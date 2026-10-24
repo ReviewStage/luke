@@ -1938,6 +1938,11 @@ test("an edit emptied and saved asks to delete the comment, and only the confirm
     ),
   ].find((each) => each.textContent === "Delete thread");
   assert.ok(confirm, "the delete is asked");
+  assert.match(
+    document.querySelector('[role="alertdialog"], [role="dialog"]')?.textContent ?? "",
+    /This cannot be undone\./u,
+    "the question says it cannot be undone",
+  );
   await act(async () => confirm.click());
   assert.deepEqual(asked, [
     { thread: ID.OPEN, action: { action: PLAN_COMMENT_ACTION.DELETE_THREAD } },

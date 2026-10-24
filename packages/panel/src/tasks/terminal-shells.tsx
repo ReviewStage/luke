@@ -8,6 +8,7 @@ import {
   type TerminalSummary,
   type TerminalsAnswer,
 } from "@luke/features/terminal-wire";
+import { IRREVERSIBLE_WORDS } from "@luke/features/words";
 import {
   CONFIRM_LOSS,
   ConfirmDialog,
@@ -282,6 +283,7 @@ function ShellRow({
         confirm={ending}
         question={{
           title: `${kill}?`,
+          body: `Whatever is running in it stops, and its output goes. ${IRREVERSIBLE_WORDS}`,
           verb: "End shell",
           running: "Ending the shell",
           loss: CONFIRM_LOSS.IRREVERSIBLE,

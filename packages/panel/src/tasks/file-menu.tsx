@@ -25,7 +25,7 @@ import { WHOLE_TEXT, type WholeText } from "./file-tab-model.js";
  */
 
 /** What the menu says where the file's text could not be read, or the service will not carry it whole. */
-const UNREAD = "Could not read the whole file.";
+const UNREAD = "The file could not be read in full.";
 const REFUSED = "This file is too large to copy whole. Open it on GitHub instead.";
 
 /** What copying a file's path says, from a header's path or a ⋯ alike, so one copy reads the same wherever it is pressed. */
@@ -58,7 +58,7 @@ export function useSaveText(): (name: string, text: string) => Promise<void> {
         },
         () =>
           show({
-            words: "Could not save the file.",
+            words: "The file could not be saved. Try again.",
             tone: STATUS_TONE.DANGER,
             hold: TOAST_HOLD.FAILED,
           }),

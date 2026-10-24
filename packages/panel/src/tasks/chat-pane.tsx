@@ -400,7 +400,7 @@ const DISCARD_QUESTION: DialogQuestion = {
   title: "Discard this post?",
   body: "Its words and pictures are kept nowhere else.",
   verb: "Discard",
-  running: "Discarding…",
+  running: "Discarding",
   loss: CONFIRM_LOSS.IRREVERSIBLE,
 };
 

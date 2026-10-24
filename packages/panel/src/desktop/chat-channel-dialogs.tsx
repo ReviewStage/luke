@@ -207,7 +207,7 @@ export function useChannelDialogs(
             ? {
                 title: "Bring back channel?",
                 body: `#${doomed.name ?? ""} returns to the rail and takes posts again.`,
-                verb: "Bring back",
+                verb: "Bring back channel",
                 running: "Bringing back",
               }
             : {
