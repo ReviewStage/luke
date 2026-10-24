@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import type { KeyboardEventHandler, ReactNode } from "react";
 import { PRESS_PULSE, pulsePress } from "../../press-pulse.js";
 import { useTouchHold } from "../menu/touch-hold.js";
 
@@ -13,7 +13,9 @@ import { useTouchHold } from "../menu/touch-hold.js";
  * in a portal, is its own. A right-click on the control, where `onContextMenu`
  * is given, does what it asks in place of the system's menu and spends a
  * hold still counting, so a finger's lift after Android's own long-press
- * menu presses nothing either. It marks itself as a long press's
+ * menu presses nothing either. A key pressed on the control, where `onKeyDown`
+ * is given, is heard here as it bubbles, which is how the menu key reaches the
+ * same list. It marks itself as a long press's
  * (`data-long-press`), so a hint over the control leaves that press to it.
  */
 
@@ -21,6 +23,7 @@ import { useTouchHold } from "../menu/touch-hold.js";
 export function HoldPress({
   onHold,
   onContextMenu,
+  onKeyDown,
   mouse = false,
   disabled = false,
   children,
@@ -29,6 +32,8 @@ export function HoldPress({
   onHold: () => void;
   /** What a right-click on the control does, in place of the system's menu. */
   onContextMenu?: (() => void) | undefined;
+  /** What a key pressed on the control does, as its menu key opens the list a right-click does. */
+  onKeyDown?: KeyboardEventHandler<HTMLElement> | undefined;
   /** Whether the mouse's main button held counts, as a touch held does. */
   mouse?: boolean | undefined;
   /** Whether a press held counts for nothing, the control being unavailable. */
@@ -53,6 +58,7 @@ export function HoldPress({
         hold.start(event, held, { mouse });
       }}
       onTouchEnd={hold.touchEnd}
+      onKeyDown={onKeyDown}
       onClickCapture={(event) => {
         if (!hold.held.current) return;
         hold.held.current = false;

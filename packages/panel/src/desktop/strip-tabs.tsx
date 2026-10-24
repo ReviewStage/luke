@@ -384,9 +384,7 @@ export interface TabLook {
   endMark?: React.JSX.Element | undefined;
   selected: boolean;
   unread?: boolean;
-  tooltip?: string | undefined;
   card?: React.ReactNode;
-  keyshortcuts?: string | undefined;
   /** Draws no fill at rest: the plan's tab while it is its column's only one. */
   quiet?: boolean;
   /** Stands first in its strip, never dragged nor dropped before. */

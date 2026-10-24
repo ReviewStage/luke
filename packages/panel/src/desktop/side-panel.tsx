@@ -988,7 +988,6 @@ function stripTabs(input: {
         { file: path },
         {
           ...tabLook({ kind: TAB_KIND.FILE, path }),
-          tooltip: path,
           card: hungCard({ kind: TAB_KIND.FILE, path, note }),
         },
       ),
