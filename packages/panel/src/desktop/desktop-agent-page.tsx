@@ -193,7 +193,7 @@ function AgentPageBar({
             className="luke-toolbar-title"
           >
             <InlineEdit
-              value={label}
+              value={rename.asked ?? label}
               label={NAME_LABEL}
               maxLength={CODING_AGENT_BOUNDS.MAX_TITLE_CHARS}
               editing

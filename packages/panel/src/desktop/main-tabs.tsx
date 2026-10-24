@@ -141,7 +141,7 @@ function RenamableTab({
   const editor =
     rename?.editing === true ? (
       <InlineEdit
-        value={look.label}
+        value={rename.asked ?? look.label}
         label={field?.label ?? "Task name"}
         maxLength={field?.maxLength ?? TASK_BOUNDS.MAX_NAME_CHARS}
         look={INLINE_EDIT_LOOK.WELL}
