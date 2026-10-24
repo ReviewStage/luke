@@ -1,8 +1,10 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import type { PlanCommentActionRequest } from "@luke/features/plan-comment-wire";
 import {
   PLAN_COMMENT_ACTOR,
+  PLAN_COMMENT_BOUNDS,
   PLAN_COMMENT_ENTRY,
   PLAN_COMMENT_SCOPE,
   PLAN_COMMENT_STATUS,
@@ -21,7 +23,9 @@ import { CommentFocusScope, PlanCommentsTab } from "./plan-comments.js";
 /**
  * A plan comment the service refuses goes back to its box above whatever
  * was typed or pasted while it was out, so neither the refused words and
- * files nor the newer ones are dropped. Synthetic thread, plain field.
+ * files nor the newer ones are dropped; where the two together are more
+ * than one comment carries, the refused one stands apart, marked as not
+ * sent, with Retry under its key. Synthetic thread, plain field.
  */
 
 const THREAD_ID = "0f9b5f6e-6a8e-4c51-9a0e-2c1f2f0b7a11";
@@ -70,7 +74,10 @@ afterEach(() => {
 });
 
 /** The Comments tab over the one open thread, whose reply the service answers with `landing`. */
-function drawn(landing: () => Promise<boolean>): HTMLElement {
+function drawn(
+  landing: () => Promise<boolean>,
+  asked: PlanCommentActionRequest[] = [],
+): HTMLElement {
   const control: PlanCommentsControl = {
     planId: "plan-1",
     threads: [THREAD],
@@ -79,7 +86,10 @@ function drawn(landing: () => Promise<boolean>): HTMLElement {
     onRetry: () => undefined,
     notes: new Map(),
     start: async () => ({ note: "not in this test" }),
-    act: async () => landing(),
+    act: async (_thread, action) => {
+      asked.push(action);
+      return landing();
+    },
   };
   const container = document.createElement("div");
   document.body.append(container);
@@ -162,4 +172,33 @@ test("a refused reply's files go back before the files pasted while it was out",
 
   assert.deepEqual(heldFiles(card), ["before.png", "after.png"]);
   assert.equal(field.value, "Like this.");
+});
+
+test("a refused reply too long to go back beside the newer words stands apart as not sent, its Retry sending it under its key", async () => {
+  const answers = [Promise.withResolvers<boolean>(), Promise.withResolvers<boolean>()];
+  const asked: PlanCommentActionRequest[] = [];
+  const card = drawn(() => answers[asked.length - 1]?.promise ?? Promise.resolve(true), asked);
+  const field = card.querySelector("textarea") ?? assert.fail("no textarea");
+  const refused = `Not for v1. ${"a".repeat(5_000)}`;
+  const newer = "b".repeat(PLAN_COMMENT_BOUNDS.MAX_WORDS_CHARS - 1_000);
+  typeInto(field, refused);
+  act(() => {
+    field.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+  });
+  typeInto(field, newer);
+  await act(async () => answers[0]?.resolve(false));
+
+  assert.equal(field.value, newer, "the newer words stay in the box as typed");
+  const line = card.querySelector("[data-unsent]") ?? assert.fail("no line marked as not sent");
+  assert.ok(line.textContent?.includes("Not for v1."));
+  const retry = [...line.querySelectorAll("button")].find((each) => each.textContent === "Retry");
+  assert.ok(retry, "the line offers Retry");
+
+  act(() => retry.click());
+  await act(async () => answers[1]?.resolve(true));
+  const [first, again] = asked;
+  assert.ok(first && "clientKey" in first && again && "clientKey" in again);
+  assert.equal(again.clientKey, first.clientKey, "Retry sends under the refused send's key");
+  assert.equal(card.querySelector("[data-unsent]"), null, "and the line goes once it is sent");
+  assert.equal(field.value, newer);
 });
