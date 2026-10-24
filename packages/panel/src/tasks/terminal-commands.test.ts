@@ -439,7 +439,7 @@ test("while the plan's agents are still being read, the picker says so and offer
   assert.deepEqual(picker()?.rows, []);
   assert.equal(
     document.querySelector('[role="dialog"] .luke-note-line')?.textContent,
-    "Reading the task’s agents…",
+    "Reading the task’s agents",
   );
   assert.deepEqual(task.shown, []);
 });

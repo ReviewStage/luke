@@ -1,6 +1,7 @@
 import { useAtomValue } from "@effect/atom-react";
 import type { CodingAgentSummary } from "@luke/features/coding-agent-wire";
 import { sandboxRead } from "@luke/features/terminal-store";
+import { noMatchWords, readingWords, TERM } from "@luke/features/words";
 import { SHORTCUT_KEY } from "@luke/settings/shortcuts";
 import { PlusIcon, Shortcut } from "@luke/ui";
 import { CommandDialog, type CommandGroup, type CommandItem } from "@luke/ui/command";
@@ -183,8 +184,8 @@ export function TerminalPicker({
       groups={groups}
       selected={selected}
       onSelectedChange={setSelected}
-      empty="No agents match."
-      {...(read ? {} : { loading: "Reading the task’s agents…" })}
+      empty={noMatchWords(TERM.AGENT)}
+      {...(read ? {} : { loading: readingWords(`the task’s ${TERM.AGENT.many}`) })}
       foot={<PickerFoot />}
     />
   );
