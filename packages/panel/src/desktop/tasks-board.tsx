@@ -138,10 +138,10 @@ import { useRowDrag } from "./use-row-drag.js";
  * its own cards, the most pressing first. A card is raised off the well,
  * drawn as Linear's board draws one: its key, how many of its Inbox threads
  * wait on the reader, when it last moved, and its creator's face over its
- * status's chip and its whole name, then a row of pills that wraps rather
- * than running past the card's edge: the chips that change its priority
- * and its assignee where it stands, the assignee's left off under an
- * assignee's column, its repository, what its agents are doing and the
+ * status's chip and its whole name, then a row that wraps rather than
+ * running past the card's edge: the chips that change its priority and its
+ * assignee where it stands, their marks alone as the List draws them, the
+ * assignee's left off under an assignee's column, its repository, what its agents are doing and the
  * pull requests they opened (`task-row-parts.tsx`), and the issues it
  * links, and a ⋯ at their end dropping the task's own menu, the sidebar
  * row's, which a right-click and the menu key drop too (`useRowMenu`) and
@@ -162,8 +162,8 @@ import { useRowDrag } from "./use-row-drag.js";
  * A narrow room, a phone's, has no width for columns side by side, nor a
  * second column in sight to drag a card onto: it stands one column at a
  * time across the whole page, chosen by a tab for each column above it
- * (Todo at first), and each card's Status chip says its status in words,
- * since its pick is how a card moves there without a drag.
+ * (Todo at first), and each card's Status chip, its mark before its name as
+ * on a wide board, is how a card moves there without a drag.
  */
 
 /** What the page is read as while the tasks are. */
@@ -249,23 +249,22 @@ function TaskBoardRepository({
 /**
  * One task's card, as Linear's board draws one: its key, what waits on the
  * reader, when it last moved, and its creator's face on its first line; its
- * status's mark before its name, which wraps; and a row of pills under it,
- * wrapping onto as many lines as they take, so nothing is cut off at the
- * card's edge: its priority, its assignee, its repository, its agents at
+ * status's mark before its name, which wraps; and a row under it, wrapping
+ * onto as many lines as they take, so nothing is cut off at the card's edge:
+ * its priority's and its assignee's marks, drawn as the List draws them, then
+ * pills for its repository, its agents at
  * work, the pull requests they opened, and the issues it links, each a press
  * of its own and each hanging its own card where it has more to say
  * (`task-part-cards.tsx`), rather than one card for the whole task, which
  * says nothing the card does not. Its ⋯ stands at the pills' end, dropping
  * the task's own menu, which a right-click opens too. One press, under its
  * pills, opens it. Renamed from that menu, its name is its field until the
- * edit ends. On a phone the status stands among the pills, saying its status
- * in words, since it is how a card moves there.
+ * edit ends.
  */
 function TaskBoardCard({
   tasks,
   task,
   workspaceName,
-  narrow,
   properties,
   waiting,
   now,
@@ -275,7 +274,6 @@ function TaskBoardCard({
   tasks: TasksControl;
   task: TaskSummary;
   workspaceName: string;
-  narrow: boolean;
   /** What the card draws beside its name. */
   properties: readonly TaskProperty[];
   /** How many of its Inbox threads wait on the reader. */
@@ -304,14 +302,6 @@ function TaskBoardCard({
   const drawn = (property: TaskProperty) => properties.includes(property);
   const endedByKey = useRefocusAfterEdit(rename.editing, press);
   const key = task.number === undefined ? undefined : taskKey(workspaceName, task.number);
-  const statusChip = drawn(TASK_PROPERTY.STATUS) ? (
-    <StatusChip
-      task={task}
-      look={narrow ? CHIP_LOOK.PILL : CHIP_LOOK.TOOLBAR}
-      named={narrow}
-      onStanding={onStanding}
-    />
-  ) : null;
   return (
     <Card
       as={CARD_ELEMENT.LI}
@@ -358,7 +348,9 @@ function TaskBoardCard({
         </span>
       </span>
       <span className="tasks-board-card-title">
-        {narrow ? null : statusChip}
+        {drawn(TASK_PROPERTY.STATUS) ? (
+          <StatusChip task={task} look={CHIP_LOOK.TOOLBAR} onStanding={onStanding} />
+        ) : null}
         {rename.editing ? (
           <span className="tasks-board-name">
             <InlineEdit
@@ -397,11 +389,10 @@ function TaskBoardCard({
         <div className="tasks-board-card-pills">
           {/* Note that a task from a service before priorities offers No priority, as one before statuses stands under Todo. */}
           {drawn(TASK_PROPERTY.PRIORITY) ? (
-            <PriorityChip task={task} look={CHIP_LOOK.PILL} onStanding={onStanding} />
+            <PriorityChip task={task} look={CHIP_LOOK.TOOLBAR} onStanding={onStanding} />
           ) : null}
-          {narrow ? statusChip : null}
           {drawn(TASK_PROPERTY.ASSIGNEE) ? (
-            <AssigneeChip task={task} look={CHIP_LOOK.PILL} onStanding={onStanding} />
+            <AssigneeChip task={task} look={CHIP_LOOK.TOOLBAR} onStanding={onStanding} />
           ) : null}
           {task.repository === null || !drawn(TASK_PROPERTY.REPOSITORY) ? null : (
             <TaskBoardRepository tasks={tasks} repository={task.repository} />
@@ -593,7 +584,6 @@ function TaskBoardColumnView({
                   tasks={tasks}
                   task={task}
                   workspaceName={workspaceName}
-                  narrow={narrow}
                   properties={drawn(task)}
                   waiting={waitingOn.get(task.id) ?? 0}
                   now={now}

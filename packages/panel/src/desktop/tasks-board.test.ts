@@ -15,7 +15,7 @@ import { IDLE_TASKS_VIEW } from "@luke/features/tasks-view";
 import type { Workspace, WorkspaceMember } from "@luke/features/workspace-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
-import { CARD_PRESS_SELECTOR } from "@luke/ui";
+import { CARD_PRESS_SELECTOR, CHIP_LOOK } from "@luke/ui";
 import {
   COMPLETED_WINDOW,
   DEFAULT_BOARD_DISPLAY,
@@ -58,7 +58,7 @@ import { TasksBoard } from "./tasks-board.js";
  * right-click drop the task's own menu, whose Rename makes its name a
  * field, and its foot draws its agents at work and their pull requests,
  * each its mark and its number. In a narrow room, a phone's, one column stands at a time, chosen
- * by its tab, and a card's Status chip, which says its status there, moves it.
+ * by its tab, and a card's Status chip, its mark alone before its name as on a wide board, moves it.
  */
 
 const DEAN = "user-dean";
@@ -610,12 +610,20 @@ test("in a narrow room showing completed adds the Canceled tab, and hiding it ag
   assert.deepEqual(columns(board), [["Todo", ["ACME-40", "ACME-39"]]]);
 });
 
-test("in a narrow room a card's Status chip says its status and sends the status picked, without a drag", async () => {
+test("in a narrow room a card's chips draw their marks alone, as the List's do, its Status before its name, and the Status sends the status picked, without a drag", async () => {
   const board = await mountBoard(TASKS, SHELL_ROOM.NARROW);
   const chip = chipOf(board, "t-39", "Status");
 
-  assert.equal(chip.querySelector(".luke-chip-name")?.textContent, "Todo");
-  assert.equal(chip.dataset.iconOnly, undefined, "the chip says its status in words");
+  for (const standing of ["Status", "Priority", "Assignee"]) {
+    const each = chipOf(board, "t-39", standing);
+    assert.equal(each.dataset.iconOnly, "true", `the ${standing} chip draws its mark alone`);
+    assert.equal(each.dataset.look, CHIP_LOOK.TOOLBAR, `the ${standing} chip wears no outline`);
+  }
+  assert.equal(
+    chip.closest(".tasks-board-card-title")?.querySelector(".tasks-board-name")?.textContent,
+    "Rate limit search",
+    "the Status chip stands before the card's name",
+  );
   act(() => chip.click());
   pick("In progress");
 
