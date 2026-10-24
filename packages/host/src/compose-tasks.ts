@@ -1271,6 +1271,17 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
     });
   }
 
+  /** Whether the open task's plan was saved past the copy held, as its follow last delivered it. */
+  function savedPastHeld(taskId: string): boolean {
+    const held = heldTaskOf(taskId);
+    return (
+      view.activeTaskId === taskId &&
+      planSaved?.taskId === taskId &&
+      held !== undefined &&
+      planSaved.at > held.updatedAt
+    );
+  }
+
   /**
    * Reads the open task's plan again where its follow delivered a save newer
    * than the copy held, so a teammate's or an agent's edit reaches the
@@ -1281,26 +1292,32 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
    */
   function readPlanWhereSaved(): void {
     const taskId = view.activeTaskId;
-    if (taskId === undefined || planSaved?.taskId !== taskId) return;
-    const held = heldTaskOf(taskId);
-    if (held !== undefined && planSaved.at > held.updatedAt) Queue.offerUnsafe(planReads, taskId);
+    if (taskId !== undefined && savedPastHeld(taskId)) Queue.offerUnsafe(planReads, taskId);
   }
 
   /**
    * Reads the open task's document again, as an open does, for a save
-   * someone else made. A failed read keeps the copy held, and a read that
-   * left before a write of the document, or a newer read, lands nothing.
+   * someone else made. A read that left before a write of the document, or
+   * a newer read, lands nothing. Note that a failed read is asked again on
+   * `BOARD_BACKOFF` for as long as the save stands newer than the copy held,
+   * because the follow delivers no other move for a mark that stood still.
    */
   function readPlan(taskId: string) {
-    return Effect.gen(function* () {
-      if (view.activeTaskId !== taskId) return;
+    const wanted = () => gate() && savedPastHeld(taskId);
+    const once = Effect.gen(function* () {
+      if (!wanted()) return;
       const documentRead = partReadStarted(OPENED_PART.DOCUMENT);
       const marksRead = partReadStarted(OPENED_PART.MARKS);
       const opened = yield* served(client.open(taskId));
-      if (!opened.ok || view.activeTaskId !== taskId) return;
+      if (view.activeTaskId !== taskId) return;
+      if (!opened.ok) {
+        if (opened.failure === TASK_CALL_FAILURE.NOT_FOUND) return;
+        return yield* Effect.fail(opened.failure);
+      }
       if (!laidNow(OPENED_PART.DOCUMENT, documentRead)) return;
       write({ document: openedDocument(taskId, opened, marksRead) });
     });
+    return Effect.ignore(Effect.retry(once, { schedule: BOARD_BACKOFF, while: wanted }));
   }
 
   /** A code shown as the Code tab's card draws it: the lines around those pointed at, which the window colours. */

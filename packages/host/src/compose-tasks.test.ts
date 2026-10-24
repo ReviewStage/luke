@@ -175,6 +175,8 @@ interface FakeService extends TasksClient {
   recordSeals: Record<string, TaskRecordLiveAnswer>;
   /** Whether each task's record is answered polled, Realtime off, its rows as `tasks` holds them now, in place of `recordSeals`. */
   recordPolled: boolean;
+  /** How many opens the service leaves unanswered before it answers again. */
+  opensUnanswered: number;
   /** What the service seals for following each task's pages; none answers unanswered. */
   pageSeals: Record<string, TaskPagesLiveAnswer>;
   /** What the service seals for following each task's Browser tabs; none answers unanswered. */
@@ -502,6 +504,7 @@ function fakeService(tasks: Task[]): FakeService {
     boardSeals: {},
     recordSeals: {},
     recordPolled: false,
+    opensUnanswered: 0,
     pageSeals: {},
     browserTabSeals: {},
     historySeals: {},
@@ -1071,6 +1074,10 @@ function fakeService(tasks: Task[]): FakeService {
     open: (taskId) =>
       Effect.sync((): TaskCallResult<Task, TaskCallFailure> => {
         service.reads.push(`open:${taskId}`);
+        if (service.opensUnanswered > 0) {
+          service.opensUnanswered -= 1;
+          return { ok: false, failure: TASK_CALL_FAILURE.UNANSWERED };
+        }
         const found = service.tasks.find((candidate) => candidate.id === taskId);
         return found === undefined
           ? { ok: false, failure: TASK_CALL_FAILURE.NOT_FOUND }
@@ -4130,7 +4137,7 @@ it.effect(
 );
 
 it.effect(
-  "a plan saved by someone else reaches the open document as its polled mark moves, and the window's own save, which the mark only confirms, reads nothing",
+  "a plan saved by someone else reaches the open document as its polled mark moves, a read of it that went unanswered asked again, and the window's own save, which the mark only confirms, reads nothing",
   () =>
     Effect.gen(function* () {
       const service = fakeService([task(INVITES, "Teammate invitations", INVITES_TEXT, 10)]);
@@ -4160,11 +4167,17 @@ it.effect(
           lastEdit: { actor: PLAN_ACTOR.DEVELOPER, at: 20, duringCall: false },
         },
       ];
+      // The first read of it goes unanswered, and is asked again, since the mark it read for stands still.
+      service.opensUnanswered = 1;
       const reached = yield* viewLands((view) => view.document.task?.document.body === theirs);
       yield* TestClock.adjust(Duration.seconds(1));
       yield* boardSettled;
-      yield* reached;
       assert.equal(opens(), opened + 1);
+      assert.equal(last()?.document.task?.document.body, INVITES_TEXT, "the copy held stands");
+      yield* TestClock.adjust(Duration.seconds(2));
+      yield* boardSettled;
+      yield* reached;
+      assert.equal(opens(), opened + 2);
 
       // The window's own save is drawn from its answer, which the next poll's mark only confirms.
       const mine = `${theirs}\n\nOnly members invite.`;
@@ -4178,7 +4191,7 @@ it.effect(
       yield* TestClock.adjust(Duration.seconds(5));
       yield* boardSettled;
       assert.equal(last()?.document.task?.document.body, mine);
-      assert.equal(opens(), opened + 1);
+      assert.equal(opens(), opened + 2);
     }),
 );
 
