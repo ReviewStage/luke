@@ -5,7 +5,13 @@ import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { act, createElement, useRef, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, test } from "vitest";
-import { ConfirmDialog, useConfirmDialog } from "./confirm-dialog.js";
+import { DIALOG_TONE } from "../dialog/dialog-actions.js";
+import {
+  CONFIRM_LOSS,
+  ConfirmDialog,
+  type DialogQuestion,
+  useConfirmDialog,
+} from "./confirm-dialog.js";
 
 /**
  * confirm-dialog.test.ts -- a question opened from a button lands on
@@ -17,6 +23,8 @@ import { ConfirmDialog, useConfirmDialog } from "./confirm-dialog.js";
  * finishes unseen. An answer that lands shows its check in the act's place
  * until the check has been seen; a refusal shakes the card; and a gated
  * question offers its act only once the subject's name is typed exactly.
+ * Only an act past undoing is drawn red; one that can be undone but reaches
+ * someone else asks in the accent, whatever tone it also names.
  */
 
 /** The answers the owner's act is waiting on, settled by the test in the order they were asked. */
@@ -319,4 +327,42 @@ test("an Enter that confirms an input method's composition does not answer a fie
 
   assert.equal(runningAfterComposing, false, "a composing Enter does not press the act");
   assert.equal(running, true, "the Enter after the composition answers");
+});
+
+/** A question asked with `costs` on its act, already open, and the look its act is drawn in. */
+function actLook(costs: Pick<DialogQuestion, "loss" | "tone">): string | null {
+  function Asked() {
+    const confirm = useConfirmDialog({ subject: true, surfaceOpen: true }, () =>
+      Promise.resolve(ACCEPTED),
+    );
+    const [asked, setAsked] = useState(false);
+    if (!asked) {
+      setAsked(true);
+      confirm.ask();
+    }
+    return createElement(ConfirmDialog, {
+      confirm,
+      question: { title: "Remove Ada?", verb: "Remove", running: "Removing", ...costs },
+    });
+  }
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  roots.push(root);
+  act(() => root.render(createElement(Asked)));
+  const look = button("Remove")?.getAttribute("data-variant") ?? null;
+  act(() => root.unmount());
+  roots.splice(roots.indexOf(root), 1);
+  return look;
+}
+
+test("only an act past undoing is drawn red; one that reaches someone else asks in the accent", () => {
+  assert.equal(actLook({ loss: CONFIRM_LOSS.IRREVERSIBLE }), "danger");
+  assert.equal(actLook({ loss: CONFIRM_LOSS.AFFECTS_OTHERS }), "primary");
+  assert.equal(
+    actLook({ loss: CONFIRM_LOSS.AFFECTS_OTHERS, tone: DIALOG_TONE.DANGER }),
+    "primary",
+    "the loss decides over a tone",
+  );
+  assert.equal(actLook({}), "danger", "a question naming no loss keeps today's red");
 });
