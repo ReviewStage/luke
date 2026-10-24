@@ -557,10 +557,10 @@ export class LiveCall implements LiveVoiceCall {
         const stream = yield* Effect.tryPromise(() => this.#options.openMicrophone()).pipe(
           Effect.orElseSucceed(() => undefined),
         );
-        if (!stream) return false;
-        const track = stream.getAudioTracks()[0];
-        if (!track || epoch !== this.#muteEpoch || this.#ended) {
+        const track = stream?.getAudioTracks()[0];
+        if (!stream || !track || epoch !== this.#muteEpoch || this.#ended) {
           stopDevice(stream);
+          if (!track) this.#microphoneUnavailable(epoch);
           return false;
         }
         track.enabled = false;
@@ -570,6 +570,7 @@ export class LiveCall implements LiveVoiceCall {
         );
         if (!attached) {
           stopDevice(stream);
+          this.#microphoneUnavailable(epoch);
           return false;
         }
         if (epoch !== this.#muteEpoch || this.#ended) {
@@ -699,16 +700,42 @@ export class LiveCall implements LiveVoiceCall {
     const { state } = report;
     this.#options.acts.reportTransport(report);
     if (state === LIVE_TRANSPORT_STATE.FAILED && !this.#ended) {
-      Deferred.doneUnsafe(this.#announcedStart, Exit.succeed(false));
-      this.#tearDown(LIVE_STATUS.FAILED, LIVE_PEER_END_REASON.TRANSPORT_FAILED);
+      this.#lose(LIVE_STATUS.FAILED, LIVE_PEER_END_REASON.TRANSPORT_FAILED);
     }
   }
 
   #onChannelClosed(): void {
     if (this.#ended) return;
-    Deferred.doneUnsafe(this.#announcedStart, Exit.succeed(false));
     Deferred.doneUnsafe(this.#announcedClose, Exit.void);
-    this.#tearDown(LIVE_STATUS.IDLE, LIVE_PEER_END_REASON.CHANNEL_CLOSED);
+    this.#lose(LIVE_STATUS.IDLE, LIVE_PEER_END_REASON.CHANNEL_CLOSED);
+  }
+
+  /**
+   * The connection gone with no hang-up asked for: said by its key before
+   * the call is let go of, a call that stood as dropped and one still
+   * opening as never started. Note that the teardown settles the open's wait
+   * for the start, after the call has ended, because an open still waiting
+   * would otherwise say its own failure a second time. A close already under
+   * way was asked for, and says nothing.
+   */
+  #lose(status: LiveStatus, reason: LivePeerEndReason): void {
+    if (!this.#closing) {
+      this.#options.events.onError(
+        this.#started ? VOICE_FAILURE.CALL_DROPPED : VOICE_FAILURE.CALL_NOT_STARTED,
+      );
+    }
+    this.#tearDown(status, reason);
+  }
+
+  /**
+   * The device would not open or go on the line for a press still standing,
+   * so the call is said to be unable to hear the developer rather than left
+   * reading as merely muted. A press a mute or the end has since overtaken
+   * says nothing.
+   */
+  #microphoneUnavailable(epoch: number): void {
+    if (epoch !== this.#muteEpoch || this.#ended) return;
+    this.#options.events.onError(VOICE_FAILURE.MICROPHONE_UNAVAILABLE);
   }
 
   #onRows(rows: readonly LiveCaptionRow[]): void {

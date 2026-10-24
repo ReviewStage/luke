@@ -7,6 +7,7 @@ import {
   NATIVE_CODING_AGENT_RUNTIMES,
 } from "@luke/features/coding-agent-wire";
 import { IDLE_TASKS_VIEW, type TaskActivity } from "@luke/features/tasks-view";
+import { VOICE_FAILURE, VOICE_FAILURE_WORDS } from "@luke/features/words";
 import { LIVE_STATUS } from "@luke/live";
 import { EXPERIMENT } from "@luke/settings";
 import { appSettingsWire, experimentsOn, settingsView } from "@luke/settings/testing";
@@ -68,7 +69,12 @@ async function mountOn(
   calls: AgentCallDoors | undefined,
   voice: VoiceView = IDLE_VOICE_VIEW,
   agent: CodingAgentSummary = AGENT,
-  call: { avatar?: AvatarState; activity?: TaskActivity; notice?: React.ReactNode } = {},
+  call: {
+    avatar?: AvatarState;
+    activity?: TaskActivity;
+    notice?: React.ReactNode;
+    unavailable?: true;
+  } = {},
 ): Promise<HTMLElement> {
   handState(
     {},
@@ -79,7 +85,11 @@ async function mountOn(
           experiments: experimentsOn(EXPERIMENT.VIDEO_CALLS),
         }),
       ),
-      voice: { view: voice, avatar: call.avatar ?? AVATAR_OFF },
+      voice: {
+        view: voice,
+        avatar: call.avatar ?? AVATAR_OFF,
+        ...(call.unavailable === undefined ? {} : { unavailable: call.unavailable }),
+      },
       tasks: {
         ...IDLE_TASKS_VIEW,
         ...(call.activity === undefined ? {} : { activity: call.activity }),
@@ -433,4 +443,27 @@ test("an agent on Claude Code or Codex offers the same Call button, which calls 
     act(() => roots.pop()?.unmount());
     document.body.innerHTML = "";
   }
+});
+
+test("an agent's tab says voice stopped working, and how to get it back, once the voice window was given up on, and a press calls nothing", async () => {
+  const pressed: string[] = [];
+  const page = await mountOn(
+    { onPress: (agentId) => pressed.push(agentId) },
+    IDLE_VOICE_VIEW,
+    AGENT,
+    { unavailable: true },
+  );
+  assert.equal(
+    callButton(page) === null,
+    true,
+    "no Call stands for a press that would reach nothing",
+  );
+  const lost = page.querySelector<HTMLButtonElement>(".agent-call-button button");
+  assert.ok(lost, "the button still stands where voice is offered");
+  assert.equal(
+    lost.getAttribute("aria-label"),
+    VOICE_FAILURE_WORDS[VOICE_FAILURE.VOICE_WINDOW_LOST].words,
+  );
+  act(() => lost.click());
+  assert.deepEqual(pressed, []);
 });

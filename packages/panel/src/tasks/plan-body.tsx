@@ -1072,7 +1072,6 @@ export const PlanBody = memo(function PlanBody({
   const { views, behind, jumps } = useTaskChase(task, live, reader);
   const editable = onEdit !== undefined;
   const text = editable ? task.document.body : undefined;
-  const editing = usePlanEditing(task.id, text, onEdit ?? NO_EDIT);
   const editReader = useEditReader(reader);
   // Note that what each section is drawn from is held steady across draws,
   // because a section drawn again parses its Markdown again
@@ -1088,6 +1087,7 @@ export const PlanBody = memo(function PlanBody({
     () => ({ reader: editReader, sections: sectionEdits, agents: steadyAgents }),
     [editReader, sectionEdits, steadyAgents],
   );
+  const editing = usePlanEditing(task.id, text, onEdit ?? NO_EDIT, place);
   const showHistory = useSteadyDoor(onShowHistory);
   const marks = useMemo<SectionMarks>(
     () => ({

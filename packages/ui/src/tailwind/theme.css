@@ -254,6 +254,9 @@
   --container-dialog-media-max: min(var(--luke-dialog-media-max-width), 100%);
   --container-tooltip: var(--luke-tooltip-max-width);
   --container-tooltip-card: var(--luke-tooltip-card-width);
+  /* Breadcrumbs and DataTable. */
+  --font-weight-dialog: var(--luke-type-dialog-weight);
+  --leading-tag: var(--luke-type-tag-leading);
   --leading-caption: var(--luke-type-caption-leading);
   --text-section: var(--luke-type-section-size);
   --text-section--line-height: var(--luke-type-section-leading);
@@ -393,6 +396,143 @@
   --animate-menu-leave: luke-menu-leave var(--luke-duration-exit) var(--luke-motion-exit) forwards;
   --z-index-menu: var(--luke-z-menu);
   --z-index-menu-over-dialog: calc(var(--luke-z-dialog) + 1);
+  --text-dialog: var(--luke-type-dialog-size);
+  --text-dialog--line-height: var(--luke-type-dialog-leading);
+  --radius-breadcrumb: var(--luke-radius-6);
+  --spacing-breadcrumb-gap: var(--luke-space-4);
+  --spacing-breadcrumb-pill-block: var(--luke-space-2);
+  --spacing-breadcrumb-pill-inline: var(--luke-space-4);
+  --spacing-breadcrumb-chevron: var(--luke-space-12);
+  --spacing-breadcrumb-title-chevron: 13px; /* off-scale: the toolbar heading's chevron, a size under a control's glyph */
+  --spacing-data-table-cell-block: var(--luke-space-12);
+  --spacing-data-table-cell-inline: var(--luke-space-20);
+  --spacing-data-table-narrow: 520px;
+  --spacing-data-table-medium: 640px;
+  --spacing-data-table-wide: 760px;
+
+  /* Banner, ScrollArea, and Pagination. */
+  --color-attention: var(--luke-color-attention);
+  --color-body-foreground: var(--luke-color-text-body);
+  /* A strip's tint and hairline, mixed from the ink of the tone the banner
+     wears (`tokens/status-tone.css`). */
+  --color-banner-strip: color-mix(in srgb, var(--luke-tone-ink) 9%, var(--luke-color-ground));
+  --color-banner-strip-edge: color-mix(in srgb, var(--luke-tone-ink) 30%, var(--luke-color-border));
+  /* A status tone's tint, which whatever wears its `data-tone` sets. */
+  --color-tone-tint: var(--luke-tone-tint);
+  --spacing-banner-strip-block: var(--luke-space-2);
+  --spacing-banner-strip-end: var(--luke-space-12);
+  --spacing-banner-strip-start: var(--luke-space-20);
+  --spacing-banner-card: var(--luke-space-12);
+  --spacing-banner-card-start: var(--luke-space-16);
+  --spacing-banner-disc: var(--luke-space-32); /* the card's glyph disc */
+  --spacing-banner-words-gap: var(--luke-space-2);
+  --spacing-banner-row-inset: calc(
+    (var(--luke-control-height) - var(--luke-type-body-leading)) /
+    2
+  );
+  --spacing-pagination-gap: var(--luke-space-4);
+  --spacing-pagination-steps-gap: var(--luke-space-16);
+  --spacing-pagination-item: calc(var(--luke-type-caption-leading) + 2 * var(--luke-space-6));
+  --spacing-pagination-item-inset: var(--luke-space-8);
+
+  /* Toast, Spinner, and Progress. Their lengths name the scale's steps
+     rather than Tailwind's rem ones, since a root may set its own size. */
+  --color-complete: var(--luke-color-complete);
+  --color-working: var(--luke-color-working);
+  --spacing-spinner: var(--luke-space-16);
+  --spacing-spinner-small: var(--luke-space-12);
+  --spacing-spinner-region: 22px; /* off-scale: a ring alone in a region */
+  --spacing-spinner-region-inset: var(--luke-space-24);
+  --spacing-progress-height: 3px; /* off-scale: a hairline bar */
+  --container-progress: 160px; /* off-scale: a meter's length beside a line of words */
+  --spacing-toast-gap: var(--luke-space-8);
+  --spacing-toast-inset: var(--luke-space-12);
+  --spacing-toast-line-gap: var(--luke-space-2);
+  --spacing-toast-glyph-inset: calc((var(--luke-control-height) - var(--luke-control-icon)) / 2);
+  --spacing-toast-text-inset: calc(
+    (var(--luke-control-height) - var(--luke-type-section-leading)) /
+    2
+  );
+  --radius-toast: var(--luke-radius-14);
+  --shadow-toast: 0 1px 2px var(--luke-color-shadow-soft), 0 12px 36px var(--luke-color-shadow);
+  --shadow-toast-dismiss: 0 1px 3px var(--luke-color-shadow-soft);
+  --z-index-toast: var(--luke-z-toast);
+
+  /* Chip and Badge. Their lengths name the scale's steps, as above. */
+  --color-chip: var(--luke-color-chip);
+  --color-chip-hover: var(--luke-color-chip-hover);
+  --color-chip-selected: var(--luke-color-chip-selected);
+  --color-chip-edge: var(--luke-color-chip-edge);
+  --color-chip-edge-strong: var(--luke-color-chip-edge-strong);
+  --color-chip-count-pressed: color-mix(
+    in srgb,
+    var(--luke-color-ink-inverse) 65%,
+    var(--luke-color-ink)
+  );
+  --color-ink: var(--luke-color-ink);
+  --color-ink-foreground: var(--luke-color-ink-inverse);
+  --color-merged: var(--luke-color-merged);
+  --color-badge-fill: light-dark(var(--luke-badge-fill-light), var(--luke-badge-fill-dark));
+  --color-badge-fill-edge: light-dark(var(--luke-badge-edge-light), var(--luke-badge-edge-dark));
+  --color-badge-fill-words: light-dark(var(--luke-badge-words-light), var(--luke-badge-words-dark));
+  --spacing-chip-inset: var(--luke-space-8);
+  --spacing-chip-inset-wide: var(--luke-space-12);
+  --spacing-chip-tight: var(--luke-space-4);
+  --spacing-chip-compact: var(--luke-space-20);
+  --spacing-chip-compact-inset: calc(var(--luke-space-8) - 1px);
+  --spacing-chip-chevron: var(--luke-space-12);
+  --spacing-chip-remove: calc(var(--luke-control-height) - var(--luke-space-12));
+  --spacing-chip-remove-glyph: 10px; /* off-scale: the ×, a size under the chevron */
+  --spacing-chip-field: var(--luke-select-field-width);
+  --spacing-chip-field-half: calc(var(--luke-select-field-width) / 2);
+  --spacing-chip-min-field: min(var(--luke-select-field-width), 100%);
+  --spacing-badge-gap: var(--luke-space-4);
+  --spacing-badge-block: var(--luke-space-2);
+  --spacing-badge-inline: var(--luke-space-8);
+  --spacing-badge-glyph: var(--luke-space-12);
+  --spacing-badge-swatch: var(--luke-space-8);
+  --spacing-status-dot: 7px; /* off-scale: a status dot */
+  --radius-badge: calc(var(--luke-type-caption-leading) / 2 + var(--luke-space-2));
+
+  /* Avatar, Skeleton, and Card. */
+  --spacing-avatar-mark: 14px; /* off-scale: a disc at a row's time */
+  --spacing-avatar-inline: var(--luke-space-16); /* a disc in a line of words */
+  --spacing-avatar-glyph: var(--luke-control-icon);
+  --spacing-avatar-stack: 18px; /* off-scale: a facepile's disc */
+  --spacing-avatar-row: var(--luke-space-20); /* a list row's disc */
+  --spacing-avatar-account: 26px; /* off-scale: the account's disc */
+  --spacing-avatar-card: var(--luke-space-32); /* a card head's disc */
+  --spacing-avatar-page: var(--luke-space-48); /* a page head's disc */
+  --spacing-avatar-masthead: 56px; /* off-scale: a masthead's disc */
+  --spacing-avatar-portrait: var(--luke-space-64); /* a portrait's disc */
+  --spacing-avatar-glyph-share: 62%; /* off-scale: an app's glyph, a share of its disc */
+  --radius-avatar-square: 36%; /* off-scale: an app's corner, a share of its edge */
+  --radius-avatar-tile: 25%; /* off-scale: a tile's corner, a quarter of its edge */
+  --shadow-avatar-edge: inset 0 0 0 0.5px var(--luke-color-border-strong);
+  --shadow-avatar-tile-edge: inset 0 0 0 1px var(--luke-color-border);
+  --color-on-identity: var(--luke-color-on-identity);
+  --color-identity-1: var(--luke-color-identity-1);
+  --color-identity-2: var(--luke-color-identity-2);
+  --color-identity-3: var(--luke-color-identity-3);
+  --color-identity-4: var(--luke-color-identity-4);
+  --color-identity-5: var(--luke-color-identity-5);
+  --color-identity-6: var(--luke-color-identity-6);
+  --spacing-skeleton-line: 0.8em; /* off-scale: a line's words, as tall as their type */
+  --spacing-skeleton-line-gap: calc((1lh - 0.8em) / 2);
+  --radius-skeleton: 4px; /* off-scale: a line's corner */
+  --color-card-surface: var(--luke-color-surface);
+  --color-card-code: var(--luke-color-code-ground);
+  --color-card-drop: var(--luke-color-focus-ring);
+  --spacing-card: var(--luke-card-inset);
+  --spacing-card-snug: var(--luke-card-inset-snug);
+  --spacing-card-compact: var(--luke-card-inset-compact);
+  --spacing-card-head-block: var(--luke-space-4);
+  --spacing-card-head-inline: var(--luke-space-12);
+  --spacing-card-head-gap: var(--luke-space-8);
+  --radius-card: var(--luke-card-radius);
+  --radius-card-raised: var(--luke-radius-8);
+  --shadow-card-soft: 0 1px 2px var(--luke-color-shadow-soft);
+  --shadow-card-lift: 0 2px 6px var(--luke-color-shadow-soft);
 
   /* Motion comes from the motion tokens alone (docs/DESIGN.md): a `transition`
      utility runs on the quick duration and the spring, never on Tailwind's

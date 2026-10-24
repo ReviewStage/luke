@@ -117,6 +117,7 @@ import {
   taskPaneItems,
   taskPaneOf,
 } from "./task-pane-switcher.js";
+import { useStandingDoor } from "./task-row-parts.js";
 import {
   SummaryButton,
   type SummaryLayout,
@@ -556,6 +557,7 @@ function PlanDocument({
     taskId: inboxTaskId,
     shown: tasks.shown,
     waiting: tasks.inbox.some((task) => task.taskId === inboxTaskId),
+    readerId: tasks.me,
     agents: tasks.agents,
   });
   // The task's comments are read while the task is shown, for its plan's margin, its Comments tab, and its summary.
@@ -788,12 +790,12 @@ function PlanDocument({
   const markRead = useSteadyDoor((unread: boolean) => {
     if (opened !== undefined) reads.mark(opened, unread);
   });
+  // The chips send a change through the door the rows use, which says so
+  // where the service did not keep it, and the chip goes on drawing the
+  // task's own value, which is the one that stands.
+  const standingDoor = useStandingDoor(tasks);
   const setStanding = useSteadyDoor(
-    opened === undefined
-      ? undefined
-      : (standing: TaskStanding) => {
-          void tasks.onSetTaskStanding(opened.id, standing);
-        },
+    opened === undefined ? undefined : (standing: TaskStanding) => standingDoor(opened, standing),
   );
   const openedId = opened?.id;
   const openedRepository = opened?.repository ?? null;

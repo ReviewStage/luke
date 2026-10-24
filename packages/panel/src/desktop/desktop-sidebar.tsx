@@ -1203,11 +1203,11 @@ function ListSkeleton(): React.JSX.Element {
  * The Inbox's row, last of the rows heading the list and drawn as they are:
  * the tray, its name, and how many items wait on the developer across every
  * task at its end, the sum of the counts the Inbox's rows show, in even
- * figures and the accent's blue, since they wait on the developer, and
- * nothing at none. Its chord takes the count's place while the row is hovered or
- * reached from the keyboard, as New task's and Search's show theirs. A press
- * opens the window's Inbox (`desktop-inbox.tsx`), and the row is the place
- * shown while it stands.
+ * figures and the needs-you tone the rows it counts wear, since they wait on
+ * the developer, and nothing at none. Its chord takes the count's place
+ * while the row is hovered or reached from the keyboard, as New task's and
+ * Search's show theirs. A press opens the window's Inbox
+ * (`desktop-inbox.tsx`), and the row is the place shown while it stands.
  */
 function SidebarInboxRow({
   waiting,
@@ -1242,8 +1242,8 @@ function SidebarInboxRow({
 /**
  * Chat's row, under the Inbox's and drawn as it is: the glyph, its name, and
  * how many messages wait on the developer in For you at its end, in the
- * Inbox's even figures and its accent, since both count what waits on the
- * reader, nothing at none. A press opens the window's Chat
+ * Inbox's even figures and its needs-you tone, since both count what waits on
+ * the reader, nothing at none. A press opens the window's Chat
  * (`desktop-chat.tsx`), and the row is the place shown while it stands.
  */
 function SidebarChatRow({

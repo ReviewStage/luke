@@ -3,7 +3,6 @@ import { RegistryContext } from "@effect/atom-react/RegistryContext";
 import type { PlanCommentAnchors } from "@luke/features/plan-comment-wire";
 import type { PlanEditRequest } from "@luke/features/plan-edit";
 import {
-  CONFLICT_NOTE,
   DOCUMENT_EDITOR_STATE,
   type DocumentEditor,
   editorAnswered,
@@ -16,7 +15,7 @@ import {
   editorRefused,
   editorRetried,
   editorSent,
-  editorTookLukes,
+  editorTookTheirs,
   editorTyped,
   leavingSave,
   pendingSave,
@@ -32,6 +31,7 @@ import type { PlanEditorPlacement } from "../plan-editor/contract.js";
 import { rendererRuntime } from "../renderer-runtime.js";
 import { useSteadyDoor } from "../steady-door.js";
 import { type ToastNotice, useToast, useWithdrawToast } from "../toast.js";
+import { type ConflictWords, conflictWords, type EditPlace } from "./edit-ref.js";
 
 /**
  * use-plan-editing.ts -- the open task's one editor: whether its text is open, which block the keyboard stands on, and its saves as the developer pauses.
@@ -99,10 +99,11 @@ const LEFT_UNSAVED = {
   KEEP_MINE: "Keep mine",
 } as const;
 
-/** What a task's words are saved through once it is left: its id, its door, and where they are kept and said. */
+/** What a task's words are saved through once it is left: its id, its door, who its conflict is named for, and where they are kept and said. */
 interface LeftTask {
   readonly taskId: string;
   readonly door: PlanEditDoor;
+  readonly place: EditPlace;
   readonly registry: AtomRegistry.AtomRegistry;
   readonly toast: (notice: ToastNotice) => void;
 }
@@ -132,14 +133,15 @@ function keepLeft(left: LeftTask, now: DocumentEditor, saving: symbol): void {
   registry.set(leftUnsavedAtom, held);
   mark(registry, savingLeftAtom, saving, false);
   if (kept === undefined) return;
-  const conflict = kept.state.kind === DOCUMENT_EDITOR_STATE.CONFLICT;
+  const { state } = kept;
+  const conflict = state.kind === DOCUMENT_EDITOR_STATE.CONFLICT;
   const press = () => {
     const standing = takeLeft(registry, taskId);
     if (standing !== undefined) saveLeft(left, editorKeptMine(standing));
   };
   left.toast({
     words: LEFT_UNSAVED.WORDS,
-    ...(conflict ? { detail: CONFLICT_NOTE } : {}),
+    ...(conflict ? { detail: conflictWords(state.by, left.place).note } : {}),
     tone: STATUS_TONE.DANGER,
     subject: taskId,
     persists: true,
@@ -198,7 +200,9 @@ export interface PlanEditing {
   /** The base and words once the open editor has taken Luke's part of a save's merged answer. */
   readonly rebase: (base: string, text: string) => void;
   readonly keepMine: () => void;
-  readonly takeLukes: () => void;
+  readonly takeTheirs: () => void;
+  /** What a standing conflict says, naming who wrote the text it met; none while there is none. */
+  readonly conflict: ConflictWords | undefined;
   readonly retry: () => void;
   /** How many of this task's saves the service answered saved, which a Saved tick confirms each of. */
   readonly saves: number;
@@ -247,14 +251,16 @@ export function usePlanEditDoor(
 
 /**
  * The editor over the open plan's text as `text` holds it; none can open
- * without one. Note that a save's answer lands only on the editor it was
- * sent from: each opening is counted, and an answer for an earlier one is
+ * without one, and a conflict names its writer for the reader `place`
+ * holds. Note that a save's answer lands only on the editor it was sent
+ * from: each opening is counted, and an answer for an earlier one is
  * dropped.
  */
 export function usePlanEditing(
   taskId: string,
   text: string | undefined,
   edit: PlanEditDoor,
+  place: EditPlace,
 ): PlanEditing {
   const [editor, setEditor] = useState<DocumentEditor | undefined>(undefined);
   const [placement, setPlacement] = useState<PlanEditorPlacement | undefined>(undefined);
@@ -280,8 +286,10 @@ export function usePlanEditing(
   // The door of the task last drawn, moved on after each commit, so a
   // cleanup as another task opens still holds the door of the one it leaves.
   const door = useRef(edit);
+  const drawnPlace = useRef(place);
   useEffect(() => {
     door.current = edit;
+    drawnPlace.current = place;
   });
 
   // Note that the save out is reserved on the ref before anything renders,
@@ -355,7 +363,13 @@ export function usePlanEditing(
       heldWords.current?.();
       const held = latest.current;
       if (held === undefined) return;
-      const left: LeftTask = { taskId, door: door.current, registry, toast };
+      const left: LeftTask = {
+        taskId,
+        door: door.current,
+        place: drawnPlace.current,
+        registry,
+        toast,
+      };
       if (held.sending === undefined) {
         saveLeft(left, held);
         return;
@@ -410,7 +424,11 @@ export function usePlanEditing(
       setEditor(latest.current);
     },
     keepMine: () => changed(editorKeptMine),
-    takeLukes: () => setEditor((now) => (now === undefined ? now : editorTookLukes(now))),
+    takeTheirs: () => setEditor((now) => (now === undefined ? now : editorTookTheirs(now))),
+    conflict:
+      editor?.state.kind === DOCUMENT_EDITOR_STATE.CONFLICT
+        ? conflictWords(editor.state.by, place)
+        : undefined,
     retry: () => {
       if (latest.current === undefined) return;
       latest.current = editorRetried(latest.current);

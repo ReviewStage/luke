@@ -181,6 +181,18 @@ The theme's custom variants say a control's conditions beside its states:
 `data-horizontal:` and `data-vertical:`. `cn` is told the theme's own sizes,
 or tailwind-merge reads `text-label` as an ink.
 
+The feedback and display components are drawn the same way: `Badge`,
+`Avatar`, `Progress`, `Spinner`, `Skeleton`, `Banner` (shadcn's alert),
+`Card`, `ScrollArea`, `Pagination`, `Breadcrumbs`, and `DataTable` (shadcn's
+table) wrap their vendored sources. `Chip` and `Toast` are drawn in the
+theme's utilities with no shadcn base: a chip is a press shadcn's badge does
+not take, and a toast's holds, stack, and timing stay the panel's on Effect's
+`Clock` (`@luke/panel`'s `toast.tsx`), which Sonner's own timers would not
+keep. `ScrollArea` keeps the platform's own scroller rather than Base UI's
+viewport and bars, so its scrolling, keys, and the refs callers hold on it
+are what they were. A component's sheet keeps only what a utility cannot
+say: keyframes, `:has()`, container queries, and rules other sheets read.
+
 ## Icons
 
 Every icon is imported through one door, `@luke/ui/icons`, built on Lucide

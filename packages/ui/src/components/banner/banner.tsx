@@ -19,10 +19,12 @@ import { STATUS_TONE, type StatusTone } from "../../status-tone.js";
  * recording masks text and nothing else.
  *
  * Where a banner stands, how wide it is and the room around it, is its
- * place's; the banner takes no class or style.
+ * place's; the banner takes no class or style. It is drawn by shadcn/ui's
+ * alert (`../../shadcn/alert.tsx`), whose narrow rules stay in `banner.css`.
  */
 
 import { type ReactNode, useId } from "react";
+import { Alert, AlertAction, AlertDescription, AlertGlyph, AlertRow } from "../../shadcn/alert.js";
 
 /** How a banner looks; its layout is the same for all three. */
 export const BANNER_LOOK = {
@@ -53,16 +55,16 @@ export function Banner({
 }): React.JSX.Element {
   const wordsId = useId();
   return (
-    <section className="luke-banner" data-look={look} data-tone={tone} aria-labelledby={wordsId}>
-      <div className="luke-banner-row">
-        <span className="luke-banner-glyph" aria-hidden="true">
+    <Alert look={look} tone={tone} aria-labelledby={wordsId}>
+      <AlertRow look={look}>
+        <AlertGlyph look={look} tone={tone}>
           {glyph}
-        </span>
-        <div id={wordsId} className="luke-banner-words">
+        </AlertGlyph>
+        <AlertDescription look={look} id={wordsId}>
           {children}
-        </div>
-        {actions === undefined ? null : <div className="luke-banner-actions">{actions}</div>}
-      </div>
-    </section>
+        </AlertDescription>
+        {actions === undefined ? null : <AlertAction>{actions}</AlertAction>}
+      </AlertRow>
+    </Alert>
   );
 }

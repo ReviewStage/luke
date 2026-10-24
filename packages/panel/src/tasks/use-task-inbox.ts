@@ -309,6 +309,8 @@ export function useTaskInbox(input: {
   shown: boolean;
   /** Whether main's read of what waits across the account says an item waits on the task. */
   waiting: boolean;
+  /** The reader's account id, which says whose of the open items wait on them; none before it is known. */
+  readerId: string | undefined;
   agents: {
     /** Every agent of the task by id, an archived one among them, whose items still stand. */
     readonly heldIds: readonly string[] | undefined;
@@ -321,7 +323,7 @@ export function useTaskInbox(input: {
     readonly onRetryList: () => void;
   };
 }): TaskInboxControl {
-  const { taskId, shown, waiting, agents } = input;
+  const { taskId, shown, waiting, readerId, agents } = input;
   const kind = input.kind ?? INBOX_SCOPE_KIND.PLAN;
   const [held, setHeld] = useState<Held>(() => fresh(taskId));
   if (held.taskId !== taskId) setHeld(fresh(taskId));
@@ -653,7 +655,7 @@ export function useTaskInbox(input: {
     drop((place) => stale.some((kept) => Equal.equals(kept.place, place)));
   }, [held.read, held.items, settled, ownTask, readAgent, drafts, drop, update, draftsOn]);
 
-  const board = useMemo(() => inboxBoard(settled), [settled]);
+  const board = useMemo(() => inboxBoard(settled, readerId), [settled, readerId]);
   const draftOf = useCallback(
     (item: InboxItem): InboxDraft => {
       const kept = drafts.find((each) => draftOfItem(each.place, item));

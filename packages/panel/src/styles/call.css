@@ -304,6 +304,16 @@ html.call-window[data-pointer-stale="true"]
   white-space: nowrap;
 }
 
+/* Why the video ended, under Video ended, in the same voice but free to
+   wrap, since a reason is a sentence. */
+.call-video-note-reason {
+  color: var(--luke-color-text-muted);
+  font-size: var(--luke-type-caption-size);
+  line-height: var(--luke-type-caption-leading);
+  text-align: center;
+  text-wrap: balance;
+}
+
 /* Restart video, labelled where the tile has room and round where it has
    not, one of the two drawn at a time; each no taller than its button. */
 .call-video-restart {

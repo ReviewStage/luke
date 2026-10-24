@@ -26,6 +26,7 @@
     "./admin/use-admin-read": "./src/admin/use-admin-read.js",
     "./app": "./src/app.js",
     "./app-bridge": "./src/app-bridge.js",
+    "./app-commands": "./src/app-commands.js",
     "./app-platform": "./src/app-platform.js",
     "./browser-live-port": "./src/tasks/browser-live-port.js",
     "./build-table": "./scripts/build-table.mjs",

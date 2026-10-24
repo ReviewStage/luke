@@ -158,6 +158,7 @@ const WAITING: readonly AppInboxTask[] = [
 async function mountPage(
   tasks: readonly TaskSummary[] = TASKS,
   room: ShellRoom = SHELL_ROOM.WIDE,
+  overrides: NonNullable<Parameters<typeof tasksControl>[0]> = {},
 ): Promise<HTMLElement> {
   const container = document.createElement("div");
   document.body.append(container);
@@ -181,6 +182,7 @@ async function mountPage(
       },
       onMarkTask: (taskId, mark) => marked.push([taskId, mark]),
       onWriteSections: (writes) => written.push(writes),
+      ...overrides,
     });
     root.render(
       onRegistry(
@@ -238,6 +240,27 @@ test("the List puts the pins first, then the rest by status from the work under 
     ["Todo", ["ACME-40", "ACME-39"]],
     ["Backlog", ["ACME-36"]],
   ]);
+});
+
+test("a refresh that failed after the tasks were read keeps the rows drawn under Could not refresh and Retry, where a first read that failed draws the error alone", async () => {
+  let retried = 0;
+  const onRetryList = () => {
+    retried += 1;
+  };
+  const page = await mountPage(TASKS, SHELL_ROOM.WIDE, { listFailed: true, onRetryList });
+
+  assert.equal(groups(page).length, 4, "the rows stand");
+  const note = page.querySelector('[role="alert"]');
+  assert.match(note?.textContent ?? "", /Could not refresh/u);
+  const retry = [...(note?.querySelectorAll("button") ?? [])].find((each) =>
+    each.textContent?.includes("Retry"),
+  );
+  act(() => retry?.click());
+  assert.equal(retried, 1);
+
+  const first = await mountPage([], SHELL_ROOM.WIDE, { listFailed: true, listRead: false });
+  assert.equal(groups(first).length, 0);
+  assert.match(first.querySelector('[role="alert"]')?.textContent ?? "", /could not be read/u);
 });
 
 test("a row says how many of its task's Inbox threads wait on the reader", async () => {
@@ -1085,6 +1108,44 @@ test("the Filter's Assignee and Creator list the members as every people menu do
   choose("Assignee", "Dean Stratakos");
   closeMenus();
   assert.match(page.textContent ?? "", /Assignee: You/, "the reader's own chip says You");
+});
+
+test("the Filter's Assignee says the members could not be read, with Retry, in the people's place, and Retry reads them again and leaves the menu standing", async () => {
+  let reads = 0;
+  fakeActPort({
+    [ACT_KIND.WORKSPACE_MEMBERS_READ]: () => {
+      reads += 1;
+      return reads === 1 ? Promise.reject(new Error("offline")) : Promise.resolve(MEMBERS);
+    },
+  });
+  const page = await mountPage();
+  listWorkspace({ ...ACME, memberCount: 2 });
+  await act(async () => undefined);
+  const labels = () =>
+    [
+      ...([...document.querySelectorAll('[role="menu"]:not([data-leaving])')]
+        .at(-1)
+        ?.querySelectorAll<HTMLElement>(".luke-menu-item") ?? []),
+    ].map((item) => [
+      item.querySelector(".luke-menu-item-label")?.textContent,
+      item.querySelector(".luke-menu-item-detail")?.textContent ?? null,
+    ]);
+
+  openOptions(page, "Filter");
+  choose("Assignee");
+  const failed = labels();
+  await act(async () => choose("Members could not be read."));
+
+  assert.deepEqual(failed.at(-1), ["Members could not be read.", "Retry"]);
+  assert.ok(
+    failed.every(([label]) => label !== "Reading members…"),
+    "a failed read is no reading",
+  );
+  assert.ok(
+    labels().some(([label]) => label === "Dean Stratakos"),
+    "the members are listed once read again, in the menu that stayed",
+  );
+  assert.ok(labels().every(([label]) => label !== "Members could not be read."));
 });
 
 test("the Filter's Repository leads each repository with its owner's picture, on the List and the Board alike", async () => {

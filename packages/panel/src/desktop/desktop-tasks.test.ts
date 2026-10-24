@@ -24,7 +24,13 @@ import {
   type InboxMessage,
   type InboxReadAsk,
 } from "@luke/features/inbox-wire";
-import { PLAN_ACTOR, type Task } from "@luke/features/task-wire";
+import {
+  PLAN_ACTOR,
+  TASK_PRIORITY,
+  TASK_STATUS,
+  type Task,
+  type TaskStanding,
+} from "@luke/features/task-wire";
 import { WORKSPACE_ROLE } from "@luke/features/workspace-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import { EXPERIMENT } from "@luke/settings";
@@ -33,7 +39,7 @@ import { experimentsOn } from "@luke/settings/testing";
 import { DOCUMENT_REGION, TASKS_PAGE } from "@luke/ui/tasks-model";
 import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
-import { act, createElement } from "react";
+import { act, createElement, Fragment } from "react";
 import { createRoot } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeAll, test, vi } from "vitest";
@@ -48,6 +54,7 @@ import { handState } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { markdownHtmlParserLanded } from "../testing/markdown.js";
 import { relayout } from "../testing/resize-observer.js";
+import { ToastHost } from "../toast.js";
 import "../file-tree/index.js";
 import { followedInboxes } from "../testing/followed-inboxes.js";
 import { codingAgentsControl, tasksControl, UNPINNED_SUMMARY } from "../testing/tasks-control.js";
@@ -1278,5 +1285,94 @@ test("a summary row that opens a tab of the side panel hands the panel the keys,
   act(() => runAppCommand(APP_COMMAND.CLOSE_TAB));
 
   assert.deepEqual(closed, ["panel"]);
+  page.unmount();
+});
+
+/** The open task's page, standing In progress at High priority, whose changes of standing the service keeps or refuses as `keeps` says, and the changes it was sent. */
+function standingPageMounted(keeps: boolean) {
+  fakeAppPlatform(QUIET_PANEL);
+  fakeAppBridge({});
+  const task: Task = {
+    ...TASK,
+    number: 7,
+    status: TASK_STATUS.IN_PROGRESS,
+    priority: TASK_PRIORITY.HIGH,
+  };
+  const sent: TaskStanding[] = [];
+  const container = document.body.appendChild(document.createElement("div"));
+  const root = createRoot(container);
+  act(() =>
+    root.render(
+      onRegistry(
+        AtomRegistry.make(),
+        createElement(
+          Fragment,
+          null,
+          createElement(DesktopTasks, {
+            summary: UNPINNED_SUMMARY,
+            looks: NO_LOOKS,
+            tasks: tasksControl({
+              page: TASKS_PAGE.DOCUMENT,
+              activeTaskId: task.id,
+              region: { kind: DOCUMENT_REGION.READY, task },
+              sidePanel: DOCUMENT_PANEL,
+              onSetTaskStanding: (_taskId, standing) => {
+                sent.push(standing);
+                return Promise.resolve(keeps);
+              },
+            }),
+          }),
+          createElement(ToastHost),
+        ),
+      ),
+    ),
+  );
+  /** The chip named `label`, which says its value after its name. */
+  const chip = (label: string) =>
+    [...container.querySelectorAll<HTMLButtonElement>("button")].find((each) =>
+      each.getAttribute("aria-label")?.startsWith(`${label}:`),
+    );
+  /** Picks `words` from the menu the `label` chip drops, and lets the answer land. */
+  const pick = async (label: string, words: string) => {
+    act(() => chip(label)?.click());
+    const row = [...document.querySelectorAll<HTMLElement>('[role="option"]')].find((each) =>
+      each.textContent?.includes(words),
+    );
+    assert.ok(row, `the ${label} menu offers ${words}`);
+    act(() => row.click());
+    await act(async () => undefined);
+  };
+  return {
+    sent,
+    chip,
+    pick,
+    unmount: () => {
+      act(() => root.unmount());
+      container.remove();
+    },
+  };
+}
+
+test("a status or priority the service refuses raises the toast the rows raise, and the chip goes on showing the value that stands", async () => {
+  const page = standingPageMounted(false);
+
+  await page.pick("Status", "Done");
+  assert.deepEqual(page.sent, [{ status: TASK_STATUS.DONE }]);
+  assert.match(document.body.textContent ?? "", /The task could not be changed\. Try again\./u);
+  assert.equal(page.chip("Status")?.getAttribute("aria-label"), "Status: In progress");
+
+  await page.pick("Priority", "Low");
+  assert.deepEqual(page.sent[1], { priority: TASK_PRIORITY.LOW });
+  assert.equal(page.chip("Priority")?.getAttribute("aria-label"), "Priority: High");
+  page.unmount();
+});
+
+test("a status the service keeps raises no toast", async () => {
+  const page = standingPageMounted(true);
+
+  await page.pick("Status", "Done");
+
+  assert.deepEqual(page.sent, [{ status: TASK_STATUS.DONE }]);
+  assert.doesNotMatch(document.body.textContent ?? "", /could not be changed/u);
   page.unmount();
 });

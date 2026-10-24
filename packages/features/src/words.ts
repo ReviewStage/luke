@@ -94,6 +94,9 @@ export function readFailedWords(thing: string): string {
   return `${sentenceStart(thing)} could not be read.`;
 }
 
+/** What a refresh that failed says beside the last good read, which stays drawn; Retry stands with it. */
+export const REFRESH_FAILED_WORDS = "Could not refresh";
+
 /**
  * The voice's failures, each said in words of its own. The notice line and
  * app state carry only these keys, never a browser's or a provider's text, so
@@ -104,8 +107,12 @@ export function readFailedWords(thing: string): string {
 export const VOICE_FAILURE = {
   /** The call could not be built, the host opened no session for it, or it never started. */
   CALL_NOT_STARTED: "call-not-started",
+  /** A call that stood lost its connection, and every try to get it back failed. */
+  CALL_DROPPED: "call-dropped",
   /** The system refused the microphone a call needs. */
   MICROPHONE_REFUSED: "microphone-refused",
+  /** The system allows the microphone, and the device still would not open, so the call cannot hear the developer. */
+  MICROPHONE_UNAVAILABLE: "microphone-unavailable",
   /** A call runs on the account's own OpenAI key, and none is saved. */
   OPENAI_KEY_MISSING: "openai-key-missing",
   /** OpenAI refused the saved key, as it does a revoked or deleted one. */
@@ -118,6 +125,8 @@ export const VOICE_FAILURE = {
   NATIVE_AGENT: "native-agent",
   /** The hosted service's ceiling is reached. */
   VOICE_UNAVAILABLE: "voice-unavailable",
+  /** The hidden window that holds every call kept failing to load and was given up on for the rest of the run. */
+  VOICE_WINDOW_LOST: "voice-window-lost",
 } as const;
 
 export type VoiceFailure = (typeof VOICE_FAILURE)[keyof typeof VOICE_FAILURE];
@@ -144,10 +153,17 @@ export const VOICE_FAILURE_WORDS = {
   [VOICE_FAILURE.CALL_NOT_STARTED]: {
     words: "Luke could not start the call. Try again in a moment.",
   },
+  [VOICE_FAILURE.CALL_DROPPED]: {
+    words: "The call dropped: the connection was lost. Call again to carry on.",
+  },
   [VOICE_FAILURE.MICROPHONE_REFUSED]: {
     words:
       "A call needs the microphone. Allow it in System Settings › Privacy & Security › Microphone.",
     remedy: VOICE_REMEDY.ALLOW_MICROPHONE,
+  },
+  [VOICE_FAILURE.MICROPHONE_UNAVAILABLE]: {
+    words:
+      "Luke can't hear you: the microphone could not be opened. Check that one is connected, then unmute.",
   },
   [VOICE_FAILURE.OPENAI_KEY_MISSING]: {
     words: "Luke could not start the call. A call runs on your OpenAI key, and none is saved.",
@@ -169,6 +185,9 @@ export const VOICE_FAILURE_WORDS = {
   },
   [VOICE_FAILURE.VOICE_UNAVAILABLE]: {
     words: "Voice is temporarily unavailable. Try again later.",
+  },
+  [VOICE_FAILURE.VOICE_WINDOW_LOST]: {
+    words: "Voice stopped working and could not restart. Quit and reopen Luke to call again.",
   },
 } as const satisfies Record<VoiceFailure, VoiceFailureWords>;
 

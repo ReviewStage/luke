@@ -25,7 +25,10 @@ import { readKept, writeKept } from "./kept-storage.js";
  * (`chat-composer.tsx`), the Inbox's New thread its To, Subject, and words
  * per workspace (`inbox-compose.tsx`), a plan's comment its words per
  * thread being started, per thread answered, and per comment edited
- * (`plan-comments.tsx`), and an inbox
+ * (`plan-comments.tsx`), an agent's line written again its words and
+ * files per agent and line (`edit-composer.tsx`), a chat ask's answer its
+ * picks and note per message, at the revision it was written against
+ * (`chat-ask.tsx`), and an inbox
  * card its answer per item, at the revision it was written against, the
  * options picked, the fields filled, and, on a thread, the steps ticked and
  * the answer pressed beside its note. A draft is known by where
@@ -57,7 +60,7 @@ const STORAGE_KEY = "luke.composerDrafts";
 /** How many drafts are kept at most, the oldest written let go first. */
 const MAX_KEPT = 200;
 
-/** What a draft is written to: a started agent, a plan's agent not yet started, an inbox item, a task not yet started, an automation's helper not yet started, a chat's channel or thread, an Inbox thread not yet started, or a plan's comment. */
+/** What a draft is written to: a started agent, a plan's agent not yet started, an inbox item, a task not yet started, an automation's helper not yet started, a chat's channel or thread, an Inbox thread not yet started, a plan's comment, an agent's line written again, or a chat message's ask. */
 export const DRAFT_PLACE = {
   AGENT: "agent",
   NEW_AGENT: "newAgent",
@@ -67,6 +70,8 @@ export const DRAFT_PLACE = {
   CHAT: "chat",
   NEW_THREAD: "newThread",
   PLAN_COMMENT: "planComment",
+  EDIT: "edit",
+  CHAT_ASK: "chatAsk",
 } as const;
 
 const draftPlaceSchema = Schema.Union([
@@ -144,6 +149,20 @@ const draftPlaceSchema = Schema.Union([
       }),
     ]),
   }),
+  Schema.Struct({
+    kind: Schema.Literal(DRAFT_PLACE.EDIT),
+    /** The agent whose transcript holds the line. */
+    agentId: Schema.String,
+    /** The developer's line the words are written again in place of. */
+    messageId: Schema.String,
+  }),
+  Schema.Struct({
+    kind: Schema.Literal(DRAFT_PLACE.CHAT_ASK),
+    /** The chat message that carries the ask. */
+    messageId: Schema.String,
+    /** The ask's revision the answer was written against, so picks never land on options its poster changed since. */
+    revision: Schema.Number,
+  }),
 ]);
 
 /** Where one draft goes. */
@@ -184,6 +203,7 @@ const storedDrafts = Schema.fromJsonString(
       press: Schema.optionalKey(Schema.Literals(Object.values(INBOX_REPLY))),
       title: Schema.optionalKey(Schema.String),
       to: Schema.optionalKey(Schema.String),
+      dropped: Schema.optionalKey(Schema.Array(Schema.String)),
     }),
   ),
 );
@@ -204,6 +224,8 @@ export interface Draft {
   readonly title?: string | undefined;
   /** The agent the draft goes to, by its id; kept only beside something written, since a pick alone is no draft. */
   readonly to?: string | undefined;
+  /** The files of a line written again that its box took off, by their key in the line, so they stay off where the line's files are offered again (`edit-composer.tsx`). */
+  readonly dropped?: readonly string[] | undefined;
 }
 
 /** One place's draft. */
@@ -226,6 +248,12 @@ export type NewThreadPlace = Extract<DraftPlace, { kind: typeof DRAFT_PLACE.NEW_
 /** A plan comment's place: a thread being started, answered, or one of its comments edited. */
 export type PlanCommentPlace = Extract<DraftPlace, { kind: typeof DRAFT_PLACE.PLAN_COMMENT }>;
 
+/** An agent's line written again: the agent and the line. */
+export type EditPlace = Extract<DraftPlace, { kind: typeof DRAFT_PLACE.EDIT }>;
+
+/** A chat ask's answer: the message carrying it, at the ask's revision. */
+export type ChatAskPlace = Extract<DraftPlace, { kind: typeof DRAFT_PLACE.CHAT_ASK }>;
+
 /** A box holding nothing. */
 export const EMPTY_DRAFT: Draft = { text: "", attachments: [], choices: [], values: [] };
 
@@ -237,7 +265,8 @@ function stored(draft: Draft): boolean {
     draft.values.length > 0 ||
     (draft.steps ?? []).length > 0 ||
     draft.press !== undefined ||
-    (draft.title ?? "") !== ""
+    (draft.title ?? "") !== "" ||
+    (draft.dropped ?? []).length > 0
   );
 }
 
@@ -255,7 +284,7 @@ function readStored(): readonly StoredDraft[] {
 function readDrafts(owner: Owner): readonly KeptDraft[] {
   return readStored()
     .filter((kept) => kept.accountId === owner)
-    .flatMap(({ place, text, choices = [], values = [], steps, press, title, to }) =>
+    .flatMap(({ place, text, choices = [], values = [], steps, press, title, to, dropped }) =>
       isDraftPlace(place)
         ? [
             {
@@ -268,6 +297,7 @@ function readDrafts(owner: Owner): readonly KeptDraft[] {
               ...(press === undefined ? undefined : { press }),
               ...(title === undefined ? undefined : { title }),
               ...(to === undefined ? undefined : { to }),
+              ...(dropped === undefined ? undefined : { dropped }),
             },
           ]
         : [],
@@ -286,7 +316,8 @@ function storedAs(owner: Owner, kept: KeptDraft, entry: StoredDraft): boolean {
     Equal.equals(entry.steps ?? [], kept.steps ?? []) &&
     entry.press === kept.press &&
     (entry.title ?? "") === (kept.title ?? "") &&
-    entry.to === kept.to
+    entry.to === kept.to &&
+    Equal.equals(entry.dropped ?? [], kept.dropped ?? [])
   );
 }
 
@@ -305,7 +336,7 @@ function writeDrafts(owner: Owner, drafts: readonly KeptDraft[]): readonly KeptD
   );
   const written = kept
     .filter((draft) => !standing.some((entry) => storedAs(owner, draft, entry)))
-    .map(({ place, text, choices, values, steps = [], press, title = "", to }) => ({
+    .map(({ place, text, choices, values, steps = [], press, title = "", to, dropped = [] }) => ({
       accountId: owner,
       place,
       text,
@@ -315,6 +346,7 @@ function writeDrafts(owner: Owner, drafts: readonly KeptDraft[]): readonly KeptD
       ...(press === undefined ? undefined : { press }),
       ...(title === "" ? undefined : { title }),
       ...(to === undefined ? undefined : { to }),
+      ...(dropped.length === 0 ? undefined : { dropped }),
     }));
   const entries = [...standing, ...written].slice(-MAX_KEPT);
   writeKept(STORAGE_KEY, storedDrafts, entries);

@@ -105,6 +105,8 @@ export interface SkillPicker {
   readonly chip: (chip: ComposerChip) => ReactNode;
   /** The repository's skills as read; nothing before they are, or where they could not be. */
   readonly known: readonly SkillOption[] | undefined;
+  /** Whether the read of the skills came back unread, which an `@` list says could not be read; asking again reads them again. */
+  readonly unread: boolean;
   /** Asks for the skills to be read, as an `@` list offering them does once it opens. */
   readonly ask: () => void;
 }
@@ -249,6 +251,7 @@ export function useSkillPicker({
       : 0;
   const at = Math.min(held, Math.max(rows.length - 1, 0));
   const known = skills !== undefined && "skills" in skills ? skills.skills : undefined;
+  const unread = skills !== undefined && "unread" in skills;
   const names = useMemo(
     () => (known === undefined ? NO_NAMES : new Set(known.map((each) => each.name))),
     [known],
@@ -343,6 +346,7 @@ export function useSkillPicker({
     onTrigger: setTrigger,
     onKey,
     known,
+    unread,
     ask,
     chip: ({ name }) => (
       <BoxChip name={name} skill={known?.find((each) => each.name === name)} onOpen={onOpen} />

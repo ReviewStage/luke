@@ -7,7 +7,7 @@ import type {
 } from "@luke/settings/wire";
 import type { ActionResult } from "@luke/wire";
 import { useMemo } from "react";
-import { useAct } from "../act.js";
+import { askActResult, useAct } from "../act.js";
 
 export interface SettingsWrites {
   setting(field: AppSettingField, value: AppSettingValue<AppSettingField>): Promise<ActionResult>;
@@ -25,7 +25,7 @@ export function useSettingsWrites(): SettingsWrites {
   const { act, updateSetting } = useAct();
   return useMemo<SettingsWrites>(
     () => ({
-      setting: (field, value) => updateSetting(field, value),
+      setting: (field, value) => askActResult(updateSetting(field, value)),
       reset: (scope, kept) => act(ACT_KIND.SETTINGS_RESET, { scope, kept: [...kept] }),
     }),
     [act, updateSetting],

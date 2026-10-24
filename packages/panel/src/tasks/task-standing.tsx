@@ -9,10 +9,12 @@ import {
   type TaskStatus,
   type TaskSummary,
 } from "@luke/features/task-wire";
+import { readFailedWords, TERM } from "@luke/features/words";
 import { taskKey } from "@luke/features/workspace-key";
 import type { WorkspaceMember } from "@luke/features/workspace-wire";
 import {
   CHIP_WIDTH,
+  ErrorState,
   GAP,
   Inline,
   Spinner,
@@ -130,7 +132,7 @@ function TaskAssigneePicker({
   /** Where a pick is sent; without one the chip only says. */
   onPick: ((assigneeId: string | null) => void) | undefined;
 }): React.JSX.Element {
-  const { members, readerId, membersReading } = useMemberDirectory();
+  const { members, readerId, membersReading, membersRefused, retry } = useMemberDirectory();
   const person = usePerson(assignee);
   return (
     <Picker
@@ -147,7 +149,13 @@ function TaskAssigneePicker({
       rows={assigneeRows(members, readerId)}
       placeholder="Assign to…"
       noMatch="No people match"
-      note={membersReading ? <Spinner delay label="Reading members" /> : undefined}
+      note={
+        membersRefused ? (
+          <ErrorState onRetry={retry}>{readFailedWords(TERM.MEMBER.many)}</ErrorState>
+        ) : membersReading ? (
+          <Spinner delay label="Reading members" />
+        ) : undefined
+      }
       align={PICKER_ALIGN.START}
       width={CHIP_WIDTH.AUTO}
       disabled={onPick === undefined}

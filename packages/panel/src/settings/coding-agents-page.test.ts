@@ -12,11 +12,13 @@ import {
 } from "@luke/features/provider-key-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import type { PortActKind, PortActResult } from "@luke/host/contract";
-import { act, createElement } from "react";
+import { act, createElement, Fragment } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
+import { rendererRegistry } from "../renderer-runtime.js";
 import { type AnyAct, FAKE_ANSWER, type FakeActAnswer, fakeActs } from "../testing/app-bridge.js";
 import { DESKTOP_LINKS, fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
+import { onRegistry } from "../testing/copy-feedback.js";
 import {
   focusedSegment,
   pressKeyIn,
@@ -24,6 +26,8 @@ import {
   segment,
   segmentedGroup,
 } from "../testing/segmented.js";
+import { newestToastSays } from "../testing/toast.js";
+import { ToastHost } from "../toast.js";
 import { CodingAgentsPage } from "./coding-agents-page.js";
 
 /**
@@ -139,7 +143,16 @@ async function mount(): Promise<HTMLElement> {
   document.body.append(container);
   const root = createRoot(container);
   roots.push(root);
-  act(() => root.render(createElement(CodingAgentsPage, { signedIn: true })));
+  act(() =>
+    root.render(
+      createElement(
+        Fragment,
+        null,
+        createElement(CodingAgentsPage, { signedIn: true }),
+        onRegistry(rendererRegistry, createElement(ToastHost)),
+      ),
+    ),
+  );
   await settle();
   return container;
 }
@@ -147,13 +160,6 @@ async function mount(): Promise<HTMLElement> {
 const fastSwitch = (page: HTMLElement) =>
   page.querySelector<HTMLButtonElement>('[role="switch"][aria-label="Fast"]') ??
   assert.fail("no Fast switch");
-
-/** The words that describe a control, in the order it names them. */
-const descriptionOf = (control: HTMLElement) =>
-  (control.getAttribute("aria-describedby") ?? "")
-    .split(" ")
-    .map((id) => document.getElementById(id)?.textContent ?? "")
-    .join(" ");
 
 /** What the page announces now: its alerts and its live regions that say something. */
 const announced = (page: HTMLElement) =>
@@ -191,20 +197,15 @@ test("while the default and the keys are read, placeholder rows stand in each gr
   assert.ok(fastSwitch(page));
 });
 
-test("a Fast the service refuses says so under Fast's own row, the switch left off and pressable again, as every settings switch's refusal does", async () => {
+test("a Fast the service refuses flips back and says so in a toast, the switch pressable again", async () => {
   const page = await mount();
   refuseWrite = true;
 
   act(() => fastSwitch(page).click());
   await settle();
 
-  assert.deepEqual(announced(page), ["The default could not be saved. Try again."]);
-  assert.equal(fastSwitch(page).getAttribute("aria-invalid"), "true");
-  assert.match(
-    descriptionOf(fastSwitch(page)),
-    /The default could not be saved\. Try again\./u,
-    "the refusal describes the Fast switch, not the rows after it",
-  );
+  assert.equal(newestToastSays(), "The default could not be saved. Try again.");
+  assert.deepEqual(announced(page), []);
   assert.equal(fastSwitch(page).getAttribute("aria-checked"), "false");
   assert.equal(fastSwitch(page).disabled, false);
   assert.deepEqual(written(), [{ model: OPUS_FAST.id, effort: "high" }]);
@@ -243,7 +244,7 @@ test("Effort and Context are each a radio group, the stored value checked and th
   ]);
 });
 
-test("a refusal goes once any row's save lands, Fast's after an effort is kept and the effort's after Fast is, since every row writes the one default", async () => {
+test("an effort's refusal stands under the rows until a save lands, and Fast's refusal is a toast that leaves no line behind", async () => {
   const page = await mount();
   const alerts = () => announced(page);
 
@@ -254,7 +255,6 @@ test("a refusal goes once any row's save lands, Fast's after an effort is kept a
   refuseWrite = false;
   act(() => segment(segmentedGroup(page, "Effort"), "Low").click());
   await settle();
-  const afterEffort = alerts();
 
   refuseWrite = true;
   act(() => segment(segmentedGroup(page, "Effort"), "Medium").click());
@@ -264,8 +264,7 @@ test("a refusal goes once any row's save lands, Fast's after an effort is kept a
   act(() => fastSwitch(page).click());
   await settle();
 
-  assert.deepEqual(fastRefused, ["The default could not be saved. Try again."]);
-  assert.deepEqual(afterEffort, []);
+  assert.deepEqual(fastRefused, []);
   assert.deepEqual(effortRefused, ["The default could not be saved. Try again."]);
   assert.deepEqual(alerts(), []);
   assert.equal(fastSwitch(page).getAttribute("aria-checked"), "true");

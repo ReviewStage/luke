@@ -157,7 +157,7 @@ import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import { useSteadyDoor, useSteadyDoors } from "../steady-door.js";
 import { TOAST_HOLD, UNDO_LABEL, useToast } from "../toast.js";
 import { useCapability, useExperiment } from "../use-app-state.js";
-import { useStandingCall, voiceViewNow } from "../use-voice-view.js";
+import { useStandingCall, voiceLostNow, voiceViewNow } from "../use-voice-view.js";
 import type { AgentCallPlace, AgentCallPress } from "./agent-call.js";
 import type { FixtureChat, Staged } from "./chat-fixture.js";
 import { useChatOn } from "./chat-gate.js";
@@ -1585,6 +1585,7 @@ export function useTasksTab(input: {
     onOpenApiKeys: input.onOpenApiKeys,
     me: input.accountId,
     onStarted: (agentId) => mainRef.current?.onChoose({ agent: agentId }),
+    onDraftRestored: (on, draftId) => mainRef.current?.onShow(on, { draft: draftId }),
     keywords: dictationWords,
   });
   // An Untitled task takes its first agent's title on the service, and the
@@ -2548,6 +2549,7 @@ export function useTasksTab(input: {
       call: now.call,
       voiceStatus: now.voiceStatus,
       openAiKeyMissing,
+      voiceLost: voiceLostNow(),
     });
     if (button.press === MICROPHONE_PRESS.ADD_OPENAI_KEY) input.onOpenApiKeys();
     if (button.press === MICROPHONE_PRESS.ASK_ACCESS) {

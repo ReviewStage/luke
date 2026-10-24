@@ -71,14 +71,18 @@ test("a task's card leads with its key, its status, its priority, and who is on 
   const parts = [...card.children];
   assert.deepEqual(
     [...(parts[0]?.children ?? [])].map((each) => [
-      each.hasAttribute("data-task-key") ? "key" : each.className,
+      each.hasAttribute("data-task-key")
+        ? "key"
+        : each.classList.contains("luke-badge")
+          ? "badge"
+          : each.className,
       each.textContent,
     ]),
     [
       ["key", "ACME-42"],
-      ["luke-badge", "In progress"],
-      ["luke-badge", "High"],
-      ["luke-badge", "No assignee"],
+      ["badge", "In progress"],
+      ["badge", "High"],
+      ["badge", "No assignee"],
     ],
     "the key as plain words, as every place draws a key, then the status, priority, and assignee chips",
   );

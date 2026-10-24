@@ -4,7 +4,6 @@ import assert from "node:assert/strict";
 import { CONVERSATION_MEDIA_TYPE } from "@luke/features/conversation-picture-wire";
 import { planAttachmentAddress } from "@luke/features/plan-attachment-link";
 import type { PlanEditRequest } from "@luke/features/plan-edit";
-import { CONFLICT_NOTE } from "@luke/features/plan-edit-model";
 import { PLAN_ACTOR, type Task } from "@luke/features/task-wire";
 import { TASK_CALL_FAILURE, type TasksEditAnswer } from "@luke/features/tasks-view";
 import { ACT_KIND } from "@luke/host/acts";
@@ -832,21 +831,47 @@ test("a title typed in is unsaved work until its rename answers", async () => {
   assert.equal(unsavedWords(container), false);
 });
 
+test("a conflict over a teammate's words names them on its note and its button, which takes their words and closes the editor", async () => {
+  const theirs = `${BODY}Charles's.\n`;
+  const by = { actor: PLAN_ACTOR.DEVELOPER, by: CHARLES, at: Date.now(), duringCall: false };
+  const { container, sent } = mount([{ conflict: { current: theirs, by } }]);
+  act(() => block(container, "Goal").click());
+  act(() => open().onDraft(`${BODY}Mine.\n`));
+  act(() => open().onFinish(1, FINISH.ESCAPE));
+  await settle();
+
+  const note = container.querySelector(".plan-editor-note");
+  assert.equal(
+    note?.querySelector("span")?.textContent,
+    "Charles Pan changed this section while you were editing.",
+  );
+  const take = [...(note?.querySelectorAll("button") ?? [])].at(-1);
+  assert.equal(take?.textContent, "Use Charles Pan’s");
+
+  act(() => take?.click());
+  await settle();
+
+  assert.equal(sent.length, 1, "taking their words saves nothing");
+  assert.ok(container.querySelector(".plan-document-editor") === null, "the editor closed");
+});
+
 test("words left waiting on a conflict are kept and said, and the toast's Keep mine saves them over Luke's", async () => {
   const lukes = `${BODY}Luke's.\n`;
-  const { container, sent, render } = mount([{ conflict: { current: lukes } }]);
+  const by = { actor: PLAN_ACTOR.NOTETAKER, at: Date.now(), duringCall: true };
+  const lukesNote = "Luke changed this section while you were editing.";
+  const { container, sent, render } = mount([{ conflict: { current: lukes, by } }]);
   const other = { ...DOCUMENT_TASK, id: "0c4f2e9a-7d1b-4a3e-8f6c-2b9d5e1a7c40" };
   act(() => block(container, "Goal").click());
   act(() => open().onDraft(`${BODY}Mine.\n`));
   act(() => open().onFinish(1, FINISH.ESCAPE));
   await settle();
-  assert.ok(container.textContent?.includes(CONFLICT_NOTE), "the conflict holds the editor open");
+  assert.ok(container.textContent?.includes(lukesNote), "the conflict holds the editor open");
 
   render(other);
   await settle();
 
   assert.equal(sent.length, 1, "a conflict sends nothing more as the plan is left");
-  assert.equal(newestToastSays(), `Your plan edits could not be saved.${CONFLICT_NOTE}Keep mine`);
+  assert.equal(newestToastSays(), `Your plan edits could not be saved.${lukesNote}Keep mine`);
 
   act(() => newestToastAction()?.click());
   await settle();

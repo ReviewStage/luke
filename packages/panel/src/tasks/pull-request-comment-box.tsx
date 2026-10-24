@@ -1,6 +1,6 @@
 import { PULL_REQUEST_ACTION } from "@luke/features/pull-request-write-wire";
 import { BUTTON_VARIANT, Button, TEXT_ELEMENT, TEXT_VARIANT, Text } from "@luke/ui";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { CommentEditor, overCommentBound } from "./comment-editor.js";
 import {
   PullRequestWriteNote,
@@ -54,6 +54,7 @@ export function PullRequestCommentBox({
 }): React.JSX.Element {
   const { writes, body, setBody } = comment;
   const sending = writes.pending !== undefined;
+  const field = useRef<HTMLElement>(null);
   const blank = body.trim() === "" || overCommentBound(body);
   const send = () => {
     if (blank || sending) return;
@@ -79,6 +80,9 @@ export function PullRequestCommentBox({
         onChange={setBody}
         busy={sending}
         onSubmit={send}
+        // Note that Esc lets go of the box and keeps its words, so it never reaches the window, which would leave the task.
+        onCancel={() => field.current?.blur()}
+        fieldRef={field}
       />
       <PullRequestWriteNote writes={writes} className="pull-request-comment-note" />
       <div className="pull-request-comment-foot">

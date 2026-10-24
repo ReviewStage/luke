@@ -29,7 +29,7 @@ import { CALL_VIDEO_LABEL } from "../call/call-video-tile.js";
 import { AgentCallVideo, useAgentCallVideo } from "../call/panel-avatar.js";
 import { useOpenAiKeyMissing, useOpenApiKeys } from "../openai-key.js";
 import { APP_SLICE, useAppSlice, VOICE_AVAILABLE } from "../use-app-state.js";
-import { useStandingVoiceView } from "../use-voice-view.js";
+import { useStandingVoiceView, useVoiceLost } from "../use-voice-view.js";
 import { CALL_CONTROL_LABEL, CallMute } from "./tasks-parts.js";
 
 /**
@@ -111,6 +111,7 @@ function useCallButton(agentId: string) {
   const view = useStandingVoiceView();
   const voiceAvailable = useAppSlice(VOICE_AVAILABLE);
   const openAiKeyMissing = useOpenAiKeyMissing();
+  const voiceLost = useVoiceLost();
   const microphoneStatus =
     useAppSlice(APP_SLICE.AUDIO)?.microphoneStatus ?? MICROPHONE_STATUS.NOT_DETERMINED;
   return {
@@ -123,6 +124,7 @@ function useCallButton(agentId: string) {
       call: view.call,
       voiceStatus: view.voiceStatus,
       openAiKeyMissing,
+      voiceLost,
     }),
   };
 }

@@ -87,7 +87,7 @@ import { SwitchRow } from "./switch-row.js";
  * costs past the standard one; a change of model keeps the standard window
  * where the next model offers two. A write is one ask of the service, the rows resting until
  * it answers; Fast is a `SwitchRow` like every other settings switch, so its
- * refusal is worded under its own row, and the other rows' under them all. With no account signed in
+ * refusal is said in a toast as the switch flips back, and the other rows' under them all. With no account signed in
  * there is no default to show, and the page says so.
  *
  * The group is `@luke/ui`'s `SettingsSection`, and Effort and Context each
@@ -173,16 +173,10 @@ function DefaultRows({
   /** Asks the service to keep `choice`, answering whether it did. */
   onChange: (choice: ModelChoice) => Promise<ActionResult>;
 }): React.JSX.Element {
-  // Fast's switch words its own refusal under its row, and the picker's and the segments' is worded under them all.
+  // Fast's switch says its own refusal in a toast, and the picker's and the segments' is worded under them all.
   const [rejection, setRejection] = useState<string>();
-  // Note that every row writes the one stored choice, so a save that lands clears the other rows'
-  // refusal too: Fast's by standing its row afresh, which only a row pressed elsewhere does.
-  const [othersSaved, setOthersSaved] = useState(0);
   const run = (next: ModelChoice) => {
-    void onChange(next).then((result) => {
-      setRejection(actionRejection(result));
-      if (result.status === ACTION_RESULT_STATUS.ACCEPTED) setOthersSaved((count) => count + 1);
-    });
+    void onChange(next).then((result) => setRejection(actionRejection(result)));
   };
   const runFast = (next: ModelChoice) =>
     onChange(next).then((result) => {
@@ -261,7 +255,6 @@ function DefaultRows({
       {/* No Fast where the plan that pays for the model runs no fast mode. */}
       {base?.model.fastWithheldByPlan === true ? null : (
         <SwitchRow
-          key={othersSaved}
           label={FAST_WORD}
           detail={
             fastNote === undefined ? undefined : (

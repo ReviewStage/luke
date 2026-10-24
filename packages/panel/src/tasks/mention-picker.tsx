@@ -20,7 +20,7 @@ import type { PageLine } from "@luke/features/page-wire";
 import { planSections } from "@luke/features/plan-document";
 import { TASK_TREE_ENTRY, type TaskSummary } from "@luke/features/task-wire";
 import type { TaskCodeShowing } from "@luke/features/tasks-view";
-import { countWords, TERM } from "@luke/features/words";
+import { countWords, readFailedWords, TERM } from "@luke/features/words";
 import { namesTaskKey, taskKey } from "@luke/features/workspace-key";
 import type { Workspace, WorkspaceMember } from "@luke/features/workspace-wire";
 import { ACT_KIND } from "@luke/host/acts";
@@ -30,6 +30,7 @@ import {
   ComboboxList,
   comboboxOptionId,
   DocumentIcon,
+  ErrorState,
   IconButton,
   KeepFocus,
   MENU_SURFACE_INSET,
@@ -290,6 +291,8 @@ const TOOL_JOIN = " · ";
 /** The repository's skills as an `@` list offers them: as read, the ask to read them, and the pick that writes one as its `/name` chip. */
 export interface MentionSkills {
   readonly known: readonly SkillOption[] | undefined;
+  /** Whether the read came back unread, which the list says could not be read, with Retry, rather than that it is reading. */
+  readonly unread: boolean;
   readonly ask: () => void;
   readonly onChoose: (name: string) => void;
 }
@@ -1056,6 +1059,22 @@ function MentionCrumb({ crumb }: { crumb: Crumb }): React.JSX.Element {
   );
 }
 
+/** The reads the list draws rows from that can fail, each named as its failure says it. */
+const MENTION_READ = {
+  MEMBERS: "members",
+  AGENTS: "agents",
+  FILES: "the repository's files",
+  SKILLS: "skills",
+} as const;
+
+type MentionRead = (typeof MENTION_READ)[keyof typeof MENTION_READ];
+
+/** A read of the list that failed, and the press that reads it again. */
+interface MentionReadFailure {
+  readonly read: MentionRead;
+  readonly retry: () => void;
+}
+
 /** The list itself: a narrowed list's crumb, each group's heading and rows, the highlighted one washed, and the keys it hears at its foot. */
 function MentionMenu({
   id,
@@ -1065,6 +1084,7 @@ function MentionMenu({
   keys,
   place,
   reading,
+  failures,
   fileCard,
   onHover,
   onChoose,
@@ -1077,11 +1097,14 @@ function MentionMenu({
   place: MenuPlace;
   /** Whether a read the list offers rows from is still out, which the list says in place of "no match". */
   reading: boolean;
+  /** The reads that failed, which the list says could not be read, with Retry, in place of "no match". */
+  failures: readonly MentionReadFailure[];
   fileCard: FileCardOf;
   onHover: (index: number) => void;
   onChoose: (row: MentionRow) => void;
 }): React.JSX.Element {
   const rows = groups.flatMap((group) => group.rows);
+  const noted = reading || failures.length > 0;
   return (
     <MenuSurface
       className="searchable-menu mention-menu"
@@ -1101,8 +1124,19 @@ function MentionMenu({
         }}
         // A narrowed list's one group is named by its crumb.
         headed={crumb === undefined}
-        empty={reading ? undefined : NO_MATCH}
-        note={reading ? <Spinner delay label="Reading" /> : undefined}
+        empty={noted ? undefined : NO_MATCH}
+        note={
+          noted ? (
+            <>
+              {reading ? <Spinner delay label="Reading" /> : null}
+              {failures.map((failure) => (
+                <ErrorState key={failure.read} onRetry={failure.retry}>
+                  {readFailedWords(failure.read)}
+                </ErrorState>
+              ))}
+            </>
+          ) : undefined
+        }
       />
       <MenuKeys keys={keys} />
     </MenuSurface>
@@ -1184,8 +1218,8 @@ export interface MentionablePullRequest
 /**
  * Reads the workspace's coding agents: the newest where no words are given,
  * or, found by the service, those whose title or task's name holds the
- * words, the archived ones among them; settles with none where the read
- * failed.
+ * words, the archived ones among them; rejects where the read failed, so
+ * the list says it could not read them rather than that none match.
  */
 export type MentionAgentsReader = (
   words: string | undefined,
@@ -1410,7 +1444,8 @@ export function useMentionPicker({
     planId: string;
     workspaceId: string | undefined;
     repository: string | null;
-    paths: readonly RepositoryPath[];
+    /** The paths read; none where the read failed, which Retry clears to read again. */
+    paths: readonly RepositoryPath[] | undefined;
   }>();
 
   const taskId = source?.taskId ?? NO_TASK;
@@ -1443,36 +1478,44 @@ export function useMentionPicker({
     setNarrowing(undefined);
   }, [inWord]);
 
-  // The repository's paths are read the first time the list opens on the task, and again once its repository changes.
-  const read =
+  // The repository's paths are read the first time the list opens on the task, and again once its repository changes or Retry asks.
+  const readOf =
     paths?.planId === taskId && paths.workspaceId === workspaceId && paths.repository === repository
-      ? paths.paths
+      ? paths
       : undefined;
+  const read = readOf?.paths;
+  const pathsFailed = readOf !== undefined && readOf.paths === undefined;
   useEffect(() => {
-    if (!open || read !== undefined) return;
+    if (!open || readOf !== undefined) return;
     const key = treeKey(taskId, workspaceId, repository);
     if (key === undefined) return;
     let live = true;
-    act(ACT_KIND.TASKS_TREE, { ...key, path: "", recursive: true }).then(
-      (answer) => {
-        if (!live) return;
-        const entries = "folder" in answer ? answer.folder.entries : [];
-        setPaths({
-          planId: taskId,
-          workspaceId,
-          repository,
-          paths: entries.map((entry) => ({
-            path: entry.name,
-            folder: entry.kind === TASK_TREE_ENTRY.FOLDER,
-          })),
-        });
-      },
-      () => undefined,
-    );
+    // Note that a refusal and a rejection both leave the paths unread and the read failed, never an empty repository.
+    const failed = () => {
+      if (live) setPaths({ planId: taskId, workspaceId, repository, paths: undefined });
+    };
+    act(ACT_KIND.TASKS_TREE, { ...key, path: "", recursive: true }).then((answer) => {
+      if (!live) return;
+      if (!("folder" in answer)) return failed();
+      setPaths({
+        planId: taskId,
+        workspaceId,
+        repository,
+        paths: answer.folder.entries.map((entry) => ({
+          path: entry.name,
+          folder: entry.kind === TASK_TREE_ENTRY.FOLDER,
+        })),
+      });
+    }, failed);
     return () => {
       live = false;
     };
-  }, [open, read, act, taskId, workspaceId, repository]);
+  }, [open, readOf, act, taskId, workspaceId, repository]);
+
+  // A failed read of the paths is read again by the next word that opens the list.
+  useEffect(() => {
+    if (!open && pathsFailed) setPaths(undefined);
+  }, [open, pathsFailed]);
 
   // The skills are asked for as each `@` word opens the list, as the `/` list asks for them; a read
   // that answered is kept, and one that failed is asked again by the next word.
@@ -1519,19 +1562,27 @@ export function useMentionPicker({
     readonly reader: MentionAgentsReader;
     readonly wordAt: number;
     readonly words: string | undefined;
-    readonly agents: readonly MentionableAgent[];
+    /** The agents read; none where the read failed, which Retry clears to read again. */
+    readonly agents: readonly MentionableAgent[] | undefined;
   }>();
   const agentsRead =
     workspaceAgents?.reader === readAgents && workspaceAgents?.wordAt === wordAt
       ? workspaceAgents
       : undefined;
   const wantsAgents = agentsRead === undefined || agentsRead.words !== words;
+  const agentsFailed =
+    agentsRead !== undefined && agentsRead.words === words && agentsRead.agents === undefined;
   useEffect(() => {
     if (!wantsAgents || readAgents === undefined || wordAt === undefined) return;
     let live = true;
-    readAgents(words).then((agents) => {
-      if (live) setWorkspaceAgents({ reader: readAgents, wordAt, words, agents });
-    });
+    readAgents(words).then(
+      (agents) => {
+        if (live) setWorkspaceAgents({ reader: readAgents, wordAt, words, agents });
+      },
+      () => {
+        if (live) setWorkspaceAgents({ reader: readAgents, wordAt, words, agents: undefined });
+      },
+    );
     return () => {
       live = false;
     };
@@ -1588,8 +1639,23 @@ export function useMentionPicker({
     open &&
     ((members === undefined && directory.membersReading) ||
       (readAgents !== undefined && wantsAgents) ||
-      (read === undefined && treeKey(taskId, workspaceId, repository) !== undefined) ||
-      (skills !== undefined && skills.known === undefined));
+      (read === undefined &&
+        !pathsFailed &&
+        treeKey(taskId, workspaceId, repository) !== undefined) ||
+      (skills !== undefined && skills.known === undefined && !skills.unread));
+  // The list says a read could not be read, never that nothing matches, and Retry reads it again.
+  const failures: readonly MentionReadFailure[] = open
+    ? [
+        ...(members === undefined && directory.membersRefused
+          ? [{ read: MENTION_READ.MEMBERS, retry: directory.retry }]
+          : []),
+        ...(readAgents !== undefined && agentsFailed
+          ? [{ read: MENTION_READ.AGENTS, retry: () => setWorkspaceAgents(undefined) }]
+          : []),
+        ...(pathsFailed ? [{ read: MENTION_READ.FILES, retry: () => setPaths(undefined) }] : []),
+        ...(skills?.unread === true ? [{ read: MENTION_READ.SKILLS, retry: skills.ask }] : []),
+      ]
+    : [];
   // Words typed past a space that match nothing are prose, not a mention: the list stands aside, and comes back only if they match again.
   const shown = naming || (open && (rows.length > 0 || !/\s/u.test(term.trim())));
   const held =
@@ -1753,6 +1819,7 @@ export function useMentionPicker({
         keys={keys}
         place={placeOf(trigger, placed, box.clientWidth)}
         reading={reading}
+        failures={failures}
         fileCard={fileCard}
         onHover={(index) => setHighlight({ start: trigger.start, query: trigger.query, at: index })}
         onChoose={choose}

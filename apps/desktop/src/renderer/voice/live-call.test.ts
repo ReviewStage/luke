@@ -591,6 +591,77 @@ it.effect(
     }),
 );
 
+/** A call opened over its own fake peer and started, standing muted. */
+const standing = (options: FixtureOptions = {}) =>
+  Effect.gen(function* () {
+    const f = yield* fixture(options);
+    const opening = yield* Effect.forkChild(f.call.open(OPENING));
+    yield* settle;
+    f.peer.gathered();
+    yield* settle;
+    f.started();
+    assert.equal(yield* Fiber.join(opening), true);
+    return f;
+  });
+
+it.effect(
+  "a call that stood and lost its connection says it dropped, by its key, whether the transport failed or the channel closed unasked; a hang-up says nothing",
+  () =>
+    Effect.gen(function* () {
+      const failed = yield* standing();
+      failed.peer.transport("failed");
+      yield* settle;
+      assert.deepEqual(failed.errors, [VOICE_FAILURE.CALL_DROPPED]);
+      assert.equal(failed.statuses.at(-1), LIVE_STATUS.FAILED);
+
+      const closed = yield* standing();
+      closed.channel().dropped();
+      yield* settle;
+      assert.deepEqual(closed.errors, [VOICE_FAILURE.CALL_DROPPED]);
+
+      // A channel that closes once the developer hung up was asked to.
+      const hungUp = yield* standing();
+      const closing = yield* Effect.forkChild(hungUp.call.close());
+      yield* settle;
+      hungUp.channel().dropped();
+      yield* Fiber.join(closing);
+      assert.deepEqual(hungUp.errors, []);
+    }),
+);
+
+it.effect("a connection that fails before the session starts says the call did not start", () =>
+  Effect.gen(function* () {
+    const f = yield* fixture();
+    const opening = yield* Effect.forkChild(f.call.open(OPENING));
+    yield* settle;
+    f.peer.gathered();
+    yield* settle;
+    f.peer.transport("failed");
+    assert.equal(yield* Fiber.join(opening), false);
+    assert.deepEqual(f.errors, [VOICE_FAILURE.CALL_NOT_STARTED]);
+  }),
+);
+
+it.effect(
+  "a microphone that won't open says so, rather than leaving the call reading as only muted",
+  () =>
+    Effect.gen(function* () {
+      const f = yield* standing({ microphone: false });
+      assert.equal(f.statuses.at(-1), LIVE_STATUS.MUTED);
+      assert.deepEqual(f.errors, []);
+      assert.equal(yield* f.call.unmute(), false);
+      assert.deepEqual(f.errors, [VOICE_FAILURE.MICROPHONE_UNAVAILABLE]);
+      assert.equal(f.call.listening, false);
+      // Once the device opens, the next press is heard and says nothing more.
+      f.grantMicrophone();
+      const unmuting = yield* Effect.forkChild(f.call.unmute());
+      yield* settle;
+      f.acknowledge(LIVE_SERVER_EVENT.INPUT_AUDIO_UNMUTED);
+      assert.equal(yield* Fiber.join(unmuting), true);
+      assert.deepEqual(f.errors, [VOICE_FAILURE.MICROPHONE_UNAVAILABLE]);
+    }),
+);
+
 const AUDIO: AvatarFeed = { kind: AVATAR_FEED_KIND.AUDIO, pcm: "AAAA" };
 const TURN_END: AvatarFeed = { kind: AVATAR_FEED_KIND.TURN_END };
 const INTERRUPT: AvatarFeed = { kind: AVATAR_FEED_KIND.INTERRUPT };

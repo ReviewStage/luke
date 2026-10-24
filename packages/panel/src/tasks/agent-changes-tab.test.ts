@@ -48,6 +48,7 @@ import {
 } from "../diff-view/contract.js";
 import type { FileMark, FileTreeModule, FileTreeProps } from "../file-tree/contract.js";
 import { findRanges, reveal } from "../find-matches.js";
+import { rendererRegistry } from "../renderer-runtime.js";
 import {
   type AnyAct,
   FAKE_ANSWER,
@@ -65,6 +66,8 @@ import { focusRestOn, restOn } from "../testing/hint-rest.js";
 import { relayout } from "../testing/resize-observer.js";
 import { landedBundles, onSideBundles } from "../testing/side-bundles.js";
 import { codingAgentsControl } from "../testing/tasks-control.js";
+import { newestToastSays } from "../testing/toast.js";
+import { ToastHost } from "../toast.js";
 import type { ChangesThreads } from "./agent-changes-tab.js";
 import { blobShaOf } from "./changes-model.js";
 import type { TreeShown } from "./file-view.js";
@@ -1115,25 +1118,23 @@ test("a write answered while a later one to the same setting is out leaves the l
   assert.equal(lastDrawn().look.layout, "split");
 });
 
-test("a refused write is said under its row, and the row can be pressed again", async () => {
-  await drawTab();
+test("a refused write flips the switch back and is said in a toast, and the switch can be pressed again", async () => {
+  await drawTab({ beside: onRegistry(rendererRegistry, createElement(ToastHost)) });
   const held = holdSettingWrites();
   const popover = openSettings();
 
   act(() => settingControl(popover, '[role="switch"]', "Ligatures").click());
+  assert.equal(
+    settingControl(popover, '[role="switch"]', "Ligatures").getAttribute("aria-checked"),
+    "true",
+    "the switch flips before the write answers",
+  );
   held[0]?.("Could not save that setting.");
   await flush();
 
   const ligatures = settingControl(popover, '[role="switch"]', "Ligatures");
-  assert.equal(ligatures.getAttribute("aria-invalid"), "true", "the refusal is said");
-  assert.match(
-    (ligatures.getAttribute("aria-describedby") ?? "")
-      .split(" ")
-      .map((id) => document.getElementById(id)?.textContent ?? "")
-      .join(" "),
-    /Could not save that setting/u,
-    "under its own row",
-  );
+  assert.equal(ligatures.getAttribute("aria-checked"), "false");
+  assert.equal(newestToastSays(), "Could not save that setting on this system.");
   assert.equal(ligatures.disabled, false);
   assert.equal(lastDrawn().look.ligatures, false);
 });
@@ -1203,6 +1204,69 @@ test("Refresh changes reads the review threads again with the files, so the two 
   act(() => refresh?.click());
 
   assert.equal(threadReads, 1);
+});
+
+test("a refresh that fails after the changes were read keeps the files drawn, says Could not refresh with Retry, and Retry reads again", async () => {
+  let failing = false;
+  const flaky = {
+    ...control,
+    readChanges: (...args: Parameters<typeof control.readChanges>) =>
+      failing ? Promise.reject(new Error("offline")) : control.readChanges(...args),
+  };
+  /** The alert that says the refresh did not land, none while it did. */
+  const refreshNote = () =>
+    [...document.querySelectorAll('[role="alert"]')].find((each) =>
+      each.textContent?.includes("Could not refresh"),
+    );
+  let threadReads = 0;
+  await drawTab({
+    control: flaky,
+    threads: {
+      list: [],
+      draw: () => null,
+      refresh: () => {
+        threadReads += 1;
+      },
+    },
+  });
+  assert.equal(refreshNote(), undefined);
+
+  const refresh = async () => {
+    const options = document.querySelector<HTMLButtonElement>(
+      'button[aria-label="Changes actions"]',
+    );
+    act(() => options?.click());
+    const item = [...document.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')].find(
+      (each) => each.textContent?.includes("Refresh changes"),
+    );
+    act(() => item?.click());
+    await flush();
+  };
+  failing = true;
+  await refresh();
+
+  const note = refreshNote();
+  assert.ok(note, "the refresh says it did not land");
+  assert.ok(document.querySelector(".file-view"), "the view stands");
+  assert.deepEqual(
+    lastDrawn().files.map((file) => file.path),
+    ["src/seats.ts"],
+  );
+
+  failing = false;
+  const retry = [...note.querySelectorAll("button")].find((each) =>
+    each.textContent?.includes("Retry"),
+  );
+  const readsBefore = threadReads;
+  act(() => retry?.click());
+  await flush();
+
+  assert.equal(threadReads, readsBefore + 1, "Retry reads the review threads with the files");
+  assert.equal(refreshNote(), undefined);
+  assert.deepEqual(
+    lastDrawn().files.map((file) => file.path),
+    ["src/seats.ts"],
+  );
 });
 
 /** What an intersection observer is told of an element coming into view, as far as the view reads it. */
