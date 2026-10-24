@@ -236,6 +236,7 @@
   --spacing-dialog-reach: var(--luke-space-12);
   --spacing-menu-inset: var(--luke-menu-inset);
   --spacing-block-gap: var(--luke-block-gap);
+  --spacing-tight-gap: var(--luke-tight-gap);
   --spacing-row-inset: var(--luke-row-inset);
   --spacing-list-inset: var(--luke-list-inset);
   --spacing-control-gap: var(--luke-control-gap);
