@@ -58,6 +58,7 @@ import {
   PULL_REQUEST_MOMENT,
   type PullRequestMoment,
 } from "@luke/features/automation-wire";
+import { readerZone } from "@luke/features/date-mention";
 import {
   INTEGRATION_NAME,
   INTEGRATION_PROVIDER_LIST,
@@ -68,6 +69,7 @@ import {
 import { LINK_PLACE } from "@luke/features/luke-link";
 import type { ModelChoice } from "@luke/features/models-wire";
 import type { WorkspaceSentry } from "@luke/features/sentry-install-wire";
+import { dayAndTimeText, timeZoneNames } from "@luke/features/time-format";
 import {
   SENTRY_LEVEL,
   SENTRY_TRIGGER_EVENT,
@@ -135,7 +137,6 @@ import {
   wholeWordsHint,
 } from "@luke/ui";
 import { ACTOR_KIND, ACTOR_STATE } from "@luke/ui/actor-model";
-import { dayAndTimeText, localTimeZone, timeZoneNames } from "@luke/ui/time-format";
 import { useDisclosure } from "@luke/ui/use-disclosure";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { Result } from "effect";
@@ -375,11 +376,6 @@ function hourlyLabel(minute: number): string {
 /** A zone as the zone picker names it, its underscores read as spaces. */
 function zoneLabel(zone: string): string {
   return zone.replaceAll("_", " ");
-}
-
-/** The zone this Mac is in, which a new automation runs in until another is chosen. */
-function windowZone(): string {
-  return localTimeZone();
 }
 
 /** An owner as the crumbs and the Owner row name it. */
@@ -2295,7 +2291,7 @@ export function AutomationEditor({
   const linkedRun = linked?.runId;
   const [running, setRunning] = useState(false);
   const [defaults] = useState<DraftDefaults>(() => ({
-    timezone: windowZone(),
+    timezone: readerZone(),
     owner: AUTOMATION_SCOPE.PERSONAL,
   }));
   // A new automation starts in the repository the workspace's plans were about lately, as a new plan does,

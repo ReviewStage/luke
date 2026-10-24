@@ -1,4 +1,10 @@
-import { agoText, callHeading, momentText, sinceText, workingTime } from "../../time-format.js";
+import {
+  agoText,
+  callHeading,
+  momentText,
+  sinceText,
+  workingTime,
+} from "@luke/features/time-format";
 import { Tooltip } from "../tooltip/hint.js";
 import { useMinute, useSecond } from "./time-clock.js";
 

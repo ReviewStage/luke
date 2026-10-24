@@ -611,7 +611,7 @@ test("a command that names a skill is confirmed as its card, with no list, and I
   const text = document.body.textContent ?? "";
   assert.match(text, /Add web-design-guidelines/u);
   assert.match(text, /From vercel-labs\/agent-skills @ 3f9c2e1/u);
-  assert.match(text, /4 files · 21 KB · skills\/web/u);
+  assert.match(text, /4 files · 22 KB · skills\/web/u);
   assert.match(text, /2 other skills in this repo/u);
   assert.equal(document.querySelector("textarea"), null);
   assert.equal(document.querySelector('input[type="checkbox"]'), null);

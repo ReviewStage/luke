@@ -21,6 +21,7 @@ import {
 } from "./automation-wire.js";
 import { agentFailureWords } from "./coding-agent-failure-words.js";
 import { CODING_AGENT_STATUS, type CodingAgentStatus } from "./coding-agent-wire.js";
+import { clockText } from "./time-format.js";
 import { SENTRY_LEVEL, TRIGGER_CATALOG } from "./trigger-catalog.js";
 
 /**
@@ -176,11 +177,6 @@ export type AutomationNext =
 export interface AutomationGroup {
   readonly owner: AutomationScope;
   readonly automations: readonly AutomationSummary[];
-}
-
-/** A time of day as a schedule says it, the minute in two figures. */
-function clockText(hour: number, minute: number): string {
-  return `${hour}:${String(minute).padStart(2, "0")}`;
 }
 
 /** A whole number a cron field spells, or nothing for any other field. */

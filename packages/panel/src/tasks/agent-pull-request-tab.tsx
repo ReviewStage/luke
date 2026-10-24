@@ -33,6 +33,8 @@ import {
   PULL_REQUEST_THREAD_VIEW,
   type PullRequestThreadView,
 } from "@luke/features/luke-link";
+import { formatCount } from "@luke/features/number-format";
+import { workingTime } from "@luke/features/time-format";
 import { INLINE_DIFF } from "@luke/settings/diff-view";
 import {
   AVATAR_SHAPE,
@@ -98,7 +100,6 @@ import {
 } from "@luke/ui";
 import { actorName } from "@luke/ui/actor-model";
 import { PICTURE_STATE, usePicture } from "@luke/ui/picture-cache";
-import { formatLocaleCount, workingTime } from "@luke/ui/time-format";
 import {
   BookOpenIcon,
   BotIcon,
@@ -361,7 +362,7 @@ const PULL_REQUEST_WORDS = {
   LEFT: "left",
   /** What the Files changed tab's hint says of every line the pull request changes. */
   total: (additions: number, deletions: number) =>
-    `+${formatLocaleCount(additions)} −${formatLocaleCount(deletions)} total`,
+    `+${formatCount(additions)} −${formatCount(deletions)} total`,
 } as const;
 
 /** The lines a review thread is on, as its head names them: where it stands now, else where it was made; none for a thread on the whole file. */
@@ -1540,7 +1541,7 @@ function Deployments({
 }): React.JSX.Element | null {
   if (deployments.length === 0) return null;
   return (
-    <Section title="Deployments" count={formatLocaleCount(deployments.length)}>
+    <Section title="Deployments" count={formatCount(deployments.length)}>
       <List label="Deployment list" variant={LIST_VARIANT.CARD} density={LIST_DENSITY.DENSE}>
         {deployments.map((deployment) => (
           <DeploymentRow key={deployment.environment} agentId={agentId} deployment={deployment} />
@@ -1604,7 +1605,7 @@ function PreviewControl({
         variant={BUTTON_VARIANT.OUTLINE}
         icon={<ScanSearchIcon />}
         label={PULL_REQUEST_WORDS.PREVIEWS}
-        trailing={formatLocaleCount(serving.length)}
+        trailing={formatCount(serving.length)}
         {...menu.trigger()}
       >
         {PULL_REQUEST_WORDS.PREVIEW}
@@ -1832,7 +1833,7 @@ function checksCount(
 ): readonly CountPart[] | undefined {
   const glyph = SUMMARY_GLYPHS[summary];
   if (glyph === null && count === undefined) return undefined;
-  const text = count === undefined ? "" : formatLocaleCount(count);
+  const text = count === undefined ? "" : formatCount(count);
   const tone = SUMMARY_TONES[summary];
   return [
     glyph === null ? { text, tone } : { text, tone, glyph, glyphLabel: SUMMARY_WORDS[summary] },
@@ -1921,8 +1922,7 @@ function tabsOf(
       value: PULL_REQUEST_VIEW.CONVERSATION,
       icon: <MessagesSquareIcon />,
       label: "Conversation",
-      count:
-        conversation === undefined ? undefined : formatLocaleCount(conversationCount(conversation)),
+      count: conversation === undefined ? undefined : formatCount(conversationCount(conversation)),
     },
     {
       value: PULL_REQUEST_VIEW.CHECKS,
@@ -1940,7 +1940,7 @@ function tabsOf(
       value: PULL_REQUEST_VIEW.CHAPTERS,
       icon: <BookOpenIcon />,
       label: "Chapters",
-      count: chapterCount === undefined ? undefined : formatLocaleCount(chapterCount),
+      count: chapterCount === undefined ? undefined : formatCount(chapterCount),
     },
     {
       value: PULL_REQUEST_VIEW.FILES,
@@ -1979,7 +1979,7 @@ function ConversationFilter({
         onClick={() => onChange(!on)}
       >
         <ChipName>{label}</ChipName>
-        {count === undefined ? null : <ChipCount>{formatLocaleCount(count)}</ChipCount>}
+        {count === undefined ? null : <ChipCount>{formatCount(count)}</ChipCount>}
       </Chip>
       {note === undefined ? null : (
         <span id={noteId} hidden>

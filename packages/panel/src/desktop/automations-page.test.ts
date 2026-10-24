@@ -3150,11 +3150,11 @@ test("on a narrow stage each row says when it runs next before what fires it, un
   assert.equal(page.querySelector(".automation-owner"), null, "no row names its owner");
   const line = (name: string) =>
     rowOf(page, name).querySelector(".luke-list-row-description")?.textContent ?? "";
-  assert.match(line("Nightly flaky-test sweep"), /^Next .+ · Weekdays at 9:00 · UTC$/u);
-  assert.equal(line("Dependency bumps"), "Weekdays at 9:00 · UTC");
+  assert.match(line("Nightly flaky-test sweep"), /^Next .+ · Weekdays at 9:00 AM · UTC$/u);
+  assert.equal(line("Dependency bumps"), "Weekdays at 9:00 AM · UTC");
   assert.match(
     line("Yearly audit"),
-    /^Next .*2099.* · Weekdays at 9:00 · UTC$/u,
+    /^Next .*2099.* · Weekdays at 9:00 AM · UTC$/u,
     "a far run names its year",
   );
   assert.ok(rowOf(page, "Dependency bumps").querySelector(".failed-mark"));

@@ -13,6 +13,7 @@
  * time, never from anything observed.
  */
 
+import { formatCount } from "@luke/features/number-format";
 import * as React from "react";
 import type { TooltipValueType } from "recharts";
 import * as RechartsPrimitive from "recharts";
@@ -297,8 +298,7 @@ function ChartTooltipContent({
                   item.value == null ? null : (
                     <span className="luke-chart-tooltip-value">
                       {Number.isFinite(item.value)
-                        ? (valueFormatter?.(Number(item.value)) ??
-                          Number(item.value).toLocaleString())
+                        ? (valueFormatter?.(Number(item.value)) ?? formatCount(Number(item.value)))
                         : String(item.value)}
                     </span>
                   )

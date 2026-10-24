@@ -1,4 +1,5 @@
 import { base64Bytes } from "./coding-agent-wire.js";
+import { formatBytes } from "./number-format.js";
 
 /**
  * attachment-model.ts -- one file on a message as its chip and its viewer read it: its bytes from its `data:` URL, its size in words, and how it is shown.
@@ -29,19 +30,14 @@ export type AttachmentView = (typeof ATTACHMENT_VIEW)[keyof typeof ATTACHMENT_VI
 const PLAYED_VIDEO_TYPE = { WEBM: "video/webm", MP4: "video/mp4" } as const;
 const PLAYED_VIDEO_TYPES: ReadonlySet<string> = new Set(Object.values(PLAYED_VIDEO_TYPE));
 
-const KILOBYTE = 1_000;
-const MEGABYTE = 1_000_000;
-
 /** A file's bytes in base64, read off its `data:` URL; empty where it carries none. */
 export function chipBase64(file: FileChip): string {
   return file.url.startsWith("data:") ? file.url.slice(file.url.indexOf(",") + 1) : "";
 }
 
-/** A file's size as a chip says it: kilobytes up to a megabyte, then megabytes to one place. */
+/** A file's size as a chip says it. */
 export function sizeLabel(base64: string): string {
-  const bytes = base64Bytes(base64);
-  if (bytes < MEGABYTE) return `${String(Math.max(1, Math.round(bytes / KILOBYTE)))} KB`;
-  return `${(bytes / MEGABYTE).toFixed(1)} MB`;
+  return formatBytes(base64Bytes(base64));
 }
 
 /** How the viewer shows a file that carries bytes. */

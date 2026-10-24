@@ -24,7 +24,9 @@ import type {
 import { CODING_AGENT_STATUS, CONTEXT_WINDOW } from "@luke/features/coding-agent-wire";
 import { GITHUB_INSTALLATION_STATUS } from "@luke/features/github-installation-wire";
 import { INTEGRATION_ROW_STATUS } from "@luke/features/integration-row-wire";
+import { formatCount, formatPercent } from "@luke/features/number-format";
 import { FAST_ACCESS, PROVIDER_KEY_STATUS } from "@luke/features/provider-key-wire";
+import { formatInstant } from "@luke/features/time-format";
 import {
   BADGE_TONE,
   Badge,
@@ -42,7 +44,6 @@ import {
   TEXT_TONE,
   Text,
 } from "@luke/ui";
-import { formatCount, formatInstant } from "@luke/ui/time-format";
 import { AdminSection, STAT_LAYOUT, StatCards, type StatSpec } from "../charts/stat-card.js";
 import { DataTableSkeleton } from "../chrome/table-skeleton.js";
 
@@ -113,7 +114,7 @@ function windowWords(contextWindow: string | null): string {
 
 /** A share of a whole as a whole percentage, or nothing where there is no whole. */
 function percentOf(part: number, whole: number): string | undefined {
-  return whole === 0 ? undefined : `${Math.round((part / whole) * 100)}%`;
+  return whole === 0 ? undefined : formatPercent(part / whole);
 }
 
 /** The window's work as four stat cards: tasks, agents, pull requests, and call minutes. */
