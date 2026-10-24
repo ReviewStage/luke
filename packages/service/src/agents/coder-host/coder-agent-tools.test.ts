@@ -195,6 +195,8 @@ const AGENT_CHOICE = {
   effort: "high",
   repository: RELAY_FULL_NAME,
 } as const;
+/** The name an untitled agent on that model goes by, as its tab names it. */
+const AGENT_CHOICE_NAME = "Opus 5.5";
 const NOTE = "I renamed InviteToken to InvitationToken on main; rebase before you push.";
 const CALLER_TITLE = "Invite expiry";
 const OPUS = "anthropic/claude-opus-5.5";
@@ -315,7 +317,7 @@ async function claimed(
   return {
     ...target,
     id: started.value.agent.id,
-    name: started.value.agent.title ?? started.value.agent.model,
+    name: started.value.agent.title ?? AGENT_CHOICE_NAME,
     sessionId: session,
   };
 }
@@ -805,10 +807,10 @@ test("start_agent starts an agent on the caller's own task as the deployment act
   const startedId = started.agent.id;
   const stored = Option.getOrThrow(await database.run(readCodingAgent(caller.userId, startedId)));
   assert.equal(stored.taskId, tasks.invitations);
-  // The agent is answered with the mention its starter names it by, its model while it has no title.
+  // The agent is answered with the mention its starter names it by, its model's name while it has no title.
   assert.equal(
     started.agent.mention,
-    `[@${stored.title ?? stored.model}](https://tryluke.dev/workspace-${workspaceId}/plan/${tasks.invitations}/agent/${startedId})`,
+    `[@${stored.title ?? AGENT_CHOICE_NAME}](https://tryluke.dev/workspace-${workspaceId}/plan/${tasks.invitations}/agent/${startedId})`,
   );
   assert.deepEqual([stored.model, stored.effort], [OPUS, "low"]);
 
@@ -2677,7 +2679,7 @@ test("a direct message and stop_agent reach a teammate's Claude Code agent throu
     userId: agents.teammates.userId,
     conversationId: started.value.agent.conversationId,
     id: started.value.agent.id,
-    name: started.value.agent.title ?? started.value.agent.model,
+    name: started.value.agent.title ?? AGENT_CHOICE_NAME,
     sessionId: `${NATIVE_SESSION_PREFIX.claude_code}000000000001-${randomUUID()}`,
   };
   assert.equal(

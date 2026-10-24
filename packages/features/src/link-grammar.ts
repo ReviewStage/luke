@@ -704,7 +704,7 @@ export function appLinkOf(target: string): string | undefined {
 }
 
 /** A file's lines a GitHub page names, the first through the last, counted from one. */
-export interface GitHubLines {
+interface GitHubLines {
   readonly startLine: number;
   readonly endLine: number;
 }
@@ -736,7 +736,7 @@ export type GitHubPage =
     };
 
 /** Whether words are a repository's `owner/name` as GitHub spells one, within its bounds. */
-export function isGitHubRepository(words: string): boolean {
+function isGitHubRepository(words: string): boolean {
   const { MAX_OWNER_CHARS, MAX_NAME_CHARS } = GITHUB_REPOSITORY_BOUNDS;
   return (
     words.length <= MAX_OWNER_CHARS + 1 + MAX_NAME_CHARS && GITHUB_REPOSITORY_PATTERN.test(words)
