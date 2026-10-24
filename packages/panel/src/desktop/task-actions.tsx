@@ -68,7 +68,7 @@ import { useTaskOrigin } from "../tasks/use-task-origin.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import { APP_SLICE, useAppSlice } from "../use-app-state.js";
 import { useRefocusAfterEdit } from "../use-refocus-after-edit.js";
-import { ActionMenu, type MenuAction, type MenuEntry } from "./action-menu.js";
+import { ActionMenu, type MenuAction, type MenuEntry, rowMenu } from "./action-menu.js";
 import { strandedHome, useMoveTaskDialog } from "./move-task-dialog.js";
 import { useRowPlace, withRowMoves } from "./row-moves.js";
 import { moveToSectionEntry, useSectionDialogs } from "./sidebar-sections.js";
@@ -405,14 +405,15 @@ function settledTask(task: TaskSummary | undefined): boolean {
 }
 
 /**
- * One task's menu and its delete question, held for whichever door offers
- * them: the sidebar's row, the toolbar's ⋯, and a Board card. Neither outlives the tab going off screen, the menu does not
- * outlive its door, and the question does not outlive the task: each is
- * taken down in the render that finds it gone, so neither is left standing
- * over another surface, over a task deleted elsewhere, or waiting for the
- * next time the panel opens.
+ * One task's menu items and its delete question, held for whichever door
+ * offers them: the sidebar's row, whose `ListRow` draws the menu itself, and
+ * the doors that draw it through `useTaskMenu`. Neither the items nor the
+ * question outlive the tab going off screen, and the question does not
+ * outlive the task: each is taken down in the render that finds it gone, so
+ * neither is left standing over another surface, over a task deleted
+ * elsewhere, or waiting for the next time the panel opens.
  */
-export function useTaskMenu(
+export function useTaskMenuItems(
   tasks: TasksControl,
   taskId: string,
   name: string,
@@ -436,7 +437,6 @@ export function useTaskMenu(
       : undefined;
   const moving = useMoveTaskDialog(tasks, task);
   const copy = useCopyToast();
-  const { open, drawn, close, trigger, contextMenu, keyMenu } = useMenu(tasks.shown && doors.drawn);
   // The place the row stands in a list that reorders, which the menu moves it from under a finger; none for the toolbar's ⋯.
   const place = useRowPlace();
   const sections = useSectionDialogs(tasks, tasks.shown && doors.drawn);
@@ -444,34 +444,26 @@ export function useTaskMenu(
     task !== undefined
       ? moveToSectionEntry(tasks, { agent: false, id: task.id }, task.workspaceId, sections.askNew)
       : undefined;
-  const menu =
-    drawn === undefined ? null : (
-      <ActionMenu
-        label="Task actions"
-        menu={drawn}
-        footer={task === undefined ? undefined : <TaskMenuFooter tasks={tasks} task={task} />}
-        groups={[
-          ...(doors.lead?.() ?? []),
-          ...withRowMoves(
-            taskActionGroups(tasks, taskId, {
-              rename: doors.rename,
-              askDelete: deletion.ask,
-              askMove: moving.ask,
-              copy,
-              section,
-              read: {
-                unread: doors.unread,
-                onMark: (unread) => {
-                  if (task !== undefined) reads.mark(task, unread);
-                },
-              },
-            }),
-            place,
-          ),
-        ]}
-        onClose={close}
-      />
-    );
+  const groups = (): readonly (readonly MenuEntry[])[] => [
+    ...(doors.lead?.() ?? []),
+    ...withRowMoves(
+      taskActionGroups(tasks, taskId, {
+        rename: doors.rename,
+        askDelete: deletion.ask,
+        askMove: moving.ask,
+        copy,
+        section,
+        read: {
+          unread: doors.unread,
+          onMark: (unread) => {
+            if (task !== undefined) reads.mark(task, unread);
+          },
+        },
+      }),
+      place,
+    ),
+  ];
+  const footer = task === undefined ? undefined : <TaskMenuFooter tasks={tasks} task={task} />;
   const dialog = (
     <>
       <ConfirmDialog confirm={deletion} question={deleteQuestion(name, settledTask(task))} />
@@ -479,6 +471,38 @@ export function useTaskMenu(
       {sections.dialog}
     </>
   );
+  return { deletion, markDone, groups, footer, dialog };
+}
+
+/**
+ * One task's menu, opened and drawn by the door that holds it: the
+ * toolbar's ⋯, a Tasks list row, and a Board card. The sidebar's row takes
+ * its items (`useTaskMenuItems`) to its `ListRow`, which opens them by its
+ * ⋯, a right-click, and the menu key alike.
+ */
+export function useTaskMenu(
+  tasks: TasksControl,
+  taskId: string,
+  name: string,
+  doors: Parameters<typeof useTaskMenuItems>[3],
+) {
+  const { deletion, markDone, groups, footer, dialog } = useTaskMenuItems(
+    tasks,
+    taskId,
+    name,
+    doors,
+  );
+  const { open, drawn, close, trigger, contextMenu, keyMenu } = useMenu(tasks.shown && doors.drawn);
+  const menu =
+    drawn === undefined ? null : (
+      <ActionMenu
+        label="Task actions"
+        menu={drawn}
+        footer={footer}
+        groups={groups()}
+        onClose={close}
+      />
+    );
   return {
     deletion,
     markDone,
@@ -603,7 +627,8 @@ function SidebarTaskCard({
  * list's order chooses. Pin
  * and Mark done stand in place of all of it while the row is hovered or
  * reached from the keyboard.
- * A press opens it, and a right-click offers its actions where the pointer is. Renamed,
+ * A press opens it, and its actions are one menu opened alike by the row's ⋯,
+ * a right-click, and the menu key (`ListRow`'s `menu`). Renamed,
  * the row is its name's field until the edit ends, and a key that ends it
  * hands focus back to the row.
  *
@@ -639,7 +664,7 @@ export function SidebarTask({
   onOpen: () => void;
 }): React.JSX.Element {
   const rename = useInlineRename(task.id, tasks.onRenameTask);
-  const actions = useTaskMenu(tasks, task.id, task.name, {
+  const actions = useTaskMenuItems(tasks, task.id, task.name, {
     rename: rename.begin,
     drawn: true,
     unread,
@@ -654,9 +679,6 @@ export function SidebarTask({
     item.current = press?.parentElement ?? null;
   }, []);
   const endedByKey = useRefocusAfterEdit(rename.editing, row);
-  // Note that the row is what the menu rings and hands focus back to, even
-  // when the right-click lands on Pin or Mark done over its end.
-  const showMenu = actions.contextMenu(row);
   const card = useMemo(
     () => <SidebarTaskCard tasks={tasks} task={task} now={now} />,
     [tasks, task, now],
@@ -708,18 +730,14 @@ export function SidebarTask({
           }
           current={current ? LIST_ROW_CURRENT.PAGE : undefined}
           unread={unread}
-          menuOpen={actions.open}
           disabled={actions.deletion.busy}
           hint={rename.editing ? undefined : { Hint: RowHint, label: task.name }}
-          onPress={
+          onPress={rename.editing ? undefined : onOpen}
+          menu={
             rename.editing
               ? undefined
-              : () => {
-                  actions.close(false);
-                  onOpen();
-                }
+              : { ...rowMenu("Task", actions.groups(), tasks.shown), footer: actions.footer }
           }
-          contextMenu={rename.editing ? undefined : showMenu}
           actionsAt={LIST_ROW_ACTIONS.HOVER}
           actions={
             rename.editing ? null : (
@@ -733,7 +751,6 @@ export function SidebarTask({
           }
         />
       </RowHintOptions>
-      {actions.menu}
       {actions.dialog}
     </>
   );

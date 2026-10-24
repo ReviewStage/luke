@@ -499,3 +499,24 @@ test("every action an agent's tab and page offer stands in its row's right-click
     );
   }
 });
+
+test("an agent row's ⋯ opens the menu its right-click does, the ⋯ a Tab stop after its press", () => {
+  const row = mount(RUN);
+  const more = row.querySelector<HTMLButtonElement>('button[aria-label="Agent actions"]');
+  assert.ok(more, "the row draws a ⋯");
+  assert.equal(more.tabIndex, 0);
+  const labels = () =>
+    [...document.querySelectorAll('[role="menuitem"]')].map((each) => each.textContent);
+  act(() => more.click());
+  const fromMore = labels();
+  assert.ok(fromMore.includes("Archive agent"));
+  act(() => {
+    document.activeElement?.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "Escape", bubbles: true }),
+    );
+  });
+  assert.deepEqual(
+    rightClick(row).map((each) => each.textContent),
+    fromMore,
+  );
+});

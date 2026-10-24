@@ -164,6 +164,19 @@ test("the row's ⋯, a right-click on it, and the menu key on it all open the sa
   expect(offered()).toEqual(SAME_MENU);
 });
 
+test("pressing the row closes the menu a right-click on it opened, and opens the row", () => {
+  draw(createElement(TaskList, { menu: taskMenu([]) }));
+  act(() => {
+    rowPress().dispatchEvent(
+      new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: 12, clientY: 8 }),
+    );
+  });
+  expect(openMenu()).not.toBeNull();
+  act(() => rowPress().click());
+  expect(openMenu()).toBeNull();
+  expect(document.querySelector("output")?.textContent).toBe("opened 1");
+});
+
 test("a right-click on the row's other acts opens its menu too, and opens nothing of the row", () => {
   draw(createElement(TaskList, { menu: taskMenu([]) }));
   act(() => {
