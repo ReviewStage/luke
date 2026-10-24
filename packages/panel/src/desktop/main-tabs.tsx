@@ -4,7 +4,7 @@ import {
   type CodingAgentStatus,
   type CodingAgentSummary,
 } from "@luke/features/coding-agent-wire";
-import { LINK_PLACE, type LinkPlace } from "@luke/features/luke-link";
+import { LINK_PLACE, type LinkPlace } from "@luke/features/link-grammar";
 import { TASK_BOUNDS, type TaskSummary } from "@luke/features/task-wire";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
@@ -29,7 +29,7 @@ import { AgentTab } from "../tasks/agent-tab.js";
 import { AgentTabCard } from "../tasks/agent-tab-card.js";
 import { AgentTabSkeleton } from "../tasks/agent-tab-skeleton.js";
 import type { ChatNoticeDoors } from "../tasks/chat-notice.js";
-import { agentTabLabel } from "../tasks/coding-agent-model.js";
+import { agentName } from "../tasks/coding-agent-model.js";
 import { DraftAgentTab } from "../tasks/draft-agent-tab.js";
 import { agentForkDoors, ForkProvider } from "../tasks/fork-action.js";
 import type { AgentFork } from "../tasks/fork-model.js";
@@ -236,7 +236,7 @@ function agentTabs(input: {
   const open = (agents.agents ?? []).filter((agent) => main.openAgents?.includes(agent.id));
   const own = open.map((agent) => {
     const tab = { agent: agent.id };
-    const label = agentTabLabel(agent, agents.models);
+    const label = agentName(agent, agents.models);
     const readCard = agentCardReading(agent, label, views.held, chosen(tab), agents);
     const draftMark = drafted.includes(agent.id) && !chosen(tab) ? <DraftMark /> : undefined;
     return {
@@ -290,7 +290,7 @@ export function agentEntries(
   held?: HeldTranscripts,
 ): AddEntry[] {
   return (agents.agents ?? []).map((agent) => {
-    const label = agentTabLabel(agent, agents.models);
+    const label = agentName(agent, agents.models);
     const chosen = main.tab !== undefined && sameTab({ agent: agent.id }, main.tab);
     return {
       row: {
@@ -542,7 +542,7 @@ export function MainTabStrip({
 export function mainTabLabel(tab: MainTab, agents: CodingAgentsControl): string | undefined {
   if (isDraftTab(tab)) return tabLook({ kind: TAB_KIND.DRAFT }).label;
   const agent = agents.agents?.find((each) => each.id === tab.agent);
-  return agent === undefined ? undefined : agentTabLabel(agent, agents.models);
+  return agent === undefined ? undefined : agentName(agent, agents.models);
 }
 
 /**

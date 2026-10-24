@@ -43,7 +43,7 @@ import {
   type PullRequestState,
 } from "@luke/features/coding-agent-wire";
 import { FAILURE_REASON, type Failure, type FailureReason } from "@luke/features/failure-remedy";
-import { agentTabLabel, CATALOG_ID_SEPARATOR, modelLabel } from "@luke/features/model-label";
+import { agentName, CATALOG_ID_SEPARATOR, modelLabel } from "@luke/features/model-label";
 import {
   type CatalogModel,
   type ContextWindows,
@@ -854,7 +854,7 @@ export function closesComposer(failure: CodingAgentCallFailure): boolean {
  * process's notifications so neither is ever named two ways
  * (`@luke/features/model-label`).
  */
-export { agentTabLabel, modelLabel };
+export { agentName, modelLabel };
 
 /**
  * The provider whose harness runs a model, read from its catalog id, whose
@@ -2231,7 +2231,7 @@ export function checkoutCommand(branch: string): string {
 }
 
 /** A branch or a file's path as a GitHub address spells it: every character encoded but the slashes GitHub reads as the name's own. */
-export function githubPath(name: string): string {
+function githubPath(name: string): string {
   return encodeURIComponent(name).replaceAll("%2F", "/");
 }
 

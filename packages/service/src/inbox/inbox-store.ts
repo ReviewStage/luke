@@ -12,7 +12,7 @@ import {
   type QueryError,
   queryBuilder,
 } from "@luke/database/core/query";
-import { agentGivenNameSql } from "@luke/database/models/agent-name";
+import { agentAutomationNameSql, agentGivenNameSql } from "@luke/database/models/agent-name";
 import { automationReadableBy } from "@luke/database/models/automation-store";
 import {
   type ChatWaitingLiveStatements,
@@ -42,7 +42,7 @@ import type {
   AccountInboxTask,
   AccountTasklessEntry,
 } from "@luke/features/account-inbox-wire";
-import type { CodingAgentAttachment } from "@luke/features/coding-agent-wire";
+import { CODING_AGENT_KIND, type CodingAgentAttachment } from "@luke/features/coding-agent-wire";
 import type { ConversationMediaType } from "@luke/features/conversation-picture-wire";
 import {
   INBOX_PICTURE_IN_WORDS,
@@ -70,7 +70,7 @@ import {
   knownAsk,
   standingAsk,
 } from "@luke/features/inbox-wire";
-import { LINK_PLACE } from "@luke/features/luke-link";
+import { LINK_PLACE } from "@luke/features/link-grammar";
 import { insideCode } from "@luke/features/mention-link";
 import {
   and,
@@ -3487,8 +3487,10 @@ const MemberAskRowSchema = Schema.Struct({
   key: Schema.String,
   title: Schema.String,
   agentId: Schema.String,
-  agentName: Schema.NullOr(Schema.String),
+  agentKind: Schema.Literals(Object.values(CODING_AGENT_KIND)),
+  agentTitle: Schema.NullOr(Schema.String),
   agentModel: Schema.String,
+  agentAutomationName: Schema.NullOr(Schema.String),
   taskId: Schema.NullOr(Schema.String),
   taskName: Schema.NullOr(Schema.String),
   askType: Schema.NullOr(Schema.String),
@@ -3537,11 +3539,10 @@ const findMemberOpenAsks = SqlSchema.findAll({
           key: inboxItem.key,
           title: inboxItem.title,
           agentId: inboxItem.agentId,
-          // The name the agent goes by: Luke for an operator, else its title.
-          agentName: sql<
-            string | null
-          >`coalesce(${agentGivenNameSql(codingAgent)}, ${codingAgent.title})`,
+          agentKind: codingAgent.kind,
+          agentTitle: codingAgent.title,
           agentModel: codingAgent.model,
+          agentAutomationName: agentAutomationNameSql(codingAgent),
           taskId: inboxItem.taskId,
           taskName: task.name,
           askType: sql<string | null>`${inboxMessage.ask}->>'type'`,

@@ -31,6 +31,7 @@ import { storeWriter } from "@luke/database/models/writer";
 import { MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
 import { AGENT_TOOL } from "@luke/features/agent-tools";
 import { MENTION_KIND } from "@luke/features/mention-link";
+import { agentName } from "@luke/features/model-label";
 import { Duration, Effect, Option, type Schema } from "effect";
 import type { HttpClient } from "effect/http";
 import { steerCodingAgent } from "../agents/coder-host/steer.js";
@@ -60,7 +61,12 @@ function wakeKey(wake: DueOperatorWake): string {
 
 /** The line that wakes the operator, naming the agent that failed. */
 function wakeLine(wake: DueOperatorWake, step: string): string {
-  const name = wake.agentTitle ?? wake.agentModel;
+  const name = agentName({
+    kind: wake.agentKind,
+    title: wake.agentTitle,
+    model: wake.agentModel,
+    automationName: wake.agentAutomationName,
+  });
   const task = wake.taskId === null ? undefined : { taskId: wake.taskId };
   const mention = writtenMention(
     { kind: MENTION_KIND.AGENT, ...task, agentId: wake.agentId },

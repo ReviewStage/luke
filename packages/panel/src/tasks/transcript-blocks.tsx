@@ -4,7 +4,7 @@ import {
   type CodingAgentTodos,
 } from "@luke/features/coding-agent-wire";
 import type { IntegrationProvider } from "@luke/features/integration-wire";
-import { readLink } from "@luke/features/luke-link";
+import { readLink } from "@luke/features/link-grammar";
 import { mayNameMention } from "@luke/features/mention-link";
 import type { CatalogModel, ModelChoice } from "@luke/features/models-wire";
 import { formatBytes } from "@luke/features/number-format";

@@ -6,8 +6,8 @@
  * hold on to.
  */
 
+import { readLink } from "@luke/features/link-grammar";
 import { LINK_ORIGIN } from "@luke/features/link-home";
-import { readLink } from "@luke/features/luke-link";
 import {
   eventWithoutAccessTokens,
   SPANS_NAMING_ACCESS_TOKENS,

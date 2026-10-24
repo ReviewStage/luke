@@ -3,7 +3,7 @@ import {
   type CodingAgentSummary,
   type TasklessAgent,
 } from "@luke/features/coding-agent-wire";
-import { LINK_PLACE } from "@luke/features/luke-link";
+import { LINK_PLACE } from "@luke/features/link-grammar";
 import type { CatalogModel } from "@luke/features/models-wire";
 import type { TaskAgentLine } from "@luke/features/task-wire";
 import { HoverCard, HoverCardHead, INLINE_REF_LOOK, InlineRef, Tooltip } from "@luke/ui";
@@ -21,9 +21,9 @@ import {
 } from "./agent-tab-card.js";
 import {
   agentActor,
+  agentName,
   agentStateWords,
   agentStillWriting,
-  agentTabLabel,
   archivedByReading,
   providerOf,
   teammateRef,
@@ -131,7 +131,7 @@ export function lineSubject(
   readerId: string | undefined,
 ): AgentSubject {
   const writing = agentStillWriting(line.status);
-  const name = agentTabLabel(line, models);
+  const name = agentName(line, models);
   const reading: CardReading = {
     corner: cardCorner({
       writing,
@@ -163,7 +163,7 @@ export function tasklessRowSubject(
 ): AgentSubject {
   const { automationId, pullRequest, ...rest } = agent;
   const summary: CodingAgentSummary = automationId === null ? rest : { ...rest, automationId };
-  const name = agentTabLabel(summary, agents.models);
+  const name = agentName(summary, agents.models);
   const tile = agentActor(summary, name);
   const base = agentCardReading(summary, name, NOTHING_HELD, false, agents);
   const { archivedAt } = agent;
@@ -201,7 +201,7 @@ export function tasklessSubject(
   },
   models: readonly CatalogModel[] | undefined,
 ): AgentSubject {
-  const name = agentTabLabel(
+  const name = agentName(
     { title: line.title, model: line.model, automationName: line.automationName },
     models,
   );
@@ -243,7 +243,7 @@ export function agentSubject(
     agents.agents?.find((each) => each.id === agentId) ??
     agents.archived?.find((each) => each.id === agentId);
   if (agent !== undefined) {
-    const name = agentTabLabel(agent, agents.models);
+    const name = agentName(agent, agents.models);
     const tile = agentActor(agent, name);
     return { name, tile, agent, read: agentCardReading(agent, name, held, chosen, agents) };
   }

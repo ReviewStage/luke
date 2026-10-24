@@ -4,6 +4,7 @@ import {
   type LinearIssueSummary,
   linearIssueIdentifierIn,
 } from "@luke/features/linear-wire";
+import { mentionMarkdownLink } from "@luke/features/link-grammar";
 import {
   type RepositoryPin,
   TASK_BOUNDS,
@@ -143,18 +144,9 @@ export function taskNameOfIssue(issue: Pick<LinearIssueSummary, "identifier" | "
   return title === "" ? issue.identifier : title;
 }
 
-/** The characters a markdown link's label escapes to stay one label. */
-const LABEL_SPECIAL = /[[\]\\]/gu;
-
-/** The characters a markdown link's target encodes so it ends where it should. */
-const TARGET_SPECIAL = /[()]/gu;
-
 /** One issue as the app writes a link to it: its key and title over its own address. */
 function issueMention(issue: Pick<LinearIssueSummary, "identifier" | "title" | "url">): string {
-  const name = `${issue.identifier} ${issue.title.trim()}`.trim();
-  const label = `@${name}`.replace(LABEL_SPECIAL, (special) => `\\${special}`);
-  const target = issue.url.replace(TARGET_SPECIAL, (special) => (special === "(" ? "%28" : "%29"));
-  return `[${label}](${target})`;
+  return mentionMarkdownLink(`${issue.identifier} ${issue.title.trim()}`.trim(), issue.url);
 }
 
 /**

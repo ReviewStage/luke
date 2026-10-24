@@ -1,7 +1,7 @@
 import { ACCOUNT_STATUS } from "@luke/credentials/snapshot";
 import { PRODUCT_SURFACE_EVENT } from "@luke/features/analytics";
 import { INTEGRATION_PROVIDER_LIST } from "@luke/features/integration-wire";
-import { LINK_PLACE } from "@luke/features/luke-link";
+import { LINK_PLACE } from "@luke/features/link-grammar";
 import type { Workspace } from "@luke/features/workspace-wire";
 import { type HostCapability, SETTINGS_VIEW_COUNTED_AS } from "@luke/settings";
 import {

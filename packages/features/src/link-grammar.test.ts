@@ -3,12 +3,20 @@ import { test } from "vitest";
 import {
   ADMIN_LINK_SECTION,
   appLinkOf,
+  GITHUB_PAGE,
+  type GitHubPage,
+  gitHubPageLink,
   LINK_PLACE,
   type LinkPlace,
   linkOf,
+  markdownLink,
+  mentionMarkdownLink,
   PULL_REQUEST_THREAD_VIEW,
+  readGitHubPage,
+  readLinearIssue,
   readLink,
-} from "./luke-link.js";
+} from "./link-grammar.js";
+import { linkLabels, linksIn, mentionLinksIn, mentionsIn } from "./mention-link.js";
 
 /**
  * A place in Luke as the link a teammate is sent: written under its
@@ -289,4 +297,118 @@ test("a link is handed to the desktop in its own scheme, written again from the 
   ]) {
     assert.equal(appLinkOf(target), undefined, target);
   }
+});
+
+const COMMIT = "0123456789abcdef0123456789abcdef01234567";
+
+test("a title holding a bracket, a backslash, or a line break is written as one label, and read back as written", () => {
+  const url = "https://github.com/acme/relay/pull/42";
+  const title = "#42 Fix [the] build\\cache]\nnow";
+  const mention = mentionMarkdownLink(title, url);
+  const [read] = linksIn(`Waiting on ${mention} by Luke.`);
+  assert.deepEqual([read?.label, read?.target], ["@#42 Fix [the] build\\cache] now", url]);
+  assert.equal(linkLabels(`Waiting on ${mention}.`), "Waiting on #42 Fix [the] build\\cache] now.");
+  assert.deepEqual(
+    mentionsIn(mention, null).map(({ label, target }) => [label, target]),
+    [["@#42 Fix [the] build\\cache] now", url]],
+  );
+});
+
+test("a target holding a parenthesis or a space is written as one target", () => {
+  const written = markdownLink("Maps", "https://example.com/a (b)/c d");
+  assert.equal(written, "[Maps](https://example.com/a%20%28b%29/c%20d)");
+  assert.deepEqual(
+    linksIn(`see ${written}.`).map(({ label, target }) => [label, target]),
+    [["Maps", "https://example.com/a%20%28b%29/c%20d"]],
+  );
+});
+
+/** Every kind of GitHub page the app reads, and the address it is written by. */
+const GITHUB_PAGES: readonly (readonly [GitHubPage, string])[] = [
+  [
+    { kind: GITHUB_PAGE.PULL_REQUEST, repository: "acme/relay", number: 42 },
+    "https://github.com/acme/relay/pull/42",
+  ],
+  [
+    { kind: GITHUB_PAGE.ISSUE, repository: "acme/relay", number: 7 },
+    "https://github.com/acme/relay/issues/7",
+  ],
+  [
+    { kind: GITHUB_PAGE.FILE, repository: "acme/relay", ref: "HEAD", path: "src/a b.ts" },
+    "https://github.com/acme/relay/blob/HEAD/src/a%20b.ts",
+  ],
+  [
+    {
+      kind: GITHUB_PAGE.FILE,
+      repository: "acme/relay",
+      ref: COMMIT,
+      path: "src/a.ts",
+      lines: { startLine: 3, endLine: 5 },
+    },
+    `https://github.com/acme/relay/blob/${COMMIT}/src/a.ts#L3-L5`,
+  ],
+  [
+    { kind: GITHUB_PAGE.FOLDER, repository: "acme/relay", ref: "0123abc", path: "src/app" },
+    "https://github.com/acme/relay/tree/0123abc/src/app",
+  ],
+];
+
+test("every GitHub page the app reads is written by its address, and read back from it", () => {
+  for (const [page, address] of GITHUB_PAGES) {
+    assert.equal(gitHubPageLink(page), address);
+    assert.deepEqual(readGitHubPage(address), page, address);
+  }
+  assert.deepEqual(readGitHubPage("https://github.com/acme/relay/pull/42/files#diff-1"), {
+    kind: GITHUB_PAGE.PULL_REQUEST,
+    repository: "acme/relay",
+    number: 42,
+  });
+  assert.deepEqual(readGitHubPage("https://github.com/acme/relay/tree/HEAD/src/"), {
+    kind: GITHUB_PAGE.FOLDER,
+    repository: "acme/relay",
+    ref: "HEAD",
+    path: "src",
+  });
+  // Lines on the default branch drift, so the page reads as the file alone.
+  assert.deepEqual(readGitHubPage("https://github.com/acme/relay/blob/HEAD/src/a.ts#L3"), {
+    kind: GITHUB_PAGE.FILE,
+    repository: "acme/relay",
+    ref: "HEAD",
+    path: "src/a.ts",
+  });
+});
+
+test("a GitHub page on a branch, one whose path climbs, lines no file has, or any other page names nothing", () => {
+  for (const target of [
+    "https://github.com/acme/relay/blob/feature/rollout/src/a.ts",
+    "https://github.com/acme/relay/blob/HEAD/../secrets",
+    "https://github.com/acme/relay/blob/HEAD//etc/passwd",
+    `https://github.com/acme/relay/blob/${COMMIT}/src/a.ts#L5-L3`,
+    "https://github.com/acme/relay/pull/0",
+    "https://github.com/acme/relay/pulls",
+    "https://github.com/acme",
+    "https://gitlab.com/acme/relay/pull/42",
+    "ftp://github.com/acme/relay/pull/42",
+  ]) {
+    assert.equal(readGitHubPage(target), undefined, target);
+  }
+});
+
+test("a Linear issue's page names its identifier, in capitals, with its slug or without; any other page names none", () => {
+  assert.equal(readLinearIssue("https://linear.app/acme/issue/ENG-123/fix-the-thing"), "ENG-123");
+  assert.equal(readLinearIssue("https://linear.app/acme/issue/eng-123"), "ENG-123");
+  for (const target of [
+    "https://linear.app/acme/project/eng-123",
+    "https://linear.app/acme/issue/123",
+    "https://example.com/acme/issue/ENG-123",
+  ]) {
+    assert.equal(readLinearIssue(target), undefined, target);
+  }
+});
+
+test("a mention whose destination stands between angle brackets names the address inside them, and is written back as that address", () => {
+  const address = `${HOME}/plan/${TASK}`;
+  const [read] = mentionLinksIn(`See [@Plan](<${address}>) now.`);
+  assert.deepEqual([read?.label, read?.target], ["@Plan", address]);
+  assert.equal(mentionMarkdownLink("Plan", read?.target ?? ""), `[@Plan](${address})`);
 });
