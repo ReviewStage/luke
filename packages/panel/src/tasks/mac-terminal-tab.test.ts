@@ -63,6 +63,8 @@ const OTHER = {
 let sent: (AnyAct | SentPortAct)[];
 /** The sentence main refuses a stop in, while it does. */
 let stopRefusal: string | undefined;
+/** The answer main gives a reveal once the test lets it, while one is held. */
+let revealHeld: PromiseWithResolvers<undefined> | undefined;
 const roots: Root[] = [];
 
 beforeAll(() => Effect.runPromise(bundleLanded(SIDE_BUNDLES.terminal)));
@@ -70,6 +72,7 @@ beforeAll(() => Effect.runPromise(bundleLanded(SIDE_BUNDLES.terminal)));
 beforeEach(() => {
   sent = [];
   stopRefusal = undefined;
+  revealHeld = undefined;
   const published = {
     repository: "acme/app",
     branch: "luke/add-thing",
@@ -90,6 +93,9 @@ beforeEach(() => {
     sent.push(request);
     if (request.kind === ACT_KIND.MAC_TERMINAL_STOP && stopRefusal !== undefined) {
       return Promise.reject(refusedOnPort(stopRefusal));
+    }
+    if (request.kind === ACT_KIND.MAC_TERMINAL_REVEAL && revealHeld !== undefined) {
+      return revealHeld.promise;
     }
     if (request.kind !== ACT_KIND.CODING_AGENTS_PULL_REQUEST) return Promise.resolve(undefined);
     // SAFETY: the tab asks for a pull request with the agent and, for another's, its number.
@@ -168,6 +174,11 @@ async function mount(asked: number, number?: number, phone = false) {
     bar: () => container.querySelector(".terminal-tab-standing")?.textContent ?? "",
     /** The words on each button the bar offers, and whether it can be pressed. */
     offered: () => buttons().map((each) => `${each.textContent}${each.disabled ? " (off)" : ""}`),
+    /** The words on each button that shows it is working. */
+    busy: () =>
+      buttons()
+        .filter((each) => each.getAttribute("aria-busy") === "true")
+        .map((each) => each.textContent),
     press: async (words: string) => {
       const button = buttons().find((each) => each.textContent === words);
       assert.ok(button, `a button saying ${words}`);
@@ -261,6 +272,33 @@ test("Open in Terminal asks main to open the run's worktree", async () => {
   await tab.press("Open in Terminal");
 
   assert.equal(sent.at(-1)?.kind, ACT_KIND.MAC_TERMINAL_REVEAL);
+});
+
+test("Open in Terminal shows it is working until main has opened it", async () => {
+  const tab = await mount(3);
+  tab.post();
+  await settle();
+  revealHeld = Promise.withResolvers();
+
+  await tab.press("Open in Terminal");
+  assert.deepEqual(tab.busy(), ["Open in Terminal"]);
+
+  await act(async () => revealHeld?.resolve(undefined));
+  await settle();
+  assert.deepEqual(tab.busy(), []);
+});
+
+test("Stop shows it is working from the press until the run has ended", async () => {
+  const tab = await mount(3);
+  const say = tab.post();
+  await settle();
+  assert.deepEqual(tab.busy(), []);
+
+  await tab.press("Stop");
+  assert.deepEqual(tab.busy(), ["Stop"]);
+
+  say({ type: MAC_TERMINAL_PORT_MESSAGE.EXIT, code: 143 });
+  assert.deepEqual(tab.busy(), []);
 });
 
 test("the tab drawn again over a run only shows it, starting none", async () => {

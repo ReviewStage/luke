@@ -13,6 +13,7 @@ import { useEffect, useRef, useState } from "react";
 import { toastActFailure, useAct } from "../act.js";
 import { TERMINAL_LOAD_FAILED, useSideBundles } from "../bundle-loader.js";
 import { useTabActions } from "../desktop/strip-tabs.js";
+import { useBusyPress } from "../settings/busy-press.js";
 import { usePhoneRoom } from "../stage-room.js";
 import type { TerminalHandle } from "../terminal/contract.js";
 import { onMacTerminalPort } from "./mac-terminal-port.js";
@@ -211,12 +212,12 @@ export function MacTerminalTab({ tab }: { tab: MacTerminalStripTab }): React.JSX
       toastActFailure(refused);
     });
   };
-  const openInTerminal = () => {
-    // Note that a refusal is written on the screen, so a press that opened nothing says why.
+  // Note that a refusal is written on the screen, so a press that opened nothing says why.
+  const opening = useBusyPress(() =>
     act(ACT_KIND.MAC_TERMINAL_REVEAL, { agentId }).catch((refused: Error) =>
       tellOnScreen.current(refused.message),
-    );
-  };
+    ),
+  );
 
   const run = () => setPresses((count) => count + 1);
   // A phone draws no bar over the screen: its header's ⋯ runs, stops, and opens the run in
@@ -248,7 +249,7 @@ export function MacTerminalTab({ tab }: { tab: MacTerminalStripTab }): React.JSX
               icon: <GLYPH.TERMINAL />,
               detail: where,
               disabled: branch === undefined || standing.kind === "starting",
-              onSelect: openInTerminal,
+              onSelect: opening.onPress,
             },
           ],
         ]
@@ -271,8 +272,10 @@ export function MacTerminalTab({ tab }: { tab: MacTerminalStripTab }): React.JSX
                 icon={<GLYPH.TERMINAL />}
                 label="Open in Terminal"
                 size={BUTTON_SIZE.COMPACT}
+                busy={opening.busy}
+                busyLabel="Opening Terminal"
                 disabled={branch === undefined || standing.kind === "starting"}
-                onClick={openInTerminal}
+                onClick={opening.onPress}
               >
                 Open in Terminal
               </Button>
@@ -281,7 +284,8 @@ export function MacTerminalTab({ tab }: { tab: MacTerminalStripTab }): React.JSX
                   icon={<GLYPH.STOP />}
                   variant={BUTTON_VARIANT.DANGER_OUTLINE}
                   size={BUTTON_SIZE.COMPACT}
-                  disabled={standing.kind === "stopping"}
+                  busy={standing.kind === "stopping"}
+                  busyLabel="Stopping"
                   onClick={stop}
                 >
                   Stop
