@@ -23,6 +23,7 @@ import { ACT_KIND } from "@luke/host/acts";
 import { HOST_CAPABILITY } from "@luke/settings";
 import { SETTINGS_SECTION } from "@luke/settings/settings-views";
 import {
+  ALIGN,
   BUTTON_TYPE,
   BUTTON_VARIANT,
   Button,
@@ -1095,21 +1096,32 @@ function Invitations({
     <>
       <Stack gap={GAP.NONE}>
         <div className="workspace-invite">
-          <Inline as={LAYOUT_ELEMENT.FORM} justify={JUSTIFY.END} grow growFirst onSubmit={invite}>
-            <TextField
-              ref={emailField}
-              type={TEXT_FIELD_TYPE.EMAIL}
-              required
-              label="Email address"
-              placeholder="name@example.com"
-              autoComplete={TEXT_FIELD_AUTO_COMPLETE.OFF}
-              spellCheck={false}
-              value={email}
-              disabled={busy}
-              // Note that Escape lets go of the field and keeps the words, rather than leaving Settings.
-              onEscape={() => emailField.current?.blur()}
-              onChange={setEmail}
-            />
+          <Inline
+            as={LAYOUT_ELEMENT.FORM}
+            align={ALIGN.END}
+            justify={JUSTIFY.END}
+            grow
+            growFirst
+            onSubmit={invite}
+          >
+            <FormField label="Email address">
+              {(field) => (
+                <TextField
+                  ref={emailField}
+                  field={field}
+                  type={TEXT_FIELD_TYPE.EMAIL}
+                  required
+                  placeholder="name@example.com"
+                  autoComplete={TEXT_FIELD_AUTO_COMPLETE.OFF}
+                  spellCheck={false}
+                  value={email}
+                  disabled={busy}
+                  // Note that Escape lets go of the field and keeps the words, rather than leaving Settings.
+                  onEscape={() => emailField.current?.blur()}
+                  onChange={setEmail}
+                />
+              )}
+            </FormField>
             <RoleChip value={role} disabled={busy} adminAllowed={owner} onChange={setRole} />
             <Button
               type={BUTTON_TYPE.SUBMIT}

@@ -44,7 +44,6 @@
   "packages/panel/src/member-rows.tsx": 1,
   "packages/panel/src/not-found.tsx": 1,
   "packages/panel/src/picture-block.tsx": 1,
-  "packages/panel/src/settings/agent-auth-section.tsx": 1,
   "packages/panel/src/settings/experimental-page.tsx": 1,
   "packages/panel/src/settings/integrations-page.tsx": 1,
   "packages/panel/src/settings/pages.tsx": 1,
