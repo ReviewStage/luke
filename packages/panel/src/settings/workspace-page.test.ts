@@ -1010,7 +1010,7 @@ test("the chosen team workspace's members are listed with their email and role, 
     ),
     ["Owner", "Member"],
   );
-  assert.deepEqual(rowActions(memberNamed(page, "Sam")), []);
+  assert.deepEqual(rowActions(memberNamed(page, "Sam")), ["Copy link"]);
 });
 
 /** Lays `words` out narrower than they run, as a row too narrow for an address does, and tells the window. */
@@ -1145,7 +1145,7 @@ test("before the workspaces are read, placeholder sections stand in the page's s
 test("an admin is offered Remove for a member but not for the owner, and Remove asks before it removes", async () => {
   const { page } = await mount({ ...ACME, role: WORKSPACE_ROLE.ADMIN });
 
-  assert.deepEqual(rowActions(memberNamed(page, "Dana")), []);
+  assert.deepEqual(rowActions(memberNamed(page, "Dana")), ["Copy link"]);
   await chooseAction(memberNamed(page, "Sam"), "Remove from workspace");
   const askedFirst = !sent.some((request) => request.kind === ACT_KIND.WORKSPACE_MEMBER_REMOVE);
   await confirm("Remove");
@@ -1179,8 +1179,8 @@ test("an admin is offered no Remove on their own row, since their way out is Lea
   ];
   const { page } = await mount({ ...ACME, role: WORKSPACE_ROLE.ADMIN });
 
-  assert.deepEqual(rowActions(memberNamed(page, "Dana")), []);
-  assert.deepEqual(rowActions(memberNamed(page, "Sam")), ["Remove from workspace"]);
+  assert.deepEqual(rowActions(memberNamed(page, "Dana")), ["Copy link"]);
+  assert.deepEqual(rowActions(memberNamed(page, "Sam")), ["Copy link", "Remove from workspace"]);
   assert.equal(buttons(page, "Leave").length, 1);
 });
 
@@ -1196,8 +1196,9 @@ test("an admin is offered no Remove on another admin, and the owner is, as the s
   const adminSees = rowActions(memberNamed(asAdmin.page, "Ola"));
   const asOwner = await mount({ ...ACME, role: WORKSPACE_ROLE.OWNER });
 
-  assert.deepEqual(adminSees, []);
+  assert.deepEqual(adminSees, ["Copy link"]);
   assert.deepEqual(rowActions(memberNamed(asOwner.page, "Ola")), [
+    "Copy link",
     "Make member",
     "Make owner",
     "Remove from workspace",
@@ -1223,7 +1224,11 @@ const ADMIN_OLA: WorkspaceMember = {
 test("the owner makes a member an admin from the member's ⋯ at once, and the row says Admin", async () => {
   const { page } = await mount({ ...ACME, role: WORKSPACE_ROLE.OWNER });
 
-  assert.deepEqual(rowActions(memberNamed(page, "Sam")), ["Make admin", "Remove from workspace"]);
+  assert.deepEqual(rowActions(memberNamed(page, "Sam")), [
+    "Copy link",
+    "Make admin",
+    "Remove from workspace",
+  ]);
   await chooseAction(memberNamed(page, "Sam"), "Make admin");
 
   assert.deepEqual(roleSent(), [
@@ -1244,6 +1249,7 @@ test("the owner's ⋯ on an admin holds Make member, Make owner, and Remove, and
   const { page } = await mount({ ...ACME, role: WORKSPACE_ROLE.OWNER });
 
   assert.deepEqual(rowActions(memberNamed(page, "Ola")), [
+    "Copy link",
     "Make member",
     "Make owner",
     "Remove from workspace",
@@ -1268,7 +1274,11 @@ test("an admin of the account's own first workspace is never offered Make owner,
   stored = [OWNER, ADMIN_OLA];
   const { page } = await mount({ ...FIRST, role: WORKSPACE_ROLE.OWNER });
 
-  assert.deepEqual(rowActions(memberNamed(page, "Ola")), ["Make member", "Remove from workspace"]);
+  assert.deepEqual(rowActions(memberNamed(page, "Ola")), [
+    "Copy link",
+    "Make member",
+    "Remove from workspace",
+  ]);
 });
 
 test("an admin is offered no role change, and a role change the service refuses is said under the row", async () => {
@@ -1278,7 +1288,7 @@ test("an admin is offered no role change, and a role change the service refuses 
   const asOwner = await mount({ ...ACME, role: WORKSPACE_ROLE.OWNER });
   await chooseAction(memberNamed(asOwner.page, "Sam"), "Make admin");
 
-  assert.deepEqual(adminSees, ["Remove from workspace"]);
+  assert.deepEqual(adminSees, ["Copy link", "Remove from workspace"]);
   assert.equal(refusalOf(memberNamed(asOwner.page, "Sam")), WORKSPACE_NOT_PERMITTED_REFUSAL);
 });
 
@@ -2016,11 +2026,16 @@ test("the owner invites an address as a role, sees it pending with its link to c
   const row = invitationRows(page)[0] ?? assert.fail("no pending invitation");
   const face = row.querySelector<HTMLElement>(".actor-mark")?.dataset.kind;
   const listed = [addressOf(row)?.textContent, row.querySelector("p")?.textContent];
-  act(() => button(row, "Copy link").click());
+  act(() => button(row, "Copy invite link").click());
+  await settle();
+  const invitationLink = copied.slice();
   await chooseAction(row, "Cancel invitation");
   act(() => button(dialog(), "Cancel invitation").click());
   await settle();
 
+  assert.deepEqual(invitationLink, [
+    "https://tryluke.dev/accept-invitation.html?id=inv-alan@example.com",
+  ]);
   assert.deepEqual(listed, [
     "alan@example.com",
     `Invited as Admin · Expires ${dayAndTimeText(Date.parse("2026-10-16T12:00:00.000Z"))}`,
@@ -2130,7 +2145,7 @@ test("an invitation made stays listed with its link when the read after it fails
 
   const row = invitationRows(page)[0] ?? assert.fail("the invitation was lost");
   assert.equal(addressOf(row)?.textContent, "alan@example.com");
-  assert.ok(button(row, "Copy link"));
+  assert.ok(button(row, "Copy invite link"));
 });
 
 test("an invitation's answer that lands after the stream told a newer list does not bring back what another window canceled", async () => {
@@ -2544,10 +2559,23 @@ test("in the window, each member's ⋯ opens their profile first, in the workspa
     opened.push([userId, name, workspaceId]),
   );
 
-  assert.deepEqual(rowActions(memberNamed(page, "Sam")), ["Open profile"]);
+  assert.deepEqual(rowActions(memberNamed(page, "Sam")), ["Open profile", "Copy link"]);
   await chooseAction(memberNamed(page, "Sam"), "Open profile");
 
   assert.deepEqual(opened, [[MEMBER.userId, "Sam", ACME.id]]);
+});
+
+test("each member's ⋯ holds Copy link, which copies that person's link under the workspace's slug, with or without a profile to open", async () => {
+  const copied: string[] = [];
+  fakeAppPlatform({ ...QUIET_PANEL, ...copyingInto(copied) });
+  const { page } = await mount(ACME);
+
+  assert.deepEqual(rowActions(memberNamed(page, "Sam")), ["Copy link"]);
+  await chooseAction(memberNamed(page, "Sam"), "Copy link");
+  await settle();
+
+  assert.deepEqual(copied, [`https://tryluke.dev/acme/person/${MEMBER.userId}`]);
+  assert.match(document.body.textContent ?? "", /Link copied/u);
 });
 
 test("on a platform without this Mac's terminal, the Workspace page draws no Repositories group beside its Integrations", async () => {
