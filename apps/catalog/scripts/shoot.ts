@@ -43,6 +43,10 @@ const PHONE_WIDTH = 390;
 const DEFAULT_JOBS = 4;
 // Time for a first paint to settle after the fonts and the page are ready.
 const SETTLE_MS = 150;
+// The longest a shot waits on an example that makes something before it draws, a recording say.
+const READY_TIMEOUT_MS = 10_000;
+// What the video player's example says while it records its stand-in (`src/examples/video-player.tsx`).
+const RECORDING_WORDS = "Recording a stand-in video";
 
 /** The capture run's zeroing of motion, laid on the root and the body, over whatever the token sheets say. */
 const STILL_MOTION_CSS = `
@@ -94,6 +98,7 @@ interface ShotResult {
 interface PlaywrightPage {
   goto(url: string): Promise<unknown>;
   waitForSelector(selector: string): Promise<unknown>;
+  waitForFunction(script: string, options?: { timeout: number }): Promise<unknown>;
   waitForTimeout(ms: number): Promise<void>;
   evaluate<Result>(script: string): Promise<Result>;
   on(event: "pageerror", listener: (value: never) => void): void;
@@ -193,6 +198,15 @@ async function shootOne(
   await page.goto(addressOf(base, shot));
   await page.waitForSelector(".catalog-example h1");
   await page.evaluate("document.fonts.ready.then(() => true)");
+  // Note that the video player draws nothing but this line until its recording is made, some frames on.
+  try {
+    await page.waitForFunction(
+      `!document.querySelector(".catalog-example").textContent.includes(${JSON.stringify(RECORDING_WORDS)})`,
+      { timeout: READY_TIMEOUT_MS },
+    );
+  } catch {
+    problems.push("still recording its stand-in when shot");
+  }
   await page.waitForTimeout(SETTLE_MS);
   await page.locator(".catalog-example").screenshot({
     path: file,
@@ -272,10 +286,14 @@ async function main(): Promise<void> {
   const outDir = path.resolve(values.out);
   const jobs = Math.max(1, Number(values.jobs) || DEFAULT_JOBS);
   const buildDir = mkdtempSync(path.join(tmpdir(), "luke-catalog-"));
-  const served = values.base === undefined ? await serveBuild(buildDir) : undefined;
-  const base = values.base ?? served?.base ?? "";
-  const browser = await loadPlaywright().chromium.launch();
+  let served: Awaited<ReturnType<typeof serveBuild>> | undefined;
+  let browser: PlaywrightBrowser | undefined;
   try {
+    // Playwright is looked for first, so a machine without it fails before the long build.
+    const playwright = loadPlaywright();
+    served = values.base === undefined ? await serveBuild(buildDir) : undefined;
+    const base = values.base ?? served?.base ?? "";
+    browser = await playwright.chromium.launch();
     const listed = await listExamples(browser, base);
     const wanted = values.example;
     const examples = wanted === undefined ? listed : listed.filter(({ id }) => wanted.includes(id));
@@ -294,18 +312,19 @@ async function main(): Promise<void> {
         THEMES.flatMap((theme) => SIZES.map((size) => ({ example, profile, theme, size }))),
       ),
     );
-    const total = queue.length;
+    const order = [...queue];
     const results: ShotResult[] = [];
     await Promise.all(
       Array.from({ length: jobs }, () => work(contexts, base, outDir, queue, results)),
     );
-    // The workers finish out of order, so the index is laid in the catalog's own.
-    writeFileSync(path.join(outDir, "index.html"), indexPage(results, examples));
+    // The workers finish out of order, so the index is laid in the order queued.
+    const queued = order.flatMap((shot) => results.filter((result) => result.shot === shot));
+    writeFileSync(path.join(outDir, "index.html"), indexPage(queued, examples));
     const flagged = results.filter((result) => result.problems.length > 0).length;
-    say(`${total} shots of ${examples.length} examples in ${outDir}/index.html`);
+    say(`${order.length} shots of ${examples.length} examples in ${outDir}/index.html`);
     if (flagged > 0) say(`${flagged} shot(s) logged a page error`);
   } finally {
-    await browser.close();
+    await browser?.close();
     await served?.stop();
     rmSync(buildDir, { recursive: true, force: true });
   }
