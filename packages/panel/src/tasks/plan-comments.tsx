@@ -14,6 +14,7 @@ import {
   type PlanCommentWriter,
 } from "@luke/features/plan-comment-wire";
 import type { PlanSection } from "@luke/features/plan-document";
+import { pasteCutWords } from "@luke/features/words";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
   BUTTON_SIZE,
@@ -43,6 +44,7 @@ import {
   ErrorState,
   Fill,
   IconButton,
+  LengthCounter,
   LINE_BUTTON_LOOK,
   LineButton,
   MENU_SURFACE_FLOW,
@@ -615,6 +617,8 @@ interface CommentTextProps {
   readonly dictation?: DictationControl | undefined;
   /** Takes files pasted into the field, answering whether it took any; none where the field takes no files, as an edit's does not. */
   readonly onPasteFiles?: ((files: readonly File[]) => boolean) | undefined;
+  /** Told once a paste past the comment's bound has been cut to fit; none where the field says nothing of it. */
+  readonly onPasteCut?: (() => void) | undefined;
 }
 
 /** The comment's field on the agent box's editor: mentions as chips, written as their links. */
@@ -630,6 +634,7 @@ function MentionCommentText({
   editor: handed,
   dictation,
   onPasteFiles,
+  onPasteCut,
 }: CommentTextProps & {
   module: PlanEditorModule | undefined;
   mentions: TaskMentionsValue;
@@ -668,6 +673,7 @@ function MentionCommentText({
       }}
       onEnter={onSubmit}
       onPasteFiles={onPasteFiles ?? (() => false)}
+      onPasteCut={onPasteCut}
       onTrigger={() => undefined}
       chip={() => null}
       mentions={{
@@ -768,7 +774,12 @@ function ReplyField({
   const dictates = useCommentEditor() !== undefined;
   const { draft, update } = useDraft(place);
   const words = draft.text;
-  const setWords = (text: string) => update((was) => ({ ...was, text }));
+  // Whether the last paste was cut to the room the field has left, until the words change again.
+  const [cut, setCut] = useState(false);
+  const setWords = (text: string) => {
+    setCut(false);
+    update((was) => ({ ...was, text }));
+  };
   const files = useCommentAttaching();
   const fileDrop = useFileDrop((dropped) => files.attach(Array.from(dropped)));
   // The words sent and not yet answered, which the field holds as a draft while it stands empty, so a send that fails finds them.
@@ -776,6 +787,8 @@ function ReplyField({
   const attempt = useRef<
     { words: string; attachments: readonly CodingAgentAttachment[]; key: string } | undefined
   >(undefined);
+  // Note that a dictation's note is said before the cut paste's, and only the agent box's editor cuts a paste.
+  const said = heard ?? (cut ? pasteCutWords(PLAN_COMMENT_BOUNDS.MAX_WORDS_CHARS) : undefined);
   const send = () => {
     const trimmed = words.trim();
     if (trimmed === "" || sending || files.reading > 0) return;
@@ -824,10 +837,15 @@ function ReplyField({
         editor={editor}
         dictation={dictation}
         onPasteFiles={files.paste}
+        onPasteCut={() => {
+          // Note that a paste cut says so over a dictation's note, which was said of what came before it.
+          setHeard(undefined);
+          setCut(true);
+        }}
       />
-      {heard === undefined ? null : (
+      {said === undefined ? null : (
         <div className="comment-note" role="alert">
-          {heard}
+          {said}
         </div>
       )}
       {files.refusal === undefined ? null : (
@@ -842,6 +860,9 @@ function ReplyField({
           <>
             <AttachFilesButton disabled={sending} onFiles={files.attach} />
             <span className="comment-field-tools">
+              {dictates ? (
+                <LengthCounter length={words.length} limit={PLAN_COMMENT_BOUNDS.MAX_WORDS_CHARS} />
+              ) : null}
               {dictates ? <DictateButton dictation={dictation} disabled={sending} /> : null}
               <IconButton
                 submit={sending ? SUBMIT_STATE.SUBMITTED : SUBMIT_STATE.READY}

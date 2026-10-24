@@ -24,6 +24,7 @@ import type { CodingAgentInboxMessagedView } from "@luke/features/coding-agent-v
 import { CODING_AGENT_CALL_FAILURE } from "@luke/features/coding-agent-view";
 import { INBOX_BOUNDS, type InboxItem } from "@luke/features/inbox-wire";
 import { encodeMention, MENTION_KIND } from "@luke/features/mention-link";
+import { pasteCutWords } from "@luke/features/words";
 import { ACT_KIND } from "@luke/host/acts";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
@@ -355,6 +356,8 @@ function ComposeCard({
   const [sending, setSending] = useState(false);
   const [reading, setReading] = useState(0);
   const [refusal, setRefusal] = useState<string | undefined>(undefined);
+  // Whether the last paste was cut to the room the box has left, until the words change again.
+  const [cut, setCut] = useState(false);
   const attempt = useRef<{ readonly key: string; readonly words: string } | undefined>(undefined);
   const statuses = useIntegrationStatuses();
   const place = useAgentRowPlace();
@@ -393,6 +396,7 @@ function ComposeCard({
     setSending(true);
     setRefusal(undefined);
     const subject = subjectOf(draft);
+    setCut(false);
     start({
       agentId: agent.id,
       ...(subject === "" ? undefined : { title: subject }),
@@ -447,7 +451,10 @@ function ComposeCard({
       })
       .finally(() => setReading((count) => count - 1));
   };
-  const note = refusal ?? (field.failed ? EDITOR_LOAD_FAILED : undefined);
+  const note =
+    refusal ??
+    (cut ? pasteCutWords(INBOX_BOUNDS.MAX_MESSAGE_CHARS) : undefined) ??
+    (field.failed ? EDITOR_LOAD_FAILED : undefined);
   return (
     <section className="inbox-view-items" aria-label={NEW_THREAD} hidden={hidden}>
       <PageToolbar
@@ -531,7 +538,11 @@ function ComposeCard({
               />
             }
             note={draft.text}
-            onNote={(words) => write((was) => ({ ...was, text: words }))}
+            onNote={(words) => {
+              setCut(false);
+              write((was) => ({ ...was, text: words }));
+            }}
+            onPasteCut={() => setCut(true)}
             placeholder={placeholder}
             maxLength={INBOX_BOUNDS.MAX_MESSAGE_CHARS}
             onEnter={() => field.room.current?.closest("form")?.requestSubmit()}

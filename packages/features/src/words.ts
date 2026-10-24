@@ -7,6 +7,8 @@
  * numbers are `time-format.ts`'s and `number-format.ts`'s, not this module's.
  */
 
+import { formatCount } from "./number-format.js";
+
 /** A noun as a count says it: its one form and its many form. */
 export interface Noun {
   readonly one: string;
@@ -92,6 +94,11 @@ export function noneYetWords(noun: Noun): string {
 /** What a read that failed says, of what it read: "Your tasks could not be read." */
 export function readFailedWords(thing: string): string {
   return `${sentenceStart(thing)} could not be read.`;
+}
+
+/** What a paste that ran past a box's limit says of that limit, once the box has cut it to fit: "Your paste was cut to fit the 16,000-character limit." */
+export function pasteCutWords(limit: number): string {
+  return `Your paste was cut to fit the ${formatCount(limit)}-character limit.`;
 }
 
 /** What a refresh that failed says beside the last good read, which stays drawn; Retry stands with it. */

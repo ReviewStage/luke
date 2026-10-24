@@ -49,6 +49,7 @@ import {
   type TaskSummary,
 } from "@luke/features/task-wire";
 import { IDLE_TASKS_VIEW } from "@luke/features/tasks-view";
+import { pasteCutWords } from "@luke/features/words";
 import {
   WORKSPACE_ROLE,
   type Workspace,
@@ -95,6 +96,7 @@ import {
   composerEditor,
   editorBundleLanded,
   installEditorLayout,
+  pasteInComposer,
   pressInComposer,
   typeInComposer,
 } from "../testing/composer.js";
@@ -1318,6 +1320,28 @@ test("a close taken lets go of the item's draft, though another item is chosen",
   await confirmClose();
 
   assert.equal(rowDrafted(page, "Alert at 80%?"), false, "the closed item's draft is let go");
+});
+
+test("a paste past an item's reply cap is cut to the room left and its note line says so, until the words change, with the counter standing from four fifths of the cap", async () => {
+  const { page } = mount();
+  await settle();
+  const pane = itemPane(page);
+  const cap = INBOX_BOUNDS.MAX_MESSAGE_CHARS;
+  const note = () => pane.querySelector(".agent-composer-note")?.textContent;
+  assert.equal(pane.querySelector(".luke-length-counter"), null);
+
+  pasteInComposer(pane, "x".repeat(cap + 100));
+  await settle();
+  assert.equal(composerEditor(pane).textContent?.length, cap);
+  assert.equal(note(), pasteCutWords(cap));
+  assert.equal(pane.querySelector(".luke-length-counter")?.textContent, `${cap}/${cap}`);
+
+  const editor = composerEditor(pane).editor ?? assert.fail("the editor is running");
+  act(() => {
+    editor.view.dispatch(editor.state.tr.delete(1, 2));
+  });
+  await settle();
+  assert.equal(note(), undefined, "the note goes once the words change again");
 });
 
 test("a close the agent changed its item before is not taken: the item stands as the agent now asks it, though no read holds the newer revision yet", async () => {
@@ -8446,6 +8470,29 @@ test("a file dropped on a New thread's box is attached, and goes with the thread
     starts.map(({ attachments }) => attachments),
     [[{ name: "spec.pdf", mediaType: "application/pdf", data: btoa("%PDF-1.7") }]],
   );
+});
+
+test("a paste past a New thread's cap is cut to the room left and its note line says so, until the words change", async () => {
+  listedWorkspace = ACME;
+  inboxes = new Map([[BILLING.id, [THRESHOLD]]]);
+  heldStarts([AGENT]);
+  const { page } = mount();
+  await settle();
+  const pane = await openNewThread(page);
+  const cap = INBOX_BOUNDS.MAX_MESSAGE_CHARS;
+  const note = () => pane.querySelector(".agent-composer-note")?.textContent;
+
+  pasteInComposer(pane, "x".repeat(cap + 100));
+  await settle();
+  assert.equal(composerEditor(pane).textContent?.length, cap);
+  assert.equal(note(), pasteCutWords(cap));
+
+  const editor = composerEditor(pane).editor ?? assert.fail("the editor is running");
+  act(() => {
+    editor.view.dispatch(editor.state.tr.delete(1, 2));
+  });
+  await settle();
+  assert.equal(note(), undefined, "the note goes once the words change again");
 });
 
 test("an @ in a New thread's box offers the workspace's agents and people, but for the agent To names", async () => {

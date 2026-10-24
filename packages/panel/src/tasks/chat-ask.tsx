@@ -8,7 +8,7 @@ import {
   knownResponse,
 } from "@luke/features/chat-wire";
 import { type InboxAsk, inboxResponseAsk } from "@luke/features/inbox-wire";
-import { andList } from "@luke/features/words";
+import { andList, pasteCutWords } from "@luke/features/words";
 import {
   CARD_LOOK,
   CARD_PADDING,
@@ -223,6 +223,8 @@ function Answer({
     kept.update((was) => keptAskDraft(typeof next === "function" ? next(askDraftOf(was)) : next));
   const [sending, setSending] = useState(false);
   const [refusal, setRefusal] = useState<string | undefined>(undefined);
+  // Whether the last paste was cut to the room the box has left, until the words change again.
+  const [cut, setCut] = useState(false);
   const statuses = useIntegrationStatuses();
   const asks = asked !== undefined && hasControls(asked);
   const placeholder = answerPlaceholder(
@@ -253,6 +255,7 @@ function Answer({
     }
     setSending(true);
     setRefusal(undefined);
+    setCut(false);
     onAnswer({ seq: message.seq, revision: ask.revision, reply }).then(
       (refused) => {
         setSending(false);
@@ -301,7 +304,10 @@ function Answer({
         : [...box.current.querySelectorAll<HTMLButtonElement>(".inbox-ask-presses button")];
     options[number - 1]?.focus();
   };
-  const note = refusal ?? (field.failed ? EDITOR_LOAD_FAILED : undefined);
+  const note =
+    refusal ??
+    (cut ? pasteCutWords(CHAT_BOUNDS.MAX_NOTE_CHARS) : undefined) ??
+    (field.failed ? EDITOR_LOAD_FAILED : undefined);
   return (
     // biome-ignore lint/a11y/noStaticElementInteractions: the keys it hears come from the options and fields inside it, whose numbers pick.
     <div ref={box} className="chat-ask-box" onKeyDown={onNumber}>
@@ -311,7 +317,11 @@ function Answer({
         messages={false}
         controls={controls}
         note={draft.note}
-        onNote={(words) => setDraft((was) => ({ ...was, note: words }))}
+        onNote={(words) => {
+          setCut(false);
+          setDraft((was) => ({ ...was, note: words }));
+        }}
+        onPasteCut={() => setCut(true)}
         placeholder={placeholder}
         maxLength={CHAT_BOUNDS.MAX_NOTE_CHARS}
         onEnter={() => field.room.current?.closest("form")?.requestSubmit()}
