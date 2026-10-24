@@ -1586,7 +1586,7 @@ test("a waiting choice of several is a checkbox list whose box counts nothing on
   assert.deepEqual(answeredPicks(page), ["Email", "Pager"], "Enter let no pick go");
 });
 
-test("Enter anywhere in a form, in a short number field or its text field's composer, sends what is filled, a required field left empty absent from it, and with nothing filled sends nothing, the box naming nothing; Shift+Enter in a text field is a new line, and an @ there picks a mention written in as its link", async () => {
+test("⌘Enter anywhere in a form of several fields sends what is filled, a required field left empty absent from it, and with nothing filled sends nothing, the box naming nothing; a bare Enter in its number field or its text field's composer sends nothing, and in a text field adds a line, and an @ there picks a mention written in as its link", async () => {
   const form = asking(EXPIRY, {
     type: INBOX_ASK.ANSWER,
     fields: [
@@ -1610,7 +1610,7 @@ test("Enter anywhere in a form, in a short number field or its text field's comp
   const retries = field("Retries").querySelector("input") ?? assert.fail("no Retries input");
 
   act(() => retries.focus());
-  keyOn(retries, "Enter");
+  keyOn(retries, "Enter", { metaKey: true });
   await settle();
   assert.deepEqual(sent, []);
   assert.equal(footWords(pane), "");
@@ -1621,6 +1621,9 @@ test("Enter anywhere in a form, in a short number field or its text field's comp
   await settle();
   assert.deepEqual(sent, [], "the first Enter picks the mention");
   pressInComposer(field("Reason"), "Enter");
+  await settle();
+  assert.deepEqual(sent, [], "a bare Enter in a form of several fields is a new line, no send");
+  pressInComposer(field("Reason"), "Enter", { metaKey: true });
   await settle();
   const file = mentionMarkdown(
     { kind: MENTION_KIND.FILE, path: "apps/web/rollout-store.ts" },
@@ -1640,6 +1643,77 @@ test("Enter anywhere in a form, in a short number field or its text field's comp
       },
     ],
   );
+});
+
+test("in a form of three fields Enter on a focused select option only picks it, ⌘Enter sends the form from there, Send's hint names ⌘↩, and a form of one field keeps Enter as its send with no such hint", async () => {
+  const form = asking(EXPIRY, {
+    type: INBOX_ASK.ANSWER,
+    fields: [
+      { type: INBOX_FIELD.SELECT, label: "Severity", required: true, options: ["Low", "High"] },
+      { type: INBOX_FIELD.NUMBER, label: "Retries" },
+      { type: INBOX_FIELD.BOOLEAN, label: "Page on-call" },
+    ],
+  });
+  const single = asking(THRESHOLD, {
+    type: INBOX_ASK.ANSWER,
+    fields: [{ type: INBOX_FIELD.SELECT, label: "Severity", options: ["Low", "High"] }],
+  });
+  inboxes.set(INVITES.id, [form]);
+  inboxes.set(BILLING.id, [single]);
+  const { page } = mount();
+  await settle();
+  // Note that the fake bridge holds one answer, so one send tells the two items' replies apart by the ask answered.
+  const sent = heldMessages((params) =>
+    repliedOn(
+      params.answers?.ask === askIdOf(EXPIRY.id) ? form : single,
+      "c1b2c3d4-0000-4000-8000-000000000093",
+    )(params),
+  );
+  const sentAbout = (id: string) =>
+    sent.filter(({ answers }) => answers?.ask === askIdOf(id)).map(({ answers }) => answers);
+
+  act(() => rowNamed(page, "Expire after 7 days?").click());
+  await settle();
+  const pane = itemPane(page);
+  const high = [...pane.querySelectorAll<HTMLButtonElement>('[role="radio"]')].find((option) =>
+    option.textContent?.includes("High"),
+  );
+  assert.ok(high, "the High option");
+  act(() => high.focus());
+  keyOn(high, "Enter");
+  await settle();
+  assert.deepEqual(sentAbout(EXPIRY.id), [], "Enter on an option sends no form of several fields");
+  assert.equal(high.getAttribute("aria-checked"), "true", "it picked the option");
+  assert.equal(
+    answerSend(pane).getAttribute("aria-keyshortcuts"),
+    "Meta+Enter",
+    "Send's hint names ⌘↩",
+  );
+
+  keyOn(high, "Enter", { metaKey: true });
+  await settle();
+  assert.deepEqual(sentAbout(EXPIRY.id), [
+    {
+      ask: askIdOf(EXPIRY.id),
+      reply: INBOX_REPLY.SUBMITTED,
+      values: [
+        { label: "Severity", value: "High" },
+        { label: "Page on-call", value: false },
+      ],
+    },
+  ]);
+
+  act(() => rowNamed(page, "Alert at 80%?").click());
+  await settle();
+  const only = [...itemPane(page).querySelectorAll<HTMLButtonElement>('[role="radio"]')].find(
+    (option) => option.textContent?.includes("Low"),
+  );
+  assert.ok(only, "the Low option");
+  assert.equal(answerSend(itemPane(page)).hasAttribute("aria-keyshortcuts"), false);
+  act(() => only.click());
+  keyOn(only, "Enter");
+  await settle();
+  assert.equal(sentAbout(THRESHOLD.id).length, 1, "Enter on the one field's option still sends");
 });
 
 test("a settled choice whose pick is not the one recommended marks each apart: the pick checked, and the recommended option by its badge", async () => {

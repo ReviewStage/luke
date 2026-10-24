@@ -420,6 +420,15 @@ export function knownAsk(ask: InboxReadAsk): ask is InboxKnownAsk {
   return Object.values<string>(INBOX_ASK).includes(ask.type);
 }
 
+/**
+ * Whether an ask is a form of several fields, which Enter alone must not
+ * send: it only picks, or breaks a line, since the rest may not be filled in
+ * yet, and ⌘ or Ctrl with Enter sends.
+ */
+export function severalFields(ask: InboxAsk): boolean {
+  return ask.type === INBOX_ASK.ANSWER && (ask.fields?.length ?? 0) > 1;
+}
+
 /** The message whose ask waits on an answer, and the ask; none where nothing waits. */
 export interface InboxAsking {
   readonly message: InboxMessage;
