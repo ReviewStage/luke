@@ -91,6 +91,7 @@ import {
   Stack,
   type StatusTone,
   TEXT_ELEMENT,
+  TEXT_FONT,
   TEXT_LINK_LOOK,
   TEXT_VARIANT,
   Text,
@@ -588,7 +589,7 @@ function Section({
   const heading = (
     <Text
       as={TEXT_ELEMENT.H3}
-      variant={TEXT_VARIANT.INHERIT}
+      variant={TEXT_VARIANT.GROUP}
       truncate
       className="pull-request-heading"
     >
@@ -1227,6 +1228,7 @@ function PendingList({
           <Text
             as={TEXT_ELEMENT.SPAN}
             variant={TEXT_VARIANT.INHERIT}
+            font={TEXT_FONT.MONO}
             truncate
             className="pull-request-quiet pull-request-pending-where"
           >
