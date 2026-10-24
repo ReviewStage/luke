@@ -115,11 +115,8 @@ export function useRowMenu(
         {...state.trigger()}
       />
     ) : null;
-  // Note that the card is the row's own control's, looked for from it first, because the ⋯ that opened the menu stands beside it rather than in it.
-  const details =
-    state.drawn === undefined
-      ? undefined
-      : (showDetailsFrom(opener?.current) ?? showDetailsFrom(state.drawn.opener));
+  // Note that the card is the row's own control's alone, never that of whatever opened the menu, a ⋯ or a chip the menu key was pressed on, because a chip's card is of another thing than the row; a row with no control of its own hangs none.
+  const details = state.drawn === undefined ? undefined : showDetailsFrom(opener?.current);
   const popup: ReactNode =
     live !== undefined && state.drawn !== undefined ? (
       <Menu

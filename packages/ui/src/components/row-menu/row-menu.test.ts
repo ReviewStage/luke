@@ -241,8 +241,17 @@ function ChipCardedMenuCard(): React.JSX.Element {
   );
 }
 
-test("a row whose press hangs no card offers no Show details for a chip in it that hangs one", () => {
+test("a row whose press hangs no card offers no Show details for a chip in it that hangs one, by its ⋯ or the menu key on the chip", () => {
   draw(createElement(ChipCardedMenuCard));
   act(() => buttonNamed("Card actions").click());
+  expect(menuItems()).toEqual(["Rename"]);
+  closeMenu();
+
+  act(() => {
+    buttonNamed("Sam").dispatchEvent(
+      new KeyboardEvent("keydown", { key: "F10", shiftKey: true, bubbles: true, cancelable: true }),
+    );
+  });
+  expect(menuLabel()).toBe("Card actions");
   expect(menuItems()).toEqual(["Rename"]);
 });
