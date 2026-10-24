@@ -44,13 +44,13 @@ import { useOpenLink } from "../tasks/use-open-link.js";
  *
  * The dialog holds the token alone: a password field with Save, or once a token is saved its hint, login, expiry, and Remove, which asks
  * first in the confirm dialog, and at its foot Create token, which opens
- * GitHub's page for a new classic token in the browser. Every line is a
- * label or a fact.
+ * GitHub's page for a new classic token in the browser. Every refusal and status says what to do
+ * next, in a line.
  *
  * The token stands in the open field alone, is sent once on Save, and is
  * cleared as soon as the service keeps it; the service never answers one.
  * The dialog is kept out of the screen recording, which masks a field's
- * characters but not their count, as Settings › API keys is.
+ * characters but not their count, as Settings › Agents' keys are.
  */
 
 /** The class PostHog's recorder leaves out of a recording, element and children alike. */
@@ -61,35 +61,35 @@ const LINE = {
   REMOVE_FAILED: "The token could not be removed. Try again.",
 } as const;
 
-/** Why a save kept nothing, as a short label. */
+/** Why a save kept nothing, and what to do next, as one short line. */
 function rejectionLabel(rejection: GitHubTokenRejection): string {
   switch (rejection) {
     case GITHUB_TOKEN_REJECTION.FINE_GRAINED:
-      return "Not a classic token";
+      return "This isn't a classic token. Create a classic token and paste that.";
     case GITHUB_TOKEN_REJECTION.INVALID:
-      return "GitHub rejected this token";
+      return "GitHub rejected this token. Check that you copied all of it, or create a new one.";
     case GITHUB_TOKEN_REJECTION.NO_REPO_SCOPE:
-      return "Missing repo scope";
+      return "This token is missing the repo scope. Create a new token with repo ticked.";
     case GITHUB_TOKEN_REJECTION.NO_GITHUB_ACCOUNT:
-      return "No GitHub account connected";
+      return "No GitHub account is connected to your Luke account. Connect GitHub in Settings › Integrations, then save the token again.";
     case GITHUB_TOKEN_REJECTION.OTHER_USER:
-      return "Token for a different GitHub account";
+      return "This token belongs to a different GitHub account than the one connected to Luke. Create it while signed in to the connected account.";
     case GITHUB_TOKEN_REJECTION.UNREACHABLE:
-      return "Couldn't reach GitHub";
+      return "Couldn't reach GitHub. Try again.";
     case GITHUB_TOKEN_REJECTION.TOO_MANY_TRIES:
-      return "Too many tokens tried in the last hour";
+      return "Too many tokens tried in the last hour. Try again later.";
   }
 }
 
-/** A saved token's status where it is not in use, as a short label. */
+/** A saved token's status where it is not in use, and what to do about it, as one short line. */
 function statusLabel(status: GitHubTokenStatus): string | undefined {
   switch (status) {
     case GITHUB_TOKEN_STATUS.VERIFIED:
       return undefined;
     case GITHUB_TOKEN_STATUS.INVALID:
-      return "GitHub rejected this token";
+      return "GitHub rejected this token. Remove it and add a new one.";
     case GITHUB_TOKEN_STATUS.UNREADABLE:
-      return "Can no longer be read";
+      return "Can no longer be read. Remove it and add it again.";
   }
 }
 

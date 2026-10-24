@@ -2,7 +2,8 @@ import type { GitHubRepository } from "@luke/features";
 import { GITHUB_ACCESS } from "@luke/features/github-repositories-wire";
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
 import { TASK_CALL_FAILURE, type TasksRepositoriesAnswer } from "@luke/features/tasks-view";
-import { REFRESH_FAILED_WORDS } from "@luke/features/words";
+import { countWords, orList, REFRESH_FAILED_WORDS } from "@luke/features/words";
+import { WORKSPACE_ROLE } from "@luke/features/workspace-wire";
 import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsLink } from "@luke/settings/settings-views";
 import {
   AVATAR_SIZE,
@@ -31,6 +32,7 @@ import { RepositoryPicture } from "../repository-picture.js";
 import { RepositoryCard, repositoryMenuRow } from "../repository-row.js";
 import { type MenuRow, SearchableMenu } from "../searchable-menu.js";
 import { PICKER_ALIGN, type PickerAlign, usePickerPlacement } from "../settings/picker-row.js";
+import { useWorkspaceMembers } from "./use-workspace-members.js";
 
 /**
  * repository-chip.tsx -- the chip that names a task's GitHub repository, and the menu that picks one.
@@ -53,7 +55,8 @@ import { PICKER_ALIGN, type PickerAlign, usePickerPlacement } from "../settings/
  * GitHub connected to the workspace, or one GitHub removed or suspended,
  * the menu says which in the list's place: an owner or an admin is offered
  * Open Settings at the workspace's GitHub repositories, the one place they
- * are set, and a member is told to ask one. The list is read from the service when the chip mounts and again
+ * are set, and a member is told which owners and admins, by name, to ask;
+ * the same holds where GitHub is installed and reaches no repository. The list is read from the service when the chip mounts and again
  * whenever the window takes focus, so a developer back from connecting
  * GitHub in the browser sees the change on the next opening; nothing polls. The menu
  * is placed as a Settings picker's is, below the chip or above it where the
@@ -115,31 +118,73 @@ const MENU_NOTE = {
   NONE_REACHED: "Luke can't see any repository yet.",
   NOT_CONNECTED: "No GitHub is connected to this workspace yet.",
   NOT_CONNECTED_IN: (workspace: string) => `${workspace} has no GitHub connected yet.`,
-  ASK_TO_CONNECT: "Ask an owner or admin to connect GitHub.",
-  ASK_TO_CONNECT_IN: (workspace: string) =>
-    `Ask an owner or admin of ${workspace} to connect GitHub.`,
   LAPSED: "This workspace's GitHub connection was removed or suspended on GitHub.",
   LAPSED_IN: (workspace: string) =>
     `${workspace}'s GitHub connection was removed or suspended on GitHub.`,
-  ASK_TO_RECONNECT: "Ask an owner or admin to reconnect GitHub.",
   NO_MATCH: "No repositories match",
 } as const;
 
+/** What a member is told to ask the workspace's owners and admins to do, each finishing "Ask … to". */
+const OWNER_ASK = {
+  CONNECT: "connect GitHub",
+  RECONNECT: "reconnect GitHub",
+  ADD_REPOSITORY: "add a repository to Luke on GitHub",
+} as const;
+
+type OwnerAsk = (typeof OWNER_ASK)[keyof typeof OWNER_ASK];
+
+/** How many owners and admins a member's note names before it counts the rest. */
+const NAMED_OWNERS = 3;
+
 /**
- * What an empty list says where the workspace's GitHub reaches nothing: that
- * it was removed or suspended on GitHub, or that none is connected, and for
- * a member, whom to ask. A member of a lapsed workspace is told both.
+ * What a menu with nothing to pick says first, for an owner or an admin or
+ * for a member: that GitHub was removed or suspended, or that none is
+ * connected, which a member is told through the ask beneath instead. A
+ * lapsed workspace says so to both.
  */
-function unconnectedNotes(chooser: RepositoryChooser): readonly string[] {
+function unconnectedLines(chooser: RepositoryChooser): readonly string[] {
   const name = chooser.workspaceName;
   if (chooser.connected === true) {
-    const lapsed = name === undefined ? MENU_NOTE.LAPSED : MENU_NOTE.LAPSED_IN(name);
-    return chooser.manages ? [lapsed] : [lapsed, MENU_NOTE.ASK_TO_RECONNECT];
+    return [name === undefined ? MENU_NOTE.LAPSED : MENU_NOTE.LAPSED_IN(name)];
   }
   if (chooser.manages) {
     return [name === undefined ? MENU_NOTE.NOT_CONNECTED : MENU_NOTE.NOT_CONNECTED_IN(name)];
   }
-  return [name === undefined ? MENU_NOTE.ASK_TO_CONNECT : MENU_NOTE.ASK_TO_CONNECT_IN(name)];
+  return [];
+}
+
+/**
+ * A member's way out of a dead end: the workspace's owners and admins by
+ * name, who alone can fix it, read while the note stands. Until the read
+ * answers, or if it never does, the note says an owner or admin without
+ * names, since a name is only ever a help.
+ */
+function AskOwners({
+  workspaceId,
+  workspaceName,
+  ask,
+}: {
+  workspaceId: string | undefined;
+  /** The workspace, named where the note above does not name it. */
+  workspaceName: string | undefined;
+  ask: OwnerAsk;
+}): React.JSX.Element {
+  const members = useWorkspaceMembers(workspaceId === undefined ? undefined : { id: workspaceId });
+  const owners = (members ?? [])
+    .filter((each) => each.role === WORKSPACE_ROLE.OWNER || each.role === WORKSPACE_ROLE.ADMIN)
+    .map((each) => each.name);
+  const named = owners.slice(0, NAMED_OWNERS);
+  const rest = owners.length - named.length;
+  const others = rest > 0 ? [countWords(rest, { one: "other", many: "others" })] : [];
+  const words =
+    owners.length === 0
+      ? `Ask an owner or admin${workspaceName === undefined ? "" : ` of ${workspaceName}`} to ${ask}.`
+      : `Ask ${orList([...named, ...others])} to ${ask}${workspaceName === undefined ? "" : ` for ${workspaceName}`}.`;
+  return (
+    <Text as={TEXT_ELEMENT.P} variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
+      {words}
+    </Text>
+  );
 }
 
 /** Whether the read's repositories hold one, as GitHub spells it or not. */
@@ -269,7 +314,7 @@ export function RepositoryChip(props: {
   useEffect(() => {
     if (listed !== undefined) onListed?.(listed.repositories.map((each) => each.fullName));
   }, [listed, onListed]);
-  // No GitHub connected is mended at the workspace's Integrations.
+  // A GitHub not connected, or reaching nothing, is mended at the workspace's GitHub row.
   const workspaceGitHub: SettingsLink = {
     page: SETTINGS_VIEW.WORKSPACE,
     section: SETTINGS_SECTION.GITHUB_REPOSITORIES,
@@ -285,38 +330,44 @@ export function RepositoryChip(props: {
   const rows = repositoryRows(chooser.recent, listed?.repositories, chooser.pictures);
   const label =
     props.value ?? (rows.length === 0 && listed !== undefined ? NONE_LABEL : CHOOSE_LABEL);
+  // A list with nothing to pick says why, then offers an owner Settings and a member the owners to ask.
+  const deadEnd = (lines: readonly string[], ask: OwnerAsk, askedOf: string | undefined) => (
+    <>
+      {lines.map((words) => (
+        <Text key={words} as={TEXT_ELEMENT.P} variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
+          {words}
+        </Text>
+      ))}
+      {chooser.manages ? (
+        <Button
+          variant={BUTTON_VARIANT.QUIET}
+          icon={<GearIcon />}
+          onClick={() => choose(() => openSettings(workspaceGitHub))}
+        >
+          {OPEN_SETTINGS_LABEL}
+        </Button>
+      ) : (
+        <AskOwners workspaceId={chooser.scope} workspaceName={askedOf} ask={ask} />
+      )}
+    </>
+  );
   const note =
     failure !== undefined ? (
       <ErrorState onRetry={read}>
         {listed === undefined ? repositoryFailureNote(failure) : REFRESH_FAILED_WORDS}
       </ErrorState>
     ) : listed !== undefined && !listed.installed && listed.repositories.length === 0 ? (
-      // Only an owner or an admin can connect the workspace's GitHub, so a member is told to ask.
-      <>
-        {unconnectedNotes(chooser).map((words) => (
-          <Text
-            key={words}
-            as={TEXT_ELEMENT.P}
-            variant={TEXT_VARIANT.CAPTION}
-            tone={TEXT_TONE.MUTED}
-          >
-            {words}
-          </Text>
-        ))}
-        {chooser.manages ? (
-          <Button
-            variant={BUTTON_VARIANT.QUIET}
-            icon={<GearIcon />}
-            onClick={() => choose(() => openSettings(workspaceGitHub))}
-          >
-            {OPEN_SETTINGS_LABEL}
-          </Button>
-        ) : null}
-      </>
+      // Only an owner or an admin can connect the workspace's GitHub, so a member is shown whom to ask.
+      deadEnd(
+        unconnectedLines(chooser),
+        chooser.connected === true ? OWNER_ASK.RECONNECT : OWNER_ASK.CONNECT,
+        chooser.connected === true ? undefined : chooser.workspaceName,
+      )
     ) : list === undefined ? (
       <Spinner delay label="Loading repositories" />
     ) : rows.length === 0 && listed?.installed ? (
-      MENU_NOTE.NONE_REACHED
+      // Installed but giving Luke nothing: the repositories are chosen on GitHub, through the workspace's row.
+      deadEnd([MENU_NOTE.NONE_REACHED], OWNER_ASK.ADD_REPOSITORY, undefined)
     ) : undefined;
 
   return (
