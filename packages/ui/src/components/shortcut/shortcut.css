@@ -26,6 +26,12 @@
     white-space: nowrap;
   }
 
+  /* A chord spelled in words, Ctrl Shift K, where Command is Ctrl: a word's
+     space between the keys, since words set tight would read as one. */
+  .luke-shortcut[data-words] {
+    gap: var(--luke-space-4);
+  }
+
   /* A chord that is a row's whole value: set at the row's label size in the
      value's ink, the way System Settings lists its keyboard shortcuts. */
   .luke-shortcut[data-value] {

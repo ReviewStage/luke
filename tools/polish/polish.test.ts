@@ -1,7 +1,7 @@
 import { JSDOM } from "jsdom";
 import { describe, expect, it } from "vitest";
 import { READY_SCRIPT } from "./ready.ts";
-import { CLIENT, drawsOn, SCENES, STEP } from "./scenes.ts";
+import { CLIENT, type Client, drawsOn, pressedOn, SCENES, STEP } from "./scenes.ts";
 
 // jsdom lays nothing out, so a box is given the rectangle it would stand in.
 const ON_SCREEN = { width: 20, height: 20, top: 10, left: 10, bottom: 30, right: 30 };
@@ -47,12 +47,16 @@ describe("the scene list", () => {
     expect(web).not.toContain("voice-speaking");
   });
 
-  it("opens ⌘K with a chord the app answers, which is Meta and never Ctrl", () => {
+  it("opens ⌘K with the chord each client answers: Meta on the desktop, a Mac's alone, and Ctrl or Meta on the web as its system has it", () => {
     const palettes = SCENES.filter((scene) => scene.id.startsWith("palette"));
-    const chords = palettes.flatMap((scene) =>
-      (scene.steps ?? []).flatMap((step) => (step.kind === STEP.PRESS ? [step.keys] : [])),
-    );
+    const chordsOn = (client: Client) =>
+      palettes.flatMap((scene) =>
+        (scene.steps ?? []).flatMap((step) =>
+          step.kind === STEP.PRESS ? [pressedOn(step.keys, client)] : [],
+        ),
+      );
     expect(palettes).toHaveLength(2);
-    expect(chords).toEqual(["Meta+K", "Meta+K"]);
+    expect(chordsOn(CLIENT.DESKTOP)).toEqual(["Meta+K", "Meta+K"]);
+    expect(chordsOn(CLIENT.WEB)).toEqual(["ControlOrMeta+K", "ControlOrMeta+K"]);
   });
 });

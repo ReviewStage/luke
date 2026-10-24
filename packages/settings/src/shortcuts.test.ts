@@ -1,22 +1,56 @@
 import assert from "node:assert/strict";
-import { test } from "vitest";
+import { afterEach, test } from "vitest";
 import { HOST_CAPABILITY } from "./capabilities.js";
 import {
   APP_COMMAND,
   APP_SHORTCUT_GROUPS,
+  APP_SHORTCUTS,
   appCommandLabel,
   CHAPTERS_KEYS,
   CHAPTERS_SHORTCUTS,
+  COMMAND_KEY,
   chaptersKeyFor,
   commandForKey,
   FILES_CHANGED_KEYS,
   FILES_CHANGED_SHORTCUT_GROUPS,
   filesChangedKeyFor,
+  installCommandKey,
   isAppCommand,
   KEYED_COMMANDS,
+  SHORTCUT_KEY,
   type ShortcutChord,
+  shortcutAccelerator,
+  shortcutAria,
+  shortcutGlyphs,
+  shortcutMatches,
   shortcutShown,
 } from "./shortcuts.js";
+
+/** What puts back the command key a test installed. */
+let restoreCommandKey: (() => void) | undefined;
+
+afterEach(() => {
+  restoreCommandKey?.();
+  restoreCommandKey = undefined;
+});
+
+/** Makes Ctrl the window's command key, as a browser on Windows or Linux does, for the rest of the test. */
+function commandIsCtrl(): void {
+  restoreCommandKey = installCommandKey(COMMAND_KEY.CONTROL);
+}
+
+/** A press of K with the modifiers given held, and no other. */
+function pressK(held: { ctrlKey?: true; metaKey?: true; altGraph?: true }) {
+  return {
+    key: "k",
+    code: "KeyK",
+    ctrlKey: held.ctrlKey === true,
+    metaKey: held.metaKey === true,
+    altKey: held.altGraph === true,
+    shiftKey: false,
+    getModifierState: (key: string) => key === "AltGraph" && held.altGraph === true,
+  };
+}
 
 /**
  * The Keyboard shortcuts page's table: every command a key reaches stands
@@ -85,4 +119,108 @@ test("the commands only the desktop's window can carry out stand on the desktop 
     assert.equal(shortcutShown(command, {}, [HOST_CAPABILITY.DESKTOP_APP]), true, command);
     assert.equal(shortcutShown(command, {}, []), false, command);
   }
+});
+
+test("where Command is Ctrl, Ctrl+K opens the command palette and ⌘K opens nothing, as the Windows key is the system's", () => {
+  commandIsCtrl();
+
+  assert.equal(
+    commandForKey(KEYED_COMMANDS, pressK({ ctrlKey: true })),
+    APP_COMMAND.COMMAND_PALETTE,
+  );
+  assert.equal(commandForKey(KEYED_COMMANDS, pressK({ metaKey: true })), undefined);
+  assert.equal(commandForKey(KEYED_COMMANDS, pressK({ ctrlKey: true, metaKey: true })), undefined);
+});
+
+test("on a Mac, ⌘K opens the command palette and Ctrl+K, a field's caret move, opens nothing", () => {
+  assert.equal(
+    commandForKey(KEYED_COMMANDS, pressK({ metaKey: true })),
+    APP_COMMAND.COMMAND_PALETTE,
+  );
+  assert.equal(commandForKey(KEYED_COMMANDS, pressK({ ctrlKey: true })), undefined);
+});
+
+test("where Command is Ctrl, AltGr, which Windows reports as Ctrl and Alt held, types its character rather than running a chord", () => {
+  commandIsCtrl();
+  const copyLink = APP_SHORTCUTS[APP_COMMAND.COPY_LINK].chord;
+  const press = {
+    key: "ć",
+    code: copyLink.key.code,
+    ctrlKey: true,
+    metaKey: false,
+    altKey: true,
+    shiftKey: false,
+  };
+
+  assert.equal(shortcutMatches(copyLink, press), true, "Ctrl+Alt+C is Copy link");
+  assert.equal(
+    shortcutMatches(copyLink, { ...press, getModifierState: (key) => key === "AltGraph" }),
+    false,
+  );
+});
+
+test("where Command is Ctrl, every keyed chord a browser carries shares its press with exactly the commands it shares it with on a Mac, the tab switcher's ⌃Tab apart", () => {
+  const shown = KEYED_COMMANDS.filter((command) => shortcutShown(command, {}, []));
+  const pressOf = (chord: ShortcutChord, commandHeld: "metaKey" | "ctrlKey") => ({
+    key: chord.key.key,
+    code: chord.key.code,
+    ctrlKey: chord.control === true,
+    metaKey: false,
+    altKey: chord.option === true,
+    shiftKey: chord.shift === true,
+    ...(chord.bare === true || chord.plain === true || chord.switching === true
+      ? undefined
+      : { [commandHeld]: true }),
+  });
+  const sharing = (press: ReturnType<typeof pressOf>) =>
+    shown.filter((other) => shortcutMatches(APP_SHORTCUTS[other].chord, press));
+  const onMac = shown.map((command) => sharing(pressOf(APP_SHORTCUTS[command].chord, "metaKey")));
+
+  commandIsCtrl();
+  const onCtrl = shown.map((command) => sharing(pressOf(APP_SHORTCUTS[command].chord, "ctrlKey")));
+
+  assert.deepEqual(onCtrl, onMac);
+  assert.ok(shown.every((command, at) => onMac[at]?.includes(command)));
+  const switcher = APP_SHORTCUTS[APP_COMMAND.NEXT_RECENT_TAB].chord;
+  const ctrlTab = {
+    key: "Tab",
+    code: "Tab",
+    ctrlKey: true,
+    metaKey: false,
+    altKey: false,
+    shiftKey: false,
+  };
+  assert.equal(shortcutMatches(switcher, ctrlTab), true, "Ctrl+Tab is still the switcher's");
+  assert.equal(
+    commandForKey(
+      KEYED_COMMANDS.filter((command) => command !== APP_COMMAND.NEXT_RECENT_TAB),
+      ctrlTab,
+    ),
+    undefined,
+    "no Command chord is Ctrl+Tab",
+  );
+});
+
+test("where Command is Ctrl, a chord is drawn and spelled for a reader with Ctrl, its modifiers in words in Windows' order", () => {
+  commandIsCtrl();
+  const palette = APP_SHORTCUTS[APP_COMMAND.COMMAND_PALETTE].chord;
+  const copyLink = APP_SHORTCUTS[APP_COMMAND.COPY_LINK].chord;
+  const copyPlan = APP_SHORTCUTS[APP_COMMAND.COPY_PLAN].chord;
+
+  assert.deepEqual(shortcutGlyphs(shortcutAccelerator(palette)), ["Ctrl", "K"]);
+  assert.deepEqual(shortcutGlyphs(shortcutAccelerator(copyLink)), ["Ctrl", "Alt", "C"]);
+  assert.deepEqual(shortcutGlyphs(shortcutAccelerator(copyPlan)), ["Ctrl", "Shift", "C"]);
+  assert.deepEqual(shortcutGlyphs("CommandOrControl+Shift+Space"), ["Ctrl", "Shift", "Space"]);
+  assert.equal(shortcutAria(palette), "Control+K");
+  assert.equal(
+    shortcutAria({ key: SHORTCUT_KEY.TAB, control: true, switching: true }),
+    "Control+Tab",
+  );
+});
+
+test("on a Mac, a chord is drawn in the menu bar's glyphs and spelled for a reader with Meta", () => {
+  const palette = APP_SHORTCUTS[APP_COMMAND.COMMAND_PALETTE].chord;
+
+  assert.deepEqual(shortcutGlyphs(shortcutAccelerator(palette)), ["⌘", "K"]);
+  assert.equal(shortcutAria(palette), "Meta+K");
 });
