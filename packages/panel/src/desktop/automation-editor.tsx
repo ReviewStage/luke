@@ -18,6 +18,7 @@ import {
   draftProblems,
   draftRepositories,
   draftTrigger,
+  filterAdmitted,
   filterValuesOf,
   type GitHubTriggerSettings,
   presetDraft,
@@ -82,6 +83,7 @@ import { EXPERIMENT } from "@luke/settings";
 import { SETTINGS_VIEW } from "@luke/settings/settings-views";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
+  BackButton,
   BUTTON_VARIANT,
   Button,
   CHIP_LOOK,
@@ -103,9 +105,11 @@ import {
   GAP,
   IconButton,
   Inline,
+  MENU_ITEM_MARK,
   MoreButton,
   matchingRows,
   moreLabel,
+  NO_CONTEXT_MENU,
   PAGE_FRAME,
   POPOVER_ALIGN,
   PROVIDER_MARK_SIZE,
@@ -126,6 +130,7 @@ import {
   Skeleton,
   SkeletonRegion,
   Spinner,
+  STATUS_TONE,
   Switch,
   TEXT_ELEMENT,
   TEXT_FIELD_FONT,
@@ -143,9 +148,10 @@ import {
 } from "@luke/ui";
 import { ACTOR_KIND, ACTOR_STATE } from "@luke/ui/actor-model";
 import { useDisclosure } from "@luke/ui/use-disclosure";
+import { useOptimisticSettingWrite } from "@luke/ui/use-setting-write";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { Result } from "effect";
-import { HistoryIcon, PlayIcon, Trash2Icon, ZapIcon } from "lucide-react";
+import { HistoryIcon, PlayIcon, SaveIcon, Trash2Icon, ZapIcon } from "lucide-react";
 import {
   type ReactNode,
   type Ref,
@@ -159,7 +165,7 @@ import { ActorMark, automationActor } from "../actor-ref.js";
 import { useAppCommand } from "../app-commands.js";
 import { copyThroughShell } from "../copy-feedback.js";
 import { useCopyLinkItem } from "../copy-link-item.js";
-import { ExperimentTag, SendFeedbackButton } from "../experiment-marks.js";
+import { ExperimentTag, SendFeedbackButton, useSendFeedbackItem } from "../experiment-marks.js";
 import { useIntegrationStatuses } from "../integration-statuses.js";
 import { useOpenSettings } from "../open-settings.js";
 import { Picker, PickerRow } from "../settings/picker-row.js";
@@ -175,6 +181,7 @@ import { CHIP_PLACE, RepositoryChip, type RepositoryChooser } from "../tasks/rep
 import { mentionableAgent } from "../tasks/task-mentions.js";
 import { useKnownNames } from "../tasks/use-known-names.js";
 import type { LeaveAsk, LeaveGuard } from "../tasks/use-tasks-tab.js";
+import { TOAST_HOLD, useToast } from "../toast.js";
 import { useExperiment } from "../use-app-state.js";
 import { ActionMenu, type MenuAction } from "./action-menu.js";
 import { OWNER_MARK_SIZE, OwnerMark } from "./automation-owner.js";
@@ -183,6 +190,7 @@ import { automationOwnerName } from "./automation-words.js";
 import { useRunsPanel } from "./folded-groups.js";
 import { type NarrowColumns, useNarrowFocus } from "./narrow-focus.js";
 import { PaneGlide } from "./pane-motion.js";
+import { PhoneHead } from "./phone-head.js";
 import { useAutomationRuns } from "./use-automation-runs.js";
 import { type RunChoices, useRunChoices } from "./use-run-choices.js";
 
@@ -357,7 +365,78 @@ const RUN_REFUSAL_WORDS = {
     "Only its creator, or the workspace's owners and admins, can run it.",
 } as const satisfies Record<AutomationCallFailure, string>;
 
+/** Why a switch did not move, as its toast says it. */
+function toggleRefusal(answer: AutomationView, enabled: boolean): string | undefined {
+  if (!("failure" in answer)) return undefined;
+  if (answer.failure === AUTOMATION_CALL_FAILURE.NOT_PERMITTED) {
+    return SAVE_REFUSAL_WORDS[AUTOMATION_CALL_FAILURE.NOT_PERMITTED];
+  }
+  return enabled ? "Could not turn it on. Try again." : "Could not turn it off. Try again.";
+}
+
 const ACCEPTED: ActionResult = { status: ACTION_RESULT_STATUS.ACCEPTED };
+
+/**
+ * An automation's on/off switch, the list row's and the editor's alike. It
+ * flips at once, from a local value, and a write the service refuses puts it
+ * back and says why in a FAILED toast, as a settings switch does; it never
+ * rests for a write.
+ *
+ * Note that its writes go one at a time, because the service reads and writes
+ * each request on its own, so two in flight could commit in either order and
+ * leave the opposite of the last press. A press made while one is out waits for
+ * it, only the newest waiting press is sent, and one that would only repeat
+ * what the burst just sent is not.
+ */
+export function AutomationSwitch({
+  automation,
+  write,
+}: {
+  automation: AutomationSummary;
+  write: (enabled: boolean) => Promise<AutomationView>;
+}): React.JSX.Element {
+  const toast = useToast();
+  const tail = useRef<Promise<unknown>>(Promise.resolve());
+  const newest = useRef(0);
+  const sent = useRef<boolean | undefined>(undefined);
+  const send = (enabled: boolean, press: number): Promise<ActionResult> => {
+    if (press !== newest.current || sent.current === enabled) return Promise.resolve(ACCEPTED);
+    sent.current = enabled;
+    const settle = () => {
+      if (press === newest.current) sent.current = undefined;
+    };
+    return write(enabled).then(
+      (answer): ActionResult => {
+        const reason = toggleRefusal(answer, enabled);
+        if (reason !== undefined) sent.current = undefined;
+        settle();
+        return reason === undefined ? ACCEPTED : { status: ACTION_RESULT_STATUS.REJECTED, reason };
+      },
+      (error: unknown) => {
+        sent.current = undefined;
+        throw error;
+      },
+    );
+  };
+  const { value, run } = useOptimisticSettingWrite(
+    automation.enabled,
+    (enabled) => {
+      const press = ++newest.current;
+      const answered = tail.current.then(() => send(enabled, press));
+      tail.current = answered.catch(() => undefined);
+      return answered;
+    },
+    (words) => toast({ words, tone: STATUS_TONE.DANGER, hold: TOAST_HOLD.FAILED }),
+  );
+  return (
+    <Switch
+      checked={value}
+      label={value ? `Turn off ${automation.name}` : `Turn on ${automation.name}`}
+      onChange={run}
+      {...NO_CONTEXT_MENU}
+    />
+  );
+}
 
 /** A time of day as the time field holds it, the hour and minute in two figures each. */
 function clockValue(hour: number, minute: number): string {
@@ -831,12 +910,23 @@ const ACTIONS_THING = "Automation";
 function AutomationActions({
   automation,
   onDelete,
+  lead = [],
+  heading,
 }: {
-  automation: AutomationSummary;
+  /** The automation, whose link and Delete the menu offers; none on a new automation's page, a phone's alone. */
+  automation: AutomationSummary | undefined;
   onDelete: () => void;
+  /** Groups over the automation's own, as a phone's ⋯ leads with the toolbar's acts (`EditorToolbar`); none elsewhere. */
+  lead?: readonly MenuAction[][];
+  /** Muted over the items: where the draft stands, on a phone. */
+  heading?: ReactNode;
 }): React.JSX.Element {
   const menu = useMenu(true);
-  const copyLink = useCopyLinkItem()({ kind: LINK_PLACE.AUTOMATION, automationId: automation.id });
+  const linkItem = useCopyLinkItem();
+  const copyLink =
+    automation === undefined
+      ? undefined
+      : linkItem({ kind: LINK_PLACE.AUTOMATION, automationId: automation.id });
   const remove: MenuAction = {
     label: "Delete",
     icon: <Trash2Icon />,
@@ -850,7 +940,12 @@ function AutomationActions({
         <ActionMenu
           label={moreLabel(ACTIONS_THING)}
           menu={menu.drawn}
-          groups={copyLink === undefined ? [[remove]] : [[copyLink], [remove]]}
+          heading={heading}
+          groups={[
+            ...lead,
+            ...(copyLink === undefined ? [] : [[copyLink]]),
+            ...(automation === undefined ? [] : [[remove]]),
+          ].filter((group) => group.length > 0)}
           onClose={menu.close}
         />
       )}
@@ -905,6 +1000,21 @@ interface RunsControl {
   readonly onPress: () => void;
 }
 
+/** Where a phone's way back from an automation's page leads, as its hint names it. */
+const AUTOMATIONS_PLACE_NAME = "automations";
+
+/** A phone's way back from an automation's page to the list, the glyph alone in its corner, with the key that leaves Automations. */
+function AutomationsBack({ onBack }: { onBack: () => void }): React.JSX.Element {
+  return (
+    <BackButton
+      label={AUTOMATIONS_PLACE}
+      place={AUTOMATIONS_PLACE_NAME}
+      command={APP_COMMAND.EXIT_AUTOMATIONS}
+      onBack={onBack}
+    />
+  );
+}
+
 /** What the toolbar's way to a narrow room's runs says. */
 const RUNS_LABEL = "Runs";
 
@@ -936,7 +1046,7 @@ function EditorToolbar({
   saveRefused: boolean;
   onBack: () => void;
   onSave: () => void;
-  onToggle: (enabled: boolean) => void;
+  onToggle: (enabled: boolean) => Promise<AutomationView>;
   onDelete: () => void;
   /** Whether a Run now is out. */
   running: boolean;
@@ -946,6 +1056,7 @@ function EditorToolbar({
   narrow: boolean;
 }): React.JSX.Element {
   const runsLabel = runs.shown ? "Hide runs" : "Show runs";
+  const feedback = useSendFeedbackItem(EXPERIMENT.CODE_REVIEW);
   const status =
     automation === undefined
       ? "Not created yet"
@@ -954,6 +1065,52 @@ function EditorToolbar({
         : dirty
           ? "Unsaved changes"
           : "Saved";
+  if (narrow) {
+    // A phone heads the page as it heads every page (`phone-head.tsx`): the way back to the list, the automation's
+    // name picked up from the page's header, and one ⋯ holding the toolbar's acts over the automation's own, where the draft stands its heading.
+    const lead: MenuAction[][] = [
+      [
+        {
+          label: automation === undefined ? "Create" : "Save",
+          icon: <SaveIcon />,
+          disabled: saving || !(automation === undefined || dirty),
+          onSelect: onSave,
+        },
+        ...(automation === undefined
+          ? []
+          : [{ label: "Run now", icon: <PlayIcon />, disabled: running, onSelect: onRunNow }]),
+      ],
+      automation === undefined
+        ? []
+        : [
+            {
+              label: automation.enabled ? "On" : "Off",
+              detail: automation.name,
+              checked: automation.enabled,
+              mark: MENU_ITEM_MARK.SWITCH,
+              onSelect: () => onToggle(!automation.enabled),
+            },
+          ],
+      [{ label: RUNS_LABEL, icon: <HistoryIcon />, onSelect: runs.onPress }],
+      codeReview ? [feedback] : [],
+    ];
+    return (
+      <PhoneHead
+        place="automation"
+        start={<AutomationsBack onBack={onBack} />}
+        pickUp={pickUp}
+        tag={codeReview ? <ExperimentTag narrow /> : null}
+        end={
+          <AutomationActions
+            automation={automation}
+            onDelete={onDelete}
+            lead={lead.filter((group) => group.length > 0)}
+            heading={status}
+          />
+        }
+      />
+    );
+  }
   return (
     <EditorToolbarFrame
       pickUp={pickUp}
@@ -984,17 +1141,11 @@ function EditorToolbar({
         disabled={!(automation === undefined || dirty)}
         onClick={onSave}
       >
-        {automation === undefined ? "Create" : "Save"}
+        {automation === undefined ? "Create automation" : "Save"}
       </Button>
       {automation === undefined ? null : (
         <>
-          <Switch
-            checked={automation.enabled}
-            label={
-              automation.enabled ? `Turn off ${automation.name}` : `Turn on ${automation.name}`
-            }
-            onChange={(enabled) => onToggle(enabled)}
-          />
+          <AutomationSwitch automation={automation} write={onToggle} />
           <AutomationActions automation={automation} onDelete={onDelete} />
         </>
       )}
@@ -1130,24 +1281,28 @@ function FilterRow({
   label,
   detail,
   values,
+  problem,
   onValues,
 }: {
   label: string;
   detail: string;
   values: readonly string[];
+  /** What stops a save in this filter, said under its row. */
+  problem: string | undefined;
   onValues: (values: readonly string[]) => void;
 }): React.JSX.Element {
   // The field's Escape lets go of the caret and keeps the press, as every field's here does.
   const field = useRef<HTMLInputElement>(null);
   const [text, setText] = useState(() => values.join(", "));
   return (
-    <SettingsRow label={label} description={detail}>
+    <SettingsRow label={label} description={detail} error={problem}>
       {(control) => (
         <span className="automation-field">
           <TextField
             ref={field}
             label={label}
             describedBy={control["aria-describedby"]}
+            invalid={control["aria-invalid"]}
             spellCheck={false}
             placeholder="All"
             value={text}
@@ -1177,7 +1332,7 @@ function SentryRows({
   draft,
   sentry,
   withheld,
-  problem,
+  problems,
   onDraft,
 }: {
   draft: AutomationDraft;
@@ -1185,8 +1340,8 @@ function SentryRows({
   sentry: SentryOffer;
   /** Whether the deployment holds no Sentry integration for this new choice of it (`sentryWithheld`). */
   withheld: boolean;
-  /** What stops a save in the cooldown, said under its row. */
-  problem: string | undefined;
+  /** What stops a save, each said under the row of the field it is about. */
+  problems: DraftProblems;
   onDraft: (patch: Partial<AutomationDraft>) => void;
 }): React.JSX.Element {
   // The cooldown's Escape lets go of the caret and keeps the press, as every field's here does.
@@ -1233,12 +1388,18 @@ function SentryRows({
         label="Projects"
         detail="Project slugs, comma-separated. Empty for every project."
         values={trigger.filters?.project ?? []}
+        problem={
+          filterAdmitted(trigger.filters?.project) ? undefined : problems[DRAFT_FIELD.FILTERS]
+        }
         onValues={(project) => filter({ project })}
       />
       <FilterRow
         label="Environments"
         detail="Comma-separated. Empty for every environment."
         values={trigger.filters?.environment ?? []}
+        problem={
+          filterAdmitted(trigger.filters?.environment) ? undefined : problems[DRAFT_FIELD.FILTERS]
+        }
         onValues={(environment) => filter({ environment })}
       />
       <SettingsRow
@@ -1258,7 +1419,7 @@ function SentryRows({
       <SettingsRow
         label="Same issue again after"
         description={`Hours before one Sentry issue can start another run, from 1 to ${AUTOMATION_BOUNDS.MAX_SUBJECT_COOLDOWN_HOURS}.`}
-        error={problem}
+        error={problems[DRAFT_FIELD.COOLDOWN]}
       >
         {(control) => (
           <span className="automation-field">
@@ -1949,7 +2110,7 @@ function EditorForm({
             error={
               draft.triggerKind === AUTOMATION_TRIGGER.SCHEDULE
                 ? undefined
-                : (problems[DRAFT_FIELD.SCHEDULE] ?? problems[DRAFT_FIELD.FILTERS])
+                : problems[DRAFT_FIELD.SCHEDULE]
             }
             onChange={(triggerKind) => onDraft({ triggerKind })}
           />
@@ -1983,7 +2144,7 @@ function EditorForm({
                   draft={draft}
                   sentry={sentry}
                   withheld={sentryWithheld(sentry, automation, draft)}
-                  problem={problems[DRAFT_FIELD.COOLDOWN]}
+                  problems={problems}
                   onDraft={onDraft}
                 />
               ) : (
@@ -2188,11 +2349,21 @@ export function AutomationPageSkeleton({
           <Skeleton width={SKELETON_NAME.TITLE} />
         </Inline>
       }
-      toolbar={(pickUp) => (
-        <EditorToolbarFrame pickUp={pickUp} onBack={onBack}>
-          <EditorActsSkeleton />
-        </EditorToolbarFrame>
-      )}
+      toolbar={(pickUp) =>
+        room === SHELL_ROOM.NARROW ? (
+          // A phone's page while it is read stands as it will be drawn: the way back alone, the name read in the page's header.
+          <PhoneHead
+            place="automation"
+            start={<AutomationsBack onBack={onBack} />}
+            pickUp={pickUp}
+            end={null}
+          />
+        ) : (
+          <EditorToolbarFrame pickUp={pickUp} onBack={onBack}>
+            <EditorActsSkeleton />
+          </EditorToolbarFrame>
+        )
+      }
       setup={<EditorSkeleton offersOwner={offersOwner} />}
       beside={
         room === SHELL_ROOM.NARROW ? null : (
@@ -2401,12 +2572,10 @@ export function AutomationEditor({
     () => (written ? leaveGuard.stand((leave) => askLeave.current(leave)) : undefined),
     [written, leaveGuard],
   );
-  const toggle = (enabled: boolean) => {
-    if (automation === undefined) return;
-    writes.toggle(automation.id, enabled).then((answer) => {
-      if ("failure" in answer) setRefusal(SAVE_REFUSAL_WORDS[answer.failure]);
-    });
-  };
+  const toggle = (enabled: boolean) =>
+    automation === undefined
+      ? Promise.resolve<AutomationView>({ failure: AUTOMATION_CALL_FAILURE.NOT_FOUND })
+      : writes.toggle(automation.id, enabled);
   const deletion = useConfirmDialog(
     { subject: automation !== undefined, surfaceOpen: true },
     () => {

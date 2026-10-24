@@ -31,7 +31,6 @@ import {
   type PaneBarMenu,
   SpinnerRegion,
   Stack,
-  TEXT_BUTTON_TONE,
   TEXT_ELEMENT,
   TEXT_VARIANT,
   Text,
@@ -43,14 +42,13 @@ import {
   CheckIcon,
   ChevronsDownUpIcon,
   ChevronsUpDownIcon,
-  ClipboardCopyIcon,
   CodeIcon,
-  FileDiffIcon,
   FoldVerticalIcon,
+  GLYPH,
   ImageIcon,
   RotateCwIcon,
   UnfoldVerticalIcon,
-} from "lucide-react";
+} from "@luke/ui/icons";
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAct } from "../act.js";
 import { appPlatform } from "../app-platform.js";
@@ -337,7 +335,7 @@ function useChangesMenu({
       [
         {
           label: CHANGES_MENU_WORDS.COPY_PATCH,
-          icon: <ClipboardCopyIcon aria-hidden="true" />,
+          icon: <GLYPH.COPY />,
           detail: why,
           disabled: patch === undefined,
           onSelect: () => {
@@ -646,11 +644,7 @@ function entryOf(
     notice === CHANGES_WORDS.UNCHANGED_CONTENTS && whole.offered && whole.texts === undefined ? (
       <>
         {" · "}
-        <TextButton
-          tone={TEXT_BUTTON_TONE.LINK}
-          aria-label={`${LIST_WORDS.SHOW_FILE}: ${path}`}
-          onClick={whole.toggle}
-        >
+        <TextButton aria-label={`${LIST_WORDS.SHOW_FILE}: ${path}`} onClick={whole.toggle}>
           {LIST_WORDS.SHOW_FILE}
         </TextButton>
       </>
@@ -1824,10 +1818,12 @@ export function AgentChangesTab({
     );
   }
   if (pullRequest === null) {
-    return <EmptyState icon={<FileDiffIcon />}>{CHANGES_WORDS.NO_PULL_REQUEST}</EmptyState>;
+    return (
+      <EmptyState icon={<GLYPH.PULL_REQUEST_CHANGES />}>{CHANGES_WORDS.NO_PULL_REQUEST}</EmptyState>
+    );
   }
   if (shownFile === undefined) {
-    return <EmptyState icon={<FileDiffIcon />}>{CHANGES_WORDS.EMPTY}</EmptyState>;
+    return <EmptyState icon={<GLYPH.PULL_REQUEST_CHANGES />}>{CHANGES_WORDS.EMPTY}</EmptyState>;
   }
   return (
     // The view hears stage-cli's keys from whatever in it has the focus, the list's own scroller among them.

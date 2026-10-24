@@ -8,7 +8,6 @@ import {
   Button,
   ComposerFrame,
   riseAboveEnd,
-  TEXT_BUTTON_TONE,
   TEXT_TONE,
   Text,
   TextButton,
@@ -225,11 +224,7 @@ function ContinuedIn({
         </span>
       ))}
       {folds ? (
-        <TextButton
-          tone={TEXT_BUTTON_TONE.LINK}
-          aria-expanded={trigger["aria-expanded"]}
-          onClick={trigger.onClick}
-        >
+        <TextButton aria-expanded={trigger["aria-expanded"]} onClick={trigger.onClick}>
           {CONTINUED_COPY.MORE(earlier.length)}
         </TextButton>
       ) : null}

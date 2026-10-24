@@ -596,7 +596,7 @@
   display: none;
 }
 
-.desktop-shell[data-room="narrow"] .plan-diagram-full-screen {
+:where(:root)[data-luke-room="narrow"] .desktop-shell .plan-diagram-full-screen {
   display: flex;
 }
 
@@ -1209,7 +1209,7 @@
    at its own width: a tree below a 360px panel, under the panel's default
    width (`SIDE_PANEL_WIDTH.DEFAULT`), so a File or Changes tab left as it
    opens keeps its tree beside it, and only a panel dragged narrower folds. */
-@container side-panel (max-width: 359px) {
+@container side-panel (width < 360px) {
   .file-view[data-pane-beside="false"] > .file-view-body > .file-tree-strip {
     display: none;
   }
@@ -1225,22 +1225,30 @@
 
 /* A narrow room, a phone's, floats the tree the same way whatever it held
    for the desktop (`usePaneRoom`, `OverPane`). */
-.desktop-shell[data-room="narrow"]
+:where(:root)[data-luke-room="narrow"]
+  .desktop-shell
   .file-view[data-pane-beside="false"]
   > .file-view-body
   > .file-tree-strip,
-.desktop-shell[data-room="narrow"] .file-view .file-tree-toggle[data-place="beside"] {
+:where(:root)[data-luke-room="narrow"]
+  .desktop-shell
+  .file-view
+  .file-tree-toggle[data-place="beside"] {
   display: none;
 }
 
-.desktop-shell[data-room="narrow"] .file-view .file-tree-toggle[data-place="over"] {
+:where(:root)[data-luke-room="narrow"]
+  .desktop-shell
+  .file-view
+  .file-tree-toggle[data-place="over"] {
   display: flex;
 }
 
 /* A panel with no room for the tree's least width beside the tab's own
    keeps the tree at its share of the panel, with no edge to drag, since
    any width a drag asked for would be drawn no wider (`useTreeEdge`). */
-@container side-panel (max-width: 539px) {
+/* off-scale: 540px, where a tree at its least width leaves the tab too little */
+@container side-panel (width < 540px) {
   .file-view .file-tree-pane > .luke-resize-edge {
     display: none;
   }
@@ -1249,7 +1257,7 @@
 /* A Terminal tab's shells float the same way below a 480px panel (`OverPane`),
    so the screen beside them never falls under forty columns: at the panel's
    default width the screen has the whole tab, the shells a hover away. */
-@container side-panel (max-width: 479px) {
+@container side-panel (width < 480px) {
   .terminal-tab .file-tree-toggle[data-place="beside"] {
     display: none;
   }
@@ -1292,7 +1300,7 @@
   display: none;
 }
 
-@container side-panel (max-width: 359px) {
+@container side-panel (width < 360px) {
   .page-view-version-words {
     display: none;
   }
@@ -1827,18 +1835,6 @@
   padding-top: var(--luke-list-inset);
 }
 
-.file-tree-notice {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: var(--luke-control-gap);
-  margin: 0;
-  padding: var(--luke-card-inset-snug);
-  color: var(--luke-color-text-muted);
-  font-size: var(--luke-type-caption-size);
-  line-height: var(--luke-type-caption-leading);
-}
-
 /* Pierre's tree draws in a shadow root of its own, which inherits these:
    the panel's words, its fills, and its focus ring, so the tree reads as
    the panel's own list, beside a File tab and under a crumb alike. The ring
@@ -1882,7 +1878,8 @@
 }
 
 /* Each tree the pane may show draws in a frame of its own, the one not
-   standing hidden. */
+   standing hidden; the host itself is hidden while words stand in the
+   tree's place (file-tree-pane.tsx's `FileTreeStage`). */
 .file-tree-view {
   display: flex;
   min-height: 0;
@@ -1890,15 +1887,8 @@
 }
 
 .file-tree-view[hidden],
-.file-tree-host > .file-tree-notice[hidden] {
+.file-tree-host[hidden] {
   display: none;
-}
-
-/* The line under the tree saying a folder was listed short of whole. */
-.file-tree-host > .file-tree-cut {
-  flex: none;
-  border-top: 1px solid var(--luke-color-border);
-  font-size: var(--luke-type-caption-size);
 }
 
 /* Why the file is not drawn, standing over the lines Luke showed of it. */
@@ -2075,7 +2065,7 @@
 
 /* Note that the rail hidden beside the chapter is hidden only where it can
    stand beside it, so a panel narrowed since still floats it when asked. */
-@container side-panel (min-width: 640px) {
+@container side-panel (width >= 640px) {
   .chapters-view[data-rail-beside="false"] .chapter-rail:not([data-leaving]) {
     display: none;
   }
@@ -2234,7 +2224,7 @@
 /* A panel too narrow for the rail beside the chapter floats it over the
    chapter's left edge instead (`OverPane`), away until its toggle or its
    strip opens it; the strip always stands for it. */
-@container side-panel (max-width: 639px) {
+@container side-panel (width < 640px) {
   .chapters-view .chapter-strip {
     display: flex;
     width: var(--luke-space-12);
@@ -2273,12 +2263,14 @@
    its word left to its hint; then the tabs take in their room; and only once their names no
    longer fit do they fold, every one to its glyph at once
    (`CHOICE_BAR_FOLD.TOGETHER`), about 480px with counts of a usual size. */
+/* off-scale: 650px, where Review's word stops fitting beside the tabs */
 @container pull-request-tab (width < 650px) {
   .pull-request-tab > .luke-pane-bar .pull-request-review {
     --luke-fold: folded;
   }
 }
 
+/* off-scale: 560px, where the tabs' room is taken in */
 @container pull-request-tab (width < 560px) {
   .pull-request-tab > .luke-pane-bar {
     --luke-fold: tight;
@@ -2355,7 +2347,8 @@
    title a line of its own over the pill and the controls, which stand
    under it at the row's two ends; beside them it would wrap a word to a
    line. The row is then drawn in the markup's order, the title first. */
-@container pull-request-header (max-width: 520px) {
+/* off-scale: 520px, kept inclusive, as the side panel at its least still draws the title on its own line */
+@container pull-request-header (width <= 520px) {
   .pull-request-title-row {
     flex-wrap: wrap;
     reading-flow: normal;
@@ -2385,21 +2378,26 @@
 /* On a phone the header would hold half the screen over the view under it,
    so once that view is scrolled it folds to its title's one line, the rest
    back as the view returns to its top (`useHeaderFold`). */
-.desktop-shell[data-room="narrow"] .pull-request-header[data-folded] {
+:where(:root)[data-luke-room="narrow"] .desktop-shell .pull-request-header[data-folded] {
   padding-block: var(--luke-item-gap);
 }
 
-.desktop-shell[data-room="narrow"]
+:where(:root)[data-luke-room="narrow"]
+  .desktop-shell
   .pull-request-header[data-folded]
   > :not(.pull-request-title-row),
-.desktop-shell[data-room="narrow"]
+:where(:root)[data-luke-room="narrow"]
+  .desktop-shell
   .pull-request-header[data-folded]
   .pull-request-title-row
   > :not(.pull-request-title) {
   display: none;
 }
 
-.desktop-shell[data-room="narrow"] .pull-request-header[data-folded] .pull-request-title {
+:where(:root)[data-luke-room="narrow"]
+  .desktop-shell
+  .pull-request-header[data-folded]
+  .pull-request-title {
   overflow: hidden;
   white-space: nowrap;
 }
@@ -2408,7 +2406,8 @@
    (below). Note that the fade is laid over its content box alone, because
    the pencil's room after the words would otherwise take the whole fade,
    and the words would stop at a hard edge before it. */
-.desktop-shell[data-room="narrow"]
+:where(:root)[data-luke-room="narrow"]
+  .desktop-shell
   .pull-request-header[data-folded]
   .pull-request-title[data-overflow="true"] {
   mask-image: linear-gradient(to left, transparent, #000 var(--luke-label-fade));
@@ -3344,7 +3343,8 @@
 }
 
 /* A narrow card's presses draw closer, at the pane's inset. */
-@container annotation (max-width: 439px) {
+/* off-scale: 440px, where a card's age is drawn closer (annotation-card.tsx) */
+@container annotation (width < 440px) {
   .pull-request-thread-actions {
     padding-inline: var(--luke-row-inset);
   }
@@ -3744,7 +3744,10 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
    column to its longest word, a word to a line; each cell keeps room for a
    few words instead, and the table scrolls inside its own box, its edges
    fading where it hides columns (below). */
-.desktop-shell[data-room="narrow"] :is(.luke-markdown, .transcript-table) :is(th, td) {
+:where(:root)[data-luke-room="narrow"]
+  .desktop-shell
+  :is(.luke-markdown, .transcript-table)
+  :is(th, td) {
   min-width: 7.5em;
 }
 
@@ -3756,7 +3759,9 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
    cut at its edge fade the same way, so a line cut short reads as one to
    scroll. */
 .transcript-table,
-.desktop-shell[data-room="narrow"] :is(.luke-markdown pre, .luke-code-card-body) {
+:where(:root)[data-luke-room="narrow"]
+  .desktop-shell
+  :is(.luke-markdown pre, .luke-code-card-body) {
   mask-image: linear-gradient(
     to right,
     transparent,
@@ -4077,7 +4082,7 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
 /* A narrow dock, a side panel at its narrowest, says Fork of or Continue
    of by its glyph alone, the words still read to assistive tech, so the
    source's name keeps the room they took. */
-@container fork-dock (max-width: 359px) {
+@container fork-dock (width < 360px) {
   .draft-fork-lead {
     position: absolute;
     overflow: hidden;
@@ -4134,6 +4139,14 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
 
 .todos-dock-focus {
   flex: 1;
+}
+
+/* The docked list's body keeps to under a third of what is seen and scrolls
+   past it, so a long list, over a composer, leaves the transcript its room
+   in a short window. */
+[data-todos-dock] .todo-items {
+  max-height: calc(var(--luke-stage-height) * 0.3);
+  overflow-y: auto;
 }
 
 /* One write of the list, as a call's row opens onto it: set bare at the
@@ -4251,9 +4264,13 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
    line to eight and then scrolling, with no space between its paragraphs,
    as a textarea's lines stand, and the placeholder the field draws at the
    editor's own insets while the words are empty, dimmed with the editor
-   while the box is held. */
+   while the box is held. In every room it stops growing short of two fifths
+   of what is seen (`--luke-stage-height`), so a short window, a laptop's
+   with a dock, is not filled by its composer; a narrow room's keyboard
+   takes a smaller share (desktop.css). */
 .agent-composer-field {
   position: relative;
+  --agent-composer-field-cap: calc(var(--luke-stage-height) * 0.4);
   --agent-composer-field-block: calc(var(--luke-space-16) + var(--luke-space-8));
   --agent-composer-field-lines: calc(
     8 *
@@ -4266,7 +4283,7 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
   box-sizing: border-box;
   width: 100%;
   min-height: calc(var(--luke-type-body-leading) + var(--agent-composer-field-block));
-  max-height: var(--agent-composer-field-lines);
+  max-height: min(var(--agent-composer-field-lines), var(--agent-composer-field-cap));
   overflow-x: hidden;
   overflow-y: auto;
   padding: var(--luke-space-16) var(--luke-space-16) var(--luke-row-inset);
@@ -4381,7 +4398,8 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
    context ring, and the microphone. The servers' and the
    ring's boxes stay, out of the row at its right end, so a popover the ⋯
    opens for them hangs where the ⋯ stands. */
-@container composer (max-width: 399px) {
+/* off-scale: 400px, a card under which the box folds its own presses into its ⋯ (composer-foot.css) */
+@container composer (width < 400px) {
   .agent-composer :is(.agent-servers-button, .agent-context-button),
   .agent-composer:not(.chat-composer) > form:not(.inbox-answer) .dictate-button {
     display: none;
@@ -4401,7 +4419,7 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
 
 /* The narrowest: the + goes into the ⋯ too, leaving what the agent
    published, the model, the ⋯, and Send. */
-@container composer (max-width: 239px) {
+@container composer (width < 240px) {
   .agent-composer .agent-composer-attach {
     display: none;
   }
@@ -4648,19 +4666,19 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
 }
 
 .attachment-viewer[data-view="text"] {
-  width: min(880px, 100vw - 2 * var(--luke-space-24));
+  width: min(880px, var(--luke-stage-width) - 2 * var(--luke-space-24));
   height: calc(var(--luke-stage-height) - 2 * var(--luke-space-24));
 }
 
 /* A picture opened at its own pixels, a diagram on a phone, is shown in
    the whole of the dimmed window, so as much of it as fits is in sight. */
 .attachment-viewer[data-view="image"][data-opening="own-pixels"] {
-  width: calc(100vw - 2 * var(--luke-space-24));
+  width: calc(var(--luke-stage-width) - 2 * var(--luke-space-24));
   height: calc(var(--luke-stage-height) - 2 * var(--luke-space-24));
 }
 
 .attachment-viewer[data-view="other"] {
-  width: min(400px, 100vw - 2 * var(--luke-space-24));
+  width: min(400px, var(--luke-stage-width) - 2 * var(--luke-space-24));
 }
 
 .attachment-viewer-header {
@@ -4840,7 +4858,7 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
 
 /* A narrow panel leaves out the word "sandbox" the tab's name already
    implies, so the agent's name keeps more of the bar. */
-@container side-panel (max-width: 359px) {
+@container side-panel (width < 360px) {
   .terminal-tab-sandbox {
     display: none;
   }
@@ -5423,7 +5441,7 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
 
 /* Too narrow for the checks' word: it goes, and the mark's words for a
    reader who cannot see it and the Pull request tab still say they failed. */
-@container published-row (max-width: 359px) {
+@container published-row (width < 360px) {
   .agent-published-checks {
     display: none;
   }
@@ -5431,7 +5449,8 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
 
 /* Too narrow for the lines as well: they go, so the title keeps a few
    words beside the number. The Changes tab and GitHub still count them. */
-@container published-row (max-width: 259px) {
+/* off-scale: 260px, where the published row's lines stop fitting */
+@container published-row (width < 260px) {
   .agent-published-lines {
     display: none;
   }
@@ -5445,14 +5464,6 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
 
 .agent-published-lines {
   white-space: nowrap;
-}
-
-.agent-published-added {
-  color: var(--luke-color-complete);
-}
-
-.agent-published-removed {
-  color: var(--luke-color-danger-text);
 }
 
 /* Lucide's glyphs, which the AI Elements components draw with, at the
@@ -5503,7 +5514,8 @@ svg.lucide {
 /* Too narrow for the job beside the model and effort: they go first, as
    the subagent's card still names them, and the working mark and its
    count stay. */
-@container subagent-row (max-width: 319px) {
+/* off-scale: 320px, where a worker's model and effort stop fitting beside its job */
+@container subagent-row (width < 320px) {
   .subagent-pair {
     display: none;
   }
@@ -5511,7 +5523,7 @@ svg.lucide {
 
 /* A narrow side panel gives a subagent's job two lines before it
    cuts it, so the time and marks beside it leave more than a word of it. */
-@container side-panel (max-width: 359px) {
+@container side-panel (width < 360px) {
   .subagent-line {
     height: auto;
     min-height: 28px; /* off-scale: a call's line */

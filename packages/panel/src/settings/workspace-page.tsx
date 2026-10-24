@@ -4,6 +4,7 @@ import type {
   WorkspaceSentryInstallation,
 } from "@luke/features/sentry-install-wire";
 import { dayAndTimeText } from "@luke/features/time-format";
+import { readingWords } from "@luke/features/words";
 import {
   INVITATION_ROLE,
   type WorkspaceInvitation,
@@ -211,7 +212,7 @@ const READ_FAILED = {
  */
 const LEAVE_WORDS = {
   RUNNING: "Leaving",
-  LINE: "You lose its tasks, agents, and Inbox until someone invites you again.",
+  LINE: "You lose its tasks, agents, and inbox until someone invites you again.",
   TASKS: (name: string) => `Tasks you wrote stay in ${name}.`,
   AGENTS: "Agents you started that are still working stop.",
   AUTOMATIONS: "Automations you created stop running.",
@@ -302,8 +303,8 @@ type ShownConnection = Pick<WorkspaceGithubInstallation, "login" | "active"> &
 /** What the Linear row's line says, by where the workspace's Linear stands and who is reading it. */
 const LINEAR_LINE = {
   CONNECTED: "Connected for everyone in this workspace",
-  EXPIRED: "Linear stopped honoring this connection. Connect again.",
-  EXPIRED_MEMBER: "Linear stopped honoring this connection. Ask an owner or admin.",
+  EXPIRED: "Sign-in expired.",
+  EXPIRED_MEMBER: "Sign-in expired. Ask an owner or admin.",
   MANAGES: "Not connected.",
   MEMBER: "Not connected. Ask an owner or admin.",
 } as const;
@@ -556,7 +557,7 @@ function MemberRow({
         confirm={remove}
         question={{
           title: `Remove ${member.name} from this workspace?`,
-          body: "They lose its tasks, agents, and Inbox until they are invited again.",
+          body: "They lose its tasks, agents, and inbox until they are invited again.",
           verb: "Remove",
           running: "Removing",
           loss: CONFIRM_LOSS.AFFECTS_OTHERS,
@@ -880,7 +881,7 @@ function TeamMembers({
   if (members === undefined) {
     return (
       <SettingsRowsSkeleton
-        label="Loading the members"
+        label={readingWords("the members")}
         rows={Array.from(
           { length: Math.min(workspace.memberCount ?? 1, MEMBERS_SKELETON_MOST) },
           () => MEMBER_ROW_SKELETON,
@@ -1167,7 +1168,10 @@ function Invitations({
       {firstReadFailed !== undefined ? (
         <ReadFailed line={firstReadFailed} onRetry={read} />
       ) : pending === undefined ? (
-        <SettingsRowsSkeleton label="Loading the invitations" rows={[INVITATION_ROW_SKELETON]} />
+        <SettingsRowsSkeleton
+          label={readingWords("the invitations")}
+          rows={[INVITATION_ROW_SKELETON]}
+        />
       ) : pending.length === 0 ? (
         <SettingsLine>{INVITATIONS_EMPTY}</SettingsLine>
       ) : null}
@@ -1418,7 +1422,7 @@ function linearLine(linear: Workspace["linear"], manages: boolean): React.ReactN
 
 /**
  * The workspace's Linear, for an owner or an admin: Connect while none is,
- * or Connect again once Linear stopped honoring it, which opens Linear's
+ * or Reconnect once its sign-in expired, which opens Linear's
  * sign-in in the browser, a sign-in that could not be begun saying why
  * under the row; and a ⋯ once one stands, as Settings › Integrations keeps
  * a connected row quiet, whose menu holds Disconnect, which asks first. A
@@ -1481,7 +1485,7 @@ function ManagedLinear({ workspace }: { workspace: Workspace }): React.JSX.Eleme
                 busyLabel="Connecting"
                 onClick={connect}
               >
-                {linear === undefined ? "Connect" : "Connect again"}
+                {linear === undefined ? "Connect" : "Reconnect"}
               </Button>
             ),
         }}
@@ -1877,7 +1881,10 @@ export function WorkspacePage({
         <ReadFailed line="Your workspaces could not be read." onRetry={control.onRetryList} />
       </SettingsSection>
     ) : (
-      <SettingsSectionsSkeleton label="Loading your workspaces" sections={WORKSPACE_SKELETON} />
+      <SettingsSectionsSkeleton
+        label={readingWords("your workspaces")}
+        sections={WORKSPACE_SKELETON}
+      />
     );
   }
   // Keyed to the workspace, so another one listed reads its own members and asks nothing left over.

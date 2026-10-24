@@ -12,6 +12,7 @@ import {
   type SubscriptionKeySummary,
 } from "@luke/features/provider-key-wire";
 import { dayAndTimeText } from "@luke/features/time-format";
+import { readingWords, SIGNED_OUT_WORDS } from "@luke/features/words";
 import { ACT_KIND } from "@luke/host/acts";
 import { HOST_CAPABILITY } from "@luke/settings";
 import { searchAnchorProps } from "@luke/settings/settings-anchors";
@@ -181,12 +182,12 @@ const HARNESSES: readonly ProviderKeyProvider[] = [
 
 const WORDS = {
   READ_FAILED: "Your keys could not be read.",
-  SIGNED_OUT: "Sign in to connect your agents.",
+  SIGNED_OUT: SIGNED_OUT_WORDS,
   CONNECT: "Connect",
   VIA_SUBSCRIPTION: "Connected via subscription",
   VIA_API_KEY: "Connected via API key",
-  RECONNECT: "Subscription needs reconnecting",
-  LIMIT: "Limit reached",
+  SIGN_IN_EXPIRED: "Sign-in expired",
+  PLAN_ATTENTION: "Subscription needs attention",
   KEY_ATTENTION: "API key needs attention",
   SUBSCRIPTION: "Subscription",
   API_KEY: "API key",
@@ -207,7 +208,7 @@ const WORDS = {
   TOKEN_INVALID: "Anthropic rejected this token. Paste a new one.",
   TOKEN_QUOTA: "Out of usage on your Claude plan.",
   TOKEN_UNREADABLE: "This token can no longer be read. Paste a new one.",
-  CHATGPT_SIGNED_OUT: "ChatGPT ended this sign-in. Sign in with ChatGPT to connect again.",
+  CHATGPT_SIGNED_OUT: "Sign-in expired. Sign in with ChatGPT to reconnect.",
   CHATGPT_UNREADABLE: "This sign-in can no longer be read. Sign in with ChatGPT to connect again.",
   CHATGPT_INELIGIBLE:
     "OpenAI says this ChatGPT account isn't eligible for Codex. Sign in with ChatGPT to use another.",
@@ -281,13 +282,24 @@ function connectionOf(
   }
   if (plan !== undefined) {
     if (plan.status === PROVIDER_KEY_STATUS.LIMIT_REACHED) {
-      return { words: WORDS.LIMIT, connected: false, attention: true };
+      return { words: WORDS.USAGE_LIMIT, connected: false, attention: true };
     }
-    return standing(plan)
-      ? { words: WORDS.VIA_SUBSCRIPTION, connected: true, attention: false }
-      : { words: WORDS.RECONNECT, connected: false, attention: true };
+    if (standing(plan)) return { words: WORDS.VIA_SUBSCRIPTION, connected: true, attention: false };
+    return { words: lapsedPlanWords(plan), connected: false, attention: true };
   }
   return { words: WORDS.CONNECT, connected: false, attention: false };
+}
+
+/**
+ * What a harness's row says of a plan that no longer stands: a sign-in
+ * expired only for a ChatGPT sign-in OpenAI ended, since a Claude token has
+ * no sign-in, and that it needs attention otherwise, its card saying why.
+ */
+function lapsedPlanWords(plan: SubscriptionKeySummary): string {
+  return plan.kind === PROVIDER_KEY_KIND.CHATGPT_OAUTH &&
+    plan.status === PROVIDER_KEY_STATUS.INVALID
+    ? WORDS.SIGN_IN_EXPIRED
+    : WORDS.PLAN_ATTENTION;
 }
 
 /** A reached limit's words, with its reset where the provider named one. */
@@ -604,7 +616,7 @@ function ClaudeTokenPanel({
         confirm={removal}
         question={{
           title: "Disconnect your Claude plan?",
-          body: "Claude agents will stop running on your Claude plan, and Luke deletes the token it holds.",
+          body: "Claude agents will stop running on your Claude plan, and he deletes the token he holds.",
           verb: WORDS.DISCONNECT,
           running: "Disconnecting…",
           loss: CONFIRM_LOSS.IRREVERSIBLE,
@@ -770,7 +782,7 @@ function ChatGptPanel({
         confirm={removal}
         question={{
           title: "Disconnect your ChatGPT plan?",
-          body: "Codex agents will stop running on your ChatGPT plan, and Luke ends its sign-in with OpenAI.",
+          body: "Codex agents will stop running on your ChatGPT plan, and he ends his sign-in with OpenAI.",
           verb: WORDS.DISCONNECT,
           running: "Disconnecting…",
           loss: CONFIRM_LOSS.REVERSIBLE,
@@ -1164,7 +1176,10 @@ export function AgentAuthSection({
             </ErrorState>
           </SettingsLine>
         ) : (
-          <SettingsRowsSkeleton label="Loading your keys" rows={HARNESSES.map(keyRowSkeleton)} />
+          <SettingsRowsSkeleton
+            label={readingWords("your keys")}
+            rows={HARNESSES.map(keyRowSkeleton)}
+          />
         )}
       </SettingsSection>
       {drawn === undefined || answer === undefined ? null : (

@@ -6,6 +6,7 @@ import {
 import { PLAN_EDIT_REFUSAL } from "@luke/features/plan-edit";
 import { PLAN_ACTOR, type PlanLastEdit, type Task } from "@luke/features/task-wire";
 import { TASK_CALL_FAILURE, type TasksEditAnswer } from "@luke/features/tasks-view";
+import { readingWords, SIGNED_OUT_WORDS } from "@luke/features/words";
 import { ACT_KIND } from "@luke/host/acts";
 import { SETTINGS_SEARCH_ROW, searchAnchorProps } from "@luke/settings/settings-anchors";
 import {
@@ -83,9 +84,9 @@ export const TEMPLATE_TITLE = "Plan template";
 const PAGE_LINE = {
   NOTE: "New plans start as a copy of this template.",
   NOTE_DETAIL: "Editing it doesn't change existing plans.",
-  SIGNED_OUT: "Sign in to edit the template your new plans start from.",
+  SIGNED_OUT: SIGNED_OUT_WORDS,
   READ_FAILED: "The template could not be read.",
-  READING: "Loading your plan template",
+  READING: readingWords("your plan template"),
   RESET_FAILED: "The template could not be reset. Try again.",
 } as const;
 

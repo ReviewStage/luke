@@ -372,7 +372,7 @@ export const SERVER_MENTION_NOTE = {
   OFF_STEERS:
     "Off for this agent. Sent into a turn under way, this message hands it to the next turn alone; the switch stays off.",
   NOT_CONNECTED: "Not connected, so no agent is handed it.",
-  EXPIRED: "Its sign-in expired, so a call to it asks for it to be reconnected first.",
+  EXPIRED: "Sign-in expired. A call to it asks you to reconnect it first.",
 } as const;
 
 /**

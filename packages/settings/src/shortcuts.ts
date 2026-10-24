@@ -45,6 +45,7 @@ export const APP_COMMAND = {
   HIDE: "hide",
   HIDE_OTHERS: "hide-others",
   QUIT: "quit",
+  RELOAD: "reload",
   ACTUAL_SIZE: "actual-size",
   ZOOM_IN: "zoom-in",
   ZOOM_OUT: "zoom-out",
@@ -346,8 +347,9 @@ export interface AppShortcut {
  * found, as every Mac app has them, and ⌘+, ⌘−, and ⌘0 to zoom as every
  * browser has them.
  *
- * The system's own chords stand here too — ⌘H, ⌥⌘H, ⌘Q, ⌘M, and ⌃⌘F, which
- * every Mac app answers through the menu bar's standard items — so the menu
+ * The system's own chords stand here too — ⌘H, ⌥⌘H, ⌘Q, ⌘M, ⌃⌘F, and ⌘R,
+ * which every Mac app answers through the menu bar's standard items, ⌘R
+ * reloading the window as a browser and Slack do — so the menu
  * reads them from here and the shortcuts page lists them. No control ever
  * offers their commands, so the keymap never claims their keys, and the
  * menu's own items answer them.
@@ -410,6 +412,12 @@ export const APP_SHORTCUTS = {
   [APP_COMMAND.QUIT]: {
     label: "Quit Luke",
     chord: { key: SHORTCUT_KEY.Q },
+    capability: HOST_CAPABILITY.DESKTOP_APP,
+  },
+  // Note that Reload is the desktop's alone, because on the web the browser's own ⌘R reloads the tab.
+  [APP_COMMAND.RELOAD]: {
+    label: "Reload",
+    chord: { key: SHORTCUT_KEY.R },
     capability: HOST_CAPABILITY.DESKTOP_APP,
   },
   // Note that the zoom chords are the desktop's alone, because only its window zooms: on the web the browser's own zoom keeps them.
@@ -677,6 +685,7 @@ export const APP_SHORTCUT_GROUPS = [
   {
     title: "Window",
     commands: [
+      APP_COMMAND.RELOAD,
       APP_COMMAND.FULL_SCREEN,
       APP_COMMAND.MINIMIZE,
       APP_COMMAND.ZOOM_IN,

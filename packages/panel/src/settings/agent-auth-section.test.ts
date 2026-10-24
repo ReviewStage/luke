@@ -245,7 +245,6 @@ const forAgentsSent = () =>
 
 test("each harness's row says how it is connected: nothing, its plan, its key, or a plan needing a hand", async () => {
   const empty = await mount();
-  assert.match(empty.textContent ?? "", /Other members connect their own/u);
   assert.equal(rowButton(empty, "Claude").textContent, "Connect");
   assert.equal(rowButton(empty, "Codex").textContent, "Connect");
   for (const root of roots.splice(0)) act(() => root.unmount());
@@ -270,7 +269,7 @@ test("each harness's row says how it is connected: nothing, its plan, its key, o
   };
   const attention = await mount();
   assert.equal(rowButton(attention, "Claude").textContent, "Connected via API key");
-  assert.equal(rowButton(attention, "Codex").textContent, "Subscription needs reconnecting");
+  assert.equal(rowButton(attention, "Codex").textContent, "Sign-in expired");
   assert.equal(rowButton(attention, "Codex").querySelector(".luke-settings-saved-mark"), null);
   for (const root of roots.splice(0)) act(() => root.unmount());
 
@@ -278,7 +277,7 @@ test("each harness's row says how it is connected: nothing, its plan, its key, o
     keys: [],
     subscriptions: [{ ...CLAUDE_PLAN, status: PROVIDER_KEY_STATUS.LIMIT_REACHED }],
   };
-  assert.equal(rowButton(await mount(), "Claude").textContent, "Limit reached");
+  assert.equal(rowButton(await mount(), "Claude").textContent, "Usage limit reached");
 });
 
 test("each harness's row stands where a link to its section lands, and Codex's says it holds the key calls run on", async () => {
@@ -452,6 +451,7 @@ test("a Claude setup-token is saved by its kind, refused with why, and disconnec
 test("a Claude token Anthropic rejected says so in its card and offers Replace token, without the setup-token hint", async () => {
   held = { keys: [], subscriptions: [{ ...CLAUDE_PLAN, status: PROVIDER_KEY_STATUS.INVALID }] };
   const page = await mount();
+  assert.equal(rowButton(page, "Claude").textContent, "Subscription needs attention");
   const dialog = await open(page, "Claude");
   const plan = card(dialog, "Subscription");
   assert.match(plan.textContent ?? "", /Anthropic rejected this token\./u);
@@ -459,6 +459,17 @@ test("a Claude token Anthropic rejected says so in its card and offers Replace t
   const field = labelled(plan, "Claude setup-token");
   assert.equal(field.placeholder, "Saved", "a saved token is said, not shown");
   assert.equal(field.value, "");
+});
+
+test("a ChatGPT sign-in OpenAI no longer honors says its sign-in expired, and how to reconnect", async () => {
+  held = { keys: [], subscriptions: [{ ...CHATGPT_PLAN, status: PROVIDER_KEY_STATUS.INVALID }] };
+  const page = await mount();
+  assert.equal(rowButton(page, "Codex").textContent, "Sign-in expired");
+  const dialog = await open(page, "Codex");
+  assert.match(
+    card(dialog, "Subscription").textContent ?? "",
+    /Sign-in expired\. Sign in with ChatGPT to reconnect\./u,
+  );
 });
 
 test("Codex's subscription signs in with ChatGPT on the desktop, meets the first sign-in with OpenAI's notice once, and disconnects after asking", async () => {

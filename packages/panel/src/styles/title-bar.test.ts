@@ -92,7 +92,7 @@ test("only the desktop profile drags the window by its toolbar and title-bar row
   const drawn = (profile: Profile) => {
     const { toolbar } = foldedShell(profile);
     const button = toolbar.appendChild(document.createElement("button"));
-    button.className = "toolbar-button";
+    button.className = "luke-button";
     const strip = document.body.appendChild(document.createElement("div"));
     strip.className = "desktop-drag-strip";
     return [toolbar, button, strip].map(dragRegion);

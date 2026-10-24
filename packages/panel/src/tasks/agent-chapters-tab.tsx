@@ -50,7 +50,6 @@ import {
   STATUS_TONE,
   Stack,
   type StatusTone,
-  TEXT_BUTTON_TONE,
   TEXT_ELEMENT,
   TEXT_TONE,
   TEXT_VARIANT,
@@ -61,15 +60,14 @@ import {
   Tooltip,
 } from "@luke/ui";
 import {
-  ArrowLeftIcon,
-  ArrowRightIcon,
-  BookOpenIcon,
   CheckIcon,
-  FileDiffIcon,
+  ChevronLeftIcon,
+  ChevronRightIcon,
+  GLYPH,
   PanelLeftIcon,
   RotateCwIcon,
   SparklesIcon,
-} from "lucide-react";
+} from "@luke/ui/icons";
 import { type ReactNode, type RefObject, useMemo, useRef, useState } from "react";
 import { PANE_EDGE, usePaneSlide } from "../desktop/pane-motion.js";
 import {
@@ -592,9 +590,7 @@ function KeyChangeItem({
       {first === undefined ? null : onReveal === undefined ? (
         <span className="chapter-key-change-ref">{lineRefLabel(first)}</span>
       ) : (
-        <TextButton tone={TEXT_BUTTON_TONE.LINK} onClick={() => onReveal(first)}>
-          {lineRefLabel(first)}
-        </TextButton>
+        <TextButton onClick={() => onReveal(first)}>{lineRefLabel(first)}</TextButton>
       )}
     </Card>
   );
@@ -725,7 +721,7 @@ function ChaptersReading({
     run();
   };
   if (chapter === undefined || row === undefined) {
-    return <EmptyState icon={<BookOpenIcon />}>{CHAPTERS_WORDS.NOTHING}</EmptyState>;
+    return <EmptyState icon={<GLYPH.PULL_REQUEST_CHAPTERS />}>{CHAPTERS_WORDS.NOTHING}</EmptyState>;
   }
   const done = viewed(row.paths);
   const previous = chapters[at - 1];
@@ -868,9 +864,11 @@ function ChaptersReading({
             </ScrollArea>
           </div>
           {stale ? (
-            <EmptyState icon={<FileDiffIcon />}>{CHAPTERS_WORDS.STALE_DIFF}</EmptyState>
+            <EmptyState icon={<GLYPH.PULL_REQUEST_CHANGES />}>
+              {CHAPTERS_WORDS.STALE_DIFF}
+            </EmptyState>
           ) : chapterFiles.length === 0 ? (
-            <EmptyState icon={<FileDiffIcon />}>{CHAPTERS_WORDS.NO_FILES}</EmptyState>
+            <EmptyState icon={<GLYPH.PULL_REQUEST_CHANGES />}>{CHAPTERS_WORDS.NO_FILES}</EmptyState>
           ) : (
             <AgentChangesTab
               // Note that each chapter's list stands on its own, its folds and the file stood on its own, as a chapter is its own page.
@@ -897,7 +895,7 @@ function ChaptersReading({
                 >
                   <Button
                     variant={BUTTON_VARIANT.QUIET}
-                    icon={<ArrowLeftIcon aria-hidden="true" />}
+                    icon={<ChevronLeftIcon aria-hidden="true" />}
                     disabled={previous === undefined}
                     onClick={() => step(-1)}
                   >
@@ -910,7 +908,7 @@ function ChaptersReading({
                 >
                   <Button
                     variant={BUTTON_VARIANT.QUIET}
-                    icon={<ArrowRightIcon aria-hidden="true" />}
+                    icon={<ChevronRightIcon aria-hidden="true" />}
                     disabled={next === undefined}
                     onClick={() => step(1)}
                   >
@@ -942,11 +940,15 @@ function chaptersState(
         </ErrorState>
       );
     case CHAPTERS_SHOWN.NO_PULL_REQUEST:
-      return <EmptyState icon={<BookOpenIcon />}>{CHAPTERS_WORDS.NO_PULL_REQUEST}</EmptyState>;
+      return (
+        <EmptyState icon={<GLYPH.PULL_REQUEST_CHAPTERS />}>
+          {CHAPTERS_WORDS.NO_PULL_REQUEST}
+        </EmptyState>
+      );
     case CHAPTERS_SHOWN.NONE:
       return state.generatable ? (
         <EmptyState
-          icon={<BookOpenIcon />}
+          icon={<GLYPH.PULL_REQUEST_CHAPTERS />}
           action={{
             label: CHAPTERS_WORDS.GENERATE,
             icon: <SparklesIcon aria-hidden="true" />,
@@ -957,7 +959,7 @@ function chaptersState(
           {CHAPTERS_WORDS.NONE}
         </EmptyState>
       ) : (
-        <EmptyState icon={<BookOpenIcon />}>{CHAPTERS_WORDS.UNAVAILABLE}</EmptyState>
+        <EmptyState icon={<GLYPH.PULL_REQUEST_CHAPTERS />}>{CHAPTERS_WORDS.UNAVAILABLE}</EmptyState>
       );
     case CHAPTERS_SHOWN.GENERATING:
       return (
@@ -1026,7 +1028,11 @@ export function AgentChaptersTab({
     );
   }
   if (pullRequest === null) {
-    return <EmptyState icon={<BookOpenIcon />}>{CHAPTERS_WORDS.NO_PULL_REQUEST}</EmptyState>;
+    return (
+      <EmptyState icon={<GLYPH.PULL_REQUEST_CHAPTERS />}>
+        {CHAPTERS_WORDS.NO_PULL_REQUEST}
+      </EmptyState>
+    );
   }
   return (
     <ChaptersReading

@@ -1,3 +1,4 @@
+import { readingWords } from "@luke/features/words";
 import { SkeletonRegion } from "@luke/ui";
 import { PageSections } from "./controls.js";
 import { AdminPage, type AdminWayBack } from "./page-header.js";
@@ -26,7 +27,7 @@ export function PageSkeleton({
 }): React.JSX.Element {
   return (
     <AdminPage title={title} note={note} back={back} controls={controls}>
-      <SkeletonRegion label="Loading…">
+      <SkeletonRegion label={readingWords("this page")}>
         <PageSections>{children}</PageSections>
       </SkeletonRegion>
     </AdminPage>

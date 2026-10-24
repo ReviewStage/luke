@@ -35,15 +35,15 @@ import {
   VisuallyHidden,
 } from "@luke/ui";
 import { ACTOR_KIND, ACTOR_STATE, type Actor, actorName, personActor } from "@luke/ui/actor-model";
-import * as Atom from "effect/reactivity/Atom";
 import {
   CheckIcon,
   CircleIcon,
-  FactoryIcon,
+  GLYPH,
   PenLineIcon,
   SquareCheckIcon,
   SquareIcon,
-} from "lucide-react";
+} from "@luke/ui/icons";
+import * as Atom from "effect/reactivity/Atom";
 import type { ReactNode } from "react";
 import { ACTOR_SIZE, ActorMark, AutomationCard, automationActor } from "../actor-ref.js";
 import { AttentionMark } from "../attention-mark.js";
@@ -445,7 +445,7 @@ function TaskStatusChip({
 
 /**
  * A holder's glyph as a row's chip draws it: a task's status's mark, an
- * automation's clock tile, and the factory glyph for the agents no
+ * automation's clock tile, and the automation glyph for the agents no
  * automation names, as the holder's group header draws them.
  */
 export function HolderGlyph({ holder }: { holder: InboxHolder }): React.JSX.Element {
@@ -453,7 +453,7 @@ export function HolderGlyph({ holder }: { holder: InboxHolder }): React.JSX.Elem
     holder.kind === INBOX_HOLDER.AUTOMATION ? (holder.automationId ?? undefined) : undefined,
   );
   if (holder.kind === INBOX_HOLDER.TASK) return <PlanGlyph status={holder.task.status} />;
-  if (holder.automationId === null) return <FactoryIcon />;
+  if (holder.automationId === null) return <GLYPH.AUTOMATION />;
   return (
     <ActorMark
       actor={

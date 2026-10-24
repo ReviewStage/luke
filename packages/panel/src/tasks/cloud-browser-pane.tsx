@@ -172,9 +172,9 @@ function openFailureWords(failure: BrowserTabOpenFailure, agent: string): string
     case BROWSER_TAB_OPEN_FAILURE.RETIRED:
       return `${agent} is archived, so its browser is gone.`;
     case BROWSER_TAB_OPEN_FAILURE.UNREACHABLE:
-      return `${browserOf(agent)} couldn't be reached. Try again in a moment.`;
+      return `${browserOf(agent)} could not be reached. Try again in a moment.`;
     case BROWSER_TAB_OPEN_FAILURE.UNANSWERED:
-      return "The tab couldn't be opened. Try again.";
+      return "The tab could not be opened. Try again.";
   }
 }
 

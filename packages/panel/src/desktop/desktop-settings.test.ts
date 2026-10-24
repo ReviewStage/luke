@@ -875,7 +875,7 @@ test("while the plan template is read its page stands the document's own head, i
 
   assert.deepEqual(
     [reading?.startsWith("Plan template"), placeholder()],
-    [true, "Loading your plan template"],
+    [true, "Reading your plan template"],
   );
   land();
   await act(async () => {

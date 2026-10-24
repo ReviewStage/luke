@@ -9,7 +9,6 @@ import {
   CHIP_LOOK,
   Chip,
   ChipName,
-  CopyIcon,
   CountParts,
   LIST_VARIANT,
   List,
@@ -21,8 +20,8 @@ import {
   Tooltip,
   useMenu,
 } from "@luke/ui";
+import { GitBranchIcon, GLYPH } from "@luke/ui/icons";
 import { pullRequestLabelOf } from "@luke/ui/tab-strip-model";
-import { GitBranchIcon, TerminalIcon } from "lucide-react";
 import type { ReactNode } from "react";
 import { ActionMenu, type MenuAction, rowMenu } from "../desktop/action-menu.js";
 import { checkoutCommand, publishedUrl, pullRequestStateWord } from "./coding-agent-model.js";
@@ -100,12 +99,12 @@ function branchActions(
           [
             {
               label: "Copy branch name",
-              icon: <CopyIcon />,
+              icon: <GLYPH.COPY />,
               onSelect: () => doors.copy(branch, "Branch name copied"),
             },
             {
               label: "Copy checkout command",
-              icon: <TerminalIcon />,
+              icon: <GLYPH.COPY />,
               onSelect: () => doors.copy(checkoutCommand(branch), "Checkout command copied"),
             },
           ],

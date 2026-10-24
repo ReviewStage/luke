@@ -1090,7 +1090,7 @@ test("while the members are being read the rest of the page stands, a placeholde
   const placeholderBoxes = rowBoxes(members);
   await settle();
 
-  assert.deepEqual(whileReading, { members: ["Loading the members", 3], identityHeld: false });
+  assert.deepEqual(whileReading, { members: ["Reading the members", 3], identityHeld: false });
   assert.equal(
     container.querySelector('[role="alert"]')?.textContent,
     "The members could not be read.Retry",
@@ -1132,7 +1132,7 @@ test("before the workspaces are read, placeholder sections stand in the page's s
       group.querySelectorAll(".luke-settings-row").length,
     ],
   );
-  assert.deepEqual(placeholderOf(container)?.[0], "Loading your workspaces");
+  assert.deepEqual(placeholderOf(container)?.[0], "Reading your workspaces");
   assert.deepEqual(sections, [
     [false, 1],
     [true, 1],
@@ -1494,7 +1494,7 @@ test("a member leaves after confirming, which names what stays and what stops, s
   );
   await confirm("Leave acme");
 
-  assert.equal(line, "You lose its tasks, agents, and Inbox until someone invites you again.");
+  assert.equal(line, "You lose its tasks, agents, and inbox until someone invites you again.");
   assert.deepEqual(named, [
     "Tasks you wrote stay in acme.",
     "Agents you started that are still working stop.",
@@ -2390,6 +2390,20 @@ test("a connected workspace's Linear reads connected for everyone and stands qui
   ]);
 });
 
+test("a workspace's Linear whose sign-in expired says so, offering an admin Reconnect and telling a member to ask", async () => {
+  const expired: Workspace = { ...CONNECTED, linear: { active: false } };
+  const admin = rowNamed((await mount(expired)).page, "Linear");
+  const member = rowNamed(
+    (await mount({ ...expired, role: WORKSPACE_ROLE.MEMBER })).page,
+    "Linear",
+  );
+
+  assert.deepEqual(rowWords(admin), ["Linear", "Sign-in expired."]);
+  assert.ok(button(admin, "Reconnect"));
+  assert.deepEqual(rowWords(member), ["Linear", "Sign-in expired. Ask an owner or admin."]);
+  assert.deepEqual(rowButtons(member), []);
+});
+
 /** The workspace Sentry installs and disconnects sent, by their payloads. */
 const sentrySent = () =>
   sent.flatMap((request) =>
@@ -2528,7 +2542,7 @@ test("while the repositories are read, placeholder rows stand in the Repositorie
   const { page } = await mount(ACME);
   const group = section(page, SETTINGS_SECTION.MAC_REPOSITORIES);
 
-  assert.deepEqual(placeholderOf(group), ["Loading the repositories", 2]);
+  assert.deepEqual(placeholderOf(group), ["Reading the repositories", 2]);
   land();
   await settle();
   assert.equal(placeholderOf(group), undefined);

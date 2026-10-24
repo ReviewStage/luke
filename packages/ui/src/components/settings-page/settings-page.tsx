@@ -96,7 +96,7 @@ export function SettingsPageSkeleton({
   label,
   sections,
 }: {
-  /** What is being read, said to a reader: "Loading Settings". */
+  /** What is being read, said to a reader: "Reading Settings". */
   label: string;
   /** The sections likely to land, each in its shape. */
   sections: readonly SettingsSectionSkeletonShape[];

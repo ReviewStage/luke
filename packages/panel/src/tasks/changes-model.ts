@@ -109,10 +109,10 @@ export type ExpansionRefusal = (typeof EXPANSION_REFUSAL)[keyof typeof EXPANSION
 
 /** What a file whose lines between hunks could not be opened says, once, above its first hunk. */
 export const EXPANSION_REFUSED_WORDS = {
-  [EXPANSION_REFUSAL.NOT_TEXT]: "Can't load more of this file: it's too large or not plain text.",
+  [EXPANSION_REFUSAL.NOT_TEXT]: "Cannot load more of this file: it's too large or not plain text.",
   [EXPANSION_REFUSAL.CHANGED]:
-    "Can't load more of this file: it changed since these changes were read.",
-  [EXPANSION_REFUSAL.UNAVAILABLE]: "Can't load more of this file just now.",
+    "Cannot load more of this file: it changed since these changes were read.",
+  [EXPANSION_REFUSAL.UNAVAILABLE]: "Cannot load more of this file just now.",
 } as const satisfies Record<ExpansionRefusal, string>;
 
 /** The letter a file wears for what became of it, as an editor's source control marks it. */

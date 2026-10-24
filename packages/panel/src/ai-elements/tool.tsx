@@ -15,7 +15,7 @@ import {
   LineSummary,
   OneLine,
   Tooltip,
-  useDisclosureBodyDrawn,
+  useDisclosurePreviewShown,
   useDisclosureState,
 } from "@luke/ui";
 import type { ReactNode } from "react";
@@ -33,8 +33,9 @@ import { Fold, type FoldProps } from "./fold.js";
  * cut moves when the mark goes: the working mark while it runs and the
  * failed mark if it failed, each as an agent's tab draws it
  * (`state-glyph.tsx`); a call that ended well keeps no seat for one. A
- * subject the body says whole, as a command's input is the command, is
- * the closed row's preview, and the open row says its verb alone. The
+ * subject the body says whole, as a command's input is the command and a
+ * read's its path, is the closed row's preview, and the open row says its
+ * verb alone (`blockSays`), even while a find draws the body hidden. The
  * verb is in the full ink and the icon and the subject in the muted one,
  * so a reader scans what each call did and the subject reads as its
  * preview, fading where the line cuts it rather than ending on an
@@ -82,6 +83,20 @@ const BLOCK_TITLE = {
   INPUT: "Input",
   ANSWER: "Answer",
 } as const;
+
+/**
+ * Whether a block says a call's subject whole, so the row previewing it
+ * gives way while the body is drawn: a block that is the subject, as a
+ * read's input is its path, or JSON holding it as one of its values, as a
+ * search's input holds its pattern. Note that words made from the input
+ * rather than copied from it, as a page's name is made from its address,
+ * are not said by it, so they stay.
+ */
+export function blockSays(block: ToolBlock, subject: string | undefined): boolean {
+  if (subject === undefined || subject === "") return false;
+  if (block.text === subject) return true;
+  return block.kind === TOOL_BLOCK.JSON && block.text.includes(`: ${JSON.stringify(subject)}`);
+}
 
 /** What a patch's line does, by its first characters: a line added, one removed, or one that stands. */
 function patchRow(line: string): CodeRow {
@@ -132,7 +147,7 @@ export interface ToolHeaderProps {
   chip?: ReactNode | undefined;
   /** Whether the subject is code (a command, a path), set in mono, rather than words. */
   subjectIsCode?: boolean;
-  /** Whether the body says the subject whole, as a command's does, so an open row drops it. */
+  /** Whether the body says the subject whole, as a command's or a read's does (`blockSays`), so an open row drops it. */
   subjectInBody?: boolean;
   /** Where the call ran, as a quiet tag at the line's end, for a call that ran somewhere other than its tab says ("On your Mac", or whose Mac by their disc and name); none for the rest. */
   place?: ReactNode | undefined;
@@ -221,14 +236,14 @@ export function ToolHeader({
   subjectInBody = false,
   place,
 }: ToolHeaderProps): ReactNode {
-  const drawn = useDisclosureBodyDrawn();
+  const previewed = useDisclosurePreviewShown(subjectInBody);
   return (
     <ToolSummary>
       <ToolLine
         state={state}
         icon={icon}
         label={label}
-        subject={subjectInBody && drawn ? undefined : subject}
+        subject={previewed ? subject : undefined}
         chip={chip}
         subjectIsCode={subjectIsCode}
         place={place}

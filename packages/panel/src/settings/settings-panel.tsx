@@ -1,5 +1,6 @@
 import type { AccountSnapshot } from "@luke/credentials/snapshot";
 import { ACCOUNT_STATUS } from "@luke/credentials/snapshot";
+import { SIGNED_OUT_WORDS } from "@luke/features/words";
 import { EXPERIMENTS, HOST_CAPABILITY, type HostCapability, NO_EXPERIMENTS } from "@luke/settings";
 import { SETTINGS_VIEW, type SettingsView } from "@luke/settings/settings-views";
 import type { AppSettingsView } from "@luke/settings/wire";
@@ -120,7 +121,7 @@ export function SettingsPanel({
 
       {view !== SETTINGS_VIEW.WORKSPACE ? null : !signedIn ? (
         <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
-          Sign in to see your workspaces.
+          {SIGNED_OUT_WORDS}
         </Text>
       ) : workspace ? (
         <WorkspacePage control={workspace} readerId={account.id} />
@@ -146,7 +147,7 @@ export function SettingsPanel({
         <SkillsPage control={workspace} readerId={account.id} />
       ) : (
         <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
-          Sign in to install skills.
+          {SIGNED_OUT_WORDS}
         </Text>
       )}
 

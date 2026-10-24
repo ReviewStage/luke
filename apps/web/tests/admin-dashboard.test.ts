@@ -204,7 +204,7 @@ test("the loading dashboard stands its sections under the same headings, saying 
   const page = render({ status: "loading" });
 
   expect(sectionHeadings(page)).toEqual(SECTIONS);
-  expect(page.querySelector('[role="status"]')?.textContent).toContain("Loading…");
+  expect(page.querySelector('[role="status"]')?.textContent).toContain("Reading this page");
 });
 
 /** Each region the page draws, by the words of the heading that names it, and the words it holds. */

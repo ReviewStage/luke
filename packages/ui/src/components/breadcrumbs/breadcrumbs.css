@@ -110,7 +110,8 @@
     display: none;
   }
 
-  @container luke-breadcrumb-bar (max-width: 519px) {
+  /* off-scale: 520px, where the narrow crumbs take over from the wide */
+  @container luke-breadcrumb-bar (width < 520px) {
     .luke-breadcrumbs li[data-shown="wide"] {
       display: none;
     }
@@ -138,7 +139,8 @@
     }
   }
 
-  @container luke-breadcrumb-bar (max-width: 299px) {
+  /* off-scale: 300px, where the narrowest crumbs take over */
+  @container luke-breadcrumb-bar (width < 300px) {
     .luke-breadcrumbs li:is([data-shown="wide-or-narrow"], [data-shown="narrow"]) {
       display: none;
     }

@@ -64,7 +64,7 @@ const SIDEBAR_OVERLAY = {
 type SidebarOverlay = (typeof SIDEBAR_OVERLAY)[keyof typeof SIDEBAR_OVERLAY];
 
 /** What the Sign out dialog says where signing out failed, in the app's words. */
-const LOG_OUT_REFUSED = "Luke could not log out. Try again.";
+const LOG_OUT_REFUSED = "Luke could not sign out. Try again.";
 
 /**
  * The foot's account: the signed-in account's face and name, raising its

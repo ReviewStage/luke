@@ -102,6 +102,7 @@ import { onRegistry } from "../testing/copy-feedback.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
 import { newestToastAction, newestToastSays } from "../testing/toast.js";
 import { ToastHost } from "../toast.js";
+import { FIXTURE_AGENT_ID } from "./agent-fixture.js";
 import { NEW_TASK_PURPOSE } from "./new-task-purpose.js";
 import { ofPullRequestTab } from "./pull-request-number.js";
 import { CHIP_PLACE, RepositoryChip } from "./repository-chip.js";
@@ -510,6 +511,30 @@ test("a task's name, pin, and status still waiting on the service are let go wit
   assert.equal(drawn()?.name, TASK.name);
   assert.equal(drawn()?.pinnedAt, undefined);
   assert.equal(drawn()?.status, listed().status);
+});
+
+test("a task given a name or a status here is pending until the view carries it, so a list held still moves it at once", async () => {
+  const never = () => new Promise<boolean>(() => undefined);
+  const tab = mount(
+    { shown: true, tasks: listRead([listed()]) },
+    { [ACT_KIND.TASKS_RENAME]: never, [ACT_KIND.TASKS_SET_STANDING]: never },
+  );
+  const before = tab.control().pendingTasks;
+
+  await act(async () => {
+    void tab.control().onRenameTask(TASK.id, "Launch plan");
+  });
+  const renaming = tab.control().pendingTasks;
+  tab.stand({ tasks: listRead([{ ...listed(), name: "Launch plan" }]) });
+  const named = tab.control().pendingTasks;
+  await act(async () => {
+    tab.control().onSettleTasks([TASK.id], TASK_STATUS.DONE);
+  });
+
+  assert.deepEqual([...(before ?? [])], []);
+  assert.deepEqual([...(renaming ?? [])], [TASK.id]);
+  assert.deepEqual([...(named ?? [])], []);
+  assert.deepEqual([...(tab.control().pendingTasks ?? [])], [TASK.id]);
 });
 
 it.effect(
@@ -2386,6 +2411,29 @@ test("a fixture run lists its first workspace's plans under the switcher, and a 
   );
   assert.equal(fixture.control().workspaces.length, 2);
   assert.equal(window.localStorage.length, 0);
+});
+
+test("an agent profile opens its task on the agent it stages, beside the agent's tab it names, where the tasks profile's task holds no agent", async () => {
+  // The window is drawn once the synthetic tasks have landed (`App`).
+  await loadTasksFixture();
+  const run = { shown: true, fixtureMode: true };
+  const tasks = mount({ ...run, profile: RUN_PROFILE.TASKS });
+  const checks = mount({ ...run, profile: RUN_PROFILE.AGENT_CHECKS });
+  const file = mount({ ...run, profile: RUN_PROFILE.AGENT_FILE });
+  const terminal = mount({ ...run, profile: RUN_PROFILE.AGENT_TERMINAL });
+
+  assert.equal(tasks.control().agents.agents, undefined);
+  assert.deepEqual(
+    checks.control().agents.agents?.map((agent) => agent.title),
+    ["Add teammate invitations"],
+  );
+  assert.deepEqual(checks.control().sidePanel.tab, { changes: FIXTURE_AGENT_ID });
+  assert.equal(
+    checks.control().sidePanel.pullRequestViews.get(FIXTURE_AGENT_ID)?.get(undefined),
+    PULL_REQUEST_VIEW.CHECKS,
+  );
+  assert.deepEqual(file.control().sidePanel.tab, { file: "src/members/invite.ts" });
+  assert.deepEqual(terminal.control().sidePanel.tab, { terminal: FIXTURE_AGENT_ID });
 });
 
 /** The task as the list names it. */

@@ -23,6 +23,7 @@ import { layContainersAt, shown } from "../testing/container-width.js";
 let laid: HTMLStyleElement | undefined;
 
 afterEach(() => {
+  delete document.documentElement.dataset.lukeRoom;
   laid?.remove();
   laid = undefined;
   document.body.replaceChildren();
@@ -34,6 +35,7 @@ function unchosenLabel(room: string): HTMLElement {
   const shell = document.body.appendChild(document.createElement("div"));
   shell.className = "desktop-shell";
   shell.dataset.room = room;
+  document.documentElement.dataset.lukeRoom = room;
   const strip = shell.appendChild(document.createElement("div"));
   strip.className = "luke-tabs";
   // The strip folds as the room says (`tab-strip.tsx`): to labels in a narrow one, to glyphs otherwise.
@@ -74,6 +76,7 @@ function itemCrumbs(room: string): HTMLElement {
   const shell = document.body.appendChild(document.createElement("div"));
   shell.className = "desktop-shell";
   shell.dataset.room = room;
+  document.documentElement.dataset.lukeRoom = room;
   const pane = shell.appendChild(document.createElement("section"));
   pane.className = "inbox-view-items";
   const bar = pane.appendChild(document.createElement("header"));
@@ -103,6 +106,7 @@ function startFold(room: string): string {
   const shell = document.body.appendChild(document.createElement("div"));
   shell.className = "desktop-shell";
   shell.dataset.room = room;
+  document.documentElement.dataset.lukeRoom = room;
   const main = shell.appendChild(document.createElement("div"));
   main.className = "desktop-task-main";
   const bar = main.appendChild(document.createElement("header"));
@@ -126,6 +130,7 @@ function byline(room: string) {
   const shell = document.body.appendChild(document.createElement("div"));
   shell.className = "desktop-shell";
   shell.dataset.room = room;
+  document.documentElement.dataset.lukeRoom = room;
   const meta = shell.appendChild(document.createElement("div"));
   meta.className = "luke-message-line";
   const part = (className: string) => {
@@ -153,6 +158,7 @@ for (const room of ["narrow", "wide"]) {
     const shell = document.body.appendChild(document.createElement("div"));
     shell.className = "desktop-shell";
     shell.dataset.room = room;
+    document.documentElement.dataset.lukeRoom = room;
     const words = shell
       .appendChild(document.createElement("div"))
       .appendChild(document.createElement("span"))

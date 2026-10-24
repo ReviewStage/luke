@@ -4,6 +4,7 @@ import type {
   ReviewThread,
 } from "@luke/features/coding-agent-wire";
 import { PULL_REQUEST_ACTION } from "@luke/features/pull-request-write-wire";
+import { IRREVERSIBLE_WORDS } from "@luke/features/words";
 import {
   Badge,
   BUTTON_SIZE,
@@ -16,8 +17,8 @@ import {
   STATUS_TONE,
   useConfirmDialog,
 } from "@luke/ui";
+import { GLYPH } from "@luke/ui/icons";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
-import { PencilIcon, Trash2Icon } from "lucide-react";
 import { createContext, type ReactNode, useContext, useState } from "react";
 import { ActorRef, commentAuthor } from "../actor-ref.js";
 import { useNamer } from "./pull-request-people.js";
@@ -64,7 +65,7 @@ const EDIT_WORDS: ReplyFormWords = {
 /** What Delete asks before it takes a pending comment out of the review. */
 const DELETE_QUESTION: DialogQuestion = {
   title: "Delete this pending comment?",
-  body: "This can't be undone.",
+  body: IRREVERSIBLE_WORDS,
   verb: "Delete comment",
   running: "Deleting",
   loss: CONFIRM_LOSS.IRREVERSIBLE,
@@ -223,7 +224,7 @@ export function PendingComment({
           <Button
             size={BUTTON_SIZE.COMPACT}
             variant={BUTTON_VARIANT.OUTLINE}
-            icon={<PencilIcon aria-hidden="true" />}
+            icon={<GLYPH.RENAME />}
             disabled={out !== undefined}
             onClick={() => setEditing(true)}
           >
@@ -232,7 +233,7 @@ export function PendingComment({
           <Button
             size={BUTTON_SIZE.COMPACT}
             variant={BUTTON_VARIANT.DANGER_OUTLINE}
-            icon={<Trash2Icon aria-hidden="true" />}
+            icon={<GLYPH.DELETE />}
             disabled={out !== undefined}
             onClick={deleting.ask}
           >

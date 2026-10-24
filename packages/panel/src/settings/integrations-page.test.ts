@@ -21,6 +21,7 @@ import {
   type IntegrationStatus,
 } from "@luke/features/integration-wire";
 import { ACT_KIND } from "@luke/host/acts";
+import type { AppStateDelivery } from "@luke/host/app-state";
 import type { PortActKind, PortActPayload } from "@luke/host/contract";
 import type { SettingsLink } from "@luke/settings/settings-views";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
@@ -38,6 +39,7 @@ import { OpenSettingsProvider } from "../open-settings.js";
 import { rendererRuntime } from "../renderer-runtime.js";
 import { announcedPolitely, mountAnnouncer } from "../testing/announcer.js";
 import { type AnyAct, fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
+import { deliveryOf, signedInAs } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { IntegrationsSection } from "./integrations-page.js";
 
@@ -227,8 +229,8 @@ async function settle(): Promise<void> {
 
 /**
  * The signed-in page once where every provider stands has been read, its
- * atoms under `registry` where one is given, as the window's root provides
- * its own, and under its title in a settings page's frame where `framed`.
+ * atoms under `registry` where one is given, else under one of its own, as
+ * the window's root provides its own, and under its title in a settings page's frame where `framed`.
  */
 async function mount(registry?: AtomRegistry.AtomRegistry, framed = false): Promise<HTMLElement> {
   const container = document.createElement("div");
@@ -262,9 +264,16 @@ async function mount(registry?: AtomRegistry.AtomRegistry, framed = false): Prom
         : createElement(IntegrationsSection, { signedIn: true }),
     ),
   );
-  act(() => root.render(registry === undefined ? page : onRegistry(registry, page)));
+  act(() => root.render(onRegistry(registry ?? ownRegistry(), page)));
   await settle();
   return container;
+}
+
+/** A registry of the page's own, as the window's root provides, so nothing one test's page shared reaches the next. */
+function ownRegistry(): AtomRegistry.AtomRegistry {
+  const registry = AtomRegistry.make();
+  registries.push(registry);
+  return registry;
 }
 
 /** A registry whose atoms wait on this clock, as the window's would on its own. */
@@ -412,7 +421,7 @@ test("an account offered no provider is told so, with no row", async () => {
   const page = await mount();
 
   assert.deepEqual(rowNames(page), []);
-  assert.match(page.textContent ?? "", /No integrations are available for this account\./u);
+  assert.match(page.textContent ?? "", /No integrations available/u);
 });
 
 test("a read that fails after one that offered nothing still says so and offers to read again", async () => {
@@ -605,6 +614,55 @@ test("a Connect waits on the browser with Reopen and Cancel, and a Cancel ends t
   );
   assert.deepEqual(granolaRow(page), { line: undefined, buttons: ["Connect"] });
   await focusWindow();
+  assert.deepEqual(granolaRow(page), { line: undefined, buttons: ["Connect"] });
+});
+
+test("a sign-in begun on one surface is what every other surface draws at once, and so is its Cancel, with no read between", async () => {
+  const registry = AtomRegistry.make();
+  registries.push(registry);
+  const settings = await mount(registry);
+  const other = await mount(registry);
+  holdReads = true;
+
+  await pressOnGranola(settings, "Connect");
+  assert.deepEqual(granolaRow(other), WAITING);
+  await pressOnGranola(other, "Cancel");
+  assert.deepEqual(granolaRow(settings), { line: undefined, buttons: ["Connect"] });
+});
+
+test("the window's focus still reads for the surfaces left once the first one drawn has closed", async () => {
+  const registry = AtomRegistry.make();
+  registries.push(registry);
+  await mount(registry);
+  const first = roots.at(-1) ?? assert.fail("the first surface has a root");
+  const other = await mount(registry);
+  act(() => first.unmount());
+
+  touched.set(GRANOLA, INTEGRATION_STATUS.EXPIRED);
+  await focusWindow();
+  assert.equal(granolaRow(other).line, "Sign-in expired.");
+});
+
+test("a sign-out leaves nothing of one account's integrations to the next account signed in", async () => {
+  const listeners = new Set<(delivery: AppStateDelivery) => void>();
+  fakeAppBridge({
+    requestAppState: () =>
+      Promise.resolve(signedInAs({ id: "one", email: "one@example.com", name: "One" })),
+    onAppState: (listener: (delivery: AppStateDelivery) => void) => {
+      listeners.add(listener);
+      return () => listeners.delete(listener);
+    },
+  });
+  const page = await mount();
+  await pressOnGranola(page, "Connect");
+  assert.deepEqual(granolaRow(page), WAITING);
+
+  touched.clear();
+  const next = signedInAs({ id: "two", email: "two@example.com", name: "Two" });
+  act(() => {
+    for (const listener of listeners) listener({ ...deliveryOf(next), version: 2 });
+  });
+  await settle();
   assert.deepEqual(granolaRow(page), { line: undefined, buttons: ["Connect"] });
 });
 
@@ -891,6 +949,12 @@ test("a query keeps only the rows it found, opening one onto the tools it found,
     "1 of 3 tools match",
   );
   assert.equal(page.querySelector(".integration-tools-panel mark")?.textContent, "deploy");
+  assert.equal(
+    rowNamed(page, "Vercel")
+      .querySelector(".luke-settings-row-state button")
+      ?.getAttribute("aria-label"),
+    "1 of 3 tools match, hide Vercel tools",
+  );
 });
 
 test("a query finds an integration by what it is for, keeping its section", async () => {
@@ -929,7 +993,7 @@ test("while where the providers stand is read, the search stands usable above pl
   const page = await mount(undefined, true);
 
   const status = page.querySelector('[role="status"]') ?? assert.fail("no placeholder");
-  assert.equal(status.textContent, "Loading the integrations");
+  assert.equal(status.textContent, "Reading the integrations");
   assert.equal(status.querySelectorAll(".luke-settings-section-card").length, 2);
   // Note that the field is checked as a yes or no, because a failure's diff of an element would print the whole document.
   assert.equal(searchField(page).closest('[aria-busy="true"]') === null, true);

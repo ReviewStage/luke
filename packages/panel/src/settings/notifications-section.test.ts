@@ -123,7 +123,7 @@ test("Send test notification posts one, and the row says when Luke notifies at a
   assert.equal(tests, 1);
   assert.match(
     container.textContent ?? "",
-    /Luke notifies only when its window is in the background\./,
+    /Luke notifies only when his window is in the background\./,
   );
 });
 
@@ -171,7 +171,7 @@ test("in a browser, a refused permission says where it is changed and offers no 
   );
 
   assert.match(container.textContent ?? "", /Your browser blocks Luke's notifications\./);
-  assert.match(container.textContent ?? "", /Luke notifies only while its tab is hidden\./);
+  assert.match(container.textContent ?? "", /Luke notifies only while his tab is hidden\./);
   assert.doesNotMatch(container.textContent ?? "", /macOS/);
   assert.equal(button(container, "Open System Settings"), undefined);
   assert.ok(button(container, "Send test notification") !== undefined);

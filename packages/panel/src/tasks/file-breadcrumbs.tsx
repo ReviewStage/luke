@@ -5,17 +5,15 @@ import {
   type BreadcrumbShown,
   Breadcrumbs,
   type Crumb,
-  Fill,
   MenuSurface,
-  NOTE_LINE_LOOK,
-  NoteLine,
   POPOVER_SIDE,
   RectFloat,
 } from "@luke/ui";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import { useEffect, useRef, useState } from "react";
-import { TREE_LOAD_FAILED, useSideBundles } from "../bundle-loader.js";
-import type { ReadFolder } from "../file-tree/contract.js";
+import { useSideBundles } from "../bundle-loader.js";
+import type { FileTreeHandle, ReadFolder, TreeStanding } from "../file-tree/contract.js";
+import { FileTreeStage, TREE_READING } from "./file-tree-pane.js";
 
 /**
  * file-breadcrumbs.tsx -- a File tab's path as breadcrumbs: the repository, then each folder the file stands in, then the file, each a press that opens the tree where it stands.
@@ -102,7 +100,9 @@ function CrumbTree({
   const module = AsyncResult.isSuccess(loaded) ? loaded.value : undefined;
   const box = useRef<HTMLDivElement>(null);
   const host = useRef<HTMLDivElement>(null);
+  const handle = useRef<FileTreeHandle | undefined>(undefined);
   const [rows, setRows] = useState<number | undefined>(undefined);
+  const [standing, setStanding] = useState<TreeStanding>(TREE_READING);
   const latest = useRef({ listFolder, onOpen, onClose });
   latest.current = { listFolder, onOpen, onClose };
   const { folder, file, opener } = opened;
@@ -126,14 +126,19 @@ function CrumbTree({
     if (module === undefined || element === null) return undefined;
     const tree = module.mount(element, {
       readFolder: (path) => latest.current.listFolder(fromRoot(folder, path)),
+      onStanding: setStanding,
       onOpen: (path, newTab) => {
         latest.current.onClose(false);
         latest.current.onOpen(fromRoot(folder, path), newTab);
       },
       onRows: setRows,
     });
+    handle.current = tree;
     tree.reveal(file, { focus: true });
-    return tree.unmount;
+    return () => {
+      handle.current = undefined;
+      tree.unmount();
+    };
   }, [module, folder, file]);
 
   useEffect(() => {
@@ -181,13 +186,13 @@ function CrumbTree({
           latest.current.onClose(true);
         }}
       >
-        {module === undefined ? (
-          <NoteLine look={NOTE_LINE_LOOK.LIST}>
-            {AsyncResult.isFailure(loaded) ? TREE_LOAD_FAILED : "Reading the files…"}
-          </NoteLine>
-        ) : (
-          <Fill className="file-tree-host" ref={host} />
-        )}
+        <FileTreeStage
+          module={module}
+          missed={AsyncResult.isFailure(loaded)}
+          host={host}
+          standing={standing}
+          onRetry={() => handle.current?.relist()}
+        />
       </MenuSurface>
     </RectFloat>
   );

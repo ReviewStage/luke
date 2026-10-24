@@ -36,7 +36,8 @@
   }
 
   /* Under a phone's width the card gives its inset back to what it holds. */
-  @container (max-width: 400px) {
+  /* off-scale: 400px, a phone's card */
+  @container (width < 400px) {
     .luke-auth-card {
       padding: var(--luke-space-32) var(--luke-space-20);
     }

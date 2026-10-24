@@ -43,7 +43,7 @@ test("a text button is a button named by its words, or by its label, and acts wi
         },
       },
       createElement(TextButton, {
-        tone: TEXT_BUTTON_TONE.LINK,
+        tone: TEXT_BUTTON_TONE.ACCENT,
         onClick: () => pressed.push("feedback"),
         children: "Send feedback",
       }),
