@@ -233,7 +233,7 @@ test("⌘K marks the task on screen unread and then read, and offers no mark for
 });
 
 function field(): HTMLInputElement {
-  const input = document.querySelector<HTMLInputElement>(".command-palette-search input");
+  const input = document.querySelector<HTMLInputElement>('[role="dialog"] input[role="combobox"]');
   assert.ok(input, "the search field is drawn");
   return input;
 }
@@ -396,9 +396,9 @@ const RIGHT = { key: "ArrowRight", code: "ArrowRight" } as const;
 const BACK = { key: "[", code: "BracketLeft", metaKey: true } as const;
 const FORWARD = { key: "]", code: "BracketRight", metaKey: true } as const;
 
-/** The footer's hints, each its keys and then its words. */
+/** The footer's hints, each its keys and then its words: the hints along the foot, the last thing the palette draws. */
 function footer(): (string | null)[] {
-  return [...document.querySelectorAll(".command-palette-footer-hint")].map(
+  return [...(document.querySelector("[cmdk-root]")?.lastElementChild?.children ?? [])].map(
     (hint) => hint.textContent,
   );
 }
@@ -500,13 +500,13 @@ test("in a row too narrow for every filter, the filter a key chooses is scrolled
 
 test("the footer names the keys that step the filters now: ← → while the field is empty, ⌘[ ⌘] once typed", () => {
   openPalette();
-  assert.deepEqual(footer(), ["↑↓Select", "⏎Open", "←→Filter"]);
+  assert.deepEqual(footer(), ["↑↓ Select", "⏎ Open", "←→ Filter"]);
 
   type("invite");
-  assert.deepEqual(footer(), ["↑↓Select", "⏎Open", "⌘[⌘]Filter"]);
+  assert.deepEqual(footer(), ["↑↓ Select", "⏎ Open", "⌘[⌘] Filter"]);
 
   type("");
-  assert.deepEqual(footer(), ["↑↓Select", "⏎Open", "←→Filter"]);
+  assert.deepEqual(footer(), ["↑↓ Select", "⏎ Open", "←→ Filter"]);
 });
 
 /** The window behind the palette, running the menu bar's commands, its Back and Forward recorded. */
@@ -1799,8 +1799,7 @@ test("People lists the listed workspace's members as every people menu does, the
 /** What the list says where no row stands: its notice, or "Nothing matches.". */
 function emptyLine(): string | undefined {
   return (
-    document.querySelector(".luke-note-line, .command-palette-notice-slot")?.textContent ??
-    undefined
+    document.querySelector(".luke-note-line, [cmdk-list] [role=alert]")?.textContent ?? undefined
   );
 }
 
@@ -1890,7 +1889,7 @@ test("People says the members are being read until they answer, and a refused re
 
   await act(async () => answers.shift()?.refuse());
   await settle();
-  const alert = document.querySelector(".command-palette-notice-slot [role=alert]");
+  const alert = document.querySelector("[cmdk-list] [role=alert]");
   assert.match(alert?.textContent ?? "", /The workspace's members could not be read\./u);
   assert.doesNotMatch(document.body.textContent ?? "", /Nothing matches/u);
 
@@ -1927,7 +1926,7 @@ test("Tasks says a refused list with a Retry that reads it again", () => {
     }),
   );
   chooseFilter("Tasks");
-  const alert = document.querySelector(".command-palette-notice-slot [role=alert]");
+  const alert = document.querySelector("[cmdk-list] [role=alert]");
   assert.match(alert?.textContent ?? "", /Your tasks could not be read\./u);
   const retry = [...document.querySelectorAll<HTMLButtonElement>("button")].find(
     (each) => each.textContent === "Retry",
@@ -2604,7 +2603,7 @@ test("an Inbox that could not be read says so in the Inbox's own group, beside t
     rows().includes("Billing usage alerts · relay"),
     "the task the Tasks group matched is listed",
   );
-  const notice = document.querySelector(".command-palette-notice-slot");
+  const notice = document.querySelector("[cmdk-list] [role=alert]");
   assert.equal(notice?.textContent?.startsWith("Your inbox could not be read."), true);
   const group = notice?.closest("[cmdk-group]");
   assert.equal(group?.querySelector("[cmdk-group-heading]")?.textContent, "Inbox");
