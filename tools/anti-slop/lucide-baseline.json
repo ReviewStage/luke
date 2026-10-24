@@ -78,7 +78,6 @@
   "packages/panel/src/tasks/plan-comments.tsx": 1,
   "packages/panel/src/tasks/plan-pictures.tsx": 1,
   "packages/panel/src/tasks/pull-request-card-notes.tsx": 1,
-  "packages/panel/src/tasks/pull-request-mark.tsx": 1,
   "packages/panel/src/tasks/pull-request-people.tsx": 1,
   "packages/panel/src/tasks/pull-request-pickers.tsx": 1,
   "packages/panel/src/tasks/pull-request-reactions.tsx": 1,
@@ -89,7 +88,6 @@
   "packages/panel/src/tasks/rewind-action.tsx": 1,
   "packages/panel/src/tasks/skill-ref.tsx": 1,
   "packages/panel/src/tasks/tab-look.tsx": 1,
-  "packages/panel/src/tasks/task-issue-links.tsx": 1,
   "packages/panel/src/tasks/transcript-blocks.tsx": 1,
   "packages/panel/src/tasks/use-side-panel.ts": 1,
   "packages/panel/src/tasks/view-settings.tsx": 1

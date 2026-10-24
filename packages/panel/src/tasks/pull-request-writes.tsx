@@ -44,7 +44,6 @@ import {
   useMenu,
 } from "@luke/ui";
 import {
-  GitMergeIcon,
   GitPullRequestClosedIcon,
   GitPullRequestDraftIcon,
   GitPullRequestIcon,
@@ -57,6 +56,7 @@ import { useAct } from "../act.js";
 import { ActionMenu, type MenuAction } from "../desktop/action-menu.js";
 import { useGitHubConnection } from "../github-connect.js";
 import { useToast, useWithdrawToast } from "../toast.js";
+import { PULL_REQUEST_STATE_LABEL, queuedLabel } from "./coding-agent-model.js";
 import { PULL_REQUEST_TONE, PullRequestMark } from "./pull-request-mark.js";
 import { pullRequestAsked, usePullRequestNumber } from "./pull-request-number.js";
 
@@ -121,14 +121,6 @@ const ACTION_WORDS = {
   [PULL_REQUEST_ACTION.ADD_REACTION]: "Add reaction",
   [PULL_REQUEST_ACTION.REMOVE_REACTION]: "Remove reaction",
 } as const satisfies Record<PullRequestAction, string>;
-
-/** The word for where the pull request stands, which the pill says. */
-const STATE_WORDS = {
-  [PULL_REQUEST_STATE.OPEN]: "Open",
-  [PULL_REQUEST_STATE.DRAFT]: "Draft",
-  [PULL_REQUEST_STATE.MERGED]: "Merged",
-  [PULL_REQUEST_STATE.CLOSED]: "Closed",
-} as const satisfies Record<PullRequestState, string>;
 
 /** The line's own words. */
 const WRITE_WORDS = {
@@ -299,11 +291,6 @@ const ACTION_GLYPHS = {
   [PULL_REQUEST_ACTION.REOPEN]: <GitPullRequestIcon aria-hidden="true" />,
 } as const satisfies Record<StateAction, React.JSX.Element>;
 
-/** How the pill says an open pull request GitHub holds in its merge queue: its place there, where GitHub said it. */
-function queuedWords(queued: { readonly position?: number | undefined }): string {
-  return queued.position === undefined ? "Queued" : `Queued #${queued.position}`;
-}
-
 /** What leaving GitHub's merge queue costs the pull requests behind it, said as the merge box's Remove from queue and a queued Close each ask. */
 export const QUEUE_WARNING =
   "Removing this pull request from the queue could impact other pull requests in the queue.";
@@ -381,18 +368,19 @@ export function PullRequestStateMenu({
   );
   // Note that a question left behind as its panel hides is let go whole, so the panel comes back asking nothing; one already answered finishes.
   if ((!shown || !mayBeQueued) && asked && !confirm.busy) setAsked(false);
-  const words = inQueue ? queuedWords(queued) : STATE_WORDS[pullRequest.state];
+  const words = inQueue
+    ? queuedLabel(queued.position)
+    : PULL_REQUEST_STATE_LABEL[pullRequest.state];
   const label = `Pull request ${words}`;
   const tone = inQueue ? STATUS_TONE.WORKING : PULL_REQUEST_TONE[pullRequest.state];
-  const mark = inQueue ? (
-    <GitMergeIcon aria-hidden="true" />
-  ) : (
-    // The pill says queued from the merge control's own read alone, so its mark never says it from the row's older one.
+  // The pill says queued from the merge control's own read alone, so its mark never says it from the row's older one.
+  const mark = (
     <PullRequestMark
       pullRequest={{
         number: pullRequest.number,
         state: pullRequest.state,
         checks: pullRequest.checks,
+        ...(inQueue ? { queued: true } : undefined),
       }}
     />
   );

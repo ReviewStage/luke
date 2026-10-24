@@ -14,6 +14,7 @@ import * as Atom from "effect/reactivity/Atom";
 import { createContext, useContext, useEffect, useState } from "react";
 import { useAct } from "../act.js";
 import { APP_SLICE, useAppSlice } from "../use-app-state.js";
+import { PULL_REQUEST_STATE_LABEL, QUEUED_LABEL } from "./coding-agent-model.js";
 
 /**
  * use-link-standing.ts -- a Linear issue, or a GitHub pull request or issue, a link in Luke's words names, as its chip says it: its key, its title, where it stands, who it is with, and a pull request's lines added and removed, read through the workspace's own connection.
@@ -152,17 +153,6 @@ function queuedOf(pullRequest: GitHubPullRequestSummary): boolean {
   return pullRequest.queued === true && pullRequest.state === PULL_REQUEST_STATE.OPEN;
 }
 
-/** An open pull request in the merge queue in words, as its chip and its tab's pill say it. */
-const QUEUED_WORDS = "Queued";
-
-/** A pull request's state in words, as its chip says it. */
-const PULL_REQUEST_WORDS = {
-  open: "Open",
-  draft: "Draft",
-  merged: "Merged",
-  closed: "Closed",
-} as const satisfies Record<PullRequestState, string>;
-
 /** A GitHub issue's state in words, as its chip says it. */
 const ISSUE_WORDS = {
   open: "Open",
@@ -286,7 +276,7 @@ function readStanding(
       : {
           key,
           title: pullRequest.title,
-          state: queuedOf(pullRequest) ? QUEUED_WORDS : PULL_REQUEST_WORDS[pullRequest.state],
+          state: queuedOf(pullRequest) ? QUEUED_LABEL : PULL_REQUEST_STATE_LABEL[pullRequest.state],
           pullRequest: standingPullRequestOf(pullRequest),
           issue: undefined,
           byline: undefined,

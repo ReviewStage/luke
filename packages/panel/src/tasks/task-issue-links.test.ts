@@ -322,6 +322,28 @@ test("an issue unlinked asks nothing and offers Undo, which links the same issue
   ]);
 });
 
+test("a GitHub issue its provider did not answer wears a mark of its own, not the open issue's circle in grey", async () => {
+  const { standing: _, ...unanswered } = SAFARI;
+  const open = {
+    ...SAFARI,
+    standing: { provider: TASK_ISSUE_PROVIDER.GITHUB, state: ISSUE_STATE.OPEN },
+  };
+  const { container } = await mount({
+    links: [
+      open,
+      { ...unanswered, id: "0b6c1f0e-2a7d-4c3e-9f1a-0d8e7b6a5c49", key: "acme/web#301" },
+    ],
+  });
+
+  const openMark = container.querySelector(".issue-mark")?.outerHTML.replace(/ class="[^"]*"/u, "");
+  const unreadMark = container
+    .querySelector(".task-issue-link-unread svg")
+    ?.outerHTML.replace(/ class="[^"]*"/u, "");
+  assert.ok(openMark !== undefined && unreadMark !== undefined, "both draw a mark");
+  assert.notEqual(unreadMark.replace(/ aria-hidden="true"| focusable="false"/gu, ""), openMark);
+  assert.equal(container.querySelector(".task-issue-link-unread .issue-mark"), null);
+});
+
 test("an issue its provider did not answer asks before it is unlinked, in red, since Undo could not link it again", async () => {
   const { standing: _, ...unread } = ENG;
   const { container, sent } = await mount({ links: [SAFARI, unread] });

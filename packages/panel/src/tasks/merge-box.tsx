@@ -38,6 +38,7 @@ import { CircleXIcon, GitMergeIcon, TriangleAlertIcon, UserRoundIcon } from "luc
 import { type ReactNode, useState } from "react";
 import { ActionMenu, type MenuAction } from "../desktop/action-menu.js";
 import { keptKey, useKept } from "../use-kept.js";
+import { queuedLabel } from "./coding-agent-model.js";
 import { type PullRequestWrites, QUEUE_WARNING } from "./pull-request-writes.js";
 
 /**
@@ -119,7 +120,6 @@ const BOX_WORDS = {
   DISABLE_AUTO_MERGE: "Disable auto-merge",
   DEQUEUE: "Remove from queue",
   CHOOSE_METHOD: "Choose how to merge",
-  queued: (position: number) => `#${position} in the merge queue`,
   autoMerge: (method: MergeMethod | null) =>
     method === null ? "Auto-merge is on" : `Auto-merge is on (${METHOD_NOUNS[method]})`,
 } as const;
@@ -197,7 +197,7 @@ function sentenceOf(pullRequest: CodingAgentOverviewPullRequest): string {
   const autoMerge = merging?.autoMerge ?? null;
   const lead =
     queued !== null
-      ? BOX_WORDS.queued(queued.position)
+      ? queuedLabel(queued.position)
       : autoMerge !== null
         ? BOX_WORDS.autoMerge(autoMerge.method)
         : undefined;

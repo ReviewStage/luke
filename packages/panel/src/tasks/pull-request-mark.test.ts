@@ -154,3 +154,22 @@ test("a pull request no longer open is drawn where it stands, whatever the queue
     assert.equal(markOf(element), "Pull request #42, merged", place);
   }
 });
+
+test("a queued pull request's mark is drawn by its own glyph, not the merged one's, so the two differ by more than colour", () => {
+  const drawing = (state: CodingAgentPullRequest["state"], queued: boolean): string | undefined => {
+    const mark = markElementOf(
+      createElement(PullRequestLine, {
+        pullRequest: {
+          ...pullRequest(state, CHECK_SUMMARY.PASSING),
+          ...(queued ? { queued: true } : undefined),
+        },
+      }),
+    );
+    return mark?.querySelector("svg")?.innerHTML ?? mark?.innerHTML;
+  };
+  const queued = drawing(PULL_REQUEST_STATE.OPEN, true);
+  assert.ok(queued !== undefined && queued !== "", "the queued mark draws");
+  for (const state of Object.values(PULL_REQUEST_STATE)) {
+    assert.notEqual(queued, drawing(state, false), `queued reads as ${state}`);
+  }
+});

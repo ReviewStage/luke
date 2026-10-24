@@ -91,9 +91,10 @@ export function contextLevel(context: CodingAgentContext): ContextLevel {
   return CONTEXT_LEVEL.ROOM;
 }
 
-/** The ring's hover: "62% of context used". */
+/** The ring's hover: "62% of context used", and ", near the limit" once the ring has turned amber or red, so the warning is not colour alone. */
 export function contextHint(context: CodingAgentContext): string {
-  return `${contextPercent(context)}% of context used`;
+  const used = `${contextPercent(context)}% of context used`;
+  return contextLevel(context) === CONTEXT_LEVEL.ROOM ? used : `${used}, near the limit`;
 }
 
 /** The popover's headline: "62% full". */
