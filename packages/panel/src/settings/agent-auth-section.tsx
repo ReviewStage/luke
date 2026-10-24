@@ -211,6 +211,8 @@ const WORDS = {
   REMOVING: "Removing",
   ADD_TOKEN: "Add token",
   REPLACE_TOKEN: "Replace token",
+  REPLACES_TOKEN: "Saving replaces the token Luke holds.",
+  REPLACES_KEY: "Saving replaces the key Luke holds.",
   SIGN_IN: "Sign in with ChatGPT",
   WAITING: "Waiting for ChatGPT",
   CONNECTED: "Connected",
@@ -603,6 +605,7 @@ function ClaudeTokenPanel({
           <SecretField
             ref={field}
             label="Claude setup-token"
+            description={plan === undefined ? undefined : WORDS.REPLACES_TOKEN}
             error={rejection}
             saved={plan !== undefined}
             placeholder='Paste the token from "claude setup-token"'
@@ -886,6 +889,7 @@ function ApiKeyPanel({
           <SecretField
             ref={field}
             label={`${name} API key`}
+            description={stored === undefined ? undefined : WORDS.REPLACES_KEY}
             error={rejection}
             saved={stored !== undefined}
             placeholder={`Paste your ${name} API key`}

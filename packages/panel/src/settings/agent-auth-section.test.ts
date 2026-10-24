@@ -381,6 +381,10 @@ test("an API key is pasted into a masked field with an eye, sent once, drawn as 
   const field = labelled(keyCard, "Anthropic API key");
   assert.equal(field.type, "password");
   assert.equal(field.autocomplete, "off");
+  assert.ok(
+    !keyCard.textContent?.includes("Saving replaces"),
+    "with no key stored there is nothing to replace",
+  );
   paste(field, KEY);
   await press(keyCard, "Show");
   assert.equal(field.type, "text", "Show reveals what is being pasted");
@@ -445,6 +449,7 @@ test("editing a saved API key shows Saved where the key would be, never the key,
   await press(keyCard, "Edit key");
   const field = labelled(keyCard, "Anthropic API key");
   assert.equal(field.placeholder, "Saved");
+  assert.match(keyCard.textContent ?? "", /Saving replaces the key Luke holds\./u);
   assert.equal(field.value, "");
   assert.equal(field.type, "password");
   assert.equal(button(keyCard, "Show").disabled, true, "there is nothing in the window to show");
@@ -463,6 +468,10 @@ test("a Claude setup-token is saved by its kind, refused with why, and disconnec
   const field = labelled(card(dialog, "Subscription"), "Claude setup-token");
   assert.equal(field.type, "password");
   assert.equal(field.placeholder, 'Paste the token from "claude setup-token"');
+  assert.ok(
+    !dialog.textContent?.includes("Saving replaces"),
+    "with no token stored there is nothing to replace",
+  );
   await pasteAndSave(field, TOKEN);
   assert.match(dialog.textContent ?? "", /That isn't a Claude setup-token\./u);
   assert.equal(field.value, TOKEN, "a refused paste stands as pasted");
@@ -539,6 +548,7 @@ test("a Claude token Anthropic rejected says so in its card and offers Replace t
   await press(plan, "Replace token");
   const field = labelled(plan, "Claude setup-token");
   assert.equal(field.placeholder, "Saved", "a saved token is said, not shown");
+  assert.match(plan.textContent ?? "", /Saving replaces the token Luke holds\./u);
   assert.equal(field.value, "");
 });
 
