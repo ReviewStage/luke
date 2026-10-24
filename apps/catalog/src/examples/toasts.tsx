@@ -4,8 +4,9 @@
  * ones carrying an action, whose × shows under the pointer or focus, the
  * Undo one draining its countdown, paused under the pointer; then one whose
  * work is under way, turned in place into done or failed by a press, one
- * to drag or sweep sideways away, shown again by a press, and the line a
- * window too small for the card draws, across its foot.
+ * to drag or sweep sideways away, shown again by a press, and the compact
+ * strip a window too small for the card draws across its foot, its words
+ * wrapped to two lines.
  */
 
 import {
@@ -175,21 +176,21 @@ function Swiped(): React.JSX.Element {
   );
 }
 
-/** The line the floating call window draws a refusal in, across its foot, its words cut at the line's end. */
+/** The compact strip the floating call window draws a refusal in, across its foot, its words wrapped to two lines. */
 function Line(): React.JSX.Element {
   return (
-    <CatalogSection id="toast-line" title="One line, in a small window">
+    <CatalogSection id="toast-compact" title="Compact, in a small window">
       <div className="catalog-toast-stage">
         <ToastStack
           label="Call window notifications"
           polite=""
           alert="The voice window could not end the call just now."
-          look={TOAST_LOOK.LINE}
+          look={TOAST_LOOK.COMPACT}
         >
           <Toast
             tone={STATUS_TONE.DANGER}
             words="The voice window could not end the call just now."
-            look={TOAST_LOOK.LINE}
+            look={TOAST_LOOK.COMPACT}
           />
         </ToastStack>
       </div>

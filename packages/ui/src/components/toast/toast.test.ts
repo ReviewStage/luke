@@ -15,7 +15,7 @@ import { ToastStack } from "./toast-stack.js";
  * dismissing; one without is never held; its countdown stops while it is
  * held; a turn of tone keeps the glyph it led with to fade under the new
  * one; a drag or a trackpad sweep past the threshold sends it away and one
- * short of it puts it back; a line leaves its second line to the announcer
+ * short of it puts it back; a compact one leaves its second line to the announcer
  * and stands across the window's foot; the stack names itself and says the newest words
  * through the window's announcer.
  */
@@ -316,7 +316,7 @@ test("a trackpad's sideways sweep sends the toast away once it passes the thresh
   assert.equal(toast.dataset.swiped, "left");
 });
 
-test("a toast drawn as a line shows its words alone, and its stack stands across the window's foot rather than in its corner", () => {
+test("a toast drawn compact shows its words alone, and its stack stands across the window's foot rather than in its corner", () => {
   const drawn = (look: ToastLook) =>
     render(
       createElement(ToastStack, {
@@ -333,7 +333,7 @@ test("a toast drawn as a line shows its words alone, and its stack stands across
       }),
     );
   drawn(TOAST_LOOK.CARD);
-  drawn(TOAST_LOOK.LINE);
+  drawn(TOAST_LOOK.COMPACT);
   const stacks = [...document.querySelectorAll<HTMLElement>("section.luke-toast-stack")];
   assert.deepEqual(
     stacks.map((stack) => [
@@ -343,7 +343,7 @@ test("a toast drawn as a line shows its words alone, and its stack stands across
     ]),
     [
       [TOAST_LOOK.CARD, "Couldn't end the call", "The voice window is not answering."],
-      [TOAST_LOOK.LINE, "Couldn't end the call", null],
+      [TOAST_LOOK.COMPACT, "Couldn't end the call", null],
     ],
   );
 });

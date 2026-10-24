@@ -465,12 +465,12 @@
     (var(--luke-control-height) - var(--luke-type-section-leading)) /
     2
   );
-  --spacing-toast-line: calc(var(--luke-control-height) + var(--luke-space-8));
+  --spacing-toast-compact: calc(var(--luke-control-height) + var(--luke-space-8));
   --radius-toast: var(--luke-radius-14);
   --shadow-toast: 0 1px 2px var(--luke-color-shadow-soft), 0 12px 36px var(--luke-color-shadow);
   --shadow-toast-dismiss: 0 1px 3px var(--luke-color-shadow-soft);
-  /* The line's shadow, the call card's in its window, kept within the few pixels such a window leaves. */
-  --shadow-toast-line: 0 2px 6px var(--luke-color-shadow);
+  /* The compact strip's shadow, the call card's in its window, kept within the few pixels such a window leaves. */
+  --shadow-toast-compact: 0 2px 6px var(--luke-color-shadow);
   --z-index-toast: var(--luke-z-toast);
 
   /* Chip and Badge. Their lengths name the scale's steps, as above. */

@@ -283,7 +283,7 @@ test("in the floating call window ⇧⌘M and ⇧⌘S answer, as the mute hints 
   assert.deepEqual(sent.at(-1), { kind: "voice.command", payload: { command: "mute-speaker" } });
 });
 
-test("a press main refuses in the floating call window is said there, as one line over the card", async () => {
+test("a press main refuses in the floating call window is said there, compact over the card", async () => {
   handBridge(onCall({ status: AVATAR_STATUS.OFF }));
   fakeActPortAnswering((request) => {
     sent.push(request);
@@ -299,10 +299,10 @@ test("a press main refuses in the floating call window is said there, as one lin
   await settle();
   assert.deepEqual(sent, [{ kind: "voice.command", payload: { command: "end-call" } }]);
   const stack = document.querySelector<HTMLElement>('section[aria-label="Notifications"]');
-  assert.equal(stack?.dataset.look, TOAST_LOOK.LINE);
+  assert.equal(stack?.dataset.look, TOAST_LOOK.COMPACT);
   const toasts = [...(stack?.querySelectorAll<HTMLElement>(".luke-toast") ?? [])];
   assert.deepEqual(
     toasts.map((toast) => [toast.dataset.look, toast.textContent]),
-    [[TOAST_LOOK.LINE, "The voice window refused end-call."]],
+    [[TOAST_LOOK.COMPACT, "The voice window refused end-call."]],
   );
 });

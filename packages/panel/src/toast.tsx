@@ -132,11 +132,11 @@ export type ToastNotice = {
 /** How long a toast takes to leave, as `--luke-duration-exit` says it. */
 const TOAST_EXIT = Duration.millis(MOTION_DURATION_MS.EXIT);
 
-/** How many toasts stand at once: three, two in a window no taller than `SHORT_WINDOW`, or one where they are drawn as a line (the floating call window). */
+/** How many toasts stand at once: three, two in a window no taller than `SHORT_WINDOW`, or one where they are drawn compact (the floating call window). */
 const TOAST_ROOM = {
   TALL: 3,
   SHORT: 2,
-  LINE: 1,
+  COMPACT: 1,
 } as const;
 
 /** The tallest window, in CSS pixels, that leaves room for two toasts rather than three: three cards of two lines each stand 300px tall. */
@@ -470,9 +470,9 @@ function newestSaying(shown: readonly ToastShown[], tones: ReadonlySet<ToastTone
   return newest === undefined ? "" : spoken(newest.notice);
 }
 
-/** How many toasts the window has room for at the height of what can be seen of it now, the keyboard's left out: one alone where they are drawn as a line. */
+/** How many toasts the window has room for at the height of what can be seen of it now, the keyboard's left out: one alone where they are drawn compact. */
 function roomNow(look: ToastLook): number {
-  if (look === TOAST_LOOK.LINE) return TOAST_ROOM.LINE;
+  if (look === TOAST_LOOK.COMPACT) return TOAST_ROOM.COMPACT;
   const seen = visibleViewport();
   return seen.bottom - seen.top <= SHORT_WINDOW ? TOAST_ROOM.SHORT : TOAST_ROOM.TALL;
 }
@@ -541,7 +541,7 @@ function ToastCard({
 /**
  * The toasts standing, in the window's bottom-right corner, and the regions
  * that say them. Mounted once, by the window's root: the panel's as cards,
- * and the floating call window's, too small for a card, as one line at a
+ * and the floating call window's, too small for a card, compact, one at a
  * time across its foot.
  */
 export function ToastHost({ look = TOAST_LOOK.CARD }: { look?: ToastLook }): React.JSX.Element {

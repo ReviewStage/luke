@@ -23,7 +23,7 @@ import {
  * there is room again; one whose hold runs down with an action draws that
  * hold as its countdown; work under way settles into its own card in
  * place; and an act's Undo toast takes the act back and stands for the Undo
- * hold; a window that draws them as a line, too small for more, stands
+ * hold; a window that draws them compact, too small for more, stands
  * the newest alone. jsdom lays nothing out, so the window's height is given. Synthetic
  * throughout.
  */
@@ -131,8 +131,8 @@ test("a window too short for three toasts stands the two newest, and the one set
   ]);
 });
 
-test("a window that draws its toasts as a line stands the newest alone, setting the one it pushed aside until it leaves", () => {
-  mount(WINDOW.TALL, TOAST_LOOK.LINE);
+test("a window that draws its toasts compact stands the newest alone, setting the one it pushed aside until it leaves", () => {
+  mount(WINDOW.TALL, TOAST_LOOK.COMPACT);
 
   act(() => show?.(persisting("Retry the webhook finished")));
   act(() => show?.(persisting("Nightly upgrade couldn't start")));

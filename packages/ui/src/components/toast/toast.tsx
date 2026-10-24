@@ -33,7 +33,7 @@ import { useToastSwipe } from "./toast-swipe.js";
  * stack's.
  *
  * Where the window is too small for the card, as the floating call window
- * is, a toast is drawn in its `TOAST_LOOK.LINE` look: one line of its glyph
+ * is, a toast is drawn in its `TOAST_LOOK.COMPACT` look: one line of its glyph
  * and words, faded where the line's end cuts them, its second line left to
  * the announcer,
  * on a card no taller than a control, with the shadow kept within the room
@@ -70,10 +70,10 @@ export const TOAST_HOLD = {
   NEWS: Duration.seconds(8),
 } as const;
 
-/** How a toast is drawn: the window's card, or one line in a window too small for the card's two (the floating call window). */
+/** How a toast is drawn: the window's card, or a compact strip in a window too small for the card (the floating call window). */
 export const TOAST_LOOK = {
   CARD: "card",
-  LINE: "line",
+  COMPACT: "compact",
 } as const;
 
 export type ToastLook = (typeof TOAST_LOOK)[keyof typeof TOAST_LOOK];
@@ -104,40 +104,40 @@ const GLYPH_INK = {
 const TOAST_CARD =
   "luke-toast relative flex items-start gap-icon-gap rounded-toast border border-border-strong bg-background px-list-inset py-row-inset shadow-toast data-[action=true]:touch-pan-y data-[action=true]:pr-toast-gap";
 
-/** The line: its glyph, words, and any action on one row a step taller than a control, so it covers a row of controls under it whole, its shadow the call card's own in its window. */
-const TOAST_LINE =
-  "luke-toast relative flex min-h-toast-line items-center gap-icon-gap rounded-toast border border-border-strong bg-background px-toast-gap shadow-toast-line data-[action=true]:touch-pan-y";
+/** The compact strip: its glyph, words, and any action on one row at least a step taller than a control, so it covers a row of controls under it whole, and taller where its words take two lines; its shadow the call card's own in its window. */
+const TOAST_COMPACT =
+  "luke-toast relative flex min-h-toast-compact items-center py-luke-4 gap-icon-gap rounded-toast border border-border-strong bg-background px-toast-gap shadow-toast-compact data-[action=true]:touch-pan-y";
 
 /** Each look's card. */
 const TOAST_FRAME = {
   [TOAST_LOOK.CARD]: TOAST_CARD,
-  [TOAST_LOOK.LINE]: TOAST_LINE,
+  [TOAST_LOOK.COMPACT]: TOAST_COMPACT,
 } as const satisfies Record<ToastLook, string>;
 
-/** The one cell its glyphs share, so a turn of tone crossfades them with the card unmoved: on the card, centred on its first row; on the line, on the line. */
+/** The one cell its glyphs share, so a turn of tone crossfades them with the card unmoved: on the card, centred on its first row; on the strip, on its middle. */
 const TOAST_GLYPH = {
   [TOAST_LOOK.CARD]:
     "luke-toast-glyph mt-toast-glyph-inset grid size-control-icon flex-none [&_svg]:size-full",
-  [TOAST_LOOK.LINE]: "luke-toast-glyph grid size-control-icon flex-none [&_svg]:size-full",
+  [TOAST_LOOK.COMPACT]: "luke-toast-glyph grid size-control-icon flex-none [&_svg]:size-full",
 } as const satisfies Record<ToastLook, string>;
 
-/** Its words and the line under them, a title's step apart, the column standing as far below its last line as above its first; on the line, its words alone. */
+/** Its words and the line under them, a title's step apart, the column standing as far below its last line as above its first; on the strip, its words alone. */
 const TOAST_TEXT = {
   [TOAST_LOOK.CARD]:
     "luke-toast-text flex min-w-0 flex-1 flex-col gap-toast-line-gap py-toast-text-inset",
-  [TOAST_LOOK.LINE]: "luke-toast-text flex min-w-0 flex-1",
+  [TOAST_LOOK.COMPACT]: "luke-toast-text flex min-w-0 flex-1",
 } as const satisfies Record<ToastLook, string>;
 
-/** Its words, cut at two lines on the card, and on the line filling it, faded where the line's end cuts them (`toast.css`). */
+/** Its words, cut at two lines on the card and on the strip alike. */
 const TOAST_WORDS = {
   [TOAST_LOOK.CARD]: "luke-toast-words line-clamp-2 wrap-anywhere",
-  [TOAST_LOOK.LINE]: "luke-toast-words min-w-0 flex-1 overflow-hidden whitespace-nowrap",
+  [TOAST_LOOK.COMPACT]: "luke-toast-words line-clamp-2 wrap-anywhere",
 } as const satisfies Record<ToastLook, string>;
 
-/** Its words' type: a section's on the card, and a label's on the line, which has room for few words and cuts the rest. */
+/** Its words' type: a section's on the card, and a label's on the strip, so two lines of it hold a refusal's sentence. */
 const TOAST_WORDS_TYPE = {
   [TOAST_LOOK.CARD]: TEXT_VARIANT.SECTION,
-  [TOAST_LOOK.LINE]: TEXT_VARIANT.LABEL,
+  [TOAST_LOOK.COMPACT]: TEXT_VARIANT.LABEL,
 } as const satisfies Record<ToastLook, TextVariant>;
 
 /** A bar along its foot, in the muted ink, faint, draining toward its start. */
@@ -188,9 +188,9 @@ export function Toast({
 }: {
   tone: ToastTone;
   words: string;
-  /** A second line under the words, which the line look leaves to the announcer. */
+  /** A second line under the words, which the compact look leaves to the announcer. */
   detail?: string | undefined;
-  /** The card, or one line in a window too small for it. */
+  /** The card, or the compact strip in a window too small for it. */
   look?: ToastLook;
   /** Whether it is on its way out. */
   leaving?: boolean;
@@ -263,7 +263,7 @@ export function Toast({
             {words}
           </Text>
         </span>
-        {detail === undefined || look === TOAST_LOOK.LINE ? null : (
+        {detail === undefined || look === TOAST_LOOK.COMPACT ? null : (
           <span className="luke-toast-detail line-clamp-2 wrap-anywhere">
             <Text variant={TEXT_VARIANT.CAPTION} as={TEXT_ELEMENT.SPAN} tone={TEXT_TONE.MUTED}>
               {detail}

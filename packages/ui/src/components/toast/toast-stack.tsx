@@ -19,9 +19,9 @@ import { TOAST_LOOK, type ToastLook } from "./toast.js";
  * once the words the host hands it change. Where the stack mounts (a portal
  * to the body, say) is the host's.
  *
- * In the line look, for a window too small for the card (the floating call
+ * In the compact look, for a window too small for the card (the floating call
  * window), the stack spans the window's foot a step in from each side
- * rather than standing in its corner, and its toasts are drawn as lines.
+ * rather than standing in its corner, and its toasts are drawn compact.
  */
 
 /** Less than this, in CSS pixels, is not a move worth playing. */

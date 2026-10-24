@@ -29,7 +29,7 @@ import { useStaleHoverAfterMove } from "./window-pointer";
  * grows the window to hold the tile on the same document. It reads keys
  * like the panel does, so the chords its hints show answer here too. A
  * press it makes that main refuses is said here, where it was pressed, by
- * the window's own toasts, one line at a time over the card's lower edge,
+ * the window's own toasts, compact and one at a time over its controls,
  * since the window is too small for the panel's cards and the panel may be
  * out of sight.
  */
@@ -52,7 +52,7 @@ export function CallWindowCard(): React.JSX.Element {
         video={cardVideo(videoStatus, track, press)}
         surface={CALL_CARD_SURFACE.WINDOW}
       />
-      <ToastHost look={TOAST_LOOK.LINE} />
+      <ToastHost look={TOAST_LOOK.COMPACT} />
     </>
   );
 }
