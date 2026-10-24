@@ -314,6 +314,18 @@ export function lineSender(
   }
 }
 
+/**
+ * Whether one of the developer's lines is the other side's words, drawn at
+ * the column's left as a chat notice is: GitHub's and another coding agent's,
+ * which nobody on the developer's side wrote. A person's, Luke's from a call,
+ * and an automation's speak for the developer and stand at the right.
+ */
+export function receivedLine(sentBy: CodingAgentSender | undefined): boolean {
+  return (
+    sentBy !== undefined && (sentBy.agent === true || sentBy.kind === CODING_AGENT_SENDER.GITHUB)
+  );
+}
+
 /** The parts of the line a transcript ends on: its words, and whether it tells of a failure, which is drawn as one. */
 export interface EndLineParts {
   readonly words: string;
