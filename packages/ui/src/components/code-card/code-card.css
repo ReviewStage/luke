@@ -35,7 +35,7 @@
   .luke-code-card-title[data-title="words"] {
     color: var(--luke-color-text);
     font-family: inherit;
-    font-weight: var(--luke-weight-medium);
+    font-weight: var(--luke-type-label-weight);
   }
 
   /* The header's own controls and the Copy keep to its right edge, flush with it. */
