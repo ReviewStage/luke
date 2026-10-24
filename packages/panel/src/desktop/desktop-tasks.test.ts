@@ -587,20 +587,20 @@ test("a task's Inbox heads its list with the Inbox's name and a view's menu offe
   ];
   let inbox = await narrowTaskInbox(items, 1_200);
   assert.equal(document.querySelector('.inbox-tasks [role="tab"]'), null, "no tab bar stands");
-  assert.deepEqual(await inbox.head(), ["Inbox", "[To do]", "All"]);
+  assert.deepEqual(await inbox.head(), ["Inbox", "[For you]", "All"]);
   assert.deepEqual(inbox.rows(), ["Expire after 7 days?"]);
   await inbox.pressScope("All");
-  assert.deepEqual(await inbox.head(), ["Inbox · All", "To do", "[All]"]);
+  assert.deepEqual(await inbox.head(), ["Inbox · All", "For you", "[All]"]);
   assert.deepEqual(inbox.rows(), ["Resend on bounce?", "Expire after 7 days?"]);
   inbox.unmount();
 
   inbox = await narrowTaskInbox(items, 1_200);
   assert.deepEqual(
     await inbox.head(),
-    ["Inbox · All", "To do", "[All]"],
+    ["Inbox · All", "For you", "[All]"],
     "the scope outlives a relaunch",
   );
-  await inbox.pressScope("To do");
+  await inbox.pressScope("For you");
   assert.deepEqual(inbox.rows(), ["Expire after 7 days?"]);
   inbox.unmount();
   window.localStorage.clear();
@@ -643,9 +643,9 @@ test("a task's Inbox whose Needs you was pressed before the tabs opens on To do,
     approvalItem("a1b2c3d4-0000-4000-8000-000000000001", "Expire after 7 days?", 1_000),
   ];
   for (const [key, kept, shown] of [
-    [TASK_EARLIER_SHOW_KEY, true, "[To do]"],
+    [TASK_EARLIER_SHOW_KEY, true, "[For you]"],
     [TASK_EARLIER_SHOW_KEY, false, "[All]"],
-    [TASK_SHOW_KEY, "unread", "[To do]"],
+    [TASK_SHOW_KEY, "unread", "[For you]"],
     [TASK_SHOW_KEY, "open", "[All]"],
   ] as const) {
     window.localStorage.clear();
@@ -672,7 +672,7 @@ test("one column wide, a task's Inbox on To do pages through only what it lists"
   assert.equal(inbox.pager(), "1 of 3");
 
   act(() => inbox.back()?.click());
-  await inbox.pressScope("To do");
+  await inbox.pressScope("For you");
   act(() => inbox.row("Alert at 80%?")?.click());
   assert.equal(inbox.pager(), "1 of 2", "the settled item is passed over");
   window.localStorage.clear();
@@ -687,11 +687,11 @@ test("one column wide, a task's Inbox filtered down to one item still offers its
     approvedItem("a1b2c3d4-0000-4000-8000-000000000002", "Resend on bounce?", 2_000),
   ]);
   act(() => inbox.back()?.click());
-  await inbox.pressScope("To do");
+  await inbox.pressScope("For you");
   act(() => inbox.row("Expire after 7 days?")?.click());
   assert.deepEqual(inbox.standing(), ["", "Expire after 7 days?"]);
   act(() => inbox.back()?.click());
-  assert.deepEqual(await inbox.head(), ["Inbox", "[To do]", "All"]);
+  assert.deepEqual(await inbox.head(), ["Inbox", "[For you]", "All"]);
   window.localStorage.clear();
   inbox.unmount();
 });
@@ -744,7 +744,7 @@ test("on To do, the item a task's Inbox chose for itself stays shown once it is 
   const asked = approvalItem("a1b2c3d4-0000-4000-8000-000000000001", "Expire after 7 days?", 1_000);
   const read = heldAnswer();
   const inbox = await narrowTaskInbox([asked], 1_200, read.promise);
-  await inbox.pressScope("To do");
+  await inbox.pressScope("For you");
   assert.equal(inbox.title(), "Expire after 7 days?");
   await read.settle({ items: [approvedItem(asked.id, asked.title, 1_000)], cursor: "2" });
   assert.deepEqual(inbox.rows(), ["Expire after 7 days?"], "the answered row stays while chosen");
@@ -764,18 +764,18 @@ test("a task's Inbox holding only settled items, read, on To do lists no row and
   ];
   const wide = await narrowTaskInbox(items, 1_200);
   assert.deepEqual(wide.rows(), ["Resend on bounce?", "Expire after 7 days?"]);
-  await wide.pressScope("To do");
-  assert.deepEqual(await wide.head(), ["Inbox", "[To do]", "All"]);
+  await wide.pressScope("For you");
+  assert.deepEqual(await wide.head(), ["Inbox", "[For you]", "All"]);
   assert.deepEqual(wide.rows(), [], "the item read is not listed under a filter leaving it out");
   assert.deepEqual(wide.filteredOut(), [undefined, "Nothing to do", "Show all"]);
   assert.equal(wide.title(), "Resend on bounce?", "the item read stays shown beside the list");
   wide.showAll();
-  assert.deepEqual(await wide.head(), ["Inbox · All", "To do", "[All]"]);
+  assert.deepEqual(await wide.head(), ["Inbox · All", "For you", "[All]"]);
   assert.deepEqual(wide.rows(), ["Resend on bounce?", "Expire after 7 days?"]);
-  await wide.pressScope("To do");
+  await wide.pressScope("For you");
   wide.unmount();
 
-  // Opened again one column wide, To do kept, nothing stands chosen, so the list stands alone and says so.
+  // Opened again one column wide, For you kept, nothing stands chosen, so the list stands alone and says so.
   const narrow = await narrowTaskInbox(items);
   assert.deepEqual(narrow.standing(), ["list", ""]);
   assert.equal(narrow.filteredOut()?.[2], "Show all");
@@ -785,7 +785,7 @@ test("a task's Inbox holding only settled items, read, on To do lists no row and
     ["list", ""],
     "Show all leaves the rows it brings back standing",
   );
-  assert.deepEqual(await narrow.head(), ["Inbox · All", "To do", "[All]"]);
+  assert.deepEqual(await narrow.head(), ["Inbox · All", "For you", "[All]"]);
   assert.deepEqual(narrow.rows(), ["Resend on bounce?", "Expire after 7 days?"]);
   window.localStorage.clear();
   narrow.unmount();
@@ -797,12 +797,12 @@ test("a task's Inbox whose read failed offers Retry though To do lists nothing i
     approvedItem("a1b2c3d4-0000-4000-8000-000000000002", "Resend on bounce?", 2_000),
   ];
   const first = await narrowTaskInbox(settled, 1_200);
-  await first.pressScope("To do");
+  await first.pressScope("For you");
   first.unmount();
 
   const read = heldAnswer();
   const inbox = await narrowTaskInbox(settled, 1_200, read.promise);
-  assert.deepEqual(inbox.rows(), [], "To do, kept from before, lists nothing");
+  assert.deepEqual(inbox.rows(), [], "For you, kept from before, lists nothing");
   await read.settle({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED });
   assert.deepEqual(inbox.failure(), [true, true]);
   window.localStorage.clear();
@@ -1202,7 +1202,7 @@ test("a plan's own Inbox marks the item it shows read as it opens it, and its ro
 });
 
 test("a plan's own Inbox acknowledges the reader's own notice as it opens it, and leaves a teammate's open", async () => {
-  // Note that the Inbox opens on All, since To do leaves the teammate's notice out.
+  // Note that the Inbox opens on All, since For you leaves the teammate's notice out.
   window.localStorage.clear();
   showEverything();
   fakeAppBridge({});

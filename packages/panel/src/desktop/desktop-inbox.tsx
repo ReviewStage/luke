@@ -1,5 +1,6 @@
 import { encodeMention, MENTION_KIND } from "@luke/features/mention-link";
 import { TASK_CALL_FAILURE, type TasksFileAnswer } from "@luke/features/tasks-view";
+import { backToWords } from "@luke/features/words";
 import { ACT_KIND } from "@luke/host/acts";
 import { EmptyState, ERROR_STATE_PLACEMENT, ErrorState, Toolbar, useMinute } from "@luke/ui";
 import { INBOX_PANEL_TARGET, inboxPanelTarget } from "@luke/ui/inbox-panel-link";
@@ -72,7 +73,7 @@ import { taskCardOf } from "./task-card.js";
  * what waits in the others), needing the developer or settled, each task read whole
  * as main says it changed (`use-inbox-items.ts`), under its task, its
  * person, its status, or in one run, the latest first or the oldest
- * first, To do, what needs them and what of theirs is unread, or All,
+ * first, For you, what needs them and what of theirs is unread, or All,
  * everything, of everyone's, theirs, or one teammate's, as the developer
  * last chose; Needs
  * you is the Inbox's one name for an item not yet answered
@@ -116,7 +117,7 @@ import { taskCardOf } from "./task-card.js";
  */
 
 /** What leads back to the list from a missing item's notice, where the Inbox shows one column. */
-const BACK_TO_INBOX = "Back to Inbox";
+const BACK_TO_INBOX = backToWords("inbox");
 
 /** A taskless item's code reads no file, there being no task whose repository it reads through. */
 const UNREAD_FILE = (): Promise<TasksFileAnswer> =>
