@@ -49,13 +49,7 @@ import {
 import type { ChatShown } from "@luke/host/contract";
 import { EXPERIMENT, HOST_CAPABILITY } from "@luke/settings";
 import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsLink } from "@luke/settings/settings-views";
-import {
-  CONFIRM_LOSS,
-  type DialogConfirm,
-  type DialogQuestion,
-  STATUS_TONE,
-  useConfirmDialog,
-} from "@luke/ui";
+import { STATUS_TONE } from "@luke/ui";
 import { callTaskName } from "@luke/ui/call-card-model";
 import {
   CHAT_PLACE,
@@ -144,10 +138,10 @@ import {
 import { useStateWithRef } from "@luke/ui/use-state-with-ref";
 import type { MicrophoneStatus } from "@luke/voice/audio";
 import { shownFiles } from "@luke/voice/code-pane-model";
-import { VOICE_COMMAND } from "@luke/voice/voice-view";
+import { VOICE_COMMAND, type VoiceCallAbout } from "@luke/voice/voice-view";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { ActHandle } from "../act.js";
+import { type ActHandle, toastActFailure } from "../act.js";
 import { streamFrom } from "../act-stream.js";
 import { ADMIN_TAB, type AdminView, adminViewOfLink } from "../admin/routing.js";
 import { appPlatform } from "../app-platform.js";
@@ -729,8 +723,6 @@ export interface TasksControl {
   onShowPanelTab: (taskId: string, tab: SidePanelTab) => void;
   /** Leaves the version history for the place that wrote a version: its agent's tab. */
   onShowSource: (taskId: string, source: RevisionSource) => void;
-  /** The question an agent's Call press asks before it ends the call standing into another agent. */
-  secondCall: { confirm: DialogConfirm; question: DialogQuestion };
   /** Opens a task on its own document tab, out from under its version history and a side panel filling the window: the call card's way back. */
   onShowTask: (taskId: string) => void;
   /** Opens a task the same way, scrolled to the section a mention or a Luke link names, or at its top for the task's own. */
@@ -1198,15 +1190,9 @@ function talkOf(agentId: string, place: AgentCallPlace): { agentId: string; task
   return place.taskId === undefined ? { agentId } : { agentId, taskId: place.taskId };
 }
 
-/** What the second call's question says: the call it ends, and what the act does. */
-function secondCallQuestion(taskName: string): DialogQuestion {
-  return {
-    title: `End your call on ${taskName} and start one here?`,
-    body: "What was said on that call stays in its agent's transcript.",
-    verb: "Start new call",
-    running: "Starting",
-    loss: CONFIRM_LOSS.REVERSIBLE,
-  };
+/** What the toast says once a Call press has ended the call standing on another place. */
+function secondCallNote(placeName: string): string {
+  return `Call on ${placeName} ended`;
 }
 
 /**
@@ -2541,38 +2527,21 @@ export function useTasksTab(input: {
   // Note that a call into an agent with no task is no task's, though no task is open either.
   const live = standingCall?.taskId !== undefined && standingCall.taskId === tasks.activeTaskId;
   // A Call press that would open a call into one agent while another's call
-  // stands ends that call, so it asks first; the answer is the same press,
-  // and Cancel leaves the call standing as it was. The question is the
-  // agent's it was asked for on the page it was asked on, the task open or
-  // an agent's own page, so it goes the moment another opens, and its
-  // surface is that page, which a version history covers.
+  // stands ends that call: it acts at once, since nothing is lost (what was
+  // said stays in that agent's transcript), and its toast's Undo calls the
+  // earlier place again, which ends the new call in turn.
   const callSurface = pageAgent ?? tasks.activeTaskId;
   const openAiKeyMissing = useOpenAiKeyMissing();
-  const [askedFor, setAskedFor] = useState<{
-    surface: string;
-    agentId: string;
-    place: AgentCallPlace;
-  }>();
   const otherCall = (agentId: string) =>
-    standingCall !== undefined && standingCall.agentId !== agentId;
-  const secondCallFor =
-    askedFor !== undefined && otherCall(askedFor.agentId) ? askedFor : undefined;
-  const secondCall = useConfirmDialog(
-    {
-      subject: secondCallFor !== undefined && secondCallFor.surface === callSurface,
-      surfaceOpen: shown && !historyOpen,
-    },
-    () =>
-      secondCallFor === undefined
-        ? Promise.resolve<ActionResult>({ status: ACTION_RESULT_STATUS.ACCEPTED })
-        : act(ACT_KIND.TASKS_TALK, talkOf(secondCallFor.agentId, secondCallFor.place)).then(
-            (): ActionResult => ({ status: ACTION_RESULT_STATUS.ACCEPTED }),
-            (refused: Error): ActionResult => ({
-              status: ACTION_RESULT_STATUS.REJECTED,
-              reason: refused.message,
-            }),
-          ),
-  );
+    standingCall !== undefined && standingCall.agentId !== agentId ? standingCall : undefined;
+  const callOver = (agentId: string, place: AgentCallPlace, earlier: VoiceCallAbout) => {
+    const ended = secondCallNote(callTaskName(tasks, earlier));
+    const again = talkOf(earlier.agentId, { taskId: earlier.taskId });
+    act(ACT_KIND.TASKS_TALK, talkOf(agentId, place)).then(
+      () => toast(undoToast(ended, () => press(ACT_KIND.TASKS_TALK, again))),
+      toastActFailure,
+    );
+  };
   // The press names its agent and where it stands, the task it is on or
   // none, whatever task is open, and the voice window, which owns the call,
   // opens it into the agent or toggles it. It is read off the document as
@@ -2599,11 +2568,9 @@ export function useTasksTab(input: {
     }
     if (button.press === MICROPHONE_PRESS.OPEN_SETTINGS) press(ACT_KIND.MICROPHONE_OPEN_SETTINGS);
     if (button.press !== MICROPHONE_PRESS.TALK || callSurface === undefined) return;
-    if (!otherCall(agentId)) press(ACT_KIND.TASKS_TALK, talkOf(agentId, place));
-    else {
-      setAskedFor({ surface: callSurface, agentId, place });
-      secondCall.ask();
-    }
+    const earlier = otherCall(agentId);
+    if (earlier === undefined) press(ACT_KIND.TASKS_TALK, talkOf(agentId, place));
+    else callOver(agentId, place, earlier);
   };
   const pressCallNow = useRef(pressCall);
   pressCallNow.current = pressCall;
@@ -3792,10 +3759,6 @@ export function useTasksTab(input: {
     // notification opens it.
     onShowSource: guard(showSource),
     // The call card's way back lands where the task's call bar is in sight.
-    secondCall: {
-      confirm: secondCall,
-      question: secondCallQuestion(callTaskName(tasks, standingCall)),
-    },
     onShowTask: guard((taskId: string) => showPanelTab(taskId, SIDE_PANEL_TAB.PLAN)),
     // Each ask is its own, so the same section asked twice scrolls twice.
     onShowMention: guard(showMention),

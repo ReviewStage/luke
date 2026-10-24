@@ -7,7 +7,6 @@ import { readingWords } from "@luke/features/words";
 import { ACT_KIND } from "@luke/host/acts";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
-  ConfirmDialog,
   EmptyState,
   ERROR_STATE_PLACEMENT,
   ErrorState,
@@ -1478,11 +1477,6 @@ export const DesktopTasks = memo(function DesktopTasks({
   /** A phone's way back out of the task, to the page it was opened from (`WindowHistory`'s `onLeave`); the Tasks page where none is handed. */
   away?: TaskHeadBack | undefined;
 }): React.JSX.Element {
-  // The second call's question stands over either page: a Talk press on a
-  // task's page asks it, and so does a task started from the New task dialog.
-  const secondCall = (
-    <ConfirmDialog open confirm={tasks.secondCall.confirm} question={tasks.secondCall.question} />
-  );
   // A task New task is starting with its agent stands as its page until the start answers.
   if (tasks.starting !== undefined) {
     return (
@@ -1514,7 +1508,6 @@ export const DesktopTasks = memo(function DesktopTasks({
             room={room}
             away={away ?? { label: TASKS_BACK, onPress: tasks.boardView.onOpen }}
           />
-          {secondCall}
         </SkillFiles>
       );
     // With no task open the column is a new account's welcome, and ⌘N's
@@ -1530,7 +1523,6 @@ export const DesktopTasks = memo(function DesktopTasks({
           <Fill className="home">
             <DesktopWelcome tasks={tasks} />
           </Fill>
-          {secondCall}
         </>
       );
   }

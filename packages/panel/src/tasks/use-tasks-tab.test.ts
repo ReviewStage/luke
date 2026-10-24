@@ -3795,7 +3795,7 @@ const OTHER_CALL: VoiceView = {
   call: { taskId: TASK.id, agentId: VOICE_CHAT_AGENT.id },
 };
 
-test("an agent's Call press opens a call into it at once, and over another agent's call asks first, the press itself the answer", async () => {
+test("an agent's Call press opens a call into it at once, and over another agent's call ends that one at once, its toast's Undo calling it again", async () => {
   const voice = voiceDelivered();
   const tab = mount(
     { shown: true, tasks: OPEN },
@@ -3815,14 +3815,20 @@ test("an agent's Call press opens a call into it at once, and over another agent
 
   await voice.stand(OTHER_CALL);
   act(() => tab.control().calls?.onPress(AGENT_ID, onTask));
-  assert.equal(payloadsOf(tab, ACT_KIND.TASKS_TALK).length, 1, "nothing is called before the ask");
-  assert.equal(tab.control().secondCall.confirm.standing, true, "the press asks first");
-  await act(async () => tab.control().secondCall.confirm.run());
   await settle();
   assert.deepEqual(payloadsOf(tab, ACT_KIND.TASKS_TALK), [
     { agentId: AGENT_ID, taskId: TASK.id },
     { agentId: AGENT_ID, taskId: TASK.id },
   ]);
+  assert.equal(newestToastSays(), `Call on ${TASK.name} endedUndo`);
+
+  act(() => _undoButton().click());
+  await settle();
+  assert.deepEqual(
+    payloadsOf(tab, ACT_KIND.TASKS_TALK).at(-1),
+    { agentId: VOICE_CHAT_AGENT.id, taskId: TASK.id },
+    "Undo calls the earlier agent on its task again",
+  );
 });
 
 test("a Call press and each Retry main refuses say why in a toast", async () => {
@@ -3869,7 +3875,7 @@ test("a Call press and each Retry main refuses say why in a toast", async () => 
 /** The list as OPEN holds it, with no task open. */
 const { activeTaskId: _open, ...NO_TASK_OPEN } = OPEN;
 
-test("an agent's page takes a call into its agent with no task open, naming no task, asks first over another call, and an archived agent takes none", async () => {
+test("an agent's page takes a call into its agent with no task open, naming no task, ends another call at once with Undo, and an archived agent takes none", async () => {
   const voice = voiceDelivered();
   const tab = mount(
     { shown: true, tasks: NO_TASK_OPEN },
@@ -3896,14 +3902,19 @@ test("an agent's page takes a call into its agent with no task open, naming no t
 
   await voice.stand(OTHER_CALL);
   act(() => tab.control().calls?.onPress(AGENT_ID, tasklessPlace));
-  assert.equal(payloadsOf(tab, ACT_KIND.TASKS_TALK).length, 1, "nothing is called before the ask");
-  assert.equal(tab.control().secondCall.confirm.standing, true, "the press asks first");
-  await act(async () => tab.control().secondCall.confirm.run());
   await settle();
   assert.deepEqual(payloadsOf(tab, ACT_KIND.TASKS_TALK), [
     { agentId: AGENT_ID },
     { agentId: AGENT_ID },
   ]);
+  assert.equal(newestToastSays(), `Call on ${TASK.name} endedUndo`);
+
+  act(() => _undoButton().click());
+  await settle();
+  assert.deepEqual(payloadsOf(tab, ACT_KIND.TASKS_TALK).at(-1), {
+    agentId: VOICE_CHAT_AGENT.id,
+    taskId: TASK.id,
+  });
 });
 
 test("a task opened is timed from the press to its document drawn ready, and one refused is timed by no span", async () => {
