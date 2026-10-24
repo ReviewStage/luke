@@ -500,6 +500,15 @@ test("an agent that has not opened its sandbox yet shows the waiting bar", async
   assert.equal(tab.action(), null);
 });
 
+/** Ends the bar's reveal, as the browser does once its delay has run; a DOM without animation events is heard through React's webkit-prefixed name for it. */
+function revealBar(): void {
+  act(() => {
+    for (const name of ["animationend", "webkitAnimationEnd"]) {
+      document.querySelector(".terminal-bar")?.dispatchEvent(new Event(name, { bubbles: true }));
+    }
+  });
+}
+
 test("a dropped connection shows its bar, and its action asks for the shell again at once", async () => {
   mountAnnouncer();
   const tab = await mount();
@@ -507,13 +516,20 @@ test("a dropped connection shows its bar, and its action asks for the shell agai
   port.say({ type: "state", state: "reconnecting" });
   assert.equal(tab.bar(), "Connection lost. Reconnecting…");
   assert.equal(announcedPolitely(), "", "a bar still hidden says nothing, so a blip is never said");
-  // Note that a DOM without animation events is heard through React's webkit-prefixed name for the end of an animation.
-  act(() => {
-    for (const name of ["animationend", "webkitAnimationEnd"]) {
-      document.querySelector(".terminal-bar")?.dispatchEvent(new Event(name, { bubbles: true }));
-    }
-  });
+  revealBar();
   assert.equal(announcedPolitely(), "Connection lost. Reconnecting…", "it is said once shown");
+
+  // A later drop hides its bar again, so its words wait for that reveal too.
+  port.say({ type: "state", state: "starting" });
+  assert.equal(announcedPolitely(), "Waiting for the agent to open its sandbox…");
+  port.say({ type: "state", state: "reconnecting" });
+  assert.equal(
+    announcedPolitely(),
+    "",
+    "the second bar is hidden, so it says nothing yet, and the bar it replaced took its words back",
+  );
+  revealBar();
+  assert.equal(announcedPolitely(), "Connection lost. Reconnecting…");
   assert.equal(tab.dimmed(), true);
   const before = main.sent.length;
   await act(async () => tab.action()?.click());

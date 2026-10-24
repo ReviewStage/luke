@@ -175,7 +175,10 @@ export function TerminalTab({
       />
       <Fill flow={FILL_FLOW.ROW} clip className="terminal-tab-body" {...room.body}>
         <div className="terminal-tab-host">
-          {look.bar === undefined ? null : <StateBar bar={look.bar} onAction={session.onAction} />}
+          {look.bar === undefined ? null : (
+            // Note that each entry into a late bar is a bar of its own, because its reveal runs again and its words wait for it.
+            <StateBar key={String(look.bar.late)} bar={look.bar} onAction={session.onAction} />
+          )}
           {session.failed ? (
             <p className="terminal-tab-failed">{TERMINAL_LOAD_FAILED}</p>
           ) : (
