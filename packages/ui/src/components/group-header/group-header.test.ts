@@ -6,14 +6,15 @@ import { act, createElement, type ReactElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
 import { NAV_COUNT_SHOWN } from "../nav-item/nav-item.js";
-import { type GroupFold, GroupHeader } from "./group-header.js";
+import { GROUP_SURFACE, type GroupFold, GroupHeader } from "./group-header.js";
 
 /**
  * group-header.test.ts -- pressing a group's head folds and unfolds its
  * rows and says so in `aria-expanded`, open or folded from the start or as
  * its holder keeps it; an action beside the fold presses without folding;
  * a head that folds nothing draws its rows always and no fold control; the
- * count is drawn as its caller gives it; a folded group draws what it leaves
+ * count is drawn as its caller gives it, always on a wide page and, in a
+ * narrow column, only folded or under the pointer; a folded group draws what it leaves
  * standing; a press that opens plays the
  * Disclosure's motion, and every motion the fold and its chevron run is
  * timed on a token reduced motion holds still.
@@ -142,6 +143,33 @@ test("the count is drawn as its caller gives it, none included, and read with it
 
   const uncounted = render(group({ defaultOpen: false }));
   assert.equal(headOf(uncounted).textContent, "acme/web");
+});
+
+test("a count stands always on a wide page, and in a narrow column only while the group is folded or under the pointer", () => {
+  const shown = (container: HTMLElement) =>
+    container.querySelector(".luke-group-header-count")?.getAttribute("data-shown");
+  const counted = (surface: typeof GROUP_SURFACE.WIDE | typeof GROUP_SURFACE.NARROW) =>
+    group({ defaultOpen: true }, { surface, count: { value: 3, noun: "tasks" } });
+
+  assert.equal(shown(render(counted(GROUP_SURFACE.WIDE))), "always");
+
+  const narrow = render(counted(GROUP_SURFACE.NARROW));
+  assert.equal(shown(narrow), "on-hover");
+  act(() => headOf(narrow).click());
+  assert.equal(shown(narrow), "always");
+  act(() => headOf(narrow).click());
+  assert.equal(shown(narrow), "on-hover");
+
+  const own = render(
+    group(
+      { defaultOpen: true },
+      {
+        surface: GROUP_SURFACE.NARROW,
+        count: { value: 3, noun: "tasks", shown: NAV_COUNT_SHOWN.ALWAYS },
+      },
+    ),
+  );
+  assert.equal(shown(own), "always", "a count that says when it stands stands as given");
 });
 
 test("a press that opens plays the fold's motion, and a group drawn open plays none", () => {

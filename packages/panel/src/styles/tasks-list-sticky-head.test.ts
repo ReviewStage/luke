@@ -54,7 +54,9 @@ function list() {
   const scroll = child(page, "div", "luke-collection-page-scroll");
   const content = child(scroll, "div", "luke-collection-page-content");
   const group = child(child(content, "div", "tasks-list"), "section", "tasks-list-group");
-  const head = child(group, "h2", "tasks-list-head");
+  const root = child(group, "div", "luke-group-header");
+  root.dataset.head = "sticks";
+  const head = child(root, "div", "luke-group-header-head");
   return { scroll, content, head };
 }
 

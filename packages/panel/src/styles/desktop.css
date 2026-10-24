@@ -5478,7 +5478,7 @@ ul.actor-stack {
   background: var(--luke-color-fill-hover);
 }
 
-.tasks-list-group[data-drop-target="true"] > .tasks-list-head {
+.tasks-list-group[data-drop-target="true"] .luke-group-header-head {
   box-shadow: inset 0 -1px var(--luke-color-focus-ring);
 }
 

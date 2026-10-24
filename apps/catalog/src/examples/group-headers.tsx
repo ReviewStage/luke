@@ -2,6 +2,7 @@ import {
   EllipsisIcon,
   FolderIcon,
   GROUP_HEADING,
+  GROUP_SURFACE,
   GroupHeader,
   IconButton,
   NAV_COUNT_SHOWN,
@@ -18,7 +19,8 @@ import { CatalogSection } from "../section";
  * group-headers.tsx -- a group's head folding its rows, open and folded,
  * with its glyph, a pin, a count shown at rest or under the pointer, and
  * its actions beside the fold; a group its holder keeps; a head with no
- * glyph, whose chevron stands at rest; and heads that fold nothing.
+ * glyph, whose chevron stands at rest; heads that fold nothing; and the count
+ * on a wide page and in a narrow column.
  */
 
 const ignore = (): void => undefined;
@@ -98,6 +100,32 @@ function Still(): React.JSX.Element {
   );
 }
 
+/** The same group on a wide page, counted always, and in a narrow column, counted only folded or under the pointer. */
+function Surfaces(): React.JSX.Element {
+  return (
+    <div className="catalog-narrow">
+      <GroupHeader
+        label="Wide page"
+        glyph={<FolderIcon />}
+        count={{ value: TASKS.length, noun: "tasks" }}
+        surface={GROUP_SURFACE.WIDE}
+        fold={{ defaultOpen: true }}
+      >
+        <Rows names={TASKS} />
+      </GroupHeader>
+      <GroupHeader
+        label="Narrow column"
+        glyph={<FolderIcon />}
+        count={{ value: TASKS.length, noun: "tasks" }}
+        surface={GROUP_SURFACE.NARROW}
+        fold={{ defaultOpen: true }}
+      >
+        <Rows names={TASKS} />
+      </GroupHeader>
+    </div>
+  );
+}
+
 function GroupHeaders(): React.JSX.Element {
   return (
     <>
@@ -109,6 +137,12 @@ function GroupHeaders(): React.JSX.Element {
       </CatalogSection>
       <CatalogSection id="group-header-still" title="Heads that fold nothing">
         <Still />
+      </CatalogSection>
+      <CatalogSection
+        id="group-header-surfaces"
+        title="Counts on a wide page and in a narrow column"
+      >
+        <Surfaces />
       </CatalogSection>
     </>
   );

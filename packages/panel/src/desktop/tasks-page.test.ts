@@ -712,15 +712,20 @@ test("a group's head folds it, its count still standing, and the fold is kept on
     const head = [...page.querySelectorAll<HTMLElement>(".tasks-list-group")].find(
       (group) => group.getAttribute("aria-label") === "Todo",
     );
-    const button = head?.querySelector<HTMLButtonElement>(".tasks-list-head button");
+    const button = head?.querySelector<HTMLButtonElement>(".luke-group-header-head button");
     assert.ok(button, "Todo's head folds it");
     return button;
   };
+
+  // Note that a wide page counts a group open and folded alike, never only under the pointer.
+  const count = () => fold().querySelector(".luke-group-header-count");
+  assert.equal(count()?.getAttribute("data-shown"), "always");
 
   act(() => fold().click());
   assert.deepEqual(groups(page)[2], ["Todo", []]);
   assert.equal(fold().getAttribute("aria-expanded"), "false");
   assert.match(fold().textContent ?? "", /2/);
+  assert.equal(count()?.getAttribute("data-shown"), "always");
 
   act(() => {
     for (const root of roots.splice(0)) root.unmount();

@@ -1,8 +1,10 @@
 /* group-header.css -- GroupHeader: the head over a group of rows, in the
    group role's type, its glyph giving way to the fold's chevron while it is
    hovered or has the keyboard, its count after its label, and its actions
-   at its end while it is hovered or holds the focus. The fold's motion and
-   the chevron's turn are the Disclosure's (disclosure.css). */
+   at its end while it is hovered or holds the focus; it may stick to the top
+   of its scroller, and hand its rows on as a subgrid of the grid it stands
+   in. The fold's motion and the chevron's turn are the Disclosure's
+   (disclosure.css). */
 
 @layer components {
   .luke-group-header {
@@ -17,6 +19,32 @@
     padding-right: var(--luke-space-4);
     border-radius: var(--luke-control-radius);
     transition: background-color var(--luke-duration-hover) var(--luke-motion-exit);
+  }
+
+  /* A head that sticks stands at the top of its scroller while its rows
+     scroll beneath it, on the page's ground so they do not show through. */
+  .luke-group-header[data-head="sticks"] > .luke-group-header-head {
+    position: sticky;
+    z-index: 3;
+    top: 0;
+    background: var(--luke-color-ground);
+  }
+
+  /* A group in a grid hands the grid's columns on through its root and the
+     fold's body down to its rows, so each column lines up down the whole
+     page. Note that a subgrid is a grid whose parent is one, so the body,
+     which the fold draws, must be a subgrid too. */
+  .luke-group-header[data-rows="subgrid"],
+  .luke-group-header[data-rows="subgrid"] > .luke-disclosure-body {
+    display: grid;
+    grid-column: 1 / -1;
+    grid-template-columns: subgrid;
+    row-gap: var(--luke-space-2);
+  }
+
+  .luke-group-header[data-rows="subgrid"] > .luke-group-header-head,
+  .luke-group-header[data-rows="subgrid"] > .luke-disclosure-body > * {
+    grid-column: 1 / -1;
   }
 
   [data-luke-profile="desktop"] .luke-group-header-head {

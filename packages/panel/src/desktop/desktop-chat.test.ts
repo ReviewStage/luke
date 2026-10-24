@@ -219,10 +219,10 @@ function rail(page: HTMLElement): string[] {
   assert.ok(nav, "the rail is drawn");
   return [
     ...nav.querySelectorAll(
-      ".sidebar-repository-header button:not(.sidebar-repository-actions *), li .luke-list-row-main",
+      ".luke-group-header-head button:not(.luke-group-header-actions *), li .luke-list-row-main",
     ),
   ].map((node) => {
-    if (node.closest(".sidebar-repository-header") !== null) return `# ${headName(node)}`;
+    if (node.closest(".luke-group-header-head") !== null) return `# ${headName(node)}`;
     const shown = node.getAttribute("aria-current") === "page" ? "▸ " : "";
     // For you says under its name how many need the reader, in the Inbox's words, which it is read by.
     const waiting = /^(\d+) needs? you$/u.exec(
@@ -2081,9 +2081,9 @@ test("each place's row says who spoke last and what, as an Inbox row previews it
     "each place is one item of its group's list, never an item inside another",
   );
   act(() => general.click());
-  const head = [
-    ...page.querySelectorAll<HTMLButtonElement>(".sidebar-repository-header button"),
-  ].find((each) => headName(each) === "Channels");
+  const head = [...page.querySelectorAll<HTMLButtonElement>(".luke-group-header-head button")].find(
+    (each) => headName(each) === "Channels",
+  );
   assert.ok(head, "Channels heads its group");
   act(() => head.click());
   const channels = rail(page);
@@ -2091,13 +2091,14 @@ test("each place's row says who spoke last and what, as an Inbox row previews it
   assert.deepEqual(channels.slice(after, after + 3), ["# Channels", "▸ general", "# Tasks"]);
   // Folded, a group whose places wait unread says how many at rest, as the Inbox's folder counts do, so the dot it hid is not lost.
   const tasks = [
-    ...page.querySelectorAll<HTMLButtonElement>(".sidebar-repository-header button"),
+    ...page.querySelectorAll<HTMLButtonElement>(".luke-group-header-head button"),
   ].find((each) => headName(each) === "Tasks");
   assert.ok(tasks, "Tasks heads its group");
+  const count = () => tasks.querySelector<HTMLElement>(".luke-group-header-count");
+  assert.equal(count()?.dataset.shown, "on-hover", "an open group's count waits for the pointer");
   act(() => tasks.click());
-  const count = tasks.querySelector<HTMLElement>(".luke-nav-item-count");
-  assert.equal(count?.dataset.shown, "always", "the folded group's count stands at rest");
-  assert.match(count?.textContent ?? "", /^1 unread/u);
+  assert.equal(count()?.dataset.shown, "always", "the folded group's count stands at rest");
+  assert.match(count()?.textContent ?? "", /^1 unread/u);
 });
 
 test("a rail group folded stays folded as Chat is drawn again, the rail's own and a task's section alike, and a group never folded stays open", () => {
@@ -2201,12 +2202,12 @@ function mountRail(): HTMLElement {
 
 /** A group's header in the rail, by its name. */
 function railHead(page: HTMLElement, name: string): HTMLElement {
-  const head = [
-    ...page.querySelectorAll<HTMLElement>(".chat-rail .sidebar-repository-header"),
-  ].find((each) => {
-    const fold = each.querySelector("button:not(.sidebar-repository-actions *)");
-    return fold !== null && headName(fold) === name;
-  });
+  const head = [...page.querySelectorAll<HTMLElement>(".chat-rail .luke-group-header-head")].find(
+    (each) => {
+      const fold = each.querySelector("button:not(.luke-group-header-actions *)");
+      return fold !== null && headName(fold) === name;
+    },
+  );
   assert.ok(head, `the rail heads ${name}`);
   return head;
 }
@@ -2241,9 +2242,9 @@ test("the rail heads the tasks' channels as the sidebar heads their tasks, Pinne
     rail(page).filter((line) => line.startsWith("# ")),
     ["# Channels", "# Pinned", "# Launch", "# Direct messages"],
   );
-  assert.equal(railHead(page, "Pinned").querySelector(".luke-nav-item-icon"), null);
+  assert.equal(railHead(page, "Pinned").querySelector(".luke-group-header-icon"), null);
   assert.equal(
-    railHead(page, "Launch").querySelector(".luke-nav-item-icon")?.textContent,
+    railHead(page, "Launch").querySelector(".luke-group-header-icon")?.textContent,
     "🚀",
     "a section wears its own emoji",
   );
