@@ -45,10 +45,19 @@ test("a thought between two calls joins their group, whose line counts the calls
   assert.deepEqual(
     rowsOf([call("ls"), thought("Read the one file."), call("cat"), words("One file.")], true),
     [
-      ["2 tools called", ["ls", "Read the one file.", "cat"], { open: false, running: false }],
+      ["2 tool calls", ["ls", "Read the one file.", "cat"], { open: false, running: false }],
       "One file.",
     ],
   );
+});
+
+test("a run of calls is counted in the same words while its turn moves and once it has finished, so its line does not reword itself as the turn ends", () => {
+  const turn = [call("ls"), call("cat"), words("One file.")];
+  assert.deepEqual(rowsOf(turn, true), [
+    ["2 tool calls", ["ls", "cat"], { open: false, running: false }],
+    "One file.",
+  ]);
+  assert.deepEqual(rowsOf(turn, false), [["2 tool calls", ["ls", "cat"]], "One file."]);
 });
 
 test("a finished turn folds everything ahead of its last words under the same line as before, thoughts and subagents inside it on rows of their own", () => {
@@ -83,9 +92,9 @@ test("a message that reached a turn while it ran stands where it arrived: betwee
     words("Fixed."),
   ];
   assert.deepEqual(rowsOf(turn.slice(0, 4), true), [
-    ["2 tools called", ["a", "b"], { open: false, running: false }],
+    ["2 tool calls", ["a", "b"], { open: false, running: false }],
     "GitHub reviewed the pull request.",
-    ["1 tool called", ["c"], { open: true, running: false }],
+    ["1 tool call", ["c"], { open: true, running: false }],
   ]);
   assert.deepEqual(rowsOf(turn, false), [
     ["2 tool calls", ["a", "b"]],
@@ -127,7 +136,7 @@ test("a spoken turn's words run with its calls: inside the open group while it m
   ];
   assert.deepEqual(rowsOf(spoken, true, true), [
     [
-      "1 tool called, 1 subagent",
+      "1 tool call, 1 subagent",
       ["end_call", "Started a worker.", "Compare the queues.", "Seven days."],
       { open: true, running: false },
     ],

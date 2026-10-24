@@ -108,7 +108,7 @@ function Disclosures(): React.JSX.Element {
           <Stack>
             <Disclosure>
               <DisclosureSummary>
-                <span>3 tools called</span>
+                <span>3 tool calls</span>
               </DisclosureSummary>
               <DisclosureBody>
                 <Text>Read package.json</Text>
@@ -118,7 +118,7 @@ function Disclosures(): React.JSX.Element {
             </Disclosure>
             <Disclosure defaultOpen>
               <DisclosureSummary>
-                <span>2 tools called</span>
+                <span>2 tool calls</span>
               </DisclosureSummary>
               <DisclosureBody>
                 <Text>Ran the tests</Text>

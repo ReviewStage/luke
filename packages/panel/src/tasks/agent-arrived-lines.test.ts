@@ -208,11 +208,11 @@ test("in a turn still running, a line GitHub sent stands between the steps befor
 
   assert.deepEqual(drawnOrder(container), [
     "line: task",
-    "fold: 2 tools called",
+    "fold: 2 tool calls",
     "call: a",
     "call: b",
     "line: github",
-    "fold: 1 tool called",
+    "fold: 1 tool call",
     "call: c",
   ]);
 });

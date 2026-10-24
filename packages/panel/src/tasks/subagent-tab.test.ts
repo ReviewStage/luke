@@ -131,7 +131,7 @@ test("a worker still working draws its run of calls under one line, open on its 
   ]);
 
   const group = container.querySelector("[data-turn-fold] > summary");
-  assert.equal(group?.textContent, "2 tools called");
+  assert.equal(group?.textContent, "2 tool calls");
   assert.equal(group?.getAttribute("aria-expanded"), "true");
   assert.deepEqual(callRows(container), ["Searched toCsv", "Ran pnpm test"]);
 });
