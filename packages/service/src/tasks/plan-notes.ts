@@ -162,7 +162,7 @@ type LockedSave<T> =
 interface PlanConflict {
   readonly status: typeof PLAN_SAVE_STATUS.CONFLICT;
   readonly current: string;
-  /** The plan's last edit, whose writer wrote the text the edit met; none for a plan nobody has written. */
+  /** Who wrote the text the edit met (`conflictWriter`); none for a plan nobody has written. */
   readonly by?: PlanLastEdit;
 }
 
@@ -305,9 +305,33 @@ export type PlanEditSaveResult =
   | PlanNotSaved;
 
 /**
+ * Who wrote the text a developer's edit met: whoever last changed a section
+ * both the edit and the text since its base changed, the newest of them,
+ * as the plan read under the save's lock names each section's writer; the
+ * plan's last edit where no such section names one, as where the edit
+ * cleared the text or the sections were renamed meanwhile.
+ */
+function conflictWriter(
+  stored: StoredTask,
+  edit: PlanEditRequest,
+  current: string,
+): PlanLastEdit | undefined {
+  const { base, value } = edit.document;
+  const mine = new Set(changedSections(base, value));
+  const contested = new Set(changedSections(base, current).filter((heading) => mine.has(heading)));
+  const writers = (stored.task.sectionEdits ?? []).filter(({ section }) => contested.has(section));
+  const newest = writers.reduce<(typeof writers)[number] | undefined>(
+    (latest, each) => (latest === undefined || each.at > latest.at ? each : latest),
+    undefined,
+  );
+  if (newest === undefined) return stored.task.lastEdit;
+  const { section: _section, ...by } = newest;
+  return by;
+}
+
+/**
  * The developer's edit of the whole text, taken into the text as it stands,
- * or the conflict it meets, naming the plan's last edit, as it was read
- * under the same lock, as who wrote the text it met.
+ * or the conflict it meets, naming who wrote the text it met.
  */
 function takeDocumentEdit(
   stored: StoredTask,
@@ -316,7 +340,7 @@ function takeDocumentEdit(
   const outcome = applyDocumentEdit(stored.text, edit);
   if ("conflict" in outcome) {
     const { current } = outcome.conflict;
-    const by = stored.task.lastEdit;
+    const by = conflictWriter(stored, edit, current);
     const status = PLAN_SAVE_STATUS.CONFLICT;
     return Result.fail(by === undefined ? { status, current } : { status, current, by });
   }
