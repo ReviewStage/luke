@@ -14,6 +14,8 @@ export * from "./components/block-menu/block-menu.js";
 export * from "./components/breadcrumbs/breadcrumbs.js";
 export * from "./components/button/button.js";
 export * from "./components/calendar/calendar.js";
+export * from "./components/call/call-controls.js";
+export * from "./components/call/call-video-tile.js";
 export * from "./components/card/card.js";
 export * from "./components/card-press/card-press.js";
 export * from "./components/checkbox/checkbox.js";

@@ -34,7 +34,6 @@
     "./call/avatar-view": "./src/call/avatar-view.js",
     "./call/call-avatar": "./src/call/call-avatar.js",
     "./call/call-card": "./src/call/call-card.js",
-    "./call/call-video-tile": "./src/call/call-video-tile.js",
     "./call/panel-avatar": "./src/call/panel-avatar.js",
     "./desktop/luke-identity": "./src/desktop/luke-identity.js",
     "./keyboard-modality": "./src/keyboard-modality.js",

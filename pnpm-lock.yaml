@@ -144,6 +144,9 @@ importers:
       '@luke/ui':
         specifier: workspace:*
         version: link:../../packages/ui
+      '@luke/voice':
+        specifier: workspace:*
+        version: link:../../packages/voice
       react:
         specifier: 'catalog:'
         version: 19.2.8

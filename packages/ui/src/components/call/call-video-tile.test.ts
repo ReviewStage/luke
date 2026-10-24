@@ -1,12 +1,19 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { BUTTON_SHAPE } from "@luke/ui";
 import { AVATAR_END_REASON, AVATAR_STATUS, type AvatarEndReason } from "@luke/voice/avatar";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
-import { AvatarVoice, CALL_VIDEO_LABEL, CallVideoTile } from "./call-video-tile.js";
+import { CALL_CONTROL_LABEL } from "./call-controls.js";
+import { AvatarVoice, CALL_VIDEO_FIT, CALL_VIDEO_LABEL, CallVideoTile } from "./call-video-tile.js";
+
+/**
+ * call-video-tile.test.ts -- Luke's avatar tile as a reader meets it: what
+ * it says while it connects, the picture once its first frame is drawn,
+ * Video ended and why, Restart video, and its own Video off; and the
+ * avatar's voice, played apart from it. Synthetic tracks.
+ */
 
 type TileProps = Parameters<typeof CallVideoTile>[0];
 type VoiceProps = Parameters<typeof AvatarVoice>[0];
@@ -41,6 +48,7 @@ function tile(props: Partial<TileProps> = {}): React.ReactElement<TileProps> {
   return createElement(CallVideoTile, {
     video: undefined,
     status: AVATAR_STATUS.STARTING,
+    fit: CALL_VIDEO_FIT.CARD,
     onSetVideo: () => undefined,
     ...props,
   });
@@ -85,7 +93,7 @@ test("no call in progress, or the experiment off, draws nothing", () => {
 test("a connecting avatar says so and offers video off, not a restart", () => {
   const { container } = mountRoot(tile({ status: AVATAR_STATUS.STARTING }));
   assert.equal(waitingSays(container), CALL_VIDEO_LABEL.CONNECTING);
-  assert.ok(button(container, CALL_VIDEO_LABEL.VIDEO_OFF));
+  assert.ok(button(container, CALL_CONTROL_LABEL.VIDEO_OFF));
   assert.equal(button(container, CALL_VIDEO_LABEL.RESTART), undefined);
   assert.equal(container.querySelector("video"), null);
 });
@@ -99,7 +107,7 @@ function waitingSays(container: HTMLElement): string | undefined {
 /** The video draws its first frame, which the element says with `loadeddata`. */
 function drawFirstFrame(container: HTMLElement): void {
   act(() => {
-    container.querySelector(".call-video-frame")?.dispatchEvent(new Event("loadeddata"));
+    container.querySelector("video:not([aria-hidden])")?.dispatchEvent(new Event("loadeddata"));
   });
 }
 
@@ -119,22 +127,22 @@ test("a fresh avatar's track waits on its own first frame again", () => {
   const { container, root } = mountRoot(tile({ status: AVATAR_STATUS.LIVE, video: VIDEO }));
   drawFirstFrame(container);
   act(() => root.render(tile({ status: AVATAR_STATUS.LIVE, video: FRESH_VIDEO })));
-  assert.deepEqual(playing(container.querySelector(".call-video-frame")), [FRESH_VIDEO]);
+  assert.deepEqual(playing(container.querySelector("video:not([aria-hidden])")), [FRESH_VIDEO]);
   assert.equal(waitingSays(container), CALL_VIDEO_LABEL.CONNECTING);
 });
 
 test("a live avatar's picture is filled out by a blurred copy of the same track, hidden from a reader", () => {
   const { container } = mountRoot(tile({ status: AVATAR_STATUS.LIVE, video: VIDEO }));
-  const fill = container.querySelector<HTMLVideoElement>(".call-video-fill");
+  const fill = container.querySelector<HTMLVideoElement>("video[aria-hidden='true']");
   assert.deepEqual(playing(fill), [VIDEO]);
   assert.equal(fill?.getAttribute("aria-hidden"), "true");
-  assert.deepEqual(playing(container.querySelector(".call-video-frame")), [VIDEO]);
+  assert.deepEqual(playing(container.querySelector("video:not([aria-hidden])")), [VIDEO]);
 });
 
 test("a live avatar with no video track draws Luke's face as a still frame", () => {
   const { container } = mountRoot(tile({ status: AVATAR_STATUS.LIVE }));
   assert.equal(container.querySelector("video"), null);
-  assert.ok(container.querySelector(".call-video-still svg"));
+  assert.ok(container.querySelector("section svg"));
   assert.equal(button(container, CALL_VIDEO_LABEL.RESTART), undefined);
 });
 
@@ -170,7 +178,7 @@ test("video off takes the tile away, since the call's own controls carry Video o
   const { container, root } = mountRoot(
     tile({ status: AVATAR_STATUS.LIVE, video: VIDEO, onSetVideo }),
   );
-  act(() => button(container, CALL_VIDEO_LABEL.VIDEO_OFF)?.click());
+  act(() => button(container, CALL_CONTROL_LABEL.VIDEO_OFF)?.click());
   // Main answers the off with the avatar ended by the developer, which the model reads as OFF.
   act(() => root.render(tile({ status: AVATAR_STATUS.OFF, video: undefined, onSetVideo })));
   assert.equal(container.querySelector("section"), null);
@@ -180,7 +188,7 @@ test("video off takes the tile away, since the call's own controls carry Video o
 test("a tile that does not toggle offers no Video off of its own, as an agent's tab's, whose composer offers it", () => {
   const { container } = mountRoot(tile({ status: AVATAR_STATUS.LIVE, toggles: false }));
   assert.ok(container.querySelector("section"));
-  assert.equal(button(container, CALL_VIDEO_LABEL.VIDEO_OFF), undefined);
+  assert.equal(button(container, CALL_CONTROL_LABEL.VIDEO_OFF), undefined);
 });
 
 test("the tile draws no sound of its own, which the panel plays apart from it", () => {
@@ -205,9 +213,4 @@ test("the avatar's voice is let go of once its track is", () => {
   act(() => root.render(voice({ audio: undefined })));
   assert.equal(container.querySelector("audio"), audio);
   assert.equal(playing(audio), undefined);
-});
-
-test("the tile's video toggle is round, as the call's own controls are", () => {
-  const live = mountRoot(tile({ status: AVATAR_STATUS.LIVE, video: VIDEO })).container;
-  assert.equal(button(live, CALL_VIDEO_LABEL.VIDEO_OFF)?.dataset.shape, BUTTON_SHAPE.ROUND);
 });

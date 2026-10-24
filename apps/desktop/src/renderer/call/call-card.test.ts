@@ -4,13 +4,13 @@ import assert from "node:assert/strict";
 import type { AppStateDelivery, AppStateSnapshot } from "@luke/host/app-state";
 import { LIVE_STATUS } from "@luke/live";
 import { CALL_CARD_SURFACE, CallCardDock, type CallCardInput } from "@luke/panel/call/call-card";
-import { CALL_VIDEO_LABEL } from "@luke/panel/call/call-video-tile";
 import { AgentCallVideo, useCallCardVideo } from "@luke/panel/call/panel-avatar";
 import { fakeActPortAnswering, fakeAppBridge } from "@luke/panel/testing/app-bridge";
 import { deliveryOf, stateWith } from "@luke/panel/testing/app-state";
 import { onRegistry } from "@luke/panel/testing/copy-feedback";
 import { EXPERIMENT } from "@luke/settings";
 import { experimentsOn } from "@luke/settings/testing";
+import { CALL_CONTROL_LABEL, CALL_VIDEO_LABEL } from "@luke/ui";
 import { AVATAR_END_REASON, AVATAR_STATUS, type AvatarState } from "@luke/voice/avatar";
 import { IDLE_VOICE_VIEW, type VoiceView } from "@luke/voice/voice-view";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
@@ -156,14 +156,17 @@ test("with video on, the card draws Luke's video over the plan's name, on the tr
   assert.ok(head && tile.compareDocumentPosition(head) & Node.DOCUMENT_POSITION_FOLLOWING);
   assert.deepEqual(
     [...tile.querySelectorAll("button")].map((each) => each.getAttribute("aria-label")),
-    [CALL_VIDEO_LABEL.VIDEO_OFF],
+    [CALL_CONTROL_LABEL.VIDEO_OFF],
   );
 
   act(() => root.render(onRegistry(registry, dock(CARD))));
   assert.ok(card(container));
   assert.equal(tileIn(card(container)), null);
   assert.equal(container.querySelector("video"), null);
-  assert.equal(container.querySelector(`button[aria-label="${CALL_VIDEO_LABEL.VIDEO_ON}"]`), null);
+  assert.equal(
+    container.querySelector(`button[aria-label="${CALL_CONTROL_LABEL.VIDEO_ON}"]`),
+    null,
+  );
 });
 
 test("the card's Video off and Video on are the agent's tab's own toggle, and both views follow the one document", async () => {
@@ -191,7 +194,7 @@ test("the card's Video off and Video on are the agent's tab's own toggle, and bo
   const cardTile = tileIn(card(page));
   assert.ok(cardTile, "and so does the card");
 
-  act(() => button(cardTile, CALL_VIDEO_LABEL.VIDEO_OFF).click());
+  act(() => button(cardTile, CALL_CONTROL_LABEL.VIDEO_OFF).click());
   await settle();
   assert.deepEqual(sent, [{ kind: "voice.setVideo", payload: { on: false } }]);
 
@@ -203,7 +206,7 @@ test("the card's Video off and Video on are the agent's tab's own toggle, and bo
   act(() => {
     const cardShown = card(page);
     assert.ok(cardShown);
-    button(cardShown, CALL_VIDEO_LABEL.VIDEO_ON).click();
+    button(cardShown, CALL_CONTROL_LABEL.VIDEO_ON).click();
   });
   await settle();
   assert.deepEqual(sent.at(-1), { kind: "voice.setVideo", payload: { on: true } });
@@ -219,9 +222,9 @@ test("the floating call window draws Luke's video while the avatar is live, its 
   assert.ok(tile, "the window's card draws the video tile");
   // jsdom has no WebRTC, so the panel's frames never reach it: Luke's still face, not a black box.
   assert.equal(tile.querySelector("video"), null);
-  assert.ok(tile.querySelector(".call-video-face"));
+  assert.ok(tile.querySelector("svg"));
 
-  act(() => button(tile, CALL_VIDEO_LABEL.VIDEO_OFF).click());
+  act(() => button(tile, CALL_CONTROL_LABEL.VIDEO_OFF).click());
   await settle();
   assert.deepEqual(sent, [{ kind: "voice.setVideo", payload: { on: false } }]);
 
@@ -242,7 +245,7 @@ test("the floating call window draws Luke's video while the avatar is live, its 
   );
   await settle();
   assert.equal(tileIn(card(page)), null);
-  assert.equal(page.querySelector(`button[aria-label="${CALL_VIDEO_LABEL.VIDEO_ON}"]`), null);
+  assert.equal(page.querySelector(`button[aria-label="${CALL_CONTROL_LABEL.VIDEO_ON}"]`), null);
 });
 
 /** ⇧⌘ and a letter, as the window hears the chord a hint names. */

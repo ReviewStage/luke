@@ -15,8 +15,6 @@
      the side panel or in a task's column, stands it this tall, so moving
      between tabs never moves the content under the bar. */
   --secondary-bar-height: calc(var(--luke-control-height) + 2 * var(--luke-space-4) + 1px);
-  /* The call bar's own row, which the passing notices stand clear of. */
-  --call-row-height: 36px;
   /* The spacing scale, one control's box, corner, and glyph, the gaps
      between controls, list items, and sections, a page's inset and measure, a
      menu's rows, glyph, and shadow, the keyboard's ring, the floating layers,
@@ -1965,28 +1963,6 @@ ul.actor-stack {
   aspect-ratio: var(--call-video-aspect);
 }
 
-/* The tile fills the frame, which stands at the picture's own aspect, so
-   the picture fills the tile whole and needs no blurred fill beside it. */
-.agent-call-video-frame .call-video-tile {
-  width: 100%;
-  height: 100%;
-}
-
-.agent-call-video .call-video-frame {
-  object-fit: cover;
-}
-
-.agent-call-video .call-video-fill {
-  display: none;
-}
-
-.agent-call-video .call-video-face {
-  width: 40%;
-  max-width: 56px;
-  height: auto;
-  aspect-ratio: 1;
-}
-
 /* Anywhere no call's tab is drawn (Settings, the home page, a panel
    filling the window) the notice line floats at the window's foot over the
    work column. */
@@ -2013,122 +1989,6 @@ ul.actor-stack {
   left: 50%;
   width: calc(100% - 2 * var(--luke-space-16));
   max-width: none;
-}
-
-/* The call bar's own row, laid out as a voice composer's controls are: at
-   rest one start pill in its middle; in a call the call's two lines at its
-   left and its controls at its right. Its height holds whichever it draws,
-   so the document above never moves when a call begins or ends, but where
-   it is too narrow for the call on one row (below). It answers its own
-   width, as the plan's page, the sidebar's card, the floating card, and the
-   floating window draw it, each at a width of its own. */
-.call-bar {
-  container: call-bar / inline-size;
-  display: flex;
-  max-width: var(--luke-page-measure);
-  min-height: var(--call-row-height);
-  flex-wrap: wrap;
-  align-items: center;
-  margin: 0 auto;
-  gap: var(--luke-space-8) var(--luke-space-12);
-}
-
-.call-bar[data-call="false"] {
-  justify-content: center;
-}
-
-.call-status {
-  display: flex;
-  min-width: 0;
-  flex: 1;
-  flex-direction: column;
-  gap: var(--luke-space-2);
-  white-space: nowrap;
-}
-
-/* Each line is cut short on one line, so a long command never wraps the row
-   or pushes the controls, and the dots are never cut. */
-.call-status-word {
-  color: var(--luke-color-text);
-  font-size: var(--luke-type-section-size);
-  font-weight: var(--luke-weight-semibold);
-}
-
-.call-status-word[data-muted="true"] {
-  color: var(--luke-color-danger-text);
-}
-
-.call-backend {
-  display: flex;
-  min-width: 0;
-  align-items: center;
-  gap: var(--luke-space-8);
-  color: var(--luke-color-text-muted);
-  font-size: var(--luke-type-caption-size);
-}
-
-.call-backend-dots {
-  display: flex;
-}
-
-/* Luke's part is the one that gives way to a long command; the notetaker's
-   says the same few words whole, or goes (below). */
-.call-backend-part[data-part="notes"] {
-  flex: none;
-}
-
-.call-backend-action {
-  font-family: var(--luke-font-mono);
-}
-
-.call-controls,
-.call-mutes {
-  display: flex;
-  flex: none;
-  align-items: center;
-}
-
-/* End call stands apart from the two mutes, so muting never hangs up. */
-.call-controls {
-  margin-left: auto;
-  gap: var(--luke-space-8);
-}
-
-.call-mutes {
-  gap: var(--luke-space-4);
-}
-
-/* Too narrow for both of the backend's parts: the notetaker's goes while
-   Luke's stands, so what Luke is doing keeps the line. */
-@container call-bar (max-width: 479px) {
-  .call-backend-part[data-part="brain"] ~ [data-part="notes"] {
-    display: none;
-  }
-}
-
-/* Narrower, the controls close up to the card head's own step, so the call
-   card's mutes and End call stand under its Video on and its way back, each
-   apart from the next, and the working dots go, the line's own words saying
-   Luke works, so Luke's command keeps their room. */
-@container call-bar (max-width: 279px) {
-  .call-backend > .call-backend-dots {
-    display: none;
-  }
-
-  .call-controls {
-    gap: var(--luke-space-4);
-  }
-}
-
-/* Too narrow for the status beside the controls (the sidebar's card at its
-   narrowest, the plan's bar in a 280px column): the status takes a row of
-   its own, the voice's word whole, and the controls stand under it at the
-   right. The floating window's bar is wider than this and must stay so,
-   since its window's height is fixed (call.css). */
-@container call-bar (max-width: 209px) {
-  .call-status {
-    flex-basis: 100%;
-  }
 }
 
 /* The repository chip ------------------------------------------------------ */
