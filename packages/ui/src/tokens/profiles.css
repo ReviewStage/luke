@@ -170,6 +170,12 @@
   /* The glyph slot every menu row keeps, at its end as at its start. */
   --luke-menu-glyph: 16px;
   --luke-menu-shadow: 0 8px 32px var(--luke-color-shadow-soft);
+  /* The three widths a menu hung from its button asks for (`POPOVER_WIDTH`):
+     a Settings picker's, the composer's, and one that holds an issue's title
+     with its key and state after it. */
+  --luke-popover-width-narrow: 280px;
+  --luke-popover-width-regular: 340px;
+  --luke-popover-width-wide: 420px;
 
   /* How deep a scroller's edge dissolves where content runs past it
      (`ScrollArea`'s fade); the window's has stood a step off the scale. */
@@ -358,6 +364,12 @@
   /* The glyph slot every menu row keeps, at its end as at its start. */
   --luke-menu-glyph: 16px;
   --luke-menu-shadow: 0 8px 32px var(--luke-color-shadow-soft);
+  /* The three widths a menu hung from its button asks for (`POPOVER_WIDTH`):
+     a Settings picker's, the composer's, and one that holds an issue's title
+     with its key and state after it. */
+  --luke-popover-width-narrow: 280px;
+  --luke-popover-width-regular: 340px;
+  --luke-popover-width-wide: 420px;
 
   /* How deep a scroller's edge dissolves where content runs past it (`ScrollArea`'s fade). */
   --luke-scroll-fade: var(--luke-space-24);
