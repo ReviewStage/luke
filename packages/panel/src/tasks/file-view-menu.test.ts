@@ -111,7 +111,7 @@ test("View settings on a File tab offers its lines' wrap, numbers, minimized not
   const popover = document.querySelector<HTMLElement>('[role="dialog"]') ?? assert.fail();
 
   assert.deepEqual(
-    [...popover.querySelectorAll("h3")].map((heading) => heading.textContent),
+    [...popover.querySelectorAll("section h2")].map((heading) => heading.textContent),
     ["Lines", "Text"],
   );
   assert.deepEqual(
