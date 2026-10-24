@@ -41,6 +41,8 @@ import {
   GAP,
   GLYPH_INK,
   GlyphSlot,
+  GROUP_SURFACE,
+  GroupHeader,
   IconButton,
   INSET,
   InlineEdit,
@@ -100,6 +102,7 @@ import { useReadMarks } from "../tasks/use-task-looks.js";
 import { useTaskMaker } from "../tasks/use-task-origin.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import { useRefocusAfterEdit } from "../use-refocus-after-edit.js";
+import { groupCount } from "./sidebar-fold.js";
 import { useTaskMenu } from "./task-actions.js";
 import { taskCardOf } from "./task-card.js";
 import {
@@ -533,17 +536,12 @@ function TaskBoardColumnView({
       id={narrow ? panelId : undefined}
       role={narrow ? "tabpanel" : undefined}
     >
-      <Text as={TEXT_ELEMENT.H2} variant={TEXT_VARIANT.INHERIT} className="tasks-board-column-head">
-        {mark}
-        <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.SECTION} truncate>
-          {words}
-        </Text>
-        {column.tasks.length === 0 ? null : (
-          <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
-            {column.tasks.length}
-          </Text>
-        )}
-      </Text>
+      <GroupHeader
+        label={words}
+        glyph={mark}
+        count={column.tasks.length === 0 ? undefined : groupCount(column.tasks.length)}
+        surface={GROUP_SURFACE.WIDE}
+      />
       {cards.length === 0 ? (
         column.older === undefined ? (
           <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED} className="tasks-board-empty">

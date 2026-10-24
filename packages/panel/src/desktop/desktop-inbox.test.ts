@@ -756,7 +756,7 @@ function heardName(button: Element): string {
 function listed(page: HTMLElement): string[] {
   const list = page.querySelector(".inbox-tasks");
   assert.ok(list, "the list is drawn");
-  const fold = ".sidebar-repository-header button[aria-expanded]:not([aria-haspopup])";
+  const fold = ".luke-group-header-head button[aria-expanded]:not([aria-haspopup])";
   return [...list.querySelectorAll(`${fold}, li button.luke-list-row-main`)].map((node) => {
     if (node.matches(fold) || !(node instanceof HTMLButtonElement)) return `# ${heardName(node)}`;
     const name = node.querySelector(ROW_TITLE)?.textContent ?? "";
@@ -3050,7 +3050,7 @@ test("a folded plan counts what in it needs you, and one where nothing does coun
   await settle();
   const headers = () => [
     ...page.querySelectorAll<HTMLButtonElement>(
-      ".inbox-tasks .sidebar-repository-header button[aria-expanded]:not([aria-haspopup])",
+      ".inbox-tasks .luke-group-header-head button[aria-expanded]:not([aria-haspopup])",
     ),
   ];
   for (const header of headers()) act(() => header.click());
@@ -4406,7 +4406,7 @@ const BUMP: InboxItem = {
 function headerNamed(page: HTMLElement, name: string): HTMLButtonElement {
   const header = [
     ...page.querySelectorAll<HTMLButtonElement>(
-      ".inbox-tasks .sidebar-repository-header button[aria-expanded]:not([aria-haspopup])",
+      ".inbox-tasks .luke-group-header-head button[aria-expanded]:not([aria-haspopup])",
     ),
   ].find((each) => heardName(each) === name);
   assert.ok(header, `no header for ${name}`);
@@ -5617,7 +5617,7 @@ test("a teammate's open item of an agent with no plan is listed under the automa
   );
   const header = [
     ...page.querySelectorAll<HTMLButtonElement>(
-      ".inbox-tasks .sidebar-repository-header button[aria-expanded]:not([aria-haspopup])",
+      ".inbox-tasks .luke-group-header-head button[aria-expanded]:not([aria-haspopup])",
     ),
   ].find((each) => heardName(each) === "Charles Pan");
   assert.ok(header, "Charles Pan heads a group");
@@ -5925,7 +5925,7 @@ const THRESHOLD_ANSWERED: InboxItem = {
 function foldedCounts(page: HTMLElement): (string | null)[] {
   const headers = () => [
     ...page.querySelectorAll<HTMLButtonElement>(
-      ".inbox-tasks .sidebar-repository-header button[aria-expanded]:not([aria-haspopup])",
+      ".inbox-tasks .luke-group-header-head button[aria-expanded]:not([aria-haspopup])",
     ),
   ];
   for (const header of headers()) {
@@ -6340,11 +6340,11 @@ test("grouped by status, what needs you stands under the attention mark, then wh
   const header = (name: string) =>
     [
       ...page.querySelectorAll<HTMLButtonElement>(
-        ".inbox-tasks .sidebar-repository-header button[aria-expanded]:not([aria-haspopup])",
+        ".inbox-tasks .luke-group-header-head button[aria-expanded]:not([aria-haspopup])",
       ),
     ].find((each) => heardName(each) === name);
   assert.ok(
-    header("Needs you")?.closest(".sidebar-repository-header")?.querySelector(".attention-mark"),
+    header("Needs you")?.closest(".luke-group-header-head")?.querySelector(".attention-mark"),
     "Needs you's group wears the attention mark",
   );
   act(() => header("Waiting on others")?.click());

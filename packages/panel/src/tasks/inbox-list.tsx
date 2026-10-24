@@ -15,6 +15,8 @@ import {
   ERROR_STATE_PLACEMENT,
   ErrorState,
   GAP,
+  GROUP_SURFACE,
+  GroupHeader,
   HoverCard,
   HoverCardHead,
   IconButton,
@@ -110,7 +112,7 @@ import {
   useAskedMenu,
   useMenuAsk,
 } from "../desktop/phone-head.js";
-import { SidebarGroupHeader } from "../desktop/sidebar-group-header.js";
+import { groupCount, sidebarFold } from "../desktop/sidebar-fold.js";
 import { SidebarSectionHead } from "../desktop/sidebar-task-view.js";
 import { useMemberDirectory } from "../member-directory.js";
 import { PEOPLE_FILTER, PEOPLE_FILTER_WORDS, peopleFilterActions } from "../member-rows.js";
@@ -175,7 +177,7 @@ import { cardTitle } from "./tool-call-model.js";
  *
  * The list is drawn from the sidebar's own pieces, on the Inbox's own ground, so it reads as the
  * sidebar does. A task's items stand under the sidebar's own group header
- * (`sidebar-group-header.tsx`), the task's glyph giving way to its chevron
+ * (`GroupHeader`), the task's glyph giving way to its chevron
  * under the pointer, a press folding the group, and each fold kept across
  * launches as a sidebar group's is; an automation's agents stand under its
  * clock tile, which hangs its card. An item is a row of two lines, as a
@@ -591,27 +593,44 @@ export function InboxItemRow({
 }
 
 /**
+ * What every group head of the list is handed beside its glyph and name: its
+ * fold, as the list keeps it, and how many of its items need the reader, which
+ * a narrow column counts only while the group is folded or the head is under
+ * the pointer, and leaves out at none, since "0 need you" is no news.
+ */
+function groupHead(folded: boolean, count: number, onToggle: () => void) {
+  return {
+    fold: sidebarFold(folded, onToggle),
+    count: count === 0 ? undefined : groupCount(count, NEEDS_YOU.COUNT),
+    surface: GROUP_SURFACE.NARROW,
+  };
+}
+
+/**
  * A holder's group header: a task's status's mark and name; an
  * automation's clock tile, wearing how its last run went and hanging its
  * card where the window reads the automation; and the factory glyph for the
  * agents no automation names, since that group names no one actor.
- * A press folds the group, as every group header's does.
+ * A press folds the group, which then fades its rows out, as every group
+ * header's does.
  */
 function HolderHeader({
   holder,
   folded,
   count,
   onToggle,
+  children,
 }: {
   holder: InboxHolder;
   folded: boolean;
   count: number;
   onToggle: () => void;
+  children: React.ReactNode;
 }): React.JSX.Element {
   const known = useAutomation(
     holder.kind === INBOX_HOLDER.AUTOMATION ? (holder.automationId ?? undefined) : undefined,
   );
-  const shared = { folded, count, noun: NEEDS_YOU.COUNT, steady: true, onToggle };
+  const shared = { ...groupHead(folded, count, onToggle), children };
   if (holder.kind === INBOX_HOLDER.TASK) {
     const glyph = <PlanGlyph status={holder.task.status} />;
     const fallback = (
@@ -620,9 +639,9 @@ function HolderHeader({
       </HoverCard>
     );
     return (
-      <SidebarGroupHeader
+      <GroupHeader
         glyph={glyph}
-        name={holder.task.name}
+        label={holder.task.name}
         card={<TaskChipCard taskId={holder.task.id} fallback={fallback} />}
         {...shared}
       />
@@ -630,11 +649,7 @@ function HolderHeader({
   }
   if (holder.automationId === null) {
     return (
-      <SidebarGroupHeader
-        glyph={<FactoryIcon aria-hidden="true" />}
-        name={holder.name}
-        {...shared}
-      />
+      <GroupHeader glyph={<FactoryIcon aria-hidden="true" />} label={holder.name} {...shared} />
     );
   }
   const actor =
@@ -642,9 +657,9 @@ function HolderHeader({
       ? { kind: ACTOR_KIND.AUTOMATION, name: holder.name, state: ACTOR_STATE.REST }
       : automationActor(known.automation);
   return (
-    <SidebarGroupHeader
+    <GroupHeader
       glyph={<ActorMark actor={actor} />}
-      name={holder.name}
+      label={holder.name}
       card={known === undefined ? undefined : <AutomationCard {...known} />}
       {...shared}
     />
@@ -654,18 +669,20 @@ function HolderHeader({
 /**
  * A status's group header: Needs you by the attention mark, Waiting on
  * others by the hourglass, and Answered by a check. A press folds the
- * group, as every group header's does.
+ * group, which then fades its rows out, as every group header's does.
  */
 function StatusHeader({
   status,
   folded,
   count,
   onToggle,
+  children,
 }: {
   status: InboxStatusGroupKind;
   folded: boolean;
   count: number;
   onToggle: () => void;
+  children: React.ReactNode;
 }): React.JSX.Element {
   const glyph =
     status === INBOX_STATUS_GROUP.NEEDS_YOU ? (
@@ -676,15 +693,9 @@ function StatusHeader({
       <CircleCheckIcon />
     );
   return (
-    <SidebarGroupHeader
-      glyph={glyph}
-      name={STATUS_WORDS[status]}
-      folded={folded}
-      count={count}
-      noun={NEEDS_YOU.COUNT}
-      steady
-      onToggle={onToggle}
-    />
+    <GroupHeader glyph={glyph} label={STATUS_WORDS[status]} {...groupHead(folded, count, onToggle)}>
+      {children}
+    </GroupHeader>
   );
 }
 
@@ -692,7 +703,8 @@ function StatusHeader({
  * A person's group header: their face and name, the reader's own as You, a
  * member who left on the quiet outline, as the sidebar's group by creator
  * heads its groups, hanging their card as an automation's header hangs its
- * own. A press folds the group, as every group header's does.
+ * own. A press folds the group, which then fades its rows out, as every
+ * group header's does.
  */
 function PersonHeader({
   person,
@@ -700,12 +712,14 @@ function PersonHeader({
   folded,
   count,
   onToggle,
+  children,
 }: {
   person: InboxPerson | undefined;
   readerId: string | undefined;
   folded: boolean;
   count: number;
   onToggle: () => void;
+  children: React.ReactNode;
 }): React.JSX.Element {
   const { members, former, readerId: known } = useMemberDirectory();
   const reader = known ?? readerId;
@@ -717,16 +731,14 @@ function PersonHeader({
         ? memberActor(you, reader)
         : { kind: ACTOR_KIND.PERSON, userId: reader ?? "", name: "", you: true };
   return (
-    <SidebarGroupHeader
+    <GroupHeader
       glyph={<ActorMark actor={actor} size={ACTOR_SIZE.INLINE} />}
-      name={actorName(actor)}
+      label={actorName(actor)}
       card={person === undefined && you === undefined ? undefined : actorCard(actor)}
-      folded={folded}
-      count={count}
-      noun={NEEDS_YOU.COUNT}
-      steady
-      onToggle={onToggle}
-    />
+      {...groupHead(folded, count, onToggle)}
+    >
+      {children}
+    </GroupHeader>
   );
 }
 
@@ -1501,8 +1513,9 @@ export function InboxList({
           folded={folded}
           count={needingYou(items)}
           onToggle={() => head.view?.folds.toggle(key)}
-        />
-        {folded ? null : <InboxRows items={items} row={row} />}
+        >
+          <InboxRows items={items} row={row} />
+        </StatusHeader>
       </div>
     );
   };
@@ -1516,8 +1529,9 @@ export function InboxList({
           folded={folded}
           count={needingYou(items)}
           onToggle={() => head.view?.folds.toggle(key)}
-        />
-        {folded ? null : <InboxRows items={items} row={row} />}
+        >
+          <InboxRows items={items} row={row} />
+        </PersonHeader>
       </div>
     );
   };
@@ -1560,10 +1574,9 @@ export function InboxList({
                   folded={folded}
                   count={needingYou(items.map((item) => ({ holder, item })))}
                   onToggle={() => head.view?.folds.toggle(key)}
-                />
-                {folded ? null : (
+                >
                   <InboxRows items={items.map((item) => ({ holder, item }))} row={row} />
-                )}
+                </HolderHeader>
               </div>
             );
           }}

@@ -18,8 +18,13 @@ import { Tooltip } from "../tooltip/hint.js";
  * It is one row in the group role's type (`TEXT_VARIANT.GROUP`): the group's
  * glyph, its label, a mark said after the label (a pinned repository's pin),
  * and the count its caller hands it. The count is the caller's to give or
- * leave out, at any value and shown at rest or only under the pointer, since
- * when a group counts its rows is the surface's choice, not this one's.
+ * leave out, at any value, since when a group counts its rows is the
+ * surface's choice, not this one's; where it stands is the surface's width
+ * (`surface`): on a wide page, the Tasks list or the Board, always, and in a
+ * narrow column, the Inbox's list or the chat rail, only while the group is
+ * folded or the head is hovered or has the keyboard, so an open group's head
+ * keeps the room for its name. A count its caller gives a `shown` of its own,
+ * the sidebar's, stands as given.
  *
  * A group that folds (`fold`) is pressed on its head, which says whether the
  * group stands open in `aria-expanded`. The fold is a Disclosure's
@@ -46,6 +51,10 @@ import { Tooltip } from "../tooltip/hint.js";
  * the sidebar leaves the open task, drawn once the fold's fade is done, and
  * out of the way while the rows it was keeping come back.
  *
+ * A head may stick to the top of its scroller while its rows scroll beneath
+ * it (`head`), and a group standing in a grid whose columns its rows share,
+ * the Tasks list's, hands them on through its fold's body (`rows`).
+ *
  * A group's actions (a repository's ⋯ and +) stand at the head's end beside
  * the fold, so pressing one folds nothing, shown while the head is hovered
  * or holds the focus, and at rest where there is no hover. A right-click on
@@ -61,6 +70,27 @@ export const GROUP_HEADING = {
   NONE: "div",
 } as const;
 export type GroupHeading = (typeof GROUP_HEADING)[keyof typeof GROUP_HEADING];
+
+/** How wide the surface a group stands on is, which says where its count stands: always on a wide page, only folded or under the pointer in a narrow column. */
+export const GROUP_SURFACE = {
+  WIDE: "wide",
+  NARROW: "narrow",
+} as const;
+export type GroupSurface = (typeof GROUP_SURFACE)[keyof typeof GROUP_SURFACE];
+
+/** Whether a head scrolls away with its rows or sticks to the top of its scroller while they scroll beneath it. */
+export const GROUP_HEAD = {
+  SCROLLS: "scrolls",
+  STICKS: "sticks",
+} as const;
+export type GroupHead = (typeof GROUP_HEAD)[keyof typeof GROUP_HEAD];
+
+/** How a group's rows stand: stacked in a column of their own, or as a subgrid of the grid the group stands in, so their cells line up with every other group's. */
+export const GROUP_ROWS = {
+  STACKED: "stacked",
+  SUBGRID: "subgrid",
+} as const;
+export type GroupRows = (typeof GROUP_ROWS)[keyof typeof GROUP_ROWS];
 
 /** How a group folds: open from the start or not, or as its holder keeps it. */
 export type GroupFold = { readonly defaultOpen: boolean } | DisclosureControl;
@@ -132,6 +162,9 @@ export function GroupHeader({
   standing,
   tooltip,
   card,
+  surface = GROUP_SURFACE.WIDE,
+  head = GROUP_HEAD.SCROLLS,
+  rows: rowsStand = GROUP_ROWS.STACKED,
   heading = GROUP_HEADING.H2,
   menuOpen = false,
   contextMenu,
@@ -155,6 +188,12 @@ export function GroupHeader({
   tooltip?: string | undefined;
   /** The card the head hangs while the pointer rests on it, named by the label where no hint says more. */
   card?: ReactNode;
+  /** How wide the surface is, which says where the count stands; wide, always. */
+  surface?: GroupSurface;
+  /** Whether the head sticks to the top of its scroller; it scrolls away unless it says so. */
+  head?: GroupHead;
+  /** How the rows stand, which a group in a grid hands on as a subgrid. */
+  rows?: GroupRows;
   heading?: GroupHeading;
   /** Whether a menu the head opened stands, which keeps it ringed and its actions shown. */
   menuOpen?: boolean;
@@ -172,7 +211,19 @@ export function GroupHeader({
   // Note that a group with no rows draws no body, so its fold names none.
   const rows = (!folds || state.drawn) && said(children);
   const Heading = heading;
-  const lead = <Lead glyph={glyph} folds={folds} label={label} mark={mark} count={count} />;
+  // Note that a narrow column counts an open group only under the pointer, because its head has no room to spare for a figure at rest.
+  const counted =
+    count === undefined
+      ? undefined
+      : {
+          ...count,
+          shown:
+            count.shown ??
+            (surface === GROUP_SURFACE.NARROW && state.open
+              ? NAV_COUNT_SHOWN.ON_HOVER
+              : NAV_COUNT_SHOWN.ALWAYS),
+        };
+  const lead = <Lead glyph={glyph} folds={folds} label={label} mark={mark} count={counted} />;
   const hint = tooltip ?? (card === undefined ? undefined : label);
   // Note that only a head with a hint or a card is wrapped, because the tooltip hands its control a click handler of its own, which a head that folds nothing must not hear.
   const control = folds ? (
@@ -193,6 +244,8 @@ export function GroupHeader({
       <div
         className="luke-group-header"
         data-folds={folds ? "true" : undefined}
+        data-head={head === GROUP_HEAD.STICKS ? head : undefined}
+        data-rows={rowsStand === GROUP_ROWS.SUBGRID ? rowsStand : undefined}
         data-disclosure={folds ? details["data-disclosure"] : undefined}
       >
         <div

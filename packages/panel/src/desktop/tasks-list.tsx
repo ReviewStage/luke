@@ -26,7 +26,6 @@ import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
   AVATAR_SIZE,
   BUTTON_SIZE,
-  BUTTON_VARIANT,
   CARD_PRESS_SELECTOR,
   CardPress,
   CHIP_LOOK,
@@ -38,9 +37,11 @@ import {
   EmptyState,
   ERROR_STATE_PLACEMENT,
   ErrorState,
-  FoldChevronIcon,
-  FoldingButton,
   GAP,
+  GROUP_HEAD,
+  GROUP_ROWS,
+  GROUP_SURFACE,
+  GroupHeader,
   IconButton,
   InlineEdit,
   LAYOUT_ELEMENT,
@@ -125,6 +126,7 @@ import { undoToast, useToast } from "../toast.js";
 import { keptKey, useKept } from "../use-kept.js";
 import { useRefocusAfterEdit } from "../use-refocus-after-edit.js";
 import { sectionGlyph } from "./section-icon-picker.js";
+import { groupCount, sidebarFold } from "./sidebar-fold.js";
 import { useTaskMenu } from "./task-actions.js";
 import { taskCardOf } from "./task-card.js";
 import {
@@ -869,6 +871,36 @@ function TasksListGroup({
   });
   const zone = zoneOf(group.head);
   const titled = group.head.kind !== TASKS_GROUP.ALL;
+  const rows =
+    drawn.length === 0 ? (
+      group.older === undefined ? (
+        <Text
+          variant={TEXT_VARIANT.CAPTION}
+          tone={TEXT_TONE.MUTED}
+          className="tasks-list-group-empty"
+        >
+          {draggable && ordered(group.head) ? DRAG_HERE : NO_TASKS}
+        </Text>
+      ) : null
+    ) : (
+      <Stack
+        as={LAYOUT_ELEMENT.UL}
+        gap={GAP.NONE}
+        moves
+        className="tasks-list-rows"
+        aria-label={head.name}
+        data-row-drop-rows={ordered(group.head) ? "" : undefined}
+        onPointerDown={draggable ? drag : undefined}
+      >
+        {drawn.map(({ value }) => row(value))}
+      </Stack>
+    );
+  const body = (
+    <>
+      {rows}
+      <OlderCompleted older={group.older} onShow={onShowOlder} />
+    </>
+  );
   return (
     <section
       className="tasks-list-group"
@@ -876,56 +908,22 @@ function TasksListGroup({
       data-row-drop={draggable ? zone : undefined}
       data-folded={folded ? "true" : undefined}
     >
-      {/* Note that one run of every task, grouped by nothing, needs no head of its own. */}
+      {/* Note that one run of every task, grouped by nothing, needs no head of its own, and no fold. */}
       {titled ? (
-        <Text as={TEXT_ELEMENT.H2} variant={TEXT_VARIANT.INHERIT} className="tasks-list-head">
-          <FoldingButton
-            variant={BUTTON_VARIANT.ROW}
-            label={head.name}
-            aria-expanded={!folded}
-            onClick={onToggle}
-            trailing={group.tasks.length}
-            icon={
-              <>
-                <span
-                  className="tasks-list-chevron"
-                  data-open={folded ? undefined : "true"}
-                  aria-hidden="true"
-                >
-                  <FoldChevronIcon />
-                </span>
-                <span className="tasks-list-glyph" aria-hidden="true">
-                  {head.icon}
-                </span>
-              </>
-            }
-          />
-        </Text>
-      ) : null}
-      {folded ? null : drawn.length === 0 ? (
-        group.older === undefined ? (
-          <Text
-            variant={TEXT_VARIANT.CAPTION}
-            tone={TEXT_TONE.MUTED}
-            className="tasks-list-group-empty"
-          >
-            {draggable && ordered(group.head) ? DRAG_HERE : NO_TASKS}
-          </Text>
-        ) : null
-      ) : (
-        <Stack
-          as={LAYOUT_ELEMENT.UL}
-          gap={GAP.NONE}
-          moves
-          className="tasks-list-rows"
-          aria-label={head.name}
-          data-row-drop-rows={ordered(group.head) ? "" : undefined}
-          onPointerDown={draggable ? drag : undefined}
+        <GroupHeader
+          label={head.name}
+          glyph={head.icon}
+          fold={sidebarFold(folded, onToggle)}
+          count={groupCount(group.tasks.length)}
+          surface={GROUP_SURFACE.WIDE}
+          head={GROUP_HEAD.STICKS}
+          rows={GROUP_ROWS.SUBGRID}
         >
-          {drawn.map(({ value }) => row(value))}
-        </Stack>
+          {body}
+        </GroupHeader>
+      ) : (
+        body
       )}
-      {folded ? null : <OlderCompleted older={group.older} onShow={onShowOlder} />}
     </section>
   );
 }

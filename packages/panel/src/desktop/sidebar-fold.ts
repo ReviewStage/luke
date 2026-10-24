@@ -14,6 +14,11 @@ import type { CountNoun } from "./sidebar-group-header.js";
 /** What a folded group's count is read as unless its group holds something else. */
 export const TASK_NOUN: CountNoun = { one: "task", many: "tasks" };
 
+/** The count a group's head draws: its figure, read with its noun ("n tasks" unless the group holds something else), where it stands being the head's `surface`. */
+export function groupCount(count: number, noun: CountNoun = TASK_NOUN): NavCount {
+  return { value: count, noun: count === 1 ? noun.one : noun.many };
+}
+
 /** A group folded as the sidebar keeps it, open unless `folded`, asking `onToggle` for each change. */
 export function sidebarFold(folded: boolean, onToggle: () => void): GroupFold {
   return {

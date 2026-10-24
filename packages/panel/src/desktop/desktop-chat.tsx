@@ -16,6 +16,8 @@ import {
   ErrorState,
   FoldingButton,
   type FoldingButtonHint,
+  GROUP_SURFACE,
+  GroupHeader,
   IconButton,
   LIST_DENSITY,
   LIST_ROW_ACTIONS,
@@ -102,7 +104,7 @@ import { strandedHome } from "./move-task-dialog.js";
 import { useNarrowFocus } from "./narrow-focus.js";
 import { type MenuAsk, PhoneHead, PlaceMore, useAskedMenu, useMenuAsk } from "./phone-head.js";
 import { sectionGlyph } from "./section-icon-picker.js";
-import { SidebarGroupHeader } from "./sidebar-group-header.js";
+import { groupCount, sidebarFold } from "./sidebar-fold.js";
 import { TaskRowMark, taskCardOf } from "./task-card.js";
 
 /**
@@ -113,7 +115,7 @@ import { TaskRowMark, taskCardOf } from "./task-card.js";
  * The rail is drawn from the sidebar's own pieces: For you at its head,
  * counting what needs the developer in the Inbox's words (`NEEDS_YOU`),
  * then the channels, the tasks', and the direct messages, each group under
- * the sidebar's own group header (`SidebarGroupHeader`), each row wearing
+ * the sidebar's own group header (`GroupHeader`), each row wearing
  * the Inbox's unread dot and the unread weight while anything in it is
  * unread (`chat-model.ts`). A direct message's row leads with the other
  * member's mark and is named by who it is with; a direct message between
@@ -758,6 +760,23 @@ function PlaceRow({
   );
 }
 
+/** A group's places, as one list. */
+function RailRows({
+  name,
+  rows,
+  row,
+}: {
+  name: string;
+  rows: readonly ChatRailRow[];
+  row: (each: ChatRailRow) => React.JSX.Element;
+}): React.JSX.Element {
+  return (
+    <List label={name} density={LIST_DENSITY.DENSE}>
+      {rows.map(row)}
+    </List>
+  );
+}
+
 /**
  * A group of the rail under the sidebar's own group header: its name,
  * folding, and how many of its places wait unread; folded, the place shown
@@ -786,7 +805,6 @@ function RailGroup({
   row: (each: ChatRailRow) => React.JSX.Element;
   current: (each: ChatRailRow) => boolean;
 }): React.JSX.Element {
-  const drawn = folded ? rows.filter(current) : rows;
   const unread = rows.filter((each) => each.unread > 0);
   const menu = useMenu(shown);
   const ellipsis = useRef<HTMLButtonElement | null>(null);
@@ -800,22 +818,26 @@ function RailGroup({
       },
     ],
   ];
+  const standing = rows.filter(current);
   return (
     <div className="sidebar-repository">
-      <SidebarGroupHeader
+      <GroupHeader
         glyph={glyph}
-        name={name}
-        folded={folded}
-        count={unread.length}
-        noun={UNREAD_NOUN}
-        steady
+        label={name}
+        fold={sidebarFold(folded, onToggle)}
+        count={unread.length === 0 ? undefined : groupCount(unread.length, UNREAD_NOUN)}
+        surface={GROUP_SURFACE.NARROW}
         menuOpen={menu.open !== undefined}
         contextMenu={menu.contextMenu(ellipsis)}
-        onToggle={onToggle}
+        standing={
+          standing.length === 0 ? undefined : <RailRows name={name} rows={standing} row={row} />
+        }
         actions={
           <MoreButton ref={ellipsis} thing={name} size={BUTTON_SIZE.COMPACT} {...menu.trigger()} />
         }
-      />
+      >
+        {rows.length === 0 ? null : <RailRows name={name} rows={rows} row={row} />}
+      </GroupHeader>
       {menu.drawn === undefined ? null : (
         <ActionMenu
           label={moreLabel(name)}
@@ -823,11 +845,6 @@ function RailGroup({
           groups={groups}
           onClose={menu.close}
         />
-      )}
-      {drawn.length === 0 ? null : (
-        <List label={name} density={LIST_DENSITY.DENSE}>
-          {drawn.map(row)}
-        </List>
       )}
     </div>
   );
