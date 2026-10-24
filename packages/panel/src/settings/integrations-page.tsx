@@ -42,6 +42,8 @@ import {
   INLINE_EDIT_LOOK,
   InlineEdit,
   type InlineEditEnd,
+  ListMotion,
+  motionKey,
   ProviderMark,
   RetryButton,
   ScrollArea,
@@ -104,7 +106,9 @@ import { MenuRow } from "./menu-row.js";
  * stands once that needs saying — connected with the count of its server's
  * tools, a sign-in under way, or one expired. A sign-in begun waits on the
  * browser with Reopen and Cancel, and one that failed or never finished
- * says so with Try again (`integration-sign-in.ts`). A connection is said to be
+ * says so with Try again (`integration-sign-in.ts`). A row that connects or
+ * disconnects glides from one section into the other (`ListMotion`), and
+ * holds still under reduced motion. A connection is said to be
  * connected only once its server answered with its tools; one whose server
  * answered why it would not says why instead (`integration-health.ts`). A
  * row's button is for the problem state alone: Connect while none stands,
@@ -660,7 +664,8 @@ function IntegrationRow({
       ].filter((group) => group.length > 0)
     : [];
   return (
-    <Stack gap={GAP.NONE}>
+    // Note that a row is followed by its connection, because one that connects or disconnects leaves one section for the other and glides across rather than leaving one and arriving in the other.
+    <Stack gap={GAP.NONE} {...motionKey(connection)}>
       <MenuRow
         thing={name}
         actions={actions}
@@ -804,6 +809,60 @@ function NoMatchNote({ query }: { query: string }): React.JSX.Element {
   return <PageNote>{words}</PageNote>;
 }
 
+/** The rows each section stands, by its heading, as the connections the rows are followed by. */
+type SectionPlaces = readonly (readonly [string | undefined, readonly string[]])[];
+
+/** Whether two placings stand the same rows in the same sections, in the same order. */
+function samePlaces(one: SectionPlaces, other: SectionPlaces): boolean {
+  return (
+    one.length === other.length &&
+    one.every(([heading, rows], at) => {
+      const [otherHeading, otherRows] = other[at] ?? [];
+      return (
+        heading === otherHeading &&
+        rows.length === otherRows?.length &&
+        rows.every((row, place) => row === otherRows[place])
+      );
+    })
+  );
+}
+
+/**
+ * The page's sections, which move (`ListMotion`): a row that connects or
+ * disconnects glides from the section it stood in to the other, followed
+ * by its connection, and the sections and rows it moved glide with it.
+ * Note that only a change in where the rows stand plays, because a row
+ * opening onto its tools grows in place, and the rows under it gliding down
+ * would pass over the tools it opened.
+ */
+function MovingSections({
+  found,
+  children,
+}: {
+  found: readonly { readonly heading: string | undefined; readonly rows: readonly FoundRow[] }[];
+  children: React.ReactNode;
+}): React.JSX.Element {
+  const moving = useRef<HTMLElement | null>(null);
+  const places: SectionPlaces = found.map((group) => [
+    group.heading,
+    group.rows.map((each) => each.row.connection),
+  ]);
+  const [placed, setPlaced] = useState(() => ({ places, change: {} }));
+  // Note that the placing follows the rows as they render, React's way of keeping what an earlier render drew, so the commit that moves a row is the one that plays.
+  let { change } = placed;
+  if (!samePlaces(placed.places, places)) {
+    change = {};
+    setPlaced({ places, change });
+  }
+  return (
+    <ListMotion root={moving} change={change}>
+      <Stack gap={GAP.PAGE} moves ref={moving}>
+        {children}
+      </Stack>
+    </ListMotion>
+  );
+}
+
 /**
  * Every offered provider's row, once where they stand has been read, so each
  * row is drawn whole at once, under the page's search; a read that failed
@@ -880,7 +939,7 @@ function IntegrationRows({ filter }: { filter: IntegrationsFilter }): React.JSX.
       ? setOpened((now) => turned(now, server))
       : setTurnedInSearch({ query, providers: turned(turnedNow, server) });
   return (
-    <>
+    <MovingSections found={found}>
       {statuses.readFailed ? (
         <SettingsSection>
           <SettingsLine>
@@ -912,7 +971,7 @@ function IntegrationRows({ filter }: { filter: IntegrationsFilter }): React.JSX.
           ))}
         </SettingsSection>
       ))}
-    </>
+    </MovingSections>
   );
 }
 

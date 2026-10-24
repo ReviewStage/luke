@@ -41,6 +41,7 @@ import { announcedPolitely, mountAnnouncer } from "../testing/announcer.js";
 import { type AnyAct, fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
 import { deliveryOf, signedInAs } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
+import { playListMotions } from "../testing/pane-motion.js";
 import { IntegrationsSection } from "./integrations-page.js";
 
 /**
@@ -1744,4 +1745,123 @@ test("Reopen on an added account still waiting on its first sign-in reopens that
       .map((request) => request.payload),
     [{ provider: notion, connection: "notion-3" }],
   );
+});
+
+/** How tall a row is drawn, in the layout given. */
+const ROW = 40;
+
+/** How much taller a row opened onto its tools stands, in the layout given. */
+const TOOLS = 200;
+
+/** How tall a moving row stands: a row's height, and its tools' under it where it opened onto them. */
+function heightOf(row: Element): number {
+  return row.querySelector(".integration-tools-panel") === null ? ROW : ROW + TOOLS;
+}
+
+/** Each row standing under the rows before it on the page, as a layout would; jsdom lays nothing out. */
+function layRowsInOrder(page: HTMLElement): void {
+  vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (
+    this: HTMLElement,
+  ) {
+    const rows = [...page.querySelectorAll("[data-motion-key]")];
+    const at = rows.indexOf(this);
+    const top = rows.slice(0, Math.max(at, 0)).reduce((sum, row) => sum + heightOf(row), 0);
+    return { top, bottom: top + ROW, left: 0, right: 0, width: 0, height: ROW } as DOMRect;
+  });
+}
+
+/** What a row moves as, the box its motion follows, by the row's name. */
+function movingRow(page: HTMLElement, name: string): HTMLElement {
+  return (
+    rowNamed(page, name).closest<HTMLElement>("[data-motion-key]") ??
+    assert.fail(`${name}'s row moves`)
+  );
+}
+
+/** Granola, Linear, and Mercury offered, none of them connected. */
+function offerThree(): void {
+  const offered: readonly IntegrationProvider[] = [
+    GRANOLA,
+    INTEGRATION_PROVIDER.LINEAR,
+    INTEGRATION_PROVIDER.MERCURY,
+  ];
+  withheld = INTEGRATION_PROVIDER_LIST.filter((provider) => !offered.includes(provider));
+}
+
+test("an integration that connects glides from Not connected into Connected, followed by its connection", async () => {
+  const motions = playListMotions();
+  try {
+    offerThree();
+    const page = await mount();
+    layRowsInOrder(page);
+    const before = movingRow(page, "Mercury");
+
+    touched.set(INTEGRATION_PROVIDER.MERCURY, INTEGRATION_STATUS.CONNECTED);
+    await focusWindow();
+
+    assert.deepEqual(sections(page), [
+      ["Connected", ["Mercury"]],
+      ["Not connected", ["Granola", "Linear"]],
+    ]);
+    const after = movingRow(page, "Mercury");
+    assert.equal(before.dataset.motionKey, INTEGRATION_PROVIDER.MERCURY);
+    assert.equal(after.dataset.motionKey, INTEGRATION_PROVIDER.MERCURY);
+    const glide = motions.played.find((each) => each.element === after);
+    assert.deepEqual(glide?.keyframes[0], { transform: `translate(0px, ${2 * ROW}px)` });
+  } finally {
+    motions.remove();
+  }
+});
+
+test("with motion held still, an integration that connects takes its place and nothing plays", async () => {
+  const motions = playListMotions();
+  try {
+    for (const name of ["--luke-duration-exit", "--luke-duration-shape"]) {
+      document.documentElement.style.setProperty(name, "0ms");
+    }
+    offerThree();
+    const page = await mount();
+    layRowsInOrder(page);
+
+    touched.set(INTEGRATION_PROVIDER.MERCURY, INTEGRATION_STATUS.CONNECTED);
+    await focusWindow();
+
+    assert.deepEqual(sections(page), [
+      ["Connected", ["Mercury"]],
+      ["Not connected", ["Granola", "Linear"]],
+    ]);
+    assert.deepEqual(
+      motions.played.map((each) => each.keyframes),
+      [],
+    );
+  } finally {
+    motions.remove();
+  }
+});
+
+test("a row opening onto its tools moves no row under it, since nothing changed section", async () => {
+  const motions = playListMotions();
+  try {
+    connectVercelAndLinear();
+    const page = await mount();
+    layRowsInOrder(page);
+    const vercel = movingRow(page, "Vercel");
+
+    openRow(page, "Linear");
+    await settle();
+
+    assert.notEqual(
+      rowNamed(page, "Linear")
+        .closest("[data-motion-key]")
+        ?.querySelector(".integration-tools-panel"),
+      null,
+    );
+    assert.equal(movingRow(page, "Vercel"), vercel);
+    assert.deepEqual(
+      motions.played.map((each) => each.keyframes),
+      [],
+    );
+  } finally {
+    motions.remove();
+  }
 });
