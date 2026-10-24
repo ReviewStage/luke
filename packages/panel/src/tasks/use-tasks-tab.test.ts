@@ -2951,7 +2951,7 @@ test("a fixture run on the chat profile opens Chat at once and its staged chat l
   assert.equal(live.control().chatView.chat, undefined);
 });
 
-test("opening Chat on a place, as a chat notice's Open in Chat does, asks first while a page stands its ask, as every other way out does", () => {
+test("opening Chat on a place, as a chat notice's Open in chat does, asks first while a page stands its ask, as every other way out does", () => {
   const tab = mount({ shown: true, tasks: listRead([listed()]) });
   const asked: (() => void)[] = [];
   act(() => {

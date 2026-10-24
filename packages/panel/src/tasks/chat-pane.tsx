@@ -173,9 +173,9 @@ const NO_TASKS: readonly TaskSummary[] = [];
 /** What a channel says before anything is posted in it. */
 const NOTHING_POSTED = "Nothing posted here yet.";
 
-/** What a channel no box is offered in says at its foot: an archived one, or a direct message between two others; and the press that brings an archived topic back. */
+/** What a channel no box is offered in says at its foot: an archived one, or a direct message between two others; and the press that unarchives a topic. */
 const ARCHIVED_CHANNEL = "This channel is archived";
-const BRING_BACK_CHANNEL = "Bring back channel";
+const UNARCHIVE_CHANNEL = "Unarchive channel";
 const OTHERS_DM = (pair: string) => `Only ${pair} post in this conversation.`;
 
 /** What a row says of a block this build does not know. */
@@ -1427,7 +1427,7 @@ function PlaceView({
       ) : channel.archived && channel.kind === CHANNEL_KIND.TOPIC && onBringBack !== undefined ? (
         <ArchivedComposerNote
           words={ARCHIVED_CHANNEL}
-          action={BRING_BACK_CHANNEL}
+          action={UNARCHIVE_CHANNEL}
           onUnarchive={() => onBringBack(channel)}
         />
       ) : (

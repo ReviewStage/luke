@@ -1054,7 +1054,7 @@ function channelOf(seq: number): string | undefined {
   return chat.answer.messages.find((message) => message.seq === seq)?.channelId;
 }
 
-test("a line a chat notice wrote draws as its sender's bubble at the left, the line under it naming who and when, its words the message's own, and Open in Chat opens the channel", () => {
+test("a line a chat notice wrote draws as its sender's bubble at the left, the line under it naming who and when, its words the message's own, and Open in chat opens the channel", () => {
   const { container, opened } = noticeDrawn(true);
   const bubble = container.querySelector<HTMLElement>("[data-chat-notice]");
   assert.ok(bubble, "the notice draws as a bubble");
@@ -1076,7 +1076,7 @@ test("a line a chat notice wrote draws as its sender's bubble at the left, the l
     bubble.querySelector(".chat-notice-words")?.textContent ?? "",
     /^Add teammate invitations are you changing memberships columns\?/u,
   );
-  const open = bubble.querySelector<HTMLElement>('button[aria-label="Open in Chat"]');
+  const open = bubble.querySelector<HTMLElement>('button[aria-label="Open in chat"]');
   act(() => open?.click());
   assert.deepEqual(opened, [{ kind: CHAT_PLACE.CHANNEL, channelId: channelOf(43) }]);
 });
@@ -1149,28 +1149,28 @@ test("where the window holds no chat, a notice's bubble names its sender from th
     bubble?.querySelector(".chat-notice-words")?.textContent?.trim(),
     "Are you changing memberships?",
   );
-  assert.equal(bubble?.querySelector('button[aria-label="Open in Chat"]'), null);
+  assert.equal(bubble?.querySelector('button[aria-label="Open in chat"]'), null);
 });
 
-/** The card Open in Chat hangs on a notice of message `seq`, once the pointer rests on it. */
+/** The card Open in chat hangs on a notice of message `seq`, once the pointer rests on it. */
 function placeCardOf(seq: number): string {
   const { container } = noticeDrawn(true, true, {
     ...NOTICE,
     metadata: { author: "agent", channel: "chat", chat_seq: seq, from: "Invite emails" },
   });
-  const open = container.querySelector('[data-chat-notice] button[aria-label="Open in Chat"]');
-  restOn(open ?? assert.fail("Open in Chat stands"));
+  const open = container.querySelector('[data-chat-notice] button[aria-label="Open in chat"]');
+  restOn(open ?? assert.fail("Open in chat stands"));
   return document.querySelector(".luke-tooltip-card [data-chat-notice-place]")?.textContent ?? "";
 }
 
-test("Open in Chat on a direct message hangs a card saying it is one, and who it is with", () => {
+test("Open in chat on a direct message hangs a card saying it is one, and who it is with", () => {
   const card = placeCardOf(41);
   assert.match(card, /^Direct message/u);
   assert.equal(card.includes("Reply in a thread"), false);
   assert.match(card, /19[67]\d/u, "a message of another year says its year");
 });
 
-test("Open in Chat on a thread reply hangs a card naming the channel, the thread, and its first message", () => {
+test("Open in chat on a thread reply hangs a card naming the channel, the thread, and its first message", () => {
   const card = placeCardOf(44);
   assert.match(card, /teammate-invitations/u);
   assert.match(card, /Reply in a thread/u);
