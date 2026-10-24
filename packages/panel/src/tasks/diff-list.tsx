@@ -8,6 +8,7 @@ import {
   MENU_SURFACE_FLOW,
   MenuSurface,
   ScrollArea,
+  SpinnerRegion,
   TooltipPill,
   useHintRest,
   usePressAway,
@@ -43,6 +44,7 @@ import {
   sameLook,
   sameNotes,
 } from "../diff-view/contract.js";
+import { CHANGES_WORDS } from "./changes-model.js";
 
 /**
  * diff-list.tsx -- a pull request's files as Files changed draws them: one list, every file under a header of its own, drawn by Pierre's list (`../diff-view/`'s `mountList`), only the files near the view drawn at all.
@@ -221,6 +223,9 @@ function sameFiles(a: readonly DiffListFile[], b: readonly DiffListFile[]): bool
 /** No lines. */
 const NO_LINES: readonly number[] = [];
 
+/** The class of the element a file's header is drawn in, which Pierre stands in the list once it draws the file. */
+const HEAD_SLOT = "diff-list-head-slot";
+
 /** The element kept by `key` in `held`, made with `className` the first time it is asked for. */
 function keptElement(held: Map<string, HTMLDivElement>, key: string, className: string) {
   const kept = held.get(key);
@@ -235,7 +240,9 @@ function keptElement(held: Map<string, HTMLDivElement>, key: string, className: 
  * The files of `entries` drawn as one list in `look`, in a `ScrollArea`
  * that fills the File tab's place and scrolls up and down, each file's
  * unwrapped lines scrolling sideways in Pierre's own way; while the bundle
- * loads the place stands empty, and where it failed to load it says so.
+ * loads the place says the changes are still being read, as the tab does
+ * while it reads them, and stands busy until Pierre has drawn the first of
+ * its files; where it failed to load it says so.
  */
 export function PierreDiffList({
   entries,
@@ -331,7 +338,7 @@ export function PierreDiffList({
   const headers = useRef(new Map<string, HTMLDivElement>());
   const notes = useRef(new Map<string, Map<string, HTMLDivElement>>());
   const renderHeader = useCallback(
-    (path: string) => keptElement(headers.current, path, "diff-list-head-slot"),
+    (path: string) => keptElement(headers.current, path, HEAD_SLOT),
     [],
   );
   const renderAnnotation = useCallback((path: string, key: string) => {
@@ -381,6 +388,24 @@ export function PierreDiffList({
       mounted.unmount();
     };
   }, [module, door]);
+
+  // Note that Pierre draws the files a beat after the list is mounted, its
+  // highlighter readied, so the list is said to be busy until the first
+  // file's header stands in the scroller, rather than standing empty.
+  const [filesDrawn, setFilesDrawn] = useState(false);
+  useEffect(() => {
+    const element = host.current;
+    if (module === undefined || element === null) return undefined;
+    const look = (watch: MutationObserver) => {
+      if (element.querySelector(`.${HEAD_SLOT}`) === null) return;
+      watch.disconnect();
+      setFilesDrawn(true);
+    };
+    const watch = new MutationObserver((_changes, self) => look(self));
+    watch.observe(element, { childList: true, subtree: true });
+    look(watch);
+    return () => watch.disconnect();
+  }, [module]);
 
   useEffect(() => {
     if (handle.current === undefined) return;
@@ -455,13 +480,19 @@ export function PierreDiffList({
       ref={holdBox}
       className="diff-view diff-list"
       data-diff-layout={look.layout}
+      aria-busy={filesDrawn ? undefined : true}
       onPointerOver={(event) => hang(event.nativeEvent)}
       onPointerLeave={letGoHint}
       onPointerDown={letGoHint}
     >
-      <ScrollArea ref={host} data-diff-list-scroller="">
-        {null}
-      </ScrollArea>
+      {/* Note that the wait stands in the scroller's place, which is drawn in the same commit the bundle lands in, before the mount reads it. */}
+      {module === undefined ? (
+        <SpinnerRegion delay label={CHANGES_WORDS.READING} />
+      ) : (
+        <ScrollArea ref={host} data-diff-list-scroller="">
+          {null}
+        </ScrollArea>
+      )}
       {offer === undefined || onComment === undefined ? null : (
         <MenuSurface
           ref={offerBox}
