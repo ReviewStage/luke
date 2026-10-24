@@ -12,9 +12,12 @@ import {
   FailureNote,
   FILL_ELEMENT,
   Fill,
-  PageToolbar,
+  NOT_FOUND_THING,
+  NotFound,
   SKELETON_SHAPE,
   Skeleton,
+  TOOLBAR_INSET,
+  Toolbar,
   useMinute,
 } from "@luke/ui";
 import { openThread, PlanCommentsProvider, usePlanComments } from "@luke/ui/plan-comments";
@@ -31,7 +34,6 @@ import { AutomationDirectory } from "../automation-directory.js";
 import { LinkWorkspaceProvider } from "../copy-link-item.js";
 import { FindScope } from "../find-in-tab.js";
 import { MemberDirectory } from "../member-directory.js";
-import { NOT_FOUND_THING, NotFound } from "../not-found.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import { useSteadyDoor } from "../steady-door.js";
 import { AgentCard, agentSubject } from "../tasks/agent-ref.js";
@@ -264,8 +266,9 @@ function TaskPageSkeleton({
       fullScreen={panel?.fullScreen === true}
       column={
         <>
-          <PageToolbar
-            lead={<MainTabStripSkeleton />}
+          <Toolbar
+            start={TOOLBAR_INSET.COLUMN}
+            title={<MainTabStripSkeleton />}
             actions={<TaskActionsSkeleton summary={summary.holds} />}
           />
           <TaskBody>
@@ -466,7 +469,7 @@ function TaskInboxTab({
           hidden={columns.shown !== INBOX_COLUMNS.BOTH}
         >
           {/* The empty pane keeps a bar the list's head's height, as the window's Inbox does. */}
-          <PageToolbar />
+          <Toolbar />
           {/* Note that the list says what its tab or its search left out, so the pane beside it stands bare. */}
           {inbox.read && listed.length === 0 && !filteredOut && searched === undefined ? (
             <EmptyState icon={<InboxIcon />}>{NEEDS_YOU.NONE}</EmptyState>
@@ -947,27 +950,26 @@ function PlanDocument({
         : "Choose a task, or start a new one.";
     // A plan that cannot be drawn offers no menu, so its way out is said here.
     const close = { label: "Close task", onClick: tasks.onLeaveTask };
+    // A plan the service would not hand the reader is not there for them, whether it was deleted or never theirs.
+    if (region.kind === DOCUMENT_REGION.MISSING) {
+      return <NotFound thing={NOT_FOUND_THING.TASK} bar={{}} action={close} />;
+    }
     return (
       <>
-        <PageToolbar heading={null} />
-        {/* A plan the service would not hand the reader is not there for them, whether it was deleted or never theirs. */}
-        {region.kind === DOCUMENT_REGION.MISSING ? (
-          <NotFound thing={NOT_FOUND_THING.TASK} action={close} />
-        ) : (
-          <Fill as={FILL_ELEMENT.SECTION} className="desktop-empty-region">
-            {region.kind === DOCUMENT_REGION.FAILED ? (
-              <ErrorState
-                onRetry={tasks.onRetryDocument}
-                placement={ERROR_STATE_PLACEMENT.CENTRED}
-                exit={close}
-              >
-                {line}
-              </ErrorState>
-            ) : (
-              <EmptyState>{line}</EmptyState>
-            )}
-          </Fill>
-        )}
+        <Toolbar />
+        <Fill as={FILL_ELEMENT.SECTION} className="desktop-empty-region">
+          {region.kind === DOCUMENT_REGION.FAILED ? (
+            <ErrorState
+              onRetry={tasks.onRetryDocument}
+              placement={ERROR_STATE_PLACEMENT.CENTRED}
+              exit={close}
+            >
+              {line}
+            </ErrorState>
+          ) : (
+            <EmptyState>{line}</EmptyState>
+          )}
+        </Fill>
       </>
     );
   }
@@ -1128,8 +1130,9 @@ function PlanDocument({
                     fullScreen={sidePanel.fullScreen}
                     column={
                       <>
-                        <PageToolbar
-                          lead={
+                        <Toolbar
+                          start={TOOLBAR_INSET.COLUMN}
+                          title={
                             <MainTabStrip
                               task={task}
                               main={mainTabs}

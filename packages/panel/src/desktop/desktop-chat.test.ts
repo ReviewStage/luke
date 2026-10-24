@@ -1591,7 +1591,9 @@ test("New channel opens a topic under the name typed, written as a channel's, wi
 function pickViewOption(page: HTMLElement, label: string): void {
   act(() =>
     page
-      .querySelector<HTMLButtonElement>('.chat-rail-bar button[aria-label="View options"]')
+      .querySelector<HTMLButtonElement>(
+        '.chat-rail > .luke-toolbar button[aria-label="View options"]',
+      )
       ?.click(),
   );
   const item = [
@@ -1647,11 +1649,14 @@ test("every channel's head ends on its menu: Mark as read and Copy link for each
 
 test("the rail's bar is a page's toolbar: Chat's title and its Experimental tag, View options, New channel, and Send feedback; Mark all as read takes every unread dot off", () => {
   const page = mount();
-  const bar = page.querySelector(".chat-rail-bar");
+  const bar = page.querySelector(".chat-rail > .luke-toolbar");
   assert.equal(bar?.querySelector("h1.desktop-toolbar-title")?.textContent, "Chat");
-  assert.equal(bar?.querySelector(".experiment-tag")?.textContent, "Experimental");
+  assert.equal(
+    bar?.querySelector(".luke-toolbar-heading > .luke-toolbar-tag .experiment-tag")?.textContent,
+    "Experimental",
+  );
   assert.deepEqual(
-    [...(bar?.querySelectorAll(".desktop-toolbar-actions button") ?? [])].map(
+    [...(bar?.querySelectorAll(".luke-toolbar-actions button") ?? [])].map(
       (each) => each.getAttribute("aria-label") ?? each.textContent,
     ),
     ["View options", "New channel", "Send feedback"],

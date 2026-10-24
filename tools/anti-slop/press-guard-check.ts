@@ -13,6 +13,7 @@ import {
   JSX_SOURCE,
   PRESS_GUARD_RULE,
 } from "./shared/press-guard.ts";
+import { PRESS_LISTENER_GUARD_RULE } from "./shared/press-listener-guard.ts";
 import { namesRetired, RETIRED_GUARD_RULE } from "./shared/retired.ts";
 import { SKELETON_GUARD_RULE } from "./shared/skeleton-guard.ts";
 
@@ -23,8 +24,9 @@ import { SKELETON_GUARD_RULE } from "./shared/skeleton-guard.ts";
  * directive that would silence `no-raw-press-outside-ui`, on any JSX-capable
  * file holding one that would silence `skeleton-through-components` or
  * `async-press-needs-busy`, whose baseline is the only way past it, on any
- * TypeScript file holding one that would silence `no-lucide-outside-door`,
- * whose baseline is the only way past it, on any TypeScript file that spells
+ * TypeScript file holding one that would silence `no-lucide-outside-door` or,
+ * where it adds a listener, `no-document-press-listener`, whose baselines are
+ * the only way past them, on any TypeScript file that spells
  * a retired name and holds one that would silence `retired`, whose retired
  * file's baseline is the only way past it, and on an `.oxlintrc.json` that
  * leaves any of them short of an error anywhere or whose `ignorePatterns`
@@ -45,6 +47,10 @@ function sourceFiles(): readonly string[] {
   if (listed.status !== 0) throw new Error(`git ls-files failed:\n${listed.stderr}`);
   return listed.stdout.split("\0").filter((file) => file.length > 0);
 }
+
+/** A press listener on the whole window, as far as the text says: the only file that has anything to silence. */
+const PRESS_LISTENER =
+  /(?:document|window|globalThis|ownerDocument|defaultView)\s*\.\s*addEventListener\(\s*["'`](?:pointerdown|mousedown|touchstart|click|auxclick)/u;
 
 /** Each guard, the files it watches, and what to do instead of silencing it. */
 const GUARDS = [
@@ -78,6 +84,17 @@ const GUARDS = [
       existsSync(absolute) &&
       readFileSync(absolute, "utf8").includes("lucide-react"),
     remedy: "Import the icon from @luke/ui/icons instead",
+  },
+  {
+    rule: PRESS_LISTENER_GUARD_RULE,
+    sources: TYPESCRIPT_SOURCE,
+    // A file that never adds a listener has nothing to silence; the guards' own tests spell fixtures.
+    watches: (absolute: string) =>
+      !path.relative(REPOSITORY_ROOT, absolute).startsWith("tools/anti-slop/") &&
+      existsSync(absolute) &&
+      PRESS_LISTENER.test(readFileSync(absolute, "utf8")),
+    remedy:
+      "Close the popover through `onPressAway` on its AnchoredPopover or RectFloat, or `usePressAway`, instead",
   },
   {
     rule: RETIRED_GUARD_RULE,

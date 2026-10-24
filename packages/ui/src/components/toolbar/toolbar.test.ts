@@ -5,7 +5,14 @@ import { readFileSync } from "node:fs";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
-import { NOT_FOUND_THING, NotFound, TOOLBAR_INSET, Toolbar, type ToolbarProps } from "./toolbar.js";
+import {
+  NOT_FOUND_THING,
+  NotFound,
+  TOOLBAR_INSET,
+  TOOLBAR_LOOK,
+  Toolbar,
+  type ToolbarProps,
+} from "./toolbar.js";
 
 /**
  * toolbar.test.ts -- a workspace's bar reads its lead, its title as the
@@ -196,4 +203,22 @@ test("a not-found state under a bar already drawn draws no second bar", () => {
 
   assert.equal(region.querySelector("header"), null);
   assert.match(region.textContent ?? "", /This task doesn't exist/);
+});
+
+test("a phone's bar stands its title in the middle column whether or not a corner holds a control, and is named by the place it heads", () => {
+  laySheets();
+  const banner = bar({
+    look: TOOLBAR_LOOK.PHONE,
+    place: "task",
+    title: "Tasks",
+    actions: createElement("span", null, "More"),
+  });
+  const heading = banner.querySelector(".luke-toolbar-heading") ?? assert.fail("no heading");
+  const actions = banner.querySelector(".luke-toolbar-actions") ?? assert.fail("no actions");
+
+  assert.ok(banner.classList.contains("task-head"));
+  assert.equal(declared(banner, "display"), "grid");
+  assert.equal(declared(heading, "grid-column"), "2");
+  assert.equal(declared(actions, "grid-column"), "3");
+  assert.equal(declared(bar({ title: "Tasks" }), "display"), "flex");
 });

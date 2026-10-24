@@ -16,12 +16,14 @@ import {
   InlineEdit,
   MoreButton,
   moreLabel,
+  NOT_FOUND_THING,
+  NotFound,
   ONE_LINE_ELEMENT,
   ONE_LINE_END,
   OneLine,
-  PageToolbar,
   SpinnerRegion,
   STATUS_TONE,
+  Toolbar,
   useMenu,
 } from "@luke/ui";
 import { pullRequestAgentOf, repositoryPullRequestOf } from "@luke/ui/pull-request-link";
@@ -36,7 +38,6 @@ import { LinkWorkspaceProvider } from "../copy-link-item.js";
 import { FindScope } from "../find-in-tab.js";
 import { usePageWorkspace } from "../links-at-hand.js";
 import { MemberDirectory } from "../member-directory.js";
-import { NOT_FOUND_THING, NotFound } from "../not-found.js";
 import { useSteadyDoor, useSteadyDoors } from "../steady-door.js";
 import { agentSubject } from "../tasks/agent-ref.js";
 import { peopleOf } from "../tasks/changes-card.js";
@@ -146,12 +147,12 @@ const ACTIONS_THING = "Agent";
 const NAME_LABEL = "Agent name";
 
 /**
- * The page's title and its ⋯, which offer the agent's own actions as its
+ * The page's bar: its title and its ⋯, which offer the agent's own actions as its
  * tab in a task's column does (`agent-actions.tsx`): its title turned into
  * its name's field by Rename, and every action of the tab's ⋯, in the same
  * groups (`strip-tabs.tsx`'s `contentActionGroups`).
  */
-function AgentPageHeading({
+function AgentPageBar({
   agent,
   agents,
   shown,
@@ -183,9 +184,9 @@ function AgentPageHeading({
   });
   const rename = luke ? undefined : actions.rename;
   return (
-    <>
-      <div className="desktop-toolbar-heading">
-        {rename?.editing === true ? (
+    <Toolbar
+      title={
+        rename?.editing === true ? (
           <OneLine
             as={ONE_LINE_ELEMENT.H1}
             end={ONE_LINE_END.ELLIPSIS}
@@ -202,24 +203,24 @@ function AgentPageHeading({
             />
           </OneLine>
         ) : (
-          <OneLine as={ONE_LINE_ELEMENT.H1} className="desktop-toolbar-title">
-            {label}
-          </OneLine>
-        )}
-      </div>
-      <div className="desktop-toolbar-actions">
-        <MoreButton thing={ACTIONS_THING} {...menu.trigger()} />
-        {menu.drawn === undefined ? null : (
-          <ActionMenu
-            label={moreLabel(ACTIONS_THING)}
-            menu={menu.drawn}
-            groups={groups}
-            onClose={menu.close}
-          />
-        )}
-        {actions.dialog}
-      </div>
-    </>
+          label
+        )
+      }
+      actions={
+        <>
+          <MoreButton thing={ACTIONS_THING} {...menu.trigger()} />
+          {menu.drawn === undefined ? null : (
+            <ActionMenu
+              label={moreLabel(ACTIONS_THING)}
+              menu={menu.drawn}
+              groups={groups}
+              onClose={menu.close}
+            />
+          )}
+          {actions.dialog}
+        </>
+      }
+    />
   );
 }
 
@@ -495,28 +496,24 @@ export function DesktopAgentPage({
   );
   const toolbar =
     agent === undefined ? (
-      <PageToolbar heading={null} />
+      <Toolbar />
     ) : (
-      <PageToolbar
-        lead={
-          <AgentPageHeading
-            agent={agent}
-            agents={control}
-            shown={tasks.shown}
-            terminals={terminalDoors}
-            onClose={tasks.agentView.onClose}
-            luke={luke}
-          />
-        }
+      <AgentPageBar
+        agent={agent}
+        agents={control}
+        shown={tasks.shown}
+        terminals={terminalDoors}
+        onClose={tasks.agentView.onClose}
+        luke={luke}
       />
     );
   if (agent === undefined) {
+    // A page the service would not hand the reader keeps its bar over the words saying so.
+    if (agents.listMissing) return <NotFound thing={NOT_FOUND_THING.AGENT} bar={{}} />;
     return (
       <Fill as={FILL_ELEMENT.SECTION} className="agent-page" aria-label="Agent">
         {toolbar}
-        {agents.listMissing ? (
-          <NotFound thing={NOT_FOUND_THING.AGENT} />
-        ) : agents.listFailed ? (
+        {agents.listFailed ? (
           <ErrorState onRetry={agents.onRetryList} placement={ERROR_STATE_PLACEMENT.CENTRED}>
             {NOT_READ}
           </ErrorState>

@@ -2439,7 +2439,13 @@ function AgentTabView({
             replyDoor={replyDoor}
             closedRemedy={closedRemedy}
             call={
-              call === undefined ? undefined : <AgentCallControls agentId={agent.id} doors={call} />
+              call === undefined ? undefined : (
+                <AgentCallControls
+                  agentId={agent.id}
+                  doors={call}
+                  startedAt={calls.find((each) => each.live)?.startedAt}
+                />
+              )
             }
             // Note that a call holds the microphone, so its own mute stands where Dictate would.
             dictates={!onCall}

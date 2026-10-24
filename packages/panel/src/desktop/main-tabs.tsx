@@ -383,9 +383,9 @@ function addEntries(
   return [...starts, ...agentRows];
 }
 
-/** The row the column's tabs stand in, which heads its toolbar: the strip, what follows it, and the "+" last. */
+/** The row the column's tabs stand in, which is its toolbar's title: the strip, what follows it, and the "+" last. */
 function MainTabsRow({ children }: { children: React.ReactNode }): React.JSX.Element {
-  return <div className="desktop-toolbar-heading main-tabs">{children}</div>;
+  return <div className="main-tabs">{children}</div>;
 }
 
 /**

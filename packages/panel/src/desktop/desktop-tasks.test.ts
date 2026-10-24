@@ -113,6 +113,9 @@ test("a task the service will not hand the reader, as a link to another workspac
     container.textContent ?? "",
     /Not foundThis task doesn't exist, or you don't have access to it\./u,
   );
+  // The frame keeps the window's bar, which the words saying so stand under.
+  const frame = container.querySelector("section[aria-label='Not found']");
+  assert.equal(frame?.firstElementChild?.tagName, "HEADER");
   assert.deepEqual(left, [TASK.id]);
   act(() => root.unmount());
   container.remove();
@@ -139,7 +142,10 @@ test("while the task is read, its column's toolbar and the side panel stand thei
   const blocks = (row: Element | null) =>
     [...(row?.querySelectorAll(":scope > .luke-skeleton") ?? [])].length;
 
-  assert.equal(blocks(container.querySelector(".desktop-toolbar > .main-tabs")), 2);
+  assert.equal(
+    blocks(container.querySelector(".luke-toolbar > .luke-toolbar-heading > .main-tabs")),
+    2,
+  );
   assert.equal(blocks(container.querySelector("aside[aria-label='Panel'] .side-panel-tabs")), 2);
   const acts = [...container.querySelectorAll(".desktop-toolbar-actions > .luke-skeleton")];
   assert.equal(

@@ -86,6 +86,13 @@ test("the view standing follows the panel: Agents while it is shut, Plan on the 
 });
 
 /** The task's page in `room`, its panel open on `tab` over the plan, the Inbox, and the board, and a page of the plan's where `paged`, every press on the panel, the way out, and a rename told; `draw` draws it again over a panel opened or shut on another tab. */
+/** What a menu item says, its words and what it acts on, without the chord the open task's items print at their end. */
+function itemWords(item: HTMLElement): string {
+  const chord = item.querySelector(".luke-shortcut")?.textContent ?? "";
+  const words = item.textContent ?? "";
+  return chord !== "" && words.endsWith(chord) ? words.slice(0, -chord.length) : words;
+}
+
 function mount(
   room: ShellRoom,
   open = true,
@@ -146,8 +153,7 @@ function mount(
   const menu = () => {
     act(() => more().click());
     const groups = [...document.querySelectorAll<HTMLElement>('[role="menu"] button')].map(
-      (each) =>
-        `${each.getAttribute("aria-checked") === "true" ? "*" : ""}${each.textContent ?? ""}`,
+      (each) => `${each.getAttribute("aria-checked") === "true" ? "*" : ""}${itemWords(each)}`,
     );
     act(() => more().click());
     return groups;
@@ -157,7 +163,7 @@ function mount(
   const choose = (name: string) => {
     act(() => more().click());
     const found = [...document.querySelectorAll<HTMLElement>('[role="menu"] button')].find(
-      (each) => each.textContent === name,
+      (each) => itemWords(each) === name,
     );
     assert.ok(found, `the ⋯ offers ${name}`);
     act(() => found.click());
@@ -169,7 +175,9 @@ function mount(
     title: container.querySelector(".task-head h1")?.textContent,
   });
   const back = () => {
-    const found = container.querySelector<HTMLButtonElement>(".task-head .phone-head-start button");
+    const found = container.querySelector<HTMLButtonElement>(
+      ".task-head .luke-toolbar-lead button",
+    );
     assert.ok(found, "the row leads with its way back");
     act(() => found.click());
   };

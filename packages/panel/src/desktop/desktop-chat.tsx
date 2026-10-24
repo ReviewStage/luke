@@ -25,9 +25,6 @@ import {
   ListRow,
   MoreButton,
   moreLabel,
-  ONE_LINE_ELEMENT,
-  ONE_LINE_END,
-  OneLine,
   PencilIcon,
   PlusIcon,
   RESIZE_EDGE_SIDE,
@@ -38,6 +35,8 @@ import {
   ScrollArea,
   SpinnerRegion,
   Time,
+  TOOLBAR_INSET,
+  Toolbar,
   Tooltip,
   UnarchiveIcon,
   useMenu,
@@ -1228,23 +1227,18 @@ function RailBar({
     );
   }
   return (
-    <header className="desktop-toolbar chat-rail-bar">
-      <div className="desktop-toolbar-heading">
-        <OneLine
-          as={ONE_LINE_ELEMENT.H1}
-          end={ONE_LINE_END.ELLIPSIS}
-          className="desktop-toolbar-title"
-        >
-          {CHAT_LIST}
-        </OneLine>
-        <ExperimentTag narrow={narrow} />
-      </div>
-      <div className="desktop-toolbar-actions">
-        {viewOptions?.(undefined)}
-        {newChannel}
-        <SendFeedbackButton experiment={EXPERIMENT.CHAT} />
-      </div>
-    </header>
+    <Toolbar
+      title={CHAT_LIST}
+      tag={<ExperimentTag />}
+      end={TOOLBAR_INSET.COLUMN}
+      actions={
+        <>
+          {viewOptions?.(undefined)}
+          {newChannel}
+          <SendFeedbackButton experiment={EXPERIMENT.CHAT} />
+        </>
+      }
+    />
   );
 }
 

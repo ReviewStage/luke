@@ -59,9 +59,8 @@ export const COMBOBOX_ITEM_HINT =
 export const COMBOBOX_ITEM_END =
   "inline-flex size-menu-glyph flex-none items-center justify-center text-muted-foreground group-aria-current/option:text-foreground [&_svg]:size-menu-glyph [&_svg]:text-inherit";
 
-/** A group's heading over its run. */
-export const COMBOBOX_LABEL =
-  "px-row-inset pt-row-inset pb-luke-4 text-group font-group text-muted-foreground";
+/** Where a group's heading stands over its run; its words are `Text`'s group role. */
+export const COMBOBOX_HEADING = "px-row-inset pt-row-inset pb-luke-4";
 
 /** What stands where no option does, or after them: one quiet line, centred, a row or two tall. */
 export const COMBOBOX_EMPTY =

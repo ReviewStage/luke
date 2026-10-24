@@ -24,7 +24,6 @@ import {
   ListRow,
   NavItem,
   OneLine,
-  PageToolbar,
   ResizeEdge,
   RowHint,
   RowHintOptions,
@@ -37,6 +36,8 @@ import {
   SkeletonRegion,
   TextButton,
   Time,
+  TOOLBAR_INSET,
+  Toolbar,
   Tooltip,
   useMinute,
 } from "@luke/ui";
@@ -598,7 +599,7 @@ function VersionPage({
   }
   return (
     <>
-      {lead === undefined ? <div className="desktop-drag-strip" /> : <PageToolbar lead={lead} />}
+      <Toolbar lead={lead} start={lead === undefined ? undefined : TOOLBAR_INSET.COLUMN} />
       <Fill className="desktop-empty-region">
         {list.kind === HISTORY_READ.FAILED ? (
           <ErrorState onRetry={versions.onRetry} placement={ERROR_STATE_PLACEMENT.CENTRED}>

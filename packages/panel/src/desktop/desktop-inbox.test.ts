@@ -8162,8 +8162,8 @@ test("the list's search stands under the Inbox's head, its name and buttons neve
   await settle();
   const title = headTitle(page);
   const buttons = () =>
-    [...(page.querySelector(".inbox-tasks-bar")?.querySelectorAll("button") ?? [])].map((each) =>
-      each.getAttribute("aria-label"),
+    [...(page.querySelector(".inbox-tasks > .luke-toolbar")?.querySelectorAll("button") ?? [])].map(
+      (each) => each.getAttribute("aria-label"),
     );
   assert.deepEqual(buttons(), ["New thread", "View options"]);
   const input = page.querySelector<HTMLInputElement>(
@@ -8383,6 +8383,32 @@ test("Discard takes a New thread away and shows the item it stood over again, as
   act(() => rowNamed(page, RETRY.title).click());
   await settle();
   assert.equal(itemPane(page).getAttribute("aria-label"), RETRY.title);
+});
+
+test("New thread's bar leads with the way back to the Inbox, titles itself New thread, and ends in Discard", async () => {
+  listedWorkspace = ACME;
+  inboxes = new Map([[BILLING.id, [THRESHOLD, RETRY]]]);
+  heldStarts([AGENT]);
+  const { page } = mount();
+  await settle();
+  layOut(page, 700);
+  await settle();
+  act(() =>
+    (
+      page.querySelector<HTMLButtonElement>('button[aria-label="New thread"]') ??
+      assert.fail("the head offers New thread")
+    ).click(),
+  );
+  await settle();
+
+  const bar = itemPane(page).querySelector("header") ?? assert.fail("New thread draws a bar");
+  const words = (selector: string) =>
+    [...bar.querySelectorAll(selector)].map(
+      (each) => each.getAttribute("aria-label") ?? each.textContent,
+    );
+  assert.deepEqual(words(".luke-toolbar-lead button"), ["Inbox"], "the way back leads");
+  assert.deepEqual(words("h1.luke-toolbar-title"), ["New thread"], "the title names it");
+  assert.deepEqual(words(".luke-toolbar-actions button"), ["Discard"], "Discard ends the bar");
 });
 
 /** Opens a New thread from the Inbox's head and hands back its pane. */

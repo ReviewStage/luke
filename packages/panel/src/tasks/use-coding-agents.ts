@@ -43,7 +43,7 @@ import {
 } from "../composer-drafts.js";
 import { rendererPause } from "../renderer-runtime.js";
 import { useSteadyDoor, useSteadyDoors } from "../steady-door.js";
-import { TOAST_HOLD, UNDO_LABEL, useToast, useWithdrawToast } from "../toast.js";
+import { TOAST_HOLD, undoToast, useToast, useWithdrawToast } from "../toast.js";
 import { useChatOn } from "./chat-gate.js";
 import {
   type AgentRun,
@@ -1191,10 +1191,8 @@ export function useCodingAgents(input: {
     if (closed === undefined) return;
     undoable.current = closed.choices.id;
     toast({
-      words: DRAFT_CLOSED,
-      tone: STATUS_TONE.COMPLETE,
+      ...undoToast(DRAFT_CLOSED, () => restoreNow.current(closed)),
       subject: closed.choices.id,
-      action: { label: UNDO_LABEL, onPress: () => restoreNow.current(closed) },
     });
   };
 
@@ -1447,14 +1445,7 @@ export function useCodingAgents(input: {
     setList((was) =>
       was.agents === undefined ? was : { ...was, agents: withAgent(was.agents, answer.agent) },
     );
-    toast({
-      words: words.done,
-      tone: STATUS_TONE.COMPLETE,
-      action: {
-        label: UNDO_LABEL,
-        onPress: () => archiveNow.current(agentId, !archived).then(sayRefusal),
-      },
-    });
+    toast(undoToast(words.done, () => archiveNow.current(agentId, !archived).then(sayRefusal)));
     readAgain();
     return { status: ACTION_RESULT_STATUS.ACCEPTED };
   };

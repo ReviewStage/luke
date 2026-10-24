@@ -1,13 +1,19 @@
 import {
   AttachmentChip,
+  BUTTON_SHAPE,
   BUTTON_VARIANT,
   Button,
+  CALL_DEVICE,
+  CALL_STAGE,
+  CallLive,
+  CallMute,
   COMPOSER_ELEMENT,
   COMPOSER_LOOK,
   ComposerFoot,
   ComposerFootSkeleton,
   ComposerFrame,
   type ComposerLook,
+  EndCallButton,
   GAP,
   IconButton,
   SKELETON_SHAPE,
@@ -48,12 +54,29 @@ function Tools(): React.JSX.Element {
   );
 }
 
-/** A call's status, as the composer shows it while one stands. */
+/** When the catalog's call started, and the moment its count stands still at: 2m 14s in. */
+const CALL_STARTED_AT = Date.UTC(2026, 9, 24, 15, 0, 0);
+const CALL_NOW = CALL_STARTED_AT + 134_000;
+
+/** A call's status and its controls, as an agent's box shows them while a call into it stands. */
 function CallStatus(): React.JSX.Element {
   return (
-    <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
-      On a call · 2:14
-    </Text>
+    <>
+      <CallLive stage={CALL_STAGE.LIVE} startedAt={CALL_STARTED_AT} muted={false} now={CALL_NOW} />
+      <CallMute
+        device={CALL_DEVICE.SPEAKER}
+        shape={BUTTON_SHAPE.SQUARE}
+        muted={false}
+        onPress={ignore}
+      />
+      <CallMute
+        device={CALL_DEVICE.MICROPHONE}
+        shape={BUTTON_SHAPE.SQUARE}
+        muted={false}
+        onPress={ignore}
+      />
+      <EndCallButton onPress={ignore} />
+    </>
   );
 }
 
