@@ -506,7 +506,7 @@ test("the @ list closes on a press outside it and the box, stays open for a pres
   assert.equal(container.querySelector(".mention-menu") !== null, false, "and it stays closed");
 });
 
-test("the box names the @ list it opened and the row highlighted in it, as any combobox's field does, and names none once the list closes", async () => {
+test("the box is a combobox naming the @ list it opened and the row highlighted in it, and a textbox naming none once the list closes", async () => {
   const { container } = await box(planPage([]));
 
   typeInComposer(container, "Follow @roll");
@@ -515,16 +515,23 @@ test("the box names the @ list it opened and the row highlighted in it, as any c
   const list = container.querySelector('.mention-menu [role="listbox"]');
   const highlighted = () => list?.querySelector('[role="option"][aria-selected="true"]')?.id;
   const first = highlighted();
-  const named = [field.getAttribute("aria-controls"), field.getAttribute("aria-activedescendant")];
+  const named = [
+    field.getAttribute("role"),
+    field.getAttribute("aria-multiline"),
+    field.getAttribute("aria-controls"),
+    field.getAttribute("aria-activedescendant"),
+  ];
   pressInComposer(container, "ArrowDown");
   const moved = [field.getAttribute("aria-activedescendant"), highlighted()];
   pressInComposer(container, "Escape");
 
   assert.ok(list?.id, "the list has an id to be named by");
-  assert.deepEqual(named, [list?.id, first]);
+  assert.deepEqual(named, ["combobox", null, list?.id, first]);
   assert.notEqual(moved[0], first);
   assert.equal(moved[0], moved[1]);
-  assert.equal(field.getAttribute("aria-expanded"), "false");
+  assert.equal(field.getAttribute("role"), "textbox");
+  assert.equal(field.getAttribute("aria-multiline"), "true");
+  assert.equal(field.getAttribute("aria-expanded"), null);
   assert.equal(field.getAttribute("aria-controls"), null);
   assert.equal(field.getAttribute("aria-activedescendant"), null);
 });

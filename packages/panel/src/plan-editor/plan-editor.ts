@@ -15,6 +15,7 @@ import StarterKit from "@tiptap/starter-kit";
 import { modEnterSends } from "../enter-sends.js";
 import { anchorsLaidIn, anchorsOf, commentAnchorMark, spanIn } from "./comment-anchors.js";
 import {
+  type EditorAria,
   type EditorSpan,
   FINISH,
   type MentionDrawer,
@@ -24,6 +25,8 @@ import {
   type PlanEditorPictures,
   type PlanEditorPlacement,
   type PlanEditorProps,
+  rootAria,
+  sameAria,
 } from "./contract.js";
 import { diagramPreview } from "./diagram-preview.js";
 import {
@@ -419,6 +422,8 @@ export function mountPlanEditor(host: HTMLElement, props: PlanEditorProps): Plan
   // The threads the editor carries marks for, and whether they are being laid on, which hands over no draft.
   let carried: readonly string[] = [];
   let laying = false;
+  // What ties the text to the `@` list or the `/` menu over it, which the panel hands over as either opens and closes.
+  let aria: EditorAria = {};
   const editor: Editor = new Editor({
     element: host,
     // Note that TipTap's own base rules would go in as an inline `<style>`, which the panel's policy (`style-src 'self'`: the desktop's `renderer/index.html` and the web's `vercel.json`) refuses; `planning.css` styles the text instead.
@@ -433,12 +438,12 @@ export function mountPlanEditor(host: HTMLElement, props: PlanEditorProps): Plan
     content: opened.content,
     contentType: "json",
     editorProps: {
-      attributes: {
+      // Note that the attributes are read again on every update, so the text names itself a combobox while a list over it stands.
+      attributes: () => ({
         class: `${className} ${EDITOR_CLASS}`,
-        role: "textbox",
-        "aria-multiline": "true",
+        ...rootAria(aria),
         "aria-label": label,
-      },
+      }),
       // Note that image files pasted are laid in as pictures, and an address of Luke's own or a page of an integration's pasted whole as its mention, as the box lays it in.
       handlePaste: (view, event) => {
         if (pictures !== undefined && pastedPictures(view, event, pictures)) return true;
@@ -506,6 +511,12 @@ export function mountPlanEditor(host: HTMLElement, props: PlanEditorProps): Plan
     chooseMention: (mention) => picking?.choose(editor, mention),
     insertBlock: (block) => slash?.insert(editor, block),
     markdown: written,
+    setAria: (next) => {
+      if (sameAria(aria, next) || editor.isDestroyed) return;
+      aria = next;
+      // Note that an input method's words are never redrawn under it: the next change it makes names the list.
+      if (!editor.view.composing) editor.view.updateState(editor.state);
+    },
     focusAt: (placement) => {
       onWordsAs = undefined;
       const selection = placedOnWords(editor, placement) ?? placed(editor, placement);
