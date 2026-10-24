@@ -74,9 +74,9 @@ export interface Scene {
   /** The launch profile it opens on. */
   readonly profile: string;
   readonly steps?: readonly Step[];
-  /** The steps on a phone, whose sidebar is a drawer and whose places sit in a bar at the foot; `steps` where absent. */
+  /** The steps in the phone's layout, whose sidebar is a drawer and whose places sit in a bar at the foot, which is the web's 390px and the desktop's 608 CSS px at zoom; `steps` where absent. */
   readonly phoneSteps?: readonly Step[];
-  /** Whether `steps` press something in the sidebar, which a window too narrow to pin it folds away: the runner presses "Show sidebar" first there. A phone's drawer is `phoneSteps`' own. */
+  /** Whether `steps` press something in the sidebar, which a window too narrow to pin it folds away: the runner presses "Show sidebar" first there. The phone layout's drawer is `phoneSteps`' own. */
   readonly sidebar?: true;
   /** The clients that draw it; both where absent. */
   readonly clients?: readonly Client[];

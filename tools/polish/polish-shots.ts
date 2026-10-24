@@ -346,7 +346,7 @@ async function showSidebar(page: PlaywrightPage, problems: string[]): Promise<vo
   if (problem !== undefined) problems.push(problem);
 }
 
-/** Waits for the panel's stage and its fonts, then runs the scene's steps, answering their problems. A scene that steps into the sidebar has it shown first, except on a phone, whose drawer its own steps open. */
+/** Waits for the panel's stage and its fonts, then runs the scene's steps, answering their problems. A scene that steps into the sidebar has it shown first, except in the phone's layout, whose drawer its own steps open. */
 async function stageScene(
   page: PlaywrightPage,
   scene: Scene,
@@ -447,7 +447,8 @@ async function shootDesktop(
     await page.emulateMedia({ colorScheme: shot.theme, reducedMotion: "reduce" });
     await page.evaluate(stillPageScript(shot.theme));
     if (shot.scene.window === WINDOW.CALL) await page.waitForTimeout(LOAD_SETTLE_MS);
-    else await stageScene(page, shot.scene, false, problems);
+    // Note that the zoomed size's 608 CSS px is under the panel's narrow line (`shell-room.ts`), so it draws the phone's layout.
+    else await stageScene(page, shot.scene, shot.size === SIZE.NARROW, problems);
     await page.screenshot({ path: file, animations: "disabled", caret: "hide" });
   } finally {
     await app.close();
