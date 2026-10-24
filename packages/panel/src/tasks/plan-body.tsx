@@ -1050,26 +1050,25 @@ export function PlanBodyColumn({
 
 /**
  * The head of a page drawn as a plan, Settings › Plan template: a document's
- * header (`PageHeader`) naming the page once, as its `h1`, with the page's
- * actions on its line, then its last edit and its note, which the page and
- * its placeholder both draw.
+ * header (`PageHeader`) naming the page once, as its `h1`, with the line
+ * saying what the page is under it and the page's actions on its line, then
+ * its last edit, which the page and its placeholder both draw.
  */
 export function PlanPageHead({
   name,
+  description,
   actions,
   edited,
-  note,
 }: {
   name: string;
+  description: React.ReactNode;
   actions: React.ReactNode;
   edited?: React.ReactNode;
-  note: React.ReactNode;
 }): React.JSX.Element {
   return (
     <div className="task-page-head">
-      <PageHeader title={name} actions={actions} />
+      <PageHeader title={name} description={description} actions={actions} />
       {edited}
-      {note}
     </div>
   );
 }
@@ -1102,8 +1101,9 @@ export interface TitleRename {
  * panel's empty room, as a document editor's page does (`useTextRoom`): at
  * the end under its last line, or anywhere where it has no text yet, and on
  * the nearest line beside it. With `page` the document is drawn as a Settings page,
- * as the plan template is: the page's actions end the title's line, and the
- * "Edited by" line and the page's note stand under the title. `looks` are the sections changed since the developer last
+ * as the plan template is: the page's line saying what it is stands in the
+ * title's header, its actions end the title's line, and the "Edited by" line
+ * stands under the title. `looks` are the sections changed since the developer last
  * looked, which the task's region keeps (`use-task-looks.ts`); without them
  * none are. `readMark` is whether the plan is marked unread, which the
  * title's ⋯ offers to flip.
@@ -1143,8 +1143,8 @@ export const PlanBody = memo(function PlanBody({
   looks?: TaskLooks;
   /** Whether the plan is marked unread, and the mark the title's ⋯ sets; without it, the ⋯ offers none. */
   readMark?: ReadMark;
-  /** The Settings page the document is drawn as: its actions and its note. */
-  page?: { actions: React.ReactNode; note: React.ReactNode };
+  /** The Settings page the document is drawn as: its actions and the line saying what it is. */
+  page?: { actions: React.ReactNode; description: React.ReactNode };
   /** What the task's own page does with its sections' links; without it, sections have none and mentions are words. */
   sectionLinks?: SectionLinks;
   /** Who reads it, whose own edits are named "you"; without it, no edit is. */
@@ -1516,9 +1516,9 @@ export const PlanBody = memo(function PlanBody({
             ) : (
               <PlanPageHead
                 name={task.name}
+                description={page.description}
                 actions={page.actions}
                 edited={editedNote}
-                note={page.note}
               />
             )}
             {page === undefined ? (

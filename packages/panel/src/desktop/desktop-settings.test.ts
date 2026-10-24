@@ -47,6 +47,8 @@ import {
   pressInPhoneHead,
   readPhoneHead,
 } from "../testing/phone-head.js";
+import { newestToastAction, newestToastSays } from "../testing/toast.js";
+import { ToastHost } from "../toast.js";
 import { DesktopSettings, type SettingsStep } from "./desktop-settings.js";
 import { SIDEBAR_OVERLAY } from "./sidebar-collapse.js";
 
@@ -978,6 +980,76 @@ test("a plan template that could not be read keeps its heading, over the failure
   assert.equal(page.textContent?.includes("The template could not be read."), true);
 });
 
+test("the plan template's header says, under its title, what the template is for and that it follows the account, which a search for it lands on", async () => {
+  fakeActPort({
+    [ACT_KIND.PLAN_TEMPLATE_READ]: () =>
+      Promise.resolve({ template: "# Context\n", custom: false }),
+  });
+  const page = mount(createElement(SettingsHarness, { opensOn: SETTINGS_VIEW.PLAN_TEMPLATE }));
+  await act(async () => {
+    for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
+  });
+
+  const header =
+    page.querySelector<HTMLElement>('section[aria-label="Plan template"] header') ??
+    assert.fail("the template page has a header");
+  assert.equal(
+    header.querySelector("p")?.textContent,
+    "New plans start as a copy of this template. Follows your account.",
+  );
+  assert.ok(header.querySelector('[data-search-anchor="plan-template"]'), "a search lands in it");
+});
+
+test("Reset to defaults resets the plan template at once, asking nothing, and its toast's Undo writes back the words the page held", async () => {
+  const written: (string | null)[] = [];
+  fakeActPort({
+    [ACT_KIND.PLAN_TEMPLATE_READ]: () => Promise.resolve({ template: "# Mine\n", custom: true }),
+    [ACT_KIND.PLAN_TEMPLATE_WRITE]: ({ template }) => {
+      written.push(template);
+      return Promise.resolve({ template: template ?? "# Default\n", custom: template !== null });
+    },
+  });
+  const page = mount(
+    createElement(
+      "div",
+      null,
+      createElement(SettingsHarness, { opensOn: SETTINGS_VIEW.PLAN_TEMPLATE }),
+      createElement(ToastHost),
+    ),
+  );
+  const settle = () =>
+    act(async () => {
+      for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
+    });
+  /** Which of the two templates the page's document draws. */
+  const shown = () => {
+    const words = page.querySelector(".template-document")?.textContent ?? "";
+    return ["Mine", "Default"].filter((name) => words.includes(name));
+  };
+  await settle();
+  assert.deepEqual(shown(), ["Mine"]);
+
+  const reset = [...page.querySelectorAll("button")].find(
+    (button) => button.textContent === "Reset to defaults",
+  );
+  assert.ok(reset, "a template of the account's own offers its reset");
+  act(() => reset.click());
+  await settle();
+
+  assert.equal(document.querySelector('[role="alertdialog"], [role="dialog"]'), null);
+  assert.deepEqual(
+    { written, shown: shown(), toast: newestToastSays()?.startsWith("Plan template reset") },
+    { written: [null], shown: ["Default"], toast: true },
+  );
+
+  const undo = newestToastAction();
+  assert.equal(undo?.textContent, "Undo");
+  act(() => undo?.click());
+  await settle();
+
+  assert.deepEqual({ written, shown: shown() }, { written: [null, "# Mine\n"], shown: ["Mine"] });
+});
+
 test("on a phone the page list is headed by its way out alone, named for the step Back goes to, and Settings centred, with no Back and Forward, and the way out leaves as Back did", () => {
   let exits = 0;
   const page = mount(
@@ -1072,6 +1144,8 @@ test("on a phone the plan template is headed by the way back and a ⋯ holding V
   });
   fakeActPort({
     [ACT_KIND.PLAN_TEMPLATE_READ]: () => Promise.resolve({ template: "# Context\n", custom: true }),
+    [ACT_KIND.PLAN_TEMPLATE_WRITE]: () =>
+      Promise.resolve({ template: "# Default\n", custom: false }),
   });
   const page = mount(
     createElement(SettingsHarness, {
@@ -1100,16 +1174,20 @@ test("on a phone the plan template is headed by the way back and a ⋯ holding V
     ["Version history", "Reset to defaults"],
   );
   chooseMenuItem("Reset to defaults");
-  assert.ok(
+  assert.equal(
     document.querySelector('[role="alertdialog"], [role="dialog"]'),
-    "the reset asks first",
+    null,
+    "the reset asks nothing",
   );
-  act(() => {
-    document.activeElement?.dispatchEvent(
-      new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }),
-    );
+  await act(async () => {
+    for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
   });
   pressInPhoneHead(page, "settings-page", "Plan template actions");
+  assert.deepEqual(
+    menuItems().map((item) => item.label),
+    ["Version history"],
+    "the reset left the template at its default, with nothing to reset",
+  );
   chooseMenuItem("Version history");
   assert.ok(page.querySelector('nav[aria-label="Versions"]'), "the template's versions stand");
 });

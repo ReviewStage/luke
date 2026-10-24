@@ -432,6 +432,7 @@ export function DesktopSettings({
               ? accountActor(settings.account)
               : undefined
           }
+          keep={keepLine}
           lead={onList === undefined ? undefined : <ListBack onList={onList} />}
           hidden={hidden.item}
           onShowHistory={() => setTemplateHistory(true)}

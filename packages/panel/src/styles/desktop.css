@@ -3813,13 +3813,6 @@ ul.actor-stack {
   margin: var(--luke-tight-gap) 0 0;
 }
 
-/* A search landing on the note keeps the name over it in view. */
-.task-page-head .template-note {
-  width: auto;
-  margin: var(--luke-section-gap) 0 0;
-  scroll-margin-top: calc(var(--luke-space-32) + 3 * var(--luke-control-height));
-}
-
 /* Version history ------------------------------------------------------------ */
 
 /* Who wrote a version, in the label's type, on its row and over its

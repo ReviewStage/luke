@@ -213,3 +213,8 @@
     justify-self: center;
   }
 }
+
+/* A search landing on the plan template's line keeps the title over it in view. */
+.template-note {
+  scroll-margin-top: calc(var(--luke-space-32) + 3 * var(--luke-control-height));
+}
