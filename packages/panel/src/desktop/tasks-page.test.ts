@@ -474,7 +474,7 @@ test("grouped by priority, the pins not leading, the List runs from the most pre
   assert.equal(page.querySelector(".tasks-list [data-cell='repository']"), null);
 });
 
-test("the title is the bar's heading with the List | Board switch after it, and Filter and View options end the bar", async () => {
+test("the title is the bar's heading with the List | Columns switch after it, and Filter and View options end the bar", async () => {
   const page = await mountPage();
 
   const bar = page.querySelector("header") ?? assert.fail("no bar");
@@ -489,9 +489,9 @@ test("the title is the bar's heading with the List | Board switch after it, and 
   assert.ok(actions?.querySelector('button[aria-label="View options"]'), "View options end it");
 });
 
-test("the switch beside the title shows the Board, kept on this Mac", async () => {
+test("the switch beside the title shows Columns, kept on this Mac", async () => {
   const page = await mountPage();
-  act(() => buttonNamed(page, "Board").click());
+  act(() => buttonNamed(page, "Columns").click());
   assert.equal(page.querySelector(".tasks-list"), null);
   assert.ok(page.querySelector("[data-task-column]"), "the Board's columns stand");
   assert.equal(page.querySelector("h1")?.textContent, "Tasks");
@@ -502,14 +502,44 @@ test("the switch beside the title shows the Board, kept on this Mac", async () =
   assert.ok((await mountPage()).querySelector("[data-task-column]"), "the Board is shown again");
 });
 
-test("on a phone the page is headed by New task and one ⋯, its title centred between them, and the ⋯ chooses the Board and opens the Filter's and View options' own menus, so nothing is lost", async () => {
+test("a board choice kept before the rename still opens Columns, named so in the switch", async () => {
+  window.localStorage.setItem("luke.tasksPageView", JSON.stringify("board"));
+  const page = await mountPage();
+
+  assert.ok(page.querySelector("[data-task-column]"), "the saved choice opens the columns");
+  assert.equal(
+    page.querySelector('[role="radio"][aria-checked="true"]')?.textContent,
+    "Columns",
+    "the switch names the view Columns",
+  );
+});
+
+test("in Columns the view options group the columns under Group by", async () => {
+  const page = await mountPage();
+  act(() => buttonNamed(page, "Columns").click());
+  openOptions(page, "View options");
+
+  const labels = [
+    ...document.querySelectorAll(
+      '[role="menu"]:not([data-leaving]) .luke-menu-item .luke-menu-item-label',
+    ),
+  ].map((each) => each.textContent);
+  assert.ok(labels.includes("Group by"), "the grouping submenu is Group by");
+  assert.ok(!labels.includes("Columns"), "no submenu is called Columns");
+});
+
+test("on a phone the page is headed by New task and one ⋯, its title centred between them, and the ⋯ chooses Columns and opens the Filter's and View options' own menus, so nothing is lost", async () => {
   const page = await mountPage(TASKS, SHELL_ROOM.NARROW);
   assert.deepEqual(
     [...page.querySelectorAll(".tasks-head button")].map((each) => each.getAttribute("aria-label")),
     ["New task", "Task list actions"],
   );
   assert.equal(page.querySelector(".tasks-head h1")?.textContent, "Tasks");
-  assert.equal(page.querySelector('[role="radiogroup"]'), null, "no List | Board bar in the head");
+  assert.equal(
+    page.querySelector('[role="radiogroup"]'),
+    null,
+    "no List | Columns bar in the head",
+  );
 
   openOptions(page, "Task list actions");
   choose("Filter");
@@ -531,7 +561,7 @@ test("on a phone the page is headed by New task and one ⋯, its title centred b
   closeMenus();
 
   openOptions(page, "Task list actions");
-  choose("Board");
+  choose("Columns");
   assert.ok(page.querySelector("[data-task-column]"), "the Board's columns stand");
   assert.equal(
     document.querySelector('[role="menu"]:not([data-leaving])'),
@@ -560,7 +590,7 @@ test("find opened in the List is let go as the Board is chosen", async () => {
     assert.ok(runAppCommand(APP_COMMAND.FIND), "the List offers find");
   });
   assert.ok(page.querySelector("[role='search'][aria-label='Find']"), "the List's find bar stands");
-  act(() => buttonNamed(page, "Board").click());
+  act(() => buttonNamed(page, "Columns").click());
   assert.equal(page.querySelector("[role='search'][aria-label='Find']"), null);
 });
 
@@ -865,7 +895,7 @@ function scrollTo(page: HTMLElement, position: { scrollTop?: number; scrollLeft?
 test("leaving the Tasks page scrolled and coming back stands each view where it was left, the Board's its own, and a refresh moves nothing", async () => {
   const page = await mountPage();
   scrollTo(page, { scrollTop: 320 });
-  act(() => buttonNamed(page, "Board").click());
+  act(() => buttonNamed(page, "Columns").click());
   assert.equal(scroller(page).scrollTop, 0, "the Board starts at its own place, not the List's");
   scrollTo(page, { scrollLeft: 150 });
   act(() => buttonNamed(page, "List").click());
@@ -881,7 +911,7 @@ test("leaving the Tasks page scrolled and coming back stands each view where it 
   listWorkspace(ACME);
   assert.equal(scroller(again).scrollTop, 40, "a refresh leaves the reader where they are");
 
-  act(() => buttonNamed(again, "Board").click());
+  act(() => buttonNamed(again, "Columns").click());
   assert.equal(scroller(again).scrollLeft, 150, "the Board is put back where it was left");
 });
 
@@ -1331,7 +1361,7 @@ test("the Filter's Repository leads each repository with its owner's picture, on
   assert.deepEqual(offered(), ["https://github.com/acme.png?size=32"]);
   closeMenus();
 
-  act(() => buttonNamed(page, "Board").click());
+  act(() => buttonNamed(page, "Columns").click());
   openOptions(page, "Filter");
   choose("Repository");
   assert.deepEqual(offered(), ["https://github.com/acme.png?size=32"]);

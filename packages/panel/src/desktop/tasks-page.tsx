@@ -156,7 +156,7 @@ const KEPT = {
   SCROLLS: keptKey("luke.tasksScroll", storedScrolls),
 } as const;
 
-/** The List | Board switch beside the page's title. */
+/** The List | Columns switch beside the page's title. */
 function ViewSwitch({
   view,
   onView,
@@ -169,7 +169,7 @@ function ViewSwitch({
       label="Tasks view"
       items={[
         { value: TASKS_VIEW.LIST, label: "List" },
-        { value: TASKS_VIEW.BOARD, label: "Board" },
+        { value: TASKS_VIEW.BOARD, label: "Columns" },
       ]}
       value={view}
       look={CHOICE_BAR_LOOK.SEGMENTED}
@@ -251,7 +251,7 @@ export function TasksPage({
             groups={(opener) => [
               [
                 viewItem(TASKS_VIEW.LIST, "List", <ListIcon />),
-                viewItem(TASKS_VIEW.BOARD, "Board", <KanbanIcon />),
+                viewItem(TASKS_VIEW.BOARD, "Columns", <KanbanIcon />),
               ],
               [
                 {

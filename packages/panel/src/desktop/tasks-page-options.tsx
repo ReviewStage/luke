@@ -695,7 +695,6 @@ function displayEntries({
     [
       {
         ...commandHead(PANEL_COMMAND.GROUP_BY),
-        ...(board ? { label: "Columns" } : {}),
         items: groupings.map((each) => ({
           label: GROUPING_WORDS[each],
           icon: GROUPING_ICON[each],
