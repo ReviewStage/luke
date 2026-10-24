@@ -87,12 +87,12 @@ function RefusedOnce(): React.JSX.Element {
   );
 }
 
-/** A question that asks for a name before it acts; Enter in the field answers. */
+/** A question that asks for the new owner's name before it acts; Enter in the field answers. */
 function Named(): React.JSX.Element {
   const [name, setName] = useState("");
   const field = useRef<HTMLInputElement | null>(null);
   const confirm = useConfirmDialog({ subject: true, surfaceOpen: true }, () =>
-    Promise.resolve(name.trim() === "" ? refused("Name the workspace.") : ACCEPTED),
+    Promise.resolve(name.trim() === "" ? refused("Name the new owner.") : ACCEPTED),
   );
   return (
     <>
@@ -104,23 +104,24 @@ function Named(): React.JSX.Element {
           confirm.ask();
         }}
       >
-        New workspace…
+        Transfer ownership…
       </Button>
       <ConfirmDialog
         open
         confirm={confirm}
         field={field}
         question={{
-          title: "New workspace",
-          verb: "Create workspace",
-          running: "Creating workspace",
-          loss: CONFIRM_LOSS.REVERSIBLE,
+          title: "Transfer the workspace?",
+          body: "The new owner can remove you and everyone else, and can transfer it back.",
+          verb: "Transfer workspace",
+          running: "Transferring workspace",
+          loss: CONFIRM_LOSS.AFFECTS_OTHERS,
         }}
       >
         <TextField
           ref={field}
-          label="Workspace name"
-          placeholder="Workspace name"
+          label="New owner"
+          placeholder="Name or email"
           value={name}
           onChange={(value) => {
             setName(value);
