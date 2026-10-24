@@ -51,6 +51,7 @@ import {
   TEXT_VARIANT,
   Text,
   Tooltip,
+  useDisclosurePreviewShown,
   useDisclosureState,
 } from "@luke/ui";
 import { ACTOR_KIND, ACTOR_STATE, type Actor, actorName } from "@luke/ui/actor-model";
@@ -133,6 +134,7 @@ import { FoldBody } from "../ai-elements/fold.js";
 import { MessageResponse, PANEL_MARKDOWN_COMPONENTS } from "../ai-elements/message.js";
 import { Reasoning, ReasoningContent, ReasoningTrigger } from "../ai-elements/reasoning.js";
 import {
+  blockSays,
   TOOL_BLOCK,
   TOOL_STATE,
   Tool,
@@ -1117,8 +1119,9 @@ export type TranscriptToolProps = Omit<ComponentProps<typeof Tool>, "children"> 
  * One tool call: its row saying what it did, closed until clicked, and its
  * input and answer under it once opened. A command is the closed row's
  * preview, dropped once the body under it shows the command whole behind
- * its prompt, or by a find, which draws that body hidden; a description
- * stays, since the body does not say it.
+ * its prompt, or by a find, which draws that body hidden, and so is any
+ * subject the input says whole, a read's path or a search's pattern
+ * (`blockSays`); a description stays, since the body does not say it.
  */
 export function TranscriptTool({
   state,
@@ -1154,7 +1157,7 @@ export function TranscriptTool({
         subject={line.subject}
         chip={chip}
         subjectIsCode={line.code}
-        subjectInBody={command && input.kind === TOOL_BLOCK.COMMAND}
+        subjectInBody={(command && input.kind === TOOL_BLOCK.COMMAND) || blockSays(input, subject)}
         place={
           kind === CALL_KIND.MAC_COMMAND && macOwner !== undefined ? (
             <ActorLine>
@@ -1484,16 +1487,7 @@ export function TranscriptTodosDock({
         <span className="todos-dock-summary">
           <RollingNumber value={done} /> of <RollingNumber value={total} /> done
         </span>
-        {focus === undefined ? null : (
-          <Text
-            as={TEXT_ELEMENT.SPAN}
-            variant={TEXT_VARIANT.INHERIT}
-            truncate
-            className="todos-dock-focus"
-          >
-            {focus}
-          </Text>
-        )}
+        <TodosDockFocus focus={focus} />
         <span className="todos-dock-chevron">
           <DisclosureChevron />
         </span>
@@ -1502,6 +1496,26 @@ export function TranscriptTodosDock({
         <TodoItems todos={todos} live />
       </DisclosureBody>
     </Disclosure>
+  );
+}
+
+/**
+ * The item the dock's line says the list is at, cut to the line, which
+ * gives way while the list under it is drawn, since the list says it
+ * there; the count before it stays, since the list says none.
+ */
+function TodosDockFocus({ focus }: { focus: string | undefined }): ReactNode {
+  const previewed = useDisclosurePreviewShown(focus !== undefined);
+  if (focus === undefined || !previewed) return null;
+  return (
+    <Text
+      as={TEXT_ELEMENT.SPAN}
+      variant={TEXT_VARIANT.INHERIT}
+      truncate
+      className="todos-dock-focus"
+    >
+      {focus}
+    </Text>
   );
 }
 

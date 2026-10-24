@@ -931,7 +931,9 @@ function OriginBody({ body }: { body: string }): React.JSX.Element {
  * automation's prompt, or the task a worker was, as a message sent to the
  * agent, at a sent message's measure over the line naming who sent it and
  * when, as a sent message's bubble stands over its own: a card folded under
- * its title, and a webhook's body folded again inside it. Where the agent
+ * its title, and a webhook's body folded again inside it. A title that is
+ * the text's own first line gives way to the card's label while the text
+ * is drawn under it, so an opened plan never says that line twice. Where the agent
  * works on a task, the plan's own pictures are drawn in the card as its
  * page draws them (`plan-pictures.tsx`), read only once the card is opened.
  */
@@ -973,7 +975,9 @@ function PlanCard({
           <PlanIcon>
             {status === undefined ? lead.icon : <TaskStatusMark status={status} />}
           </PlanIcon>
-          <PlanTitle label={lead.label}>{title}</PlanTitle>
+          <PlanTitle label={lead.label} previews={title === cardTitle(text)}>
+            {title}
+          </PlanTitle>
         </PlanHeader>
         <PlanContent>
           {taskId === undefined ? (
