@@ -291,6 +291,8 @@ const TOOL_JOIN = " · ";
 /** The repository's skills as an `@` list offers them: as read, the ask to read them, and the pick that writes one as its `/name` chip. */
 export interface MentionSkills {
   readonly known: readonly SkillOption[] | undefined;
+  /** Whether the read came back unread, which the list says could not be read, with Retry, rather than that it is reading. */
+  readonly unread: boolean;
   readonly ask: () => void;
   readonly onChoose: (name: string) => void;
 }
@@ -1062,6 +1064,7 @@ const MENTION_READ = {
   MEMBERS: "members",
   AGENTS: "agents",
   FILES: "the repository's files",
+  SKILLS: "skills",
 } as const;
 
 type MentionRead = (typeof MENTION_READ)[keyof typeof MENTION_READ];
@@ -1639,7 +1642,7 @@ export function useMentionPicker({
       (read === undefined &&
         !pathsFailed &&
         treeKey(taskId, workspaceId, repository) !== undefined) ||
-      (skills !== undefined && skills.known === undefined));
+      (skills !== undefined && skills.known === undefined && !skills.unread));
   // The list says a read could not be read, never that nothing matches, and Retry reads it again.
   const failures: readonly MentionReadFailure[] = open
     ? [
@@ -1650,6 +1653,7 @@ export function useMentionPicker({
           ? [{ read: MENTION_READ.AGENTS, retry: () => setWorkspaceAgents(undefined) }]
           : []),
         ...(pathsFailed ? [{ read: MENTION_READ.FILES, retry: () => setPaths(undefined) }] : []),
+        ...(skills?.unread === true ? [{ read: MENTION_READ.SKILLS, retry: skills.ask }] : []),
       ]
     : [];
   // Words typed past a space that match nothing are prose, not a mention: the list stands aside, and comes back only if they match again.
