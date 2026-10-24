@@ -1,8 +1,8 @@
 import { type PageLine, type PagePlace, pagePlaceId } from "@luke/features/page-wire";
-import type { TasksPagesAnswer } from "@luke/features/tasks-view";
 import { ACT_KIND } from "@luke/host/acts";
 import { useEffect, useState } from "react";
 import { useAct } from "../act.js";
+import { streamFrom } from "../act-stream.js";
 
 /**
  * use-inbox-pages.ts -- the pages of the task whose item the window's Inbox shows, or of the agent on no task whose page stands, for the panel beside it, as they move.
@@ -12,9 +12,10 @@ import { useAct } from "../act.js";
  * task's own once as the task is chosen (`ACT_KIND.TASKS_PAGES`) and follows
  * them while it stays chosen (`ACT_KIND.TASKS_PAGES_FOLLOW`): the host
  * streams them each time they move over Neon Realtime, so a page an agent
- * shows lands as it is shown, and nothing is read again here. A read or a
- * change that did not answer keeps the pages last read; one of a task no
- * longer chosen is let go. An agent on no task holds pages of its own,
+ * shows lands as it is shown. A read that did not answer keeps the pages
+ * last read, and a follow that broke is opened again (`act-stream.ts`),
+ * which lands what moved meanwhile; one of a task no longer chosen is let
+ * go. An agent on no task holds pages of its own,
  * which its page's panel reads and follows on the same terms.
  */
 
@@ -37,7 +38,6 @@ export function useInboxPages(place: PagePlace | undefined): InboxPages {
     const asked: PagePlace = onAgent ? { agentId: id } : { taskId: id };
     let live = true;
     let followed = false;
-    let stream: AsyncIteratorObject<TasksPagesAnswer> | undefined;
     act(ACT_KIND.TASKS_PAGES, asked).then(
       (answer) => {
         // Note that a change heard first is as new, so the read stands only until one is.
@@ -45,23 +45,17 @@ export function useInboxPages(place: PagePlace | undefined): InboxPages {
       },
       () => undefined,
     );
-    act(ACT_KIND.TASKS_PAGES_FOLLOW, asked)
-      .then(async (opened) => {
-        stream = opened;
-        if (!live) {
-          await opened.return?.(undefined);
-          return;
-        }
-        for await (const answer of opened) {
-          if (!live || !("pages" in answer)) continue;
-          followed = true;
-          setRead({ id, pages: answer.pages });
-        }
-      })
-      .catch(() => undefined);
+    const stop = streamFrom(
+      () => act(ACT_KIND.TASKS_PAGES_FOLLOW, asked),
+      (answer) => {
+        if (!live || !("pages" in answer)) return;
+        followed = true;
+        setRead({ id, pages: answer.pages });
+      },
+    );
     return () => {
       live = false;
-      void stream?.return?.(undefined);
+      stop();
     };
   }, [act, id, onAgent]);
   return { pages: read?.id === id ? read?.pages : undefined };

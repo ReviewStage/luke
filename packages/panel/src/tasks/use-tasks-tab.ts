@@ -34,7 +34,6 @@ import {
   TASK_CALL_FAILURE,
   TASKS_READ,
   type TasksEditAnswer,
-  type TasksRevisionsAnswer,
   type TasksView,
 } from "@luke/features/tasks-view";
 import { managesWorkspace } from "@luke/features/workspace-role";
@@ -145,6 +144,7 @@ import { VOICE_COMMAND } from "@luke/voice/voice-view";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ActHandle } from "../act.js";
+import { streamFrom } from "../act-stream.js";
 import { ADMIN_TAB, type AdminView, adminViewOfLink } from "../admin/routing.js";
 import { appPlatform } from "../app-platform.js";
 import { usePrefetchDiffBundle } from "../bundle-loader.js";
@@ -2783,24 +2783,9 @@ export function useTasksTab(input: {
           taskId,
           ...(before === undefined ? undefined : { before }),
         }),
-      followNewest: (taskId, take) => {
-        let live = true;
-        let stream: AsyncIteratorObject<TasksRevisionsAnswer> | undefined;
-        act(ACT_KIND.TASKS_HISTORY_FOLLOW, { taskId })
-          .then(async (opened) => {
-            stream = opened;
-            if (!live) {
-              await opened.return?.(undefined);
-              return;
-            }
-            for await (const answer of opened) if (live) take(answer);
-          })
-          .catch(() => undefined);
-        return () => {
-          live = false;
-          void stream?.return?.(undefined);
-        };
-      },
+      // A follow that broke is opened again, so the newest page never stops moving for good.
+      followNewest: (taskId, take) =>
+        streamFrom(() => act(ACT_KIND.TASKS_HISTORY_FOLLOW, { taskId }), take),
       readRevision: (taskId, seq) => act(ACT_KIND.TASKS_REVISION, { taskId, seq }),
       restore: (taskId, seq) => act(ACT_KIND.TASKS_RESTORE, { taskId, seq }),
     }),
