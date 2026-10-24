@@ -54,18 +54,15 @@ test("a request to an organization's owner leaves nothing to return to", async (
   const page = await openPage(GITHUB_INSTALL_STATUS.REQUESTED);
 
   expect(said(page)).toEqual([
-    "Your request went to the GitHub organization's owner",
+    "Your request went to your organization's owner",
     "You can close this tab.",
   ]);
 });
 
-test("an account another workspace holds says how to connect it here", async () => {
+test("an account another workspace holds says so and sends nowhere", async () => {
   const page = await openPage(GITHUB_INSTALL_STATUS.ALREADY_CONNECTED);
 
-  expect(said(page)).toEqual([
-    "That GitHub account is connected to another workspace",
-    "Disconnect it there first, or choose another account.",
-  ]);
+  expect(said(page)).toEqual(["That GitHub account is connected to another workspace"]);
 });
 
 test("an expired link sends the developer back to connect again", async () => {

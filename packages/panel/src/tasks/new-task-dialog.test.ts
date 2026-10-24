@@ -545,10 +545,8 @@ test("a box with no repository holds Start and says why under the card", async (
   await card.key("Enter");
 
   assert.equal(card.startButton().disabled, true);
-  assert.equal(
-    card.dialog()?.textContent?.includes("An agent needs a repository to work in. Choose one."),
-    true,
-  );
+  // The chip asks for a repository too, so the note under the card is the second saying.
+  assert.equal(card.dialog()?.textContent?.split("Choose a repository").length, 3);
   assert.deepEqual(card.starts, []);
 });
 

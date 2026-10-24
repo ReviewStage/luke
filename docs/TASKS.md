@@ -262,7 +262,7 @@ the account's default, Dictate, and Start.
 - The task's repository is the sidebar's to name: by the group it stands in,
   or on its row where the list's view groups by creator or not at all.
   A task with none yet, the 13 tasks from before repositories among them,
-  shows a compact `Choose repository` chip in the toolbar's actions row, left
+  shows a compact `Choose a repository` chip in the toolbar's actions row, left
   of Start, with the composer's menu: a pick is saved through
   `PATCH /api/plans/{id}`, and a refusal is said beside it. A task can be
   used without a repository.
