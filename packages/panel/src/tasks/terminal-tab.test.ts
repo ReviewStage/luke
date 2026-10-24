@@ -1548,3 +1548,30 @@ test("the window handing the tab a new link opener keeps the shell's scrollback 
   await act(async () => vi.advanceTimersByTimeAsync(100));
   assert.equal(findTally(), "1 of 1");
 });
+
+test("on a phone a connecting terminal says so in a bar over its screen, and a connected one draws no bar", async () => {
+  const tab = await mount(true, false, undefined, false, SIDE_BUNDLES, true);
+  assert.equal(tab.bar(), "Connecting…");
+
+  main.post(OLDEST).say({ type: "state", state: "attached" });
+  assert.equal(tab.bar(), undefined);
+});
+
+test("in a wide room a connecting terminal draws no bar, the title bar saying so", async () => {
+  const tab = await mount();
+  assert.equal(tab.standing(), "· sandbox · connecting…");
+  assert.equal(tab.bar(), undefined);
+});
+
+test("on a phone a drop after connecting waits out its own reveal, as a drop after a connection does", async () => {
+  mountAnnouncer();
+  const tab = await mount(true, false, undefined, false, SIDE_BUNDLES, true);
+  revealBar();
+  assert.equal(announcedPolitely(), "Connecting…");
+
+  main.post(OLDEST).say({ type: "state", state: "reconnecting" });
+  assert.equal(tab.bar(), "Connection lost. Reconnecting…");
+  assert.equal(announcedPolitely(), "", "the drop's bar is hidden, so it says nothing yet");
+  revealBar();
+  assert.equal(announcedPolitely(), "Connection lost. Reconnecting…");
+});

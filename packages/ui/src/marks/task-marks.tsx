@@ -35,20 +35,21 @@ const LIT_BARS = {
 } as const satisfies Record<TaskPriority, number>;
 
 /**
- * The box every mark spans within its 14 units, a status's and a
- * priority's alike, so the two stand the same size side by side: a settled
- * status's disc, and an open one's ring to the outer edge of its line.
+ * The square a priority's mark spans within its 14 units: about the area of
+ * a status's disc (0.75 to 13.25), centred on it, rather than its width,
+ * because a square as wide as a circle reads larger beside it. So a
+ * priority stands inside the same room around it a status does.
  */
-const MARK_EDGE = { start: 0.75, end: 13.25 } as const;
+const MARK_EDGE = { start: 1.5, end: 12.5 } as const;
 
 /** How wide each of a priority's bars is drawn. */
-const BAR_WIDTH = 3;
+const BAR_WIDTH = 2.6;
 
-/** The three bars, each its left edge, its top, and its height, rising left to right across the mark's box to its foot. */
+/** The three bars, each its left edge, its top, and its height, rising left to right across the mark's square to its foot. */
 const BARS = [
-  { x: MARK_EDGE.start, y: 8.75, height: 4.5 },
-  { x: 5.5, y: 4.75, height: 8.5 },
-  { x: MARK_EDGE.end - BAR_WIDTH, y: MARK_EDGE.start, height: 12.5 },
+  { x: MARK_EDGE.start, y: 8.5, height: 4 },
+  { x: 7 - BAR_WIDTH / 2, y: 5, height: 7.5 },
+  { x: MARK_EDGE.end - BAR_WIDTH, y: MARK_EDGE.start, height: 11 },
 ] as const;
 
 /** The tone each status is drawn in: at rest, under way, or finished well. */
@@ -130,7 +131,7 @@ function priorityBody(priority: TaskPriority): React.JSX.Element {
           y={MARK_EDGE.start}
           width={MARK_EDGE.end - MARK_EDGE.start}
           height={MARK_EDGE.end - MARK_EDGE.start}
-          rx="3"
+          rx="2.5"
         />
         <path className="luke-task-mark-cut" d="M7 4v3.6M7 9.6v.2" />
       </>

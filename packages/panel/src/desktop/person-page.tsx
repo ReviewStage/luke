@@ -36,6 +36,7 @@ import {
   Text,
   Time,
   type ToolbarPickUp,
+  useLeaving,
   useMenu,
   useMinute,
 } from "@luke/ui";
@@ -56,10 +57,12 @@ import {
   personRef,
 } from "@luke/ui/person-page-model";
 import { LinkIcon, ListFilterIcon, MailIcon, UsersIcon } from "lucide-react";
-import { type ReactNode, useCallback, useRef, useState } from "react";
+import { type ReactNode, useCallback, useMemo, useRef, useState } from "react";
+import { useAct } from "../act.js";
 import { ACTOR_SIZE, ActorMark, AutomationCard, automationActor, YouBadge } from "../actor-ref.js";
 import { useAppCommand } from "../app-commands.js";
 import { LINK_COPY, useCopyToast } from "../copy-feedback.js";
+import { agentPlace, LinkWorkspaceProvider, useCopyLinkItem } from "../copy-link-item.js";
 import { MemberDirectory, useMemberDirectory } from "../member-directory.js";
 import { useOpenSettings } from "../open-settings.js";
 import { stateEndMark } from "../state-glyph.js";
@@ -67,12 +70,16 @@ import { AgentCard, lineSubject } from "../tasks/agent-ref.js";
 import { InboxItemRow, InboxListSkeleton } from "../tasks/inbox-list.js";
 import { INBOX_HOLDER, type InboxListed, inboxWaitsOn } from "../tasks/inbox-model.js";
 import { agentEndMark } from "../tasks/tab-look.js";
+import { readAgentById } from "../tasks/use-coding-agents.js";
+import { useUnreadTasks } from "../tasks/use-task-looks.js";
 import { AUTOMATIONS_PAGE, type TasksControl } from "../tasks/use-tasks-tab.js";
 import { useWaitingItems } from "../tasks/use-waiting-items.js";
-import { ActionMenu, type MenuAction } from "./action-menu.js";
+import { ActionMenu, type MenuAction, rowMenu } from "./action-menu.js";
+import { useAgentArchive } from "./agent-archive.js";
 import { STANDING_GLYPH } from "./automation-runs-panel.js";
 import { automationNextText } from "./automation-words.js";
 import {
+  PersonBody,
   PersonLineSkeleton,
   PersonReadingSkeleton,
   PersonSectionFrame,
@@ -109,7 +116,12 @@ import { useAutomations } from "./use-automations.js";
  * Nothing on it is read for it: it shows a teammate only what the sidebar,
  * the Inbox, and an agent's card already show any member, never their
  * personal workspace, their answers, or another workspace's. A press on a
- * row opens what it names, and Escape leaves the page.
+ * row opens what it names, and its ⋯, a right-click, and the menu key open
+ * its acts: a task's the sidebar's, an agent's Copy link and Archive, an
+ * Item's and an automation's Copy link, each link written under the
+ * workspace the page stands in. Its lists move: a row arriving slides in, one
+ * leaving slides out, and one taken from a section into another glides
+ * across. Escape leaves the page.
  */
 
 /** What a page's head says under a name, by who the person is to the workspace. */
@@ -141,12 +153,26 @@ function PersonSection({
 }): React.JSX.Element {
   return (
     <PersonSectionFrame label={title} title={title} count={count}>
-      <List label={title}>{children}</List>
+      <List label={title} moves>
+        {children}
+      </List>
     </PersonSectionFrame>
   );
 }
 
-/** One of their agents as a row: its tile, its name, the task it works on, and when it last moved; a press opens its tab. */
+/** What an agent's row is, naming its ⋯ and menu "Agent actions". */
+const AGENT_THING = "Agent";
+
+/** What an automation's row is, naming its ⋯ and menu "Automation actions". */
+const AUTOMATION_THING = "Automation";
+
+/**
+ * One of their agents as a row: its tile, its name, the task it works on,
+ * and when it last moved; a press opens its tab, and its ⋯, right-click and
+ * menu key offer Copy link and Archive, as a task's summary offers them,
+ * asking first while a teammate's agent still works, read again by its own
+ * id wherever it stands.
+ */
 function AgentRow({
   each,
   tasks,
@@ -159,33 +185,83 @@ function AgentRow({
   const { task, agent } = each;
   const subject = lineSubject(agent, tasks.agents.models, tasks.me);
   const card = <AgentCard subject={subject} models={tasks.agents.models} />;
+  const { act } = useAct();
+  // Note that the agent is read again by its own id before a teammate's is archived, because the agents control reads only the open task's.
+  const control = { ...tasks.agents, readAgent: (agentId: string) => readAgentById(act, agentId) };
+  const archive = useAgentArchive(agent, control, tasks.shown);
+  const copyLink = useCopyLinkItem()(agentPlace({ id: agent.id, planId: task.id }));
   return (
-    <RowHintOptions card={card} cardBeside>
-      <ListRow
-        leading={
-          <span className="home-row-picture">
-            <ActorMark actor={subject.tile} />
-          </span>
-        }
-        title={subject.name}
-        hint={{ Hint: RowHint, label: subject.name }}
-        meta={
-          <span className="home-row-meta">
-            <OneLine className="home-row-context" words={task.name}>
-              {task.name}
-            </OneLine>
-            {agentEndMark(agent, false)}
-            {agent.at === undefined ? null : <Time at={agent.at} now={now} hint={false} />}
-          </span>
-        }
-        onPress={() => tasks.onShowAgent(task.id, agent.id)}
-      />
-    </RowHintOptions>
+    <>
+      <RowHintOptions card={card} cardBeside>
+        <ListRow
+          motionKey={agent.id}
+          leading={
+            <span className="home-row-picture">
+              <ActorMark actor={subject.tile} />
+            </span>
+          }
+          title={subject.name}
+          hint={{ Hint: RowHint, label: subject.name }}
+          meta={
+            <span className="home-row-meta">
+              <OneLine className="home-row-context" words={task.name}>
+                {task.name}
+              </OneLine>
+              {agentEndMark(agent, false)}
+              {agent.at === undefined ? null : <Time at={agent.at} now={now} hint={false} />}
+            </span>
+          }
+          onPress={() => tasks.onShowAgent(task.id, agent.id)}
+          menu={rowMenu(
+            AGENT_THING,
+            copyLink === undefined ? [[archive.action]] : [[copyLink], [archive.action]],
+            tasks.shown,
+          )}
+        />
+      </RowHintOptions>
+      {archive.dialog}
+    </>
+  );
+}
+
+/** An agent's key, by which its row leaves its list and glides into another (`ListMotion`). */
+function agentKey({ agent }: PersonAgent): string {
+  return agent.id;
+}
+
+/** A section's agents, a row no longer listed drawn on until its exit has played (`useLeaving`). */
+function AgentRows({
+  agents,
+  tasks,
+  now,
+}: {
+  agents: readonly PersonAgent[];
+  tasks: TasksControl;
+  now: number;
+}): React.JSX.Element {
+  const drawn = useLeaving(agents, agentKey);
+  return (
+    <>
+      {drawn.map(({ key, value }) => (
+        <AgentRow key={key} each={value} tasks={tasks} now={now} />
+      ))}
+    </>
   );
 }
 
 /** What the page's ⋯ is called, on its button and its menu alike. */
 const PERSON = "Person";
+
+/**
+ * The workspace the page's links are written under: the one its page stands
+ * in, by its slug where it has one, else by its id; none where it is not
+ * known, so nothing copies a link that names no workspace.
+ */
+function linkWorkspaceOf(tasks: TasksControl): string | undefined {
+  const homeId = tasks.personView.workspaceId ?? tasks.workspace?.id;
+  const home = tasks.workspaces.find((each) => each.id === homeId);
+  return home?.slug ?? homeId;
+}
 
 /**
  * The header's end: their tasks in the sidebar, where the workspace is
@@ -221,11 +297,7 @@ function PersonActions({
     workspace !== undefined &&
     (workspace.role === WORKSPACE_ROLE.OWNER || workspace.role === WORKSPACE_ROLE.ADMIN);
   const email = member?.email;
-  // Their link names the workspace their page stands in, by its slug where it has one.
-  const homeId = tasks.personView.workspaceId ?? workspace?.id;
-  const home = tasks.workspaces.find((each) => each.id === homeId);
-  // A page whose workspace is not known has no link, rather than one naming no workspace.
-  const slug = home?.slug ?? homeId;
+  const slug = linkWorkspaceOf(tasks);
   const link = slug === undefined ? undefined : linkOf({ kind: LINK_PLACE.PERSON, userId }, slug);
   const showTasks = you ? "My tasks in sidebar" : "Their tasks in sidebar";
   const actions: MenuAction[][] = [
@@ -310,18 +382,26 @@ interface PersonAutomations {
  */
 function usePersonAutomations(workspaceId: string | undefined, userId: string): PersonAutomations {
   const { read, reload } = useAutomations(workspaceId);
+  // Note that their automations keep one identity while the read stands, because the list that draws them follows it (`useLeaving`).
+  const theirs = useMemo(
+    () =>
+      read === undefined || "failure" in read
+        ? []
+        : read.automations.filter(
+            (automation) =>
+              automation.creatorId === userId &&
+              automationOwner(automation) === AUTOMATION_SCOPE.WORKSPACE,
+          ),
+    [read, userId],
+  );
   const none = { automations: [], reading: false, failed: false, onRetry: reload };
   if (workspaceId === undefined) return none;
   if (read === undefined) return { ...none, reading: true };
   if ("failure" in read) return { ...none, failed: true };
-  const automations = read.automations.filter(
-    (automation) =>
-      automation.creatorId === userId && automationOwner(automation) === AUTOMATION_SCOPE.WORKSPACE,
-  );
-  return { ...none, automations };
+  return { ...none, automations: theirs };
 }
 
-/** One of their automations as a row: its clock wearing how its newest run went, its name, and what fires it, then a failure's mark and when it runs next, hanging its card; a press opens it. */
+/** One of their automations as a row: its clock wearing how its newest run went, its name, and what fires it, then a failure's mark and when it runs next, hanging its card; a press opens it, and its ⋯, right-click and menu key offer Copy link. */
 function AutomationRow({
   automation,
   workspaceName,
@@ -340,6 +420,7 @@ function AutomationRow({
   const hold = useCallback((press: HTMLElement | null) => {
     item.current = press?.parentElement ?? null;
   }, []);
+  const copyLink = useCopyLinkItem()({ kind: LINK_PLACE.AUTOMATION, automationId: automation.id });
   return (
     <RowHintOptions
       card={<AutomationCard automation={automation} workspaceName={workspaceName} />}
@@ -348,6 +429,7 @@ function AutomationRow({
     >
       <ListRow
         ref={hold}
+        motionKey={automation.id}
         leading={
           <span className="home-row-picture">
             <ActorMark actor={automationActor(automation)} />
@@ -372,8 +454,45 @@ function AutomationRow({
         }
         hint={{ Hint: RowHint, label: automation.name }}
         onPress={onOpen}
+        menu={copyLink === undefined ? undefined : rowMenu(AUTOMATION_THING, [[copyLink]])}
       />
     </RowHintOptions>
+  );
+}
+
+/** An automation's key, by which its row leaves its list (`ListMotion`). */
+function automationKey({ id }: AutomationSummary): string {
+  return id;
+}
+
+/** Their automations' rows, a row no longer listed drawn on until its exit has played (`useLeaving`). */
+function AutomationRows({
+  automations,
+  tasks,
+  now,
+}: {
+  automations: readonly AutomationSummary[];
+  tasks: TasksControl;
+  now: number;
+}): React.JSX.Element {
+  const drawn = useLeaving(automations, automationKey);
+  return (
+    <>
+      {drawn.map(({ key, value: automation }) => (
+        <AutomationRow
+          key={key}
+          automation={automation}
+          workspaceName={tasks.workspace?.name}
+          now={now}
+          onOpen={() =>
+            tasks.automationsView.onOpen({
+              kind: AUTOMATIONS_PAGE.EDIT,
+              automationId: automation.id,
+            })
+          }
+        />
+      ))}
+    </>
   );
 }
 
@@ -412,12 +531,15 @@ function PersonTasks({
   listed,
   tasks,
   now,
+  unread,
   onShowAll,
 }: {
   title: string;
   listed: readonly TaskSummary[];
   tasks: TasksControl;
   now: number;
+  /** Whether a task is unread, as the sidebar's rows count it. */
+  unread: (task: TaskSummary) => boolean;
   onShowAll: (() => void) | undefined;
 }): React.JSX.Element | null {
   if (listed.length === 0) return null;
@@ -425,21 +547,48 @@ function PersonTasks({
   return (
     <Stack gap={GAP.TIGHT}>
       <PersonSection title={title} count={listed.length}>
-        {listed.slice(0, PERSON_TASKS_SHOWN).map((task) => (
-          <RecentRow
-            key={task.id}
-            tasks={tasks}
-            task={task}
-            now={now}
-            face={false}
-            onOpen={() => tasks.onSelect(task.id)}
-          />
-        ))}
+        <TaskRows listed={listed} tasks={tasks} now={now} unread={unread} />
       </PersonSection>
       {onShowAll === undefined ? null : (
         <ShowMoreRow more={listed.length - PERSON_TASKS_SHOWN} shown={false} onToggle={onShowAll} />
       )}
     </Stack>
+  );
+}
+
+/** A task's key, by which its row leaves its list and glides into another (`ListMotion`). */
+function taskKey({ id }: TaskSummary): string {
+  return id;
+}
+
+/** A section's first `PERSON_TASKS_SHOWN` tasks, a row no longer listed drawn on until its exit has played (`useLeaving`). */
+function TaskRows({
+  listed,
+  tasks,
+  now,
+  unread,
+}: {
+  listed: readonly TaskSummary[];
+  tasks: TasksControl;
+  now: number;
+  unread: (task: TaskSummary) => boolean;
+}): React.JSX.Element {
+  const shown = useMemo(() => listed.slice(0, PERSON_TASKS_SHOWN), [listed]);
+  const drawn = useLeaving(shown, taskKey);
+  return (
+    <>
+      {drawn.map(({ key, value: task }) => (
+        <RecentRow
+          key={key}
+          tasks={tasks}
+          task={task}
+          now={now}
+          face={false}
+          unread={unread(task)}
+          onOpen={() => tasks.onSelect(task.id)}
+        />
+      ))}
+    </>
   );
 }
 
@@ -478,7 +627,10 @@ function PersonColumn({
   const shared = memberCount === undefined ? (members?.length ?? 0) > 1 : memberCount > 1;
   const showTasks = () => taskView.onAssignedToAlone(userId);
   const showCreated = () => taskView.onCreatedByAlone(userId);
-  const page = personPage(userId, listed);
+  // Note that the page keeps one identity while the list stands, because each of its lists follows its rows (`useLeaving`).
+  const page = useMemo(() => personPage(userId, listed), [userId, listed]);
+  // A task's row is unread as its sidebar row is, so its weight and its menu's Mark as read agree with the sidebar's.
+  const unread = useUnreadTasks(tasks.tasks, { listRead: tasks.listRead, staged });
   const you = userId === tasks.me;
   const theirAutomations = usePersonAutomations(tasks.workspace?.id, userId);
   const { automations } = theirAutomations;
@@ -557,118 +709,109 @@ function PersonColumn({
       // A phone's page offers its acts from its bar's one ⋯ instead.
       actions={away === undefined ? actions : undefined}
     >
-      <PersonTop>{note}</PersonTop>
-      {tasks.listFailed ? (
-        <div className="home-note">
-          <ErrorState onRetry={tasks.onRetryList}>
-            {`${you ? "Your" : "Their"} tasks could not be read.`}
-          </ErrorState>
-        </div>
-      ) : !tasks.listRead && personPageEmpty(page) ? (
-        <RowsSkeleton label={`Reading ${theirs} tasks…`} />
-      ) : null}
-      {page.working.length === 0 ? null : (
-        <PersonSection title="Working now" count={page.working.length}>
-          {page.working.map((each) => (
-            <AgentRow key={each.agent.id} each={each} tasks={tasks} now={now} />
-          ))}
-        </PersonSection>
-      )}
-      {/* Note that the Inbox's placeholder, or its failure, stands where its section will, right after Working now. */}
-      {read.failed ? (
-        <div className="home-note">
-          <ErrorState onRetry={read.onRetry}>Some Inbox items could not be read.</ErrorState>
-        </div>
-      ) : waiting.length === 0 && read.reading ? (
-        <SectionSkeleton>
-          <InboxListSkeleton />
-        </SectionSkeleton>
-      ) : null}
-      {waiting.length === 0 ? null : (
-        <PersonSection
-          title={you ? "Waiting on you" : "Waiting on their answer"}
-          count={waiting.length}
-        >
-          {waiting.map((listed) => (
-            <InboxItemRow
-              key={listed.item.id}
-              listed={listed}
-              chosen={false}
-              now={now}
-              models={tasks.agents.models}
-              readerId={tasks.me}
-              chip
-              onChoose={openItem}
-            />
-          ))}
-        </PersonSection>
-      )}
-      <PersonTasks
-        title={you ? "Assigned to you" : "Assigned"}
-        listed={page.assigned}
-        tasks={tasks}
-        now={now}
-        onShowAll={shared ? showTasks : undefined}
-      />
-      <PersonTasks
-        title={you ? "Created by you" : "Created"}
-        listed={page.created}
-        tasks={tasks}
-        now={now}
-        onShowAll={shared ? showCreated : undefined}
-      />
-      {page.agents.length === 0 ? null : (
-        <PersonSection title="Agents" count={page.agents.length}>
-          {page.agents.map((each) => (
-            <AgentRow key={each.agent.id} each={each} tasks={tasks} now={now} />
-          ))}
-        </PersonSection>
-      )}
-      {automations.length === 0 ? null : (
-        <PersonSection title="Automations" count={automations.length}>
-          {automations.map((automation) => (
-            <AutomationRow
-              key={automation.id}
-              automation={automation}
-              workspaceName={tasks.workspace?.name}
-              now={now}
-              onOpen={() =>
-                tasks.automationsView.onOpen({
-                  kind: AUTOMATIONS_PAGE.EDIT,
-                  automationId: automation.id,
-                })
-              }
-            />
-          ))}
-        </PersonSection>
-      )}
-      {theirAutomations.failed ? (
-        <div className="home-note">
-          <ErrorState onRetry={theirAutomations.onRetry}>
-            {`${you ? "Your" : "Their"} automations could not be read.`}
-          </ErrorState>
-        </div>
-      ) : theirAutomations.reading ? (
-        <RowsSkeleton label={`Reading ${theirs} automations…`} />
-      ) : null}
-      {/* Note that the page is said to be empty only once it names someone and the task list, the Inbox, and the automations have answered, since any may yet name something, or nobody may be found. */}
-      {unnamed ||
-      !tasks.listRead ||
-      read.failed ||
-      read.reading ||
-      theirAutomations.failed ||
-      theirAutomations.reading ? null : personPageEmpty(page) &&
-        waiting.length === 0 &&
-        automations.length === 0 ? (
-        <div className="home-note">
-          <NoteLine look={NOTE_LINE_LOOK.INSET}>
-            {you ? "Nothing of yours here yet." : "Nothing of theirs here yet."}
-          </NoteLine>
-        </div>
-      ) : null}
+      <PersonBody reading={!tasks.listRead || read.reading || theirAutomations.reading || unnamed}>
+        <PersonTop>{note}</PersonTop>
+        {tasks.listFailed ? (
+          <div className="home-note">
+            <ErrorState onRetry={tasks.onRetryList}>
+              {`${you ? "Your" : "Their"} tasks could not be read.`}
+            </ErrorState>
+          </div>
+        ) : !tasks.listRead && personPageEmpty(page) ? (
+          <RowsSkeleton label={`Reading ${theirs} tasks…`} />
+        ) : null}
+        {page.working.length === 0 ? null : (
+          <PersonSection title="Working now" count={page.working.length}>
+            <AgentRows agents={page.working} tasks={tasks} now={now} />
+          </PersonSection>
+        )}
+        {/* Note that the Inbox's placeholder, or its failure, stands where its section will, right after Working now. */}
+        {read.failed ? (
+          <div className="home-note">
+            <ErrorState onRetry={read.onRetry}>Some Inbox items could not be read.</ErrorState>
+          </div>
+        ) : waiting.length === 0 && read.reading ? (
+          <SectionSkeleton>
+            <InboxListSkeleton />
+          </SectionSkeleton>
+        ) : null}
+        {waiting.length === 0 ? null : (
+          <PersonSection
+            title={you ? "Waiting on you" : "Waiting on their answer"}
+            count={waiting.length}
+          >
+            {waiting.map((listed) => (
+              <InboxItemRow
+                key={listed.item.id}
+                listed={listed}
+                chosen={false}
+                now={now}
+                models={tasks.agents.models}
+                readerId={tasks.me}
+                chip
+                onChoose={openItem}
+              />
+            ))}
+          </PersonSection>
+        )}
+        <PersonTasks
+          title={you ? "Assigned to you" : "Assigned"}
+          listed={page.assigned}
+          tasks={tasks}
+          now={now}
+          unread={unread}
+          onShowAll={shared ? showTasks : undefined}
+        />
+        <PersonTasks
+          title={you ? "Created by you" : "Created"}
+          listed={page.created}
+          tasks={tasks}
+          now={now}
+          unread={unread}
+          onShowAll={shared ? showCreated : undefined}
+        />
+        {page.agents.length === 0 ? null : (
+          <PersonSection title="Agents" count={page.agents.length}>
+            <AgentRows agents={page.agents} tasks={tasks} now={now} />
+          </PersonSection>
+        )}
+        {automations.length === 0 ? null : (
+          <PersonSection title="Automations" count={automations.length}>
+            <AutomationRows automations={automations} tasks={tasks} now={now} />
+          </PersonSection>
+        )}
+        {theirAutomations.failed ? (
+          <div className="home-note">
+            <ErrorState onRetry={theirAutomations.onRetry}>
+              {`${you ? "Your" : "Their"} automations could not be read.`}
+            </ErrorState>
+          </div>
+        ) : theirAutomations.reading ? (
+          <RowsSkeleton label={`Reading ${theirs} automations…`} />
+        ) : null}
+        {/* Note that the page is said to be empty only once it names someone and the task list, the Inbox, and the automations have answered, since any may yet name something, or nobody may be found. */}
+        {unnamed ||
+        !tasks.listRead ||
+        read.failed ||
+        read.reading ||
+        theirAutomations.failed ||
+        theirAutomations.reading ? null : personPageEmpty(page) &&
+          waiting.length === 0 &&
+          automations.length === 0 ? (
+          <div className="home-note">
+            <NoteLine look={NOTE_LINE_LOOK.INSET}>
+              {you ? "Nothing of yours here yet." : "Nothing of theirs here yet."}
+            </NoteLine>
+          </div>
+        ) : null}
+      </PersonBody>
     </DetailPage>
   );
-  if (away === undefined) return detail;
+  // Every link on the page, a row's Copy link among them, is written under the workspace it stands in.
+  const linked = (
+    <LinkWorkspaceProvider value={linkWorkspaceOf(tasks)}>{detail}</LinkWorkspaceProvider>
+  );
+  if (away === undefined) return linked;
   return (
     <Fill className="person-phone">
       <PhoneHead
@@ -677,7 +820,7 @@ function PersonColumn({
         pickUp={pickUp}
         end={actions}
       />
-      {detail}
+      {linked}
     </Fill>
   );
 }

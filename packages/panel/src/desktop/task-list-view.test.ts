@@ -524,6 +524,13 @@ test("⌘K offers each view choice only while it would change the list, and runn
   assert.deepEqual(groupNames(sidebar), ["You", "Charles Pan"]);
   assert.equal(appCommandOffered(APP_COMMAND.GROUP_TASKS_BY_CREATOR), false);
   assert.equal(appCommandOffered(APP_COMMAND.GROUP_TASKS_BY_REPOSITORY), true);
+  assert.equal(appCommandOffered(APP_COMMAND.GROUP_TASKS_BY_ASSIGNEE), true);
+
+  act(() => {
+    runAppCommand(APP_COMMAND.GROUP_TASKS_BY_ASSIGNEE);
+  });
+  assert.equal(appCommandOffered(APP_COMMAND.GROUP_TASKS_BY_ASSIGNEE), false);
+  assert.equal(appCommandOffered(APP_COMMAND.GROUP_TASKS_BY_CREATOR), true);
 
   act(() => {
     runAppCommand(APP_COMMAND.SHOW_MY_TASKS);
@@ -534,6 +541,7 @@ test("⌘K offers each view choice only while it would change the list, and runn
 
 test("a workspace nobody shares offers ⌘K no grouping or filtering by creator", async () => {
   await mountRead(PERSONAL);
+  assert.equal(appCommandOffered(APP_COMMAND.GROUP_TASKS_BY_ASSIGNEE), false);
   assert.equal(appCommandOffered(APP_COMMAND.GROUP_TASKS_BY_CREATOR), false);
   assert.equal(appCommandOffered(APP_COMMAND.SHOW_MY_TASKS), false);
   assert.equal(appCommandOffered(APP_COMMAND.LIST_TASKS_UNGROUPED), true);

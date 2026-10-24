@@ -1249,8 +1249,8 @@ ul.actor-stack {
   display: none;
 }
 
-/* off-scale: 220px, where the update pill's word stops fitting beside a name */
-@container sidebar-foot (width < 220px) {
+/* off-scale: 280px, where the offline pill's word stops fitting beside "Not signed in" or a name as long as it, which would otherwise end cut short at the default sidebar's 264px */
+@container sidebar-foot (width < 280px) {
   .offline-mark {
     aspect-ratio: 1;
     justify-content: center;
@@ -1662,7 +1662,7 @@ ul.actor-stack {
 }
 
 /* A plan's comment counts and a block's comment button stand in the gutter
-   past the column's end (tasks.css), which the desktop's 40px inset holds.
+   past the column's end (tasks.css), which the desktop's 48px inset holds.
    The web's 24px holds neither, so its documents end a finger's target and a
    hair either side of it short of the column, whether or not a thread stands
    yet, as the desktop's inset does, so the words never move when the first
@@ -1673,6 +1673,15 @@ ul.actor-stack {
 
 [data-luke-profile="web"] .desktop-document .plan-document-body {
   padding-right: var(--comment-gutter);
+}
+
+/* Under 480px of room the document gives back half its inset at its start,
+   as every page does (`CollectionPage`, `DetailPage`, `SettingsPage`), and
+   keeps its end's, which holds the comment gutter, as the web's does. */
+@container plan-document (width < 480px) {
+  .desktop-document .plan-document-body {
+    padding-left: var(--luke-page-inset-narrow);
+  }
 }
 
 .desktop-document .plan-body,
@@ -4811,12 +4820,23 @@ ul.actor-stack {
 }
 
 /* The title says what starts, "New task", then the repository's chip in
-   the title's own line, as Linear's team chip stands in its title. */
+   the title's own line, as Linear's team chip stands in its title. The
+   chip keeps a floor of room, so the repository can always be chosen. */
 .new-task-title {
+  --new-task-chip-floor: calc(var(--luke-control-height) * 2);
   display: flex;
   min-width: 0;
   align-items: center;
   gap: var(--luke-item-gap);
+}
+
+/* The title keeps its own width, so a phone's narrow head gives the room
+   that is left to the chips after it, which fade where they are cut, and
+   "New task" stays on one line. Only a longer title, such as "Create with
+   an agent" on a zoomed phone, wraps, short of the chip's floor. */
+.new-task-title > h2 {
+  flex-shrink: 0;
+  max-width: calc(100% - var(--new-task-chip-floor) - var(--luke-item-gap));
 }
 
 /* New task's chips are Settings pickers (`settings/picker-row.tsx`)

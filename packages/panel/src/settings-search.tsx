@@ -32,9 +32,14 @@ import {
   FILES_CHANGED_GROUP_TITLE,
   FILES_CHANGED_KEYS_LISTED,
   FILES_CHANGED_SHORTCUTS,
+  IN_CONTEXT_KEY,
+  IN_CONTEXT_SHORTCUTS,
+  type InContextKey,
+  inContextShown,
   shownShortcutGroups,
   WRITING_ACTIONS_LISTED,
   WRITING_GROUP_TITLE,
+  WRITING_KEYS_IN_CONTEXT,
   WRITING_SHORTCUTS,
   type WritingShortcut,
 } from "@luke/settings/shortcuts";
@@ -144,8 +149,23 @@ const EXPERIMENT_WORDS = "experiment preview beta labs early try";
 /** The words every window shortcut answers to, which change nothing and so offer no removal. */
 const WINDOW_SHORTCUT_WORDS = "keyboard shortcut key chord";
 
+/** The words the one Escape row answers to besides, which stands for every layer the key steps back from. */
+const ESCAPE_WORDS = "escape esc exit leave back";
+
 /** The words every writing chord and Markdown rule answers to besides. */
 const WRITING_WORDS = "format formatting markdown editor text";
+
+/** A key that answers in place, as the Keyboard shortcuts page lists it under `group`. */
+function inContextEntry(key: InContextKey, group: string): SettingsSearchEntry {
+  const { label } = IN_CONTEXT_SHORTCUTS[key];
+  const leaving = key === IN_CONTEXT_KEY.STEP_BACK ? ESCAPE_WORDS : "";
+  return {
+    id: key,
+    label,
+    page: SETTINGS_VIEW.SHORTCUTS,
+    haystack: [label, WINDOW_SHORTCUT_WORDS, group, leaving],
+  };
+}
 
 /**
  * The rows that are not stored settings, each gated by the condition that
@@ -388,14 +408,15 @@ function fixedEntries(input: SettingsSearchInput): readonly SettingsSearchEntry[
       haystack: ["Test notification", "notifications send alert banner permission allow"],
     },
     // The window's own chords, fixed rather than chosen, listed below them; a gated feature's only while its experiment is on.
-    ...shownShortcutGroups(input.settings.experiments, input.capabilities).flatMap((group) =>
-      group.commands.map((command) => ({
+    ...shownShortcutGroups(input.settings.experiments, input.capabilities).flatMap((group) => [
+      ...group.commands.map((command) => ({
         id: command,
         label: APP_SHORTCUTS[command].label,
         page: SETTINGS_VIEW.SHORTCUTS,
         haystack: [APP_SHORTCUTS[command].label, WINDOW_SHORTCUT_WORDS, group.title],
       })),
-    ),
+      ...group.keys.map((key) => inContextEntry(key, group.title)),
+    ]),
     // The writing chords and Markdown rules, listed under the window's, found by the rule typed too.
     ...WRITING_ACTIONS_LISTED.map((action) => {
       const { label, markdown }: WritingShortcut = WRITING_SHORTCUTS[action];
@@ -412,6 +433,10 @@ function fixedEntries(input: SettingsSearchInput): readonly SettingsSearchEntry[
         ],
       };
     }),
+    // A link's ⌘K and the @ list's keys, after the writing chords.
+    ...WRITING_KEYS_IN_CONTEXT.filter((key) => inContextShown(key, input.capabilities)).map((key) =>
+      inContextEntry(key, WRITING_GROUP_TITLE),
+    ),
     // Files changed's own keys, listed under Writing.
     ...FILES_CHANGED_KEYS_LISTED.map((key) => ({
       id: key,

@@ -29,7 +29,8 @@ export type { MacCommandAsk } from "./mac-command-ask.js";
  * Mac's output off, and both speakers heard at once; or, in any fixture run,
  * the panel's Tasks tab over a synthetic task, or over its synthetic coding
  * agent and that agent's tabs; or a synthetic account signed in, on a page
- * of Settings, on Admin, or on Automations. Any other word — the default
+ * of Settings, on Admin, on Automations, or with its Inbox and its own page
+ * filled. Any other word — the default
  * included — stages nothing.
  */
 export const RUN_PROFILE = {
@@ -47,6 +48,10 @@ export const RUN_PROFILE = {
   TASKS_WORK: "tasks-work",
   /** The tasks' list, opened at launch on the window's Chat over a synthetic chat. */
   CHAT: "chat",
+  /** A synthetic account signed in, its tasks holding Inbox items: an ask of each kind, a form, a notice with code, a long thread, an answered item, and a closed one. */
+  INBOX: "inbox",
+  /** The same account and items, its tasks assigned to it and its agents at work, which its own page lists. */
+  PERSON: "person",
   /** The same task on its coding agent, its Pull request tab beside it: checks, reviews, and a merge queued. */
   AGENT_PULL_REQUEST: "agent-pull-request",
   /** The same agent, its Pull request tab on the checks. */

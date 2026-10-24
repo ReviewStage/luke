@@ -8,7 +8,7 @@
  * the card.
  *
  * Each kind keeps its own draft, so a note is always sent as the kind it was
- * written as. One rule keeps it: Cancel and a delivered send discard it;
+ * written as. One rule keeps it: only a delivered send discards it; Cancel,
  * Escape and a press on the dimmed window only close the card, keeping the
  * words and screenshots for the next opening of that kind — unless there are
  * no words yet, in which case there is nothing worth keeping and they discard
@@ -214,7 +214,7 @@ export function FeedbackDialog({
   const [drafts, setDrafts, latestDrafts] = useStateWithRef<FeedbackDrafts>(FRESH_DRAFTS);
   /**
    * Counts each kind's discards, so a screenshot still being read when its
-   * draft was cancelled or sent lands in no draft at all.
+   * draft was discarded or sent lands in no draft at all.
    */
   const discards = useRef<Record<FeedbackKind, number>>({
     [FEEDBACK_KIND.FEEDBACK]: 0,
@@ -273,9 +273,9 @@ export function FeedbackDialog({
     setRejection(undefined);
   };
 
-  const close = (discard: boolean) => {
+  const close = () => {
     if (kind === undefined || latestBusy()) return;
-    if (discard || !hasWords(latestDrafts()[kind])) discardDraft(kind);
+    if (!hasWords(latestDrafts()[kind])) discardDraft(kind);
     setRejection(undefined);
     onClose();
   };
@@ -288,7 +288,7 @@ export function FeedbackDialog({
       files,
       FEEDBACK_LIMITS.MAX_IMAGES - latestDrafts()[of].images.length,
     );
-    // Note that a draft cancelled or sent while its screenshots were read
+    // Note that a draft discarded or sent while its screenshots were read
     // takes none of them, and neither does one now being sent, because
     // either would carry a picture into a note nobody attached it to.
     if (discards.current[of] !== discarded || latestBusy()) return;
@@ -357,7 +357,7 @@ export function FeedbackDialog({
       refused={rejection !== undefined}
       holding={hasWords(draft)}
       initialFocus={field}
-      onDismiss={() => close(false)}
+      onDismiss={close}
       onKeyDown={sendKey}
       dropping={fileDrop.dropping}
       dropTarget={fileDrop.target}
@@ -376,7 +376,7 @@ export function FeedbackDialog({
       }
       actions={
         <>
-          <Button variant={BUTTON_VARIANT.QUIET} disabled={busy} onClick={() => close(true)}>
+          <Button variant={BUTTON_VARIANT.QUIET} disabled={busy} onClick={close}>
             Cancel
           </Button>
           <Button

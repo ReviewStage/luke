@@ -21,6 +21,7 @@ import { App } from "./app.js";
 import "./desktop/automations-page.js";
 import "./desktop/desktop-admin.js";
 import "./desktop/desktop-settings.js";
+import "./desktop/person-page.js";
 import { installWindowHistory } from "./navigation-history.js";
 import { rendererRegistry } from "./renderer-runtime.js";
 import { loadTasksFixture } from "./tasks/tasks-fixture-loader.js";
@@ -34,8 +35,9 @@ import { appStateFirstRead } from "./use-app-state.js";
  * with nothing read, opens the window where its Settings, Admin, or
  * Automations profile names, signed in as the fixture's synthetic account,
  * each page drawn from the answers the fixture stages at the act door rather
- * than its signed-out line; and a fixture run on any other profile still
- * draws the account main holds.
+ * than its signed-out line, and its person profile's account reads its own
+ * page as its own; and a fixture run on any other profile still draws the
+ * account main holds.
  */
 
 declare global {
@@ -205,5 +207,31 @@ it.effect(
       assert.ok(links, "the plan's Linked issues box stands");
       assert.match(links.textContent ?? "", /Link issue/u);
       assert.doesNotMatch(drawn(), /did not answer/u);
+    }),
+);
+
+it.effect(
+  "the person profile's account opens its own profile from its menu and reads it as its own",
+  () =>
+    Effect.gen(function* () {
+      yield* drawWindow(RUN_PROFILE.PERSON);
+      // The account's button at the sidebar's foot, named by the account alone where the workspace's switcher says more.
+      const account = [...document.querySelectorAll("button")].find(
+        (button) => button.textContent?.endsWith("Ada Lovelace") && !button.matches("[aria-label]"),
+      );
+      assert.ok(account, "the account's button stands");
+      act(() => account.click());
+      const profile = [...document.querySelectorAll('[role="menuitem"]')].find(
+        (item): item is HTMLElement =>
+          item instanceof HTMLElement &&
+          item.querySelector(".luke-menu-item-label")?.textContent === "Your profile",
+      );
+      assert.ok(profile, "its menu offers Your profile");
+      act(() => profile.click());
+      yield* Effect.promise(settle);
+
+      assert.match(drawn(), /Assigned to you/u);
+      assert.match(drawn(), /Waiting on you/u);
+      assert.doesNotMatch(drawn(), /Waiting on their answer/u);
     }),
 );

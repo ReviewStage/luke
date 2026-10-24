@@ -26,7 +26,8 @@ import type { TasksControl } from "./use-tasks-tab.js";
  * has not granted the App issues answers so, with where its owner grants
  * them, rather than an empty list. A read refused or never answered is a
  * standing of its own (`FAILED`), never an empty list, so the menu says the
- * issues could not be read and offers Retry.
+ * issues could not be read and offers Retry; one still out is `READING`, so
+ * the menu says it is reading rather than that nothing was found.
  */
 
 /** How long the typing rests before GitHub is searched for the words as typed. */
@@ -36,6 +37,8 @@ const SEARCH_PAUSE = Duration.millis(250);
 export const GITHUB_ISSUES_STANDING = {
   /** Nothing to draw: no repository chosen or named, or GitHub not connected. */
   NONE: "none",
+  /** The repository's issues are still being read, so what it holds is not known yet. */
+  READING: "reading",
   LISTED: "listed",
   UNGRANTED: "ungranted",
   /** The read was refused or never answered, so what the repository holds is not known. */
@@ -44,6 +47,7 @@ export const GITHUB_ISSUES_STANDING = {
 
 export type GitHubIssuesStanding =
   | { readonly kind: typeof GITHUB_ISSUES_STANDING.NONE }
+  | { readonly kind: typeof GITHUB_ISSUES_STANDING.READING }
   | {
       readonly kind: typeof GITHUB_ISSUES_STANDING.LISTED;
       readonly repository: string;
@@ -57,6 +61,8 @@ export type GitHubIssuesStanding =
   | { readonly kind: typeof GITHUB_ISSUES_STANDING.FAILED; readonly repository: string };
 
 const NONE: GitHubIssuesStanding = { kind: GITHUB_ISSUES_STANDING.NONE };
+
+const READING: GitHubIssuesStanding = { kind: GITHUB_ISSUES_STANDING.READING };
 
 /** A read refused, or never answered, which is not an empty repository. */
 const FAILED_READ = { failed: true } as const;
@@ -216,14 +222,8 @@ export function useGitHubIssues(
   }
   // Note that what stands until GitHub answers is read off the open issues, where they are the repository's.
   const open = listed?.repository === place ? listed.answer : undefined;
-  if (open === undefined) {
-    return [
-      ref === undefined
-        ? { kind: GITHUB_ISSUES_STANDING.LISTED, repository: place, issues: [] }
-        : NONE,
-      ask,
-    ];
-  }
+  // Note that the section says it is reading, never that it is empty, until the open issues answer.
+  if (open === undefined) return [READING, ask];
   if ("failed" in open || "ungranted" in open || words === "") {
     return [standingOf(place, open), ask];
   }

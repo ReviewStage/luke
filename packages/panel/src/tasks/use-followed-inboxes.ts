@@ -4,9 +4,9 @@ import {
   type CodingAgentInboxScope,
 } from "@luke/features/coding-agent-view";
 import type { InboxItem } from "@luke/features/inbox-wire";
-import { AGENT_INBOX_ACT_KIND } from "@luke/host/contract";
+import { ACT_KIND } from "@luke/host/acts";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { actPort } from "../app-bridge.js";
+import { askAct } from "../act.js";
 
 /**
  * use-followed-inboxes.ts -- the inboxes of the plans, or of the agents with no plan, a surface draws, followed while it draws them and pushed to the window as each changes.
@@ -38,14 +38,16 @@ const UNANSWERED: Heard = { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED };
 /**
  * The window's own follower: one stream on its act port per follow, closed
  * by the stop it answers. A stream that could not open, or broke, is heard
- * as unanswered, unless it was stopped first.
+ * as unanswered, unless it was stopped first. Note that it opens through the
+ * act door, so a fixture run's Inbox profile pushes its staged items
+ * (`inbox-fixture.ts`) where main would push nothing.
  */
 export const windowInboxFollower: InboxFollower = {
   follow: (scope, hear) => {
     let stopped = false;
     let stream: AsyncIteratorObject<Heard, unknown, unknown> | undefined;
     void (async () => {
-      stream = await actPort()[AGENT_INBOX_ACT_KIND.CODING_AGENTS_INBOX_FOLLOW](scope);
+      stream = await askAct(ACT_KIND.CODING_AGENTS_INBOX_FOLLOW, scope);
       if (stopped) {
         await stream.return?.(undefined);
         return;

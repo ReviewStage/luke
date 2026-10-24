@@ -1,4 +1,4 @@
-import type { Replay, ReplayStep } from "@luke/features/agent-replay";
+import { REPLAY_STEP_KIND, type Replay, type ReplayStep } from "@luke/features/agent-replay";
 import type { CodingAgentPullRequestAnswerView } from "@luke/features/coding-agent-view";
 import type { CodingAgentPullRequest, CodingAgentSummary } from "@luke/features/coding-agent-wire";
 import { CODING_AGENT_SENDER } from "@luke/features/coding-agent-wire";
@@ -11,6 +11,7 @@ import {
   DisclosureBody,
   DisclosureSummary,
   Inline,
+  MESSAGE_LINE_ALIGN,
   MessageLine,
   OneLine,
   TEXT_ELEMENT,
@@ -24,23 +25,26 @@ import { ACTOR_KIND, ACTOR_STATE, type Actor, actorName } from "@luke/ui/actor-m
 import { pullRequestLabelOf, TAB_WORDS } from "@luke/ui/tab-strip-model";
 import { MESSAGE_ROLE } from "@luke/wire";
 import { ChevronsUpIcon, SplitIcon, TextQuoteIcon } from "lucide-react";
-import { type ReactNode, useEffect, useRef, useState } from "react";
+import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { ActorRef } from "../actor-ref.js";
 import { Message, MessageContent } from "../ai-elements/message.js";
 import { PLAN_BODY_LAYOUT, Plan, PlanContent, PlanHeader, PlanIcon } from "../ai-elements/plan.js";
-import { TOOL_BLOCK } from "../ai-elements/tool.js";
 import { useFindOpen } from "../find-in-tab.js";
 import { useMemberDirectory } from "../member-directory.js";
-import { lineSender, providerOf } from "./coding-agent-model.js";
+import { lineSender, providerOf, receivedLine } from "./coding-agent-model.js";
+import { ConnectionNames, useServerName } from "./connection-names.js";
+import { CopyMessageAction } from "./copy-message.js";
 import { linkChip } from "./mention-chip.js";
 import {
   earlierStepsLine,
   leftOutLine,
   REPLAY_PAGE,
+  replayCallsServer,
   replayCount,
   replayLede,
   replayPage,
   replayVerb,
+  replayWords,
   STEP_VIEW,
   type StepView,
   stepView,
@@ -58,13 +62,14 @@ import { useOpenPlace } from "./use-open-link.js";
  * The card stands as the plan's card does, at a sent message's measure over
  * the line naming who started the agent and when, as any line sent to the
  * agent is named: a teammate by their face and name, the reader's own by
- * the time alone. Its summary row names the source by the chip its tab
+ * the time alone, and its Copy, which copies the replay as it was handed. Its summary row names the source by the chip its tab
  * wears, which opens that tab and hangs its card, and how many of the
  * source's steps were replayed, of how many where the earliest were left
  * out. Opened, it says what it holds, Luke's summary of the oldest steps
  * and how many steps were left out where either applies, then the newest
- * steps, one row each, each opening onto its words exactly as the agent was
- * handed them, under a row that draws the earlier ones a page at a time,
+ * steps, each drawn as the live transcript draws it, a line over who sent
+ * it, when, and Copy, and a call as a call of its tool, opening onto its
+ * words exactly as the agent was handed them, under a row that draws the earlier ones a page at a time,
  * and a foot naming the branch and the pull request the source published,
  * where known. The source's whole transcript is a press of its chip away.
  * The model is `replay-card-model.ts`.
@@ -204,34 +209,106 @@ function usePublished(agentId: string, read: ReplayPlace["readPublished"]): Publ
  * transcript names nobody over the reader's own lines; and by its name
  * alone where its step's marker named no sender the window can place.
  */
-function LineSender({
+function useLineSender(
+  view: Extract<StepView, { kind: typeof STEP_VIEW.LINE }>,
+  readerId: string | undefined,
+): ReactNode {
+  const { members, former } = useMemberDirectory();
+  if (view.own) return undefined;
+  const actor =
+    view.sentBy === undefined ? undefined : lineSender(view.sentBy, readerId, members, former);
+  if (actor !== undefined) return <ActorRef actor={actor} />;
+  // A member's line the reader sent is theirs; one the window cannot place keeps its name.
+  if (readerId !== undefined && view.sentBy?.userId === readerId) return undefined;
+  return (
+    <Text
+      as={TEXT_ELEMENT.SPAN}
+      variant={TEXT_VARIANT.INHERIT}
+      truncate
+      className="message-sender-words"
+    >
+      {view.sender}
+    </Text>
+  );
+}
+
+/**
+ * A replayed line, drawn as a transcript draws a line sent to the agent: a
+ * sent message, at the column's left where it is the other side's words
+ * (Luke's, GitHub's, another agent's), under the line naming who sent it,
+ * unless it is the reader's own, when, where its marker said, and Copy.
+ */
+function LineStep({
   view,
   readerId,
 }: {
   view: Extract<StepView, { kind: typeof STEP_VIEW.LINE }>;
   readerId: string | undefined;
-}): React.JSX.Element | null {
-  const { members, former } = useMemberDirectory();
-  if (view.own) return null;
-  const actor =
-    view.sentBy === undefined ? undefined : lineSender(view.sentBy, readerId, members, former);
-  if (actor !== undefined) {
-    return <MessageLine sender={<ActorRef actor={actor} />} />;
-  }
-  // A member's line the reader sent is theirs; one the window cannot place keeps its name.
-  if (readerId !== undefined && view.sentBy?.userId === readerId) return null;
+}): React.JSX.Element {
+  const sender = useLineSender(view, readerId);
+  const received = receivedLine(view.sentBy);
   return (
-    <MessageLine
-      sender={
-        <Text
-          as={TEXT_ELEMENT.SPAN}
-          variant={TEXT_VARIANT.INHERIT}
-          truncate
-          className="message-sender-words"
-        >
-          {view.sender}
-        </Text>
-      }
+    <Message
+      from={received ? MESSAGE_ROLE.ASSISTANT : MESSAGE_ROLE.USER}
+      className={received ? "is-chat" : undefined}
+      data-replay-step={REPLAY_STEP_KIND.LINE}
+    >
+      <MessageContent>
+        <TranscriptWords text={view.words} />
+      </MessageContent>
+      <MessageLine
+        align={received ? MESSAGE_LINE_ALIGN.START : MESSAGE_LINE_ALIGN.END}
+        sender={sender}
+        at={view.at}
+        actions={<CopyMessageAction words={view.words} />}
+      />
+    </Message>
+  );
+}
+
+/**
+ * A replayed call, drawn as a transcript draws a call of its tool: its
+ * kind's icon or its integration's mark, its command's description, the
+ * server it ran on, and the agent it is about by the chip that agent's tab
+ * wears, hanging its card, folded onto its input and its result.
+ */
+function CallStep({
+  view,
+  place,
+}: {
+  view: Extract<StepView, { kind: typeof STEP_VIEW.CALL }>;
+  place: ReplayPlace;
+}): React.JSX.Element {
+  const call = view.view;
+  const server = useServerName(call);
+  const agentId = view.agent?.id;
+  const listed = agentId === undefined ? undefined : place.tile(agentId);
+  const title = view.agent?.title;
+  const agent =
+    listed ??
+    (title === undefined
+      ? undefined
+      : {
+          kind: ACTOR_KIND.AGENT,
+          agentId,
+          name: title,
+          provider: view.agent?.model === undefined ? undefined : providerOf(view.agent.model),
+          state: ACTOR_STATE.REST,
+        });
+  return (
+    <TranscriptTool
+      data-replay-step={REPLAY_STEP_KIND.TOOL}
+      state={view.state}
+      kind={call.kind}
+      provider={call.provider}
+      server={server}
+      subject={call.subject}
+      description={call.description}
+      agent={agent}
+      agentCard={agentId === undefined ? undefined : place.card(agentId)}
+      input={call.input}
+      output={call.output}
+      errorText={view.errorText}
     />
   );
 }
@@ -242,24 +319,11 @@ function LineSender({
  * words as its words; and a call as a call's row, folded onto its input
  * and its result, which run long.
  */
-function StepRow({
-  step,
-  readerId,
-}: {
-  step: ReplayStep;
-  readerId: string | undefined;
-}): React.JSX.Element {
+function StepRow({ step, place }: { step: ReplayStep; place: ReplayPlace }): React.JSX.Element {
   const view = stepView(step);
   switch (view.kind) {
     case STEP_VIEW.LINE:
-      return (
-        <Message from={MESSAGE_ROLE.USER} data-replay-step={step.kind}>
-          <MessageContent>
-            <TranscriptWords text={view.words} />
-          </MessageContent>
-          <LineSender view={view} readerId={readerId} />
-        </Message>
-      );
+      return <LineStep view={view} readerId={place.readerId} />;
     case STEP_VIEW.SAID:
       return (
         <div data-replay-step={step.kind}>
@@ -267,19 +331,7 @@ function StepRow({
         </div>
       );
     case STEP_VIEW.CALL:
-      return (
-        <TranscriptTool
-          data-replay-step={step.kind}
-          state={view.state}
-          kind={view.call}
-          subject={view.subject}
-          input={{ kind: TOOL_BLOCK.TEXT, text: view.input }}
-          output={
-            view.output === undefined ? undefined : { kind: TOOL_BLOCK.TEXT, text: view.output }
-          }
-          errorText={view.errorText}
-        />
-      );
+      return <CallStep view={view} place={place} />;
   }
 }
 
@@ -314,15 +366,17 @@ function SummaryRow({ line, text }: { line: string; text: string }): React.JSX.E
  */
 function ReplaySteps({
   steps,
-  readerId,
+  place,
 }: {
   steps: readonly ReplayStep[];
-  readerId: string | undefined;
+  place: ReplayPlace;
 }): React.JSX.Element {
   const finding = useFindOpen();
   const [shown, setShown] = useState(REPLAY_PAGE);
   const list = useRef<HTMLDivElement>(null);
   const page = replayPage(steps.length, finding ? steps.length : shown);
+  // Note that the replay's calls stand in its first message's words, which the transcript's own check for a server's call never reads.
+  const callsServer = useMemo(() => replayCallsServer(steps), [steps]);
   const drawMore = () => {
     if (page.next === page.from) list.current?.focus({ preventScroll: true });
     setShown(steps.length - page.from + page.next);
@@ -340,10 +394,12 @@ function ReplaySteps({
           </Button>
         </Inline>
       )}
-      {steps.slice(page.from).map((step, index) => (
-        // Note that a step is keyed by its place among them all, because the replay never changes once handed, and a page landing above keeps the rows below as they were.
-        <StepRow key={page.from + index} step={step} readerId={readerId} />
-      ))}
+      <ConnectionNames needed={callsServer}>
+        {steps.slice(page.from).map((step, index) => (
+          // Note that a step is keyed by its place among them all, because the replay never changes once handed, and a page landing above keeps the rows below as they were.
+          <StepRow key={page.from + index} step={step} place={place} />
+        ))}
+      </ConnectionNames>
     </div>
   );
 }
@@ -484,7 +540,7 @@ export function ReplayCard({
               <em>{left}</em>
             </Text>
           )}
-          <ReplaySteps steps={replay.steps} readerId={place.readerId} />
+          <ReplaySteps steps={replay.steps} place={place} />
           <ReplayFoot agentId={agentId} place={place} />
         </PlanContent>
       </Plan>
@@ -492,6 +548,7 @@ export function ReplayCard({
         sender={starter === undefined ? undefined : <ActorRef actor={starter} />}
         at={sentAt}
         wrap
+        actions={<CopyMessageAction words={replayWords(replay)} />}
       />
     </Message>
   );

@@ -267,6 +267,28 @@ test("a writing chord is found by its name and by the Markdown typed for it, on 
   assert.ok(shortcutsFound("markdown").includes("Divider"), "a rule with no chord is listed too");
 });
 
+test("Escape and the keys that answer in place are found on the Keyboard shortcuts page, Escape by every word for leaving", () => {
+  const shortcutsFound = (query: string) =>
+    (
+      searchSettings(
+        settingsSearchEntries({
+          settings: settingsView(),
+          voiceControlsDrawn: false,
+          accountDrawn: true,
+          capabilities: DESKTOP_CAPABILITIES,
+          workspace: undefined,
+        }),
+        query,
+      )?.groups ?? []
+    )
+      .filter((group) => group.page === SETTINGS_VIEW.SHORTCUTS)
+      .flatMap((group) => group.items.map((entry) => entry.label));
+
+  assert.deepEqual(shortcutsFound("exit"), ["Close what's open, or step back"]);
+  assert.deepEqual(shortcutsFound("inbox option"), ["Choose an inbox option by its number"]);
+  assert.ok(shortcutsFound("link").includes("Link selected words"));
+});
+
 /** Every page's rows as a signed-in desktop reader of a workspace they administer sees them. */
 const FULL_INPUT: SettingsSearchInput = {
   settings: settingsView({ voiceAvailable: true }),

@@ -532,7 +532,7 @@ async function pressEnter(): Promise<void> {
   await settle();
 }
 
-test("a draft opens nothing until its bar's Enter, then opens the tab in its agent's browser and hands it on; a refusal stays in words, and Escape discards it", async () => {
+test("a draft opens nothing until its bar's Enter, then opens the tab in its agent's browser and hands it on; a refusal stays as a failure note over the kept address", async () => {
   mountAnnouncer();
   const asked: TasksBrowserTabOpenParams[] = [];
   let answer: WireBoundaryInput = { failure: BROWSER_TAB_OPEN_FAILURE.NOT_READY };
@@ -570,15 +570,22 @@ test("a draft opens nothing until its bar's Enter, then opens the tab in its age
 
   await pressEnter();
   assert.deepEqual(asked, [{ taskId: TASK, agentId: AGENT_ID, address: "http://localhost:3000/" }]);
-  assert.ok(
-    announcedAsAlert().includes("hasn't opened its sandbox"),
-    "a refusal is announced as an alert",
+  assert.equal(
+    document.querySelector(".cloud-browser-standing [role='alert']")?.textContent,
+    "Invite expiry hasn't opened its sandbox yet. Try again once it has started working.",
+    "a refusal is an alert, said once",
   );
+  assert.equal(announcedAsAlert(), "", "the window's own alert does not say it again");
   assert.ok(
     document
-      .querySelector(".cloud-browser-standing")
+      .querySelector(".cloud-browser-standing .luke-failure-note")
       ?.textContent?.includes("hasn't opened its sandbox"),
-    "a refusal is said under the bar",
+    "a refusal is said under the bar as a failure note",
+  );
+  assert.equal(
+    addressField().value,
+    "localhost:3000",
+    "the refused address stays for Enter to retry",
   );
   assert.deepEqual(handed, []);
 
@@ -591,11 +598,37 @@ test("a draft opens nothing until its bar's Enter, then opens the tab in its age
   answer = { tab: opened };
   await pressEnter();
   assert.deepEqual(handed, [opened]);
+  assert.equal(discarded, 0);
+});
 
-  await act(async () =>
-    addressField().dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })),
+test("in a draft, Escape clears the typed address first and discards the draft only on an empty field", async () => {
+  fakeActPort({});
+  let discarded = 0;
+  draw(
+    createElement(CloudBrowserDraftPane, {
+      taskId: TASK,
+      draft: { id: "draft-1", agentId: AGENT_ID },
+      owner: { name: "Invite expiry", icon: createElement("span") },
+      onOpened: () => undefined,
+      onDiscard: () => {
+        discarded += 1;
+      },
+    }),
   );
-  assert.equal(discarded, 1);
+  await settle();
+  const pressEscape = () =>
+    act(async () =>
+      addressField().dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })),
+    );
+
+  typeAddress("localhost:3000");
+  await settle();
+  await pressEscape();
+  assert.equal(addressField().value, "", "the first Escape clears the words");
+  assert.equal(discarded, 0, "the draft stands while there were words to clear");
+
+  await pressEscape();
+  assert.equal(discarded, 1, "Escape on an empty field discards the draft");
 });
 
 test("a live tab's bar opens a typed address and steps back, forward, and reload over the live view, and says so where another member holds the tab", async () => {

@@ -289,16 +289,21 @@ async function catalogScenes(browser: PlaywrightBrowser, base: string): Promise<
   return entries.map(({ id, title }) => ({ id, title, place: "Catalog", profile: "" }));
 }
 
-/** The element a step names, within its landmark where it names one. */
+/** The element a step names, by its whole name where it asks, within its landmark where it names one. */
 function targetOf(
   page: PlaywrightPage,
-  target: { role: string; name: string; within?: { role: string; name?: string } },
+  target: {
+    role: string;
+    name: string;
+    exact?: boolean;
+    within?: { role: string; name?: string };
+  },
 ): PlaywrightLocator {
   const scope =
     target.within === undefined
       ? page
       : page.getByRole(target.within.role, { name: target.within.name }).first();
-  return scope.getByRole(target.role, { name: target.name }).first();
+  return scope.getByRole(target.role, { name: target.name, exact: target.exact === true }).first();
 }
 
 /** Runs `step` on `page`, `client`'s, answering what went wrong, or nothing. */
@@ -496,7 +501,10 @@ async function shootBrowser(
     viewport: { width: viewport.width, height: viewport.height },
     // A finger works either phone, as the catalog's own shoot gives its phone frame.
     ...(frame.phone ? { hasTouch: true } : {}),
-    ...(phone ? { isMobile: true, deviceScaleFactor: 2 } : {}),
+    // Note that the phone is shot at one device pixel per CSS pixel, because an emulated scale
+    // gives the page a devicePixelRatio its device-pixel resize boxes do not share, and the
+    // terminal's WebGL screen, which sizes its canvas from that box, then draws nothing.
+    ...(phone ? { isMobile: true } : {}),
     colorScheme: shot.theme,
     reducedMotion: "reduce",
   });

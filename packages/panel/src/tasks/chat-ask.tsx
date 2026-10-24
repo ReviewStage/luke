@@ -38,6 +38,7 @@ import {
   chatAskWaitsOn,
   chatNumberedPick,
 } from "./chat-ask-model.js";
+import type { ChatComposerMentions } from "./chat-composer.js";
 import { useChatReplyDoor } from "./chat-reply-doors.js";
 import {
   AnswerForm,
@@ -105,7 +106,10 @@ import { SentWords } from "./skill-chip.js";
  * the ask's revision (`composer-drafts.ts`), so the chat closing, a switch
  * away, or the card scrolling out finds it as it was; an answer taken lets
  * it go. The note line
- * takes mentions where the page hands them, and a dictation, but no files,
+ * takes the channel's mentions, as the chat's own box does
+ * (`chat-mention-source.ts`): an `@` lists the members a mention there
+ * tells, then the channel's task, and a `#` names the channels. It takes a
+ * dictation too, but no files,
  * which a chat answer does not carry. Words selected in the card, its
  * title, its blocks, and its options, steps, and fields' names, and
  * replied to are quoted into its note line while it may be answered
@@ -141,6 +145,8 @@ interface AskCardProps {
   readonly blocks: React.ReactNode;
   /** The actor a member is drawn as, by the member's id (`chat-actors.ts`). */
   readonly actorOf: (memberId: string) => Actor;
+  /** What the note line's `@` and `#` offer: the channel's, as the chat's own box offers there. */
+  readonly mentions: ChatComposerMentions;
   /** The words a dictation into the note line is likely to say. */
   readonly keywords: readonly string[];
   readonly now: number;
@@ -198,6 +204,7 @@ function Answer({
   response,
   asked,
   self,
+  mentions,
   keywords,
   onAnswer,
 }: {
@@ -209,6 +216,7 @@ function Answer({
   asked: InboxAsk | undefined;
   /** The poster's agent, which the note line's `@` list does not offer; none where a person or Luke posted it. */
   self: string | undefined;
+  mentions: ChatComposerMentions;
   keywords: readonly string[];
   onAnswer: AskCardProps["onAnswer"];
 }): React.JSX.Element {
@@ -239,6 +247,7 @@ function Answer({
     skills: undefined,
     keywords,
     statuses,
+    chat: mentions,
     onNote: setRefusal,
   });
   // A Reply over the card's words lays its quote into the note line, never while an answer is out.
@@ -429,6 +438,7 @@ export function AskCard({
   answers,
   blocks,
   actorOf,
+  mentions,
   keywords,
   now,
   onAnswer,
@@ -507,6 +517,7 @@ export function AskCard({
                 response={response}
                 asked={asked}
                 self={self}
+                mentions={mentions}
                 keywords={keywords}
                 onAnswer={onAnswer}
               />
