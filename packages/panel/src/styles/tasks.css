@@ -5378,8 +5378,8 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
 }
 
 .pull-request-mark {
-  width: 13px;
-  height: 13px;
+  width: var(--luke-icon-12);
+  height: var(--luke-icon-12);
   flex: 0 0 auto;
 }
 
@@ -5393,8 +5393,8 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
    success green, closed as done in the merged purple, and closed as not
    planned in the muted ink. */
 .issue-mark {
-  width: 13px;
-  height: 13px;
+  width: var(--luke-icon-12);
+  height: var(--luke-icon-12);
   flex: 0 0 auto;
 }
 
@@ -5428,8 +5428,8 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
 
 .task-issue-link .issue-mark,
 .task-issue-link-unread {
-  width: 13px;
-  height: 13px;
+  width: var(--luke-icon-12);
+  height: var(--luke-icon-12);
 }
 
 .task-issue-link-unread {

@@ -135,13 +135,6 @@ file-tree-container {
   color-scheme: inherit;
 }
 
-/* Every Lucide glyph is drawn a step finer than the library's own stroke,
-   so the window's marks read as pencil rather than marker beside its light
-   headings. The stroke is the glyph's own attribute, which a style outranks. */
-.lucide {
-  stroke-width: 1.5;
-}
-
 .app-stage {
   position: relative;
   width: 100%;
