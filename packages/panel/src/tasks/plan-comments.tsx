@@ -54,7 +54,6 @@ import {
   SUBMIT_STATE,
   TEXT_AREA_GROW_LIMIT,
   TEXT_AREA_LOOK,
-  TEXT_AREA_SUBMIT,
   TEXT_ELEMENT,
   TEXT_TONE,
   TEXT_VARIANT,
@@ -104,8 +103,17 @@ import { ActorMark, ActorRef } from "../actor-ref.js";
 import { useAppCommand } from "../app-commands.js";
 import { useSideBundles } from "../bundle-loader.js";
 import { coarsePointerNow, FINGER_SELECTION_GAP } from "../coarse-pointer.js";
+import {
+  DRAFT_PLACE,
+  type DraftPlace,
+  EMPTY_DRAFT,
+  type PlanCommentPlace,
+  useDraft,
+  useDraftWriter,
+} from "../composer-drafts.js";
 import { useCopyLinkItem } from "../copy-link-item.js";
 import { ActionMenu, type MenuAction } from "../desktop/action-menu.js";
+import { enterSubmitKey } from "../enter-sends.js";
 import { MarkdownMessage } from "../markdown-message.js";
 import { usePerson } from "../member-directory.js";
 import {
@@ -373,19 +381,30 @@ function CommentEntry({
   lead?: ReactNode;
 }): React.JSX.Element {
   const [editing, setEditing] = useState<string | undefined>(undefined);
-  const deleting = useConfirmDialog({ subject: true, surfaceOpen: true }, async () =>
-    (await doors.control.act(
+  // The edit's words, kept where they differ from the comment's, so a Cancel or an Esc finds them as the box reopens.
+  const edited = useDraft({
+    kind: DRAFT_PLACE.PLAN_COMMENT,
+    planId: doors.control.planId,
+    on: { threadId: thread.id, entryId: entry.id },
+  });
+  const drafts = useDraftWriter();
+  const deleting = useConfirmDialog({ subject: true, surfaceOpen: true }, async () => {
+    const deleted = await doors.control.act(
       thread.id,
       first
         ? { action: PLAN_COMMENT_ACTION.DELETE_THREAD }
         : { action: PLAN_COMMENT_ACTION.DELETE, entry: entry.id },
-    ))
-      ? { status: ACTION_RESULT_STATUS.ACCEPTED }
-      : {
-          status: ACTION_RESULT_STATUS.REJECTED,
-          reason: doors.control.notes.get(thread.id) ?? COMMENT_NOT_DELETED,
-        },
-  );
+    );
+    if (!deleted) {
+      return {
+        status: ACTION_RESULT_STATUS.REJECTED,
+        reason: doors.control.notes.get(thread.id) ?? COMMENT_NOT_DELETED,
+      };
+    }
+    // Words left unsent on what went go with it, so no plan is marked holding a draft no box opens.
+    drafts.drop((place) => writtenOn(place, thread.id, first ? undefined : entry.id));
+    return { status: ACTION_RESULT_STATUS.ACCEPTED };
+  });
   const copyLink = useCopyLinkItem()({
     kind: LINK_PLACE.COMMENT,
     planId: doors.control.planId,
@@ -401,7 +420,8 @@ function CommentEntry({
           {
             label: COMMENT_WORDS.EDIT,
             icon: <PencilIcon aria-hidden="true" />,
-            onSelect: () => setEditing(entry.words ?? ""),
+            onSelect: () =>
+              setEditing(edited.draft.text === "" ? (entry.words ?? "") : edited.draft.text),
           },
         ]
       : []),
@@ -451,13 +471,27 @@ function CommentEntry({
           ),
     [mine, openDate, control, thread.id, entry.id],
   );
+  const write = (words: string) => {
+    setEditing(words);
+    // Note that words as the comment holds them, or none, keep no draft, so the box reopens on the comment as it stands.
+    edited.update((was) => ({
+      ...was,
+      text: words.trim() === "" || words === entry.words ? "" : words,
+    }));
+  };
   const save = () => {
     const words = editing?.trim() ?? "";
-    if (words === "") return;
+    // Note that a comment is never saved empty, so an edit emptied asks to delete it, as its menu's Delete does.
+    if (words === "") {
+      deleting.ask();
+      return;
+    }
     void doors.control
       .act(thread.id, { action: PLAN_COMMENT_ACTION.EDIT, entry: entry.id, words })
       .then((done) => {
-        if (done) setEditing(undefined);
+        if (!done) return;
+        setEditing(undefined);
+        edited.update(() => EMPTY_DRAFT);
       });
   };
   return (
@@ -524,7 +558,7 @@ function CommentEntry({
           <CommentText
             value={editing}
             label={COMMENT_WORDS.EDIT}
-            onChange={setEditing}
+            onChange={write}
             onSubmit={save}
             onCancel={() => setEditing(undefined)}
             autoFocus
@@ -663,8 +697,9 @@ function MentionCommentText({
 const NO_SKILLS: ReadonlySet<string> = new Set();
 
 /**
- * A comment's words as they are typed: Return sends, Shift-Return breaks the
- * line, and Esc lets the field go. A plain field, so the field's own undo
+ * A comment's words as they are typed: Return sends, as `enterSends` reads
+ * it, so a finger's keyboard breaks the line with it, Shift-Return breaks
+ * the line, and Esc lets the field go. A plain field, so the field's own undo
  * and redo change its words and never the plan's.
  */
 function PlainCommentText({
@@ -693,7 +728,7 @@ function PlainCommentText({
         const files = Array.from(event.clipboardData.files);
         if (files.length > 0 && onPasteFiles?.(files) === true) event.preventDefault();
       }}
-      submitKey={TEXT_AREA_SUBMIT.ENTER}
+      submitKey={enterSubmitKey()}
       onSubmit={onSubmit}
       onEscape={onCancel}
     />
@@ -703,6 +738,7 @@ function PlainCommentText({
 /** The field under a thread that answers it, or starts it where it is the thread being started. */
 function ReplyField({
   label,
+  place,
   sending,
   onSend,
   onCancel,
@@ -710,6 +746,8 @@ function ReplyField({
   variant = REPLY_VARIANT.REPLY,
 }: {
   label: string;
+  /** Where the words are kept unsent, so Esc, a press away, or the thread closing finds them as the field opens again. */
+  place: PlanCommentPlace;
   sending: boolean;
   /** Sends the words and the files under a key that stays the same while they do, so a send tried again after a lost answer is taken once. */
   onSend: (
@@ -728,7 +766,9 @@ function ReplyField({
   const dictating = dictation.phase !== DICTATION_PHASE.IDLE;
   // Note that only the agent box's editor takes a dictation, so the plain field offers none.
   const dictates = useCommentEditor() !== undefined;
-  const [words, setWords] = useState("");
+  const { draft, update } = useDraft(place);
+  const words = draft.text;
+  const setWords = (text: string) => update((was) => ({ ...was, text }));
   const files = useCommentAttaching();
   const fileDrop = useFileDrop((dropped) => files.attach(Array.from(dropped)));
   // The words sent and not yet answered, which the field holds as a draft while it stands empty, so a send that fails finds them.
@@ -754,7 +794,7 @@ function ReplyField({
         attempt.current = undefined;
         return;
       }
-      setWords((now) => (now === "" ? trimmed : now));
+      update((now) => (now.text === "" ? { ...now, text: trimmed } : now));
       if (files.now().length === 0) files.set(attachments);
     });
   };
@@ -764,12 +804,9 @@ function ReplyField({
       className="comment-field"
       data-variant={variant}
       dropping={fileDrop.dropping}
-      // Note that the words in flight, held files and files still being read, and a dictation whose words land once heard, hold the field as typed words do, so a press away keeps a thread being started.
+      // Note that the words in flight, held files and files still being read, and a dictation whose words land once heard, hold the field, so a press away keeps a thread being started; typed words are kept as its draft and hold nothing.
       data-held={
-        (words === "" ? inFlight : words).trim() !== "" ||
-        files.attachments.length > 0 ||
-        files.reading > 0 ||
-        dictating
+        inFlight.trim() !== "" || files.attachments.length > 0 || files.reading > 0 || dictating
       }
       {...fileDrop.target}
     >
@@ -819,6 +856,13 @@ function ReplyField({
       </div>
     </ComposerFrame>
   );
+}
+
+/** Whether a draft's place is a comment's of a thread: any of its own, or one comment's edit where `entryId` names it. */
+function writtenOn(place: DraftPlace, threadId: string, entryId: string | undefined): boolean {
+  if (place.kind !== DRAFT_PLACE.PLAN_COMMENT || !("threadId" in place.on)) return false;
+  if (place.on.threadId !== threadId) return false;
+  return entryId === undefined || ("entryId" in place.on && place.on.entryId === entryId);
 }
 
 /** Whether two sends carry the same files, each the very one read, in the same order. */
@@ -1068,6 +1112,11 @@ function ThreadCard({
       {thread.status === PLAN_COMMENT_STATUS.OPEN ? (
         <ReplyField
           label={COMMENT_WORDS.REPLY}
+          place={{
+            kind: DRAFT_PLACE.PLAN_COMMENT,
+            planId: doors.control.planId,
+            on: { threadId: thread.id },
+          }}
           sending={sending}
           autoFocus={false}
           onCancel={() => onClose?.()}
@@ -1115,6 +1164,11 @@ function PendingCard({
       )}
       <ReplyField
         label={COMMENT_WORDS.ADD}
+        place={{
+          kind: DRAFT_PLACE.PLAN_COMMENT,
+          planId: doors.control.planId,
+          on: { quote: pending.quote, scope: pending.scope },
+        }}
         sending={sending}
         autoFocus
         onCancel={onCancel}
@@ -1658,7 +1712,7 @@ export function PlanCommentLayer({
     editorOpenThread(editorActive);
     return () => editorOpenThread(undefined);
   }, [editorActive]);
-  // A press anywhere but the thread, its words, or what it opened over the page closes it; a thread being started goes too while empty, and stays holding a draft, as a box's draft does.
+  // A press anywhere but the thread, its words, or what it opened over the page closes it, its words kept as its draft; a thread being started goes too, but while its words are sent or it holds files or a dictation, which no draft keeps.
   useEffect(() => {
     if (active === undefined) return;
     const away = (event: PointerEvent) => {

@@ -8,6 +8,7 @@ import {
   type InboxReplyKind,
   inboxFormValueSchema,
 } from "@luke/features/inbox-wire";
+import { PLAN_COMMENT_SCOPE } from "@luke/features/plan-comment-wire";
 import { Equal, Schema } from "effect";
 import { Atom } from "effect/reactivity";
 import { useEffect, useLayoutEffect, useMemo, useRef } from "react";
@@ -22,7 +23,9 @@ import { readKept, writeKept } from "./kept-storage.js";
  * draft agent its first message per plan, New task its words per workspace
  * the task starts in, a chat's box its message per channel and per thread
  * (`chat-composer.tsx`), the Inbox's New thread its To, Subject, and words
- * per workspace (`inbox-compose.tsx`), and an inbox
+ * per workspace (`inbox-compose.tsx`), a plan's comment its words per
+ * thread being started, per thread answered, and per comment edited
+ * (`plan-comments.tsx`), and an inbox
  * card its answer per item, at the revision it was written against, the
  * options picked, the fields filled, and, on a thread, the steps ticked and
  * the answer pressed beside its note. A draft is known by where
@@ -54,7 +57,7 @@ const STORAGE_KEY = "luke.composerDrafts";
 /** How many drafts are kept at most, the oldest written let go first. */
 const MAX_KEPT = 200;
 
-/** What a draft is written to: a started agent, a plan's agent not yet started, an inbox item, a task not yet started, an automation's helper not yet started, a chat's channel or thread, or an Inbox thread not yet started. */
+/** What a draft is written to: a started agent, a plan's agent not yet started, an inbox item, a task not yet started, an automation's helper not yet started, a chat's channel or thread, an Inbox thread not yet started, or a plan's comment. */
 export const DRAFT_PLACE = {
   AGENT: "agent",
   NEW_AGENT: "newAgent",
@@ -63,6 +66,7 @@ export const DRAFT_PLACE = {
   NEW_AUTOMATION: "newAutomation",
   CHAT: "chat",
   NEW_THREAD: "newThread",
+  PLAN_COMMENT: "planComment",
 } as const;
 
 const draftPlaceSchema = Schema.Union([
@@ -120,6 +124,25 @@ const draftPlaceSchema = Schema.Union([
     kind: Schema.Literal(DRAFT_PLACE.NEW_THREAD),
     /** The workspace whose Inbox the thread is written in; null before the workspaces are read. */
     workspaceId: Schema.NullOr(Schema.String),
+  }),
+  Schema.Struct({
+    kind: Schema.Literal(DRAFT_PLACE.PLAN_COMMENT),
+    /** The plan the comment is on, which the sidebar marks. */
+    planId: Schema.String,
+    /**
+     * What the words go to: the comment of a thread they edit, the thread
+     * they answer, or, for a thread not yet started, the words it is started
+     * on and whether on them or their block. Note that an edit is read first,
+     * because a reply's place would read one with the comment it names left off.
+     */
+    on: Schema.Union([
+      Schema.Struct({ threadId: Schema.String, entryId: Schema.String }),
+      Schema.Struct({ threadId: Schema.String }),
+      Schema.Struct({
+        quote: Schema.String,
+        scope: Schema.Literals(Object.values(PLAN_COMMENT_SCOPE)),
+      }),
+    ]),
   }),
 ]);
 
@@ -199,6 +222,9 @@ export type ChatDraftPlace = Extract<DraftPlace, { kind: typeof DRAFT_PLACE.CHAT
 
 /** New thread's place: the workspace whose Inbox it is written in. */
 export type NewThreadPlace = Extract<DraftPlace, { kind: typeof DRAFT_PLACE.NEW_THREAD }>;
+
+/** A plan comment's place: a thread being started, answered, or one of its comments edited. */
+export type PlanCommentPlace = Extract<DraftPlace, { kind: typeof DRAFT_PLACE.PLAN_COMMENT }>;
 
 /** A box holding nothing. */
 export const EMPTY_DRAFT: Draft = { text: "", attachments: [], choices: [], values: [] };
@@ -573,7 +599,7 @@ export function useDraftWriter(): DraftWriter {
   );
 }
 
-/** Whether a plan holds a draft: one of its agents', its draft agent's, or an inbox card's. */
+/** Whether a plan holds a draft: one of its agents', its draft agent's, an inbox card's, or a comment's. */
 export function usePlanDrafted(taskId: string): boolean {
   return useAtomValue(draftedAtom, (tasks) => tasks.includes(taskId));
 }
