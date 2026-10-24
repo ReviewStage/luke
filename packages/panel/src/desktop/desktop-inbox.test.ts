@@ -1344,6 +1344,31 @@ test("⌘-clicking two open items chooses both across their groups, opening neit
   assert.deepEqual(picked(page), []);
 });
 
+test("an agent changing an item the bar's Resolve asks about withdraws the question whole, resolving nothing", async () => {
+  const { page } = mount();
+  await settle();
+  const sent = takenCloses();
+  commandClick(page, "Alert at 80%?");
+  commandClick(page, "Expire after 7 days?");
+  act(() => barButton(page, "Resolve").click());
+  await settle();
+  assert.ok(document.querySelector('[role="alertdialog"]'), "Resolve asks first");
+
+  // The agent asks again under the same key, and main says the plan moved.
+  inboxes.set(BILLING.id, [{ ...THRESHOLD, revision: 2, updatedAt: 7_000 }, RETRY]);
+  act(() =>
+    setHolding([
+      { taskId: BILLING.id, items: 2, updatedAt: 7_000 },
+      { taskId: INVITES.id, items: 1, updatedAt: 4_000 },
+    ]),
+  );
+  await settle();
+
+  assert.equal(document.querySelector('[role="alertdialog"]'), null, "the question goes");
+  assert.deepEqual(sent, []);
+  assert.deepEqual(picked(page), ["Alert at 80%?", "Expire after 7 days?"], "the selection stands");
+});
+
 test("the bar's Mark as unread marks every item chosen at once under one toast, whose Undo marks each read again as it stood", async () => {
   const { page } = mount([], { toasts: true });
   await settle();

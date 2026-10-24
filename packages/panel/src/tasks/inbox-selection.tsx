@@ -71,10 +71,14 @@ export function InboxSelectionBar({
   onClose?: InboxCloser | undefined;
 }): React.JSX.Element {
   const toast = useToast();
-  // The open items Resolve asked about, which its question stands over while any is still chosen.
+  // The open items Resolve asked about, at the revisions it asked on.
   const [resolving, setResolving] = useState<readonly InboxListed[]>([]);
   const open = listed.filter(({ item }) => item.status === INBOX_STATUS.OPEN);
-  const asked = resolving.filter(({ item }) => open.some((each) => each.item.id === item.id));
+  // Note that the question stands only while every item it asked about is still chosen and open at the revision asked on, so an agent's change or an item let go withdraws it whole rather than resolving what the reader never saw.
+  const unchanged = resolving.every(({ item }) =>
+    open.some((each) => each.item.id === item.id && each.item.revision === item.revision),
+  );
+  const asked = unchanged ? resolving : [];
   const confirm = useConfirmDialog({ subject: asked.length > 0, surfaceOpen: shown }, () => {
     const closing = asked;
     if (onClose !== undefined) {
