@@ -2997,6 +2997,31 @@ test("Review opens a panel whose choice and words are submitted for the agent as
   );
 });
 
+test("Ctrl+Enter submits the review from its words as ⌘↩ does, and a bare Enter only adds a line", async () => {
+  const tab = await draw(controlAnswering());
+  const panel = openReview(tab);
+
+  writeReview(panel, "Looks right.");
+  pressInBox(panel, { key: "Enter" }, "Review comment");
+  await settle();
+  assert.deepEqual(changes, [], "a bare Enter sends nothing");
+
+  pressInBox(panel, { key: "Enter", ctrlKey: true }, "Review comment");
+  await settle();
+
+  assert.deepEqual(changes, [
+    [
+      AGENT.id,
+      {
+        action: PULL_REQUEST_ACTION.SUBMIT_REVIEW,
+        event: REVIEW_EVENT.COMMENT,
+        // Note that the bare Enter left a new line open after the words.
+        body: "Looks right.\n\n",
+      },
+    ],
+  ]);
+});
+
 test("a review GitHub refuses says so in GitHub's own words inside the panel, never over the header, and the words written stand for another try", async () => {
   changeAnswer = {
     outcome: PULL_REQUEST_WRITE_OUTCOME.REFUSED,

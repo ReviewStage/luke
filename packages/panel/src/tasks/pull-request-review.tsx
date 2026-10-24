@@ -21,6 +21,7 @@ import { CONFIRM_STAGE } from "@luke/ui/confirm-state";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { MessageSquarePlusIcon, Trash2Icon } from "lucide-react";
 import { type ReactNode, useId, useRef, useState } from "react";
+import { modEnterSends } from "../enter-sends.js";
 import { CommentEditor, overCommentBound } from "./comment-editor.js";
 import type { PendingReview } from "./line-comment.js";
 import { PullRequestWriteNote, type PullRequestWrites } from "./pull-request-writes.js";
@@ -146,7 +147,7 @@ function ReviewPanel({
   const sending = writes.pending !== undefined;
 
   const onKey = (event: React.KeyboardEvent) => {
-    if (event.key !== "Enter" || !(event.metaKey || event.ctrlKey)) return;
+    if (!modEnterSends(event)) return;
     event.preventDefault();
     if (!sending) draft.submit();
   };
