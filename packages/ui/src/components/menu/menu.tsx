@@ -703,7 +703,8 @@ function besideMenu(item: HTMLElement | null, side: string): number {
  * window leaves no room, its first item level with the item that opened
  * it, or its last where the window's foot leaves no room below. Whether it
  * stands is the menu's (`open`), so resting on another item, Left, or
- * Escape closes it alone, and a finger's arrival opens nothing: iOS plays a
+ * Escape closes it alone, fading out as its menu does (`DROPDOWN_MENU_SURFACE`
+ * on Base UI's ending state), and a finger's arrival opens nothing: iOS plays a
  * tap's arrival as a hover and spends the tap on what comes in with it, so
  * the tap itself opens it, the keyboard taken into it.
  */

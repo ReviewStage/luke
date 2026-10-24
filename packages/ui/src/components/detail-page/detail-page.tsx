@@ -74,7 +74,7 @@ export function DetailPage({
   return (
     <section
       className="luke-detail-page"
-      data-frame={heading.frame ?? PAGE_FRAME.PAGE}
+      data-frame={heading.frame}
       data-width={heading.width ?? PAGE_WIDTH.MEASURE}
       data-inset={inset}
       aria-labelledby={underToolbar ? undefined : titleId}

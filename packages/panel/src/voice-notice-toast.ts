@@ -14,7 +14,7 @@
  * dismissed until the voice says something else.
  */
 
-import { VOICE_REMEDY_LABEL, type VoiceRemedy } from "@luke/features/words";
+import { VOICE_REMEDY, VOICE_REMEDY_LABEL, type VoiceRemedy } from "@luke/features/words";
 import { STATUS_TONE, type ToastTone } from "@luke/ui";
 import { type RefObject, useEffect, useRef } from "react";
 import { type ToastNotice, useToast, useWithdrawToast } from "./toast.js";
@@ -30,6 +30,15 @@ const DISMISS_HINT_LABEL = "Got it";
 
 /** What the voice's toast is about, by which it is withdrawn once the voice stops saying it. */
 const VOICE_NOTICE_SUBJECT = "voice-toast";
+
+/** OpenAI's billing page, where the key's account is given credit. */
+export const OPENAI_BILLING_URL =
+  "https://platform.openai.com/settings/organization/billing/overview";
+
+/** The page a remedy opens, for those that open one: its toast action is a link to it. */
+const VOICE_REMEDY_HREF: Partial<Record<VoiceRemedy, string>> = {
+  [VOICE_REMEDY.ADD_OPENAI_CREDIT]: OPENAI_BILLING_URL,
+};
 
 /** The toast's tone for what the notice carries: a failure is refused work, and a notice or the hint asks the developer's attention. */
 const TOAST_TONE_OF = {
@@ -68,7 +77,8 @@ function noticeToast(
   }
   if (remedy === undefined) return toast;
   const onPress = () => presses.current.onRemedy(remedy);
-  return { ...toast, action: { label: VOICE_REMEDY_LABEL[remedy], onPress } };
+  const href = VOICE_REMEDY_HREF[remedy];
+  return { ...toast, action: { label: VOICE_REMEDY_LABEL[remedy], href, onPress } };
 }
 
 /** Stands the voice's notice as a toast while it is shown, and withdraws it once it is not. */

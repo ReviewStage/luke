@@ -27,6 +27,7 @@ import React from "react";
 
 import {
   ArchiveIcon,
+  BackIcon,
   BoardIcon,
   CloseIcon,
   CopyIcon,
@@ -135,6 +136,8 @@ export const GLYPH = {
   END_CALL: lucideGlyph(PhoneOff),
   RETRY: RetryIcon,
   GO_BACK: lucideGlyph(RotateCcw),
+  // The way back to the place above, which `BackButton` alone draws.
+  BACK: BackIcon,
   PIN: lucideGlyph(Pin),
   UNPIN: lucideGlyph(PinOff),
   ARCHIVE: ArchiveIcon,
