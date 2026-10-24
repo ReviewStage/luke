@@ -17,6 +17,7 @@ import { CHECKBOXES_EXAMPLE } from "./examples/checkboxes";
 import { CHIPS_EXAMPLE } from "./examples/chips";
 import { CHOICE_BAR_EXAMPLE } from "./examples/choice-bar";
 import { CHOICE_LIST_EXAMPLE } from "./examples/choice-list";
+import { CODE_CARDS_EXAMPLE } from "./examples/code-cards";
 import { COLLECTION_PAGE_EXAMPLE } from "./examples/collection-page";
 import { COMBOBOX_EXAMPLE } from "./examples/combobox";
 import { COMMAND_ASK_EXAMPLE } from "./examples/command-ask";
@@ -148,6 +149,7 @@ export const EXAMPLES: readonly Example[] = [
   COMBOBOX_EXAMPLE,
   CONFIRM_DIALOGS_EXAMPLE,
   COPY_BUTTONS_EXAMPLE,
+  CODE_CARDS_EXAMPLE,
   COMMAND_ASK_EXAMPLE,
   COMMAND_DIALOG_EXAMPLE,
   COMMENTS_EXAMPLE,
