@@ -29,6 +29,7 @@ export const TERM = {
   PULL_REQUEST: { one: "pull request", many: "pull requests" },
   REPOSITORY: { one: "repository", many: "repositories" },
   SKILL: { one: "skill", many: "skills" },
+  INTEGRATION: { one: "integration", many: "integrations" },
   RESULT: { one: "result", many: "results" },
   SECTION: { one: "section", many: "sections" },
   FILE: { one: "file", many: "files" },
@@ -41,6 +42,17 @@ export const VERB = {
   OPEN: "Open",
   RESET_TO_DEFAULTS: "Reset to defaults",
 } as const;
+
+/**
+ * What the account's connected services are called as a heading or a label:
+ * Settings' page, the agent box's popover and ⋯, the @ menu, and the
+ * automation editor all say it. "MCP server" names only a custom server added
+ * by its URL, never one of these.
+ */
+export const INTEGRATION_LABEL = {
+  one: "Integration",
+  many: "Integrations",
+} as const satisfies Noun;
 
 /**
  * What a form says beside a field: that it may be left empty, that the secret

@@ -565,7 +565,7 @@ export const STOP_FAILED = "The agent could not be stopped. Try again.";
 export const RENAME_FAILED = "The agent could not be renamed. Try again.";
 
 /** What the toast says when the service did not switch an agent's MCP servers, whose switches fall back. */
-export const SERVERS_FAILED = "The agent's MCP servers could not be changed. Try again.";
+export const SERVERS_FAILED = "The agent's integrations could not be changed. Try again.";
 
 /** What an agent's archive says once it landed, and what it says refused. */
 const ARCHIVED_WORDS = {

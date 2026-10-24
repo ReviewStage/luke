@@ -1699,12 +1699,12 @@ test("a personal automation another member made is not called Only you, in its r
   assert.equal(picked(editor, "Owner"), "Personal");
 });
 
-test("a new agent's MCP servers are a field chip of the owner's connected ones until switched off, the row naming those off, and a switch saves with the task", async () => {
+test("a new agent's Integrations are a field chip of the owner's connected ones until switched off, the row naming those off, and a switch saves with the task", async () => {
   standing = [{ ...SWEEP, mine: true }];
   const page = mountPages({ kind: AUTOMATIONS_PAGE.EDIT, automationId: SWEEP.id });
   await settle();
   const chip = serversChip() ?? assert.fail("the servers chip stands");
-  assert.match(page.textContent ?? "", /Every connected server is on\./u);
+  assert.match(page.textContent ?? "", /Every connected integration is on\./u);
   assert.equal(
     chip.querySelectorAll(".luke-provider-mark").length,
     2,
@@ -1738,31 +1738,31 @@ test("a new agent's MCP servers are a field chip of the owner's connected ones u
   });
 });
 
-test("a new agent's MCP servers row claims nothing while the owner's connections are read", async () => {
+test("a new agent's Integrations row claims nothing while the owner's connections are read", async () => {
   standing = [{ ...SWEEP, mine: true }];
   integrationsHeld = true;
   const page = mountPages({ kind: AUTOMATIONS_PAGE.EDIT, automationId: SWEEP.id });
   await settle();
 
   const reading = [...page.querySelectorAll("[role=status]")].map((each) => each.textContent);
-  assert.ok(reading.includes("Reading your connected servers…"), "the row says it is reading");
-  assert.doesNotMatch(page.textContent ?? "", /None connected yet\.|Every connected server/u);
+  assert.ok(reading.includes("Reading your connected integrations…"), "the row says it is reading");
+  assert.doesNotMatch(page.textContent ?? "", /None connected yet\.|Every connected integration/u);
   assert.equal(serversChip(page), undefined, "no chip claims None while the read is out");
 });
 
-test("a new agent's MCP servers row says a refused read of the owner's connections, and Retry reads them", async () => {
+test("a new agent's Integrations row says a refused read of the owner's connections, and Retry reads them", async () => {
   standing = [{ ...SWEEP, mine: true }];
   integrationsRefusals = 1;
   const page = mountPages({ kind: AUTOMATIONS_PAGE.EDIT, automationId: SWEEP.id });
   await settle();
 
   const alert = page.querySelector("[role=alert]");
-  assert.match(alert?.textContent ?? "", /Your connected servers could not be read\./u);
+  assert.match(alert?.textContent ?? "", /Your connected integrations could not be read\./u);
   assert.doesNotMatch(page.textContent ?? "", /None connected yet\./u);
 
   act(() => button("Retry").click());
   await settle();
-  assert.match(page.textContent ?? "", /Every connected server is on\./u);
+  assert.match(page.textContent ?? "", /Every connected integration is on\./u);
   assert.equal(
     (serversChip() ?? assert.fail("the servers chip stands")).querySelectorAll(
       ".luke-provider-mark",
@@ -1784,7 +1784,7 @@ test("another member's automation says which servers its creator switched off, o
 
   assert.match(
     page.textContent ?? "",
-    /Its creator's connected servers, but Sentry and Notion \(account 2\) switched off\./u,
+    /Its creator's connected integrations, but Sentry and Notion \(account 2\) switched off\./u,
   );
   assert.equal(serversChip(page), undefined);
 });

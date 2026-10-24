@@ -146,7 +146,7 @@ test("at 220px wide, while a turn runs, the ⋯ offers every press it hid", asyn
   const offered = [...document.querySelectorAll('[role="menuitem"]')].map(
     (item) => item.textContent,
   );
-  assert.deepEqual(offered, ["Attach files", "MCP servers", "62% of context used", "Dictate"]);
+  assert.deepEqual(offered, ["Attach files", "Integrations", "62% of context used", "Dictate"]);
 });
 
 test("the ⋯ offers only what it hid: at 320px the + still stands beside it, so the ⋯ offers no Attach files", async () => {
@@ -155,14 +155,14 @@ test("the ⋯ offers only what it hid: at 320px the + still stands beside it, so
   const offered = [...document.querySelectorAll('[role="menuitem"]')].map(
     (item) => item.textContent,
   );
-  assert.deepEqual(offered, ["MCP servers", "62% of context used", "Dictate"]);
+  assert.deepEqual(offered, ["Integrations", "62% of context used", "Dictate"]);
 });
 
-test("MCP servers chosen from the ⋯ opens the servers popover its hidden press would have, and Escape hands the keyboard back to the ⋯", async () => {
+test("Integrations chosen from the ⋯ opens the servers popover its hidden press would have, and Escape hands the keyboard back to the ⋯", async () => {
   const box = await drawnAt(CARD.NARROWEST);
   act(() => box.press("Composer actions").click());
   const servers = [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find(
-    (item) => item.textContent === "MCP servers",
+    (item) => item.textContent === "Integrations",
   );
   act(() => servers?.click());
 
@@ -189,7 +189,7 @@ test("the ⋯'s menu closes once the card changes width, as a panel dragged narr
       .filter((item) => item.closest("[inert]") === null)
       .map((item) => item.textContent);
   act(() => box.press("Composer actions").click());
-  assert.deepEqual(offered(), ["MCP servers", "62% of context used", "Dictate"]);
+  assert.deepEqual(offered(), ["Integrations", "62% of context used", "Dictate"]);
 
   // Laid out again at the same width, as a scroll would, it stays.
   act(() => relayout());

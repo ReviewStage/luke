@@ -17,7 +17,7 @@ import {
   retriesBesideRemedy,
 } from "@luke/features/failure-remedy";
 import type { CatalogModel } from "@luke/features/models-wire";
-import { pasteCutWords } from "@luke/features/words";
+import { INTEGRATION_LABEL, pasteCutWords } from "@luke/features/words";
 import {
   ComposerFoot,
   McpIcon,
@@ -669,7 +669,7 @@ export function AgentComposer({
           {
             press: OVERFLOW_PRESS.SERVERS,
             action: {
-              label: "MCP servers",
+              label: INTEGRATION_LABEL.many,
               icon: <McpIcon />,
               onSelect: () => setServersOpen(true),
             },
