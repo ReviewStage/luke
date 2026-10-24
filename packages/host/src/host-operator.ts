@@ -1979,6 +1979,8 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         client.call(GATEWAY_METHOD.CODING_AGENTS_ENSURE_OPERATOR, {
           workspaceId: params.workspaceId,
           ...(params.reset === undefined ? undefined : { reset: params.reset }),
+          ...(params.restore === undefined ? undefined : { restore: params.restore }),
+          ...(params.timeZone === undefined ? undefined : { timeZone: params.timeZone }),
         }),
         answerOf(codingAgentOperatorEnsureAnswerViewSchema, CODING_AGENT_UNANSWERED),
       ),
