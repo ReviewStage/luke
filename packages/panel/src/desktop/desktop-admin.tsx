@@ -155,9 +155,10 @@ export function DesktopAdmin({
               command={APP_COMMAND.EXIT_ADMIN}
               onBack={onExit}
             />
+            {/* A label for the list, no heading: the view beside it is named once, by its own toolbar. */}
             <Text
-              as={TEXT_ELEMENT.H1}
-              variant={TEXT_VARIANT.TITLE}
+              as={TEXT_ELEMENT.DIV}
+              variant={TEXT_VARIANT.LABEL}
               className="admin-sections-title"
             >
               {ADMIN_TITLE}

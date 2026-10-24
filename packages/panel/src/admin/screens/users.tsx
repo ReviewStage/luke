@@ -6,7 +6,7 @@ import {
 } from "@luke/features/admin-wire";
 import { formatCount } from "@luke/features/number-format";
 import { formatDate } from "@luke/features/time-format";
-import { readingWords } from "@luke/features/words";
+import { type Noun, noMatchWords, noneYetWords, readingWords } from "@luke/features/words";
 import {
   COLLECTION_STATE,
   SearchField,
@@ -16,6 +16,7 @@ import {
   Text,
 } from "@luke/ui";
 import { ACCOUNTS_SORT_KEY, type AccountsDetailColumn } from "@luke/ui/accounts-sort";
+import { matchesTokens, searchTokens } from "@luke/ui/search-tokens";
 import { useEffect, useState } from "react";
 import {
   ACCOUNTS_TABLE_MIN_WIDTH,
@@ -38,8 +39,15 @@ import { useAdminRead, useAdminWrite } from "../use-admin-read.js";
 
 const USERS_ERROR = "The users endpoint did not answer.";
 
-/** What the roster says when no account answers the search. */
-const USERS_EMPTY = "No account matches.";
+/** What a toast says when the star's write did not land. */
+const FAVORITE_FAILED = "The favorite could not be saved. Try again.";
+
+const ACCOUNT: Noun = { one: "account", many: "accounts" };
+
+/** What the roster says when no account answers the search, and when it holds none. */
+function usersEmpty(searched: boolean): string {
+  return searched ? noMatchWords(ACCOUNT) : noneYetWords(ACCOUNT);
+}
 
 /**
  * The roster's own columns beside the shared ones: when the account joined
@@ -72,12 +80,15 @@ const ROSTER_SKELETON_ROWS = 10;
 function UsersSections({
   list,
   rows,
+  searched,
   windowDays,
   onOpenAccount,
   onToggleFavorite,
 }: {
   list: AdminUserList | undefined;
   rows: readonly AdminUserListRow[];
+  /** Whether the box holds a search, which is what an empty table is worded by. */
+  searched: boolean;
   windowDays: number;
   onOpenAccount: (id: string) => void;
   onToggleFavorite: (id: string, favorite: boolean) => void;
@@ -99,7 +110,7 @@ function UsersSections({
         {list === undefined ? (
           <AccountsTableSkeleton rows={ROSTER_SKELETON_ROWS} {...roster} />
         ) : (
-          <AccountsTable rows={rows} emptyText={USERS_EMPTY} {...roster} />
+          <AccountsTable rows={rows} emptyText={usersEmpty(searched)} {...roster} />
         )}
         <RosterNote truncatedTo={truncatedTo} searched={list?.search !== undefined} />
       </AdminSection>
@@ -172,6 +183,7 @@ export function UsersScreen({
         ...list,
         rows: list.rows.map((row) => (row.id === id ? { ...row, favorite } : row)),
       })),
+    FAVORITE_FAILED,
   );
 
   // The title, its controls, and the search stand the same on the loading
@@ -228,6 +240,7 @@ export function UsersScreen({
             <UsersSections
               list={undefined}
               rows={[]}
+              searched={false}
               windowDays={windowDays}
               onOpenAccount={onOpenAccount}
               onToggleFavorite={toggleFavorite}
@@ -240,10 +253,11 @@ export function UsersScreen({
       // The service searches the whole roster once the debounce settles; until
       // that answer lands, the same needle filters the rows already loaded, so
       // the box stays instant between refetches.
-      const needle = query.trim().toLowerCase();
-      const rows = needle
-        ? list.rows.filter((row) => `${row.name} ${row.email}`.toLowerCase().includes(needle))
-        : list.rows;
+      const tokens = searchTokens(query);
+      const rows =
+        tokens.length > 0
+          ? list.rows.filter((row) => matchesTokens([row.name, row.email], tokens))
+          : list.rows;
       return page({
         // Note that the count stands beside the field rather than in it, so a
         // narrow page wraps it under the field instead of crowding the query.
@@ -264,6 +278,7 @@ export function UsersScreen({
           <UsersSections
             list={list}
             rows={rows}
+            searched={tokens.length > 0 || list.search !== undefined}
             windowDays={windowDays}
             onOpenAccount={onOpenAccount}
             onToggleFavorite={toggleFavorite}

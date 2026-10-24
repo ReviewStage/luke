@@ -150,7 +150,8 @@
   }
 
   /* A filter's search field stands at a search's width, not the line's. */
-  .luke-collection-page-filters > [data-slot="input"] {
+  .luke-collection-page-filters > [data-slot="input"],
+  .luke-collection-page-filters > .luke-search-field {
     flex: 0 1 240px;
     min-width: 0;
   }

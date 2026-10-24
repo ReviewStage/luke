@@ -1,5 +1,7 @@
 import { ADMIN_REFUSED, type AdminQuery, type AdminReadProcedure } from "@luke/features/admin-wire";
+import { STATUS_TONE } from "@luke/ui";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { showToast, TOAST_HOLD } from "../toast.js";
 import { AdminReadRefused, useAdminDoors } from "./admin-doors.js";
 
 /**
@@ -329,7 +331,8 @@ export type AdminWriter = (id: string, value: boolean, signal: AbortSignal) => P
  * of order, since the chain deletes the intent before each request and stops
  * when none is left. A landed write redraws its own outcome, so a roster
  * refresh that crossed it mid-flight cannot leave a stale value, and a failed
- * one puts the old value back only when no newer press has spoken since. An
+ * one says so in a toast and puts the old value back only when no newer press
+ * has spoken since. An
  * aborted chain finishes its request in silence: nothing is drawn after the
  * screen that owned it is gone.
  */
@@ -340,6 +343,7 @@ class AdminWriteChain {
   constructor(
     private readonly send: AdminWriter,
     private readonly draw: (id: string, value: boolean) => void,
+    private readonly failed: string,
     private readonly signal: AbortSignal,
   ) {}
 
@@ -361,8 +365,14 @@ class AdminWriteChain {
         this.intents.delete(id);
         const landed = await this.attempt(id, want);
         if (this.signal.aborted) return;
-        if (landed) this.draw(id, want);
-        else if (!this.intents.has(id)) this.draw(id, !want);
+        if (landed) {
+          this.draw(id, want);
+          continue;
+        }
+        // Note that a refusal is said even when a newer press is queued, because
+        // that one's own answer says nothing of this one's.
+        showToast({ words: this.failed, tone: STATUS_TONE.DANGER, hold: TOAST_HOLD.FAILED });
+        if (!this.intents.has(id)) this.draw(id, !want);
       }
     } finally {
       this.writing.delete(id);
@@ -387,10 +397,11 @@ class AdminWriteChain {
 export function useAdminWrite(
   send: AdminWriter,
   draw: (id: string, value: boolean) => void,
+  failed: string,
 ): (id: string, value: boolean) => void {
-  const latest = useRef({ send, draw });
+  const latest = useRef({ send, draw, failed });
   useEffect(() => {
-    latest.current = { send, draw };
+    latest.current = { send, draw, failed };
   });
 
   // The chain is built under the mount's own controller, so a strict-mode
@@ -401,6 +412,7 @@ export function useAdminWrite(
     chain.current = new AdminWriteChain(
       (id, value, signal) => latest.current.send(id, value, signal),
       (id, value) => latest.current.draw(id, value),
+      latest.current.failed,
       controller.signal,
     );
     return () => {
