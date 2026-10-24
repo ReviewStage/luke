@@ -22,6 +22,10 @@
   /* The least a press is taken across on a coarse pointer, a finger's: a
      control drawn smaller keeps its size and takes the press around it. */
   --luke-touch-target: 44px;
+  /* The bar across the top of a tab or a dock (`PaneBar`): a control's
+     height with a tight gap over and under it, and the hairline it stands
+     on, so a bar holding words alone stands as tall as one holding buttons. */
+  --luke-pane-bar-height: calc(var(--luke-control-height) + 2 * var(--luke-tight-gap) + 1px);
   --luke-control-inset: var(--luke-space-12);
   --luke-control-gap: var(--luke-space-8);
   --luke-icon-gap: var(--luke-space-8);
@@ -225,6 +229,10 @@
   /* The least a press is taken across on a coarse pointer, a finger's: a
      control drawn smaller keeps its size and takes the press around it. */
   --luke-touch-target: 44px;
+  /* The bar across the top of a tab or a dock (`PaneBar`): a control's
+     height with a tight gap over and under it, and the hairline it stands
+     on, so a bar holding words alone stands as tall as one holding buttons. */
+  --luke-pane-bar-height: calc(var(--luke-control-height) + 2 * var(--luke-tight-gap) + 1px);
   --luke-control-inset: var(--luke-space-16);
   --luke-control-gap: var(--luke-space-8);
   --luke-icon-gap: var(--luke-space-8);

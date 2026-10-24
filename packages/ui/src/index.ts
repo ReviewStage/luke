@@ -76,6 +76,7 @@ export * from "./components/page-frame/page-frame.js";
 export * from "./components/page-thumb/page-thumb.js";
 export * from "./components/page-toolbar/page-toolbar.js";
 export * from "./components/pagination/pagination.js";
+export * from "./components/pane-bar/pane-bar.js";
 export * from "./components/pane-pin/pane-pin.js";
 export * from "./components/picture-tile/picture-tile.js";
 export * from "./components/popover-panel/popover-panel.js";
