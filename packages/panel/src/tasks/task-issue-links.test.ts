@@ -243,6 +243,23 @@ test("each link is drawn with its key, title, live state, and keyword, and its m
   assert.deepEqual(opened, ["https://github.com/acme/web/issues/312"]);
 });
 
+test("a GitHub issue filed in another repository than the task's is called by its repository's name before its number", async () => {
+  const elsewhere: TaskIssueLinkView = {
+    ...SAFARI,
+    id: "0b6c1f0e-2a7d-4c3e-9f1a-0d8e7b6a5c44",
+    key: "Acme/Auth#270",
+    url: "https://github.com/acme/auth/issues/270",
+    repository: "acme/auth",
+    number: 270,
+  };
+  const { container } = await mount({ links: [SAFARI, elsewhere] });
+
+  assert.deepEqual(
+    rows(container).map(({ key }) => key),
+    ["#312", "Auth#270"],
+  );
+});
+
 test("a chip hangs its issue's card while the pointer rests on it: its title, repository key, state, and keyword", async () => {
   const { container } = await mount({ links: [SAFARI] });
 

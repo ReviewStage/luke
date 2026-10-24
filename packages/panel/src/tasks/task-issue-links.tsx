@@ -1,14 +1,17 @@
-import type { GitHubIssuePick } from "@luke/features/github-repositories-wire";
+import type { GitHubIssuePick, IssueState } from "@luke/features/github-repositories-wire";
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
 import type { LinearIssueSummary } from "@luke/features/linear-wire";
+import { MENTION_KIND } from "@luke/features/mention-link";
 import {
   TASK_ISSUE_PROVIDER,
   TASK_ISSUE_RELATION,
   type TaskIssueLinkView,
   type TaskIssueRelation,
+  type TaskIssueTag,
 } from "@luke/features/task-issue-wire";
 import {
   CHIP_LOOK,
+  CHIP_SIZE,
   CHIP_WIDTH,
   Chip,
   ChipName,
@@ -35,8 +38,14 @@ import { ActionMenu, type MenuAction } from "../desktop/action-menu.js";
 import { IssueCard } from "./issue-card.js";
 import { IssueMark } from "./issue-mark.js";
 import { IssuePickerChip } from "./issue-picker-chip.js";
-import { linksFull, RELATION_DETAIL, standingWords } from "./task-issue-links-model.js";
-import { useOpenLink } from "./use-open-link.js";
+import {
+  issueKeyWords,
+  linksFull,
+  RELATION_DETAIL,
+  standingWords,
+} from "./task-issue-links-model.js";
+import { useLinkStanding } from "./use-link-standing.js";
+import { linkPressOf, useOpenLink } from "./use-open-link.js";
 import { relinkOf, useTaskIssueLinks } from "./use-task-issue-links.js";
 import type { TasksControl } from "./use-tasks-tab.js";
 
@@ -80,27 +89,35 @@ const OPEN_WORDS = {
   [TASK_ISSUE_PROVIDER.LINEAR]: "Open in Linear",
 } as const satisfies Record<TaskIssueLinkView["provider"], string>;
 
-/** The provider's mark for where a link's issue stands: GitHub's for its state, an open mark unread, or Linear's own. */
-function LinkMark({ link }: { link: TaskIssueLinkView }): React.JSX.Element {
-  const { standing } = link;
-  if (standing?.provider === TASK_ISSUE_PROVIDER.GITHUB) {
-    return <IssueMark issue={{ number: link.number ?? 0, state: standing.state }} />;
-  }
-  if (link.provider === TASK_ISSUE_PROVIDER.GITHUB) {
+/** The provider's mark for where an issue stands: GitHub's for its state, an open mark unread, or Linear's own. */
+function LinkMark({
+  provider,
+  number,
+  state,
+}: {
+  provider: TaskIssueLinkView["provider"];
+  /** A GitHub issue's number, which its mark names it by. */
+  number: number | undefined;
+  /** Where a GitHub issue stands; none where its provider answered nothing. */
+  state: IssueState | undefined;
+}): React.JSX.Element {
+  if (state !== undefined) return <IssueMark issue={{ number: number ?? 0, state }} />;
+  if (provider === TASK_ISSUE_PROVIDER.GITHUB) {
     return <CircleDotIcon className="task-issue-link-unread" aria-hidden="true" />;
   }
   return <ProviderMark provider={INTEGRATION_PROVIDER.LINEAR} size={PROVIDER_MARK_SIZE.CAPTION} />;
 }
 
-/**
- * What a link's chip calls its issue's number: `#42` for a GitHub issue, whose
- * key is `owner/name#42` in the service, and Linear's own key, so the chip
- * reads as every other chip of an issue does and the repository stays in its
- * tooltip.
- */
-function keyWords(link: TaskIssueLinkView): string {
-  const at = link.key.lastIndexOf("#");
-  return link.provider === TASK_ISSUE_PROVIDER.GITHUB && at >= 0 ? link.key.slice(at) : link.key;
+/** The mark of a link as its page read it. */
+function linkMarkOf(link: TaskIssueLinkView): React.JSX.Element {
+  const { standing } = link;
+  return (
+    <LinkMark
+      provider={link.provider}
+      number={link.number}
+      state={standing?.provider === TASK_ISSUE_PROVIDER.GITHUB ? standing.state : undefined}
+    />
+  );
 }
 
 /** What a link's chip says of it beyond its key and title: where it stands, where its provider answered, and its keyword. */
@@ -113,11 +130,14 @@ function linkSummary(link: TaskIssueLinkView): string {
 /** One linked issue as its chip, and the menu it drops. */
 function LinkChip({
   link,
+  repository,
   onOpen,
   onRelate,
   onUnlink,
 }: {
   link: TaskIssueLinkView;
+  /** The task's repository, which a GitHub issue filed there is called by its number alone. */
+  repository: string | null;
   onOpen: () => void;
   onRelate: (relation: TaskIssueRelation) => void;
   onUnlink: () => void;
@@ -150,7 +170,7 @@ function LinkChip({
         label={`${link.key} ${link.title} · ${summary}`}
         card={
           <IssueCard
-            mark={<LinkMark link={link} />}
+            mark={linkMarkOf(link)}
             title={link.title}
             heading={stateWords === undefined ? link.key : `${link.key} · ${stateWords}`}
             note={`${LINKS_WORDS[link.relation]}: ${RELATION_DETAIL[link.relation]}`}
@@ -164,8 +184,8 @@ function LinkChip({
           aria-label={`${link.key} ${link.title}: ${summary}`}
           {...trigger(dropBelowStart)}
         >
-          <LinkMark link={link} />
-          <span className="task-issue-link-key">{keyWords(link)}</span>
+          {linkMarkOf(link)}
+          <span className="task-issue-link-key">{issueKeyWords(link, repository)}</span>
           <ChipName>{link.title}</ChipName>
         </Chip>
       </Tooltip>
@@ -186,6 +206,81 @@ function LinkChip({
         />
       )}
     </li>
+  );
+}
+
+/** The provider each tag's issue is held by, as a link mention names it. */
+const TAG_INTEGRATION = {
+  [TASK_ISSUE_PROVIDER.GITHUB]: INTEGRATION_PROVIDER.GITHUB,
+  [TASK_ISSUE_PROVIDER.LINEAR]: INTEGRATION_PROVIDER.LINEAR,
+} as const satisfies Record<TaskIssueTag["provider"], string>;
+
+/** A tag's card: the issue's title, key and state as its provider answers them once the card is drawn, and its key alone until then or where it answers nothing. */
+function IssueTagCard({
+  tag,
+  taskId,
+  repository,
+}: {
+  tag: TaskIssueTag;
+  taskId: string;
+  repository: string | null;
+}): React.JSX.Element {
+  // Note that the read starts only as the card is drawn, since a Board of tags must not ask a provider for each of them as it opens.
+  const standing = useLinkStanding(
+    { kind: MENTION_KIND.LINK, provider: TAG_INTEGRATION[tag.provider], url: tag.url },
+    { taskId, workspace: "" },
+  );
+  return (
+    <IssueCard
+      mark={
+        <LinkMark
+          provider={tag.provider}
+          number={standing?.issue?.number}
+          state={standing?.issue?.state}
+        />
+      }
+      title={standing?.title ?? issueKeyWords(tag, repository)}
+      heading={standing?.state === undefined ? tag.key : `${tag.key} · ${standing.state}`}
+      opener={standing?.opener}
+      note={`${LINKS_WORDS[tag.relation]}: ${RELATION_DETAIL[tag.relation]}`}
+    />
+  );
+}
+
+/**
+ * A Board card's tag for one issue its task links: the issue's mark and its
+ * key, hanging the issue's card as the task page's chips do. A press opens
+ * the issue as a link to it does elsewhere (`use-open-link.ts`), never the
+ * task. The list carries no title or state, which a provider answers live,
+ * so the tag wears the unread mark and its card reads them as it is drawn.
+ */
+export function TaskIssueTagChip({
+  tag,
+  taskId,
+  repository,
+}: {
+  tag: TaskIssueTag;
+  taskId: string;
+  /** The task's repository, which a GitHub issue filed there is called by its number alone. */
+  repository: string | null;
+}): React.JSX.Element {
+  const openLink = useOpenLink();
+  return (
+    <Tooltip
+      label={`${tag.key} · ${LINKS_WORDS[tag.relation]}`}
+      card={<IssueTagCard tag={tag} taskId={taskId} repository={repository} />}
+    >
+      <Chip
+        look={CHIP_LOOK.PILL}
+        size={CHIP_SIZE.COMPACT}
+        data-provider={tag.provider}
+        href={tag.url}
+        onClick={linkPressOf(openLink, tag.url)}
+      >
+        <LinkMark provider={tag.provider} number={undefined} state={undefined} />
+        <ChipName mono>{issueKeyWords(tag, repository)}</ChipName>
+      </Chip>
+    </Tooltip>
   );
 }
 
@@ -264,6 +359,7 @@ export function TaskIssueLinks({
           <LinkChip
             key={link.id}
             link={link}
+            repository={repository}
             onOpen={() => openLink(link.url)}
             onRelate={(relation) => control.onRelate(link.id, relation)}
             onUnlink={() => unlink(link)}

@@ -1,5 +1,3 @@
-import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
-import { TASK_ISSUE_PROVIDER, type TaskIssueProvider } from "@luke/features/task-issue-wire";
 import {
   TASK_BOUNDS,
   TASK_STATUS,
@@ -27,10 +25,7 @@ import {
   Card,
   CardPress,
   CHIP_LOOK,
-  CHIP_SIZE,
   CHOICE_BAR_LOOK,
-  Chip,
-  ChipName,
   ChoiceBar,
   COLLECTION_STATE,
   CollectionPage,
@@ -50,8 +45,6 @@ import {
   motionKey,
   PAGE_FRAME,
   PAGE_WIDTH,
-  PROVIDER_MARK_SIZE,
-  ProviderMark,
   SCROLL_FADE,
   SCROLL_OVERSCROLL,
   SCROLL_SIZE,
@@ -92,14 +85,13 @@ import { useAppCommand } from "../app-commands.js";
 import { useMemberDirectory } from "../member-directory.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import { useSettledWaiting } from "../tasks/inbox-settling.js";
-import { issueTagWords } from "../tasks/task-issue-links-model.js";
+import { TaskIssueTagChip } from "../tasks/task-issue-links.js";
 import {
   NO_ASSIGNEE_WORDS,
   TASK_PRIORITY_WORDS,
   TASK_STATUS_WORDS,
   TaskKey,
 } from "../tasks/task-standing.js";
-import { linkPressOf, useOpenLink } from "../tasks/use-open-link.js";
 import { useReadMarks } from "../tasks/use-task-looks.js";
 import { useTaskMaker } from "../tasks/use-task-origin.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
@@ -193,37 +185,18 @@ const FIRST_SHOWN: string = TASK_STATUS.TODO;
 /** What the tabs choosing a narrow board's column are called, to a screen reader. */
 const COLUMN_TABS = "Columns";
 
-/** The mark a tag wears for who holds its issue. */
-const TAG_MARK = {
-  [TASK_ISSUE_PROVIDER.GITHUB]: INTEGRATION_PROVIDER.GITHUB,
-  [TASK_ISSUE_PROVIDER.LINEAR]: INTEGRATION_PROVIDER.LINEAR,
-} as const satisfies Record<TaskIssueProvider, string>;
-
 /**
  * The issues a card's task links, oldest first, a tag each in a row under
- * its name: the provider's mark and its key, a GitHub issue of the task's
- * own repository by its `#N` alone. A press on a tag opens the issue as a
- * link to it does elsewhere (`../tasks/use-open-link.ts`), never the task.
- * Nothing for a task that links none.
+ * its name (`../tasks/task-issue-links.tsx`). Nothing for a task that links
+ * none.
  */
 function TaskBoardTags({ task }: { task: TaskSummary }): React.JSX.Element | null {
-  const openLink = useOpenLink();
   const tags = task.issues ?? [];
   if (tags.length === 0) return null;
   return (
     <div className="tasks-board-tags">
       {tags.map((tag) => (
-        <Chip
-          key={tag.id}
-          look={CHIP_LOOK.PILL}
-          size={CHIP_SIZE.COMPACT}
-          data-provider={tag.provider}
-          href={tag.url}
-          onClick={linkPressOf(openLink, tag.url)}
-        >
-          <ProviderMark provider={TAG_MARK[tag.provider]} size={PROVIDER_MARK_SIZE.CAPTION} />
-          <ChipName mono>{issueTagWords(tag, task.repository)}</ChipName>
-        </Chip>
+        <TaskIssueTagChip key={tag.id} tag={tag} taskId={task.id} repository={task.repository} />
       ))}
     </div>
   );
