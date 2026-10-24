@@ -1870,7 +1870,7 @@ test("a Run now still out is named by what it is doing and refuses another press
 
   assert.deepEqual(
     { name: run.getAttribute("aria-label"), busy: run.getAttribute("aria-busy"), runsAsked },
-    { name: "Running", busy: "true", runsAsked: [SWEEP.id] },
+    { name: "Starting", busy: "true", runsAsked: [SWEEP.id] },
   );
 });
 
@@ -2247,7 +2247,7 @@ test("runs land in a new agent on the account's default until a model is chosen,
   await settle();
 
   assert.match(page.textContent ?? "", /Your default, until you choose one\./u);
-  act(() => button("Archive successful runs").click());
+  act(() => button("Archive finished runs").click());
   act(() => button("Save").click());
   await settle();
 

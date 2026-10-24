@@ -61,7 +61,7 @@ const RUN_REASON_WORDS = {
   [AUTOMATION_RUN_REASON.NO_REPOSITORY]: "It names no repository to work in.",
   [AUTOMATION_RUN_REASON.REPOSITORY_UNREACHABLE]:
     "Luke can no longer reach its repository on GitHub.",
-  [AUTOMATION_RUN_REASON.GITHUB_SIGN_IN]: "Its GitHub sign-in had lapsed.",
+  [AUTOMATION_RUN_REASON.GITHUB_SIGN_IN]: "Its GitHub sign-in expired.",
   [AUTOMATION_RUN_REASON.MODEL]: "Its model is no longer offered. Choose another.",
   [AUTOMATION_RUN_REASON.CREDENTIAL_MISSING]: "Connect its model's provider in settings to run it.",
   [AUTOMATION_RUN_REASON.UNAVAILABLE]: "Coding agents could not be reached.",
@@ -136,10 +136,10 @@ function agentLine(
 
 /** Where a started run's agent stands, as its row's line says it. */
 const AGENT_STATUS_WORDS = {
-  [CODING_AGENT_STATUS.STARTING]: "Starting",
+  [CODING_AGENT_STATUS.STARTING]: "Starting…",
   [CODING_AGENT_STATUS.RUNNING]: "Working",
   [CODING_AGENT_STATUS.COMPLETED]: "Finished",
-  [CODING_AGENT_STATUS.FAILED]: "Its agent failed",
+  [CODING_AGENT_STATUS.FAILED]: "Failed",
   [CODING_AGENT_STATUS.CANCELLED]: "Stopped",
 } as const satisfies Record<CodingAgentStatus, string>;
 
@@ -336,7 +336,7 @@ export function automationRunLine(
     case AUTOMATION_RUN_STATUS.QUEUED:
       return "Waiting to start";
     case AUTOMATION_RUN_STATUS.FAILED:
-      return "It could not start.";
+      return "Couldn't start";
     case AUTOMATION_RUN_STATUS.SKIPPED:
       return "Skipped";
     case AUTOMATION_RUN_STATUS.STARTED:

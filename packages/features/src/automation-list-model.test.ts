@@ -268,13 +268,18 @@ test("a run's line says why it did not start, else where its agent stands, or th
     automationRunLine(run({ status: AUTOMATION_RUN_STATUS.QUEUED })),
     "Waiting to start",
   );
+  assert.equal(automationRunLine(run({ status: AUTOMATION_RUN_STATUS.FAILED })), "Couldn't start");
+  assert.equal(automationRunLine(run({ agent: agent(CODING_AGENT_STATUS.STARTING) })), "Starting…");
+  assert.equal(
+    automationRunLine(
+      run({ status: AUTOMATION_RUN_STATUS.FAILED, reason: AUTOMATION_RUN_REASON.GITHUB_SIGN_IN }),
+    ),
+    "Its GitHub sign-in expired.",
+  );
   assert.equal(automationRunLine(run({ agent: agent(CODING_AGENT_STATUS.RUNNING) })), "Working");
   assert.equal(automationRunLine(run({ agent: agent(CODING_AGENT_STATUS.COMPLETED) })), "Finished");
   assert.equal(automationRunLine(run({ agent: null })), "Its agent is gone");
-  assert.equal(
-    automationRunLine(run({ agent: agent(CODING_AGENT_STATUS.FAILED) })),
-    "Its agent failed",
-  );
+  assert.equal(automationRunLine(run({ agent: agent(CODING_AGENT_STATUS.FAILED) })), "Failed");
   assert.equal(
     automationRunLine(
       run({
@@ -284,7 +289,7 @@ test("a run's line says why it did not start, else where its agent stands, or th
         },
       }),
     ),
-    "Its agent failed: the sandbox or checkout failed",
+    "Failed: the sandbox or checkout failed",
   );
   const keyRefused = run({
     agent: {
@@ -294,7 +299,7 @@ test("a run's line says why it did not start, else where its agent stands, or th
   });
   assert.equal(
     automationRunLine(keyRefused, "its creator"),
-    "Its agent failed: its creator's API key was refused or cannot be read",
+    "Failed: its creator's API key was refused or cannot be read",
     "another's automation names whose key, and no Settings the reader cannot mend",
   );
   assert.match(automationRunLine(keyRefused), /check Settings › Agents$/u);
@@ -307,7 +312,7 @@ test("a run's line says why it did not start, else where its agent stands, or th
   });
   assert.equal(
     automationRunLine(onTeammatesAgent),
-    "Its agent failed: its owner's API key was refused or cannot be read",
+    "Failed: its owner's API key was refused or cannot be read",
     "a same-agent run on a teammate's agent names that agent's owner, whoever made the automation",
   );
   assert.match(
