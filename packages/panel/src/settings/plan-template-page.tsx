@@ -38,6 +38,7 @@ import { GLYPH, HistoryIcon, InfoIcon } from "@luke/ui/icons";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { type ActHandle, useAct } from "../act.js";
+import { PhoneHead, PlaceMore } from "../desktop/phone-head.js";
 import { DocumentScroll } from "../tasks/document-frame.js";
 import type { TaskReader } from "../tasks/edit-ref.js";
 import { PlanBody, PlanBodyColumn, PlanPageHead } from "../tasks/plan-body.js";
@@ -62,6 +63,10 @@ import type { PlanEditDoor } from "../tasks/use-plan-editing.js";
  * save already out so the default lands last. A quiet note under the
  * title, drawn as an archived task's banner is, says what the template is
  * for.
+ *
+ * On a phone the page stands under a phone's bar (`../desktop/phone-head.tsx`):
+ * the way back to the page list, and a ⋯ holding the page's actions, which
+ * leave the title's line.
  *
  * The template is the account's, kept on the service, so the page reads it
  * afresh as it opens and every Mac the account signs in on edits the same
@@ -98,6 +103,9 @@ const TEMPLATE_WORKSPACE_ID = "plan-template";
 
 /** What the title line's button that opens the template's version history says, as a task's menu item says it. */
 const HISTORY_LABEL = "Version history";
+
+/** What the page's reset says. */
+const RESET_LABEL = "Reset to default";
 
 /** How wide the placeholder's headings and the lines under each stand, as shares of their lines, a plan's sections in the body's type. */
 const TEMPLATE_SKELETON = [
@@ -331,7 +339,7 @@ function TitleActions({
           busyLabel="Resetting"
           onClick={onReset}
         >
-          Reset to default
+          {RESET_LABEL}
         </Button>
       ) : null}
     </>
@@ -343,37 +351,26 @@ function TemplateDocument({
   template,
   reader,
   onShowHistory,
+  actions,
 }: {
   template: TemplateControl;
   /** The account reading it, whose every edit it is. */
   reader: TaskReader;
   onShowHistory: () => void;
+  /** What ends the title's line: the page's actions, or none where a phone's bar holds them. */
+  actions: React.ReactNode;
 }): React.JSX.Element {
-  const reset = useConfirmDialog({ subject: template.custom, surfaceOpen: true }, template.reset);
   return (
-    <>
-      <TemplateFrame>
-        <PlanBody
-          task={templateDocument(template.text, template.lastEdit)}
-          live={false}
-          reader={reader}
-          onEdit={template.edit}
-          onShowHistory={onShowHistory}
-          page={{
-            actions: (
-              <TitleActions
-                custom={template.custom}
-                resetting={reset.busy}
-                onShowHistory={onShowHistory}
-                onReset={reset.ask}
-              />
-            ),
-            note: <TemplateNote />,
-          }}
-        />
-      </TemplateFrame>
-      <ConfirmDialog open confirm={reset} question={RESET_QUESTION} />
-    </>
+    <TemplateFrame>
+      <PlanBody
+        task={templateDocument(template.text, template.lastEdit)}
+        live={false}
+        reader={reader}
+        onEdit={template.edit}
+        onShowHistory={onShowHistory}
+        page={{ actions, note: <TemplateNote /> }}
+      />
+    </TemplateFrame>
   );
 }
 
@@ -408,10 +405,14 @@ function TemplateHeadFrame({
  * press; then headings over their lines in the plan's own type, so the
  * template lands where the blocks stood.
  */
-function TemplateSkeleton(): React.JSX.Element {
+function TemplateSkeleton({ phone }: { phone: boolean }): React.JSX.Element {
   return (
     <TemplateHeadFrame
-      actions={<Skeleton shape={SKELETON_SHAPE.CONTROL} width="var(--luke-control-height)" />}
+      actions={
+        phone ? null : (
+          <Skeleton shape={SKELETON_SHAPE.CONTROL} width="var(--luke-control-height)" />
+        )
+      }
     >
       <SkeletonRegion label={PAGE_LINE.READING}>
         <Stack gap={GAP.SECTION}>
@@ -437,9 +438,12 @@ function TemplateSkeleton(): React.JSX.Element {
 function TemplateState({
   signedIn,
   template,
+  phone,
 }: {
   signedIn: boolean;
   template: TemplateControl;
+  /** Whether a phone's bar holds the page's actions, so its head stands no block for them. */
+  phone: boolean;
 }): React.JSX.Element {
   if (!signedIn) {
     return (
@@ -456,25 +460,68 @@ function TemplateState({
     );
   }
   // While the read is out the page's head stands where the document's will, the template's blocks under it.
-  return <TemplateSkeleton />;
+  return <TemplateSkeleton phone={phone} />;
+}
+
+/**
+ * A phone's bar over the page: the way back to the page list, and a ⋯
+ * holding the page's actions while the template is drawn, Version history
+ * and, while the account holds a template of its own, Reset to default. The
+ * document's own head names the page, as every Settings page's does.
+ */
+function TemplateBar({
+  lead,
+  drawn,
+  custom,
+  onShowHistory,
+  onReset,
+}: {
+  lead: React.ReactNode;
+  drawn: boolean;
+  custom: boolean;
+  onShowHistory: () => void;
+  onReset: () => void;
+}): React.JSX.Element {
+  return (
+    <PhoneHead
+      place="settings-page"
+      start={lead}
+      title={null}
+      end={
+        drawn ? (
+          <PlaceMore
+            thing={TEMPLATE_TITLE}
+            shown
+            groups={() => [
+              [
+                { label: HISTORY_LABEL, icon: <HistoryIcon />, onSelect: onShowHistory },
+                ...(custom ? [{ label: RESET_LABEL, icon: <ResetIcon />, onSelect: onReset }] : []),
+              ],
+            ]}
+          />
+        ) : null
+      }
+    />
+  );
 }
 
 /**
  * Settings › Plan template beside Settings' page list: the template as a
- * plan's document, its title line carrying the page's actions.
- * `onShowHistory` opens the history, from the button or the "Edited by"
- * line, a section's opening it on the template as it stands.
+ * plan's document, its title line carrying the page's actions, or on a
+ * phone under a bar whose ⋯ holds them. `onShowHistory` opens the history,
+ * from the button or the "Edited by" line, a section's opening it on the
+ * template as it stands.
  */
 export function PlanTemplatePage({
   account,
-  bar,
+  lead,
   hidden,
   onShowHistory,
 }: {
   /** The signed-in account, whose every edit of the template is; none while signed out. */
   account: PersonActor | undefined;
-  /** The head of the page's column, as every Settings page's (`desktop-settings.tsx`). */
-  bar: React.ReactNode;
+  /** The way back to the page list, which leads a phone's bar over the page; none beside the list, where the window's drag strip heads it. */
+  lead: React.ReactNode;
   /** Whether the page is hidden, as a narrow room hides it behind the page list. */
   hidden: boolean;
   onShowHistory: () => void;
@@ -483,6 +530,8 @@ export function PlanTemplatePage({
   const { act } = useAct();
   const template = useTemplate(signedIn, act);
   const drawn = account !== undefined && template.read === TEMPLATE_READ.READ;
+  const reset = useConfirmDialog({ subject: template.custom, surfaceOpen: true }, template.reset);
+  const phone = lead !== undefined;
   return (
     <section
       className="settings-page"
@@ -490,17 +539,38 @@ export function PlanTemplatePage({
       aria-busy={signedIn && template.read === TEMPLATE_READ.READING ? true : undefined}
       hidden={hidden}
     >
-      {/* Settings has no top bar: the page's title and its actions stand in the page. */}
-      {bar}
+      {/* Settings has no top bar but a phone's: the page's title and its actions stand in the page. */}
+      {phone ? (
+        <TemplateBar
+          lead={lead}
+          drawn={drawn}
+          custom={template.custom}
+          onShowHistory={onShowHistory}
+          onReset={reset.ask}
+        />
+      ) : (
+        <div className="desktop-drag-strip" />
+      )}
       {drawn ? (
         <TemplateDocument
           template={template}
           reader={{ readerId: account.userId, owner: account }}
           onShowHistory={() => onShowHistory()}
+          actions={
+            phone ? null : (
+              <TitleActions
+                custom={template.custom}
+                resetting={reset.busy}
+                onShowHistory={onShowHistory}
+                onReset={reset.ask}
+              />
+            )
+          }
         />
       ) : (
-        <TemplateState signedIn={signedIn} template={template} />
+        <TemplateState signedIn={signedIn} template={template} phone={phone} />
       )}
+      <ConfirmDialog open confirm={reset} question={RESET_QUESTION} />
     </section>
   );
 }

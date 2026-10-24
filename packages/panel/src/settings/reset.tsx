@@ -17,6 +17,7 @@ import { BUTTON_VARIANT, Button, STATUS_TONE } from "@luke/ui";
 import { GLYPH } from "@luke/ui/icons";
 import { useSettingWrite } from "@luke/ui/use-setting-write";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
+import { PlaceMore } from "../desktop/phone-head.js";
 import { TOAST_HOLD, undoToast, useToast } from "../toast.js";
 import type { SettingsWrites } from "./writes.js";
 
@@ -25,6 +26,9 @@ const RESET_NOTES = {
   [SETTINGS_RESET_SCOPE.VOICE]: "Voice settings reset",
   [SETTINGS_RESET_SCOPE.APPEARANCE]: "Appearance settings reset",
 } as const satisfies Record<SettingsResetScope, string>;
+
+/** What the page's reset says. */
+const RESET_LABEL = "Reset to defaults";
 
 /** What the toast says when an Undo could not write a setting back. */
 const UNDO_REFUSED_NOTE = "The settings could not be put back. Try again.";
@@ -95,7 +99,8 @@ function writeBack(writes: SettingsWrites, held: readonly HeldSetting[]): Promis
  * A reset that landed takes the control away with what it reset, so it is
  * said in a toast with an Undo, which writes back what the page held.
  * The control is `@luke/ui`'s quiet `Button`, its glyph in the button's icon
- * slot.
+ * slot; on a phone, whose page ends its bar rather than its title line, it is
+ * the one item of the bar's ⋯ (`PlaceMore`), resting there as the button would.
  *
  * The page resets only the rows it draws: it names the group's rows it
  * leaves out, Zoom in a browser, and the store keeps them inside the one
@@ -106,11 +111,13 @@ function ResetPageButton({
   settings,
   writes,
   rows,
+  more,
 }: {
   scope: SettingsResetScope;
   settings: AppSettingsView;
   writes: SettingsWrites;
   rows: SettingsRowsInput;
+  more: string | undefined;
 }): React.JSX.Element {
   const toast = useToast();
   const reset = (asked: SettingsResetScope): Promise<ActionResult> => {
@@ -137,6 +144,17 @@ function ResetPageButton({
     });
   };
   const { busy, run } = useSettingWrite(reset);
+  if (more !== undefined) {
+    return (
+      <PlaceMore
+        thing={more}
+        shown
+        groups={() => [
+          [{ label: RESET_LABEL, icon: <ResetIcon />, disabled: busy, onSelect: () => run(scope) }],
+        ]}
+      />
+    );
+  }
   return (
     <Button
       variant={BUTTON_VARIANT.QUIET}
@@ -145,7 +163,7 @@ function ResetPageButton({
       busyLabel="Resetting"
       onClick={() => run(scope)}
     >
-      Reset to defaults
+      {RESET_LABEL}
     </Button>
   );
 }
@@ -159,13 +177,15 @@ const PAGE_RESET = {
   [SETTINGS_VIEW.APPEARANCE]: SETTINGS_RESET_SCOPE.APPEARANCE,
 } satisfies Partial<Record<SettingsView, SettingsResetScope>>;
 
-/** The reset a page's title line carries, absent while the page stands at its defaults. */
+/** The reset a page's title line carries, or a phone's ⋯ holding it; absent while the page stands at its defaults. */
 export function pageResetControl(
   view: SettingsView,
   settings: AppSettingsView | undefined,
   writes: SettingsWrites,
   /** Which rows the page draws, so a change only to a row it leaves out, Zoom in a browser, offers no reset. */
   rows: SettingsRowsInput | undefined,
+  /** On a phone, whose bar ends with a ⋯ in its place, the page the ⋯ names ("Appearance actions"); none draws the button. */
+  more?: string | undefined,
 ): React.JSX.Element | undefined {
   if (!(view in PAGE_RESET)) return undefined;
   // SAFETY: `in` narrows the view to the pages the table names.
@@ -173,6 +193,13 @@ export function pageResetControl(
   if (!settings || !rows || !settingsScopeChanged(settings, scope, rows)) return undefined;
   // Keyed to the page, so a press out on one page does not rest the next one's.
   return (
-    <ResetPageButton key={scope} scope={scope} settings={settings} writes={writes} rows={rows} />
+    <ResetPageButton
+      key={scope}
+      scope={scope}
+      settings={settings}
+      writes={writes}
+      rows={rows}
+      more={more}
+    />
   );
 }

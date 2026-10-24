@@ -12,13 +12,14 @@ import {
   Skeleton,
   SkeletonRegion,
   STATUS_TONE,
-  TOOLBAR_INSET,
   Toolbar,
   Tooltip,
 } from "@luke/ui";
+import { RotateCcwIcon } from "@luke/ui/icons";
 import { MARKDOWN_CLASS, markdownClass } from "@luke/ui/markdown-class";
 import { ACTION_RESULT_STATUS } from "@luke/wire";
 import { useRef, useState } from "react";
+import { PhoneHead, PlaceMore } from "../desktop/phone-head.js";
 import { MarkdownMessage } from "../markdown-message.js";
 import { TOAST_HOLD, type ToastNotice, undoToast, useToast } from "../toast.js";
 import { DocumentScroll } from "./document-frame.js";
@@ -53,7 +54,9 @@ import { HISTORY_READ, type PlanHistoryControl, type ViewedVersion } from "./use
  * a restore is itself a version the history keeps, so it happens at once
  * and its toast's Undo restores the one before it. Everything drawn is the plan's words, so the root is left
  * out of the screen recording (`ph-no-capture`) as a second line behind the
- * recording's text masking.
+ * recording's text masking. Standing alone on a phone, the page is headed as
+ * a phone heads every page (`../desktop/phone-head.tsx`): the way back to the
+ * versions, when the version was saved, and a ⋯ holding its restore.
  */
 
 /** What the view says over a version that changed nothing from the one before it. */
@@ -72,7 +75,11 @@ const PAGE_SKELETON = [
 const SECTION_LEVEL = "2";
 
 /** How wide the placeholder bar's moment and its restore stand: a day and a time in the title's type, and Restore this version. */
-const BAR_SKELETON = { MOMENT: "160px", RESTORE: "148px" } as const;
+const BAR_SKELETON = {
+  MOMENT: "160px",
+  RESTORE: "148px",
+  MORE: "var(--luke-control-height)",
+} as const;
 
 /** What the toast says once a version is restored, and why its Undo did nothing. */
 const VERSION_RESTORED_NOTE = "Version restored";
@@ -80,6 +87,12 @@ const RESTORE_UNDO_REFUSED_NOTE = "The restore could not be undone. Try again.";
 
 /** Why Restore this version is unavailable over the newest version. */
 const CURRENT_HINT = "This version is already current";
+
+/** What the version's restore says. */
+const RESTORE_LABEL = "Restore this version";
+
+/** What a phone's ⋯ over a version is named for ("Version actions"). */
+const VERSION_THING = "Version";
 
 /** What Restore this version says while its restore is under way. */
 const RESTORING = "Restoring";
@@ -297,29 +310,29 @@ function VersionPageFrame({
   lead,
   title,
   actions,
+  more,
   children,
 }: {
   lead?: React.ReactNode;
   title: React.ReactNode;
   actions: React.ReactNode;
+  /** The ⋯ holding `actions` on a phone, whose bar has room for one control a corner. */
+  more: React.ReactNode;
   children: React.ReactNode;
 }): React.JSX.Element {
+  // Note that only a phone leads the bar with a way back, the version standing there alone.
+  const titled = (
+    <OneLine as={ONE_LINE_ELEMENT.H1} end={ONE_LINE_END.ELLIPSIS} className="luke-toolbar-title">
+      {title}
+    </OneLine>
+  );
   return (
     <>
-      <Toolbar
-        lead={lead}
-        start={lead === undefined ? undefined : TOOLBAR_INSET.COLUMN}
-        title={
-          <OneLine
-            as={ONE_LINE_ELEMENT.H1}
-            end={ONE_LINE_END.ELLIPSIS}
-            className="luke-toolbar-title"
-          >
-            {title}
-          </OneLine>
-        }
-        actions={actions}
-      />
+      {lead === undefined ? (
+        <Toolbar title={titled} actions={actions} />
+      ) : (
+        <PhoneHead place="version" start={lead} title={titled} end={more} />
+      )}
       <Fill className="desktop-document">
         <DocumentScroll>{children}</DocumentScroll>
       </Fill>
@@ -375,9 +388,26 @@ export function VersionView({
             busyLabel={RESTORING}
             onClick={() => restore.onRestore()}
           >
-            Restore this version
+            {RESTORE_LABEL}
           </Button>
         </Tooltip>
+      }
+      more={
+        <PlaceMore
+          thing={VERSION_THING}
+          shown
+          groups={() => [
+            [
+              {
+                label: RESTORE_LABEL,
+                icon: <RotateCcwIcon />,
+                detail: viewing.current ? CURRENT_HINT : undefined,
+                disabled: viewing.current || restore.busy,
+                onSelect: () => restore.onRestore(),
+              },
+            ],
+          ]}
+        />
       }
     >
       <VersionContent
@@ -410,6 +440,7 @@ export function VersionPageSkeleton({
       lead={lead}
       title={<Skeleton width={BAR_SKELETON.MOMENT} />}
       actions={<Skeleton shape={SKELETON_SHAPE.CONTROL} width={BAR_SKELETON.RESTORE} />}
+      more={<Skeleton shape={SKELETON_SHAPE.CONTROL} width={BAR_SKELETON.MORE} />}
     >
       <VersionSkeleton title={title} section={section} />
     </VersionPageFrame>
