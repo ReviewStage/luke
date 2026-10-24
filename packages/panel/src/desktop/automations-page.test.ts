@@ -1251,7 +1251,7 @@ test("a save the service refuses keeps the draft and says why under the name", a
   await settle();
 
   assert.equal(
-    page.querySelector(".automation-save-refusal")?.textContent,
+    page.querySelector("[role='alert']")?.textContent,
     "Only its creator, or the workspace's owners and admins, can change it.",
   );
   assert.equal(
@@ -2403,7 +2403,7 @@ test("a Run now the service refuses says why under the name, and a new automatio
   act(() => button("Run now").click());
   await settle();
   assert.equal(
-    page.querySelector(".automation-save-refusal")?.textContent,
+    page.querySelector("[role='alert']")?.textContent,
     "Only its creator, or the workspace's owners and admins, can run it.",
   );
   act(() => root?.unmount());
@@ -2764,6 +2764,55 @@ test("a right-click on an automation's switch opens no menu, and Escape from its
   });
   await settle();
   assert.equal(document.activeElement, press);
+});
+
+test("an automation row's ⋯, its right-click and the menu key open the same menu, whose Copy link copies its link", async () => {
+  const page = mountPages({ kind: AUTOMATIONS_PAGE.LIST });
+  await settle();
+  const row = rowOf(page, SWEEP.name);
+  const press = row.querySelector("button") ?? assert.fail("the row is a press");
+  const openMenus = () => document.querySelectorAll('[role="menu"]:not([data-leaving])');
+  const items = () => [...(openMenus()[0]?.querySelectorAll('[role="menuitem"]') ?? [])];
+  const closeMenu = async () => {
+    act(() => {
+      document.activeElement?.dispatchEvent(
+        new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }),
+      );
+    });
+    await settle();
+  };
+  const doors = [
+    () =>
+      act(() =>
+        (row.querySelector('button[aria-label="Automation actions"]') as HTMLElement).click(),
+      ),
+    () =>
+      act(() => {
+        press.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true }));
+      }),
+    () =>
+      act(() => {
+        press.dispatchEvent(
+          new KeyboardEvent("keydown", { key: "ContextMenu", bubbles: true, cancelable: true }),
+        );
+      }),
+  ];
+
+  for (const open of doors) {
+    open();
+    await settle();
+    assert.equal(openMenus().length, 1);
+    assert.equal(openMenus()[0]?.getAttribute("aria-label"), "Automation actions");
+    assert.deepEqual(
+      items().map((item) => item.textContent),
+      ["Copy link"],
+    );
+    await closeMenu();
+  }
+  doors[2]?.();
+  await settle();
+  await act(async () => menuItem("Copy link").click());
+  assert.equal(copied.at(-1), `https://tryluke.dev/${WORKSPACE.id}/automation/${SWEEP.id}`);
 });
 
 test("a link to a run shows the Runs panel a reader folded, its run marked current, a fold after it stands, and the link opened again shows it again", async () => {

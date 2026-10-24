@@ -23,6 +23,7 @@ import {
   DIALOG_TONE,
   type DialogQuestion,
   EmptyState,
+  FailureNote,
   ONE_LINE_ELEMENT,
   OneLine,
   TEXT_BUTTON_TONE,
@@ -59,7 +60,7 @@ import { PICTURE_STATE, type PictureAnswer, usePicture } from "@luke/ui/picture-
 import { ACTION_RESULT_STATUS } from "@luke/wire";
 import * as Atom from "effect/reactivity/Atom";
 import type * as AtomRegistry from "effect/reactivity/AtomRegistry";
-import { AtSignIcon, CircleAlertIcon, HashIcon } from "lucide-react";
+import { AtSignIcon, HashIcon } from "lucide-react";
 import {
   createContext,
   Fragment,
@@ -389,7 +390,6 @@ interface PendingPost extends PendingPlace {
 
 /** What a post refused says where nothing said why. */
 const UNSENT = "Not sent";
-const RETRY_POST = "Retry";
 const DISCARD_POST = "Discard";
 
 /** What Discard asks before a refused post is let go. */
@@ -565,19 +565,16 @@ function PendingRow({
             </div>
           )}
           {entry.refused === undefined ? null : (
-            <p className="agent-undelivered chat-unsent" role="alert">
-              <CircleAlertIcon aria-hidden="true" />
+            <FailureNote
+              onRetry={() => context.onRetryPost(entry.id)}
+              also={
+                <TextButton tone={TEXT_BUTTON_TONE.QUIET} onClick={discard.ask}>
+                  {DISCARD_POST}
+                </TextButton>
+              }
+            >
               {entry.refused}
-              <TextButton
-                tone={TEXT_BUTTON_TONE.ACCENT}
-                onClick={() => context.onRetryPost(entry.id)}
-              >
-                {RETRY_POST}
-              </TextButton>
-              <TextButton tone={TEXT_BUTTON_TONE.QUIET} onClick={discard.ask}>
-                {DISCARD_POST}
-              </TextButton>
-            </p>
+            </FailureNote>
           )}
           <ConfirmDialog confirm={discard} question={DISCARD_QUESTION} />
         </div>

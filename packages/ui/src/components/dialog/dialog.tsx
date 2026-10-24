@@ -3,6 +3,7 @@ import { type Ref, useId, useImperativeHandle, useLayoutEffect, useRef, useState
 import type { PictureExpand } from "../../picture-expand.js";
 import { replayMotion } from "../../replay-motion.js";
 import { DialogContent, Dialog as ShadcnDialog } from "../../shadcn/dialog.js";
+import { trappedTab } from "../../trapped-tab.js";
 import { TEXT_ELEMENT, TEXT_VARIANT, Text } from "../text/text.js";
 import { useHeldFocus } from "./held-focus.js";
 
@@ -82,21 +83,6 @@ export const DIALOG_SIZE = {
 } as const;
 
 export type DialogSize = (typeof DIALOG_SIZE)[keyof typeof DIALOG_SIZE];
-
-/**
- * What Tab may land on inside the card: its enabled controls and links, and
- * anything else given a place in the Tab order. Note that one taken out of
- * that order, as a menu's rows are, is dropped by its `tabIndex` rather than
- * here, because any negative value takes it out.
- */
-const FOCUSABLE = [
-  "a[href]",
-  "button:not([disabled])",
-  "textarea:not([disabled])",
-  "select:not([disabled])",
-  "input:not([disabled]):not([hidden])",
-  "[tabindex]:not(:disabled)",
-].join(", ");
 
 /** What names the card: the title drawn at its head, or the id of a head the dialog draws itself. */
 type DialogName =
@@ -200,39 +186,6 @@ export type DialogProps = DialogName & {
   expand?: PictureExpand | undefined;
   children: React.ReactNode;
 };
-
-/** Whether `first` comes before `second` in the document's order. */
-function precedes(first: Node, second: Node): boolean {
-  return (first.compareDocumentPosition(second) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0;
-}
-
-/** The move Tab makes from the focused element, kept to the card's own controls. */
-function trappedTab(event: React.KeyboardEvent<HTMLElement>): void {
-  const card = event.currentTarget;
-  const controls = [...card.querySelectorAll<HTMLElement>(FOCUSABLE)].filter(
-    (control) => control.tabIndex >= 0,
-  );
-  const focused = document.activeElement;
-  const at = focused instanceof HTMLElement ? controls.indexOf(focused) : -1;
-  // Note that a focus inside the card off its controls, a picker's list that
-  // holds the keyboard, moves to the control beside it in the card's order,
-  // because counting it as off the controls would send it to an end instead.
-  if (at === -1 && focused !== null && focused !== card && card.contains(focused)) {
-    const beside = event.shiftKey
-      ? controls.findLast((control) => precedes(control, focused))
-      : controls.find((control) => precedes(focused, control));
-    event.preventDefault();
-    (beside ?? (event.shiftKey ? controls.at(-1) : controls[0]))?.focus();
-    return;
-  }
-  // Note that the ends wrap and a focus off the controls (the card itself,
-  // while the dialog is at work) comes back onto them, because past either
-  // end the browser's own move would leave the card for the window behind it.
-  const wraps = event.shiftKey ? at <= 0 : at === -1 || at === controls.length - 1;
-  if (!wraps) return;
-  event.preventDefault();
-  (event.shiftKey ? controls.at(-1) : controls[0])?.focus();
-}
 
 /** What the card plays as it answers: a swell for a dismissal it holds back, a shake for an act refused. */
 const CARD_ANSWER = {

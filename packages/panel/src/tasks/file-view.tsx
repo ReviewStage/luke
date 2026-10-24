@@ -7,6 +7,8 @@ import {
   FILL_FLOW,
   Fill,
   IconButton,
+  PaneBar,
+  type PaneBarMenu,
   ProviderMark,
   RESIZE_EDGE_SIDE,
   type ResizeEdgeHandle,
@@ -40,7 +42,7 @@ import {
 import { type PaneSlide, usePaneSlide } from "../desktop/pane-motion.js";
 import type { ReadFolder } from "../file-tree/contract.js";
 import { FileBreadcrumbs } from "./file-breadcrumbs.js";
-import { FileMenu } from "./file-menu.js";
+import { useFileMenu } from "./file-menu.js";
 import type { FileNotes } from "./file-note.js";
 import { FileTab, type ReadFileWindow } from "./file-tab.js";
 import {
@@ -489,17 +491,18 @@ function BarPathWords({ path }: { path: BarPath }): React.JSX.Element {
 }
 
 /**
- * The bar across a File tab and its tree, or a Changes tab and its own:
- * Back and Forward where the tab keeps a history, what leads it (a File
- * tab's path, or Files changed's count of the files viewed), then the
- * GitHub button, dimmed with no page to open yet, the ⋯, and the tree's
- * toggle where there is a tree.
+ * The bar across a File tab and its tree, or a Changes tab and its own, drawn
+ * by `PaneBar`: Back and Forward where the tab keeps a history, then what
+ * leads it (a File tab's path, or Files changed's count of the files
+ * viewed), the GitHub button, dimmed with no page to open yet, the tab's own
+ * controls, the tree's toggle where there is a tree, and the ⋯ last.
  */
 export function FileViewBar({
   history,
   lead,
   onGitHub,
   menu,
+  more,
   tree,
 }: {
   history?: FileHistory | undefined;
@@ -507,17 +510,28 @@ export function FileViewBar({
   lead: ReactNode;
   /** Opens the page on GitHub; none dims the button. */
   onGitHub: (() => void) | undefined;
-  /** The bar's ⋯. */
+  /** The tab's own controls after the GitHub button: View settings, or a ⋯ of its own. */
   menu: ReactNode;
+  /** The bar's ⋯, drawn last, after the tree's toggle; none draws none. */
+  more?: PaneBarMenu | undefined;
   /** The tree's toggles, where there is a tree. */
   tree?: PaneToggles | undefined;
 }): React.JSX.Element {
+  // Note that a path stands among the controls, since Back and Forward come before it, and a count with no history leads the bar as words do.
+  const crumbs = history !== undefined;
   return (
-    <header className="file-view-bar">
-      <BreadcrumbBar>
-        {history === undefined ? null : <HistoryButtons history={history} />}
-        {lead}
-        <div className="file-view-actions">
+    <PaneBar
+      middle={
+        crumbs ? (
+          <BreadcrumbBar>
+            <HistoryButtons history={history} />
+            {lead}
+          </BreadcrumbBar>
+        ) : null
+      }
+      detail={crumbs ? undefined : lead}
+      actions={
+        <>
           <Tooltip label="Open on GitHub">
             <IconButton
               icon={<ProviderMark provider={INTEGRATION_PROVIDER.GITHUB} />}
@@ -528,9 +542,10 @@ export function FileViewBar({
           </Tooltip>
           {menu}
           {tree === undefined ? null : <TreeToggle toggles={tree} />}
-        </div>
-      </BreadcrumbBar>
-    </header>
+        </>
+      }
+      menu={more}
+    />
   );
 }
 
@@ -542,13 +557,13 @@ interface TabRead {
 }
 
 /** The end of a File tab's bar: View settings, offering the settings its lines follow, then its ⋯. */
-export function FileViewMenu(props: ComponentProps<typeof FileMenu>): React.JSX.Element {
-  return (
-    <>
-      <ViewSettingsButton scope={{ kind: VIEW_SETTINGS_SCOPE.LINES, notes: true }} />
-      <FileMenu {...props} />
-    </>
-  );
+export function useFileViewEnd(
+  props: Parameters<typeof useFileMenu>[0],
+): Pick<ComponentProps<typeof FileViewBar>, "menu" | "more"> {
+  return {
+    menu: <ViewSettingsButton scope={{ kind: VIEW_SETTINGS_SCOPE.LINES, notes: true }} />,
+    more: useFileMenu(props),
+  };
 }
 
 /** What the tab is keyed by while it reads the default branch's head rather than a commit. */
@@ -654,6 +669,11 @@ export function FileView({
       : readAt({ path: file.path, firstLine: 1, lastLine: 1, raw: true }).then(wholeTextOf, () => ({
           kind: WHOLE_TEXT.UNREAD,
         }));
+  const fileViewEnd = useFileViewEnd({
+    path: file.path,
+    ready: read.kind === FILE_READ.READY,
+    readText,
+  });
 
   // The tree and the breadcrumbs hear each folder in the tree's own words.
   const readFolderListing: ReadFolder = useCallback(
@@ -690,13 +710,7 @@ export function FileView({
           </>
         }
         onGitHub={read.kind === FILE_READ.READY ? () => openGitHub(fileUrl(read, file)) : undefined}
-        menu={
-          <FileViewMenu
-            path={file.path}
-            ready={read.kind === FILE_READ.READY}
-            readText={readText}
-          />
-        }
+        {...fileViewEnd}
         tree={browsing ? tree.toggles : undefined}
       />
       <Fill flow={FILL_FLOW.ROW} clip className="file-view-body" {...tree.body}>
