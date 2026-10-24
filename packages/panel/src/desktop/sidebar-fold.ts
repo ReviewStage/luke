@@ -1,5 +1,4 @@
 import { type GroupFold, NAV_COUNT_SHOWN, type NavCount } from "@luke/ui";
-import type { CountNoun } from "./sidebar-group-header.js";
 
 /**
  * sidebar-fold.ts -- how the sidebar's heads hand `GroupHeader` the fold and the count they keep.
@@ -10,6 +9,12 @@ import type { CountNoun } from "./sidebar-group-header.js";
  * stands in is ignored rather than toggled, since a toggle on a state the
  * keeper already holds would put it back.
  */
+
+/** What a group's count is read as, one and many. */
+export interface CountNoun {
+  readonly one: string;
+  readonly many: string;
+}
 
 /** What a folded group's count is read as unless its group holds something else. */
 export const TASK_NOUN: CountNoun = { one: "task", many: "tasks" };

@@ -75,6 +75,6 @@ test("an automations list's groups and its suggestions stand a page section's ga
   );
 });
 
-test("a person's blocks stand a page section's gap under their head", () => {
-  assert.equal(marginTop(after("person-top", "person-section-head")), `${PAGE_SECTION_GAP}px`);
+test("a person's sections stand a page section's gap under their head", () => {
+  assert.equal(marginTop(after("person-top", "home-section")), `${PAGE_SECTION_GAP}px`);
 });

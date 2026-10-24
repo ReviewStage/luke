@@ -1,6 +1,8 @@
 import {
   DetailPage,
   GAP,
+  GROUP_HEADING,
+  GroupHeader,
   Inline,
   List,
   ListRow,
@@ -8,10 +10,6 @@ import {
   SKELETON_SHAPE,
   Skeleton,
   SkeletonRegion,
-  TEXT_ELEMENT,
-  TEXT_TONE,
-  TEXT_VARIANT,
-  Text,
 } from "@luke/ui";
 import type { ReactNode } from "react";
 
@@ -27,8 +25,8 @@ import type { ReactNode } from "react";
  * chunk loads draws through the same boxes.
  */
 
-/** How wide a placeholder section's name and its count stand, as a short section name and a number do. */
-const SKELETON_SECTION = { NAME: "120px", COUNT: "12px" } as const;
+/** How wide a placeholder section's name stands, as a short section name does. */
+const SKELETON_SECTION_NAME = "120px";
 
 /** How wide the placeholder head's name and the line under it stand, as a name and a role and email do. */
 const SKELETON_HEAD = { NAME: "180px", LINE: "240px" } as const;
@@ -103,35 +101,26 @@ export function PersonSectionFrame({
 }: {
   label?: string | undefined;
   title: ReactNode;
-  count: ReactNode;
+  count?: number | undefined;
   children: ReactNode;
 }): React.JSX.Element {
   return (
     <section className="home-section" aria-label={label}>
-      <header className="person-section-head">
-        <Text
-          as={label === undefined ? TEXT_ELEMENT.SPAN : TEXT_ELEMENT.H2}
-          variant={TEXT_VARIANT.SECTION}
-          tone={TEXT_TONE.MUTED}
-        >
-          {title}
-        </Text>
-        <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
-          {count}
-        </Text>
-      </header>
-      {children}
+      <GroupHeader
+        heading={label === undefined ? GROUP_HEADING.NONE : GROUP_HEADING.H2}
+        label={title}
+        count={count === undefined ? undefined : { value: count }}
+      >
+        {children}
+      </GroupHeader>
     </section>
   );
 }
 
-/** A section still being read: blocks where its name and count will stand, over the placeholder rows in `children`. */
+/** A section still being read: a block where its name will stand, over the placeholder rows in `children`. */
 export function SectionSkeleton({ children }: { children: ReactNode }): React.JSX.Element {
   return (
-    <PersonSectionFrame
-      title={<Skeleton width={SKELETON_SECTION.NAME} />}
-      count={<Skeleton width={SKELETON_SECTION.COUNT} />}
-    >
+    <PersonSectionFrame title={<Skeleton width={SKELETON_SECTION_NAME} />}>
       {children}
     </PersonSectionFrame>
   );

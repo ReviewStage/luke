@@ -97,12 +97,12 @@ const HOVER_ONLY: readonly {
   press?: string;
 }[] = [
   {
-    name: "a repository header's ⋯ and +",
+    name: "a group header's ⋯ and +",
     piece: {
-      className: "sidebar-repository-header",
-      children: [{ tag: "span", className: "sidebar-repository-actions" }],
+      className: "luke-group-header-head",
+      children: [{ tag: "span", className: "luke-group-header-actions" }],
     },
-    control: ".sidebar-repository-actions",
+    control: ".luke-group-header-actions",
   },
   {
     name: "a tab's × other than the chosen tab's",

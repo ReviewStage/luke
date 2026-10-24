@@ -25,6 +25,7 @@ import {
   Fill,
   FolderIcon,
   GAP,
+  GROUP_ACTIONS,
   GROUP_HEADING,
   GroupHeader,
   HoldPress,
@@ -36,6 +37,7 @@ import {
   MoreButton,
   motionKey,
   motionRows,
+  NAV_COUNT_SHOWN,
   NAV_CURRENT,
   NavItem,
   NOTE_LINE_LOOK,
@@ -154,9 +156,8 @@ import { needsYouNoun, usePlacesWaiting } from "./places-waiting.js";
 import { RowPlaced, useRowMoveKeys } from "./row-moves.js";
 import { SidebarAgent } from "./sidebar-agent.js";
 import { SIDEBAR_WIDTH, type SidebarCollapse, sidebarInSight } from "./sidebar-collapse.js";
-import { foldedCount, sidebarFold, TASK_NOUN } from "./sidebar-fold.js";
+import { type CountNoun, foldedCount, sidebarFold, TASK_NOUN } from "./sidebar-fold.js";
 import { SidebarFoot } from "./sidebar-foot.js";
-import type { CountNoun } from "./sidebar-group-header.js";
 import { SidebarInbox } from "./sidebar-inbox.js";
 import { SidebarLuke } from "./sidebar-luke.js";
 import { SidebarPinnedTab } from "./sidebar-pinned-tab.js";
@@ -171,7 +172,6 @@ import {
 } from "./sidebar-sections.js";
 import {
   HiddenStatusesLine,
-  SidebarSectionHead,
   TaskStatusFilter,
   TaskViewOptions,
   useTaskViewCommands,
@@ -756,12 +756,11 @@ function PinnedSection({
       aria-label="Pinned"
       data-row-drop={onDropOut === undefined ? undefined : PINNED_DROP_ZONE}
     >
-      <SidebarSectionHead
-        name="Pinned"
-        folded={folded}
-        count={rows.length}
-        noun={PIN_NOUN}
-        onToggle={folds.togglePinned}
+      <GroupHeader
+        heading={GROUP_HEADING.NONE}
+        label="Pinned"
+        fold={sidebarFold(folded, folds.togglePinned)}
+        count={foldedCount(folded, rows.length, PIN_NOUN, NAV_COUNT_SHOWN.ALWAYS)}
         standing={
           standing.length === 0 ? undefined : (
             <PinnedRows
@@ -773,22 +772,21 @@ function PinnedSection({
             />
           )
         }
-        rows={
-          rows.length === 0 ? (
-            <div className="sidebar-section-slot">
-              <NoteLine look={NOTE_LINE_LOOK.INSET}>Drag tasks here to pin them</NoteLine>
-            </div>
-          ) : (
-            <PinnedRows
-              rows={rows}
-              context={context}
-              onOpenTab={onOpenTab}
-              movable
-              onDropOut={onDropOut}
-            />
-          )
-        }
-      />
+      >
+        {rows.length === 0 ? (
+          <div className="sidebar-section-slot">
+            <NoteLine look={NOTE_LINE_LOOK.INSET}>Drag tasks here to pin them</NoteLine>
+          </div>
+        ) : (
+          <PinnedRows
+            rows={rows}
+            context={context}
+            onOpenTab={onOpenTab}
+            movable
+            onDropOut={onDropOut}
+          />
+        )}
+      </GroupHeader>
     </nav>
   );
 }
@@ -2083,27 +2081,34 @@ function SidebarColumn({
                     {...motionRows()}
                   >
                     {tasks.signedIn ? (
-                      <SidebarSectionHead name="Tasks">
-                        {sectionsShown && tasks.workspace !== undefined ? (
-                          <NewSectionButton
-                            onNew={chosen(() => {
-                              const { workspace } = tasks;
-                              if (workspace !== undefined) sectionDialogs.askNew(workspace.id);
-                            })}
-                          />
-                        ) : null}
-                        <TaskStatusFilter
-                          menu={statusMenu}
-                          statuses={statuses}
-                          onStatuses={taskView.onStatuses}
-                        />
-                        <TaskViewOptions
-                          shown={tasks.shown && overlay.inSight}
-                          control={taskView}
-                          shared={shared}
-                          filtered={createdBy !== undefined || assignedTo !== undefined}
-                        />
-                      </SidebarSectionHead>
+                      <GroupHeader
+                        heading={GROUP_HEADING.NONE}
+                        label="Tasks"
+                        actionsShown={GROUP_ACTIONS.AT_REST}
+                        actions={
+                          <>
+                            {sectionsShown && tasks.workspace !== undefined ? (
+                              <NewSectionButton
+                                onNew={chosen(() => {
+                                  const { workspace } = tasks;
+                                  if (workspace !== undefined) sectionDialogs.askNew(workspace.id);
+                                })}
+                              />
+                            ) : null}
+                            <TaskStatusFilter
+                              menu={statusMenu}
+                              statuses={statuses}
+                              onStatuses={taskView.onStatuses}
+                            />
+                            <TaskViewOptions
+                              shown={tasks.shown && overlay.inSight}
+                              control={taskView}
+                              shared={shared}
+                              filtered={createdBy !== undefined || assignedTo !== undefined}
+                            />
+                          </>
+                        }
+                      />
                     ) : null}
                     {tasks.signedIn ? (
                       <ViewChips

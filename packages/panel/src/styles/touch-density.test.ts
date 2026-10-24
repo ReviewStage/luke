@@ -433,8 +433,8 @@ function pointerOnlyPresses(): ReadonlyMap<string, HTMLElement> {
     [
       "a fold's chevron",
       built(
-        '<button class="luke-nav-item" aria-expanded="false"><span class="luke-nav-item-glyph"><span class="luke-nav-item-icon"></span><span class="luke-nav-item-chevron"></span></span></button>',
-        ".luke-nav-item-chevron",
+        '<button class="luke-group-header-lead" aria-expanded="false"><span class="luke-group-header-glyph"><span class="luke-group-header-icon"></span><span class="luke-group-header-chevron"></span></span></button>',
+        ".luke-group-header-chevron",
       ),
     ],
     [

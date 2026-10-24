@@ -8342,7 +8342,7 @@ function searchList(page: HTMLElement, words: string): void {
 function sidebarMagnifier(page: HTMLElement): HTMLButtonElement {
   return (
     page.querySelector<HTMLButtonElement>(
-      '.desktop-sidebar .sidebar-section-head button[aria-label="Search inbox"]',
+      '.desktop-sidebar .luke-group-header-head button[aria-label="Search inbox"]',
     ) ?? assert.fail("the sidebar's head offers the search")
   );
 }
@@ -8457,7 +8457,7 @@ test("with the inbox-first sidebar, a press on View options while the search sta
   await settle();
   act(() => sidebarMagnifier(page).click());
   const options = page.querySelector<HTMLButtonElement>(
-    '.desktop-sidebar .sidebar-section-head button[aria-label="View options"]',
+    '.desktop-sidebar .luke-group-header-head button[aria-label="View options"]',
   );
   assert.ok(options, "the head keeps the view's menu beside the field");
 
@@ -8475,7 +8475,7 @@ test("with the inbox-first sidebar, New thread keeps its place as the search unf
   const { page } = mount([], { sidebar: true });
   await settle();
   const head = () =>
-    page.querySelector<HTMLElement>(".desktop-sidebar .sidebar-section-head") ??
+    sidebarMagnifier(page).closest<HTMLElement>(".luke-group-header-head") ??
     assert.fail("the sidebar's list head stands");
   const buttons = () =>
     [...head().querySelectorAll("button")].map((each) => each.getAttribute("aria-label"));

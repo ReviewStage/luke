@@ -369,28 +369,6 @@ body,
   margin-top: var(--luke-section-gap);
 }
 
-/* A section's head, Pinned's and Tasks', in the headings' voice a level
-   above the groups under it: its name, a press that folds the section where
-   it folds, and its buttons at its end, View options on Tasks'. */
-.sidebar-section-head {
-  display: flex;
-  height: var(--luke-control-height);
-  align-items: center;
-  gap: var(--luke-tight-gap);
-  padding: 0 var(--luke-tight-gap) 0 0;
-}
-
-[data-luke-profile="desktop"] .sidebar-section-head {
-  -webkit-app-region: no-drag;
-}
-
-.sidebar-section-head-name {
-  min-width: 0;
-  flex: 1;
-  padding-left: var(--row-inset);
-  color: var(--luke-color-text-muted);
-}
-
 /* The Tasks page's filter line: a chip for each field filtered and Clear
    after them, laid out as the collection page's filter line lays out what
    it holds, standing hidden while nothing is filtered so a chip arriving
@@ -914,11 +892,8 @@ ul.actor-stack {
   cursor: grabbing;
 }
 
-/* A repository's plans under a header in the headings' voice, drawn as a
-   row with the task rows' own hover: its fold (`sidebar-group-header.tsx`),
-   a NavItem whose owner's picture gives way to the chevron, and at the end
-   a ⋯ and a + that show while the header is hovered, holds focus, or has
-   its menu open. */
+/* A repository's plans under a `GroupHeader`, a group a section's gap
+   below the one before it. */
 .sidebar-repository + .sidebar-repository,
 .sidebar-tasks + .sidebar-repository,
 .chat-rail-body > .luke-list + .sidebar-repository {
@@ -935,30 +910,6 @@ ul.actor-stack {
 
 .sidebar-group > .sidebar-repository:not([data-leaving]) ~ .sidebar-repository:not([data-leaving]) {
   margin-top: var(--luke-control-gap);
-}
-
-.sidebar-repository-header {
-  display: flex;
-  align-items: center;
-  gap: var(--luke-list-gap);
-  margin-bottom: var(--luke-list-gap);
-  padding-right: var(--luke-tight-gap);
-  border-radius: var(--luke-control-radius);
-  transition: background-color var(--luke-duration-hover) var(--luke-motion-exit);
-}
-
-[data-luke-profile="desktop"] .sidebar-repository-header {
-  -webkit-app-region: no-drag;
-}
-
-.sidebar-repository-header:hover {
-  background: var(--luke-color-fill-hover);
-}
-
-/* Ringed while its menu is open, as a plan row is, so the menu is plainly
-   about this repository. */
-.sidebar-repository-header[data-menu-open="true"] {
-  box-shadow: inset 0 0 0 1px var(--luke-color-border-selected);
 }
 
 /* The account's own sections, between Pinned and Tasks (sidebar-sections.tsx).
@@ -1165,31 +1116,6 @@ ul.actor-stack {
 .sidebar-repository-pinned svg {
   width: 11px;
   height: 11px;
-}
-
-.sidebar-repository-actions {
-  display: flex;
-  flex: none;
-  align-items: center;
-  opacity: 0;
-  transition: opacity var(--luke-duration-hover) var(--luke-motion-exit);
-}
-
-.sidebar-repository-header:is(:focus-within, [data-menu-open="true"]) .sidebar-repository-actions {
-  opacity: 1;
-}
-
-@media (hover: hover) {
-  .sidebar-repository-header:hover .sidebar-repository-actions {
-    opacity: 1;
-  }
-}
-
-/* A screen with no hover shows them at rest, in the room they keep. */
-@media (hover: none) {
-  .sidebar-repository-actions {
-    opacity: 1;
-  }
 }
 
 /* A side panel tab pinned to the sidebar, in a plan row's shape: the tab's
@@ -3818,14 +3744,6 @@ ul.actor-stack {
   margin-top: var(--luke-section-gap);
 }
 
-.settings-nav-workspace {
-  display: flex;
-  min-width: 0;
-  align-items: center;
-  gap: var(--luke-item-gap);
-  color: var(--luke-color-text);
-}
-
 .settings-page,
 .version-page,
 .admin-page {
@@ -4798,15 +4716,6 @@ ul.actor-stack {
   margin-top: var(--luke-tight-gap);
 }
 
-/* A section's name and count. */
-.person-section-head {
-  display: flex;
-  align-items: baseline;
-  gap: var(--luke-item-gap);
-  margin-bottom: var(--luke-list-gap);
-  font-variant-numeric: tabular-nums;
-}
-
 /* The way to the rest of their tasks, standing under the section's rows. */
 .person-section-foot {
   margin-bottom: 0;
@@ -5465,45 +5374,6 @@ ul.actor-stack {
 
 .tasks-list-group[data-drop-target="true"] .luke-group-header-head {
   box-shadow: inset 0 -1px var(--luke-color-focus-ring);
-}
-
-/* A group's head: the fold's chevron, its glyph, its name, and how many it
-   holds, on a quiet band with no rule under it, standing at the top of the
-   page while its rows scroll beneath it. */
-.tasks-list-head {
-  position: sticky;
-  z-index: 3;
-  top: 0;
-  margin: 0;
-  background: var(--luke-color-ground);
-  color: var(--luke-color-text-muted);
-  font-variant-numeric: tabular-nums;
-}
-
-.tasks-list-chevron {
-  display: inline-flex;
-  flex: none;
-  color: var(--luke-color-text-muted);
-  transition: transform var(--luke-duration-fast) var(--luke-spring-fast);
-}
-
-.tasks-list-chevron > svg {
-  width: var(--luke-space-12);
-  height: var(--luke-space-12);
-}
-
-.tasks-list-chevron[data-open="true"] {
-  transform: rotate(90deg);
-}
-
-.tasks-list-glyph {
-  display: inline-flex;
-  flex: none;
-}
-
-.tasks-list-glyph > svg {
-  width: var(--luke-control-icon);
-  height: var(--luke-control-icon);
 }
 
 /* A row: one line of the grid's columns, lit under the pointer as a list's

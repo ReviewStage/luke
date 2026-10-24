@@ -16,8 +16,8 @@ import { ArchivedAgents } from "./agent-archive.js";
 import { DesktopSidebar } from "./desktop-sidebar.js";
 
 /**
- * sidebar-group-header.test.ts -- every group that folds folds under one
- * header: the sidebar's Pinned and repositories, and the summary's archived
+ * sidebar-folds.test.ts -- every group that folds folds under one
+ * header, `GroupHeader`: the sidebar's Pinned and repositories, and the summary's archived
  * agents, alike but for what each counts, each unrolling as it opens, and a
  * folded group leaving the task open standing.
  */

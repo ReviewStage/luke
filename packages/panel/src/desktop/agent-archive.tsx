@@ -28,8 +28,7 @@ import type { CodingAgentsControl } from "../tasks/use-coding-agents.js";
 import { TOAST_HOLD, useToast } from "../toast.js";
 import { keptKey, useKept } from "../use-kept.js";
 import { ActionMenu, type MenuAction } from "./action-menu.js";
-import { foldedCount } from "./sidebar-fold.js";
-import type { CountNoun } from "./sidebar-group-header.js";
+import { type CountNoun, foldedCount } from "./sidebar-fold.js";
 
 /**
  * agent-archive.tsx -- a coding agent's Archive, asked first while a teammate's agent still works, and the task's archived agents folded under Archived at the foot of its summary's Coding agents, each with its Unarchive.

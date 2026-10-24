@@ -226,6 +226,11 @@
     }
   }
 
+  /* A head whose buttons are the list's own keeps them standing. */
+  .luke-group-header-actions[data-shown="at-rest"] {
+    opacity: 1;
+  }
+
   /* A screen with no hover shows them at rest, in the room they keep. */
   @media (hover: none) {
     .luke-group-header-actions {
