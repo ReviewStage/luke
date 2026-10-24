@@ -352,9 +352,13 @@ it.effect(
             {
               openLive: () => fakeRealtime().client,
               reseal: () => Effect.succeed({ failure: "unavailable" }),
-              // Every answer carries the same rows, as a held poll answers once a while passes with nothing moved.
-              poll: () =>
-                Effect.succeed(failing ? { failure: "unavailable" } : polledRead([], "1")),
+              // A poll past a digest answers it unchanged with no rows, as the held poll does; one past none answers the rows whole.
+              poll: (after) =>
+                Effect.succeed(
+                  failing
+                    ? { failure: "unavailable" }
+                    : polledRead(after === undefined ? [] : undefined, "1"),
+                ),
               now: () => 0,
               behind: () => {
                 behind += 1;

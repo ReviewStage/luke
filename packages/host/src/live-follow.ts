@@ -558,8 +558,9 @@ export function liveRows<Part extends string>(
                 gone();
                 return yield* Effect.never;
               }
-              // Note that the rows are handed on again once a poll answers, moved or not, since the caller was told they may be behind.
+              // Note that the next poll asks for the rows whole, past no digest, and hands them on moved or not, since the caller was told they may be behind.
               last = undefined;
+              seen = undefined;
               dependencies.behind?.();
               return yield* Effect.fail(read);
             }
