@@ -6,6 +6,7 @@ import {
   Button,
   CheckIcon,
   ExternalIcon,
+  FailureNote,
   GAP,
   Inline,
   Progress,
@@ -43,12 +44,9 @@ function updateButton(action: UpdateRowAction, control: UpdateControl): React.JS
           Download
         </Button>
       );
+    // Note that a failed check's Retry stands in its `FailureNote` under the row.
     case UPDATE_ROW_ACTION.RETRY:
-      return (
-        <Button variant={BUTTON_VARIANT.OUTLINE} onClick={() => void control.onCheck()}>
-          Try again
-        </Button>
-      );
+      return null;
     default:
       return (
         <Button
@@ -103,10 +101,25 @@ export function UpdatesSection({
                 </>
               )
             }
-            // Note that a failure is the row's error, announced as it lands;
-            // every other detail is read with the row rather than spoken over
-            // whatever the reader is on.
-            error={row.failed ? row.detail : undefined}
+            // Note that a failure is a `FailureNote` under the row, an alert
+            // announced as it lands, with Retry where asking again can mend
+            // it; every other detail is read with the row rather than spoken
+            // over whatever the reader is on.
+            below={
+              row.failed
+                ? () => (
+                    <FailureNote
+                      onRetry={
+                        row.action === UPDATE_ROW_ACTION.RETRY
+                          ? () => void control.onCheck()
+                          : undefined
+                      }
+                    >
+                      {row.detail}
+                    </FailureNote>
+                  )
+                : undefined
+            }
           >
             {() => updateButton(row.action, control)}
           </SettingsRow>

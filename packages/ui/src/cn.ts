@@ -182,6 +182,7 @@ const merge = extendTailwindMerge({
         "dialog-room",
         "dialog-command-top",
         "dialog-command-room",
+        "dialog-command-sheet",
         "viewport-top",
         "keyboard-inset",
         "popover-room",

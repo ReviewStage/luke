@@ -1251,7 +1251,7 @@ test("a save the service refuses keeps the draft and says why under the name", a
   await settle();
 
   assert.equal(
-    page.querySelector(".automation-save-refusal")?.textContent,
+    page.querySelector("[role='alert']")?.textContent,
     "Only its creator, or the workspace's owners and admins, can change it.",
   );
   assert.equal(
@@ -1895,14 +1895,71 @@ test("Escape keeps a new page whose schedule was changed, though nothing was typ
   assert.equal(places.length, 1);
 });
 
-test("a schedule's day, time, and zone are saved as picked and typed, and a custom cron as written", async () => {
+/** A new automation's page, named and given its prompt, ready to have its schedule picked. */
+async function mountNewScheduled(): Promise<HTMLElement> {
   const page = mountPages({ kind: AUTOMATIONS_PAGE.NEW });
   await settle();
   type(page.querySelector("input[aria-label='Automation name']"), "Weekly sweep");
   type(page.querySelector("textarea[aria-label='Prompt']"), "Update the dependencies.");
+  return page;
+}
+
+test("a schedule repeated weekly is saved on Monday at nine, as its day and time are first drawn", async () => {
+  const page = await mountNewScheduled();
   pick(page, "Repeats", "Weekly");
+  act(() => button("Create").click());
+  await settle();
+
+  assert.deepEqual(creates.at(-1)?.trigger, {
+    kind: AUTOMATION_TRIGGER.SCHEDULE,
+    cron: "0 9 * * 1",
+    timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+  });
+});
+
+/** The Nightly sweep's page, standing on a schedule of Wednesdays at 07:30 Tokyo time. */
+async function mountWeeklySweep(): Promise<HTMLElement> {
+  standing = [
+    {
+      ...SWEEP,
+      trigger: { kind: AUTOMATION_TRIGGER.SCHEDULE, cron: "30 7 * * 3", timezone: "Asia/Tokyo" },
+    },
+  ];
+  const page = mountPages({ kind: AUTOMATIONS_PAGE.EDIT, automationId: SWEEP.id });
+  await settle();
+  return page;
+}
+
+test("a weekly schedule's day picked is saved, with its time and zone as they stood", async () => {
+  const page = await mountWeeklySweep();
   pick(page, "Day", "Monday");
-  type(page.querySelector("input[aria-label='Time']"), "07:30");
+  act(() => button("Save").click());
+  await settle();
+
+  assert.deepEqual(changes.at(-1), {
+    automationId: SWEEP.id,
+    change: {
+      trigger: { kind: AUTOMATION_TRIGGER.SCHEDULE, cron: "30 7 * * 1", timezone: "Asia/Tokyo" },
+    },
+  });
+});
+
+test("a weekly schedule's time typed is saved, with its day and zone as they stood", async () => {
+  const page = await mountWeeklySweep();
+  type(page.querySelector("input[aria-label='Time']"), "18:45");
+  act(() => button("Save").click());
+  await settle();
+
+  assert.deepEqual(changes.at(-1), {
+    automationId: SWEEP.id,
+    change: {
+      trigger: { kind: AUTOMATION_TRIGGER.SCHEDULE, cron: "45 18 * * 3", timezone: "Asia/Tokyo" },
+    },
+  });
+});
+
+test("a schedule's time zone is saved as searched for and picked", async () => {
+  const page = await mountNewScheduled();
   act(() => picker(page, "Time zone").click());
   type(document.querySelector("input[placeholder='Search time zones']"), "Tokyo");
   act(() => {
@@ -1916,19 +1973,20 @@ test("a schedule's day, time, and zone are saved as picked and typed, and a cust
 
   assert.deepEqual(creates.at(-1)?.trigger, {
     kind: AUTOMATION_TRIGGER.SCHEDULE,
-    cron: "30 7 * * 1",
+    cron: "0 9 * * 1-5",
     timezone: "Asia/Tokyo",
   });
+});
 
+test("a custom cron is saved as written, in the zone the schedule already had", async () => {
+  const page = await mountWeeklySweep();
   pick(page, "Repeats", "Custom");
   type(page.querySelector("input[aria-label='Cron']"), "15 2 * * 1-5");
-  const created = places.at(-1);
-  assert.equal(created?.kind, AUTOMATIONS_PAGE.EDIT);
   act(() => button("Save").click());
   await settle();
 
   assert.deepEqual(changes.at(-1), {
-    automationId: "automationId" in created ? created.automationId : undefined,
+    automationId: SWEEP.id,
     change: {
       trigger: { kind: AUTOMATION_TRIGGER.SCHEDULE, cron: "15 2 * * 1-5", timezone: "Asia/Tokyo" },
     },
@@ -2403,7 +2461,7 @@ test("a Run now the service refuses says why under the name, and a new automatio
   act(() => button("Run now").click());
   await settle();
   assert.equal(
-    page.querySelector(".automation-save-refusal")?.textContent,
+    page.querySelector("[role='alert']")?.textContent,
     "Only its creator, or the workspace's owners and admins, can run it.",
   );
   act(() => root?.unmount());
@@ -2764,6 +2822,55 @@ test("a right-click on an automation's switch opens no menu, and Escape from its
   });
   await settle();
   assert.equal(document.activeElement, press);
+});
+
+test("an automation row's ⋯, its right-click and the menu key open the same menu, whose Copy link copies its link", async () => {
+  const page = mountPages({ kind: AUTOMATIONS_PAGE.LIST });
+  await settle();
+  const row = rowOf(page, SWEEP.name);
+  const press = row.querySelector("button") ?? assert.fail("the row is a press");
+  const openMenus = () => document.querySelectorAll('[role="menu"]:not([data-leaving])');
+  const items = () => [...(openMenus()[0]?.querySelectorAll('[role="menuitem"]') ?? [])];
+  const closeMenu = async () => {
+    act(() => {
+      document.activeElement?.dispatchEvent(
+        new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }),
+      );
+    });
+    await settle();
+  };
+  const doors = [
+    () =>
+      act(() =>
+        (row.querySelector('button[aria-label="Automation actions"]') as HTMLElement).click(),
+      ),
+    () =>
+      act(() => {
+        press.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true }));
+      }),
+    () =>
+      act(() => {
+        press.dispatchEvent(
+          new KeyboardEvent("keydown", { key: "ContextMenu", bubbles: true, cancelable: true }),
+        );
+      }),
+  ];
+
+  for (const open of doors) {
+    open();
+    await settle();
+    assert.equal(openMenus().length, 1);
+    assert.equal(openMenus()[0]?.getAttribute("aria-label"), "Automation actions");
+    assert.deepEqual(
+      items().map((item) => item.textContent),
+      ["Copy link"],
+    );
+    await closeMenu();
+  }
+  doors[2]?.();
+  await settle();
+  await act(async () => menuItem("Copy link").click());
+  assert.equal(copied.at(-1), `https://tryluke.dev/${WORKSPACE.id}/automation/${SWEEP.id}`);
 });
 
 test("a link to a run shows the Runs panel a reader folded, its run marked current, a fold after it stands, and the link opened again shows it again", async () => {

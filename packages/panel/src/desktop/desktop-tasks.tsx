@@ -9,6 +9,7 @@ import {
   EmptyState,
   ERROR_STATE_PLACEMENT,
   ErrorState,
+  FailureNote,
   FILL_ELEMENT,
   Fill,
   PageToolbar,
@@ -1153,14 +1154,10 @@ function PlanDocument({
                           actions={
                             <>
                               {rename.refused ? (
-                                <p className="error-message" role="alert">
-                                  {RENAME_FAILED_NOTE}
-                                </p>
+                                <FailureNote>{RENAME_FAILED_NOTE}</FailureNote>
                               ) : null}
                               {repositoryNote !== undefined ? (
-                                <p className="error-message" role="alert">
-                                  {repositoryNote}
-                                </p>
+                                <FailureNote>{repositoryNote}</FailureNote>
                               ) : null}
                               <CopyChord copy={tasks.copy} />
                               {terminalDoors.terminals ? (

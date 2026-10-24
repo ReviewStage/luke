@@ -41,7 +41,6 @@ import {
   TEXT_VARIANT,
   Text,
   Tooltip,
-  useMenu,
   useMinute,
   useResizeEdge,
 } from "@luke/ui";
@@ -51,7 +50,7 @@ import { useCopyLinkItem } from "../copy-link-item.js";
 import { GLYPH_STATE, type GlyphState, StateGlyph, stateEndMark } from "../state-glyph.js";
 import { centreWithin, scrollerOf } from "../tasks/code-pane.js";
 import { useOpenLink } from "../tasks/use-open-link.js";
-import { ActionMenu, type MenuAction } from "./action-menu.js";
+import { type MenuAction, rowMenu } from "./action-menu.js";
 import { RUNS_PANEL_WIDTH, type RunsPanel } from "./folded-groups.js";
 import { usePaneSlide } from "./pane-motion.js";
 import type { RunsRead } from "./use-automation-runs.js";
@@ -77,8 +76,8 @@ import type { RunsRead } from "./use-automation-runs.js";
 /** Whose key a run ran on where the automation is another's, as its line names it. */
 const CREATOR = "its creator";
 
-/** What a run's right-click menu is called. */
-const RUN_ACTIONS = "Run actions";
+/** What a run's row is, which names its ⋯ and its menu. */
+const RUN_THING = "Run";
 
 /** What the panel says while the automation has no run, over how to have one. */
 const NO_RUNS_LINE = "No runs yet";
@@ -131,7 +130,7 @@ function subjectLink(run: AutomationRunSummary): { url: string; label: string } 
   return { url: firing.subject.url, label: `Open in ${TRIGGER_CATALOG[firing.provider].name}` };
 }
 
-/** One run's row, a press opening its agent where it started one, or else its subject where it names one, and its right-click offering its Copy link and its subject; a run with neither is words alone. */
+/** One run's row, a press opening its agent where it started one, or else its subject where it names one, and its ⋯ and right-click offering its Copy link and its subject; a run with neither is words alone. */
 function RunRow({
   run,
   keyHolder,
@@ -150,7 +149,6 @@ function RunRow({
 }): React.JSX.Element {
   const state = STANDING_GLYPH[automationRunStanding(run)];
   const line = automationRunLine(run, keyHolder);
-  const menu = useMenu(true);
   const linkItem = useCopyLinkItem();
   const openLink = useOpenLink();
   const { agent } = run;
@@ -172,40 +170,35 @@ function RunRow({
     if (linked && drawn !== null && scroller !== undefined) centreWithin(scroller, drawn);
   }, [linked]);
   return (
-    <>
-      <ListRow
-        ref={(node) => {
-          row.current = node;
-        }}
-        leading={<StateGlyph glyph={<FiringGlyph of={run.firing} />} state={state} />}
-        title={automationRunTitle(run)}
-        description={
-          <Tooltip label={line}>
-            <span>{line}</span>
+    <ListRow
+      ref={(node) => {
+        row.current = node;
+      }}
+      leading={<StateGlyph glyph={<FiringGlyph of={run.firing} />} state={state} />}
+      title={automationRunTitle(run)}
+      description={
+        <Tooltip label={line}>
+          <span>{line}</span>
+        </Tooltip>
+      }
+      meta={
+        <span className="automation-row-meta">
+          <Tooltip label={momentText(run.firedAt)}>
+            <span>{sinceText(run.firedAt, now)}</span>
           </Tooltip>
-        }
-        meta={
-          <span className="automation-row-meta">
-            <Tooltip label={momentText(run.firedAt)}>
-              <span>{sinceText(run.firedAt, now)}</span>
-            </Tooltip>
-            {stateEndMark(state, true)}
-          </span>
-        }
-        current={linked ? LIST_ROW_CURRENT.ITEM : undefined}
-        onPress={
-          agent !== null
-            ? () => onOpenAgent(agent.id)
-            : subject === undefined
-              ? undefined
-              : () => openLink(subject.url)
-        }
-        contextMenu={items.length === 0 ? undefined : menu.contextMenu(row)}
-      />
-      {menu.drawn === undefined || items.length === 0 ? null : (
-        <ActionMenu label={RUN_ACTIONS} menu={menu.drawn} groups={[items]} onClose={menu.close} />
-      )}
-    </>
+          {stateEndMark(state, true)}
+        </span>
+      }
+      current={linked ? LIST_ROW_CURRENT.ITEM : undefined}
+      onPress={
+        agent !== null
+          ? () => onOpenAgent(agent.id)
+          : subject === undefined
+            ? undefined
+            : () => openLink(subject.url)
+      }
+      menu={rowMenu(RUN_THING, [items])}
+    />
   );
 }
 

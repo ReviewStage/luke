@@ -2287,7 +2287,7 @@ ul.actor-stack {
    opacity over `--luke-duration-quick` and its travel on the spring, and leaves
    first on the menu's `luke-menu-leave`, fading over `--luke-duration-exit`
    while its owner holds it drawn and inert (`use-disclosure.ts`; the
-   palette's Radix dialog holds its own on `data-state`). A menu's own
+   terminal picker's Radix dialog holds its own on `data-state`). A menu's own
    surface (`MenuSurface`) draws all three itself. */
 .task-summary-card[data-leaving="true"],
 :is(.command-palette, .command-palette-backdrop)[data-state="closed"] {
@@ -2299,7 +2299,7 @@ ul.actor-stack {
   transition: none;
 }
 
-/* The heading over a section of ⌘K's rows: inset as a row's words are,
+/* The heading over the terminal picker's rows: inset as a row's words are,
    and a little apart from the section above it. cmdk draws the heading's
    box itself, so it is reached by its attribute; its words are a caption. */
 .command-palette [cmdk-group-heading] {
@@ -5279,16 +5279,17 @@ ul.actor-stack {
 
 /* Dialog parts ---------------------------------------------------------------- */
 
-/* The command palette's dimmed window fades in on this. */
-/* Command palette --------------------------------------------------------- */
+/* The terminal picker's palette ------------------------------------------ */
 
-/* ⌘K over the window: the dialog's dimmed window and card, a third of the
-   way down as a command palette stands, holding the searchable menu's own
-   search row and rows, the filters under the field and the keys' hints at
-   its foot. The highlight is cmdk's `data-selected`, which the arrows and
-   the pointer both move, so a hover draws nothing of its own. The results
-   are `@luke/ui`'s `ComboboxListBox`, filling the card between the filters
-   and the foot and scrolling inside itself, so nothing here scrolls. */
+/* The terminal picker over the window (`tasks/terminal-picker.tsx`), drawn as
+   ⌘K's palette was before ⌘K moved onto `@luke/ui/command`'s CommandDialog:
+   the dialog's dimmed window and card, a third of the way down, holding the
+   search row and rows, and the keys' hints at its foot. The highlight is
+   cmdk's `data-selected`, which the arrows and the pointer both move, so a
+   hover draws nothing of its own. The results are `@luke/ui`'s
+   `ComboboxListBox`, filling the card above the foot and scrolling inside
+   itself, so nothing here scrolls. These `command-palette*` rules are the
+   picker's alone now, and go once it moves onto CommandDialog too (CD3). */
 .command-palette-backdrop {
   position: fixed;
   z-index: var(--luke-z-dialog);
@@ -5370,16 +5371,6 @@ ul.actor-stack {
   color: var(--luke-color-text-muted);
 }
 
-/* The band under the field the filters stand in. Note that it is a block,
-   because a fill bar takes its container's width and has none of its own
-   in a row that shrinks to fit it. */
-.command-palette-filters {
-  flex: 0 0 auto;
-  min-width: 0;
-  padding: var(--luke-space-8) var(--luke-space-12);
-  border-bottom: 1px solid var(--luke-color-border);
-}
-
 /* The keys' hints along the card's foot, each chord a step louder than the
    words that say what it does, so the eye finds the keys first. */
 .command-palette-footer {
@@ -5418,25 +5409,10 @@ ul.actor-stack {
   }
 }
 
-/* Where the palette's rows would stand, a failure of their read centred in it as a note is. */
-.command-palette-notice-slot {
-  display: flex;
-  min-height: 40px;
-  align-items: center;
-  justify-content: center;
-}
-
-/* A quiet line under the rows: the Files filter saying its search is of
-   the repository's first entries alone. */
-.command-palette-notice {
-  padding: var(--luke-space-8) var(--row-inset) var(--luke-space-4);
-}
-
-/* In a narrow room, a phone's, the palette is a sheet hung from the top of
+/* In a narrow room, a phone's, the picker is a sheet hung from the top of
    what is seen rather than a card floating in it: the screen's whole width,
-   its corners rounded only where it ends, and its filters one line that
-   scrolls sideways under the finger. It is drawn at the body, outside the
-   shell, so the room is asked of the document. */
+   its corners rounded only where it ends. It is drawn at the body, outside
+   the shell, so the room is asked of the document. */
 :root:has(.desktop-shell[data-room="narrow"]) .command-palette {
   top: var(--luke-viewport-top);
   left: 0;
@@ -5448,17 +5424,6 @@ ul.actor-stack {
   animation:
     luke-menu-arrive var(--luke-duration-quick) var(--luke-motion-exit) backwards,
     luke-sheet-drop var(--luke-duration-fast) var(--luke-spring-fast) backwards;
-}
-
-/* The filters run to the sheet's edges, so one cut off at the edge reads as
-   more to scroll to, the band's inset standing at the ends of the scroll. */
-:root:has(.desktop-shell[data-room="narrow"]) .command-palette-filters {
-  padding-inline: 0;
-}
-
-:root:has(.desktop-shell[data-room="narrow"]) .command-palette-filters [role="radiogroup"] {
-  padding-inline: var(--luke-space-12);
-  overscroll-behavior-x: contain;
 }
 
 /* ⌃Tab's switcher (`tab-switcher.tsx`): the tabs and places stood on last

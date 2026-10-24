@@ -39,6 +39,7 @@ function barOver(path = PATH) {
       onRegistry(
         AtomRegistry.make(),
         createElement(FileViewBar, {
+          history: { canGoBack: false, canGoForward: false, onStep: () => undefined },
           lead: createElement(FileBreadcrumbs, {
             repository: REPOSITORY,
             path,

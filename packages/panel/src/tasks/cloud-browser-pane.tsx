@@ -21,6 +21,7 @@ import {
   FILL_ELEMENT,
   Fill,
   IconButton,
+  PaneBar,
   REMOTE_KEY_ACTION,
   REMOTE_POINTER_ACTION,
   type RemoteKey,
@@ -214,52 +215,56 @@ function CloudBrowserBar({
     onOpen(opened);
   };
   return (
-    <header className="file-view-bar browser-view-bar cloud-browser-bar">
-      <div className="file-view-history">
-        <Tooltip label="Back">
-          <IconButton
-            icon={<ArrowLeftIcon aria-hidden="true" />}
-            label="Back"
-            disabled={onStep === undefined}
-            onClick={() => onStep?.(BROWSER_LIVE_HISTORY.BACK)}
+    <PaneBar
+      middle={
+        <>
+          <div className="file-view-history">
+            <Tooltip label="Back">
+              <IconButton
+                icon={<ArrowLeftIcon aria-hidden="true" />}
+                label="Back"
+                disabled={onStep === undefined}
+                onClick={() => onStep?.(BROWSER_LIVE_HISTORY.BACK)}
+              />
+            </Tooltip>
+            <Tooltip label="Forward">
+              <IconButton
+                icon={<ArrowRightIcon aria-hidden="true" />}
+                label="Forward"
+                disabled={onStep === undefined}
+                onClick={() => onStep?.(BROWSER_LIVE_HISTORY.FORWARD)}
+              />
+            </Tooltip>
+            <Tooltip label="Reload">
+              <IconButton
+                icon={<RotateCwIcon aria-hidden="true" />}
+                label="Reload"
+                turns
+                disabled={onStep === undefined}
+                onClick={() => onStep?.(BROWSER_LIVE_HISTORY.RELOAD)}
+              />
+            </Tooltip>
+          </div>
+          <AddressField
+            ref={field}
+            value={typed ?? address}
+            autoFocus={autoFocus}
+            disabled={disabled}
+            onChange={setTyped}
+            onOpen={go}
+            onBlur={holdTyped ? undefined : () => setTyped(undefined)}
+            onEscape={
+              onEscape ??
+              (() => {
+                setTyped(undefined);
+                field.current?.blur();
+              })
+            }
           />
-        </Tooltip>
-        <Tooltip label="Forward">
-          <IconButton
-            icon={<ArrowRightIcon aria-hidden="true" />}
-            label="Forward"
-            disabled={onStep === undefined}
-            onClick={() => onStep?.(BROWSER_LIVE_HISTORY.FORWARD)}
-          />
-        </Tooltip>
-        <Tooltip label="Reload">
-          <IconButton
-            icon={<RotateCwIcon aria-hidden="true" />}
-            label="Reload"
-            turns
-            disabled={onStep === undefined}
-            onClick={() => onStep?.(BROWSER_LIVE_HISTORY.RELOAD)}
-          />
-        </Tooltip>
-      </div>
-      <AddressField
-        ref={field}
-        value={typed ?? address}
-        autoFocus={autoFocus}
-        disabled={disabled}
-        onChange={setTyped}
-        onOpen={go}
-        onBlur={holdTyped ? undefined : () => setTyped(undefined)}
-        onEscape={
-          onEscape ??
-          (() => {
-            setTyped(undefined);
-            field.current?.blur();
-          })
-        }
-      />
-      {children}
-    </header>
+        </>
+      }
+      actions={children}
+    />
   );
 }
 

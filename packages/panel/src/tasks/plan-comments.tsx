@@ -33,6 +33,8 @@ import {
   CardPress,
   type CardShadow,
   COMPOSER_LOOK,
+  Comment,
+  type CommentAuthor,
   CommentsIcon,
   ComposerFrame,
   ConfirmDialog,
@@ -101,7 +103,7 @@ import {
   useRef,
   useState,
 } from "react";
-import { ActorMark, ActorRef } from "../actor-ref.js";
+import { ActorMark, ActorRef, commentAuthor } from "../actor-ref.js";
 import { useAppCommand } from "../app-commands.js";
 import { useSideBundles } from "../bundle-loader.js";
 import { coarsePointerNow, FINGER_SELECTION_GAP } from "../coarse-pointer.js";
@@ -254,16 +256,15 @@ export function useCommentFocus(): CommentFocus {
   return useContext(CommentFocusContext);
 }
 
-/** Who wrote an entry, as every place naming an actor draws them. */
-function WriterRef({
-  writer,
-  agents,
-}: {
-  writer: PlanCommentWriter;
-  agents: EditAgents | undefined;
-}): ReactNode {
+/** Who wrote an entry as a comment draws them: their face, and their name as every place naming an actor draws it. */
+function useWriter(
+  writer: PlanCommentWriter,
+  agents: EditAgents | undefined,
+): { author: CommentAuthor; nameRef: ReactNode } {
   const person = usePerson(writer.by);
-  if (writer.actor === PLAN_COMMENT_ACTOR.LUKE) return <ActorRef actor={LUKE_ACTOR} />;
+  if (writer.actor === PLAN_COMMENT_ACTOR.LUKE) {
+    return { author: commentAuthor(LUKE_ACTOR), nameRef: <ActorRef actor={LUKE_ACTOR} nameOnly /> };
+  }
   if (
     writer.actor === PLAN_COMMENT_ACTOR.AGENT &&
     writer.agentId !== undefined &&
@@ -271,15 +272,61 @@ function WriterRef({
   ) {
     const { agentId } = writer;
     const subject = agentSubject(agents.control, agentId, NOTHING_HELD, false);
-    return (
-      <AgentActorRef
-        subject={subject}
-        models={agents.control.models}
-        onOpen={() => agents.onOpen?.(agentId)}
-      />
-    );
+    return {
+      author: commentAuthor(subject.tile),
+      nameRef: (
+        <AgentActorRef
+          subject={subject}
+          models={agents.control.models}
+          onOpen={() => agents.onOpen?.(agentId)}
+          nameOnly
+        />
+      ),
+    };
   }
-  return <ActorRef actor={person} />;
+  return { author: commentAuthor(person), nameRef: <ActorRef actor={person} nameOnly /> };
+}
+
+/** One entry of a thread as a comment (`Comment`): its writer's face and name, when it was written, what stands at the head's end, then its words. */
+function WrittenComment({
+  writer,
+  agents,
+  said,
+  at,
+  now,
+  trailing,
+  children,
+}: {
+  writer: PlanCommentWriter;
+  agents: EditAgents | undefined;
+  /** What the writer did, said after their name, for a line of what happened to a thread. */
+  said?: string;
+  at: number;
+  now: number;
+  trailing?: ReactNode;
+  children?: ReactNode;
+}): React.JSX.Element {
+  const { author, nameRef } = useWriter(writer, agents);
+  return (
+    <Comment
+      author={author}
+      nameRef={
+        said === undefined ? (
+          nameRef
+        ) : (
+          <>
+            {nameRef}
+            <span className="comment-event-words">{` ${said}`}</span>
+          </>
+        )
+      }
+      at={at}
+      now={now}
+      trailing={trailing}
+    >
+      {children}
+    </Comment>
+  );
 }
 
 /** The mark of who wrote an entry, alone, for a thread at rest's faces. */
@@ -324,17 +371,17 @@ function EventLine({
 }): React.JSX.Element {
   return (
     <div className="comment-event" data-kind={entry.kind}>
-      <div className="comment-head">
-        <WriterRef writer={entry.writer} agents={agents} />
-        <span className="comment-event-words">
-          {` ${entry.kind === PLAN_COMMENT_ENTRY.RESOLVED ? COMMENT_WORDS.RESOLVED_IT : COMMENT_WORDS.REOPENED_IT}`}
-        </span>
-        <span className="comment-head-end">
-          <span className="comment-time">
-            <Time at={entry.at} now={now} />
-          </span>
-        </span>
-      </div>
+      <WrittenComment
+        writer={entry.writer}
+        agents={agents}
+        said={
+          entry.kind === PLAN_COMMENT_ENTRY.RESOLVED
+            ? COMMENT_WORDS.RESOLVED_IT
+            : COMMENT_WORDS.REOPENED_IT
+        }
+        at={entry.at}
+        now={now}
+      />
     </div>
   );
 }
@@ -498,81 +545,88 @@ function CommentEntry({
   };
   return (
     <div className="comment-entry" data-entry={entry.id}>
-      {/* Note that the time and the tools share the row's end, the tools in the time's place under the pointer, so a long name gives way to neither and nothing stands over it. */}
-      <div className="comment-head">
-        <WriterRef writer={entry.writer} agents={doors.agents} />
-        <span className="comment-head-end">
-          <span className="comment-time">
-            <Time at={entry.at} now={now} />
-            {entry.editedAt === undefined ? null : ` · ${COMMENT_WORDS.EDITED}`}
-          </span>
-          <div className="comment-tools">
-            {first ? (
-              <Tooltip label={settle ? COMMENT_WORDS.RESOLVE : COMMENT_WORDS.REOPEN}>
+      {/* Note that the tools stand at the head's end, shown under the pointer or the keyboard, so a long name gives way to them and nothing stands over it. */}
+      <WrittenComment
+        writer={entry.writer}
+        agents={doors.agents}
+        at={entry.at}
+        now={now}
+        trailing={
+          <>
+            {entry.editedAt === undefined ? null : (
+              <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED} as={TEXT_ELEMENT.SPAN}>
+                {COMMENT_WORDS.EDITED}
+              </Text>
+            )}
+            <div className="comment-tools">
+              {first ? (
+                <Tooltip label={settle ? COMMENT_WORDS.RESOLVE : COMMENT_WORDS.REOPEN}>
+                  <IconButton
+                    size={BUTTON_SIZE.COMPACT}
+                    icon={settle ? <CheckIcon /> : <RotateCcwIcon />}
+                    label={settle ? COMMENT_WORDS.RESOLVE : COMMENT_WORDS.REOPEN}
+                    onClick={() =>
+                      void doors.control.act(thread.id, {
+                        action: settle ? PLAN_COMMENT_ACTION.RESOLVE : PLAN_COMMENT_ACTION.REOPEN,
+                      })
+                    }
+                  />
+                </Tooltip>
+              ) : null}
+              <Tooltip label={COMMENT_WORDS.MORE}>
                 <IconButton
                   size={BUTTON_SIZE.COMPACT}
-                  icon={settle ? <CheckIcon /> : <RotateCcwIcon />}
-                  label={settle ? COMMENT_WORDS.RESOLVE : COMMENT_WORDS.REOPEN}
-                  onClick={() =>
-                    void doors.control.act(thread.id, {
-                      action: settle ? PLAN_COMMENT_ACTION.RESOLVE : PLAN_COMMENT_ACTION.REOPEN,
-                    })
-                  }
+                  icon={<EllipsisIcon />}
+                  label={COMMENT_WORDS.MORE}
+                  {...trigger}
                 />
               </Tooltip>
-            ) : null}
-            <Tooltip label={COMMENT_WORDS.MORE}>
-              <IconButton
-                size={BUTTON_SIZE.COMPACT}
-                icon={<EllipsisIcon />}
-                label={COMMENT_WORDS.MORE}
-                {...trigger}
-              />
-            </Tooltip>
-            {menu.drawn === undefined ? null : (
-              <ActionMenu
-                label={COMMENT_WORDS.MORE}
-                menu={menu.drawn}
-                groups={[items]}
-                onClose={menu.close}
-              />
+              {menu.drawn === undefined ? null : (
+                <ActionMenu
+                  label={COMMENT_WORDS.MORE}
+                  menu={menu.drawn}
+                  groups={[items]}
+                  onClose={menu.close}
+                />
+              )}
+            </div>
+            <ConfirmDialog
+              confirm={deleting}
+              question={first ? DELETE_THREAD_QUESTION : DELETE_QUESTION}
+            />
+          </>
+        }
+      >
+        {lead}
+        {editing === undefined ? (
+          <>
+            {/* Note that a comment's files stand over its words, as the field held them and as every message's do. */}
+            {entry.files === undefined ? null : (
+              <CommentFiles planId={doors.control.planId} files={entry.files} />
             )}
-          </div>
-          <ConfirmDialog
-            confirm={deleting}
-            question={first ? DELETE_THREAD_QUESTION : DELETE_QUESTION}
-          />
-        </span>
-      </div>
-      {lead}
-      {editing === undefined ? (
-        <>
-          {/* Note that a comment's files stand over its words, as the field held them and as every message's do. */}
-          {entry.files === undefined ? null : (
-            <CommentFiles planId={doors.control.planId} files={entry.files} />
-          )}
-          <WordsDatesContext.Provider value={dates}>
-            <CommentWords words={entry.words ?? ""} />
-          </WordsDatesContext.Provider>
-        </>
-      ) : (
-        <ComposerFrame look={COMPOSER_LOOK.FIELD} className="comment-field comment-editing">
-          <CommentText
-            value={editing}
-            label={COMMENT_WORDS.EDIT}
-            onChange={write}
-            onSubmit={save}
-            onCancel={() => setEditing(undefined)}
-            autoFocus
-          />
-          <div className="comment-field-foot">
-            <Button onClick={() => setEditing(undefined)}>{COMMENT_WORDS.CANCEL}</Button>
-            <Button variant={BUTTON_VARIANT.PRIMARY} onClick={save}>
-              {COMMENT_WORDS.SAVE}
-            </Button>
-          </div>
-        </ComposerFrame>
-      )}
+            <WordsDatesContext.Provider value={dates}>
+              <CommentWords words={entry.words ?? ""} />
+            </WordsDatesContext.Provider>
+          </>
+        ) : (
+          <ComposerFrame look={COMPOSER_LOOK.FIELD} className="comment-field comment-editing">
+            <CommentText
+              value={editing}
+              label={COMMENT_WORDS.EDIT}
+              onChange={write}
+              onSubmit={save}
+              onCancel={() => setEditing(undefined)}
+              autoFocus
+            />
+            <div className="comment-field-foot">
+              <Button onClick={() => setEditing(undefined)}>{COMMENT_WORDS.CANCEL}</Button>
+              <Button variant={BUTTON_VARIANT.PRIMARY} onClick={save}>
+                {COMMENT_WORDS.SAVE}
+              </Button>
+            </div>
+          </ComposerFrame>
+        )}
+      </WrittenComment>
     </div>
   );
 }
@@ -1066,19 +1120,13 @@ function ThreadCard({
         data-thread={thread.id}
       >
         {head}
-        {first === undefined ? null : (
-          <div className="comment-head">
-            <WriterRef writer={first.writer} agents={doors.agents} />
-            <span className="comment-time">
-              <Time at={first.at} now={now} />
-            </span>
-          </div>
-        )}
         {/* Note that the words are drawn as they are open, their chips with them, clamped; the card's press opens the thread. */}
         {first === undefined ? null : (
-          <div className="comment-clamp">
-            <CommentWords words={first.words ?? ""} />
-          </div>
+          <WrittenComment writer={first.writer} agents={doors.agents} at={first.at} now={now}>
+            <div className="comment-clamp">
+              <CommentWords words={first.words ?? ""} />
+            </div>
+          </WrittenComment>
         )}
         {/* Note that the whole card at rest is one press that opens it, but for a control of its own inside it, an agent's name say, and a mention's chip opens it as it takes its own press; its button is the keyboard's way in, the replies drawn on it, or its name alone where there are none. */}
         <CardPress

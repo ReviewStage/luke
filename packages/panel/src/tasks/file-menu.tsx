@@ -3,6 +3,7 @@ import {
   DownloadIcon,
   EllipsisIcon,
   IconButton,
+  type PaneBarMenu,
   STATUS_TONE,
   Tooltip,
   useMenu,
@@ -26,10 +27,10 @@ import { WHOLE_TEXT, type WholeText } from "./file-tab-model.js";
  * the file as it holds it, its long lines uncut, rather than the lines the
  * tab draws, which the service cuts.
  *
- * Every bar over lines hangs the same ⋯ with its own actions (`BarMenu`),
- * an agent's Files changed view and a page's source alike; how the lines
- * are drawn is set from the View settings button beside it
- * (`view-settings.tsx`), never from the ⋯.
+ * The File tab hands its bar this menu's definition (`useFileMenu`) for
+ * `PaneBar` to draw as its ⋯, and an agent's Files changed view still hangs
+ * its own through `BarMenu`; how the lines are drawn is set from the View
+ * settings button beside it (`view-settings.tsx`), never from the ⋯.
  */
 
 /** What the menu says where the file's text could not be read, or the service will not carry it whole. */
@@ -95,7 +96,7 @@ export function useSaveText(): (name: string, text: string) => Promise<void> {
       );
 }
 
-export function FileMenu({
+export function useFileMenu({
   path,
   ready,
   readText,
@@ -106,7 +107,7 @@ export function FileMenu({
   ready: boolean;
   /** The file's whole text, read a window at a time, or why it is not at hand. */
   readText: () => Promise<WholeText>;
-}): React.JSX.Element {
+}): PaneBarMenu {
   const copyWithToast = useCopyToast();
   const show = useToast();
   const saveText = useSaveText();
@@ -121,10 +122,10 @@ export function FileMenu({
       }
     });
 
-  return (
-    <BarMenu
-      label="File actions"
-      actions={[
+  return {
+    label: "File actions",
+    groups: [
+      [
         {
           label: "Copy file name",
           icon: <CopyIcon />,
@@ -143,7 +144,7 @@ export function FileMenu({
           disabled: !ready,
           onSelect: () => withText((text) => saveText(name, text)),
         },
-      ]}
-    />
-  );
+      ],
+    ],
+  };
 }

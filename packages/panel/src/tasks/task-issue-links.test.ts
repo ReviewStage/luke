@@ -354,9 +354,9 @@ test("a first read that did not land says so in the row's place, and Try again r
     links: [SAFARI],
     reads: [{ failure: TASK_CALL_FAILURE.UNANSWERED }, { issues: [SAFARI] }],
   });
-  const said = container.querySelector('[role="alert"]')?.firstChild?.textContent;
+  const said = container.querySelector('[role="alert"] .luke-failure-note-words')?.textContent;
 
-  press([...container.querySelectorAll("button")].find((each) => each.textContent === "Try again"));
+  press([...container.querySelectorAll("button")].find((each) => each.textContent === "Retry"));
   await settle();
 
   assert.equal(said, "Luke didn't answer. Try again.");
