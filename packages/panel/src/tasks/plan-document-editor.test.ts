@@ -786,6 +786,35 @@ test("words a plan was left with stay unsaved work while their save is out, and 
   assert.equal(unsavedWords(container), false);
 });
 
+test("a plan left twice while its first save is out stays unsaved work until both saves answer", async () => {
+  const answers: ((saved: TasksEditAnswer) => void)[] = [];
+  const { container, render } = mount();
+  const other = { ...DOCUMENT_TASK, id: "0c4f2e9a-7d1b-4a3e-8f6c-2b9d5e1a7c40" };
+  const held = () =>
+    new Promise<TasksEditAnswer>((resolve) => {
+      answers.push(resolve);
+    });
+  const editAndLeave = async (words: string) => {
+    render(DOCUMENT_TASK, held);
+    await settle();
+    act(() => block(container, "Goal").click());
+    act(() => open().onDraft(words));
+    render(other, held);
+    await settle();
+  };
+  await editAndLeave(`${BODY}Mine.\n`);
+  await editAndLeave(`${BODY}Mine again.\n`);
+  assert.equal(answers.length, 2, "both saves are out");
+
+  answers[0]?.({ saved: true });
+  await settle();
+  assert.equal(unsavedWords(container), true, "the newer save is still out");
+
+  answers[1]?.({ saved: true });
+  await settle();
+  assert.equal(unsavedWords(container), false);
+});
+
 test("a title typed in is unsaved work until its rename answers", async () => {
   const { container, renamed } = mount();
   const words = title(container);

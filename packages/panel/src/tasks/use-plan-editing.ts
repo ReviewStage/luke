@@ -66,8 +66,8 @@ const leftUnsavedAtom = Atom.keepAlive(Atom.make<ReadonlyMap<string, DocumentEdi
 /** The tasks whose open editor holds words the service does not hold yet, while it does. */
 const openUnsavedAtom = Atom.keepAlive(Atom.make<readonly string[]>([]));
 
-/** The tasks left with words whose leaving save is still out, until it answers. */
-const savingLeftAtom = Atom.keepAlive(Atom.make<readonly string[]>([]));
+/** Each leaving save still out, one mark apiece, so a task left twice stays marked until both answer. */
+const savingLeftAtom = Atom.keepAlive(Atom.make<readonly symbol[]>([]));
 
 /** The titles being typed in, each by its own id, from the first word typed until the rename it asks for answers. */
 const titlesUnsavedAtom = Atom.keepAlive(Atom.make<readonly string[]>([]));
@@ -82,10 +82,10 @@ const planWordsUnsavedAtom = Atom.make(
 );
 
 /** `key` marked in `marks` as holding words not saved, or not. */
-function mark(
+function mark<Key>(
   registry: AtomRegistry.AtomRegistry,
-  marks: Atom.Writable<readonly string[]>,
-  key: string,
+  marks: Atom.Writable<readonly Key[]>,
+  key: Key,
   unsaved: boolean,
 ): void {
   const others = registry.get(marks).filter((held) => held !== key);
@@ -123,14 +123,14 @@ function takeLeft(registry: AtomRegistry.AtomRegistry, taskId: string): Document
  * and said in a toast that stands until dismissed, whose action saves them
  * again from what is kept then: a Retry, or a Keep mine over a conflict.
  */
-function keepLeft(left: LeftTask, now: DocumentEditor): void {
+function keepLeft(left: LeftTask, now: DocumentEditor, saving: symbol): void {
   const { taskId, registry } = left;
   const kept = editorLeft(now);
   const held = new Map(registry.get(leftUnsavedAtom));
   if (kept === undefined) held.delete(taskId);
   else held.set(taskId, kept);
   registry.set(leftUnsavedAtom, held);
-  mark(registry, savingLeftAtom, taskId, false);
+  mark(registry, savingLeftAtom, saving, false);
   if (kept === undefined) return;
   const conflict = kept.state.kind === DOCUMENT_EDITOR_STATE.CONFLICT;
   const press = () => {
@@ -147,18 +147,22 @@ function keepLeft(left: LeftTask, now: DocumentEditor): void {
   });
 }
 
-/** Saves the words of a task left through its door, keeping them where that save does not land; they are unsaved work until it answers. */
-function saveLeft(left: LeftTask, now: DocumentEditor): void {
-  mark(left.registry, savingLeftAtom, left.taskId, true);
+/**
+ * Saves the words of a task left through its door, keeping them where that
+ * save does not land; they are unsaved work under `saving`, its own mark,
+ * until it answers.
+ */
+function saveLeft(left: LeftTask, now: DocumentEditor, saving = Symbol(left.taskId)): void {
+  mark(left.registry, savingLeftAtom, saving, true);
   const request = leavingSave(now);
   if (request === undefined) {
-    keepLeft(left, now);
+    keepLeft(left, now, saving);
     return;
   }
   const sent = editorSent(now, request);
   left.door(request).then(
-    (answered) => keepLeft(left, editorAnswered(sent, answered)),
-    (refused: Error) => keepLeft(left, editorRefused(sent, refused.message)),
+    (answered) => keepLeft(left, editorAnswered(sent, answered), saving),
+    (refused: Error) => keepLeft(left, editorRefused(sent, refused.message), saving),
   );
 }
 
@@ -358,10 +362,11 @@ export function usePlanEditing(
       }
       // Note that words typed while a save was out go once it lands, from
       // what it saved, and are unsaved work while they wait on it.
-      mark(registry, savingLeftAtom, taskId, true);
+      const saving = Symbol(taskId);
+      mark(registry, savingLeftAtom, saving, true);
       flight.current?.then(
-        (answered) => saveLeft(left, editorAnswered(held, answered)),
-        (refused: Error) => saveLeft(left, editorRefused(held, refused.message)),
+        (answered) => saveLeft(left, editorAnswered(held, answered), saving),
+        (refused: Error) => saveLeft(left, editorRefused(held, refused.message), saving),
       );
     };
   }, [taskId]);
