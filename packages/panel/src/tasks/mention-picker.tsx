@@ -1474,23 +1474,36 @@ function kindsOf(
   return [...ordered, ...connected];
 }
 
+/** Words typed in the `@` word that starts at `wordAt`. */
+interface WordsTyped {
+  readonly wordAt: number;
+  readonly words: string;
+}
+
 /**
  * Words once they have stood the pause, as an atom whose work is the wait:
  * setting it again starts the wait over, so only the newest words rest.
  */
 const restAtom = () =>
-  rendererRuntime.fn((words: string) => Effect.as(Effect.sleep(SEARCH_PAUSE), words));
+  rendererRuntime.fn((typed: WordsTyped) => Effect.as(Effect.sleep(SEARCH_PAUSE), typed));
 
-/** Whether the typing has rested on the words, which no words always have. */
-function useRested(words: string | undefined): boolean {
+/**
+ * Whether the typing has rested on the words of the `@` word at `wordAt`,
+ * which no words always have. Note that the rest is forgotten once the
+ * words go, so words typed again, in this word or another, wait afresh.
+ */
+function useRested(wordAt: number | undefined, words: string | undefined): boolean {
   const [atom] = useState(restAtom);
   const [rested, rest] = useAtom(atom);
   useEffect(() => {
-    if (words !== undefined) rest(words);
-  }, [words, rest]);
+    rest(wordAt === undefined || words === undefined ? Atom.Reset : { wordAt, words });
+  }, [wordAt, words, rest]);
   return (
     words === undefined ||
-    (AsyncResult.isSuccess(rested) && !rested.waiting && rested.value === words)
+    (AsyncResult.isSuccess(rested) &&
+      !rested.waiting &&
+      rested.value.wordAt === wordAt &&
+      rested.value.words === words)
   );
 }
 
@@ -1673,7 +1686,7 @@ export function useMentionPicker({
   const agentsFailed =
     agentsRead !== undefined && agentsRead.words === words && agentsRead.agents === undefined;
   // Note that words are asked of the service once the typing rests on them, as the issue pickers' are, rather than letter by letter.
-  const rested = useRested(words);
+  const rested = useRested(wordAt, words);
   useEffect(() => {
     if (!wantsAgents || readAgents === undefined || wordAt === undefined || !rested) return;
     let live = true;

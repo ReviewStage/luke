@@ -390,6 +390,29 @@ test("a key typed in ⌘K stands in its field at once, and the rows are ranked f
   assert.equal(rows()[0], "Agents");
 });
 
+test("a Return pressed before the rows are ranked for the words typed chooses the row they rank first, never one the earlier words ranked", async () => {
+  const sent = openPalette();
+  chooseFilter("Settings");
+
+  // Note that the key and the Return go in outside `act`, which would draw the ranking's own render between them.
+  const input = field();
+  const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+  flushSync(() => {
+    setValue?.call(input, "integrations");
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  flushSync(() => {
+    input.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }),
+    );
+  });
+  const before = { tabs: [...sent.tabs], views: [...sent.views] };
+  await act(() => Promise.resolve());
+
+  assert.deepEqual(before, { tabs: [], views: [] }, "nothing chosen from the earlier rows");
+  assert.deepEqual(sent, { tabs: [PANEL_TAB.SETTINGS], views: [SETTINGS_VIEW.INTEGRATIONS] });
+});
+
 test("choosing a page opens Settings on that page", () => {
   const sent = openPalette();
   chooseFilter("Settings");

@@ -1101,6 +1101,30 @@ it.effect(
 );
 
 it.effect(
+  "words typed after @ again, once they went, wait the pause afresh before the service is asked",
+  () =>
+    Effect.gen(function* () {
+      const registry = registryOn(yield* Clock.Clock);
+      const { container } = yield* Effect.promise(() => workspaceBox(registry));
+
+      typeInComposer(container, "See @bill");
+      yield* rest;
+      eraseInComposer(container, 4);
+      yield* Effect.promise(settle);
+      const asked = workspaceReads().length;
+      typeInComposer(container, "bill");
+      yield* Effect.promise(settle);
+      const typedAgain = workspaceReads().length;
+      yield* rest;
+
+      assert.equal(typedAgain, asked, "nothing asked before the pause");
+      assert.deepEqual(workspaceReads().slice(asked), [
+        { workspaceId: "workspace-1", words: "bill", includeArchived: true },
+      ]);
+    }),
+);
+
+it.effect(
   "an agent of another task picked from the @ list is sent as its link under its task, and one on no task under the workspace",
   () =>
     Effect.gen(function* () {
