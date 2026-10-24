@@ -5,13 +5,14 @@ import {
   GroupHeader,
   Inline,
   List,
+  ListMotion,
   ListRow,
   PAGE_FRAME,
   SKELETON_SHAPE,
   Skeleton,
   SkeletonRegion,
 } from "@luke/ui";
-import type { ReactNode } from "react";
+import { type ReactNode, useRef } from "react";
 
 /**
  * person-frame.tsx -- a person's page's boxes, which the page and its placeholders both draw.
@@ -20,7 +21,10 @@ import type { ReactNode } from "react";
  * component here, drawn by the page with what it read and by its
  * placeholders with blocks in what is still being read, so a placeholder is
  * the page's own shape rather than a copy of it. The page names its person
- * once, as its header's title (`PageHeader`, the page's one `h1`). It stands outside the
+ * once, as its header's title (`PageHeader`, the page's one `h1`). Under the
+ * header its blocks stand in one body, the root its lists move under
+ * (`ListMotion`), so a row glides as its list changes, and one taken out of
+ * a section and drawn in another, an agent done working, glides across. It stands outside the
  * page's chunk (`pages-on-demand.ts`), so what the window draws while that
  * chunk loads draws through the same boxes.
  */
@@ -85,6 +89,29 @@ export function PersonLineSkeleton(): React.JSX.Element {
  */
 export function PersonTop({ children }: { children?: ReactNode }): React.JSX.Element {
   return <div className="person-top">{children}</div>;
+}
+
+/**
+ * What stands under the page's header: its top and its sections, the root
+ * their lists move under (`ListMotion`). While what the page lists is still
+ * being read (`reading`), a row arriving fades in where it stands rather
+ * than slides in after the last.
+ */
+export function PersonBody({
+  reading,
+  children,
+}: {
+  reading: boolean;
+  children: ReactNode;
+}): React.JSX.Element {
+  const root = useRef<HTMLDivElement | null>(null);
+  return (
+    <div ref={root}>
+      <ListMotion root={root} reading={reading}>
+        {children}
+      </ListMotion>
+    </div>
+  );
 }
 
 /** What says, to a reader, that the members are read: the header's blocks are decoration. */
