@@ -19,6 +19,7 @@ import {
   INTEGRATION_ROW_STATUS,
   type IntegrationRowStatus,
 } from "@luke/features/integration-row-wire";
+import { INTEGRATION_STATUS_WORDS } from "@luke/features/integration-status-words";
 import { STATUS_TONE, type StatusTone } from "@luke/ui";
 import { PULL_REQUEST_STATE_LABEL } from "../tasks/coding-agent-model.js";
 import { PULL_REQUEST_TONE } from "../tasks/pull-request-mark.js";
@@ -61,13 +62,6 @@ const CONNECTION_TONE = {
   [INTEGRATION_ROW_STATUS.EXPIRED]: STATUS_TONE.ATTENTION,
 } as const satisfies Record<IntegrationRowStatus, StatusTone>;
 
-/** What each connection status is called, as Settings' integration rows say it. */
-const CONNECTION_LABEL = {
-  [INTEGRATION_ROW_STATUS.PENDING]: "Connecting",
-  [INTEGRATION_ROW_STATUS.CONNECTED]: "Connected",
-  [INTEGRATION_ROW_STATUS.EXPIRED]: "Sign-in expired",
-} as const satisfies Record<IntegrationRowStatus, string>;
-
 /** Whether a connection status is one this build knows, which the account page's answer, a bare string, may not be. */
 function isConnectionStatus(status: string): status is IntegrationRowStatus {
   return Object.hasOwn(CONNECTION_TONE, status);
@@ -80,5 +74,5 @@ export function connectionTone(status: string): StatusTone {
 
 /** What a connection is called on a badge; a status this build does not know is drawn as the service spelled it. */
 export function connectionWord(status: string): string {
-  return isConnectionStatus(status) ? CONNECTION_LABEL[status] : status;
+  return isConnectionStatus(status) ? INTEGRATION_STATUS_WORDS[status] : status;
 }
