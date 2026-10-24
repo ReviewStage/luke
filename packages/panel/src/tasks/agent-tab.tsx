@@ -86,7 +86,7 @@ import {
 import { Fold, FoldBody } from "../ai-elements/fold.js";
 import { Message, MessageContent } from "../ai-elements/message.js";
 import { Plan, PlanContent, PlanHeader, PlanIcon, PlanTitle } from "../ai-elements/plan.js";
-import { TOOL_STATE } from "../ai-elements/tool.js";
+import { TOOL_BLOCK, TOOL_STATE } from "../ai-elements/tool.js";
 import { appPlatform } from "../app-platform.js";
 import { useAutomation } from "../automation-directory.js";
 import { copyThroughShell, useCopyToast } from "../copy-feedback.js";
@@ -603,8 +603,18 @@ function DelegationRow({
   // A native harness's subagent has no worker's tab to open yet.
   const native = nativeSubagent(part);
   const opens = onOpen !== undefined && !native;
-  // Note that a native subagent's task and answer fold open under its row instead, as its call's own body reads them.
+  // Note that a row that opens no tab folds its task and answer open under its line instead: a native subagent's as
+  // its call's own body reads them, and a worker's own worker's, whose transcript no tab reads, as its delegation says.
   const call = toolCallView(part);
+  const body = native
+    ? { input: call.input, output: call.output }
+    : opens
+      ? undefined
+      : {
+          input: { kind: TOOL_BLOCK.TEXT, text: view.task },
+          output:
+            view.result === undefined ? undefined : { kind: TOOL_BLOCK.TEXT, text: view.result },
+        };
   return (
     <TranscriptSubagent
       callId={part.callId}
@@ -617,7 +627,7 @@ function DelegationRow({
       card={
         opens ? live?.cards?.worker({ callId: part.callId, task: view.task, status }) : undefined
       }
-      body={native ? { input: call.input, output: call.output } : undefined}
+      body={body}
     />
   );
 }
@@ -2909,9 +2919,11 @@ function AgentTabBody({
  * the worker runs, drawn as the agent's is with the task it was handed in
  * the plan's place, a working line at its end while it runs, counting
  * from the start its pages say, and no head and no composer, since the
- * tab's own label names the task and nothing is sent to a worker. Where
- * the worker stands is what its pages say, which the panel keeps for the
- * tab's glyph (`onStatus`).
+ * tab's own label names the task and nothing is sent to a worker. Its
+ * rows open and hang what an agent's rows do, through the task's own doors
+ * (`onOpenTarget`, `cards`), but a worker of its own opens no tab, and no
+ * message of its is edited or reverted. Where the worker stands is what its
+ * pages say, which the panel keeps for the tab's glyph (`onStatus`).
  */
 export function AgentSubagentTab({
   agentId,
@@ -2923,10 +2935,16 @@ export function AgentSubagentTab({
   onStatus,
   onHeld,
   sender,
+  onOpenTarget,
+  cards,
 }: {
   agentId: string;
   callId: string;
   task: string;
+  /** Opens what one of its calls is about, as its agent's tab does; none where nothing opens it. */
+  onOpenTarget?: DelegationDoors["onOpenTarget"];
+  /** The cards its rows that open a tab hang, its agent's own; none where they hang their hints. */
+  cards?: TranscriptCards | undefined;
   /** Who handed the worker its task, named under its card: the agent that delegated it, which opens its tab; none where the panel names nobody. */
   sender?: ReactNode;
   status: CodingAgentStatus;
@@ -2957,7 +2975,13 @@ export function AgentSubagentTab({
   // The worker's lines, its task first, and what its rows draw from, kept from draw to draw while none of it moved.
   const lines = useMemo(() => workerLines(task, transcript.messages), [task, transcript.messages]);
   const models = control.models;
-  const delegation = useMemo(() => ({ models }), [models]);
+  // The press is the same door from draw to draw, so a message kept as it was opens what the window opens now.
+  const openTarget = useSteady(onOpenTarget);
+  const chatOn = useChatOn();
+  const delegation = useMemo(
+    () => ({ models, onOpenTarget: openTarget, cards, chatOn }),
+    [models, openTarget, cards, chatOn],
+  );
   const origin = useMemo(() => (sender === undefined ? undefined : { sender }), [sender]);
   // As an agent's: dated by the page it was read from, with the worker's own title.
   useEffect(() => {

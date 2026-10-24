@@ -1726,6 +1726,7 @@ function TabContent({
   shown,
   findActive,
   onOpenTarget,
+  cards,
   onWorkerStatus,
   onWorkerHeld,
   onOpenFile,
@@ -1770,6 +1771,8 @@ function TabContent({
   findActive: boolean;
   /** Opens what a row of a tab is about in the tab that draws it, as the Comments tab's opens the plan or an agent's tab. */
   onOpenTarget: (target: ToolTarget) => void;
+  /** What a worker's rows hang, its agent's cards (`taskCards`). */
+  cards: TaskCards;
   /** A delegated worker's page said where it stands now. */
   onWorkerStatus: (callId: string, status: CodingAgentStatus) => void;
   /** A delegated worker's tab drew its transcript anew, by the call that started it. */
@@ -1965,6 +1968,8 @@ function TabContent({
           shown={shown}
           onStatus={(status) => onWorkerStatus(tab.subagent, status)}
           onHeld={onWorkerHeld}
+          onOpenTarget={onOpenTarget}
+          cards={cards.agent(tab.delegation.agent)}
         />
       );
     }
@@ -2412,6 +2417,21 @@ export function SidePanel({
     agents: openAgents,
     subagents: NO_SUBAGENTS,
   });
+  // A worker's tab hangs the cards its agent's rows hang, each read as its tab reads its own, the tab chosen here or the agent's followed in the column.
+  const chosenTab = panel.tab;
+  const cards = useMemo(
+    () =>
+      taskCards({
+        agents,
+        held: drawnTranscripts,
+        chosen: (chosen) =>
+          (chosenTab !== undefined && sameTab(chosen, chosenTab)) ||
+          (shownAgent !== undefined && sameTab(chosen, { agent: shownAgent })),
+        shownCode: shownCode ?? [],
+        pages: pagePlaceOf(holder, taskId),
+      }),
+    [agents, drawnTranscripts, chosenTab, shownAgent, shownCode, holder, taskId],
+  );
   // The file tabs of files shown on the task or browsed to on it, in the strip's order.
   const offered = shownFiles(shownCode ?? []);
   const files = panel.files.filter(
@@ -2671,6 +2691,7 @@ export function SidePanel({
                 shown={keys}
                 findActive={keys && focused}
                 onOpenTarget={onOpenTarget}
+                cards={cards}
                 onWorkerStatus={views.onWorkerStatus}
                 onWorkerHeld={views.onWorkerHeld}
                 onOpenFile={panel.onPreviewFile}
