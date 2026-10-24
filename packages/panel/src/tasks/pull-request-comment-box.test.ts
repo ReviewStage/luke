@@ -87,7 +87,7 @@ test("Esc that closes the / menu keeps the caret in the box, and the next Esc le
     holder.querySelector<TiptapEditorHTMLElement>('.ProseMirror[aria-label="Comment"]') ??
     assert.fail("the box's editor is mounted");
   const editor: Editor = element.editor ?? assert.fail("the box's editor is running");
-  const escape = () =>
+  const pressEscape = () =>
     act(() => {
       element.dispatchEvent(
         new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }),
@@ -102,9 +102,9 @@ test("Esc that closes the / menu keeps the caret in the box, and the next Esc le
   });
   const opened = holder.querySelector('[role="listbox"]') !== null;
 
-  escape();
+  pressEscape();
   const afterFirst = document.activeElement;
-  escape();
+  pressEscape();
 
   assert.ok(opened, "the / menu opens");
   assert.equal(afterFirst, element, "the first Esc closes the menu and keeps the caret");
