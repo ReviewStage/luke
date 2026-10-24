@@ -54,6 +54,7 @@ import {
 } from "@luke/ui";
 import { ACTOR_KIND, ACTOR_STATE, type Actor, actorName } from "@luke/ui/actor-model";
 import { githubShapes, wholeRendering } from "@luke/ui/github-html";
+import { GLYPH } from "@luke/ui/icons";
 import { gluedRun, LINK_GLUE } from "@luke/ui/link-glue";
 import {
   MARKDOWN_HTML_STEP,
@@ -115,6 +116,7 @@ import {
 } from "lucide-react";
 import {
   type ComponentProps,
+  type ComponentType,
   createContext,
   Fragment,
   type MouseEvent,
@@ -983,9 +985,10 @@ const CALL_ICON = {
   [CALL_KIND.SHOW_PAGE]: AppWindowIcon,
   [CALL_KIND.READ_PAGE]: AppWindowIcon,
   [CALL_KIND.SHOW_IMAGE]: ImageIcon,
+  [CALL_KIND.OPEN_PULL_REQUEST]: () => <GLYPH.PULL_REQUEST />,
   [CALL_KIND.SLEEP]: TimerIcon,
   [CALL_KIND.OTHER]: WrenchIcon,
-} as const satisfies Record<CallKind, LucideIcon>;
+} as const satisfies Record<CallKind, ComponentType<{ "aria-hidden"?: "true" }>>;
 
 /**
  * The coding agent a call about one names, drawn on its row in the place of

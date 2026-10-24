@@ -226,6 +226,7 @@ import { useAgentServers } from "./use-agent-servers.js";
 import { type AgentTranscriptControl, useAgentTranscript } from "./use-agent-transcript.js";
 import type { CodingAgentsControl } from "./use-coding-agents.js";
 import { useKnownNames, useTaskStatus } from "./use-known-names.js";
+import { useOpenLink } from "./use-open-link.js";
 import { type CutBody, useWholePart, useWholePartDoor, WholePartsProvider } from "./whole-parts.js";
 import { WorkedFor, WorkingLine } from "./working-time.js";
 
@@ -763,13 +764,15 @@ function TargetCallView({
   onOpen: () => void;
 }): ReactNode {
   const cards = useLiveDoors(doors)?.cards;
+  const openLink = useOpenLink();
   return (
     <OpeningCallView
       part={part}
       hint={TARGET_HINT[target.kind]}
       card={cards?.target(target, toolCallView(part).subject)}
       cards={cards}
-      onOpen={onOpen}
+      // Note that a pull request opens as a link to it does, in its Pull request tab where the place has one, so the row asks no window's `onOpenTarget`.
+      onOpen={target.kind === TOOL_TARGET.PULL_REQUEST ? () => openLink(target.url) : onOpen}
     />
   );
 }
