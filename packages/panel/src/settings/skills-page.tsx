@@ -65,6 +65,7 @@ import {
   failureLine,
   fencedSkillFile,
   installedNotice,
+  removeQuestion,
   SKILL_ACTION,
   SKILLS_LINE,
   type SkillAction,
@@ -386,17 +387,7 @@ function SkillRowView({
           />
         </div>
       </Tooltip>
-      <ConfirmDialog
-        open
-        confirm={removal}
-        question={{
-          title: `Remove ${skill.name}?`,
-          body: "Agents started afterwards no longer load it. Installing it again takes the paste again.",
-          verb: "Remove",
-          running: "Removing…",
-          loss: CONFIRM_LOSS.REVERSIBLE,
-        }}
-      />
+      <ConfirmDialog open confirm={removal} question={removeQuestion(skill, workspace)} />
       <ConfirmDialog
         open
         confirm={sharing}

@@ -552,14 +552,26 @@ test("View reads the skill and draws its text as written and every file with its
   assert.equal(document.querySelector('[role="dialog"]'), null);
 });
 
-test("Remove asks first, then takes the skill off the page", async () => {
+test("Remove asks first, red for a personal skill whose files go, then takes it off the page", async () => {
   await mountPage();
 
   await choose("pr-style", "Remove");
-  act(() => button("Remove", dialog("alertdialog")).click());
+  const question = dialog("alertdialog");
+  assert.equal(button("Remove", question).dataset.variant, "danger");
+  assert.match(question.textContent ?? "", /Its files are deleted/u);
+  act(() => button("Remove", question).click());
   await settle();
   assert.deepEqual(sentOf(ACT_KIND.INSTALLED_SKILLS_REMOVE), [{ skillId: PR_STYLE.id }]);
   assert.ok(!(document.body.textContent ?? "").includes("pr-style described"));
+});
+
+test("Removing a workspace skill says everyone in the workspace loses it, in the accent", async () => {
+  await mountPage();
+
+  await choose("release-notes", "Remove");
+  const question = dialog("alertdialog");
+  assert.match(question.textContent ?? "", /Everyone in Stage loses release-notes/u);
+  assert.notEqual(button("Remove", question).dataset.variant, "danger");
 });
 
 test("Add skill opens with its box focused, not the card", async () => {
