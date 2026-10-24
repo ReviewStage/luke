@@ -453,10 +453,10 @@ test("the workspace's skills stand before the account's own, each with its sourc
   await mountPage();
 
   const headings = [...document.querySelectorAll("h2")].map((each) => each.textContent);
-  assert.deepEqual(headings, ["Stage", "Personal"]);
+  assert.deepEqual(headings, ["Stage", "Only you"]);
   const text = document.body.textContent ?? "";
   assert.match(text, /release-notes described · acme\/agent-skills @ 3f9c2e1 · by DeanWorkspace/u);
-  assert.match(text, /pr-style described · pastedPersonal/u);
+  assert.match(text, /pr-style described · pastedOnly you/u);
   assert.match(text, /\.agents\/skills.*only agents started afterwards/u);
 });
 
@@ -483,18 +483,18 @@ test("a GitHub skill whose folder moved offers Update in its ⋯, which updates 
   assert.deepEqual(sentOf(ACT_KIND.INSTALLED_SKILLS_CHECK_UPDATE), [
     { workspaceId: "workspace-stage", skillId: RELEASE_NOTES.id },
   ]);
-  assert.deepEqual(menuOf("release-notes"), ["View", "Update", "Remove"]);
+  assert.deepEqual(menuOf("release-notes"), ["Open", "Update", "Remove"]);
   await choose("release-notes", "Update");
   assert.deepEqual(sentOf(ACT_KIND.INSTALLED_SKILLS_UPDATE), [
     { workspaceId: "workspace-stage", skillId: RELEASE_NOTES.id },
   ]);
-  assert.deepEqual(menuOf("release-notes"), ["View", "Remove"]);
+  assert.deepEqual(menuOf("release-notes"), ["Open", "Remove"]);
 });
 
 test("the account's own skill offers Share with workspace, which asks in plain words and moves it there", async () => {
   await mountPage();
 
-  assert.deepEqual(menuOf("pr-style"), ["View", "Share with workspace", "Remove"]);
+  assert.deepEqual(menuOf("pr-style"), ["Open", "Share with workspace", "Remove"]);
   await choose("pr-style", "Share with workspace");
   const question = dialog("alertdialog");
   assert.match(question.textContent ?? "", /Share pr-style with Stage\?/u);
@@ -526,20 +526,20 @@ test("a share the workspace already has the name for is refused in the question,
     dialog("alertdialog").textContent ?? "",
     /Stage already has a skill named pr-style\. Remove one of them first\./u,
   );
-  assert.match(rowOf("pr-style").textContent ?? "", /pastedPersonal/u);
+  assert.match(rowOf("pr-style").textContent ?? "", /pastedOnly you/u);
 });
 
 test("Share is never offered in a personal workspace", async () => {
   stored = [PR_STYLE];
   await mountPage(workspace({ personal: true }));
 
-  assert.deepEqual(menuOf("pr-style"), ["View", "Remove"]);
+  assert.deepEqual(menuOf("pr-style"), ["Open", "Remove"]);
 });
 
 test("View reads the skill and draws its text as written and every file with its size", async () => {
   await mountPage();
 
-  await choose("pr-style", "View");
+  await choose("pr-style", "Open");
   assert.deepEqual(sentOf(ACT_KIND.INSTALLED_SKILLS_READ), [{ skillId: PR_STYLE.id }]);
   const shown = dialog();
   assert.equal(shown.querySelector("h2")?.textContent, "pr-style");
@@ -598,7 +598,7 @@ test("a workspace skill a member may not change draws its switch unavailable and
 
   assert.equal(switchOf("release-notes").disabled, true);
   assert.equal(switchOf("pr-style").disabled, false);
-  assert.deepEqual(menuOf("release-notes"), ["View"]);
+  assert.deepEqual(menuOf("release-notes"), ["Open"]);
   assert.deepEqual(sentOf(ACT_KIND.INSTALLED_SKILLS_CHECK_UPDATE), []);
 });
 
@@ -608,7 +608,7 @@ test("a personal workspace lists the account's own skills alone", async () => {
 
   assert.deepEqual(
     [...document.querySelectorAll("h2")].map((each) => each.textContent),
-    ["Personal"],
+    ["Only you"],
   );
 });
 
@@ -623,7 +623,7 @@ test("a command that names a skill is confirmed as its card, with no list, and I
   assert.match(text, /Add web-design-guidelines/u);
   assert.match(text, /From vercel-labs\/agent-skills @ 3f9c2e1/u);
   assert.match(text, /4 files · 22 kB · skills\/web/u);
-  assert.match(text, /2 other skills in this repo/u);
+  assert.match(text, /2 other skills in this repository/u);
   assert.equal(document.querySelector("textarea"), null);
   assert.equal(document.querySelector('input[type="checkbox"]'), null);
 

@@ -207,16 +207,16 @@ test("a workspace skill whose installer is gone or unknown names nobody", () => 
 test("Everyone in the workspace is offered to every member, and never in a personal workspace", () => {
   const labels = (shown: Workspace) => installScopes(shown).map((each) => each.label);
 
-  assert.deepEqual(labels(workspace()), ["Just me", "Everyone in Stage"]);
+  assert.deepEqual(labels(workspace()), ["Only you", "Everyone in Stage"]);
   assert.deepEqual(labels(workspace({ role: WORKSPACE_ROLE.ADMIN })), [
-    "Just me",
+    "Only you",
     "Everyone in Stage",
   ]);
   assert.deepEqual(labels(workspace({ role: WORKSPACE_ROLE.OWNER })), [
-    "Just me",
+    "Only you",
     "Everyone in Stage",
   ]);
-  assert.deepEqual(labels(workspace({ role: WORKSPACE_ROLE.OWNER, personal: true })), ["Just me"]);
+  assert.deepEqual(labels(workspace({ role: WORKSPACE_ROLE.OWNER, personal: true })), ["Only you"]);
 });
 
 test("the box says at once what it was read as, and a source on another host says only GitHub for now", () => {

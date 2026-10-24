@@ -27,7 +27,6 @@ import {
   SkeletonRegion,
   Stack,
   TEXT_ELEMENT,
-  TEXT_TONE,
   TEXT_VARIANT,
   Text,
   Tooltip,
@@ -56,7 +55,7 @@ import type { PlanEditDoor } from "../tasks/use-plan-editing.js";
  * no name of the account's to change, so it is drawn and never edited, and
  * the page's actions stand at the end of its line: the version history
  * (`plan-template-history.tsx`), which the "Edited by" line under the
- * title opens too, and Reset to default while the account holds a
+ * title opens too, and Reset to defaults while the account holds a
  * template of its own. The reset asks first, since it replaces every word of
  * the account's, kept since only in the template's history, and waits for a
  * save already out so the default lands last. A quiet note under the
@@ -83,7 +82,6 @@ export const TEMPLATE_TITLE = "Plan template";
 /** What the page says. */
 const PAGE_LINE = {
   NOTE: "New plans start as a copy of this template.",
-  NOTE_DETAIL: "Editing it doesn't change existing plans.",
   SIGNED_OUT: SIGNED_OUT_WORDS,
   READ_FAILED: "The template could not be read.",
   READING: readingWords("your plan template"),
@@ -289,7 +287,6 @@ function TemplateNote(): React.JSX.Element {
     <div className="template-note" {...searchAnchorProps(SETTINGS_SEARCH_ROW.PLAN_TEMPLATE)}>
       <Banner look={BANNER_LOOK.CARD} glyph={<InfoIcon />}>
         <Text variant={TEXT_VARIANT.SECTION}>{PAGE_LINE.NOTE}</Text>
-        <Text tone={TEXT_TONE.MUTED}>{PAGE_LINE.NOTE_DETAIL}</Text>
       </Banner>
     </div>
   );
@@ -303,7 +300,7 @@ function TemplateFrame({ children }: { children: React.ReactNode }): React.JSX.E
 /**
  * The page's actions at the end of its header's title line
  * (`PageHeader`'s actions), as every Settings page carries its own: the
- * version history, and Reset to default while the account holds a template of
+ * version history, and Reset to defaults while the account holds a template of
  * its own. They are `@luke/ui`'s quiet `IconButton` and outline `Button`.
  */
 function TitleActions({
@@ -331,7 +328,7 @@ function TitleActions({
           busyLabel="Resetting"
           onClick={onReset}
         >
-          Reset to default
+          Reset to defaults
         </Button>
       ) : null}
     </>

@@ -502,7 +502,7 @@ test("a row of the skills' list leads with a book, says what it is for and where
     row.querySelector(".luke-combobox-option-detail")?.textContent,
     SKILLS[0]?.description,
   );
-  assert.equal(row.querySelector(".luke-combobox-option-hint")?.textContent, "Repo");
+  assert.equal(row.querySelector(".luke-combobox-option-hint")?.textContent, "Repository");
 
   restOn(row);
 
