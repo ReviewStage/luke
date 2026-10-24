@@ -105,6 +105,7 @@ function Facts(): React.JSX.Element {
 function Task({ secondary }: { secondary: boolean }): React.JSX.Element {
   return (
     <DetailPage
+      frame={PAGE_FRAME.PAGE}
       title={TITLE}
       description="A task in the platform workspace."
       actions={
@@ -126,6 +127,7 @@ function Task({ secondary }: { secondary: boolean }): React.JSX.Element {
 function LongTask(): React.JSX.Element {
   return (
     <DetailPage
+      frame={PAGE_FRAME.PAGE}
       title={TITLE}
       description="Scroll down: the bar names the task once its title is gone."
     >

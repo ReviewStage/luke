@@ -203,6 +203,7 @@ export function useAgentActions(
     | "archivedAt"
     | "brief"
     | "kind"
+    | "startedBy"
   >,
   agents: CodingAgentsControl,
   input: {

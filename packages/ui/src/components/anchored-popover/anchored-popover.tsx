@@ -39,7 +39,10 @@ import { type PressAway, usePressAway } from "./press-away.js";
  * the resize is measured. A press outside the layer and its button is
  * handed to the owner, who closes it (`press-away.ts`). A popover asks for its width in pixels or by one
  * of the three names a menu's width is chosen from (`POPOVER_WIDTH`), whose
- * token the layer is drawn at and measured by.
+ * token the layer is drawn at and measured by. An owner that closes its
+ * popover through `open` keeps the layer drawn where it last stood, so what
+ * it holds fades out in place (`PopoverPanel`'s `open`), while the layer
+ * hears no press away and measures nothing until it opens again.
  */
 
 export {
@@ -138,6 +141,7 @@ function askedWidth(layer: HTMLElement, width: number | PopoverWidth): number {
  * the focus its popover takes as it mounts.
  */
 export function AnchoredPopover({
+  open = true,
   align,
   width = DEFAULT_WIDTH,
   bounds = POPOVER_BOUNDS.ROOM,
@@ -145,6 +149,8 @@ export function AnchoredPopover({
   holds,
   children,
 }: PressAway & {
+  /** Whether what it holds stands open; closed, the layer stays where it stood while that fades. Open where it is left out. */
+  open?: boolean | undefined;
   align: PopoverAlign;
   /** The width it asks for, in pixels or by name, a form's wider than a menu's. */
   width?: number | PopoverWidth | undefined;
@@ -154,9 +160,13 @@ export function AnchoredPopover({
 }): React.JSX.Element {
   const layer = useRef<HTMLDivElement>(null);
   const [place, setPlace] = useState<PopoverPlace | undefined>(undefined);
-  usePressAway(layer, () => layer.current?.parentElement, { onPressAway, holds });
+  usePressAway(layer, () => layer.current?.parentElement, {
+    onPressAway: open ? onPressAway : undefined,
+    holds,
+  });
 
   useLayoutEffect(() => {
+    if (!open) return;
     const drawn = layer.current;
     const anchor = drawn?.parentElement;
     if (drawn === null || anchor === null || anchor === undefined) return;
@@ -197,7 +207,7 @@ export function AnchoredPopover({
       viewport?.removeEventListener("scroll", measure);
       document.removeEventListener("scroll", measure, { capture: true });
     };
-  }, [align, width, bounds]);
+  }, [open, align, width, bounds]);
 
   return (
     <div

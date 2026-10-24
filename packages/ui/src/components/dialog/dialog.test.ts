@@ -2,7 +2,9 @@
 
 import { act, createElement, createRef, useId, useRef, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeAll, expect, test } from "vitest";
+import { afterEach, beforeAll, expect, test, vi } from "vitest";
+import { MOTION_TOKEN } from "../../motion-timing.js";
+import { holdExits } from "../../testing/held-exits.js";
 import { Announcer } from "../announcer/announcer.js";
 import { DIALOG_ROLE, Dialog, type DialogHandle } from "./dialog.js";
 
@@ -14,9 +16,10 @@ import { DIALOG_ROLE, Dialog, type DialogHandle } from "./dialog.js";
  * the button; a press dragged out of the card puts nothing away; an input
  * method's keys stay the method's; no key or press inside reaches the window
  * behind; a busy dialog holds focus on its card until it is done, and
- * nudges its card when asked away meanwhile; and one
+ * nudges its card when asked away meanwhile; one
  * given a title and actions is named by the title, its answers after what
- * it holds.
+ * it holds; and one its owner closes through `open` fades out before it
+ * goes, or goes at once where motion is held.
  */
 
 declare global {
@@ -34,6 +37,9 @@ afterEach(() => {
     for (const root of roots.splice(0)) root.unmount();
   });
   document.body.replaceChildren();
+  document.body.style.removeProperty(MOTION_TOKEN.DURATION_FAST);
+  Reflect.deleteProperty(Element.prototype, "getAnimations");
+  vi.useRealTimers();
 });
 
 /** What the window behind the dialog heard, which should be nothing, and the keys the dialog heard. */
@@ -460,4 +466,58 @@ test("a dialog opened over another is the one Escape puts away, and the one bene
   expect(afterFirst).toEqual(["inner"]);
   expect(card(DIALOG_ROLE.ALERT_DIALOG)).toBeNull();
   expect(dismissed).toEqual(["inner", "outer"]);
+});
+
+/** A window holding the button that opens a dialog through `open`, whose Done closes it the same way. */
+function OpenOwner(): React.JSX.Element {
+  const [open, setOpen] = useState(false);
+  return createElement(
+    "div",
+    null,
+    createElement("button", { type: "button", onClick: () => setOpen(true) }, "Rename"),
+    createElement(Dialog, {
+      open,
+      title: "Rename plan",
+      onDismiss: () => setOpen(false),
+      children: createElement("button", { type: "button", onClick: () => setOpen(false) }, "Done"),
+    }),
+  );
+}
+
+/** The owner drawn, its dialog opened from its button, and then closed by Done. */
+function closedThroughOpen(): HTMLButtonElement {
+  draw(createElement(OpenOwner));
+  const opener = button("Rename");
+  opener.focus();
+  act(() => opener.click());
+  expect(card()).not.toBeNull();
+  act(() => button("Done").click());
+  return opener;
+}
+
+test("a dialog its owner closes through open stays drawn in its ending state, focus back on its opener, until its fade has run, then goes", async () => {
+  vi.useFakeTimers({ toFake: ["requestAnimationFrame", "cancelAnimationFrame"] });
+  const exits = holdExits();
+  const opener = closedThroughOpen();
+  const leaving = card();
+  const endingAsClosed = leaving?.hasAttribute("data-ending-style");
+  const focusAsClosed = holds(opener);
+  act(() => vi.advanceTimersToNextFrame());
+  const standsAFrameOn = card() !== null;
+  await act(async () => exits.finish());
+
+  expect(leaving).not.toBeNull();
+  expect(endingAsClosed).toBe(true);
+  expect(focusAsClosed).toBe(true);
+  expect(standsAFrameOn).toBe(true);
+  expect(card()).toBeNull();
+});
+
+test("a dialog closed through open while motion is held goes at once", () => {
+  document.body.style.setProperty(MOTION_TOKEN.DURATION_FAST, "0s");
+  holdExits();
+  const opener = closedThroughOpen();
+
+  expect(card()).toBeNull();
+  expect(holds(opener)).toBe(true);
 });

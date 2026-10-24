@@ -4077,6 +4077,24 @@ test("Close on a pull request in the merge queue asks first with the queue's war
   );
 });
 
+test("Close on a queued pull request draws its act in the accent, since it reaches the pull requests behind it and reopening undoes it", async () => {
+  const tab = await draw(
+    merging(MERGE_STATE.CLEAN, {
+      queue: true,
+      queued: { position: 2 },
+      autoMerge: { method: null },
+    }),
+  );
+  await pressAction(tab, "Close pull request");
+
+  const act = [
+    ...document.querySelectorAll<HTMLButtonElement>(
+      '[role="dialog"] button, [role="alertdialog"] button',
+    ),
+  ].find((each) => each.textContent === "Close pull request");
+  assert.equal(act?.getAttribute("data-variant"), "primary");
+});
+
 test("an open pull request GitHub holds in its merge queue says Queued and its place in the pill, in the working tone rather than the needs-you one, its menu offering Close and never Convert to draft; the merge control draws no chip, only Remove from queue", async () => {
   const tab = await draw(
     merging(MERGE_STATE.CLEAN, {
