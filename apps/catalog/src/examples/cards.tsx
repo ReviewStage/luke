@@ -44,7 +44,7 @@ function Cards(): React.JSX.Element {
         <div className="catalog-column">
           <Card>
             <Stack gap={GAP.FIELD}>
-              <Text as={TEXT_ELEMENT.H3} variant={TEXT_VARIANT.LABEL} tone={TEXT_TONE.MUTED}>
+              <Text as={TEXT_ELEMENT.H3} variant={TEXT_VARIANT.GROUP}>
                 Calls per day
               </Text>
               <Text tone={TEXT_TONE.MUTED}>No calls in this window.</Text>
@@ -56,12 +56,8 @@ function Cards(): React.JSX.Element {
         <div className="catalog-column">
           <Card look={CARD_LOOK.RAISED} padding={CARD_PADDING.FLUSH}>
             <CardHead>
-              <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.CAPTION}>
-                Decide
-              </Text>
-              <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.CAPTION}>
-                Answered
-              </Text>
+              <span>Decide</span>
+              <span>Answered</span>
             </CardHead>
           </Card>
         </div>
