@@ -13,6 +13,7 @@ import {
   type InstalledSkillScope,
 } from "@luke/features/installed-skill-wire";
 import { parseSkillPaste, SKILL_PASTE_KIND } from "@luke/features/skill-paste";
+import { TASK_SKILL_BOUNDS } from "@luke/features/task-wire";
 import { countWords, TERM } from "@luke/features/words";
 import type { Workspace } from "@luke/features/workspace-wire";
 import { ACT_KIND } from "@luke/host/acts";
@@ -605,11 +606,17 @@ function TextSkill({
         <FormField
           label={SKILLS_LINE.WHEN}
           description={declares.description ? SKILLS_LINE.DECLARED : undefined}
+          count={
+            declares.description
+              ? undefined
+              : { length: fill.description.length, limit: TASK_SKILL_BOUNDS.MAX_DESCRIPTION_CHARS }
+          }
         >
           {(field) => (
             <TextArea
               field={field}
               value={fill.description}
+              maxLength={TASK_SKILL_BOUNDS.MAX_DESCRIPTION_CHARS}
               rows={2}
               grow
               readOnly={declares.description}
