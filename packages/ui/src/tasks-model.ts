@@ -302,7 +302,7 @@ const START_FAILED_NOTE = "Luke's service did not answer. Try again.";
 const REPOSITORY_FAILURE_NOTES = {
   [TASK_CALL_FAILURE.UNANSWERED]: START_FAILED_NOTE,
   [TASK_CALL_FAILURE.REPOSITORY_NOT_REACHABLE]:
-    "Luke can't see that repository on GitHub. Choose which repositories Luke can see, then try again.",
+    "Luke cannot see that repository on GitHub. Choose which repositories Luke can see, then try again.",
 } as const satisfies Record<RepositoryCallFailure, string>;
 
 /** The sentence the page shows for a start or a repository change the service refused. */

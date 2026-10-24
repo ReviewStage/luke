@@ -637,11 +637,11 @@ test("Escape in the repository menu closes the menu and leaves the dialog standi
 });
 
 test("a refusal keeps the card and the words, says why under it, and Retry starts again", async () => {
-  const card = await mount("Luke can't reach acme/web.");
+  const card = await mount("Luke cannot reach acme/web.");
   card.type("Dark mode toggle");
   await card.key("Enter");
   assert.ok(card.dialog());
-  assert.match(card.note() ?? "", /Luke can't reach acme\/web\./u);
+  assert.match(card.note() ?? "", /Luke cannot reach acme\/web\./u);
   assert.equal(card.field().textContent, "Dark mode toggle");
   act(() => card.button("Retry").click());
   await settle();
@@ -810,7 +810,7 @@ test("a member of a workspace whose GitHub reaches no repository is told so and 
   await settle();
 
   assert.deepEqual(menuNotes(), [
-    "Luke can't see any repository yet.",
+    "Luke cannot see any repository yet.",
     "Ask Dean or Charles to add a repository to Luke's GitHub App.",
   ]);
   assert.equal(
@@ -833,7 +833,7 @@ test("an owner of a workspace whose GitHub reaches no repository is offered Open
     assert.fail("the menu offers to open Settings");
   act(() => open.click());
 
-  assert.deepEqual(notes, ["Luke can't see any repository yet."]);
+  assert.deepEqual(notes, ["Luke cannot see any repository yet."]);
   assert.deepEqual(dialog.links, [
     {
       page: SETTINGS_VIEW.WORKSPACE,
@@ -1506,7 +1506,7 @@ test("a repository whose installation grants Luke no issues says so in the GitHu
   const regranted = issueRows().rows[0]?.split("#")[0];
 
   assert.deepEqual(listed, [
-    "Luke can't read acme/ledger's issues yetGrant access",
+    "Luke cannot read acme/ledger's issues yetGrant access",
     "Restack the deploy queueENG-1 · Todo",
     "Add support for stacked PRsENG-2 · In Progress",
     "Rotate the deploy keyOPS-7",

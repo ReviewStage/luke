@@ -346,7 +346,7 @@ export function TaskIssueLinks({
       confirm={unlinking}
       question={{
         title: `Unlink ${doomed?.key ?? ""}?`,
-        body: "Its provider can't be reached, so it can't be linked again until it can.",
+        body: "Its provider cannot be reached, so it cannot be linked again until it can.",
         verb: LINKS_WORDS.UNLINK,
         running: "Unlinking",
         loss: CONFIRM_LOSS.IRREVERSIBLE,
