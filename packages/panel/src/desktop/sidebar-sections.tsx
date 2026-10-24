@@ -10,7 +10,10 @@ import {
   BUTTON_SIZE,
   ConfirmDialog,
   DIALOG_TONE,
+  Dialog,
+  DialogActions,
   type DialogConfirm,
+  ErrorLine,
   GAP,
   GROUP_HEADING,
   GroupHeader,
@@ -50,6 +53,7 @@ import { ActionMenu, type MenuAction, type MenuEntry } from "./action-menu.js";
 import { type RowPlace, RowPlaced, withRowMoves } from "./row-moves.js";
 import { SectionIconPicker, sectionGlyph } from "./section-icon-picker.js";
 import { foldedCount, sidebarFold, TASK_NOUN } from "./sidebar-fold.js";
+import { useFormDialog } from "./use-form-dialog.js";
 import { useRowDrag } from "./use-row-drag.js";
 
 /**
@@ -164,42 +168,55 @@ export function useSectionDialogs(tasks: TasksControl, surfaceOpen: boolean): Se
     confirm.ask();
   };
   const editing = ask?.kind === TASK_SECTION_WRITE.EDIT;
+  const form = useFormDialog(confirm, title.trim() !== "");
   const dialog = (
     <>
-      <ConfirmDialog
-        confirm={confirm}
-        field={field}
-        question={{
-          title: editing ? "Edit section" : "New section",
-          verb: editing ? "Save" : "Create section",
-          running: editing ? "Saving" : "Creating section",
-          tone: DIALOG_TONE.PRIMARY,
-        }}
-      >
-        <TextField
-          ref={field}
-          label="Section title"
-          spellCheck={false}
-          placeholder="Section title"
-          maxLength={TASK_SECTION_BOUNDS.MAX_TITLE_CHARS}
-          value={title}
-          disabled={confirm.busy}
-          onChange={(next) => {
-            setTitle(next);
-            // Note that a refused answer has settled, so the refusal alone holds
-            // the card up: the question is asked again rather than cleared, or
-            // the first key typed after it would close the card.
-            if (confirm.rejection !== undefined) confirm.ask();
-          }}
-        />
-        {/* Keyed by what was asked, so each opening starts its tab, color, and search afresh from the icon it opened with. */}
-        <SectionIconPicker
-          key={ask?.kind === TASK_SECTION_WRITE.EDIT ? ask.section.id : TASK_SECTION_WRITE.CREATE}
-          icon={icon}
-          disabled={confirm.busy}
-          onIcon={setIcon}
-        />
-      </ConfirmDialog>
+      {form.open ? (
+        <Dialog
+          title={editing ? "Edit section" : "New section"}
+          busy={form.settling}
+          refused={form.refusal !== undefined}
+          initialFocus={field}
+          onDismiss={form.dismiss}
+          actions={
+            <DialogActions
+              onCancel={form.dismiss}
+              act={{
+                verb: editing ? "Save" : "Create section",
+                tone: DIALOG_TONE.PRIMARY,
+                running: editing ? "Saving" : "Creating section",
+                ...form.act,
+              }}
+            />
+          }
+        >
+          <TextField
+            ref={field}
+            label="Section title"
+            spellCheck={false}
+            placeholder="Section title"
+            maxLength={TASK_SECTION_BOUNDS.MAX_TITLE_CHARS}
+            value={title}
+            disabled={form.settling}
+            onEnter={form.submit}
+            onChange={(next) => {
+              setTitle(next);
+              // Note that a refused answer has settled, so the refusal alone holds
+              // the card up: the question is asked again rather than cleared, or
+              // the first key typed after it would close the card.
+              if (confirm.rejection !== undefined) confirm.ask();
+            }}
+          />
+          {/* Keyed by what was asked, so each opening starts its tab, color, and search afresh from the icon it opened with. */}
+          <SectionIconPicker
+            key={ask?.kind === TASK_SECTION_WRITE.EDIT ? ask.section.id : TASK_SECTION_WRITE.CREATE}
+            icon={icon}
+            disabled={form.settling}
+            onIcon={setIcon}
+          />
+          <ErrorLine>{form.refusal}</ErrorLine>
+        </Dialog>
+      ) : null}
       <ConfirmDialog
         confirm={deletion}
         question={{
