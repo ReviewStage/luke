@@ -46,7 +46,7 @@ function doorsAsked(withPanel: boolean) {
   const asked: string[] = [];
   const doors: PublishedDoors = {
     openGitHub: (url) => asked.push(`github ${url}`),
-    copy: (words) => asked.push(`copy ${words}`),
+    copy: (words, label) => asked.push(`copy ${words} (${label})`),
     openPullRequest: withPanel ? () => asked.push("tab") : undefined,
   };
   return { doors, asked };
@@ -99,7 +99,18 @@ test("the pull request's row opens its Pull request tab where a panel takes it, 
   act(() => menuItem("Open on GitHub").click());
   rightClick(row);
   act(() => menuItem("Copy branch name").click());
-  assert.deepEqual(asked, ["tab", `github ${URL}`, "copy luke/expiry-job"]);
+  assert.deepEqual(asked, ["tab", `github ${URL}`, "copy luke/expiry-job (Branch name copied)"]);
+});
+
+test("the pull request's right-click offers Copy link, copying its address where a panel takes the tab and where none does", () => {
+  for (const withPanel of [true, false]) {
+    const { row, asked } = drawRow(withPanel);
+    rightClick(row);
+    act(() => menuItem("Copy link").click());
+    assert.deepEqual(asked, [`copy ${URL} (Link copied)`]);
+    act(() => root?.unmount());
+    document.body.innerHTML = "";
+  }
 });
 
 test("where no panel takes the tab, the pull request's row opens it on GitHub", () => {
