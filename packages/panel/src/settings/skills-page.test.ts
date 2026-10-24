@@ -547,7 +547,7 @@ test("View reads the skill and draws its text as written and every file with its
     [...shown.querySelectorAll("dt, dd")].map((each) => each.textContent),
     ["SKILL.md", "48 B", "examples/good.md", "2.0 kB"],
   );
-  act(() => button("Close", shown).click());
+  act(() => button("Done", shown).click());
   assert.equal(document.querySelector('[role="dialog"]'), null);
 });
 

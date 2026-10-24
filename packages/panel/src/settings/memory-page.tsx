@@ -6,6 +6,7 @@ import { ACT_KIND } from "@luke/host/acts";
 import { SETTINGS_SEARCH_ROW } from "@luke/settings/settings-anchors";
 import {
   Badge,
+  CONFIRM_LOSS,
   ConfirmDialog,
   ErrorState,
   SETTINGS_SKELETON_CONTROL,
@@ -139,6 +140,7 @@ function MemoryRow({
             : "No agent will recall it in any later task in this workspace, for anyone.",
           verb: "Forget",
           running: "Forgetting…",
+          loss: CONFIRM_LOSS.IRREVERSIBLE,
         }}
       />
     </div>
