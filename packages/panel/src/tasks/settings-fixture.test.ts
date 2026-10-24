@@ -1,5 +1,11 @@
 import assert from "node:assert/strict";
-import { ADMIN_READ } from "@luke/features/admin-wire";
+import type { AdminMetrics } from "@luke/features/admin-answer-wire";
+import {
+  ADMIN_METRICS_SCOPE,
+  ADMIN_METRICS_SCOPE_PARAM,
+  ADMIN_METRICS_WINDOW_PARAM,
+  ADMIN_READ,
+} from "@luke/features/admin-wire";
 import { AUTOMATION_FOLLOW } from "@luke/features/automation-view";
 import { AUTOMATION_RUN_STATUS } from "@luke/features/automation-wire";
 import { INTEGRATION_PROVIDER, INTEGRATION_STATUS } from "@luke/features/integration-wire";
@@ -61,6 +67,7 @@ const READS: readonly Read[] = [
     ...ACME,
     skillId: "5d2b7c1e-4a3f-4e8b-9c6d-000000000001",
   }),
+  read(ACT_KIND.INSTALLED_SKILLS_READ, { skillId: "5d2b7c1e-4a3f-4e8b-9c6d-000000000001" }),
   read(ACT_KIND.MEMORIES_READ, ACME),
   read(ACT_KIND.ADMIN_READ, { procedure: ADMIN_READ.METRICS, query: {} }),
 ];
@@ -152,6 +159,42 @@ test("an Automations profile follows three automations in the listed workspace, 
       (run) => run.status === AUTOMATION_RUN_STATUS.FAILED,
     ),
   );
+});
+
+test("every skill the Skills profile lists reads whole when viewed", () => {
+  const listed = answered(RUN_PROFILE.SETTINGS_SKILLS, ACT_KIND.INSTALLED_SKILLS_LIST, ACME);
+  assert.ok("skills" in listed);
+  const unread = listed.skills.filter((skill) => {
+    const content = answered(RUN_PROFILE.SETTINGS_SKILLS, ACT_KIND.INSTALLED_SKILLS_READ, {
+      skillId: skill.id,
+    });
+    return !("skillFile" in content) || !content.skillFile.includes(skill.name);
+  });
+
+  assert.ok(listed.skills.length > 0);
+  assert.deepEqual(unread, []);
+});
+
+test("Admin's Overview answers the window and the scope its controls ask for", () => {
+  const metrics = (query: Record<string, string>): AdminMetrics => {
+    const read = answered(RUN_PROFILE.ADMIN, ACT_KIND.ADMIN_READ, {
+      procedure: ADMIN_READ.METRICS,
+      query,
+    });
+    assert.ok("answer" in read);
+    // SAFETY: a metrics read answers the Overview's metrics.
+    return read.answer as AdminMetrics;
+  };
+  const week = metrics({ [ADMIN_METRICS_WINDOW_PARAM]: "7" });
+  const everyone = metrics({ [ADMIN_METRICS_SCOPE_PARAM]: ADMIN_METRICS_SCOPE.ALL });
+  const byDefault = metrics({});
+
+  assert.equal(week.windowDays, 7);
+  assert.equal(week.overview.activity.daily.length, 7);
+  assert.equal(byDefault.windowDays, 30);
+  assert.ok(byDefault.overview.topAccounts.every((account) => !account.admin));
+  assert.ok(everyone.overview.topAccounts.some((account) => account.admin));
+  assert.ok(everyone.users.total > byDefault.users.total);
 });
 
 test("a signed-in profile lays the synthetic account, an admin, over main's signed-out document; any other leaves it as it is", () => {

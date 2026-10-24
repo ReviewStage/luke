@@ -21,9 +21,19 @@ import {
   FUNNEL_STEP,
   REACH_FEATURE,
 } from "@luke/features/admin-overview-vocabulary";
-import { ADMIN_READ, ADMIN_UNANSWERED } from "@luke/features/admin-wire";
+import {
+  ADMIN_METRICS_SCOPE,
+  ADMIN_METRICS_SCOPE_PARAM,
+  ADMIN_METRICS_WINDOW_DEFAULT,
+  ADMIN_METRICS_WINDOW_PARAM,
+  ADMIN_READ,
+  ADMIN_UNANSWERED,
+  adminMetricsScope,
+  adminMetricsWindow,
+} from "@luke/features/admin-wire";
 import { CHAPTERS_MODEL } from "@luke/features/chapters-model-choice";
 import { GITHUB_TOKEN_STATUS } from "@luke/features/github-token-wire";
+import { INSTALLED_SKILL_CALL_FAILURE } from "@luke/features/installed-skill-view";
 import { INSTALLED_SKILL_SCOPE, INSTALLED_SKILL_SOURCE } from "@luke/features/installed-skill-wire";
 import {
   INTEGRATION_PROVIDER,
@@ -265,6 +275,24 @@ function skills(workspaceId: string) {
   ];
 }
 
+/** One staged skill read whole: its `SKILL.md`, its frontmatter naming it, and its one file; none for an id no staged skill has. */
+function skillContent(id: string) {
+  const skill = skills("").find((each) => each.id === id);
+  if (skill === undefined) return undefined;
+  const skillFile = [
+    "---",
+    `name: ${skill.name}`,
+    `description: ${skill.description}`,
+    "---",
+    "",
+    `# ${skill.name}`,
+    "",
+    skill.description,
+    "",
+  ].join("\n");
+  return { id, skillFile, files: [{ path: "SKILL.md", bytes: skillFile.length }] };
+}
+
 /* ----- Settings › Memory ----- */
 
 function memory(
@@ -359,9 +387,22 @@ function topAccount(id: string, name: string, activeDays: number, admin = false)
   };
 }
 
-/** The Overview's numbers over the last 30 days. */
-function adminMetrics(): AdminMetrics {
-  const days = trailingDays(30);
+/** How many of the fixture's accounts are admins, whom the Overview leaves out unless asked for everyone. */
+const ADMIN_ACCOUNTS = 3;
+
+/**
+ * The Overview's numbers over the window the read asks for, the last 30 days
+ * where it names none, and over every account or every account but the
+ * admins, as its Hide admins asks: a window's counts scaled to its length,
+ * and the admins left out of the totals and the most active accounts.
+ */
+function adminMetrics(query: Readonly<Record<string, string>>): AdminMetrics {
+  const windowDays =
+    adminMetricsWindow(query[ADMIN_METRICS_WINDOW_PARAM]) ?? ADMIN_METRICS_WINDOW_DEFAULT;
+  const adminsHidden =
+    adminMetricsScope(query[ADMIN_METRICS_SCOPE_PARAM]) !== ADMIN_METRICS_SCOPE.ALL;
+  const scaled = (monthly: number) => Math.round((monthly * windowDays) / 30);
+  const days = trailingDays(windowDays);
   const retention = { weeks: 6, cohorts: cohorts() };
   const funnel = [
     [FUNNEL_STEP.SIGNED_UP, 64],
@@ -372,6 +413,7 @@ function adminMetrics(): AdminMetrics {
     [FUNNEL_STEP.OPENED_PR, 19],
     [FUNNEL_STEP.MERGED_PR, 14],
   ] as const;
+  const signedUp = scaled(64);
   const reach = [
     [REACH_FEATURE.TASKS, 38],
     [REACH_FEATURE.CODING_AGENTS, 33],
@@ -381,13 +423,19 @@ function adminMetrics(): AdminMetrics {
     [REACH_FEATURE.AUTOMATIONS, 9],
     [REACH_FEATURE.CHAT, 12],
   ] as const;
-  const activeDevelopers = 42;
+  const activeDevelopers = adminsHidden ? 42 : 42 + ADMIN_ACCOUNTS;
+  const topAccounts = [
+    topAccount("user-maya", "Maya Okafor", 27),
+    topAccount(ACCOUNT_ID, "Ada Lovelace", 24, true),
+    topAccount("user-theo", "Theo Lindqvist", 19),
+    topAccount("user-priya", "Priya Raman", 12),
+  ];
   return {
     generatedAt: NOW,
-    windowDays: days.length,
+    windowDays,
     users: {
-      total: 312,
-      newInWindow: 64,
+      total: adminsHidden ? 312 : 312 + ADMIN_ACCOUNTS,
+      newInWindow: signedUp,
       signupTrend: { days: 7, recent: 18, prior: 14 },
       dailySignups: days.map((day, index) => ({ day, count: wave(index, 1, 0.08) })),
     },
@@ -411,7 +459,10 @@ function adminMetrics(): AdminMetrics {
         })),
         trend: { days: 7, recent: 1840, prior: 1622 },
       },
-      funnel: funnel.map(([step, accounts]) => ({ step, accounts, share: accounts / 64 })),
+      funnel: funnel.map(([step, monthly]) => {
+        const accounts = scaled(monthly);
+        return { step, accounts, share: signedUp === 0 ? null : accounts / signedUp };
+      }),
       reach: {
         activeDevelopers,
         features: reach.map(([feature, developers]) => ({
@@ -420,12 +471,7 @@ function adminMetrics(): AdminMetrics {
           share: developers / activeDevelopers,
         })),
       },
-      topAccounts: [
-        topAccount("user-maya", "Maya Okafor", 27),
-        topAccount(ACCOUNT_ID, "Ada Lovelace", 24, true),
-        topAccount("user-theo", "Theo Lindqvist", 19),
-        topAccount("user-priya", "Priya Raman", 12),
-      ],
+      topAccounts: adminsHidden ? topAccounts.filter((account) => !account.admin) : topAccounts,
       retention,
     },
     retention,
@@ -514,13 +560,17 @@ const ANSWERS: { readonly [Kind in PortActKind]?: StagedAnswer<Kind> } = {
       workspaceId === WORKSPACE.ACME ? [{ installationId: "sentry-acme", account: "acme" }] : [],
   }),
   [ACT_KIND.INSTALLED_SKILLS_LIST]: ({ workspaceId }) => ({ skills: skills(workspaceId) }),
+  [ACT_KIND.INSTALLED_SKILLS_READ]: ({ skillId: id }) =>
+    skillContent(id) ?? { failure: INSTALLED_SKILL_CALL_FAILURE.NOT_FOUND },
   [ACT_KIND.INSTALLED_SKILLS_CHECK_UPDATE]: ({ skillId: id }) => ({
     available: id === skillId(1),
     latestSha: "9a8b7c6d5e4f30211a2b3c4d5e6f708192a3b4c5",
   }),
   [ACT_KIND.MEMORIES_READ]: () => ({ memories: MEMORIES }),
-  [ACT_KIND.ADMIN_READ]: ({ procedure }) =>
-    procedure === ADMIN_READ.METRICS ? { answer: adminMetrics() } : { refused: ADMIN_UNANSWERED },
+  [ACT_KIND.ADMIN_READ]: ({ procedure, query }) =>
+    procedure === ADMIN_READ.METRICS
+      ? { answer: adminMetrics(query) }
+      : { refused: ADMIN_UNANSWERED },
 };
 
 /**
