@@ -137,7 +137,7 @@ function Searched(): React.JSX.Element {
         label="Tasks"
         heading={GROUP_HEADING.NONE}
         actionsShown={GROUP_ACTIONS.AT_REST}
-        actions={<IconButton label="View options" icon={<EllipsisIcon />} onClick={ignore} />}
+        actions={<MoreButton thing="Tasks" onClick={ignore} />}
         search={{ label: "Search tasks", value: query, onChange: setQuery }}
       />
     </div>
