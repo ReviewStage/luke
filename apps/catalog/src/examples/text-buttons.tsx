@@ -12,9 +12,9 @@ import { CatalogSection } from "../section";
 
 /**
  * text-buttons.tsx -- every TextButton tone among the words it stands in: a
- * quiet name and count, a link-look act in a caption, an accent toggle that
- * shows its replies, and long words cut short in a narrow column, on one
- * line or, as a card's name, on two.
+ * quiet name and count, an accent toggle that shows its replies, and long
+ * words cut short in a narrow column, on one line or, as a card's name, on
+ * two.
  */
 
 /** Does nothing, for a press the catalog only draws. */
@@ -43,14 +43,6 @@ function TextButtons(): React.JSX.Element {
           Edited by Ada Lovelace,{" "}
           <TextButton onClick={pressed} aria-label="Open the version history">
             2 hours ago
-          </TextButton>
-        </Text>
-      </CatalogSection>
-      <CatalogSection id="text-buttons-link" title="Link, an act nothing else says is pressable">
-        <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
-          Draws the video tile beside the call.{" "}
-          <TextButton tone={TEXT_BUTTON_TONE.LINK} onClick={pressed}>
-            Send feedback
           </TextButton>
         </Text>
       </CatalogSection>

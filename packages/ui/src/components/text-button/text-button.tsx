@@ -3,7 +3,6 @@ import type { ButtonHTMLAttributes, MouseEvent, ReactNode } from "react";
 import { cn } from "../../cn.js";
 import { PRESS_PULSE, pulseOnPress } from "../../press-pulse.js";
 import { useLinkAddress } from "../menu/link-address.js";
-import { TEXT_LINK_LOOK } from "../text-link/text-link-look.js";
 
 /**
  * text-button.tsx -- a press drawn as words among words: a link's look on a button, for an act that stays in the window.
@@ -16,13 +15,11 @@ import { TEXT_LINK_LOOK } from "../text-link/text-link-look.js";
  * - `quiet` in the words' own ink, underlined only under the pointer or the
  *   keyboard, for words that already read as the act (a name, an "Edited"
  *   line, a count);
- * - `link` drawn as an underlined `TextLink` is (`text-link.css`'s one
- *   underline), the words' own ink over a faint underline that goes full
- *   strength under the pointer or the keyboard, for an act nothing else
- *   around it says is pressable ("Send feedback"); a press that opens a page
- *   is a `TextLink` itself, never this;
  * - `accent` in the accent's ink, set as a label, for the one act a line
  *   offers ("3 replies").
+ *
+ * There is no underlined tone at rest: an underline means a press leaves the
+ * app, so it is a `TextLink` (an anchor), never this.
  *
  * It keeps to one line unless asked for two (`lines`), as a card's name
  * wraps: words longer than that end in an ellipsis. Words too short to want
@@ -38,7 +35,6 @@ import { TEXT_LINK_LOOK } from "../text-link/text-link-look.js";
 /** How a text button reads at rest. */
 export const TEXT_BUTTON_TONE = {
   QUIET: "quiet",
-  LINK: "link",
   ACCENT: "accent",
 } as const;
 
@@ -95,8 +91,7 @@ const UNDERLINE_ON_HOVER = "no-underline decoration-1 underline-offset-[0.24em]"
 
 /**
  * How each tone reads: quiet, in the line's ink until the pointer or the
- * keyboard underlines it in the full ink; a link, underlined faintly and
- * fully under the pointer or the keyboard; the accent, in the accent's ink
+ * keyboard underlines it in the full ink; the accent, in the accent's ink
  * and a label's weight. Note that a state here is a selector of its own
  * rather than Tailwind's `hover:`, which a touch screen never answers, and
  * that the accent's weight is keyed on its tone, which outweighs the box's
@@ -104,7 +99,6 @@ const UNDERLINE_ON_HOVER = "no-underline decoration-1 underline-offset-[0.24em]"
  */
 const TEXT_TONE = {
   quiet: `${UNDERLINE_ON_HOVER} [&:is(:hover,:focus-visible)]:text-foreground [&:is(:hover,:focus-visible)]:underline`,
-  link: "luke-text-link",
   accent: `${UNDERLINE_ON_HOVER} text-accent-ink data-[tone=accent]:font-label [&:is(:hover,:focus-visible)]:underline`,
 } as const satisfies Record<TextButtonTone, string>;
 
@@ -145,7 +139,6 @@ export function TextButton({
       type="button"
       className={cn(TEXT, TEXT_LINES[lines], TEXT_TONE[tone])}
       data-tone={tone}
-      data-look={tone === TEXT_BUTTON_TONE.LINK ? TEXT_LINK_LOOK.UNDERLINED : undefined}
       data-lines={lines}
       ref={linkAddress}
       id={id}

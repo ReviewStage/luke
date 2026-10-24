@@ -50,7 +50,6 @@ import {
   STATUS_TONE,
   Stack,
   type StatusTone,
-  TEXT_BUTTON_TONE,
   TEXT_ELEMENT,
   TEXT_TONE,
   TEXT_VARIANT,
@@ -591,9 +590,7 @@ function KeyChangeItem({
       {first === undefined ? null : onReveal === undefined ? (
         <span className="chapter-key-change-ref">{lineRefLabel(first)}</span>
       ) : (
-        <TextButton tone={TEXT_BUTTON_TONE.LINK} onClick={() => onReveal(first)}>
-          {lineRefLabel(first)}
-        </TextButton>
+        <TextButton onClick={() => onReveal(first)}>{lineRefLabel(first)}</TextButton>
       )}
     </Card>
   );
