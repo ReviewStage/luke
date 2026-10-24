@@ -14,12 +14,14 @@ import {
   CALL_KIND,
   CALL_WORDS,
   type CallKind,
+  callLine,
   callPlace,
+  isCommandKind,
   TURN_ROW,
   type TurnRow,
 } from "@luke/features/turn-rows";
 import { MESSAGE_ROLE } from "@luke/wire";
-import { TOOL_BLOCK, type ToolBlock } from "../ai-elements/tool.js";
+import { blockSays, TOOL_BLOCK, type ToolBlock } from "../ai-elements/tool.js";
 import {
   AGENT_PART,
   type AgentPart,
@@ -228,6 +230,42 @@ function agentBlock(part: AgentPart): CopiedBlock[] {
       error,
     },
   ];
+}
+
+/**
+ * A block's words as its row draws them, open: words and a thought as they
+ * are; a call's line, its verb or a described command's purpose, its
+ * subject where the body does not say it whole (`blockSays`), and where it
+ * ran, then its input, and its error or else its answer.
+ */
+function drawnWords(block: CopiedBlock): readonly string[] {
+  if (block.kind !== COPIED_BLOCK.CALL) return [block.text];
+  const { call, subject, description, server, input, output, error } = block;
+  const line = callLine(call, subject, description);
+  const said =
+    input !== undefined &&
+    ((isCommandKind(call) && input.kind === TOOL_BLOCK.COMMAND) || blockSays(input, subject));
+  const place = callPlace(call, server);
+  return [
+    line.verb,
+    ...(said || line.subject === undefined ? [] : [line.subject]),
+    ...(place === undefined ? [] : [place]),
+    ...(input === undefined ? [] : [input.text]),
+    ...(error !== undefined ? [error] : output === undefined ? [] : [output.text]),
+  ];
+}
+
+/**
+ * The words a part's row draws, its line and its body, as a find counts them
+ * before the row is drawn: read as both copies read it (`agentBlock`), and a
+ * part its page carried cut by its two ends, which stand in the whole the
+ * fold reads as a find opens it.
+ */
+export function partWords(part: AgentPart): string {
+  const cut =
+    part.kind === AGENT_PART.TOOL || part.kind === AGENT_PART.REASONING ? part.cut : undefined;
+  const ends = cut === undefined ? [] : [cut.head, cut.tail];
+  return [...agentBlock(part).flatMap(drawnWords), ...ends].join("\n");
 }
 
 /**

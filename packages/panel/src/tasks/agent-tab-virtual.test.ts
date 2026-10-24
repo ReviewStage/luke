@@ -260,6 +260,52 @@ test("⌘F finds words in a row the log has not drawn, scrolls the log to it, an
   assert.equal(litRow?.getAttribute("data-row-key"), "m-7");
 });
 
+test("⌘F counts a match in a closed call's answer far up the log, steps to it, and opens the fold on it", async () => {
+  const held = messages(0, 400);
+  held[7] = {
+    id: "m-7",
+    role: MESSAGE_ROLE.ASSISTANT,
+    parts: [
+      { type: "step-start" },
+      {
+        type: "tool-run_command",
+        toolCallId: "m-7-grep",
+        state: "output-available",
+        input: { command: "rg TTL" },
+        output: { exitCode: 0, stdout: "src/lantern.ts", stderr: "" },
+      },
+      { type: "step-start" },
+      { type: "text", text: "Found where it is set." },
+    ],
+    startedAt: 7_000,
+    finishedAt: 7_500,
+  };
+  const { follower } = following(page(held));
+  const { container, box } = await drawTab(
+    codingAgentsControl({ agents: [AGENT], transcripts: follower }),
+    (tab) => createElement(FindScope, { active: true, subject: { agent: AGENT_ID } }, tab),
+  );
+  layOut(box);
+  assert.ok(!drawnRows(container).includes("m-7"), "the seventh reply's row is not drawn");
+
+  act(() => {
+    runAppCommand(APP_COMMAND.FIND);
+  });
+  typeFind("lantern");
+  await act(settled);
+
+  assert.equal(findTally(), "1 of 1");
+  assert.ok(drawnRows(container).includes("m-7"), "the seventh reply's row is drawn");
+  const lit = [...(CSS.highlights.get("find-current") ?? [])] as Range[];
+  assert.equal(lit.length, 1, "one match is lit as the one the find is at");
+  const litRange = lit[0] ?? assert.fail("the lit match");
+  assert.equal(litRange.toString(), "lantern");
+  const output =
+    litRange.startContainer.parentElement?.closest("[data-tool-output]") ??
+    assert.fail("the match is in the call's answer");
+  assert.equal(output.closest("[hidden]"), null, "the fold around the answer stands open");
+});
+
 test("⌘F finds a word on a long fence's 55th line, past its cut, and opens the card on that line", async () => {
   const fence = Array.from({ length: 60 }, (_, at) =>
     at === 54 ? "const lantern = 55;" : `const line${at + 1} = ${at + 1};`,
