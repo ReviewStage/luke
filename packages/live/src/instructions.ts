@@ -120,11 +120,11 @@ const CALL_ENDING_POLICY = `Ending policy: You cannot hang up the call yourself;
 
 const CALL_INSTRUCTIONS_HEAD = `${CALL_ROLE}
 Speak warmly and naturally, at an unhurried pace. Be clear and direct, not overly cheerful.
-If the user is frustrated, acknowledge it briefly and focus on the next helpful step.
+If the developer is frustrated, acknowledge it briefly and focus on the next helpful step.
 
 Backchannel policy: Use moderate backchannels. Acknowledge naturally without competing with the main response.
 
-Interruption policy: Stop speaking when the user interrupts. Listen to what they say.
+Interruption policy: Stop speaking when the developer interrupts. Listen to what they say.
 
 ${CALL_ENDING_POLICY}${CALL_CONVERSATION_POLICY}`;
 
