@@ -21,7 +21,13 @@ import type { PageLine } from "@luke/features/page-wire";
 import { planSections } from "@luke/features/plan-document";
 import { TASK_TREE_ENTRY, type TaskSummary } from "@luke/features/task-wire";
 import type { TaskCodeShowing } from "@luke/features/tasks-view";
-import { countWords, noMatchWords, readFailedWords, TERM } from "@luke/features/words";
+import {
+  countWords,
+  INTEGRATION_LABEL,
+  noMatchWords,
+  readFailedWords,
+  TERM,
+} from "@luke/features/words";
 import { namesTaskKey, taskKey } from "@luke/features/workspace-key";
 import type { Workspace, WorkspaceMember } from "@luke/features/workspace-wire";
 import { ACT_KIND } from "@luke/host/acts";
@@ -211,7 +217,7 @@ const MENTION_GROUP = {
   PEOPLE: "People",
   PULL_REQUESTS: "Pull requests",
   SKILLS: "Skills",
-  SERVERS: "MCP servers",
+  SERVERS: INTEGRATION_LABEL.many,
   CHANNELS: "Channels",
   FROM: "Mention from",
 } as const;
@@ -296,7 +302,7 @@ const PICK_DATE_KEY = "pick-date";
 const SKILL_DETAIL = "Skill";
 
 /** What a server's row says beside its name. */
-const SERVER_DETAIL = "MCP server";
+const SERVER_DETAIL = INTEGRATION_LABEL.one;
 
 /** What a tool's row says beside its name, which already names its server. */
 const TOOL_DETAIL = "Tool";

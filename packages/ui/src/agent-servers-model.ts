@@ -13,7 +13,7 @@ import {
   type IntegrationStatus,
   integrationAccountNames,
 } from "@luke/features/integration-wire";
-import { readFailedWords } from "@luke/features/words";
+import { INTEGRATION_LABEL, readFailedWords } from "@luke/features/words";
 import { matchIntegration } from "./integration-search.js";
 import { searchTokens } from "./search-tokens.js";
 
@@ -78,7 +78,7 @@ export const SERVER_ACTION = {
 } as const;
 
 /** What the popover and its button are called. */
-export const SERVERS_LABEL = "Integrations";
+export const SERVERS_LABEL = INTEGRATION_LABEL.many;
 
 /** One server's row. */
 export interface ServerRow {

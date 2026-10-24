@@ -79,6 +79,7 @@ import {
 } from "@luke/features/trigger-catalog";
 import {
   andList,
+  INTEGRATION_LABEL,
   IRREVERSIBLE_WORDS,
   noMatchWords,
   readFailedWords,
@@ -563,11 +564,11 @@ function ServersRow({
   if (!mine) {
     return (
       <SettingsRow
-        label="MCP servers"
+        label={INTEGRATION_LABEL.many}
         description={
           disabled.length === 0
-            ? "All of its creator's connected servers."
-            : `Its creator's connected servers, but ${andList(disabled.map(switchedOffName))} switched off.`
+            ? "All of its creator's connected integrations."
+            : `Its creator's connected integrations, but ${andList(disabled.map(switchedOffName))} switched off.`
         }
       >
         {() => null}
@@ -603,9 +604,9 @@ function UnreadServersRow({
   if (failed) {
     return (
       <SettingsRow
-        label="MCP servers"
+        label={INTEGRATION_LABEL.many}
         below={() => (
-          <ErrorState onRetry={onRetry}>Your connected servers could not be read.</ErrorState>
+          <ErrorState onRetry={onRetry}>Your connected integrations could not be read.</ErrorState>
         )}
       />
     );
@@ -616,9 +617,12 @@ function UnreadServersRow({
 /** The servers row while the connections are read: its name, and blocks where its words and its field chip will stand, claiming nothing. */
 function ServersRowSkeleton(): React.JSX.Element {
   return (
-    <SettingsRow label="MCP servers" description={<Skeleton width={SERVERS_DETAIL_SKELETON} />}>
+    <SettingsRow
+      label={INTEGRATION_LABEL.many}
+      description={<Skeleton width={SERVERS_DETAIL_SKELETON} />}
+    >
       {() => (
-        <SkeletonRegion label="Reading your connected servers…">
+        <SkeletonRegion label="Reading your connected integrations…">
           <SettingsControlSkeleton control={SETTINGS_SKELETON_CONTROL.SELECT} />
         </SkeletonRegion>
       )}
@@ -649,12 +653,12 @@ function OwnServersRow({
   const shown = on.slice(0, SERVERS_CHIP_MARKS);
   return (
     <SettingsRow
-      label="MCP servers"
+      label={INTEGRATION_LABEL.many}
       description={
         connected.length === 0
           ? "None connected yet."
           : off.length === 0
-            ? "Every connected server is on."
+            ? "Every connected integration is on."
             : `${namesSaid(off)} off.`
       }
     >
