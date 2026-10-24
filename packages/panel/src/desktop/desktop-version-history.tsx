@@ -283,8 +283,6 @@ function RevisionRow({
           description={<span className="version-row-summary">{summary}</span>}
           meta={<Time at={lastEdit.at} now={now} />}
           current={selected ? LIST_ROW_CURRENT.ITEM : undefined}
-          // Note that the view's own arrows choose the row they step to, so the list's are left out.
-          tabbable
           onPress={onSelect}
           contextMenu={offered ? showMenu : undefined}
           actionsAt={LIST_ROW_ACTIONS.HOVER}
@@ -375,8 +373,6 @@ function SectionRow({
         title={sectionName(section.heading)}
         meta={word}
         current={selected ? LIST_ROW_CURRENT.ITEM : undefined}
-        // Note that the view's own arrows choose the row they step to, so the list's are left out.
-        tabbable
         onPress={onSelect}
         contextMenu={source === undefined ? undefined : menu.contextMenu()}
       />
@@ -481,67 +477,72 @@ function EarlierRow({ onRead }: { onRead: () => Promise<boolean> }): React.JSX.E
   );
 }
 
-/** Whether a key press belongs to something that takes keys of its own: a field, a dialog over the window, or a menu open over a row. */
-function keysTaken(target: EventTarget | null): boolean {
-  if (!(target instanceof HTMLElement)) return false;
-  return (
-    target.isContentEditable ||
-    target.closest('input, textarea, select, dialog, [role="menu"]') !== null
-  );
-}
-
-/** What a list does with the arrow keys: up and down step through it, and right and left go into a row and back out, where the list offers them. */
-interface ArrowKeys {
-  /** Steps one row down or up; answers whether there was a row to step to. */
-  readonly step: (by: 1 | -1) => boolean;
-  /** Goes into the chosen row; answers whether it opens anything. */
-  readonly open?: () => boolean;
-  readonly back?: () => void;
+/** The key of the row among `rows` that is `element`, where it is one. */
+function keyOfRow<K>(rows: Map<K, HTMLElement>, element: EventTarget | null): K | undefined {
+  for (const [key, row] of rows) if (row === element) return key;
+  return undefined;
 }
 
 /**
- * The arrows, anywhere in the view but a field or a dialog, as the list on
- * show takes them: the versions, or the sections of the one opened. Note
- * that the handler reads the keys through a ref, so a list re-rendered on
- * every step does not take the listener down and up again with it.
+ * Chooses the row the focus stepped onto from another row of the same
+ * list, which is what its ↑↓ do (`List`'s roving keys). Note that a focus
+ * that comes into the list from outside chooses nothing, so Tab lands on a
+ * row without changing the version shown.
  */
-function useArrowKeys(keys: ArrowKeys): void {
-  const latest = useRef(keys);
-  latest.current = keys;
-  useEffect(() => {
-    const handleKey = (event: KeyboardEvent) => {
-      if (event.defaultPrevented || keysTaken(event.target)) return;
-      if (event.metaKey || event.ctrlKey || event.altKey || event.shiftKey) return;
-      const held = latest.current;
-      const step = event.key === "ArrowDown" ? 1 : event.key === "ArrowUp" ? -1 : undefined;
-      let handled = false;
-      if (step !== undefined) handled = held.step(step);
-      else if (event.key === "ArrowRight") handled = held.open?.() ?? false;
-      else if (event.key === "ArrowLeft" && held.back !== undefined) {
-        held.back();
-        handled = true;
-      }
-      if (handled) event.preventDefault();
-    };
-    window.addEventListener("keydown", handleKey);
-    return () => window.removeEventListener("keydown", handleKey);
-  }, []);
+function chooseSteppedRow<K>(
+  rows: Map<K, HTMLElement>,
+  choose: (key: K) => void,
+): (event: React.FocusEvent) => void {
+  return (event) => {
+    if (keyOfRow(rows, event.relatedTarget) === undefined) return;
+    const key = keyOfRow(rows, event.target);
+    if (key !== undefined) choose(key);
+  };
 }
 
-/** The row `step` away from the one whose key is `at` among `keys`, chosen and focused, which brings it into its list's view; false where there is none. */
-function stepThrough<K>(
-  keys: readonly K[],
-  at: K | undefined,
-  step: 1 | -1,
-  choose: (key: K) => void,
+/**
+ * ← and → on a row: → goes into the row's sections where it has them, and
+ * ← comes back out. Note that they are heard on the list's own box, so a
+ * field, a dialog, or a menu over a row, whose keys bubble through React's
+ * tree, are never taken for a row's.
+ */
+function goThroughRow<K>(
   rows: Map<K, HTMLElement>,
-): boolean {
-  const index = at === undefined ? -1 : keys.indexOf(at);
-  const next = keys[index + step];
-  if (index === -1 || next === undefined) return false;
-  choose(next);
-  rows.get(next)?.focus();
-  return true;
+  keys: { readonly open?: (key: K) => boolean; readonly back?: () => void },
+): (event: React.KeyboardEvent) => void {
+  return (event) => {
+    if (event.defaultPrevented) return;
+    if (event.metaKey || event.ctrlKey || event.altKey || event.shiftKey) return;
+    const key = keyOfRow(rows, event.target);
+    if (key === undefined) return;
+    if (event.key === "ArrowRight" && keys.open?.(key) === true) event.preventDefault();
+    else if (event.key === "ArrowLeft" && keys.back !== undefined) {
+      event.preventDefault();
+      keys.back();
+    }
+  };
+}
+
+/**
+ * Hands the focus to the chosen section once a revision's sections are
+ * drawn, because the list of versions goes inert as they open and the focus
+ * with it, and the sections' arrows need a row to walk from. Note that it
+ * only takes a focus that was lost, never one the reader put somewhere.
+ */
+function useSectionsFocused(
+  opened: number | undefined,
+  unit: number | undefined,
+  sectionRows: Map<number, HTMLElement>,
+): void {
+  const focused = useRef<number | undefined>(undefined);
+  useEffect(() => {
+    if (opened === undefined) focused.current = undefined;
+    if (opened === undefined || unit === undefined || focused.current === opened) return;
+    const row = sectionRows.get(unit);
+    if (row === undefined) return;
+    focused.current = opened;
+    if (document.activeElement === null || document.activeElement === document.body) row.focus();
+  }, [opened, unit, sectionRows]);
 }
 
 /**
@@ -757,24 +758,16 @@ export function DesktopVersionHistory({
   const chooseUnit = (at: number) => {
     versions.onChooseSection(sections?.find((section) => section.unit === at)?.heading);
   };
-  const units = sections?.map((section) => section.unit) ?? [];
-  const seqs = revisions.map((line) => line.seq);
-  useArrowKeys(
-    opened === undefined
-      ? {
-          step: (by) => stepThrough(seqs, versions.selected, by, versions.onSelect, rows),
-          open: () => {
-            const line = revisions.find((each) => each.seq === versions.selected);
-            if (line === undefined || !opensSections(line)) return false;
-            openSections(line.seq);
-            return true;
-          },
-        }
-      : {
-          step: (by) => stepThrough(units, unit, by, chooseUnit, sectionRows),
-          back: closeSections,
-        },
-  );
+  const versionKeys = goThroughRow(rows, {
+    open: (seq) => {
+      const line = revisions.find((each) => each.seq === seq);
+      if (line === undefined || !opensSections(line)) return false;
+      openSections(seq);
+      return true;
+    },
+  });
+  const sectionKeys = goThroughRow(sectionRows, { back: closeSections });
+  useSectionsFocused(opened?.seq, unit, sectionRows);
   useOpenedRowShown(versions.selected, rows, log);
   const hidden = hiddenColumns(room, versions.listed);
   const screen = useNarrowFocus(room, versions.listed);
@@ -797,7 +790,12 @@ export function DesktopVersionHistory({
             <h1 className="version-log-title">Version history</h1>
             <Fill className="sidebar-section">
               <ScrollArea ref={log} fade={SCROLL_FADE.BOTH}>
-                <div className="sidebar-section-body">
+                {/* biome-ignore lint/a11y/noStaticElementInteractions: the keys and the focus are the rows' own, which the box only hears bubble. */}
+                <div
+                  className="sidebar-section-body"
+                  onFocus={chooseSteppedRow(rows, versions.onSelect)}
+                  onKeyDown={versionKeys}
+                >
                   {list.kind === HISTORY_READ.READING ? <LogSkeleton /> : null}
                   <List label={LIST_LABEL.VERSIONS}>
                     {revisions.map((line) => {
@@ -854,7 +852,12 @@ export function DesktopVersionHistory({
             inert={opened === undefined}
           >
             <ScrollArea fade={SCROLL_FADE.BOTH}>
-              <div className="sidebar-section-body">
+              {/* biome-ignore lint/a11y/noStaticElementInteractions: the keys and the focus are the rows' own, which the box only hears bubble. */}
+              <div
+                className="sidebar-section-body"
+                onFocus={chooseSteppedRow(sectionRows, chooseUnit)}
+                onKeyDown={sectionKeys}
+              >
                 {openedLine === undefined ? null : (
                   <>
                     <SectionsHead

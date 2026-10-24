@@ -644,6 +644,7 @@ export function SettingsSearchResults({
               <li key={entry.id}>
                 <NavItem
                   current={entry.id === opened ? NAV_CURRENT.LOCATION : undefined}
+                  roving
                   onClick={() => onOpen(entry)}
                 >
                   <Highlighted text={entry.label} tokens={search.tokens} />

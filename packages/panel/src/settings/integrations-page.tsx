@@ -360,15 +360,6 @@ function ToolsLine({
   );
 }
 
-/** The keys that move the list's tool, by how far each moves it in a list of `count`. */
-function movedTo(key: string, at: number, count: number): number | undefined {
-  if (key === "ArrowDown") return Math.min(at + 1, count - 1);
-  if (key === "ArrowUp") return Math.max(at - 1, 0);
-  if (key === "Home") return 0;
-  if (key === "End") return count - 1;
-  return undefined;
-}
-
 /** A row's tools, opened in place under it: the list, and beside it the page of the tool it holds. */
 function RowToolsPanel({
   id,
@@ -395,17 +386,20 @@ function RowToolsPanel({
     keepInView(list.current, row?.closest("li") ?? null);
   };
 
+  // The list's own arrows move the focus (`List`), and the tool held follows it, as a press on a row holds it.
+  const onRowFocus = (event: React.FocusEvent) => {
+    const stepped = [...rows.current].some(([, row]) => row === event.relatedTarget);
+    const landed = [...rows.current].find(([, row]) => row === event.target);
+    if (!stepped || landed === undefined) return;
+    setHeld(landed[0]);
+    keepInView(list.current, landed[1].closest("li"));
+  };
+
   const onRowKey = (event: React.KeyboardEvent<HTMLElement>, tool: IntegrationTool) => {
-    const at = shown.indexOf(tool);
-    const to = movedTo(event.key, at, shown.length);
-    if (to !== undefined) {
-      event.preventDefault();
-      hold(shown[to]);
-    } else if (event.key === "Enter" || event.key === "ArrowRight") {
-      event.preventDefault();
-      setHeld(tool.name);
-      body.current?.focus();
-    }
+    if (event.key !== "Enter" && event.key !== "ArrowRight") return;
+    event.preventDefault();
+    setHeld(tool.name);
+    body.current?.focus();
   };
 
   const onBodyKey = (event: React.KeyboardEvent<HTMLDivElement>) => {
@@ -420,7 +414,8 @@ function RowToolsPanel({
     <div id={id} className="integration-tools-panel">
       <div className="integration-tools-split">
         <ScrollArea ref={list}>
-          <div className="integration-tools-list">
+          {/* biome-ignore lint/a11y/noStaticElementInteractions: the focus is the rows' own, which the box only hears bubble. */}
+          <div className="integration-tools-list" onFocus={onRowFocus}>
             <IntegrationToolList
               server={name}
               tools={shown}

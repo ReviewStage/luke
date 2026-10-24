@@ -4,6 +4,7 @@ import { PRESS_PULSE, pulseOnPress } from "../../press-pulse.js";
 import { STATUS_TONE, type StatusTone } from "../../status-tone.js";
 import { type ContextMenuProps, withContextMenu } from "../menu/menu.js";
 import { ClippedLine, ONE_LINE_ELEMENT, ONE_LINE_END } from "../one-line/clipped-line.js";
+import { rovingItem } from "../roving-keys/roving-keys.js";
 
 /**
  * nav-item.tsx -- a place in a column of places: its glyph, its name, and what stands at its end, a count, a mark, or its chord.
@@ -126,6 +127,8 @@ export type NavItemProps = HintProps & {
   disabled?: boolean | undefined;
   /** Whether a pointer's press leaves the focus where it is. */
   keepFocus?: boolean | undefined;
+  /** Whether it is an item of a column a `useRovingKeys` box holds, whose one Tab stop the arrows walk. */
+  roving?: boolean | undefined;
   id?: string | undefined;
   ref?: Ref<HTMLButtonElement> | undefined;
   /** Its name, where the words drawn do not say the whole of it. */
@@ -250,6 +253,7 @@ export function NavItem({
   menu,
   onClick,
   keepFocus,
+  roving,
   ...props
 }: NavItemProps): React.JSX.Element {
   const folds = variant === NAV_ITEM_VARIANT.HEAD && expanded !== undefined;
@@ -277,6 +281,7 @@ export function NavItem({
       onClick={pulseOnPress(menu?.onClick ?? onClick, PRESS_PULSE.QUIET)}
       {...withContextMenu(props.contextMenu, { onPointerDown: props.onPointerDown })}
       onKeyDown={props.onKeyDown}
+      {...(roving === true ? rovingItem() : undefined)}
     >
       {said(icon) ? <Glyph icon={icon} folds={folds} /> : null}
       <Name>{children}</Name>

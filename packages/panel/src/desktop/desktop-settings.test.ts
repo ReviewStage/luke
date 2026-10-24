@@ -66,7 +66,8 @@ const isAgentRead = (kind: string): boolean =>
  * The Workspace page is titled with the listed workspace and follows the
  * sidebar. The Integrations page's own search stands beside the sidebar's:
  * Command-F lands in the nearer one, and a sidebar result that opens an
- * integration hands its query down.
+ * integration hands its query down. The page list is one Tab stop that ↑ and ↓
+ * walk, opening nothing until a page is pressed.
  */
 
 const ignore = () => undefined;
@@ -842,4 +843,27 @@ test("a page's row in the sidebar offers Copy link on a right-click, copying the
   await act(async () => item.click());
 
   assert.deepEqual(copied, ["https://tryluke.dev/acme/settings/workspace"]);
+});
+
+test("the page list is one Tab stop, and ↑ and ↓ walk its pages across the groups without opening one", () => {
+  const page = mount(createElement(SettingsHarness));
+  const buttons = pageButtons(page);
+  assert.deepEqual(
+    buttons.map((each) => each.tabIndex),
+    buttons.map((_, at) => (at === 0 ? 0 : -1)),
+  );
+  act(() => buttons[0]?.focus());
+  const press = (key: string) =>
+    act(() => {
+      document.activeElement?.dispatchEvent(
+        new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true }),
+      );
+    });
+  press("ArrowDown");
+  assert.equal(document.activeElement, buttons[1]);
+  press("ArrowUp");
+  press("ArrowUp");
+  assert.equal(document.activeElement, buttons.at(-1), "↑ wraps to the last page");
+  assert.equal(shownTitle(page), "Profile", "walking the list opens no page");
+  assert.equal(buttons.filter((each) => each.tabIndex === 0).length, 1);
 });

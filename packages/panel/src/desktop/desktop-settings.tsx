@@ -28,6 +28,7 @@ import {
   Shortcut,
   Stack,
   useMenu,
+  useRovingKeys,
 } from "@luke/ui";
 import { accountActor } from "@luke/ui/actor-model";
 import { integrationNamed } from "@luke/ui/integration-search";
@@ -102,6 +103,7 @@ function SettingsPageRow({
       <NavItem
         icon={page.icon}
         current={current ? NAV_CURRENT.PAGE : undefined}
+        roving
         mark={note ? <AttentionMark note={note} /> : undefined}
         onClick={onOpen}
         contextMenu={copyLink === undefined ? undefined : menu.contextMenu()}
@@ -214,6 +216,8 @@ export function DesktopSettings({
   const [opened, setOpened] = useState<SettingsSearchEntry>();
   const [templateHistory, setTemplateHistory] = useState(false);
   const experiments = useExperimentChoices();
+  // The pages, or the results of a search, are one Tab stop that ↑↓ walk.
+  const roving = useRovingKeys<HTMLDivElement>();
   // The template's history is the template page's, so a page turned another way, by a shortcut or a voice request, leaves it.
   if (templateHistory && settings.view !== SETTINGS_VIEW.PLAN_TEMPLATE) setTemplateHistory(false);
   // The Integrations page's search is the page's, so turning to another page leaves it.
@@ -318,7 +322,7 @@ export function DesktopSettings({
         <LinkWorkspaceProvider value={listed?.slug ?? listed?.id}>
           <Fill className="sidebar-section">
             <ScrollArea fade={SCROLL_FADE.BOTH}>
-              <div className="sidebar-section-body">
+              <div className="sidebar-section-body" {...roving}>
                 {search ? (
                   <SettingsSearchResults search={search} opened={marked} onOpen={openResult} />
                 ) : (

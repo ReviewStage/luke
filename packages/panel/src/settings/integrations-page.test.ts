@@ -1054,7 +1054,7 @@ test("an opened row holds its first tool, whose page stands beside the list, and
   assert.equal(detail.querySelector(".integration-tool-parameter-name")?.textContent, "limit");
 });
 
-test("the arrows, Home, and End move the tool an opened row holds, its page following, and the list is one stop for Tab", async () => {
+test("the list is one Tab stop, and the arrows, Home, and End, wrapping, move the tool an opened row holds, its page following", async () => {
   connectVercelAndLinear();
   const page = await mount();
   openRow(page, "Vercel");
@@ -1074,7 +1074,7 @@ test("the arrows, Home, and End move the tool an opened row holds, its page foll
   assert.deepEqual(held(page), ["list_projects", "list_projects"]);
   assert.equal(toolName(document.activeElement), "list_projects");
   keyAtFocus("ArrowDown");
-  assert.deepEqual(held(page), ["list_projects", "list_projects"]);
+  assert.deepEqual(held(page), ["delete_project", "delete_project"], "↓ wraps at the end");
   keyAtFocus("Home");
   assert.deepEqual(held(page), ["delete_project", "delete_project"]);
   keyAtFocus("End");
