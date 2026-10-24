@@ -1,3 +1,23 @@
+/**
+ * act.ts -- the window's one door out to the host: an act asked, told, or pressed.
+ *
+ * Every effect leaves on the window's act port, one call per `ACT_KIND`, and
+ * this module is its only caller. There are three ways to send one, by who
+ * reads what comes back:
+ *
+ * - `askAct` (`act` on `useAct`): the caller reads the answer, and a refusal
+ *   rejects it with the sentence the host drew, for the caller to show.
+ * - `pressAct` (`press`): a person pressed something and nothing reads the
+ *   answer. A refusal, or any other failure, raises a FAILED toast carrying
+ *   the act's own refusal sentence, so a press never fails silently.
+ * - `tellAct` (`tell`): a report nobody pressed, such as a call's avatar
+ *   state or a refresh after a turn. It stays quiet whatever comes back,
+ *   because a toast nobody asked for is noise.
+ *
+ * A control's press is a `press`; reach for `tell` only where no person
+ * pressed anything.
+ */
+
 import { ACT_KIND } from "@luke/host/acts";
 import {
   ACT_ERROR,
@@ -8,9 +28,14 @@ import {
 } from "@luke/host/contract";
 import type { AppSettingField, AppSettingValue } from "@luke/settings";
 import type { SettingsUpdateResult } from "@luke/settings/wire";
+import { STATUS_TONE } from "@luke/ui";
 import { ORPCError } from "@orpc/client";
 import { useMemo } from "react";
 import { actPort } from "./app-bridge.js";
+import { showToast, TOAST_HOLD } from "./toast.js";
+
+/** What a press's toast says when its act failed with no refusal of its own: the port gone, or a fault. */
+const PRESS_FAILED_WORDS = "That didn't go through. Try again.";
 
 /**
  * What each kind takes and answers, keyed by the kind. Note that a kind's own
@@ -30,6 +55,9 @@ type ActResult<Kind extends PortActKind> = ActResults[Kind];
 /** A kind that carries nothing is called with nothing; every other kind carries its own payload. */
 type ActArguments<Kind extends PortActKind> =
   ActPayload<Kind> extends undefined ? [] : [payload: ActPayload<Kind>];
+
+/** A refusal the host drew for an act, carrying its sentence: an `Error`, as every reader already handles. */
+class ActRefusal extends Error {}
 
 /**
  * One kind on the window's act port: its procedure called by the kind's own
@@ -53,7 +81,7 @@ async function portAct(
     return await call(payload);
   } catch (error) {
     if (error instanceof ORPCError && error.code === ACT_ERROR.REFUSED) {
-      throw new Error(error.message);
+      throw new ActRefusal(error.message);
     }
     throw error;
   }
@@ -69,14 +97,30 @@ async function performAct<Kind extends PortActKind>(
 }
 
 /**
- * An act whose answer nothing reads, for a caller outside React: the call
- * window's avatar reports from the fiber running it, not from a render.
+ * An act whose answer nothing reads and no person pressed for, quiet
+ * whatever comes back: the call window's avatar reports from the fiber
+ * running it, not from a render.
  */
 export function tellAct<Kind extends PortActKind>(
   kind: Kind,
   ...[payload]: ActArguments<Kind>
 ): void {
   void performAct(kind, payload).catch(() => undefined);
+}
+
+/**
+ * An act a person pressed for, whose answer nothing reads: a refusal raises a
+ * FAILED toast in its own words, and any other failure one saying it did
+ * not go through.
+ */
+export function pressAct<Kind extends PortActKind>(
+  kind: Kind,
+  ...[payload]: ActArguments<Kind>
+): void {
+  void performAct(kind, payload).catch((error: unknown) => {
+    const words = error instanceof ActRefusal ? error.message : PRESS_FAILED_WORDS;
+    showToast({ words, tone: STATUS_TONE.DANGER, hold: TOAST_HOLD.FAILED });
+  });
 }
 
 /**
@@ -103,13 +147,14 @@ interface SettingWriteActs {
 
 /**
  * What a component or hook reaches the act channel through, in one bundle.
- * Note that `act` and `tell` are typed as `askAct` and `tellAct` themselves,
- * rather than restated as generic methods: with every kind the act port
- * answers, comparing two such generic signatures is a union TypeScript can
- * no longer represent.
+ * Note that `act`, `press`, and `tell` are typed as `askAct`, `pressAct`,
+ * and `tellAct` themselves, rather than restated as generic methods: with
+ * every kind the act port answers, comparing two such generic signatures is
+ * a union TypeScript can no longer represent.
  */
 export interface ActHandle extends SettingWriteActs {
   act: typeof askAct;
+  press: typeof pressAct;
   tell: typeof tellAct;
 }
 
@@ -118,6 +163,7 @@ export function useAct(): ActHandle {
   return useMemo<ActHandle>(
     () => ({
       act: askAct,
+      press: pressAct,
       tell: tellAct,
       // SAFETY: as updateSetting's own cast above, for this render tree's channel.
       updateSetting: (field, value) =>
