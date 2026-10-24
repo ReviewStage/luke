@@ -111,25 +111,44 @@ function Problem({ children }: { children: string }): React.JSX.Element {
   );
 }
 
+/** Where a fact ends and the next begins: a dot that rides the fact before it, never starting a wrapped line. */
+const FACT_END = "\u00a0· ";
+
+/** The expiry's words, whole: "Expires Dec 23, 2026" never breaks inside, so a narrow row moves it as one. */
+function expiryWords(expiresAt: number): string {
+  return `Expires ${dayText(expiresAt)}`.replaceAll(" ", "\u00a0");
+}
+
+/** One fact of a token's line, with its separator bound to its end while another fact follows. */
+function Fact({ more, children }: { more: boolean; children: ReactNode }): React.JSX.Element {
+  return (
+    <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.INHERIT}>
+      {children}
+      {more ? FACT_END : null}
+    </Text>
+  );
+}
+
 /** What tells a saved token apart: its hint, login, expiry, and its status where it is not in use. */
 export function TokenFacts({ token }: { token: GitHubTokenSummary }): React.JSX.Element {
   const status = statusLabel(token.status);
+  const expires = token.expiresAt !== null;
   return (
     <SettingsFacts gap={GAP.TIGHT}>
-      <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.INHERIT} font={TEXT_FONT.MONO}>
-        {token.hint}
-      </Text>
-      {" · "}
-      <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.LABEL}>
-        {token.login}
-      </Text>
-      {token.expiresAt === null ? null : ` · Expires ${dayText(token.expiresAt)}`}
-      {status === undefined ? null : (
-        <>
-          {" · "}
-          <Problem>{status}</Problem>
-        </>
+      <Fact more>
+        <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.INHERIT} font={TEXT_FONT.MONO}>
+          {token.hint}
+        </Text>
+      </Fact>
+      <Fact more={expires || status !== undefined}>
+        <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.LABEL}>
+          {token.login}
+        </Text>
+      </Fact>
+      {token.expiresAt === null ? null : (
+        <Fact more={status !== undefined}>{expiryWords(token.expiresAt)}</Fact>
       )}
+      {status === undefined ? null : <Problem>{status}</Problem>}
     </SettingsFacts>
   );
 }

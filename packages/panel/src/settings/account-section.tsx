@@ -33,6 +33,9 @@ import { GitHubTokenDialog, TokenFacts } from "./github-dialog.js";
 /** The class PostHog's recorder leaves out of a recording, element and children alike. */
 const NO_CAPTURE = "ph-no-capture";
 
+/** The row's name. */
+const TOKEN_LABEL = "GitHub personal access token";
+
 /** What the row says while no token is saved, so what the token is for is told before it is asked for. */
 const TOKEN_PURPOSE =
   "Lets agents work in repositories Luke's GitHub App does not reach, and open pull requests as you.";
@@ -98,7 +101,7 @@ function GitHubTokenRow(): React.JSX.Element {
         leading={
           <ProviderMark provider={INTEGRATION_PROVIDER.GITHUB} size={PROVIDER_MARK_SIZE.ROW} />
         }
-        label="GitHub personal access token"
+        label={<OneLine hint={wholeWordsHint(TOKEN_LABEL)}>{TOKEN_LABEL}</OneLine>}
         description={
           token ? <TokenFacts token={token} /> : token === null ? TOKEN_PURPOSE : undefined
         }
