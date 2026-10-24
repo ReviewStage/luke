@@ -59,8 +59,8 @@ import type { TasklessAgent } from "@luke/features/coding-agent-wire";
 import { formatCount } from "@luke/features/number-format";
 import { TASK_TREE_BOUNDS, TASK_TREE_ENTRY, type TaskSummary } from "@luke/features/task-wire";
 import type { TaskCodeShowing, TasksTreeAnswer } from "@luke/features/tasks-view";
-import { noMatchWords, readFailedWords, readingWords, TERM, VERB } from "@luke/features/words";
 import { TERMINAL_ASK } from "@luke/features/terminal-entry";
+import { noMatchWords, readFailedWords, readingWords, TERM, VERB } from "@luke/features/words";
 import { taskKey } from "@luke/features/workspace-key";
 import type { Workspace, WorkspaceMember } from "@luke/features/workspace-wire";
 import {
@@ -168,7 +168,7 @@ import { refusalLine } from "../tasks/file-tab-model.js";
 import { InboxItemCard, InboxItemEnd, ItemMark } from "../tasks/inbox-item-parts.js";
 import { holderName, type InboxListed, inboxItemWords } from "../tasks/inbox-model.js";
 import { agentEndMark, openPlanStanding, TAB_KIND, tabLook } from "../tasks/tab-look.js";
-import { markReadItem } from "../tasks/task-menu-items.js";
+import { markReadItem, type OpenTaskRename, useTaskRenameOffer } from "../tasks/task-menu-items.js";
 import { TaskKey } from "../tasks/task-standing.js";
 import { useOpenTerminal } from "../tasks/terminal-commands.js";
 import { cardTitle } from "../tasks/tool-call-model.js";
@@ -1253,21 +1253,24 @@ function agentPinRows(
 
 /**
  * The plan on screen's own commands, as its ⋯ menu offers them
- * (`task-actions.tsx`'s `taskActionGroups`): Version history, Cancel task
- * on a task not already canceled, Change repository, and Open on GitHub
- * where it has a repository; each runs what its menu item runs. None while
- * no plan is looked at. Note that Copy link, Mark as read, Pin, Mark done,
- * and Permanently delete are rows of their own, and that Rename is not
- * offered, because the plan's ⋯ has no door ⌘K can reach.
+ * (`task-actions.tsx`'s `taskActionGroups`): Rename where its page offers
+ * the door its ⋯ asks, Version history, Cancel task on a task not already
+ * canceled, Change repository, and Open on GitHub where it has a
+ * repository; each runs what its menu item runs. None while no plan is
+ * looked at. Note that Copy link, Mark as read, Pin, Mark done, and
+ * Permanently delete are rows of their own.
  */
 function taskCommandRows(
   tasks: TasksControl,
   reads: ReadMarks,
+  rename: OpenTaskRename | undefined,
   choose: (run: () => void) => void,
 ): readonly PaletteRow[] {
   const task = reads.watched === undefined ? undefined : taskOf(tasks, reads.watched);
   if (task === undefined) return [];
+  const renamed = rename?.taskId === task.id ? rename.begin : undefined;
   const commands: readonly { item: PanelCommand; run: () => void }[] = [
+    ...(renamed === undefined ? [] : [{ item: PANEL_COMMAND.RENAME_TASK, run: renamed }]),
     { item: PANEL_COMMAND.VERSION_HISTORY, run: () => tasks.history.onOpen(task.id) },
     ...(settleOffered(task, SETTLED_STATUS.CANCELED)
       ? [
@@ -1775,6 +1778,7 @@ export function CommandPalette({
   const originOf = useTaskOrigin();
   const { members } = membersRead;
   const reads = useReadMarks();
+  const renameOffer = useTaskRenameOffer();
   const agentReads = useAgentReadMarks();
   // The open agent's Archive, asked of `OpenAgentArchive` by the agent it was chosen for.
   const openAgent = openAgentOf(listedTasks);
@@ -1882,7 +1886,7 @@ export function CommandPalette({
         ...agentReadMarkRows(listedTasks, agentReads, choose),
         ...taskPinRows(tasks, reads, choose),
         ...agentPinRows(listedTasks, choose),
-        ...taskCommandRows(tasks, reads, choose),
+        ...taskCommandRows(tasks, reads, renameOffer, choose),
         ...agentArchiveRows(openAgent, askArchive, choose),
       ].map((row) => ({ ...row, loose: true })),
     ],

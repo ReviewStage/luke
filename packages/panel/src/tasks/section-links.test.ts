@@ -8,7 +8,7 @@ import {
   mentionMarkdown,
 } from "@luke/features/mention-link";
 import type { Task } from "@luke/features/task-wire";
-import { act, createElement } from "react";
+import { act, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
 import { fakeAppBridge } from "../testing/app-bridge.js";
@@ -461,7 +461,7 @@ test("a click on a folder's chip in a plan that can be edited opens no editor", 
   assert.equal(container.querySelector(".plan-document-editor"), null);
 });
 
-/** The task's page drawn as a task's own page is, its title renamed and its versions opened, each kept. */
+/** The task's page drawn as a task's own page is, its title renamed through a door each Rename asks once, and its versions opened, each kept. */
 function drawnTitled() {
   const renamed: string[] = [];
   const histories: (number | undefined)[] = [];
@@ -469,21 +469,22 @@ function drawnTitled() {
   document.body.append(container);
   const root = createRoot(container);
   roots.push(root);
-  act(() =>
-    root.render(
-      createElement(PlanBody, {
-        task: TASK,
-        live: false,
-        onEdit: () => Promise.reject(new Error("Nothing is saved in this test.")),
-        onRename: (name) => {
-          renamed.push(name);
-          return Promise.resolve(true);
-        },
-        onShowHistory: (save) => histories.push(save),
-        sectionLinks: { workspace: WORKSPACE, onOpen: () => undefined, reveal: undefined },
-      }),
-    ),
-  );
+  function TitledPlan(): React.JSX.Element {
+    const [asks, setAsks] = useState(0);
+    return createElement(PlanBody, {
+      task: TASK,
+      live: false,
+      onEdit: () => Promise.reject(new Error("Nothing is saved in this test.")),
+      onRename: (name) => {
+        renamed.push(name);
+        return Promise.resolve(true);
+      },
+      rename: { asks, asked: undefined, onBegin: () => setAsks((count) => count + 1) },
+      onShowHistory: (save) => histories.push(save),
+      sectionLinks: { workspace: WORKSPACE, onOpen: () => undefined, reveal: undefined },
+    });
+  }
+  act(() => root.render(createElement(TitledPlan)));
   const block = container.querySelector<HTMLElement>('[role="group"][aria-label="Title"]');
   const more = container.querySelector<HTMLButtonElement>('[aria-label="Title actions"]');
   assert.ok(block, "the title is a block");

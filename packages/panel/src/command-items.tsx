@@ -92,6 +92,7 @@ export const PANEL_COMMAND = {
   MARK_UNREAD: unkeyed("Mark as unread", <MailIcon />),
   MARK_READ: unkeyed("Mark as read", <MailOpenIcon />),
   RENAME: unkeyed("Rename", <GLYPH.RENAME />),
+  RENAME_TASK: unkeyed("Rename", <GLYPH.RENAME />, NOUN.TASK),
   VERSION_HISTORY: unkeyed("Version history", <HistoryIcon />),
   PIN_TAB: unkeyed("Pin", <GLYPH.PIN />, NOUN.TAB),
   UNPIN_TAB: unkeyed("Unpin", <GLYPH.UNPIN />, NOUN.TAB),

@@ -38,12 +38,12 @@ import { APP_COMMAND, type AppCommand } from "@luke/settings/shortcuts";
 import { experimentsOn, settingsView } from "@luke/settings/testing";
 import { DOCUMENT_REGION, TASK_MARK, TASKS_PAGE } from "@luke/ui/tasks-model";
 import { shownFiles } from "@luke/voice/code-pane-model";
+import { ACTION_RESULT_STATUS } from "@luke/wire";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment, useState } from "react";
 import { flushSync } from "react-dom";
 import { createRoot, type Root } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
-import { ACTION_RESULT_STATUS } from "@luke/wire";
 import { afterEach, beforeEach, test, vi } from "vitest";
 import {
   appCommandOffered,
@@ -54,7 +54,9 @@ import {
 import { PageWorkspaceProvider, useCopyLink, usePageWorkspace } from "../links-at-hand.js";
 import { installPanelSpanRecorder, PANEL_SPAN, type PanelSpan } from "../panel-spans.js";
 import { PANEL_TAB, type PanelTab } from "../panel-tabs.js";
-import type { SidePanelControl } from "../tasks/use-side-panel.js";
+import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
+import { ShellRoomContext } from "../stage-room.js";
+import { SIDE_PANEL_TAB, type SidePanelControl } from "../tasks/use-side-panel.js";
 import { NO_LOOKS, useTaskLooks } from "../tasks/use-task-looks.js";
 import { AUTOMATIONS_PAGE, type InboxChoice, type TasksControl } from "../tasks/use-tasks-tab.js";
 import {
@@ -2665,6 +2667,86 @@ test("with a task on screen, ⌘K offers its Version history, Cancel task, Chang
     `repository:${task.id}`,
     `github:${task.id}`,
   ]);
+});
+
+/** The open task's page in `room`, its panel on the plan, beside the palette, the plan looked at as the window's shell looks at it. */
+function paletteBesideTask(room: ShellRoom): HTMLElement {
+  const base = tasksControl();
+  const tasks = tasksControl({
+    page: TASKS_PAGE.DOCUMENT,
+    activeTaskId: DOCUMENT_TASK.id,
+    region: { kind: DOCUMENT_REGION.READY, task: DOCUMENT_TASK },
+    sidePanel: {
+      ...base.sidePanel,
+      open: true,
+      fullScreen: room === SHELL_ROOM.NARROW,
+      fullScreenOnly: room === SHELL_ROOM.NARROW,
+      tabs: [SIDE_PANEL_TAB.PLAN],
+      strip: [SIDE_PANEL_TAB.PLAN],
+      tab: SIDE_PANEL_TAB.PLAN,
+    },
+  });
+  const host = document.body.appendChild(document.createElement("div"));
+  const root = createRoot(host);
+  roots.push(root);
+  act(() =>
+    root.render(
+      onRegistry(
+        AtomRegistry.make(),
+        createElement(
+          ShellRoomContext.Provider,
+          { value: room },
+          createElement(Looker, { looked: DOCUMENT_TASK }),
+          createElement(DesktopTasks, {
+            summary: UNPINNED_SUMMARY,
+            looks: NO_LOOKS,
+            room,
+            away: { label: "Tasks", onPress: () => undefined },
+            tasks,
+          }),
+          createElement(WindowPalette, {
+            available: true,
+            tab: PANEL_TAB.TASKS,
+            onTabChange: () => undefined,
+            tasks,
+            settings: {
+              rows: {
+                settings: settingsView(),
+                voiceControlsDrawn: true,
+                accountDrawn: true,
+                capabilities: DESKTOP_CAPABILITIES,
+              },
+              capabilities: DESKTOP_CAPABILITIES,
+              onViewChange: () => undefined,
+            },
+            readFiles: () => Promise.reject(new Error("no repository is open")),
+          }),
+        ),
+      ),
+    ),
+  );
+  act(() => {
+    assert.ok(runAppCommand(APP_COMMAND.COMMAND_PALETTE), "⌘K opens");
+  });
+  chooseFilter("Commands");
+  press("Rename task");
+  return host;
+}
+
+test("on a wide window ⌘K's Rename task puts the caret in the plan's own title", () => {
+  const host = paletteBesideTask(SHELL_ROOM.WIDE);
+
+  const title = host.querySelector('[role="textbox"][aria-label="Task name"]');
+  assert.ok(title, "the plan's title is drawn");
+  assert.ok(document.activeElement === title, "the caret is in the plan's title");
+});
+
+test("on a phone ⌘K's Rename task opens the task's name in the head's field", () => {
+  const host = paletteBesideTask(SHELL_ROOM.NARROW);
+
+  const field = host.querySelector('.task-head input[aria-label="Task name"]');
+  assert.ok(field, "the head's title is the name's field");
+  assert.ok(document.activeElement === field, "the caret is in the head's field");
 });
 
 test("on a one-off agent's page, ⌘K's Archive agent archives it, and an archived agent's page offers Unarchive agent, which brings it back", async () => {
