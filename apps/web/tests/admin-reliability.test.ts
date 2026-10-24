@@ -224,7 +224,7 @@ test("an account that needs attention reads what broke by status alone, and a pr
   );
 
   expect(row?.textContent).toContain("OpenAI key · quota exceeded");
-  expect(row?.textContent).toContain("GitHub App · suspended");
+  expect(row?.textContent).toContain("GitHub App · Suspended");
   const name = row?.querySelector<HTMLAnchorElement>("a");
   await act(async () => {
     name?.click();
