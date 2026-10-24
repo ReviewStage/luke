@@ -25,6 +25,7 @@ import {
   type TaskIssueChoice,
 } from "@luke/features/task-issue-wire";
 import { TASK_SKILL_SOURCE, TASK_TREE_ENTRY } from "@luke/features/task-wire";
+import { WORKSPACE_ROLE, type WorkspaceMember } from "@luke/features/workspace-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsLink } from "@luke/settings/settings-views";
 import type { LinearIssuesAsk } from "@luke/ui/tasks-model";
@@ -33,7 +34,7 @@ import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
-import { OpenSettingsProvider } from "../open-settings.js";
+import { OPEN_SETTINGS_LABEL, OpenSettingsProvider } from "../open-settings.js";
 import {
   type AnyAct,
   FAKE_ANSWER,
@@ -759,6 +760,84 @@ test("a member of a workspace with no GitHub connected is told only to ask an ow
     buttons.some((button) => ["Open Settings", "Retry"].includes(button.textContent ?? "")),
     false,
   );
+});
+
+/** A read answering that the App is installed and gives Luke no repository. */
+const NOTHING_REACHED = () =>
+  Promise.resolve({
+    repositories: {
+      installed: true,
+      repositories: [],
+      installationUrl: "https://github.com/apps/luke/installations/new",
+    },
+  });
+
+/** A workspace's people as the host answers them: two to ask, a third owner past the names a note gives, and a plain member. */
+const PEOPLE: readonly WorkspaceMember[] = [
+  { userId: "u-dean", name: "Dean", email: "dean@acme.test", role: WORKSPACE_ROLE.OWNER },
+  { userId: "u-charles", name: "Charles", email: "charles@acme.test", role: WORKSPACE_ROLE.ADMIN },
+  { userId: "u-sam", name: "Sam", email: "sam@acme.test", role: WORKSPACE_ROLE.MEMBER },
+];
+
+test("a member of a workspace with no GitHub connected is told which owners and admins to ask, and no member is named", async () => {
+  fakeActPort({ [ACT_KIND.WORKSPACE_MEMBERS_READ]: () => Promise.resolve(PEOPLE) });
+  await mount(undefined, undefined, {
+    scope: "workspace-acme",
+    workspaceName: "Acme",
+    manages: false,
+    read: NOWHERE_INSTALLED,
+  });
+
+  await openChip();
+  await settle();
+
+  assert.deepEqual(menuNotes(), ["Ask Dean or Charles to connect GitHub for Acme."]);
+});
+
+test("a member of a workspace whose GitHub reaches no repository is told so and which owners and admins to ask, with no Open Settings", async () => {
+  fakeActPort({ [ACT_KIND.WORKSPACE_MEMBERS_READ]: () => Promise.resolve(PEOPLE) });
+  await mount(undefined, undefined, {
+    scope: "workspace-acme",
+    manages: false,
+    connected: true,
+    read: NOTHING_REACHED,
+  });
+
+  const buttons = await openChip();
+  await settle();
+
+  assert.deepEqual(menuNotes(), [
+    "Luke can't see any repository yet.",
+    "Ask Dean or Charles to add a repository to Luke on GitHub.",
+  ]);
+  assert.equal(
+    buttons.some((button) => button.textContent === OPEN_SETTINGS_LABEL),
+    false,
+  );
+});
+
+test("an owner of a workspace whose GitHub reaches no repository is offered Open Settings at the workspace's GitHub", async () => {
+  const dialog = await mount(undefined, undefined, {
+    scope: "workspace-acme",
+    connected: true,
+    read: NOTHING_REACHED,
+  });
+
+  const buttons = await openChip();
+  const notes = menuNotes();
+  const open =
+    buttons.find((button) => button.textContent === OPEN_SETTINGS_LABEL) ??
+    assert.fail("the menu offers to open Settings");
+  act(() => open.click());
+
+  assert.deepEqual(notes, ["Luke can't see any repository yet."]);
+  assert.deepEqual(dialog.links, [
+    {
+      page: SETTINGS_VIEW.WORKSPACE,
+      section: SETTINGS_SECTION.GITHUB_REPOSITORIES,
+      workspaceId: "workspace-acme",
+    },
+  ]);
 });
 
 /** The notes the chip's menu draws, and whether it offers Open Settings, for a workspace with a GitHub connected whose read finds none installed. */

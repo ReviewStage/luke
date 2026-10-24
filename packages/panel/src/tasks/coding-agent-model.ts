@@ -712,6 +712,22 @@ function unreachedFailure(
       authorizeUrl: unreached.authorizeUrl,
     };
   }
+  // The member's token is theirs to add or replace in Settings, so each of its cases carries that remedy and needs no task.
+  if (unreached?.reason === REPOSITORY_UNREACHED.NO_TOKEN) {
+    return { reason: FAILURE_REASON.GITHUB_TOKEN, text: "No GitHub token saved." };
+  }
+  if (unreached?.reason === REPOSITORY_UNREACHED.TOKEN_NO_ACCESS) {
+    return {
+      reason: FAILURE_REASON.GITHUB_TOKEN,
+      text: `Your GitHub token can't access ${unreached.repository}.`,
+    };
+  }
+  if (unreached?.reason === REPOSITORY_UNREACHED.TOKEN_CANNOT_PUSH) {
+    return {
+      reason: FAILURE_REASON.GITHUB_TOKEN,
+      text: `Your GitHub token can't push to ${unreached.repository}.`,
+    };
+  }
   if (unreached === undefined || taskId === null) {
     return callFailure(SHARED_FAILURE_NOTE[CODING_AGENT_CALL_FAILURE.REPOSITORY_NOT_REACHABLE]);
   }
@@ -751,12 +767,6 @@ function unreachedFailure(
         taskId: taskId,
         workspace: unreached.workspace,
       };
-    case REPOSITORY_UNREACHED.NO_TOKEN:
-      return callFailure("No GitHub token saved.");
-    case REPOSITORY_UNREACHED.TOKEN_NO_ACCESS:
-      return callFailure(`Your GitHub token can't access ${repository}.`);
-    case REPOSITORY_UNREACHED.TOKEN_CANNOT_PUSH:
-      return callFailure(`Your GitHub token can't push to ${repository}.`);
   }
 }
 

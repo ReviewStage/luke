@@ -177,13 +177,44 @@ test("a saved token's Manage opens it with Remove, which asks first, then takes 
   assert.ok(tokenField(), "the field stands again");
 });
 
-test("a refused save says why in a short label and keeps the field", async () => {
-  refuseSave = GITHUB_TOKEN_REJECTION.FINE_GRAINED;
+test("each refused save says why and what to do next, and keeps the field", async () => {
   await mountAndOpen();
-  await paste(PASTED);
+  const said = new Map<string, string | undefined>();
+  for (const rejection of Object.values(GITHUB_TOKEN_REJECTION)) {
+    refuseSave = rejection;
+    await paste(PASTED);
+    said.set(rejection, document.querySelector('[role="alert"]')?.textContent ?? undefined);
+    assert.ok(tokenField(), "the field stands as pasted");
+  }
 
-  assert.equal(document.querySelector('[role="alert"]')?.textContent, "Not a classic token");
-  assert.ok(tokenField(), "the field stands as pasted");
+  assert.deepEqual(Object.fromEntries(said), {
+    fine_grained: "This isn't a classic token. Create a classic token and paste that.",
+    invalid: "GitHub rejected this token. Check that you copied all of it, or create a new one.",
+    no_repo_scope: "This token is missing the repo scope. Create a new token with repo ticked.",
+    no_github_account:
+      "No GitHub account is connected to your Luke account. Connect GitHub in Settings › Integrations, then save the token again.",
+    other_user:
+      "This token belongs to a different GitHub account than the one connected to Luke. Create it while signed in to the connected account.",
+    unreachable: "Couldn't reach GitHub. Try again.",
+    too_many_tries: "Too many tokens tried in the last hour. Try again later.",
+  });
+});
+
+test("a saved token GitHub rejected says to remove it and add a new one", async () => {
+  stored = { ...KEPT, status: GITHUB_TOKEN_STATUS.INVALID };
+  await mountAndOpen();
+
+  assert.match(
+    dialog().textContent ?? "",
+    /GitHub rejected this token\. Remove it and add a new one\./u,
+  );
+});
+
+test("a saved token Luke can no longer read says to remove it and add it again", async () => {
+  stored = { ...KEPT, status: GITHUB_TOKEN_STATUS.UNREADABLE };
+  await mountAndOpen();
+
+  assert.match(dialog().textContent ?? "", /Can no longer be read\. Remove it and add it again\./u);
 });
 
 test("a read that went unanswered offers Try again in place of Add, which reads the token again", async () => {

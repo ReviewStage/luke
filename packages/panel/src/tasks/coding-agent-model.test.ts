@@ -12,7 +12,7 @@ import {
   OPERATOR_QUIET_REPLY,
   PULL_REQUEST_STATE,
 } from "@luke/features/coding-agent-wire";
-import { FAILURE_REASON } from "@luke/features/failure-remedy";
+import { FAILURE_REASON, remedyLabel } from "@luke/features/failure-remedy";
 import { MODEL_PROVIDER } from "@luke/features/models-wire";
 import { REPOSITORY_UNREACHED } from "@luke/features/repository-reach-wire";
 import { dayAndTimeText } from "@luke/features/time-format";
@@ -641,6 +641,35 @@ test("a message refused for a repository out of reach names the plan's remedy on
     repository: "acme/relay",
     settingsUrl: "https://github.com/settings/installations/7",
   });
+});
+
+test("a refusal for the member's own GitHub token reads with its remedy, Update GitHub token, with or without a task", () => {
+  const refused = (reason: "no-token" | "token-no-access" | "token-cannot-push") =>
+    ({
+      failure: CODING_AGENT_CALL_FAILURE.REPOSITORY_NOT_REACHABLE,
+      unreached: { reason, repository: "acme/relay" },
+    }) as const;
+
+  const noToken = messageFailureNote(refused(REPOSITORY_UNREACHED.NO_TOKEN), null);
+  const noAccess = startFailureNote(refused(REPOSITORY_UNREACHED.TOKEN_NO_ACCESS), null);
+  const cannotPush = startFailureNote(
+    refused(REPOSITORY_UNREACHED.TOKEN_CANNOT_PUSH),
+    "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10",
+  );
+
+  assert.deepEqual(noToken, {
+    reason: FAILURE_REASON.GITHUB_TOKEN,
+    text: "No GitHub token saved.",
+  });
+  assert.deepEqual(noAccess, {
+    reason: FAILURE_REASON.GITHUB_TOKEN,
+    text: "Your GitHub token can't access acme/relay.",
+  });
+  assert.deepEqual(cannotPush, {
+    reason: FAILURE_REASON.GITHUB_TOKEN,
+    text: "Your GitHub token can't push to acme/relay.",
+  });
+  assert.equal(remedyLabel(cannotPush), "Update GitHub token");
 });
 
 test("a message a Claude plan refused says to reconnect it, a limit says when it resets, and a plan's refusal says nothing of turning to another payer", () => {
