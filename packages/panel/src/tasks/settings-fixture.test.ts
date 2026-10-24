@@ -175,7 +175,7 @@ test("every skill the Skills profile lists reads whole when viewed", () => {
   assert.deepEqual(unread, []);
 });
 
-test("Admin's Overview answers the window and the scope its controls ask for", () => {
+test("Admin's Overview answers the window and the scope its controls ask for, its counts agreeing within it", () => {
   const metrics = (query: Record<string, string>): AdminMetrics => {
     const read = answered(RUN_PROFILE.ADMIN, ACT_KIND.ADMIN_READ, {
       procedure: ADMIN_READ.METRICS,
@@ -191,6 +191,12 @@ test("Admin's Overview answers the window and the scope its controls ask for", (
 
   assert.equal(week.windowDays, 7);
   assert.equal(week.overview.activity.daily.length, 7);
+  assert.ok(week.overview.topAccounts.every((account) => account.activeDays <= 7));
+  assert.equal(
+    week.users.newInWindow,
+    week.users.dailySignups.reduce((sum, day) => sum + day.count, 0),
+  );
+  assert.equal(week.overview.funnel[0]?.accounts, week.users.newInWindow);
   assert.equal(byDefault.windowDays, 30);
   assert.ok(byDefault.overview.topAccounts.every((account) => !account.admin));
   assert.ok(everyone.overview.topAccounts.some((account) => account.admin));

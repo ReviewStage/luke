@@ -401,7 +401,9 @@ function adminMetrics(query: Readonly<Record<string, string>>): AdminMetrics {
     adminMetricsWindow(query[ADMIN_METRICS_WINDOW_PARAM]) ?? ADMIN_METRICS_WINDOW_DEFAULT;
   const adminsHidden =
     adminMetricsScope(query[ADMIN_METRICS_SCOPE_PARAM]) !== ADMIN_METRICS_SCOPE.ALL;
-  const scaled = (monthly: number) => Math.round((monthly * windowDays) / 30);
+  // A month's active days scaled to the window, at least one and never more than the window holds.
+  const activeIn = (monthly: number) =>
+    Math.min(windowDays, Math.max(1, Math.round((monthly * windowDays) / 30)));
   const days = trailingDays(windowDays);
   const retention = { weeks: 6, cohorts: cohorts() };
   const funnel = [
@@ -413,7 +415,9 @@ function adminMetrics(query: Readonly<Record<string, string>>): AdminMetrics {
     [FUNNEL_STEP.OPENED_PR, 19],
     [FUNNEL_STEP.MERGED_PR, 14],
   ] as const;
-  const signedUp = scaled(64);
+  // The signups are the daily series summed, as the service counts them, so the total and the funnel's base agree with the bars.
+  const dailySignups = days.map((day, index) => ({ day, count: wave(index, 1, 0.08) }));
+  const signedUp = dailySignups.reduce((sum, day) => sum + day.count, 0);
   const reach = [
     [REACH_FEATURE.TASKS, 38],
     [REACH_FEATURE.CODING_AGENTS, 33],
@@ -425,10 +429,10 @@ function adminMetrics(query: Readonly<Record<string, string>>): AdminMetrics {
   ] as const;
   const activeDevelopers = adminsHidden ? 42 : 42 + ADMIN_ACCOUNTS;
   const topAccounts = [
-    topAccount("user-maya", "Maya Okafor", 27),
-    topAccount(ACCOUNT_ID, "Ada Lovelace", 24, true),
-    topAccount("user-theo", "Theo Lindqvist", 19),
-    topAccount("user-priya", "Priya Raman", 12),
+    topAccount("user-maya", "Maya Okafor", activeIn(27)),
+    topAccount(ACCOUNT_ID, "Ada Lovelace", activeIn(24), true),
+    topAccount("user-theo", "Theo Lindqvist", activeIn(19)),
+    topAccount("user-priya", "Priya Raman", activeIn(12)),
   ];
   return {
     generatedAt: NOW,
@@ -437,7 +441,7 @@ function adminMetrics(query: Readonly<Record<string, string>>): AdminMetrics {
       total: adminsHidden ? 312 : 312 + ADMIN_ACCOUNTS,
       newInWindow: signedUp,
       signupTrend: { days: 7, recent: 18, prior: 14 },
-      dailySignups: days.map((day, index) => ({ day, count: wave(index, 1, 0.08) })),
+      dailySignups,
     },
     overview: {
       headline: {
@@ -460,7 +464,8 @@ function adminMetrics(query: Readonly<Record<string, string>>): AdminMetrics {
         trend: { days: 7, recent: 1840, prior: 1622 },
       },
       funnel: funnel.map(([step, monthly]) => {
-        const accounts = scaled(monthly);
+        // Each step keeps its month's share of the signups, so no step outnumbers the one before it.
+        const accounts = Math.round((signedUp * monthly) / 64);
         return { step, accounts, share: signedUp === 0 ? null : accounts / signedUp };
       }),
       reach: {
