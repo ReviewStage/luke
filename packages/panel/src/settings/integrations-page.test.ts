@@ -706,7 +706,7 @@ test("a Cancel that lands after the sign-in finished leaves the provider connect
   assert.equal(granolaRow(page).line, "Connected · 1 tool");
 });
 
-test("a sign-in cancelled on Vercel Connect's own page says so plainly, with Try again", async () => {
+test("a sign-in cancelled on Vercel Connect's own page says so plainly, with Retry", async () => {
   const page = await mount();
   await pressOnGranola(page, "Connect");
 
@@ -715,14 +715,14 @@ test("a sign-in cancelled on Vercel Connect's own page says so plainly, with Try
   await focusWindow();
   assert.deepEqual(granolaRow(page), {
     line: "You cancelled connecting Granola.",
-    buttons: ["Try again"],
+    buttons: ["Retry"],
   });
   // The service names a failure once; the next read leaves the line as it stood.
   await focusWindow();
   assert.equal(granolaRow(page).line, "You cancelled connecting Granola.");
 });
 
-test("a sign-in Connect refused says so, then Connect's own line quoted under it, with Try again", async () => {
+test("a sign-in Connect refused says so, then Connect's own line quoted under it, with Retry", async () => {
   const page = await mount();
   await pressOnGranola(page, "Connect");
 
@@ -737,14 +737,14 @@ test("a sign-in Connect refused says so, then Connect's own line quoted under it
   await focusWindow();
   assert.deepEqual(granolaRow(page), {
     line: "Could not connect to Granola.\nGranola's sign-in said: “client_assertion aud must be the authorization server issuer”",
-    buttons: ["Try again"],
+    buttons: ["Retry"],
   });
 
-  await pressOnGranola(page, "Try again");
+  await pressOnGranola(page, "Retry");
   assert.deepEqual(granolaRow(page), WAITING);
 });
 
-test("a sign-in the browser came back from without a grant says it could not connect, and why, with Try again", async () => {
+test("a sign-in the browser came back from without a grant says it could not connect, and why, with Retry", async () => {
   const page = await mount();
   await pressOnGranola(page, "Connect");
   await focusWindow();
@@ -754,15 +754,15 @@ test("a sign-in the browser came back from without a grant says it could not con
   await focusWindow();
   assert.deepEqual(granolaRow(page), {
     line: "Could not connect to Granola: the sign-in came back without access.",
-    buttons: ["Try again"],
+    buttons: ["Retry"],
   });
 
-  await pressOnGranola(page, "Try again");
+  await pressOnGranola(page, "Retry");
   assert.deepEqual(granolaRow(page), WAITING);
 });
 
 it.effect(
-  "a sign-in still pending once its wait runs out says it did not finish, with Try again, and connects after all if the browser finishes it later",
+  "a sign-in still pending once its wait runs out says it did not finish, with Retry, and connects after all if the browser finishes it later",
   () =>
     Effect.gen(function* () {
       listed.set(GRANOLA, [{ name: "list_meetings", description: "Lists meetings." }]);
@@ -774,7 +774,7 @@ it.effect(
       yield* Effect.promise(settle);
       assert.deepEqual(granolaRow(page), {
         line: "Sign-in didn't finish.",
-        buttons: ["Try again"],
+        buttons: ["Retry"],
       });
 
       touched.set(GRANOLA, INTEGRATION_STATUS.CONNECTED);
@@ -825,7 +825,7 @@ it.effect("a sign-in begun later does not put off the deadline of one begun befo
     yield* Effect.promise(settle);
     assert.deepEqual(granolaRow(page), {
       line: "Sign-in didn't finish.",
-      buttons: ["Try again"],
+      buttons: ["Retry"],
     });
     assert.ok(
       page.textContent?.includes("Waiting for Linear in your browser…"),
@@ -848,7 +848,7 @@ it.effect(
       yield* Effect.promise(settle);
       assert.deepEqual(granolaRow(page), {
         line: "Sign-in didn't finish.",
-        buttons: ["Try again"],
+        buttons: ["Retry"],
       });
     }),
 );
@@ -1424,7 +1424,7 @@ test("an account renamed from its row's ⋯ is named in place: Escape keeps its 
   assert.ok(rowOf("Work"), "the row says the new name");
 });
 
-test("an added account whose first sign-in Connect refused keeps its row with the reason and Try again, which signs in a new account", async () => {
+test("an added account whose first sign-in Connect refused keeps its row with the reason and Retry, which signs in a new account", async () => {
   const notion = INTEGRATION_PROVIDER.NOTION;
   standing.set(notion, INTEGRATION_STATUS.CONNECTED);
   addable = [notion];
@@ -1463,8 +1463,8 @@ test("an added account whose first sign-in Connect refused keeps its row with th
   sent = [];
   act(() =>
     (
-      [...added.querySelectorAll("button")].find((button) => button.textContent === "Try again") ??
-      assert.fail("no Try again")
+      [...added.querySelectorAll("button")].find((button) => button.textContent === "Retry") ??
+      assert.fail("no Retry")
     ).click(),
   );
   await settle();
@@ -1639,7 +1639,7 @@ test("a statuses read answered after a newer one still says why the sign-in it s
 
   assert.deepEqual(granolaRow(page), {
     line: "Could not connect to Granola.\nGranola's sign-in said: “access_denied”",
-    buttons: ["Try again"],
+    buttons: ["Retry"],
   });
 });
 
