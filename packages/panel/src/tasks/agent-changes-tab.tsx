@@ -1808,7 +1808,7 @@ export function AgentChangesTab({
   const unkept = refreshFailed && !out && (pullRequest === null || shownFile === undefined);
   if ("failure" in answer || unkept) {
     return (
-      <ErrorState onRetry={ask} placement={ERROR_STATE_PLACEMENT.CENTRED}>
+      <ErrorState onRetry={refresh} placement={ERROR_STATE_PLACEMENT.CENTRED}>
         {CHANGES_WORDS.FAILED}
       </ErrorState>
     );
@@ -1848,7 +1848,9 @@ export function AgentChangesTab({
         tree={room.toggles}
       />
       <PullRequestWriteNote writes={viewedFiles} />
-      {refreshFailed && !out ? <ErrorState onRetry={ask}>{REFRESH_FAILED_WORDS}</ErrorState> : null}
+      {refreshFailed && !out ? (
+        <ErrorState onRetry={refresh}>{REFRESH_FAILED_WORDS}</ErrorState>
+      ) : null}
       {pullRequest.truncated ? (
         <div className="file-tab-notice">
           <p>{CHANGES_WORDS.TRUNCATED}</p>

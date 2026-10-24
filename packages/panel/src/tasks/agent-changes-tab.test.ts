@@ -1217,7 +1217,17 @@ test("a refresh that fails after the changes were read keeps the files drawn, sa
     [...document.querySelectorAll('[role="alert"]')].find((each) =>
       each.textContent?.includes("Could not refresh"),
     );
-  await drawTab({ control: flaky });
+  let threadReads = 0;
+  await drawTab({
+    control: flaky,
+    threads: {
+      list: [],
+      draw: () => null,
+      refresh: () => {
+        threadReads += 1;
+      },
+    },
+  });
   assert.equal(refreshNote(), undefined);
 
   const refresh = async () => {
@@ -1246,9 +1256,11 @@ test("a refresh that fails after the changes were read keeps the files drawn, sa
   const retry = [...note.querySelectorAll("button")].find((each) =>
     each.textContent?.includes("Retry"),
   );
+  const readsBefore = threadReads;
   act(() => retry?.click());
   await flush();
 
+  assert.equal(threadReads, readsBefore + 1, "Retry reads the review threads with the files");
   assert.equal(refreshNote(), undefined);
   assert.deepEqual(
     lastDrawn().files.map((file) => file.path),
