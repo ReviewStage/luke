@@ -681,12 +681,11 @@ test("a channel's composer offers the members a mention there tells under the ap
   act(() => railRow(page, "teammate-invitations").click());
   const box = boxNamed(page, "Message #teammate-invitations");
   typeInComposer(box, "@in");
+  // Note that Maria Chen is not offered, since "in" is no word of her name and a person is not found by letters in order.
   assert.deepEqual(menuRows(page), [
     "# Agents",
     "Invite emails · This task",
     "Add teammate invitations · This task",
-    "# People",
-    "Maria Chen",
     "# Plan",
     "Teammate invitations · The whole plan",
   ]);

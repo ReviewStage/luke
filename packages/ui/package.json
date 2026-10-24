@@ -27,6 +27,7 @@
     "./tokens.css": "./src/tokens/tokens.css",
     "./styles.css": "./src/styles.css",
     "./search-tokens": "./src/search-tokens.js",
+    "./search-score": "./src/search-score.js",
     "./reply-quote": "./src/reply-quote.js",
     "./skill-mention": "./src/skill-mention.js",
     "./sort-direction": "./src/sort-direction.js",

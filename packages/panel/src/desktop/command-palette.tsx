@@ -8,9 +8,11 @@
  * through the filters while the search field is empty, and ⌘[ and ⌘] at
  * any time, where they mean Back and Forward elsewhere; once anything is
  * typed, ← and → move the caret, as in any text field. A press on a filter
- * chooses it. The palette ranks the rows itself with the dialog's own
- * scoring (`commandScore`), so each kind keeps its own best few however
- * many rows the others hold.
+ * chooses it. The palette ranks the rows itself with the one tiered scorer
+ * (`@luke/ui/search-score`), so each kind keeps its own best few however
+ * many rows the others hold, and marks in each row what found it. Letters
+ * typed in order find only a file and a command, whose words are typed by
+ * their first letters, so "thm" finds no Theme setting.
  *
  * It decides nothing about a command: it lists the commands whose control is
  * on screen and able right now (`app-commands.ts`), so a row runs exactly
@@ -58,7 +60,7 @@ import { formatCount } from "@luke/features/number-format";
 import { TASK_TREE_BOUNDS, TASK_TREE_ENTRY, type TaskSummary } from "@luke/features/task-wire";
 import type { TaskCodeShowing, TasksTreeAnswer } from "@luke/features/tasks-view";
 import { readFailedWords, TERM } from "@luke/features/words";
-import { namesTaskKey, taskKey } from "@luke/features/workspace-key";
+import { taskKey } from "@luke/features/workspace-key";
 import type { Workspace, WorkspaceMember } from "@luke/features/workspace-wire";
 import type { ExperimentChoices, HostCapability } from "@luke/settings";
 import { SETTINGS_PAGE_LIST, type SettingsView } from "@luke/settings/settings-views";
@@ -94,9 +96,15 @@ import {
   CommandDialog,
   type CommandGroup,
   type CommandItem,
-  commandScore,
 } from "@luke/ui/command";
-import { matchesTokens, matchRanges, searchTokens } from "@luke/ui/search-tokens";
+import {
+  hitRangesIn,
+  SEARCH_TIER,
+  type SearchHit,
+  type SearchSubject,
+  searchHit,
+} from "@luke/ui/search-score";
+import { type MatchRange, matchesTokens, matchRanges, searchTokens } from "@luke/ui/search-tokens";
 import {
   agentRow,
   orderTaskRows,
@@ -107,6 +115,7 @@ import {
   taskRow,
 } from "@luke/ui/task-list-model";
 import { DOCUMENT_REGION, TASK_MARK } from "@luke/ui/tasks-model";
+import { fileName } from "@luke/voice/code-pane-model";
 import {
   type ReactNode,
   useDeferredValue,
@@ -393,6 +402,8 @@ interface PaletteRow {
   taskKey?: { readonly workspaceName: string; readonly number: number } | undefined;
   /** Longer words the row is found by as the settings search finds it, every word of the query somewhere in them. */
   keywords?: readonly string[] | undefined;
+  /** Whether letters typed in order find the row, as a file's path or a command's name. */
+  loose?: boolean | undefined;
   onChoose: () => void;
 }
 
@@ -403,33 +414,30 @@ interface PaletteSection {
   notice: PaletteNotice | undefined;
 }
 
-/** The score a row found only by its keywords takes: after every row its own words matched. */
-const KEYWORD_SCORE = Number.MIN_VALUE;
-
-/** The score a task takes whose key the query is whole: the scoring's best, which no fuzzy match beats. */
-const KEY_SCORE = 1;
-
 /**
- * How well a row answers the query: the best where it is the row's task's
- * key whole, else the dialog's own score over its short words, else the least
- * score where every word of the query is in its keywords. Note that a key
- * typed whole is not left to that score, because it weighs the words
- * before a term, so STAG-42 typed could rank STAG-421 of a shorter name
- * above STAG-42 itself; and the keywords are not scored by it, because
- * it is fuzzy and a setting's description is long enough to hold
- * almost any letters in order.
+ * What a row is searched by: its name, its other short words, its task's
+ * key, its keywords, and, for a file or a command, its letters in order.
  */
-function rowScore(row: PaletteRow, query: string, tokens: readonly string[]): number {
-  const key =
-    row.taskKey === undefined ? undefined : taskKey(row.taskKey.workspaceName, row.taskKey.number);
-  if (key !== undefined && namesTaskKey(query, key)) return KEY_SCORE;
-  const score = commandScore(row.terms.join(" "), query);
-  if (score > 0 || row.keywords === undefined) return score;
-  return matchesTokens(row.keywords, tokens) ? KEYWORD_SCORE : 0;
+function rowSubject(row: PaletteRow): SearchSubject {
+  return {
+    label: row.label,
+    lines: row.terms.filter((term) => term !== row.label),
+    key:
+      row.taskKey === undefined
+        ? undefined
+        : taskKey(row.taskKey.workspaceName, row.taskKey.number),
+    keywords: row.keywords,
+    loose: row.loose,
+  };
+}
+
+/** How well a row answers the query, by the tier it meets; 0 where it meets none. */
+function rowScore(row: PaletteRow, query: string): number {
+  return searchHit(rowSubject(row), query)?.score ?? 0;
 }
 
 /**
- * How well a path answers the query: the dialog's own score, asked only of a path
+ * How well a path answers the query, as its row would: asked only of a path
  * holding every letter typed, since the repository may hold tens of
  * thousands and most hold none of a query's rarer letters.
  */
@@ -438,7 +446,7 @@ function pathScore(path: string, query: string): number {
   for (const letter of query.toLowerCase()) {
     if (letter.trim() !== "" && !lowered.includes(letter)) return 0;
   }
-  return commandScore(path, query);
+  return searchHit({ label: fileName(path), lines: [path], loose: true }, query)?.score ?? 0;
 }
 
 /**
@@ -449,12 +457,11 @@ function ranked<Item>(
   items: readonly Item[],
   query: string,
   limit: number,
-  score: (item: Item, tokens: readonly string[]) => number,
+  score: (item: Item) => number,
 ): readonly Item[] {
-  const tokens = searchTokens(query);
-  if (tokens.length === 0) return items.slice(0, limit);
+  if (searchTokens(query).length === 0) return items.slice(0, limit);
   return items
-    .map((item) => ({ item, score: score(item, tokens) }))
+    .map((item) => ({ item, score: score(item) }))
     .filter((each) => each.score > 0)
     .sort((first, second) => second.score - first.score)
     .slice(0, limit)
@@ -548,6 +555,7 @@ function fileRow(
   const note = newestFileNote(read.shown, path, { repository: read.repository, commit: undefined });
   return {
     ...fileLook(path),
+    loose: true,
     card: <FileCard path={path} note={note} />,
     onChoose: () => open(path),
   };
@@ -1168,27 +1176,34 @@ function settingRows(
 
 /**
  * The person whose name explains why the query found a row, its assignee
- * before its creator: the one whose name holds the most words of the query,
- * else, where the query reaches the row only with the names among its words,
- * as a loose match on a name, or one running from the task's name into a
- * person's, does, the name it answers best; none where the row's own words
- * explain it.
+ * before its creator: the one whose name holds the most words of the query;
+ * none where no name holds one, since the row's own words explain it then.
  */
-function personFound(
-  row: PaletteRow,
-  query: string,
-  tokens: readonly string[],
-): string | undefined {
+function personFound(row: PaletteRow, tokens: readonly string[]): string | undefined {
   const people = row.people ?? [];
   if (people.length === 0 || tokens.length === 0) return undefined;
   // The name holding the most of the query's words, so a first name two people share never hides the one the whole query names.
   const held = (name: string) =>
     tokens.filter((token) => matchRanges(name, [token]).length > 0).length;
   const named = people.reduce((best, name) => (held(name) > held(best) ? name : best));
-  if (held(named) > 0) return named;
-  const others = row.terms.filter((term) => !people.includes(term)).join(" ");
-  if (commandScore(others, query) !== 0) return undefined;
-  return people.toSorted((a, b) => commandScore(b, query) - commandScore(a, query))[0];
+  return held(named) > 0 ? named : undefined;
+}
+
+/**
+ * Where a drawn line other than the row's name is marked: a loose hit's
+ * letters where they fell in it, and else wherever the words typed stand
+ * in it, since a word tier found each of them whole.
+ */
+function markedIn(
+  text: string,
+  subject: SearchSubject,
+  hit: SearchHit | undefined,
+  tokens: readonly string[],
+): readonly MatchRange[] {
+  if (hit === undefined) return [];
+  return hit.tier === SEARCH_TIER.LOOSE
+    ? hitRangesIn(text, subject, hit)
+    : matchRanges(text, tokens);
 }
 
 /** A row as the dialog draws it, known by its place in the list, its words lit where the query found them. */
@@ -1198,8 +1213,10 @@ function paletteItem(
   query: string,
   tokens: readonly string[],
 ): CommandItem {
+  const subject = rowSubject(row);
+  const hit = searchHit(subject, query);
   // A task found by its assignee's or its creator's name says the name after its detail, so the match is in sight.
-  const found = personFound(row, query, tokens);
+  const found = personFound(row, tokens);
   const detail =
     found === undefined
       ? row.detail
@@ -1210,11 +1227,18 @@ function paletteItem(
         {row.workspace === undefined ? null : (
           <WorkspaceRef
             workspace={row.workspace}
-            name={<Highlighted text={row.workspace.name} tokens={tokens} />}
+            name={
+              <Highlighted
+                text={row.workspace.name}
+                ranges={markedIn(row.workspace.name, subject, hit, tokens)}
+              />
+            }
           />
         )}
         {row.workspace === undefined || detail === undefined ? null : " · "}
-        {detail === undefined ? null : <Highlighted text={detail} tokens={tokens} />}
+        {detail === undefined ? null : (
+          <Highlighted text={detail} ranges={markedIn(detail, subject, hit, tokens)} />
+        )}
       </>
     );
   // Spoken, since a palette row is an option, which carries no
@@ -1238,7 +1262,7 @@ function paletteItem(
           tokens={tokens}
         />
       ),
-    label: <Highlighted text={row.label} tokens={tokens} />,
+    label: <Highlighted text={row.label} ranges={hit?.label ?? []} />,
     icon: row.icon,
     detail: words,
     hint: end,
@@ -1534,7 +1558,7 @@ export function CommandPalette({
     open &&
     askLuke !== undefined &&
     (filter === PALETTE_FILTER.ALL || filter === PALETTE_FILTER.AGENTS) &&
-    (tokens.length === 0 || rowScore(askLuke, sought, tokens) > 0);
+    (tokens.length === 0 || rowScore(askLuke, sought) > 0);
   // The listed workspace's members, read once for it, name a task's assignee by face.
   const membersRead = useWorkspaceMembersRead(tasks.workspace);
   const originOf = useTaskOrigin();
@@ -1591,7 +1615,7 @@ export function CommandPalette({
 
   // Each kind's rows in tiers, built only for the filter shown and only
   // while open: every row a tier matches ranks above the next tier's.
-  const byRow = (row: PaletteRow, words: readonly string[]) => rowScore(row, sought, words);
+  const byRow = (row: PaletteRow) => rowScore(row, sought);
   const tiersOf = {
     [PALETTE_FILTER.TASKS]: () => [
       tasks.signedIn
@@ -1622,6 +1646,7 @@ export function CommandPalette({
       peopleRows(members, tasks.me, (userId) => onTasks(() => tasks.personView.onOpen(userId))),
     ],
     [PALETTE_FILTER.FILES]: () => [],
+    // Note that a command is found by its letters in order too, as a path is, since a command's name is typed by its first letters.
     [PALETTE_FILTER.ACTIONS]: () => [
       [
         ...copyLinkRows(links.linksAt(fromPanel), (held) => choose(() => links.copy(held))),
@@ -1631,7 +1656,7 @@ export function CommandPalette({
         ...agentReadMarkRows(listedTasks, agentReads, choose),
         ...taskPinRows(tasks, reads, choose),
         ...agentPinRows(listedTasks, choose),
-      ],
+      ].map((row) => ({ ...row, loose: true })),
     ],
     [PALETTE_FILTER.SETTINGS]: () => [
       settingsPageRows(settings.capabilities, experiments, openPage),

@@ -88,6 +88,8 @@ export interface ComboboxOption {
   /** The caller's own key for the option, stable while it stands. */
   readonly id: string;
   readonly label: ReactNode;
+  /** Its name in plain words, where `label` draws them marked, which names its card to a reader. */
+  readonly words?: string | undefined;
   /** Before its glyph, in a column the options leading with one line up in, as a task's key leads its row in the Tasks list. */
   readonly lead?: ReactNode;
   readonly icon?: ReactNode;
@@ -218,7 +220,7 @@ function OptionRow({
   if (option.card === undefined) return row;
   return (
     <Tooltip
-      label={typeof option.label === "string" ? option.label : undefined}
+      label={option.words ?? (typeof option.label === "string" ? option.label : undefined)}
       card={option.card}
       cardBeside
     >

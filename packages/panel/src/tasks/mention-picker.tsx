@@ -54,7 +54,8 @@ import {
 } from "@luke/ui";
 import { type Actor, LUKE_ACTOR } from "@luke/ui/actor-model";
 import type { NamedServer } from "@luke/ui/agent-servers-model";
-import { commandScore } from "@luke/ui/command";
+import { hitRangesIn, LOOSE_FROM, type SearchSubject, searchHit } from "@luke/ui/search-score";
+import { searchTokens } from "@luke/ui/search-tokens";
 import type { SkillOption } from "@luke/ui/skill-mention";
 import { pullRequestLabelOf } from "@luke/ui/tab-strip-model";
 import { fileFolder, fileName } from "@luke/voice/code-pane-model";
@@ -78,6 +79,7 @@ import { useMemberDirectory } from "../member-directory.js";
 import { memberRows, YOU_WORD } from "../member-rows.js";
 import type { ComposerTrigger, MentionNode } from "../plan-editor/contract.js";
 import { rendererRuntime } from "../renderer-runtime.js";
+import { Highlighted } from "../search-field.js";
 import { appStateDerivedAtom, useAppSlice } from "../use-app-state.js";
 import { type AgentRowPlace, agentMenuRow, useAgentRowPlace } from "./agent-menu-row.js";
 import {
@@ -106,7 +108,8 @@ import { useTaskStatus } from "./use-known-names.js";
  * highlighted row as its mention, and Escape closes the list until the caret
  * leaves the word. Keys an input method is composing with stay its own. Nothing typed after the `@`, it offers the task and its
  * sections; typed, it finds each kind's best few by the words typed, scored
- * as ⌘K scores them (`commandScore`), files and folders first, each
+ * as ⌘K scores them (`@luke/ui/search-score`), each row marking what found
+ * it, letters typed in order finding only a path, files and folders first, each
  * group in a fixed place so a later read never moves the rows above it.
  * Once the words run past a space and nothing matches them, the list
  * stands aside, since they are the developer's own words rather than a
@@ -311,9 +314,6 @@ const PER_GROUP = 4;
 
 /** The most rows a list narrowed to one kind lists. */
 const PER_KIND = 50;
-
-/** The score a task takes whose key the words are whole: cmdk's best, which no fuzzy match beats. */
-const KEY_SCORE = 1;
 
 /** How long the typing rests before the service is searched for the agents the words name. */
 const SEARCH_PAUSE = Duration.millis(250);
@@ -780,15 +780,38 @@ function keyed(row: MentionRow, query: string): boolean {
   return row.key !== undefined && namesTaskKey(query, row.key);
 }
 
+/** Whether a row is a path's, whose letters typed in order find it. */
+function isPath(row: MentionRow): boolean {
+  return (
+    "mention" in row &&
+    (row.mention.kind === MENTION_KIND.FILE || row.mention.kind === MENTION_KIND.FOLDER)
+  );
+}
+
+/** What a row is searched by: its name, the words it is found by, its task's key, and, for a path, its letters in order. */
+function rowSubject(row: MentionRow): SearchSubject {
+  return {
+    label: row.name,
+    lines: row.terms === row.name ? [] : [row.terms],
+    key: row.key,
+    loose: isPath(row),
+  };
+}
+
+/** How well a row answers the query, by the tier it meets; 0 where it meets none. */
+function rowScore(row: MentionRow, query: string): number {
+  return searchHit(rowSubject(row), query)?.score ?? 0;
+}
+
 /**
  * The rows matching the query, best first, as many as `most`; the first
  * rows in order for no query. A task whose key the words are whole ranks
- * first, since cmdk's fuzzy score could put a longer key it begins above it.
+ * first, in the scorer's first tier.
  */
 function best(rows: readonly MentionRow[], query: string, most: number): readonly MentionRow[] {
   if (query.trim() === "") return rows.slice(0, most);
   return rows
-    .map((row) => ({ row, score: keyed(row, query) ? KEY_SCORE : commandScore(row.terms, query) }))
+    .map((row) => ({ row, score: rowScore(row, query) }))
     .filter((each) => each.score > 0)
     .sort((first, second) => second.score - first.score)
     .slice(0, most)
@@ -820,8 +843,10 @@ interface PathSearch {
  * of thousands of. Each word's finds are kept while the word is typed on or
  * back, so a word met again is answered from what it found; and a word typed
  * on from one kept searches only what that one found. Note that the
- * narrowing is sound because cmdk's score asks for every letter typed in
- * order, so a letter more never finds a path the shorter word did not.
+ * narrowing is sound only from a word of at least `LOOSE_FROM` letters:
+ * a letter more never begins, starts, or holds a word the shorter one did
+ * not, and its letters in order are the shorter one's in order, but a
+ * shorter word finds nothing by letters in order, which a longer one may.
  */
 function pathSearch(paths: readonly RepositoryPath[]): PathSearch {
   const all = paths.map((entry) => ({ entry, row: pathRow(entry) }));
@@ -834,12 +859,12 @@ function pathSearch(paths: readonly RepositoryPath[]): PathSearch {
       if (!term.startsWith(word) && !word.startsWith(term)) kept.delete(word);
     }
     const shorter = [...kept.keys()]
-      .filter((word) => term.startsWith(word))
+      .filter((word) => term.startsWith(word) && searchTokens(word).join("").length >= LOOSE_FROM)
       .sort((first, second) => second.length - first.length)
       .at(0);
     const among = shorter === undefined ? all : (kept.get(shorter)?.matched ?? all);
     const matched = among
-      .map((each) => ({ ...each, score: commandScore(each.row.terms, term) }))
+      .map((each) => ({ ...each, score: rowScore(each.row, term) }))
       .filter((each) => each.score > 0);
     const ranked = [...matched].sort((first, second) => second.score - first.score);
     kept.set(term, { matched, ranked });
@@ -1078,15 +1103,38 @@ function rowKey(row: MentionRow): string {
 /** The card a file's row hangs, drawn for the path as the list draws it; none for a row that is no file. */
 type FileCardOf = (row: MentionRow) => React.ReactNode;
 
-/** The groups as the list draws them: each row its glyph, its name, its detail, an agent's end, its card, and a chevron where it opens. */
-function comboboxGroups(groups: readonly MentionGroup[], fileCard: FileCardOf): ComboboxGroup[] {
+/** A row's name and detail, each marked where the words found it, as ⌘K marks its rows. */
+function markedWords(
+  row: MentionRow,
+  query: string,
+): { readonly label: React.ReactNode; readonly detail: React.ReactNode } {
+  const subject = rowSubject(row);
+  const hit = searchHit(subject, query);
+  if (hit === undefined) return { label: row.name, detail: row.detail };
+  return {
+    label: <Highlighted text={row.name} ranges={hit.label} />,
+    detail:
+      typeof row.detail === "string" ? (
+        <Highlighted text={row.detail} ranges={hitRangesIn(row.detail, subject, hit)} />
+      ) : (
+        row.detail
+      ),
+  };
+}
+
+/** The groups as the list draws them: each row its glyph, its name and detail marked where `query` found them, an agent's end, its card, and a chevron where it opens. */
+function comboboxGroups(
+  groups: readonly MentionGroup[],
+  query: string,
+  fileCard: FileCardOf,
+): ComboboxGroup[] {
   return groups.map((group) => ({
     label: group.label,
     options: group.rows.map((row) => ({
       id: rowKey(row),
-      label: row.name,
+      ...markedWords(row, query),
+      words: row.name,
       icon: row.look?.icon ?? <RowGlyph row={row} />,
-      detail: row.detail,
       hint: row.look?.end,
       card: row.look?.card ?? row.card ?? fileCard(row),
       opens: "from" in row,
@@ -1152,6 +1200,7 @@ function MentionMenu({
   id,
   crumb,
   groups,
+  query,
   at,
   keys,
   reading,
@@ -1163,6 +1212,8 @@ function MentionMenu({
   id: string;
   crumb: Crumb | undefined;
   groups: readonly MentionGroup[];
+  /** The words the groups were found by, which mark each row. */
+  query: string;
   at: number;
   keys: readonly MenuKey[];
   /** Whether a read the list offers rows from is still out, which the list says in place of "no match". */
@@ -1181,7 +1232,7 @@ function MentionMenu({
       <ComboboxList
         id={id}
         label={MENU_LABEL}
-        groups={comboboxGroups(groups, fileCard)}
+        groups={comboboxGroups(groups, query, fileCard)}
         active={at}
         onActiveChange={onHover}
         onChoose={(index) => {
@@ -1930,6 +1981,7 @@ export function useMentionPicker({
             : { kind: scope.kind, folder: scope.walked.at(-1)?.path, back }
         }
         groups={groups}
+        query={naming ? trigger.query : term}
         at={at}
         keys={keys}
         reading={reading}

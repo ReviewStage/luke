@@ -1,8 +1,9 @@
 import { noMatchWords, TERM } from "@luke/features/words";
-import { Command, defaultFilter } from "cmdk";
+import { Command } from "cmdk";
 import { type ReactNode, type Ref, useLayoutEffect, useRef, useState } from "react";
 import { cn } from "../../cn.js";
 import { SearchIcon } from "../../face/glyphs.js";
+import { searchHit } from "../../search-score.js";
 import { COMBOBOX_HEADING } from "../../shadcn/combobox.js";
 import { DialogContent, Dialog as ShadcnDialog } from "../../shadcn/dialog.js";
 import {
@@ -19,10 +20,10 @@ import { Tooltip } from "../tooltip/hint.js";
 /**
  * command-dialog.tsx -- a search field over a list of commands in a card over the dimmed window, found by typing and chosen with the arrows and Return: ⌘K's frame, and every palette's.
  *
- * It is the one place cmdk is drawn, so no caller imports it: the field,
- * the list's keys (↑ and ↓ wrapping, Home and End, Return choosing), and
- * the scoring of typed words are cmdk's, and everything seen is this
- * component's. The rows are narrowed here by that scoring, each group in
+ * It is the one place cmdk is drawn, so no caller imports it: the field
+ * and the list's keys (↑ and ↓ wrapping, Home and End, Return choosing) are
+ * cmdk's, and everything seen is this component's. The rows are narrowed
+ * here by the one tiered scorer every search ranks by (`search-score.ts`), each group in
  * the caller's order with its rows best first, so a group's note stays
  * after its rows, and stays when none of them match. shadcn/ui's command pattern is the reference: cmdk's root
  * inside shadcn's dialog (`../../shadcn/dialog.tsx`, on Base UI), which
@@ -57,7 +58,7 @@ import { Tooltip } from "../tooltip/hint.js";
 
 /** Whether the dialog narrows its rows to the words typed, or shows them as the caller handed them. */
 export const COMMAND_FILTER = {
-  /** cmdk matches each row's words against the field and ranks what matches. */
+  /** The dialog matches each row's words against the field and ranks what matches. */
   WORDS: "words",
   /** The caller narrows and ranks its rows itself, from the query it is told. */
   NONE: "none",
@@ -118,22 +119,9 @@ const NOTE = "px-row-inset pt-luke-4 pb-luke-8 text-caption text-muted-foregroun
 const HEADING = cn("block", COMBOBOX_HEADING);
 
 /**
- * How well `words`, and any `keywords` beside them, answer `typed`: 0 where
- * they do not, up to 1 where they are it, by cmdk's own scoring, which every
- * palette ranks by. A caller that ranks its own rows (`COMMAND_FILTER.NONE`)
- * scores them with this, so its order and the dialog's agree.
- */
-export function commandScore(
-  words: string,
-  typed: string,
-  keywords?: readonly string[] | undefined,
-): number {
-  return defaultFilter(words, typed, keywords === undefined ? undefined : [...keywords]);
-}
-
-/**
  * The `groups` narrowed to the rows whose words match `typed`, best first
- * within each group, by `commandScore`; every row where nothing is typed.
+ * within each group, by the tiered scorer over each row's words and
+ * keywords; every row where nothing is typed.
  * Note that the groups keep the caller's order, each its note.
  */
 function matching(groups: readonly CommandGroup[], typed: string): readonly CommandGroup[] {
@@ -141,7 +129,10 @@ function matching(groups: readonly CommandGroup[], typed: string): readonly Comm
   return groups.map((group) => ({
     ...group,
     items: group.items
-      .map((item) => ({ item, score: commandScore(item.words, typed, item.keywords) }))
+      .map((item) => ({
+        item,
+        score: searchHit({ label: item.words, keywords: item.keywords }, typed)?.score ?? 0,
+      }))
       .filter((scored) => scored.score > 0)
       .sort((first, second) => second.score - first.score)
       .map((scored) => scored.item),
@@ -179,7 +170,7 @@ export interface CommandDialogProps {
   /** The field's placeholder, what typing finds. */
   placeholder: string;
   groups: readonly CommandGroup[];
-  /** Whether cmdk narrows the rows to the words typed; the caller's own ranking turns it off. */
+  /** Whether the dialog narrows the rows to the words typed; the caller's own ranking turns it off. */
   filter?: CommandFilter | undefined;
   /** The words typed, where the owner holds them; the dialog holds its own where none are given, cleared each time it opens. */
   query?: string | undefined;
