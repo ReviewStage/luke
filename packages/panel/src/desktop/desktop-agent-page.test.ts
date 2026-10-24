@@ -1209,6 +1209,23 @@ test("an agent the service will not hand the reader, as a link to another worksp
   );
 });
 
+test("on a phone an agent that is not found still leads with its way back", async () => {
+  pages = [{ failure: CODING_AGENT_CALL_FAILURE.NOT_FOUND }];
+  const left: string[] = [];
+  const page = mount(tasksControl({}), undefined, {
+    label: "Inbox",
+    onPress: () => left.push("away"),
+  });
+  await settle();
+
+  assert.match(page.textContent ?? "", /Not found/u);
+  const head = page.querySelector<HTMLElement>(".agent-head") ?? assert.fail("the phone's bar");
+  const back = head.querySelector<HTMLButtonElement>("button") ?? assert.fail("its way back");
+  assert.equal(back.textContent?.trim(), "Inbox");
+  act(() => back.click());
+  assert.deepEqual(left, ["away"]);
+});
+
 test("an archived agent's page offers Unarchive in its composer's place, which brings the agent back", async () => {
   pages = [{ agent: { ...PAGE, archivedAt: 2 } }];
   const page = mount();

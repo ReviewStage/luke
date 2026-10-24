@@ -74,7 +74,7 @@ import {
 } from "./agent-actions.js";
 import { isLuke, LUKE_NAME, useLukeOperator } from "./luke-operator.js";
 import { AgentPane } from "./main-tabs.js";
-import { PhoneBack, PhoneHead } from "./phone-head.js";
+import { PhoneBack, PhoneHead, phoneBar } from "./phone-head.js";
 import {
   COLUMN,
   SIDE_PANEL_HOLDER,
@@ -563,7 +563,19 @@ export function DesktopAgentPage({
     );
   if (agent === undefined) {
     // A page the service would not hand the reader keeps its bar over the words saying so.
-    if (agents.listMissing) return <NotFound thing={NOT_FOUND_THING.AGENT} bar={{}} />;
+    // On a phone the bar keeps the page's way back, the drawer and the places bar out of reach.
+    if (agents.listMissing) {
+      return (
+        <NotFound
+          thing={NOT_FOUND_THING.AGENT}
+          bar={
+            phoneHead === undefined
+              ? {}
+              : phoneBar({ place: "agent", start: <PhoneBack back={phoneHead.back} />, end: null })
+          }
+        />
+      );
+    }
     return (
       <Fill as={FILL_ELEMENT.SECTION} className="agent-page" aria-label="Agent">
         {toolbar}
