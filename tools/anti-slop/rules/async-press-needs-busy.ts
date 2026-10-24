@@ -43,28 +43,6 @@ function calleeName(callee: Node): string | undefined {
 }
 
 /**
- * Whether `node`, a handler's body, awaits something, starts an act, or
- * chains a promise, outside any function it only defines: what a press does
- * that takes time. Note that a `void`ed act counts, since it is the
- * unawaited promise a person is left waiting on.
- */
-function startsWait(node: Node): boolean {
-  if (node.type === "AwaitExpression") return true;
-  if (node.type === "CallExpression") {
-    const name = calleeName(node.callee);
-    if (name !== undefined && (ACT_CALLS.has(name) || PROMISE_CHAIN.has(name))) return true;
-  }
-  for (const [key, child] of Object.entries(node)) {
-    if (key === "parent") continue;
-    const children = Array.isArray(child) ? child : [child];
-    for (const each of children) {
-      if (isNode(each) && !isFunction(each) && startsWait(each)) return true;
-    }
-  }
-  return false;
-}
-
-/**
  * The rule: a `@luke/ui` button whose press is async, or hands back a
  * promise (`pressAct`, `useAct().press`, an awaited act, a `.then`), passes
  * `busy`, so a slow answer is seen working in the one busy shape every kind of
@@ -98,6 +76,30 @@ export const asyncPressNeedsBusyRule = defineRule({
       held.set(name, held.has(name) ? null : value);
     }
 
+    /**
+     * Whether `node`, a handler's body, awaits something, starts an act,
+     * chains a promise, or calls a function of this file that does, outside
+     * any function it only defines: what a press does that takes time. Note
+     * that a `void`ed act counts, since it is the unawaited promise a person
+     * is left waiting on.
+     */
+    function startsWait(node: Node, depth: number): boolean {
+      if (node.type === "AwaitExpression") return true;
+      if (node.type === "CallExpression") {
+        const name = calleeName(node.callee);
+        if (name !== undefined && (ACT_CALLS.has(name) || PROMISE_CHAIN.has(name))) return true;
+        if (node.callee.type === "Identifier" && isAsync(node.callee, depth)) return true;
+      }
+      for (const [key, child] of Object.entries(node)) {
+        if (key === "parent") continue;
+        const children = Array.isArray(child) ? child : [child];
+        for (const each of children) {
+          if (isNode(each) && !isFunction(each) && startsWait(each, depth)) return true;
+        }
+      }
+      return false;
+    }
+
     /** Whether the press `node` names or writes is async, following a name held in this file. */
     function isAsync(node: Node | null | undefined, depth: number): boolean {
       if (node === null || node === undefined) return false;
@@ -107,7 +109,7 @@ export const asyncPressNeedsBusyRule = defineRule({
         case "ArrowFunctionExpression":
         case "FunctionExpression":
         case "FunctionDeclaration":
-          return node.async || (node.body !== null && startsWait(node.body));
+          return node.async || (node.body !== null && startsWait(node.body, depth));
         case "ConditionalExpression":
           return isAsync(node.consequent, depth) || isAsync(node.alternate, depth);
         case "LogicalExpression":

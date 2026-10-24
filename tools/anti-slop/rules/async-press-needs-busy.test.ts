@@ -58,6 +58,11 @@ tester.run("async-press-needs-busy", asyncPressNeedsBusyRule, {
     panel(
       "function A({ press }) { return <Button onClick={() => { const later = () => press(K); later; }} />; }",
     ),
+    // A wrapper over a function that waits on nothing, or that calls itself, needs no busy.
+    panel("function A() { const open = () => set(1); return <Button onClick={() => open()} />; }"),
+    panel(
+      "function A() { function again() { again(); } return <Button onClick={() => again()} />; }",
+    ),
     // A name that is no `@luke/ui` button, or a lowercase element, is not the rule's.
     {
       code: 'import { Button } from "./my-button.js"; function A({ press }) { return <Button onClick={() => press(K)} />; }',
@@ -125,6 +130,13 @@ tester.run("async-press-needs-busy", asyncPressNeedsBusyRule, {
     {
       ...panel(
         "function A({ press }) { const save = useCallback(() => press(K), []); return <Button onClick={save} />; }",
+      ),
+      errors: [{ messageId: "noBusy" }],
+    },
+    // A short wrapper over a function of this file that is async.
+    {
+      ...panel(
+        "function A() { const send = async () => { await go(); }; return <Button onClick={() => void send()} />; }",
       ),
       errors: [{ messageId: "noBusy" }],
     },
