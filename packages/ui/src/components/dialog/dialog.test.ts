@@ -469,7 +469,7 @@ test("a dialog opened over another is the one Escape puts away, and the one bene
 });
 
 /** A window holding the button that opens a dialog through `open`, whose Done closes it the same way. */
-function OpenOwner({ onExited }: { onExited?: () => void }): React.JSX.Element {
+function OpenOwner({ onExited }: { onExited?: (() => void) | undefined }): React.JSX.Element {
   const [open, setOpen] = useState(false);
   return createElement(
     "div",
