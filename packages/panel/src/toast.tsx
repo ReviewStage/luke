@@ -73,7 +73,7 @@ const ALERT_TONES: ReadonlySet<ToastTone> = new Set([STATUS_TONE.DANGER]);
 export { TOAST_HOLD };
 
 /** What a toast's action says when it takes back what the toast reports. */
-export const UNDO_LABEL = "Undo";
+const UNDO_LABEL = "Undo";
 
 /** A toast's one action: its button's label, and what a press of it does; one that opens a page names it as `href`, so it is drawn as a link, and its press opens it through the window's door. */
 interface ToastAction {

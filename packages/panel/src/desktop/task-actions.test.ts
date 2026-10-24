@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
 import {
   PLAN_ACTOR,
   TASK_STATUS,
@@ -10,10 +11,12 @@ import {
 } from "@luke/features/task-wire";
 import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
 import { ACT_KIND } from "@luke/host/acts";
+import { ProviderMark } from "@luke/ui";
 import { DOCUMENT_REGION, TASKS_PAGE, type TaskMark } from "@luke/ui/tasks-model";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { act, createElement, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
+import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, test } from "vitest";
 import { MemberDirectory } from "../member-directory.js";
 import { OpenPersonProvider } from "../person-door.js";
@@ -206,8 +209,19 @@ function rightClick(row: HTMLElement, clientX: number, clientY: number): void {
 function menuItems(): HTMLButtonElement[] {
   return [...document.querySelectorAll<HTMLButtonElement>('[role="menu"] [role="menuitem"]')];
 }
+/** What an item says, without the chord printed at its end. */
+function itemLabel(item: HTMLElement): string | null {
+  return item.querySelector(".luke-menu-item-label")?.textContent ?? null;
+}
+/** Each item of the open menu that prints a chord, as what it says and the chord's glyphs. */
+function itemChords(): [string | null, string][] {
+  return menuItems().flatMap((item): [string | null, string][] => {
+    const keys = item.querySelector(".luke-shortcut");
+    return keys === null ? [] : [[itemLabel(item), keys.textContent ?? ""]];
+  });
+}
 function choose(label: string): void {
-  const item = menuItems().find((candidate) => candidate.textContent === label);
+  const item = menuItems().find((candidate) => itemLabel(candidate) === label);
   assert.ok(item, `the menu offers ${label}`);
   act(() => item.click());
 }
@@ -522,7 +536,7 @@ test("Copy link copies the plan's address on tryluke.dev, alike from the toolbar
   };
   const link = `https://tryluke.dev/dean/plan/${TASK.id}`;
   const copyFromMenu = async () => {
-    const item = menuItems().find((candidate) => candidate.textContent === "Copy link");
+    const item = menuItems().find((candidate) => itemLabel(candidate) === "Copy link");
     assert.ok(item, "the menu offers Copy link");
     await act(async () => item.click());
   };
@@ -700,7 +714,7 @@ test("Mark done marks a task with agents done at once, from its row's check and 
   rightClick(rowButton, 40, 60);
   choose("Mark done");
   rightClick(rowButton, 40, 60);
-  const cancel = menuItems().find((item) => item.textContent === "Cancel task");
+  const cancel = menuItems().find((item) => itemLabel(item) === "Cancel task");
   assert.equal(cancel?.dataset.danger, "true", "Cancel task is drawn red");
   choose("Cancel task");
   assert.deepEqual(settled, [
@@ -715,9 +729,31 @@ test("Mark done marks a task with agents done at once, from its row's check and 
   const doneRowButton = doneRow.querySelector("ul > li > button");
   assert.ok(doneRowButton instanceof HTMLButtonElement);
   rightClick(doneRowButton, 40, 60);
-  const labels = menuItems().map((item) => item.textContent);
+  const labels = menuItems().map(itemLabel);
   assert.equal(labels.includes("Mark done"), false);
   assert.equal(labels.includes("Cancel task"), true);
+});
+
+test("the open task's ⋯ prints the chords of Copy plan, Mark done, and Permanently delete, which act on it, another task's menu prints none, and Open on GitHub wears the GitHub mark", () => {
+  const { tasks, asked } = openTab({ [TASK.id]: "acme/app", [OTHER.id]: "acme/app" });
+
+  openMenu(mountToolbar(tasks));
+  assert.deepEqual(itemChords(), [
+    ["Copy plan", "⇧⌘C"],
+    ["Mark done", "⇧⌘A"],
+    ["Permanently delete", "⌘⌫"],
+  ]);
+  const github = menuItems().find((item) => itemLabel(item) === "Open on GitHub");
+  assert.equal(
+    github?.querySelector(".luke-menu-item-glyph")?.innerHTML,
+    renderToStaticMarkup(createElement(ProviderMark, { provider: INTEGRATION_PROVIDER.GITHUB })),
+    "Open on GitHub wears the GitHub mark",
+  );
+
+  unmountAll();
+  rightClick(mountSidebarTask(tasks, OTHER, asked), 40, 60);
+  assert.ok(menuItems().some((item) => itemLabel(item) === "Mark done"));
+  assert.deepEqual(itemChords(), [], "no chord acts on a task that is not open");
 });
 
 test("a task is found in the list the control hands down now, a renamed one by its new name and an added one at once, else in the open document", () => {
@@ -746,7 +782,7 @@ function openedMenu(): { label: string | null; items: (string | null)[] } | unde
   if (menu === null) return undefined;
   return {
     label: menu.getAttribute("aria-label"),
-    items: menuItems().map((item) => item.textContent),
+    items: menuItems().map(itemLabel),
   };
 }
 

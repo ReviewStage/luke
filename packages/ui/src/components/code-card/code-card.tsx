@@ -1,5 +1,13 @@
 import type { CodeLines, CodeToken } from "@luke/features/tasks-view";
-import { Fragment, type ReactNode, useId, useState } from "react";
+import {
+  Fragment,
+  type ReactNode,
+  type RefObject,
+  useId,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
 import { cssCustomProperties } from "../../css.js";
 import { CARD_CORNER, CARD_ELEMENT, CARD_LOOK, CARD_PADDING, Card } from "../card/card.js";
 import { CopyButton } from "../copy-button/copy-button.js";
@@ -28,7 +36,11 @@ import { wholeWordsHint } from "../tooltip/hint.js";
  *
  * A block longer than 40 lines shows its first 40 over a line offering the
  * rest ("Show all"), which then offers to cut it again ("Show less"), so a
- * long block never buries what comes after it. Copy copies the whole block
+ * long block never buries what comes after it. The rest is still drawn,
+ * under `hidden="until-found"`, so a find over the page reaches it, the
+ * browser's own and the window's alike (`find-matches.ts`), and the card
+ * opens whole when a match lands there (`beforematch`), as a closed
+ * `<details>` opens. Copy copies the whole block
  * whichever way it stands. Its lines are left out of the screen recording
  * (`ph-no-capture`), a second line behind the recording's text masking,
  * since their colours draw the code's shape.
@@ -36,6 +48,12 @@ import { wholeWordsHint } from "../tooltip/hint.js";
 
 /** How many lines a block shows before the rest waits behind Show all. */
 const CODE_CARD_CUT_LINES = 40;
+
+/** The `hidden` a cut block's rest wears: drawn, and found by a find over the page, but not shown until a match lands in it. */
+const UNTIL_FOUND = "until-found";
+
+/** The event a find fires at what `UNTIL_FOUND` hides before it shows a match there. */
+const BEFORE_MATCH = "beforematch";
 
 /** What the line under a cut block says, cut and whole. */
 const CUT_LABEL = {
@@ -123,6 +141,34 @@ function CodeRuns({
   ));
 }
 
+/**
+ * The rest of a cut block, hidden until found while `hiding`, and `onFound`
+ * called when a find lands in it. Note that the attribute is set here rather
+ * than as a prop, because React draws `hidden` as a flag and would set it
+ * to no value, which hides the rest from every find.
+ */
+function useRestUntilFound(
+  hiding: boolean,
+  onFound: () => void,
+): RefObject<HTMLSpanElement | null> {
+  const rest = useRef<HTMLSpanElement | null>(null);
+  const [found] = useState(() => ({ current: onFound }));
+  found.current = onFound;
+  useLayoutEffect(() => {
+    const element = rest.current;
+    if (element === null) return;
+    if (!hiding) {
+      element.removeAttribute("hidden");
+      return;
+    }
+    element.setAttribute("hidden", UNTIL_FOUND);
+    const open = () => found.current();
+    element.addEventListener(BEFORE_MATCH, open);
+    return () => element.removeEventListener(BEFORE_MATCH, open);
+  }, [hiding, found]);
+  return rest;
+}
+
 /** What a block's own words are, or what a caller draws in their place. */
 type CodeCardLines =
   | {
@@ -174,9 +220,18 @@ export function CodeCard({
   // Note that the newline a block ends on closes its last line rather than opening one more, but a block drawn as rows names each row itself, so an empty last row is a row.
   const text = (rows === undefined ? (code ?? "").replace(/\n$/u, "") : (code ?? "")).split("\n");
   const cut = code !== undefined && text.length > CODE_CARD_CUT_LINES;
-  const shown = cut && !whole ? CODE_CARD_CUT_LINES : text.length;
-  const shownText = text.slice(0, shown);
-  const shownLines = lines?.slice(0, shown);
+  const rest = useRestUntilFound(cut && !whole, () => setWhole(true));
+  const lead = cut ? CODE_CARD_CUT_LINES : text.length;
+  const drawLines = (from: number, to: number): ReactNode =>
+    rows === undefined ? (
+      <CodeRuns text={text.slice(from, to)} lines={lines?.slice(from, to)} />
+    ) : (
+      <CodeRows
+        text={text.slice(from, to)}
+        lines={lines?.slice(from, to)}
+        rows={rows.slice(from)}
+      />
+    );
   return (
     <Card
       as={CARD_ELEMENT.FIGURE}
@@ -209,11 +264,16 @@ export function CodeCard({
           data-rows={rows === undefined ? undefined : true}
         >
           <code>
-            {rows === undefined ? (
-              <CodeRuns text={shownText} lines={shownLines} />
-            ) : (
-              <CodeRows text={shownText} lines={shownLines} rows={rows} />
-            )}
+            {drawLines(0, lead)}
+            {cut ? (
+              <>
+                {/* Note that the newline closes the lead's last line, so the rest's first is never read run on to it. */}
+                {rows === undefined ? "\n" : null}
+                <span ref={rest} className="luke-code-card-rest">
+                  {drawLines(lead, text.length)}
+                </span>
+              </>
+            ) : null}
           </code>
         </pre>
       )}

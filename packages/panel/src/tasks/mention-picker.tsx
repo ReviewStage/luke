@@ -39,6 +39,7 @@ import {
   MenuKeys,
   type MenuRow,
   MenuSurface,
+  POPOVER_WIDTH,
   ProviderMark,
   RectFloat,
   Spinner,
@@ -1799,6 +1800,7 @@ export function useMentionPicker({
     <RectFloat
       anchor={() => wordBox(trigger)}
       side={side}
+      width={POPOVER_WIDTH.REGULAR}
       onPressAway={closeList}
       holds={(target) => room.current?.contains(target) === true}
     >

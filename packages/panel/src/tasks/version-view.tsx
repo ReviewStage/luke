@@ -12,18 +12,19 @@ import {
   ONE_LINE_ELEMENT,
   ONE_LINE_END,
   OneLine,
-  PageToolbar,
   SKELETON_SHAPE,
   Skeleton,
   SkeletonRegion,
   STATUS_TONE,
+  TOOLBAR_INSET,
+  Toolbar,
   Tooltip,
   useConfirmDialog,
 } from "@luke/ui";
 import { MARKDOWN_CLASS, markdownClass } from "@luke/ui/markdown-class";
 import { ACTION_RESULT_STATUS } from "@luke/wire";
 import { MarkdownMessage } from "../markdown-message.js";
-import { TOAST_HOLD, type ToastNotice, UNDO_LABEL } from "../toast.js";
+import { TOAST_HOLD, type ToastNotice, undoToast } from "../toast.js";
 import { DocumentScroll } from "./document-frame.js";
 import { VERSION_CHANGE, type VersionDiff, versionDiff } from "./plan-history-model.js";
 import { PlanPictures, usePlanPictureDrawer } from "./plan-pictures.js";
@@ -274,23 +275,18 @@ export function sayRestored(
     toast({ words: VERSION_RESTORED_NOTE, tone: STATUS_TONE.COMPLETE, hold: TOAST_HOLD.DONE });
     return;
   }
-  toast({
-    words: VERSION_RESTORED_NOTE,
-    tone: STATUS_TONE.COMPLETE,
-    action: {
-      label: UNDO_LABEL,
-      onPress: () => {
-        undo().then((undone) => {
-          if (undone) return;
-          toast({
-            words: RESTORE_UNDO_REFUSED_NOTE,
-            tone: STATUS_TONE.DANGER,
-            hold: TOAST_HOLD.FAILED,
-          });
+  toast(
+    undoToast(VERSION_RESTORED_NOTE, () => {
+      undo().then((undone) => {
+        if (undone) return;
+        toast({
+          words: RESTORE_UNDO_REFUSED_NOTE,
+          tone: STATUS_TONE.DANGER,
+          hold: TOAST_HOLD.FAILED,
         });
-      },
-    },
-  });
+      });
+    }),
+  );
 }
 
 /** The page a version stands on: its bar, led by `lead`, naming the version in `title` with `actions` at its end, over the version's document. */
@@ -307,9 +303,10 @@ function VersionPageFrame({
 }): React.JSX.Element {
   return (
     <>
-      <PageToolbar
+      <Toolbar
         lead={lead}
-        heading={
+        start={lead === undefined ? undefined : TOOLBAR_INSET.COLUMN}
+        title={
           <OneLine
             as={ONE_LINE_ELEMENT.H1}
             end={ONE_LINE_END.ELLIPSIS}
@@ -318,7 +315,7 @@ function VersionPageFrame({
             {title}
           </OneLine>
         }
-        actions={actions ?? null}
+        actions={actions}
       />
       <Fill className="desktop-document">
         <DocumentScroll>{children}</DocumentScroll>

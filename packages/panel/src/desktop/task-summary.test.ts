@@ -402,6 +402,22 @@ test("Escape takes the card the toolbar's button hung back down and hands the fo
   assert.equal(document.activeElement, toggle, "the toolbar's button has the focus back");
 });
 
+test("a press outside the card the toolbar's button hung takes it down, and a press inside it leaves it", () => {
+  const column = columnAt(280);
+  const toggle =
+    column.page.querySelector<HTMLButtonElement>('button[aria-label="Toggle summary"]') ??
+    assert.fail("the toolbar's button stands");
+  act(() => toggle.click());
+  const card = document.querySelector('[role="dialog"][aria-label="Summary"]');
+  assert.ok(card, "the card hangs");
+
+  act(() => card.dispatchEvent(new Event("pointerdown", { bubbles: true })));
+  assert.equal(toggle.getAttribute("aria-expanded"), "true", "a press inside leaves it hung");
+
+  act(() => document.body.dispatchEvent(new Event("pointerdown", { bubbles: true })));
+  assert.equal(toggle.getAttribute("aria-expanded"), "false", "a press outside takes it down");
+});
+
 test("where the summary pins beside the document, the toolbar's button says whether it stands pinned", () => {
   const column = columnAt(1200);
   const toggle =

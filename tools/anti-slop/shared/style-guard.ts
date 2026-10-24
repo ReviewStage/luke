@@ -18,6 +18,7 @@ export const STYLE_RULE = {
   ELLIPSIS: "ellipsis",
   DURATION: "literal-duration",
   EASING: "literal-easing",
+  PICKER_WIDTH: "literal-picker-width",
 } as const;
 export type StyleRule = (typeof STYLE_RULE)[keyof typeof STYLE_RULE];
 
@@ -50,6 +51,11 @@ export const STYLE_RULES: Readonly<
     refuses: "a literal easing (`ease`, `linear`, `cubic-bezier()`) where a motion token goes",
     backlog: true,
   },
+  [STYLE_RULE.PICKER_WIDTH]: {
+    refuses:
+      "a literal width on a picker's, popover's or menu's selector: it hangs at one of `POPOVER_WIDTH`'s three tokens",
+    backlog: false,
+  },
 };
 
 export const STYLE_RULE_IDS: readonly StyleRule[] = Object.values(STYLE_RULE);
@@ -67,6 +73,15 @@ const TOOLING = [".agents/", ".claude/", ".codex/", ".cursor/", ".opencode/"];
 const RULE_EXEMPT_FILES: Readonly<Partial<Record<StyleRule, readonly string[]>>> = {
   [STYLE_RULE.DURATION]: ["packages/ui/src/face/face-motion.css"],
   [STYLE_RULE.EASING]: ["packages/ui/src/face/face-motion.css"],
+};
+
+/**
+ * Folders one rule passes whole: `@luke/ui` is where a popover's width is
+ * drawn from its token, and the catalog's stage and rooms are its own
+ * demonstration layout, not a picker.
+ */
+const RULE_EXEMPT_FOLDERS: Readonly<Partial<Record<StyleRule, readonly string[]>>> = {
+  [STYLE_RULE.PICKER_WIDTH]: ["packages/ui/", "apps/catalog/"],
 };
 
 /**
@@ -288,6 +303,49 @@ function literalType(property: string, value: string): boolean {
 
 const RADIUS_PROPERTY = /^border(?:-[a-z]+)*-radius$/u;
 
+const LENGTH_LITERAL = /(?<![\w.#-])(?:\d*\.)?\d+(?:px|r?em|ch|vw|vh|vmin|vmax)\b/iu;
+
+/** Whether a value spells a length in a unit, a percentage or a `var()` aside: the width of a box asked for in pixels. */
+function holdsLiteralLength(value: string): boolean {
+  return LENGTH_LITERAL.test(
+    withoutVars(bareValue(value)).replace(/(?<![\w.#-])0+(?:\.0+)?[a-z]+/giu, " "),
+  );
+}
+
+const WIDTH_PROPERTY = /^(?:min-|max-)?width$/u;
+
+/**
+ * A class that names a picker, a popover or a menu's layer: the word among
+ * the class's own, so `.mention-menu` and `.settings-picker` count and
+ * `.menubar` does not.
+ */
+const PICKER_CLASS = /^(?:[\w-]+-)?(?:picker|popover|menu|combobox)(?:-[\w-]+)?$/u;
+
+/** The glyph, picture and field boxes that stand inside a picker, whose size is theirs, not the picker's. */
+const INNER_ELEMENT = /(?:^|[\s>+~])(?:svg|img|input|textarea)(?:[:[\s]|$)/u;
+
+/**
+ * Whether a block's selector draws a picker's own box: its last compound
+ * names a picker class and is no glyph or field inside one. Note that we
+ * read the last compound only, because a rule's earlier parts say where it
+ * stands, not what it sizes.
+ */
+function isPickerBox(block: CssBlock): boolean {
+  const selector = selectorOf(block);
+  if (selector.length === 0) return false;
+  return selector.split(",").some((part) => {
+    const last =
+      part
+        .trim()
+        .split(/[\s>+~]+/u)
+        .at(-1) ?? "";
+    if (INNER_ELEMENT.test(` ${last}`)) return false;
+    return [...last.matchAll(/\.(-?[_a-zA-Z](?:[\w-])*)/gu)].some((match) =>
+      PICKER_CLASS.test(match[1] ?? ""),
+    );
+  });
+}
+
 const TIME_LITERAL = /(?<![\w.#-])(?:\d*\.)?\d+m?s\b/iu;
 const ZERO_TIME = /(?<![\w.#-])0*\.?0+m?s\b/giu;
 const EASING_FUNCTION = /\b(?:cubic-bezier|steps|linear)\(/u;
@@ -357,6 +415,9 @@ function cssRuleOf(declaration: CssDeclaration, block: CssBlock): StyleRule | un
   if (property === "text-overflow" && /\bellipsis\b/u.test(bare)) return STYLE_RULE.ELLIPSIS;
   if (RADIUS_PROPERTY.test(property) && holdsLiteralNumber(value)) return STYLE_RULE.RADIUS;
   if (literalType(property, value)) return STYLE_RULE.TYPE;
+  if (WIDTH_PROPERTY.test(property) && holdsLiteralLength(value) && isPickerBox(block)) {
+    return STYLE_RULE.PICKER_WIDTH;
+  }
   const loop = isAnsweredLoop(declaration, block);
   if (!loop && literalDuration(declaration)) return STYLE_RULE.DURATION;
   if (!loop && literalEasing(declaration)) return STYLE_RULE.EASING;
@@ -584,5 +645,9 @@ export function styleViolations(
       violations.push(...classViolations(string.text, string.line, names));
     }
   }
-  return violations.filter((violation) => !RULE_EXEMPT_FILES[violation.rule]?.includes(file));
+  return violations.filter(
+    (violation) =>
+      !RULE_EXEMPT_FILES[violation.rule]?.includes(file) &&
+      !RULE_EXEMPT_FOLDERS[violation.rule]?.some((folder) => file.startsWith(folder)),
+  );
 }

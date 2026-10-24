@@ -65,7 +65,7 @@ async function view(name: string): Promise<HTMLElement> {
 
 /** The way back leading the phone's task's header. */
 function back(): HTMLButtonElement {
-  const found = document.querySelector<HTMLButtonElement>(".task-head .phone-head-start button");
+  const found = document.querySelector<HTMLButtonElement>(".task-head .luke-toolbar-lead button");
   assert.ok(found, "the task's header leads with its way back");
   return found;
 }

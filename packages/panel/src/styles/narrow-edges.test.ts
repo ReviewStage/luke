@@ -82,9 +82,13 @@ function pixels(element: Element, length: string): number {
 
 /** The shell in the room given, its sheet holding its task's column and its side panel standing full screen, each bar with its tabs and its actions. */
 function shell(room: string): void {
-  const bar = (className: string, tabs: string, actions: string): Piece => ({
+  const bar = (className: string, tabs: Piece, actions: string): Piece => ({
     className,
-    children: [{ className: tabs, children: [{ className: "luke-tabs" }] }, { className: actions }],
+    children: [tabs, { className: actions }],
+  });
+  const strip = (className: string): Piece => ({
+    className,
+    children: [{ className: "luke-tabs" }],
   });
   built(document.body, {
     className: "desktop-shell",
@@ -99,7 +103,7 @@ function shell(room: string): void {
             children: [
               bar(
                 "desktop-toolbar",
-                "desktop-toolbar-heading main-tabs",
+                { className: "desktop-toolbar-heading", children: [strip("main-tabs")] },
                 "desktop-toolbar-actions",
               ),
             ],
@@ -108,7 +112,7 @@ function shell(room: string): void {
             tag: "aside",
             className: "side-panel",
             data: { fullScreen: "true" },
-            children: [bar("side-panel-bar", "side-panel-tabs", "toolbar-tab-actions")],
+            children: [bar("side-panel-bar", strip("side-panel-tabs"), "toolbar-tab-actions")],
           },
         ],
       },
@@ -116,10 +120,10 @@ function shell(room: string): void {
   });
 }
 
-/** The bars that hold a task's tabs, each by what the developer calls it, with its tabs and what follows them. */
+/** The bars that hold a task's tabs, each by what the developer calls it, the box of its bar its tabs stand in, and the tabs: a column's stand in its toolbar's title. */
 const BARS = [
-  ["the task's column", ".desktop-toolbar", ".main-tabs"],
-  ["the side panel", ".side-panel-bar", ".side-panel-tabs"],
+  ["the task's column", ".desktop-toolbar", ".desktop-toolbar-heading", ".main-tabs"],
+  ["the side panel", ".side-panel-bar", ".side-panel-tabs", ".side-panel-tabs"],
 ] as const;
 
 /** Where a bar's row of tabs starts and ends from the column's edges: the bar's padding and the row's margin together. */
@@ -136,9 +140,9 @@ test("in a narrow room a task's tabs take a row of their own under the bar's but
   layFor("web", true);
   shell("narrow");
   const inset = pixels(document.body, "var(--column-inset)");
-  for (const [name, barSelector, tabsSelector] of BARS) {
+  for (const [name, barSelector, rowSelector, tabsSelector] of BARS) {
     const bar = the(barSelector);
-    const tabs = the(`${barSelector} > ${tabsSelector}`);
+    const tabs = the(`${barSelector} > ${rowSelector}`);
     assert.equal(getComputedStyle(bar).flexWrap, "wrap", `${name}'s bar wraps`);
     assert.equal(getComputedStyle(tabs).order, "1", `${name}'s tabs stand after its buttons`);
     assert.deepEqual(tabRowInsets(bar, tabs), { start: inset, end: inset }, `${name}'s tab row`);
@@ -155,9 +159,9 @@ test("in a narrow room a task's tabs take a row of their own under the bar's but
 test("in a wide room a task's tabs stand in the bar's one row, beside its buttons", () => {
   layFor("web", false);
   shell("wide");
-  for (const [name, barSelector, tabsSelector] of BARS) {
+  for (const [name, barSelector, rowSelector] of BARS) {
     assert.notEqual(getComputedStyle(the(barSelector)).flexWrap, "wrap", `${name}'s bar`);
-    assert.notEqual(getComputedStyle(the(`${barSelector} > ${tabsSelector}`)).order, "1");
+    assert.notEqual(getComputedStyle(the(`${barSelector} > ${rowSelector}`)).order, "1");
   }
 });
 

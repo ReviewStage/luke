@@ -276,7 +276,7 @@ function SettingsLoading({
         <div className="desktop-drag-strip" />
       </nav>
       <section className="settings-page" aria-label="Settings" hidden={hidden.item}>
-        <div className="desktop-drag-strip" />
+        {/* Note that the page draws its own bar, the window's drag handle, as Settings' page does once drawn. */}
         <SettingsPageSkeleton label="Loading Settings" sections={SETTINGS_SKELETON} />
       </section>
     </div>

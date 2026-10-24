@@ -83,4 +83,15 @@
   .luke-composer-foot-strip + .luke-composer-foot-call {
     margin-inline-end: 0;
   }
+
+  /* A bar holding a call answers its own width, so the call's status gives
+     way in a narrow box before the call's controls or the send are pushed
+     past it (call.css). Note that only such a bar is a container, because
+     a container's width no longer follows what it holds. */
+  .luke-composer-foot-bar:has(
+    > .luke-composer-foot-call,
+    > .luke-composer-foot-end > .luke-composer-foot-call
+  ) {
+    container: luke-composer-foot / inline-size;
+  }
 }

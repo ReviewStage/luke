@@ -18,7 +18,7 @@ import { ImagePlusIcon } from "lucide-react";
 import { useMemo } from "react";
 import { useAct } from "../act.js";
 import { encodeImage } from "../feedback-images.js";
-import { TOAST_HOLD, UNDO_LABEL, useToast, useWorkingToast } from "../toast.js";
+import { TOAST_HOLD, undoToast, useToast, useWorkingToast } from "../toast.js";
 import type { ViewerAction } from "./attachment-viewer.js";
 import { useTaskMentions } from "./task-mentions.js";
 
@@ -172,11 +172,7 @@ export function useAddToPlan(): ViewerAction | undefined {
             : { words: ADD_WORDS.UNDONE, tone: STATUS_TONE.COMPLETE, hold: TOAST_HOLD.DONE },
         );
       };
-      settle({
-        words: ADD_WORDS.ADDED,
-        tone: STATUS_TONE.COMPLETE,
-        action: { label: UNDO_LABEL, onPress: () => void undo() },
-      });
+      settle(undoToast(ADD_WORDS.ADDED, () => void undo()));
     };
     return {
       label: ADD_LABEL,

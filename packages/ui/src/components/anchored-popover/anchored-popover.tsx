@@ -116,7 +116,7 @@ function roomAround(element: HTMLElement, bounds: PopoverBounds): Box {
 }
 
 /** The width asked for before it is measured: its pixels, or its token's. */
-function askedStyleWidth(width: number | PopoverWidth): number | string {
+export function askedStyleWidth(width: number | PopoverWidth): number | string {
   return typeof width === "number" ? width : `var(${WIDTH_TOKEN[width]})`;
 }
 

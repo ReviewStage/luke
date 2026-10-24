@@ -59,10 +59,12 @@ function buttonNamed(drawing: HTMLElement, name: string): HTMLButtonElement | un
   );
 }
 
-/** The lines the card shows now. */
+/** The lines the card shows now, less what it holds `hidden` and the newline that closes the last. */
 function shownLines(drawing: HTMLElement): string[] {
-  const body = drawing.querySelector(".luke-code-card pre") ?? assert.fail("No code card");
-  return (body.textContent ?? "").split("\n");
+  const body = drawing.querySelector(".luke-code-card pre")?.cloneNode(true);
+  if (!(body instanceof Element)) return assert.fail("No code card");
+  for (const hidden of body.querySelectorAll("[hidden]")) hidden.remove();
+  return (body.textContent ?? "").replace(/\n$/u, "").split("\n");
 }
 
 test("a long fence in a transcript is cut at 40 lines behind Show all, which shows the rest", async () => {

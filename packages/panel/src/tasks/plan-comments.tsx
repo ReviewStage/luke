@@ -70,6 +70,7 @@ import {
   useConfirmDialog,
   useMenu,
   useMinute,
+  usePressAway,
   VisuallyHidden,
 } from "@luke/ui";
 import { type Actor, LUKE_ACTOR } from "@luke/ui/actor-model";
@@ -1412,6 +1413,9 @@ const KEEPS_THREAD_OPEN = [
   '[role="alertdialog"]',
 ].join(", ");
 
+/** The thread's cards are several boxes, which `KEEPS_THREAD_OPEN` names, so its press away stands by no layer of its own. */
+const NO_LAYER: RefObject<HTMLElement | null> = { current: null };
+
 export function PlanCommentLayer({
   body,
   scroller,
@@ -1786,21 +1790,22 @@ export function PlanCommentLayer({
     return () => editorOpenThread(undefined);
   }, [editorActive]);
   // A press anywhere but the thread, its words, or what it opened over the page closes it, its words kept as its draft; a thread being started goes too, but while its words are sent or it holds files or a dictation, which no draft keeps.
-  useEffect(() => {
-    if (active === undefined) return;
-    const away = (event: PointerEvent) => {
-      if (event.target instanceof Element && event.target.closest(KEEPS_THREAD_OPEN) !== null) {
-        return;
-      }
-      if (active === PENDING_THREAD) {
-        if (cards.current.get(PENDING_THREAD)?.querySelector('[data-held="true"]')) return;
-        setPending(undefined);
-      }
-      onActive(undefined);
-    };
-    document.addEventListener("pointerdown", away);
-    return () => document.removeEventListener("pointerdown", away);
-  }, [active, onActive, setPending]);
+  usePressAway(NO_LAYER, () => undefined, {
+    onPressAway:
+      active === undefined
+        ? undefined
+        : () => {
+            if (
+              active === PENDING_THREAD &&
+              cards.current.get(PENDING_THREAD)?.querySelector('[data-held="true"]')
+            ) {
+              return;
+            }
+            if (active === PENDING_THREAD) setPending(undefined);
+            onActive(undefined);
+          },
+    holds: (target) => target instanceof Element && target.closest(KEEPS_THREAD_OPEN) !== null,
+  });
   const slotStyle = (id: string) => ({ transform: `translateY(${tops.get(id) ?? 0}px)` });
   const close = () => {
     onActive(undefined);

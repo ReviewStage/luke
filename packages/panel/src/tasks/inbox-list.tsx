@@ -32,9 +32,6 @@ import {
   motionRows,
   NOTE_LINE_LOOK,
   NoteLine,
-  ONE_LINE_ELEMENT,
-  ONE_LINE_END,
-  OneLine,
   PaneBar,
   RESIZE_EDGE_SIDE,
   ResizeEdge,
@@ -46,6 +43,8 @@ import {
   Skeleton,
   SkeletonRegion,
   Stack,
+  TOOLBAR_INSET,
+  Toolbar,
   Tooltip,
   useLeaving,
   useMenu,
@@ -1148,18 +1147,7 @@ function ListHead({
           {view === undefined ? (
             <PaneBar title={title} actions={options} />
           ) : (
-            <header className="desktop-toolbar inbox-tasks-bar">
-              <div className="desktop-toolbar-heading">
-                <OneLine
-                  as={ONE_LINE_ELEMENT.H1}
-                  end={ONE_LINE_END.ELLIPSIS}
-                  className="desktop-toolbar-title"
-                >
-                  {title}
-                </OneLine>
-              </div>
-              <div className="desktop-toolbar-actions">{options}</div>
-            </header>
+            <Toolbar title={title} actions={options} end={TOOLBAR_INSET.COLUMN} />
           )}
           {search}
         </>

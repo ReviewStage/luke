@@ -1850,22 +1850,9 @@ ul.actor-stack {
 /* While a call into an agent stands, its tab's foot holds the call: Luke's
    video in a room of its own between the transcript and the composer, which
    the transcript ends above, so no word is ever drawn under the video. The
-   room goes as video goes off or the call ends. The voice's notice line
-   floats just over the room's top edge, over the transcript's foot, so it
-   never stands on the video; it takes no pointer but its own button, so the
-   transcript under it scrolls. */
+   room goes as video goes off or the call ends. */
 .agent-call-foot {
   position: relative;
-}
-
-.agent-call-notice {
-  position: absolute;
-  z-index: 6;
-  right: 0;
-  bottom: 100%;
-  left: 0;
-  height: 0;
-  pointer-events: none;
 }
 
 /* The video's room: the video centred in it, as tall as the developer left
@@ -2255,16 +2242,10 @@ ul.actor-stack {
   padding: 0 var(--column-inset) var(--luke-space-8);
 }
 
-/* Its buttons end as far in from the list's edge as the side panel's toggle
-   stands from the window's. */
-.inbox-tasks-bar {
-  padding-right: var(--column-inset);
-}
-
 /* Split beside the item, the list's bar ends at the item's edge rather than
    the window's, so it keeps its own inset though the side panel's toggle
    stands at the window's top right. */
-.desktop-shell .inbox-view[data-columns="both"] .inbox-tasks-bar {
+.desktop-shell .inbox-view[data-columns="both"] .inbox-tasks > .luke-toolbar {
   padding-right: var(--column-inset);
 }
 
@@ -2280,12 +2261,14 @@ ul.actor-stack {
   > .desktop-task
   > .page-find
   > .inbox-view
-  .inbox-tasks-bar,
+  .inbox-tasks
+  > .luke-toolbar,
 .desktop-shell[data-sidebar-collapsed="true"]
   .desktop-main
   > .page-find
   > .chat-view
-  .chat-rail-bar {
+  .chat-rail
+  > .luke-toolbar {
   display: grid;
   grid-template-columns:
     minmax(
@@ -2302,13 +2285,15 @@ ul.actor-stack {
   > .desktop-task
   > .page-find
   > .inbox-view
-  .inbox-tasks-bar
+  .inbox-tasks
+  > .luke-toolbar
   .desktop-toolbar-heading,
 .desktop-shell[data-sidebar-collapsed="true"]
   .desktop-main
   > .page-find
   > .chat-view
-  .chat-rail-bar
+  .chat-rail
+  > .luke-toolbar
   .desktop-toolbar-heading {
   grid-column: 2;
 }
@@ -2318,13 +2303,15 @@ ul.actor-stack {
   > .desktop-task
   > .page-find
   > .inbox-view
-  .inbox-tasks-bar
+  .inbox-tasks
+  > .luke-toolbar
   .desktop-toolbar-actions,
 .desktop-shell[data-sidebar-collapsed="true"]
   .desktop-main
   > .page-find
   > .chat-view
-  .chat-rail-bar
+  .chat-rail
+  > .luke-toolbar
   .desktop-toolbar-actions {
   grid-column: 3;
   justify-self: end;
@@ -2354,7 +2341,8 @@ ul.actor-stack {
   > .desktop-task
   > .page-find
   > .inbox-view[data-columns="list"]
-  .inbox-tasks-bar {
+  .inbox-tasks
+  > .luke-toolbar {
   display: flex;
   padding-left: var(--sidebar-toggle-clearance);
 }
@@ -3450,13 +3438,11 @@ ul.actor-stack {
   color: var(--luke-color-text-muted);
 }
 
-/* Its buttons end as far in from the rail's edge as the Inbox list's do.
-   The rail is a list's column, never a page's width, so Send feedback draws
+/* The rail is a list's column, never a page's width, so Send feedback draws
    its glyph alone, named still (`FoldingButton`), leaving Chat's title and
    its tag their room. */
-.chat-rail-bar {
+.chat-rail > .luke-toolbar {
   --luke-fold: folded;
-  padding-right: var(--column-inset);
 }
 
 /* The rail's places, inside the `ScrollArea` that scrolls them, on the Inbox list's insets. */
@@ -4758,7 +4744,7 @@ ul.actor-stack {
    tab pinned in view. */
 .desktop-shell[data-room="narrow"]
 :is(
-  .desktop-task-main .desktop-toolbar:has(> .main-tabs),
+  .desktop-task-main .desktop-toolbar:has(> .desktop-toolbar-heading > .main-tabs),
   .side-panel-bar:has(> .side-panel-tabs)
 ) {
   --bar-start: var(--sidebar-toggle-clearance);
@@ -4770,7 +4756,7 @@ ul.actor-stack {
 
 .desktop-shell[data-room="narrow"]
   :is(.desktop-task-main .desktop-toolbar, .side-panel-bar)
-  > :is(.main-tabs, .side-panel-tabs) {
+  > :is(.desktop-toolbar-heading:has(> .main-tabs), .side-panel-tabs) {
   order: 1;
   flex: 0 0 calc(100% + var(--bar-start) + var(--bar-end) - 2 * var(--column-inset));
   margin-right: calc(var(--column-inset) - var(--bar-end));
@@ -4779,41 +4765,20 @@ ul.actor-stack {
 
 .desktop-shell[data-room="narrow"]
   :is(.desktop-task-main .desktop-toolbar, .side-panel-bar)
-  > :is(.main-tabs, .side-panel-tabs)
+  > :is(.desktop-toolbar-heading:has(> .main-tabs), .side-panel-tabs)
   + * {
   min-height: var(--luke-control-height);
   margin-left: auto;
 }
 
-/* A phone's page header (`phone-head.tsx`), a task's and each place's: one
-   control in its start corner, one ⋯ in its end corner, and the title of
-   what is on screen centred between them, truncating. The corners are one
-   control wide each, so the title's centre is the row's. It stands in the
-   title bar's buttons' place, which a phone's task and places do not draw,
-   so it starts at the column's inset. Under a task's, the column's bar starts
-   and ends at the column's own inset, and the side panel draws no bar at
-   all, the row standing for it. */
-.desktop-shell[data-room="narrow"] .desktop-main .desktop-toolbar.phone-head {
-  display: grid;
-  grid-template-columns: var(--luke-control-height) minmax(0, 1fr) var(--luke-control-height);
+/* A phone's page header (`phone-head.tsx`, `Toolbar`'s phone look) stands in
+   the title bar's buttons' place, which a phone's task and places do not
+   draw, so it starts at the column's inset. Under a task's, the column's bar
+   starts and ends at the column's own inset, and the side panel draws no bar
+   at all, the row standing for it. */
+.desktop-shell[data-room="narrow"] .desktop-main .desktop-toolbar[data-look="phone"] {
   padding-right: var(--column-inset);
   padding-left: var(--column-inset);
-}
-
-.phone-head > .desktop-toolbar-heading {
-  display: flex;
-  min-width: 0;
-  align-items: center;
-  justify-content: center;
-  gap: var(--luke-space-8);
-}
-
-.phone-head > .desktop-toolbar-heading > .desktop-toolbar-title {
-  min-width: 0;
-}
-
-.phone-head > .desktop-toolbar-actions {
-  justify-content: flex-end;
 }
 
 .desktop-shell[data-room="narrow"] .task-head ~ .desktop-task .desktop-task-main .desktop-toolbar {

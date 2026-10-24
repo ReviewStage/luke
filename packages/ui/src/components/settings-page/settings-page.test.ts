@@ -91,7 +91,7 @@ test("the page's actions stand in its head beside its title", async () => {
       children: section("Microphone"),
     }),
   );
-  const head = container.querySelector("header");
+  const head = container.querySelector("h1")?.closest("header");
   const button = [...(head?.querySelectorAll("button") ?? [])].find(
     (element) => element.textContent === "Reset",
   );
@@ -103,7 +103,7 @@ test("a page with no actions holds only its title in its head", async () => {
   const container = await render(
     createElement(SettingsPage, { title: "Voice", children: section("Microphone") }),
   );
-  const head = container.querySelector("header");
+  const head = container.querySelector("h1")?.closest("header");
   expect(head?.textContent).toBe("Voice");
   expect(head?.querySelector("button")).toBeNull();
 });
