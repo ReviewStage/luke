@@ -965,6 +965,30 @@ test("a conflict over a teammate's words names them on its note and its button, 
   assert.ok(container.querySelector(".plan-document-editor") === null, "the editor closed");
 });
 
+test("Keep mine in the open editor over a teammate's change to another section lays the merged words into it and saves both changes", async () => {
+  const theirs = BODY.replace("Only an admin", "Only an owner");
+  const mine = BODY.replace("Invites land by email.", "Invites land by email or link.");
+  const merged = theirs.replace("Invites land by email.", "Invites land by email or link.");
+  const by = { actor: PLAN_ACTOR.DEVELOPER, by: CHARLES, at: Date.now(), duringCall: false };
+  const { container, sent } = mount([{ conflict: { current: theirs, by } }]);
+  act(() => block(container, "Goal").click());
+  const [editor] = mounted;
+  act(() => open().onDraft(mine));
+  act(() => open().onFinish(1, FINISH.ESCAPE));
+  await settle();
+
+  const keep = container.querySelector(".plan-editor-note")?.querySelector("button");
+  assert.equal(keep?.textContent, "Keep mine");
+  act(() => keep?.click());
+  await settle();
+
+  assert.deepEqual(editor?.took, [[mine, merged]]);
+  assert.deepEqual(sent, [
+    { document: { base: BODY, value: mine } },
+    { document: { base: theirs, value: merged } },
+  ]);
+});
+
 test("words left waiting on a conflict are kept and said, and the toast's Keep mine saves them beside Luke's", async () => {
   const lukes = `${BODY}Luke's.\n`;
   const by = { actor: PLAN_ACTOR.NOTETAKER, at: Date.now(), duringCall: true };
