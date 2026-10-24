@@ -30,11 +30,10 @@ import {
   SkeletonRegion,
   Tooltip,
   useConfirmDialog,
-  useMenu,
 } from "@luke/ui";
 import { PencilIcon, TerminalIcon, Trash2Icon } from "lucide-react";
-import { type ReactNode, type RefObject, useRef, useState } from "react";
-import { ActionMenu } from "../desktop/action-menu.js";
+import { type ReactNode, type RefObject, useState } from "react";
+import { rowMenu } from "../desktop/action-menu.js";
 import type { FloatingBox } from "../desktop/hover-pane.js";
 import { AgentRef, type AgentSubject } from "./agent-ref.js";
 import { AgentGlyph } from "./tab-look.js";
@@ -57,6 +56,9 @@ import type { TerminalSession } from "./use-terminal-session.js";
 
 /** What a Terminal tab's card says under its agent's, before the count of its shells. */
 const CARD_FOOT = "Terminal in this agent’s sandbox";
+
+/** What a shell's row is, which names its ⋯ and its menu. */
+const SHELL_THING = "Shell";
 
 /** The most characters of a shell's name, as the service holds it. */
 const TITLE_MAX = 60;
@@ -185,7 +187,7 @@ function ListedShells({
   );
 }
 
-/** One shell's row: its press shows it, its × ends it, and its right-click opens its menu. */
+/** One shell's row: its press shows it, its × ends it, and its ⋯, right-click and menu key open its menu. */
 function ShellRow({
   shell,
   shown,
@@ -198,8 +200,6 @@ function ShellRow({
   surfaceOpen: boolean;
   session: Pick<TerminalSession, "onChoose" | "onCreate" | "onRename" | "onKill">;
 }): React.JSX.Element {
-  const row = useRef<HTMLElement | null>(null);
-  const menu = useMenu(true);
   const [renaming, setRenaming] = useState(false);
   const kill = `End ${shell.title}`;
   // Ending a shell ends what runs in it, which nothing brings back, so it asks first.
@@ -207,9 +207,6 @@ function ShellRow({
   return (
     <>
       <ListRow
-        ref={(element) => {
-          row.current = element;
-        }}
         leading={<TerminalIcon />}
         title={
           renaming ? (
@@ -235,9 +232,7 @@ function ShellRow({
         }
         current={shown ? LIST_ROW_CURRENT.ITEM : undefined}
         onPress={renaming ? undefined : () => session.onChoose(shell.id)}
-        contextMenu={renaming ? undefined : menu.contextMenu(row)}
         actionsAt={LIST_ROW_ACTIONS.HOVER}
-        menuOpen={menu.open !== undefined}
         actions={
           renaming ? null : (
             <Tooltip label={kill}>
@@ -245,36 +240,33 @@ function ShellRow({
             </Tooltip>
           )
         }
+        menu={
+          renaming
+            ? undefined
+            : rowMenu(SHELL_THING, [
+                [
+                  {
+                    label: "Rename",
+                    icon: <PencilIcon aria-hidden="true" />,
+                    onSelect: () => setRenaming(true),
+                  },
+                  {
+                    label: "New shell",
+                    icon: <PlusIcon />,
+                    onSelect: session.onCreate,
+                  },
+                ],
+                [
+                  {
+                    label: "End shell",
+                    icon: <Trash2Icon aria-hidden="true" />,
+                    danger: true,
+                    onSelect: ending.ask,
+                  },
+                ],
+              ])
+        }
       />
-      {menu.drawn === undefined ? null : (
-        <ActionMenu
-          label={shell.title}
-          menu={menu.drawn}
-          onClose={menu.close}
-          groups={[
-            [
-              {
-                label: "Rename",
-                icon: <PencilIcon aria-hidden="true" />,
-                onSelect: () => setRenaming(true),
-              },
-              {
-                label: "New shell",
-                icon: <PlusIcon />,
-                onSelect: session.onCreate,
-              },
-            ],
-            [
-              {
-                label: "End shell",
-                icon: <Trash2Icon aria-hidden="true" />,
-                danger: true,
-                onSelect: ending.ask,
-              },
-            ],
-          ]}
-        />
-      )}
       <ConfirmDialog
         confirm={ending}
         question={{ title: `${kill}?`, verb: "End shell", running: "Ending the shell" }}

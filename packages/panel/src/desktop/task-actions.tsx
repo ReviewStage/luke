@@ -68,7 +68,7 @@ import { useTaskOrigin } from "../tasks/use-task-origin.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import { APP_SLICE, useAppSlice } from "../use-app-state.js";
 import { useRefocusAfterEdit } from "../use-refocus-after-edit.js";
-import { ActionMenu, type MenuAction, type MenuEntry, sharedGroups } from "./action-menu.js";
+import { ActionMenu, type MenuAction, type MenuEntry, rowMenu } from "./action-menu.js";
 import { strandedHome, useMoveTaskDialog } from "./move-task-dialog.js";
 import { useRowPlace, withRowMoves } from "./row-moves.js";
 import { moveToSectionEntry, useSectionDialogs } from "./sidebar-sections.js";
@@ -736,12 +736,7 @@ export function SidebarTask({
           menu={
             rename.editing
               ? undefined
-              : {
-                  thing: "Task",
-                  groups: sharedGroups(actions.groups()),
-                  footer: actions.footer,
-                  shown: tasks.shown,
-                }
+              : { ...rowMenu("Task", actions.groups(), tasks.shown), footer: actions.footer }
           }
           actionsAt={LIST_ROW_ACTIONS.HOVER}
           actions={

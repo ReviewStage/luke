@@ -371,7 +371,7 @@ test("a comment's time reads as chat's does, a few letters, with the full moment
     { ...open, entries: [{ ...open.entries[0], at }], createdAt: at, updatedAt: at },
   ]);
 
-  const time = container.querySelector<HTMLElement>(".comment-time time");
+  const time = container.querySelector<HTMLElement>(".luke-comment-time time");
   assert.equal(time?.textContent, "3h");
 
   restOn(time as HTMLElement);
@@ -587,7 +587,7 @@ test("a thread at rest opens from a press anywhere on its card", () => {
     container.querySelector<HTMLElement>(`.comment-card[data-thread="${ID.GONE}"]`);
   assert.equal(card()?.dataset.open, "false");
 
-  act(() => card()?.querySelector<HTMLElement>(".comment-head")?.click());
+  act(() => card()?.querySelector<HTMLElement>(".luke-comment-head")?.click());
   assert.equal(card()?.dataset.open, "true", "the card's head opens it");
 });
 
@@ -1064,11 +1064,7 @@ test("in the Comments tab a thread's quote stands under its first comment's writ
   const card = container.querySelector<HTMLElement>(`.comment-card[data-thread="${ID.OPEN}"]`);
   const entry = card?.querySelector(".comment-entry");
 
-  assert.ok(
-    entry?.querySelector(
-      ":scope > .comment-head + * .comment-quote, :scope > .comment-head + .comment-quote",
-    ),
-  );
+  assert.ok(entry?.querySelector(".luke-comment-head + .luke-comment-body .comment-quote"));
   assert.equal(card?.firstElementChild?.classList.contains("comment-entry"), true);
 });
 
@@ -1094,7 +1090,7 @@ test("a thread's resolve reads as its writer's own line, drawn as a comment's he
   act(() => container.querySelector<HTMLButtonElement>('button[aria-label="Resolved"]')?.click());
   const event = container.querySelector<HTMLElement>(".comment-event[data-kind='resolved']");
   assert.ok(
-    event?.firstElementChild?.classList.contains("comment-head"),
+    event?.querySelector(":scope > .luke-comment > .luke-comment-head"),
     "drawn as a comment's head",
   );
   assert.ok(event?.textContent?.includes("Dean Stratakos resolved this"));
@@ -1602,7 +1598,7 @@ test("on the plan's page the date chip in the reader's own comment, its thread o
   await act(async () => undefined);
   act(() =>
     container
-      .querySelector<HTMLElement>(`.comment-card[data-thread="${ID.OPEN}"] .comment-head`)
+      .querySelector<HTMLElement>(`.comment-card[data-thread="${ID.OPEN}"] .luke-comment-head`)
       ?.click(),
   );
 

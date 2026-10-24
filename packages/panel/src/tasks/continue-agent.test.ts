@@ -364,7 +364,8 @@ test("a failed turn's end line names no price, even from a service that sent the
     assert.fail("the box offers its model chip");
   act(() => chip.click());
   await settle();
-  const menu = tab.container.querySelector(".agent-model-menu") ?? assert.fail("the menu opens");
+  const menu =
+    tab.container.querySelector(".luke-searchable-menu") ?? assert.fail("the menu opens");
   assert.match(menu.textContent ?? "", /This agent: 1\.2M tokens · \$2\.41/);
   assert.doesNotMatch(menu.textContent ?? "", /\$0\.08/);
 });

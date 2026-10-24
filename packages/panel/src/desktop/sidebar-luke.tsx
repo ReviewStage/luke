@@ -18,7 +18,7 @@ import { agentGlyphState } from "../tasks/coding-agent-model.js";
 import { agentEndMark, TAB_KIND, tabLook } from "../tasks/tab-look.js";
 import { markReadItem } from "../tasks/task-menu-items.js";
 import { useCallingAgent } from "../use-voice-view.js";
-import { type MenuEntry, sharedGroups } from "./action-menu.js";
+import { type MenuEntry, rowMenu } from "./action-menu.js";
 import { useAgentReadMarks } from "./agent-read-marks.js";
 import { LUKE_NAME, type LukeOperator } from "./luke-operator.js";
 import { RowMarks } from "./task-actions.js";
@@ -128,7 +128,7 @@ export function SidebarLuke({
           if (agentId !== undefined) onOpen(agentId);
           else if (operator.failed) operator.retry();
         }}
-        menu={{ thing: "Luke", groups: sharedGroups(groups), shown }}
+        menu={rowMenu("Luke", groups, shown)}
         actionsAt={operator.failed ? LIST_ROW_ACTIONS.ALWAYS : LIST_ROW_ACTIONS.HOVER}
         actions={actions}
       />

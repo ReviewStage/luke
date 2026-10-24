@@ -31,7 +31,7 @@ import { markReadItem } from "../tasks/task-menu-items.js";
 import { type CodingAgentsControl, readAgentById } from "../tasks/use-coding-agents.js";
 import { useRefocusAfterEdit } from "../use-refocus-after-edit.js";
 import { useCallingAgent } from "../use-voice-view.js";
-import { type MenuAction, type MenuEntry, sharedGroups } from "./action-menu.js";
+import { type MenuAction, type MenuEntry, rowMenu } from "./action-menu.js";
 import { rowDoors, useAgentActions } from "./agent-actions.js";
 import { useAgentReadMarks } from "./agent-read-marks.js";
 import { useRowPlace, withRowMoves } from "./row-moves.js";
@@ -280,11 +280,7 @@ export function SidebarAgent({
           unread={isUnread}
           hint={editing ? undefined : { Hint: RowHint, label: name }}
           onPress={editing ? undefined : onOpen}
-          menu={
-            editing
-              ? undefined
-              : { thing: "Agent", groups: sharedGroups(withRowMoves(groups, place)), shown }
-          }
+          menu={editing ? undefined : rowMenu("Agent", withRowMoves(groups, place), shown)}
           actionsAt={LIST_ROW_ACTIONS.HOVER}
           actions={editing ? null : <RowMarks marks={marks} />}
         />

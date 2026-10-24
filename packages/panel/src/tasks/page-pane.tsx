@@ -14,10 +14,10 @@ import {
   FILL_ELEMENT,
   Fill,
   IconButton,
-  OneLine,
+  PaneBar,
+  type PaneBarMenu,
   SpinnerRegion,
   Tooltip,
-  wholeWordsHint,
 } from "@luke/ui";
 import { Option, Schema } from "effect";
 import {
@@ -38,7 +38,6 @@ import {
   useFindPress,
   useFindSource,
 } from "../find-in-tab.js";
-import { BarMenu } from "./file-menu.js";
 import { VIEW_SETTINGS_SCOPE, ViewSettingsButton } from "./view-settings.js";
 import { WholeFile, type WholeFileNote } from "./whole-file.js";
 
@@ -326,25 +325,25 @@ function PageSource({
 }
 
 /** The bar's ⋯ over the source: its text copied. */
-function SourceMenu({ read }: { read: SourceRead | undefined }): React.JSX.Element {
-  const copyWithToast = useCopyToast();
-  return (
-    <BarMenu
-      label="Source actions"
-      actions={[
+function sourceMenu(
+  read: SourceRead | undefined,
+  copy: (text: string, words: string) => void,
+): PaneBarMenu {
+  return {
+    label: "Source actions",
+    groups: [
+      [
         {
           label: "Copy source",
           icon: <ClipboardCopyIcon aria-hidden="true" />,
           disabled: read?.kind !== SOURCE_READ.READY,
           onSelect: () => {
-            if (read?.kind === SOURCE_READ.READY) {
-              copyWithToast(sourceText(read.lines), "Source copied");
-            }
+            if (read?.kind === SOURCE_READ.READY) copy(sourceText(read.lines), "Source copied");
           },
         },
-      ]}
-    />
-  );
+      ],
+    ],
+  };
 }
 
 /**
@@ -371,6 +370,7 @@ export function PagePane({
   const [chosen, setChosen] = useState<number | undefined>(undefined);
   const [reloads, setReloads] = useState(0);
   const [view, setView] = useState<PageView>(PAGE_VIEW.PAGE);
+  const copyWithToast = useCopyToast();
   const sources = usePageSources(readSource);
   const version = chosen === undefined ? page.version : Math.min(chosen, page.version);
   const step = (to: number) => setChosen(to === page.version ? undefined : to);
@@ -389,62 +389,60 @@ export function PagePane({
       subject={{ task: pagePlaceId(place), tab: { page: page.id } }}
     >
       <Fill className="page-view file-view ph-no-capture">
-        <header className="file-view-bar">
-          <OneLine className="page-view-title" hint={wholeWordsHint(page.title)}>
-            {page.title}
-          </OneLine>
-          <div className="file-view-actions">
-            {page.version > 1 ? (
-              <div className="page-view-versions">
-                <VersionStep
-                  label="Earlier version"
-                  to={version > 1 ? version - 1 : undefined}
-                  icon={<ChevronLeftIcon aria-hidden="true" />}
-                  onStep={step}
-                />
-                {/* In a narrow panel the count stands alone (tasks.css). */}
-                <span className="page-view-version">
-                  <span className="page-view-version-words">
-                    Version {version} of {page.version}
+        <PaneBar
+          title={page.title}
+          actions={
+            <>
+              {page.version > 1 ? (
+                <div className="page-view-versions">
+                  <VersionStep
+                    label="Earlier version"
+                    to={version > 1 ? version - 1 : undefined}
+                    icon={<ChevronLeftIcon aria-hidden="true" />}
+                    onStep={step}
+                  />
+                  {/* In a narrow panel the count stands alone (tasks.css). */}
+                  <span className="page-view-version">
+                    <span className="page-view-version-words">
+                      Version {version} of {page.version}
+                    </span>
+                    <span className="page-view-version-count">
+                      {version}/{page.version}
+                    </span>
                   </span>
-                  <span className="page-view-version-count">
-                    {version}/{page.version}
-                  </span>
-                </span>
-                <VersionStep
-                  label="Later version"
-                  to={version < page.version ? version + 1 : undefined}
-                  icon={<ChevronRightIcon aria-hidden="true" />}
-                  onStep={step}
+                  <VersionStep
+                    label="Later version"
+                    to={version < page.version ? version + 1 : undefined}
+                    icon={<ChevronRightIcon aria-hidden="true" />}
+                    onStep={step}
+                  />
+                </div>
+              ) : null}
+              <Tooltip label={toggleLabel}>
+                <IconButton
+                  icon={<CodeXmlIcon aria-hidden="true" />}
+                  label={toggleLabel}
+                  onClick={() => setView(showingSource ? PAGE_VIEW.PAGE : PAGE_VIEW.SOURCE)}
                 />
-              </div>
-            ) : null}
-            <Tooltip label={toggleLabel}>
-              <IconButton
-                icon={<CodeXmlIcon aria-hidden="true" />}
-                label={toggleLabel}
-                onClick={() => setView(showingSource ? PAGE_VIEW.PAGE : PAGE_VIEW.SOURCE)}
-              />
-            </Tooltip>
-            <Tooltip label="Reload">
-              <IconButton
-                icon={<RotateCwIcon aria-hidden="true" />}
-                label="Reload page"
-                turns
-                onClick={() => {
-                  setReloads((was) => was + 1);
-                  sources.forget();
-                }}
-              />
-            </Tooltip>
-            {showingSource ? (
-              <>
+              </Tooltip>
+              <Tooltip label="Reload">
+                <IconButton
+                  icon={<RotateCwIcon aria-hidden="true" />}
+                  label="Reload page"
+                  turns
+                  onClick={() => {
+                    setReloads((was) => was + 1);
+                    sources.forget();
+                  }}
+                />
+              </Tooltip>
+              {showingSource ? (
                 <ViewSettingsButton scope={{ kind: VIEW_SETTINGS_SCOPE.LINES, notes: false }} />
-                <SourceMenu read={source} />
-              </>
-            ) : null}
-          </div>
-        </header>
+              ) : null}
+            </>
+          }
+          menu={showingSource ? sourceMenu(source, copyWithToast) : undefined}
+        />
         {showingSource ? (
           <PageSource
             title={page.title}

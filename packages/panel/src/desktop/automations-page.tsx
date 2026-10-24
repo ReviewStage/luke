@@ -46,7 +46,6 @@ import {
   TEXT_VARIANT,
   Text,
   Tooltip,
-  useMenu,
   useMinute,
   VisuallyHidden,
 } from "@luke/ui";
@@ -63,7 +62,7 @@ import { GLYPH_STATE, glyphStateWords, stateEndMark } from "../state-glyph.js";
 import { AUTOMATIONS_PAGE, type TasksControl } from "../tasks/use-tasks-tab.js";
 import { TOAST_HOLD, useToast } from "../toast.js";
 import { useExperiment } from "../use-app-state.js";
-import { ActionMenu } from "./action-menu.js";
+import { rowMenu } from "./action-menu.js";
 import { AutomationEditor, AutomationPageSkeleton, type SentryOffer } from "./automation-editor.js";
 import {
   AutomationGroupCard,
@@ -105,8 +104,8 @@ import { useAutomations } from "./use-automations.js";
  * from it goes back to the list.
  */
 
-/** What an automation's row's right-click menu is called. */
-const ROW_ACTIONS = "Automation actions";
+/** What an automation's row is, which names its ⋯ and its menu. */
+const ROW_THING = "Automation";
 
 /** What the list says where it could not be read. */
 const UNREAD_LINE = "The automations could not be read.";
@@ -192,12 +191,9 @@ function AutomationRow({
 }): React.JSX.Element {
   const state = STANDING_GLYPH[automationRunStanding(automation.lastRun)];
   const next = automationNext(automation);
-  const menu = useMenu(true);
-  const press = useRef<HTMLElement | null>(null);
   // Note that the row's item is its press's parent, which its card counts as its control, as a sidebar task's row does.
   const item = useRef<HTMLElement | null>(null);
   const hold = useCallback((node: HTMLElement | null) => {
-    press.current = node;
     item.current = node?.parentElement ?? null;
   }, []);
   const copyLink = useCopyLinkItem()({ kind: LINK_PLACE.AUTOMATION, automationId: automation.id });
@@ -206,86 +202,76 @@ function AutomationRow({
   const trigger = automationTriggerText(automation.trigger, automation.repositories ?? []);
   const hiddenWorking = working === undefined ? null : <VisuallyHidden>{working}</VisuallyHidden>;
   return (
-    <>
-      <RowHintOptions
-        card={<AutomationCard automation={automation} workspaceName={workspace?.name} />}
-        cardBeside
-        cardRegion={item}
-      >
-        <ListRow
-          ref={hold}
-          leading={<ActorMark actor={automationActor(automation)} size={ACTOR_SIZE.ROW} />}
-          title={
-            <span className="automation-row-name" data-enabled={String(automation.enabled)}>
-              {automation.name}
-            </span>
-          }
-          description={
-            narrow ? (
-              <>
-                {hiddenWorking}
-                {stateEndMark(state, true)}
-                {automationNarrowLine(automation, trigger, now)}
-              </>
-            ) : (
-              trigger
-            )
-          }
-          meta={
-            narrow ? undefined : (
-              <AutomationRowMeta
-                lead={hiddenWorking}
-                owner={
-                  <OwnerCell
-                    owner={automationOwner(automation)}
-                    mine={automation.mine === true}
-                    workspace={workspace}
-                  />
-                }
-                next={
-                  <>
-                    {stateEndMark(state, true)}
-                    <Tooltip
-                      label={next.kind === AUTOMATION_NEXT.AT ? momentText(next.at) : undefined}
-                    >
-                      <Text
-                        as={TEXT_ELEMENT.SPAN}
-                        variant={TEXT_VARIANT.INHERIT}
-                        truncate
-                        className="automation-row-when"
-                      >
-                        {automationNextText(automation, now)}
-                      </Text>
-                    </Tooltip>
-                  </>
-                }
-              />
-            )
-          }
-          actions={
-            <Switch
-              checked={automation.enabled}
-              label={
-                automation.enabled ? `Turn off ${automation.name}` : `Turn on ${automation.name}`
+    <RowHintOptions
+      card={<AutomationCard automation={automation} workspaceName={workspace?.name} />}
+      cardBeside
+      cardRegion={item}
+    >
+      <ListRow
+        ref={hold}
+        leading={<ActorMark actor={automationActor(automation)} size={ACTOR_SIZE.ROW} />}
+        title={
+          <span className="automation-row-name" data-enabled={String(automation.enabled)}>
+            {automation.name}
+          </span>
+        }
+        description={
+          narrow ? (
+            <>
+              {hiddenWorking}
+              {stateEndMark(state, true)}
+              {automationNarrowLine(automation, trigger, now)}
+            </>
+          ) : (
+            trigger
+          )
+        }
+        meta={
+          narrow ? undefined : (
+            <AutomationRowMeta
+              lead={hiddenWorking}
+              owner={
+                <OwnerCell
+                  owner={automationOwner(automation)}
+                  mine={automation.mine === true}
+                  workspace={workspace}
+                />
               }
-              onChange={(enabled) => onToggle(enabled)}
-              {...NO_CONTEXT_MENU}
+              next={
+                <>
+                  {stateEndMark(state, true)}
+                  <Tooltip
+                    label={next.kind === AUTOMATION_NEXT.AT ? momentText(next.at) : undefined}
+                  >
+                    <Text
+                      as={TEXT_ELEMENT.SPAN}
+                      variant={TEXT_VARIANT.INHERIT}
+                      truncate
+                      className="automation-row-when"
+                    >
+                      {automationNextText(automation, now)}
+                    </Text>
+                  </Tooltip>
+                </>
+              }
             />
-          }
-          hint={{ Hint: RowHint, label: automation.name }}
-          onPress={onOpen}
-          contextMenu={copyLink === undefined ? undefined : menu.contextMenu(press)}
-        />
-      </RowHintOptions>
-      {menu.drawn === undefined || copyLink === undefined ? null : (
-        <ActionMenu
-          label={ROW_ACTIONS}
-          menu={menu.drawn}
-          groups={[[copyLink]]}
-          onClose={menu.close}
-        />
-      )}
-    </>
+          )
+        }
+        actions={
+          <Switch
+            checked={automation.enabled}
+            label={
+              automation.enabled ? `Turn off ${automation.name}` : `Turn on ${automation.name}`
+            }
+            onChange={(enabled) => onToggle(enabled)}
+            {...NO_CONTEXT_MENU}
+          />
+        }
+        hint={{ Hint: RowHint, label: automation.name }}
+        onPress={onOpen}
+        menu={copyLink === undefined ? undefined : rowMenu(ROW_THING, [[copyLink]])}
+      />
+    </RowHintOptions>
   );
 }
 

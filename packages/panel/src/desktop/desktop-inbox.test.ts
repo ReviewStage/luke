@@ -8545,7 +8545,9 @@ function toMenuRows(): string[] {
   const menu = document.querySelector('[role="dialog"][aria-label="To"]');
   assert.ok(menu, "To's menu is open");
   return [
-    ...menu.querySelectorAll('.luke-combobox-heading, .menu-row-list-heading, [role="option"]'),
+    ...menu.querySelectorAll(
+      '.luke-combobox-heading, .luke-searchable-menu-heading, [role="option"]',
+    ),
   ].map((node) => {
     if (!node.matches('[role="option"]')) return `# ${node.textContent}`;
     const name = node.querySelector(".luke-combobox-option-label")?.textContent ?? "";

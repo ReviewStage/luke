@@ -9,7 +9,11 @@ import {
   BUTTON_VARIANT,
   Button,
   ErrorState,
+  type MenuRow,
+  POPOVER_ALIGN,
+  POPOVER_WIDTH,
   SETTINGS_ROW_INDENT,
+  SearchableMenu,
   SettingsLine,
   SettingsRow,
   SettingsRowMark,
@@ -21,8 +25,6 @@ import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { useAct } from "../act.js";
 import { TILE_SIZE, WorkspaceTile } from "../desktop/workspace-tile.js";
 import { repositoryMenuRow } from "../repository-row.js";
-import { type MenuRow, SearchableMenu } from "../searchable-menu.js";
-import { PICKER_ALIGN, usePickerPlacement } from "./picker-row.js";
 
 /**
  * workspace-token-repositories.tsx -- the repositories members added to a workspace on their own GitHub tokens, under GitHub's row on Settings › Workspace.
@@ -129,7 +131,7 @@ type Candidates =
 
 /**
  * Add repository and its menu: the outline `Button`, and under it the
- * app's searched menu placed as a Settings picker's is.
+ * app's searched menu hung from it at a Settings picker's width.
  */
 export function AddTokenRepository({
   workspaceId,
@@ -147,7 +149,6 @@ export function AddTokenRepository({
   const menuId = useId();
   const holder = useRef<HTMLSpanElement>(null);
   const button = useRef<HTMLButtonElement>(null);
-  const placement = usePickerPlacement(open, button, PICKER_ALIGN.END, menuId);
   const close = () => {
     setOpen(false);
     button.current?.focus();
@@ -182,7 +183,7 @@ export function AddTokenRepository({
           ? WORDS.NONE
           : undefined;
   return (
-    <span className="settings-picker" ref={holder} {...placement}>
+    <span className="settings-picker" ref={holder}>
       <Button
         ref={button}
         variant={BUTTON_VARIANT.OUTLINE}
@@ -203,12 +204,13 @@ export function AddTokenRepository({
           ref={drawn.ref}
           id={menuId}
           label={WORDS.ADD}
-          className="settings-picker-menu"
           placeholder={WORDS.SEARCH}
           rows={rows}
           value={undefined}
           note={note}
           noMatch={WORDS.NO_MATCH}
+          align={POPOVER_ALIGN.END}
+          width={POPOVER_WIDTH.NARROW}
           onPick={(id) => {
             close();
             onRefused(undefined);

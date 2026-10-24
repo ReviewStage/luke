@@ -10,17 +10,14 @@ import { APP_COMMAND, APP_SHORTCUTS } from "@luke/settings/shortcuts";
 import type { DialogConfirm } from "@luke/ui";
 import {
   BackIcon,
-  BUTTON_SIZE,
   BusyLabel,
   commandKeyshortcuts,
-  EllipsisIcon,
   EmptyState,
   ERROR_STATE_PLACEMENT,
   ErrorState,
   FILL_ELEMENT,
   Fill,
   FoldingButton,
-  IconButton,
   LIST_ROW_ACTIONS,
   LIST_ROW_CURRENT,
   List,
@@ -42,7 +39,6 @@ import {
   TextButton,
   Time,
   Tooltip,
-  useMenu,
   useMinute,
 } from "@luke/ui";
 import { type Actor, actorName } from "@luke/ui/actor-model";
@@ -81,7 +77,7 @@ import {
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import { useFormerMembers, useWorkspaceMembers } from "../tasks/use-workspace-members.js";
 import { useVersionRestore, VersionPageSkeleton, VersionView } from "../tasks/version-view.js";
-import { ActionMenu, type MenuAction } from "./action-menu.js";
+import { type MenuAction, rowMenu } from "./action-menu.js";
 import { HistoryButtons, useSidebarEdge } from "./desktop-sidebar.js";
 import { useNarrowFocus } from "./narrow-focus.js";
 import type { SidebarCollapse } from "./sidebar-collapse.js";
@@ -103,11 +99,10 @@ import type { SidebarCollapse } from "./sidebar-collapse.js";
  * the version that made the section's last change instead, its row brought
  * into the list's view. Choosing a row, or stepping with the up and down
  * arrows, draws that version beside the list (`version-view.tsx`), and older
- * versions are read a page at a time from the list's foot. A row's ⋯, which
- * stands in its time's place while the row is hovered or holds the
- * keyboard as a sidebar task's Pin and Archive do, and its right-click offer
- * what applies to its version: Show changes, its Open, and its Restore. Show
- * changes, or the right arrow, slides the column one level over, as a nested
+ * versions are read a page at a time from the list's foot. A row's ⋯, shown
+ * while the row is hovered or holds the keyboard, its right-click and the
+ * menu key offer what applies to its version: Show changes, its Open, and
+ * its Restore. Show changes, or the right arrow, slides the column one level over, as a nested
  * page of System Settings does, the title going with the list: All versions
  * at its head, who wrote the version, which opens where it was written, then
  * a row for each section it changed, a section added or removed saying so.
@@ -162,8 +157,11 @@ const NO_HISTORY_LINE = "No versions yet.";
 /** What the menu item that opens a revision's sections says. */
 const SECTIONS_LABEL = "Show changes";
 
-/** What a row's ⋯ says. */
-const ACTIONS_LABEL = "Version actions";
+/** What a version's row is, which names its ⋯ and its menu. */
+const VERSION_THING = "Version";
+
+/** What a changed section's row is, which names its ⋯ and its menu. */
+const SECTION_THING = "Section";
 
 /** The word a changed section wears beside its name: none for an edit, which most are. */
 const SECTION_CHANGE_WORDS = {
@@ -208,10 +206,9 @@ function sourceItem(source: SourceDoor): MenuAction {
 
 /**
  * One revision's row: who wrote it, what it did, and when; lit while its
- * version is drawn. Its ⋯ stands over the time while the row is hovered or
- * holds the keyboard, a button beside the row rather than inside it, since a
- * button holds no other, and drops the same menu the row's right-click
- * hangs at the pointer. A row with nothing to offer has neither.
+ * version is drawn. Its ⋯ (`ListRow`'s `menu`) shows while the row is hovered
+ * or holds the keyboard, and drops the same menu the row's right-click and
+ * the menu key hang. A row with nothing to offer has none of them.
  */
 function RevisionRow({
   line,
@@ -244,8 +241,6 @@ function RevisionRow({
   summary: string;
 }): React.JSX.Element {
   const { lastEdit } = line;
-  const menu = useMenu(true);
-  const ellipsis = useRef<HTMLButtonElement | null>(null);
   const groups = [
     [
       ...(onOpenSections === undefined
@@ -262,51 +257,28 @@ function RevisionRow({
       ? []
       : [{ label: "Restore this version", icon: <RotateCcwIcon />, onSelect: onRestore }],
   ].filter((group) => group.length > 0);
-  const offered = groups.length > 0;
-  // Note that the ⋯ is what a right-click's menu hands focus back to, since
-  // it is the menu's own door from the keyboard.
-  const showMenu = menu.contextMenu(ellipsis);
   // Note that the author's card hangs beside the row as the pointer rests on it; an author with none, Luke or an agent, hangs nothing.
   const card = actorCard(author);
   return (
-    <>
-      <RowHintOptions card={card} cardBeside>
-        <ListRow
-          ref={rowRef}
-          leading={<ActorMark actor={author} size={ACTOR_SIZE.ROW} />}
-          title={
-            <span className="version-row-author" data-author={author.kind}>
-              {actorName(author)}
-              <LeftWords actor={author} />
-            </span>
-          }
-          description={<span className="version-row-summary">{summary}</span>}
-          meta={<Time at={lastEdit.at} now={now} />}
-          current={selected ? LIST_ROW_CURRENT.ITEM : undefined}
-          onPress={onSelect}
-          contextMenu={offered ? showMenu : undefined}
-          actionsAt={LIST_ROW_ACTIONS.HOVER}
-          menuOpen={menu.open !== undefined}
-          hint={card === undefined ? undefined : { Hint: RowHint, label: actorName(author) }}
-          actions={
-            offered ? (
-              <Tooltip label={ACTIONS_LABEL}>
-                <IconButton
-                  ref={ellipsis}
-                  icon={<EllipsisIcon />}
-                  label={ACTIONS_LABEL}
-                  size={BUTTON_SIZE.COMPACT}
-                  {...menu.trigger()}
-                />
-              </Tooltip>
-            ) : null
-          }
-        />
-      </RowHintOptions>
-      {menu.drawn === undefined ? null : (
-        <ActionMenu label={ACTIONS_LABEL} menu={menu.drawn} groups={groups} onClose={menu.close} />
-      )}
-    </>
+    <RowHintOptions card={card} cardBeside>
+      <ListRow
+        ref={rowRef}
+        leading={<ActorMark actor={author} size={ACTOR_SIZE.ROW} />}
+        title={
+          <span className="version-row-author" data-author={author.kind}>
+            {actorName(author)}
+            <LeftWords actor={author} />
+          </span>
+        }
+        description={<span className="version-row-summary">{summary}</span>}
+        meta={<Time at={lastEdit.at} now={now} />}
+        current={selected ? LIST_ROW_CURRENT.ITEM : undefined}
+        onPress={onSelect}
+        actionsAt={LIST_ROW_ACTIONS.HOVER}
+        hint={card === undefined ? undefined : { Hint: RowHint, label: actorName(author) }}
+        menu={rowMenu(VERSION_THING, groups)}
+      />
+    </RowHintOptions>
   );
 }
 
@@ -365,26 +337,15 @@ function SectionRow({
   source: SourceDoor | undefined;
 }): React.JSX.Element {
   const word = SECTION_CHANGE_WORDS[section.change];
-  const menu = useMenu(true);
   return (
-    <>
-      <ListRow
-        ref={rowRef}
-        title={sectionName(section.heading)}
-        meta={word}
-        current={selected ? LIST_ROW_CURRENT.ITEM : undefined}
-        onPress={onSelect}
-        contextMenu={source === undefined ? undefined : menu.contextMenu()}
-      />
-      {menu.drawn === undefined || source === undefined ? null : (
-        <ActionMenu
-          label="Section actions"
-          menu={menu.drawn}
-          groups={[[sourceItem(source)]]}
-          onClose={menu.close}
-        />
-      )}
-    </>
+    <ListRow
+      ref={rowRef}
+      title={sectionName(section.heading)}
+      meta={word}
+      current={selected ? LIST_ROW_CURRENT.ITEM : undefined}
+      onPress={onSelect}
+      menu={source === undefined ? undefined : rowMenu(SECTION_THING, [[sourceItem(source)]])}
+    />
   );
 }
 

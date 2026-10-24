@@ -2460,7 +2460,7 @@ test("a default model that could not be read is said as unknown, and a model can
   act(() => button("Choose a model").click());
   await settle();
 
-  assert.ok(page.querySelector(".agent-model-menu"), "the model menu opens");
+  assert.ok(page.querySelector(".luke-searchable-menu"), "the model menu opens");
   assert.equal(catalogReads, readsBefore + 1, "opening it reads the catalog again");
   assert.equal(
     page.querySelector(".automation-editor-status")?.textContent,
@@ -2764,6 +2764,55 @@ test("a right-click on an automation's switch opens no menu, and Escape from its
   });
   await settle();
   assert.equal(document.activeElement, press);
+});
+
+test("an automation row's ⋯, its right-click and the menu key open the same menu, whose Copy link copies its link", async () => {
+  const page = mountPages({ kind: AUTOMATIONS_PAGE.LIST });
+  await settle();
+  const row = rowOf(page, SWEEP.name);
+  const press = row.querySelector("button") ?? assert.fail("the row is a press");
+  const openMenus = () => document.querySelectorAll('[role="menu"]:not([data-leaving])');
+  const items = () => [...(openMenus()[0]?.querySelectorAll('[role="menuitem"]') ?? [])];
+  const closeMenu = async () => {
+    act(() => {
+      document.activeElement?.dispatchEvent(
+        new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }),
+      );
+    });
+    await settle();
+  };
+  const doors = [
+    () =>
+      act(() =>
+        (row.querySelector('button[aria-label="Automation actions"]') as HTMLElement).click(),
+      ),
+    () =>
+      act(() => {
+        press.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true }));
+      }),
+    () =>
+      act(() => {
+        press.dispatchEvent(
+          new KeyboardEvent("keydown", { key: "ContextMenu", bubbles: true, cancelable: true }),
+        );
+      }),
+  ];
+
+  for (const open of doors) {
+    open();
+    await settle();
+    assert.equal(openMenus().length, 1);
+    assert.equal(openMenus()[0]?.getAttribute("aria-label"), "Automation actions");
+    assert.deepEqual(
+      items().map((item) => item.textContent),
+      ["Copy link"],
+    );
+    await closeMenu();
+  }
+  doors[2]?.();
+  await settle();
+  await act(async () => menuItem("Copy link").click());
+  assert.equal(copied.at(-1), `https://tryluke.dev/${WORKSPACE.id}/automation/${SWEEP.id}`);
 });
 
 test("a link to a run shows the Runs panel a reader folded, its run marked current, a fold after it stands, and the link opened again shows it again", async () => {
@@ -3385,7 +3434,7 @@ test("a model catalog that could not be read says so in the model menu, and Retr
   act(() => button("Choose a model").click());
   await settle();
 
-  const menu = page.querySelector(".agent-model-menu") ?? assert.fail("the model menu opens");
+  const menu = page.querySelector(".luke-searchable-menu") ?? assert.fail("the model menu opens");
   assert.equal(
     menu.querySelector("[role=alert]")?.textContent,
     "The models could not be read.Retry",

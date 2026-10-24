@@ -91,7 +91,7 @@ function FaceBadge({ state }: { state: ReviewState }): React.JSX.Element {
 }
 
 /** Someone the pull request names, by their face and name, hanging their card, as every actor is drawn. */
-export function PersonRef({ person }: { person: GitHubPerson }): React.JSX.Element {
+function PersonRef({ person }: { person: GitHubPerson }): React.JSX.Element {
   return <ActorRef actor={useNamer()(person)} />;
 }
 

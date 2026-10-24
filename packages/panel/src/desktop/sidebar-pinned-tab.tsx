@@ -42,7 +42,7 @@ import { PlanGlyph, TAB_KIND, type TabSubject, tabLook } from "../tasks/tab-look
 import { TRANSCRIPT_COPY } from "../tasks/transcript-copy.js";
 import { type PinnedTab, SIDE_PANEL_TAB } from "../tasks/use-side-panel.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
-import { type MenuAction, sharedGroups } from "./action-menu.js";
+import { type MenuAction, rowMenu } from "./action-menu.js";
 import { agentTranscriptRead } from "./agent-actions.js";
 import { useRowPlace, withRowMoves } from "./row-moves.js";
 import { type TranscriptCopier, useTranscriptCopier } from "./strip-tabs.js";
@@ -478,11 +478,11 @@ export function SidebarPinnedTab({
           onPress={() => {
             if (!gone) onOpen();
           }}
-          menu={{
-            thing: "Pinned tab",
-            groups: sharedGroups(withRowMoves(pinActionGroups(pin, tasks, copied), place)),
-            shown: tasks.shown && inSight,
-          }}
+          menu={rowMenu(
+            "Pinned tab",
+            withRowMoves(pinActionGroups(pin, tasks, copied), place),
+            tasks.shown && inSight,
+          )}
           actionsAt={LIST_ROW_ACTIONS.HOVER}
           actions={
             <Tooltip label="Unpin">

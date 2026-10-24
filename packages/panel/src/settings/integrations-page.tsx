@@ -642,7 +642,7 @@ function IntegrationRow({
   return (
     <Stack gap={GAP.NONE}>
       <MenuRow
-        label={`${name} actions`}
+        thing={name}
         actions={actions}
         anchor={connection}
         {...(bySignIn ? { heading: PAGE_LINE.GITHUB_SIGN_IN } : undefined)}

@@ -2195,74 +2195,23 @@ ul.actor-stack {
 }
 
 /* The chip in the toolbar stands in the actions row beside Start, so it is
-   the toolbar chip (`chip.tsx`). The wrapper draws nothing of its own, so a
-   plan whose chip is not drawn leaves no gap in the row; its menu hangs
-   from the actions row's right edge, with or without the chip. */
+   the toolbar chip (`chip.tsx`). Its box is the anchor its menu hangs from
+   (`@luke/ui`'s `SearchableMenu`), and draws nothing of its own, so a plan
+   whose chip is not drawn leaves no gap in the row while the menu is shut. */
 .repository-chip[data-place="toolbar"] {
-  display: contents;
+  display: flex;
 }
 
-.repository-chip[data-place="toolbar"] .searchable-menu {
-  right: 0;
-  left: auto;
-}
-
-/* A form row's chip is a Settings picker (`settings/picker-row.tsx`), so its
-   menu hangs from the chip's trailing edge, where the column is, or from its
-   leading edge where the chip leads its line. */
-.repository-chip[data-place="field"] .searchable-menu {
-  right: var(--settings-picker-inset, 0px);
-  left: auto;
-}
-
-.repository-chip[data-place="field"][data-align="start"] .searchable-menu {
-  right: auto;
-  left: var(--settings-picker-inset, 0px);
-}
-
-/* Wherever it stands, the menu is placed as a Settings picker's is
-   (`usePickerPlacement`): above the chip where the window leaves more room
-   there, its list capped to the room on the side it took, and no wider than
-   the room, pushed back over the chip where it would run past it, so on a
-   phone it never runs past the screen's edge and scrolls the shell sideways. */
-.repository-chip .searchable-menu {
-  max-width: var(--settings-picker-width-max, 340px);
-}
-
-.repository-chip[data-side="above"] .searchable-menu {
-  top: auto;
-  bottom: calc(100% + var(--luke-space-4));
-}
-
-.repository-chip {
-  --luke-combobox-list-max: min(280px, var(--settings-picker-list-max, 280px));
+.repository-chip[data-place="toolbar"]:empty {
+  display: none;
 }
 
 /* New task's Issue chip (`issue-picker-chip.tsx`) stands at the right end
-   of the dialog's head row, its menu hung from its trailing edge, or after
-   the repository chip in Home's card foot, hung from its leading edge;
-   placed as a Settings picker's is, wide enough for an issue's title with
-   its key and state after it. */
+   of the dialog's head row, or after the repository chip in Home's card
+   foot, the box its menu hangs from. */
 .issue-picker-chip {
-  --luke-combobox-list-max: min(280px, var(--settings-picker-list-max, 280px));
   position: relative;
   min-width: 0;
-}
-
-.issue-picker-chip .searchable-menu {
-  left: var(--settings-picker-inset, 0px);
-  width: 420px;
-  max-width: var(--settings-picker-width-max, 420px);
-}
-
-.issue-picker-chip[data-align="end"] .searchable-menu {
-  right: var(--settings-picker-inset, 0px);
-  left: auto;
-}
-
-.issue-picker-chip[data-side="above"] .searchable-menu {
-  top: auto;
-  bottom: calc(100% + var(--luke-space-4));
 }
 
 /* An integration whose brand publishes its one-colour mark in named inks
@@ -2325,69 +2274,12 @@ ul.actor-stack {
   border-top: 1px solid var(--luke-color-border);
 }
 
-/* One muted line under the pinned rows or a submenu's, inset as a row's
-   words are: what the agent has cost. */
-.task-compose-menu-foot-note {
-  padding: var(--luke-space-4) var(--row-inset) 0;
-}
-
-.task-compose-submenu > .task-compose-menu-foot-note {
-  padding-bottom: var(--luke-menu-inset);
-}
-
-/* A note that starts where a row's label does, past the row's glyph slot. */
-.task-compose-menu-foot-note[data-aligned="true"] {
-  padding-left: calc(var(--row-inset) + var(--luke-menu-glyph) + var(--luke-icon-gap));
-}
-
-/* A submenu stands beside the pinned row that opened it, its top level
-   with that row's and its near edge at the menu's own; it turns to the
-   menu's other side where its room ends before it does, is pushed back
-   over the menu (`--submenu-shift`) where neither side holds it, and stands up
-   from the row's foot where the window's bottom would cut it. */
-.task-compose-menu-branch {
-  position: relative;
-}
-
-.task-compose-submenu {
-  position: absolute;
-  z-index: 1;
-  top: 0;
-  left: calc(100% + 9px - var(--submenu-shift, 0px));
-  width: 200px;
-  padding: 0;
-}
-
-.task-compose-submenu[data-side="left"] {
-  right: calc(100% + 9px - var(--submenu-shift, 0px));
-  left: auto;
-}
-
-.task-compose-submenu[data-stand="up"] {
-  top: auto;
-  bottom: 0;
-}
-
 /* A searchable menu hung from its own button (`@luke/ui`'s
    `AnchoredPopover`) stands in the layer's place, and is what a listed
    row's submenu stands against. */
 .luke-anchored-popover > .searchable-menu {
   position: relative;
   width: auto;
-}
-
-/* A listed row's submenu stands beside the row as the list scrolled it
-   (`searchable-menu.tsx` places the branch over the row), taking no
-   pointer itself, so the rows under it stay the pointer's. */
-.searchable-menu-row-branch {
-  position: absolute;
-  right: 0;
-  left: 0;
-  pointer-events: none;
-}
-
-.searchable-menu-row-branch > * {
-  pointer-events: auto;
 }
 
 /* What pops up arrives on the pair every arriving element rides, the
@@ -5144,7 +5036,7 @@ ul.actor-stack {
 }
 
 /* The "+" and the menu it drops, which hangs under it in `@luke/ui`'s
-   anchored popover, within what is seen of the window (`strip-tabs.tsx`).
+   `SearchableMenu`, within what is seen of the window (`strip-tabs.tsx`).
    The menu falls over the row's drag region, so it claims its presses back
    from the window frame. */
 .tab-add-anchor {
@@ -5153,15 +5045,7 @@ ul.actor-stack {
   flex: 0 0 auto;
 }
 
-/* Hung there, it is no taller than the room its side of the "+" leaves
-   (`--luke-popover-room`), measured against what is seen of the window, so
-   a phone's keyboard or a short window never hides its last rows: its list
-   gives way and scrolls, under the search row that stays. */
-.luke-anchored-popover > .tab-add-menu {
-  max-height: var(--luke-popover-room, none);
-}
-
-[data-luke-profile="desktop"] .tab-add-menu {
+[data-luke-profile="desktop"] .tab-add-anchor .luke-anchored-popover {
   -webkit-app-region: no-drag;
 }
 
@@ -5183,10 +5067,6 @@ ul.actor-stack {
 .side-panel-no-tabs-line {
   margin-bottom: var(--luke-space-8);
   padding: 0 var(--row-inset);
-}
-
-.menu-row-list-heading {
-  padding: var(--luke-space-8) var(--row-inset) var(--luke-space-4);
 }
 
 /* The plan's tab, kept mounted while another tab is shown, laid out still
@@ -5645,13 +5525,6 @@ ul.actor-stack {
   display: flex;
 }
 
-/* The model menu hangs under the chevron, to the toolbar's right edge. */
-.start-agent-menu {
-  right: 0;
-  left: auto;
-  width: 300px;
-}
-
 /* Feedback dialog ------------------------------------------------------------ */
 
 /* A note to the people who make Luke, on the shared dialog's wide card,
@@ -5884,19 +5757,6 @@ ul.actor-stack {
   min-width: 0;
   align-items: center;
   gap: var(--luke-space-6);
-}
-
-/* A picker's menu here is as wide as its widest value, within a bound,
-   since the chip it hangs from grew to name its whole value: an owner's
-   long workspace name reads whole in the menu, not faded at its check.
-   The bound is also the room the scroller leaves (`picker-row.tsx`), which
-   pushes the menu back over the chip where it would run past it, so a menu
-   beside the runs never runs past the form's edge and loses the start of its
-   rows. */
-.automation-form .settings-picker .settings-picker-menu {
-  width: max-content;
-  min-width: min(max(280px, 100%), var(--settings-picker-width-max, 280px));
-  max-width: min(400px, var(--settings-picker-width-max, 400px));
 }
 
 /* New task's chips are Settings pickers (`settings/picker-row.tsx`)

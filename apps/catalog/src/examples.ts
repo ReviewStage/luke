@@ -25,6 +25,7 @@ import { COMMENTS_EXAMPLE } from "./examples/comments";
 import { COMPOSER_FOOTS_EXAMPLE } from "./examples/composer-foots";
 import { COMPOSER_FRAMES_EXAMPLE } from "./examples/composer-frames";
 import { CONFIRM_DIALOGS_EXAMPLE } from "./examples/confirm-dialogs";
+import { COPY_BUTTONS_EXAMPLE } from "./examples/copy-buttons";
 import { CORNER_COUNTS_EXAMPLE } from "./examples/corner-counts";
 import { DAILY_BARS_EXAMPLE } from "./examples/daily-bars";
 import { DATA_TABLE_EXAMPLE } from "./examples/data-table";
@@ -62,6 +63,7 @@ import { MORE_BUTTONS_EXAMPLE } from "./examples/more-buttons";
 import { NAV_ITEMS_EXAMPLE } from "./examples/nav-items";
 import { NOTE_LINES_EXAMPLE } from "./examples/note-lines";
 import { ONE_LINE_EXAMPLE } from "./examples/one-line";
+import { OVER_PANES_EXAMPLE } from "./examples/over-panes";
 import { PAGE_THUMBS_EXAMPLE } from "./examples/page-thumbs";
 import { PAGE_TOOLBAR_EXAMPLE } from "./examples/page-toolbar";
 import { PAGINATION_EXAMPLE } from "./examples/pagination";
@@ -146,6 +148,7 @@ export const EXAMPLES: readonly Example[] = [
   COLLECTION_PAGE_EXAMPLE,
   COMBOBOX_EXAMPLE,
   CONFIRM_DIALOGS_EXAMPLE,
+  COPY_BUTTONS_EXAMPLE,
   COMMAND_ASK_EXAMPLE,
   COMMAND_DIALOG_EXAMPLE,
   COMMENTS_EXAMPLE,
@@ -191,6 +194,7 @@ export const EXAMPLES: readonly Example[] = [
   NAV_ITEMS_EXAMPLE,
   NOTE_LINES_EXAMPLE,
   ONE_LINE_EXAMPLE,
+  OVER_PANES_EXAMPLE,
   PAGINATION_EXAMPLE,
   PAGE_THUMBS_EXAMPLE,
   PAGE_TOOLBAR_EXAMPLE,

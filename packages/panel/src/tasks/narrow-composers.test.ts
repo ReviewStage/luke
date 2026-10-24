@@ -7,7 +7,6 @@ import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, type ReactElement, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
-import { PICKER_ALIGN } from "../settings/picker-row.js";
 import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
 import { editorBundleLanded, installEditorLayout, QUIET_COMPOSER } from "../testing/composer.js";
 import { layContainersAt, shown } from "../testing/container-width.js";
@@ -16,7 +15,6 @@ import { installScrollIntoView } from "../testing/scroll-into-view.js";
 import { tasksControl } from "../testing/tasks-control.js";
 import { AgentComposer } from "./agent-composer.js";
 import { NewTaskDialog } from "./new-task-dialog.js";
-import { CHIP_PLACE, RepositoryChip } from "./repository-chip.js";
 import { useAgentComposer } from "./use-agent-composer.js";
 
 /**
@@ -254,41 +252,6 @@ test("on a desktop, New task's dialog keeps the dimmed window's margins", async 
   const style = getComputedStyle(dialog);
   assert.equal(pixels(dialog, style.marginLeft), 0, "it stands within the dimmed window's margins");
   assert.equal(pixels(dialog, style.marginRight), 0);
-});
-
-test("on a 390px screen, the repository menu opened from Home's chip stands inside the screen", async () => {
-  layContainersAt({}, { touch: true });
-  vi.spyOn(window, "innerWidth", "get").mockReturnValue(PHONE.SCREEN);
-  const chipLeft = 85;
-  vi.spyOn(HTMLButtonElement.prototype, "getBoundingClientRect").mockReturnValue(
-    DOMRect.fromRect({ x: chipLeft, y: 300, width: 120, height: 44 }),
-  );
-  // The menu at its own width, which jsdom lays out as none.
-  const menuWidth = 340;
-  vi.spyOn(HTMLElement.prototype, "offsetWidth", "get").mockImplementation(function (
-    this: HTMLElement,
-  ) {
-    return this.classList.contains("searchable-menu") ? menuWidth : 0;
-  });
-  const container = await draw(
-    createElement(RepositoryChip, {
-      value: "acme/web",
-      chooser: { ...tasksControl().repositories, recent: ["acme/web"] },
-      onChoose: ignore,
-      place: CHIP_PLACE.FIELD,
-      align: PICKER_ALIGN.START,
-    }),
-  );
-  const chip =
-    container.querySelector<HTMLButtonElement>(".repository-chip button") ??
-    assert.fail("the chip stands");
-  await act(async () => chip.click());
-  const menu = container.querySelector(".searchable-menu") ?? assert.fail("the menu opens");
-
-  const style = getComputedStyle(menu);
-  const start = chipLeft + pixels(menu, style.left);
-  const end = start + Math.min(menuWidth, pixels(menu, style.maxWidth));
-  assert.ok(start >= 0 && end <= PHONE.SCREEN, `the menu stands from ${start} to ${end}`);
 });
 
 /** The `@` list's foot, which names the keys it hears. */
