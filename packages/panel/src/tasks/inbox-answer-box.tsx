@@ -21,6 +21,7 @@ import { TOAST_HOLD, useToast } from "../toast.js";
 import { useAttachedFiles } from "../use-attached-files.js";
 import { AttachFilesButton } from "./attach-files-button.js";
 import { AttachedFileChips, attachmentChips } from "./attached-file-chips.js";
+import type { ChatComposerMentions } from "./chat-composer.js";
 import { ComposerField } from "./composer-field.js";
 import { type ComposerPickers, useComposerPickers } from "./composer-pickers.js";
 import { DictateButton, DictationStrip } from "./dictation-strip.js";
@@ -158,7 +159,9 @@ export interface AnswerField {
  * A box's field, its editor, its lists, and its dictation, all its own: an
  * `@` lists what the page hands, a `/` the repository's skills, and a
  * server's chip says what a send does with it, a turn opened or the running
- * one steered, by the agent the words go to.
+ * one steered, by the agent the words go to. A box answering a chat
+ * message's ask is handed its channel's offer instead (`chat`), so its `@`
+ * and `#` list what the chat's own box lists there.
  */
 export function useAnswerField({
   draft,
@@ -168,6 +171,7 @@ export function useAnswerField({
   skills,
   keywords,
   statuses,
+  chat,
   onNote,
 }: {
   draft: string;
@@ -179,6 +183,8 @@ export function useAnswerField({
   skills: SkillSource | undefined;
   keywords: readonly string[];
   statuses: IntegrationStatuses;
+  /** What the chat channel offers where the words answer an ask posted in it (`chat-mention-source.ts`); none where they answer an Inbox item. */
+  chat?: ChatComposerMentions | undefined;
   /** Says why a dictation left nothing, or clears what the last one said. */
   onNote: (note: string | undefined) => void;
 }): AnswerField {
@@ -204,6 +210,7 @@ export function useAnswerField({
             : SERVER_HANDED.OPENS,
       },
     },
+    chat,
     onNote,
   });
   return {

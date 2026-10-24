@@ -1,4 +1,5 @@
 import { INTEGRATION_STATUS } from "@luke/features/integration-wire";
+import type { MentionPlace } from "@luke/features/mention-link";
 import { namedServers } from "@luke/ui/agent-servers-model";
 import type { ReactNode, RefObject } from "react";
 import type { IntegrationStatuses } from "../integration-statuses.js";
@@ -7,13 +8,14 @@ import type {
   ComposerEditorHandle,
   ComposerTrigger,
 } from "../plan-editor/contract.js";
+import type { ChatComposerMentions } from "./chat-composer.js";
 import type { ComposerFieldMentions } from "./composer-field.js";
-import { MentionNodeChip, pastedMentionNode } from "./mention-chip.js";
+import { type MentionDoors, MentionNodeChip, pastedMentionNode } from "./mention-chip.js";
 import { MENTION_MENU_SIDE, type MentionMenuSide, useMentionPicker } from "./mention-picker.js";
 import { MentionedServers, type MentionedServersPlace } from "./server-card.js";
 import { useSkillOpener } from "./skill-chip.js";
 import { type SkillSource, useSkillPicker } from "./skill-picker.js";
-import { useTaskMentions } from "./task-mentions.js";
+import { type TaskMentionsValue, useMentionDoors, useTaskMentions } from "./task-mentions.js";
 import { DICTATION_PHASE, type DictationControl, useDictation } from "./use-dictation.js";
 import { useKnownNames } from "./use-known-names.js";
 
@@ -32,6 +34,12 @@ import { useKnownNames } from "./use-known-names.js";
  * then dictation does, and Escape otherwise leaves the box, or does what its
  * owner says instead (`onLeave`), as New task's closes its card. What a server's
  * chip says a send does with it is the box's to tell (`servers.place`).
+ *
+ * A box answering a chat message's ask is handed that channel's offer
+ * instead (`chat`, `chat-mention-source.ts`), as the chat's own box is: its
+ * `@` lists the members a mention there tells, then the channel's task, and
+ * its `#` names the channels, with no server, since the words are a chat
+ * answer rather than an agent's turn.
  */
 
 /** The field's props the pickers own, laid onto `ComposerField` as they are. */
@@ -52,6 +60,40 @@ export interface ComposerPickers {
   readonly field: PickedField;
 }
 
+/** Where a box's mentions are written: the doors its chips open through, and the place, task, and plan text an address pasted whole is read against; no place where one pastes as its words. */
+interface MentionsAt {
+  readonly doors: MentionDoors;
+  readonly place: MentionPlace | undefined;
+  readonly taskId: string;
+  readonly text: () => string;
+}
+
+/**
+ * Where a box's mentions are written: the page's, where it hands them; the
+ * chat channel's the box answers in, under the workspace that channel's
+ * links are written in, an address pasting as its words before that is
+ * known, as the chat's own box pastes it; none where the box takes no
+ * mention.
+ */
+function mentionsAt(
+  page: TaskMentionsValue | undefined,
+  chat: ChatComposerMentions | undefined,
+  windowDoors: MentionDoors,
+): MentionsAt | undefined {
+  if (chat === undefined) {
+    if (page === undefined) return undefined;
+    return { doors: page.doors, place: page.doors.place, taskId: page.taskId, text: page.text };
+  }
+  const doors = page?.doors ?? windowDoors;
+  const { workspace, taskId, text } = chat.source;
+  return {
+    doors,
+    place: workspace === "" ? undefined : { ...doors.place, workspace },
+    taskId,
+    text,
+  };
+}
+
 /** The pickers of a box written to an agent, as above. */
 export function useComposerPickers({
   editor,
@@ -62,6 +104,7 @@ export function useComposerPickers({
   skills,
   keywords,
   servers,
+  chat,
   onNote,
   onLeave,
   side = MENTION_MENU_SIDE.ABOVE,
@@ -80,6 +123,8 @@ export function useComposerPickers({
   keywords: readonly string[];
   /** Where the account's servers stand, which the `@` list offers, and what a send does with one the words name. */
   servers: { readonly statuses: IntegrationStatuses; readonly place: MentionedServersPlace };
+  /** What a chat channel offers where the words answer an ask posted in it, in place of the page's mentions and the servers; none where they go to an agent. */
+  chat?: ChatComposerMentions | undefined;
   /** Says why a dictation left nothing, or clears what the last one said. */
   onNote: (note: string | undefined) => void;
   /** What Escape does where no list or dictation takes it: New task's box closes its card; the box gives up the caret where none is given. */
@@ -97,12 +142,14 @@ export function useComposerPickers({
     onOpen: openSkill,
     side,
   });
-  // An `@` picks a mention of the page the box stands on, where it stands on one that hands them.
+  // An `@` picks a mention of the page the box stands on, where it stands on one that hands them, or of the chat channel the box answers in.
   const taskMentions = useTaskMentions();
+  const windowDoors = useMentionDoors();
+  const at = mentionsAt(taskMentions, chat, windowDoors);
   // A Luke address pasted whole is called by the name the window holds for what it names.
   const known = useKnownNames();
   const mentionPicker = useMentionPicker({
-    source: taskMentions,
+    source: chat === undefined ? taskMentions : chat.source,
     self,
     // The repository's skills, a pick written as the `/name` chip the `/` list writes.
     skills:
@@ -114,12 +161,24 @@ export function useComposerPickers({
             ask: skillPicker.ask,
             onChoose: (name) => editor.current?.chooseSkillAtMention(name),
           },
-    // The servers the account connected, each one a mention hands the agent's next turn.
-    servers: namedServers({
-      statusOf: servers.statuses.statusOf,
-      accountsOf: servers.statuses.accountsOf,
-      standing: (status) => status === INTEGRATION_STATUS.CONNECTED,
-    }),
+    // The servers the account connected, each one a mention hands the agent's next turn; none in a chat answer, which opens no turn.
+    servers:
+      chat === undefined
+        ? namedServers({
+            statusOf: servers.statuses.statusOf,
+            accountsOf: servers.statuses.accountsOf,
+            standing: (status) => status === INTEGRATION_STATUS.CONNECTED,
+          })
+        : [],
+    members: chat?.members,
+    // A channel is written as its word, as the chat's own box writes it.
+    channels:
+      chat === undefined
+        ? undefined
+        : {
+            known: chat.channels,
+            onChoose: (name) => editor.current?.chooseWords(`#${name}`),
+          },
     room,
     side,
     onChoose: (mention) => editor.current?.chooseMention(mention),
@@ -150,26 +209,29 @@ export function useComposerPickers({
       onTrigger: skillPicker.onTrigger,
       chip: skillPicker.chip,
       mentions:
-        taskMentions === undefined
+        at === undefined
           ? undefined
           : {
               onTrigger: mentionPicker.onTrigger,
+              onChannelTrigger: chat === undefined ? undefined : mentionPicker.onChannelTrigger,
               // A server's chip in the box says what a send now does with it.
               chip: (mention, node) => (
                 <MentionedServers value={servers.place}>
                   <MentionNodeChip
                     mention={mention}
-                    doors={taskMentions.doors}
+                    doors={at.doors}
                     edit={{ node, pickDate: mentionPicker.pickDate }}
                   />
                 </MentionedServers>
               ),
               pasted: (words) =>
-                pastedMentionNode(words, taskMentions.doors.place, {
-                  known,
-                  taskId: taskMentions.taskId,
-                  text: taskMentions.text,
-                }),
+                at.place === undefined
+                  ? undefined
+                  : pastedMentionNode(words, at.place, {
+                      known,
+                      taskId: at.taskId,
+                      text: at.text,
+                    }),
             },
       children: (
         <>
