@@ -110,6 +110,7 @@ import { relayout } from "../testing/resize-observer.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
 import { readSegmented, segment, segmentedGroup } from "../testing/segmented.js";
 import { tasksControl, waitingOf } from "../testing/tasks-control.js";
+import { newestToastAction, newestToastSays } from "../testing/toast.js";
 import { ToastHost } from "../toast.js";
 import { DesktopInbox } from "./desktop-inbox.js";
 import { DesktopSidebar } from "./desktop-sidebar.js";
@@ -805,7 +806,7 @@ const SCOPE_NAMES = ["To do", "All", "Archived"] as const;
 
 /** The Inbox's name as the list's head says it. */
 function headTitle(page: HTMLElement): string | null | undefined {
-  return page.querySelector(".inbox-tasks .desktop-toolbar-title")?.textContent;
+  return page.querySelector(".inbox-tasks .luke-toolbar-title")?.textContent;
 }
 
 /** Shows the scope `name` from the list's View options. */
@@ -1197,7 +1198,7 @@ test("an open item's ⋯ menu in the pane's bar offers Mark as read or unread, C
   const sent = takenCloses();
   const ellipsis = () =>
     itemPane(page).querySelector<HTMLButtonElement>(
-      '.desktop-toolbar button[aria-label="Item actions"]',
+      '.luke-toolbar button[aria-label="Item actions"]',
     ) ?? assert.fail("the pane's bar ends in its ⋯ menu");
 
   act(() => ellipsis().click());
@@ -1269,6 +1270,177 @@ test("an open item's row offers Resolve without answering beside its mark and la
   assert.equal(hoverClose(threshold), null, "the closed row offers Close no longer");
 });
 
+/** ⌘-clicks the row of the item so titled, as a Mac's list chooses a row in or out. */
+function commandClick(page: HTMLElement, title: string): void {
+  act(() => {
+    rowNamed(page, title).dispatchEvent(
+      new MouseEvent("click", { bubbles: true, cancelable: true, metaKey: true }),
+    );
+  });
+}
+
+/** The titles of the rows the list holds chosen, in the order drawn. */
+function picked(page: HTMLElement): string[] {
+  return [...page.querySelectorAll<HTMLButtonElement>(".inbox-tasks li button.luke-list-row-main")]
+    .filter((row) => row.getAttribute("aria-description") === "Selected")
+    .map((row) => row.querySelector(ROW_TITLE)?.textContent ?? "");
+}
+
+/** The selection's bar under the list, or none while nothing is chosen. */
+function selectionBar(page: HTMLElement): HTMLElement | null {
+  return page.querySelector<HTMLElement>(".inbox-tasks .luke-selection-bar");
+}
+
+/** The selection bar's button named `name`. */
+function barButton(page: HTMLElement, name: string): HTMLButtonElement {
+  const button = [
+    ...(selectionBar(page) ?? assert.fail("the bar stands")).querySelectorAll<HTMLButtonElement>(
+      "button",
+    ),
+  ].find((each) => each.textContent?.trim() === name);
+  assert.ok(button, `the bar offers ${name}`);
+  return button;
+}
+
+/** Whether the row of the item so titled says to a reader that it is unread. */
+function rowUnread(page: HTMLElement, title: string): boolean {
+  return [...rowNamed(page, title).querySelectorAll(".luke-visually-hidden")].some(
+    (each) => each.textContent === "Unread",
+  );
+}
+
+test("⌘-clicking two open items chooses both across their groups, opening neither, and the bar's Resolve asks once for both, red, then resolves each at the revision drawn and lets the selection go", async () => {
+  const { page } = mount();
+  await settle();
+  const sent = takenCloses();
+  const threshold = "Alert at 80%?";
+  const expiry = "Expire after 7 days?";
+  assert.deepEqual(picked(page), [], "nothing stands chosen before");
+
+  commandClick(page, threshold);
+  commandClick(page, expiry);
+  assert.deepEqual(picked(page), [threshold, expiry]);
+  assert.match(selectionBar(page)?.textContent ?? "", /2 selected/u);
+
+  act(() => barButton(page, "Resolve").click());
+  await settle();
+  assert.deepEqual(sent, [], "Resolve asks first");
+  const question =
+    document.querySelector<HTMLElement>('[role="alertdialog"]') ?? assert.fail("Resolve asks");
+  assert.match(question.textContent ?? "", /Resolve 2 items without answering\?/u);
+  assert.match(question.textContent ?? "", /Their agents are told/u);
+  const resolve = [...question.querySelectorAll("button")].find(
+    (button) => button.textContent === "Resolve",
+  );
+  assert.equal(resolve?.getAttribute("data-variant"), "danger", "it can't be undone, so it is red");
+  await confirmClose();
+
+  assert.deepEqual(
+    sent.map(({ itemId }) => itemId).sort(),
+    [THRESHOLD.id, EXPIRY.id].sort(),
+    "both items are resolved",
+  );
+  assert.equal(selectionBar(page), null, "the selection is let go");
+  assert.deepEqual(picked(page), []);
+});
+
+test("an agent changing an item the bar's Resolve asks about withdraws the question whole, resolving nothing", async () => {
+  const { page } = mount();
+  await settle();
+  const sent = takenCloses();
+  commandClick(page, "Alert at 80%?");
+  commandClick(page, "Expire after 7 days?");
+  act(() => barButton(page, "Resolve").click());
+  await settle();
+  assert.ok(document.querySelector('[role="alertdialog"]'), "Resolve asks first");
+
+  // The agent asks again under the same key, and main says the plan moved.
+  inboxes.set(BILLING.id, [{ ...THRESHOLD, revision: 2, updatedAt: 7_000 }, RETRY]);
+  act(() =>
+    setHolding([
+      { taskId: BILLING.id, items: 2, updatedAt: 7_000 },
+      { taskId: INVITES.id, items: 1, updatedAt: 4_000 },
+    ]),
+  );
+  await settle();
+
+  assert.equal(document.querySelector('[role="alertdialog"]'), null, "the question goes");
+  assert.deepEqual(sent, []);
+  assert.deepEqual(picked(page), ["Alert at 80%?", "Expire after 7 days?"], "the selection stands");
+});
+
+test("the bar's Mark as unread marks every item chosen at once under one toast, whose Undo marks each read again as it stood", async () => {
+  const { page } = mount([], { toasts: true });
+  await settle();
+  const expiry = "Expire after 7 days?";
+  const retry = "How is a failed email retried?";
+  readMarks = [];
+
+  commandClick(page, expiry);
+  commandClick(page, retry);
+  act(() => barButton(page, "Mark as unread").click());
+  await settle();
+
+  assert.deepEqual(readMarks.sort(), [`unread:${EXPIRY.id}`, `unread:${RETRY.id}`].sort());
+  assert.ok(rowUnread(page, expiry) && rowUnread(page, retry), "both rows read as unread");
+  assert.equal(selectionBar(page), null, "the selection is let go");
+  assert.match(newestToastSays() ?? "", /2 items marked unread/u);
+
+  readMarks = [];
+  const undo = newestToastAction() ?? assert.fail("the toast offers Undo");
+  assert.equal(undo.textContent, "Undo");
+  await act(async () => undo.click());
+  await settle();
+  assert.deepEqual(readMarks.sort(), [`read:${EXPIRY.id}`, `read:${RETRY.id}`].sort());
+  assert.ok(!rowUnread(page, expiry) && !rowUnread(page, retry), "both rows read as read again");
+});
+
+test("the bar's marks say in one toast how many the service refused", async () => {
+  const { page } = mount([], { toasts: true });
+  await settle();
+  readMarkRefused = true;
+  commandClick(page, "Expire after 7 days?");
+  commandClick(page, "How is a failed email retried?");
+  act(() => barButton(page, "Mark as unread").click());
+  await settle();
+  assert.equal(newestToastSays(), "Could not mark 2 items unread");
+});
+
+test("Esc lets the selection go, in the list as in its bar", async () => {
+  const { page, asked } = mount();
+  await settle();
+  const expiry = "Expire after 7 days?";
+  const retry = "How is a failed email retried?";
+
+  commandClick(page, expiry);
+  commandClick(page, retry);
+  act(() => rowNamed(page, retry).focus());
+  keyOn(rowNamed(page, retry), "Escape");
+  assert.deepEqual(picked(page), [], "Esc in the list chooses none");
+  assert.equal(selectionBar(page), null);
+  assert.equal(asked.closed, 0, "the key goes no further than the list");
+
+  commandClick(page, expiry);
+  keyOn(barButton(page, "Clear"), "Escape");
+  assert.deepEqual(picked(page), [], "Esc in the bar chooses none");
+});
+
+test("a plain click still opens its item, leaving what is chosen as it stands", async () => {
+  const { page } = mount();
+  await settle();
+  const expiry = "Expire after 7 days?";
+  const retry = "How is a failed email retried?";
+
+  commandClick(page, expiry);
+  act(() => rowNamed(page, retry).click());
+  await settle();
+
+  assert.equal(rowNamed(page, retry).getAttribute("aria-current"), "page", "the item opens");
+  assert.notEqual(rowNamed(page, expiry).getAttribute("aria-current"), "page");
+  assert.deepEqual(picked(page), [expiry], "the selection stands");
+  assert.match(selectionBar(page)?.textContent ?? "", /1 selected/u);
+});
+
 /** The act channel answering every close as `answer` does, written down by item. */
 function answeredCloses(answer: (itemId: string) => { item: InboxItem; taken: boolean }): string[] {
   const sent: string[] = [];
@@ -1292,7 +1464,7 @@ function answeredCloses(answer: (itemId: string) => { item: InboxItem; taken: bo
 async function closeFromPane(page: HTMLElement): Promise<void> {
   const ellipsis =
     itemPane(page).querySelector<HTMLButtonElement>(
-      '.desktop-toolbar button[aria-label="Item actions"]',
+      '.luke-toolbar button[aria-label="Item actions"]',
     ) ?? assert.fail("the pane's bar ends in its ⋯ menu");
   act(() => ellipsis.click());
   act(() => menuItem("Resolve without answering").click());
@@ -1861,7 +2033,7 @@ test("the pane's crumbs lead with their tabs' glyphs, the plan's document and th
     "the agent's crumb wears its mark",
   );
   assert.deepEqual(
-    [...page.querySelectorAll(".inbox-view-items .desktop-toolbar button")]
+    [...page.querySelectorAll(".inbox-view-items .luke-toolbar button")]
       .map((button) => button.getAttribute("aria-label") ?? button.textContent)
       .slice(2),
     ["Item actions"],
@@ -2955,7 +3127,7 @@ function columnsShown(page: HTMLElement): string[] {
 /** The item's bar's press named Inbox, the way back to the list, where there is one. */
 function wayBack(page: HTMLElement): HTMLButtonElement | undefined {
   return [
-    ...page.querySelectorAll<HTMLButtonElement>(".inbox-view-items > .desktop-toolbar button"),
+    ...page.querySelectorAll<HTMLButtonElement>(".inbox-view-items > .luke-toolbar button"),
   ].find((button) => button.textContent === "Inbox");
 }
 

@@ -15,7 +15,6 @@ import {
   useLayoutEffect,
   useMemo,
   useRef,
-  useState,
 } from "react";
 import { flushSync } from "react-dom";
 import { cn } from "../../cn.js";
@@ -24,6 +23,7 @@ import { CloseIcon } from "../../face/glyphs.js";
 import { joinRefs } from "../../join-refs.js";
 import { PRESS_PULSE, pulseOnPress, pulsePress } from "../../press-pulse.js";
 import { useClipped } from "../../use-clipped.js";
+import { ANNOUNCE, announce } from "../announcer/announcer.js";
 import { BUTTON_SIZE, IconButton } from "../button/button.js";
 import {
   type ContextMenuProps,
@@ -318,7 +318,6 @@ export function Tabs({
   const stripRef = useMemo(() => joinRefs(strip, roving.ref), [roving.ref]);
   // How many tabs the strip draws, which it asks room for at their widest (tabs.css).
   const count = Children.toArray(children).filter(isValidElement).length;
-  const [movedSaid, setMovedSaid] = useState("");
   // Where a tab was closed from the keyboard, until focus has moved on from it.
   const closedAt = useRef<number | undefined>(undefined);
   // The chosen tab last brought into view, so a tab newly chosen, opened
@@ -350,7 +349,7 @@ export function Tabs({
       ? undefined
       : (from: number, to: number) => {
           const tabs = movableTabs(strip.current);
-          setMovedSaid(movedLine(tabs[from], to, tabs.length));
+          announce(ANNOUNCE.POLITE, movedLine(tabs[from], to, tabs.length));
           onMove(from, to);
         };
   const onPointerDown = useTabDrag(move);
@@ -404,38 +403,29 @@ export function Tabs({
     scrollStrip(node, event.deltaY * unit, false);
   };
 
-  // The line a move says stands before the strip, so the control after the
-  // strip is still the one a closed last tab hands focus to.
   return (
-    <>
-      {move === undefined ? null : (
-        <span className="luke-visually-hidden" role="status">
-          {movedSaid}
-        </span>
-      )}
-      <div
-        ref={stripRef}
-        data-roving={roving["data-roving"]}
-        role="tablist"
-        aria-label={label}
-        className={STRIP}
-        data-ground={ground}
-        data-fold={fold}
-        style={cssCustomProperties({ "--luke-tab-count": count })}
-        onKeyDown={keyDown}
-        onPointerDown={onPointerDown}
-        onWheel={wheel}
-        onFocus={(event) => {
-          roving.onFocus(event);
-          if (within(event.currentTarget, event.target)) onFocusChange?.(true);
-        }}
-        onBlur={(event) => {
-          if (!event.currentTarget.contains(event.relatedTarget)) onFocusChange?.(false);
-        }}
-      >
-        {children}
-      </div>
-    </>
+    <div
+      ref={stripRef}
+      data-roving={roving["data-roving"]}
+      role="tablist"
+      aria-label={label}
+      className={STRIP}
+      data-ground={ground}
+      data-fold={fold}
+      style={cssCustomProperties({ "--luke-tab-count": count })}
+      onKeyDown={keyDown}
+      onPointerDown={onPointerDown}
+      onWheel={wheel}
+      onFocus={(event) => {
+        roving.onFocus(event);
+        if (within(event.currentTarget, event.target)) onFocusChange?.(true);
+      }}
+      onBlur={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget)) onFocusChange?.(false);
+      }}
+    >
+      {children}
+    </div>
   );
 }
 

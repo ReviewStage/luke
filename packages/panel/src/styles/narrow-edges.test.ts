@@ -65,10 +65,12 @@ function the(selector: string): HTMLElement {
   return element;
 }
 
-/** A length with every `var()` in it read off `element`, through as many as it names. */
+/** A length with every `var()` in it read off `element`, through as many as it names, a fallback standing where one names nothing. */
 function resolved(element: Element, length: string): string {
-  const once = length.replace(/var\((--[\w-]+)\)/g, (_, name: string) =>
-    getComputedStyle(element).getPropertyValue(name).trim(),
+  const once = length.replace(
+    /var\((--[\w-]+)(?:,\s*((?:[^()]|\([^()]*\))*))?\)/g,
+    (_, name: string, fallback: string | undefined) =>
+      getComputedStyle(element).getPropertyValue(name).trim() || (fallback ?? ""),
   );
   return once === length ? once : resolved(element, once);
 }
@@ -82,8 +84,9 @@ function pixels(element: Element, length: string): number {
 
 /** The shell in the room given, its sheet holding its task's column and its side panel standing full screen, each bar with its tabs and its actions. */
 function shell(room: string): void {
-  const bar = (className: string, tabs: Piece, actions: string): Piece => ({
+  const bar = (className: string, tabs: Piece, actions: string, data?: Piece["data"]): Piece => ({
     className,
+    ...(data === undefined ? {} : { data }),
     children: [tabs, { className: actions }],
   });
   const strip = (className: string): Piece => ({
@@ -102,9 +105,10 @@ function shell(room: string): void {
             className: "desktop-task-main",
             children: [
               bar(
-                "desktop-toolbar",
-                { className: "desktop-toolbar-heading", children: [strip("main-tabs")] },
-                "desktop-toolbar-actions",
+                "luke-toolbar",
+                { className: "luke-toolbar-heading", children: [strip("main-tabs")] },
+                "luke-toolbar-actions",
+                { look: "tabs" },
               ),
             ],
           },
@@ -122,7 +126,7 @@ function shell(room: string): void {
 
 /** The bars that hold a task's tabs, each by what the developer calls it, the box of its bar its tabs stand in, and the tabs: a column's stand in its toolbar's title. */
 const BARS = [
-  ["the task's column", ".desktop-toolbar", ".desktop-toolbar-heading", ".main-tabs"],
+  ["the task's column", ".luke-toolbar", ".luke-toolbar-heading", ".main-tabs"],
   ["the side panel", ".side-panel-bar", ".side-panel-tabs", ".side-panel-tabs"],
 ] as const;
 

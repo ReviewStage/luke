@@ -131,6 +131,7 @@ export function TemplateVersionHistory({
   });
   const subject: VersionSubject = {
     versions,
+    noun: "template",
     title: TEMPLATE_TITLE,
     agents: [],
     summary: templateRevisionSummary,
@@ -147,6 +148,7 @@ export function TemplateVersionHistory({
       account={account}
       onExit={onExit}
       onRestored={onExit}
+      exitPlace={TEMPLATE_TITLE}
     />
   );
 }

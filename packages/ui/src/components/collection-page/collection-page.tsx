@@ -1,4 +1,4 @@
-import { type ReactNode, useId } from "react";
+import { type ReactNode, type Ref, useId } from "react";
 import { PAGE_FRAME, PAGE_WIDTH, type PageHeading } from "../page-frame/page-frame.js";
 import { PageHeader } from "../page-header/page-header.js";
 import { SKELETON_SHAPE, Skeleton, SkeletonRegion } from "../skeleton/skeleton.js";
@@ -90,6 +90,7 @@ export function CollectionPage({
   empty,
   error,
   children,
+  scrollRef,
   ...heading
 }: PageHeading & {
   /** What narrows the collection (a search field, chips, a `ChoiceBar`), on one wrapping line. */
@@ -109,6 +110,8 @@ export function CollectionPage({
   error?: ReactNode;
   /** The rows (a List of ListRows), drawn once `state` is ready. */
   children?: ReactNode;
+  /** The page's one scroller, for a caller that remembers where it stood. */
+  scrollRef?: Ref<HTMLDivElement>;
 }): React.JSX.Element {
   const titleId = `${useId()}title`;
   const underToolbar = heading.frame === PAGE_FRAME.TOOLBAR;
@@ -118,7 +121,7 @@ export function CollectionPage({
   return (
     <section
       className="luke-collection-page"
-      data-frame={heading.frame ?? PAGE_FRAME.PAGE}
+      data-frame={heading.frame}
       data-width={heading.width ?? PAGE_WIDTH.MEASURE}
       aria-labelledby={underToolbar ? undefined : titleId}
       aria-label={underToolbar ? heading.label : undefined}
@@ -143,7 +146,7 @@ export function CollectionPage({
           {filterLine}
         </div>
       )}
-      <div className="luke-collection-page-scroll">
+      <div className="luke-collection-page-scroll" ref={scrollRef}>
         <div className="luke-collection-page-content">
           {state === COLLECTION_STATE.LOADING ? (
             <CollectionPageSkeleton label={loadingLabel} skeleton={skeleton} />

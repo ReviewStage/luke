@@ -10,12 +10,11 @@ import {
   type SettingsPageGroup,
   type SettingsView,
 } from "@luke/settings/settings-views";
-import { APP_COMMAND, APP_SHORTCUTS } from "@luke/settings/shortcuts";
+import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
-  BackIcon,
-  commandKeyshortcuts,
+  BACK_BUTTON_LOOK,
+  BackButton,
   Fill,
-  FoldingButton,
   GAP,
   LAYOUT_ELEMENT,
   NAV_CURRENT,
@@ -25,7 +24,6 @@ import {
   SCROLL_FADE,
   ScrollArea,
   SettingsPage,
-  Shortcut,
   Stack,
   TEXT_ELEMENT,
   TEXT_VARIANT,
@@ -68,6 +66,7 @@ import {
 import { hiddenColumns, SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import { useExperimentChoices } from "../use-app-state.js";
 import { ActionMenu } from "./action-menu.js";
+import { backPlaceOf } from "./back-place.js";
 import { HistoryButtons, useSidebarEdge } from "./desktop-sidebar.js";
 import { useNarrowFocus } from "./narrow-focus.js";
 import type { SidebarCollapse } from "./sidebar-collapse.js";
@@ -75,6 +74,12 @@ import { WorkspaceTile } from "./workspace-tile.js";
 
 /** What the way back from a page to the page list says, in a narrow room. */
 const SETTINGS_LIST = "Settings";
+
+/** Where the way back from a page to the page list leads, as a hint names it. */
+const SETTINGS_PLACE = "settings";
+
+/** Where Settings' way out leads where no step stands behind it, as a hint names it. */
+const SETTINGS_EXIT_PLACE = "tasks";
 
 /** Whether Settings stands on its page list rather than on a page, which a narrow room draws one at a time. */
 export interface SettingsStep {
@@ -127,7 +132,7 @@ function SettingsPageRow({
 
 /** The way back to the page list, which leads a page's bar in a narrow room. */
 function ListBack({ onList }: { onList: () => void }): React.JSX.Element {
-  return <FoldingButton label={SETTINGS_LIST} icon={<BackIcon />} onClick={onList} />;
+  return <BackButton label={SETTINGS_LIST} place={SETTINGS_PLACE} onBack={onList} />;
 }
 
 /** The head of the plan template's column: the window's drag strip, or under it in a narrow room the way back to the page list. */
@@ -147,13 +152,21 @@ function GroupHeading({
   capabilities: readonly HostCapability[];
 }): React.JSX.Element {
   if (group !== SETTINGS_PAGE_GROUP.WORKSPACE || listed === undefined) {
-    return <h2 className="section-heading">{settingsGroupHeadingOf(group, capabilities)}</h2>;
+    return (
+      <Text as={TEXT_ELEMENT.H2} variant={TEXT_VARIANT.GROUP} className="section-heading">
+        {settingsGroupHeadingOf(group, capabilities)}
+      </Text>
+    );
   }
   return (
-    <h2 className="section-heading settings-nav-workspace">
+    <Text
+      as={TEXT_ELEMENT.H2}
+      variant={TEXT_VARIANT.GROUP}
+      className="section-heading settings-nav-workspace"
+    >
       <WorkspaceTile workspace={listed} />
       {listed.name}
-    </h2>
+    </Text>
   );
 }
 
@@ -306,14 +319,13 @@ export function DesktopSettings({
       <nav className="settings-pages" aria-label="Settings pages" hidden={hidden.list}>
         <div className="desktop-drag-strip" />
         <HistoryButtons history={history} room={room} />
-        <NavItem
-          icon={<BackIcon />}
-          aria-keyshortcuts={commandKeyshortcuts(APP_COMMAND.EXIT_SETTINGS)}
-          shortcut={<Shortcut chord={APP_SHORTCUTS[APP_COMMAND.EXIT_SETTINGS].chord} />}
-          onClick={onExit}
-        >
-          Back
-        </NavItem>
+        <BackButton
+          look={BACK_BUTTON_LOOK.COLUMN}
+          label="Back"
+          place={backPlaceOf(history, SETTINGS_EXIT_PLACE)}
+          command={APP_COMMAND.EXIT_SETTINGS}
+          onBack={onExit}
+        />
         {/* A label for the list, no heading: the page beside it is named once, by its own header's `h1`. */}
         <Text as={TEXT_ELEMENT.DIV} variant={TEXT_VARIANT.INHERIT} className="settings-pages-title">
           Settings

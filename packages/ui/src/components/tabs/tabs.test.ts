@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import { act, createElement, type ReactNode, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
+import { Announcer } from "../announcer/announcer.js";
 import { Tab, TabCard, Tabs, type TabsControls } from "./tabs.js";
 
 /**
@@ -266,6 +267,7 @@ test("Delete closes the focused tab and hands focus to the tab standing in its p
 test("an owner's step moves the focused tab a place along, keeps focus on it, and says where it now stands", async () => {
   const controls: { current: TabsControls | null } = { current: null };
   const container = await render(createElement(Strip, { count: 3, controls }));
+  await render(createElement(Announcer));
   act(() => controls.current?.step(1));
   assert.deepEqual(moves, [], "no tab has the focus to move");
   act(() => tabOf(container, "Tab 2").focus());
@@ -273,7 +275,7 @@ test("an owner's step moves the focused tab a place along, keeps focus on it, an
   assert.deepEqual(moves, [[1, 2]]);
   assert.equal(document.activeElement, tabOf(container, "Tab 2"));
   assert.equal(
-    container.querySelector('[role="status"]')?.textContent,
+    document.querySelector('[role="status"]')?.textContent,
     "Tab 2 moved to position 3 of 3",
   );
   assert.deepEqual(controls.current?.placeOf(tabOf(container, "Tab 3")), {

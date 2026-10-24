@@ -1,11 +1,12 @@
 // @vitest-environment jsdom
 
 import { Duration } from "effect";
-import { act, createElement, type ReactElement } from "react";
+import { act, createElement, Fragment, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, expect, test, vi } from "vitest";
 import { CheckIcon } from "../../face/glyphs.js";
 import { GLYPH } from "../../icons/glyph-registry.js";
+import { Announcer } from "../announcer/announcer.js";
 import { TOAST_HOLD } from "../toast/toast.js";
 import { CopyButton } from "./copy-button.js";
 
@@ -37,7 +38,7 @@ function draw(element: ReactElement): HTMLElement {
   const container = document.body.appendChild(document.createElement("div"));
   const root = createRoot(container);
   roots.push(root);
-  act(() => root.render(element));
+  act(() => root.render(createElement(Fragment, null, createElement(Announcer), element)));
   return container;
 }
 
@@ -60,8 +61,9 @@ function shownGlyph(): string {
   return button().querySelector('[aria-hidden="true"]')?.innerHTML ?? "";
 }
 
+/** What the window's announcer says now in `role`'s region. */
 function said(role: "status" | "alert"): string {
-  return button().querySelector(`[role="${role}"]`)?.textContent ?? "";
+  return document.querySelector(`[role="${role}"]`)?.textContent ?? "";
 }
 
 async function press(): Promise<void> {
@@ -113,6 +115,24 @@ test("a refused copy shows the alert and says so, then turns back after the hold
   expect(said("status")).toBe("");
   act(() => vi.advanceTimersByTime(HOLD_MS));
   expect(shownGlyph()).toBe(drawing(GLYPH.COPY));
+  expect(said("alert"), "the refusal is taken back with the glyph").toBe("");
+});
+
+test("a refused copy answered by a retry that lands leaves no refusal behind", async () => {
+  let refuses = true;
+  draw(
+    createElement(CopyButton, {
+      text: "pnpm test",
+      what: "code",
+      copy: () =>
+        refuses ? Promise.reject(new Error("The clipboard refused")) : Promise.resolve(),
+    }),
+  );
+  await press();
+  expect(said("alert")).toBe("Could not copy");
+  refuses = false;
+  await press();
+  expect(said("status")).toBe("Copied");
   expect(said("alert")).toBe("");
 });
 
@@ -156,4 +176,5 @@ test("a second press starts the hold over from its own answer", async () => {
   expect(shownGlyph()).toBe(drawing(CheckIcon));
   act(() => vi.advanceTimersByTime(1));
   expect(shownGlyph()).toBe(drawing(GLYPH.COPY));
+  expect(said("status")).toBe("");
 });

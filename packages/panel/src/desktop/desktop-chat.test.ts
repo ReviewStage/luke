@@ -467,8 +467,10 @@ test("a message's Copy takes its words as Markdown, beside the Reply its byline 
       "migration, online, and nothing writes the pair twice today.",
   ]);
   assert.equal(
-    actions?.querySelector('button[aria-label="Copy message"] [role="status"]')?.textContent,
-    "Copied",
+    actions
+      ?.querySelector('button[aria-label="Copy message"] .luke-copy-glyph')
+      ?.getAttribute("data-state"),
+    "copied",
     "the press shows it was copied",
   );
 });
@@ -1104,8 +1106,8 @@ function mountTaskTabReading(): HTMLElement {
 
 test("until the chat is read, the window's Chat keeps its titled bar with New channel over placeholder rows saying it is read, and the plan's Chat tab's wait stands centred, rather than as a ring in the corner", () => {
   const chat = mount(() => undefined);
-  const bar = chat.querySelector(".chat-rail .desktop-toolbar");
-  assert.equal(bar?.querySelector("h1.desktop-toolbar-title")?.textContent, "Chat");
+  const bar = chat.querySelector(".chat-rail .luke-toolbar");
+  assert.equal(bar?.querySelector("h1.luke-toolbar-title")?.textContent, "Chat");
   const create = bar?.querySelector<HTMLButtonElement>('button[aria-label="New channel"]');
   assert.ok(create, "New channel stands while it is read");
   assert.equal(create.disabled, true, "but opens no channel against no chat");
@@ -1651,7 +1653,7 @@ test("every channel's head ends on its menu: Mark as read and Copy link for each
 test("the rail's bar is a page's toolbar: Chat's title and its Experimental tag, View options, New channel, and Send feedback; Mark all as read takes every unread dot off", () => {
   const page = mount();
   const bar = page.querySelector(".chat-rail > .luke-toolbar");
-  assert.equal(bar?.querySelector("h1.desktop-toolbar-title")?.textContent, "Chat");
+  assert.equal(bar?.querySelector("h1.luke-toolbar-title")?.textContent, "Chat");
   assert.equal(
     bar?.querySelector(".luke-toolbar-heading > .luke-toolbar-tag .experiment-tag")?.textContent,
     "Experimental",
@@ -2096,6 +2098,21 @@ test("each place's row says who spoke last and what, as an Inbox row previews it
   const count = tasks.querySelector<HTMLElement>(".luke-nav-item-count");
   assert.equal(count?.dataset.shown, "always", "the folded group's count stands at rest");
   assert.match(count?.textContent ?? "", /^1 unread/u);
+});
+
+test("a rail group folded stays folded as Chat is drawn again, the rail's own and a task's section alike, and a group never folded stays open", () => {
+  const page = mountRail();
+  act(() => railHead(page, "Channels").querySelector("button")?.click());
+  act(() => railHead(page, "Launch").querySelector("button")?.click());
+  const folded = rail(page);
+  assert.ok(!folded.includes("general"), "Channels is folded");
+  assert.ok(!folded.includes("billing-export"), "Launch is folded");
+
+  act(() => root?.unmount());
+  document.body.innerHTML = "";
+  const again = rail(mountRail());
+  assert.deepEqual(again, folded, "the rail draws as it was left");
+  assert.ok(again.includes("teammate-invitations •"), "Pinned, never folded, stays open");
 });
 
 test("the rail's rows draw in the sidebar's ink, and every message leads with its author's face", () => {

@@ -439,7 +439,7 @@ test("Start and the task's ⋯ stand in the task's toolbar whichever tab its col
         tasks: sharedTab(DEAN.userId, tab),
       }),
     );
-    const toolbar = container.querySelector(".desktop-toolbar");
+    const toolbar = container.querySelector(".luke-toolbar");
     const shown = ["Start a coding agent", "Task actions"].filter(
       (label) => toolbar?.querySelector(`[aria-label="${label}"]`) !== null,
     );

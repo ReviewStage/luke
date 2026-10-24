@@ -17,6 +17,7 @@ import {
   SKELETON_SHAPE,
   Skeleton,
   TOOLBAR_INSET,
+  TOOLBAR_LOOK,
   Toolbar,
   useMinute,
 } from "@luke/ui";
@@ -268,6 +269,8 @@ function TaskPageSkeleton({
         <>
           <Toolbar
             start={TOOLBAR_INSET.COLUMN}
+            look={TOOLBAR_LOOK.TABS}
+            measure
             title={<MainTabStripSkeleton />}
             actions={<TaskActionsSkeleton summary={summary.holds} />}
           />
@@ -622,9 +625,9 @@ function PlanDocument({
   }, [taskId, inbox.read, waiting, onInboxRead]);
   const rename = useInlineRename(taskId, tasks.onRenameTask);
   // A terminal shown hands the keys to the side panel, where it stands; an
-  // agent's tab's Open terminal always opens that agent's own.
+  // agent's tab's Show terminal always opens that agent's own.
   const showSide = () => setFocus(COLUMN.SIDE);
-  // Open terminal opens an agent's terminal as on every surface that draws it (`agent-actions.tsx`).
+  // Show terminal opens an agent's terminal as on every surface that draws it (`agent-actions.tsx`).
   const terminalDoors = useAgentTerminalDoors(
     tasks.sidePanel,
     region.kind === DOCUMENT_REGION.READY ? region.task.repository : null,
@@ -1132,6 +1135,8 @@ function PlanDocument({
                       <>
                         <Toolbar
                           start={TOOLBAR_INSET.COLUMN}
+                          look={TOOLBAR_LOOK.TABS}
+                          measure
                           title={
                             <MainTabStrip
                               task={task}

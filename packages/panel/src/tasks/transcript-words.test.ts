@@ -18,8 +18,9 @@ import { TranscriptWords } from "./transcript-blocks.js";
  * sanitizer drops, and words that only look like a tag. The drawn markup of
  * every sample is held in `transcript-words.golden.json`, which
  * `LUKE_UPDATE_FIXTURES=1` writes, so a change to how the words are parsed,
- * or to when the parser arrives, that moves a byte fails here. Synthetic
- * words.
+ * or to when the parser arrives, that moves a byte fails here. A heading keeps
+ * its level in the outline and takes its type from the role its level maps to,
+ * never from a size of its own. Synthetic words.
  */
 
 /** Records the drawings instead of asserting them. `check.sh` never sets it. */
@@ -70,6 +71,11 @@ afterEach(() => {
 
 /** The markup a transcript draws for the words, once whatever it loads has landed. */
 async function drawn(text: string): Promise<string> {
+  return (await drawnInto(text)).innerHTML;
+}
+
+/** The box a transcript draws the words into, once whatever it loads has landed. */
+async function drawnInto(text: string): Promise<HTMLElement> {
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
@@ -78,7 +84,7 @@ async function drawn(text: string): Promise<string> {
   await act(async () => {
     for (let tick = 0; tick < 8; tick += 1) await Promise.resolve();
   });
-  return container.innerHTML;
+  return container;
 }
 
 test("a transcript draws every sample of its markdown exactly as recorded", async () => {
@@ -90,4 +96,24 @@ test("a transcript draws every sample of its markdown exactly as recorded", asyn
     return;
   }
   assert.equal(recorded, await fs.readFile(GOLDEN, "utf8"));
+});
+
+test("a message's headings keep their level and are set in the role that level maps to", async () => {
+  const box = await drawnInto(
+    "# One\n\n## Two\n\n### Three\n\n#### Four\n\n##### Five\n\n###### Six",
+  );
+  const headings = [...box.querySelectorAll("h1, h2, h3, h4, h5, h6")].map((heading) => [
+    heading.tagName.toLowerCase(),
+    heading.getAttribute("data-variant"),
+    heading.textContent,
+  ]);
+
+  assert.deepEqual(headings, [
+    ["h1", "dialog", "One"],
+    ["h2", "section", "Two"],
+    ["h3", "section", "Three"],
+    ["h4", "label", "Four"],
+    ["h5", "label", "Five"],
+    ["h6", "label", "Six"],
+  ]);
 });

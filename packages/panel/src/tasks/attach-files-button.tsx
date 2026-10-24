@@ -8,7 +8,7 @@ import { type Ref, useImperativeHandle } from "react";
  * The agent box, the Inbox's answer box, a channel's box, and a plan
  * comment's field each stand the same press at their foot's left, its
  * picker hidden beside it. What a box does with the files picked is its
- * own: each reads them into what it carries (`attached-files.ts`). The
+ * own: each reads them into what it carries (`use-attached-files.ts`). The
  * picker is cleared after each pick, so the same file can be picked again
  * once it was taken off. A box whose overflow menu opens the picker too
  * hands in a ref to open it by.

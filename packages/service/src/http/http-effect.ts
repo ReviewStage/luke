@@ -250,7 +250,8 @@ export const resolvedUserId = /* @__PURE__ */ Effect.fnUntraced(function* (
   request: Request,
 ): Effect.fn.Return<string, HostedRefusal> {
   const account = yield* seams.resolveUserId(request);
-  if (Option.isNone(account)) return yield* Effect.fail<HostedRefusal>(HOSTED_REFUSAL.INVALID_TOKEN);
+  if (Option.isNone(account))
+    return yield* Effect.fail<HostedRefusal>(HOSTED_REFUSAL.INVALID_TOKEN);
   return account.value;
 });
 

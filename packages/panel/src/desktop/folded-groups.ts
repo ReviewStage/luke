@@ -1,4 +1,4 @@
-import { Schema } from "effect";
+import { Schema, SchemaTransformation } from "effect";
 import { useCallback, useState } from "react";
 import { readKept, writeKept } from "../kept-storage.js";
 import {
@@ -12,6 +12,7 @@ import {
   type InboxSort,
   type InboxWhose,
 } from "../tasks/inbox-model.js";
+import { keptKey, useKept } from "../use-kept.js";
 
 /**
  * folded-groups.ts -- which of the sidebar's groups the developer folded, Pinned, the repositories', the creators', and the assignees', kept across launches, and the Inbox's plan groups, how it lists its items, and how wide its list stands kept the same way.
@@ -122,15 +123,20 @@ const storedRunsPanel = Schema.fromJsonString(
 /** How the Inbox groups its items. */
 const storedGrouping = Schema.fromJsonString(Schema.Literals(Object.values(INBOX_GROUPING)));
 
-/** How the Inbox sorts its items. */
-const storedSort = Schema.fromJsonString(Schema.Literals(Object.values(INBOX_SORT)));
-
 /** The sort an earlier version kept that the sorts no longer name: the open items first, the one waiting longest first. */
 const EARLIER_SORT = { WAITING: "waiting" } as const;
 
-/** How the Inbox sorts its items, as any version kept it. */
-const storedEarlierSort = Schema.fromJsonString(
-  Schema.Literals([...Object.values(INBOX_SORT), ...Object.values(EARLIER_SORT)]),
+/** How the Inbox sorts its items, Waiting longest, which the sorts no longer name, read as Oldest first. */
+const storedSort = Schema.fromJsonString(
+  Schema.Literals([...Object.values(INBOX_SORT), ...Object.values(EARLIER_SORT)]).pipe(
+    Schema.decodeTo(
+      Schema.Literals(Object.values(INBOX_SORT)),
+      SchemaTransformation.transform({
+        decode: (kept) => (kept === EARLIER_SORT.WAITING ? INBOX_SORT.OLDEST : kept),
+        encode: (sort) => sort,
+      }),
+    ),
+  ),
 );
 
 /** Whose items the Inbox lists. */
@@ -171,6 +177,15 @@ const SHOW_OF_KEPT = {
 
 /** Whether the Needs you button was pressed, before the tabs; null where nothing was kept. */
 const storedEarlierShow = Schema.fromJsonString(Schema.NullOr(Schema.Boolean));
+
+/** The Inbox's view choices, each kept on this Mac under its own key. */
+const KEPT = {
+  GROUPING: keptKey<InboxGrouping>(STORAGE_KEY.INBOX_GROUPING, storedGrouping),
+  SORT: keptKey<InboxSort>(STORAGE_KEY.INBOX_SORT, storedSort),
+  WHOSE: keptKey<InboxWhose>(STORAGE_KEY.INBOX_WHOSE, storedWhose),
+  MEDIA_PREVIEWS: keptKey(STORAGE_KEY.INBOX_MEDIA_PREVIEWS, storedFlag),
+  SECOND_LINE: keptKey(STORAGE_KEY.INBOX_SECOND_LINE, storedFlag),
+} as const;
 
 /** Every fold the sidebar keeps. */
 interface Folds {
@@ -321,23 +336,6 @@ export interface InboxWhoseChoice {
   onWhose: (whose: InboxWhose) => void;
 }
 
-/** A view choice, `fallback` until first changed, or what `read` makes of what an earlier version kept, and kept under `key` as it is changed. */
-function useKeptChoice<A>(
-  key: string,
-  schema: Schema.Codec<A, string>,
-  fallback: A,
-  read: () => A = () => readKept(key, schema, fallback),
-): readonly [A, (next: A) => void] {
-  const [value, setValue] = useState<A>(read);
-  return [
-    value,
-    (next) => {
-      setValue(next);
-      writeKept(key, schema, next);
-    },
-  ];
-}
-
 /**
  * The scope kept under `key`, a tab kept there before the scopes read as
  * the scope that lists what it did (`SHOW_OF_KEPT`); or, where none is, the
@@ -350,12 +348,6 @@ function readShow(key: string, earlier: string): InboxShow {
   const fallback = pressed === false ? INBOX_SHOW.ALL : INBOX_SHOW.TO_DO;
   const kept = readKept(key, storedEarlierTab, null);
   return kept === null ? fallback : SHOW_OF_KEPT[kept];
-}
-
-/** The sort kept, Waiting longest, which the sorts no longer name, read as Oldest first; the latest first where none is. */
-function readSort(): InboxSort {
-  const kept = readKept(STORAGE_KEY.INBOX_SORT, storedEarlierSort, INBOX_SORT.LATEST);
-  return kept === EARLIER_SORT.WAITING ? INBOX_SORT.OLDEST : kept;
 }
 
 /** An Inbox's scope, read from `key` (or `earlier`'s press) and kept there as it is chosen. */
@@ -378,32 +370,11 @@ export function useTaskInboxShow(): InboxShowChoice {
 /** The Inbox's view choices, To do of everyone's, grouped by nothing, the latest first, with no media shown, until first changed, and kept as each is pressed. */
 export function useInboxViewChoices(): InboxViewChoices {
   const shown = useKeptShow(STORAGE_KEY.INBOX_SHOW, STORAGE_KEY.INBOX_WAITING_ONLY);
-  const [grouping, onGrouping] = useKeptChoice<InboxGrouping>(
-    STORAGE_KEY.INBOX_GROUPING,
-    storedGrouping,
-    INBOX_GROUPING.NONE,
-  );
-  const [sort, onSort] = useKeptChoice<InboxSort>(
-    STORAGE_KEY.INBOX_SORT,
-    storedSort,
-    INBOX_SORT.LATEST,
-    readSort,
-  );
-  const [whose, onWhose] = useKeptChoice<InboxWhose>(
-    STORAGE_KEY.INBOX_WHOSE,
-    storedWhose,
-    EVERYONES,
-  );
-  const [mediaPreviews, onMediaPreviews] = useKeptChoice<boolean>(
-    STORAGE_KEY.INBOX_MEDIA_PREVIEWS,
-    storedFlag,
-    false,
-  );
-  const [secondLine, onSecondLine] = useKeptChoice<boolean>(
-    STORAGE_KEY.INBOX_SECOND_LINE,
-    storedFlag,
-    true,
-  );
+  const [grouping, onGrouping] = useKept(KEPT.GROUPING, INBOX_GROUPING.NONE);
+  const [sort, onSort] = useKept(KEPT.SORT, INBOX_SORT.LATEST);
+  const [whose, onWhose] = useKept(KEPT.WHOSE, EVERYONES);
+  const [mediaPreviews, onMediaPreviews] = useKept(KEPT.MEDIA_PREVIEWS, false);
+  const [secondLine, onSecondLine] = useKept(KEPT.SECOND_LINE, true);
   return {
     ...shown,
     grouping,

@@ -1579,7 +1579,7 @@ function pageMenuItem(page: HTMLElement, label: string): HTMLButtonElement {
   );
 }
 
-test("the page's ⋯ offers what a task's agent's tab ⋯ does: Rename, Open terminal, Copy link, the transcript's two copies, Archive agent, and Permanently delete last, and no Run, which its Pull request tab offers", async () => {
+test("the page's ⋯ offers what a task's agent's tab ⋯ does: Rename, Show terminal, Copy link, the transcript's two copies, Archive, and Permanently delete last, and no Run, which its Pull request tab offers", async () => {
   const page = mount();
   await settle();
   const more = page.querySelector<HTMLButtonElement>('[aria-label="Agent actions"]');
@@ -1591,11 +1591,11 @@ test("the page's ⋯ offers what a task's agent's tab ⋯ does: Rename, Open ter
   );
   assert.deepEqual(offered, [
     "Rename",
-    "Open terminal⌘J",
+    "Show terminal⌘J",
     "Copy link",
     "Copy concise transcript",
     "Copy full transcript",
-    "Archive agent",
+    "Archive",
     "Permanently delete",
   ]);
 });
@@ -1613,7 +1613,7 @@ test("Luke's page is titled Luke, and its ⋯ offers neither Rename, Archive, no
   assert.equal(page.querySelector("h1")?.textContent, "Luke");
   assert.deepEqual(
     [...document.querySelectorAll('[role="menuitem"]')].map((each) => each.textContent),
-    ["Open terminal⌘J", "Copy link", "Copy concise transcript", "Copy full transcript"],
+    ["Show terminal⌘J", "Copy link", "Copy concise transcript", "Copy full transcript"],
   );
 });
 
@@ -1652,10 +1652,10 @@ function mountHearingPanel() {
   return { page, chosen };
 }
 
-test("Open terminal on the page's ⋯, and ⌘J, show the agent's own Terminal tab in the side panel beside its page, as on a task", async () => {
+test("Show terminal on the page's ⋯, and ⌘J, show the agent's own Terminal tab in the side panel beside its page, as on a task", async () => {
   const { page, chosen } = mountHearingPanel();
   await settle();
-  const open = pageMenuItem(page, "Open terminal⌘J");
+  const open = pageMenuItem(page, "Show terminal⌘J");
   act(() => open.click());
   await settle();
   let offered = false;
@@ -1685,7 +1685,7 @@ test("an archived agent's page offers no terminal, from its ⋯ or ⌘J, its san
   });
   await settle();
 
-  assert.ok(!offered.includes("Open terminal⌘J"), `no Open terminal: ${offered.join(", ")}`);
+  assert.ok(!offered.includes("Show terminal⌘J"), `no Show terminal: ${offered.join(", ")}`);
   assert.equal(ran, false, "⌘J is not offered");
   assert.deepEqual(chosen, []);
 });
@@ -1829,10 +1829,10 @@ test("a fork's Pull request tab offers no Run, since its head's branch name woul
   );
 });
 
-test("Archive agent on the page's ⋯ reads an agent at rest again and archives it unasked, its composer giving way to Unarchive", async () => {
+test("Archive on the page's ⋯ reads an agent at rest again and archives it unasked, its composer giving way to Unarchive", async () => {
   const page = mount();
   await settle();
-  const archive = pageMenuItem(page, "Archive agent");
+  const archive = pageMenuItem(page, "Archive");
   await act(async () => archive.click());
   await settle();
 
@@ -1844,11 +1844,11 @@ test("Archive agent on the page's ⋯ reads an agent at rest again and archives 
   );
 });
 
-test("Archive agent on the page's ⋯ archives the reader's own agent at once while it works, asking nothing", async () => {
+test("Archive on the page's ⋯ archives the reader's own agent at once while it works, asking nothing", async () => {
   pages = [{ agent: { ...PAGE, status: CODING_AGENT_STATUS.RUNNING } }];
   const page = mount();
   await settle();
-  const archive = pageMenuItem(page, "Archive agent");
+  const archive = pageMenuItem(page, "Archive");
   await act(async () => archive.click());
   await settle();
 
@@ -1878,7 +1878,7 @@ test("an archive the service refuses says why and leaves the automation's prompt
   archiveRefused = true;
   const page = mount(tasksControl({ workspaces: [ACME] }));
   await settle();
-  const archive = pageMenuItem(page, "Archive agent");
+  const archive = pageMenuItem(page, "Archive");
   await act(async () => archive.click());
   await settle();
 

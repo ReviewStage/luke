@@ -147,7 +147,7 @@ test("while the task is read, its column's toolbar and the side panel stand thei
     2,
   );
   assert.equal(blocks(container.querySelector("aside[aria-label='Panel'] .side-panel-tabs")), 2);
-  const acts = [...container.querySelectorAll(".desktop-toolbar-actions > .luke-skeleton")];
+  const acts = [...container.querySelectorAll(".luke-toolbar-actions > .luke-skeleton")];
   assert.equal(
     acts.at(-1)?.getAttribute("style"),
     "--luke-skeleton-width: var(--luke-control-height);",
@@ -513,9 +513,9 @@ async function narrowTaskInbox(
       return [alert?.textContent?.includes("The inbox could not be read.") ?? false, retry];
     },
     back: () =>
-      [
-        ...tab.querySelectorAll<HTMLButtonElement>(".inbox-view-items > .desktop-toolbar button"),
-      ].find((button) => button.textContent === "Inbox") ?? null,
+      [...tab.querySelectorAll<HTMLButtonElement>(".inbox-view-items > .luke-toolbar button")].find(
+        (button) => button.textContent === "Inbox",
+      ) ?? null,
     row: (title: string) =>
       [
         ...tab.querySelectorAll<HTMLButtonElement>(".inbox-tasks li button.luke-list-row-main"),

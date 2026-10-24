@@ -35,7 +35,7 @@ import { DesktopTasks } from "./desktop-tasks.js";
  * tab-actions.test.ts -- a column's bar holds a ⋯ for its chosen tab's
  * content actions: the task's own menu on the task's tab, and on an agent's
  * or a subagent's tab the actions its right-click offers on what it shows,
- * without the tab's own keeping (Close, Close others, Pin tab), which stays
+ * without the tab's own keeping (Close, Close others, Pin), which stays
  * on the right-click alone. A tab with no content action shows no ⋯, and no
  * tab wears one of its own. A Pull request tab's ⋯ also offers what its body
  * hands up, Open on GitHub and Refresh, which no other tab's offers.
@@ -81,14 +81,7 @@ afterEach(() => {
 const SUBAGENT = { subagent: "call-1", delegation: { agent: AGENT.id, task: "Audit retries" } };
 
 /** What a right-click offers on a tab itself rather than on what it shows. */
-const TAB_KEEPING = new Set([
-  "Close",
-  "Close others",
-  "Pin tab",
-  "Unpin tab",
-  "Move left",
-  "Move right",
-]);
+const TAB_KEEPING = new Set(["Close", "Close others", "Pin", "Unpin", "Move left", "Move right"]);
 
 /** Waits out the few microtasks the window's document takes to arrive after the first draw. */
 async function settle(): Promise<void> {
@@ -205,7 +198,7 @@ interface Bars {
 
 /** The two columns' bars, as the task's page draws them. */
 function bars(container: HTMLElement): Bars {
-  const main = container.querySelector<HTMLElement>(".desktop-task-main .desktop-toolbar");
+  const main = container.querySelector<HTMLElement>(".desktop-task-main .luke-toolbar");
   const side = container.querySelector<HTMLElement>(".side-panel-bar");
   assert.ok(main && side, "both columns draw their bars");
   return { main, side };
@@ -252,11 +245,11 @@ test("a subagent's tab puts its right-click's content actions, and none of the t
   const agentItems = rightClickChosen(main);
   for (const item of [
     "Rename",
-    "Open terminal",
+    "Show terminal",
     "Copy link",
     "Copy concise transcript",
     "Copy full transcript",
-    "Archive agent",
+    "Archive",
     "Permanently delete",
   ]) {
     assert.ok(agentItems.includes(item), `the agent's right-click offers ${item}`);

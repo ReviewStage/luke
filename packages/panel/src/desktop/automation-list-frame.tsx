@@ -47,7 +47,7 @@ export function AutomationsToolbar({ children }: { children: ReactNode }): React
   // The toolbar's own width, which a container query reads, folds Create with an agent to its glyph before it crowds the title.
   return (
     <div className="automations-toolbar">
-      <Toolbar title="Automations" actions={children} />
+      <Toolbar title="Automations" actions={<div className="automations-acts">{children}</div>} />
     </div>
   );
 }

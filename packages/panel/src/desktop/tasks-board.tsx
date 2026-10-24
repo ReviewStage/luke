@@ -533,7 +533,7 @@ function TaskBoardColumnView({
       id={narrow ? panelId : undefined}
       role={narrow ? "tabpanel" : undefined}
     >
-      <h2 className="tasks-board-column-head">
+      <Text as={TEXT_ELEMENT.H2} variant={TEXT_VARIANT.INHERIT} className="tasks-board-column-head">
         {mark}
         <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.SECTION} truncate>
           {words}
@@ -543,7 +543,7 @@ function TaskBoardColumnView({
             {column.tasks.length}
           </Text>
         )}
-      </h2>
+      </Text>
       {cards.length === 0 ? (
         column.older === undefined ? (
           <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED} className="tasks-board-empty">
@@ -673,6 +673,7 @@ export function TasksBoard({
       width={PAGE_WIDTH.FULL}
       label={title}
       toolbar={frame.toolbar}
+      scrollRef={frame.scroll}
       filters={filters}
       state={boardState(tasks, listed.length === 0)}
       loadingLabel={READING_LINE}

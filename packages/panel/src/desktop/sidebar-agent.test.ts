@@ -171,7 +171,7 @@ function item(items: readonly HTMLButtonElement[], label: string): HTMLButtonEle
 
 test("an agent at rest is archived from its row's right-click at once, once its own page reads it at rest too", async () => {
   const row = mount(RUN);
-  const archive = item(rightClick(row), "Archive agent");
+  const archive = item(rightClick(row), "Archive");
   await act(async () => archive.click());
   await settle();
 
@@ -182,7 +182,7 @@ test("an agent at rest is archived from its row's right-click at once, once its 
 test("the reader's own working agent is archived at once from its row, asking nothing, since its toast's Undo brings it back", async () => {
   standing = { ...RUN, status: CODING_AGENT_STATUS.RUNNING };
   const row = mount({ ...RUN, status: CODING_AGENT_STATUS.RUNNING });
-  const archive = item(rightClick(row), "Archive agent");
+  const archive = item(rightClick(row), "Archive");
   await act(async () => archive.click());
   await settle();
 
@@ -193,7 +193,7 @@ test("the reader's own working agent is archived at once from its row, asking no
 test("a teammate's agent the list read at rest but whose page reads it working is asked about first, and archived only once asked", async () => {
   standing = { ...RUN, startedBy: ADA, status: CODING_AGENT_STATUS.RUNNING };
   const row = mount({ ...RUN, startedBy: ADA });
-  const archive = item(rightClick(row), "Archive agent");
+  const archive = item(rightClick(row), "Archive");
   await act(async () => archive.click());
   await settle();
 
@@ -211,7 +211,7 @@ test("a teammate's agent the list read at rest but whose page reads it working i
 test("stopping a teammate's working agent to archive it draws its act in the accent, since Unarchive brings it back", async () => {
   standing = { ...RUN, startedBy: ADA, status: CODING_AGENT_STATUS.RUNNING };
   const row = mount({ ...RUN, startedBy: ADA });
-  const archive = item(rightClick(row), "Archive agent");
+  const archive = item(rightClick(row), "Archive");
   await act(async () => archive.click());
   await settle();
 
@@ -231,7 +231,7 @@ test("an archived agent's row offers Unarchive in Archive's place and no pin, an
   const row = mount({ ...RUN, archivedAt: 3 });
   const items = rightClick(row);
   const labels = items.map((each) => each.textContent);
-  assert.ok(!labels.includes("Archive agent"));
+  assert.ok(!labels.includes("Archive"));
   assert.ok(!labels.includes("Pin"));
   await act(async () => item(items, "Unarchive").click());
   await settle();
@@ -544,7 +544,7 @@ test("an agent row's ⋯ opens the menu its right-click does, the ⋯ a Tab stop
     [...document.querySelectorAll('[role="menuitem"]')].map((each) => each.textContent);
   act(() => more.click());
   const fromMore = labels();
-  assert.ok(fromMore.includes("Archive agent"));
+  assert.ok(fromMore.includes("Archive"));
   act(() => {
     document.activeElement?.dispatchEvent(
       new KeyboardEvent("keydown", { key: "Escape", bubbles: true }),

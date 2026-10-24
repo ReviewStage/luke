@@ -446,7 +446,8 @@ test("a text file opened over a tab leaves the tab's find its own, the file's wo
   });
 
   assert.equal(
-    document.querySelector('[role="search"][aria-label="Find"] [aria-live="polite"]')?.textContent,
+    document.querySelector('[role="search"][aria-label="Find"] .luke-search-field-tally')
+      ?.textContent,
     "1 of 1",
   );
   act(() => {

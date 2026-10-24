@@ -275,47 +275,46 @@ function AddReaction({
           }}
         />
       </Tooltip>
-      {open ? (
-        <AnchoredPopover align={POPOVER_ALIGN.START} width={PICKER_WIDTH}>
-          <PopoverPanel
-            id={panelId}
-            title={ADD_REACTION}
-            look={POPOVER_PANEL_LOOK.MENU}
-            initialFocus={first}
-            onDismiss={close}
-            onLeave={(left) => {
-              if (!(left instanceof Node && root.current?.contains(left))) setOpen(false);
-            }}
+      <AnchoredPopover open={open} align={POPOVER_ALIGN.START} width={PICKER_WIDTH}>
+        <PopoverPanel
+          open={open}
+          id={panelId}
+          title={ADD_REACTION}
+          look={POPOVER_PANEL_LOOK.MENU}
+          initialFocus={first}
+          onDismiss={close}
+          onLeave={(left) => {
+            if (!(left instanceof Node && root.current?.contains(left))) setOpen(false);
+          }}
+        >
+          <div
+            className="pull-request-reaction-choices"
+            role="toolbar"
+            aria-label={ADD_REACTION}
+            onKeyDown={move}
           >
-            <div
-              className="pull-request-reaction-choices"
-              role="toolbar"
-              aria-label={ADD_REACTION}
-              onKeyDown={move}
-            >
-              {REACTION_ORDER.map((content, index) => (
-                <Tooltip key={content} label={REACTION_FACES[content].item}>
-                  <IconButton
-                    ref={index === 0 ? first : undefined}
-                    icon={
-                      <span className="pull-request-reaction-emoji" aria-hidden="true">
-                        {REACTION_FACES[content].emoji}
-                      </span>
-                    }
-                    label={REACTION_FACES[content].item}
-                    pressed={mine.has(content)}
-                    tabbable={index === at}
-                    onClick={() => {
-                      onPick(content);
-                      close();
-                    }}
-                  />
-                </Tooltip>
-              ))}
-            </div>
-          </PopoverPanel>
-        </AnchoredPopover>
-      ) : null}
+            {REACTION_ORDER.map((content, index) => (
+              <Tooltip key={content} label={REACTION_FACES[content].item}>
+                <IconButton
+                  ref={index === 0 ? first : undefined}
+                  icon={
+                    <span className="pull-request-reaction-emoji" aria-hidden="true">
+                      {REACTION_FACES[content].emoji}
+                    </span>
+                  }
+                  label={REACTION_FACES[content].item}
+                  pressed={mine.has(content)}
+                  tabbable={index === at}
+                  onClick={() => {
+                    onPick(content);
+                    close();
+                  }}
+                />
+              </Tooltip>
+            ))}
+          </div>
+        </PopoverPanel>
+      </AnchoredPopover>
     </li>
   );
 }

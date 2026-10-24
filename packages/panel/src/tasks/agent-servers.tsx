@@ -355,12 +355,16 @@ const PointerHighlight: ListRowHint = ({ label, children }) => {
 };
 
 function ServersPopover({
+  open: standing,
   id,
   servers,
   statuses,
   onClose,
   onLeave,
+  onExited,
 }: {
+  /** Whether it stands; closed, it fades out, then tells its owner it is gone. */
+  open: boolean;
   id: string;
   servers: AgentServersControl;
   statuses: IntegrationStatuses;
@@ -368,6 +372,7 @@ function ServersPopover({
   onClose: () => void;
   /** Focus left the popover for `left`; the owner closes unless that is still its own. */
   onLeave: (left: EventTarget | null) => void;
+  onExited: () => void;
 }): React.JSX.Element {
   const field = useRef<HTMLInputElement>(null);
   const list = useRef<HTMLDivElement>(null);
@@ -800,6 +805,7 @@ function ServersPopover({
 
   return (
     <PopoverPanel
+      open={standing}
       id={id}
       look={POPOVER_PANEL_LOOK.MENU}
       title={
@@ -811,6 +817,7 @@ function ServersPopover({
       }
       onDismiss={dismiss}
       onLeave={onLeave}
+      onExited={onExited}
     >
       {/* Note that the searchable menu's own class rides a box drawn as its
           contents, because its rows' highlight is that menu's. */}
@@ -864,6 +871,9 @@ export function AgentServersButton({
   const popoverId = useId();
   const root = useRef<HTMLDivElement>(null);
   const trigger = useRef<HTMLButtonElement>(null);
+  // Note that the popover is drawn from its opening until its fade has run, and no longer, because its search, its page and its reads of every server's tools are its own and start afresh each time it opens.
+  const [drawn, setDrawn] = useState(open);
+  if (open && !drawn) setDrawn(true);
 
   // Note that we hand focus back to the button, as a menu returns it to its
   // trigger, because closing takes the focused popover away with it.
@@ -900,9 +910,10 @@ export function AgentServersButton({
           {face}
         </Chip>
       )}
-      {open ? (
-        <AnchoredPopover align={POPOVER_ALIGN.END}>
+      <AnchoredPopover open={open} align={POPOVER_ALIGN.END}>
+        {drawn ? (
           <ServersPopover
+            open={open}
             id={popoverId}
             servers={servers}
             statuses={statuses}
@@ -912,9 +923,10 @@ export function AgentServersButton({
               if (!document.hasFocus()) return;
               if (!(left instanceof Node && root.current?.contains(left))) setOpen(false);
             }}
+            onExited={() => setDrawn(false)}
           />
-        </AnchoredPopover>
-      ) : null}
+        ) : null}
+      </AnchoredPopover>
     </div>
   );
 }

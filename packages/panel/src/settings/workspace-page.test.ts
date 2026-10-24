@@ -737,9 +737,9 @@ async function confirm(verb: string): Promise<void> {
 const identity = (page: HTMLElement) =>
   page.querySelector<HTMLElement>(".menu-row") ?? assert.fail("no identity row");
 
-/** What a row says its last act was refused with, in its announced line, or nothing while that is empty. */
+/** What a row says its last act was refused with, in its error line, or nothing while that is empty. */
 const refusalOf = (within: Element) =>
-  [...within.querySelectorAll('[aria-live="polite"]')]
+  [...within.querySelectorAll('[data-slot="field-error"]')]
     .map((each) => each.textContent)
     .find((words) => words !== null && words !== "");
 

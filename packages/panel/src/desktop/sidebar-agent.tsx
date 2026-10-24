@@ -1,6 +1,5 @@
 import { CODING_AGENT_BOUNDS, type TasklessAgent } from "@luke/features/coding-agent-wire";
 import {
-  ArchiveIcon,
   InlineEdit,
   LIST_DENSITY,
   LIST_ROW_ACTIONS,
@@ -8,13 +7,9 @@ import {
   LIST_ROW_INK,
   ListRow,
   OneLine,
-  PencilIcon,
-  PinIcon,
   RowHint,
   RowHintOptions,
   Time,
-  UnarchiveIcon,
-  UnpinIcon,
   VisuallyHidden,
 } from "@luke/ui";
 import { ACTOR_KIND, ACTOR_STATE, type Actor, teammateCreator } from "@luke/ui/actor-model";
@@ -22,6 +17,7 @@ import { agentRow, taskRowName } from "@luke/ui/task-list-model";
 import { useCallback, useMemo, useRef } from "react";
 import { useAct } from "../act.js";
 import { ACTOR_SIZE, ActorMark } from "../actor-ref.js";
+import { commandAction, commandHead, PANEL_COMMAND } from "../command-items.js";
 import { useDraftedAgents } from "../composer-drafts.js";
 import { DraftMark } from "../draft-mark.js";
 import { useMemberDirectory } from "../member-directory.js";
@@ -56,7 +52,7 @@ import { type RowMark, RowMarks } from "./task-actions.js";
  * the row's ⋯, a right-click, and the menu key, in a task's row's groups: Copy link and Rename, which turns
  * the row into its name's field until the edit ends, with Mark as unread
  * or Mark as read between them, through a task's marks (`agent-read-marks.ts`); then Pin or Unpin,
- * the reader's own, Archive agent, asked first while a teammate's agent works
+ * the reader's own, Archive, asked first while a teammate's agent works
  * (`agent-archive.tsx`), or Unarchive, and Move to section, the reader's
  * own sections, as a task's (`sidebar-sections.tsx`); and last and alone,
  * Permanently delete, always asked first (`agent-delete.tsx`), which leaves
@@ -85,8 +81,8 @@ function starterOf(
 /** Pin or Unpin, whichever the agent is not yet, as a task's row offers them. */
 function pinItem(agent: TasklessAgent, onPin: (pinned: boolean) => void): MenuAction {
   return agent.pinnedAt === undefined
-    ? { label: "Pin", icon: <PinIcon />, onSelect: () => onPin(true) }
-    : { label: "Unpin", icon: <UnpinIcon />, onSelect: () => onPin(false) };
+    ? commandAction(PANEL_COMMAND.PIN_AGENT, () => onPin(true), false)
+    : commandAction(PANEL_COMMAND.UNPIN_AGENT, () => onPin(false), false);
 }
 
 /**
@@ -176,9 +172,7 @@ export function SidebarAgent({
   const editing = rename?.editing ?? false;
   const endedByKey = useRefocusAfterEdit(editing, row);
   const renameItem: MenuAction | undefined =
-    onRename === undefined
-      ? undefined
-      : { label: "Rename", icon: <PencilIcon />, onSelect: onRename };
+    onRename === undefined ? undefined : commandAction(PANEL_COMMAND.RENAME, onRename, false);
   const pin = onPin === undefined ? undefined : pinItem(agent, onPin);
   // Note that the row lays the agent's actions out in a task's row's groups, its own items among them.
   const groups: MenuEntry[][] = [
@@ -202,8 +196,7 @@ export function SidebarAgent({
       : [
           {
             key: "pin",
-            label: pinned ? "Unpin" : "Pin",
-            icon: pinned ? <UnpinIcon /> : <PinIcon />,
+            ...commandHead(pinned ? PANEL_COMMAND.UNPIN_AGENT : PANEL_COMMAND.PIN_AGENT),
             onSelect: () => onPin(!pinned),
           },
         ]),
@@ -213,14 +206,12 @@ export function SidebarAgent({
           archived
             ? {
                 key: "unarchive",
-                label: "Unarchive",
-                icon: <UnarchiveIcon />,
+                ...commandHead(PANEL_COMMAND.UNARCHIVE_AGENT),
                 onSelect: archive.onSelect,
               }
             : {
                 key: "archive",
-                label: "Archive",
-                icon: <ArchiveIcon />,
+                ...commandHead(PANEL_COMMAND.ARCHIVE_AGENT),
                 onSelect: archive.onSelect,
               },
         ]),

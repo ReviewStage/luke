@@ -388,7 +388,7 @@ test("View options offer the three time ranges, the one read checked and said af
   const heard: string[] = [];
   const page = render(ready(metrics()), heard);
 
-  expect(page.querySelector("header .desktop-toolbar-heading")?.textContent).toBe(
+  expect(page.querySelector("header .luke-toolbar-heading")?.textContent).toBe(
     "OverviewLast 7 days",
   );
   openViewOptions(page);

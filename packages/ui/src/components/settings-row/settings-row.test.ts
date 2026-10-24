@@ -3,6 +3,7 @@
 import { act, createElement, type ReactElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, expect, test } from "vitest";
+import { Announcer } from "../announcer/announcer.js";
 import { Button } from "../button/button.js";
 import { Switch } from "../switch/switch.js";
 import { SettingsRow } from "./settings-row.js";
@@ -85,9 +86,10 @@ test("the label's id names a control and the description describes it", () => {
   expect(box.hasAttribute("aria-invalid")).toBe(false);
 });
 
-test("a refused write marks the control invalid, describes it, and is announced as it arrives", () => {
+test("a refused write marks the control invalid, describes it, and is announced as an alert as it arrives", () => {
   const container = mount(createElement(RefusedRow));
-  const region = container.querySelector('[aria-live="polite"]');
+  mount(createElement(Announcer));
+  const region = container.querySelector('[data-slot="field-error"]');
   expect(region?.textContent).toBe("");
   const control = container.querySelector<HTMLButtonElement>('button[role="switch"]');
   if (control === null) throw new Error("no switch");
@@ -97,8 +99,12 @@ test("a refused write marks the control invalid, describes it, and is announced 
   expect(wordsOf(control, "aria-describedby")).toBe(
     "Words the call hears stand under its video. The setting could not be saved.",
   );
-  expect(container.querySelector('[aria-live="polite"]')).toBe(region);
+  expect(container.querySelector('[data-slot="field-error"]')).toBe(region);
   expect(region?.textContent).toBe("The setting could not be saved.");
+  expect(document.querySelector('[role="alert"]')?.textContent).toBe(
+    "The setting could not be saved.",
+  );
+  expect(document.querySelector('[role="status"]')?.textContent).toBe("");
 });
 
 test("an empty description and error say nothing, so the control is neither described nor invalid", () => {
@@ -161,7 +167,7 @@ test("what a row grows below its line is read after the row's words, and its err
   );
   const words = container.textContent ?? "";
   const field = container.querySelector('input[aria-label="Anthropic API key"]');
-  const error = container.querySelector('[aria-live="polite"]');
+  const error = container.querySelector('[data-slot="field-error"]');
   if (field === null || error === null) throw new Error("no field or error");
   expect(words.indexOf("Add key")).toBeLessThan(words.indexOf("The key was refused."));
   expect(field.compareDocumentPosition(error) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
@@ -190,7 +196,7 @@ test("a control as wide as the row stands under its words, named by the label an
   expect(group.getAttribute("aria-invalid")).toBe("true");
   // It follows the words in reading order, and before the error that describes it.
   const words = container.querySelector(".luke-settings-row-description");
-  const error = container.querySelector('[aria-live="polite"]');
+  const error = container.querySelector('[data-slot="field-error"]');
   if (words === null || error === null) throw new Error("no words or error");
   expect(words.compareDocumentPosition(group) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   expect(group.compareDocumentPosition(error) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();

@@ -1,9 +1,9 @@
 import { type ReactNode, type RefObject, useLayoutEffect, useRef } from "react";
 import { MOTION_TOKEN, tokenTiming } from "../../motion-timing.js";
-import { VISUALLY_HIDDEN_ELEMENT, VisuallyHidden } from "../visually-hidden/visually-hidden.js";
+import { ANNOUNCE, Announcer, useAnnounce } from "../announcer/announcer.js";
 
 /**
- * toast-stack.tsx -- the toasts standing, in the window's bottom-right corner, and the two live regions that say them.
+ * toast-stack.tsx -- the toasts standing, in the window's bottom-right corner, and the window's `Announcer` that says them.
  *
  * The stack is a landmark over whatever docks at the window's foot, taking no
  * pointer itself, so only a toast with something to press stands in the way
@@ -11,12 +11,12 @@ import { VISUALLY_HIDDEN_ELEMENT, VisuallyHidden } from "../visually-hidden/visu
  * drawn to where it now stands, on the spring small elements ride, read from
  * the tokens at the stack so reduced motion and a capture run play nothing.
  *
- * What each toast says reaches assistive tech through two regions drawn
- * beside the stack, which the host mounts with the window rather than with
- * any toast, because a live region drawn already holding its words is one a
- * screen reader may never read: a polite one for what was done or is asked,
- * and an alert for what was refused. The host hands each the words to say.
- * Where the stack mounts (a portal to the body, say) is the host's.
+ * What each toast says reaches assistive tech through the window's one pair
+ * of live regions, the `Announcer` the stack mounts beside it, since the
+ * host mounts the stack with the window rather than with any toast: what was
+ * done or is asked politely, and what was refused as an alert, each said
+ * once the words the host hands it change. Where the stack mounts (a portal
+ * to the body, say) is the host's.
  */
 
 /** Less than this, in CSS pixels, is not a move worth playing. */
@@ -48,7 +48,7 @@ function useStackGlide(): RefObject<HTMLOListElement | null> {
   return list;
 }
 
-/** The stack, named as a landmark, its toasts oldest first, and what its polite and alert regions say now. */
+/** The stack, named as a landmark, its toasts oldest first, and the window's `Announcer`, told what the newest toasts say. */
 export function ToastStack({
   label,
   polite,
@@ -65,6 +65,8 @@ export function ToastStack({
   children: ReactNode;
 }): React.JSX.Element {
   const list = useStackGlide();
+  useAnnounce(ANNOUNCE.POLITE, polite);
+  useAnnounce(ANNOUNCE.ALERT, alert);
   return (
     <>
       <section className="luke-toast-stack pointer-events-none fixed z-toast" aria-label={label}>
@@ -72,12 +74,7 @@ export function ToastStack({
           {children}
         </ol>
       </section>
-      <VisuallyHidden as={VISUALLY_HIDDEN_ELEMENT.P} role="status">
-        {polite}
-      </VisuallyHidden>
-      <VisuallyHidden as={VISUALLY_HIDDEN_ELEMENT.P} role="alert">
-        {alert}
-      </VisuallyHidden>
+      <Announcer />
     </>
   );
 }

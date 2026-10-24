@@ -153,9 +153,10 @@
 .desktop-shell:not([data-room="narrow"]) > .desktop-main {
   --desktop-bar-height: calc(2 * (var(--title-bar-middle) - var(--sheet-gap)) + 1px);
   --luke-toolbar-height: var(--desktop-bar-height);
+  --luke-toolbar-block-inset: 0px;
 }
 
-.desktop-shell:not([data-room="narrow"]) > .desktop-main :is(.desktop-toolbar, .side-panel-bar) {
+.desktop-shell:not([data-room="narrow"]) > .desktop-main .side-panel-bar {
   padding-block: 0;
 }
 
@@ -421,7 +422,8 @@
    (toolbar.css) at the bar height set above, the one the side panel's bar
    shares, so the two bars' bottom borders are one line across the window.
    While the sidebar is folded, or a narrow room's drawer is away, the title
-   bar's buttons stand over the toolbar's start, so it starts past them. */
-.desktop-shell[data-sidebar-collapsed="true"] .desktop-main .desktop-toolbar {
-  padding-left: var(--sidebar-toggle-clearance);
+   bar's buttons stand over the toolbar's start, so it starts past them: the
+   room the bar reads its start from (`--luke-toolbar-start-at`). */
+.desktop-shell[data-sidebar-collapsed="true"] .desktop-main {
+  --luke-toolbar-start-at: var(--sidebar-toggle-clearance);
 }

@@ -23,6 +23,7 @@ import {
   NoteLine,
   NotFound,
   OneLine,
+  PAGE_FRAME,
   RowHint,
   RowHintOptions,
   ShowMoreRow,
@@ -502,6 +503,7 @@ function PersonColumn({
     ) : null;
   return (
     <DetailPage
+      frame={PAGE_FRAME.PAGE}
       title={
         unnamed ? (
           refused ? (

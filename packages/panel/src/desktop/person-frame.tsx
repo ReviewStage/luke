@@ -4,6 +4,7 @@ import {
   Inline,
   List,
   ListRow,
+  PAGE_FRAME,
   SKELETON_SHAPE,
   Skeleton,
   SkeletonRegion,
@@ -163,7 +164,11 @@ export function RowsSkeleton({ label }: { label: string }): React.JSX.Element {
  */
 export function PersonPageSkeleton({ name }: { name: string | undefined }): React.JSX.Element {
   return (
-    <DetailPage title={<PersonTitleSkeleton name={name} />} description={<PersonLineSkeleton />}>
+    <DetailPage
+      frame={PAGE_FRAME.PAGE}
+      title={<PersonTitleSkeleton name={name} />}
+      description={<PersonLineSkeleton />}
+    >
       <PersonTop>
         <PersonReadingSkeleton />
       </PersonTop>

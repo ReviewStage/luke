@@ -50,7 +50,7 @@ function list() {
   const page = child(document.body, "section", "luke-collection-page");
   page.dataset.frame = "toolbar";
   page.dataset.width = "full";
-  child(page, "header", "desktop-toolbar");
+  child(page, "header", "luke-toolbar");
   const scroll = child(page, "div", "luke-collection-page-scroll");
   const content = child(scroll, "div", "luke-collection-page-content");
   const group = child(child(content, "div", "tasks-list"), "section", "tasks-list-group");
