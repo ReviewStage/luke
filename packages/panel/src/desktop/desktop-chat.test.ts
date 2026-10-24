@@ -245,8 +245,8 @@ function seen(node: Element | null | undefined): string | undefined {
 /** The pane's messages as a reader hears them: each author and where it was posted, then its replies where the thread is open. */
 function stream(page: HTMLElement): string[] {
   return [...page.querySelectorAll(".chat-message, .chat-reply")].map((node) => {
-    const byline = node.querySelector(":scope > .chat-message-body > .chat-byline");
-    const author = byline?.querySelector(".chat-byline-name")?.textContent ?? "";
+    const byline = node.querySelector(":scope > .luke-comment > .luke-comment-head");
+    const author = byline?.querySelector(".luke-comment-name")?.textContent ?? "";
     const where = seen(byline?.querySelector(".chat-byline-where"));
     const indent = node.classList.contains("chat-reply") ? "  ↳ " : "";
     return `${indent}${author}${where === undefined ? "" : ` ${where}`}`;
@@ -435,7 +435,10 @@ test("a message says how long ago it was posted, as every row and thread in the 
   const page = mount();
   act(() => railRow(page, "teammate-invitations").click());
   const time = (seq: number) =>
-    page.querySelector(`.chat-message[data-seq="${seq}"] time.chat-time`)?.textContent;
+    (
+      page.querySelector(`.chat-message[data-seq="${seq}"] .luke-comment-time time`) ??
+      page.querySelector(`.chat-message[data-seq="${seq}"] time.chat-time`)
+    )?.textContent;
   assert.equal(time(47), "16m");
   assert.equal(time(51), "3m");
 });
@@ -532,7 +535,10 @@ function boxWords(box: HTMLElement): string {
 function words(page: HTMLElement): string[] {
   return [...page.querySelectorAll(".chat-message, .chat-reply")].map((node) => {
     const indent = node.classList.contains("chat-reply") ? "  ↳ " : "";
-    const body = node.querySelector(":scope > .chat-message-body > .chat-words");
+    const body =
+      node.querySelector(
+        ":scope > .luke-comment > .luke-comment-body > .chat-message-body > .chat-words",
+      ) ?? node.querySelector(":scope > .chat-message-body > .chat-words");
     return `${indent}${body?.textContent?.trim() ?? ""}`;
   });
 }
@@ -797,7 +803,7 @@ test("an open choice is headed as the Inbox heads one, picked by its option's nu
   assert.equal(settled.querySelector(".inbox-ask-standing")?.textContent, "Answered");
   const answer = settled.querySelector('.inbox-comment[data-inbox-comment="answered"]');
   assert.ok(answer, "the answer stands as its answerer's comment");
-  assert.match(answer.querySelector(".inbox-comment-when")?.textContent ?? "", /Sent to/u);
+  assert.match(answer.querySelector(".luke-comment-trailing")?.textContent ?? "", /Sent to/u);
   const picked = [...answer.querySelectorAll('[role="radio"][aria-checked="true"]')];
   assert.deepEqual(
     picked.map((option) => option.textContent?.startsWith("14 days")),
@@ -1972,10 +1978,10 @@ test("in a listed workspace, a person is drawn with their photo from the members
     "her row wears her photo",
   );
   act(() => railRow(page, "general").click());
-  const named = [...page.querySelectorAll(".chat-byline-name")].map((each) => each.textContent);
+  const named = [...page.querySelectorAll(".luke-comment-name")].map((each) => each.textContent);
   assert.ok(named.includes("Maria Chen"), "her messages name her as the members read does");
   assert.ok(
-    page.querySelector(".chat-face img[src^='https://example.com/maria.png']"),
+    page.querySelector(".luke-comment-face img[src^='https://example.com/maria.png']"),
     "and lead with her photo",
   );
 });
@@ -1984,12 +1990,12 @@ test("an agent's line names it by its title alone, as every place of the window 
   const opened: ReadLink[] = [];
   const page = mount((chat) => chat, undefined, undefined, opened);
   act(() => railRow(page, "teammate-invitations").click());
-  const byline = [...page.querySelectorAll(".chat-message .chat-byline")].find(
-    (each) => each.querySelector(".chat-byline-name")?.textContent === "Add teammate invitations",
+  const byline = [...page.querySelectorAll(".chat-message .luke-comment-head")].find(
+    (each) => each.querySelector(".luke-comment-name")?.textContent === "Add teammate invitations",
   );
   assert.ok(byline);
   assert.doesNotMatch(byline.textContent ?? "", /@/u, "no handle beside it");
-  const name = byline.querySelector<HTMLButtonElement>(".chat-byline-name button");
+  const name = byline.querySelector<HTMLButtonElement>(".luke-comment-name button");
   assert.ok(name, "the agent's name is a press");
   act(() => name.click());
   assert.equal(opened.length, 1);
@@ -2019,12 +2025,12 @@ test("an agent the plans' summaries do not name opens its tab under the plan the
   );
   act(() => railRow(page, "teammate-invitations").click());
   // An agent no summary names is named as the chat read names it.
-  const agentLine = [...page.querySelectorAll(".chat-message .chat-byline")].find(
+  const agentLine = [...page.querySelectorAll(".chat-message .luke-comment-head")].find(
     (byline) =>
-      byline.querySelector(".chat-byline-name")?.textContent === "Add teammate invitations",
+      byline.querySelector(".luke-comment-name")?.textContent === "Add teammate invitations",
   );
   assert.ok(agentLine, "the agent is named by the name the read carries");
-  act(() => agentLine?.querySelector<HTMLButtonElement>(".chat-byline-name button")?.click());
+  act(() => agentLine?.querySelector<HTMLButtonElement>(".luke-comment-name button")?.click());
   const [link] = opened;
   assert.ok(link !== undefined && "place" in link);
   assert.deepEqual(link.place, { kind: LINK_PLACE.AGENT, planId: ELSEWHERE, agentId: ELSEWHERE });
@@ -2063,7 +2069,7 @@ test("each place's row says who spoke last and what, as an Inbox row previews it
   assert.match(count?.textContent ?? "", /^1 unread/u);
 });
 
-test("the rail's rows draw in the sidebar's ink, and a message's face is the app's own mark, never tiled", () => {
+test("the rail's rows draw in the sidebar's ink, and every message leads with its author's face", () => {
   const page = mount((chat) => chat);
   const rows = [...page.querySelectorAll(".chat-rail .luke-list-row")];
   assert.ok(rows.length > 0, "the rail holds rows");
@@ -2073,13 +2079,8 @@ test("the rail's rows draw in the sidebar's ink, and a message's face is the app
     "every rail row wears the sidebar's ink",
   );
   act(() => railRow(page, "teammate-invitations").click());
-  const faces = [...page.querySelectorAll(".chat-face .actor-mark")];
+  const faces = [...page.querySelectorAll(".luke-comment-face .luke-avatar")];
   assert.ok(faces.length > 0, "messages lead with faces");
-  assert.deepEqual(
-    faces.filter((each) => each.getAttribute("data-tiled") === "true"),
-    [],
-    "no face stands on a tile outside a pile",
-  );
 });
 
 /** The fixture's task channel by its name, with the plan it is of. */
@@ -2618,9 +2619,9 @@ test("a task whose repository is let go reads its installed skills alone, and ch
 /** Where an agent's face in the channel shown stands, by the name its first message is bylined with: working, failed, or at rest. */
 function faceState(page: HTMLElement, name: string): string | null | undefined {
   const message = [...page.querySelectorAll(".chat-message")].find(
-    (each) => each.querySelector(".chat-byline-name")?.textContent === name,
+    (each) => each.querySelector(".luke-comment-name")?.textContent === name,
   );
-  return message?.querySelector(".chat-face .state-glyph")?.getAttribute("data-state");
+  return message?.querySelector(".luke-comment-face .state-glyph")?.getAttribute("data-state");
 }
 
 test("an agent wears where it stands, as its tile does everywhere else: its face working or failed, and a failed one's row the failed mark at its end", () => {
@@ -2733,9 +2734,12 @@ test("a member whose account is gone is named and drawn as one former member, in
   );
   act(() => railRow(page, "general").click());
   const gone = [...page.querySelectorAll(".chat-message")].find(
-    (each) => each.querySelector(".chat-face .actor-mark[data-kind='someone']") !== null,
+    (each) => each.querySelector(".luke-comment-name")?.textContent === "Former member",
   );
-  assert.equal(gone?.querySelector(".chat-byline-name")?.textContent, "Former member");
+  assert.ok(
+    gone?.querySelector(".luke-comment-face .luke-avatar[data-glyph]"),
+    "on the glyph for someone",
+  );
 });
 
 /** Chat over the fixture's chat on its plan's channel, each post held until the test lands it or refuses it, in the order posted. */

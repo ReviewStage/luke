@@ -562,7 +562,7 @@ function threadPresses(): ReadonlyMap<string, HTMLElement> {
     [
       "a quiet message's Reply",
       built(
-        '<div class="chat-byline"><span class="chat-byline-action"><button class="luke-text-button">Reply</button></span></div>',
+        '<div class="luke-comment-head"><span class="luke-comment-trailing"><span class="chat-byline-action"><button class="luke-text-button">Reply</button></span></span></div>',
         "button",
       ),
     ],
