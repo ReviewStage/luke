@@ -131,12 +131,14 @@
   }
 
   /* In a narrow box's foot the status gives way before the call's controls
-     or the send do: first its word, the mark and the count saying the call
-     is up, and then the whole, where the box folds its own presses into its
+     or the send do: first a live call's word, the mark and the count
+     saying the call is up, while "Connecting…" and "Ending…", which have
+     no count to say it and are narrower for it, keep theirs; and then the
+     whole, where the box folds its own presses into its
      ⋯ (a card under 400px), the mutes' struck glyphs and End call still
      saying a call stands (composer-foot.css). */
   @container luke-composer-foot (max-width: 495px) {
-    .luke-call-live-word {
+    .luke-call-live[data-stage="live"] .luke-call-live-word {
       display: none;
     }
   }

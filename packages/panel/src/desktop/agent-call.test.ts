@@ -315,6 +315,14 @@ test("while the call comes up or goes down, the box's foot says Connecting… or
     assert.match(call.textContent ?? "", new RegExp(`^${word}`, "u"));
     assert.doesNotMatch(call.textContent ?? "", new RegExp(CALL_LIVE_WORD.LIVE, "u"));
     assert.equal(call.querySelector('[role="timer"]'), null, "no count before or after the call");
+    const said = call.querySelector(".luke-call-live-word");
+    assert.ok(said);
+    const laid = layContainersAt({ "luke-composer-foot": 440 });
+    try {
+      assert.ok(shown(said), "the word stays where a live call's gives way, since it has no count");
+    } finally {
+      laid.remove();
+    }
     act(() => roots.pop()?.unmount());
   }
 });
