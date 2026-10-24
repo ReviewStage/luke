@@ -1,0 +1,165 @@
+// @vitest-environment jsdom
+
+import assert from "node:assert/strict";
+import {
+  PLAN_COMMENT_ACTOR,
+  PLAN_COMMENT_ENTRY,
+  PLAN_COMMENT_SCOPE,
+  PLAN_COMMENT_STATUS,
+  type PlanCommentThread,
+} from "@luke/features/plan-comment-wire";
+import { type PlanCommentsControl, PlanCommentsProvider } from "@luke/ui/plan-comments";
+import * as AtomRegistry from "effect/reactivity/AtomRegistry";
+import { act, createElement } from "react";
+import { createRoot, type Root } from "react-dom/client";
+import { afterEach, beforeEach, test } from "vitest";
+import { type AnyAct, FAKE_ANSWER, type FakeActAnswer } from "../testing/app-bridge.js";
+import { attachmentChipName } from "../testing/attachment-chip.js";
+import { onRegistry } from "../testing/copy-feedback.js";
+import { CommentFocusScope, PlanCommentsTab } from "./plan-comments.js";
+
+/**
+ * A plan comment the service refuses goes back to its box above whatever
+ * was typed or pasted while it was out, so neither the refused words and
+ * files nor the newer ones are dropped. Synthetic thread, plain field.
+ */
+
+const THREAD_ID = "0f9b5f6e-6a8e-4c51-9a0e-2c1f2f0b7a11";
+
+const THREAD: PlanCommentThread = {
+  id: THREAD_ID,
+  scope: PLAN_COMMENT_SCOPE.WORDS,
+  quote: "single-use link",
+  anchor: { from: 0, to: 15 },
+  section: "Goal",
+  status: PLAN_COMMENT_STATUS.OPEN,
+  entries: [
+    {
+      id: "0f9b5f6e-6a8e-4c51-9a0e-2c1f2f0baaaa",
+      kind: PLAN_COMMENT_ENTRY.COMMENT,
+      writer: {
+        actor: PLAN_COMMENT_ACTOR.MEMBER,
+        by: { userId: "u-charles", name: "Charles Pan" },
+      },
+      words: "Should this be a setting?",
+      at: 1,
+    },
+  ],
+  createdAt: 1,
+  updatedAt: 1,
+  revision: 1,
+};
+
+const roots: Root[] = [];
+
+beforeEach(() => {
+  Object.defineProperty(window, "luke", {
+    configurable: true,
+    value: {
+      act: (_request: AnyAct): Promise<FakeActAnswer> =>
+        Promise.resolve({ status: FAKE_ANSWER.UNKNOWN_ACT }),
+      recordSurfaceEvent: () => undefined,
+    },
+  });
+});
+
+afterEach(() => {
+  for (const root of roots.splice(0)) act(() => root.unmount());
+  document.body.innerHTML = "";
+  window.localStorage.clear();
+});
+
+/** The Comments tab over the one open thread, whose reply the service answers with `landing`. */
+function drawn(landing: () => Promise<boolean>): HTMLElement {
+  const control: PlanCommentsControl = {
+    planId: "plan-1",
+    threads: [THREAD],
+    read: true,
+    failed: false,
+    onRetry: () => undefined,
+    notes: new Map(),
+    start: async () => ({ note: "not in this test" }),
+    act: async () => landing(),
+  };
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  roots.push(root);
+  const tab = createElement(PlanCommentsTab, {
+    doors: { agents: undefined, me: "u-dean" },
+    onShowDocument: () => undefined,
+  });
+  const tree = createElement(
+    PlanCommentsProvider,
+    { value: control },
+    createElement(CommentFocusScope, { reveal: undefined, children: tab }),
+  );
+  act(() => root.render(onRegistry(AtomRegistry.make(), tree)));
+  return (
+    container.querySelector<HTMLElement>(`.comment-card[data-thread="${THREAD_ID}"]`) ??
+    assert.fail("no card")
+  );
+}
+
+/** Types `words` into the plain field, as a keyboard's input lands. */
+function typeInto(field: HTMLTextAreaElement, words: string): void {
+  act(() => {
+    const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")?.set;
+    setter?.call(field, words);
+    field.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+}
+
+/** Pastes a picture named `name` into the plain field, and waits for it to be read. */
+async function pastePicture(field: HTMLTextAreaElement, name: string): Promise<void> {
+  const png = Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 7, 7, 7]);
+  const paste = new Event("paste", { bubbles: true, cancelable: true });
+  Object.defineProperty(paste, "clipboardData", {
+    value: { files: [new File([png], name, { type: "image/png" })] },
+  });
+  await act(async () => {
+    field.dispatchEvent(paste);
+  });
+  // Note that a file is read off the disk before it lands in the field.
+  for (let round = 0; round < 4; round += 1) await act(() => Promise.resolve());
+}
+
+/** The files the card's field holds, by name. */
+function heldFiles(card: HTMLElement): (string | null)[] {
+  const field = card.querySelector(".comment-field") ?? assert.fail("no reply field");
+  return [...field.querySelectorAll('[aria-label="Attached files"] > li')].map(attachmentChipName);
+}
+
+test("a refused reply goes back above the words typed while it was out, and neither is dropped", async () => {
+  const answer = Promise.withResolvers<boolean>();
+  const card = drawn(() => answer.promise);
+  const field = card.querySelector("textarea") ?? assert.fail("no textarea");
+  typeInto(field, "Not for v1.");
+  act(() => {
+    field.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+  });
+  assert.equal(field.value, "", "the field empties as the words are sent");
+
+  typeInto(field, "Ask Charles first.");
+  await act(async () => answer.resolve(false));
+
+  assert.equal(field.value, "Not for v1.\n\nAsk Charles first.");
+});
+
+test("a refused reply's files go back before the files pasted while it was out", async () => {
+  const answer = Promise.withResolvers<boolean>();
+  const card = drawn(() => answer.promise);
+  const field = card.querySelector("textarea") ?? assert.fail("no textarea");
+  await pastePicture(field, "before.png");
+  typeInto(field, "Like this.");
+  act(() => {
+    field.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+  });
+  assert.deepEqual(heldFiles(card), [], "the files go with the words");
+
+  await pastePicture(field, "after.png");
+  await act(async () => answer.resolve(false));
+
+  assert.deepEqual(heldFiles(card), ["before.png", "after.png"]);
+  assert.equal(field.value, "Like this.");
+});

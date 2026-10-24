@@ -876,7 +876,7 @@ function ReplyField({
     const same = was?.words === trimmed && sameFiles(was.attachments, attachments);
     const key = same && was !== undefined ? was.key : crypto.randomUUID();
     attempt.current = { words: trimmed, attachments, key };
-    // Note that the field empties as the words are sent, since a send may wait on the ones its mentions hand the thread to, and takes them back where the send fails and nothing was typed since.
+    // Note that the field empties as the words are sent, since a send may wait on the ones its mentions hand the thread to, and takes them back where the send fails, above whatever was typed since.
     setWords("");
     files.set([]);
     setInFlight(trimmed);
@@ -886,8 +886,9 @@ function ReplyField({
         attempt.current = undefined;
         return;
       }
-      update((now) => (now.text === "" ? { ...now, text: trimmed } : now));
-      if (files.now().length === 0) files.set(attachments);
+      // Note that words typed while the send was out stay under the refused ones, so neither is dropped.
+      update((now) => ({ ...now, text: now.text === "" ? trimmed : `${trimmed}\n\n${now.text}` }));
+      files.set([...attachments, ...files.now()]);
     });
   };
   return (
