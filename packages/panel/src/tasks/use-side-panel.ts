@@ -468,6 +468,18 @@ const sidePanelStateSchema = Schema.Struct({
 export type SidePanelState = typeof sidePanelStateSchema.Type;
 
 /**
+ * The panel a fixture run opens with: a kept state, and beside it the tabs
+ * no kept state holds, already open, one of them shown where it names one:
+ * file tabs, Terminal tabs, and what each Pull request tab shows.
+ */
+export interface StagedSidePanel extends Omit<SidePanelState, "tab"> {
+  readonly tab?: SidePanelState["tab"] | FileStripTab | TerminalStripTab;
+  readonly files?: readonly OpenFile[];
+  readonly terminals?: readonly TerminalStripTab[];
+  readonly pullRequestViews?: ByPullRequestTab<PullRequestView>;
+}
+
+/**
  * The state the hook holds: the kept one, every fixed kind in `tabs`, the
  * subagent tabs open, by the call that started each, in the order opened,
  * and the file tabs open, in the strip's order. Those are this view's
@@ -1647,6 +1659,14 @@ function settled(state: SidePanelState): HeldState {
   };
 }
 
+/** A staged state made whole as a kept one is, with the file and Terminal tabs and the Pull request views it stages open, and its file or Terminal tab shown where it names one. */
+function stagedHeld(staged: StagedSidePanel): HeldState {
+  const { tab, files = [], terminals = [], pullRequestViews = new Map(), ...kept } = staged;
+  const opened = tab !== undefined && (isFileTab(tab) || isTerminalTab(tab));
+  const held = settled(opened ? kept : { ...kept, tab });
+  return { ...held, ...(opened ? { tab } : undefined), files, terminals, pullRequestViews };
+}
+
 /** Whether a chosen or viewed tab is kept across a launch: a fixed tab or a Changes tab, the kinds that stand again after it. */
 function keptChoice(tab: SidePanelTab): tab is FixedSidePanelTab | ChangesStripTab {
   return isFixedTab(tab) || isChangesTab(tab);
@@ -1803,7 +1823,7 @@ function firstHeld(was: TaskHolds, now: TaskHolds): readonly FixedSidePanelTab[]
  * was asked for.
  */
 export function useSidePanel(
-  staged: SidePanelState | undefined,
+  staged: StagedSidePanel | undefined,
   task: OpenTask,
   agents?: readonly string[] | undefined,
   subagents: readonly string[] = [],
@@ -1826,7 +1846,7 @@ export function useSidePanel(
   const [seen, setSeen] = useState<OpenTask>(task);
   // The tab a pin or a notification asked for, while it is still the one chosen.
   const [asked, setAsked] = useState<{ task: string; tab: SidePanelTab } | undefined>(undefined);
-  const stage = useMemo(() => (staged === undefined ? undefined : settled(staged)), [staged]);
+  const stage = useMemo(() => (staged === undefined ? undefined : stagedHeld(staged)), [staged]);
   const taskId = task.id;
   const state = stage === undefined ? kept : (moved ?? stage);
   // A terminal of this Mac whose tab closes, whichever way it closes, is closed with it (`mac-terminal-acts.ts`).

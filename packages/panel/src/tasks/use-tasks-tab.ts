@@ -1626,10 +1626,11 @@ export function useTasksTab(input: {
           }),
     [openDocument, viewed.activeTaskId],
   );
-  // A fixture's tasks have no agents, as they are read from nowhere.
+  // A fixture's tasks have no agents, as they are read from nowhere, but where an agent profile stages one.
   const agents = useCodingAgents({
     acts: input.acts,
-    taskId: fixture === undefined ? viewed.activeTaskId : undefined,
+    taskId:
+      fixture === undefined || fixture.taskAgents !== undefined ? viewed.activeTaskId : undefined,
     repository:
       openDocument?.id === viewed.activeTaskId ? (openDocument?.repository ?? null) : null,
     listedAgents: tasks.tasks.some((task) => task.id === viewed.activeTaskId)

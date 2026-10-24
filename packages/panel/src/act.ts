@@ -33,7 +33,9 @@ import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { ORPCError } from "@orpc/client";
 import { useMemo } from "react";
 import { actPort } from "./app-bridge.js";
+import { loadedTasksFixture } from "./tasks/tasks-fixture-loader.js";
 import { showToast, TOAST_HOLD } from "./toast.js";
+import { appStateNow } from "./use-app-state.js";
 
 /** What a press's toast says when its act failed with no refusal of its own: the port gone, or a fault. */
 const PRESS_FAILED_WORDS = "That didn't go through. Try again.";
@@ -61,6 +63,25 @@ type ActArguments<Kind extends PortActKind> =
 class ActRefusal extends Error {}
 
 /**
+ * What a fixture run answers itself, from the synthetic data its profile
+ * stages, in place of main, which answers a fixture run's service reads
+ * with nothing (`tasks-fixture.ts`); none where the act goes to main as it
+ * would, which is every act of a live run. The answer is boxed, so an act
+ * staged to answer nothing is told from one left to main.
+ */
+function stagedAnswer(
+  kind: PortActKind,
+  payload: PortActPayload<PortActKind>,
+): { readonly answer: PortActResult<PortActKind> } | undefined {
+  // Note that only a fixture run, which loads the fixture, reads the run, because a read starts the document's follow.
+  const fixture = loadedTasksFixture();
+  if (fixture === undefined) return undefined;
+  const run = appStateNow()?.run;
+  if (run?.fixtureMode !== true) return undefined;
+  return fixture.fixtureActAnswer(run, kind, payload);
+}
+
+/**
  * One kind on the window's act port: its procedure called by the kind's own
  * name, and a refusal rejected as the sentence it carries, the rejection
  * every reader already handles. Note that each call is its own promise rather
@@ -73,6 +94,8 @@ async function portAct(
   kind: PortActKind,
   payload: PortActPayload<PortActKind>,
 ): Promise<PortActResult<PortActKind>> {
+  const staged = stagedAnswer(kind, payload);
+  if (staged !== undefined) return staged.answer;
   // SAFETY: the contract keys each procedure by its kind, and ActArguments
   // paired this payload with it; the erasure is the one dispatch on the kind.
   const call = actPort()[kind] as (
