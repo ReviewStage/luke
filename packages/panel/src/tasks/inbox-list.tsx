@@ -43,6 +43,9 @@ import {
   Skeleton,
   SkeletonRegion,
   Stack,
+  TEXT_ELEMENT,
+  TEXT_VARIANT,
+  Text,
   TOOLBAR_INSET,
   Toolbar,
   Tooltip,
@@ -1076,7 +1079,15 @@ function ListHead({
         <PhoneHead
           place="inbox"
           start={head.phone.start}
-          title={<h1 className="desktop-toolbar-title">{title}</h1>}
+          title={
+            <Text
+              as={TEXT_ELEMENT.H1}
+              variant={TEXT_VARIANT.TOOLBAR_TITLE}
+              className="desktop-toolbar-title"
+            >
+              {title}
+            </Text>
+          }
           end={
             <PlaceMore
               thing="Inbox"

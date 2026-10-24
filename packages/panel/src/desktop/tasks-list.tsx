@@ -880,7 +880,7 @@ function TasksListGroup({
     >
       {/* Note that one run of every task, grouped by nothing, needs no head of its own. */}
       {titled ? (
-        <h2 className="tasks-list-head">
+        <Text as={TEXT_ELEMENT.H2} variant={TEXT_VARIANT.INHERIT} className="tasks-list-head">
           <FoldingButton
             variant={BUTTON_VARIANT.ROW}
             label={head.name}
@@ -902,7 +902,7 @@ function TasksListGroup({
               </>
             }
           />
-        </h2>
+        </Text>
       ) : null}
       {folded ? null : drawn.length === 0 ? (
         group.older === undefined ? (
