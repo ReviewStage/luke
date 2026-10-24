@@ -5546,10 +5546,11 @@ ul.actor-stack {
 }
 
 /* A row's creator's face and each of its agents' and pull requests' marks
-   (`task-row-parts.tsx`) are presses of their own, each hanging its card,
+   (`task-row-parts.tsx`) are presses of their own, a pull request's a link
+   to its page, each hanging its card,
    standing over the row's press in a cell that lets the pointer through, so
    a press beside them still opens the task. */
-.tasks-list-cell :is([data-task-creator], button[data-task-work]) {
+.tasks-list-cell :is([data-task-creator], :is(a, button)[data-task-work]) {
   position: relative;
   z-index: 1;
   pointer-events: auto;

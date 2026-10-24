@@ -24,6 +24,7 @@ import { runAppCommand } from "../app-commands.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
 import { fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
+import { layContainersAt } from "../testing/container-width.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { restOn } from "../testing/hint-rest.js";
 import { tasksControl } from "../testing/tasks-control.js";
@@ -1403,4 +1404,46 @@ test("a row's pull request mark and its count are presses: one from a service be
   act(() => part("pull-request").click());
   act(() => part("more").click());
   assert.deepEqual(opened, ["t-39", "t-39"]);
+});
+
+test("a row's pull request link and its count take the pointer over the row's press, while the rest of the cell lets it through to the press", async () => {
+  const laid = layContainersAt({}, { only: ["./desktop.css"] });
+  const withPullRequests: TaskSummary = {
+    ...task(39, "Rate limit search", TASK_STATUS.TODO, TASK_PRIORITY.HIGH),
+    agents: {
+      total: 1,
+      working: 0,
+      agents: [],
+      pullRequestTotal: 2,
+      pullRequests: [
+        {
+          number: 4222,
+          title: "Rate limit the search endpoint",
+          state: "open",
+          checks: "passing",
+          additions: 30,
+          deletions: 5,
+          url: "https://github.com/acme/web/pull/4222",
+        },
+        {
+          number: 4223,
+          title: "Follow-up",
+          state: "open",
+          checks: "passing",
+          additions: 1,
+          deletions: 1,
+        },
+      ],
+    },
+  };
+  const page = await mountPage([withPullRequests, ...TASKS.slice(2)]);
+  const cell = rowOf(page, "ACME-39").querySelector<HTMLElement>("[data-cell='agents']");
+  const link = cell?.querySelector<HTMLElement>("a[data-task-work='pull-request']");
+  const count = cell?.querySelector<HTMLElement>("button[data-task-work='more']");
+
+  assert.ok(link, "a pull request with a page is a link to it");
+  assert.equal(getComputedStyle(link).pointerEvents, "auto");
+  assert.equal(getComputedStyle(count ?? assert.fail("the count stands")).pointerEvents, "auto");
+  assert.equal(getComputedStyle(cell ?? assert.fail("the cell stands")).pointerEvents, "none");
+  laid.remove();
 });
