@@ -70,9 +70,9 @@ import { useRowDrag } from "./use-row-drag.js";
  * folded and kept as a repository's
  * fold is, with Edit section and Delete section on its ⋯ and a right-click,
  * and between them, while it holds rows, what acts on all of them at once:
- * Mark all as read while any task is unread, Move tasks to another section
- * or a new one and Remove tasks from section, which take its agents with
- * its tasks, and Mark tasks done, which sets its tasks all Done and asks
+ * Mark all as read while any task is unread, Move all to section, to another section
+ * or a new one and Remove all from section, which take its agents with
+ * its tasks, and Mark all done, which sets its tasks all Done and asks
  * nothing, as a repository's does. An agent with no task stands among its
  * tasks as a task does, in the one order, and is dragged as one.
  * Its rows stand in the order dragged, and a row is dragged within its
@@ -377,7 +377,7 @@ interface SectionDoors {
 }
 
 /**
- * Move tasks to: the workspace's other sections and New section…, each
+ * Move all to section: the workspace's other sections and New section…, each
  * taking every row of the section, its agents' with its tasks', in its
  * order, onto the top of the one chosen.
  */
@@ -398,7 +398,7 @@ function moveTasksEntry(drawn: DrawnSection, context: SectionContext): MenuEntry
       };
     });
   return {
-    label: "Move tasks to",
+    label: "Move all to section",
     icon: <GLYPH.MOVE />,
     items: [
       ...others,
@@ -441,12 +441,12 @@ function sectionActionGroups(
     ...read,
     moveTasksEntry(drawn, context),
     {
-      label: "Remove tasks from section",
+      label: "Remove all from section",
       icon: <FolderOutputIcon />,
       onSelect: () => tasks.onWriteSections(unplaceAllWrites(drawn.entries.map(memberOf))),
     },
     ...(held.some((task) => settleOffered(task, SETTLED_STATUS.DONE))
-      ? [{ label: "Mark tasks done", icon: <MarkDoneIcon />, onSelect: doors.onMarkDone }]
+      ? [{ label: "Mark all done", icon: <MarkDoneIcon />, onSelect: doors.onMarkDone }]
       : []),
   ];
   return [edit, bulk, remove];
