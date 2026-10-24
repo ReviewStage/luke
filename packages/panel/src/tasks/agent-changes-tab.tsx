@@ -31,7 +31,6 @@ import {
   type PaneBarMenu,
   SpinnerRegion,
   Stack,
-  TEXT_BUTTON_TONE,
   TEXT_ELEMENT,
   TEXT_VARIANT,
   Text,
@@ -645,11 +644,7 @@ function entryOf(
     notice === CHANGES_WORDS.UNCHANGED_CONTENTS && whole.offered && whole.texts === undefined ? (
       <>
         {" · "}
-        <TextButton
-          tone={TEXT_BUTTON_TONE.LINK}
-          aria-label={`${LIST_WORDS.SHOW_FILE}: ${path}`}
-          onClick={whole.toggle}
-        >
+        <TextButton aria-label={`${LIST_WORDS.SHOW_FILE}: ${path}`} onClick={whole.toggle}>
           {LIST_WORDS.SHOW_FILE}
         </TextButton>
       </>

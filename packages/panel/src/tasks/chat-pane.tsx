@@ -1089,10 +1089,7 @@ function ForYouWhere({
       {onOpen === undefined ? (
         name
       ) : (
-        <TextButton
-          tone={TEXT_BUTTON_TONE.LINK}
-          onClick={() => onOpen({ kind: CHAT_PLACE.CHANNEL, channelId: channel.id })}
-        >
+        <TextButton onClick={() => onOpen({ kind: CHAT_PLACE.CHANNEL, channelId: channel.id })}>
           {name}
         </TextButton>
       )}
