@@ -23,7 +23,7 @@ import { useVoiceNoticeToast } from "./voice-notice-toast.js";
  * failure, a notice, or that the Mac's output is off, stands as a toast in
  * the window's one stack for as long as the voice says it, and never a word
  * anyone said, which streams into the agent's transcript instead. A failure
- * is said as an alert and offers its remedy; the volume hint offers Dismiss
+ * is said as an alert and offers its remedy; the volume hint offers Hide
  * and leaves at once once answered, while a failure lingers a toast's Done
  * hold to be read. Synthetic throughout.
  */
@@ -210,7 +210,7 @@ test("a temporary unavailability stands as a notice, said politely rather than a
   assert.equal(said("alert"), "");
 });
 
-test("while Luke speaks into a Mac whose output is off, a toast says so, politely, with a Dismiss that quiets it", () => {
+test("while Luke speaks into a Mac whose output is off, a toast says so, politely, with a Hide that quiets it", () => {
   const dismissed: string[] = [];
   drawn({
     speakers: LUKE_SPEAKING,
@@ -219,7 +219,7 @@ test("while Luke speaks into a Mac whose output is off, a toast says so, politel
   });
   assert.deepEqual(standing(), [HINT]);
   assert.equal(said("status"), HINT);
-  act(() => toastControl("Dismiss").click());
+  act(() => toastControl("Hide").click());
   assert.deepEqual(dismissed, ["got it"]);
 });
 
@@ -227,7 +227,7 @@ test("the volume hint leaves at once when it is answered, while a failure linger
   vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
   drawn({ speakers: LUKE_SPEAKING, silent: true });
   redrawn({ speakers: LUKE_SPEAKING, silent: false });
-  assert.deepEqual(standing(), [], "no stale hint or Dismiss after it was answered");
+  assert.deepEqual(standing(), [], "no stale hint or Hide after it was answered");
 
   const words = "Luke could not start the call. Try again in a moment.";
   redrawn({ speakers: NOBODY, error: VOICE_FAILURE.CALL_NOT_STARTED });

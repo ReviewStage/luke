@@ -47,7 +47,7 @@ export function CallChords(): null {
 
 /**
  * The window's voice notice: a failure, a notice, or the hint that Luke speaks
- * into a silent Mac, which a "Dismiss" quiets for the stretch of silence it
+ * into a silent Mac, which a "Hide" quiets for the stretch of silence it
  * answered. Stood as a toast in the window's one stack (`voice-notice-toast.ts`).
  */
 function VoiceNotices({ children }: { children: ReactNode }): React.JSX.Element {
@@ -57,14 +57,14 @@ function VoiceNotices({ children }: { children: ReactNode }): React.JSX.Element 
   const fixture = fixtureVoice(useAppSlice(RUN_PROFILE_NAME) ?? "");
   /**
    * Which stretch of unbroken silence is on screen, advanced each time one
-   * begins. A "Dismiss" is remembered against the stretch it answered, so it
+   * begins. A "Hide" is remembered against the stretch it answered, so it
    * holds for that whole mute and lapses naturally with it.
    */
   const [silenceStretch, setSilenceStretch] = useState(0);
   const wasSilent = useRef(false);
   const [hintDismissal, setHintDismissal] = useState<VolumeHintDismissal>();
   // Silence is counted in stretches — one per unbroken run of muted-or-zero —
-  // because that is the unit a "Dismiss" answers. The edge into silence is the
+  // because that is the unit a "Hide" answers. The edge into silence is the
   // only thing counted; every reading inside one stretch leaves it alone.
   useEffect(() => {
     const silent = outputSilent(outputAudio);
@@ -76,7 +76,7 @@ function VoiceNotices({ children }: { children: ReactNode }): React.JSX.Element 
     voiceNotice: view.voiceNotice,
     speakers: fixture?.speakers ?? { listening: view.listening, lukeSpeaking: view.lukeSpeaking },
     fixtureSpeaking: fixture !== undefined,
-    // The hint asks only over a silence the helper actually reported, and "Dismiss" quiets it for this stretch and any that follows too soon.
+    // The hint asks only over a silence the helper actually reported, and "Hide" quiets it for this stretch and any that follows too soon.
     volumeHint: {
       wanted:
         (fixture?.muted ?? false) ||
