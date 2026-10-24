@@ -166,14 +166,14 @@ it.layer(getTestDB())("rewinding a coding agent's conversation", (it) => {
   );
 
   it.effect(
-    "waits for a hand-over under way to end, and is refused as busy, cutting nothing, where it outlasts the wait",
+    "waits for a hand-over under way to end however long its runtime takes, cutting nothing meanwhile, and cuts once it has",
     () =>
       Effect.gen(function* () {
         const target = yield* openConversation;
         const db = yield* Database;
-        const { secondLine } = yield* threeLines(target);
+        const { first, secondLine } = yield* threeLines(target);
         const before = yield* standing(target);
-        // A hand-over's claim taken now, which nothing clears while the cut waits.
+        // A hand-over's claim taken now, which its holder clears once its runtime answers.
         yield* db
           .update(conversations)
           .set({ dispatchClaim: randomUUID(), dispatchClaimedAt: new Date(0) })
@@ -181,13 +181,28 @@ it.layer(getTestDB())("rewinding a coding agent's conversation", (it) => {
 
         const cutting = yield* Effect.forkChild(rewindConversation(target, secondLine));
         // The clock moves a step at a time, a round trip apart, so the wait passes on a real Postgres too.
-        while (cutting.pollUnsafe() === undefined) {
-          yield* TestClock.adjust(Duration.millis(100));
-          yield* standing(target);
-        }
+        const passing = (until: () => boolean) =>
+          Effect.gen(function* () {
+            while (!until()) {
+              yield* TestClock.adjust(Duration.millis(100));
+              yield* standing(target);
+            }
+          });
+        let steps = 0;
+        // Twenty seconds on, longer than a send waits for a claim, the cut is still waiting.
+        yield* passing(() => cutting.pollUnsafe() !== undefined || ++steps > 200);
+        const pendingMeanwhile = cutting.pollUnsafe() === undefined;
+        const meanwhile = yield* standing(target);
+        yield* db
+          .update(conversations)
+          .set({ dispatchClaim: null, dispatchClaimedAt: null })
+          .where(eq(conversations.id, target.conversationId));
+        yield* passing(() => cutting.pollUnsafe() !== undefined);
 
-        assert.deepEqual(yield* Fiber.join(cutting), Result.fail(REWIND_REFUSAL.BUSY));
-        assert.deepEqual(yield* standing(target), before);
+        assert.ok(pendingMeanwhile);
+        assert.deepEqual(meanwhile, before);
+        assert.ok(Result.isSuccess(yield* Fiber.join(cutting)));
+        assert.deepEqual((yield* standing(target)).turns, [first]);
       }),
   );
 

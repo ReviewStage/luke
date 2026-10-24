@@ -84,12 +84,17 @@ const lockClaim = SqlSchema.findOneOption({
 });
 
 const writeClaim = SqlSchema.void({
-  Request: Schema.Struct({ conversationId: Schema.String, claim: Schema.String, at: Schema.Date }),
-  execute: ({ conversationId, claim, at }) =>
+  Request: Schema.Struct({
+    conversationId: Schema.String,
+    claim: Schema.String,
+    at: Schema.Date,
+    line: Schema.NullOr(Schema.String),
+  }),
+  execute: ({ conversationId, claim, at, line }) =>
     Database.use((db) =>
       db
         .update(conversations)
-        .set({ dispatchClaim: claim, dispatchClaimedAt: at })
+        .set({ dispatchClaim: claim, dispatchClaimedAt: at, dispatchLine: line })
         .where(eq(conversations.id, conversationId)),
     ),
 });
@@ -100,7 +105,7 @@ const clearClaim = SqlSchema.void({
     Database.use((db) =>
       db
         .update(conversations)
-        .set({ dispatchClaim: null, dispatchClaimedAt: null })
+        .set({ dispatchClaim: null, dispatchClaimedAt: null, dispatchLine: null })
         .where(and(eq(conversations.id, conversationId), eq(conversations.dispatchClaim, claim))),
     ),
 });
@@ -129,14 +134,25 @@ export const dispatchClaimStands = /* @__PURE__ */ Effect.fnUntraced(function* (
   return false;
 });
 
-/** Takes the claim for a hand-over about to be made, under the row lock `dispatchClaimStands` took, answering the claimant's id. */
+/**
+ * Takes the claim for a hand-over about to be made, under the row lock
+ * `dispatchClaimStands` took, answering the claimant's id; naming the line's
+ * row where it hands one over, which `sentLineStands` does not read as sent
+ * while the claim stands, since its hand-over may yet withdraw it.
+ */
 export const takeDispatchClaim = /* @__PURE__ */ Effect.fnUntraced(function* (
   conversationId: string,
+  line?: string,
 ): Effect.fn.Return<string, StoreFailure, DatabaseServices> {
   const claim = randomUUID();
-  yield* writeClaim({ conversationId, claim, at: yield* DateTime.nowAsDate });
+  yield* writeClaim({ conversationId, claim, at: yield* DateTime.nowAsDate, line: line ?? null });
   return claim;
 });
+
+/** The instant a claim taken before is past its expiry at `now`. */
+export function claimExpiredBefore(now: Date): Date {
+  return new Date(now.getTime() - Duration.toMillis(DISPATCH_CLAIM.EXPIRY));
+}
 
 /** Clears the claim, where it is still the claimant's: one taken over past its expiry is the new holder's. */
 export function releaseDispatchClaim(

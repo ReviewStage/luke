@@ -5,6 +5,7 @@ import { SqlClient, SqlSchema } from "effect/sql";
 import { Database, type DatabaseServices, type StoreFailure } from "../core/query.js";
 import { conversations, messages, turns } from "../schemas/storage.js";
 import {
+  DISPATCH_CLAIM,
   DispatchClaimHeld,
   dispatchClaimStands,
   waitingOutDispatchClaim,
@@ -345,8 +346,10 @@ const cut = (target: ConversationTarget, messageId: string) =>
 /**
  * Cuts the conversation back to just before the developer's line named, as
  * above, in one transaction, once no hand-over to the agent is under way
- * (`dispatch-claim.ts`); refused where the account holds no such line, where
- * the line sits inside a turn, or where a hand-over outlasted the wait.
+ * (`dispatch-claim.ts`), waiting for one as long as a claim can stand, since
+ * its caller has already stopped the agent for the cut; refused where the
+ * account holds no such line, where the line sits inside a turn, or where
+ * hand-overs kept the conversation claimed past that wait.
  */
 export function rewindConversation(
   target: ConversationTarget,
@@ -357,7 +360,11 @@ export function rewindConversation(
   DatabaseServices
 > {
   return Effect.flatMap(SqlClient.SqlClient, (client) =>
-    waitingOutDispatchClaim(target.conversationId, client.withTransaction(cut(target, messageId))),
+    waitingOutDispatchClaim(
+      target.conversationId,
+      client.withTransaction(cut(target, messageId)),
+      DISPATCH_CLAIM.EXPIRY,
+    ),
   ).pipe(
     Effect.catchTag("DispatchClaimHeld", () =>
       Effect.succeed(Result.fail<RewindRefusal>(REWIND_REFUSAL.BUSY)),

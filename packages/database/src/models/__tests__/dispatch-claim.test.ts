@@ -15,7 +15,7 @@ import { getTestDB } from "../../testing/index.js";
 import { ASK_DISPATCH_REFUSAL, askRecord } from "../asks.js";
 import { readRewoundRevision } from "../conversation-rewind.js";
 import { DISPATCH_CLAIM } from "../dispatch-claim.js";
-import { readMessageByClientId } from "../message-reads.js";
+import { readMessageByClientId, sentLineStands } from "../message-reads.js";
 import {
   type ConversationTarget,
   STORE_WRITE_EFFECT,
@@ -261,6 +261,39 @@ it.layer(getTestDB())("the conversation's dispatch claim", (it) => {
 
       assert.deepEqual(yield* Ref.get(seen), [true, true]);
     }),
+  );
+
+  it.effect(
+    "a line whose hand-over is under way is not read as sent, so a send repeated meanwhile goes on to wait for it, and is read as sent once the runtime took it",
+    () =>
+      Effect.gen(function* () {
+        const target = yield* openAgentConversation;
+        const writer = yield* storeWriter({ tools: {} });
+        const began = yield* Deferred.make<void>();
+        const release = yield* Deferred.make<void>();
+        const line = { text: "Fix the tile.", clientKey: "fix", sender: SENDER };
+        const sent = sentLineStands(target.userId, target.conversationId, sentLineId("fix"));
+
+        const sending = yield* Effect.forkChild(
+          writer.writeAwaitingLine(
+            target,
+            line,
+            Effect.andThen(
+              Deferred.succeed(began, undefined),
+              Effect.as(Deferred.await(release), true),
+            ),
+          ),
+        );
+        yield* Deferred.await(began);
+        const sentMeanwhile = yield* sent;
+        const rowsMeanwhile = yield* rowsUnder(target, "fix");
+        yield* Deferred.succeed(release, undefined);
+        yield* Fiber.join(sending);
+
+        assert.equal(sentMeanwhile, false);
+        assert.equal(rowsMeanwhile, 1);
+        assert.equal(yield* sent, true);
+      }),
   );
 
   it.effect(
