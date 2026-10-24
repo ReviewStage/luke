@@ -184,7 +184,7 @@ export const taskActivitySchema = EffectSchema.Struct({
       ),
     }),
   ),
-  // Note that no notetaker writes beside a call any more, so the service sends no `notes`; the key stays optional, never removed, so a desktop of an older release still parses what it sends and a newer one parses what an older service sent.
+  // Note that no notetaker writes beside a call any more and no desktop draws one, so the key is optional here, never removed: this release parses a frame with or without it, while the service keeps sending `notes: false` for the earlier desktops that still require it.
   notes: EffectSchema.optionalKey(EffectSchema.Boolean),
 });
 

@@ -221,6 +221,8 @@ export const hostedLiveExchange = /* @__PURE__ */ Effect.fn("web/hostedLiveExcha
       ...(brain === undefined
         ? undefined
         : { planner: brain.action === undefined ? {} : { action: brain.action } }),
+      // Note that no notetaker writes beside the call any more, yet we still send `notes: false`, because a desktop of an earlier release requires the key and would drop the whole frame without it.
+      notes: false,
     });
   };
 
