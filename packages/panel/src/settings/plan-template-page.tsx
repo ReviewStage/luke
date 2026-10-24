@@ -17,7 +17,6 @@ import {
   ConfirmDialog,
   type DialogQuestion,
   EmptyState,
-  ERROR_STATE_PLACEMENT,
   ErrorState,
   Fill,
   GAP,
@@ -379,45 +378,62 @@ function TemplateDocument({
 }
 
 /**
- * The template while it is read, drawn in the document's own frame: the
- * page's head as the document draws it, its name and note whole, since
- * neither waits on the read, and a block for its history's press; then
- * headings over their lines in the plan's own type, so the template lands
- * where the blocks stood.
+ * What stands under the page's head while the template is not drawn, in the
+ * document's own frame: the page's head as the document draws it, its name and
+ * note whole, since neither waits on the read, and `children` under it. The
+ * head names the page once in every state, so a page with no template to show
+ * still has its heading.
  */
-function TemplateSkeleton(): React.JSX.Element {
+function TemplateHeadFrame({
+  actions,
+  children,
+}: {
+  actions: React.ReactNode;
+  children: React.ReactNode;
+}): React.JSX.Element {
   return (
     <TemplateFrame>
       <DocumentScroll>
         <PlanBodyColumn>
-          <PlanPageHead
-            name={TEMPLATE_TITLE}
-            actions={<Skeleton shape={SKELETON_SHAPE.CONTROL} width="var(--luke-control-height)" />}
-            note={<TemplateNote />}
-          />
-          <SkeletonRegion label={PAGE_LINE.READING}>
-            <Stack gap={GAP.SECTION}>
-              {TEMPLATE_SKELETON.map((section) => (
-                <Stack key={section.heading} gap={GAP.TIGHT}>
-                  <Text variant={TEXT_VARIANT.SECTION} as={TEXT_ELEMENT.DIV}>
-                    <Skeleton width={section.heading} />
-                  </Text>
-                  <div>
-                    {section.lines.map((width, at) => (
-                      <Skeleton key={at} width={width} />
-                    ))}
-                  </div>
-                </Stack>
-              ))}
-            </Stack>
-          </SkeletonRegion>
+          <PlanPageHead name={TEMPLATE_TITLE} actions={actions} note={<TemplateNote />} />
+          {children}
         </PlanBodyColumn>
       </DocumentScroll>
     </TemplateFrame>
   );
 }
 
-/** What stands in the document's place: no account, the read under way, or the read failed with its Retry. */
+/**
+ * The template while it is read: the head, and a block for its history's
+ * press; then headings over their lines in the plan's own type, so the
+ * template lands where the blocks stood.
+ */
+function TemplateSkeleton(): React.JSX.Element {
+  return (
+    <TemplateHeadFrame
+      actions={<Skeleton shape={SKELETON_SHAPE.CONTROL} width="var(--luke-control-height)" />}
+    >
+      <SkeletonRegion label={PAGE_LINE.READING}>
+        <Stack gap={GAP.SECTION}>
+          {TEMPLATE_SKELETON.map((section) => (
+            <Stack key={section.heading} gap={GAP.TIGHT}>
+              <Text variant={TEXT_VARIANT.SECTION} as={TEXT_ELEMENT.DIV}>
+                <Skeleton width={section.heading} />
+              </Text>
+              <div>
+                {section.lines.map((width, at) => (
+                  <Skeleton key={at} width={width} />
+                ))}
+              </div>
+            </Stack>
+          ))}
+        </Stack>
+      </SkeletonRegion>
+    </TemplateHeadFrame>
+  );
+}
+
+/** What stands in the document's place: no account, the read under way, or the read failed with its Retry, each under the page's head. */
 function TemplateState({
   signedIn,
   template,
@@ -427,18 +443,16 @@ function TemplateState({
 }): React.JSX.Element {
   if (!signedIn) {
     return (
-      <Fill className="desktop-empty-region">
+      <TemplateHeadFrame actions={null}>
         <EmptyState>{PAGE_LINE.SIGNED_OUT}</EmptyState>
-      </Fill>
+      </TemplateHeadFrame>
     );
   }
   if (template.read === TEMPLATE_READ.FAILED) {
     return (
-      <Fill className="desktop-empty-region">
-        <ErrorState onRetry={template.retry} placement={ERROR_STATE_PLACEMENT.CENTRED}>
-          {PAGE_LINE.READ_FAILED}
-        </ErrorState>
-      </Fill>
+      <TemplateHeadFrame actions={null}>
+        <ErrorState onRetry={template.retry}>{PAGE_LINE.READ_FAILED}</ErrorState>
+      </TemplateHeadFrame>
     );
   }
   // While the read is out the page's head stands where the document's will, the template's blocks under it.

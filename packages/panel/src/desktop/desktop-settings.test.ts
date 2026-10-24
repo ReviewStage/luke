@@ -883,6 +883,25 @@ test("the plan template names itself once, by a header holding its title and its
   assert.deepEqual(named(), { titles: ["Plan template"], acts: ["Version history"] });
 });
 
+test("a plan template that could not be read keeps its heading, over the failure and its Retry", async () => {
+  fakeAppBridge({
+    ...fakeAppBridgeCalls(),
+  });
+  fakeActPort({
+    [ACT_KIND.PLAN_TEMPLATE_READ]: () => Promise.reject(refusedOnPort("Not here.")),
+  });
+  const page = mount(createElement(SettingsHarness, { opensOn: SETTINGS_VIEW.PLAN_TEMPLATE }));
+  await act(async () => {
+    for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
+  });
+
+  assert.deepEqual(
+    [...page.querySelectorAll("h1")].map((title) => title.textContent),
+    ["Plan template"],
+  );
+  assert.equal(page.textContent?.includes("The template could not be read."), true);
+});
+
 test("a page's row in the sidebar offers Copy link on a right-click, copying the page's link under the listed workspace", async () => {
   const copied: string[] = [];
   fakeAppPlatform({ ...QUIET_PANEL, ...copyingInto(copied) });
