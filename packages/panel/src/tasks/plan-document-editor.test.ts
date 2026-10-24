@@ -940,6 +940,26 @@ test("a title typed in is unsaved work until its rename answers", async () => {
   assert.equal(unsavedWords(container), false);
 });
 
+test("the plan's title is the page's one h1, and editing it in place still renames the plan", async () => {
+  const { container, renamed } = mount();
+
+  const headings = container.querySelectorAll("h1");
+  assert.equal(headings.length, 1, "the plan page names itself once");
+  assert.equal(headings[0]?.textContent, DOCUMENT_NAME);
+  assert.ok(headings[0]?.contains(title(container)), "the title edited is the h1's own words");
+
+  act(() => {
+    title(container).focus();
+    title(container).textContent = "Beta";
+    title(container).dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  act(() => title(container).blur());
+  await settle();
+
+  assert.deepEqual(renamed, ["Beta"]);
+  assert.equal(container.querySelector("h1")?.textContent, "Beta");
+});
+
 test("a conflict over a teammate's words names them on its note and its button, which takes their words and closes the editor", async () => {
   const theirs = `${BODY}Charles's.\n`;
   const by = { actor: PLAN_ACTOR.DEVELOPER, by: CHARLES, at: Date.now(), duringCall: false };
