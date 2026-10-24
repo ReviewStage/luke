@@ -11,6 +11,7 @@ import {
   type SignIn,
   signInLine,
 } from "@luke/features/integration-sign-in";
+import { INTEGRATION_STATUS_WORDS } from "@luke/features/integration-status-words";
 import { byName } from "@luke/features/integration-tool-model";
 import type { IntegrationStatusView } from "@luke/features/integration-view";
 import {
@@ -180,7 +181,7 @@ const FILTER_INPUT_ID = "integrations-filter-input";
 const FILTER_PLACEHOLDER = "Search integrations and tools";
 
 const PAGE_LINE = {
-  CONNECTED: "Connected",
+  CONNECTED: INTEGRATION_STATUS_WORDS[INTEGRATION_STATUS.CONNECTED],
   CHECKING: "Checking…",
   TOOLS_NOT_READ: readFailedWords("the tools"),
   SIGNED_OUT: SIGNED_OUT_WORDS,
@@ -301,9 +302,15 @@ function rowLine(
   if (signIn !== undefined) return signInRowLine(provider, signIn);
   switch (status) {
     case INTEGRATION_STATUS.PENDING:
-      return { text: "Connecting…", state: LINE_STATE.WAITING };
+      return {
+        text: INTEGRATION_STATUS_WORDS[INTEGRATION_STATUS.PENDING],
+        state: LINE_STATE.WAITING,
+      };
     case INTEGRATION_STATUS.EXPIRED:
-      return { text: "Sign-in expired.", state: LINE_STATE.ATTENTION };
+      return {
+        text: INTEGRATION_STATUS_WORDS[INTEGRATION_STATUS.EXPIRED],
+        state: LINE_STATE.ATTENTION,
+      };
     case INTEGRATION_STATUS.DISCONNECTED:
     case undefined:
     case INTEGRATION_STATUS.UNAVAILABLE:

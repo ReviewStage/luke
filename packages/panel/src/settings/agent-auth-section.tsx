@@ -1,4 +1,6 @@
 import { CODING_AGENT_CALL_FAILURE } from "@luke/features/coding-agent-view";
+import { INTEGRATION_STATUS_WORDS } from "@luke/features/integration-status-words";
+import { INTEGRATION_STATUS } from "@luke/features/integration-wire";
 import {
   PROVIDER_KEY_KIND,
   PROVIDER_KEY_PROVIDER,
@@ -195,7 +197,7 @@ const WORDS = {
   MANAGE: "Manage",
   VIA_SUBSCRIPTION: "Connected with a subscription",
   VIA_API_KEY: "Connected with an API key",
-  SIGN_IN_EXPIRED: "Sign-in expired",
+  SIGN_IN_EXPIRED: INTEGRATION_STATUS_WORDS[INTEGRATION_STATUS.EXPIRED],
   PLAN_ATTENTION: "Subscription needs attention",
   KEY_ATTENTION: "API key needs attention",
   SUBSCRIPTION: "Subscription",
@@ -215,12 +217,12 @@ const WORDS = {
   REPLACES_KEY: "Saving replaces the key Luke holds.",
   SIGN_IN: "Sign in with ChatGPT",
   WAITING: "Waiting for ChatGPT",
-  CONNECTED: "Connected",
+  CONNECTED: INTEGRATION_STATUS_WORDS[INTEGRATION_STATUS.CONNECTED],
   USAGE_LIMIT: "Usage limit reached",
   TOKEN_INVALID: "Anthropic rejected this token. Paste a new one.",
   TOKEN_QUOTA: "Out of usage on your Claude subscription.",
   TOKEN_UNREADABLE: "This token can no longer be read. Paste a new one.",
-  CHATGPT_SIGNED_OUT: "Sign-in expired. Sign in with ChatGPT to reconnect.",
+  CHATGPT_SIGNED_OUT: `${INTEGRATION_STATUS_WORDS[INTEGRATION_STATUS.EXPIRED]}. Sign in with ChatGPT to reconnect.`,
   CHATGPT_UNREADABLE: "This sign-in can no longer be read. Sign in with ChatGPT to connect again.",
   CHATGPT_INELIGIBLE:
     "OpenAI says this ChatGPT account isn't eligible for Codex. Sign in with ChatGPT to use another.",
