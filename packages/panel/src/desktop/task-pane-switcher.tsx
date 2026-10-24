@@ -4,6 +4,7 @@ import {
   DocumentIcon,
   InlineEdit,
   type InlineEditEnd,
+  NO_BACK_KEY,
   TEXT_ELEMENT,
   TEXT_VARIANT,
   Text,
@@ -127,7 +128,15 @@ export function TaskHead({
   return (
     <PhoneHead
       place="task"
-      start={<BackButton label={back.label} place={back.label} onBack={back.onPress} />}
+      start={
+        // Note that it names no key, because the window's Back takes one history step and this leaves the task or its tab.
+        <BackButton
+          label={back.label}
+          place={back.label}
+          command={NO_BACK_KEY}
+          onBack={back.onPress}
+        />
+      }
       title={
         <Text
           as={TEXT_ELEMENT.H1}
