@@ -17,6 +17,7 @@ import {
   leavingSave,
   pendingSave,
 } from "./plan-edit-model.js";
+import { TASK_BOUNDS } from "./task-wire.js";
 import { TASK_CALL_FAILURE } from "./tasks-view.js";
 
 const TEXT = "# Context\n\nOnly an admin can add a member.\n";
@@ -192,4 +193,19 @@ test("Keep mine sends no comment anchors where the other writer's lines moved th
 
   assert.equal(saved(moved).comments, undefined);
   assert.deepEqual(saved(unmoved).comments, anchors);
+});
+
+test("Keep mine whose merge runs past the bound says so and holds the editor open with the merged words", () => {
+  const room = TASK_BOUNDS.MAX_BODY_CHARS - SECTIONS.length;
+  const mine = SECTIONS.replace("add a member.", `add a member.${"m".repeat(room)}`);
+  const theirs = SECTIONS.replace("Send the invite.", "Send the invite now.");
+
+  const kept = editorCloseAsked(editorKeptMine(conflictedOver(mine, theirs)));
+
+  assert.deepEqual(kept.state, {
+    kind: DOCUMENT_EDITOR_STATE.FAILED,
+    note: "Not saved: the plan is too long.",
+  });
+  assert.ok(kept.draft.includes("Send the invite now."));
+  assert.equal(editorCloses(kept), false);
 });

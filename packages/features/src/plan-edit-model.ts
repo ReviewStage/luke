@@ -290,7 +290,8 @@ export function editorKeptMine(editor: DocumentEditor): DocumentEditor {
   const draft = keptOver(editor.base, editor.draft, base);
   const { anchors: _anchors, ...rest } = editor;
   const kept = draft === editor.draft ? editor : rest;
-  return { ...kept, base, draft, state: { kind: DOCUMENT_EDITOR_STATE.EDITING } };
+  // Note that two changes each within the bound may merge past it, which says so and holds the editor open.
+  return editorTyped({ ...kept, base, state: { kind: DOCUMENT_EDITOR_STATE.EDITING } }, draft);
 }
 
 /** The developer takes the other writer's words: the editor holds them and closes, with nothing to save. */
