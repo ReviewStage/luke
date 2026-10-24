@@ -289,8 +289,11 @@
     border-bottom: none;
   }
 
+  /* Inline, so that a chevron after words inside a line (a text button's
+     "3 tools") stays on the words' line rather than dropping under them as a
+     block would; in a summary, itself a flex row, it is a flex item either way. */
   .luke-disclosure-turn {
-    display: flex;
+    display: inline-flex;
     flex: none;
     color: var(--luke-color-text-muted);
     /* The chevron turns on the spring small elements ride, so it settles
