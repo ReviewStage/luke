@@ -9,6 +9,7 @@ import { MODEL_PROVIDER } from "@luke/features/models-wire";
 import { SENTRY_TRIGGER_EVENT, TRIGGER_PROVIDER } from "@luke/features/trigger-catalog";
 import * as ui from "@luke/ui";
 import {
+  FaceMark,
   FiringGlyph,
   HarnessMark,
   MARK_PROVIDER,
@@ -24,7 +25,7 @@ import { CatalogSection } from "../section";
 
 /**
  * artwork.tsx -- the production artwork `@luke/ui` draws from `@luke/brand`'s
- * generated sources: Luke's face at rest, every glyph, every provider's
+ * generated sources: Luke's face at rest and its still mark, every glyph, every provider's
  * mark, and what fires an automation, each drawn from the package itself
  * rather than from a copy.
  */
@@ -81,6 +82,11 @@ function Artwork(): React.JSX.Element {
       <CatalogSection id="artwork-face-inherit" title="Face in its holder's ink, filling its box">
         <div className="catalog-face">
           <WingFace fill inherit />
+        </div>
+      </CatalogSection>
+      <CatalogSection id="artwork-face-mark" title="Face mark, filling its box in its holder's ink">
+        <div className="catalog-face">
+          <FaceMark />
         </div>
       </CatalogSection>
       <CatalogSection id="artwork-glyphs" title="Glyphs">
