@@ -37,7 +37,7 @@ import { Schema } from "effect";
 import { CircleXIcon, GitMergeIcon, TriangleAlertIcon, UserRoundIcon } from "lucide-react";
 import { type ReactNode, useState } from "react";
 import { ActionMenu, type MenuAction } from "../desktop/action-menu.js";
-import { readKept, writeKept } from "../kept-storage.js";
+import { keptKey, useKept } from "../use-kept.js";
 import { type PullRequestWrites, QUEUE_WARNING } from "./pull-request-writes.js";
 
 /**
@@ -204,26 +204,25 @@ function sentenceOf(pullRequest: CodingAgentOverviewPullRequest): string {
   return lead === undefined ? standing : `${lead}. ${standing}`;
 }
 
-/** Where the method chosen is kept, by repository. */
-const METHODS_KEY = "luke.pullRequestMergeMethods";
-
 const storedMethods = Schema.fromJsonString(
   Schema.Record(Schema.String, Schema.Literals(Object.values(MERGE_METHOD))),
 );
+
+/** Where the method chosen is kept, by repository. */
+const KEPT = { METHODS: keptKey("luke.pullRequestMergeMethods", storedMethods) } as const;
 
 /** The method chosen for the repository, kept across launches: the one last chosen where the repository still allows it, else the first it allows. */
 function useMergeMethod(
   repository: string | null,
   allowed: readonly MergeMethod[],
 ): readonly [MergeMethod | undefined, (method: MergeMethod) => void] {
-  const [kept, setKept] = useState(() => readKept(METHODS_KEY, storedMethods, {}));
+  const [kept, , change] = useKept(KEPT.METHODS, {});
   const chosen = repository === null ? undefined : kept[repository];
   const method = chosen !== undefined && allowed.includes(chosen) ? chosen : allowed[0];
   const choose = (next: MergeMethod) => {
     if (repository === null) return;
-    const now = { ...readKept(METHODS_KEY, storedMethods, {}), [repository]: next };
-    writeKept(METHODS_KEY, storedMethods, now);
-    setKept(now);
+    // Note that the record is read again before it is written, so another window's method for another repository is kept.
+    change((held) => ({ ...held, [repository]: next }));
   };
   return [method, choose];
 }

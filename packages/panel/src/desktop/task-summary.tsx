@@ -46,6 +46,7 @@ import { openPlanStanding, TAB_KIND, tabLook } from "../tasks/tab-look.js";
 import type { CodingAgentsControl } from "../tasks/use-coding-agents.js";
 import { SIDE_PANEL_TAB } from "../tasks/use-side-panel.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
+import { keptFlag, keptKey, useKept } from "../use-kept.js";
 import { rowMenu } from "./action-menu.js";
 import { ArchivedAgents, useAgentArchive } from "./agent-archive.js";
 import { AGENTS_SECTION, agentEntries, INBOX_ROW, inboxEntry } from "./main-tabs.js";
@@ -100,11 +101,11 @@ import { type CardSubject, tabCard } from "./tab-card.js";
  */
 
 /**
- * The storage key the pin is kept under. Note that a `false` kept from when
- * unpinning hid the summary now reads collapsed, the nearest thing to hidden
- * the summary still has.
+ * The pin is kept on this Mac, pinned where none was. Note that a `false`
+ * kept from when unpinning hid the summary now reads collapsed, the nearest
+ * thing to hidden the summary still has.
  */
-const SUMMARY_PINNED_KEY = "luke.summary-pinned";
+const KEPT = { PINNED: keptKey("luke.summary-pinned", keptFlag) } as const;
 
 /**
  * The least width of the task's column, in CSS pixels, at which the summary
@@ -175,35 +176,18 @@ export interface SummaryPin {
   onMeasured: (wide: boolean) => void;
 }
 
-/** The kept pin, or pinned where there is none or storage refuses the read. */
-function readPinned(): boolean {
-  try {
-    return window.localStorage.getItem(SUMMARY_PINNED_KEY) !== "false";
-  } catch {
-    return true;
-  }
-}
-
 /**
  * The pin, kept across launches. A fixture run starts pinned and keeps
  * nothing, so its frames never wear a developer's own choice.
  */
 export function useSummaryPin(fixtureMode: boolean): SummaryPin {
-  const [kept, setKept] = useState(readPinned);
+  const [kept, , changeKept] = useKept(KEPT.PINNED, true);
   const [staged, setStaged] = useState(true);
   const [wide, setWide] = useState(true);
   const onToggle = useCallback(
-    () => (fixtureMode ? setStaged : setKept)((was) => !was),
-    [fixtureMode],
+    () => (fixtureMode ? setStaged : changeKept)((was) => !was),
+    [fixtureMode, changeKept],
   );
-  // A write that fails costs only the preference, so it is not worth a word on screen.
-  useEffect(() => {
-    try {
-      window.localStorage.setItem(SUMMARY_PINNED_KEY, String(kept));
-    } catch {
-      // The summary keeps working on the pin it holds.
-    }
-  }, [kept]);
   const pinned = fixtureMode ? staged : kept;
   // The same pin across draws while none of it moves, so the column it is handed to is not drawn again for a new one.
   return useMemo(() => ({ pinned, onToggle, wide, onMeasured: setWide }), [pinned, onToggle, wide]);

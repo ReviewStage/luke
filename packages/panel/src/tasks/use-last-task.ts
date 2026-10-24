@@ -1,8 +1,8 @@
 import type { TaskSummary } from "@luke/features/task-wire";
 import { TASKS_READ, type TasksView } from "@luke/features/tasks-view";
 import { Schema } from "effect";
-import { useCallback, useEffect, useRef, useState } from "react";
-import { readKept, writeKept } from "../kept-storage.js";
+import { useEffect, useRef, useState } from "react";
+import { keptKey, useKept } from "../use-kept.js";
 
 /**
  * use-last-task.ts -- the task each account last had open, kept across launches, and opened again at the next launch where it still stands.
@@ -27,13 +27,13 @@ import { readKept, writeKept } from "../kept-storage.js";
  * own.
  */
 
-/** Where the tasks are kept in the renderer's storage, and where they were kept before tasks had their name. */
-const STORAGE_KEY = { NOW: "luke.lastTask", EARLIER: "luke.lastPlan" } as const;
-
 /** Each account's last open task, by the account's email. */
 const storedTasks = Schema.fromJsonString(Schema.Record(Schema.String, Schema.String));
 
 type KeptTasks = typeof storedTasks.Type;
+
+/** Where the tasks are kept in the renderer's storage, and where they were kept before tasks had their name. */
+const KEPT = { TASKS: keptKey("luke.lastTask", storedTasks, "luke.lastPlan") } as const;
 
 const NONE_KEPT: KeptTasks = {};
 
@@ -61,24 +61,13 @@ export function useLastTask(input: {
   select: (taskId: string) => void;
 }): boolean {
   const { staged, account, tasks, listStatus, openTaskId, boundFor, select } = input;
-  const [kept, setKept] = useState(() =>
-    readKept(STORAGE_KEY.NOW, storedTasks, NONE_KEPT, STORAGE_KEY.EARLIER),
-  );
+  const [kept, , keep] = useKept(KEPT.TASKS, NONE_KEPT);
   // The account the launch's reopen was decided for, and the task it asked for.
   const [decided, setDecided] = useState<{ account: string; asked?: string } | undefined>(
     undefined,
   );
   // The task last seen open, and the account it was open for.
   const wasOpen = useRef<{ account: string; taskId: string } | undefined>(undefined);
-  const keep = useCallback(
-    (next: (held: KeptTasks) => KeptTasks) =>
-      setKept((held) => {
-        const changed = next(held);
-        if (changed !== held) writeKept(STORAGE_KEY.NOW, storedTasks, changed);
-        return changed;
-      }),
-    [],
-  );
 
   // The task the host opens is kept, and let go once it closes. Note that
   // only a close seen in this run, under the same account, lets it go,

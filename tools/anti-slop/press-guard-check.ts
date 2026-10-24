@@ -6,6 +6,7 @@ import { ARROW_KEY_GUARD_RULE, NAMES_ARROW_KEY } from "./shared/arrow-key-guard.
 import { BUSY_GUARD_RULE } from "./shared/busy-guard.ts";
 import { TYPESCRIPT_SOURCE } from "./shared/effect-edges.ts";
 import { HEADING_GUARD_RULE } from "./shared/heading-guard.ts";
+import { KEPT_GUARD_RULE } from "./shared/kept-guard.ts";
 import { LIVE_REGION_GUARD_RULE } from "./shared/live-region-guard.ts";
 import { LUCIDE_GUARD_RULE } from "./shared/lucide-guard.ts";
 import { OPEN_PAGE_GUARD_RULE } from "./shared/open-page-guard.ts";
@@ -34,8 +35,9 @@ import { SKELETON_GUARD_RULE } from "./shared/skeleton-guard.ts";
  * that names an arrow key and holds one that would silence
  * `no-hand-written-arrow-keys`, on any TypeScript file holding one that would
  * silence `no-lucide-outside-door` or, where it adds a listener,
- * `no-document-press-listener`, whose baselines are the only way past them, on
- * any TypeScript file that spells
+ * `no-document-press-listener` or, where it names the window's storage or
+ * its helpers, `no-direct-view-storage`, whose baselines are the only way past
+ * them, on any TypeScript file that spells
  * a retired name and holds one that would silence `retired`, whose retired
  * file's baseline is the only way past it, and on an `.oxlintrc.json` that
  * leaves any of them short of an error anywhere or whose `ignorePatterns`
@@ -60,6 +62,9 @@ function sourceFiles(): readonly string[] {
 /** A press listener on the whole window, as far as the text says: the only file that has anything to silence. */
 const PRESS_LISTENER =
   /(?:document|window|globalThis|ownerDocument|defaultView)\s*\.\s*addEventListener\(\s*["'`](?:pointerdown|mousedown|touchstart|click|auxclick)/u;
+
+/** A file that touches the window's storage or imports the helpers over it, as far as the text says: the only file that has anything to silence. */
+const KEPT_STORAGE = /\b(?:localStorage|sessionStorage)\b|kept-storage/u;
 
 /** Each guard, the files it watches, and what to do instead of silencing it. */
 const GUARDS = [
@@ -136,6 +141,17 @@ const GUARDS = [
       PRESS_LISTENER.test(readFileSync(absolute, "utf8")),
     remedy:
       "Close the popover through `onPressAway` on its AnchoredPopover or RectFloat, or `usePressAway`, instead",
+  },
+  {
+    rule: KEPT_GUARD_RULE,
+    sources: TYPESCRIPT_SOURCE,
+    // A file that names no storage has nothing to silence; the guards' own tests spell fixtures.
+    watches: (absolute: string) =>
+      !path.relative(REPOSITORY_ROOT, absolute).startsWith("tools/anti-slop/") &&
+      existsSync(absolute) &&
+      KEPT_STORAGE.test(readFileSync(absolute, "utf8")),
+    remedy:
+      "Keep the choice through `useKept` (`packages/panel/src/use-kept.ts`) instead, or name storage that is no view choice in tools/anti-slop/kept-storage-allowed.json with its reason",
   },
   {
     rule: RETIRED_GUARD_RULE,

@@ -14,6 +14,7 @@ import {
   Button,
   DetailPage,
   ErrorState,
+  GAP,
   List,
   ListRow,
   MoreButton,
@@ -27,6 +28,7 @@ import {
   RowHint,
   RowHintOptions,
   ShowMoreRow,
+  Stack,
   TEXT_ELEMENT,
   TEXT_TONE,
   TEXT_VARIANT,
@@ -408,8 +410,9 @@ function PersonTasks({
   onShowAll: (() => void) | undefined;
 }): React.JSX.Element | null {
   if (listed.length === 0) return null;
+  // Note that the section and its foot are one block of the page, so the page's gap between sections stands above both and the foot stands close under the rows.
   return (
-    <>
+    <Stack gap={GAP.TIGHT}>
       <PersonSection title={title} count={listed.length}>
         {listed.slice(0, PERSON_TASKS_SHOWN).map((task) => (
           <RecentRow
@@ -423,15 +426,9 @@ function PersonTasks({
         ))}
       </PersonSection>
       {onShowAll === undefined ? null : (
-        <div className="person-section-foot">
-          <ShowMoreRow
-            more={listed.length - PERSON_TASKS_SHOWN}
-            shown={false}
-            onToggle={onShowAll}
-          />
-        </div>
+        <ShowMoreRow more={listed.length - PERSON_TASKS_SHOWN} shown={false} onToggle={onShowAll} />
       )}
-    </>
+    </Stack>
   );
 }
 

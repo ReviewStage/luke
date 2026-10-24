@@ -4,6 +4,7 @@ import { asyncPressNeedsBusyRule } from "./rules/async-press-needs-busy.ts";
 import { enforceDeleteWithWhereRule } from "./rules/enforce-delete-with-where.ts";
 import { enforceUpdateWithWhereRule } from "./rules/enforce-update-with-where.ts";
 import { noAwaitDrizzleStatementRule } from "./rules/no-await-drizzle-statement.ts";
+import { noDirectViewStorageRule } from "./rules/no-direct-view-storage.ts";
 import { noDocumentPressListenerRule } from "./rules/no-document-press-listener.ts";
 import { noHandWrittenArrowKeysRule } from "./rules/no-hand-written-arrow-keys.ts";
 import { noHandWrittenLiveRegionRule } from "./rules/no-hand-written-live-region.ts";
@@ -21,7 +22,7 @@ import { skeletonThroughComponentsRule } from "./rules/skeleton-through-componen
  * Oxlint rules that catch code or tests that silently do nothing or wipe data,
  * and the design system's guards against controls and headings built outside `@luke/ui`,
  * loading skeletons that copy the surface they stand for, buttons that wait on a press without saying so, buttons that open a page,
- * popovers that close on a press through a listener of their own, and the
+ * popovers that close on a press through a listener of their own, view choices stored by hand rather than through `useKept`, and the
  * classes, glyphs and patterns phase 2 retired coming back.
  */
 const antiSlopPlugin = eslintCompatPlugin({
@@ -31,6 +32,7 @@ const antiSlopPlugin = eslintCompatPlugin({
     "enforce-delete-with-where": enforceDeleteWithWhereRule,
     "enforce-update-with-where": enforceUpdateWithWhereRule,
     "no-await-drizzle-statement": noAwaitDrizzleStatementRule,
+    "no-direct-view-storage": noDirectViewStorageRule,
     "no-document-press-listener": noDocumentPressListenerRule,
     "no-hand-written-arrow-keys": noHandWrittenArrowKeysRule,
     "no-hand-written-live-region": noHandWrittenLiveRegionRule,

@@ -26,15 +26,13 @@ import {
   type TasksDisplay,
   type TasksFilter,
 } from "@luke/ui/tasks-page-model";
-import { Schema } from "effect";
+import { Schema, SchemaTransformation } from "effect";
 import { KanbanIcon, ListFilterIcon, ListIcon, SlidersHorizontalIcon } from "lucide-react";
-import { useState } from "react";
 import { FIND_PAGE, PageFind } from "../find-in-tab.js";
-import { readKept, writeKept } from "../kept-storage.js";
 import { MemberDirectory } from "../member-directory.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
-import { keptKey } from "../use-kept.js";
+import { keptKey, useKept } from "../use-kept.js";
 import { storedScrolls, useKeptScroll } from "../use-kept-scroll.js";
 import { NewTaskButton } from "./new-task-button.js";
 import { PhoneHead, PlaceMore, useMenuAsk } from "./phone-head.js";
@@ -81,20 +79,7 @@ export const TASKS_VIEW = {
 
 export type TasksView = (typeof TASKS_VIEW)[keyof typeof TASKS_VIEW];
 
-/** Where the view shown last, the filters (each workspace's by its id), and each view's display are kept in the renderer's storage. */
-const VIEW_KEY = "luke.tasksPageView";
-const FILTER_KEY = "luke.tasksFilter";
-const DISPLAY_KEY = {
-  [TASKS_VIEW.LIST]: "luke.tasksListDisplay",
-  [TASKS_VIEW.BOARD]: "luke.tasksBoardDisplay",
-} as const satisfies Record<TasksView, string>;
-
 const storedView = Schema.fromJsonString(Schema.Literals(Object.values(TASKS_VIEW)));
-
-/** Where each view stood scrolled when the reader left it, by the view's name, kept on this Mac. */
-const KEPT = {
-  SCROLLS: keptKey("luke.tasksScroll", storedScrolls),
-} as const;
 
 /** The filters as kept: each workspace's by its id. */
 const storedFilters = Schema.fromJsonString(
@@ -145,6 +130,32 @@ const INITIAL_DISPLAY = {
   [TASKS_VIEW.BOARD]: DEFAULT_BOARD_DISPLAY,
 } as const satisfies Record<TasksView, TasksDisplay>;
 
+/** A view's display as kept, over its own initial one; its own where none was kept. A property the view offered only since it was kept stands as its own display draws it, and one kept is kept with the properties its view offers now. */
+function storedDisplayOf(view: TasksView) {
+  return storedDisplay.pipe(
+    Schema.decodeTo(
+      Schema.declare(
+        (display): display is TasksDisplay => typeof display === "object" && display !== null,
+      ),
+      SchemaTransformation.transform({
+        decode: (kept) => keptTasksDisplay(kept, INITIAL_DISPLAY[view], EARLIER_OFFERED[view]),
+        encode: (display) => ({ ...display, offered: OFFERED[view] }),
+      }),
+    ),
+  );
+}
+
+/** Where the view shown last, the filters (each workspace's by its id), each view's display, and where each view stood scrolled when the reader left it, by the view's name, are kept on this Mac. */
+const KEPT = {
+  VIEW: keptKey("luke.tasksPageView", storedView),
+  FILTERS: keptKey("luke.tasksFilter", storedFilters),
+  DISPLAY: {
+    [TASKS_VIEW.LIST]: keptKey("luke.tasksListDisplay", storedDisplayOf(TASKS_VIEW.LIST)),
+    [TASKS_VIEW.BOARD]: keptKey("luke.tasksBoardDisplay", storedDisplayOf(TASKS_VIEW.BOARD)),
+  },
+  SCROLLS: keptKey("luke.tasksScroll", storedScrolls),
+} as const;
+
 /** The List | Board switch beside the page's title. */
 function ViewSwitch({
   view,
@@ -168,12 +179,6 @@ function ViewSwitch({
   );
 }
 
-/** A view's display as kept, over its own initial one; its own where none was kept. A property the view offered only since it was kept stands as its own display draws it. */
-function readDisplay(view: TasksView): TasksDisplay {
-  const kept = readKept(DISPLAY_KEY[view], storedDisplay, {});
-  return keptTasksDisplay(kept, INITIAL_DISPLAY[view], EARLIER_OFFERED[view]);
-}
-
 /** The Tasks page, in the plan's place: the List or the Board, as the reader last chose, under its Filter and View options. */
 export function TasksPage({
   tasks,
@@ -182,35 +187,34 @@ export function TasksPage({
   tasks: TasksControl;
   room: ShellRoom;
 }): React.JSX.Element {
-  const [view, setView] = useState(() => readKept(VIEW_KEY, storedView, TASKS_VIEW.LIST));
-  const [displays, setDisplays] = useState(() => ({
-    [TASKS_VIEW.LIST]: readDisplay(TASKS_VIEW.LIST),
-    [TASKS_VIEW.BOARD]: readDisplay(TASKS_VIEW.BOARD),
-  }));
-  const [filters, setFilters] = useState<Readonly<Record<string, TasksFilter>>>(() =>
-    readKept(FILTER_KEY, storedFilters, {}),
+  const [view, keepView] = useKept(KEPT.VIEW, TASKS_VIEW.LIST);
+  const [listDisplay, onListDisplay] = useKept(
+    KEPT.DISPLAY[TASKS_VIEW.LIST],
+    INITIAL_DISPLAY[TASKS_VIEW.LIST],
+  );
+  const [boardDisplay, onBoardDisplay] = useKept(
+    KEPT.DISPLAY[TASKS_VIEW.BOARD],
+    INITIAL_DISPLAY[TASKS_VIEW.BOARD],
+  );
+  const [filters, , changeFilters] = useKept<Readonly<Record<string, TasksFilter>>>(
+    KEPT.FILTERS,
+    {},
   );
   const workspaceId = tasks.workspace?.id;
   const filter =
     workspaceId === undefined ? NO_TASKS_FILTER : (filters[workspaceId] ?? NO_TASKS_FILTER);
+  // Note that the record is read again before it is written, so another tab's filter for another workspace is kept, over this tab's own where storage keeps nothing.
   const onFilter = (next: TasksFilter) => {
     if (workspaceId === undefined) return;
-    // Note that the record is read again before it is written, so another tab's filter for another workspace is kept, over this tab's own where storage keeps nothing.
-    const kept = { ...filters, ...readKept(FILTER_KEY, storedFilters, {}), [workspaceId]: next };
-    setFilters(kept);
-    writeKept(FILTER_KEY, storedFilters, kept);
+    changeFilters((held) => ({ ...held, [workspaceId]: next }));
   };
-  const display = displays[view];
-  const onDisplay = (next: TasksDisplay) => {
-    setDisplays((held) => ({ ...held, [view]: next }));
-    writeKept(DISPLAY_KEY[view], storedDisplay, { ...next, offered: OFFERED[view] });
-  };
+  const display = view === TASKS_VIEW.LIST ? listDisplay : boardDisplay;
+  const onDisplay = view === TASKS_VIEW.LIST ? onListDisplay : onBoardDisplay;
   // Note that each view stands where its reader left it, put back once as the page has its tasks and never as they refresh.
   const scroll = useKeptScroll(KEPT.SCROLLS, view, tasks.listRead);
   const choose = (next: TasksView) => {
     scroll.keep();
-    setView(next);
-    writeKept(VIEW_KEY, storedView, next);
+    keepView(next);
   };
   const shared = (tasks.workspace?.memberCount ?? 1) > 1;
   const listed = tasks.listed.tasks;

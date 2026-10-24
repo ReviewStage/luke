@@ -1,7 +1,7 @@
 import type { Workspace } from "@luke/features/workspace-wire";
 import { Schema } from "effect";
 import { useState } from "react";
-import { readKept, writeKept } from "../kept-storage.js";
+import { keptKey, useKept } from "../use-kept.js";
 
 /**
  * chosen-workspace.ts -- which of the account's workspaces the sidebar lists and New task starts in, kept across launches.
@@ -17,11 +17,11 @@ import { readKept, writeKept } from "../kept-storage.js";
  * never wear a developer's choice.
  */
 
-/** Where the choice is kept in the renderer's storage. */
-const STORAGE_KEY = "luke.chosenWorkspace";
-
 /** The chosen workspace's id; none kept reads as the empty id, which no workspace has. */
 const storedChoice = Schema.fromJsonString(Schema.String);
+
+/** Where the choice is kept in the renderer's storage. */
+const KEPT = { CHOICE: keptKey("luke.chosenWorkspace", storedChoice) } as const;
 
 /**
  * The workspace `kept` names where the view lists it, else the first listed,
@@ -49,15 +49,14 @@ export function useChosenWorkspace(
   // Note that the fixture run's choice is a state of its own rather than the
   // kept one reset, because the run is only known a render after the kept
   // choice was read, as `folded-groups.ts` says of its folds.
-  const [kept, setKept] = useState(() => readKept(STORAGE_KEY, storedChoice, ""));
+  const [kept, keep] = useKept(KEPT.CHOICE, "");
   const [stagedChoice, setStagedChoice] = useState<string | undefined>(undefined);
   const choose = (workspaceId: string) => {
     if (staged) {
       setStagedChoice(workspaceId);
       return;
     }
-    setKept(workspaceId);
-    writeKept(STORAGE_KEY, storedChoice, workspaceId);
+    keep(workspaceId);
   };
   return { chosen: resolveChoice(workspaces, staged ? stagedChoice : kept), choose };
 }

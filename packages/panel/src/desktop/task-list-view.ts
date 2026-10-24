@@ -10,8 +10,7 @@ import {
 } from "@luke/ui/task-list-model";
 import { Schema } from "effect";
 import * as Atom from "effect/reactivity/Atom";
-import { useState } from "react";
-import { readKept, writeKept } from "../kept-storage.js";
+import { keptKey, useKept } from "../use-kept.js";
 
 /**
  * task-list-view.ts -- how each workspace's task list is grouped, ordered, and filtered in the sidebar, kept per workspace on this Mac.
@@ -24,9 +23,6 @@ import { readKept, writeKept } from "../kept-storage.js";
  * assigned to anyone. A fixture run draws that view and keeps
  * nothing, so its frames never wear a developer's choices.
  */
-
-/** Where the views are kept in the renderer's storage. */
-const STORAGE_KEY = "luke.sidebarTaskViews";
 
 /** Each workspace's view, by its id. */
 const storedViews = Schema.fromJsonString(
@@ -43,6 +39,9 @@ const storedViews = Schema.fromJsonString(
 );
 
 type Views = Readonly<Record<string, TaskListView>>;
+
+/** Where the views are kept in the renderer's storage. */
+const KEPT = { VIEWS: keptKey("luke.sidebarTaskViews", storedViews) } as const;
 
 /** The listed workspace's view, and the presses that change it. */
 export interface TaskListViewControl {
@@ -63,13 +62,7 @@ export interface TaskListViewControl {
   readonly onStatuses: (statuses: readonly TaskStatus[]) => void;
 }
 
-/**
- * The views as this window has chosen them since it opened, none until its
- * first choice, the kept ones standing until then; and a fixture run's. One
- * for the window, so the sidebar and a person's page, which lists their
- * tasks there, read and change the same view.
- */
-const chosenViewsAtom = Atom.keepAlive(Atom.make<Views | undefined>(undefined));
+/** A fixture run's views, which keep nothing. One for the window, so the sidebar and a person's page, which lists their tasks there, read and change the same view. */
 const stagedViewsAtom = Atom.keepAlive(Atom.make<Views>({}));
 
 /** The view of the workspace listed, kept as each choice is made, unless the run is `staged`. */
@@ -77,10 +70,9 @@ export function useTaskListView(
   workspaceId: string | undefined,
   staged: boolean,
 ): TaskListViewControl {
-  const [stored] = useState<Views>(() => readKept(STORAGE_KEY, storedViews, {}));
-  const [chosen, setKept] = useAtom(chosenViewsAtom);
+  // Note that every surface holding the key draws a choice at once, so the sidebar and a person's page read and change the same view.
+  const [kept, keep] = useKept<Views>(KEPT.VIEWS, {});
   const [stagedViews, setStagedViews] = useAtom(stagedViewsAtom);
-  const kept = chosen ?? stored;
   const views = staged ? stagedViews : kept;
   const view =
     (workspaceId === undefined ? undefined : views[workspaceId]) ?? DEFAULT_TASK_LIST_VIEW;
@@ -91,8 +83,7 @@ export function useTaskListView(
       setStagedViews(all);
       return;
     }
-    setKept(all);
-    writeKept(STORAGE_KEY, storedViews, all);
+    keep(all);
   };
   return {
     view,
