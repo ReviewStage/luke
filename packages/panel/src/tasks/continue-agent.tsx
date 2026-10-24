@@ -64,6 +64,7 @@ const CONTINUED_COPY = {
   MORE: (count: number) => `+${count} more`,
   EARLIER: "Earlier continuations",
   ARCHIVE: "Archive",
+  ARCHIVING: "Archiving",
   STOP: "Stop",
   STOPPING: "Stopping",
   CONTINUING: "Continuing in new agent",
@@ -261,8 +262,9 @@ export function ContinuedTrail(doors: ContinuedDoors): React.JSX.Element {
  * The quiet note in a continued agent's box, framed as the box it replaces:
  * Continued in and the agents' chips, then Stop while a turn still runs,
  * and Archive, bordered as a housekeeping press is, which asks first only
- * where archiving would stop a teammate's turn (`useAgentArchive`) and
- * toasts with Undo once it took. An agent already
+ * where archiving would stop a teammate's turn (`useAgentArchive`), is held
+ * busy while a teammate's agent at rest is read again first, and toasts with
+ * Undo once it took. An agent already
  * archived is offered no Archive.
  */
 export function ContinuedComposerNote({
@@ -306,7 +308,12 @@ export function ContinuedComposerNote({
                     </Button>
                   )}
                   {agent.archivedAt !== undefined ? null : (
-                    <Button variant={BUTTON_VARIANT.OUTLINE} onClick={archive.action.onSelect}>
+                    <Button
+                      variant={BUTTON_VARIANT.OUTLINE}
+                      busy={archive.reading}
+                      busyLabel={CONTINUED_COPY.ARCHIVING}
+                      onClick={archive.action.onSelect}
+                    >
                       {CONTINUED_COPY.ARCHIVE}
                     </Button>
                   )}

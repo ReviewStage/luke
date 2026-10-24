@@ -34,7 +34,8 @@ import {
   useConfirmDialog,
 } from "@luke/ui";
 import { GLYPH } from "@luke/ui/icons";
-import { type ReactNode, type RefObject, useState } from "react";
+import { useInlineRename } from "@luke/ui/use-inline-rename";
+import type { ReactNode, RefObject } from "react";
 import { rowMenu } from "../desktop/action-menu.js";
 import { AgentRef, type AgentSubject } from "./agent-ref.js";
 import type { PaneOver } from "./file-view.js";
@@ -55,6 +56,9 @@ import type { TerminalSession } from "./use-terminal-session.js";
  * its glyph's to say, the working mark in its place, so no word beside it
  * repeats it (`state-glyph.tsx`).
  */
+
+/** What a shell's row says under the field it reopens when the service refused its new name. */
+const RENAME_REFUSED = "The shell could not be renamed. Try again.";
 
 /** What a Terminal tab's card says under its agent's, before the count of its shells. */
 const CARD_FOOT = "Terminal in this agent’s sandbox";
@@ -202,7 +206,8 @@ function ShellRow({
   surfaceOpen: boolean;
   session: Pick<TerminalSession, "onChoose" | "onCreate" | "onRename" | "onKill">;
 }): React.JSX.Element {
-  const [renaming, setRenaming] = useState(false);
+  const rename = useInlineRename(shell.id, session.onRename);
+  const renaming = rename.editing;
   const kill = `End ${shell.title}`;
   // Ending a shell ends what runs in it, which nothing brings back, so it asks first.
   const ending = useConfirmDialog({ subject: true, surfaceOpen }, () => session.onKill(shell.id));
@@ -213,20 +218,23 @@ function ShellRow({
         title={
           renaming ? (
             <InlineEdit
-              value={shell.title}
+              value={rename.asked ?? shell.title}
               label="Shell name"
               editing
               maxLength={TITLE_MAX}
-              onEnd={({ value }) => {
-                setRenaming(false);
-                if (value !== undefined) session.onRename(shell.id, value);
-              }}
+              onEnd={({ value }) => void rename.end(value)}
             />
           ) : (
             shell.title
           )
         }
-        description={<span className="terminal-shell-detail">{shellDetail(shell)}</span>}
+        description={
+          rename.refused ? (
+            <span>{RENAME_REFUSED}</span>
+          ) : (
+            <span className="terminal-shell-detail">{shellDetail(shell)}</span>
+          )
+        }
         meta={
           shell.running ? (
             <span className="terminal-shell-running" role="img" aria-label="Running" />
@@ -250,7 +258,7 @@ function ShellRow({
                   {
                     label: "Rename",
                     icon: <GLYPH.RENAME />,
-                    onSelect: () => setRenaming(true),
+                    onSelect: rename.begin,
                   },
                   {
                     label: "New shell",

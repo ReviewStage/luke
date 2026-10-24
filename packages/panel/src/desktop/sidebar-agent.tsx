@@ -22,6 +22,7 @@ import { useDraftedAgents } from "../composer-drafts.js";
 import { DraftMark } from "../draft-mark.js";
 import { useMemberDirectory } from "../member-directory.js";
 import { AgentCard, tasklessRowSubject } from "../tasks/agent-ref.js";
+import { RENAME_FAILED } from "../tasks/coding-agent-model.js";
 import { agentEndMark, TAB_KIND, tabLook } from "../tasks/tab-look.js";
 import { markReadItem } from "../tasks/task-menu-items.js";
 import { type CodingAgentsControl, readAgentById } from "../tasks/use-coding-agents.js";
@@ -50,7 +51,9 @@ import { type RowMark, RowMarks } from "./task-actions.js";
  * press opens the agent's own page, and it reads in semibold while it ended
  * unseen, as its tab does, or while it is marked unread by hand. Its actions are one menu, opened alike by
  * the row's ⋯, a right-click, and the menu key, in a task's row's groups: Copy link and Rename, which turns
- * the row into its name's field until the edit ends, with Mark as unread
+ * the row into its name's field until the edit ends, the new name drawn at
+ * once and a refused one saying so under the field it reopens, as a task's
+ * row does, with Mark as unread
  * or Mark as read between them, through a task's marks (`agent-read-marks.ts`); then Pin or Unpin,
  * the reader's own, Archive, asked first while a teammate's agent works
  * (`agent-archive.tsx`), or Unarchive, and Move to section, the reader's
@@ -250,6 +253,7 @@ export function SidebarAgent({
               </>
             )
           }
+          description={rename?.refused === true ? <span>{RENAME_FAILED}</span> : undefined}
           meta={
             editing ? null : (
               <span className="sidebar-task-time">

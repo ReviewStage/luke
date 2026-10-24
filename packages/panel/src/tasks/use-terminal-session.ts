@@ -22,12 +22,21 @@ import { sandboxRead, shellsAsked } from "@luke/features/terminal-store";
 import { SANDBOX_STATE, type TerminalsAnswer } from "@luke/features/terminal-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import { STATUS_TONE } from "@luke/ui";
+import {
+  type PendingValues,
+  pendingSettled,
+  pendingShown,
+  pendingValue,
+  pendingWithout,
+  type SameValue,
+} from "@luke/ui/pending-values";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { Duration, Effect, Option, Schema } from "effect";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useAct } from "../act.js";
 import { useSideBundles } from "../bundle-loader.js";
+import { usePendingNow } from "../pending-clock.js";
 import { rendererRuntime } from "../renderer-runtime.js";
 import type { TerminalFind, TerminalHandle } from "../terminal/contract.js";
 import { onTerminalPort } from "../terminal/terminal-port.js";
@@ -64,12 +73,41 @@ const RESIZE_SETTLES = Duration.millis(100);
 const STARTING_RELIST = Duration.seconds(5);
 const SHELLS_REREAD = Duration.seconds(5);
 
-/** What a toast says when a shell could not be started, named, or ended. */
+/** What a toast says when a shell could not be started or ended; a refused name is said by its row. */
 const SHELL_FAILED = {
   CREATE: "Could not start a shell.",
-  RENAME: "Could not rename that shell.",
   KILL: "Could not end that shell.",
 } as const;
+
+/** No shell's name given here and waiting on the list. */
+const NO_PENDING_TITLES: PendingValues<string, string> = new Map();
+
+/** Whether two shells' names are one. */
+const sameTitle: SameValue<string> = (a, b) => a === b;
+
+/** A shell's name as the list read it; none where the list holds no such shell. */
+function shellTitle(listed: TerminalsAnswer | undefined, shell: string): string | undefined {
+  return listed?.terminals.find((each) => each.id === shell)?.title;
+}
+
+/** The list with each name given here that it does not yet carry drawn in its shell's place. */
+function withTitles(
+  listed: TerminalsAnswer | undefined,
+  titles: PendingValues<string, string>,
+): TerminalsAnswer | undefined {
+  if (listed === undefined || titles.size === 0) return listed;
+  const shown = pendingShown(
+    pendingSettled(titles, (shell) => shellTitle(listed, shell), sameTitle, undefined),
+  );
+  if (shown.size === 0) return listed;
+  return {
+    ...listed,
+    terminals: listed.terminals.map((each) => {
+      const title = shown.get(each.id);
+      return title === undefined ? each : { ...each, title };
+    }),
+  };
+}
 
 /** The states the host says that change the agent's shells. */
 const LIST_CHANGES: ReadonlySet<TerminalState["kind"]> = new Set([
@@ -233,7 +271,8 @@ export interface TerminalSession {
   readonly onChoose: (shell: string) => void;
   /** Starts a shell in the same agent's sandbox and shows it. */
   readonly onCreate: () => void;
-  readonly onRename: (shell: string, title: string) => void;
+  /** Names a shell, drawn at once and put back where refused; answers whether the name took. */
+  readonly onRename: (shell: string, title: string) => Promise<boolean>;
   /** Ends a shell, answering whether it ended; the one shown gives way to the oldest left, or a new one. */
   readonly onKill: (shell: string) => Promise<ActionResult>;
 }
@@ -434,19 +473,34 @@ export function useTerminalSession(
     }
   }, [act, agentId, enter, failedToast, onChoose, reread]);
 
-  const onRename = useCallback(
-    async (target: string, title: string) => {
-      live.current.listMoves += 1;
-      try {
-        const answer = await act(ACT_KIND.TERMINAL_RENAME, { agentId, terminalId: target, title });
-        if ("refused" in answer) return failedToast(SHELL_FAILED.RENAME);
-        writeList(answer);
-      } catch {
-        failedToast(SHELL_FAILED.RENAME);
-      }
-    },
-    [act, agentId, failedToast, writeList],
+  // A name given here stands over the list until a read carries it, or a third name, or its time
+  // runs out (`@luke/ui/pending-values`), and goes at once where the rename is refused.
+  const [titles, setTitles] = useState(NO_PENDING_TITLES);
+  const titlesNow = usePendingNow(titles.size > 0);
+  useEffect(
+    () =>
+      setTitles((was) =>
+        pendingSettled(was, (shell) => shellTitle(listed, shell), sameTitle, titlesNow),
+      ),
+    [listed, titlesNow],
   );
+  const named = useMemo(() => withTitles(listed, titles), [listed, titles]);
+  const onRename = async (target: string, title: string): Promise<boolean> => {
+    live.current.listMoves += 1;
+    const asked = pendingValue(titles.get(target), title, shellTitle(listed, target), sameTitle);
+    setTitles((was) => new Map(was).set(target, asked));
+    const answer = await act(ACT_KIND.TERMINAL_RENAME, {
+      agentId,
+      terminalId: target,
+      title,
+    }).catch(() => undefined);
+    if (answer === undefined || "refused" in answer) {
+      setTitles((was) => pendingWithout(was, target, asked));
+      return false;
+    }
+    writeList(answer);
+    return true;
+  };
 
   // Note that the shown shell's port is let go before it is ended, because
   // the host says it is gone on that port, which would start a shell in its
@@ -715,11 +769,11 @@ export function useTerminalSession(
     find: handle?.find,
     screen: setElement,
     onAction,
-    listed,
+    listed: named,
     shell,
     onChoose,
     onCreate: () => void onCreate(),
-    onRename: (target, title) => void onRename(target, title),
+    onRename,
     onKill,
   };
 }

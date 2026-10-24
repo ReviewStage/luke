@@ -2724,6 +2724,53 @@ test("one agent's pins are asked one after another, so the service hears an Unpi
   assert.deepEqual(asked(), [true, false]);
 });
 
+test("an agent with no task is renamed and archived in the sidebar's list at once, and put back where the service refuses", async () => {
+  const taskless = {
+    id: "agent-9",
+    planId: null,
+    model: "anthropic/claude-opus-5.5",
+    effort: "high",
+    title: "Nightly triage",
+    createdAt: 1,
+    status: CODING_AGENT_STATUS.COMPLETED,
+    turnId: null,
+    automationId: null,
+    workspaceId: "workspace-1",
+    repository: null,
+    activityAt: 1,
+  };
+  const renamed = Promise.withResolvers<PortActResult<typeof ACT_KIND.CODING_AGENTS_RENAME>>();
+  const archived = Promise.withResolvers<PortActResult<typeof ACT_KIND.CODING_AGENTS_ARCHIVE>>();
+  const tab = mount(
+    { shown: true, tasks: { ...listRead([]), tasklessAgents: [taskless] } },
+    {
+      [ACT_KIND.CODING_AGENTS_RENAME]: () => renamed.promise,
+      [ACT_KIND.CODING_AGENTS_ARCHIVE]: () => archived.promise,
+    },
+  );
+  await settle();
+  const listed = () => {
+    const { standing, archived: gone } = tab.control().listedAgents;
+    return {
+      standing: standing.map((agent) => agent.title),
+      archived: gone.map((agent) => agent.title),
+    };
+  };
+
+  await act(async () => {
+    void tab.control().agents.onRename(taskless.id, "Morning triage");
+    void tab.control().agents.onArchive(taskless.id, true);
+  });
+  assert.deepEqual(listed(), { standing: [], archived: ["Morning triage"] });
+
+  await act(async () => {
+    renamed.resolve({ failure: CODING_AGENT_CALL_FAILURE.NOT_FOUND });
+    archived.resolve({ failure: CODING_AGENT_CALL_FAILURE.NOT_FOUND });
+  });
+  await settle();
+  assert.deepEqual(listed(), { standing: ["Nightly triage"], archived: [] });
+});
+
 test("an agent's pin still waiting its turn when the account changes is never asked, so it lands on no one else's pins", async () => {
   const answers: ((answer: PortActResult<typeof ACT_KIND.CODING_AGENTS_PIN>) => void)[] = [];
   const tab = mount(
@@ -3258,6 +3305,30 @@ test("New task's Agent mode sends one start carrying the agent, its words and mo
   );
   assert.equal(tab.control().agents.draft, undefined, "no draft stands in its place");
   assert.deepEqual(tab.control().mainTabs.tab, { agent: AGENT_ID }, "the task opens on its tab");
+});
+
+test("archiving a task's last agent opens no draft while the archive is out, so a refused one brings the agent back alone", async () => {
+  const archived = Promise.withResolvers<PortActResult<typeof ACT_KIND.CODING_AGENTS_ARCHIVE>>();
+  const tab = mount(
+    { shown: true, tasks: OPEN },
+    {
+      [ACT_KIND.CODING_AGENTS_LIST]: () => Promise.resolve({ agents: [RUNNING_AGENT] }),
+      [ACT_KIND.CODING_AGENTS_ARCHIVE]: () => archived.promise,
+    },
+  );
+  await settle();
+  assert.deepEqual(tab.control().mainTabs.tab, { agent: AGENT_ID });
+
+  await act(async () => {
+    void tab.control().agents.onArchive(AGENT_ID, true);
+  });
+  assert.deepEqual(tab.control().mainTabs.tabs, [], "the agent leaves at once");
+  assert.equal(tab.control().agents.draft, undefined, "no draft opens while the archive is out");
+
+  await act(async () => archived.resolve({ failure: CODING_AGENT_CALL_FAILURE.NOT_FOUND }));
+  await settle();
+  assert.deepEqual(tab.control().mainTabs.tab, { agent: AGENT_ID });
+  assert.equal(tab.control().agents.draft, undefined);
 });
 
 test("a task started, with an agent or without, leaves a hidden side panel hidden", async () => {

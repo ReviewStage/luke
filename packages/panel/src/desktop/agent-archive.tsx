@@ -20,12 +20,12 @@ import {
 } from "@luke/ui";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { Schema } from "effect";
-import { useRef } from "react";
+import { useRef, useState } from "react";
 import { commandAction, commandHead, PANEL_COMMAND } from "../command-items.js";
 import { AgentCard, agentSubject, NOTHING_HELD } from "../tasks/agent-ref.js";
 import { agentName, agentStillWriting, teammateStarter } from "../tasks/coding-agent-model.js";
 import { AgentGlyph, agentEndMark } from "../tasks/tab-look.js";
-import type { CodingAgentsControl } from "../tasks/use-coding-agents.js";
+import { ARCHIVE_DRAWN, type CodingAgentsControl } from "../tasks/use-coding-agents.js";
 import { TOAST_HOLD, useToast } from "../toast.js";
 import { keptKey, useKept } from "../use-kept.js";
 import { ActionMenu, type MenuAction } from "./action-menu.js";
@@ -45,7 +45,10 @@ import { type CountNoun, foldedCount } from "./sidebar-fold.js";
  * reader's. Note that a teammate's agent drawn at rest is read again
  * before it is archived unasked, because nothing follows an agent whose
  * tab is not shown, and a turn begun since, by Luke or another window, is
- * asked about first like any other. Archived, the agent leaves its tab, the
+ * asked about first like any other, a button that pressed it held busy while
+ * the read is out. Archived, which is drawn at once, before the service
+ * answers, and put back where it refuses, unless it was asked about, whose
+ * dialog stands until the answer to say a refusal, the agent leaves its tab, the
  * summary, the "+" menu, and the sidebar's card and marks, while its
  * transcript and its pull request are kept, ⌘K still finds it, saying it is
  * archived and opening its own page, and a toast offers Undo
@@ -110,6 +113,8 @@ function useArchivePress(agents: CodingAgentsControl) {
 /** An agent's Archive as a menu offers it, and the question it asks through. */
 export interface AgentArchive {
   action: MenuAction;
+  /** Whether a teammate's agent at rest is being read again before it is archived, which a button drawing the action shows busy. */
+  reading: boolean;
   dialog: React.JSX.Element;
 }
 
@@ -135,23 +140,30 @@ export function useAgentArchive(
   shown: boolean,
 ): AgentArchive {
   const press = useArchivePress(agents);
+  // Note that an archive asked about waits on its answer, so the dialog stands to say a refusal.
   const confirm = useConfirmDialog({ subject: true, surfaceOpen: shown }, () =>
-    agents.onArchive(agent.id, true),
+    agents.onArchive(agent.id, true, ARCHIVE_DRAWN.ON_ANSWER),
   );
+  const [reading, setReading] = useState(false);
   const teammate = teammateStarter(agent.startedBy, agents.me) !== undefined;
   const archive = () => void press(agent.id, true);
-  const asked = () =>
+  const asked = () => {
+    if (reading) return;
+    setReading(true);
     void agents.readAgent(agent.id).then((now) => {
+      setReading(false);
       // A read that did not land asks first rather than stop a turn it could not see.
       if (now === undefined || agentStillWriting(now.status)) confirm.ask();
       else return press(agent.id, true);
     });
+  };
   return {
     action: commandAction(
       PANEL_COMMAND.ARCHIVE_AGENT,
       teammate ? (agentStillWriting(agent.status) ? confirm.ask : asked) : archive,
       false,
     ),
+    reading,
     dialog: (
       <ConfirmDialog
         open

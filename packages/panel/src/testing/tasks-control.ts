@@ -163,6 +163,7 @@ export function codingAgentsControl(
     onSwitchServers: () => Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }),
     onOpenIntegrations: ignore,
     onOpenApiKeys: ignore,
+    pending: { titles: new Map(), archives: new Map() },
     onRename: () => Promise.resolve(false),
     onArchive: () => Promise.resolve({ status: ACTION_RESULT_STATUS.REJECTED, reason: "Ignored." }),
     onDelete: () => Promise.resolve({ status: ACTION_RESULT_STATUS.REJECTED, reason: "Ignored." }),
