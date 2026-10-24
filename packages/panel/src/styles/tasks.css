@@ -2857,9 +2857,6 @@
   align-items: baseline;
   gap: var(--luke-item-gap);
   margin: 0 0 var(--luke-item-gap);
-  color: var(--luke-color-text-muted);
-  font-size: var(--luke-type-caption-size);
-  font-weight: var(--luke-weight-semibold);
 }
 
 .pull-request-count {
@@ -2980,14 +2977,6 @@
 
 .pull-request-description-text li + li {
   margin-top: var(--luke-list-gap);
-}
-
-.pull-request-description-text :not(pre) > code {
-  padding: 0.1em 0.35em;
-  border-radius: var(--luke-radius-6);
-  background: var(--luke-color-fill-strong);
-  font-family: var(--luke-font-mono);
-  font-size: 0.9em;
 }
 
 .pull-request-description-text ul[data-type="taskList"] {
@@ -3725,11 +3714,16 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
   white-space: pre-wrap;
 }
 
-/* An inline span of code: the blocks' type on a subtle fill, no edge. */
-.transcript-inline-code {
-  padding: 0.1em 0.35em;
+/* An inline span of code, in a transcript, a pull request's description, or
+   a card's branches, is the prose's (`.luke-prose code`, `@luke/ui`'s
+   prose.css) in its padding, tint, face and size, and the corner role nearest
+   its own, so code reads the same wherever words carry it. */
+.transcript-inline-code,
+.pull-request-description-text :not(pre) > code,
+.card-code {
+  padding: 0.1em 0.4em;
   border-radius: var(--luke-radius-6);
-  background: var(--luke-color-fill-strong);
+  background: var(--luke-prose-tint, var(--luke-color-fill-hover));
   font-family: var(--luke-font-mono);
   font-size: 0.9em;
 }

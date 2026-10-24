@@ -10,9 +10,11 @@ import {
   Chip,
   ChipName,
   CopyIcon,
+  CountParts,
   LIST_VARIANT,
   List,
   ListRow,
+  linesCount,
   ProviderMark,
   RowHint,
   RowHintOptions,
@@ -169,8 +171,7 @@ export function LinesChanged({
 }): React.JSX.Element {
   return (
     <span className="agent-published-lines">
-      <span className="agent-published-added">+{additions}</span>{" "}
-      <span className="agent-published-removed">−{deletions}</span>
+      <CountParts parts={linesCount(additions, deletions)} />
     </span>
   );
 }

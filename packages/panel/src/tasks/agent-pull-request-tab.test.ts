@@ -934,6 +934,13 @@ test("the Checks tab lists the head's deployments over its checks: each environm
     .filter((each) => each.closest("[hidden]") === null)
     .map((each) => each.firstChild?.textContent);
   assert.deepEqual(headings, ["Deployments", "Checks"], "the deployments stand over the checks");
+  assert.deepEqual(
+    [...tab.querySelectorAll(".pull-request-heading")]
+      .filter((each) => each.closest("[hidden]") === null)
+      .map((each) => each.getAttribute("data-variant")),
+    ["group", "group"],
+    "a section's heading is set in the group role",
+  );
   const deployments =
     tab.querySelector<HTMLElement>('[aria-label="Deployments"]') ??
     assert.fail("the deployments stand");
@@ -4972,8 +4979,10 @@ test("a comment GitHub refuses says so under it in GitHub's own words, its words
   };
   await drawCommentable(undefined, { ...INVITE_FILE, additions: 5 });
   const lines = () =>
-    lists.at(-1)?.renderHeader(INVITE_FILE.path).querySelector(".agent-published-added")
-      ?.textContent;
+    lists
+      .at(-1)
+      ?.renderHeader(INVITE_FILE.path)
+      .querySelector(".agent-published-lines .luke-count-part")?.textContent;
   const comment = await pickLines({
     start: 9,
     side: DIFF_SELECTION_SIDE.ADDITIONS,
@@ -5963,6 +5972,11 @@ test("the member's pending comments stand on their lines in Files changed, marke
     (each) => each.querySelector(".pull-request-pending-where")?.textContent,
   );
   assert.deepEqual(listed, ["src/invite.ts · line 13", "src/invite.ts · line 12"]);
+  assert.equal(
+    panel.querySelector(".pull-request-pending-where")?.getAttribute("data-font"),
+    "mono",
+    "a pending comment's place reads in the monospace face, as a path does",
+  );
 
   // ⌘↩ in a listed comment's edit saves that comment alone, never the whole review.
   const entry = panel.querySelector<HTMLElement>('ol[aria-label="Pending"] > li') ?? assert.fail();

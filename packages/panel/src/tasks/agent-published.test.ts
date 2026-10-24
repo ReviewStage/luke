@@ -5,7 +5,7 @@ import { CHECK_SUMMARY, PULL_REQUEST_STATE } from "@luke/features/coding-agent-w
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
-import { BranchChip, type PublishedDoors, PublishedRow } from "./agent-published.js";
+import { BranchChip, LinesChanged, type PublishedDoors, PublishedRow } from "./agent-published.js";
 
 /**
  * agent-published.test.ts -- the pull request's row pinned over an agent's
@@ -130,4 +130,16 @@ test("the box's foot wears the branch's chip, opening the branch compared on Git
 test("the pull request's row reads as every place names it, its number then its title", () => {
   const { row } = drawRow(true);
   assert.match(row.textContent ?? "", /^#42 Expire invitations/u);
+});
+
+test("the lines a change adds and removes are drawn as every count of them is, grouped and toned", () => {
+  drawn(createElement(LinesChanged, { additions: 1234, deletions: 5 }));
+  const parts = [...document.querySelectorAll(".agent-published-lines .luke-count-part")];
+  assert.deepEqual(
+    parts.map((part) => [part.textContent, part.getAttribute("data-tone")]),
+    [
+      ["+1,234", "complete"],
+      ["−5", "danger"],
+    ],
+  );
 });

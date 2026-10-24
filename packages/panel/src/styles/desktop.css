@@ -4444,16 +4444,6 @@ ul.actor-stack {
   vertical-align: -2px; /* off-scale */
 }
 
-/* A pull request's branches on its card stand as inline code does in words
-   (`.luke-markdown code`): mono on a tint, rounded. */
-.card-code {
-  padding: 0.08em 0.36em;
-  border-radius: 0.36em;
-  background: color-mix(in srgb, currentColor 13%, transparent);
-  color: var(--luke-color-text);
-  font-weight: var(--luke-weight-medium);
-}
-
 /* Who opened a pull request on its card, and how long ago it moved after
    them (`tasks/pull-request-card-notes.tsx`): the time wraps under the name
    as one piece where a long login leaves it no room, so the name is never
