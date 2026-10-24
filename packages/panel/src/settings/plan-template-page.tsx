@@ -419,7 +419,7 @@ function TitleActions({
       </Tooltip>
       {custom ? (
         <Button
-          variant={BUTTON_VARIANT.OUTLINE}
+          variant={BUTTON_VARIANT.QUIET}
           icon={<GLYPH.GO_BACK />}
           busy={resetting}
           busyLabel="Resetting"

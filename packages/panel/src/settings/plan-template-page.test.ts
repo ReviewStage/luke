@@ -113,6 +113,21 @@ async function opened(container: HTMLElement): Promise<Editor> {
   return editor;
 }
 
+test("the template's Reset draws quiet, as every other Settings Reset does", async () => {
+  const container = document.createElement("div");
+  document.body.append(container);
+  root = createRoot(container);
+  registry = AtomRegistry.make();
+  draw(true);
+  await settle();
+
+  const reset = [...container.querySelectorAll("button")].find(
+    (button) => button.textContent === "Reset to defaults",
+  );
+
+  assert.equal(reset?.getAttribute("data-variant"), "quiet");
+});
+
 test("an edit saved after the reset withdraws its Undo, so the Undo can never write the old template over it", async () => {
   const container = await resetPage();
   const editor = await opened(container);
