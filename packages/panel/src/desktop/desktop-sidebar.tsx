@@ -29,6 +29,7 @@ import {
   GroupHeader,
   HoldPress,
   IconButton,
+  joinRefs,
   LAYOUT_ELEMENT,
   ListMotion,
   MarkDoneIcon,
@@ -61,6 +62,7 @@ import {
   useMenu,
   useMinute,
   useResizeEdge,
+  useRovingKeys,
   VisuallyHidden,
 } from "@luke/ui";
 import { actorName, creatorActor, personActor } from "@luke/ui/actor-model";
@@ -115,7 +117,7 @@ import {
   ShieldUserIcon,
   ZapIcon,
 } from "lucide-react";
-import { memo, useRef } from "react";
+import { memo, useMemo, useRef } from "react";
 import { ACTOR_SIZE, ActorMark, actorCard, UnassignedMark } from "../actor-ref.js";
 import { runAppCommand, useAppCommand } from "../app-commands.js";
 import { ColumnFoot } from "../call/call-card.js";
@@ -1606,6 +1608,9 @@ function SidebarColumn({
   const coarse = useCoarsePointer();
   const overlay = useFloatingSidebar(sidebar);
   const body = useRef<HTMLDivElement>(null);
+  // The column's rows, Luke's, the pins', and every group's tasks and agents, are one Tab stop that ↑↓ walk, a folded group's passed by.
+  const roving = useRovingKeys<HTMLDivElement>();
+  const bodyRef = useMemo(() => joinRefs(body, roving.ref), [roving.ref]);
   // The window's Inbox, an agent's page, the Automations page, Chat, and the Board stand in the task's place, so while one does no task is the place shown.
   const inInbox = onTasks && tasks.inboxView.open;
   const inAutomations = onTasks && tasks.automationsView.open;
@@ -1987,7 +1992,7 @@ function SidebarColumn({
       <Fill className="sidebar-section">
         <ScrollArea fade={SCROLL_FADE.BOTH}>
           <ListMotion root={body}>
-            <div ref={body} className="sidebar-section-body" {...motionRows()}>
+            <div {...roving} ref={bodyRef} className="sidebar-section-body" {...motionRows()}>
               {narrow ? places : null}
               {operator === undefined ? null : (
                 <nav className="sidebar-group" aria-label="Luke">

@@ -152,6 +152,7 @@ export * from "./css.js";
 export * from "./face/glyphs.js";
 export * from "./face/wing-face.js";
 export * from "./icons/lucide-glyphs.js";
+export * from "./join-refs.js";
 export * from "./marks/harness-mark.js";
 export * from "./marks/provider-mark.js";
 export * from "./marks/task-marks.js";

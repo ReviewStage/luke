@@ -3,12 +3,13 @@
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, expect, test } from "vitest";
-import { ROVING_ORIENTATION, rovingItem, useRovingKeys } from "./roving-keys.js";
+import { ROVING_ORIENTATION, rovingItem, useRovingColumns, useRovingKeys } from "./roving-keys.js";
 
 /**
  * roving-keys.test.ts -- a row of items walks with ←→ and leaves ↑↓ alone,
  * a key heard on the box itself steps from none, and an item's own handler
- * that takes a key keeps it. A `List`'s walk down its rows is tested
+ * that takes a key keeps it; columns of sets are crossed by ←→, an empty
+ * column passed over. A `List`'s walk down its rows is tested
  * through the list (`list-row.test.ts`), and a set's other options through
  * the components that take them: a chosen stop and a `moveTo` through
  * `Tabs` and `ChoiceBar`, both pairs of arrows through `ChoiceBar` and
@@ -113,4 +114,52 @@ test("a key heard on the box itself steps from none: forward and Home to the fir
     key(name);
     expect(document.activeElement, name).toBe(landed);
   }
+});
+
+const COLUMNS = [["Backlog one", "Backlog two"], [], ["Done one"]] as const;
+
+/** One column of cards, walked down by ↑↓. */
+function Column({ cards }: { cards: readonly string[] }): React.JSX.Element {
+  const roving = useRovingKeys<HTMLDivElement>();
+  return createElement(
+    "div",
+    roving,
+    cards.map((card) =>
+      createElement("button", { key: card, type: "button", ...rovingItem() }, card),
+    ),
+  );
+}
+
+/** A board of columns, the middle one holding no card, crossed by ←→. */
+function Board(): React.JSX.Element {
+  const crossing = useRovingColumns<HTMLDivElement>();
+  return createElement(
+    "div",
+    crossing,
+    COLUMNS.map((cards, at) => createElement(Column, { key: at, cards })),
+  );
+}
+
+test("← and → cross from a column to the next one's Tab stop, an empty column passed over, wrapping, and leave ↑↓ to the column", () => {
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  roots.push(root);
+  act(() => root.render(createElement(Board)));
+  const card = (name: string) => {
+    const found = [...container.querySelectorAll("button")].find(
+      (each) => each.textContent === name,
+    );
+    if (found === undefined) throw new Error(`No card ${name}`);
+    return found;
+  };
+  act(() => card("Backlog one").focus());
+  key("ArrowDown");
+  expect(document.activeElement).toBe(card("Backlog two"));
+  key("ArrowRight");
+  expect(document.activeElement).toBe(card("Done one"));
+  key("ArrowRight");
+  expect(document.activeElement).toBe(card("Backlog two"));
+  key("ArrowLeft");
+  expect(document.activeElement).toBe(card("Done one"));
 });

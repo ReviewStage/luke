@@ -411,7 +411,12 @@ function TaskInboxTab({
   });
   // A notice of the reader's own is acknowledged as it opens, as the window's Inbox acknowledges it.
   useNodOnOpen({ shown: opened, readerId: tasks.me, control: inbox });
-  const { pager, direction } = useInboxPager(steps, list, chosen?.item.id, choose, {
+  // K and J choose the item above or below, the keyboard following it to its row.
+  const step = (listed: InboxListed) => {
+    choose(listed);
+    columns.onStep();
+  };
+  const { pager, direction } = useInboxPager(steps, list, chosen?.item.id, step, {
     shown,
     folded: NO_FOLDS,
   });

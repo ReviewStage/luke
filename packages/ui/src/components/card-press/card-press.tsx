@@ -12,6 +12,7 @@ import {
 } from "react";
 import { PRESS_PULSE, pulsePress } from "../../press-pulse.js";
 import { type ContextMenuProps, withContextMenu } from "../menu/menu.js";
+import { rovingItem } from "../roving-keys/roving-keys.js";
 import { holdRun, ListSelectionContext, selectableRow } from "../selection/list-selection.js";
 
 /**
@@ -57,6 +58,10 @@ import { holdRun, ListSelectionContext, selectableRow } from "../selection/list-
  * be chosen: ⌘- and ⇧-clicks on the button choose rows rather than press it
  * (`list-selection.ts`), and one chosen takes the selected fill on its
  * reach and is described as selected.
+ *
+ * A press that is an item of a roving set (`roving`), a list's or a board
+ * column's whose box `useRovingKeys` keeps, is one of the set's items: the
+ * set's one Tab stop or out of the tab order, the arrows walking to it.
  */
 
 /** How a press reaches its card: lying over it, or hearing through it. */
@@ -129,6 +134,7 @@ export function CardPress({
   label,
   disabled = false,
   selectKey,
+  roving = false,
   ref,
   onKeyDown,
   contextMenu,
@@ -152,6 +158,8 @@ export function CardPress({
   disabled?: boolean | undefined;
   /** What the card is chosen by in a `SelectionRegion`; a press with none is never chosen. */
   selectKey?: string | undefined;
+  /** Whether it is an item of a roving set, whose box keeps one Tab stop that the arrows walk (`useRovingKeys`). */
+  roving?: boolean | undefined;
   /** The button, for what focuses it or measures against it. */
   ref?: RefObject<HTMLButtonElement | null> | undefined;
   /** A key pressed on it, as a menu's key opens the card's menu. */
@@ -204,6 +212,7 @@ export function CardPress({
       aria-description={chosen ? SELECTION_WORDS.SELECTED : undefined}
       data-selected={chosen ? "true" : undefined}
       {...(choosable ? selectableRow(selectKey) : {})}
+      {...(roving ? rovingItem() : {})}
       disabled={disabled}
       onMouseDown={choosable ? holdRun : undefined}
       onClick={(event: ReactMouseEvent<HTMLButtonElement>) => {

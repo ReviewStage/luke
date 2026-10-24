@@ -298,6 +298,34 @@ test("a section stands over its tasks, which Tasks leaves out", async () => {
   assert.equal(header === null ? undefined : heardName(header), "Launch");
 });
 
+test("the column's task rows, a section's and Tasks', are one Tab stop that ↓ walks from one group into the next, wrapping", async () => {
+  const sidebar = await mountSidebar([]);
+  const row = (name: string) => {
+    const found = [
+      ...sidebar.querySelectorAll<HTMLButtonElement>(".sidebar-tasks > li > button"),
+    ].find((each) => each.querySelector(".luke-list-row-title")?.firstChild?.textContent === name);
+    return found ?? assert.fail(`no row for ${name}`);
+  };
+  const stops = () =>
+    [...sidebar.querySelectorAll<HTMLButtonElement>(".sidebar-tasks > li > button")].filter(
+      (each) => each.tabIndex === 0,
+    );
+  const down = () =>
+    act(() => {
+      document.activeElement?.dispatchEvent(
+        new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true, cancelable: true }),
+      );
+    });
+
+  assert.equal(stops().length, 1, "Tab lands on the column's rows once");
+  act(() => row("Invite expiry").focus());
+  down();
+  assert.equal(document.activeElement, row("Retry audit"), "↓ goes from Launch into Tasks");
+  assert.deepEqual(stops(), [row("Retry audit")]);
+  down();
+  assert.equal(document.activeElement, row("Invite expiry"), "the walk wraps to the first row");
+});
+
 test("a section folds on its title, aria-expanded following, counts its tasks folded, and keeps its ⋯ outside the fold", async () => {
   const sidebar = await mountSidebar([]);
   const launch = () =>

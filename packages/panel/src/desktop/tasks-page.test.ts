@@ -777,6 +777,74 @@ test("a group's head folds it, its count still standing, and the fold is kept on
   assert.deepEqual(groups(again)[2], ["Todo", []], "the fold is kept");
 });
 
+/** The press of the row of the task keyed `key`. */
+function pressOf(page: HTMLElement, key: string): HTMLElement {
+  const press = rowOf(page, key).querySelector<HTMLElement>("[data-card-press]");
+  assert.ok(press, `the row of ${key} has a press`);
+  return press;
+}
+
+/** The keys of the rows Tab stops on, in the order drawn. */
+function tabStops(page: HTMLElement): string[] {
+  return [...page.querySelectorAll<HTMLElement>(".tasks-list-group li")]
+    .filter((row) => row.querySelector<HTMLElement>("[data-card-press]")?.tabIndex === 0)
+    .map((row) => row.querySelector("[data-task-key]")?.textContent ?? "");
+}
+
+/** The key of the row whose press holds the keyboard, if one does. */
+function focusedKey(page: HTMLElement): string | undefined {
+  const row = document.activeElement?.closest(".tasks-list-group li");
+  return row === null || !page.contains(row ?? null)
+    ? undefined
+    : (row?.querySelector("[data-task-key]")?.textContent ?? undefined);
+}
+
+/** Presses `key` where the keyboard stands, with `held` modifiers. */
+function pressHere(key: string, held: KeyboardEventInit = {}): void {
+  const target = document.activeElement ?? document.body;
+  act(() => {
+    target.dispatchEvent(
+      new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true, ...held }),
+    );
+  });
+}
+
+test("the List's rows are one Tab stop, across every group, that ↓ walks, End ends and the walk wraps, the stop following the row last focused", async () => {
+  const page = await mountPage();
+  assert.deepEqual(tabStops(page), ["ACME-44"], "Tab lands on the first row alone");
+
+  act(() => pressOf(page, "ACME-44").focus());
+  pressHere("ArrowDown");
+  pressHere("ArrowDown");
+  assert.equal(focusedKey(page), "ACME-40", "↓↓ goes two rows on, from Pinned into Todo");
+  assert.deepEqual(tabStops(page), ["ACME-40"], "Tab comes back to the row left");
+
+  pressHere("End");
+  assert.equal(focusedKey(page), "ACME-36");
+  pressHere("ArrowDown");
+  assert.equal(focusedKey(page), "ACME-44", "the walk wraps past the last row");
+  pressHere("ArrowUp");
+  assert.equal(focusedKey(page), "ACME-36");
+  pressHere("Home");
+  assert.equal(focusedKey(page), "ACME-44");
+});
+
+test("↓ passes over a folded group's rows, and a key held with ⌘ is left to the app's own shortcuts", async () => {
+  const page = await mountPage();
+  const todo = [...page.querySelectorAll<HTMLElement>(".tasks-list-group")].find(
+    (group) => group.getAttribute("aria-label") === "Todo",
+  );
+  const fold = todo?.querySelector<HTMLButtonElement>(".luke-group-header-head button");
+  assert.ok(fold, "Todo's head folds it");
+  act(() => fold.click());
+
+  act(() => pressOf(page, "ACME-42").focus());
+  pressHere("ArrowDown");
+  assert.equal(focusedKey(page), "ACME-36", "In progress steps straight to Backlog");
+  pressHere("ArrowUp", { metaKey: true });
+  assert.equal(focusedKey(page), "ACME-36", "⌘↑ walks nowhere");
+});
+
 /** The page's one scroller, which holds the List's rows or the Board's columns. */
 function scroller(page: HTMLElement): HTMLElement {
   const found = page.querySelector<HTMLElement>(".luke-collection-page-scroll");

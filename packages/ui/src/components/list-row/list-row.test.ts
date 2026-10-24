@@ -4,6 +4,7 @@ import { act, cloneElement, createElement, Fragment, Profiler, useState } from "
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { IconButton } from "../button/button.js";
+import { useRovingKeys } from "../roving-keys/roving-keys.js";
 import {
   LIST_DENSITY,
   LIST_ROW_ACTIONS,
@@ -400,6 +401,41 @@ test("a row that says its own Tab stop is left out of the arrows' walk", () => {
   act(() => button(container, "create_issue").focus());
   key("ArrowDown");
   expect(document.activeElement).toBe(button(container, "create_issue"));
+});
+
+/** Two lists of places in one box, as a rail's groups stand, whose rows join the box's walk. */
+function Rail(): React.JSX.Element {
+  const roving = useRovingKeys<HTMLDivElement>();
+  return createElement(
+    "div",
+    roving,
+    ...[
+      ["Inbox", "Tasks"],
+      ["General", "Launch"],
+    ].map((names, at) =>
+      createElement(List, {
+        key: at,
+        label: `Group ${at + 1}`,
+        joinsWalk: true,
+        children: names.map((name) =>
+          createElement(ListRow, { key: name, title: name, onPress: ignore }),
+        ),
+      }),
+    ),
+  );
+}
+
+test("lists that join the walk of a box around them are one Tab stop the arrows walk from list to list", () => {
+  const container = draw(createElement(Rail));
+  expect(tabStops(container)).toEqual([button(container, "Inbox")]);
+  act(() => button(container, "Tasks").focus());
+  key("ArrowDown");
+  expect(document.activeElement).toBe(button(container, "General"));
+  expect(tabStops(container)).toEqual([button(container, "General")]);
+  key("End");
+  expect(document.activeElement).toBe(button(container, "Launch"));
+  key("ArrowDown");
+  expect(document.activeElement).toBe(button(container, "Inbox"));
 });
 
 test("a row that opens nothing is no control, its acts still are", () => {

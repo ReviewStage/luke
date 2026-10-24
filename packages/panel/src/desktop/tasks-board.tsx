@@ -67,6 +67,8 @@ import {
   Tooltip,
   useLeaving,
   useMinute,
+  useRovingColumns,
+  useRovingKeys,
   useRowMenu,
 } from "@luke/ui";
 import { actorName, creatorActor } from "@luke/ui/actor-model";
@@ -352,6 +354,7 @@ function TaskBoardCard({
           <CardPress
             ref={press}
             disabled={actions.deletion.busy}
+            roving
             onPress={() => {
               menu.close(false);
               onOpen();
@@ -521,6 +524,8 @@ function TaskBoardColumnView({
       ? properties.filter((property) => property !== TASK_PROPERTY.ASSIGNEE)
       : properties;
   const cards = useLeaving(column.tasks, taskIdOf);
+  // A column's cards are one Tab stop that ↑↓ walk; ←→ cross to the next column's (`useRovingColumns`).
+  const roving = useRovingKeys<HTMLDivElement>();
   return (
     <Card
       as={CARD_ELEMENT.SECTION}
@@ -547,7 +552,7 @@ function TaskBoardColumnView({
           </Text>
         ) : null
       ) : (
-        <div className="tasks-board-column-scroll">
+        <div className="tasks-board-column-scroll" {...roving}>
           {/* Note that the cards hand a swipe on, because a contained area swallows a sideways one it cannot scroll, and the board scrolls sideways under them. */}
           <ScrollArea
             size={narrow ? SCROLL_SIZE.FILL : SCROLL_SIZE.CONTENT}
@@ -606,6 +611,7 @@ export function TasksBoard({
   const waitingOn = new Map(waiting.map((each) => [each.taskId, each.items.length]));
   const ids = useId();
   const board = useRef<HTMLDivElement>(null);
+  const crossing = useRovingColumns<HTMLDivElement>();
   const [chosen, setChosen] = useState<string>(FIRST_SHOWN);
   const listed = tasks.listed.tasks;
   const { filter, display } = frame;
@@ -685,7 +691,7 @@ export function TasksBoard({
         <ErrorState onRetry={tasks.onRetryList}>{REFRESH_FAILED_WORDS}</ErrorState>
       ) : null}
       <ListMotion root={board}>
-        <div ref={board} className="tasks-board" data-row-drop-scope="">
+        <div ref={board} className="tasks-board" data-row-drop-scope="" {...crossing}>
           {columns.length === 0 ? (
             <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
               {NONE_STANDING}

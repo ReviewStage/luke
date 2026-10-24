@@ -45,6 +45,7 @@ import {
   useMenu,
   useMinute,
   useResizeEdge,
+  useRovingKeys,
   VisuallyHidden,
 } from "@luke/ui";
 import { type Actor, actorName } from "@luke/ui/actor-model";
@@ -762,7 +763,7 @@ function RailRows({
   row: (each: ChatRailRow) => React.JSX.Element;
 }): React.JSX.Element {
   return (
-    <List label={name} density={LIST_DENSITY.DENSE}>
+    <List label={name} density={LIST_DENSITY.DENSE} joinsWalk>
       {rows.map(row)}
     </List>
   );
@@ -1030,6 +1031,8 @@ function ChatView({
     railShown: !hidden.list,
     rail: screen,
   });
+  // The rail's places, For you and every group's, are one Tab stop that ↑↓ walk.
+  const railKeys = useRovingKeys<HTMLDivElement>();
   // Note that the window's Chat stands on no task's page, so a task's channel is handed its task's mentions here.
   const taskDoors = useTaskDoors(tasks, true);
   const mentionPlace = useMemo(() => mentionPlaceOf(tasks.workspace), [tasks.workspace]);
@@ -1141,8 +1144,8 @@ function ChatView({
           )}
         />
         <ScrollArea fade={SCROLL_FADE.START}>
-          <div className="chat-rail-body">
-            <List label="For you" density={LIST_DENSITY.DENSE}>
+          <div className="chat-rail-body" {...railKeys}>
+            <List label="For you" density={LIST_DENSITY.DENSE} joinsWalk>
               <PlaceRow
                 mark={<AtSignIcon />}
                 title="For you"

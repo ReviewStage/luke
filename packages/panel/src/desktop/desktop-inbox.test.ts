@@ -3610,6 +3610,79 @@ test("split, K and J move the chosen row and the item beside it, which draws no 
   act(() => keys.unmount());
 });
 
+test("split, K and J hand the keyboard to the row they choose, so the arrows go on from there", async () => {
+  const { page } = mount();
+  await settle();
+  const keys = standKeymap();
+  act(() => rowNamed(page, "Alert at 80%?").focus());
+
+  pressKey("j", document.activeElement ?? document.body);
+  assert.equal(readTitle(page), "Expire after 7 days?");
+  assert.equal(
+    document.activeElement,
+    rowNamed(page, "Expire after 7 days?"),
+    "J's row holds the keyboard",
+  );
+  pressKey("k", document.activeElement ?? document.body);
+  assert.equal(readTitle(page), "Alert at 80%?");
+  assert.equal(
+    document.activeElement,
+    rowNamed(page, "Alert at 80%?"),
+    "K's row holds the keyboard",
+  );
+  pressKey("ArrowUp", document.activeElement ?? document.body);
+  assert.equal(
+    document.activeElement,
+    rowNamed(page, "How is a failed email retried?"),
+    "↑ goes on from the row K reached",
+  );
+  act(() => keys.unmount());
+});
+
+/** The titles of the list's rows Tab stops on, in the order drawn. */
+function rowTabStops(page: HTMLElement): (string | null | undefined)[] {
+  return [...page.querySelectorAll<HTMLButtonElement>(".inbox-tasks li button.luke-list-row-main")]
+    .filter((row) => row.tabIndex === 0)
+    .map((row) => row.querySelector(ROW_TITLE)?.textContent);
+}
+
+test("the list's rows are one Tab stop, across its plans, that ↓ walks and End ends, the walk wrapping and the stop following the row last focused", async () => {
+  const { page } = mount();
+  await settle();
+  assert.deepEqual(rowTabStops(page), ["How is a failed email retried?"], "Tab lands on one row");
+
+  act(() => rowNamed(page, "How is a failed email retried?").focus());
+  pressKey("ArrowDown", document.activeElement ?? document.body);
+  pressKey("ArrowDown", document.activeElement ?? document.body);
+  assert.equal(
+    document.activeElement,
+    rowNamed(page, "Expire after 7 days?"),
+    "↓↓ goes two rows on, into the next plan",
+  );
+  assert.deepEqual(rowTabStops(page), ["Expire after 7 days?"], "Tab comes back to the row left");
+  pressKey("ArrowDown", document.activeElement ?? document.body);
+  assert.equal(
+    document.activeElement,
+    rowNamed(page, "How is a failed email retried?"),
+    "it wraps",
+  );
+  pressKey("End", document.activeElement ?? document.body);
+  assert.equal(document.activeElement, rowNamed(page, "Expire after 7 days?"));
+});
+
+test("↓ passes over a folded plan's rows", async () => {
+  const { page } = mount();
+  await settle();
+  act(() => headerNamed(page, "Invites").click());
+  act(() => rowNamed(page, "Alert at 80%?").focus());
+  pressKey("ArrowDown", document.activeElement ?? document.body);
+  assert.equal(
+    document.activeElement,
+    rowNamed(page, "How is a failed email retried?"),
+    "Invites' row is passed over, the walk wrapping to the first",
+  );
+});
+
 test("a folded plan's items have no row, so K and J pass over them and the pager counts the rows a reader finds", async () => {
   const { page } = mount();
   await settle();

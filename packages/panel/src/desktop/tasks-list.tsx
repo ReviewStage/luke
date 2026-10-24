@@ -43,6 +43,7 @@ import {
   GROUP_SURFACE,
   GroupHeader,
   InlineEdit,
+  joinRefs,
   LAYOUT_ELEMENT,
   ListMotion,
   motionKey,
@@ -64,6 +65,7 @@ import {
   Tooltip,
   useLeaving,
   useMinute,
+  useRovingKeys,
   useRowMenu,
   VisuallyHidden,
 } from "@luke/ui";
@@ -105,7 +107,7 @@ import {
   PinIcon,
   UserXIcon,
 } from "lucide-react";
-import { type ReactNode, useId, useRef, useState } from "react";
+import { type ReactNode, useId, useMemo, useRef, useState } from "react";
 import { ACTOR_SIZE, ActorMark, UnassignedMark } from "../actor-ref.js";
 import { useAppCommand } from "../app-commands.js";
 import { FIND_SKIP_ATTRIBUTE } from "../find-matches.js";
@@ -743,6 +745,7 @@ function TaskListRow({
               ref={press}
               disabled={actions.deletion.busy}
               selectKey={task.id}
+              roving
               onPress={() => {
                 menu.close(false);
                 onOpen();
@@ -1042,6 +1045,9 @@ export function TasksList({
   const workspaceName = tasks.workspace?.name ?? "";
   const drops = listDrops(tasks, groups, setStanding);
   const list = useRef<HTMLDivElement>(null);
+  // The rows of every group are one Tab stop that ↑↓ walk, a folded group's passed by, as they are not drawn.
+  const roving = useRovingKeys<HTMLDivElement>();
+  const listRef = useMemo(() => joinRefs(list, roving.ref), [roving.ref]);
   const toast = useToast();
   const regionId = useId();
   const [chosen, setChosen] = useState<ReadonlySet<string>>(() => new Set());
@@ -1080,7 +1086,8 @@ export function TasksList({
       <SelectionRegion id={regionId} selection={{ selected, onChange: setChosen }}>
         <ListMotion root={list}>
           <div
-            ref={list}
+            {...roving}
+            ref={listRef}
             className="tasks-list"
             data-row-drop-scope=""
             {...motionRows()}
