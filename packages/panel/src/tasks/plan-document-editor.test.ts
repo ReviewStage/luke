@@ -33,7 +33,7 @@ import { landedBundles, onSideBundles } from "../testing/side-bundles.js";
 import { newestToastAction, newestToastSays } from "../testing/toast.js";
 import { ToastHost } from "../toast.js";
 import { PlanBody } from "./plan-body.js";
-import { usePlanEditDoor } from "./use-plan-editing.js";
+import { usePlanEditDoor, usePlanWordsUnsaved } from "./use-plan-editing.js";
 
 /**
  * The editor itself is TipTap in a bundle of its own (`../plan-editor/`),
@@ -157,6 +157,18 @@ async function settle(): Promise<void> {
  * atoms of its own, as the window holds them; `render` draws another plan,
  * through its own door where given.
  */
+/** What the window tells its shell of the plans' words, drawn beside the plan as a shell would read it. */
+function UnsavedWords(): ReactElement {
+  return createElement("output", { "data-unsaved-words": String(usePlanWordsUnsaved()) });
+}
+
+/** Whether the window says a plan holds words not saved. */
+function unsavedWords(container: HTMLElement): boolean {
+  return (
+    container.querySelector("[data-unsaved-words]")?.getAttribute("data-unsaved-words") === "true"
+  );
+}
+
 function mount(answers: readonly TasksEditAnswer[] = [], first: Task = DOCUMENT_TASK) {
   const sent: PlanEditRequest[] = [];
   const renamed: string[] = [];
@@ -180,7 +192,16 @@ function mount(answers: readonly TasksEditAnswer[] = [], first: Task = DOCUMENT_
       root.render(
         onRegistry(
           registry,
-          onSideBundles(bundles, createElement(Fragment, null, page, createElement(ToastHost))),
+          onSideBundles(
+            bundles,
+            createElement(
+              Fragment,
+              null,
+              page,
+              createElement(ToastHost),
+              createElement(UnsavedWords),
+            ),
+          ),
         ),
       ),
     );
@@ -714,6 +735,34 @@ test("words whose save is refused as the developer leaves the plan are kept, sai
   assert.ok(container.textContent?.includes("Not saved: the service did not answer."));
   assert.equal(newestToastSays(), undefined, "the toast goes once the words are back");
   assert.equal(sent.length, 1, "nothing saves them on its own");
+});
+
+test("words typed and not yet saved are unsaved work, and once they save they are not", async () => {
+  const { container } = mount();
+  act(() => block(container, "Goal").click());
+  assert.equal(unsavedWords(container), false, "an editor open on the plan's own words holds none");
+
+  act(() => open().onDraft(`${BODY}Mine.\n`));
+  assert.equal(unsavedWords(container), true);
+
+  act(() => open().onFinish(1, FINISH.ESCAPE));
+  await settle();
+  assert.equal(unsavedWords(container), false);
+});
+
+test("words a plan was left with that its save refused stay unsaved work, there and back", async () => {
+  const { container, render } = mount([{ failure: TASK_CALL_FAILURE.UNANSWERED }]);
+  const other = { ...DOCUMENT_TASK, id: "0c4f2e9a-7d1b-4a3e-8f6c-2b9d5e1a7c40" };
+  act(() => block(container, "Goal").click());
+  act(() => open().onDraft(`${BODY}Mine.\n`));
+
+  render(other);
+  await settle();
+  assert.equal(unsavedWords(container), true, "kept while another plan is open");
+
+  render(DOCUMENT_TASK);
+  await settle();
+  assert.equal(unsavedWords(container), true, "and in the editor they open in again");
 });
 
 test("words left waiting on a conflict are kept and said, and the toast's Keep mine saves them over Luke's", async () => {

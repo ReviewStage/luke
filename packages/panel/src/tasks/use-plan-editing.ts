@@ -1,4 +1,4 @@
-import { useAtom } from "@effect/atom-react";
+import { useAtom, useAtomValue } from "@effect/atom-react";
 import { RegistryContext } from "@effect/atom-react/RegistryContext";
 import type { PlanCommentAnchors } from "@luke/features/plan-comment-wire";
 import type { PlanEditRequest } from "@luke/features/plan-edit";
@@ -62,6 +62,24 @@ export type PlanEditDoor = (request: PlanEditRequest) => Promise<TasksEditAnswer
 
 /** The words each task was left with that did not save, by the task's id, until they save or the developer comes back to them. */
 const leftUnsavedAtom = Atom.keepAlive(Atom.make<ReadonlyMap<string, DocumentEditor>>(new Map()));
+
+/** The tasks whose open editor holds words the service does not hold yet, while it does. */
+const openUnsavedAtom = Atom.keepAlive(Atom.make<readonly string[]>([]));
+
+/** Whether any plan holds words not saved: an editor open on them, or a task left with them. */
+const planWordsUnsavedAtom = Atom.make(
+  (get) => get(openUnsavedAtom).length > 0 || get(leftUnsavedAtom).size > 0,
+);
+
+/** `taskId` marked as holding words its open editor has not saved, or not. */
+function markOpenUnsaved(
+  registry: AtomRegistry.AtomRegistry,
+  taskId: string,
+  unsaved: boolean,
+): void {
+  const others = registry.get(openUnsavedAtom).filter((held) => held !== taskId);
+  registry.set(openUnsavedAtom, unsaved ? [...others, taskId] : others);
+}
 
 /** What the toast over words a task was left with says, and its action, by whether they wait on a conflict. */
 const LEFT_UNSAVED = {
@@ -158,6 +176,8 @@ export interface PlanEditing {
   readonly select: (host: EditorHost) => void;
   /** An open editor's way to hand over words it still holds, which the document calls before it saves what is left; none once it goes. */
   readonly holdWords: (handOver: (() => void) | undefined) => void;
+  /** The open editor came to hold words it has not handed over yet, which are unsaved until they are. */
+  readonly holdingWords: () => void;
   /** The base and words once the open editor has taken Luke's part of a save's merged answer. */
   readonly rebase: (base: string, text: string) => void;
   readonly keepMine: () => void;
@@ -165,6 +185,16 @@ export interface PlanEditing {
   readonly retry: () => void;
   /** How many of this task's saves the service answered saved, which a Saved tick confirms each of. */
   readonly saves: number;
+}
+
+/**
+ * Whether any plan holds words the service does not: typed and not yet
+ * saved, a save still out, or words a task was left with that its save
+ * refused. A shell asks before a way out of Luke while they stand, since
+ * no way out of the app saves them.
+ */
+export function usePlanWordsUnsaved(): boolean {
+  return useAtomValue(planWordsUnsavedAtom);
 }
 
 /**
@@ -200,6 +230,8 @@ export function usePlanEditing(
   const [selecting, setSelecting] = useState<EditorHost | undefined>(undefined);
   const [cursor, setCursor] = useState<EditorHost | undefined>(undefined);
   const [saves, setSaves] = useState(0);
+  // Whether the open editor holds words typed since its last hand-over.
+  const [holding, setHolding] = useState(false);
   const registry = useContext(RegistryContext);
   const toast = useToast();
   const withdrawToast = useWithdrawToast();
@@ -254,6 +286,15 @@ export function usePlanEditing(
     restartPause(stamp.current);
   };
 
+  // Words the service does not hold yet are marked for as long as they stand
+  // open here; once the task is left, the words kept in its place say so.
+  const unsaved = editor !== undefined && (holding || editor.draft !== editor.base);
+  useEffect(() => {
+    if (!unsaved) return;
+    markOpenUnsaved(registry, taskId, true);
+    return () => markOpenUnsaved(registry, taskId, false);
+  }, [registry, taskId, unsaved]);
+
   // A pause that ran out on the newest keystroke saves what stands.
   useEffect(() => {
     if (AsyncResult.isSuccess(pause) && !pause.waiting && pause.value === stamp.current) send();
@@ -305,7 +346,10 @@ export function usePlanEditing(
       setPlacement(place);
       setSelecting(undefined);
     },
-    typeText: (words, anchors) => changed((now) => editorTyped(now, words, anchors)),
+    typeText: (words, anchors) => {
+      setHolding(false);
+      changed((now) => editorTyped(now, words, anchors));
+    },
     // The save starts with the close, not a render later, since the close may
     // be focus leaving for another task that takes the document with it.
     close: (select) => {
@@ -321,7 +365,9 @@ export function usePlanEditing(
     select: setCursor,
     holdWords: (handOver) => {
       heldWords.current = handOver;
+      if (handOver === undefined) setHolding(false);
     },
+    holdingWords: () => setHolding(true),
     rebase: (base, words) => {
       if (latest.current === undefined) return;
       latest.current = editorRebased(latest.current, base, words);

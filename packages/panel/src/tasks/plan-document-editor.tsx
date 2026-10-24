@@ -643,6 +643,7 @@ function useDraftHandOver(
   }, []);
   return {
     onDraft: (markdown, anchors) => {
+      if (pending.current === undefined) door.current.holdingWords();
       pending.current = { markdown, anchors };
       stamp.current += 1;
       restartPause(stamp.current);

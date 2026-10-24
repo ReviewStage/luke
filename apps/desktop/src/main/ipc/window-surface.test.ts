@@ -96,6 +96,8 @@ function fixture() {
         );
         return STILL;
       },
+      tellUnsavedWork: (sender, holding) =>
+        heard.push(`unsaved:${sender === panelContents ? "panel" : "other"}:${holding}`),
     }),
   );
   ports.push(port);
@@ -157,6 +159,21 @@ it("a still is taken of the panel that asks, none of an empty part, and refused 
     refused: "Could not take a still of the window.",
   });
   assert.deepEqual(heard, ["still:panel:800x600"]);
+});
+
+it("a panel's unsaved work is kept as it tells it, and refused from any other window", async () => {
+  const { port, panel, voice, heard } = fixture();
+
+  assert.deepEqual(await port.call(panel, KIND.WINDOW_UNSAVED_WORK, { holding: true }), {
+    answer: undefined,
+  });
+  assert.deepEqual(await port.call(panel, KIND.WINDOW_UNSAVED_WORK, { holding: false }), {
+    answer: undefined,
+  });
+  assert.deepEqual(await port.call(voice, KIND.WINDOW_UNSAVED_WORK, { holding: true }), {
+    refused: "Could not tell this system about unsaved work.",
+  });
+  assert.deepEqual(heard, ["unsaved:panel:true", "unsaved:panel:false"]);
 });
 
 it("words are copied, a mail and the settings opened, a notification posted, and feedback carried", async () => {

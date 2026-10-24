@@ -71,6 +71,7 @@ import { type RepositoryRemedyDoors, RepositoryRemedyProvider } from "./tasks/re
 import { useTasksFixtureLanded } from "./tasks/tasks-fixture-loader.js";
 import { ThreadRevealProvider } from "./tasks/thread-reveal.js";
 import { ListedPullRequests, OpenLinkProvider } from "./tasks/use-open-link.js";
+import { usePlanWordsUnsaved } from "./tasks/use-plan-editing.js";
 import { type LeaveAsk, useLeaveGuard, useTasksTab } from "./tasks/use-tasks-tab.js";
 import { TOAST_HOLD, ToastHost, useToast } from "./toast.js";
 import { useUpdatedToast } from "./update-toast.js";
@@ -152,10 +153,13 @@ const CHAT_WAITING: Atom.Atom<readonly string[]> = Atom.map(
 /** The version of main's document the window holds, which moves with every delivery. */
 const APP_STATE_VERSION: Atom.Atom<number> = appStateDerivedAtom((state) => state?.version ?? 0);
 
-/** Tells the shell the ask standing while a page holds unsaved work, or nothing once none does. */
-const tellShellUnsavedWork = (ask: LeaveAsk | undefined): void => {
-  appPlatform().unsavedWork?.(ask);
-};
+/**
+ * The ask the shell hears while a plan holds words not saved and no page
+ * stands an ask of its own: the panel's own doors save those words as a
+ * task is left, so nothing asks before them, but the shell's ways out of
+ * the page save nothing, and ask first.
+ */
+const LEAVE_AT_ONCE: LeaveAsk = (leave) => leave();
 
 /**
  * The shell, handed Settings as the document holds it. It is read here
@@ -294,8 +298,13 @@ function AppWindow(): React.JSX.Element {
   useSessionReplay(run, useAppSlice(APP_SLICE.SESSION_REPLAY));
   usePrefetchBundles();
   // Note that the tab switch asks first while a page holds unsaved work, because Settings takes the window and the page with it.
-  // The shell hears the ask too, so its own ways out of the page ask first.
-  const leaveGuard = useLeaveGuard(tellShellUnsavedWork);
+  // The shell hears the ask too, and so do plan words not saved, so its own ways out of the page ask first.
+  const [pageAsk, setPageAsk] = useState<LeaveAsk>();
+  const leaveGuard = useLeaveGuard((ask) => setPageAsk(() => ask));
+  const planWordsUnsaved = usePlanWordsUnsaved();
+  useEffect(() => {
+    appPlatform().unsavedWork?.(pageAsk ?? (planWordsUnsaved ? LEAVE_AT_ONCE : undefined));
+  }, [pageAsk, planWordsUnsaved]);
   const { guard: guardLeave } = leaveGuard;
   const changeTab = useCallback(
     (next: PanelTab) =>

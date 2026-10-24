@@ -100,12 +100,12 @@ export interface AppPlatform {
    */
   askNotificationsPermission?(): void;
   /**
-   * Hears the ask standing each time a page comes to hold unsaved work, and
-   * nothing once none does, so a shell that can leave the page by ways of its
-   * own, a browser tab closed, reloaded, or sent elsewhere, asks first while
-   * there is work to lose and only then. `ask` takes the way out once the
-   * developer says to leave. The Mac app, whose window's close is main's,
-   * leaves this out.
+   * Hears the ask standing each time a page comes to hold unsaved work, or a
+   * plan holds words not saved, and nothing once none does, so a shell that can
+   * leave the page by ways of its own asks first while there is work to lose
+   * and only then: a browser tab closed, reloaded, or sent elsewhere, and the
+   * Mac app quit, restarted to update, or signed out. `ask` takes the way
+   * out once the developer says to leave.
    */
   unsavedWork?(ask: ((leave: () => void) => void) | undefined): void;
 }

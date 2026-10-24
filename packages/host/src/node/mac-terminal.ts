@@ -124,6 +124,11 @@ const startTimes = Effect.fnUntraced(function* (pids: readonly number[]) {
 /** Every terminal standing, which a quit closes. */
 const standing = new Set<MacTerminal>();
 
+/** How many terminals stand open, which a quit names before it closes them. */
+export function openMacTerminals(): number {
+  return standing.size;
+}
+
 /** Closes every terminal still open, as Luke quits, all at once, so the quit waits on the slowest close rather than their sum. */
 export const closeEveryMacTerminal: Effect.Effect<void> = Effect.suspend(() =>
   Effect.forEach([...standing], (terminal) => terminal.close(), {
