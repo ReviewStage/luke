@@ -92,6 +92,8 @@ export type Actor =
     }
   | {
       readonly kind: typeof ACTOR_KIND.AUTOMATION;
+      /** The automation's id, which its card is read by; absent where the place naming it knows only its name. */
+      readonly automationId?: string | undefined;
       readonly name: string;
       readonly state: ActorState;
     }

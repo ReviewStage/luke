@@ -19,6 +19,7 @@ import {
   heldLatest,
   lastFinished,
 } from "./agent-tab-card.js";
+import { ChipCardSkeleton } from "./chip-cards.js";
 import {
   agentActor,
   agentName,
@@ -377,9 +378,10 @@ export function AgentHoverCard({
   agentId: string;
 }): React.ReactNode {
   const { workspaceId } = useMemberDirectory();
+  const glyph = <ActorMark actor={actor} size={ACTOR_SIZE.CARD} />;
   const fallback = (
     <HoverCard>
-      <HoverCardHead glyph={<ActorMark actor={actor} size={ACTOR_SIZE.CARD} />} name={actor.name} />
+      <HoverCardHead glyph={glyph} name={actor.name} />
     </HoverCard>
   );
   return (
@@ -388,6 +390,7 @@ export function AgentHoverCard({
       taskId={actor.taskId}
       name={actor.name}
       workspaceId={workspaceId}
+      reading={<ChipCardSkeleton glyph={glyph} name={actor.name} />}
       fallback={fallback}
     />
   );

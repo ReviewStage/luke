@@ -101,6 +101,7 @@ export function InboxCodeCard({
     >
       <CodeCardHeader
         codeRef={codeRef}
+        repository={block.repo}
         note={undefined}
         copied={shown.kind === CODE_READ.READY ? copiedLines(shown.code) : undefined}
         // Note that lines the task does not read open nothing, because the File tab reads the task's repository alone.
