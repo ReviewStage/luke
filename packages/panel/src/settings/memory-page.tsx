@@ -61,8 +61,7 @@ function noteFor(workspace: Workspace): string {
     `As they work in ${workspace.name}, Luke's coding agents keep the facts and conventions ` +
     "you settle and recall them in the workspace's later tasks. Everyone in the workspace " +
     "shares these memories, except those marked Only you, which only your Luke recalls. " +
-    "What you say now always wins, and an agent corrects a memory it contradicts. Forget " +
-    "anything that is wrong or no longer true."
+    "Forget anything that is wrong or no longer true."
   );
 }
 
