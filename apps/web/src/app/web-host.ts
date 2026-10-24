@@ -510,7 +510,11 @@ const composedWeb = (
         actPort,
         actPortClient: tabs.portClient,
         platform: webPlatform(
-          { recordSurfaceEvent: count, unsavedWork: tab.unsavedWork },
+          {
+            recordSurfaceEvent: count,
+            unsavedWork: tab.unsavedWork,
+            unsavedPlanWords: tab.unsavedPlanWords,
+          },
           linkPlatform,
         ),
         operator,
