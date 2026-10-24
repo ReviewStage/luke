@@ -8,6 +8,11 @@ import { CODING_AGENT_FAILURE, type CodingAgentFailure } from "./coding-agent-wi
  * failure a new agent mends says so after its words, unless Continue
  * stands beside them or one already continued it (`continuable`), when the
  * advice is redundant or stale.
+ *
+ * A failure the reader mends in Settings names no path to the page: the
+ * line's remedy opens the page itself (`failure-remedy.ts`), by the name
+ * the page has now, where a path written into the words would go stale the
+ * day the page is renamed.
  */
 
 /** Why a turn failed, by the service's one word for it; nothing for a reason with no words. */
@@ -16,8 +21,7 @@ const AGENT_FAILURE_WORDS = {
   [CODING_AGENT_FAILURE.SANDBOX]: "the sandbox or checkout failed",
   [CODING_AGENT_FAILURE.GITHUB]: "GitHub refused or could not be reached",
   [CODING_AGENT_FAILURE.ABANDONED]: "the turn ran past its bound and was ended",
-  [CODING_AGENT_FAILURE.PROVIDER_KEY]:
-    "your API key was refused or cannot be read; check Settings › Agents",
+  [CODING_AGENT_FAILURE.PROVIDER_KEY]: "your API key was refused or cannot be read",
   [CODING_AGENT_FAILURE.NOT_STARTED]: "the agent never started",
   [CODING_AGENT_FAILURE.FAST_ON_OWN_KEY]:
     "Fast isn't available on your own API key; choose the model with Fast off",

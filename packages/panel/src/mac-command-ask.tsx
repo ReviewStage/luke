@@ -1,15 +1,17 @@
 import { ACT_KIND } from "@luke/host/acts";
 import type { MacCommandAsk } from "@luke/host/app-state";
 import { MAC_COMMAND_DECISION, type MacCommandDecision } from "@luke/host/contract";
+import { SETTINGS_VIEW } from "@luke/settings/settings-views";
 import { CommandAsk } from "@luke/ui";
 import { useAct } from "./act.js";
+import { SettingsPageLink } from "./open-settings.js";
 import { APP_SLICE, useAppSlice } from "./use-app-state.js";
 import { useHeldThroughExit } from "./use-held-through-exit.js";
 
 /**
  * mac-command-ask.tsx -- the command an agent asks to run on this Mac, put to the developer over the window while main holds it.
  *
- * Main holds each command it claimed under Settings › This Mac's Ask every
+ * Main holds each command it claimed under This Mac's Ask every
  * time until the developer answers or the command's own timeout passes
  * (`@luke/host`'s `compose-mac-commands.ts`), and the document carries the
  * asks waiting. The earliest is drawn, and the next takes its place as it
@@ -40,6 +42,7 @@ export function MacCommandAskDialog(): React.JSX.Element | null {
       onAllowOnce={() => answer(MAC_COMMAND_DECISION.ALLOW_ONCE)}
       onAllowAlways={() => answer(MAC_COMMAND_DECISION.ALLOW_ALWAYS)}
       onDeny={() => answer(MAC_COMMAND_DECISION.DENY)}
+      settingsPage={<SettingsPageLink page={SETTINGS_VIEW.THIS_MAC} />}
     />
   );
 }

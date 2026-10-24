@@ -748,7 +748,7 @@ test("a generation that failed says why with Retry, chapters someone else is mak
   );
   assert.match(
     unavailable.textContent ?? "",
-    /Save an API key in Settings › Agents to generate chapters\./u,
+    /Save an API key in Agents settings to generate chapters\./u,
   );
   assert.equal(
     [...unavailable.querySelectorAll("button")].some(

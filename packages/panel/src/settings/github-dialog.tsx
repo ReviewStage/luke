@@ -8,6 +8,7 @@ import {
 } from "@luke/features/github-token-wire";
 import { dayText } from "@luke/features/time-format";
 import { ACT_KIND } from "@luke/host/acts";
+import { SETTINGS_VIEW } from "@luke/settings/settings-views";
 import {
   ANNOUNCE,
   BUTTON_TYPE,
@@ -36,8 +37,9 @@ import {
   useConfirmDialog,
 } from "@luke/ui";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
-import { useRef, useState } from "react";
+import { type ReactNode, useRef, useState } from "react";
 import { useAct } from "../act.js";
+import { SettingsPageLink } from "../open-settings.js";
 import { useOpenLink } from "../tasks/use-open-link.js";
 import { useAnnounceShown } from "../use-announce-shown.js";
 
@@ -64,7 +66,7 @@ const LINE = {
 } as const;
 
 /** Why a save kept nothing, and what to do next, as one short line. */
-function rejectionLabel(rejection: GitHubTokenRejection): string {
+function rejectionLabel(rejection: GitHubTokenRejection): ReactNode {
   switch (rejection) {
     case GITHUB_TOKEN_REJECTION.FINE_GRAINED:
       return "This isn't a classic token. Create a classic token and paste that.";
@@ -73,7 +75,13 @@ function rejectionLabel(rejection: GitHubTokenRejection): string {
     case GITHUB_TOKEN_REJECTION.NO_REPO_SCOPE:
       return "This token is missing the repo scope. Create a new token with repo ticked.";
     case GITHUB_TOKEN_REJECTION.NO_GITHUB_ACCOUNT:
-      return "No GitHub account is connected to your Luke account. Connect GitHub in Settings › Integrations, then save the token again.";
+      return (
+        <>
+          No GitHub account is connected to your Luke account. Connect GitHub in{" "}
+          <SettingsPageLink page={SETTINGS_VIEW.INTEGRATIONS} /> settings, then save the token
+          again.
+        </>
+      );
     case GITHUB_TOKEN_REJECTION.OTHER_USER:
       return "This token belongs to a different GitHub account than the one connected to Luke. Create it while signed in to the connected account.";
     case GITHUB_TOKEN_REJECTION.UNREACHABLE:
@@ -166,11 +174,11 @@ function TokenForm({
 }: {
   /** The dialog's way to the field, which takes focus as the card opens and as a removal brings the form back. */
   field: React.RefObject<HTMLInputElement | null>;
-  onSave: (token: string) => Promise<string | undefined>;
+  onSave: (token: string) => Promise<ReactNode>;
 }): React.JSX.Element {
   const [pasted, setPasted] = useState("");
   const [saving, setSaving] = useState(false);
-  const [problem, setProblem] = useState<string | undefined>(undefined);
+  const [problem, setProblem] = useState<ReactNode>(undefined);
   const save = () => {
     const token = pasted.trim();
     if (token === "" || saving) return;
@@ -239,7 +247,7 @@ export function GitHubTokenDialog({
   const openLink = useOpenLink();
   const field = useRef<HTMLInputElement | null>(null);
 
-  const save = (pasted: string): Promise<string | undefined> =>
+  const save = (pasted: string): Promise<ReactNode> =>
     act(ACT_KIND.GITHUB_TOKEN_SAVE, { token: pasted })
       .catch(() => undefined)
       .then((answer) => {
