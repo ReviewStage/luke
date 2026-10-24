@@ -24,6 +24,7 @@
  */
 
 import { APP_COMMAND } from "@luke/settings/shortcuts";
+import { TOOLBAR_LOOK } from "@luke/ui";
 import { useCallback, useLayoutEffect, useRef, useState } from "react";
 import { useAppCommand } from "../app-commands.js";
 import { useColumnSplit } from "../column-split.js";
@@ -108,9 +109,24 @@ export interface InboxColumns {
 /** What the list head's menu button is called, by which the list finds it. */
 export const VIEW_OPTIONS = "View options";
 
-/** The list head's View options button, the list's one steady control, which chooses what it lists. */
+/** The ⋯ of a phone's page header (`phone-head.tsx`, `Toolbar`'s phone look), the one standing on screen. */
+const PHONE_HEAD_MORE = `.luke-toolbar[data-look="${TOOLBAR_LOOK.PHONE}"] > .luke-toolbar-actions button`;
+
+/**
+ * The list head's View options button, the list's one steady control,
+ * which chooses what it lists; or, on a phone, whose header holds View
+ * options in its ⋯ (the window's Inbox's own head, or a task's header over
+ * its Inbox tab), that ⋯, never the search's field, whose focus would
+ * raise a phone's keyboard.
+ */
 export function listHeadControl(list: ParentNode | null): HTMLElement | null {
-  return list?.querySelector<HTMLElement>(`button[aria-label="${VIEW_OPTIONS}"]`) ?? null;
+  return (
+    list?.querySelector<HTMLElement>(`button[aria-label="${VIEW_OPTIONS}"]`) ??
+    [...document.querySelectorAll<HTMLElement>(PHONE_HEAD_MORE)].find(
+      (more) => more.closest("[hidden]") === null,
+    ) ??
+    null
+  );
 }
 
 /** Whether the list was asked for, kept by the Inbox's holder rather than the Inbox, and the way to ask for it or give it up. */

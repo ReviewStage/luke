@@ -79,7 +79,9 @@ import {
   ConversationScrollButton,
 } from "../ai-elements/conversation.js";
 import { PhoneHead } from "../desktop/phone-head.js";
+import { HandTabActionsContext } from "../desktop/strip-tabs.js";
 import { PictureBlock } from "../picture-block.js";
+import { usePhoneRoom } from "../stage-room.js";
 import { useSteadyDoor } from "../steady-door.js";
 import { SendingAgent } from "./agent-ref.js";
 import { ArchivedComposerNote } from "./archived-note.js";
@@ -1321,6 +1323,11 @@ function PlaceView({
   const section = useRef<HTMLElement>(null);
   const replyDoors = useContext(ChatReplyDoorsContext);
   const footDoor = useRef<((words: string) => boolean) | undefined>(undefined);
+  // A channel drawn in a task's tab on a phone is headed by the task's header alone, whose title
+  // names the tab, so its own head, which says the task's name again, is not drawn there.
+  const phoneRoom = usePhoneRoom();
+  const inTab = useContext(HandTabActionsContext) !== undefined;
+  const headed = !(phoneRoom && inTab);
   // A Reply over words no nearer box answers quotes into the channel's own, at its foot.
   const reply = (
     <ReplyToSelection
@@ -1381,14 +1388,16 @@ function PlaceView({
   const doors = doorsIn(channel.id);
   return (
     <section ref={section} className="chat-stream ph-no-capture" aria-label={title} hidden={hidden}>
-      <PlaceHead
-        title={title}
-        channel={channel}
-        meta={channelMeta(chat, names, channel)}
-        lead={lead}
-        actions={channelActions?.(channel)}
-        phone={phone}
-      />
+      {headed ? (
+        <PlaceHead
+          title={title}
+          channel={channel}
+          meta={channelMeta(chat, names, channel)}
+          lead={lead}
+          actions={channelActions?.(channel)}
+          phone={phone}
+        />
+      ) : null}
       {threads.length === 0 && !pending.some((each) => each.channelId === channel.id) ? (
         <EmptyState icon={channel.kind === CHANNEL_KIND.DM ? <AtSignIcon /> : <HashIcon />}>
           {NOTHING_POSTED}

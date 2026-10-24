@@ -426,8 +426,8 @@ export function useTaskMenuItems(
     rename: () => void;
     drawn: boolean;
     unread: boolean;
-    /** Groups drawn over the task's own, read as the menu is drawn, as a phone's header leads its ⋯ with the task's views; none elsewhere. */
-    lead?: (() => readonly (readonly MenuEntry[])[]) | undefined;
+    /** Groups drawn over the task's own, read as the menu is drawn from `opener`, as a phone's header leads its ⋯ with the task's views; none elsewhere. */
+    lead?: ((opener: HTMLElement) => readonly (readonly MenuEntry[])[]) | undefined;
   },
 ) {
   const task = taskOf(tasks, taskId);
@@ -450,7 +450,6 @@ export function useTaskMenuItems(
       ? moveToSectionEntry(tasks, { agent: false, id: task.id }, task.workspaceId, sections.askNew)
       : undefined;
   const groups = (): readonly (readonly MenuEntry[])[] => [
-    ...(doors.lead?.() ?? []),
     ...withRowMoves(
       taskActionGroups(tasks, taskId, {
         rename: doors.rename,
@@ -504,7 +503,7 @@ export function useTaskMenu(
         label="Task actions"
         menu={drawn}
         footer={footer}
-        groups={groups()}
+        groups={[...(doors.lead?.(drawn.opener) ?? []), ...groups()]}
         onClose={close}
       />
     );
@@ -542,8 +541,8 @@ export function TaskActions({
   button: boolean;
   /** Opens the toolbar's title as the task's name field. */
   onRename: () => void;
-  /** Groups the menu leads with over the task's own, read as it is drawn: a phone's views of the task, and what the tab shown offers (`task-pane-switcher.tsx`). */
-  lead?: (() => readonly (readonly MenuEntry[])[]) | undefined;
+  /** Groups the menu leads with over the task's own, read as it is drawn from `opener`: a phone's views of the task, and what the tab shown offers (`task-pane-switcher.tsx`). */
+  lead?: ((opener: HTMLElement) => readonly (readonly MenuEntry[])[]) | undefined;
 }): React.JSX.Element {
   // Note that the open plan is unread only by a mark by hand, since its saves are seen as they land.
   const actions = useTaskMenu(tasks, task.id, task.name, {
