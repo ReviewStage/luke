@@ -2286,28 +2286,15 @@ ul.actor-stack {
    menu's (`@luke/ui`'s `luke-menu-arrive` and `luke-menu-drop`), its
    opacity over `--luke-duration-quick` and its travel on the spring, and leaves
    first on the menu's `luke-menu-leave`, fading over `--luke-duration-exit`
-   while its owner holds it drawn and inert (`use-disclosure.ts`; the
-   terminal picker's Radix dialog holds its own on `data-state`). A menu's own
+   while its owner holds it drawn and inert (`use-disclosure.ts`). A menu's own
    surface (`MenuSurface`) draws all three itself. */
-.task-summary-card[data-leaving="true"],
-:is(.command-palette, .command-palette-backdrop)[data-state="closed"] {
+.task-summary-card[data-leaving="true"] {
   pointer-events: none;
   animation: luke-menu-leave var(--luke-duration-exit) var(--luke-motion-exit) forwards;
   /* Note that the hold waits on every motion the element runs, and losing
      focus would start the scrollbar's own fade (above), so the exit is the
      one motion it has. */
   transition: none;
-}
-
-/* The heading over the terminal picker's rows: inset as a row's words are,
-   and a little apart from the section above it. cmdk draws the heading's
-   box itself, so it is reached by its attribute; its words are a caption. */
-.command-palette [cmdk-group-heading] {
-  padding: var(--luke-space-8) var(--row-inset) var(--luke-space-4);
-}
-
-.command-palette [cmdk-group]:first-child [cmdk-group-heading] {
-  padding-top: var(--luke-space-2);
 }
 
 /* An integration's tools (`integration-tool-list.tsx`), in the MCP
@@ -5278,153 +5265,6 @@ ul.actor-stack {
 }
 
 /* Dialog parts ---------------------------------------------------------------- */
-
-/* The terminal picker's palette ------------------------------------------ */
-
-/* The terminal picker over the window (`tasks/terminal-picker.tsx`), drawn as
-   ⌘K's palette was before ⌘K moved onto `@luke/ui/command`'s CommandDialog:
-   the dialog's dimmed window and card, a third of the way down, holding the
-   search row and rows, and the keys' hints at its foot. The highlight is
-   cmdk's `data-selected`, which the arrows and the pointer both move, so a
-   hover draws nothing of its own. The results are `@luke/ui`'s
-   `ComboboxListBox`, filling the card above the foot and scrolling inside
-   itself, so nothing here scrolls. These `command-palette*` rules are the
-   picker's alone now, and go once it moves onto CommandDialog too (CD3). */
-.command-palette-backdrop {
-  position: fixed;
-  z-index: var(--luke-z-dialog);
-  inset: 0;
-  background: var(--luke-color-scrim);
-  animation: luke-dialog-fade var(--luke-duration-quick) var(--luke-motion-exit);
-}
-
-[data-luke-profile="desktop"] .command-palette-backdrop {
-  -webkit-app-region: no-drag;
-}
-
-.command-palette {
-  position: fixed;
-  z-index: var(--luke-z-dialog);
-  top: calc(var(--luke-viewport-top) + var(--luke-stage-height) * 0.18);
-  left: 50%;
-  display: flex;
-  width: min(560px, calc(100vw - 2 * var(--luke-space-24)));
-  max-height: calc(var(--luke-stage-height) * 0.64);
-  flex-direction: column;
-  border: 1px solid var(--luke-color-border-strong);
-  border-radius: var(--luke-dialog-radius);
-  background: var(--luke-color-overlay);
-  box-shadow: 0 16px 56px var(--luke-color-shadow);
-  color: var(--luke-color-text);
-  overflow: clip;
-  transform: translateX(-50%);
-  animation:
-    luke-menu-arrive var(--luke-duration-quick) var(--luke-motion-exit) backwards,
-    luke-scale-in-centered-x var(--luke-duration-fast) var(--luke-spring-fast) backwards;
-}
-
-[data-luke-profile="desktop"] .command-palette {
-  -webkit-app-region: no-drag;
-}
-
-.command-palette:focus,
-.command-palette [cmdk-root]:focus {
-  outline: none; /* no ring: a dialog holding focus for its controls */
-}
-
-.command-palette [cmdk-root] {
-  display: flex;
-  min-height: 0;
-  flex-direction: column;
-}
-
-.command-palette-search {
-  display: flex;
-  flex: 0 0 auto;
-  align-items: center;
-  gap: var(--luke-icon-gap);
-  height: 44px;
-  padding: 0 var(--luke-space-16);
-  border-bottom: 1px solid var(--luke-color-border);
-  color: var(--luke-color-text-muted);
-}
-
-.command-palette-search svg {
-  width: var(--luke-menu-glyph);
-  height: var(--luke-menu-glyph);
-  flex: 0 0 auto;
-}
-
-.command-palette-search input {
-  flex: 1;
-  min-width: 0;
-  height: 100%;
-  border: 0;
-  outline: none; /* no ring: a menu's filter, which always holds the caret */
-  background: none;
-  color: var(--luke-color-text);
-  font: inherit;
-  font-size: var(--luke-type-body-size);
-}
-
-.command-palette-search input::placeholder {
-  color: var(--luke-color-text-muted);
-}
-
-/* The keys' hints along the card's foot, each chord a step louder than the
-   words that say what it does, so the eye finds the keys first. */
-.command-palette-footer {
-  display: flex;
-  flex: 0 0 auto;
-  align-items: center;
-  gap: var(--luke-space-16);
-  height: 36px;
-  padding: 0 var(--luke-space-16);
-  border-top: 1px solid var(--luke-color-border);
-  color: var(--luke-color-text-muted);
-  font-size: var(--luke-type-caption-size);
-}
-
-.command-palette-footer-hint {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--luke-space-4);
-}
-
-/* A hint's keys set as one chord, ↑↓ and ←→, a step apart from their word. */
-.command-palette-footer-keys {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.04em;
-}
-
-.command-palette-footer {
-  --luke-shortcut-ink: var(--luke-color-text-muted);
-}
-
-/* Under a finger the foot's keys are none to press, so it is not drawn. */
-@media (hover: none) and (pointer: coarse) {
-  .command-palette-footer {
-    display: none;
-  }
-}
-
-/* In a narrow room, a phone's, the picker is a sheet hung from the top of
-   what is seen rather than a card floating in it: the screen's whole width,
-   its corners rounded only where it ends. It is drawn at the body, outside
-   the shell, so the room is asked of the document. */
-:root:has(.desktop-shell[data-room="narrow"]) .command-palette {
-  top: var(--luke-viewport-top);
-  left: 0;
-  width: 100%;
-  max-height: calc(var(--luke-stage-height) * 0.8);
-  border-width: 0 0 1px;
-  border-radius: 0 0 var(--luke-dialog-radius) var(--luke-dialog-radius);
-  transform: none;
-  animation:
-    luke-menu-arrive var(--luke-duration-quick) var(--luke-motion-exit) backwards,
-    luke-sheet-drop var(--luke-duration-fast) var(--luke-spring-fast) backwards;
-}
 
 /* ⌃Tab's switcher (`tab-switcher.tsx`): the tabs and places stood on last
    as a row of cards over the window, drawn as ⌘K's palette is, its ground,
