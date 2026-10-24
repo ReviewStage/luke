@@ -147,7 +147,7 @@ afterEach(() => {
 function drawn(
   view: "page" | "tab" | "other",
   threads: readonly PlanCommentThread[] = THREADS,
-  landing: () => boolean = () => true,
+  landing: () => boolean | Promise<boolean> = () => true,
   plan: Task = PLAN,
   reveal?: { readonly thread: string; readonly ask: number },
   mentions?: TaskMentionsValue,
@@ -736,7 +736,7 @@ test("a reply pasted past the comment's cap is cut to the room left and the card
   const card = container.querySelector<HTMLElement>(`.comment-card[data-thread="${ID.OPEN}"]`);
   assert.ok(card);
   const cap = PLAN_COMMENT_BOUNDS.MAX_WORDS_CHARS;
-  const note = () => card.querySelector(".comment-note")?.textContent;
+  const note = () => card.querySelector(".luke-composer-foot-note")?.textContent;
   assert.equal(card.querySelector(".luke-length-counter"), null);
 
   pasteInComposer(card, "x".repeat(cap + 100));
@@ -959,7 +959,7 @@ test("on a plan's page a comment's field offers dictation, and the plain field n
 
   const dictate = (container: HTMLElement) =>
     container.querySelector(
-      `.comment-card[data-thread="${ID.OPEN}"] .comment-field-tools button[aria-label^="Dictate"]`,
+      `.comment-card[data-thread="${ID.OPEN}"] .luke-composer-foot button[aria-label^="Dictate"]`,
     );
   assert.ok(dictate(withMentions.container), "the editor's field takes a dictation");
   assert.equal(dictate(plain.container), null, "the plain field does not");
@@ -1028,6 +1028,36 @@ test("a reply's field empties as it is sent, and takes the words back where the 
 
   await act(async () => undefined);
   assert.equal(field.value, "Not for v1.", "and takes them back where the send fails");
+});
+
+test("a reply's Send stands in the box's foot, busy from the press until the service answers", async () => {
+  const answer = Promise.withResolvers<boolean>();
+  const { container, asked } = drawn("page", THREADS, () => answer.promise);
+  act(() =>
+    container
+      .querySelector<HTMLElement>(`mark.plan-comment-mark[data-threads~="${ID.OPEN}"]`)
+      ?.click(),
+  );
+  const card = container.querySelector<HTMLElement>(`.comment-card[data-thread="${ID.OPEN}"]`);
+  assert.ok(card);
+  typeInto(card.querySelector<HTMLTextAreaElement>("textarea"), "Not for v1.");
+  const send = () =>
+    card.querySelector<HTMLButtonElement>(
+      '.luke-composer-foot button[aria-label="Reply"], .luke-composer-foot button[aria-label="Sending"]',
+    );
+  assert.equal(send()?.getAttribute("aria-label"), "Reply");
+
+  act(() => send()?.click());
+  assert.equal(send()?.getAttribute("aria-label"), "Sending");
+  assert.equal(send()?.getAttribute("aria-busy"), "true");
+  assert.deepEqual(
+    asked.map((each) => each.action.action),
+    [PLAN_COMMENT_ACTION.REPLY],
+  );
+
+  await act(async () => answer.resolve(true));
+  assert.equal(send()?.getAttribute("aria-label"), "Reply");
+  assert.equal(send()?.getAttribute("aria-busy"), null);
 });
 
 test("a thread being started keeps its card through a press away while its words are sent, and takes them back where the send fails", async () => {

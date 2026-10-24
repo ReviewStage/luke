@@ -269,7 +269,7 @@ async function drawnTab(input: {
       container.querySelector<HTMLElement>(".agent-end") ??
       container.querySelector<HTMLElement>("[data-ended]")?.parentElement ??
       null,
-    note: () => container.querySelector<HTMLElement>(".agent-composer-note"),
+    note: () => container.querySelector<HTMLElement>(".luke-composer-foot-note"),
     continuedNote: () => container.querySelector<HTMLElement>(".continued-composer"),
     continuedIn: () => [...container.querySelectorAll<HTMLElement>("[data-continued]")],
     sendButton: () => container.querySelector<HTMLButtonElement>('button[aria-label="Send"]'),
@@ -278,7 +278,9 @@ async function drawnTab(input: {
     buttons,
     /** The end line's words and the presses on their row, each by what it says. */
     endRow: () => {
-      const words = container.querySelector<HTMLElement>("[data-ended] :is(.agent-end-words, .luke-failure-note-words)");
+      const words = container.querySelector<HTMLElement>(
+        "[data-ended] :is(.agent-end-words, .luke-failure-note-words)",
+      );
       const row = words?.closest<HTMLElement>(".agent-end-row") ?? null;
       return row === null ? null : { row, presses: buttons(row) };
     },

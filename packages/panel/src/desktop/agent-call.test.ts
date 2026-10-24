@@ -166,7 +166,7 @@ const ON_CALL: VoiceView = {
 
 /** The names of the buttons the agent's composer offers, in its row's order. */
 function composerButtons(page: HTMLElement): (string | null)[] {
-  return [...page.querySelectorAll(".agent-composer-actions button")].map((each) =>
+  return [...page.querySelectorAll(".agent-composer .luke-composer-foot-end button")].map((each) =>
     each.getAttribute("aria-label"),
   );
 }

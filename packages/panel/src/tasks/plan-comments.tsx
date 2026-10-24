@@ -36,6 +36,7 @@ import {
   Comment,
   type CommentAuthor,
   CommentsIcon,
+  ComposerFoot,
   ComposerFrame,
   ConfirmDialog,
   DIALOG_TONE,
@@ -45,7 +46,6 @@ import {
   ErrorState,
   Fill,
   IconButton,
-  LengthCounter,
   LINE_BUTTON_LOOK,
   LineButton,
   MENU_SURFACE_FLOW,
@@ -56,7 +56,6 @@ import {
   ScrollArea,
   Skeleton,
   SkeletonRegion,
-  SUBMIT_STATE,
   TEXT_AREA_GROW_LIMIT,
   TEXT_AREA_LOOK,
   TEXT_ELEMENT,
@@ -231,6 +230,7 @@ const COMMENT_WORDS = {
   EDITED: "edited",
   OPEN_THREAD: "Open thread",
   SHOW_WORDS: "Show in the plan",
+  SENDING: "Sending",
 } as const;
 
 /** Which thread is open, and the one being started, shared by the marks that open them and the margin that draws them. */
@@ -838,6 +838,7 @@ function ReplyField({
   >(undefined);
   // Note that a dictation's note is said before the cut paste's, and only the agent box's editor cuts a paste.
   const said = heard ?? (cut ? pasteCutWords(PLAN_COMMENT_BOUNDS.MAX_WORDS_CHARS) : undefined);
+  const note = refusal ?? said;
   const send = () => {
     const trimmed = words.trim();
     if (trimmed === "" || sending || files.reading) return;
@@ -872,10 +873,6 @@ function ReplyField({
       }
       {...files.drop.target}
     >
-      <AttachedFileChips
-        files={attachmentChips(files.attachments)}
-        onRemove={sending ? undefined : files.remove}
-      />
       <CommentText
         value={words}
         label={label}
@@ -892,38 +889,32 @@ function ReplyField({
           setCut(true);
         }}
       />
-      {said === undefined ? null : (
-        <div className="comment-note" role="alert">
-          {said}
-        </div>
-      )}
-      {refusal === undefined ? null : (
-        <div className="comment-note" role="alert">
-          {refusal}
-        </div>
-      )}
-      <div className="comment-field-foot">
-        {dictating ? (
-          <DictationStrip dictation={dictation} />
-        ) : (
-          <>
-            <AttachFilesButton disabled={sending} onFiles={files.attach} />
-            <span className="comment-field-tools">
-              {dictates ? (
-                <LengthCounter length={words.length} limit={PLAN_COMMENT_BOUNDS.MAX_WORDS_CHARS} />
-              ) : null}
-              {dictates ? <DictateButton dictation={dictation} disabled={sending} /> : null}
-              <IconButton
-                submit={sending ? SUBMIT_STATE.SUBMITTED : SUBMIT_STATE.READY}
-                variant={BUTTON_VARIANT.INK}
-                label={label === COMMENT_WORDS.ADD ? COMMENT_WORDS.COMMENT : COMMENT_WORDS.REPLY}
-                disabled={words.trim() === "" || sending || files.reading}
-                onClick={send}
-              />
-            </span>
-          </>
-        )}
-      </div>
+      <ComposerFoot
+        files={
+          <AttachedFileChips
+            files={attachmentChips(files.attachments)}
+            onRemove={sending ? undefined : files.remove}
+          />
+        }
+        tools={<AttachFilesButton disabled={sending} onFiles={files.attach} />}
+        counter={
+          dictates
+            ? { length: words.length, limit: PLAN_COMMENT_BOUNDS.MAX_WORDS_CHARS }
+            : undefined
+        }
+        actions={dictates ? <DictateButton dictation={dictation} disabled={sending} /> : undefined}
+        strip={dictating ? <DictationStrip dictation={dictation} /> : undefined}
+        send={{
+          label: label === COMMENT_WORDS.ADD ? COMMENT_WORDS.COMMENT : COMMENT_WORDS.REPLY,
+          empty: words.trim() === "",
+          held: files.reading,
+          onSend: send,
+          busy: sending,
+          busyLabel: COMMENT_WORDS.SENDING,
+        }}
+        // Note that a file refused is said over a dictation's note or a cut paste, as the agent box says it.
+        note={note === undefined ? undefined : { words: note }}
+      />
     </ComposerFrame>
   );
 }
