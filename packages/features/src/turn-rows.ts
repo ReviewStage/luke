@@ -460,11 +460,11 @@ function foldedSummary({ calls, subagents, codingAgents, messages }: Held): stri
   return line.join(", ");
 }
 
-/** What a group's line says it holds: its calls, a coding agent's start among them, then its subagents. */
+/** What a group's line says it holds: its calls, a coding agent's start among them, then its subagents, in the words its fold says them in once the turn has finished. */
 function groupSummary({ calls, subagents, codingAgents }: Held): string {
   const tools = calls + codingAgents;
   const said = [
-    ...(tools > 0 ? [countWords(tools, { one: "tool called", many: "tools called" })] : []),
+    ...(tools > 0 ? [countWords(tools, { one: "tool call", many: "tool calls" })] : []),
     ...(subagents > 0 ? [countWords(subagents, { one: "subagent", many: "subagents" })] : []),
   ];
   return said.join(", ");
