@@ -23,6 +23,7 @@ import {
   LIST_DENSITY,
   LIST_ROW_CURRENT,
   List,
+  ListMotion,
   ListRow,
   type ListRowHint,
   McpIcon,
@@ -397,6 +398,7 @@ function ServersPopover({
 }): React.JSX.Element {
   const field = useRef<HTMLInputElement>(null);
   const list = useRef<HTMLDivElement>(null);
+  const moving = useRef<HTMLDivElement>(null);
   const rowsId = useId();
   const rows = useServerRows(statuses, servers.disabled);
   const [working, setWorking] = useState<{ server: string; act: WorkingAct } | undefined>(
@@ -666,6 +668,8 @@ function ServersPopover({
     card: React.ReactNode;
     /** Whether the press opens a further page, which a chevron says. */
     opens: boolean;
+    /** The key the list's motion follows the row by, out of one section and into another. */
+    motionKey?: string;
     onPress: (() => void) | undefined;
   }) => {
     const { index } = input;
@@ -686,6 +690,7 @@ function ServersPopover({
             keepFocus
             tabbable={false}
             onPress={input.onPress}
+            motionKey={input.motionKey}
             hint={{ Hint: PointerHighlight, label: input.row.name }}
           />
         </RowHintOptions>
@@ -711,6 +716,8 @@ function ServersPopover({
       card: <ServerCard provider={row.provider} connection={row.connection} />,
       actions: end(row),
       opens: opensTools(row),
+      // Note that a server's row is followed by its connection, because a server that connects leaves Not connected for Connected and glides across rather than leaving one list and arriving in the other.
+      motionKey: row.connection,
       // Note that a row the keys can choose takes the press as Enter does, because a row hangs its card from its press and a row with none would hang nothing.
       onPress: rowPress(row),
     });
@@ -745,27 +752,29 @@ function ServersPopover({
       />
       <div className="agent-servers-scroll">
         <ScrollArea ref={list} size={SCROLL_SIZE.CONTENT}>
-          <div className="agent-servers-list">
-            {rows.length === 0 ? <ServersNote words={SERVERS_NONE} /> : null}
-            {rows.length > 0 && picks.length === 0 && groups.length === 0 ? (
-              <ServersNote words={SEARCH.NONE} />
-            ) : null}
-            {groups.map((group) => (
-              <Fragment key={group.heading ?? "unread"}>
-                {group.heading !== undefined ? <ServersHeading words={group.heading} /> : null}
-                <List label={group.heading ?? SERVERS_LABEL} density={LIST_DENSITY.COMPACT}>
-                  {group.rows.map(serverRow)}
-                </List>
-              </Fragment>
-            ))}
-            {found.tools.length > 0 ? (
-              <>
-                <ServersHeading words={SEARCH.TOOLS} />
-                <List label={SEARCH.TOOLS} density={LIST_DENSITY.COMPACT}>
-                  {found.tools.map(toolRow)}
-                </List>
-              </>
-            ) : null}
+          <div ref={moving} className="agent-servers-list">
+            <ListMotion root={moving}>
+              {rows.length === 0 ? <ServersNote words={SERVERS_NONE} /> : null}
+              {rows.length > 0 && picks.length === 0 && groups.length === 0 ? (
+                <ServersNote words={SEARCH.NONE} />
+              ) : null}
+              {groups.map((group) => (
+                <Fragment key={group.heading ?? "unread"}>
+                  {group.heading !== undefined ? <ServersHeading words={group.heading} /> : null}
+                  <List label={group.heading ?? SERVERS_LABEL} density={LIST_DENSITY.COMPACT} moves>
+                    {group.rows.map(serverRow)}
+                  </List>
+                </Fragment>
+              ))}
+              {found.tools.length > 0 ? (
+                <>
+                  <ServersHeading words={SEARCH.TOOLS} />
+                  <List label={SEARCH.TOOLS} density={LIST_DENSITY.COMPACT}>
+                    {found.tools.map(toolRow)}
+                  </List>
+                </>
+              ) : null}
+            </ListMotion>
           </div>
         </ScrollArea>
       </div>
