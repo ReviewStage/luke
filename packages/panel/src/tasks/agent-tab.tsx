@@ -2936,8 +2936,12 @@ export function AgentSubagentTab({
     const held = { messages, status: pageStatus, runStartedAt, title: pageTitle };
     onHeld(callId, { ...held, subagentTitles: new Map() });
   }, [onHeld, callId, messages, pageStatus, runStartedAt, pageTitle]);
+  // A worker's reply streams into a log as quiet as its agent's, so it is said once whole, under the worker's name.
+  const name = cardTitle(task);
+  const tab = useRef<HTMLElement>(null);
+  useReplySaid({ messages, status: pageStatus, name, quiet: false, tab });
   return (
-    <AgentTabFrame label={cardTitle(task)}>
+    <AgentTabFrame ref={tab} label={name}>
       <MacOwnerProvider value={macOwner}>
         <AgentPicturesProvider value={pictures}>
           <WholePartsProvider value={wholeParts}>

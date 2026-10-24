@@ -2104,8 +2104,9 @@ const SENTENCE_END = /[.!?](?=\s|$)/u;
  * What a turn that finished replied, as a reader hears it: its newest
  * reply's last stretch of words, after the turn's last call, cut to its
  * first sentence, or to its first words where that runs on. Nothing where
- * there is no reply, it holds no words, or it is an operator's quiet reply
- * (`quiet`), which leaves its member nothing to read.
+ * there is no reply, no words follow its last call, as a turn that ended on
+ * a call, or it is an operator's quiet reply (`quiet`), which leaves its
+ * member nothing to read.
  */
 export function finishedReplyLead(
   messages: readonly CodingAgentMessage[],
@@ -2114,7 +2115,10 @@ export function finishedReplyLead(
   const reply = messages.findLast((message) => message.role === MESSAGE_ROLE.ASSISTANT);
   if (reply === undefined) return undefined;
   if (quiet && isQuietReply(reply)) return undefined;
-  const last = agentParts(reply).findLast((part) => part.kind === AGENT_PART.TEXT);
+  // Note that only words after the turn's last call are its reply, because words before it were the turn under way.
+  const parts = agentParts(reply);
+  const lastCall = parts.findLastIndex((part) => part.kind === AGENT_PART.TOOL);
+  const last = parts.slice(lastCall + 1).findLast((part) => part.kind === AGENT_PART.TEXT);
   const words = last?.kind === AGENT_PART.TEXT ? plainWords(last.text) : "";
   if (words === "") return undefined;
   const end = SENTENCE_END.exec(words);

@@ -95,3 +95,14 @@ test("an item that landed while the Inbox was not on screen is not said once it 
   push([unseen], true);
   assert.equal(announcedPolitely(), "");
 });
+
+test("an item its agent posts again under the same key, at a newer revision, is said again", () => {
+  const first = item("66666666-6666-4666-8666-666666666666", "Merge the release?");
+  const push = inbox("plan-e", []);
+  push([first]);
+  assert.equal(announcedPolitely(), "New in your inbox: Merge the release?");
+  // Answered, it leaves the list; posted again, it comes back at its next revision.
+  push([]);
+  push([{ ...first, revision: 2, title: "Merge the hotfix too?" }]);
+  assert.equal(announcedPolitely(), "New in your inbox: Merge the hotfix too?");
+});

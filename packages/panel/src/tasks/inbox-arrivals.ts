@@ -10,8 +10,8 @@
  * item that lands read, as a thread the reader opened with New thread is
  * read for them; and what lands while the Inbox is not on screen is let
  * by unsaid, its toast having said it. Every Inbox the window reads one
- * task through hears the same push, so an item is said once whichever
- * of them said it first.
+ * task through hears the same push, so an item is said once at each
+ * revision whichever of them said it first.
  */
 
 import type { InboxItem } from "@luke/features/inbox-wire";
@@ -19,8 +19,17 @@ import { inboxArrivalWords } from "@luke/features/words";
 import { ANNOUNCE, announce } from "@luke/ui";
 import { useEffect, useRef } from "react";
 
-/** The items said by any Inbox of the window, so a second reader of the same task says them no more. */
-const saidItems = new Set<string>();
+/**
+ * The newest revision of each item any Inbox of the window said, so a
+ * second reader of the same task says it no more, while an item its agent
+ * posted again under the same key, at a newer revision, is said again.
+ */
+const saidRevisions = new Map<string, number>();
+
+/** Whether some Inbox of the window said `item` at its revision already. */
+function saidBefore(item: InboxItem): boolean {
+  return (saidRevisions.get(item.id) ?? 0) >= item.revision;
+}
 
 /** One task's Inbox as its hook last read it: the task, and its items once a read has answered. */
 interface ArrivalsHeld {
@@ -42,10 +51,10 @@ export function useInboxArrivals(held: ArrivalsHeld, onScreen: boolean): void {
     // Note that a task's first read is where its Inbox stands, so nothing in it is news.
     if (was === undefined || was.taskId !== held.taskId || !onScreen) return;
     const landed = held.items.filter(
-      (item) => !was.ids.has(item.id) && item.unread === true && !saidItems.has(item.id),
+      (item) => !was.ids.has(item.id) && item.unread === true && !saidBefore(item),
     );
     if (landed.length === 0) return;
-    for (const item of landed) saidItems.add(item.id);
+    for (const item of landed) saidRevisions.set(item.id, item.revision);
     announce(ANNOUNCE.POLITE, inboxArrivalWords(landed.map((item) => item.title)));
   }, [held, onScreen]);
 }

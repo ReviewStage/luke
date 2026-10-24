@@ -11,7 +11,7 @@ import {
   type CodingAgentStatus,
   type CodingAgentSummary,
 } from "@luke/features/coding-agent-wire";
-import { MESSAGE_ROLE } from "@luke/wire";
+import { MESSAGE_ROLE, type WireRecord } from "@luke/wire";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -20,7 +20,7 @@ import { announcedPolitely, mountAnnouncer } from "../testing/announcer.js";
 import { fakeAppBridge } from "../testing/app-bridge.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { codingAgentsControl, pushedPage } from "../testing/tasks-control.js";
-import { AgentTab } from "./agent-tab.js";
+import { AgentSubagentTab, AgentTab } from "./agent-tab.js";
 import type { TranscriptFollower } from "./use-agent-transcript.js";
 
 /**
@@ -64,26 +64,41 @@ const PLAN: CodingAgentMessage = {
   parts: [{ type: "text", text: "Audit the retry paths." }],
 };
 
-/** The reply as a page reads it, its words so far. */
-function reply(words: string): CodingAgentMessage {
+/** The reply as a page reads it: its words so far, or its parts where it called a tool. */
+function reply(words: string | readonly WireRecord[]): CodingAgentMessage {
   return {
     id: "reply",
     role: MESSAGE_ROLE.ASSISTANT,
-    parts: [{ type: "step-start" }, { type: "text", text: words }],
+    parts:
+      typeof words === "string"
+        ? [{ type: "step-start" }, { type: "text", text: words }]
+        : [{ type: "step-start" }, ...words],
     startedAt: 1_000,
   };
 }
 
 function page(
-  words: string,
+  words: string | readonly WireRecord[],
   status: CodingAgentStatus,
   cursor: string,
 ): CodingAgentMessagesAnswerView {
   return { messages: [PLAN, reply(words)], cursor, status, title: null, subagents: [] };
 }
 
-/** A running agent's tab, its first page answered at once and each later one when the test hands it. */
-async function runningTab(first: CodingAgentMessagesAnswerView) {
+/** A call the reply made, answered. */
+const READ_TESTS: WireRecord = {
+  type: "tool-read",
+  toolCallId: "call-read",
+  state: "output-available",
+  input: { path: "retry.test.ts" },
+  output: { ok: true },
+};
+
+/** What the worker tab's worker was handed, which names its tab. */
+const WORKER_TASK = "Check the CSV writers";
+
+/** A running agent's tab, or its worker's, its first page answered at once and each later one when the test hands it. */
+async function runningTab(first: CodingAgentMessagesAnswerView, worker = false) {
   fakeAppBridge({});
   mountAnnouncer();
   let hear: ((page: CodingAgentTranscriptPage) => void) | undefined;
@@ -105,14 +120,25 @@ async function runningTab(first: CodingAgentMessagesAnswerView) {
     root?.render(
       onRegistry(
         registry,
-        createElement(AgentTab, {
-          agent: AGENT,
-          control,
-          shown: true,
-          onOpenSubagent: () => undefined,
-          onOpenTarget: () => undefined,
-          onHeld: () => undefined,
-        }),
+        worker
+          ? createElement(AgentSubagentTab, {
+              agentId: AGENT.id,
+              callId: "delegation-call",
+              task: WORKER_TASK,
+              status: CODING_AGENT_STATUS.RUNNING,
+              control,
+              shown: true,
+              onStatus: () => undefined,
+              onHeld: () => undefined,
+            })
+          : createElement(AgentTab, {
+              agent: AGENT,
+              control,
+              shown: true,
+              onOpenSubagent: () => undefined,
+              onOpenTarget: () => undefined,
+              onHeld: () => undefined,
+            }),
       ),
     );
     await settle();
@@ -177,4 +203,38 @@ test("a reader whose focus stands in the transcript hears only who the reply is 
   act(() => log.focus());
   await tab.answer(page("The retry paths are safe.", CODING_AGENT_STATUS.COMPLETED, "1:2"));
   assert.equal(announcedPolitely(), "Reply from Retry audit");
+});
+
+test("a turn that ended on a call says no words written before the call as its reply", async () => {
+  const tab = await runningTab(page("I'll check the tests.", CODING_AGENT_STATUS.RUNNING, "1:1"));
+  await tab.answer(
+    page(
+      [{ type: "text", text: "I'll check the tests." }, READ_TESTS],
+      CODING_AGENT_STATUS.COMPLETED,
+      "1:2",
+    ),
+  );
+  assert.equal(announcedPolitely(), "");
+});
+
+test("the reply is the words after the turn's last call", async () => {
+  const tab = await runningTab(page("I'll check the tests.", CODING_AGENT_STATUS.RUNNING, "1:1"));
+  await tab.answer(
+    page(
+      [
+        { type: "text", text: "I'll check the tests." },
+        READ_TESTS,
+        { type: "text", text: "They pass. Nothing to change." },
+      ],
+      CODING_AGENT_STATUS.COMPLETED,
+      "1:2",
+    ),
+  );
+  assert.equal(announcedPolitely(), "Reply from Retry audit: They pass.");
+});
+
+test("a worker's reply is said once whole, under the worker's name", async () => {
+  const tab = await runningTab(page("The writers", CODING_AGENT_STATUS.RUNNING, "1:1"), true);
+  await tab.answer(page("The writers quote every field.", CODING_AGENT_STATUS.COMPLETED, "1:2"));
+  assert.equal(announcedPolitely(), `Reply from ${WORKER_TASK}: The writers quote every field.`);
 });
