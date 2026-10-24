@@ -95,6 +95,7 @@ import {
   cssCustomProperties,
   DetailPage,
   ErrorState,
+  FailureNote,
   Fill,
   FoldingButton,
   IconButton,
@@ -2486,15 +2487,9 @@ export function AutomationEditor({
             onChange={(name) => editDraft({ name })}
           />
           {shownProblems && problems[DRAFT_FIELD.NAME] !== undefined ? (
-            <p className="error-message automation-form-problem" role="alert">
-              {problems[DRAFT_FIELD.NAME]}
-            </p>
+            <FailureNote>{problems[DRAFT_FIELD.NAME]}</FailureNote>
           ) : null}
-          {refusal === undefined ? null : (
-            <p className="error-message automation-save-refusal" role="alert">
-              {refusal}
-            </p>
-          )}
+          {refusal === undefined ? null : <FailureNote>{refusal}</FailureNote>}
           <EditorForm
             draft={draft}
             automation={automation}

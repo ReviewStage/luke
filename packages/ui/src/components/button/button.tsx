@@ -13,6 +13,7 @@ import { CheckIcon } from "../../face/glyphs.js";
 import { PRESS_FACE, PRESS_PULSE, pulsePress } from "../../press-pulse.js";
 import { replayMotion } from "../../replay-motion.js";
 import { buttonVariants, Button as ShadcnButton } from "../../shadcn/button.js";
+import { rovingItem } from "../roving-keys/roving-keys.js";
 import { useSettled } from "../spinner/settle-wait.js";
 import { SpinnerRing } from "../spinner/spinner.js";
 
@@ -45,8 +46,9 @@ import { SpinnerRing } from "../spinner/spinner.js";
  * microphone muted is never read as one hearing you.
  *
  * A button that is not `tabbable` is out of the tab order but takes the
- * focus when it is handed it, for a roving stop: one of a group the
- * keyboard enters at one place and moves through by its own keys.
+ * focus when it is handed it. A `roving` one is an item of a roving set
+ * (`useRovingKeys`): one of a group the keyboard enters at one place and
+ * moves through by the arrows, whose box keeps its tab order.
  *
  * A button that keeps focus (`keepFocus`) leaves the focus where it is
  * when a pointer presses it, so a field beside it that holds the keys, as a
@@ -214,6 +216,8 @@ type ButtonBase = LandingProps &
     focusableWhenDisabled?: boolean | undefined;
     /** Whether Tab stops on it; one that is not still takes the focus a roving group hands it. */
     tabbable?: boolean | undefined;
+    /** Whether it is an item of a `useRovingKeys` box, which keeps its tab order and walks it with the arrows. */
+    roving?: boolean | undefined;
     /** Whether a pointer's press leaves the focus where it is, as on a field beside it that holds the keys. */
     keepFocus?: boolean | undefined;
     /** Whether its glyph turns once as a press lands, as a refresh's or a retry's arrow does. */
@@ -360,6 +364,7 @@ function stateProps(props: ButtonBase, name: string | undefined, done = false) {
     ref: props.ref,
     disabled: props.disabled === true && props.focusableWhenDisabled !== true,
     tabIndex: props.tabbable === false ? -1 : undefined,
+    ...(props.roving === true ? rovingItem() : undefined),
     "aria-disabled": refusing ? true : undefined,
     "aria-busy": props.busy === true ? true : undefined,
     "aria-label": busyName ?? name,

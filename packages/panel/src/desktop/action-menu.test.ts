@@ -1,12 +1,12 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import { PaneBar } from "@luke/ui";
 import { CopyIcon } from "lucide-react";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
 import { MenuRow } from "../settings/menu-row.js";
-import { BarMenu } from "../tasks/file-menu.js";
 import { restOn } from "../testing/hint-rest.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
 
@@ -86,7 +86,7 @@ test("a Settings row's ⋯ and a file bar's ⋯ each open their menu on a press 
       "div",
       null,
       createElement(MenuRow, { thing: "Linear", actions: ACTIONS, children: "Linear" }),
-      createElement(BarMenu, { thing: "File", actions: ACTIONS }),
+      createElement(PaneBar, { menu: { label: "File actions", groups: [ACTIONS] } }),
     ),
   );
   for (const name of ["Linear actions", "File actions"]) {

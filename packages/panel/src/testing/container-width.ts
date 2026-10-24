@@ -25,7 +25,8 @@ import tokens from "@luke/ui/tokens.css?inline";
  *
  * A control shown only under the pointer answers the device through an
  * input-type media query, `(hover: …)`, `(pointer: …)`, or both joined by
- * `and`, which jsdom drops too: each is resolved for a touch screen (no
+ * `and`, spaced or not as a Tailwind arbitrary variant writes them
+ * (`[@media(hover:none)_and_(pointer:coarse)]:`), which jsdom drops too: each is resolved for a touch screen (no
  * hover, a coarse pointer) where the layout says `touch`, and for a mouse
  * (hover, a fine pointer) where it does not. Every other media query is left for jsdom to
  * drop.
@@ -75,7 +76,7 @@ const SHEETS = [
  * an input-type media query, or a named layer.
  */
 const AT_RULE =
-  /@container (?:([a-z-]+) )?\((?:(max-width|min-width): (\d+)px|width (<|<=|>|>=) (\d+)px)\) \{|@media ((?:not all and )?\((?:hover|pointer): [a-z]+\)(?: and \((?:hover|pointer): [a-z]+\))*) \{|@layer ([a-z-]+) \{/g;
+  /@container (?:([a-z-]+) )?\((?:(max-width|min-width): (\d+)px|width (<|<=|>|>=) (\d+)px)\) \{|@media ((?:not all and )?\((?:hover|pointer): ?[a-z]+\)(?: and \((?:hover|pointer): ?[a-z]+\))*) \{|@layer ([a-z-]+) \{/g;
 
 /** What each device answers the input-type features: on a touch screen nothing hovers and the pointer is a finger; a mouse hovers, finely. */
 const DEVICE = {
@@ -124,7 +125,7 @@ function mediaHolds(media: string, layout: ContainerLayout): boolean {
   const negated = media.startsWith("not all and ");
   const device: Readonly<Record<string, string>> =
     layout.touch === true ? DEVICE.TOUCH : DEVICE.MOUSE;
-  const features = [...media.matchAll(/\((hover|pointer): ([a-z]+)\)/g)];
+  const features = [...media.matchAll(/\((hover|pointer): ?([a-z]+)\)/g)];
   const answered = features.every(
     ([, feature, value]) => feature !== undefined && device[feature] === value,
   );

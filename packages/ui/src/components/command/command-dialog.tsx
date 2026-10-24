@@ -30,6 +30,10 @@ import { Tooltip } from "../tooltip/hint.js";
  * The card stands high in the window rather than in its middle, so the
  * field stays where it is while the rows under it come and go, and it
  * fades out over `--luke-duration-exit` as it closes, inert while it does.
+ * In a narrow room, a phone's, it is a sheet hung from the top of what is
+ * seen rather than a card floating in it: the screen's whole width, its
+ * corners rounded only where it ends. Under a finger its foot, whose keys
+ * are none to press, is not drawn.
  *
  * Each row is a menu's row (`ComboboxOptionItem`), its lead, its glyph,
  * its name and detail fading where they are cut, its hint (a chord) and its
@@ -80,13 +84,13 @@ export interface CommandGroup {
   readonly note?: ReactNode;
 }
 
-/** The dimmed window: the card stands a fifth of the way down it rather than in its middle, and fades out with it. */
+/** The dimmed window: the card stands a fifth of the way down it rather than in its middle, and fades out with it; in a narrow room, against its top and sides. */
 const ROOM =
-  "items-start pt-dialog-command-top data-ending-style:pointer-events-none data-ending-style:animate-leave";
+  "items-start pt-dialog-command-top data-ending-style:pointer-events-none data-ending-style:animate-leave room-narrow:p-0";
 
-/** The card: the palette's measure, unpadded, its field, band, list, and foot edge to edge, fading out as it closes. */
+/** The card: the palette's measure, unpadded, its field, band, list, and foot edge to edge, fading out as it closes; in a narrow room, a sheet across the screen, edged and rounded only along its foot. */
 const CARD =
-  "w-dialog-command max-h-dialog-command-room gap-0 overflow-clip p-0 focus:outline-none data-ending-style:pointer-events-none data-ending-style:animate-leave";
+  "w-dialog-command max-h-dialog-command-room gap-0 overflow-clip p-0 focus:outline-none data-ending-style:pointer-events-none data-ending-style:animate-leave room-narrow:w-full room-narrow:max-h-dialog-command-sheet room-narrow:rounded-t-none room-narrow:border-x-0 room-narrow:border-t-0";
 
 /** cmdk's root: a column that gives way to the card's height, so the list scrolls inside it. */
 const ROOT = "flex min-h-0 flex-1 flex-col outline-none";
@@ -102,9 +106,9 @@ const FIELD =
 /** A band under the field the caller fills, such as a row of filters. */
 const BAND = "min-w-0 flex-none border-b border-border px-luke-12 py-luke-8";
 
-/** The foot the caller fills, such as the keys' hints, in a caption's words. */
+/** The foot the caller fills, such as the keys' hints, in a caption's words; not drawn under a finger, which has no keys to press. */
 const FOOT =
-  "flex min-w-0 flex-none items-center gap-luke-16 border-t border-border px-luke-16 py-luke-8 text-caption text-muted-foreground";
+  "flex min-w-0 flex-none items-center gap-luke-16 border-t border-border px-luke-16 py-luke-8 text-caption text-muted-foreground [@media(hover:none)_and_(pointer:coarse)]:hidden";
 
 /** A group's note after its rows: a quiet caption at the rows' inset. */
 const NOTE = "px-row-inset pt-luke-4 pb-luke-8 text-caption text-muted-foreground";
@@ -113,8 +117,22 @@ const NOTE = "px-row-inset pt-luke-4 pb-luke-8 text-caption text-muted-foregroun
 const HEADING = cn("block", COMBOBOX_LABEL);
 
 /**
+ * How well `words`, and any `keywords` beside them, answer `typed`: 0 where
+ * they do not, up to 1 where they are it, by cmdk's own scoring, which every
+ * palette ranks by. A caller that ranks its own rows (`COMMAND_FILTER.NONE`)
+ * scores them with this, so its order and the dialog's agree.
+ */
+export function commandScore(
+  words: string,
+  typed: string,
+  keywords?: readonly string[] | undefined,
+): number {
+  return defaultFilter(words, typed, keywords === undefined ? undefined : [...keywords]);
+}
+
+/**
  * The `groups` narrowed to the rows whose words match `typed`, best first
- * within each group, by cmdk's own scoring; every row where nothing is typed.
+ * within each group, by `commandScore`; every row where nothing is typed.
  * Note that the groups keep the caller's order, each its note.
  */
 function matching(groups: readonly CommandGroup[], typed: string): readonly CommandGroup[] {
@@ -122,10 +140,7 @@ function matching(groups: readonly CommandGroup[], typed: string): readonly Comm
   return groups.map((group) => ({
     ...group,
     items: group.items
-      .map((item) => ({
-        item,
-        score: defaultFilter(item.words, typed, item.keywords ? [...item.keywords] : undefined),
-      }))
+      .map((item) => ({ item, score: commandScore(item.words, typed, item.keywords) }))
       .filter((scored) => scored.score > 0)
       .sort((first, second) => second.score - first.score)
       .map((scored) => scored.item),

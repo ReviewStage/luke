@@ -2869,6 +2869,11 @@ test("a post refused while the box holds nothing newer comes back into it with w
     chat.page.querySelector<HTMLElement>(".chat-message[data-unsent]") ??
     assert.fail("the refused post stays where it went");
   assert.match(unsent.textContent ?? "", /Back to the box\. Again\./u);
+  assert.match(
+    unsent.querySelector('[role="alert"]')?.textContent ?? "",
+    /^Chat could not be reached\.RetryDiscard$/u,
+    "the refusal is an alert with Retry and Discard",
+  );
   const retry =
     [...unsent.querySelectorAll("button")].find((each) => each.textContent === "Retry") ??
     assert.fail("with Retry");

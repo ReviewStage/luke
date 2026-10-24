@@ -38,6 +38,7 @@ import {
   MarkStrip,
   NAV_CURRENT,
   NavItem,
+  PaneBar,
   SCROLL_SIZE,
   ScrollArea,
   Skeleton,
@@ -66,7 +67,7 @@ import {
   RotateCwIcon,
   SparklesIcon,
 } from "lucide-react";
-import { type ReactNode, useId, useMemo, useRef, useState } from "react";
+import { type ReactNode, useMemo, useRef, useState } from "react";
 import { PANE_EDGE, usePaneSlide } from "../desktop/pane-motion.js";
 import {
   AgentChangesTab,
@@ -93,7 +94,6 @@ import {
   steppedChapter,
 } from "./chapters-model.js";
 import type { ChaptersRead } from "./chapters-read.js";
-import { BarMenu } from "./file-menu.js";
 import type { TreeShown } from "./file-view.js";
 import { TranscriptWords } from "./transcript-blocks.js";
 import type { CodingAgentsControl } from "./use-coding-agents.js";
@@ -180,7 +180,7 @@ const CHAPTERS_WORDS = {
   SHOW_RAIL: "Show chapters",
   HIDE_RAIL: "Hide chapters",
   RAIL: "Chapters",
-  THING: "Chapters",
+  ACTIONS: "Chapters actions",
   RISK_REASONS: "Why",
   /** A chapter's place among them, as its foot says it. */
   of: (at: number, count: number) => `Chapter ${at} of ${count}`,
@@ -270,16 +270,16 @@ function ChapterRailFrame({
   );
 }
 
-/** The chapter being read, beside the rail, named by its heading. */
+/** The chapter being read, beside the rail, named by its title where it has one. */
 function ChapterReading({
-  labelledBy,
+  label,
   children,
 }: {
-  labelledBy?: string | undefined;
+  label?: string | undefined;
   children: ReactNode;
 }): React.JSX.Element {
   return (
-    <Fill as={FILL_ELEMENT.SECTION} className="chapter-reading" aria-labelledby={labelledBy}>
+    <Fill as={FILL_ELEMENT.SECTION} className="chapter-reading" aria-label={label}>
       {children}
     </Fill>
   );
@@ -589,7 +589,6 @@ function ChaptersReading({
   threads: ChangesThreads;
   lineComments: LineComments | undefined;
 }): React.JSX.Element {
-  const headingId = useId();
   const [chosen, setChosen] = useState(0);
   const at = Math.min(chosen, chapters.length - 1);
   const [beside, setBeside] = useState(true);
@@ -716,63 +715,62 @@ function ChaptersReading({
           />
         ) : null}
         <ChapterStrip rows={rows} at={at} viewed={viewed} onOpen={toggleRail} />
-        <ChapterReading labelledBy={headingId}>
-          <header className="chapter-head">
-            <ScrollArea size={SCROLL_SIZE.CONTENT}>
-              <div className="chapter-head-body">
-                <div className="chapter-head-row">
-                  <RailToggle
-                    beside={beside}
-                    over={over}
-                    onBeside={() => setBeside((was) => !was)}
-                    onOver={() => setOver((was) => !was)}
-                  />
-                  <Text
-                    as={TEXT_ELEMENT.H3}
-                    variant={TEXT_VARIANT.SECTION}
-                    id={headingId}
-                    className="chapter-head-title"
-                  >
-                    {at + 1}. {chapter.title}
-                  </Text>
-                  {chapter.risk === null ? null : (
-                    <RiskChip risk={chapter.risk} reasons={chapter.riskReasons} />
-                  )}
-                  <span className="chapter-head-actions">
-                    {marks === undefined ? null : (
-                      <Tooltip
-                        label={done ? CHAPTERS_WORDS.UNMARK_VIEWED : CHAPTERS_WORDS.MARK_VIEWED}
-                        chord={CHAPTERS_SHORTCUTS[CHAPTERS_KEY.MARK_CHAPTER_VIEWED].chord}
-                      >
-                        <span className="chapter-viewed">
-                          <Checkbox checked={done} onChange={markChapter}>
-                            {CHAPTERS_WORDS.VIEWED}
-                          </Checkbox>
-                        </span>
-                      </Tooltip>
-                    )}
-                    <BarMenu
-                      thing={CHAPTERS_WORDS.THING}
-                      actions={[
-                        {
-                          label: CHAPTERS_WORDS.REFRESH_CHAPTERS,
-                          icon: <RotateCwIcon aria-hidden="true" />,
-                          disabled: read.out,
-                          onSelect: read.ask,
-                        },
-                        ...(generatable
-                          ? [
-                              {
-                                label: CHAPTERS_WORDS.REGENERATE_CHAPTERS,
-                                icon: <SparklesIcon aria-hidden="true" />,
-                                onSelect: read.generate,
-                              },
-                            ]
-                          : []),
-                      ]}
-                    />
+        <ChapterReading label={`${at + 1}. ${chapter.title}`}>
+          <PaneBar
+            mark={
+              <RailToggle
+                beside={beside}
+                over={over}
+                onBeside={() => setBeside((was) => !was)}
+                onOver={() => setOver((was) => !was)}
+              />
+            }
+            title={`${at + 1}. ${chapter.title}`}
+            detail={
+              chapter.risk === null ? undefined : (
+                <RiskChip risk={chapter.risk} reasons={chapter.riskReasons} />
+              )
+            }
+            actions={
+              marks === undefined ? null : (
+                <Tooltip
+                  label={done ? CHAPTERS_WORDS.UNMARK_VIEWED : CHAPTERS_WORDS.MARK_VIEWED}
+                  chord={CHAPTERS_SHORTCUTS[CHAPTERS_KEY.MARK_CHAPTER_VIEWED].chord}
+                >
+                  <span className="chapter-viewed">
+                    <Checkbox checked={done} onChange={markChapter}>
+                      {CHAPTERS_WORDS.VIEWED}
+                    </Checkbox>
                   </span>
-                </div>
+                </Tooltip>
+              )
+            }
+            menu={{
+              label: CHAPTERS_WORDS.ACTIONS,
+              groups: [
+                [
+                  {
+                    label: CHAPTERS_WORDS.REFRESH_CHAPTERS,
+                    icon: <RotateCwIcon aria-hidden="true" />,
+                    disabled: read.out,
+                    onSelect: read.ask,
+                  },
+                  ...(generatable
+                    ? [
+                        {
+                          label: CHAPTERS_WORDS.REGENERATE_CHAPTERS,
+                          icon: <SparklesIcon aria-hidden="true" />,
+                          onSelect: read.generate,
+                        },
+                      ]
+                    : []),
+                ],
+              ],
+            }}
+          />
+          <div className="chapter-brief">
+            <ScrollArea size={SCROLL_SIZE.CONTENT}>
+              <div className="chapter-brief-body">
                 <div className="chapter-summary">
                   <TranscriptWords text={chapter.summary} />
                 </div>
@@ -812,7 +810,7 @@ function ChaptersReading({
                 )}
               </div>
             </ScrollArea>
-          </header>
+          </div>
           {stale ? (
             <EmptyState icon={<FileDiffIcon />}>{CHAPTERS_WORDS.STALE_DIFF}</EmptyState>
           ) : chapterFiles.length === 0 ? (
@@ -833,35 +831,39 @@ function ChaptersReading({
               fileReveal={reveal}
             />
           )}
-          <footer className="chapter-foot">
-            <Tooltip
-              label={previous?.title}
-              chord={CHAPTERS_SHORTCUTS[CHAPTERS_KEY.PREVIOUS_CHAPTER].chord}
-            >
-              <Button
-                variant={BUTTON_VARIANT.QUIET}
-                icon={<ArrowLeftIcon aria-hidden="true" />}
-                disabled={previous === undefined}
-                onClick={() => step(-1)}
-              >
-                {CHAPTERS_WORDS.PREVIOUS}
-              </Button>
-            </Tooltip>
-            <span className="chapter-foot-place">{CHAPTERS_WORDS.of(at + 1, chapters.length)}</span>
-            <Tooltip
-              label={next?.title}
-              chord={CHAPTERS_SHORTCUTS[CHAPTERS_KEY.NEXT_CHAPTER].chord}
-            >
-              <Button
-                variant={BUTTON_VARIANT.QUIET}
-                icon={<ArrowRightIcon aria-hidden="true" />}
-                disabled={next === undefined}
-                onClick={() => step(1)}
-              >
-                {CHAPTERS_WORDS.NEXT}
-              </Button>
-            </Tooltip>
-          </footer>
+          <PaneBar
+            title={CHAPTERS_WORDS.of(at + 1, chapters.length)}
+            actions={
+              <>
+                <Tooltip
+                  label={previous?.title}
+                  chord={CHAPTERS_SHORTCUTS[CHAPTERS_KEY.PREVIOUS_CHAPTER].chord}
+                >
+                  <Button
+                    variant={BUTTON_VARIANT.QUIET}
+                    icon={<ArrowLeftIcon aria-hidden="true" />}
+                    disabled={previous === undefined}
+                    onClick={() => step(-1)}
+                  >
+                    {CHAPTERS_WORDS.PREVIOUS}
+                  </Button>
+                </Tooltip>
+                <Tooltip
+                  label={next?.title}
+                  chord={CHAPTERS_SHORTCUTS[CHAPTERS_KEY.NEXT_CHAPTER].chord}
+                >
+                  <Button
+                    variant={BUTTON_VARIANT.QUIET}
+                    icon={<ArrowRightIcon aria-hidden="true" />}
+                    disabled={next === undefined}
+                    onClick={() => step(1)}
+                  >
+                    {CHAPTERS_WORDS.NEXT}
+                  </Button>
+                </Tooltip>
+              </>
+            }
+          />
         </ChapterReading>
       </ChaptersBody>
     </Fill>

@@ -2372,10 +2372,10 @@
   display: none;
 }
 
-/* The chapter: its head, which scrolls on its own once it is taller than
+/* The chapter: its bar, its brief, which scrolls on its own once it is taller than
    its share, so the diff under it keeps at least half the view; the list;
-   and the foot. */
-.chapter-head {
+   and its foot bar. */
+.chapter-brief {
   display: flex;
   min-height: 0;
   max-height: 50%;
@@ -2384,7 +2384,7 @@
   border-bottom: 1px solid var(--luke-color-border);
 }
 
-.chapter-head-body {
+.chapter-brief-body {
   display: flex;
   flex-direction: column;
   gap: var(--luke-space-8);
@@ -2591,13 +2591,13 @@
    longer fit do they fold, every one to its glyph at once
    (`CHOICE_BAR_FOLD.TOGETHER`), about 480px with counts of a usual size. */
 @container pull-request-tab (width < 650px) {
-  .pull-request-tabs .pull-request-review {
+  .pull-request-tab > .luke-pane-bar .pull-request-review {
     --luke-fold: folded;
   }
 }
 
 @container pull-request-tab (width < 560px) {
-  .pull-request-tabs {
+  .pull-request-tab > .luke-pane-bar {
     --luke-fold: tight;
   }
 }
