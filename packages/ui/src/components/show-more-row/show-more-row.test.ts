@@ -93,3 +93,24 @@ test("a list whose rows all fit under the cap has no foot", () => {
   expect(rows()).toBe(3);
   expect(foot()).toBeNull();
 });
+
+test("a busy foot is named for what it is doing and refuses another press", () => {
+  const container = document.body.appendChild(document.createElement("div"));
+  const root = createRoot(container);
+  roots.push(root);
+  let pressed = 0;
+  act(() =>
+    root.render(
+      createElement(ShowMoreRow, {
+        more: 5,
+        shown: false,
+        onToggle: () => (pressed += 1),
+        busy: true,
+        busyLabel: "Loading older versions",
+      }),
+    ),
+  );
+  expect(foot()?.getAttribute("aria-label")).toBe("Loading older versions");
+  act(() => foot()?.click());
+  expect(pressed).toBe(0);
+});

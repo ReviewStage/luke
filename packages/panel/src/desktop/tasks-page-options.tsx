@@ -10,11 +10,9 @@ import {
   MENU_ITEM_MARK,
   motionKey,
   motionRows,
+  ShowMoreRow,
   TaskPriorityMark,
   TaskStatusMark,
-  TEXT_TONE,
-  TEXT_VARIANT,
-  Text,
   TextButton,
   Tooltip,
   useLeaving,
@@ -822,7 +820,7 @@ export function TasksViewOptions({
   );
 }
 
-/** The muted line ending a settled group the completed window leaves older tasks out of, which shows them all; nothing where it leaves none. */
+/** The foot of a settled group the completed window leaves older tasks out of, which shows them all; nothing where it leaves none. */
 export function OlderCompleted({
   older,
   onShow,
@@ -831,10 +829,5 @@ export function OlderCompleted({
   onShow: () => void;
 }): React.JSX.Element | null {
   if (older === undefined) return null;
-  // Note that the line is the group's quiet caption, as its "No tasks" is, the words a press.
-  return (
-    <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
-      <TextButton onClick={onShow}>{`+ ${older} older`}</TextButton>
-    </Text>
-  );
+  return <ShowMoreRow more={older} shown={false} onToggle={onShow} />;
 }
