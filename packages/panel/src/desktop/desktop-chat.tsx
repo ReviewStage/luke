@@ -34,6 +34,9 @@ import {
   SCROLL_FADE,
   ScrollArea,
   SpinnerRegion,
+  TEXT_ELEMENT,
+  TEXT_VARIANT,
+  Text,
   Time,
   TOOLBAR_INSET,
   Toolbar,
@@ -1194,7 +1197,15 @@ function RailBar({
         <PhoneHead
           place="chat-rail"
           start={newChannel}
-          title={<h1 className="luke-toolbar-title">{CHAT_LIST}</h1>}
+          title={
+            <Text
+              as={TEXT_ELEMENT.H1}
+              variant={TEXT_VARIANT.TOOLBAR_TITLE}
+              className="luke-toolbar-title"
+            >
+              {CHAT_LIST}
+            </Text>
+          }
           tag={<ExperimentTag narrow />}
           end={
             <PlaceMore

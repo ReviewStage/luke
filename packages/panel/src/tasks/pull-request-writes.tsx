@@ -37,6 +37,9 @@ import {
   InlineEdit,
   type InlineEditEnd,
   STATUS_TONE,
+  TEXT_ELEMENT,
+  TEXT_VARIANT,
+  Text,
   Tooltip,
   useConfirmDialog,
   useMenu,
@@ -513,9 +516,13 @@ export function PullRequestTitleLine({
   children: ReactNode;
 }): React.JSX.Element {
   return (
-    <h2 className={field ? "pull-request-title pull-request-title-field" : "pull-request-title"}>
+    <Text
+      as={TEXT_ELEMENT.H2}
+      variant={TEXT_VARIANT.DIALOG}
+      className={field ? "pull-request-title pull-request-title-field" : "pull-request-title"}
+    >
       {children}
-    </h2>
+    </Text>
   );
 }
 

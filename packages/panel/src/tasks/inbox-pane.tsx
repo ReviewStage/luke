@@ -38,7 +38,9 @@ import {
   STATUS_TONE,
   Stack,
   SteppedBack,
+  TEXT_ELEMENT,
   TEXT_TONE,
+  TEXT_VARIANT,
   Text,
   TOOLBAR_INSET,
   Tooltip,
@@ -924,9 +926,15 @@ function Subject({
 }): React.JSX.Element {
   return (
     <header className="inbox-subject">
-      <h2 ref={heading} className="inbox-subject-title" data-inbox-title="">
+      <Text
+        as={TEXT_ELEMENT.H2}
+        variant={TEXT_VARIANT.DIALOG}
+        ref={heading}
+        className="inbox-subject-title"
+        data-inbox-title=""
+      >
         {cardTitle(item.title)}
-      </h2>
+      </Text>
     </header>
   );
 }

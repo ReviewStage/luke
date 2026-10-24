@@ -143,9 +143,6 @@ body {
 
 .catalog-example-title {
   margin: 0 0 var(--luke-space-24);
-  font-size: var(--luke-type-title-size);
-  line-height: var(--luke-type-title-leading);
-  font-weight: var(--luke-weight-bold);
 }
 
 .catalog-section + .catalog-section {
@@ -154,9 +151,6 @@ body {
 
 .catalog-section-title {
   margin: 0 0 var(--luke-space-12);
-  font-size: var(--luke-type-section-size);
-  line-height: var(--luke-type-section-leading);
-  font-weight: var(--luke-weight-semibold);
 }
 
 .catalog-face {
@@ -628,8 +622,6 @@ body {
   flex: 1;
   margin: 0;
   overflow: hidden;
-  font-size: 15px;
-  font-weight: var(--luke-weight-semibold);
   text-overflow: ellipsis;
   white-space: nowrap;
 }

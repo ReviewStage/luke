@@ -5,6 +5,9 @@ import {
   IconButton,
   InlineEdit,
   type InlineEditEnd,
+  TEXT_ELEMENT,
+  TEXT_VARIANT,
+  Text,
   Tooltip,
 } from "@luke/ui";
 import { BotIcon, ListIcon } from "lucide-react";
@@ -137,7 +140,11 @@ export function TaskHead({
         </Tooltip>
       }
       title={
-        <h1 className="luke-toolbar-title">
+        <Text
+          as={TEXT_ELEMENT.H1}
+          variant={TEXT_VARIANT.TOOLBAR_TITLE}
+          className="luke-toolbar-title"
+        >
           <InlineEdit
             value={title}
             label="Task name"
@@ -145,7 +152,7 @@ export function TaskHead({
             editing={rename?.editing === true}
             onEnd={(end) => rename?.onEnd(end)}
           />
-        </h1>
+        </Text>
       }
       end={actions}
     />

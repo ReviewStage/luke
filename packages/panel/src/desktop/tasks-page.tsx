@@ -1,5 +1,13 @@
 import { TASK_PRIORITY_ORDER, TASK_STATUS } from "@luke/features/task-wire";
-import { CHOICE_BAR_LOOK, CHOICE_BAR_SIZE, ChoiceBar, Toolbar } from "@luke/ui";
+import {
+  CHOICE_BAR_LOOK,
+  CHOICE_BAR_SIZE,
+  ChoiceBar,
+  TEXT_ELEMENT,
+  TEXT_VARIANT,
+  Text,
+  Toolbar,
+} from "@luke/ui";
 import {
   BOARD_PROPERTIES,
   COMPLETED_WINDOW,
@@ -212,7 +220,15 @@ export function TasksPage({
       <PhoneHead
         place="tasks"
         start={<NewTaskButton tasks={tasks} />}
-        title={<h1 className="luke-toolbar-title">{TASKS}</h1>}
+        title={
+          <Text
+            as={TEXT_ELEMENT.H1}
+            variant={TEXT_VARIANT.TOOLBAR_TITLE}
+            className="luke-toolbar-title"
+          >
+            {TASKS}
+          </Text>
+        }
         end={
           <PlaceMore
             thing="Task list"
