@@ -109,6 +109,7 @@ import {
   MoreButton,
   matchingRows,
   moreLabel,
+  NO_CONTEXT_MENU,
   PAGE_FRAME,
   POPOVER_ALIGN,
   PROVIDER_MARK_SIZE,
@@ -147,6 +148,7 @@ import {
 } from "@luke/ui";
 import { ACTOR_KIND, ACTOR_STATE } from "@luke/ui/actor-model";
 import { useDisclosure } from "@luke/ui/use-disclosure";
+import { useOptimisticSettingWrite } from "@luke/ui/use-setting-write";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { Result } from "effect";
 import { HistoryIcon, PlayIcon, SaveIcon, Trash2Icon, ZapIcon } from "lucide-react";
@@ -363,8 +365,8 @@ const RUN_REFUSAL_WORDS = {
     "Only its creator, or the workspace's owners and admins, can run it.",
 } as const satisfies Record<AutomationCallFailure, string>;
 
-/** Why a switch did not move, as its toast says it: the list's and the editor's alike. */
-export function toggleRefusal(answer: AutomationView, enabled: boolean): string | undefined {
+/** Why a switch did not move, as its toast says it. */
+function toggleRefusal(answer: AutomationView, enabled: boolean): string | undefined {
   if (!("failure" in answer)) return undefined;
   if (answer.failure === AUTOMATION_CALL_FAILURE.NOT_PERMITTED) {
     return SAVE_REFUSAL_WORDS[AUTOMATION_CALL_FAILURE.NOT_PERMITTED];
@@ -373,6 +375,68 @@ export function toggleRefusal(answer: AutomationView, enabled: boolean): string 
 }
 
 const ACCEPTED: ActionResult = { status: ACTION_RESULT_STATUS.ACCEPTED };
+
+/**
+ * An automation's on/off switch, the list row's and the editor's alike. It
+ * flips at once, from a local value, and a write the service refuses puts it
+ * back and says why in a FAILED toast, as a settings switch does; it never
+ * rests for a write.
+ *
+ * Note that its writes go one at a time, because the service reads and writes
+ * each request on its own, so two in flight could commit in either order and
+ * leave the opposite of the last press. A press made while one is out waits for
+ * it, only the newest waiting press is sent, and one that would only repeat
+ * what the burst just sent is not.
+ */
+export function AutomationSwitch({
+  automation,
+  write,
+}: {
+  automation: AutomationSummary;
+  write: (enabled: boolean) => Promise<AutomationView>;
+}): React.JSX.Element {
+  const toast = useToast();
+  const tail = useRef<Promise<unknown>>(Promise.resolve());
+  const newest = useRef(0);
+  const sent = useRef<boolean | undefined>(undefined);
+  const send = (enabled: boolean, press: number): Promise<ActionResult> => {
+    if (press !== newest.current || sent.current === enabled) return Promise.resolve(ACCEPTED);
+    sent.current = enabled;
+    const settle = () => {
+      if (press === newest.current) sent.current = undefined;
+    };
+    return write(enabled).then(
+      (answer): ActionResult => {
+        const reason = toggleRefusal(answer, enabled);
+        if (reason !== undefined) sent.current = undefined;
+        settle();
+        return reason === undefined ? ACCEPTED : { status: ACTION_RESULT_STATUS.REJECTED, reason };
+      },
+      (error: unknown) => {
+        sent.current = undefined;
+        throw error;
+      },
+    );
+  };
+  const { value, run } = useOptimisticSettingWrite(
+    automation.enabled,
+    (enabled) => {
+      const press = ++newest.current;
+      const answered = tail.current.then(() => send(enabled, press));
+      tail.current = answered.catch(() => undefined);
+      return answered;
+    },
+    (words) => toast({ words, tone: STATUS_TONE.DANGER, hold: TOAST_HOLD.FAILED }),
+  );
+  return (
+    <Switch
+      checked={value}
+      label={value ? `Turn off ${automation.name}` : `Turn on ${automation.name}`}
+      onChange={run}
+      {...NO_CONTEXT_MENU}
+    />
+  );
+}
 
 /** A time of day as the time field holds it, the hour and minute in two figures each. */
 function clockValue(hour: number, minute: number): string {
@@ -982,7 +1046,7 @@ function EditorToolbar({
   saveRefused: boolean;
   onBack: () => void;
   onSave: () => void;
-  onToggle: (enabled: boolean) => void;
+  onToggle: (enabled: boolean) => Promise<AutomationView>;
   onDelete: () => void;
   /** Whether a Run now is out. */
   running: boolean;
@@ -1081,13 +1145,7 @@ function EditorToolbar({
       </Button>
       {automation === undefined ? null : (
         <>
-          <Switch
-            checked={automation.enabled}
-            label={
-              automation.enabled ? `Turn off ${automation.name}` : `Turn on ${automation.name}`
-            }
-            onChange={(enabled) => onToggle(enabled)}
-          />
+          <AutomationSwitch automation={automation} write={onToggle} />
           <AutomationActions automation={automation} onDelete={onDelete} />
         </>
       )}
@@ -2415,7 +2473,6 @@ export function AutomationEditor({
   const [shownProblems, setShownProblems] = useState(false);
   const [saving, setSaving] = useState(false);
   const [refusal, setRefusal] = useState<string | undefined>(undefined);
-  const toast = useToast();
   // The webhook secret a write just minted, shown once on this page and gone when it is left.
   const [shownSecret, setShownSecret] = useState<string | undefined>(undefined);
   const taskBacked = automation !== undefined && automation.planId !== null;
@@ -2515,15 +2572,10 @@ export function AutomationEditor({
     () => (written ? leaveGuard.stand((leave) => askLeave.current(leave)) : undefined),
     [written, leaveGuard],
   );
-  const toggle = (enabled: boolean) => {
-    if (automation === undefined) return;
-    writes.toggle(automation.id, enabled).then((answer) => {
-      const refused = toggleRefusal(answer, enabled);
-      if (refused !== undefined) {
-        toast({ words: refused, tone: STATUS_TONE.DANGER, hold: TOAST_HOLD.FAILED });
-      }
-    });
-  };
+  const toggle = (enabled: boolean) =>
+    automation === undefined
+      ? Promise.resolve<AutomationView>({ failure: AUTOMATION_CALL_FAILURE.NOT_FOUND })
+      : writes.toggle(automation.id, enabled);
   const deletion = useConfirmDialog(
     { subject: automation !== undefined, surfaceOpen: true },
     () => {
