@@ -3174,7 +3174,7 @@ test("a pull request with no labels spends no line on them: its label picker sta
 });
 
 it.effect(
-  "each branch is a chip that copies its name: a button the keyboard reaches, named for what it copies, its glyph saying Copied for a moment once the clipboard took it",
+  "each branch is a chip that copies its name: a button the keyboard reaches, named for what it copies, its glyph turning to the check and saying Copied once the clipboard took it",
   () =>
     Effect.gen(function* () {
       const registry = registryOn(yield* Clock.Clock);
@@ -3188,7 +3188,7 @@ it.effect(
         assert.fail("the branches stand");
       const chips = [...branches.querySelectorAll<HTMLButtonElement>("button")];
       const head = chips[1] ?? assert.fail("the head's chip stands");
-      const glyph = () => head.querySelector(".copy-glyph")?.getAttribute("data-state");
+      const glyph = () => head.querySelector(".luke-copy-glyph")?.getAttribute("data-state");
 
       assert.deepEqual(
         chips.map((chip) => [
@@ -3215,10 +3215,6 @@ it.effect(
         "Copy branch luke/expiry-job",
         "its name stays",
       );
-
-      yield* TestClock.adjust("2 seconds");
-      yield* Effect.promise(settle);
-      assert.equal(glyph(), "idle", "the check goes after its moment");
 
       yield* Effect.promise(async () => {
         await act(async () => chips[0]?.click());

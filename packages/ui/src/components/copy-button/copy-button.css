@@ -1,7 +1,10 @@
 /* copy-button.css -- a copy button's glyph (`copy-button.tsx`): the copy at
    rest, the check in the complete ink once a copy lands, and the alert in
    the danger ink once one is refused, each fading and springing in where
-   the last stood, so the button never moves. The first draw stands still. */
+   the last stood, so the button never moves. The first draw stands still.
+   A chip's lead (`COPY_LOOK.CHIP`) holds its own glyph and the copy's in one
+   square, the copy's own showing under the pointer or the keyboard and for
+   as long as an answer stands. */
 
 @layer components {
   .luke-copy-glyph {
@@ -22,6 +25,39 @@
 
   .luke-copy-glyph[data-state="failed"] {
     color: var(--luke-color-danger-text);
+  }
+
+  .luke-copy-lead > * {
+    grid-area: 1 / 1;
+    place-self: center;
+    transition: opacity var(--luke-duration-quick) var(--luke-motion-exit);
+  }
+
+  .luke-copy-lead > .luke-copy-glyph {
+    opacity: 0;
+  }
+
+  .luke-chip:focus-visible .luke-copy-lead > .luke-copy-lead-mark,
+  .luke-copy-lead:not([data-state="idle"]) > .luke-copy-lead-mark {
+    opacity: 0;
+  }
+
+  .luke-chip:focus-visible .luke-copy-lead > .luke-copy-glyph,
+  .luke-copy-lead:not([data-state="idle"]) > .luke-copy-glyph {
+    opacity: 1;
+  }
+
+  /* Note that the pointer's swap is a mouse's alone, because a touch screen
+     spends a first tap on a hover that changes what is shown; there the
+     lead stands until the copy's answer. */
+  @media (hover: hover) {
+    .luke-chip:hover .luke-copy-lead > .luke-copy-lead-mark {
+      opacity: 0;
+    }
+
+    .luke-chip:hover .luke-copy-lead > .luke-copy-glyph {
+      opacity: 1;
+    }
   }
 
   @keyframes luke-copy-glyph-fade {

@@ -1466,39 +1466,6 @@ ul.actor-stack {
   background: var(--luke-color-fill-pressed);
 }
 
-/* A copy button's glyph (`copy-feedback.tsx`): the copy, the check, and the
-   alert in one cell, only the state's own drawn, so a copy crossfades in
-   place, the check in the success colour, and the button never moves. */
-.copy-glyph {
-  display: inline-grid;
-  flex: none;
-  place-items: center;
-}
-
-.copy-glyph > svg {
-  grid-area: 1 / 1;
-  opacity: 0;
-  transform: scale(0.6);
-  transition:
-    opacity var(--luke-duration-quick) var(--luke-motion-exit),
-    transform var(--luke-duration-fast) var(--luke-spring-fast);
-}
-
-.copy-glyph[data-state="idle"] > [data-glyph="idle"],
-.copy-glyph[data-state="copied"] > [data-glyph="copied"],
-.copy-glyph[data-state="failed"] > [data-glyph="failed"] {
-  opacity: 1;
-  transform: none;
-}
-
-.copy-glyph > [data-glyph="copied"] {
-  color: var(--luke-color-complete);
-}
-
-.copy-glyph > [data-glyph="failed"] {
-  color: var(--luke-color-danger-text);
-}
-
 /* Plan actions ---------------------------------------------------------- */
 
 /* The window's own menu is `@luke/ui`'s `Menu` (`action-menu.tsx`), its

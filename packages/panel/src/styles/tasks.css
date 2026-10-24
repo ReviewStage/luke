@@ -2849,55 +2849,6 @@
   color: var(--luke-color-text-muted);
 }
 
-/* A branch's glyph: the branch at rest, the copy glyph under the pointer
-   or the keyboard, saying what a press does, then the copy's own answer
-   for its moment, each in the one square so the chip never moves. */
-.pull-request-branch-glyph {
-  display: inline-grid;
-  flex: none;
-  width: 12px;
-  height: 12px;
-  color: var(--luke-color-text-muted);
-}
-
-.pull-request-branch-glyph > *,
-.pull-request-branch-glyph svg {
-  width: 12px;
-  height: 12px;
-}
-
-.pull-request-branch-glyph > * {
-  grid-area: 1 / 1;
-  transition: opacity var(--luke-duration-quick) var(--luke-motion-exit);
-}
-
-.pull-request-branch-glyph > .copy-glyph {
-  opacity: 0;
-}
-
-.pull-request-branch:has(:focus-visible) .pull-request-branch-glyph > svg,
-.pull-request-branch-glyph:not([data-state="idle"]) > svg {
-  opacity: 0;
-}
-
-.pull-request-branch:has(:focus-visible) .pull-request-branch-glyph > .copy-glyph,
-.pull-request-branch-glyph:not([data-state="idle"]) > .copy-glyph {
-  opacity: 1;
-}
-
-/* Note that the pointer's swap is a mouse's alone, because a touch
-   screen spends a first tap on a hover that changes what is shown; there
-   the branch's glyph stands until the copy's answer. */
-@media (hover: hover) {
-  .pull-request-branch:hover .pull-request-branch-glyph > svg {
-    opacity: 0;
-  }
-
-  .pull-request-branch:hover .pull-request-branch-glyph > .copy-glyph {
-    opacity: 1;
-  }
-}
-
 /* The branches and, beside them, the stack it stands in
    (`pull-request-stack.tsx`): the branches give way first. */
 .pull-request-branch-row {
