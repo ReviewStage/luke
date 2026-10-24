@@ -20,6 +20,7 @@
     "anti-slop/enforce-delete-with-where": "error",
     "anti-slop/enforce-update-with-where": "error",
     "anti-slop/no-await-drizzle-statement": "error",
+    "anti-slop/no-lucide-outside-door": "error",
     "anti-slop/no-node-test": "error",
     "anti-slop/no-raw-async-primitives": "error",
     "anti-slop/no-raw-press-outside-ui": "error",

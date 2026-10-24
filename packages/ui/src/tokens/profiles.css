@@ -18,7 +18,7 @@
 
   --luke-control-height: 30px;
   --luke-control-radius: var(--luke-radius-10);
-  --luke-control-icon: 15px;
+  --luke-control-icon: var(--luke-icon-16);
   /* The least a press is taken across on a coarse pointer, a finger's: a
      control drawn smaller keeps its size and takes the press around it. */
   --luke-touch-target: 44px;
@@ -178,7 +178,7 @@
 
   --luke-control-height: 44px;
   --luke-control-radius: var(--luke-radius-10);
-  --luke-control-icon: 16px;
+  --luke-control-icon: var(--luke-icon-16);
   /* The least a press is taken across on a coarse pointer, a finger's: a
      control drawn smaller keeps its size and takes the press around it. */
   --luke-touch-target: 44px;

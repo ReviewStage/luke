@@ -2,7 +2,7 @@ import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-
+import { LUCIDE_GUARD_RULE } from "./shared/lucide-guard.ts";
 import {
   configWeakensGuard,
   guardSuppressionLines,
@@ -17,8 +17,9 @@ import { SKELETON_GUARD_RULE } from "./shared/skeleton-guard.ts";
  * inline disable and has no flag to refuse one, so `pnpm lint` runs this
  * after it. It fails on a JSX-capable file outside `@luke/ui` holding a
  * directive that would silence `no-raw-press-outside-ui`, on any JSX-capable
- * file holding one that would silence `skeleton-through-components`, and on
- * an `.oxlintrc.json` that leaves either rule short of an error anywhere.
+ * file holding one that would silence `skeleton-through-components` or
+ * `no-lucide-outside-door`, whose baseline is the only way past it, and on
+ * an `.oxlintrc.json` that leaves any of them short of an error anywhere.
  */
 const REPOSITORY_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
 
@@ -48,6 +49,11 @@ const GUARDS = [
     watches: () => true,
     remedy:
       "Draw the skeleton in a `*Skeleton` component, through the components the loaded state draws with",
+  },
+  {
+    rule: LUCIDE_GUARD_RULE,
+    watches: () => true,
+    remedy: "Import the icon from @luke/ui/icons instead",
   },
 ] as const;
 
