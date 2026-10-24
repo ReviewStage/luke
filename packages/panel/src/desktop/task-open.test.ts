@@ -24,7 +24,7 @@ import { DesktopTasks } from "./desktop-tasks.js";
 
 /**
  * task-open.test.ts -- a task opens on its agent's tab through one placeholder
- * in the page's shape: no spinner, no empty column, and no "Loading agent"
+ * in the page's shape: no spinner, no empty column, and no "Reading the agent"
  * between the open and the transcript, which is followed from the agent's id
  * before the task's list of agents answers. Synthetic throughout.
  */
@@ -178,7 +178,7 @@ function columnLog(container: HTMLElement): string {
   const pane = container.querySelector(".desktop-agent");
   if (pane === null || pane.textContent === null) return "empty";
   if (pane.querySelector(".luke-spinner") !== null) return "spinner";
-  if (/Loading agent/u.test(pane.textContent)) return "loading agent";
+  if (/Reading the agent/u.test(pane.textContent)) return "loading agent";
   const region = pane.querySelector(".agent-tab > .agent-log-skeleton-wait");
   if (region !== null) {
     const blocks = [...region.querySelectorAll(".luke-skeleton")].map(
@@ -189,7 +189,7 @@ function columnLog(container: HTMLElement): string {
   return pane.querySelector(".agent-tab .conversation-log") === null ? "empty" : "transcript";
 }
 
-test("a task opened on an agent whose list is still read follows the agent's transcript at once, its tab standing in its own shape rather than empty or Loading agent", async () => {
+test("a task opened on an agent whose list is still read follows the agent's transcript at once, its tab standing in its own shape rather than empty or Reading the agent", async () => {
   const held = heldFollower();
   const page = mount(opened({ read: true, listed: false, follower: held.follower }));
   await settle();

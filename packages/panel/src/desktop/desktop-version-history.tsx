@@ -4,7 +4,7 @@ import { LINK_PLACE, linkOf } from "@luke/features/link-grammar";
 import { sectionAnchors } from "@luke/features/mention-link";
 import { planSections } from "@luke/features/plan-document";
 import type { PlanRevisionLine } from "@luke/features/task-wire";
-import { readFailedWords } from "@luke/features/words";
+import { readFailedWords, readingWords } from "@luke/features/words";
 import type { FormerMember, Workspace, WorkspaceMember } from "@luke/features/workspace-wire";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
@@ -456,7 +456,7 @@ function EarlierRow({
           shown={false}
           onToggle={read}
           busy={reading}
-          busyLabel="Loading older versions"
+          busyLabel={readingWords("older versions")}
         />
       )}
     </div>

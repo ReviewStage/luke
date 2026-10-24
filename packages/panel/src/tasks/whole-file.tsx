@@ -1,4 +1,5 @@
 import { useAtomValue } from "@effect/atom-react";
+import { readingWords } from "@luke/features/words";
 import { EmptyState, Fill, ScrollArea, SpinnerRegion } from "@luke/ui";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import { type ReactNode, type RefObject, useCallback, useEffect, useRef, useState } from "react";
@@ -355,7 +356,7 @@ export function WholeFile({
       <ScrollArea ref={host}>{null}</ScrollArea>
       {module === undefined ? (
         <div className="whole-file-wait">
-          <SpinnerRegion delay label="Loading file" />
+          <SpinnerRegion delay label={readingWords("the file")} />
         </div>
       ) : null}
       {notes.map((note) => createPortal(note.content, elementFor(note.key), note.key))}

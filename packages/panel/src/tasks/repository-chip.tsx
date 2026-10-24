@@ -1,7 +1,7 @@
 import type { GitHubRepository } from "@luke/features";
 import { GITHUB_ACCESS } from "@luke/features/github-repositories-wire";
 import { TASK_CALL_FAILURE, type TasksRepositoriesAnswer } from "@luke/features/tasks-view";
-import { countWords, orList, REFRESH_FAILED_WORDS } from "@luke/features/words";
+import { countWords, orList, REFRESH_FAILED_WORDS, readingWords } from "@luke/features/words";
 import { WORKSPACE_ROLE } from "@luke/features/workspace-wire";
 import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsLink } from "@luke/settings/settings-views";
 import {
@@ -364,7 +364,7 @@ export function RepositoryChip(props: {
         chooser.connected === true ? undefined : chooser.workspaceName,
       )
     ) : list === undefined ? (
-      <Spinner delay label="Loading repositories" />
+      <Spinner delay label={readingWords("repositories")} />
     ) : rows.length === 0 && listed?.installed ? (
       // Installed but giving Luke nothing: the repositories are chosen on GitHub, through the workspace's row.
       deadEnd([MENU_NOTE.NONE_REACHED], OWNER_ASK.ADD_REPOSITORY, undefined)

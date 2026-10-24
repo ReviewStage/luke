@@ -624,6 +624,8 @@ export function AutomationsPage({
 /** The workspace's Sentry while no workspace is listed: unread, with nothing to install on. */
 const SENTRY_UNREAD: SentryOffer = {
   read: undefined,
+  failed: false,
+  onRetry: () => undefined,
   installing: false,
   refusal: undefined,
   onInstall: () => undefined,
@@ -637,9 +639,10 @@ const SENTRY_UNREAD: SentryOffer = {
  */
 function useWorkspaceSentry(workspaceId: string): SentryOffer {
   const { act } = useAct();
-  const sentry = useSentryRead(workspaceId).read;
-  // Note that a read that failed offers what one still out does, so a saved Sentry trigger stays editable.
-  const read = sentry !== undefined && "sentry" in sentry ? sentry.sentry : undefined;
+  const { read: answer, retry } = useSentryRead(workspaceId);
+  // Note that a read that failed offers what one still out does, so a saved Sentry trigger stays editable; the editor says the failure above its rows.
+  const read = answer !== undefined && "sentry" in answer ? answer.sentry : undefined;
+  const failed = answer !== undefined && "failed" in answer;
   const [installing, setInstalling] = useState(false);
   const [refusal, setRefusal] = useState<string | undefined>(undefined);
   const onInstall = () => {
@@ -650,7 +653,7 @@ function useWorkspaceSentry(workspaceId: string): SentryOffer {
       .catch((refused: Error) => setRefusal(refused.message))
       .finally(() => setInstalling(false));
   };
-  return { read, installing, refusal, onInstall };
+  return { read, failed, onRetry: retry, installing, refusal, onInstall };
 }
 
 /** The editor over a listed workspace, offered that workspace's Sentry. */

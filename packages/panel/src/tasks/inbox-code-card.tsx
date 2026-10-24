@@ -1,5 +1,6 @@
 import type { InboxCodeBlock } from "@luke/features/inbox-wire";
 import type { CodeRef } from "@luke/features/task-wire";
+import { readingWords } from "@luke/features/words";
 import { ANNOUNCE, ErrorState, SpinnerRegion } from "@luke/ui";
 import { copiedLines } from "@luke/voice/code-pane-model";
 import { useEffect, useRef, useState } from "react";
@@ -100,7 +101,7 @@ export function InboxCodeCard({
         shown.kind === CODE_READ.READY ? (
           <CodeSnippet code={shown.code} />
         ) : shown.kind === CODE_READ.READING ? (
-          <SpinnerRegion delay label="Loading lines" />
+          <SpinnerRegion delay label={readingWords("the lines")} />
         ) : (
           <div className="file-tab-notice">
             {shown.again ? (

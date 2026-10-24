@@ -1,6 +1,7 @@
 import { encodeMention, MENTION_KIND } from "@luke/features/mention-link";
 import type { TaskFileRequest } from "@luke/features/task-wire";
 import type { TaskCode, TasksFileAnswer } from "@luke/features/tasks-view";
+import { readingWords } from "@luke/features/words";
 import { APP_COMMAND, FILES_CHANGED_KEY, filesChangedKeyFor } from "@luke/settings/shortcuts";
 import {
   ANNOUNCE,
@@ -338,7 +339,7 @@ export function FileTab({
       {read.kind === FILE_READ.READY ? (
         <FileTextView file={file} held={read} notes={notes} handleRef={handle} />
       ) : read.kind === FILE_READ.READING ? (
-        <SpinnerRegion delay label="Loading file" />
+        <SpinnerRegion delay label={readingWords("the file")} />
       ) : snippet === undefined ? (
         <ReadNotice
           read={read}

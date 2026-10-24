@@ -1,5 +1,6 @@
 import { CONTEXT_WINDOW } from "@luke/features/coding-agent-wire";
 import type { CatalogModel, ModelChoice } from "@luke/features/models-wire";
+import { readingWords } from "@luke/features/words";
 import {
   ErrorState,
   type FootRow,
@@ -259,7 +260,7 @@ export function ModelMenu(props: {
           props.failed ? (
             <ErrorState onRetry={props.onRetry}>{MODELS_READ_FAILED}</ErrorState>
           ) : (
-            <Spinner delay label="Loading models" />
+            <Spinner delay label={readingWords("models")} />
           )
         ) : models.length === 0 ? (
           MENU_NOTE.NONE

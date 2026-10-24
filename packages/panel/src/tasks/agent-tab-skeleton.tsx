@@ -1,3 +1,4 @@
+import { readingWords } from "@luke/features/words";
 import { ComposerFootSkeleton, SKELETON_SHAPE, Skeleton, SkeletonRegion } from "@luke/ui";
 import { PromptInputCard } from "../ai-elements/prompt-input.js";
 import { ComposerActions, ComposerAttach, ComposerCard } from "./agent-composer.js";
@@ -20,7 +21,7 @@ import { ComposerFieldRoom, UnloadedComposerField } from "./composer-field.js";
  */
 
 /** What the log's placeholder says to a reader. */
-const TRANSCRIPT_LOADING_LABEL = "Loading transcript";
+const TRANSCRIPT_LOADING_LABEL = readingWords("the transcript");
 
 /** How wide each of the log's placeholder lines stands, the newest last: one message's lines. */
 const LOG_LINE_WIDTHS = ["72%", "88%", "64%", "40%"] as const;
