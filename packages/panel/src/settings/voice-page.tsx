@@ -137,7 +137,7 @@ export function VoiceSection({
   );
 }
 
-/** Allow, which waits on the system's answer to the microphone's request. */
+/** Allow, which waits on the host's answer to the request, that it has been handed to the voice window. */
 function AllowMicrophone({ microphone }: { microphone: MicrophoneControl }): React.JSX.Element {
   const request = useBusyPress(microphone.onRequest);
   return (

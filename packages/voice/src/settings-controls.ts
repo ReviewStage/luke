@@ -74,8 +74,8 @@ export interface UpdateControl {
   build: RunningBuild;
   /** Asks the release manifest for the latest build, right now. */
   onCheck: () => Promise<void>;
-  /** Restarts into the downloaded release, settling once asked, for the button that waits on it. */
-  onInstall: () => void | Promise<void>;
+  /** Restarts into the downloaded release. */
+  onInstall: () => void;
   /** Opens the latest release's page, fixed by the build, in the browser. */
   onOpenLatest: () => void;
 }
