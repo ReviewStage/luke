@@ -74,10 +74,12 @@ function Owner({
   start,
   heard,
   answers,
+  suggestion,
 }: {
   start: string;
   heard: Heard;
   answers: { submit: boolean; cancel: boolean };
+  suggestion: string | undefined;
 }): React.JSX.Element {
   const [body, setBody] = useState(start);
   return createElement(CommentEditor, {
@@ -92,11 +94,16 @@ function Owner({
     focus: true,
     onSubmit: answers.submit ? () => heard.submitted.push(body) : undefined,
     onCancel: answers.cancel ? () => heard.cancels.push(heard.cancels.length) : undefined,
+    suggestion,
   });
 }
 
 /** The box drawn in a holder that records every key reaching it, its words held by an owner. */
-function mount(start: string, answers = { submit: true, cancel: true }) {
+function mount(
+  start: string,
+  answers = { submit: true, cancel: true },
+  suggestion: string | undefined = undefined,
+) {
   const heard: Heard = { changes: [], submitted: [], cancels: [] };
   const reached: string[] = [];
   // Note that the keys are heard above the root React listens on, as a pane holding the box hears them.
@@ -105,7 +112,7 @@ function mount(start: string, answers = { submit: true, cancel: true }) {
   const holder = pane.appendChild(document.createElement("div"));
   const root = createRoot(holder);
   roots.push(root);
-  act(() => root.render(createElement(Owner, { start, heard, answers })));
+  act(() => root.render(createElement(Owner, { start, heard, answers, suggestion })));
   const element =
     holder.querySelector<TiptapEditorHTMLElement>('.ProseMirror[aria-label="Comment"]') ??
     assert.fail("the box's editor is mounted");
@@ -194,6 +201,68 @@ test("@user and #123 typed at a line's start stay as GitHub reads them, a mentio
   type("#123 is fixed, thanks @dana");
 
   assert.equal(heard.changes.at(-1), "#123 is fixed, thanks @dana");
+});
+
+test("Esc in the link field gives the link up alone: the box stays open and nothing above it hears the key", () => {
+  const { holder, editor, heard, reached } = mount("Ship it");
+  act(() => {
+    editor.view.focus();
+    editor.commands.setTextSelection({ from: 1, to: 5 });
+  });
+  act(() =>
+    (
+      holder.querySelector<HTMLButtonElement>('[role="toolbar"] button[aria-label="Link"]') ??
+      assert.fail("the toolbar offers Link")
+    ).click(),
+  );
+  const field =
+    holder.querySelector<HTMLInputElement>('input[aria-label="Link"]') ??
+    assert.fail("Link opens the link field");
+
+  act(() => {
+    field.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }),
+    );
+  });
+
+  assert.equal(holder.querySelector('input[aria-label="Link"]'), null, "the link field closes");
+  assert.deepEqual(heard.cancels, [], "the box is not let go");
+  assert.deepEqual(reached, [], "nothing above the box hears the Esc");
+});
+
+test("Add a suggestion over words selected into an empty last line keeps the words and lays the block in after them", () => {
+  const { holder, editor, heard } = mount("Please fix this", undefined, "  once();");
+  act(() => {
+    editor.view.focus();
+    editor.view.dispatch(
+      editor.state.tr
+        .setSelection(TextSelection.atEnd(editor.state.doc))
+        .split(editor.state.doc.content.size - 1),
+    );
+  });
+  act(() => {
+    editor.view.dispatch(
+      editor.state.tr.setSelection(
+        TextSelection.create(editor.state.doc, 8, editor.state.doc.content.size - 1),
+      ),
+    );
+  });
+  assert.equal(
+    editor.state.selection.$to.parent.content.size,
+    0,
+    "the selection ends on the empty line",
+  );
+
+  act(() =>
+    (
+      holder.querySelector<HTMLButtonElement>('button[aria-label="Add a suggestion"]') ??
+      assert.fail("a suggestion is offered")
+    ).click(),
+  );
+
+  const sent = heard.changes.at(-1) ?? assert.fail("the block is handed over");
+  assert.ok(sent.startsWith("Please fix this\n"), "the selected words stay");
+  assert.ok(sent.endsWith("```suggestion\n  once();\n```"), "the suggestion follows them");
 });
 
 test("words past GitHub's bound say by how much", () => {

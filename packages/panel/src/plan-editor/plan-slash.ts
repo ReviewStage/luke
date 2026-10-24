@@ -119,9 +119,9 @@ function slashAt(view: EditorView): SlashWord | undefined {
   };
 }
 
-/** A document's own blocks laid in after the top-level block the caret stands in, or in place of it where it is an empty line, so nothing written is split. */
+/** A document's own blocks laid in after the top-level block the selection ends in, or in place of it where the caret stands alone on an empty line, so nothing written is split or replaced. */
 function ownBlockAtCaret(editor: Editor, content: readonly JSONContent[]): void {
-  const { $to } = editor.state.selection;
+  const { $to, empty } = editor.state.selection;
   if ($to.depth < 1) {
     editor
       .chain()
@@ -131,7 +131,7 @@ function ownBlockAtCaret(editor: Editor, content: readonly JSONContent[]): void 
     return;
   }
   const line = $to.node(1);
-  if (line.isTextblock && line.content.size === 0) {
+  if (empty && line.isTextblock && line.content.size === 0) {
     editor
       .chain()
       .focus()
