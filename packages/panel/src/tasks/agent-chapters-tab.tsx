@@ -61,9 +61,9 @@ import {
   Tooltip,
 } from "@luke/ui";
 import {
-  ArrowLeftIcon,
-  ArrowRightIcon,
   CheckIcon,
+  ChevronLeftIcon,
+  ChevronRightIcon,
   GLYPH,
   PanelLeftIcon,
   RotateCwIcon,
@@ -898,7 +898,7 @@ function ChaptersReading({
                 >
                   <Button
                     variant={BUTTON_VARIANT.QUIET}
-                    icon={<ArrowLeftIcon aria-hidden="true" />}
+                    icon={<ChevronLeftIcon aria-hidden="true" />}
                     disabled={previous === undefined}
                     onClick={() => step(-1)}
                   >
@@ -911,7 +911,7 @@ function ChaptersReading({
                 >
                   <Button
                     variant={BUTTON_VARIANT.QUIET}
-                    icon={<ArrowRightIcon aria-hidden="true" />}
+                    icon={<ChevronRightIcon aria-hidden="true" />}
                     disabled={next === undefined}
                     onClick={() => step(1)}
                   >
