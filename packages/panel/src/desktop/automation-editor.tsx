@@ -1790,6 +1790,7 @@ function ModelRow({
             usage={undefined}
             look={CHIP_LOOK.FIELD}
             width={CHIP_WIDTH.MIN_FIELD}
+            startsNew
           />
         ) : choices.defaultFailed ? (
           <ModelPicker

@@ -62,7 +62,7 @@ import { useRepositoryRemedy } from "./repository-remedy.js";
  * of the account's pays for says "Connect Claude" or "Connect Codex" at its
  * row's end, and its pick closes the menu and lands on that harness's row
  * in Settings › Agents rather than choosing it. On the Start button's
- * menu, whose choice a new agent starts on and the reader's own
+ * and an automation's menus, whose choice a new agent starts on and the reader's own
  * credentials pay for, a choice that is such a model, as a new account's
  * Claude default is on an OpenAI key alone, has a Connect row head the
  * pinned rows and the last line say why it cannot run; a running agent's
@@ -162,7 +162,7 @@ export function ModelMenu(props: {
   footNote?: string | undefined;
   /** One muted line under that: the plan that pays and where to manage it, on a ChatGPT-paid agent's chip; nothing elsewhere. */
   planNote?: React.ReactNode;
-  /** Whether the choice is what a new agent would start on, on the reader's own credentials, so one nothing of theirs pays for says it cannot run: the Start button's. */
+  /** Whether the choice is what a new agent would start on, on the reader's own credentials, so one nothing of theirs pays for says it cannot run: the Start button's and an automation's. */
   startsNew?: boolean | undefined;
   /** The menu is on its way out (`SearchableMenu`'s). */
   leaving?: boolean | undefined;
