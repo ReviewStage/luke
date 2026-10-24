@@ -1895,7 +1895,7 @@ ul.actor-stack {
   flex: 0 0 auto;
   align-items: center;
   gap: var(--luke-icon-gap);
-  height: 40px;
+  height: var(--luke-pane-bar-height);
   padding: 0 var(--luke-list-inset);
   border-bottom: 1px solid var(--luke-color-border);
 }
@@ -3633,12 +3633,6 @@ ul.actor-stack {
 .version-log-title,
 .admin-sections-title {
   margin: var(--luke-block-gap) var(--row-inset);
-}
-
-.settings-pages-title {
-  font-size: var(--luke-type-title-size);
-  font-weight: var(--luke-weight-semibold);
-  letter-spacing: -0.015em;
 }
 
 /* The search field at the sidebar's head (`SearchField`), apart from the

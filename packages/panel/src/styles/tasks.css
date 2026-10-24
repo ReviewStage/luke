@@ -5192,7 +5192,7 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
   flex: 0 0 auto;
   align-items: center;
   gap: var(--luke-icon-gap);
-  height: 40px;
+  height: var(--luke-pane-bar-height);
   padding: 0 var(--luke-list-inset) 0 var(--luke-item-gap);
   border-bottom: 1px solid var(--luke-color-border);
 }
