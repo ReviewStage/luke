@@ -27,6 +27,7 @@ import {
   RUNNER_EVENT,
   RUNNER_HEARTBEAT,
   RUNNER_RELEASE,
+  RUNNER_WARM,
   type RunnerConfig,
   type RunnerEvent,
 } from "./protocol.js";
@@ -48,6 +49,7 @@ import {
   WAKEUP_STOPPED_TURN,
   WAKEUP_WAIT,
   WAKEUP_WAIT_THEN_MESSAGE,
+  WARM_TURNS,
   WORKFLOW_TURN,
 } from "./testing/recorded-stream.js";
 
@@ -299,6 +301,111 @@ it.effect("keeps the CLI up for a message sent during a turn until a turn answer
       RUNNER_EVENT.END,
     ]);
   }),
+);
+
+/** How many IDLE events Luke has taken. */
+function idles(luke: ReturnType<typeof fakeLuke>): number {
+  return luke.applied.filter(
+    ({ message }) => "type" in message && message.type === RUNNER_EVENT.IDLE,
+  ).length;
+}
+
+/** Waits, without moving the clock, until Luke has taken the IDLE events given. */
+function untilIdles(luke: ReturnType<typeof fakeLuke>, count: number) {
+  return Effect.gen(function* () {
+    for (let step = 0; step < 5_000 && idles(luke) < count; step += 1) yield* Effect.yieldNow;
+    assert.equal(idles(luke), count);
+  });
+}
+
+const WARM_CONFIG: RunnerConfig = { ...CONFIG, warm: true };
+
+it.effect(
+  "keeps a warm launch up past its turn, posting IDLE, takes the next message as a fresh turn of the same CLI, and ends as idled when Luke retires it",
+  () =>
+    Effect.gen(function* () {
+      const luke = fakeLuke();
+      const { cli, write, run } = yield* launch(WARM_TURNS, luke);
+      yield* write(WARM_CONFIG);
+      yield* write(FIRST_MESSAGE);
+      yield* untilIdles(luke, 1);
+      assert.equal(run.pollUnsafe(), undefined, "the launch stays up past its turn");
+
+      yield* write({ type: INPUT_LINE.MESSAGE, content: [{ type: "text", text: "And this." }] });
+      yield* untilIdles(luke, 2);
+      yield* write({ type: INPUT_LINE.RETIRE });
+
+      assert.equal(yield* Fiber.join(run), RUNNER_END.IDLED);
+      assert.deepEqual(kinds(luke.applied), [
+        "system/init",
+        "assistant",
+        "result/success",
+        RUNNER_EVENT.IDLE,
+        "assistant",
+        "result/success",
+        RUNNER_EVENT.IDLE,
+        RUNNER_EVENT.END,
+      ]);
+      assert.deepEqual(luke.applied.at(-1)?.message, {
+        type: RUNNER_EVENT.END,
+        reason: RUNNER_END.IDLED,
+      });
+      // The second message found no turn running, so it is no follow-up queued behind one.
+      assert.deepEqual(
+        cli.prompts.map((prompt) => prompt.priority),
+        [undefined, undefined],
+      );
+      assert.equal(cli.closed, true);
+    }),
+);
+
+it.effect("a retire written behind a message is skipped, and the message's turn runs", () =>
+  Effect.gen(function* () {
+    const luke = fakeLuke();
+    const { write, run } = yield* launch(WARM_TURNS, luke);
+    yield* write(WARM_CONFIG);
+    yield* write(FIRST_MESSAGE);
+    yield* untilIdles(luke, 1);
+
+    yield* write({ type: INPUT_LINE.MESSAGE, content: [{ type: "text", text: "And this." }] });
+    yield* write({ type: INPUT_LINE.RETIRE });
+    yield* untilIdles(luke, 2);
+    assert.equal(run.pollUnsafe(), undefined, "the retire behind the message ended nothing");
+    yield* write({ type: INPUT_LINE.RETIRE });
+
+    assert.equal(yield* Fiber.join(run), RUNNER_END.IDLED);
+  }),
+);
+
+it.effect("a warm launch nobody retires ends as idled at its cap", () =>
+  Effect.gen(function* () {
+    const luke = fakeLuke();
+    const { write, run } = yield* launch(SHORT_TURN, luke);
+    yield* write(WARM_CONFIG);
+    yield* write(FIRST_MESSAGE);
+    yield* untilIdles(luke, 1);
+    yield* TestClock.adjust(Duration.millis(RUNNER_WARM.IDLE_CAP_MS - 1));
+    assert.equal(run.pollUnsafe(), undefined);
+
+    yield* TestClock.adjust(Duration.millis(1));
+
+    assert.equal(yield* Fiber.join(run), RUNNER_END.IDLED);
+  }),
+);
+
+it.effect(
+  "a launch the config does not ask to stay warm ends at its turn's end and skips a retire",
+  () =>
+    Effect.gen(function* () {
+      const luke = fakeLuke();
+      const { write, run } = yield* launch(SHORT_TURN, luke);
+      yield* write(CONFIG);
+      yield* write({ type: INPUT_LINE.RETIRE });
+      yield* write(FIRST_MESSAGE);
+
+      assert.equal(yield* Fiber.join(run), RUNNER_END.TURN_ENDED);
+      assert.equal(idles(luke), 0);
+    }),
 );
 
 it.effect(

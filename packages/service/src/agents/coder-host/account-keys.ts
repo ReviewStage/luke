@@ -1,4 +1,3 @@
-import type { DatabaseServices } from "@luke/database/core/query";
 import {
   type KeyRing,
   openProviderKey,
@@ -11,9 +10,8 @@ import {
   setProviderKeyFastAccess,
   setProviderKeyStatus,
 } from "@luke/database/models/provider-key-store";
-import type { TaskStoreEffect, TaskStoreFailure } from "@luke/database/models/task-store";
+import type { TaskStoreEffect } from "@luke/database/models/task-store";
 import {
-  type FastAccess,
   PROVIDER_KEY_KIND,
   PROVIDER_KEY_PROVIDER,
   type ProviderKeyProvider,
@@ -98,20 +96,6 @@ export function accountProviderKeys(
         seams,
       ),
     };
-  });
-}
-
-/**
- * Whether the account's own Anthropic key may run fast mode, as its row
- * says, readable or not; nothing where it holds no Anthropic key or no fast
- * request has answered on it.
- */
-export function anthropicFastAccess(
-  userId: string,
-): Effect.Effect<FastAccess | undefined, TaskStoreFailure, DatabaseServices> {
-  return Effect.map(listProviderKeyRows(userId, PROVIDER_KEY_KIND.API_KEY), (rows) => {
-    const own = rows.find((row) => row.provider === PROVIDER_KEY_PROVIDER.ANTHROPIC);
-    return own?.fastAccess ?? undefined;
   });
 }
 

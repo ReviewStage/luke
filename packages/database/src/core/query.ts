@@ -4,8 +4,8 @@ import type { EffectPgQueryEffectHKT, EffectPgQueryResultHKT } from "drizzle-orm
 import * as PgDrizzle from "drizzle-orm/effect-postgres";
 import { QueryBuilder } from "drizzle-orm/pg-core";
 import type { PgEffectDatabase } from "drizzle-orm/pg-core/effect";
-import { Context, Layer, type Schema } from "effect";
-import type * as SqlClient from "effect/sql/SqlClient";
+import { Context, Effect, Layer, Option, type Schema } from "effect";
+import * as SqlClient from "effect/sql/SqlClient";
 import type { SqlError } from "effect/sql/SqlError";
 
 /**
@@ -25,6 +25,27 @@ export type DatabaseShape = PgEffectDatabase<EffectPgQueryEffectHKT, EffectPgQue
 export class Database extends Context.Service<Database, DatabaseShape>()(
   "@luke/database/Database",
 ) {}
+
+/**
+ * How many statements one read runs at once outside a transaction: a few,
+ * because the web pool holds five connections an instance and every request
+ * on it shares them.
+ */
+export const READ_CONCURRENCY = 3;
+
+/**
+ * How many of a read's independent statements may run at once here: one
+ * inside a transaction, whose statements share its one connection and gain
+ * nothing from running together, and `READ_CONCURRENCY` outside one, where
+ * each may take a connection of the pool.
+ */
+export const readConcurrency: Effect.Effect<number, never, SqlClient.SqlClient> = Effect.flatMap(
+  SqlClient.SqlClient,
+  (client) =>
+    Effect.map(Effect.serviceOption(client.transactionService), (transaction) =>
+      Option.isSome(transaction) ? 1 : READ_CONCURRENCY,
+    ),
+);
 
 /** The database over the runtime's `PgClient`, without logging or caching (connect-effect-postgres step 3). */
 export const databaseOverPgClient: Layer.Layer<Database, never, PgClient.PgClient> = Layer.effect(
