@@ -90,9 +90,39 @@ test("a coding agent with Chat on is shown no link of a task's Luke, on a task o
   assert.deepEqual(drawnAs(chatOf(null)), []);
 });
 
-test("the inbox's post tool and the plan's edit tool show a file's link Luke draws as its chip", () => {
-  assert.deepEqual(drawnAs(INBOX_TOOLS.POST.description), [MENTION_KIND.FILE]);
-  assert.deepEqual(drawnAs(EDIT_PLAN_TOOL.description), [MENTION_KIND.FILE]);
+test("the inbox's post tool and the plan's edit tool show a file's link Luke draws as its chip, written as a mention", () => {
+  for (const description of [INBOX_TOOLS.POST.description, EDIT_PLAN_TOOL.description]) {
+    assert.deepEqual(drawnAs(description), [MENTION_KIND.FILE]);
+    assert.ok(
+      linksIn(description).every(({ label }) => isMentionLabel(label)),
+      description,
+    );
+  }
+});
+
+/** Every mention of an app-only thing the words show, as the mention its target names, and whether its label is a mention's. */
+function appMentionsIn(words: string): { kind: string | undefined; mention: boolean }[] {
+  return [...words.matchAll(/\[([^\]]+)\]\((luke:\/\/mcp\/[^)\s`]+)\)/gu)].map(
+    ([, label, target]) => ({
+      kind: decodeMention(target ?? "", REPOSITORY)?.kind,
+      mention: isMentionLabel(label ?? ""),
+    }),
+  );
+}
+
+test("a coding agent is shown to name an MCP server as a mention Luke draws as its chip, a second account's among them", () => {
+  for (const onTask of [true, false]) {
+    const words = coderInstructions(
+      REPOSITORY,
+      CODING_AGENT_BRIEF.PROMPT,
+      true,
+      onTask ? TASK_ADDRESS : null,
+    );
+    assert.deepEqual(appMentionsIn(words), [
+      { kind: MENTION_KIND.SERVER, mention: true },
+      { kind: MENTION_KIND.SERVER, mention: true },
+    ]);
+  }
 });
 
 /** Every date mention the words show, as the mention its target names. */
