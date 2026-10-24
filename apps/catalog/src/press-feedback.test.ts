@@ -43,6 +43,8 @@ class StillObserver {
 // observer that never hears a change, as a page that never moves would.
 globalThis.ResizeObserver ??= StillObserver as unknown as typeof ResizeObserver;
 globalThis.IntersectionObserver ??= StillObserver as unknown as typeof IntersectionObserver;
+// Note that a list bringing its lit row into view, as a command palette does, scrolls nothing here.
+Element.prototype.scrollIntoView ??= () => undefined;
 
 /** What the platform presses, or what speaks as a control pressed. */
 const PRESSABLE = [

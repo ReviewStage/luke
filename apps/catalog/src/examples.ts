@@ -20,6 +20,7 @@ import { CHOICE_LIST_EXAMPLE } from "./examples/choice-list";
 import { COLLECTION_PAGE_EXAMPLE } from "./examples/collection-page";
 import { COMBOBOX_EXAMPLE } from "./examples/combobox";
 import { COMMAND_ASK_EXAMPLE } from "./examples/command-ask";
+import { COMMAND_DIALOG_EXAMPLE } from "./examples/command-dialog";
 import { COMMENTS_EXAMPLE } from "./examples/comments";
 import { COMPOSER_FOOTS_EXAMPLE } from "./examples/composer-foots";
 import { COMPOSER_FRAMES_EXAMPLE } from "./examples/composer-frames";
@@ -146,6 +147,7 @@ export const EXAMPLES: readonly Example[] = [
   COMBOBOX_EXAMPLE,
   CONFIRM_DIALOGS_EXAMPLE,
   COMMAND_ASK_EXAMPLE,
+  COMMAND_DIALOG_EXAMPLE,
   COMMENTS_EXAMPLE,
   DAILY_BARS_EXAMPLE,
   DATA_TABLE_EXAMPLE,
