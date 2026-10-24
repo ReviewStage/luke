@@ -656,13 +656,146 @@ export const APP_SHORTCUTS = {
 } as const satisfies Record<KeyedCommand, AppShortcut>;
 
 /**
- * The shortcuts as the Keyboard shortcuts page and the command palette list
- * them: in groups that follow the menu bar, under the group's name in
- * sentence case, every keyed command in exactly one.
+ * A key the Keyboard shortcuts page lists that no app command holds: the
+ * window's layered Escape, named once for every layer it steps back from,
+ * or one that answers in one place alone, where focus or a selection
+ * stands. The window's keymap never claims one and no menu item carries it;
+ * each place answers it itself, and this table only names it for the page.
+ */
+export const IN_CONTEXT_KEY = {
+  STEP_BACK: "in-context-step-back",
+  INBOX_OPTION: "in-context-inbox-option",
+  NEW_TASK_ISSUE: "in-context-new-task-issue",
+  TAB_STRIP_PREVIOUS: "in-context-tab-strip-previous",
+  TAB_STRIP_NEXT: "in-context-tab-strip-next",
+  TAB_STRIP_CLOSE: "in-context-tab-strip-close",
+  SWITCHER_NEXT: "in-context-switcher-next",
+  SWITCHER_PREVIOUS: "in-context-switcher-previous",
+  SWITCHER_GO: "in-context-switcher-go",
+  VIEWER_PREVIOUS: "in-context-viewer-previous",
+  VIEWER_NEXT: "in-context-viewer-next",
+  VIEWER_ZOOM_IN: "in-context-viewer-zoom-in",
+  VIEWER_ZOOM_OUT: "in-context-viewer-zoom-out",
+  VIEWER_FIT: "in-context-viewer-fit",
+  LINK: "in-context-link",
+  MENTION_WRITE: "in-context-mention-write",
+  MENTION_OPEN: "in-context-mention-open",
+} as const;
+
+export type InContextKey = (typeof IN_CONTEXT_KEY)[keyof typeof IN_CONTEXT_KEY];
+
+/**
+ * One key the page lists in its place: its name, its chord, and, for a run
+ * of keys, the last of them (`through`), 1 through 9. A platform feature's
+ * key is listed only where the platform offers it (`capability`).
+ */
+export interface InContextShortcut {
+  label: string;
+  chord: ShortcutChord;
+  through?: ShortcutChord;
+  capability?: HostCapability;
+}
+
+/**
+ * The keys that answer in place, each read where its place answers it: the
+ * window's layered Escape, once for every layer it steps back from
+ * (`app.tsx` in `@luke/panel`); an Inbox ask's options by their number
+ * (`inbox-ask-controls.tsx`); New task's ⌘L for its issue
+ * (`issue-picker-chip.tsx`); a tab strip's arrows and Delete (`tabs.tsx` in
+ * `@luke/ui`); the tab switcher's keys while ⌃ is held (`tab-switcher.tsx`);
+ * the file viewer's arrows and its picture's zoom (`attachment-viewer.tsx`,
+ * `zoom-image.tsx` in `@luke/ui`); ⌘K over selected words for a link
+ * (`writing-format.ts`); and the `@` list's Tab and → (`mention-picker.tsx`).
+ */
+export const IN_CONTEXT_SHORTCUTS = {
+  [IN_CONTEXT_KEY.STEP_BACK]: {
+    label: "Close what's open, or step back",
+    chord: { key: SHORTCUT_KEY.ESCAPE, bare: true },
+  },
+  [IN_CONTEXT_KEY.INBOX_OPTION]: {
+    label: "Choose an inbox option by its number",
+    chord: { key: SHORTCUT_KEY.ONE, plain: true },
+    through: { key: SHORTCUT_KEY.NINE, plain: true },
+  },
+  [IN_CONTEXT_KEY.NEW_TASK_ISSUE]: {
+    label: "Choose an issue for a new task",
+    chord: { key: SHORTCUT_KEY.L },
+  },
+  [IN_CONTEXT_KEY.TAB_STRIP_PREVIOUS]: {
+    label: "Focus previous tab in strip",
+    chord: { key: SHORTCUT_KEY.LEFT, plain: true },
+  },
+  [IN_CONTEXT_KEY.TAB_STRIP_NEXT]: {
+    label: "Focus next tab in strip",
+    chord: { key: SHORTCUT_KEY.RIGHT, plain: true },
+  },
+  [IN_CONTEXT_KEY.TAB_STRIP_CLOSE]: {
+    label: "Close focused tab",
+    chord: { key: SHORTCUT_KEY.BACKSPACE, plain: true },
+  },
+  [IN_CONTEXT_KEY.SWITCHER_NEXT]: {
+    label: "Next card in tab switcher",
+    chord: { key: SHORTCUT_KEY.RIGHT, plain: true },
+    capability: HOST_CAPABILITY.DESKTOP_APP,
+  },
+  [IN_CONTEXT_KEY.SWITCHER_PREVIOUS]: {
+    label: "Previous card in tab switcher",
+    chord: { key: SHORTCUT_KEY.LEFT, plain: true },
+    capability: HOST_CAPABILITY.DESKTOP_APP,
+  },
+  [IN_CONTEXT_KEY.SWITCHER_GO]: {
+    label: "Go to chosen card",
+    chord: { key: SHORTCUT_KEY.ENTER, plain: true },
+    capability: HOST_CAPABILITY.DESKTOP_APP,
+  },
+  [IN_CONTEXT_KEY.VIEWER_PREVIOUS]: {
+    label: "Previous file in viewer",
+    chord: { key: SHORTCUT_KEY.LEFT, plain: true },
+  },
+  [IN_CONTEXT_KEY.VIEWER_NEXT]: {
+    label: "Next file in viewer",
+    chord: { key: SHORTCUT_KEY.RIGHT, plain: true },
+  },
+  [IN_CONTEXT_KEY.VIEWER_ZOOM_IN]: {
+    label: "Zoom image in",
+    chord: { key: SHORTCUT_KEY.EQUALS, plain: true },
+  },
+  [IN_CONTEXT_KEY.VIEWER_ZOOM_OUT]: {
+    label: "Zoom image out",
+    chord: { key: SHORTCUT_KEY.MINUS, plain: true },
+  },
+  [IN_CONTEXT_KEY.VIEWER_FIT]: {
+    label: "Fit image",
+    chord: { key: SHORTCUT_KEY.ZERO, plain: true },
+  },
+  [IN_CONTEXT_KEY.LINK]: {
+    label: "Link selected words",
+    chord: { key: SHORTCUT_KEY.K },
+  },
+  [IN_CONTEXT_KEY.MENTION_WRITE]: {
+    label: "Mention highlighted row",
+    chord: { key: SHORTCUT_KEY.TAB, plain: true },
+  },
+  [IN_CONTEXT_KEY.MENTION_OPEN]: {
+    label: "Open highlighted folder or place",
+    chord: { key: SHORTCUT_KEY.RIGHT, plain: true },
+  },
+} as const satisfies Record<InContextKey, InContextShortcut>;
+
+/**
+ * The shortcuts as the Keyboard shortcuts page lists them, under the group's
+ * name in sentence case: the keyed commands, every one in exactly one group,
+ * which the command palette lists too, then the keys that answer in place
+ * (`keys`), every one but the writing ones (`WRITING_KEYS_IN_CONTEXT`) in
+ * exactly one. The groups are by what the keys act on, not the menu bar's
+ * menus. The page lists none of the commands the layered Escape reaches,
+ * since one row names it (`IN_CONTEXT_KEY.STEP_BACK`), though each stays
+ * here for the palette's and the hovers' sake.
  */
 export const APP_SHORTCUT_GROUPS = [
   {
     title: "General",
+    keys: [IN_CONTEXT_KEY.STEP_BACK],
     commands: [
       APP_COMMAND.COMMAND_PALETTE,
       APP_COMMAND.SETTINGS,
@@ -679,6 +812,7 @@ export const APP_SHORTCUT_GROUPS = [
   },
   {
     title: "Tasks",
+    keys: [IN_CONTEXT_KEY.INBOX_OPTION, IN_CONTEXT_KEY.NEW_TASK_ISSUE],
     commands: [
       APP_COMMAND.NEW_TASK,
       APP_COMMAND.COPY_PLAN,
@@ -709,6 +843,11 @@ export const APP_SHORTCUT_GROUPS = [
   },
   {
     title: "Tabs & panels",
+    keys: [
+      IN_CONTEXT_KEY.TAB_STRIP_PREVIOUS,
+      IN_CONTEXT_KEY.TAB_STRIP_NEXT,
+      IN_CONTEXT_KEY.TAB_STRIP_CLOSE,
+    ],
     commands: [
       APP_COMMAND.TOGGLE_SIDEBAR,
       APP_COMMAND.TOGGLE_SIDE_PANEL,
@@ -728,10 +867,16 @@ export const APP_SHORTCUT_GROUPS = [
   },
   {
     title: "Call",
+    keys: [],
     commands: [APP_COMMAND.TOGGLE_MICROPHONE, APP_COMMAND.TOGGLE_SPEAKER],
   },
   {
     title: "Navigation",
+    keys: [
+      IN_CONTEXT_KEY.SWITCHER_NEXT,
+      IN_CONTEXT_KEY.SWITCHER_PREVIOUS,
+      IN_CONTEXT_KEY.SWITCHER_GO,
+    ],
     commands: [
       APP_COMMAND.BACK,
       APP_COMMAND.FORWARD,
@@ -743,6 +888,7 @@ export const APP_SHORTCUT_GROUPS = [
   },
   {
     title: "Window",
+    keys: [],
     commands: [
       APP_COMMAND.RELOAD,
       APP_COMMAND.FULL_SCREEN,
@@ -753,7 +899,29 @@ export const APP_SHORTCUT_GROUPS = [
       APP_COMMAND.CLOSE_WINDOW,
     ],
   },
-] as const satisfies readonly { title: string; commands: readonly KeyedCommand[] }[];
+  {
+    title: "Image viewer",
+    keys: [
+      IN_CONTEXT_KEY.VIEWER_PREVIOUS,
+      IN_CONTEXT_KEY.VIEWER_NEXT,
+      IN_CONTEXT_KEY.VIEWER_ZOOM_IN,
+      IN_CONTEXT_KEY.VIEWER_ZOOM_OUT,
+      IN_CONTEXT_KEY.VIEWER_FIT,
+    ],
+    commands: [],
+  },
+] as const satisfies readonly {
+  title: string;
+  keys: readonly InContextKey[];
+  commands: readonly KeyedCommand[];
+}[];
+
+/** The keys that answer in place which the Keyboard shortcuts page lists under Writing, after the writing chords: a link over selected words, and the `@` list's own. */
+export const WRITING_KEYS_IN_CONTEXT: readonly InContextKey[] = [
+  IN_CONTEXT_KEY.LINK,
+  IN_CONTEXT_KEY.MENTION_WRITE,
+  IN_CONTEXT_KEY.MENTION_OPEN,
+];
 
 /**
  * What a key does in Files changed, the Pull request tab's view of its files.
@@ -1084,15 +1252,39 @@ export function shortcutShown(
   return experimentStands && capabilityStands;
 }
 
-/** The shortcut groups with only the commands that stand for the account's experiments and the platform's capabilities, as every list of them reads them. */
+/** Whether a key that answers in place stands in the page's lists for the platform's capabilities. */
+export function inContextShown(
+  key: InContextKey,
+  capabilities: readonly HostCapability[],
+): boolean {
+  const shortcut: InContextShortcut = IN_CONTEXT_SHORTCUTS[key];
+  return shortcut.capability === undefined || capabilities.includes(shortcut.capability);
+}
+
+/**
+ * The shortcut groups as the Keyboard shortcuts page and its settings search
+ * list them: only the commands that stand for the account's experiments and
+ * the platform's capabilities, none the layered Escape reaches, which the
+ * group's one Escape key names for them all, and only the keys in place the
+ * platform offers.
+ */
 export function shownShortcutGroups(
   experiments: ExperimentChoices,
   capabilities: readonly HostCapability[],
-): readonly { readonly title: string; readonly commands: readonly KeyedCommand[] }[] {
+): readonly {
+  readonly title: string;
+  readonly commands: readonly KeyedCommand[];
+  readonly keys: readonly InContextKey[];
+}[] {
   return APP_SHORTCUT_GROUPS.map((group) => ({
-    ...group,
-    commands: group.commands.filter((command) => shortcutShown(command, experiments, capabilities)),
-  })).filter((group) => group.commands.length > 0);
+    title: group.title,
+    commands: group.commands.filter(
+      (command) =>
+        !shortcutLayered(APP_SHORTCUTS[command].chord) &&
+        shortcutShown(command, experiments, capabilities),
+    ),
+    keys: group.keys.filter((key) => inContextShown(key, capabilities)),
+  })).filter((group) => group.commands.length + group.keys.length > 0);
 }
 
 /** A command's name as the window says it, keyed, the menu bar's own, or ⌘K's own. */
