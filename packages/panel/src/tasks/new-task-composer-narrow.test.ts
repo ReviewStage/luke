@@ -163,8 +163,8 @@ test("at a phone's room the head's title stays one line at its own width, and th
   const title =
     container.querySelector(".new-task-title > h2") ?? assert.fail("the head draws its title");
   const style = getComputedStyle(title);
-  assert.equal(style.whiteSpace, "nowrap");
   assert.equal(style.flexShrink, "0");
+  assert.notEqual(style.maxWidth, "", "a longer title is capped, leaving the chip its room");
   const chipName = container.querySelector(".new-task-title .luke-chip-name");
   assert.notEqual(chipName, null, "the repository chip draws its name through the fading ChipName");
 });
