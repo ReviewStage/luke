@@ -155,6 +155,26 @@ test("the menu key and ⇧F10 on a Settings row open the same menu under the row
   }
 });
 
+test("Escape from a menu the menu key opened on a Settings row's ⋯ hands focus back to the ⋯", () => {
+  const container = mount(
+    createElement(MenuRow, { thing: "Linear", actions: ACTIONS, children: "Linear" }),
+  );
+  const ellipsis =
+    container.querySelector<HTMLButtonElement>('button[aria-label="Linear actions"]') ??
+    assert.fail("no ⋯");
+  act(() => ellipsis.focus());
+  act(() => {
+    ellipsis.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "F10", shiftKey: true, bubbles: true, cancelable: true }),
+    );
+  });
+  const menu = openMenu();
+  assert.ok(menu, "the menu key opens it");
+  act(() => menu.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })));
+  assert.equal(openMenu(), null);
+  assert.equal(document.activeElement, ellipsis, "focus is back on the ⋯");
+});
+
 test("a Settings row's ⋯ opens its acts in groups ruled apart, and Escape, Tab, or a press elsewhere closes them, focus back on the ⋯", () => {
   const container = mount(
     createElement(MenuRow, {

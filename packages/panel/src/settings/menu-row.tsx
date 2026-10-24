@@ -1,6 +1,14 @@
 import { searchAnchorProps } from "@luke/settings/settings-anchors";
-import { MoreButton, moreLabel, SettingsRow, type SettingsRowControl, useMenu } from "@luke/ui";
-import { type ReactNode, useRef } from "react";
+import {
+  dropBelowStart,
+  MoreButton,
+  moreLabel,
+  opensMenu,
+  SettingsRow,
+  type SettingsRowControl,
+  useMenu,
+} from "@luke/ui";
+import { type KeyboardEvent, type ReactNode, useRef } from "react";
 import { ActionMenu, type MenuAction } from "../desktop/action-menu.js";
 
 /**
@@ -87,6 +95,13 @@ export function MenuRow({
   const groups = groupsOf(actions);
   const acting = groups.length > 0;
   const more = !acting ? null : <MoreButton ref={door} thing={thing} {...menu.trigger()} />;
+  // Note that the menu hangs under the row but hands focus back to what held the keyboard, the ⋯ or a control beside it, since the row itself takes none.
+  const keyMenu = (event: KeyboardEvent<HTMLElement>) => {
+    if (!opensMenu(event)) return;
+    event.preventDefault();
+    const held = event.target instanceof HTMLElement ? event.target : event.currentTarget;
+    menu.show(dropBelowStart(event.currentTarget), held);
+  };
   return (
     <>
       {/* biome-ignore lint/a11y/noStaticElementInteractions: the right-click and the menu key are further doors to the ⋯ beside it. */}
@@ -94,7 +109,7 @@ export function MenuRow({
         className={row === undefined ? "settings-row menu-row" : "menu-row"}
         {...(anchor ? searchAnchorProps(anchor) : undefined)}
         {...(acting ? menu.contextMenu(door) : undefined)}
-        onKeyDown={acting ? menu.keyMenu : undefined}
+        onKeyDown={acting ? keyMenu : undefined}
       >
         {row === undefined ? (
           <>
