@@ -9,6 +9,7 @@ import {
 import {
   createContext,
   createElement,
+  type MouseEvent,
   type ReactNode,
   useCallback,
   useContext,
@@ -255,4 +256,22 @@ export function useOpenLink(): (href: string) => void {
     },
     [openPlace, openHere, listed],
   );
+}
+
+/**
+ * The press of a link that opens a page outside the window, over `open`
+ * ({@link useOpenLink}'s): the page opens through the platform's link-open
+ * act, so a refused address toasts as any refused open does, and the browser
+ * does not follow the address a second time. Note that the link is still an
+ * `<a href>`, so a right-click offers its link menu and a reader's link list
+ * finds it.
+ */
+export function linkPressOf(
+  open: (href: string) => void,
+  href: string,
+): (event: MouseEvent<HTMLAnchorElement>) => void {
+  return (event) => {
+    event.preventDefault();
+    open(href);
+  };
 }

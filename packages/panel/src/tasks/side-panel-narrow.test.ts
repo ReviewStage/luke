@@ -284,7 +284,7 @@ test("a press of the toggle opens the tree with the keyboard in it, holds the ke
   assert.ok(held.contains(document.activeElement), "the keyboard lands in the tree");
 
   const outside =
-    tab.querySelector<HTMLButtonElement>('button[aria-label="Open on GitHub"]') ??
+    tab.querySelector<HTMLAnchorElement>('a[aria-label="Open on GitHub"]') ??
     assert.fail("the bar offers GitHub");
   // jsdom walks no focus for Tab, so the walk out is the key, then the focus it lands.
   act(() => {

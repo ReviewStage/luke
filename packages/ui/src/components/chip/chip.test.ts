@@ -219,3 +219,28 @@ test("a long name cut in its middle keeps its words whole and its end, after a j
   assert.equal(short?.textContent, "main");
   assert.equal(short?.querySelector(".luke-chip-name-end"), null);
 });
+
+test("a chip given an address is a link named by its words, going there, and its press is heard before the page is followed", () => {
+  const presses: boolean[] = [];
+  render(
+    createElement(
+      Chip,
+      {
+        look: CHIP_LOOK.PILL,
+        href: "https://github.com/acme/web/issues/312",
+        onClick: (event) => {
+          event.preventDefault();
+          presses.push(event.defaultPrevented);
+        },
+      },
+      createElement(ChipName, { mono: true, children: "#312" }),
+    ),
+  );
+
+  const link = document.querySelector("a");
+  assert.equal(link?.textContent, "#312");
+  assert.equal(link?.getAttribute("href"), "https://github.com/acme/web/issues/312");
+  assert.equal(document.querySelector("button"), null);
+  act(() => link?.click());
+  assert.deepEqual(presses, [true]);
+});

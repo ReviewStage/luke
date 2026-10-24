@@ -95,7 +95,7 @@ import {
   TASK_STATUS_WORDS,
   TaskKey,
 } from "../tasks/task-standing.js";
-import { useOpenLink } from "../tasks/use-open-link.js";
+import { linkPressOf, useOpenLink } from "../tasks/use-open-link.js";
 import { useReadMarks } from "../tasks/use-task-looks.js";
 import { useTaskMaker } from "../tasks/use-task-origin.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
@@ -211,7 +211,8 @@ function TaskBoardTags({ task }: { task: TaskSummary }): React.JSX.Element | nul
           look={CHIP_LOOK.PILL}
           size={CHIP_SIZE.COMPACT}
           data-provider={tag.provider}
-          onClick={() => openLink(tag.url)}
+          href={tag.url}
+          onClick={linkPressOf(openLink, tag.url)}
         >
           <ProviderMark provider={TAG_MARK[tag.provider]} size={PROVIDER_MARK_SIZE.CAPTION} />
           <ChipName mono>{issueTagWords(tag, task.repository)}</ChipName>

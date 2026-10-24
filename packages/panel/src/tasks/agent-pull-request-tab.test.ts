@@ -864,9 +864,10 @@ test("a picture GitHub linked to itself opens over the window rather than in the
   act(() => viewer().querySelector<HTMLButtonElement>('[aria-label="Next file"]')?.click());
   assert.deepEqual(shown(), ["Overview.png", "2 of 2"]);
   const onGitHub =
-    [...viewer().querySelectorAll<HTMLButtonElement>("button")].find(
-      (button) => button.textContent === "Open on GitHub",
-    ) ?? assert.fail("the viewer offers Open on GitHub");
+    [...viewer().querySelectorAll<HTMLAnchorElement>("a")].find(
+      (link) => link.textContent === "Open on GitHub",
+    ) ?? assert.fail("the viewer offers Open on GitHub as a link");
+  assert.equal(onGitHub.getAttribute("href"), SCREENSHOT, "a link to the page GitHub linked");
   act(() => onGitHub.click());
   await settle();
   assert.deepEqual(opened, [SCREENSHOT]);
@@ -903,9 +904,9 @@ test("in the viewer, Open on GitHub opens the upload GitHub linked a picture to,
   assert.equal(viewer.querySelector(".attachment-viewer-place"), null, "it walks the upload alone");
   act(() =>
     (
-      [...viewer.querySelectorAll<HTMLButtonElement>("button")].find(
-        (button) => button.textContent === "Open on GitHub",
-      ) ?? assert.fail("the viewer offers Open on GitHub")
+      [...viewer.querySelectorAll<HTMLAnchorElement>("a")].find(
+        (link) => link.textContent === "Open on GitHub",
+      ) ?? assert.fail("the viewer offers Open on GitHub as a link")
     ).click(),
   );
   await settle();
@@ -960,8 +961,8 @@ test("the Checks tab lists the head's deployments over its checks: each environm
 
 test("the header offers Preview once the checks land, before their tab is shown: one deployment serving an address opens at a press, several drop a menu of their environments, and one still deploying or naming no address offers none", async () => {
   const preview = (tab: HTMLElement) =>
-    [...tab.querySelectorAll<HTMLButtonElement>(".pull-request-title-actions button")].find(
-      (button) => button.textContent?.startsWith("Preview"),
+    [...tab.querySelectorAll<HTMLElement>(".pull-request-title-actions :is(a, button)")].find(
+      (control) => control.textContent?.startsWith("Preview"),
     );
   const ready = (environment: string, url: string) => ({
     environment,
@@ -984,7 +985,8 @@ test("the header offers Preview once the checks land, before their tab is shown:
     }),
   );
   const single = preview(one) ?? assert.fail("the header offers Preview");
-  assert.equal(single.getAttribute("aria-haspopup"), null, "one deployment opens at once");
+  assert.equal(single.tagName, "A", "one deployment is a link to the address it serves");
+  assert.equal(single.getAttribute("href"), "https://luke-web-git-expiry.vercel.app");
   act(() => single.click());
   await settle();
   assert.deepEqual(opened, ["https://luke-web-git-expiry.vercel.app"]);
@@ -1072,9 +1074,10 @@ test("the earlier entries a read left on GitHub are counted first, in the headin
     tab.querySelector('[aria-label="Conversation"]') ?? assert.fail("the conversation stands");
   assert.equal(conversation.querySelector(".pull-request-count")?.textContent, "5");
   const earlier =
-    conversation.querySelector<HTMLButtonElement>(".pull-request-earlier button") ??
+    conversation.querySelector<HTMLAnchorElement>(".pull-request-earlier a") ??
     assert.fail("the earlier entries are counted");
   assert.equal(earlier.textContent, "3 earlier comments on GitHub");
+  assert.equal(earlier.getAttribute("href"), PAGE, "a link to the pull request's page");
   await act(async () => earlier.click());
   assert.deepEqual(opened, [PAGE]);
 });
@@ -1191,9 +1194,10 @@ test("a review that only left line comments draws each thread under it: its file
     "once",
   );
   const more =
-    open.querySelector<HTMLButtonElement>(".annotation-card-more button") ??
+    open.querySelector<HTMLAnchorElement>(".annotation-card-more a") ??
     assert.fail("the replies left on GitHub are counted");
   assert.equal(more.textContent, "2 more replies on GitHub");
+  assert.equal(more.getAttribute("href"), `${PAGE}#discussion_r1`, "a link to the last reply");
   await act(async () => more.click());
   assert.deepEqual(opened, [`${PAGE}#discussion_r1`]);
 

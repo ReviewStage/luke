@@ -36,7 +36,7 @@ afterEach(() => {
 });
 
 /** The branch's chip over the doors the desktop's window hands it, beside the window's toasts. */
-async function mountChip(): Promise<HTMLButtonElement> {
+async function mountChip(): Promise<HTMLAnchorElement> {
   fakeAppPlatform(DESKTOP_LINKS);
   const doors: PublishedDoors = {
     openGitHub: (url) => appPlatform().openGitHub(url),
@@ -58,7 +58,7 @@ async function mountChip(): Promise<HTMLButtonElement> {
       ),
     ),
   );
-  return container.querySelector("button") ?? assert.fail("the branch's chip stands");
+  return container.querySelector("a") ?? assert.fail("the branch's chip stands as a link");
 }
 
 /** What each toast standing says, oldest first. */

@@ -9,6 +9,7 @@ import {
 import { SHORTCUT_KEY, type ShortcutChord } from "@luke/settings/shortcuts";
 import {
   Button,
+  ButtonLink,
   CloseIcon,
   DIALOG_SIZE,
   Dialog,
@@ -34,6 +35,7 @@ import {
 import { useId, useState } from "react";
 import { CopyGlyph, type CopyState, copyHint, useCopyFeedback } from "../copy-feedback.js";
 import { FileTypeIcon } from "./file-type-icon.js";
+import { linkPressOf } from "./use-open-link.js";
 import { WholeFile, type WholeFileNote } from "./whole-file.js";
 
 /**
@@ -88,11 +90,39 @@ const ZOOM_CHORD = {
 /** No notes on a file of a message. */
 const NO_NOTES: readonly WholeFileNote[] = [];
 
-/** One more thing the viewer's picture or video may be given to: its button's words and glyph, and what a press does with the file shown. */
-export interface ViewerAction {
+/**
+ * One more thing the viewer's picture or video may be given to: its button's
+ * words and glyph, and what a press does with the file shown, an act of the
+ * window's (`onPress`), or opening a page outside it, which it draws as the
+ * link it is (`address`, the page the file shown goes to, if it has one, and
+ * `onOpen`, which opens it through the window's link-open act).
+ */
+export type ViewerAction = {
   readonly label: string;
   readonly icon: React.ReactNode;
-  readonly onPress: (file: FileChip) => void;
+} & (
+  | { readonly onPress: (file: FileChip) => void; readonly address?: undefined }
+  | {
+      readonly address: (file: FileChip) => string | undefined;
+      readonly onOpen: (address: string) => void;
+      readonly onPress?: undefined;
+    }
+);
+
+/** The viewer's action that opens a page, drawn as a link to it; nothing for a file with no page to open. */
+function ViewerLink({
+  action,
+  address,
+}: {
+  action: Extract<ViewerAction, { onOpen: unknown }>;
+  address: string | undefined;
+}): React.JSX.Element | null {
+  if (address === undefined) return null;
+  return (
+    <ButtonLink icon={action.icon} href={address} onClick={linkPressOf(action.onOpen, address)}>
+      {action.label}
+    </ButtonLink>
+  );
 }
 
 /** Saves the file where the system's download asks, under its own name. */
@@ -330,10 +360,12 @@ export function AttachmentViewer({
               />
             </>
           ) : null}
-          {action === undefined || !(image || video) ? null : (
+          {action === undefined || !(image || video) ? null : action.address === undefined ? (
             <Button icon={action.icon} onClick={() => action.onPress(file)}>
               {action.label}
             </Button>
+          ) : (
+            <ViewerLink action={action} address={action.address(file)} />
           )}
           <HeaderButton
             label={VIEWER_LABEL.DOWNLOAD}

@@ -33,7 +33,6 @@ import { CallCardContext, type CallCardInput, callControls } from "./call/call-c
 import { useCallCardVideo } from "./call/panel-avatar.js";
 import { useWindowFocused } from "./call/use-window-focused.js";
 import { useOpenApiKeys } from "./openai-key.js";
-import { useOpenLink } from "./tasks/use-open-link.js";
 import { APP_SLICE, useAppSlice } from "./use-app-state.js";
 import { useVoiceNotice } from "./use-voice-notice.js";
 import { fixtureVoice, useStandingVoiceView, useVoiceView } from "./use-voice-view.js";
@@ -44,9 +43,6 @@ const OUTPUT_AUDIO = Atom.map(APP_SLICE.AUDIO, (audio) => audio?.outputAudio);
 
 /** The launch profile, which stages a capture run's conversation. */
 const RUN_PROFILE_NAME = Atom.map(APP_SLICE.RUN, (run) => run?.profile);
-
-/** OpenAI's billing page, where the account a saved key belongs to is given credit. */
-const OPENAI_BILLING_URL = "https://platform.openai.com/settings/organization/billing/overview";
 
 /** The line with nothing on it, as a page drawn outside a window reads it. */
 const NO_NOTICE: VoiceNoticeStripProps = {
@@ -121,8 +117,7 @@ function VoiceNoticeLine({ children }: { children: ReactNode }): React.JSX.Eleme
   }, [silenceStretch]);
   const { tell } = useAct();
   const openApiKeys = useOpenApiKeys();
-  const openLink = useOpenLink();
-  /** A failure's remedy, done where it is done: Settings for the OpenAI key, OpenAI's billing for its credit, System Settings for the microphone. */
+  /** A failure's remedy, done where it is done: Settings for the OpenAI key, System Settings for the microphone; OpenAI's billing for its credit is a link the notice line opens. */
   const onRemedy = useCallback(
     (remedy: VoiceRemedy) => {
       switch (remedy) {
@@ -130,14 +125,14 @@ function VoiceNoticeLine({ children }: { children: ReactNode }): React.JSX.Eleme
           openApiKeys();
           return;
         case VOICE_REMEDY.ADD_OPENAI_CREDIT:
-          openLink(OPENAI_BILLING_URL);
+          // Note that credit is a link, which the notice line draws and opens itself.
           return;
         case VOICE_REMEDY.ALLOW_MICROPHONE:
           tell(ACT_KIND.MICROPHONE_OPEN_SETTINGS);
           return;
       }
     },
-    [openApiKeys, openLink, tell],
+    [openApiKeys, tell],
   );
   const { content, shown } = notice;
   const value = useMemo(

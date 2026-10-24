@@ -1,6 +1,7 @@
-import { VOICE_REMEDY_LABEL, type VoiceRemedy } from "@luke/features/words";
-import { BUTTON_SHAPE, BUTTON_VARIANT, Button } from "@luke/ui";
+import { VOICE_REMEDY, VOICE_REMEDY_LABEL, type VoiceRemedy } from "@luke/features/words";
+import { BUTTON_SHAPE, BUTTON_VARIANT, Button, ButtonLink } from "@luke/ui";
 import { MarkdownMessage } from "./markdown-message.js";
+import { linkPressOf, useOpenLink } from "./tasks/use-open-link.js";
 import { VOICE_NOTICE_TONE, type VoiceNoticePresentation } from "./use-voice-notice.js";
 
 /**
@@ -14,11 +15,18 @@ import { VOICE_NOTICE_TONE, type VoiceNoticePresentation } from "./use-voice-not
  * of its fade can run. A failure is announced as an alert, and anything else
  * as a status line; the row is drawn anew when what it carries changes kind,
  * because a live region is announced reliably as it arrives, not as its
- * role turns. A failure with a remedy offers it as a button beside its words.
+ * role turns. A failure with a remedy offers it as a button beside its words,
+ * or, where the remedy is a page outside the window, as a link to it.
  */
 
 /** What dismisses the volume hint for this stretch of silence. */
 const DISMISS_HINT_LABEL = "Got it";
+
+/** The remedies that are a page outside the window: OpenAI's billing page, where the account a saved key belongs to is given credit. */
+const REMEDY_ADDRESS: Partial<Record<VoiceRemedy, string>> = {
+  [VOICE_REMEDY.ADD_OPENAI_CREDIT]:
+    "https://platform.openai.com/settings/organization/billing/overview",
+};
 
 export interface VoiceNoticeStripProps {
   notice: VoiceNoticePresentation;
@@ -36,6 +44,8 @@ export function VoiceNoticeStrip({
   const { content, shown } = notice;
   const tone = content?.tone ?? VOICE_NOTICE_TONE.NOTICE;
   const remedy = content?.remedy;
+  const address = remedy === undefined ? undefined : REMEDY_ADDRESS[remedy];
+  const openLink = useOpenLink();
   return (
     <div className="voice-notice" data-shown={String(shown)} data-tone={tone} inert={!shown}>
       <div
@@ -53,7 +63,15 @@ export function VoiceNoticeStrip({
             {DISMISS_HINT_LABEL}
           </Button>
         ) : null}
-        {remedy === undefined ? null : (
+        {remedy === undefined ? null : address !== undefined ? (
+          <ButtonLink
+            variant={BUTTON_VARIANT.OUTLINE}
+            href={address}
+            onClick={linkPressOf(openLink, address)}
+          >
+            {VOICE_REMEDY_LABEL[remedy]}
+          </ButtonLink>
+        ) : (
           <Button
             variant={BUTTON_VARIANT.OUTLINE}
             shape={BUTTON_SHAPE.ROUND}

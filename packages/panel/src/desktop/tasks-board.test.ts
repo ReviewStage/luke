@@ -763,8 +763,8 @@ test("a card draws a tag for each issue its task links, oldest first, a GitHub i
   ]);
 
   const tagsOf = (taskId: string) => [
-    ...board.querySelectorAll<HTMLButtonElement>(
-      `li[data-task-id="${taskId}"] .tasks-board-tags button`,
+    ...board.querySelectorAll<HTMLAnchorElement>(
+      `li[data-task-id="${taskId}"] .tasks-board-tags a`,
     ),
   ];
   const tags = tagsOf("t-42");
@@ -775,6 +775,15 @@ test("a card draws a tag for each issue its task links, oldest first, a GitHub i
       [TASK_ISSUE_PROVIDER.LINEAR, "ENG-455"],
       [TASK_ISSUE_PROVIDER.GITHUB, "Acme/Auth#270"],
     ],
+  );
+  assert.deepEqual(
+    tags.map((tag) => tag.getAttribute("href")),
+    [
+      "https://github.com/acme/web/issues/312",
+      "https://linear.app/acme/issue/ENG-455",
+      "https://github.com/acme/auth/issues/270",
+    ],
+    "each tag is a link to its issue",
   );
   assert.ok(
     tags.every((tag) => tag.querySelector("svg")),

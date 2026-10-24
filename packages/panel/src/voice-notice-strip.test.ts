@@ -11,6 +11,7 @@ import type { VoiceSpeakers } from "@luke/voice/voice-view";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
+import { fakeAppPlatform } from "./testing/app-platform.js";
 import { useVoiceNotice } from "./use-voice-notice.js";
 import { VoiceNoticeStrip } from "./voice-notice-strip.js";
 
@@ -111,36 +112,50 @@ test("a call with no OpenAI key saved says so as an alert, with the button that 
   assert.deepEqual(remedies, [VOICE_REMEDY.ADD_OPENAI_KEY]);
 });
 
-test("a call whose OpenAI key was refused or is out of credit says which as an alert, with the button that fixes it", () => {
-  const cases = [
-    {
-      failure: VOICE_FAILURE.OPENAI_KEY_REFUSED,
-      words: "Luke could not start the call. OpenAI refused your key, which may have been revoked.",
-      label: "Add an OpenAI key",
-      remedy: VOICE_REMEDY.ADD_OPENAI_KEY,
-    },
-    {
-      failure: VOICE_FAILURE.OPENAI_KEY_UNFUNDED,
-      words: "Luke could not start the call. Your OpenAI account is out of credit.",
-      label: "Add OpenAI credit",
-      remedy: VOICE_REMEDY.ADD_OPENAI_CREDIT,
-    },
-  ] as const;
-  for (const { failure, words, label, remedy } of cases) {
-    const remedies: VoiceRemedy[] = [];
-    const line = drawn({
-      speakers: NOBODY,
-      error: failure,
-      onRemedy: (pressed) => remedies.push(pressed),
-    });
-    const alert = line.querySelector('[role="alert"]');
-    assert.ok(alert);
-    assert.equal(alert.querySelector(".voice-notice-text")?.textContent, words);
-    const button = alert.querySelector("button");
-    assert.equal(button?.textContent, label);
-    act(() => button?.click());
-    assert.deepEqual(remedies, [remedy]);
-  }
+test("a call whose OpenAI key was refused says so as an alert, with the button that fixes it", () => {
+  const remedies: VoiceRemedy[] = [];
+  const line = drawn({
+    speakers: NOBODY,
+    error: VOICE_FAILURE.OPENAI_KEY_REFUSED,
+    onRemedy: (pressed) => remedies.push(pressed),
+  });
+  const alert = line.querySelector('[role="alert"]');
+  assert.ok(alert);
+  assert.equal(
+    alert.querySelector(".voice-notice-text")?.textContent,
+    "Luke could not start the call. OpenAI refused your key, which may have been revoked.",
+  );
+  const button = alert.querySelector("button");
+  assert.equal(button?.textContent, "Add an OpenAI key");
+  act(() => button?.click());
+  assert.deepEqual(remedies, [VOICE_REMEDY.ADD_OPENAI_KEY]);
+});
+
+test("a call whose OpenAI account is out of credit says so as an alert, with a link to OpenAI's billing page that opens through the window's link act", () => {
+  const opened: string[] = [];
+  fakeAppPlatform({ openWeb: (url) => opened.push(url) });
+  const remedies: VoiceRemedy[] = [];
+  const line = drawn({
+    speakers: NOBODY,
+    error: VOICE_FAILURE.OPENAI_KEY_UNFUNDED,
+    onRemedy: (pressed) => remedies.push(pressed),
+  });
+  const alert = line.querySelector('[role="alert"]');
+  assert.ok(alert);
+  assert.equal(
+    alert.querySelector(".voice-notice-text")?.textContent,
+    "Luke could not start the call. Your OpenAI account is out of credit.",
+  );
+  assert.equal(alert.querySelector("button"), null, "a page to go to is no button");
+  const link = alert.querySelector("a");
+  assert.equal(link?.textContent, "Add OpenAI credit");
+  assert.equal(
+    link?.getAttribute("href"),
+    "https://platform.openai.com/settings/organization/billing/overview",
+  );
+  act(() => link?.click());
+  assert.deepEqual(opened, ["https://platform.openai.com/settings/organization/billing/overview"]);
+  assert.deepEqual(remedies, []);
 });
 
 test("while Luke speaks into a Mac whose output is off, the line says so with a Got it that quiets it", () => {
