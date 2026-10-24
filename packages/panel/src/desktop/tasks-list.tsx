@@ -12,7 +12,13 @@ import {
   type TaskStanding,
   type TaskSummary,
 } from "@luke/features/task-wire";
-import { noneYetWords, readFailedWords, readingWords, TERM } from "@luke/features/words";
+import {
+  noneYetWords,
+  REFRESH_FAILED_WORDS,
+  readFailedWords,
+  readingWords,
+  TERM,
+} from "@luke/features/words";
 import { taskKey } from "@luke/features/workspace-key";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
@@ -938,6 +944,10 @@ export function TasksList({
         </ErrorState>
       }
     >
+      {/* A refresh that failed after the tasks were read leaves them drawn, with a line over them. */}
+      {tasks.listFailed && listed.length > 0 ? (
+        <ErrorState onRetry={tasks.onRetryList}>{REFRESH_FAILED_WORDS}</ErrorState>
+      ) : null}
       <ListMotion root={list}>
         <div
           ref={list}

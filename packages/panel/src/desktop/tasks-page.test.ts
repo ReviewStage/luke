@@ -158,6 +158,7 @@ const WAITING: readonly AppInboxTask[] = [
 async function mountPage(
   tasks: readonly TaskSummary[] = TASKS,
   room: ShellRoom = SHELL_ROOM.WIDE,
+  overrides: NonNullable<Parameters<typeof tasksControl>[0]> = {},
 ): Promise<HTMLElement> {
   const container = document.createElement("div");
   document.body.append(container);
@@ -181,6 +182,7 @@ async function mountPage(
       },
       onMarkTask: (taskId, mark) => marked.push([taskId, mark]),
       onWriteSections: (writes) => written.push(writes),
+      ...overrides,
     });
     root.render(
       onRegistry(
@@ -238,6 +240,27 @@ test("the List puts the pins first, then the rest by status from the work under 
     ["Todo", ["ACME-40", "ACME-39"]],
     ["Backlog", ["ACME-36"]],
   ]);
+});
+
+test("a refresh that failed after the tasks were read keeps the rows drawn under Could not refresh and Retry, where a first read that failed draws the error alone", async () => {
+  let retried = 0;
+  const onRetryList = () => {
+    retried += 1;
+  };
+  const page = await mountPage(TASKS, SHELL_ROOM.WIDE, { listFailed: true, onRetryList });
+
+  assert.equal(groups(page).length, 4, "the rows stand");
+  const note = page.querySelector('[role="alert"]');
+  assert.match(note?.textContent ?? "", /Could not refresh/u);
+  const retry = [...(note?.querySelectorAll("button") ?? [])].find((each) =>
+    each.textContent?.includes("Retry"),
+  );
+  act(() => retry?.click());
+  assert.equal(retried, 1);
+
+  const first = await mountPage([], SHELL_ROOM.WIDE, { listFailed: true, listRead: false });
+  assert.equal(groups(first).length, 0);
+  assert.match(first.querySelector('[role="alert"]')?.textContent ?? "", /could not be read/u);
 });
 
 test("a row says how many of its task's Inbox threads wait on the reader", async () => {

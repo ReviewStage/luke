@@ -2,6 +2,7 @@ import type { GitHubRepository } from "@luke/features";
 import { GITHUB_ACCESS } from "@luke/features/github-repositories-wire";
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
 import { TASK_CALL_FAILURE, type TasksRepositoriesAnswer } from "@luke/features/tasks-view";
+import { REFRESH_FAILED_WORDS } from "@luke/features/words";
 import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsLink } from "@luke/settings/settings-views";
 import {
   AVATAR_SIZE,
@@ -175,6 +176,12 @@ function repositoryRows(
   return names.map((fullName) => repositoryMenuRow(fullName, pictures, onToken.has(fullName)));
 }
 
+/** What a read that listed answers: the repositories, and whether the App is installed. */
+type ListedRepositories = Extract<
+  TasksRepositoriesAnswer,
+  { repositories: unknown }
+>["repositories"];
+
 export function RepositoryChip(props: {
   /** The repository named now, `owner/name`, or null while none is. */
   value: string | null;
@@ -201,6 +208,8 @@ export function RepositoryChip(props: {
   const [open, setOpen] = useState(false);
   const drawn = useDisclosure(open);
   const [list, setList] = useState<TasksRepositoriesAnswer | undefined>(undefined);
+  // The last read that listed, kept while a later one fails, so the rows stand and a line says the refresh did not land.
+  const [lastListed, setLastListed] = useState<ListedRepositories | undefined>(undefined);
   const menuId = useId();
   const chip = useRef<HTMLDivElement>(null);
   const trigger = useRef<HTMLButtonElement>(null);
@@ -214,8 +223,12 @@ export function RepositoryChip(props: {
   latest.current = chooser;
 
   const read = useCallback(() => {
-    latest.current.read().then(setList, () => {
-      setList({ failure: TASK_CALL_FAILURE.UNANSWERED });
+    const settle = (answer: TasksRepositoriesAnswer) => {
+      setList(answer);
+      if ("repositories" in answer) setLastListed(answer.repositories);
+    };
+    latest.current.read().then(settle, () => {
+      settle({ failure: TASK_CALL_FAILURE.UNANSWERED });
     });
   }, []);
 
@@ -246,7 +259,7 @@ export function RepositoryChip(props: {
     pick();
   };
 
-  const listed = list !== undefined && "repositories" in list ? list.repositories : undefined;
+  const listed = lastListed;
   const failure = list !== undefined && "failure" in list ? list.failure : undefined;
   // A pick the read does not list is handed back, so nothing out of reach stands chosen.
   const unreached = value !== null && listed !== undefined && !listedIn(listed.repositories, value);
@@ -274,7 +287,9 @@ export function RepositoryChip(props: {
     props.value ?? (rows.length === 0 && listed !== undefined ? NONE_LABEL : CHOOSE_LABEL);
   const note =
     failure !== undefined ? (
-      <ErrorState onRetry={read}>{repositoryFailureNote(failure)}</ErrorState>
+      <ErrorState onRetry={read}>
+        {listed === undefined ? repositoryFailureNote(failure) : REFRESH_FAILED_WORDS}
+      </ErrorState>
     ) : listed !== undefined && !listed.installed && listed.repositories.length === 0 ? (
       // Only an owner or an admin can connect the workspace's GitHub, so a member is told to ask.
       <>

@@ -1206,6 +1206,69 @@ test("Refresh changes reads the review threads again with the files, so the two 
   assert.equal(threadReads, 1);
 });
 
+test("a refresh that fails after the changes were read keeps the files drawn, says Could not refresh with Retry, and Retry reads again", async () => {
+  let failing = false;
+  const flaky = {
+    ...control,
+    readChanges: (...args: Parameters<typeof control.readChanges>) =>
+      failing ? Promise.reject(new Error("offline")) : control.readChanges(...args),
+  };
+  /** The alert that says the refresh did not land, none while it did. */
+  const refreshNote = () =>
+    [...document.querySelectorAll('[role="alert"]')].find((each) =>
+      each.textContent?.includes("Could not refresh"),
+    );
+  let threadReads = 0;
+  await drawTab({
+    control: flaky,
+    threads: {
+      list: [],
+      draw: () => null,
+      refresh: () => {
+        threadReads += 1;
+      },
+    },
+  });
+  assert.equal(refreshNote(), undefined);
+
+  const refresh = async () => {
+    const options = document.querySelector<HTMLButtonElement>(
+      'button[aria-label="Changes actions"]',
+    );
+    act(() => options?.click());
+    const item = [...document.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')].find(
+      (each) => each.textContent?.includes("Refresh changes"),
+    );
+    act(() => item?.click());
+    await flush();
+  };
+  failing = true;
+  await refresh();
+
+  const note = refreshNote();
+  assert.ok(note, "the refresh says it did not land");
+  assert.ok(document.querySelector(".file-view"), "the view stands");
+  assert.deepEqual(
+    lastDrawn().files.map((file) => file.path),
+    ["src/seats.ts"],
+  );
+
+  failing = false;
+  const retry = [...note.querySelectorAll("button")].find((each) =>
+    each.textContent?.includes("Retry"),
+  );
+  const readsBefore = threadReads;
+  act(() => retry?.click());
+  await flush();
+
+  assert.equal(threadReads, readsBefore + 1, "Retry reads the review threads with the files");
+  assert.equal(refreshNote(), undefined);
+  assert.deepEqual(
+    lastDrawn().files.map((file) => file.path),
+    ["src/seats.ts"],
+  );
+});
+
 /** What an intersection observer is told of an element coming into view, as far as the view reads it. */
 type InView = (entries: readonly { readonly isIntersecting: boolean }[]) => void;
 
