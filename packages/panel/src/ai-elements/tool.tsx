@@ -6,6 +6,7 @@ import {
   Card,
   DISCLOSURE_BODY,
   DisclosureBody,
+  FailureNote,
   GlyphSlot,
   LineSummary,
   OneLine,
@@ -292,9 +293,7 @@ export function ToolOutput({ block, errorText }: ToolOutputProps): ReactNode {
   if (errorText !== undefined) {
     return (
       <div data-tool-output="">
-        <p className="tool-error" role="alert">
-          {errorText}
-        </p>
+        <FailureNote>{errorText}</FailureNote>
       </div>
     );
   }
