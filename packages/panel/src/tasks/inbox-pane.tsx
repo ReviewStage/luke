@@ -25,14 +25,14 @@ import {
   Card,
   CardHead,
   type Crumb,
-  EllipsisIcon,
   ErrorState,
   Fill,
   FoldingButton,
   type FoldingButtonHint,
   GAP,
-  IconButton,
   LAYOUT_ELEMENT,
+  MoreButton,
+  moreLabel,
   ONE_LINE_END,
   PageToolbar,
   STATUS_TONE,
@@ -850,7 +850,7 @@ function ThreadMessage({
 }
 
 /** What the pane's ⋯ menu is called, which is its tooltip too. */
-const ITEM_MENU_LABEL = "Item actions";
+const ITEM_THING = "Item";
 
 /**
  * The item's ⋯ menu at the end of the pane's bar, as an issue's page and an
@@ -895,12 +895,10 @@ function InboxItemMenu({
   if (groups.length === 0) return null;
   return (
     <>
-      <Tooltip label={ITEM_MENU_LABEL}>
-        <IconButton icon={<EllipsisIcon />} label={ITEM_MENU_LABEL} {...menu.trigger()} />
-      </Tooltip>
+      <MoreButton thing={ITEM_THING} {...menu.trigger()} />
       {menu.drawn === undefined ? null : (
         <ActionMenu
-          label={ITEM_MENU_LABEL}
+          label={moreLabel(ITEM_THING)}
           menu={menu.drawn}
           groups={groups}
           onClose={menu.close}

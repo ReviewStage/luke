@@ -12,6 +12,7 @@ import {
   popoverPlace,
   samePlace,
 } from "./popover-place.js";
+import { type PressAway, usePressAway } from "./press-away.js";
 
 /**
  * anchored-popover.tsx -- the layer a popover hangs from its own button in: above it, a small gap off, from one of its edges, inside the room around it.
@@ -35,7 +36,8 @@ import {
  * it was asked to line up with, so a button that grows or shrinks from its
  * other edge, as the model chip does when Fast comes on, leaves its open
  * menu where it stood rather than throwing it sideways for a frame until
- * the resize is measured. A popover asks for its width in pixels or by one
+ * the resize is measured. A press outside the layer and its button is
+ * handed to the owner, who closes it (`press-away.ts`). A popover asks for its width in pixels or by one
  * of the three names a menu's width is chosen from (`POPOVER_WIDTH`), whose
  * token the layer is drawn at and measured by.
  */
@@ -139,8 +141,10 @@ export function AnchoredPopover({
   align,
   width = DEFAULT_WIDTH,
   bounds = POPOVER_BOUNDS.ROOM,
+  onPressAway,
+  holds,
   children,
-}: {
+}: PressAway & {
   align: PopoverAlign;
   /** The width it asks for, in pixels or by name, a form's wider than a menu's. */
   width?: number | PopoverWidth | undefined;
@@ -150,6 +154,7 @@ export function AnchoredPopover({
 }): React.JSX.Element {
   const layer = useRef<HTMLDivElement>(null);
   const [place, setPlace] = useState<PopoverPlace | undefined>(undefined);
+  usePressAway(layer, () => layer.current?.parentElement, { onPressAway, holds });
 
   useLayoutEffect(() => {
     const drawn = layer.current;

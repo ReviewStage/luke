@@ -223,6 +223,7 @@ export function TasksPage({
         title={<h1 className="desktop-toolbar-title">{TASKS}</h1>}
         end={
           <PlaceMore
+            thing="Task list"
             shown={tasks.shown}
             groups={(opener) => [
               [

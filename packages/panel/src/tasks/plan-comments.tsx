@@ -40,7 +40,6 @@ import {
   ConfirmDialog,
   DIALOG_TONE,
   type DialogQuestion,
-  EllipsisIcon,
   EmptyState,
   ERROR_STATE_PLACEMENT,
   ErrorState,
@@ -51,6 +50,8 @@ import {
   LineButton,
   MENU_SURFACE_FLOW,
   MenuSurface,
+  MoreButton,
+  moreLabel,
   PaneBar,
   SCROLL_FADE,
   ScrollArea,
@@ -219,7 +220,7 @@ const COMMENT_WORDS = {
   REPLY: "Reply",
   RESOLVE: "Resolve",
   REOPEN: "Reopen",
-  MORE: "More",
+  THING: "Comment",
   EDIT: "Edit",
   DELETE: "Delete",
   DELETE_THREAD: "Delete thread",
@@ -574,17 +575,10 @@ function CommentEntry({
                   />
                 </Tooltip>
               ) : null}
-              <Tooltip label={COMMENT_WORDS.MORE}>
-                <IconButton
-                  size={BUTTON_SIZE.COMPACT}
-                  icon={<EllipsisIcon />}
-                  label={COMMENT_WORDS.MORE}
-                  {...trigger}
-                />
-              </Tooltip>
+              <MoreButton thing={COMMENT_WORDS.THING} size={BUTTON_SIZE.COMPACT} {...trigger} />
               {menu.drawn === undefined ? null : (
                 <ActionMenu
-                  label={COMMENT_WORDS.MORE}
+                  label={moreLabel(COMMENT_WORDS.THING)}
                   menu={menu.drawn}
                   groups={[items]}
                   onClose={menu.close}

@@ -155,7 +155,7 @@ function words(line: Element | null | undefined): string {
 /** The line under the card a transcript opens on, in `place`. */
 function senderLine(place: Element): HTMLElement {
   return (
-    place.querySelector<HTMLElement>(".agent-origin .message-sender") ??
+    place.querySelector<HTMLElement>(".agent-origin .luke-message-line-sender") ??
     assert.fail("the card is named by who sent it")
   );
 }
@@ -189,7 +189,8 @@ test("the line naming who sent the plan stands under its card, then when it was 
     card.compareDocumentPosition(line) & Node.DOCUMENT_POSITION_FOLLOWING,
     "the sender's line follows the card",
   );
-  const meta = line.closest(".message-meta") ?? assert.fail("the sender's line is the card's meta");
+  const meta =
+    line.closest(".luke-message-line") ?? assert.fail("the sender's line is the card's meta");
   const time = meta.querySelector("time") ?? assert.fail("the meta says when the plan was sent");
   assert.equal(time.getAttribute("datetime"), new Date(BRIEF_SENT_AT).toISOString());
   assert.ok(

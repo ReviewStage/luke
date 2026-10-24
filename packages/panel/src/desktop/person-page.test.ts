@@ -609,15 +609,15 @@ test("the reader's own page offers nothing to edit: its toolbar lists their task
     [...page.querySelectorAll(".desktop-toolbar-actions button")].map(
       (each) => each.getAttribute("aria-label") ?? each.textContent,
     ),
-    ["My tasks in sidebar", "More"],
+    ["My tasks in sidebar", "Person actions"],
   );
 });
 
-test("More offers their page's link and a member's email to copy and, to an owner, the workspace's members in Settings", async () => {
+test("Person actions offers their page's link and a member's email to copy and, to an owner, the workspace's members in Settings", async () => {
   const { page, opened } = mount(CHARLES.userId);
   await settle();
 
-  act(() => page.querySelector<HTMLButtonElement>('button[aria-label="More"]')?.click());
+  act(() => page.querySelector<HTMLButtonElement>('button[aria-label="Person actions"]')?.click());
   const items = [...document.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')];
   assert.deepEqual(
     items.map((item) => item.textContent),
@@ -629,11 +629,11 @@ test("More offers their page's link and a member's email to copy and, to an owne
   ]);
 });
 
-test("someone who left offers only their page's link in More: no email to copy, and no row in Settings to manage", async () => {
+test("someone who left offers only their page's link in Person actions: no email to copy, and no row in Settings to manage", async () => {
   const { page } = mount(PRIYA.userId);
   await settle();
 
-  act(() => page.querySelector<HTMLButtonElement>('button[aria-label="More"]')?.click());
+  act(() => page.querySelector<HTMLButtonElement>('button[aria-label="Person actions"]')?.click());
   assert.deepEqual(
     [...document.querySelectorAll('[role="menuitem"]')].map((item) => item.textContent),
     ["Copy link"],
@@ -654,7 +654,7 @@ test("Copy link copies their page's link under the slug of the workspace it stan
   );
   await settle();
 
-  act(() => page.querySelector<HTMLButtonElement>('button[aria-label="More"]')?.click());
+  act(() => page.querySelector<HTMLButtonElement>('button[aria-label="Person actions"]')?.click());
   act(() => button(document.body, "Copy link").click());
   await settle();
 
@@ -665,7 +665,7 @@ test("a page whose workspace is not known offers no Copy link, rather than a lin
   const { page } = mountWith({ workspace: undefined, workspaces: [] }, CHARLES.userId);
   await settle();
 
-  act(() => page.querySelector<HTMLButtonElement>('button[aria-label="More"]')?.click());
+  act(() => page.querySelector<HTMLButtonElement>('button[aria-label="Person actions"]')?.click());
   assert.doesNotMatch(document.body.textContent ?? "", /Copy link/u);
 });
 
@@ -674,7 +674,7 @@ test("a page for someone neither the members nor those who left name, as a link 
   await settle();
 
   assert.match(page.textContent ?? "", /Not found/u);
-  assert.equal(page.querySelector('button[aria-label="More"]'), null);
+  assert.equal(page.querySelector('button[aria-label="Person actions"]'), null);
 });
 
 test("someone who left heads their page with their own picture", async () => {

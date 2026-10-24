@@ -87,7 +87,7 @@ function mentionMenuWidth(room: string, card: number): number {
   const field = composer.appendChild(document.createElement("div"));
   field.className = "agent-composer-field";
   const menu = field.appendChild(document.createElement("div"));
-  menu.className = "luke-menu-surface searchable-menu mention-menu";
+  menu.className = "luke-menu-surface mention-menu";
   const style = getComputedStyle(menu);
   const length = (value: string): number => {
     if (value.endsWith("%")) return (card * Number.parseFloat(value)) / 100;

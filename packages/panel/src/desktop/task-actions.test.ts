@@ -738,3 +738,63 @@ test("a task is found in the list the control hands down now, a renamed one by i
   const opened = tasksControl({ region: { kind: DOCUMENT_REGION.READY, task: TASK } });
   assert.equal(taskOf(opened, TASK.id)?.id, TASK.id, "the open document's task");
 });
+
+/** The open menu's name and its items' words, or nothing where none stands. */
+function openedMenu(): { label: string | null; items: (string | null)[] } | undefined {
+  const menu = document.querySelector<HTMLElement>('[role="menu"]');
+  if (menu === null) return undefined;
+  return {
+    label: menu.getAttribute("aria-label"),
+    items: menuItems().map((item) => item.textContent),
+  };
+}
+
+/** Presses `name` on `target`, as a keyboard does. */
+function pressKey(target: HTMLElement, name: string, shiftKey = false): void {
+  act(() => {
+    target.dispatchEvent(
+      new KeyboardEvent("keydown", { key: name, shiftKey, bubbles: true, cancelable: true }),
+    );
+  });
+}
+
+test("a sidebar task's ⋯, a right-click on it, and the menu key open the same menu, and the ⋯ is a Tab stop after its press", () => {
+  const { tasks, asked } = openTab();
+  const press = mountSidebarTask(tasks, OTHER, asked);
+  const more = document.querySelector<HTMLButtonElement>('li button[aria-label="Task actions"]');
+  assert.ok(more, "the row draws a ⋯");
+  assert.equal(more.tabIndex, 0, "the ⋯ is reached by Tab");
+  assert.equal(
+    press.compareDocumentPosition(more) & Node.DOCUMENT_POSITION_FOLLOWING,
+    Node.DOCUMENT_POSITION_FOLLOWING,
+    "after the row's press",
+  );
+
+  openMenu(more);
+  const fromMore = openedMenu();
+  assert.equal(fromMore?.label, "Task actions");
+  assert.ok(fromMore?.items.includes("Permanently delete"));
+  pressKey(document.activeElement as HTMLElement, "Escape");
+  assert.equal(openedMenu(), undefined);
+
+  rightClick(press, 40, 60);
+  assert.deepEqual(openedMenu(), fromMore);
+  pressKey(document.activeElement as HTMLElement, "Escape");
+
+  pressKey(press, "ContextMenu");
+  assert.deepEqual(openedMenu(), fromMore);
+  pressKey(document.activeElement as HTMLElement, "Escape");
+
+  pressKey(press, "F10", true);
+  assert.deepEqual(openedMenu(), fromMore);
+  assert.deepEqual(asked.opened, [], "the row itself opened nothing");
+});
+
+test("a sidebar task being renamed draws no ⋯ and offers no menu", () => {
+  const { tasks, asked } = openTab();
+  const press = mountSidebarTask(tasks, OTHER, asked);
+  rightClick(press, 40, 60);
+  choose("Rename");
+  assert.equal(document.querySelector('li button[aria-label="Task actions"]'), null);
+  assert.equal(openedMenu(), undefined);
+});

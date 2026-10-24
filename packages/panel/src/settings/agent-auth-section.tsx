@@ -25,13 +25,14 @@ import {
   ConfirmDialog,
   DIALOG_SIZE,
   Dialog,
-  EllipsisIcon,
   ErrorState,
   GAP,
   IconButton,
   Inline,
   JUSTIFY,
   LAYOUT_ELEMENT,
+  MoreButton,
+  moreLabel,
   PencilIcon,
   SETTINGS_ROW_MARK_WIDTH,
   SETTINGS_ROW_STATE,
@@ -864,12 +865,7 @@ function ApiKeyPanel({
               disabled={removal.busy}
               onClick={() => setEditing(true)}
             />
-            <IconButton
-              ref={door}
-              icon={<EllipsisIcon />}
-              label={`${name} key actions`}
-              {...menu.trigger()}
-            />
+            <MoreButton ref={door} thing={`${name} key`} {...menu.trigger()} />
           </Inline>
         </Inline>
       )}
@@ -879,7 +875,7 @@ function ApiKeyPanel({
       {rejection === undefined ? null : <State ok={false}>{rejection}</State>}
       {menu.drawn === undefined ? null : (
         <ActionMenu
-          label={`${name} key actions`}
+          label={moreLabel(`${name} key`)}
           menu={menu.drawn}
           groups={[
             [

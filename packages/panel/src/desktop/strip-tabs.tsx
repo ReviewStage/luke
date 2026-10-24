@@ -3,9 +3,10 @@ import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
   CloseIcon,
   CopyIcon,
-  EllipsisIcon,
   IconButton,
   type MenuRow,
+  MoreButton,
+  moreLabel,
   PencilIcon,
   PinIcon,
   PlusIcon,
@@ -255,12 +256,10 @@ function ToolbarTabActions({
   slot: HTMLElement;
 }): React.JSX.Element {
   const menu = useMenu(true);
-  const named = `${label} actions`;
+  const named = moreLabel(label);
   return createPortal(
     <>
-      <Tooltip label={named}>
-        <IconButton icon={<EllipsisIcon />} label={named} {...menu.trigger()} />
-      </Tooltip>
+      <MoreButton thing={label} {...menu.trigger()} />
       {menu.drawn === undefined ? null : (
         <ActionMenu label={named} menu={menu.drawn} groups={groups} onClose={menu.close} />
       )}
