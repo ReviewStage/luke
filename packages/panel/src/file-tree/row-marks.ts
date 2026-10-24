@@ -126,13 +126,19 @@ const CUT = `${NAME} [data-truncate-container]`;
 const CUT_MARK = `${CUT} [data-truncate-marker]`;
 const FOLDERS = `${NAME} [data-item-flattened-subitems] > [data-item-flattened-subitem]`;
 
+/** The open file's row, the one the tree marks chosen (`folder-browser.ts`'s `markAlone`). */
+const OPEN_ROW = '[data-type="item"][data-item-selected="true"]';
+
 /**
- * The rules the tree draws by: a cut name's fade at its end; the window's thin scrollbar, whose colour
+ * The rules the tree draws by: the open file's row lifted by a hairline and
+ * a soft shadow over the ground the host gives it, as `@luke/ui`'s ListRow
+ * draws a list's open row; a cut name's fade at its end; the window's thin scrollbar, whose colour
  * inherits into Pierre's shadow root and whose width does not, so it is set
  * here on the scroller and on the box Pierre measures that scroller's
  * gutter from; and each file's run.
  */
 const SHEET = `
+${OPEN_ROW} { box-shadow: 0 0 0 1px var(--luke-color-border), 0 1px 2px var(--luke-color-shadow-soft); }
 ${HALVES} > div:first-child, ${FOLDERS} { flex: 0 1 max-content; min-width: 0; }
 ${HALVES} > div:last-child, ${FOLDERS}:last-child { flex: 0 999999 max-content; min-width: 0; }
 ${CUT}[data-truncate-container="fruncate"] [data-truncate-content] { direction: ltr; }

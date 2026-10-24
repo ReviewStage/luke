@@ -1136,13 +1136,16 @@
 }
 
 /* The tree beside a File tab, its search level with the tab's heading, as
-   wide as it was last dragged (`useTreeEdge`), never so wide that it takes
-   the tab's room, and dragged by the edge on its left, which straddles its
-   border as the side panel's does. */
+   wide as it was last dragged (`useTreeEdge`), and dragged by the edge on
+   its left, which straddles its border as the side panel's does. It gives
+   way only where the tab beside it would fall below the least a diff reads
+   at, so a panel at its default width keeps the tree near the width it was
+   left at rather than at a share of the panel. */
+/* off-scale: 200px, the least a diff reads at, its file heads keeping their Viewed box */
 .file-tree-pane {
   position: relative;
   display: flex;
-  width: min(var(--file-tree-width, 264px), max(40%, 100% - 320px));
+  width: min(var(--file-tree-width, 264px), 100% - 200px);
   min-width: 0;
   flex: 0 0 auto;
   flex-direction: column;
@@ -1839,13 +1842,16 @@
    lays its rows edge to edge with no room for one outside. Its ground is
    the opaque ground it stands on, never transparent, because the tree
    cuts a long name in its middle by painting the cut over in that ground:
-   a transparent one drew both halves of the name over one another. */
+   a transparent one drew both halves of the name over one another. The
+   open file's row is drawn as every list draws its open row (`@luke/ui`'s
+   ListRow `current`): the work sheet's ground here, its hairline and
+   shadow in the tree's own sheet (`row-marks.ts`). */
 .file-tree-host {
   --trees-bg-override: var(--luke-color-well);
   --trees-bg-muted-override: var(--luke-color-fill-hover);
   --trees-fg-override: var(--luke-color-text);
   --trees-fg-muted-override: var(--luke-color-text-muted);
-  --trees-selected-bg-override: var(--luke-color-fill-selected);
+  --trees-selected-bg-override: var(--luke-color-ground);
   --trees-selected-fg-override: var(--luke-color-text);
   --trees-selected-focused-border-color-override: var(--luke-color-focus-ring);
   --trees-border-color-override: var(--luke-color-border);

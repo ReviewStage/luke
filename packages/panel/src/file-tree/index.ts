@@ -18,6 +18,7 @@ import {
 import {
   browseFolders,
   type FolderBrowser,
+  keepMarked,
   markAlone,
   repositoryPath,
   treePath,
@@ -42,8 +43,9 @@ import { dress, pressedToggle, rowDecoration } from "./row-marks.js";
  * A file opens on a press, or on Return where the tree's keyboard stands on
  * it, read off the row Pierre drew, since Pierre tells a selection and not
  * how it was made: ⌘ held opens it in a tab of its own. Note that Pierre
- * takes a ⌘-press as adding to its selection, which the tab's next reveal
- * puts back to the one file shown.
+ * takes a ⌘-press as adding to its selection, which the tree puts back to
+ * the one file shown at once, since that file stays the tab's own, so one
+ * row alone ever looks open.
  *
  * Each file is drawn with its type's coloured icon (Pierre's complete set),
  * and a folder holding one folder alone shares its row, as `src/main` does
@@ -279,8 +281,12 @@ function mount(host: HTMLElement, props: FileTreeProps): FileTreeHandle {
   const onClick = (event: MouseEvent) => {
     const row = pressedRow(event);
     const path = row?.dataset.itemPath;
+    const apart = event.metaKey || event.ctrlKey;
+    // Note that a ⌘-press leaves the tab's own file the one marked open.
+    const view = standing();
+    if (apart && view !== undefined) keepMarked(view.tree, marked);
     if (row?.dataset.itemType !== ROW.FILE || path === undefined) return;
-    props.onOpen(repositoryPath(path), event.metaKey || event.ctrlKey);
+    props.onOpen(repositoryPath(path), apart);
   };
   // Note that a press on a Viewed toggle is heard on its way down, before
   // the row it stands in, so it goes no further: the row neither opens nor
