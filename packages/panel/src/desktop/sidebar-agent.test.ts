@@ -18,6 +18,7 @@ import type { CodingAgentsControl } from "../tasks/use-coding-agents.js";
 import { type AnyAct, FAKE_ANSWER, type FakeActAnswer, fakeActs } from "../testing/app-bridge.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { restOn } from "../testing/hint-rest.js";
+import { relayout } from "../testing/resize-observer.js";
 import { codingAgentsControl } from "../testing/tasks-control.js";
 import { type AgentActions, rowDoors, useAgentActions } from "./agent-actions.js";
 import { SidebarAgent } from "./sidebar-agent.js";
@@ -576,4 +577,20 @@ test("an agent row's ⋯ opens the menu its right-click does, the ⋯ a Tab stop
     rightClick(row).map((each) => each.textContent),
     fromMore,
   );
+});
+
+test("an agent's name cut short by its row fades out where it is cut, and one that fits does not", () => {
+  const row = mount(RUN);
+  const name =
+    row.querySelector<HTMLElement>(".luke-list-row-title .luke-one-line") ??
+    assert.fail("the name is drawn as one line");
+  assert.equal(name.textContent, RUN.title);
+  assert.equal(name.dataset.overflow, "false");
+
+  Object.defineProperty(name, "scrollWidth", { configurable: true, value: 320 });
+  Object.defineProperty(name, "clientWidth", { configurable: true, value: 180 });
+  act(() => relayout());
+
+  assert.equal(name.dataset.end, "fade");
+  assert.equal(name.dataset.overflow, "true");
 });

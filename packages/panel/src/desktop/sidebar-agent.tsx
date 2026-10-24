@@ -248,7 +248,7 @@ export function SidebarAgent({
               />
             ) : (
               <>
-                {name}
+                <OneLine words={name}>{name}</OneLine>
                 {isUnread ? <VisuallyHidden>(unread)</VisuallyHidden> : null}
               </>
             )
