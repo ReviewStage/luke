@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import { it } from "@effect/vitest";
 import {
   AUTOMATION_ACTION,
   AUTOMATION_DEFAULT_GUARDS,
@@ -43,13 +44,16 @@ import { appSettingsWire, experimentsOn, settingsView } from "@luke/settings/tes
 import { isMacTerminalTab, TAB_WORDS } from "@luke/ui/tab-strip-model";
 import { CALL_LABEL } from "@luke/ui/tasks-model";
 import { MESSAGE_ROLE } from "@luke/wire";
-import { Effect } from "effect";
+import { Clock, Context, Effect } from "effect";
+import * as AsyncResult from "effect/reactivity/AsyncResult";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
+import { TestClock } from "effect/testing";
 import { act, createElement, Fragment } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
 import { runAppCommand } from "../app-commands.js";
 import { SIDE_BUNDLES } from "../bundle-loader.js";
+import { rendererRuntime } from "../renderer-runtime.js";
 import type { AgentCallPlace } from "../tasks/agent-call.js";
 import { archiveWords } from "../tasks/coding-agent-model.js";
 import { SIDE_PANEL_TAB, type SidePanelControl, useSidePanel } from "../tasks/use-side-panel.js";
@@ -422,10 +426,11 @@ afterEach(() => {
   takeDownTerminal = undefined;
 });
 
-/** The page of the agent, standing in the task's place, as the window's tasks control holds it. */
+/** The page of the agent, standing in the task's place, as the window's tasks control holds it, its atoms held by `registry`. */
 function mount(
   tasks: TasksControl = tasksControl({}),
   openLink?: (link: ReadLink) => void,
+  registry = AtomRegistry.make(),
 ): HTMLElement {
   const container = document.createElement("div");
   document.body.append(container);
@@ -434,7 +439,7 @@ function mount(
   act(() =>
     root?.render(
       onRegistry(
-        AtomRegistry.make(),
+        registry,
         createElement(
           Fragment,
           null,
@@ -1908,75 +1913,108 @@ test("Rename on the page's ⋯ turns the title into its name's field, and the na
   assert.equal(page.querySelector("h1")?.textContent, "Sweep the slow tests");
 });
 
-test("an @ in the agent's box names an archived agent by its task's name, read from the window's tasks", async () => {
-  installEditorLayout();
-  installScrollIntoView();
-  const billing: Task = {
-    id: "2b2b2b2b-0000-4000-8000-000000000000",
-    workspaceId: PAGE.workspaceId,
-    name: "Billing",
-    createdAt: 1,
-    updatedAt: 2,
-    repository: "acme/relay",
-    document: { body: "", assumptions: [] },
-  };
-  workspace = [
-    {
-      id: "3c3c3c3c-0000-4000-8000-000000000000",
-      planId: billing.id,
-      model: PAGE.model,
-      effort: PAGE.effort,
-      title: "Bill by seat",
-      createdAt: 1,
-      status: CODING_AGENT_STATUS.COMPLETED,
-      turnId: null,
-      archivedAt: 3,
-    },
-  ];
-  const page = mount(tasksControl({ tasks: [billing] }));
-  await settle();
+/** A registry whose atoms wait on this clock, as the window's wait on its own. */
+function registryOn(clock: Clock.Clock): AtomRegistry.AtomRegistry {
+  return AtomRegistry.make({
+    initialValues: [[rendererRuntime, AsyncResult.success(Context.make(Clock.Clock, clock))]],
+  });
+}
 
-  typeInComposer(page, "Ask @billing");
-  await settle();
-
-  const rows = [...page.querySelectorAll('.mention-menu [aria-label="Agents"] [role="option"]')];
-  assert.deepEqual(
-    rows.map((row) => [
-      row.querySelector(".luke-combobox-option-label")?.textContent,
-      row.querySelector(".luke-combobox-option-detail")?.textContent,
-    ]),
-    [["Bill by seat", "Billing · Archived"]],
-  );
+/** The clock moved past the pause the typing rests before agents are searched for, and what the search answered drawn. */
+const pastSearchPause = Effect.gen(function* () {
+  yield* TestClock.adjust("300 millis");
+  yield* Effect.promise(settle);
 });
 
-test("an agent working in no repository, as Luke does, still takes an @ in its box, which offers the workspace's agents", async () => {
-  installEditorLayout();
-  installScrollIntoView();
-  pages = [{ agent: { ...PAGE, repository: null } }];
-  workspace = [
-    {
-      id: "3c3c3c3c-0000-4000-8000-000000000000",
-      planId: null,
-      model: PAGE.model,
-      effort: PAGE.effort,
-      title: "Bill by seat",
-      createdAt: 1,
-      status: CODING_AGENT_STATUS.COMPLETED,
-      turnId: null,
-    },
-  ];
-  const page = mount(tasksControl({ workspace: ACME, workspaces: [ACME] }));
-  await settle();
+it.effect(
+  "an @ in the agent's box names an archived agent by its task's name, read from the window's tasks",
+  () =>
+    Effect.gen(function* () {
+      installEditorLayout();
+      installScrollIntoView();
+      const billing: Task = {
+        id: "2b2b2b2b-0000-4000-8000-000000000000",
+        workspaceId: PAGE.workspaceId,
+        name: "Billing",
+        createdAt: 1,
+        updatedAt: 2,
+        repository: "acme/relay",
+        document: { body: "", assumptions: [] },
+      };
+      workspace = [
+        {
+          id: "3c3c3c3c-0000-4000-8000-000000000000",
+          planId: billing.id,
+          model: PAGE.model,
+          effort: PAGE.effort,
+          title: "Bill by seat",
+          createdAt: 1,
+          status: CODING_AGENT_STATUS.COMPLETED,
+          turnId: null,
+          archivedAt: 3,
+        },
+      ];
+      const page = mount(
+        tasksControl({ tasks: [billing] }),
+        undefined,
+        registryOn(yield* Clock.Clock),
+      );
+      yield* Effect.promise(settle);
 
-  typeInComposer(page, "Ask @bill");
-  await settle();
+      typeInComposer(page, "Ask @billing");
+      yield* pastSearchPause;
 
-  const rows = [...page.querySelectorAll('.mention-menu [aria-label="Agents"] [role="option"]')];
-  assert.deepEqual(
-    rows.map((row) => row.querySelector(".luke-combobox-option-label")?.textContent),
-    ["Bill by seat"],
-  );
-});
+      const rows = [
+        ...page.querySelectorAll('.mention-menu [aria-label="Agents"] [role="option"]'),
+      ];
+      assert.deepEqual(
+        rows.map((row) => [
+          row.querySelector(".luke-combobox-option-label")?.textContent,
+          row.querySelector(".luke-combobox-option-detail")?.textContent,
+        ]),
+        [["Bill by seat", "Billing · Archived"]],
+      );
+    }),
+);
+
+it.effect(
+  "an agent working in no repository, as Luke does, still takes an @ in its box, which offers the workspace's agents",
+  () =>
+    Effect.gen(function* () {
+      installEditorLayout();
+      installScrollIntoView();
+      pages = [{ agent: { ...PAGE, repository: null } }];
+      workspace = [
+        {
+          id: "3c3c3c3c-0000-4000-8000-000000000000",
+          planId: null,
+          model: PAGE.model,
+          effort: PAGE.effort,
+          title: "Bill by seat",
+          createdAt: 1,
+          status: CODING_AGENT_STATUS.COMPLETED,
+          turnId: null,
+        },
+      ];
+      const page = mount(
+        tasksControl({ workspace: ACME, workspaces: [ACME] }),
+        undefined,
+        registryOn(yield* Clock.Clock),
+      );
+      yield* Effect.promise(settle);
+
+      typeInComposer(page, "Ask @bill");
+      yield* pastSearchPause;
+
+      const rows = [
+        ...page.querySelectorAll('.mention-menu [aria-label="Agents"] [role="option"]'),
+      ];
+      assert.deepEqual(
+        rows.map((row) => row.querySelector(".luke-combobox-option-label")?.textContent),
+        ["Bill by seat"],
+      );
+    }),
+);
 
 test("on the page of an agent working in no repository, a GitHub page of a file or a folder in its words is that file's or folder's chip, of the repository its address names, and opens on GitHub", async () => {
   pages = [{ agent: { ...PAGE, repository: null } }];
