@@ -359,6 +359,7 @@ function actLook(costs: Pick<DialogQuestion, "loss" | "tone">): string | null {
 test("only an act past undoing is drawn red; one that reaches someone else asks in the accent", () => {
   assert.equal(actLook({ loss: CONFIRM_LOSS.IRREVERSIBLE }), "danger");
   assert.equal(actLook({ loss: CONFIRM_LOSS.AFFECTS_OTHERS }), "primary");
+  assert.equal(actLook({ loss: CONFIRM_LOSS.REVERSIBLE }), "primary");
   assert.equal(
     actLook({ loss: CONFIRM_LOSS.AFFECTS_OTHERS, tone: DIALOG_TONE.DANGER }),
     "primary",
