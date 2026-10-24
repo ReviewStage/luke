@@ -6,7 +6,7 @@ import { afterEach, beforeAll, expect, test, vi } from "vitest";
 import { MOTION_TOKEN } from "../../motion-timing.js";
 import { holdExits } from "../../testing/held-exits.js";
 import { Announcer } from "../announcer/announcer.js";
-import { DIALOG_ROLE, Dialog, type DialogHandle } from "./dialog.js";
+import { DIALOG_ROLE, Dialog, type DialogHandle, nextRowOrHead } from "./dialog.js";
 
 /**
  * dialog.test.ts -- a dialog opened from a button takes the keyboard and
@@ -18,8 +18,10 @@ import { DIALOG_ROLE, Dialog, type DialogHandle } from "./dialog.js";
  * behind; a busy dialog holds focus on its card until it is done, and
  * nudges its card when asked away meanwhile; one
  * given a title and actions is named by the title, its answers after what
- * it holds; and one its owner closes through `open` fades out before it
- * goes, or goes at once where motion is held.
+ * it holds; one its owner closes through `open` fades out before it
+ * goes, or goes at once where motion is held, and hands focus back once it
+ * has gone; and one whose act took its opener's row away hands focus to the
+ * row after it, or to the list's head where none is left.
  */
 
 declare global {
@@ -507,22 +509,23 @@ function closedThroughOpen(onExited?: () => void): HTMLButtonElement {
   return opener;
 }
 
-test("a dialog its owner closes through open stays drawn in its ending state, focus back on its opener, until its fade has run, then goes", async () => {
+test("a dialog its owner closes through open stays drawn in its ending state until its fade has run, then goes, handing focus back to its opener", async () => {
   vi.useFakeTimers({ toFake: ["requestAnimationFrame", "cancelAnimationFrame"] });
   const exits = holdExits();
   const opener = closedThroughOpen();
   const leaving = card();
   const endingAsClosed = leaving?.hasAttribute("data-ending-style");
-  const focusAsClosed = holds(opener);
+  const focusWhileFading = holds(opener);
   act(() => vi.advanceTimersToNextFrame());
   const standsAFrameOn = card() !== null;
   await act(async () => exits.finish());
 
   expect(leaving).not.toBeNull();
   expect(endingAsClosed).toBe(true);
-  expect(focusAsClosed).toBe(true);
+  expect(focusWhileFading).toBe(false);
   expect(standsAFrameOn).toBe(true);
   expect(card()).toBeNull();
+  expect(holds(opener)).toBe(true);
 });
 
 test("a dialog closed through open while motion is held goes at once", () => {
@@ -562,4 +565,120 @@ test("a dialog that never opened has no exit to tell its owner of", () => {
   draw(createElement(OpenOwner, { onExited: gone }));
 
   expect(gone).not.toHaveBeenCalled();
+});
+
+/** A list of rows, each with a Delete that asks first in a dialog whose answer takes the row away, focus handed on as `nextRowOrHead` says. */
+function RowsOwner({ names }: { names: readonly string[] }): React.JSX.Element {
+  const [rows, setRows] = useState(names);
+  const [asked, setAsked] = useState<string | undefined>(undefined);
+  return createElement(
+    "div",
+    null,
+    createElement(
+      "ul",
+      null,
+      rows.map((name) =>
+        createElement(
+          "li",
+          { key: name },
+          createElement("button", { type: "button", onClick: () => setAsked(name) }, name),
+        ),
+      ),
+    ),
+    createElement(Dialog, {
+      open: asked !== undefined,
+      title: "Delete row?",
+      restoreTo: nextRowOrHead,
+      onDismiss: () => setAsked(undefined),
+      children: createElement(
+        "button",
+        {
+          type: "button",
+          onClick: () => {
+            setRows((now) => now.filter((name) => name !== asked));
+            setAsked(undefined);
+          },
+        },
+        "Delete",
+      ),
+    }),
+  );
+}
+
+/** The rows drawn, the one named `name` asked about from its own button, and the question answered Delete. */
+function deletedFromList(names: readonly string[], name: string): void {
+  draw(createElement(RowsOwner, { names }));
+  const opener = button(name);
+  opener.focus();
+  act(() => opener.click());
+  expect(card()).not.toBeNull();
+  act(() => button("Delete").click());
+}
+
+test("a dialog whose act took its opener's row hands focus to the row after it once its fade has run", async () => {
+  vi.useFakeTimers({ toFake: ["requestAnimationFrame", "cancelAnimationFrame"] });
+  const exits = holdExits();
+  deletedFromList(["Alpha", "Beta", "Gamma"], "Beta");
+  const next = button("Gamma");
+  act(() => vi.advanceTimersToNextFrame());
+  const focusWhileFading = holds(next);
+  await act(async () => exits.finish());
+
+  expect(focusWhileFading).toBe(false);
+  expect(card()).toBeNull();
+  expect(holds(next)).toBe(true);
+});
+
+test("a dialog whose act took the last row hands focus to the list's head", () => {
+  document.body.style.setProperty(MOTION_TOKEN.DURATION_FAST, "0s");
+  holdExits();
+  deletedFromList(["Alpha", "Beta", "Gamma"], "Gamma");
+
+  expect(card()).toBeNull();
+  expect(holds(button("Alpha"))).toBe(true);
+});
+
+/** One row that asks before it is deleted, its question drawn inside it, so deleting it takes the question with it. */
+function AskingRow({ name, onDelete }: { name: string; onDelete: () => void }): React.JSX.Element {
+  const [asked, setAsked] = useState(false);
+  return createElement(
+    "li",
+    null,
+    createElement("button", { type: "button", onClick: () => setAsked(true) }, name),
+    createElement(Dialog, {
+      open: asked,
+      title: "Delete row?",
+      restoreTo: nextRowOrHead,
+      onDismiss: () => setAsked(false),
+      children: createElement("button", { type: "button", onClick: onDelete }, "Delete"),
+    }),
+  );
+}
+
+/** A list whose rows each hold their own question. */
+function AskingRows({ names }: { names: readonly string[] }): React.JSX.Element {
+  const [rows, setRows] = useState(names);
+  return createElement(
+    "ul",
+    null,
+    rows.map((name) =>
+      createElement(AskingRow, {
+        key: name,
+        name,
+        onDelete: () => setRows((now) => now.filter((each) => each !== name)),
+      }),
+    ),
+  );
+}
+
+test("a dialog unmounted with the row its act took away hands focus to the row after it", async () => {
+  draw(createElement(AskingRows, { names: ["Alpha", "Beta", "Gamma"] }));
+  const opener = button("Beta");
+  opener.focus();
+  act(() => opener.click());
+  expect(card()).not.toBeNull();
+  await act(async () => button("Delete").click());
+
+  expect(card()).toBeNull();
+  expect(holds(button("Gamma"))).toBe(true);
 });

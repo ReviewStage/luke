@@ -22,6 +22,7 @@ import {
   MoreButton,
   NOTE_LINE_LOOK,
   NoteLine,
+  nextRowOrHead,
   PencilIcon,
   Stack,
   TextField,
@@ -113,7 +114,8 @@ export interface SectionDialogs {
   /** Opens New section in a workspace; `after` is what to write with the section once made, a task moved into it. */
   askNew: (workspaceId: string, after?: (sectionId: string) => readonly TaskSectionWrite[]) => void;
   askEdit: (section: TaskSection) => void;
-  askDelete: (section: TaskSection) => void;
+  /** Deletes a section, focus going on from `from`, the control its menu was opened from, to the section after it, or the first. */
+  askDelete: (section: TaskSection, from: HTMLElement | null) => void;
   dialog: React.JSX.Element;
 }
 
@@ -217,6 +219,7 @@ export function useSectionDialogs(tasks: TasksControl, surfaceOpen: boolean): Se
         refused={form.refusal !== undefined}
         initialFocus={field}
         onDismiss={form.dismiss}
+        restoreTo={nextRowOrHead}
         actions={
           <DialogActions
             onCancel={form.dismiss}
@@ -262,8 +265,11 @@ export function useSectionDialogs(tasks: TasksControl, surfaceOpen: boolean): Se
       open({ kind: TASK_SECTION_WRITE.CREATE, workspaceId, after }, "", undefined),
     askEdit: (section) =>
       open({ kind: TASK_SECTION_WRITE.EDIT, section }, section.title, section.icon),
-    askDelete: (section) => {
+    askDelete: (section, from) => {
       const before = tasks.taskSections;
+      // Note that focus goes on to the section beside it now, while this one
+      // still stands, rather than falling to the window as it is taken away.
+      if (from !== null) nextRowOrHead(from)()?.focus({ preventScroll: true });
       tasks.onWriteSections([{ kind: TASK_SECTION_WRITE.DELETE, id: section.id }]);
       toast(
         undoToast(SECTION_DELETED, () => {
@@ -362,6 +368,8 @@ interface SectionContext {
 
 /** What a section's actions on all its tasks run through beyond the section's writes: each asks or reaches past the sections. */
 interface SectionDoors {
+  /** The section's ⋯, which its menu opens from and hands focus back to. */
+  readonly opener: React.RefObject<HTMLElement | null>;
   readonly onMarkRead: () => void;
   /** Sets every task Done. */
   readonly onMarkDone: () => void;
@@ -420,7 +428,7 @@ function sectionActionGroups(
       label: "Delete section",
       icon: <TrashIcon />,
       danger: true,
-      onSelect: () => dialogs.askDelete(section),
+      onSelect: () => dialogs.askDelete(section, doors.opener.current),
     },
   ];
   if (drawn.rows.length === 0) return [edit, remove];
@@ -518,6 +526,7 @@ function SidebarSection({
   const reads = useReadMarks();
   const held = drawnSectionTasks(drawn);
   const groups = sectionActionGroups(drawn, context, {
+    opener: ellipsis,
     onMarkRead: () => {
       for (const task of held.filter(context.unread)) reads.mark(task, false);
     },

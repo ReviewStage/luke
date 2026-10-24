@@ -24,7 +24,10 @@ import { useHeldFocus } from "./held-focus.js";
  * Every modal stands the same way, the way every desktop app's does: the
  * window dims, the card holds focus and keeps Tab among its own controls,
  * and Escape or a press that begins and ends on the dimmed window puts it
- * away, which hands focus back to whatever opened it if that still stands.
+ * away, which hands focus back to whatever opened it if that still stands,
+ * or, where the card's own act took it away, the row it stood in with it,
+ * to where its owner says (`restoreTo`): the row after it, or the list's
+ * head where none is left (`nextRowOrHead`).
  * A press that begins in the card and ends on the dimmed window, as a text
  * selection dragged out of the card does, puts nothing away. No key and no
  * press inside goes on to the window, because a window chord or a press on a
@@ -46,8 +49,9 @@ import { useHeldFocus } from "./held-focus.js";
  *
  * The dialog stands while it is `open`, and as `open` falls the card and its
  * dimmed window fade out on the exit token, drawn and taking no press until
- * the fade has run, focus handed back to what opened the card as the fade
- * begins. Reduced motion and a capture run, which zero the tokens, take it
+ * the fade has run, focus handed back to what opened the card once it has,
+ * so it never lands on something the act that closed the card is about to
+ * take away. Reduced motion and a capture run, which zero the tokens, take it
  * away at once. An owner whose card holds state or reads data while it is
  * drawn hears `onExited` once the card is gone, and takes it out then. An
  * owner always passes `open`: one that mounts the dialog to open it and
@@ -117,6 +121,18 @@ type DialogName =
 export interface DialogHandle {
   dismiss: () => void;
 }
+
+/**
+ * Where focus goes once a card is gone if what opened it has left the
+ * window meanwhile: worked out from what opened it as the card opens, while
+ * that still stands, and answered once the card is gone; nothing leaves
+ * focus where it fell.
+ */
+export type RestoreTo = (opener: HTMLElement) => () => HTMLElement | null;
+
+/** What in a row takes focus: the item a list's arrows walk, else its first control. */
+const ROW_FOCUS =
+  "[data-roving-item], button:not(:disabled), a[href], input:not(:disabled), select:not(:disabled), textarea:not(:disabled), [tabindex]";
 
 /** What Base UI hears as a dismissal: Escape, and a press on the dimmed window. */
 const DISMISSAL: ReadonlySet<DialogRoot.ChangeEventReason> = new Set([
@@ -188,6 +204,8 @@ export type DialogProps = DialogName & {
   initialFocus?: React.RefObject<HTMLElement | null> | undefined;
   /** Escape or a press on the dimmed window: the dialog decides what putting it away costs. */
   onDismiss: () => void;
+  /** Where focus goes once the card is gone if what opened it has left the window meanwhile (`nextRowOrHead`); none leaves it where it fell. */
+  restoreTo?: RestoreTo | undefined;
   /** Its fade has run and it is gone, which an owner whose card holds state or reads data lets go of it on. */
   onExited?: (() => void) | undefined;
   /** The dialog's own keys, heard after Tab and Escape and never while an input method composes. */
@@ -237,34 +255,118 @@ function useRefusalShake(card: React.RefObject<HTMLDivElement | null>, refused: 
   }, [card, refused]);
 }
 
-/** Hands focus back to `invoker` and forgets it, unless it has left the window meanwhile. */
-function handBack(invoker: React.RefObject<HTMLElement | null>): void {
-  const back = invoker.current;
-  invoker.current = null;
-  if (back?.isConnected) back.focus({ preventScroll: true });
+/** Whether `element` can take focus: in the window, and in no part of it put out of reach, as a row leaving its list is. */
+function reachable(element: HTMLElement): boolean {
+  return element.isConnected && element.closest("[inert]") === null;
+}
+
+/** What takes focus in `row`, where it stands within reach. */
+function rowFocus(row: Element | null): HTMLElement | null {
+  if (!(row instanceof HTMLElement) || !reachable(row)) return null;
+  return row.querySelector<HTMLElement>(ROW_FOCUS);
 }
 
 /**
- * Remembers what held focus as the dialog opened and hands focus back to it
- * as the dialog closes, as its fade begins or as it is unmounted, unless it
- * has left the window meanwhile.
+ * The row after the one `opener` stands in, or the first row of its list
+ * where that one is gone too, as they stand once the card is gone: where
+ * focus goes when the card's act took the opener's row with it (a task
+ * deleted, an Inbox item resolved), so the keyboard carries on down the list
+ * rather than falling to the window. A row is the list item the opener
+ * stands in, and one leaving its list, out of reach, is passed over; an
+ * opener in no list has no neighbour.
+ */
+export const nextRowOrHead: RestoreTo = (opener) => {
+  const row = opener.closest("li");
+  const list = row?.parentElement;
+  if (row === null || list === null || list === undefined) return () => null;
+  const next = row.nextElementSibling;
+  return () => {
+    const after = rowFocus(next);
+    if (after !== null) return after;
+    for (const each of list.children) {
+      const head = each === row ? null : rowFocus(each);
+      if (head !== null) return head;
+    }
+    return null;
+  };
+};
+
+/** What opened the card, and where focus goes in its place should it be gone. */
+interface Opener {
+  element: HTMLElement;
+  restore: (() => HTMLElement | null) | undefined;
+}
+
+/** Whether focus has gone somewhere of its own outside the card, where a hand-back leaves it, since the card no longer holds it to give back. */
+function focusTaken(card: HTMLElement | null): boolean {
+  const now = document.activeElement;
+  if (!(now instanceof HTMLElement) || now === document.body || !reachable(now)) return false;
+  return !(card?.contains(now) ?? false);
+}
+
+/**
+ * Hands focus back to what opened the card and forgets it, or, where that
+ * has left the window meanwhile, to where `restoreTo` said, if anywhere;
+ * answers what opened it, for an unmount to look again.
+ */
+function handBack(
+  invoker: React.RefObject<Opener | null>,
+  card: HTMLElement | null,
+): Opener | null {
+  const back = invoker.current;
+  invoker.current = null;
+  if (back === null || focusTaken(card)) return back;
+  const to = reachable(back.element) ? back.element : back.restore?.();
+  to?.focus({ preventScroll: true });
+  return back;
+}
+
+/**
+ * Remembers what held focus as the dialog opened, and where focus goes
+ * should that be gone by the time the card is (`restoreTo`), and answers the
+ * hand-back the dialog runs once its card is gone; an unmount hands it back
+ * too, since a card its owner takes away has no exit of its own.
  *
  * Note that the invoker is read in a layout effect, because the card's own
  * focus lands in a later effect, and once it has, the control that opened
- * the card no longer holds it; and that a close through `open` hands focus
- * back in an effect, after Base UI's own have let go of the card's trap,
- * which would otherwise take focus back into the card on its way out.
+ * the card no longer holds it; that a card asked open again before its
+ * fade has run keeps the invoker it had, since focus by then stands in the
+ * card; and that focus goes back only once the card is gone, after Base
+ * UI's own have let go of the card's trap, which would otherwise take
+ * focus back into the card on its way out, and after the act that closed
+ * it has taken away what it took.
  */
-function useInvokerFocus(open: boolean): void {
-  const invoker = useRef<HTMLElement | null>(null);
+function useInvokerFocus(
+  open: boolean,
+  restoreTo: RestoreTo | undefined,
+  card: React.RefObject<HTMLElement | null>,
+): () => void {
+  const invoker = useRef<Opener | null>(null);
   useLayoutEffect(() => {
-    if (!open) return;
-    invoker.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-  }, [open]);
-  useEffect(() => {
-    if (!open) handBack(invoker);
-  }, [open]);
-  useLayoutEffect(() => () => handBack(invoker), []);
+    if (!open || invoker.current !== null) return;
+    const element = document.activeElement;
+    if (!(element instanceof HTMLElement)) return;
+    invoker.current = { element, restore: restoreTo?.(element) };
+  }, [open, restoreTo]);
+  // Note that an unmount looks again a microtask on, once the commit that
+  // unmounts it has taken out what it takes, because a card drawn inside the
+  // row its act took away unmounts with that row while the row still stands,
+  // so focus handed back to it falls to the window as the row goes.
+  useLayoutEffect(
+    () => () => {
+      const back = handBack(invoker, card.current);
+      const restore = back?.restore;
+      if (back === null || restore === undefined) return;
+      queueMicrotask(() => {
+        if (reachable(back.element) || focusTaken(null)) return;
+        restore()?.focus({ preventScroll: true });
+      });
+    },
+    [card],
+  );
+  return () => {
+    handBack(invoker, card.current);
+  };
 }
 
 /**
@@ -288,6 +390,7 @@ export function Dialog({
   holding = false,
   initialFocus,
   onDismiss,
+  restoreTo,
   onExited,
   onKeyDown,
   dropTarget,
@@ -314,8 +417,8 @@ export function Dialog({
   }, [open]);
   useEffect(() => () => heldSaid.current(), []);
 
-  useInvokerFocus(open);
-  // Note that a card on its way out holds no focus, which has gone back to what opened it.
+  const handBackFocus = useInvokerFocus(open, restoreTo, card);
+  // Note that a card on its way out holds no focus of its own, which goes back to what opened it once it is gone.
   useHeldFocus<HTMLElement>(initialFocus ?? card, open && drawn && !busy);
   useHeldFocus(card, open && drawn && busy);
   useRefusalShake(card, refused);
@@ -352,6 +455,7 @@ export function Dialog({
     if (open) stood.current = true;
   }, [open]);
   const exited = () => {
+    handBackFocus();
     if (!stood.current) return;
     stood.current = false;
     onExited?.();
