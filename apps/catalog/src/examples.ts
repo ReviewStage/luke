@@ -61,6 +61,7 @@ import { ONE_LINE_EXAMPLE } from "./examples/one-line";
 import { PAGE_THUMBS_EXAMPLE } from "./examples/page-thumbs";
 import { PAGE_TOOLBAR_EXAMPLE } from "./examples/page-toolbar";
 import { PAGINATION_EXAMPLE } from "./examples/pagination";
+import { PANE_BARS_EXAMPLE } from "./examples/pane-bars";
 import { PANE_PINS_EXAMPLE } from "./examples/pane-pins";
 import { PICTURE_TILES_EXAMPLE } from "./examples/picture-tiles";
 import { POPOVER_PANELS_EXAMPLE } from "./examples/popover-panels";
@@ -183,6 +184,7 @@ export const EXAMPLES: readonly Example[] = [
   PAGINATION_EXAMPLE,
   PAGE_THUMBS_EXAMPLE,
   PAGE_TOOLBAR_EXAMPLE,
+  PANE_BARS_EXAMPLE,
   PICTURE_TILES_EXAMPLE,
   POPOVER_PANELS_EXAMPLE,
   PRESS_SHORTCUTS_EXAMPLE,

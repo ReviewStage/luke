@@ -53,6 +53,7 @@
 @import "./face/face-motion.css";
 @import "./face/glyphs.css";
 @import "./components/one-line/one-line.css";
+@import "./components/pane-bar/pane-bar.css";
 @import "./components/hold-press/hold-press.css";
 @import "./components/inline-ref/inline-ref.css";
 @import "./components/resize-corner/resize-corner.css";

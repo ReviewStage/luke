@@ -43,6 +43,7 @@ Every token is a `--luke-*` custom property under `src/tokens/`.
   | --- | ---: | ---: | ---: |
   | `--luke-control-height` | 30px | 44px | 32px |
   | `--luke-control-radius` | 10px | 10px | 10px |
+  | `--luke-pane-bar-height` (`PaneBar`) | 39px | 53px | 41px |
   | `--luke-control-icon` | 16px | 16px | 16px |
   | `--luke-type-body-*` (size / leading) | 13 / 20 | 16 / 24 | 14 / 20 |
   | `--luke-type-label-*` | 13 / 18 | 14 / 20 | 13 / 18 |
