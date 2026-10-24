@@ -1770,11 +1770,12 @@ export function CommandPalette({
   // The render a key paints the field in draws the ranking already standing, and only the
   // render the words sought catch up in ranks them, so no key waits on the ranking.
   if (open) stood.current = sought === query ? rank() : stood.current;
-  // Whether the row chosen is a command's, which Return runs rather than opens.
-  const runs =
-    stood.current
-      .find((group) => group.id === PALETTE_FILTER.COMMANDS)
-      ?.items.some((item) => item.id === selected) ?? false;
+  // Whether the row chosen is a command's, Ask Luke's among them, which Return runs rather than opens.
+  const runs = stood.current.some(
+    (group) =>
+      (group.id === PALETTE_FILTER.COMMANDS || group.id === ASK_LUKE_GROUP) &&
+      group.items.some((item) => item.id === selected),
+  );
 
   return (
     <CommandDialog

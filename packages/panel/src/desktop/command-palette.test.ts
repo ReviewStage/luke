@@ -2601,6 +2601,15 @@ test("⌘K's first entry is Ask Luke while the account has the operator on, whic
   await settle();
 
   assert.equal(rows()[0], "Ask Luke");
+  assert.deepEqual(
+    footer(),
+    ["↑↓ Select", "⏎ Run", "←→ Filter"],
+    "Ask Luke is a command, which runs",
+  );
+  chooseFilter("Commands");
+  assert.equal(rows()[0], "Ask Luke");
+  assert.deepEqual(footer(), ["↑↓ Select", "⏎ Run", "←→ Filter"]);
+  chooseFilter("All");
   assert.ok(
     !rows().some((row) => row.startsWith("Orla")),
     "Luke is not listed again by his agent's name",
