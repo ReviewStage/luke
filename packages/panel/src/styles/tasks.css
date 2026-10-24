@@ -616,12 +616,6 @@
 }
 
 /* A fence Mermaid refused says so over its code, in the failure's red. */
-.plan-diagram-failed {
-  margin: 0 0 var(--luke-control-gap);
-  color: var(--luke-color-danger-text);
-  font-size: var(--luke-type-caption-size);
-}
-
 /* In the editor the fence stays code, and its diagram stands under it,
    out of the text: nothing in it takes the caret or a selection. */
 .plan-diagram-preview {
@@ -4994,15 +4988,6 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
 
 .terminal-tab-screen[data-dim="true"] {
   opacity: 0.42;
-}
-
-.terminal-tab-failed {
-  margin: 0;
-  padding: var(--luke-row-inset) var(--luke-list-inset) var(--luke-row-inset) var(--luke-space-16);
-  color: var(--luke-color-danger-text);
-  font-family: var(--luke-font-mono);
-  font-size: var(--luke-type-caption-size);
-  line-height: var(--luke-type-caption-leading);
 }
 
 /* Where the words and the action do not fit one line, the action drops to

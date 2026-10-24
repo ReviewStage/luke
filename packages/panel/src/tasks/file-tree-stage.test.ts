@@ -6,7 +6,7 @@ import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, test } from "vitest";
-import type { SideBundles } from "../bundle-loader.js";
+import { type SideBundles, sideBundles } from "../bundle-loader.js";
 import type { FolderListing } from "../file-tree/contract.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { landedBundles, onSideBundles } from "../testing/side-bundles.js";
@@ -57,11 +57,11 @@ async function settle(): Promise<void> {
   });
 }
 
-/** The words of every line the host says, alerts and notes alike. */
+/** The words of every line the host says, alerts, notes and waits alike. */
 function said(): string[] {
-  return [...document.querySelectorAll(".luke-note-line, .luke-failure-note")].map(
-    (line) => line.textContent ?? "",
-  );
+  return [
+    ...document.querySelectorAll(".luke-note-line, .luke-failure-note, .luke-spinner-region"),
+  ].map((line) => line.textContent ?? "");
 }
 
 /** The host the tree draws in, and whether it is shown. */
@@ -108,6 +108,49 @@ test("a crumb's tree says its root is read, says why it could not be with Retry,
   assert.deepEqual(said(), ["Reading files"]);
 
   answers[1]?.resolve({ entries: [{ name: "README.md", folder: false }], truncated: false });
+  await settle();
+  assert.deepEqual(said(), []);
+  assert.equal(hostShown(), true);
+});
+
+test("a tree bundle that failed to load says so with Retry, which imports it again and draws the tree", async () => {
+  let online = false;
+  const unloaded = sideBundles({
+    fileTree: () =>
+      online
+        ? import("../file-tree/index.js").then((e) => e.fileTree)
+        : Promise.reject(new Error("offline")),
+  });
+  const container = document.body.appendChild(document.createElement("div"));
+  const root = createRoot(container);
+  roots.push(root);
+  act(() =>
+    root.render(
+      onRegistry(
+        AtomRegistry.make(),
+        onSideBundles(
+          unloaded,
+          createElement(FileTreePane, {
+            file: "README.md",
+            listFolder: () =>
+              Promise.resolve({
+                entries: [{ name: "README.md", folder: false }],
+                truncated: false,
+              }),
+            onOpen: () => undefined,
+          }),
+        ),
+      ),
+    ),
+  );
+  await settle();
+  assert.deepEqual(said(), ["The files could not be shown.Retry"]);
+
+  online = true;
+  const retry =
+    [...document.querySelectorAll("button")].find((button) => button.textContent === "Retry") ??
+    assert.fail("the failure offers Retry");
+  await act(async () => retry.click());
   await settle();
   assert.deepEqual(said(), []);
   assert.equal(hostShown(), true);

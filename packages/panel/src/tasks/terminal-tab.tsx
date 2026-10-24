@@ -2,6 +2,8 @@ import { type TerminalAction, type TerminalBar, terminalLook } from "@luke/featu
 import { SHORTCUT_KEY } from "@luke/settings/shortcuts";
 import {
   ANNOUNCE,
+  ERROR_STATE_PLACEMENT,
+  ErrorState,
   FILL_FLOW,
   Fill,
   PaneBar,
@@ -204,7 +206,9 @@ export function TerminalTab({
             <StateBar key={String(look.bar.late)} bar={look.bar} onAction={session.onAction} />
           )}
           {session.failed ? (
-            <p className="terminal-tab-failed">{TERMINAL_LOAD_FAILED}</p>
+            <ErrorState placement={ERROR_STATE_PLACEMENT.CENTRED} onRetry={session.retryBundle}>
+              {TERMINAL_LOAD_FAILED}
+            </ErrorState>
           ) : (
             <div ref={session.screen} className="terminal-tab-screen" data-dim={String(look.dim)} />
           )}

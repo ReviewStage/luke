@@ -1,10 +1,11 @@
-import { useAtomValue } from "@effect/atom-react";
+import { useAtomRefresh, useAtomValue } from "@effect/atom-react";
 import {
   Button,
   CARD_CORNER,
   CARD_ELEMENT,
   CARD_PADDING,
   Card,
+  FailureNote,
   IMAGE_OPENING,
   PictureTile,
   PortalFence,
@@ -116,10 +117,17 @@ function useAppearance(): DiagramAppearance {
 /**
  * A code's drawing in the window's appearance: the one held, or nothing
  * while the bundle loads and the draw runs, which then lands. A bundle that
- * could not load refuses every code, so each fence stands as its code.
+ * could not load refuses every code, so each fence stands as its code, with
+ * the `retry` that imports the bundle again; a fence the bundle itself
+ * refused has none, since drawing it again would refuse it again.
  */
-function useDrawing(code: string, appearance: DiagramAppearance): DiagramDrawing | undefined {
-  const bundle = useAtomValue(useSideBundles().diagram);
+function useDrawing(
+  code: string,
+  appearance: DiagramAppearance,
+): { readonly drawing: DiagramDrawing | undefined; readonly retry: (() => void) | undefined } {
+  const { diagram } = useSideBundles();
+  const bundle = useAtomValue(diagram);
+  const retryBundle = useAtomRefresh(diagram);
   const held = heldDrawing(appearance, code);
   const [, landed] = useReducer((count: number) => count + 1, 0);
   useEffect(() => {
@@ -132,8 +140,10 @@ function useDrawing(code: string, appearance: DiagramAppearance): DiagramDrawing
       standing = false;
     };
   }, [held, bundle, appearance, code]);
-  if (held !== undefined) return held;
-  return AsyncResult.isFailure(bundle) ? { kind: DIAGRAM_DRAWING.REFUSED } : undefined;
+  if (held !== undefined) return { drawing: held, retry: undefined };
+  return AsyncResult.isFailure(bundle)
+    ? { drawing: { kind: DIAGRAM_DRAWING.REFUSED }, retry: retryBundle }
+    : { drawing: undefined, retry: undefined };
 }
 
 /** What a diagram opened over the window is named, its header's title and the file Download saves. */
@@ -159,8 +169,8 @@ function DiagramPicture({ url }: { url: string }): React.JSX.Element {
 }
 
 /** The line a refused fence stands under. */
-function RefusedLine(): React.JSX.Element {
-  return <p className="plan-diagram-failed">{DIAGRAM_REFUSED_LINE}</p>;
+function RefusedLine({ onRetry }: { onRetry?: (() => void) | undefined }): React.JSX.Element {
+  return <FailureNote onRetry={onRetry}>{DIAGRAM_REFUSED_LINE}</FailureNote>;
 }
 
 /** A diagram opened over the window at its own pixels, until it is closed. */
@@ -193,7 +203,7 @@ export function PlanDiagram({
   code: string;
   source: ReactNode;
 }): React.JSX.Element {
-  const drawingNow = useDrawing(code, useAppearance());
+  const { drawing: drawingNow, retry } = useDrawing(code, useAppearance());
   const [showingCode, setShowingCode] = useState(false);
   const [fullScreen, setFullScreen] = useState(false);
   const picture = drawingNow?.kind === DIAGRAM_DRAWING.DRAWN ? drawingNow.url : undefined;
@@ -225,7 +235,7 @@ export function PlanDiagram({
           </span>
         )}
       </div>
-      {drawingNow?.kind === DIAGRAM_DRAWING.REFUSED ? <RefusedLine /> : null}
+      {drawingNow?.kind === DIAGRAM_DRAWING.REFUSED ? <RefusedLine onRetry={retry} /> : null}
       {pictureShown ? (
         <div className="plan-diagram-stage">
           <PictureTile
@@ -268,7 +278,7 @@ export function DiagramPreview({
   previous: string | undefined;
 }): React.JSX.Element {
   const appearance = useAppearance();
-  const drawingNow = useDrawing(code, appearance);
+  const { drawing: drawingNow, retry } = useDrawing(code, appearance);
   const shown =
     drawingNow ?? (previous === undefined ? undefined : heldDrawing(appearance, previous));
   return (
@@ -277,7 +287,7 @@ export function DiagramPreview({
         <span>Preview</span>
       </div>
       {shown?.kind === DIAGRAM_DRAWING.DRAWN ? <DiagramPicture url={shown.url} /> : null}
-      {shown?.kind === DIAGRAM_DRAWING.REFUSED ? <RefusedLine /> : null}
+      {shown?.kind === DIAGRAM_DRAWING.REFUSED ? <RefusedLine onRetry={retry} /> : null}
     </>
   );
 }

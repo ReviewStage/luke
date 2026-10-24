@@ -14,7 +14,7 @@ import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, type ReactElement, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test } from "vitest";
-import type { SideBundles } from "./bundle-loader.js";
+import { type SideBundles, sideBundles } from "./bundle-loader.js";
 import { MarkdownMessage } from "./markdown-message.js";
 import { SHELL_ROOM } from "./shell-room.js";
 import { ShellRoomContext } from "./stage-room.js";
@@ -126,6 +126,15 @@ function pictures(container: HTMLElement): (string | null)[] {
   return [...container.querySelectorAll(".plan-diagram img")].map((img) => img.getAttribute("src"));
 }
 
+/** The failure note's Retry, where the fence has one. */
+function retry(container: HTMLElement): HTMLButtonElement | undefined {
+  return (
+    [...container.querySelectorAll<HTMLButtonElement>(".plan-diagram [role=alert] button")].find(
+      (button) => button.textContent === "Retry",
+    ) ?? undefined
+  );
+}
+
 /** The diagram's Show code, or Show diagram, toggle. */
 function toggle(container: HTMLElement): HTMLButtonElement {
   return (
@@ -194,10 +203,47 @@ test("a fence the diagram bundle refuses says it could not be drawn, over its co
 
   assert.deepEqual(pictures(page), []);
   assert.equal(
-    page.querySelector(".plan-diagram-failed")?.textContent,
+    page.querySelector(".plan-diagram [role=alert]")?.textContent,
     "This diagram could not be drawn.",
   );
+  assert.equal(retry(page), undefined);
   assert.equal(page.querySelector(".plan-diagram pre")?.textContent, `${UNPARSED}\n`);
+});
+
+test("a diagram bundle that failed to load says so with Retry, which imports it again and draws the fence", async () => {
+  const code = "flowchart TD\n  Offline --> Online";
+  let online = false;
+  const unloaded = sideBundles({
+    diagram: () => (online ? Promise.resolve(STAND_IN) : Promise.reject(new Error("offline"))),
+  });
+  const container = document.body.appendChild(document.createElement("div"));
+  const root = createRoot(container);
+  roots.push(root);
+  act(() =>
+    root.render(
+      onRegistry(
+        AtomRegistry.make(),
+        onSideBundles(
+          unloaded,
+          createElement(PlanBody, { task: taskWith(mermaidFence(code)), live: false }),
+        ),
+      ),
+    ),
+  );
+  await settle();
+
+  assert.equal(
+    container.querySelector(".plan-diagram [role=alert]")?.textContent,
+    "This diagram could not be drawn.Retry",
+  );
+  assert.deepEqual(pictures(container), []);
+
+  online = true;
+  await act(async () => retry(container)?.click());
+  await settle();
+
+  assert.deepEqual(pictures(container), [pictureOf(code, DIAGRAM_APPEARANCE.LIGHT)]);
+  assert.equal(container.querySelector(".plan-diagram [role=alert]"), null);
 });
 
 test("the diagram is drawn again in the window's new appearance when it flips", async () => {

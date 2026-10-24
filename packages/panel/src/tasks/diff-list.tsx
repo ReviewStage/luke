@@ -1,8 +1,9 @@
-import { useAtomValue } from "@effect/atom-react";
+import { useAtomRefresh, useAtomValue } from "@effect/atom-react";
 import {
   Button,
   cssCustomProperties,
-  EmptyState,
+  ERROR_STATE_PLACEMENT,
+  ErrorState,
   Fill,
   MENU_SURFACE_FLOW,
   MenuSurface,
@@ -273,7 +274,9 @@ export function PierreDiffList({
   /** The lines to scroll to and light a moment once the list draws their file open; each ask once. */
   flash?: DiffListFlash | undefined;
 }): React.JSX.Element {
-  const loaded = useAtomValue(useSideBundles().diffView);
+  const { diffView } = useSideBundles();
+  const loaded = useAtomValue(diffView);
+  const retry = useAtomRefresh(diffView);
   // The hint over the gap control under the pointer or the focus, which Pierre draws in a shadow root no hint of the window's own reaches.
   const [hint, setHint] = useState<GapHint | undefined>(undefined);
   const hintId = useId();
@@ -438,7 +441,11 @@ export function PierreDiffList({
   });
 
   if (AsyncResult.isFailure(loaded)) {
-    return <EmptyState>{DIFF_LOAD_FAILED}</EmptyState>;
+    return (
+      <ErrorState placement={ERROR_STATE_PLACEMENT.CENTRED} onRetry={retry}>
+        {DIFF_LOAD_FAILED}
+      </ErrorState>
+    );
   }
   // Note that the area holds no React of its own, because Pierre draws the
   // list into it as the scroller it virtualizes over and empties it when
