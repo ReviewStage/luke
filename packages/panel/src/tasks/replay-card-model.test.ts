@@ -4,8 +4,10 @@ import {
   REPLAY_SENDER,
   REPLAY_STEP_KIND,
   REPLAY_TOOL_STATE,
+  REPLAY_VALUE_FORM,
   type Replay,
   type ReplayStep,
+  type ReplayValueForm,
   START_NOTE_HEADING,
   toolStep,
 } from "@luke/features/agent-replay";
@@ -26,6 +28,7 @@ import {
   briefAgent,
   leftOutLine,
   REPLAY_VERB,
+  replayCallsServer,
   replayCount,
   replayOpening,
   replayVerb,
@@ -324,6 +327,62 @@ test("a call's step whose marker names its tool is drawn as the live transcript 
   assert.equal(failed.state, TOOL_STATE.OUTPUT_ERROR);
   assert.equal(failed.errorText, "exit 1");
   assert.equal(failed.view.output, undefined);
+});
+
+test("a native harness's call in a replay is drawn as the eve call that draws it, as the live transcript draws it", () => {
+  const read = stepView(
+    toolStep({
+      summary: "Read: src/a.ts",
+      tool: "Read",
+      state: REPLAY_TOOL_STATE.DONE,
+      input: '{"file_path":"src/a.ts"}',
+      inputForm: REPLAY_VALUE_FORM.JSON,
+      output: "export const a = 1;",
+      outputForm: REPLAY_VALUE_FORM.TEXT,
+    }),
+  );
+  assert.ok(read.kind === STEP_VIEW.CALL);
+  assert.equal(read.view.kind, CALL_KIND.READ_FILE);
+  assert.equal(read.view.subject, "src/a.ts");
+});
+
+test("a call's text that only looks like JSON stays the text it was, and a value written as JSON is read back as one", () => {
+  const read = (outputForm: ReplayValueForm) =>
+    stepView(
+      toolStep({
+        summary: "Read: notes.json",
+        tool: "read_file",
+        state: REPLAY_TOOL_STATE.DONE,
+        input: '{"filePath":"notes.json"}',
+        inputForm: REPLAY_VALUE_FORM.JSON,
+        output: '{"content":"hello"}',
+        outputForm,
+      }),
+    );
+  const text = read(REPLAY_VALUE_FORM.TEXT);
+  assert.ok(text.kind === STEP_VIEW.CALL);
+  assert.match(text.view.output?.text ?? "", /"content"/u);
+  const value = read(REPLAY_VALUE_FORM.JSON);
+  assert.ok(value.kind === STEP_VIEW.CALL);
+  assert.equal(value.view.output?.text, "hello");
+});
+
+test("a replay calls a server where one of its calls, as the transcript draws it, ran on one", () => {
+  const call = (tool: string) =>
+    toolStep({
+      summary: `Used: ${tool}`,
+      tool,
+      state: REPLAY_TOOL_STATE.RUNNING,
+      input: "{}",
+      inputForm: REPLAY_VALUE_FORM.JSON,
+    });
+  assert.equal(replayCallsServer([call("bash")]), false);
+  assert.equal(replayCallsServer([call("bash"), call("mcp__notion__search")]), true);
+  // A step from before its marker named its tool names no server.
+  assert.equal(
+    replayCallsServer([{ kind: REPLAY_STEP_KIND.TOOL, summary: "Used: x", words: "Input: {}" }]),
+    false,
+  );
 });
 
 test("a line's step whose marker names when it was sent carries that moment", () => {

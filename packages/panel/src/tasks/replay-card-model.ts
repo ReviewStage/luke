@@ -4,9 +4,11 @@ import {
   REPLAY_SENDER,
   REPLAY_STEP_KIND,
   REPLAY_TOOL_STATE,
+  REPLAY_VALUE_FORM,
   type Replay,
   type ReplayStep,
   type ReplayToolState,
+  type ReplayValueForm,
 } from "@luke/features/agent-replay";
 import {
   CODING_AGENT_SENDER,
@@ -18,9 +20,11 @@ import { CALL_KIND, CALL_WORDS, type CallKind } from "@luke/features/turn-rows";
 import { isRecord, valueFromJsonText, type WireValue } from "@luke/wire";
 import { TOOL_BLOCK, TOOL_STATE, type ToolState } from "../ai-elements/tool.js";
 import { AGENT_PART, agentParts, messageWords } from "./coding-agent-model.js";
+import { type DrawnCall, drawnCall } from "./native-tool-calls.js";
 import {
   type CalledAgent,
   calledAgent,
+  isServerCallTool,
   type ToolCallView,
   toolCallView,
 } from "./tool-call-model.js";
@@ -356,9 +360,18 @@ export function briefAgent(
   };
 }
 
-/** The words a call took or gave as the value they spell: an object or a list read back from its JSON, anything else as the words it is, as the service wrote a string as it is and every other value as its JSON. */
-function wireOf(words: string): WireValue {
+/**
+ * The words a call took or gave as the value they spell, as the service
+ * wrote them: read back from their JSON where their marker says they were a
+ * value's JSON, and kept as they are where it says they were text, so a
+ * text that only looks like JSON stays the text it was. Where the marker
+ * names no form, an object or a list is read back from its JSON and
+ * anything else kept as words.
+ */
+function wireOf(words: string, form: ReplayValueForm | undefined): WireValue {
+  if (form === REPLAY_VALUE_FORM.TEXT) return words;
   const value = valueFromJsonText(words);
+  if (form === REPLAY_VALUE_FORM.JSON) return value;
   return isRecord(value) || Array.isArray(value) ? value : words;
 }
 
@@ -419,6 +432,19 @@ function spelledCall(step: ReplayStep): CallRead {
   };
 }
 
+/** A call's step whose marker named its tool as the transcript draws it: a native harness's as the eve call that draws the same (`drawnCall`), its input and its result as the values they were. */
+function stepCall(
+  step: ReplayStep & { readonly state: ReplayToolState; readonly input: string },
+  tool: string,
+): DrawnCall {
+  const read = markedCall(step);
+  return drawnCall({
+    tool,
+    input: wireOf(read.input, step.inputForm),
+    output: read.output === undefined ? undefined : wireOf(read.output, step.outputForm),
+  });
+}
+
 /**
  * A call's step whose marker named its tool, read back as a transcript
  * draws a call of that tool (`toolCallView`): its kind, subject, and
@@ -431,11 +457,7 @@ function toolView(
   tool: string,
 ): StepView {
   const read = markedCall(step);
-  const call = {
-    tool,
-    input: wireOf(read.input),
-    output: read.output === undefined ? undefined : wireOf(read.output),
-  };
+  const call = stepCall(step, tool);
   return {
     kind: STEP_VIEW.CALL,
     state: read.state,
@@ -543,4 +565,17 @@ function stepWords(step: ReplayStep): string {
 export function replayWords(replay: Replay): string {
   const summary = replay.summary === undefined ? [] : [replay.summary.text];
   return [...summary, ...replay.steps.map(stepWords)].join("\n\n");
+}
+
+/** Whether a step is a call of a server's tool, as the transcript draws it, whose row names the account it ran on. */
+function callsServer(step: ReplayStep): boolean {
+  const { state, input, tool } = step;
+  if (step.kind !== REPLAY_STEP_KIND.TOOL || state === undefined || input === undefined)
+    return false;
+  return tool !== undefined && isServerCallTool(stepCall({ ...step, state, input }, tool).tool);
+}
+
+/** Whether any of the steps is a call of a server's tool, which is all the accounts' names are read for (`ConnectionNames`). */
+export function replayCallsServer(steps: readonly ReplayStep[]): boolean {
+  return steps.some(callsServer);
 }

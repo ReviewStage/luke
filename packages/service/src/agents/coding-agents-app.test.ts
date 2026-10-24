@@ -98,6 +98,7 @@ import {
   REPLAY_SENDER,
   REPLAY_STEP_KIND,
   REPLAY_TOOL_STATE,
+  REPLAY_VALUE_FORM,
   START_NOTE_HEADING,
   stepsBytes,
 } from "@luke/features/agent-replay";
@@ -10376,7 +10377,14 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
         );
         assert.match(parts.replay?.steps[2]?.words ?? "", /Result: ok/u);
         // A call names the tool it called, and a line when it was sent, which the replay card draws them by.
-        assert.equal(parts.replay?.steps[2]?.tool, "bash");
+        assert.deepEqual(
+          [
+            parts.replay?.steps[2]?.tool,
+            parts.replay?.steps[2]?.inputForm,
+            parts.replay?.steps[2]?.outputForm,
+          ],
+          ["bash", REPLAY_VALUE_FORM.JSON, REPLAY_VALUE_FORM.TEXT],
+        );
         assert.ok(
           parts.replay?.steps
             .filter((step) => step.kind === REPLAY_STEP_KIND.LINE)

@@ -7,6 +7,7 @@ import {
   REPLAY_SENDER,
   REPLAY_STEP_KIND,
   REPLAY_TOOL_STATE,
+  REPLAY_VALUE_FORM,
   type Replay,
   type ReplayStep,
   START_NOTE_HEADING,
@@ -243,7 +244,7 @@ test("a step behind a marker from before the marker named its state or sender re
   ]);
 });
 
-test("a tool step's tool and a line's moment read back from their markers, and a step from before the marker named them reads back with neither", () => {
+test("a tool step's tool and its values' forms and a line's moment read back from their markers, and a step from before the marker named them reads back with neither", () => {
   const at = Date.UTC(2026, 9, 14, 15, 42);
   const steps: readonly ReplayStep[] = [
     toolStep({
@@ -251,13 +252,16 @@ test("a tool step's tool and a line's moment read back from their markers, and a
       tool: "bash",
       state: REPLAY_TOOL_STATE.DONE,
       input: '{"command":"pnpm test"}',
-      output: "ok",
+      inputForm: REPLAY_VALUE_FORM.JSON,
+      output: '{"looks":"like json"}',
+      outputForm: REPLAY_VALUE_FORM.TEXT,
     }),
     toolStep({
       summary: "Used: save_issue",
       tool: "mcp__linear__save_issue",
       state: REPLAY_TOOL_STATE.RUNNING,
       input: "{}",
+      inputForm: REPLAY_VALUE_FORM.JSON,
     }),
     {
       kind: REPLAY_STEP_KIND.LINE,

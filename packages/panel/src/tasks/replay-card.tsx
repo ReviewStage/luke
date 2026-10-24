@@ -25,20 +25,21 @@ import { ACTOR_KIND, ACTOR_STATE, type Actor, actorName } from "@luke/ui/actor-m
 import { pullRequestLabelOf, TAB_WORDS } from "@luke/ui/tab-strip-model";
 import { MESSAGE_ROLE } from "@luke/wire";
 import { ChevronsUpIcon, SplitIcon, TextQuoteIcon } from "lucide-react";
-import { type ReactNode, useEffect, useRef, useState } from "react";
+import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { ActorRef } from "../actor-ref.js";
 import { Message, MessageContent } from "../ai-elements/message.js";
 import { PLAN_BODY_LAYOUT, Plan, PlanContent, PlanHeader, PlanIcon } from "../ai-elements/plan.js";
 import { useFindOpen } from "../find-in-tab.js";
 import { useMemberDirectory } from "../member-directory.js";
 import { lineSender, providerOf, receivedLine } from "./coding-agent-model.js";
-import { useServerName } from "./connection-names.js";
+import { ConnectionNames, useServerName } from "./connection-names.js";
 import { CopyMessageAction } from "./copy-message.js";
 import { linkChip } from "./mention-chip.js";
 import {
   earlierStepsLine,
   leftOutLine,
   REPLAY_PAGE,
+  replayCallsServer,
   replayCount,
   replayLede,
   replayPage,
@@ -374,6 +375,8 @@ function ReplaySteps({
   const [shown, setShown] = useState(REPLAY_PAGE);
   const list = useRef<HTMLDivElement>(null);
   const page = replayPage(steps.length, finding ? steps.length : shown);
+  // Note that the replay's calls stand in its first message's words, which the transcript's own check for a server's call never reads.
+  const callsServer = useMemo(() => replayCallsServer(steps), [steps]);
   const drawMore = () => {
     if (page.next === page.from) list.current?.focus({ preventScroll: true });
     setShown(steps.length - page.from + page.next);
@@ -391,10 +394,12 @@ function ReplaySteps({
           </Button>
         </Inline>
       )}
-      {steps.slice(page.from).map((step, index) => (
-        // Note that a step is keyed by its place among them all, because the replay never changes once handed, and a page landing above keeps the rows below as they were.
-        <StepRow key={page.from + index} step={step} place={place} />
-      ))}
+      <ConnectionNames needed={callsServer}>
+        {steps.slice(page.from).map((step, index) => (
+          // Note that a step is keyed by its place among them all, because the replay never changes once handed, and a page landing above keeps the rows below as they were.
+          <StepRow key={page.from + index} step={step} place={place} />
+        ))}
+      </ConnectionNames>
     </div>
   );
 }

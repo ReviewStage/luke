@@ -21,6 +21,7 @@ import {
   REPLAY_SENDER,
   REPLAY_STEP_KIND,
   REPLAY_TOOL_STATE,
+  REPLAY_VALUE_FORM,
   type Replay,
   type ReplayStep,
   type ReplaySummary,
@@ -270,18 +271,34 @@ function wordsOf(value: UnparsedWireValue): string {
   return isWireString(value) ? value : (JSON.stringify(value) ?? "");
 }
 
+/** How `wordsOf` spells a value, so a reader parses only what was JSON and keeps a text that merely looks like it. */
+function formOf(value: UnparsedWireValue) {
+  return isWireString(value) ? REPLAY_VALUE_FORM.TEXT : REPLAY_VALUE_FORM.JSON;
+}
+
 /** One call as a step: its line, the tool it called, where it stood, and its input and its output whole, its result or its error, none while it ran. */
 function callStep(part: StoredToolPart): ReplayStep {
   // SAFETY: a stored part's input is the JSON the row carried, and it is only said, never read into.
-  const input = wordsOf(part.input as UnparsedWireValue);
-  const call = { summary: callEntry(part), tool: part.type.slice("tool-".length), input };
+  const given = part.input as UnparsedWireValue;
+  const call = {
+    summary: callEntry(part),
+    tool: part.type.slice("tool-".length),
+    input: wordsOf(given),
+    inputForm: formOf(given),
+  };
   if (part.state === "output-available") {
     // SAFETY: a stored part's output is the JSON the row carried, and it is only said, never read into.
-    const output = wordsOf(part.output as UnparsedWireValue);
-    return toolStep({ ...call, state: REPLAY_TOOL_STATE.DONE, output });
+    const answer = part.output as UnparsedWireValue;
+    const output = wordsOf(answer);
+    return toolStep({ ...call, state: REPLAY_TOOL_STATE.DONE, output, outputForm: formOf(answer) });
   }
   if (part.state === "output-error") {
-    return toolStep({ ...call, state: REPLAY_TOOL_STATE.FAILED, output: part.errorText });
+    return toolStep({
+      ...call,
+      state: REPLAY_TOOL_STATE.FAILED,
+      output: part.errorText,
+      outputForm: REPLAY_VALUE_FORM.TEXT,
+    });
   }
   return toolStep({ ...call, state: REPLAY_TOOL_STATE.RUNNING });
 }
