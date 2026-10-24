@@ -24,7 +24,19 @@ import {
   type KeyedCommand,
 } from "@luke/settings/shortcuts";
 import { TaskStatusMark } from "@luke/ui";
-import { GLYPH, HistoryIcon, MailIcon, MailOpenIcon } from "@luke/ui/icons";
+import {
+  ClockIcon,
+  GLYPH,
+  HistoryIcon,
+  LayersIcon,
+  ListIcon,
+  ListXIcon,
+  MailIcon,
+  MailOpenIcon,
+  ScrollTextIcon,
+  UserCheckIcon,
+  UsersIcon,
+} from "@luke/ui/icons";
 import type { MenuAction } from "./desktop/action-menu.js";
 
 /** Where a command is offered: a menu on a row that names its thing, or ⌘K, whose row names nothing. */
@@ -47,6 +59,7 @@ export interface PanelCommand {
 const NOUN = {
   TASK: "task",
   AGENT: "agent",
+  TAB: "tab",
 } as const;
 
 /**
@@ -81,6 +94,21 @@ export const PANEL_COMMAND = {
   MARK_READ: unkeyed("Mark as read", <MailOpenIcon />),
   RENAME: unkeyed("Rename", <GLYPH.RENAME />),
   VERSION_HISTORY: unkeyed("Version history", <HistoryIcon />),
+  PIN_TAB: unkeyed("Pin", <GLYPH.PIN />, NOUN.TAB),
+  UNPIN_TAB: unkeyed("Unpin", <GLYPH.UNPIN />, NOUN.TAB),
+  CLOSE_TAB: keyed(APP_COMMAND.CLOSE_TAB, <GLYPH.CLOSE />, NOUN.TAB),
+  CLOSE_OTHER_TABS: unkeyed("Close others", <ListXIcon />),
+  SHOW_TERMINAL: keyed(APP_COMMAND.SHOW_TERMINAL, <GLYPH.TERMINAL />),
+  COPY_CONCISE_TRANSCRIPT: unkeyed("Copy concise transcript", <GLYPH.COPY />),
+  COPY_FULL_TRANSCRIPT: unkeyed("Copy full transcript", <ScrollTextIcon />),
+  ARCHIVE_AGENT: unkeyed("Archive", <GLYPH.ARCHIVE />, NOUN.AGENT),
+  UNARCHIVE_AGENT: unkeyed("Unarchive", <GLYPH.UNARCHIVE />, NOUN.AGENT),
+  DELETE_AGENT: unkeyed("Permanently delete", <GLYPH.DELETE />, NOUN.AGENT),
+  MOVE_TO_SECTION: unkeyed("Move to section", <LayersIcon />),
+  GROUP_BY: unkeyed("Group by", <ListIcon />),
+  ORDER_BY: unkeyed("Order by", <ClockIcon />),
+  ASSIGNED_TO: unkeyed("Assigned to", <UserCheckIcon />),
+  CREATED_BY: unkeyed("Created by", <UsersIcon />),
   CANCEL_TASK: unkeyed("Cancel task", <TaskStatusMark status={TASK_STATUS.CANCELED} />),
   CHANGE_REPOSITORY: unkeyed("Change repository", <GLYPH.REPOSITORY />),
   MOVE_TO_WORKSPACE: unkeyed("Move to workspace", <GLYPH.MOVE />),
@@ -105,6 +133,11 @@ export function commandWords(item: PanelCommand, place: CommandPlace): string {
   return `${item.verb} ${item.noun}`;
 }
 
+/** The command's verb and glyph as a row's menu draws them, for a submenu or a row's mark, which hold or run it some way of their own. */
+export function commandHead(item: PanelCommand): { label: string; icon: React.JSX.Element } {
+  return { label: commandWords(item, COMMAND_PLACE.MENU), icon: item.icon };
+}
+
 /**
  * The command as an action menu draws it, on a row that names its thing:
  * its verb and glyph, and its chord where `keyed` says the chord acts on
@@ -115,10 +148,6 @@ export function commandAction(
   onSelect: () => void,
   keyed: boolean,
 ): MenuAction {
-  const action: MenuAction = {
-    label: commandWords(item, COMMAND_PLACE.MENU),
-    icon: item.icon,
-    onSelect,
-  };
+  const action: MenuAction = { ...commandHead(item), onSelect };
   return keyed && item.command !== undefined ? { ...action, command: item.command } : action;
 }

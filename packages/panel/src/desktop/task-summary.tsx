@@ -68,7 +68,7 @@ import { type CardSubject, tabCard } from "./tab-card.js";
  * file tree's own: its type's coloured icon, height, and type size. A row
  * opens what it names exactly as its "+" row does: a kind or a
  * file opens the side panel on its tab, and an agent chooses its tab in the
- * column. An agent's row offers Archive agent on a right-click, and the
+ * column. An agent's row offers Archive on a right-click, and the
  * agents archived are folded under Archived at the foot of Coding agents
  * (`agent-archive.tsx`).
  *
@@ -547,7 +547,7 @@ function SummaryRow({
   );
 }
 
-/** An agent's row, whose right-click offers Copy link and Archive agent, asking first while the agent still works. */
+/** An agent's row, whose right-click offers Copy link and Archive, asking first while the agent still works. */
 function AgentSummaryRow({
   entry,
   agent,
