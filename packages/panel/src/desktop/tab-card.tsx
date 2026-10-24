@@ -145,8 +145,8 @@ function PlanCard({
  * latest settled where none does.
  */
 function InboxCard({ inbox }: { inbox: InboxBoardView }): React.JSX.Element {
-  const waiting = inbox.open.length;
-  const latest = waiting > 0 ? inbox.open.at(-1) : inbox.settled[0];
+  const waiting = inbox.waiting.length;
+  const latest = waiting > 0 ? inbox.waiting.at(-1) : inbox.settled[0];
   return (
     <HoverCard data-tab-card="">
       <HoverCardHead

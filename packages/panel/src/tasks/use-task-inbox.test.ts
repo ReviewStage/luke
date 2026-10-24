@@ -94,6 +94,7 @@ test("a task taken up again holds no read until its follow pushes anew, and then
       kind: INBOX_SCOPE_KIND.PLAN,
       shown: true,
       waiting: true,
+      readerId: undefined,
       agents: {
         heldIds: [AGENT],
         inboxFollower: main.follower,

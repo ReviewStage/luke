@@ -28,11 +28,11 @@ import { ClippedLine, ONE_LINE_ELEMENT, ONE_LINE_END } from "../one-line/clipped
  *
  * Its end holds, at rest, a `mark` (a failed run's glyph, a pin) and a
  * `count`, read with its noun ("3 waiting on you") and left out at none,
- * muted, or in the accent's blue where it counts what waits on the reader;
- * a fold's count can stand only while the head is hovered. Its `shortcut`,
- * the chord the app draws, stands there while it is hovered or has the
- * keyboard and takes the count's and the mark's place then, so showing it
- * moves nothing. A row's `detail`, the words after its name, steps back and
+ * muted, or in the needs-you tone (`STATUS_TONE.ATTENTION`) where it counts
+ * what waits on the reader; a fold's count can stand only while the head is
+ * hovered. Its `shortcut`, the chord the app draws, stands there while it is
+ * hovered or has the keyboard and takes the count's and the mark's place
+ * then, so showing it moves nothing. A row's `detail`, the words after its name, steps back and
  * gives way first, so the name stays whole. An `unread` row reads in the
  * heavier weight and the primary ink until it is looked at.
  *

@@ -727,6 +727,11 @@ test("on a phone the bar's Inbox and Chat wear the counts the drawer's rows show
     "the drawer counts the same",
   );
   assert.equal(chatRow(page)?.textContent, "Chat4 need you", "the drawer counts the same");
+  // Note that the counts wear the needs-you tone the rows they count do, not a tally's ink.
+  const toneOf = (row: HTMLElement | undefined) =>
+    row?.querySelector(".luke-nav-item-count")?.getAttribute("data-tone");
+  assert.equal(toneOf(placeRow(page, "Inbox")), STATUS_TONE.ATTENTION);
+  assert.equal(toneOf(chatRow(page)), STATUS_TONE.ATTENTION);
   act(() => root?.unmount());
   document.body.innerHTML = "";
 

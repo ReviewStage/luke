@@ -154,6 +154,7 @@ export function useInboxListing(
     waiting:
       tasks.inbox.some((each) => each.taskId === taskId) ||
       waitingTaskless.some((each) => each.agentId === chosenAgentId),
+    readerId: tasks.me,
     agents,
   });
   // Note that the models come from the open task's agents where this task's have not read them, so an agent is named alike in both.
