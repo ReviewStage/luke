@@ -83,6 +83,7 @@ function drawn(
   chosen: number[],
   older: { earlier?: number; onLoadEarlier?: () => Promise<boolean> } = {},
   onExit: () => void = ignore,
+  stepBehind: string | undefined = undefined,
 ): HTMLElement {
   const base = tasksControl();
   const tasks = tasksControl({
@@ -122,11 +123,17 @@ function drawn(
         },
         room: SHELL_ROOM.WIDE,
         history: {
-          canGoBack: false,
+          canGoBack: stepBehind !== undefined,
           canGoForward: false,
-          onBack: ignore,
+          onBack: onExit,
           onForward: ignore,
-          steps: { back: [], forward: [] },
+          steps: {
+            back:
+              stepBehind === undefined
+                ? []
+                : [{ at: 0, title: { label: stepBehind }, page: { kind: "inbox", of: undefined } }],
+            forward: [],
+          },
           onGoTo: ignore,
         },
         subject: taskVersionSubject(tasks),
@@ -229,6 +236,19 @@ test("a list with no older versions has no foot", () => {
   expect(foot(drawn([]))).toBeNull();
 });
 
+/** Rests the keyboard's focus on `button` past the hint's wait, on a faked clock, and answers what the hint says. */
+function hintOf(button: HTMLButtonElement): string | null | undefined {
+  document.documentElement.dataset.keyboard = "true";
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+  act(() => button.focus());
+  act(() => {
+    vi.advanceTimersByTime(MOTION_DELAY_MS.HINT);
+  });
+  vi.useRealTimers();
+  delete document.documentElement.dataset.keyboard;
+  return document.querySelector('[role="tooltip"]')?.textContent;
+}
+
 test("the Back row leaves the history when pressed, and its hint says where it leads", () => {
   let exits = 0;
   const view = drawn([], {}, () => {
@@ -237,20 +257,16 @@ test("the Back row leaves the history when pressed, and its hint says where it l
   const back = backRow(view);
   expect(back).toBeDefined();
   if (back === undefined) return;
-
-  // The keyboard moves onto the row and rests there past the hint's wait, on a faked clock.
-  document.documentElement.dataset.keyboard = "true";
-  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
-  act(() => back.focus());
-  act(() => {
-    vi.advanceTimersByTime(MOTION_DELAY_MS.HINT);
-  });
-  vi.useRealTimers();
-  delete document.documentElement.dataset.keyboard;
-  expect(document.querySelector('[role="tooltip"]')?.textContent).toContain(
-    `Back to ${DOCUMENT_TASK.name}`,
-  );
+  expect(hintOf(back)).toContain(`Back to ${DOCUMENT_TASK.name}`);
 
   act(() => back.click());
   expect(exits).toBe(1);
+});
+
+test("the Back row names the page the window goes back to, where the history opened from another", () => {
+  const view = drawn([], {}, ignore, "Inbox");
+  const back = backRow(view);
+  expect(back).toBeDefined();
+  if (back === undefined) return;
+  expect(hintOf(back)).toContain("Back to Inbox");
 });

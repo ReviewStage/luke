@@ -75,6 +75,7 @@ import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import { useFormerMembers, useWorkspaceMembers } from "../tasks/use-workspace-members.js";
 import { useVersionRestore, VersionPageSkeleton, VersionView } from "../tasks/version-view.js";
 import { type MenuAction, rowMenu } from "./action-menu.js";
+import { backPlaceOf } from "./back-place.js";
 import { HistoryButtons, useSidebarEdge } from "./desktop-sidebar.js";
 import { useNarrowFocus } from "./narrow-focus.js";
 import type { SidebarCollapse } from "./sidebar-collapse.js";
@@ -670,6 +671,7 @@ export function DesktopVersionHistory({
   account,
   onExit,
   onRestored,
+  exitPlace,
 }: {
   sidebar: SidebarCollapse;
   room: ShellRoom;
@@ -679,6 +681,8 @@ export function DesktopVersionHistory({
   account: AccountSnapshot;
   onExit: () => void;
   onRestored: () => void;
+  /** Where `onExit` leads where it is no step of the window's history, as the Back row's hint names it; the step behind where none is named. */
+  exitPlace?: string | undefined;
 }): React.JSX.Element {
   const now = useMinute();
   const { versions, agents } = subject;
@@ -757,7 +761,7 @@ export function DesktopVersionHistory({
         <BackButton
           look={BACK_BUTTON_LOOK.COLUMN}
           label="Back"
-          place={subject.title ?? subject.noun}
+          place={exitPlace ?? backPlaceOf(history, subject.title ?? subject.noun)}
           command={APP_COMMAND.EXIT_VERSION_HISTORY}
           onBack={onExit}
         />
