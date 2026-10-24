@@ -14,14 +14,14 @@ import {
   Button,
   DetailPage,
   ErrorState,
-  FILL_ELEMENT,
-  Fill,
   List,
   ListRow,
   MoreButton,
   moreLabel,
+  NOT_FOUND_THING,
   NOTE_LINE_LOOK,
   NoteLine,
+  NotFound,
   OneLine,
   PAGE_FRAME,
   RowHint,
@@ -57,7 +57,6 @@ import { ACTOR_SIZE, ActorMark, AutomationCard, automationActor, YouBadge } from
 import { useAppCommand } from "../app-commands.js";
 import { LINK_COPY, useCopyToast } from "../copy-feedback.js";
 import { MemberDirectory, useMemberDirectory } from "../member-directory.js";
-import { NOT_FOUND_THING, NotFound } from "../not-found.js";
 import { useOpenSettings } from "../open-settings.js";
 import { stateEndMark } from "../state-glyph.js";
 import { AgentCard, lineSubject } from "../tasks/agent-ref.js";
@@ -487,11 +486,7 @@ function PersonColumn({
   // Nobody the workspace's members or those who left name, as a link to someone outside it opens, is not found here; until both are read, nobody is.
   const unnamed = person.kind === ACTOR_KIND.SOMEONE && person.reason === SOMEONE_REASON.UNNAMED;
   if (unnamed && members !== undefined && former !== undefined) {
-    return (
-      <Fill as={FILL_ELEMENT.SECTION} className="automations-view" aria-label={PROFILE}>
-        <NotFound thing={NOT_FOUND_THING.PERSON} />
-      </Fill>
-    );
+    return <NotFound thing={NOT_FOUND_THING.PERSON} bar={{}} />;
   }
   // Note that someone nothing names yet is drawn as a placeholder, because only settled reads may say they are not in the workspace.
   const theirs = you ? "your" : "their";

@@ -88,6 +88,67 @@
     gap: var(--luke-tight-gap);
   }
 
+  /* A call's status in a message box's foot: its live mark, its word, and
+     its count on one line in the caption's type. While muted the struck
+     microphone stands for the mark and the word goes quiet, never red,
+     since red is for danger alone. The count's figures are tabular
+     (`Time`), so the controls beside it never shift as it ticks. */
+  .luke-call-live {
+    display: flex;
+    flex: none;
+    align-items: center;
+    gap: var(--luke-space-6);
+    color: var(--luke-color-text-muted);
+    font-size: var(--luke-type-caption-size);
+    line-height: var(--luke-type-caption-leading);
+    white-space: nowrap;
+  }
+
+  .luke-call-live-mark {
+    width: var(--luke-space-6);
+    height: var(--luke-space-6);
+    flex: none;
+    border-radius: var(--luke-radius-full);
+    background: var(--luke-tone-ink);
+  }
+
+  .luke-call-live-word {
+    color: var(--luke-color-text);
+  }
+
+  .luke-call-live:is([data-muted="true"], :not([data-stage="live"])) .luke-call-live-word {
+    color: var(--luke-color-text-muted);
+  }
+
+  .luke-call-live-muted {
+    display: flex;
+    flex: none;
+  }
+
+  .luke-call-live-muted > svg {
+    width: var(--luke-icon-12);
+    height: var(--luke-icon-12);
+  }
+
+  /* In a narrow box's foot the status gives way before the call's controls
+     or the send do: first a live call's word, the mark and the count
+     saying the call is up, while "Connecting…" and "Ending…", which have
+     no count to say it and are narrower for it, keep theirs; and then the
+     whole, where the box folds its own presses into its
+     ⋯ (a card under 400px), the mutes' struck glyphs and End call still
+     saying a call stands (composer-foot.css). */
+  @container luke-composer-foot (max-width: 495px) {
+    .luke-call-live[data-stage="live"] .luke-call-live-word {
+      display: none;
+    }
+  }
+
+  @container luke-composer-foot (max-width: 375px) {
+    .luke-call-live {
+      display: none;
+    }
+  }
+
   /* Too narrow for both of the backend's parts: the notetaker's goes while
      Luke's stands, so what Luke is doing keeps the line. */
   @container luke-call-bar (max-width: 479px) {

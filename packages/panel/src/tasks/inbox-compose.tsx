@@ -36,12 +36,12 @@ import {
   type FoldingButtonHint,
   FormField,
   matchingRows,
-  PageToolbar,
   POPOVER_ALIGN,
   Spinner,
-  STATUS_TONE,
   TEXT_FIELD_SIZE,
   TextField,
+  TOOLBAR_INSET,
+  Toolbar,
   Tooltip,
 } from "@luke/ui";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -57,7 +57,7 @@ import {
 } from "../composer-drafts.js";
 import { useIntegrationStatuses } from "../integration-statuses.js";
 import { Picker } from "../settings/picker-row.js";
-import { UNDO_LABEL, useToast } from "../toast.js";
+import { undoToast, useToast } from "../toast.js";
 import { useAttachedFiles } from "../use-attached-files.js";
 import { type AgentRowPlace, agentMenuRow, useAgentRowPlace } from "./agent-menu-row.js";
 import { AttachFilesButton } from "./attach-files-button.js";
@@ -428,17 +428,12 @@ function ComposeCard({
     update(() => EMPTY_DRAFT);
     onDiscard();
     if (!written(kept)) return;
-    toast({
-      words: DISCARDED,
-      tone: STATUS_TONE.COMPLETE,
-      action: {
-        label: UNDO_LABEL,
-        onPress: () => {
-          update(() => kept);
-          onRestore();
-        },
-      },
-    });
+    toast(
+      undoToast(DISCARDED, () => {
+        update(() => kept);
+        onRestore();
+      }),
+    );
   };
   const note =
     refusal ??
@@ -446,13 +441,14 @@ function ComposeCard({
     (field.failed ? EDITOR_LOAD_FAILED : undefined);
   return (
     <section className="inbox-view-items" aria-label={NEW_THREAD} hidden={hidden}>
-      <PageToolbar
+      <Toolbar
+        start={TOOLBAR_INSET.COLUMN}
         lead={
           onBack === undefined ? null : (
             <FoldingButton label="Inbox" icon={<BackIcon />} onClick={onBack} hint={BackHint} />
           )
         }
-        heading={<h1 className="desktop-toolbar-title">{NEW_THREAD}</h1>}
+        title={NEW_THREAD}
         actions={
           <Button variant={BUTTON_VARIANT.QUIET} onClick={discard} disabled={sending}>
             {DISCARD}

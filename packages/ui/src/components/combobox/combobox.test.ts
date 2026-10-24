@@ -18,7 +18,8 @@ import { useComboboxField } from "./use-combobox-field.js";
  * keys an input method is composing with never reach the list. A list
  * standing alone, under an editor of its caller's, names its one group to a
  * reader without drawing its heading, says so where nothing matches, and
- * keeps a press from taking the caret. An option that cannot be chosen now
+ * keeps a press from taking the caret; a headed list draws each group's
+ * name over its options in the group role. An option that cannot be chosen now
  * is passed over by the pointer and a press, the one chosen now is told as
  * current, a note stands after the options, and a list with no field holds
  * the focus and reads the keys itself. A row and a box a list engine owns
@@ -344,6 +345,16 @@ test("a list standing alone with headings draws them, and says so where nothing 
     none.container.querySelector('[role="listbox"]')?.textContent ?? "",
     /Nothing matches/u,
   );
+});
+
+test("a group's heading, drawn over its own options, says its name in the group role", () => {
+  const { container } = mountList(["Apricot"], true);
+  const group = container.querySelector('[role="group"]') ?? assert.fail("group");
+  const heading = group.firstElementChild;
+
+  assert.equal(group.getAttribute("aria-label"), "Stone fruit");
+  assert.equal(heading?.textContent, "Stone fruit");
+  assert.equal(heading?.getAttribute("data-variant"), "group");
 });
 
 /** Fruit where Banana cannot be chosen now and Cherry is the one chosen, with no field: the list steers itself. */

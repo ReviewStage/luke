@@ -1,80 +1,99 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { PLAN_ACTOR } from "@luke/features/task-wire";
-import { useConfirmDialog } from "@luke/ui";
-import { ACTION_RESULT_STATUS } from "@luke/wire";
-import { Effect } from "effect";
-import { act, createElement, type ReactNode } from "react";
+import * as AtomRegistry from "effect/reactivity/AtomRegistry";
+import { act, createElement, Fragment } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeAll, beforeEach, test } from "vitest";
-import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
-import { DESKTOP_LINKS, fakeAppPlatform } from "../testing/app-platform.js";
-import { DOCUMENT_TASK } from "../testing/document-task.js";
-import { markdownHtmlParserLanded } from "../testing/markdown.js";
-import { HISTORY_READ } from "./use-plan-history.js";
-import { VersionView } from "./version-view.js";
+import { afterEach, test } from "vitest";
+import { onRegistry } from "../testing/copy-feedback.js";
+import { ToastHost, type ToastNotice, useToast } from "../toast.js";
+import { sayRestored } from "./version-view.js";
 
 /**
- * version-view.test.ts -- a version of a plan names its task in the page
- * title's role, as the plan's header does, and not as a `#` heading of its
- * text, so the page keeps the one `h1` its bar gives it.
+ * version-view.test.ts -- a restored version is said in the window's toast: with an Undo where the history names the version that stood before, which restores that one and says so where it is refused. Synthetic throughout.
  */
 
-const NAME = "Invitations";
-
-// A version's words are drawn once the parser has landed, as the panel lands it after its first paint.
-beforeAll(() => Effect.runPromise(markdownHtmlParserLanded));
-
-const roots: Root[] = [];
-
-beforeEach(() => {
-  fakeAppPlatform(DESKTOP_LINKS);
-  fakeAppBridge({});
-  fakeActPort({});
-});
+let root: Root | undefined;
+let registry: AtomRegistry.AtomRegistry | undefined;
+let show: ((notice: ToastNotice) => void) | undefined;
 
 afterEach(() => {
-  for (const root of roots.splice(0)) act(() => root.unmount());
+  act(() => root?.unmount());
+  root = undefined;
+  registry?.dispose();
   document.body.innerHTML = "";
 });
 
-function Version(): ReactNode {
-  const restore = useConfirmDialog({ subject: true, surfaceOpen: true }, () =>
-    Promise.resolve({ status: ACTION_RESULT_STATUS.ACCEPTED }),
-  );
-  return createElement(VersionView, {
-    onRetry: () => undefined,
-    title: NAME,
-    viewing: {
-      line: {
-        seq: 2,
-        lastEdit: { actor: PLAN_ACTOR.NOTETAKER, at: 2, duringCall: true },
-        startedAt: 1,
-        changes: 1,
-      },
-      current: false,
-      read: {
-        kind: HISTORY_READ.READY,
-        document: { ...DOCUMENT_TASK.document, body: "## Rollout\n\nShip it." },
-        previous: null,
-      },
-    },
-    restore,
-  });
+/** Hands the test the window's way of showing a toast. */
+function Shower(): null {
+  show = useToast();
+  return null;
 }
 
-test("a version names its task in the title role, as no heading, under the bar's one h1", () => {
+/** The window's toasts, mounted as its root mounts them. */
+function mount(): void {
   const container = document.body.appendChild(document.createElement("div"));
-  const root = createRoot(container);
-  roots.push(root);
-  act(() => root.render(createElement(Version)));
+  root = createRoot(container);
+  registry = AtomRegistry.make();
+  const held = registry;
+  act(() =>
+    root?.render(
+      onRegistry(
+        held,
+        createElement(Fragment, null, createElement(Shower), createElement(ToastHost)),
+      ),
+    ),
+  );
+}
 
-  const name = [...container.querySelectorAll(".task-title .luke-text")].map((title) => [
-    title.textContent,
-    title.getAttribute("data-variant"),
-  ]);
-  assert.deepEqual(name, [[NAME, "title"]]);
-  assert.equal(container.querySelectorAll("h1").length, 1);
-  assert.equal(container.querySelector('.luke-markdown-heading[data-level="1"]'), null);
+/** What each toast standing says, leaving out those on their way out. */
+function standing(): string[] {
+  return [...document.querySelectorAll(".luke-toast:not([data-leaving]) .luke-toast-words")].map(
+    (words) => words.textContent ?? "",
+  );
+}
+
+/** The Undo on the toasts, or nothing where none stands. */
+function undoButton(): HTMLButtonElement | undefined {
+  return [
+    ...document.querySelectorAll<HTMLButtonElement>(".luke-toast:not([data-leaving]) button"),
+  ].find((button) => button.textContent === "Undo");
+}
+
+test("a restore with a version before it says so with an Undo, which restores that version and sends the toast away", async () => {
+  mount();
+  const undone: string[] = [];
+  const toast = show ?? assert.fail("the window shows toasts");
+  act(() =>
+    sayRestored(toast, () => {
+      undone.push("restored the version before");
+      return Promise.resolve(true);
+    }),
+  );
+  assert.ok(undoButton(), "the restore offers its Undo");
+
+  await act(async () => undoButton()?.click());
+
+  assert.deepEqual(undone, ["restored the version before"]);
+  assert.equal(undoButton(), undefined);
+  assert.deepEqual(standing(), []);
+});
+
+test("an Undo that is refused says the restore could not be undone", async () => {
+  mount();
+  const toast = show ?? assert.fail("the window shows toasts");
+  act(() => sayRestored(toast, () => Promise.resolve(false)));
+
+  await act(async () => undoButton()?.click());
+
+  assert.deepEqual(standing(), ["The restore could not be undone. Try again."]);
+});
+
+test("a restore with no version before it says so without an Undo", () => {
+  mount();
+  const toast = show ?? assert.fail("the window shows toasts");
+  act(() => sayRestored(toast, undefined));
+
+  assert.deepEqual(standing(), ["Version restored"]);
+  assert.equal(undoButton(), undefined);
 });

@@ -3,7 +3,7 @@ import { Command, defaultFilter } from "cmdk";
 import { type ReactNode, type Ref, useLayoutEffect, useRef, useState } from "react";
 import { cn } from "../../cn.js";
 import { SearchIcon } from "../../face/glyphs.js";
-import { COMBOBOX_LABEL } from "../../shadcn/combobox.js";
+import { COMBOBOX_HEADING } from "../../shadcn/combobox.js";
 import { DialogContent, Dialog as ShadcnDialog } from "../../shadcn/dialog.js";
 import {
   COMBOBOX_LIST_HEIGHT,
@@ -13,6 +13,7 @@ import {
 } from "../combobox/combobox.js";
 import { useHeldFocus } from "../dialog/held-focus.js";
 import { NoteLine } from "../note-line/note-line.js";
+import { TEXT_ELEMENT, TEXT_VARIANT, Text } from "../text/text.js";
 import { Tooltip } from "../tooltip/hint.js";
 
 /**
@@ -113,8 +114,8 @@ const FOOT =
 /** A group's note after its rows: a quiet caption at the rows' inset. */
 const NOTE = "px-row-inset pt-luke-4 pb-luke-8 text-caption text-muted-foreground";
 
-/** A group's heading, as a list's group heading is drawn. */
-const HEADING = cn("block", COMBOBOX_LABEL);
+/** Where a group's heading stands, as a list's group heading does. */
+const HEADING = cn("block", COMBOBOX_HEADING);
 
 /**
  * How well `words`, and any `keywords` beside them, answer `typed`: 0 where
@@ -320,7 +321,9 @@ export function CommandDialog({
                   key={group.id}
                   heading={
                     group.label === undefined ? undefined : (
-                      <span className={HEADING}>{group.label}</span>
+                      <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.GROUP} className={HEADING}>
+                        {group.label}
+                      </Text>
                     )
                   }
                 >
