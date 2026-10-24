@@ -530,5 +530,26 @@ it.effect(
       yield* Effect.yieldNow;
       assert.equal(g.views.at(-1)?.call, undefined);
       assert.equal(g.views.at(-1)?.voiceError, undefined);
+
+      // A close the host began, as a deleted task's, whose connection is lost
+      // while the call is still closing, was asked for too.
+      const h = fixture();
+      const third = yield* Effect.forkChild(h.talkTo(INVITES_AGENT), { startImmediately: true });
+      const closing = h.latest();
+      assert.ok(closing);
+      closing.started();
+      yield* Fiber.join(third);
+      assert.ok(closing.sessionId);
+      closing.closing = Effect.never;
+      yield* h.obey({ sessionId: closing.sessionId, phase: LIVE_SESSION_PHASE.CLOSING });
+      yield* Effect.yieldNow;
+      yield* h.obey({
+        sessionId: closing.sessionId,
+        phase: LIVE_SESSION_PHASE.CLOSED,
+        reason: LIVE_CLOSE_REASON.CONNECTION_LOST,
+      });
+      yield* Effect.yieldNow;
+      assert.equal(h.views.at(-1)?.call, undefined);
+      assert.equal(h.views.at(-1)?.voiceError, undefined);
     }),
 );

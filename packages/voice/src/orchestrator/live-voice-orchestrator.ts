@@ -463,8 +463,12 @@ export class LiveVoiceOrchestrator {
           this.#releasePress();
           if (this.#call) {
             // Note that a connection the host lost, every try to get it back
-            // spent, is said as dropped, because nobody asked for this end.
-            if (change.reason === LIVE_CLOSE_REASON.CONNECTION_LOST) {
+            // spent, is said as dropped, because nobody asked for this end; a
+            // call the host was already closing was asked to end, and says nothing.
+            if (
+              this.#closing === undefined &&
+              change.reason === LIVE_CLOSE_REASON.CONNECTION_LOST
+            ) {
               this.#strip.showError(VOICE_FAILURE.CALL_DROPPED);
             }
             this.#status = LIVE_STATUS.IDLE;
