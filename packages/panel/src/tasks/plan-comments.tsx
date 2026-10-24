@@ -837,7 +837,11 @@ function ReplyField({
         editor={editor}
         dictation={dictation}
         onPasteFiles={files.paste}
-        onPasteCut={() => setCut(true)}
+        onPasteCut={() => {
+          // Note that a paste cut says so over a dictation's note, which was said of what came before it.
+          setHeard(undefined);
+          setCut(true);
+        }}
       />
       {said === undefined ? null : (
         <div className="comment-note" role="alert">

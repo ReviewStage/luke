@@ -374,3 +374,33 @@ test("a paste past the post's cap is cut to the room left and the note says so, 
   });
   assert.equal(note(), undefined, "the note goes once the words change again");
 });
+
+test("a paste that is cut says so over the note a refused file left, and leaves a refused post's Retry standing", async () => {
+  const { container, draw } = page();
+  const held = heldSend();
+  draw([{ channelId: GENERAL, label: "Message #general", onSend: held.onSend }]);
+  const box = boxNamed(container, "Message #general");
+  const cap = CHAT_BOUNDS.MAX_TEXT_CHARS;
+  const note = () => box.querySelector(".agent-composer-note")?.textContent;
+
+  const drop = new Event("drop", { bubbles: true, cancelable: true });
+  Object.defineProperty(drop, "dataTransfer", {
+    value: { types: ["Files"], files: [new File(["x"], "spec.pdf", { type: "application/pdf" })] },
+  });
+  act(() => box.dispatchEvent(drop));
+  assert.equal(note(), "spec.pdf can't be attached. Attach images.");
+
+  pasteInComposer(box, "x".repeat(cap + 100));
+  assert.equal(note(), pasteCutWords(cap));
+
+  pressInComposer(box, "Enter");
+  await settle();
+  await held.answer("no network");
+  assert.equal(note()?.includes("no network"), true, "the refused post is said with its Retry");
+  pasteInComposer(box, "more");
+  assert.equal(
+    note()?.includes("no network"),
+    true,
+    "a paste into the full box leaves it standing",
+  );
+});

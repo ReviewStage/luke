@@ -502,7 +502,11 @@ function AnswerCard({
           setCut(false);
           control.onDraft(item, { ...draft, note: text });
         }}
-        onPasteCut={() => setCut(true)}
+        onPasteCut={() => {
+          // Note that a paste cut says so over a refusal said of what came before it.
+          setRefusal(undefined);
+          setCut(true);
+        }}
         placeholder={placeholder}
         maxLength={INBOX_BOUNDS.MAX_MESSAGE_CHARS}
         onEnter={() => {

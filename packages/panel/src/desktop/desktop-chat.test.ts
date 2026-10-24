@@ -28,6 +28,7 @@ import {
   type TaskAgentLine,
   type TaskSummary,
 } from "@luke/features/task-wire";
+import { pasteCutWords } from "@luke/features/words";
 import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import { type ChatPlace, type ChatPost, FOR_YOU } from "@luke/ui/chat-model";
@@ -59,6 +60,7 @@ import {
   composerEditor,
   editorBundleLanded,
   installEditorLayout,
+  pasteInComposer,
   pressInComposer,
   typeInComposer,
 } from "../testing/composer.js";
@@ -869,6 +871,24 @@ test("an ask's note and decision are there again when Chat closes and opens agai
     settledAsk(page, 51).querySelector("[data-inbox-note]")?.textContent?.trim(),
     "go ahead",
   );
+});
+
+test("a paste past an ask note's cap is cut to the room left and the card's note line says so, until the words change", () => {
+  const page = mount();
+  const card = openAsk(page, UNIQUE_INDEX);
+  const cap = CHAT_BOUNDS.MAX_NOTE_CHARS;
+  const note = () => card.querySelector(".agent-composer-note")?.textContent;
+
+  pasteInComposer(card, "x".repeat(cap + 100));
+  assert.equal(boxWords(card).length, cap);
+  assert.equal(note(), pasteCutWords(cap));
+
+  const editor = composerEditor(card).editor;
+  assert.ok(editor, "the editor is running");
+  act(() => {
+    editor.view.dispatch(editor.state.tr.delete(1, 2));
+  });
+  assert.equal(note(), undefined, "the note goes once the words change again");
 });
 
 test("a form's text field is the composer's own field, its answer stands in its fields read-only, and the reply in its thread says the same", async () => {

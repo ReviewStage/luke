@@ -318,7 +318,11 @@ function useChatSend(place: ChatDraftPlace, onSend: ChatComposerProps["onSend"])
     // Note that a note of the box's own, a refusal or a dictation's, is said before the cut paste's.
     note: note ?? (cut ? plainNote(pasteCutWords(CHAT_BOUNDS.MAX_TEXT_CHARS)) : undefined),
     setNote,
-    setCut,
+    // Note that a paste that was cut takes down the file's or the dictation's note, which was said of what came before, but never a refused post's, whose Retry stands.
+    cutPaste: () => {
+      setCut(true);
+      setNote((was) => (was?.retries === true ? was : undefined));
+    },
     send,
   };
 }
@@ -449,7 +453,7 @@ function EditorChatComposer({
     empty,
     note,
     setNote,
-    setCut,
+    cutPaste,
     send,
   } = useChatSend(chatPlace(channelId, replyTo), onSend);
   const dictation = useDictation({
@@ -542,7 +546,7 @@ function EditorChatComposer({
             attach(pasted);
             return true;
           }}
-          onPasteCut={() => setCut(true)}
+          onPasteCut={cutPaste}
           onTrigger={() => undefined}
           chip={() => null}
           quote={(quote) => <ComposerQuoteView quote={quote} held={dictating} />}

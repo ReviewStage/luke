@@ -8472,6 +8472,29 @@ test("a file dropped on a New thread's box is attached, and goes with the thread
   );
 });
 
+test("a paste past a New thread's cap is cut to the room left and its note line says so, until the words change", async () => {
+  listedWorkspace = ACME;
+  inboxes = new Map([[BILLING.id, [THRESHOLD]]]);
+  heldStarts([AGENT]);
+  const { page } = mount();
+  await settle();
+  const pane = await openNewThread(page);
+  const cap = INBOX_BOUNDS.MAX_MESSAGE_CHARS;
+  const note = () => pane.querySelector(".agent-composer-note")?.textContent;
+
+  pasteInComposer(pane, "x".repeat(cap + 100));
+  await settle();
+  assert.equal(composerEditor(pane).textContent?.length, cap);
+  assert.equal(note(), pasteCutWords(cap));
+
+  const editor = composerEditor(pane).editor ?? assert.fail("the editor is running");
+  act(() => {
+    editor.view.dispatch(editor.state.tr.delete(1, 2));
+  });
+  await settle();
+  assert.equal(note(), undefined, "the note goes once the words change again");
+});
+
 test("an @ in a New thread's box offers the workspace's agents and people, but for the agent To names", async () => {
   listedWorkspace = SHARED_WORKSPACE;
   members = SHARED_MEMBERS;
