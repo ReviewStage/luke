@@ -2216,6 +2216,37 @@ test("⌘K offers the open task's Chat tab only while the account has Chat on", 
   assert.ok(!rows().some((row) => row.startsWith("Chat")), "Chat off offers no Chat");
 });
 
+test("⌘K's Show chat is offered only while the account has Chat on, as the side panel's \"+\" offers the tab, since a Chat tab with no Chat drawn opens blank", async () => {
+  const tasks = tasksControl({
+    activeTaskId: DOCUMENT_TASK.id,
+    tasks: [
+      {
+        id: DOCUMENT_TASK.id,
+        workspaceId: DOCUMENT_TASK.workspaceId,
+        name: DOCUMENT_TASK.name,
+        createdAt: 1,
+        updatedAt: 2,
+        repository: null,
+      },
+    ],
+    region: { kind: DOCUMENT_REGION.READY, task: DOCUMENT_TASK },
+    chatView: { ...tasksControl().chatView, available: true },
+  });
+  handState(experimentsOn(EXPERIMENT.CHAT));
+  await paletteUnderState(tasks);
+  chooseFilter("Actions");
+  assert.ok(rows().includes("Show chat"), "Chat on offers Show chat");
+  assert.ok(rows().includes("Show board"));
+  for (const root of roots.splice(0)) act(() => root.unmount());
+  document.body.innerHTML = "";
+
+  handState({});
+  await paletteUnderState(tasks);
+  chooseFilter("Actions");
+  assert.ok(!rows().includes("Show chat"), "Chat off offers no Show chat");
+  assert.ok(rows().includes("Show board"), "the tabs that exist are still offered");
+});
+
 /** Answers Luke's ensure with his id, every other act with nothing, and keeps every act sent. */
 function servingLuke(agentId: string): SentPortAct[] {
   const sent: SentPortAct[] = [];
@@ -2538,4 +2569,30 @@ test("while main says a task's inbox changed later than its push, a query it doe
   );
   await settle();
   assert.deepEqual(rows(), ["Which webhook secret should rotate? · Billing usage alerts"]);
+});
+
+test("an Inbox that could not be read says so in the Inbox's own group, beside the rows other groups matched, and its Retry reads it again", async () => {
+  paletteOverInbox(() => ({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }));
+
+  type("billing");
+  await settle();
+
+  assert.ok(
+    rows().includes("Billing usage alerts · relay"),
+    "the task the Tasks group matched is listed",
+  );
+  const notice = document.querySelector(".command-palette-notice-slot");
+  assert.equal(notice?.textContent?.startsWith("Your inbox could not be read."), true);
+  const group = notice?.closest("[cmdk-group]");
+  assert.equal(group?.querySelector("[cmdk-group-heading]")?.textContent, "Inbox");
+  assert.ok(
+    [...document.querySelectorAll("[cmdk-group-heading]")].some(
+      (each) => each.textContent === "Tasks",
+    ),
+    "the other matches keep their own group",
+  );
+  assert.ok(
+    [...(notice?.querySelectorAll("button") ?? [])].some((each) => each.textContent === "Retry"),
+    "the failed source offers Retry",
+  );
 });

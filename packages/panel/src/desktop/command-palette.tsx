@@ -143,7 +143,7 @@ import { cardTitle } from "../tasks/tool-call-model.js";
 import type { CodingAgentsControl } from "../tasks/use-coding-agents.js";
 import { choiceOf } from "../tasks/use-inbox-listing.js";
 import { type InboxSearch, useInboxSearch } from "../tasks/use-inbox-search.js";
-import { SIDE_PANEL_TAB_KIND, SIDE_PANEL_TABS } from "../tasks/use-side-panel.js";
+import { SIDE_PANEL_TAB_KIND } from "../tasks/use-side-panel.js";
 import { type ReadMarks, useReadMarks } from "../tasks/use-task-looks.js";
 import { useTaskOrigin } from "../tasks/use-task-origin.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
@@ -156,7 +156,13 @@ import { type AgentReadMarks, useAgentReadMarks } from "./agent-read-marks.js";
 import { LUKE_NAME, type LukeOperator, useLukeOperator, withoutLuke } from "./luke-operator.js";
 import { agentEntries, chatEntries, inboxEntries } from "./main-tabs.js";
 import { strandedHome } from "./move-task-dialog.js";
-import { changesOffers, panelEntries } from "./side-panel.js";
+import {
+  changesOffers,
+  inboxOffered,
+  offeredPanelKinds,
+  panelEntries,
+  SIDE_PANEL_HOLDER,
+} from "./side-panel.js";
 import { taskOf } from "./task-actions.js";
 import { homeTaskCardOf, TaskRowMark } from "./task-card.js";
 import { WorkspaceRef } from "./workspace-ref.js";
@@ -364,10 +370,11 @@ interface PaletteRow {
   onChoose: () => void;
 }
 
-/** One kind's rows, ranked and cut to what the filter lists. */
+/** One kind's rows, ranked and cut to what the filter lists, and its source's notice where it stands. */
 interface PaletteSection {
   kind: PaletteKind;
   rows: readonly PaletteRow[];
+  notice: PaletteNotice | undefined;
 }
 
 /** The score a row found only by its keywords takes: after every row its own words matched. */
@@ -492,22 +499,6 @@ function inboxNotice(search: InboxSearch): PaletteNotice | undefined {
   return search.failed
     ? { kind: PALETTE_NOTICE.FAILED, line: INBOX_FAILED_LINE, onRetry: search.onRetry }
     : undefined;
-}
-
-/**
- * What an empty list says for the filter shown: its kind's own notice, or,
- * under All, the first kind still reading, else the first refused, since
- * either could still have matched; nothing where "Nothing matches." is true.
- */
-function emptyNotice(
-  filter: PaletteFilter,
-  notices: readonly (PaletteNotice | undefined)[],
-): PaletteNotice | undefined {
-  if (filter !== PALETTE_FILTER.ALL) return notices[0];
-  return (
-    notices.find((notice) => notice?.kind === PALETTE_NOTICE.READING) ??
-    notices.find((notice) => notice?.kind === PALETTE_NOTICE.FAILED)
-  );
 }
 
 /** The list's notice where its rows would stand: a refusal with Retry, a reading line a reader hears, or a line of its own. */
@@ -965,18 +956,25 @@ function copyLinkRows(
  * The side panel's kinds, listed with the commands as Show board and the
  * rest, a command's verb before the name its tab wears, each wearing its
  * kind's glyph as its tab does (`tab-look.tsx`) and showing the panel on
- * its tab as the panel's "+" does, over the version history; none while
+ * its tab as the panel's "+" does, over the version history, and only the
+ * kinds the "+" offers (`offeredPanelKinds`), so none opens blank; none while
  * the plan is not drawn, since there is no panel to show, nor while an
  * agent's page holds the panel, which is that agent's. No chord reaches
  * them.
  */
 function panelTabRows(
   tasks: TasksControl,
+  chatOn: boolean,
   show: (pick: () => void) => void,
 ): readonly PaletteRow[] {
   if (tasks.region.kind !== DOCUMENT_REGION.READY || !holdsTaskPanel(tasks)) return [];
   const plan = openPlanStanding(tasks);
-  return SIDE_PANEL_TABS.map((tab) => {
+  const kinds = offeredPanelKinds(SIDE_PANEL_HOLDER.TASK, {
+    inbox: inboxOffered(tasks.agents, tasks.sidePanel),
+    chat: chatOn && tasks.chatView.available,
+    code: true,
+  });
+  return kinds.map((tab) => {
     // Note that the row says the kind, Show plan, while its glyph is the Plan tab's, the task's status.
     const { icon } = tabLook({ kind: TAB_KIND.PANEL, tab, plan });
     const label = `Show ${SIDE_PANEL_TAB_KIND[tab].label.toLowerCase()}`;
@@ -1583,7 +1581,7 @@ export function CommandPalette({
       [
         ...copyLinkRows(links.linksAt(fromPanel), (held) => choose(() => links.copy(held))),
         ...actionRows((command) => choose(() => runAppCommand(command))),
-        ...panelTabRows(tasks, onTasks),
+        ...panelTabRows(tasks, chatOn, onTasks),
         ...readMarkRows(tasks, reads, choose),
         ...agentReadMarkRows(listedTasks, agentReads, choose),
         ...taskPinRows(tasks, reads, choose),
@@ -1610,11 +1608,6 @@ export function CommandPalette({
   const kinds = PALETTE_FILTERS.filter((each): each is PaletteKind =>
     filter === PALETTE_FILTER.ALL ? each !== PALETTE_FILTER.ALL : each === filter,
   );
-  const sections: readonly PaletteSection[] = open
-    ? kinds
-        .map((kind) => ({ kind, rows: rowsFor(kind) }))
-        .filter((section) => section.rows.length > 0)
-    : [];
   // Each kind's word for its rows' absence: still reading, refused, or a line of its own.
   const noticeOf = {
     [PALETTE_FILTER.TASKS]: () => tasksNotice(tasks),
@@ -1626,13 +1619,21 @@ export function CommandPalette({
     [PALETTE_FILTER.ACTIONS]: () => undefined,
     [PALETTE_FILTER.SETTINGS]: () => undefined,
   } as const satisfies Record<PaletteKind, () => PaletteNotice | undefined>;
-  const notice =
-    open && sections.length === 0 && !askLukeShown
-      ? emptyNotice(
-          filter,
-          kinds.map((kind) => noticeOf[kind]()),
-        )
-      : undefined;
+  // Note that each kind's notice stands in its own group, beside the rows other kinds matched,
+  // so a source that failed or is still reading is never taken for no match; under All a
+  // line of a kind's own (no repository open) stays out, since that kind is simply not searched.
+  const noticeFor = (kind: PaletteKind): PaletteNotice | undefined => {
+    const notice = noticeOf[kind]();
+    return filter === PALETTE_FILTER.ALL && notice?.kind === PALETTE_NOTICE.SAID
+      ? undefined
+      : notice;
+  };
+  const sections: readonly PaletteSection[] = open
+    ? kinds
+        .map((kind) => ({ kind, rows: rowsFor(kind), notice: noticeFor(kind) }))
+        .filter((section) => section.rows.length > 0 || section.notice !== undefined)
+    : [];
+  const nothingMatches = open && sections.length === 0;
   const cut =
     filesOpen &&
     filter === PALETTE_FILTER.FILES &&
@@ -1667,13 +1668,11 @@ export function CommandPalette({
       <PaletteFilters filter={filter} onFilter={changeFilter} />
       <Command.List asChild label="Results">
         <ComboboxListBox height={COMBOBOX_LIST_HEIGHT.FILL}>
-          {notice === undefined ? (
+          {nothingMatches ? (
             <Command.Empty>
               <NoteLine>Nothing matches.</NoteLine>
             </Command.Empty>
-          ) : (
-            <NoticeLine notice={notice} />
-          )}
+          ) : null}
           {askLukeShown && askLuke !== undefined ? (
             <Command.Group>
               <PaletteItem row={askLuke} value={FIRST_ROW} query={query} tokens={tokens} />
@@ -1700,6 +1699,7 @@ export function CommandPalette({
                   />
                 );
               })}
+              {section.notice === undefined ? null : <NoticeLine notice={section.notice} />}
             </Command.Group>
           ))}
           {cut ? (
