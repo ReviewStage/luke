@@ -1,3 +1,4 @@
+import { TEXT_ELEMENT, TEXT_VARIANT, Text } from "@luke/ui";
 import type { ReactNode } from "react";
 
 /**
@@ -16,9 +17,14 @@ export function CatalogSection({
 }): React.JSX.Element {
   return (
     <section className="catalog-section" aria-labelledby={id}>
-      <h2 id={id} className="catalog-section-title">
+      <Text
+        as={TEXT_ELEMENT.H2}
+        variant={TEXT_VARIANT.SECTION}
+        id={id}
+        className="catalog-section-title"
+      >
         {title}
-      </h2>
+      </Text>
       {children}
     </section>
   );

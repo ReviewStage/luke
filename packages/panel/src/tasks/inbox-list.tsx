@@ -40,9 +40,13 @@ import {
   SCROLL_FADE,
   ScrollArea,
   SearchField,
+  SelectionRegion,
   Skeleton,
   SkeletonRegion,
   Stack,
+  TEXT_ELEMENT,
+  TEXT_VARIANT,
+  Text,
   TOOLBAR_INSET,
   Toolbar,
   Tooltip,
@@ -84,7 +88,7 @@ import {
   UserIcon,
   UsersIcon,
 } from "lucide-react";
-import { useCallback, useLayoutEffect, useMemo, useRef } from "react";
+import { useCallback, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { ACTOR_SIZE, ActorMark, AutomationCard, actorCard, automationActor } from "../actor-ref.js";
 import { AttentionMark } from "../attention-mark.js";
 import { useAutomation } from "../automation-directory.js";
@@ -161,6 +165,7 @@ import {
   useRowMediaAsks,
   useRowMediaReads,
 } from "./inbox-row-media.js";
+import { InboxSelectionBar } from "./inbox-selection.js";
 import { PlanGlyph } from "./tab-look.js";
 import { markReadItem } from "./task-menu-items.js";
 import { cardTitle } from "./tool-call-model.js";
@@ -225,7 +230,12 @@ import { cardTitle } from "./tool-call-model.js";
  * is resized from its right edge as the sidebar is, and keeps one width
  * between them across launches; an Inbox showing one column at a time
  * draws its list the whole Inbox wide, with no edge, and hides it while an
- * item stands in its place (`inbox-columns.ts`).
+ * item stands in its place (`inbox-columns.ts`). A list on a page chooses
+ * rows as a Mac's list does (`SelectionRegion`): ⌘-click one in or out,
+ * ⇧-click a run, ⇧↑↓ grow it, ⌘A every row drawn, and Esc none, across
+ * every group, while a plain press still opens its item; while any is
+ * chosen, a bar at the list's foot marks them all read or unread, or
+ * resolves them, at once (`inbox-selection.tsx`).
  */
 
 /** What an item's row's right-click menu is called. */
@@ -409,6 +419,7 @@ export function InboxItemRow({
   muted = false,
   media,
   ref,
+  selectKey,
   onChoose,
   onMark,
   onClose,
@@ -433,6 +444,8 @@ export function InboxItemRow({
   media?: RowMediaReads | undefined;
   /** Handed the row's press, by which the list finds the row of an item. */
   ref?: React.RefCallback<HTMLElement> | undefined;
+  /** What the row is chosen by where its list chooses rows (`SelectionRegion`); none where it is never chosen. */
+  selectKey?: string | undefined;
   onChoose: (listed: InboxListed) => void;
   /** Marks the item read or unread; none where the row offers no mark. */
   onMark?: ((listed: InboxListed, unread: boolean) => void) | undefined;
@@ -564,6 +577,7 @@ export function InboxItemRow({
           unread={unread}
           muted={muted}
           hint={{ Hint: RowHint, label: title }}
+          selectKey={selectKey}
           onPress={() => onChoose(listed)}
           contextMenu={groups.length === 0 ? undefined : menu.contextMenu(press)}
         />
@@ -1076,7 +1090,15 @@ function ListHead({
         <PhoneHead
           place="inbox"
           start={head.phone.start}
-          title={<h1 className="desktop-toolbar-title">{title}</h1>}
+          title={
+            <Text
+              as={TEXT_ELEMENT.H1}
+              variant={TEXT_VARIANT.TOOLBAR_TITLE}
+              className="desktop-toolbar-title"
+            >
+              {title}
+            </Text>
+          }
           end={
             <PlaceMore
               thing="Inbox"
@@ -1325,6 +1347,20 @@ function useRowFocusKept(rows: InboxRowPresses): RowFocus {
   };
 }
 
+/** The items whose rows the list draws, in their order: every item listed but those of a group folded. */
+function drawnItems(view: InboxListView, folded: (key: string) => boolean): readonly InboxListed[] {
+  if (view.grouping === INBOX_GROUPING.NONE) return view.items;
+  if (view.grouping === INBOX_GROUPING.PERSON) {
+    return view.groups.flatMap(({ key, items }) => (folded(key) ? [] : items));
+  }
+  if (view.grouping === INBOX_GROUPING.STATUS) {
+    return view.groups.flatMap(({ key, items }) => (folded(key) ? [] : items));
+  }
+  return view.groups.flatMap(({ holder, items }) =>
+    folded(holderKey(holder)) ? [] : items.map((item) => ({ holder, item })),
+  );
+}
+
 /** A group's key, by which it leaves the list (`ListMotion`). */
 function groupKey({ key }: { readonly key: string }): string {
   return key;
@@ -1396,12 +1432,21 @@ export function InboxList({
   /** Where the list stands: its own column on the Inbox's page, or the sidebar, which scrolls it with the rest and draws the chosen item's open beside it. */
   placement?: InboxListPlacement;
   onChoose: (listed: InboxListed) => void;
-  /** Marks an item read or unread from its row; none where the rows offer no mark. */
-  onMark?: ((listed: InboxListed, unread: boolean) => void) | undefined;
-  /** Closes an open item without an answer from its row; none where the rows offer no close. */
+  /** Marks an item read or unread from its row or the selection's bar, answering whether the service took it; none where the rows offer no mark. */
+  onMark?: ((listed: InboxListed, unread: boolean) => Promise<boolean>) | undefined;
+  /** Closes an open item without an answer from its row or the selection's bar; none where the rows offer no close. */
   onClose?: InboxCloser | undefined;
 }): React.JSX.Element {
   const now = useMinute();
+  const regionId = useId();
+  const [picked, setPicked] = useState<ReadonlySet<string>>(() => new Set());
+  // Note that only the list on a page chooses rows; the sidebar's leaves its rows to open alone.
+  const choosing = placement === INBOX_LIST_PLACEMENT.PAGE;
+  const drawn = choosing ? drawnItems(view, (key) => head.view?.folds.folded(key) ?? false) : [];
+  // Note that only rows drawn stay chosen, so an item gone from the list, filtered out, or folded away is never acted on, and stays unchosen once back.
+  const picks = drawn.filter(({ item }) => picked.has(item.id));
+  if (picks.length !== picked.size) setPicked(new Set(picks.map(({ item }) => item.id)));
+  const unpick = () => setPicked(new Set());
   const { width, onResize } = useInboxListWidth();
   const rowFocus = useRowFocusKept(rows);
   const bodyRef = useRef<HTMLDivElement | null>(null);
@@ -1439,6 +1484,7 @@ export function InboxList({
       muted={isDone(listed.item)}
       media={media}
       ref={leaving ? undefined : rows.hold(listed.item.id)}
+      selectKey={choosing && !leaving ? listed.item.id : undefined}
       onChoose={onChoose}
       onMark={onMark}
       onClose={onClose}
@@ -1540,8 +1586,25 @@ export function InboxList({
     >
       <ListHead head={head} readerId={readerId} placement={placement} />
       <ListMotion root={bodyRef} change={view} reading={reading}>
-        {sidebar ? body : <ScrollArea fade={SCROLL_FADE.START}>{body}</ScrollArea>}
+        {sidebar ? (
+          body
+        ) : (
+          <SelectionRegion id={regionId} selection={{ selected: picked, onChange: setPicked }}>
+            <ScrollArea fade={SCROLL_FADE.START}>{body}</ScrollArea>
+          </SelectionRegion>
+        )}
       </ListMotion>
+      {/* Note that the bar stands at the list's foot rather than over its rows, so choosing a row moves none under the pointer. */}
+      {choosing ? (
+        <InboxSelectionBar
+          listed={picks}
+          controls={regionId}
+          shown={head.shown}
+          onClear={unpick}
+          onMark={onMark}
+          onClose={onClose}
+        />
+      ) : null}
       {!sidebar && columns === INBOX_COLUMNS.BOTH ? <ResizeEdge edge={edge} /> : null}
     </nav>
   );

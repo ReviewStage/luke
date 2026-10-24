@@ -34,6 +34,9 @@ import {
   SCROLL_FADE,
   ScrollArea,
   SpinnerRegion,
+  TEXT_ELEMENT,
+  TEXT_VARIANT,
+  Text,
   Time,
   TOOLBAR_INSET,
   Toolbar,
@@ -1214,7 +1217,13 @@ function RailBar({
           start={newChannel}
           title={
             <>
-              <h1 className="desktop-toolbar-title">{CHAT_LIST}</h1>
+              <Text
+                as={TEXT_ELEMENT.H1}
+                variant={TEXT_VARIANT.TOOLBAR_TITLE}
+                className="desktop-toolbar-title"
+              >
+                {CHAT_LIST}
+              </Text>
               <ExperimentTag narrow />
             </>
           }

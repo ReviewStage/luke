@@ -15,6 +15,9 @@ import {
   PAGE_WIDTH,
   PlusIcon,
   Skeleton,
+  TEXT_ELEMENT,
+  TEXT_VARIANT,
+  Text,
   TextField,
 } from "@luke/ui";
 import { useState } from "react";
@@ -132,7 +135,13 @@ function Tasks({
 function Toolbar(): React.JSX.Element {
   return (
     <header className="catalog-window-toolbar">
-      <h1 className="catalog-window-toolbar-title">Tasks</h1>
+      <Text
+        as={TEXT_ELEMENT.H1}
+        variant={TEXT_VARIANT.TOOLBAR_TITLE}
+        className="catalog-window-toolbar-title"
+      >
+        Tasks
+      </Text>
       <Button variant={BUTTON_VARIANT.OUTLINE} icon={<PlusIcon />}>
         New task
       </Button>

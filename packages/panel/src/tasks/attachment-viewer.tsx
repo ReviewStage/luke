@@ -19,6 +19,9 @@ import {
   type ImageOpening,
   type ImageZoom,
   OneLine,
+  TEXT_ELEMENT,
+  TEXT_VARIANT,
+  Text,
   Tooltip,
   useImageZoom,
   usePictureExpand,
@@ -305,9 +308,14 @@ export function AttachmentViewer({
       >
         <header className="attachment-viewer-header">
           <FileTypeIcon name={file.name} />
-          <h2 id={titleId} className="attachment-viewer-title">
+          <Text
+            as={TEXT_ELEMENT.H2}
+            variant={TEXT_VARIANT.SECTION}
+            id={titleId}
+            className="attachment-viewer-title"
+          >
             <OneLine>{file.name}</OneLine>
-          </h2>
+          </Text>
           <span className="attachment-viewer-size">{sizeLabel(base64)}</span>
           {note === undefined || note === null ? null : (
             <span className="attachment-viewer-note">{note}</span>

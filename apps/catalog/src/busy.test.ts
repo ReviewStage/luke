@@ -97,42 +97,58 @@ function busyButtons(): ReadonlyArray<{ example: string; button: HTMLElement }> 
 /** The longest a ring may wait, in milliseconds, before the test calls it never shown. */
 const RING_WAIT_LIMIT_MS = 1000;
 
-test("every busy button is named by what it is doing, refuses its press, and shows its one ring after the same wait", () => {
-  const odd: string[] = [];
-  const found = busyButtons();
-  const shownAt = new Map<HTMLElement, number>();
-  for (const { example, button } of found) {
-    const where = `${example}: ${kindOf(button)} "${nameOf(button)}"`;
-    if (nameOf(button) === "") odd.push(`${where} has no name`);
-    if (!button.matches(":disabled, [aria-disabled='true']")) odd.push(`${where} takes a press`);
-    if (button.querySelector(RING) !== null) shownAt.set(button, 0);
-  }
-  // Note that the wait is read off the page a millisecond at a time rather than named here, so it is whatever the one shared delay is.
-  for (let elapsed = 1; elapsed <= RING_WAIT_LIMIT_MS; elapsed += 1) {
-    act(() => vi.advanceTimersByTime(1));
-    for (const { button } of found) {
-      if (!shownAt.has(button) && button.querySelector(RING) !== null) shownAt.set(button, elapsed);
-    }
-  }
-  const waits = new Set(shownAt.values());
-  for (const { example, button } of found) {
-    const where = `${example}: ${kindOf(button)} "${nameOf(button)}"`;
-    if (!shownAt.has(button)) odd.push(`${where} never shows a ring`);
-    else if (button.querySelectorAll(RING).length !== 1)
-      odd.push(`${where} shows more than one ring`);
-  }
-  assert.deepEqual(odd, [], "these busy buttons differ from the one busy shape");
-  assert.equal(waits.size, 1, `the rings show after ${[...waits].join(" and ")} ms, not one wait`);
-  assert.ok(!waits.has(0), "a ring shows the moment the press lands, with no wait");
-  assert.ok(found.length >= 5, `only ${found.length} busy buttons were drawn`);
-});
+/** How long a test that draws every example may take: the catalog grows with each component, and a CI runner is slower than a laptop. */
+const EVERY_EXAMPLE_TIMEOUT_MS = 30_000;
 
-test("the catalog draws every kind of button busy", () => {
-  const drawnKinds = new Set(busyButtons().map(({ button }) => kindOf(button)));
-  assert.deepEqual(
-    KINDS.map(([kind]) => kind).filter((kind) => !drawnKinds.has(kind)),
-    [],
-    "these kinds of button are never drawn busy",
-  );
-  assert.ok(!drawnKinds.has("other"), "a busy button of no known kind is drawn");
-});
+test(
+  "every busy button is named by what it is doing, refuses its press, and shows its one ring after the same wait",
+  () => {
+    const odd: string[] = [];
+    const found = busyButtons();
+    const shownAt = new Map<HTMLElement, number>();
+    for (const { example, button } of found) {
+      const where = `${example}: ${kindOf(button)} "${nameOf(button)}"`;
+      if (nameOf(button) === "") odd.push(`${where} has no name`);
+      if (!button.matches(":disabled, [aria-disabled='true']")) odd.push(`${where} takes a press`);
+      if (button.querySelector(RING) !== null) shownAt.set(button, 0);
+    }
+    // Note that the wait is read off the page a millisecond at a time rather than named here, so it is whatever the one shared delay is.
+    for (let elapsed = 1; elapsed <= RING_WAIT_LIMIT_MS; elapsed += 1) {
+      act(() => vi.advanceTimersByTime(1));
+      for (const { button } of found) {
+        if (!shownAt.has(button) && button.querySelector(RING) !== null)
+          shownAt.set(button, elapsed);
+      }
+    }
+    const waits = new Set(shownAt.values());
+    for (const { example, button } of found) {
+      const where = `${example}: ${kindOf(button)} "${nameOf(button)}"`;
+      if (!shownAt.has(button)) odd.push(`${where} never shows a ring`);
+      else if (button.querySelectorAll(RING).length !== 1)
+        odd.push(`${where} shows more than one ring`);
+    }
+    assert.deepEqual(odd, [], "these busy buttons differ from the one busy shape");
+    assert.equal(
+      waits.size,
+      1,
+      `the rings show after ${[...waits].join(" and ")} ms, not one wait`,
+    );
+    assert.ok(!waits.has(0), "a ring shows the moment the press lands, with no wait");
+    assert.ok(found.length >= 5, `only ${found.length} busy buttons were drawn`);
+  },
+  EVERY_EXAMPLE_TIMEOUT_MS,
+);
+
+test(
+  "the catalog draws every kind of button busy",
+  () => {
+    const drawnKinds = new Set(busyButtons().map(({ button }) => kindOf(button)));
+    assert.deepEqual(
+      KINDS.map(([kind]) => kind).filter((kind) => !drawnKinds.has(kind)),
+      [],
+      "these kinds of button are never drawn busy",
+    );
+    assert.ok(!drawnKinds.has("other"), "a busy button of no known kind is drawn");
+  },
+  EVERY_EXAMPLE_TIMEOUT_MS,
+);

@@ -1,3 +1,4 @@
+import * as ui from "@luke/ui";
 import { GAP, GlyphSlot, Inline, TEXT_VARIANT, Text } from "@luke/ui";
 import { GLYPH, ICON_SIZE } from "@luke/ui/icons";
 import type { Example } from "../examples";
@@ -7,8 +8,15 @@ import { CatalogSection } from "../section";
  * icons.tsx -- every concept the app draws as an icon, each with the one
  * glyph that stands for it, and the four seats an icon is drawn at: 12 beside
  * a caption's words, 16 in a button or a menu row, 20 as a row's lead, and 40
- * over an empty state.
+ * over an empty state; and every glyph the barrel exports under its own name,
+ * so a glyph added to `@luke/ui` is drawn here without a line of its own.
  */
+
+/** Every glyph the barrel exports, which it names `…Icon`, by that name. */
+const GLYPH_EXPORTS = Object.entries(ui)
+  .filter(([name, value]) => name.endsWith("Icon") && typeof value === "function")
+  .map(([name, value]) => [name, value as () => React.JSX.Element] as const)
+  .sort(([left], [right]) => left.localeCompare(right));
 
 const SEAT_CONCEPTS = ["TASK", "AGENT", "PULL_REQUEST", "INBOX"] as const;
 
@@ -43,6 +51,18 @@ function Icons(): React.JSX.Element {
             </Inline>
           ))}
         </Inline>
+      </CatalogSection>
+      <CatalogSection id="icons-exports" title="Every glyph the barrel exports">
+        <div className="catalog-icon-grid">
+          {GLYPH_EXPORTS.map(([name, Glyph]) => (
+            <span key={name} className="catalog-glyph-line">
+              <GlyphSlot size={ICON_SIZE.MEDIUM}>
+                <Glyph />
+              </GlyphSlot>
+              <Text variant={TEXT_VARIANT.CAPTION}>{name}</Text>
+            </span>
+          ))}
+        </div>
       </CatalogSection>
     </>
   );

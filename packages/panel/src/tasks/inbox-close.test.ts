@@ -71,7 +71,14 @@ afterEach(() => {
 
 /** The close as a row offers it: a button pressing its action, and its question beside it. */
 function CloseProbe({ item, closed }: { item: InboxItem; closed: InboxItem[] }): React.JSX.Element {
-  const close = useInboxClose(item, (each) => closed.push(each), true);
+  const close = useInboxClose(
+    item,
+    (each) => {
+      closed.push(each);
+      return Promise.resolve(true);
+    },
+    true,
+  );
   return createElement(
     "div",
     null,
