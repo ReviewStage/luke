@@ -160,13 +160,15 @@ function drawn(
   const started: PlanCommentStartRequest[] = [];
   /** Each time the plan's own tab was asked to be shown. */
   const documentsShown: true[] = [];
+  /** Why each thread's last act failed, which a test sets before it draws the thread. */
+  const notes = new Map<string, string>();
   const control: PlanCommentsControl = {
     planId: PLAN.id,
     threads,
     read,
     failed: false,
     onRetry: () => undefined,
-    notes: new Map(),
+    notes,
     start: async (start) => {
       started.push(start);
       return { note: "not in this test" };
@@ -206,7 +208,7 @@ function drawn(
     }),
   );
   act(() => root.render(onRegistry(registry, tree)));
-  return { container, asked, started, documentsShown };
+  return { container, asked, started, documentsShown, notes };
 }
 
 /** What `draw` drew with the column stood wide enough for its margin, since jsdom lays nothing out. */
@@ -677,6 +679,69 @@ test("a thread at rest opens from a press anywhere on its card", () => {
 
   act(() => card()?.querySelector<HTMLElement>(".luke-comment-head")?.click());
   assert.equal(card()?.dataset.open, "true", "the card's head opens it");
+});
+
+test("a press that opens a thread puts the caret in its reply, and a thread drawn open takes none", () => {
+  const { container } = drawn("page");
+  act(() => container.querySelector<HTMLButtonElement>(".comment-count button")?.click());
+  const card = () =>
+    container.querySelector<HTMLElement>(`.comment-card[data-thread="${ID.GONE}"]`);
+  assert.equal(card()?.querySelector("textarea"), null, "a card at rest has no field");
+
+  act(() => card()?.querySelector<HTMLElement>(".luke-comment-head")?.click());
+
+  const reply = card()?.querySelector("textarea");
+  assert.ok(reply, "the open thread's reply field");
+  assert.equal(document.activeElement, reply);
+
+  const tab = drawn("tab");
+  const [field] = tab.container.querySelectorAll("textarea");
+  assert.ok(field, "the Comments tab's reply field");
+  assert.notEqual(
+    document.activeElement,
+    field,
+    "a tab of threads open from the first takes no caret",
+  );
+});
+
+test("a failed send says why in the foot under the box, and no note stands over the card", async () => {
+  const { container } = wide(() => drawn("page", []));
+  const paragraph = [...container.querySelectorAll("p")].find((p) =>
+    p.textContent?.startsWith("Admins can withdraw"),
+  );
+  assert.ok(paragraph);
+  act(() => paragraph.dispatchEvent(new Event("pointerover", { bubbles: true })));
+  act(() => container.querySelector<HTMLButtonElement>(".comment-block-button button")?.click());
+  const pending = () => container.querySelector(`.comment-card[data-thread="pending"]`);
+  typeInto(pending()?.querySelector("textarea"), "Ask Luke about retries");
+
+  act(() => {
+    pending()
+      ?.querySelector("textarea")
+      ?.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+  });
+  await act(async () => undefined);
+
+  const foot = pending()?.querySelector(".luke-composer-foot-note");
+  assert.equal(foot?.textContent, "not in this test");
+  assert.equal(foot?.querySelector("[role='alert']")?.textContent, "not in this test");
+  assert.equal(pending()?.querySelector(".comment-note"), null);
+});
+
+test("a failed act on an open thread says why in its reply's foot", () => {
+  const { container, notes } = drawn("page");
+  const mark = container.querySelector<HTMLElement>(
+    `mark.plan-comment-mark[data-threads~="${ID.OPEN}"]`,
+  );
+  notes.set(ID.OPEN, "Could not resolve the thread.");
+
+  act(() => mark?.click());
+
+  const card = container.querySelector<HTMLElement>(`.comment-card[data-thread="${ID.OPEN}"]`);
+  assert.equal(
+    card?.querySelector(".luke-composer-foot-note")?.textContent,
+    "Could not resolve the thread.",
+  );
 });
 
 test("the pointer on a thread's words marks its card before a press", () => {
