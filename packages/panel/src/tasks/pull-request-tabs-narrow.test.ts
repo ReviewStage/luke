@@ -1,6 +1,9 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import { CHOICE_BAR_FOLD, CHOICE_BAR_LOOK, ChoiceBar, PaneBar } from "@luke/ui";
+import { act, createElement } from "react";
+import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
 import { layContainersAt } from "../testing/container-width.js";
 
@@ -12,9 +15,18 @@ import { layContainersAt } from "../testing/container-width.js";
  * and the row, as the tab draws it, is read through them.
  */
 
+declare global {
+  var IS_REACT_ACT_ENVIRONMENT: boolean | undefined;
+}
+
+globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+
 let laid: HTMLStyleElement | undefined;
 
+const roots: Root[] = [];
+
 afterEach(() => {
+  for (const root of roots.splice(0)) act(() => root.unmount());
   laid?.remove();
   laid = undefined;
   document.body.innerHTML = "";
@@ -97,4 +109,40 @@ test("the desktop's tabs at that width fold to their glyphs as before", () => {
   const desktop = phoneRowAt("wide");
   assert.equal(desktop.named, false);
   assert.equal(desktop.glyph, true);
+}, 30_000);
+
+/**
+ * The tabs as the tab draws them, a fill bar folding together in the
+ * PaneBar's middle. Note that the bar is a size container, which counts
+ * none of its options toward its own width, so a bar that only hugs them
+ * stands 0px wide and shows none of them: it must grow into the middle.
+ */
+test("the tabs take the bar's middle rather than hugging options their container does not count", () => {
+  laid = layContainersAt({ "pull-request-tab": 700 });
+  const tab = document.body.appendChild(document.createElement("div"));
+  tab.className = "file-view pull-request-tab";
+  const root = createRoot(tab);
+  roots.push(root);
+  act(() =>
+    root.render(
+      createElement(PaneBar, {
+        middle: createElement(ChoiceBar<"conversation" | "files">, {
+          label: "Pull request",
+          items: [
+            { value: "conversation", label: "Conversation" },
+            { value: "files", label: "Files changed" },
+          ],
+          value: "conversation",
+          onChange: () => {},
+          look: CHOICE_BAR_LOOK.FILL,
+          fold: CHOICE_BAR_FOLD.TOGETHER,
+        }),
+      }),
+    ),
+  );
+  const bar = tab.querySelector(".luke-choice-bar") ?? assert.fail("the tabs stand");
+  assert.equal(bar.parentElement?.className, "luke-pane-bar-middle");
+  const drawn = getComputedStyle(bar);
+  assert.equal(drawn.containerType, "inline-size");
+  assert.equal(drawn.flexGrow, "1");
 }, 30_000);
