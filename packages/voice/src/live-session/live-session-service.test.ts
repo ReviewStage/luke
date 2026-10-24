@@ -645,7 +645,7 @@ it.effect(
       yield* settle();
       assert.deepEqual(
         sideband.sent.map((event) => ("content" in event ? event.content : event.type)),
-        ["First.", "Luke is reading the repository; this takes a moment.", "Second."],
+        ["First.", "Your backend is reading the repository; this takes a moment.", "Second."],
       );
     }),
 );
@@ -781,7 +781,7 @@ it.effect(
       const sideband = yield* f.open();
       yield* settle();
       assert.deepEqual(said(sideband), [
-        "While the developer was away, Luke kept working. Catch them up in a sentence or two, in your own words rather than reading this out: Invites expire after seven days. He is still working, and will say more when he has it.",
+        "While the developer was away, your backend kept working. Catch them up in a sentence or two, in your own words rather than reading this out: Invites expire after seven days. It is still working, and will say more when it has it.",
         "The resend button is wired too.",
       ]);
       assert.equal(f.endings.count, 0);
@@ -805,7 +805,7 @@ it.effect(
       yield* settle();
       assert.deepEqual(said(sideband), []);
       assert.deepEqual(thought(sideband), [
-        "Luke is still working on what the developer asked on an earlier call; his findings will follow when he has them.",
+        "Your backend is still working on what the developer asked on an earlier call; its findings will follow when it has them.",
       ]);
       sideband.input("How's it going?", 0, 800);
       sideband.delegation("item_1", 900);
@@ -855,7 +855,7 @@ it.effect(
       const sideband = yield* f.open();
       yield* settle();
       assert.deepEqual(said(sideband), [
-        "While the developer was away, Luke kept working. Catch them up in a sentence or two, in your own words rather than reading this out: Invites expire after seven days.",
+        "While the developer was away, your backend kept working. Catch them up in a sentence or two, in your own words rather than reading this out: Invites expire after seven days.",
         "Ask the developer this next, once they have answered anything you have already asked: Which email provider? Recommended answer: Postmark.",
       ]);
       assert.equal(brain.followed, 1);
