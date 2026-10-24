@@ -9,6 +9,7 @@ import {
   PULL_REQUEST_STATE,
   type PullRequestState,
 } from "@luke/features/coding-agent-wire";
+import { saidWords } from "@luke/features/integration-health";
 import {
   PULL_REQUEST_ACTION,
   PULL_REQUEST_WRITE_BOUNDS,
@@ -31,6 +32,7 @@ import {
   ConfirmDialog,
   type DialogQuestion,
   ErrorState,
+  FailureNote,
   IconButton,
   INLINE_EDIT_LOOK,
   InlineEdit,
@@ -71,9 +73,11 @@ import { pullRequestAsked, usePullRequestNumber } from "./pull-request-number.js
  * asked again (`onWritten`), so the header and the page say where the pull
  * request stands now rather than what the press assumed. A refusal stands
  * on its own line over the header until it is dismissed or the next change
- * is sent: GitHub's own words where GitHub refused the change, an offer to
- * sign in with GitHub again where it would not take the member's sign-in,
- * and Luke's own words where the change never reached GitHub.
+ * is sent: our sentence where GitHub refused the change, with GitHub's own
+ * words quoted on a line of their own under it, naming GitHub, never inside
+ * our sentence; an offer to sign in with GitHub again where it would not
+ * take the member's sign-in; and Luke's own words where the change never
+ * reached GitHub.
  *
  * The pill is `@luke/ui`'s pill chip in the tone of where the pull request
  * stands, as stage-cli's status pill is, and opens a menu offering what may
@@ -126,8 +130,11 @@ const ACTION_WORDS = {
 const WRITE_WORDS = {
   SIGN_IN: "Sign in with GitHub to make this change as you.",
   SIGN_IN_PRESS: "Sign in with GitHub",
-  /** GitHub's own words on a change it refused. */
-  refused: (words: string) => `GitHub said: ${words}`,
+  DISMISS: "Dismiss",
+  /** Our sentence on a change GitHub refused, which GitHub's own words follow on a line of their own. */
+  REFUSED: "GitHub refused this change.",
+  /** Who said the words quoted under a refusal. */
+  SOURCE: "GitHub",
 } as const;
 
 /** Luke's own words where a change never reached GitHub, by why. */
@@ -153,6 +160,8 @@ export type WriteNote =
   | {
       readonly kind: typeof WRITE_NOTE.WORDS;
       readonly words: string;
+      /** GitHub's own words on a change it refused, quoted and naming GitHub, for a line under `words`; none where it said none. */
+      readonly said?: string | undefined;
       /** Why the service refused it, where the control that sent it does more than say its words. */
       readonly reason?: PullRequestRefusal | undefined;
     };
@@ -170,14 +179,16 @@ const NOT_SENT: WriteOutcome = {
   note: { kind: WRITE_NOTE.WORDS, words: NOT_SENT_WORDS },
 };
 
+/** What a note says, our sentence first and any words GitHub said on the line under it. */
+function noteWords(note: WriteNote): string {
+  if (note.kind === WRITE_NOTE.SIGN_IN) return WRITE_WORDS.SIGN_IN;
+  return note.said === undefined ? note.words : `${note.words}\n${note.said}`;
+}
+
 /** How an answer went, in the words its line says where GitHub did not make the change. */
 function outcomeOf(note: WriteNote | undefined): WriteOutcome {
   if (note === undefined) return { done: true };
-  return {
-    done: false,
-    words: note.kind === WRITE_NOTE.SIGN_IN ? WRITE_WORDS.SIGN_IN : note.words,
-    note,
-  };
+  return { done: false, words: noteWords(note), note };
 }
 
 /** The tab's changes: the one out, if any, what the last one left to say, and the presses. */
@@ -207,7 +218,8 @@ export function noteOf(
     case PULL_REQUEST_WRITE_OUTCOME.REFUSED:
       return {
         kind: WRITE_NOTE.WORDS,
-        words: WRITE_WORDS.refused(answer.words),
+        words: WRITE_WORDS.REFUSED,
+        said: saidWords(WRITE_WORDS.SOURCE, answer.words),
         // Note that only a change's answer names why; a viewed mark's never does.
         reason: "reason" in answer ? answer.reason : undefined,
       };
@@ -456,7 +468,10 @@ export function PullRequestStateMenu({
  * The line where GitHub did not take the last change: why, the sign-in
  * that mends it where that is why, and its dismissal. It stands over the
  * header unless the control that sent the change draws it in its own place
- * (`className`), as the review panel does.
+ * (`className`), as the review panel does. Note that a change that went
+ * wrong is a failure note, whose words keep their line breaks, so GitHub's
+ * own words stand on a line of their own under ours; only the sign-in,
+ * which needs a remedy beyond Dismiss, is an error state.
  */
 export function PullRequestWriteNote({
   writes,
@@ -471,16 +486,20 @@ export function PullRequestWriteNote({
   if (note === undefined) return null;
   return (
     <div className={className}>
-      <ErrorState
-        remedy={
-          note.kind === WRITE_NOTE.SIGN_IN
-            ? { label: WRITE_WORDS.SIGN_IN_PRESS, onClick: () => void connect() }
-            : undefined
-        }
-        onDismiss={dismiss}
-      >
-        {note.kind === WRITE_NOTE.SIGN_IN ? WRITE_WORDS.SIGN_IN : note.words}
-      </ErrorState>
+      {note.kind === WRITE_NOTE.SIGN_IN ? (
+        <ErrorState
+          remedy={{ label: WRITE_WORDS.SIGN_IN_PRESS, onClick: () => void connect() }}
+          onDismiss={dismiss}
+        >
+          {WRITE_WORDS.SIGN_IN}
+        </ErrorState>
+      ) : (
+        <FailureNote
+          also={<IconButton icon={<GLYPH.CLOSE />} label={WRITE_WORDS.DISMISS} onClick={dismiss} />}
+        >
+          {noteWords(note)}
+        </FailureNote>
+      )}
     </div>
   );
 }

@@ -2498,7 +2498,7 @@ test("a change GitHub refused says so in GitHub's own words until dismissed, and
     assert.fail("the tab says GitHub refused");
   assert.equal(
     note.querySelector("[role='alert']")?.textContent,
-    "GitHub said: Pull request is in the merge queue.",
+    "GitHub refused this change.\nGitHub said: “Pull request is in the merge queue.”",
   );
   assert.ok(reads > 1, "the pull request is read again after GitHub answered");
   const dismiss =
@@ -2908,7 +2908,7 @@ test("while a merge's change is out its press stands busy, and where GitHub refu
   await settle();
   assert.equal(
     tab.querySelector(".pull-request-write-note [role='alert']")?.textContent,
-    "GitHub said: Pull request is not mergeable.",
+    "GitHub refused this change.\nGitHub said: “Pull request is not mergeable.”",
   );
 });
 
@@ -3063,7 +3063,7 @@ test("a review GitHub refuses says so in GitHub's own words inside the panel, ne
 
   assert.equal(
     panel.querySelector(".pull-request-review-note [role='alert']")?.textContent,
-    "GitHub said: Review Can not approve your own pull request",
+    "GitHub refused this change.\nGitHub said: “Review Can not approve your own pull request”",
   );
   assert.equal(tab.querySelector(".pull-request-write-note"), null);
   assert.equal(boxWords(panel), "LGTM");
@@ -3750,6 +3750,123 @@ test("the label picker lists the repository's labels, those on the pull request 
   ]);
 });
 
+test("a reviewer chosen stands in the header before GitHub answers, and goes back where GitHub refused, our sentence first and GitHub's words quoted on the line under it", async () => {
+  const answer = Promise.withResolvers<void>();
+  changeHeld = answer.promise;
+  changeAnswer = {
+    outcome: PULL_REQUEST_WRITE_OUTCOME.REFUSED,
+    words: "Reviews may only be requested from collaborators.",
+  };
+  const tab = await draw(
+    controlAnswering({
+      reviewOptions: () =>
+        Promise.resolve({ labels: [], users: [{ login: "priyan", bot: false }], teams: [] }),
+    }),
+  );
+  const faces = () =>
+    [...tab.querySelectorAll('.pull-request-header [aria-label="Reviewers"] > li')].map((face) =>
+      face.getAttribute("aria-label"),
+    );
+  const before = faces();
+  assert.ok(!before.includes("priyan · Review requested"));
+
+  act(() =>
+    (
+      tab.querySelector<HTMLButtonElement>('.pull-request-reviewers [aria-label="Reviewer"]') ??
+      assert.fail("the reviewer picker stands beside the reviewers")
+    ).click(),
+  );
+  await settle();
+  await pressItem("priyan");
+  assert.deepEqual(
+    faces(),
+    [...before, "priyan · Review requested"],
+    "the choice is drawn before GitHub answers",
+  );
+
+  answer.resolve();
+  await settle();
+  assert.deepEqual(faces(), before, "a choice GitHub refused goes back");
+  assert.equal(
+    tab.querySelector(".pull-request-write-note [role='alert']")?.textContent,
+    "GitHub refused this change.\nGitHub said: “Reviews may only be requested from collaborators.”",
+  );
+});
+
+test("a label chosen stands under the title before GitHub answers, in the colour the repository gives it, and stays once the pull request's read carries it", async () => {
+  const answer = Promise.withResolvers<void>();
+  changeHeld = answer.promise;
+  let labelled = false;
+  const tab = await draw(
+    controlAnswering({
+      pullRequest: () =>
+        Promise.resolve({
+          pullRequest: {
+            ...PULL_REQUEST,
+            labels: labelled ? [{ name: "docs", color: "0075ca" }] : [],
+          },
+        }),
+      reviewOptions: () =>
+        Promise.resolve({ labels: [{ name: "docs", color: "0075ca" }], users: [], teams: [] }),
+    }),
+  );
+  const labels = () =>
+    [
+      ...tab.querySelectorAll<HTMLElement>(
+        ".pull-request-header .pull-request-label > .luke-badge",
+      ),
+    ].map((label) => [label.textContent, label.style.getPropertyValue("--luke-badge-fill-light")]);
+
+  act(() =>
+    (
+      tab.querySelector<HTMLButtonElement>('.pull-request-reviewers [aria-label="Label"]') ??
+      assert.fail("the label picker stands beside the reviewers")
+    ).click(),
+  );
+  await settle();
+  await pressItem("docs");
+  assert.deepEqual(labels(), [["docs", "#0075ca"]], "the label is drawn before GitHub answers");
+
+  labelled = true;
+  answer.resolve();
+  await settle();
+  assert.deepEqual(labels(), [["docs", "#0075ca"]]);
+  assert.equal(tab.querySelector(".pull-request-write-note"), null);
+});
+
+test("a picker whose repository could not be read offers Retry in its menu, which reads it again and lists what it finds", async () => {
+  let reads = 0;
+  const tab = await draw(
+    controlAnswering({
+      reviewOptions: () => {
+        reads += 1;
+        return Promise.resolve(
+          reads === 1
+            ? { failure: CODING_AGENT_CALL_FAILURE.GITHUB_UNANSWERED }
+            : { labels: [], users: [{ login: "priyan", bot: false }], teams: [] },
+        );
+      },
+    }),
+  );
+
+  act(() =>
+    (
+      tab.querySelector<HTMLButtonElement>('.pull-request-reviewers [aria-label="Reviewer"]') ??
+      assert.fail("the reviewer picker stands beside the reviewers")
+    ).click(),
+  );
+  await settle();
+  assert.deepEqual(menuItems(), [{ label: "Retry", checked: null }]);
+  assert.match(
+    document.querySelector('[role="menuitem"]')?.textContent ?? "",
+    /The repository could not be read\./u,
+  );
+
+  await pressItem("Retry");
+  assert.equal(reads, 2);
+  assert.deepEqual(menuItems(), [{ label: "priyan", checked: "false" }]);
+});
+
 /** A review carrying the threads given, as the conversation's read answers one. */
 function reviewWith(threads: readonly ReviewThread[]): CodingAgentOverviewConversation {
   return {
@@ -3899,7 +4016,7 @@ test("a reply GitHub refuses says so under its thread in GitHub's own words, its
 
   assert.equal(
     withId.querySelector(".pull-request-thread-note [role='alert']")?.textContent,
-    "GitHub said: Pull request review thread is locked",
+    "GitHub refused this change.\nGitHub said: “Pull request review thread is locked”",
   );
   assert.equal(boxWords(withId), "Done.");
   assert.equal(withoutId.querySelector(".pull-request-thread-actions"), null);
@@ -4586,7 +4703,7 @@ test("a comment GitHub refuses says so under the box in GitHub's own words, its 
 
   assert.equal(
     tab.querySelector(".pull-request-comment-note [role='alert']")?.textContent,
-    "GitHub said: Conversation is locked to collaborators",
+    "GitHub refused this change.\nGitHub said: “Conversation is locked to collaborators”",
   );
   assert.equal(boxWords(tab.querySelector(".pull-request-comment-box") ?? tab), "Ping?");
 });
@@ -5120,7 +5237,7 @@ test("a comment GitHub refuses says so under it in GitHub's own words, its words
 
   assert.equal(
     comment.querySelector(".line-comment-note [role='alert']")?.textContent,
-    "GitHub said: Pull request review thread line must be part of the diff",
+    "GitHub refused this change.\nGitHub said: “Pull request review thread line must be part of the diff”",
   );
   assert.equal(boxWords(comment), "Here.");
   assert.match(lines() ?? "", /\+2/u);
@@ -5152,7 +5269,7 @@ test("Discard's question stands busy until GitHub answers, and says GitHub's ref
   assert.equal(question().getAttribute("aria-busy"), "true", "the question waits on GitHub");
   held.resolve();
   await settle();
-  assert.match(question().textContent ?? "", /GitHub said: Review is not pending/u);
+  assert.match(question().textContent ?? "", /GitHub said: “Review is not pending”/u);
 });
 
 test("Remove from queue's question goes once a read finds the pull request out of the queue, and a refusal stands in the question for another try", async () => {
