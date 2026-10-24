@@ -35,7 +35,6 @@ import {
   Text,
   TextButton,
   Time,
-  TOOLBAR_INSET,
   Toolbar,
   Tooltip,
   useMinute,
@@ -85,6 +84,7 @@ import { type MenuAction, rowMenu } from "./action-menu.js";
 import { backPlaceOf } from "./back-place.js";
 import { HistoryButtons, useSidebarEdge } from "./desktop-sidebar.js";
 import { useNarrowFocus } from "./narrow-focus.js";
+import { PhoneHead } from "./phone-head.js";
 import type { SidebarCollapse } from "./sidebar-collapse.js";
 
 /**
@@ -289,6 +289,9 @@ function RevisionRow({
 const ALL_VERSIONS = "All versions";
 const ALL_VERSIONS_PLACE = "all versions";
 
+/** The list's title. */
+const VERSION_HISTORY = "Version history";
+
 /**
  * The head of a revision's sections: the way back to every version, and who
  * wrote it, which goes where it was written where anywhere in the window
@@ -301,7 +304,8 @@ function SectionsHead({
 }: {
   author: Actor;
   source: SourceDoor | undefined;
-  onBack: () => void;
+  /** The way back to every version, a row of its own; none on a phone, whose header leads with it. */
+  onBack: (() => void) | undefined;
 }): React.JSX.Element {
   const name = (
     <OneLine className="version-row-author">
@@ -311,12 +315,14 @@ function SectionsHead({
   );
   return (
     <>
-      <BackButton
-        look={BACK_BUTTON_LOOK.COLUMN}
-        label={ALL_VERSIONS}
-        place={ALL_VERSIONS_PLACE}
-        onBack={onBack}
-      />
+      {onBack === undefined ? null : (
+        <BackButton
+          look={BACK_BUTTON_LOOK.COLUMN}
+          label={ALL_VERSIONS}
+          place={ALL_VERSIONS_PLACE}
+          onBack={onBack}
+        />
+      )}
       <p className="version-sections-head">
         <ActorMark actor={author} size={ACTOR_SIZE.ROW} />
         {source === undefined ? (
@@ -608,7 +614,11 @@ function VersionPage({
   }
   return (
     <>
-      <Toolbar lead={lead} start={lead === undefined ? undefined : TOOLBAR_INSET.COLUMN} />
+      {lead === undefined ? (
+        <Toolbar />
+      ) : (
+        <PhoneHead place="version" start={lead} title={null} end={null} />
+      )}
       <Fill className="desktop-empty-region">
         {list.kind === HISTORY_READ.FAILED ? (
           <ErrorState onRetry={versions.onRetry} placement={ERROR_STATE_PLACEMENT.CENTRED}>
@@ -664,7 +674,11 @@ export function taskVersionSubject(tasks: TasksControl): VersionSubject {
  * leaves for wherever it was opened from, and `onRestored` for what a
  * restore landed on. A narrow room shows the list or the version, one at a
  * time (`hiddenColumns`): a version or a section chosen stands alone the
- * whole width, under a way back to the list.
+ * whole width, under a way back to the list. Each is headed as a phone heads
+ * every page (`phone-head.tsx`): the list by its way out, or from a
+ * revision's sections the way back to every version, and its title, with no
+ * Back and Forward; a version by the way back, when it was saved, and its
+ * restore in a ⋯.
  */
 export function DesktopVersionHistory({
   sidebar,
@@ -752,24 +766,56 @@ export function DesktopVersionHistory({
   useOpenedRowShown(versions.selected, rows, log);
   const hidden = hiddenColumns(room, versions.listed);
   const screen = useNarrowFocus(room, versions.listed);
+  const narrow = room === SHELL_ROOM.NARROW;
+  const exitPlaceName = exitPlace ?? backPlaceOf(history, subject.title ?? subject.noun);
 
   return (
     <div ref={screen} className="desktop-version-history">
       <nav className="version-log ph-no-capture" aria-label="Versions" hidden={hidden.list}>
-        <div className="desktop-drag-strip" />
-        <HistoryButtons history={history} room={room} />
-        <BackButton
-          look={BACK_BUTTON_LOOK.COLUMN}
-          label="Back"
-          place={exitPlace ?? backPlaceOf(history, subject.title ?? subject.noun)}
-          command={APP_COMMAND.EXIT_VERSION_HISTORY}
-          onBack={onExit}
-        />
+        {narrow ? (
+          // A phone's header: the way out, or from a revision's sections back to every version, and the title.
+          <PhoneHead
+            place="version-log"
+            start={
+              opened === undefined ? (
+                <BackButton
+                  label="Back"
+                  place={exitPlaceName}
+                  command={APP_COMMAND.EXIT_VERSION_HISTORY}
+                  onBack={onExit}
+                />
+              ) : (
+                <BackButton
+                  label={ALL_VERSIONS}
+                  place={ALL_VERSIONS_PLACE}
+                  command={APP_COMMAND.EXIT_VERSION_HISTORY}
+                  onBack={closeSections}
+                />
+              )
+            }
+            title={VERSION_HISTORY}
+            end={null}
+          />
+        ) : (
+          <>
+            <div className="desktop-drag-strip" />
+            <HistoryButtons history={history} room={room} />
+            <BackButton
+              look={BACK_BUTTON_LOOK.COLUMN}
+              label="Back"
+              place={exitPlaceName}
+              command={APP_COMMAND.EXIT_VERSION_HISTORY}
+              onBack={onExit}
+            />
+          </>
+        )}
         <div className="version-log-track" data-opened={String(opened !== undefined)}>
           <div className="version-log-pane" inert={opened !== undefined}>
-            <Text as={TEXT_ELEMENT.H1} variant={TEXT_VARIANT.TITLE} className="version-log-title">
-              Version history
-            </Text>
+            {narrow ? null : (
+              <Text as={TEXT_ELEMENT.H1} variant={TEXT_VARIANT.TITLE} className="version-log-title">
+                {VERSION_HISTORY}
+              </Text>
+            )}
             <Fill className="sidebar-section">
               <ScrollArea ref={log} fade={SCROLL_FADE.BOTH}>
                 {/* biome-ignore lint/a11y/noStaticElementInteractions: the keys and the focus are the rows' own, which the box only hears bubble. */}
@@ -847,7 +893,7 @@ export function DesktopVersionHistory({
                         openedAuthor ?? revisionAuthorOf(openedLine, reader, agents, subject.own)
                       }
                       source={openedSource}
-                      onBack={closeSections}
+                      onBack={narrow ? undefined : closeSections}
                     />
                     {failed ? (
                       <ErrorState

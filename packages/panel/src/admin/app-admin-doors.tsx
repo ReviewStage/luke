@@ -17,8 +17,9 @@
 import type { AdminReadParams, AdminRefused } from "@luke/features/admin-wire";
 import { ADMIN_UNANSWERED } from "@luke/features/admin-wire";
 import { ACT_KIND } from "@luke/host/acts";
-import { ERROR_STATE_PLACEMENT, ErrorState, TOOLBAR_INSET, Toolbar } from "@luke/ui";
+import { ERROR_STATE_PLACEMENT, ErrorState } from "@luke/ui";
 import { askAct } from "../act.js";
+import { PhoneHead } from "../desktop/phone-head.js";
 import {
   type AdminDoors,
   AdminDoorsProvider,
@@ -64,12 +65,12 @@ const APP_ADMIN_READS: AdminReads = {
   favorite: (id, favorite) => askAct(ACT_KIND.ADMIN_FAVORITE, { id, favorite }).catch(() => false),
 };
 
-/** A refusal standing in the view's place, as the app's centred failure, under the toolbar's lead where one stands. */
+/** A refusal standing in the view's place, as the app's centred failure, under a phone's header led by the way back to the list where one stands. */
 function GateRefusal({ words }: { words: string }): React.JSX.Element {
   const lead = useAdminToolbarLead();
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      {lead === undefined ? null : <Toolbar lead={lead} start={TOOLBAR_INSET.COLUMN} />}
+      {lead === undefined ? null : <PhoneHead place="admin" start={lead} title={null} end={null} />}
       <ErrorState placement={ERROR_STATE_PLACEMENT.CENTRED}>{words}</ErrorState>
     </div>
   );

@@ -10,6 +10,7 @@ import {
   GroupHeader,
   IconButton,
   LAYOUT_ELEMENT,
+  nextRowOrHead,
   OneLine,
   STATUS_TONE,
   Stack,
@@ -156,6 +157,7 @@ export function useAgentArchive(
         open
         confirm={confirm}
         question={archiveQuestion(agentName(agent, agents.models))}
+        restoreTo={nextRowOrHead}
       />
     ),
   };

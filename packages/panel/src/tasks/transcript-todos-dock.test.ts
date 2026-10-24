@@ -12,8 +12,9 @@ import { TranscriptTodosDock } from "./transcript-blocks.js";
  * transcript-todos-dock.test.ts -- the docked to-do list says how far it
  * has got with counts that roll as they change; an item that changes where
  * it stands while drawn has its glyph arrive, and a list drawn as it stands
- * is still; and in a short window an open list stops growing at under a
- * third of what is seen and scrolls past it. Synthetic list.
+ * is still; its line leads with its chevron; and in a short window an open
+ * list stops growing at under a third of what is seen and scrolls past it.
+ * Synthetic list.
  */
 
 declare global {
@@ -88,6 +89,16 @@ test("a step done springs its check in, the next taken up arrives, and the count
     '.todo-item[data-todo-status="done"] > .luke-glyph-slot[data-arrival="check"]',
   );
   assert.equal(mark?.getAttribute("aria-label"), "Done");
+});
+
+test("the dock's line leads with its fold's chevron, as every fold's line does, turned down once it stands open", () => {
+  const { view } = docked(steps(1));
+  const head = view.querySelector("summary") ?? assert.fail("the dock's line");
+  const lead = () => head.firstElementChild ?? assert.fail("the line's first mark");
+  assert.ok(lead().classList.contains("luke-disclosure-turn"), head.innerHTML);
+  assert.equal(lead().getAttribute("data-open"), "false");
+  act(() => head.click());
+  assert.equal(lead().getAttribute("data-open"), "true");
 });
 
 test("in a short window, an open list stops growing at under a third of what is seen and scrolls past it", () => {

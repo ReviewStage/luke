@@ -39,6 +39,7 @@ import {
   Stack,
   Switch,
   TEXT_ELEMENT,
+  TEXT_FONT,
   TEXT_VARIANT,
   Text,
   Tooltip,
@@ -224,12 +225,23 @@ function SkillFileDialog({
         <Stack gap={GAP.FIELD}>
           <MarkdownMessage words={fencedSkillFile(read.content.skillFile)} />
           <Stack gap={GAP.ITEM}>
-            <Text variant={TEXT_VARIANT.LABEL} as={TEXT_ELEMENT.H3}>
+            <Text variant={TEXT_VARIANT.SECTION} as={TEXT_ELEMENT.H3}>
               {SKILLS_LINE.FILES}
             </Text>
             <Facts>
               {read.content.files.map((file) => (
-                <Fact key={file.path} label={file.path}>
+                <Fact
+                  key={file.path}
+                  label={
+                    <Text
+                      as={TEXT_ELEMENT.SPAN}
+                      variant={TEXT_VARIANT.INHERIT}
+                      font={TEXT_FONT.MONO}
+                    >
+                      {file.path}
+                    </Text>
+                  }
+                >
                   {formatBytes(file.bytes)}
                 </Fact>
               ))}

@@ -20,7 +20,6 @@ import {
   LAYOUT_ELEMENT,
   NAV_CURRENT,
   NavItem,
-  PageToolbar,
   ResizeEdge,
   SCROLL_FADE,
   ScrollArea,
@@ -29,6 +28,7 @@ import {
   TEXT_ELEMENT,
   TEXT_VARIANT,
   Text,
+  TOOLBAR_LOOK,
   useMenu,
   useRovingKeys,
 } from "@luke/ui";
@@ -70,6 +70,7 @@ import { ActionMenu } from "./action-menu.js";
 import { backPlaceOf } from "./back-place.js";
 import { HistoryButtons, useSidebarEdge } from "./desktop-sidebar.js";
 import { useNarrowFocus } from "./narrow-focus.js";
+import { PhoneHead } from "./phone-head.js";
 import type { SidebarCollapse } from "./sidebar-collapse.js";
 import { WorkspaceTile } from "./workspace-tile.js";
 
@@ -136,10 +137,44 @@ function ListBack({ onList }: { onList: () => void }): React.JSX.Element {
   return <BackButton label={SETTINGS_LIST} place={SETTINGS_PLACE} onBack={onList} />;
 }
 
-/** The head of the plan template's column: the window's drag strip, or under it in a narrow room the way back to the page list. */
-function PageBar({ onList }: { onList: (() => void) | undefined }): React.JSX.Element {
-  if (onList === undefined) return <div className="desktop-drag-strip" />;
-  return <PageToolbar lead={<ListBack onList={onList} />} />;
+/**
+ * The head of the page list: the window's drag strip, the history's Back and
+ * Forward, the way out, and the list's label; or on a phone its header, the
+ * way out alone and Settings centred, the history's buttons left out since
+ * the way out is the one.
+ */
+function ListHead({
+  room,
+  history,
+  onExit,
+}: {
+  room: ShellRoom;
+  history: NavigationHistory;
+  onExit: () => void;
+}): React.JSX.Element {
+  const exit = (
+    <BackButton
+      look={room === SHELL_ROOM.NARROW ? BACK_BUTTON_LOOK.HEADER : BACK_BUTTON_LOOK.COLUMN}
+      label="Back"
+      place={backPlaceOf(history, SETTINGS_EXIT_PLACE)}
+      command={APP_COMMAND.EXIT_SETTINGS}
+      onBack={onExit}
+    />
+  );
+  if (room === SHELL_ROOM.NARROW) {
+    return <PhoneHead place="settings-pages" start={exit} title={SETTINGS_LIST} end={null} />;
+  }
+  return (
+    <>
+      <div className="desktop-drag-strip" />
+      <HistoryButtons history={history} room={room} />
+      {exit}
+      {/* A label for the list, no heading: the page beside it is named once, by its own header's `h1`. */}
+      <Text as={TEXT_ELEMENT.DIV} variant={TEXT_VARIANT.TITLE} className="settings-pages-title">
+        {SETTINGS_LIST}
+      </Text>
+    </>
+  );
 }
 
 /** A group of pages under its head, which folds them: the listed workspace's tile and name over its own group, the group's words otherwise. */
@@ -208,7 +243,10 @@ function PageGroup({
  * A narrow room shows the list or the page, one at a time, the other column
  * hidden (`hiddenColumns`): Settings opens on its list, a page chosen there,
  * by a search, or by a link stands alone the whole width, and a way back at
- * its head returns to the list. The list's edge resizes nothing then.
+ * its head returns to the list. The list's edge resizes nothing then. Each
+ * is headed as a phone heads every page (`phone-head.tsx`): the list by its
+ * way out and Settings centred, with no Back and Forward; a page by the way
+ * back to the list, the name its bar picks up centred, and its reset in a ⋯.
  */
 export function DesktopSettings({
   sidebar,
@@ -251,7 +289,13 @@ export function DesktopSettings({
   const voiceNote = voicePageAttention(settings.microphone);
   const writes = useSettingsWrites();
   const rows = settingsRowsInput(settings);
-  const reset = pageResetControl(settings.view, settings.settings, writes, rows);
+  const reset = pageResetControl(
+    settings.view,
+    settings.settings,
+    writes,
+    rows,
+    room === SHELL_ROOM.NARROW ? title : undefined,
+  );
   // Built only while a query stands: an empty field searches nothing.
   const search =
     rows && query !== "" ? searchSettings(settingsSearchEntries(rows), query) : undefined;
@@ -292,7 +336,6 @@ export function DesktopSettings({
   const hidden = hiddenColumns(room, step.listed);
   const screen = useNarrowFocus(room, step.listed);
   const onList = room === SHELL_ROOM.NARROW ? step.onList : undefined;
-  const bar = <PageBar onList={onList} />;
   // The page with a search of its own takes Command-F while it shows; a page hidden behind the list does not.
   const pageSearched =
     settings.view === SETTINGS_VIEW.INTEGRATIONS &&
@@ -315,19 +358,7 @@ export function DesktopSettings({
   return (
     <div ref={screen} className="desktop-settings">
       <nav className="settings-pages" aria-label="Settings pages" hidden={hidden.list}>
-        <div className="desktop-drag-strip" />
-        <HistoryButtons history={history} room={room} />
-        <BackButton
-          look={BACK_BUTTON_LOOK.COLUMN}
-          label="Back"
-          place={backPlaceOf(history, SETTINGS_EXIT_PLACE)}
-          command={APP_COMMAND.EXIT_SETTINGS}
-          onBack={onExit}
-        />
-        {/* A label for the list, no heading: the page beside it is named once, by its own header's `h1`. */}
-        <Text as={TEXT_ELEMENT.DIV} variant={TEXT_VARIANT.INHERIT} className="settings-pages-title">
-          Settings
-        </Text>
+        <ListHead room={room} history={history} onExit={onExit} />
         <SettingsSearchField
           find={!pageSearched}
           onFind={hidden.list ? step.onList : undefined}
@@ -382,7 +413,7 @@ export function DesktopSettings({
               ? accountActor(settings.account)
               : undefined
           }
-          bar={bar}
+          lead={onList === undefined ? undefined : <ListBack onList={onList} />}
           hidden={hidden.item}
           onShowHistory={() => setTemplateHistory(true)}
         />
@@ -394,6 +425,7 @@ export function DesktopSettings({
             title={title}
             actions={reset}
             lead={onList === undefined ? undefined : <ListBack onList={onList} />}
+            look={onList === undefined ? TOOLBAR_LOOK.WINDOW : TOOLBAR_LOOK.PHONE}
           >
             <SettingsPanel
               {...settings}

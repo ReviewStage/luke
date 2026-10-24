@@ -15,7 +15,7 @@ import {
 import { EXPERIMENT, HOST_CAPABILITY, type HostCapability } from "@luke/settings";
 import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsView } from "@luke/settings/settings-views";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
-import { experimentsOn, settingsView } from "@luke/settings/testing";
+import { appSettingsWire, experimentsOn, settingsView } from "@luke/settings/testing";
 import { UPDATE_STATUS } from "@luke/settings/update";
 import { MICROPHONE_STATUS } from "@luke/voice/audio";
 import { NOTIFICATIONS_GRANTOR, NOTIFICATIONS_STATUS } from "@luke/voice/settings-controls";
@@ -27,10 +27,10 @@ import { afterEach, beforeEach, test } from "vitest";
 import { useAct } from "../act.js";
 import { runAppCommand } from "../app-commands.js";
 import { CallCardContext, type CallCardInput, callControls } from "../call/call-card.js";
-import { MOUSE_BUTTON } from "../navigation-history.js";
+import { MOUSE_BUTTON, type NavigationHistory } from "../navigation-history.js";
 import type { SettingsPanelProps } from "../settings/settings-panel.js";
 import type { WorkspaceSettingsControl } from "../settings/workspace-page.js";
-import { SHELL_ROOM } from "../shell-room.js";
+import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import {
   fakeActPort,
   fakeActPortAnswering,
@@ -41,7 +41,13 @@ import {
 import { copyingInto, fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import { DESKTOP_CAPABILITIES, handState } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
-import { DesktopSettings } from "./desktop-settings.js";
+import {
+  chooseMenuItem,
+  menuItems,
+  pressInPhoneHead,
+  readPhoneHead,
+} from "../testing/phone-head.js";
+import { DesktopSettings, type SettingsStep } from "./desktop-settings.js";
 import { SIDEBAR_OVERLAY } from "./sidebar-collapse.js";
 
 /** The task kinds on the act port, which the call-card test's fake refuses. */
@@ -178,7 +184,22 @@ function settingsProps(
   } satisfies SettingsPanelProps;
 }
 
-/** Settings holding its own page, as the app holds it, opened on Profile, over the workspaces the tasks' sidebar lists where it is handed them. */
+/** A history with nothing to go back or forward to. */
+const NO_HISTORY: NavigationHistory = {
+  canGoBack: false,
+  canGoForward: false,
+  onBack: ignore,
+  onForward: ignore,
+  steps: { back: [], forward: [] },
+  onGoTo: ignore,
+};
+
+/**
+ * Settings holding its own page, as the app holds it, opened on Profile,
+ * over the workspaces the tasks' sidebar lists where it is handed them; in
+ * `room`, standing on its list or its page as `step` says, over `history`
+ * where it is named.
+ */
 function SettingsHarness({
   workspace,
   opensOn = SETTINGS_VIEW.ACCOUNT,
@@ -186,6 +207,9 @@ function SettingsHarness({
   onExit = ignore,
   capabilities,
   stored,
+  room = SHELL_ROOM.WIDE,
+  step = { listed: true, onList: ignore },
+  history = NO_HISTORY,
 }: {
   workspace?: WorkspaceSettingsControl;
   opensOn?: SettingsView;
@@ -194,6 +218,9 @@ function SettingsHarness({
   capabilities?: readonly HostCapability[];
   /** The stored settings the pages read, the defaults where left out. */
   stored?: SettingsPanelProps["settings"];
+  room?: ShellRoom;
+  step?: SettingsStep;
+  history?: NavigationHistory;
 }): React.JSX.Element {
   const [view, setView] = useState<SettingsView>(opensOn);
   // The card is handed down as the window's root hands it, past every page between.
@@ -208,16 +235,9 @@ function SettingsHarness({
       onResize: ignore,
       staged: false,
     },
-    history: {
-      canGoBack: false,
-      canGoForward: false,
-      onBack: ignore,
-      onForward: ignore,
-      steps: { back: [], forward: [] },
-      onGoTo: ignore,
-    },
-    room: SHELL_ROOM.WIDE,
-    step: { listed: true, onList: ignore },
+    history,
+    room,
+    step,
     settings: {
       ...settingsProps(view, setView, capabilities, stored),
       ...(workspace ? { workspace } : undefined),
@@ -933,6 +953,160 @@ test("a plan template that could not be read keeps its heading, over the failure
     ["Plan template"],
   );
   assert.equal(page.textContent?.includes("The template could not be read."), true);
+});
+
+test("on a phone the page list is headed by its way out alone, named for the step Back goes to, and Settings centred, with no Back and Forward, and the way out leaves as Back did", () => {
+  let exits = 0;
+  const page = mount(
+    createElement(SettingsHarness, {
+      room: SHELL_ROOM.NARROW,
+      onExit: () => {
+        exits += 1;
+      },
+      history: {
+        ...NO_HISTORY,
+        canGoBack: true,
+        steps: {
+          back: [{ at: 0, title: { label: "Inbox" }, page: { kind: "inbox", of: undefined } }],
+          forward: [],
+        },
+      },
+    }),
+  );
+
+  assert.deepEqual(readPhoneHead(page, "settings-pages"), {
+    start: ["Back"],
+    title: "Settings",
+    end: [],
+  });
+  const names = [...page.querySelectorAll("button")].map((each) => each.getAttribute("aria-label"));
+  assert.ok(!names.includes("Back") && !names.includes("Forward"), "no Back and Forward stand");
+  assert.ok(
+    page.querySelector('nav[aria-label="Settings pages"] input'),
+    "the search stands below",
+  );
+  pressInPhoneHead(page, "settings-pages", "Back");
+  assert.equal(exits, 1);
+});
+
+test("on a phone a page is headed by the way back to the list and its reset in the ⋯, its title its own heading's, which leaves the title's line", async () => {
+  const resets: unknown[] = [];
+  fakeActPort({
+    [ACT_KIND.SETTINGS_RESET]: (payload) => {
+      resets.push(payload);
+      return Promise.resolve({
+        status: ACTION_RESULT_STATUS.ACCEPTED,
+        settings: appSettingsWire(settingsView()),
+      });
+    },
+  });
+  let listings = 0;
+  const page = mount(
+    createElement(SettingsHarness, {
+      opensOn: SETTINGS_VIEW.APPEARANCE,
+      room: SHELL_ROOM.NARROW,
+      step: {
+        listed: false,
+        onList: () => {
+          listings += 1;
+        },
+      },
+      stored: settingsView({ voiceAvailable: true, zoom: 125 }),
+    }),
+  );
+
+  assert.deepEqual(readPhoneHead(page, "settings-page"), {
+    start: ["Settings"],
+    title: undefined,
+    end: ["Appearance actions"],
+  });
+  const section = page.querySelector('section[aria-label="Appearance"]');
+  assert.deepEqual(
+    [...(section?.querySelectorAll("h1") ?? [])].map((each) => each.textContent),
+    ["Appearance"],
+    "the page names itself once",
+  );
+  assert.ok(
+    ![...(section?.querySelectorAll("button") ?? [])].some(
+      (each) => each.textContent === "Reset to defaults",
+    ),
+    "the title's line holds no reset",
+  );
+  pressInPhoneHead(page, "settings-page", "Appearance actions");
+  assert.deepEqual(menuItems(), [{ label: "Reset to defaults", disabled: false }]);
+  chooseMenuItem("Reset to defaults");
+  await act(async () => {
+    for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
+  });
+  assert.equal(resets.length, 1, "the ⋯'s reset resets the page");
+  pressInPhoneHead(page, "settings-page", "Settings");
+  assert.equal(listings, 1);
+});
+
+test("on a phone the plan template is headed by the way back and a ⋯ holding Version history and Reset to defaults, which leave its title's line", async () => {
+  fakeAppBridge({
+    ...fakeAppBridgeCalls(),
+  });
+  fakeActPort({
+    [ACT_KIND.PLAN_TEMPLATE_READ]: () => Promise.resolve({ template: "# Context\n", custom: true }),
+  });
+  const page = mount(
+    createElement(SettingsHarness, {
+      opensOn: SETTINGS_VIEW.PLAN_TEMPLATE,
+      room: SHELL_ROOM.NARROW,
+      step: { listed: false, onList: ignore },
+    }),
+  );
+  await act(async () => {
+    for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
+  });
+
+  assert.deepEqual(readPhoneHead(page, "settings-page"), {
+    start: ["Settings"],
+    title: undefined,
+    end: ["Plan template actions"],
+  });
+  assert.equal(
+    page.querySelector('.task-title-line button[aria-label="Version history"]'),
+    null,
+    "the title's line holds no actions",
+  );
+  pressInPhoneHead(page, "settings-page", "Plan template actions");
+  assert.deepEqual(
+    menuItems().map((item) => item.label),
+    ["Version history", "Reset to defaults"],
+  );
+  chooseMenuItem("Reset to defaults");
+  assert.ok(
+    document.querySelector('[role="alertdialog"], [role="dialog"]'),
+    "the reset asks first",
+  );
+  act(() => {
+    document.activeElement?.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }),
+    );
+  });
+  pressInPhoneHead(page, "settings-page", "Plan template actions");
+  chooseMenuItem("Version history");
+  assert.ok(page.querySelector('nav[aria-label="Versions"]'), "the template's versions stand");
+});
+
+test("a wide room keeps the page list's Back row and title and a page's own title and reset, with no phone's header", () => {
+  const page = mount(
+    createElement(SettingsHarness, {
+      opensOn: SETTINGS_VIEW.APPEARANCE,
+      stored: settingsView({ voiceAvailable: true, zoom: 125 }),
+    }),
+  );
+
+  assert.equal(page.querySelector('header[data-look="phone"]'), null);
+  assert.equal(page.querySelector(".settings-pages-title")?.textContent, "Settings");
+  assert.equal(page.querySelector(".settings-pages-title")?.getAttribute("data-variant"), "title");
+  assert.equal(shownTitle(page), "Appearance");
+  assert.ok(
+    [...page.querySelectorAll("button")].some((each) => each.textContent === "Reset to defaults"),
+    "the reset ends the page's title line",
+  );
 });
 
 test("a page's row in the sidebar offers Copy link on a right-click, copying the page's link under the listed workspace", async () => {

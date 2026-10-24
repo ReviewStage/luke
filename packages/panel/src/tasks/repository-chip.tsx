@@ -41,7 +41,7 @@ import { useWorkspaceMembers } from "./use-workspace-members.js";
  * Drawn along the composer card's foot for a task about to start, the way a
  * branch or model chip is: the owner's picture and `owner/name`, or the
  * GitHub mark and the pick it is waiting on. In the open task's toolbar it stands in the actions row,
- * reading `Choose repository` while the task has none; once the task names
+ * reading `Choose a repository` while the task has none; once the task names
  * one, the sidebar's row says which and the toolbar draws no chip, and the
  * menu alone is left, opened by the task menu's Change repository and
  * hung from the toolbar. Its menu is the shared searchable one: a search over every
@@ -109,7 +109,7 @@ const PLACE_LOOK = {
 } as const satisfies Record<ChipPlace, ChipLook>;
 
 /** The chip's words while it waits on a pick. */
-const CHOOSE_LABEL = "Choose repository";
+const CHOOSE_LABEL = "Choose a repository";
 
 /** The chip's words where the workspace's GitHub reaches nothing to pick. */
 const NONE_LABEL = "No repository";

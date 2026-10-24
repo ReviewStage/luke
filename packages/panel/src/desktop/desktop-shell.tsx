@@ -20,6 +20,7 @@ import {
   SettingsPageSkeleton,
   type SettingsSectionSkeletonShape,
   SidebarIcon,
+  TOOLBAR_LOOK,
   Toolbar,
   Tooltip,
   useDrawerSwipe,
@@ -76,6 +77,7 @@ import { OfflineMark, useOffline } from "./offline-mark.js";
 import { ADMIN_PLACE, PERSON_PAGE, VERSION_HISTORY } from "./pages-on-demand.js";
 import { PaneGlide } from "./pane-motion.js";
 import { PersonPageSkeleton } from "./person-frame.js";
+import { PhoneHead } from "./phone-head.js";
 import { SidePanelChord, SidePanelToggle } from "./side-panel.js";
 import { SIDEBAR_OVERLAY, type SidebarCollapse, sidebarInSight } from "./sidebar-collapse.js";
 import { homeTaskCardOf } from "./task-card.js";
@@ -125,26 +127,64 @@ function TasksLoading({ onExit }: { onExit: () => void }): React.JSX.Element {
   );
 }
 
-/** What stands while the Admin place's chunk loads (`pages-on-demand.ts`): its list's column and the view's frame over quiet blocks, and its own way out. */
+/**
+ * What stands while the Admin place's chunk loads (`pages-on-demand.ts`): its
+ * list's column and the view's frame over quiet blocks, and its own way out.
+ * A narrow room heads the column it shows as the place will, a phone's
+ * header (`phone-head.tsx`) led by the way out of the list or back to it.
+ */
 function AdminLoading({
   onExit,
+  place,
+  onList,
   hidden,
 }: {
   onExit: () => void;
+  /** Where the way out leads, as its hint names it. */
+  place: string;
+  onList: () => void;
   hidden: HiddenColumns;
 }): React.JSX.Element {
   useAppCommand(APP_COMMAND.EXIT_ADMIN, onExit);
+  const narrow = hidden.list || hidden.item;
   return (
     <div className="desktop-admin">
       <nav className="admin-sections" aria-label="Admin sections" hidden={hidden.list}>
-        <div className="desktop-drag-strip" />
+        {narrow ? (
+          <PhoneHead
+            place="admin-sections"
+            start={
+              <BackButton
+                label="Back"
+                place={place}
+                command={APP_COMMAND.EXIT_ADMIN}
+                onBack={onExit}
+              />
+            }
+            title="Admin"
+            end={null}
+          />
+        ) : (
+          <div className="desktop-drag-strip" />
+        )}
       </nav>
       <section className="admin-page" aria-label="Admin" hidden={hidden.item}>
-        <div className="desktop-drag-strip" />
+        {narrow ? null : <div className="desktop-drag-strip" />}
         <CollectionPage
           frame={PAGE_FRAME.TOOLBAR}
           label="Admin"
-          toolbar={<Toolbar title="Overview" />}
+          toolbar={
+            narrow ? (
+              <PhoneHead
+                place="admin"
+                start={<BackButton label="Admin" place="admin" onBack={onList} />}
+                title="Overview"
+                end={null}
+              />
+            ) : (
+              <Toolbar title="Overview" />
+            )
+          }
           state={COLLECTION_STATE.LOADING}
           loadingLabel="Reading the dashboard…"
         />
@@ -165,39 +205,65 @@ function PersonLoading({
   return <PersonPageSkeleton name={name} />;
 }
 
+/** Where Settings' and Admin's ways out lead where no step stands behind them, as a hint names it. */
+const TASKS_EXIT_PLACE = "tasks";
+
 /** Where a version history's way out leads where no step stands behind it, as a hint names it. */
 const HISTORY_EXIT_PLACE = "plan";
 
 /**
  * What stands while a version history's chunk loads: its frame, the list's
  * column where the sidebar stood, and its own way out, its Back row and
- * Escape, so the history is left as it would be once drawn.
+ * Escape, so the history is left as it would be once drawn. A narrow room
+ * heads the column it shows as the history will, a phone's header
+ * (`phone-head.tsx`) led by the way out of the list or back to it.
  */
 function VersionHistoryLoading({
   onExit,
   place,
+  onList,
   hidden,
 }: {
   onExit: () => void;
   /** Where the way out leads, as its hint names it. */
   place: string;
+  onList: () => void;
   hidden: HiddenColumns;
 }): React.JSX.Element {
   useAppCommand(APP_COMMAND.EXIT_VERSION_HISTORY, onExit);
+  const narrow = hidden.list || hidden.item;
+  const exit = (
+    <BackButton
+      look={narrow ? BACK_BUTTON_LOOK.HEADER : BACK_BUTTON_LOOK.COLUMN}
+      label="Back"
+      place={place}
+      command={APP_COMMAND.EXIT_VERSION_HISTORY}
+      onBack={onExit}
+    />
+  );
   return (
     <div className="desktop-version-history">
       <nav className="version-log" aria-label="Versions" hidden={hidden.list}>
-        <div className="desktop-drag-strip" />
-        <BackButton
-          look={BACK_BUTTON_LOOK.COLUMN}
-          label="Back"
-          place={place}
-          command={APP_COMMAND.EXIT_VERSION_HISTORY}
-          onBack={onExit}
-        />
+        {narrow ? (
+          <PhoneHead place="version-log" start={exit} title="Version history" end={null} />
+        ) : (
+          <>
+            <div className="desktop-drag-strip" />
+            {exit}
+          </>
+        )}
       </nav>
       <section className="version-page" aria-label="Version" hidden={hidden.item}>
-        <div className="desktop-drag-strip" />
+        {narrow ? (
+          <PhoneHead
+            place="version"
+            start={<BackButton label="Versions" place="versions" onBack={onList} />}
+            title={null}
+            end={null}
+          />
+        ) : (
+          <div className="desktop-drag-strip" />
+        )}
       </section>
     </div>
   );
@@ -265,24 +331,57 @@ const SETTINGS_SKELETON: readonly SettingsSectionSkeletonShape[] = [
  * lands where the blocks stood; and Settings' own way out, so Escape pressed
  * in that frame leaves Settings as it would once drawn, rather than falling
  * through to the task behind it. It is gone as Settings stands and offers the
- * same command itself. A narrow room hides the column Settings will hide.
+ * same command itself. A narrow room hides the column Settings will hide,
+ * and heads the one it shows as Settings will, a phone's header
+ * (`phone-head.tsx`) led by the way out of the list or back to it.
  */
 function SettingsLoading({
   onExit,
+  place,
+  onList,
   hidden,
 }: {
   onExit: () => void;
+  /** Where the way out leads, as its hint names it. */
+  place: string;
+  onList: () => void;
   hidden: HiddenColumns;
 }): React.JSX.Element {
   useAppCommand(APP_COMMAND.EXIT_SETTINGS, onExit);
+  const narrow = hidden.list || hidden.item;
   return (
     <div className="desktop-settings">
       <nav className="settings-pages" aria-label="Settings pages" hidden={hidden.list}>
-        <div className="desktop-drag-strip" />
+        {narrow ? (
+          <PhoneHead
+            place="settings-pages"
+            start={
+              <BackButton
+                label="Back"
+                place={place}
+                command={APP_COMMAND.EXIT_SETTINGS}
+                onBack={onExit}
+              />
+            }
+            title="Settings"
+            end={null}
+          />
+        ) : (
+          <div className="desktop-drag-strip" />
+        )}
       </nav>
       <section className="settings-page" aria-label="Settings" hidden={hidden.item}>
         {/* Note that the page draws its own bar, the window's drag handle, as Settings' page does once drawn. */}
-        <SettingsPageSkeleton label={readingWords("Settings")} sections={SETTINGS_SKELETON} />
+        <SettingsPageSkeleton
+          label={readingWords("Settings")}
+          sections={SETTINGS_SKELETON}
+          {...(narrow
+            ? {
+                lead: <BackButton label="Settings" place="settings" onBack={onList} />,
+                look: TOOLBAR_LOOK.PHONE,
+              }
+            : {})}
+        />
       </section>
     </div>
   );
@@ -678,6 +777,8 @@ export function DesktopShell({
           fallback={
             <SettingsLoading
               onExit={exitSettings}
+              place={backPlaceOf(history, TASKS_EXIT_PLACE)}
+              onList={settingsStep.onList}
               hidden={hiddenColumns(room, settingsStep.listed)}
             />
           }
@@ -708,6 +809,7 @@ export function DesktopShell({
                 <VersionHistoryLoading
                   onExit={exitHistory}
                   place={backPlaceOf(history, HISTORY_EXIT_PLACE)}
+                  onList={tasks.history.onList}
                   hidden={hiddenColumns(room, tasks.history.listed)}
                 />
               }
@@ -732,7 +834,12 @@ export function DesktopShell({
   if (tasks.adminView.open && (adminAccess || adminPending)) {
     const exitAdmin = history.canGoBack ? history.onBack : tasks.adminView.onClose;
     const loading = (
-      <AdminLoading onExit={exitAdmin} hidden={hiddenColumns(room, tasks.adminView.listed)} />
+      <AdminLoading
+        onExit={exitAdmin}
+        place={backPlaceOf(history, TASKS_EXIT_PLACE)}
+        onList={tasks.adminView.onList}
+        hidden={hiddenColumns(room, tasks.adminView.listed)}
+      />
     );
     // While the account's access is read, the place stands as it does while its chunk loads.
     if (!adminAccess) {

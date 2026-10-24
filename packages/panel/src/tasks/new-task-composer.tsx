@@ -161,7 +161,7 @@ const TOO_LONG = "That request is too long.";
 
 /** Why Start is held without a repository. */
 const COMPOSER_WORDS = {
-  NEEDS_REPOSITORY: "An agent needs a repository to work in. Choose one.",
+  NEEDS_REPOSITORY: "Choose a repository",
 } as const;
 
 /** What one Agent-mode press asked beside its key: the task's name, repository, workspace, and issues, and the agent's words, files, and model. */

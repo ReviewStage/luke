@@ -200,6 +200,7 @@ const INVITATIONS_EMPTY =
 const READ_FAILED = {
   MEMBERS: "The members could not be read.",
   INVITATIONS: "The invitations could not be read.",
+  SENTRY: "The workspace's Sentry could not be read.",
 } as const;
 
 /**
@@ -1640,16 +1641,20 @@ function ManagedSentry({
 /**
  * The workspace's Sentry: drawn only where the deployment holds Luke's
  * Sentry integration, an owner's or an admin's to install for everyone,
- * and for a member, read only, where it is installed or the ask to have it.
+ * and for a member, read only, where it is installed or the ask to have it;
+ * a read that did not land says so in the row's place, with Retry.
  */
 function WorkspaceSentryRow({ workspace }: { workspace: Workspace }): React.JSX.Element | null {
-  const { read, changed } = useSentryRead(workspace.id);
-  if (read === undefined || !read.configured) return null;
+  const { read, retry, changed } = useSentryRead(workspace.id);
+  if (read === undefined) return null;
+  if ("failed" in read) return <ReadFailed line={READ_FAILED.SENTRY} onRetry={retry} />;
+  const { sentry } = read;
+  if (!sentry.configured) return null;
   if (managesWorkspace(workspace)) {
-    return <ManagedSentry workspace={workspace} sentry={read} onChanged={changed} />;
+    return <ManagedSentry workspace={workspace} sentry={sentry} onChanged={changed} />;
   }
   return (
-    <SettingsRow leading={SENTRY_MARK} label="Sentry" description={sentryLine(read, false)}>
+    <SettingsRow leading={SENTRY_MARK} label="Sentry" description={sentryLine(sentry, false)}>
       {() => null}
     </SettingsRow>
   );

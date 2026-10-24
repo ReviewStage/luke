@@ -243,6 +243,13 @@ const ROW_STATE: Record<LineState, SettingsRowState> = {
 interface RowLine {
   readonly text: string;
   readonly state: LineState;
+  /** The server's or the sign-in's own words behind `text`, quoted and naming who said them, on a line of their own. */
+  readonly said?: string;
+}
+
+/** Someone else's words behind a row's line, where there are any. */
+function saidOf(said: string | undefined): Pick<RowLine, "said"> {
+  return said === undefined ? {} : { said };
 }
 
 /** A connected row's line, from how its server answered. */
@@ -254,7 +261,7 @@ function connectedLine(health: ConnectionHealth): RowLine {
         state: LINE_STATE.CONNECTED,
       };
     case CONNECTION_HEALTH.BROKEN:
-      return { text: health.problem, state: LINE_STATE.ATTENTION };
+      return { text: health.problem, state: LINE_STATE.ATTENTION, ...saidOf(health.said) };
     case CONNECTION_HEALTH.CHECKING:
       return { text: PAGE_LINE.CHECKING, state: LINE_STATE.PLAIN };
     case CONNECTION_HEALTH.FAILED:
@@ -264,9 +271,9 @@ function connectedLine(health: ConnectionHealth): RowLine {
 
 /** A sign-in's line: its wait with the ring, a failure in the attention tint, or one unfinished, plain. */
 function signInRowLine(provider: IntegrationProvider, signIn: SignIn): RowLine {
-  const { text, problem } = signInLine(provider, signIn);
+  const { text, problem, said } = signInLine(provider, signIn);
   if (signIn.kind === SIGN_IN.WAITING) return { text, state: LINE_STATE.WAITING };
-  return { text, state: problem ? LINE_STATE.ATTENTION : LINE_STATE.PLAIN };
+  return { text, state: problem ? LINE_STATE.ATTENTION : LINE_STATE.PLAIN, ...saidOf(said) };
 }
 
 /**
@@ -307,13 +314,23 @@ function grantLabel(status: IntegrationStatus | undefined, signIn: SignIn | unde
   return status === INTEGRATION_STATUS.EXPIRED ? ROW_ACT.RECONNECT : "Connect";
 }
 
-/** A row's line, with the ring before a wait's words. */
+/**
+ * A row's line, with the ring before a wait's words, and where the server or
+ * the sign-in said words of its own, those quoted on a plain line under ours.
+ */
 function RowLineText({ line }: { line: RowLine }): React.JSX.Element {
-  return (
-    <SettingsRowStateLine state={ROW_STATE[line.state]}>
+  const state = (
+    <SettingsRowStateLine state={ROW_STATE[line.state]} block={line.said !== undefined}>
       {line.state === LINE_STATE.WAITING ? <SpinnerRing size={SPINNER_SIZE.SMALL} /> : null}
       {line.text}
     </SettingsRowStateLine>
+  );
+  if (line.said === undefined) return state;
+  return (
+    <>
+      {state}
+      <SettingsRowStateLine block>{line.said}</SettingsRowStateLine>
+    </>
   );
 }
 

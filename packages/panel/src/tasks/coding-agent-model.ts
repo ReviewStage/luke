@@ -406,7 +406,7 @@ export function agentStateWords(status: CodingAgentStatus): string | undefined {
 }
 
 /** What the Start button says while it cannot start: the task names no repository yet. */
-export const START_NEEDS_REPOSITORY = "Choose a repository first.";
+export const START_NEEDS_REPOSITORY = "Choose a repository";
 
 /** What the refusals a Start and a message meet alike say, worded once. */
 const SHARED_FAILURE_NOTE = {

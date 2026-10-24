@@ -1,6 +1,12 @@
 import type { CodingAgentSummary } from "@luke/features/coding-agent-wire";
 import { IRREVERSIBLE_WORDS } from "@luke/features/words";
-import { CONFIRM_LOSS, ConfirmDialog, type DialogQuestion, useConfirmDialog } from "@luke/ui";
+import {
+  CONFIRM_LOSS,
+  ConfirmDialog,
+  type DialogQuestion,
+  nextRowOrHead,
+  useConfirmDialog,
+} from "@luke/ui";
 import { ACTION_RESULT_STATUS } from "@luke/wire";
 import { commandAction, PANEL_COMMAND } from "../command-items.js";
 import { agentName } from "../tasks/coding-agent-model.js";
@@ -64,6 +70,7 @@ export function useAgentDelete(
         open
         confirm={confirm}
         question={deleteQuestion(agentName(agent, agents.models), agent.archivedAt !== undefined)}
+        restoreTo={nextRowOrHead}
       />
     ),
   };
