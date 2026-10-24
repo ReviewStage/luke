@@ -1,4 +1,5 @@
 import { CONTEXT_WINDOW } from "@luke/features/coding-agent-wire";
+import { remedyLabel } from "@luke/features/failure-remedy";
 import {
   type CatalogModel,
   MODEL_PROVIDER,
@@ -24,7 +25,9 @@ import {
   SettingsRowsSkeleton,
   SettingsSection,
   Spinner,
+  TEXT_BUTTON_TONE,
   TEXT_LINK_LOOK,
+  TextButton,
   TextLink,
 } from "@luke/ui";
 import { actionRejection } from "@luke/ui/use-setting-write";
@@ -32,6 +35,7 @@ import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { useCallback, useEffect, useState } from "react";
 import { useAct } from "../act.js";
 import { HarnessMark } from "../harness-marks.js";
+import { OPEN_SETTINGS_LABEL } from "../open-settings.js";
 import {
   choiceModelId,
   choiceOn,
@@ -43,15 +47,18 @@ import {
   FAST_WORD,
   fastRestingNote,
   longWindowNote,
-  MODEL_NOT_CONNECTED,
   MODELS_READ_FAILED,
+  modelConnectFailure,
+  modelConnectWords,
   modelLabel,
   offeredModels,
   readModelChoice,
+  unrunnableChoice,
   unsearchedModels,
   windowLabel,
   windowOf,
 } from "../tasks/coding-agent-model.js";
+import { useRepositoryRemedy } from "../tasks/repository-remedy.js";
 import { useOpenLink } from "../tasks/use-open-link.js";
 import { AgentAuthSection } from "./agent-auth-section.js";
 import { ChaptersModelSection } from "./chapters-model-section.js";
@@ -73,7 +80,12 @@ import { SwitchRow } from "./switch-row.js";
  * opens and shows what the last Start wrote. The model row is the same picker every settings row uses,
  * searched because the catalog is long: each base model under the mark
  * of the harness that runs it, the newest first within each provider, every fast
- * version folded into its model, the chosen one checked. Under it a Fast
+ * version folded into its model, the chosen one checked; a model no
+ * subscription or API key of the account's pays for says "Connect Claude" or
+ * "Connect Codex" at its end, and its pick lands on that harness's row above
+ * rather than keeping it, and a default that is such a model, as a new
+ * account's Claude default is on an OpenAI key alone, says it cannot run
+ * under the row, with the same press. Under it a Fast
  * switch runs the model's fast version, resting where the model has none
  * or the service withholds it because Anthropic never granted the key's
  * organization fast mode, saying which, and on the account's own key with
@@ -134,8 +146,9 @@ const WRITE_REFUSED: ActionResult = {
  * What the model row says under its name, where the key it runs on is the
  * account's own: that it runs there while the provider last accepted it, and
  * that the key needs a hand where it did not, since such a key fails the
- * agent's steps. Without an API key the row says nothing: a subscription
- * pays, or the model is drawn disabled where nothing does.
+ * agent's steps. Without an API key the row says nothing where a
+ * subscription pays; where nothing does, `DefaultRows` says the default
+ * cannot run in this note's place.
  */
 function modelRowNote(
   provider: ModelProvider | undefined,
@@ -183,7 +196,20 @@ function DefaultRows({
     });
   const listed = models?.find((model) => model.id === choice.model);
   const ownKey = listed === undefined ? undefined : ownKeys.get(listed.provider);
-  const note = modelRowNote(listed?.provider, ownKey);
+  const remedy = useRepositoryRemedy();
+  // A default nothing pays for says so in the key's note's place, with the press that connects it.
+  const unrunnable = models === undefined ? undefined : unrunnableChoice(models, choice);
+  const note =
+    unrunnable === undefined ? (
+      modelRowNote(listed?.provider, ownKey)
+    ) : (
+      <>
+        {unrunnable.text}{" "}
+        <TextButton tone={TEXT_BUTTON_TONE.ACCENT} onClick={() => remedy(unrunnable)?.()}>
+          {remedyLabel(unrunnable) ?? OPEN_SETTINGS_LABEL}
+        </TextButton>
+      </>
+    );
   // The stored effort stands alone until the catalog is read, and where the catalog has
   // stopped offering the stored model, so the row never draws nothing.
   const offered = models === undefined ? [] : effortsOf(models, choice.model);
@@ -225,9 +251,7 @@ function DefaultRows({
                 icon: <HarnessMark provider={model.provider} />,
                 terms: [model.name, model.provider],
                 searchOnly: !unsearched.has(model.id),
-                ...(model.credentialMissing === true
-                  ? { disabled: MODEL_NOT_CONNECTED }
-                  : undefined),
+                end: modelConnectWords(model),
               }))
         }
         placeholder="Search models"
@@ -247,6 +271,9 @@ function DefaultRows({
           // The pick keeps Fast where the model has a fast version, and drops it where it has none.
           const picked = offeredModels(models ?? []).find((each) => each.model.id === id);
           if (picked === undefined) return;
+          // A model nothing pays for is never kept as the default: its pick goes to connect it.
+          const missing = modelConnectFailure(picked.model);
+          if (missing !== undefined) return remedy(missing)?.();
           run(choiceAt(choiceModelId(picked, read.fast)));
         }}
       />

@@ -99,6 +99,7 @@ export function AgentModelChip({
   look = CHIP_LOOK.TOOLBAR,
   width,
   narrow = false,
+  startsNew = false,
 }: {
   model: AgentModelControl;
   /** The catalog as last read; nothing before the first read lands. */
@@ -117,6 +118,8 @@ export function AgentModelChip({
   width?: ChipWidth | undefined;
   /** Whether its place is too narrow for the words, so a chip whose harness has a mark draws that alone. */
   narrow?: boolean;
+  /** Whether the choice is what a new agent would start on, on the reader's own credentials, as an automation's is, so one nothing of theirs pays for says it cannot run; never a running agent's, whose starter pays. */
+  startsNew?: boolean;
 }): React.JSX.Element {
   const [open, setOpen] = useState(false);
   const drawn = useDisclosure(open);
@@ -174,6 +177,7 @@ export function AgentModelChip({
           failed={modelsFailed}
           onRetry={readModels}
           chosen={settledChoice(offered, model.choice)}
+          startsNew={startsNew}
           offersFast={runtimeModelRule(model.runtime).fast}
           onChoose={model.choose}
           footNote={agentUsageLine(usage)}

@@ -154,6 +154,7 @@ export function StartAgentButton({ control }: { control: CodingAgentsControl }):
           failed={control.modelsFailed}
           onRetry={control.readModels}
           chosen={chosen}
+          startsNew
           onChoose={setPicked}
           onClose={close}
           onLeave={(left) => {
