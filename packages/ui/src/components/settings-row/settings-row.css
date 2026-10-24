@@ -183,7 +183,6 @@
 
     .luke-settings-row:not([data-density="compact"], [data-labels-control="true"])
       .luke-settings-row-controls {
-      flex-shrink: 0;
       margin-inline-start: auto;
     }
 
