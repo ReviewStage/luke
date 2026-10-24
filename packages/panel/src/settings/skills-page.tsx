@@ -8,6 +8,7 @@ import {
 } from "@luke/features/installed-skill-view";
 import { INSTALLED_SKILL_SOURCE } from "@luke/features/installed-skill-wire";
 import { formatBytes } from "@luke/features/number-format";
+import { readingWords } from "@luke/features/words";
 import type { Workspace } from "@luke/features/workspace-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import {
@@ -499,7 +500,7 @@ function ShownSkills({
   // A group still being read stands its placeholder row in the card the rows will.
   const rows = (shown: readonly SkillRow[] | undefined) =>
     shown === undefined ? (
-      <SettingsRowsSkeleton label="Loading your skills" rows={SKILL_GROUP_SKELETON.rows} />
+      <SettingsRowsSkeleton label={readingWords("your skills")} rows={SKILL_GROUP_SKELETON.rows} />
     ) : shown.length === 0 ? (
       <SettingsLine>{SKILLS_LINE.NONE}</SettingsLine>
     ) : (
@@ -584,7 +585,7 @@ export function SkillsPage({
         </SettingsLine>
       </SettingsSection>
     ) : (
-      <SettingsSectionsSkeleton label="Loading your skills" sections={SKILLS_SKELETON} />
+      <SettingsSectionsSkeleton label={readingWords("your skills")} sections={SKILLS_SKELETON} />
     );
   }
   // Keyed to the workspace, so another one listed reads its own skills and asks nothing left over.

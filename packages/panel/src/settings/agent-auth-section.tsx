@@ -12,6 +12,7 @@ import {
   type SubscriptionKeySummary,
 } from "@luke/features/provider-key-wire";
 import { dayAndTimeText } from "@luke/features/time-format";
+import { readingWords, SIGNED_OUT_WORDS } from "@luke/features/words";
 import { ACT_KIND } from "@luke/host/acts";
 import { HOST_CAPABILITY } from "@luke/settings";
 import { searchAnchorProps } from "@luke/settings/settings-anchors";
@@ -181,7 +182,7 @@ const HARNESSES: readonly ProviderKeyProvider[] = [
 
 const WORDS = {
   READ_FAILED: "Your keys could not be read.",
-  SIGNED_OUT: "Sign in to connect your agents.",
+  SIGNED_OUT: SIGNED_OUT_WORDS,
   CONNECT: "Connect",
   VIA_SUBSCRIPTION: "Connected via subscription",
   VIA_API_KEY: "Connected via API key",
@@ -615,7 +616,7 @@ function ClaudeTokenPanel({
         confirm={removal}
         question={{
           title: "Disconnect your Claude plan?",
-          body: "Claude agents will stop running on your Claude plan, and Luke deletes the token it holds.",
+          body: "Claude agents will stop running on your Claude plan, and he deletes the token he holds.",
           verb: WORDS.DISCONNECT,
           running: "Disconnecting…",
           loss: CONFIRM_LOSS.IRREVERSIBLE,
@@ -781,7 +782,7 @@ function ChatGptPanel({
         confirm={removal}
         question={{
           title: "Disconnect your ChatGPT plan?",
-          body: "Codex agents will stop running on your ChatGPT plan, and Luke ends its sign-in with OpenAI.",
+          body: "Codex agents will stop running on your ChatGPT plan, and he ends his sign-in with OpenAI.",
           verb: WORDS.DISCONNECT,
           running: "Disconnecting…",
           loss: CONFIRM_LOSS.REVERSIBLE,
@@ -1175,7 +1176,10 @@ export function AgentAuthSection({
             </ErrorState>
           </SettingsLine>
         ) : (
-          <SettingsRowsSkeleton label="Loading your keys" rows={HARNESSES.map(keyRowSkeleton)} />
+          <SettingsRowsSkeleton
+            label={readingWords("your keys")}
+            rows={HARNESSES.map(keyRowSkeleton)}
+          />
         )}
       </SettingsSection>
       {drawn === undefined || answer === undefined ? null : (

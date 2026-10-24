@@ -147,7 +147,7 @@ const GITHUB = INTEGRATION_PROVIDER.GITHUB;
 const SERVERS_SETTINGS = "Manage in Settings";
 
 /** What the popover's list says where the deployment offers the account no server at all. */
-const SERVERS_NONE = "No servers available";
+const SERVERS_NONE = "No integrations available";
 
 /** What the home's field asks for, and says where nothing matches. */
 const SEARCH = {

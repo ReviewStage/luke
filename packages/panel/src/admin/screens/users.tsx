@@ -6,6 +6,7 @@ import {
 } from "@luke/features/admin-wire";
 import { formatCount } from "@luke/features/number-format";
 import { formatDate } from "@luke/features/time-format";
+import { readingWords } from "@luke/features/words";
 import {
   COLLECTION_STATE,
   SearchField,
@@ -193,7 +194,7 @@ export function UsersScreen({
             onHideAdminsChange={onHideAdminsChange}
           />
         }
-        loadingLabel="Loading…"
+        loadingLabel={readingWords("users")}
         {...content}
       />,
     );

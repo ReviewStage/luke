@@ -1,4 +1,5 @@
 import { MAC_REPOSITORY_BOUNDS, type MacRepository } from "@luke/features/mac-terminal-wire";
+import { readingWords } from "@luke/features/words";
 import { ACT_KIND } from "@luke/host/acts";
 import { SETTINGS_SECTION } from "@luke/settings/settings-views";
 import {
@@ -185,7 +186,10 @@ export function MacRepositoriesGroup({ workspaceId }: { workspaceId: string }): 
           <ErrorState onRetry={read.reread}>{NOT_READ}</ErrorState>
         </SettingsLine>
       ) : read.names === undefined ? (
-        <SettingsRowsSkeleton label="Loading the repositories" rows={REPOSITORIES_SKELETON} />
+        <SettingsRowsSkeleton
+          label={readingWords("the repositories")}
+          rows={REPOSITORIES_SKELETON}
+        />
       ) : read.names.length === 0 ? (
         <SettingsLine>This workspace reaches no repositories on GitHub yet.</SettingsLine>
       ) : (

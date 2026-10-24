@@ -58,8 +58,8 @@ export const EXPERIMENTS = [
     key: EXPERIMENT.INBOX_FIRST,
     name: "Inbox-first sidebar",
     detail:
-      "The sidebar lists your Inbox's threads under their tasks in place of your task list, " +
-      "which you find on the Tasks page.",
+      "The sidebar lists your inbox's items under their tasks in place of your task list, " +
+      "which you find on the tasks page.",
     owner: "Dean",
     since: "2026-10-20",
   },
@@ -67,7 +67,7 @@ export const EXPERIMENTS = [
     key: EXPERIMENT.CODE_REVIEW,
     name: "Code review",
     detail:
-      "Suggest a Code review automation on the Automations page, which reviews each pull " +
+      "Suggest a Code review automation on the automations page, which reviews each pull " +
       "request as Luke and posts one GitHub review.",
     owner: "Dean",
     since: "2026-10-19",

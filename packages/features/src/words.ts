@@ -90,6 +90,9 @@ export function orList(names: readonly string[]): string {
   return OR.format(names);
 }
 
+/** What a page that needs an account says to someone not signed in. One line for every page, so none is worded its own way. */
+export const SIGNED_OUT_WORDS = "Sign in to use this page.";
+
 /** What a wait is called while something is read: "Reading tasks". A label, so no "…". */
 export function readingWords(things: string): string {
   return `Reading ${things}`;

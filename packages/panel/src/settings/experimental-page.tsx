@@ -1,3 +1,4 @@
+import { SIGNED_OUT_WORDS } from "@luke/features/words";
 import { ACT_KIND } from "@luke/host/acts";
 import {
   EXPERIMENT,
@@ -58,7 +59,7 @@ import type { SettingsWrites } from "./writes.js";
 const NO_EXPERIMENTS_LINE = "No experiments";
 
 /** Why a signed-out page holds no switches: experiments are an account's. */
-const SIGN_IN_NOTE = "Sign in to try experiments.";
+const SIGN_IN_NOTE = SIGNED_OUT_WORDS;
 
 /** The schema section an experiment's own settings stand in, for one that has any. */
 function sectionOf(experiment: Experiment): SettingSection | undefined {

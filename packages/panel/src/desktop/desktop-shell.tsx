@@ -1,5 +1,6 @@
 import { ACCOUNT_STATUS, type AccountProvider } from "@luke/credentials/snapshot";
 import type { Task } from "@luke/features/task-wire";
+import { readingWords } from "@luke/features/words";
 import { EXPERIMENT, HOST_CAPABILITY } from "@luke/settings";
 import { SETTINGS_VIEW } from "@luke/settings/settings-views";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
@@ -281,7 +282,7 @@ function SettingsLoading({
       </nav>
       <section className="settings-page" aria-label="Settings" hidden={hidden.item}>
         {/* Note that the page draws its own bar, the window's drag handle, as Settings' page does once drawn. */}
-        <SettingsPageSkeleton label="Loading Settings" sections={SETTINGS_SKELETON} />
+        <SettingsPageSkeleton label={readingWords("Settings")} sections={SETTINGS_SKELETON} />
       </section>
     </div>
   );

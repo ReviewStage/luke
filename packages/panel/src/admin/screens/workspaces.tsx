@@ -10,6 +10,7 @@ import { INTEGRATION_ROW_STATUS } from "@luke/features/integration-row-wire";
 import { INTEGRATION_NAME } from "@luke/features/integration-wire";
 import { formatCount, formatPercent } from "@luke/features/number-format";
 import { formatDate } from "@luke/features/time-format";
+import { readingWords } from "@luke/features/words";
 import {
   Badge,
   COLLECTION_STATE,
@@ -361,7 +362,7 @@ export function WorkspacesScreen({
             onSharedOnlyChange={changeSharedOnly}
           />
         }
-        loadingLabel="Loading…"
+        loadingLabel={readingWords("workspaces")}
         {...content}
       />,
     );

@@ -245,7 +245,6 @@ const forAgentsSent = () =>
 
 test("each harness's row says how it is connected: nothing, its plan, its key, or a plan needing a hand", async () => {
   const empty = await mount();
-  assert.match(empty.textContent ?? "", /Other members connect their own/u);
   assert.equal(rowButton(empty, "Claude").textContent, "Connect");
   assert.equal(rowButton(empty, "Codex").textContent, "Connect");
   for (const root of roots.splice(0)) act(() => root.unmount());
