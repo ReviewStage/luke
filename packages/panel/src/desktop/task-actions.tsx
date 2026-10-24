@@ -1,13 +1,10 @@
 import { ACCOUNT_STATUS } from "@luke/credentials/snapshot";
-import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
-import { PLAN_ACTOR, TASK_BOUNDS, TASK_STATUS, type TaskSummary } from "@luke/features/task-wire";
+import { PLAN_ACTOR, TASK_BOUNDS, type TaskSummary } from "@luke/features/task-wire";
 import { APP_COMMAND, type KeyedCommand } from "@luke/settings/shortcuts";
 import {
   BUTTON_SIZE,
   ConfirmDialog,
-  CopyIcon,
   type DialogQuestion,
-  ExternalIcon,
   IconButton,
   InlineEdit,
   LIST_DENSITY,
@@ -15,19 +12,13 @@ import {
   LIST_ROW_CURRENT,
   LIST_ROW_INK,
   ListRow,
-  MarkDoneIcon,
   MoreButton,
   OneLine,
-  PinIcon,
-  ProviderMark,
   RowHint,
   RowHintOptions,
-  TaskStatusMark as TaskStandingMark,
   TIME_LOOK,
   Time,
   Tooltip,
-  TrashIcon,
-  UnpinIcon,
   useConfirmDialog,
   useMenu,
   useMinute,
@@ -44,10 +35,16 @@ import {
   type TaskMark,
 } from "@luke/ui/tasks-model";
 import { useInlineRename } from "@luke/ui/use-inline-rename";
-import { FolderInputIcon } from "lucide-react";
 import { useCallback, useMemo, useRef } from "react";
 import { ActorRef, AssigneeFaceHeard, AssigneeFaceMark } from "../actor-ref.js";
 import { useAppCommand } from "../app-commands.js";
+import {
+  COMMAND_PLACE,
+  commandAction,
+  commandWords,
+  PANEL_COMMAND,
+  type PanelCommand,
+} from "../command-items.js";
 import { usePlanDrafted } from "../composer-drafts.js";
 import { useCopyToast } from "../copy-feedback.js";
 import { DraftMark } from "../draft-mark.js";
@@ -80,6 +77,11 @@ import { TaskRowMark, taskCardOf } from "./task-card.js";
  * Both doors open the same menu over the same task, so a task in the list can
  * be acted on without being opened first. The menu is the window's own (`action-menu.tsx`),
  * so both doors draw it the same way and Permanently delete can be drawn red.
+ * Each item is worded, marked, and keyed as the window's one list has it
+ * (`command-items.tsx`), as ⌘K offers the same command; the open task's menu
+ * prints the chords of Copy plan, Mark done, and Permanently delete, which
+ * act on the open task, and another task's prints none, as a tab's menu
+ * prints its chords for the chosen tab alone.
  *
  * Copy link copies the plan's address on tryluke.dev, as the ⋯
  * beside the plan's title does (`task-menu-items.tsx`). Mark as unread
@@ -138,13 +140,11 @@ export function taskOf(tasks: TasksControl, taskId: string): TaskSummary | undef
     : undefined;
 }
 
-/** One way a task can be moved in the sidebar or settled, as the menu and the row's own buttons both offer it, and the chord that runs it on the open task, where it has one. */
+/** One way a task can be moved in the sidebar or settled, as the menu and the row's own buttons both offer it: the list's command and what it does to this task. */
 interface PlaceMark {
   key: string;
-  label: string;
-  icon: React.JSX.Element;
+  item: PanelCommand;
   onSelect: () => void;
-  command?: KeyedCommand;
 }
 
 /** Pin, offered as whichever way the task is not yet, and Mark done, offered on a task not yet done. */
@@ -152,36 +152,37 @@ function placeMarks(tasks: TasksControl, task: TaskSummary): PlaceMark[] {
   const marking = (mark: TaskMark) => () => tasks.onMarkTask(task.id, mark);
   const pin: PlaceMark =
     task.pinnedAt === undefined
-      ? { key: TASK_MARK.PIN, label: "Pin", icon: <PinIcon />, onSelect: marking(TASK_MARK.PIN) }
+      ? { key: TASK_MARK.PIN, item: PANEL_COMMAND.PIN_TASK, onSelect: marking(TASK_MARK.PIN) }
       : {
           key: TASK_MARK.UNPIN,
-          label: "Unpin",
-          icon: <UnpinIcon />,
+          item: PANEL_COMMAND.UNPIN_TASK,
           onSelect: marking(TASK_MARK.UNPIN),
         };
   const done: PlaceMark = {
     key: SETTLED_STATUS.DONE,
-    label: "Mark done",
-    icon: <MarkDoneIcon />,
+    item: PANEL_COMMAND.MARK_TASK_DONE,
     onSelect: () => tasks.onSettleTasks([task.id], SETTLED_STATUS.DONE),
-    command: APP_COMMAND.MARK_TASK_DONE,
   };
   return settleOffered(task, SETTLED_STATUS.DONE) ? [pin, done] : [pin];
 }
 
-/** Pin, Mark done, and Cancel task as the menu's items, Cancel task on a task not already canceled; nothing for a task neither the list nor the document holds. */
-function placeActions(tasks: TasksControl, task: TaskSummary | undefined): MenuAction[] {
+/** Pin, Mark done, and Cancel task as the menu's items, Cancel task on a task not already canceled, Mark done keyed where `keyed`; nothing for a task neither the list nor the document holds. */
+function placeActions(
+  tasks: TasksControl,
+  task: TaskSummary | undefined,
+  keyed: boolean,
+): MenuAction[] {
   if (task === undefined) return [];
-  const marks = placeMarks(tasks, task).map(({ label, icon, onSelect }) => ({
-    label,
-    icon,
-    onSelect,
-  }));
+  const marks = placeMarks(tasks, task).map(({ item, onSelect }) =>
+    commandAction(item, onSelect, keyed),
+  );
   const cancel: MenuAction = {
-    label: "Cancel task",
-    icon: <TaskStandingMark status={TASK_STATUS.CANCELED} />,
+    ...commandAction(
+      PANEL_COMMAND.CANCEL_TASK,
+      () => tasks.onSettleTasks([task.id], SETTLED_STATUS.CANCELED),
+      keyed,
+    ),
     danger: true,
-    onSelect: () => tasks.onSettleTasks([task.id], SETTLED_STATUS.CANCELED),
   };
   const cancelable = settleOffered(task, SETTLED_STATUS.CANCELED);
   return cancelable ? [...marks, cancel] : marks;
@@ -249,12 +250,12 @@ function SidebarTaskMarks({
   disabled: boolean;
 }): React.JSX.Element {
   const marks = placeMarks(tasks, task).map(
-    ({ key, label, icon, onSelect, command }): RowMark => ({
+    ({ key, item, onSelect }): RowMark => ({
       key,
-      label,
-      icon,
+      label: commandWords(item, COMMAND_PLACE.MENU),
+      icon: item.icon,
       onSelect,
-      command: current ? command : undefined,
+      command: current ? item.command : undefined,
     }),
   );
   return <RowMarks marks={marks} disabled={disabled} />;
@@ -266,7 +267,8 @@ function SidebarTaskMarks({
  * offers it, ahead of Copy link, Mark as unread or read, Rename,
  * and Version history; Pin, Mark done, and Cancel task follow; the repository is changed from any plan and opened on
  * GitHub where there is one, beside Move to workspace where the plan may be
- * moved; Permanently delete is last and alone.
+ * moved; Permanently delete is last and alone. Only the open plan's items
+ * print their chords, since a chord acts on the open plan alone.
  */
 function taskActionGroups(
   tasks: TasksControl,
@@ -284,7 +286,7 @@ function taskActionGroups(
   const { region } = tasks;
   const drawn = region.kind === DOCUMENT_REGION.READY && region.task.id === taskId;
   const task = taskOf(tasks, taskId);
-  const copy: MenuAction = { label: "Copy plan", icon: <CopyIcon />, onSelect: tasks.copy.onPress };
+  const copy = commandAction(PANEL_COMMAND.COPY_PLAN, tasks.copy.onPress, drawn);
   const link: MenuAction[] =
     task === undefined
       ? []
@@ -294,32 +296,29 @@ function taskActionGroups(
         ];
   const rename = renameTaskItem(doors.rename);
   const versions = versionHistoryItem(() => tasks.history.onOpen(taskId));
-  const change: MenuAction = {
-    label: "Change repository",
-    icon: <ProviderMark provider={INTEGRATION_PROVIDER.GITHUB} />,
-    onSelect: () => tasks.onChangeRepository(taskId),
-  };
+  const change = commandAction(
+    PANEL_COMMAND.CHANGE_REPOSITORY,
+    () => tasks.onChangeRepository(taskId),
+    drawn,
+  );
   const move: MenuAction[] =
     doors.askMove === undefined
       ? []
-      : [{ label: "Move to workspace", icon: <FolderInputIcon />, onSelect: doors.askMove }];
-  const open: MenuAction = {
-    label: "Open on GitHub",
-    icon: <ExternalIcon />,
-    onSelect: () => tasks.onOpenOnGitHub(taskId),
+      : [commandAction(PANEL_COMMAND.MOVE_TO_WORKSPACE, doors.askMove, drawn)];
+  const open = commandAction(
+    PANEL_COMMAND.OPEN_ON_GITHUB,
+    () => tasks.onOpenOnGitHub(taskId),
+    drawn,
+  );
+  const remove: MenuAction = {
+    ...commandAction(PANEL_COMMAND.DELETE_TASK, doors.askDelete, drawn),
+    danger: true,
   };
   const groups: MenuEntry[][] = [
     [...(drawn ? [copy] : []), ...link, rename, versions],
-    [...placeActions(tasks, task), ...(doors.section === undefined ? [] : [doors.section])],
+    [...placeActions(tasks, task, drawn), ...(doors.section === undefined ? [] : [doors.section])],
     [change, ...move, ...((task?.repository ?? null) === null ? [] : [open])],
-    [
-      {
-        label: "Permanently delete",
-        icon: <TrashIcon />,
-        onSelect: doors.askDelete,
-        danger: true,
-      },
-    ],
+    [remove],
   ];
   return groups.filter((group) => group.length > 0);
 }
