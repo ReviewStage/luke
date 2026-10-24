@@ -1,0 +1,29 @@
+/* row-menu.css -- the ⋯ of a row that is no `ListRow`, a Board card or a
+   grid row, shown the way a `ListRow`'s is: while the row holds the keyboard
+   or its menu is open, while the pointer rests on it where there is a hover,
+   and always on a screen with no hover, where nothing would reveal it. Its
+   room is kept whether it shows or not, so its coming and going moves
+   nothing. */
+@layer components {
+  .luke-row-more {
+    display: flex;
+    opacity: 0;
+    transition: opacity var(--luke-duration-hover) var(--luke-motion-exit);
+  }
+
+  [data-row-menu]:is(:has(:focus-visible), [data-menu-open="true"]) .luke-row-more {
+    opacity: 1;
+  }
+
+  @media (hover: hover) {
+    [data-row-menu]:hover .luke-row-more {
+      opacity: 1;
+    }
+  }
+
+  @media (hover: none) {
+    .luke-row-more {
+      opacity: 1;
+    }
+  }
+}

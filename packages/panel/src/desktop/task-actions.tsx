@@ -409,8 +409,9 @@ function settledTask(task: TaskSummary | undefined): boolean {
 
 /**
  * One task's menu items and its delete question, held for whichever door
- * offers them: the sidebar's row, whose `ListRow` draws the menu itself, and
- * the doors that draw it through `useTaskMenu`. Neither the items nor the
+ * offers them: the sidebar's row, whose `ListRow` draws the menu itself, a
+ * Tasks list row and a Board card, which draw it through `useRowMenu`, and
+ * the toolbar's ⋯, which draws it through `useTaskMenu`. Neither the items nor the
  * question outlive the tab going off screen, and the question does not
  * outlive the task: each is taken down in the render that finds it gone, so
  * neither is left standing over another surface, over a task deleted
@@ -478,10 +479,10 @@ export function useTaskMenuItems(
 }
 
 /**
- * One task's menu, opened and drawn by the door that holds it: the
- * toolbar's ⋯, a Tasks list row, and a Board card. The sidebar's row takes
- * its items (`useTaskMenuItems`) to its `ListRow`, which opens them by its
- * ⋯, a right-click, and the menu key alike.
+ * One task's menu, opened and drawn by the toolbar's ⋯. A row takes its items
+ * (`useTaskMenuItems`) to its menu instead, which opens them by its ⋯, a
+ * right-click, and the menu key alike: the sidebar's `ListRow`, and a Tasks
+ * list row and a Board card through `useRowMenu`.
  */
 export function useTaskMenu(
   tasks: TasksControl,

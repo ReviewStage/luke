@@ -22,17 +22,9 @@ import { useClipped } from "../../use-clipped.js";
 import { BUTTON_SIZE } from "../button/button.js";
 import { motionKey, motionRows } from "../list-motion/list-motion.js";
 import { useLinkAddress } from "../menu/link-address.js";
-import {
-  type ContextMenuProps,
-  dropBelowStart,
-  Menu,
-  type MenuEntry,
-  opensMenu,
-  useMenu,
-  withContextMenu,
-} from "../menu/menu.js";
-import { MoreButton, moreLabel } from "../more-button/more-button.js";
+import { type ContextMenuProps, withContextMenu } from "../menu/menu.js";
 import { rovingItem, useRovingKeys } from "../roving-keys/roving-keys.js";
+import { type ListRowMenu, useRowMenu } from "../row-menu/row-menu.js";
 import {
   holdRun,
   type ListSelection,
@@ -43,6 +35,7 @@ import {
 } from "../selection/list-selection.js";
 import { useRowSwipe } from "./use-row-swipe.js";
 
+export type { ListRowMenu } from "../row-menu/row-menu.js";
 export type { ListSelection } from "../selection/list-selection.js";
 
 /**
@@ -287,20 +280,6 @@ const ListDensityContext = createContext<ListDensity>(LIST_DENSITY.REGULAR);
  */
 const ListVariantContext = createContext<ListVariant>(LIST_VARIANT.PLAIN);
 
-/** A row's menu of its thing's acts: what the thing is, which names its ⋯ and the menu, and the menu's items. */
-export interface ListRowMenu {
-  /** What the row is, as a sentence opens with it: "Task" names its ⋯ and its menu "Task actions". */
-  readonly thing: string;
-  /** The menu's items in groups, a rule between each group; none at all offers no menu. */
-  readonly groups: readonly (readonly MenuEntry[])[];
-  /** A muted line over the items, saying what they act on where the row's words do not. */
-  readonly heading?: ReactNode;
-  /** A muted line under the items, as who made the thing. */
-  readonly footer?: ReactNode;
-  /** Whether the surface the row stands on is shown; its menu closes once it is not, and stands while it is where unsaid. */
-  readonly shown?: boolean | undefined;
-}
-
 /** The act of a row that offers no swipe. */
 const NO_ACT = (): void => undefined;
 
@@ -491,10 +470,8 @@ export function ListRow({
     [ref, linkAddress],
   );
   const titleId = useId();
-  const rowMenu = useMenu(menu?.shown ?? true);
-  const moreElement = useRef<HTMLButtonElement | null>(null);
-  // Note that a row unavailable, or whose thing offers no acts now, opens no menu by any door.
-  const offered = menu !== undefined && !disabled && menu.groups.some((group) => group.length > 0);
+  const rowMenu = useRowMenu(menu, { disabled, opener: onPress ? pressElement : undefined });
+  const offered = rowMenu.offered;
   const [titleMeasured, titleClipped] = useClipped(plainWords(title));
   useEffect(() => {
     onTitleClipped?.(titleClipped);
@@ -611,7 +588,7 @@ export function ListRow({
         const row = event.currentTarget.closest<HTMLElement>(".luke-list-row");
         pulsePress(row ?? event.currentTarget, pressPulse);
         // Note that a right-click's menu holds the press as its opener, which its outside press leaves alone, so the press closes it.
-        if (rowMenu.open !== undefined) rowMenu.close(false);
+        if (rowMenu.open) rowMenu.close(false);
         if (choosable && selecting.press(selectKey, event)) return;
         onPress(event);
       }}
@@ -634,30 +611,16 @@ export function ListRow({
       {said(actions) ? <div className="luke-list-row-actions">{actions}</div> : null}
       {offered ? (
         <div className="luke-list-row-more">
-          <MoreButton
-            ref={moreElement}
-            thing={menu.thing}
-            size={
-              (density ?? listDensity) === LIST_DENSITY.REGULAR ? undefined : BUTTON_SIZE.COMPACT
-            }
-            aria-describedby={titleId}
-            {...rowMenu.trigger()}
-          />
+          {rowMenu.button({
+            size:
+              (density ?? listDensity) === LIST_DENSITY.REGULAR ? undefined : BUTTON_SIZE.COMPACT,
+            describedBy: titleId,
+          })}
         </div>
       ) : null}
     </>
   );
-  // The menu key, on the row's press or any of its acts, hangs the menu
-  // under the row from its start, and hands focus back to what held it.
-  const menuKey = (event: KeyboardEvent<HTMLLIElement>) => {
-    if (event.defaultPrevented || !opensMenu(event)) return;
-    event.preventDefault();
-    const held = event.target instanceof HTMLElement ? event.target : event.currentTarget;
-    rowMenu.show(dropBelowStart(event.currentTarget), held);
-  };
-  const rightClick = offered
-    ? rowMenu.contextMenu(onPress ? pressElement : moreElement)
-    : contextMenu;
+  const rightClick = rowMenu.doors ?? contextMenu;
   const { view, item } = swiped;
   const hold = (element: HTMLLIElement | null) => {
     item.ref.current = element;
@@ -678,10 +641,10 @@ export function ListRow({
         data-muted={muted === true ? "true" : undefined}
         data-density={density}
         data-ink={ink}
-        data-menu-open={menuOpen || rowMenu.open !== undefined ? "true" : undefined}
+        data-menu-open={menuOpen || rowMenu.open ? "true" : undefined}
         data-swipe={swipe === undefined ? undefined : view.state}
         data-armed={view.armed ? "true" : undefined}
-        onKeyDown={offered ? menuKey : undefined}
+        onKeyDown={rowMenu.onKeyDown}
         {...withContextMenu(
           rightClick,
           swipe === undefined ? {} : { onPointerDown: item.onPointerDown },
@@ -725,16 +688,7 @@ export function ListRow({
       {/* Note that the menu stands beside the row rather than in it, because a
           press or a key in the menu's portal would otherwise reach the row's
           own handlers, a long press on an item opening the menu again. */}
-      {offered && rowMenu.drawn !== undefined ? (
-        <Menu
-          label={moreLabel(menu.thing)}
-          menu={rowMenu.drawn}
-          heading={menu.heading}
-          footer={menu.footer}
-          groups={menu.groups}
-          onClose={rowMenu.close}
-        />
-      ) : null}
+      {rowMenu.popup}
     </>
   );
 }

@@ -507,6 +507,14 @@
     transition: opacity var(--luke-duration-hover) var(--luke-motion-exit);
   }
 
+  /* A mail-style row, whose metadata stands on its title's line, keeps its
+     ⋯ on that line too, level with the metadata and the acts beside it. */
+  .luke-list-row[data-meta="title"] .luke-list-row-more {
+    align-self: start;
+    height: var(--luke-type-label-leading);
+    margin-block-start: var(--luke-list-row-inset-block);
+  }
+
   .luke-list-row:not([data-actions="hover"]) .luke-list-row-actions:has(+ .luke-list-row-more) {
     padding-inline-end: 0;
   }

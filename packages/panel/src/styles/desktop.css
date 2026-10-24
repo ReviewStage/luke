@@ -5371,22 +5371,6 @@ ul.actor-stack {
   margin-left: auto;
 }
 
-/* With a pointer, the ⋯ comes in while the card is hovered, holds the
-   keyboard, or has its menu open. A touch screen has no hover to spend a
-   tap on, so there it always stands (`touch-hover.test.ts`). */
-@media (hover: hover) {
-  .tasks-board-card-more {
-    opacity: 0;
-    transition: opacity var(--luke-duration-hover) var(--luke-motion-exit);
-  }
-
-  .tasks-board-card:hover .tasks-board-card-more,
-  .tasks-board-card:has(:focus-visible) .tasks-board-card-more,
-  .tasks-board-card[data-menu-open="true"] .tasks-board-card-more {
-    opacity: 1;
-  }
-}
-
 /* On a phone the Board's tabs, one for each status, take the whole line
    above its one column, and scroll sideways where they need more; the
    column's cards fill its height, so a card's Status menu has the column's
@@ -5707,23 +5691,6 @@ ul.actor-stack {
    agent, named before their square, as a Board card names them. */
 .tasks-list-maker {
   max-width: 16ch;
-}
-
-/* With a pointer, the ⋯ comes in while the row is hovered, holds the
-   keyboard, or has its menu open; its column keeps its room meanwhile, so
-   nothing moves. A touch screen has no hover to spend a tap on, so there
-   it always stands (`touch-hover.test.ts`). */
-@media (hover: hover) {
-  .tasks-list-cell[data-cell="more"] {
-    opacity: 0;
-    transition: opacity var(--luke-duration-hover) var(--luke-motion-exit);
-  }
-
-  .tasks-list-row:hover .tasks-list-cell[data-cell="more"],
-  .tasks-list-row:has(:focus-visible) .tasks-list-cell[data-cell="more"],
-  .tasks-list-row[data-menu-open="true"] .tasks-list-cell[data-cell="more"] {
-    opacity: 1;
-  }
 }
 
 /* What a task's agents are doing and the pull requests they opened
