@@ -150,6 +150,7 @@ export * from "./components/working-mark/working-mark.js";
 export * from "./components/writing-glyph/writing-glyph.js";
 export * from "./components/zoom-image/zoom-image.js";
 export * from "./css.js";
+export * from "./face/face-mark.js";
 export * from "./face/glyphs.js";
 export * from "./face/wing-face.js";
 export * from "./icons/lucide-glyphs.js";

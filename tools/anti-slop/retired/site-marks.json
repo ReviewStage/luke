@@ -1,0 +1,10 @@
+{
+  "instead": "Draw Luke's face with FaceMark from @luke/ui, and a provider's mark, X's and LinkedIn's included, with ProviderMark.",
+  "patterns": [
+    {
+      "import": "@luke/brand",
+      "names": ["FACE_ART"],
+      "allow": ["packages/brand/", "packages/credentials/", "packages/ui/src/face/"]
+    }
+  ]
+}
