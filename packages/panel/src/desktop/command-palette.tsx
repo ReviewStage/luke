@@ -820,7 +820,10 @@ function agentRows(
   // Note that the plan's places open in its own panel, and in the Inbox's
   // beside an item of the plan, whose panel is the Inbox's.
   const holder = holdsTaskPanel(tasks) ? SIDE_PANEL_HOLDER.TASK : SIDE_PANEL_HOLDER.INBOX;
-  const shownCode = tasks.shownCode ?? [];
+  // Note that the Inbox's panel reads the chosen item's pages on its own and draws no code shown (`desktop-inbox.tsx`), so its "+" offers no shown file.
+  const inboxHeld = holder === SIDE_PANEL_HOLDER.INBOX;
+  const shownCode = inboxHeld ? [] : (tasks.shownCode ?? []);
+  const pages = (inboxHeld ? tasks.inboxView.pages : tasks.pages) ?? [];
   const places = opensTaskItems(tasks)
     ? panelOffers({
         holder,
@@ -828,7 +831,7 @@ function agentRows(
         panel: tasks.sidePanel,
         agents: tasks.agents,
         shownCode,
-        pages: tasks.pages ?? [],
+        pages,
         chat: chatOn && tasks.chatView.available,
         onNewTerminal: doors.onNewTerminal,
         browsers: doors.browsers,

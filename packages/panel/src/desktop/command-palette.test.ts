@@ -2564,6 +2564,50 @@ test('with a task open, ⌘K\'s "This task" lists its pages and a terminal for e
   assert.deepEqual(chosen, [{ page: "page-1" }, { terminal: agent.id }]);
 });
 
+test('over an Inbox item of the open task, ⌘K\'s "This task" lists the pages the Inbox\'s panel read, as that panel\'s "+" offers them, and no file shown on the task, which that panel draws none of', async () => {
+  const showing: TaskCodeShowing = {
+    callId: "c",
+    turnId: "t",
+    shownAt: 1_000,
+    code: {
+      ref: { path: "src/invites/accept.ts", startLine: 3, endLine: 5 },
+      repository: "acme/relay",
+      firstLine: 1,
+      lineCount: 9,
+      lines: [],
+      note: "A used invite is refused here.",
+    },
+  };
+  const base = tasksControl();
+  const tasks = tasksControl({
+    activeTaskId: DOCUMENT_TASK.id,
+    tasks: [
+      {
+        id: DOCUMENT_TASK.id,
+        workspaceId: DOCUMENT_TASK.workspaceId,
+        name: DOCUMENT_TASK.name,
+        createdAt: 1,
+        updatedAt: 2,
+        repository: null,
+      },
+    ],
+    region: { kind: DOCUMENT_REGION.READY, task: DOCUMENT_TASK },
+    shownCode: [showing],
+    pages: [],
+    inboxView: {
+      ...base.inboxView,
+      open: true,
+      chosen: { taskId: DOCUMENT_TASK.id, itemId: "item-1" },
+      pages: [{ id: "page-2", title: "Review notes", version: 1, at: 1 }],
+    },
+  });
+  await paletteUnderState(tasks);
+  chooseFilter("This task");
+  const listed = rows();
+  assert.ok(listed.includes(`Review notes · ${DOCUMENT_TASK.name}`), "the Inbox's page is listed");
+  assert.ok(!listed.some((row) => row.startsWith("accept.ts")), "no shown file is listed");
+});
+
 test("with a task on screen, ⌘K offers its Version history, Cancel task, Change repository, and Open on GitHub, each running on it what its ⋯ item runs", () => {
   const task = { ...DOCUMENT_TASK, repository: "acme/relay" };
   const ran: string[] = [];
