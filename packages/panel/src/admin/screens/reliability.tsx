@@ -462,7 +462,7 @@ function SystemHealth({
 }): React.JSX.Element {
   return (
     <AdminSection title="System health">
-      <div className={`grid ${CARD_GAP} min-[720px]:grid-cols-[1fr_1.4fr]`}>
+      <div className={`grid ${CARD_GAP} @min-[720px]/admin-section:grid-cols-[1fr_1.4fr]`}>
         {health === undefined ? (
           <DatabaseCardSkeleton />
         ) : (
