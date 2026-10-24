@@ -106,7 +106,7 @@ function press(container: HTMLElement, name: string): void {
 test("View settings on a File tab offers its lines' wrap, numbers, minimized notes, syntax theme, and type, and each is drawn on its lines at once", async () => {
   const container = mount();
   await wholeFileDrawn(container);
-  press(container, "View settings");
+  press(container, "View options");
   const popover = document.querySelector<HTMLElement>('[role="dialog"]') ?? assert.fail();
 
   assert.deepEqual(

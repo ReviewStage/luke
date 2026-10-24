@@ -43,7 +43,7 @@ import {
 } from "./file-view-settings.js";
 
 /**
- * view-settings.tsx -- the View settings button in a bar over lines, and the popover under it: on Files changed every diff setting stage-cli offers, in Luke's own controls, grouped by what a reader changes; over a File tab's or a page's source only those its lines follow.
+ * view-settings.tsx -- the View options button in a bar over lines, and the popover under it: on Files changed every diff setting stage-cli offers, in Luke's own controls, grouped by what a reader changes; over a File tab's or a page's source only those its lines follow.
  *
  * The popover sets what every diff follows (`file-view-settings.ts`), the
  * Files changed view's and a review thread's alike, drawn again as each
@@ -62,7 +62,7 @@ import {
  */
 
 /** What the button and its popover are called. */
-const VIEW_SETTINGS_LABEL = "View settings";
+const VIEW_SETTINGS_LABEL = "View options";
 
 /** A vocabulary's values as a control's options, each by the name the settings give it. */
 function optionsOf<Value extends string>(
@@ -208,7 +208,7 @@ function SettingsGroup({
   );
 }
 
-/** What a View settings button sets: a diff's every setting, its layout's room said, or those a File tab's lines follow, its wrap, its numbers, its syntax theme, and its type. */
+/** What a View options button sets: a diff's every setting, its layout's room said, or those a File tab's lines follow, its wrap, its numbers, its syntax theme, and its type. */
 export const VIEW_SETTINGS_SCOPE = {
   DIFF: "diff",
   LINES: "lines",
@@ -452,7 +452,7 @@ function ViewSettingsPopover({
   );
 }
 
-/** A bar's View settings button, and its popover while open: a diff's every setting, or only those its lines follow, so no row sets what the tab does not draw. */
+/** A bar's View options button, and its popover while open: a diff's every setting, or only those its lines follow, so no row sets what the tab does not draw. */
 export function ViewSettingsButton({ scope }: { scope: ViewSettingsScope }): React.JSX.Element {
   const [open, setOpen] = useState(false);
   const popoverId = useId();
