@@ -5248,7 +5248,15 @@ ul.actor-stack {
   position: relative;
   z-index: 1;
   /* off-scale: centres the compact chip on the name's first line */
-  margin: calc((var(--luke-type-label-leading) - var(--luke-space-20)) / 2) 0;
+  margin-block: calc((var(--luke-type-label-leading) - var(--luke-space-20)) / 2);
+}
+
+/* The mark that leads the name and the one that leads the pills, the
+   status's and the priority's (or the assignee's face where no priority is
+   drawn), stand on one column: each chip is drawn out past the card's
+   inset as far, so the two marks stand one above the other. */
+.tasks-board-card-title > .luke-chip,
+.tasks-board-card-pills > .luke-chip[data-icon-only="true"]:first-child {
   margin-left: calc(-1 * var(--luke-space-4));
 }
 
