@@ -21,10 +21,11 @@ import type { PageLine } from "@luke/features/page-wire";
 import { planSections } from "@luke/features/plan-document";
 import { TASK_TREE_ENTRY, type TaskSummary } from "@luke/features/task-wire";
 import type { TaskCodeShowing } from "@luke/features/tasks-view";
-import { countWords, readFailedWords, TERM } from "@luke/features/words";
+import { countWords, noMatchWords, readFailedWords, TERM } from "@luke/features/words";
 import { namesTaskKey, taskKey } from "@luke/features/workspace-key";
 import type { Workspace, WorkspaceMember } from "@luke/features/workspace-wire";
 import { ACT_KIND } from "@luke/host/acts";
+import { SHORTCUT_KEY } from "@luke/settings/shortcuts";
 import {
   BackButton,
   type ComboboxGroup,
@@ -39,6 +40,7 @@ import {
   MenuKeys,
   type MenuRow,
   MenuSurface,
+  menuKey,
   NO_BACK_KEY,
   POPOVER_WIDTH,
   ProviderMark,
@@ -334,16 +336,16 @@ const listedTasksAtom: Atom.Atom<{
 const MENU_LABEL = "Mention";
 
 /** What the list says where it has no row. */
-const NO_MATCH = "No results match";
+const NO_MATCH = noMatchWords(TERM.RESULT);
 
 /** The keys the list hears, said at its foot as far as it hears them now. */
 const MENU_KEY = {
-  MOVE: { keys: "↑↓", does: "Move" },
-  MENTION: { keys: "↵", does: "Mention" },
-  OPEN: { keys: "→", does: "Open" },
-  WIDEN: { keys: "⌫", does: "All kinds" },
-  UP: { keys: "⌫", does: "Up" },
-  CLOSE: { keys: "esc", does: "Close" },
+  MOVE: menuKey("Move", SHORTCUT_KEY.UP, SHORTCUT_KEY.DOWN),
+  MENTION: menuKey("Mention", SHORTCUT_KEY.ENTER, SHORTCUT_KEY.TAB),
+  OPEN: menuKey("Open", SHORTCUT_KEY.RIGHT),
+  WIDEN: menuKey("All kinds", SHORTCUT_KEY.BACKSPACE),
+  UP: menuKey("Up", SHORTCUT_KEY.BACKSPACE),
+  CLOSE: menuKey("Close", SHORTCUT_KEY.ESCAPE),
 } as const satisfies Record<string, MenuKey>;
 
 /** What a narrowed list's back arrow is read by: back to every kind, or up out of a folder. */
