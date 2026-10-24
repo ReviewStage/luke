@@ -423,7 +423,7 @@ function summaryRows(tasks: TasksControl, inbox: InboxBoardView, openComments?: 
   const inboxHolds = inbox.open.length + inbox.settled.length > 0;
   const inboxRow =
     inboxHolds || sidePanel.tabs.includes(SIDE_PANEL_TAB.INBOX)
-      ? [inboxEntry(() => sidePanel.onChoose(SIDE_PANEL_TAB.INBOX), inbox.open.length)]
+      ? [inboxEntry(() => sidePanel.onChoose(SIDE_PANEL_TAB.INBOX), inbox.waiting.length)]
       : [];
   // The task's comments stand in Tabs while any thread is open, counting them, or while their tab was used.
   const commented = openComments !== undefined && openComments > 0;
