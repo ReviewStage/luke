@@ -14,6 +14,7 @@ import {
 } from "@luke/ui";
 import type { UpdateControl } from "@luke/voice/settings-controls";
 import { useAct } from "../act.js";
+import { useBusyPress } from "./busy-press.js";
 
 /**
  * The row's one act, in the outline face every Settings row's act wears:
@@ -28,11 +29,7 @@ function updateButton(action: UpdateRowAction, control: UpdateControl): React.JS
     case UPDATE_ROW_ACTION.DOWNLOADING:
       return null;
     case UPDATE_ROW_ACTION.RESTART:
-      return (
-        <Button variant={BUTTON_VARIANT.OUTLINE} onClick={control.onInstall}>
-          Restart to update
-        </Button>
-      );
+      return <RestartToUpdate control={control} />;
     case UPDATE_ROW_ACTION.GET:
       return (
         <Button
@@ -61,6 +58,21 @@ function updateButton(action: UpdateRowAction, control: UpdateControl): React.JS
         </Button>
       );
   }
+}
+
+/** Restart to update, which waits on the host as it quits into the downloaded release. */
+function RestartToUpdate({ control }: { control: UpdateControl }): React.JSX.Element {
+  const install = useBusyPress(control.onInstall);
+  return (
+    <Button
+      variant={BUTTON_VARIANT.OUTLINE}
+      busy={install.busy}
+      busyLabel="Restarting"
+      onClick={install.onPress}
+    >
+      Restart to update
+    </Button>
+  );
 }
 
 /**

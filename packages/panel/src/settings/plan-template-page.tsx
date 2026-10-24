@@ -311,10 +311,13 @@ function TemplateFrame({ children }: { children: React.ReactNode }): React.JSX.E
  */
 function TitleActions({
   custom,
+  resetting,
   onShowHistory,
   onReset,
 }: {
   custom: boolean;
+  /** Whether the reset the question asked is under way. */
+  resetting: boolean;
   onShowHistory: () => void;
   onReset: () => void;
 }): React.JSX.Element {
@@ -324,7 +327,13 @@ function TitleActions({
         <IconButton icon={<HistoryIcon />} label={HISTORY_LABEL} onClick={onShowHistory} />
       </Tooltip>
       {custom ? (
-        <Button variant={BUTTON_VARIANT.OUTLINE} icon={<ResetIcon />} onClick={onReset}>
+        <Button
+          variant={BUTTON_VARIANT.OUTLINE}
+          icon={<ResetIcon />}
+          busy={resetting}
+          busyLabel="Resetting"
+          onClick={onReset}
+        >
           Reset to default
         </Button>
       ) : null}
@@ -357,6 +366,7 @@ function TemplateDocument({
             actions: (
               <TitleActions
                 custom={template.custom}
+                resetting={reset.busy}
                 onShowHistory={onShowHistory}
                 onReset={reset.ask}
               />

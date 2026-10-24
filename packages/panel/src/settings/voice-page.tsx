@@ -22,6 +22,7 @@ import {
   VOICE_KEYLESS_NOTE,
 } from "@luke/voice/microphone-access";
 import type { MicrophoneControl } from "@luke/voice/settings-controls";
+import { useBusyPress } from "./busy-press.js";
 import { AttentionMark } from "./marks.js";
 import { SchemaSettingRows } from "./schema-rows.js";
 import type { SettingsWrites } from "./writes.js";
@@ -121,11 +122,7 @@ export function VoiceSection({
                       />
                     </Tooltip>
                   ) : null}
-                  {microphoneRow.offerAccess ? (
-                    <Button variant={BUTTON_VARIANT.OUTLINE} onClick={microphone.onRequest}>
-                      Allow
-                    </Button>
-                  ) : null}
+                  {microphoneRow.offerAccess ? <AllowMicrophone microphone={microphone} /> : null}
                 </>
               )}
             </SettingsRow>
@@ -137,6 +134,21 @@ export function VoiceSection({
           while both halves do. */}
       {microphoneRow.ready ? <VoiceControlsSection view={view} writes={writes} /> : null}
     </>
+  );
+}
+
+/** Allow, which waits on the system's answer to the microphone's request. */
+function AllowMicrophone({ microphone }: { microphone: MicrophoneControl }): React.JSX.Element {
+  const request = useBusyPress(microphone.onRequest);
+  return (
+    <Button
+      variant={BUTTON_VARIANT.OUTLINE}
+      busy={request.busy}
+      busyLabel="Asking for access"
+      onClick={request.onPress}
+    >
+      Allow
+    </Button>
   );
 }
 

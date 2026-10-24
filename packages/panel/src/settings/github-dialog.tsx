@@ -137,7 +137,12 @@ function SavedToken({
   return (
     <Inline justify={JUSTIFY.BETWEEN}>
       <TokenFacts token={token} />
-      <Button variant={BUTTON_VARIANT.DANGER_OUTLINE} disabled={removal.busy} onClick={removal.ask}>
+      <Button
+        variant={BUTTON_VARIANT.DANGER_OUTLINE}
+        busy={removal.busy}
+        busyLabel="Removing"
+        onClick={removal.ask}
+      >
         Remove
       </Button>
       <ConfirmDialog

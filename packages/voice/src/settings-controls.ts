@@ -10,8 +10,8 @@ export interface MicrophoneControl {
   status: MicrophoneStatus;
   /** Whether there is anything to talk to, which is the microphone's only use. */
   voiceAvailable: boolean;
-  /** Asks the system for access. Using the microphone is the talk key's job. */
-  onRequest: () => void;
+  /** Asks the system for access, settling once asked, for the button that waits on it. Using the microphone is the talk key's job. */
+  onRequest: () => void | Promise<void>;
   /** Opens the one place the system's own grant can be changed. */
   onOpenSettings: () => void;
 }
@@ -57,8 +57,8 @@ export interface NotificationsControl {
   packaged: boolean;
   /** Opens System Settings on its notifications; offered only where macOS grants them. */
   onOpenSettings: () => void;
-  /** Posts a notification right away, even while Luke's window is in front. */
-  onTest: () => void;
+  /** Posts a notification right away, even while Luke's window is in front, settling once it has been asked. */
+  onTest: () => void | Promise<void>;
 }
 
 /**
@@ -74,8 +74,8 @@ export interface UpdateControl {
   build: RunningBuild;
   /** Asks the release manifest for the latest build, right now. */
   onCheck: () => Promise<void>;
-  /** Restarts into the downloaded release. */
-  onInstall: () => void;
+  /** Restarts into the downloaded release, settling once asked, for the button that waits on it. */
+  onInstall: () => void | Promise<void>;
   /** Opens the latest release's page, fixed by the build, in the browser. */
   onOpenLatest: () => void;
 }

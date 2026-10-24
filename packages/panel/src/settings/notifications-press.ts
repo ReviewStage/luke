@@ -13,8 +13,8 @@ import { ACT_KIND } from "@luke/host/acts";
 import { pressAct } from "../act.js";
 import { appPlatform } from "../app-platform.js";
 
-/** What the Test notification button does when pressed. */
-export function testNotifications(): void {
+/** What the Test notification button does when pressed, settling once the host has answered. */
+export function testNotifications(): Promise<void> {
   appPlatform().askNotificationsPermission?.();
-  pressAct(ACT_KIND.NOTIFICATIONS_TEST);
+  return pressAct(ACT_KIND.NOTIFICATIONS_TEST);
 }
