@@ -2,7 +2,7 @@ import { ACCOUNT_STATUS } from "@luke/credentials/snapshot";
 import type { AccountFailedRun } from "@luke/features/account-inbox-wire";
 import { PRODUCT_SURFACE_EVENT } from "@luke/features/analytics";
 import { FEEDBACK_KIND, type FeedbackKind } from "@luke/features/feedback";
-import { LINK_PLACE, type ReadLink } from "@luke/features/link-grammar";
+import { LINK_PLACE, linkOf, type ReadLink } from "@luke/features/link-grammar";
 import type { ModelProvider } from "@luke/features/models-wire";
 import { IDLE_TASKS_VIEW } from "@luke/features/tasks-view";
 import { ACT_KIND } from "@luke/host/acts";
@@ -57,6 +57,7 @@ import { OpenAiKeyProvider } from "./openai-key.js";
 import { PANEL_TAB, type PanelTab } from "./panel-tabs.js";
 import { OpenPersonProvider } from "./person-door.js";
 import { installPressIntent } from "./press-intent.js";
+import { settingsPageOf } from "./settings/pages.js";
 import { settingsRowsInput, shownSettingsView } from "./settings/settings-rows.js";
 import { followSettingsLink, useSettingsPlace, useSettingsWorkspace } from "./settings-link.js";
 import { SHELL_ROOM } from "./shell-room.js";
@@ -495,7 +496,18 @@ function AppWindow(): React.JSX.Element {
     if (route.kind === LINK_ROUTE.SETTINGS) {
       openSettings(route.settings);
     } else if (route.kind === LINK_ROUTE.EXPERIMENT_OFF) {
-      toast({ words: EXPERIMENT_OFF_LINK, tone: STATUS_TONE.DANGER, hold: TOAST_HOLD.FAILED });
+      // Note that the toast names the page the experiment is turned on in by its own name, as a link to it.
+      const { settings } = route;
+      toast({
+        words: EXPERIMENT_OFF_LINK,
+        tone: STATUS_TONE.DANGER,
+        hold: TOAST_HOLD.FAILED,
+        action: {
+          label: settingsPageOf(settings.page).title,
+          href: linkOf({ kind: LINK_PLACE.SETTINGS, page: settings.page }, link.workspace),
+          onPress: () => openSettings(settings),
+        },
+      });
     } else {
       guardLeave(() => {
         changeTab(PANEL_TAB.TASKS);

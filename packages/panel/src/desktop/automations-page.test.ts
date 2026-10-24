@@ -264,6 +264,8 @@ let defaultRefused = false;
 let catalogReads = 0;
 /** Whether the model catalog answers that it could not be read. */
 let catalogRefused = false;
+/** Whether the catalog marks every model as one no credential of the reader's pays for. */
+let catalogUnconnected = false;
 /** Whether the workspace's newest agents answer that they could not be read. */
 let agentListRefused = false;
 /** Whether a search among the workspace's agents answers that it could not be made. */
@@ -328,6 +330,7 @@ beforeEach(() => {
   defaultRefused = false;
   catalogReads = 0;
   catalogRefused = false;
+  catalogUnconnected = false;
   agentListRefused = false;
   agentSearchRefused = false;
   changeRefusal = undefined;
@@ -478,7 +481,11 @@ beforeEach(() => {
         catalogReads += 1;
         const value = catalogRefused
           ? { failure: AUTOMATION_CALL_FAILURE.UNANSWERED }
-          : { models: CATALOG };
+          : {
+              models: CATALOG.map((model) =>
+                catalogUnconnected ? { ...model, credentialMissing: true } : model,
+              ),
+            };
         return Promise.resolve({ status: FAKE_ANSWER.DONE, value });
       }
       if (request.kind === ACT_KIND.CODING_AGENTS_DEFAULT_READ) {
@@ -2731,6 +2738,26 @@ test("a default model that could not be read is said as unknown, and a model can
     "Saved",
     "opening the menu chooses nothing",
   );
+});
+
+test("the reader's own automation says a model nothing of theirs pays for cannot run, while a teammate's, run on its maker's connections, says nothing of it", async () => {
+  catalogUnconnected = true;
+  standing = [DIGEST, SWEEP];
+  /** The pinned rows of the Model row's menu, on the automation given. */
+  const footOn = async (automationId: string): Promise<string> => {
+    const page = mountPages({ kind: AUTOMATIONS_PAGE.EDIT, automationId });
+    await settle();
+    const chip = page.querySelector<HTMLButtonElement>(".agent-model-chip button");
+    assert.ok(chip, "the Model row draws the default's chip");
+    act(() => chip.click());
+    await settle();
+    return page.querySelector(".luke-searchable-menu-foot")?.textContent ?? "";
+  };
+
+  assert.match(await footOn(DIGEST.id), /Opus 5\.5 cannot run until you connect Claude/u);
+  const teammates = await footOn(SWEEP.id);
+  assert.match(teammates, /Effort/u, "the menu is open on its pinned rows");
+  assert.doesNotMatch(teammates, /cannot run|Connect/u);
 });
 
 test("a GitHub automation's row says its trigger as one sentence, naming the repository it is heard in", async () => {

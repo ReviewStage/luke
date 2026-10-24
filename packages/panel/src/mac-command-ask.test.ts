@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import { ACT_KIND } from "@luke/host/acts";
 import type { AppStateDelivery, MacCommandAsk } from "@luke/host/app-state";
 import { MAC_COMMAND_DECISION, type MacCommandAnswer } from "@luke/host/contract";
+import { SETTINGS_VIEW, type SettingsLink } from "@luke/settings/settings-views";
 import { holdExits } from "@luke/ui/testing/held-exits";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment } from "react";
@@ -11,6 +12,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test, vi } from "vitest";
 import { tellAct } from "./act.js";
 import { MacCommandAskDialog } from "./mac-command-ask.js";
+import { OpenSettingsProvider } from "./open-settings.js";
 import { rendererRegistry } from "./renderer-runtime.js";
 import {
   fakeActPort,
@@ -51,8 +53,11 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-/** The dialog drawn over main's document holding `asks`, with what it answered main. */
-async function mount(asks: readonly MacCommandAsk[]): Promise<MacCommandAnswer[]> {
+/** The dialog drawn over main's document holding `asks`, with what it answered main, each place in Settings it opened landing in `opened`. */
+async function mount(
+  asks: readonly MacCommandAsk[],
+  opened: SettingsLink[] = [],
+): Promise<MacCommandAnswer[]> {
   handState({}, { macCommands: { asks } });
   const answered: MacCommandAnswer[] = [];
   fakeActPort({
@@ -65,7 +70,16 @@ async function mount(asks: readonly MacCommandAsk[]): Promise<MacCommandAnswer[]
   const root = createRoot(container);
   roots.push(root);
   await act(async () =>
-    root.render(onRegistry(AtomRegistry.make(), createElement(MacCommandAskDialog))),
+    root.render(
+      onRegistry(
+        AtomRegistry.make(),
+        createElement(
+          OpenSettingsProvider,
+          { value: (link: SettingsLink) => opened.push(link) },
+          createElement(MacCommandAskDialog),
+        ),
+      ),
+    ),
   );
   return answered;
 }
@@ -127,6 +141,17 @@ test("the earliest ask is drawn with its command, and each answer goes back by t
     { id: FIRST.id, decision: MAC_COMMAND_DECISION.ALLOW_ALWAYS },
     { id: FIRST.id, decision: MAC_COMMAND_DECISION.DENY },
   ]);
+});
+
+test("the card names This Mac by a link, whose press denies the command before it opens the page the card would cover", async () => {
+  const opened: SettingsLink[] = [];
+  const answered = await mount([FIRST], opened);
+  const card = document.querySelector('[role="alertdialog"]') ?? assert.fail("the prompt stands");
+  assert.doesNotMatch(card.textContent ?? "", /›/u, "no path to the page is spelled");
+
+  await act(async () => button("This Mac").click());
+  assert.deepEqual(answered, [{ id: FIRST.id, decision: MAC_COMMAND_DECISION.DENY }]);
+  assert.deepEqual(opened, [{ page: SETTINGS_VIEW.THIS_MAC }]);
 });
 
 test("an answer main refuses raises a toast in main's own words", async () => {

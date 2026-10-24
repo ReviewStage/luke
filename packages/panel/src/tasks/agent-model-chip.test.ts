@@ -27,7 +27,9 @@ import { AgentModelChip } from "./agent-model-chip.js";
  * for the same catalog (`coder-agent-tools.test.ts`), while an eve agent's
  * offers all of it. A model whose plan runs no fast mode draws no Fast.
  * A Codex agent's menu ends on the ChatGPT plan that pays and a link to
- * manage its usage; no other agent's says what pays.
+ * manage its usage; no other agent's says what pays. An automation's chip
+ * says a choice nothing of the reader's pays for cannot run; a running
+ * agent's never does.
  */
 
 const MODELS: readonly CatalogModel[] = [
@@ -293,4 +295,39 @@ test("a Codex agent its OpenAI API key pays for names no plan, before its first 
     CODING_AGENT_PAYER.API_KEY,
   );
   assert.doesNotMatch(first.foot, /plan|Manage usage/u);
+});
+
+test("an automation's chip, whose choice a new agent starts on, says a model nothing of the reader's pays for cannot run, while a running agent's chip says nothing of it", () => {
+  const unconnected = MODELS.map((model) => ({ ...model, credentialMissing: true }));
+  const footOf = (startsNew: boolean): string => {
+    const view = document.createElement("div");
+    document.body.append(view);
+    const root = createRoot(view);
+    roots.push(root);
+    act(() =>
+      root.render(
+        createElement(AgentModelChip, {
+          model: {
+            choice: { model: "anthropic/claude-opus-5.5", effort: "high" },
+            note: undefined,
+            choose: () => undefined,
+          },
+          models: unconnected,
+          modelsFailed: false,
+          readModels: () => undefined,
+          usage: undefined,
+          startsNew,
+        }),
+      ),
+    );
+    const chip = view.querySelector<HTMLButtonElement>(".agent-model-chip button");
+    assert.ok(chip);
+    act(() => chip.click());
+    const foot = view.querySelector(".luke-searchable-menu-foot")?.textContent ?? "";
+    act(() => chip.click());
+    return foot;
+  };
+
+  assert.match(footOf(true), /Connect Claude.*Opus 5\.5 cannot run until you connect Claude/u);
+  assert.doesNotMatch(footOf(false), /cannot run|Connect/u);
 });

@@ -42,7 +42,12 @@ import {
   PULL_REQUEST_STATE,
   type PullRequestState,
 } from "@luke/features/coding-agent-wire";
-import { FAILURE_REASON, type Failure, type FailureReason } from "@luke/features/failure-remedy";
+import {
+  FAILURE_REASON,
+  type Failure,
+  type FailureReason,
+  remedyLabel,
+} from "@luke/features/failure-remedy";
 import { agentName, CATALOG_ID_SEPARATOR, modelLabel } from "@luke/features/model-label";
 import {
   type CatalogModel,
@@ -601,8 +606,49 @@ export interface RefusedCall {
 /** What a missing credential keeps the developer from: starting an agent, or messaging one. */
 const ACTION = { START: "start an agent", MESSAGE: "message this agent" } as const;
 
-/** What a model menu says beside a model whose provider no subscription or API key of the account's pays for, which it draws disabled. */
-export const MODEL_NOT_CONNECTED = "Not connected";
+/** A model nothing pays for, as a failure whose press connects its provider at its harness's row. */
+export interface ConnectFailure {
+  readonly reason: typeof FAILURE_REASON.CONNECT_AGENTS;
+  readonly text: string;
+  readonly provider: ModelProvider;
+}
+
+/**
+ * The press a model menu's row holds for a model whose provider no
+ * subscription or API key of the account's pays for: "Connect Claude" at
+ * the row's end (`remedyLabel`), landing on its harness's row in Settings ›
+ * Agents (`useRepositoryRemedy`); none for a model something pays for.
+ */
+export function modelConnectFailure(model: CatalogModel): ConnectFailure | undefined {
+  if (model.credentialMissing !== true) return undefined;
+  return {
+    reason: FAILURE_REASON.CONNECT_AGENTS,
+    text: `${modelLabel(model.id, [model])} cannot run until you connect ${harnessNameOf(model.provider)} with a subscription or an API key.`,
+    provider: model.provider,
+  };
+}
+
+/** What a model's row says at its end where nothing pays for it: the press that connects its harness, which its pick is. */
+export function modelConnectWords(model: CatalogModel): string | undefined {
+  const connect = modelConnectFailure(model);
+  return connect === undefined ? undefined : remedyLabel(connect);
+}
+
+/**
+ * Why a choice cannot run, and the press that connects what would run it:
+ * the note a model menu and Settings' Default model stand under the choice
+ * where no subscription or API key of the account's pays for its model, as
+ * a new account holding only an OpenAI key finds its Claude default; none
+ * for a choice something pays for, or one the catalog no longer lists.
+ */
+export function unrunnableChoice(
+  models: readonly CatalogModel[],
+  choice: ModelChoice,
+): ConnectFailure | undefined {
+  const { base } = readModelChoice(models, choice.model);
+  const model = models.find((each) => each.id === base);
+  return model === undefined ? undefined : modelConnectFailure(model);
+}
 
 /** What an agent Luke's key paid for says to a message, since it never moves to another payer. */
 export const LUKE_PAID_REFUSAL = "Luke's key no longer runs agents. Continue in a new one.";
