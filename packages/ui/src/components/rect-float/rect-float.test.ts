@@ -4,7 +4,12 @@ import assert from "node:assert/strict";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
-import { POPOVER_SIDE, type PopoverSide } from "../anchored-popover/popover-place.js";
+import {
+  POPOVER_SIDE,
+  POPOVER_WIDTH,
+  type PopoverSide,
+  type PopoverWidth,
+} from "../anchored-popover/popover-place.js";
 import { RectFloat } from "./rect-float.js";
 
 /**
@@ -59,12 +64,16 @@ function boxAt(left: number, top: number) {
 }
 
 /** A layer by the box `anchor` answers, laid in an owner's box 100 in and 50 down the window. */
-function mount(anchor: () => ReturnType<typeof boxAt>, side?: PopoverSide): HTMLElement {
+function mount(
+  anchor: () => ReturnType<typeof boxAt>,
+  side?: PopoverSide,
+  width?: PopoverWidth,
+): HTMLElement {
   const owner = document.body.appendChild(document.createElement("div"));
   owner.getBoundingClientRect = () => new DOMRect(100, 50, 600, 700);
   const root = createRoot(owner);
   roots.push(root);
-  act(() => root.render(createElement(RectFloat, { anchor, side, children: "Toolbar" })));
+  act(() => root.render(createElement(RectFloat, { anchor, side, width, children: "Toolbar" })));
   const layer = owner.querySelector<HTMLElement>(".luke-rect-float");
   assert.ok(layer, "the layer is drawn");
   return layer;
@@ -122,4 +131,14 @@ test("a margin its owner's rule gives the layer, as one spacing a box's children
   } finally {
     style.remove();
   }
+});
+
+test("a layer asked for a width stands at that width's token, and none asked is as wide as what it holds", () => {
+  const narrow = mount(() => boxAt(200, 300), undefined, POPOVER_WIDTH.NARROW);
+  const wide = mount(() => boxAt(200, 300), undefined, POPOVER_WIDTH.WIDE);
+  const held = mount(() => boxAt(200, 300));
+
+  assert.equal(narrow.style.width, "var(--luke-popover-width-narrow)");
+  assert.equal(wide.style.width, "var(--luke-popover-width-wide)");
+  assert.equal(held.style.width, "");
 });

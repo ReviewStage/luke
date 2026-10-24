@@ -1,11 +1,13 @@
 import { useLayoutEffect, useRef, useState } from "react";
 import { cssCustomProperties } from "../../css.js";
 import { visibleViewport } from "../../visible-viewport.js";
+import { askedStyleWidth } from "../anchored-popover/anchored-popover.js";
 import {
   type Box,
   POPOVER_ALIGN,
   POPOVER_SIDE,
   type PopoverSide,
+  type PopoverWidth,
   popoverPlace,
 } from "../anchored-popover/popover-place.js";
 import { type PressAway, usePressAway } from "../anchored-popover/press-away.js";
@@ -29,8 +31,9 @@ import { type PressAway, usePressAway } from "../anchored-popover/press-away.js"
  * as the anchored popover's is, which a tall list bounds itself by. A press
  * outside it is handed to its owner, who closes it unless the press lands
  * on what it `holds`, the field whose caret it stands by say
- * (`../anchored-popover/press-away.ts`). What it holds draws its own
- * surface (`MenuSurface`).
+ * (`../anchored-popover/press-away.ts`). It stands at one of the popover's
+ * three widths where its owner names one (`POPOVER_WIDTH`), never at a
+ * width of the owner's own. What it holds draws its own surface (`MenuSurface`).
  */
 
 /** Where the layer stands in its owner's box: its corner, the widest the room it keeps inside leaves it, and the height its side leaves it. */
@@ -124,6 +127,7 @@ function placeIn(
 export function RectFloat({
   anchor,
   side = POPOVER_SIDE.ABOVE,
+  width,
   onPressAway,
   holds,
   children,
@@ -131,6 +135,8 @@ export function RectFloat({
   /** The box to stand by, in window coordinates, as it stands now; none where it cannot be measured. */
   anchor: () => Box | undefined;
   side?: PopoverSide | undefined;
+  /** One of the three widths a popover asks for, drawn from its token; as wide as what it holds where none is named. */
+  width?: PopoverWidth | undefined;
   children: React.ReactNode;
 }): React.JSX.Element {
   const layer = useRef<HTMLDivElement>(null);
@@ -172,16 +178,17 @@ export function RectFloat({
       ref={layer}
       className="luke-rect-float"
       data-side={place?.side ?? side}
-      style={
-        place === undefined
+      style={{
+        ...(width === undefined ? undefined : { width: askedStyleWidth(width) }),
+        ...(place === undefined
           ? undefined
           : {
               left: place.left,
               top: place.top,
               maxWidth: place.width,
               ...cssCustomProperties({ "--luke-popover-room": `${place.room}px` }),
-            }
-      }
+            }),
+      }}
     >
       {children}
     </div>

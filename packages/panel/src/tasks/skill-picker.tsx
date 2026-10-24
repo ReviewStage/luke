@@ -5,6 +5,7 @@ import {
   GAP,
   MENU_SURFACE_INSET,
   MenuSurface,
+  POPOVER_WIDTH,
   RectFloat,
   Stack,
   TEXT_ELEMENT,
@@ -299,6 +300,7 @@ export function useSkillPicker({
     <RectFloat
       anchor={() => wordBox(mention)}
       side={side}
+      width={POPOVER_WIDTH.REGULAR}
       onPressAway={() => setClosedAt(mention.start)}
       holds={(target) => room.current?.contains(target) === true}
     >

@@ -20,6 +20,7 @@ import {
   Stack,
   Tooltip,
   useMenu,
+  usePressAway,
 } from "@luke/ui";
 import { openThread, usePlanCommentsControl } from "@luke/ui/plan-comments";
 import { sameTab } from "@luke/ui/tab-strip-model";
@@ -688,13 +689,16 @@ function SummaryCard({
     // The toolbar's opener is a box around its button, which takes the focus back.
     (opener?.querySelector<HTMLElement>("button") ?? opener)?.focus({ preventScroll: true });
   }, [from, onDismiss]);
+  // A press on a control that hangs the card, or on what the card opened, is that control's to answer.
+  usePressAway(card, () => undefined, {
+    onPressAway: leaving ? undefined : onDismiss,
+    holds: (target) =>
+      !(target instanceof Element) ||
+      target.closest(OPENER) !== null ||
+      target.closest(OPENED_FROM_CARD) !== null,
+  });
   useEffect(() => {
     if (leaving) return;
-    const press = (event: PointerEvent) => {
-      const { target } = event;
-      if (!(target instanceof Element) || card.current?.contains(target)) return;
-      if (target.closest(OPENER) === null && target.closest(OPENED_FROM_CARD) === null) onDismiss();
-    };
     // Note that the window's own Escape mutes a call or steps back a layer
     // (app.tsx), so the card keeps the press, as a menu does, before it is
     // heard there.
@@ -708,13 +712,9 @@ function SummaryCard({
       event.stopPropagation();
       collapse();
     };
-    window.addEventListener("pointerdown", press, true);
     window.addEventListener("keydown", key, true);
-    return () => {
-      window.removeEventListener("pointerdown", press, true);
-      window.removeEventListener("keydown", key, true);
-    };
-  }, [collapse, onDismiss, leaving]);
+    return () => window.removeEventListener("keydown", key, true);
+  }, [collapse, leaving]);
   return (
     <Card
       look={CARD_LOOK.RAISED}

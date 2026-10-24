@@ -4,6 +4,7 @@ import { asyncPressNeedsBusyRule } from "./rules/async-press-needs-busy.ts";
 import { enforceDeleteWithWhereRule } from "./rules/enforce-delete-with-where.ts";
 import { enforceUpdateWithWhereRule } from "./rules/enforce-update-with-where.ts";
 import { noAwaitDrizzleStatementRule } from "./rules/no-await-drizzle-statement.ts";
+import { noDocumentPressListenerRule } from "./rules/no-document-press-listener.ts";
 import { noLucideOutsideDoorRule } from "./rules/no-lucide-outside-door.ts";
 import { noNodeTestRule } from "./rules/no-node-test.ts";
 import { noRawAsyncPrimitivesRule } from "./rules/no-raw-async-primitives.ts";
@@ -15,8 +16,9 @@ import { skeletonThroughComponentsRule } from "./rules/skeleton-through-componen
 /**
  * Oxlint rules that catch code or tests that silently do nothing or wipe data,
  * and the design system's guards against controls built outside `@luke/ui`,
- * loading skeletons that copy the surface they stand for, buttons that wait on a press without saying so, and the classes,
- * glyphs and patterns phase 2 retired coming back.
+ * loading skeletons that copy the surface they stand for, buttons that wait on a press without saying so, popovers that close on a press
+ * through a listener of their own, and the classes, glyphs and patterns phase 2
+ * retired coming back.
  */
 const antiSlopPlugin = eslintCompatPlugin({
   meta: { name: "anti-slop" },
@@ -25,6 +27,7 @@ const antiSlopPlugin = eslintCompatPlugin({
     "enforce-delete-with-where": enforceDeleteWithWhereRule,
     "enforce-update-with-where": enforceUpdateWithWhereRule,
     "no-await-drizzle-statement": noAwaitDrizzleStatementRule,
+    "no-document-press-listener": noDocumentPressListenerRule,
     "no-lucide-outside-door": noLucideOutsideDoorRule,
     "no-node-test": noNodeTestRule,
     "no-raw-async-primitives": noRawAsyncPrimitivesRule,

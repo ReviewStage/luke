@@ -128,6 +128,24 @@ describe("a stylesheet", () => {
     expect(sheetRules(css)).toEqual([STYLE_RULE.EASING, STYLE_RULE.EASING, STYLE_RULE.EASING]);
   });
 
+  it("refuses a literal width on a picker's, popover's or menu's box, outside @luke/ui, and passes a token, a share, and a glyph in one", () => {
+    const panel = "packages/panel/src/styles/tasks.css";
+    const css = `.mention-menu { width: 360px; max-width: 100%; }
+      .composer .skill-menu { min-width: 20rem; }
+      .settings-picker, .thing { max-width: 420px; }
+      .a-popover { width: calc(100% - 2 * var(--luke-space-8)); max-width: 100%; }
+      .b-menu { width: var(--luke-popover-width-regular); }
+      .issue-picker-detail > svg { width: 12px; }
+      .menubar { width: 200px; }
+      .automation-field { width: 200px; }`;
+    expect(sheetRules(css, panel)).toEqual([
+      STYLE_RULE.PICKER_WIDTH,
+      STYLE_RULE.PICKER_WIDTH,
+      STYLE_RULE.PICKER_WIDTH,
+    ]);
+    expect(sheetRules(css, "packages/ui/src/components/thing/thing.css")).toEqual([]);
+  });
+
   it("reads declarations through nesting, layers, strings, and comments", () => {
     const css = `@layer components {
       .a {
