@@ -777,9 +777,12 @@ function unreachedFailure(
       authorizeUrl: unreached.authorizeUrl,
     };
   }
-  // The member's token is theirs to add or replace in Settings, so each of its cases carries that remedy and needs no task.
+  // The member's token is theirs to replace in Settings, so each of its cases carries that remedy and needs no task. NO_TOKEN is a saved token the deployment cannot open; a member with none saved never reaches it.
   if (unreached?.reason === REPOSITORY_UNREACHED.NO_TOKEN) {
-    return { reason: FAILURE_REASON.GITHUB_TOKEN, text: "No GitHub token saved.", noneSaved: true };
+    return {
+      reason: FAILURE_REASON.GITHUB_TOKEN,
+      text: "Your saved GitHub token could not be opened.",
+    };
   }
   if (unreached?.reason === REPOSITORY_UNREACHED.TOKEN_NO_ACCESS) {
     return {
