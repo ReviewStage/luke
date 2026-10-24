@@ -315,7 +315,13 @@ const EmojiPanel = memo(function EmojiPanel({
     <>
       {found.map((group) => (
         <section key={group.name} className="section-emoji-group" aria-label={group.name}>
-          <h3 className="section-emoji-group-name">{group.name}</h3>
+          <Text
+            as={TEXT_ELEMENT.H3}
+            variant={TEXT_VARIANT.GROUP}
+            className="section-emoji-group-name"
+          >
+            {group.name}
+          </Text>
           <div className="section-icon-grid">
             {group.emojis.map((one) => (
               <GridChoice

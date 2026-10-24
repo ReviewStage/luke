@@ -144,7 +144,13 @@ function TaskUnderToolbar(): React.JSX.Element {
       label={TITLE}
       toolbar={
         <header className="catalog-window-toolbar">
-          <h1 className="catalog-window-toolbar-title">{TITLE}</h1>
+          <Text
+            as={TEXT_ELEMENT.H1}
+            variant={TEXT_VARIANT.TOOLBAR_TITLE}
+            className="catalog-window-toolbar-title"
+          >
+            {TITLE}
+          </Text>
           <Button variant={BUTTON_VARIANT.OUTLINE} icon={<PencilIcon />}>
             Edit
           </Button>

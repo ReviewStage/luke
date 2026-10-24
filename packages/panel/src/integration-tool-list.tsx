@@ -30,6 +30,7 @@ import {
   ScrollArea,
   STATUS_TONE,
   type StatusTone,
+  TEXT_ELEMENT,
   TEXT_TONE,
   TEXT_VARIANT,
   Text,
@@ -211,12 +212,12 @@ function Parameters({ tool }: { tool: IntegrationTool }): React.JSX.Element | nu
   if (tool.parameters === undefined) return null;
   return (
     <section className="integration-tool-parameters" aria-label="Parameters">
-      <h3 className="integration-tool-section">
+      <Text as={TEXT_ELEMENT.H3} variant={TEXT_VARIANT.GROUP} className="integration-tool-section">
         {"Parameters"}
         <span className="integration-tool-section-count">
           {tool.parameters.length === 0 ? "none" : tool.parameters.length}
         </span>
-      </h3>
+      </Text>
       {tool.parameters.length === 0 ? null : (
         <dl className="integration-tool-parameter-list">
           {requiredFirst(tool.parameters).map((parameter) => (

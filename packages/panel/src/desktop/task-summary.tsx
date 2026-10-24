@@ -18,6 +18,8 @@ import {
   SCROLL_SIZE,
   ScrollArea,
   Stack,
+  TEXT_VARIANT,
+  Text,
   Tooltip,
   useMenu,
   usePressAway,
@@ -610,7 +612,9 @@ function SummaryList({
     <>
       {sections.map(({ heading, entries }) => (
         <div key={heading} className="task-summary-section">
-          <p className="section-heading">{heading}</p>
+          <Text variant={TEXT_VARIANT.GROUP} className="section-heading">
+            {heading}
+          </Text>
           <List label={heading} density={LIST_DENSITY.DENSE}>
             {entries.map((entry) => {
               const onPick = () => {

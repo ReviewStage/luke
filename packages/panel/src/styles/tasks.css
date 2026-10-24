@@ -1599,13 +1599,6 @@
   border-top: 1px solid var(--luke-color-border);
 }
 
-.view-settings-heading {
-  margin: 0;
-  color: var(--luke-color-text-muted);
-  font-size: var(--luke-type-caption-size);
-  font-weight: var(--luke-weight-medium);
-}
-
 /* A Files changed list of diffs (diff-list.tsx), or a review thread's lines
    (file-diff.tsx): Pierre draws each file in a shadow root of its own, in
    the panel's look (diff-view/index.ts). */
@@ -2766,10 +2759,6 @@
 
 .pull-request-title {
   margin: 0;
-  color: var(--luke-color-text);
-  font-size: var(--luke-type-dialog-size);
-  font-weight: var(--luke-weight-semibold);
-  line-height: var(--luke-type-dialog-leading);
   user-select: text;
 }
 
@@ -3576,24 +3565,10 @@
 
 .transcript-heading {
   margin: var(--luke-space-8) 0 var(--luke-space-4);
-  font-size: var(--luke-type-body-size);
-  font-weight: var(--luke-weight-medium);
-}
-
-.transcript-heading:where([data-level="1"], [data-level="2"], [data-level="3"]) {
-  font-weight: var(--luke-weight-semibold);
 }
 
 .transcript-heading:where([data-level="1"], [data-level="2"]) {
   margin-top: var(--luke-space-12);
-}
-
-.transcript-heading:where([data-level="1"]) {
-  font-size: var(--luke-type-dialog-size);
-}
-
-.transcript-heading:where([data-level="2"]) {
-  font-size: var(--luke-type-section-size);
 }
 
 .transcript-list {
@@ -4793,9 +4768,6 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
 .attachment-viewer-title {
   overflow: hidden;
   margin: 0;
-  font-size: var(--luke-type-section-size);
-  line-height: var(--luke-type-section-leading);
-  font-weight: var(--luke-weight-semibold);
   white-space: nowrap;
 }
 
