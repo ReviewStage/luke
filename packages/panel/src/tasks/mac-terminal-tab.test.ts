@@ -32,7 +32,7 @@ import { OpenHereProvider } from "./use-open-link.js";
  * Run on this Mac's tab as the developer meets it: a press reads the agent's
  * pushed branch and starts a run of it; the bar says how the run stands and
  * offers Stop while it runs and Run once it has ended; Stop asks main to end
- * it and the tab draws it stopped when main says it ended; Run starts it
+ * it, after asking first, and the tab draws it stopped when main says it ended; Run starts it
  * anew; Open in Terminal asks main to open the worktree once a run has
  * started; and the tab drawn again over a run only shows it, a stopped one
  * still Stopped; a run asked from another pull request's tab reads and runs
@@ -203,6 +203,29 @@ async function mount(asked: number, number?: number, phone = false) {
   };
 }
 
+/** The question standing over the window, as its words and its answers. */
+function question() {
+  const dialog = document.querySelector('[role="alertdialog"]');
+  return {
+    standing: dialog !== null,
+    words: dialog?.textContent ?? "",
+    answer: async (verb: string) => {
+      const button = [...(dialog?.querySelectorAll<HTMLButtonElement>("button") ?? [])].find(
+        (each) => each.textContent === verb,
+      );
+      assert.ok(button, `the question offers ${verb}`);
+      await act(async () => button.click());
+      await settle();
+    },
+  };
+}
+
+/** Presses Stop and answers the question it asks. */
+async function stopRun(tab: Awaited<ReturnType<typeof mount>>): Promise<void> {
+  await tab.press("Stop");
+  await question().answer("Stop");
+}
+
 /** Each open the tab asked main for, as its payload. */
 const opens = () =>
   sent.flatMap((each) =>
@@ -223,7 +246,7 @@ test("a press reads the branch and starts a run; Stop ends it, and Run starts it
   assert.match(tab.bar(), /luke\/add-thing · this Mac · Running/u);
   assert.deepEqual(tab.offered(), ["Open in Terminal", "Stop"]);
 
-  await tab.press("Stop");
+  await stopRun(tab);
   assert.equal(sent.at(-1)?.kind, ACT_KIND.MAC_TERMINAL_STOP);
   assert.match(tab.bar(), /Stopping…/u);
   say({ type: MAC_TERMINAL_PORT_MESSAGE.EXIT, code: 143 });
@@ -235,23 +258,41 @@ test("a press reads the branch and starts a run; Stop ends it, and Run starts it
   assert.equal(opens()[1]?.again, true);
 });
 
-test("a Stop main refuses returns the tab to running and says why, and a later Stop still works", async () => {
+test("a Stop main refuses returns the tab to running and says why in the question, and a later Stop still works", async () => {
   const tab = await mount(9);
   const say = tab.post();
   await settle();
   stopRefusal = "Luke can't stop that run right now.";
 
-  await tab.press("Stop");
+  await stopRun(tab);
 
   assert.match(tab.bar(), /Running/u);
   assert.deepEqual(tab.offered(), ["Open in Terminal", "Stop"]);
-  assert.ok(tab.toasts().includes(stopRefusal), `toasts stood: ${tab.toasts().join(" | ")}`);
+  assert.ok(question().words.includes(stopRefusal), `the question stood: ${question().words}`);
 
   stopRefusal = undefined;
-  await tab.press("Stop");
+  await question().answer("Stop");
   assert.match(tab.bar(), /Stopping…/u);
   say({ type: MAC_TERMINAL_PORT_MESSAGE.EXIT, code: 143 });
   assert.match(tab.bar(), /Stopped/u);
+});
+
+test("Stop asks first, in the words of what it ends, and Cancel leaves the run going", async () => {
+  const tab = await mount(10);
+  tab.post();
+  await settle();
+  const before = sent.length;
+
+  await tab.press("Stop");
+
+  const asked = question();
+  assert.match(asked.words, /Stop the run\?.*What's running in it ends\. This cannot be undone\./u);
+  assert.equal(sent.length, before, "nothing is ended before the answer");
+  await asked.answer("Cancel");
+  assert.equal(question().standing, false);
+  assert.equal(sent.length, before, "Cancel ends nothing");
+  assert.match(tab.bar(), /Running/u);
+  assert.deepEqual(tab.offered(), ["Open in Terminal", "Stop"]);
 });
 
 test("a run that ends on its own says how it ended", async () => {
@@ -294,7 +335,7 @@ test("Stop shows it is working from the press until the run has ended", async ()
   await settle();
   assert.deepEqual(tab.busy(), []);
 
-  await tab.press("Stop");
+  await stopRun(tab);
   assert.deepEqual(tab.busy(), ["Stop"]);
 
   say({ type: MAC_TERMINAL_PORT_MESSAGE.EXIT, code: 143 });
@@ -321,7 +362,7 @@ test("a run stopped, its tab drawn again, still says Stopped", async () => {
   const first = await mount(5);
   first.post();
   await settle();
-  await first.press("Stop");
+  await stopRun(first);
   first.unmount();
 
   const again = await mount(5);
@@ -404,5 +445,6 @@ test("on a phone the tab draws no bar, and the task's header's ⋯ stops, runs, 
 
   tab.handed.press("Stop");
   await settle();
+  await question().answer("Stop");
   assert.equal(sent.at(-1)?.kind, ACT_KIND.MAC_TERMINAL_STOP);
 });

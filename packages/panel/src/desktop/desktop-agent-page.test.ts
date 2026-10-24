@@ -30,6 +30,11 @@ import {
   type PullRequestState,
 } from "@luke/features/coding-agent-wire";
 import { LINK_PLACE, type ReadLink } from "@luke/features/link-grammar";
+import {
+  MAC_TERMINAL_PORT_CHANNEL,
+  MAC_TERMINAL_PORT_MESSAGE,
+  type MacTerminalPortOutbound,
+} from "@luke/features/mac-terminal-wire";
 import { pageFrameUrl } from "@luke/features/page-frame";
 import { PAGE_SHOWER, type PageLine } from "@luke/features/page-wire";
 import type { Task } from "@luke/features/task-wire";
@@ -54,6 +59,8 @@ import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
 import { runAppCommand } from "../app-commands.js";
 import { SIDE_BUNDLES } from "../bundle-loader.js";
 import { rendererRuntime } from "../renderer-runtime.js";
+import { SHELL_ROOM } from "../shell-room.js";
+import { ShellRoomContext } from "../stage-room.js";
 import type { AgentCallPlace } from "../tasks/agent-call.js";
 import { archiveWords } from "../tasks/coding-agent-model.js";
 import { SIDE_PANEL_TAB, type SidePanelControl, useSidePanel } from "../tasks/use-side-panel.js";
@@ -371,6 +378,13 @@ beforeEach(() => {
       if (request.kind === ACT_KIND.CODING_AGENTS_PULL_REQUEST && published !== undefined) {
         return Promise.resolve({ status: FAKE_ANSWER.DONE, value: published });
       }
+      // Note that main starts and ends a run of this Mac's without a word back.
+      if (
+        request.kind === ACT_KIND.MAC_TERMINAL_OPEN ||
+        request.kind === ACT_KIND.MAC_TERMINAL_CLOSE
+      ) {
+        return Promise.resolve({ status: FAKE_ANSWER.DONE, value: undefined });
+      }
       if (request.kind === ACT_KIND.GITHUB_OPEN) {
         openedOnGitHub.push(request.payload.url);
         return Promise.resolve({ status: FAKE_ANSWER.DONE, value: undefined });
@@ -641,6 +655,31 @@ function PanelPage(): React.JSX.Element {
     tasks: { ...tasksControl({}), sidePanel },
     agentId: AGENT_ID,
   });
+}
+
+/** The agent's page in a phone's room, over the window's own side panel, which stands only full screen. */
+function PhonePanelPage(): React.JSX.Element {
+  const agents = [AGENT_ID];
+  const sidePanel = useSidePanel(
+    undefined,
+    { id: AGENT_ID, holds: {} },
+    agents,
+    [],
+    [],
+    [],
+    agents,
+    SHELL_ROOM.NARROW,
+  );
+  drawnPanel = sidePanel;
+  return createElement(
+    ShellRoomContext.Provider,
+    { value: SHELL_ROOM.NARROW },
+    createElement(DesktopAgentPage, {
+      tasks: { ...tasksControl({}), sidePanel },
+      agentId: AGENT_ID,
+      away: { label: "Inbox", onPress: () => undefined },
+    }),
+  );
 }
 
 test("a delegation's row opens its worker in the side panel beside the agent's page, whose + offers none of a task's Board, Code, or Call", async () => {
@@ -1822,6 +1861,152 @@ test("Run in the header of a Pull request tab opened by its number runs that pul
   assert.ok(tab !== undefined && isMacTerminalTab(tab), "Run shows a Mac terminal");
   assert.equal(tab.macTerminal, AGENT_ID);
   assert.equal(tab.number, 2905);
+});
+
+/** Runs the agent's pushed branch on this Mac from the Pull request tab's header, which shows the run's Mac terminal tab. */
+/** The agent has pushed a branch, which its pull request tab reads. */
+function pushBranch(): void {
+  published = {
+    repository: "acme/relay",
+    branch: "luke/flaky-sweep",
+    pullRequest: {
+      number: 2911,
+      title: "Await the payment mock",
+      url: "https://github.com/acme/relay/pull/2911",
+      state: PULL_REQUEST_STATE.OPEN,
+      checks: CHECK_SUMMARY.PASSING,
+      additions: 3,
+      deletions: 1,
+      changedFiles: 1,
+    },
+  };
+}
+
+async function runOnThisMac(): Promise<void> {
+  takeDownTerminal = standTerminalDocument();
+  pages = [{ agent: { ...PAGE, status: CODING_AGENT_STATUS.RUNNING } }];
+  pushBranch();
+  const container = await mountPanelPage();
+  await settle();
+  const row =
+    container.querySelector<HTMLButtonElement>(
+      '.agent-tab-foot [aria-label="Pull request"] li > button',
+    ) ?? assert.fail("the pull request's row stands over the box");
+  act(() => row.click());
+  await settle();
+  const run =
+    container.querySelector<HTMLButtonElement>(
+      'aside.side-panel .pull-request-title-actions button[aria-label="Run on this Mac"]',
+    ) ?? assert.fail("the Pull request tab's header offers Run");
+  act(() => run.click());
+  await settle();
+}
+
+/** Hands the run's tab a port, as main does after an open, and answers what it can say on it. */
+async function postRunPort(): Promise<(message: MacTerminalPortOutbound) => void> {
+  const { port1: port } = new MessageChannel();
+  act(() => {
+    window.dispatchEvent(
+      new MessageEvent("message", {
+        data: { channel: MAC_TERMINAL_PORT_CHANNEL, ticket: { agentId: AGENT_ID } },
+        source: window,
+        ports: [port],
+      }),
+    );
+  });
+  await settle();
+  return (message) => act(() => port.onmessage?.(new MessageEvent("message", { data: message })));
+}
+
+/** The × on the Mac terminal's tab in the strip. */
+function macTerminalClose(): HTMLButtonElement {
+  return (
+    document.querySelector<HTMLButtonElement>(
+      `aside.side-panel button[aria-label="Close ${TAB_WORDS.MAC_TERMINAL}"]`,
+    ) ?? assert.fail("the Mac terminal's tab has a ×")
+  );
+}
+
+/** The question standing over the window, as its words and its answer buttons. */
+function questionStanding() {
+  const dialog = document.querySelector('[role="alertdialog"]');
+  return {
+    words: dialog?.textContent ?? "",
+    press: async (verb: string) => {
+      const button = [...(dialog?.querySelectorAll<HTMLButtonElement>("button") ?? [])].find(
+        (each) => each.textContent === verb,
+      );
+      assert.ok(button, `the question offers ${verb}`);
+      await act(async () => button.click());
+      await settle();
+    },
+  };
+}
+
+test("closing a Mac terminal's tab while its run is going asks first, and Cancel leaves it open", async () => {
+  await runOnThisMac();
+  await postRunPort();
+  assert.ok(isMacTerminalTab(drawnPanel?.tab ?? SIDE_PANEL_TAB.PLAN), "Run shows a Mac terminal");
+
+  act(() => macTerminalClose().click());
+  await settle();
+
+  const question = questionStanding();
+  assert.match(question.words, /Close this terminal\?.*What's running in it ends\./u);
+  assert.ok(
+    isMacTerminalTab(drawnPanel?.tab ?? SIDE_PANEL_TAB.PLAN),
+    "nothing is closed before the answer",
+  );
+  await question.press("Cancel");
+  assert.equal(document.querySelector('[role="alertdialog"]'), null);
+  assert.ok(isMacTerminalTab(drawnPanel?.tab ?? SIDE_PANEL_TAB.PLAN), "Cancel leaves it open");
+
+  act(() => macTerminalClose().click());
+  await settle();
+  await questionStanding().press("Close");
+  assert.ok(!isMacTerminalTab(drawnPanel?.tab ?? SIDE_PANEL_TAB.PLAN), "the answer closes the tab");
+});
+
+test("on a phone, Close in the panel header asks first while the run is going, as the strip's × does", async () => {
+  takeDownTerminal = standTerminalDocument();
+  pushBranch();
+  localStorage.clear();
+  installScrollIntoView();
+  const container = document.createElement("div");
+  document.body.append(container);
+  root = createRoot(container);
+  act(() => root?.render(onRegistry(AtomRegistry.make(), createElement(PhonePanelPage))));
+  await settle();
+  act(() => drawnPanel?.onChoose({ macTerminal: AGENT_ID, repository: "acme/relay", asked: 1 }));
+  await settle();
+  await postRunPort();
+  assert.ok(isMacTerminalTab(drawnPanel?.tab ?? SIDE_PANEL_TAB.PLAN), "the Mac terminal is shown");
+
+  const more =
+    container.querySelector<HTMLButtonElement>('[aria-label="Panel actions"]') ??
+    assert.fail("the panel's header has a ⋯");
+  act(() => more.click());
+  const close = [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find((each) =>
+    each.textContent?.startsWith("Close"),
+  );
+  assert.ok(close, "the ⋯ offers Close");
+  act(() => close.click());
+  await settle();
+
+  assert.match(questionStanding().words, /Close this terminal\?/u);
+  assert.ok(isMacTerminalTab(drawnPanel?.tab ?? SIDE_PANEL_TAB.PLAN), "nothing is closed unasked");
+});
+
+test("closing a Mac terminal's tab once its run has ended asks nothing", async () => {
+  await runOnThisMac();
+  const say = await postRunPort();
+  say({ type: MAC_TERMINAL_PORT_MESSAGE.EXIT, code: 0 });
+
+  act(() => macTerminalClose().click());
+  await settle();
+
+  assert.equal(document.querySelector('[role="alertdialog"]'), null, "no question stands");
+  assert.ok(!isMacTerminalTab(drawnPanel?.tab ?? SIDE_PANEL_TAB.PLAN), "the tab closed at once");
 });
 
 test("a fork's Pull request tab offers no Run, since its head's branch name would be read from the base repository", async () => {

@@ -19,6 +19,7 @@ import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
   CloseIcon,
   CollapseIcon,
+  ConfirmDialog,
   EmptyState,
   ERROR_STATE_PLACEMENT,
   ErrorState,
@@ -43,6 +44,7 @@ import {
   TEXT_VARIANT,
   Text,
   Tooltip,
+  useConfirmDialog,
   useResizeEdge,
 } from "@luke/ui";
 import { LUKE_ACTOR } from "@luke/ui/actor-model";
@@ -59,6 +61,7 @@ import {
   isSubagentTab,
   isTerminalTab,
   isTranscriptTab,
+  type MacTerminalStripTab,
   type PageStripTab,
   type StripTab,
   type SubagentStripTab,
@@ -69,6 +72,7 @@ import {
 } from "@luke/ui/tab-strip-model";
 import type { CodeFeedCallSource } from "@luke/voice/code-pane-model";
 import { type ShownFile, shownFiles } from "@luke/voice/code-pane-model";
+import { ACTION_RESULT_STATUS } from "@luke/wire";
 import {
   Fragment,
   type ReactNode,
@@ -127,7 +131,11 @@ import { fileLook, newestFileNote } from "../tasks/file-ref.js";
 import { snippetOf } from "../tasks/file-tab-model.js";
 import { FileView, type TreeShown } from "../tasks/file-view.js";
 import type { InboxBoardView } from "../tasks/inbox-model.js";
-import { MacTerminalTab } from "../tasks/mac-terminal-tab.js";
+import {
+  MAC_TERMINAL_CLOSE_QUESTION,
+  MacTerminalTab,
+  macTerminalGoing,
+} from "../tasks/mac-terminal-tab.js";
 import { OpenFileTabProvider } from "../tasks/open-file-tab.js";
 import { PagePane } from "../tasks/page-pane.js";
 import { PlanCommentsTab } from "../tasks/plan-comments.js";
@@ -969,6 +977,8 @@ function stripTabs(input: {
   copied: TranscriptCopier;
   /** Opens an agent's tab in the plan's column, as a card naming the agent offers. */
   onOpenAgent: (agentId: string) => void;
+  /** Closes a Mac terminal's tab, which asks first while its run is going. */
+  onCloseMacTerminal: (tab: MacTerminalStripTab) => void;
   /** The agent whose tab the plan's column shows, whose card follows its run. */
   shownAgent: string | undefined;
   /** The open plan, or the agent on no task, whose pages a page tab's card previews. */
@@ -1115,7 +1125,7 @@ function stripTabs(input: {
   const macTerminalTabs = panel.strip.filter(isMacTerminalTab).map((tab) => ({
     tab,
     look: look(tab, { ...tabLook({ kind: TAB_KIND.MAC_TERMINAL }), detail: tab.repository }),
-    close: () => panel.onClose(tab),
+    close: () => input.onCloseMacTerminal(tab),
   }));
   // A cloud Browser tab is named by its page's title, wearing the glyph of whose browser it is in,
   // and hangs a card saying whose browser that is, with its address; a draft closed is discarded.
@@ -1226,6 +1236,7 @@ function PanelTabs({
   actionsSlot,
   handed,
   onOpenAgent,
+  onCloseMacTerminal,
   shownAgent,
   inbox,
   inboxDrafted,
@@ -1268,6 +1279,8 @@ function PanelTabs({
   handed: HandedTabActions | undefined;
   /** Opens an agent's tab in the plan's column, as a Changes tab's card offers. */
   onOpenAgent: (agentId: string) => void;
+  /** Closes a Mac terminal's tab, asking first while its run is going. */
+  onCloseMacTerminal: (tab: MacTerminalStripTab) => void;
   /** The agent whose tab the plan's column shows, whose Changes card follows its run. */
   shownAgent: string | undefined;
   /** The task's Inbox as its board reads, whose items waiting on the developer its tab counts and its card says; none beside anything but a task's page. */
@@ -1295,6 +1308,7 @@ function PanelTabs({
     held,
     copied,
     onOpenAgent,
+    onCloseMacTerminal,
     shownAgent,
     pagePlace: pagePlaceOf(holder, taskId),
     plan: task,
@@ -1388,6 +1402,30 @@ function PanelTabs({
       />
     </PanelTabsRow>
   );
+}
+
+/**
+ * What closes a Mac terminal's tab, asking first while its run is going,
+ * since closing it ends what runs there: every way of closing one (its ×,
+ * ⌘W, its menu, a phone's header) goes through `close`, and `question` is
+ * drawn once by the panel.
+ */
+function useMacTerminalClose(panel: SidePanelControl) {
+  const closing = useRef<MacTerminalStripTab | undefined>(undefined);
+  const confirm = useConfirmDialog({ subject: true, surfaceOpen: true }, () => {
+    if (closing.current !== undefined) panel.onClose(closing.current);
+    return Promise.resolve({ status: ACTION_RESULT_STATUS.ACCEPTED });
+  });
+  const close = (tab: MacTerminalStripTab) => {
+    if (!macTerminalGoing(tab.macTerminal)) {
+      panel.onClose(tab);
+      return;
+    }
+    closing.current = tab;
+    confirm.ask();
+  };
+  const question = <ConfirmDialog open confirm={confirm} question={MAC_TERMINAL_CLOSE_QUESTION} />;
+  return { close, question };
 }
 
 /**
@@ -2625,6 +2663,7 @@ export function SidePanel({
   });
   // Something on offer past the fixed kinds, which an empty panel offers in place as a closed kind is.
   const offersMore = offers.some((entry) => entry.row.section !== undefined);
+  const macTerminalClose = useMacTerminalClose(panel);
 
   return (
     <PanelFrame
@@ -2643,7 +2682,11 @@ export function SidePanel({
             listing={listing}
             shown={ownShown}
             onList={() => setOwnListed(true)}
-            onCloseShown={tab === undefined ? undefined : () => panel.onClose(tab)}
+            onCloseShown={
+              tab === undefined
+                ? undefined
+                : () => (isMacTerminalTab(tab) ? macTerminalClose.close(tab) : panel.onClose(tab))
+            }
           />
         ) : undefined
       }
@@ -2669,6 +2712,7 @@ export function SidePanel({
           actionsSlot={actionsSlot}
           handed={handed}
           onOpenAgent={(agent) => onOpenTarget({ kind: TOOL_TARGET.AGENT, agent })}
+          onCloseMacTerminal={macTerminalClose.close}
           shownAgent={shownAgent}
           inbox={inbox?.board}
           inboxDrafted={inbox?.drafted ?? false}
@@ -2783,6 +2827,7 @@ export function SidePanel({
           </div>
         </FindScope>
       )}
+      {macTerminalClose.question}
     </PanelFrame>
   );
 }
