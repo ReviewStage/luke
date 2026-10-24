@@ -492,6 +492,12 @@ test("the browse list sorts by name, groups only where the repository's plugins 
     [["productivity", ["grill-me"]]],
   );
   assert.deepEqual(skillList(grouped, "nothing like it"), []);
+  // Each word may land in a different line: the name holds one, the description the other.
+  assert.deepEqual(
+    skillList(grouped, "grill plan").map((group) => group.skills.map((each) => each.name)),
+    [["grill-me"]],
+  );
+  assert.deepEqual(skillList(grouped, "grill nothing"), []);
 });
 
 test("a source installs what the plan installs, and nothing while it installs nothing", () => {

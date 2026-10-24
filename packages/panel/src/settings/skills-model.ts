@@ -45,6 +45,7 @@ import {
 import { andList, countWords, readFailedWords, TERM } from "@luke/features/words";
 import type { Workspace, WorkspaceMember } from "@luke/features/workspace-wire";
 import { CONFIRM_LOSS, type ConfirmLoss, STATUS_TONE, type StatusTone } from "@luke/ui";
+import { matchesTokens, searchTokens } from "@luke/ui/search-tokens";
 
 /**
  * skills-model.ts -- Settings › Skills and its Add skill dialog as the window draws them, judged without drawing: the rows and their lines, and what a paste would install.
@@ -883,14 +884,9 @@ export interface SkillListGroup {
   readonly skills: readonly InstalledSkillCandidate[];
 }
 
-/** Whether a skill answers the search: its name or its description holds the words, in any case. */
-function answers(candidate: InstalledSkillCandidate, query: string): boolean {
-  const words = query.trim().toLocaleLowerCase();
-  if (words === "") return true;
-  return (
-    candidate.name.toLocaleLowerCase().includes(words) ||
-    (candidate.description?.toLocaleLowerCase().includes(words) ?? false)
-  );
+/** Whether a skill answers the search: each word of it is in the name or the description, in any case. */
+function answers(candidate: InstalledSkillCandidate, tokens: readonly string[]): boolean {
+  return matchesTokens([candidate.name, candidate.description ?? ""], tokens);
 }
 
 /**
@@ -903,8 +899,9 @@ export function skillList(
   skills: readonly InstalledSkillCandidate[],
   query: string,
 ): readonly SkillListGroup[] {
+  const tokens = searchTokens(query);
   const shown = skills
-    .filter((each) => answers(each, query))
+    .filter((each) => answers(each, tokens))
     .sort((one, other) => one.name.localeCompare(other.name));
   if (!skills.some((each) => each.group !== undefined)) {
     return shown.length === 0 ? [] : [{ title: undefined, skills: shown }];

@@ -12,6 +12,7 @@ import {
 import { INSTALLED_SKILL_CALL_FAILURE } from "@luke/features/installed-skill-view";
 import { INSTALLED_SKILL_SCOPE, INSTALLED_SKILL_SOURCE } from "@luke/features/installed-skill-wire";
 import { parseSkillPaste, SKILL_PASTE_KIND } from "@luke/features/skill-paste";
+import { TASK_SKILL_BOUNDS } from "@luke/features/task-wire";
 import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import type { PortActKind } from "@luke/host/contract";
@@ -872,6 +873,24 @@ test("pasted text folds to its size, its name suggested and editable, and asks w
       description: "How PRs read here.",
     },
   ]);
+});
+
+test("the When-to-use box stops at the description cap and counts toward it", async () => {
+  await mountDialog();
+  await paste(TEXT);
+
+  const box = fieldOf("When should agents use it?");
+  assert.equal(
+    box instanceof HTMLTextAreaElement && box.maxLength,
+    TASK_SKILL_BOUNDS.MAX_DESCRIPTION_CHARS,
+  );
+  assert.equal(document.querySelector(".luke-length-counter"), null);
+  typeInto(box, "x".repeat(Math.ceil(TASK_SKILL_BOUNDS.MAX_DESCRIPTION_CHARS * 0.9)));
+  await settle();
+  assert.match(
+    document.querySelector(".luke-length-counter")?.textContent ?? "",
+    new RegExp(`/${TASK_SKILL_BOUNDS.MAX_DESCRIPTION_CHARS}$`, "u"),
+  );
 });
 
 test("a source on another host says only GitHub for now and asks the service nothing", async () => {
