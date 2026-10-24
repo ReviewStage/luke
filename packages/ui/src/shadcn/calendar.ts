@@ -70,7 +70,7 @@ export const CALENDAR_RANGE: Readonly<Record<CalendarPlace, string>> = {
 
 /** A day's button: its number over the face drawn behind it. */
 export const CALENDAR_DAY_BUTTON =
-  "relative z-0 m-0 flex h-control w-full cursor-pointer items-center justify-center rounded-none border-0 bg-transparent p-0 font-sans focus-visible:rounded-control text-body tabular-nums before:absolute before:inset-0 before:-z-1 before:rounded-control before:transition-colors before:duration-(--luke-duration-hover) before:ease-[ease] before:content-[''] in-data-[luke-profile=desktop]:cursor-default";
+  "relative z-0 m-0 flex h-control w-full cursor-pointer items-center justify-center rounded-none border-0 bg-transparent p-0 font-sans focus-visible:rounded-control text-body tabular-nums before:absolute before:inset-0 before:-z-1 before:rounded-control before:transition-colors before:duration-(--luke-duration-hover) before:ease-motion-exit before:content-[''] in-data-[luke-profile=desktop]:cursor-default";
 
 /** A day's face: lit under the pointer, or filled in the accent where it is picked. */
 export const CALENDAR_DAY_FACE = {

@@ -10,7 +10,7 @@ import { GITHUB_ACCESS, type GitHubAccess } from "@luke/features/github-reposito
 import { Effect, Option } from "effect";
 import { Database } from "../../core/query.js";
 import { user } from "../../schemas/auth.js";
-import { getTestDB, startTask } from "../../testing/index.js";
+import { getTestDB, plansOf, startTask } from "../../testing/index.js";
 import {
   archiveCodingAgent,
   createCodingAgent,
@@ -174,5 +174,14 @@ it.layer(getTestDB())("the token agents' pull requests due a poll", (it) => {
         )).filter((each) => each.agentId === agentId);
         assert.deepEqual(another, { agentId, userId: owner, pullRequest: 8, state: null });
       }),
+  );
+
+  it.effect("the claim finds the polls due through their index, soonest first", () =>
+    Effect.gen(function* () {
+      const plans = yield* plansOf(claimTokenPullRequestPolls(NOW, NEXT, EVERY));
+      const due = plans.find(({ sql }) => /for update of "token_pull_request_poll"/i.test(sql));
+
+      assert.match(due?.plan ?? "", /token_pull_request_poll_due/);
+    }),
   );
 });

@@ -8,10 +8,17 @@ import type { AppSettings } from "@luke/settings/wire";
 import type { MicrophoneRoute, MicrophoneStatus, OutputAudioState } from "@luke/voice/audio";
 import type { AvatarState } from "@luke/voice/avatar";
 import type { NotificationsStatus } from "@luke/voice/settings-controls";
-import type { VoiceCallTranscript, VoiceView } from "@luke/voice/voice-view";
-import { EXCESS_KEYS, type UnparsedWireValue } from "@luke/wire";
+import {
+  callTranscriptChangeBetween,
+  isVoiceCallTranscriptChange,
+  type VoiceCallTranscript,
+  type VoiceCallTranscriptChange,
+  type VoiceView,
+  withCallTranscriptChange,
+} from "@luke/voice/voice-view";
+import { EXCESS_KEYS, isRecord, keepIdentity, type UnparsedWireValue } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
-import { Result, Schema } from "effect";
+import { Equal, Result, Schema } from "effect";
 import type { MacCommandAsk } from "./mac-command-ask.js";
 
 export type { MacCommandAsk } from "./mac-command-ask.js";
@@ -82,12 +89,6 @@ interface AppVoiceSlice {
    * one: it travels on `app:voice-level-changed` as the stream it is.
    */
   view?: VoiceView;
-  /**
-   * What was said on the standing call so far, held whole from the changes
-   * the voice window reports beside its view (`VoiceCallTranscript`); absent
-   * while no call stands, before its first line, and once that window is gone.
-   */
-  callTranscript?: VoiceCallTranscript | undefined;
   /**
    * Luke's avatar on the call, as the panel reports it: what puts the video
    * tile in the tab of the agent the call is into and what the tile draws. Main's rather than
@@ -258,6 +259,16 @@ export interface AppState {
   audio: AppAudioSlice;
   voice: AppVoiceSlice;
   /**
+   * What was said on the standing call so far, held whole from the changes
+   * the voice window reports beside its view (`VoiceCallTranscript`); absent
+   * while no call stands, before its first line, and once that window is gone.
+   * Not part of the voice slice, because it grows for the whole call while
+   * the view beside it is reported ten times a second: a window is handed
+   * only what moved in it (`AppStateDelivery`), and the voice and call
+   * windows, which draw none of it, are never handed it.
+   */
+  callTranscript?: VoiceCallTranscript | undefined;
+  /**
    * The Tasks tab's named tasks as the host's reads of the service
    * hold them: the list, the one active task, and its saved document. Only
    * the panel's Tasks tab draws it, and the active task is the one whose
@@ -286,9 +297,10 @@ export interface AppWindowFacts {
 
 /**
  * The document as one window is handed it: every slice, and that window's own
- * facts beside them. The first delivery is this window's bootstrap and every
- * later one carries a version at least as high, so there is no "which arrived
- * first" for a reader to answer.
+ * facts beside them. Its first read is this window's bootstrap, and every
+ * delivery after it (`AppStateDelivery`) carries what moved under a version
+ * at least as high, so there is no "which arrived first" for a reader to
+ * answer.
  */
 export type AppStateSnapshot = AppState & { window: AppWindowFacts };
 
@@ -316,6 +328,118 @@ const readAppStateSnapshot = readEither(appStateSnapshotSchema, { excess: EXCESS
 /** The boundary parse for a snapshot, as the window's bridge holds every delivery to it. */
 export function isAppStateSnapshot(value: UnparsedWireValue): boolean {
   return Result.isSuccess(readAppStateSnapshot(value));
+}
+
+/** What a delivery replaces whole: every slice and the window's facts, all but the call transcript. */
+type AppStateEntry = Exclude<keyof AppStateSnapshot, "version" | "callTranscript">;
+
+/**
+ * One push of the document to a window: what moved in it since the last that
+ * window was handed, under the version it moved to. Each entry in `entries`
+ * is replaced whole, each in `gone` is no longer held, and every entry named
+ * in neither is the one the window holds. An entry that went is named in a
+ * list of its own rather than as undefined, because the push is JSON and
+ * JSON keeps no key whose value is undefined. The call transcript is carried
+ * as the change that moved it, never whole after the first, since it grows
+ * for the whole call. A window's first delivery names every entry it draws.
+ */
+export interface AppStateDelivery {
+  readonly version: number;
+  readonly entries: { readonly [Entry in AppStateEntry]?: AppStateSnapshot[Entry] };
+  readonly gone?: readonly AppStateEntry[];
+  readonly callTranscript?: VoiceCallTranscriptChange;
+}
+
+/**
+ * The delivery that brings a window holding `sent` to `next`, or none where
+ * nothing it is handed moved. Note that the document keeps the identity of
+ * every part a patch did not move, so an untouched entry is answered at its
+ * first comparison and only an entry that moved is walked.
+ */
+export function appStateDelivery(
+  sent: AppStateSnapshot | undefined,
+  next: AppStateSnapshot,
+): AppStateDelivery | undefined {
+  // SAFETY: `Object.keys` of a snapshot names its own entries, its version, and its transcript, the last two dropped here.
+  const names = [...new Set([...Object.keys(sent ?? {}), ...Object.keys(next)])].filter(
+    (name) => name !== "version" && name !== "callTranscript",
+  ) as AppStateEntry[];
+  const moved = names.filter((name) => sent === undefined || !Equal.equals(sent[name], next[name]));
+  const gone = moved.filter((name) => next[name] === undefined);
+  const callTranscript = callTranscriptChangeBetween(sent?.callTranscript, next.callTranscript);
+  if (sent !== undefined && moved.length === 0 && callTranscript === undefined) return undefined;
+  return {
+    version: next.version,
+    entries: Object.fromEntries(
+      moved.filter((name) => next[name] !== undefined).map((name) => [name, next[name]]),
+    ),
+    ...(gone.length === 0 ? undefined : { gone }),
+    ...(callTranscript === undefined ? undefined : { callTranscript }),
+  };
+}
+
+/**
+ * The document a window holds once a delivery lands on it: each entry named
+ * replaced, keeping the identity of every part of it that did not move, so a
+ * memo keyed on a part the delivery left alone still holds; each entry gone
+ * held no more; every other entry the very object held; and the transcript
+ * with its change applied.
+ */
+export function withAppStateDelivery(
+  held: AppStateSnapshot,
+  delivery: AppStateDelivery,
+): AppStateSnapshot {
+  const entries = Object.fromEntries(
+    Object.entries(delivery.entries).map(([name, value]) => [
+      name,
+      // SAFETY: a delivery's entries are keyed by the snapshot's own entry names.
+      keepIdentity(held[name as AppStateEntry], value),
+    ]),
+  );
+  const { callTranscript: heldTranscript, ...rest } = held;
+  const callTranscript =
+    delivery.callTranscript === undefined
+      ? heldTranscript
+      : withCallTranscriptChange(heldTranscript, delivery.callTranscript);
+  const next: AppStateSnapshot = {
+    ...rest,
+    ...entries,
+    ...(callTranscript === undefined ? undefined : { callTranscript }),
+    version: delivery.version,
+  };
+  // Note that an entry gone is held as no key at all, as the document holds it.
+  for (const name of delivery.gone ?? []) Reflect.deleteProperty(next, name);
+  return next;
+}
+
+/**
+ * The boundary declaration of a delivery, held to the same terms as a
+ * snapshot's: the version, and the window facts and capabilities where it
+ * carries them, each one this build knows. The transcript's change is read
+ * by its own Schema.
+ */
+const appStateDeliverySchema = Schema.Struct({
+  version: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+  entries: Schema.Struct({
+    run: Schema.optional(
+      Schema.Struct({
+        capabilities: Schema.Array(Schema.Literals(Object.values(HOST_CAPABILITY))),
+      }),
+    ),
+    window: Schema.optional(Schema.Struct({ fullScreen: Schema.Boolean })),
+  }),
+  gone: Schema.optional(Schema.Array(Schema.String)),
+});
+
+const readAppStateDelivery = readEither(appStateDeliverySchema, { excess: EXCESS_KEYS.DROP });
+
+/** The boundary parse for a delivery, as the window's push stream holds every one to it. */
+export function isAppStateDelivery(value: UnparsedWireValue): boolean {
+  return (
+    Result.isSuccess(readAppStateDelivery(value)) &&
+    isRecord(value) &&
+    (value.callTranscript === undefined || isVoiceCallTranscriptChange(value.callTranscript))
+  );
 }
 
 /**
