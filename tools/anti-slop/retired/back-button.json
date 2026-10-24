@@ -1,0 +1,7 @@
+{
+  "instead": "Draw the way back with BackButton from @luke/ui, or the toolbar's crumbs lead; the back arrow glyph is imported only there.",
+  "glyphs": [
+    { "glyph": "GLYPH.BACK", "allow": ["packages/ui/src/components/back-button/"] },
+    { "glyph": "ArrowLeft", "allow": ["packages/ui/src/components/back-button/"] }
+  ]
+}
