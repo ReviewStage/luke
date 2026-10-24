@@ -24,17 +24,17 @@ import type { SettingsWrites } from "./writes.js";
  */
 const NOTIFICATIONS_WORDS = {
   packaged: {
-    when: "Luke notifies only when its window is in the background.",
+    when: "Luke notifies only when his window is in the background.",
     on: "macOS showed Luke's last notification, so notifications are on.",
     off: "macOS has notifications off for Luke.",
   },
   development: {
-    when: "Luke notifies only when its window is in the background.",
+    when: "Luke notifies only when his window is in the background.",
     on: "macOS showed the last notification from Electron, which is how the dev build appears to macOS.",
     off: "macOS has notifications off for Electron, which is how the dev build appears to macOS.",
   },
   browser: {
-    when: "Luke notifies only while its tab is hidden.",
+    when: "Luke notifies only while his tab is hidden.",
     on: "Your browser lets Luke show notifications.",
     off: "Your browser blocks Luke's notifications. Allow them in this site's settings, beside its address.",
   },

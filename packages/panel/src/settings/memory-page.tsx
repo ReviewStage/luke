@@ -1,6 +1,6 @@
 import type { MemorySummary } from "@luke/features/memory-wire";
 import { dayText } from "@luke/features/time-format";
-import { readFailedWords, readingWords } from "@luke/features/words";
+import { readFailedWords, readingWords, SIGNED_OUT_WORDS } from "@luke/features/words";
 import type { Workspace } from "@luke/features/workspace-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import { SETTINGS_SEARCH_ROW } from "@luke/settings/settings-anchors";
@@ -51,7 +51,7 @@ import { MenuRow } from "./menu-row.js";
 const PAGE_LINE = {
   FAILED: readFailedWords("Luke's memory"),
   WORKSPACES_FAILED: readFailedWords("your workspaces"),
-  SIGNED_OUT: "Sign in to see what Luke remembers.",
+  SIGNED_OUT: SIGNED_OUT_WORDS,
   EMPTY: "Luke hasn't remembered anything yet.",
   FORGET_FAILED: "The memory could not be forgotten. Try again.",
   PRIVATE: "Only you",
@@ -59,12 +59,7 @@ const PAGE_LINE = {
 
 /** What the page says the memories are for, and who shares them. */
 function noteFor(workspace: Workspace): string {
-  return (
-    `As they work in ${workspace.name}, Luke's coding agents keep the facts and conventions ` +
-    "you settle and recall them in the workspace's later tasks. Everyone in the workspace " +
-    "shares these memories, except those marked Only you, which only your Luke recalls. " +
-    "Forget anything that is wrong or no longer true."
-  );
+  return `Luke's coding agents keep what you settle in ${workspace.name} and recall it in later tasks.`;
 }
 
 /** Whose words a memory holds, as the reader is told: You for their own. */

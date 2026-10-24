@@ -10,7 +10,7 @@ import {
   type ProviderKeyStatus,
   type ProviderKeySummary,
 } from "@luke/features/provider-key-wire";
-import { readingWords } from "@luke/features/words";
+import { readingWords, SIGNED_OUT_WORDS } from "@luke/features/words";
 import { ACT_KIND } from "@luke/host/acts";
 import { SETTINGS_SEARCH_ROW, searchAnchorProps } from "@luke/settings/settings-anchors";
 import {
@@ -25,8 +25,6 @@ import {
   SettingsSection,
   Spinner,
   TEXT_LINK_LOOK,
-  TEXT_TONE,
-  Text,
   TextLink,
 } from "@luke/ui";
 import { actionRejection } from "@luke/ui/use-setting-write";
@@ -98,7 +96,7 @@ import { SwitchRow } from "./switch-row.js";
 const PAGE_LINE = {
   FAILED: "The default could not be read.",
   MODELS_NONE_MATCH: "No models match",
-  SIGNED_OUT: "Sign in to choose the model your agents run on.",
+  SIGNED_OUT: SIGNED_OUT_WORDS,
   WRITE_FAILED: "The default could not be saved. Try again.",
 } as const;
 
@@ -439,7 +437,7 @@ function CodingAgentsSection({
           </ErrorState>
         </SettingsLine>
       ) : (
-        <SettingsRowsSkeleton label="Loading your default" rows={DEFAULT_SKELETON} />
+        <SettingsRowsSkeleton label={readingWords("your default")} rows={DEFAULT_SKELETON} />
       )}
     </SettingsSection>
   );
@@ -460,7 +458,6 @@ export function CodingAgentsPage({ signedIn }: { signedIn: boolean }): React.JSX
   }, []);
   return (
     <>
-      <Text tone={TEXT_TONE.MUTED}>Other members connect their own subscriptions or API keys.</Text>
       <AgentAuthSection signedIn={signedIn} onKeys={onKeys} />
       <CodingAgentsSection signedIn={signedIn} ownKeys={ownKeys} keysAnswered={keysAnswered} />
       <ChaptersModelSection signedIn={signedIn} />

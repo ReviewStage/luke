@@ -185,7 +185,7 @@ test("the loading screen stands its sections under the same headings, saying it 
   const { page } = await openReliability(undefined);
 
   expect(sectionHeadings(page)).toEqual(SECTIONS);
-  expect(page.querySelector('[role="status"]')?.textContent).toContain("Loading…");
+  expect(page.querySelector('[role="status"]')?.textContent).toContain("Reading this page");
 });
 
 test("each rate reads as a share with what it is a share of", async () => {

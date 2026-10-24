@@ -127,7 +127,7 @@ function view(page: HTMLElement): HTMLElement {
  */
 function saysLoading(page: HTMLElement): boolean {
   return Array.from(page.querySelectorAll('[role="status"]')).some((region) =>
-    region.textContent?.startsWith("Loading…"),
+    region.textContent?.startsWith("Reading"),
   );
 }
 
@@ -456,7 +456,7 @@ test("a sign-out the service refuses says so and leaves the dashboard signed in"
 
   await vi.waitFor(() =>
     expect(document.querySelector('[role="alertdialog"]')?.textContent).toContain(
-      "Luke could not log out. Try again.",
+      "Luke could not sign out. Try again.",
     ),
   );
   expect(page.querySelector('nav[aria-label="Admin sections"]')).not.toBeNull();

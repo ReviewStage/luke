@@ -421,7 +421,7 @@ test("an account offered no provider is told so, with no row", async () => {
   const page = await mount();
 
   assert.deepEqual(rowNames(page), []);
-  assert.match(page.textContent ?? "", /No integrations are available for this account\./u);
+  assert.match(page.textContent ?? "", /No integrations available/u);
 });
 
 test("a read that fails after one that offered nothing still says so and offers to read again", async () => {
@@ -949,6 +949,12 @@ test("a query keeps only the rows it found, opening one onto the tools it found,
     "1 of 3 tools match",
   );
   assert.equal(page.querySelector(".integration-tools-panel mark")?.textContent, "deploy");
+  assert.equal(
+    rowNamed(page, "Vercel")
+      .querySelector(".luke-settings-row-state button")
+      ?.getAttribute("aria-label"),
+    "1 of 3 tools match, hide Vercel tools",
+  );
 });
 
 test("a query finds an integration by what it is for, keeping its section", async () => {
@@ -987,7 +993,7 @@ test("while where the providers stand is read, the search stands usable above pl
   const page = await mount(undefined, true);
 
   const status = page.querySelector('[role="status"]') ?? assert.fail("no placeholder");
-  assert.equal(status.textContent, "Loading the integrations");
+  assert.equal(status.textContent, "Reading the integrations");
   assert.equal(status.querySelectorAll(".luke-settings-section-card").length, 2);
   // Note that the field is checked as a yes or no, because a failure's diff of an element would print the whole document.
   assert.equal(searchField(page).closest('[aria-busy="true"]') === null, true);

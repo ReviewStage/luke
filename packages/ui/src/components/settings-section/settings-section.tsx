@@ -177,7 +177,7 @@ export function SettingsRowsSkeleton({
   label,
   rows,
 }: {
-  /** What is being read, said to a reader: "Loading the members"; none where a region around them says it. */
+  /** What is being read, said to a reader: "Reading the members"; none where a region around them says it. */
   label?: string | undefined;
   /** The rows likely to land, each in its shape, from what the loaded rows are drawn from. */
   rows: readonly SettingsRowSkeletonShape[];
@@ -215,7 +215,7 @@ export function SettingsSectionsSkeleton({
   label,
   sections,
 }: {
-  /** What is being read, said to a reader: "Loading the integrations". */
+  /** What is being read, said to a reader: "Reading the integrations". */
   label: string;
   /** The sections likely to land, each in its shape, from what the page's sections are drawn from. */
   sections: readonly SettingsSectionSkeletonShape[];

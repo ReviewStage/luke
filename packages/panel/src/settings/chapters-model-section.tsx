@@ -3,6 +3,7 @@ import {
   CHAPTERS_MODEL_LIST,
   type ChaptersModelId,
 } from "@luke/features/chapters-model-choice";
+import { readingWords, SIGNED_OUT_WORDS } from "@luke/features/words";
 import { ACT_KIND } from "@luke/host/acts";
 import { SETTINGS_SEARCH_ROW, searchAnchorProps } from "@luke/settings/settings-anchors";
 import {
@@ -37,7 +38,7 @@ import { useAct } from "../act.js";
 /** What the group says while it cannot read or write, with no account, and under its row. */
 const SECTION_LINE = {
   FAILED: "The chapters model could not be read.",
-  SIGNED_OUT: "Sign in to choose the model your chapters run on.",
+  SIGNED_OUT: SIGNED_OUT_WORDS,
   WRITE_FAILED: "The chapters model could not be saved. Try again.",
   DETAIL: "Runs on your own API key, or OpenAI's model of the same tier on an OpenAI key alone.",
 } as const;
@@ -123,7 +124,10 @@ export function ChaptersModelSection({ signedIn }: { signedIn: boolean }): React
           </ErrorState>
         </SettingsLine>
       ) : (
-        <SettingsRowsSkeleton label="Loading your chapters model" rows={CHAPTERS_SKELETON} />
+        <SettingsRowsSkeleton
+          label={readingWords("your chapters model")}
+          rows={CHAPTERS_SKELETON}
+        />
       )}
     </SettingsSection>
   );
