@@ -8,7 +8,6 @@ import { useCallback, useMemo, useRef } from "react";
 import { AssigneeFaceMark } from "../actor-ref.js";
 import { useMemberDirectory } from "../member-directory.js";
 import { PlanGlyph } from "../tasks/tab-look.js";
-import { useReadMarks } from "../tasks/use-task-looks.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import { useAnnounceShown } from "../use-announce-shown.js";
 import { useRefocusAfterEdit } from "../use-refocus-after-edit.js";
@@ -28,7 +27,8 @@ import { TaskRowMark, taskCardOf } from "./task-card.js";
  * dashed unassigned mark where no one is, and none where the reader is;
  * then its row's mark and time. Who made it is never its face, and stays on
  * its card (`taskCardOf`), which it hangs beside it while the pointer rests
- * on it. Its acts are the sidebar row's (`useTaskMenuItems`), one menu
+ * on it. Unread as the sidebar counts it, its name stands in the heavier
+ * weight, and its menu offers to mark it read. Its acts are the sidebar row's (`useTaskMenuItems`), one menu
  * opened alike by its ⋯, a right-click, and the menu key; renamed from it,
  * the row is its name's field until the edit ends, and a key that ends it
  * hands focus back to the row. It wears the task's id (`motionKey`), so a
@@ -39,6 +39,7 @@ export function RecentRow({
   task,
   now,
   face = true,
+  unread,
   onOpen,
 }: {
   tasks: TasksControl;
@@ -46,16 +47,17 @@ export function RecentRow({
   now: number;
   /** Whether the row wears who is on it, which a person's own page says once in its head instead. */
   face?: boolean;
+  /** Whether it is unread as the sidebar's row counts it: marked so by hand, or saved since the developer last looked (`useUnreadTasks`). */
+  unread: boolean;
   onOpen: () => void;
 }): React.JSX.Element {
   const directory = useMemberDirectory();
-  const reads = useReadMarks();
   const rename = useInlineRename(task.id, tasks.onRenameTask);
   useAnnounceShown(ANNOUNCE.ALERT, rename.refused ? RENAME_FAILED_NOTE : "");
   const actions = useTaskMenuItems(tasks, task.id, task.name, {
     rename: rename.begin,
     drawn: true,
-    unread: reads.markedUnread(task.id),
+    unread,
   });
   const row = useRef<HTMLElement | null>(null);
   const hold = useCallback((press: HTMLElement | null) => {
@@ -100,6 +102,7 @@ export function RecentRow({
               </span>
             )
           }
+          unread={unread}
           disabled={actions.deletion.busy}
           hint={rename.editing ? undefined : { Hint: RowHint, label: task.name }}
           onPress={rename.editing ? undefined : onOpen}

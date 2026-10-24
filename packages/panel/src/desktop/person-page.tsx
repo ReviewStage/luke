@@ -58,6 +58,7 @@ import {
 } from "@luke/ui/person-page-model";
 import { LinkIcon, ListFilterIcon, MailIcon, UsersIcon } from "lucide-react";
 import { type ReactNode, useCallback, useMemo, useRef, useState } from "react";
+import { useAct } from "../act.js";
 import { ACTOR_SIZE, ActorMark, AutomationCard, automationActor, YouBadge } from "../actor-ref.js";
 import { useAppCommand } from "../app-commands.js";
 import { LINK_COPY, useCopyToast } from "../copy-feedback.js";
@@ -69,6 +70,8 @@ import { AgentCard, lineSubject } from "../tasks/agent-ref.js";
 import { InboxItemRow, InboxListSkeleton } from "../tasks/inbox-list.js";
 import { INBOX_HOLDER, type InboxListed, inboxWaitsOn } from "../tasks/inbox-model.js";
 import { agentEndMark } from "../tasks/tab-look.js";
+import { readAgentById } from "../tasks/use-coding-agents.js";
+import { useUnreadTasks } from "../tasks/use-task-looks.js";
 import { AUTOMATIONS_PAGE, type TasksControl } from "../tasks/use-tasks-tab.js";
 import { useWaitingItems } from "../tasks/use-waiting-items.js";
 import { ActionMenu, type MenuAction, rowMenu } from "./action-menu.js";
@@ -167,7 +170,8 @@ const AUTOMATION_THING = "Automation";
  * One of their agents as a row: its tile, its name, the task it works on,
  * and when it last moved; a press opens its tab, and its ⋯, right-click and
  * menu key offer Copy link and Archive, as a task's summary offers them,
- * asking first while a teammate's agent still works.
+ * asking first while a teammate's agent still works, read again by its own
+ * id wherever it stands.
  */
 function AgentRow({
   each,
@@ -181,7 +185,10 @@ function AgentRow({
   const { task, agent } = each;
   const subject = lineSubject(agent, tasks.agents.models, tasks.me);
   const card = <AgentCard subject={subject} models={tasks.agents.models} />;
-  const archive = useAgentArchive(agent, tasks.agents, tasks.shown);
+  const { act } = useAct();
+  // Note that the agent is read again by its own id before a teammate's is archived, because the agents control reads only the open task's.
+  const control = { ...tasks.agents, readAgent: (agentId: string) => readAgentById(act, agentId) };
+  const archive = useAgentArchive(agent, control, tasks.shown);
   const copyLink = useCopyLinkItem()(agentPlace({ id: agent.id, planId: task.id }));
   return (
     <>
@@ -524,12 +531,15 @@ function PersonTasks({
   listed,
   tasks,
   now,
+  unread,
   onShowAll,
 }: {
   title: string;
   listed: readonly TaskSummary[];
   tasks: TasksControl;
   now: number;
+  /** Whether a task is unread, as the sidebar's rows count it. */
+  unread: (task: TaskSummary) => boolean;
   onShowAll: (() => void) | undefined;
 }): React.JSX.Element | null {
   if (listed.length === 0) return null;
@@ -537,7 +547,7 @@ function PersonTasks({
   return (
     <Stack gap={GAP.TIGHT}>
       <PersonSection title={title} count={listed.length}>
-        <TaskRows listed={listed} tasks={tasks} now={now} />
+        <TaskRows listed={listed} tasks={tasks} now={now} unread={unread} />
       </PersonSection>
       {onShowAll === undefined ? null : (
         <ShowMoreRow more={listed.length - PERSON_TASKS_SHOWN} shown={false} onToggle={onShowAll} />
@@ -556,10 +566,12 @@ function TaskRows({
   listed,
   tasks,
   now,
+  unread,
 }: {
   listed: readonly TaskSummary[];
   tasks: TasksControl;
   now: number;
+  unread: (task: TaskSummary) => boolean;
 }): React.JSX.Element {
   const shown = useMemo(() => listed.slice(0, PERSON_TASKS_SHOWN), [listed]);
   const drawn = useLeaving(shown, taskKey);
@@ -572,6 +584,7 @@ function TaskRows({
           task={task}
           now={now}
           face={false}
+          unread={unread(task)}
           onOpen={() => tasks.onSelect(task.id)}
         />
       ))}
@@ -616,6 +629,8 @@ function PersonColumn({
   const showCreated = () => taskView.onCreatedByAlone(userId);
   // Note that the page keeps one identity while the list stands, because each of its lists follows its rows (`useLeaving`).
   const page = useMemo(() => personPage(userId, listed), [userId, listed]);
+  // A task's row is unread as its sidebar row is, so its weight and its menu's Mark as read agree with the sidebar's.
+  const unread = useUnreadTasks(tasks.tasks, { listRead: tasks.listRead, staged });
   const you = userId === tasks.me;
   const theirAutomations = usePersonAutomations(tasks.workspace?.id, userId);
   const { automations } = theirAutomations;
@@ -744,6 +759,7 @@ function PersonColumn({
           listed={page.assigned}
           tasks={tasks}
           now={now}
+          unread={unread}
           onShowAll={shared ? showTasks : undefined}
         />
         <PersonTasks
@@ -751,6 +767,7 @@ function PersonColumn({
           listed={page.created}
           tasks={tasks}
           now={now}
+          unread={unread}
           onShowAll={shared ? showCreated : undefined}
         />
         {page.agents.length === 0 ? null : (
