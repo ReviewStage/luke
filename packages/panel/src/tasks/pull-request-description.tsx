@@ -2,6 +2,7 @@ import type { CodingAgentOverviewPullRequest } from "@luke/features/coding-agent
 import { PULL_REQUEST_ACTION, PULL_REQUEST_REFUSAL } from "@luke/features/pull-request-write-wire";
 import {
   Button,
+  CONFIRM_LOSS,
   ConfirmDialog,
   type DialogQuestion,
   EDITABLE_BLOCK_KIND,
@@ -62,6 +63,7 @@ const RELOAD_QUESTION: DialogQuestion = {
   body: "Your changes are discarded, and the description opens as it stands on GitHub now. This can't be undone.",
   verb: "Reload",
   running: "Reloading",
+  loss: CONFIRM_LOSS.IRREVERSIBLE,
 };
 
 /** Where the description stands: drawn, open in its editor, or waiting on its read to open again on GitHub's words. */

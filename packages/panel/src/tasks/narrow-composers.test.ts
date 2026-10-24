@@ -302,7 +302,7 @@ function inboxBox(): Record<"foot" | "attach" | "line" | "actions" | "mic" | "se
   const attach = part(part(foot, "div", "luke-composer-foot-tools"), "button", "");
   const actions = part(foot, "div", "luke-composer-foot-end");
   const mic = part(actions, "button", "dictate-button");
-  const send = part(actions, "button", "prompt-input-submit");
+  const send = part(actions, "button", "");
   return { foot, attach, line, actions, mic, send };
 }
 

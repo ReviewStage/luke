@@ -3,6 +3,7 @@ import { readFailedWords } from "@luke/features/words";
 import {
   BUTTON_VARIANT,
   Button,
+  CONFIRM_LOSS,
   ConfirmDialog,
   DIALOG_TONE,
   type DialogConfirm,
@@ -93,6 +94,7 @@ function restoreQuestion(at: number, noun: string): DialogQuestion {
     body: `The ${noun} will go back to the version from ${dayAndTimeText(at)}. The ${noun} as it stands now stays in the history.`,
     verb: "Restore",
     running: "Restoring",
+    loss: CONFIRM_LOSS.REVERSIBLE,
     tone: DIALOG_TONE.PRIMARY,
   };
 }

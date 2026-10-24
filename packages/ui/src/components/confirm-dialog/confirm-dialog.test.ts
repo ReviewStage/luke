@@ -4,7 +4,8 @@ import assert from "node:assert/strict";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { act, createElement, useRef, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeAll, test } from "vitest";
+import { afterEach, beforeAll, test, vi } from "vitest";
+import { holdExits } from "../../testing/held-exits.js";
 import { DIALOG_TONE } from "../dialog/dialog-actions.js";
 import {
   CONFIRM_LOSS,
@@ -21,7 +22,8 @@ import {
  * act can be tried again; and the question goes the moment its subject or
  * its surface does, a refusal with it, while an answer already given
  * finishes unseen. An answer that lands shows its check in the act's place
- * until the check has been seen; a refusal shakes the card; and a gated
+ * until the check has been seen, and the card fades out still wearing it,
+ * drawn until its fade has run; a refusal shakes the card; and a gated
  * question offers its act only once the subject's name is typed exactly.
  * Only an act past undoing is drawn red; one that can be undone but reaches
  * someone else asks in the accent, whatever tone it also names.
@@ -262,14 +264,43 @@ test("an answer that lands shows its check in the act's place, the card standing
   const cancelStilled = button("Cancel")?.disabled;
   key("Escape");
   const keptByEscape = question() !== null;
-  act(() => motion.dispatchEvent(new Event("finish")));
+  // Note that the engine goes before the check's motion ends, so the card's
+  // own fade, which jsdom cannot run, does not hold it.
   Reflect.deleteProperty(HTMLElement.prototype, "getAnimations");
+  act(() => motion.dispatchEvent(new Event("finish")));
 
   assert.ok(card, "the card stands while the check shows");
   assert.equal(checked, "true", "the act wears its check");
   assert.equal(cancelStilled, true);
   assert.equal(keptByEscape, true, "Escape does not cut the check short");
   assert.equal(question(), null, "the card goes once the check has been seen");
+  assert.ok(holds(opener), "focus goes back to the opener");
+});
+
+test("a card whose check has been seen fades out still wearing it, and goes once its fade has run", async () => {
+  vi.useFakeTimers({ toFake: ["requestAnimationFrame", "cancelAnimationFrame"] });
+  const exits = holdExits(
+    (element) =>
+      element.classList.contains("luke-button-done") || element.hasAttribute("data-ending-style"),
+  );
+  const { opener, settle } = asked();
+  press("Delete");
+  await settle(ACCEPTED);
+  act(() => exits.finish());
+  const leaving = question();
+  const ending = leaving?.hasAttribute("data-ending-style");
+  const checked = button("Delete")?.getAttribute("data-done");
+  act(() => vi.advanceTimersToNextFrame());
+  const standsAFrameOn = question() !== null;
+  await act(async () => exits.finish());
+  exits.restore();
+  vi.useRealTimers();
+
+  assert.ok(leaving, "the card stands as it fades");
+  assert.equal(ending, true, "the card is in its ending state");
+  assert.equal(checked, "true", "the act still wears its check");
+  assert.equal(standsAFrameOn, true, "the card waits on its fade");
+  assert.equal(question(), null, "the card goes once its fade has run");
   assert.ok(holds(opener), "focus goes back to the opener");
 });
 

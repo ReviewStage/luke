@@ -2,6 +2,7 @@ import type { CodingAgentSummary } from "@luke/features/coding-agent-wire";
 import {
   ArchiveIcon,
   BUTTON_SIZE,
+  CONFIRM_LOSS,
   ConfirmDialog,
   type DialogQuestion,
   GAP,
@@ -20,7 +21,7 @@ import {
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { useRef, useState } from "react";
 import { AgentCard, agentSubject, NOTHING_HELD } from "../tasks/agent-ref.js";
-import { agentName, agentStillWriting } from "../tasks/coding-agent-model.js";
+import { agentName, agentStillWriting, teammateStarter } from "../tasks/coding-agent-model.js";
 import { AgentGlyph, agentEndMark } from "../tasks/tab-look.js";
 import type { CodingAgentsControl } from "../tasks/use-coding-agents.js";
 import { TOAST_HOLD, useToast } from "../toast.js";
@@ -71,13 +72,18 @@ const ARCHIVED_NOUN: CountNoun = { one: "archived agent", many: "archived agents
 /** What an archived agent's one action says, in an archived task's words. */
 const UNARCHIVE_LABEL = "Unarchive";
 
-/** What asking to archive a working agent says. */
-function archiveQuestion(name: string): DialogQuestion {
+/**
+ * What asking to archive a working agent says. Unarchive brings the agent
+ * back, so the act is never red: it asks in the accent, as an act that
+ * reaches someone else where the agent is a teammate's, whose turn it stops.
+ */
+function archiveQuestion(name: string, teammate: string | undefined): DialogQuestion {
   return {
     title: `Stop and archive ${name}?`,
     body: "Its transcript and pull request are kept.",
     verb: "Stop and archive",
     running: "Archiving…",
+    loss: teammate === undefined ? CONFIRM_LOSS.REVERSIBLE : CONFIRM_LOSS.AFFECTS_OTHERS,
   };
 }
 
@@ -109,7 +115,10 @@ export function useAgentUnarchive(agentId: string, agents: CodingAgentsControl):
  * question goes with the surface it was asked on.
  */
 export function useAgentArchive(
-  agent: Pick<CodingAgentSummary, "id" | "status" | "title" | "automationName" | "model">,
+  agent: Pick<
+    CodingAgentSummary,
+    "id" | "status" | "title" | "automationName" | "model" | "startedBy"
+  >,
   agents: CodingAgentsControl,
   shown: boolean,
 ): AgentArchive {
@@ -134,7 +143,10 @@ export function useAgentArchive(
     dialog: (
       <ConfirmDialog
         confirm={confirm}
-        question={archiveQuestion(agentName(agent, agents.models))}
+        question={archiveQuestion(
+          agentName(agent, agents.models),
+          teammateStarter(agent.startedBy, agents.me),
+        )}
       />
     ),
   };

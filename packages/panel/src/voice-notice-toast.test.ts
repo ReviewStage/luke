@@ -104,12 +104,14 @@ function standing(): string[] {
   );
 }
 
-/** The button a standing toast labels `label`, in its words or, for its ×, by its name. */
-function toastButton(label: string): HTMLButtonElement {
+/** The control a standing toast labels `label`, a button or a link, in its words or, for its ×, by its name. */
+function toastControl(label: string): HTMLElement {
   const found = [
-    ...document.querySelectorAll<HTMLButtonElement>(".luke-toast:not([data-leaving]) button"),
-  ].find((button) => button.textContent === label || button.getAttribute("aria-label") === label);
-  return found ?? assert.fail(`a toast button named ${label}`);
+    ...document.querySelectorAll<HTMLElement>(".luke-toast:not([data-leaving]) :is(button, a)"),
+  ].find(
+    (control) => control.textContent === label || control.getAttribute("aria-label") === label,
+  );
+  return found ?? assert.fail(`a toast control named ${label}`);
 }
 
 /** What the stack's live region of `role` says now. */
@@ -171,7 +173,17 @@ test("a call whose OpenAI key is missing, refused or out of credit offers the re
   for (const { failure, label, remedy } of cases) {
     const remedies: VoiceRemedy[] = [];
     drawn({ speakers: NOBODY, error: failure, onRemedy: (pressed) => remedies.push(pressed) });
-    act(() => toastButton(label).click());
+    const control = toastControl(label);
+    if (failure === VOICE_FAILURE.OPENAI_KEY_UNFUNDED) {
+      assert.equal(control.tagName, "A", "a remedy that opens a page is a link");
+      assert.equal(
+        control.getAttribute("href"),
+        "https://platform.openai.com/settings/organization/billing/overview",
+      );
+    } else {
+      assert.equal(control.tagName, "BUTTON");
+    }
+    act(() => control.click());
     assert.deepEqual(remedies, [remedy]);
     assert.deepEqual(standing(), [], "the press sends the toast away");
     act(() => root?.unmount());
@@ -182,7 +194,7 @@ test("a call whose OpenAI key is missing, refused or out of credit offers the re
 
 test("a failure dismissed while the voice still says it stays dismissed, and the next thing the voice says stands anew", () => {
   drawn({ speakers: NOBODY, error: VOICE_FAILURE.OPENAI_KEY_MISSING });
-  act(() => toastButton("Dismiss").click());
+  act(() => toastControl("Dismiss").click());
   redrawn({ speakers: NOBODY, error: VOICE_FAILURE.OPENAI_KEY_MISSING });
   assert.deepEqual(standing(), []);
 
@@ -207,7 +219,7 @@ test("while Luke speaks into a Mac whose output is off, a toast says so, politel
   });
   assert.deepEqual(standing(), [HINT]);
   assert.equal(said("status"), HINT);
-  act(() => toastButton("Got it").click());
+  act(() => toastControl("Got it").click());
   assert.deepEqual(dismissed, ["got it"]);
 });
 

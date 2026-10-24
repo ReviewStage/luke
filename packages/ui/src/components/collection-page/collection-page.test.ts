@@ -46,6 +46,7 @@ afterEach(() => {
 function Tasks({ state }: { state: CollectionState }): React.JSX.Element {
   const [query, setQuery] = useState("");
   return createElement(CollectionPage, {
+    frame: PAGE_FRAME.PAGE,
     title: "Tasks",
     description: "Everything planned in this workspace.",
     actions: createElement(Button, null, "New task"),
@@ -121,6 +122,7 @@ test("a read in progress stands the caller's own skeleton in the named region, i
   act(() =>
     root.render(
       createElement(CollectionPage, {
+        frame: PAGE_FRAME.PAGE,
         title: "Tasks",
         state: COLLECTION_STATE.LOADING,
         loadingLabel: "Reading tasks",

@@ -14,33 +14,13 @@ import {
   PROMISE_CHAIN,
 } from "../shared/busy-guard.ts";
 import { repositoryPathOf } from "../shared/effect-edges.ts";
-import { attributeName } from "../shared/jsx.ts";
+import { attributeName, calleeName, isFunction, isNode } from "../shared/jsx.ts";
 import { JSX_SOURCE } from "../shared/press-guard.ts";
 
 /** How many names a handler is followed through before the rule gives up on it. */
 const FOLLOW_DEPTH = 4;
 
 type Node = ESTree.Node;
-
-/** Whether `value` is an AST node, which is what a walk descends into. */
-function isNode(value: unknown): value is Node {
-  return typeof value === "object" && value !== null && "type" in value;
-}
-
-function isFunction(node: Node): boolean {
-  return (
-    node.type === "ArrowFunctionExpression" ||
-    node.type === "FunctionExpression" ||
-    node.type === "FunctionDeclaration"
-  );
-}
-
-/** The name a call is made by: `press` in `press(x)` and in `act.press(x)`. */
-function calleeName(callee: Node): string | undefined {
-  if (callee.type === "Identifier") return callee.name;
-  if (callee.type !== "MemberExpression" || callee.computed) return undefined;
-  return callee.property.type === "Identifier" ? callee.property.name : undefined;
-}
 
 /**
  * The rule: a `@luke/ui` button whose press is async, or hands back a

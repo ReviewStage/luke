@@ -33,6 +33,7 @@ import {
   CardPress,
   type CardShadow,
   COMPOSER_LOOK,
+  CONFIRM_LOSS,
   Comment,
   type CommentAuthor,
   CommentsIcon,
@@ -405,6 +406,7 @@ const DELETE_QUESTION: DialogQuestion = {
   title: "Delete this comment?",
   verb: "Delete",
   running: "Deleting…",
+  loss: CONFIRM_LOSS.IRREVERSIBLE,
   tone: DIALOG_TONE.DANGER,
 };
 
@@ -413,6 +415,7 @@ const DELETE_THREAD_QUESTION: DialogQuestion = {
   body: "Every comment in it is deleted with it.",
   verb: "Delete thread",
   running: "Deleting…",
+  loss: CONFIRM_LOSS.IRREVERSIBLE,
   tone: DIALOG_TONE.DANGER,
 };
 

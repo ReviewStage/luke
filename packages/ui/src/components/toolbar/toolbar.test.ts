@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, test } from "vitest";
+import { afterEach, test, vi } from "vitest";
 import {
   NOT_FOUND_THING,
   NotFound,
@@ -18,7 +18,9 @@ import {
  * toolbar.test.ts -- a workspace's bar reads its lead, its title as the
  * page's heading, the tag after it, and its actions, in that order, drawing
  * only the slots that say something, and its actions end it even with no
- * title; each edge stands at the inset it is named; and a place that is not found keeps its bar above the words
+ * title; a page with a parent leads its heading with its trail, each
+ * place a press back to it and the page's own name last, words that are no
+ * press, said to be the current page; each edge stands at the inset it is named; and a place that is not found keeps its bar above the words
  * saying so. jsdom lays nothing out and drops a layer whole, so the sheet
  * is laid out of its layer and a length is read as it declares it.
  */
@@ -32,6 +34,7 @@ globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 const roots: Root[] = [];
 
 afterEach(() => {
+  vi.unstubAllGlobals();
   act(() => {
     for (const root of roots.splice(0)) root.unmount();
   });
@@ -157,6 +160,44 @@ test("a title that is more than words stands in the title's place as given", () 
 
   assert.equal(banner.querySelector("h1"), null);
   assert.equal(banner.querySelector<HTMLInputElement>("input[aria-label='Name']")?.value, "Inbox");
+});
+
+test("a trail leads the heading with each place above the page, the page's own name last and no press", () => {
+  // jsdom lacks the ResizeObserver a folding way back measures its fold by, and lays nothing out to measure.
+  vi.stubGlobal(
+    "ResizeObserver",
+    class {
+      observe(): void {}
+      disconnect(): void {}
+    },
+  );
+  const pressed: string[] = [];
+  const banner = bar({
+    title: "Nightly triage",
+    trail: [
+      { label: "Workspace", onPress: () => pressed.push("Workspace") },
+      {
+        label: "Automations",
+        icon: createElement("svg"),
+        onPress: () => pressed.push("Automations"),
+      },
+    ],
+  });
+  const path = banner.querySelector("nav") ?? assert.fail("no trail");
+  const crumbs = [...path.querySelectorAll("li")];
+
+  assert.equal(path.getAttribute("aria-label"), "Path");
+  assert.deepEqual(
+    crumbs.map((crumb) => crumb.textContent),
+    ["Workspace", "Automations", "Nightly triage"],
+  );
+  const current = crumbs.at(-1) ?? assert.fail("no current page");
+  assert.equal(current.querySelector("[aria-current='page']")?.textContent, "Nightly triage");
+  assert.equal(current.querySelector("button, a"), null);
+  for (const crumb of crumbs.slice(0, -1)) {
+    act(() => (crumb.querySelector("button") ?? assert.fail("no press")).click());
+  }
+  assert.deepEqual(pressed, ["Workspace", "Automations"]);
 });
 
 test("an edge named for the column's own edge stands nearer it than one named for its words", () => {
