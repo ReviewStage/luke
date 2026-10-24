@@ -18,6 +18,7 @@
  * pressed anything.
  */
 
+import { ACT_UNREACHED_WORDS } from "@luke/features/words";
 import { ACT_KIND } from "@luke/host/acts";
 import {
   ACT_ERROR,
@@ -36,9 +37,6 @@ import { actPort } from "./app-bridge.js";
 import { loadedTasksFixture } from "./tasks/tasks-fixture-loader.js";
 import { showToast, TOAST_HOLD } from "./toast.js";
 import { appStateNow } from "./use-app-state.js";
-
-/** What a press's toast says when its act failed with no refusal of its own: the port gone, or a fault. */
-const PRESS_FAILED_WORDS = "That didn't go through. Try again.";
 
 /**
  * What each kind takes and answers, keyed by the kind. Note that a kind's own
@@ -59,7 +57,12 @@ type ActResult<Kind extends PortActKind> = ActResults[Kind];
 type ActArguments<Kind extends PortActKind> =
   ActPayload<Kind> extends undefined ? [] : [payload: ActPayload<Kind>];
 
-/** A refusal the host drew for an act, carrying its sentence: an `Error`, as every reader already handles. */
+/**
+ * A failed act as a person reads it, carrying its sentence: an `Error`, as
+ * every reader already handles. A refusal carries the sentence the host drew;
+ * any other failure carries `ACT_UNREACHED_WORDS` and its own error as the
+ * cause, so no text a transport or a fault happened to carry reaches a screen.
+ */
 class ActRefusal extends Error {}
 
 /**
@@ -96,18 +99,20 @@ async function portAct(
 ): Promise<PortActResult<PortActKind>> {
   const staged = stagedAnswer(kind, payload);
   if (staged !== undefined) return staged.answer;
-  // SAFETY: the contract keys each procedure by its kind, and ActArguments
-  // paired this payload with it; the erasure is the one dispatch on the kind.
-  const call = actPort()[kind] as (
-    payload: PortActPayload<PortActKind>,
-  ) => Promise<PortActResult<PortActKind>>;
   try {
+    // SAFETY: the contract keys each procedure by its kind, and ActArguments
+    // paired this payload with it; the erasure is the one dispatch on the kind.
+    const call = actPort()[kind] as (
+      payload: PortActPayload<PortActKind>,
+    ) => Promise<PortActResult<PortActKind>>;
     return await call(payload);
   } catch (error) {
     if (error instanceof ORPCError && error.code === ACT_ERROR.REFUSED) {
       throw new ActRefusal(error.message);
     }
-    throw error;
+    // Note that the failure's own text goes to the log, where a fault is diagnosed, and never to a person.
+    console.error(`The act ${kind} failed on its way to the service.`, error);
+    throw new ActRefusal(ACT_UNREACHED_WORDS, { cause: error });
   }
 }
 
@@ -133,13 +138,21 @@ export function tellAct<Kind extends PortActKind>(
 }
 
 /**
+ * What a person reads of an act's failure: a refusal in its own words, and
+ * any other failure, an act's or a fault on the way to one, in the one fixed
+ * sentence, never its own text.
+ */
+export function actFailureWords(error: unknown): string {
+  return error instanceof ActRefusal ? error.message : ACT_UNREACHED_WORDS;
+}
+
+/**
  * Says an act's failure in a FAILED toast: a refusal in its own words, and
- * any other failure that it did not go through. A press that must also undo
+ * any other failure in the one fixed sentence. A press that must also undo
  * what it drew before the answer (`askAct`'s caller) says its failure here.
  */
 export function toastActFailure(error: unknown): void {
-  const words = error instanceof ActRefusal ? error.message : PRESS_FAILED_WORDS;
-  showToast({ words, tone: STATUS_TONE.DANGER, hold: TOAST_HOLD.FAILED });
+  showToast({ words: actFailureWords(error), tone: STATUS_TONE.DANGER, hold: TOAST_HOLD.FAILED });
 }
 
 /**
@@ -158,15 +171,14 @@ export function pressAct<Kind extends PortActKind>(
 /**
  * An act whose answer a row reads as an `ActionResult`, a refusal and any
  * other failure settled into the REJECTED one carrying the sentence a
- * refusal drew, or the press door's words, so a control that waits on the
+ * refusal drew, or the one fixed sentence, so a control that waits on the
  * answer is never left waiting on a rejection.
  */
 export async function askActResult(asked: Promise<ActionResult>): Promise<ActionResult> {
   try {
     return await asked;
   } catch (error) {
-    const reason = error instanceof ActRefusal ? error.message : PRESS_FAILED_WORDS;
-    return { status: ACTION_RESULT_STATUS.REJECTED, reason };
+    return { status: ACTION_RESULT_STATUS.REJECTED, reason: actFailureWords(error) };
   }
 }
 

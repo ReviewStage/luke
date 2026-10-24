@@ -180,6 +180,9 @@ export function replyFromWords(agent: string, lead?: string): string {
 /** What a refresh that failed says beside the last good read, which stays drawn; Retry stands with it. */
 export const REFRESH_FAILED_WORDS = "Could not refresh";
 
+/** What an act that failed on its way to the service says, whatever the failure's own text: a person reads this, and the text goes to the log. */
+export const ACT_UNREACHED_WORDS = "Luke could not reach the service. Try again.";
+
 /**
  * The voice's failures, each said in words of its own. The notice line and
  * app state carry only these keys, never a browser's or a provider's text, so
