@@ -1,7 +1,14 @@
 import { CODING_AGENT_CALL_FAILURE } from "@luke/features/coding-agent-view";
 import { INBOX_STATUS, type InboxItem } from "@luke/features/inbox-wire";
+import { countWords, TERM } from "@luke/features/words";
 import { ACT_KIND } from "@luke/host/acts";
-import { ConfirmDialog, type DialogQuestion, STATUS_TONE, useConfirmDialog } from "@luke/ui";
+import {
+  CONFIRM_LOSS,
+  ConfirmDialog,
+  type DialogQuestion,
+  STATUS_TONE,
+  useConfirmDialog,
+} from "@luke/ui";
 import { ACTION_RESULT_STATUS } from "@luke/wire";
 import { CircleSlashIcon } from "lucide-react";
 import { useCallback, useRef, useState } from "react";
@@ -48,8 +55,18 @@ const NOT_TAKEN = {
   SETTLED: "This item was already settled.",
 } as const;
 
-/** Closes an open item without an answer; nothing where a close of it is on its way. */
-export type InboxCloser = (item: InboxItem) => void;
+/** How a close says what became of it: aloud, a toast saying why one was not taken, or not at all, for a batch of closes that counts its refusals in one toast. */
+interface CloseSaying {
+  readonly quiet?: boolean | undefined;
+}
+
+/**
+ * Closes an open item without an answer, and answers once the service did
+ * whether it was closed; a close of it already on its way answers as closed,
+ * since that one answers its own press, and one of an item no longer open as
+ * not.
+ */
+export type InboxCloser = (item: InboxItem, saying?: CloseSaying) => Promise<boolean>;
 
 /** A close's key and the revision it was made for, kept so a press again on the same item goes under the same key. */
 interface Attempt {
@@ -76,16 +93,21 @@ export function useInboxCloser({
   const heard = useRef(onHeard);
   heard.current = onHeard;
   return useCallback(
-    (item: InboxItem) => {
-      if (item.status !== INBOX_STATUS.OPEN || out.current.has(item.id)) return;
+    (item: InboxItem, saying?: CloseSaying) => {
+      if (out.current.has(item.id)) return Promise.resolve(true);
+      if (item.status !== INBOX_STATUS.OPEN) return Promise.resolve(false);
       const was = attempts.current.get(item.id);
       const key = was?.revision === item.revision ? was.key : crypto.randomUUID();
       attempts.current.set(item.id, { key, revision: item.revision });
       out.current.add(item.id);
       const sent = settler.close(item);
-      const say = (words: string) =>
-        toast({ words, tone: STATUS_TONE.DANGER, hold: TOAST_HOLD.FAILED });
-      void act(ACT_KIND.CODING_AGENTS_INBOX_CLOSE, {
+      const say = (words: string) => {
+        if (saying?.quiet !== true) {
+          toast({ words, tone: STATUS_TONE.DANGER, hold: TOAST_HOLD.FAILED });
+        }
+        return false;
+      };
+      return act(ACT_KIND.CODING_AGENTS_INBOX_CLOSE, {
         itemId: item.id,
         revision: item.revision,
         clientKey: key,
@@ -114,6 +136,7 @@ export function useInboxCloser({
               place.thread !== true,
           );
           if (item.needsReply) heard.current?.();
+          return true;
         });
     },
     [act, settler, toast, writer],
@@ -130,6 +153,30 @@ function closeQuestion(item: InboxItem): DialogQuestion {
     verb: "Resolve",
     running: "Resolving…",
   };
+}
+
+/**
+ * What a close of every item chosen in a list asks first, once for them all:
+ * how many, and that their agents are told, red since none can be opened
+ * again but by its agent; one item's own question where one is chosen.
+ */
+export function closeAllQuestion(items: readonly InboxItem[]): DialogQuestion {
+  const [only] = items;
+  if (items.length === 1 && only !== undefined) return closeQuestion(only);
+  return {
+    title: `Resolve ${countWords(items.length, TERM.INBOX_ITEM)} without answering?`,
+    body: "Their agents are told. Only an item's agent can open it again.",
+    verb: "Resolve",
+    running: "Resolving…",
+    loss: CONFIRM_LOSS.IRREVERSIBLE,
+  };
+}
+
+/** What one toast says of a close of several items the service refused some of: how many it took, and how many not. */
+export function closedNote(landed: number, refused: number): string {
+  return landed === 0
+    ? `Could not resolve ${countWords(refused, TERM.INBOX_ITEM)}`
+    : `${countWords(landed, TERM.INBOX_ITEM)} resolved, ${refused} could not be`;
 }
 
 /** One item's close as a menu and an icon offer it, and the question it asks through, which the caller draws beside them. */
@@ -156,7 +203,7 @@ export function useInboxClose(
   const confirm = useConfirmDialog(
     { subject: open && item.revision === asked, surfaceOpen },
     () => {
-      closer?.(item);
+      void closer?.(item);
       return Promise.resolve({ status: ACTION_RESULT_STATUS.ACCEPTED });
     },
   );
