@@ -2143,6 +2143,42 @@
   border-bottom: 1px solid var(--luke-color-border);
 }
 
+/* The chapter's foot says its place whole, "Chapter 1 of 2", before its
+   buttons take room: the place never shrinks, so the buttons give way
+   first, folding to their glyphs (`FoldingButton`), and only where even the
+   place will not fit does it drop its noun for a reader and say "1 of 2". */
+.chapter-reading {
+  container: chapter-reading / inline-size;
+}
+
+.chapter-place {
+  flex: none;
+  padding-left: var(--luke-row-inset);
+  color: var(--luke-color-text);
+  white-space: nowrap;
+}
+
+/* off-scale: 480px, where Previous chapter and Next chapter no longer fit beside the place */
+@container chapter-reading (width < 480px) {
+  .chapter-reading > .luke-pane-bar:last-child {
+    --luke-fold: folded;
+  }
+}
+
+/* off-scale: 240px, where the place no longer fits with its noun */
+@container chapter-reading (width < 240px) {
+  .chapter-place-noun {
+    position: absolute;
+    overflow: hidden;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    padding: 0;
+    border: 0;
+    clip-path: inset(50%);
+  }
+}
+
 .chapter-viewed {
   display: flex;
   align-items: center;
