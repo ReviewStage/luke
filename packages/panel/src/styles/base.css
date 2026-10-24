@@ -183,10 +183,14 @@ file-tree-container {
   /* One ring for every control, and for anything else in the tab order, so
      no element given a tabindex is left to the engine's own ring.
      `:focus-visible` alone guesses wrong in a window Luke focuses for itself
-     and rings a button after a plain press, so until the keyboard has
-     actually moved focus (`keyboard-modality.ts`) nothing rings.
+     and rings a button after a plain press, or a page's Back the page focused
+     on mount, so the ring is drawn only once the keyboard has actually moved
+     focus (`keyboard-modality.ts`). Note that the modality is part of this
+     selector rather than a gate after it, because a gate of lower specificity
+     in the same layer loses to it and lets the guess ring.
      In the base layer, so a sheet's own rule for a control still wins: a
      menu row marks its focus with a fill, and says so where it is drawn. */
+  :root[data-keyboard="true"]
   :is(
     button,
     a[href],
