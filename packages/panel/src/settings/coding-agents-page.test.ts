@@ -13,6 +13,7 @@ import {
 import { ACT_KIND } from "@luke/host/acts";
 import type { PortActKind, PortActResult } from "@luke/host/contract";
 import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsLink } from "@luke/settings/settings-views";
+import { holdExits } from "@luke/ui/testing/held-exits";
 import { act, createElement, Fragment } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
@@ -56,6 +57,13 @@ const OPUS_FAST: CatalogModel = {
   name: "Claude Opus 5.5 (Fast)",
 };
 
+const SONNET: CatalogModel = {
+  id: "anthropic/claude-sonnet-5.5",
+  name: "Claude Sonnet 5.5",
+  provider: MODEL_PROVIDER.ANTHROPIC,
+  efforts: ["low", "high"],
+};
+
 /** The account's own Anthropic key, as the service answers it. */
 const OWN_ANTHROPIC: ProviderKeySummary = {
   provider: PROVIDER_KEY_PROVIDER.ANTHROPIC,
@@ -97,6 +105,11 @@ function answer(request: AnyAct): Promise<FakeActAnswer> {
       return Promise.resolve(done({ choice: stored }));
     case ACT_KIND.CHAPTERS_MODEL_READ:
       return Promise.resolve(done({ model: CHAPTERS_MODEL.HAIKU }));
+    case ACT_KIND.CHAPTERS_MODEL_WRITE:
+      if (refuseWrite) {
+        return Promise.resolve(done({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }));
+      }
+      return Promise.resolve(done({ model: request.payload.model }));
     case ACT_KIND.PROVIDER_KEYS_READ:
       return Promise.resolve(done({ keys }));
     case ACT_KIND.PROVIDER_KEYS_SAVE:
@@ -117,8 +130,11 @@ function answer(request: AnyAct): Promise<FakeActAnswer> {
 }
 
 const roots: Root[] = [];
+let motion: ReturnType<typeof holdExits>;
 
 beforeEach(() => {
+  // jsdom runs no motion, so a Saved tick would be taken the moment it stood.
+  motion = holdExits((element) => element.classList.contains("luke-saved-tick"));
   stored = { model: OPUS.id, effort: "high" };
   models = [OPUS, OPUS_FAST];
   keys = [];
@@ -133,6 +149,7 @@ beforeEach(() => {
 afterEach(() => {
   for (const root of roots.splice(0)) act(() => root.unmount());
   document.body.innerHTML = "";
+  motion.restore();
 });
 
 async function settle(): Promise<void> {
@@ -174,6 +191,24 @@ const fastSwitch = (page: HTMLElement) =>
 /** What the page announces now: its alerts and its error lines that say something. */
 const announced = (page: HTMLElement) =>
   [...page.querySelectorAll('[role="alert"], [data-slot="field-error"]')]
+    .map((each) => each.textContent ?? "")
+    .filter((words) => words !== "");
+
+/** The settings row a name heads. */
+const rowOf = (page: HTMLElement, label: string) =>
+  [...page.querySelectorAll<HTMLElement>(".luke-settings-row")].find((row) =>
+    row.textContent?.startsWith(label),
+  ) ?? assert.fail(`no ${label} row`);
+
+/** What stands beside a row's name: its Saved tick and its Modified word. */
+const marksIn = (row: HTMLElement) =>
+  [...row.querySelectorAll(".luke-saved-tick, .luke-settings-changed-mark")].map(
+    (each) => each.textContent ?? "",
+  );
+
+/** What a row says under itself about its last write. */
+const errorsIn = (row: HTMLElement) =>
+  [...row.querySelectorAll('[role="alert"], [data-slot="field-error"]')]
     .map((each) => each.textContent ?? "")
     .filter((words) => words !== "");
 
@@ -254,14 +289,15 @@ test("Effort and Context are each a radio group, the stored value checked and th
   ]);
 });
 
-test("an effort's refusal stands under the rows until a save lands, and Fast's refusal is a toast that leaves no line behind", async () => {
+test("a refused Effort or Context says so under its own row until that row's next save lands, and Fast's refusal is a toast that leaves no line behind", async () => {
   const page = await mount();
-  const alerts = () => announced(page);
+  const effort = () => errorsIn(rowOf(page, "Effort"));
+  const context = () => errorsIn(rowOf(page, "Context"));
 
   refuseWrite = true;
   act(() => fastSwitch(page).click());
   await settle();
-  const fastRefused = alerts();
+  const fastRefused = announced(page);
   refuseWrite = false;
   act(() => segment(segmentedGroup(page, "Effort"), "Low").click());
   await settle();
@@ -269,15 +305,74 @@ test("an effort's refusal stands under the rows until a save lands, and Fast's r
   refuseWrite = true;
   act(() => segment(segmentedGroup(page, "Effort"), "Medium").click());
   await settle();
-  const effortRefused = alerts();
+  act(() => segment(segmentedGroup(page, "Context"), "200K").click());
+  await settle();
+  const refused = [effort(), context()];
   refuseWrite = false;
-  act(() => fastSwitch(page).click());
+  act(() => segment(segmentedGroup(page, "Effort"), "High").click());
+  await settle();
+  const effortSaved = [effort(), context()];
+  act(() => segment(segmentedGroup(page, "Context"), "200K").click());
   await settle();
 
+  const refusal = "The default could not be saved. Try again.";
   assert.deepEqual(fastRefused, []);
-  assert.deepEqual(effortRefused, ["The default could not be saved. Try again."]);
-  assert.deepEqual(alerts(), []);
-  assert.equal(fastSwitch(page).getAttribute("aria-checked"), "true");
+  assert.deepEqual(refused, [[refusal], [refusal]]);
+  assert.deepEqual(effortSaved, [[], [refusal]]);
+  assert.deepEqual([effort(), context()], [[], []]);
+  assert.equal(fastSwitch(page).getAttribute("aria-checked"), "false");
+});
+
+test("the model, Effort and Context rows each tick Saved once their write lands, Modified while they differ from a new account's default, and a refusal ticks nothing", async () => {
+  models = [OPUS, OPUS_FAST, SONNET];
+  const page = await mount();
+  const marks = () => [
+    marksIn(rowOf(page, "Default model")),
+    marksIn(rowOf(page, "Effort")),
+    marksIn(rowOf(page, "Context")),
+  ];
+  assert.deepEqual(marks(), [[], [], []]);
+
+  refuseWrite = true;
+  act(() => segment(segmentedGroup(page, "Effort"), "Low").click());
+  await settle();
+  assert.deepEqual(marks(), [[], [], []], "a refused write ticks nothing and changes nothing");
+  refuseWrite = false;
+
+  act(() => segment(segmentedGroup(page, "Effort"), "Low").click());
+  await settle();
+  assert.deepEqual(marks(), [[], ["Modified", "Saved"], []]);
+
+  act(() => segment(segmentedGroup(page, "Context"), "200K").click());
+  await settle();
+  assert.deepEqual(marks(), [[], ["Modified", "Saved"], ["Modified", "Saved"]]);
+
+  act(() => motion.finish());
+  act(() =>
+    (
+      page.querySelector<HTMLButtonElement>('button[aria-label^="Default model: "]') ??
+      assert.fail("no Default model chip")
+    ).click(),
+  );
+  const menu =
+    document.querySelector('[role="dialog"][aria-label="Default model"]') ?? assert.fail();
+  const option = [...menu.querySelectorAll<HTMLElement>('[role="option"]')].find((each) =>
+    (each.textContent ?? "").startsWith("Sonnet 5.5"),
+  );
+  act(() => option?.click());
+  await settle();
+  assert.deepEqual(marksIn(rowOf(page, "Default model")), ["Modified", "Saved"]);
+  assert.deepEqual(written().at(-1), { model: SONNET.id, effort: "low" });
+});
+
+test("the Chapters model ticks Saved beside Model once its write lands, within the page", async () => {
+  const page = await mount();
+  assert.deepEqual(marksIn(rowOf(page, "Model")), []);
+
+  act(() => segment(segmentedGroup(page, "Chapters model"), "Sonnet 5.5").click());
+  await settle();
+
+  assert.deepEqual(marksIn(rowOf(page, "Model")), ["Modified", "Saved"]);
 });
 
 /** The Fast row's words under its name, which describe its switch. */

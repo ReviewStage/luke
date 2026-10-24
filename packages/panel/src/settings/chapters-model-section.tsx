@@ -1,4 +1,5 @@
 import {
+  CHAPTERS_MODEL_DEFAULT,
   CHAPTERS_MODEL_LABEL,
   CHAPTERS_MODEL_LIST,
   type ChaptersModelId,
@@ -17,8 +18,11 @@ import {
   SettingsRowsSkeleton,
   SettingsSection,
 } from "@luke/ui";
+import { useSettingWrite } from "@luke/ui/use-setting-write";
+import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { useCallback, useEffect, useState } from "react";
 import { useAct } from "../act.js";
+import { SettingMarks } from "./marks.js";
 
 /**
  * chapters-model-section.tsx -- Settings › Agents' Chapters group: the Claude model a Generate chapters the member presses runs on.
@@ -30,8 +34,10 @@ import { useAct } from "../act.js";
  * an Anthropic key, OpenAI's of its tier where they saved only an OpenAI key
  * (`@luke/service`'s `chaptersModelOf`), so the row offers Claude's alone,
  * as a segmented control. The page reads the
- * choice afresh as it opens; a write is one ask of the service, the control
- * resting until it answers and a refusal worded under it. With no account
+ * choice afresh as it opens; a write is one ask of the service through
+ * `useSettingWrite`, the control resting until it answers, a refusal worded
+ * under it, and the row saying Saved once a write lands and Modified while the
+ * choice is not Haiku. With no account
  * signed in there is nothing to show, and the group says so.
  */
 
@@ -53,8 +59,6 @@ export function ChaptersModelSection({ signedIn }: { signedIn: boolean }): React
   const { act } = useAct();
   const [model, setModel] = useState<ChaptersModelId | undefined>(undefined);
   const [readFailed, setReadFailed] = useState(false);
-  const [rejection, setRejection] = useState<string>();
-  const [busy, setBusy] = useState(false);
   const [attempt, setAttempt] = useState(0);
 
   // The page opening reads the choice the service holds now, which another device may just have written.
@@ -79,29 +83,31 @@ export function ChaptersModelSection({ signedIn }: { signedIn: boolean }): React
   }, [act, signedIn, attempt]);
 
   const write = useCallback(
-    (next: ChaptersModelId) => {
-      setBusy(true);
-      void act(ACT_KIND.CHAPTERS_MODEL_WRITE, { model: next })
+    (next: ChaptersModelId): Promise<ActionResult> =>
+      act(ACT_KIND.CHAPTERS_MODEL_WRITE, { model: next })
         .catch(() => undefined)
-        .then((answer) => {
-          setBusy(false);
+        .then((answer): ActionResult => {
           if (answer === undefined || "failure" in answer) {
-            setRejection(SECTION_LINE.WRITE_FAILED);
-            return;
+            return { status: ACTION_RESULT_STATUS.REJECTED, reason: SECTION_LINE.WRITE_FAILED };
           }
-          setRejection(undefined);
           setModel(answer.model);
-        });
-    },
+          return { status: ACTION_RESULT_STATUS.ACCEPTED };
+        }),
     [act],
   );
+  const { busy, rejection, saves, run } = useSettingWrite(write);
 
   return (
     <SettingsSection title="Chapters">
       {!signedIn ? (
         <SettingsLine>{SECTION_LINE.SIGNED_OUT}</SettingsLine>
       ) : model !== undefined ? (
-        <SettingsRow label="Model" description={SECTION_LINE.DETAIL} error={rejection}>
+        <SettingsRow
+          label="Model"
+          adornment={<SettingMarks changed={model !== CHAPTERS_MODEL_DEFAULT} saves={saves} />}
+          description={SECTION_LINE.DETAIL}
+          error={rejection}
+        >
           {() => (
             <ChoiceBar
               label="Chapters model"
@@ -113,7 +119,7 @@ export function ChaptersModelSection({ signedIn }: { signedIn: boolean }): React
               look={CHOICE_BAR_LOOK.SEGMENTED}
               disabled={busy}
               {...searchAnchorProps(SETTINGS_SEARCH_ROW.CHAPTERS_MODEL)}
-              onChange={write}
+              onChange={run}
             />
           )}
         </SettingsRow>
