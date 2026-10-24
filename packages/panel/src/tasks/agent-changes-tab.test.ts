@@ -74,6 +74,7 @@ import { ToastHost } from "../toast.js";
 import type { ChangesThreads } from "./agent-changes-tab.js";
 import { blobShaOf } from "./changes-model.js";
 import type { TreeShown } from "./file-view.js";
+import { OpenFileTabProvider } from "./open-file-tab.js";
 
 /**
  * agent-changes-tab.test.ts -- a Files changed view hands the diff bundle
@@ -302,6 +303,8 @@ interface DrawOptions {
   readonly finding?: boolean;
   /** Whether the view is the Pull request tab's chosen one; it is unless told. */
   readonly shown?: boolean;
+  /** The side panel's door to a file's own File tab, as its tab hands it; none outside a side panel. */
+  readonly openTab?: (path: string) => void;
 }
 
 /** Draws the view again in the root standing, its tree open or not, beside whatever else is given. */
@@ -315,6 +318,10 @@ async function redraw(options: DrawOptions = {}): Promise<DiffListProps> {
     tree: options.tree ?? { open: options.treeOpen ?? false, onToggle: () => undefined },
     threads: options.threads,
   });
+  const opening =
+    options.openTab === undefined
+      ? tab
+      : createElement(OpenFileTabProvider, { value: options.openTab }, tab);
   act(() =>
     root?.render(
       onRegistry(
@@ -323,7 +330,7 @@ async function redraw(options: DrawOptions = {}): Promise<DiffListProps> {
           bundles,
           createElement(DisclosureFind, {
             finding: options.finding ?? false,
-            children: createElement("div", null, tab, options.beside ?? null),
+            children: createElement("div", null, opening, options.beside ?? null),
           }),
         ),
       ),
@@ -575,6 +582,33 @@ test("a file the filter leaves out, chosen in a tree of every changed file, clea
   assert.equal(lastDrawn().files.length, 3, "the filter is cleared");
   assert.deepEqual(revealed, ["README.md"]);
   assert.equal(treeRevealed.at(-1), "README.md");
+});
+
+test("a file chosen with ⌘ or Ctrl in the tree opens in a File tab of its own, and a plain choice still scrolls to it in place", async () => {
+  files = [changed("src/seats.ts"), changed("src/billing/plan.ts"), changed("README.md")];
+  const tabs: string[] = [];
+  await drawTab({ treeOpen: true, openTab: (path) => tabs.push(path) });
+  const open = treeOpens.at(-1) ?? assert.fail("a tree is mounted");
+
+  act(() => open("README.md", true));
+  await flush();
+  assert.deepEqual(tabs, ["README.md"]);
+  assert.deepEqual(revealed, [], "the list stays where it stood");
+
+  act(() => open("src/billing/plan.ts", false));
+  await flush();
+  assert.deepEqual(tabs, ["README.md"]);
+  assert.deepEqual(revealed, ["src/billing/plan.ts"]);
+});
+
+test("a file chosen with ⌘ where no side panel offers a File tab is scrolled to in place", async () => {
+  files = [changed("src/seats.ts"), changed("README.md")];
+  await drawTab({ treeOpen: true });
+  const open = treeOpens.at(-1) ?? assert.fail("a tree is mounted");
+
+  act(() => open("README.md", true));
+  await flush();
+  assert.deepEqual(revealed, ["README.md"]);
 });
 
 /** A tree as the panel holds it, open as given, counting its toggles and keeping the widths asked for. */

@@ -140,6 +140,7 @@ import { FilesChangedKeysSheet } from "./files-changed-keys.js";
 import { ImageDiff, type ImageSides, imageDrawable } from "./image-diff.js";
 import { LineComment, type PendingReview } from "./line-comment.js";
 import { MinimizedThreads } from "./minimized-threads.js";
+import { useOpenFileTab } from "./open-file-tab.js";
 import { usePullRequestNumber } from "./pull-request-number.js";
 import { PullRequestWriteNote } from "./pull-request-writes.js";
 import { landable, type ThreadLanding, ThreadLandingProvider } from "./thread-reveal.js";
@@ -1833,13 +1834,16 @@ export function AgentChangesTab({
     if (!shown) hideKeys();
   }, [shown, hideKeys]);
   const { go, expand } = list;
-  // A file chosen in the tree floating over the list takes the tree down, to show the file.
+  const openTab = useOpenFileTab();
+  // A file chosen with ⌘ or Ctrl opens in a File tab of its own, as a File tab's tree opens one,
+  // where the panel offers one; a file chosen in the tree floating over the list takes the tree down, to show the file.
   const choose = useCallback(
-    (path: string) => {
+    (path: string, newTab: boolean) => {
+      if (newTab && openTab !== undefined) return openTab(path);
       closeOver();
       go(path);
     },
-    [closeOver, go],
+    [closeOver, go, openTab],
   );
   // A file asked for is opened and scrolled to, each ask once; one asked for at its lines is stood on, and the list scrolls to them once it draws the file open.
   const latestFileReveal = useRef({ fileReveal, expand, go, stand: list.stand });

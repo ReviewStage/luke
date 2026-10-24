@@ -127,6 +127,7 @@ import { snippetOf } from "../tasks/file-tab-model.js";
 import { FileView, type TreeShown } from "../tasks/file-view.js";
 import type { InboxBoardView } from "../tasks/inbox-model.js";
 import { MacTerminalTab } from "../tasks/mac-terminal-tab.js";
+import { OpenFileTabProvider } from "../tasks/open-file-tab.js";
 import { PagePane } from "../tasks/page-pane.js";
 import { PlanCommentsTab } from "../tasks/plan-comments.js";
 import { ofPullRequestTab, pullRequestOfTab } from "../tasks/pull-request-number.js";
@@ -1778,8 +1779,8 @@ function TabContent({
   onOpenFile: (ref: CodeRef, commit?: string) => void;
   /** Whether a File or Changes tab's tree is open, which holds for every one of them alike, and its toggle. */
   fileTree: TreeShown;
-  /** Shows a file browsed to from a File tab's tree or breadcrumbs (`SidePanelControl.onBrowseFile`). */
-  onBrowseFile: (from: string, path: string, newTab: boolean) => void;
+  /** Shows a file browsed to from a File tab's tree or breadcrumbs, or chosen with ⌘ in the Changes tree (`SidePanelControl.onBrowseFile`). */
+  onBrowseFile: (from: string | undefined, path: string, newTab: boolean) => void;
   /** Walks a File tab's history a step (`SidePanelControl.onFileHistory`). */
   onFileHistory: (from: string, step: FileHistoryStep) => void;
   /** Folds or opens a note on a File tab (`SidePanelControl.onFoldNote`). */
@@ -1879,22 +1880,29 @@ function TabContent({
     // Note that a link in a pull request's own tab, to its earlier entries or a reply, leaves for GitHub, because the tab already is that pull request.
     return (
       <PullRequestsOnGitHub key={tabKey(tab)}>
-        {/* The tab is a chunk of its own, read the first time one is drawn or its card hangs (`pages-on-demand.ts`). */}
-        <Suspense fallback={<SpinnerRegion delay label={readingWords("the pull request")} />}>
-          <PULL_REQUEST_TAB.Route
-            agentId={tab.changes}
-            number={tab.number}
-            control={agents}
-            shown={shown}
-            repository={repository}
-            tree={fileTree}
-            view={ofPullRequestTab(pullRequestViews, tab) ?? PULL_REQUEST_VIEW.CONVERSATION}
-            onView={(view) => onPullRequestView(tab, view)}
-            onActions={(actions) => onTabActions(tab, actions)}
-            // Note that Run reads the branch of the pull request the tab shows: the agent's own, or the one its number names.
-            onRun={onRunOnMac === undefined ? undefined : () => onRunOnMac(tab.changes, tab.number)}
-          />
-        </Suspense>
+        {/* A file chosen with ⌘ in its Changes tree opens in a File tab of its own, where the panel reads File tabs by the task (`open-file-tab.ts`). */}
+        <OpenFileTabProvider
+          value={codeFilesRead ? (path) => onBrowseFile(undefined, path, true) : undefined}
+        >
+          {/* The tab is a chunk of its own, read the first time one is drawn or its card hangs (`pages-on-demand.ts`). */}
+          <Suspense fallback={<SpinnerRegion delay label={readingWords("the pull request")} />}>
+            <PULL_REQUEST_TAB.Route
+              agentId={tab.changes}
+              number={tab.number}
+              control={agents}
+              shown={shown}
+              repository={repository}
+              tree={fileTree}
+              view={ofPullRequestTab(pullRequestViews, tab) ?? PULL_REQUEST_VIEW.CONVERSATION}
+              onView={(view) => onPullRequestView(tab, view)}
+              onActions={(actions) => onTabActions(tab, actions)}
+              // Note that Run reads the branch of the pull request the tab shows: the agent's own, or the one its number names.
+              onRun={
+                onRunOnMac === undefined ? undefined : () => onRunOnMac(tab.changes, tab.number)
+              }
+            />
+          </Suspense>
+        </OpenFileTabProvider>
       </PullRequestsOnGitHub>
     );
   }
