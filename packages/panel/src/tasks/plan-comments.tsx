@@ -1,4 +1,4 @@
-import { useAtomValue } from "@effect/atom-react";
+import { useAtomSet, useAtomValue } from "@effect/atom-react";
 import {
   base64Bytes,
   CODING_AGENT_BOUNDS,
@@ -99,8 +99,9 @@ import {
 } from "@luke/ui/plan-comments";
 import { visibleViewport } from "@luke/ui/visible-viewport";
 import { ACTION_RESULT_STATUS } from "@luke/wire";
-import { Schema } from "effect";
+import { Equal, Schema } from "effect";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
+import * as Atom from "effect/reactivity/Atom";
 import {
   createContext,
   type ReactNode,
@@ -880,7 +881,16 @@ function ReplyField({
   const [inFlight, setInFlight] = useState("");
   const attempt = useRef<CommentSend | undefined>(undefined);
   // A refused send the field could not take back beside what was typed or added since, kept apart, marked as not sent, with Retry under its key.
-  const [unsent, setUnsent] = useState<CommentSend | undefined>(undefined);
+  const unsent = useAtomValue(
+    unsentAtom,
+    (all) => all.find((each) => Equal.equals(each.place, place))?.send,
+  );
+  const keepUnsent = useAtomSet(unsentAtom);
+  const setUnsent = (send: CommentSend | undefined) =>
+    keepUnsent((all) => [
+      ...all.filter((each) => !Equal.equals(each.place, place)),
+      ...(send === undefined ? [] : [{ place, send }]),
+    ]);
   // The words the field holds this moment, for a send's answer that lands after the render it was made in.
   const wordsNow = useRef(words);
   wordsNow.current = words;
@@ -932,6 +942,8 @@ function ReplyField({
   // Note that Discard asks first, since a send not sent is kept nowhere else.
   const discard = useConfirmDialog({ subject: unsent !== undefined, surfaceOpen: true }, () => {
     setUnsent(undefined);
+    // Note that words written again after a discard are a new comment, so they go under a new key.
+    attempt.current = undefined;
     return Promise.resolve({ status: ACTION_RESULT_STATUS.ACCEPTED });
   });
   return (
@@ -942,11 +954,7 @@ function ReplyField({
       dropping={files.drop.dropping}
       // Note that the words in flight, held files and files still being read, and a dictation whose words land once heard, hold the field, so a press away keeps a thread being started; typed words are kept as its draft and hold nothing.
       data-held={
-        inFlight.trim() !== "" ||
-        unsent !== undefined ||
-        files.attachments.length > 0 ||
-        files.reading ||
-        dictating
+        inFlight.trim() !== "" || files.attachments.length > 0 || files.reading || dictating
       }
       {...files.drop.target}
     >
@@ -972,8 +980,7 @@ function ReplyField({
         label={label}
         onChange={setWords}
         onSubmit={send}
-        // Note that Esc keeps a card whose send was not sent, which closing would take with it.
-        onCancel={unsent === undefined ? onCancel : () => undefined}
+        onCancel={onCancel}
         autoFocus={autoFocus}
         editor={editor}
         dictation={dictation}
@@ -1027,6 +1034,15 @@ interface CommentSend {
   readonly attachments: readonly CodingAgentAttachment[];
   readonly key: string;
 }
+
+/**
+ * Each window's sends marked as not sent, by the place they were written
+ * in, kept past their field, so a thread closed and opened again finds its
+ * line where it was left. Note that each window's registry holds its own.
+ */
+const unsentAtom = Atom.keepAlive(
+  Atom.make<readonly { readonly place: PlanCommentPlace; readonly send: CommentSend }[]>([]),
+);
 
 /** Whether one comment carries these words and files: its words' bound, and a message's count of files and their bytes together. */
 function carried(send: Pick<CommentSend, "words" | "attachments">): boolean {

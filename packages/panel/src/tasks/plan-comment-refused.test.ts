@@ -77,6 +77,7 @@ afterEach(() => {
 function drawn(
   landing: () => Promise<boolean>,
   asked: PlanCommentActionRequest[] = [],
+  registry: AtomRegistry.AtomRegistry = AtomRegistry.make(),
 ): HTMLElement {
   const control: PlanCommentsControl = {
     planId: "plan-1",
@@ -104,7 +105,7 @@ function drawn(
     { value: control },
     createElement(CommentFocusScope, { reveal: undefined, children: tab }),
   );
-  act(() => root.render(onRegistry(AtomRegistry.make(), tree)));
+  act(() => root.render(onRegistry(registry, tree)));
   return (
     container.querySelector<HTMLElement>(`.comment-card[data-thread="${THREAD_ID}"]`) ??
     assert.fail("no card")
@@ -174,31 +175,77 @@ test("a refused reply's files go back before the files pasted while it was out",
   assert.equal(field.value, "Like this.");
 });
 
-test("a refused reply too long to go back beside the newer words stands apart as not sent, its Retry sending it under its key", async () => {
-  const answers = [Promise.withResolvers<boolean>(), Promise.withResolvers<boolean>()];
+/** Draws the thread, sends `refused`, types `newer` while it is out, and has the service refuse it; later sends land. */
+async function refusedBesideNewer(refused: string, newer: string) {
+  const answer = Promise.withResolvers<boolean>();
   const asked: PlanCommentActionRequest[] = [];
-  const card = drawn(() => answers[asked.length - 1]?.promise ?? Promise.resolve(true), asked);
+  const registry = AtomRegistry.make();
+  const landing = () => (asked.length === 1 ? answer.promise : Promise.resolve(true));
+  const card = drawn(landing, asked, registry);
   const field = card.querySelector("textarea") ?? assert.fail("no textarea");
-  const refused = `Not for v1. ${"a".repeat(5_000)}`;
-  const newer = "b".repeat(PLAN_COMMENT_BOUNDS.MAX_WORDS_CHARS - 1_000);
   typeInto(field, refused);
   act(() => {
     field.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
   });
   typeInto(field, newer);
-  await act(async () => answers[0]?.resolve(false));
+  await act(async () => answer.resolve(false));
+  return { card, field, asked, redraw: () => drawn(landing, asked, registry) };
+}
 
-  assert.equal(field.value, newer, "the newer words stay in the box as typed");
+/** The key each comment was sent under, in order. */
+function keys(asked: readonly PlanCommentActionRequest[]): (string | undefined)[] {
+  return asked.map((each) => ("clientKey" in each ? each.clientKey : undefined));
+}
+
+const TOO_LONG = {
+  REFUSED: `Not for v1. ${"a".repeat(5_000)}`,
+  NEWER: "b".repeat(PLAN_COMMENT_BOUNDS.MAX_WORDS_CHARS - 1_000),
+} as const;
+
+test("a refused reply too long to go back beside the newer words stands apart as not sent, outlasting its field, its Retry sending it under its key", async () => {
+  const drawnFirst = await refusedBesideNewer(TOO_LONG.REFUSED, TOO_LONG.NEWER);
+  assert.equal(drawnFirst.field.value, TOO_LONG.NEWER, "the newer words stay in the box as typed");
+  assert.ok(drawnFirst.card.querySelector("[data-unsent]"), "the refused reply is marked not sent");
+
+  // Note that the field goes with its thread, as a press away closes it, and comes back as it opens again.
+  for (const root of roots.splice(0)) act(() => root.unmount());
+  const card = drawnFirst.redraw();
   const line = card.querySelector("[data-unsent]") ?? assert.fail("no line marked as not sent");
   assert.ok(line.textContent?.includes("Not for v1."));
   const retry = [...line.querySelectorAll("button")].find((each) => each.textContent === "Retry");
   assert.ok(retry, "the line offers Retry");
 
-  act(() => retry.click());
-  await act(async () => answers[1]?.resolve(true));
-  const [first, again] = asked;
-  assert.ok(first && "clientKey" in first && again && "clientKey" in again);
-  assert.equal(again.clientKey, first.clientKey, "Retry sends under the refused send's key");
+  await act(async () => retry.click());
+  const [first, again] = keys(drawnFirst.asked);
+  assert.ok(first !== undefined);
+  assert.equal(again, first, "Retry sends under the refused send's key");
   assert.equal(card.querySelector("[data-unsent]"), null, "and the line goes once it is sent");
-  assert.equal(field.value, newer);
+  assert.equal(card.querySelector("textarea")?.value, TOO_LONG.NEWER);
+});
+
+test("words written again after a not-sent reply is discarded go under a new key", async () => {
+  const { card, field, asked } = await refusedBesideNewer(TOO_LONG.REFUSED, TOO_LONG.NEWER);
+  const line = card.querySelector("[data-unsent]") ?? assert.fail("no line marked as not sent");
+  const discard = [...line.querySelectorAll("button")].find(
+    (each) => each.textContent === "Discard",
+  );
+  assert.ok(discard, "the line offers Discard");
+  act(() => discard.click());
+  const confirm = [
+    ...document.querySelectorAll('[role="alertdialog"] button, [role="dialog"] button'),
+  ]
+    .filter((each): each is HTMLButtonElement => each instanceof HTMLButtonElement)
+    .find((each) => each.textContent === "Discard");
+  assert.ok(confirm, "Discard asks first");
+  await act(async () => confirm.click());
+  assert.equal(card.querySelector("[data-unsent]"), null, "the line goes once discarded");
+
+  typeInto(field, TOO_LONG.REFUSED);
+  act(() => {
+    field.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+  });
+  await act(async () => undefined);
+  const [first, again] = keys(asked);
+  assert.ok(first !== undefined && again !== undefined);
+  assert.notEqual(again, first);
 });
