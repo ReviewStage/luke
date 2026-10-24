@@ -45,6 +45,14 @@ export function modEnterSends(press: Pick<EnterPress, "key" | "metaKey" | "ctrlK
   return press.key === "Enter" && (press.metaKey || press.ctrlKey);
 }
 
+/** Whether a press is the send of a box whose `submit` key is given: Enter as `enterSends` reads it, or ⌘ or Ctrl with Enter as `modEnterSends` does. */
+export function submitSends(
+  press: EnterPress,
+  submit: TextAreaSubmit = TEXT_AREA_SUBMIT.ENTER,
+): boolean {
+  return submit === TEXT_AREA_SUBMIT.MOD_ENTER ? modEnterSends(press) : enterSends(press);
+}
+
 /** The return key's label as the pointer stands now. */
 export function enterKeyHint(): EnterKeyHint {
   return coarsePointer() ? ENTER_KEY_HINT.NEW_LINE : ENTER_KEY_HINT.SEND;

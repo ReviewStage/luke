@@ -684,7 +684,9 @@ test("a one-off agent's row offers Mark as unread after Copy link, Pin, Rename, 
     "Permanently delete",
   ]);
   await act(async () => menuItem("Pin").click());
+  // Note that Sweep stands under Pinned, in a list that reorders, whose rows offer to move.
   assert.deepEqual(agentMenu(sidebar, "Sweep flaky tests"), [
+    "Move down",
     "Copy link",
     "Mark as unread",
     "Rename",

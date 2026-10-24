@@ -2,7 +2,8 @@ import { useAtomValue } from "@effect/atom-react";
 import { CODING_AGENT_STATUS, type CodingAgentSummary } from "@luke/features/coding-agent-wire";
 import { INBOX_BOUNDS, type InboxItem, type InboxMessage } from "@luke/features/inbox-wire";
 import { pasteCutWords } from "@luke/features/words";
-import { ComposerFoot, type ComposerNote, STATUS_TONE } from "@luke/ui";
+import type { ShortcutChord } from "@luke/settings/shortcuts";
+import { ComposerFoot, type ComposerNote, STATUS_TONE, TEXT_AREA_SUBMIT } from "@luke/ui";
 import { SERVER_HANDED } from "@luke/ui/agent-servers-model";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
@@ -23,12 +24,15 @@ import { AttachedFileChips, attachmentChips } from "./attached-file-chips.js";
 import { ComposerField } from "./composer-field.js";
 import { type ComposerPickers, useComposerPickers } from "./composer-pickers.js";
 import { DictateButton, DictationStrip } from "./dictation-strip.js";
+import { askSendChord } from "./inbox-ask-controls.js";
 import {
   acknowledgedOnOpen,
   awaitsNod,
   type InboxDraft,
   inboxNoteReading,
   inboxThreadSend,
+  knownAsk,
+  openAskOf,
 } from "./inbox-model.js";
 import { ComposerQuoteView, ReplyToSelection } from "./reply-to-selection.js";
 import type { SkillSource } from "./skill-picker.js";
@@ -239,6 +243,8 @@ interface AnswerFormProps {
   readonly says?: ComposerNote | undefined;
   /** Whether Send reads Got it, a nod that messages nobody. */
   readonly nod: boolean;
+  /** The key Send's hint names, where Enter does not send; none where it does. */
+  readonly sendChord?: ShortcutChord | undefined;
   readonly sending: boolean;
   /** Whether a send waits, while one is out or files are read. */
   readonly held: boolean;
@@ -273,6 +279,7 @@ export function AnswerForm({
   tools,
   says,
   nod,
+  sendChord,
   sending,
   held,
   sendable,
@@ -304,6 +311,8 @@ export function AnswerForm({
         takesFocus={false}
         {...pickers.field}
         onEnter={onEnter}
+        // Note that the note's Enter is a new line wherever the form's own is, since a partly filled form is already sendable.
+        submitKey={sendChord === undefined ? undefined : TEXT_AREA_SUBMIT.MOD_ENTER}
         onPasteFiles={onPasteFiles ?? takesNoFiles}
         onPasteCut={onPasteCut}
         quote={quote}
@@ -317,6 +326,7 @@ export function AnswerForm({
         send={{
           label: nod ? GOT_IT : SEND,
           inWords: nod,
+          chord: sendChord,
           empty: !sendable,
           held,
           busy: sending,
@@ -391,6 +401,7 @@ function AnswerCard({
   // Note that Send lights only where the box holds a reply the service takes: an answer to the open ask attached, or words or files, a notice's nod being Got it's.
   const sendable = nod || inboxThreadSend(thread, draft) !== undefined;
   const asks = controls !== undefined;
+  const asking = openAskOf(thread);
   const placeholder = answerPlaceholder(asks, undefined);
   const field = useAnswerField({
     draft: draft.note,
@@ -467,6 +478,11 @@ function AnswerCard({
               : { words: note }
         }
         nod={nod}
+        sendChord={
+          asks && asking !== undefined && knownAsk(asking.ask)
+            ? askSendChord(asking.ask)
+            : undefined
+        }
         sending={sending}
         held={held}
         sendable={sendable}

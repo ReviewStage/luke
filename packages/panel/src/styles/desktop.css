@@ -118,11 +118,6 @@ body,
 }
 
 .app-stage[data-surface="desktop"] {
-  /* Where the work column begins, which the floating notice line centres on,
-     and the most it is drawn at over it. */
-  --work-left: var(--sidebar-width);
-  --notice-width-max: 560px;
-  --notice-width: min(var(--notice-width-max), calc(100vw - var(--work-left) - 96px));
   position: absolute;
   /* The stage stands over what is seen of the window: from where a phone
      panned it to, down to where the on-screen keyboard begins, so what
@@ -148,14 +143,6 @@ body,
   position: absolute;
   z-index: 1;
   inset: 0;
-}
-
-/* The work column starts at the window's edge where no sidebar stands beside
-   it: folded away, or a narrow room's, which shows one place at a time. */
-.app-stage[data-surface="desktop"]:has(
-  .desktop-shell:is([data-sidebar-collapsed="true"], [data-room="narrow"])
-) {
-  --work-left: 0px;
 }
 
 /* A narrow room shows a screen's list or the item chosen in it, one at a
@@ -1914,12 +1901,6 @@ ul.actor-stack {
   pointer-events: none;
 }
 
-.agent-call-notice > .voice-notice {
-  bottom: var(--luke-space-8);
-  width: max-content;
-  max-width: min(var(--notice-width-max), calc(100% - 2 * var(--luke-space-32)));
-}
-
 /* The video's room: the video centred in it, as tall as the developer left
    it (`use-call-video-size.ts`) and as wide as its own picture's aspect makes
    that, never wider than the tab nor taller than two fifths of the stage, so
@@ -1937,34 +1918,6 @@ ul.actor-stack {
     calc(var(--luke-stage-height) * 0.4 * var(--call-video-aspect))
   );
   aspect-ratio: var(--call-video-aspect);
-}
-
-/* Anywhere no call's tab is drawn (Settings, the home page, a panel
-   filling the window) the notice line floats at the window's foot over the
-   work column. */
-.desktop-shell > .voice-notice {
-  bottom: var(--luke-space-24);
-  left: calc(var(--work-left) + (100% - var(--work-left)) / 2);
-  width: max-content;
-  max-width: var(--notice-width);
-}
-
-/* On a phone it floats just above whatever docks at the column's foot, a
-   composer first of all (`column-dock.ts`), rather than over it, and spans the
-   screen less a step at each side. However tall the dock grows, it keeps
-   three controls' height of what is seen above it to stand in. The stage already keeps off the
-   notch and the home indicator. */
-.desktop-shell[data-room="narrow"] > .voice-notice {
-  bottom: calc(
-    max(
-      0px,
-      min(var(--luke-column-dock, 0px), var(--luke-stage-height) - 3 * var(--luke-control-height))
-    ) +
-    var(--luke-space-12)
-  );
-  left: 50%;
-  width: calc(100% - 2 * var(--luke-space-16));
-  max-width: none;
 }
 
 /* The repository chip ------------------------------------------------------ */

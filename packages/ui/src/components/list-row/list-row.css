@@ -46,8 +46,11 @@
   }
 
   /* The pointer lights a row that opens something, never past the open
-     row's own stronger fill. */
-  .luke-list-row:has(> button.luke-list-row-main):hover:not([data-current="true"]) {
+     row's own stronger fill or a chosen row's. */
+  .luke-list-row:has(> button.luke-list-row-main):hover:not(
+    [data-current="true"],
+    [data-selected="true"]
+  ) {
     background: var(--luke-color-fill-hover);
   }
 
@@ -64,6 +67,12 @@
     box-shadow:
       0 0 0 1px var(--luke-color-border),
       0 1px 2px var(--luke-color-shadow-soft);
+  }
+
+  /* A row chosen in its list's selection is filled as a Mac's list fills
+     the rows chosen, over the open row's ground where it is both. */
+  .luke-list-row[data-selected="true"] {
+    background: var(--luke-color-fill-selected);
   }
 
   /* The press spans the mark, the words, and the end, its parts standing
@@ -707,7 +716,10 @@
     touch-action: pan-y;
   }
 
-  .luke-list-row[data-swipe]:has(button.luke-list-row-main):hover:not([data-current="true"]) {
+  .luke-list-row[data-swipe]:has(button.luke-list-row-main):hover:not(
+    [data-current="true"],
+    [data-selected="true"]
+  ) {
     --luke-list-row-fill: var(--luke-color-fill-hover);
 
     background: none;
@@ -715,6 +727,12 @@
 
   .luke-list-row[data-swipe][data-current="true"] {
     --luke-list-row-fill: var(--luke-color-ground);
+
+    background: none;
+  }
+
+  .luke-list-row[data-swipe][data-selected="true"] {
+    --luke-list-row-fill: var(--luke-color-fill-selected);
 
     background: none;
   }

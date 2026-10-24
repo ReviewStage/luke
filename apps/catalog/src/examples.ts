@@ -94,6 +94,7 @@ import { SCROLL_AREA_EXAMPLE } from "./examples/scroll-area";
 import { SEARCH_FIELDS_EXAMPLE } from "./examples/search-fields";
 import { SEARCHABLE_MENU_EXAMPLE } from "./examples/searchable-menu";
 import { SECRET_FIELDS_EXAMPLE } from "./examples/secret-fields";
+import { SELECTION_EXAMPLE } from "./examples/selection";
 import { SETTINGS_PAGE_EXAMPLE } from "./examples/settings-page";
 import { SETTINGS_ROW_EXAMPLE } from "./examples/settings-row";
 import { SETTINGS_SECTION_EXAMPLE } from "./examples/settings-section";
@@ -195,6 +196,7 @@ export const EXAMPLES: readonly Example[] = [
   TABS_EXAMPLE,
   LIST_ROW_EXAMPLE,
   SHOW_MORE_ROWS_EXAMPLE,
+  SELECTION_EXAMPLE,
   LIST_MOTION_EXAMPLE,
   ROVING_KEYS_EXAMPLE,
   MENU_EXAMPLE,

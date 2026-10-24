@@ -19,6 +19,7 @@ import type {
   WritingInsert,
   WritingMark,
 } from "@luke/settings/shortcuts";
+import type { TextAreaSubmit } from "@luke/ui";
 
 /** A box in the window, in the coordinates `getBoundingClientRect` speaks. */
 export interface EditorBox {
@@ -427,6 +428,8 @@ export interface ComposerEditorProps {
   readonly onKey: (event: KeyboardEvent) => boolean;
   /** Enter with no Shift, while no input method is composing; on a coarse pointer, where Enter is a new line, only with ⌘ or Ctrl. */
   readonly onEnter: () => void;
+  /** The key that sends, as it stands now: Enter where the box leaves it out, ⌘ or Ctrl with Enter where Enter must break the line. */
+  readonly submitKey?: (() => TextAreaSubmit) | undefined;
   /** Files pasted; answers whether the owner took them, which keeps them out of the words. */
   readonly onPasteFiles: (files: readonly File[]) => boolean;
   /** A paste that ran past the bound and was cut to the room left, or laid in nowhere for want of it; the owner says so, since the words it sees are not the words pasted. */

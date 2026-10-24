@@ -24,7 +24,9 @@
  * an agent's unseen dot, a plan's Inbox, the Automations mark. Only one
  * whose action is the one way back to something the developer would
  * otherwise lose, such as words a save left unsaved, persists until it is
- * dismissed. One whose hold runs down by itself with an action drains a bar
+ * dismissed, and one with no action persists only while what it says still
+ * stands, until whoever showed it withdraws it, as the voice's notices are
+ * (`voice-notice-toast.ts`). One whose hold runs down by itself with an action drains a bar
  * along its foot over that hold, paused with it. One saying work is under
  * way (`useWorkingToast`) stands until the work settles, then turns in
  * place into what came of it, done or failed, and stands for that one's
@@ -85,7 +87,8 @@ interface ToastAction {
  * carries, with its own hold, the action's where it names none, or, where
  * it `persists`, none at all, standing until it is dismissed: kept for an
  * action that is the one way back to something the developer would
- * otherwise lose. One that `waits` stands only once fewer than three do,
+ * otherwise lose, or, with no action, for what stands only as long as
+ * whoever showed it says so, which withdraws it by its `subject`. One that `waits` stands only once fewer than three do,
  * rather than pushing the oldest out, for news that arrives in runs and
  * each piece of which is the developer's to act on. Its `subject` is what it
  * is about, by which whoever showed it may withdraw it once it is stale.
@@ -102,6 +105,12 @@ export type ToastNotice = {
   | { readonly hold: Duration.Duration; readonly action?: never; readonly persists?: never }
   | { readonly action: ToastAction; readonly hold?: Duration.Duration; readonly persists?: never }
   | { readonly action: ToastAction; readonly persists: true; readonly hold?: never }
+  | {
+      readonly subject: string;
+      readonly persists: true;
+      readonly action?: never;
+      readonly hold?: never;
+    }
   | {
       readonly tone: typeof STATUS_TONE.WORKING;
       readonly hold?: never;

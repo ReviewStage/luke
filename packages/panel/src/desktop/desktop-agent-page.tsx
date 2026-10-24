@@ -38,7 +38,6 @@ import { usePageWorkspace } from "../links-at-hand.js";
 import { MemberDirectory } from "../member-directory.js";
 import { NOT_FOUND_THING, NotFound } from "../not-found.js";
 import { useSteadyDoor, useSteadyDoors } from "../steady-door.js";
-import { CallNotice } from "../tasks/agent-call.js";
 import { agentSubject } from "../tasks/agent-ref.js";
 import { peopleOf } from "../tasks/changes-card.js";
 import { agentName } from "../tasks/coding-agent-model.js";
@@ -266,12 +265,9 @@ function useTaskAgentsFollow(
 export function DesktopAgentPage({
   tasks,
   agentId,
-  notice,
 }: {
   tasks: TasksControl;
   agentId: string;
-  /** The voice's notice line, while it rides the foot of the page's agent's call. */
-  notice?: React.ReactNode;
 }): React.JSX.Element {
   // The draft a Fork or a Continue opened on the page, by its key, which the pane shows in the agent's place.
   const [drafting, setDrafting] = useState<{ agentId: string; draftId: string } | undefined>(
@@ -571,23 +567,21 @@ export function DesktopAgentPage({
                           active={tasks.shown && !sideFocused}
                           subject={tab}
                         >
-                          <CallNotice.Provider value={notice}>
-                            <AgentPane
-                              call={calls}
-                              label={luke ? LUKE_NAME : agentName(agent, control.models)}
-                              tabbed={false}
-                              tab={paneTab}
-                              agents={control}
-                              shown={shown}
-                              views={views}
-                              onOpenDelegation={openDelegation}
-                              onOpenPullRequest={openPullRequest}
-                              onOpenTarget={openTarget}
-                              cards={cards}
-                              onFork={draftDoors.onFork}
-                              onContinue={draftDoors.onContinue}
-                            />
-                          </CallNotice.Provider>
+                          <AgentPane
+                            call={calls}
+                            label={luke ? LUKE_NAME : agentName(agent, control.models)}
+                            tabbed={false}
+                            tab={paneTab}
+                            agents={control}
+                            shown={shown}
+                            views={views}
+                            onOpenDelegation={openDelegation}
+                            onOpenPullRequest={openPullRequest}
+                            onOpenTarget={openTarget}
+                            cards={cards}
+                            onFork={draftDoors.onFork}
+                            onContinue={draftDoors.onContinue}
+                          />
                         </FindScope>
                       </Fill>
                       {drawing.panel ? (
