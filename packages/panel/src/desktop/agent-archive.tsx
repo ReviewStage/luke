@@ -19,12 +19,14 @@ import {
   useMenu,
 } from "@luke/ui";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
-import { useRef, useState } from "react";
+import { Schema } from "effect";
+import { useRef } from "react";
 import { AgentCard, agentSubject, NOTHING_HELD } from "../tasks/agent-ref.js";
 import { agentName, agentStillWriting, teammateStarter } from "../tasks/coding-agent-model.js";
 import { AgentGlyph, agentEndMark } from "../tasks/tab-look.js";
 import type { CodingAgentsControl } from "../tasks/use-coding-agents.js";
 import { TOAST_HOLD, useToast } from "../toast.js";
+import { keptKey, useKept } from "../use-kept.js";
 import { ActionMenu, type MenuAction } from "./action-menu.js";
 import { foldedCount } from "./sidebar-fold.js";
 import type { CountNoun } from "./sidebar-group-header.js";
@@ -60,8 +62,13 @@ import type { CountNoun } from "./sidebar-group-header.js";
  * row hangs the agent's card beside it as a standing row does, saying it
  * was archived and when (`agent-ref.tsx`), though no press opens it,
  * since its tab is gone. It draws nothing while no agent is archived, and
- * starts folded.
+ * starts folded, then stands as the reader left it, kept on this Mac.
  */
+
+/** Whether the reader left Archived open, one choice for every task's summary, kept on this Mac. */
+const KEPT = {
+  UNFOLDED: keptKey("luke.taskArchivedUnfolded", Schema.fromJsonString(Schema.Boolean)),
+} as const;
 
 /** What the archived agents' fold says. */
 const ARCHIVED_LABEL = "Archived";
@@ -214,7 +221,7 @@ export function ArchivedAgents({
   /** Whether the summary is on screen: off it, an archived row's menu stands over nothing. */
   shown: boolean;
 }): React.JSX.Element | null {
-  const [unfolded, setUnfolded] = useState(false);
+  const [unfolded, setUnfolded] = useKept(KEPT.UNFOLDED, false);
   const archived = agents.archived ?? [];
   if (archived.length === 0) return null;
   return (

@@ -85,6 +85,7 @@ import {
 } from "@luke/ui/plan-comments";
 import { visibleViewport } from "@luke/ui/visible-viewport";
 import { ACTION_RESULT_STATUS } from "@luke/wire";
+import { Schema } from "effect";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import {
   CheckIcon,
@@ -132,6 +133,7 @@ import {
 } from "../plan-editor/contract.js";
 import { useBusyPress } from "../settings/busy-press.js";
 import { useAttachedFiles } from "../use-attached-files.js";
+import { keptKey, useKept } from "../use-kept.js";
 import { AgentActorRef, agentSubject, NOTHING_HELD } from "./agent-ref.js";
 import { AttachFilesButton } from "./attach-files-button.js";
 import { AttachedFileChips, attachmentChips } from "./attached-file-chips.js";
@@ -2036,6 +2038,14 @@ const COMMENTS_FILTER = { OPEN: "open", RESOLVED: "resolved" } as const;
 
 type CommentsFilter = (typeof COMMENTS_FILTER)[keyof typeof COMMENTS_FILTER];
 
+/** The Comments tab's filter, kept on this Mac, one for every plan. */
+const KEPT = {
+  FILTER: keptKey<CommentsFilter>(
+    "luke.commentsFilter",
+    Schema.fromJsonString(Schema.Literals(Object.values(COMMENTS_FILTER))),
+  ),
+} as const;
+
 /** What the Comments tab's head names the threads it lists, by its filter. */
 const COMMENTS_FILTER_WORDS = {
   [COMMENTS_FILTER.OPEN]: "Open",
@@ -2121,7 +2131,7 @@ export function PlanCommentsTab({
 }): React.JSX.Element | null {
   const control = usePlanCommentsControlOrUndefined();
   const { reveal, revealed } = useCommentFocus();
-  const [filter, setFilter] = useState<CommentsFilter>(COMMENTS_FILTER.OPEN);
+  const [filter, setFilter] = useKept(KEPT.FILTER, COMMENTS_FILTER.OPEN);
   // A resolved thread asked to be shown, as a link to it asks, is listed here under Resolved, the plan holding no card of it.
   const shownAsk = useRef<number | undefined>(undefined);
   const resolvedAsked =

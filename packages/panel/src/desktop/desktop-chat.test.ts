@@ -2095,6 +2095,21 @@ test("each place's row says who spoke last and what, as an Inbox row previews it
   assert.match(count?.textContent ?? "", /^1 unread/u);
 });
 
+test("a rail group folded stays folded as Chat is drawn again, the rail's own and a task's section alike, and a group never folded stays open", () => {
+  const page = mountRail();
+  act(() => railHead(page, "Channels").querySelector("button")?.click());
+  act(() => railHead(page, "Launch").querySelector("button")?.click());
+  const folded = rail(page);
+  assert.ok(!folded.includes("general"), "Channels is folded");
+  assert.ok(!folded.includes("billing-export"), "Launch is folded");
+
+  act(() => root?.unmount());
+  document.body.innerHTML = "";
+  const again = rail(mountRail());
+  assert.deepEqual(again, folded, "the rail draws as it was left");
+  assert.ok(again.includes("teammate-invitations •"), "Pinned, never folded, stays open");
+});
+
 test("the rail's rows draw in the sidebar's ink, and every message leads with its author's face", () => {
   const page = mount((chat) => chat);
   const rows = [...page.querySelectorAll(".chat-rail .luke-list-row")];

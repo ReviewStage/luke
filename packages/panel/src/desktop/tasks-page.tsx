@@ -26,6 +26,8 @@ import { readKept, writeKept } from "../kept-storage.js";
 import { MemberDirectory } from "../member-directory.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
+import { keptKey } from "../use-kept.js";
+import { storedScrolls, useKeptScroll } from "../use-kept-scroll.js";
 import { NewTaskButton } from "./new-task-button.js";
 import { PhoneHead, PlaceMore, useMenuAsk } from "./phone-head.js";
 import { TasksBoard } from "./tasks-board.js";
@@ -51,7 +53,8 @@ import {
  * The filter is the page's, one for both views and one for each workspace,
  * since a creator and a repository are a workspace's own; each view keeps a
  * display of its own (`tasks-page-model.ts`). Which view it shows, the
- * filter, and both displays are kept on this Mac.
+ * filter, both displays, and where each view stood scrolled when the reader
+ * left it are kept on this Mac.
  *
  * The List is `tasks-list.tsx`, and the Board `tasks-board.tsx`. A display
  * is kept with the properties its view offered then, so a property a view
@@ -79,6 +82,11 @@ const DISPLAY_KEY = {
 } as const satisfies Record<TasksView, string>;
 
 const storedView = Schema.fromJsonString(Schema.Literals(Object.values(TASKS_VIEW)));
+
+/** Where each view stood scrolled when the reader left it, by the view's name, kept on this Mac. */
+const KEPT = {
+  SCROLLS: keptKey("luke.tasksScroll", storedScrolls),
+} as const;
 
 /** The filters as kept: each workspace's by its id. */
 const storedFilters = Schema.fromJsonString(
@@ -189,7 +197,10 @@ export function TasksPage({
     setDisplays((held) => ({ ...held, [view]: next }));
     writeKept(DISPLAY_KEY[view], storedDisplay, { ...next, offered: OFFERED[view] });
   };
+  // Note that each view stands where its reader left it, put back once as the page has its tasks and never as they refresh.
+  const scroll = useKeptScroll(KEPT.SCROLLS, view, tasks.listRead);
   const choose = (next: TasksView) => {
+    scroll.keep();
     setView(next);
     writeKept(VIEW_KEY, storedView, next);
   };
@@ -291,7 +302,7 @@ export function TasksPage({
   );
   // Note that the line stands while nothing is filtered, hidden, so its first chip scales in and its last scales out.
   const chips = <TasksFilterChips tasks={listed} filter={filter} onFilter={onFilter} />;
-  const frame = { toolbar, chips, filter, display, onDisplay };
+  const frame = { toolbar, chips, filter, display, onDisplay, scroll: scroll.ref };
   // Note that find's subject is the view shown, so a search in one view is let go as the other is chosen.
   return (
     <PageFind page={FIND_PAGE.BOARD} at={view} active={tasks.shown}>
