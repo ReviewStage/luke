@@ -65,7 +65,7 @@ const NOTE =
   "luke-hover-card-note m-0 overflow-hidden text-muted-foreground wrap-anywhere [&_code]:font-mono [&_code]:text-hover-card-code pointer-coarse:[&_code]:text-caption";
 const RULE = "luke-hover-card-rule m-0 h-px w-full flex-none border-0 bg-border";
 const ROW =
-  "luke-hover-card-row group/row -mx-2 box-border flex h-menu-row w-[calc(100%+--spacing(4))] min-w-0 items-center gap-icon-gap rounded-menu-row border-0 bg-transparent px-2 py-0 text-left text-body leading-[inherit] text-foreground transition-colors duration-(--luke-duration-hover) ease-[ease] data-[look=detail]:text-caption data-[look=detail]:leading-[inherit] data-[look=detail]:text-muted-foreground";
+  "luke-hover-card-row group/row -mx-2 box-border flex h-menu-row w-[calc(100%+--spacing(4))] min-w-0 items-center gap-icon-gap rounded-menu-row border-0 bg-transparent px-2 py-0 text-left text-body leading-[inherit] text-foreground transition-colors duration-(--luke-duration-hover) ease-motion-exit data-[look=detail]:text-caption data-[look=detail]:leading-[inherit] data-[look=detail]:text-muted-foreground";
 const ROW_PRESS =
   "[font-family:inherit] [font-style:inherit] [font-weight:inherit] cursor-pointer hover:bg-fill-strong focus-visible:bg-fill-strong focus-visible:outline-none";
 const ROW_GLYPH =

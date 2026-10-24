@@ -1,5 +1,5 @@
 import { useLayoutEffect, useRef, useState } from "react";
-import { tokenTiming } from "./motion-timing.js";
+import { MOTION_TOKEN, tokenTiming } from "./motion-timing.js";
 
 /**
  * picture-expand.ts -- a picture opened from its tile grows from the tile's own rect into the viewer, and shrinks back into it as the viewer closes.
@@ -23,8 +23,8 @@ import { tokenTiming } from "./motion-timing.js";
  */
 
 /** The duration and easing a flight plays on, those of a dialog rising into place. */
-const FLIGHT_DURATION = "--luke-duration-fast";
-const FLIGHT_EASING = "--luke-spring-fast";
+const FLIGHT_DURATION = MOTION_TOKEN.DURATION_FAST;
+const FLIGHT_EASING = MOTION_TOKEN.SPRING_FAST;
 
 /** The picture inside the card that lands over the tile: the viewer's zoomed picture. */
 const PICTURE_SELECTOR = ".luke-zoom-image";

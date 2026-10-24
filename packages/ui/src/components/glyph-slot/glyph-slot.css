@@ -40,7 +40,7 @@
      the fade alone. */
   .luke-glyph-slot[data-arrival] {
     animation:
-      luke-glyph-slot-fade var(--luke-duration-quick) var(--luke-motion-pane) backwards,
+      luke-glyph-slot-fade var(--luke-duration-quick) var(--luke-motion-exit) backwards,
       luke-glyph-slot-step var(--luke-duration-fast) var(--luke-spring-fast) backwards;
   }
 
@@ -50,7 +50,7 @@
 
   @media (prefers-reduced-motion: reduce) {
     .luke-glyph-slot[data-arrival] {
-      animation: luke-glyph-slot-fade var(--luke-duration-quick) var(--luke-motion-pane) backwards;
+      animation: luke-glyph-slot-fade var(--luke-duration-quick) var(--luke-motion-exit) backwards;
     }
   }
 

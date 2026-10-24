@@ -33,8 +33,8 @@
     font-weight: var(--luke-type-label-weight);
     -webkit-app-region: no-drag;
     transition:
-      background-color var(--luke-duration-hover) ease,
-      opacity var(--luke-duration-hover) ease;
+      background-color var(--luke-duration-hover) var(--luke-motion-exit),
+      opacity var(--luke-duration-hover) var(--luke-motion-exit);
   }
 
   /* Under a finger, a finger's height at least. */
@@ -95,6 +95,6 @@
     line-height: var(--luke-type-caption-leading);
     white-space: nowrap;
     pointer-events: none;
-    transition: opacity var(--luke-duration-hover) ease;
+    transition: opacity var(--luke-duration-hover) var(--luke-motion-exit);
   }
 }
