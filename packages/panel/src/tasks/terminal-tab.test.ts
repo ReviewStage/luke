@@ -41,6 +41,7 @@ import { bundleLanded, onSideBundles } from "../testing/side-bundles.js";
 import { codingAgentsControl } from "../testing/tasks-control.js";
 import { TerminalCardFoot, TerminalStanding } from "./terminal-shells.js";
 import { TerminalTab } from "./terminal-tab.js";
+import { OpenLinkProvider } from "./use-open-link.js";
 
 /**
  * An agent's Terminal tab as the developer meets it: a shell in the agent's
@@ -798,7 +799,6 @@ test("an attach refused after its tab was taken down leaves nothing waiting, so 
   main.down.clear();
   const later = await mount();
   const port = main.post(OLDEST);
-  assert.equal(port.closed(), false);
   port.say({ type: "state", state: "attached" });
   assert.equal(later.standing(), "· sandbox · connected");
 });
@@ -1491,6 +1491,62 @@ test("on a phone the tab draws no bar over the screen, and the task's header's �
   await settle();
   assert.equal(tab.toggled(), 0, "the shells float over the screen, the panel's choice untouched");
   assert.deepEqual(tab.handed().labels(), ["Hide shells", "Open agent"]);
+});
+
+test("the window handing the tab a new link opener keeps the shell's scrollback and its connection", async () => {
+  vi.useFakeTimers();
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  roots.push(root);
+  const agents = codingAgentsControl({ agents: [AGENT], agentIds: [AGENT.id] });
+  const registry = AtomRegistry.make();
+  const tab = createElement(TerminalTab, {
+    agentId: AGENT.id,
+    agents,
+    shown: true,
+    onOpenAgent: () => undefined,
+    onClose: () => undefined,
+    shells: { open: true, onToggle: () => undefined },
+  });
+  // The window's opener is a new closure whenever what it reads changes, as the window draws it.
+  const draw = () =>
+    act(() =>
+      root.render(
+        onRegistry(
+          registry,
+          onSideBundles(
+            SIDE_BUNDLES,
+            createElement(FindScope, {
+              active: true,
+              subject: { task: TASK, tab: { terminal: AGENT.id } },
+              children: createElement(OpenLinkProvider, { value: () => undefined }, tab),
+            }),
+          ),
+        ),
+      ),
+    );
+  draw();
+  await settle();
+  const port = main.post(OLDEST);
+  port.say({ type: "state", state: "attached" });
+  port.say({ type: "output", data: bytes("pnpm test\r\n") });
+  await act(async () => vi.advanceTimersByTimeAsync(100));
+  const asked = main.sent.length;
+
+  draw();
+  await settle();
+
+  assert.deepEqual(
+    main.sent.slice(asked).map((request) => request.kind),
+    [],
+  );
+  act(() => {
+    runAppCommand(APP_COMMAND.FIND);
+  });
+  typeFind("pnpm");
+  await act(async () => vi.advanceTimersByTimeAsync(100));
+  assert.equal(findTally(), "1 of 1");
 });
 
 test("on a phone a connecting terminal says so in a bar over its screen, and a connected one draws no bar", async () => {

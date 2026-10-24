@@ -639,11 +639,14 @@ export function useTerminalSession(
     [connect, enter, reread],
   );
 
-  // Note that the screen reads the latest of these through a ref, because
-  // mounting it again for a new closure would lose its scrollback.
+  // Note that the screen reads the latest of these through refs, because
+  // mounting it again for a new closure would lose its scrollback, and the
+  // link opener is a new closure whenever the listed tasks change.
   const typed = useRef(onInput);
+  const linked = useRef(openLink);
   useLayoutEffect(() => {
     typed.current = onInput;
+    linked.current = openLink;
   });
 
   // The screen mounts once the bundle has loaded and the tab has drawn its place.
@@ -658,7 +661,7 @@ export function useTerminalSession(
             live.current.port?.postMessage(resize);
           },
         }),
-      onLink: openLink,
+      onLink: (url) => linked.current(url),
     });
     live.current.handle = mounted;
     setHandle(mounted);
@@ -667,7 +670,7 @@ export function useTerminalSession(
       setHandle(undefined);
       mounted.unmount();
     };
-  }, [module, element, openLink, settleResize]);
+  }, [module, element, settleResize]);
 
   // The shell's port, which main posts to this window alone after an attach.
   useEffect(
