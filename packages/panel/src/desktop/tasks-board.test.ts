@@ -40,6 +40,7 @@ import {
 } from "../testing/app-bridge.js";
 import { fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import { handState, signedInAs } from "../testing/app-state.js";
+import { layContainersAt } from "../testing/container-width.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { restOn } from "../testing/hint-rest.js";
 import { tasksControl } from "../testing/tasks-control.js";
@@ -641,6 +642,19 @@ test("in a narrow room a card's chips draw their marks alone, as the List's do, 
 
   assert.deepEqual(sent, [["t-39", { status: TASK_STATUS.IN_PROGRESS }]]);
   assert.deepEqual(opened, [], "a pick opens no task");
+});
+
+test("a card's Status mark and its Priority mark stand on one column, the one before its name over the one leading its pills", async () => {
+  const laid = layContainersAt({});
+  try {
+    const board = await mountBoard();
+    const status = getComputedStyle(chipOf(board, "t-39", "Status"));
+    const priority = getComputedStyle(chipOf(board, "t-39", "Priority"));
+    assert.notEqual(status.marginLeft, "", "the Status chip is drawn out past the card's inset");
+    assert.equal(priority.marginLeft, status.marginLeft);
+  } finally {
+    laid.remove();
+  }
 });
 
 test("in a wide room every column stands side by side, with no tabs, and a card's chips draw their marks alone", async () => {

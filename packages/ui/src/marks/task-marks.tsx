@@ -34,11 +34,21 @@ const LIT_BARS = {
   [TASK_PRIORITY.LOW]: 1,
 } as const satisfies Record<TaskPriority, number>;
 
-/** The three bars, each its left edge, its top, and its height, rising left to right. */
+/**
+ * The box every mark spans within its 14 units, a status's and a
+ * priority's alike, so the two stand the same size side by side: a settled
+ * status's disc, and an open one's ring to the outer edge of its line.
+ */
+const MARK_EDGE = { start: 0.75, end: 13.25 } as const;
+
+/** How wide each of a priority's bars is drawn. */
+const BAR_WIDTH = 3;
+
+/** The three bars, each its left edge, its top, and its height, rising left to right across the mark's box to its foot. */
 const BARS = [
-  { x: 2, y: 8, height: 4 },
-  { x: 6, y: 5, height: 7 },
-  { x: 10, y: 2, height: 10 },
+  { x: MARK_EDGE.start, y: 8.75, height: 4.5 },
+  { x: 5.5, y: 4.75, height: 8.5 },
+  { x: MARK_EDGE.end - BAR_WIDTH, y: MARK_EDGE.start, height: 12.5 },
 ] as const;
 
 /** The tone each status is drawn in: at rest, under way, or finished well. */
@@ -114,7 +124,14 @@ function priorityBody(priority: TaskPriority): React.JSX.Element {
   if (priority === TASK_PRIORITY.URGENT) {
     return (
       <>
-        <rect className="luke-task-mark-fill" x="1" y="1" width="12" height="12" rx="3" />
+        <rect
+          className="luke-task-mark-fill"
+          x={MARK_EDGE.start}
+          y={MARK_EDGE.start}
+          width={MARK_EDGE.end - MARK_EDGE.start}
+          height={MARK_EDGE.end - MARK_EDGE.start}
+          rx="3"
+        />
         <path className="luke-task-mark-cut" d="M7 4v3.6M7 9.6v.2" />
       </>
     );
@@ -127,10 +144,10 @@ function priorityBody(priority: TaskPriority): React.JSX.Element {
             key={x}
             className="luke-task-mark-fill"
             x={x}
-            y="6.3"
-            width="2"
-            height="1.4"
-            rx=".5"
+            y="6.25"
+            width={BAR_WIDTH}
+            height="1.5"
+            rx=".6"
           />
         ))}
       </>
@@ -146,9 +163,9 @@ function priorityBody(priority: TaskPriority): React.JSX.Element {
           data-lit={index < lit}
           x={x}
           y={y}
-          width="2.4"
+          width={BAR_WIDTH}
           height={height}
-          rx=".6"
+          rx=".75"
         />
       ))}
     </>
