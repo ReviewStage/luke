@@ -220,6 +220,7 @@ import {
   TranscriptTool,
   TranscriptWords,
 } from "./transcript-blocks.js";
+import { drawnMessageWords } from "./transcript-copy.js";
 import { type FindRow, useTranscriptFind } from "./transcript-find.js";
 import {
   UndeliveredLines,
@@ -1706,15 +1707,11 @@ function drawsMessage(row: PlacedRow, messageId: string): boolean {
 /** Each message's words as a find counts them, kept by the message, so a page that leaves it reads them once. */
 const wordsFound = new WeakMap<CodingAgentMessage, string>();
 
-/** The words a message draws that a find counts before its row is drawn: its text and its reasoning. */
+/** The words a message draws that a find counts before its row is drawn: its text, its reasoning, and each call's line, input, answer and error, as its rows draw them (`drawnMessageWords`). */
 function findWordsOf(message: CodingAgentMessage): string {
   const kept = wordsFound.get(message);
   if (kept !== undefined) return kept;
-  const words = agentParts(message)
-    .flatMap((part) =>
-      part.kind === AGENT_PART.TEXT || part.kind === AGENT_PART.REASONING ? [part.text] : [],
-    )
-    .join("\n");
+  const words = drawnMessageWords(message);
   wordsFound.set(message, words);
   return words;
 }

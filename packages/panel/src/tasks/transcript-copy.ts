@@ -14,12 +14,14 @@ import {
   CALL_KIND,
   CALL_WORDS,
   type CallKind,
+  callLine,
   callPlace,
+  isCommandKind,
   TURN_ROW,
   type TurnRow,
 } from "@luke/features/turn-rows";
 import { MESSAGE_ROLE } from "@luke/wire";
-import { TOOL_BLOCK, type ToolBlock } from "../ai-elements/tool.js";
+import { blockSays, TOOL_BLOCK, type ToolBlock } from "../ai-elements/tool.js";
 import {
   AGENT_PART,
   type AgentPart,
@@ -228,6 +230,39 @@ function agentBlock(part: AgentPart): CopiedBlock[] {
       error,
     },
   ];
+}
+
+/**
+ * A block's words as its row draws them, open: words and a thought as they
+ * are; a call's line as one phrase, its verb or a described command's
+ * purpose, its subject where the body does not say it whole (`blockSays`),
+ * and where it ran; then its input, and its error or else its answer.
+ */
+function drawnWords(block: CopiedBlock): readonly string[] {
+  if (block.kind !== COPIED_BLOCK.CALL) return [block.text];
+  const { call, subject, description, server, input, output, error } = block;
+  const line = callLine(call, subject, description);
+  const said =
+    input !== undefined &&
+    ((isCommandKind(call) && input.kind === TOOL_BLOCK.COMMAND) || blockSays(input, subject));
+  const lead = [line.verb, said ? undefined : line.subject, callPlace(call, server)];
+  return [
+    lead.filter((words) => words !== undefined).join(" "),
+    ...(input === undefined ? [] : [input.text]),
+    ...(error !== undefined ? [error] : output === undefined ? [] : [output.text]),
+  ];
+}
+
+/**
+ * The words a message's rows draw, each line and body, as a find counts them
+ * before the rows are drawn: the parts the rows are drawn from (`agentRows`),
+ * each read as both copies read it (`agentBlock`). Note that a part its page
+ * carried cut counts none of the words left out, because its fold draws
+ * them only once read whole, and its ends are the stored JSON's, not the
+ * answer as drawn.
+ */
+export function drawnMessageWords(message: CodingAgentMessage): string {
+  return rowBlocks(agentRows(message, false)).flatMap(agentBlock).flatMap(drawnWords).join("\n");
 }
 
 /**
