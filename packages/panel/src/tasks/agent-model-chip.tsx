@@ -63,7 +63,7 @@ import { useOpenLink } from "./use-open-link.js";
 const CHATGPT_USAGE_URL = "https://chatgpt.com/settings/usage";
 
 const CHATGPT_PLAN_WORDS = {
-  USING: "Using ChatGPT plan",
+  USING: "Using ChatGPT subscription",
   MANAGE: "Manage usage",
 } as const;
 

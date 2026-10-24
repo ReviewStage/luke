@@ -218,7 +218,7 @@ const WORDS = {
   CONNECTED: "Connected",
   USAGE_LIMIT: "Usage limit reached",
   TOKEN_INVALID: "Anthropic rejected this token. Paste a new one.",
-  TOKEN_QUOTA: "Out of usage on your Claude plan.",
+  TOKEN_QUOTA: "Out of usage on your Claude subscription.",
   TOKEN_UNREADABLE: "This token can no longer be read. Paste a new one.",
   CHATGPT_SIGNED_OUT: "Sign-in expired. Sign in with ChatGPT to reconnect.",
   CHATGPT_UNREADABLE: "This sign-in can no longer be read. Sign in with ChatGPT to connect again.",
@@ -233,7 +233,7 @@ const WORDS = {
   SAVE_TOKEN_FAILED: "The token could not be saved. Try again.",
   SAVE_KEY_FAILED: "The key could not be saved. Try again.",
   REMOVE_KEY_FAILED: "The key could not be removed. Try again.",
-  CLAUDE_DISCONNECT_FAILED: "Your Claude plan could not be disconnected. Try again.",
+  CLAUDE_DISCONNECT_FAILED: "Your Claude subscription could not be disconnected. Try again.",
   CHATGPT_DISCONNECT_FAILED: "ChatGPT could not be disconnected. Try again.",
   SIGN_IN_FAILED: "Luke couldn't reach ChatGPT. Try again.",
   DEFAULT_FAILED: "The default could not be changed. Try again.",
@@ -629,8 +629,8 @@ function ClaudeTokenPanel({
       <FootQuestion
         confirm={removal}
         question={{
-          title: "Disconnect your Claude plan?",
-          body: "Claude agents will stop running on your Claude plan, and he deletes the token he holds.",
+          title: "Disconnect your Claude subscription?",
+          body: "Claude agents will stop running on your Claude subscription, and he deletes the token he holds.",
           verb: WORDS.DISCONNECT,
           running: WORDS.DISCONNECTING,
           loss: CONFIRM_LOSS.IRREVERSIBLE,
@@ -790,8 +790,8 @@ function ChatGptPanel({
       <FootQuestion
         confirm={removal}
         question={{
-          title: "Disconnect your ChatGPT plan?",
-          body: "Codex agents will stop running on your ChatGPT plan, and he ends his sign-in with OpenAI.",
+          title: "Disconnect your ChatGPT subscription?",
+          body: "Codex agents will stop running on your ChatGPT subscription, and he ends his sign-in with OpenAI.",
           verb: WORDS.DISCONNECT,
           running: WORDS.DISCONNECTING,
           loss: CONFIRM_LOSS.IRREVERSIBLE,

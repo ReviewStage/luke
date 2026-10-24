@@ -330,10 +330,10 @@ test("an agent paid for by a plan says the plan where an agent on a key says dol
   );
   assert.equal(
     agentUsageLine({ ...usage, payer: CODING_AGENT_PAYER.CLAUDE_SUBSCRIPTION }),
-    "This agent: 1.2M tokens · Claude plan",
+    "This agent: 1.2M tokens · Claude subscription",
   );
   assert.equal(
     agentUsageLine({ ...usage, payer: CODING_AGENT_PAYER.CHATGPT_SUBSCRIPTION }),
-    "This agent: 1.2M tokens · ChatGPT plan",
+    "This agent: 1.2M tokens · ChatGPT subscription",
   );
 });

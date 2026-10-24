@@ -641,7 +641,7 @@ function dmMemberOf(
     const routing = yield* readCodingAgentRouting(userId, target.id);
     if (!writesToAgent(userId, target, Option.isSome(routing) ? routing.value.payer : null)) {
       return Result.fail(
-        `Not posted: ${yield* agentStarterName(target)}'s own plan pays for that agent, so only they and their agents can message it.`,
+        `Not posted: ${yield* agentStarterName(target)}'s own subscription pays for that agent, so only they and their agents can message it.`,
       );
     }
     // An agent never seated in the chat, such as one on another task, joins it as it is messaged.
