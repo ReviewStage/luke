@@ -1219,6 +1219,27 @@ test("a pin dragged onto a status the service refuses is pinned again under the 
   );
 });
 
+test("a pin with a position of its own, dragged onto a status the service refuses, is pinned again at that very position", async () => {
+  keeps = false;
+  const moved: PinMove[] = [];
+  const pinned = TASKS.map((each) =>
+    each.number === 44
+      ? { ...each, pinPosition: "a5" }
+      : each.number === 39
+        ? { ...each, pinnedAt: 6, pinPosition: "a1" }
+        : each,
+  );
+  const page = await mountPage(pinned, SHELL_ROOM.WIDE, {
+    onMovePins: (moves) => moved.push(...moves),
+  });
+  layRowsOut(page);
+
+  dragRow(page, "ACME-44", "Backlog");
+  await act(async () => undefined);
+
+  assert.deepEqual(moved, [{ agent: false, id: "t-44", position: "a5" }]);
+});
+
 test("a section holding no task stands in the List, empty, and a row dragged into it is kept there", async () => {
   const LATER = "a1b2c3d4-0000-4000-8000-000000000003";
   sections = {
