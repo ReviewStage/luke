@@ -9,9 +9,13 @@ import {
 } from "@luke/features/pull-request-chapters";
 import { PULL_REQUEST_CHAPTERS_FAILURE_KIND } from "@luke/features/pull-request-chapters-wire";
 import { SETTINGS_VIEW } from "@luke/settings/settings-views";
-import { CHAPTERS_KEY, CHAPTERS_SHORTCUTS, chaptersKeyFor } from "@luke/settings/shortcuts";
 import {
-  BUTTON_VARIANT,
+  CHAPTERS_KEY,
+  CHAPTERS_SHORTCUTS,
+  chaptersKeyFor,
+  type ShortcutChord,
+} from "@luke/settings/shortcuts";
+import {
   Button,
   CARD_CORNER,
   CARD_ELEMENT,
@@ -29,6 +33,8 @@ import {
   FILL_ELEMENT,
   FILL_FLOW,
   Fill,
+  FoldingButton,
+  type FoldingButtonHint,
   GAP,
   HoverCard,
   HoverCardHead,
@@ -69,7 +75,15 @@ import {
   RotateCwIcon,
   SparklesIcon,
 } from "@luke/ui/icons";
-import { type ReactNode, type RefObject, useMemo, useRef, useState } from "react";
+import {
+  createContext,
+  type ReactNode,
+  type RefObject,
+  useContext,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { PANE_EDGE, usePaneSlide } from "../desktop/pane-motion.js";
 import { SettingsPageLink } from "../open-settings.js";
 import {
@@ -187,8 +201,9 @@ const CHAPTERS_WORDS = {
   RAIL: "Chapters",
   ACTIONS_THING: "Chapters",
   RISK_REASONS: "Why",
-  /** A chapter's place among them, as its foot says it. */
-  of: (at: number, count: number) => `Chapter ${at} of ${count}`,
+  /** A chapter's place among them, as its foot says it: its first word, which a foot too narrow for it leaves to a reader, then the place. */
+  PLACE_NOUN: "Chapter",
+  of: (at: number, count: number) => `${at} of ${count}`,
   /** How many review threads stand on a chapter's hunks, as its row says to a reader. */
   threads: "threads",
   /** A chapter's row, as a reader hears it whole. */
@@ -602,6 +617,53 @@ function KeyChangeItem({
 /** No review thread, for a view handed none. */
 const NO_THREADS: ChangesThreads = { list: [], draw: () => null };
 
+/** The chapter a foot button steps to and the keys that step to it, which its hint names, read by `StepHint` since a hint is a component of its own. */
+const StepContext = createContext<{
+  readonly neighbour: Chapter | undefined;
+  readonly chord: ShortcutChord | undefined;
+}>({ neighbour: undefined, chord: undefined });
+
+/** The hint of a foot button: the chapter it steps to and its keys, after its words where they are folded. */
+const StepHint: FoldingButtonHint = ({ label, children }) => {
+  const { neighbour, chord } = useContext(StepContext);
+  const title = neighbour?.title;
+  return (
+    <Tooltip
+      label={label === undefined || title === undefined ? (title ?? label) : `${label}: ${title}`}
+      chord={chord}
+    >
+      {children}
+    </Tooltip>
+  );
+};
+
+/** The foot's button to the previous or the next chapter, its words folding away where the foot has no room for them beside its place. */
+function StepButton({
+  words,
+  icon,
+  neighbour,
+  chord,
+  onStep,
+}: {
+  words: string;
+  icon: ReactNode;
+  neighbour: Chapter | undefined;
+  chord: ShortcutChord | undefined;
+  onStep: () => void;
+}): React.JSX.Element {
+  return (
+    <StepContext.Provider value={{ neighbour, chord }}>
+      <FoldingButton
+        label={words}
+        icon={icon}
+        hint={StepHint}
+        disabled={neighbour === undefined}
+        onClick={onStep}
+      />
+    </StepContext.Provider>
+  );
+}
+
 /** The chapters ready: the rail, the chapter chosen, its diff, and its foot. */
 function ChaptersReading({
   agentId,
@@ -889,35 +951,28 @@ function ChaptersReading({
             />
           )}
           <PaneBar
-            title={CHAPTERS_WORDS.of(at + 1, chapters.length)}
+            middle={
+              <span className="chapter-place">
+                <span className="chapter-place-noun">{CHAPTERS_WORDS.PLACE_NOUN} </span>
+                {CHAPTERS_WORDS.of(at + 1, chapters.length)}
+              </span>
+            }
             actions={
               <>
-                <Tooltip
-                  label={previous?.title}
+                <StepButton
+                  words={CHAPTERS_WORDS.PREVIOUS}
+                  icon={<ChevronLeftIcon aria-hidden="true" />}
+                  neighbour={previous}
                   chord={CHAPTERS_SHORTCUTS[CHAPTERS_KEY.PREVIOUS_CHAPTER].chord}
-                >
-                  <Button
-                    variant={BUTTON_VARIANT.QUIET}
-                    icon={<ChevronLeftIcon aria-hidden="true" />}
-                    disabled={previous === undefined}
-                    onClick={() => step(-1)}
-                  >
-                    {CHAPTERS_WORDS.PREVIOUS}
-                  </Button>
-                </Tooltip>
-                <Tooltip
-                  label={next?.title}
+                  onStep={() => step(-1)}
+                />
+                <StepButton
+                  words={CHAPTERS_WORDS.NEXT}
+                  icon={<ChevronRightIcon aria-hidden="true" />}
+                  neighbour={next}
                   chord={CHAPTERS_SHORTCUTS[CHAPTERS_KEY.NEXT_CHAPTER].chord}
-                >
-                  <Button
-                    variant={BUTTON_VARIANT.QUIET}
-                    icon={<ChevronRightIcon aria-hidden="true" />}
-                    disabled={next === undefined}
-                    onClick={() => step(1)}
-                  >
-                    {CHAPTERS_WORDS.NEXT}
-                  </Button>
-                </Tooltip>
+                  onStep={() => step(1)}
+                />
               </>
             }
           />
