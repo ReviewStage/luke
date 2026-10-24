@@ -9,7 +9,6 @@
     "./account-initials": "./src/account-initials.js",
     "./appearance": "./src/tokens/appearance.js",
     "./actor-model": "./src/actor-model.js",
-    "./choice-keys": "./src/components/choice/choice-keys.js",
     "./command": "./src/components/command/command-dialog.js",
     "./composing-key": "./src/composing-key.js",
     "./accounts-sort": "./src/accounts-sort.js",
