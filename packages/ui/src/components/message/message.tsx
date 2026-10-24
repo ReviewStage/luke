@@ -57,7 +57,7 @@ export function MessageFrame({
 }
 
 /**
- * The actions on a turn, set in the line under it (`MessageLine`) after who
+ * The actions on a turn, set in the line under it (`MessageLine`) beside who
  * sent it and when. Hidden, the bar takes no pointer, so the words above it
  * stay selectable.
  */

@@ -1092,7 +1092,7 @@ function lineParts(line: Element | null): readonly string[] {
   });
 }
 
-test("the line under an agent's message and under a chat notice read in the same order: who sent it, when, then its actions", () => {
+test("the line under an agent's message and under a chat notice keep who sent it and when at the column's edge, the actions inside them", () => {
   const sent: CodingAgentMessage = {
     id: "sent",
     role: MESSAGE_ROLE.USER,
@@ -1123,8 +1123,8 @@ test("the line under an agent's message and under a chat notice read in the same
     "[data-chat-notice] > .luke-message-line",
   );
 
-  assert.deepEqual(underMessage, ["sender", "time", "actions"]);
-  assert.deepEqual(lineParts(notice), underMessage);
+  assert.deepEqual(underMessage, ["actions", "sender", "time"]);
+  assert.deepEqual(lineParts(notice), ["sender", "time", "actions"]);
 });
 
 test("a notice a person posted names them by their own chip, which hangs their card, as an agent's names it by its own", () => {
