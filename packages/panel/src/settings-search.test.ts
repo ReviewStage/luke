@@ -144,6 +144,25 @@ test("searching GitHub while signed in finds Integrations' GitHub row and Profil
   );
 });
 
+test("the OpenAI key a call or dictation runs on is found by those words, on Codex's row in Agents, where it is kept", () => {
+  const entries = settingsSearchEntries({
+    settings: settingsView({ voiceAvailable: true }),
+    voiceControlsDrawn: true,
+    accountDrawn: true,
+    capabilities: DESKTOP_CAPABILITIES,
+  });
+  for (const query of ["voice key", "call key", "dictation key"]) {
+    const agents = (searchSettings(entries, query)?.groups ?? []).find(
+      (group) => group.page === SETTINGS_VIEW.CODING_AGENTS,
+    );
+    assert.deepEqual(
+      agents?.items.map((entry) => entry.id),
+      [SETTINGS_SECTION.CODEX],
+      query,
+    );
+  }
+});
+
 /** Where `query` leads on the Experimental page, signed in or not. */
 function experimentalFound(query: string, accountDrawn: boolean): readonly string[] {
   const input: SettingsSearchInput = {

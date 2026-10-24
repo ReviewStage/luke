@@ -14,7 +14,7 @@ import {
 } from "@luke/features/coding-agent-wire";
 import { FAILURE_REASON, type FailureReason, remedyLabel } from "@luke/features/failure-remedy";
 import { inboxLineWords } from "@luke/features/inbox-wire";
-import type { CatalogModel, ModelChoice } from "@luke/features/models-wire";
+import type { CatalogModel, ModelChoice, ModelProvider } from "@luke/features/models-wire";
 import type { KnownNames } from "@luke/features/place-chip-model";
 import type { TaskStatus } from "@luke/features/task-wire";
 import { TRANSCRIPT_PART_TYPE } from "@luke/features/transcript-wire";
@@ -1464,18 +1464,20 @@ export function AgentMessage({
 function AgentEndLine({
   ended,
   endReason,
+  keyProvider,
   onOpenApiKeys,
 }: {
   ended: EndLineParts;
   endReason: FailureReason | undefined;
+  keyProvider: ModelProvider | undefined;
   onOpenApiKeys: (() => void) | undefined;
 }): React.JSX.Element {
   // Note that a failure's words are the note's to say, so only a stop's are said here.
   useAnnounce(ANNOUNCE.POLITE, ended.failed ? "" : ended.words);
-  // Note that a key refused is mended in Settings, so its line offers the API keys after the words.
+  // Note that a key refused is mended at its harness's row in Settings, so its line offers that row after the words.
   const remedy =
     endReason === FAILURE_REASON.API_KEY
-      ? remedyLabel({ reason: FAILURE_REASON.API_KEY, text: ended.words })
+      ? remedyLabel({ reason: FAILURE_REASON.API_KEY, text: ended.words, provider: keyProvider })
       : undefined;
   const remedyButton =
     remedy === undefined ? null : (
@@ -1511,17 +1513,24 @@ function AgentEndLine({
 function AgentEndRow({
   ended,
   endReason,
+  keyProvider,
   onOpenApiKeys,
   press,
 }: {
   ended: EndLineParts;
   endReason: FailureReason | undefined;
+  keyProvider: ModelProvider | undefined;
   onOpenApiKeys: (() => void) | undefined;
   press: ReactNode;
 }): React.JSX.Element {
   return (
     <div className="agent-end-row">
-      <AgentEndLine ended={ended} endReason={endReason} onOpenApiKeys={onOpenApiKeys} />
+      <AgentEndLine
+        ended={ended}
+        endReason={endReason}
+        keyProvider={keyProvider}
+        onOpenApiKeys={onOpenApiKeys}
+      />
       {press}
     </div>
   );
@@ -1847,6 +1856,7 @@ function AgentTranscriptView({
   startedAt,
   ended,
   endReason = FAILURE_REASON.OTHER,
+  keyProvider,
   onOpenApiKeys,
   onRetry,
   onOlder,
@@ -1894,7 +1904,9 @@ function AgentTranscriptView({
   ended?: EndLineParts | undefined;
   /** What mends the turn the end line tells of (`endLineReason`): an API key looked at, or nothing the line offers. */
   endReason?: FailureReason;
-  /** Turns to the page holding the API keys, which an end line telling of a key refused offers. */
+  /** The provider whose key the agent ran on, whose harness an end line telling of a key refused names. */
+  keyProvider?: ModelProvider | undefined;
+  /** Turns to the harness's row holding the key, which an end line telling of a key refused offers. */
   onOpenApiKeys?: (() => void) | undefined;
   onRetry: () => void;
   /** Reads the messages older than the first held, which the log asks for as the reader nears its top; none where none stand. */
@@ -2117,6 +2129,7 @@ function AgentTranscriptView({
                     <AgentEndRow
                       ended={ended}
                       endReason={endReason}
+                      keyProvider={keyProvider}
                       onOpenApiKeys={onOpenApiKeys}
                       press={endPress}
                     />
@@ -2152,6 +2165,7 @@ function AgentTranscriptView({
             <AgentEndRow
               ended={ended}
               endReason={endReason}
+              keyProvider={keyProvider}
               onOpenApiKeys={onOpenApiKeys}
               press={endPress}
             />
@@ -2245,8 +2259,8 @@ function AgentTabView({
   /** The chat a chat notice's card reads and opens; none where the window holds none. */
   chat?: ChatNoticeDoors | undefined;
   openGitHub: (url: string) => void;
-  /** Turns to Settings › Agents, which a turn failed on a refused key offers. */
-  onOpenApiKeys?: (() => void) | undefined;
+  /** Turns to Settings › Agents at the provider's harness row, which a turn failed on a refused key offers. */
+  onOpenApiKeys?: ((provider: ModelProvider | undefined) => void) | undefined;
   /** The words a dictation into the box is likely to say. */
   keywords?: readonly string[] | undefined;
   /** Where the skills a `/` in the box offers are read from; nothing where it offers none. */
@@ -2320,6 +2334,7 @@ function AgentTabView({
   const chatOn = useChatOn();
   const working = agentStillWriting(agent.status);
   const name = agentName(agent, models);
+  const keyProvider = providerOf(agent.model);
   const tab = useRef<HTMLElement>(null);
   useReplySaid({
     messages: transcript.messages,
@@ -2441,7 +2456,10 @@ function AgentTabView({
                         : endLineParts(agent.status, transcript.failure, starter, continuable)
                     }
                     endReason={endLineReason(transcript.failure, starter)}
-                    onOpenApiKeys={onOpenApiKeys}
+                    keyProvider={keyProvider}
+                    onOpenApiKeys={
+                      onOpenApiKeys === undefined ? undefined : () => onOpenApiKeys(keyProvider)
+                    }
                     endPress={endPress}
                     endTrail={endTrail}
                     onRetry={transcript.onRetry}

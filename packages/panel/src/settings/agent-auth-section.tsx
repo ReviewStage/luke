@@ -14,7 +14,8 @@ import {
 import { dayAndTimeText } from "@luke/features/time-format";
 import { ACT_KIND } from "@luke/host/acts";
 import { HOST_CAPABILITY } from "@luke/settings";
-import { SETTINGS_SEARCH_ROW, searchAnchorProps } from "@luke/settings/settings-anchors";
+import { searchAnchorProps } from "@luke/settings/settings-anchors";
+import { SETTINGS_SECTION } from "@luke/settings/settings-views";
 import {
   ANNOUNCE,
   BUTTON_TYPE,
@@ -125,30 +126,49 @@ const CREDENTIAL = {
 
 type Credential = (typeof CREDENTIAL)[keyof typeof CREDENTIAL];
 
-/** Each harness by the provider whose models it runs: its name, its plan's kind, the provider's name on its key, where a key is made, and the row a search lands on. */
+/** What a harness's row and dialog are drawn from. */
+interface Harness {
+  readonly name: string;
+  readonly plan: SubscriptionKeySummary["kind"];
+  readonly keyName: string;
+  readonly keyUrl: string;
+  readonly anchor: string;
+  readonly detail: string | undefined;
+}
+
+/**
+ * Each harness by the provider whose models it runs: its name, its plan's
+ * kind, the provider's name on its key, where a key is made, the row a search
+ * or a remedy lands on, and the line under its name, where one says more.
+ */
 const HARNESS = {
   [PROVIDER_KEY_PROVIDER.ANTHROPIC]: {
     name: "Claude",
     plan: PROVIDER_KEY_KIND.CLAUDE_SETUP_TOKEN,
     keyName: "Anthropic",
     keyUrl: "https://console.anthropic.com/settings/keys",
-    anchor: SETTINGS_SEARCH_ROW.API_KEY_ANTHROPIC,
+    anchor: SETTINGS_SECTION.CLAUDE,
+    detail: undefined,
   },
   [PROVIDER_KEY_PROVIDER.OPENAI]: {
     name: "Codex",
     plan: PROVIDER_KEY_KIND.CHATGPT_OAUTH,
     keyName: "OpenAI",
     keyUrl: "https://platform.openai.com/api-keys",
-    anchor: SETTINGS_SEARCH_ROW.API_KEY_OPENAI,
+    anchor: SETTINGS_SECTION.CODEX,
+    // Note that the Voice page sends here for the key a call runs on, so the row says it holds it.
+    detail: "Its OpenAI key also runs calls and dictation.",
   },
-} as const satisfies Record<ProviderKeyProvider, unknown>;
+} as const satisfies Record<ProviderKeyProvider, Harness>;
 
-/** A harness's row while the keys are read: its mark, its name alone, and the press that connects it. */
-const KEY_ROW_SKELETON: SettingsRowSkeletonShape = {
-  described: false,
-  mark: SETTINGS_ROW_MARK_WIDTH,
-  controls: [SETTINGS_SKELETON_CONTROL.BUTTON],
-};
+/** A harness's row while the keys are read: its mark, its name and any line under it, and the press that connects it. */
+function keyRowSkeleton(provider: ProviderKeyProvider): SettingsRowSkeletonShape {
+  return {
+    described: HARNESS[provider].detail !== undefined,
+    mark: SETTINGS_ROW_MARK_WIDTH,
+    controls: [SETTINGS_SKELETON_CONTROL.BUTTON],
+  };
+}
 
 const HARNESSES: readonly ProviderKeyProvider[] = [
   PROVIDER_KEY_PROVIDER.ANTHROPIC,
@@ -1122,6 +1142,7 @@ export function AgentAuthSection({
                     </SettingsRowMark>
                   }
                   label={HARNESS[provider].name}
+                  description={HARNESS[provider].detail}
                 >
                   {() => (
                     <Button
@@ -1150,10 +1171,7 @@ export function AgentAuthSection({
             </ErrorState>
           </SettingsLine>
         ) : (
-          <SettingsRowsSkeleton
-            label="Loading your keys"
-            rows={HARNESSES.map(() => KEY_ROW_SKELETON)}
-          />
+          <SettingsRowsSkeleton label="Loading your keys" rows={HARNESSES.map(keyRowSkeleton)} />
         )}
       </SettingsSection>
       {drawn === undefined || answer === undefined ? null : (

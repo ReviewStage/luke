@@ -22,7 +22,7 @@ import {
   hasWordsOrFiles,
 } from "@luke/features/coding-agent-wire";
 import { FAILURE_REASON, type Failure } from "@luke/features/failure-remedy";
-import type { CatalogModel, ModelChoice } from "@luke/features/models-wire";
+import type { CatalogModel, ModelChoice, ModelProvider } from "@luke/features/models-wire";
 import {
   PULL_REQUEST_CHAPTERS_CALL_FAILURE,
   type PullRequestChaptersAnswerView,
@@ -336,8 +336,8 @@ export interface CodingAgentsControl {
   onSwitchServers: ServersWriter;
   /** Opens Settings on its Integrations page, where an MCP server is connected. */
   onOpenIntegrations: () => void;
-  /** Opens Settings on its Agents page, where the developer's API keys are. */
-  onOpenApiKeys: () => void;
+  /** Opens Settings on its Agents page at the provider's harness row, where the developer's key for it is; at the page's top where none is known. */
+  onOpenApiKeys: (provider: ModelProvider | undefined) => void;
   /** Renames one agent, taking the agent as the service answers it; answers whether the rename took. */
   onRename: (agentId: string, title: string) => Promise<boolean>;
   /**
@@ -681,7 +681,7 @@ export function useCodingAgents(input: {
   /** Opens Settings on its Agents page. */
   /** The signed-in account's id, whose own agents carry no "Started by". */
   me?: string | undefined;
-  onOpenApiKeys: () => void;
+  onOpenApiKeys: (provider: ModelProvider | undefined) => void;
   /** Called with the agent a Start made, so its tab opens. */
   onStarted: (agentId: string) => void;
   /** Called with the plan and key of a draft an Undo put back, so its tab opens again. */
@@ -1754,7 +1754,7 @@ export function useCodingAgents(input: {
     onSwitchServers,
     onOpenIntegrations: () => latest.current.onOpenIntegrations(),
     me: input.me,
-    onOpenApiKeys: () => latest.current.onOpenApiKeys(),
+    onOpenApiKeys: (provider) => latest.current.onOpenApiKeys(provider),
     onRename,
     onArchive,
     onDelete,

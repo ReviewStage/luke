@@ -1,4 +1,6 @@
+import { harnessNameOf } from "./agent-runtime-models.js";
 import { INTEGRATION_NAME, type IntegrationProvider } from "./integration-wire.js";
+import type { ModelProvider } from "./models-wire.js";
 
 /**
  * failure-remedy.ts -- why a failure stands, as a typed word beside its sentence, and what the press that mends it says.
@@ -6,6 +8,7 @@ import { INTEGRATION_NAME, type IntegrationProvider } from "./integration-wire.j
 
 export const FAILURE_REASON = {
   RECONNECT_INTEGRATION: "reconnect-integration",
+  /** The member's own API key was refused or cannot be read: its harness's row on Settings › Agents replaces it. */
   API_KEY: "api-key",
   /** The task's workspace has no GitHub connected: Settings › Workspace connects it. */
   CONNECT_GITHUB: "connect-github",
@@ -21,7 +24,7 @@ export const FAILURE_REASON = {
   GITHUB_TOKEN: "github-token",
   /** The member's own token is not authorized for an organization's SAML SSO: GitHub's own page authorizes it. */
   AUTHORIZE_TOKEN: "authorize-token",
-  /** No subscription or API key of the member's pays for the model's provider: Settings › Agents connects one. */
+  /** No subscription or API key of the member's pays for the model's provider: its harness's row on Settings › Agents connects one. */
   CONNECT_AGENTS: "connect-agents",
   OTHER: "other",
 } as const;
@@ -69,13 +72,20 @@ export type Failure =
       readonly authorizeUrl: string;
     }
   | {
-      readonly reason:
-        | typeof FAILURE_REASON.API_KEY
-        | typeof FAILURE_REASON.CONNECT_AGENTS
-        | typeof FAILURE_REASON.GITHUB_TOKEN
-        | typeof FAILURE_REASON.OTHER;
+      readonly reason: typeof FAILURE_REASON.API_KEY | typeof FAILURE_REASON.CONNECT_AGENTS;
+      readonly text: string;
+      /** The provider whose harness the press connects, which it names and lands on; none where the service named none. */
+      readonly provider?: ModelProvider | undefined;
+    }
+  | {
+      readonly reason: typeof FAILURE_REASON.GITHUB_TOKEN | typeof FAILURE_REASON.OTHER;
       readonly text: string;
     };
+
+/** What a press that connects an agent's credential says: the harness it connects, or Settings where none is known. */
+function connectLabel(provider: ModelProvider | undefined): string {
+  return provider === undefined ? "Open Settings" : `Connect ${harnessNameOf(provider)}`;
+}
 
 /** The remedy's label; none where only Retry answers. */
 export function remedyLabel(failure: Failure): string | undefined {
@@ -83,7 +93,7 @@ export function remedyLabel(failure: Failure): string | undefined {
     case FAILURE_REASON.RECONNECT_INTEGRATION:
       return `Reconnect ${failure.name ?? INTEGRATION_NAME[failure.provider]}`;
     case FAILURE_REASON.API_KEY:
-      return "Open API keys";
+      return connectLabel(failure.provider);
     case FAILURE_REASON.CONNECT_GITHUB:
       return "Connect GitHub";
     case FAILURE_REASON.RECONNECT_GITHUB:
@@ -99,7 +109,7 @@ export function remedyLabel(failure: Failure): string | undefined {
     case FAILURE_REASON.AUTHORIZE_TOKEN:
       return `Authorize token for ${failure.organization}`;
     case FAILURE_REASON.CONNECT_AGENTS:
-      return "Open Settings";
+      return connectLabel(failure.provider);
     case FAILURE_REASON.OTHER:
       return undefined;
   }

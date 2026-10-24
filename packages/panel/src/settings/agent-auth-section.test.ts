@@ -15,6 +15,8 @@ import {
 import { ACT_KIND } from "@luke/host/acts";
 import type { PortActKind, PortActResult } from "@luke/host/contract";
 import { HOST_CAPABILITY, type HostCapability } from "@luke/settings";
+import { SETTINGS_SEARCH_ANCHOR_ATTRIBUTE } from "@luke/settings/settings-anchors";
+import { SETTINGS_SECTION } from "@luke/settings/settings-views";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -276,6 +278,16 @@ test("each harness's row says how it is connected: nothing, its plan, its key, o
     subscriptions: [{ ...CLAUDE_PLAN, status: PROVIDER_KEY_STATUS.LIMIT_REACHED }],
   };
   assert.equal(rowButton(await mount(), "Claude").textContent, "Limit reached");
+});
+
+test("each harness's row stands where a link to its section lands, and Codex's says it holds the key calls run on", async () => {
+  const page = await mount();
+  const landed = (section: string) =>
+    page.querySelector(`[${SETTINGS_SEARCH_ANCHOR_ATTRIBUTE}="${section}"]`) ??
+    assert.fail(`nothing stands at ${section}`);
+  assert.ok(landed(SETTINGS_SECTION.CLAUDE).contains(rowButton(page, "Claude")));
+  assert.ok(landed(SETTINGS_SECTION.CODEX).contains(rowButton(page, "Codex")));
+  assert.match(landed(SETTINGS_SECTION.CODEX).textContent ?? "", /OpenAI key/u);
 });
 
 test("the dialog's radios pick the plan or the key as the default, sent as the plan's forAgents, and only a saved credential's radio is pressable", async () => {

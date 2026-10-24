@@ -17,7 +17,7 @@ import type {
 import type { LinearIssueSummary } from "@luke/features/linear-wire";
 import { LINK_PLACE, type ReadLink } from "@luke/features/link-grammar";
 import { MENTION_KIND, type PlanMention } from "@luke/features/mention-link";
-import type { CatalogModel, ModelChoice } from "@luke/features/models-wire";
+import { type CatalogModel, MODEL_PROVIDER, type ModelChoice } from "@luke/features/models-wire";
 import type { PageLine } from "@luke/features/page-wire";
 import type { PlanEditRequest } from "@luke/features/plan-edit";
 import { planMarkdown } from "@luke/features/plan-markdown";
@@ -1230,8 +1230,8 @@ export function useTasksTab(input: {
   failedRuns: readonly AccountFailedRun[];
   /** Opens Settings on its Integrations page, where an agent's MCP server is connected. */
   onOpenIntegrations: () => void;
-  /** Opens Settings on its Agents page, where the developer's API keys are. */
-  onOpenApiKeys: () => void;
+  /** Opens Settings on its Agents page at the provider's harness row, where the developer's key for it is. */
+  onOpenApiKeys: CodingAgentsControl["onOpenApiKeys"];
   /** Opens Settings at the place the link names. */
   onOpenSettings: (link: SettingsLink) => void;
   /** The window's ask before leaving unsaved work, which guards every door here that moves the place. */
@@ -2548,7 +2548,8 @@ export function useTasksTab(input: {
       openAiKeyMissing,
       voiceLost: voiceLostNow(),
     });
-    if (button.press === MICROPHONE_PRESS.ADD_OPENAI_KEY) input.onOpenApiKeys();
+    // Note that a call runs on the OpenAI key, which Codex's row holds.
+    if (button.press === MICROPHONE_PRESS.ADD_OPENAI_KEY) input.onOpenApiKeys(MODEL_PROVIDER.OPENAI);
     if (button.press === MICROPHONE_PRESS.ASK_ACCESS) {
       tell(ACT_KIND.VOICE_COMMAND, { command: VOICE_COMMAND.REQUEST_MICROPHONE_ACCESS });
     }

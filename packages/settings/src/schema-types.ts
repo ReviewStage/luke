@@ -8,7 +8,7 @@ import type { RuntimeStatus } from "./status.js";
 export const SETTINGS_PAGE = {
   /** Who is signed in and the ways out, the page Settings opens on. */
   ACCOUNT: "account",
-  /** The voice, its controls, and the two system-wide keys that reach Luke. */
+  /** The voice and its controls, under a pointer to Codex's row in Agents, where the OpenAI key a call runs on is kept. */
   VOICE: "voice",
   APPEARANCE: "appearance",
   /** The window's own shortcuts, listed to be found rather than changed. */

@@ -599,7 +599,7 @@ function credentialMissingWords(
   return `Connect ${harness} in Settings to ${action}.`;
 }
 
-/** A missing credential's note, whose press opens Settings › Agents. */
+/** A missing credential's note, whose press opens Settings › Agents at the harness's row. */
 function credentialMissingFailure(
   refused: RefusedCall,
   action: (typeof ACTION)[keyof typeof ACTION],
@@ -607,6 +607,7 @@ function credentialMissingFailure(
   return {
     reason: FAILURE_REASON.CONNECT_AGENTS,
     text: credentialMissingWords(refused.provider, action),
+    provider: refused.provider,
   };
 }
 
