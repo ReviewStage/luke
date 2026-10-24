@@ -7,9 +7,7 @@ import {
 import type { InboxItem } from "@luke/features/inbox-wire";
 import { TASK_CALL_FAILURE } from "@luke/features/tasks-view";
 import type { AppInboxWaitingItem } from "@luke/host/app-state";
-import { CONFIRM_LOSS } from "@luke/ui";
 import { FOR_YOU } from "@luke/ui/chat-model";
-import { CONFIRM_STAGE } from "@luke/ui/confirm-state";
 import { NO_TASK_SECTIONS } from "@luke/ui/task-sections-model";
 import { DOCUMENT_REGION, TASKS_PAGE } from "@luke/ui/tasks-model";
 import { ACTION_RESULT_STATUS } from "@luke/wire";
@@ -336,19 +334,6 @@ export function tasksControl(overrides: Partial<TasksControl> = {}): TasksContro
     onSectionRevealed: ignore,
     onShowInbox: ignore,
     onShowChat: ignore,
-    secondCall: {
-      confirm: {
-        stage: CONFIRM_STAGE.RESTING,
-        rejection: undefined,
-        busy: false,
-        ask: ignore,
-        keep: ignore,
-        clear: ignore,
-        run: ignore,
-        standing: false,
-      },
-      question: { title: "", body: "", verb: "", running: "", loss: CONFIRM_LOSS.IRREVERSIBLE },
-    },
     inbox: [],
     inboxShown: null,
     chatShown: null,

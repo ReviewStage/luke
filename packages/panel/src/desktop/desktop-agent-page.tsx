@@ -9,7 +9,6 @@ import { encodeMention, MENTION_KIND } from "@luke/features/mention-link";
 import { readingWords } from "@luke/features/words";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
-  ConfirmDialog,
   ERROR_STATE_PLACEMENT,
   ErrorState,
   FILL_ELEMENT,
@@ -680,12 +679,6 @@ export function DesktopAgentPage({
                         />
                       ) : null}
                     </div>
-                    {/* The second call's question, which a Call press here asks over another agent's call. */}
-                    <ConfirmDialog
-                      open
-                      confirm={tasks.secondCall.confirm}
-                      question={tasks.secondCall.question}
-                    />
                   </OpenHereProvider>
                 </OpenLinkProvider>
               </AgentMentions>
