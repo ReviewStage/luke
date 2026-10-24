@@ -9,11 +9,13 @@ import { ACTOR_KIND, ACTOR_STATE } from "@luke/ui/actor-model";
 import type { TiptapEditorHTMLElement } from "@tiptap/core";
 import { TextSelection } from "@tiptap/pm/state";
 import { Effect } from "effect";
+import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
 import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
 import { editorBundleLanded, installEditorLayout } from "../testing/composer.js";
+import { onRegistry } from "../testing/copy-feedback.js";
 import { DOCUMENT_TASK } from "../testing/document-task.js";
 import { PlanBody } from "./plan-body.js";
 import { TaskMentions, type TaskMentionsValue } from "./task-mentions.js";
@@ -80,9 +82,13 @@ async function opened(page?: TaskMentionsValue, task: Task = TASK) {
       reveal: undefined,
     },
   });
+  // Note that each open gets a registry of its own, because the window's minute tick is an atom the default registry keeps from one test to the next, so a chip's "from today" would count from whichever clock the first test read.
   act(() =>
     root.render(
-      page === undefined ? body : createElement(TaskMentions, { value: page, children: body }),
+      onRegistry(
+        AtomRegistry.make(),
+        page === undefined ? body : createElement(TaskMentions, { value: page, children: body }),
+      ),
     ),
   );
   const rollout = container.querySelector<HTMLElement>('[role="group"][aria-label="Rollout"]');
