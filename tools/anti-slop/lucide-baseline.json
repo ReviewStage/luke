@@ -96,7 +96,6 @@
   "packages/panel/src/tasks/issue-picker-chip.tsx": 1,
   "packages/panel/src/tasks/lone-link-card.tsx": 1,
   "packages/panel/src/tasks/mac-terminal-tab.tsx": 1,
-  "packages/panel/src/tasks/markdown-toolbar.tsx": 1,
   "packages/panel/src/tasks/mention-picker.tsx": 1,
   "packages/panel/src/tasks/merge-box.tsx": 1,
   "packages/panel/src/tasks/minimized-threads.tsx": 1,
