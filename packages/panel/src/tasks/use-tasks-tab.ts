@@ -1,3 +1,4 @@
+import { useAtomValue } from "@effect/atom-react";
 import type { AccountFailedRun } from "@luke/features/account-inbox-wire";
 import type { AutomationPresetName } from "@luke/features/automation-code-review";
 import type { Board } from "@luke/features/board-wire";
@@ -66,6 +67,7 @@ import {
   FOR_YOU,
   placeChannel,
 } from "@luke/ui/chat-model";
+import { pendingShown, pendingWithout } from "@luke/ui/pending-values";
 import type { PictureAnswer } from "@luke/ui/picture-cache";
 import {
   isAgentTab,
@@ -96,6 +98,7 @@ import {
   type LinearIssuesAsk,
   MARK_FAILED_NOTES,
   MICROPHONE_PRESS,
+  markAsked,
   markedView,
   microphoneButton,
   type PendingAgentPins,
@@ -107,34 +110,36 @@ import {
   type PendingStatuses,
   PIN_MOVE_FAILED_NOTE,
   type PinMove,
-  pendingMark,
   pinnedRepositories,
   positionedView,
   REPOSITORY_PIN_FAILED_NOTES,
   recentRepositories,
+  renameAsked,
   renamedView,
   repositoryFailureNote,
   repositoryPageUrl,
   STATUS_RESTORE_FAILED_NOTE,
   type StatusChange,
   settleChanges,
+  settledMarks,
   settledNote,
+  settledRenames,
+  settledStatuses,
   settleFailedNote,
   sidebarTasks,
   startFailureNote,
+  statusAsked,
   statusedView,
   TASK_MARK,
   TASKS_PAGE,
   type TaskMark,
+  type TaskNames,
   type TasksPage,
   tasksPage,
   undoStillDue,
   unsettledAgentPins,
-  unsettledMarks,
   unsettledPinPositions,
-  unsettledRenames,
   unsettledRepositoryPins,
-  unsettledStatuses,
   workspaceReaches,
 } from "@luke/ui/tasks-model";
 import { useStateWithRef } from "@luke/ui/use-state-with-ref";
@@ -142,6 +147,9 @@ import type { MicrophoneStatus } from "@luke/voice/audio";
 import { shownFiles } from "@luke/voice/code-pane-model";
 import { VOICE_COMMAND } from "@luke/voice/voice-view";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
+import { Clock, Duration, Option, Schedule, Stream } from "effect";
+import * as AsyncResult from "effect/reactivity/AsyncResult";
+import * as Atom from "effect/reactivity/Atom";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ActHandle } from "../act.js";
 import { streamFrom } from "../act-stream.js";
@@ -153,6 +161,7 @@ import { useChosenWorkspace } from "../desktop/chosen-workspace.js";
 import { useOpenAiKeyMissing } from "../openai-key.js";
 import { PANEL_SPAN, PANEL_SPAN_ATTRIBUTE, recordPanelSpan } from "../panel-spans.js";
 import { pressedWithCommand } from "../press-intent.js";
+import { rendererRuntime } from "../renderer-runtime.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import { useSteadyDoor, useSteadyDoors } from "../steady-door.js";
 import { TOAST_HOLD, undoToast, useToast } from "../toast.js";
@@ -1049,6 +1058,29 @@ interface TaskAsk {
   over: string | undefined;
 }
 
+/** No name given here and still waiting on main's view. */
+const NO_PENDING_RENAMES: PendingRenames = new Map();
+
+/** No task pin given here and still waiting on main's view. */
+const NO_PENDING_MARKS: PendingMarks = new Map();
+
+/** No status given here and still waiting on main's view. */
+const NO_PENDING_STATUSES: PendingStatuses = new Map();
+
+/**
+ * How often the runtime clock is read while a task's name, pin, or status
+ * given here waits on main's view, so one past its time limit lets go.
+ */
+const PENDING_TICK = Duration.seconds(5);
+
+/** The time now, and again each `PENDING_TICK` after, on the renderer's clock, read only while a value waits. */
+const pendingClockAtom = rendererRuntime.atom(
+  Stream.fromEffectSchedule(Clock.currentTimeMillis, Schedule.spaced(PENDING_TICK)),
+);
+
+/** No reading, while nothing waits on main's view. */
+const NO_PENDING_CLOCK = Atom.make(AsyncResult.initial<number>());
+
 /** No repository pin given here and still waiting on main's view. */
 const NO_PENDING_PINS: PendingRepositoryPins = new Map();
 
@@ -1330,13 +1362,35 @@ export function useTasksTab(input: {
   // signed out as every fixture run is.
   const fixture = tasksFixture?.fixtureTasksView(input.run);
   const viewed = fixture ?? input.tasks;
-  // A name given here stands until main's view carries it, so a rename that
-  // landed never flickers back while main's copy of the view catches up.
-  const [renames, setRenames] = useState<PendingRenames>(new Map());
-  useEffect(() => setRenames((held) => unsettledRenames(held, viewed)), [viewed]);
+  const accountSignedIn = input.signedIn;
+  // A name, pin, or status given here stands until main's view answers it
+  // (`@luke/ui/pending-values`), so a press that landed never flickers back
+  // while main's copy of the view catches up, and one the service or a
+  // teammate answered otherwise, or that waited past its time, gives way to
+  // the view. Note that a sign-out lets every one go, because each names a
+  // task of the account it was given under. The clock is read only while
+  // one waits, so a window with nothing pending draws nothing on its ticks.
+  const [renames, setRenames] = useState<PendingRenames>(NO_PENDING_RENAMES);
+  const [marks, setMarks] = useState<PendingMarks>(NO_PENDING_MARKS);
+  const [statuses, setStatuses] = useState<PendingStatuses>(NO_PENDING_STATUSES);
+  const waiting = renames.size > 0 || marks.size > 0 || statuses.size > 0;
+  const pendingNow = Option.getOrUndefined(
+    AsyncResult.value(useAtomValue(waiting ? pendingClockAtom : NO_PENDING_CLOCK)),
+  );
+  useEffect(() => {
+    setRenames((held) =>
+      accountSignedIn ? settledRenames(held, viewed, pendingNow) : NO_PENDING_RENAMES,
+    );
+    setMarks((held) =>
+      accountSignedIn ? settledMarks(held, viewed, pendingNow) : NO_PENDING_MARKS,
+    );
+    setStatuses((held) =>
+      accountSignedIn ? settledStatuses(held, viewed, pendingNow) : NO_PENDING_STATUSES,
+    );
+  }, [viewed, accountSignedIn, pendingNow]);
   // A name being typed is drawn over both, held here rather than read back
   // from main, so every surface naming the task follows the typing at once.
-  const [drafts, setDrafts] = useState<PendingRenames>(new Map());
+  const [drafts, setDrafts] = useState<TaskNames>(new Map());
   const draftName = useCallback((taskId: string, name: string | undefined) => {
     setDrafts((held) => {
       if (held.get(taskId) === name) return held;
@@ -1346,18 +1400,11 @@ export function useTasksTab(input: {
       return next;
     });
   }, []);
-  // A pin or an archive given here stands until main's view carries it, as a name does.
-  const [marks, setMarks] = useState<PendingMarks>(new Map());
-  useEffect(() => setMarks((held) => unsettledMarks(held, viewed)), [viewed]);
-  // A status given here stands until main's view carries it, apart from the pins and archives.
-  const [statuses, setStatuses] = useState<PendingStatuses>(new Map());
-  useEffect(() => setStatuses((held) => unsettledStatuses(held, viewed)), [viewed]);
   // A repository's pin given here stands until main's view carries it, as a
   // task's does. Note that a sign-out lets every one go, because a pin names
   // a repository rather than a row of this account's own, so one left
   // standing would be drawn on the next account to sign in.
   const [repositoryPins, setRepositoryPins] = useState<PendingRepositoryPins>(new Map());
-  const accountSignedIn = input.signedIn;
   useEffect(
     () =>
       setRepositoryPins((held) =>
@@ -1408,7 +1455,7 @@ export function useTasksTab(input: {
   useEffect(() => {
     if (!accountSignedIn) setClosedTabs(NO_CLOSED_TABS);
   }, [accountSignedIn, setClosedTabs]);
-  const renamed = useMemo(() => renamedView(viewed, renames), [viewed, renames]);
+  const renamed = useMemo(() => renamedView(viewed, pendingShown(renames)), [viewed, renames]);
   const drafted = useMemo(() => renamedView(renamed, drafts), [renamed, drafts]);
   const marked = useMemo(
     () => statusedView(markedView(drafted, marks), statuses),
@@ -2098,15 +2145,10 @@ export function useTasksTab(input: {
   // A fixture's tasks are renamed nowhere, as they are read from nowhere.
   const renameTask = async (taskId: string, name: string): Promise<boolean> => {
     if (fixture !== undefined) return false;
-    setRenames((held) => new Map(held).set(taskId, name));
+    const pending = renameAsked(renames, viewed, taskId, name);
+    setRenames((held) => new Map(held).set(taskId, pending));
     const renamed = await act(ACT_KIND.TASKS_RENAME, { taskId, name }).catch(() => false);
-    if (!renamed) {
-      setRenames((held) =>
-        held.get(taskId) === name
-          ? new Map([...held].filter(([pending]) => pending !== taskId))
-          : held,
-      );
-    }
+    if (!renamed) setRenames((held) => pendingWithout(held, taskId, pending));
     return renamed;
   };
 
@@ -2121,17 +2163,13 @@ export function useTasksTab(input: {
   // it, and says so in a toast, since the menu that asked has closed.
   const markTask = (taskId: string, mark: TaskMark) => {
     if (fixture !== undefined) return;
-    const next = { ...marks.get(taskId), ...pendingMark(mark, Date.now()) };
+    const next = markAsked(marks, viewed, taskId, mark, Date.now());
     setMarks((held) => new Map(held).set(taskId, next));
     act(ACT_KIND.TASKS_PIN, { taskId, pinned: mark === TASK_MARK.PIN })
       .catch(() => false)
       .then((changed) => {
         if (!changed) {
-          setMarks((held) =>
-            held.get(taskId) === next
-              ? new Map([...held].filter(([pending]) => pending !== taskId))
-              : held,
-          );
+          setMarks((held) => pendingWithout(held, taskId, next));
           toast({
             words: MARK_FAILED_NOTES[mark],
             tone: STATUS_TONE.DANGER,
@@ -2316,12 +2354,15 @@ export function useTasksTab(input: {
   // tasks the service kept and how many it refused.
   const sendStatuses = (changes: readonly StatusChange[]) => {
     for (const { taskId } of changes) chooseStatus(taskId);
-    const asked = changes.map(({ taskId, status }) => ({ taskId, next: { status } }));
+    const asked = changes.map(({ taskId, status }) => ({
+      taskId,
+      next: statusAsked(statuses, viewed, taskId, status),
+    }));
     setStatuses(
       (held) => new Map([...held, ...asked.map(({ taskId, next }) => [taskId, next] as const)]),
     );
     const answers = asked.map(({ taskId, next }) =>
-      act(ACT_KIND.TASKS_SET_STANDING, { taskId, status: next.status }).catch(() => false),
+      act(ACT_KIND.TASKS_SET_STANDING, { taskId, status: next.value }).catch(() => false),
     );
     return Promise.all(answers).then((changed) => {
       const refused = asked.filter((_, index) => !changed[index]);
