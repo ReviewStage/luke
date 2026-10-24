@@ -52,6 +52,8 @@ export const APP_COMMAND = {
   TOGGLE_SPEAKER: "toggle-speaker",
   MOVE_TAB_LEFT: "move-tab-left",
   MOVE_TAB_RIGHT: "move-tab-right",
+  MOVE_ROW_UP: "move-row-up",
+  MOVE_ROW_DOWN: "move-row-down",
   NEW_TAB: "new-tab",
   CLOSE_TAB: "close-tab",
   REOPEN_CLOSED_TAB: "reopen-closed-tab",
@@ -331,7 +333,8 @@ export interface AppShortcut {
  * Safari have them, ⌃Tab and ⌃⇧Tab through the tabs used last as VS Code
  * and Chrome have them, ⇧⌘⏎ to fill the window
  * with a pane as iTerm and Warp have it, ⇧⌘← and ⇧⌘→ to move the focused tab along its strip, the
- * keys VS Code's Move Editor Left and Right end in, ⌘T to open a tab, ⌘W
+ * keys VS Code's Move Editor Left and Right end in, ⇧⌘↑ and ⇧⌘↓ to move the focused
+ * row of a list that reorders up or down it, ⌘T to open a tab, ⌘W
  * to close the tab chosen, ⇧⌘T to reopen the tab closed last, and ⇧⌘W to
  * close the window as Chrome and VS Code have them,
  * ⇧⌘M to toggle the call's microphone as Teams has it, with ⇧⌘S for its
@@ -442,6 +445,15 @@ export const APP_SHORTCUTS = {
   [APP_COMMAND.MOVE_TAB_RIGHT]: {
     label: "Move tab right",
     chord: { key: SHORTCUT_KEY.RIGHT, shift: true },
+  },
+  // Note that a row takes the chords a tab's pair does, turned a quarter, because a list runs up and down where a strip runs along.
+  [APP_COMMAND.MOVE_ROW_UP]: {
+    label: "Move row up",
+    chord: { key: SHORTCUT_KEY.UP, shift: true },
+  },
+  [APP_COMMAND.MOVE_ROW_DOWN]: {
+    label: "Move row down",
+    chord: { key: SHORTCUT_KEY.DOWN, shift: true },
   },
   [APP_COMMAND.NEW_TAB]: { label: "New tab", chord: { key: SHORTCUT_KEY.T } },
   [APP_COMMAND.CLOSE_TAB]: { label: "Close tab", chord: { key: SHORTCUT_KEY.W } },
@@ -640,6 +652,8 @@ export const APP_SHORTCUT_GROUPS = [
       APP_COMMAND.REOPEN_CLOSED_TAB,
       APP_COMMAND.MOVE_TAB_LEFT,
       APP_COMMAND.MOVE_TAB_RIGHT,
+      APP_COMMAND.MOVE_ROW_UP,
+      APP_COMMAND.MOVE_ROW_DOWN,
       APP_COMMAND.SHOW_TERMINAL,
       APP_COMMAND.MENTION_LINES,
       APP_COMMAND.INSERT_PICTURE,
