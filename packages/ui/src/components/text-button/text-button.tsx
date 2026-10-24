@@ -3,6 +3,7 @@ import type { ButtonHTMLAttributes, MouseEvent, ReactNode } from "react";
 import { cn } from "../../cn.js";
 import { PRESS_PULSE, pulseOnPress } from "../../press-pulse.js";
 import { useLinkAddress } from "../menu/link-address.js";
+import { TEXT_LINK_LOOK } from "../text-link/text-link-look.js";
 
 /**
  * text-button.tsx -- a press drawn as words among words: a link's look on a button, for an act that stays in the window.
@@ -15,9 +16,11 @@ import { useLinkAddress } from "../menu/link-address.js";
  * - `quiet` in the words' own ink, underlined only under the pointer or the
  *   keyboard, for words that already read as the act (a name, an "Edited"
  *   line, a count);
- * - `link` in the words' own ink over a faint underline that goes full
- *   strength under the pointer or the keyboard, as a written link is drawn,
- *   for an act nothing else around it says is pressable ("Send feedback");
+ * - `link` drawn as an underlined `TextLink` is (`text-link.css`'s one
+ *   underline), the words' own ink over a faint underline that goes full
+ *   strength under the pointer or the keyboard, for an act nothing else
+ *   around it says is pressable ("Send feedback"); a press that opens a page
+ *   is a `TextLink` itself, never this;
  * - `accent` in the accent's ink, set as a label, for the one act a line
  *   offers ("3 replies").
  *
@@ -71,7 +74,7 @@ export type TextButtonLines = (typeof TEXT_BUTTON_LINES)[keyof typeof TEXT_BUTTO
  * line it stands in.
  */
 const TEXT =
-  "luke-text-button align-baseline min-w-0 max-w-full m-0 p-0 [border:0] rounded-[2px] bg-transparent bg-none text-inherit [font:inherit] text-start no-underline decoration-1 underline-offset-[0.24em] text-ellipsis cursor-pointer in-data-[luke-profile=desktop]:cursor-default transition-[color,text-decoration-color] duration-(--luke-duration-hover) ease-motion-exit [&_svg]:size-[0.8em] [&_svg]:ms-0.5 [&_svg]:align-[-0.05em]";
+  "luke-text-button align-baseline min-w-0 max-w-full m-0 p-0 [border:0] rounded-[2px] bg-transparent bg-none text-inherit [font:inherit] text-start text-ellipsis cursor-pointer in-data-[luke-profile=desktop]:cursor-default transition-[color,text-decoration-color] duration-(--luke-duration-hover) ease-motion-exit [&_svg]:size-[0.8em] [&_svg]:ms-0.5 [&_svg]:align-[-0.05em]";
 
 /**
  * How many lines the words take. One is cut with an ellipsis; two wrap
@@ -87,6 +90,9 @@ const TEXT_LINES = {
     "inline-block overflow-clip whitespace-nowrap pointer-coarse:relative pointer-coarse:overflow-visible pointer-coarse:before:absolute pointer-coarse:before:top-1/2 pointer-coarse:before:left-1/2 pointer-coarse:before:w-[max(100%,var(--luke-touch-target))] pointer-coarse:before:h-touch pointer-coarse:before:[transform:translate(-50%,-50%)] pointer-coarse:before:content-['']",
 } as const satisfies Record<TextButtonLines, string>;
 
+/** The line a quiet or an accent text button draws only under the pointer or the keyboard. */
+const UNDERLINE_ON_HOVER = "no-underline decoration-1 underline-offset-[0.24em]";
+
 /**
  * How each tone reads: quiet, in the line's ink until the pointer or the
  * keyboard underlines it in the full ink; a link, underlined faintly and
@@ -97,9 +103,9 @@ const TEXT_LINES = {
  * `font: inherit`.
  */
 const TEXT_TONE = {
-  quiet: "[&:is(:hover,:focus-visible)]:text-foreground [&:is(:hover,:focus-visible)]:underline",
-  link: "underline decoration-[color-mix(in_srgb,currentColor_32%,transparent)] [&:is(:hover,:focus-visible)]:decoration-current",
-  accent: "text-accent-ink data-[tone=accent]:font-label [&:is(:hover,:focus-visible)]:underline",
+  quiet: `${UNDERLINE_ON_HOVER} [&:is(:hover,:focus-visible)]:text-foreground [&:is(:hover,:focus-visible)]:underline`,
+  link: "luke-text-link",
+  accent: `${UNDERLINE_ON_HOVER} text-accent-ink data-[tone=accent]:font-label [&:is(:hover,:focus-visible)]:underline`,
 } as const satisfies Record<TextButtonTone, string>;
 
 /** A pointer's press that leaves the focus where it is. */
@@ -139,6 +145,7 @@ export function TextButton({
       type="button"
       className={cn(TEXT, TEXT_LINES[lines], TEXT_TONE[tone])}
       data-tone={tone}
+      data-look={tone === TEXT_BUTTON_TONE.LINK ? TEXT_LINK_LOOK.UNDERLINED : undefined}
       data-lines={lines}
       ref={linkAddress}
       id={id}

@@ -7,6 +7,7 @@ import {
   FILL_FLOW,
   Fill,
   IconButton,
+  IconButtonLink,
   PaneBar,
   type PaneBarMenu,
   ProviderMark,
@@ -53,6 +54,7 @@ import {
 } from "./file-tab-model.js";
 import { FileTreePane } from "./file-tree-pane.js";
 import { keptListings, type ListFolder, listingOf } from "./folder-listings.js";
+import { linkPressOf } from "./use-open-link.js";
 import { FILE_HISTORY_STEP, type FileHistoryStep, type OpenFile } from "./use-side-panel.js";
 import { VIEW_SETTINGS_SCOPE, ViewSettingsButton } from "./view-settings.js";
 
@@ -508,7 +510,7 @@ function BarPathWords({ path }: { path: BarPath }): React.JSX.Element {
 export function FileViewBar({
   history,
   lead,
-  onGitHub,
+  github,
   menu,
   more,
   tree,
@@ -516,8 +518,8 @@ export function FileViewBar({
   history?: FileHistory | undefined;
   /** What leads the bar after Back and Forward: a File tab's path and the commit it is read at, or Files changed's count. */
   lead: ReactNode;
-  /** Opens the page on GitHub; none dims the button. */
-  onGitHub: (() => void) | undefined;
+  /** The page on GitHub, and the door that opens it; none dims the button. */
+  github: { readonly href: string; readonly open: (url: string) => void } | undefined;
   /** The tab's own controls after the GitHub button: View settings, or a ⋯ of its own. */
   menu: ReactNode;
   /** The bar's ⋯, drawn last, after the tree's toggle; none draws none. */
@@ -541,12 +543,20 @@ export function FileViewBar({
       actions={
         <>
           <Tooltip label="Open on GitHub">
-            <IconButton
-              icon={<ProviderMark provider={INTEGRATION_PROVIDER.GITHUB} />}
-              label="Open on GitHub"
-              disabled={onGitHub === undefined}
-              onClick={onGitHub}
-            />
+            {github === undefined ? (
+              <IconButton
+                icon={<ProviderMark provider={INTEGRATION_PROVIDER.GITHUB} />}
+                label="Open on GitHub"
+                disabled
+              />
+            ) : (
+              <IconButtonLink
+                icon={<ProviderMark provider={INTEGRATION_PROVIDER.GITHUB} />}
+                label="Open on GitHub"
+                href={github.href}
+                onClick={linkPressOf(github.open, github.href)}
+              />
+            )}
           </Tooltip>
           {menu}
           {tree === undefined ? null : <TreeToggle toggles={tree} />}
@@ -717,7 +727,11 @@ export function FileView({
             )}
           </>
         }
-        onGitHub={read.kind === FILE_READ.READY ? () => openGitHub(fileUrl(read, file)) : undefined}
+        github={
+          read.kind === FILE_READ.READY
+            ? { href: fileUrl(read, file), open: openGitHub }
+            : undefined
+        }
         {...fileViewEnd}
         tree={browsing ? tree.toggles : undefined}
       />

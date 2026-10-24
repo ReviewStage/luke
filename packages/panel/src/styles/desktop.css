@@ -1639,6 +1639,12 @@ ul.actor-stack {
   grid-template-columns: var(--luke-space-48) minmax(0, 1fr);
 }
 
+/* A row that is a FormField stands its label over its control rather than before it. */
+.inbox-compose-row[data-field] {
+  display: block;
+  padding-block: var(--luke-space-8);
+}
+
 .inbox-compose-label {
   color: var(--luke-color-text-muted);
   font-size: var(--luke-type-caption-size);
