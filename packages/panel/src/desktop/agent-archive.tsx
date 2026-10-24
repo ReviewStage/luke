@@ -13,12 +13,12 @@ import {
   STATUS_TONE,
   Stack,
   Tooltip,
-  UnarchiveIcon,
   useConfirmDialog,
   useMenu,
 } from "@luke/ui";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { useRef, useState } from "react";
+import { commandAction, commandHead, PANEL_COMMAND } from "../command-items.js";
 import { AgentCard, agentSubject, NOTHING_HELD } from "../tasks/agent-ref.js";
 import { agentName, agentStillWriting } from "../tasks/coding-agent-model.js";
 import { AgentGlyph, agentEndMark } from "../tasks/tab-look.js";
@@ -31,7 +31,7 @@ import type { CountNoun } from "./sidebar-group-header.js";
 /**
  * agent-archive.tsx -- a coding agent's Archive, asked first while the agent still works, and the task's archived agents folded under Archived at the foot of its summary's Coding agents, each with its Unarchive.
  *
- * Archive agent stands in an agent's tab menu and in the menu of its row in
+ * Archive stands in an agent's tab menu and in the menu of its row in
  * the task's summary, and for an agent with no task in its page's ⋯ and its
  * sidebar row's menu, whose Unarchive stands in its place once archived
  * (`useAgentUnarchive`). An agent at rest is archived at once; one still
@@ -69,7 +69,7 @@ const ARCHIVED_LABEL = "Archived";
 const ARCHIVED_NOUN: CountNoun = { one: "archived agent", many: "archived agents" };
 
 /** What an archived agent's one action says, in an archived task's words. */
-const UNARCHIVE_LABEL = "Unarchive";
+const UNARCHIVE = commandHead(PANEL_COMMAND.UNARCHIVE_AGENT);
 
 /** What asking to archive a working agent says. */
 function archiveQuestion(name: string): DialogQuestion {
@@ -100,7 +100,7 @@ export interface AgentArchive {
 /** An archived agent's Unarchive as a menu offers it, its refusal said in a toast. */
 export function useAgentUnarchive(agentId: string, agents: CodingAgentsControl): MenuAction {
   const press = useArchivePress(agents);
-  return { label: UNARCHIVE_LABEL, icon: <UnarchiveIcon />, onSelect: () => press(agentId, false) };
+  return commandAction(PANEL_COMMAND.UNARCHIVE_AGENT, () => press(agentId, false), false);
 }
 
 /**
@@ -119,10 +119,9 @@ export function useAgentArchive(
   );
   const working = agentStillWriting(agent.status);
   return {
-    action: {
-      label: "Archive agent",
-      icon: <ArchiveIcon />,
-      onSelect: working
+    action: commandAction(
+      PANEL_COMMAND.ARCHIVE_AGENT,
+      working
         ? confirm.ask
         : () =>
             void agents.readAgent(agent.id).then((now) => {
@@ -130,7 +129,8 @@ export function useAgentArchive(
               if (now === undefined || agentStillWriting(now.status)) confirm.ask();
               else return press(agent.id, true);
             }),
-    },
+      false,
+    ),
     dialog: (
       <ConfirmDialog
         confirm={confirm}
@@ -172,10 +172,10 @@ function ArchivedAgentRow({
         </span>
       </Tooltip>
       <span className="task-summary-marks">
-        <Tooltip label={UNARCHIVE_LABEL}>
+        <Tooltip label={UNARCHIVE.label}>
           <IconButton
-            icon={<UnarchiveIcon />}
-            label={UNARCHIVE_LABEL}
+            icon={UNARCHIVE.icon}
+            label={UNARCHIVE.label}
             size={BUTTON_SIZE.COMPACT}
             onClick={unarchive}
           />
@@ -185,7 +185,7 @@ function ArchivedAgentRow({
         <ActionMenu
           label="Archived agent actions"
           menu={menu.drawn}
-          groups={[[{ label: UNARCHIVE_LABEL, icon: <UnarchiveIcon />, onSelect: unarchive }]]}
+          groups={[[commandAction(PANEL_COMMAND.UNARCHIVE_AGENT, unarchive, false)]]}
           onClose={menu.close}
         />
       )}

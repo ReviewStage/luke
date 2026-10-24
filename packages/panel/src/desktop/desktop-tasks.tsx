@@ -622,9 +622,9 @@ function PlanDocument({
   }, [taskId, inbox.read, waiting, onInboxRead]);
   const rename = useInlineRename(taskId, tasks.onRenameTask);
   // A terminal shown hands the keys to the side panel, where it stands; an
-  // agent's tab's Open terminal always opens that agent's own.
+  // agent's tab's Show terminal always opens that agent's own.
   const showSide = () => setFocus(COLUMN.SIDE);
-  // Open terminal opens an agent's terminal as on every surface that draws it (`agent-actions.tsx`).
+  // Show terminal opens an agent's terminal as on every surface that draws it (`agent-actions.tsx`).
   const terminalDoors = useAgentTerminalDoors(
     tasks.sidePanel,
     region.kind === DOCUMENT_REGION.READY ? region.task.repository : null,

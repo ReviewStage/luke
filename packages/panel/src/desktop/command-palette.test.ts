@@ -63,7 +63,7 @@ import {
   type SentPortAct,
 } from "../testing/app-bridge.js";
 import { copyingInto, fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
-import { DESKTOP_CAPABILITIES, handState } from "../testing/app-state.js";
+import { DESKTOP_CAPABILITIES, handCapabilities, handState } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { sidebarProps } from "../testing/desktop-sidebar.js";
 import { DOCUMENT_TASK } from "../testing/document-task.js";
@@ -1550,6 +1550,53 @@ test("a task's command wears the same chord in ⌘K as in the open task's ⋯, �
   assert.equal(itemChord("Mark done"), doneKeys);
   assert.equal(copyKeys, "⇧⌘C");
   assert.equal(itemChord("Copy plan"), copyKeys);
+});
+
+test("an agent tab's right-click words and keys Close and Show terminal as ⌘K does, ⌘K naming the tab where the menu says the verb alone", async () => {
+  fakeAppBridge({});
+  fakeActPort({});
+  handCapabilities(DESKTOP_CAPABILITIES);
+  const tasks = tasksControl({
+    ...ON_AGENT_TAB,
+    mainTabs: {
+      ...ON_AGENT_TAB.mainTabs,
+      tabs: [{ agent: LINKED_AGENT }],
+      openAgents: [LINKED_AGENT],
+    },
+  });
+  const host = document.body.appendChild(document.createElement("div"));
+  const root = createRoot(host);
+  roots.push(root);
+  act(() =>
+    root.render(
+      onRegistry(
+        AtomRegistry.make(),
+        createElement(DesktopTasks, { summary: UNPINNED_SUMMARY, looks: NO_LOOKS, tasks }),
+      ),
+    ),
+  );
+  // The document arrives a few microtasks after the window first draws.
+  await settle();
+  openPalette(tasks);
+  type("close tab");
+  const closeKeys = rowChord("Close tab");
+  type("show terminal");
+  const terminalKeys = rowChord("Show terminal");
+  act(() => {
+    assert.ok(runAppCommand(APP_COMMAND.COMMAND_PALETTE), "⌘K closes");
+  });
+
+  const tab = host.querySelector<HTMLElement>('[role="tab"][aria-selected="true"]');
+  assert.ok(tab, "the agent's tab is chosen");
+  act(() => {
+    tab.dispatchEvent(
+      new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: 40, clientY: 20 }),
+    );
+  });
+  assert.equal(closeKeys, "⌘W");
+  assert.equal(itemChord("Close"), closeKeys);
+  assert.equal(terminalKeys, "⌘J");
+  assert.equal(itemChord("Show terminal"), terminalKeys);
 });
 
 /** Main's clipboard, keeping each copy the window asks of it. */

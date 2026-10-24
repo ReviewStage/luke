@@ -1117,7 +1117,7 @@ function stripTabs(input: {
  * (`use-side-panel.ts`). A tab pinned to the sidebar is drawn and moved as
  * any other. Every tab's right-click offers Close, Close others, which
  * closes every tab but it and chooses it, and a fixed tab's, a file's, and
- * a Changes tab's Pin tab or Unpin tab, which puts it in the sidebar or takes it out; a
+ * a Changes tab's Pin or Unpin, which puts it in the sidebar or takes it out; a
  * subagent's adds the two copies of its transcript, built from the rows the
  * tab draws (`transcript-copy.ts`) and answered with the window's toast,
  * which the bar's ⋯ also offers while the subagent's tab is the chosen one.

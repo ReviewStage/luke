@@ -4,7 +4,6 @@ import type { TaskAgentLine, TaskPullRequestLine, TaskSummary } from "@luke/feat
 import { ACT_KIND } from "@luke/host/acts";
 import {
   BUTTON_SIZE,
-  CopyIcon,
   HOVER_CARD_ROW_LOOK,
   HoverCard,
   HoverCardHead,
@@ -21,7 +20,6 @@ import {
   RowHint,
   RowHintOptions,
   Tooltip,
-  UnpinIcon,
   useMinute,
   VisuallyHidden,
 } from "@luke/ui";
@@ -30,9 +28,9 @@ import { shownFiles } from "@luke/voice/code-pane-model";
 import { Duration, Effect } from "effect";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import * as Atom from "effect/reactivity/Atom";
-import { ScrollTextIcon } from "lucide-react";
 import { useCallback, useEffect, useRef } from "react";
 import { askAct } from "../act.js";
+import { commandAction, commandHead, PANEL_COMMAND } from "../command-items.js";
 import { rendererRuntime } from "../renderer-runtime.js";
 import { agentSubject, NOTHING_HELD } from "../tasks/agent-ref.js";
 import { peopleOf } from "../tasks/changes-card.js";
@@ -81,6 +79,9 @@ import { PullRequestLine, RepositoryDetail, taskCardOf } from "./task-card.js";
  * card, until it is unpinned. Another task's pins are drawn as they were kept, since
  * nothing of that task is read.
  */
+
+/** What a pin's Unpin button says and wears, as the pin's menu does. */
+const UNPIN = commandHead(PANEL_COMMAND.UNPIN_TAB);
 
 /** What a pin's card says once its task no longer holds what it opens. */
 const GONE_NOTE = "No longer on this task";
@@ -205,11 +206,11 @@ function pinActionGroups(
   copied: TranscriptCopier,
 ): MenuAction[][] {
   const { tab } = pin;
-  const unpin: MenuAction = {
-    label: "Unpin",
-    icon: <UnpinIcon />,
-    onSelect: () => tasks.sidePanel.onUnpin(pin.task, tab),
-  };
+  const unpin = commandAction(
+    PANEL_COMMAND.UNPIN_TAB,
+    () => tasks.sidePanel.onUnpin(pin.task, tab),
+    false,
+  );
   const agent =
     isAgentTab(tab) && pin.task === tasks.activeTaskId
       ? tasks.agents.agents?.find((each) => each.id === tab.agent)
@@ -225,16 +226,12 @@ function pinActionGroups(
   const copy = copied(read);
   return [
     [
-      {
-        label: "Copy concise transcript",
-        icon: <CopyIcon />,
-        onSelect: () => copy(TRANSCRIPT_COPY.CONCISE),
-      },
-      {
-        label: "Copy full transcript",
-        icon: <ScrollTextIcon />,
-        onSelect: () => copy(TRANSCRIPT_COPY.FULL),
-      },
+      commandAction(
+        PANEL_COMMAND.COPY_CONCISE_TRANSCRIPT,
+        () => copy(TRANSCRIPT_COPY.CONCISE),
+        false,
+      ),
+      commandAction(PANEL_COMMAND.COPY_FULL_TRANSCRIPT, () => copy(TRANSCRIPT_COPY.FULL), false),
     ],
     [unpin],
   ];
@@ -485,10 +482,10 @@ export function SidebarPinnedTab({
           )}
           actionsAt={LIST_ROW_ACTIONS.HOVER}
           actions={
-            <Tooltip label="Unpin">
+            <Tooltip label={UNPIN.label}>
               <IconButton
-                icon={<UnpinIcon />}
-                label={`Unpin ${pin.label}`}
+                icon={UNPIN.icon}
+                label={`${UNPIN.label} ${pin.label}`}
                 size={BUTTON_SIZE.COMPACT}
                 onClick={() => tasks.sidePanel.onUnpin(pin.task, pin.tab)}
               />

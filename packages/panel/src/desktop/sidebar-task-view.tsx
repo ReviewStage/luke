@@ -33,11 +33,11 @@ import {
   SlidersHorizontalIcon,
   UserCheckIcon,
   UserIcon,
-  UsersIcon,
 } from "lucide-react";
 import type { ReactNode } from "react";
 import { ACTOR_SIZE, ActorMark } from "../actor-ref.js";
 import { useAppCommand } from "../app-commands.js";
+import { commandHead, PANEL_COMMAND } from "../command-items.js";
 import { useMemberDirectory } from "../member-directory.js";
 import { memberReadNotice, PEOPLE_FILTER, peopleFilterActions } from "../member-rows.js";
 import { TASK_STATUS_WORDS } from "../tasks/task-standing.js";
@@ -206,8 +206,7 @@ function viewEntries(
   return [
     [
       {
-        label: "Group by",
-        icon: <ListIcon />,
+        ...commandHead(PANEL_COMMAND.GROUP_BY),
         items: [
           grouping("Repository", <FolderGitIcon />, TASK_GROUPING.REPOSITORY),
           ...(shared
@@ -220,8 +219,7 @@ function viewEntries(
         ],
       },
       {
-        label: "Order by",
-        icon: <ClockIcon />,
+        ...commandHead(PANEL_COMMAND.ORDER_BY),
         items: [
           order("Last updated", <ClockIcon />, TASK_ORDER.UPDATED),
           order("Created", <CalendarPlusIcon />, TASK_ORDER.CREATED),
@@ -233,13 +231,11 @@ function viewEntries(
       ? [
           [
             {
-              label: "Assigned to",
-              icon: <UserCheckIcon />,
+              ...commandHead(PANEL_COMMAND.ASSIGNED_TO),
               items: memberFilter(view.assignedTo, control.onAssignedTo, reader),
             },
             {
-              label: "Created by",
-              icon: <UsersIcon />,
+              ...commandHead(PANEL_COMMAND.CREATED_BY),
               items: memberFilter(view.createdBy, control.onCreatedBy, reader),
             },
           ],

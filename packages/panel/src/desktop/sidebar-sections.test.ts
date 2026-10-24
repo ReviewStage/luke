@@ -1310,7 +1310,7 @@ test("an agent's menu offers Move to section after Pin and Archive, as a task's 
   const labels = menuLabels();
   assert.deepEqual(labels.slice(labels.indexOf("Pin"), labels.indexOf("Pin") + 3), [
     "Pin",
-    "Archive agent",
+    "Archive",
     "Move to section",
   ]);
   act(() => item("Move to section").click());
