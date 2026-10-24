@@ -152,20 +152,31 @@ export function lucideWholeModule(file) {
 }
 
 // The worker Pierre's diffs highlights a Files changed list in
-// (`src/diff-view/highlight-pool.ts`, started by `src/diff-view/index.ts`), bundled whole as one classic
-// script and handed to the diff bundle as text (`DIFF_HIGHLIGHT_WORKER`),
-// which starts each worker from a `blob:`, the one place the panel's policy
-// admits a worker from. Shiki's WebAssembly engine is answered with nothing,
-// since the bundle colours with Pierre's Highlights, or with Shiki's
-// JavaScript engine where WebAssembly is refused, and never with Shiki's own
-// WebAssembly; carried, it would be 600 KB of the worker's text.
-const SHIKI_WASM = /^shiki\/wasm$/;
-const shikiWasmLeftOut = {
-  name: "shiki-wasm-left-out",
+// (`src/diff-view/highlight-pool.ts`, started by `src/diff-view/index.ts`),
+// bundled whole as one classic script and handed to the diff bundle as text
+// (`DIFF_HIGHLIGHT_WORKER`), which starts each worker from a `blob:`, the one
+// place the panel's policy admits a worker from.
+//
+// The worker is handed every grammar and theme it highlights with by the
+// window's thread, which loads each on its own as a language or a theme is
+// first drawn; Pierre's own loaders of Shiki's grammars and of the theme
+// catalogues throw before they load anything in a worker, so the sets they
+// import are answered with a module that throws, rather than carried: some
+// 9.7 MB of the worker's text, which every window parsed with the diff
+// bundle. Shiki's WebAssembly engine is answered the same way, since the
+// bundle colours with Pierre's Highlights, or with Shiki's JavaScript engine
+// where WebAssembly is refused, and never with Shiki's own WebAssembly.
+const HIGHLIGHT_WORKER_LEFT_OUT =
+  /^(?:shiki\/langs|shiki\/wasm|@pierre\/highlights\/themes\/loader|@pierre\/theming\/themes)$/;
+const highlightWorkerSetsLeftOut = {
+  name: "highlight-worker-sets-left-out",
   setup(build) {
-    build.onResolve({ filter: SHIKI_WASM }, (args) => ({ path: args.path, namespace: "no-wasm" }));
-    build.onLoad({ filter: /.*/, namespace: "no-wasm" }, () => ({
-      contents: "export default undefined;",
+    build.onResolve({ filter: HIGHLIGHT_WORKER_LEFT_OUT }, (args) => ({
+      path: args.path,
+      namespace: "highlight-worker-left-out",
+    }));
+    build.onLoad({ filter: /.*/, namespace: "highlight-worker-left-out" }, (args) => ({
+      contents: `throw new Error(${JSON.stringify(`${args.path} is left out of the highlight worker, which is handed what it highlights with.`)});`,
       loader: "js",
     }));
   },
@@ -185,7 +196,7 @@ export const HIGHLIGHT_WORKER_BUILD = {
   target: "chrome140",
   minify: true,
   conditions: ["production"],
-  plugins: [shikiWasmLeftOut],
+  plugins: [highlightWorkerSetsLeftOut],
   define: { "process.env.NODE_ENV": '"production"' },
   logLevel: "info",
 };
