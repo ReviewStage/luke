@@ -18,9 +18,10 @@ import { DesktopVersionHistory, taskVersionSubject } from "./desktop-version-his
 import { SIDEBAR_OVERLAY } from "./sidebar-collapse.js";
 
 /**
- * version-history-keys.test.ts -- ↓ pressed on a version's row chooses the
- * version under it, which the page beside the list then shows, rather than
- * only moving the focus there. Synthetic plan and people.
+ * version-history-keys.test.ts -- the versions are one Tab stop, and ↑ and ↓
+ * pressed on a row choose the version they step to, which the page beside the
+ * list then shows, rather than only moving the focus there; focus coming onto
+ * a row from outside the list chooses nothing. Synthetic plan and people.
  */
 
 declare global {
@@ -128,17 +129,38 @@ function drawn(chosen: number[]): HTMLElement {
   return container;
 }
 
-test("↓ on a version's row chooses the version under it", () => {
-  const chosen: number[] = [];
-  const view = drawn(chosen);
-  const rows = [
+/** The version rows' presses, newest first. */
+function rowsOf(view: HTMLElement): HTMLButtonElement[] {
+  return [
     ...view.querySelectorAll<HTMLButtonElement>('[aria-label="Version list"] .luke-list-row-main'),
   ];
-  act(() => rows[0]?.focus());
+}
+
+/** Presses `name` on whatever holds the focus. */
+function key(name: string): void {
   act(() => {
-    rows[0]?.dispatchEvent(
-      new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true, cancelable: true }),
+    document.activeElement?.dispatchEvent(
+      new KeyboardEvent("keydown", { key: name, bubbles: true, cancelable: true }),
     );
   });
+}
+
+test("the versions are one Tab stop, and ↑ and ↓ choose the version they step to", () => {
+  const chosen: number[] = [];
+  const rows = rowsOf(drawn(chosen));
+  expect(rows.map((row) => row.tabIndex)).toEqual([0, -1, -1]);
+  act(() => rows[0]?.focus());
+  key("ArrowDown");
   expect(chosen).toEqual([2]);
+  expect(document.activeElement).toBe(rows[1]);
+  key("ArrowUp");
+  expect(chosen).toEqual([2, 3]);
+  expect(rows.map((row) => row.tabIndex)).toEqual([0, -1, -1]);
+});
+
+test("focus landing on a version from outside the list does not choose it", () => {
+  const chosen: number[] = [];
+  const rows = rowsOf(drawn(chosen));
+  act(() => rows[1]?.focus());
+  expect(chosen).toEqual([]);
 });

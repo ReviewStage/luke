@@ -50,8 +50,8 @@ import { Highlighted } from "./search-field.js";
  * search landed on are marked. One row is the owner's current one, drawn
  * highlighted, and a press on a row opens it; where the owner keeps the
  * keys in a field of its own, as the MCP popover's filter does, a press
- * keeps the focus there (`keepFocus`), and otherwise the current row is
- * the list's one stop for Tab, as a listbox's is. Where the owner opens
+ * keeps the focus there (`keepFocus`), and otherwise the list is one stop
+ * for Tab that ↑↓ walk (`List`), the owner following the focus. Where the owner opens
  * nothing, as a server's hover card does (`tasks/server-card.tsx`), each
  * row is its words alone, with no press and no chevron.
  *
@@ -134,7 +134,7 @@ export function IntegrationToolList({
   tools: readonly IntegrationTool[];
   /** The words a search asks for, marked where they landed. */
   tokens: readonly string[];
-  /** The name of the row drawn highlighted, and the list's one Tab stop. */
+  /** The name of the row drawn highlighted. */
   current: string | undefined;
   /** The id a row is drawn with, so an owner can find it. */
   idOf?: (tool: IntegrationTool) => string;
@@ -189,7 +189,7 @@ export function IntegrationToolList({
               current={isCurrent ? LIST_ROW_CURRENT.ITEM : undefined}
               chevron={onOpen !== undefined}
               keepFocus={keepFocus}
-              tabbable={keepFocus || isCurrent}
+              tabbable={keepFocus ? true : undefined}
               onPress={onOpen === undefined ? undefined : () => onOpen(tool)}
               onKeyDown={onKeyDown === undefined ? undefined : (event) => onKeyDown(event, tool)}
               hint={
