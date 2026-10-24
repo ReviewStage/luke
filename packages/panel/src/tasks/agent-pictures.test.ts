@@ -513,7 +513,7 @@ test("a WebM the agent showed plays where it stands, above the picture shown wit
       "under Luke's own bar, with an Expand into the viewer",
     );
     assert.equal(inline.hasAttribute("controls"), false, "and not the browser's");
-    assert.equal(inline.getAttribute("aria-label"), "Video: flow");
+    assert.equal(inline.getAttribute("aria-label"), "Video: Inviting a member");
     assert.ok(inline.closest(".ph-no-capture"), "the player is left out of the replay");
     assert.deepEqual(
       [...container.querySelectorAll("img")].map((image) => image.getAttribute("src")),
