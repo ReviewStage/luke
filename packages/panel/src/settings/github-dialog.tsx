@@ -85,7 +85,7 @@ function rejectionLabel(rejection: GitHubTokenRejection): ReactNode {
     case GITHUB_TOKEN_REJECTION.OTHER_USER:
       return "This token belongs to a different GitHub account than the one connected to Luke. Create it while signed in to the connected account.";
     case GITHUB_TOKEN_REJECTION.UNREACHABLE:
-      return "Couldn't reach GitHub. Try again.";
+      return "GitHub could not be reached. Try again.";
     case GITHUB_TOKEN_REJECTION.TOO_MANY_TRIES:
       return "Too many tokens tried in the last hour. Try again later.";
   }
@@ -158,8 +158,9 @@ function SavedToken({
         confirm={removal}
         question={{
           title: "Remove your GitHub token?",
+          body: "Luke deletes the token he holds, and your pull requests stop using it until you add one again.",
           verb: "Remove",
-          running: "Removing…",
+          running: "Removing",
           loss: CONFIRM_LOSS.IRREVERSIBLE,
         }}
       />

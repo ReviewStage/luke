@@ -462,7 +462,7 @@ test("the MCP popover waits on a Connect as Settings does, with Reopen and Cance
   });
   await settle();
   assert.deepEqual(slackRow(), {
-    words: "Could not connect to Slack: the sign-in came back without access.",
+    words: "Slack could not be connected: the sign-in came back without access.",
     buttons: ["Retry"],
   });
 

@@ -218,6 +218,8 @@ test("a saved token's Manage opens it with Remove, which asks at the dialog's fo
   assert.equal(document.querySelector('[role="alertdialog"]'), null, "no card opens over it");
   const question = asked() ?? assert.fail("no question at the foot");
   assert.match(question.textContent ?? "", /Remove your GitHub token\?/u);
+  // The question has a one-line body saying what goes.
+  assert.match(question.textContent ?? "", /Luke deletes the token he holds/u);
   assert.doesNotMatch(dialog().textContent ?? "", /Create token|Done/u, "the foot is the question");
   assert.ok(document.activeElement === button("Cancel", question), "Cancel takes focus");
 
@@ -258,7 +260,7 @@ test("each refused save says why and what to do next, and keeps the field", asyn
       "No GitHub account is connected to your Luke account. Connect GitHub in Integrations settings, then save the token again.",
     other_user:
       "This token belongs to a different GitHub account than the one connected to Luke. Create it while signed in to the connected account.",
-    unreachable: "Couldn't reach GitHub. Try again.",
+    unreachable: "GitHub could not be reached. Try again.",
     too_many_tries: "Too many tokens tried in the last hour. Try again later.",
   });
 });
@@ -301,7 +303,7 @@ test("a read that went unanswered says so as an alert with Retry in place of Add
   );
   assert.equal(
     document.querySelector('[role="alert"]')?.textContent,
-    "Couldn't read the token.Retry",
+    "The token could not be read.Retry",
   );
 
   act(() => button("Retry").click());

@@ -59,7 +59,7 @@ test("a connected server whose tools read failed offers Reconnect, saying so in 
   });
 
   assert.equal(row.kind, SERVER_ROW.RECONNECT);
-  assert.equal(row.problem, "Could not reach Slack.");
+  assert.equal(row.problem, "Slack could not be reached.");
   assert.equal(row.said, "Slack said: “App is not enabled for Slack MCP server access”");
   assert.equal(row.tools, undefined);
 });
@@ -75,7 +75,7 @@ test("a server that could not be reached keeps its switch and says so, since rec
   const row = slackRow({ problem: { reason: INTEGRATION_TOOLS_PROBLEM.UNREACHABLE } });
 
   assert.equal(row.kind, SERVER_ROW.SWITCH);
-  assert.equal(row.problem, "Could not reach Slack.");
+  assert.equal(row.problem, "Slack could not be reached.");
   assert.equal(row.said, undefined);
   assert.equal(row.tools, undefined);
 });

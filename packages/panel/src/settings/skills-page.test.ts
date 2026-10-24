@@ -503,7 +503,7 @@ test("the account's own skill offers Share with workspace, which asks in plain w
     question.textContent ?? "",
     /Everyone in Stage will get pr-style\. It leaves your personal skills\./u,
   );
-  act(() => button("Share", question).click());
+  act(() => button("Share with workspace", question).click());
   await settle();
 
   assert.deepEqual(sentOf(ACT_KIND.INSTALLED_SKILLS_SHARE), [
@@ -520,7 +520,7 @@ test("a share the workspace already has the name for is refused in the question,
   await mountPage();
 
   await choose("pr-style", "Share with workspace");
-  act(() => button("Share", dialog("alertdialog")).click());
+  act(() => button("Share with workspace", dialog("alertdialog")).click());
   await settle();
 
   assert.match(
@@ -759,7 +759,7 @@ test("a browsed skill's SKILL.md opens beside its box, and a read that failed is
     )[2] ?? assert.fail("no View for tdd");
   act(() => view().click());
   await settle();
-  assert.match(document.body.textContent ?? "", /Luke couldn't reach the service/u);
+  assert.match(document.body.textContent ?? "", /The service could not be reached/u);
   act(() => view().click());
   act(() => view().click());
   await settle();

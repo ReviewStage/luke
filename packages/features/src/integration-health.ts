@@ -88,7 +88,7 @@ function problemLines(
   if (problem.reason === INTEGRATION_TOOLS_PROBLEM.REFUSED) {
     return { problem: `${name} refused the sign-in.` };
   }
-  const sentence = `Could not reach ${name}.`;
+  const sentence = `${name} could not be reached.`;
   return problem.message === undefined
     ? { problem: sentence }
     : { problem: sentence, said: saidWords(name, problem.message) };

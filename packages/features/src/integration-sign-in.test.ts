@@ -55,7 +55,7 @@ test("a sign-in given up on still learns why from a later read that names it", (
   });
   assert.ok(named !== undefined);
   assert.deepEqual(signInLine(GRANOLA, named), {
-    text: "Could not connect to Granola.",
+    text: "Granola could not be connected.",
     problem: true,
     said: "Granola's sign-in said: “The provider said no.”",
   });

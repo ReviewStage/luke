@@ -975,7 +975,13 @@ test("Remove photo, offered only where a photo is set, asks first and then sends
   assert.deepEqual(rowActions(identity(page)), ["Replace photo", "Remove photo"]);
   await chooseAction(identity(page), "Remove photo");
   assert.deepEqual(photos(), []);
-  await confirm("Remove");
+  // The confirm repeats the menu's verb and says in one line what goes, with no ellipsis.
+  assert.match(
+    dialog().textContent ?? "",
+    /The photo is deleted, and the workspace is marked by its first letter instead\./u,
+  );
+  assert.equal((dialog().textContent ?? "").includes("…"), false);
+  await confirm("Remove photo");
 
   assert.deepEqual(photos(), [{ workspaceId: ACME.id, photo: null }]);
 });
@@ -1148,7 +1154,8 @@ test("an admin is offered Remove for a member but not for the owner, and Remove 
   assert.deepEqual(rowActions(memberNamed(page, "Dana")), ["Copy link"]);
   await chooseAction(memberNamed(page, "Sam"), "Remove from workspace");
   const askedFirst = !sent.some((request) => request.kind === ACT_KIND.WORKSPACE_MEMBER_REMOVE);
-  await confirm("Remove");
+  // The confirm repeats the menu's verb.
+  await confirm("Remove from workspace");
 
   assert.equal(askedFirst, true);
   assert.deepEqual(
@@ -1168,7 +1175,7 @@ test("Remove from workspace is drawn in the accent, not red, since a removed mem
 
   await chooseAction(memberNamed(page, "Sam"), "Remove from workspace");
 
-  assert.equal(button(dialog(), "Remove").getAttribute("data-variant"), "primary");
+  assert.equal(button(dialog(), "Remove from workspace").getAttribute("data-variant"), "primary");
 });
 
 test("an admin is offered no Remove on their own row, since their way out is Leave", async () => {
@@ -1325,6 +1332,7 @@ test("the owner cannot leave until the workspace is handed over: its row says so
     item.querySelector(".luke-menu-item-copy")?.getAttribute("data-place"),
   );
   act(() => offered.find((item) => item.textContent?.includes("ola@example.com"))?.click());
+  assert.equal((dialog().textContent ?? "").includes(`Transfer ownership of ${ACME.name}?`), true);
   await confirm("Transfer ownership");
   const refusedUntilNamed = roleSent();
   typeGate(ACME.name.toUpperCase());
@@ -1488,7 +1496,7 @@ test("a removal the account's role does not allow says so in the dialog that ask
   const { page } = await mount({ ...ACME, role: WORKSPACE_ROLE.OWNER });
 
   await chooseAction(memberNamed(page, "Sam"), "Remove from workspace");
-  await confirm("Remove");
+  await confirm("Remove from workspace");
 
   assert.equal(
     dialog().querySelector('[data-slot="field-error"]:not(:empty)')?.textContent,
@@ -1515,6 +1523,10 @@ test("a member leaves after confirming, which names what stays and what stops, s
   ]);
   assert.equal(
     document.querySelector(".luke-toast-stack")?.textContent?.includes("You left acme."),
+    false,
+  );
+  assert.equal(
+    document.querySelector(".luke-toast-stack")?.textContent?.includes("You left acme"),
     true,
   );
 

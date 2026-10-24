@@ -207,7 +207,7 @@ const WORDS = {
   SAVING_TOKEN: "Saving the token",
   DISCONNECT: "Disconnect",
   DISCONNECTING: "Disconnecting",
-  REMOVE: "Remove",
+  REMOVE_KEY: "Remove key",
   REMOVING: "Removing",
   ADD_TOKEN: "Add token",
   REPLACE_TOKEN: "Replace token",
@@ -235,7 +235,7 @@ const WORDS = {
   REMOVE_KEY_FAILED: "The key could not be removed. Try again.",
   CLAUDE_DISCONNECT_FAILED: "Your Claude subscription could not be disconnected. Try again.",
   CHATGPT_DISCONNECT_FAILED: "ChatGPT could not be disconnected. Try again.",
-  SIGN_IN_FAILED: "Luke couldn't reach ChatGPT. Try again.",
+  SIGN_IN_FAILED: "ChatGPT could not be reached. Try again.",
   DEFAULT_FAILED: "The default could not be changed. Try again.",
 } as const;
 
@@ -389,11 +389,11 @@ function keyRejectionWords(provider: ProviderKeyProvider, rejection: ProviderKey
       return `This looks like an ${HARNESS[other].keyName} key. Paste it under ${HARNESS[other].name}.`;
     }
     case PROVIDER_KEY_REJECTION.UNREACHABLE:
-      return `Couldn't reach ${name} to check this key. Try again.`;
+      return `${name} could not be reached to check this key. Try again.`;
     case PROVIDER_KEY_REJECTION.TOO_MANY_TRIES:
       return "Too many keys tried in the last hour. Try again later.";
     case PROVIDER_KEY_REJECTION.UNVERIFIED_SIGN_IN:
-      return `${name} couldn't confirm this sign-in. Sign in again.`;
+      return `${name} could not confirm this sign-in. Sign in again.`;
   }
 }
 
@@ -941,7 +941,7 @@ function ApiKeyPanel({
           groups={[
             [
               {
-                label: WORDS.REMOVE,
+                label: WORDS.REMOVE_KEY,
                 icon: <TrashIcon />,
                 danger: true,
                 disabled: removal.busy,
@@ -960,7 +960,7 @@ function ApiKeyPanel({
             provider === PROVIDER_KEY_PROVIDER.OPENAI
               ? `Agents on ${name} models won't start without a subscription. Calls and dictation will be off.`
               : `Agents on ${name} models won't start without a subscription.`,
-          verb: "Remove key",
+          verb: WORDS.REMOVE_KEY,
           running: WORDS.REMOVING,
           loss: CONFIRM_LOSS.IRREVERSIBLE,
         }}

@@ -178,7 +178,7 @@ const PAGE_LINE = {
   SIGNED_OUT: SIGNED_OUT_WORDS,
   READ_FAILED: "Your integrations could not be read.",
   NONE_OFFERED: "No integrations available",
-  NOT_OPENED: "Luke could not open your browser to sign in.",
+  NOT_OPENED: "Your browser could not be opened to sign in. Try again.",
   GITHUB_SIGN_IN: "Uses your GitHub sign-in",
 } as const;
 
@@ -515,7 +515,7 @@ function disconnectAccount(
   const { provider, connection, name } = row;
   const refused: ActionResult = {
     status: ACTION_RESULT_STATUS.REJECTED,
-    reason: `Luke could not disconnect ${name}. Try again in a moment.`,
+    reason: `${name} could not be disconnected. Try again.`,
   };
   if (grantedBySignIn(provider)) {
     return github.disconnect().then((disconnected) => {
@@ -576,7 +576,7 @@ function IntegrationRow({
     setConnecting(false);
     if (outcome === GRANT_OUTCOME.NOT_OPENED) setRejection(PAGE_LINE.NOT_OPENED);
     if (outcome === GRANT_OUTCOME.REFUSED) {
-      setRejection(`Luke could not start connecting ${name}. Try again in a moment.`);
+      setRejection(`${name} could not be connected. Try again.`);
     }
   };
 
@@ -599,8 +599,7 @@ function IntegrationRow({
     void cancelSignIn(connection).then((cancelled) => {
       setConnecting(false);
       setCancelling(false);
-      if (!cancelled)
-        setRejection(`Luke could not cancel connecting ${name}. Try again in a moment.`);
+      if (!cancelled) setRejection(`The sign-in to ${name} could not be canceled. Try again.`);
     });
   }, [cancelSignIn, connection, name]);
 
@@ -611,11 +610,10 @@ function IntegrationRow({
     setRejection(undefined);
     void act(ACT_KIND.INTEGRATIONS_RENAME, { provider, connection, label }).then(
       (answer) => {
-        if ("failure" in answer)
-          setRejection(`Luke could not rename ${name}. Try again in a moment.`);
+        if ("failure" in answer) setRejection(`${name} could not be renamed. Try again.`);
         void statuses.read();
       },
-      () => setRejection(`Luke could not rename ${name}. Try again in a moment.`),
+      () => setRejection(`${name} could not be renamed. Try again.`),
     );
   };
 
@@ -746,7 +744,7 @@ function IntegrationRow({
                 }
               : undefined),
           verb: "Disconnect",
-          running: "Disconnecting…",
+          running: "Disconnecting",
           loss: CONFIRM_LOSS.AFFECTS_OTHERS,
         }}
       />

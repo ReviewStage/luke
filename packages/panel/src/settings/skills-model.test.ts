@@ -676,8 +676,8 @@ test("Share asks in plain words who gets the skill and that it leaves the accoun
   assert.deepEqual(shareQuestion("grill-me", workspace()), {
     title: "Share grill-me with Stage?",
     body: "Everyone in Stage will get grill-me. It leaves your personal skills.",
-    verb: "Share",
-    running: "Sharing…",
+    verb: "Share with workspace",
+    running: "Sharing",
   });
   assert.equal(
     shareFailureLine({ failure: INSTALLED_SKILL_CALL_FAILURE.NAME_TAKEN }, "grill-me", workspace()),
@@ -685,7 +685,7 @@ test("Share asks in plain words who gets the skill and that it leaves the accoun
   );
   assert.equal(
     shareFailureLine({ failure: INSTALLED_SKILL_CALL_FAILURE.UNANSWERED }, "grill-me", workspace()),
-    "Luke couldn't reach the service. Try again.",
+    "The service could not be reached. Try again.",
   );
 });
 

@@ -277,8 +277,8 @@ export function shareQuestion(
   return {
     title: `Share ${skillName} with ${workspace.name}?`,
     body: `${everyoneIn(workspace)} will get ${skillName}. It leaves your personal skills.`,
-    verb: "Share",
-    running: "Sharing…",
+    verb: SKILLS_LINE.SHARE,
+    running: "Sharing",
   };
 }
 
@@ -354,15 +354,16 @@ const FILES_REFUSAL_WORDS = {
 
 /** Why a call has no answer, where that is all there is to say. */
 const FAILURE_WORDS = {
-  [INSTALLED_SKILL_CALL_FAILURE.UNANSWERED]: "Luke couldn't reach the service. Try again.",
+  [INSTALLED_SKILL_CALL_FAILURE.UNANSWERED]: "The service could not be reached. Try again.",
   [INSTALLED_SKILL_CALL_FAILURE.NOT_FOUND]: "That skill or workspace is no longer yours to reach.",
   [INSTALLED_SKILL_CALL_FAILURE.NOT_PERMITTED]:
     "Only whoever installed this skill, or the workspace's owners and admins, can change it.",
-  [INSTALLED_SKILL_CALL_FAILURE.INVALID]: "Luke couldn't install that. Check what you pasted.",
+  [INSTALLED_SKILL_CALL_FAILURE.INVALID]:
+    "The skill could not be installed. Check what you pasted.",
   [INSTALLED_SKILL_CALL_FAILURE.NAME_TAKEN]: "A skill of that name is already installed there.",
   [INSTALLED_SKILL_CALL_FAILURE.FILES_REFUSED]: "The skill's files were refused.",
   [INSTALLED_SKILL_CALL_FAILURE.REPOSITORY_NOT_REACHABLE]:
-    "Luke can't reach that repository on GitHub. A private one needs the workspace's GitHub connected.",
+    "That repository could not be reached on GitHub. A private one needs the workspace's GitHub connected.",
   [INSTALLED_SKILL_CALL_FAILURE.REF_NOT_FOUND]:
     "That branch, tag, or commit isn't in the repository.",
   [INSTALLED_SKILL_CALL_FAILURE.GITHUB_UNANSWERED]:
@@ -436,7 +437,7 @@ const UNSUPPORTED_WORDS = {
   [SKILL_PASTE_UNSUPPORTED.DOWNLOAD_URL]: "Only GitHub sources for now.",
   [SKILL_PASTE_UNSUPPORTED.OTHER_COMMAND]: "Only a skills add command installs a skill.",
   [SKILL_PASTE_UNSUPPORTED.NO_SOURCE]: "That command names no repository.",
-  [SKILL_PASTE_UNSUPPORTED.UNREADABLE_SOURCE]: "Luke can't read a GitHub repository from that.",
+  [SKILL_PASTE_UNSUPPORTED.UNREADABLE_SOURCE]: "A GitHub repository could not be read from that.",
 } as const satisfies Record<SkillPasteUnsupportedReason, string>;
 
 /* ----- The dialog ----- */
