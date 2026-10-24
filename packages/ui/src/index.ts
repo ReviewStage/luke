@@ -134,6 +134,7 @@ export * from "./components/time/time-clock.js";
 export * from "./components/toast/toast.js";
 export * from "./components/toast/toast-actions.js";
 export * from "./components/toast/toast-stack.js";
+export * from "./components/toolbar/toolbar.js";
 export * from "./components/tooltip/hint.js";
 export * from "./components/tooltip/tooltip.js";
 export * from "./components/turn-into-menu/turn-into-menu.js";
