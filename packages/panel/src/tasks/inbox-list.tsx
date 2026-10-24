@@ -20,6 +20,7 @@ import {
   HoverCard,
   HoverCardHead,
   IconButton,
+  joinRefs,
   LAYOUT_ELEMENT,
   LIST_LEAVING_SELECTOR,
   LIST_ROW_ACTIONS,
@@ -56,6 +57,7 @@ import {
   useMenu,
   useMinute,
   useResizeEdge,
+  useRovingKeys,
   VisuallyHidden,
 } from "@luke/ui";
 import {
@@ -1457,6 +1459,9 @@ export function InboxList({
   const { width, onResize } = useInboxListWidth();
   const rowFocus = useRowFocusKept(rows);
   const bodyRef = useRef<HTMLDivElement | null>(null);
+  // Note that the rows of every group are one Tab stop that ↑↓ walk on a page, and in the sidebar join the sidebar's own walk, a box around them.
+  const roving = useRovingKeys<HTMLDivElement>();
+  const rovingBody = useMemo(() => joinRefs(bodyRef, roving.ref), [roving.ref]);
   // Note that only the window's Inbox shows its rows' media, as its view's menu chooses; a task's own shows none.
   // The reads hold the pictures of the items listed alone, and none while the rows show no media.
   const previews = head.view?.choices.mediaPreviews === true;
@@ -1533,7 +1538,8 @@ export function InboxList({
   // Note that each grouping draws its groups anew, keyed by it, so a group of one grouping never leaves into another's.
   const body = (
     <div
-      ref={bodyRef}
+      {...(sidebar ? {} : roving)}
+      ref={sidebar ? bodyRef : rovingBody}
       className="inbox-tasks-body"
       data-empty={String(listedItems(view).length === 0)}
       {...motionRows()}

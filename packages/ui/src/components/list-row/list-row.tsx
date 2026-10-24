@@ -299,6 +299,9 @@ function said(words: ReactNode): boolean {
  * End go to the first and the last, and an unavailable row is passed over.
  * A row whose list steers it from elsewhere, a field holding the keys, says
  * whether it is a Tab stop itself (`tabbable`) and stays out of the walk.
+ * A list standing among others under group heads, a rail's, may instead
+ * join the walk of a box around them all (`joinsWalk`), so the rows of
+ * every group are one Tab stop the arrows walk from first to last.
  *
  * A list asked to (`selection`) chooses rows at once, as a Mac's list does
  * (`list-selection.ts`): ⌘-click one in or out, ⇧-click a run from the
@@ -314,6 +317,7 @@ export function List({
   density = LIST_DENSITY.REGULAR,
   fingerTall = false,
   moves = false,
+  joinsWalk = false,
   selection,
   children,
 }: {
@@ -326,6 +330,8 @@ export function List({
   fingerTall?: boolean | undefined;
   /** Whether its rows move as they arrive, leave, and change places, under a `ListMotion` (`motionRows`). */
   moves?: boolean;
+  /** Whether its rows join the walk of a `useRovingKeys` box around it, with the rows of the lists beside it, rather than walk alone. */
+  joinsWalk?: boolean;
   /** Which rows are chosen and what hears the next set, where the list chooses rows at all. */
   selection?: ListSelection | undefined;
   children: ReactNode;
@@ -334,9 +340,9 @@ export function List({
   const chooser = useListSelection(selection);
   return (
     <ul
-      {...roving}
+      {...(joinsWalk ? {} : roving)}
       onKeyDown={(event) => {
-        if (!chooser.onKeyDown(event)) roving.onKeyDown(event);
+        if (!chooser.onKeyDown(event) && !joinsWalk) roving.onKeyDown(event);
       }}
       id={id}
       className="luke-list"

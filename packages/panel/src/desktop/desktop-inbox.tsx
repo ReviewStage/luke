@@ -231,7 +231,12 @@ function InboxShown({
     columns.onOpen(listed.item.id);
   };
   const { onMark: markItem } = marks;
-  const { pager, direction } = useInboxPager(steps, list, chosen?.item.id, choose, {
+  // K and J choose the item above or below, the keyboard following it to its row.
+  const step = (listed: InboxListed) => {
+    choose(listed);
+    columns.onStep();
+  };
+  const { pager, direction } = useInboxPager(steps, list, chosen?.item.id, step, {
     shown: tasks.shown,
     folded: folds.folded,
   });

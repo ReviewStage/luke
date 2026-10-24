@@ -27,6 +27,12 @@ import {
  * from the item holding the focus, or, while the focus stands on none of
  * them, from none: forward and Home to the first, back and End to the last.
  *
+ * Sets standing side by side as columns, a board's, each walked down by
+ * ↑↓ in a box of its own, are crossed by ←→ (`useRovingColumns`): from
+ * an item, to the Tab stop of the column beside it, wrapping, as Tab
+ * entering that column would land, a column holding no available item
+ * passed over.
+ *
  * A set may differ in three ways, each an option rather than a copy of the
  * walk. A radio group steps by either pair of arrows (`BOTH`). A set where
  * one item is chosen, a tablist or a radio group, keeps its Tab stop on the
@@ -99,6 +105,13 @@ const NONE_SKIPPED = () => false;
 function itemsOf(box: HTMLElement): HTMLElement[] {
   return Array.from(box.querySelectorAll<HTMLElement>(`[${ITEM_ATTRIBUTE}]`)).filter(
     (item) => item.parentElement?.closest(`[${BOX_ATTRIBUTE}]`) === box,
+  );
+}
+
+/** The boxes a box of columns holds, in the order they are drawn, none inside another of them. */
+function boxesOf(columns: HTMLElement): HTMLElement[] {
+  return Array.from(columns.querySelectorAll<HTMLElement>(`[${BOX_ATTRIBUTE}]`)).filter(
+    (box) => !columns.contains(box.parentElement?.closest(`[${BOX_ATTRIBUTE}]`) ?? null),
   );
 }
 
@@ -283,4 +296,42 @@ export function useRovingKeys<T extends HTMLElement>({
   );
 
   return { [BOX_ATTRIBUTE]: "", ref, onKeyDown, onFocus };
+}
+
+/** What a box of roving columns takes, spread on it: the key it hears, which says whether the key crossed to another column. */
+export interface RovingColumns<T extends HTMLElement> {
+  readonly onKeyDown: (event: KeyboardEvent<T>) => boolean;
+}
+
+/**
+ * ←→ across the roving sets a box holds as columns, each a
+ * `useRovingKeys` box of its own walked by ↑↓: from the item holding the
+ * focus to the Tab stop of the column beside it, wrapping, a column with no
+ * available item passed over. A key a column already took, or one held with
+ * a modifier, is left alone, as the walk down a column leaves it.
+ */
+export function useRovingColumns<T extends HTMLElement>(): RovingColumns<T> {
+  const onKeyDown = useCallback((event: KeyboardEvent<T>): boolean => {
+    if (event.defaultPrevented) return false;
+    if (event.metaKey || event.altKey || event.ctrlKey || event.shiftKey) return false;
+    const across = STEP_KEYS[ROVING_ORIENTATION.HORIZONTAL];
+    if (![...across.next, ...across.previous].some((each) => each === event.key)) return false;
+    const target = event.target;
+    if (!(target instanceof HTMLElement) || !target.hasAttribute(ITEM_ATTRIBUTE)) return false;
+    const columns = boxesOf(event.currentTarget);
+    const from = target.parentElement?.closest<HTMLElement>(`[${BOX_ATTRIBUTE}]`) ?? null;
+    const at = from === null ? -1 : columns.indexOf(from);
+    if (at < 0) return false;
+    const empty = (index: number) => {
+      const column = columns[index];
+      return column === undefined || !itemsOf(column).some(available);
+    };
+    const to = rovingStep(event.key, ROVING_ORIENTATION.HORIZONTAL, at, columns.length, empty);
+    const column = to === undefined || to === at ? undefined : columns[to];
+    if (column === undefined) return false;
+    event.preventDefault();
+    focusRovingStop(column);
+    return true;
+  }, []);
+  return { onKeyDown };
 }
