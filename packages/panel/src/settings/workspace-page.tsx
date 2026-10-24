@@ -72,18 +72,19 @@ import {
   wholeWordsHint,
 } from "@luke/ui";
 import { ACTOR_KIND, memberActor, ROLE_WORDS, SOMEONE_REASON } from "@luke/ui/actor-model";
-import { githubAccountPictureUrl } from "@luke/ui/tasks-model";
-import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import {
   CrownIcon,
   ExternalLinkIcon,
+  GLYPH,
   ImageUpIcon,
   ShieldIcon,
   UserIcon,
   UserMinusIcon,
   UserRoundIcon,
   XIcon,
-} from "lucide-react";
+} from "@luke/ui/icons";
+import { githubAccountPictureUrl } from "@luke/ui/tasks-model";
+import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { useEffect, useRef, useState } from "react";
 import { useAct } from "../act.js";
 import { streamFrom } from "../act-stream.js";
@@ -1452,7 +1453,16 @@ function ManagedLinear({ workspace }: { workspace: Workspace }): React.JSX.Eleme
   const actions =
     linear === undefined
       ? []
-      : [[{ label: "Disconnect", icon: <TrashIcon />, danger: true, onSelect: disconnect.ask }]];
+      : [
+          [
+            {
+              label: "Disconnect",
+              icon: <GLYPH.DISCONNECT />,
+              danger: true,
+              onSelect: disconnect.ask,
+            },
+          ],
+        ];
   return (
     <Stack gap={GAP.NONE}>
       <MenuRow

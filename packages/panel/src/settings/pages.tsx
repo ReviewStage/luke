@@ -6,18 +6,8 @@ import {
   type SettingsPageGroup,
   type SettingsView,
 } from "@luke/settings/settings-views";
-import {
-  DisplayIcon,
-  DocumentIcon,
-  KeyboardIcon,
-  LaptopIcon,
-  MemoryIcon,
-  PlugIcon,
-  SpeakerIcon,
-  TerminalIcon,
-  UserIcon,
-} from "@luke/ui";
-import { BellIcon, BookOpenIcon, FlaskConicalIcon, InfoIcon, UsersIcon } from "lucide-react";
+import { DisplayIcon, KeyboardIcon, LaptopIcon, PlugIcon, SpeakerIcon } from "@luke/ui";
+import { BellIcon, FlaskConicalIcon, GLYPH, InfoIcon } from "@luke/ui/icons";
 import { settingsPageShown } from "./settings-rows.js";
 
 /** A page's name and glyph. */
@@ -36,31 +26,19 @@ interface SettingsPage {
  * workspace.
  */
 const SETTINGS_PAGE = {
-  [SETTINGS_VIEW.ACCOUNT]: { title: "Profile", icon: <UserIcon /> },
-  [SETTINGS_VIEW.WORKSPACE]: {
-    title: "Workspace",
-    icon: <UsersIcon className="settings-icon" />,
-  },
-  [SETTINGS_VIEW.CODING_AGENTS]: { title: "Agents", icon: <TerminalIcon /> },
+  [SETTINGS_VIEW.ACCOUNT]: { title: "Profile", icon: <GLYPH.PERSON /> },
+  [SETTINGS_VIEW.WORKSPACE]: { title: "Workspace", icon: <GLYPH.PEOPLE /> },
+  [SETTINGS_VIEW.CODING_AGENTS]: { title: "Agents", icon: <GLYPH.AGENT /> },
   [SETTINGS_VIEW.INTEGRATIONS]: { title: "Integrations", icon: <PlugIcon /> },
-  [SETTINGS_VIEW.SKILLS]: {
-    title: "Skills",
-    icon: <BookOpenIcon className="settings-icon" />,
-  },
-  [SETTINGS_VIEW.PLAN_TEMPLATE]: { title: "Plan template", icon: <DocumentIcon /> },
-  [SETTINGS_VIEW.MEMORY]: { title: "Memory", icon: <MemoryIcon /> },
+  [SETTINGS_VIEW.SKILLS]: { title: "Skills", icon: <GLYPH.SKILL /> },
+  [SETTINGS_VIEW.PLAN_TEMPLATE]: { title: "Plan template", icon: <GLYPH.PLAN /> },
+  [SETTINGS_VIEW.MEMORY]: { title: "Memory", icon: <GLYPH.MEMORY /> },
   [SETTINGS_VIEW.VOICE]: { title: "Voice", icon: <SpeakerIcon /> },
   [SETTINGS_VIEW.APPEARANCE]: { title: "Appearance", icon: <DisplayIcon /> },
-  [SETTINGS_VIEW.NOTIFICATIONS]: {
-    title: "Notifications",
-    icon: <BellIcon className="settings-icon" />,
-  },
+  [SETTINGS_VIEW.NOTIFICATIONS]: { title: "Notifications", icon: <BellIcon /> },
   [SETTINGS_VIEW.THIS_MAC]: { title: "This Mac", icon: <LaptopIcon /> },
-  [SETTINGS_VIEW.EXPERIMENTAL]: {
-    title: "Experimental",
-    icon: <FlaskConicalIcon className="settings-icon" />,
-  },
-  [SETTINGS_VIEW.ABOUT]: { title: "About", icon: <InfoIcon className="settings-icon" /> },
+  [SETTINGS_VIEW.EXPERIMENTAL]: { title: "Experimental", icon: <FlaskConicalIcon /> },
+  [SETTINGS_VIEW.ABOUT]: { title: "About", icon: <InfoIcon /> },
   [SETTINGS_VIEW.SHORTCUTS]: { title: "Keyboard shortcuts", icon: <KeyboardIcon /> },
 } satisfies Record<SettingsView, SettingsPage>;
 
