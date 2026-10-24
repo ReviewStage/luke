@@ -2218,9 +2218,13 @@ function AgentTabView({
   const onRevert = useSteady(boxOpen ? composer.revert : undefined);
   // Note that the rewind doors stand as they were while what they say is unchanged, because every message
   // reads them, and a page that moved no rewind point must draw no message again.
+  const pending = composer.sent.length > 0;
   const points = useKept(
-    useMemo(() => rewindPoints(kept), [kept]),
-    (a, b) => sameSet(a.editable, b.editable) && sameEntries(a.revertsAt, b.revertsAt),
+    useMemo(() => rewindPoints(kept, pending), [kept, pending]),
+    (a, b) =>
+      sameSet(a.editable, b.editable) &&
+      sameEntries(a.revertsAt, b.revertsAt) &&
+      sameSet(a.followed, b.followed),
   );
   const editorNow = { agentId: agent.id, doors, keywords, skills, dictates: !onCall };
   const editorProps = useRef(editorNow);
