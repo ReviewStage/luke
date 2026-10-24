@@ -150,7 +150,14 @@ function ResetPageButton({
         thing={more}
         shown
         groups={() => [
-          [{ label: RESET_LABEL, icon: <ResetIcon />, disabled: busy, onSelect: () => run(scope) }],
+          [
+            {
+              label: RESET_LABEL,
+              icon: <GLYPH.GO_BACK />,
+              disabled: busy,
+              onSelect: () => run(scope),
+            },
+          ],
         ]}
       />
     );

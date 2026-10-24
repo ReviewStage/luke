@@ -495,7 +495,9 @@ function TemplateBar({
             groups={() => [
               [
                 { label: HISTORY_LABEL, icon: <HistoryIcon />, onSelect: onShowHistory },
-                ...(custom ? [{ label: RESET_LABEL, icon: <ResetIcon />, onSelect: onReset }] : []),
+                ...(custom
+                  ? [{ label: RESET_LABEL, icon: <GLYPH.GO_BACK />, onSelect: onReset }]
+                  : []),
               ],
             ]}
           />
