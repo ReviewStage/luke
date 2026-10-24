@@ -36,7 +36,7 @@ export type SceneWindow = (typeof WINDOW)[keyof typeof WINDOW];
 
 /** What a step does. */
 export const STEP = {
-  /** Presses a chord, Playwright's spelling (`ControlOrMeta+K`). */
+  /** Presses a chord, Playwright's spelling (`Meta+K`). */
   PRESS: "press",
   /** Clicks the first element of an ARIA role and accessible name. */
   CLICK: "click",
@@ -105,7 +105,8 @@ const PLACE = {
 export const PLACES: readonly string[] = Object.values(PLACE);
 
 // The steps a few scenes share.
-const OPEN_PALETTE: Step = { kind: STEP.PRESS, keys: "ControlOrMeta+K" };
+// Note that this is Meta, never `ControlOrMeta`: the app answers ⌘K on every platform and refuses a Ctrl chord (`shortcutMatches`, `packages/settings/src/shortcuts.ts`), so Ctrl+K on Linux opens nothing.
+const OPEN_PALETTE: Step = { kind: STEP.PRESS, keys: "Meta+K" };
 
 // A phone opens on the task's panel: back to the task, then back to the Tasks list.
 const MAIN = { role: "main" } as const;
@@ -116,6 +117,11 @@ const PHONE_TO_LIST: readonly Step[] = [
 const PHONE_PLACES = { role: "navigation", name: "Places" } as const;
 
 const DESKTOP_ONLY: readonly Client[] = [CLIENT.DESKTOP];
+
+/** Whether `client` draws `scene`: every client does where the scene names none. */
+export function drawsOn(scene: Scene, client: Client): boolean {
+  return (scene.clients ?? Object.values(CLIENT)).includes(client);
+}
 
 export const SCENES: readonly Scene[] = [
   // Tasks: the list, the open task, and its menus.
@@ -285,10 +291,28 @@ export const SCENES: readonly Scene[] = [
     clients: DESKTOP_ONLY,
     macOnly: true,
   },
-  // The voice, as a capture run stages it.
-  { id: "voice-speaking", place: PLACE.VOICE, title: "Luke speaking", profile: "speaking" },
-  { id: "voice-muted", place: PLACE.VOICE, title: "Output off", profile: "muted" },
-  { id: "voice-duplex", place: PLACE.VOICE, title: "Both speaking", profile: "duplex" },
+  // The voice, as a capture run stages it: the web client has no voice window, so it would draw the empty Inbox.
+  {
+    id: "voice-speaking",
+    place: PLACE.VOICE,
+    title: "Luke speaking",
+    profile: "speaking",
+    clients: DESKTOP_ONLY,
+  },
+  {
+    id: "voice-muted",
+    place: PLACE.VOICE,
+    title: "Output off",
+    profile: "muted",
+    clients: DESKTOP_ONLY,
+  },
+  {
+    id: "voice-duplex",
+    place: PLACE.VOICE,
+    title: "Both speaking",
+    profile: "duplex",
+    clients: DESKTOP_ONLY,
+  },
   // Settings, page by page.
   { id: "settings-account", place: PLACE.SETTINGS, title: "Account", profile: "settings-account" },
   {

@@ -40,13 +40,15 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
+import { READY_SCRIPT } from "./ready.ts";
 import {
   CLIENT,
   type Client,
+  drawsOn,
   PLACES,
   SCENES,
-  STEP,
   type Scene,
+  STEP,
   type Step,
   WINDOW,
 } from "./scenes.ts";
@@ -104,14 +106,9 @@ const LOAD_SETTLE_MS = 1_200;
 const STEP_SETTLE_MS = 400;
 // The element every panel window draws once its state has arrived (`packages/panel/src/app.tsx`).
 const STAGE_SELECTOR = ".app-stage";
-// What a loading skeleton's box wears (root AGENTS.md: `anti-slop/skeleton-through-components`); one counts only where it stands on screen.
-const SKELETON_SCRIPT = `![...document.querySelectorAll('[class*="skeleton"]')].some((box) => {
-  const r = box.getBoundingClientRect();
-  return r.width > 0 && r.height > 0 && r.bottom > 0 && r.right > 0 && r.top < innerHeight && r.left < innerWidth;
-})`;
 // The video player's example draws only this line until its stand-in is recorded, some frames on (`apps/catalog/src/examples/video-player.tsx`).
 const RECORDED_SCRIPT = `!document.querySelector(".catalog-example").textContent.includes("Recording a stand-in video")`;
-// How long a scene waits for its skeletons to give way before it is shot anyway, with a note.
+// How long a scene waits for its skeletons and spinners to give way before it is shot anyway, with a note.
 const READING_TIMEOUT_MS = 10_000;
 // The desktop's renderer pages, by what their address ends with.
 const WINDOW_PAGE = { [WINDOW.PANEL]: "/index.html", [WINDOW.CALL]: "/call.html" } as const;
@@ -357,7 +354,7 @@ async function stageScene(
   await page.evaluate("document.fonts.ready.then(() => true)");
   await page.waitForTimeout(LOAD_SETTLE_MS);
   try {
-    await page.waitForFunction(SKELETON_SCRIPT, undefined, { timeout: READING_TIMEOUT_MS });
+    await page.waitForFunction(READY_SCRIPT, undefined, { timeout: READING_TIMEOUT_MS });
   } catch {
     problems.push("still reading when shot");
   }
@@ -663,9 +660,14 @@ function shotsOf(
 }
 
 /** The targets of `wanted` that draw an app scene: its clients, both where it names none. */
-function clientsOf(scene: Scene, wanted: readonly Target[]): readonly Target[] {
-  const clients: readonly Client[] = scene.clients ?? [CLIENT.DESKTOP, CLIENT.WEB];
-  return wanted.filter((target) => clients.some((client) => client === target));
+function clientsOf(scene: Scene, wanted: readonly Target[]): readonly Client[] {
+  return wanted.filter((target) => target !== TARGET.CATALOG && drawsOn(scene, target));
+}
+
+/** The clients among `wanted` that a scene naming its clients does not draw on. */
+function clientsNotDrawing(scene: Scene, wanted: readonly Target[]): readonly Client[] {
+  if (scene.clients === undefined) return [];
+  return wanted.filter((target) => target !== TARGET.CATALOG && !drawsOn(scene, target));
 }
 
 const USAGE = `usage: polish-shots.ts [--out <dir>] [--client desktop|web|catalog]... [--scene <id>]...
@@ -700,6 +702,12 @@ async function main(): Promise<void> {
   const skipped = onMac ? [] : named.filter((scene) => scene.macOnly === true);
   for (const scene of skipped) say(`skipped ${scene.id} (${scene.title}): drawn only on the Mac`);
   const scenes = named.filter((scene) => !skipped.includes(scene));
+  // A scene that names its clients is not drawn by the others, so a run that asks for one says so.
+  for (const scene of scenes)
+    for (const target of clientsNotDrawing(scene, targets))
+      say(
+        `skipped ${scene.id} (${scene.title}) on ${target}: drawn only by ${(scene.clients ?? []).join(", ")}`,
+      );
   if (targets.includes(TARGET.DESKTOP) && values.electron === undefined) {
     throw new Error("The desktop is driven through --electron <path to the Electron binary>");
   }
