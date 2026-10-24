@@ -50,10 +50,12 @@ export const STEP = {
   WAIT_FOR_TEXT: "wait-for-text",
 } as const;
 
-/** An element by its ARIA role and accessible name, looked for within a landmark where one is named. */
+/** An element by its ARIA role and accessible name, which it holds among other words unless `exact`, looked for within a landmark where one is named. */
 interface Target {
   readonly role: string;
   readonly name: string;
+  /** Whether the name is the element's whole name, where another element's holds it among more words. */
+  readonly exact?: true;
   readonly within?: { readonly role: string; readonly name?: string };
 }
 
@@ -92,6 +94,7 @@ const PLACE = {
   PLAN: "Plan",
   CHAT: "Chat",
   INBOX: "Inbox",
+  PERSON: "Person",
   AGENT: "Agent",
   TERMINAL: "Terminal",
   CALL: "Call",
@@ -115,6 +118,27 @@ const PHONE_TO_LIST: readonly Step[] = [
   { kind: STEP.CLICK, role: "button", name: "Tasks", within: MAIN },
 ];
 const PHONE_PLACES = { role: "navigation", name: "Places" } as const;
+
+// The Inbox, by the sidebar's row or a phone's places bar, and back from the item it opens on to its
+// list, which a window too narrow for both shows alone; at full width Esc leaves the list as it stands.
+const OPEN_INBOX: Step = { kind: STEP.CLICK, role: "button", name: "Inbox" };
+const TO_INBOX_LIST: Step = { kind: STEP.PRESS, keys: "Escape" };
+const PHONE_TO_INBOX: readonly Step[] = [
+  TO_INBOX_LIST,
+  { kind: STEP.CLICK, role: "button", name: "Inbox", within: PHONE_PLACES },
+  TO_INBOX_LIST,
+];
+const LONG_THREAD: Step = {
+  kind: STEP.CLICK,
+  role: "button",
+  name: "What the expired invite page says",
+};
+const FORM_ITEM: Step = { kind: STEP.CLICK, role: "button", name: "Invite limits" };
+const NEW_THREAD: Step = { kind: STEP.CLICK, role: "button", name: "New thread" };
+
+// The account's menu at the sidebar's foot, named as the workspace's switcher is named within more words.
+const ACCOUNT_MENU: Step = { kind: STEP.CLICK, role: "button", name: "Ada Lovelace", exact: true };
+const YOUR_PROFILE: Step = { kind: STEP.CLICK, role: "menuitem", name: "Your profile" };
 
 const DESKTOP_ONLY: readonly Client[] = [CLIENT.DESKTOP];
 
@@ -209,12 +233,53 @@ export const SCENES: readonly Scene[] = [
     id: "inbox",
     place: PLACE.INBOX,
     title: "The Inbox",
-    profile: "tasks",
+    profile: "inbox",
     sidebar: true,
-    steps: [{ kind: STEP.CLICK, role: "button", name: "Inbox" }],
+    steps: [OPEN_INBOX],
+    phoneSteps: PHONE_TO_INBOX,
+  },
+  {
+    id: "inbox-thread",
+    place: PLACE.INBOX,
+    title: "A long thread",
+    profile: "inbox",
+    sidebar: true,
+    steps: [OPEN_INBOX, TO_INBOX_LIST, LONG_THREAD],
+    phoneSteps: [...PHONE_TO_INBOX, LONG_THREAD],
+  },
+  {
+    id: "inbox-form",
+    place: PLACE.INBOX,
+    title: "A form",
+    profile: "inbox",
+    sidebar: true,
+    steps: [OPEN_INBOX, TO_INBOX_LIST, FORM_ITEM],
+    phoneSteps: [...PHONE_TO_INBOX, FORM_ITEM],
+  },
+  {
+    id: "inbox-new-thread",
+    place: PLACE.INBOX,
+    title: "New thread",
+    profile: "inbox",
+    sidebar: true,
+    steps: [OPEN_INBOX, TO_INBOX_LIST, NEW_THREAD],
+    phoneSteps: [...PHONE_TO_INBOX, NEW_THREAD],
+  },
+  // A person's page: the account's own, from its menu at the sidebar's foot.
+  {
+    id: "person",
+    place: PLACE.PERSON,
+    title: "Your profile",
+    profile: "person",
+    sidebar: true,
+    steps: [ACCOUNT_MENU, YOUR_PROFILE],
     phoneSteps: [
-      ...PHONE_TO_LIST,
-      { kind: STEP.CLICK, role: "button", name: "Inbox", within: PHONE_PLACES },
+      TO_INBOX_LIST,
+      { kind: STEP.CLICK, role: "button", name: "More", within: PHONE_PLACES },
+      ACCOUNT_MENU,
+      YOUR_PROFILE,
+      // Note that the drawer stands open over the page it opened, so the scene closes it.
+      { kind: STEP.PRESS, keys: "Escape" },
     ],
   },
   // A coding agent and its tabs.
