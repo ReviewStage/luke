@@ -622,17 +622,34 @@ test("a message on the port that is no message of main's is never drawn nor acte
   assert.equal(tab.standing(), "· sandbox · connected");
 });
 
-test("a terminal bundle that fails to load leaves the tab saying so, and attaches nothing", async () => {
+test("a terminal bundle that fails to load leaves the tab saying so with Retry, which imports it again and draws the screen", async () => {
+  const landed = await Effect.runPromise(bundleLanded(SIDE_BUNDLES.terminal));
+  let online = false;
   const unloaded = sideBundles({
-    terminal: () => Promise.reject(new Error("The chunk could not be loaded.")),
+    terminal: () =>
+      online
+        ? Promise.resolve(landed)
+        : Promise.reject(new Error("The chunk could not be loaded.")),
   });
   const tab = await mount(true, true, undefined, false, unloaded);
   await settle();
   assert.equal(
-    tab.container.querySelector(".terminal-tab-failed")?.textContent,
-    "The terminal could not be shown.",
+    tab.container.querySelector(".terminal-tab-host [role=alert]")?.textContent,
+    "The terminal could not be shown.Retry",
   );
+  assert.equal(tab.container.querySelector(".terminal-tab-screen"), null);
   assert.deepEqual(tab.kinds(), []);
+
+  online = true;
+  const retry = [...tab.container.querySelectorAll("button")].find(
+    (button) => button.textContent === "Retry",
+  );
+  assert.ok(retry, "the failure offers Retry");
+  await act(async () => retry.click());
+  await settle();
+
+  assert.equal(tab.container.querySelector(".terminal-tab-host [role=alert]"), null);
+  assert.ok(tab.container.querySelector(".terminal-tab-screen"));
 });
 
 test("an agent archived or retired closes its Terminal tab, as its Changes tab closes", async () => {

@@ -1,4 +1,4 @@
-import { useAtomValue } from "@effect/atom-react";
+import { useAtomRefresh, useAtomValue } from "@effect/atom-react";
 import type { TasksTreeAnswer } from "@luke/features/tasks-view";
 import { noMatchWords, readingWords, TERM } from "@luke/features/words";
 import {
@@ -14,6 +14,7 @@ import {
   ResizeEdge,
   type ResizeEdgeHandle,
   SearchField,
+  SpinnerRegion,
   Tooltip,
 } from "@luke/ui";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
@@ -103,6 +104,7 @@ export function FileTreeStage({
   host,
   standing,
   onRetry,
+  onRetryBundle,
 }: {
   /** The tree's bundle once it landed; none while it loads or where it could not. */
   module: FileTreeModule | undefined;
@@ -112,23 +114,21 @@ export function FileTreeStage({
   standing: TreeStanding;
   /** Lists the root again, where it could not be listed. */
   onRetry: () => void;
+  /** Imports the bundle again, where it could not be loaded. */
+  onRetryBundle: () => void;
 }): React.JSX.Element {
   if (module === undefined) {
     return missed ? (
-      <NoteLine look={NOTE_LINE_LOOK.LIST}>{TREE_LOAD_FAILED}</NoteLine>
+      <FailureNote onRetry={onRetryBundle}>{TREE_LOAD_FAILED}</FailureNote>
     ) : (
-      <NoteLine look={NOTE_LINE_LOOK.LIST} status>
-        {TREE_WORDS.READING}
-      </NoteLine>
+      <SpinnerRegion delay label={TREE_WORDS.READING} />
     );
   }
   const drawn = standing.kind === TREE_STANDING.DRAWN;
   return (
     <>
       {standing.kind === TREE_STANDING.READING ? (
-        <NoteLine look={NOTE_LINE_LOOK.LIST} status>
-          {TREE_WORDS.READING}
-        </NoteLine>
+        <SpinnerRegion delay label={TREE_WORDS.READING} />
       ) : null}
       {standing.kind === TREE_STANDING.FAILED ? (
         <FailureNote onRetry={standing.retry ? onRetry : undefined}>{standing.notice}</FailureNote>
@@ -218,7 +218,9 @@ function FileTreeBody({
   /** Whether the pane floats over its tab, which Escape puts away. */
   floating: boolean;
 }): React.JSX.Element {
-  const loaded = useAtomValue(useSideBundles().fileTree);
+  const { fileTree } = useSideBundles();
+  const loaded = useAtomValue(fileTree);
+  const retryBundle = useAtomRefresh(fileTree);
   const module = AsyncResult.isSuccess(loaded) ? loaded.value : undefined;
   const host = useRef<HTMLDivElement>(null);
   const handle = useRef<FileTreeHandle | undefined>(undefined);
@@ -342,6 +344,7 @@ function FileTreeBody({
         host={host}
         standing={standing}
         onRetry={() => handle.current?.relist()}
+        onRetryBundle={retryBundle}
       />
     </Fill>
   );

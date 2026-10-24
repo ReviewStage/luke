@@ -1,4 +1,4 @@
-import { useAtomValue } from "@effect/atom-react";
+import { useAtomRefresh, useAtomValue } from "@effect/atom-react";
 import {
   BREADCRUMB_POPUP,
   BREADCRUMB_SHOWN,
@@ -103,7 +103,9 @@ function CrumbTree({
   onClose: (returnFocus: boolean) => void;
   onExited: () => void;
 }): React.JSX.Element {
-  const loaded = useAtomValue(useSideBundles().fileTree);
+  const { fileTree } = useSideBundles();
+  const loaded = useAtomValue(fileTree);
+  const retryBundle = useAtomRefresh(fileTree);
   const module = AsyncResult.isSuccess(loaded) ? loaded.value : undefined;
   const box = useRef<HTMLDivElement>(null);
   const host = useRef<HTMLDivElement>(null);
@@ -201,6 +203,7 @@ function CrumbTree({
           host={host}
           standing={standing}
           onRetry={() => handle.current?.relist()}
+          onRetryBundle={retryBundle}
         />
       </MenuSurface>
     </RectFloat>

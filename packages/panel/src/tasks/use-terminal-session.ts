@@ -1,4 +1,4 @@
-import { useAtomSet, useAtomValue } from "@effect/atom-react";
+import { useAtomRefresh, useAtomSet, useAtomValue } from "@effect/atom-react";
 import {
   TERMINAL_CONNECTION,
   TERMINAL_FLOW,
@@ -259,6 +259,8 @@ export interface TerminalSession {
   readonly state: TerminalState;
   /** Whether the terminal bundle failed to load, so there is no screen to draw on. */
   readonly failed: boolean;
+  /** Imports the terminal bundle again, where it failed to load. */
+  readonly retryBundle: () => void;
   /** The find over the screen's scrollback, once there is a screen. */
   readonly find: TerminalFind | undefined;
   readonly screen: (element: HTMLDivElement | null) => void;
@@ -297,7 +299,9 @@ export function useTerminalSession(
   const { act } = useAct();
   const openLink = useOpenLink();
   // Note that the module itself is held, not the result around it, which is a new value each render.
-  const loaded = useAtomValue(useSideBundles().terminal);
+  const { terminal } = useSideBundles();
+  const loaded = useAtomValue(terminal);
+  const retryBundle = useAtomRefresh(terminal);
   const module = Option.getOrUndefined(AsyncResult.value(loaded));
   const [state, setState] = useState<TerminalState>({ kind: TERMINAL_STATE.CONNECTING });
   const [element, setElement] = useState<HTMLDivElement | null>(null);
@@ -766,6 +770,7 @@ export function useTerminalSession(
   return {
     state,
     failed: AsyncResult.isFailure(loaded),
+    retryBundle,
     find: handle?.find,
     screen: setElement,
     onAction,

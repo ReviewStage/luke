@@ -1,10 +1,19 @@
-import { useAtomValue } from "@effect/atom-react";
+import { useAtomRefresh, useAtomValue } from "@effect/atom-react";
 import {
   MAC_TERMINAL_PORT_MESSAGE,
   macTerminalPortOutboundSchema,
 } from "@luke/features/mac-terminal-wire";
 import { ACT_KIND } from "@luke/host/acts";
-import { BUTTON_SIZE, BUTTON_VARIANT, Button, FILL_FLOW, Fill, PaneBar } from "@luke/ui";
+import {
+  BUTTON_SIZE,
+  BUTTON_VARIANT,
+  Button,
+  ERROR_STATE_PLACEMENT,
+  ErrorState,
+  FILL_FLOW,
+  Fill,
+  PaneBar,
+} from "@luke/ui";
 import { GLYPH, PlayIcon } from "@luke/ui/icons";
 import type { MacTerminalStripTab } from "@luke/ui/tab-strip-model";
 import { Option, Schema } from "effect";
@@ -99,7 +108,9 @@ export function MacTerminalTab({ tab }: { tab: MacTerminalStripTab }): React.JSX
   // Note that the link opener is read through a ref rather than hung on the run's effect, because it is made anew whenever the listed tasks change, and the effect would tear the terminal down and draw it again each time.
   const opensLink = useRef(openLink);
   opensLink.current = openLink;
-  const loaded = useAtomValue(useSideBundles().terminal);
+  const { terminal } = useSideBundles();
+  const loaded = useAtomValue(terminal);
+  const retry = useAtomRefresh(terminal);
   const module = Option.getOrUndefined(AsyncResult.value(loaded));
   const [element, setElement] = useState<HTMLDivElement | null>(null);
   const port = useRef<MessagePort | undefined>(undefined);
@@ -308,7 +319,9 @@ export function MacTerminalTab({ tab }: { tab: MacTerminalStripTab }): React.JSX
       <Fill flow={FILL_FLOW.ROW} clip className="terminal-tab-body">
         <div className="terminal-tab-host">
           {AsyncResult.isFailure(loaded) ? (
-            <p className="terminal-tab-failed">{TERMINAL_LOAD_FAILED}</p>
+            <ErrorState placement={ERROR_STATE_PLACEMENT.CENTRED} onRetry={retry}>
+              {TERMINAL_LOAD_FAILED}
+            </ErrorState>
           ) : (
             <div ref={setElement} className="terminal-tab-screen" />
           )}

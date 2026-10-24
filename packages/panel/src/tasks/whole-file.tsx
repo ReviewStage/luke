@@ -1,6 +1,6 @@
-import { useAtomValue } from "@effect/atom-react";
+import { useAtomRefresh, useAtomValue } from "@effect/atom-react";
 import { readingWords } from "@luke/features/words";
-import { EmptyState, Fill, ScrollArea, SpinnerRegion } from "@luke/ui";
+import { ERROR_STATE_PLACEMENT, ErrorState, Fill, ScrollArea, SpinnerRegion } from "@luke/ui";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import { type ReactNode, type RefObject, useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
@@ -290,7 +290,9 @@ export function WholeFile({
    */
   findable?: boolean | undefined;
 }): React.JSX.Element {
-  const loaded = useAtomValue(useSideBundles().diffView);
+  const { diffView } = useSideBundles();
+  const loaded = useAtomValue(diffView);
+  const retry = useAtomRefresh(diffView);
   const module = AsyncResult.isSuccess(loaded) ? loaded.value : undefined;
   const host = useRef<HTMLDivElement>(null);
   const handle = useRef<FileViewHandle | undefined>(undefined);
@@ -349,7 +351,11 @@ export function WholeFile({
   }
 
   if (AsyncResult.isFailure(loaded)) {
-    return <EmptyState>{FILE_LOAD_FAILED}</EmptyState>;
+    return (
+      <ErrorState placement={ERROR_STATE_PLACEMENT.CENTRED} onRetry={retry}>
+        {FILE_LOAD_FAILED}
+      </ErrorState>
+    );
   }
   return (
     <Fill className="whole-file">
