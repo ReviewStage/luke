@@ -13,6 +13,7 @@ import {
   CHANGED_FILE_STATUS,
   CHECK_STATE,
   CHECK_SUMMARY,
+  type CheckSummary,
   CODING_AGENT_STATUS,
   CONVERSATION_ENTRY,
   type CodingAgentOverviewChecks,
@@ -44,8 +45,11 @@ import {
   REVIEW_COMMENT_MODE,
   REVIEW_EVENT,
 } from "@luke/features/pull-request-write-wire";
+import type { TaskSummary } from "@luke/features/task-wire";
+import { IDLE_TASKS_VIEW } from "@luke/features/tasks-view";
 import { WORKSPACE_ROLE, type WorkspaceMember } from "@luke/features/workspace-wire";
 import { ACT_KIND } from "@luke/host/acts";
+import type { AppStateDelivery, AppStateSnapshot } from "@luke/host/app-state";
 import { timeRuntime } from "@luke/ui";
 import type { Editor, TiptapEditorHTMLElement } from "@tiptap/core";
 import { TextSelection } from "@tiptap/pm/state";
@@ -70,9 +74,9 @@ import type { FileTreeModule } from "../file-tree/contract.js";
 import { type GitHubConnectControl, GitHubConnectProvider } from "../github-connect.js";
 import { MemberDirectory } from "../member-directory.js";
 import { rendererRuntime } from "../renderer-runtime.js";
-import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
+import { fakeActPort, fakeAppBridge, fakeAppBridgeCalls } from "../testing/app-bridge.js";
 import { copyingInto, DESKTOP_LINKS, fakeAppPlatform } from "../testing/app-platform.js";
-import { handSettings } from "../testing/app-state.js";
+import { deliveryOf, handSettings, stateWith } from "../testing/app-state.js";
 import { installEditorLayout } from "../testing/composer.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { restOn } from "../testing/hint-rest.js";
@@ -2659,6 +2663,103 @@ test("the merge control is a chip saying what holds the merge up, GitHub's sente
     act(() => root?.unmount());
     root = undefined;
   }
+});
+
+/** The agent's task as the task list pushes it, the line of its pull request saying its checks stand as given; none where the list holds no line of it. */
+function tasksPushing(checks: CheckSummary | undefined): AppStateSnapshot["tasks"] {
+  const line = {
+    number: PULL_REQUEST.number,
+    title: PULL_REQUEST.title,
+    state: PULL_REQUEST_STATE.OPEN,
+    additions: 4,
+    deletions: 1,
+    url: PAGE,
+    agentId: AGENT.id,
+  };
+  const task: TaskSummary = {
+    id: AGENT.planId ?? assert.fail("the agent stands on a task"),
+    workspaceId: "workspace-acme",
+    name: "Invitation expiry",
+    createdAt: 1,
+    updatedAt: 2,
+    repository: "acme/relay",
+    agents: {
+      total: 1,
+      working: 0,
+      agents: [],
+      pullRequestTotal: 1,
+      pullRequests: checks === undefined ? [] : [{ ...line, checks }],
+    },
+  };
+  return { ...IDLE_TASKS_VIEW, tasks: [task] };
+}
+
+test("an open tab reads its checks and merge state again as the task list pushes its pull request's line moved, its checks finishing or the line leaving the list as it merges, and draws them with no press; a push that moves nothing reads nothing", async () => {
+  const listeners = new Set<(delivery: AppStateDelivery) => void>();
+  const push = (checks: CheckSummary | undefined) => {
+    const delivery = deliveryOf(stateWith({}, { tasks: tasksPushing(checks) }));
+    act(() => {
+      for (const listener of listeners) listener(delivery);
+    });
+  };
+  fakeAppBridge({
+    ...fakeAppBridgeCalls(),
+    requestAppState: () =>
+      Promise.resolve(stateWith({}, { tasks: tasksPushing(CHECK_SUMMARY.PENDING) })),
+    onAppState: (listener: (delivery: AppStateDelivery) => void) => {
+      listeners.add(listener);
+      return () => listeners.delete(listener);
+    },
+  });
+  const merge = (state: MergeState) => ({
+    pullRequest: { ...PULL_REQUEST, merge: state, merging: MERGING },
+  });
+  const tab = await draw(
+    controlAnswering({
+      pullRequest: inTurn<CodingAgentOverviewPullRequestAnswerView>(
+        merge(MERGE_STATE.UNKNOWN),
+        merge(MERGE_STATE.CLEAN),
+        {
+          pullRequest: {
+            ...PULL_REQUEST,
+            state: PULL_REQUEST_STATE.MERGED,
+            mergedAt: 9_000,
+            merge: MERGE_STATE.CLEAN,
+            merging: MERGING,
+          },
+        },
+      ),
+      checks: inTurn<CodingAgentOverviewChecksAnswerView>(
+        { pullRequest: { checks: [check("build", CHECK_STATE.PENDING)] } },
+        { pullRequest: { checks: [check("build", CHECK_STATE.PASSED)] } },
+      ),
+    }),
+  );
+  await choose(tab, "Checks");
+  const running = words(tab, "li .luke-list-row-title");
+  assert.notDeepEqual(running, ["build, passed"]);
+  assert.equal(mergeShown(tab)?.chip, "Checking");
+
+  push(CHECK_SUMMARY.PENDING);
+  await settle();
+  assert.deepEqual(
+    words(tab, "li .luke-list-row-title"),
+    running,
+    "nothing moved, so nothing is read",
+  );
+  assert.equal(mergeShown(tab)?.chip, "Checking");
+
+  push(CHECK_SUMMARY.PASSING);
+  await settle();
+  assert.deepEqual(words(tab, "li .luke-list-row-title"), ["build, passed"]);
+  assert.equal(mergeShown(tab)?.chip, undefined);
+  assert.equal(mergeShown(tab)?.press, "Squash and merge");
+
+  // The list holds only a few lines, so one merging can fall out of it, which is a move too.
+  push(undefined);
+  await settle();
+  assert.equal(standing(tab), "Merged");
+  assert.equal(mergeShown(tab), undefined, "a merged pull request offers no merge");
 });
 
 test("a pull request ready to merge offers the first method the repository allows as its press, its chevron choosing another, kept for the repository; the press merges at once, as stage-cli's does, at the head it read", async () => {

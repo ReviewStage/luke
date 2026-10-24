@@ -77,6 +77,8 @@ export interface FakeOpenAi {
   attachAsks: Array<Omit<RecordedAttach, "socket">>;
   /** The status the next create answers with; 201 unless a test says otherwise. */
   createStatus: number;
+  /** The body a refused create answers with, as OpenAI words its error; a bare refusal unless a test says otherwise. */
+  createRefusal: WireRecord;
   /** The status every attach is refused with, where one is, as OpenAI answers an attach to a session already gone; a socket otherwise. */
   attachStatus: number | undefined;
   /** Resolves with the next attach the service opens, or the one already waiting. */
@@ -116,6 +118,7 @@ export async function startFakeOpenAi(): Promise<FakeOpenAi> {
     attaches,
     attachAsks: [],
     createStatus: HTTP_CREATED,
+    createRefusal: { error: "refused" },
     attachStatus: undefined,
     nextAttach: attachLine.next,
     close: async () => {
@@ -131,7 +134,7 @@ export async function startFakeOpenAi(): Promise<FakeOpenAi> {
       creates.push({ authorization: request.headers.authorization, body });
       sessions += 1;
       if (fake.createStatus !== HTTP_CREATED) {
-        response.writeHead(fake.createStatus).end(JSON.stringify({ error: "refused" }));
+        response.writeHead(fake.createStatus).end(JSON.stringify(fake.createRefusal));
         return;
       }
       response.writeHead(HTTP_CREATED, { "content-type": "application/json" }).end(

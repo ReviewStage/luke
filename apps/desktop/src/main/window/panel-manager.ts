@@ -15,6 +15,8 @@ import {
 } from "electron";
 import { layLiquidGlass } from "../native/liquid-glass";
 import { hardenedWebPreferences, refuseForeignNavigation } from "./hardened-window";
+import { askReloadPanel } from "./reload-dialog";
+import { onRendererDeath, RendererRevival } from "./renderer-revival";
 import { followSwipes } from "./swipe-navigation";
 import { WINDOW_MATERIAL, type WindowMaterial } from "./window-material";
 import {
@@ -70,6 +72,11 @@ interface PanelManagerOptions {
    * this opens.
    */
   followResponsiveness?: (window: BrowserWindow) => void;
+  /**
+   * The window's renderer died or failed to load: it is about to be
+   * reloaded, or, past the bound, the developer is asked whether to.
+   */
+  onRendererGone?: (reason: string) => void;
 }
 
 /**
@@ -154,6 +161,7 @@ export class PanelManager {
   readonly #onAllClosed: (() => void) | undefined;
   readonly #onFullScreenChanged: (() => void) | undefined;
   readonly #followResponsiveness: ((window: BrowserWindow) => void) | undefined;
+  readonly #onRendererGone: ((reason: string) => void) | undefined;
   readonly #placementPath: string | undefined;
   readonly #closing: () => boolean;
   /** The window, keyed by the display it was opened against. */
@@ -185,6 +193,7 @@ export class PanelManager {
     this.#onAllClosed = options.onAllClosed;
     this.#onFullScreenChanged = options.onFullScreenChanged;
     this.#followResponsiveness = options.followResponsiveness;
+    this.#onRendererGone = options.onRendererGone;
     this.#placementPath = options.placementPath;
     this.#closing = options.closing;
   }
@@ -452,14 +461,17 @@ export class PanelManager {
     this.#followVisibility(window);
     // A page that stops answering is reported once per stretch, as it answers
     // again or the window closes on it; unlike the voice window's, it is not
-    // replaced, since the panel holds what the developer was doing.
+    // reloaded, since it may answer again and the panel holds what the
+    // developer was doing. One whose renderer died has lost that already.
     this.#followResponsiveness?.(window);
+    const revival = this.#followDeaths(window);
     // Each page the window loads, a reload's included, is handed the avatar's
     // grant standing, since the renderer it replaced ran the session and the
     // voice window stays muted while the avatar reads as up. Note that the
     // first page is handed it twice, which the renderer reads as one grant.
     const drew = () => {
       if (window.isDestroyed()) return;
+      revival.loaded();
       this.#drawn.add(window);
       if (this.#avatarSession) this.#throttle(window);
       this.#avatar.pageDrew();
@@ -499,6 +511,7 @@ export class PanelManager {
     // Found by the window rather than the id it was born under, because a
     // rebind may have moved it.
     window.on("closed", () => {
+      revival.stop();
       windowPushes.holdState(page, false);
       for (const [id, candidate] of [...this.#windows]) {
         if (candidate !== window) continue;
@@ -506,6 +519,45 @@ export class PanelManager {
       }
       if (this.#windows.size === 0) this.#onAllClosed?.();
     });
-    void window.loadFile(this.#rendererHtmlPath);
+    this.#load(window);
+  }
+
+  /** Loads the panel's page; a load that fails is heard as `did-fail-load`, so its promise's rejection says nothing more. */
+  #load(window: BrowserWindow): void {
+    if (window.isDestroyed()) return;
+    window.loadFile(this.#rendererHtmlPath).catch(() => undefined);
+  }
+
+  /**
+   * Reloads the window's page each time its renderer dies or fails to load,
+   * after a pause and within the voice window's bound (`renderer-revival.ts`),
+   * so a blank window stands only for that pause. Until it draws again the
+   * avatar's grant reaches no page, and the reload's first frame is handed
+   * it (`drew`). Past the bound the window is shown with the question of
+   * reloading once more, since a window that crash-loops unasked would spin
+   * the process, or quitting. A quit's own teardown is no death.
+   */
+  #followDeaths(window: BrowserWindow): RendererRevival {
+    const revival: RendererRevival = new RendererRevival({
+      revive: () => this.#load(window),
+      onGone: (reason) => this.#onRendererGone?.(`${reason} It is being reloaded.`),
+      onGaveUp: (reason) => {
+        this.#onRendererGone?.(`${reason} It stopped reloading, so the developer was asked.`);
+        void askReloadPanel(window).then((reload) => {
+          if (window.isDestroyed() || this.#closing()) return;
+          if (!reload) app.quit();
+          // Note that a quit a live call holds leaves the launch standing,
+          // and declining to end the call keeps it so, so the page is loaded
+          // once more rather than left blank with no question on it.
+          if (!this.#closing()) revival.restart();
+        });
+      },
+    });
+    onRendererDeath(window.webContents, "panel", (reason) => {
+      if (window.isDestroyed() || this.#closing()) return;
+      this.#drawn.delete(window);
+      revival.gone(reason);
+    });
+    return revival;
   }
 }
