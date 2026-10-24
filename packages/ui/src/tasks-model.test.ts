@@ -145,7 +145,7 @@ test("an account known to have no OpenAI API key is sent to add one before the m
   };
   const addKey = {
     press: MICROPHONE_PRESS.ADD_OPENAI_KEY,
-    label: "Add an OpenAI API key in Settings",
+    label: "Add an OpenAI key in settings",
     muted: false,
   };
   assert.deepEqual(microphoneButton({ ...input, openAiKeyMissing: true }), addKey);

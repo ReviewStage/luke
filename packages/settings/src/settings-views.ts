@@ -1,4 +1,6 @@
+import { MODEL_PROVIDER, type ModelProvider } from "@luke/features/models-wire";
 import { SETTINGS_PAGE as SETTINGS_VIEW, type SettingsPage as SettingsView } from "@luke/settings";
+import { SETTINGS_SEARCH_ROW } from "@luke/settings/settings-anchors";
 
 export type { SettingsView };
 /**
@@ -95,6 +97,10 @@ export const SETTINGS_SECTION = {
   MAC_REPOSITORIES: "workspace-mac-repositories",
   /** How code and diffs are drawn, on Appearance: every setting the View settings popover offers, and the File tabs' own. */
   APPEARANCE_DIFFS: "appearance-diffs",
+  /** Claude's row on Agents: the account's Claude plan and Anthropic key, anchored as its search result is. */
+  CLAUDE: SETTINGS_SEARCH_ROW.API_KEY_ANTHROPIC,
+  /** Codex's row on Agents: the account's ChatGPT plan and OpenAI key, which calls and dictation run on too. */
+  CODEX: SETTINGS_SEARCH_ROW.API_KEY_OPENAI,
 } as const;
 
 type SettingsSection = (typeof SETTINGS_SECTION)[keyof typeof SETTINGS_SECTION];
@@ -112,4 +118,19 @@ export interface SettingsLink {
   readonly workspaceId?: string;
   /** Lands on the page list rather than the page, as a link naming no page this window knows does; a narrow room draws the two apart. */
   readonly listed?: true;
+}
+
+/** Each provider's harness row on Agents, where its plan and key are kept. */
+const HARNESS_SECTION = {
+  [MODEL_PROVIDER.ANTHROPIC]: SETTINGS_SECTION.CLAUDE,
+  [MODEL_PROVIDER.OPENAI]: SETTINGS_SECTION.CODEX,
+} as const satisfies Record<ModelProvider, SettingsSection>;
+
+/**
+ * Where a press that connects an agent's credential lands: the provider's
+ * harness row on Agents, or the top of Agents where no provider is known.
+ */
+export function agentKeyLink(provider: ModelProvider | undefined): SettingsLink {
+  if (provider === undefined) return { page: SETTINGS_VIEW.CODING_AGENTS };
+  return { page: SETTINGS_VIEW.CODING_AGENTS, section: HARNESS_SECTION[provider] };
 }

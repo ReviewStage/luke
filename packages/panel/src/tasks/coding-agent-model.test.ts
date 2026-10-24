@@ -716,17 +716,38 @@ test("a Start refused for a missing credential says in one sentence which harnes
       {
         reason: FAILURE_REASON.CONNECT_AGENTS,
         text: "Connect Claude in Settings to start an agent.",
+        provider: MODEL_PROVIDER.ANTHROPIC,
       },
       {
         reason: FAILURE_REASON.CONNECT_AGENTS,
         text: "Connect Codex in Settings to start an agent.",
+        provider: MODEL_PROVIDER.OPENAI,
       },
       {
         reason: FAILURE_REASON.CONNECT_AGENTS,
         text: "Connect Codex in Settings to message this agent.",
+        provider: MODEL_PROVIDER.OPENAI,
       },
       { reason: FAILURE_REASON.OTHER, text: LUKE_PAID_REFUSAL },
     ],
+  );
+});
+
+test("a missing credential's press names the harness to connect, and Settings where the service named none", () => {
+  const missing = (provider?: (typeof MODEL_PROVIDER)[keyof typeof MODEL_PROVIDER]) =>
+    remedyLabel(
+      startFailureNote(
+        {
+          failure: CODING_AGENT_CALL_FAILURE.AGENT_CREDENTIAL_MISSING,
+          ...(provider === undefined ? undefined : { provider }),
+        },
+        null,
+      ),
+    );
+
+  assert.deepEqual(
+    [missing(MODEL_PROVIDER.ANTHROPIC), missing(MODEL_PROVIDER.OPENAI), missing()],
+    ["Connect Claude", "Connect Codex", "Open Settings"],
   );
 });
 
