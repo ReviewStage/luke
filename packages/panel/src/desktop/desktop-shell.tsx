@@ -26,7 +26,7 @@ import {
   useDrawerSwipe,
 } from "@luke/ui";
 import { DOCUMENT_REGION, TASKS_PAGE } from "@luke/ui/tasks-model";
-import { Suspense, useEffect, useMemo, useRef } from "react";
+import { Suspense, useEffect, useLayoutEffect, useMemo, useRef } from "react";
 import { ACTOR_SIZE, actorMarkWidth } from "../actor-ref.js";
 import { useAppCommand } from "../app-commands.js";
 import { appPlatform } from "../app-platform.js";
@@ -423,6 +423,72 @@ function SidebarChord({ sidebar }: { sidebar: SidebarCollapse }): null {
   return null;
 }
 
+/** What held the keyboard as Settings opened, named by what a control is called, since the shell it stood in is drawn anew as Settings goes. */
+interface Holder {
+  element: HTMLElement;
+  tag: string;
+  label: string;
+  /** Which of the controls so called it was, in the order the window draws them. */
+  place: number;
+}
+
+/** What a control is called: its label, its placeholder, or its words. */
+function labelOf(element: HTMLElement): string {
+  return (
+    element.getAttribute("aria-label") ??
+    element.getAttribute("placeholder") ??
+    element.textContent?.trim() ??
+    ""
+  );
+}
+
+/** Every control of `tag` called `label`, in the order the window draws them. */
+function calledSo(tag: string, label: string): HTMLElement[] {
+  return [...document.querySelectorAll<HTMLElement>(tag)].filter((each) => labelOf(each) === label);
+}
+
+/** The control holding the keyboard now, named; none where it stands nowhere or on a control with no name. */
+function holder(): Holder | undefined {
+  const element = document.activeElement;
+  if (!(element instanceof HTMLElement) || element === document.body) return undefined;
+  const tag = element.localName;
+  const label = labelOf(element);
+  if (label === "") return undefined;
+  return { element, tag, label, place: calledSo(tag, label).indexOf(element) };
+}
+
+/** The control that held the keyboard, as it stands now: itself where it never left, else the one drawn in its place, if any. */
+function found({ element, tag, label, place }: Holder): HTMLElement | undefined {
+  return element.isConnected ? element : calledSo(tag, label)[place];
+}
+
+/**
+ * Hands the keyboard back as Settings is left to the control that held it as
+ * Settings opened, where that is still to be found.
+ * Note that the control is named as Settings opens, in the render that turns
+ * the window over, because by the commit its shell is gone and the keyboard
+ * with it; and that it is handed back only from nowhere, since a press that
+ * left Settings on a control of its own has put the keyboard where it was
+ * meant to go.
+ */
+function useSettingsFocusReturn(inSettings: boolean): void {
+  const before = useRef<Holder | undefined>(undefined);
+  const was = useRef(false);
+  if (inSettings && !was.current) before.current = holder();
+  useLayoutEffect(() => {
+    if (inSettings) {
+      was.current = true;
+      return;
+    }
+    if (!was.current) return;
+    was.current = false;
+    const back = before.current === undefined ? undefined : found(before.current);
+    before.current = undefined;
+    const now = document.activeElement;
+    if (now === null || now === document.body) back?.focus({ preventScroll: true });
+  }, [inSettings]);
+}
+
 /**
  * The shortcuts that reach a place from anywhere past the sign-in: a new
  * task, Settings, the Inbox, the tab closed latest, opened again on its
@@ -636,6 +702,7 @@ export function DesktopShell({
 }): React.JSX.Element {
   const { account } = settings;
   const shell = useRef<HTMLDivElement>(null);
+  useSettingsFocusReturn(tab === PANEL_TAB.SETTINGS);
   const keepOverlay = useFloatDismiss({ state: sidebar.overlay, onState: sidebar.onOverlay });
   // A phone's drawer follows a finger swiping in from the screen's left edge, or back out, as a phone's own drawers do.
   const coarse = useCoarsePointer();

@@ -246,6 +246,65 @@ test("while Settings is still loading its frame stands, a page of placeholder se
   assert.deepEqual(tabs, [PANEL_TAB.TASKS]);
 });
 
+/** The shell on the tasks with its tab chosen from outside, so a test can open Settings and leave it. */
+function mountSwitching(): (tab: PanelTab) => void {
+  const container = document.createElement("div");
+  document.body.append(container);
+  root = createRoot(container);
+  const registry = AtomRegistry.make();
+  const draw = (tab: PanelTab) =>
+    act(() =>
+      root?.render(
+        onRegistry(
+          registry,
+          createElement(
+            DesktopShell,
+            shellProps(tasksControl({ page: TASKS_PAGE.HOME }), tab, ignore, {}),
+          ),
+        ),
+      ),
+    );
+  draw(PANEL_TAB.TASKS);
+  return draw;
+}
+
+test("leaving Settings gives the keyboard back to the control that held it as Settings opened", () => {
+  handState({});
+  const draw = mountSwitching();
+  const opener = document.querySelector<HTMLElement>(
+    '.title-bar-controls button[aria-label="New task"]',
+  );
+  assert.ok(opener, "the title bar's New task stands");
+  opener.focus();
+
+  draw(PANEL_TAB.SETTINGS);
+  assert.equal(
+    document.activeElement,
+    document.body,
+    "Settings draws over the window, the keyboard nowhere",
+  );
+  draw(PANEL_TAB.TASKS);
+
+  const back = document.activeElement;
+  assert.equal(back?.getAttribute("aria-label"), "New task");
+  assert.ok(back?.isConnected);
+});
+
+test("leaving Settings where the control that held the keyboard is gone leaves it with the window, and raises nothing", () => {
+  handState({});
+  const draw = mountSwitching();
+  const opener = document.createElement("button");
+  opener.setAttribute("aria-label", "Gone by then");
+  document.body.append(opener);
+  opener.focus();
+
+  draw(PANEL_TAB.SETTINGS);
+  opener.remove();
+
+  assert.doesNotThrow(() => draw(PANEL_TAB.TASKS));
+  assert.equal(document.activeElement, document.body);
+});
+
 /**
  * The shell in a narrow room on `tab` over `overrides`, Settings standing on
  * its list or its page as `listed` says, over a history whose Back goes to
