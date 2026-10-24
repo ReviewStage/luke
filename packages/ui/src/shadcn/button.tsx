@@ -22,15 +22,15 @@ import { cn } from "../cn.js";
  */
 
 const buttonVariants = cva(
-  "group/button relative flex-none items-center justify-center max-w-full m-0 border border-solid border-button-edge font-ui no-underline whitespace-nowrap transition-[background-color,color,filter,opacity] duration-(--luke-duration-hover) ease-[ease]",
+  "group/button relative flex-none items-center justify-center max-w-full m-0 border border-solid border-button-edge font-ui no-underline whitespace-nowrap transition-[background-color,color,filter,opacity] duration-(--luke-duration-hover) ease-motion-exit",
   {
     variants: {
       size: {
-        control: "inline-flex h-control rounded-control text-label font-medium",
-        compact: "inline-flex h-6 px-2 rounded-control text-caption font-semibold",
-        icon: "inline-flex size-control p-0 rounded-control text-label font-medium",
-        "icon-compact": "inline-flex size-6 p-0 rounded-luke-6 text-label font-medium",
-        row: "flex w-full justify-start h-menu-row px-2 rounded-menu-row text-body font-regular",
+        control: "inline-flex h-control rounded-control text-label font-label",
+        compact: "inline-flex h-6 px-2 rounded-control text-tag font-tag",
+        icon: "inline-flex size-control p-0 rounded-control text-label font-label",
+        "icon-compact": "inline-flex size-6 p-0 rounded-luke-6 text-label font-label",
+        row: "flex w-full justify-start h-menu-row px-2 rounded-menu-row text-body font-text",
       },
       shape: {
         square: "",

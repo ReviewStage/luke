@@ -5,8 +5,9 @@ import { RadioGroup } from "@base-ui/react/radio-group";
 import type { ReactNode } from "react";
 import { cn } from "../../cn.js";
 import { PRESS_PULSE, pulsePress } from "../../press-pulse.js";
+import { STATUS_TONE, type StatusTone } from "../../status-tone.js";
 import { useClipped } from "../../use-clipped.js";
-import { BADGE_TONE, Badge, type BadgeTone } from "../badge/badge.js";
+import { Badge } from "../badge/badge.js";
 
 /**
  * choice-list.tsx -- a list of options a reader picks from, each a row the width of its column holding a label, a line of detail, and a badge: one of them, or any that apply, and once settled, what was offered with what was picked.
@@ -106,14 +107,6 @@ export const CHOICE_FLOW = {
 
 export type ChoiceFlow = (typeof CHOICE_FLOW)[keyof typeof CHOICE_FLOW];
 
-/** What a marked row's control fills with once checked where not the accent: what picking it means, going ahead or holding back. */
-export const CHOICE_TONE = {
-  COMPLETE: "complete",
-  DANGER: "danger",
-} as const;
-
-export type ChoiceTone = (typeof CHOICE_TONE)[keyof typeof CHOICE_TONE];
-
 /** How many of a numbered list's rows wear their number: the keys 1 to 9. */
 export const CHOICE_NUMBERED_ROWS = 9;
 
@@ -150,7 +143,7 @@ const LIST_LOOK = {
  * where a utility would outrank it.
  */
 const ROW =
-  "luke-choice flex items-center gap-3 min-w-0 m-0 py-2 px-3 [border:0] rounded-control outline-offset-[calc(-1*var(--luke-focus-ring-width))] font-ui text-body text-left cursor-pointer in-data-[luke-profile=desktop]:cursor-default transition-[background-color] duration-(--luke-duration-hover) ease-[ease]";
+  "luke-choice flex items-center gap-3 min-w-0 m-0 py-row-inset px-list-inset [border:0] rounded-control outline-offset-[calc(-1*var(--luke-focus-ring-width))] font-ui text-body text-left cursor-pointer in-data-[luke-profile=desktop]:cursor-default transition-[background-color] duration-(--luke-duration-hover) ease-motion-exit";
 
 /**
  * Each look's own row. A pill's corners are half its one-line height
@@ -177,7 +170,7 @@ const ROW_ACROSS = "flex-[1_1_0] items-start";
  * in a radio and a tick in a box.
  */
 const CONTROL =
-  "luke-choice-control inline-grid flex-none place-items-center size-4 box-border border-[1.5px] border-solid transition-[background-color,border-color] duration-(--luke-duration-hover) ease-[ease]";
+  "luke-choice-control inline-grid flex-none place-items-center size-4 box-border border-[1.5px] border-solid transition-[background-color,border-color] duration-(--luke-duration-hover) ease-motion-exit";
 
 /**
  * A checked control's fill: the accent, or what picking it means, going
@@ -186,10 +179,8 @@ const CONTROL =
  */
 const CONTROL_ACCENT_FILL = "border-accent-fill bg-accent-fill";
 
-const CONTROL_FILL = {
-  complete: "border-complete bg-complete",
-  danger: "border-danger-fill bg-danger-fill",
-} as const satisfies Record<ChoiceTone, string>;
+/** A checked control's fill in its row's status tone (`tokens/status-tone.css`). */
+const CONTROL_TONE_FILL = "border-tone-ink bg-tone-ink";
 
 const CONTROL_MARK = {
   radio: "after:size-1.5 after:rounded-[50%] after:content-['']",
@@ -208,7 +199,7 @@ const CONTROL_INK = {
  * the face itself has no box to ring (`choice-list.css`).
  */
 const FACE =
-  "overflow-hidden w-full max-w-[88px] aspect-square rounded-[50%] bg-border transition-[box-shadow] duration-(--luke-duration-hover) ease-[ease] [&_img]:block [&_img]:size-full [&_img]:object-cover [&_img]:object-[50%_25%] [:hover:not(:disabled)>&]:[box-shadow:0_0_0_2px_var(--luke-color-border-strong)]";
+  "overflow-hidden w-full max-w-[88px] aspect-square rounded-[50%] bg-border transition-[box-shadow] duration-(--luke-duration-hover) ease-motion-exit [&_img]:block [&_img]:size-full [&_img]:object-cover [&_img]:object-[50%_25%] [:hover:not(:disabled)>&]:[box-shadow:0_0_0_2px_var(--luke-color-border-strong)]";
 
 const FACE_RING = {
   rest: "[box-shadow:inset_0_0_0_1px_var(--luke-color-border-strong)]",
@@ -240,7 +231,7 @@ export interface ChoiceOption<Value extends string> {
    * act where none is given, or the neutral one for a word that only says
    * what the option is, as a voice's "Feminine" does.
    */
-  badgeTone?: BadgeTone | undefined;
+  badgeTone?: StatusTone | undefined;
   /** A picture before the words, a workspace's tile; a picture list's face. */
   mark?: ReactNode;
   /** What hangs after the label on its line, a connected credential's check. */
@@ -252,7 +243,7 @@ export interface ChoiceOption<Value extends string> {
   /** Whether this option alone cannot be picked. */
   disabled?: boolean | undefined;
   /** What a marked row's control fills with once checked; the accent where none is given. */
-  tone?: ChoiceTone | undefined;
+  tone?: StatusTone | undefined;
 }
 
 interface ChoiceListBase<Value extends string> {
@@ -357,7 +348,7 @@ function ChoiceWords({
   number,
 }: {
   option: ChoiceOption<string>;
-  tone: BadgeTone;
+  tone: StatusTone;
   look?: ChoiceLook | undefined;
   after?: ReactNode;
   number?: number | undefined;
@@ -373,7 +364,7 @@ function ChoiceWords({
       <span className="luke-choice-head flex flex-wrap items-start justify-between gap-x-2 gap-y-1">
         <span
           className={cn(
-            "luke-choice-label min-w-0 font-medium wrap-anywhere",
+            "luke-choice-label min-w-0 font-label wrap-anywhere",
             labelFlex(option, look),
           )}
         >
@@ -386,7 +377,7 @@ function ChoiceWords({
             {/* The number is the row's key, which the row says to a reader as its key shortcut. */}
             {number === undefined ? null : (
               <span
-                className="luke-choice-number min-w-[1ch] text-subtle-foreground text-caption leading-body tabular-nums text-center"
+                className="luke-choice-number min-w-[1ch] text-muted-foreground text-caption leading-body tabular-nums text-center"
                 aria-hidden="true"
               >
                 {number}
@@ -410,7 +401,7 @@ function PictureName({ name, picked }: { name: string; picked: boolean }): React
       ref={box}
       className={cn(
         "luke-choice-name overflow-hidden max-w-full text-caption leading-body whitespace-nowrap",
-        picked && "text-foreground font-semibold",
+        picked && "text-foreground font-emphasis",
       )}
       data-overflow={String(clipped)}
     >
@@ -428,10 +419,12 @@ function ChoiceControl({
 }: {
   radio: boolean;
   checked: boolean;
-  tone: ChoiceTone | undefined;
+  tone: StatusTone | undefined;
   inCard: boolean;
 }): React.JSX.Element {
   const shape = radio ? "radio" : "box";
+  // Note that a neutral tone says nothing of what picking means, so its control fills in the accent.
+  const toned = tone !== undefined && tone !== STATUS_TONE.NEUTRAL;
   return (
     <span
       className={cn(
@@ -441,10 +434,10 @@ function ChoiceControl({
         inCard
           ? "mt-0 self-center [:disabled>&]:opacity-40"
           : "self-start mt-[calc((var(--luke-type-body-leading)-var(--luke-space-16))/2)]",
-        !checked && "border-subtle-foreground",
-        checked && (tone === undefined ? CONTROL_ACCENT_FILL : CONTROL_FILL[tone]),
+        !checked && "border-muted-foreground",
+        checked && (toned ? CONTROL_TONE_FILL : CONTROL_ACCENT_FILL),
         checked && CONTROL_MARK[shape],
-        checked && CONTROL_INK[shape][tone === undefined ? "accent" : "toned"],
+        checked && CONTROL_INK[shape][toned ? "toned" : "accent"],
       )}
       data-shape={shape}
       aria-hidden="true"
@@ -466,7 +459,7 @@ function RowInside({
   checked: boolean;
   look: ChoiceLook;
   number: number | undefined;
-  badgeTone: BadgeTone;
+  badgeTone: StatusTone;
 }): React.JSX.Element {
   const picture = look === CHOICE_LOOK.PICTURE;
   return (
@@ -532,7 +525,7 @@ function ChoiceRow({
   look: ChoiceLook;
   across: boolean;
   /** The badge's tone where the option names none. */
-  badgeTone: BadgeTone;
+  badgeTone: StatusTone;
   /** The row's key, counted from one, where the list is numbered and the row among its first nine. */
   number: number | undefined;
   focusRef: React.RefObject<HTMLButtonElement | null> | undefined;
@@ -701,7 +694,7 @@ function OpenChoices<Value extends string>(props: ChoiceListOpen<Value>): React.
       across={flow === CHOICE_FLOW.ACROSS}
       number={numbered && index < CHOICE_NUMBERED_ROWS ? index + 1 : undefined}
       focusRef={option === landing ? focusRef : undefined}
-      badgeTone={readOnly ? BADGE_TONE.NEUTRAL : BADGE_TONE.ATTENTION}
+      badgeTone={readOnly ? STATUS_TONE.NEUTRAL : STATUS_TONE.ATTENTION}
       onPress={() => press(option.value)}
     />
   ));
@@ -754,11 +747,11 @@ function SettledChoices<Value extends string>({
             )}
             <ChoiceWords
               option={option}
-              tone={BADGE_TONE.NEUTRAL}
+              tone={STATUS_TONE.NEUTRAL}
               after={
                 picked ? (
                   // Note that the note runs inline in the label's line, so its smaller words share the label's baseline rather than a box's centre.
-                  <span className="luke-choice-picked ml-2 text-muted-foreground text-caption leading-body font-regular whitespace-nowrap">
+                  <span className="luke-choice-picked ml-2 text-muted-foreground text-caption leading-body font-caption whitespace-nowrap">
                     <PickedCheck className="mr-0.5" />
                     {pickedNote}
                   </span>

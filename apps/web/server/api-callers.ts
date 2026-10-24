@@ -389,9 +389,7 @@ function moduleExports(source: string, file: string): readonly ModuleExport[] {
  * narrows through an intersection, and `string & Function` has no call
  * signature for the probe to reach.
  */
-// oxlint-disable-next-line anti-slop/no-unknown-returns -- the builder's answer is the untyped module's own; `decodeString` parses it at the call below.
 type PathBuilderCall = (...segments: readonly string[]) => unknown;
-// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Schema.declare's predicate is this boundary's own decoder, called only from Schema.is below.
 const PathBuilder = Schema.declare((input: unknown): input is PathBuilderCall =>
   Predicate.isFunction(input),
 );

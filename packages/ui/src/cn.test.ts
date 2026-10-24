@@ -3,20 +3,26 @@ import { test } from "vitest";
 import { cn } from "./cn.js";
 
 /**
- * cn.test.ts -- the joiner merges the theme's own roles as what they are.
- *
- * A theme size tailwind-merge does not know it takes for a colour, so a
- * control's type would be dropped beside its ink, and a smaller box would
- * be drawn at the larger one it was meant to replace.
+ * cn.test.ts -- the joiner keeps a theme's type size beside a text colour,
+ * and lets a later length, padding, corner, width, or motion from the theme
+ * replace an earlier one, as it does Tailwind's own.
  */
 
-test("a theme type size stands beside an ink, and a later one replaces it", () => {
+test("a theme's type size and a text colour both stand, and a later size replaces an earlier", () => {
+  assert.equal(cn("text-body text-foreground"), "text-body text-foreground");
   assert.equal(cn("text-label text-button-ink"), "text-label text-button-ink");
-  assert.equal(cn("text-label", "text-caption"), "text-caption");
+  assert.equal(cn("text-body text-foreground", "text-caption"), "text-foreground text-caption");
 });
 
-test("a theme height, inset, and corner give way to the ones a later class names", () => {
-  assert.equal(cn("h-control", "size-6"), "size-6");
-  assert.equal(cn("px-control-inset", "px-2"), "px-2");
-  assert.equal(cn("rounded-control", "rounded-full"), "rounded-full");
+test("a later theme length, padding, or corner replaces an earlier one", () => {
+  assert.equal(
+    cn("h-control px-control-inset rounded-control", "h-auto p-0 rounded-control-compact"),
+    "h-auto p-0 rounded-control-compact",
+  );
+});
+
+test("a later width or motion replaces a theme's own, as a caller's class replaces a component's", () => {
+  assert.equal(cn("max-w-dialog-wide", "max-w-dialog-confirm"), "max-w-dialog-confirm");
+  assert.equal(cn("animate-dialog-in", "animate-none"), "animate-none");
+  assert.equal(cn("animate-menu-in", "animate-tooltip-leave"), "animate-tooltip-leave");
 });

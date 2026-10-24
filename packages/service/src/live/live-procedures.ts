@@ -81,7 +81,7 @@ import { childConversationId } from "@luke/database/models/ids";
 import { macCommandsLiveStatement } from "@luke/database/models/mac-command-store";
 import { repositoryPinsLiveStatement } from "@luke/database/models/repository-pin-store";
 import { taskSectionsLiveStatements } from "@luke/database/models/task-section-store";
-import { readTask } from "@luke/database/models/task-store";
+import { readTaskHeader } from "@luke/database/models/task-store";
 import {
   isWorkspaceMember,
   workspaceOf as workspaceOfAccount,
@@ -312,7 +312,7 @@ export function liveProcedures(seams: LiveProcedureSeams) {
     taskBoard: signedIn.taskBoard.effect(function* ({ input, context }) {
       yield* sameUser(input, context.userId);
       const taskId = yield* pathUuid(input.id);
-      const task = yield* hostedStoreOrUnavailable(readTask(context.userId, taskId));
+      const task = yield* hostedStoreOrUnavailable(readTaskHeader(context.userId, taskId));
       if (Option.isNone(task)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
       const statement = boardLiveStatement(context.userId, taskId);
       if (Option.isNone(statement)) return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
@@ -321,7 +321,7 @@ export function liveProcedures(seams: LiveProcedureSeams) {
     taskRecord: signedIn.taskRecord.effect(function* ({ input, context }) {
       yield* sameUser(input, context.userId);
       const taskId = yield* pathUuid(input.id);
-      const task = yield* hostedStoreOrUnavailable(readTask(context.userId, taskId));
+      const task = yield* hostedStoreOrUnavailable(readTaskHeader(context.userId, taskId));
       if (Option.isNone(task)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
       const statements = taskRecordLiveStatements(context.userId, taskId);
       if (Option.isNone(statements)) return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
@@ -330,7 +330,7 @@ export function liveProcedures(seams: LiveProcedureSeams) {
     taskPages: signedIn.taskPages.effect(function* ({ input, context }) {
       yield* sameUser(input, context.userId);
       const taskId = yield* pathUuid(input.id);
-      const task = yield* hostedStoreOrUnavailable(readTask(context.userId, taskId));
+      const task = yield* hostedStoreOrUnavailable(readTaskHeader(context.userId, taskId));
       if (Option.isNone(task)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
       const statements = taskPagesLiveStatements(context.userId, taskId);
       if (Option.isNone(statements)) return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
@@ -348,7 +348,7 @@ export function liveProcedures(seams: LiveProcedureSeams) {
     taskHistory: signedIn.taskHistory.effect(function* ({ input, context }) {
       yield* sameUser(input, context.userId);
       const taskId = yield* pathUuid(input.id);
-      const task = yield* hostedStoreOrUnavailable(readTask(context.userId, taskId));
+      const task = yield* hostedStoreOrUnavailable(readTaskHeader(context.userId, taskId));
       if (Option.isNone(task)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
       const statements = taskHistoryLiveStatements(context.userId, taskId);
       if (Option.isNone(statements)) return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
@@ -357,7 +357,7 @@ export function liveProcedures(seams: LiveProcedureSeams) {
     taskBrowserTabs: signedIn.taskBrowserTabs.effect(function* ({ input, context }) {
       yield* sameUser(input, context.userId);
       const taskId = yield* pathUuid(input.id);
-      const task = yield* hostedStoreOrUnavailable(readTask(context.userId, taskId));
+      const task = yield* hostedStoreOrUnavailable(readTaskHeader(context.userId, taskId));
       if (Option.isNone(task)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
       const statement = taskBrowserTabsLiveStatement(context.userId, taskId);
       if (Option.isNone(statement)) return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
@@ -391,7 +391,7 @@ export function liveProcedures(seams: LiveProcedureSeams) {
     taskInbox: signedIn.taskInbox.effect(function* ({ input, context }) {
       yield* sameUser(input, context.userId);
       const taskId = yield* pathUuid(input.id);
-      const task = yield* hostedStoreOrUnavailable(readTask(context.userId, taskId));
+      const task = yield* hostedStoreOrUnavailable(readTaskHeader(context.userId, taskId));
       if (Option.isNone(task)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
       const statements = taskInboxLiveStatements(context.userId, taskId);
       if (Option.isNone(statements)) return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);

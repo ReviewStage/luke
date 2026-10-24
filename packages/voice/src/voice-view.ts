@@ -39,11 +39,12 @@ type VoiceCallLine = typeof voiceCallLineSchema.Type;
  * ends, and its lines in the order they opened.
  *
  * It is not part of {@link VoiceView}, because it grows for the whole call
- * and the view is reported at the heard lines' rate. It is the app-state slice
- * `voice.callTranscript`, beside `voice.view`: the voice window reports only
- * a {@link VoiceCallTranscriptChange} with each view, main splices it in
- * with {@link withCallTranscriptChange}, and a panel opened mid-call reads
- * the whole of it from the document. Its one reader is the agent tab's live
+ * and the view is reported at the heard lines' rate. It is the app document's
+ * `callTranscript`, beside the voice slice: the voice window reports only a
+ * {@link VoiceCallTranscriptChange} with each view, main splices it in with
+ * {@link withCallTranscriptChange}, a panel is handed only what moved in it
+ * since the last it was handed ({@link callTranscriptChangeBetween}), and a
+ * panel opened mid-call reads the whole of it from the document. Its one reader is the agent tab's live
  * transcript (`transcript-model.ts`'s `heardCalls`), which matches it to
  * `view.call`'s agent; it is none while no call stands or before its first line.
  */
@@ -60,7 +61,9 @@ export interface VoiceCallTranscript {
  * Applied twice it is applied once, so a report heard again changes nothing.
  */
 const voiceCallTranscriptChangeSchema = Schema.Struct({
-  voiceSessionId: Schema.UndefinedOr(Schema.String),
+  // Note that a session not yet named may cross as no key at all, because a
+  // window's push is JSON and JSON keeps no key whose value is undefined.
+  voiceSessionId: Schema.optional(Schema.String),
   from: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
   lines: Schema.Array(voiceCallLineSchema),
 });
@@ -203,6 +206,27 @@ export function withCallTranscriptChange(
       : held.lines.slice(0, change.from);
   const lines = [...kept, ...change.lines];
   return lines.length === 0 ? undefined : { voiceSessionId: change.voiceSessionId, lines };
+}
+
+/**
+ * What moved from `sent` to `next`, as the change that turns the one into the
+ * other: the lines from the first that is not the line it was, and the empty
+ * change from 0 for a call gone. A line keeps its object while it does not
+ * move, so the walk is one comparison per line kept. None where nothing did.
+ */
+export function callTranscriptChangeBetween(
+  sent: VoiceCallTranscript | undefined,
+  next: VoiceCallTranscript | undefined,
+): VoiceCallTranscriptChange | undefined {
+  if (sent === next) return undefined;
+  if (next === undefined) return { voiceSessionId: undefined, from: 0, lines: [] };
+  const kept = sent !== undefined && sent.voiceSessionId === next.voiceSessionId ? sent.lines : [];
+  let from = 0;
+  while (from < kept.length && from < next.lines.length && kept[from] === next.lines[from]) {
+    from += 1;
+  }
+  if (from === kept.length && from === next.lines.length) return undefined;
+  return { voiceSessionId: next.voiceSessionId, from, lines: next.lines.slice(from) };
 }
 
 export function isVoiceView(value: UnparsedWireValue): value is VoiceView & WireRecord {

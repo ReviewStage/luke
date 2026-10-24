@@ -3,10 +3,10 @@
 import { act, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
+import { STATUS_TONE } from "../../status-tone.js";
 import { useMenu } from "../menu/menu.js";
 import {
   NAV_COUNT_SHOWN,
-  NAV_COUNT_TONE,
   NAV_CURRENT,
   NAV_ITEM_VARIANT,
   NavItem,
@@ -109,7 +109,7 @@ test("a count is muted unless it is drawn in the accent's blue", () => {
       null,
       createElement(NavItem, { count: { value: 2, noun: "tasks" }, children: "acme/web" }),
       createElement(NavItem, {
-        count: { value: 3, noun: "waiting on you", tone: NAV_COUNT_TONE.ACCENT },
+        count: { value: 3, noun: "waiting on you", tone: STATUS_TONE.ATTENTION },
         children: "Inbox",
       }),
     ),
@@ -118,7 +118,7 @@ test("a count is muted unless it is drawn in the accent's blue", () => {
   const tones = [...container.querySelectorAll<HTMLElement>(".luke-nav-item-count")].map(
     (each) => each.dataset.tone,
   );
-  expect(tones).toEqual([NAV_COUNT_TONE.MUTED, NAV_COUNT_TONE.ACCENT]);
+  expect(tones).toEqual([STATUS_TONE.NEUTRAL, STATUS_TONE.ATTENTION]);
 });
 
 test("the place shown is announced as the page, a search's find as the location", () => {

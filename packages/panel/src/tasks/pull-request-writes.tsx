@@ -22,7 +22,6 @@ import {
   BUTTON_SIZE,
   CHIP_LOOK,
   CHIP_SIZE,
-  CHIP_TONE,
   Chip,
   ChipName,
   COMMAND_LINK_ELEMENT,
@@ -32,6 +31,7 @@ import {
   INLINE_EDIT_LOOK,
   InlineEdit,
   type InlineEditEnd,
+  STATUS_TONE,
   Tooltip,
   useMenu,
 } from "@luke/ui";
@@ -279,7 +279,7 @@ function queuedWords(queued: { readonly position?: number | undefined }): string
  * opens the changes that may be made from there, and a merged pull request,
  * which no change leaves, is a badge. An open one GitHub holds in its merge
  * queue says so in the pill, as stage-cli's does: Queued and its place, in
- * the attention tone with the merge's mark, its menu offering Close alone.
+ * the working tone with the merge's mark, its menu offering Close alone.
  * Note that the pill is a compact one, which `@luke/ui` draws in a badge's
  * box, so every state stands at the one size the app's status badges do,
  * the one with a menu adding its chevron.
@@ -300,7 +300,7 @@ export function PullRequestStateMenu({
   const menu = useMenu(actions.length > 0);
   const words = inQueue ? queuedWords(queued) : STATE_WORDS[pullRequest.state];
   const label = `Pull request ${words}`;
-  const tone = inQueue ? CHIP_TONE.ATTENTION : PULL_REQUEST_TONE[pullRequest.state];
+  const tone = inQueue ? STATUS_TONE.WORKING : PULL_REQUEST_TONE[pullRequest.state];
   const mark = inQueue ? (
     <GitMergeIcon aria-hidden="true" />
   ) : (

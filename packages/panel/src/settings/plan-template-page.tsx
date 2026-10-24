@@ -25,6 +25,7 @@ import {
   SKELETON_SHAPE,
   Skeleton,
   SkeletonRegion,
+  STATUS_TONE,
   Stack,
   TEXT_ELEMENT,
   TEXT_TONE,
@@ -42,7 +43,7 @@ import { DocumentScroll } from "../tasks/document-frame.js";
 import type { TaskReader } from "../tasks/edit-ref.js";
 import { PlanBody, PlanBodyColumn, PlanPageHead } from "../tasks/plan-body.js";
 import type { PlanEditDoor } from "../tasks/use-plan-editing.js";
-import { TOAST_TONE, useToast } from "../toast.js";
+import { useToast } from "../toast.js";
 
 /**
  * plan-template-page.tsx -- Settings › Plan template: the Markdown every new plan starts as a copy of, drawn and edited as a plan is.
@@ -260,7 +261,7 @@ function useTemplate(signedIn: boolean, act: ActHandle["act"]): TemplateControl 
       } else {
         toast({
           words: PAGE_LINE.LEFT_UNSAVED,
-          tone: TOAST_TONE.FAILED,
+          tone: STATUS_TONE.DANGER,
           persists: true,
           action: { label: "Retry", onPress: () => save(words) },
         });
@@ -436,7 +437,6 @@ function TemplateSkeleton(): React.JSX.Element {
                   </Text>
                   <div>
                     {section.lines.map((width, at) => (
-                      // oxlint-disable-next-line react/no-array-index-key -- a placeholder's lines have nothing but their place.
                       <Skeleton key={at} width={width} />
                     ))}
                   </div>

@@ -9,6 +9,6 @@
   }
 
   .luke-checkbox[data-disabled="true"] {
-    color: var(--luke-color-text-subtle);
+    color: var(--luke-color-text-muted);
   }
 }

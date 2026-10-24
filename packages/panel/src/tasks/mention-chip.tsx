@@ -25,6 +25,8 @@ import {
 } from "@luke/features/mention-link";
 import { type KnownNames, placeChipLook } from "@luke/features/place-chip-model";
 import { planSections } from "@luke/features/plan-document";
+import { UNTITLED_TASK_NAME } from "@luke/features/task-wire";
+import { THING_KIND, thingName, thingOfMention, thingOfPlace } from "@luke/features/thing-kind";
 import { isGitHubAddress } from "@luke/host/acts";
 import {
   CommentsIcon,
@@ -62,14 +64,7 @@ import type { LinkDrawer, MarkdownSpan } from "../markdown-message.js";
 import { usePerson } from "../member-directory.js";
 import type { HeadingsChange, MentionNode, MentionNodeDoors } from "../plan-editor/contract.js";
 import { APP_STATE_HELD, useAppSlice } from "../use-app-state.js";
-import {
-  AutomationChipCard,
-  PageChipCard,
-  PersonChipCard,
-  SectionChipCard,
-  TaskChipCard,
-  VersionChipCard,
-} from "./chip-cards.js";
+import { useSectionHeading } from "./chip-cards.js";
 import { providerOf } from "./coding-agent-model.js";
 import {
   DATE_PICKER_CLOSE,
@@ -77,17 +72,20 @@ import {
   type DatePickerOpening,
   dateMentionNode,
 } from "./date-picker.js";
-import { FileCard } from "./file-ref.js";
-import { shortCommit } from "./file-tab-model.js";
 import { FileTypeIcon } from "./file-type-icon.js";
-import { InboxItemChipCard, InboxItemChipGlyph } from "./inbox-item-chip.js";
+import { InboxItemChipGlyph, useInboxItemTitle } from "./inbox-item-chip.js";
 import { IssueMark } from "./issue-mark.js";
-import { MentionedAgentCard, ReadAgentModel } from "./mentioned-agent-card.js";
+import { ReadAgentModel } from "./mentioned-agent-card.js";
 import { OpenedNote, PullRequestCardNotes } from "./pull-request-card-notes.js";
 import { PullRequestMark } from "./pull-request-mark.js";
-import { ServerCard } from "./server-card.js";
 import { AgentMark, PlanGlyph } from "./tab-look.js";
-import { useKnownNames, useTaskStatus } from "./use-known-names.js";
+import { branchNote, thingCard } from "./thing-card.js";
+import {
+  useKnownNames,
+  useTaskKeyTargets,
+  useTaskNameCatchUp,
+  useTaskStatus,
+} from "./use-known-names.js";
 import {
   type ChipWhere,
   type LinkStanding,
@@ -147,9 +145,16 @@ import { useWordsDates } from "./words-dates.js";
  * automation, an agent's message (`@luke/features/luke-link`), is drawn as
  * the same chip, wearing the place's glyph and named as the window already
  * knows it (`@luke/features/place-chip-model`): the words it was labelled
- * with, else the place's own name, else its kind; and a bare plan's, page's,
- * or agent's link is called by the task's, the page's, or the agent's own
- * name where the window holds it, rather than by its kind. A press opens the
+ * with, else the place's own name, else its kind. A plan, a section, a
+ * page, an agent, a person, or an Inbox item is called by its name now
+ * wherever the window holds it, whatever words its link was written with:
+ * the task's, the heading the section's anchor names, the page's, the
+ * agent's as its tab names it, Luke for Luke, the member's, the item's, so
+ * a chip never keeps a name its card no longer says. What it was written
+ * with stands in only where the window cannot read it, a task deleted, of
+ * another workspace, or not the reader's; and a task named before the
+ * window ever read its task list has the list followed, once between every
+ * chip, so its name lands (`useTaskNameCatchUp`). A press opens the
  * place as any Luke link opens, in the window. Its card, hung while the pointer rests
  * on it, names it whole: a file's is the card every place naming the file
  * hangs, and a file's lines open at the commit the mention pins them to.
@@ -208,33 +213,35 @@ interface MentionedAgentLook {
 }
 
 /**
- * A mention's target named again where an edit of the plan it names moved
- * the anchor of the section it names (`../plan-editor/plan-mentions.ts`):
- * the new target, or nothing where the target names no section of the
- * plan, or one whose anchor the edit left where it was, or one of a
- * section the edit did not keep.
+ * A mention named again where an edit of the plan it names renamed the
+ * section it names or moved its anchor (`../plan-editor/plan-mentions.ts`):
+ * the target at its anchor now, under the section's heading now, so the
+ * words the plan is saved with call it what its chip does; or nothing where
+ * the target names no section of the plan, or one whose heading and anchor
+ * the edit left as they were, or one of a section the edit did not keep.
  */
 export function retargetedMention(
   taskId: string,
   place: MentionPlace,
   target: string,
   change: HeadingsChange,
-): string | undefined {
+): MentionNode | undefined {
   const mention = decodeMention(target, place.repository);
   if (mention?.kind !== MENTION_KIND.SECTION || mention.taskId !== taskId) return undefined;
   const was = sectionAnchors(change.before);
   const is = sectionAnchors(change.after);
   const at = was.indexOf(mention.anchor);
-  const now = is[change.kept.get(at) ?? -1];
-  if (now === undefined || now === "" || now === mention.anchor) return undefined;
-  return encodeMention({ ...mention, anchor: now }, place);
+  const kept = change.kept.get(at) ?? -1;
+  const now = is[kept];
+  const heading = change.after[kept];
+  if (now === undefined || now === "" || heading === undefined) return undefined;
+  // Note that a heading renamed in case or punctuation alone keeps its anchor and still renames its mentions.
+  if (now === mention.anchor && heading === change.before[at]) return undefined;
+  return { name: heading, target: encodeMention({ ...mention, anchor: now }, place) };
 }
 
 /** What a gone section's card says of it. */
 const GONE_WORDS = "No longer in the plan";
-
-/** Where a file or a folder no lines pin is read: the head of its repository's default branch, as its link names it. */
-const DEFAULT_BRANCH_WORDS = "On the default branch";
 
 /** What a page's card says of it. */
 const PAGE_WORDS = "A page on this task";
@@ -428,22 +435,7 @@ function noteOf(
   return undefined;
 }
 
-/** What a file's or a folder's card says of where it is read with no lines pinned: the repository's default branch, where a repository names it. */
-function branchNote(repository: string | undefined): string | undefined {
-  return repository === undefined ? undefined : DEFAULT_BRANCH_WORDS;
-}
-
-/** What a file's card says of the lines a mention pins: where they run, and the commit they were read at. */
-function linesNote(lines: MentionLines | undefined): string | undefined {
-  if (lines === undefined) return undefined;
-  const span =
-    lines.startLine === lines.endLine
-      ? `Line ${lines.startLine}`
-      : `Lines ${lines.startLine}–${lines.endLine}`;
-  return `${span} at ${shortCommit(lines.commit)}`;
-}
-
-/** The card a chip hangs: a file's own card, a server's or a tool's its server's row, an agent's tab's or a pull request's Pull request tab's where the place has one, or its glyph and whole name, a provider's page's key and state with what a pull request's notes say, and why it is gone where it is. */
+/** The card a chip hangs: its thing's (`thing-card.tsx`), a file's own card and a server's or a tool's its server's row among them, an agent's tab's or a pull request's Pull request tab's where the place has one, or its glyph and whole name, a provider's page's key and state with what a pull request's notes say, and why it is gone where it is. */
 function MentionCard({
   mention,
   target,
@@ -467,24 +459,6 @@ function MentionCard({
     workspace: doors.place.workspace,
   });
   const repository = doors.place.repository ?? undefined;
-  if (mention.kind === MENTION_KIND.FILE) {
-    return (
-      <FileCard
-        path={mention.path}
-        repository={repository}
-        note={linesNote(mention.lines) ?? branchNote(repository)}
-      />
-    );
-  }
-  if (mention.kind === MENTION_KIND.SERVER || mention.kind === MENTION_KIND.TOOL) {
-    return (
-      <ServerCard
-        provider={mention.provider}
-        connection={mention.connection}
-        tool={mention.kind === MENTION_KIND.TOOL ? mention.tool : undefined}
-      />
-    );
-  }
   // Only an agent of the page's own task has a tab here, so only its chip hangs that tab's card.
   const tabCard =
     mention.kind === MENTION_KIND.AGENT && mention.taskId === doors.taskId
@@ -538,51 +512,15 @@ function MentionCard({
       {note === undefined ? null : <HoverCardNote>{note}</HoverCardNote>}
     </HoverCard>
   );
-  // A plan, a section, a page, or an agent hangs the card the window hangs for it elsewhere, its own card standing in where the window holds none.
-  switch (mention.kind) {
-    case MENTION_KIND.TASK:
-      return <TaskChipCard taskId={mention.taskId} fallback={card} />;
-    case MENTION_KIND.SECTION:
-      return (
-        <SectionChipCard
-          taskId={mention.taskId}
-          anchor={mention.anchor}
-          name={name}
-          gone={state === MENTION_STATE.GONE ? GONE_WORDS : undefined}
-          fallback={card}
-        />
-      );
-    case MENTION_KIND.PAGE:
-      return (
-        <PageChipCard
-          place={"taskId" in mention ? { taskId: mention.taskId } : { agentId: mention.agentId }}
-          pageId={mention.pageId}
-          fallback={card}
-        />
-      );
-    // A person hangs their card as the members of the workspace their link names draw them.
-    case MENTION_KIND.PERSON:
-      return (
-        <PersonChipCard
-          userId={mention.userId}
-          workspace={readLink(target)?.workspace ?? doors.place.workspace}
-          fallback={card}
-        />
-      );
-    // Any other agent hangs its tab's card all the same, read as the card is hung.
-    case MENTION_KIND.AGENT:
-      return (
-        <MentionedAgentCard
-          agentId={mention.agentId}
-          taskId={mention.taskId}
-          name={name}
-          workspaceId={workspaceId}
-          fallback={card}
-        />
-      );
-    default:
-      return card;
-  }
+  // Note that what the mention names hangs the card the window hangs for it elsewhere, its own card standing in where the window holds none.
+  return thingCard(thingOfMention(mention), {
+    own: card,
+    name,
+    workspace: readLink(target)?.workspace ?? doors.place.workspace,
+    wordsWorkspaceId: workspaceId,
+    repository,
+    gone: state === MENTION_STATE.GONE ? GONE_WORDS : undefined,
+  });
 }
 
 /** A card's note, where there are words for one. */
@@ -626,33 +564,26 @@ export function MentionChipCard({
 }
 
 /**
- * What a chip calls a mention: the name it was written with, unless it was
- * written as its bare address and the window holds better, the name of the
- * plan, the page, the agent, or the person it names, or the key and title a provider
- * answered for its page.
+ * What a chip calls a mention: the name of what it names as the window
+ * holds it now (`THING_NAME`), the plan's, the section's heading, the
+ * page's, the agent's as its tab names it, the person's, Luke, whatever
+ * words it was written with; else the name it was written with; and a
+ * provider's page written as its bare address, by the key and title its
+ * provider answered for it.
  */
-function bareName(
+function chipName(
   mention: Mention,
   written: string,
   bare: boolean,
   known: KnownNames,
   standing: LinkStanding | undefined,
+  heading: string | undefined,
 ): string {
-  if (!bare) return written;
-  switch (mention.kind) {
-    case MENTION_KIND.LINK:
-      return standing === undefined ? written : `${standing.key} ${standing.title}`;
-    case MENTION_KIND.TASK:
-      return known.tasks.get(mention.taskId) ?? written;
-    case MENTION_KIND.PAGE:
-      return known.pages.get(mention.pageId) ?? written;
-    case MENTION_KIND.AGENT:
-      return known.agents.get(mention.agentId) ?? written;
-    case MENTION_KIND.PERSON:
-      return known.people.get(mention.userId) ?? written;
-    default:
-      return written;
-  }
+  const thing = thingOfMention(mention);
+  const { live, held } = thingName(thing, known, { heading, answered: standing });
+  // Note that a plan the window still lists Untitled keeps the name it was written with, which says more.
+  if (thing.kind === THING_KIND.PLAN && held === UNTITLED_TASK_NAME) return written;
+  return (live || bare ? held : undefined) ?? written;
 }
 
 /**
@@ -688,7 +619,7 @@ function MentionChip({
   /** The name it was written with, without its `@`. */
   name: string;
   doors: MentionDoors;
-  /** Whether it was written as its bare address, so a plan, a page, an agent, or a provider's page is called by its own name where the window holds it. */
+  /** Whether it was written as its bare address, so a provider's page is called by the key and title its provider answered. */
   bare?: boolean;
 }): React.JSX.Element {
   const openLink = useOpenLink();
@@ -697,7 +628,21 @@ function MentionChip({
     taskId: doors.taskId,
     workspace: doors.place.workspace,
   });
-  const name = githubName(mention, standing) ?? bareName(mention, written, bare, known, standing);
+  const section = mention.kind === MENTION_KIND.SECTION ? mention : undefined;
+  const heading = useSectionHeading(section?.taskId, section?.anchor ?? "");
+  useTaskNameCatchUp(mention.kind === MENTION_KIND.TASK ? mention.taskId : undefined);
+  // Note that a plan written as its own key (`ACME-42`) says the key, as the words wrote it, and one labelled with another task's key its name.
+  const keys = useTaskKeyTargets();
+  const keyTarget = keys.get(written);
+  const keyNames =
+    keyTarget === undefined ? undefined : decodeMention(keyTarget, doors.place.repository);
+  const keyed =
+    mention.kind === MENTION_KIND.TASK &&
+    keyNames?.kind === MENTION_KIND.TASK &&
+    keyNames.taskId === mention.taskId;
+  const name =
+    githubName(mention, standing) ??
+    (keyed ? written : chipName(mention, written, bare, known, standing, heading));
   const state = mentionState(mention, doors);
   const press = pressOf(mention, target, state, doors, openLink);
   const card = (
@@ -917,6 +862,7 @@ function PlaceChip({
   place,
   workspace,
   label,
+  read,
 }: {
   href: string;
   place: LinkPlace;
@@ -924,9 +870,14 @@ function PlaceChip({
   workspace: string;
   /** The words it was labelled with, without an `@`; none where it was written bare. */
   label: string | undefined;
+  /** The names the window holds beyond its own, an Inbox item's read as its chip stands say. */
+  read?: ((known: KnownNames) => KnownNames) | undefined;
 }): React.JSX.Element {
   const openLink = useOpenLink();
-  const known = useKnownNames("automationId" in place ? place.automationId : undefined);
+  const held = useKnownNames("automationId" in place ? place.automationId : undefined);
+  const known = read === undefined ? held : read(held);
+  const planned = place.kind === LINK_PLACE.TASK || place.kind === LINK_PLACE.VERSION;
+  useTaskNameCatchUp(planned ? place.planId : undefined);
   const { name, under } = placeChipLook(place, label, known);
   const glyph = <PlaceGlyph place={place} name={name} workspace={workspace} known={known} />;
   const own = (
@@ -956,9 +907,10 @@ function PlaceChip({
 
 /**
  * The card a place in Luke hangs, as the window hangs it wherever it names
- * the place: a plan's, a section's, a version's, a page's, an agent's, a
- * member's, an Inbox item's, or an automation's; `fallback`, the chip's
- * glyph and name, for any other, and where the window holds none.
+ * the place, by its thing's kind (`thing-card.tsx`): a plan's, a section's,
+ * a version's, a page's, an agent's, a member's, an Inbox item's, or an
+ * automation's; `fallback`, the chip's glyph and name, for any other, and
+ * where the window holds none.
  */
 function PlaceCard({
   place,
@@ -975,58 +927,38 @@ function PlaceCard({
     taskId: "planId" in place ? (place.planId ?? NO_TASK_ID) : NO_TASK_ID,
     workspace,
   });
-  switch (place.kind) {
-    case LINK_PLACE.TASK:
-      return <TaskChipCard taskId={place.planId} fallback={fallback} />;
-    case LINK_PLACE.SECTION:
-      return (
-        <SectionChipCard
-          taskId={place.planId}
-          anchor={place.anchor}
-          name={name}
-          gone={undefined}
-          fallback={fallback}
-        />
-      );
-    case LINK_PLACE.VERSION:
-      return (
-        <VersionChipCard taskId={place.planId} revision={place.revision} fallback={fallback} />
-      );
-    case LINK_PLACE.PAGE:
-      return (
-        <PageChipCard
-          place={"planId" in place ? { taskId: place.planId } : { agentId: place.agentId }}
-          pageId={place.pageId}
-          fallback={fallback}
-        />
-      );
-    case LINK_PLACE.AGENT:
-      return (
-        <MentionedAgentCard
-          agentId={place.agentId}
-          taskId={place.planId}
-          name={name}
-          workspaceId={workspaceId}
-          fallback={fallback}
-        />
-      );
-    case LINK_PLACE.PERSON:
-      return <PersonChipCard userId={place.userId} workspace={workspace} fallback={fallback} />;
-    case LINK_PLACE.INBOX_ITEM:
-      return <InboxItemChipCard place={place} fallback={fallback} />;
-    case LINK_PLACE.AUTOMATION:
-    case LINK_PLACE.AUTOMATION_RUN:
-      return (
-        <AutomationChipCard
-          automationId={place.automationId}
-          workspace={workspace}
-          wordsWorkspaceId={workspaceId}
-          fallback={fallback}
-        />
-      );
-    default:
-      return fallback;
-  }
+  return thingCard(thingOfPlace(place), {
+    own: fallback,
+    name,
+    workspace,
+    wordsWorkspaceId: workspaceId,
+    repository: undefined,
+    gone: undefined,
+  });
+}
+
+/** A link to an Inbox item. */
+type InboxItemLinkPlace = Extract<LinkPlace, { readonly kind: typeof LINK_PLACE.INBOX_ITEM }>;
+
+/** An Inbox item's chip, called by the item's title whether it waits or was settled, as its Inbox row is, which only its followed inbox holds once it no longer waits. */
+function InboxItemChip({
+  place,
+  ...chip
+}: {
+  href: string;
+  place: InboxItemLinkPlace;
+  workspace: string;
+  label: string | undefined;
+}): React.JSX.Element {
+  const title = useInboxItemTitle(place);
+  const read =
+    title === undefined
+      ? undefined
+      : (known: KnownNames): KnownNames => ({
+          ...known,
+          inboxItems: new Map([...known.inboxItems, [place.itemId, title]]),
+        });
+  return <PlaceChip place={place} read={read} {...chip} />;
 }
 
 /** The plan of a place that names none, which no plan's id spells. */
@@ -1080,14 +1012,13 @@ export function linkChip(
   }
   const read = readLink(href);
   if (read === undefined) return undefined;
-  return (
-    <PlaceChip
-      href={href}
-      place={read.place}
-      workspace={read.workspace}
-      label={bare ? undefined : mentionName(label.trim())}
-    />
-  );
+  const written = bare ? undefined : mentionName(label.trim());
+  if (read.place.kind === LINK_PLACE.INBOX_ITEM) {
+    return (
+      <InboxItemChip href={href} place={read.place} workspace={read.workspace} label={written} />
+    );
+  }
+  return <PlaceChip href={href} place={read.place} workspace={read.workspace} label={written} />;
 }
 
 /** What draws a link in Markdown as its chip through the doors given (`linkChip`); a link where it names nothing. */
@@ -1106,7 +1037,7 @@ export interface PastedNames {
 /** What a pasted address's chip is called: a section of the plan pasted on by its heading, a plan, a page, or an agent by the name the window holds, else what its address says. */
 function pastedName(mention: Mention, said: string, names: PastedNames): string {
   if (mention.kind !== MENTION_KIND.SECTION)
-    return bareName(mention, said, true, names.known, undefined);
+    return chipName(mention, said, true, names.known, undefined, undefined);
   if (mention.taskId !== names.taskId) return said;
   const headings = planSections(names.text()).map((section) => section.heading);
   return headings[sectionAnchors(headings).indexOf(mention.anchor)] ?? said;

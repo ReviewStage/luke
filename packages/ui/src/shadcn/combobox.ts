@@ -19,7 +19,7 @@
  * indicator a slot of its own at the row's end rather than an absolute
  * check; the list is capped by the app's placement hook
  * (`--luke-combobox-list-max`), scrolls only down (its ring is `combobox.css`'s
- * to leave off, the active option marking it); the label is the subtle caption; and the empty
+ * to leave off, the active option marking it); the label is the muted caption; and the empty
  * line is a row or two tall, so a list with nothing never falls to a sliver.
  * `@luke/ui`'s `Combobox` (`components/combobox/combobox.tsx`) is what an
  * app draws; these are its inside.
@@ -35,7 +35,7 @@ export const COMBOBOX_WELL =
 
 /** An item: its glyph, its name, then its detail and hint at its end, lit while it is the active option. */
 export const COMBOBOX_ITEM =
-  "group/option flex h-menu-row flex-none cursor-default items-center gap-icon-gap rounded-menu-row px-luke-8 font-sans text-body whitespace-nowrap text-foreground select-none aria-selected:not-aria-disabled:bg-secondary aria-disabled:opacity-40";
+  "group/option flex h-menu-row flex-none cursor-default items-center gap-icon-gap rounded-menu-row px-row-inset font-sans text-body whitespace-nowrap text-foreground select-none aria-selected:not-aria-disabled:bg-secondary aria-disabled:opacity-40";
 
 /** What leads an item before its glyph, a task's key say, in a column wide enough for a long one, so the glyphs and names it leads line up down the list. */
 export const COMBOBOX_ITEM_LEAD = "inline-flex min-w-combobox-lead flex-none items-center";
@@ -45,23 +45,24 @@ export const COMBOBOX_ITEM_GLYPH =
   "inline-flex size-menu-glyph flex-none items-center justify-center text-muted-foreground [&_:is(svg,img)]:size-menu-glyph";
 
 /** An item's name, which gives way only after its detail does. */
-export const COMBOBOX_ITEM_LABEL = "min-w-0 flex-initial overflow-hidden font-medium";
+export const COMBOBOX_ITEM_LABEL = "min-w-0 flex-initial overflow-hidden font-label";
 
 /** An item's detail, quieter, giving way first where the row runs short. */
 export const COMBOBOX_ITEM_DETAIL =
-  "block min-w-0 flex-[0_1000_auto] overflow-hidden pl-luke-12 text-caption leading-[inherit] text-subtle-foreground";
+  "block min-w-0 flex-[0_1000_auto] overflow-hidden pl-luke-12 text-caption leading-[inherit] text-muted-foreground";
 
 /** An item's hint at its end, at a menu's distance from what stands before it, as a chord is. */
 export const COMBOBOX_ITEM_HINT =
-  "inline-flex flex-none items-center gap-luke-4 pl-luke-16 text-caption leading-[inherit] text-subtle-foreground";
+  "inline-flex flex-none items-center gap-luke-4 pl-luke-16 text-caption leading-[inherit] text-muted-foreground";
 
 /** An item's end slot, one glyph wide: a chevron, or the check of the one chosen now in the text's own ink. */
 export const COMBOBOX_ITEM_END =
-  "inline-flex size-menu-glyph flex-none items-center justify-center text-subtle-foreground group-aria-current/option:text-foreground [&_svg]:size-menu-glyph [&_svg]:text-inherit";
+  "inline-flex size-menu-glyph flex-none items-center justify-center text-muted-foreground group-aria-current/option:text-foreground [&_svg]:size-menu-glyph [&_svg]:text-inherit";
 
 /** A group's heading over its run. */
-export const COMBOBOX_LABEL = "px-luke-8 pt-luke-8 pb-luke-4 text-caption font-medium text-subtle-foreground";
+export const COMBOBOX_LABEL =
+  "px-row-inset pt-row-inset pb-luke-4 text-group font-group text-muted-foreground";
 
 /** What stands where no option does, or after them: one quiet line, centred, a row or two tall. */
 export const COMBOBOX_EMPTY =
-  "m-0 flex min-h-luke-40 items-center justify-center px-luke-12 py-luke-4 text-center text-caption text-subtle-foreground";
+  "m-0 flex min-h-luke-40 items-center justify-center px-list-inset py-luke-4 text-center text-caption text-muted-foreground";

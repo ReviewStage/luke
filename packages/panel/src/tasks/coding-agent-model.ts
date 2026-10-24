@@ -51,11 +51,13 @@ import {
   type ModelChoice,
   type ModelProvider,
 } from "@luke/features/models-wire";
+import { formatCompact, formatUsd } from "@luke/features/number-format";
 import {
   REPOSITORY_UNREACHED,
   type RepositoryUnreached,
 } from "@luke/features/repository-reach-wire";
 import type { PlanEditor } from "@luke/features/task-wire";
+import { dayAndTimeText } from "@luke/features/time-format";
 import {
   ROW_PART,
   type RowReading,
@@ -63,6 +65,7 @@ import {
   type TurnRow,
   turnRows,
 } from "@luke/features/turn-rows";
+import { andList } from "@luke/features/words";
 import type { FormerMember, WorkspaceMember } from "@luke/features/workspace-wire";
 import {
   ACTOR_KIND,
@@ -74,7 +77,6 @@ import {
   personActor,
   SOMEONE_REASON,
 } from "@luke/ui/actor-model";
-import { dayAndTimeText } from "@luke/ui/time-format";
 import { callOfLine } from "@luke/voice/transcript-model";
 import {
   ACTION_RESULT_STATUS,
@@ -118,25 +120,6 @@ import {
 /** The words that separate the parts of a line. */
 const LINE_SEPARATOR = " · ";
 
-/** How many tokens are a thousand and a million, as the compact count spells them. */
-const THOUSAND = 1_000;
-const MILLION = 1_000_000;
-
-/** The least dollars drawn as an amount; under it the cost reads as less than a cent. */
-const LEAST_CENTS = 0.005;
-
-/** A count of tokens compact enough for a line: 812, 12.3k, 1.2M. */
-export function compactCount(count: number): string {
-  if (count >= MILLION) return `${(count / MILLION).toFixed(1)}M`;
-  if (count >= THOUSAND) return `${(count / THOUSAND).toFixed(1)}k`;
-  return String(count);
-}
-
-/** Dollars as a line draws them: to the cent, and under a cent "<$0.01". */
-function dollars(costUsd: number): string {
-  return costUsd > 0 && costUsd < LEAST_CENTS ? "<$0.01" : `$${costUsd.toFixed(2)}`;
-}
-
 /** The plans an agent may be paid for by, each as its usage line names it; a key is billed by the token and names none. */
 const PLAN_USAGE: Partial<Record<CodingAgentPayer, string>> = {
   [CODING_AGENT_PAYER.CLAUDE_SUBSCRIPTION]: "Claude plan",
@@ -154,10 +137,10 @@ const PLAN_USAGE: Partial<Record<CodingAgentPayer, string>> = {
  */
 export function agentUsageLine(usage: CodingAgentUsage | undefined): string | undefined {
   if (usage === undefined) return undefined;
-  const tokens = `${compactCount(usage.inputTokens + usage.outputTokens)} tokens`;
+  const tokens = `${formatCompact(usage.inputTokens + usage.outputTokens)} tokens`;
   const paid =
     (usage.payer === undefined ? undefined : PLAN_USAGE[usage.payer]) ??
-    (usage.costUsd === undefined ? undefined : dollars(usage.costUsd));
+    (usage.costUsd === undefined ? undefined : formatUsd(usage.costUsd));
   return `This agent: ${paid === undefined ? tokens : `${tokens}${LINE_SEPARATOR}${paid}`}`;
 }
 
@@ -1092,13 +1075,13 @@ function choiceDetail(effort: string, fast: boolean, standardTokens?: number): s
 /** The word the menu's pinned row and the settings row say for the context window. */
 export const CONTEXT_WORD = "Context";
 
-/** The tenth of a million a window's size in millions is cut to. */
-const TENTH_OF_A_MILLION = MILLION / 10;
+/** The steps a window's size is cut down to before it is said: a thousand below a million, a tenth of a million from it. */
+const WINDOW_CUT = { THOUSAND: 1_000, TENTH_OF_A_MILLION: 100_000, MILLION: 1_000_000 } as const;
 
-/** A window's size as a choice says it, cut to the thousand or the tenth of a million below: 272K, 1M for 1,050,000. */
+/** A window's size as a choice says it, cut to the thousand or the tenth of a million below, not rounded: 272K, 1M for 1,050,000. */
 export function windowLabel(tokens: number): string {
-  if (tokens >= MILLION) return `${Math.floor(tokens / TENTH_OF_A_MILLION) / 10}M`;
-  return `${Math.floor(tokens / THOUSAND)}K`;
+  const step = tokens >= WINDOW_CUT.MILLION ? WINDOW_CUT.TENTH_OF_A_MILLION : WINDOW_CUT.THOUSAND;
+  return formatCompact(Math.floor(tokens / step) * step);
 }
 
 /** The two windows the model offers, or nothing for a model with one, or one the catalog does not offer now. */
@@ -1162,7 +1145,7 @@ export function longWindowNote(windows: ContextWindows): string {
     parts.push(`${factorLabel(windows.longInputPriceFactor)} for input`);
   if (windows.longOutputPriceFactor !== undefined)
     parts.push(`${factorLabel(windows.longOutputPriceFactor)} for output`);
-  return parts.length === 0 ? `${past} more.` : `${past} ${parts.join(" and ")}.`;
+  return parts.length === 0 ? `${past} more.` : `${past} ${andList(parts)}.`;
 }
 
 /** A choice as the words it is drawn in: the base model's name, and the detail drawn dimmed after it. */

@@ -10,7 +10,26 @@ import type { HTMLAttributes, ReactNode } from "react";
  * never picks a heading level for its size, nor a size for its level. Each
  * role's size, leading, and weight are the profile's (`tokens/profiles.css`),
  * so the same words are the desktop's density in the window and the site's
- * on the web.
+ * on the web. A role has one weight, whatever draws it.
+ *
+ * The roles, by the job they do:
+ *
+ * - `TITLE`: a document's own title in the page, a person's, Settings', the
+ *   plan's. `TOOLBAR_TITLE`: the name in the window's top bar, which a
+ *   workspace (Tasks, Inbox, Chat) wears in place of an in-page title.
+ * - `DIALOG`: a dialog's or a pane's heading. `SECTION`: a heading on a page.
+ *   `GROUP`: the small heading over a group of rows in a sidebar, a menu, a
+ *   picker, or a settings list.
+ * - `LABEL`: a row's name, a button's words, a message's author. `BODY`:
+ *   words read as a sentence, and a dense row's name. `CAPTION`: a row's
+ *   detail, a time, a count, any note beside what it is about.
+ *
+ * A badge's, a chip's, and a tooltip's words are the caption's size at the
+ * `tag` weight (`--luke-type-tag-*`), which those components read themselves.
+ *
+ * Words that count or tell time, or change while a reader watches, are
+ * drawn in tabular figures by the component that draws them (`Time`,
+ * `Badge`, a count part), so a parent need not remember to.
  *
  * A face and a truncation are the two things a caller may ask of the words
  * beyond their role: the monospace face for a technical token (a version, a
@@ -21,24 +40,25 @@ import type { HTMLAttributes, ReactNode } from "react";
  * own box's edge, so it stands as a block or a flex item.
  */
 
-/** How words are set: body, a label, a caption, a section's or a dialog's heading, a page's title, or as their surroundings set them (`inherit`, for words cut to a line inside a row that has already set its type and ink). */
+/** How words are set: body, a label, a caption, a group's, a section's or a dialog's heading, a page's or the top bar's title, or as their surroundings set them (`inherit`, for words cut to a line inside a row that has already set its type and ink). */
 export const TEXT_VARIANT = {
   BODY: "body",
   LABEL: "label",
   CAPTION: "caption",
+  GROUP: "group",
   SECTION: "section",
   DIALOG: "dialog",
+  TOOLBAR_TITLE: "toolbar-title",
   TITLE: "title",
   INHERIT: "inherit",
 } as const;
 
 export type TextVariant = (typeof TEXT_VARIANT)[keyof typeof TEXT_VARIANT];
 
-/** The ink words are drawn in: the text's own, a step quieter, or quieter still. */
+/** The ink words are drawn in: the text's own, or a step quieter. */
 export const TEXT_TONE = {
   DEFAULT: "default",
   MUTED: "muted",
-  SUBTLE: "subtle",
 } as const;
 
 export type TextTone = (typeof TEXT_TONE)[keyof typeof TEXT_TONE];

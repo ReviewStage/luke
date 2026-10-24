@@ -1,3 +1,4 @@
+import { dayAndTimeText, momentText } from "@luke/features/time-format";
 import {
   BUTTON_VARIANT,
   Button,
@@ -14,14 +15,14 @@ import {
   SKELETON_SHAPE,
   Skeleton,
   SkeletonRegion,
+  STATUS_TONE,
   Tooltip,
   useConfirmDialog,
 } from "@luke/ui";
 import { MARKDOWN_CLASS, markdownClass } from "@luke/ui/markdown-class";
-import { dayAndTimeText, momentText } from "@luke/ui/time-format";
 import { ACTION_RESULT_STATUS } from "@luke/wire";
 import { MarkdownMessage } from "../markdown-message.js";
-import { TOAST_HOLD, TOAST_TONE, type ToastNotice, UNDO_LABEL } from "../toast.js";
+import { TOAST_HOLD, type ToastNotice, UNDO_LABEL } from "../toast.js";
 import { DocumentScroll } from "./document-frame.js";
 import { VERSION_CHANGE, type VersionDiff, versionDiff } from "./plan-history-model.js";
 import { PlanPictures, usePlanPictureDrawer } from "./plan-pictures.js";
@@ -147,7 +148,6 @@ function VersionBody({
       {units.map((unit, at) => (
         <MarkdownMessage
           // A unit's heading may stand twice, struck and written again, so its place keys it.
-          // oxlint-disable-next-line react/no-array-index-key -- the units are drawn once per diff, in order.
           key={at}
           words={unit.words}
           className={`plan-unit${CHANGE_CLASS[unit.change]}`}
@@ -182,7 +182,6 @@ function VersionSkeleton({
         {PAGE_SKELETON.map((unit) => (
           <NoteUnit key={unit.heading} heading={<Skeleton width={unit.heading} />}>
             {unit.lines.map((width, at) => (
-              // oxlint-disable-next-line react/no-array-index-key -- a placeholder's lines have nothing but their place.
               <Skeleton key={at} width={width} />
             ))}
           </NoteUnit>
@@ -266,12 +265,12 @@ export function sayRestored(
   undo: (() => Promise<boolean>) | undefined,
 ): void {
   if (undo === undefined) {
-    toast({ words: VERSION_RESTORED_NOTE, tone: TOAST_TONE.DONE, hold: TOAST_HOLD.DONE });
+    toast({ words: VERSION_RESTORED_NOTE, tone: STATUS_TONE.COMPLETE, hold: TOAST_HOLD.DONE });
     return;
   }
   toast({
     words: VERSION_RESTORED_NOTE,
-    tone: TOAST_TONE.DONE,
+    tone: STATUS_TONE.COMPLETE,
     action: {
       label: UNDO_LABEL,
       onPress: () => {
@@ -279,7 +278,7 @@ export function sayRestored(
           if (undone) return;
           toast({
             words: RESTORE_UNDO_REFUSED_NOTE,
-            tone: TOAST_TONE.FAILED,
+            tone: STATUS_TONE.DANGER,
             hold: TOAST_HOLD.FAILED,
           });
         });

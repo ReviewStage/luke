@@ -1,6 +1,6 @@
 {
   "name": "@luke/features",
-  "version": "0.19.0",
+  "version": "0.20.0",
   "private": true,
   "type": "module",
   "description": "The client side of the hosted service: its paths and wire, its clients, the plan and board domain, the planner's run vocabulary, product events, and feedback delivery",
@@ -83,6 +83,7 @@
     "./picture-wire": "./src/picture-wire.js",
     "./pin-order": "./src/pin-order.js",
     "./place-chip-model": "./src/place-chip-model.js",
+    "./thing-kind": "./src/thing-kind.js",
     "./plan-attachment-link": "./src/plan-attachment-link.js",
     "./inbox-attachment-link": "./src/inbox-attachment-link.js",
     "./lone-link": "./src/lone-link.js",
@@ -115,6 +116,7 @@
     "./workspace-live": "./src/workspace-live.js",
     "./workspace-wire": "./src/workspace-wire.js",
     "./workspace-key": "./src/workspace-key.js",
+    "./words": "./src/words.js",
     "./sign-in-provider": "./src/sign-in-provider.js",
     "./skill-file": "./src/skill-file.js",
     "./skill-paste": "./src/skill-paste.js",
@@ -155,7 +157,9 @@
     "./automation-list-model": "./src/automation-list-model.js",
     "./automation-draft-model": "./src/automation-draft-model.js",
     "./terminal-store": "./src/terminal-store.js",
-    "./trigger-catalog": "./src/trigger-catalog.js"
+    "./trigger-catalog": "./src/trigger-catalog.js",
+    "./time-format": "./src/time-format.js",
+    "./number-format": "./src/number-format.js"
   },
   "types": "./src/index.ts",
   "scripts": {

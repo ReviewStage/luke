@@ -18,7 +18,7 @@
     color: var(--luke-color-text-muted);
     font-family: var(--luke-font-sans);
     font-size: calc(var(--luke-avatar-size) * 0.5);
-    font-weight: var(--luke-weight-semibold);
+    font-weight: var(--luke-type-emphasis-weight);
     line-height: 1;
     vertical-align: middle;
     user-select: none;
@@ -180,7 +180,7 @@
   }
 
   /* No one stands on no ground, an empty seat in an outline dashed as
-     Linear draws a task with no assignee: the subtle ink on every ground, a
+     Linear draws a task with no assignee: the muted ink on every ground, a
      hairline at every size, as a disc's edge is, its eight long dashes laid
      evenly round it (`pathLength`) with round ends, so it is never read as
      the backlog's shorter-dashed status ring. The seat inside is filled
@@ -188,7 +188,7 @@
      than the ring, so the outline leads. */
   .luke-avatar[data-unassigned="true"] {
     background: none;
-    color: var(--luke-color-text-subtle);
+    color: var(--luke-color-text-muted);
   }
 
   .luke-avatar[data-unassigned="true"]::after {

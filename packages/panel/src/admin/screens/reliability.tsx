@@ -15,9 +15,10 @@ import { AUTOMATION_RUN_REASON, type AutomationRunReason } from "@luke/features/
 import { CODING_AGENT_FAILURE, type CodingAgentFailure } from "@luke/features/coding-agent-wire";
 import { INTEGRATION_NAME } from "@luke/features/integration-wire";
 import { MODEL_PROVIDER } from "@luke/features/models-wire";
+import { formatCount, formatPercent } from "@luke/features/number-format";
 import { PROVIDER_KEY_STATUS } from "@luke/features/provider-key-wire";
+import { formatDate } from "@luke/features/time-format";
 import {
-  BADGE_TONE,
   Badge,
   Card,
   DATA_TABLE_COLUMN_KIND,
@@ -28,13 +29,13 @@ import {
   List,
   ListRow,
   Skeleton,
+  STATUS_TONE,
   TEXT_LINK_LOOK,
   TEXT_TONE,
   Text,
   TextLink,
 } from "@luke/ui";
-import { formatShare } from "@luke/ui/admin-format";
-import { formatCount, formatDate } from "@luke/ui/time-format";
+import { RATE_PLACES } from "@luke/ui/admin-format";
 import { AccountCell, AccountCellSkeleton } from "../accounts-table/accounts-table.js";
 import { useAdminDoors } from "../admin-doors.js";
 import { adminReadView } from "../admin-read-view.js";
@@ -164,7 +165,7 @@ function IntegrationRow({ integration }: { integration: AdminIntegration }): Rea
     <ListRow
       title={integration.label}
       meta={
-        <Badge tone={integration.configured ? BADGE_TONE.COMPLETE : BADGE_TONE.ATTENTION}>
+        <Badge tone={integration.configured ? STATUS_TONE.COMPLETE : STATUS_TONE.ATTENTION}>
           {integration.configured ? "Configured" : "Not configured"}
         </Badge>
       }
@@ -198,7 +199,7 @@ function attentionColumns(
       cell: (row) => (
         <Inline>
           {row.problems.map((problem) => (
-            <Badge key={problemLabel(problem)} tone={BADGE_TONE.ATTENTION}>
+            <Badge key={problemLabel(problem)} tone={STATUS_TONE.ATTENTION}>
               {problemLabel(problem)}
             </Badge>
           ))}
@@ -225,13 +226,13 @@ const FAILURE_STATS: readonly StatSpec<AdminReliability>[] = [
   {
     key: "luke-turns",
     label: () => "Luke turns failed",
-    value: ({ headline }) => formatShare(share(headline.lukeTurns)),
+    value: ({ headline }) => formatPercent(share(headline.lukeTurns), RATE_PLACES),
     hint: ({ headline, windowDays }) => ofHint(headline.lukeTurns, "turns", windowDays),
   },
   {
     key: "agent-runs",
     label: () => "Coding-agent runs failed",
-    value: ({ headline }) => formatShare(share(headline.agentRuns)),
+    value: ({ headline }) => formatPercent(share(headline.agentRuns), RATE_PLACES),
     hint: ({ headline, windowDays }) => ofHint(headline.agentRuns, "runs", windowDays),
   },
   {
@@ -243,18 +244,18 @@ const FAILURE_STATS: readonly StatSpec<AdminReliability>[] = [
   {
     key: "calls",
     label: () => "Calls dropped",
-    value: ({ headline }) => formatShare(share(headline.calls)),
+    value: ({ headline }) => formatPercent(share(headline.calls), RATE_PLACES),
     hint: ({ headline, windowDays }) => ofHint(headline.calls, "calls", windowDays),
   },
   {
     key: "automation-runs",
     label: () => "Automation runs failed",
-    value: ({ headline }) => formatShare(share(headline.automationRuns)),
+    value: ({ headline }) => formatPercent(share(headline.automationRuns), RATE_PLACES),
     hint: ({ headline, windowDays }) => {
       const automations = headline.automationRuns;
       return automations.total === 0
         ? ofHint(automations, "runs", windowDays)
-        : `+ ${formatShare(automations.skipped / automations.total)} skipped`;
+        : `+ ${formatPercent(automations.skipped / automations.total, RATE_PLACES)} skipped`;
     },
     title: ({ headline, windowDays }) => ofHint(headline.automationRuns, "runs", windowDays),
   },
@@ -469,7 +470,9 @@ function SystemHealth({
             hint={`probe round-trip ${formatCount(health.database.latencyMs)} ms`}
           >
             <Inline>
-              <Badge tone={health.database.reachable ? BADGE_TONE.COMPLETE : BADGE_TONE.ATTENTION}>
+              <Badge
+                tone={health.database.reachable ? STATUS_TONE.COMPLETE : STATUS_TONE.ATTENTION}
+              >
                 {health.database.reachable ? "Reachable" : "Unreachable"}
               </Badge>
             </Inline>

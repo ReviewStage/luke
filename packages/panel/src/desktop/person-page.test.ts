@@ -437,14 +437,20 @@ test("each row opens what it names: an agent its tab, an item the Inbox on it, a
   assert.deepEqual(opened.tasks, [DASHBOARD.id]);
 });
 
-test("a waiting item is the Inbox's own row: its task named in a chip before its preview, the marks of its Inbox row and its time at the end, and its card hung beside it", async () => {
+test("a waiting item is the Inbox's own row: its task named on a line of its own over its preview, its time at the end, and its card hung beside it, which names the agent its row leaves out", async () => {
   const { page } = mount(CHARLES.userId);
   await settle();
 
   const row = button(page, "Retry 429s too?");
   assert.equal(row.querySelector(".home-row-context"), null, "no task name at the row's end");
-  assert.equal(row.querySelector(".luke-list-row-lead")?.textContent, RETRIES.name);
-  assert.ok(row.querySelector('.actor-mark[data-kind="agent"]'), "the agent's tile leads");
+  const lead = row.querySelector('.luke-list-row-lead[data-at="line"]');
+  assert.equal(lead?.textContent, RETRIES.name);
+  assert.equal(
+    lead?.closest(".luke-list-row-description"),
+    null,
+    "the task stands on its own line",
+  );
+  assert.equal(row.querySelector('.actor-mark[data-kind="agent"]'), null, "no agent's tile leads");
   assert.ok(row.querySelector(".home-row-meta time"), "its time stands at its end");
 
   restOn(row);

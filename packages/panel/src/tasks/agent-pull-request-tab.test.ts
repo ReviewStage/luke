@@ -2584,7 +2584,7 @@ test("the merge control is a chip saying what holds the merge up, GitHub's sente
     [
       "checking",
       merging(MERGE_STATE.UNKNOWN),
-      held("Checking", "neutral", "GitHub is still checking whether it merges"),
+      held("Checking", "working", "GitHub is still checking whether it merges"),
     ],
     [
       "review required",
@@ -3777,7 +3777,7 @@ test("an open pull request's pill offers Close and a closed one's Reopen, each a
   ]);
 });
 
-test("an open pull request GitHub holds in its merge queue says Queued and its place in the pill, in the attention tone, its menu offering Close and never Convert to draft; the merge control draws no chip, only Remove from queue", async () => {
+test("an open pull request GitHub holds in its merge queue says Queued and its place in the pill, in the working tone rather than the needs-you one, its menu offering Close and never Convert to draft; the merge control draws no chip, only Remove from queue", async () => {
   const tab = await draw(
     merging(MERGE_STATE.CLEAN, {
       queue: true,
@@ -3788,7 +3788,7 @@ test("an open pull request GitHub holds in its merge queue says Queued and its p
   const pill = pillOf(tab) ?? assert.fail("the pill stands");
   assert.deepEqual(
     [standing(tab), pill.getAttribute("data-tone"), pill.getAttribute("aria-label")],
-    ["Queued #2", "attention", "Pull request Queued #2"],
+    ["Queued #2", "working", "Pull request Queued #2"],
   );
   assert.deepEqual(offered(tab), ["Close pull request"]);
   assert.equal(mergeControl(tab)?.querySelector(".merge-chip"), null, "no chip says it again");

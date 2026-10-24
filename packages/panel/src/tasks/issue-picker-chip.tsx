@@ -3,15 +3,16 @@ import { type GitHubIssuePick, isOutsideAuthor } from "@luke/features/github-rep
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
 import type { LinearIssueSummary } from "@luke/features/linear-wire";
 import { TASK_BOUNDS } from "@luke/features/task-wire";
+import { sinceText } from "@luke/features/time-format";
 import { SHORTCUT_KEY, type ShortcutChord, shortcutAria } from "@luke/settings/shortcuts";
 import {
-  BADGE_TONE,
   Badge,
   CHIP_LOOK,
   CHIP_WIDTH,
   Chip,
   ChipName,
   ProviderMark,
+  STATUS_TONE,
   TEXT_ELEMENT,
   TEXT_VARIANT,
   Text,
@@ -19,7 +20,6 @@ import {
   useMinute,
 } from "@luke/ui";
 import { type LinearIssuesAsk, linearIssuesAskOf, offeredIssues } from "@luke/ui/tasks-model";
-import { sinceText } from "@luke/ui/time-format";
 import { useDisclosure } from "@luke/ui/use-disclosure";
 import { Duration, Effect } from "effect";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
@@ -267,7 +267,7 @@ function githubRow(
       <span className="issue-picker-github-detail">
         <Tooltip label={ISSUE_WORDS.OUTSIDE_HINT}>
           <span>
-            <Badge tone={BADGE_TONE.ATTENTION}>{ISSUE_WORDS.OUTSIDE}</Badge>
+            <Badge tone={STATUS_TONE.ATTENTION}>{ISSUE_WORDS.OUTSIDE}</Badge>
           </span>
         </Tooltip>
         <Text

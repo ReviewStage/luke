@@ -1,4 +1,4 @@
-import { VisuallyHidden } from "@luke/ui";
+import { STATUS_TONE, VisuallyHidden } from "@luke/ui";
 /**
  * copy-feedback.tsx -- the window's one answer to a copy: a button's glyph turning to a check for a moment, or a toast for a copy made from a menu.
  *
@@ -16,12 +16,13 @@ import { VisuallyHidden } from "@luke/ui";
  */
 
 import { useAtom } from "@effect/atom-react";
+import { MOTION_DELAY_MS } from "@luke/brand";
 import { Duration, Effect } from "effect";
 import { CheckIcon, CircleAlertIcon, CopyIcon } from "lucide-react";
 import { useRef, useState } from "react";
 import { appPlatform } from "./app-platform.js";
 import { rendererRuntime } from "./renderer-runtime.js";
-import { TOAST_TONE, useToast } from "./toast.js";
+import { useToast } from "./toast.js";
 
 /** What a copy button shows: its resting glyph, the check, or the alert. */
 const COPY_STATE = {
@@ -33,7 +34,7 @@ const COPY_STATE = {
 export type CopyState = (typeof COPY_STATE)[keyof typeof COPY_STATE];
 
 /** How long a button's check, or its alert, stands: long enough to see, gone before anyone waits on it. */
-const BUTTON_HOLD = Duration.millis(1_200);
+const BUTTON_HOLD = Duration.millis(MOTION_DELAY_MS.CONFIRM);
 
 /** How long a copy's toast stands before it leaves. */
 const TOAST_HOLD = Duration.millis(1_500);
@@ -173,8 +174,8 @@ export function useCopyToast(): (words: string, label: string) => void {
       if (press !== latestMenuCopy) return;
       show(
         answer === COPY_STATE.COPIED
-          ? { words: label, tone: TOAST_TONE.DONE, hold: TOAST_HOLD }
-          : { words: COPY_FAILED_NOTE, tone: TOAST_TONE.FAILED, hold: TOAST_HOLD },
+          ? { words: label, tone: STATUS_TONE.COMPLETE, hold: TOAST_HOLD }
+          : { words: COPY_FAILED_NOTE, tone: STATUS_TONE.DANGER, hold: TOAST_HOLD },
       );
     });
   };

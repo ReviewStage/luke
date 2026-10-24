@@ -42,12 +42,12 @@ function reading(inputTokens: number): CodingAgentContext {
 test("the ring says the share of the window the last step read, and the popover heads with it and the total, the window rounded where whole", () => {
   assert.equal(contextHint(CONTEXT), "62% of context used");
   assert.equal(contextFullLine(CONTEXT), "62% full");
-  assert.equal(contextTotalLine(CONTEXT), "~620.0k / 1M tokens");
+  assert.equal(contextTotalLine(CONTEXT), "~620K / 1M tokens");
   // A read past the window says so rather than stopping at a hundred.
   assert.equal(contextFullLine(reading(1_470_000)), "147% full");
   assert.equal(
     contextTotalLine({ ...CONTEXT, windowTokens: 200_000, inputTokens: 812 }),
-    "~812 / 200k tokens",
+    "~812 / 200K tokens",
   );
 });
 
@@ -64,10 +64,10 @@ test("the popover divides the read into the instructions, the tools, the plan, a
   assert.deepEqual(
     rows.map((row) => [row.label, rowCount(row)]),
     [
-      ["System prompt", "~1.2k"],
-      ["Tool definitions", "~2.8k"],
+      ["System prompt", "~1.2K"],
+      ["Tool definitions", "~2.8K"],
       ["Plan", "~600"],
-      ["Conversation", "~615.4k"],
+      ["Conversation", "~615.4K"],
     ],
   );
   // The bar's stretches are shares of the window, so together they fill what the step read.
@@ -88,9 +88,9 @@ test("an agent handed a prompt names its brief so; once eve compacted, the brief
   assert.deepEqual(
     contextRows(compacted, CODING_AGENT_BRIEF.PLAN).map((row) => [row.label, rowCount(row)]),
     [
-      ["System prompt", "~1.2k"],
-      ["Tool definitions", "~2.8k"],
-      ["Conversation", "~616.0k"],
+      ["System prompt", "~1.2K"],
+      ["Tool definitions", "~2.8K"],
+      ["Conversation", "~616K"],
     ],
   );
   // A read the estimates outrun scales them down to it: the parts add up to the count and the
@@ -108,15 +108,15 @@ test("an agent handed a prompt names its brief so; once eve compacted, the brief
 
 test("under the legend: what the cache read and wrote, the last step's output, where eve compacts, and when it last did, where it has", () => {
   assert.deepEqual(contextStats(CONTEXT, NOW), [
-    { label: "Read from cache", value: "600.0k" },
-    { label: "Written to cache", value: "18.0k" },
-    { label: "Last step's output", value: "2.4k" },
-    { label: "Compacts at", value: "900k (90%)" },
+    { label: "Read from cache", value: "600K" },
+    { label: "Written to cache", value: "18K" },
+    { label: "Last step's output", value: "2.4K" },
+    { label: "Compacts at", value: "900K (90%)" },
   ]);
   const { cachedInputTokens: _read, cacheWriteTokens: _written, ...uncached } = CONTEXT;
   assert.deepEqual(contextStats({ ...uncached, compactedAt: NOW - 120_000 }, NOW), [
-    { label: "Last step's output", value: "2.4k" },
-    { label: "Compacts at", value: "900k (90%)" },
+    { label: "Last step's output", value: "2.4K" },
+    { label: "Compacts at", value: "900K (90%)" },
     { label: "Last compacted", value: "2m ago" },
   ]);
 });

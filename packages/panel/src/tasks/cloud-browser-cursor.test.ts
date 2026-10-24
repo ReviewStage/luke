@@ -176,19 +176,23 @@ test("the agent's pointer hides while a member drives the tab, and fades once th
   assert.equal(pointer()?.hasAttribute("data-shown"), false, "faded once the agent is idle");
 });
 
-test("where motion is reduced the agent's pointer is held still: it neither rocks, glides, nor ripples", async () => {
-  vi.stubGlobal("matchMedia", (query: string) => ({
-    matches: query === "(prefers-reduced-motion: reduce)",
-    addEventListener: () => undefined,
-    removeEventListener: () => undefined,
-  }));
-  await paneOf(CLICKED);
-  const drawn = pointer();
-  assert.ok(drawn);
-  assert.ok(drawn.hasAttribute("data-shown"), "still drawn where the agent points");
-  assert.ok(drawn.hasAttribute("data-still"), "held still");
-  assert.equal(drawn.querySelector(".cloud-browser-cursor-ripple"), null, "no ripple");
-});
+// Reduced motion leaves its durations at 1ms, and a capture run zeroes them: the tokens say both, the OS setting only the first.
+test.each(["1ms", "0s"])(
+  "where the motion tokens stand at %s the agent's pointer is held still: it neither rocks, glides, nor ripples",
+  async (duration) => {
+    document.documentElement.style.setProperty("--luke-duration-fast", duration);
+    try {
+      await paneOf(CLICKED);
+      const drawn = pointer();
+      assert.ok(drawn);
+      assert.ok(drawn.hasAttribute("data-shown"), "still drawn where the agent points");
+      assert.ok(drawn.hasAttribute("data-still"), "held still");
+      assert.equal(drawn.querySelector(".cloud-browser-cursor-ripple"), null, "no ripple");
+    } finally {
+      document.documentElement.style.removeProperty("--luke-duration-fast");
+    }
+  },
+);
 
 test("over a dark or mid-grey page the agent's pointer is drawn in its lighter grey, and over a light one in its own", async () => {
   let shade = 0;

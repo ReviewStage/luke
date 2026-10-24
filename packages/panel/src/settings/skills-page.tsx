@@ -7,6 +7,7 @@ import {
   type InstalledSkillFailedView,
 } from "@luke/features/installed-skill-view";
 import { INSTALLED_SKILL_SOURCE } from "@luke/features/installed-skill-wire";
+import { formatBytes } from "@luke/features/number-format";
 import type { Workspace } from "@luke/features/workspace-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import {
@@ -33,6 +34,7 @@ import {
   type SettingsSectionSkeletonShape,
   SettingsSectionsSkeleton,
   SpinnerRegion,
+  STATUS_TONE,
   Stack,
   Switch,
   TEXT_ELEMENT,
@@ -52,7 +54,7 @@ import { MarkdownMessage } from "../markdown-message.js";
 import { SkillCard, SkillMark } from "../tasks/skill-ref.js";
 import { SkillSourceBadge } from "../tasks/skill-source-badge.js";
 import { useWorkspaceMembersRead } from "../tasks/use-workspace-members.js";
-import { TOAST_HOLD, TOAST_TONE, useToast } from "../toast.js";
+import { TOAST_HOLD, useToast } from "../toast.js";
 import { AddSkillDialog } from "./add-skill-dialog.js";
 import { MenuRow } from "./menu-row.js";
 import { shownWorkspace } from "./settings-rows.js";
@@ -66,7 +68,6 @@ import {
   type SkillRow,
   shareFailureLine,
   shareQuestion,
-  sizeText,
   skillActions,
   skillGroups,
   withSkill,
@@ -224,7 +225,7 @@ function SkillFileDialog({
             <Facts>
               {read.content.files.map((file) => (
                 <Fact key={file.path} label={file.path}>
-                  {sizeText(file.bytes)}
+                  {formatBytes(file.bytes)}
                 </Fact>
               ))}
             </Facts>
@@ -467,7 +468,8 @@ function ShownSkills({
       );
       setLanded(new Set(made.map((each) => each.id)));
       const notice = installedNotice(made, workspace);
-      if (notice !== undefined) toast({ ...notice, tone: TOAST_TONE.DONE, hold: TOAST_HOLD.DONE });
+      if (notice !== undefined)
+        toast({ ...notice, tone: STATUS_TONE.COMPLETE, hold: TOAST_HOLD.DONE });
     },
     [toast, workspace],
   );

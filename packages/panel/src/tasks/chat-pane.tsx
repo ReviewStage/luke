@@ -16,6 +16,7 @@ import {
 import type { CodingAgentAttachment } from "@luke/features/coding-agent-wire";
 import type { MentionPlace } from "@luke/features/mention-link";
 import type { TaskSummary } from "@luke/features/task-wire";
+import { andList } from "@luke/features/words";
 import {
   ConfirmDialog,
   DIALOG_TONE,
@@ -290,7 +291,7 @@ function Block({
   code: InboxCodeDoors | undefined;
   context: MessageContext;
 }): React.JSX.Element {
-  if (!knownBlock(block)) return <Text tone={TEXT_TONE.SUBTLE}>{NEWER_LUKE}</Text>;
+  if (!knownBlock(block)) return <Text tone={TEXT_TONE.MUTED}>{NEWER_LUKE}</Text>;
   switch (block.type) {
     case CHAT_BLOCK.MARKDOWN:
       // Note that every message is drawn as a document, as an Inbox item's words are, so a link alone on its line is its card; whoever wrote it, a selection inside may be replied to.
@@ -1166,7 +1167,7 @@ function channelMeta(chat: ChatAnswer, names: ChatNames, channel: ChatChannel): 
 
 /** A direct message's two, each by name, as its foot names them where the reader is neither. */
 function dmPair(chat: ChatAnswer, names: ChatNames, channel: ChatChannel): string {
-  return (channel.members ?? []).map((id) => chatWho(chat, names, id).name).join(" and ");
+  return andList((channel.members ?? []).map((id) => chatWho(chat, names, id).name));
 }
 
 /** What a channel's composer is called: "Message" and the channel's `#name`, or who a DM is with. */

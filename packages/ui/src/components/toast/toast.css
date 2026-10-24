@@ -71,7 +71,7 @@
     display: flex;
     align-items: flex-start;
     gap: var(--luke-icon-gap);
-    padding: var(--luke-space-8) var(--luke-space-12);
+    padding: var(--luke-row-inset) var(--luke-list-inset);
     border: 1px solid var(--luke-color-border-strong);
     border-radius: var(--luke-radius-14);
     background: var(--luke-color-overlay);
@@ -126,7 +126,7 @@
   .luke-toast-glyph > span {
     display: flex;
     grid-area: 1 / 1;
-    color: var(--luke-color-complete);
+    color: var(--luke-tone-ink);
   }
 
   .luke-toast-glyph svg {
@@ -134,13 +134,10 @@
     height: 100%;
   }
 
-  .luke-toast-glyph > [data-tone="failed"] {
-    color: var(--luke-color-danger-text);
-  }
-
   /* An ask is the developer's to answer, and work under way is not done
-     yet, so neither stands in the success green: both take the muted ink. */
-  .luke-toast-glyph > [data-tone="ask"],
+     yet, and a toast says neither louder than its words: both take the muted
+     ink rather than their tone's. */
+  .luke-toast-glyph > [data-tone="attention"],
   .luke-toast-glyph > [data-tone="working"] {
     color: var(--luke-color-text-muted);
   }
@@ -243,8 +240,8 @@
     transform: scale(0.85);
     pointer-events: none;
     transition:
-      opacity var(--luke-duration-hover) ease,
-      transform var(--luke-duration-hover) ease;
+      opacity var(--luke-duration-hover) var(--luke-motion-exit),
+      transform var(--luke-duration-hover) var(--luke-motion-exit);
   }
 
   .luke-toast:focus-within .luke-toast-dismiss {

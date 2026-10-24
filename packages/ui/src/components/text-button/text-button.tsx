@@ -71,7 +71,7 @@ export type TextButtonLines = (typeof TEXT_BUTTON_LINES)[keyof typeof TEXT_BUTTO
  * line it stands in.
  */
 const TEXT =
-  "luke-text-button align-baseline min-w-0 max-w-full m-0 p-0 [border:0] rounded-[2px] bg-transparent bg-none text-inherit [font:inherit] text-start no-underline decoration-1 underline-offset-[0.24em] text-ellipsis cursor-pointer in-data-[luke-profile=desktop]:cursor-default transition-[color,text-decoration-color] duration-(--luke-duration-hover) ease-[ease] [&_svg]:size-[0.8em] [&_svg]:ms-0.5 [&_svg]:align-[-0.05em]";
+  "luke-text-button align-baseline min-w-0 max-w-full m-0 p-0 [border:0] rounded-[2px] bg-transparent bg-none text-inherit [font:inherit] text-start no-underline decoration-1 underline-offset-[0.24em] text-ellipsis cursor-pointer in-data-[luke-profile=desktop]:cursor-default transition-[color,text-decoration-color] duration-(--luke-duration-hover) ease-motion-exit [&_svg]:size-[0.8em] [&_svg]:ms-0.5 [&_svg]:align-[-0.05em]";
 
 /**
  * How many lines the words take. One is cut with an ellipsis; two wrap
@@ -99,7 +99,7 @@ const TEXT_LINES = {
 const TEXT_TONE = {
   quiet: "[&:is(:hover,:focus-visible)]:text-foreground [&:is(:hover,:focus-visible)]:underline",
   link: "underline decoration-[color-mix(in_srgb,currentColor_32%,transparent)] [&:is(:hover,:focus-visible)]:decoration-current",
-  accent: "text-accent-ink data-[tone=accent]:font-medium [&:is(:hover,:focus-visible)]:underline",
+  accent: "text-accent-ink data-[tone=accent]:font-label [&:is(:hover,:focus-visible)]:underline",
 } as const satisfies Record<TextButtonTone, string>;
 
 /** A pointer's press that leaves the focus where it is. */

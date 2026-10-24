@@ -15,7 +15,7 @@ import {
   claimRuntimeSession,
   recordedRuntimeSession,
 } from "@luke/database/models/recorded-session";
-import { readTask } from "@luke/database/models/task-store";
+import { readTaskPlan } from "@luke/database/models/task-store";
 import {
   type AwaitingLineMetadata,
   type ConversationTarget,
@@ -297,7 +297,7 @@ export const steerCodingAgentWritten = /* @__PURE__ */ Effect.fn("web/steerCodin
       task: Effect.result(
         agent.taskId === null
           ? Effect.succeed(undefined)
-          : hostedStoreOrUnavailable(readTask(userId, agent.taskId)),
+          : hostedStoreOrUnavailable(readTaskPlan(userId, agent.taskId)),
       ),
       workspace: Effect.result(hostedStoreOrUnavailable(agentWorkspace(userId, agent))),
       sessionId: Effect.result(hostedStoreOrUnavailable(recordedRuntimeSession(target))),
@@ -353,7 +353,7 @@ export const steerCodingAgentWritten = /* @__PURE__ */ Effect.fn("web/steerCodin
           ? Effect.succeed(NO_MENTIONED_READS)
           : hostedStoreOrUnavailable(
               readMentioned(userId, pointed, {
-                task: task?.task,
+                task,
                 workspaceId: agent.organizationId,
               }),
             ),
@@ -371,7 +371,7 @@ export const steerCodingAgentWritten = /* @__PURE__ */ Effect.fn("web/steerCodin
     return yield* Effect.fail(HOSTED_REFUSAL.AGENT_NOT_READY);
   }
   const reads = yield* Effect.fromResult(reached.reads);
-  const mentioned = reviewers ? undefined : mentionedContext(pointed, task?.task, reads);
+  const mentioned = reviewers ? undefined : mentionedContext(pointed, task, reads);
   const running = yield* Effect.fromResult(read.running);
   // Each image is kept beside the agent's conversation before eve is handed it, so eve is told its id and the
   // row names it; a repeat under the key was answered above, and the same bytes again keep nothing twice.
@@ -436,7 +436,7 @@ export const steerCodingAgentWritten = /* @__PURE__ */ Effect.fn("web/steerCodin
   const servers =
     line.sender.kind === MESSAGE_SENDER.AGENT || reviewers
       ? []
-      : mentionedServers(line.serverWords ?? line.text, task?.task.repository ?? null);
+      : mentionedServers(line.serverWords ?? line.text, task?.repository ?? null);
   // Note that a native agent's servers are written just after its harness takes the words rather than
   // just before, still in this transaction, because a harness this function relays to (`native-relay.ts`)
   // writes the agent's row on its own connection as it launches, and would wait on this transaction's lock

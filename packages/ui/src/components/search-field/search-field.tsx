@@ -1,8 +1,11 @@
+import { countWords, TERM } from "@luke/features/words";
 import type { KeyboardEvent, ReactNode, Ref } from "react";
 import { useImperativeHandle, useRef } from "react";
+import { cn } from "../../cn.js";
 import { isComposingKey } from "../../composing-key.js";
 import { CloseIcon, SearchIcon } from "../../face/glyphs.js";
 import { pulseOnPress } from "../../press-pulse.js";
+import { ShadcnInput } from "../../shadcn/input.js";
 import { useDisclosure } from "../../use-disclosure.js";
 import type { ComboboxField } from "../combobox/use-combobox-field.js";
 
@@ -41,6 +44,15 @@ import type { ComboboxField } from "../combobox/use-combobox-field.js";
  * It stands as a well of its own, or as the head row of a menu it filters:
  * no edge but a hairline under it, and no ring, since the caret is always
  * in it while the menu stands.
+ *
+ * Its field is shadcn/ui's input (`../../shadcn/input.tsx`, on Base UI),
+ * bare inside the well, which stays a `<label>` so a press anywhere on it
+ * hands the caret to the field. Note that shadcn's input group is not used,
+ * because its addons take the press by a handler of their own where the
+ * label already does, and its button is another component's to vendor. The
+ * parts are drawn in Tailwind utilities over the theme's field roles, and
+ * the well, its field, and its clear keep the `luke-search-field` names a
+ * test and a folding search (`folding-search.css`) find them by.
  */
 
 /** How a search stands: a well among other controls, or a menu's head row. */
@@ -50,6 +62,37 @@ export const SEARCH_FIELD_LOOK = {
 } as const;
 
 export type SearchFieldLook = (typeof SEARCH_FIELD_LOOK)[keyof typeof SEARCH_FIELD_LOOK];
+
+/** The well: a control tall on the hover fill inside a hairline, the magnifier leading at a control's glyph size. */
+const SEARCH_WELL =
+  "luke-search-field group/search box-border flex h-control min-w-0 cursor-text items-center gap-icon-gap rounded-control border border-border bg-muted pr-luke-2 pl-search-lead text-muted-foreground transition-[border-color] duration-(--luke-duration-hover) ease-plain [&>svg]:size-control-icon [&>svg]:flex-none";
+
+/** Each look's classes over the well's: a menu's head row is a menu row tall, with only a hairline under it and no ring. */
+const SEARCH_LOOK_CLASS = {
+  [SEARCH_FIELD_LOOK.WELL]: undefined,
+  [SEARCH_FIELD_LOOK.MENU]:
+    "h-menu-search rounded-none border-0 border-b bg-transparent px-luke-12 outline-none [&>svg]:size-menu-glyph",
+} as const satisfies Record<SearchFieldLook, string | undefined>;
+
+/** The field, bare in the well and taking the room left. */
+const SEARCH_INPUT =
+  "luke-search-field-input h-full flex-1 rounded-none border-0 bg-transparent p-0 outline-none focus:bg-transparent";
+
+/** The tally in a caption's tabular figures, said rather than drawn where the bar is folded. */
+const SEARCH_TALLY =
+  "flex-none pr-luke-6 text-caption tabular-nums [@container_style(--luke-fold:folded)]:sr-only";
+
+/** The chord, standing until the caret arrives, and never under a finger, which has no key to summon with. */
+const SEARCH_SHORTCUT =
+  "inline-flex flex-none pr-luke-6 group-focus-within/search:hidden [@media(hover:none)_and_(pointer:coarse)]:hidden";
+
+/**
+ * The clear, nested in the well as far inside its edge on every side as from the end; it grows in and shrinks out.
+ * Note that it runs neither inside a container that is itself leaving, whose own exit
+ * (`folding-search.css`) is what it rides, since a utility would outrank that rule.
+ */
+const SEARCH_CLEAR =
+  "luke-search-field-clear m-0 inline-flex size-search-clear flex-none not-in-data-[leaving=true]:animate-pop-in cursor-default items-center justify-center rounded-control-compact border-0 bg-transparent p-0 text-muted-foreground transition-[background-color] duration-(--luke-duration-hover) ease-plain hover:bg-fill-selected hover:text-foreground active:bg-fill-pressed not-in-data-[leaving=true]:data-[leaving=true]:animate-pop-out [&>svg]:size-control-icon";
 
 /** How many results a query found, and which is current, where one is. */
 export interface SearchTally {
@@ -69,7 +112,10 @@ type SearchEnd =
 function tallyLine(tally: SearchTally): string {
   if (tally.count === 0) return "No results";
   const count = tally.more === true ? `${tally.count}+` : String(tally.count);
-  return tally.at === undefined ? `${count} results` : `${tally.at + 1} of ${count}`;
+  if (tally.at !== undefined) return `${tally.at + 1} of ${count}`;
+  return tally.more === true
+    ? `${count} ${TERM.RESULT.many}`
+    : countWords(tally.count, TERM.RESULT);
 }
 
 /** A search named `label`, holding `value`, answering its keys with the callbacks given. */
@@ -141,12 +187,13 @@ export function SearchField({
   };
 
   return (
-    <label className="luke-search-field" data-look={look}>
+    // biome-ignore lint/a11y/noLabelWithoutControl: the well holds its field, shadcn's input, which the rule cannot see is one.
+    <label className={cn(SEARCH_WELL, SEARCH_LOOK_CLASS[look])} data-look={look}>
       <SearchIcon />
-      <input
+      <ShadcnInput
         ref={field}
         id={id}
-        className="luke-search-field-input"
+        className={SEARCH_INPUT}
         type="text"
         {...combobox?.field}
         aria-label={label}
@@ -159,7 +206,7 @@ export function SearchField({
         onKeyDown={onKeyDown}
       />
       {tally === undefined || empty ? null : (
-        <span className="luke-search-field-tally" aria-live="polite">
+        <span className={SEARCH_TALLY} aria-live="polite">
           {tallyLine(tally)}
         </span>
       )}
@@ -168,7 +215,7 @@ export function SearchField({
         <button
           ref={clear.ref}
           type="button"
-          className="luke-search-field-clear"
+          className={SEARCH_CLEAR}
           aria-label="Clear search"
           data-leaving={clear.leaving ? "true" : undefined}
           inert={clear.leaving}
@@ -180,7 +227,7 @@ export function SearchField({
           <CloseIcon />
         </button>
       ) : empty && shortcut !== undefined ? (
-        <span className="luke-search-field-shortcut">{shortcut}</span>
+        <span className={SEARCH_SHORTCUT}>{shortcut}</span>
       ) : null}
     </label>
   );

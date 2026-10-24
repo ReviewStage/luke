@@ -7,9 +7,9 @@
    face is playing it, and its own steady rhythm beside a face taken by the
    exchange. The stagger is cut into the keyframes rather than carried as a
    delay, so a paused loop holds every dot at rest, the pose the face itself
-   holds paused; and being timed to a face gesture, they answer
-   --luke-face-motion rather than --luke-loop-motion, so the two can never stop
-   apart. */
+   holds paused. An endless loop, so its period is a literal and it answers
+   --luke-loop-motion, which reduced motion and a capture run pause with the
+   face's own token. */
 
 @layer components {
   .luke-thinking-dots {
@@ -26,9 +26,9 @@
     background: var(--luke-color-text-muted);
     opacity: 0.35;
     animation-duration: 2s;
-    animation-timing-function: cubic-bezier(0.4, 0, 0.6, 1);
+    animation-timing-function: var(--luke-motion-exit);
     animation-iteration-count: infinite;
-    animation-play-state: var(--luke-face-motion);
+    animation-play-state: var(--luke-loop-motion);
   }
 
   .luke-thinking-dots i:nth-child(1) {

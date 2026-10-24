@@ -32,7 +32,6 @@ import {
   MarkDoneIcon,
   motionKey,
   motionRows,
-  NAV_COUNT_TONE,
   NAV_CURRENT,
   NavItem,
   NOTE_LINE_LOOK,
@@ -50,6 +49,7 @@ import {
   Shortcut,
   Skeleton,
   SkeletonRegion,
+  STATUS_TONE,
   Stack,
   Tooltip,
   UNASSIGNED_WORDS,
@@ -1227,7 +1227,7 @@ function SidebarInboxRow({
       count={{
         value: waiting,
         noun: needsYouNoun(waiting),
-        tone: NAV_COUNT_TONE.ACCENT,
+        tone: STATUS_TONE.ATTENTION,
       }}
       aria-keyshortcuts={commandKeyshortcuts(APP_COMMAND.INBOX)}
       shortcut={<Shortcut chord={APP_SHORTCUTS[APP_COMMAND.INBOX].chord} />}
@@ -1262,7 +1262,7 @@ function SidebarChatRow({
       count={{
         value: waiting,
         noun: needsYouNoun(waiting),
-        tone: NAV_COUNT_TONE.ACCENT,
+        tone: STATUS_TONE.ATTENTION,
       }}
       onClick={onOpen}
     >

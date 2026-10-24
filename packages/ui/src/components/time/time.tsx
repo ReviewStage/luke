@@ -1,4 +1,10 @@
-import { agoText, callHeading, momentText, sinceText, workingTime } from "../../time-format.js";
+import {
+  agoText,
+  callHeading,
+  momentText,
+  sinceText,
+  workingTime,
+} from "@luke/features/time-format";
 import { Tooltip } from "../tooltip/hint.js";
 import { useMinute, useSecond } from "./time-clock.js";
 
@@ -16,7 +22,8 @@ import { useMinute, useSecond } from "./time-clock.js";
  * stands over the card and covers the words it is read beside; nor does a
  * sidebar or Inbox row's, which steps out of sight while its row is
  * hovered, so no pointer rests on it, and nor does a time inside a tooltip
- * of its own.
+ * of its own. Its figures are tabular, so a time that ticks or sits in a
+ * column shifts nothing beside it, and no parent need ask.
  */
 
 /** How a time is said. */
@@ -92,7 +99,7 @@ function TimeAt({ at, look, now, className, hint }: TimeAtProps): React.JSX.Elem
   // Note that a count is a timer to a reader rather than a live region, because a count announced each second drowns everything else.
   const time = (
     <time
-      className={className}
+      className={className === undefined ? "luke-time" : `luke-time ${className}`}
       dateTime={duration ? durationDateTime(now - at) : new Date(at).toISOString()}
       role={duration ? "timer" : undefined}
       aria-live={duration ? "off" : undefined}

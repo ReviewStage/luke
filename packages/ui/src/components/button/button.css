@@ -249,7 +249,7 @@
   .luke-button-face {
     transition:
       transform var(--luke-duration-fast) var(--luke-spring-fast),
-      opacity var(--luke-duration-quick) ease-out;
+      opacity var(--luke-duration-quick) var(--luke-motion-exit);
   }
 
   /* Note that the face goes down on the quick exit beat and comes back on
@@ -258,7 +258,7 @@
   .luke-button:active:not(:disabled, [aria-disabled="true"], [data-variant="row"])
   .luke-button-face {
     transform: scale(0.9);
-    transition: transform var(--luke-duration-exit) ease-out;
+    transition: transform var(--luke-duration-exit) var(--luke-motion-exit);
   }
 
   /* Every press a button takes is answered once it lands, so even a click
@@ -363,7 +363,7 @@
 
   .luke-button-done {
     animation:
-      luke-button-done-fade var(--luke-duration-quick) ease-out backwards,
+      luke-button-done-fade var(--luke-duration-quick) var(--luke-motion-exit) backwards,
       luke-button-done-spring var(--luke-duration-fast) var(--luke-spring-fast) backwards;
   }
 
@@ -381,7 +381,7 @@
   .luke-button-done[data-hold="true"] {
     animation:
       luke-button-done-hold var(--luke-confirm-delay) linear,
-      luke-button-done-fade var(--luke-duration-quick) ease-out backwards,
+      luke-button-done-fade var(--luke-duration-quick) var(--luke-motion-exit) backwards,
       luke-button-done-spring var(--luke-duration-fast) var(--luke-spring-fast) backwards;
   }
 

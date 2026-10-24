@@ -98,7 +98,6 @@ export function fixtureBridge(profile: RunProfile): AppBridge {
     ]),
   ]);
   // SAFETY: the map derives every method of the contract from BRIDGE by its kind's shape, as the web root's fixture does.
-  // oxlint-disable-next-line anti-slop/no-chained-type-assertions -- The manifest map proves the dynamically keyed object is the derived bridge.
   return {
     ...quiet,
     requestAppState: () => Promise.resolve(state),

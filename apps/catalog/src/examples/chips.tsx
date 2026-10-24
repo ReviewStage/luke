@@ -1,12 +1,10 @@
 import {
   ALIGN,
-  BADGE_TONE,
   Badge,
   BUTTON_VARIANT,
   Button,
   CHIP_LOOK,
   CHIP_SIZE,
-  CHIP_TONE,
   CHIP_WIDTH,
   Chip,
   ChipCount,
@@ -15,6 +13,7 @@ import {
   Inline,
   MARK_PROVIDER,
   ProviderMark,
+  STATUS_TONE,
   Stack,
 } from "@luke/ui";
 import { useState } from "react";
@@ -159,7 +158,7 @@ function Chips(): React.JSX.Element {
       </CatalogSection>
       <CatalogSection id="chips-tones" title="Tones">
         <Inline>
-          {Object.values(CHIP_TONE).map((tone) => (
+          {Object.values(STATUS_TONE).map((tone) => (
             <Chip key={tone} look={CHIP_LOOK.PILL} tone={tone} chevron>
               <ProviderMark provider={MARK_PROVIDER.GITHUB} />
               <ChipName>{tone}</ChipName>
@@ -169,13 +168,13 @@ function Chips(): React.JSX.Element {
       </CatalogSection>
       <CatalogSection id="chips-compact-tones" title="Compact tones, beside a badge">
         <Inline gap={GAP.TIGHT}>
-          {Object.values(CHIP_TONE).map((tone) => (
+          {Object.values(STATUS_TONE).map((tone) => (
             <Chip key={tone} look={CHIP_LOOK.PILL} size={CHIP_SIZE.COMPACT} tone={tone} chevron>
               <ProviderMark provider={MARK_PROVIDER.GITHUB} />
               <ChipName>{tone}</ChipName>
             </Chip>
           ))}
-          <Badge tone={BADGE_TONE.MERGED} icon={<ProviderMark provider={MARK_PROVIDER.GITHUB} />}>
+          <Badge tone={STATUS_TONE.MERGED} icon={<ProviderMark provider={MARK_PROVIDER.GITHUB} />}>
             badge
           </Badge>
         </Inline>

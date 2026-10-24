@@ -282,8 +282,6 @@ function buttonLook({
     shape: shape === BUTTON_SHAPE.ROUND ? "round" : "square",
     className: cn(
       "luke-button",
-      // Note that a subtle button's words keep the weight of the quiet words it stands among.
-      box === "compact" && variant === BUTTON_VARIANT.SUBTLE && "font-medium",
       busy ? "cursor-progress" : settled ? "cursor-default" : PRESSABLE_CURSOR,
       fades && "disabled:opacity-45",
     ),
@@ -520,7 +518,7 @@ export function Button({
         {icon}
         <span className={WORDS}>{children}</span>
         {trailing === undefined ? null : (
-          <span className="luke-button-trailing flex-none text-subtle-foreground text-caption tabular-nums">
+          <span className="luke-button-trailing flex-none text-muted-foreground text-caption tabular-nums">
             {trailing}
           </span>
         )}

@@ -190,7 +190,7 @@ const FILL_TIGHT_OPTION = "fold-tight:[[data-fold]_&]:gap-1 fold-tight:[[data-fo
  */
 const OPTION = cn(
   "luke-choice-bar-option relative inline-flex items-center justify-center m-0 [border:0] [background:none]",
-  "outline-offset-[var(--luke-focus-ring-inset)] text-muted-foreground font-ui font-medium whitespace-nowrap",
+  "outline-offset-[var(--luke-focus-ring-inset)] text-muted-foreground font-ui font-label whitespace-nowrap",
   "[transition:background-color_var(--luke-duration-hover)_ease,color_var(--luke-duration-hover)_ease]",
   "cursor-pointer [[data-luke-profile=desktop]_&]:cursor-default disabled:cursor-default disabled:opacity-40",
   "[&:hover:not(:disabled)]:text-foreground aria-selected:text-foreground aria-checked:text-foreground",
@@ -251,7 +251,7 @@ const ICON =
  * the gap stands for the space between parts, which a row drops.
  */
 const COUNT =
-  "luke-choice-bar-count inline-flex items-center gap-1 text-subtle-foreground text-caption tabular-nums font-regular";
+  "luke-choice-bar-count inline-flex items-center gap-1 text-muted-foreground text-caption tabular-nums font-caption";
 
 /** A box in a bar, in pixels from its padding edge. */
 interface ThumbBox {

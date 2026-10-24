@@ -435,7 +435,12 @@ function pointAt(x: number, y: number): { getBoundingClientRect: () => DOMRect }
 /** What can be seen of the window, as the rectangle a menu is held inside. */
 function seenRect() {
   const seen = visibleViewport();
-  return { x: seen.left, y: seen.top, width: seen.right - seen.left, height: seen.bottom - seen.top };
+  return {
+    x: seen.left,
+    y: seen.top,
+    width: seen.right - seen.left,
+    height: seen.bottom - seen.top,
+  };
 }
 
 /** The items of one menu, its own and not a submenu's within it, that the keys move between now. */
@@ -475,7 +480,7 @@ function onItemCard(target: Node | null, menus: readonly (HTMLElement | null)[])
 /** The slot at a row's end, one glyph wide, after any hint; a setting's check in the text's own ink. */
 function endSlot(afterHint: boolean, setting: boolean): string {
   return cn(
-    "luke-menu-item-end grid size-menu-glyph flex-none place-items-center text-subtle-foreground [&>svg]:size-menu-glyph [&>svg]:flex-none [&>svg]:text-inherit [&>svg.settings-chevron]:size-menu-chevron",
+    "luke-menu-item-end grid size-menu-glyph flex-none place-items-center text-muted-foreground [&>svg]:size-menu-glyph [&>svg]:flex-none [&>svg]:text-inherit [&>svg.settings-chevron]:size-menu-chevron",
     !afterHint && "ml-auto",
     setting && "text-foreground",
   );
@@ -484,11 +489,7 @@ function endSlot(afterHint: boolean, setting: boolean): string {
 /** What an item prints at its end: its hint, and after it a setting's switch, the chevron of a list it opens, or a setting's check while it is on. */
 function ItemEnd({ action }: { action: MenuAction }): React.JSX.Element | null {
   const hint =
-    action.hint === undefined ? null : (
-      <span className="luke-menu-item-hint">
-        {action.hint}
-      </span>
-    );
+    action.hint === undefined ? null : <span className="luke-menu-item-hint">{action.hint}</span>;
   if (action.mark === MENU_ITEM_MARK.SWITCH && action.checked !== undefined) {
     return (
       <>
@@ -550,7 +551,9 @@ function ItemBody({ action }: { action: MenuAction }): React.JSX.Element {
         )}
         data-place={beside ? MENU_DETAIL.BESIDE : undefined}
       >
-        <OneLine className={cn("luke-menu-item-label min-w-0", beside ? "flex-initial" : "flex-none")}>
+        <OneLine
+          className={cn("luke-menu-item-label min-w-0", beside ? "flex-initial" : "flex-none")}
+        >
           {action.label}
         </OneLine>
         <OneLine className={cn("luke-menu-item-detail", beside && "min-w-0 flex-[0_1000_auto]")}>
@@ -1011,7 +1014,7 @@ export function Menu({
         {heading === undefined ? null : (
           <>
             <div
-              className="luke-menu-heading flex flex-col gap-luke-2 px-luke-8 py-luke-4 text-caption leading-[inherit]"
+              className="luke-menu-heading flex flex-col gap-luke-2 px-row-inset py-luke-4 text-caption leading-[inherit]"
               role="none"
             >
               {heading}
@@ -1046,7 +1049,7 @@ export function Menu({
           <>
             <DropdownMenuSeparator className="luke-menu-rule" />
             <div
-              className="luke-menu-footer flex flex-col gap-luke-2 px-luke-8 py-luke-4 text-caption leading-[inherit] text-subtle-foreground"
+              className="luke-menu-footer flex flex-col gap-luke-2 px-row-inset py-luke-4 text-caption leading-[inherit] text-muted-foreground"
               role="none"
             >
               {footer}

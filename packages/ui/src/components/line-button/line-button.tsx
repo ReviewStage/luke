@@ -54,7 +54,7 @@ export type LineButtonLook = (typeof LINE_BUTTON_LOOK)[keyof typeof LINE_BUTTON_
  * and that a glyph keeps its seat however long the words beside it run.
  */
 const LINE =
-  "luke-line-button flex w-full min-w-0 items-center gap-icon-gap m-0 p-0 [border:0] bg-transparent bg-none text-inherit [font:inherit] text-start list-none select-none cursor-pointer in-data-[luke-profile=desktop]:cursor-default transition-[color,background-color,opacity] duration-(--luke-duration-hover) ease-[ease] [&::-webkit-details-marker]:hidden [&>svg]:flex-none";
+  "luke-line-button flex w-full min-w-0 items-center gap-icon-gap m-0 p-0 [border:0] bg-transparent bg-none text-inherit [font:inherit] text-start list-none select-none cursor-pointer in-data-[luke-profile=desktop]:cursor-default transition-[color,background-color,opacity] duration-(--luke-duration-hover) ease-motion-exit [&::-webkit-details-marker]:hidden [&>svg]:flex-none";
 
 /**
  * Each look's own. A call's row is at least 28px tall (a finger's 44px on a

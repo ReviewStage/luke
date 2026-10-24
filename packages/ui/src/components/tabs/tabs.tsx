@@ -102,7 +102,7 @@ const STRIP =
   "luke-tabs relative flex min-w-0 items-center gap-list-gap overscroll-x-contain [scrollbar-width:none]";
 
 /** A tab's pill, in a label's type; where it stands, pinned while chosen, is tabs.css's. */
-const PILL = "luke-tab flex items-center rounded-control text-label font-medium";
+const PILL = "luke-tab flex items-center rounded-control text-label font-label";
 
 /** The pill's button, or the field a rename stands in its place: the pill's height and corner, in its type and ink. */
 const TAB_BUTTON =
@@ -110,7 +110,7 @@ const TAB_BUTTON =
 
 /** A mark at the pill's end, the × or a failed run's, centred on its line; whether it stands, a fold's, is tabs.css's. */
 const END_SLOT =
-  "absolute top-1/2 right-(--luke-tab-close-inset) [transform:translateY(-50%)] transition-opacity duration-(--luke-duration-hover) ease-[ease]";
+  "absolute top-1/2 right-(--luke-tab-close-inset) [transform:translateY(-50%)] transition-opacity duration-(--luke-duration-hover) ease-motion-exit";
 
 /** A tab that moves: every one but those anchored at the strip's start. */
 const MOVABLE_TAB = `.luke-tab:not([data-anchored="true"]) ${TAB}`;
@@ -713,7 +713,7 @@ export function TabCard({
     >
       <div className="luke-tab-card-preview ph-no-capture flex h-[110px] items-center justify-center mb-0.5 border border-solid border-border rounded-luke-6 bg-surface overflow-hidden group-data-[here=true]/card:opacity-55">
         {still === undefined ? (
-          <span className="luke-tab-card-glyph inline-flex text-subtle-foreground [--luke-glyph-size:28px] [&_:is(svg,img)]:size-[28px]">
+          <span className="luke-tab-card-glyph inline-flex text-muted-foreground [--luke-glyph-size:28px] [&_:is(svg,img)]:size-[28px]">
             {icon}
           </span>
         ) : (
@@ -735,7 +735,7 @@ export function TabCard({
         {detail === undefined ? null : (
           <>
             {detailIcon}
-            <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.SUBTLE}>
+            <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
               {detail}
             </Text>
           </>

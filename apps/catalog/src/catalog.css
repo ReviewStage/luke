@@ -471,7 +471,7 @@ body {
   gap: var(--luke-control-gap);
 }
 
-.catalog-settings-key > .luke-text-field {
+.catalog-settings-key > [data-slot="input"] {
   flex: 1 1 var(--luke-select-field-width);
 }
 
@@ -775,7 +775,7 @@ body {
   text-transform: none;
 }
 
-.catalog-width .luke-text-field {
+.catalog-width [data-slot="input"] {
   inline-size: 10ch; /* four digits and the spinner, at either profile's size */
 }
 
@@ -995,6 +995,12 @@ body {
   display: flex;
   align-items: center;
   gap: var(--luke-icon-gap);
+}
+
+.catalog-icon-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(12rem, 1fr));
+  gap: var(--luke-space-12);
 }
 
 .catalog-glyph-line-top {

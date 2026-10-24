@@ -11,6 +11,7 @@ import {
   type ProviderKeysAnswer,
   type SubscriptionKeySummary,
 } from "@luke/features/provider-key-wire";
+import { dayAndTimeText } from "@luke/features/time-format";
 import { ACT_KIND } from "@luke/host/acts";
 import { HOST_CAPABILITY } from "@luke/settings";
 import { SETTINGS_SEARCH_ROW, searchAnchorProps } from "@luke/settings/settings-anchors";
@@ -62,7 +63,6 @@ import {
   useConfirmDialog,
   useMenu,
 } from "@luke/ui";
-import { dayAndTimeText } from "@luke/ui/time-format";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { EyeIcon, EyeOffIcon } from "lucide-react";
 import { useCallback, useEffect, useId, useRef, useState } from "react";

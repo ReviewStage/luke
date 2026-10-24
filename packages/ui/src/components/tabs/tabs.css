@@ -153,9 +153,9 @@
     /* Its transform is a drag's (use-tab-drag.ts): sliding aside for a tab
        dragged past it, and home again, on the bounce small elements ride. */
     transition:
-      background-color var(--luke-duration-hover) ease,
-      color var(--luke-duration-hover) ease,
-      opacity var(--luke-duration-hover) ease,
+      background-color var(--luke-duration-hover) var(--luke-motion-exit),
+      color var(--luke-duration-hover) var(--luke-motion-exit),
+      opacity var(--luke-duration-hover) var(--luke-motion-exit),
       transform var(--luke-duration-fast) var(--luke-spring-fast);
   }
 
@@ -186,8 +186,8 @@
     box-shadow: 0 4px 12px var(--luke-color-shadow);
     color: var(--luke-color-text);
     transition:
-      background-color var(--luke-duration-hover) ease,
-      color var(--luke-duration-hover) ease;
+      background-color var(--luke-duration-hover) var(--luke-motion-exit),
+      color var(--luke-duration-hover) var(--luke-motion-exit);
   }
 
   /* The chosen tab keeps a share of its own, its glyph, its label, and its
@@ -298,7 +298,7 @@
      ink until it is chosen, as a chat app's channels do. */
   .luke-tab[data-unread="true"] .luke-tab-label {
     color: var(--luke-color-text);
-    font-weight: var(--luke-weight-bold);
+    font-weight: var(--luke-type-emphasis-weight);
   }
 
   /* A preview tab, which the next one opened takes the place of, wears its

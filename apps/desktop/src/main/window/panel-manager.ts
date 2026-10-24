@@ -1,6 +1,6 @@
 import type { AvatarGrant } from "@luke/features/avatar-grant";
 import type { RunMode } from "@luke/host";
-import type { PushName, PushPayload } from "@luke/host/contract";
+import type { EventPushName, PushPayload } from "@luke/host/contract";
 import { PanelAvatarRelay } from "@luke/host/panel-avatar";
 import type { AvatarFeed } from "@luke/voice/avatar";
 import type { AvatarViewSignal } from "@luke/voice/avatar-view";
@@ -203,7 +203,7 @@ export class PanelManager {
   }
 
   /** Hands a payload to every living window. */
-  broadcast<Name extends PushName>(push: Name, payload: PushPayload<Name>): void {
+  broadcast<Name extends EventPushName>(push: Name, payload: PushPayload<Name>): void {
     for (const window of this.#windows.values()) {
       if (window.isDestroyed()) continue;
       windowPushes.push(window.webContents, push, payload);

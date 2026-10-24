@@ -1,9 +1,9 @@
 import type { MemorySummary } from "@luke/features/memory-wire";
+import { dayText } from "@luke/features/time-format";
 import type { Workspace } from "@luke/features/workspace-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import { SETTINGS_SEARCH_ROW } from "@luke/settings/settings-anchors";
 import {
-  BADGE_TONE,
   Badge,
   ConfirmDialog,
   ErrorState,
@@ -12,13 +12,13 @@ import {
   type SettingsRowSkeletonShape,
   SettingsRowsSkeleton,
   SettingsSection,
+  STATUS_TONE,
   TEXT_TONE,
   TEXT_VARIANT,
   Text,
   TrashIcon,
   useConfirmDialog,
 } from "@luke/ui";
-import { dayText } from "@luke/ui/time-format";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useAct } from "../act.js";
@@ -61,8 +61,7 @@ function noteFor(workspace: Workspace): string {
     `As they work in ${workspace.name}, Luke's coding agents keep the facts and conventions ` +
     "you settle and recall them in the workspace's later tasks. Everyone in the workspace " +
     "shares these memories, except those marked Only you, which only your Luke recalls. " +
-    "What you say now always wins, and an agent corrects a memory it contradicts. Forget " +
-    "anything that is wrong or no longer true."
+    "Forget anything that is wrong or no longer true."
   );
 }
 
@@ -119,7 +118,7 @@ function MemoryRow({
         row={{
           label: <span className="memory-text">{memory.text}</span>,
           adornment: memory.private ? (
-            <Badge tone={BADGE_TONE.NEUTRAL}>{PAGE_LINE.PRIVATE}</Badge>
+            <Badge tone={STATUS_TONE.NEUTRAL}>{PAGE_LINE.PRIVATE}</Badge>
           ) : undefined,
           description: `Kept by ${keeperOf(memory, readerId)} · ${dayText(memory.updatedAt)}`,
         }}
@@ -246,7 +245,7 @@ export function MemorySection({
   if (workspace === undefined) return <SettingsLine>{PAGE_LINE.NO_WORKSPACE}</SettingsLine>;
   return (
     <>
-      <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.SUBTLE}>
+      <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
         {noteFor(workspace)}
       </Text>
       <div className={NO_CAPTURE}>
