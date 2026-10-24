@@ -26,6 +26,7 @@ import {
   useInboxDrafts,
 } from "../composer-drafts.js";
 import { messageFailureWords } from "./coding-agent-model.js";
+import { useInboxArrivals } from "./inbox-arrivals.js";
 import {
   awaitsNod,
   EMPTY_INBOX_DRAFT,
@@ -307,6 +308,8 @@ export function useTaskInbox(input: {
   kind?: CodingAgentInboxScope["kind"] | undefined;
   /** Whether the window shows the tasks. */
   shown: boolean;
+  /** Whether this Inbox is the one on screen, which says what lands in it (`inbox-arrivals.ts`); none where it is not. */
+  onScreen?: boolean | undefined;
   /** Whether main's read of what waits across the account says an item waits on the task. */
   waiting: boolean;
   /** The reader's account id, which says whose of the open items wait on them; none before it is known. */
@@ -327,6 +330,7 @@ export function useTaskInbox(input: {
   const kind = input.kind ?? INBOX_SCOPE_KIND.PLAN;
   const [held, setHeld] = useState<Held>(() => fresh(taskId));
   if (held.taskId !== taskId) setHeld(fresh(taskId));
+  useInboxArrivals(held, input.onScreen === true);
   const [images, setImages] = useState<ReadonlyMap<string, InboxImage>>(new Map());
   // The reads out now, by attachment, so an item drawn again while its read is out asks once.
   const reading = useRef(new Set<string>());
