@@ -24,6 +24,8 @@ import {
   SavedTick,
   STATUS_TONE,
   TEXT_BUTTON_LINES,
+  TEXT_TONE,
+  Text,
   TextButton,
   Tooltip,
   useMenu,
@@ -36,6 +38,7 @@ import { commentSpansIn, usePlanCommentsControl } from "@luke/ui/plan-comments";
 import { LinkIcon } from "lucide-react";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ActorStack } from "../actor-ref.js";
+import { usePrefetchEditorBundle } from "../bundle-loader.js";
 import { LINK_COPY, useCopyToast } from "../copy-feedback.js";
 import { ActionMenu, type MenuAction } from "../desktop/action-menu.js";
 import { VERSION_HISTORY } from "../desktop/pages-on-demand.js";
@@ -47,7 +50,7 @@ import {
   MarkdownMessage,
 } from "../markdown-message.js";
 import { useCreator } from "../member-directory.js";
-import type { PlanEditorHandle } from "../plan-editor/contract.js";
+import { PLACEMENT_END, PLAN_PLACEHOLDER, type PlanEditorHandle } from "../plan-editor/contract.js";
 import { useSteadyDoor } from "../steady-door.js";
 import { TOAST_HOLD, useToast } from "../toast.js";
 import { centreWithin } from "./code-pane.js";
@@ -295,6 +298,27 @@ function EditTime({
       </TextButton>
     );
   return short ? <Tooltip label={momentText(at)}>{time}</Tooltip> : time;
+}
+
+/**
+ * What an editable plan with no text says at rest, the editor's own
+ * placeholder in a quieter ink, so the room does not read as blank; its
+ * press opens the editor, and the pointer or the keyboard reaching it reads
+ * the editor's bundle ahead, as a section's block does.
+ */
+function EmptyPlanLine({ onOpen }: { onOpen: () => void }): React.JSX.Element {
+  const prefetchEditorBundle = usePrefetchEditorBundle();
+  return (
+    <Text tone={TEXT_TONE.MUTED}>
+      <TextButton
+        onPointerEnter={prefetchEditorBundle}
+        onFocus={prefetchEditorBundle}
+        onClick={onOpen}
+      >
+        {PLAN_PLACEHOLDER}
+      </TextButton>
+    </Text>
+  );
 }
 
 /** The press that opens the history from a plan's last edit, by how long ago it was. */
@@ -1538,7 +1562,11 @@ export const PlanBody = memo(function PlanBody({
               </>
             ) : null}
             {editing.editor === undefined ? (
-              sections
+              editable && views.length === 0 ? (
+                <EmptyPlanLine onOpen={() => editing.open(PLACEMENT_END)} />
+              ) : (
+                sections
+              )
             ) : (
               <PlanDocumentEditor
                 task={task}

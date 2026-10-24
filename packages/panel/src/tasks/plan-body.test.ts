@@ -428,3 +428,9 @@ test("a plan read and not edited names itself by one h1, its title, with the tit
   );
   assert.equal(more?.closest("header")?.contains(headings[0] ?? null), true);
 });
+
+test("an empty plan that cannot be edited draws no line saying to write it", async () => {
+  const view = await draw({ ...TASK, document: { body: "", assumptions: [] } });
+
+  assert.ok(!view.textContent?.includes("Write the plan"), "no line under the byline");
+});
