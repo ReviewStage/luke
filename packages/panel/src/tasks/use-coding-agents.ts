@@ -129,7 +129,9 @@ const NO_KEYWORDS: readonly string[] = [];
  * developer visits another plan. Its words and files are the plan's kept
  * draft (`../composer-drafts.ts`), under the draft's key, so its words
  * outlast a relaunch too, and a plan holding them opens on its draft's tab
- * again, under the same key.
+ * again, under the same key. A draft let go while it holds words or files
+ * goes at once, and a toast offers Undo, which puts it back under the same
+ * key, its chips, words, and files with it, and shows its tab again.
  *
  * New task's Agent mode starts its agent with its task, in the task's one
  * start (`use-tasks-tab.ts`): an agent that landed joins the list of the
@@ -259,7 +261,11 @@ export interface CodingAgentsControl {
   onDraftAttachments: (
     next: (held: readonly CodingAgentAttachment[]) => readonly CodingAgentAttachment[],
   ) => void;
-  /** Lets the draft go; nothing was started, so nothing is left behind. */
+  /**
+   * Lets the draft go; nothing was started, so nothing is left behind. One
+   * that held words or files raises a toast whose Undo puts it back and
+   * shows its tab (`onDraftRestored`).
+   */
   onDiscardDraft: (draftId: string) => void;
   /**
    * Starts the draft's agent with the words as its prompt, never the task,
@@ -483,6 +489,33 @@ function forkOf(fork: AgentFork | undefined): { readonly fork?: AgentFork } {
 /** Nothing laid in after a draft's own words as they move. */
 const NOTHING_CARRIED: Pick<Draft, "text" | "attachments"> = { text: "", attachments: [] };
 
+/** What the toast says as a draft holding words or files is let go. */
+const DRAFT_CLOSED = "Draft closed";
+
+/** A draft let go while it held words or files, kept for its Undo: the plan it stood on, its key and chips, and its words and files. */
+interface ClosedDraft {
+  readonly on: string;
+  readonly choices: DraftChoices;
+  readonly words: Pick<Draft, "text" | "attachments">;
+}
+
+/** The draft as it would be let go, kept for its Undo, or nothing where it holds no words or files. */
+function closedDraft(on: string, draft: AgentDraft): ClosedDraft | undefined {
+  if (draft.prompt === "" && draft.attachments.length === 0) return undefined;
+  const { id, choice, disabledServers, fork, refused } = draft;
+  return {
+    on,
+    choices: {
+      id,
+      choice,
+      disabledServers,
+      ...forkOf(fork),
+      ...(refused === undefined ? undefined : { refused }),
+    },
+    words: { text: draft.prompt, attachments: draft.attachments },
+  };
+}
+
 /** A Start on its way or asked again: the task, the key the press minted, and the choice it was for. */
 interface PendingStart {
   taskId: string;
@@ -630,6 +663,8 @@ export function useCodingAgents(input: {
   onOpenApiKeys: () => void;
   /** Called with the agent a Start made, so its tab opens. */
   onStarted: (agentId: string) => void;
+  /** Called with the plan and key of a draft an Undo put back, so its tab opens again. */
+  onDraftRestored?: (on: string, draftId: string) => void;
   /** The words a dictation into an agent's box is likely to say; none where nothing is open. */
   keywords?: readonly string[];
   /** Mints one press's key. */
@@ -1126,7 +1161,41 @@ export function useCodingAgents(input: {
     next: (held: readonly CodingAgentAttachment[]) => readonly CodingAgentAttachment[],
   ) => writeWords((was) => ({ ...was, attachments: next(was.attachments) }));
 
-  const onDiscardDraft = letGo;
+  // Note that a draft holding words or files is let go at once, as every
+  // act that can be taken back is, and its toast's Undo puts it back.
+  const onDiscardDraft = (draftId: string) => {
+    const closed =
+      startsOn === undefined || draft?.id !== draftId ? undefined : closedDraft(startsOn, draft);
+    letGo(draftId);
+    if (closed === undefined) return;
+    toast({
+      words: DRAFT_CLOSED,
+      tone: STATUS_TONE.COMPLETE,
+      action: { label: UNDO_LABEL, onPress: () => restoreNow.current(closed) },
+    });
+  };
+
+  // Note that a draft the open plan opened since in the closed one's place,
+  // as a column left with no tab opens one, gives way to it, its words and
+  // files laid in after the closed one's, so nothing written in either is lost.
+  const restoreDraft = (closed: ClosedDraft) => {
+    const { on, choices, words } = closed;
+    const standing = on === startsOn && draft?.id !== choices.id ? draft : undefined;
+    if (standing !== undefined) {
+      writer.drop((place) => place.kind === DRAFT_PLACE.NEW_AGENT && place.draftId === standing.id);
+    }
+    const text = [words.text, standing?.prompt ?? ""].filter((each) => each !== "").join("\n\n");
+    const attachments = [...words.attachments, ...(standing?.attachments ?? [])];
+    writer.update(wordsPlace(on, choices.id, choices.fork), (was) => ({
+      ...was,
+      text,
+      attachments,
+    }));
+    withDraft(on, choices);
+    latest.current.onDraftRestored?.(on, choices.id);
+  };
+  const restoreNow = useRef(restoreDraft);
+  restoreNow.current = restoreDraft;
 
   // Note that the draft's key is the Start's every time it is sent, because
   // nothing a refused send asked was made, and a send whose answer was lost

@@ -3451,6 +3451,44 @@ test("a task with no agent opens on a new agent's draft once its agents are read
   assert.deepEqual(payloadsOf(tab, ACT_KIND.CODING_AGENTS_START), []);
 });
 
+test("closing a draft holding words lets it go at once, and its toast's Undo opens its tab again with the same words, files, and chips", async () => {
+  const tab = mount(
+    { shown: true, tasks: OPEN },
+    { [ACT_KIND.CODING_AGENTS_LIST]: () => Promise.resolve({ agents: [] }) },
+  );
+  await vi.waitFor(async () => {
+    await settle();
+    assert.ok(tab.control().agents.draft, "the task holds a draft");
+  });
+  const draft = tab.control().agents.draft;
+  assert.ok(draft);
+  const prompt = "Rename the invite email's subject.";
+  const notes = { name: "notes.md", mediaType: "text/plain", data: "IyBOb3Rlcw==" } as const;
+  const choice = { model: "openai/gpt-6.1-sol", effort: "xhigh" } as const;
+  act(() => tab.control().agents.onDraftChange({ prompt, choice }));
+  act(() => tab.control().agents.onDraftAttachments((held) => [...held, notes]));
+
+  act(() => {
+    tab.control().mainTabs.onClose({ draft: draft.id });
+    tab.control().agents.onDiscardDraft(draft.id);
+  });
+  await settle();
+  assert.notEqual(tab.control().agents.draft?.id, draft.id, "the draft closed is let go at once");
+  assert.equal(newestToastSays(), "Draft closedUndo");
+
+  act(() => _undoButton().click());
+  await settle();
+  assert.deepEqual(tab.control().agents.draft, {
+    id: draft.id,
+    prompt,
+    attachments: [notes],
+    choice,
+    disabledServers: [],
+  });
+  assert.deepEqual(tab.control().mainTabs.tab, { draft: draft.id }, "and its tab is shown again");
+  assert.deepEqual(payloadsOf(tab, ACT_KIND.CODING_AGENTS_START), [], "nothing is started");
+});
+
 test("a task with no agent opens its new agent's draft with a hidden side panel left hidden", async () => {
   const tab = mount(
     { shown: true, tasks: OPEN },

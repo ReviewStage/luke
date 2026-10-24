@@ -81,7 +81,8 @@ import { TabStrip } from "./tab-strip.js";
  * ended on while no one was looking at it reads in semibold until shown. The
  * draft's tab, named New agent as the "+" row that opens it is, stands after
  * the agents until its first message, or its Call, starts the agent, and
- * closing it lets the draft go. A task with no other tab standing shows a
+ * closing it lets the draft go at once, a toast's Undo bringing it back with
+ * its words and files where it held any (`use-coding-agents.ts`). A task with no other tab standing shows a
  * draft's (`use-main-tabs.ts`), so a voice chat or a typed one is the
  * developer's to start from its composer. Every tab wears its kind's look (`tab-look.tsx`), and an
  * agent's or the draft's, while its box holds words and another tab is
