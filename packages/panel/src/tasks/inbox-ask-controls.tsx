@@ -10,6 +10,7 @@ import {
   type InboxForm,
   recommendedLabels,
 } from "@luke/features/inbox-wire";
+import { FIELD_WORDS } from "@luke/features/words";
 import { SHORTCUT_KEY, type ShortcutChord } from "@luke/settings/shortcuts";
 import {
   Badge,
@@ -30,7 +31,11 @@ import {
   ReadableControls,
   Stack,
   TEXT_AREA_SUBMIT,
+  TEXT_ELEMENT,
   TEXT_FIELD_TYPE,
+  TEXT_TONE,
+  TEXT_VARIANT,
+  Text,
   TextField,
 } from "@luke/ui";
 import type { Actor } from "@luke/ui/actor-model";
@@ -155,15 +160,24 @@ function ChoiceOptions({
   );
 }
 
-/** What marks a field that may be left empty, since most must be filled. */
-const OPTIONAL = "Optional";
+/** Whether a field may be left empty, since most must be filled. */
+function optionalField(field: InboxField): boolean {
+  return field.required !== true;
+}
 
-/** A field's name, and "Optional" after it where it may be left empty. */
-function FieldLabel({ field }: { field: InboxField }): React.JSX.Element {
+/** A yes or no's name, and "Optional" after it where it may be left empty, in the muted caption `FormField` sets it in. */
+function CheckboxWords({ field }: { field: InboxField }): React.JSX.Element {
   return (
     <>
       {field.label}
-      {field.required === true ? null : <span className="inbox-field-optional">{OPTIONAL}</span>}
+      {optionalField(field) ? (
+        <>
+          {" "}
+          <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
+            {FIELD_WORDS.OPTIONAL}
+          </Text>
+        </>
+      ) : null}
     </>
   );
 }
@@ -250,7 +264,8 @@ function InboxFormField({
       return (
         <div {...fieldFrame(field, readOnly)}>
           <FormField
-            label={<FieldLabel field={field} />}
+            label={field.label}
+            optional={optionalField(field)}
             count={
               readOnly
                 ? undefined
@@ -283,7 +298,7 @@ function InboxFormField({
     case INBOX_FIELD.NUMBER:
       return (
         <div {...fieldFrame(field, readOnly)}>
-          <FormField label={<FieldLabel field={field} />}>
+          <FormField label={field.label} optional={optionalField(field)}>
             {(control) => (
               <div className="inbox-field-short">
                 <TextField
@@ -303,30 +318,32 @@ function InboxFormField({
     case INBOX_FIELD.SELECT:
       return (
         <div {...fieldFrame(field, readOnly)}>
-          <span className="inbox-field-name" aria-hidden="true">
-            <FieldLabel field={field} />
-          </span>
-          <ChoiceList
-            legend={field.label}
-            options={(field.options ?? []).map((option) => ({
-              value: option,
-              label: option,
-              badge: field.recommended === option ? RECOMMENDED : undefined,
-            }))}
-            value={(field.options ?? []).filter((option) => option === value)}
-            look={CHOICE_LOOK.PILL}
-            clearable
-            disabled={disabled}
-            readOnly={readOnly}
-            onChange={(picked) => set(picked[0])}
-          />
+          <FormField label={field.label} optional={optionalField(field)}>
+            {(control) => (
+              <ChoiceList
+                legend={field.label}
+                describedBy={control["aria-describedby"]}
+                options={(field.options ?? []).map((option) => ({
+                  value: option,
+                  label: option,
+                  badge: field.recommended === option ? RECOMMENDED : undefined,
+                }))}
+                value={(field.options ?? []).filter((option) => option === value)}
+                look={CHOICE_LOOK.PILL}
+                clearable
+                disabled={disabled}
+                readOnly={readOnly}
+                onChange={(picked) => set(picked[0])}
+              />
+            )}
+          </FormField>
         </div>
       );
     case INBOX_FIELD.BOOLEAN:
       return (
         <div {...fieldFrame(field, readOnly)}>
           <Checkbox checked={value === true} disabled={disabled} readOnly={readOnly} onChange={set}>
-            <FieldLabel field={field} />
+            <CheckboxWords field={field} />
           </Checkbox>
         </div>
       );

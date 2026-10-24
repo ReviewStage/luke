@@ -2460,28 +2460,12 @@ ul.actor-stack {
 }
 
 /* A form's fields stacked, each its name over its control at one left edge
-   (`inbox-pane.tsx`'s FormFields): "Optional" quiet after the name of one
-   that may be left empty, a number in a short field, and a select's name
-   over its pills in the label's type, as a field's label stands. */
-.inbox-field-optional {
-  margin-left: var(--luke-item-gap);
-  color: var(--luke-color-text-muted);
-  font-size: var(--luke-type-caption-size);
-  font-weight: var(--luke-weight-regular);
-}
-
+   (`inbox-pane.tsx`'s FormFields), and a number in a short field. */
 .inbox-field {
   display: flex;
   min-width: 0;
   flex-direction: column;
   gap: var(--luke-item-gap);
-}
-
-.inbox-field-name {
-  color: var(--luke-color-text);
-  font-size: var(--luke-type-label-size);
-  font-weight: var(--luke-weight-medium);
-  line-height: var(--luke-type-label-leading);
 }
 
 .inbox-field-short {

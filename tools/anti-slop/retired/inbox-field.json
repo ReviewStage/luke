@@ -1,0 +1,7 @@
+{
+  "instead": "Mark a form field that may be left empty with FormField's optional from @luke/ui.",
+  "classes": [
+    { "class": "inbox-field-optional", "allow": [] },
+    { "class": "inbox-field-name", "allow": [] }
+  ]
+}
