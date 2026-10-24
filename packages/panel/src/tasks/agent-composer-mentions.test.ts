@@ -668,6 +668,46 @@ test("skills that could not be read for one @ list are asked for again by the ne
   assert.deepEqual(groups(container), ["Skills"]);
 });
 
+test("an @ whose read of the skills came back unread says they could not be read, with Retry, and ends its reading; Retry reads them again", async () => {
+  let reachable = false;
+  const flaky: SkillSource = () =>
+    Promise.resolve(
+      reachable
+        ? {
+            skills: [
+              {
+                name: "release",
+                description: "Use to cut a release.",
+                source: TASK_SKILL_SOURCE.REPOSITORY,
+                path: ".agents/skills/release/SKILL.md",
+              },
+            ],
+          }
+        : { unread: "GitHub could not be reached." },
+    );
+  const { container } = await box(planPage([]), flaky);
+
+  typeInComposer(container, "Run @releas");
+  await settle();
+
+  const failed = listNote(container);
+  assert.match(failed.words, /Skills could not be read\./u);
+  assert.doesNotMatch(failed.words, /Reading/u);
+  assert.equal(container.querySelector(".mention-menu .luke-combobox-empty"), null);
+
+  reachable = true;
+  act(() => (failed.retry ?? assert.fail("no Retry")).click());
+  await settle();
+
+  assert.equal(listNote(container).words, "");
+  assert.deepEqual(
+    [...container.querySelectorAll('.mention-menu [role="group"]')].map((group) =>
+      group.getAttribute("aria-label"),
+    ),
+    ["Skills"],
+  );
+});
+
 const ISSUE_URL = "https://linear.app/acme/issue/LUKE-142/fix-the-thing";
 
 /** Words pasted into the box's editor, as the system's clipboard hands them over. */
