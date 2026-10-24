@@ -1600,7 +1600,7 @@ interface DesktopSidebarProps {
   onTabChange: (tab: PanelTab) => void;
   account: AccountSnapshot;
   updates: UpdateControl;
-  /** Signs the account out, once the account menu's Log out is answered. */
+  /** Signs the account out, when the account menu's Sign out is pressed. */
   onSignOut: () => Promise<void>;
   /** Hears every press in the sidebar, which a press outside it would put away while it floats. */
   onPressWithin: () => void;

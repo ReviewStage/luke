@@ -12,15 +12,17 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
 import { useAppCommand } from "../app-commands.js";
 import { OpenPersonProvider } from "../person-door.js";
+import { rendererRegistry } from "../renderer-runtime.js";
 import { fakeActPortAnswering, fakeAppBridge } from "../testing/app-bridge.js";
 import { DESKTOP_CAPABILITIES, handCapabilities, handState } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
+import { ToastHost } from "../toast.js";
 import { SidebarFoot } from "./sidebar-foot.js";
 
 /**
  * The sidebar's foot as the developer meets it: the account's menu in
  * Cursor's order, Settings, what the menu bar's Help menu offers, Contact
- * us, and Sign out, which asks first.
+ * us, and Sign out, which acts on the press.
  */
 
 const DEAN: AccountSnapshot = {
@@ -117,6 +119,12 @@ function mount(
       ),
     ),
   );
+  // Note that a refusal's toast is shown on the window's own registry, which `showToast` writes to.
+  const toasts = document.createElement("div");
+  document.body.append(toasts);
+  const toastRoot = createRoot(toasts);
+  roots.push(toastRoot);
+  act(() => toastRoot.render(onRegistry(rendererRegistry, createElement(ToastHost))));
   return (
     container.querySelector<HTMLButtonElement>('button[aria-haspopup="menu"]') ??
     assert.fail("the foot draws the account's button")
@@ -165,17 +173,6 @@ function accountItem(label: string): HTMLButtonElement {
       line.querySelector(".luke-menu-item-label")?.textContent === label,
   );
   return item ?? assert.fail(`the account's menu offers ${label}`);
-}
-
-function dialog(): HTMLElement | null {
-  return document.querySelector<HTMLElement>('[role="alertdialog"]');
-}
-
-function dialogButton(label: string): HTMLButtonElement {
-  const button = [...(dialog()?.querySelectorAll("button") ?? [])].find(
-    (candidate) => candidate.textContent === label,
-  );
-  return button ?? assert.fail(`the dialog offers ${label}`);
 }
 
 test("the account opens its menu: who is signed in, then Settings, the Help menu's offers, Contact us, and Sign out, parted by rules", async () => {
@@ -326,7 +323,7 @@ test("in the window's bottom-left corner, Contact us's menu opens rightward and 
   assert.equal(at?.[2], "602px", "its foot level with Contact us's");
 });
 
-test("Sign out asks first, and only its answer signs the account out", async () => {
+test("Sign out signs the account out on the press, with no question first", async () => {
   let signOuts = 0;
   const button = mount(DEAN, {
     onSignOut: () => {
@@ -334,32 +331,23 @@ test("Sign out asks first, and only its answer signs the account out", async () 
       return Promise.resolve();
     },
   });
-  const logOut = () => {
-    act(() => button.click());
-    act(() => accountItem("Sign out").click());
-  };
+  act(() => button.click());
 
-  logOut();
-  assert.equal(dialog()?.querySelector("h2")?.textContent, "Sign out of dean@example.com?");
-  act(() => dialogButton("Cancel").click());
-  assert.equal(dialog(), null);
-  assert.equal(signOuts, 0);
+  await act(async () => accountItem("Sign out").click());
 
-  logOut();
-  await act(async () => dialogButton("Sign out").click());
   assert.equal(signOuts, 1);
+  assert.equal(document.querySelector('[role="alertdialog"], [role="dialog"]'), null);
 });
 
-test("a Sign out that fails keeps the dialog up saying so, and the account still signed in", async () => {
+test("a Sign out that fails says so in a toast, and the account is still signed in", async () => {
   const button = mount(DEAN, { onSignOut: () => Promise.reject(new Error("refused")) });
   act(() => button.click());
-  act(() => accountItem("Sign out").click());
 
-  await act(async () => dialogButton("Sign out").click());
+  await act(async () => accountItem("Sign out").click());
 
   assert.match(
-    dialog()?.querySelector('[data-slot="field-error"]:not(:empty)')?.textContent ?? "",
-    /could not log out/u,
+    document.body.textContent ?? "",
+    /The account could not be signed out\. Try again\./u,
   );
 });
 
