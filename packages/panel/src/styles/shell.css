@@ -145,6 +145,15 @@
     0 16px 40px -20px var(--luke-color-shadow);
 }
 
+/* A narrow room's column is full bleed but is still the work, so it stands
+   on the sheet's ground rather than showing the frame through it. */
+.desktop-shell[data-room="narrow"] > .desktop-main,
+.desktop-shell[data-room="narrow"]
+  > :is(.desktop-settings, .desktop-version-history, .desktop-admin)
+  > :is(.settings-page, .version-page, .admin-page) {
+  background: var(--luke-color-ground);
+}
+
 /* Inside the sheet a top row is shorter by the gap above it and the same
    below its middle, so its middle stays level with the traffic lights and
    the title bar's buttons, which stand on the window rather than the sheet,
