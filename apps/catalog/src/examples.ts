@@ -21,6 +21,7 @@ import { COLLECTION_PAGE_EXAMPLE } from "./examples/collection-page";
 import { COMBOBOX_EXAMPLE } from "./examples/combobox";
 import { COMMAND_ASK_EXAMPLE } from "./examples/command-ask";
 import { COMMENTS_EXAMPLE } from "./examples/comments";
+import { COMPOSER_FOOTS_EXAMPLE } from "./examples/composer-foots";
 import { COMPOSER_FRAMES_EXAMPLE } from "./examples/composer-frames";
 import { CONFIRM_DIALOGS_EXAMPLE } from "./examples/confirm-dialogs";
 import { CORNER_COUNTS_EXAMPLE } from "./examples/corner-counts";
@@ -135,6 +136,7 @@ export const EXAMPLES: readonly Example[] = [
   CARD_PRESSES_EXAMPLE,
   BLOCK_LISTS_EXAMPLE,
   COMPOSER_FRAMES_EXAMPLE,
+  COMPOSER_FOOTS_EXAMPLE,
   CHIPS_EXAMPLE,
   BAR_ITEMS_EXAMPLE,
   CHOICE_BAR_EXAMPLE,

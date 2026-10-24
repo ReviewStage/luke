@@ -1,0 +1,73 @@
+/* composer-foot.css -- a message box's foot: its files' row, its bar of
+   tools and presses with the send at its end, and its one note under them,
+   inset as the frame around it stands. */
+
+@layer components {
+  /* A card's foot stands at the card's inset; the bar's two ends hold apart. */
+  .luke-composer-foot {
+    display: flex;
+    flex-direction: column;
+    gap: var(--luke-tight-gap);
+    padding: 0 var(--luke-space-12) var(--luke-space-12);
+  }
+
+  /* A field's or an input's foot stands a step tighter in its well. */
+  .luke-composer-frame:is([data-look="field"], [data-look="input"]) .luke-composer-foot {
+    padding: var(--luke-space-2) var(--luke-space-6) var(--luke-space-6);
+  }
+
+  /* A bare frame's foot is flush with the words over it, since the card around it insets both. */
+  .luke-composer-frame[data-look="bare"] .luke-composer-foot {
+    padding-inline: 0;
+  }
+
+  .luke-composer-foot-files {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--luke-tight-gap);
+  }
+
+  .luke-composer-foot-bar {
+    display: flex;
+    min-height: var(--luke-control-height);
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--luke-block-gap);
+  }
+
+  .luke-composer-foot-tools {
+    display: flex;
+    min-width: 0;
+    align-items: center;
+    gap: var(--luke-tight-gap);
+  }
+
+  .luke-composer-foot-end {
+    display: flex;
+    flex: none;
+    align-items: center;
+    gap: var(--luke-tight-gap);
+    margin-inline-start: auto;
+  }
+
+  /* A dictation's strip takes the bar's room, the call beside it at the end. */
+  .luke-composer-foot-strip {
+    display: flex;
+    flex: 1;
+    min-width: 0;
+    align-items: center;
+  }
+
+  /* A call stands a step off the send, so End call and Send never read as a pair. */
+  .luke-composer-foot-call {
+    display: flex;
+    flex: none;
+    align-items: center;
+    gap: var(--luke-tight-gap);
+    margin-inline-end: var(--luke-tight-gap);
+  }
+
+  .luke-composer-foot-strip + .luke-composer-foot-call {
+    margin-inline-end: 0;
+  }
+}
