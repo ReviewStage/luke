@@ -4780,6 +4780,52 @@ test("several comments stand open at once, each under its own lines with its own
   );
 });
 
+test("the words of a line comment outlast the tab: a window drawn again finds them where the same lines are picked, and Add single comment lets them go", async () => {
+  await drawCommentable();
+  const added = {
+    start: 12,
+    side: DIFF_SELECTION_SIDE.ADDITIONS,
+    end: 13,
+    endSide: DIFF_SELECTION_SIDE.ADDITIONS,
+  };
+  const removed = {
+    start: 12,
+    side: DIFF_SELECTION_SIDE.DELETIONS,
+    end: 12,
+    endSide: DIFF_SELECTION_SIDE.DELETIONS,
+  };
+  writeLineComment(await pickLines(added), "Why twice?");
+  writeLineComment(await pickLines(removed), "Gone?");
+
+  // Closing the tab and reading the window again, as a relaunch does.
+  act(() => root?.unmount());
+  root = undefined;
+  await drawCommentable();
+
+  assert.equal(commentDrawn(), false, "no comment stands open before the lines are picked");
+  assert.equal(boxWords(await pickLines(added)), "Why twice?", "the words come back on the lines");
+  assert.equal(boxWords(await pickLines(removed)), "Gone?", "and on the side they were written on");
+  const other = await pickLines({
+    start: 8,
+    side: DIFF_SELECTION_SIDE.ADDITIONS,
+    end: 8,
+    endSide: DIFF_SELECTION_SIDE.ADDITIONS,
+  });
+  assert.equal(boxWords(other), "", "other lines meet none of them");
+
+  const [first] = commentNotes();
+  act(() =>
+    commentOffer(first?.element ?? assert.fail("a comment stands"), "Add single comment").click(),
+  );
+  await settle();
+  act(() => root?.unmount());
+  root = undefined;
+  await drawCommentable();
+
+  assert.equal(boxWords(await pickLines(added)), "", "the words GitHub took are let go");
+  assert.equal(boxWords(await pickLines(removed)), "Gone?", "the others stay");
+});
+
 test("a comment opened on lines takes the keyboard once the list stands its note in the window", async () => {
   await drawCommentable();
   const comment = await pickLines({

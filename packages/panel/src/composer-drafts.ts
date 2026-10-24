@@ -1,5 +1,5 @@
 import { useAtomSet, useAtomValue } from "@effect/atom-react";
-import type { CodingAgentAttachment } from "@luke/features/coding-agent-wire";
+import { type CodingAgentAttachment, DIFF_SIDE } from "@luke/features/coding-agent-wire";
 import {
   INBOX_REPLY,
   INBOX_STATUS,
@@ -25,8 +25,10 @@ import { readKept, writeKept } from "./kept-storage.js";
  * (`chat-composer.tsx`), the Inbox's New thread its To, Subject, and words
  * per workspace (`inbox-compose.tsx`), a plan's comment its words per
  * thread being started, per thread answered, and per comment edited
- * (`plan-comments.tsx`), an agent's line written again its words and
- * files per agent and line (`edit-composer.tsx`), a chat ask's answer its
+ * (`plan-comments.tsx`), a line comment in Files changed its words per
+ * agent, file, side, and last line (`comment-drafts.ts`), an agent's line
+ * written again its words and files per agent and line
+ * (`edit-composer.tsx`), a chat ask's answer its
  * picks and note per message, at the revision it was written against
  * (`chat-ask.tsx`), and an inbox
  * card its answer per item, at the revision it was written against, the
@@ -60,7 +62,7 @@ const STORAGE_KEY = "luke.composerDrafts";
 /** How many drafts are kept at most, the oldest written let go first. */
 const MAX_KEPT = 200;
 
-/** What a draft is written to: a started agent, a plan's agent not yet started, an inbox item, a task not yet started, an automation's helper not yet started, a chat's channel or thread, an Inbox thread not yet started, a plan's comment, an agent's line written again, or a chat message's ask. */
+/** What a draft is written to: a started agent, a plan's agent not yet started, an inbox item, a task not yet started, an automation's helper not yet started, a chat's channel or thread, an Inbox thread not yet started, a plan's comment, a line comment on an agent's changed file, an agent's line written again, or a chat message's ask. */
 export const DRAFT_PLACE = {
   AGENT: "agent",
   NEW_AGENT: "newAgent",
@@ -70,6 +72,7 @@ export const DRAFT_PLACE = {
   CHAT: "chat",
   NEW_THREAD: "newThread",
   PLAN_COMMENT: "planComment",
+  LINE_COMMENT: "lineComment",
   EDIT: "edit",
   CHAT_ASK: "chatAsk",
 } as const;
@@ -148,6 +151,17 @@ const draftPlaceSchema = Schema.Union([
         scope: Schema.Literals(Object.values(PLAN_COMMENT_SCOPE)),
       }),
     ]),
+  }),
+  Schema.Struct({
+    kind: Schema.Literal(DRAFT_PLACE.LINE_COMMENT),
+    /** The agent whose pull request's Files changed the comment is written in. */
+    agentId: Schema.String,
+    /** The changed file the comment is on. */
+    path: Schema.String,
+    /** The side of the diff the comment's last line counts on, as GitHub anchors a thread. */
+    side: Schema.Literals(Object.values(DIFF_SIDE)),
+    /** The comment's last line, under which it stands. */
+    line: Schema.Number,
   }),
   Schema.Struct({
     kind: Schema.Literal(DRAFT_PLACE.EDIT),
@@ -247,6 +261,9 @@ export type NewThreadPlace = Extract<DraftPlace, { kind: typeof DRAFT_PLACE.NEW_
 
 /** A plan comment's place: a thread being started, answered, or one of its comments edited. */
 export type PlanCommentPlace = Extract<DraftPlace, { kind: typeof DRAFT_PLACE.PLAN_COMMENT }>;
+
+/** A line comment in Files changed: the agent, the file, and the side and last line it stands under. */
+export type LineCommentPlace = Extract<DraftPlace, { kind: typeof DRAFT_PLACE.LINE_COMMENT }>;
 
 /** An agent's line written again: the agent and the line. */
 export type EditPlace = Extract<DraftPlace, { kind: typeof DRAFT_PLACE.EDIT }>;

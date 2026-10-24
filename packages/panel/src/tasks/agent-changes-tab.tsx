@@ -49,9 +49,18 @@ import {
   RotateCwIcon,
   UnfoldVerticalIcon,
 } from "@luke/ui/icons";
-import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  type ComponentProps,
+  type ReactNode,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { useAct } from "../act.js";
 import { appPlatform } from "../app-platform.js";
+import { useDraft } from "../composer-drafts.js";
 import { useCopyToast } from "../copy-feedback.js";
 import {
   DIFF_SELECTION_SIDE,
@@ -96,13 +105,13 @@ import {
 import { ChangesStrip } from "./changes-strip.js";
 import { agentStillWriting } from "./coding-agent-model.js";
 import {
+  type CommentDraft,
   type CommentDrafts,
   closeDraft,
   lightDraft,
+  lineCommentPlace,
   NO_DRAFTS,
   openDraft,
-  withWords,
-  wordsOf,
 } from "./comment-drafts.js";
 import {
   type DiffListEntry,
@@ -1027,10 +1036,32 @@ export interface LineComments {
 }
 
 /**
+ * A line comment whose words the drafts store keeps as they are typed, by
+ * where the comment stands (`lineCommentPlace`), so they outlast the tab
+ * and the window. Note that each comment reads its own draft, so a word
+ * typed in one draws no other comment of the list.
+ */
+function DraftedLineComment({
+  draft,
+  ...comment
+}: Omit<ComponentProps<typeof LineComment>, "body" | "onBody"> & {
+  draft: CommentDraft;
+}): React.JSX.Element {
+  const { draft: kept, update } = useDraft(lineCommentPlace(comment.agentId, draft));
+  return (
+    <LineComment
+      {...comment}
+      body={kept.text}
+      onBody={(text) => update((was) => ({ ...was, text }))}
+    />
+  );
+}
+
+/**
  * The comments being written on lines of the files, several at once
- * across lines and files, held above the list with their words
- * (`comment-drafts.ts`) for as long as the tab stands, so one scrolled out
- * of the list and back loses nothing; one opens where the gutter's + or a
+ * across lines and files, held above the list (`comment-drafts.ts`) for
+ * as long as the tab stands, with their words in the drafts store, so one
+ * scrolled out of the list and back, or left with the tab, loses nothing; one opens where the gutter's + or a
  * selection of code picks lines GitHub would take a comment on
  * (`commentLines`). A comment whose lines a read of the files no longer
  * holds is not drawn.
@@ -1085,14 +1116,13 @@ function useListCommenting(
         side: COMMENT_SIDE[lines.side],
         line: lines.line,
         content: (
-          <LineComment
+          <DraftedLineComment
+            draft={draft}
             agentId={agentId}
             path={path}
             lines={lines}
             headSha={headSha}
             pending={comments.pending}
-            body={wordsOf(drafts, draft)}
-            onBody={(body) => setDrafts((was) => withWords(was, draft, body))}
             suggestion={suggestedLines(file, lines)}
             onActive={() => setDrafts((was) => lightDraft(was, draft.id))}
             onClose={() => setDrafts((was) => closeDraft(was, draft.id))}
