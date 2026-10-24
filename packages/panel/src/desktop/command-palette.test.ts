@@ -43,6 +43,7 @@ import { act, createElement, Fragment, useState } from "react";
 import { flushSync } from "react-dom";
 import { createRoot, type Root } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
+import { ACTION_RESULT_STATUS } from "@luke/wire";
 import { afterEach, beforeEach, test, vi } from "vitest";
 import {
   appCommandOffered,
@@ -2512,6 +2513,162 @@ test("⌘K's Show chat is offered only while the account has Chat on, as the sid
   chooseFilter("Commands");
   assert.ok(!rows().includes("Show chat"), "Chat off offers no Show chat");
   assert.ok(rows().includes("Show board"), "the tabs that exist are still offered");
+});
+
+test('with a task open, ⌘K\'s "This task" lists its pages and a terminal for each agent, as the side panel\'s "+" offers them, and each opens as the "+" opens it', async () => {
+  const agent = {
+    id: "agent-7",
+    planId: DOCUMENT_TASK.id,
+    model: "anthropic/claude-opus-5.5",
+    effort: "high",
+    title: "Invoice export",
+    createdAt: 1,
+    status: CODING_AGENT_STATUS.COMPLETED,
+    turnId: null,
+  };
+  const chosen: unknown[] = [];
+  const base = tasksControl();
+  const tasks = tasksControl({
+    activeTaskId: DOCUMENT_TASK.id,
+    tasks: [
+      {
+        id: DOCUMENT_TASK.id,
+        workspaceId: DOCUMENT_TASK.workspaceId,
+        name: DOCUMENT_TASK.name,
+        createdAt: 1,
+        updatedAt: 2,
+        repository: null,
+      },
+    ],
+    region: { kind: DOCUMENT_REGION.READY, task: DOCUMENT_TASK },
+    pages: [{ id: "page-1", title: "Invite funnel", version: 1, at: 1 }],
+    sidePanel: { ...base.sidePanel, onChoose: (tab) => chosen.push(tab) },
+    agents: codingAgentsControl({ agents: [agent], agentIds: [agent.id] }),
+  });
+  handCapabilities(DESKTOP_CAPABILITIES);
+  await paletteUnderState(tasks);
+  chooseFilter("This task");
+  const listed = rows();
+  assert.ok(listed.includes(`Invite funnel · ${DOCUMENT_TASK.name}`), "the page is listed");
+  assert.ok(
+    listed.includes(`Invoice export · Terminal · ${DOCUMENT_TASK.name}`),
+    "the agent's terminal is listed",
+  );
+
+  press(`Invite funnel · ${DOCUMENT_TASK.name}`);
+  act(() => {
+    assert.ok(runAppCommand(APP_COMMAND.COMMAND_PALETTE), "⌘K opens again");
+  });
+  chooseFilter("This task");
+  press(`Invoice export · Terminal · ${DOCUMENT_TASK.name}`);
+  assert.deepEqual(chosen, [{ page: "page-1" }, { terminal: agent.id }]);
+});
+
+test("with a task on screen, ⌘K offers its Version history, Cancel task, Change repository, and Open on GitHub, each running on it what its ⋯ item runs", () => {
+  const task = { ...DOCUMENT_TASK, repository: "acme/relay" };
+  const ran: string[] = [];
+  const base = tasksControl();
+  const tasks = tasksControl({
+    tasks: [task],
+    region: { kind: DOCUMENT_REGION.READY, task },
+    activeTaskId: task.id,
+    history: { ...base.history, onOpen: (taskId) => ran.push(`history:${taskId}`) },
+    onSettleTasks: (taskIds, status) => ran.push(`settle:${taskIds.join()}:${status}`),
+    onChangeRepository: (taskId) => ran.push(`repository:${taskId}`),
+    onOpenOnGitHub: (taskId) => ran.push(`github:${taskId}`),
+  });
+  const root = createRoot(document.body.appendChild(document.createElement("div")));
+  roots.push(root);
+  act(() =>
+    root.render(
+      onRegistry(
+        AtomRegistry.make(),
+        createElement(
+          Fragment,
+          null,
+          createElement(Looker, { looked: task }),
+          createElement(WindowPalette, {
+            available: true,
+            tab: PANEL_TAB.TASKS,
+            onTabChange: () => undefined,
+            tasks,
+            settings: {
+              rows: {
+                settings: settingsView(),
+                voiceControlsDrawn: true,
+                accountDrawn: true,
+                capabilities: DESKTOP_CAPABILITIES,
+              },
+              capabilities: DESKTOP_CAPABILITIES,
+              onViewChange: () => undefined,
+            },
+            readFiles: () => Promise.reject(new Error("no repository is open")),
+          }),
+        ),
+      ),
+    ),
+  );
+  for (const command of ["Version history", "Cancel task", "Change repository", "Open on GitHub"]) {
+    act(() => {
+      assert.ok(runAppCommand(APP_COMMAND.COMMAND_PALETTE), "⌘K opens");
+    });
+    chooseFilter("Commands");
+    press(command);
+  }
+  assert.deepEqual(ran, [
+    `history:${task.id}`,
+    `settle:${task.id}:canceled`,
+    `repository:${task.id}`,
+    `github:${task.id}`,
+  ]);
+});
+
+test("on a one-off agent's page, ⌘K's Archive agent archives it, and an archived agent's page offers Unarchive agent, which brings it back", async () => {
+  const agent = {
+    id: "agent-6",
+    planId: null,
+    model: "anthropic/claude-opus-5.5",
+    effort: "high",
+    title: "Triage overnight issues",
+    createdAt: 1,
+    status: CODING_AGENT_STATUS.COMPLETED,
+    turnId: null,
+    automationId: null,
+    workspaceId: "workspace-1",
+    repository: "acme/relay",
+    activityAt: 2,
+  };
+  const asked: string[] = [];
+  const draw = (listedAgents: TasksControl["listedAgents"]) => {
+    act(() => {
+      for (const root of roots.splice(0)) root.unmount();
+    });
+    document.body.innerHTML = "";
+    openPalette(
+      tasksControl({
+        agentView: { agentId: agent.id, onOpen: () => undefined, onClose: () => undefined },
+        listedAgents,
+        agents: codingAgentsControl({
+          onArchive: (agentId, archived) => {
+            asked.push(`${agentId}:${String(archived)}`);
+            return Promise.resolve({ status: ACTION_RESULT_STATUS.ACCEPTED });
+          },
+        }),
+      }),
+    );
+    type("archive");
+    return rows().filter((row) => /^(Archive|Unarchive) agent$/u.test(row));
+  };
+
+  assert.deepEqual(draw({ standing: [agent], archived: [] }), ["Archive agent"]);
+  press("Archive agent");
+  await act(async () => undefined);
+  assert.deepEqual(draw({ standing: [], archived: [{ ...agent, archivedAt: 3 }] }), [
+    "Unarchive agent",
+  ]);
+  press("Unarchive agent");
+  await act(async () => undefined);
+  assert.deepEqual(asked, [`${agent.id}:true`, `${agent.id}:false`]);
 });
 
 test("⌘K still offers Show inbox for a task an item waits on while its agents are unread and its Inbox tab is closed", async () => {
