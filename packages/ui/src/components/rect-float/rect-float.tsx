@@ -1,4 +1,5 @@
 import { useLayoutEffect, useRef, useState } from "react";
+import { cssCustomProperties } from "../../css.js";
 import { visibleViewport } from "../../visible-viewport.js";
 import {
   type Box,
@@ -23,19 +24,22 @@ import { type PressAway, usePressAway } from "../anchored-popover/press-away.js"
  * stands by and a field in it is still inside the owner's box when it takes
  * the focus. It is measured as it is drawn, before it is painted, each time
  * it is drawn again, whenever it resizes or the window does, and whenever
- * anything scrolls, since a scroll may leave its side no room. A press
+ * anything scrolls, since a scroll may leave its side no room. The height
+ * its side leaves it is handed to what it holds as `--luke-popover-room`,
+ * as the anchored popover's is, which a tall list bounds itself by. A press
  * outside it is handed to its owner, who closes it unless the press lands
  * on what it `holds`, the field whose caret it stands by say
  * (`../anchored-popover/press-away.ts`). What it holds draws its own
  * surface (`MenuSurface`).
  */
 
-/** Where the layer stands in its owner's box: its corner, and the widest the room it keeps inside leaves it. */
+/** Where the layer stands in its owner's box: its corner, the widest the room it keeps inside leaves it, and the height its side leaves it. */
 interface FloatPlace {
   readonly side: PopoverSide;
   readonly left: number;
   readonly top: number;
   readonly width: number;
+  readonly room: number;
 }
 
 /** Whether two places draw the layer alike, so a scroll that moves nothing renders nothing. */
@@ -45,7 +49,8 @@ function samePlace(a: FloatPlace | undefined, b: FloatPlace): boolean {
     a.side === b.side &&
     a.left === b.left &&
     a.top === b.top &&
-    a.width === b.width
+    a.width === b.width &&
+    a.room === b.room
   );
 }
 
@@ -106,6 +111,7 @@ function placeIn(
       frame.scrollTop -
       (Number.parseFloat(margin.marginTop) || 0),
     width: place.width,
+    room: place.room,
   };
 }
 
@@ -169,7 +175,12 @@ export function RectFloat({
       style={
         place === undefined
           ? undefined
-          : { left: place.left, top: place.top, maxWidth: place.width }
+          : {
+              left: place.left,
+              top: place.top,
+              maxWidth: place.width,
+              ...cssCustomProperties({ "--luke-popover-room": `${place.room}px` }),
+            }
       }
     >
       {children}

@@ -1217,10 +1217,12 @@
 }
 
 /* A crumb's tree, hung under the crumb on a menu's surface
-   (file-breadcrumbs.tsx), at a narrow popover's width. */
+   (file-breadcrumbs.tsx), at a narrow popover's width, and never taller
+   than the room its side of the crumb leaves it (`--luke-popover-room`),
+   its rows scrolling within. */
 .file-crumb-tree {
   width: var(--luke-popover-width-narrow);
-  max-height: calc(var(--luke-stage-height) - 16px);
+  max-height: min(calc(var(--luke-stage-height) - 16px), var(--luke-popover-room, 100vh));
 }
 
 [data-luke-profile="desktop"] .file-crumb-tree {
