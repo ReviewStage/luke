@@ -443,7 +443,7 @@ test("the Mac offline says so in the foot, and nothing does while it is online",
     await act(async () => {
       for (let tick = 0; tick < 8; tick += 1) await Promise.resolve();
     });
-    const mark = document.querySelector('[role="status"][aria-label="Offline"]');
+    const mark = document.querySelector('.offline-mark[aria-label="Offline"]');
     const words = mark?.textContent ?? null;
     for (const root of roots.splice(0)) act(() => root.unmount());
     return words;

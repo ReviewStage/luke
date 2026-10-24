@@ -36,6 +36,7 @@ import { runAppCommand } from "../app-commands.js";
 import { GitHubConnectProvider } from "../github-connect.js";
 import { OpenSettingsProvider } from "../open-settings.js";
 import { rendererRuntime } from "../renderer-runtime.js";
+import { announcedPolitely, mountAnnouncer } from "../testing/announcer.js";
 import { type AnyAct, fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { IntegrationsSection } from "./integrations-page.js";
@@ -903,15 +904,14 @@ test("a query finds an integration by what it is for, keeping its section", asyn
 
 test("a query that finds nothing says so, and clearing it brings every row back", async () => {
   connectVercelAndLinear();
+  mountAnnouncer();
   const page = await mount();
 
   await searchFor(page, "frobnicate");
 
   assert.deepEqual(sections(page), []);
-  assert.equal(
-    page.querySelector('[role="status"]')?.textContent,
-    "No integrations or tools match “frobnicate”",
-  );
+  assert.equal(page.textContent?.includes("No integrations or tools match “frobnicate”"), true);
+  assert.equal(announcedPolitely(), "No integrations or tools match “frobnicate”");
 
   const clear =
     page.querySelector<HTMLButtonElement>('button[aria-label="Clear search"]') ??
@@ -921,6 +921,7 @@ test("a query that finds nothing says so, and clearing it brings every row back"
 
   assert.equal(rowNames(page).length, INTEGRATION_PROVIDER_LIST.length);
   assert.equal(document.activeElement, searchField(page));
+  assert.equal(announcedPolitely(), "", "the words go once the rows are back");
 });
 
 test("while where the providers stand is read, the search stands usable above placeholder sections, and the rows land in their place", async () => {

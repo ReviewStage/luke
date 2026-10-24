@@ -2,6 +2,7 @@ import { ACCOUNT_STATUS } from "@luke/credentials/snapshot";
 import { PLAN_ACTOR, TASK_BOUNDS, type TaskSummary } from "@luke/features/task-wire";
 import { APP_COMMAND, type KeyedCommand } from "@luke/settings/shortcuts";
 import {
+  ANNOUNCE,
   BUTTON_SIZE,
   CONFIRM_LOSS,
   ConfirmDialog,
@@ -64,6 +65,7 @@ import {
 import { useReadMarks } from "../tasks/use-task-looks.js";
 import { useTaskOrigin } from "../tasks/use-task-origin.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
+import { useAnnounceShown } from "../use-announce-shown.js";
 import { APP_SLICE, useAppSlice } from "../use-app-state.js";
 import { useRefocusAfterEdit } from "../use-refocus-after-edit.js";
 import { ActionMenu, type MenuAction, type MenuEntry, rowMenu } from "./action-menu.js";
@@ -656,6 +658,7 @@ export function SidebarTask({
   onOpen: () => void;
 }): React.JSX.Element {
   const rename = useInlineRename(task.id, tasks.onRenameTask);
+  useAnnounceShown(ANNOUNCE.ALERT, rename.refused ? RENAME_FAILED_NOTE : "");
   const actions = useTaskMenuItems(tasks, task.id, task.name, {
     rename: rename.begin,
     drawn: true,
@@ -704,7 +707,7 @@ export function SidebarTask({
               </>
             )
           }
-          description={rename.refused ? <span role="alert">{RENAME_FAILED_NOTE}</span> : undefined}
+          description={rename.refused ? <span>{RENAME_FAILED_NOTE}</span> : undefined}
           meta={
             rename.editing ? null : (
               <span className="sidebar-task-time">

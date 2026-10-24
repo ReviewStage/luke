@@ -1,5 +1,12 @@
 import { PULL_REQUEST_WRITE_BOUNDS } from "@luke/features/pull-request-write-wire";
-import { BLOCK_MENU_GROUP, COMPOSER_LOOK, ComposerFrame, IconButton, Tooltip } from "@luke/ui";
+import {
+  ANNOUNCE,
+  BLOCK_MENU_GROUP,
+  COMPOSER_LOOK,
+  ComposerFrame,
+  IconButton,
+  Tooltip,
+} from "@luke/ui";
 import { FileDiffIcon } from "@luke/ui/icons";
 import { markdownClass } from "@luke/ui/markdown-class";
 import { type ReactNode, type RefObject, useEffect, useRef } from "react";
@@ -10,6 +17,7 @@ import {
   PLACEMENT_END,
   type PlanEditorHandle,
 } from "../plan-editor/contract.js";
+import { useAnnounceShown } from "../use-announce-shown.js";
 import type { OwnBlock } from "./block-picker.js";
 import { MarkdownEditor } from "./markdown-editor.js";
 import { fencedBlock } from "./markdown-fence.js";
@@ -136,6 +144,7 @@ export function CommentEditor({
   const unanswered = useRef(false);
   const block = suggestion === undefined ? undefined : suggestionBlock(suggestion);
   const over = value.length - PULL_REQUEST_WRITE_BOUNDS.MAX_BODY_CHARS;
+  useAnnounceShown(ANNOUNCE.ALERT, over > 0 ? COMMENT_EDITOR_WORDS.over(over) : "");
 
   // Note that a box drawn into a note the diff stands only once it draws again takes the keyboard once it stands in the window.
   useEffect(() => {
@@ -212,11 +221,7 @@ export function CommentEditor({
         />
         {foot}
       </ComposerFrame>
-      {over > 0 ? (
-        <p className="comment-editor-note" role="alert">
-          {COMMENT_EDITOR_WORDS.over(over)}
-        </p>
-      ) : null}
+      {over > 0 ? <p className="comment-editor-note">{COMMENT_EDITOR_WORDS.over(over)}</p> : null}
     </div>
   );
 }
