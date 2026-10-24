@@ -38,8 +38,17 @@ tester.run("retired (example.json)", retiredRule, {
       filename: PANEL,
     },
     { code: 'import { x } from "retired-example-not";', filename: PANEL },
-    // A retired word in prose is no class.
+    // A retired word in prose is no class, nor a value compared against, a key, or another attribute's value.
     { code: "<p>the retired-example class</p>", filename: PANEL },
+    { code: 'const label = "Drop the retired-example class.";', filename: PANEL },
+    {
+      code: 'const mode = "a"; <div className={mode === "retired-example" ? "new-a" : "new-b"} />;',
+      filename: PANEL,
+    },
+    {
+      code: 'const map = { "retired-example": 1 }; type T = "retired-example"; <div data-kind="retired-example" />;',
+      filename: PANEL,
+    },
   ],
   invalid: [
     {
@@ -58,6 +67,17 @@ tester.run("retired (example.json)", retiredRule, {
       filename: PANEL,
       errors: [{ messageId: "retired" }],
     },
+    // A class kept in a constant or an object reaches the DOM all the same.
+    {
+      code: 'const OLD = "retired-example"; <div className={OLD} />;',
+      filename: PANEL,
+      errors: [{ messageId: "retired" }],
+    },
+    {
+      code: 'const CLASSES = { bar: "x retired-example-part-bar" };',
+      filename: PANEL,
+      errors: [{ messageId: "retired" }],
+    },
     // A glyph by any of Lucide's aliases, through the door or a namespace of it, and a concept off the registry.
     {
       code: 'import { LucideRetiredExample, RetiredExampleIcon as Mine } from "@luke/ui/icons";',
@@ -71,6 +91,17 @@ tester.run("retired (example.json)", retiredRule, {
     },
     {
       code: 'import { GLYPH as G } from "@luke/ui/icons"; const a = G.RETIRED_EXAMPLE;',
+      filename: PANEL,
+      errors: [{ messageId: "retired" }],
+    },
+    // Drawn as a JSX member, once however many tags the element spells.
+    {
+      code: 'import { GLYPH as G } from "@luke/ui/icons"; <G.RETIRED_EXAMPLE></G.RETIRED_EXAMPLE>;',
+      filename: PANEL,
+      errors: [{ messageId: "retired" }],
+    },
+    {
+      code: 'import * as icons from "@luke/ui/icons"; <icons.RetiredExampleIcon />;',
       filename: PANEL,
       errors: [{ messageId: "retired" }],
     },
@@ -105,15 +136,16 @@ tester.run("retired (baseline)", baselined, {
   valid: [
     // A file at exactly its baseline.
     { code: '<a className="old-thing" /> ; <b className="old-thing" />;', filename: HELD_FILE },
-    // An import narrowed to names passes the module's other names.
+    // An import narrowed to names passes the module's other names, by name or off a namespace.
     { code: 'import { New } from "old-lib";', filename: PANEL },
+    { code: 'import * as lib from "old-lib"; <lib.New />; lib.New;', filename: PANEL },
   ],
   invalid: [
     // One place past the baseline: the new one is reported.
     {
       code: '<a className="old-thing" />; <b className="old-thing" />; <i className="old-thing" />;',
       filename: HELD_FILE,
-      errors: [{ messageId: "retired", line: 1, column: 61 }],
+      errors: [{ messageId: "retired", line: 1, column: 71 }],
     },
     // Fewer places than the baseline: the count comes down with the fix.
     {
@@ -127,6 +159,17 @@ tester.run("retired (baseline)", baselined, {
       code: 'import { New, Old } from "old-lib";',
       filename: PANEL,
       errors: [{ messageId: "retired" }],
+    },
+    // A narrowed name read off a namespace or a default import, and a way in that takes every name at once.
+    {
+      code: 'import * as lib from "old-lib"; import dflt from "old-lib"; <lib.Old />; dflt.Old;',
+      filename: PANEL,
+      errors: [{ messageId: "retired" }, { messageId: "retired" }],
+    },
+    {
+      code: 'export * from "old-lib"; const lib = require("old-lib"); await import("old-lib/x");',
+      filename: PANEL,
+      errors: [{ messageId: "retired" }, { messageId: "retired" }, { messageId: "retired" }],
     },
   ],
 });

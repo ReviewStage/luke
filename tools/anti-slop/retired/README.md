@@ -18,9 +18,10 @@ so guard PRs that land together never touch the same file.
 ```
 
 - `instead` is what the error tells someone to use.
-- A **class** is refused in a `className` string (the oxlint rule) and in a
-  stylesheet's selectors (the style guard, `style-guard.ts`). A trailing `*`
-  matches every class it starts.
+- A **class** is refused in any string that reads as a class list, in a
+  `className` or kept in a constant (the oxlint rule), and in a stylesheet's
+  selectors (the style guard, `style-guard.ts`). A trailing `*` matches every
+  class it starts.
 - A **glyph** is a name imported from `@luke/ui/icons`, Lucide's aliases alike
   (`ArrowLeft`, `ArrowLeftIcon`, `LucideArrowLeft`), or a concept read off the
   registry (`GLYPH.BACK`).

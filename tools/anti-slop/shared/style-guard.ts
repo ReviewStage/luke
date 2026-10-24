@@ -465,7 +465,7 @@ function classRuleOf(token: string, names: ThemeNames): StyleRule | undefined {
  * brackets hold (`content-['·']`). Note that we ask this of the whole
  * string, because a word like `truncate` in a sentence is no class.
  */
-function isClassList(text: string): boolean {
+export function isClassList(text: string): boolean {
   const words = text.split(/\s+/u).filter((word) => word.length > 0);
   return (
     words.length > 0 &&
