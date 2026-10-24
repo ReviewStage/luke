@@ -1,19 +1,19 @@
 import type { PendingReviewComment, ReviewThread } from "@luke/features/coding-agent-wire";
 import { PULL_REQUEST_ACTION } from "@luke/features/pull-request-write-wire";
 import {
-  BADGE_TONE,
   Badge,
   BUTTON_SIZE,
   BUTTON_VARIANT,
   Button,
   ConfirmDialog,
   type DialogQuestion,
+  STATUS_TONE,
   useConfirmDialog,
 } from "@luke/ui";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { PencilIcon, Trash2Icon } from "lucide-react";
-import { createContext, type ReactNode, useContext, useEffect, useRef, useState } from "react";
-import { MarkdownField } from "./markdown-field.js";
+import { createContext, type ReactNode, useContext, useState } from "react";
+import { CommentEditor, overCommentBound } from "./comment-editor.js";
 import { noop, useThreadWriting } from "./pull-request-thread-actions.js";
 import { PullRequestWriteNote, usePullRequestWrites } from "./pull-request-writes.js";
 
@@ -138,7 +138,7 @@ export function usePendingThread(thread: ReviewThread): boolean {
 
 /** The Pending mark a pending comment and a thread it starts wear. */
 export function PendingBadge(): React.JSX.Element {
-  return <Badge tone={BADGE_TONE.ATTENTION}>{PENDING_WORDS.PENDING}</Badge>;
+  return <Badge tone={STATUS_TONE.ATTENTION}>{PENDING_WORDS.PENDING}</Badge>;
 }
 
 /** The words being written over a pending comment's: the field, Cancel, and Save; ⌘↩ saves. */
@@ -156,37 +156,24 @@ function EditForm({
   onCancel: () => void;
 }): React.JSX.Element {
   const [body, setBody] = useState(draft.body);
-  const field = useRef<HTMLTextAreaElement>(null);
-  const blank = body.trim() === "";
+  const blank = body.trim() === "" || overCommentBound(body);
   const save = () => {
     if (!blank && !busy) onSave(body);
   };
-  useEffect(() => {
-    field.current?.focus();
-  }, []);
+  // Note that ⌘↩ saves this comment alone, and goes no further (`comment-editor.tsx`): the Review panel around a listed comment submits the whole review on it.
   return (
-    // biome-ignore lint/a11y/noStaticElementInteractions: Escape in the field lets the edit go, as the reply's field does; the key arrives here from it.
-    <div
-      className="pull-request-thread-reply"
-      onKeyDown={(event) => {
-        // Note that ⌘↩ saves this comment alone, so it goes no further: the Review panel around a listed comment submits the whole review on it.
-        if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
-          event.stopPropagation();
-          return;
-        }
-        if (event.key !== "Escape" || busy) return;
-        event.stopPropagation();
-        onCancel();
-      }}
-    >
-      <MarkdownField
+    <div className="pull-request-thread-reply">
+      <CommentEditor
         label={PENDING_WORDS.FIELD}
         placeholder={PENDING_WORDS.PLACEHOLDER}
         value={body}
         onChange={setBody}
         busy={busy}
-        fieldRef={field}
+        focus
         onSubmit={save}
+        onCancel={() => {
+          if (!busy) onCancel();
+        }}
       />
       <div className="pull-request-thread-reply-foot">
         <Button disabled={busy} onClick={onCancel}>

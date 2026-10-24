@@ -39,6 +39,7 @@ import {
   PageToolbar,
   RowHint,
   RowHintOptions,
+  STATUS_TONE,
   Switch,
   TEXT_ELEMENT,
   TEXT_TONE,
@@ -60,7 +61,7 @@ import { useSentryRead } from "../settings/use-sentry-read.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import { GLYPH_STATE, glyphStateWords, stateEndMark } from "../state-glyph.js";
 import { AUTOMATIONS_PAGE, type TasksControl } from "../tasks/use-tasks-tab.js";
-import { TOAST_HOLD, TOAST_TONE, useToast } from "../toast.js";
+import { TOAST_HOLD, useToast } from "../toast.js";
 import { useExperiment } from "../use-app-state.js";
 import { ActionMenu } from "./action-menu.js";
 import { AutomationEditor, AutomationPageSkeleton, type SentryOffer } from "./automation-editor.js";
@@ -415,7 +416,7 @@ function ListPage({
     toggle(automation.id, enabled).then((answer) => {
       const refusal = toggleRefusal(answer, enabled);
       if (refusal !== undefined) {
-        toast({ words: refusal, tone: TOAST_TONE.FAILED, hold: TOAST_HOLD.FAILED });
+        toast({ words: refusal, tone: STATUS_TONE.DANGER, hold: TOAST_HOLD.FAILED });
       }
     });
   };

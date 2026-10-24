@@ -53,6 +53,7 @@ import {
   Inline,
   LAYOUT_ELEMENT,
   Shortcut,
+  STATUS_TONE,
   TEXT_ELEMENT,
   TEXT_VARIANT,
   Text,
@@ -65,7 +66,7 @@ import { Duration } from "effect";
 import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { useAct } from "./act.js";
 import { encodeImage, imageFiles } from "./feedback-images.js";
-import { TOAST_TONE, type ToastNotice, useToast } from "./toast.js";
+import { type ToastNotice, useToast } from "./toast.js";
 import { DROP_LEAVE, useFileDrop } from "./use-file-drop.js";
 
 /**
@@ -107,7 +108,7 @@ const SEND_CHORD: ShortcutChord = { key: SHORTCUT_KEY.ENTER };
 /** The toast a delivered note is thanked with: read on the way back from the Send button, gone before anyone wonders. */
 const SENT_NOTICE: ToastNotice = {
   words: "Sent",
-  tone: TOAST_TONE.DONE,
+  tone: STATUS_TONE.COMPLETE,
   hold: Duration.seconds(3),
 };
 

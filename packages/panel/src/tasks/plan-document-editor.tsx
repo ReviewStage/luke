@@ -85,7 +85,7 @@ const titlePauseAtom = rendererRuntime.fn((stamp: number) =>
 );
 
 /** Whether a click lands on words to edit: no selection made by the press, and not on a link, a button bar a picture's, a video's player, a task's checkbox or the label around it, or the section's byline. */
-function editsOnClick(target: EventTarget): boolean {
+export function editsOnClick(target: EventTarget): boolean {
   const selection = window.getSelection();
   if (selection !== null && !selection.isCollapsed) return false;
   // Note that a mention's chip is its own, a link's or a folder's that opens nothing alike, and so is the byline's row, whose writer and ⋯ are presses of their own, a button in the words, a diagram's Show code say, and a task's checkbox, which ticks its item, and the label around it, whose press a finger takes beside the box and hands to it; a comment's marked words open its thread and the editor at them alike. A picture's press is a button that hands on only the press it does not take, a diagram's under a mouse in a wide room, which is the words' as the bare picture's was. A video's player is its own whole, its frame and every control in it, whatever they are drawn as, since a press there plays, seeks, or enlarges it; its caption is the words'.
@@ -143,6 +143,56 @@ function wordsUnder(
     if (at.textContent === text && inCode(at) === code) occurrence += 1;
   }
   return { section, text, occurrence, offset: range.startOffset, code, top: lineTop(range, words) };
+}
+
+/** Whether an element is a heading that opens a section, as the editor counts them (`SECTION_LEVELS`). */
+function opensSection(element: Element | null | undefined): element is HTMLHeadingElement {
+  return (
+    element instanceof HTMLHeadingElement && (element.tagName === "H1" || element.tagName === "H2")
+  );
+}
+
+/**
+ * The words a click at a point landed on in a document drawn whole rather
+ * than as its sections, as a pull request's description is: the section
+ * counted by the headings that open one before the words, as the editor
+ * counts them, so it finds them again (`PlacedWords`); none where it landed
+ * on no words.
+ */
+export function documentWordsUnder(
+  root: HTMLElement,
+  x: number,
+  y: number,
+): PlacedWords | undefined {
+  const range = rangeAt(x, y);
+  const words = range?.startContainer;
+  if (range == null || !(words instanceof Text) || !root.contains(words)) return undefined;
+  const code = inCode(words);
+  let section = 0;
+  let occurrence = 0;
+  // Whether any words came before, since a heading opening the text opens its first section.
+  let begun = false;
+  let heading: Element | undefined;
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+  for (let at = walker.nextNode(); at !== null; at = walker.nextNode()) {
+    const opens = at.parentElement?.closest("h1, h2");
+    if (opensSection(opens) && opens !== heading) {
+      heading = opens;
+      section += begun ? 1 : 0;
+      occurrence = begun ? 0 : occurrence;
+    }
+    if (at === words) break;
+    if ((at.textContent ?? "").trim() !== "") begun = true;
+    if (at.textContent === words.data && inCode(at) === code) occurrence += 1;
+  }
+  return {
+    section,
+    text: words.data,
+    occurrence,
+    offset: range.startOffset,
+    code,
+    top: lineTop(range, words),
+  };
 }
 
 /** Where the words a closing editor's caret stood on stand in the drawn text now; none where the drawn text holds no such words. */

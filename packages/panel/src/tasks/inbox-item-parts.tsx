@@ -19,7 +19,6 @@ import {
 import { LINK_PLACE } from "@luke/features/link-grammar";
 import type { CatalogModel } from "@luke/features/models-wire";
 import {
-  BADGE_TONE,
   Badge,
   HOVER_CARD_ROW_LOOK,
   HoverCard,
@@ -30,6 +29,7 @@ import {
   HoverCardRule,
   INLINE_REF_LOOK,
   InlineRef,
+  STATUS_TONE,
   TaskStatusMark,
   Time,
   VisuallyHidden,
@@ -369,7 +369,7 @@ function CardAsk({
                 label={option.label}
                 end={
                   recommendedLabels(ask).includes(option.label) ? (
-                    <Badge tone={BADGE_TONE.ATTENTION}>{RECOMMENDED}</Badge>
+                    <Badge tone={STATUS_TONE.ATTENTION}>{RECOMMENDED}</Badge>
                   ) : undefined
                 }
               />

@@ -122,10 +122,10 @@ function MenuNote({ read }: { read: SkillsRead | undefined }): React.ReactNode {
   if (read.skills.length > 0) return SKILL_MENU_NOTE.NO_MATCH;
   return (
     <Stack gap={GAP.TIGHT} align={ALIGN.CENTER}>
-      <Text as={TEXT_ELEMENT.SPAN} tone={TEXT_TONE.SUBTLE}>
+      <Text as={TEXT_ELEMENT.SPAN} tone={TEXT_TONE.MUTED}>
         {SKILL_MENU_NOTE.NONE}
       </Text>
-      <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.SUBTLE}>
+      <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
         {SKILL_MENU_NOTE.NONE_HINT}
       </Text>
     </Stack>

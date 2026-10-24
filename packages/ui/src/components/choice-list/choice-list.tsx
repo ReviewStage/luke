@@ -1,7 +1,8 @@
 import type { ReactNode } from "react";
 import { PRESS_PULSE, pulsePress } from "../../press-pulse.js";
+import { STATUS_TONE, type StatusTone } from "../../status-tone.js";
 import { useClipped } from "../../use-clipped.js";
-import { BADGE_TONE, Badge, type BadgeTone } from "../badge/badge.js";
+import { Badge } from "../badge/badge.js";
 
 /**
  * choice-list.tsx -- a list of options a reader picks from, each a row the width of its column holding a label, a line of detail, and a badge: one of them, or any that apply, and once settled, what was offered with what was picked.
@@ -89,14 +90,6 @@ export const CHOICE_FLOW = {
 
 export type ChoiceFlow = (typeof CHOICE_FLOW)[keyof typeof CHOICE_FLOW];
 
-/** What a marked row's control fills with once checked where not the accent: what picking it means, going ahead or holding back. */
-export const CHOICE_TONE = {
-  COMPLETE: "complete",
-  DANGER: "danger",
-} as const;
-
-export type ChoiceTone = (typeof CHOICE_TONE)[keyof typeof CHOICE_TONE];
-
 /** How many of a numbered list's rows wear their number: the keys 1 to 9. */
 export const CHOICE_NUMBERED_ROWS = 9;
 
@@ -121,7 +114,7 @@ export interface ChoiceOption<Value extends string> {
    * act where none is given, or the neutral one for a word that only says
    * what the option is, as a voice's "Feminine" does.
    */
-  badgeTone?: BadgeTone | undefined;
+  badgeTone?: StatusTone | undefined;
   /** A picture before the words, a workspace's tile; a picture list's face. */
   mark?: ReactNode;
   /** What hangs after the label on its line, a connected credential's check. */
@@ -133,7 +126,7 @@ export interface ChoiceOption<Value extends string> {
   /** Whether this option alone cannot be picked. */
   disabled?: boolean | undefined;
   /** What a marked row's control fills with once checked; the accent where none is given. */
-  tone?: ChoiceTone | undefined;
+  tone?: StatusTone | undefined;
 }
 
 interface ChoiceListBase<Value extends string> {
@@ -220,7 +213,7 @@ function ChoiceWords({
   number,
 }: {
   option: ChoiceOption<string>;
-  tone: BadgeTone;
+  tone: StatusTone;
   after?: ReactNode;
   number?: number | undefined;
 }): React.JSX.Element {
@@ -281,7 +274,7 @@ function ChoiceRow({
   disabled: boolean;
   look: ChoiceLook;
   /** The badge's tone where the option names none. */
-  badgeTone: BadgeTone;
+  badgeTone: StatusTone;
   /** The row's key, counted from one, where the list is numbered and the row among its first nine. */
   number: number | undefined;
   focusRef: React.RefObject<HTMLButtonElement | null> | undefined;
@@ -429,7 +422,7 @@ function OpenChoices<Value extends string>(props: ChoiceListOpen<Value>): React.
       look={look}
       number={numbered && index < CHOICE_NUMBERED_ROWS ? index + 1 : undefined}
       focusRef={option === landing ? focusRef : undefined}
-      badgeTone={readOnly ? BADGE_TONE.NEUTRAL : BADGE_TONE.ATTENTION}
+      badgeTone={readOnly ? STATUS_TONE.NEUTRAL : STATUS_TONE.ATTENTION}
       onPress={() => press(option.value)}
     />
   ));
@@ -487,7 +480,7 @@ function SettledChoices<Value extends string>({
             )}
             <ChoiceWords
               option={option}
-              tone={BADGE_TONE.NEUTRAL}
+              tone={STATUS_TONE.NEUTRAL}
               after={
                 picked ? (
                   <span className="luke-choice-picked">

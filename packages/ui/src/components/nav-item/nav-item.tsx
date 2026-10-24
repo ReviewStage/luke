@@ -1,6 +1,7 @@
 import type { ButtonHTMLAttributes, KeyboardEvent, MouseEvent, ReactNode, Ref } from "react";
 import { ChevronRightIcon } from "../../face/glyphs.js";
 import { PRESS_PULSE, pulseOnPress } from "../../press-pulse.js";
+import { STATUS_TONE, type StatusTone } from "../../status-tone.js";
 import { type ContextMenuProps, withContextMenu } from "../menu/menu.js";
 import { ClippedLine, ONE_LINE_ELEMENT, ONE_LINE_END } from "../one-line/clipped-line.js";
 
@@ -73,22 +74,14 @@ export const NAV_COUNT_SHOWN = {
 
 export type NavCountShown = (typeof NAV_COUNT_SHOWN)[keyof typeof NAV_COUNT_SHOWN];
 
-/** A count's ink: muted, as a group's tally, or the accent's blue, for what waits on the reader. */
-export const NAV_COUNT_TONE = {
-  MUTED: "muted",
-  ACCENT: "accent",
-} as const;
-
-export type NavCountTone = (typeof NAV_COUNT_TONE)[keyof typeof NAV_COUNT_TONE];
-
 /** A count at the item's end: its figure, what it counts as a reader hears it, when it stands, and its ink. */
 export interface NavCount {
   readonly value: number;
   /** Said after the figure to a reader, "waiting on you", "tasks"; the figure alone where absent. */
   readonly noun?: string | undefined;
   readonly shown?: NavCountShown | undefined;
-  /** Muted where absent. */
-  readonly tone?: NavCountTone | undefined;
+  /** Its status tone: neutral, a tally in the muted ink, where absent; attention for what needs the reader. */
+  readonly tone?: StatusTone | undefined;
 }
 
 /** What `useMenu().trigger()` hands the button its menu drops from. */
@@ -185,7 +178,7 @@ function AtRest({ mark, count }: { mark: ReactNode; count: NavCount | undefined 
         <span
           className="luke-nav-item-count"
           data-shown={count.shown ?? NAV_COUNT_SHOWN.ALWAYS}
-          data-tone={count.tone ?? NAV_COUNT_TONE.MUTED}
+          data-tone={count.tone ?? STATUS_TONE.NEUTRAL}
         >
           {count.value}
           {count.noun === undefined ? null : (

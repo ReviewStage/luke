@@ -15,7 +15,7 @@ import type { ChatShown } from "@luke/host/contract";
 import { APP_SETTING_SCHEMA, type Experiment, type HostCapability } from "@luke/settings";
 import { SETTINGS_VIEW, type SettingsLink } from "@luke/settings/settings-views";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
-import { cssCustomProperties } from "@luke/ui";
+import { cssCustomProperties, STATUS_TONE } from "@luke/ui";
 import { callBarAgentId } from "@luke/ui/call-card-model";
 import { useLinkOpener } from "@luke/ui/held-link";
 import { EXPERIMENT_OFF_LINK, LINK_ROUTE, linkRoute } from "@luke/ui/link-route";
@@ -71,7 +71,7 @@ import { useTasksFixtureLanded } from "./tasks/tasks-fixture-loader.js";
 import { ThreadRevealProvider } from "./tasks/thread-reveal.js";
 import { ListedPullRequests, OpenLinkProvider } from "./tasks/use-open-link.js";
 import { type LeaveAsk, useLeaveGuard, useTasksTab } from "./tasks/use-tasks-tab.js";
-import { TOAST_HOLD, TOAST_TONE, ToastHost, useToast } from "./toast.js";
+import { TOAST_HOLD, ToastHost, useToast } from "./toast.js";
 import { useUpdatedToast } from "./update-toast.js";
 import {
   APP_SETTINGS_VIEW,
@@ -479,7 +479,7 @@ function AppWindow(): React.JSX.Element {
     if (route.kind === LINK_ROUTE.SETTINGS) {
       openSettings(route.settings);
     } else if (route.kind === LINK_ROUTE.EXPERIMENT_OFF) {
-      toast({ words: EXPERIMENT_OFF_LINK, tone: TOAST_TONE.FAILED, hold: TOAST_HOLD.FAILED });
+      toast({ words: EXPERIMENT_OFF_LINK, tone: STATUS_TONE.DANGER, hold: TOAST_HOLD.FAILED });
     } else {
       guardLeave(() => {
         changeTab(PANEL_TAB.TASKS);

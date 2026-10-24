@@ -2,8 +2,8 @@ import type { PlanEditor } from "@luke/features/task-wire";
 import { callHeading, WORKED_SEPARATOR, workingTime } from "@luke/features/time-format";
 import { LIVE_CLOSE_REASON, type LiveCloseReason } from "@luke/live";
 import {
-  BADGE_TONE,
   Badge,
+  STATUS_TONE,
   TEXT_ELEMENT,
   TEXT_VARIANT,
   Text,
@@ -179,7 +179,7 @@ export function CallStartMarker({
     <CallMarker end={CALL_MARKER_END.START} live={live}>
       <span className="call-marker-pill">
         <Badge
-          tone={live ? BADGE_TONE.COMPLETE : BADGE_TONE.NEUTRAL}
+          tone={live ? STATUS_TONE.COMPLETE : STATUS_TONE.NEUTRAL}
           icon={
             <span className="call-marker-icon" aria-hidden="true">
               <WaveformIcon />

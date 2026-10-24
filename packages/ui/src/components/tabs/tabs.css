@@ -563,7 +563,7 @@
   .luke-tab-card-glyph {
     --luke-glyph-size: 28px;
     display: inline-flex;
-    color: var(--luke-color-text-subtle);
+    color: var(--luke-color-text-muted);
   }
 
   .luke-tab-card-glyph :is(svg, img) {

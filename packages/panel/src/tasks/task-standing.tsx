@@ -170,7 +170,7 @@ export interface TaskStandingDoor {
  * page over its title, its hover card and an Inbox row's card at the head,
  * the Tasks list's row, the board's card, and ⌘K's row, where the words
  * typed that found it are marked in it. Plain caption-size words in the
- * subtle ink, monospace with even figures, never a chip, and never shrunk by
+ * muted ink, monospace with even figures, never a chip, and never shrunk by
  * what stands beside it, so a chip there gives way instead. Nothing for a
  * task from a service before keys, or where the window holds no such
  * workspace.
@@ -193,7 +193,7 @@ export function TaskKey({
     <span className="task-key" data-task-key="" aria-hidden={decorative ? true : undefined}>
       <Text
         variant={TEXT_VARIANT.CAPTION}
-        tone={TEXT_TONE.SUBTLE}
+        tone={TEXT_TONE.MUTED}
         font={TEXT_FONT.MONO}
         as={TEXT_ELEMENT.SPAN}
       >

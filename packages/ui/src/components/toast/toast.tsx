@@ -1,6 +1,7 @@
 import { type KeyboardEvent, type ReactNode, useRef, useState } from "react";
 import { cssCustomProperties } from "../../css.js";
 import { AlertIcon, CircleCheckIcon, InboxIcon } from "../../icons/lucide-glyphs.js";
+import { STATUS_TONE } from "../../status-tone.js";
 import { SpinnerRing } from "../spinner/spinner.js";
 import { TEXT_ELEMENT, TEXT_TONE, TEXT_VARIANT, Text } from "../text/text.js";
 import { useToastSwipe } from "./toast-swipe.js";
@@ -31,15 +32,12 @@ import { useToastSwipe } from "./toast-swipe.js";
  * stack's.
  */
 
-/** What a toast reports: the act done, the act refused, something asked of the developer, or work still under way. */
-export const TOAST_TONE = {
-  DONE: "done",
-  FAILED: "failed",
-  ASK: "ask",
-  WORKING: "working",
-} as const;
-
-export type ToastTone = (typeof TOAST_TONE)[keyof typeof TOAST_TONE];
+/** What a toast reports, of the status tones: the act done, the act refused, something asked of the developer, or work still under way. */
+export type ToastTone =
+  | typeof STATUS_TONE.COMPLETE
+  | typeof STATUS_TONE.DANGER
+  | typeof STATUS_TONE.ATTENTION
+  | typeof STATUS_TONE.WORKING;
 
 /** A second, in milliseconds: the notch a countdown drains by under reduced motion. */
 const SECOND_MS = 1000;
@@ -53,13 +51,13 @@ const GLYPH_TURN = {
 /** The glyph a toast leads with: a check for what was done, an alert for what was refused, the Inbox's tray for an ask, and the spinner's ring for work under way. */
 function ToneGlyph({ tone }: { tone: ToastTone }): React.JSX.Element {
   switch (tone) {
-    case TOAST_TONE.DONE:
+    case STATUS_TONE.COMPLETE:
       return <CircleCheckIcon />;
-    case TOAST_TONE.FAILED:
+    case STATUS_TONE.DANGER:
       return <AlertIcon />;
-    case TOAST_TONE.ASK:
+    case STATUS_TONE.ATTENTION:
       return <InboxIcon />;
-    case TOAST_TONE.WORKING:
+    case STATUS_TONE.WORKING:
       return <SpinnerRing />;
   }
 }

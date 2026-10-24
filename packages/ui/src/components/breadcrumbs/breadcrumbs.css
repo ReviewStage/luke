@@ -180,7 +180,7 @@
   }
 
   .luke-breadcrumbs[data-variant="caption"] .luke-breadcrumb-separator {
-    color: var(--luke-color-text-subtle);
+    color: var(--luke-color-text-muted);
   }
 
   .luke-breadcrumbs[data-variant="caption"] .luke-breadcrumb-separator svg {

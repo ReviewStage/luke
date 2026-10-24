@@ -49,7 +49,7 @@
 
 import { useAtomSet, useAtomValue } from "@effect/atom-react";
 import { MOTION_DURATION_MS } from "@luke/brand";
-import { TOAST_TONE, Toast, ToastActions, ToastStack, type ToastTone } from "@luke/ui";
+import { STATUS_TONE, Toast, ToastActions, ToastStack, type ToastTone } from "@luke/ui";
 import { visibleViewport } from "@luke/ui/visible-viewport";
 import { Clock, Duration, Effect } from "effect";
 import * as Atom from "effect/reactivity/Atom";
@@ -57,17 +57,15 @@ import { useCallback, useLayoutEffect } from "react";
 import { createPortal } from "react-dom";
 import { rendererRuntime } from "./renderer-runtime.js";
 
-export { TOAST_TONE };
-
 /** The tones said in the polite region: all but a refusal, which is an alert. */
 const POLITE_TONES: ReadonlySet<ToastTone> = new Set([
-  TOAST_TONE.DONE,
-  TOAST_TONE.ASK,
-  TOAST_TONE.WORKING,
+  STATUS_TONE.COMPLETE,
+  STATUS_TONE.ATTENTION,
+  STATUS_TONE.WORKING,
 ]);
 
 /** The tone said in the alert region: a refusal. */
-const ALERT_TONES: ReadonlySet<ToastTone> = new Set([TOAST_TONE.FAILED]);
+const ALERT_TONES: ReadonlySet<ToastTone> = new Set([STATUS_TONE.DANGER]);
 
 /**
  * How long a toast stands, by what it reports: a change carried, one
@@ -101,7 +99,7 @@ interface ToastAction {
  * rather than pushing the oldest out, for news that arrives in runs and
  * each piece of which is the developer's to act on. Its `subject` is what it
  * is about, by which whoever showed it may withdraw it once it is stale.
- * One of `TOAST_TONE.WORKING` has no hold and no action: it stands until the
+ * One of `STATUS_TONE.WORKING` has no hold and no action: it stands until the
  * work it says is under way settles it (`useWorkingToast`).
  */
 export type ToastNotice = {
@@ -115,7 +113,7 @@ export type ToastNotice = {
   | { readonly action: ToastAction; readonly hold?: Duration.Duration; readonly persists?: never }
   | { readonly action: ToastAction; readonly persists: true; readonly hold?: never }
   | {
-      readonly tone: typeof TOAST_TONE.WORKING;
+      readonly tone: typeof STATUS_TONE.WORKING;
       readonly hold?: never;
       readonly action?: never;
       readonly persists?: never;
@@ -197,7 +195,7 @@ const toastStackAtom = Atom.keepAlive(Atom.make<ToastLine>(EMPTY_STACK));
 
 /** The hold a notice stands for: its own, its action's, or none where it persists or says work is under way. */
 function holdOf(notice: ToastNotice): Duration.Duration | undefined {
-  if (notice.persists === true || notice.tone === TOAST_TONE.WORKING) return undefined;
+  if (notice.persists === true || notice.tone === STATUS_TONE.WORKING) return undefined;
   return notice.hold ?? ACTION_HOLD;
 }
 
@@ -231,7 +229,7 @@ function dueAt(toast: ToastShown): number | undefined {
 /** Whether two notices say the same thing, with no action between them whose press would be lost, and neither work under way that will settle on its own. */
 function sameSaying(a: ToastNotice, b: ToastNotice): boolean {
   return (
-    a.tone !== TOAST_TONE.WORKING &&
+    a.tone !== STATUS_TONE.WORKING &&
     a.action === undefined &&
     b.action === undefined &&
     a.words === b.words &&
@@ -307,7 +305,7 @@ function settleWork(
   now: number,
 ): ToastLine {
   const working = (about: ToastNotice) =>
-    about.tone === TOAST_TONE.WORKING && about.subject === subject;
+    about.tone === STATUS_TONE.WORKING && about.subject === subject;
   const standing = stack.shown.find((toast) => !toast.leaving && working(toast.notice));
   if (standing !== undefined) {
     const turned = { ...standing, notice, left: holdOf(notice), since: now };
@@ -415,7 +413,7 @@ export function useWorkingToast(): (words: string) => (notice: ToastNotice) => v
   return useCallback(
     (words: string) => {
       const subject = crypto.randomUUID();
-      step({ kind: TOAST_STEP.SHOW, notice: { words, tone: TOAST_TONE.WORKING, subject } });
+      step({ kind: TOAST_STEP.SHOW, notice: { words, tone: STATUS_TONE.WORKING, subject } });
       return (notice: ToastNotice) =>
         step({ kind: TOAST_STEP.SETTLE, subject, notice: { subject, ...notice } });
     },

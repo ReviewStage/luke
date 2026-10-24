@@ -112,14 +112,14 @@ export function SettingsPanel({
             {panelView ? <PrivacySection view={panelView} writes={writes} /> : null}
           </>
         ) : (
-          <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.SUBTLE}>
+          <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
             Not signed in.
           </Text>
         )
       ) : null}
 
       {view !== SETTINGS_VIEW.WORKSPACE ? null : !signedIn ? (
-        <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.SUBTLE}>
+        <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
           Sign in to see your workspaces.
         </Text>
       ) : workspace ? (
@@ -143,7 +143,7 @@ export function SettingsPanel({
       {view !== SETTINGS_VIEW.SKILLS ? null : signedIn ? (
         <SkillsPage control={workspace} readerId={account.id} />
       ) : (
-        <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.SUBTLE}>
+        <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
           Sign in to install skills.
         </Text>
       )}

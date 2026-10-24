@@ -13,6 +13,7 @@ import {
   POPOVER_BOUNDS,
   SKELETON_SHAPE,
   Skeleton,
+  STATUS_TONE,
   Tooltip,
   UnpinIcon,
   useMenu,
@@ -30,7 +31,7 @@ import {
   type TranscriptCopy,
   transcriptMarkdown,
 } from "../tasks/transcript-copy.js";
-import { TOAST_HOLD, TOAST_TONE, useToast } from "../toast.js";
+import { TOAST_HOLD, useToast } from "../toast.js";
 import { ActionMenu, type MenuAction } from "./action-menu.js";
 import { MenuTab } from "./tab-strip.js";
 
@@ -476,7 +477,7 @@ export function useTranscriptCopier(): TranscriptCopier {
   const copyWithToast = useCopyToast();
   const toast = useToast();
   const unread = () =>
-    toast({ words: TRANSCRIPT_UNREAD_NOTE, tone: TOAST_TONE.FAILED, hold: TOAST_HOLD.FAILED });
+    toast({ words: TRANSCRIPT_UNREAD_NOTE, tone: STATUS_TONE.DANGER, hold: TOAST_HOLD.FAILED });
   return (read) => (copy) => {
     read().then(
       (transcript) =>

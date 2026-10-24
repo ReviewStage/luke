@@ -73,7 +73,7 @@
   }
 
   .luke-inline-ref[data-gone="true"] {
-    color: var(--luke-color-text-subtle);
+    color: var(--luke-color-text-muted);
   }
 
   .luke-inline-ref[data-gone="true"] .luke-inline-ref-label {

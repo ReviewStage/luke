@@ -20,7 +20,7 @@
  * range's end, while the days between wash their cells edge to edge, the
  * ends washing their inner half, a band rounding where a week ends it;
  * today is the accent's ink with a dot under its number; and a
- * neighbouring month's days are subtle. The keyboard's ring, inside the
+ * neighbouring month's days are muted. The keyboard's ring, inside the
  * day since its neighbours stand against it, is `calendar.css`'s, the
  * day rounding to its face while the ring stands.
  */
@@ -52,7 +52,7 @@ export const CALENDAR_MONTH_GRID = "table-fixed border-separate border-spacing-0
 
 /** A weekday's heading over its column. */
 export const CALENDAR_WEEKDAY =
-  "h-control w-control p-0 text-center font-sans text-tag font-tag text-subtle-foreground";
+  "h-control w-control p-0 text-center font-sans text-tag font-tag text-muted-foreground";
 
 /** A day's cell, a control's height across. */
 export const CALENDAR_DAY = "w-control p-0";
@@ -77,11 +77,11 @@ export const CALENDAR_DAY_FACE = {
   PICKED: "before:bg-accent-fill",
 } as const;
 
-/** A day's ink: on the accent where picked, then today's accent, then a neighbouring month's subtle, then the text's own. */
+/** A day's ink: on the accent where picked, then today's accent, then a neighbouring month's muted, then the text's own. */
 export const CALENDAR_DAY_INK = {
   PICKED: "text-on-accent",
   TODAY: "text-accent-ink",
-  OUTSIDE: "text-subtle-foreground",
+  OUTSIDE: "text-muted-foreground",
   OWN: "text-foreground",
 } as const;
 

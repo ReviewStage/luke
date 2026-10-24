@@ -65,7 +65,7 @@ export type SearchFieldLook = (typeof SEARCH_FIELD_LOOK)[keyof typeof SEARCH_FIE
 
 /** The well: a control tall on the hover fill inside a hairline, the magnifier leading at a control's glyph size. */
 const SEARCH_WELL =
-  "luke-search-field group/search box-border flex h-control min-w-0 cursor-text items-center gap-icon-gap rounded-control border border-border bg-muted pr-luke-2 pl-search-lead text-subtle-foreground transition-[border-color] duration-(--luke-duration-hover) ease-plain [&>svg]:size-control-icon [&>svg]:flex-none";
+  "luke-search-field group/search box-border flex h-control min-w-0 cursor-text items-center gap-icon-gap rounded-control border border-border bg-muted pr-luke-2 pl-search-lead text-muted-foreground transition-[border-color] duration-(--luke-duration-hover) ease-plain [&>svg]:size-control-icon [&>svg]:flex-none";
 
 /** Each look's classes over the well's: a menu's head row is a menu row tall, with only a hairline under it and no ring. */
 const SEARCH_LOOK_CLASS = {

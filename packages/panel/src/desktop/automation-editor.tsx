@@ -975,11 +975,7 @@ function EditorToolbar({
     >
       {codeReview ? <SendFeedbackButton experiment={EXPERIMENT.CODE_REVIEW} /> : null}
       <EditorStatus>
-        <Text
-          variant={TEXT_VARIANT.CAPTION}
-          tone={dirty ? TEXT_TONE.MUTED : TEXT_TONE.SUBTLE}
-          as={TEXT_ELEMENT.SPAN}
-        >
+        <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED} as={TEXT_ELEMENT.SPAN}>
           {status}
         </Text>
       </EditorStatus>
@@ -1970,7 +1966,6 @@ function EditorForm({
                   <SelectRow
                     width={CHIP_WIDTH.MIN_FIELD}
                     label="Event"
-                    detail="Heard through the workspace's GitHub App."
                     value={draft.githubEvent}
                     options={GITHUB_EVENTS}
                     parse={githubEventOf}

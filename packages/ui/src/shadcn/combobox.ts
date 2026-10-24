@@ -19,7 +19,7 @@
  * indicator a slot of its own at the row's end rather than an absolute
  * check; the list is capped by the app's placement hook
  * (`--luke-combobox-list-max`), scrolls only down (its ring is `combobox.css`'s
- * to leave off, the active option marking it); the label is the subtle caption; and the empty
+ * to leave off, the active option marking it); the label is the muted caption; and the empty
  * line is a row or two tall, so a list with nothing never falls to a sliver.
  * `@luke/ui`'s `Combobox` (`components/combobox/combobox.tsx`) is what an
  * app draws; these are its inside.
@@ -49,15 +49,15 @@ export const COMBOBOX_ITEM_LABEL = "min-w-0 flex-initial overflow-hidden font-la
 
 /** An item's detail, quieter, giving way first where the row runs short. */
 export const COMBOBOX_ITEM_DETAIL =
-  "block min-w-0 flex-[0_1000_auto] overflow-hidden pl-luke-12 text-caption leading-[inherit] text-subtle-foreground";
+  "block min-w-0 flex-[0_1000_auto] overflow-hidden pl-luke-12 text-caption leading-[inherit] text-muted-foreground";
 
 /** An item's hint at its end, at a menu's distance from what stands before it, as a chord is. */
 export const COMBOBOX_ITEM_HINT =
-  "inline-flex flex-none items-center gap-luke-4 pl-luke-16 text-caption leading-[inherit] text-subtle-foreground";
+  "inline-flex flex-none items-center gap-luke-4 pl-luke-16 text-caption leading-[inherit] text-muted-foreground";
 
 /** An item's end slot, one glyph wide: a chevron, or the check of the one chosen now in the text's own ink. */
 export const COMBOBOX_ITEM_END =
-  "inline-flex size-menu-glyph flex-none items-center justify-center text-subtle-foreground group-aria-current/option:text-foreground [&_svg]:size-menu-glyph [&_svg]:text-inherit";
+  "inline-flex size-menu-glyph flex-none items-center justify-center text-muted-foreground group-aria-current/option:text-foreground [&_svg]:size-menu-glyph [&_svg]:text-inherit";
 
 /** A group's heading over its run. */
 export const COMBOBOX_LABEL =
@@ -65,4 +65,4 @@ export const COMBOBOX_LABEL =
 
 /** What stands where no option does, or after them: one quiet line, centred, a row or two tall. */
 export const COMBOBOX_EMPTY =
-  "m-0 flex min-h-luke-40 items-center justify-center px-list-inset py-luke-4 text-center text-caption text-subtle-foreground";
+  "m-0 flex min-h-luke-40 items-center justify-center px-list-inset py-luke-4 text-center text-caption text-muted-foreground";

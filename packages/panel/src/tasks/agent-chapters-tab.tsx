@@ -19,10 +19,8 @@ import {
   Card,
   CHIP_LOOK,
   CHIP_SIZE,
-  CHIP_TONE,
   Checkbox,
   Chip,
-  type ChipTone,
   EMPTY_STATE_ACTION_LOOK,
   EmptyState,
   ERROR_STATE_PLACEMENT,
@@ -45,7 +43,9 @@ import {
   Skeleton,
   SkeletonRegion,
   SpinnerRegion,
+  STATUS_TONE,
   Stack,
+  type StatusTone,
   TEXT_BUTTON_TONE,
   TEXT_ELEMENT,
   TEXT_TONE,
@@ -216,10 +216,10 @@ const RISK_WORDS = {
 
 /** The tone a chapter's risk chip takes. */
 const RISK_TONES = {
-  high: CHIP_TONE.DANGER,
-  medium: CHIP_TONE.ATTENTION,
-  low: CHIP_TONE.COMPLETE,
-} as const satisfies Record<Risk, ChipTone>;
+  high: STATUS_TONE.DANGER,
+  medium: STATUS_TONE.ATTENTION,
+  low: STATUS_TONE.COMPLETE,
+} as const satisfies Record<Risk, StatusTone>;
 
 /** The rail's toggle that opens it beside the chapter, which the stylesheet draws only where it has room there. */
 const BESIDE_TOGGLE = '.chapter-rail-toggle[data-place="beside"]';
@@ -693,7 +693,7 @@ function ChaptersReading({
         </div>
       ) : null}
       <p className="chapters-made-by">
-        <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.SUBTLE}>
+        <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
           {CHAPTERS_WORDS.madeBy(chaptersModelLabel(model))}
         </Text>
       </p>

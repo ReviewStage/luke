@@ -76,10 +76,6 @@
     color: var(--luke-color-text-muted);
   }
 
-  .luke-text[data-tone="subtle"] {
-    color: var(--luke-color-text-subtle);
-  }
-
   .luke-text[data-font="mono"] {
     font-family: var(--luke-font-mono);
   }
