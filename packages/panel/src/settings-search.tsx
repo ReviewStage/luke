@@ -367,8 +367,8 @@ function fixedEntries(input: SettingsSearchInput): readonly SettingsSearchEntry[
           haystack: ["Rename workspace", "rename name change workspace photo"],
         }
       : undefined,
-    // The Skills page's one standing row: the skills themselves are read from the service and listed under it.
-    input.accountDrawn
+    // The Skills page's one standing row, drawn once the page has the workspace it lists the skills of: the skills themselves are read from the service and listed under it.
+    input.workspace
       ? {
           id: SETTINGS_SEARCH_ROW.ADD_SKILL,
           label: "Add a skill",

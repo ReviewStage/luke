@@ -300,6 +300,11 @@ test("the Mac repositories need a terminal here, and renaming needs a workspace 
     labelsFound("repositories", withoutTerminal).includes("Repositories on this Mac"),
     false,
   );
+  assert.equal(
+    labelsFound("add a skill", { ...FULL_INPUT, workspace: undefined }).includes("Add a skill"),
+    false,
+    "the Skills page draws no Add a skill row while its workspace is unread or failed",
+  );
   assert.deepEqual(labelsFound("rename", { ...FULL_INPUT, workspace: TEAM }), []);
   assert.deepEqual(
     labelsFound("rename", { ...FULL_INPUT, workspace: { ...FIRST, personal: true } }),
