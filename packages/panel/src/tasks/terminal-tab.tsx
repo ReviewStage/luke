@@ -147,18 +147,19 @@ export function TerminalTab({
       {...room.root}
     >
       <PaneBar
-        mark={
-          <AgentRef
-            subject={subject}
-            models={agents.models}
-            onOpen={onOpenAgent}
-            glyph={<AgentGlyph agent={subject.agent} />}
-            label={subject.name}
-          />
-        }
-        detail={
-          <span className="terminal-tab-standing">
-            <span className="terminal-tab-sandbox">· sandbox </span>· {look.words}
+        middle={
+          // Note that the name and where the connection stands share one shrinking box, so a long name gives way to the toggle rather than running under it.
+          <span className="terminal-tab-title">
+            <AgentRef
+              subject={subject}
+              models={agents.models}
+              onOpen={onOpenAgent}
+              glyph={<AgentGlyph agent={subject.agent} />}
+              label={subject.name}
+            />
+            <span className="terminal-tab-standing">
+              <span className="terminal-tab-sandbox">· sandbox </span>· {look.words}
+            </span>
           </span>
         }
         actions={<TreeToggle toggles={room.toggles} words={SHELLS_TOGGLE} />}
