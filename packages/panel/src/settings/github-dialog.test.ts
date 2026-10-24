@@ -171,6 +171,28 @@ test("with no token the row offers Add, and a token pasted into the unrecorded f
   assert.ok(!document.body.innerHTML.includes(PASTED), "the page holds the token nowhere");
 });
 
+test("the dialog opens with the token field focused, and Remove's question going back to a form leaves it there", async () => {
+  await mountAndOpen();
+  assert.ok(document.activeElement === tokenField(), "the field takes focus as the card opens");
+  await paste(PASTED);
+  act(() => button("Done").click());
+  await settle();
+
+  act(() => button("Manage").click());
+  await settle();
+  assert.equal(tokenField(), null);
+  act(() => {
+    button("Remove", dialog()).focus();
+    button("Remove", dialog()).click();
+  });
+  await settle();
+  act(() =>
+    button("Remove", dialog().querySelector<HTMLElement>('[role="group"]') ?? dialog()).click(),
+  );
+  await settle();
+  assert.ok(document.activeElement === tokenField(), "the form drawn again has focus");
+});
+
 test("a saved token's Manage opens it with Remove, which asks at the dialog's foot, then takes it away", async () => {
   stored = KEPT;
   await mountAndOpen();

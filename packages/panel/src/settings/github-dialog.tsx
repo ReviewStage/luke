@@ -36,7 +36,7 @@ import {
   useConfirmDialog,
 } from "@luke/ui";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useAct } from "../act.js";
 import { useOpenLink } from "../tasks/use-open-link.js";
 import { useAnnounceShown } from "../use-announce-shown.js";
@@ -161,8 +161,11 @@ function SavedToken({
 
 /** The field a token is pasted into, with Save, and why a save kept nothing under it. */
 function TokenForm({
+  field,
   onSave,
 }: {
+  /** The dialog's way to the field, which takes focus as the card opens and as a removal brings the form back. */
+  field: React.RefObject<HTMLInputElement | null>;
   onSave: (token: string) => Promise<string | undefined>;
 }): React.JSX.Element {
   const [pasted, setPasted] = useState("");
@@ -189,6 +192,7 @@ function TokenForm({
       }}
     >
       <SecretField
+        ref={field}
         label="Personal access token"
         error={problem}
         placeholder="ghp_…"
@@ -233,6 +237,7 @@ export function GitHubTokenDialog({
 }): React.JSX.Element {
   const { act } = useAct();
   const openLink = useOpenLink();
+  const field = useRef<HTMLInputElement | null>(null);
 
   const save = (pasted: string): Promise<string | undefined> =>
     act(ACT_KIND.GITHUB_TOKEN_SAVE, { token: pasted })
@@ -259,6 +264,7 @@ export function GitHubTokenDialog({
       open={open}
       title="Personal access token"
       size={DIALOG_SIZE.WIDE}
+      initialFocus={field}
       onDismiss={onClose}
       onExited={onExited}
       actionsStart={
@@ -278,7 +284,7 @@ export function GitHubTokenDialog({
     >
       <div className={NO_CAPTURE}>
         {token === null ? (
-          <TokenForm onSave={save} />
+          <TokenForm field={field} onSave={save} />
         ) : (
           <SavedToken token={token} onRemove={remove} />
         )}

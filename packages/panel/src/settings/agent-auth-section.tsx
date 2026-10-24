@@ -77,7 +77,7 @@ import {
 } from "@luke/ui";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { InfoIcon } from "@luke/ui/icons";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAct } from "../act.js";
 import { ActionMenu } from "../desktop/action-menu.js";
 import { HarnessMark } from "../harness-marks.js";
@@ -491,9 +491,12 @@ function SecretFoot({
 /** Claude's plan: a pasted setup-token, its status, Replace token, and Disconnect. */
 function ClaudeTokenPanel({
   plan,
+  field,
   onAnswer,
 }: {
   plan: SubscriptionKeySummary | undefined;
+  /** The dialog's way to the field while it stands. */
+  field: React.RefObject<HTMLInputElement | null>;
   onAnswer: (answer: ProviderKeysAnswer) => void;
 }): React.JSX.Element {
   const { act } = useAct();
@@ -598,6 +601,7 @@ function ClaudeTokenPanel({
           }}
         >
           <SecretField
+            ref={field}
             label="Claude setup-token"
             error={rejection}
             saved={plan !== undefined}
@@ -800,15 +804,17 @@ function ChatGptPanel({
 function ApiKeyPanel({
   provider,
   stored,
+  field,
   onAnswer,
 }: {
   provider: ProviderKeyProvider;
   stored: ProviderKeySummary | undefined;
+  /** The dialog's way to the field while it stands. */
+  field: React.RefObject<HTMLInputElement | null>;
   onAnswer: (answer: ProviderKeysAnswer) => void;
 }): React.JSX.Element {
   const { act } = useAct();
   const name = HARNESS[provider].keyName;
-  const field = useRef<HTMLInputElement | null>(null);
   const door = useRef<HTMLButtonElement | null>(null);
   const [editing, setEditing] = useState(false);
   const [pasted, setPasted] = useState("");
@@ -987,6 +993,17 @@ function AgentAuthDialog({
   const chosen = defaultOf(plan, key);
   const [turning, setTurning] = useState(false);
   const [refused, setRefused] = useState<string | undefined>(undefined);
+  const tokenField = useRef<HTMLInputElement | null>(null);
+  const keyField = useRef<HTMLInputElement | null>(null);
+  // Note that the card opens on the first field it draws, the setup-token's above the API key's, and none where both are kept.
+  const firstField = useMemo(
+    () => ({
+      get current() {
+        return tokenField.current ?? keyField.current;
+      },
+    }),
+    [],
+  );
   const claude = provider === PROVIDER_KEY_PROVIDER.ANTHROPIC;
   // The ChatGPT sign-in is the desktop's alone, so elsewhere its card stands out of reach until one made there is held.
   const planOutOfReach = !claude && !chatGptOffered && plan === undefined;
@@ -1024,7 +1041,7 @@ function AgentAuthDialog({
       disabled: !selectable[CREDENTIAL.SUBSCRIPTION] || planOutOfReach,
       detail: planOutOfReach ? WORDS.DESKTOP_ONLY : undefined,
       below: planOutOfReach ? null : claude ? (
-        <ClaudeTokenPanel plan={plan} onAnswer={onAnswer} />
+        <ClaudeTokenPanel plan={plan} field={tokenField} onAnswer={onAnswer} />
       ) : (
         <ChatGptPanel plan={plan} offered={chatGptOffered} onAnswer={onAnswer} />
       ),
@@ -1047,7 +1064,7 @@ function AgentAuthDialog({
           {WORDS.GET_KEY}
         </TextLink>
       ),
-      below: <ApiKeyPanel provider={provider} stored={key} onAnswer={onAnswer} />,
+      below: <ApiKeyPanel provider={provider} stored={key} field={keyField} onAnswer={onAnswer} />,
     },
   ];
 
@@ -1056,6 +1073,7 @@ function AgentAuthDialog({
       open={open}
       title={harness.name}
       size={DIALOG_SIZE.WIDE}
+      initialFocus={firstField}
       onDismiss={onClose}
       onExited={onExited}
       actions={<DialogActions onDone={onClose} />}

@@ -562,6 +562,14 @@ test("Remove asks first, then takes the skill off the page", async () => {
   assert.ok(!(document.body.textContent ?? "").includes("pr-style described"));
 });
 
+test("Add skill opens with its box focused, not the card", async () => {
+  await mountPage();
+
+  act(() => button("Add skill").click());
+  await settle();
+  assert.ok(document.activeElement === document.querySelector("textarea"), "the box has focus");
+});
+
 test("an install lights its own rows once and says which skills and how to call one", async () => {
   await mountPage();
 

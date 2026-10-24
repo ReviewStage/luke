@@ -692,6 +692,7 @@ export function AddSkillDialog({
   const [refusal, setRefusal] = useState<string | undefined>(undefined);
   // Note that only a change that came at once folds the box, so a skill typed by hand keeps its box while the writer pauses.
   const pasted = useRef(false);
+  const box = useRef<HTMLTextAreaElement | null>(null);
   const paste = useMemo(() => parseSkillPaste(text), [text]);
   const declares = useMemo(() => textDeclares(paste), [paste]);
   const scopes = installScopes(workspace);
@@ -835,6 +836,7 @@ export function AddSkillDialog({
       size={DIALOG_SIZE.WIDE}
       busy={installing}
       holding={text.trim() !== ""}
+      initialFocus={box}
       onDismiss={onClose}
       onExited={onExited}
       actionsStart={
@@ -889,6 +891,8 @@ export function AddSkillDialog({
                 grow
                 font={TEXT_FIELD_FONT.MONO}
                 spellCheck={false}
+                ref={box}
+                // Note that the card's own focus lands after this field's, so the dialog is told of it too; autoFocus is what takes it where Change or Edit draws it again.
                 autoFocus
                 busy={installing}
                 placeholder="npx skills add mattpocock/skills --skill grill-me"
