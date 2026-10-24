@@ -131,6 +131,21 @@ test("a copy act that throws before it answers is a refused copy too", async () 
   expect(said("alert")).toBe("Could not copy");
 });
 
+test("the copy act runs within the press, while a browser's clipboard still takes a write", () => {
+  const copied: string[] = [];
+  draw(
+    createElement(CopyButton, {
+      text: "pnpm test",
+      what: "code",
+      copy: async (words: string) => {
+        copied.push(words);
+      },
+    }),
+  );
+  act(() => button().click());
+  expect(copied).toEqual(["pnpm test"]);
+});
+
 test("a second press starts the hold over from its own answer", async () => {
   vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
   draw(createElement(CopyButton, { text: "main", what: "branch name", copy: async () => {} }));

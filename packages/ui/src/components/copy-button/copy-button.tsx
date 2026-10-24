@@ -134,14 +134,19 @@ export function CopyButton({
       turn(state);
       hold({ settle: () => turn(COPY_STATE.IDLE) });
     };
-    // Note that the act is called inside a promise, because one that throws
-    // before it hands a promise back is a refused copy too.
-    Promise.resolve(text)
-      .then(copy)
-      .then(
-        () => answer(COPY_STATE.COPIED),
-        () => answer(COPY_STATE.FAILED),
-      );
+    // Note that the act is called within the press, because a browser's
+    // clipboard takes a write only while the press's activation stands, and
+    // one that throws before it hands a promise back is a refused copy too.
+    let copying: Promise<void>;
+    try {
+      copying = copy(text);
+    } catch (refusal) {
+      copying = Promise.reject(refusal);
+    }
+    copying.then(
+      () => answer(COPY_STATE.COPIED),
+      () => answer(COPY_STATE.FAILED),
+    );
   };
   const { state, turns } = shown;
   return (
