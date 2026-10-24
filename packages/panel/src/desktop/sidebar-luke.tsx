@@ -1,30 +1,24 @@
 import type { TasklessAgent } from "@luke/features/coding-agent-wire";
 import {
-  BUTTON_SIZE,
   ConfirmDialog,
   type DialogQuestion,
-  EllipsisIcon,
-  IconButton,
   LIST_DENSITY,
   LIST_ROW_ACTIONS,
   LIST_ROW_CURRENT,
   LIST_ROW_INK,
   ListRow,
-  Tooltip,
   useConfirmDialog,
-  useMenu,
   VisuallyHidden,
   WingFace,
 } from "@luke/ui";
 import { ACTION_RESULT_STATUS } from "@luke/wire";
 import { RotateCcwIcon, RotateCwIcon } from "lucide-react";
-import { useCallback, useRef } from "react";
 import { GLYPH_STATE, StateGlyph } from "../state-glyph.js";
 import { agentGlyphState } from "../tasks/coding-agent-model.js";
 import { agentEndMark, TAB_KIND, tabLook } from "../tasks/tab-look.js";
 import { markReadItem } from "../tasks/task-menu-items.js";
 import { useCallingAgent } from "../use-voice-view.js";
-import { ActionMenu, type MenuEntry } from "./action-menu.js";
+import { type MenuEntry, sharedGroups } from "./action-menu.js";
 import { useAgentReadMarks } from "./agent-read-marks.js";
 import { LUKE_NAME, type LukeOperator } from "./luke-operator.js";
 import { RowMarks } from "./task-actions.js";
@@ -37,14 +31,11 @@ import { RowMarks } from "./task-actions.js";
  * call into him stands, the failed mark at its end, and the unseen dot,
  * main's or one set by hand. It stands above every pin and section and in
  * none of them, so it offers neither Pin nor Move to section, and neither
- * Archive nor Permanently delete: its ⋯ offers its read mark and Reset,
+ * Archive nor Permanently delete: its ⋯, right-click, and menu key offer its read mark and Reset,
  * asked first, which archives this Luke and opens a fresh one. A press opens
  * his page. While his ensure is on its way the row stands muted, and once it
  * failed it offers a quiet retry at its end, never a toast.
  */
-
-/** What the row's menu is called. */
-const ACTIONS_LABEL = "Luke actions";
 
 /** What asking to reset Luke says. */
 const RESET_QUESTION: DialogQuestion = {
@@ -89,11 +80,6 @@ export function SidebarLuke({
   /** Opens the page of the Luke named, this one or a fresh one a Reset made. */
   onOpen: (agentId: string) => void;
 }): React.JSX.Element {
-  const row = useRef<HTMLElement | null>(null);
-  const hold = useCallback((press: HTMLElement | null) => {
-    row.current = press;
-  }, []);
-  const menu = useMenu(shown);
   const calling = useCallingAgent();
   const reads = useAgentReadMarks();
   const { agentId } = operator;
@@ -117,20 +103,10 @@ export function SidebarLuke({
     <RowMarks
       marks={[{ key: "retry", label: "Retry", icon: <RotateCwIcon />, onSelect: operator.retry }]}
     />
-  ) : (
-    <Tooltip label={ACTIONS_LABEL}>
-      <IconButton
-        icon={<EllipsisIcon />}
-        label={ACTIONS_LABEL}
-        size={BUTTON_SIZE.COMPACT}
-        {...menu.trigger()}
-      />
-    </Tooltip>
-  );
+  ) : null;
   return (
     <>
       <ListRow
-        ref={hold}
         density={LIST_DENSITY.DENSE}
         ink={LIST_ROW_INK.SIDEBAR}
         leading={
@@ -148,19 +124,14 @@ export function SidebarLuke({
         current={current ? LIST_ROW_CURRENT.PAGE : undefined}
         unread={isUnread}
         muted={agentId === undefined}
-        menuOpen={menu.open !== undefined}
         onPress={() => {
-          menu.close(false);
           if (agentId !== undefined) onOpen(agentId);
           else if (operator.failed) operator.retry();
         }}
-        contextMenu={menu.contextMenu(row)}
+        menu={{ thing: "Luke", groups: sharedGroups(groups), shown }}
         actionsAt={operator.failed ? LIST_ROW_ACTIONS.ALWAYS : LIST_ROW_ACTIONS.HOVER}
         actions={actions}
       />
-      {menu.drawn === undefined ? null : (
-        <ActionMenu label={ACTIONS_LABEL} menu={menu.drawn} groups={groups} onClose={menu.close} />
-      )}
       <ConfirmDialog confirm={reset} question={RESET_QUESTION} />
     </>
   );

@@ -22,7 +22,6 @@ import {
   RowHintOptions,
   Tooltip,
   UnpinIcon,
-  useMenu,
   useMinute,
   VisuallyHidden,
 } from "@luke/ui";
@@ -43,7 +42,7 @@ import { PlanGlyph, TAB_KIND, type TabSubject, tabLook } from "../tasks/tab-look
 import { TRANSCRIPT_COPY } from "../tasks/transcript-copy.js";
 import { type PinnedTab, SIDE_PANEL_TAB } from "../tasks/use-side-panel.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
-import { ActionMenu, type MenuAction } from "./action-menu.js";
+import { type MenuAction, sharedGroups } from "./action-menu.js";
 import { agentTranscriptRead } from "./agent-actions.js";
 import { useRowPlace, withRowMoves } from "./row-moves.js";
 import { type TranscriptCopier, useTranscriptCopier } from "./strip-tabs.js";
@@ -73,7 +72,7 @@ import { PullRequestLine, RepositoryDetail, taskCardOf } from "./task-card.js";
  * task's own row is pressed or another task opens. Its Unpin stands at the row's end while it is hovered or
  * reached from the keyboard, in the task rows' Pin and Archive style, and
  * part of the row to its card, as theirs are, and
- * a right-click offers Unpin, beside an agent's two copies of its
+ * a menu, opened by its ⋯, a right-click, or the menu key, offers Unpin, beside an agent's two copies of its
  * transcript while its task is open.
  *
  * A pin outlives what it opens only on the open task's word: an agent the
@@ -421,13 +420,10 @@ export function SidebarPinnedTab({
   const pin = namedPin(kept, task, livePullRequest);
   const copied = useTranscriptCopier();
   const now = useMinute();
-  const menu = useMenu(tasks.shown && inSight);
   const place = useRowPlace();
-  const row = useRef<HTMLElement | null>(null);
   const item = useRef<HTMLElement | null>(null);
   // Note that the row's item is its press's parent, which its card counts as its control.
   const hold = useCallback((press: HTMLElement | null) => {
-    row.current = press;
     item.current = press?.parentElement ?? null;
   }, []);
   const gone = pinGone(pin, tasks);
@@ -435,9 +431,6 @@ export function SidebarPinnedTab({
   const changesCard = pinChangesCard(pin, tasks, gone, (agentId) =>
     tasks.onOpenPinnedTab({ ...pin, tab: { agent: agentId } }),
   );
-  // The row is what the menu rings and hands focus back to, even when the
-  // right-click lands on Unpin over its end.
-  const showMenu = menu.contextMenu(row);
   return (
     <>
       <RowHintOptions
@@ -481,13 +474,15 @@ export function SidebarPinnedTab({
             )
           }
           current={current ? LIST_ROW_CURRENT.PAGE : undefined}
-          menuOpen={menu.open !== undefined}
           hint={{ Hint: RowHint, label: pin.label }}
           onPress={() => {
-            menu.close(false);
             if (!gone) onOpen();
           }}
-          contextMenu={showMenu}
+          menu={{
+            thing: "Pinned tab",
+            groups: sharedGroups(withRowMoves(pinActionGroups(pin, tasks, copied), place)),
+            shown: tasks.shown && inSight,
+          }}
           actionsAt={LIST_ROW_ACTIONS.HOVER}
           actions={
             <Tooltip label="Unpin">
@@ -501,14 +496,6 @@ export function SidebarPinnedTab({
           }
         />
       </RowHintOptions>
-      {menu.drawn === undefined ? null : (
-        <ActionMenu
-          label={`${pin.label} actions`}
-          menu={menu.drawn}
-          groups={withRowMoves(pinActionGroups(pin, tasks, copied), place)}
-          onClose={menu.close}
-        />
-      )}
     </>
   );
 }

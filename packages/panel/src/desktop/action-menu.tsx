@@ -48,6 +48,13 @@ function sharedEntry(entry: MenuEntry): SharedMenuEntry {
     : sharedAction(entry);
 }
 
+/** The shared groups for a row's menu (`ListRow`'s `menu`), each item's command's chord as its hint. */
+export function sharedGroups(
+  groups: readonly (readonly MenuEntry[])[],
+): readonly (readonly SharedMenuEntry[])[] {
+  return groups.map((group) => group.map(sharedEntry));
+}
+
 /** The window's menu, drawn by the shared one with each item's chord at its end. */
 export function ActionMenu({
   groups,
@@ -62,5 +69,5 @@ export function ActionMenu({
   /** Closes the menu, handing focus back to its opener where nothing else has taken it. */
   onClose: (returnFocus: boolean) => void;
 }): React.JSX.Element {
-  return <Menu {...props} groups={groups.map((group) => group.map(sharedEntry))} />;
+  return <Menu {...props} groups={sharedGroups(groups)} />;
 }

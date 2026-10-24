@@ -15,7 +15,6 @@ import {
   Time,
   UnarchiveIcon,
   UnpinIcon,
-  useMenu,
   VisuallyHidden,
 } from "@luke/ui";
 import { ACTOR_KIND, ACTOR_STATE, type Actor, teammateCreator } from "@luke/ui/actor-model";
@@ -32,7 +31,7 @@ import { markReadItem } from "../tasks/task-menu-items.js";
 import { type CodingAgentsControl, readAgentById } from "../tasks/use-coding-agents.js";
 import { useRefocusAfterEdit } from "../use-refocus-after-edit.js";
 import { useCallingAgent } from "../use-voice-view.js";
-import { ActionMenu, type MenuAction, type MenuEntry } from "./action-menu.js";
+import { type MenuAction, type MenuEntry, sharedGroups } from "./action-menu.js";
 import { rowDoors, useAgentActions } from "./agent-actions.js";
 import { useAgentReadMarks } from "./agent-read-marks.js";
 import { useRowPlace, withRowMoves } from "./row-moves.js";
@@ -53,8 +52,8 @@ import { type RowMark, RowMarks } from "./task-actions.js";
  * keyboard (`RowMarks`), as on a task's row, and rested on, the row hangs the
  * agent's card beside it, as its tab does on a task (`agent-ref.tsx`). A
  * press opens the agent's own page, and it reads in semibold while it ended
- * unseen, as its tab does, or while it is marked unread by hand. A right-click offers its actions where the
- * pointer is, in a task's row's groups: Copy link and Rename, which turns
+ * unseen, as its tab does, or while it is marked unread by hand. Its actions are one menu, opened alike by
+ * the row's ⋯, a right-click, and the menu key, in a task's row's groups: Copy link and Rename, which turns
  * the row into its name's field until the edit ends, with Mark as unread
  * or Mark as read between them, through a task's marks (`agent-read-marks.ts`); then Pin or Unpin,
  * the reader's own, Archive agent, asked first while the agent works
@@ -69,9 +68,6 @@ import { type RowMark, RowMarks } from "./task-actions.js";
  * by its own id before it is archived unasked, because the row's status is
  * the list's and the task open's agents never hold it.
  */
-
-/** What the row's menu is called, as the agent page's ⋯ is. */
-const ACTIONS_LABEL = "Agent actions";
 
 /** Who started the agent, as its row's end wears them: its automation, or a teammate's face where it has none and `face` allows it. */
 function starterOf(
@@ -162,7 +158,6 @@ export function SidebarAgent({
     row.current = press;
     item.current = press?.parentElement ?? null;
   }, []);
-  const menu = useMenu(shown);
   const place = useRowPlace();
   const { act } = useAct();
   const reads = useAgentReadMarks();
@@ -283,29 +278,17 @@ export function SidebarAgent({
           }
           current={current ? LIST_ROW_CURRENT.PAGE : undefined}
           unread={isUnread}
-          menuOpen={menu.open !== undefined}
           hint={editing ? undefined : { Hint: RowHint, label: name }}
-          onPress={
+          onPress={editing ? undefined : onOpen}
+          menu={
             editing
               ? undefined
-              : () => {
-                  menu.close(false);
-                  onOpen();
-                }
+              : { thing: "Agent", groups: sharedGroups(withRowMoves(groups, place)), shown }
           }
-          contextMenu={editing ? undefined : menu.contextMenu(row)}
           actionsAt={LIST_ROW_ACTIONS.HOVER}
           actions={editing ? null : <RowMarks marks={marks} />}
         />
       </RowHintOptions>
-      {menu.drawn === undefined ? null : (
-        <ActionMenu
-          label={ACTIONS_LABEL}
-          menu={menu.drawn}
-          groups={withRowMoves(groups, place)}
-          onClose={menu.close}
-        />
-      )}
       {actions.dialog}
     </>
   );
