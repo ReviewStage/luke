@@ -29,7 +29,7 @@ import {
 const DISMISS_HINT_LABEL = "Got it";
 
 /** What the voice's toast is about, by which it is withdrawn once the voice stops saying it. */
-const VOICE_NOTICE_SUBJECT = "voice-notice";
+const VOICE_NOTICE_SUBJECT = "voice-toast";
 
 /** The toast's tone for what the notice carries: a failure is refused work, and a notice or the hint asks the developer's attention. */
 const TOAST_TONE_OF = {

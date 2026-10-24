@@ -166,7 +166,7 @@ function CallControls(): React.JSX.Element {
 }
 
 export const CALL_CONTROLS_EXAMPLE: Example = {
-  id: "call-controls",
+  id: "call",
   title: "Call controls",
   Render: CallControls,
 };
