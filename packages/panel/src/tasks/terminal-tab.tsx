@@ -1,6 +1,7 @@
 import { type TerminalAction, type TerminalBar, terminalLook } from "@luke/features/terminal-model";
 import { SHORTCUT_KEY } from "@luke/settings/shortcuts";
 import {
+  ANNOUNCE,
   FILL_FLOW,
   Fill,
   PaneBar,
@@ -11,10 +12,11 @@ import {
   Text,
   TextButton,
 } from "@luke/ui";
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { TERMINAL_LOAD_FAILED } from "../bundle-loader.js";
 import { FIND_STEP, type FindSource, useFindSource } from "../find-in-tab.js";
 import { TERMINAL_FIND, type TerminalFind } from "../terminal/contract.js";
+import { useAnnounceShown } from "../use-announce-shown.js";
 import { AgentRef, agentSubject, NOTHING_HELD } from "./agent-ref.js";
 import { TreeToggle, usePaneRoom } from "./file-view.js";
 import { AgentGlyph } from "./tab-look.js";
@@ -82,8 +84,15 @@ function StateBar({
   onAction: (action: TerminalAction) => void;
 }): React.JSX.Element {
   const { action } = bar;
+  // Note that a late bar is hidden until it has held a second, so its words are said once its reveal has run: a blip that mends first is never seen, so it is never said.
+  const [revealed, setRevealed] = useState(false);
+  useAnnounceShown(ANNOUNCE.POLITE, bar.late && !revealed ? "" : bar.words);
   return (
-    <div className="terminal-bar" role="status" data-late={String(bar.late)}>
+    <div
+      className="terminal-bar"
+      data-late={String(bar.late)}
+      onAnimationEnd={() => setRevealed(true)}
+    >
       {bar.busy ? (
         <span className="terminal-bar-busy" aria-hidden="true">
           ⋯
@@ -166,7 +175,10 @@ export function TerminalTab({
       />
       <Fill flow={FILL_FLOW.ROW} clip className="terminal-tab-body" {...room.body}>
         <div className="terminal-tab-host">
-          {look.bar === undefined ? null : <StateBar bar={look.bar} onAction={session.onAction} />}
+          {look.bar === undefined ? null : (
+            // Note that each entry into a late bar is a bar of its own, because its reveal runs again and its words wait for it.
+            <StateBar key={String(look.bar.late)} bar={look.bar} onAction={session.onAction} />
+          )}
           {session.failed ? (
             <p className="terminal-tab-failed">{TERMINAL_LOAD_FAILED}</p>
           ) : (

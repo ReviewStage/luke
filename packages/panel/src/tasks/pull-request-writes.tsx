@@ -29,7 +29,6 @@ import {
   CONFIRM_LOSS,
   CommandLink,
   ConfirmDialog,
-  DIALOG_TONE,
   type DialogQuestion,
   ErrorState,
   IconButton,
@@ -316,7 +315,6 @@ const CLOSE_QUEUED_QUESTION: DialogQuestion = {
   verb: ACTION_WORDS[PULL_REQUEST_ACTION.CLOSE],
   running: "Closing",
   loss: CONFIRM_LOSS.AFFECTS_OTHERS,
-  tone: DIALOG_TONE.DANGER,
 };
 
 /** The question Close asks of an open pull request whose place in the merge queue could not be read, since it may be in it. */
@@ -457,12 +455,10 @@ export function PullRequestStateMenu({
       {menu.drawn === undefined ? null : (
         <ActionMenu label={label} menu={menu.drawn} groups={[items]} onClose={menu.close} />
       )}
-      {asked ? (
-        <ConfirmDialog
-          confirm={confirm}
-          question={inQueue ? CLOSE_QUEUED_QUESTION : CLOSE_UNKNOWN_QUESTION}
-        />
-      ) : null}
+      <ConfirmDialog
+        confirm={confirm}
+        question={inQueue ? CLOSE_QUEUED_QUESTION : CLOSE_UNKNOWN_QUESTION}
+      />
     </>
   );
 }

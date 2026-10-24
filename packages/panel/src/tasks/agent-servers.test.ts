@@ -439,7 +439,7 @@ test("a press on a tool opens its page with the popover standing open, and its b
 
   act(() =>
     container
-      .querySelector<HTMLButtonElement>('button[aria-label="Back to Vercel tools"]')
+      .querySelector<HTMLButtonElement>(".integration-tool-detail-head button")
       ?.click(),
   );
   assert.equal(container.querySelector(".integration-tool-detail"), null);

@@ -17,6 +17,7 @@ import type { PlanSection } from "@luke/features/plan-document";
 import { pasteCutWords } from "@luke/features/words";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
+  ANNOUNCE,
   BUTTON_SIZE,
   BUTTON_VARIANT,
   Button,
@@ -40,7 +41,6 @@ import {
   ComposerFoot,
   ComposerFrame,
   ConfirmDialog,
-  DIALOG_TONE,
   type DialogQuestion,
   EmptyState,
   ERROR_STATE_PLACEMENT,
@@ -132,6 +132,7 @@ import {
   type PlanEditorModule,
 } from "../plan-editor/contract.js";
 import { useBusyPress } from "../settings/busy-press.js";
+import { useAnnounceShown } from "../use-announce-shown.js";
 import { useAttachedFiles } from "../use-attached-files.js";
 import { keptKey, useKept } from "../use-kept.js";
 import { AgentActorRef, agentSubject, NOTHING_HELD } from "./agent-ref.js";
@@ -409,7 +410,6 @@ const DELETE_QUESTION: DialogQuestion = {
   verb: "Delete",
   running: "Deleting…",
   loss: CONFIRM_LOSS.IRREVERSIBLE,
-  tone: DIALOG_TONE.DANGER,
 };
 
 const DELETE_THREAD_QUESTION: DialogQuestion = {
@@ -418,7 +418,6 @@ const DELETE_THREAD_QUESTION: DialogQuestion = {
   verb: "Delete thread",
   running: "Deleting…",
   loss: CONFIRM_LOSS.IRREVERSIBLE,
-  tone: DIALOG_TONE.DANGER,
 };
 
 /** What a delete that did not land says. */
@@ -1108,6 +1107,7 @@ function ThreadCard({
   const [first] = comments;
   const gone = thread.anchor === undefined;
   const note = doors.control.notes.get(thread.id);
+  useAnnounceShown(ANNOUNCE.ALERT, note ?? "");
   const head = (
     <>
       {gone ? <GoneQuote thread={thread} onShowWords={onShowWords} /> : null}
@@ -1183,11 +1183,7 @@ function ThreadCard({
           <EventLine key={entry.id} entry={entry} agents={doors.agents} now={now} />
         ),
       )}
-      {note === undefined ? null : (
-        <div className="comment-note" role="alert">
-          {note}
-        </div>
-      )}
+      {note === undefined ? null : <div className="comment-note">{note}</div>}
       {thread.status === PLAN_COMMENT_STATUS.OPEN ? (
         <ReplyField
           label={COMMENT_WORDS.REPLY}
@@ -1234,13 +1230,10 @@ function PendingCard({
 }): React.JSX.Element {
   const [sending, setSending] = useState(false);
   const [note, setNote] = useState<string | undefined>(undefined);
+  useAnnounceShown(ANNOUNCE.ALERT, note ?? "");
   return (
     <CommentCard place={THREAD_PLACE.MARGIN} open data-thread={PENDING_THREAD}>
-      {note === undefined ? null : (
-        <div className="comment-note" role="alert">
-          {note}
-        </div>
-      )}
+      {note === undefined ? null : <div className="comment-note">{note}</div>}
       <ReplyField
         label={COMMENT_WORDS.ADD}
         place={{

@@ -41,10 +41,18 @@ const SHEET_WORDS = {
   DONE: "Done",
 } as const;
 
-export function FilesChangedKeysSheet({ onDismiss }: { onDismiss: () => void }): React.JSX.Element {
+export function FilesChangedKeysSheet({
+  open,
+  onDismiss,
+}: {
+  /** Whether the sheet stands; falling, it fades out. */
+  open: boolean;
+  onDismiss: () => void;
+}): React.JSX.Element {
   const done = useRef<HTMLButtonElement>(null);
   return (
     <Dialog
+      open={open}
       title={SHEET_WORDS.TITLE}
       size={DIALOG_SIZE.WIDE}
       initialFocus={done}

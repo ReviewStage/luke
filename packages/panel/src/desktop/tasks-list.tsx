@@ -24,6 +24,7 @@ import {
 import { taskKey } from "@luke/features/workspace-key";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
+  ANNOUNCE,
   AVATAR_SIZE,
   BUTTON_SIZE,
   CARD_PRESS_SELECTOR,
@@ -33,7 +34,6 @@ import {
   CollectionPage,
   type CollectionState,
   cssCustomProperties,
-  EllipsisIcon,
   EmptyState,
   ERROR_STATE_PLACEMENT,
   ErrorState,
@@ -42,7 +42,6 @@ import {
   GROUP_ROWS,
   GROUP_SURFACE,
   GroupHeader,
-  IconButton,
   InlineEdit,
   LAYOUT_ELEMENT,
   ListMotion,
@@ -65,6 +64,7 @@ import {
   Tooltip,
   useLeaving,
   useMinute,
+  useRowMenu,
   VisuallyHidden,
 } from "@luke/ui";
 import { actorName, creatorActor } from "@luke/ui/actor-model";
@@ -123,11 +123,13 @@ import { useReadMarks } from "../tasks/use-task-looks.js";
 import { useTaskMaker } from "../tasks/use-task-origin.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import { undoToast, useToast } from "../toast.js";
+import { useAnnounceShown } from "../use-announce-shown.js";
 import { keptKey, useKept } from "../use-kept.js";
 import { useRefocusAfterEdit } from "../use-refocus-after-edit.js";
+import { rowMenu } from "./action-menu.js";
 import { sectionGlyph } from "./section-icon-picker.js";
 import { groupCount, sidebarFold } from "./sidebar-fold.js";
-import { useTaskMenu } from "./task-actions.js";
+import { useTaskMenuItems } from "./task-actions.js";
 import { taskCardOf } from "./task-card.js";
 import {
   AssigneeChip,
@@ -167,9 +169,9 @@ import { useRowDrag } from "./use-row-drag.js";
  *
  * A row is changed where it stands, as a Board card is
  * (`task-row-parts.tsx`): its priority, status, and assignee are chips
- * dropping the menu that changes them, and its ⋯, shown while the row is in hand, and a
- * right-click drop the task's own menu, whose Rename makes its name its
- * field. A press anywhere else on the row opens the task, and resting on it
+ * dropping the menu that changes them, and the task's own menu, whose Rename makes
+ * its name its field, which its ⋯, shown while the row is in hand, a right-click, and
+ * the menu key open alike (`useRowMenu`). A press anywhere else on the row opens the task, and resting on it
  * hangs the task's card beside it, as its sidebar row does (`task-card.tsx`).
  *
  * A group's head folds it, kept on this Mac (`KEPT.FOLDS`), its count
@@ -680,13 +682,21 @@ function TaskListRow({
   const maker = useTaskMaker(task);
   const reads = useReadMarks();
   const rename = useInlineRename(task.id, tasks.onRenameTask);
-  const actions = useTaskMenu(tasks, task.id, task.name, {
+  useAnnounceShown(ANNOUNCE.ALERT, rename.refused ? RENAME_FAILED_NOTE : "");
+  const actions = useTaskMenuItems(tasks, task.id, task.name, {
     rename: rename.begin,
     drawn: true,
     unread: reads.markedUnread(task.id),
   });
   const item = useRef<HTMLLIElement | null>(null);
   const press = useRef<HTMLButtonElement | null>(null);
+  const nameId = useId();
+  const menu = useRowMenu(
+    rename.editing
+      ? undefined
+      : { ...rowMenu("Task", actions.groups(), tasks.shown), footer: actions.footer },
+    { disabled: actions.deletion.busy, opener: press },
+  );
   const endedByKey = useRefocusAfterEdit(rename.editing, press);
   const drawn = (property: TaskProperty) => properties.includes(property);
   const key = task.number === undefined ? undefined : taskKey(workspaceName, task.number);
@@ -710,7 +720,7 @@ function TaskListRow({
       className="tasks-list-row"
       data-task-id={task.id}
       {...motionKey(task.id)}
-      data-menu-open={actions.open ? "true" : undefined}
+      {...menu.props}
       data-editing={rename.editing ? "true" : undefined}
     >
       <span className="tasks-list-cell" data-cell="name">
@@ -734,13 +744,11 @@ function TaskListRow({
               disabled={actions.deletion.busy}
               selectKey={task.id}
               onPress={() => {
-                actions.close(false);
+                menu.close(false);
                 onOpen();
               }}
-              onKeyDown={actions.keyMenu}
-              contextMenu={actions.contextMenu(press)}
             >
-              <span className="tasks-list-press">
+              <span id={nameId} className="tasks-list-press">
                 <OneLine>{task.name}</OneLine>
                 {spoken === "" ? null : (
                   <VisuallyHidden {...{ [FIND_SKIP_ATTRIBUTE]: "" }}>{spoken}</VisuallyHidden>
@@ -749,11 +757,7 @@ function TaskListRow({
             </CardPress>
           </Tooltip>
         )}
-        {rename.refused ? (
-          <span className="tasks-list-note" role="alert">
-            {RENAME_FAILED_NOTE}
-          </span>
-        ) : null}
+        {rename.refused ? <span className="tasks-list-note">{RENAME_FAILED_NOTE}</span> : null}
       </span>
       {/* Note that a task from a service before priorities offers No priority, as one before statuses stands under Todo. */}
       {cell(
@@ -819,17 +823,9 @@ function TaskListRow({
         <Time at={taskTime(task, TASK_ORDER.UPDATED)} now={now} hint={false} />,
       )}
       <span className="tasks-list-cell" data-cell="more">
-        <Tooltip label="Task actions">
-          <IconButton
-            icon={<EllipsisIcon />}
-            label={`Actions for ${task.name}`}
-            size={BUTTON_SIZE.COMPACT}
-            disabled={actions.deletion.busy}
-            {...actions.trigger()}
-          />
-        </Tooltip>
+        {menu.more({ size: BUTTON_SIZE.COMPACT, describedBy: nameId })}
       </span>
-      {actions.menu}
+      {menu.popup}
       {actions.dialog}
     </li>
   );

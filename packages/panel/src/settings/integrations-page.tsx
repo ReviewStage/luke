@@ -29,10 +29,12 @@ import { readFailedWords } from "@luke/features/words";
 import { ACT_KIND } from "@luke/host/acts";
 import { APP_COMMAND, APP_SHORTCUTS } from "@luke/settings/shortcuts";
 import {
+  ANNOUNCE,
   BUTTON_VARIANT,
   Button,
   ChevronDownIcon,
   ChevronRightIcon,
+  CONFIRM_LOSS,
   ConfirmDialog,
   commandKeyshortcuts,
   ErrorState,
@@ -88,6 +90,7 @@ import {
 } from "../integration-tool-list.js";
 import { useIntegrationToolReads } from "../integration-tools.js";
 import { focusSearchField, Highlighted } from "../search-field.js";
+import { useAnnounceShown } from "../use-announce-shown.js";
 import { MenuRow } from "./menu-row.js";
 
 /**
@@ -724,6 +727,7 @@ function IntegrationRow({
               : undefined),
           verb: "Disconnect",
           running: "Disconnecting…",
+          loss: CONFIRM_LOSS.AFFECTS_OTHERS,
         }}
       />
     </Stack>
@@ -773,6 +777,13 @@ function turned(set: ReadonlySet<string>, server: string): ReadonlySet<string> {
   const next = new Set(set);
   if (!next.delete(server)) next.add(server);
   return next;
+}
+
+/** What stands where the search finds nothing, said politely as it lands and as the query changes. */
+function NoMatchNote({ query }: { query: string }): React.JSX.Element {
+  const words = `No integrations or tools match “${query.trim()}”`;
+  useAnnounceShown(ANNOUNCE.POLITE, words);
+  return <PageNote>{words}</PageNote>;
 }
 
 /**
@@ -857,11 +868,7 @@ function IntegrationRows({ filter }: { filter: IntegrationsFilter }): React.JSX.
         </SettingsSection>
       ) : null}
       {groups.length === 0 ? <PageNote>{PAGE_LINE.NONE_OFFERED}</PageNote> : null}
-      {groups.length > 0 && found.length === 0 ? (
-        <div role="status">
-          <PageNote>{`No integrations or tools match “${query.trim()}”`}</PageNote>
-        </div>
-      ) : null}
+      {groups.length > 0 && found.length === 0 ? <NoMatchNote query={query} /> : null}
       {found.map((group) => (
         <SettingsSection key={group.heading ?? "unread"} title={group.heading}>
           {group.rows.map((found) => (

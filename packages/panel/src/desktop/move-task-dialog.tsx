@@ -141,8 +141,9 @@ function WorkspaceChoices({
   );
 }
 
-/** The dialog over the window while the move is asked, running, or refused, and nothing otherwise. */
+/** The dialog over the window while the move is asked, running, or refused, and through its fade as it goes. */
 function MoveTaskCard({
+  open,
   confirm,
   task,
   from,
@@ -151,6 +152,8 @@ function MoveTaskCard({
   chosen,
   onChoose,
 }: {
+  /** Whether the move is asked, running, or refused; falling, the card fades out. */
+  open: boolean;
   confirm: DialogConfirm;
   task: TaskSummary;
   from: Workspace | undefined;
@@ -170,6 +173,7 @@ function MoveTaskCard({
   };
   return (
     <Dialog
+      open={open}
       size={DIALOG_SIZE.CONFIRM}
       title={`Move “${task.name}” to another workspace`}
       busy={moving}
@@ -232,7 +236,7 @@ export function strandedHome(
 interface MoveTaskDoor {
   /** The menu item's press; absent where the menu does not offer the move. */
   ask: (() => void) | undefined;
-  /** The dialog to draw beside the menu, while the move is asked, running, or refused. */
+  /** The dialog to draw beside the menu, which stands while the move is asked, running, or refused. */
   dialog: React.JSX.Element | null;
 }
 
@@ -273,8 +277,9 @@ export function useMoveTaskDialog(
         }
       : undefined,
     dialog:
-      open && task !== undefined ? (
+      task !== undefined ? (
         <MoveTaskCard
+          open={open}
           confirm={confirm}
           task={task}
           from={tasks.workspaces.find((workspace) => workspace.id === task.workspaceId)}

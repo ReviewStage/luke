@@ -26,14 +26,11 @@ import { INBOX_BOUNDS, type InboxItem } from "@luke/features/inbox-wire";
 import { encodeMention, MENTION_KIND } from "@luke/features/mention-link";
 import { pasteCutWords } from "@luke/features/words";
 import { ACT_KIND } from "@luke/host/acts";
-import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
-  BackIcon,
+  BackButton,
   BUTTON_VARIANT,
   Button,
   CHIP_WIDTH,
-  FoldingButton,
-  type FoldingButtonHint,
   FormField,
   matchingRows,
   POPOVER_ALIGN,
@@ -42,7 +39,6 @@ import {
   TextField,
   TOOLBAR_INSET,
   Toolbar,
-  Tooltip,
 } from "@luke/ui";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useAct } from "../act.js";
@@ -83,15 +79,9 @@ const NO_AGENT = "Choose an agent";
 const NO_MATCH = "No agent matches";
 const NO_AGENTS = "No agents in this workspace yet.";
 const AGENTS_FAILED = "The workspace's agents could not be read.";
-const BACK_TO_INBOX = "Back to inbox";
+const INBOX = "Inbox";
+const INBOX_PLACE = "inbox";
 const DISCARDED = "Draft discarded";
-
-/** The way back's pill, which names Back's chord as the item pane's does. */
-const BackHint: FoldingButtonHint = ({ children }) => (
-  <Tooltip label={BACK_TO_INBOX} command={APP_COMMAND.BACK}>
-    {children}
-  </Tooltip>
-);
 
 /** The workspace's agents as To offers them: read, failed, or not yet read. */
 type AgentsRead = { readonly agents: readonly MentionableAgent[] } | { readonly failed: true };
@@ -445,7 +435,7 @@ function ComposeCard({
         start={TOOLBAR_INSET.COLUMN}
         lead={
           onBack === undefined ? null : (
-            <FoldingButton label="Inbox" icon={<BackIcon />} onClick={onBack} hint={BackHint} />
+            <BackButton label={INBOX} place={INBOX_PLACE} onBack={onBack} />
           )
         }
         title={NEW_THREAD}

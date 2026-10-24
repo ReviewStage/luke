@@ -1,8 +1,9 @@
 import type { InboxCodeBlock } from "@luke/features/inbox-wire";
 import type { CodeRef } from "@luke/features/task-wire";
-import { ErrorState, SpinnerRegion } from "@luke/ui";
+import { ANNOUNCE, ErrorState, SpinnerRegion } from "@luke/ui";
 import { copiedLines } from "@luke/voice/code-pane-model";
 import { useEffect, useRef, useState } from "react";
+import { useAnnounceShown } from "../use-announce-shown.js";
 import { FileCodeCard } from "./code-pane.js";
 import { CodeSnippet } from "./code-snippet.js";
 import type { ReadFileWindow } from "./file-tab.js";
@@ -81,6 +82,11 @@ export function InboxCodeCard({
 
   const shown: CodeRead =
     unread === undefined ? read : { kind: CODE_READ.NOTICE, line: unread, again: false };
+  // Note that a failure that offers Retry is said by its `ErrorState`, so only a notice with none is said here.
+  useAnnounceShown(
+    ANNOUNCE.ALERT,
+    shown.kind === CODE_READ.NOTICE && !shown.again ? shown.line : "",
+  );
   return (
     <FileCodeCard
       codeRef={codeRef}
@@ -100,7 +106,7 @@ export function InboxCodeCard({
             {shown.again ? (
               <ErrorState onRetry={() => setAsked((was) => was + 1)}>{shown.line}</ErrorState>
             ) : (
-              <p role="alert">{shown.line}</p>
+              <p>{shown.line}</p>
             )}
           </div>
         )

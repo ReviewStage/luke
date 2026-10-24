@@ -13,6 +13,7 @@ import { TASK_FILE_REFUSAL, type TaskFileRefusal } from "@luke/features/task-wir
 import { REFRESH_FAILED_WORDS } from "@luke/features/words";
 import { ACT_KIND } from "@luke/host/acts";
 import {
+  ANNOUNCE,
   BUTTON_SIZE,
   Button,
   Checkbox,
@@ -36,6 +37,7 @@ import {
   Text,
   TextButton,
   Tooltip,
+  useAnnounce,
 } from "@luke/ui";
 import {
   CheckIcon,
@@ -264,8 +266,15 @@ function ViewedCount({
   const count = files.length;
   const seen = viewed === undefined ? undefined : files.filter((file) => viewed(file.path)).length;
   const complete = seen === count && !truncated;
+  const words =
+    seen === undefined
+      ? LIST_WORDS.filesOf(count)
+      : complete
+        ? LIST_WORDS.allViewed(count)
+        : LIST_WORDS.viewedOf(seen, count);
+  useAnnounce(ANNOUNCE.POLITE, words);
   return (
-    <p className="files-viewed" aria-live="polite" data-complete={complete ? "" : undefined}>
+    <p className="files-viewed" data-complete={complete ? "" : undefined}>
       {complete ? <CheckIcon aria-hidden="true" /> : null}
       <Text
         as={TEXT_ELEMENT.SPAN}
@@ -273,11 +282,7 @@ function ViewedCount({
         truncate
         className="files-viewed-words"
       >
-        {seen === undefined
-          ? LIST_WORDS.filesOf(count)
-          : complete
-            ? LIST_WORDS.allViewed(count)
-            : LIST_WORDS.viewedOf(seen, count)}
+        {words}
       </Text>
     </p>
   );
@@ -327,7 +332,7 @@ function useChangesMenu({
       ? CHANGES_MENU_WORDS.NO_PATCH
       : undefined;
   return {
-    label: "Changes actions",
+    thing: "Changes",
     groups: [
       [
         {
@@ -1905,7 +1910,7 @@ export function AgentChangesTab({
           />
         )}
       </Fill>
-      {shown && list.keysShown ? <FilesChangedKeysSheet onDismiss={hideKeys} /> : null}
+      <FilesChangedKeysSheet open={shown && list.keysShown} onDismiss={hideKeys} />
     </Fill>
   );
 }

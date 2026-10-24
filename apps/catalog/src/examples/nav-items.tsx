@@ -1,12 +1,12 @@
 import {
   AVATAR_SIZE,
   Avatar,
-  BackIcon,
   Badge,
   ChevronDownIcon,
   ComposeIcon,
   FolderIcon,
   GearIcon,
+  InboxIcon,
   NAV_CURRENT,
   NAV_ITEM_VARIANT,
   NavItem,
@@ -58,8 +58,8 @@ function Places(): React.JSX.Element {
       <NavItem icon={<FolderIcon />} disabled>
         Automations
       </NavItem>
-      <NavItem icon={<BackIcon />} mark={<Badge tone={STATUS_TONE.ATTENTION}>Needs you</Badge>}>
-        Back
+      <NavItem icon={<InboxIcon />} mark={<Badge tone={STATUS_TONE.ATTENTION}>Needs you</Badge>}>
+        Inbox
       </NavItem>
     </div>
   );

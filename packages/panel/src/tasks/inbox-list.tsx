@@ -98,7 +98,7 @@ import { AttentionMark } from "../attention-mark.js";
 import { useAutomation } from "../automation-directory.js";
 import { useInboxItemDraft } from "../composer-drafts.js";
 import { useCopyLinkItem } from "../copy-link-item.js";
-import { ActionMenu, type MenuAction, type MenuEntry } from "../desktop/action-menu.js";
+import { ActionMenu, type MenuAction, type MenuEntry, rowMenu } from "../desktop/action-menu.js";
 import {
   INBOX_LIST_WIDTH,
   type InboxShowChoice,
@@ -241,8 +241,8 @@ import { cardTitle } from "./tool-call-model.js";
  * resolves them, at once (`inbox-selection.tsx`).
  */
 
-/** What an item's row's right-click menu is called. */
-const ITEM_ACTIONS = "Inbox item actions";
+/** What an item's row is, which names its ⋯ and its menu "Inbox item actions". */
+const ITEM_THING = "Inbox item";
 
 /** What an unread row says to a reader, its dot being drawn for the eye alone. */
 const UNREAD = "Unread";
@@ -394,12 +394,13 @@ function lineGlyph(kind: InboxLineKind): React.JSX.Element | null {
  * Where the list hands down `onMark`, the row offers to mark it read or unread:
  * a press over its time while the pointer rests on it or it holds the
  * keyboard, the time and its marks stepping aside, and the first item of
- * its right-click menu, which names the key that does the same to the
+ * its menu, which names the key that does the same to the
  * chosen item (`APP_COMMAND.TOGGLE_INBOX_ITEM_READ`); and a swipe right, a
  * short one leaving the row open on a Read or Unread button, a long one
  * marking it as it is let go (`@luke/ui`'s `ListRow` swipe). A list its tasks
  * do not head is the person page's, or the Inbox's own grouped by anything
- * but task. Its right-click offers
+ * but task. Its menu, opened by the row's ⋯, a right-click, and the menu key
+ * alike (`ListRow`'s `menu`), offers
  * Copy link, the item's link under the task or the agent that holds it, where
  * the list hands down a workspace to write it under. Where the list hands
  * down its media reads (`media`), the row shows the pictures and pages its
@@ -407,7 +408,7 @@ function lineGlyph(kind: InboxLineKind): React.JSX.Element | null {
  * hands down `onClose`, an open item's row offers to close it without an
  * answer, asked first (`inbox-close.tsx`): a press beside its mark while
  * the pointer rests on it or it holds the keyboard, and the last item of
- * its right-click menu.
+ * its menu.
  */
 export function InboxItemRow({
   listed,
@@ -466,7 +467,6 @@ export function InboxItemRow({
   const preview = inboxPreview(item, nameOf, ticked);
   const carried = useMemo(() => inboxMedia(item), [item]);
   useRowMediaAsks(item.id, item.updatedAt, carried, media);
-  const menu = useMenu(true);
   const copyLink = useCopyLinkItem()(
     holder.kind === INBOX_HOLDER.TASK
       ? { kind: LINK_PLACE.INBOX_ITEM, planId: holder.task.id, itemId: item.id }
@@ -485,12 +485,10 @@ export function InboxItemRow({
     copyLink === undefined ? [] : [copyLink],
     close.action === undefined ? [] : [close.action],
   ].filter((group) => group.length > 0);
-  const press = useRef<HTMLElement | null>(null);
   // Note that the row's item is its press's parent, which its card counts as its control, as a sidebar task's row does.
   const region = useRef<HTMLElement | null>(null);
   const hold = useCallback(
     (element: HTMLElement | null) => {
-      press.current = element;
       region.current = element?.parentElement ?? null;
       ref?.(element);
     },
@@ -582,12 +580,9 @@ export function InboxItemRow({
           hint={{ Hint: RowHint, label: title }}
           selectKey={selectKey}
           onPress={() => onChoose(listed)}
-          contextMenu={groups.length === 0 ? undefined : menu.contextMenu(press)}
+          menu={rowMenu(ITEM_THING, groups)}
         />
       </RowHintOptions>
-      {menu.drawn === undefined || groups.length === 0 ? null : (
-        <ActionMenu label={ITEM_ACTIONS} menu={menu.drawn} groups={groups} onClose={menu.close} />
-      )}
       {close.dialog}
     </>
   );

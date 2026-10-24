@@ -12,12 +12,11 @@ import {
 } from "@luke/features/integration-tool-model";
 import {
   ALIGN,
-  ArrowLeftIcon,
+  BackButton,
   Badge,
   FILL_ELEMENT,
   Fill,
   GAP,
-  IconButton,
   Inline,
   LAYOUT_ELEMENT,
   LIST_DENSITY,
@@ -25,6 +24,7 @@ import {
   List,
   ListRow,
   type ListRowHint,
+  NO_BACK_KEY,
   ONE_LINE_ELEMENT,
   OneLine,
   ScrollArea,
@@ -34,7 +34,6 @@ import {
   TEXT_TONE,
   TEXT_VARIANT,
   Text,
-  Tooltip,
 } from "@luke/ui";
 import { cloneElement, createContext, useContext } from "react";
 import { MarkdownMessage } from "./markdown-message.js";
@@ -280,7 +279,7 @@ export function IntegrationToolDetail({
   server,
   tool,
   tokens,
-  backLabel,
+  backPlace,
   onBack,
   keepFocus,
   bodyRef,
@@ -291,8 +290,8 @@ export function IntegrationToolDetail({
   tool: IntegrationTool;
   /** The words a search asks for, marked where they landed in what it does. */
   tokens: readonly string[];
-  /** What the back is named, where the owner offers one; it stands only where both are given. */
-  backLabel?: string;
+  /** The place the back leads to, as a sentence names it ("Linear tools"), where the owner offers one; it stands only where both are given. */
+  backPlace?: string;
   onBack?: () => void;
   /** Whether a pointer's press on the back leaves the focus where it is, in a field of the owner's. */
   keepFocus?: boolean;
@@ -306,15 +305,14 @@ export function IntegrationToolDetail({
   return (
     <Fill as={FILL_ELEMENT.ARTICLE} className="integration-tool-detail" aria-label={title}>
       <header className="integration-tool-detail-head">
-        {onBack !== undefined && backLabel !== undefined ? (
-          <Tooltip label={backLabel}>
-            <IconButton
-              icon={<ArrowLeftIcon />}
-              label={backLabel}
-              keepFocus={keepFocus}
-              onClick={onBack}
-            />
-          </Tooltip>
+        {onBack !== undefined && backPlace !== undefined ? (
+          <BackButton
+            label={backPlace}
+            place={backPlace}
+            command={NO_BACK_KEY}
+            keepFocus={keepFocus}
+            onBack={onBack}
+          />
         ) : null}
         <OneLine
           as={ONE_LINE_ELEMENT.H2}

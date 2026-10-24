@@ -8,6 +8,7 @@ import { Effect } from "effect";
 import { act, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
+import { announcedAsAlert, mountAnnouncer } from "../testing/announcer.js";
 import type { AnyAct, FakeActAnswer } from "../testing/app-bridge.js";
 import { FAKE_ANSWER } from "../testing/app-bridge.js";
 import { editorBundleLanded, installEditorLayout } from "../testing/composer.js";
@@ -265,11 +266,13 @@ test("Add a suggestion over words selected into an empty last line keeps the wor
   assert.ok(sent.endsWith("```suggestion\n  once();\n```"), "the suggestion follows them");
 });
 
-test("words past GitHub's bound say by how much", () => {
+test("words past GitHub's bound say by how much, and are announced as an alert", () => {
+  mountAnnouncer();
   const { holder } = mount("a".repeat(PULL_REQUEST_WRITE_BOUNDS.MAX_BODY_CHARS + 2));
 
   assert.equal(
-    holder.querySelector('.comment-editor-note[role="alert"]')?.textContent,
+    holder.querySelector(".comment-editor-note")?.textContent,
     "2 characters over GitHub's limit.",
   );
+  assert.equal(announcedAsAlert(), "2 characters over GitHub's limit.");
 });

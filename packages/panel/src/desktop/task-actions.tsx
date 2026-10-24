@@ -2,6 +2,7 @@ import { ACCOUNT_STATUS } from "@luke/credentials/snapshot";
 import { PLAN_ACTOR, TASK_BOUNDS, type TaskSummary } from "@luke/features/task-wire";
 import { APP_COMMAND, type KeyedCommand } from "@luke/settings/shortcuts";
 import {
+  ANNOUNCE,
   BUTTON_SIZE,
   CONFIRM_LOSS,
   ConfirmDialog,
@@ -64,6 +65,7 @@ import {
 import { useReadMarks } from "../tasks/use-task-looks.js";
 import { useTaskOrigin } from "../tasks/use-task-origin.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
+import { useAnnounceShown } from "../use-announce-shown.js";
 import { APP_SLICE, useAppSlice } from "../use-app-state.js";
 import { useRefocusAfterEdit } from "../use-refocus-after-edit.js";
 import { ActionMenu, type MenuAction, type MenuEntry, rowMenu } from "./action-menu.js";
@@ -407,8 +409,9 @@ function settledTask(task: TaskSummary | undefined): boolean {
 
 /**
  * One task's menu items and its delete question, held for whichever door
- * offers them: the sidebar's row, whose `ListRow` draws the menu itself, and
- * the doors that draw it through `useTaskMenu`. Neither the items nor the
+ * offers them: the sidebar's row, whose `ListRow` draws the menu itself, a
+ * Tasks list row and a Board card, which draw it through `useRowMenu`, and
+ * the toolbar's ⋯, which draws it through `useTaskMenu`. Neither the items nor the
  * question outlive the tab going off screen, and the question does not
  * outlive the task: each is taken down in the render that finds it gone, so
  * neither is left standing over another surface, over a task deleted
@@ -476,10 +479,10 @@ export function useTaskMenuItems(
 }
 
 /**
- * One task's menu, opened and drawn by the door that holds it: the
- * toolbar's ⋯, a Tasks list row, and a Board card. The sidebar's row takes
- * its items (`useTaskMenuItems`) to its `ListRow`, which opens them by its
- * ⋯, a right-click, and the menu key alike.
+ * One task's menu, opened and drawn by the toolbar's ⋯. A row takes its items
+ * (`useTaskMenuItems`) to its menu instead, which opens them by its ⋯, a
+ * right-click, and the menu key alike: the sidebar's `ListRow`, and a Tasks
+ * list row and a Board card through `useRowMenu`.
  */
 export function useTaskMenu(
   tasks: TasksControl,
@@ -656,6 +659,7 @@ export function SidebarTask({
   onOpen: () => void;
 }): React.JSX.Element {
   const rename = useInlineRename(task.id, tasks.onRenameTask);
+  useAnnounceShown(ANNOUNCE.ALERT, rename.refused ? RENAME_FAILED_NOTE : "");
   const actions = useTaskMenuItems(tasks, task.id, task.name, {
     rename: rename.begin,
     drawn: true,
@@ -704,7 +708,7 @@ export function SidebarTask({
               </>
             )
           }
-          description={rename.refused ? <span role="alert">{RENAME_FAILED_NOTE}</span> : undefined}
+          description={rename.refused ? <span>{RENAME_FAILED_NOTE}</span> : undefined}
           meta={
             rename.editing ? null : (
               <span className="sidebar-task-time">

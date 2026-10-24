@@ -93,7 +93,7 @@ test("the lead, the middle, and the actions stand in that order, the ⋯ last", 
       detail: "Version 2 of 3",
       middle: createElement("span", { "data-part": "middle" }, "src / index.ts"),
       actions: createElement("button", { type: "button", onClick: ignore }, "Reload"),
-      menu: { label: "Page actions", groups: [[{ label: "Copy link", onSelect: ignore }]] },
+      menu: { thing: "Page", groups: [[{ label: "Copy link", onSelect: ignore }]] },
     }),
   );
   const said = [...barOf(container).querySelectorAll("[data-part], .luke-one-line, button")].map(
@@ -119,7 +119,7 @@ test("the ⋯ drops the menu it was handed, and a choice in it acts and closes i
       { label: "Save as…", onSelect: () => chosen.push("Save as…") },
     ],
   ];
-  render(createElement(PaneBar, { title: "index.ts", menu: { label: "File actions", groups } }));
+  render(createElement(PaneBar, { title: "index.ts", menu: { thing: "File", groups } }));
   const more = button("File actions");
   assert.equal(more.getAttribute("aria-haspopup"), "menu");
   assert.equal(openMenu("File actions"), null);

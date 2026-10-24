@@ -11,6 +11,7 @@ import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
 import { SignInGate } from "./sign-in-gate.js";
+import { announcedPolitely, mountAnnouncer } from "./testing/announcer.js";
 import { fakeAppBridge } from "./testing/app-bridge.js";
 
 const ignore = () => undefined;
@@ -125,4 +126,16 @@ test("a sign-in waited on holds both buttons, keeps the badge, and Cancel takes 
   );
   act(() => button(container, "Cancel").click());
   assert.equal(cancelled, 1);
+});
+
+test("the wait on the browser is announced politely, and taken back once the wait ends", () => {
+  mountAnnouncer();
+  const { root } = mountRoot(gate());
+  assert.equal(announcedPolitely(), "");
+
+  act(() => root.render(gate({ waiting: ACCOUNT_PROVIDER.GITHUB })));
+  assert.equal(announcedPolitely(), "Finish in your browser.");
+
+  act(() => root.render(gate()));
+  assert.equal(announcedPolitely(), "");
 });

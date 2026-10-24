@@ -1348,7 +1348,7 @@ test("a fixture run staged on Chat offers it with no account to turn its experim
 
 /** The offline status in the title bar beside the traffic lights, if one stands. */
 function titleBarOffline(page: HTMLElement): Element | null {
-  return page.querySelector('.title-bar-controls [role="status"][aria-label="Offline"]');
+  return page.querySelector('.title-bar-controls .offline-mark[aria-label="Offline"]');
 }
 
 test("with the sidebar folded, the Mac offline says so in the title bar beside New task, and nothing does online", async () => {
@@ -1419,7 +1419,7 @@ test("on a phone an open task leads its own row with the way back the window's h
 
   const fromInbox = render({ title: { label: "Inbox" } }, SHELL_ROOM.NARROW);
   await settle();
-  assert.equal(back(fromInbox).getAttribute("aria-label"), "Back to Inbox");
+  assert.equal(back(fromInbox).textContent, "Inbox");
   assert.equal(fromInbox.querySelector(".desktop-shell > .title-bar-controls"), null);
   act(() => back(fromInbox).click());
   assert.deepEqual(left, ["left"]);
@@ -1428,11 +1428,7 @@ test("on a phone an open task leads its own row with the way back the window's h
 
   const fromNowhere = render(undefined, SHELL_ROOM.NARROW);
   await settle();
-  assert.equal(
-    back(fromNowhere).getAttribute("aria-label"),
-    "Back to Tasks",
-    "with no page behind, the Tasks page",
-  );
+  assert.equal(back(fromNowhere).textContent, "Tasks", "with no page behind, the Tasks page");
   act(() => root?.unmount());
   document.body.innerHTML = "";
 

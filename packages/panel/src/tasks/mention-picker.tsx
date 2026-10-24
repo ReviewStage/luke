@@ -25,13 +25,12 @@ import { namesTaskKey, taskKey } from "@luke/features/workspace-key";
 import type { Workspace, WorkspaceMember } from "@luke/features/workspace-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import {
-  ArrowLeftIcon,
+  BackButton,
   type ComboboxGroup,
   ComboboxList,
   comboboxOptionId,
   DocumentIcon,
   ErrorState,
-  IconButton,
   KeepFocus,
   MENU_SURFACE_INSET,
   MenuGlyph,
@@ -39,6 +38,7 @@ import {
   MenuKeys,
   type MenuRow,
   MenuSurface,
+  NO_BACK_KEY,
   POPOVER_WIDTH,
   ProviderMark,
   RectFloat,
@@ -343,6 +343,12 @@ const MENU_KEY = {
 const BACK_LABEL = {
   WIDEN: "All kinds",
   UP: "Up",
+} as const;
+
+/** Where the crumb's way back leads, as its hint says it. */
+const BACK_PLACE = {
+  WIDEN: "all kinds",
+  UP: "the folder above",
 } as const;
 
 /** One row the list offers: what it mentions, or the skill it names, the name it is written with, and a muted detail. */
@@ -1028,11 +1034,12 @@ function MentionCrumb({ crumb }: { crumb: Crumb }): React.JSX.Element {
     // Note that a press on the crumb keeps the caret in the editor, where the keys are read.
     <KeepFocus className="agent-servers-page-head mention-menu-crumb">
       {back === undefined ? null : (
-        <IconButton
-          icon={<ArrowLeftIcon />}
+        <BackButton
           label={folder === undefined ? BACK_LABEL.WIDEN : BACK_LABEL.UP}
+          place={folder === undefined ? BACK_PLACE.WIDEN : BACK_PLACE.UP}
+          command={NO_BACK_KEY}
           tabbable={false}
-          onClick={back}
+          onBack={back}
         />
       )}
       <MenuGlyph>

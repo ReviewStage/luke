@@ -31,7 +31,7 @@ const NAME_ASKED = "Name the workspace.";
 /** New workspace's ask: the press that opens the card, and the card. */
 export interface NewWorkspaceAsk {
   ask: () => void;
-  dialog: React.JSX.Element | null;
+  dialog: React.JSX.Element;
 }
 
 /** New workspace's ask, opened by `ask()`, and the card that asks it, standing only while `surfaceOpen`. */
@@ -51,19 +51,21 @@ export function useNewWorkspaceDialog(
       return onCreate(trimmed).then((refused) => {
         if (refused !== undefined)
           return { status: ACTION_RESULT_STATUS.REJECTED, reason: refused };
-        setName("");
         return { status: ACTION_RESULT_STATUS.ACCEPTED };
       });
     },
   );
   const form = useFormDialog(confirm, name.trim() !== "");
-  const dialog = form.open ? (
+  const dialog = (
     <Dialog
+      open={form.open}
       title="New workspace"
       busy={form.settling}
       refused={form.refusal !== undefined}
       initialFocus={field}
       onDismiss={form.dismiss}
+      // Note that the name is let go once the card has faded, so the words stay while it goes.
+      onExited={() => setName("")}
       actions={
         <DialogActions
           onCancel={form.dismiss}
@@ -95,7 +97,7 @@ export function useNewWorkspaceDialog(
       />
       <ErrorLine>{form.refusal}</ErrorLine>
     </Dialog>
-  ) : null;
+  );
   return {
     ask: () => {
       setName("");

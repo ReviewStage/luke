@@ -1,5 +1,4 @@
 import {
-  EllipsisIcon,
   IconButton,
   LIST_DENSITY,
   LIST_ROW_ACTIONS,
@@ -12,6 +11,7 @@ import {
   type ListDensity,
   ListRow,
   type MenuEntry,
+  MoreButton,
   PencilIcon,
   Switch,
   TrashIcon,
@@ -49,7 +49,7 @@ function Members(): React.JSX.Element {
           meta={member.role}
           current={open === member.id ? LIST_ROW_CURRENT.ITEM : undefined}
           onPress={() => setOpen(member.id)}
-          actions={<IconButton icon={<EllipsisIcon />} label={`More for ${member.name}`} />}
+          actions={<MoreButton thing={member.name} />}
         />
       ))}
     </List>
@@ -153,6 +153,10 @@ function ListRows(): React.JSX.Element {
               metaAt={LIST_ROW_META.TITLE}
               unread
               onPress={() => undefined}
+              menu={{
+                thing: "Inbox item",
+                groups: [[{ label: "Mark as read", onSelect: ignore }]],
+              }}
             />
             <ListRow
               title="Board cards wrap and hover per part"
@@ -162,6 +166,10 @@ function ListRows(): React.JSX.Element {
               meta="2h"
               metaAt={LIST_ROW_META.TITLE}
               onPress={() => undefined}
+              menu={{
+                thing: "Inbox item",
+                groups: [[{ label: "Mark as unread", onSelect: ignore }]],
+              }}
             />
           </List>
         </div>

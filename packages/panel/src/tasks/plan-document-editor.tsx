@@ -2,6 +2,7 @@ import { useAtom, useAtomValue } from "@effect/atom-react";
 import { DOCUMENT_EDITOR_STATE, type DocumentEditor } from "@luke/features/plan-edit-model";
 import { PLAN_ACTOR, TASK_BOUNDS, type Task } from "@luke/features/task-wire";
 import {
+  ANNOUNCE,
   Button,
   EDITABLE_BLOCK_KIND,
   EDITABLE_HEADING_LEAVE,
@@ -26,6 +27,7 @@ import {
   type PlanEditorPlacement,
 } from "../plan-editor/contract.js";
 import { rendererRuntime } from "../renderer-runtime.js";
+import { useAnnounceShown } from "../use-announce-shown.js";
 import { useEditorPictures } from "./editor-pictures.js";
 import { MarkdownEditor } from "./markdown-editor.js";
 import { type MentionDoors, retargetedMention } from "./mention-chip.js";
@@ -763,9 +765,14 @@ function DocumentNote({
   editor: DocumentEditor;
   editing: PlanEditing;
 }): React.JSX.Element | null {
+  useAnnounceShown(
+    ANNOUNCE.ALERT,
+    editing.conflict?.note ??
+      (editor.state.kind === DOCUMENT_EDITOR_STATE.FAILED ? editor.state.note : ""),
+  );
   if (editing.conflict !== undefined) {
     return (
-      <div className="plan-editor-note" role="alert">
+      <div className="plan-editor-note">
         <span>{editing.conflict.note}</span>
         <Button onClick={editing.keepMine}>Keep mine</Button>
         <Button onClick={editing.takeTheirs}>{editing.conflict.take}</Button>
@@ -774,7 +781,7 @@ function DocumentNote({
   }
   if (editor.state.kind === DOCUMENT_EDITOR_STATE.FAILED) {
     return (
-      <div className="plan-editor-note" role="alert">
+      <div className="plan-editor-note">
         <span>{editor.state.note}</span>
         <RetryButton onRetry={editing.retry} />
       </div>

@@ -135,70 +135,69 @@ export function useChannelDialogs(
   const bodyId = useId();
   const dialog = (
     <>
-      {form.open ? (
-        <Dialog
-          title={editing ? "Edit channel" : "New channel"}
-          describedBy={bodyId}
-          busy={form.settling}
-          refused={form.refusal !== undefined}
-          initialFocus={field}
-          onDismiss={form.dismiss}
-          actions={
-            <DialogActions
-              onCancel={form.dismiss}
-              act={{
-                verb: editing ? "Save" : "Create channel",
-                tone: DIALOG_TONE.PRIMARY,
-                running: editing ? "Saving" : "Creating channel",
-                ...form.act,
-              }}
-            />
-          }
-        >
-          <Text id={bodyId} tone={TEXT_TONE.MUTED}>
-            A topic channel is open to everyone in the workspace, agents included.
-          </Text>
-          <Stack>
-            <FormField
-              label="Name"
-              description="Lowercase, with dashes, as agents write it after #."
-              count={{ length: name.length, limit: CHAT_BOUNDS.MAX_KEY_CHARS }}
-            >
-              {(control) => (
-                <TextField
-                  ref={field}
-                  field={control}
-                  placeholder="release-train"
-                  spellCheck={false}
-                  maxLength={CHAT_BOUNDS.MAX_KEY_CHARS}
-                  value={name}
-                  disabled={form.settling}
-                  onEnter={form.submit}
-                  onChange={typed(setName)}
-                />
-              )}
-            </FormField>
-            <FormField
-              label="Purpose"
-              description="Agents that read the channel see it too."
-              count={{ length: purpose.length, limit: CHAT_BOUNDS.MAX_PURPOSE_CHARS }}
-            >
-              {(control) => (
-                <TextField
-                  field={control}
-                  placeholder="What the channel is for, in a line"
-                  maxLength={CHAT_BOUNDS.MAX_PURPOSE_CHARS}
-                  value={purpose}
-                  disabled={form.settling}
-                  onEnter={form.submit}
-                  onChange={typed(setPurpose)}
-                />
-              )}
-            </FormField>
-          </Stack>
-          <ErrorLine>{form.refusal}</ErrorLine>
-        </Dialog>
-      ) : null}
+      <Dialog
+        open={form.open}
+        title={editing ? "Edit channel" : "New channel"}
+        describedBy={bodyId}
+        busy={form.settling}
+        refused={form.refusal !== undefined}
+        initialFocus={field}
+        onDismiss={form.dismiss}
+        actions={
+          <DialogActions
+            onCancel={form.dismiss}
+            act={{
+              verb: editing ? "Save" : "Create channel",
+              tone: DIALOG_TONE.PRIMARY,
+              running: editing ? "Saving" : "Creating channel",
+              ...form.act,
+            }}
+          />
+        }
+      >
+        <Text id={bodyId} tone={TEXT_TONE.MUTED}>
+          A topic channel is open to everyone in the workspace, agents included.
+        </Text>
+        <Stack>
+          <FormField
+            label="Name"
+            description="Lowercase, with dashes, as agents write it after #."
+            count={{ length: name.length, limit: CHAT_BOUNDS.MAX_KEY_CHARS }}
+          >
+            {(control) => (
+              <TextField
+                ref={field}
+                field={control}
+                placeholder="release-train"
+                spellCheck={false}
+                maxLength={CHAT_BOUNDS.MAX_KEY_CHARS}
+                value={name}
+                disabled={form.settling}
+                onEnter={form.submit}
+                onChange={typed(setName)}
+              />
+            )}
+          </FormField>
+          <FormField
+            label="Purpose"
+            description="Agents that read the channel see it too."
+            count={{ length: purpose.length, limit: CHAT_BOUNDS.MAX_PURPOSE_CHARS }}
+          >
+            {(control) => (
+              <TextField
+                field={control}
+                placeholder="What the channel is for, in a line"
+                maxLength={CHAT_BOUNDS.MAX_PURPOSE_CHARS}
+                value={purpose}
+                disabled={form.settling}
+                onEnter={form.submit}
+                onChange={typed(setPurpose)}
+              />
+            )}
+          </FormField>
+        </Stack>
+        <ErrorLine>{form.refusal}</ErrorLine>
+      </Dialog>
       <ConfirmDialog
         confirm={archive}
         question={{

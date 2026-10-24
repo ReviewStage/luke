@@ -20,7 +20,6 @@ import {
   type ButtonVariant,
   CONFIRM_LOSS,
   ConfirmDialog,
-  DIALOG_TONE,
   type DialogQuestion,
   SPINNER_SIZE,
   SpinnerRing,
@@ -401,7 +400,6 @@ const DEQUEUE_QUESTION: DialogQuestion = {
   verb: BOX_WORDS.DEQUEUE,
   running: BUSY_WORDS[PULL_REQUEST_ACTION.DEQUEUE],
   loss: CONFIRM_LOSS.AFFECTS_OTHERS,
-  tone: DIALOG_TONE.DANGER,
 };
 
 /**
@@ -530,7 +528,7 @@ export function MergeControl({
     <span className="merge-control">
       {face === undefined ? null : <MergeChip face={face} sentence={sentenceOf(pullRequest)} />}
       {drawn}
-      {asked ? <ConfirmDialog confirm={confirm} question={DEQUEUE_QUESTION} /> : null}
+      <ConfirmDialog confirm={confirm} question={DEQUEUE_QUESTION} />
     </span>
   );
 }
