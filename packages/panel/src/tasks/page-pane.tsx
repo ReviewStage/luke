@@ -202,12 +202,13 @@ function useFrameFocus(frame: RefObject<HTMLIFrameElement | null>): void {
 
 /**
  * The page drawn in its sandboxed frame, found in through the frame (`useFrameFind`).
- * Note that the frame stands from the start, its ring over it until `onLoad`, because the page
- * reads only as the frame loads it, and a frame left blank says nothing of that.
+ * Note that the frame stands from the start, its ring over it until `onLoad` of the `src` it
+ * shows, because the page reads only as the frame loads it, a version stepped to included, and a
+ * frame left blank says nothing of that.
  */
 function PageFrame({ title, src }: { title: string; src: string }): React.JSX.Element {
   const frame = useRef<HTMLIFrameElement>(null);
-  const [framed, setFramed] = useState(false);
+  const [framedSrc, setFramedSrc] = useState<string>();
   const found = useFrameFind(frame);
   useFrameFocus(frame);
   return (
@@ -221,11 +222,11 @@ function PageFrame({ title, src }: { title: string; src: string }): React.JSX.El
         allow=""
         referrerPolicy="no-referrer"
         onLoad={() => {
-          setFramed(true);
+          setFramedSrc(src);
           found();
         }}
       />
-      {framed ? null : (
+      {framedSrc === src ? null : (
         <div className="page-view-frame-wait">
           <SpinnerRegion delay label={readingWords("the page")} />
         </div>

@@ -116,6 +116,23 @@ test("a page's frame says it is read until it loads, and the wait goes when it h
   assert.equal(container.querySelector('[role="status"]'), null);
 });
 
+test("stepping to another version says Reading again until that version's frame loads", async () => {
+  const { container, frame, press } = mount(FUNNEL);
+  act(() => {
+    frame().dispatchEvent(new Event("load"));
+  });
+  assert.equal(container.querySelector('[role="status"]'), null);
+
+  await press("Earlier version");
+
+  assert.equal(frame().getAttribute("src"), versionUrl(2));
+  assert.equal(container.querySelector('[role="status"]')?.textContent, "Reading the page");
+  act(() => {
+    frame().dispatchEvent(new Event("load"));
+  });
+  assert.equal(container.querySelector('[role="status"]'), null);
+});
+
 test("View source draws the version's HTML as a File tab's numbered, coloured lines in the frame's place, and View page draws the frame again", async () => {
   const { container, press, frame, sourceLines } = mount(FUNNEL);
 
