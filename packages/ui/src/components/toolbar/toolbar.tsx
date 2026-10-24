@@ -29,10 +29,12 @@
  * A document's page draws the bar with no title of its own, since its header
  * names it in the page (`PageHeader`), and hands it `pickUp`: the header's
  * name, which the bar shows in its title's place only once the header has
- * scrolled away, fading in and out on the motion tokens. Note that the copy
- * is words, never a heading, because the header's title is the page's one
- * `h1`, and that it is hidden from a reader while the header is in view, so
- * the name is read once.
+ * scrolled away, fading in and out on the motion tokens. Where the page has
+ * a parent too, the bar leads with its trail and the name joins it as the
+ * last crumb, the page the reader stands on, as it scrolls into view and out
+ * of it. Note that the copy is words, never a heading, because the header's
+ * title is the page's one `h1`, and that it is hidden from a reader while
+ * the header is in view, so the name is read once.
  *
  * Each edge is inset by name (`TOOLBAR_INSET`): a bar that starts or ends
  * on words stands them where its column's words start, and one that starts
@@ -114,7 +116,7 @@ export interface ToolbarProps {
   readonly lead?: ReactNode;
   /** The page's name, drawn as its heading on one line; a node that is more than words stands as given. */
   readonly title?: ReactNode;
-  /** The places above the page, outermost first, which lead its heading as crumbs with the `title` last; read only where the title is words. */
+  /** The places above the page, outermost first, which lead its heading as crumbs with the `title` last, or a document's `pickUp` name once it is shown; read only where the title is words or there is a `pickUp`. */
   readonly trail?: readonly ToolbarPlace[] | undefined;
   /** A document's name, shown in the title's place once its header has scrolled away; read only where there is no `title`. */
   readonly pickUp?: ToolbarPickUp | undefined;
@@ -159,19 +161,28 @@ function placeCrumb(place: ToolbarPlace): Crumb {
     : { label: place.label, icon: place.icon, onPress };
 }
 
-/** The page's trail: the places above it, then its own name last, words that are no press, said to be the current page. */
+/**
+ * The page's trail: the places above it, then its own name last, words that
+ * are no press, said to be the current page. A name that comes and goes
+ * (`shown`, as a document's does once its header has scrolled away) joins
+ * the trail fading in, and is out of it, and a reader's, while it is gone.
+ */
 function ToolbarTrail({
   trail,
   title,
+  shown,
 }: {
   trail: readonly ToolbarPlace[];
   title: string;
+  shown?: boolean | undefined;
 }): React.JSX.Element {
+  // Note that a name not yet read leaves the places alone, so the way back stands while it loads.
+  const own: Crumb[] = title === "" ? [] : [{ label: title, current: true, shown }];
   return (
     <Breadcrumbs
       label={TRAIL_LABEL}
       variant={BREADCRUMBS_VARIANT.TITLE}
-      crumbs={[...trail.map(placeCrumb), { label: title, current: true }]}
+      crumbs={[...trail.map(placeCrumb), ...own]}
     />
   );
 }
@@ -222,6 +233,8 @@ export function Toolbar({
       <div className="luke-toolbar-heading">
         {trail !== undefined && trail.length > 0 && typeof title === "string" && title !== "" ? (
           <ToolbarTrail trail={trail} title={title} />
+        ) : trail !== undefined && trail.length > 0 && !said(title) && pickUp !== undefined ? (
+          <ToolbarTrail trail={trail} title={pickUp.name} shown={pickUp.shown} />
         ) : said(title) ? (
           <ToolbarTitle title={title} />
         ) : pickUp !== undefined && pickUp.name !== "" ? (

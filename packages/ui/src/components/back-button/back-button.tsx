@@ -21,7 +21,8 @@ import { Tooltip } from "../tooltip/hint.js";
  * Both wear the one back glyph (`GLYPH.BACK`), which nothing else draws,
  * and raise the one hint, "Back to {place}" (`backToWords`), with the
  * key that goes back, the window's Back from the shortcuts table unless
- * the place names its own. Note that the hint names the place whether or
+ * the place names its own, or says it has none (`NO_BACK_KEY`), as a popover
+ * whose own keys step back does where the window's Back goes elsewhere. Note that the hint names the place whether or
  * not the words are folded, because the words name the place alone and
  * the hint says that a press leads there. The key is said, not answered:
  * the app that mounts the button keeps the key's handler, as it keeps
@@ -38,12 +39,15 @@ export const BACK_BUTTON_LOOK = {
 
 export type BackButtonLook = (typeof BACK_BUTTON_LOOK)[keyof typeof BACK_BUTTON_LOOK];
 
+/** What a place that no key of the window goes back from says, so its hint names none. */
+export const NO_BACK_KEY = null;
+
 /** A way back, drawn as `look` says, to `place`. */
 export function BackButton({
   look = BACK_BUTTON_LOOK.HEADER,
   label,
   place,
-  command = APP_COMMAND.BACK,
+  command: named = APP_COMMAND.BACK,
   onBack,
 }: {
   /** Where it stands: in a bar where none is said. */
@@ -52,12 +56,13 @@ export function BackButton({
   label: string;
   /** The place it leads to as a sentence names it mid-way, which its hint reads ("chat", "MCP servers"). */
   place: string;
-  /** The key that goes back here, which its hint says: the window's Back where none is named. */
-  command?: KeyedCommand | undefined;
+  /** The key that goes back here, which its hint says: the window's Back where none is named, and none for `NO_BACK_KEY`. */
+  command?: KeyedCommand | typeof NO_BACK_KEY | undefined;
   /** Goes back. */
   onBack: () => void;
 }): React.JSX.Element {
   const hint = backToWords(place);
+  const command = named ?? undefined;
   // Note that the hint stays one component while its words and key do, because a new one each draw would remount the button and drop its focus.
   const WayBackHint = useMemo<FoldingButtonHint>(
     () =>

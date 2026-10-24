@@ -6,7 +6,7 @@ import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
-import { BACK_BUTTON_LOOK, BackButton, type BackButtonLook } from "./back-button.js";
+import { BACK_BUTTON_LOOK, BackButton, type BackButtonLook, NO_BACK_KEY } from "./back-button.js";
 
 /**
  * back-button.test.ts -- a way back, in a bar or at the top of a column, is
@@ -54,10 +54,14 @@ function draw(element: ReactElement): void {
 }
 
 /** A way back to chat drawn in `look`, and how many times it went back. */
-function wayBack(look: BackButtonLook): { button: HTMLButtonElement; backs: () => number } {
+function wayBack(
+  look: BackButtonLook,
+  keyed: Pick<Parameters<typeof BackButton>[0], "command"> = {},
+): { button: HTMLButtonElement; backs: () => number } {
   let backs = 0;
   draw(
     createElement(BackButton, {
+      ...keyed,
       look,
       label: "Chat",
       place: "chat",
@@ -97,3 +101,14 @@ test.each(LOOKS)("a way back in a %s hints where it leads, with the key that goe
   expect(button.getAttribute("aria-describedby")).toBe(hint?.id);
   expect(button.getAttribute("aria-keyshortcuts")).toBe("Meta+[");
 });
+
+test.each(LOOKS)(
+  "a way back in a %s that names no key hints where it leads and says no key",
+  (look) => {
+    const { button } = wayBack(look, { command: NO_BACK_KEY });
+    focusByKeyboard(button);
+    const hint = document.querySelector('[role="tooltip"]');
+    expect(hint?.textContent).toBe("Back to chat");
+    expect(button.getAttribute("aria-keyshortcuts")).toBeNull();
+  },
+);

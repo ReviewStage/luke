@@ -5143,10 +5143,11 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
   display: flex;
 }
 
-/* A server's page, in the popover's place: back (`@luke/ui`'s IconButton),
-   its mark and name, its count, and its switch at the end, over a hairline,
-   at the search field's height. */
+/* A server's page, in the popover's place: back (`@luke/ui`'s BackButton,
+   folded to its glyph), its mark and name, its count, and its switch at the
+   end, over a hairline, at the search field's height. */
 .agent-servers-page-head {
+  --luke-fold: folded;
   display: flex;
   flex: 0 0 auto;
   align-items: center;
