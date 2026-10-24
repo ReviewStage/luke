@@ -2988,6 +2988,7 @@ ul.actor-stack {
 
 .inbox-comment {
   position: relative;
+  isolation: isolate;
   display: flex;
   min-width: 0;
   flex-direction: column;
@@ -3008,6 +3009,7 @@ ul.actor-stack {
   bottom: calc(var(--inbox-face) / -2);
   left: calc(var(--inbox-face) / 2 - 1px);
   width: 2px;
+  z-index: -1;
   background: var(--luke-color-border);
   content: "";
 }
@@ -3099,7 +3101,6 @@ ul.actor-stack {
    though not the keyboard's ring on an option laid edge to edge in them. */
 .inbox-comment-body {
   display: flex;
-  margin-left: calc(var(--inbox-face) + var(--luke-space-12));
   min-width: 0;
   flex-direction: column;
   gap: var(--luke-space-8);
@@ -4067,9 +4068,15 @@ ul.actor-stack {
 
 /* A post of the reader's on its way reads quieter until the chat holds it,
    and one refused stays as quiet over its red mark. */
-:is(.chat-message, .chat-reply)[data-pending] > .chat-message-body > .chat-words,
-:is(.chat-message, .chat-reply)[data-unsent] > .chat-message-body > .chat-words {
+:is(.chat-message, .chat-reply)[data-pending] .chat-message-body > .chat-words,
+:is(.chat-message, .chat-reply)[data-unsent] .chat-message-body > .chat-words {
   opacity: 0.6;
+}
+
+/* A message that names its author is a comment, its face in the comment's
+   own column, so it spans the row rather than standing in the face's column. */
+:is(.chat-message, .chat-reply) > .luke-comment {
+  grid-column: 1 / -1;
 }
 
 /* A message continuing its author's run sits right under the one before. */
@@ -4185,7 +4192,12 @@ ul.actor-stack {
 /* Note that a root's own byline is reached by children alone, so hovering a
    reply in its open thread shows that reply's presses and not the root's. */
 @media (hover: hover) {
-  :is(.chat-message, .chat-reply):hover > .chat-message-body > .chat-byline > .chat-byline-action {
+  :is(.chat-message, .chat-reply):hover > .chat-message-body > .chat-byline > .chat-byline-action,
+  :is(.chat-message, .chat-reply):hover
+    > .luke-comment
+    > .luke-comment-head
+    > .luke-comment-trailing
+    > .chat-byline-action {
     opacity: 1;
   }
 }

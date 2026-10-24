@@ -1682,12 +1682,8 @@ test("a teammate's answer names them by their disc and name, their pick checked 
   assert.deepEqual(answeredPicks(page), ["Retry 3 times over an hour"]);
   const reply =
     answeredControls(page).closest<HTMLElement>(".inbox-comment") ?? assert.fail("their answer");
-  assert.match(wordsOf(reply.querySelector(".inbox-comment-head")) ?? "", /^Charles Pan/u);
-  assert.equal(
-    reply.querySelector<HTMLElement>(".inbox-comment-head [data-actor-ref] .actor-mark")?.dataset
-      .kind,
-    "person",
-  );
+  assert.match(wordsOf(reply.querySelector(".luke-comment-head")) ?? "", /^Charles Pan/u);
+  assert.equal(faceKind(reply.querySelector(".luke-comment-face")), "person");
 
   const answerer = reply.querySelector("[data-actor-ref]") ?? assert.fail("the answerer is named");
   restOn(answerer);
@@ -2237,8 +2233,9 @@ test("the thread names its agent as one button wherever it does, its message's c
   const asking =
     page.querySelector('[data-inbox-comment="message"]') ??
     assert.fail("the agent's message is a comment");
-  assert.ok(
-    asking.querySelector('.inbox-comment-head [data-actor-ref] .actor-mark[data-kind="agent"]'),
+  assert.equal(
+    faceKind(asking.querySelector(".luke-comment-face")),
+    "agent",
     "the agent's tile leads its comment",
   );
   reach(comment);
@@ -4711,6 +4708,13 @@ function inOrder(on: InboxItem, messages: readonly InboxMessage[]): InboxMessage
   return [...(on.thread ?? []), ...messages].toSorted((a, b) => a.createdAt - b.createdAt);
 }
 
+/** The kind of writer a comment's face draws, as its avatar's outline says it: a person's circle, or an agent's square. */
+function faceKind(face: Element | null | undefined): string | undefined {
+  const disc = face?.querySelector<HTMLElement>(".luke-avatar");
+  if (disc === null || disc === undefined) return undefined;
+  return disc.dataset.shape === "square" ? "agent" : "person";
+}
+
 /** The shown item's thread as a reader meets it: each comment's kind, its writer's face, its writer by name, and a message's words. */
 function threadOf(page: HTMLElement): (string | null | undefined)[][] {
   return [
@@ -4719,9 +4723,8 @@ function threadOf(page: HTMLElement): (string | null | undefined)[][] {
     ),
   ].map((entry) => [
     entry.dataset.inboxComment ?? (entry.dataset.inboxEarlier === undefined ? "?" : "earlier"),
-    entry.querySelector<HTMLElement>(".inbox-comment-head [data-actor-ref] .actor-mark")?.dataset
-      .kind,
-    wordsOf(entry.querySelector(".inbox-comment-name")),
+    faceKind(entry.querySelector(".luke-comment-face")),
+    wordsOf(entry.querySelector(".luke-comment-name")),
     wordsOf(entry.querySelector("[data-inbox-message-text]")),
   ]);
 }
@@ -6420,7 +6423,7 @@ function draftReply(pane: HTMLElement): (string | null)[] {
   const draft =
     pane.querySelector<HTMLElement>(".inbox-thread > li:last-child") ?? assert.fail("no thread");
   assert.equal(draft.dataset.inboxComment, "draft", "the draft reply ends the thread");
-  const head = wordsOf(draft.querySelector(".inbox-comment-head"));
+  const head = wordsOf(draft.querySelector(".luke-comment-head"));
   const question = draft.querySelector("form.inbox-answer > [data-inbox-draft-ask]");
   if (question === null) return [head];
   assert.doesNotMatch(
@@ -6466,24 +6469,20 @@ function repliedOn(item: InboxItem, id: string) {
   };
 }
 
-/** Each comment of the shown thread as its head draws its writer: its kind, then the kind of each face its head draws, each as the chip naming them holds it, and the faces drawn anywhere but in its head or its body. */
+/** Each comment of the shown thread as its head draws its writer: its kind, then the kind of each face it draws, and the marks drawn anywhere but in its head or its body. */
 function commentHeads(pane: HTMLElement): (string | undefined | (string | undefined)[])[][] {
   return [...pane.querySelectorAll<HTMLElement>(".inbox-thread > .inbox-comment")].map(
     (comment) => [
       comment.dataset.inboxComment,
-      [
-        ...comment.querySelectorAll<HTMLElement>(
-          ".inbox-comment-head > .inbox-comment-name > [data-actor-ref] .actor-mark",
-        ),
-      ].map((mark) => mark.dataset.kind),
+      [...comment.querySelectorAll<HTMLElement>(".luke-comment-face")].map(faceKind),
       [...comment.querySelectorAll<HTMLElement>(".actor-mark")]
-        .filter((mark) => mark.closest(".inbox-comment-head, .inbox-comment-body") === null)
+        .filter((mark) => mark.closest(".luke-comment-head, .inbox-comment-body") === null)
         .map((mark) => mark.dataset.kind),
     ],
   );
 }
 
-test("each comment of a thread is headed by its writer's chip, their face and name as one target, its face the thread's gutter with no face drawn apart from it; the draft reply's head is the reader's chip, \"You\", with nothing after it", async () => {
+test("each comment of a thread is headed by its writer's face and name, its face the thread's gutter with no face drawn apart from it; the draft reply's head is the reader's, \"You\", with nothing after it", async () => {
   const shown = threadItem([
     askingMessage(EXPIRY_ASK),
     threadMessage(
@@ -6501,12 +6500,12 @@ test("each comment of a thread is headed by its writer's chip, their face and na
     ["draft", ["person"], []],
   ]);
   const draft =
-    pane.querySelector<HTMLElement>('[data-inbox-comment="draft"] .inbox-comment-head') ??
+    pane.querySelector<HTMLElement>('[data-inbox-comment="draft"] .luke-comment-head') ??
     assert.fail("the draft reply has a head");
-  assert.equal(wordsOf(draft), "You", "the reader's chip alone, no draft and no time after it");
+  assert.equal(wordsOf(draft), "You", "the reader's name alone, no draft and no time after it");
   assert.ok(
-    draft.querySelector('.inbox-comment-name > [data-actor-ref][data-kind="person"] .actor-mark'),
-    "the reader is named by their chip, its face and name",
+    draft.querySelector('.luke-comment-name > [data-actor-ref][data-kind="person"]'),
+    "the reader is named by their ref",
   );
 });
 
@@ -6548,14 +6547,16 @@ test("a thread draws every message, the agent's by its tile and name alone, no t
     ["message", "agent", "Alerts", "That is the default elsewhere."],
   ]);
   assert.deepEqual(
-    [...pane.querySelectorAll(".inbox-thread .inbox-comment-head")].map((head) =>
-      [...head.children].map((part) => part.className),
+    [...pane.querySelectorAll(".inbox-thread .luke-comment-head")].map((head) =>
+      [...head.children].map((part) =>
+        [...part.classList].find((name) => name.startsWith("luke-comment-")),
+      ),
     ),
     [
-      ["inbox-comment-name", "inbox-comment-when"],
-      ["inbox-comment-name", "inbox-comment-when"],
-      ["inbox-comment-name", "inbox-comment-when"],
-      ["inbox-comment-name"],
+      ["luke-comment-name", "luke-comment-time"],
+      ["luke-comment-name", "luke-comment-time"],
+      ["luke-comment-name", "luke-comment-time"],
+      ["luke-comment-name"],
     ],
     "an agent's message, as a member's, is headed by its chip and when alone, with no tag after its chip, and the draft by the reader's chip alone",
   );
@@ -7553,7 +7554,7 @@ test("an answered decide's card leaves the agent's message for the head of the r
     pane.querySelector(`[data-message-id="${ASKING_ID}"]`) ?? assert.fail("the agent's message");
   assert.equal(asked.querySelector(".inbox-ask"), null, "the agent's message ends with its words");
   const reply = pane.querySelector(`[data-message-id="${ANSWER_ID}"]`) ?? assert.fail("the reply");
-  assert.equal(wordsOf(reply.querySelector(".inbox-comment-name")), "You", "the answerer heads it");
+  assert.equal(wordsOf(reply.querySelector(".luke-comment-name")), "You", "the answerer heads it");
   const box = answeredBox(pane);
   const rows = [...box.querySelectorAll<HTMLButtonElement>('[role="radio"]')];
   assert.deepEqual(

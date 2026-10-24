@@ -13,6 +13,7 @@ import {
   AVATAR_SIZE,
   Avatar,
   type AvatarSize,
+  type CommentAuthor,
   GAP,
   HoverCard,
   HoverCardHead,
@@ -279,6 +280,67 @@ function Face({
           size={size}
         />
       );
+  }
+}
+
+/**
+ * An actor as `Comment` draws its writer's face: a person on a circle by
+ * their picture or letter, Luke, an agent, an automation and an App's bot
+ * by their glyph on a square, and someone unnamed by the glyph for why.
+ * The name `Comment` says is the caller's, as `ActorRef` says it.
+ */
+export function commentAuthor(actor: Actor): CommentAuthor {
+  const picture = (url: string | undefined) => pictureAt(url, ACTOR_SIZE.ROW);
+  switch (actor.kind) {
+    case ACTOR_KIND.PERSON:
+      return { name: actor.name, id: actor.userId, picture: picture(actor.pictureUrl) };
+    case ACTOR_KIND.LUKE:
+      return { name: actorName(actor), shape: AVATAR_SHAPE.SQUARE, glyph: <WingFace /> };
+    case ACTOR_KIND.AGENT:
+      return {
+        name: actorName(actor),
+        shape: AVATAR_SHAPE.SQUARE,
+        glyph: (
+          <StateGlyph
+            glyph={<AgentMark provider={actor.provider} />}
+            state={GLYPH_OF_STATE[actor.state]}
+          />
+        ),
+      };
+    case ACTOR_KIND.AUTOMATION:
+      return {
+        name: actorName(actor),
+        shape: AVATAR_SHAPE.SQUARE,
+        glyph: <StateGlyph glyph={<ClockIcon />} state={GLYPH_OF_STATE[actor.state]} />,
+      };
+    case ACTOR_KIND.GITHUB:
+      return actor.bot
+        ? {
+            name: actor.login,
+            shape: AVATAR_SHAPE.SQUARE,
+            glyph: <BotIcon />,
+            picture: picture(actor.avatarUrl),
+          }
+        : { name: actor.login, picture: picture(actor.avatarUrl) };
+    case ACTOR_KIND.SOMEONE:
+      if (leftWithFace(actor)) {
+        return {
+          name: actorName(actor),
+          id: actor.userId ?? actorName(actor),
+          picture: picture(actor.pictureUrl),
+        };
+      }
+      return {
+        name: actorName(actor),
+        glyph:
+          actor.reason === SOMEONE_REASON.FORMER ? (
+            <UserRoundXIcon />
+          ) : actor.reason === SOMEONE_REASON.EARLIER ? (
+            <HistoryIcon />
+          ) : (
+            <UserRoundIcon />
+          ),
+      };
   }
 }
 
