@@ -218,9 +218,10 @@ function usePressOutside(
 /**
  * Asks the owner to close a peek at Escape wherever the keyboard stands,
  * since a peek takes none and so hears no key of its own. Note that it is
- * heard at the window before the work's layers hear it, and that a key
- * aimed into a menu or a dialog is left to that layer, and one already
- * taken, or aimed into the pane, to the pane's own handler.
+ * heard at the window as the key bubbles, after what the keyboard stands in
+ * has had it, so a terminal that takes Escape for its shell keeps it, and
+ * that a key aimed into a menu or a dialog is left to that layer, and one
+ * aimed into the pane to the pane's own handler.
  */
 function useEscapedPeek(peeking: boolean, onClose: () => void): void {
   const close = useRef(onClose);
@@ -234,8 +235,8 @@ function useEscapedPeek(peeking: boolean, onClose: () => void): void {
       event.preventDefault();
       close.current();
     };
-    window.addEventListener("keydown", onEscape, true);
-    return () => window.removeEventListener("keydown", onEscape, true);
+    window.addEventListener("keydown", onEscape);
+    return () => window.removeEventListener("keydown", onEscape);
   }, [peeking]);
 }
 

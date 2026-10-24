@@ -232,3 +232,20 @@ test("Escape puts a peek away wherever the keyboard stands, though it holds none
   key(button("Elsewhere"), "Escape");
   expect(pane()?.getAttribute("data-state")).toBe("leaving");
 });
+
+test("a peek leaves Escape to what the keyboard stands in when that takes it", () => {
+  const container = document.body.appendChild(document.createElement("div"));
+  const root = createRoot(container);
+  roots.push(root);
+  act(() => root.render(createElement(PeekTab)));
+  act(() => button("Elsewhere").focus());
+  press(button("Peek"));
+  const taken = (event: Event) => event.preventDefault();
+  button("Elsewhere").addEventListener("keydown", taken);
+
+  const event = new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true });
+  act(() => {
+    button("Elsewhere").dispatchEvent(event);
+  });
+  expect(pane()?.getAttribute("data-state")).toBe("open");
+});
