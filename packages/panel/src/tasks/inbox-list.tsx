@@ -484,7 +484,8 @@ export function InboxItemRow({
       ? undefined
       : {
           ...markReadItem({ unread, onMark: (next) => onMark(listed, next) }),
-          command: APP_COMMAND.TOGGLE_INBOX_ITEM_READ,
+          // Note that U acts only on the chosen item, so only its row names the chord.
+          ...(chosen ? { command: APP_COMMAND.TOGGLE_INBOX_ITEM_READ } : {}),
         };
   const close = useInboxClose(item, onClose, true);
   const groups = [

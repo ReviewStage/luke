@@ -90,8 +90,8 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-/** The list drawn over `VIEW`, with what it was asked to open. */
-function mount(): { opened: string[]; marked: string[] } {
+/** The list drawn over `VIEW`, with what it was asked to open, `chosen` the item it has chosen. */
+function mount(chosen?: string): { opened: string[]; marked: string[] } {
   fakeAppPlatform(QUIET_PANEL);
   vi.stubGlobal(
     "ResizeObserver",
@@ -105,7 +105,7 @@ function mount(): { opened: string[]; marked: string[] } {
   function Inbox() {
     return createElement(InboxList, {
       view: VIEW,
-      chosen: undefined,
+      chosen,
       models: undefined,
       readerId: undefined,
       head: {
@@ -206,4 +206,15 @@ test("a row's ⋯ takes the keyboard's focus, is described by the item's title, 
   act(() => read?.click());
   expect(marked).toEqual([VIEW.items[0]?.item.id]);
   expect(opened).toEqual([]);
+});
+
+test("a row's mail button names U only on the chosen item, the one U acts on", () => {
+  mount(VIEW.items[1]?.item.id);
+  const rows = [...document.querySelectorAll<HTMLElement>(".luke-list-row")];
+  const mail = (row: HTMLElement | undefined) =>
+    row?.querySelector("button[aria-label^='Mark as']")?.getAttribute("aria-keyshortcuts");
+
+  expect(rows.length).toBe(2);
+  expect(mail(rows[0])).toBeNull();
+  expect(mail(rows[1])).toBeTruthy();
 });
