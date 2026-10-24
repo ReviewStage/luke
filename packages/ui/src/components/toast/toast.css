@@ -10,7 +10,8 @@
    in Tailwind utilities over the theme (`toast.tsx`, `toast-stack.tsx`,
    `toast-actions.tsx`). What stays here is what those cannot say: where the
    stack stands, which reads the window's keyboard inset and its column's
-   dock; the card's motion, which is keyframes and the offset its swipe
+   dock, or spans the foot of a window too small for the card (the line
+   look); the card's motion, which is keyframes and the offset its swipe
    writes (`--luke-toast-drag`); the countdown's drain, over the hold and the
    seconds the card writes (`--luke-toast-hold`, `--luke-toast-seconds`); and
    what takes the pointer, which reads `:has()` and the screen's hover. */
@@ -51,6 +52,26 @@
         env(safe-area-inset-right, 0px)
       )
     );
+  }
+
+  /* The line look's stack, in a window too small for the card (the floating
+     call window, whose card stands a step in from its edges): across the
+     window's foot, inside the card's own edges, over its lower edge for the
+     toast's hold. */
+  .luke-toast-stack[data-look="line"] {
+    right: var(--luke-space-12);
+    bottom: var(--luke-space-12);
+    left: var(--luke-space-12);
+    width: auto;
+  }
+
+  /* A line's words fill it, so they fade over its last few pixels only
+     where they run that far, short words ending on their last letter, as a
+     chip's do (`chip.css`). Note that the fade stays here, because
+     Tailwind's mask utilities compose the gradient through variables
+     rather than drawing it. */
+  .luke-toast[data-look="line"] .luke-toast-words {
+    mask-image: linear-gradient(to left, transparent, #000 var(--luke-label-fade));
   }
 
   /* Each card rises in on the spring and fades in. Its sideways offset while

@@ -5,12 +5,13 @@ import type { AppStateDelivery, AppStateSnapshot } from "@luke/host/app-state";
 import { LIVE_STATUS } from "@luke/live";
 import { CALL_CARD_SURFACE, CallCardDock, type CallCardInput } from "@luke/panel/call/call-card";
 import { AgentCallVideo, useCallCardVideo } from "@luke/panel/call/panel-avatar";
-import { fakeActPortAnswering, fakeAppBridge } from "@luke/panel/testing/app-bridge";
+import { rendererRegistry } from "@luke/panel/renderer-runtime";
+import { fakeActPortAnswering, fakeAppBridge, refusedOnPort } from "@luke/panel/testing/app-bridge";
 import { deliveryOf, stateWith } from "@luke/panel/testing/app-state";
 import { onRegistry } from "@luke/panel/testing/copy-feedback";
 import { EXPERIMENT } from "@luke/settings";
 import { experimentsOn } from "@luke/settings/testing";
-import { CALL_CONTROL_LABEL, CALL_VIDEO_LABEL } from "@luke/ui";
+import { CALL_CONTROL_LABEL, CALL_VIDEO_LABEL, TOAST_LOOK } from "@luke/ui";
 import { AVATAR_END_REASON, AVATAR_STATUS, type AvatarState } from "@luke/voice/avatar";
 import { IDLE_VOICE_VIEW, type VoiceView } from "@luke/voice/voice-view";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
@@ -107,12 +108,15 @@ function handBridge(first: AppStateSnapshot): void {
   });
 }
 
-function mount(element: React.ReactElement): HTMLElement {
+function mount(
+  element: React.ReactElement,
+  registry: AtomRegistry.AtomRegistry = AtomRegistry.make(),
+): HTMLElement {
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
   roots.push(root);
-  act(() => root.render(onRegistry(AtomRegistry.make(), element)));
+  act(() => root.render(onRegistry(registry, element)));
   return container;
 }
 
@@ -277,4 +281,28 @@ test("in the floating call window ⇧⌘M and ⇧⌘S answer, as the mute hints 
   pressShiftCommand("KeyS", "S");
   await settle();
   assert.deepEqual(sent.at(-1), { kind: "voice.command", payload: { command: "mute-speaker" } });
+});
+
+test("a press main refuses in the floating call window is said there, as one line over the card", async () => {
+  handBridge(onCall({ status: AVATAR_STATUS.OFF }));
+  fakeActPortAnswering((request) => {
+    sent.push(request);
+    return Promise.reject(refusedOnPort("The voice window refused end-call."));
+  });
+  // The window's own registry, the one its presses' toasts are shown on.
+  const page = mount(createElement(CallWindowCard), rendererRegistry);
+  await settle();
+  const windowCard = card(page);
+  assert.ok(windowCard);
+
+  act(() => button(windowCard, CALL_CONTROL_LABEL.END_CALL).click());
+  await settle();
+  assert.deepEqual(sent, [{ kind: "voice.command", payload: { command: "end-call" } }]);
+  const stack = document.querySelector<HTMLElement>('section[aria-label="Notifications"]');
+  assert.equal(stack?.dataset.look, TOAST_LOOK.LINE);
+  const toasts = [...(stack?.querySelectorAll<HTMLElement>(".luke-toast") ?? [])];
+  assert.deepEqual(
+    toasts.map((toast) => [toast.dataset.look, toast.textContent]),
+    [[TOAST_LOOK.LINE, "The voice window refused end-call."]],
+  );
 });

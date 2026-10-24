@@ -1,6 +1,7 @@
 import { type ReactNode, type RefObject, useLayoutEffect, useRef } from "react";
 import { MOTION_TOKEN, tokenTiming } from "../../motion-timing.js";
 import { ANNOUNCE, Announcer, useAnnounce } from "../announcer/announcer.js";
+import { TOAST_LOOK, type ToastLook } from "./toast.js";
 
 /**
  * toast-stack.tsx -- the toasts standing, in the window's bottom-right corner, and the window's `Announcer` that says them.
@@ -17,6 +18,10 @@ import { ANNOUNCE, Announcer, useAnnounce } from "../announcer/announcer.js";
  * done or is asked politely, and what was refused as an alert, each said
  * once the words the host hands it change. Where the stack mounts (a portal
  * to the body, say) is the host's.
+ *
+ * In the line look, for a window too small for the card (the floating call
+ * window), the stack spans the window's foot a step in from each side
+ * rather than standing in its corner, and its toasts are drawn as lines.
  */
 
 /** Less than this, in CSS pixels, is not a move worth playing. */
@@ -53,6 +58,7 @@ export function ToastStack({
   label,
   polite,
   alert,
+  look = TOAST_LOOK.CARD,
   children,
 }: {
   /** What the stack is called, as a landmark among the window's regions. */
@@ -61,6 +67,8 @@ export function ToastStack({
   polite: string;
   /** What the alert region says: what was refused, or nothing. */
   alert: string;
+  /** Where it stands: the window's corner for cards, or across its foot for lines, its toasts drawn in the same look. */
+  look?: ToastLook;
   /** The toasts, each a `Toast`, oldest first. */
   children: ReactNode;
 }): React.JSX.Element {
@@ -69,7 +77,11 @@ export function ToastStack({
   useAnnounce(ANNOUNCE.ALERT, alert);
   return (
     <>
-      <section className="luke-toast-stack pointer-events-none fixed z-toast" aria-label={label}>
+      <section
+        className="luke-toast-stack pointer-events-none fixed z-toast"
+        data-look={look}
+        aria-label={label}
+      >
         <ol ref={list} className="m-0 flex list-none flex-col gap-toast-gap p-0">
           {children}
         </ol>

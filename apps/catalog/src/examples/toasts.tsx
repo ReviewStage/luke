@@ -3,8 +3,9 @@
  * them: a plain one that lets clicks through, one with a second line, and
  * ones carrying an action, whose × shows under the pointer or focus, the
  * Undo one draining its countdown, paused under the pointer; then one whose
- * work is under way, turned in place into done or failed by a press, and one
- * to drag or sweep sideways away, shown again by a press.
+ * work is under way, turned in place into done or failed by a press, one
+ * to drag or sweep sideways away, shown again by a press, and the line a
+ * window too small for the card draws, across its foot.
  */
 
 import {
@@ -13,6 +14,7 @@ import {
   GAP,
   Inline,
   STATUS_TONE,
+  TOAST_LOOK,
   Toast,
   ToastActions,
   ToastStack,
@@ -173,12 +175,35 @@ function Swiped(): React.JSX.Element {
   );
 }
 
+/** The line the floating call window draws a refusal in, across its foot, its words cut at the line's end. */
+function Line(): React.JSX.Element {
+  return (
+    <CatalogSection id="toast-line" title="One line, in a small window">
+      <div className="catalog-toast-stage">
+        <ToastStack
+          label="Call window notifications"
+          polite=""
+          alert="The voice window could not end the call just now."
+          look={TOAST_LOOK.LINE}
+        >
+          <Toast
+            tone={STATUS_TONE.DANGER}
+            words="The voice window could not end the call just now."
+            look={TOAST_LOOK.LINE}
+          />
+        </ToastStack>
+      </div>
+    </CatalogSection>
+  );
+}
+
 function AllToasts(): React.JSX.Element {
   return (
     <>
       <Toasts />
       <Working />
       <Swiped />
+      <Line />
     </>
   );
 }

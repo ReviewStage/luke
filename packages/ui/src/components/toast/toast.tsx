@@ -32,6 +32,13 @@ import { useToastSwipe } from "./toast-swipe.js";
  * plain text. The toast takes no class or style; where it stands is the
  * stack's.
  *
+ * Where the window is too small for the card, as the floating call window
+ * is, a toast is drawn in its `TOAST_LOOK.LINE` look: one line of its glyph
+ * and words, faded where the line's end cuts them, its second line left to
+ * the announcer,
+ * on a card no taller than a control, with the shadow kept within the room
+ * such a window leaves it.
+ *
  * It is drawn in Tailwind utilities over the theme; `toast.css` keeps what
  * those cannot say: its arrival, turn, departure, and countdown, which are
  * keyframes or read the custom properties its swipe and countdown write, and
@@ -63,6 +70,14 @@ export const TOAST_HOLD = {
   NEWS: Duration.seconds(8),
 } as const;
 
+/** How a toast is drawn: the window's card, or one line in a window too small for the card's two (the floating call window). */
+export const TOAST_LOOK = {
+  CARD: "card",
+  LINE: "line",
+} as const;
+
+export type ToastLook = (typeof TOAST_LOOK)[keyof typeof TOAST_LOOK];
+
 /** A second, in milliseconds: the notch a countdown drains by under reduced motion. */
 const SECOND_MS = 1000;
 
@@ -89,13 +104,35 @@ const GLYPH_INK = {
 const TOAST_CARD =
   "luke-toast relative flex items-start gap-icon-gap rounded-toast border border-border-strong bg-background px-list-inset py-row-inset shadow-toast data-[action=true]:touch-pan-y data-[action=true]:pr-toast-gap";
 
-/** The one cell its glyphs share, so a turn of tone crossfades them with the card unmoved. */
-const TOAST_GLYPH =
-  "luke-toast-glyph mt-toast-glyph-inset grid size-control-icon flex-none [&_svg]:size-full";
+/** The line: its glyph, words, and any action on one row a control tall, its shadow the call card's own in its window. */
+const TOAST_LINE =
+  "luke-toast relative flex min-h-control items-center gap-icon-gap rounded-toast border border-border-strong bg-background px-toast-gap shadow-toast-line data-[action=true]:touch-pan-y";
 
-/** Its words and the line under them, a title's step apart, the column standing as far below its last line as above its first. */
-const TOAST_TEXT =
-  "luke-toast-text flex min-w-0 flex-1 flex-col gap-toast-line-gap py-toast-text-inset";
+/** Each look's card. */
+const TOAST_FRAME = {
+  [TOAST_LOOK.CARD]: TOAST_CARD,
+  [TOAST_LOOK.LINE]: TOAST_LINE,
+} as const satisfies Record<ToastLook, string>;
+
+/** The one cell its glyphs share, so a turn of tone crossfades them with the card unmoved: on the card, centred on its first row; on the line, on the line. */
+const TOAST_GLYPH = {
+  [TOAST_LOOK.CARD]:
+    "luke-toast-glyph mt-toast-glyph-inset grid size-control-icon flex-none [&_svg]:size-full",
+  [TOAST_LOOK.LINE]: "luke-toast-glyph grid size-control-icon flex-none [&_svg]:size-full",
+} as const satisfies Record<ToastLook, string>;
+
+/** Its words and the line under them, a title's step apart, the column standing as far below its last line as above its first; on the line, its words alone. */
+const TOAST_TEXT = {
+  [TOAST_LOOK.CARD]:
+    "luke-toast-text flex min-w-0 flex-1 flex-col gap-toast-line-gap py-toast-text-inset",
+  [TOAST_LOOK.LINE]: "luke-toast-text flex min-w-0 flex-1",
+} as const satisfies Record<ToastLook, string>;
+
+/** Its words, cut at two lines on the card, and on the line filling it, faded where the line's end cuts them (`toast.css`). */
+const TOAST_WORDS = {
+  [TOAST_LOOK.CARD]: "luke-toast-words line-clamp-2 wrap-anywhere",
+  [TOAST_LOOK.LINE]: "luke-toast-words min-w-0 flex-1 overflow-hidden whitespace-nowrap",
+} as const satisfies Record<ToastLook, string>;
 
 /** A bar along its foot, in the muted ink, faint, draining toward its start. */
 const TOAST_COUNTDOWN =
@@ -131,11 +168,12 @@ function useToneTurn(tone: ToastTone): { now: ToastTone; was: ToastTone | undefi
   return next;
 }
 
-/** One toast: its tone, words and detail, and the actions at its end, if it has any. */
+/** One toast: its tone, words and detail, and the actions at its end, if it has any, in the look its window has room for. */
 export function Toast({
   tone,
   words,
   detail,
+  look = TOAST_LOOK.CARD,
   leaving = false,
   actions,
   countdown,
@@ -144,8 +182,10 @@ export function Toast({
 }: {
   tone: ToastTone;
   words: string;
-  /** A second line under the words. */
+  /** A second line under the words, which the line look leaves to the announcer. */
   detail?: string | undefined;
+  /** The card, or one line in a window too small for it. */
+  look?: ToastLook;
   /** Whether it is on its way out. */
   leaving?: boolean;
   /** Its action and dismiss, as `ToastActions` draws them; a toast with none is never pointed at. */
@@ -173,8 +213,9 @@ export function Toast({
   return (
     <li
       ref={swipe.ref}
-      className={TOAST_CARD}
+      className={TOAST_FRAME[look]}
       data-tone={tone}
+      data-look={look}
       data-action={actions === undefined ? undefined : "true"}
       data-leaving={leaving ? "true" : undefined}
       data-held={holding ? "true" : undefined}
@@ -198,7 +239,7 @@ export function Toast({
             },
           })}
     >
-      <span className={TOAST_GLYPH} aria-hidden="true">
+      <span className={TOAST_GLYPH[look]} aria-hidden="true">
         {glyphs.map((shown) => (
           <span
             key={shown}
@@ -210,13 +251,13 @@ export function Toast({
           </span>
         ))}
       </span>
-      <span className={TOAST_TEXT} key={words}>
-        <span className="luke-toast-words line-clamp-2 wrap-anywhere">
+      <span className={TOAST_TEXT[look]} key={words}>
+        <span className={TOAST_WORDS[look]}>
           <Text variant={TEXT_VARIANT.SECTION} as={TEXT_ELEMENT.SPAN}>
             {words}
           </Text>
         </span>
-        {detail === undefined ? null : (
+        {detail === undefined || look === TOAST_LOOK.LINE ? null : (
           <span className="luke-toast-detail line-clamp-2 wrap-anywhere">
             <Text variant={TEXT_VARIANT.CAPTION} as={TEXT_ELEMENT.SPAN} tone={TEXT_TONE.MUTED}>
               {detail}

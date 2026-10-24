@@ -5,7 +5,7 @@ import { act, createElement, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test, vi } from "vitest";
 import { STATUS_TONE } from "../../status-tone.js";
-import { Toast } from "./toast.js";
+import { TOAST_LOOK, Toast, type ToastLook } from "./toast.js";
 import { ToastActions } from "./toast-actions.js";
 import { ToastStack } from "./toast-stack.js";
 
@@ -15,7 +15,8 @@ import { ToastStack } from "./toast-stack.js";
  * dismissing; one without is never held; its countdown stops while it is
  * held; a turn of tone keeps the glyph it led with to fade under the new
  * one; a drag or a trackpad sweep past the threshold sends it away and one
- * short of it puts it back; the stack names itself and says the newest words
+ * short of it puts it back; a line leaves its second line to the announcer
+ * and stands across the window's foot; the stack names itself and says the newest words
  * through the window's announcer.
  */
 
@@ -313,4 +314,36 @@ test("a trackpad's sideways sweep sends the toast away once it passes the thresh
   assert.deepEqual(before, []);
   assert.deepEqual(dismissed, ["dismiss"]);
   assert.equal(toast.dataset.swiped, "left");
+});
+
+test("a toast drawn as a line shows its words alone, and its stack stands across the window's foot rather than in its corner", () => {
+  const drawn = (look: ToastLook) =>
+    render(
+      createElement(ToastStack, {
+        label: "Notifications",
+        polite: "",
+        alert: "Couldn't end the call",
+        look,
+        children: createElement(Toast, {
+          tone: STATUS_TONE.DANGER,
+          words: "Couldn't end the call",
+          detail: "The voice window is not answering.",
+          look,
+        }),
+      }),
+    );
+  drawn(TOAST_LOOK.CARD);
+  drawn(TOAST_LOOK.LINE);
+  const stacks = [...document.querySelectorAll<HTMLElement>("section.luke-toast-stack")];
+  assert.deepEqual(
+    stacks.map((stack) => [
+      stack.dataset.look,
+      stack.querySelector(".luke-toast-words")?.textContent,
+      stack.querySelector(".luke-toast-detail")?.textContent ?? null,
+    ]),
+    [
+      [TOAST_LOOK.CARD, "Couldn't end the call", "The voice window is not answering."],
+      [TOAST_LOOK.LINE, "Couldn't end the call", null],
+    ],
+  );
 });
