@@ -96,6 +96,12 @@
   background: var(--luke-color-sidebar);
 }
 
+/* Full bleed, the sheet stands no gap in, which what is measured from the
+   window's edge reads (`--panel-toggle-clearance`). */
+.desktop-shell[data-room="narrow"] {
+  --sheet-gap: 0px;
+}
+
 /* Note that the sheet rounds its corners without clipping what it holds,
    because a menu hung in it may stand past its edge over the next column
    (an AnchoredPopover bounded by the window), and a clip would cut it off;
