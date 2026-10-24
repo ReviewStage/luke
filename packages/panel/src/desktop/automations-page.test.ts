@@ -645,7 +645,7 @@ test("a switch turns its automation off, and the row takes the service's answer 
   assert.equal(row.querySelector("[role=switch]")?.getAttribute("aria-checked"), "false");
 });
 
-test("a switch flips at once, before the service answers, and a second press is a toggle back, never the same write twice", async () => {
+test("a switch flips at once, before the service answers, and a press made meanwhile waits its turn", async () => {
   heldChanges = [];
   const page = mount();
   await settle();
@@ -662,12 +662,37 @@ test("a switch flips at once, before the service answers, and a second press is 
   );
   press();
   await settle();
+  assert.equal(changes.length, 1, "the second press sends nothing while the first is out");
+  assert.equal(sweep()?.getAttribute("aria-checked"), "true", "but the switch already shows it");
+
+  heldChanges[0]?.();
+  await settle();
 
   assert.deepEqual(changes, [
     { automationId: SWEEP.id, change: { enabled: false } },
     { automationId: SWEEP.id, change: { enabled: true } },
   ]);
-  assert.equal(sweep()?.getAttribute("aria-checked"), "true", "the second press put it back");
+});
+
+test("presses made while a write is out send only the newest, and none that repeats what was sent", async () => {
+  heldChanges = [];
+  const page = mount();
+  await settle();
+  const press = () =>
+    act(() =>
+      rowOf(page, "Nightly flaky-test sweep")
+        .querySelector<HTMLButtonElement>("[role=switch]")
+        ?.click(),
+    );
+
+  press();
+  press();
+  press();
+  await settle();
+  heldChanges[0]?.();
+  await settle();
+
+  assert.deepEqual(changes, [{ automationId: SWEEP.id, change: { enabled: false } }]);
 });
 
 test("a switch the service refuses in the editor reads its new state at once, then goes back", async () => {
@@ -684,30 +709,6 @@ test("a switch the service refuses in the editor reads its new state at once, th
   );
   await settle();
   assert.equal(page.querySelector("[role=switch]")?.getAttribute("aria-checked"), "true");
-});
-
-test("an older switch's answer landing after a newer one's draws nothing over it", async () => {
-  heldChanges = [];
-  const page = mount();
-  await settle();
-  listHeld = true;
-  const press = () =>
-    act(() => automationRows(page)[0]?.querySelector<HTMLButtonElement>("[role=switch]")?.click());
-
-  press();
-  press();
-  await settle();
-  const [older, newer] = heldChanges;
-  newer?.();
-  await settle();
-  older?.();
-  await settle();
-
-  assert.equal(changes.length, 2);
-  assert.equal(
-    page.querySelector(".automation-row-name")?.textContent,
-    "Nightly flaky-test sweep, write 2",
-  );
 });
 
 test("a switch's answer landing after a list pushed since it was sent draws nothing over the push", async () => {

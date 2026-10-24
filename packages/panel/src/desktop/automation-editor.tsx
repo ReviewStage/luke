@@ -377,7 +377,13 @@ const ACCEPTED: ActionResult = { status: ACTION_RESULT_STATUS.ACCEPTED };
  * An automation's on/off switch, the list row's and the editor's alike. It
  * flips at once, from a local value, and a write the service refuses puts it
  * back and says why in a FAILED toast, as a settings switch does; it never
- * rests for a write, so a second press is a real toggle back.
+ * rests for a write.
+ *
+ * Note that its writes go one at a time, because the service reads and writes
+ * each request on its own, so two in flight could commit in either order and
+ * leave the opposite of the last press. A press made while one is out waits for
+ * it, only the newest waiting press is sent, and one that would only repeat
+ * what the burst just sent is not.
  */
 export function AutomationSwitch({
   automation,
@@ -387,13 +393,36 @@ export function AutomationSwitch({
   write: (enabled: boolean) => Promise<AutomationView>;
 }): React.JSX.Element {
   const toast = useToast();
+  const tail = useRef<Promise<unknown>>(Promise.resolve());
+  const newest = useRef(0);
+  const sent = useRef<boolean | undefined>(undefined);
+  const send = (enabled: boolean, press: number): Promise<ActionResult> => {
+    if (press !== newest.current || sent.current === enabled) return Promise.resolve(ACCEPTED);
+    sent.current = enabled;
+    const settle = () => {
+      if (press === newest.current) sent.current = undefined;
+    };
+    return write(enabled).then(
+      (answer): ActionResult => {
+        const reason = toggleRefusal(answer, enabled);
+        if (reason !== undefined) sent.current = undefined;
+        settle();
+        return reason === undefined ? ACCEPTED : { status: ACTION_RESULT_STATUS.REJECTED, reason };
+      },
+      (error: unknown) => {
+        sent.current = undefined;
+        throw error;
+      },
+    );
+  };
   const { value, run } = useOptimisticSettingWrite(
     automation.enabled,
-    (enabled) =>
-      write(enabled).then((answer): ActionResult => {
-        const reason = toggleRefusal(answer, enabled);
-        return reason === undefined ? ACCEPTED : { status: ACTION_RESULT_STATUS.REJECTED, reason };
-      }),
+    (enabled) => {
+      const press = ++newest.current;
+      const answered = tail.current.then(() => send(enabled, press));
+      tail.current = answered.catch(() => undefined);
+      return answered;
+    },
     (words) => toast({ words, tone: STATUS_TONE.DANGER, hold: TOAST_HOLD.FAILED }),
   );
   return (
