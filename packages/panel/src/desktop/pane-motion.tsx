@@ -27,8 +27,8 @@ import { Component, type RefObject, useLayoutEffect, useRef, useState } from "re
 
 /** The content that glides where a pane displaced it, each by its own left edge. */
 const GLIDERS = [
-  ".desktop-toolbar-heading",
-  ".desktop-toolbar-actions",
+  ".luke-toolbar-heading",
+  ".luke-toolbar-actions",
   ".desktop-document .plan-body",
   ".desktop-agent > *",
   ".desktop-empty-region > *",

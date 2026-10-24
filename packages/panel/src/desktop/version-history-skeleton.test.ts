@@ -116,8 +116,8 @@ test("while the versions are read, each placeholder row stands a version's own p
 
 test("while the version it opens on is found, the page's bar stands blocks where its moment and its Restore will", () => {
   const page = drawn({ kind: HISTORY_READ.READING }).querySelector(".version-page");
-  assert.ok(page?.querySelector(".desktop-toolbar-title .luke-skeleton"), "the moment's place");
-  assert.ok(page?.querySelector(".desktop-toolbar-actions .luke-skeleton"), "Restore's place");
+  assert.ok(page?.querySelector(".luke-toolbar-title .luke-skeleton"), "the moment's place");
+  assert.ok(page?.querySelector(".luke-toolbar-actions .luke-skeleton"), "Restore's place");
 });
 
 test("in a narrow room the page's bar is led by the way back to the list, which stands at the column's own edge", () => {

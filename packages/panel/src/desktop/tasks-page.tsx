@@ -224,7 +224,7 @@ export function TasksPage({
           <Text
             as={TEXT_ELEMENT.H1}
             variant={TEXT_VARIANT.TOOLBAR_TITLE}
-            className="desktop-toolbar-title"
+            className="luke-toolbar-title"
           >
             {TASKS}
           </Text>

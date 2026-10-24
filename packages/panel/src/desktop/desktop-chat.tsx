@@ -1198,17 +1198,15 @@ function RailBar({
           place="chat-rail"
           start={newChannel}
           title={
-            <>
-              <Text
-                as={TEXT_ELEMENT.H1}
-                variant={TEXT_VARIANT.TOOLBAR_TITLE}
-                className="desktop-toolbar-title"
-              >
-                {CHAT_LIST}
-              </Text>
-              <ExperimentTag narrow />
-            </>
+            <Text
+              as={TEXT_ELEMENT.H1}
+              variant={TEXT_VARIANT.TOOLBAR_TITLE}
+              className="luke-toolbar-title"
+            >
+              {CHAT_LIST}
+            </Text>
           }
+          tag={<ExperimentTag narrow />}
           end={
             <PlaceMore
               thing="Chat"
@@ -1240,6 +1238,7 @@ function RailBar({
       title={CHAT_LIST}
       tag={<ExperimentTag />}
       end={TOOLBAR_INSET.COLUMN}
+      folded
       actions={
         <>
           {viewOptions?.(undefined)}

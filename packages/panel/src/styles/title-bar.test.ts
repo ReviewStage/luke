@@ -22,8 +22,11 @@ afterEach(() => {
   document.documentElement.removeAttribute("data-luke-profile");
 });
 
-/** The panel's sheets that declare a drag region. */
-const DRAG_SHEETS = ["call.css", "shell.css", "desktop.css", "tasks.css"];
+/** The sheets that declare a drag region: the panel's, and the toolbar's own, which the shared components lay first. */
+const DRAG_SHEETS = [
+  `${__dirname}/../../../ui/src/components/toolbar/toolbar.css`,
+  ...["call.css", "shell.css", "desktop.css", "tasks.css"].map((name) => `${__dirname}/${name}`),
+];
 
 /**
  * Every rule of those sheets that declares a drag region, in order, read from
@@ -31,7 +34,7 @@ const DRAG_SHEETS = ["call.css", "shell.css", "desktop.css", "tasks.css"];
  * Electron's draws.
  */
 const DRAG_RULES = DRAG_SHEETS.flatMap((name) => {
-  const text = readFileSync(`${__dirname}/${name}`, "utf8").replace(/\/\*[\s\S]*?\*\//g, "");
+  const text = readFileSync(name, "utf8").replace(/\/\*[\s\S]*?\*\//g, "");
   return [...text.matchAll(/([^{}]+)\{([^{}]*)\}/g)].flatMap(([, selector = "", body = ""]) => {
     const region = /-webkit-app-region:\s*([\w-]+)/.exec(body)?.[1];
     return region === undefined ? [] : [{ selector: selector.trim(), region }];
@@ -61,7 +64,7 @@ function foldedShell(profile: Profile) {
   const main = shell.appendChild(document.createElement("main"));
   main.className = "desktop-main";
   const toolbar = main.appendChild(document.createElement("div"));
-  toolbar.className = "desktop-toolbar";
+  toolbar.className = "luke-toolbar";
   const controls = shell.appendChild(document.createElement("div"));
   controls.className = "title-bar-controls";
   return { controls, toolbar };

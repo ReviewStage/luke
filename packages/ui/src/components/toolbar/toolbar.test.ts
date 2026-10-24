@@ -80,8 +80,10 @@ function pixels(element: Element, value: string): number {
   const style = getComputedStyle(element);
   let text = value;
   for (let depth = 0; depth < 16 && text.includes("var("); depth += 1) {
-    text = text.replace(/var\((--[\w-]+)\)/g, (_, name: string) =>
-      style.getPropertyValue(name).trim(),
+    text = text.replace(
+      /var\((--[\w-]+)(?:,\s*((?:[^()]|\([^()]*\))*))?\)/g,
+      (_, name: string, fallback: string | undefined) =>
+        style.getPropertyValue(name).trim() || (fallback ?? ""),
     );
   }
   const terms = text
@@ -262,4 +264,38 @@ test("a phone's bar stands its title in the middle column whether or not a corne
   assert.equal(declared(heading, "grid-column"), "2");
   assert.equal(declared(actions, "grid-column"), "3");
   assert.equal(declared(bar({ title: "Tasks" }), "display"), "flex");
+});
+
+test("a bar told to fold draws its controls' glyphs alone, and a bar not told to leaves them worded", () => {
+  laySheets();
+
+  assert.equal(declared(bar({ title: "Chat", folded: true }), "--luke-fold"), "folded");
+  assert.equal(declared(bar({ title: "Chat" }), "--luke-fold"), "");
+});
+
+test("a tab strip's bar wraps its strip to a row of its own, under the actions, only in a narrow room", () => {
+  laySheets();
+  const strip = (room: string): HTMLElement => {
+    const stage = document.body.appendChild(document.createElement("div"));
+    stage.dataset.room = room;
+    const container = stage.appendChild(document.createElement("div"));
+    const root = createRoot(container);
+    roots.push(root);
+    act(() =>
+      root.render(
+        createElement(Toolbar, {
+          look: TOOLBAR_LOOK.TABS,
+          title: createElement("div", null, "Tabs"),
+          actions: createElement("span", null, "Start"),
+        }),
+      ),
+    );
+    return container.querySelector("header") ?? assert.fail("no bar");
+  };
+
+  const narrow = strip("narrow");
+  const heading = narrow.querySelector(".luke-toolbar-heading") ?? assert.fail("no heading");
+  assert.equal(declared(narrow, "flex-wrap"), "wrap");
+  assert.equal(declared(heading, "order"), "1");
+  assert.equal(declared(strip("wide"), "flex-wrap"), "");
 });

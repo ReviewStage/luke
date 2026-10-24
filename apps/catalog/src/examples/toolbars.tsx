@@ -7,6 +7,7 @@ import {
   NOT_FOUND_THING,
   NotFound,
   TOOLBAR_INSET,
+  TOOLBAR_LOOK,
   Toolbar,
 } from "@luke/ui";
 import type { Example } from "../examples";
@@ -15,8 +16,10 @@ import { CatalogSection } from "../section";
 /**
  * toolbars.tsx -- a workspace's bar with its title and actions; one led by a
  * way back, a tag after its title; one led by a control at the column's own
- * edge; a narrow bar, whose title fades where cut rather than wrapping;
- * and a place that is not found keeping its bar.
+ * edge; a narrow bar, whose title fades where cut rather than wrapping; a
+ * bar told to fold, its controls' glyphs alone; a tab strip's bar in a narrow
+ * room, wrapping its strip to a row of its own; and a place that is not found
+ * keeping its bar.
  */
 
 /** A press the catalog has nowhere to take. */
@@ -57,6 +60,26 @@ function Toolbars(): React.JSX.Element {
       <CatalogSection id="toolbar-narrow" title="A narrow bar cuts its title">
         <div className="catalog-narrow">
           <Toolbar title="Quarterly review of the onboarding funnel" actions={<NewAutomation />} />
+        </div>
+      </CatalogSection>
+      <CatalogSection
+        id="toolbar-folded"
+        title="Told to fold, its controls draw their glyphs alone"
+      >
+        <Toolbar
+          title="Chat"
+          folded
+          actions={<FoldingButton label="Send feedback" icon={<BackIcon />} onClick={stay} />}
+        />
+      </CatalogSection>
+      <CatalogSection id="toolbar-tabs" title="A tab strip's bar wraps its strip in a narrow room">
+        <div data-room="narrow">
+          <Toolbar
+            look={TOOLBAR_LOOK.TABS}
+            start={TOOLBAR_INSET.COLUMN}
+            title={<Badge>Agent one</Badge>}
+            actions={<NewAutomation />}
+          />
         </div>
       </CatalogSection>
       <CatalogSection id="toolbar-not-found" title="Not found, under its bar">

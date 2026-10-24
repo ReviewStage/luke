@@ -243,10 +243,7 @@ function smallTargets(): ReadonlyMap<string, Element> {
     [
       "a toolbar's glyph button",
       buttonIn(
-        drawn(
-          createElement(IconButton, { icon: "+", label: "New tab" }),
-          "desktop-toolbar-actions",
-        ),
+        drawn(createElement(IconButton, { icon: "+", label: "New tab" }), "luke-toolbar-actions"),
       ),
     ],
   ]);

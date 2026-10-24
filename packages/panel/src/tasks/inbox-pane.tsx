@@ -42,6 +42,7 @@ import {
   TEXT_TONE,
   TEXT_VARIANT,
   Text,
+  TOOLBAR_INSET,
   Tooltip,
   useMenu,
   useMinute,
@@ -1217,8 +1218,9 @@ export function InboxPane({
       hidden={hidden}
     >
       <PageToolbar
+        start={TOOLBAR_INSET.COLUMN}
         lead={
-          <>
+          <div className="inbox-item-bar">
             {onBack === undefined ? null : (
               <FoldingButton label="Inbox" icon={<BackIcon />} onClick={onBack} hint={BackHint} />
             )}
@@ -1230,7 +1232,7 @@ export function InboxPane({
               titleShown={headingAway}
             />
             {/* The bar ends in the pager, where the item stands alone, and the item's ⋯ menu. */}
-            <div className="desktop-toolbar-actions inbox-item-actions">
+            <div className="luke-toolbar-actions inbox-item-actions">
               {pager === undefined ||
               (pager.onPrevious === undefined && pager.onNext === undefined) ? null : (
                 <InboxPagerControls pager={pager} />
@@ -1244,7 +1246,7 @@ export function InboxPane({
                 onClose={doors.onClose}
               />
             </div>
-          </>
+          </div>
         }
       />
       <Fill className="desktop-inbox">

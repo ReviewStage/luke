@@ -1104,8 +1104,8 @@ function mountTaskTabReading(): HTMLElement {
 
 test("until the chat is read, the window's Chat keeps its titled bar with New channel over placeholder rows saying it is read, and the plan's Chat tab's wait stands centred, rather than as a ring in the corner", () => {
   const chat = mount(() => undefined);
-  const bar = chat.querySelector(".chat-rail .desktop-toolbar");
-  assert.equal(bar?.querySelector("h1.desktop-toolbar-title")?.textContent, "Chat");
+  const bar = chat.querySelector(".chat-rail .luke-toolbar");
+  assert.equal(bar?.querySelector("h1.luke-toolbar-title")?.textContent, "Chat");
   const create = bar?.querySelector<HTMLButtonElement>('button[aria-label="New channel"]');
   assert.ok(create, "New channel stands while it is read");
   assert.equal(create.disabled, true, "but opens no channel against no chat");
@@ -1648,7 +1648,7 @@ test("every channel's head ends on its menu: Mark as read and Copy link for each
 test("the rail's bar is a page's toolbar: Chat's title and its Experimental tag, View options, New channel, and Send feedback; Mark all as read takes every unread dot off", () => {
   const page = mount();
   const bar = page.querySelector(".chat-rail > .luke-toolbar");
-  assert.equal(bar?.querySelector("h1.desktop-toolbar-title")?.textContent, "Chat");
+  assert.equal(bar?.querySelector("h1.luke-toolbar-title")?.textContent, "Chat");
   assert.equal(
     bar?.querySelector(".luke-toolbar-heading > .luke-toolbar-tag .experiment-tag")?.textContent,
     "Experimental",

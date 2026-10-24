@@ -806,7 +806,7 @@ const SCOPE_NAMES = ["To do", "All", "Archived"] as const;
 
 /** The Inbox's name as the list's head says it. */
 function headTitle(page: HTMLElement): string | null | undefined {
-  return page.querySelector(".inbox-tasks .desktop-toolbar-title")?.textContent;
+  return page.querySelector(".inbox-tasks .luke-toolbar-title")?.textContent;
 }
 
 /** Shows the scope `name` from the list's View options. */
@@ -1198,7 +1198,7 @@ test("an open item's ⋯ menu in the pane's bar offers Mark as read or unread, C
   const sent = takenCloses();
   const ellipsis = () =>
     itemPane(page).querySelector<HTMLButtonElement>(
-      '.desktop-toolbar button[aria-label="Item actions"]',
+      '.luke-toolbar button[aria-label="Item actions"]',
     ) ?? assert.fail("the pane's bar ends in its ⋯ menu");
 
   act(() => ellipsis().click());
@@ -1464,7 +1464,7 @@ function answeredCloses(answer: (itemId: string) => { item: InboxItem; taken: bo
 async function closeFromPane(page: HTMLElement): Promise<void> {
   const ellipsis =
     itemPane(page).querySelector<HTMLButtonElement>(
-      '.desktop-toolbar button[aria-label="Item actions"]',
+      '.luke-toolbar button[aria-label="Item actions"]',
     ) ?? assert.fail("the pane's bar ends in its ⋯ menu");
   act(() => ellipsis.click());
   act(() => menuItem("Resolve without answering").click());
@@ -2033,7 +2033,7 @@ test("the pane's crumbs lead with their tabs' glyphs, the plan's document and th
     "the agent's crumb wears its mark",
   );
   assert.deepEqual(
-    [...page.querySelectorAll(".inbox-view-items .desktop-toolbar button")]
+    [...page.querySelectorAll(".inbox-view-items .luke-toolbar button")]
       .map((button) => button.getAttribute("aria-label") ?? button.textContent)
       .slice(2),
     ["Item actions"],
@@ -3127,7 +3127,7 @@ function columnsShown(page: HTMLElement): string[] {
 /** The item's bar's press named Inbox, the way back to the list, where there is one. */
 function wayBack(page: HTMLElement): HTMLButtonElement | undefined {
   return [
-    ...page.querySelectorAll<HTMLButtonElement>(".inbox-view-items > .desktop-toolbar button"),
+    ...page.querySelectorAll<HTMLButtonElement>(".inbox-view-items > .luke-toolbar button"),
   ].find((button) => button.textContent === "Inbox");
 }
 
