@@ -411,7 +411,7 @@ export const START_NEEDS_REPOSITORY = "Choose a repository first.";
 /** What the refusals a Start and a message meet alike say, worded once. */
 const SHARED_FAILURE_NOTE = {
   [CODING_AGENT_CALL_FAILURE.REPOSITORY_NOT_REACHABLE]:
-    "Luke can't reach this task's repository on GitHub.",
+    "Luke cannot reach this task's repository on GitHub.",
   [CODING_AGENT_CALL_FAILURE.GITHUB_UNANSWERED]: "GitHub didn't answer. Try again.",
   [CODING_AGENT_CALL_FAILURE.MESSAGE_TOO_LONG]: "That message is too long.",
   [CODING_AGENT_CALL_FAILURE.AGENT_NOT_READY]:
@@ -420,7 +420,7 @@ const SHARED_FAILURE_NOTE = {
   // Said once the panel stopped asking again (`image-preparing.ts`).
   [CODING_AGENT_CALL_FAILURE.AGENT_IMAGE_PREPARING]:
     "The agent's image is taking too long to prepare. Try again in a few minutes.",
-  [CODING_AGENT_CALL_FAILURE.NATIVE_AGENT_NOT_HERE]: "This agent can't be reached from here yet.",
+  [CODING_AGENT_CALL_FAILURE.NATIVE_AGENT_NOT_HERE]: "This agent cannot be reached from here yet.",
   [CODING_AGENT_CALL_FAILURE.AGENT_PLAN_SIGNED_OUT]:
     "The plan paying for this agent is signed out. Its starter signs in again in Settings.",
   [CODING_AGENT_CALL_FAILURE.AGENT_PLAN_UNREACHABLE]:
@@ -738,13 +738,13 @@ function unreachedFailure(
   if (unreached?.reason === REPOSITORY_UNREACHED.TOKEN_NO_ACCESS) {
     return {
       reason: FAILURE_REASON.GITHUB_TOKEN,
-      text: `Your GitHub token can't access ${unreached.repository}. Check the repository still exists under that name, or ask its owner to give your GitHub account access.`,
+      text: `Your GitHub token cannot access ${unreached.repository}. Check the repository still exists under that name, or ask its owner to give your GitHub account access.`,
     };
   }
   if (unreached?.reason === REPOSITORY_UNREACHED.TOKEN_CANNOT_PUSH) {
     return {
       reason: FAILURE_REASON.GITHUB_TOKEN,
-      text: `Your GitHub token can't push to ${unreached.repository}. Ask its owner to give your GitHub account write access.`,
+      text: `Your GitHub token cannot push to ${unreached.repository}. Ask its owner to give your GitHub account write access.`,
     };
   }
   if (unreached === undefined || taskId === null) {
@@ -755,13 +755,13 @@ function unreachedFailure(
     case REPOSITORY_UNREACHED.NOT_CONNECTED:
       return {
         reason: FAILURE_REASON.CONNECT_GITHUB,
-        text: `This workspace isn't connected to GitHub, so Luke can't reach ${repository}.`,
+        text: `This workspace isn't connected to GitHub, so Luke cannot reach ${repository}.`,
         taskId: taskId,
       };
     case REPOSITORY_UNREACHED.CONNECTION_LAPSED:
       return {
         reason: FAILURE_REASON.RECONNECT_GITHUB,
-        text: `This workspace's GitHub connection was removed or suspended, so Luke can't reach ${repository}.`,
+        text: `This workspace's GitHub connection was removed or suspended, so Luke cannot reach ${repository}.`,
         taskId: taskId,
       };
     case REPOSITORY_UNREACHED.OTHER_OWNER:

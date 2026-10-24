@@ -1,4 +1,5 @@
 import type { CodingAgentSummary } from "@luke/features/coding-agent-wire";
+import { IRREVERSIBLE_WORDS } from "@luke/features/words";
 import { CONFIRM_LOSS, ConfirmDialog, type DialogQuestion, useConfirmDialog } from "@luke/ui";
 import { ACTION_RESULT_STATUS } from "@luke/wire";
 import { commandAction, PANEL_COMMAND } from "../command-items.js";
@@ -22,7 +23,7 @@ import type { MenuAction } from "./action-menu.js";
 
 /** What asking to delete an agent says: what goes, and, for one not archived, the archive that keeps it instead. */
 function deleteQuestion(name: string, archived: boolean): DialogQuestion {
-  const lost = `“${name}” and its transcript will be deleted. This can’t be undone.`;
+  const lost = `“${name}” and its transcript will be deleted. ${IRREVERSIBLE_WORDS}`;
   return {
     title: "Permanently delete agent?",
     body: archived ? lost : `${lost} To keep it out of the way instead, archive it.`,

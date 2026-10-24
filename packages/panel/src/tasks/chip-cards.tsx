@@ -91,7 +91,7 @@ const CARD_READING = "Reading…";
 const CARD_NOTE_WIDTH = "80%";
 
 /** What a page's card says where its page cannot be read: deleted, or on a plan or an agent the reader cannot reach. */
-const PAGE_UNREAD = "Luke can't read this page.";
+const PAGE_UNREAD = "Luke cannot read this page.";
 
 /**
  * Every chip's card while what it shows is read, whatever its kind: the

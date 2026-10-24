@@ -91,7 +91,7 @@ function archiveQuestion(name: string): DialogQuestion {
     title: `Stop and archive ${name}?`,
     body: "Its transcript and pull request are kept.",
     verb: "Stop and archive",
-    running: "Archiving…",
+    running: "Archiving",
     loss: CONFIRM_LOSS.AFFECTS_OTHERS,
   };
 }

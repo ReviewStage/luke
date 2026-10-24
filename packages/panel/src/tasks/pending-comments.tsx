@@ -4,6 +4,7 @@ import type {
   ReviewThread,
 } from "@luke/features/coding-agent-wire";
 import { PULL_REQUEST_ACTION } from "@luke/features/pull-request-write-wire";
+import { IRREVERSIBLE_WORDS } from "@luke/features/words";
 import {
   Badge,
   BUTTON_SIZE,
@@ -64,7 +65,7 @@ const EDIT_WORDS: ReplyFormWords = {
 /** What Delete asks before it takes a pending comment out of the review. */
 const DELETE_QUESTION: DialogQuestion = {
   title: "Delete this pending comment?",
-  body: "This can't be undone.",
+  body: IRREVERSIBLE_WORDS,
   verb: "Delete comment",
   running: "Deleting",
   loss: CONFIRM_LOSS.IRREVERSIBLE,

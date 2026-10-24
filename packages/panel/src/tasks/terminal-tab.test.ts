@@ -638,7 +638,7 @@ test("an agent archived or retired closes its Terminal tab, as its Changes tab c
 test("a shell or agent the service cannot find shows the bar that asks again, and leaves the tab open", async () => {
   main.listRefused = TERMINAL_REFUSAL.NOT_FOUND;
   const tab = await mount();
-  assert.equal(tab.bar(), "Couldn’t find this agent’s shell.");
+  assert.equal(tab.bar(), "Could not find this agent’s shell.");
   assert.equal(tab.closed(), 0);
 });
 

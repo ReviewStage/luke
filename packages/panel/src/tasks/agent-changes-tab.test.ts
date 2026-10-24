@@ -2361,11 +2361,11 @@ test("a file whose read is refused closes its gaps and says why, once, above its
   };
   assert.equal(
     why("src/seats.ts"),
-    "Can't load more of this file: it's too large or not plain text.",
+    "Cannot load more of this file: it's too large or not plain text.",
   );
   assert.equal(
     why("src/moved.ts"),
-    "Can't load more of this file: it changed since these changes were read.",
+    "Cannot load more of this file: it changed since these changes were read.",
   );
 });
 

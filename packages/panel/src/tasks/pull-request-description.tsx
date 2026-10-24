@@ -1,5 +1,6 @@
 import type { CodingAgentOverviewPullRequest } from "@luke/features/coding-agent-wire";
 import { PULL_REQUEST_ACTION, PULL_REQUEST_REFUSAL } from "@luke/features/pull-request-write-wire";
+import { IRREVERSIBLE_WORDS } from "@luke/features/words";
 import {
   ANNOUNCE,
   Button,
@@ -62,7 +63,7 @@ const DESCRIPTION_WORDS = {
 /** What Reload asks first, since it drops the draft. */
 const RELOAD_QUESTION: DialogQuestion = {
   title: "Reload the description?",
-  body: "Your changes are discarded, and the description opens as it stands on GitHub now. This can't be undone.",
+  body: `Your changes are discarded, and the description opens as it stands on GitHub now. ${IRREVERSIBLE_WORDS}`,
   verb: "Reload",
   running: "Reloading",
   loss: CONFIRM_LOSS.IRREVERSIBLE,

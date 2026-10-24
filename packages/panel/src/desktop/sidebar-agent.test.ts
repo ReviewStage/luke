@@ -466,7 +466,7 @@ test("Permanently delete stands last and alone in the row's right-click, asks fi
     document.querySelector<HTMLElement>('[role="alertdialog"]') ?? assert.fail("it asks first");
   assert.equal(
     document.getElementById(question.getAttribute("aria-describedby") ?? "")?.textContent,
-    "“Remove the stale copy” and its transcript will be deleted. This can’t be undone. To keep it out of the way instead, archive it.",
+    "“Remove the stale copy” and its transcript will be deleted. This cannot be undone. To keep it out of the way instead, archive it.",
   );
   await act(async () => dialogAnswer("Permanently delete").click());
   await settle();
@@ -484,7 +484,7 @@ test("an archived agent's row offers Permanently delete too, and Cancel deletes 
     document.querySelector<HTMLElement>('[role="alertdialog"]') ?? assert.fail("it asks first");
   assert.equal(
     document.getElementById(question.getAttribute("aria-describedby") ?? "")?.textContent,
-    "“Remove the stale copy” and its transcript will be deleted. This can’t be undone.",
+    "“Remove the stale copy” and its transcript will be deleted. This cannot be undone.",
     "an archived agent is out of the way already",
   );
   await act(async () => dialogAnswer("Cancel").click());

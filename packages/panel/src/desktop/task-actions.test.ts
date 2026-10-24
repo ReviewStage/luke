@@ -269,7 +269,7 @@ test("Permanently delete asks in a dialog naming the plan, from the ⋯ and from
   assert.equal(title?.textContent, "Permanently delete task?");
   assert.equal(
     body?.textContent,
-    "“Teammate invitations” and its board and transcript will be deleted. This can’t be undone. To keep it out of the way instead, mark it done.",
+    "“Teammate invitations” and its board and transcript will be deleted. This cannot be undone. To keep it out of the way instead, mark it done.",
   );
   // A key already pressed lands on the answer that changes nothing.
   assert.equal(document.activeElement, answer("Cancel"));
