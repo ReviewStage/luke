@@ -103,17 +103,20 @@ export function standsAt(task: TaskSummary, standing: TaskStanding): boolean {
 
 /**
  * Sends a task a change of where it stands, unless it stands there already,
- * which the tab draws at once and puts back where the service did not keep
- * it, and says so then. What the caller moved with it to put back too,
- * `onRefused`, runs only on that refusal.
+ * which the tab draws at once, a member assigned by the directory's name for
+ * them, and puts back where the service did not keep it, and says so then.
+ * What the caller moved with it to put back too, `onRefused`, runs only on
+ * that refusal.
  */
 export function useStandingDoor(
   tasks: Pick<TasksControl, "onSetTaskStanding">,
 ): (task: TaskSummary, standing: TaskStanding, onRefused?: () => void) => void {
   const toast = useToast();
+  const { members } = useMemberDirectory();
   return (task, standing, onRefused) => {
     if (standsAt(task, standing)) return;
-    void tasks.onSetTaskStanding(task.id, standing).then((kept) => {
+    const named = members?.find((member) => member.userId === standing.assigneeId)?.name;
+    void tasks.onSetTaskStanding(task.id, standing, named).then((kept) => {
       if (kept) return;
       onRefused?.();
       toast({ words: UNCHANGED_LINE, tone: STATUS_TONE.DANGER, hold: TOAST_HOLD.FAILED });

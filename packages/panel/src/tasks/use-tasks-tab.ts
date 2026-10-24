@@ -802,8 +802,12 @@ export interface TasksControl {
   onChangeRepository: (taskId: string) => void;
   /** Gives a task its repository, or takes it away with null; answers why the service refused, or nothing once it is kept. */
   onSetRepository: (taskId: string, repository: string | null) => Promise<string | undefined>;
-  /** Sets where a task stands, how much it matters, or both; answers whether the service kept it. */
-  onSetTaskStanding: (taskId: string, standing: TaskStanding) => Promise<boolean>;
+  /** Sets where a task stands, how much it matters, or who it is assigned to, drawn at once by the assignee's name where the caller knows it; answers whether the service kept it. */
+  onSetTaskStanding: (
+    taskId: string,
+    standing: TaskStanding,
+    assigneeName?: string,
+  ) => Promise<boolean>;
   /** Opens a task's repository on GitHub in the browser. */
   onOpenOnGitHub: (taskId: string) => void;
   /** Opens Settings › Workspace at its GitHub, for the workspace the task belongs to. */
@@ -2346,9 +2350,13 @@ export function useTasksTab(input: {
   // A change of where a task stands, its status, priority, or assignee, is
   // drawn at once and sent, and a refused one goes back where it was only
   // while no later press replaced it. Answers whether the service kept it.
-  const sendStanding = (taskId: string, standing: TaskStanding): Promise<boolean> => {
+  const sendStanding = (
+    taskId: string,
+    standing: TaskStanding,
+    assigneeName?: string,
+  ): Promise<boolean> => {
     if (standing.status !== undefined) chooseStatus(taskId);
-    const asked = standingAsked(standings, viewed, taskId, standing);
+    const asked = standingAsked(standings, viewed, taskId, standing, assigneeName);
     setStandings((held) => withStanding(held, taskId, asked));
     return act(ACT_KIND.TASKS_SET_STANDING, { taskId, ...standing })
       .catch(() => false)
@@ -2718,9 +2726,13 @@ export function useTasksTab(input: {
   };
 
   // A fixture's tasks are read from nowhere, so nothing keeps where they stand.
-  const setTaskStanding = (taskId: string, standing: TaskStanding): Promise<boolean> => {
+  const setTaskStanding = (
+    taskId: string,
+    standing: TaskStanding,
+    assigneeName?: string,
+  ): Promise<boolean> => {
     if (fixture !== undefined) return Promise.resolve(false);
-    return sendStanding(taskId, standing);
+    return sendStanding(taskId, standing, assigneeName);
   };
 
   // A fixture's tasks move nowhere, as they are read from nowhere. Note that

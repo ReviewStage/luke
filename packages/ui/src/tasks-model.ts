@@ -580,44 +580,51 @@ export function settledMarks(
 
 /**
  * Where tasks were sent to stand here that main's view has yet to carry, by
- * task id: a status, a priority, and an assignee's id (null for no one),
+ * task id: a status, a priority, and an assignee (null for no one),
  * each apart from the others and from the pins, so each lands or is refused
  * on its own.
  */
 export interface PendingStandings {
   readonly status: PendingValues<string, TaskStatus>;
   readonly priority: PendingValues<string, TaskPriority>;
-  readonly assigneeId: PendingValues<string, string | null>;
+  readonly assignee: PendingValues<string, PendingAssignee>;
 }
+
+/** Who a task was sent to be assigned to, by their id and the name they are drawn by; null for no one. */
+type PendingAssignee = { readonly userId: string; readonly name: string } | null;
 
 /** No task waiting on where it was sent to stand. */
 export const NO_PENDING_STANDINGS: PendingStandings = {
   status: new Map(),
   priority: new Map(),
-  assigneeId: new Map(),
+  assignee: new Map(),
 };
 
 /** What one press asked of a task's standing, each part it changes, which a refusal lets go of. */
 export interface StandingAsk {
   readonly status?: PendingValue<TaskStatus>;
   readonly priority?: PendingValue<TaskPriority>;
-  readonly assigneeId?: PendingValue<string | null>;
+  readonly assignee?: PendingValue<PendingAssignee>;
 }
 
 /** Whether two standings are one. */
 const sameStanding: SameValue<string | null> = (a, b) => a === b;
+
+/** Whether two assignees are one person, or both no one, whatever name each is drawn by. */
+const sameAssignee: SameValue<PendingAssignee> = (a, b) =>
+  sameStanding(a?.userId ?? null, b?.userId ?? null);
 
 /** A task's priority, No priority for one from a service before priorities. */
 function standingPriority(task: Pick<TaskSummary, "priority">): TaskPriority {
   return task.priority ?? TASK_PRIORITY.NONE;
 }
 
-/** A task's assignee's id, null where it is assigned to no one. */
-function standingAssignee(task: Pick<TaskSummary, "assignee">): string | null {
-  return task.assignee?.userId ?? null;
+/** A task's assignee, null where it is assigned to no one. */
+function standingAssignee(task: Pick<TaskSummary, "assignee">): PendingAssignee {
+  return task.assignee ?? null;
 }
 
-/** The name the view knows a member by, from a task assigned to them or made by them; none where it knows none, and the member directory names them. */
+/** The name the view knows a member by, from a task assigned to them or made by them; none where it knows none. */
 function memberName(view: TasksView, userId: string): string {
   for (const task of view.tasks) {
     if (task.assignee?.userId === userId) return task.assignee.name;
@@ -626,23 +633,21 @@ function memberName(view: TasksView, userId: string): string {
   return "";
 }
 
-/** A row assigned to the member named, or to no one. */
-function assignedTo<Row extends TaskSummary>(row: Row, assigneeId: string | null, view: TasksView) {
-  if (assigneeId === null) {
-    const { assignee: _assignee, ...unassigned } = row;
-    return unassigned as Row;
-  }
-  return { ...row, assignee: { userId: assigneeId, name: memberName(view, assigneeId) } };
+/** A row assigned to the member given, or to no one. */
+function assignedTo<Row extends TaskSummary>(row: Row, assignee: PendingAssignee): Row {
+  if (assignee !== null) return { ...row, assignee };
+  const { assignee: _assignee, ...unassigned } = row;
+  return unassigned as Row;
 }
 
 /** Whether any task waits on where it was sent. */
 function anyStanding(standings: PendingStandings): boolean {
-  return standings.status.size + standings.priority.size + standings.assigneeId.size > 0;
+  return standings.status.size + standings.priority.size + standings.assignee.size > 0;
 }
 
 /** The tasks waiting on where they were sent to stand. */
 export function standingTasks(standings: PendingStandings): readonly string[] {
-  return [...standings.status.keys(), ...standings.priority.keys(), ...standings.assigneeId.keys()];
+  return [...standings.status.keys(), ...standings.priority.keys(), ...standings.assignee.keys()];
 }
 
 /** The view with each pending standing drawn in place, in the list and on the open document alike. */
@@ -651,13 +656,13 @@ export function standingView(view: TasksView, standings: PendingStandings): Task
   const stood = <Row extends TaskSummary>(row: Row): Row => {
     const status = standings.status.get(row.id);
     const priority = standings.priority.get(row.id);
-    const assignee = standings.assigneeId.get(row.id);
+    const assignee = standings.assignee.get(row.id);
     const placed: Row = {
       ...row,
       ...(status === undefined ? {} : { status: status.value }),
       ...(priority === undefined ? {} : { priority: priority.value }),
     };
-    return assignee === undefined ? placed : assignedTo(placed, assignee.value, view);
+    return assignee === undefined ? placed : assignedTo(placed, assignee.value);
   };
   const held = view.document.task;
   return {
@@ -671,13 +676,15 @@ export function standingView(view: TasksView, standings: PendingStandings): Task
  * The pending standing a press asks for, over where the view stands the task
  * and anything of it still pending. Each part is an object of its own, so
  * whoever set it lets go of it alone, and never of a later press's for the
- * same task.
+ * same task. A member assigned is drawn by the name the press knows them by
+ * (`assigneeName`, the member directory's), else the one the list does.
  */
 export function standingAsked(
   standings: PendingStandings,
   view: TasksView,
   taskId: string,
   standing: TaskStanding,
+  assigneeName?: string,
 ): StandingAsk {
   const task = viewedTask(view, taskId);
   const { status, priority, assigneeId } = standing;
@@ -705,11 +712,13 @@ export function standingAsked(
     ...(assigneeId === undefined
       ? {}
       : {
-          assigneeId: pendingValue(
-            standings.assigneeId.get(taskId),
-            assigneeId,
+          assignee: pendingValue(
+            standings.assignee.get(taskId),
+            assigneeId === null
+              ? null
+              : { userId: assigneeId, name: assigneeName ?? memberName(view, assigneeId) },
             task === undefined ? undefined : standingAssignee(task),
-            sameStanding,
+            sameAssignee,
           ),
         }),
   };
@@ -726,7 +735,7 @@ export function withStanding(
   return {
     status: set(standings.status, ask.status),
     priority: set(standings.priority, ask.priority),
-    assigneeId: set(standings.assigneeId, ask.assigneeId),
+    assignee: set(standings.assignee, ask.assignee),
   };
 }
 
@@ -741,7 +750,7 @@ export function standingWithout(
   return {
     status: drop(standings.status, ask.status),
     priority: drop(standings.priority, ask.priority),
-    assigneeId: drop(standings.assigneeId, ask.assigneeId),
+    assignee: drop(standings.assignee, ask.assignee),
   };
 }
 
@@ -759,17 +768,12 @@ export function settledStandings(
     };
   const status = pendingSettled(standings.status, read(standingStatus), sameStanding, now);
   const priority = pendingSettled(standings.priority, read(standingPriority), sameStanding, now);
-  const assigneeId = pendingSettled(
-    standings.assigneeId,
-    read(standingAssignee),
-    sameStanding,
-    now,
-  );
+  const assignee = pendingSettled(standings.assignee, read(standingAssignee), sameAssignee, now);
   const same =
     status === standings.status &&
     priority === standings.priority &&
-    assigneeId === standings.assigneeId;
-  return same ? standings : { status, priority, assigneeId };
+    assignee === standings.assignee;
+  return same ? standings : { status, priority, assignee };
 }
 
 /**

@@ -605,15 +605,15 @@ function listDrops(
       if (fromPins) tasks.onMarkTask(task.id, TASK_MARK.UNPIN);
       if (leaving.length > 0) tasks.onWriteSections(leaving);
     };
-    // Note that a row put back is pinned at the place it held, and kept in its section under the rows it stood under.
+    // Note that a row put back is pinned at the place it held among the pins, given a position there, since a pin given anew with none would lead them; and kept in its section under the rows it stood under.
     const before = tasks.taskSections;
     const back = () => {
       const now = latest();
       if (fromPins) {
+        const others = pins.filter((each) => each.id !== task.id);
+        const at = pins.findIndex((each) => each.id === task.id);
         now.onMarkTask(task.id, TASK_MARK.PIN);
-        if (task.pinPosition !== undefined) {
-          now.onMovePins([{ agent: false, id: task.id, position: task.pinPosition }]);
-        }
+        now.onMovePins(pinMoves(pinPositionsForInsert(others, task, at, pinPlaceOf)));
       }
       if (leaving.length === 0) return;
       const member = { agent: false, id: task.id };

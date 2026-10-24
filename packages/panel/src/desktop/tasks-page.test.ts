@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import { inPinOrder } from "@luke/features/pin-order";
 import type { TaskSections, TaskSectionWrite } from "@luke/features/task-section-wire";
 import {
   TASK_PRIORITY,
@@ -15,7 +16,7 @@ import { ACT_KIND } from "@luke/host/acts";
 import type { AppInboxTask } from "@luke/host/app-state";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import { applySectionWrite, NO_TASK_SECTIONS } from "@luke/ui/task-sections-model";
-import { TASK_MARK, type TaskMark } from "@luke/ui/tasks-model";
+import { type PinMove, TASK_MARK, type TaskMark } from "@luke/ui/tasks-model";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -1186,6 +1187,36 @@ test("a row dragged out of its section or Pinned onto a status the service refus
     "the row is unpinned at once, and pinned again once refused",
   );
   assert.match(document.body.textContent ?? "", /The task could not be changed/);
+});
+
+test("a pin dragged onto a status the service refuses is pinned again under the pins that stood above it, though a pin given anew would lead them", async () => {
+  keeps = false;
+  const moved: PinMove[] = [];
+  // Note that Rate limit search was pinned last, so it leads, and the invitations' task, pinned before it, stands under it.
+  const pinned = TASKS.map((each) => (each.number === 39 ? { ...each, pinnedAt: 6 } : each));
+  const page = await mountPage(pinned, SHELL_ROOM.WIDE, {
+    onMovePins: (moves) => moved.push(...moves),
+  });
+  layRowsOut(page);
+  assert.deepEqual(groups(page)[0], ["Pinned", ["ACME-39", "ACME-44"]]);
+
+  dragRow(page, "ACME-44", "Backlog");
+  await act(async () => undefined);
+
+  // The pins as the service would stand them once the invitations' task is pinned again, later than any.
+  const positions = new Map(moved.map((move) => [move.id, move.position] as const));
+  const after = pinned
+    .map((each) => (each.number === 44 ? { ...each, pinnedAt: 100 } : each))
+    .filter((each) => each.pinnedAt !== undefined)
+    .map((each) => ({ ...each, pinPosition: positions.get(each.id) ?? each.pinPosition }));
+  const order = inPinOrder(after, (each) => ({
+    position: each.pinPosition,
+    at: each.pinnedAt ?? 0,
+  }));
+  assert.deepEqual(
+    order.map((each) => each.number),
+    [39, 44],
+  );
 });
 
 test("a section holding no task stands in the List, empty, and a row dragged into it is kept there", async () => {

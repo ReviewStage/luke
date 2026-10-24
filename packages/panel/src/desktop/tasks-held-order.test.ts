@@ -126,6 +126,7 @@ async function mountView(
   roots.push(root);
   const registry = AtomRegistry.make();
   const sent: [string, unknown][] = [];
+  const named: (string | undefined)[] = [];
   const draw = (listed: readonly TaskSummary[], drawing: Drawing = {}) => {
     const control = tasksControl({
       tasks: [...listed],
@@ -135,8 +136,9 @@ async function mountView(
       listRead: true,
       shown: drawing.shown ?? true,
       ...(drawing.pendingTasks === undefined ? {} : { pendingTasks: drawing.pendingTasks }),
-      onSetTaskStanding: (taskId, standing) => {
+      onSetTaskStanding: (taskId, standing, assigneeName) => {
         sent.push([taskId, standing]);
+        named.push(assigneeName);
         return Promise.resolve(true);
       },
     });
@@ -173,7 +175,7 @@ async function mountView(
   };
   draw(tasks);
   await act(async () => undefined);
-  return { container, draw, sent };
+  return { container, draw, sent, named };
 }
 
 /** Each of the List's groups, or the Board's columns: its name and its tasks' keys, in order. */
@@ -294,6 +296,34 @@ test("in the List, a status the reader picks on a row's chip moves the row at on
     ],
     "once moved, it holds still again in its new place",
   );
+});
+
+for (const [name, view, display] of [
+  ["List", TasksList, DEFAULT_LIST_DISPLAY],
+  ["Columns", TasksBoard, DEFAULT_BOARD_DISPLAY],
+] as const) {
+  test(`in the ${name}, a status the reader gave a task that the service refuses puts it back in the group it stands in`, async () => {
+    const { container, draw } = await mountView(view, TASKS, display);
+    const before = laidOut(container);
+    const under = (key: string) => laidOut(container).find(([, keys]) => keys.includes(key))?.[0];
+
+    draw(changed(39, { status: TASK_STATUS.IN_PROGRESS }), { pendingTasks: new Set(["t-39"]) });
+    assert.equal(under("ACME-39"), "In progress", "it moves at once");
+    draw(TASKS);
+    draw(TASKS);
+
+    assert.deepEqual(laidOut(container), before);
+  });
+}
+
+test("in the List, a member picked on a row's Assignee chip is sent with the name the member directory knows them by, so the row draws it at once", async () => {
+  const { container, sent, named } = await mountView(TasksList, TASKS, DEFAULT_LIST_DISPLAY);
+
+  act(() => chipOf(container, "ACME-41", "Assignee").click());
+  pick("Charles Pan");
+
+  assert.deepEqual(sent, [["t-41", { assigneeId: CHARLES }]]);
+  assert.deepEqual(named, ["Charles Pan"]);
 });
 
 test("in the List ordered by name, a task the reader renamed here moves at once, and one a teammate renamed holds its place", async () => {

@@ -457,6 +457,23 @@ test("a priority or an assignee given here is drawn on the task at once, the ass
   assert.deepEqual(standingView(listed, refused).tasks[0], standingTask(INVITES, TASK_STATUS.TODO));
 });
 
+test("a member the list names on no task is drawn by the name the press knows them by", () => {
+  const listed = _view({ tasks: [standingTask(INVITES, TASK_STATUS.TODO)] });
+  const ask = standingAsked(
+    NO_PENDING_STANDINGS,
+    listed,
+    INVITES,
+    { assigneeId: "user-charles" },
+    "Charles Pan",
+  );
+  const standings = withStanding(NO_PENDING_STANDINGS, INVITES, ask);
+
+  assert.deepEqual(standingView(listed, standings).tasks[0]?.assignee, {
+    userId: "user-charles",
+    name: "Charles Pan",
+  });
+});
+
 test("a task sent to no one is drawn unassigned until the list carries it", () => {
   const assigned = {
     ...standingTask(INVITES, TASK_STATUS.TODO),
@@ -467,7 +484,7 @@ test("a task sent to no one is drawn unassigned until the list carries it", () =
 
   assert.equal(standingView(listed, standings).tasks[0]?.assignee, undefined);
   const carried = _view({ tasks: [standingTask(INVITES, TASK_STATUS.TODO)] });
-  assert.equal(settledStandings(standings, carried, undefined).assigneeId.size, 0);
+  assert.equal(settledStandings(standings, carried, undefined).assignee.size, 0);
 });
 
 test("a name the service trims, or a status a teammate set first, gives way to the list rather than standing over it", () => {
