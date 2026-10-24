@@ -495,7 +495,9 @@
   /* A row's ⋯ stands last, in its own track, as far in from the row's end
      as its press's words are, its room kept whether it shows or not so its
      coming and going moves nothing. Beside acts that always stand it keeps
-     their own gap and takes their end inset. */
+     their own gap and takes their end inset; beside acts that come in on
+     hover it comes in with them, in its end's place, where there is a
+     hover (below). */
   .luke-list-row-more {
     display: flex;
     grid-column: more;
@@ -672,6 +674,53 @@
     .luke-list-row[data-actions="hover"]:has(.luke-list-row-actions):hover .luke-list-row-meta {
       visibility: hidden;
       transition: visibility 0s linear var(--luke-duration-hover);
+    }
+  }
+
+  /* Where there is a hover, a row whose acts come in on hover keeps no track
+     for its ⋯: the ⋯ comes in with the acts, last among them, in its end's
+     place, so at rest its metadata ends the row and its words run to its
+     end inset, with no room standing empty past them. The end's track is
+     as wide as the acts and the ⋯ together, so nothing moves as they come
+     and go, and the end steps aside for both as it does for the acts
+     (above). Note that the acts stand clear of the ⋯ by its width
+     (`--luke-list-row-more-size`, its button's), because they are two boxes
+     in one track. A row that offers a menu and no acts keeps its ⋯ in its
+     own track beside its end, which nothing steps in for, and so does every
+     row on a screen with no hover, where the ⋯ is always shown (above). */
+  @media (hover: hover) {
+    .luke-list-row[data-actions="hover"] {
+      --luke-list-row-more-size: var(--luke-control-height);
+    }
+
+    :is(
+        .luke-list:is([data-density="compact"], [data-density="dense"]) > .luke-list-row,
+        .luke-list-row:is([data-density="compact"], [data-density="dense"])
+      )[data-actions="hover"] {
+      --luke-list-row-more-size: var(--luke-space-24);
+    }
+
+    .luke-list-row[data-actions="hover"]:has(> .luke-list-row-actions + .luke-list-row-more)
+      > .luke-list-row-main,
+    .luke-list-row[data-actions="hover"]
+      > .luke-list-row-slide:has(> .luke-list-row-actions + .luke-list-row-more)
+      > .luke-list-row-main {
+      padding-inline-end: var(--luke-list-row-inset-inline);
+    }
+
+    .luke-list-row[data-actions="hover"] .luke-list-row-actions + .luke-list-row-more {
+      grid-column: end;
+      justify-self: end;
+      margin-inline: 0 var(--luke-list-row-inset-inline);
+      padding-inline-end: 0;
+    }
+
+    .luke-list-row[data-actions="hover"] .luke-list-row-actions:has(+ .luke-list-row-more) {
+      margin-inline-end: calc(
+        var(--luke-list-row-inset-inline) +
+        var(--luke-list-row-more-size) +
+        var(--luke-space-4)
+      );
     }
   }
 

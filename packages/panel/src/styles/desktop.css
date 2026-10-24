@@ -2252,14 +2252,18 @@ ul.actor-stack {
 
 /* An unread Inbox item wears a mail app's blue dot in a gutter before its
    words (`inbox-list.tsx`); the gutter stands on every row, so the words
-   line up whether a row wears the dot or not. */
+   line up whether a row wears the dot or not, and the row's leading gap
+   alone stands between it and the title. The gutter sets its line in the
+   title's type, so its baseline is the title's, and the dot stands centred
+   on the title's capitals rather than on its line's box, which the
+   system's face sets its letters low in. */
 .inbox-row-gutter {
-  display: inline-flex;
+  display: block;
   width: var(--inbox-unread-dot);
   flex: none;
-  align-items: center;
-  justify-content: center;
-  margin-inline-end: var(--luke-item-gap);
+  font-size: var(--luke-type-label-size);
+  line-height: var(--luke-type-label-leading);
+  text-align: center;
 
   --inbox-unread-dot: 7px;
 }
@@ -2267,10 +2271,12 @@ ul.actor-stack {
 /* Note that the dot is the accent's ink rather than its fill, because the
    web's cyan fill reads at 1.7:1 on its light page, under a mark's 3:1. */
 .inbox-row-unread {
+  display: inline-block;
   width: var(--inbox-unread-dot);
   height: var(--inbox-unread-dot);
   border-radius: 50%;
   background: var(--luke-color-accent-text);
+  vertical-align: calc(0.5cap - var(--inbox-unread-dot) / 2);
 }
 
 /* An Inbox item that needs the developer wears the attention mark before
