@@ -144,7 +144,8 @@ function ResetPageButton({
     <Button
       variant={BUTTON_VARIANT.QUIET}
       icon={<ResetIcon />}
-      disabled={busy}
+      busy={busy}
+      busyLabel="Resetting"
       onClick={() => run(scope)}
     >
       Reset to defaults

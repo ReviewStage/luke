@@ -13,6 +13,8 @@ import {
   type DialogConfirm,
   EllipsisIcon,
   GAP,
+  GROUP_HEADING,
+  GroupHeader,
   IconButton,
   LAYOUT_ELEMENT,
   MarkDoneIcon,
@@ -49,7 +51,7 @@ import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import { ActionMenu, type MenuAction, type MenuEntry } from "./action-menu.js";
 import { type RowPlace, RowPlaced, withRowMoves } from "./row-moves.js";
 import { SectionIconPicker, sectionGlyph } from "./section-icon-picker.js";
-import { SidebarGroupHeader } from "./sidebar-group-header.js";
+import { foldedCount, sidebarFold, TASK_NOUN } from "./sidebar-fold.js";
 import { useRowDrag } from "./use-row-drag.js";
 
 /**
@@ -82,7 +84,7 @@ export const TASKS_DROP_ZONE = "tasks";
 export const PINNED_DROP_ZONE = "pinned";
 
 /** What a press must land in to drag a section rather than one of its tasks. */
-const SECTION_HANDLE = ".sidebar-repository-header";
+const SECTION_HANDLE = ".luke-group-header-head";
 
 /** Why a blank title was not kept. */
 const TITLE_ASKED = "Name the section.";
@@ -392,6 +394,59 @@ function sectionActionGroups(
   return [edit, bulk, remove];
 }
 
+/**
+ * A section's rows as drawn open or folded: open, every row, dragged among
+ * its own and out of it; folded, only the open one, which a drop over lands
+ * on top of rather than among.
+ */
+function SectionRows({
+  drawn,
+  context,
+  rows,
+  folded,
+}: {
+  drawn: DrawnSection;
+  context: SectionContext;
+  rows: readonly TaskRow[];
+  folded: boolean;
+}): React.JSX.Element {
+  const move = folded
+    ? undefined
+    : (from: number, to: number) =>
+        context.tasks.onWriteSections(placeWritesWithin(drawn, from, to));
+  const drag = useRowDrag(move, {
+    onDropOut: (from, zone, at) => {
+      const row = rows[from];
+      if (row !== undefined) context.onDropRow(row, zone, at);
+    },
+  });
+  // Note that a row on its way out has no place among the rows a drag or a menu moves.
+  const shown = useLeaving(rows, taskRowKey);
+  const listedAt = new Map(rows.map((row, at) => [taskRowKey(row), at]));
+  const placeOf = (key: string) => {
+    const at = listedAt.get(key);
+    return move === undefined || at === undefined
+      ? undefined
+      : { at, count: rows.length, onMove: move };
+  };
+  return (
+    <Stack
+      as={LAYOUT_ELEMENT.UL}
+      gap={GAP.ROW}
+      className="sidebar-tasks"
+      data-row-drop-rows={folded ? undefined : ""}
+      moves
+      onPointerDown={drag}
+    >
+      {shown.map(({ key, value: row }) => (
+        <RowPlaced key={key} place={placeOf(key)}>
+          {context.row(row)}
+        </RowPlaced>
+      ))}
+    </Stack>
+  );
+}
+
 /** One section: its header, its menu, and its rows, or a word that tasks are dragged in while it holds none. */
 function SidebarSection({
   drawn,
@@ -406,28 +461,10 @@ function SidebarSection({
   const { section } = drawn;
   const { tasks } = context;
   const folded = context.folded(section.id);
-  const rows = folded ? drawn.rows.filter(context.current) : drawn.rows;
-  const move = folded
-    ? undefined
-    : (from: number, to: number) => tasks.onWriteSections(placeWritesWithin(drawn, from, to));
-  const drag = useRowDrag(move, {
-    onDropOut: (from, zone, at) => {
-      const row = rows[from];
-      if (row !== undefined) context.onDropRow(row, zone, at);
-    },
-  });
+  const standing = drawn.rows.filter(context.current);
   const menu = useMenu(tasks.shown && context.inSight);
   const ellipsis = useRef<HTMLButtonElement | null>(null);
   const reads = useReadMarks();
-  // Note that a row on its way out has no place among the rows a drag or a menu moves.
-  const shown = useLeaving(rows, taskRowKey);
-  const listedAt = new Map(rows.map((row, at) => [taskRowKey(row), at]));
-  const placeOf = (key: string) => {
-    const at = listedAt.get(key);
-    return move === undefined || at === undefined
-      ? undefined
-      : { at, count: rows.length, onMove: move };
-  };
   const held = drawnSectionTasks(drawn);
   const groups = sectionActionGroups(drawn, context, {
     onMarkRead: () => {
@@ -441,19 +478,20 @@ function SidebarSection({
   });
   const glyph = sectionGlyph(section.icon);
   return (
-    <div
-      className="sidebar-repository sidebar-own-section"
-      data-row-drop={section.id}
-      data-iconless={glyph === undefined ? "true" : undefined}
-    >
-      <SidebarGroupHeader
+    <div className="sidebar-repository sidebar-own-section" data-row-drop={section.id}>
+      <GroupHeader
+        heading={GROUP_HEADING.NONE}
         glyph={glyph}
-        name={section.title}
-        folded={folded}
-        count={drawn.rows.length}
+        label={section.title}
+        fold={sidebarFold(folded, () => context.onToggle(section.id))}
+        count={foldedCount(folded, drawn.rows.length, TASK_NOUN)}
         menuOpen={menu.open !== undefined}
         contextMenu={menu.contextMenu(ellipsis)}
-        onToggle={() => context.onToggle(section.id)}
+        standing={
+          standing.length === 0 ? undefined : (
+            <SectionRows drawn={drawn} context={context} rows={standing} folded />
+          )
+        }
         actions={
           <Tooltip label="Section actions">
             <IconButton
@@ -465,7 +503,15 @@ function SidebarSection({
             />
           </Tooltip>
         }
-      />
+      >
+        {drawn.rows.length === 0 ? (
+          <div className="sidebar-section-slot">
+            <NoteLine look={NOTE_LINE_LOOK.INSET}>Drag tasks here</NoteLine>
+          </div>
+        ) : (
+          <SectionRows drawn={drawn} context={context} rows={drawn.rows} folded={false} />
+        )}
+      </GroupHeader>
       {menu.drawn === undefined ? null : (
         <ActionMenu
           label={`${section.title} actions`}
@@ -473,29 +519,6 @@ function SidebarSection({
           groups={withRowMoves(groups, place)}
           onClose={menu.close}
         />
-      )}
-      {rows.length === 0 ? (
-        folded ? null : (
-          <div className="sidebar-section-slot">
-            <NoteLine look={NOTE_LINE_LOOK.INSET}>Drag tasks here</NoteLine>
-          </div>
-        )
-      ) : (
-        // A folded section's rows are only the open one, so a drop over it lands on top rather than among them.
-        <Stack
-          as={LAYOUT_ELEMENT.UL}
-          gap={GAP.ROW}
-          className="sidebar-tasks"
-          data-row-drop-rows={folded ? undefined : ""}
-          moves
-          onPointerDown={drag}
-        >
-          {shown.map(({ key, value: row }) => (
-            <RowPlaced key={key} place={placeOf(key)}>
-              {context.row(row)}
-            </RowPlaced>
-          ))}
-        </Stack>
       )}
     </div>
   );

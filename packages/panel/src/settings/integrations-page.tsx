@@ -542,6 +542,8 @@ function IntegrationRow({
   const github = useGitHubConnection();
   const signIn = statuses.signInOf(connection);
   const [connecting, setConnecting] = useState(false);
+  // Note that the sign-in's own Cancel is the one busy while it is called off, as Connect is while one begins.
+  const [cancelling, setCancelling] = useState(false);
   const [editing, setEditing] = useState(false);
   const [rejection, setRejection] = useState<string | undefined>(undefined);
   // Several accounts at a provider each name themselves; one alone is the provider, as ever.
@@ -570,9 +572,11 @@ function IntegrationRow({
 
   const cancel = useCallback(() => {
     setConnecting(true);
+    setCancelling(true);
     setRejection(undefined);
     void cancelSignIn(connection).then((cancelled) => {
       setConnecting(false);
+      setCancelling(false);
       if (!cancelled)
         setRejection(`Luke could not cancel connecting ${name}. Try again in a moment.`);
     });
@@ -638,7 +642,7 @@ function IntegrationRow({
   return (
     <Stack gap={GAP.NONE}>
       <MenuRow
-        label={`${name} actions`}
+        thing={name}
         actions={actions}
         anchor={connection}
         {...(bySignIn ? { heading: PAGE_LINE.GITHUB_SIGN_IN } : undefined)}
@@ -669,10 +673,22 @@ function IntegrationRow({
           error: rejection,
           control: waiting ? (
             <>
-              <Button variant={BUTTON_VARIANT.QUIET} disabled={connecting} onClick={connect}>
+              <Button
+                variant={BUTTON_VARIANT.QUIET}
+                busy={connecting && !cancelling}
+                busyLabel="Reopening the sign-in"
+                disabled={cancelling}
+                onClick={connect}
+              >
                 {SIGN_IN_ACTION.REOPEN}
               </Button>
-              <Button variant={BUTTON_VARIANT.OUTLINE} disabled={connecting} onClick={cancel}>
+              <Button
+                variant={BUTTON_VARIANT.OUTLINE}
+                busy={cancelling}
+                busyLabel="Canceling the sign-in"
+                disabled={connecting && !cancelling}
+                onClick={cancel}
+              >
                 {SIGN_IN_ACTION.CANCEL}
               </Button>
             </>
@@ -681,7 +697,12 @@ function IntegrationRow({
           ) : status === undefined ||
             status === INTEGRATION_STATUS.UNAVAILABLE ||
             (connected && !broken) ? null : (
-            <Button variant={BUTTON_VARIANT.OUTLINE} disabled={connecting} onClick={connect}>
+            <Button
+              variant={BUTTON_VARIANT.OUTLINE}
+              busy={connecting}
+              busyLabel="Connecting"
+              onClick={connect}
+            >
               {grantLabel(status, signIn)}
             </Button>
           ),

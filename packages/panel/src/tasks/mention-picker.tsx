@@ -37,8 +37,10 @@ import {
   MenuGlyph,
   type MenuKey,
   MenuKeys,
+  type MenuRow,
   MenuSurface,
   ProviderMark,
+  RectFloat,
   Spinner,
   TEXT_ELEMENT,
   TEXT_VARIANT,
@@ -71,7 +73,6 @@ import { type IntegrationToolsReads, useIntegrationTools } from "../integration-
 import { useMemberDirectory } from "../member-directory.js";
 import { memberRows, YOU_WORD } from "../member-rows.js";
 import type { ComposerTrigger, MentionNode } from "../plan-editor/contract.js";
-import type { MenuRow } from "../searchable-menu.js";
 import { appStateDerivedAtom, useAppSlice } from "../use-app-state.js";
 import { type AgentRowPlace, agentMenuRow, useAgentRowPlace } from "./agent-menu-row.js";
 import {
@@ -342,17 +343,6 @@ const BACK_LABEL = {
   WIDEN: "All kinds",
   UP: "Up",
 } as const;
-
-/** The gap between the word's line and the list under it. */
-const MENU_GAP = 4;
-
-/** The list's width, as the stylesheet sets it (`.mention-menu`). */
-const MENU_WIDTH = 360;
-
-/** Where the list stands in its room: its left edge, and its top, or its foot over the word with its top left to it. */
-type MenuPlace =
-  | { readonly left: number; readonly top: number }
-  | { readonly left: number; readonly top: "auto"; readonly bottom: number };
 
 /** One row the list offers: what it mentions, or the skill it names, the name it is written with, and a muted detail. */
 type MentionRow = {
@@ -1082,7 +1072,6 @@ function MentionMenu({
   groups,
   at,
   keys,
-  place,
   reading,
   failures,
   fileCard,
@@ -1094,7 +1083,6 @@ function MentionMenu({
   groups: readonly MentionGroup[];
   at: number;
   keys: readonly MenuKey[];
-  place: MenuPlace;
   /** Whether a read the list offers rows from is still out, which the list says in place of "no match". */
   reading: boolean;
   /** The reads that failed, which the list says could not be read, with Retry, in place of "no match". */
@@ -1106,11 +1094,7 @@ function MentionMenu({
   const rows = groups.flatMap((group) => group.rows);
   const noted = reading || failures.length > 0;
   return (
-    <MenuSurface
-      className="searchable-menu mention-menu"
-      inset={MENU_SURFACE_INSET.NONE}
-      style={place}
-    >
+    <MenuSurface className="mention-menu" inset={MENU_SURFACE_INSET.NONE}>
       {crumb === undefined ? null : <MentionCrumb crumb={crumb} />}
       <ComboboxList
         id={id}
@@ -1161,6 +1145,17 @@ export const MENTION_MENU_SIDE = {
 } as const;
 
 export type MentionMenuSide = (typeof MENTION_MENU_SIDE)[keyof typeof MENTION_MENU_SIDE];
+
+/** The box a word's list hangs by, in window coordinates: the line its first letter stands on, as the editor reported it. */
+export function wordBox(word: ComposerTrigger): {
+  left: number;
+  top: number;
+  right: number;
+  bottom: number;
+} {
+  const { left, top, bottom } = word.rect;
+  return { left, top, right: left, bottom };
+}
 
 /** A page an agent showed on the plan, as the list offers it: as the plan lists it, its id, its newest version's title and number, and when that version was written, which its row and its card say. */
 export type MentionablePage = PageLine;
@@ -1399,9 +1394,10 @@ function kindsOf(
 
 /**
  * The `@` list for an editor on a task's page: its rows read from the
- * plan's words as they stand and the repository's paths, placed by the word
- * in `room`, and a pick handed to `onChoose` as the mention's node; a list
- * that never opens where there is no task to offer. Where channels are
+ * plan's words as they stand and the repository's paths, hung by the word
+ * (`@luke/ui`'s `RectFloat`) and closed by a press outside it and `room`,
+ * and a pick handed to `onChoose` as the mention's node; a list that never
+ * opens where there is no task to offer. Where channels are
  * handed, a `#` word opens the same list on them.
  */
 export function useMentionPicker({
@@ -1426,7 +1422,7 @@ export function useMentionPicker({
   members?: MentionMembers | undefined;
   /** The channels a `#` word names, where the words are a chat message's; none elsewhere, where a `#` opens nothing. */
   channels?: MentionChannels | undefined;
-  /** The element the list is placed in, by the word. */
+  /** The box the editor stands in: a press in it is the editor's, and the date picker hangs in it. */
   room: RefObject<HTMLElement | null>;
   side: MentionMenuSide;
   onChoose: (mention: MentionNode) => void;
@@ -1723,6 +1719,11 @@ export function useMentionPicker({
     } else onChoose({ name: row.written ?? row.name, target: encodeMention(row.mention, place) });
   };
 
+  // The list closed by Escape or a press away stays closed until the caret leaves its word.
+  const closeList = () => {
+    if (said !== undefined) setClosed({ word: said.word, start: said.trigger.start });
+  };
+
   // ↑, ↓, Home, End, Enter and Escape steer the list as any combobox's do;
   // ⌘Enter writes the highlighted row as a bare Enter does.
   const activeId = rows.length === 0 ? undefined : comboboxOptionId(listId, at);
@@ -1744,9 +1745,7 @@ export function useMentionPicker({
       const row = rows[at];
       if (row !== undefined) choose(row);
     },
-    onEscape: () => {
-      if (said !== undefined) setClosed({ word: said.word, start: said.trigger.start });
-    },
+    onEscape: () => closeList(),
   });
 
   // The list's own keys come first: ⌫ widens, → opens, Tab writes, and a
@@ -1785,16 +1784,6 @@ export function useMentionPicker({
     MENU_KEY.CLOSE,
   ];
 
-  // The list stands by the word's line, on the side asked, inside the room's width.
-  // Note that the room is measured only while the list is shown, since a measure in a draw lays out the whole window.
-  const box = room.current;
-  const placed = shown ? box?.getBoundingClientRect() : undefined;
-  const placeOf = (word: ComposerTrigger, at: DOMRect, width: number): MenuPlace => {
-    const left = Math.max(0, Math.min(word.rect.left - at.left, width - MENU_WIDTH));
-    return side === MENTION_MENU_SIDE.BELOW
-      ? { left, top: word.rect.bottom - at.top + MENU_GAP }
-      : { left, top: "auto", bottom: at.bottom - word.rect.top + MENU_GAP };
-  };
   // Note that a file's card is made as its row is drawn, because the repository's paths are thousands and only the few listed hang one.
   const shownCode = source?.shownCode ?? NO_SHOWN_CODE;
   const openFiles = source?.openFiles ?? NO_OPEN_FILES;
@@ -1805,8 +1794,14 @@ export function useMentionPicker({
     const commit = openFiles.find((file) => file.path === path)?.commit;
     return <FileCard path={path} note={newestFileNote(shownCode, path, { repository, commit })} />;
   };
-  const list =
-    !shown || box === null || placed === undefined ? null : (
+  // The list hangs by the word's line, on the side asked; a press outside it and the room closes it as Escape does.
+  const list = !shown ? null : (
+    <RectFloat
+      anchor={() => wordBox(trigger)}
+      side={side}
+      onPressAway={closeList}
+      holds={(target) => room.current?.contains(target) === true}
+    >
       <MentionMenu
         id={listId}
         crumb={
@@ -1817,14 +1812,14 @@ export function useMentionPicker({
         groups={groups}
         at={at}
         keys={keys}
-        place={placeOf(trigger, placed, box.clientWidth)}
         reading={reading}
         failures={failures}
         fileCard={fileCard}
         onHover={(index) => setHighlight({ start: trigger.start, query: trigger.query, at: index })}
         onChoose={choose}
       />
-    );
+    </RectFloat>
+  );
 
   const menu = (
     <>

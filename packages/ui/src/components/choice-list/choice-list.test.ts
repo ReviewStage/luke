@@ -168,6 +168,22 @@ test("the arrows choose the next open row, past an unavailable one, wrapping at 
   assert.equal(row(page, "Retry once").disabled, true);
 });
 
+test("Home and End choose the first and the last open row of a pick-one list and take the keyboard there, and only move it along a pick-several one", () => {
+  const one = render(createElement(Held, { start: ["three"] }));
+  const three = row(one, "Retry 3 times");
+  act(() => three.focus());
+  key(three, "End");
+  assert.equal(document.activeElement, row(one, "Never retry"));
+  key(row(one, "Never retry"), "Home");
+  assert.equal(document.activeElement, three);
+  assert.equal(heard(one), "never,three");
+  const many = render(createElement(Held, { select: CHOICE_SELECT.MANY }));
+  act(() => row(many, "Retry 3 times").focus());
+  key(row(many, "Retry 3 times"), "End");
+  assert.equal(document.activeElement, row(many, "Never retry"));
+  assert.equal(heard(many), "");
+});
+
 test("a press chooses a row; a press on the checked row keeps it, unless the list is clearable", () => {
   const kept = render(createElement(Held));
   act(() => row(kept, "Never retry").click());

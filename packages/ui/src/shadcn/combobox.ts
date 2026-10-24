@@ -35,7 +35,7 @@ export const COMBOBOX_WELL =
 
 /** An item: its glyph, its name, then its detail and hint at its end, lit while it is the active option. */
 export const COMBOBOX_ITEM =
-  "group/option flex h-menu-row flex-none cursor-default items-center gap-icon-gap rounded-menu-row px-row-inset font-sans text-body whitespace-nowrap text-foreground select-none aria-selected:not-aria-disabled:bg-secondary aria-disabled:opacity-40";
+  "group/option flex h-menu-row flex-none cursor-default items-center gap-icon-gap rounded-menu-row px-row-inset font-sans text-body whitespace-nowrap text-foreground select-none aria-selected:not-aria-disabled:bg-secondary aria-disabled:opacity-disabled";
 
 /** What leads an item before its glyph, a task's key say, in a column wide enough for a long one, so the glyphs and names it leads line up down the list. */
 export const COMBOBOX_ITEM_LEAD = "inline-flex min-w-combobox-lead flex-none items-center";

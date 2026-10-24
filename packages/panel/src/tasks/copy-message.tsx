@@ -1,4 +1,4 @@
-import { MESSAGE_ACTIONS_PLACEMENT, MessageActions, type MessageActionsPlacement } from "@luke/ui";
+import { MessageActions } from "@luke/ui";
 import { LinkIcon } from "lucide-react";
 import type { ReactNode } from "react";
 import { MessageAction } from "../ai-elements/message.js";
@@ -32,7 +32,6 @@ export function CopyMessageAction({
   messageId,
   forkable = false,
   forkCut,
-  placement = MESSAGE_ACTIONS_PLACEMENT.FLOATING,
   lead,
   rewind,
 }: {
@@ -45,8 +44,6 @@ export function CopyMessageAction({
   forkable?: boolean;
   /** Where its fork cuts it, where it is a reply still being written; none where a fork keeps it whole. */
   forkCut?: ForkCut | undefined;
-  /** Where the actions stand: floated over the message's corner, or set in the line under it. */
-  placement?: MessageActionsPlacement;
   /** An action of the message's own set before Copy, as a chat notice's Open in Chat is. */
   lead?: ReactNode;
   /** How its tab may offer to rewind to it: Edit on a line of the developer's, Revert to here on the agent's own; none where it offers neither. */
@@ -56,7 +53,7 @@ export function CopyMessageAction({
   const place = useMessagePlace(messageId ?? "");
   const copyLink = useCopyLink();
   return (
-    <MessageActions placement={placement}>
+    <MessageActions>
       {lead}
       {copyable ? (
         <MessageAction

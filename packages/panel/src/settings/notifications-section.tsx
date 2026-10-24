@@ -13,6 +13,7 @@ import {
   NOTIFICATIONS_STATUS,
   type NotificationsControl,
 } from "@luke/voice/settings-controls";
+import { useBusyPress } from "./busy-press.js";
 import { SchemaSettingRows } from "./schema-rows.js";
 import type { SettingsWrites } from "./writes.js";
 
@@ -45,6 +46,21 @@ function notificationsWords(
 ): (typeof NOTIFICATIONS_WORDS)[keyof typeof NOTIFICATIONS_WORDS] {
   if (control.grantor === NOTIFICATIONS_GRANTOR.BROWSER) return NOTIFICATIONS_WORDS.browser;
   return control.packaged ? NOTIFICATIONS_WORDS.packaged : NOTIFICATIONS_WORDS.development;
+}
+
+/** Send test notification, which waits on the host's answer to the test. */
+function SendTestNotification({ control }: { control: NotificationsControl }): React.JSX.Element {
+  const test = useBusyPress(control.onTest);
+  return (
+    <Button
+      variant={BUTTON_VARIANT.OUTLINE}
+      busy={test.busy}
+      busyLabel="Sending the test notification"
+      onClick={test.onPress}
+    >
+      Send test notification
+    </Button>
+  );
 }
 
 /**
@@ -91,11 +107,7 @@ export function NotificationsSection({
           </>
         }
       >
-        {() => (
-          <Button variant={BUTTON_VARIANT.OUTLINE} onClick={control.onTest}>
-            Send test notification
-          </Button>
-        )}
+        {() => <SendTestNotification control={control} />}
       </SettingsRow>
       {/* Note that the refusal's row is its line alone, with no name of its
           own, because the test row above already names what it is about. */}

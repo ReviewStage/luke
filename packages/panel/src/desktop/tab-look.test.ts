@@ -233,7 +233,7 @@ function rowLooks(column: Element): Map<string, Look> {
   const add = column.querySelector<HTMLButtonElement>('button[aria-label="Open a tab"]');
   assert.ok(add, "the strip's +");
   act(() => add.click());
-  const rows = [...column.querySelectorAll('.tab-add-menu [role="option"]')].map((row) => {
+  const rows = [...column.querySelectorAll('.luke-searchable-menu [role="option"]')].map((row) => {
     const label = row.querySelector(".luke-combobox-option-label")?.textContent ?? "";
     return [
       label,

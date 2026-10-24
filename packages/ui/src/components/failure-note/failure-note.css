@@ -48,5 +48,7 @@
   .luke-failure-note-retry {
     display: flex;
     flex: none;
+    align-items: center;
+    gap: var(--luke-icon-gap);
   }
 }

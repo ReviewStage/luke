@@ -53,6 +53,7 @@ import {
   ChipName,
   ChoiceBar,
   type ChoiceItem,
+  Comment,
   type CountPart,
   DETAIL_PAGE_INSET,
   DetailPage,
@@ -74,6 +75,7 @@ import {
   ListRow,
   linesCount,
   PAGE_FRAME,
+  PaneBar,
   ProviderMark,
   SCROLL_FADE,
   SCROLL_FADE_INSET,
@@ -132,7 +134,7 @@ import {
   useRef,
   useState,
 } from "react";
-import { ACTOR_SIZE, ActorMark, ActorRef } from "../actor-ref.js";
+import { ACTOR_SIZE, ActorMark, ActorRef, commentAuthor } from "../actor-ref.js";
 import { Fold, FoldBody } from "../ai-elements/fold.js";
 import { appPlatform } from "../app-platform.js";
 import { useCopyLinkItem } from "../copy-link-item.js";
@@ -156,6 +158,7 @@ import {
   AnnotationCard,
   AnnotationComment,
   AnnotationComments,
+  type AnnotationReply,
   type AnnotationState,
 } from "./annotation-card.js";
 import { threadPreview } from "./changes-model.js";
@@ -194,13 +197,7 @@ import {
 import { PullRequestDescription } from "./pull-request-description.js";
 import { PullRequestLabels } from "./pull-request-labels.js";
 import { PullRequestNumberProvider, pullRequestOfTab } from "./pull-request-number.js";
-import {
-  HeaderReviewers,
-  OpenedLine,
-  PersonRef,
-  ReviewStanding,
-  useNamer,
-} from "./pull-request-people.js";
+import { HeaderReviewers, OpenedLine, ReviewStanding, useNamer } from "./pull-request-people.js";
 import {
   LabelPicker,
   ReviewerPicker,
@@ -1185,17 +1182,14 @@ function ThreadComment({
   const draft = usePendingComment(comment.url);
   const writer = useNamer()(comment.by);
   const words = <EntryWords entry={comment} picture={picture} />;
-  const reply = first
+  const reply: AnnotationReply | undefined = first
     ? undefined
     : {
-        face: <ActorMark actor={writer} size={ACTOR_SIZE.ROW} />,
-        meta: (
-          <>
-            <ActorRef actor={writer} nameOnly />
-            <Time className="annotation-card-time" at={comment.at} now={now} />
-            {draft === undefined ? null : <PendingBadge />}
-          </>
-        ),
+        author: commentAuthor(writer),
+        nameRef: <ActorRef actor={writer} nameOnly />,
+        at: comment.at,
+        now,
+        trailing: draft === undefined ? undefined : <PendingBadge />,
       };
   return (
     <AnnotationComment reply={reply} className="pull-request-thread-comment">
@@ -1238,12 +1232,7 @@ function PendingList({
           </Text>
           <PendingComment
             draft={draft}
-            head={
-              <>
-                <PersonRef person={draft.by} />
-                <Time className="changes-comment-time" at={draft.at} now={now} />
-              </>
-            }
+            head={{ person: draft.by, at: draft.at, now }}
             words={<EntryWords entry={draft} picture={picture} />}
           />
         </BlockListItem>
@@ -1368,7 +1357,7 @@ function EntryFrame({
   );
 }
 
-/** An entry's head: who, where a review left them, and when. */
+/** A skeleton entry's head, where who stands before the words are read. */
 function EntryHead({ children }: { children: ReactNode }): React.JSX.Element {
   return <span className="changes-comment-head">{children}</span>;
 }
@@ -1384,6 +1373,7 @@ function EntryCard({
   picture: GitHubPictureDrawer;
 }): React.JSX.Element {
   const threads = entry.threads ?? [];
+  const writer = useNamer()(entry.by);
   const landed = useLandedEntry(entry.url);
   return (
     <EntryFrame
@@ -1393,13 +1383,16 @@ function EntryCard({
       {...landedMark(landed.ringed)}
       onAnimationEnd={landed.onAnimationEnd}
     >
-      <EntryHead>
-        <PersonRef person={entry.by} />
-        {entry.state === undefined ? null : <ReviewStanding state={entry.state} />}
-        <Time className="changes-comment-time" at={entry.at} now={now} />
-      </EntryHead>
-      <EntryWords entry={entry} picture={picture} />
-      <Reactions reactions={entry.reactions} subject={entry.subject} />
+      <Comment
+        author={commentAuthor(writer)}
+        nameRef={<ActorRef actor={writer} nameOnly />}
+        at={entry.at}
+        now={now}
+        trailing={entry.state === undefined ? undefined : <ReviewStanding state={entry.state} />}
+      >
+        <EntryWords entry={entry} picture={picture} />
+        <Reactions reactions={entry.reactions} subject={entry.subject} />
+      </Comment>
       {threads.length === 0 ? null : (
         <Stack as={LAYOUT_ELEMENT.OL} gap={GAP.ITEM} className="pull-request-threads">
           {threads.map((thread, at) => (
@@ -2687,8 +2680,8 @@ function PullRequestTabBody({
                     editing={{ options, refreshing: pullRequestRead.out }}
                   />
                 </header>
-                <div className="pull-request-tabs">
-                  <div className="pull-request-tab-bar">
+                <PaneBar
+                  middle={
                     <ChoiceBar<PullRequestView>
                       label="Pull request"
                       items={tabsOf(parts, published, held, changes, chapters)}
@@ -2698,19 +2691,21 @@ function PullRequestTabBody({
                       fold={tabsFold}
                       panels={ids}
                     />
-                  </div>
-                  {reviewable ? (
-                    <PullRequestReview
-                      writes={review}
-                      pending={pendingReview}
-                      pendingList={
-                        drafts === undefined || drafts.length === 0 ? null : (
-                          <PendingList drafts={drafts} now={now} picture={picture} />
-                        )
-                      }
-                    />
-                  ) : null}
-                </div>
+                  }
+                  actions={
+                    reviewable ? (
+                      <PullRequestReview
+                        writes={review}
+                        pending={pendingReview}
+                        pendingList={
+                          drafts === undefined || drafts.length === 0 ? null : (
+                            <PendingList drafts={drafts} now={now} picture={picture} />
+                          )
+                        }
+                      />
+                    ) : null
+                  }
+                />
                 <Fill
                   className="pull-request-view"
                   role="tabpanel"

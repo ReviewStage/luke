@@ -167,6 +167,7 @@ const WORDS = {
   CANCEL: "Cancel",
   SAVE: "Save",
   DISCONNECT: "Disconnect",
+  DISCONNECTING: "Disconnecting",
   REMOVE: "Remove",
   ADD_TOKEN: "Add token",
   REPLACE_TOKEN: "Replace token",
@@ -496,7 +497,8 @@ function ClaudeTokenPanel({
               )}
               <Button
                 variant={BUTTON_VARIANT.OUTLINE}
-                disabled={removal.busy}
+                busy={removal.busy}
+                busyLabel={WORDS.DISCONNECTING}
                 onClick={removal.ask}
               >
                 {WORDS.DISCONNECT}
@@ -671,7 +673,12 @@ function ChatGptPanel({
         </SettingsFacts>
         <Inline wrap={false}>
           {connected ? (
-            <Button variant={BUTTON_VARIANT.OUTLINE} disabled={removal.busy} onClick={removal.ask}>
+            <Button
+              variant={BUTTON_VARIANT.OUTLINE}
+              busy={removal.busy}
+              busyLabel={WORDS.DISCONNECTING}
+              onClick={removal.ask}
+            >
               {WORDS.DISCONNECT}
             </Button>
           ) : continueOffered ? (

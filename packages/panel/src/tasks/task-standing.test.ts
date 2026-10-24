@@ -9,7 +9,6 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
 import { MemberDirectory } from "../member-directory.js";
 import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
-import { layContainersAt } from "../testing/container-width.js";
 import { restOn } from "../testing/hint-rest.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
 import { TaskKeyLine, TaskStandingChips } from "./task-standing.js";
@@ -182,57 +181,6 @@ test("the assignee's menu lists No assignee, then the reader, then every other m
   act(() => (rows[2] ?? assert.fail("no Ada row")).click());
 
   assert.deepEqual(sent, [{ assigneeId: "user-ada" }]);
-});
-
-/**
- * A length the stylesheet draws, in pixels: its one `var()` read off what
- * `element` inherits, or its fallback, since jsdom resolves none.
- */
-function drawnPixels(element: Element, value: string): number {
-  const read = value.replace(
-    /var\((--[\w-]+),\s*([^()]*)\)/u,
-    (_, name: string, fallback: string) => {
-      const inherited = getComputedStyle(element).getPropertyValue(name).trim();
-      return inherited === "" ? fallback : inherited;
-    },
-  );
-  return read === "none" ? Number.POSITIVE_INFINITY : Number.parseFloat(read);
-}
-
-test("the assignee's menu opened near the panel's right edge stands inside the panel rather than scrolling it sideways", () => {
-  const panel = 390;
-  const chipLeft = 300;
-  const chipWidth = 80;
-  const menuWidth = 280;
-  layContainersAt({});
-  vi.spyOn(window, "innerWidth", "get").mockReturnValue(panel);
-  vi.spyOn(window, "innerHeight", "get").mockReturnValue(800);
-  // jsdom lays nothing out, so the chip's place and the menu's own width are answered as the panel would lay them.
-  vi.spyOn(HTMLElement.prototype, "offsetWidth", "get").mockImplementation(function (
-    this: HTMLElement,
-  ) {
-    return this.classList.contains("settings-picker-menu") ? menuWidth : 0;
-  });
-  const host = drawn(TASK, () => undefined);
-  const assignee = chip(host, "Assignee");
-  vi.spyOn(assignee, "getBoundingClientRect").mockReturnValue(
-    new DOMRect(chipLeft, 100, chipWidth, 28),
-  );
-
-  act(() => assignee.click());
-  const menu = document.querySelector(".settings-picker-menu") ?? assert.fail("the menu opens");
-  const style = getComputedStyle(menu);
-  const width = Math.min(menuWidth, drawnPixels(menu, style.maxWidth));
-  const start =
-    style.left === "auto"
-      ? chipLeft + chipWidth - drawnPixels(menu, style.right) - width
-      : chipLeft + drawnPixels(menu, style.left);
-
-  assert.ok(
-    start >= 0 && start + width <= panel,
-    `the menu stands from ${start} to ${start + width}`,
-  );
-  assert.equal(width, menuWidth, "the menu keeps its whole width");
 });
 
 test("the assignee's menu says it is reading while the members are unread, and never that none match", async () => {

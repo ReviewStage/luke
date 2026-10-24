@@ -34,7 +34,9 @@ import {
   CHIP_WIDTH,
   FoldingButton,
   type FoldingButtonHint,
+  matchingRows,
   PageToolbar,
+  POPOVER_ALIGN,
   Spinner,
   STATUS_TONE,
   TEXT_FIELD_SIZE,
@@ -53,8 +55,7 @@ import {
   useDraftWriter,
 } from "../composer-drafts.js";
 import { useIntegrationStatuses } from "../integration-statuses.js";
-import { matchingRows } from "../searchable-menu.js";
-import { PICKER_ALIGN, Picker } from "../settings/picker-row.js";
+import { Picker } from "../settings/picker-row.js";
 import { UNDO_LABEL, useToast } from "../toast.js";
 import { useAttachedFiles } from "../use-attached-files.js";
 import { type AgentRowPlace, agentMenuRow, useAgentRowPlace } from "./agent-menu-row.js";
@@ -464,7 +465,7 @@ function ComposeCard({
             <span className="inbox-compose-label">{TO}</span>
             <Picker
               label={TO}
-              align={PICKER_ALIGN.START}
+              align={POPOVER_ALIGN.START}
               width={CHIP_WIDTH.AUTO}
               value={agent?.id}
               valueLabel={chosen === undefined ? NO_AGENT : chosen.label}

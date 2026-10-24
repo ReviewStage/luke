@@ -20,10 +20,12 @@ import { CHOICE_LIST_EXAMPLE } from "./examples/choice-list";
 import { COLLECTION_PAGE_EXAMPLE } from "./examples/collection-page";
 import { COMBOBOX_EXAMPLE } from "./examples/combobox";
 import { COMMAND_ASK_EXAMPLE } from "./examples/command-ask";
+import { COMMAND_DIALOG_EXAMPLE } from "./examples/command-dialog";
 import { COMMENTS_EXAMPLE } from "./examples/comments";
 import { COMPOSER_FOOTS_EXAMPLE } from "./examples/composer-foots";
 import { COMPOSER_FRAMES_EXAMPLE } from "./examples/composer-frames";
 import { CONFIRM_DIALOGS_EXAMPLE } from "./examples/confirm-dialogs";
+import { COPY_BUTTONS_EXAMPLE } from "./examples/copy-buttons";
 import { CORNER_COUNTS_EXAMPLE } from "./examples/corner-counts";
 import { DAILY_BARS_EXAMPLE } from "./examples/daily-bars";
 import { DATA_TABLE_EXAMPLE } from "./examples/data-table";
@@ -33,6 +35,7 @@ import { DISCLOSURES_EXAMPLE } from "./examples/disclosures";
 import { DRAWER_SWIPES_EXAMPLE } from "./examples/drawer-swipes";
 import { EDITABLE_DOCUMENT_EXAMPLE } from "./examples/editable-document";
 import { EMPTY_STATES_EXAMPLE } from "./examples/empty-states";
+import { ERROR_LINES_EXAMPLE } from "./examples/error-lines";
 import { ERROR_STATES_EXAMPLE } from "./examples/error-states";
 import { FACTS_EXAMPLE } from "./examples/facts";
 import { FAILURE_NOTES_EXAMPLE } from "./examples/failure-notes";
@@ -61,6 +64,7 @@ import { MORE_BUTTONS_EXAMPLE } from "./examples/more-buttons";
 import { NAV_ITEMS_EXAMPLE } from "./examples/nav-items";
 import { NOTE_LINES_EXAMPLE } from "./examples/note-lines";
 import { ONE_LINE_EXAMPLE } from "./examples/one-line";
+import { OVER_PANES_EXAMPLE } from "./examples/over-panes";
 import { PAGE_THUMBS_EXAMPLE } from "./examples/page-thumbs";
 import { PAGE_TOOLBAR_EXAMPLE } from "./examples/page-toolbar";
 import { PAGINATION_EXAMPLE } from "./examples/pagination";
@@ -85,6 +89,7 @@ import { SAVED_TICKS_EXAMPLE } from "./examples/saved-ticks";
 import { SCROLL_AREA_EXAMPLE } from "./examples/scroll-area";
 import { SEARCH_FIELDS_EXAMPLE } from "./examples/search-fields";
 import { SEARCHABLE_MENU_EXAMPLE } from "./examples/searchable-menu";
+import { SECRET_FIELDS_EXAMPLE } from "./examples/secret-fields";
 import { SETTINGS_PAGE_EXAMPLE } from "./examples/settings-page";
 import { SETTINGS_ROW_EXAMPLE } from "./examples/settings-row";
 import { SETTINGS_SECTION_EXAMPLE } from "./examples/settings-section";
@@ -145,7 +150,9 @@ export const EXAMPLES: readonly Example[] = [
   COLLECTION_PAGE_EXAMPLE,
   COMBOBOX_EXAMPLE,
   CONFIRM_DIALOGS_EXAMPLE,
+  COPY_BUTTONS_EXAMPLE,
   COMMAND_ASK_EXAMPLE,
+  COMMAND_DIALOG_EXAMPLE,
   COMMENTS_EXAMPLE,
   DAILY_BARS_EXAMPLE,
   DATA_TABLE_EXAMPLE,
@@ -154,6 +161,7 @@ export const EXAMPLES: readonly Example[] = [
   DISCLOSURES_EXAMPLE,
   DRAWER_SWIPES_EXAMPLE,
   EMPTY_STATES_EXAMPLE,
+  ERROR_LINES_EXAMPLE,
   ERROR_STATES_EXAMPLE,
   FACTS_EXAMPLE,
   FAILURE_NOTES_EXAMPLE,
@@ -189,6 +197,7 @@ export const EXAMPLES: readonly Example[] = [
   NAV_ITEMS_EXAMPLE,
   NOTE_LINES_EXAMPLE,
   ONE_LINE_EXAMPLE,
+  OVER_PANES_EXAMPLE,
   PAGINATION_EXAMPLE,
   PAGE_THUMBS_EXAMPLE,
   PAGE_TOOLBAR_EXAMPLE,
@@ -205,6 +214,7 @@ export const EXAMPLES: readonly Example[] = [
   SAVED_TICKS_EXAMPLE,
   SEARCH_FIELDS_EXAMPLE,
   SEARCHABLE_MENU_EXAMPLE,
+  SECRET_FIELDS_EXAMPLE,
   SETTINGS_PAGE_EXAMPLE,
   SETTINGS_SECTION_EXAMPLE,
   SPINNERS_EXAMPLE,

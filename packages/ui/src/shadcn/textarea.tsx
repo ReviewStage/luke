@@ -22,7 +22,7 @@ export const TEXTAREA_WELL =
 
 /** What every text area shares: its box, its type, its placeholder, and its invalid and disabled states. */
 const TEXTAREA_FIELD =
-  "m-0 box-border block h-auto w-full min-w-0 font-body text-body font-text text-foreground transition-[border-color,background-color] duration-(--luke-duration-hover) ease-plain placeholder:text-muted-foreground aria-invalid:animate-field-shake aria-invalid:border-destructive disabled:cursor-not-allowed disabled:text-muted-foreground disabled:opacity-70";
+  "m-0 box-border block h-auto w-full min-w-0 font-body text-body font-text text-foreground transition-[border-color,background-color] duration-(--luke-duration-hover) ease-plain placeholder:text-muted-foreground aria-invalid:animate-field-shake aria-invalid:border-destructive disabled:cursor-not-allowed disabled:opacity-disabled";
 
 export function ShadcnTextarea({ className, ...props }: React.ComponentProps<"textarea">) {
   return (

@@ -82,7 +82,6 @@ import { EXPERIMENT } from "@luke/settings";
 import { SETTINGS_VIEW } from "@luke/settings/settings-views";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
-  AnchoredPopover,
   BUTTON_VARIANT,
   Button,
   CHIP_LOOK,
@@ -97,9 +96,11 @@ import {
   DetailPage,
   EllipsisIcon,
   ErrorState,
+  FailureNote,
   Fill,
   FoldingButton,
   IconButton,
+  matchingRows,
   OneLine,
   PAGE_FRAME,
   PageToolbar,
@@ -158,7 +159,6 @@ import { useCopyLinkItem } from "../copy-link-item.js";
 import { ExperimentTag, SendFeedbackButton } from "../experiment-marks.js";
 import { useIntegrationStatuses } from "../integration-statuses.js";
 import { useOpenSettings } from "../open-settings.js";
-import { matchingRows } from "../searchable-menu.js";
 import { Picker, PickerRow } from "../settings/picker-row.js";
 import { SelectRow } from "../settings/select-row.js";
 import { SwitchRow } from "../settings/switch-row.js";
@@ -1575,26 +1575,24 @@ function ModelPicker({
         <ChipName>Choose a model</ChipName>
       </Chip>
       {drawn.mounted ? (
-        <AnchoredPopover align={POPOVER_ALIGN.END}>
-          <ModelMenu
-            leaving={drawn.leaving}
-            ref={drawn.ref}
-            id={menuId}
-            className="agent-model-menu"
-            models={models}
-            failed={modelsFailed}
-            onRetry={readModels}
-            chosen={undefined}
-            onChoose={(choice) => {
-              onChoose(choice);
-              setOpen(false);
-            }}
-            onClose={close}
-            onLeave={(left) => {
-              if (!(left instanceof Node && root.current?.contains(left))) setOpen(false);
-            }}
-          />
-        </AnchoredPopover>
+        <ModelMenu
+          leaving={drawn.leaving}
+          ref={drawn.ref}
+          id={menuId}
+          align={POPOVER_ALIGN.END}
+          models={models}
+          failed={modelsFailed}
+          onRetry={readModels}
+          chosen={undefined}
+          onChoose={(choice) => {
+            onChoose(choice);
+            setOpen(false);
+          }}
+          onClose={close}
+          onLeave={(left) => {
+            if (!(left instanceof Node && root.current?.contains(left))) setOpen(false);
+          }}
+        />
       ) : null}
     </div>
   );
@@ -2490,15 +2488,9 @@ export function AutomationEditor({
             onChange={(name) => editDraft({ name })}
           />
           {shownProblems && problems[DRAFT_FIELD.NAME] !== undefined ? (
-            <p className="error-message automation-form-problem" role="alert">
-              {problems[DRAFT_FIELD.NAME]}
-            </p>
+            <FailureNote>{problems[DRAFT_FIELD.NAME]}</FailureNote>
           ) : null}
-          {refusal === undefined ? null : (
-            <p className="error-message automation-save-refusal" role="alert">
-              {refusal}
-            </p>
-          )}
+          {refusal === undefined ? null : <FailureNote>{refusal}</FailureNote>}
           <EditorForm
             draft={draft}
             automation={automation}

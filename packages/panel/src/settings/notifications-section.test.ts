@@ -110,7 +110,13 @@ afterEach(() => {
 
 test("Send test notification posts one, and the row says when Luke notifies at all", () => {
   let tests = 0;
-  const container = draw(control({ onTest: () => (tests += 1) }));
+  const container = draw(
+    control({
+      onTest: () => {
+        tests += 1;
+      },
+    }),
+  );
 
   act(() => button(container, "Send test notification")?.click());
 

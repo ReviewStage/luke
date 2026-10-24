@@ -5,6 +5,8 @@ import {
   ConfirmDialog,
   type DialogQuestion,
   GAP,
+  GROUP_HEADING,
+  GroupHeader,
   IconButton,
   LAYOUT_ELEMENT,
   OneLine,
@@ -23,7 +25,8 @@ import { AgentGlyph, agentEndMark } from "../tasks/tab-look.js";
 import type { CodingAgentsControl } from "../tasks/use-coding-agents.js";
 import { TOAST_HOLD, useToast } from "../toast.js";
 import { ActionMenu, type MenuAction } from "./action-menu.js";
-import { type CountNoun, SidebarGroupHeader } from "./sidebar-group-header.js";
+import { foldedCount } from "./sidebar-fold.js";
+import type { CountNoun } from "./sidebar-group-header.js";
 
 /**
  * agent-archive.tsx -- a coding agent's Archive, asked first while the agent still works, and the task's archived agents folded under Archived at the foot of its summary's Coding agents, each with its Unarchive.
@@ -43,9 +46,10 @@ import { type CountNoun, SidebarGroupHeader } from "./sidebar-group-header.js";
  * (`use-coding-agents.ts`).
  *
  * The archived agents are folded away behind the header every group of the
- * window folds under (`sidebar-group-header.tsx`), an archive box that gives way to the fold's
+ * window folds under (`GroupHeader`), an archive box that gives way to the fold's
  * chevron while hovered or reached from the keyboard, and folded, the count
- * after its name, the fold landing at once as the sidebar's does.
+ * after its name, the rows unrolling as they fade in and fading out as it
+ * folds.
  * Unfolded, each archived agent is a muted row in the summary's own shape, a failed one's mark at
  * its end as a standing row's, whose Unarchive stands in the mark's place
  * while it is hovered or reached from the keyboard, as the sidebar task
@@ -203,15 +207,13 @@ export function ArchivedAgents({
   if (archived.length === 0) return null;
   return (
     <div className="task-summary-archived">
-      <SidebarGroupHeader
+      <GroupHeader
+        heading={GROUP_HEADING.NONE}
         glyph={<ArchiveIcon />}
-        name={ARCHIVED_LABEL}
-        folded={!unfolded}
-        count={archived.length}
-        noun={ARCHIVED_NOUN}
-        onToggle={() => setUnfolded((was) => !was)}
-      />
-      {unfolded ? (
+        label={ARCHIVED_LABEL}
+        fold={{ open: unfolded, onOpenChange: setUnfolded }}
+        count={foldedCount(!unfolded, archived.length, ARCHIVED_NOUN)}
+      >
         <Stack
           as={LAYOUT_ELEMENT.UL}
           gap={GAP.ROW}
@@ -222,7 +224,7 @@ export function ArchivedAgents({
             <ArchivedAgentRow key={agent.id} agent={agent} agents={agents} shown={shown} />
           ))}
         </Stack>
-      ) : null}
+      </GroupHeader>
     </div>
   );
 }

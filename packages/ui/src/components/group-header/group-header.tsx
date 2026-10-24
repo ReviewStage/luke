@@ -10,6 +10,7 @@ import {
 import { type ContextMenuProps, withContextMenu } from "../menu/menu.js";
 import { NAV_COUNT_SHOWN, type NavCount } from "../nav-item/nav-item.js";
 import { TEXT_ELEMENT, TEXT_VARIANT, Text } from "../text/text.js";
+import { Tooltip } from "../tooltip/hint.js";
 
 /**
  * group-header.tsx -- the head over a group of rows, which may fold the group: the sidebar's repositories and sections, the Inbox's plans, the Tasks list's groups and the Board's columns, a Settings list's and the person page's sections alike.
@@ -36,6 +37,14 @@ import { TEXT_ELEMENT, TEXT_VARIANT, Text } from "../text/text.js";
  * is read as one button and would swallow the heading and the actions in it.
  * A closed group's rows are not drawn at all, so a find in the page passes
  * them by, as a sidebar's folded rows are passed by.
+ *
+ * A head naming something with a card of its own, a person or an automation,
+ * hangs that card while the pointer rests on it (`card`), and a head whose
+ * label alone does not say the whole of it hangs a hint (`tooltip`), both
+ * over the head's lead and never over the rows under it. A group that folds
+ * may leave rows standing under its head while it is folded (`standing`), as
+ * the sidebar leaves the open task, drawn once the fold's fade is done, and
+ * out of the way while the rows it was keeping come back.
  *
  * A group's actions (a repository's ⋯ and +) stand at the head's end beside
  * the fold, so pressing one folds nothing, shown while the head is hovered
@@ -120,6 +129,9 @@ export function GroupHeader({
   count,
   actions,
   fold,
+  standing,
+  tooltip,
+  card,
   heading = GROUP_HEADING.H2,
   menuOpen = false,
   contextMenu,
@@ -137,6 +149,12 @@ export function GroupHeader({
   actions?: ReactNode;
   /** How the group folds; left out, the head folds nothing and the rows always stand. */
   fold?: GroupFold | undefined;
+  /** What a folded group leaves drawn under its head once its rows have faded; nothing is drawn while the group stands open. */
+  standing?: ReactNode;
+  /** The head's hover hint, where the label alone does not say the whole of it. */
+  tooltip?: string | undefined;
+  /** The card the head hangs while the pointer rests on it, named by the label where no hint says more. */
+  card?: ReactNode;
   heading?: GroupHeading;
   /** Whether a menu the head opened stands, which keeps it ringed and its actions shown. */
   menuOpen?: boolean;
@@ -155,6 +173,21 @@ export function GroupHeader({
   const rows = (!folds || state.drawn) && said(children);
   const Heading = heading;
   const lead = <Lead glyph={glyph} folds={folds} label={label} mark={mark} count={count} />;
+  const hint = tooltip ?? (card === undefined ? undefined : label);
+  // Note that only a head with a hint or a card is wrapped, because the tooltip hands its control a click handler of its own, which a head that folds nothing must not hear.
+  const control = folds ? (
+    <button
+      type="button"
+      className="luke-group-header-lead"
+      aria-expanded={state.open}
+      aria-controls={rows ? rowsId : undefined}
+      onClick={pulseOnPress(state.toggle, PRESS_PULSE.QUIET)}
+    >
+      {lead}
+    </button>
+  ) : (
+    <span className="luke-group-header-lead">{lead}</span>
+  );
   return (
     <DisclosureScope state={state}>
       <div
@@ -168,18 +201,12 @@ export function GroupHeader({
           {...withContextMenu<HTMLDivElement>(contextMenu, {})}
         >
           <Heading className="luke-group-header-heading">
-            {folds ? (
-              <button
-                type="button"
-                className="luke-group-header-lead"
-                aria-expanded={state.open}
-                aria-controls={rows ? rowsId : undefined}
-                onClick={pulseOnPress(state.toggle, PRESS_PULSE.QUIET)}
-              >
-                {lead}
-              </button>
+            {hint === undefined ? (
+              control
             ) : (
-              <span className="luke-group-header-lead">{lead}</span>
+              <Tooltip label={hint} card={card}>
+                {control}
+              </Tooltip>
             )}
           </Heading>
           {said(actions) ? <span className="luke-group-header-actions">{actions}</span> : null}
@@ -196,6 +223,7 @@ export function GroupHeader({
             {children}
           </div>
         ) : null}
+        {folds && !state.drawn && said(standing) ? standing : null}
       </div>
     </DisclosureScope>
   );

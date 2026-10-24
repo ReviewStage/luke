@@ -4,6 +4,15 @@
    it, turned, pushed back, and stood up as the menu measured it. */
 
 @layer components {
+  /* Hung from its button, a menu is no taller than the room its side of the
+     button leaves (`--luke-popover-room`, measured against what is seen of
+     the window), so a phone's keyboard or a short window never hides its
+     last rows: its list gives way and scrolls, under the search row that
+     stays. */
+  .luke-anchored-popover > .luke-searchable-menu {
+    max-height: var(--luke-popover-room, none);
+  }
+
   /* The rows pinned under the list, behind a hairline, where the scrolling
      cannot take them. */
   .luke-searchable-menu-foot {

@@ -20,7 +20,7 @@ import {
 import { CONFIRM_STAGE } from "@luke/ui/confirm-state";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { MessageSquarePlusIcon, Trash2Icon } from "lucide-react";
-import { type ReactNode, useEffect, useId, useRef, useState } from "react";
+import { type ReactNode, useId, useRef, useState } from "react";
 import { CommentEditor, overCommentBound } from "./comment-editor.js";
 import type { PendingReview } from "./line-comment.js";
 import { PullRequestWriteNote, type PullRequestWrites } from "./pull-request-writes.js";
@@ -239,9 +239,6 @@ export function PullRequestReview({
   const root = useRef<HTMLDivElement>(null);
   const trigger = useRef<HTMLButtonElement>(null);
 
-  // Note that a press outside closes it too, as a menu's does, because the
-  // field keeps the focus through a press on words nothing can focus, so no
-  // blur says it was left; a review on its way holds it open all the same.
   // Note that the question stands, busy, until GitHub answers the discard, says its refusal in GitHub's words, and holds the panel open meanwhile as a review on its way does.
   const discarding = useConfirmDialog({ subject: pending != null, surfaceOpen: open }, () =>
     writes
@@ -254,15 +251,6 @@ export function PullRequestReview({
       ),
   );
   const sending = writes.pending !== undefined || discarding.stage !== CONFIRM_STAGE.RESTING;
-  useEffect(() => {
-    if (!open || sending) return undefined;
-    const pressed = (event: PointerEvent) => {
-      if (inQuestion(event.target)) return;
-      if (!(event.target instanceof Node && root.current?.contains(event.target))) setOpen(false);
-    };
-    document.addEventListener("pointerdown", pressed, true);
-    return () => document.removeEventListener("pointerdown", pressed, true);
-  }, [open, sending]);
 
   // Note that we hand focus back to the press, as a menu returns it to its
   // trigger, because closing takes the focused field away with it.
@@ -301,7 +289,16 @@ export function PullRequestReview({
         onClick={() => setOpen(!open)}
       />
       {open ? (
-        <AnchoredPopover align={POPOVER_ALIGN.END} width={PANEL_WIDTH}>
+        // Note that a press outside closes it too, as a menu's does, because
+        // the field keeps the focus through a press on words nothing can
+        // focus, so no blur says it was left; a review on its way, or the
+        // question it asked, holds it open all the same.
+        <AnchoredPopover
+          align={POPOVER_ALIGN.END}
+          width={PANEL_WIDTH}
+          onPressAway={sending ? undefined : () => setOpen(false)}
+          holds={inQuestion}
+        >
           <ReviewPanel
             id={panelId}
             draft={{ event, body, setEvent, setBody, submit }}

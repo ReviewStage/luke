@@ -8,6 +8,12 @@ import { PRESS_PULSE, pulsePress } from "../../press-pulse.js";
 import { STATUS_TONE, type StatusTone } from "../../status-tone.js";
 import { useClipped } from "../../use-clipped.js";
 import { Badge } from "../badge/badge.js";
+import {
+  ROVING_ORIENTATION,
+  ROVING_STOP,
+  rovingItem,
+  useRovingKeys,
+} from "../roving-keys/roving-keys.js";
 
 /**
  * choice-list.tsx -- a list of options a reader picks from, each a row the width of its column holding a label, a line of detail, and a badge: one of them, or any that apply, and once settled, what was offered with what was picked.
@@ -109,14 +115,6 @@ export type ChoiceFlow = (typeof CHOICE_FLOW)[keyof typeof CHOICE_FLOW];
 
 /** How many of a numbered list's rows wear their number: the keys 1 to 9. */
 export const CHOICE_NUMBERED_ROWS = 9;
-
-/** The keys that step along a pick-one list, and which way. */
-const STEP_KEYS = new Map([
-  ["ArrowDown", 1],
-  ["ArrowRight", 1],
-  ["ArrowUp", -1],
-  ["ArrowLeft", -1],
-]);
 
 /**
  * A list's box: a column of rows with no box of its own. Rows across stand
@@ -432,7 +430,7 @@ function ChoiceControl({
         radio ? "rounded-[50%]" : "rounded-choice-box",
         // Note that an unsaved credential's radio in a card cannot be picked, so its ring steps back while its label stays readable.
         inCard
-          ? "mt-0 self-center [:disabled>&]:opacity-40"
+          ? "mt-0 self-center [:disabled>&]:opacity-disabled"
           : "self-start mt-[calc((var(--luke-type-body-leading)-var(--luke-space-16))/2)]",
         !checked && "border-muted-foreground",
         checked && (toned ? CONTROL_TONE_FILL : CONTROL_ACCENT_FILL),
@@ -518,6 +516,7 @@ function ChoiceRow({
   radio: boolean;
   option: ChoiceOption<string>;
   checked: boolean;
+  /** Whether it is a Tab stop of its own, as each of a group of checkboxes is; a radio group's one stop is its keys' to keep. */
   tabStop: boolean;
   disabled: boolean;
   /** Whether an unavailable row fades, which a read-only list's and a card's do not. */
@@ -537,13 +536,16 @@ function ChoiceRow({
     render: <button type="button" />,
     nativeButton: true,
     value: option.value,
+    "data-value": option.value,
+    ...rovingItem(),
+    // Note that a radio is drawn out of the tab order, which quiets the group's own roving stop, so the stop its keys keep is the only one.
     tabIndex: tabStop ? 0 : -1,
     className: cn(
       ROW,
       ROW_LOOK[look],
       across && !card && ROW_ACROSS,
       "disabled:cursor-default",
-      dims && "disabled:opacity-40",
+      dims && "disabled:opacity-disabled",
     ),
     "data-tone": option.tone,
     disabled,
@@ -638,48 +640,33 @@ function OpenChoices<Value extends string>(props: ChoiceListOpen<Value>): React.
   const still = disabled || readOnly;
   const open = options.filter((option) => option.disabled !== true);
   const landing = open.find((option) => value.includes(option.value)) ?? open[0];
+  // An arrow, Home, or End takes the keyboard to an open row, wrapping at
+  // either end; along a pick-one list it chooses the row it lands on, and
+  // along a pick-several one it toggles nothing. Note that a pick-one
+  // list's one Tab stop is its checked row, and that each row of a
+  // pick-several one is a stop of its own, as a group of checkboxes is.
+  const roving = useRovingKeys<HTMLElement>({
+    orientation: ROVING_ORIENTATION.BOTH,
+    stop: one ? ROVING_STOP.CHOSEN : ROVING_STOP.NONE,
+    moveTo: (row) => {
+      row.focus();
+      const landed = options.find((option) => option.value === row.dataset.value);
+      if (one && landed !== undefined && !value.includes(landed.value)) {
+        props.onChange([landed.value]);
+      }
+    },
+  });
   const press = (pressed: Value) => {
     const next = afterPress(props, pressed);
     if (next !== undefined) props.onChange(next);
     else if (one) props.onPressChecked?.(pressed);
   };
-  // An arrow chooses the next open row along and takes the keyboard there, wrapping at either end.
+  // Note that Base UI's own arrows never run, so a key pressed in a card's controls stays theirs.
   const onKeyDown = (
     event: React.KeyboardEvent<HTMLElement> & { preventBaseUIHandler: () => void },
   ) => {
-    const step = STEP_KEYS.get(event.key);
-    if (step === undefined) return;
-    // Note that Base UI's own arrows never run, so a key pressed in a card's controls stays theirs.
     event.preventBaseUIHandler();
-    if (open.length === 0 || still) return;
-    // Note that a key pressed in a card's own controls is theirs, not the group's.
-    if (!(event.target instanceof HTMLElement) || event.target.getAttribute("role") !== "radio") {
-      return;
-    }
-    event.preventDefault();
-    // Note that the step counts from the focused row, because clearing a pick leaves focus on an unchecked row.
-    const radios = [...event.currentTarget.querySelectorAll<HTMLButtonElement>('[role="radio"]')];
-    const focused = event.target instanceof HTMLButtonElement ? radios.indexOf(event.target) : -1;
-    const from = open.findIndex((option) => option === options[focused]);
-    const at = from >= 0 ? from : open.findIndex((option) => value.includes(option.value));
-    const next = open[(Math.max(at, 0) + step + open.length) % open.length];
-    if (next === undefined) return;
-    if (!value.includes(next.value)) props.onChange([next.value]);
-    radios[options.indexOf(next)]?.focus();
-  };
-  // An arrow along a pick-several list moves the keyboard to the next open row and toggles nothing.
-  const onBoxKeyDown = (event: React.KeyboardEvent<HTMLElement>) => {
-    const step = STEP_KEYS.get(event.key);
-    if (step === undefined || still) return;
-    const boxes = [
-      ...event.currentTarget.querySelectorAll<HTMLButtonElement>(
-        '[role="checkbox"]:not(:disabled)',
-      ),
-    ];
-    const at = event.target instanceof HTMLButtonElement ? boxes.indexOf(event.target) : -1;
-    if (at < 0) return;
-    event.preventDefault();
-    boxes[(at + step + boxes.length) % boxes.length]?.focus();
+    if (!still) roving.onKeyDown(event);
   };
   const rows = options.map((option, index) => (
     <ChoiceRow
@@ -687,7 +674,7 @@ function OpenChoices<Value extends string>(props: ChoiceListOpen<Value>): React.
       radio={one}
       option={option}
       checked={value.includes(option.value)}
-      tabStop={!one || option === landing}
+      tabStop={!one}
       disabled={still || option.disabled === true}
       dims={!readOnly && look !== CHOICE_LOOK.CARD}
       look={look}
@@ -710,7 +697,13 @@ function OpenChoices<Value extends string>(props: ChoiceListOpen<Value>): React.
   };
   if (!one) {
     return (
-      <CheckboxGroup {...group} render={<fieldset />} value={[...value]} onKeyDown={onBoxKeyDown}>
+      <CheckboxGroup
+        {...group}
+        {...roving}
+        render={<fieldset />}
+        value={[...value]}
+        onKeyDown={onKeyDown}
+      >
         {rows}
       </CheckboxGroup>
     );
@@ -720,9 +713,13 @@ function OpenChoices<Value extends string>(props: ChoiceListOpen<Value>): React.
       {...group}
       value={value[0] ?? null}
       readOnly={readOnly || undefined}
+      {...roving}
       onKeyDown={onKeyDown}
       // Note that focus landing in a card's own field keeps its caret, which Base UI's group would select across.
-      onFocus={(event) => event.preventBaseUIHandler()}
+      onFocus={(event) => {
+        event.preventBaseUIHandler();
+        roving.onFocus(event);
+      }}
     >
       {rows}
     </RadioGroup>

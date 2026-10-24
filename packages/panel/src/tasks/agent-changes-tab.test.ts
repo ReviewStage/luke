@@ -1559,7 +1559,7 @@ const MARKED: CodingAgentPullRequestViewedAnswerView = {
 /** What the bar's count of the files viewed says. */
 function viewedCount(): string {
   return (
-    document.querySelector(".file-view-bar .files-viewed")?.textContent ??
+    document.querySelector(".luke-pane-bar .files-viewed")?.textContent ??
     assert.fail("the bar counts the files viewed")
   );
 }
@@ -1640,7 +1640,7 @@ test("the bar leads with the count of files viewed in the crumbs' place, polite 
   files = [changed("src/billing/a.ts"), changed("b.ts"), changed("c.ts")];
   await drawTab({ treeOpen: true });
 
-  const bar = document.querySelector(".file-view-bar") ?? assert.fail("a bar");
+  const bar = document.querySelector(".luke-pane-bar") ?? assert.fail("a bar");
   assert.equal(bar.querySelector(".luke-breadcrumbs"), null, "no crumbs");
   assert.doesNotMatch(bar.textContent ?? "", /billing/u, "the bar names no file");
   const count = bar.querySelector(".files-viewed") ?? assert.fail("a count");

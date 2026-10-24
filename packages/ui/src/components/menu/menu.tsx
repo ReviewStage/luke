@@ -17,6 +17,7 @@ import {
 import { useDisclosure } from "../../use-disclosure.js";
 import { visibleViewport } from "../../visible-viewport.js";
 import { OneLine } from "../one-line/one-line.js";
+import { ROVING_STOP, rovingItem, useRovingKeys } from "../roving-keys/roving-keys.js";
 import { SwitchMark } from "../switch/switch.js";
 import { Tooltip } from "../tooltip/hint.js";
 import { MenuGlyph } from "./menu-surface.js";
@@ -390,42 +391,6 @@ export function useMenu(shown: boolean) {
   return { open: standing ? menu : undefined, drawn, show, close, trigger, contextMenu, keyMenu };
 }
 
-/** The item a navigation key moves to from the focused one, or nothing for any other key. */
-function itemAfter(key: string, at: number, count: number): number | undefined {
-  switch (key) {
-    case "ArrowDown":
-      return (at + 1) % count;
-    case "ArrowUp":
-      return (at <= 0 ? count : at) - 1;
-    case "Home":
-      return 0;
-    case "End":
-      return count - 1;
-    default:
-      return undefined;
-  }
-}
-
-/**
- * Moves focus between the items of the menu the key was heard on, its own
- * and not a submenu's, by a navigation key (Up, Down, Home, End), passing
- * over every item that does not apply now, which Base UI's own keys would
- * stop on; answers whether the key was one.
- */
-function moveMenuFocus(event: BaseUIEvent<React.KeyboardEvent<HTMLDivElement>>): boolean {
-  const items = itemsOf(event.currentTarget);
-  const next = itemAfter(
-    event.key,
-    items.findIndex((item) => item.matches(":focus")),
-    items.length,
-  );
-  if (next === undefined) return false;
-  event.preventDefault();
-  event.preventBaseUIHandler();
-  items[next]?.focus();
-  return true;
-}
-
 /** A point in the window as the box of no size a menu hangs from. */
 function pointAt(x: number, y: number): { getBoundingClientRect: () => DOMRect } {
   const box = { x, y, left: x, top: y, right: x, bottom: y, width: 0, height: 0 };
@@ -615,8 +580,9 @@ export function MenuItem({
     nativeButton: true,
     // Note that a dimmed item is a disabled button outright, as it was,
     // rather than Base UI's focusable `aria-disabled` one, so neither the
-    // keys (`moveMenuFocus`) nor a press stop on it.
+    // keys (`useRovingKeys`) nor a press stop on it.
     render: <button type="button" disabled={action.disabled} />,
+    ...rovingItem(),
     label: action.label,
     "aria-label": heard,
     className: "luke-menu-item",
@@ -794,6 +760,7 @@ function Submenu({
     focusInto.current = true;
     onOpen(true);
   };
+  const roving = useRovingKeys<HTMLDivElement>({ stop: ROVING_STOP.NONE });
   const keyDown = (event: BaseUIEvent<React.KeyboardEvent<HTMLDivElement>>) => {
     if (event.key === "Escape" || event.key === "ArrowLeft") {
       event.preventDefault();
@@ -803,7 +770,9 @@ function Submenu({
       trigger.current?.focus();
       return;
     }
-    if (moveMenuFocus(event)) event.stopPropagation();
+    if (!roving.onKeyDown(event)) return;
+    event.stopPropagation();
+    event.preventBaseUIHandler();
   };
   return (
     <DropdownMenuSub open={open} onOpenChange={() => undefined}>
@@ -814,6 +783,7 @@ function Submenu({
         openOnHover={false}
         label={entry.label}
         className="luke-menu-item"
+        {...rovingItem()}
         data-open={open ? "true" : undefined}
         endClassName={endSlot(false, false)}
         onPointerEnter={(event) => {
@@ -850,6 +820,7 @@ function Submenu({
         data-leaving={leaving ? "true" : undefined}
         inert={leaving}
         finalFocus={false}
+        data-roving={roving["data-roving"]}
         onKeyDown={keyDown}
       >
         {entry.items.map((action) => (
@@ -907,6 +878,8 @@ export function Menu({
     [hold],
   );
   const [submenu, setSubmenu] = useState<string | undefined>(undefined);
+  // Note that the keys walk the items the menu draws, and the tab order is Base UI's, since Tab closes a menu.
+  const roving = useRovingKeys<HTMLDivElement>({ stop: ROVING_STOP.NONE });
   const submenuElement = useRef<HTMLDivElement | null>(null);
   // Opened again while it was leaving, the menu stands with no submenu, as one opened anew does.
   const [wasLeaving, setWasLeaving] = useState(leaving);
@@ -974,7 +947,9 @@ export function Menu({
       return;
     }
     // Walking the menu's own items leaves a submenu the pointer opened behind.
-    if (moveMenuFocus(event)) setSubmenu(undefined);
+    if (!roving.onKeyDown(event)) return;
+    event.preventBaseUIHandler();
+    setSubmenu(undefined);
   };
 
   // Note that a value a filter toggles leaves the menu standing, so several are chosen in one visit.
@@ -1008,6 +983,7 @@ export function Menu({
         data-leaving={leaving ? "true" : undefined}
         inert={leaving}
         finalFocus={false}
+        data-roving={roving["data-roving"]}
         onKeyDown={keyDown}
         onPointerOver={pointerOver}
       >

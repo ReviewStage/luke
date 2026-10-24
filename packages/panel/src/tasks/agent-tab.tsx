@@ -31,7 +31,7 @@ import {
   INLINE_REF_LOOK,
   InlineRef,
   LineSummary,
-  MESSAGE_ACTIONS_PLACEMENT,
+  MessageLine,
   OneLine,
   STATUS_TONE,
   TaskStatusMark,
@@ -177,7 +177,6 @@ import { ReplayCard, type ReplayPlace, replayPlace } from "./replay-card.js";
 import { briefAgent, replayOpening } from "./replay-card-model.js";
 import { REPLY_SCOPE, ReplyToSelection } from "./reply-to-selection.js";
 import { REWIND_ACTION, RewindProvider, rewindPoints, useMessageEdit } from "./rewind-action.js";
-import { SentTime } from "./sent-time.js";
 import { MentionedServers, SentToAgent } from "./server-card.js";
 import { SentWords, useSkill } from "./skill-chip.js";
 import type { SkillSource } from "./skill-picker.js";
@@ -978,12 +977,7 @@ function PlanCard({
           {body === undefined ? null : <OriginBody body={body} />}
         </PlanContent>
       </Plan>
-      {!named && sentAt === undefined ? null : (
-        <div className="message-meta">
-          {named ? <span className="message-sender">{sender}</span> : null}
-          {sentAt === undefined ? null : <SentTime at={sentAt} named={named} />}
-        </div>
-      )}
+      <MessageLine sender={named ? sender : undefined} at={sentAt} wrap />
     </Message>
   );
 }
@@ -1178,14 +1172,10 @@ function agentOrigin(input: {
 
 /** Who wrote or said a message: their mark and their name, hanging their card. */
 function MessageSender({ actor }: { actor: Actor }): React.JSX.Element {
-  return (
-    <span className="message-sender">
-      {actor.kind === ACTOR_KIND.AGENT && actor.agentId !== undefined ? (
-        <SendingAgent actor={actor} agentId={actor.agentId} />
-      ) : (
-        <ActorRef actor={actor} />
-      )}
-    </span>
+  return actor.kind === ACTOR_KIND.AGENT && actor.agentId !== undefined ? (
+    <SendingAgent actor={actor} agentId={actor.agentId} />
+  ) : (
+    <ActorRef actor={actor} />
   );
 }
 
@@ -1358,20 +1348,15 @@ export function AgentMessage({
           </MessageContent>
         )}
         <UndeliveredMark messageId={message.id} />
-        {words === "" && named === null && sentAt === undefined ? null : (
-          <div className="message-meta">
-            {words === "" ? null : (
-              <CopyMessageAction
-                words={shown}
-                messageId={message.id}
-                placement={MESSAGE_ACTIONS_PLACEMENT.INLINE}
-                rewind={REWIND_ACTION.EDIT}
-              />
-            )}
-            {named}
-            {sentAt === undefined ? null : <SentTime at={sentAt} named={named !== null} />}
-          </div>
-        )}
+        <MessageLine
+          sender={named}
+          at={sentAt}
+          actions={
+            words === "" ? null : (
+              <CopyMessageAction words={shown} messageId={message.id} rewind={REWIND_ACTION.EDIT} />
+            )
+          }
+        />
       </Message>
     );
   }
@@ -1413,7 +1398,6 @@ export function AgentMessage({
             messageId={message.id}
             forkable={forks}
             forkCut={forkCut}
-            placement={MESSAGE_ACTIONS_PLACEMENT.INLINE}
             rewind={REWIND_ACTION.REVERT}
           />
         ) : null
@@ -2196,7 +2180,7 @@ function AgentTabView({
   delegationStarts: ReadonlyMap<string, number> | undefined;
   onStop: () => Promise<void>;
   /** Brings the agent back from the archive; present exactly while it is archived, when no message is sent. */
-  onUnarchive?: (() => void) | undefined;
+  onUnarchive?: (() => void | Promise<void>) | undefined;
   /** Opens one of the agent's workers in a tab of the panel's own; none where the view stands in no panel. */
   onOpenSubagent?: DelegationDoors["onOpen"];
   /** Opens what one of its calls is about; none where nothing opens it. */

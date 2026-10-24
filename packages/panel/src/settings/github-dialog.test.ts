@@ -217,15 +217,19 @@ test("a saved token Luke can no longer read says to remove it and add it again",
   assert.match(dialog().textContent ?? "", /Can no longer be read\. Remove it and add it again\./u);
 });
 
-test("a read that went unanswered offers Try again in place of Add, which reads the token again", async () => {
+test("a read that went unanswered says so as an alert with Retry in place of Add, which reads the token again", async () => {
   unansweredReads = 1;
   await mountAndOpen(false);
   assert.equal(
     [...document.querySelectorAll("button")].some((each) => each.textContent === "Add"),
     false,
   );
+  assert.equal(
+    document.querySelector('[role="alert"]')?.textContent,
+    "Couldn't read the token.Retry",
+  );
 
-  act(() => button("Try again").click());
+  act(() => button("Retry").click());
   await settle();
   button("Add");
 });

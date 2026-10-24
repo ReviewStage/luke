@@ -1,15 +1,16 @@
 /**
  * command-palette.tsx -- ⌘K: the tasks, the open task's agents and files, the Inbox's items, every command the window can run now, and the Settings pages and settings, found by typing, in a dialog over the window.
  *
- * The palette is cmdk's own dialog, list, and keys, drawn in the window's
- * menu rows, under a row of filters as Cursor's palette has them: All, then
+ * The palette is `@luke/ui`'s command dialog (`@luke/ui/command`), its
+ * rows the window's menu rows, under a row of filters as Cursor's palette has them: All, then
  * one kind each. All lists each kind's best few rows under its heading, and
  * a filter that kind's alone, as many as are worth reading. ← and → step
  * through the filters while the search field is empty, and ⌘[ and ⌘] at
  * any time, where they mean Back and Forward elsewhere; once anything is
  * typed, ← and → move the caret, as in any text field. A press on a filter
- * chooses it. The palette ranks the rows itself with cmdk's own scoring, so
- * each kind keeps its own best few however many rows the others hold.
+ * chooses it. The palette ranks the rows itself with the dialog's own
+ * scoring (`commandScore`), so each kind keeps its own best few however
+ * many rows the others hold.
  *
  * It decides nothing about a command: it lists the commands whose control is
  * on screen and able right now (`app-commands.ts`), so a row runs exactly
@@ -41,10 +42,9 @@
  * included, and no chord changes what stands behind it. Closing hands focus
  * back to whatever had it, and only then runs what was chosen, so a command
  * acts from where the developer was, as its shortcut would have. It then
- * fades out over `--luke-duration-exit`, held by Radix's dialog through the exit
- * its `data-state` plays, and inert while it does.
+ * fades out as the dialog does.
  *
- * Every row's value is its place in the list, never words: cmdk writes it
+ * Every row's id is its place in the list, never words: the dialog writes it
  * into an attribute, which the session recording does not mask
  * (`session-replay.ts`), and two tasks may share a name. The search reads
  * each row's words instead.
@@ -77,25 +77,24 @@ import {
   CHOICE_BAR_LOOK,
   CHOICE_BAR_SIZE,
   ChoiceBar,
-  COMBOBOX_LIST_HEIGHT,
-  ComboboxListBox,
-  ComboboxOptionItem,
   ErrorState,
   GearIcon,
+  NOTE_LINE_LOOK,
   NoteLine,
   PinIcon,
-  SearchIcon,
   Shortcut,
-  TEXT_ELEMENT,
-  TEXT_TONE,
-  TEXT_VARIANT,
-  Text,
-  Tooltip,
   UnpinIcon,
   useMinute,
   WingFace,
 } from "@luke/ui";
 import { ACTOR_KIND, type Actor, actorName, assigneeFace } from "@luke/ui/actor-model";
+import {
+  COMMAND_FILTER,
+  CommandDialog,
+  type CommandGroup,
+  type CommandItem,
+  commandScore,
+} from "@luke/ui/command";
 import { matchesTokens, matchRanges, searchTokens } from "@luke/ui/search-tokens";
 import {
   agentRow,
@@ -107,9 +106,8 @@ import {
   taskRow,
 } from "@luke/ui/task-list-model";
 import { DOCUMENT_REGION, TASK_MARK } from "@luke/ui/tasks-model";
-import { Command, defaultFilter } from "cmdk";
 import { LinkIcon } from "lucide-react";
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { type ReactNode, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { AssigneeFaceMark } from "../actor-ref.js";
 import {
   appCommandOffered,
@@ -216,8 +214,14 @@ const KIND_ROWS = {
   FILTERED: 50,
 } as const;
 
-/** The first row's value: rows are valued by their place in the list, from one. */
+/** The first row's id: rows are known by their place in the list, from one. */
 const FIRST_ROW = "1";
+
+/** The group Ask Luke stands alone in, above every kind's, under no heading. */
+const ASK_LUKE_GROUP = "ask-luke";
+
+/** What the list says where no row stands and no source is still to answer. */
+const NOTHING_MATCHES = "Nothing matches.";
 
 /** What the row that opens Luke says, as his chord's command names it. */
 const ASK_LUKE_LABEL = appCommandLabel(APP_COMMAND.ASK_LUKE);
@@ -380,30 +384,30 @@ interface PaletteSection {
 /** The score a row found only by its keywords takes: after every row its own words matched. */
 const KEYWORD_SCORE = Number.MIN_VALUE;
 
-/** The score a task takes whose key the query is whole: cmdk's best, which no fuzzy match beats. */
+/** The score a task takes whose key the query is whole: the scoring's best, which no fuzzy match beats. */
 const KEY_SCORE = 1;
 
 /**
  * How well a row answers the query: the best where it is the row's task's
- * key whole, else cmdk's own score over its short words, else the least
+ * key whole, else the dialog's own score over its short words, else the least
  * score where every word of the query is in its keywords. Note that a key
- * typed whole is not left to cmdk, because its scoring weighs the words
+ * typed whole is not left to that score, because it weighs the words
  * before a term, so STAG-42 typed could rank STAG-421 of a shorter name
- * above STAG-42 itself; and the keywords are not scored by cmdk, because
- * its scoring is fuzzy and a setting's description is long enough to hold
+ * above STAG-42 itself; and the keywords are not scored by it, because
+ * it is fuzzy and a setting's description is long enough to hold
  * almost any letters in order.
  */
 function rowScore(row: PaletteRow, query: string, tokens: readonly string[]): number {
   const key =
     row.taskKey === undefined ? undefined : taskKey(row.taskKey.workspaceName, row.taskKey.number);
   if (key !== undefined && namesTaskKey(query, key)) return KEY_SCORE;
-  const score = defaultFilter(row.terms.join(" "), query);
+  const score = commandScore(row.terms.join(" "), query);
   if (score > 0 || row.keywords === undefined) return score;
   return matchesTokens(row.keywords, tokens) ? KEYWORD_SCORE : 0;
 }
 
 /**
- * How well a path answers the query: cmdk's own score, asked only of a path
+ * How well a path answers the query: the dialog's own score, asked only of a path
  * holding every letter typed, since the repository may hold tens of
  * thousands and most hold none of a query's rarer letters.
  */
@@ -412,7 +416,7 @@ function pathScore(path: string, query: string): number {
   for (const letter of query.toLowerCase()) {
     if (letter.trim() !== "" && !lowered.includes(letter)) return 0;
   }
-  return defaultFilter(path, query);
+  return commandScore(path, query);
 }
 
 /**
@@ -501,16 +505,16 @@ function inboxNotice(search: InboxSearch): PaletteNotice | undefined {
     : undefined;
 }
 
-/** The list's notice where its rows would stand: a refusal with Retry, a reading line a reader hears, or a line of its own. */
+/** A kind's notice after its rows: a refusal with Retry, a reading line a reader hears, or a line of its own, inset as the group's note is. */
 function NoticeLine({ notice }: { notice: PaletteNotice }): React.JSX.Element {
   if (notice.kind === PALETTE_NOTICE.FAILED) {
-    return (
-      <div className="command-palette-notice-slot">
-        <ErrorState onRetry={notice.onRetry}>{notice.line}</ErrorState>
-      </div>
-    );
+    return <ErrorState onRetry={notice.onRetry}>{notice.line}</ErrorState>;
   }
-  return <NoteLine status={notice.kind === PALETTE_NOTICE.READING}>{notice.line}</NoteLine>;
+  return (
+    <NoteLine look={NOTE_LINE_LOOK.INSET} status={notice.kind === PALETTE_NOTICE.READING}>
+      {notice.line}
+    </NoteLine>
+  );
 }
 
 /** A file's row, as every place names a file (`file-ref.tsx`): its type's icon, its name, and its folder after it, hanging the file's card with Luke's note on its newest lines where he showed it. */
@@ -1152,21 +1156,17 @@ function personFound(
   const named = people.reduce((best, name) => (held(name) > held(best) ? name : best));
   if (held(named) > 0) return named;
   const others = row.terms.filter((term) => !people.includes(term)).join(" ");
-  if (defaultFilter(others, query) !== 0) return undefined;
-  return people.toSorted((a, b) => defaultFilter(b, query) - defaultFilter(a, query))[0];
+  if (commandScore(others, query) !== 0) return undefined;
+  return people.toSorted((a, b) => commandScore(b, query) - commandScore(a, query))[0];
 }
 
-function PaletteItem({
-  row,
-  value,
-  query,
-  tokens,
-}: {
-  row: PaletteRow;
-  value: string;
-  query: string;
-  tokens: readonly string[];
-}): React.JSX.Element {
+/** A row as the dialog draws it, known by its place in the list, its words lit where the query found them. */
+function paletteItem(
+  row: PaletteRow,
+  id: string,
+  query: string,
+  tokens: readonly string[],
+): CommandItem {
   // A task found by its assignee's or its creator's name says the name after its detail, so the match is in sight.
   const found = personFound(row, query, tokens);
   const detail =
@@ -1197,33 +1197,25 @@ function PaletteItem({
         {row.endMark}
       </>
     );
-  const item = (
-    <Command.Item asChild value={value} onSelect={row.onChoose}>
-      <ComboboxOptionItem
-        option={{
-          id: value,
-          lead:
-            row.taskKey === undefined ? undefined : (
-              <TaskKey
-                workspaceName={row.taskKey.workspaceName}
-                number={row.taskKey.number}
-                tokens={tokens}
-              />
-            ),
-          label: <Highlighted text={row.label} tokens={tokens} />,
-          icon: row.icon,
-          detail: words,
-          hint: end,
-        }}
-      />
-    </Command.Item>
-  );
-  if (row.card === undefined) return item;
-  return (
-    <Tooltip label={row.label} card={row.card} cardBeside>
-      {item}
-    </Tooltip>
-  );
+  return {
+    id,
+    lead:
+      row.taskKey === undefined ? undefined : (
+        <TaskKey
+          workspaceName={row.taskKey.workspaceName}
+          number={row.taskKey.number}
+          tokens={tokens}
+        />
+      ),
+    label: <Highlighted text={row.label} tokens={tokens} />,
+    icon: row.icon,
+    detail: words,
+    hint: end,
+    card: row.card,
+    // Note that the palette ranks its own rows, so these words only name the row's card.
+    words: row.label,
+    onSelect: row.onChoose,
+  };
 }
 
 /**
@@ -1262,7 +1254,7 @@ function PaletteFilters({
     if (band.current !== null) revealChecked(band.current);
   }, [filter]);
   return (
-    <div ref={band} className="command-palette-filters">
+    <div ref={band}>
       <ChoiceBar
         label="Filter"
         items={PALETTE_FILTERS.map((each) => ({ value: each, label: FILTER_LABEL[each] }))}
@@ -1276,21 +1268,20 @@ function PaletteFilters({
   );
 }
 
+/** The keys' hints along the foot, each its chords and then its word, which a reader is not read. */
 function PaletteFooter({ typed }: { typed: boolean }): React.JSX.Element {
   const hints = [...LIST_HINTS, typed ? FILTER_HINT.TYPED : FILTER_HINT.EMPTY];
   return (
-    <div className="command-palette-footer" aria-hidden="true">
+    <>
       {hints.map((hint) => (
-        <span key={hint.label} className="command-palette-footer-hint">
-          <span className="command-palette-footer-keys">
-            {hint.chords.map((chord) => (
-              <Shortcut key={chord.key.accelerator} chord={chord} />
-            ))}
-          </span>
+        <span key={hint.label} aria-hidden="true">
+          {hint.chords.map((chord) => (
+            <Shortcut key={chord.key.accelerator} chord={chord} />
+          ))}{" "}
           {hint.label}
         </span>
       ))}
-    </div>
+    </>
   );
 }
 
@@ -1375,12 +1366,12 @@ export function CommandPalette({
   const [files, setFiles] = useState<FilesHeld | undefined>(undefined);
   // The read of the files asked last, by its count: only its answer is kept.
   const filesAsk = useRef(0);
-  const invoker = useRef<HTMLElement | null>(null);
   // Whether the keyboard was in the side panel when ⌘K was pressed, which puts its tab's link first, as ⌥⌘C there would.
   const [fromPanel, setFromPanel] = useState(false);
   const chosen = useRef<(() => void) | undefined>(undefined);
   const shown = useRef(false);
-  const field = useRef<HTMLInputElement>(null);
+  // The groups as they stood when the palette last stood open, which it fades out with rather than giving way to "Nothing matches.".
+  const stood = useRef<readonly CommandGroup[]>([]);
   // The menu bar's Back and Forward, a mouse's back button among them, leave the window behind the palette alone.
   useOverlayHold(open);
 
@@ -1388,8 +1379,6 @@ export function CommandPalette({
     APP_COMMAND.COMMAND_PALETTE,
     available
       ? () => {
-          invoker.current =
-            document.activeElement instanceof HTMLElement ? document.activeElement : null;
           setFromPanel(inSidePanel(document.activeElement));
           changeFilter(PALETTE_FILTER.ALL);
           setQuery("");
@@ -1404,20 +1393,16 @@ export function CommandPalette({
   );
 
   // Note that what was chosen runs once the palette is gone and focus is
-  // back where it was, because a command that moves focus (Delete's
-  // question, the New task dialog's field) would otherwise lose it to the palette's
-  // own going. The field takes focus as the palette opens, as the dialog
-  // gives it, and also where it opens again while it is still leaving,
-  // which the dialog, never having let it go, does not give it again.
+  // back where it was, which the dialog hands back as it closes, because a
+  // command that moves focus (Delete's question, the New task dialog's
+  // field) would otherwise lose it to the palette's own going.
   useEffect(() => {
     if (open) {
       shown.current = true;
-      field.current?.focus();
       return;
     }
     if (!shown.current) return;
     shown.current = false;
-    if (invoker.current?.isConnected) invoker.current.focus({ preventScroll: true });
     const run = chosen.current;
     chosen.current = undefined;
     run?.();
@@ -1456,12 +1441,11 @@ export function CommandPalette({
       settings.onViewChange(page);
     });
 
+  // Note that no key pressed in the palette goes on to the window, which the
+  // dialog sees to, because the window's Escape would stop Luke mid-reply and
+  // a window chord would change what stands behind the palette. Escape itself
+  // is the dialog's, which closes the palette alone.
   const keyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
-    // Note that no key pressed in the palette goes on to the window, because
-    // the window's Escape would stop Luke mid-reply and a window chord would
-    // change what stands behind the palette. Escape itself is the dialog's,
-    // which closes the palette alone.
-    event.stopPropagation();
     const step = arrowStep(event, query);
     if (step !== 0) {
       event.preventDefault();
@@ -1636,7 +1620,6 @@ export function CommandPalette({
         .map((kind) => ({ kind, rows: rowsFor(kind), notice: noticeFor(kind) }))
         .filter((section) => section.rows.length > 0 || section.notice !== undefined)
     : [];
-  const nothingMatches = open && sections.length === 0;
   const cut =
     filesOpen &&
     filter === PALETTE_FILTER.FILES &&
@@ -1644,77 +1627,48 @@ export function CommandPalette({
     held.truncated;
   // Note that Ask Luke, where it stands, is the first row, so the first row chosen as the palette opens is his.
   let place = askLukeShown ? 1 : 0;
+  const items = (rows: readonly PaletteRow[]): CommandItem[] =>
+    rows.map((row) => {
+      place += 1;
+      return paletteItem(row, String(place), query, tokens);
+    });
+  // A kind's notice after its rows, or, under Files, that the listing searched was cut short.
+  const noteOf = (section: PaletteSection): ReactNode =>
+    section.notice !== undefined ? (
+      <NoticeLine notice={section.notice} />
+    ) : cut && section.kind === PALETTE_FILTER.FILES ? (
+      TRUNCATED_LINE
+    ) : undefined;
+  const groups: readonly CommandGroup[] = [
+    ...(askLukeShown && askLuke !== undefined
+      ? [{ id: ASK_LUKE_GROUP, items: [paletteItem(askLuke, FIRST_ROW, query, tokens)] }]
+      : []),
+    ...sections.map((section) => ({
+      id: section.kind,
+      label: FILTER_LABEL[section.kind],
+      items: items(section.rows),
+      note: noteOf(section),
+    })),
+  ];
+  if (open) stood.current = groups;
 
   return (
-    <Command.Dialog
+    <CommandDialog
       open={open}
       onOpenChange={setOpen}
       label="Command palette"
-      shouldFilter={false}
-      value={selected}
-      onValueChange={setSelected}
-      loop
-      overlayClassName="command-palette-backdrop"
-      contentClassName="command-palette"
-      inert={!open}
+      placeholder={FILTER_PLACEHOLDER[filter]}
+      groups={stood.current}
+      filter={COMMAND_FILTER.NONE}
+      query={query}
+      onQueryChange={setQuery}
+      selected={selected}
+      onSelectedChange={setSelected}
+      // Note that a listing cut short is said where nothing matches too, since what was sought may lie past the cut.
+      empty={cut ? `${NOTHING_MATCHES} ${TRUNCATED_LINE}` : NOTHING_MATCHES}
+      band={<PaletteFilters filter={filter} onFilter={changeFilter} />}
+      foot={<PaletteFooter typed={query !== ""} />}
       onKeyDown={keyDown}
-    >
-      <div className="command-palette-search">
-        <SearchIcon />
-        <Command.Input
-          ref={field}
-          placeholder={FILTER_PLACEHOLDER[filter]}
-          value={query}
-          onValueChange={setQuery}
-        />
-      </div>
-      <PaletteFilters filter={filter} onFilter={changeFilter} />
-      <Command.List asChild label="Results">
-        <ComboboxListBox height={COMBOBOX_LIST_HEIGHT.FILL}>
-          {nothingMatches ? (
-            <Command.Empty>
-              <NoteLine>Nothing matches.</NoteLine>
-            </Command.Empty>
-          ) : null}
-          {askLukeShown && askLuke !== undefined ? (
-            <Command.Group>
-              <PaletteItem row={askLuke} value={FIRST_ROW} query={query} tokens={tokens} />
-            </Command.Group>
-          ) : null}
-          {sections.map((section) => (
-            <Command.Group
-              key={section.kind}
-              heading={
-                <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
-                  {FILTER_LABEL[section.kind]}
-                </Text>
-              }
-            >
-              {section.rows.map((row) => {
-                place += 1;
-                return (
-                  <PaletteItem
-                    key={place}
-                    row={row}
-                    value={String(place)}
-                    query={query}
-                    tokens={tokens}
-                  />
-                );
-              })}
-              {section.notice === undefined ? null : <NoticeLine notice={section.notice} />}
-            </Command.Group>
-          ))}
-          {cut ? (
-            <div className="command-palette-notice">
-              <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
-                {TRUNCATED_LINE}
-              </Text>
-            </div>
-          ) : null}
-        </ComboboxListBox>
-      </Command.List>
-      <PaletteFooter typed={query !== ""} />
-    </Command.Dialog>
+    />
   );
 }

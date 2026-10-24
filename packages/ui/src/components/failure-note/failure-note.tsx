@@ -17,6 +17,10 @@
  * mark, the words' first line, and Retry share one middle. A failure that
  * needs a remedy beyond Retry, or that empties the place it stood in, is an
  * `ErrorState`.
+ *
+ * A failure may carry one act beside Retry, `also`, such as Discard on a post
+ * that did not go; it stands after Retry in the same row, and holds the
+ * line's control-tall first row on its own where there is no Retry.
  */
 
 import type { ReactNode } from "react";
@@ -24,33 +28,38 @@ import { GLYPH } from "../../icons/glyph-registry.js";
 import { STATUS_TONE } from "../../status-tone.js";
 import { RetryButton } from "../retry-button/retry-button.js";
 
-/** A failure's words, `children`, behind the failed mark in the danger tone, and Retry after them where `onRetry` is given. */
+/** A failure's words, `children`, behind the failed mark in the danger tone, and Retry after them where `onRetry` is given, then `also`. */
 export function FailureNote({
   onRetry,
+  also,
   children,
 }: {
-  /** Retry's press; with none, the line says its words alone. */
+  /** Retry's press; with none, the line says its words alone, and any `also`. */
   onRetry?: (() => void) | undefined;
+  /** A second act after Retry, drawn by the caller as a `@luke/ui` control; with neither, the line says its words alone. */
+  also?: ReactNode;
   /** What failed, as "The answer could not be sent." */
   children: ReactNode;
 }): React.JSX.Element {
   const Mark = GLYPH.FAILED;
+  const acts = onRetry !== undefined || also !== undefined;
   return (
     <p
       className="luke-failure-note"
       data-tone={STATUS_TONE.DANGER}
-      data-retry={onRetry === undefined ? undefined : ""}
+      data-retry={acts ? "" : undefined}
       role="alert"
     >
       <span className="luke-failure-note-mark" aria-hidden="true">
         <Mark />
       </span>
       <span className="luke-failure-note-words">{children}</span>
-      {onRetry === undefined ? null : (
+      {acts ? (
         <span className="luke-failure-note-retry">
-          <RetryButton onRetry={onRetry} />
+          {onRetry === undefined ? null : <RetryButton onRetry={onRetry} />}
+          {also}
         </span>
-      )}
+      ) : null}
     </p>
   );
 }

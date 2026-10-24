@@ -336,7 +336,7 @@ function SkillRowView({
       >
         <div>
           <MenuRow
-            label={`${skill.name} actions`}
+            thing={skill.name}
             actions={actions}
             row={{
               leading: (

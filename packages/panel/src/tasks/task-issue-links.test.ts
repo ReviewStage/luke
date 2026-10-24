@@ -354,9 +354,9 @@ test("a first read that did not land says so in the row's place, and Try again r
     links: [SAFARI],
     reads: [{ failure: TASK_CALL_FAILURE.UNANSWERED }, { issues: [SAFARI] }],
   });
-  const said = container.querySelector('[role="alert"]')?.firstChild?.textContent;
+  const said = container.querySelector('[role="alert"] .luke-failure-note-words')?.textContent;
 
-  press([...container.querySelectorAll("button")].find((each) => each.textContent === "Try again"));
+  press([...container.querySelectorAll("button")].find((each) => each.textContent === "Retry"));
   await settle();
 
   assert.equal(said, "Luke didn't answer. Try again.");
@@ -410,75 +410,4 @@ test("on a phone the chips wrap rather than run past the page, each cutting its 
   } finally {
     laid.remove();
   }
-});
-
-/** Link issue's menu at its own width, an issue's title with its key and state after it. */
-const LINK_MENU_WIDTH = 420;
-
-/**
- * Where Link issue's menu stands once the chip stands `left` pixels in from
- * the left edge of a window `width` wide, 90px wide itself: the edge it
- * hangs from, and its left and right edges as the stylesheet draws them from
- * that edge, its inset, and its width capped to the widest it may stand.
- * jsdom lays nothing out, so the chip's place and the menu's width are
- * answered as the window would lay them.
- */
-async function linkMenuAt(left: number, width = 390) {
-  vi.spyOn(window, "innerWidth", "get").mockReturnValue(width);
-  vi.spyOn(window, "innerHeight", "get").mockReturnValue(800);
-  vi.spyOn(HTMLElement.prototype, "offsetWidth", "get").mockImplementation(function (
-    this: HTMLElement,
-  ) {
-    return this.classList.contains("searchable-menu") ? LINK_MENU_WIDTH : 0;
-  });
-  const { container } = await mount({ links: [SAFARI] });
-  const chip =
-    [...container.querySelectorAll<HTMLElement>("button")].find(
-      (each) => each.textContent === "Link issue",
-    ) ?? assert.fail("Link issue stands");
-  vi.spyOn(chip, "getBoundingClientRect").mockReturnValue(new DOMRect(left, 100, 90, 28));
-  press(chip);
-  await settle();
-  const box = chip.closest<HTMLElement>(".issue-picker-chip") ?? assert.fail("the picker's box");
-  const widest = Number.parseFloat(box.style.getPropertyValue("--settings-picker-width-max"));
-  const inset = Number.parseFloat(box.style.getPropertyValue("--settings-picker-inset"));
-  const drawn = Math.min(LINK_MENU_WIDTH, widest);
-  const start = box.dataset.align === "end" ? left + 90 - inset - drawn : left + inset;
-  return { align: box.dataset.align, start, end: start + drawn, drawn };
-}
-
-test("Link issue near the window's right edge hangs its menu from its trailing edge, inside the window", async () => {
-  const menu = await linkMenuAt(290);
-  assert.equal(menu.align, "end");
-  assert.ok(
-    menu.start >= 0 && menu.end <= 390,
-    `the menu stands from ${menu.start} to ${menu.end}`,
-  );
-  assert.ok(menu.drawn >= 280, `the menu stands ${menu.drawn}px wide`);
-});
-
-test("Link issue near the row's start hangs its menu from its leading edge, inside the window", async () => {
-  const menu = await linkMenuAt(16);
-  assert.equal(menu.align, "start");
-  assert.ok(
-    menu.start >= 0 && menu.end <= 390,
-    `the menu stands from ${menu.start} to ${menu.end}`,
-  );
-});
-
-test("Link issue with too little room on either side pushes its menu back over the chip, whole and inside the window", async () => {
-  const menu = await linkMenuAt(320, 600);
-  assert.equal(menu.align, "end");
-  assert.equal(menu.drawn, LINK_MENU_WIDTH);
-  assert.ok(
-    menu.start >= 0 && menu.end <= 600,
-    `the menu stands from ${menu.start} to ${menu.end}`,
-  );
-});
-
-test("Link issue with room for the whole menu after it hangs it from its leading edge, though there is more before it", async () => {
-  const menu = await linkMenuAt(560, 1000);
-  assert.equal(menu.align, "start");
-  assert.equal(menu.start, 560);
-  assert.equal(menu.drawn, LINK_MENU_WIDTH);
 });

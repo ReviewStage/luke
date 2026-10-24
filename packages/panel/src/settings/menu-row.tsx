@@ -1,24 +1,26 @@
 import { searchAnchorProps } from "@luke/settings/settings-anchors";
 import {
-  EllipsisIcon,
-  IconButton,
+  dropBelowStart,
+  MoreButton,
+  moreLabel,
+  opensMenu,
   SettingsRow,
   type SettingsRowControl,
-  Tooltip,
   useMenu,
 } from "@luke/ui";
-import { type ReactNode, useRef } from "react";
+import { type KeyboardEvent, type ReactNode, useRef } from "react";
 import { ActionMenu, type MenuAction } from "../desktop/action-menu.js";
 
 /**
  * menu-row.tsx -- a Settings row with actions of its own: a stored key, a connected service, a changeable shortcut.
  *
  * The row's acts live in the window's own menu rather than in buttons along
- * the row, the way a sidebar task's do: a ⋯ at the row's end opens it, and a
- * right-click anywhere on the row opens the same menu at the pointer. The ⋯
- * is always drawn, muted as a toolbar's glyphs are until the pointer is on it,
- * because a ⋯ shown only on hover leaves an empty gap at the end of the row. A
- * row with no act that applies now draws no ⋯ and answers no right-click. An
+ * the row, the way a sidebar task's do: a ⋯ at the row's end (`MoreButton`, named
+ * "{thing} actions") opens it, a right-click anywhere on the row opens the same
+ * menu at the pointer, and the menu key or ⇧F10 on the row opens it under the
+ * row. The ⋯ is always drawn, muted as a toolbar's glyphs are until the pointer
+ * is on it, because a ⋯ shown only on hover leaves an empty gap at the end of
+ * the row. A row with no act that applies now draws no ⋯ and opens nothing. An
  * act that cannot be taken back asks first through the confirm dialog, which
  * hands focus back to the ⋯ the menu returned it to.
  *
@@ -71,15 +73,15 @@ function groupsOf(actions: MenuRowActions): readonly (readonly MenuAction[])[] {
 }
 
 export function MenuRow({
-  label,
+  thing,
   actions,
   heading,
   anchor,
   row,
   children,
 }: MenuRowBody & {
-  /** What the menu is named: "Linear actions". */
-  label: string;
+  /** What the row is, as a sentence opens with it: "Linear" names its ⋯ and its menu "Linear actions". */
+  thing: string;
   actions: MenuRowActions;
   /** A muted line over the menu's acts saying what they act on, where the row's words do not. */
   heading?: string;
@@ -92,18 +94,22 @@ export function MenuRow({
   const door = useRef<HTMLButtonElement | null>(null);
   const groups = groupsOf(actions);
   const acting = groups.length > 0;
-  const more = !acting ? null : (
-    <Tooltip label="More">
-      <IconButton ref={door} icon={<EllipsisIcon />} label={label} {...menu.trigger()} />
-    </Tooltip>
-  );
+  const more = !acting ? null : <MoreButton ref={door} thing={thing} {...menu.trigger()} />;
+  // Note that the menu hangs under the row but hands focus back to what held the keyboard, the ⋯ or a control beside it, since the row itself takes none.
+  const keyMenu = (event: KeyboardEvent<HTMLElement>) => {
+    if (!opensMenu(event)) return;
+    event.preventDefault();
+    const held = event.target instanceof HTMLElement ? event.target : event.currentTarget;
+    menu.show(dropBelowStart(event.currentTarget), held);
+  };
   return (
     <>
-      {/* biome-ignore lint/a11y/noStaticElementInteractions: the right-click is a second door to the ⋯ beside it, which is the keyboard's. */}
+      {/* biome-ignore lint/a11y/noStaticElementInteractions: the right-click and the menu key are further doors to the ⋯ beside it. */}
       <div
         className={row === undefined ? "settings-row menu-row" : "menu-row"}
         {...(anchor ? searchAnchorProps(anchor) : undefined)}
         {...(acting ? menu.contextMenu(door) : undefined)}
+        onKeyDown={acting ? keyMenu : undefined}
       >
         {row === undefined ? (
           <>
@@ -132,7 +138,7 @@ export function MenuRow({
       </div>
       {menu.drawn === undefined ? null : (
         <ActionMenu
-          label={label}
+          label={moreLabel(thing)}
           menu={menu.drawn}
           groups={groups}
           {...(heading === undefined ? undefined : { heading })}

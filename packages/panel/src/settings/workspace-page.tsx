@@ -174,6 +174,11 @@ const ACCEPTED: ActionResult = { status: ACTION_RESULT_STATUS.ACCEPTED };
 /** The roles an invitation offers, in the order the role's menu lists them, the default first. */
 const INVITATION_ROLES = [INVITATION_ROLE.MEMBER, INVITATION_ROLE.ADMIN] as const;
 
+/** The writes the invitations list takes, one out at a time. */
+const INVITATION_WRITE = { INVITE: "invite", CANCEL: "cancel" } as const;
+
+type InvitationWrite = (typeof INVITATION_WRITE)[keyof typeof INVITATION_WRITE];
+
 /** What each role may do, as the role menu's second lines say it. */
 const ROLE_DETAIL = {
   [INVITATION_ROLE.MEMBER]: "Works on tasks and agents",
@@ -202,6 +207,7 @@ const READ_FAILED = {
  * fails as `creator-left`.
  */
 const LEAVE_WORDS = {
+  RUNNING: "Leaving",
   LINE: "You lose its tasks, agents, and Inbox until someone invites you again.",
   TASKS: (name: string) => `Tasks you wrote stay in ${name}.`,
   AGENTS: "Agents you started that are still working stop.",
@@ -521,7 +527,7 @@ function MemberRow({
   return (
     <Stack gap={GAP.NONE}>
       <MenuRow
-        label={`${member.name} actions`}
+        thing={member.name}
         actions={[profileActs, roleActs, removeActs]}
         row={{
           leading: <ActorMark actor={memberActor(member, readerId)} size={ACTOR_SIZE.CARD} />,
@@ -636,7 +642,8 @@ function MemberLeave({
         {() => (
           <Button
             variant={BUTTON_VARIANT.DANGER_OUTLINE}
-            disabled={leave.busy}
+            busy={leave.busy}
+            busyLabel={LEAVE_WORDS.RUNNING}
             onClick={() => {
               automations.read();
               leave.ask();
@@ -652,7 +659,7 @@ function MemberLeave({
           title: `Leave ${workspace.name}?`,
           body: LEAVE_WORDS.LINE,
           verb: `Leave ${workspace.name}`,
-          running: "Leaving",
+          running: LEAVE_WORDS.RUNNING,
         }}
       >
         <ul className="leave-consequences">
@@ -775,7 +782,8 @@ function OwnerLeave({
           heir === undefined ? null : (
             <Button
               variant={BUTTON_VARIANT.OUTLINE}
-              disabled={transfer.busy}
+              busy={transfer.busy}
+              busyLabel={TRANSFER_WORDS.RUNNING}
               onClick={() => transfer.ask()}
             >
               {TRANSFER_WORDS.VERB}
@@ -977,7 +985,8 @@ function Invitations({
   const emailField = useRef<HTMLInputElement>(null);
   const [role, setRole] = useState<WorkspaceInvitation["role"]>(INVITATION_ROLE.MEMBER);
   const [note, setNote] = useState<string>();
-  const [busy, setBusy] = useState(false);
+  const [writing, setWriting] = useState<InvitationWrite>();
+  const busy = writing !== undefined;
   // Note that the press reads a ref rather than `busy`, because a second
   // press can land before the render that would disable the button.
   const sending = useRef(false);
@@ -1004,10 +1013,14 @@ function Invitations({
   };
   // Note that one write runs at a time, invite or cancel, so no list read
   // after one can see the service before another has settled.
-  const write = <A,>(made: () => Promise<A>, done: (answer: A, fresh: boolean) => void) => {
+  const write = <A,>(
+    which: InvitationWrite,
+    made: () => Promise<A>,
+    done: (answer: A, fresh: boolean) => void,
+  ) => {
     if (sending.current) return;
     sending.current = true;
-    setBusy(true);
+    setWriting(which);
     setNote(undefined);
     const before = streamed.current;
     made()
@@ -1017,7 +1030,7 @@ function Invitations({
       )
       .finally(() => {
         sending.current = false;
-        setBusy(false);
+        setWriting(undefined);
       });
   };
 
@@ -1055,6 +1068,7 @@ function Invitations({
   const invite = (event: React.FormEvent) => {
     event.preventDefault();
     write(
+      INVITATION_WRITE.INVITE,
       () => act(ACT_KIND.WORKSPACE_INVITE, { workspaceId, email, role }),
       (made, fresh) => {
         setEmail("");
@@ -1067,6 +1081,7 @@ function Invitations({
 
   const cancel = (invitationId: string) =>
     write(
+      INVITATION_WRITE.CANCEL,
       () => act(ACT_KIND.WORKSPACE_INVITATION_CANCEL, { workspaceId, invitationId }),
       // The cancel's own answer is the list after it, so a read out before it is passed over.
       (left, fresh) => {
@@ -1096,7 +1111,13 @@ function Invitations({
               onChange={setEmail}
             />
             <RoleChip value={role} disabled={busy} adminAllowed={owner} onChange={setRole} />
-            <Button type={BUTTON_TYPE.SUBMIT} variant={BUTTON_VARIANT.OUTLINE} disabled={busy}>
+            <Button
+              type={BUTTON_TYPE.SUBMIT}
+              variant={BUTTON_VARIANT.OUTLINE}
+              busy={writing === INVITATION_WRITE.INVITE}
+              busyLabel="Inviting"
+              disabled={writing === INVITATION_WRITE.CANCEL}
+            >
               Invite
             </Button>
           </Inline>
@@ -1117,7 +1138,7 @@ function Invitations({
       {(pending ?? []).map((one) => (
         <MenuRow
           key={one.id}
-          label={`${one.email} actions`}
+          thing={one.email}
           actions={[
             {
               label: "Cancel invitation",
@@ -1227,11 +1248,20 @@ function ManagedGitHub({
   const { act } = useAct();
   const workspaceId = workspace.id;
   const [refusal, setRefusal] = useState<string>();
+  // Note that a second press while the browser is being sent is taken as none, as Linear's is.
+  const [opening, setOpening] = useState(false);
+  const underWay = useRef(false);
   const open = () => {
+    if (underWay.current) return;
+    underWay.current = true;
+    setOpening(true);
     setRefusal(undefined);
-    act(ACT_KIND.WORKSPACE_GITHUB_CONNECT, { workspaceId }).catch((refused: Error) =>
-      setRefusal(refused.message),
-    );
+    act(ACT_KIND.WORKSPACE_GITHUB_CONNECT, { workspaceId })
+      .catch((refused: Error) => setRefusal(refused.message))
+      .finally(() => {
+        underWay.current = false;
+        setOpening(false);
+      });
   };
   const connected = connections.length > 0;
   return (
@@ -1249,12 +1279,19 @@ function ManagedGitHub({
               <Button
                 variant={BUTTON_VARIANT.OUTLINE}
                 icon={<ExternalLinkIcon aria-hidden="true" />}
+                busy={opening}
+                busyLabel="Opening GitHub"
                 onClick={open}
               >
                 Manage on GitHub
               </Button>
             ) : (
-              <Button variant={BUTTON_VARIANT.OUTLINE} onClick={open}>
+              <Button
+                variant={BUTTON_VARIANT.OUTLINE}
+                busy={opening}
+                busyLabel="Connecting"
+                onClick={open}
+              >
                 Connect
               </Button>
             )}
@@ -1370,7 +1407,7 @@ function ManagedLinear({ workspace }: { workspace: Workspace }): React.JSX.Eleme
   return (
     <Stack gap={GAP.NONE}>
       <MenuRow
-        label="Linear actions"
+        thing="Linear"
         actions={actions}
         row={{
           leading: LINEAR_MARK,
@@ -1502,7 +1539,7 @@ function ManagedSentry({
   return (
     <Stack gap={GAP.NONE}>
       <MenuRow
-        label="Sentry actions"
+        thing="Sentry"
         actions={actions}
         row={{
           leading: SENTRY_MARK,
@@ -1718,7 +1755,7 @@ function WorkspaceIdentity({ workspace }: { workspace: Workspace }): React.JSX.E
   return (
     <Stack gap={GAP.NONE}>
       <MenuRow
-        label="Workspace actions"
+        thing="Workspace"
         actions={actions}
         row={{
           leading: <WorkspaceTile workspace={workspace} size={TILE_SIZE.HEAD} />,

@@ -909,11 +909,11 @@ test("its last tab closed shuts the panel, and shown again it offers in place ev
   assert.ok(add, "the panel offers its +");
   act(() => add.click());
   await settle();
-  const offered = [...document.querySelectorAll(".tab-add-menu [role='option']")].map(
+  const offered = [...document.querySelectorAll(".luke-searchable-menu [role='option']")].map(
     (each) => each.textContent,
   );
-  const headings = [...document.querySelectorAll(".tab-add-menu [role='group']")].map((each) =>
-    each.getAttribute("aria-label"),
+  const headings = [...document.querySelectorAll(".luke-searchable-menu [role='group']")].map(
+    (each) => each.getAttribute("aria-label"),
   );
   act(() => add.click());
   await settle();
@@ -1342,7 +1342,9 @@ test("a teammate's message to an agent on its own page carries their sign-in pic
   );
   await settle();
 
-  const sender = page.querySelector(".is-user:not(.agent-origin) .message-sender [data-actor-ref]");
+  const sender = page.querySelector(
+    ".is-user:not(.agent-origin) .luke-message-line-sender [data-actor-ref]",
+  );
   assert.equal(sender?.querySelector(".luke-inline-ref-label")?.textContent, "Charles Pan");
   assert.equal(sender?.querySelector("img")?.getAttribute("src"), picture);
 });
@@ -1383,7 +1385,7 @@ function origin(page: HTMLElement): OpenedOrigin {
     page.querySelector<HTMLElement>(".agent-origin") ?? assert.fail("the page opens on its card");
   const head = card.querySelector<HTMLElement>("[data-task-card] > summary");
   act(() => head?.click());
-  return { card, sender: card.querySelector<HTMLElement>(".message-sender") };
+  return { card, sender: card.querySelector<HTMLElement>(".luke-message-line-sender") };
 }
 
 test("an automation's agent opens on the automation's prompt alone, sent by the automation, whose name opens its page", async () => {
@@ -2126,7 +2128,9 @@ test("a delete the service refused for an agent still starting says why in the d
   await settle();
 
   assert.deepEqual(deletes, [AGENT_ID]);
-  const reason = document.querySelector('[role="alertdialog"] [role="alert"]');
+  const reason = document.querySelector(
+    '[role="alertdialog"] [data-slot="field-error"]:not(:empty)',
+  );
   assert.equal(reason?.textContent, "The agent is still starting its turn. Try again in a moment.");
   assert.equal(closed, 0);
 });
