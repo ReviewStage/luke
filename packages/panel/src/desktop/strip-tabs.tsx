@@ -376,6 +376,10 @@ function ToolbarTabActions({
 
 /** What a tab of either strip draws, beyond its menu. */
 export interface TabLook {
+  /** The id the tab stands under, which the panel it shows is labelled by (`Tab`'s). */
+  id?: string | undefined;
+  /** The id of the panel the tab shows (`Tab`'s). */
+  controls?: string | undefined;
   icon: React.JSX.Element;
   label: string;
   /** Words after the label, dimmed (`Tab`'s). */
