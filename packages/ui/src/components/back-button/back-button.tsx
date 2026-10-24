@@ -48,6 +48,8 @@ export function BackButton({
   label,
   place,
   command: named = APP_COMMAND.BACK,
+  keepFocus,
+  tabbable,
   onBack,
 }: {
   /** Where it stands: in a bar where none is said. */
@@ -58,6 +60,10 @@ export function BackButton({
   place: string;
   /** The key that goes back here, which its hint says: the window's Back where none is named, and none for `NO_BACK_KEY`. */
   command?: KeyedCommand | typeof NO_BACK_KEY | undefined;
+  /** Whether a pointer's press leaves the focus where it is, in a field of the owner's. */
+  keepFocus?: boolean | undefined;
+  /** Whether it stands in the tab order, in a bar: out of it where the owner's keys step back. */
+  tabbable?: boolean | undefined;
   /** Goes back. */
   onBack: () => void;
 }): React.JSX.Element {
@@ -78,11 +84,20 @@ export function BackButton({
   if (look === BACK_BUTTON_LOOK.COLUMN) {
     return (
       <Tooltip label={hint} command={command}>
-        <NavItem icon={<GLYPH.BACK />} onClick={onBack}>
+        <NavItem icon={<GLYPH.BACK />} keepFocus={keepFocus} onClick={onBack}>
           {label}
         </NavItem>
       </Tooltip>
     );
   }
-  return <FoldingButton label={label} icon={<GLYPH.BACK />} onClick={onBack} hint={WayBackHint} />;
+  return (
+    <FoldingButton
+      label={label}
+      icon={<GLYPH.BACK />}
+      keepFocus={keepFocus}
+      tabbable={tabbable}
+      onClick={onBack}
+      hint={WayBackHint}
+    />
+  );
 }

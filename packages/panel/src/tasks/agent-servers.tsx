@@ -797,7 +797,7 @@ function ServersPopover({
         server={row.name}
         tool={shown}
         tokens={pageTokens}
-        backLabel={`Back to ${row.name} tools`}
+        backPlace={`${row.name} tools`}
         onBack={closeTool}
         keepFocus
         bodyRef={toolBody}

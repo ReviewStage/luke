@@ -1980,7 +1980,8 @@ ul.actor-stack {
   border-bottom: 1px solid var(--luke-color-border);
 }
 
-.integration-tool-detail-head:has(> .luke-button) {
+.integration-tool-detail-head:has(.luke-button) {
+  --luke-fold: folded;
   padding-left: var(--luke-item-gap);
 }
 

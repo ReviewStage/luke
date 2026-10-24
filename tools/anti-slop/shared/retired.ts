@@ -191,6 +191,10 @@ export function namesRetired(text: string, retirements: readonly Retirement[] = 
     const name = retirement.name.endsWith(PREFIX_MARK)
       ? retirement.name.slice(0, -PREFIX_MARK.length)
       : retirement.name;
+    // Note that an import narrowed to names is spelled by those names, because its module is spelled by every file that never imports them.
+    if (retirement.kind === RETIRED_KIND.IMPORT && retirement.names.length > 0) {
+      return retirement.names.some((imported) => text.includes(imported));
+    }
     const needle = retirement.kind === RETIRED_KIND.GLYPH ? bareGlyph(name) : name;
     return text.includes(needle.replace(`${GLYPH_REGISTRY}.`, ""));
   });
