@@ -1024,9 +1024,9 @@ function button(name: string): HTMLButtonElement {
   return found;
 }
 
-/** What a copy button says of its copy to a reader: "Copied" once the clipboard took it. */
-function said(copyButton: HTMLButtonElement): string {
-  return copyButton.querySelector('[role="status"]')?.textContent ?? "";
+/** Whether a copy button shows its copy landed, its glyph turned to the check, once the clipboard took it. */
+function copiedShown(copyButton: HTMLButtonElement): boolean {
+  return copyButton.querySelector(".luke-copy-glyph")?.getAttribute("data-state") === "copied";
 }
 
 /** The option of the list standing open whose words are `words`. */
@@ -1094,9 +1094,9 @@ function pickerDetail(page: HTMLElement, label: string): string | undefined {
   return id === null ? undefined : (document.getElementById(id)?.textContent ?? undefined);
 }
 
-/** Whether `words` stand in a polite live region, as a row's error line says them. */
+/** Whether `words` stand in an error line, which the window's announcer says as they arrive. */
 function announced(words: string): boolean {
-  return [...document.querySelectorAll("[aria-live=polite]")].some(
+  return [...document.querySelectorAll("[data-slot=field-error]")].some(
     (region) => region.textContent === words,
   );
 }
@@ -2691,7 +2691,7 @@ test("a webhook made in the window shows its secret once, read-only with Copy, l
   act(() => button("Copy secret").click());
   await settle();
   assert.deepEqual(copied, [MADE_SECRET]);
-  assert.equal(said(button("Copy secret")), "Copied");
+  assert.ok(copiedShown(button("Copy secret")));
 
   act(() => button("Done").click());
   assert.equal(page.querySelector("input[aria-label='Secret']"), null);
@@ -2709,7 +2709,7 @@ test("a new secret shown after one was copied says nothing was copied of it yet"
   await settle();
   act(() => button("Copy secret").click());
   await settle();
-  assert.equal(said(button("Copy secret")), "Copied", "the first secret's copy is said");
+  assert.ok(copiedShown(button("Copy secret")), "the first secret's copy is shown");
 
   act(() => button("Done").click());
   act(() => button("New secret").click());
@@ -2725,7 +2725,7 @@ test("a new secret shown after one was copied says nothing was copied of it yet"
     page.querySelector<HTMLInputElement>("input[aria-label='Secret']")?.value,
     ROTATED_SECRET,
   );
-  assert.equal(said(button("Copy secret")), "", "the new secret is not said to be copied");
+  assert.ok(!copiedShown(button("Copy secret")), "the new secret is not shown as copied");
 });
 
 test("a shown secret is let go of once the automation is saved as anything but a webhook", async () => {
@@ -2772,7 +2772,7 @@ test("a new secret, asked for first, is shown once on the page that asked, and i
   act(() => button("Copy address").click());
   await settle();
   assert.deepEqual(copied, [hooked.webhookUrl]);
-  assert.equal(said(button("Copy address")), "Copied");
+  assert.ok(copiedShown(button("Copy address")));
   act(() => button("New secret").click());
   await settle();
   assert.deepEqual(secretsAsked, [], "nothing is replaced before the developer says so");

@@ -7,6 +7,7 @@ import {
   useLayoutEffect,
   useRef,
 } from "react";
+import { ANNOUNCE, useAnnounce } from "../announcer/announcer.js";
 import { Button } from "../button/button.js";
 import { Menu, type MenuEntry, useMenu } from "../menu/menu.js";
 import { focusRovingStop, ROVING_ORIENTATION, useRovingKeys } from "../roving-keys/roving-keys.js";
@@ -17,7 +18,8 @@ import { focusChoosable } from "./list-selection.js";
  *
  * It stands only while a row is chosen, and draws nothing once none is, so
  * a list's owner draws it beside the list whatever the count. The count
- * leads it and is said as it changes, so a reader choosing rows by the
+ * leads it and is said politely through the window's `Announcer` as it
+ * changes, the first row chosen included, so a reader choosing rows by the
  * keys hears how many they hold. The acts follow in the order handed, each
  * a labelled button that does its act on every chosen row, or drops a menu
  * of choices where the act is one of several (a status, a section); Clear,
@@ -79,6 +81,7 @@ export function SelectionBar({
 }): React.JSX.Element | null {
   const roving = useRovingKeys<HTMLDivElement>({ orientation: ROVING_ORIENTATION.HORIZONTAL });
   const countId = useId();
+  useAnnounce(ANNOUNCE.POLITE, count > 0 ? selectedWords(count) : "");
   // Whether the focus stands in the bar, or stood there as its buttons went.
   const holding = useRef(false);
   useLayoutEffect(() => {
@@ -118,7 +121,7 @@ export function SelectionBar({
       aria-controls={controls}
       className="luke-selection-bar"
     >
-      <span id={countId} role="status" className="luke-selection-bar-count">
+      <span id={countId} className="luke-selection-bar-count">
         {selectedWords(count)}
       </span>
       <div className="luke-selection-bar-acts">

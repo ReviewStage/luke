@@ -467,8 +467,10 @@ test("a message's Copy takes its words as Markdown, beside the Reply its byline 
       "migration, online, and nothing writes the pair twice today.",
   ]);
   assert.equal(
-    actions?.querySelector('button[aria-label="Copy message"] [role="status"]')?.textContent,
-    "Copied",
+    actions
+      ?.querySelector('button[aria-label="Copy message"] .luke-copy-glyph')
+      ?.getAttribute("data-state"),
+    "copied",
     "the press shows it was copied",
   );
 });

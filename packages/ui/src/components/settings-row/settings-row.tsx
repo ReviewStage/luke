@@ -1,6 +1,7 @@
 import { type ReactNode, useId } from "react";
 import { CheckIcon } from "../../face/glyphs.js";
 import { AlertIcon } from "../../icons/lucide-glyphs.js";
+import { ANNOUNCE } from "../announcer/announcer.js";
 import { ErrorLine } from "../error-line/error-line.js";
 import { LANDED, landedMark } from "../landed/landed.js";
 import { GAP, type Gap, Inline } from "../layout/layout.js";
@@ -13,7 +14,8 @@ import { VisuallyHidden } from "../visually-hidden/visually-hidden.js";
  * The row mints the ids and hands its controls what they need to be read
  * with its words: the label's id, for a control named by `aria-labelledby`,
  * and the description and the error, which describe it. The error is the
- * one `ErrorLine` a form field's is too. The row is its own inline-size
+ * one `ErrorLine` a form field's is too, said as an alert, since a write
+ * that was refused is one the developer believes landed. The row is its own inline-size
  * container, so where its controls stand is decided by the row's width and
  * not the window's: under 380px they drop below the words to the row's end.
  * The row owns its padding, the least height its profile gives a row (the
@@ -214,7 +216,9 @@ export function SettingsRow({
             {below(control)}
           </div>
         )}
-        <ErrorLine id={errorId}>{failed ? error : null}</ErrorLine>
+        <ErrorLine id={errorId} level={ANNOUNCE.ALERT}>
+          {failed ? error : null}
+        </ErrorLine>
       </div>
     </div>
   );

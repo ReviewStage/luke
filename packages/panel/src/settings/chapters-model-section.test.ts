@@ -88,9 +88,9 @@ const written = () =>
     request.kind === ACT_KIND.CHAPTERS_MODEL_WRITE ? [request.payload.model] : [],
   );
 
-/** What the group announces now: its alerts and its live regions that say something. */
+/** What the group announces now: its alerts and its error lines that say something. */
 const alerts = (page: HTMLElement) =>
-  [...page.querySelectorAll('[role="alert"], [aria-live]')]
+  [...page.querySelectorAll('[role="alert"], [data-slot="field-error"]')]
     .map((each) => each.textContent ?? "")
     .filter((words) => words !== "");
 

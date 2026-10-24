@@ -7,6 +7,7 @@ import { CloseIcon, SearchIcon } from "../../face/glyphs.js";
 import { pulseOnPress } from "../../press-pulse.js";
 import { ShadcnInput } from "../../shadcn/input.js";
 import { useDisclosure } from "../../use-disclosure.js";
+import { ANNOUNCE, useAnnounce } from "../announcer/announcer.js";
 import type { ComboboxField } from "../combobox/use-combobox-field.js";
 
 /**
@@ -19,8 +20,9 @@ import type { ComboboxField } from "../combobox/use-combobox-field.js";
  * The well rings, not the field, while the caret is in it.
  *
  * Its end holds what the caller gives it. A tally (`tally`) says how many
- * results the query found, and which one is current, in a polite live region,
- * while a query stands, said rather than drawn under an element whose
+ * results the query found, and which one is current, while a query stands,
+ * said politely through the window's `Announcer` as it changes, and read in
+ * place rather than drawn under an element whose
  * `--luke-fold` is `folded`, so a narrow bar gives the field its room; or
  * `trailing` is any words of the caller's. A chord
  * (`shortcut`) says how to summon the field while it is empty and the caret
@@ -80,7 +82,7 @@ const SEARCH_INPUT =
 
 /** The tally in a caption's tabular figures, said rather than drawn where the bar is folded. */
 const SEARCH_TALLY =
-  "flex-none pr-luke-6 text-caption tabular-nums [@container_style(--luke-fold:folded)]:sr-only";
+  "luke-search-field-tally flex-none pr-luke-6 text-caption tabular-nums [@container_style(--luke-fold:folded)]:sr-only";
 
 /** The chord, standing until the caret arrives, and never under a finger, which has no key to summon with. */
 const SEARCH_SHORTCUT =
@@ -170,6 +172,8 @@ export function SearchField({
   );
   const empty = value.length === 0;
   const clear = useDisclosure(onClear !== undefined && !empty);
+  const tallied = tally === undefined || empty ? undefined : tallyLine(tally);
+  useAnnounce(ANNOUNCE.POLITE, tallied ?? "");
 
   const onKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
     if (combobox !== undefined) {
@@ -205,11 +209,7 @@ export function SearchField({
         onChange={(event) => onChange(event.target.value)}
         onKeyDown={onKeyDown}
       />
-      {tally === undefined || empty ? null : (
-        <span className={SEARCH_TALLY} aria-live="polite">
-          {tallyLine(tally)}
-        </span>
-      )}
+      {tallied === undefined ? null : <span className={SEARCH_TALLY}>{tallied}</span>}
       {trailing}
       {clear.mounted ? (
         <button

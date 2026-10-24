@@ -248,7 +248,7 @@ test("⌘F finds in the view standing, its bar under the view's toolbar, and cou
   });
 
   assert.equal(
-    page.querySelector('[role="search"][aria-label="Find"] [aria-live="polite"]')?.textContent,
+    page.querySelector('[role="search"][aria-label="Find"] .luke-search-field-tally')?.textContent,
     "1 of 1",
   );
 });

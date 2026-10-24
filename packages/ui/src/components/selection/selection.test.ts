@@ -3,6 +3,7 @@
 import { act, createElement, Fragment, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
+import { Announcer } from "../announcer/announcer.js";
 import { CardPress } from "../card-press/card-press.js";
 import { List, ListRow } from "../list-row/list-row.js";
 import { type SelectionAct, SelectionBar } from "./selection-bar.js";
@@ -320,13 +321,25 @@ function Bar({ count }: { count: number }): React.JSX.Element {
   );
 }
 
-test("the bar says how many rows are chosen, in the number's own format", () => {
+test("the bar is named by how many rows are chosen, in the number's own format", () => {
   const container = draw(createElement(Bar, { count: 1200 }));
   const bar = container.querySelector('[role="toolbar"]');
-  expect(bar?.querySelector('[role="status"]')?.textContent).toBe("1,200 selected");
-  expect(bar?.getAttribute("aria-labelledby")).toBe(
-    bar?.querySelector('[role="status"]')?.getAttribute("id"),
-  );
+  const named = document.getElementById(bar?.getAttribute("aria-labelledby") ?? "");
+  expect(named?.textContent).toBe("1,200 selected");
+});
+
+test("the count is said politely as rows are chosen, the first one included", () => {
+  draw(createElement(Announcer));
+  const container = document.body.appendChild(document.createElement("div"));
+  const root = createRoot(container);
+  roots.push(root);
+  const bar = (count: number) =>
+    createElement(SelectionBar, { count, acts: [], onClear: () => undefined, controls: "places" });
+  act(() => root.render(bar(0)));
+  act(() => root.render(bar(1)));
+  expect(document.querySelector('[role="status"]')?.textContent).toBe("1 selected");
+  act(() => root.render(bar(2)));
+  expect(document.querySelector('[role="status"]')?.textContent).toBe("2 selected");
 });
 
 test("the bar does its acts, drops an act's menu of choices, and Clear chooses none, drawing no bar", () => {
