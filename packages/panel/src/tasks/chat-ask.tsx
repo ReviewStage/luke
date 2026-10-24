@@ -14,7 +14,6 @@ import {
   CARD_PADDING,
   Card,
   CardHead,
-  ErrorState,
   GAP,
   LAYOUT_ELEMENT,
   Stack,
@@ -326,6 +325,7 @@ function Answer({
         maxLength={CHAT_BOUNDS.MAX_NOTE_CHARS}
         onEnter={() => field.room.current?.closest("form")?.requestSubmit()}
         quote={(quote) => <ComposerQuoteView quote={quote} held={sending} />}
+        says={note === undefined ? undefined : { words: note }}
         nod={nod}
         sending={sending}
         held={sending}
@@ -333,11 +333,6 @@ function Answer({
         sendable={nod || chatAskHolds(draft) || chatAskReply(response, draft) !== undefined}
         onSubmit={send}
       />
-      {note === undefined ? null : (
-        <div className="agent-composer-note">
-          <ErrorState>{note}</ErrorState>
-        </div>
-      )}
     </div>
   );
 }

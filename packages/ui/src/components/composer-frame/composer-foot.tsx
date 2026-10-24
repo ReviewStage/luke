@@ -3,10 +3,11 @@ import {
   BUTTON_TYPE,
   BUTTON_VARIANT,
   type BusyProps,
+  Button,
   IconButton,
   SUBMIT_STATE,
 } from "../button/button.js";
-import { ErrorState } from "../error-state/error-state.js";
+import { ErrorState, type ErrorStateRemedy } from "../error-state/error-state.js";
 import { LengthCounter } from "../length-counter/length-counter.js";
 import { Tooltip } from "../tooltip/hint.js";
 
@@ -33,10 +34,14 @@ import { Tooltip } from "../tooltip/hint.js";
  * frame that is a form it submits the form, as Enter in the field does;
  * given `onSend` it acts on its own press instead.
  *
+ * A send that settles something with no message to send, a notice's "Got it",
+ * reads in words (`inWords`) rather than as the round glyph, and is the
+ * same press otherwise.
+ *
  * Under the bar stands at most one note, the box's one line for what went
  * wrong or what it did to the words: why a post did not go, with Retry
- * where trying again can mend it, a paste cut to the room left, or a file
- * refused. It is a failure's line (`ErrorState`), said as it lands.
+ * where trying again can mend it or a remedy where it cannot ("Unarchive"),
+ * a paste cut to the room left, or a file refused. It is a failure's line (`ErrorState`), said as it lands.
  *
  * Where the foot stands in its frame is the frame's look: a card's foot at
  * a card's inset, a field's and an input's a step tighter, and a bare
@@ -53,6 +58,8 @@ export type ComposerSend = {
   held?: boolean | undefined;
   /** Its own press, where the frame is no form whose submit sends it. */
   onSend?: (() => void) | undefined;
+  /** Whether it reads as its label in words, where its press settles something and sends no message ("Got it"). */
+  inWords?: boolean | undefined;
 } & BusyProps;
 
 /** The one line under the bar: what it says, and Retry where trying again can mend it. */
@@ -61,19 +68,35 @@ export interface ComposerNote {
   readonly words: string;
   /** Retry's press, for a send that was refused. */
   readonly onRetry?: (() => void) | undefined;
+  /** The press that mends what went wrong where trying again alone cannot, as "Unarchive". */
+  readonly remedy?: ErrorStateRemedy | undefined;
 }
 
 /** The send: the round submit in the panel's ink, busy while its send is out. */
 function SendButton({ send }: { send: ComposerSend }): React.JSX.Element {
-  const { label, empty, held = false, onSend } = send;
+  const { label, empty, held = false, inWords = false, onSend } = send;
   const busy = send.busy === true ? { busy: true, busyLabel: send.busyLabel } : {};
+  const type = onSend === undefined ? BUTTON_TYPE.SUBMIT : BUTTON_TYPE.BUTTON;
+  if (inWords) {
+    return (
+      <Button
+        variant={BUTTON_VARIANT.INK}
+        type={type}
+        disabled={empty || held}
+        onClick={onSend}
+        {...busy}
+      >
+        {label}
+      </Button>
+    );
+  }
   return (
     <Tooltip label={label}>
       <IconButton
         submit={SUBMIT_STATE.READY}
         variant={BUTTON_VARIANT.INK}
         label={label}
-        type={onSend === undefined ? BUTTON_TYPE.SUBMIT : BUTTON_TYPE.BUTTON}
+        type={type}
         disabled={empty || held}
         onClick={onSend}
         {...busy}
@@ -140,7 +163,9 @@ export function ComposerFoot({
       </div>
       {note === undefined ? null : (
         <div className="luke-composer-foot-note">
-          <ErrorState onRetry={note.onRetry}>{note.words}</ErrorState>
+          <ErrorState onRetry={note.onRetry} remedy={note.remedy}>
+            {note.words}
+          </ErrorState>
         </div>
       )}
     </div>

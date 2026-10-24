@@ -5117,7 +5117,7 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
    the box's words, and over the developer's bubble in the transcript, at its
    right as the bubble is; and the pictures a call answered
    (`agent-pictures.tsx`), on the same chips. */
-.agent-composer .attached-files {
+.agent-composer .prompt-input > .attached-files {
   padding: var(--luke-space-12) var(--luke-space-12) 0;
 }
 

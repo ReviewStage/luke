@@ -27,6 +27,11 @@
     gap: var(--luke-tight-gap);
   }
 
+  /* A row that holds nothing drawn takes no gap, as a box's chips row is hidden while it holds no file. */
+  .luke-composer-foot-files:not(:has(> :not([hidden]))) {
+    display: none;
+  }
+
   .luke-composer-foot-bar {
     display: flex;
     min-height: var(--luke-control-height);

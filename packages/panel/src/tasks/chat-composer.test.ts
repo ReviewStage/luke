@@ -353,13 +353,15 @@ test("a quote handed to a box whose editor still loads is laid in once the edito
   );
 });
 
-test("a paste past the post's cap is cut to the room left and the note says so, until the words change, and the counter stands from four fifths of the cap", () => {
+test("the box's foot says a cut paste's note and the counter from four fifths of the cap, until the words change", () => {
   const { container, draw } = page();
   draw([{ channelId: GENERAL, label: "Message #general", onSend: taken }]);
   const box = boxNamed(container, "Message #general");
   const cap = CHAT_BOUNDS.MAX_TEXT_CHARS;
-  const note = () => box.querySelector(".agent-composer-note")?.textContent;
-  const counter = () => box.querySelector(".luke-length-counter")?.textContent;
+  // Both stand in the one foot every message box shares (`ComposerFoot`), inside the card.
+  const note = () =>
+    box.querySelector(".luke-composer-foot > .luke-composer-foot-note")?.textContent;
+  const counter = () => box.querySelector(".luke-composer-foot .luke-length-counter")?.textContent;
   assert.equal(counter(), undefined);
 
   pasteInComposer(box, "x".repeat(cap + 100));
@@ -381,7 +383,7 @@ test("a paste that is cut says so over the note a refused file left, and leaves 
   draw([{ channelId: GENERAL, label: "Message #general", onSend: held.onSend }]);
   const box = boxNamed(container, "Message #general");
   const cap = CHAT_BOUNDS.MAX_TEXT_CHARS;
-  const note = () => box.querySelector(".agent-composer-note")?.textContent;
+  const note = () => box.querySelector(".luke-composer-foot-note")?.textContent;
 
   const drop = new Event("drop", { bubbles: true, cancelable: true });
   Object.defineProperty(drop, "dataTransfer", {

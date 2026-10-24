@@ -3,11 +3,8 @@ import { CHAT_BOUNDS } from "@luke/features/chat-wire";
 import type { CodingAgentAttachment } from "@luke/features/coding-agent-wire";
 import { pasteCutWords } from "@luke/features/words";
 import {
-  ErrorState,
-  GAP,
-  Inline,
-  LengthCounter,
-  SUBMIT_STATE,
+  ComposerFoot,
+  type ComposerNote as FootNote,
   TEXT_AREA_GROW_LIMIT,
   TEXT_AREA_LOOK,
   TEXT_ELEMENT,
@@ -15,18 +12,11 @@ import {
   TEXT_VARIANT,
   Text,
   TextArea,
-  Tooltip,
 } from "@luke/ui";
 import { cutReply, QUOTE_GAP, quoteOf } from "@luke/ui/reply-quote";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import { type RefObject, useEffect, useLayoutEffect, useRef, useState } from "react";
-import {
-  PromptInput,
-  PromptInputFooter,
-  PromptInputSubmit,
-  PromptInputTools,
-  submitPromptInput,
-} from "../ai-elements/prompt-input.js";
+import { PromptInput, submitPromptInput } from "../ai-elements/prompt-input.js";
 import { useSideBundles } from "../bundle-loader.js";
 import { type ChatDraftPlace, DRAFT_PLACE, EMPTY_DRAFT, useDraft } from "../composer-drafts.js";
 import { useLinkWorkspace } from "../copy-link-item.js";
@@ -61,8 +51,9 @@ import { useKnownNames } from "./use-known-names.js";
  *
  * The box is the shared composer card (`prompt-input.tsx`) around the agent
  * box's own editor (`composer-field.tsx`), as the agent tab's, the Inbox's,
- * and a plan comment's are, and under it the card's foot saying what it
- * takes, the microphone, and the shared round send. Enter sends, Shift-Enter
+ * and a plan comment's are, and under it the shared foot (`ComposerFoot`) holding
+ * the files, what the box takes, the counter, the microphone, the round send,
+ * and the one note under them. Enter sends, Shift-Enter
  * starts a new line, and the box is empty at once, keeping the caret, so
  * the next post can be written while this one goes, drawn in the stream as
  * on its way (`chat-pane.tsx`). A post refused comes back into the box with
@@ -89,9 +80,9 @@ import { useKnownNames } from "./use-known-names.js";
  * its channels' (`chatKeywords`). Pictures go with a post as files go with an Inbox
  * answer (`attached-files.ts`): the "+" at the foot's left opens the
  * system's picker for images, an image pasted into the box is taken, and
- * images dropped on the card are, each drawn as a chip above the words with
+ * images dropped on the card are, each drawn as a chip over the foot with
  * its way off, PNG, JPEG, and WebP kept and any other image re-encoded; a
- * file that cannot come says why under the card, and a post may be
+ * file that cannot come says why under the foot's bar, and a post may be
  * pictures alone. While pictures are read the post waits for them. Where
  * the editor's bundle could not be loaded, a plain textarea stands in with
  * no list and no pictures, as a plan comment's does, so a message can
@@ -170,29 +161,6 @@ export function ChatComposer(props: ChatComposerProps): React.JSX.Element {
       {...props}
       module={AsyncResult.isSuccess(bundle) ? bundle.value : undefined}
     />
-  );
-}
-
-/** The bar under the box, as the agent box's and the Inbox's stand: the parts it leads with (the + of pictures), then the parts the box hands it (dictation's) and the round send at its end. */
-function ComposerFoot({
-  empty,
-  lead,
-  children,
-}: {
-  empty: boolean;
-  lead?: React.ReactNode;
-  children?: React.ReactNode;
-}): React.JSX.Element {
-  return (
-    <PromptInputFooter>
-      <PromptInputTools>{lead}</PromptInputTools>
-      <Inline gap={GAP.TIGHT} wrap={false}>
-        {children}
-        <Tooltip label={SEND}>
-          <PromptInputSubmit label={SEND} status={SUBMIT_STATE.READY} disabled={empty} />
-        </Tooltip>
-      </Inline>
-    </PromptInputFooter>
   );
 }
 
@@ -301,20 +269,10 @@ function useChatSend(place: ChatDraftPlace, onSend: ChatComposerProps["onSend"])
   };
 }
 
-/** Where a box's note stands, under the card: why a post did not go, with Retry beside it, or why a file or a dictation came to nothing. */
-function NoteLine({
-  note,
-  onRetry,
-}: {
-  note: ComposerNote | undefined;
-  onRetry: () => void;
-}): React.JSX.Element | null {
-  if (note === undefined) return null;
-  return (
-    <div className="agent-composer-note">
-      <ErrorState onRetry={note.retries ? onRetry : undefined}>{note.words}</ErrorState>
-    </div>
-  );
+/** What the box says under its foot's bar as the foot draws it: Retry beside a refused post's words, which sends them again. */
+function footNote(note: ComposerNote | undefined, onRetry: () => void): FootNote | undefined {
+  if (note === undefined) return undefined;
+  return { words: note.words, onRetry: note.retries ? onRetry : undefined };
 }
 
 /** A line under the box where a post would address more members than a post tells, since those past the first few hear nothing of it. */
@@ -478,7 +436,6 @@ function EditorChatComposer({
           send();
         }}
       >
-        <AttachedFileChips files={attachmentChips(files.attachments)} onRemove={files.remove} />
         <ComposerField
           module={module}
           editor={editor}
@@ -527,22 +484,19 @@ function EditorChatComposer({
         >
           {picker.menu}
         </ComposerField>
-        {dictating ? (
-          <PromptInputFooter>
-            <DictationStrip dictation={dictation} />
-          </PromptInputFooter>
-        ) : (
-          <ComposerFoot
-            empty={empty || files.reading}
-            lead={<AttachFilesButton label={ATTACH} accept={PICKS_IMAGES} onFiles={files.attach} />}
-          >
-            <LengthCounter length={draft.length} limit={CHAT_BOUNDS.MAX_TEXT_CHARS} />
-            <DictateButton dictation={dictation} disabled={module === undefined} />
-          </ComposerFoot>
-        )}
+        <ComposerFoot
+          files={
+            <AttachedFileChips files={attachmentChips(files.attachments)} onRemove={files.remove} />
+          }
+          tools={<AttachFilesButton label={ATTACH} accept={PICKS_IMAGES} onFiles={files.attach} />}
+          counter={{ length: draft.length, limit: CHAT_BOUNDS.MAX_TEXT_CHARS }}
+          actions={<DictateButton dictation={dictation} disabled={module === undefined} />}
+          strip={dictating ? <DictationStrip dictation={dictation} /> : undefined}
+          send={{ label: SEND, empty: empty || files.reading }}
+          note={footNote(note, send)}
+        />
       </PromptInput>
       <CrowdedNote shown={mentions.crowded(draft)} />
-      <NoteLine note={note} onRetry={send} />
     </div>
   );
 }
@@ -597,10 +551,9 @@ function PlainChatComposer({
             }}
           />
         </div>
-        <ComposerFoot empty={empty} />
+        <ComposerFoot send={{ label: SEND, empty }} note={footNote(note, send)} />
       </PromptInput>
       <CrowdedNote shown={mentions.crowded(draft)} />
-      <NoteLine note={note} onRetry={send} />
     </div>
   );
 }
