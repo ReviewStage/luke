@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
+import { VOICE_FAILURE, type VoiceFailure } from "@luke/features/words";
 import type { VoiceLiveSessionChanged } from "@luke/gateway";
 import { LIVE_STATUS, type LiveStatus } from "@luke/live";
 import { CONVERSATION_ENTRY_KIND, type ConversationEntryKind } from "@luke/wire/conversation";
@@ -46,6 +47,8 @@ class FakeCall implements LiveVoiceCall {
   silences = 0;
   closes = 0;
   opensSucceed = true;
+  /** What a refused open reports as it fails, as the real call reports a peer the browser refused. */
+  openFailure: VoiceFailure | undefined;
   /** Where closing waits before it is done, as a real peer's close does. */
   closing: Effect.Effect<void> = Effect.void;
   #release: (() => void) | undefined;
@@ -82,6 +85,7 @@ class FakeCall implements LiveVoiceCall {
   /** The session started, or refused to; a started one is named in the order it opened. */
   started(): void {
     if (this.opensSucceed) this.sessionId = `s${++sessions}`;
+    else if (this.openFailure !== undefined) this.events.onError(this.openFailure);
     this.#release?.();
     this.#release = undefined;
   }
@@ -147,6 +151,7 @@ function fixture(
   let microphoneGranted = true;
   let microphoneAsks = 0;
   let microphoneAsk: (() => Effect.Effect<boolean>) | undefined;
+  let hostedFailure: VoiceFailure | undefined;
   const stops: number[] = [];
   const silencedAtStops: number[] = [];
   const orchestrator = new LiveVoiceOrchestrator({
@@ -162,7 +167,7 @@ function fixture(
           microphoneAsks += 1;
           return microphoneAsk ? microphoneAsk() : Effect.succeed(microphoneGranted);
         }),
-      hostedUnavailableNote: () => Effect.succeed(undefined),
+      hostedFailure: () => Effect.sync(() => hostedFailure),
       stopSpeaking: () =>
         Effect.sync(() => {
           stops.push(calls[calls.length - 1]?.mutes ?? 0);
@@ -194,6 +199,10 @@ function fixture(
     transcripts,
     setMicrophone: (granted: boolean) => {
       microphoneGranted = granted;
+    },
+    /** Why the service refused the last session, as its diagnostics answer. */
+    setHostedFailure: (failure: VoiceFailure | undefined) => {
+      hostedFailure = failure;
     },
     /** The system's dialog standing: the ask answers when the test says so. */
     setMicrophoneAsk: (ask: () => Effect.Effect<boolean>) => {
@@ -407,5 +416,81 @@ it.effect(
         from: 0,
         lines: [],
       });
+    }),
+);
+
+it.effect(
+  "a call refused for want of an OpenAI key says so at once in place of the generic failure, which is never reported",
+  () =>
+    Effect.gen(function* () {
+      const f = fixture();
+      f.setHostedFailure(VOICE_FAILURE.OPENAI_KEY_MISSING);
+      const pressed = yield* Effect.forkChild(f.talkTo(INVITES_AGENT), { startImmediately: true });
+      const call = f.latest();
+      assert.ok(call);
+      call.opensSucceed = false;
+      call.openFailure = VOICE_FAILURE.CALL_NOT_STARTED;
+      call.started();
+      yield* Fiber.join(pressed);
+      yield* Effect.yieldNow;
+      assert.equal(f.views.at(-1)?.voiceError, VOICE_FAILURE.OPENAI_KEY_MISSING);
+      assert.equal(
+        f.views.some((view) => view.voiceError === VOICE_FAILURE.CALL_NOT_STARTED),
+        false,
+      );
+      assert.equal(f.views.at(-1)?.voiceNotice, undefined);
+    }),
+);
+
+it.effect("a call that fails to open with no reason from the service says it did not start", () =>
+  Effect.gen(function* () {
+    const f = fixture();
+    const pressed = yield* Effect.forkChild(f.talkTo(INVITES_AGENT), { startImmediately: true });
+    const call = f.latest();
+    assert.ok(call);
+    call.opensSucceed = false;
+    call.openFailure = VOICE_FAILURE.CALL_NOT_STARTED;
+    call.started();
+    yield* Fiber.join(pressed);
+    yield* Effect.yieldNow;
+    assert.equal(f.views.at(-1)?.voiceError, VOICE_FAILURE.CALL_NOT_STARTED);
+  }),
+);
+
+it.effect(
+  "a failure's clock stands still while speech hides it, and runs on from where it stopped once the line shows again",
+  () =>
+    Effect.gen(function* () {
+      const f = fixture({}, yield* Effect.context<never>());
+      const pressed = yield* Effect.forkChild(f.talkTo(INVITES_AGENT), { startImmediately: true });
+      const call = f.latest();
+      assert.ok(call);
+      call.started();
+      yield* Fiber.join(pressed);
+      // Muted, then the microphone taken away: the next press is refused while the call stands.
+      yield* f.talkTo(INVITES_AGENT);
+      f.setMicrophone(false);
+      f.surround({ ...SURROUNDINGS, microphoneGranted: false });
+      yield* f.talkTo(INVITES_AGENT);
+      yield* Effect.yieldNow;
+      const error = () => f.views.at(-1)?.voiceError;
+      assert.equal(error(), VOICE_FAILURE.MICROPHONE_REFUSED);
+
+      yield* TestClock.adjust(Duration.seconds(4));
+      call.report(LIVE_STATUS.SPEAKING, { listening: false, lukeSpeaking: true });
+      yield* Effect.yieldNow;
+      // Hidden behind Luke's voice for far longer than the line's whole hold.
+      yield* TestClock.adjust(Duration.seconds(60));
+      yield* Effect.yieldNow;
+      assert.equal(error(), VOICE_FAILURE.MICROPHONE_REFUSED);
+
+      call.report(LIVE_STATUS.MUTED, { listening: false, lukeSpeaking: false });
+      yield* Effect.yieldNow;
+      yield* TestClock.adjust(Duration.millis(7_900));
+      yield* Effect.yieldNow;
+      assert.equal(error(), VOICE_FAILURE.MICROPHONE_REFUSED, "8 of its 12 seconds were left");
+      yield* TestClock.adjust(Duration.millis(200));
+      yield* Effect.yieldNow;
+      assert.equal(error(), undefined);
     }),
 );

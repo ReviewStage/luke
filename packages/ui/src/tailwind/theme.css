@@ -28,16 +28,53 @@
   --shadow-switch-thumb: var(--luke-shadow-switch-thumb);
   --ease-spring-fast: var(--luke-spring-fast);
 
+  /* The controls' own roles (`profiles.css`), which a button, a toggle, and
+     a tab are drawn at in every profile; and a button's look, which its
+     variant and state set as `--luke-button-*` on the button itself
+     (`button.css`), so a container's sheet restyles it by those alone. */
+  --font-ui: var(--luke-font-sans);
+  --text-body: var(--luke-type-body-size);
+  --text-body--line-height: var(--luke-type-body-leading);
+  --text-label: var(--luke-type-label-size);
+  --text-label--line-height: var(--luke-type-label-leading);
+  --text-caption: var(--luke-type-caption-size);
+  --text-caption--line-height: var(--luke-type-caption-leading);
+  --spacing-control: var(--luke-control-height);
+  --spacing-control-inset: var(--luke-control-inset);
+  --spacing-control-icon: var(--luke-control-icon);
+  --spacing-icon-gap: var(--luke-icon-gap);
+  --spacing-menu-row: var(--luke-menu-row-height);
+  --spacing-menu-glyph: var(--luke-menu-glyph);
+  --spacing-list-gap: var(--luke-list-gap);
+  --radius-luke-6: var(--luke-radius-6);
+  --radius-luke-8: var(--luke-radius-8);
+  --radius-luke-10: var(--luke-radius-10);
+  --radius-luke-full: var(--luke-radius-full);
+  --radius-control: var(--luke-control-radius);
+  --radius-menu-row: var(--luke-menu-row-radius);
+  --color-fill-strong: var(--luke-color-fill-strong);
+  --color-fill-pressed: var(--luke-color-fill-pressed);
+  --color-border-selected: var(--luke-color-border-selected);
+  --color-accent-ink: var(--luke-color-accent-text);
+  --spacing-touch: var(--luke-touch-target);
+  /* A box or a range a choice is drawn in: a field's ground inside a
+     chosen row's edge, filled in the accent where it is on. */
+  --color-field: var(--luke-color-input);
+  --color-surface: var(--luke-color-surface);
+  --color-control-edge: var(--luke-color-border-selected);
+  --color-accent-fill: var(--luke-color-accent);
+  --color-on-accent: var(--luke-color-on-accent);
+  --color-button-fill: var(--luke-button-fill);
+  --color-button-ink: var(--luke-button-ink);
+  --color-button-edge: var(--luke-button-edge);
   /* Text entry and the words around it (`text-field`, `search-field`,
      `form-field`, `inline-edit`, `length-counter`): a
      field's grounds and edges, the type roles its words are set in, and the
      lengths it stands at, each a profile's role. A name added here that
      tailwind-merge cannot read is listed in `../cn.ts`. */
   --color-well: var(--luke-color-well);
-  --color-field: var(--luke-color-input);
   --color-field-focus: var(--luke-color-input-focus);
   --color-ground: var(--luke-color-ground);
-  --color-fill-pressed: var(--luke-color-fill-pressed);
   --font-body: var(--luke-font-sans);
   --text-title: var(--luke-type-title-size);
   --text-title--line-height: var(--luke-type-title-leading);
@@ -53,8 +90,6 @@
      window sets at the body's size, not 16px. */
   --spacing-luke-20: var(--luke-space-20);
   --spacing-luke-24: var(--luke-space-24);
-  --spacing-control-inset: var(--luke-control-inset);
-  --spacing-control-icon: var(--luke-control-icon);
   /* A field a step under a control, among a bar's controls. */
   --spacing-control-compact: calc(var(--luke-control-height) - 2 * var(--luke-space-2));
   /* A time's block inset: the room around one line, so its value stands on the field's middle. */
@@ -180,14 +215,12 @@
   --color-popover: var(--luke-color-overlay);
   --color-popover-foreground: var(--luke-color-text);
   --color-border-strong: var(--luke-color-border-strong);
-  --color-fill-strong: var(--luke-color-fill-strong);
   --color-danger: var(--luke-color-danger-text);
   --color-tooltip: var(--luke-color-tooltip);
   --color-tooltip-foreground: var(--luke-color-tooltip-text);
   --color-tooltip-edge: var(--luke-color-tooltip-edge);
   --radius-dialog: var(--luke-dialog-radius);
   --radius-menu: var(--luke-menu-radius);
-  --radius-menu-row: var(--luke-menu-row-radius);
   --radius-tooltip: var(--luke-tooltip-radius);
   --shadow-dialog: var(--luke-dialog-shadow);
   --shadow-dialog-drop: var(--luke-dialog-drop-shadow);
@@ -202,9 +235,6 @@
   --spacing-card-inset-snug: var(--luke-card-inset-snug);
   --spacing-dialog-reach: var(--luke-space-12);
   --spacing-menu-inset: var(--luke-menu-inset);
-  --spacing-menu-row: var(--luke-menu-row-height);
-  --spacing-menu-glyph: var(--luke-menu-glyph);
-  --spacing-icon-gap: var(--luke-icon-gap);
   --spacing-block-gap: var(--luke-block-gap);
   --spacing-row-inset: var(--luke-row-inset);
   --spacing-list-inset: var(--luke-list-inset);
@@ -224,10 +254,6 @@
   --container-dialog-media-max: min(var(--luke-dialog-media-max-width), 100%);
   --container-tooltip: var(--luke-tooltip-max-width);
   --container-tooltip-card: var(--luke-tooltip-card-width);
-  --text-body: var(--luke-type-body-size);
-  --text-body--line-height: var(--luke-type-body-leading);
-  --text-caption: var(--luke-type-caption-size);
-  --text-caption--line-height: var(--luke-type-caption-leading);
   --leading-caption: var(--luke-type-caption-leading);
   --text-section: var(--luke-type-section-size);
   --text-section--line-height: var(--luke-type-section-leading);
@@ -324,14 +350,9 @@
   --color-destructive: var(--luke-color-danger);
   --color-input: var(--luke-color-input);
   /* A picked day's fill and ink, and the wash of a range between its ends. */
-  --color-accent-fill: var(--luke-color-accent);
-  --color-accent-ink: var(--luke-color-accent-text);
-  --color-on-accent: var(--luke-color-on-accent);
   --color-fill-selected: var(--luke-color-fill-selected);
   /* A toolbar floated on the menu's surface: a row's round, a hair out. */
   --radius-menu-toolbar: calc(var(--luke-menu-row-radius) + var(--luke-space-2));
-  --radius-control: var(--luke-control-radius);
-  --spacing-control: var(--luke-control-height);
   /* The base scale, as `p-luke-8` (`tokens/scale.css`), because the window's
      root type is 13px and Tailwind's own numbered steps are rems of it. */
   --spacing-luke-2: var(--luke-space-2);
@@ -352,8 +373,6 @@
   --spacing-combobox-list: var(--luke-combobox-list-max, 280px);
   /* off-scale: the column a list's leads stand in, wide enough for a task's long key */
   --spacing-combobox-lead: 9ch;
-  --text-label: var(--luke-type-label-size);
-  --text-label--line-height: var(--luke-type-label-leading);
   --text-group: var(--luke-type-group-size);
   --text-group--line-height: var(--luke-type-group-leading);
   --text-tag: var(--luke-type-tag-size);
@@ -364,6 +383,7 @@
   --font-weight-label: var(--luke-type-label-weight);
   --font-weight-group: var(--luke-type-group-weight);
   --font-weight-tag: var(--luke-type-tag-weight);
+  --font-weight-caption: var(--luke-type-caption-weight);
   --font-weight-section: var(--luke-type-section-weight);
   --font-weight-emphasis: var(--luke-type-emphasis-weight);
   --font-weight-title: var(--luke-type-title-weight);
@@ -379,8 +399,50 @@
      own literal. */
   --default-transition-duration: var(--luke-duration-quick);
   --default-transition-timing-function: var(--luke-spring);
+
+  /* The choice bar's own (`components/choice-bar/`): a compact fill
+     option's height, a step under the control's; a segment's height and
+     corner inside its trough, the trough's inset in from the control's; the
+     thumb a segment stands on; a count's glyph, at the caption's size; and
+     the ink a status tone draws a count's part or a checked control in
+     (`tokens/status-tone.css`). */
+  --spacing-choice-fill-compact: calc(var(--luke-control-height) - var(--luke-space-4));
+  --spacing-choice-segment: calc(var(--luke-control-height) - 2 * var(--luke-space-2));
+  --spacing-choice-segment-compact: calc(var(--luke-control-height) - 2 * var(--luke-space-4));
+  --spacing-caption-glyph: var(--luke-type-caption-size);
+  --radius-choice-segment: calc(var(--luke-control-radius) - var(--luke-space-2));
+  --color-choice-thumb: var(--luke-color-thumb);
+  --color-tone-ink: var(--luke-tone-ink);
+
+  /* ChoiceList's own (`components/choice-list/`): a marked row's control,
+     filled in its status tone's ink (`tone-ink`) with its dot or tick in the
+     ground's ink; a checkbox's corner there, drawn at the
+     four-pixel space; the body's leading under a caption's size, as a pill
+     and a row's number keep it; and a caption's size alone, which keeps the
+     line of what holds it, as a card's aside does. */
+  --radius-choice-box: var(--luke-space-4);
+  --text-caption-inline: var(--luke-type-caption-size);
 }
 
+/* The conditions a control answers beside its states: a finger's pointer,
+   on which a press is taken a finger's width across (`pointer-coarse:`),
+   and the fold a narrow container asks of the controls in it through
+   `--luke-fold` (`fold-folded:`, `fold-bare:`; README's "Folding in a
+   narrow container"). */
+@custom-variant pointer-coarse (@media (pointer: coarse));
+@custom-variant fold-folded (@container style(--luke-fold: folded));
+@custom-variant fold-bare (@container style(--luke-fold: bare));
+
+/* An orientation, as shadcn/ui's own stylesheet names Base UI's
+   `data-orientation` for the components it vendors (a slider's, a tab
+   list's, a toggle group's). */
+@custom-variant data-horizontal (&[data-orientation="horizontal"]);
+@custom-variant data-vertical (&[data-orientation="vertical"]);
+
+/* The choice bar's: the room a toolbar short of it asks a bar folding
+   together, or named in words alone, to take in (`--luke-fold: tight`,
+   `components/choice-bar/`). */
+@custom-variant fold-tight (@container style(--luke-fold: tight));
 /* A composer's dialog card on a phone's screen (`../shadcn/dialog.tsx`): a
    root that measures its own room says so in `data-luke-room` (the panel's
    `stage-room.ts`), and one that says nothing is answered by the dimmed

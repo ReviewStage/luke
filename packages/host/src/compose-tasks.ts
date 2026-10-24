@@ -809,8 +809,8 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
           listStatus: TASKS_READ.READY,
           live: HOST_LIVE.LIVE,
         });
-        // A name the service gave the open task reaches its document as the list carries it.
-        if (view.activeTaskId !== undefined) nameHeldAsListed(view.activeTaskId);
+        // What the service holds of the open task, its name, status, assignee, and repository, reaches its document as the list carries it.
+        if (view.activeTaskId !== undefined) heldAsListed(view.activeTaskId);
       },
       // A list that could not be read says so beside the tasks it already drew rather than emptying them.
       failed: () => write({ listStatus: TASKS_READ.FAILED, live: HOST_LIVE.OFFLINE }),
@@ -1517,12 +1517,29 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
     publish();
   }
 
-  /** The open document of `taskId` given the name its row of the list now reads, where the two differ. */
-  function nameHeldAsListed(taskId: string): void {
+  /**
+   * The open document of `taskId` given everything its row of the list now
+   * reads, its name, status, assignee, and repository among them, so a
+   * change a teammate or an agent made reaches the open task as it reaches
+   * the list. Note that the row is the whole of what the task carries but
+   * its document, so a field the row leaves out is one the task no longer
+   * has, and that the last save is the document's own, kept with its body.
+   */
+  function heldAsListed(taskId: string): void {
     const held = heldTaskOf(taskId);
     const listed = view.tasks.find((row) => row.id === taskId);
-    if (held === undefined || listed === undefined || listed.name === held.name) return;
-    write({ document: { status: TASKS_READ.READY, task: { ...held, name: listed.name } } });
+    if (held === undefined || listed === undefined) return;
+    const { agents: _agents, issues: _issues, ...row } = listed;
+    const { updatedAt, document, agentEdits, lastEdit, sectionEdits } = held;
+    const task: Task = {
+      ...row,
+      updatedAt,
+      document,
+      ...(agentEdits === undefined ? undefined : { agentEdits }),
+      ...(lastEdit === undefined ? undefined : { lastEdit }),
+      ...(sectionEdits === undefined ? undefined : { sectionEdits }),
+    };
+    write({ document: { ...view.document, task } });
   }
 
   /**

@@ -1,5 +1,5 @@
 import { CHANNEL_KIND, type ChatChannel } from "@luke/features/chat-wire";
-import { LINK_PLACE } from "@luke/features/luke-link";
+import { LINK_PLACE } from "@luke/features/link-grammar";
 import type { MentionLines, MentionPlace } from "@luke/features/mention-link";
 import { inPinOrder } from "@luke/features/pin-order";
 import type { CodeRef } from "@luke/features/task-wire";

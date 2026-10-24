@@ -8,6 +8,7 @@ import type {
   Ref,
 } from "react";
 import { useCallback, useRef } from "react";
+import { cn } from "../../cn.js";
 import { ChevronDownIcon } from "../../face/glyphs.js";
 import { BUTTON_VARIANT, Button, type ButtonVariant, IconButton } from "../button/button.js";
 import { Tooltip } from "../tooltip/hint.js";
@@ -68,6 +69,41 @@ export interface SplitButtonMenu {
   onClick: (event: MouseEvent<HTMLElement>) => void;
   ref?: Ref<HTMLButtonElement> | undefined;
 }
+
+/**
+ * The halves joined into one control, drawn from the box: no edge or corner
+ * between them, and the main part's fold, under a `--luke-fold` of `folded`
+ * a square around its glyph, its words drawn nowhere though a reader still
+ * has them, and of `bare` that square alone at the control's own corner,
+ * the chevron not drawn. Note that each is a child selector of the box's,
+ * which outweighs the halves' own utilities, so neither takes a class. The
+ * edge's ink is `split-button.css`'s, set as a button's inks are.
+ */
+const SPLIT_BOX = cn(
+  "luke-split-button inline-flex flex-none items-center min-w-0 max-w-full",
+  "[&>.luke-button:first-child]:border-e-0 [&>.luke-button:first-child]:rounded-e-none",
+  "[&>.luke-button:last-child]:rounded-s-none",
+  "fold-folded:[&>.luke-button:first-child]:w-control",
+  "fold-folded:[&>.luke-button:first-child]:p-0",
+  "fold-folded:[&>.luke-button:first-child_.luke-button-words]:sr-only",
+  "fold-bare:[&>.luke-button:first-child]:w-control",
+  "fold-bare:[&>.luke-button:first-child]:p-0",
+  "fold-bare:[&>.luke-button:first-child_.luke-button-words]:sr-only",
+  "fold-bare:[&>.luke-button:first-child]:border-e",
+  "fold-bare:[&>.luke-button:first-child]:rounded-control",
+  "fold-bare:[&>.luke-button:last-child]:hidden",
+);
+
+/** A filled look's halves, parted by a rule in its own ink. */
+const SPLIT_FILLED_RULE =
+  "[&>.luke-button:last-child]:border-s-[color-mix(in_srgb,var(--luke-button-ink)_30%,transparent)]";
+
+/** The looks drawn on a fill, whose halves a rule in their ink parts rather than a hairline. */
+const FILLED: ReadonlySet<ButtonVariant> = new Set([
+  BUTTON_VARIANT.PRIMARY,
+  BUTTON_VARIANT.DANGER,
+  BUTTON_VARIANT.INK,
+]);
 
 /** An act and, joined to it, the chevron that drops its options. */
 export function SplitButton({
@@ -135,7 +171,7 @@ export function SplitButton({
   );
   return (
     <span
-      className="luke-split-button"
+      className={cn(SPLIT_BOX, FILLED.has(variant) && SPLIT_FILLED_RULE)}
       data-variant={variant}
       onClickCapture={
         onMainPress === undefined

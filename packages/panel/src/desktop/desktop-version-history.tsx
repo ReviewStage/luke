@@ -1,6 +1,6 @@
 import { ACCOUNT_STATUS, type AccountSnapshot } from "@luke/credentials/snapshot";
 import type { CodingAgentSummary } from "@luke/features/coding-agent-wire";
-import { LINK_PLACE, linkOf } from "@luke/features/luke-link";
+import { LINK_PLACE, linkOf } from "@luke/features/link-grammar";
 import { sectionAnchors } from "@luke/features/mention-link";
 import { planSections } from "@luke/features/plan-document";
 import type { PlanRevisionLine } from "@luke/features/task-wire";

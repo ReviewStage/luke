@@ -5,7 +5,7 @@ import {
   inboxAttachmentIdsIn,
   inboxAttachmentOf,
 } from "./inbox-attachment-link.js";
-import { LINK_PLACE, readLink } from "./luke-link.js";
+import { LINK_PLACE, readLink } from "./link-grammar.js";
 
 /**
  * A picture in an Inbox item's words as its address: written under the

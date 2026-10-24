@@ -1013,6 +1013,29 @@ test("the Filter's Repository names each repository as the repository chip does,
   assert.deepEqual(offered, ["acme", "beta"]);
 });
 
+test("the Filter's Repository rows each hang the repository's card, its name with its owner under it", async () => {
+  const page = await mountPage([
+    ...TASKS,
+    { ...task(50, "Docs for web", TASK_STATUS.TODO, TASK_PRIORITY.NONE), repository: "beta/web" },
+  ]);
+
+  openOptions(page, "Filter");
+  choose("Repository");
+  const row = [
+    ...document.querySelectorAll<HTMLElement>('[role="menu"]:not([data-leaving]) .luke-menu-item'),
+  ].find((item) => item.querySelector(".luke-menu-item-detail")?.textContent === "beta");
+  restOn(row ?? assert.fail("the Filter offers beta/web"));
+  const card = document.querySelector(".luke-tooltip-card [data-repository-card]");
+
+  assert.deepEqual(
+    [
+      card?.querySelector(".luke-hover-card-name")?.textContent,
+      card?.querySelector(".luke-hover-card-sub")?.textContent,
+    ],
+    ["web", "beta"],
+  );
+});
+
 test("the Filter's Assignee and Creator list the members as every people menu does, you first as You and the rest by name with their email beside it, each hanging their card, and your own chip says You", async () => {
   fakeActPort({
     [ACT_KIND.WORKSPACE_MEMBERS_READ]: () =>

@@ -42,7 +42,7 @@
     "apps/desktop/src/main/ipc/register-desktop-ipc.ts",
     "apps/desktop/src/main/native/media-duck.ts",
     "apps/desktop/src/main/services/window-service.ts",
-    "apps/desktop/src/main/window/voice-window.ts",
+    "apps/desktop/src/main/window/renderer-revival.ts",
     "packages/panel/src/feedback-images.ts",
     "packages/panel/src/luke-face-mood.ts",
     "packages/panel/src/use-voice-notice.ts",

@@ -82,7 +82,7 @@ import { ACTOR_SIZE, ActorMark, actorCard, UnassignedMark } from "../actor-ref.j
 import { useMemberDirectory } from "../member-directory.js";
 import { memberRows } from "../member-rows.js";
 import { RepositoryPicture } from "../repository-picture.js";
-import { repositoryWords } from "../repository-row.js";
+import { RepositoryCard, repositoryWords } from "../repository-row.js";
 import {
   NO_ASSIGNEE_WORDS,
   TASK_PRIORITY_WORDS,
@@ -245,7 +245,7 @@ interface FieldValue {
   readonly icon: React.JSX.Element;
   /** Muted words beside the name in the menu, a repository's owner or a person's email or You; the chip names the value without them. */
   readonly detail?: string | undefined;
-  /** The card a person's row hangs. */
+  /** The card a person's or a repository's row hangs. */
   readonly card?: React.ReactNode;
 }
 
@@ -410,6 +410,7 @@ function fieldValues(
             value: repository,
             words: repositoryWords(repository).label,
             detail: repositoryWords(repository).detail,
+            card: <RepositoryCard repository={repository} pictures={pictures} />,
             icon: (
               <RepositoryPicture
                 repository={repository}

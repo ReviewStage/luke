@@ -117,11 +117,11 @@ import {
   type AgentPartCut,
   agentLines,
   agentListCallIds,
+  agentName,
   agentPart,
   agentParts,
   agentRows,
   agentStillWriting,
-  agentTabLabel,
   agentWorkingPhase,
   archivedByReading,
   CONTINUE_AGAIN_LABEL,
@@ -226,6 +226,7 @@ import { useAgentServers } from "./use-agent-servers.js";
 import { type AgentTranscriptControl, useAgentTranscript } from "./use-agent-transcript.js";
 import type { CodingAgentsControl } from "./use-coding-agents.js";
 import { useKnownNames, useTaskStatus } from "./use-known-names.js";
+import { useOpenLink } from "./use-open-link.js";
 import { type CutBody, useWholePart, useWholePartDoor, WholePartsProvider } from "./whole-parts.js";
 import { WorkedFor, WorkingLine } from "./working-time.js";
 
@@ -763,13 +764,15 @@ function TargetCallView({
   onOpen: () => void;
 }): ReactNode {
   const cards = useLiveDoors(doors)?.cards;
+  const openLink = useOpenLink();
   return (
     <OpeningCallView
       part={part}
       hint={TARGET_HINT[target.kind]}
       card={cards?.target(target, toolCallView(part).subject)}
       cards={cards}
-      onOpen={onOpen}
+      // Note that a pull request opens as a link to it does, in its Pull request tab where the place has one, so the row asks no window's `onOpenTarget`.
+      onOpen={target.kind === TOOL_TARGET.PULL_REQUEST ? () => openLink(target.url) : onOpen}
     />
   );
 }
@@ -2218,9 +2221,13 @@ function AgentTabView({
   const onRevert = useSteady(boxOpen ? composer.revert : undefined);
   // Note that the rewind doors stand as they were while what they say is unchanged, because every message
   // reads them, and a page that moved no rewind point must draw no message again.
+  const pending = composer.sent.length > 0;
   const points = useKept(
-    useMemo(() => rewindPoints(kept), [kept]),
-    (a, b) => sameSet(a.editable, b.editable) && sameEntries(a.revertsAt, b.revertsAt),
+    useMemo(() => rewindPoints(kept, pending), [kept, pending]),
+    (a, b) =>
+      sameSet(a.editable, b.editable) &&
+      sameEntries(a.revertsAt, b.revertsAt) &&
+      sameSet(a.followed, b.followed),
   );
   const editorNow = { agentId: agent.id, doors, keywords, skills, dictates: !onCall };
   const editorProps = useRef(editorNow);
@@ -2314,7 +2321,7 @@ function AgentTabView({
     [automationId, automationName, brief, run, tasked, openTarget, originStarter, steadyGitHub],
   );
   return (
-    <AgentTabFrame ref={tab} label={agentTabLabel(agent, models)}>
+    <AgentTabFrame ref={tab} label={agentName(agent, models)}>
       <MacOwnerProvider value={macOwner}>
         <AgentPicturesProvider value={pictures}>
           <WholePartsProvider value={wholeParts}>

@@ -65,7 +65,7 @@ import {
   type ConversationRuntime,
   MESSAGE_SENDER,
 } from "../storage-vocabulary.js";
-import { agentGivenNameSql } from "./agent-name.js";
+import { agentAutomationNameSql, agentGivenNameSql } from "./agent-name.js";
 import { InstantColumnSchema } from "./columns.js";
 import { waitOutConversationDispatch } from "./dispatch-lock.js";
 import {
@@ -381,7 +381,7 @@ const CODING_AGENT_LINE_COLUMNS = {
   taskId: codingAgent.taskId,
   organizationId: AGENT_WORKSPACE,
   automationId: codingAgent.automationId,
-  automationName: sql<string | null>`${codingAgent.automationOrigin} ->> 'name'`,
+  automationName: agentAutomationNameSql(codingAgent),
   startedFrom: codingAgent.startedFrom,
   conversationId: codingAgent.conversationId,
   model: codingAgent.model,
@@ -1302,7 +1302,7 @@ function containing(words: string): string {
 }
 
 /**
- * The name an agent is shown by, as `agentTabLabel` names it: Luke for an
+ * The name an agent is shown by, as `agentName` names it: Luke for an
  * operator, else its title, else the name of the automation whose run started
  * it, else its model. Note that the model is named as `modelLabel` spells an
  * id the catalog has not been read for, its provider dropped and its words
@@ -1998,7 +1998,7 @@ function workspaceRequest(userId: string, organizationId: string, options: Works
  * account's own where `ownOnly` asks, newest started first, an archived one
  * left out unless `includeArchived` asks,
  * only those on the repository named where one is, on the plan named
- * where one is, and whose shown name (`agentTabLabel`) or task's name holds each of
+ * where one is, and whose shown name (`agentName`) or task's name holds each of
  * the words where some are given, and at most `limit`; a workspace the account is not in has
  * none.
  */

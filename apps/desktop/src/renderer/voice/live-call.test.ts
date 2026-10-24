@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
+import { VOICE_FAILURE, type VoiceFailure } from "@luke/features/words";
 import {
   LIVE_PEER_END_REASON,
   LIVE_TRANSPORT_STATE,
@@ -270,7 +271,7 @@ function build(services: Context.Context<never>, options: FixtureOptions) {
   const statuses: LiveStatus[] = [];
   const speakers: LiveVoiceSpeakers[] = [];
   const captions: (readonly LiveCaptionRow[])[] = [];
-  const errors: (string | undefined)[] = [];
+  const errors: VoiceFailure[] = [];
   const offers: string[] = [];
   const transports: LiveTransportState[] = [];
   /** The reason each end of the peer was reported under, in order. */
@@ -457,6 +458,22 @@ it.effect(
       assert.equal(f.statuses.at(-1), LIVE_STATUS.MUTED);
       assert.equal(f.call.standing, true);
       assert.equal(f.call.listening, false);
+    }),
+);
+
+it.effect(
+  "a peer the browser refuses fails the call by its key alone: none of the browser's own text, which can quote the offer, reaches the call's events",
+  () =>
+    Effect.gen(function* () {
+      const f = yield* fixture();
+      f.peer.setLocalDescription = async () => {
+        throw new Error("Failed to parse SessionDescription. a=ice-pwd:hunter2 Invalid value");
+      };
+      const opening = yield* Effect.forkChild(f.call.open(OPENING));
+      yield* settle;
+      assert.equal(yield* Fiber.join(opening), false);
+      assert.deepEqual(f.errors, [VOICE_FAILURE.CALL_NOT_STARTED]);
+      assert.equal(f.statuses.at(-1), LIVE_STATUS.FAILED);
     }),
 );
 

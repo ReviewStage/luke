@@ -1,19 +1,27 @@
 import type { MentionLines } from "@luke/features/mention-link";
 import { THING_KIND, type Thing, type ThingKind, type ThingOf } from "@luke/features/thing-kind";
 import type { ReactNode } from "react";
+import { LukeCard } from "../actor-ref.js";
+import { tabCard } from "../desktop/tab-card.js";
 import {
   AutomationChipCard,
+  ChipCardSkeleton,
   PageChipCard,
   PersonChipCard,
   SectionChipCard,
-  TaskChipCard,
+  UnreadPageCard,
   VersionChipCard,
 } from "./chip-cards.js";
 import { FileCard } from "./file-ref.js";
 import { shortCommit } from "./file-tab-model.js";
 import { InboxItemChipCard } from "./inbox-item-chip.js";
-import { MentionedAgentCard } from "./mentioned-agent-card.js";
+import {
+  AgentPullRequestChipCard,
+  MentionedAgentCard,
+  PullRequestChipCard,
+} from "./mentioned-agent-card.js";
 import { ServerCard } from "./server-card.js";
+import { TAB_KIND } from "./tab-look.js";
 
 /**
  * thing-card.tsx -- the card a chip hangs for each kind of thing it names, one entry per kind (`@luke/features/thing-kind`).
@@ -23,13 +31,19 @@ import { ServerCard } from "./server-card.js";
  * it was written. The table is keyed by every `THING_KIND` and typed over
  * each kind's own `Thing`, so a kind added there fails to compile until it
  * says what card it hangs. A kind with no card of its own yet hangs the
- * chip's own, its glyph and name, and says so by name, `OWN_CARD`.
+ * chip's own, its glyph and name, and says so by name, `OWN_CARD`. A plan,
+ * an agent, and a pull request hang the card their own tab hangs
+ * (`tabCard`), wherever the chip stands. A card that reads what it shows
+ * as it is hung waits in one way whatever its kind (`ChipCardSkeleton`),
+ * and stands in with the chip's own only where the read answers nothing.
  */
 
 /** What a chip hands its thing's card: the card it draws of its own, and where it stands. */
 export interface ThingCardAt {
   /** The chip's own card, its glyph and its name, which a kind with none of its own hangs, and any card stands in with where the window holds nothing. */
   readonly own: ReactNode;
+  /** The chip's glyph, which a card waiting on its read wears. */
+  readonly glyph: ReactNode;
   /** The name the chip calls it by. */
   readonly name: string;
   /** The slug of the workspace the link was written under. */
@@ -64,6 +78,11 @@ function linesNote(lines: MentionLines | undefined): string | undefined {
   return `${span} at ${shortCommit(lines.commit)}`;
 }
 
+/** A card's one waiting state while what it shows is read: the chip's glyph and name over a line standing in for the rest. */
+function reading(at: ThingCardAt): ReactNode {
+  return <ChipCardSkeleton glyph={at.glyph} name={at.name} />;
+}
+
 /** An MCP server's card, or one of its tools': its server's row as the MCP popover draws it. */
 const SERVER_CARD: ThingCard<ThingOf<typeof THING_KIND.SERVER | typeof THING_KIND.TOOL>> = (
   server,
@@ -83,13 +102,15 @@ const AUTOMATION_CARD: ThingCard<
     automationId={automation.automationId}
     workspace={at.workspace}
     wordsWorkspaceId={at.wordsWorkspaceId}
+    reading={reading(at)}
     fallback={at.own}
   />
 );
 
 /** The card each kind hangs, as the window hangs it wherever it names the thing; the chip's own standing in where the window holds none. */
 export const THING_CARD: ThingCards = {
-  [THING_KIND.PLAN]: (plan, at) => <TaskChipCard taskId={plan.taskId} fallback={at.own} />,
+  [THING_KIND.PLAN]: (plan, at) =>
+    tabCard({ kind: TAB_KIND.PLAN, taskId: plan.taskId, name: at.name }),
   [THING_KIND.SECTION]: (section, at) => (
     <SectionChipCard
       taskId={section.taskId}
@@ -108,7 +129,8 @@ export const THING_CARD: ThingCards = {
     <PageChipCard
       place={"taskId" in page ? { taskId: page.taskId } : { agentId: page.agentId }}
       pageId={page.pageId}
-      fallback={at.own}
+      reading={reading(at)}
+      fallback={<UnreadPageCard glyph={at.glyph} name={at.name} />}
     />
   ),
   [THING_KIND.AGENT]: (agent, at) => (
@@ -117,13 +139,23 @@ export const THING_CARD: ThingCards = {
       taskId={agent.taskId}
       name={at.name}
       workspaceId={at.wordsWorkspaceId}
+      reading={reading(at)}
       fallback={at.own}
     />
   ),
   [THING_KIND.WORKER]: OWN_CARD,
-  [THING_KIND.LUKE]: OWN_CARD,
-  [THING_KIND.CHANGES]: OWN_CARD,
-  [THING_KIND.PULL_REQUEST]: OWN_CARD,
+  [THING_KIND.LUKE]: () => <LukeCard />,
+  [THING_KIND.CHANGES]: (changes, at) => (
+    <AgentPullRequestChipCard
+      agentId={changes.agentId}
+      taskId={changes.planId}
+      reading={reading(at)}
+      fallback={at.own}
+    />
+  ),
+  [THING_KIND.PULL_REQUEST]: (pullRequest, at) => (
+    <PullRequestChipCard url={pullRequest.url} reading={reading(at)} fallback={at.own} />
+  ),
   [THING_KIND.PULL_REQUEST_THREAD]: OWN_CARD,
   [THING_KIND.ISSUE]: OWN_CARD,
   [THING_KIND.LINK]: OWN_CARD,
@@ -136,7 +168,12 @@ export const THING_CARD: ThingCards = {
   [THING_KIND.SETTINGS]: OWN_CARD,
   // A person hangs their card as the members of the workspace their link names draw them.
   [THING_KIND.PERSON]: (person, at) => (
-    <PersonChipCard userId={person.userId} workspace={at.workspace} fallback={at.own} />
+    <PersonChipCard
+      userId={person.userId}
+      workspace={at.workspace}
+      reading={reading(at)}
+      fallback={at.own}
+    />
   ),
   [THING_KIND.CHAT]: OWN_CARD,
   [THING_KIND.ADMIN]: OWN_CARD,

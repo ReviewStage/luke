@@ -1,4 +1,4 @@
-import { LINK_PLACE, type ReadLink } from "@luke/features/luke-link";
+import { LINK_PLACE, type ReadLink } from "@luke/features/link-grammar";
 import type { Workspace } from "@luke/features/workspace-wire";
 import {
   SETTINGS_PAGE_LIST,

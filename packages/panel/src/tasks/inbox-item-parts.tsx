@@ -16,7 +16,7 @@ import {
   type InboxItem,
   recommendedLabels,
 } from "@luke/features/inbox-wire";
-import { LINK_PLACE } from "@luke/features/luke-link";
+import { LINK_PLACE } from "@luke/features/link-grammar";
 import type { CatalogModel } from "@luke/features/models-wire";
 import {
   Badge,
@@ -54,7 +54,7 @@ import { useMemberDirectory } from "../member-directory.js";
 import { GLYPH_STATE, StateGlyph } from "../state-glyph.js";
 import { APP_SLICE, useAppSlice } from "../use-app-state.js";
 import { AgentMarkRef, type AgentSubject, lineSubject, tasklessSubject } from "./agent-ref.js";
-import { AutomationChipCard, TaskChipCard } from "./chip-cards.js";
+import { AutomationChipCard, ChipCardSkeleton, TaskChipCard } from "./chip-cards.js";
 import { agentStillWriting, providerOf } from "./coding-agent-model.js";
 import {
   holderName,
@@ -320,6 +320,7 @@ function HolderRef({
               automationId={holder.automationId}
               workspace={workspaceId}
               wordsWorkspaceId={workspaceId}
+              reading={<ChipCardSkeleton glyph={glyph} name={name} />}
               fallback={fallback}
             />
           )

@@ -14,7 +14,7 @@ import { APP_SLICE, useAppSlice } from "./use-app-state.js";
  * asks waiting. The earliest is drawn, and the next takes its place as it
  * goes; the answer goes back by the ask's id, and the card goes as main
  * drops the ask, so one answered elsewhere or timed out leaves no card
- * standing.
+ * standing. An answer main refuses says why in a toast, as every press does.
  */
 
 /** The ask drawn: the earliest waiting, which main lists first. */
@@ -24,10 +24,10 @@ function firstAsk(asks: readonly MacCommandAsk[] | undefined): MacCommandAsk | u
 
 export function MacCommandAskDialog(): React.JSX.Element | null {
   const ask = firstAsk(useAppSlice(APP_SLICE.MAC_COMMANDS)?.asks);
-  const { tell } = useAct();
+  const { press } = useAct();
   if (ask === undefined) return null;
   const answer = (decision: MacCommandDecision) =>
-    tell(ACT_KIND.MAC_COMMAND_ANSWER, { id: ask.id, decision });
+    press(ACT_KIND.MAC_COMMAND_ANSWER, { id: ask.id, decision });
   return (
     <CommandAsk
       key={ask.id}

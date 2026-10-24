@@ -8,6 +8,8 @@
  */
 
 import { IDLE_TASKS_VIEW } from "@luke/features/tasks-view";
+import { VOICE_REMEDY, type VoiceRemedy } from "@luke/features/words";
+import { ACT_KIND } from "@luke/host/acts";
 import { callCard, callCardShown } from "@luke/ui/call-card-model";
 import {
   outputSilent,
@@ -30,6 +32,7 @@ import { useAct } from "./act.js";
 import { CallCardContext, type CallCardInput, callControls } from "./call/call-card.js";
 import { useCallCardVideo } from "./call/panel-avatar.js";
 import { useWindowFocused } from "./call/use-window-focused.js";
+import { useOpenApiKeys } from "./openai-key.js";
 import { APP_SLICE, useAppSlice } from "./use-app-state.js";
 import { useVoiceNotice } from "./use-voice-notice.js";
 import { fixtureVoice, useStandingVoiceView, useVoiceView } from "./use-voice-view.js";
@@ -45,6 +48,7 @@ const RUN_PROFILE_NAME = Atom.map(APP_SLICE.RUN, (run) => run?.profile);
 const NO_NOTICE: VoiceNoticeStripProps = {
   notice: { content: undefined, shown: false },
   onDismissHint: () => undefined,
+  onRemedy: () => undefined,
 };
 
 const VoiceNoticeContext = createContext<VoiceNoticeStripProps>(NO_NOTICE);
@@ -111,10 +115,26 @@ function VoiceNoticeLine({ children }: { children: ReactNode }): React.JSX.Eleme
   const onDismissHint = useCallback(() => {
     setHintDismissal({ at: Date.now(), stretch: silenceStretch });
   }, [silenceStretch]);
+  const { tell } = useAct();
+  const openApiKeys = useOpenApiKeys();
+  /** A failure's remedy, done where it is done: Settings for the OpenAI key, System Settings for the microphone. */
+  const onRemedy = useCallback(
+    (remedy: VoiceRemedy) => {
+      switch (remedy) {
+        case VOICE_REMEDY.ADD_OPENAI_KEY:
+          openApiKeys();
+          return;
+        case VOICE_REMEDY.ALLOW_MICROPHONE:
+          tell(ACT_KIND.MICROPHONE_OPEN_SETTINGS);
+          return;
+      }
+    },
+    [openApiKeys, tell],
+  );
   const { content, shown } = notice;
   const value = useMemo(
-    () => ({ notice: { content, shown }, onDismissHint }),
-    [content, shown, onDismissHint],
+    () => ({ notice: { content, shown }, onDismissHint, onRemedy }),
+    [content, shown, onDismissHint, onRemedy],
   );
   return <VoiceNoticeContext.Provider value={value}>{children}</VoiceNoticeContext.Provider>;
 }

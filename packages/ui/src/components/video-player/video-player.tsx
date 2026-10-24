@@ -302,7 +302,9 @@ export function VideoPlayer({
       tabIndex={-1}
       role="group"
       aria-label={VIDEO_LABEL.PLAYER}
-      onKeyDown={(event) => playerKey(event, video.current)}
+      // Note that the player hears a key before the control it lands on, because the scrubber's
+      // slider steps on an arrow itself and stands down only for a key already taken.
+      onKeyDownCapture={(event) => playerKey(event, video.current)}
     >
       {url === undefined ? null : (
         // Note that the player carries no captions track, because an agent's recording of its screen has no sound.

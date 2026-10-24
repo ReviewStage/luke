@@ -15,7 +15,8 @@ import { fakeService, LISTED_TASK } from "./support/fake-service";
  * shell's frame, which stands while the host in the tab waits on the
  * session, and the panel signed in takes its place once the session answers;
  * a tab whose host cannot stand takes the frame down rather than leave it
- * looking as though the panel were still coming. The second mount stands
+ * looking as though the panel were still coming, and says so with Reload
+ * rather than stand blank. The second mount stands
  * after the first, whose host never stood and so read no state, because the
  * panel's state read is the tab's once.
  */
@@ -42,7 +43,7 @@ function servedRoot(): HTMLElement {
   return root;
 }
 
-test("a tab whose host cannot stand takes the frame down and draws nothing", async () => {
+test("a tab whose host cannot stand takes the frame down and says so with Reload", async () => {
   vi.spyOn(console, "error").mockImplementation(() => undefined);
   const root = servedRoot();
   const unreachable = Layer.effect(
@@ -53,7 +54,17 @@ test("a tab whose host cannot stand takes the frame down and draws nothing", asy
   app = await mountWebApp(root, { httpClient: unreachable });
 
   assert.equal(app, undefined, "the host does not stand");
-  assert.equal(root.childElementCount, 0, "the frame is gone and nothing is drawn");
+  assert.equal(root.querySelector(".boot-frame"), null, "the frame is gone");
+  await vi.waitFor(() => {
+    assert.equal(
+      root.querySelector('[role="alert"]')?.textContent,
+      "This page could not be shown.Reload",
+    );
+  });
+  assert.deepEqual(
+    [...root.querySelectorAll("button")].map((button) => button.textContent),
+    ["Reload"],
+  );
 });
 
 test("the shell's frame stands while the session is read, and the signed-in panel replaces it", async () => {

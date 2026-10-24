@@ -1,4 +1,9 @@
+import { Checkbox } from "@base-ui/react/checkbox";
+import { CheckboxGroup } from "@base-ui/react/checkbox-group";
+import { Radio } from "@base-ui/react/radio";
+import { RadioGroup } from "@base-ui/react/radio-group";
 import type { ReactNode } from "react";
+import { cn } from "../../cn.js";
 import { PRESS_PULSE, pulsePress } from "../../press-pulse.js";
 import { STATUS_TONE, type StatusTone } from "../../status-tone.js";
 import { useClipped } from "../../use-clipped.js";
@@ -61,6 +66,18 @@ import { Badge } from "../badge/badge.js";
  *
  * The list owns its rows' spacing, type, and states. The caller holds the
  * value and answers every change with the values it asks for.
+ *
+ * A pick-one list is Base UI's `RadioGroup` of `Radio`s, a pick-several one
+ * its `CheckboxGroup` of `Checkbox`es, each row a native button
+ * (`nativeButton`) holding its words, so the roles, the checked state, and
+ * the `data-checked` a row is drawn by are Base UI's. What a press and a
+ * key do stays Luke's: Base UI checks a radio as focus lands on it, refuses
+ * Enter on a row, and has no press that takes a choice back or hears the
+ * checked row again, so the list answers its rows' presses and its arrows
+ * itself and stops Base UI's own handling of them
+ * (`preventBaseUIHandler`). Its rows are drawn in Tailwind utilities over
+ * `tailwind/theme.css`; `choice-list.css` keeps what must stay a sheet's,
+ * its header saying why.
  */
 
 /** How many options a list takes: exactly one, or any that apply. */
@@ -100,6 +117,106 @@ const STEP_KEYS = new Map([
   ["ArrowUp", -1],
   ["ArrowLeft", -1],
 ]);
+
+/**
+ * A list's box: a column of rows with no box of its own. Rows across stand
+ * side by side, pills wrap onto as many lines as they need, never jumping
+ * between a line's end and the line under it, and faces stand in a grid,
+ * four to a line. Each look names its own gap, so no two utilities set one.
+ */
+const LIST = "luke-choice-list min-w-0 m-0 p-0 [border:0] list-none";
+
+const LIST_LOOK = {
+  plain: "flex gap-1",
+  marked: "flex gap-1",
+  pill: "flex flex-row flex-wrap gap-1.5",
+  picture: "grid grid-cols-4 gap-x-2 gap-y-3",
+  card: "flex gap-2",
+} as const satisfies Record<ChoiceLook, string>;
+
+/**
+ * A row's box: a label, its detail, and what stands beside them in a line
+ * the width of its column. Note that a row draws the keyboard's ring inside
+ * itself, because the list scrolls in a dialog whose edge would cut a ring
+ * drawn outside; and that its fill, edge, and ink are `choice-list.css`'s,
+ * because a stepped-back region quiets them from the components layer,
+ * where a utility would outrank it.
+ */
+const ROW =
+  "luke-choice flex items-center gap-3 min-w-0 m-0 py-row-inset px-list-inset [border:0] rounded-control outline-offset-[calc(-1*var(--luke-focus-ring-width))] font-ui text-body text-left cursor-pointer in-data-[luke-profile=desktop]:cursor-default transition-[background-color] duration-(--luke-duration-hover) ease-motion-exit";
+
+/**
+ * Each look's own row. A pill's corners are half its one-line height
+ * rather than a full round, so a long option that wraps in a narrow column
+ * stands as a rounded box instead of swelling into an ellipse, while a short
+ * one is the same capsule as ever. A face is its picture over its name, in
+ * the type of what holds the list; a card's row is its head's radio alone,
+ * the card wearing the box.
+ */
+const ROW_LOOK = {
+  plain: "",
+  marked: "",
+  pill: "gap-icon-gap min-h-control py-1 px-3 rounded-[calc(var(--luke-control-height)/2)] text-caption leading-body",
+  picture: "flex-col gap-1 p-0 outline-none text-[length:inherit] leading-body",
+  card: "p-0",
+} as const satisfies Record<ChoiceLook, string>;
+
+/** A row standing beside the others shares the width, each as tall as the tallest. */
+const ROW_ACROSS = "flex-[1_1_0] items-start";
+
+/**
+ * A marked row's radio or checkbox, stood on the label's first line (in a
+ * card's head, on its centre): a ring at rest, filled once checked, a dot
+ * in a radio and a tick in a box.
+ */
+const CONTROL =
+  "luke-choice-control inline-grid flex-none place-items-center size-4 box-border border-[1.5px] border-solid transition-[background-color,border-color] duration-(--luke-duration-hover) ease-motion-exit";
+
+/**
+ * A checked control's fill: the accent, or what picking it means, going
+ * ahead or holding back, its dot or tick in the ground's ink, which reads
+ * on either.
+ */
+const CONTROL_ACCENT_FILL = "border-accent-fill bg-accent-fill";
+
+/** A checked control's fill in its row's status tone (`tokens/status-tone.css`). */
+const CONTROL_TONE_FILL = "border-tone-ink bg-tone-ink";
+
+const CONTROL_MARK = {
+  radio: "after:size-1.5 after:rounded-[50%] after:content-['']",
+  box: "after:w-2 after:h-1 after:mt-[-2px] after:border-b-2 after:border-l-2 after:[transform:rotate(-45deg)] after:content-['']",
+} as const;
+
+const CONTROL_INK = {
+  radio: { accent: "after:bg-on-accent", toned: "after:bg-ground" },
+  box: { accent: "after:border-on-accent", toned: "after:border-ground" },
+} as const;
+
+/**
+ * A face's picture, round, ringed in the strong hairline, which thickens
+ * under the pointer and turns the switch's accent once picked. The
+ * keyboard's ring is drawn on the picture, outside the picked ring, since
+ * the face itself has no box to ring (`choice-list.css`).
+ */
+const FACE =
+  "overflow-hidden w-full max-w-[88px] aspect-square rounded-[50%] bg-border transition-[box-shadow] duration-(--luke-duration-hover) ease-motion-exit [&_img]:block [&_img]:size-full [&_img]:object-cover [&_img]:object-[50%_25%] [:hover:not(:disabled)>&]:[box-shadow:0_0_0_2px_var(--luke-color-border-strong)]";
+
+const FACE_RING = {
+  rest: "[box-shadow:inset_0_0_0_1px_var(--luke-color-border-strong)]",
+  picked: "[box-shadow:0_0_0_2px_var(--luke-color-switch-on)]",
+} as const;
+
+/**
+ * A card holds its radio, what it says at the head's end, and controls of
+ * its own under them, ringed once picked, and steps back whole while its
+ * option is unavailable.
+ */
+const CARD = "luke-choice-card flex flex-col gap-2 p-3 rounded-control";
+
+const CARD_RING = {
+  rest: "[box-shadow:inset_0_0_0_1px_var(--luke-color-border)]",
+  picked: "[box-shadow:inset_0_0_0_1px_var(--luke-color-border-selected)]",
+} as const;
 
 /** One option: the value it chooses, its words, and what stands beside them. */
 export interface ChoiceOption<Value extends string> {
@@ -172,11 +289,11 @@ export interface ChoiceListSettled<Value extends string> extends ChoiceListBase<
   pickedNote: ReactNode;
 }
 
-/** The check before a picked row's note, in the note's own ink. */
-function PickedCheck(): React.JSX.Element {
+/** The check before a picked row's note, or before a picked pill's words, in the ink around it. */
+function PickedCheck({ className }: { className: string }): React.JSX.Element {
   return (
     <svg
-      className="luke-choice-check"
+      className={cn("luke-choice-check size-3 align-[-1px]", className)}
       viewBox="0 0 24 24"
       fill="none"
       stroke="currentColor"
@@ -205,32 +322,64 @@ function afterPress<Value extends string>(
   return props.clearable === true ? [] : undefined;
 }
 
-/** A row's words: its label with the badge at its top right, its number after that, and anything the caller hangs after the label, then its detail. */
+/** How a label shares its head with what stands at its end. */
+function labelFlex(option: ChoiceOption<string>, look: ChoiceLook | undefined): string {
+  // Note that a pill sizes to its words, and that only a badge asks a label for a measure, since a number alone stands beside any label.
+  if (look === CHOICE_LOOK.PILL) return "flex-initial";
+  return option.badge === undefined ? "flex-[1_1_0]" : "flex-[1_1_10em]";
+}
+
+/**
+ * A row's words: its label with the badge at its top right, its number after that, and anything the caller hangs after the label, then its detail.
+ *
+ * The badge stands at the label's top right while the label keeps a
+ * readable measure beside it; in a column too narrow for both, a side
+ * panel's or a phone's, the badge and the number drop to a line of their
+ * own under the label rather than squeezing it to a word a line. A word too
+ * long for its line, a path or an identifier, still breaks anywhere rather
+ * than pushing past the row's edge. Note that the detail's ink is
+ * `choice-list.css`'s, which a stepped-back region quiets.
+ */
 function ChoiceWords({
   option,
   tone,
+  look,
   after,
   number,
 }: {
   option: ChoiceOption<string>;
   tone: StatusTone;
+  look?: ChoiceLook | undefined;
   after?: ReactNode;
   number?: number | undefined;
 }): React.JSX.Element {
   const hung = after ?? option.after;
   return (
-    <span className="luke-choice-words">
-      <span className="luke-choice-head">
-        <span className="luke-choice-label">
+    <span
+      className={cn(
+        "luke-choice-words flex flex-col gap-0.5 min-w-0",
+        look === CHOICE_LOOK.CARD ? "flex-initial" : "flex-auto",
+      )}
+    >
+      <span className="luke-choice-head flex flex-wrap items-start justify-between gap-x-2 gap-y-1">
+        <span
+          className={cn(
+            "luke-choice-label min-w-0 font-label wrap-anywhere",
+            labelFlex(option, look),
+          )}
+        >
           {option.label}
           {hung}
         </span>
         {option.badge === undefined && number === undefined ? null : (
-          <span className="luke-choice-end">
+          <span className="luke-choice-end inline-flex flex-none items-center gap-2">
             {option.badge === undefined ? null : <Badge tone={tone}>{option.badge}</Badge>}
             {/* The number is the row's key, which the row says to a reader as its key shortcut. */}
             {number === undefined ? null : (
-              <span className="luke-choice-number" aria-hidden="true">
+              <span
+                className="luke-choice-number min-w-[1ch] text-muted-foreground text-caption leading-body tabular-nums text-center"
+                aria-hidden="true"
+              >
                 {number}
               </span>
             )}
@@ -238,19 +387,116 @@ function ChoiceWords({
         )}
       </span>
       {option.detail === undefined ? null : (
-        <span className="luke-choice-detail">{option.detail}</span>
+        <span className="luke-choice-detail text-caption">{option.detail}</span>
       )}
     </span>
   );
 }
 
-/** A face's name under its picture, faded where the face is too narrow to hold it. */
-function PictureName({ name }: { name: string }): React.JSX.Element {
+/** A face's name under its picture, faded where the face is too narrow to hold it, and set in the full ink once picked. */
+function PictureName({ name, picked }: { name: string; picked: boolean }): React.JSX.Element {
   const [box, clipped] = useClipped(name);
   return (
-    <span ref={box} className="luke-choice-name" data-overflow={String(clipped)}>
+    <span
+      ref={box}
+      className={cn(
+        "luke-choice-name overflow-hidden max-w-full text-caption leading-body whitespace-nowrap",
+        picked && "text-foreground font-emphasis",
+      )}
+      data-overflow={String(clipped)}
+    >
       {name}
     </span>
+  );
+}
+
+/** A marked row's radio or checkbox, filled in the accent, or in its tone, once checked. */
+function ChoiceControl({
+  radio,
+  checked,
+  tone,
+  inCard,
+}: {
+  radio: boolean;
+  checked: boolean;
+  tone: StatusTone | undefined;
+  inCard: boolean;
+}): React.JSX.Element {
+  const shape = radio ? "radio" : "box";
+  // Note that a neutral tone says nothing of what picking means, so its control fills in the accent.
+  const toned = tone !== undefined && tone !== STATUS_TONE.NEUTRAL;
+  return (
+    <span
+      className={cn(
+        CONTROL,
+        radio ? "rounded-[50%]" : "rounded-choice-box",
+        // Note that an unsaved credential's radio in a card cannot be picked, so its ring steps back while its label stays readable.
+        inCard
+          ? "mt-0 self-center [:disabled>&]:opacity-40"
+          : "self-start mt-[calc((var(--luke-type-body-leading)-var(--luke-space-16))/2)]",
+        !checked && "border-muted-foreground",
+        checked && (toned ? CONTROL_TONE_FILL : CONTROL_ACCENT_FILL),
+        checked && CONTROL_MARK[shape],
+        checked && CONTROL_INK[shape][toned ? "toned" : "accent"],
+      )}
+      data-shape={shape}
+      aria-hidden="true"
+    />
+  );
+}
+
+/** What a row holds, by its look: a pill's check, a marked row's control, a mark, and its words or a face's name. */
+function RowInside({
+  radio,
+  option,
+  checked,
+  look,
+  number,
+  badgeTone,
+}: {
+  radio: boolean;
+  option: ChoiceOption<string>;
+  checked: boolean;
+  look: ChoiceLook;
+  number: number | undefined;
+  badgeTone: StatusTone;
+}): React.JSX.Element {
+  const picture = look === CHOICE_LOOK.PICTURE;
+  return (
+    <>
+      {look === CHOICE_LOOK.PILL ? (
+        <PickedCheck className={cn("flex-none m-0", checked ? "block" : "hidden")} />
+      ) : null}
+      {look === CHOICE_LOOK.MARKED || look === CHOICE_LOOK.CARD ? (
+        <ChoiceControl
+          radio={radio}
+          checked={checked}
+          tone={option.tone}
+          inCard={look === CHOICE_LOOK.CARD}
+        />
+      ) : null}
+      {option.mark === undefined ? null : (
+        <span
+          className={cn(
+            "luke-choice-mark inline-flex flex-none",
+            picture && FACE,
+            picture && (checked ? FACE_RING.picked : FACE_RING.rest),
+          )}
+        >
+          {option.mark}
+        </span>
+      )}
+      {picture ? (
+        <PictureName name={option.label} picked={checked} />
+      ) : (
+        <ChoiceWords
+          option={option}
+          tone={option.badgeTone ?? badgeTone}
+          look={look}
+          number={number}
+        />
+      )}
+    </>
   );
 }
 
@@ -261,7 +507,9 @@ function ChoiceRow({
   checked,
   tabStop,
   disabled,
+  dims,
   look,
+  across,
   number,
   focusRef,
   badgeTone,
@@ -272,7 +520,10 @@ function ChoiceRow({
   checked: boolean;
   tabStop: boolean;
   disabled: boolean;
+  /** Whether an unavailable row fades, which a read-only list's and a card's do not. */
+  dims: boolean;
   look: ChoiceLook;
+  across: boolean;
   /** The badge's tone where the option names none. */
   badgeTone: StatusTone;
   /** The row's key, counted from one, where the list is numbered and the row among its first nine. */
@@ -280,15 +531,26 @@ function ChoiceRow({
   focusRef: React.RefObject<HTMLButtonElement | null> | undefined;
   onPress: () => void;
 }): React.JSX.Element {
+  const card = look === CHOICE_LOOK.CARD;
   const attributes = {
     ref: focusRef,
-    type: "button",
+    render: <button type="button" />,
+    nativeButton: true,
+    value: option.value,
     tabIndex: tabStop ? 0 : -1,
-    className: "luke-choice",
+    className: cn(
+      ROW,
+      ROW_LOOK[look],
+      across && !card && ROW_ACROSS,
+      "disabled:cursor-default",
+      dims && "disabled:opacity-40",
+    ),
     "data-tone": option.tone,
     disabled,
     "aria-keyshortcuts": number === undefined ? undefined : String(number),
-    onClick: (event: React.MouseEvent<HTMLButtonElement>) => {
+    onClick: (event: React.MouseEvent<HTMLElement> & { preventBaseUIHandler: () => void }) => {
+      // Note that the list answers the press itself, because Base UI's own takes no choice back.
+      event.preventBaseUIHandler();
       // Note that a row's radio or box is what gives, as a checkbox's box does; a pill gives whole, a picture a little.
       const control = event.currentTarget.querySelector<HTMLElement>(
         ":scope > .luke-choice-control",
@@ -301,55 +563,58 @@ function ChoiceRow({
         );
       onPress();
     },
+    // Note that Enter presses a row as a button's Enter does, which Base UI's radio and checkbox refuse.
+    onKeyDown: (event: React.KeyboardEvent<HTMLElement> & { preventBaseUIHandler: () => void }) => {
+      if (event.key === "Enter") event.preventBaseUIHandler();
+    },
+    // Note that focus landing on a radio chooses nothing, because the arrows choose for themselves.
+    onFocus: (event: React.FocusEvent<HTMLElement> & { preventBaseUIHandler: () => void }) => {
+      event.preventBaseUIHandler();
+    },
   } as const;
-  const words = (
-    <>
-      {look === CHOICE_LOOK.PILL ? <PickedCheck /> : null}
-      {look === CHOICE_LOOK.MARKED || look === CHOICE_LOOK.CARD ? (
-        <span
-          className="luke-choice-control"
-          data-shape={radio ? "radio" : "box"}
-          aria-hidden="true"
-        />
-      ) : null}
-      {option.mark === undefined ? null : <span className="luke-choice-mark">{option.mark}</span>}
-      {look === CHOICE_LOOK.PICTURE ? (
-        <PictureName name={option.label} />
-      ) : (
-        <ChoiceWords option={option} tone={option.badgeTone ?? badgeTone} number={number} />
-      )}
-    </>
+  const inside = (
+    <RowInside
+      radio={radio}
+      option={option}
+      checked={checked}
+      look={look}
+      number={number}
+      badgeTone={badgeTone}
+    />
   );
-  // Note that each role is spelled out, because a role read off a value is one the accessibility lint cannot check.
   const row = radio ? (
-    // biome-ignore lint/a11y/useSemanticElements: a row is drawn as a button holding a label, a detail, and a badge, which a native radio cannot be, and speaks as the radio it behaves as.
-    <button role="radio" aria-checked={checked} {...attributes}>
-      {words}
-    </button>
+    <Radio.Root {...attributes}>{inside}</Radio.Root>
   ) : (
-    // biome-ignore lint/a11y/useSemanticElements: a row is drawn as a button holding a label, a detail, and a badge, which a native checkbox cannot be, and speaks as the checkbox it behaves as.
-    <button role="checkbox" aria-checked={checked} {...attributes}>
-      {words}
-    </button>
+    <Checkbox.Root {...attributes}>{inside}</Checkbox.Root>
   );
-  if (look !== CHOICE_LOOK.CARD) return row;
+  if (!card) return row;
   return (
     <div
-      className="luke-choice-card"
+      className={cn(
+        CARD,
+        checked ? CARD_RING.picked : CARD_RING.rest,
+        option.detail !== undefined && "opacity-55",
+      )}
       data-checked={checked}
       data-unavailable={option.detail === undefined ? undefined : true}
     >
-      <div className="luke-choice-card-head">
+      <div className="luke-choice-card-head flex items-center justify-between gap-2">
         {row}
         {option.aside === undefined ? null : (
-          <span className="luke-choice-aside">{option.aside}</span>
+          <span className="luke-choice-aside text-caption-inline">{option.aside}</span>
         )}
       </div>
       {option.below === undefined || option.below === null ? null : (
-        <div className="luke-choice-card-body">{option.below}</div>
+        <div className="luke-choice-card-body flex flex-col gap-1.5">{option.below}</div>
       )}
     </div>
   );
+}
+
+/** The list's own box, by its look and flow. */
+function listClass(look: ChoiceLook, flow: ChoiceFlow): string {
+  const down = look !== CHOICE_LOOK.PILL && flow === CHOICE_FLOW.DOWN;
+  return cn(LIST, LIST_LOOK[look], down ? "flex-col" : "flex-row");
 }
 
 /** The rows as a radio group or a group of checkboxes. */
@@ -379,9 +644,14 @@ function OpenChoices<Value extends string>(props: ChoiceListOpen<Value>): React.
     else if (one) props.onPressChecked?.(pressed);
   };
   // An arrow chooses the next open row along and takes the keyboard there, wrapping at either end.
-  const onKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
+  const onKeyDown = (
+    event: React.KeyboardEvent<HTMLElement> & { preventBaseUIHandler: () => void },
+  ) => {
     const step = STEP_KEYS.get(event.key);
-    if (step === undefined || open.length === 0 || still) return;
+    if (step === undefined) return;
+    // Note that Base UI's own arrows never run, so a key pressed in a card's controls stays theirs.
+    event.preventBaseUIHandler();
+    if (open.length === 0 || still) return;
     // Note that a key pressed in a card's own controls is theirs, not the group's.
     if (!(event.target instanceof HTMLElement) || event.target.getAttribute("role") !== "radio") {
       return;
@@ -398,7 +668,7 @@ function OpenChoices<Value extends string>(props: ChoiceListOpen<Value>): React.
     radios[options.indexOf(next)]?.focus();
   };
   // An arrow along a pick-several list moves the keyboard to the next open row and toggles nothing.
-  const onBoxKeyDown = (event: React.KeyboardEvent<HTMLFieldSetElement>) => {
+  const onBoxKeyDown = (event: React.KeyboardEvent<HTMLElement>) => {
     const step = STEP_KEYS.get(event.key);
     if (step === undefined || still) return;
     const boxes = [
@@ -419,46 +689,43 @@ function OpenChoices<Value extends string>(props: ChoiceListOpen<Value>): React.
       checked={value.includes(option.value)}
       tabStop={!one || option === landing}
       disabled={still || option.disabled === true}
+      dims={!readOnly && look !== CHOICE_LOOK.CARD}
       look={look}
+      across={flow === CHOICE_FLOW.ACROSS}
       number={numbered && index < CHOICE_NUMBERED_ROWS ? index + 1 : undefined}
       focusRef={option === landing ? focusRef : undefined}
       badgeTone={readOnly ? STATUS_TONE.NEUTRAL : STATUS_TONE.ATTENTION}
       onPress={() => press(option.value)}
     />
   ));
+  const group = {
+    "aria-label": legend,
+    "aria-describedby": describedBy,
+    "aria-invalid": invalid,
+    "aria-busy": busy,
+    className: listClass(look, flow),
+    "data-flow": flow,
+    "data-look": look,
+    "data-read-only": readOnly || undefined,
+  };
   if (!one) {
     return (
-      <fieldset
-        aria-label={legend}
-        aria-describedby={describedBy}
-        aria-invalid={invalid}
-        aria-busy={busy}
-        className="luke-choice-list"
-        data-flow={flow}
-        data-look={look}
-        data-read-only={readOnly || undefined}
-        onKeyDown={onBoxKeyDown}
-      >
+      <CheckboxGroup {...group} render={<fieldset />} value={[...value]} onKeyDown={onBoxKeyDown}>
         {rows}
-      </fieldset>
+      </CheckboxGroup>
     );
   }
   return (
-    <div
-      role="radiogroup"
-      aria-label={legend}
-      aria-describedby={describedBy}
-      aria-invalid={invalid}
-      aria-busy={busy}
-      aria-readonly={readOnly || undefined}
-      className="luke-choice-list"
-      data-flow={flow}
-      data-look={look}
-      data-read-only={readOnly || undefined}
+    <RadioGroup
+      {...group}
+      value={value[0] ?? null}
+      readOnly={readOnly || undefined}
       onKeyDown={onKeyDown}
+      // Note that focus landing in a card's own field keeps its caret, which Base UI's group would select across.
+      onFocus={(event) => event.preventBaseUIHandler()}
     >
       {rows}
-    </div>
+    </RadioGroup>
   );
 }
 
@@ -470,21 +737,22 @@ function SettledChoices<Value extends string>({
   pickedNote,
 }: ChoiceListSettled<Value>): React.JSX.Element {
   return (
-    <ul aria-label={legend} className="luke-choice-list">
+    <ul aria-label={legend} className={listClass(CHOICE_LOOK.PLAIN, CHOICE_FLOW.DOWN)}>
       {options.map((option) => {
         const picked = value.includes(option.value);
         return (
-          <li key={option.value} className="luke-choice" data-picked={picked}>
+          <li key={option.value} className={ROW} data-picked={picked}>
             {option.mark === undefined ? null : (
-              <span className="luke-choice-mark">{option.mark}</span>
+              <span className="luke-choice-mark inline-flex flex-none">{option.mark}</span>
             )}
             <ChoiceWords
               option={option}
               tone={STATUS_TONE.NEUTRAL}
               after={
                 picked ? (
-                  <span className="luke-choice-picked">
-                    <PickedCheck />
+                  // Note that the note runs inline in the label's line, so its smaller words share the label's baseline rather than a box's centre.
+                  <span className="luke-choice-picked ml-2 text-muted-foreground text-caption leading-body font-caption whitespace-nowrap">
+                    <PickedCheck className="mr-0.5" />
                     {pickedNote}
                   </span>
                 ) : null

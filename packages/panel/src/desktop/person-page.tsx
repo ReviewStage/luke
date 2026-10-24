@@ -4,7 +4,7 @@ import {
   automationTriggerText,
 } from "@luke/features/automation-list-model";
 import { AUTOMATION_SCOPE, type AutomationSummary } from "@luke/features/automation-wire";
-import { LINK_PLACE, linkOf } from "@luke/features/luke-link";
+import { LINK_PLACE, linkOf } from "@luke/features/link-grammar";
 import type { TaskSummary } from "@luke/features/task-wire";
 import { WORKSPACE_ROLE } from "@luke/features/workspace-wire";
 import { SETTINGS_SECTION, SETTINGS_VIEW } from "@luke/settings/settings-views";

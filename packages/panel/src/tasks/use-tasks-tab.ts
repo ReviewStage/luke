@@ -15,7 +15,7 @@ import type {
   RepositoryIssuesAsk,
 } from "@luke/features/github-repositories-wire";
 import type { LinearIssueSummary } from "@luke/features/linear-wire";
-import { LINK_PLACE, type ReadLink } from "@luke/features/luke-link";
+import { LINK_PLACE, type ReadLink } from "@luke/features/link-grammar";
 import { MENTION_KIND, type PlanMention } from "@luke/features/mention-link";
 import type { CatalogModel, ModelChoice } from "@luke/features/models-wire";
 import type { PageLine } from "@luke/features/page-wire";
@@ -170,9 +170,9 @@ import {
 } from "./closed-tabs.js";
 import { useCloudBrowserDrafts, useCloudBrowserTabs } from "./cloud-browser-tabs.js";
 import {
+  agentName,
   startFailureNote as agentStartFailureNote,
   agentStillWriting,
-  agentTabLabel,
   choiceRequest,
   openingLineOf,
   type SentLine,
@@ -1756,7 +1756,7 @@ export function useTasksTab(input: {
   const pinLabels = useMemo(
     () => ({
       agents: new Map(
-        (agents.agents ?? []).map((agent) => [agent.id, agentTabLabel(agent, agents.models)]),
+        (agents.agents ?? []).map((agent) => [agent.id, agentName(agent, agents.models)]),
       ),
       pullRequests: new Map(
         [...agents.pullRequests].map(([agentId, pullRequest]) => [

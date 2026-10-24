@@ -3,7 +3,15 @@ import {
   type CodingAgentAttachment,
   type CodingAgentMessage,
 } from "@luke/features/coding-agent-wire";
-import { BUTTON_SIZE, BUTTON_VARIANT, Button } from "@luke/ui";
+import {
+  BUTTON_SIZE,
+  BUTTON_VARIANT,
+  Button,
+  ConfirmDialog,
+  type DialogQuestion,
+  useConfirmDialog,
+} from "@luke/ui";
+import { ACTION_RESULT_STATUS } from "@luke/wire";
 import { type ReactNode, useEffect, useReducer, useRef, useState } from "react";
 import { AgentComposer } from "./agent-composer.js";
 import { LinePicturesWatch, useLineAttachments } from "./agent-pictures.js";
@@ -24,11 +32,20 @@ import type { AgentComposerControl } from "./use-agent-composer.js";
  * or Escape where no list or dictation takes it, closes it and sends
  * nothing; Send hands the words and files on to go in the line's place.
  * Its draft is its own and kept nowhere, so the foot's box keeps whatever
- * it held.
+ * it held. Where messages follow the line, Send asks first, as Revert to here
+ * does, since the send drops them and what it drops is gone.
  */
 
 /** What the foot's Cancel says. */
 const CANCEL_WORDS = "Cancel";
+
+/** What Send asks before it drops the messages after the line. */
+const SEND_QUESTION: DialogQuestion = {
+  title: "Send the edited message?",
+  body: "Everything after it will be removed from the conversation, and the agent stopped if it is working. Changes the agent made to its files stay as they are.",
+  verb: "Send",
+  running: "Sending",
+};
 
 /** What the box hands on as it sends, and the doors it is drawn with beside the tab's own box. */
 export interface EditComposerDoors {
@@ -37,6 +54,8 @@ export interface EditComposerDoors {
   readonly keywords?: readonly string[] | undefined;
   readonly skills?: SkillSource | undefined;
   readonly dictates: boolean;
+  /** Whether messages follow the line, which its send drops, so Send asks first. */
+  readonly cuts: boolean;
   readonly onCancel: () => void;
   readonly onSend: (words: string, attachments: readonly CodingAgentAttachment[]) => void;
 }
@@ -68,6 +87,11 @@ export function EditComposer({
     for (const each of landed) offered.current.add(each.key);
     setAttachments((held) => [...held, ...landed.map((each) => each.attachment)]);
   }, [line.attachments]);
+  // Note that the send answers at once: the tab takes it in turn behind any send, and says there if it did not go.
+  const confirm = useConfirmDialog({ subject: edit.cuts, surfaceOpen: true }, () => {
+    edit.onSend(draft, attachments);
+    return Promise.resolve({ status: ACTION_RESULT_STATUS.ACCEPTED });
+  });
   const composer: AgentComposerControl = {
     draft,
     setDraft,
@@ -78,7 +102,9 @@ export function EditComposer({
     closed: undefined,
     // Note that the box sends nothing while one of the line's pictures is still read, which it would leave behind.
     send: () => {
-      if (!line.reading) edit.onSend(draft, attachments);
+      if (line.reading) return;
+      if (edit.cuts) confirm.ask();
+      else edit.onSend(draft, attachments);
     },
     retry: noop,
     sent: [],
@@ -111,6 +137,7 @@ export function EditComposer({
           </Button>
         )}
       />
+      <ConfirmDialog confirm={confirm} question={SEND_QUESTION} />
     </>
   );
 }

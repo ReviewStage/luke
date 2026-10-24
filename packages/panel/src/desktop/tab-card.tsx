@@ -65,6 +65,8 @@ export type CardSubject =
       readonly kind: typeof TAB_KIND.AGENT;
       readonly subject: AgentSubject;
       readonly models: readonly CatalogModel[] | undefined;
+      /** What a place that holds no tab of the agent says under a rule, the task it works on; none where its tab stands beside it. */
+      readonly foot?: string | undefined;
     }
   | {
       readonly kind: typeof TAB_KIND.SUBAGENT;
@@ -204,7 +206,7 @@ export function tabCard(subject: CardSubject): React.JSX.Element | null {
     case TAB_KIND.MAC_TERMINAL:
       return null;
     case TAB_KIND.AGENT:
-      return <AgentCard subject={subject.subject} models={subject.models} />;
+      return <AgentCard subject={subject.subject} models={subject.models} foot={subject.foot} />;
     case TAB_KIND.SUBAGENT:
       return (
         <AgentTabCard

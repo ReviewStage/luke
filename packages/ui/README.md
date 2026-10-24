@@ -163,6 +163,24 @@ an open menu by the edge of the button it hangs from as that button grows;
 it, `PopoverPanel`, the hover card's parts, `DrawerScrim`, and `PortalFence`
 are drawn in the theme's utilities.
 
+The buttons and toggles: `Button`, `IconButton`, and `ButtonLink` stand on
+shadcn's button, which `SplitButton` and `FoldingButton` join and fold;
+`LineButton` and `TextButton` on Base UI's button; `Checkbox` and `Slider` on
+shadcn's checkbox and slider; `ChoiceBar` on Base UI's toggle group and
+`ChoiceList` on its radio and checkbox groups, each keeping its own keys.
+`Tabs` keeps its own strip, since an editor's strip, choosing with Return,
+closing with Delete, and reordering, is not what Base UI's tabs are for; its
+plain looks are drawn in the theme.
+
+A component's own sheet keeps what another sheet restyles it by from the
+`components` layer, which a utility would outrank (a button's
+`--luke-button-*` inks, a choice row's fill under a stepped-back region), and
+what Tailwind has no words for (keyframes, scroll-state and style queries).
+The theme's custom variants say a control's conditions beside its states:
+`pointer-coarse:`, `fold-folded:`, `fold-bare:`, `fold-tight:`, and shadcn's
+`data-horizontal:` and `data-vertical:`. `cn` is told the theme's own sizes,
+or tailwind-merge reads `text-label` as an ink.
+
 ## Icons
 
 Every icon is imported through one door, `@luke/ui/icons`, built on Lucide

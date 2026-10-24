@@ -5,8 +5,13 @@ import {
   dateWhole,
   readerZone,
 } from "@luke/features/date-mention";
-import { issueAddressOf, pullRequestAddressOf } from "@luke/features/github-repositories-wire";
-import { LINK_PLACE, type LinkPlace, readLink } from "@luke/features/luke-link";
+import {
+  issueAddressOf,
+  LINK_PLACE,
+  type LinkPlace,
+  pullRequestAddressOf,
+  readLink,
+} from "@luke/features/link-grammar";
 import {
   decodeMention,
   encodeMention,
@@ -104,7 +109,7 @@ import { useWordsDates } from "./words-dates.js";
  * having left, as the workspace's members around the chip say
  * (`../member-directory.tsx`), and opens their page in the workspace. A
  * link to any other place in Luke, an Inbox item, an
- * automation, an agent's message (`@luke/features/luke-link`), is drawn as
+ * automation, an agent's message (`@luke/features/link-grammar`), is drawn as
  * the same chip, wearing the place's glyph and named as the window already
  * knows it (`@luke/features/place-chip-model`): the words it was labelled
  * with, else the place's own name, else its kind. A plan, a section, a
@@ -358,19 +363,20 @@ function MentionCard({
   if (changesCard !== undefined) return changesCard;
   const whole = mention.kind === MENTION_KIND.FOLDER ? `${mention.path}/` : name;
   const note = noteOf(mention, state, doors.taskId, standing);
+  const glyph = (
+    <MentionGlyph
+      mention={mention}
+      target={target}
+      name={name}
+      doors={doors}
+      known={known}
+      standing={standing}
+    />
+  );
   const card = (
     <HoverCard data-mention-card="">
       <HoverCardHead
-        glyph={
-          <MentionGlyph
-            mention={mention}
-            target={target}
-            name={name}
-            doors={doors}
-            known={known}
-            standing={standing}
-          />
-        }
+        glyph={glyph}
         name={standing?.title ?? whole}
         sub={mention.kind === MENTION_KIND.FOLDER ? repository : undefined}
       />
@@ -403,6 +409,7 @@ function MentionCard({
   // Note that what the mention names hangs the card the window hangs for it elsewhere, its own card standing in where the window holds none.
   return thingCard(thingOfMention(mention), {
     own: card,
+    glyph,
     name,
     workspace: readLink(target)?.workspace ?? doors.place.workspace,
     wordsWorkspaceId: workspaceId,
@@ -719,7 +726,9 @@ function PlaceChip({
       {under === undefined ? null : <HoverCardNote>{`In ${under}`}</HoverCardNote>}
     </HoverCard>
   );
-  const card = <PlaceCard place={place} workspace={workspace} name={name} fallback={own} />;
+  const card = (
+    <PlaceCard place={place} workspace={workspace} name={name} glyph={glyph} fallback={own} />
+  );
   return (
     <InlineRef
       look={INLINE_REF_LOOK.PILL}
@@ -749,11 +758,14 @@ function PlaceCard({
   place,
   workspace,
   name,
+  glyph,
   fallback,
 }: {
   place: LinkPlace;
   workspace: string;
   name: string;
+  /** The chip's glyph, which its card wears while what it shows is read. */
+  glyph: ReactNode;
   fallback: ReactNode;
 }): ReactNode {
   const workspaceId = useWordsWorkspaceId({
@@ -762,6 +774,7 @@ function PlaceCard({
   });
   return thingCard(thingOfPlace(place), {
     own: fallback,
+    glyph,
     name,
     workspace,
     wordsWorkspaceId: workspaceId,
