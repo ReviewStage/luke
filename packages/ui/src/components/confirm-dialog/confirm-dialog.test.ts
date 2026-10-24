@@ -117,6 +117,11 @@ function question(): HTMLElement | null {
   return document.querySelector<HTMLElement>('[role="alertdialog"]');
 }
 
+/** What the card's error line says, which is nothing while the act was not refused. */
+function refusal(): string | undefined {
+  return question()?.querySelector('[data-slot="field-error"]')?.textContent ?? undefined;
+}
+
 /**
  * Whether `element` holds the keyboard. Note that a focus is compared by
  * hand, because a failed `assert.equal` prints both elements whole.
@@ -174,10 +179,10 @@ test("a refusal keeps the card up saying why, and the act can be tried again", a
   const { settle } = asked();
   press("Delete");
   await settle(REFUSED);
-  assert.equal(document.querySelector('[role="alert"]')?.textContent, "The key is in use.");
+  assert.equal(refusal(), "The key is in use.");
   assert.ok(holds(button("Cancel")), "focus comes back to Cancel");
   press("Delete");
-  assert.equal(document.querySelector('[role="alert"]'), null, "a fresh try clears the refusal");
+  assert.equal(refusal(), "", "a fresh try clears the refusal");
   await settle(ACCEPTED);
   assert.equal(question(), null);
 });
@@ -202,7 +207,7 @@ test("a refusal goes with its surface and is not drawn again when the surface co
   const { settle } = asked();
   press("Delete");
   await settle(REFUSED);
-  assert.ok(document.querySelector('[role="alert"]'));
+  assert.equal(refusal(), "The key is in use.");
   press("Page");
   assert.equal(question(), null);
   press("Page");

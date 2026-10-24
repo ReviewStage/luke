@@ -48,10 +48,13 @@
  * stands a hidden input beside each option, each of which would change
  * what the bar is; the bar says it is a tablist or a radio group, and each
  * option a tab or a radio, over the group's own words. Its keys are Luke's
- * (`useChoiceKeys`), Base UI's own composite keys refused, because a
+ * (`useRovingKeys`), Base UI's own composite keys refused, because a
  * tablist steps by ← and → alone where a radio group takes ↑ and ↓ too, and
- * an arrow chooses as it moves. It is drawn in Tailwind over the theme
- * (`tailwind/theme.css`), each look's and size's utilities chosen here so
+ * an arrow chooses as it moves. The bar is one Tab stop, on the chosen
+ * option or the first while none is, and each option is drawn out of the
+ * tab order (-1), which quiets the toggle group's own roving tab stop, so
+ * the stop the keys keep is the only one. It is drawn in Tailwind over the
+ * theme (`tailwind/theme.css`), each look's and size's utilities chosen here so
  * no two stand for one property; `choice-bar.css` keeps the thumb's
  * measured box and the fold's container and sibling rules. It keeps the
  * `luke-choice-bar*` classes, which the apps' sheets and tests select it by.
@@ -70,15 +73,30 @@ import {
   type ReactNode,
   useCallback,
   useLayoutEffect,
+  useMemo,
   useRef,
   useState,
 } from "react";
 import { cn } from "../../cn.js";
+import { joinRefs } from "../../join-refs.js";
 import { pulseOnPress } from "../../press-pulse.js";
-import { CHOICE_ROLE, type ChoiceRole } from "../choice/choice-keys.js";
 import { type CountPart, CountParts } from "../choice/count-part.js";
-import { type ChoiceKeys, useChoiceKeys } from "../choice/use-choice-keys.js";
+import {
+  ROVING_ORIENTATION,
+  ROVING_STOP,
+  type RovingBox,
+  rovingItem,
+  useRovingKeys,
+} from "../roving-keys/roving-keys.js";
 import { Tooltip } from "../tooltip/hint.js";
+
+/** The role a bar's options carry, which decides the keys it steps by: a tab's, or a radio's. */
+const CHOICE_ROLE = {
+  TAB: "tab",
+  RADIO: "radio",
+} as const;
+
+type ChoiceRole = (typeof CHOICE_ROLE)[keyof typeof CHOICE_ROLE];
 
 /** How the bar draws its chosen option: a fill under it, or a thumb raised in a trough. */
 export const CHOICE_BAR_LOOK = {
@@ -192,7 +210,7 @@ const OPTION = cn(
   "luke-choice-bar-option relative inline-flex items-center justify-center m-0 [border:0] [background:none]",
   "outline-offset-[var(--luke-focus-ring-inset)] text-muted-foreground font-ui font-label whitespace-nowrap",
   "[transition:background-color_var(--luke-duration-hover)_ease,color_var(--luke-duration-hover)_ease]",
-  "cursor-pointer [[data-luke-profile=desktop]_&]:cursor-default disabled:cursor-default disabled:opacity-40",
+  "cursor-pointer [[data-luke-profile=desktop]_&]:cursor-default disabled:cursor-default disabled:opacity-disabled",
   "[&:hover:not(:disabled)]:text-foreground aria-selected:text-foreground aria-checked:text-foreground",
 );
 
@@ -449,7 +467,7 @@ function useFoldTogether(
 function groupAttributes(
   role: ChoiceRole,
   label: string,
-  onKeyDown: ChoiceKeys<string>["onKeyDown"],
+  onKeyDown: RovingBox<HTMLDivElement>["onKeyDown"] | undefined,
 ): Pick<ToggleGroupPrimitive.Props<string>, "role" | "aria-label" | "onKeyDown"> {
   return {
     role: role === CHOICE_ROLE.TAB ? "tablist" : "radiogroup",
@@ -643,13 +661,16 @@ export function ChoiceBar<Value extends string>(props: ChoiceBarProps<Value>): R
   const roving = focus === CHOICE_BAR_FOCUS.ROVING;
   const choose = (chosen: Value) => props.onChange(chosen);
   // An arrow chooses the next option along and takes the keyboard there; Home and End go to either end.
-  const keys = useChoiceKeys({
-    options: items,
-    value,
-    role,
-    disabled: disabled || !roving,
-    onChoose: choose,
+  const keys = useRovingKeys<HTMLDivElement>({
+    orientation: role === CHOICE_ROLE.TAB ? ROVING_ORIENTATION.HORIZONTAL : ROVING_ORIENTATION.BOTH,
+    stop: roving ? ROVING_STOP.CHOSEN : ROVING_STOP.NONE,
+    moveTo: (option) => {
+      option.focus();
+      const landed = items.find((item) => item.value === option.dataset.value);
+      if (landed !== undefined && landed.value !== value) choose(landed.value);
+    },
   });
+  const barRef = useMemo(() => joinRefs(thumb.barRef, keys.ref), [thumb.barRef, keys.ref]);
   // A press on another option chooses it; one on the chosen option lets it go, which a clearable bar takes as the choice taken back.
   const press = (pressed: readonly Value[]) => {
     const next = pressed[0];
@@ -667,10 +688,12 @@ export function ChoiceBar<Value extends string>(props: ChoiceBarProps<Value>): R
   );
   return (
     <ToggleGroupPrimitive<Value>
-      ref={thumb.barRef}
+      ref={barRef}
       value={value === undefined ? [] : [value]}
       onValueChange={press}
-      {...groupAttributes(role, label, keys.onKeyDown)}
+      data-roving={keys["data-roving"]}
+      onFocus={keys.onFocus}
+      {...groupAttributes(role, label, disabled || !roving ? undefined : keys.onKeyDown)}
       {...appAttributes}
       className={cn(
         BAR,
@@ -695,7 +718,9 @@ export function ChoiceBar<Value extends string>(props: ChoiceBarProps<Value>): R
             ref={thumb.optionRef}
             {...optionAttributes(role, chosen, panels?.(item.value))}
             value={item.value}
-            tabIndex={roving ? keys.tabIndexOf(item.value) : -1}
+            data-value={item.value}
+            {...rovingItem()}
+            tabIndex={-1}
             className={optionClass}
             disabled={disabled || item.disabled === true}
             onMouseDown={roving ? undefined : keepFocus}

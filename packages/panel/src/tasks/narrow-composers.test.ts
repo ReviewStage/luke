@@ -257,7 +257,7 @@ test("on a desktop, New task's dialog keeps the dimmed window's margins", async 
 /** The `@` list's foot, which names the keys it hears. */
 function mentionFoot(): HTMLElement {
   const menu = document.body.appendChild(document.createElement("div"));
-  menu.className = "luke-menu-surface searchable-menu mention-menu";
+  menu.className = "luke-menu-surface mention-menu";
   const foot = menu.appendChild(document.createElement("div"));
   foot.className = "luke-menu-keys";
   return foot;

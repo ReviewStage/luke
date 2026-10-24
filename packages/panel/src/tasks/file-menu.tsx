@@ -1,18 +1,9 @@
-import {
-  CopyIcon,
-  DownloadIcon,
-  EllipsisIcon,
-  IconButton,
-  type PaneBarMenu,
-  STATUS_TONE,
-  Tooltip,
-  useMenu,
-} from "@luke/ui";
+import { CopyIcon, DownloadIcon, type PaneBarMenu, STATUS_TONE } from "@luke/ui";
 import { fileName } from "@luke/voice/code-pane-model";
 import { ClipboardCopyIcon, FolderTreeIcon } from "lucide-react";
 import { appPlatform } from "../app-platform.js";
 import { useCopyToast } from "../copy-feedback.js";
-import { ActionMenu, type MenuAction } from "../desktop/action-menu.js";
+import type { MenuAction } from "../desktop/action-menu.js";
 import { TOAST_HOLD, useToast } from "../toast.js";
 import { WHOLE_TEXT, type WholeText } from "./file-tab-model.js";
 
@@ -28,8 +19,8 @@ import { WHOLE_TEXT, type WholeText } from "./file-tab-model.js";
  * tab draws, which the service cuts.
  *
  * The File tab hands its bar this menu's definition (`useFileMenu`) for
- * `PaneBar` to draw as its ⋯, and an agent's Files changed view still hangs
- * its own through `BarMenu`; how the lines are drawn is set from the View
+ * `PaneBar` to draw as its ⋯, and an agent's Files changed view hands its
+ * own (`useChangesMenu`); how the lines are drawn is set from the View
  * settings button beside it (`view-settings.tsx`), never from the ⋯.
  */
 
@@ -52,28 +43,6 @@ function copyPathAction(path: string, copy: (text: string, words: string) => voi
     icon: <FolderTreeIcon aria-hidden="true" />,
     onSelect: () => copy(path, PATH_COPY_WORDS.PATH_COPIED),
   };
-}
-
-/** The ⋯ at the end of a bar over lines: the actions given. */
-export function BarMenu({
-  label,
-  actions,
-}: {
-  /** What the ⋯ and its menu are called. */
-  label: string;
-  actions: readonly MenuAction[];
-}): React.JSX.Element {
-  const menu = useMenu(true);
-  return (
-    <>
-      <Tooltip label={label}>
-        <IconButton icon={<EllipsisIcon />} label={label} {...menu.trigger()} />
-      </Tooltip>
-      {menu.drawn === undefined ? null : (
-        <ActionMenu label={label} menu={menu.drawn} groups={[actions]} onClose={menu.close} />
-      )}
-    </>
-  );
 }
 
 /** Saves text where the system's save dialog chooses, as a file of the name given, the save or its failure said in a toast. */

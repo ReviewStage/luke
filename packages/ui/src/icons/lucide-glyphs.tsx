@@ -4,6 +4,8 @@ import {
   CircleAlert,
   CircleCheck,
   Code,
+  Eye,
+  EyeOff,
   Heading1,
   Heading2,
   Heading3,
@@ -127,3 +129,9 @@ export const TableIcon = lucideGlyph(Table, "icon-button-glyph");
 
 /** A speech bubble with a plus: a comment begun on words. */
 export const CommentAddIcon = lucideGlyph(MessageSquarePlus, "icon-button-glyph");
+
+/** An open eye: shows a secret's typed characters. */
+export const ShowSecretIcon = lucideGlyph(Eye, "icon-button-glyph");
+
+/** The eye struck through: masks a secret's typed characters again. */
+export const HideSecretIcon = lucideGlyph(EyeOff, "icon-button-glyph");

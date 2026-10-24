@@ -10,7 +10,8 @@ import { cn } from "../cn.js";
  * are Luke's field rather than shadcn's: a control's height, inset, and
  * corner, the field's ground inside the strong hairline, the body's type,
  * a placeholder in the muted ink, the focus ground, the danger edge and one
- * shake while invalid, and the disabled field's ink and cursor. None of
+ * shake while invalid, and the disabled field's cursor and the one fade
+ * every control wears while it cannot be used (`opacity-disabled`). None of
  * shadcn's outline or ring utilities, because the window's own focus ring
  * (`@luke/panel`'s base.css) draws the keyboard's ring and a utility would
  * outrank it (`shadcn-focus.test.ts`); no `file:` utilities, as no field
@@ -27,7 +28,7 @@ export const INPUT_CONTROL =
 
 /** What every field shares: its box, its type, its placeholder, and its invalid and disabled states. */
 const INPUT_FIELD =
-  "m-0 box-border block w-full min-w-0 font-body text-body font-text text-foreground transition-[border-color,background-color] duration-(--luke-duration-hover) ease-plain placeholder:text-muted-foreground aria-invalid:animate-field-shake aria-invalid:border-destructive disabled:cursor-not-allowed disabled:text-muted-foreground disabled:opacity-70";
+  "m-0 box-border block w-full min-w-0 font-body text-body font-text text-foreground transition-[border-color,background-color] duration-(--luke-duration-hover) ease-plain placeholder:text-muted-foreground aria-invalid:animate-field-shake aria-invalid:border-destructive disabled:cursor-not-allowed disabled:opacity-disabled";
 
 export function ShadcnInput({ className, type, ...props }: React.ComponentProps<"input">) {
   return (

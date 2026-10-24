@@ -232,7 +232,7 @@ async function sendersFor(
 ): Promise<readonly Seen[]> {
   const drawn = await drawnFor(reader, [], agent, messages);
   return drawn.flatMap((message, index): Seen[] => {
-    const sender = message.querySelector<HTMLElement>(".message-sender [data-actor-ref]");
+    const sender = message.querySelector<HTMLElement>(".luke-message-line-sender [data-actor-ref]");
     if (sender === null) return [];
     const id = messages[index]?.id ?? "";
     const name = sender.querySelector(".luke-inline-ref-label")?.textContent ?? "";
@@ -284,7 +284,7 @@ test("another agent's message wears the mark of the harness its model runs in, a
   const drawn = await drawnFor(DEAN.userId);
   const harnessOf = (id: string) => {
     const sender = drawn[MESSAGES.findIndex((message) => message.id === id)]?.querySelector(
-      ".message-sender .actor-mark",
+      ".luke-message-line-sender .actor-mark",
     );
     const mark = sender?.querySelector(".luke-harness-mark");
     return mark?.getAttribute("data-provider") ?? undefined;
@@ -303,7 +303,7 @@ function readingOrder(message: Element, words: string): readonly string[] {
   const seen: [string, Node | null][] = [
     ["words", text],
     ["Copy", message.querySelector('button[aria-label="Copy"]')],
-    ["sender", message.querySelector(".message-sender")],
+    ["sender", message.querySelector(".luke-message-line-sender")],
     ["sent at", message.querySelector("time")],
   ];
   return seen
@@ -319,7 +319,7 @@ test("another agent named as a line's sender opens its tab on a press and hangs 
   const drawn = await drawnFor(DEAN.userId, opened);
   const sender = drawn[
     MESSAGES.findIndex((message) => message.id === "claude-agent")
-  ]?.querySelector<HTMLElement>(".message-sender [data-actor-ref]");
+  ]?.querySelector<HTMLElement>(".luke-message-line-sender [data-actor-ref]");
   assert.ok(sender instanceof HTMLButtonElement, "the sender is a door");
 
   restOn(sender);
@@ -342,13 +342,13 @@ test("another agent named as a line's sender opens its tab on a press and hangs 
   fakeAppBridge({});
 });
 
-test("a sent message keeps its bubble on top, with its Copy, who sent it, and when on the line under it", async () => {
+test("a sent message keeps its bubble on top, with who sent it, when, and its Copy on the line under it", async () => {
   const drawn = await drawnFor(DEAN.userId);
   const byId = (id: string) => drawn[MESSAGES.findIndex((each) => each.id === id)];
   const charles = byId("charles");
   const own = byId("dean");
   assert.ok(charles !== undefined && own !== undefined);
-  assert.deepEqual(readingOrder(charles, "Not five."), ["words", "Copy", "sender", "sent at"]);
+  assert.deepEqual(readingOrder(charles, "Not five."), ["words", "sender", "sent at", "Copy"]);
   assert.equal(
     charles.querySelector("time")?.getAttribute("datetime"),
     new Date(CHARLES_SENT_AT).toISOString(),

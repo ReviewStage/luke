@@ -27,7 +27,7 @@ function Checkbox({ className, indeterminate, ...props }: CheckboxPrimitive.Root
       data-slot="checkbox"
       indeterminate={indeterminate}
       className={cn(
-        "peer relative flex size-[14px] shrink-0 items-center justify-center rounded-[4px] border border-control-edge bg-field text-on-accent transition-transform duration-(--luke-duration-fast) ease-spring-fast data-checked:border-accent-fill data-checked:bg-accent-fill data-indeterminate:border-accent-fill data-indeterminate:bg-accent-fill data-disabled:opacity-50 active:not-data-disabled:not-data-readonly:scale-85 cursor-pointer in-data-[luke-profile=desktop]:cursor-default data-disabled:cursor-default data-readonly:cursor-default",
+        "peer relative flex size-[14px] shrink-0 items-center justify-center rounded-[4px] border border-control-edge bg-field text-on-accent transition-transform duration-(--luke-duration-fast) ease-spring-fast data-checked:border-accent-fill data-checked:bg-accent-fill data-indeterminate:border-accent-fill data-indeterminate:bg-accent-fill data-disabled:opacity-disabled active:not-data-disabled:not-data-readonly:scale-85 cursor-pointer in-data-[luke-profile=desktop]:cursor-default data-disabled:cursor-default data-readonly:cursor-default",
         className,
       )}
       {...props}
