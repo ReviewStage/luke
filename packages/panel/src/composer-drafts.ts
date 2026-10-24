@@ -25,7 +25,10 @@ import { readKept, writeKept } from "./kept-storage.js";
  * (`chat-composer.tsx`), the Inbox's New thread its To, Subject, and words
  * per workspace (`inbox-compose.tsx`), a plan's comment its words per
  * thread being started, per thread answered, and per comment edited
- * (`plan-comments.tsx`), and an inbox
+ * (`plan-comments.tsx`), an agent's line written again its words and
+ * files per agent and line (`edit-composer.tsx`), a chat ask's answer its
+ * picks and note per message, at the revision it was written against
+ * (`chat-ask.tsx`), and an inbox
  * card its answer per item, at the revision it was written against, the
  * options picked, the fields filled, and, on a thread, the steps ticked and
  * the answer pressed beside its note. A draft is known by where
@@ -57,7 +60,7 @@ const STORAGE_KEY = "luke.composerDrafts";
 /** How many drafts are kept at most, the oldest written let go first. */
 const MAX_KEPT = 200;
 
-/** What a draft is written to: a started agent, a plan's agent not yet started, an inbox item, a task not yet started, an automation's helper not yet started, a chat's channel or thread, an Inbox thread not yet started, or a plan's comment. */
+/** What a draft is written to: a started agent, a plan's agent not yet started, an inbox item, a task not yet started, an automation's helper not yet started, a chat's channel or thread, an Inbox thread not yet started, a plan's comment, an agent's line written again, or a chat message's ask. */
 export const DRAFT_PLACE = {
   AGENT: "agent",
   NEW_AGENT: "newAgent",
@@ -67,6 +70,8 @@ export const DRAFT_PLACE = {
   CHAT: "chat",
   NEW_THREAD: "newThread",
   PLAN_COMMENT: "planComment",
+  EDIT: "edit",
+  CHAT_ASK: "chatAsk",
 } as const;
 
 const draftPlaceSchema = Schema.Union([
@@ -143,6 +148,20 @@ const draftPlaceSchema = Schema.Union([
         scope: Schema.Literals(Object.values(PLAN_COMMENT_SCOPE)),
       }),
     ]),
+  }),
+  Schema.Struct({
+    kind: Schema.Literal(DRAFT_PLACE.EDIT),
+    /** The agent whose transcript holds the line. */
+    agentId: Schema.String,
+    /** The developer's line the words are written again in place of. */
+    messageId: Schema.String,
+  }),
+  Schema.Struct({
+    kind: Schema.Literal(DRAFT_PLACE.CHAT_ASK),
+    /** The chat message that carries the ask. */
+    messageId: Schema.String,
+    /** The ask's revision the answer was written against, so picks never land on options its poster changed since. */
+    revision: Schema.Number,
   }),
 ]);
 
@@ -225,6 +244,12 @@ export type NewThreadPlace = Extract<DraftPlace, { kind: typeof DRAFT_PLACE.NEW_
 
 /** A plan comment's place: a thread being started, answered, or one of its comments edited. */
 export type PlanCommentPlace = Extract<DraftPlace, { kind: typeof DRAFT_PLACE.PLAN_COMMENT }>;
+
+/** An agent's line written again: the agent and the line. */
+export type EditPlace = Extract<DraftPlace, { kind: typeof DRAFT_PLACE.EDIT }>;
+
+/** A chat ask's answer: the message carrying it, at the ask's revision. */
+export type ChatAskPlace = Extract<DraftPlace, { kind: typeof DRAFT_PLACE.CHAT_ASK }>;
 
 /** A box holding nothing. */
 export const EMPTY_DRAFT: Draft = { text: "", attachments: [], choices: [], values: [] };
