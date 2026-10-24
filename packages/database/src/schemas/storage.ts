@@ -107,6 +107,8 @@ export const conversations = pgTable(
     dispatchClaim: uuid("dispatch_claim"),
     /** When the standing dispatch claim was taken, from which it expires for a holder that died before clearing it; null with the claim. */
     dispatchClaimedAt: timestamptz("dispatch_claimed_at"),
+    /** The message row of the line the standing claim hands over, which is not yet a line sent; null with the claim, and for an ask's. */
+    dispatchLine: uuid("dispatch_line"),
   },
   (table) => [
     // One main stands per account at a time: Clear stamps the old one and opens the next in one

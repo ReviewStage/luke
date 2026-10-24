@@ -1,7 +1,7 @@
 {
   "version": "8",
   "dialect": "postgres",
-  "id": "7ed0a6ea-64a7-4798-b08b-24b2f2653db0",
+  "id": "da370902-f201-447c-ac92-19cd1f3c4ca7",
   "prevIds": [
     "36726b58-f012-43ff-90c1-561393d9c1ff"
   ],
@@ -8574,6 +8574,19 @@
       "generated": null,
       "identity": null,
       "name": "dispatch_claimed_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "conversations"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "dispatch_line",
       "entityType": "columns",
       "schema": "public",
       "table": "conversations"

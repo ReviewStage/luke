@@ -7,6 +7,7 @@ import { Database, type DatabaseServices, type StoreFailure } from "../core/quer
 import { asks, conversations, messages } from "../schemas/storage.js";
 import { InstantColumnSchema } from "./columns.js";
 import {
+  claimExpiredBefore,
   claimRetry,
   DISPATCH_CLAIM,
   DispatchClaimHeld,
@@ -798,7 +799,7 @@ function askHandOversSettled(target: ConversationTarget): AskEffect<void> {
     Effect.map(
       findAskHandOver({
         ...target,
-        claimedAfter: new Date(now.getTime() - Duration.toMillis(DISPATCH_CLAIM.EXPIRY)),
+        claimedAfter: claimExpiredBefore(now),
       }),
       (rows) => rows.length > 0,
     ),

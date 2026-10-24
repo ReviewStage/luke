@@ -2446,7 +2446,7 @@ const claimLine = /* @__PURE__ */ Effect.fnUntraced(function* (
     finishedAt: context.now,
     sender: line.sender,
   });
-  const claim = yield* takeDispatchClaim(context.target.conversationId);
+  const claim = yield* takeDispatchClaim(context.target.conversationId, id);
   return Result.succeed({ id, txid, claim });
 });
 
