@@ -10,7 +10,8 @@ import { Comment } from "./comment.js";
  * comment.test.ts -- a comment names its writer, says how long ago they
  * wrote, holds what the caller puts at its head's end and what they wrote
  * under it; its face stands the writer's letter where no picture is given,
- * and asks for the picture where one is; a draft not yet sent says no time.
+ * or a glyph a condition left as nothing, and asks for the picture where
+ * one is; a draft not yet sent says no time.
  */
 
 /** Oct 14, 2026, 6:00 PM, on the machine's own clock, and a comment two hours before it. */
@@ -50,6 +51,13 @@ test("with no picture the face stands the writer's letter, said once beside the 
   assert.equal(wordsOf(markup, "luke-comment-face"), "A");
   assert.doesNotMatch(markup, /<img/u);
   assert.doesNotMatch(markup, /aria-label="Ada Lovelace"/u);
+});
+
+test("a glyph a condition left as nothing still leaves the writer's letter on the face", () => {
+  for (const glyph of [null, false]) {
+    const markup = drawn({ author: { name: "Ada Lovelace", glyph }, at: AT, now: NOW });
+    assert.equal(wordsOf(markup, "luke-comment-face"), "A");
+  }
 });
 
 test("with a picture the face asks for it", () => {

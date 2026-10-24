@@ -59,6 +59,11 @@ const TRAILING =
   "luke-comment-trailing ms-auto inline-flex h-lh flex-none items-center gap-control-gap self-start";
 const BODY = "luke-comment-body col-start-2 row-start-2 min-w-0 text-body";
 
+/** Whether a node draws anything: none, null, and a boolean, as a condition leaves it, draw nothing. */
+function drawsSomething(node: ReactNode): boolean {
+  return node !== undefined && node !== null && typeof node !== "boolean";
+}
+
 /** One comment by `author`, written `at`, with `trailing` at its head's end and `children` under it. */
 export function Comment({
   author,
@@ -86,6 +91,8 @@ export function Comment({
   /** What they wrote. */
   children?: ReactNode;
 } & Omit<HTMLAttributes<HTMLElement>, "children" | "className" | "style">): React.JSX.Element {
+  // Note that a glyph drawn conditionally may arrive as nothing to draw, which is no glyph, so the letter still stands.
+  const glyph = drawsSomething(author.glyph) ? author.glyph : undefined;
   // Note that the element is made rather than written, because a ref typed
   // for either element is no ref for their union.
   return createElement(
@@ -97,8 +104,8 @@ export function Comment({
         {...(author.id === undefined ? {} : { id: author.id })}
         src={author.picture}
         shape={author.shape ?? AVATAR_SHAPE.CIRCLE}
-        glyph={author.glyph}
-        tiled={author.glyph !== undefined}
+        glyph={glyph}
+        tiled={glyph !== undefined}
         size={AVATAR_SIZE.ROW}
         decorative
       />
