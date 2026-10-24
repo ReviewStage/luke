@@ -180,3 +180,18 @@ test("a body with nothing to copy draws no Copy", () => {
   draw(createElement(CodeCard, { title: "src/seats.ts", body: "reading", copy: noCopy }));
   expect(buttonNamed("Copy code")).toBeUndefined();
 });
+
+test("a block drawn as rows keeps an empty last row", () => {
+  draw(
+    createElement(CodeCard, {
+      title: "Suggested change",
+      code: "old\n",
+      rows: [CODE_ROW.REMOVED, CODE_ROW.ADDED],
+      copy: noCopy,
+    }),
+  );
+  expect([...document.querySelectorAll("pre [data-row]")].map((row) => row.textContent)).toEqual([
+    "old",
+    "\n",
+  ]);
+});

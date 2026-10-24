@@ -171,8 +171,8 @@ export function CodeCard({
 }): React.JSX.Element {
   const bodyId = useId();
   const [whole, setWhole] = useState(false);
-  // Note that the newline a block ends on closes its last line rather than opening one more.
-  const text = (code ?? "").replace(/\n$/u, "").split("\n");
+  // Note that the newline a block ends on closes its last line rather than opening one more, but a block drawn as rows names each row itself, so an empty last row is a row.
+  const text = (rows === undefined ? (code ?? "").replace(/\n$/u, "") : (code ?? "")).split("\n");
   const cut = code !== undefined && text.length > CODE_CARD_CUT_LINES;
   const shown = cut && !whole ? CODE_CARD_CUT_LINES : text.length;
   const shownText = text.slice(0, shown);
