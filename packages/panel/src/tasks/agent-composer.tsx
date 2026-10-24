@@ -17,11 +17,13 @@ import {
   retriesBesideRemedy,
 } from "@luke/features/failure-remedy";
 import type { CatalogModel } from "@luke/features/models-wire";
+import { pasteCutWords } from "@luke/features/words";
 import {
   BUTTON_TYPE,
   EllipsisIcon,
   ErrorState,
   IconButton,
+  LengthCounter,
   McpIcon,
   MicrophoneIcon,
   PlusIcon,
@@ -472,6 +474,8 @@ export function AgentComposer({
   const [contextOpen, setContextOpen] = useState(false);
   const [stopping, setStopping] = useState(false);
   const [refusal, setRefusal] = useState<string | undefined>(undefined);
+  // Whether the last paste was cut to the room the box has left, until the words change again.
+  const [cut, setCut] = useState(false);
   // How many hand-offs are still being read, during which Send waits, so no
   // message goes without a file the developer already handed the box.
   const [reading, setReading] = useState(0);
@@ -516,6 +520,7 @@ export function AgentComposer({
   const words =
     composer.closed ??
     refusal ??
+    (cut ? pasteCutWords(maxLength) : undefined) ??
     unloaded ??
     (composer.note === undefined ? model?.note : undefined);
   const note: Failure | undefined =
@@ -710,6 +715,7 @@ export function AgentComposer({
         dropping={fileDrop.dropping}
         onSubmit={() => {
           setRefusal(undefined);
+          setCut(false);
           refocus.current = card.current?.contains(document.activeElement) === true;
           composer.send();
           setSends((count) => count + 1);
@@ -732,7 +738,12 @@ export function AgentComposer({
           editor={editor}
           room={room}
           draft={composer.draft}
-          setDraft={composer.setDraft}
+          // Note that the words changing again takes the cut note down, so it never outlives the paste it was said of.
+          setDraft={(text) => {
+            setCut(false);
+            composer.setDraft(text);
+          }}
+          onPasteCut={() => setCut(true)}
           placeholder={placeholder}
           label={wording?.label ?? "Message to the agent"}
           input={
@@ -790,6 +801,7 @@ export function AgentComposer({
                 {tools}
               </PromptInputTools>
               <ComposerActions>
+                <LengthCounter length={composer.draft.length} limit={maxLength} />
                 {actions?.(folds(FOLD_WIDTH.ACTIONS))}
                 {model === undefined ? null : (
                   <AgentModelChip

@@ -5,12 +5,13 @@ import {
   CODING_AGENT_CALL_FAILURE,
   type CodingAgentAgentAnswer,
 } from "@luke/features/coding-agent-view";
-import { CODING_AGENT_STATUS } from "@luke/features/coding-agent-wire";
+import { CODING_AGENT_BOUNDS, CODING_AGENT_STATUS } from "@luke/features/coding-agent-wire";
 import {
   REPOSITORY_UNREACHED,
   type RepositoryUnreached,
 } from "@luke/features/repository-reach-wire";
 import { TASK_SKILL_SOURCE } from "@luke/features/task-wire";
+import { pasteCutWords } from "@luke/features/words";
 import { ACT_KIND } from "@luke/host/acts";
 import { SETTINGS_VIEW, type SettingsLink } from "@luke/settings/settings-views";
 import type { SkillOption } from "@luke/ui/skill-mention";
@@ -169,6 +170,57 @@ test("the box takes the caret as it opens, Enter sends what was typed, and the b
   assert.equal(document.activeElement, composerEditor(box.container), "and keeps the caret");
   typeInComposer(box.container, "and the next one");
   assert.equal(box.shown(), "and the next one");
+});
+
+/** A paste of `text` into the box's editor, as the system's clipboard hands one over. */
+function pasteInComposer(container: ParentNode, text: string): void {
+  const event = new Event("paste", { bubbles: true, cancelable: true });
+  Object.defineProperty(event, "clipboardData", {
+    value: {
+      files: [],
+      types: ["text/plain"],
+      getData: (type: string) => (type === "text/plain" ? text : ""),
+    },
+  });
+  act(() => {
+    composerEditor(container).dispatchEvent(event);
+  });
+}
+
+test("a paste past the box's cap is cut to the room left and the note says so, until the words change", async () => {
+  const box = await mounted();
+  const cap = CODING_AGENT_BOUNDS.MAX_MESSAGE_CHARS;
+  const note = () => box.container.querySelector(".agent-composer-note")?.textContent;
+  assert.equal(note(), undefined);
+
+  pasteInComposer(box.container, "x".repeat(cap + 500));
+  assert.equal(box.shown().length, cap, "the box holds what fits");
+  assert.equal(note()?.includes(pasteCutWords(cap)), true, "and says the rest was cut");
+
+  const editor = composerEditor(box.container).editor;
+  assert.ok(editor, "the editor is running");
+  act(() => {
+    editor.view.dispatch(editor.state.tr.delete(1, 2));
+  });
+  assert.equal(note(), undefined, "the note goes once the words change again");
+});
+
+test("a paste that fits the cap says nothing of a cut", async () => {
+  const box = await mounted();
+  pasteInComposer(box.container, "x".repeat(1000));
+  assert.equal(box.shown().length, 1000);
+  assert.equal(box.container.querySelector(".agent-composer-note"), null);
+});
+
+test("the length counter stands from four fifths of the cap and not before", async () => {
+  const box = await mounted();
+  const cap = CODING_AGENT_BOUNDS.MAX_MESSAGE_CHARS;
+  const counter = () => box.container.querySelector(".luke-length-counter")?.textContent;
+
+  typeInComposer(box.container, "x".repeat(cap * 0.8 - 1));
+  assert.equal(counter(), undefined);
+  typeInComposer(box.container, "x");
+  assert.equal(counter(), `${cap * 0.8}/${cap}`);
 });
 
 test("words selected raise the format toolbar, its marks alone, and a message bolded from it is sent as its Markdown", async () => {

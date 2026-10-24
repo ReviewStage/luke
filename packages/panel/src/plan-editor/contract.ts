@@ -429,6 +429,8 @@ export interface ComposerEditorProps {
   readonly onEnter: () => void;
   /** Files pasted; answers whether the owner took them, which keeps them out of the words. */
   readonly onPasteFiles: (files: readonly File[]) => boolean;
+  /** A paste that ran past the bound and was cut to the room left, or laid in nowhere for want of it; the owner says so, since the words it sees are not the words pasted. */
+  readonly onPasteCut?: (() => void) | undefined;
   /** The `/` word the caret stands at the end of, as it changes; nothing once it stands in none. */
   readonly onTrigger: (trigger: ComposerTrigger | undefined) => void;
   /** Draws a chip into the element its node stands as; answers what takes the drawing down. */
