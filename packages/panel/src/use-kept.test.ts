@@ -3,7 +3,7 @@
 import { Schema } from "effect";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeAll, expect, test } from "vitest";
+import { afterEach, beforeAll, expect, test, vi } from "vitest";
 import { keptKey, useKept } from "./use-kept.js";
 
 /**
@@ -28,6 +28,7 @@ afterEach(() => {
   root = undefined;
   document.body.innerHTML = "";
   window.localStorage.clear();
+  vi.restoreAllMocks();
 });
 
 const SORT = {
@@ -124,4 +125,21 @@ test("a change is made over what storage holds now, and one that answers what it
   window.localStorage.removeItem(KEPT.SORT.name);
   act(() => doors?.change((held) => held));
   expect(window.localStorage.getItem(KEPT.SORT.name)).toBeNull();
+});
+
+test("where storage refuses a write, a change goes on from the choice drawn, not the older one it holds", () => {
+  window.localStorage.setItem(KEPT.SORT.name, JSON.stringify(SORT.LATEST));
+  const container = document.body.appendChild(document.createElement("div"));
+  root = createRoot(container);
+  act(() => root?.render(createElement(TwoLists)));
+  vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
+    throw new Error("quota");
+  });
+  const flip = (held: Sort): Sort => (held === SORT.LATEST ? SORT.OLDEST : SORT.LATEST);
+  act(() => doors?.change(flip));
+  expect(shown()).toBe(`${SORT.OLDEST} ${SORT.OLDEST}`);
+  act(() => doors?.change(flip));
+  expect(shown()).toBe(`${SORT.LATEST} ${SORT.LATEST}`);
+  act(() => doors?.change(flip));
+  expect(shown()).toBe(`${SORT.OLDEST} ${SORT.OLDEST}`);
 });

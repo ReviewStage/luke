@@ -44,6 +44,9 @@ export const keptFlag = Schema.Literals(["true", "false"]).pipe(
   ),
 );
 
+/** The keys whose last write storage refused, so what a surface draws is newer than what storage holds. */
+const UNWRITTEN = new Set<string>();
+
 /** The surfaces drawn now that hold each key, so a choice made in one is drawn in every other. */
 const HOLDERS = new Map<string, Set<(kept: unknown) => void>>();
 
@@ -85,14 +88,18 @@ export function useKept<A>(
     (next: A) => {
       drawn.current = next;
       setValue(next);
-      writeKept(key.name, key.schema, next);
+      if (writeKept(key.name, key.schema, next)) UNWRITTEN.delete(key.name);
+      else UNWRITTEN.add(key.name);
       for (const holder of HOLDERS.get(key.name) ?? []) holder(next);
     },
     [key],
   );
   const change = useCallback(
     (changed: (kept: A) => A) => {
-      const was = readKept(key.name, key.schema, drawn.current, key.earlier);
+      // Note that where storage refused the last write, the choice drawn is newer than the one it holds, so it is changed instead.
+      const was = UNWRITTEN.has(key.name)
+        ? drawn.current
+        : readKept(key.name, key.schema, drawn.current, key.earlier);
       const next = changed(was);
       if (!Object.is(next, was)) choose(next);
     },

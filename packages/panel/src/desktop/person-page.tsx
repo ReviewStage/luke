@@ -426,11 +426,7 @@ function PersonTasks({
         ))}
       </PersonSection>
       {onShowAll === undefined ? null : (
-        <ShowMoreRow
-          more={listed.length - PERSON_TASKS_SHOWN}
-          shown={false}
-          onToggle={onShowAll}
-        />
+        <ShowMoreRow more={listed.length - PERSON_TASKS_SHOWN} shown={false} onToggle={onShowAll} />
       )}
     </Stack>
   );

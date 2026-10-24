@@ -171,19 +171,18 @@ const SHOW_OF_KEPT = {
  * before the scopes, read as the scope that lists what it did
  * (`SHOW_OF_KEPT`); or, as the key the Needs you button kept its press
  * under is read, whether it was pressed, To do where it was and All, all it
- * then listed, where it was not; and To do where nothing was kept.
+ * then listed, where it was not. Note that a `null`, which an earlier build
+ * kept where nothing was chosen, reads as none, so the key beside it is read.
  */
 const storedShow = Schema.fromJsonString(
   Schema.Union([
     Schema.Literals([...Object.values(INBOX_SHOW), ...Object.values(EARLIER_SHOW)]),
     Schema.Boolean,
-    Schema.Null,
   ]).pipe(
     Schema.decodeTo(
       Schema.Literals(Object.values(INBOX_SHOW)),
       SchemaTransformation.transform({
         decode: (kept) => {
-          if (kept === null) return INBOX_SHOW.TO_DO;
           if (typeof kept === "boolean") return kept ? INBOX_SHOW.TO_DO : INBOX_SHOW.ALL;
           return SHOW_OF_KEPT[kept];
         },

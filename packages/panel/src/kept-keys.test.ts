@@ -136,6 +136,16 @@ test("the Inbox's scope is read from a tab, or a button's press, kept before the
   expect(draw(() => useInboxViewChoices()).now().show).toBe("to-do");
 });
 
+test("an Inbox scope kept as null reads the Needs you press kept beside it, as it did before", () => {
+  keep("luke.inboxShow", "null");
+  keep("luke.inboxWaitingOnly", "false");
+  keep("luke.taskInboxShow", "null");
+  keep("luke.taskInboxWaitingOnly", "false");
+  const shown = draw(() => ({ window: useInboxViewChoices(), task: useTaskInboxShow() }));
+  expect(shown.now().window.show).toBe("all");
+  expect(shown.now().task.show).toBe("all");
+});
+
 test("the Inbox's choices are read as they were kept, and an earlier sort as the one that replaced it", () => {
   keep("luke.inboxShow", '"all"');
   keep("luke.inboxGrouping", '"plan"');
