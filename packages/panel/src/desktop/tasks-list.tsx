@@ -743,7 +743,7 @@ function TaskListRow({
         {rename.editing ? (
           <span className="tasks-list-press">
             <InlineEdit
-              value={task.name}
+              value={rename.asked ?? task.name}
               label="Task name"
               maxLength={TASK_BOUNDS.MAX_NAME_CHARS}
               editing
