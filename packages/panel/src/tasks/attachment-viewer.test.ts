@@ -12,7 +12,7 @@ import { afterEach, beforeEach, test, vi } from "vitest";
 import { runAppCommand } from "../app-commands.js";
 import { FindScope } from "../find-in-tab.js";
 import { fakeAppBridge } from "../testing/app-bridge.js";
-import { fakeAppPlatform } from "../testing/app-platform.js";
+import { copyingInto, fakeAppPlatform } from "../testing/app-platform.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { relayout } from "../testing/resize-observer.js";
 import { wholeFileDrawn, wholeFileLines } from "../testing/whole-file.js";
@@ -471,23 +471,50 @@ test("Copy image puts the picture shown on the clipboard as its PNG, and its che
   assert.deepEqual(copied, [PIXEL], "the PNG's own bytes, whatever the address says after them");
   const glyph = () =>
     document
-      .querySelector('button[aria-label="Copy image"] .copy-glyph')
+      .querySelector('button[aria-label="Copy image"] .luke-copy-glyph')
       ?.getAttribute("data-state");
   assert.equal(glyph(), "copied");
   viewer.key("ArrowLeft");
   assert.equal(glyph(), "idle", "the picture walked to was not the one copied");
-  viewer.key("ArrowRight");
-  assert.equal(glyph(), "copied", "back on the copied picture, the check stands again");
   const refused = Promise.withResolvers<void>();
   answer = refused.promise;
-  viewer.key("ArrowLeft");
   viewer.press("Copy image");
-  await act(async () => undefined);
-  assert.equal(
-    glyph(),
-    "idle",
-    "a copy still asked for answers nothing yet, the last one's check included",
-  );
+  viewer.key("ArrowRight");
   await act(async () => refused.reject(new Error("refused")));
-  assert.equal(glyph(), "failed", "its own answer lands beside it");
+  assert.equal(glyph(), "idle", "a copy answered after the next picture was shown lands nowhere");
+});
+
+test("Copy text puts a text file's words on the clipboard and shows the check", async () => {
+  const copied: string[] = [];
+  fakeAppPlatform(copyingInto(copied));
+  const notes: FileChip = {
+    name: "notes.ts",
+    mediaType: "text/plain",
+    url: `data:text/plain;base64,${btoa("const a = 1;\nconst b = 2;\n")}`,
+  };
+  const root = createRoot(document.body.appendChild(document.createElement("div")));
+  roots.push(root);
+  const registry = AtomRegistry.make();
+  registries.push(registry);
+  act(() =>
+    root.render(
+      onRegistry(
+        registry,
+        createElement(AttachmentViewer, {
+          files: [notes],
+          at: 0,
+          onAt: () => undefined,
+          onClose: () => undefined,
+        }),
+      ),
+    ),
+  );
+  await wholeFileDrawn(document.body);
+  const button =
+    document.querySelector<HTMLButtonElement>('button[aria-label="Copy text"]') ??
+    assert.fail("a text file offers Copy text");
+  await act(async () => button.click());
+
+  assert.deepEqual(copied, ["const a = 1;\nconst b = 2;\n"]);
+  assert.equal(button.querySelector(".luke-copy-glyph")?.getAttribute("data-state"), "copied");
 });

@@ -10,6 +10,7 @@ import { SHORTCUT_KEY, type ShortcutChord } from "@luke/settings/shortcuts";
 import {
   Button,
   CloseIcon,
+  CopyButton,
   DIALOG_SIZE,
   Dialog,
   IconButton,
@@ -32,7 +33,7 @@ import {
   ZoomOutIcon,
 } from "lucide-react";
 import { useId, useState } from "react";
-import { CopyGlyph, type CopyState, copyHint, useCopyFeedback } from "../copy-feedback.js";
+import { copyImageThroughShell, copyThroughShell } from "../copy-feedback.js";
 import { FileTypeIcon } from "./file-type-icon.js";
 import { WholeFile, type WholeFileNote } from "./whole-file.js";
 
@@ -71,12 +72,16 @@ import { WholeFile, type WholeFileNote } from "./whole-file.js";
 const VIEWER_LABEL = {
   PREVIOUS: "Previous file",
   NEXT: "Next file",
-  COPY: "Copy text",
-  COPY_IMAGE: "Copy image",
   ZOOM_OUT: "Zoom out",
   ZOOM_IN: "Zoom in",
   DOWNLOAD: "Download",
   CLOSE: "Close",
+} as const;
+
+/** What the header's two Copy buttons copy, which `CopyButton` names ("Copy text"). */
+const COPY_WHAT = {
+  TEXT: "text",
+  IMAGE: "image",
 } as const;
 
 /** The bare keys a picture's zoom buttons name in their hints, which `@luke/ui`'s `useImageZoom` answers. */
@@ -103,38 +108,20 @@ function download(file: FileChip): void {
   link.click();
 }
 
-/** Copy for a text file's words, answered on its glyph as every copy button is. */
+/** Copy for a text file's words, `@luke/ui`'s one Copy. */
 function CopyTextButton({ text }: { text: string }): React.JSX.Element {
-  const { state, copy } = useCopyFeedback();
-  return (
-    <Tooltip label={copyHint(state, VIEWER_LABEL.COPY)}>
-      <IconButton
-        icon={<CopyGlyph state={state} />}
-        label={VIEWER_LABEL.COPY}
-        onClick={() => copy(text)}
-      />
-    </Tooltip>
-  );
+  return <CopyButton text={text} what={COPY_WHAT.TEXT} copy={copyThroughShell} />;
 }
 
 /**
- * Copy for a picture, put on the clipboard as a copy from Preview puts one,
- * answered on its glyph as every copy button is. Note that the answer is
- * shown only beside the picture it was for, because the button stands
- * while the files are walked and a copy may land after the next is shown.
+ * Copy for a picture, put on the clipboard as a copy from Preview puts one;
+ * its button's text is the picture's address. Note that it is keyed by that
+ * address, because the button stands while the files are walked: a copy
+ * answered after the next picture is shown lands nowhere, and the next
+ * starts at rest.
  */
 function CopyImageButton({ url }: { url: string }): React.JSX.Element {
-  const { state: copyState, answeredImage, copyImage } = useCopyFeedback();
-  const state: CopyState = answeredImage === url ? copyState : "idle";
-  return (
-    <Tooltip label={copyHint(state, VIEWER_LABEL.COPY_IMAGE)}>
-      <IconButton
-        icon={<CopyGlyph state={state} />}
-        label={VIEWER_LABEL.COPY_IMAGE}
-        onClick={() => copyImage(url)}
-      />
-    </Tooltip>
-  );
+  return <CopyButton key={url} text={url} what={COPY_WHAT.IMAGE} copy={copyImageThroughShell} />;
 }
 
 /** One of the header's icon buttons, its name its hint, beside the key that does the same where there is one. */
