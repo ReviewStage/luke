@@ -103,6 +103,15 @@ function key(name: string): void {
   });
 }
 
+/** Presses Enter as an input method does to confirm a composition, on whatever holds focus: flagged composing, and for Safari's last key, code 229 alone. */
+function composingEnter(init: KeyboardEventInit): void {
+  act(() => {
+    (document.activeElement ?? document.body).dispatchEvent(
+      new KeyboardEvent("keydown", { key: "Enter", bubbles: true, ...init }),
+    );
+  });
+}
+
 /** The question's card, while it stands. */
 function question(): HTMLElement | null {
   return document.querySelector<HTMLElement>('[role="alertdialog"]');
@@ -284,4 +293,25 @@ test("a gated question lands on its gate and offers the act only once the subjec
   assert.equal(runningMisnamed, false, "a name typed otherwise is not the name");
   assert.equal(running, true, "Enter answers once the name is typed");
   assert.equal(question(), null);
+});
+
+test("an Enter that confirms an input method's composition does not answer a field's or a gate's question", async () => {
+  const { settle } = asked(false, "Acme Inc");
+  const gate = question()?.querySelector("input") ?? assert.fail("no gate");
+  act(() => {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(
+      gate,
+      "Acme Inc",
+    );
+    gate.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  composingEnter({ isComposing: true });
+  composingEnter({ keyCode: 229 });
+  const runningAfterComposing = button("Deleting") !== undefined;
+  key("Enter");
+  const running = button("Deleting")?.disabled;
+  await settle(ACCEPTED);
+
+  assert.equal(runningAfterComposing, false, "a composing Enter does not press the act");
+  assert.equal(running, true, "the Enter after the composition answers");
 });

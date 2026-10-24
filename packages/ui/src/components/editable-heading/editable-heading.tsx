@@ -1,4 +1,5 @@
 import type { FocusEvent, FormEvent, KeyboardEvent, RefObject } from "react";
+import { isComposingKey } from "../../composing-key.js";
 import { MARKDOWN_CLASS } from "../../markdown/markdown-class.js";
 
 /**
@@ -50,6 +51,10 @@ export function EditableHeading({
   onLeave: (way: EditableHeadingLeave, heading: HTMLDivElement) => void;
 }): React.JSX.Element {
   const keyed = (event: KeyboardEvent<HTMLDivElement>) => {
+    // Note that a key an input method took is left alone entirely, even
+    // its default, because its Enter confirms a composition rather than
+    // leaving the heading, and its Escape cancels one.
+    if (isComposingKey(event)) return;
     const way = leaveOf(event.key);
     if (way === undefined) return;
     event.preventDefault();

@@ -17,6 +17,7 @@ import { SETTINGS_VIEW, type SettingsLink } from "@luke/settings/settings-views"
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import { cssCustomProperties, STATUS_TONE } from "@luke/ui";
 import { callBarAgentId } from "@luke/ui/call-card-model";
+import { isComposingKey } from "@luke/ui/composing-key";
 import { useLinkOpener } from "@luke/ui/held-link";
 import { EXPERIMENT_OFF_LINK, LINK_ROUTE, linkRoute } from "@luke/ui/link-route";
 import { forgetPictures } from "@luke/ui/picture-cache";
@@ -618,8 +619,13 @@ function AppWindow(): React.JSX.Element {
 
   useEffect(() => {
     const handleKey = (event: KeyboardEvent) => {
-      if (event.key !== "Escape") return;
-      // Muting an open microphone comes before any of it. Closing the panel
+      if (event.key !== "Escape" || isComposingKey(event)) return;
+      // A field or dialog that took the press for itself is the nearest layer
+      // of all, ahead of the call, the sign-in wait, and every page: an Escape
+      // that clears a search or withdraws a question has been answered, and
+      // an input method's own is never the window's.
+      if (event.defaultPrevented) return;
+      // Muting an open microphone comes before the layers below. Closing the panel
       // or a sheet mid-sentence would strand the microphone open, and the
       // same press asks Luke for quiet mid-sentence: a reply being spoken is
       // the most open thing there is, and Escape ends it without opening a
@@ -643,8 +649,6 @@ function AppWindow(): React.JSX.Element {
         signIn.cancelSignIn();
         return;
       }
-      // A dialog that took the press for itself is the nearest layer of all.
-      if (event.defaultPrevented) return;
       // Otherwise it closes the nearest thing that is open, one layer at a
       // time: Settings, a plan's version history, an agent's or a person's page, the Automations page, or the Board, back to wherever it was
       // opened from, then a side panel filling the window back beside its

@@ -1,5 +1,6 @@
 import type { ActionResult } from "@luke/wire";
 import { useId, useMemo, useRef, useState } from "react";
+import { isComposingKey } from "../../composing-key.js";
 import {
   CONFIRM_STAGE,
   type ConfirmSurroundings,
@@ -136,9 +137,10 @@ function ConfirmCard({
   };
   // Enter in the question's field, or in its gate, answers it as a press of
   // the act would, which a gate still locked refuses with the act's own
-  // shake; anywhere else Enter is the focused button's own.
+  // shake; anywhere else Enter is the focused button's own. An Enter that
+  // confirms an input method's composition is the input method's, not the act's.
   const fieldKey = (event: React.KeyboardEvent<HTMLDivElement>) => {
-    if (event.key !== "Enter" || settling) return;
+    if (event.key !== "Enter" || settling || isComposingKey(event)) return;
     if (event.target !== field?.current && event.target !== gateField.current) return;
     event.preventDefault();
     actButton.current?.click();
