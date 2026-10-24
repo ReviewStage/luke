@@ -206,7 +206,7 @@ test("a repository's header folds on its name, says its pin, counts its plans fo
   assert.ok(menu, "the right-click opens the repository's menu");
   assert.deepEqual(
     [...menu.querySelectorAll('[role="menuitem"]')].map((item) => item.textContent),
-    ["Unpin", "Mark tasks done", "Open on GitHub"],
+    ["Unpin", "Mark all done", "Open on GitHub"],
   );
   const ellipsis = sidebar.querySelector('button[aria-label="relay actions"]');
   assert.equal(ellipsis?.getAttribute("aria-expanded"), "true");

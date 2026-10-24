@@ -813,13 +813,13 @@ function PinnedSection({
 /**
  * A repository's actions, offered alike from its header's ⋯ and from a
  * right-click on the header: Pin holds the group above the rest on the
- * account, Mark tasks done sets every task under the header Done, which the
+ * account, Mark all done sets every task under the header Done, which the
  * sidebar's status filter then leaves out, and Open on GitHub opens the
  * repository's page, under GitHub's mark rather than the owner's picture,
- * since it is about GitHub. Mark tasks done asks nothing first, since it
+ * since it is about GitHub. Mark all done asks nothing first, since it
  * stops no agent. The tasks with no repository have no pin, since they
  * always stand last, and no page to open. A group of tasks all done
- * already offers no Mark tasks done, so the plans with no repository offer
+ * already offers no Mark all done, so the plans with no repository offer
  * nothing there.
  */
 function repositoryActionGroups(group: RepositoryGroup, tasks: TasksControl): MenuAction[][] {
@@ -829,7 +829,7 @@ function repositoryActionGroups(group: RepositoryGroup, tasks: TasksControl): Me
     ? []
     : [
         {
-          label: "Mark tasks done",
+          label: "Mark all done",
           icon: <MarkDoneIcon />,
           onSelect: () =>
             tasks.onSettleTasks(
