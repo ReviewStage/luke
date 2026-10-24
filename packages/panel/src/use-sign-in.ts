@@ -1,4 +1,5 @@
 import type { AccountProvider } from "@luke/credentials/snapshot";
+import { SIGN_IN_FAILURE, SIGN_IN_FAILURE_WORDS } from "@luke/features/words";
 import { ACT_KIND } from "@luke/host/acts";
 import { useStateWithRef } from "@luke/ui/use-state-with-ref";
 import { useCallback, useRef, useState } from "react";
@@ -42,10 +43,14 @@ export function useSignIn(): SignIn {
       const attempt = ++signInAttempt.current;
       setSignInFailure(undefined);
       setSignInWait(provider);
+      // Note that a sign-in that ended without landing answers why, as a
+      // key said in the words module's own words; a refusal is the port's
+      // own fault, which says only that it did not finish.
       act(ACT_KIND.ACCOUNT_BEGIN_SIGN_IN, { provider }).then(
-        () => {
+        (answer) => {
           if (signInAttempt.current !== attempt) return;
           setSignInWait(undefined);
+          if ("failure" in answer) setSignInFailure(SIGN_IN_FAILURE_WORDS[answer.failure]);
           // The browser has the focus the sign-in finished in, and signing in
           // is an arrival at the tasks it just unlocked.
           appPlatform().focusPanel();
@@ -53,7 +58,7 @@ export function useSignIn(): SignIn {
         () => {
           if (signInAttempt.current !== attempt) return;
           setSignInWait(undefined);
-          setSignInFailure("Sign-in didn't finish. Try again.");
+          setSignInFailure(SIGN_IN_FAILURE_WORDS[SIGN_IN_FAILURE.UNFINISHED]);
           appPlatform().focusPanel();
         },
       );

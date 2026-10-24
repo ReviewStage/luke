@@ -1,4 +1,8 @@
-import { ACCOUNT_PROVIDER, accountSnapshotSchema } from "@luke/credentials/snapshot";
+import {
+  ACCOUNT_PROVIDER,
+  accountSnapshotSchema,
+  signInAnswerSchema,
+} from "@luke/credentials/snapshot";
 import { Schema as EffectSchema } from "effect";
 import { actProcedure, exactInput } from "./base.js";
 import { ACCOUNT_ACT_KIND } from "./kinds.js";
@@ -21,7 +25,7 @@ export const accountActsContract = {
     "Could not start signing in on this system.",
   )
     .input(exactInput(providerParamsSchema))
-    .output(EffectSchema.flip(accountSnapshotSchema)),
+    .output(EffectSchema.flip(signInAnswerSchema)),
   [ACCOUNT_ACT_KIND.ACCOUNT_SIGN_IN_AGAIN]: actProcedure("Sign-in didn't finish.")
     .input(exactInput(providerParamsSchema))
     .output(EffectSchema.flip(EffectSchema.Boolean)),

@@ -1,5 +1,5 @@
 /**
- * words.ts -- the words the app says in many places: a count and its noun, a list of names, a read's reading, no-match and failed phrases, the glossary's fixed terms, and the voice's failures.
+ * words.ts -- the words the app says in many places: a count and its noun, a list of names, a read's reading, no-match and failed phrases, the glossary's fixed terms, the voice's failures, and the sign-in's.
  *
  * Each kind of words has one function here, so a screen names only its noun
  * and every screen, the service's included, says it the same way. It holds no
@@ -184,4 +184,45 @@ const VOICE_FAILURES: ReadonlySet<string> = new Set(Object.values(VOICE_FAILURE)
 /** Whether a value crossing from another window is one of the voice's failures, and no free text. */
 export function isVoiceFailure(value: unknown): value is VoiceFailure {
   return typeof value === "string" && VOICE_FAILURES.has(value);
+}
+
+/**
+ * Why a sign-in ended without landing, each said in words of its own. The
+ * sign-in screen is handed only these keys, never a provider's or a client's
+ * text, so nothing a sign-in carried (a token, a callback's code) can reach
+ * it. A new reason is a key here and its words in
+ * {@link SIGN_IN_FAILURE_WORDS}, which the compiler holds to naming every key.
+ */
+export const SIGN_IN_FAILURE = {
+  /** Nothing came back from the browser before the wait ran out. */
+  TIMED_OUT: "timed-out",
+  /** The sign-in page could not be opened in the browser. */
+  BROWSER: "browser",
+  /** Another sign-in is already waiting in the browser. */
+  ALREADY_WAITING: "already-waiting",
+  /** The provider's answer refused the sign-in, or carried no code. */
+  REFUSED: "refused",
+  /** This machine has no network, so the press is answered before a browser is opened. */
+  OFFLINE: "offline",
+  /** Anything else that kept the sign-in from finishing. */
+  UNFINISHED: "unfinished",
+} as const;
+
+export type SignInFailure = (typeof SIGN_IN_FAILURE)[keyof typeof SIGN_IN_FAILURE];
+
+export const SIGN_IN_FAILURE_WORDS = {
+  [SIGN_IN_FAILURE.TIMED_OUT]: "Sign-in timed out waiting for your browser. Try again.",
+  [SIGN_IN_FAILURE.BROWSER]: "Luke couldn't open the sign-in page in your browser. Try again.",
+  [SIGN_IN_FAILURE.ALREADY_WAITING]:
+    "A sign-in is already waiting in your browser. Finish it there, or try again later.",
+  [SIGN_IN_FAILURE.REFUSED]: "The sign-in was declined in your browser. Try again.",
+  [SIGN_IN_FAILURE.OFFLINE]: "You're offline. Connect to the internet, then sign in.",
+  [SIGN_IN_FAILURE.UNFINISHED]: "Sign-in didn't finish. Try again.",
+} as const satisfies Record<SignInFailure, string>;
+
+const SIGN_IN_FAILURES: ReadonlySet<string> = new Set(Object.values(SIGN_IN_FAILURE));
+
+/** Whether a value crossing from another process is one of the sign-in's failures, and no free text. */
+export function isSignInFailure(value: unknown): value is SignInFailure {
+  return typeof value === "string" && SIGN_IN_FAILURES.has(value);
 }
