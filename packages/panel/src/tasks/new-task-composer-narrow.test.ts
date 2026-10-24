@@ -89,11 +89,10 @@ async function mount(listSide: MentionMenuSide = MENTION_MENU_SIDE.BELOW): Promi
   return container;
 }
 
-/** Where a list opened in the card stands against the caret's line: over it where its foot is set from the line, under it where its top is. */
-function sideOf(list: HTMLElement): "below" | "above" {
-  if (list.style.bottom !== "") return "above";
-  assert.match(list.style.top, /px$/u, "a list under the line sets its top from it");
-  return "below";
+/** Which side of the caret's line a list opened in the card hangs on, as the layer it hangs in says. */
+function sideOf(list: HTMLElement): string | null {
+  const layer = list.closest(".luke-rect-float") ?? assert.fail("the list hangs in a layer");
+  return layer.getAttribute("data-side");
 }
 
 /** The list a word typed at the start of the box opens, by its class. */
@@ -121,6 +120,22 @@ test("in the dialog, whose card is not at a page's top, the @ list still opens o
 test("in the dialog the / list still opens over the line too", async () => {
   const container = await mount(MENTION_MENU_SIDE.ABOVE);
   assert.equal(sideOf(await listOpenedBy(container, "/", ".skill-menu")), "above");
+});
+
+test("the / list closes on a press outside it and the box, and a press in the box leaves it open", async () => {
+  const container = await mount();
+  const list = await listOpenedBy(container, "/", ".skill-menu");
+  const press = (target: Element) =>
+    act(() => {
+      target.dispatchEvent(new Event("pointerdown", { bubbles: true }));
+    });
+  press(list);
+  const field = container.querySelector(".composer-editor") ?? assert.fail("the box's editor");
+  press(field);
+  const keptOpen = container.querySelector(".skill-menu") !== null;
+  press(document.body);
+  assert.equal(keptOpen, true, "a press in the list or the box leaves it open");
+  assert.equal(container.querySelector(".skill-menu") !== null, false, "a press outside closes it");
 });
 
 test("on a phone-wide card the placeholder wraps in the card's five lines rather than being cut short, and stays one line on a desktop", async () => {

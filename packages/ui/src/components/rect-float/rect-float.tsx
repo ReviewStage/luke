@@ -7,6 +7,7 @@ import {
   type PopoverSide,
   popoverPlace,
 } from "../anchored-popover/popover-place.js";
+import { type PressAway, usePressAway } from "../anchored-popover/press-away.js";
 
 /**
  * rect-float.tsx -- the layer that stands by a box in the window rather than by a button: words selected, or a caret, with a toolbar, a list, or a field floated over or under it.
@@ -22,8 +23,11 @@ import {
  * stands by and a field in it is still inside the owner's box when it takes
  * the focus. It is measured as it is drawn, before it is painted, each time
  * it is drawn again, whenever it resizes or the window does, and whenever
- * anything scrolls, since a scroll may leave its side no room. What it
- * holds draws its own surface (`MenuSurface`).
+ * anything scrolls, since a scroll may leave its side no room. A press
+ * outside it is handed to its owner, who closes it unless the press lands
+ * on what it `holds`, the field whose caret it stands by say
+ * (`../anchored-popover/press-away.ts`). What it holds draws its own
+ * surface (`MenuSurface`).
  */
 
 /** Where the layer stands in its owner's box: its corner, and the widest the room it keeps inside leaves it. */
@@ -114,8 +118,10 @@ function placeIn(
 export function RectFloat({
   anchor,
   side = POPOVER_SIDE.ABOVE,
+  onPressAway,
+  holds,
   children,
-}: {
+}: PressAway & {
   /** The box to stand by, in window coordinates, as it stands now; none where it cannot be measured. */
   anchor: () => Box | undefined;
   side?: PopoverSide | undefined;
@@ -124,6 +130,7 @@ export function RectFloat({
   const layer = useRef<HTMLDivElement>(null);
   const [place, setPlace] = useState<FloatPlace | undefined>(undefined);
   const measure = useRef<() => void>(() => undefined);
+  usePressAway(layer, () => undefined, { onPressAway, holds });
   measure.current = () => {
     const drawn = layer.current;
     const frame = drawn?.offsetParent;

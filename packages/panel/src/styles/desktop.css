@@ -2247,39 +2247,11 @@ ul.actor-stack {
   color: var(--integration-ink-sentry);
 }
 
-/* The searchable menu, in the shape of a command menu: the search as the
-   first row, flush and edge to edge over a hairline; under it the list,
-   its rows inset by the list's own padding so a highlight never meets the
-   border, scrolling inside itself past a bounded height; and under the
-   list, behind another hairline, the rows pinned where the scrolling
-   cannot take them. A row is one fixed height whatever the list holds:
-   the list is a plain block and a row flexes in no column it stands in,
-   because a bounded flex column would otherwise shrink its rows towards
-   their words as the matches grew past the bound, and let them back out
-   as a search cut them down. The menu opens under its trigger, its list
-   and its foot each carrying the surface's inset. */
-.searchable-menu {
-  position: absolute;
-  z-index: 2;
-  top: calc(100% + var(--luke-space-4));
-  left: 0;
-  width: 340px;
-  padding: 0;
-}
-
 .task-compose-menu-foot {
   display: block;
   flex: 0 0 auto;
   padding: var(--luke-menu-inset);
   border-top: 1px solid var(--luke-color-border);
-}
-
-/* A searchable menu hung from its own button (`@luke/ui`'s
-   `AnchoredPopover`) stands in the layer's place, and is what a listed
-   row's submenu stands against. */
-.luke-anchored-popover > .searchable-menu {
-  position: relative;
-  width: auto;
 }
 
 /* What pops up arrives on the pair every arriving element rides, the
