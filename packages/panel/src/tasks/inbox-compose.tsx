@@ -52,16 +52,14 @@ import {
   useDraft,
   useDraftWriter,
 } from "../composer-drafts.js";
-import { imageFiles } from "../feedback-images.js";
 import { useIntegrationStatuses } from "../integration-statuses.js";
 import { matchingRows } from "../searchable-menu.js";
 import { PICKER_ALIGN, Picker } from "../settings/picker-row.js";
 import { UNDO_LABEL, useToast } from "../toast.js";
-import { useFileDrop } from "../use-file-drop.js";
+import { useAttachedFiles } from "../use-attached-files.js";
 import { type AgentRowPlace, agentMenuRow, useAgentRowPlace } from "./agent-menu-row.js";
 import { AttachFilesButton } from "./attach-files-button.js";
 import { AttachedFileChips, attachmentChips } from "./attached-file-chips.js";
-import { readFiles, withFiles } from "./attached-files.js";
 import { messageFailureWords } from "./coding-agent-model.js";
 import { AnswerForm, EDITOR_LOAD_FAILED, useAnswerField } from "./inbox-answer-box.js";
 import type { MentionDoors } from "./mention-chip.js";
@@ -354,7 +352,6 @@ function ComposeCard({
   const { read, listed, asked, agent } = composeTo;
   const toast = useToast();
   const [sending, setSending] = useState(false);
-  const [reading, setReading] = useState(0);
   const [refusal, setRefusal] = useState<string | undefined>(undefined);
   // Whether the last paste was cut to the room the box has left, until the words change again.
   const [cut, setCut] = useState(false);
@@ -365,7 +362,6 @@ function ComposeCard({
   latestAgent.current = agent;
   const chosen = agent === undefined ? undefined : agentMenuRow(agent, place);
   const placeholder = agent === undefined ? "Write a message" : `Write to ${agent.name}`;
-  const fileDrop = useFileDrop((files) => attach(Array.from(files)));
   const field = useAnswerField({
     draft: draft.text,
     placeholder,
@@ -383,13 +379,21 @@ function ComposeCard({
       const id = latestAgent.current?.id;
       return id === undefined ? drafted : { ...drafted, to: id };
     });
+  // Note that a send waits while files handed to the box are still read.
+  const files = useAttachedFiles({
+    holder: {
+      attachments: draft.attachments,
+      update: (next) => write((was) => ({ ...was, attachments: next(was.attachments) })),
+    },
+    onRefusal: setRefusal,
+  });
   const text = draft.text.trim();
   const sendable =
     agent !== undefined &&
     (text !== "" || draft.attachments.length > 0) &&
     text.length <= INBOX_BOUNDS.MAX_MESSAGE_CHARS;
   const send = () => {
-    if (!sendable || sending || reading > 0) return;
+    if (!sendable || sending || files.reading) return;
     const words = sendWords(agent.id, draft);
     const key = attempt.current?.words === words ? attempt.current.key : crypto.randomUUID();
     attempt.current = { key, words };
@@ -434,22 +438,6 @@ function ComposeCard({
         },
       },
     });
-  };
-  const attach = (files: readonly File[]) => {
-    if (files.length === 0) return;
-    setReading((count) => count + 1);
-    readFiles(files)
-      .then((filesRead) => {
-        // Taken after whatever the box holds as the read lands, so a chip taken off meanwhile is not undone.
-        let refused = filesRead.refusal;
-        write((was) => {
-          const taken = withFiles(was.attachments, filesRead);
-          refused = taken.refusal;
-          return { ...was, attachments: taken.attachments };
-        });
-        setRefusal(refused);
-      })
-      .finally(() => setReading((count) => count - 1));
   };
   const note =
     refusal ??
@@ -518,23 +506,17 @@ function ComposeCard({
             />
           </div>
         </div>
-        <div className="agent-composer inbox-compose-box" {...fileDrop.target}>
+        <div className="agent-composer inbox-compose-box" {...files.drop.target}>
           <AnswerForm
-            dropping={fileDrop.dropping}
+            dropping={files.drop.dropping}
             field={field}
             asks={false}
             messages
             controls={undefined}
             chips={
               <AttachedFileChips
-                files={attachmentChips(draft.attachments)}
-                onRemove={(index) => {
-                  setRefusal(undefined);
-                  write((was) => ({
-                    ...was,
-                    attachments: was.attachments.filter((_, at) => at !== index),
-                  }));
-                }}
+                files={attachmentChips(files.attachments)}
+                onRemove={files.remove}
               />
             }
             note={draft.text}
@@ -546,17 +528,11 @@ function ComposeCard({
             placeholder={placeholder}
             maxLength={INBOX_BOUNDS.MAX_MESSAGE_CHARS}
             onEnter={() => field.room.current?.closest("form")?.requestSubmit()}
-            onPasteFiles={(files) => {
-              // Only images are taken from the clipboard; text pastes as it always does.
-              const pasted = imageFiles(files);
-              if (pasted.length === 0) return false;
-              attach(pasted);
-              return true;
-            }}
-            tools={<AttachFilesButton onFiles={attach} />}
+            onPasteFiles={files.paste}
+            tools={<AttachFilesButton onFiles={files.attach} />}
             nod={false}
             sending={sending}
-            held={sending || reading > 0}
+            held={sending || files.reading}
             sendable={sendable}
             onSubmit={send}
           />

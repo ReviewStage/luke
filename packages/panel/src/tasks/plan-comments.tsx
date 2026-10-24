@@ -125,7 +125,7 @@ import {
   type PlanEditorHandle,
   type PlanEditorModule,
 } from "../plan-editor/contract.js";
-import { useFileDrop } from "../use-file-drop.js";
+import { useAttachedFiles } from "../use-attached-files.js";
 import { AgentActorRef, agentSubject, NOTHING_HELD } from "./agent-ref.js";
 import { AttachFilesButton } from "./attach-files-button.js";
 import { AttachedFileChips, attachmentChips } from "./attached-file-chips.js";
@@ -134,7 +134,7 @@ import { DictateButton, DictationStrip } from "./dictation-strip.js";
 import type { EditAgents } from "./edit-ref.js";
 import { MentionNodeChip, pastedMentionNode } from "./mention-chip.js";
 import { MENTION_MENU_SIDE, useMentionPicker } from "./mention-picker.js";
-import { CommentFiles, useCommentAttaching } from "./plan-comment-files.js";
+import { CommentFiles } from "./plan-comment-files.js";
 import { EDITOR_ROOM_CLASS } from "./plan-document-editor.js";
 import { type TaskMentionsValue, useMentionLink, useTaskMentions } from "./task-mentions.js";
 import { DICTATION_PHASE, type DictationControl, useDictation } from "./use-dictation.js";
@@ -780,8 +780,9 @@ function ReplyField({
     setCut(false);
     update((was) => ({ ...was, text }));
   };
-  const files = useCommentAttaching();
-  const fileDrop = useFileDrop((dropped) => files.attach(Array.from(dropped)));
+  // Why the last files handed to the field did not all come; nothing once they did.
+  const [refusal, setRefusal] = useState<string | undefined>(undefined);
+  const files = useAttachedFiles({ onRefusal: setRefusal });
   // The words sent and not yet answered, which the field holds as a draft while it stands empty, so a send that fails finds them.
   const [inFlight, setInFlight] = useState("");
   const attempt = useRef<
@@ -791,7 +792,7 @@ function ReplyField({
   const said = heard ?? (cut ? pasteCutWords(PLAN_COMMENT_BOUNDS.MAX_WORDS_CHARS) : undefined);
   const send = () => {
     const trimmed = words.trim();
-    if (trimmed === "" || sending || files.reading > 0) return;
+    if (trimmed === "" || sending || files.reading) return;
     const { attachments } = files;
     const was = attempt.current;
     const same = was?.words === trimmed && sameFiles(was.attachments, attachments);
@@ -816,12 +817,12 @@ function ReplyField({
       look={variant === REPLY_VARIANT.FIRST ? COMPOSER_LOOK.BARE : COMPOSER_LOOK.CARD}
       className="comment-field"
       data-variant={variant}
-      dropping={fileDrop.dropping}
+      dropping={files.drop.dropping}
       // Note that the words in flight, held files and files still being read, and a dictation whose words land once heard, hold the field, so a press away keeps a thread being started; typed words are kept as its draft and hold nothing.
       data-held={
-        inFlight.trim() !== "" || files.attachments.length > 0 || files.reading > 0 || dictating
+        inFlight.trim() !== "" || files.attachments.length > 0 || files.reading || dictating
       }
-      {...fileDrop.target}
+      {...files.drop.target}
     >
       <AttachedFileChips
         files={attachmentChips(files.attachments)}
@@ -848,9 +849,9 @@ function ReplyField({
           {said}
         </div>
       )}
-      {files.refusal === undefined ? null : (
+      {refusal === undefined ? null : (
         <div className="comment-note" role="alert">
-          {files.refusal}
+          {refusal}
         </div>
       )}
       <div className="comment-field-foot">
@@ -868,7 +869,7 @@ function ReplyField({
                 submit={sending ? SUBMIT_STATE.SUBMITTED : SUBMIT_STATE.READY}
                 variant={BUTTON_VARIANT.INK}
                 label={label === COMMENT_WORDS.ADD ? COMMENT_WORDS.COMMENT : COMMENT_WORDS.REPLY}
-                disabled={words.trim() === "" || sending || files.reading > 0}
+                disabled={words.trim() === "" || sending || files.reading}
                 onClick={send}
               />
             </span>
