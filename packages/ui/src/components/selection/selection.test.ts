@@ -7,6 +7,7 @@ import { Announcer } from "../announcer/announcer.js";
 import { CardPress } from "../card-press/card-press.js";
 import { List, ListRow } from "../list-row/list-row.js";
 import { type SelectionAct, SelectionBar } from "./selection-bar.js";
+import { selectionMenu } from "./selection-menu.js";
 import { SelectionRegion } from "./selection-region.js";
 
 /**
@@ -20,6 +21,7 @@ import { SelectionRegion } from "./selection-region.js";
  * list not asked opens its row on a ⌘-click as it always has. The bar
  * over the list says how many are chosen, does its acts, drops an act's
  * menu, and clears on Clear and on Esc; with none chosen it draws nothing.
+ * A chosen row's menu offers the bar's acts, an act's choices as a submenu.
  * A region of the app's own lists chooses its card presses the same way,
  * across every list it holds. Synthetic places.
  */
@@ -495,4 +497,69 @@ test("Clear in the bar over a region hands the focus to the region's first card 
 
   expect(page.querySelector('[role="toolbar"]')).toBeNull();
   expect(document.activeElement).toBe(cards()[0]);
+});
+
+/** A row whose menu is the bar's acts on the places chosen, what they did listed after it. */
+function ChosenRowMenu(): React.JSX.Element {
+  const [heard, setHeard] = useState<string[]>([]);
+  const hear = (what: string) => () => setHeard((all) => [...all, what]);
+  const acts: SelectionAct[] = [
+    { label: "Mark done", onAct: hear("done") },
+    {
+      label: "Move to section",
+      menu: [
+        [{ label: "Later", onSelect: hear("later") }],
+        [{ label: "Remove from section", onSelect: hear("out") }],
+      ],
+    },
+  ];
+  return createElement(
+    Fragment,
+    null,
+    createElement(List, {
+      label: "Places",
+      children: createElement(ListRow, {
+        title: "Inbox",
+        onPress: () => undefined,
+        menu: { thing: "Place", groups: selectionMenu(acts), heading: "2 places" },
+      }),
+    }),
+    createElement("output", null, heard.join(",")),
+  );
+}
+
+test("a chosen row's menu offers the bar's acts under its heading, each act's choices one submenu", () => {
+  const page = draw(createElement(ChosenRowMenu));
+  const openMenu = () => {
+    act(() => {
+      page
+        .querySelector("[data-card-press], li button")
+        ?.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true }));
+    });
+  };
+  const labels = () =>
+    [...document.querySelectorAll('[role="menu"]:not([data-leaving]) .luke-menu-item-label')].map(
+      (label) => label.textContent,
+    );
+  const choose = (name: string) => {
+    const item = [
+      ...document.querySelectorAll<HTMLElement>(
+        '[role="menu"]:not([data-leaving]) .luke-menu-item',
+      ),
+    ].find((each) => each.querySelector(".luke-menu-item-label")?.textContent === name);
+    if (item === undefined) throw new Error(`no ${name} in the menu`);
+    act(() => item.click());
+  };
+
+  openMenu();
+  expect(document.querySelector(".luke-menu-heading")?.textContent).toBe("2 places");
+  expect(labels()).toEqual(["Mark done", "Move to section"]);
+  choose("Mark done");
+  expect(page.querySelector("output")?.textContent).toBe("done");
+
+  openMenu();
+  choose("Move to section");
+  expect(labels()).toEqual(["Mark done", "Move to section", "Later", "Remove from section"]);
+  choose("Remove from section");
+  expect(page.querySelector("output")?.textContent).toBe("done,out");
 });
