@@ -204,7 +204,7 @@ export interface ComposerWords {
 const BUTTON = {
   SEND: "Send",
   STOP: "Stop",
-  STOPPING: "Stopping…",
+  STOPPING: "Stopping",
   SENDING: "Sending",
   ATTACH: "Attach files",
   MORE_THING: "Composer",
@@ -559,7 +559,7 @@ export function AgentComposer({
   const placeholder = closed
     ? ""
     : (wording?.placeholder ??
-        (agentName === undefined ? PLACEHOLDER.UNNAMED : PLACEHOLDER.NAMED(agentName)));
+      (agentName === undefined ? PLACEHOLDER.UNNAMED : PLACEHOLDER.NAMED(agentName)));
   const sendLabel = wording?.send ?? BUTTON.SEND;
 
   // Note that a held box gives up the caret, because a field that takes no
