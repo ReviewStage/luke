@@ -215,7 +215,7 @@ test("someone on GitHub hangs a card saying who they are there and that a person
     "devin-ai-integration",
   );
   assert.equal(bot.querySelector(".luke-hover-card-name .actor-bot")?.textContent, "bot");
-  assert.equal(bot.querySelector(".luke-hover-card-sub")?.textContent, "GitHub app");
+  assert.equal(bot.querySelector(".luke-hover-card-sub")?.textContent, "GitHub App");
   assert.equal(bot.querySelector(".luke-hover-card-corner"), null);
   assert.equal(
     document.querySelector(".luke-inline-ref-label")?.textContent,

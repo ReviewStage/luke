@@ -616,7 +616,7 @@ function SomeoneCard({
 /** What a GitHub account's card says it is, a person's or an App's bot's, and where a person stands. */
 const GITHUB_WORDS = {
   USER: "GitHub user",
-  APP: "GitHub app",
+  APP: "GitHub App",
   OUTSIDE: "Not in this workspace",
 } as const;
 

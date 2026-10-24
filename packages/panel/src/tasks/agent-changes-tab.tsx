@@ -290,8 +290,8 @@ function ViewedCount({
 
 /** What the bar's ⋯ says. */
 const CHANGES_MENU_WORDS = {
-  COPY_PATCH: "Copy PR patch",
-  DOWNLOAD_PATCH: "Download PR patch",
+  COPY_PATCH: "Copy patch",
+  DOWNLOAD_PATCH: "Download patch",
   PATCH_COPIED: "Patch copied",
   /** Why the patch is not offered where the read stopped short of every file. */
   TRUNCATED: "This pull request has more files than were read",

@@ -813,7 +813,7 @@ test("a member of a workspace whose GitHub reaches no repository is told so and 
 
   assert.deepEqual(menuNotes(), [
     "Luke can't see any repository yet.",
-    "Ask Dean or Charles to add a repository to Luke on GitHub.",
+    "Ask Dean or Charles to add a repository to Luke's GitHub App.",
   ]);
   assert.equal(
     buttons.some((button) => button.textContent === OPEN_SETTINGS_LABEL),

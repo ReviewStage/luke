@@ -130,7 +130,7 @@ const MENU_NOTE = {
 const OWNER_ASK = {
   CONNECT: "connect GitHub",
   RECONNECT: "reconnect GitHub",
-  ADD_REPOSITORY: "add a repository to Luke on GitHub",
+  ADD_REPOSITORY: "add a repository to Luke's GitHub App",
 } as const;
 
 type OwnerAsk = (typeof OWNER_ASK)[keyof typeof OWNER_ASK];
