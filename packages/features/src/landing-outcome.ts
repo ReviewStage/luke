@@ -134,7 +134,7 @@ const LANDING_WORDS = {
       name === undefined
         ? "That account is connected to another workspace"
         : `That ${name} account is connected to another workspace`,
-    line: undefined,
+    line: `Uninstall Luke from that account on ${name ?? "its provider"}, then connect it here.`,
   }),
   [LANDING_OUTCOME.NOTHING_TO_CONNECT]: (name) => ({
     tone: LANDING_TONE.FAILED,
