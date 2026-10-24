@@ -8,6 +8,8 @@ import {
   Badge,
   BUTTON_VARIANT,
   Button,
+  CONFIRM_LOSS,
+  ConfirmDialog,
   ErrorState,
   type MenuRow,
   POPOVER_ALIGN,
@@ -17,9 +19,11 @@ import {
   SettingsLine,
   SettingsRow,
   SettingsRowMark,
+  useConfirmDialog,
 } from "@luke/ui";
 import { githubAccountPictureUrl } from "@luke/ui/tasks-model";
 import { useDisclosure } from "@luke/ui/use-disclosure";
+import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { PlusIcon } from "lucide-react";
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { useAct } from "../act.js";
@@ -31,7 +35,9 @@ import { repositoryMenuRow } from "../repository-row.js";
  *
  * Each stands inset under GitHub's row, as a connected account does, led by
  * its owner's picture on GitHub and marked Token, with Remove for its adder
- * and for a workspace's owner or admin. One the workspace's App reaches is
+ * and for a workspace's owner or admin, which asks first, in the accent
+ * rather than red: adding it again undoes it, but its agents stop reaching
+ * it for every member meanwhile. One the workspace's App reaches is
  * left out by the service, since the App wins. Add repository drops the
  * app's searched menu over the repositories the reader's own token may
  * push to that neither the App nor the workspace's list already holds, read
@@ -226,7 +232,7 @@ export function AddTokenRepository({
   );
 }
 
-/** One token repository's row, inset under GitHub's: its owner's picture, its name marked Token, and Remove where the reader may. */
+/** One token repository's row, inset under GitHub's: its owner's picture, its name marked Token, and Remove where the reader may, asked first, its refusal said in the question. */
 function TokenRepositoryRow({
   repository,
   onRemove,
@@ -234,51 +240,58 @@ function TokenRepositoryRow({
   repository: WorkspaceTokenRepository;
   onRemove: () => Promise<string | undefined>;
 }): React.JSX.Element {
-  const [busy, setBusy] = useState(false);
-  const [refusal, setRefusal] = useState<string>();
+  const removal = useConfirmDialog({ subject: repository.removable, surfaceOpen: true }, () =>
+    onRemove().then(
+      (refused): ActionResult =>
+        refused === undefined
+          ? { status: ACTION_RESULT_STATUS.ACCEPTED }
+          : { status: ACTION_RESULT_STATUS.REJECTED, reason: refused },
+    ),
+  );
   const [owner = repository.fullName] = repository.fullName.split("/");
   return (
-    <SettingsRow
-      indent={SETTINGS_ROW_INDENT.MARK}
-      leading={
-        <SettingsRowMark>
-          <WorkspaceTile
-            workspace={{
-              id: `github:${owner}`,
-              name: owner,
-              pictureUrl: githubAccountPictureUrl(owner),
-            }}
-            size={TILE_SIZE.NESTED}
-          />
-        </SettingsRowMark>
-      }
-      label={repository.fullName}
-      adornment={<Badge>{WORDS.TOKEN}</Badge>}
-      error={refusal}
-    >
-      {() =>
-        repository.removable ? (
-          <Button
-            variant={BUTTON_VARIANT.OUTLINE}
-            busy={busy}
-            busyLabel={WORDS.REMOVING}
-            onClick={() => {
-              setBusy(true);
-              setRefusal(undefined);
-              onRemove().then(
-                (refused) => {
-                  setBusy(false);
-                  setRefusal(refused);
-                },
-                () => setBusy(false),
-              );
-            }}
-          >
-            {WORDS.REMOVE}
-          </Button>
-        ) : null
-      }
-    </SettingsRow>
+    <>
+      <SettingsRow
+        indent={SETTINGS_ROW_INDENT.MARK}
+        leading={
+          <SettingsRowMark>
+            <WorkspaceTile
+              workspace={{
+                id: `github:${owner}`,
+                name: owner,
+                pictureUrl: githubAccountPictureUrl(owner),
+              }}
+              size={TILE_SIZE.NESTED}
+            />
+          </SettingsRowMark>
+        }
+        label={repository.fullName}
+        adornment={<Badge>{WORDS.TOKEN}</Badge>}
+      >
+        {() =>
+          repository.removable ? (
+            <Button
+              variant={BUTTON_VARIANT.OUTLINE}
+              busy={removal.busy}
+              busyLabel={WORDS.REMOVING}
+              onClick={removal.ask}
+            >
+              {WORDS.REMOVE}
+            </Button>
+          ) : null
+        }
+      </SettingsRow>
+      <ConfirmDialog
+        confirm={removal}
+        question={{
+          title: `Remove ${repository.fullName}?`,
+          body: "Agents in this workspace stop reaching it until someone adds it again.",
+          verb: WORDS.REMOVE,
+          running: WORDS.REMOVING,
+          loss: CONFIRM_LOSS.AFFECTS_OTHERS,
+        }}
+      />
+    </>
   );
 }
 

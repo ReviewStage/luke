@@ -1844,7 +1844,7 @@ test("Archive agent on the page's ⋯ reads an agent at rest again and archives 
   );
 });
 
-test("Archive agent on the page's ⋯ asks first while the agent works, and archives nothing until asked", async () => {
+test("Archive agent on the page's ⋯ archives the reader's own agent at once while it works, asking nothing", async () => {
   pages = [{ agent: { ...PAGE, status: CODING_AGENT_STATUS.RUNNING } }];
   const page = mount();
   await settle();
@@ -1852,8 +1852,8 @@ test("Archive agent on the page's ⋯ asks first while the agent works, and arch
   await act(async () => archive.click());
   await settle();
 
-  assert.match(document.body.textContent ?? "", /Stop and archive Sweep the flaky tests\?/u);
-  assert.deepEqual(archives, []);
+  assert.equal(document.querySelector('[role="alertdialog"]'), null, "nothing was asked");
+  assert.deepEqual(archives, [{ agentId: AGENT_ID, archived: true }]);
 });
 
 test("an archived agent's ⋯ offers Unarchive in Archive's place, and no Rename", async () => {

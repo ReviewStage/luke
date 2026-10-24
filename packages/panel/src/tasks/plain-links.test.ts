@@ -4,8 +4,6 @@ import assert from "node:assert/strict";
 import type { Task } from "@luke/features/task-wire";
 import { PLAN_ACTOR } from "@luke/features/task-wire";
 import { ACT_KIND } from "@luke/host/acts";
-import { useConfirmDialog } from "@luke/ui";
-import { ACTION_RESULT_STATUS } from "@luke/wire";
 import { Effect } from "effect";
 import { act, createElement, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -127,9 +125,7 @@ function plainLinks(container: HTMLElement): [string | null, boolean][] {
 
 /** A plan's version, read and ready, as the version history draws it. */
 function Version(): ReactNode {
-  const restore = useConfirmDialog({ subject: true, surfaceOpen: true }, () =>
-    Promise.resolve({ status: ACTION_RESULT_STATUS.ACCEPTED }),
-  );
+  const restore = { busy: false, onRestore: () => undefined };
   return createElement(VersionView, {
     onRetry: () => undefined,
     viewing: {

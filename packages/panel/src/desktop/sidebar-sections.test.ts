@@ -21,7 +21,7 @@ import {
 } from "@luke/ui/task-sections-model";
 import { type PinMove, TASK_MARK, type TaskMark } from "@luke/ui/tasks-model";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
-import { act, createElement, useState } from "react";
+import { act, createElement, Fragment, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
 import { appCommandOffered, runAppCommand } from "../app-commands.js";
@@ -30,13 +30,15 @@ import { handState } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { sidebarProps } from "../testing/desktop-sidebar.js";
 import { tasksControl } from "../testing/tasks-control.js";
+import { newestToastAction, newestToastSays } from "../testing/toast.js";
+import { ToastHost } from "../toast.js";
 import { DesktopSidebar } from "./desktop-sidebar.js";
 
 /**
  * sidebar-sections.test.ts -- the account's own sections in the sidebar:
  * each drawn over the tasks kept in it,
  * which Tasks then leaves out, and reached from a task's menu, whose Move
- * to section writes the move and whose section's Delete asks first; and
+ * to section writes the move and whose section's Delete acts at once with Undo; and
  * the dialog's icon picker, every Lucide glyph in a color and every emoji,
  * found by one search; and a task dragged between Pinned, Tasks, and a
  * section, pinned, unpinned, and moved where it is let go; and, under a finger, which drags nothing, a pin, a
@@ -206,7 +208,19 @@ async function mountSidebarRedrawn(
   roots.push(root);
   const registry = AtomRegistry.make();
   const draw = async (sections: TaskSections) => {
-    act(() => root.render(onRegistry(registry, sidebarOver(sections, writes, rest))));
+    act(() =>
+      root.render(
+        onRegistry(
+          registry,
+          createElement(
+            Fragment,
+            null,
+            sidebarOver(sections, writes, rest),
+            createElement(ToastHost),
+          ),
+        ),
+      ),
+    );
     await settle();
   };
   await draw(sections);
@@ -367,25 +381,6 @@ test("a task's Move to section puts it on top of the section chosen", async () =
   ]);
 });
 
-test("a section's Delete section asks first, then deletes the section and none of its tasks", async () => {
-  const writes: TaskSectionWrite[] = [];
-  const sidebar = await mountSidebar(writes);
-  const actions = sidebar.querySelector<HTMLButtonElement>('[aria-label="Launch actions"]');
-  assert.ok(actions);
-
-  act(() => actions.click());
-  act(() => item("Delete section").click());
-  const asked = writes.length;
-  const confirm = [...document.querySelectorAll<HTMLButtonElement>("button")].find(
-    (button) => button.textContent === "Delete section",
-  );
-  assert.ok(confirm, "the question is asked");
-  await act(async () => confirm.click());
-
-  assert.equal(asked, 0);
-  assert.deepEqual(writes, [{ kind: TASK_SECTION_WRITE.DELETE, id: LAUNCH }]);
-});
-
 /** Launch holding both tasks, Invite expiry on top, and Someday holding none. */
 const BOTH_IN_LAUNCH: TaskSections = {
   sections: ICONLESS.sections,
@@ -420,6 +415,43 @@ function openRowMenu(sidebar: HTMLElement, name: string): void {
     row.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, clientX: 10, clientY: 10 }));
   });
 }
+
+/** The sections' titles, in the order the sidebar draws them. */
+function sectionTitles(sidebar: HTMLElement): string[] {
+  const heads = sidebar.querySelectorAll('nav[aria-label="Sections"] .luke-group-header-head');
+  return [...heads].map((head) => heardName(head.querySelector("button[aria-expanded]") ?? head));
+}
+
+/** `state` once the service has taken every write of `writes`, in order. */
+function applied(state: TaskSections, writes: readonly TaskSectionWrite[]): TaskSections {
+  return writes.reduce((was, write) => applySectionWrite(was, write, 30), state);
+}
+
+test("deleting a section removes it at once with no dialog, and Undo brings it back where it stood with its tasks", async () => {
+  const writes: TaskSectionWrite[] = [];
+  const { container: sidebar, draw } = await mountSidebarRedrawn(writes, BOTH_IN_LAUNCH);
+  const stood = sectionTitles(sidebar);
+  openSectionMenu(sidebar, "Launch");
+
+  act(() => item("Delete section").click());
+  const deleted = applied(BOTH_IN_LAUNCH, writes.splice(0));
+  await draw(deleted);
+
+  assert.equal(document.querySelector('[role="alertdialog"]'), null, "nothing is asked");
+  assert.deepEqual(sectionTitles(sidebar), ["Someday"]);
+  assert.deepEqual(namesIn(sidebar, "Tasks"), ["Invite expiry", "Retry audit"]);
+  assert.match(newestToastSays() ?? "", /Section deleted/u);
+
+  act(() => newestToastAction()?.click());
+  await draw(applied(deleted, writes));
+
+  assert.deepEqual(stood, ["Someday", "Launch"]);
+  assert.deepEqual(sectionTitles(sidebar), stood);
+  assert.deepEqual(namesIn(sidebar, "Sections"), ["Invite expiry", "Retry audit"]);
+  assert.deepEqual(namesIn(sidebar, "Tasks"), []);
+  const icon = sectionHeader(sidebar, "Launch").querySelector(".luke-group-header-icon");
+  assert.equal(icon?.textContent, "🚀");
+});
 
 test("a section holding tasks offers what acts on all of them between Edit and Delete, after its move", async () => {
   const sidebar = await mountSidebar([], ICONLESS);
@@ -517,21 +549,6 @@ test("a section's Mark all as read stands while a task in it is unread, and mark
 
   assert.deepEqual(marks, [["Mark as unread"], ["Mark as unread"]]);
   assert.ok(!menuLabels().includes("Mark all as read"));
-});
-
-test("a section's Delete question goes when the section does, deleted on another Mac", async () => {
-  const writes: TaskSectionWrite[] = [];
-  const { container, draw } = await mountSidebarRedrawn(writes);
-  const actions = container.querySelector<HTMLButtonElement>('[aria-label="Launch actions"]');
-  assert.ok(actions);
-  act(() => actions.click());
-  act(() => item("Delete section").click());
-  assert.ok(document.querySelector('[role="alertdialog"]'), "the question is asked");
-
-  await draw({ sections: [], entries: [], agentEntries: [] });
-
-  assert.equal(document.querySelector('[role="alertdialog"]'), null);
-  assert.deepEqual(writes, []);
 });
 
 test("a section without an icon draws its title behind the fold's chevron alone, and one with an icon behind its icon", async () => {

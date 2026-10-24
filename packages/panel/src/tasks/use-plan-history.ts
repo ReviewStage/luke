@@ -127,11 +127,11 @@ export interface PlanHistoryControl {
   onRetryVersion: () => void;
   /** Reads the page of revisions older than the oldest read; answers whether it landed. */
   onLoadEarlier: () => Promise<boolean>;
-  /** Restores the version chosen as the plan's content; the caller hears it landed through `onRestored`. */
-  onRestore: () => Promise<ActionResult>;
+  /** Restores the version `seq`, or the one chosen, as the plan's content; the caller hears it landed through `onRestored`. */
+  onRestore: (seq?: number) => Promise<ActionResult>;
 }
 
-/** What a restore the service did not carry answers, so the dialog stays and says why. */
+/** What a restore the service did not carry answers, so its press says why. */
 const RESTORE_REFUSED: ActionResult = {
   status: ACTION_RESULT_STATUS.REJECTED,
   reason: "The version could not be restored. Try again.",
@@ -471,14 +471,14 @@ export function usePlanHistory(input: {
     });
   }, [readBefore]);
 
-  const onRestore = async (): Promise<ActionResult> => {
-    if (taskId === undefined || seq === undefined) return RESTORE_REFUSED;
+  const onRestore = async (at = seq): Promise<ActionResult> => {
+    if (taskId === undefined || at === undefined) return RESTORE_REFUSED;
     // The version standing before the restore is the newest the list read.
     const before = newest;
-    const restored = await source.restore(taskId, seq).catch(() => false);
+    const restored = await source.restore(taskId, at).catch(() => false);
     if (!restored) return RESTORE_REFUSED;
     onRestored(
-      before === undefined || before === seq
+      before === undefined || before === at
         ? undefined
         : () => latest.current.restore(taskId, before).catch(() => false),
     );

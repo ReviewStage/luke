@@ -56,7 +56,7 @@ import { type RowMark, RowMarks } from "./task-actions.js";
  * the row's ⋯, a right-click, and the menu key, in a task's row's groups: Copy link and Rename, which turns
  * the row into its name's field until the edit ends, with Mark as unread
  * or Mark as read between them, through a task's marks (`agent-read-marks.ts`); then Pin or Unpin,
- * the reader's own, Archive agent, asked first while the agent works
+ * the reader's own, Archive agent, asked first while a teammate's agent works
  * (`agent-archive.tsx`), or Unarchive, and Move to section, the reader's
  * own sections, as a task's (`sidebar-sections.tsx`); and last and alone,
  * Permanently delete, always asked first (`agent-delete.tsx`), which leaves

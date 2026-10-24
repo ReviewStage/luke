@@ -16,7 +16,7 @@ import { TASK_CALL_FAILURE } from "@luke/features/tasks-view";
 import { ACT_KIND } from "@luke/host/acts";
 import type { WireBoundaryInput } from "@luke/wire";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
-import { act, createElement } from "react";
+import { act, createElement, Fragment } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
 import { fakeActPort } from "../testing/app-bridge.js";
@@ -25,6 +25,8 @@ import { layContainersAt } from "../testing/container-width.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { restOn } from "../testing/hint-rest.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
+import { newestToastAction, newestToastSays } from "../testing/toast.js";
+import { ToastHost } from "../toast.js";
 import { TaskIssueLinks } from "./task-issue-links.js";
 
 /**
@@ -163,22 +165,27 @@ async function mount(options: {
     root.render(
       onRegistry(
         AtomRegistry.make(),
-        createElement(TaskIssueLinks, {
-          taskId: TASK_ID,
-          workspaceId: WORKSPACE_ID,
-          repository: "acme/web",
-          linearIn: () => undefined,
-          githubIn: () =>
-            options.github === false
-              ? undefined
-              : () =>
-                  Promise.resolve({
-                    issues: [
-                      pick(312, "Login fails on Safari 18", "I_kwDOweb312"),
-                      pick(301, "Chart tooltips unreadable", "I_kwDOweb301"),
-                    ],
-                  }),
-        }),
+        createElement(
+          Fragment,
+          null,
+          createElement(TaskIssueLinks, {
+            taskId: TASK_ID,
+            workspaceId: WORKSPACE_ID,
+            repository: "acme/web",
+            linearIn: () => undefined,
+            githubIn: () =>
+              options.github === false
+                ? undefined
+                : () =>
+                    Promise.resolve({
+                      issues: [
+                        pick(312, "Login fails on Safari 18", "I_kwDOweb312"),
+                        pick(301, "Chart tooltips unreadable", "I_kwDOweb301"),
+                      ],
+                    }),
+          }),
+          createElement(ToastHost),
+        ),
       ),
     ),
   );
@@ -267,6 +274,35 @@ test("a keyword switched and an issue unlinked from a chip's menu reach the host
     rows(container).map(({ key, keyword }) => [key, keyword]),
     [["#312", "Part of"]],
   );
+});
+
+test("an issue unlinked asks nothing and offers Undo, which links the same issue again under its keyword", async () => {
+  const { container, sent } = await mount({ links: [SAFARI, ENG] });
+
+  choose(container, 1, "Unlink");
+  await settle();
+  const says = newestToastSays();
+  const unlinked = rows(container).map(({ key }) => key);
+  act(() => newestToastAction()?.click());
+  await settle();
+
+  assert.equal(document.querySelector('[role="alertdialog"]'), null, "nothing is asked");
+  assert.match(says ?? "", /Issue unlinked/u);
+  assert.deepEqual(unlinked, ["#312"]);
+  assert.deepEqual(sent.slice(1, 3), [
+    [ACT_KIND.TASK_ISSUES_UNLINK, { taskId: TASK_ID, linkId: ENG.id }],
+    [
+      ACT_KIND.TASK_ISSUES_LINK,
+      {
+        taskId: TASK_ID,
+        issue: {
+          provider: TASK_ISSUE_PROVIDER.LINEAR,
+          id: ENG.externalId,
+          relation: TASK_ISSUE_RELATION.PART_OF,
+        },
+      },
+    ],
+  ]);
 });
 
 test("Link issue opens the picker over the task's repository, the linked issue dimmed, and an issue picked is linked and read back", async () => {

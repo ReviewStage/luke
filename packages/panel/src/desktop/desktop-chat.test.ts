@@ -1551,6 +1551,8 @@ test("New channel opens a topic under the name typed, written as a channel's, wi
     (item) => item.textContent === "Archive channel",
   );
   act(() => archive?.click());
+  // Archiving reaches everyone in the channel but can be undone, so it asks in the accent, not red.
+  assert.equal(dialogButton("Archive channel").getAttribute("data-variant"), "primary");
   act(() => dialogButton("Archive channel").click());
   await settle();
   // The topic archived while it is read keeps its row in sight, under Archived, still the one shown.
@@ -1575,6 +1577,7 @@ test("New channel opens a topic under the name typed, written as a channel's, wi
   ].find((each) => each.textContent === "Bring back channel");
   assert.ok(bring, "the archived topic's foot offers to bring it back");
   act(() => bring.click());
+  assert.equal(dialogButton("Bring back").getAttribute("data-variant"), "primary");
   act(() => dialogButton("Bring back").click());
   await settle();
   assert.ok(

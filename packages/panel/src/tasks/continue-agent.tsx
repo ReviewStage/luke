@@ -266,9 +266,9 @@ export function ContinuedTrail(doors: ContinuedDoors): React.JSX.Element {
 /**
  * The quiet note in a continued agent's box, framed as the box it replaces:
  * Continued in and the agents' chips, then Stop while a turn still runs,
- * and Archive, bordered as a housekeeping press is, which asks first where
- * archiving would stop a turn (`useAgentArchive`) and toasts with Undo once
- * it took. An agent already
+ * and Archive, bordered as a housekeeping press is, which asks first only
+ * where archiving would stop a teammate's turn (`useAgentArchive`) and
+ * toasts with Undo once it took. An agent already
  * archived is offered no Archive.
  */
 export function ContinuedComposerNote({

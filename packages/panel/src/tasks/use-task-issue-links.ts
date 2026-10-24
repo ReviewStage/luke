@@ -1,12 +1,14 @@
-import type {
-  TaskIssueChoice,
-  TaskIssueLinkView,
-  TaskIssueRelation,
+import {
+  TASK_ISSUE_PROVIDER,
+  type TaskIssueChoice,
+  type TaskIssueLinkView,
+  type TaskIssueRelation,
 } from "@luke/features/task-issue-wire";
 import { TASK_CALL_FAILURE } from "@luke/features/tasks-view";
 import { ACT_KIND } from "@luke/host/acts";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useAct } from "../act.js";
+import { undoToast, useToast } from "../toast.js";
 import { linkNoteOf } from "./task-issue-links-model.js";
 
 /**
@@ -17,8 +19,9 @@ import { linkNoteOf } from "./task-issue-links-model.js";
  * never keeps; a link made is read again with the rest, so its state is
  * drawn too. A relation changed stands at once and is put back where the
  * service refused it, unless a newer change of the same link went out since,
- * whose answer is the one that stands; an unlink lets the row go once the
- * service answers. What did not land is said in one note, the latest, until
+ * whose answer is the one that stands; an unlink asks nothing, lets the row
+ * go once the service answers, and offers Undo in a toast, which links the
+ * same issue again under the keyword it had. What did not land is said in one note, the latest, until
  * the next change; a read that did not land is asked again by `onRetry`.
  */
 
@@ -37,6 +40,20 @@ export interface TaskIssueLinksControl {
   readonly onRetry: () => void;
 }
 
+/** What the toast says once an issue is unlinked. */
+const UNLINKED = "Issue unlinked";
+
+/** The choice that links a link's issue again under its keyword; none for a GitHub link read with no repository or number. */
+function relinkOf(link: TaskIssueLinkView): TaskIssueChoice | undefined {
+  const { relation } = link;
+  if (link.provider === TASK_ISSUE_PROVIDER.LINEAR) {
+    return { provider: TASK_ISSUE_PROVIDER.LINEAR, id: link.externalId, relation };
+  }
+  const { repository, number } = link;
+  if (repository === undefined || number === undefined) return undefined;
+  return { provider: TASK_ISSUE_PROVIDER.GITHUB, repository, number, relation };
+}
+
 /** A refusal the act port answered, in its own sentence (`act.ts` rethrows one as an `Error` carrying it). */
 function refusedSentence(refused: Error): string {
   return refused.message === ""
@@ -46,6 +63,7 @@ function refusedSentence(refused: Error): string {
 
 export function useTaskIssueLinks(taskId: string): TaskIssueLinksControl {
   const { act } = useAct();
+  const toast = useToast();
   const [read, setRead] = useState<{
     readonly taskId: string;
     readonly links: readonly TaskIssueLinkView[];
@@ -131,11 +149,17 @@ export function useTaskIssueLinks(taskId: string): TaskIssueLinksControl {
   };
 
   const onUnlink = (linkId: string) => {
+    const unlinked = read?.links.find((link) => link.id === linkId);
+    const relink = unlinked === undefined ? undefined : relinkOf(unlinked);
     say(undefined);
     act(ACT_KIND.TASK_ISSUES_UNLINK, { taskId, linkId })
       .then((answer) => {
-        if ("unlinked" in answer) replaced((links) => links.filter((link) => link.id !== linkId));
-        else say(linkNoteOf(answer));
+        if (!("unlinked" in answer)) {
+          say(linkNoteOf(answer));
+          return;
+        }
+        replaced((links) => links.filter((link) => link.id !== linkId));
+        if (relink !== undefined) toast(undoToast(UNLINKED, () => onLink(relink)));
       })
       .catch((refused: Error) => say(refusedSentence(refused)));
   };

@@ -32,7 +32,7 @@ import { type TabDoors, type TranscriptRead, useTranscriptCopier } from "./strip
  * while neither it nor what it stands under is archived; Open terminal, where the platform runs one,
  * and none for an archived agent, whose sandbox takes no shell; Copy link; its transcript's
  * two copies, read whole from the service; Archive agent, asked first
- * while it works (`agent-archive.tsx`), or Unarchive once it is archived;
+ * while a teammate's agent works (`agent-archive.tsx`), or Unarchive once it is archived;
  * and last and alone, Permanently delete, always asked first
  * (`agent-delete.tsx`), which closes the surface once it landed.
  * Run, which runs the agent's pushed branch on this Mac, stands on its

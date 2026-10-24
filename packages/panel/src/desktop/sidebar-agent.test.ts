@@ -48,6 +48,10 @@ const RUN: TasklessAgent = {
   activityAt: 2,
 };
 
+/** Who reads the sidebar, and a teammate who started an agent of theirs. */
+const ME = "user-me";
+const ADA = { userId: "user-ada", name: "Ada Lovelace" };
+
 /** Where the agent stands as its own page reads it, which may have moved since the list was read. */
 let standing: TasklessAgent = RUN;
 /** Every archive or Unarchive asked, in order. */
@@ -99,6 +103,7 @@ function mount(
   unread = false,
 ): HTMLElement {
   const agents = codingAgentsControl({
+    me: ME,
     pullRequests,
     onArchive: (agentId, archived) => {
       archives.push({ agentId, archived });
@@ -174,9 +179,20 @@ test("an agent at rest is archived from its row's right-click at once, once its 
   assert.equal(document.querySelector('[role="alertdialog"]'), null, "nothing was asked");
 });
 
-test("an agent the list read at rest but whose page reads it working is asked about first, and archived only once asked", async () => {
+test("the reader's own working agent is archived at once from its row, asking nothing, since its toast's Undo brings it back", async () => {
   standing = { ...RUN, status: CODING_AGENT_STATUS.RUNNING };
-  const row = mount(RUN);
+  const row = mount({ ...RUN, status: CODING_AGENT_STATUS.RUNNING });
+  const archive = item(rightClick(row), "Archive agent");
+  await act(async () => archive.click());
+  await settle();
+
+  assert.equal(document.querySelector('[role="alertdialog"]'), null, "nothing was asked");
+  assert.deepEqual(archives, [{ agentId: AGENT_ID, archived: true }]);
+});
+
+test("a teammate's agent the list read at rest but whose page reads it working is asked about first, and archived only once asked", async () => {
+  standing = { ...RUN, startedBy: ADA, status: CODING_AGENT_STATUS.RUNNING };
+  const row = mount({ ...RUN, startedBy: ADA });
   const archive = item(rightClick(row), "Archive agent");
   await act(async () => archive.click());
   await settle();
@@ -192,9 +208,9 @@ test("an agent the list read at rest but whose page reads it working is asked ab
   assert.deepEqual(archives, [{ agentId: AGENT_ID, archived: true }]);
 });
 
-test("stopping a working agent to archive it draws its act in the accent, since Unarchive brings it back", async () => {
-  standing = { ...RUN, status: CODING_AGENT_STATUS.RUNNING };
-  const row = mount(RUN);
+test("stopping a teammate's working agent to archive it draws its act in the accent, since Unarchive brings it back", async () => {
+  standing = { ...RUN, startedBy: ADA, status: CODING_AGENT_STATUS.RUNNING };
+  const row = mount({ ...RUN, startedBy: ADA });
   const archive = item(rightClick(row), "Archive agent");
   await act(async () => archive.click());
   await settle();

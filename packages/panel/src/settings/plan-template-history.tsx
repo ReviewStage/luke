@@ -131,9 +131,7 @@ export function TemplateVersionHistory({
   });
   const subject: VersionSubject = {
     versions,
-    noun: "template",
     title: TEMPLATE_TITLE,
-    shown: true,
     agents: [],
     summary: templateRevisionSummary,
     onShowSource: undefined,

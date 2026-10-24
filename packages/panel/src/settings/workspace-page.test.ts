@@ -1757,8 +1757,13 @@ test("the repositories members added on their tokens stand under GitHub's accoun
   assert.deepEqual(rowButtons(rowNamed(group, "octo-member/side")), []);
 
   act(() => button(rowNamed(group, "acme/relay"), "Remove").click());
+  const asked = sent.some((one) => one.kind === ACT_KIND.WORKSPACE_TOKEN_REPOSITORY_SET);
+  // The repository goes for every member's agents, so its removal asks first, in the accent.
+  assert.equal(button(dialog(), "Remove").getAttribute("data-variant"), "primary");
+  act(() => button(dialog(), "Remove").click());
   await settle();
 
+  assert.equal(asked, false, "nothing is sent while it asks");
   assert.deepEqual(
     sent
       .filter((one) => one.kind === ACT_KIND.WORKSPACE_TOKEN_REPOSITORY_SET)
@@ -2011,6 +2016,8 @@ test("the owner invites an address as a role, sees it pending with its link to c
   const listed = [addressOf(row)?.textContent, row.querySelector("p")?.textContent];
   act(() => button(row, "Copy link").click());
   await chooseAction(row, "Cancel invitation");
+  act(() => button(dialog(), "Cancel invitation").click());
+  await settle();
 
   assert.deepEqual(listed, [
     "alan@example.com",
@@ -2142,6 +2149,26 @@ test("an invitation's answer that lands after the stream told a newer list does 
   release();
   await settle();
 
+  assert.deepEqual(invitationRows(page), []);
+});
+
+test("Cancelling an invitation asks first, in the accent rather than red, and sends nothing until it is answered", async () => {
+  const { page } = await mount({ ...ACME, role: WORKSPACE_ROLE.OWNER });
+  await invite(page, "alan@example.com", WORKSPACE_ROLE.MEMBER);
+  const row = invitationRows(page)[0] ?? assert.fail("no pending invitation");
+  const cancels = () =>
+    sent.filter((request) => request.kind === ACT_KIND.WORKSPACE_INVITATION_CANCEL).length;
+
+  await chooseAction(row, "Cancel invitation");
+  const asked = cancels();
+  const answer = button(dialog(), "Cancel invitation");
+
+  assert.equal(asked, 0, "nothing is sent while it asks");
+  assert.match(dialog().textContent ?? "", /alan@example\.com/u);
+  assert.equal(answer.getAttribute("data-variant"), "primary");
+  act(() => answer.click());
+  await settle();
+  assert.equal(cancels(), 1);
   assert.deepEqual(invitationRows(page), []);
 });
 

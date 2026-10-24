@@ -7,7 +7,6 @@ import type { PlanRevisionLine } from "@luke/features/task-wire";
 import { readFailedWords } from "@luke/features/words";
 import type { FormerMember, Workspace, WorkspaceMember } from "@luke/features/workspace-wire";
 import { APP_COMMAND, APP_SHORTCUTS } from "@luke/settings/shortcuts";
-import type { DialogConfirm } from "@luke/ui";
 import {
   BackIcon,
   commandKeyshortcuts,
@@ -76,7 +75,12 @@ import {
 } from "../tasks/use-plan-history.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import { useFormerMembers, useWorkspaceMembers } from "../tasks/use-workspace-members.js";
-import { useVersionRestore, VersionPageSkeleton, VersionView } from "../tasks/version-view.js";
+import {
+  useVersionRestore,
+  VersionPageSkeleton,
+  type VersionRestore,
+  VersionView,
+} from "../tasks/version-view.js";
 import { type MenuAction, rowMenu } from "./action-menu.js";
 import { HistoryButtons, useSidebarEdge } from "./desktop-sidebar.js";
 import { useNarrowFocus } from "./narrow-focus.js";
@@ -132,11 +136,7 @@ import type { SidebarCollapse } from "./sidebar-collapse.js";
  */
 export interface VersionSubject {
   readonly versions: PlanHistoryControl;
-  /** What the versions are of, in the view's own words: "plan", or "template". */
-  readonly noun: string;
   readonly title: string | undefined;
-  /** Whether the view is on screen, which the restore's question stands on. */
-  readonly shown: boolean;
   /** The coding agents whose harness a revision of theirs wears. */
   readonly agents: readonly Pick<CodingAgentSummary, "id" | "model">[];
   /** What a revision did, in a few words. */
@@ -233,7 +233,7 @@ function RevisionRow({
   onOpenSections: (() => void) | undefined;
   /** The way to the place that wrote the revision; none where nothing else in the window did. */
   source: SourceDoor | undefined;
-  /** Chooses the version and asks to restore it; none for the plan as it stands. */
+  /** Restores the version, asking nothing; none for the plan as it stands. */
   onRestore: (() => void) | undefined;
   /** Copies the version's link; none for a history with no link of its own. */
   onCopyLink: (() => void) | undefined;
@@ -570,7 +570,7 @@ function VersionPage({
   lead,
 }: {
   subject: VersionSubject;
-  restore: DialogConfirm;
+  restore: VersionRestore;
   /** The one unit of the version drawn alone, while a section of its revision is open. */
   section: number | undefined;
   /** What leads the page's bar: the way back to the list, where the page stands alone. */
@@ -583,7 +583,6 @@ function VersionPage({
         viewing={versions.viewing}
         restore={restore}
         title={subject.title}
-        noun={subject.noun}
         section={section}
         task={subject.task}
         lead={lead}
@@ -635,9 +634,7 @@ export function taskVersionSubject(tasks: TasksControl): VersionSubject {
             ),
           },
     versions: tasks.history,
-    noun: "plan",
     title: task?.name,
-    shown: tasks.shown,
     agents: tasks.agents.agents ?? [],
     summary: revisionSummary,
     onShowSource:
@@ -689,7 +686,7 @@ export function DesktopVersionHistory({
   const former = useFormerMembers(subject.workspace);
   const reader = readerOf(account, members, former);
   // A restore that lands leaves for the task it restored, which is not always the one Back returns to.
-  const restore = useVersionRestore(versions, subject.shown, onRestored);
+  const restore = useVersionRestore(versions, onRestored);
   const sections = openedSections(versions.viewing, opened);
   const failed = sectionsFailed(versions.viewing, opened);
   const sourceOf = (line: PlanRevisionLine, author: Actor): SourceDoor | undefined => {
@@ -714,10 +711,7 @@ export function DesktopVersionHistory({
   const restoreOf = (line: PlanRevisionLine): (() => void) | undefined => {
     const newest = revisions[0]?.seq;
     if (line.seq === newest) return undefined;
-    return () => {
-      versions.onSelect(line.seq);
-      restore.ask();
-    };
+    return () => restore.onRestore(line.seq);
   };
   const closeSections = () => {
     if (opened === undefined) return;

@@ -962,7 +962,8 @@ function RoleChip({
  * invites an address as a member or an admin, then those still pending,
  * each under the outline face a person not yet in wears, saying as what and
  * until when, with its link to copy and Cancel invitation in its ⋯, which asks
- * nothing first since inviting the address again undoes it. A refusal is
+ * first in the accent rather than red: inviting the address again undoes it,
+ * but the link already sent to the invitee stops working. A refusal is
  * said under the form. The form is `@luke/ui`'s `TextField`, the role's
  * chip, and Invite its outline `Button`; each pending one is a `SettingsRow`
  * led by the face, through `MenuRow`, Copy link its outline `Button`.
@@ -1097,6 +1098,19 @@ function Invitations({
       },
     );
 
+  // Note that the question goes with its invitation, canceled or accepted meanwhile.
+  const [cancelling, setCancelling] = useState<WorkspaceInvitation>();
+  const cancellation = useConfirmDialog(
+    {
+      subject: cancelling !== undefined && (pending ?? []).some((one) => one.id === cancelling.id),
+      surfaceOpen: true,
+    },
+    () => {
+      if (cancelling !== undefined) cancel(cancelling.id);
+      return Promise.resolve(ACCEPTED);
+    },
+  );
+
   return (
     <>
       <Stack gap={GAP.NONE}>
@@ -1162,7 +1176,10 @@ function Invitations({
               icon: <XIcon />,
               danger: true,
               disabled: busy,
-              onSelect: () => cancel(one.id),
+              onSelect: () => {
+                setCancelling(one);
+                cancellation.ask();
+              },
             },
           ]}
           row={{
@@ -1181,6 +1198,16 @@ function Invitations({
           }}
         />
       ))}
+      <ConfirmDialog
+        confirm={cancellation}
+        question={{
+          title: "Cancel invitation?",
+          body: `The link sent to ${cancelling?.email ?? ""} stops working. Inviting the address again sends a new one.`,
+          verb: "Cancel invitation",
+          running: "Canceling",
+          loss: CONFIRM_LOSS.AFFECTS_OTHERS,
+        }}
+      />
     </>
   );
 }
