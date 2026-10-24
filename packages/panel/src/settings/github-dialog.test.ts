@@ -174,13 +174,13 @@ test("with no token the row offers Add, and a token pasted into the unrecorded f
   act(() => button("Done").click());
   assert.match(
     document.body.textContent ?? "",
-    /GitHub personal access tokenghp_…wxyz\u00a0· octo-member\u00a0· Expires\u00a0/u,
+    /GitHub personal access tokenghp_…wxyz\u00a0·\u00a0octo-memberExpires\u00a0/u,
   );
   button("Manage");
   assert.ok(!document.body.innerHTML.includes(PASTED), "the page holds the token nowhere");
 });
 
-test("a token's expiry is one unbreakable unit and no fact on the row's line starts with a dot", async () => {
+test("a token's expiry is one unbreakable unit and no fact on the row's line carries a dot at its edge", async () => {
   stored = KEPT;
   await mountAndOpen(false);
   const facts = [
@@ -189,7 +189,7 @@ test("a token's expiry is one unbreakable unit and no fact on the row's line sta
   const expiry = facts.find((each) => each.startsWith("Expires"));
   assert.match(expiry ?? "", /^Expires\u00a0[A-Z][a-z]{2}\u00a0\d{1,2},\u00a0\d{4}$/u);
   assert.deepEqual(
-    facts.filter((each) => each.startsWith("·")),
+    facts.filter((each) => /^·|·$/u.test(each)),
     [],
   );
 });
