@@ -3,6 +3,7 @@ import { CHAT_BOUNDS } from "@luke/features/chat-wire";
 import type { CodingAgentAttachment } from "@luke/features/coding-agent-wire";
 import { pasteCutWords } from "@luke/features/words";
 import {
+  ANNOUNCE,
   ComposerFoot,
   type ComposerNote as FootNote,
   TEXT_AREA_GROW_LIMIT,
@@ -12,6 +13,7 @@ import {
   TEXT_VARIANT,
   Text,
   TextArea,
+  useAnnounce,
 } from "@luke/ui";
 import { cutReply, QUOTE_GAP, quoteOf } from "@luke/ui/reply-quote";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
@@ -277,8 +279,9 @@ function footNote(note: ComposerNote | undefined, onRetry: () => void): FootNote
 
 /** A line under the box where a post would address more members than a post tells, since those past the first few hear nothing of it. */
 function CrowdedNote({ shown }: { shown: boolean }): React.JSX.Element {
+  useAnnounce(ANNOUNCE.POLITE, shown ? CROWDED : "");
   return (
-    <div className="chat-composer-crowded" role="status">
+    <div className="chat-composer-crowded">
       {shown ? (
         <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
           {CROWDED}

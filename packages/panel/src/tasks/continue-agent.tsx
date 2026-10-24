@@ -1,6 +1,7 @@
 import type { CodingAgentAttachment, CodingAgentSummary } from "@luke/features/coding-agent-wire";
 import type { Failure } from "@luke/features/failure-remedy";
 import {
+  ANNOUNCE,
   BANNER_LOOK,
   Banner,
   BUTTON_VARIANT,
@@ -20,6 +21,7 @@ import { ActorMark } from "../actor-ref.js";
 import { DRAFT_PLACE, type Draft, EMPTY_DRAFT, useDraftWriter } from "../composer-drafts.js";
 import { ActionMenu } from "../desktop/action-menu.js";
 import { useAgentArchive } from "../desktop/agent-archive.js";
+import { useAnnounceShown } from "../use-announce-shown.js";
 import { AgentActorRef, type AgentSubject, agentSubject, NOTHING_HELD } from "./agent-ref.js";
 import { CONTINUE_LABEL, CONTINUED_IN } from "./coding-agent-model.js";
 import { useContinueDoor } from "./fork-action.js";
@@ -105,6 +107,7 @@ export function ContinueAgent({
   const writer = useDraftWriter();
   const { continueAgent } = control;
   const opensDraft = useContinueDoor();
+  useAnnounceShown(ANNOUNCE.ALERT, note?.text ?? "");
 
   const press = () => {
     if (continueAgent === undefined || busy) return;
@@ -147,11 +150,7 @@ export function ContinueAgent({
       >
         {label}
       </Button>
-      {note === undefined ? null : (
-        <span className="agent-continue-note" role="alert">
-          {note.text}
-        </span>
-      )}
+      {note === undefined ? null : <span className="agent-continue-note">{note.text}</span>}
     </span>
   );
 }

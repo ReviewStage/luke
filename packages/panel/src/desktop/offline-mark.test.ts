@@ -7,6 +7,7 @@ import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
+import { announcedPolitely, mountAnnouncer } from "../testing/announcer.js";
 import { fakeAppBridge, fakeAppBridgeCalls } from "../testing/app-bridge.js";
 import { deliveryOf, stateWith } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
@@ -54,7 +55,7 @@ async function mount(first: AppStateSnapshot): Promise<(next: AppStateSnapshot) 
 
 /** The pill's announced name, or none where nothing is drawn. */
 function said(): string | undefined {
-  return document.querySelector('[role="status"]')?.getAttribute("aria-label") ?? undefined;
+  return document.querySelector(".offline-mark")?.getAttribute("aria-label") ?? undefined;
 }
 
 test("nothing is drawn while the Mac is online and live updates are current", async () => {
@@ -76,6 +77,21 @@ test("a broken follow says catching up, and its recovery clears it", async () =>
 
   await push(documentOf(true, HOST_LIVE.LIVE, 3));
   assert.equal(said(), undefined);
+});
+
+test("the pill going offline or catching up is announced politely as it changes, and taken back once live", async () => {
+  mountAnnouncer();
+  const push = await mount(documentOf(true, HOST_LIVE.LIVE));
+  assert.equal(announcedPolitely(), "");
+
+  await push(documentOf(true, HOST_LIVE.CATCHING_UP, 2));
+  assert.equal(announcedPolitely(), "Catching up");
+
+  await push(documentOf(false, HOST_LIVE.CATCHING_UP, 3));
+  assert.equal(announcedPolitely(), "Offline");
+
+  await push(documentOf(true, HOST_LIVE.LIVE, 4));
+  assert.equal(announcedPolitely(), "");
 });
 
 test("a service that answers no seal says offline while the Mac is online", async () => {

@@ -9,6 +9,7 @@ import {
 import { dayText } from "@luke/features/time-format";
 import { ACT_KIND } from "@luke/host/acts";
 import {
+  ANNOUNCE,
   BUTTON_TYPE,
   BUTTON_VARIANT,
   Button,
@@ -38,6 +39,7 @@ import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { useState } from "react";
 import { useAct } from "../act.js";
 import { useOpenLink } from "../tasks/use-open-link.js";
+import { useAnnounceShown } from "../use-announce-shown.js";
 
 /**
  * github-dialog.tsx -- Settings › Profile › GitHub personal access token: the member's own classic token, added, shown, and removed.
@@ -95,10 +97,9 @@ function statusLabel(status: GitHubTokenStatus): string | undefined {
 
 /** A problem said in the attention tint, announced as it lands. */
 function Problem({ children }: { children: string }): React.JSX.Element {
+  useAnnounceShown(ANNOUNCE.ALERT, children);
   return (
-    <SettingsRowStateLine state={SETTINGS_ROW_STATE.ATTENTION} role="alert">
-      {children}
-    </SettingsRowStateLine>
+    <SettingsRowStateLine state={SETTINGS_ROW_STATE.ATTENTION}>{children}</SettingsRowStateLine>
   );
 }
 

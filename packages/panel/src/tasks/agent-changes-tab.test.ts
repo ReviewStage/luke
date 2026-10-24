@@ -50,6 +50,7 @@ import {
 import type { FileMark, FileTreeModule, FileTreeProps } from "../file-tree/contract.js";
 import { findRanges, reveal } from "../find-matches.js";
 import { rendererRegistry } from "../renderer-runtime.js";
+import { announcedPolitely, mountAnnouncer } from "../testing/announcer.js";
 import {
   type AnyAct,
   FAKE_ANSWER,
@@ -1613,6 +1614,19 @@ test("the member's viewed marks tick their files, count toward the bar's progres
   assert.equal(viewedCount(), "1 / 3 files viewed");
 });
 
+test("the count of files viewed is announced politely as a tick changes it", async () => {
+  viewedAnswer = MARKED;
+  answerMarks(() => ({ outcome: PULL_REQUEST_WRITE_OUTCOME.DONE }));
+  files = [changed("a.ts"), changed("b.ts"), changed("c.ts")];
+  await drawTab();
+  mountAnnouncer();
+  assert.equal(announcedPolitely(), "", "the count first drawn is not read out");
+
+  act(() => viewedBox("c.ts").click());
+  await flush();
+  assert.equal(announcedPolitely(), "2 / 3 files viewed");
+});
+
 test("ticking a file's box marks it viewed on GitHub at once and folds it; one GitHub refuses goes back and says why", async () => {
   viewedAnswer = MARKED;
   let refuse = false;
@@ -1653,7 +1667,7 @@ test("the bar leads with the count of files viewed in the crumbs' place, polite 
   assert.equal(bar.querySelector(".luke-breadcrumbs"), null, "no crumbs");
   assert.doesNotMatch(bar.textContent ?? "", /billing/u, "the bar names no file");
   const count = bar.querySelector(".files-viewed") ?? assert.fail("a count");
-  assert.equal(count.getAttribute("aria-live"), "polite");
+  assert.equal(count.hasAttribute("aria-live"), false, "it is said through the announcer");
   assert.equal(count.querySelector("button, input"), null, "the count is words, not a control");
   assert.doesNotMatch(
     document.body.textContent ?? "",

@@ -1,6 +1,7 @@
 import { type TerminalAction, type TerminalBar, terminalLook } from "@luke/features/terminal-model";
 import { SHORTCUT_KEY } from "@luke/settings/shortcuts";
 import {
+  ANNOUNCE,
   FILL_FLOW,
   Fill,
   PaneBar,
@@ -10,6 +11,7 @@ import {
   TEXT_VARIANT,
   Text,
   TextButton,
+  useAnnounce,
 } from "@luke/ui";
 import { useMemo } from "react";
 import { TERMINAL_LOAD_FAILED } from "../bundle-loader.js";
@@ -82,8 +84,9 @@ function StateBar({
   onAction: (action: TerminalAction) => void;
 }): React.JSX.Element {
   const { action } = bar;
+  useAnnounce(ANNOUNCE.POLITE, bar.words);
   return (
-    <div className="terminal-bar" role="status" data-late={String(bar.late)}>
+    <div className="terminal-bar" data-late={String(bar.late)}>
       {bar.busy ? (
         <span className="terminal-bar-busy" aria-hidden="true">
           ⋯

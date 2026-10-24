@@ -1348,7 +1348,7 @@ test("a fixture run staged on Chat offers it with no account to turn its experim
 
 /** The offline status in the title bar beside the traffic lights, if one stands. */
 function titleBarOffline(page: HTMLElement): Element | null {
-  return page.querySelector('.title-bar-controls [role="status"][aria-label="Offline"]');
+  return page.querySelector('.title-bar-controls .offline-mark[aria-label="Offline"]');
 }
 
 test("with the sidebar folded, the Mac offline says so in the title bar beside New task, and nothing does online", async () => {
