@@ -83,6 +83,15 @@ test("the plain box takes the caret where its place was opened, and leaves it wh
   assert.ok(document.activeElement !== stepped, "a place stepped to leaves the caret out");
 });
 
+test("the plain box opened while the developer types in another field leaves the caret there", async () => {
+  const search = document.createElement("input");
+  document.body.append(search);
+  search.focus();
+  const field = await plainBox(true);
+  assert.ok(document.activeElement === search, "the field typed in keeps the caret");
+  assert.ok(document.activeElement !== field);
+});
+
 test("Escape in the plain box leaves it, keeps its words, and is marked taken so the window passes it by", async () => {
   const field = await plainBox(true);
   act(() => {

@@ -160,3 +160,14 @@ test("where a channel stands alone in a narrow Chat, K and J step on to the next
     "J goes on stepping, the caret in no box",
   );
 });
+
+test("a channel K or J stepped to, opened again later by a press, hands the caret to its box", () => {
+  const page = mount();
+  act(() => {
+    runAppCommand(APP_COMMAND.NEXT_CHAT_CHANNEL);
+  });
+  assert.equal(holdsCaret(footBox(page)), false);
+  act(() => railRow(page, "For you").click());
+  act(() => railRow(page, "general").click());
+  assert.ok(holdsCaret(footBox(page)), "the press opens the channel into its box");
+});

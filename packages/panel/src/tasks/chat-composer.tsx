@@ -33,7 +33,7 @@ import { useAttachedFiles } from "../use-attached-files.js";
 import { AttachFilesButton } from "./attach-files-button.js";
 import { AttachedFileChips, attachmentChips } from "./attached-file-chips.js";
 import { ATTACH_TAKES } from "./attached-files.js";
-import { ComposerField } from "./composer-field.js";
+import { ComposerField, typingElsewhere } from "./composer-field.js";
 import { DictateButton, DictationStrip } from "./dictation-strip.js";
 import { type MentionDoors, MentionNodeChip, pastedMentionNode } from "./mention-chip.js";
 import {
@@ -527,7 +527,7 @@ function PlainChatComposer({
 }: ChatComposerProps): React.JSX.Element {
   const field = useRef<HTMLTextAreaElement>(null);
   // Note that the plain box takes the caret where the editor box would, read as it first draws.
-  const [takes] = useState(compact === true || takesCaret === true);
+  const [takes] = useState(() => compact === true || (takesCaret === true && !typingElsewhere()));
   const { draft, setDraft, empty, note, send } = useChatSend(chatPlace(channelId, replyTo), onSend);
   // Note that the plain box has no quote block, so a reply's quote is written at its end as the Markdown it sends as.
   useReplyDoor(

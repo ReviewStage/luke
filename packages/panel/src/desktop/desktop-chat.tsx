@@ -911,6 +911,8 @@ function useChannelKeys({
 }): ChatPlace | undefined {
   const stepped = useRef(false);
   const [steppedTo, setSteppedTo] = useState<ChatPlace | undefined>(undefined);
+  // Note that a step is spent once another place is shown, so a press that opens it again later is a press.
+  if (steppedTo !== undefined && !samePlace(steppedTo, place)) setSteppedTo(undefined);
   const steps = groups === undefined ? [] : drawnSteps(groups, folded, place);
   const at = steps.findIndex((each) => samePlace(each, place));
   const go = (to: ChatPlace | undefined) =>
