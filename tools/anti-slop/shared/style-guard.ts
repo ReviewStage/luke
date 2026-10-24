@@ -19,6 +19,7 @@ export const STYLE_RULE = {
   DURATION: "literal-duration",
   EASING: "literal-easing",
   PICKER_WIDTH: "literal-picker-width",
+  SPACING: "literal-spacing",
 } as const;
 export type StyleRule = (typeof STYLE_RULE)[keyof typeof STYLE_RULE];
 
@@ -56,6 +57,11 @@ export const STYLE_RULES: Readonly<
       "a literal width on a picker's, popover's or menu's selector: it hangs at one of `POPOVER_WIDTH`'s three tokens",
     backlog: false,
   },
+  [STYLE_RULE.SPACING]: {
+    refuses:
+      "a pixel or rem literal on `padding`, `margin`, `gap`, `row-gap` or `column-gap` in the panel's stylesheets: the spacing role or scale step is read (0, `1px` and `auto` pass)",
+    backlog: true,
+  },
 };
 
 export const STYLE_RULE_IDS: readonly StyleRule[] = Object.values(STYLE_RULE);
@@ -82,6 +88,15 @@ const RULE_EXEMPT_FILES: Readonly<Partial<Record<StyleRule, readonly string[]>>>
  */
 const RULE_EXEMPT_FOLDERS: Readonly<Partial<Record<StyleRule, readonly string[]>>> = {
   [STYLE_RULE.PICKER_WIDTH]: ["packages/ui/", "apps/catalog/"],
+};
+
+/**
+ * Where one rule reads at all: spacing is held in the panel's own sheets,
+ * where `@luke/ui`'s spacing roles are read, and a component sheet in
+ * `@luke/ui` is where a role is drawn from its scale.
+ */
+const RULE_SCOPES: Readonly<Partial<Record<StyleRule, RegExp>>> = {
+  [STYLE_RULE.SPACING]: /^packages\/panel\/src\/styles\/[^/]+\.css$/u,
 };
 
 /**
@@ -346,6 +361,28 @@ function isPickerBox(block: CssBlock): boolean {
   });
 }
 
+const SPACING_PROPERTY =
+  /^(?:(?:padding|margin)(?:-(?:top|right|bottom|left|inline|block)(?:-(?:start|end))?)?|gap|row-gap|column-gap)$/u;
+
+const SPACING_LITERAL = /(?<![\w.#])-?(?:\d*\.)?\d+(px|rem)\b/giu;
+
+/**
+ * Whether a value spells a pixel or rem length of its own: a zero is none,
+ * and a hairline (`1px`, either way round) is none, being a border's width
+ * rather than a space. Note that a literal inside `calc()` counts, because
+ * a space built from a literal is still one.
+ */
+function holdsLiteralSpacing(value: string): boolean {
+  const left = withoutVars(bareValue(value)).replace(WIDE_KEYWORDS, " ");
+  for (const match of left.matchAll(SPACING_LITERAL)) {
+    const length = Math.abs(Number.parseFloat(match[0]));
+    if (length === 0) continue;
+    if (length === 1 && match[1]?.toLowerCase() === "px") continue;
+    return true;
+  }
+  return false;
+}
+
 const TIME_LITERAL = /(?<![\w.#-])(?:\d*\.)?\d+m?s\b/iu;
 const ZERO_TIME = /(?<![\w.#-])0*\.?0+m?s\b/giu;
 const EASING_FUNCTION = /\b(?:cubic-bezier|steps|linear)\(/u;
@@ -418,6 +455,7 @@ function cssRuleOf(declaration: CssDeclaration, block: CssBlock): StyleRule | un
   if (WIDTH_PROPERTY.test(property) && holdsLiteralLength(value) && isPickerBox(block)) {
     return STYLE_RULE.PICKER_WIDTH;
   }
+  if (SPACING_PROPERTY.test(property) && holdsLiteralSpacing(value)) return STYLE_RULE.SPACING;
   const loop = isAnsweredLoop(declaration, block);
   if (!loop && literalDuration(declaration)) return STYLE_RULE.DURATION;
   if (!loop && literalEasing(declaration)) return STYLE_RULE.EASING;
@@ -647,6 +685,7 @@ export function styleViolations(
   }
   return violations.filter(
     (violation) =>
+      RULE_SCOPES[violation.rule]?.test(file) !== false &&
       !RULE_EXEMPT_FILES[violation.rule]?.includes(file) &&
       !RULE_EXEMPT_FOLDERS[violation.rule]?.some((folder) => file.startsWith(folder)),
   );
