@@ -154,14 +154,14 @@ const ACTIONS = "ml-auto flex shrink-0 gap-dialog-action-gap [&>.luke-button]:mi
  * control, as a `Card` does, rather than clipped at the edge; that a
  * picture's card (`media`) is fitted edge to edge and draws its own head and
  * scroller, so its middle lays nothing out; and that a composer's card
- * neither scrolls nor gives way, as it stood before the middle, because its
- * chips hang lists (the repository's, the `@` menu) past the card's inner
- * edges, which a scroller would clip and a picker would take for its room
- * (`roomAround`), and its field already yields to the window's height
- * (`desktop.css`'s `.new-task`).
+ * does not scroll its middle, because its chips hang lists (the repository's,
+ * the `@` menu) past the card's inner edges, which a scroller would clip and
+ * a picker would take for its room (`roomAround`). Its middle still gives
+ * way to the card's height, as `.new-task` did standing in the card itself,
+ * so its field yields to a short window (`desktop.css`) and its foot stays.
  */
 const MIDDLE =
-  "flex min-h-0 flex-1 flex-col gap-[inherit] overflow-x-hidden overflow-y-auto overscroll-contain [--luke-focus-ring-offset:var(--luke-focus-ring-inset)] data-[size=media]:contents data-[size=composer]:min-h-auto data-[size=composer]:flex-none data-[size=composer]:overflow-visible";
+  "flex min-h-0 flex-1 flex-col gap-[inherit] overflow-x-hidden overflow-y-auto overscroll-contain [--luke-focus-ring-offset:var(--luke-focus-ring-inset)] data-[size=media]:contents data-[size=composer]:overflow-visible";
 
 /** What a reader is told when a draft holds the card back. */
 const HELD_NOTICE = "Your draft is kept. Press Escape again to close.";
