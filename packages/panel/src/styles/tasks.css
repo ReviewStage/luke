@@ -6140,12 +6140,6 @@ svg.lucide {
   white-space: pre;
 }
 
-.comment-note {
-  margin: var(--luke-item-gap) 0 0;
-  color: var(--luke-color-danger-text);
-  font-size: 12px;
-}
-
 .comment-gone {
   display: flex;
   align-items: center;

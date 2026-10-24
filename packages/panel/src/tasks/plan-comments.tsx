@@ -17,7 +17,6 @@ import type { PlanSection } from "@luke/features/plan-document";
 import { IRREVERSIBLE_WORDS, pasteCutWords } from "@luke/features/words";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
-  ANNOUNCE,
   BUTTON_SIZE,
   BUTTON_VARIANT,
   Button,
@@ -45,6 +44,7 @@ import {
   EmptyState,
   ERROR_STATE_PLACEMENT,
   ErrorState,
+  FailureNote,
   Fill,
   IconButton,
   LINE_BUTTON_LOOK,
@@ -132,7 +132,6 @@ import {
   type PlanEditorModule,
 } from "../plan-editor/contract.js";
 import { useBusyPress } from "../settings/busy-press.js";
-import { useAnnounceShown } from "../use-announce-shown.js";
 import { useAttachedFiles } from "../use-attached-files.js";
 import { keptKey, useKept } from "../use-kept.js";
 import { AgentActorRef, agentSubject, NOTHING_HELD } from "./agent-ref.js";
@@ -823,6 +822,7 @@ function ReplyField({
   onSend,
   onCancel,
   autoFocus,
+  failure,
   variant = REPLY_VARIANT.REPLY,
 }: {
   label: string;
@@ -837,6 +837,8 @@ function ReplyField({
   ) => Promise<boolean>;
   onCancel: () => void;
   autoFocus: boolean;
+  /** Why the last act on the thread did not go, which the foot says under the box; none while nothing failed. */
+  failure?: string | undefined;
   /** A thread's first comment, which is the card itself, or a reply under its comments, which stays a line until it is used. */
   variant?: ReplyVariant;
 }): React.JSX.Element {
@@ -864,7 +866,8 @@ function ReplyField({
   >(undefined);
   // Note that a dictation's note is said before the cut paste's, and only the agent box's editor cuts a paste.
   const said = heard ?? (cut ? pasteCutWords(PLAN_COMMENT_BOUNDS.MAX_WORDS_CHARS) : undefined);
-  const note = refusal ?? said;
+  // Note that a failed send is said over a refused file, which is said over a dictation's note or a cut paste.
+  const note = failure ?? refusal ?? said;
   const send = () => {
     const trimmed = words.trim();
     if (trimmed === "" || sending || files.reading) return;
@@ -1110,7 +1113,11 @@ function ThreadCard({
   const [first] = comments;
   const gone = thread.anchor === undefined;
   const note = doors.control.notes.get(thread.id);
-  useAnnounceShown(ANNOUNCE.ALERT, note ?? "");
+  // Whether a press on the card at rest opened it, which is what hands its reply the caret; a thread open from the first, as every one in the Comments tab, takes none.
+  const [pressed, setPressed] = useState(false);
+  useEffect(() => {
+    if (!open) setPressed(false);
+  }, [open]);
   const head = (
     <>
       {gone ? <GoneQuote thread={thread} onShowWords={onShowWords} /> : null}
@@ -1145,7 +1152,10 @@ function ThreadCard({
           reach={CARD_PRESS_REACH.CARD}
           alsoPressedBy={MENTION_REF}
           corner={CARD_PRESS_CORNER.MENU}
-          onPress={() => onOpen?.()}
+          onPress={() => {
+            setPressed(true);
+            onOpen?.();
+          }}
         >
           {replies.length === 0 ? (
             <VisuallyHidden>{COMMENT_WORDS.OPEN_THREAD}</VisuallyHidden>
@@ -1186,7 +1196,6 @@ function ThreadCard({
           <EventLine key={entry.id} entry={entry} agents={doors.agents} now={now} />
         ),
       )}
-      {note === undefined ? null : <div className="comment-note">{note}</div>}
       {thread.status === PLAN_COMMENT_STATUS.OPEN ? (
         <ReplyField
           label={COMMENT_WORDS.REPLY}
@@ -1196,7 +1205,8 @@ function ThreadCard({
             on: { threadId: thread.id },
           }}
           sending={sending}
-          autoFocus={false}
+          autoFocus={pressed}
+          failure={note}
           onCancel={() => onClose?.()}
           onSend={async (words, clientKey, attachments) => {
             setSending(true);
@@ -1211,7 +1221,10 @@ function ThreadCard({
             return sent;
           }}
         />
-      ) : null}
+      ) : note === undefined ? null : (
+        // Note that a resolved thread has no field to stand a failure under, so its Reopen's is said on its own.
+        <FailureNote>{note}</FailureNote>
+      )}
     </CommentCard>
   );
 }
@@ -1233,10 +1246,8 @@ function PendingCard({
 }): React.JSX.Element {
   const [sending, setSending] = useState(false);
   const [note, setNote] = useState<string | undefined>(undefined);
-  useAnnounceShown(ANNOUNCE.ALERT, note ?? "");
   return (
     <CommentCard place={THREAD_PLACE.MARGIN} open data-thread={PENDING_THREAD}>
-      {note === undefined ? null : <div className="comment-note">{note}</div>}
       <ReplyField
         label={COMMENT_WORDS.ADD}
         place={{
@@ -1246,6 +1257,7 @@ function PendingCard({
         }}
         sending={sending}
         autoFocus
+        failure={note}
         onCancel={onCancel}
         variant={REPLY_VARIANT.FIRST}
         onSend={async (words, clientKey, attachments) => {
