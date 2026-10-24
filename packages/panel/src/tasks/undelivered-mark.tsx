@@ -11,7 +11,9 @@ import { createContext, type ReactNode, useContext } from "react";
  * what did not go and carries it on with Continue in new agent. A message
  * refused for now while the developer had already written on in the box
  * keeps its words on its line the same way, and its mark offers Retry,
- * which sends it again where it stands. The tab hands its transcript the
+ * which sends it again where it stands. The note stands directly under the
+ * bubble, which is what fades the bubble and its files (`tasks.css`'s
+ * `.is-user:has(> .luke-failure-note)`). The tab hands its transcript the
  * lines so marked (`SentLineMarks`), by the id each was drawn under, and
  * the lines still on their way, whose files are drawn going up.
  */
@@ -57,16 +59,8 @@ export function useLineSending(messageId: string): boolean {
 export function UndeliveredMark({ messageId }: { messageId: string }): ReactNode {
   const marks = useContext(MarksContext);
   if (marks.undelivered.has(messageId)) {
-    return (
-      <div className="agent-undelivered" data-undelivered="">
-        <FailureNote>{UNDELIVERED_WORDS}</FailureNote>
-      </div>
-    );
+    return <FailureNote>{UNDELIVERED_WORDS}</FailureNote>;
   }
   if (!marks.unsent.has(messageId)) return null;
-  return (
-    <div className="agent-undelivered" data-unsent="">
-      <FailureNote onRetry={() => marks.retry(messageId)}>{UNSENT_WORDS}</FailureNote>
-    </div>
-  );
+  return <FailureNote onRetry={() => marks.retry(messageId)}>{UNSENT_WORDS}</FailureNote>;
 }

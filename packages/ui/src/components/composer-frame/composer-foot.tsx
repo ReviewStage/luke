@@ -1,3 +1,4 @@
+import type { ShortcutChord } from "@luke/settings/shortcuts";
 import type { ReactNode } from "react";
 import {
   BUTTON_TYPE,
@@ -60,6 +61,8 @@ export type ComposerSend = {
   onSend?: (() => void) | undefined;
   /** Whether it reads as its label in words, where its press settles something and sends no message ("Got it"). */
   inWords?: boolean | undefined;
+  /** The key that sends where it is no bare Enter, drawn on its hint: ⌘↩ for a box whose Enter breaks the line. */
+  chord?: ShortcutChord | undefined;
 } & BusyProps;
 
 /** The one line under the bar: what it says, and Retry where trying again can mend it. */
@@ -74,7 +77,7 @@ export interface ComposerNote {
 
 /** The send: the round submit in the panel's ink, busy while its send is out. */
 function SendButton({ send }: { send: ComposerSend }): React.JSX.Element {
-  const { label, empty, held = false, inWords = false, onSend } = send;
+  const { label, empty, held = false, inWords = false, onSend, chord } = send;
   const busy = send.busy === true ? { busy: true, busyLabel: send.busyLabel } : {};
   const type = onSend === undefined ? BUTTON_TYPE.SUBMIT : BUTTON_TYPE.BUTTON;
   if (inWords) {
@@ -91,7 +94,7 @@ function SendButton({ send }: { send: ComposerSend }): React.JSX.Element {
     );
   }
   return (
-    <Tooltip label={label}>
+    <Tooltip label={label} chord={chord}>
       <IconButton
         submit={SUBMIT_STATE.READY}
         variant={BUTTON_VARIANT.INK}

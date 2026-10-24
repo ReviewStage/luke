@@ -35,6 +35,11 @@
     animation-name: luke-over-pane-in-left;
   }
 
+  /* A peek waits a beat before it slides, so a pointer passing on its way elsewhere leaves before anything is covered. */
+  .luke-over-pane[data-arrival="peek"] {
+    animation-delay: var(--luke-duration-quick);
+  }
+
   /* On its way out it slides past its edge and holds there until it is let go. */
   .luke-over-pane[data-state="leaving"] {
     animation: luke-over-pane-out-right var(--luke-duration-pane) var(--luke-motion-pane) forwards;

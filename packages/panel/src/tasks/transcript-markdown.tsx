@@ -1,31 +1,18 @@
-import type { CodeLines, CodeToken } from "@luke/features/tasks-view";
+import type { CodeLines } from "@luke/features/tasks-view";
 import { ACT_KIND, COLOURED_CODE_MAX_CHARS, FENCE_LANGUAGE_MAX_CHARS } from "@luke/host/acts";
-import {
-  CARD_CORNER,
-  CARD_LOOK,
-  CARD_PADDING,
-  Card,
-  cssCustomProperties,
-  IconButton,
-  TEXT_ELEMENT,
-  TEXT_VARIANT,
-  Text,
-  Tooltip,
-} from "@luke/ui";
+import { CODE_CARD_TITLE, CODE_ROW, CodeCard, type CodeRow } from "@luke/ui";
 import { SUGGESTED_CHANGE_LANGUAGE } from "@luke/ui/github-html";
 import type { MarkdownComponents, MarkdownNodeProps } from "@luke/ui/markdown";
 import {
   type ComponentProps,
-  type CSSProperties,
   createContext,
-  Fragment,
   type ReactNode,
   useContext,
   useEffect,
   useState,
 } from "react";
 import { type ActHandle, useAct } from "../act.js";
-import { CopyGlyph, copyHint, useCopyFeedback } from "../copy-feedback.js";
+import { copyThroughShell } from "../copy-feedback.js";
 
 /**
  * transcript-markdown.tsx -- a transcript's code and tables: a fenced block drawn as the Code tab draws code, a table as a quiet grid, and an inline span on a subtle fill.
@@ -45,14 +32,11 @@ import { CopyGlyph, copyHint, useCopyFeedback } from "../copy-feedback.js";
  * asked for: one whose closing fence has not arrived is still streaming,
  * and is drawn plain until it does, so a long answer is coloured once
  * rather than once a word. What main answered is held by language and
- * code, so a block drawn again, or twice, asks once. A block's lines are
- * left out of the screen recording (`ph-no-capture`) as the Code tab's
- * are, a second line behind the recording's text masking, since their
- * colours draw the code's shape.
+ * code, so a block drawn again, or twice, asks once. A block stands in
+ * `@luke/ui`'s `CodeCard`, as every block of code in the window does, so
+ * its header, its one Copy, its cut at 40 lines, and the screen recording's
+ * leaving its lines out are the card's.
  */
-
-/** What a block's copy is called, which is its accessible name and its hint. */
-const COPY_LABEL = "Copy code";
 
 /** What a block whose fence names no language is labelled. */
 const PLAIN_LANGUAGE = "text";
@@ -65,15 +49,6 @@ const SUGGESTION = {
 
 /** The language a diff is fenced in, whose rows are tinted by what they do. */
 const DIFF_LANGUAGE = "diff";
-
-/** What a row of a block drawn as rows does: a line removed, one added, or one standing as it was. */
-const CODE_ROW = {
-  REMOVED: "removed",
-  ADDED: "added",
-  CONTEXT: "context",
-} as const;
-
-type CodeRow = (typeof CODE_ROW)[keyof typeof CODE_ROW];
 
 /** A diff's file header, `--- a/path` or `+++ b/path`: three marks, then a space or nothing. */
 const DIFF_HEADER = /^(?:---|\+\+\+)(?:\s|$)/u;
@@ -112,19 +87,6 @@ let colouringCount = 0;
  * the block's place in it but not the words.
  */
 const MarkdownSource = createContext("");
-
-/**
- * A run's colour in each appearance, as the properties `tasks.css` picks
- * between, so the code follows the appearance without being drawn again;
- * nothing for a run in the theme's own foreground.
- */
-function runColours({ color, lightColor }: CodeToken): CSSProperties | undefined {
-  if (color === undefined && lightColor === undefined) return undefined;
-  const colours: Record<string, string> = {};
-  if (color !== undefined) colours["--run-dark"] = color;
-  if (lightColor !== undefined) colours["--run-light"] = lightColor;
-  return cssCustomProperties(colours);
-}
 
 /** Forgets the oldest colouring, so a long session's window holds a bounded number. */
 function forgetOldest(): void {
@@ -213,36 +175,6 @@ function useColouredLines(language: string, code: string, whole: boolean): CodeL
   return answered?.language === language && answered.code === code ? answered.lines : undefined;
 }
 
-/** A block's copy, answered as every copy button in the window is (`copy-feedback.tsx`). */
-function CopyCodeButton({ code }: { code: string }): ReactNode {
-  const { state, copy } = useCopyFeedback();
-  return (
-    <Tooltip label={copyHint(state, COPY_LABEL)}>
-      <IconButton
-        icon={<CopyGlyph state={state} />}
-        label={COPY_LABEL}
-        onClick={() => copy(code)}
-      />
-    </Tooltip>
-  );
-}
-
-/** A block's lines, each run in its colour where main coloured them. */
-function CodeRuns({ code, lines }: { code: string; lines: CodeLines | undefined }): ReactNode {
-  if (lines === undefined) return code;
-  return lines.map((tokens, line) => (
-    // Note that a line's place is its identity: the lines of one answer never reorder.
-    <Fragment key={line}>
-      {line > 0 ? "\n" : null}
-      {tokens.map((token, at) => (
-        <span key={at} style={runColours(token)}>
-          {token.text}
-        </span>
-      ))}
-    </Fragment>
-  ));
-}
-
 /**
  * A block's lines as rows tinted by what each does, or none for a block of
  * plain lines. A suggestion as written holds the new lines alone, every one
@@ -275,46 +207,24 @@ function rowsOf(language: string, code: string): readonly Row[] | undefined {
   }));
 }
 
-/**
- * A block's lines as rows, each tinted by what it does and as wide as the
- * widest, its runs in their colours where main coloured them. Note that an
- * empty row holds a newline, so it stands a line tall.
- */
-function CodeRows({
-  rows,
-  lines,
-}: {
-  rows: readonly Row[];
-  lines: CodeLines | undefined;
-}): ReactNode {
-  return rows.map((row, at) => {
-    const tokens = lines?.[at];
-    return (
-      // Note that a row's place is its identity: a block's rows never reorder.
-      <span key={at} className="transcript-code-row" data-row={row.kind}>
-        {row.text === ""
-          ? "\n"
-          : tokens === undefined
-            ? row.text
-            : tokens.map((token, run) => (
-                <span key={run} style={runColours(token)}>
-                  {token.text}
-                </span>
-              ))}
-      </span>
-    );
-  });
+/** The words of the rows added, which is what a suggestion copies. */
+function addedText(rows: readonly Row[]): string {
+  return rows
+    .filter((row) => row.kind === CODE_ROW.ADDED)
+    .map((row) => row.text)
+    .join("\n");
 }
 
 /**
- * A fenced block: a quiet header naming its language with a copy at its
- * right, over its lines, which keep whole and scroll sideways inside the
- * block rather than widening the transcript. A ```suggestion block, a
- * change suggested to the lines a review comment is on, is headed as
- * GitHub heads one, its lines drawn as rows on the added lines' tint, and a
- * suggested change GitHub rendered its removed lines over its added ones on
- * the removed lines' tint; its copy is the new lines alone, which is the
- * suggestion. A diff's rows are tinted the same way (`rowsOf`).
+ * A fenced block as a `CodeCard`: its language in the header, which is
+ * "text" for a fence that names none, over its lines, which keep whole and
+ * scroll sideways inside the card rather than widening the transcript. A
+ * ```suggestion block, a change suggested to the lines a review comment is
+ * on, is headed as GitHub heads one, its lines drawn as rows on the added
+ * lines' tint, and a suggested change GitHub rendered its removed lines over
+ * its added ones on the removed lines' tint; its copy is the new lines
+ * alone, which is the suggestion. A diff's rows are tinted the same way
+ * (`rowsOf`).
  */
 function TranscriptCodeBlock({
   className,
@@ -331,44 +241,18 @@ function TranscriptCodeBlock({
   // Note that a suggestion names no language of its own to colour it in.
   const lines = useColouredLines(language, code, whole && !suggesting);
   const rows = rowsOf(language, code);
-  const copied = suggesting
-    ? (rows ?? [])
-        .filter((row) => row.kind === CODE_ROW.ADDED)
-        .map((row) => row.text)
-        .join("\n")
-    : code;
   return (
-    <Card
-      look={CARD_LOOK.CODE}
-      corner={CARD_CORNER.CONTROL}
-      padding={CARD_PADDING.FLUSH}
-      className="transcript-code ph-no-capture"
-    >
-      <div className="transcript-code-header">
-        {suggesting ? (
-          <span className="transcript-code-suggestion">{SUGGESTION.LABEL}</span>
-        ) : (
-          <Text
-            as={TEXT_ELEMENT.SPAN}
-            variant={TEXT_VARIANT.INHERIT}
-            truncate
-            className="transcript-code-language"
-          >
-            {language === "" ? PLAIN_LANGUAGE : language}
-          </Text>
-        )}
-        <CopyCodeButton code={copied} />
-      </div>
-      <pre className="transcript-code-body" data-rows={rows === undefined ? undefined : true}>
-        <code>
-          {rows === undefined ? (
-            <CodeRuns code={code} lines={lines} />
-          ) : (
-            <CodeRows rows={rows} lines={lines} />
-          )}
-        </code>
-      </pre>
-    </Card>
+    <CodeCard
+      title={
+        suggesting ? SUGGESTION.LABEL : language === "" ? PLAIN_LANGUAGE : language.toLowerCase()
+      }
+      titleIs={suggesting ? CODE_CARD_TITLE.WORDS : CODE_CARD_TITLE.NAME}
+      code={rows === undefined ? code : rows.map((row) => row.text).join("\n")}
+      lines={lines}
+      rows={rows?.map((row) => row.kind)}
+      copied={suggesting ? addedText(rows ?? []) : code}
+      copy={copyThroughShell}
+    />
   );
 }
 

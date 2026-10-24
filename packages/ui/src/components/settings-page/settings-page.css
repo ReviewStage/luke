@@ -63,31 +63,9 @@
     padding: var(--luke-page-inset);
   }
 
-  /* The title and the page's actions on one line, the actions dropping
-     below the title when both do not fit. */
+  /* The header (`PageHeader`), the room under it before the sections. */
   .luke-settings-page-head {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    justify-content: space-between;
-    gap: var(--luke-control-gap);
     margin-bottom: var(--luke-space-24);
-  }
-
-  .luke-settings-page-head > .luke-text {
-    min-width: 0;
-  }
-
-  /* A quiet act ends the line flush with the cards' edge. Note that the
-     actions take the margin rather than the button, because a button wider
-     than its container by its own negative margin would be held to it and
-     cut short. */
-  .luke-settings-page-actions {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: var(--luke-control-gap);
-    margin-inline-end: calc(-1 * var(--luke-control-inset));
   }
 
   .luke-settings-page-sections {

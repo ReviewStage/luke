@@ -1,19 +1,25 @@
-import { CodeCard } from "@luke/ui";
+import { CODE_CARD_TITLE, CODE_ROW, CodeCard, TextButton } from "@luke/ui";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
 
 /**
  * code-cards.tsx -- the one card for a block of code: a short block headed
  * by its language, one headed by its file with the host's colours on its
- * runs, and a block of 60 lines cut at 40 behind Show all. The catalog's
- * copy act is the browser's own clipboard; an app hands in its shell's.
+ * runs, a block of 60 lines cut at 40 behind Show all, a suggestion drawn
+ * as rows on the added and removed grounds, and a body the caller draws under
+ * a header with an action of its own. The catalog's copy act is the
+ * browser's own clipboard; an app hands in its shell's.
  */
 
 const copyToClipboard = (text: string): Promise<void> => navigator.clipboard.writeText(text);
 
 const SHORT = ["pnpm install", "pnpm exec vitest run packages/ui"].join("\n");
 
-const COLOURED = ['import { CodeCard } from "@luke/ui";', "", "export const cut = 40;"].join("\n");
+const COLOURED = [
+  'import { CODE_CARD_TITLE, CODE_ROW, CodeCard, TextButton } from "@luke/ui";',
+  "",
+  "export const cut = 40;",
+].join("\n");
 
 /** The colours the host's highlighter hands for `COLOURED`, GitHub's own in each appearance. */
 const COLOURED_LINES = [
@@ -36,6 +42,8 @@ const COLOURED_LINES = [
   ],
 ];
 
+const SUGGESTION = ["const days = 30;", "const days = 7;", "export default days;"];
+
 const LONG = Array.from(
   { length: 60 },
   (_, at) => `  step${at + 1}: "Line ${at + 1} of the block",`,
@@ -57,6 +65,25 @@ function CodeCards(): React.JSX.Element {
       </CatalogSection>
       <CatalogSection id="code-card-cut" title="Cut at 40 lines, with Show all">
         <CodeCard title="yaml" code={LONG} copy={copyToClipboard} />
+      </CatalogSection>
+      <CatalogSection id="code-card-rows" title="Drawn as rows, copying its new lines">
+        <CodeCard
+          title="Suggested change"
+          titleIs={CODE_CARD_TITLE.WORDS}
+          code={SUGGESTION.join("\n")}
+          rows={[CODE_ROW.REMOVED, CODE_ROW.ADDED, CODE_ROW.ADDED]}
+          copied={SUGGESTION.slice(1).join("\n")}
+          copy={copyToClipboard}
+        />
+      </CatalogSection>
+      <CatalogSection id="code-card-body" title="A body of the caller's own, with an action">
+        <CodeCard
+          title="packages/ui/src/cut.ts"
+          body="Drawn by the caller, not cut."
+          copied={COLOURED}
+          actions={<TextButton onClick={() => {}}>Open file</TextButton>}
+          copy={copyToClipboard}
+        />
       </CatalogSection>
     </>
   );

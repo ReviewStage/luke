@@ -36,8 +36,8 @@ import { ROW_RUN, withRowMoves } from "./row-moves.js";
 /**
  * Where a tab of the strip around it stands among the tabs that move, read
  * from the strip as the tab's menu opens, which moves it one place either
- * way under a finger (`row-moves.tsx`); none in a strip whose tabs stay
- * put, or for the tab anchored at its start.
+ * way (`row-moves.tsx`); none in a strip whose tabs stay put, or for the
+ * tab anchored at its start.
  */
 const TabPlaceContext = createContext<((tab: HTMLElement) => TabPlace | undefined) | undefined>(
   undefined,

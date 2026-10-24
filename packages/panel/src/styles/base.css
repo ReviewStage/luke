@@ -372,8 +372,7 @@ body,
   line-height: var(--luke-type-label-leading);
 }
 
-/* A voice failure in the `.error-message` red, because it is a fault being
-   reported. */
+/* A voice failure in the danger red, because it is a fault being reported. */
 .voice-notice[data-tone="error"] .voice-notice-text {
   color: var(--luke-color-danger-text);
 }
@@ -450,17 +449,6 @@ body,
 .draft-mark > svg {
   width: 100%;
   height: 100%;
-}
-
-/* A fault's words, in the danger text colour: a refusal under the row or
-   the dialog it answers, and a press that did not land. The one class for
-   them, so a failure reads alike wherever it is said. A read that did not
-   land is said more quietly, its glyph alone in red (`@luke/ui`'s
-   `ErrorState`). */
-.error-message {
-  margin: 0;
-  color: var(--luke-color-danger-text);
-  font-size: var(--luke-type-caption-size);
 }
 
 /* Session primitives ----------------------------------------------------- */
