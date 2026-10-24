@@ -56,11 +56,11 @@
 
   /* The line look's stack, in a window too small for the card (the floating
      call window, whose card stands a step in from its edges): across the
-     window's foot, inside the card's own edges, over its lower edge for the
-     toast's hold. */
+     window's foot, inside the card's own edges, over its row of controls
+     for the toast's hold. */
   .luke-toast-stack[data-look="line"] {
     right: var(--luke-space-12);
-    bottom: var(--luke-space-12);
+    bottom: var(--luke-space-8);
     left: var(--luke-space-12);
     width: auto;
   }

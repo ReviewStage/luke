@@ -4,7 +4,7 @@ import { cssCustomProperties } from "../../css.js";
 import { AlertIcon, CircleCheckIcon, InboxIcon } from "../../icons/lucide-glyphs.js";
 import { STATUS_TONE } from "../../status-tone.js";
 import { SpinnerRing } from "../spinner/spinner.js";
-import { TEXT_ELEMENT, TEXT_TONE, TEXT_VARIANT, Text } from "../text/text.js";
+import { TEXT_ELEMENT, TEXT_TONE, TEXT_VARIANT, Text, type TextVariant } from "../text/text.js";
 import { useToastSwipe } from "./toast-swipe.js";
 
 /**
@@ -104,9 +104,9 @@ const GLYPH_INK = {
 const TOAST_CARD =
   "luke-toast relative flex items-start gap-icon-gap rounded-toast border border-border-strong bg-background px-list-inset py-row-inset shadow-toast data-[action=true]:touch-pan-y data-[action=true]:pr-toast-gap";
 
-/** The line: its glyph, words, and any action on one row a control tall, its shadow the call card's own in its window. */
+/** The line: its glyph, words, and any action on one row a step taller than a control, so it covers a row of controls under it whole, its shadow the call card's own in its window. */
 const TOAST_LINE =
-  "luke-toast relative flex min-h-control items-center gap-icon-gap rounded-toast border border-border-strong bg-background px-toast-gap shadow-toast-line data-[action=true]:touch-pan-y";
+  "luke-toast relative flex min-h-toast-line items-center gap-icon-gap rounded-toast border border-border-strong bg-background px-toast-gap shadow-toast-line data-[action=true]:touch-pan-y";
 
 /** Each look's card. */
 const TOAST_FRAME = {
@@ -133,6 +133,12 @@ const TOAST_WORDS = {
   [TOAST_LOOK.CARD]: "luke-toast-words line-clamp-2 wrap-anywhere",
   [TOAST_LOOK.LINE]: "luke-toast-words min-w-0 flex-1 overflow-hidden whitespace-nowrap",
 } as const satisfies Record<ToastLook, string>;
+
+/** Its words' type: a section's on the card, and a label's on the line, which has room for few words and cuts the rest. */
+const TOAST_WORDS_TYPE = {
+  [TOAST_LOOK.CARD]: TEXT_VARIANT.SECTION,
+  [TOAST_LOOK.LINE]: TEXT_VARIANT.LABEL,
+} as const satisfies Record<ToastLook, TextVariant>;
 
 /** A bar along its foot, in the muted ink, faint, draining toward its start. */
 const TOAST_COUNTDOWN =
@@ -253,7 +259,7 @@ export function Toast({
       </span>
       <span className={TOAST_TEXT[look]} key={words}>
         <span className={TOAST_WORDS[look]}>
-          <Text variant={TEXT_VARIANT.SECTION} as={TEXT_ELEMENT.SPAN}>
+          <Text variant={TOAST_WORDS_TYPE[look]} as={TEXT_ELEMENT.SPAN}>
             {words}
           </Text>
         </span>

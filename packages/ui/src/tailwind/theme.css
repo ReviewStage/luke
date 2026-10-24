@@ -465,6 +465,7 @@
     (var(--luke-control-height) - var(--luke-type-section-leading)) /
     2
   );
+  --spacing-toast-line: calc(var(--luke-control-height) + var(--luke-space-8));
   --radius-toast: var(--luke-radius-14);
   --shadow-toast: 0 1px 2px var(--luke-color-shadow-soft), 0 12px 36px var(--luke-color-shadow);
   --shadow-toast-dismiss: 0 1px 3px var(--luke-color-shadow-soft);
