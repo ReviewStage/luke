@@ -304,12 +304,12 @@ function TaskPageChipCard({
   wait: PageWait;
 }): ReactNode {
   const tasks = useAppSlice(APP_SLICE.TASKS);
-  if (tasks?.activeTaskId !== taskId) {
+  // Note that the window holds no pages for the open plan both before they land and once a read found none, so a plan it holds none for is read as a closed one is.
+  const held = tasks?.activeTaskId === taskId ? tasks.pages : undefined;
+  if (held === undefined) {
     return <ReadTaskPageChipCard taskId={taskId} pageId={pageId} wait={wait} />;
   }
-  // Note that the open plan's pages may land after the plan itself, and a page is unread only once they have.
-  if (tasks.pages === undefined) return wait.reading;
-  const page = tasks.pages.find((each) => each.id === pageId);
+  const page = held.find((each) => each.id === pageId);
   if (page === undefined) return wait.fallback;
   return <PageCard place={{ taskId }} page={page} />;
 }

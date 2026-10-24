@@ -547,7 +547,7 @@ test("a page's chip hangs its title, its version and who showed it, and when it 
   assert.equal(read.sub, "Shown by Luke");
 });
 
-test("a page's chip of the open plan whose pages are still to land hangs the one reading state, never that it can't be read", async () => {
+test("a page's chip of the open plan the window holds no pages for reads the plan's pages as it is hung, and says it can't be read once they lack it", async () => {
   const { pages: _landing, ...opening } = STATE.tasks;
   const container = await drawn(
     mentionMarkdown({ kind: MENTION_KIND.PAGE, taskId: TASK_ID, pageId: PAGE_ID }, "Unfurl", PLACE),
@@ -556,7 +556,7 @@ test("a page's chip of the open plan whose pages are still to land hangs the one
   );
 
   const card = await cardOf(chipsOf(container)[0]);
-  assert.deepEqual([card.card, card.name, card.notes], ["data-chip-card-reading", "Unfurl", []]);
+  assert.deepEqual([card.name, card.notes], ["Unfurl", [PAGE_UNREAD]]);
 });
 
 test("a chip of a page an agent on no task showed hangs the same card as a plan's page, read as it is first hung: its title, its version and the agent that showed it, and when it moved, over its preview; one the agent's pages hold not, or of an agent the reader cannot reach, says it can't be read", async () => {
