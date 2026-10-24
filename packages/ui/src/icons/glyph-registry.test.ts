@@ -24,9 +24,10 @@ test("no two concepts are drawn by the same mark", () => {
   }
 });
 
-test("every concept draws a mark, and a line drawing draws it at the window's stroke", () => {
+test("every concept draws a mark hidden from a reader, and a line drawing draws it at the window's stroke", () => {
   for (const { concept, markup } of DRAWN) {
     assert.match(markup, /^<svg /u, `${concept} draws an svg`);
+    assert.match(markup, /aria-hidden="true"/u, `${concept} is hidden from a reader`);
     // The GitHub mark is a brand's solid art, which has no stroke to weigh.
     if (concept === "OPEN_ON_GITHUB") continue;
     assert.match(markup, /stroke-width="1\.9"/u, `${concept} is drawn at the one stroke`);

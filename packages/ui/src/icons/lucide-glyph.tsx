@@ -18,6 +18,13 @@ void React;
  */
 export function lucideGlyph(Drawing: LucideIcon, className?: string): () => React.JSX.Element {
   return function LucideGlyph(): React.JSX.Element {
-    return <Drawing className={className} strokeWidth={ICON_STROKE_WIDTH} focusable="false" />;
+    return (
+      <Drawing
+        className={className}
+        strokeWidth={ICON_STROKE_WIDTH}
+        aria-hidden="true"
+        focusable="false"
+      />
+    );
   };
 }

@@ -28,6 +28,8 @@ function seatPixels(seat: string): number {
 }
 
 test("the four seats are 12, 16, 20 and 40 pixels, growing from caption to empty state", () => {
-  const sizes = [ICON_SIZE.SMALL, ICON_SIZE.MEDIUM, ICON_SIZE.LARGE, ICON_SIZE.EMPTY].map(seatPixels);
+  const sizes = [ICON_SIZE.SMALL, ICON_SIZE.MEDIUM, ICON_SIZE.LARGE, ICON_SIZE.EMPTY].map(
+    seatPixels,
+  );
   assert.deepEqual(sizes, [12, 16, 20, 40]);
 });
