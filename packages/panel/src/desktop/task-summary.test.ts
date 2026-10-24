@@ -329,7 +329,7 @@ test("an agent's row in the summary offers Copy link on a right-click, copying t
   assert.ok(copy);
   await act(async () => copy.click());
 
-  assert.deepEqual(labels, ["Copy link", "Archive"]);
+  assert.deepEqual(labels, ["Copy link", "Show details⌥↓", "Archive"]);
   assert.deepEqual(copied, [`https://tryluke.dev/acme/plan/${AGENT.planId}/agent/${AGENT.id}`]);
 });
 

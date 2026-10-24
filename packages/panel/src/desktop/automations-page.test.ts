@@ -3145,7 +3145,7 @@ test("an automation row's ⋯, its right-click and the menu key open the same me
     assert.equal(openMenus()[0]?.getAttribute("aria-label"), "Automation actions");
     assert.deepEqual(
       items().map((item) => item.textContent),
-      ["Copy link", "Delete"],
+      ["Copy link", "Show details⌥↓", "Delete"],
     );
     await closeMenu();
   }

@@ -680,7 +680,7 @@ test("a one-off agent's menu goes with a floating sidebar as it is put away", as
 
   float(SIDEBAR_OVERLAY.CLOSED);
 
-  assert.equal(opened, 7);
+  assert.equal(opened, 8);
   assert.equal(document.querySelectorAll('[role="menuitem"]').length, 0);
 });
 
@@ -729,6 +729,7 @@ test("a one-off agent's row offers Mark as unread after Copy link, Pin, Rename, 
     "Pin",
     "Archive",
     "Move to section",
+    "Show details",
     "Permanently delete",
   ]);
   await act(async () => menuItem("Pin").click());
@@ -741,6 +742,7 @@ test("a one-off agent's row offers Mark as unread after Copy link, Pin, Rename, 
     "Unpin",
     "Archive",
     "Move to section",
+    "Show details",
     "Permanently delete",
   ]);
   await act(async () => menuItem("Unpin").click());

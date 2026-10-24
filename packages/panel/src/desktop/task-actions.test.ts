@@ -766,7 +766,12 @@ test("the open task's ⋯ prints the chords of Copy plan, Mark done, and Permane
   unmountAll();
   rightClick(mountSidebarTask(tasks, OTHER, asked), 40, 60);
   assert.ok(menuItems().some((item) => itemLabel(item) === "Mark done"));
-  assert.deepEqual(itemChords(), [], "no chord acts on a task that is not open");
+  // Note that Show details' ⌥↓ is the row's own key, which opens its card rather than acting on the task.
+  assert.deepEqual(
+    itemChords(),
+    [["Show details", "⌥↓"]],
+    "no chord acts on a task that is not open",
+  );
 });
 
 test("a task is found in the list the control hands down now, a renamed one by its new name and an added one at once, else in the open document", () => {
