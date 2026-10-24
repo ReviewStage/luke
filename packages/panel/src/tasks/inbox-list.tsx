@@ -1,5 +1,6 @@
 import { LINK_PLACE } from "@luke/features/link-grammar";
 import type { CatalogModel } from "@luke/features/models-wire";
+import { readFailedWords, TERM } from "@luke/features/words";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
   BUTTON_SIZE,
@@ -1163,8 +1164,8 @@ export function SearchEmpty({ searched }: { searched: string }): React.JSX.Eleme
   return <p className="sidebar-note">{`No items match “${searched.trim()}”.`}</p>;
 }
 
-/** What the list says where a task's read did not answer. */
-const NOT_READ = "Some items could not be read.";
+/** What the Inbox says where a read of its items, or of the tasks holding them, did not answer. */
+export const INBOX_NOT_READ = readFailedWords(`some ${TERM.INBOX_ITEM.many}`);
 
 /** The words of the way on from an Inbox with nothing in it. */
 const NEW_TASK_LABEL = "New task";
@@ -1219,7 +1220,7 @@ export function InboxListNote({
   if (failed) {
     return (
       <div className="sidebar-note">
-        <ErrorState onRetry={onRetry}>{NOT_READ}</ErrorState>
+        <ErrorState onRetry={onRetry}>{INBOX_NOT_READ}</ErrorState>
       </div>
     );
   }

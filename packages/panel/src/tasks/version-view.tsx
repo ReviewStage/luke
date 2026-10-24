@@ -1,4 +1,5 @@
 import { dayAndTimeText, momentText } from "@luke/features/time-format";
+import { readFailedWords } from "@luke/features/words";
 import {
   BUTTON_VARIANT,
   Button,
@@ -191,17 +192,22 @@ function VersionSkeleton({
   );
 }
 
+/** What the page says where the version's read did not answer. */
+export const VERSION_FAILED = readFailedWords("the version");
+
 /** The version's content against the one before it, or the state standing in its place. */
 function VersionContent({
   viewing,
   title,
   section,
   task,
+  onRetry,
 }: {
   viewing: ViewedVersion;
   title: string | undefined;
   section: number | undefined;
   task: MentionedTask | undefined;
+  onRetry: () => void;
 }): React.JSX.Element {
   const { read } = viewing;
   if (read.kind === HISTORY_READ.READING)
@@ -209,7 +215,7 @@ function VersionContent({
   if (read.kind === HISTORY_READ.FAILED) {
     return (
       <div className="version-note">
-        <ErrorState>The version could not be read.</ErrorState>
+        <ErrorState onRetry={onRetry}>{VERSION_FAILED}</ErrorState>
       </div>
     );
   }
@@ -333,6 +339,7 @@ export function VersionView({
   section,
   task,
   lead,
+  onRetry,
 }: {
   viewing: ViewedVersion;
   /** The restore's question, held by the history around the page (`useVersionRestore`). */
@@ -347,6 +354,8 @@ export function VersionView({
   task?: MentionedTask | undefined;
   /** What leads the bar, as the way back to the list where the version stands alone. */
   lead?: React.ReactNode;
+  /** Reads the version again, from the Retry its failed read offers. */
+  onRetry: () => void;
 }): React.JSX.Element {
   const { line } = viewing;
   return (
@@ -373,7 +382,13 @@ export function VersionView({
           </Tooltip>
         }
       >
-        <VersionContent viewing={viewing} title={title} section={section} task={task} />
+        <VersionContent
+          viewing={viewing}
+          title={title}
+          section={section}
+          task={task}
+          onRetry={onRetry}
+        />
       </VersionPageFrame>
       <ConfirmDialog confirm={restore} question={restoreQuestion(line.lastEdit.at, noun)} />
     </>

@@ -211,6 +211,7 @@ test("a version draws the picture it struck and the one it wrote in, each in its
       Promise.resolve({ status: ACTION_RESULT_STATUS.ACCEPTED }),
     );
     return createElement(VersionView, {
+      onRetry: () => undefined,
       viewing: {
         line: {
           seq: 2,
