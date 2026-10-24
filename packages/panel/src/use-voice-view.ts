@@ -137,19 +137,19 @@ interface VoiceViewState {
  * reload, close, or display change therefore costs the exchange nothing.
  */
 export function useVoiceView(): VoiceViewState {
-  const { tell } = useAct();
+  const { press } = useAct();
   // A voice window that went away leaves no view behind, and an idle voice is
   // what every panel draws in its place.
   const view = useAppSlice(voiceViewAtom);
   useCallCommands(view, useAppSlice(microphoneGrantedAtom), (command) =>
-    tell(ACT_KIND.VOICE_COMMAND, { command }),
+    press(ACT_KIND.VOICE_COMMAND, { command }),
   );
 
   const stopSpeaking = useCallback(() => {
-    tell(ACT_KIND.VOICE_COMMAND, { command: VOICE_COMMAND.STOP_SPEAKING });
+    press(ACT_KIND.VOICE_COMMAND, { command: VOICE_COMMAND.STOP_SPEAKING });
   }, []);
   const requestMicrophoneAccess = useCallback(() => {
-    tell(ACT_KIND.VOICE_COMMAND, { command: VOICE_COMMAND.REQUEST_MICROPHONE_ACCESS });
+    press(ACT_KIND.VOICE_COMMAND, { command: VOICE_COMMAND.REQUEST_MICROPHONE_ACCESS });
   }, []);
   return {
     view,

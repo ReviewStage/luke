@@ -1065,13 +1065,13 @@ function placed(place: Place) {
 
 /** The shell standing in a place with a call in progress about another task, its card's presses sent as `App` sends them. */
 function CallShell({ place, folded }: { place: Place; folded: boolean }): React.JSX.Element {
-  const { tell } = useAct();
+  const { press } = useAct();
   const { tab, tasks } = placed(place);
   // The card is handed down as the window's root hands it, past every page between.
   const call: CallCardInput = {
     card: { taskName: CALL_TASK_NAME, status: undefined, microphoneMuted: false },
     speakerMuted: false,
-    controls: callControls(tell, false),
+    controls: callControls(press, false),
   };
   const shell = createElement(DesktopShell, {
     gates: {

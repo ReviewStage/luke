@@ -251,13 +251,13 @@ export function AgentCallControls({
   /** When the call standing into the agent started, as its transcript row says; none before its first line is heard. */
   startedAt: number | undefined;
 }): React.JSX.Element {
-  const { tell } = useAct();
+  const { press } = useAct();
   const { view, button } = useCallButton(agentId);
   if (!onCallInto(view, agentId)) {
     return <CallButton subject={agentId} onPress={() => doors.onPress(agentId)} />;
   }
   // The speaker and the end are the voice window's to carry out: it plays Luke and holds the call.
-  const command = (sent: VoiceCommand) => tell(ACT_KIND.VOICE_COMMAND, { command: sent });
+  const command = (sent: VoiceCommand) => press(ACT_KIND.VOICE_COMMAND, { command: sent });
   return (
     <fieldset className="agent-call-controls" aria-label={CALL_CONTROLS_LABEL}>
       <AgentCallStatus status={view.voiceStatus} startedAt={startedAt} muted={button.muted} />

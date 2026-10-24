@@ -104,10 +104,10 @@ export function useCardVideoStatus(): AvatarStatus | undefined {
 export function cardVideo(
   status: AvatarStatus | undefined,
   track: MediaStreamTrack | undefined,
-  tell: ActHandle["tell"],
+  press: ActHandle["press"],
 ): CallCardVideo | undefined {
   if (status === undefined) return undefined;
-  return { status, track, onSetVideo: (on) => tell(ACT_KIND.VOICE_SET_VIDEO, { on }) };
+  return { status, track, onSetVideo: (on) => press(ACT_KIND.VOICE_SET_VIDEO, { on }) };
 }
 
 /**
@@ -115,10 +115,10 @@ export function cardVideo(
  * own task, and the three call controls are the voice window's, about the
  * call standing, so none of them names a task.
  */
-export function callControls(tell: ActHandle["tell"], speakerMuted: boolean): CallControls {
-  const command = (sent: VoiceCommand) => tell(ACT_KIND.VOICE_COMMAND, { command: sent });
+export function callControls(press: ActHandle["press"], speakerMuted: boolean): CallControls {
+  const command = (sent: VoiceCommand) => press(ACT_KIND.VOICE_COMMAND, { command: sent });
   return {
-    onReturn: () => tell(ACT_KIND.CALL_SHOW_AGENT),
+    onReturn: () => press(ACT_KIND.CALL_SHOW_AGENT),
     onToggleMicrophone: () => command(VOICE_COMMAND.TOGGLE_MICROPHONE),
     onToggleSpeaker: () =>
       command(speakerMuted ? VOICE_COMMAND.UNMUTE_SPEAKER : VOICE_COMMAND.MUTE_SPEAKER),

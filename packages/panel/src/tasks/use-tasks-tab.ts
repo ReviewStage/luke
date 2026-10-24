@@ -1234,7 +1234,7 @@ function taskHolds(
 }
 
 export function useTasksTab(input: {
-  acts: Pick<ActHandle, "act" | "tell">;
+  acts: Pick<ActHandle, "act" | "press" | "tell">;
   /** The tasks main holds, the account's; a fixture run's own stand in for them. */
   tasks: TasksView;
   run: { readonly fixtureMode: boolean; readonly profile: string };
@@ -1270,7 +1270,7 @@ export function useTasksTab(input: {
 }): TasksControl {
   const { shown, leaveGuard } = input;
   const { guard } = leaveGuard;
-  const { act, tell } = input.acts;
+  const { act, press, tell } = input.acts;
   const copyWithToast = useCopyToast();
   const toast = useToast();
   // The New task dialog's ask, standing while the dialog does: the preset it was opened with, if any.
@@ -2595,11 +2595,11 @@ export function useTasksTab(input: {
     if (button.press === MICROPHONE_PRESS.ADD_OPENAI_KEY)
       input.onOpenApiKeys(MODEL_PROVIDER.OPENAI);
     if (button.press === MICROPHONE_PRESS.ASK_ACCESS) {
-      tell(ACT_KIND.VOICE_COMMAND, { command: VOICE_COMMAND.REQUEST_MICROPHONE_ACCESS });
+      press(ACT_KIND.VOICE_COMMAND, { command: VOICE_COMMAND.REQUEST_MICROPHONE_ACCESS });
     }
-    if (button.press === MICROPHONE_PRESS.OPEN_SETTINGS) tell(ACT_KIND.MICROPHONE_OPEN_SETTINGS);
+    if (button.press === MICROPHONE_PRESS.OPEN_SETTINGS) press(ACT_KIND.MICROPHONE_OPEN_SETTINGS);
     if (button.press !== MICROPHONE_PRESS.TALK || callSurface === undefined) return;
-    if (!otherCall(agentId)) tell(ACT_KIND.TASKS_TALK, talkOf(agentId, place));
+    if (!otherCall(agentId)) press(ACT_KIND.TASKS_TALK, talkOf(agentId, place));
     else {
       setAskedFor({ surface: callSurface, agentId, place });
       secondCall.ask();
@@ -3520,7 +3520,7 @@ export function useTasksTab(input: {
     workspaces: viewed.workspaces,
     workspacesFailed: viewed.workspacesStatus === TASKS_READ.FAILED,
     // A failed read is taken as stale, so the refresh reads the workspaces again at once.
-    onRetryWorkspaces: () => tell(ACT_KIND.TASKS_REFRESH),
+    onRetryWorkspaces: () => press(ACT_KIND.TASKS_REFRESH),
     workspace: listedWorkspace,
     onChooseWorkspace: guard(switchWorkspace),
     onCreateWorkspace: createWorkspace,
@@ -3562,7 +3562,7 @@ export function useTasksTab(input: {
     shownCode: tasks.shownCode,
     agentCallCode: tasks.agentCallCode,
     codeFailed: tasks.codeStatus === TASKS_READ.FAILED,
-    onRetryCode: () => tell(ACT_KIND.TASKS_REFRESH),
+    onRetryCode: () => press(ACT_KIND.TASKS_REFRESH),
     pages: tasks.pages,
     agents,
     history: {
@@ -3852,7 +3852,7 @@ export function useTasksTab(input: {
       const repository = repositoryOf(taskId);
       if (repository !== null) openGitHub(repositoryPageUrl(repository));
     },
-    onRetryList: () => tell(ACT_KIND.TASKS_REFRESH),
+    onRetryList: () => press(ACT_KIND.TASKS_REFRESH),
     onRetryDocument: () => {
       if (tasks.activeTaskId !== undefined) select(tasks.activeTaskId);
     },
