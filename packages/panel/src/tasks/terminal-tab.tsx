@@ -3,6 +3,7 @@ import { SHORTCUT_KEY } from "@luke/settings/shortcuts";
 import {
   FILL_FLOW,
   Fill,
+  PaneBar,
   Shortcut,
   TEXT_BUTTON_TONE,
   TEXT_ELEMENT,
@@ -145,8 +146,8 @@ export function TerminalTab({
       data-state={session.state.kind}
       {...room.root}
     >
-      <header className="file-view-bar">
-        <span className="terminal-tab-title">
+      <PaneBar
+        mark={
           <AgentRef
             subject={subject}
             models={agents.models}
@@ -154,14 +155,14 @@ export function TerminalTab({
             glyph={<AgentGlyph agent={subject.agent} />}
             label={subject.name}
           />
+        }
+        detail={
           <span className="terminal-tab-standing">
             <span className="terminal-tab-sandbox">· sandbox </span>· {look.words}
           </span>
-        </span>
-        <div className="file-view-actions">
-          <TreeToggle toggles={room.toggles} words={SHELLS_TOGGLE} />
-        </div>
-      </header>
+        }
+        actions={<TreeToggle toggles={room.toggles} words={SHELLS_TOGGLE} />}
+      />
       <Fill flow={FILL_FLOW.ROW} clip className="terminal-tab-body" {...room.body}>
         <div className="terminal-tab-host">
           {look.bar === undefined ? null : <StateBar bar={look.bar} onAction={session.onAction} />}

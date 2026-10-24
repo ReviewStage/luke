@@ -415,7 +415,7 @@ test("the tab is left out of the screen recording, its screen and bar with it", 
   const tab = await mount();
   const screen = tab.container.querySelector(".terminal-tab-screen");
   assert.ok(screen?.closest(".ph-no-capture"));
-  assert.ok(tab.container.querySelector(".file-view-bar")?.closest(".ph-no-capture"));
+  assert.ok(tab.container.querySelector(".luke-pane-bar")?.closest(".ph-no-capture"));
 });
 
 test("shown, the tab lists the agent's shells and attaches to the oldest; hidden, it lets the port go and attaches nothing more", async () => {
