@@ -4763,48 +4763,6 @@ ul.actor-stack {
   align-items: center;
 }
 
-/* Dialog parts ---------------------------------------------------------------- */
-
-/* ⌃Tab's switcher (`tab-switcher.tsx`): the tabs and places stood on last
-   as a row of cards over the window, drawn as ⌘K's palette is, its ground,
-   edge, corner, shadow, and scrim, and stood in the middle of the stage, as
-   ⌘Tab's are. A card, `@luke/ui`'s TabCard, is its preview over its glyph
-   and name, its task and strip under them; the card chosen is lit as a menu's row is, its edge
-   drawn in the selected border, and the card of the stop here is dimmed. A
-   preview is a still of the tab, or its glyph large until it has one, and
-   the session recording leaves it out by its class (`ph-no-capture`). */
-.tab-switcher-backdrop {
-  position: fixed;
-  z-index: var(--luke-z-dialog);
-  inset: 0;
-  background: var(--luke-color-scrim);
-  animation: luke-dialog-fade var(--luke-duration-quick) var(--luke-motion-exit);
-}
-
-.tab-switcher {
-  position: fixed;
-  z-index: var(--luke-z-dialog);
-  top: calc(var(--luke-viewport-top) + var(--luke-stage-height) / 2);
-  left: 50%;
-  display: flex;
-  max-width: calc(100vw - 2 * var(--luke-space-24));
-  flex-direction: column;
-  border: 1px solid var(--luke-color-border-strong);
-  border-radius: var(--luke-dialog-radius);
-  background: var(--luke-color-overlay);
-  box-shadow: 0 16px 56px var(--luke-color-shadow);
-  color: var(--luke-color-text);
-  overflow: clip;
-  transform: translate(-50%, -50%);
-  animation:
-    luke-menu-arrive var(--luke-duration-quick) var(--luke-motion-exit) backwards,
-    luke-scale-in-centered var(--luke-duration-fast) var(--luke-spring-fast) backwards;
-}
-
-[data-luke-profile="desktop"] :is(.tab-switcher, .tab-switcher-backdrop) {
-  -webkit-app-region: no-drag;
-}
-
 /* Start ------------------------------------------------------------------ */
 
 /* The toolbar's Start, a shared SplitButton, and the note beside it. */
