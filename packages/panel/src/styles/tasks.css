@@ -1835,18 +1835,6 @@
   padding-top: var(--luke-list-inset);
 }
 
-.file-tree-notice {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: var(--luke-control-gap);
-  margin: 0;
-  padding: var(--luke-card-inset-snug);
-  color: var(--luke-color-text-muted);
-  font-size: var(--luke-type-caption-size);
-  line-height: var(--luke-type-caption-leading);
-}
-
 /* Pierre's tree draws in a shadow root of its own, which inherits these:
    the panel's words, its fills, and its focus ring, so the tree reads as
    the panel's own list, beside a File tab and under a crumb alike. The ring
@@ -1890,7 +1878,8 @@
 }
 
 /* Each tree the pane may show draws in a frame of its own, the one not
-   standing hidden. */
+   standing hidden; the host itself is hidden while words stand in the
+   tree's place (file-tree-pane.tsx's `FileTreeStage`). */
 .file-tree-view {
   display: flex;
   min-height: 0;
@@ -1898,15 +1887,8 @@
 }
 
 .file-tree-view[hidden],
-.file-tree-host > .file-tree-notice[hidden] {
+.file-tree-host[hidden] {
   display: none;
-}
-
-/* The line under the tree saying a folder was listed short of whole. */
-.file-tree-host > .file-tree-cut {
-  flex: none;
-  border-top: 1px solid var(--luke-color-border);
-  font-size: var(--luke-type-caption-size);
 }
 
 /* Why the file is not drawn, standing over the lines Luke showed of it. */

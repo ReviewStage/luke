@@ -38,6 +38,7 @@ async function mountMarked(marks: readonly FileMark[]) {
   const host = document.body.appendChild(document.createElement("div"));
   const handle = fileTree.mount(host, {
     readFolder: () => Promise.resolve({ entries: [], truncated: false }),
+    onStanding: () => undefined,
     onOpen: (path) => opened.push(path),
     onViewed: (path) => viewed.push(path),
   });

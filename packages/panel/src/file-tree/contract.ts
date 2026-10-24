@@ -40,6 +40,37 @@ export type FolderListing =
 /** Lists one folder of the repository. */
 export type ReadFolder = (path: string) => Promise<FolderListing>;
 
+/**
+ * Where the tree stands, which its host says in words, since the bundle
+ * draws rows and nothing else: its root being read; drawn; the root not
+ * listed, in the tab's words, with whether listing it again may help; or a
+ * search standing that matches nothing.
+ */
+export const TREE_STANDING = {
+  READING: "reading",
+  DRAWN: "drawn",
+  FAILED: "failed",
+  NO_MATCH: "no-match",
+} as const;
+
+/**
+ * The tree's standing, as its host is told it each time it changes. Note
+ * that a tree drawn says too whether a folder in it was listed short of
+ * whole (`cut`), which stands under its rows whether or not a search
+ * matches, since it may be why one does not.
+ */
+export type TreeStanding =
+  | { readonly kind: typeof TREE_STANDING.READING }
+  | {
+      readonly kind: typeof TREE_STANDING.FAILED;
+      readonly notice: string;
+      readonly retry: boolean;
+    }
+  | {
+      readonly kind: typeof TREE_STANDING.DRAWN | typeof TREE_STANDING.NO_MATCH;
+      readonly cut: boolean;
+    };
+
 /** What became of a file in a change set, as its row in the tree is marked: A, M, D, or R. */
 export const FILE_MARK = {
   ADDED: "added",
@@ -75,10 +106,15 @@ export interface FileMark {
 export interface FileTreeProps {
   /**
    * Lists a folder the first time it opens, the root before the tree is
-   * drawn, whose notice stands in the tree's place; the tab answers from
-   * what it already read where it can.
+   * drawn; the tab answers from what it already read where it can.
    */
   readonly readFolder: ReadFolder;
+  /**
+   * Where the tree stands, told as it mounts and each time that changes,
+   * which the tab says in words beside the host it mounted the tree in,
+   * since the tree draws none of its own.
+   */
+  readonly onStanding: (standing: TreeStanding) => void;
   /** A file chosen in the tree, by a press or Return: open it, in a tab of its own where ⌘ was held. */
   readonly onOpen: (path: string, newTab: boolean) => void;
   /**
@@ -113,7 +149,8 @@ export interface FileTreeHandle {
   readonly reveal: (path: string, options: RevealOptions) => void;
   /**
    * Shows only the rows whose path holds the query, the folders above them
-   * opened, or says no file matches; the empty query shows every row again.
+   * opened, or none, standing as matching nothing; the empty query shows
+   * every row again.
    */
   readonly search: (query: string) => void;
   /** Shows only these files, every folder above them opened, or the whole repository for none. */
@@ -130,6 +167,8 @@ export interface FileTreeHandle {
    * row drawing too whatever else its mark carries; none marks nothing.
    */
   readonly mark: (marks: readonly FileMark[]) => void;
+  /** Lists the root again, where it could not be listed; anywhere else, does nothing. */
+  readonly relist: () => void;
   readonly unmount: () => void;
 }
 
