@@ -27,7 +27,7 @@ import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsLink } from "@luke/settin
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeEach, test } from "vitest";
+import { afterEach, beforeEach, onTestFinished, test } from "vitest";
 import { OpenSettingsProvider } from "../open-settings.js";
 import type { InboxChoice, TasksControl } from "../tasks/use-tasks-tab.js";
 import { fakeActPort, fakeAppBridge, refusedOnPort } from "../testing/app-bridge.js";
@@ -36,6 +36,7 @@ import { handState } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { followedInboxes } from "../testing/followed-inboxes.js";
 import { restOn } from "../testing/hint-rest.js";
+import { playListMotions } from "../testing/pane-motion.js";
 import { tasksControl, waitingOf } from "../testing/tasks-control.js";
 import { PersonPage } from "./person-page.js";
 
@@ -305,45 +306,52 @@ function mountWith(
   away?: { label: string; onPress: () => void },
 ) {
   const opened: Opened = { tasks: [], agents: [], inbox: [], settings: [] };
-  const tasks = tasksControl({
-    me: DEAN.userId,
-    workspace: { ...ACME, memberCount },
-    tasks: TASKS,
-    listed: { tasks: TASKS, ...HOLDING },
-    ...HOLDING,
-    onSelect: (taskId) => opened.tasks.push(taskId),
-    onShowAgent: (taskId, agentId) => opened.agents.push([taskId, agentId]),
-    inboxView: {
-      open: false,
-      chosen: undefined,
-      onOpen: () => opened.inbox.push("inbox"),
-      onOpenList: () => undefined,
-      onClose: () => undefined,
-      onChoose: (chosen) => opened.inbox.push(chosen),
-      onOpenItem: () => undefined,
-      listed: false,
-      onListed: () => undefined,
-      pages: undefined,
-      onTaskAgents: () => undefined,
-    },
-    ...overrides,
-  });
+  const control = (more: Partial<TasksControl>) =>
+    tasksControl({
+      me: DEAN.userId,
+      workspace: { ...ACME, memberCount },
+      tasks: TASKS,
+      listed: { tasks: TASKS, ...HOLDING },
+      ...HOLDING,
+      onSelect: (taskId) => opened.tasks.push(taskId),
+      onShowAgent: (taskId, agentId) => opened.agents.push([taskId, agentId]),
+      inboxView: {
+        open: false,
+        chosen: undefined,
+        onOpen: () => opened.inbox.push("inbox"),
+        onOpenList: () => undefined,
+        onClose: () => undefined,
+        onChoose: (chosen) => opened.inbox.push(chosen),
+        onOpenItem: () => undefined,
+        listed: false,
+        onListed: () => undefined,
+        pages: undefined,
+        onTaskAgents: () => undefined,
+      },
+      ...overrides,
+      ...more,
+    });
+  const registry = AtomRegistry.make();
+  const draw = (tasks: TasksControl) =>
+    act(() =>
+      root?.render(
+        onRegistry(
+          registry,
+          createElement(
+            OpenSettingsProvider,
+            { value: (link: SettingsLink) => opened.settings.push(link) },
+            createElement(PersonPage, { tasks, userId, name, away }),
+          ),
+        ),
+      ),
+    );
   const container = document.createElement("div");
   document.body.append(container);
   root = createRoot(container);
-  act(() =>
-    root?.render(
-      onRegistry(
-        AtomRegistry.make(),
-        createElement(
-          OpenSettingsProvider,
-          { value: (link: SettingsLink) => opened.settings.push(link) },
-          createElement(PersonPage, { tasks, userId, name, away }),
-        ),
-      ),
-    ),
-  );
-  return { page: container, opened };
+  draw(control({}));
+  /** Draws the page again over the workspace with `more` on top of what it was mounted with. */
+  const redraw = (more: Partial<TasksControl>) => draw(control(more));
+  return { page: container, opened, redraw };
 }
 
 async function settle(): Promise<void> {
@@ -383,6 +391,26 @@ function titles(page: HTMLElement): string[] {
 function waits(page: HTMLElement): string[] {
   return [...page.querySelectorAll('[role="status"][aria-busy="true"]')].map(
     (region) => region.textContent ?? "",
+  );
+}
+
+/** Opens the menu of the row named `name` by its ⋯, named for the row's `thing`, and answers its items' words. */
+function openRowMenu(page: HTMLElement, name: string, thing: string): string[] {
+  const more = button(page, name)
+    .closest("li")
+    ?.querySelector<HTMLButtonElement>(`button[aria-label="${thing} actions"]`);
+  act(() => (more ?? assert.fail(`${name} offers its ⋯`)).click());
+  return [...document.querySelectorAll('[role="menuitem"]')].map((item) => item.textContent ?? "");
+}
+
+/** A page over the fixture workspace with its slug, standing in it, as a link opens it. */
+function mountLinked(userId: string) {
+  return mountWith(
+    {
+      workspaces: [{ ...ACME, slug: "acme" }],
+      personView: { ...tasksControl().personView, userId, workspaceId: ACME.id },
+    },
+    userId,
   );
 }
 
@@ -903,4 +931,73 @@ test("on a phone a page for someone nobody names still leads with its way back",
   assert.ok(back, "the way back stands");
   act(() => back.click());
   assert.deepEqual(left, ["away"]);
+});
+
+test("a task's row offers the sidebar's acts from its ⋯, and Rename makes its name the field", async () => {
+  const { page } = mount(CHARLES.userId);
+  await settle();
+
+  const items = openRowMenu(page, "Retry budget dashboard", "Task");
+  for (const act of ["Copy link", "Rename", "Permanently delete"]) {
+    assert.ok(
+      items.some((item) => item.startsWith(act)),
+      `${act} is offered`,
+    );
+  }
+  act(() => button(document.body, "Rename").click());
+  await settle();
+
+  const field = page.querySelector<HTMLInputElement>('input[aria-label="Task name"]');
+  assert.equal(field?.value, DASHBOARD.name);
+});
+
+test("an agent's row offers Copy link and Archive, and Copy link copies its link under the page's workspace", async () => {
+  const { page } = mountLinked(CHARLES.userId);
+  await settle();
+
+  assert.deepEqual(openRowMenu(page, "Tenant cache keys", "Agent"), ["Copy link", "Archive"]);
+  act(() => button(document.body, "Copy link").click());
+  await settle();
+
+  assert.deepEqual(copied, [`https://tryluke.dev/acme/plan/${CACHE.id}/agent/${CACHE_KEYS.id}`]);
+});
+
+test("an automation's row offers Copy link, copying its link under the page's workspace", async () => {
+  const { page } = mountLinked(CHARLES.userId);
+  await settle();
+
+  assert.deepEqual(openRowMenu(page, "Morning Sentry triage", "Automation"), ["Copy link"]);
+  act(() => button(document.body, "Copy link").click());
+  await settle();
+
+  assert.deepEqual(copied, [`https://tryluke.dev/acme/automation/${AUTOMATIONS[0]?.id}`]);
+});
+
+test("a waiting item's row offers Copy link, written under the page's workspace", async () => {
+  const { page } = mountLinked(CHARLES.userId);
+  await settle();
+
+  assert.ok(openRowMenu(page, "Retry 429s too?", "Inbox item").includes("Copy link"));
+});
+
+test("a task no longer theirs slides out of its section, drawn on out of reach until its exit has played", async () => {
+  const motions = playListMotions();
+  onTestFinished(motions.remove);
+  const { page, redraw } = mount(CHARLES.userId);
+  await settle();
+
+  const left = TASKS.filter((each) => each.id !== DASHBOARD.id);
+  redraw({ tasks: left, listed: { tasks: left, ...HOLDING } });
+  const leaving = page.querySelector(`[data-motion-key="${DASHBOARD.id}"]`);
+  assert.equal(leaving?.hasAttribute("data-leaving"), true, "drawn on while it goes");
+  assert.equal(leaving?.hasAttribute("inert"), true, "out of reach");
+  assert.ok(
+    motions.played.some((motion) => motion.element === leaving),
+    "its exit plays",
+  );
+
+  act(() => {
+    for (const each of motions.played.splice(0)) each.finish();
+  });
+  assert.deepEqual(sections(page).Created, ["Relay retries on 502"]);
 });
