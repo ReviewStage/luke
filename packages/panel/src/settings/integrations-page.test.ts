@@ -630,6 +630,19 @@ test("a sign-in begun on one surface is what every other surface draws at once, 
   assert.deepEqual(granolaRow(settings), { line: undefined, buttons: ["Connect"] });
 });
 
+test("the window's focus still reads for the surfaces left once the first one drawn has closed", async () => {
+  const registry = AtomRegistry.make();
+  registries.push(registry);
+  await mount(registry);
+  const first = roots.at(-1) ?? assert.fail("the first surface has a root");
+  const other = await mount(registry);
+  act(() => first.unmount());
+
+  touched.set(GRANOLA, INTEGRATION_STATUS.EXPIRED);
+  await focusWindow();
+  assert.equal(granolaRow(other).line, "Sign-in expired.");
+});
+
 test("a sign-out leaves nothing of one account's integrations to the next account signed in", async () => {
   const listeners = new Set<(delivery: AppStateDelivery) => void>();
   fakeAppBridge({

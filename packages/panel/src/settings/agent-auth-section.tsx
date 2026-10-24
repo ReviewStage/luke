@@ -181,7 +181,8 @@ const WORDS = {
   CONNECT: "Connect",
   VIA_SUBSCRIPTION: "Connected via subscription",
   VIA_API_KEY: "Connected via API key",
-  RECONNECT: "Sign-in expired",
+  SIGN_IN_EXPIRED: "Sign-in expired",
+  PLAN_ATTENTION: "Subscription needs attention",
   KEY_ATTENTION: "API key needs attention",
   SUBSCRIPTION: "Subscription",
   API_KEY: "API key",
@@ -278,11 +279,22 @@ function connectionOf(
     if (plan.status === PROVIDER_KEY_STATUS.LIMIT_REACHED) {
       return { words: WORDS.USAGE_LIMIT, connected: false, attention: true };
     }
-    return standing(plan)
-      ? { words: WORDS.VIA_SUBSCRIPTION, connected: true, attention: false }
-      : { words: WORDS.RECONNECT, connected: false, attention: true };
+    if (standing(plan)) return { words: WORDS.VIA_SUBSCRIPTION, connected: true, attention: false };
+    return { words: lapsedPlanWords(plan), connected: false, attention: true };
   }
   return { words: WORDS.CONNECT, connected: false, attention: false };
+}
+
+/**
+ * What a harness's row says of a plan that no longer stands: a sign-in
+ * expired only for a ChatGPT sign-in OpenAI ended, since a Claude token has
+ * no sign-in, and that it needs attention otherwise, its card saying why.
+ */
+function lapsedPlanWords(plan: SubscriptionKeySummary): string {
+  return plan.kind === PROVIDER_KEY_KIND.CHATGPT_OAUTH &&
+    plan.status === PROVIDER_KEY_STATUS.INVALID
+    ? WORDS.SIGN_IN_EXPIRED
+    : WORDS.PLAN_ATTENTION;
 }
 
 /** A reached limit's words, with its reset where the provider named one. */

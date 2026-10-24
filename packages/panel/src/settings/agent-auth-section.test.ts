@@ -441,6 +441,7 @@ test("a Claude setup-token is saved by its kind, refused with why, and disconnec
 test("a Claude token Anthropic rejected says so in its card and offers Replace token, without the setup-token hint", async () => {
   held = { keys: [], subscriptions: [{ ...CLAUDE_PLAN, status: PROVIDER_KEY_STATUS.INVALID }] };
   const page = await mount();
+  assert.equal(rowButton(page, "Claude").textContent, "Subscription needs attention");
   const dialog = await open(page, "Claude");
   const plan = card(dialog, "Subscription");
   assert.match(plan.textContent ?? "", /Anthropic rejected this token\./u);

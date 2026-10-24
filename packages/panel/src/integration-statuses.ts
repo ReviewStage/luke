@@ -210,7 +210,7 @@ interface Flight {
 
 /**
  * What the book's reads keep beside it, which no surface draws: the marks,
- * the reads sent, the read on its way, and how many surfaces hold the book.
+ * the reads sent, the read on its way, and the last focus read for.
  * Note that it is a mutable record, because a read's answer compares its own
  * mark with the sign-ins' as it lands, which no render stands between.
  */
@@ -218,7 +218,7 @@ interface Ledger {
   marks: number;
   reads: number;
   flight: Flight | undefined;
-  holders: number;
+  focus: Event | undefined;
 }
 
 /**
@@ -237,9 +237,9 @@ interface Shared {
 const sharedOf = Atom.family(
   (_owner: string | null): Shared => ({
     book: Atom.make(NO_BOOK).pipe(Atom.setIdleTTL(0)),
-    ledger: Atom.make((): Ledger => ({ marks: 0, reads: 0, flight: undefined, holders: 0 })).pipe(
-      Atom.setIdleTTL(0),
-    ),
+    ledger: Atom.make(
+      (): Ledger => ({ marks: 0, reads: 0, flight: undefined, focus: undefined }),
+    ).pipe(Atom.setIdleTTL(0)),
   }),
 );
 
@@ -352,15 +352,11 @@ export function useIntegrationStatuses(): IntegrationStatuses {
     if (deadline !== undefined) arm(deadline);
   }, [deadline, arm]);
 
-  // The focus is the developer back from the browser, where a sign-in settles; one still pending is given a grace to land. Note that the first surface to hold the book listens for every one, so one focus is one read.
+  // The focus is the developer back from the browser, where a sign-in settles; one still pending is given a grace to land. Note that every surface listens, so the focus is heard while any one stands, and the first to hear an event reads for all of them, so one focus is one read.
   useEffect(() => {
-    ledger.holders += 1;
-    if (ledger.holders > 1) {
-      return () => {
-        ledger.holders -= 1;
-      };
-    }
-    const focused = () => {
+    const focused = (event: Event) => {
+      if (ledger.focus === event) return;
+      ledger.focus = event;
       const at = now();
       change((book) =>
         book.signIns.size === 0
@@ -376,10 +372,7 @@ export function useIntegrationStatuses(): IntegrationStatuses {
       void send();
     };
     window.addEventListener("focus", focused);
-    return () => {
-      ledger.holders -= 1;
-      window.removeEventListener("focus", focused);
-    };
+    return () => window.removeEventListener("focus", focused);
   }, [ledger, send, now, change]);
 
   const settle = useCallback(
