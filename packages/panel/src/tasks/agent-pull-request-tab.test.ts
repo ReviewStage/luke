@@ -682,15 +682,15 @@ test("the tab draws the pull request as a page: its standing and branches, wheth
     /@charlespan asked\./u,
     "a mention stands as GitHub drew it",
   );
-  assert.equal(description.querySelector(".transcript-code-language")?.textContent, "ts");
+  assert.equal(description.querySelector(".luke-code-card-title")?.textContent, "ts");
   assert.equal(
-    description.querySelector(".transcript-code-body")?.textContent,
+    description.querySelector(".luke-code-card-body")?.textContent,
     "const days = 7;\n\nexport default days;",
     "a highlighted block is the window's own code block in its language, a blank line in it kept",
   );
   assert.ok(description.querySelector('input[type="checkbox"][disabled]'), "a task list stands");
   assert.equal(
-    description.querySelectorAll(".transcript-code").length,
+    description.querySelectorAll(".luke-code-card").length,
     1,
     "inline code stays inline",
   );

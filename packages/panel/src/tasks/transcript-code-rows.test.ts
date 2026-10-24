@@ -55,7 +55,7 @@ async function drawn(element: ReactElement): Promise<HTMLElement> {
 
 /** Each row of the block drawn, as what it does and the words it shows. */
 function rowsOf(drawing: HTMLElement): { kind: string | null; text: string | null }[] {
-  return [...drawing.querySelectorAll(".transcript-code-row")].map((row) => ({
+  return [...drawing.querySelectorAll(".luke-code-card-row")].map((row) => ({
     kind: row.getAttribute("data-row"),
     text: row.textContent,
   }));
@@ -69,7 +69,7 @@ test("GitHub's rendering of a suggested change draws as its removed line over it
     }),
   );
 
-  assert.equal(drawing.querySelector(".transcript-code-header")?.textContent, "Suggested change");
+  assert.equal(drawing.querySelector("figcaption")?.textContent, "Suggested change");
   assert.equal(drawing.querySelector("table"), null, "GitHub's table is not drawn");
   assert.deepEqual(rowsOf(drawing), [
     { kind: "removed", text: "describe('proxy-no-page-runtime', () => {" },
@@ -88,7 +88,7 @@ test("a suggestion as written holds its new lines alone, every one added, a line
     createElement(TranscriptWords, { text: "```suggestion\nsteps:\n  - run: pnpm test\n```" }),
   );
 
-  assert.equal(drawing.querySelector(".transcript-code-header")?.textContent, "Suggested change");
+  assert.equal(drawing.querySelector("figcaption")?.textContent, "Suggested change");
   assert.deepEqual(rowsOf(drawing), [
     { kind: "added", text: "steps:" },
     { kind: "added", text: "  - run: pnpm test" },
