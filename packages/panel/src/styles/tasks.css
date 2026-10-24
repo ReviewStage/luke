@@ -402,14 +402,6 @@
   border-top: 1px solid var(--luke-color-border);
 }
 
-/* The date picker's zones (`date-picker.tsx`'s Time zone) stand in the
-   room its card stood in, as wide as the card, rather than hung under a
-   field: the popover already places them. */
-.searchable-menu.date-zone-menu {
-  position: static;
-  width: auto;
-}
-
 /* A narrowed list stands under its kind's crumb, as an MCP server's page
    stands under its own; a kind typed with its colon has no back arrow, so
    its glyph keeps the rows' inset. */

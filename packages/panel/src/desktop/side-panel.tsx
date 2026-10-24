@@ -27,6 +27,8 @@ import {
   LIST_DENSITY,
   List,
   ListRow,
+  type MenuRow,
+  MenuRowList,
   RESIZE_EDGE_SIDE,
   ResizeEdge,
   type ResizeEdgeHandle,
@@ -87,7 +89,6 @@ import { FindScope } from "../find-in-tab.js";
 import { drawnVisibly, focusSeek } from "../focus-seek.js";
 import { panelTabPlace } from "../links-at-hand.js";
 import { useMemberDirectory } from "../member-directory.js";
-import { type MenuRow, MenuRowList } from "../searchable-menu.js";
 import { GLYPH_STATE, type GlyphState, stateEndMark } from "../state-glyph.js";
 import { AgentActorRef, agentSubject, NOTHING_HELD } from "../tasks/agent-ref.js";
 import { AgentSubagentTab, type BriefTask, type TranscriptCards } from "../tasks/agent-tab.js";

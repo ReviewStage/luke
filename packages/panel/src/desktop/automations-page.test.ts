@@ -2460,7 +2460,7 @@ test("a default model that could not be read is said as unknown, and a model can
   act(() => button("Choose a model").click());
   await settle();
 
-  assert.ok(page.querySelector(".agent-model-menu"), "the model menu opens");
+  assert.ok(page.querySelector(".luke-searchable-menu"), "the model menu opens");
   assert.equal(catalogReads, readsBefore + 1, "opening it reads the catalog again");
   assert.equal(
     page.querySelector(".automation-editor-status")?.textContent,
@@ -3385,7 +3385,7 @@ test("a model catalog that could not be read says so in the model menu, and Retr
   act(() => button("Choose a model").click());
   await settle();
 
-  const menu = page.querySelector(".agent-model-menu") ?? assert.fail("the model menu opens");
+  const menu = page.querySelector(".luke-searchable-menu") ?? assert.fail("the model menu opens");
   assert.equal(
     menu.querySelector("[role=alert]")?.textContent,
     "The models could not be read.Retry",
