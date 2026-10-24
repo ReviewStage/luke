@@ -20,12 +20,12 @@ import type { CatalogModel } from "@luke/features/models-wire";
 import { pasteCutWords } from "@luke/features/words";
 import {
   BUTTON_TYPE,
-  EllipsisIcon,
   ErrorState,
-  IconButton,
   LengthCounter,
   McpIcon,
   MicrophoneIcon,
+  MoreButton,
+  moreLabel,
   PlusIcon,
   riseAboveEnd,
   SUBMIT_STATE,
@@ -209,7 +209,7 @@ const BUTTON = {
   STOP: "Stop",
   STOPPING: "Stopping…",
   ATTACH: "Attach files",
-  MORE: "More",
+  MORE_THING: "Composer",
 } as const;
 
 /**
@@ -340,20 +340,22 @@ function ComposerMore({
   return (
     <>
       <span className="agent-composer-more">
-        <Tooltip label={BUTTON.MORE}>
-          <IconButton
-            icon={<EllipsisIcon />}
-            label={BUTTON.MORE}
-            {...trigger}
-            onClick={(event) => {
-              setTaken(hiddenPresses(foot.current));
-              trigger.onClick(event);
-            }}
-          />
-        </Tooltip>
+        <MoreButton
+          thing={BUTTON.MORE_THING}
+          {...trigger}
+          onClick={(event) => {
+            setTaken(hiddenPresses(foot.current));
+            trigger.onClick(event);
+          }}
+        />
       </span>
       {menu.drawn === undefined ? null : (
-        <ActionMenu label={BUTTON.MORE} menu={menu.drawn} groups={[actions]} onClose={menu.close} />
+        <ActionMenu
+          label={moreLabel(BUTTON.MORE_THING)}
+          menu={menu.drawn}
+          groups={[actions]}
+          onClose={menu.close}
+        />
       )}
     </>
   );

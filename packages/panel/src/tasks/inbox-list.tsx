@@ -1078,6 +1078,7 @@ function ListHead({
           title={<h1 className="desktop-toolbar-title">{title}</h1>}
           end={
             <PlaceMore
+              thing="Inbox"
               shown={shown}
               groups={(opener) => [
                 [

@@ -20,7 +20,6 @@ import {
   ComposeIcon,
   commandKeyshortcuts,
   dropBelowStart,
-  EllipsisIcon,
   ErrorState,
   Fill,
   FolderIcon,
@@ -32,6 +31,7 @@ import {
   LAYOUT_ELEMENT,
   ListMotion,
   MarkDoneIcon,
+  MoreButton,
   motionKey,
   motionRows,
   NAV_CURRENT,
@@ -915,15 +915,12 @@ function RepositorySection({
         actions={
           <>
             {actionGroups.length === 0 ? null : (
-              <Tooltip label="Repository actions">
-                <IconButton
-                  ref={ellipsis}
-                  icon={<EllipsisIcon />}
-                  label={`Actions for ${named}`}
-                  size={BUTTON_SIZE.COMPACT}
-                  {...menu.trigger()}
-                />
-              </Tooltip>
+              <MoreButton
+                ref={ellipsis}
+                thing={named}
+                size={BUTTON_SIZE.COMPACT}
+                {...menu.trigger()}
+              />
             )}
             {repository === null ? null : (
               <Tooltip label={`New task in ${label}`}>
