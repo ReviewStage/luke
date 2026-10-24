@@ -158,3 +158,50 @@ test("ordered by name, the reader's own rename moves its task at once, though a 
   draw(renamed);
   assert.deepEqual(names(container), ["Invite expiry", "Audit log", "Zero downtime"]);
 });
+
+/** Each group under Tasks, by the name its fold reads, with its tasks' names in the order drawn. */
+function groups(sidebar: HTMLElement): [string, string[]][] {
+  const region = sidebar.querySelector('nav[aria-label="Tasks"]');
+  return [...(region?.querySelectorAll<HTMLElement>(".sidebar-repository") ?? [])].map((group) => {
+    const fold = group.querySelector("button[aria-expanded]");
+    const heard = [...(fold?.children ?? [])].find(
+      (part) => part.getAttribute("aria-hidden") !== "true",
+    );
+    const titles = [...group.querySelectorAll(".luke-list-row-title")];
+    return [heard?.textContent ?? "", titles.map((name) => name.firstChild?.textContent ?? "")];
+  });
+}
+
+test("grouped by assignee, a task given to someone else moves to their group at once, its old header still naming who it named", () => {
+  const shared = { ...WORKSPACE, memberCount: 2 };
+  window.localStorage.setItem(
+    "luke.sidebarTaskViews",
+    JSON.stringify({ [WORKSPACE.id]: { grouping: "assignee", order: "updated" } }),
+  );
+  const ada = { userId: "user-ada", name: "Ada Lovelace" };
+  const grace = { userId: "user-grace", name: "Grace Hopper" };
+  const rest = { workspace: shared, workspaces: [shared] };
+  const { container, draw } = mountSidebar([]);
+  draw(
+    [
+      { ...task("t-1", "Invite expiry", 3), assignee: ada },
+      { ...task("t-2", "Retry audit", 2), assignee: ada },
+      { ...task("t-3", "Usage report", 1), assignee: grace },
+    ],
+    rest,
+  );
+
+  draw(
+    [
+      { ...task("t-1", "Invite expiry", 3), assignee: grace },
+      { ...task("t-2", "Retry audit", 2), assignee: ada },
+      { ...task("t-3", "Usage report", 1), assignee: grace },
+    ],
+    rest,
+  );
+
+  assert.deepEqual(groups(container), [
+    ["Ada Lovelace", ["Retry audit"]],
+    ["Grace Hopper", ["Invite expiry", "Usage report"]],
+  ]);
+});

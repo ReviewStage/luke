@@ -1187,24 +1187,46 @@ function liveSections(sections: TaskSections, live: ReadonlyMap<string, TaskRow>
   }
 }
 
+/** The group a row stands in under a grouping, by what keys it: its repository, its assignee's or creator's id, or the one run's. */
+function groupOf(row: TaskRow, grouping: TaskSections["grouping"]): string | null | undefined {
+  switch (grouping) {
+    case TASK_GROUPING.REPOSITORY:
+      return taskRowRepository(row);
+    case TASK_GROUPING.ASSIGNEE:
+      return assigneeOf(row)?.userId;
+    case TASK_GROUPING.CREATOR: {
+      const { createdBy, ownerId } = creatorOf(row);
+      return createdBy?.userId ?? ownerId;
+    }
+    case TASK_GROUPING.NONE:
+      return null;
+  }
+}
+
 /**
  * Where each row stands, as the sections order and group it: the row as it
  * was first drawn while the sidebar is in sight (`use-held-order.ts`), or as
- * it is now where it is new to the list or a press here gave it a name or a
- * status the view has yet to carry, so the reader's own act moves it at once.
+ * it is now where it is new to the list, it belongs in another group now, or
+ * a press here gave it a name or a status the view has yet to carry. Note
+ * that a row held under a group it left would stand under a header that no
+ * longer names it, so it moves to its own at once, as the reader's own act
+ * does.
  */
 function taskPlaces(
   rows: readonly TaskRow[],
   held: ReadonlyMap<string, TaskRow>,
-  pending: ReadonlySet<string> | undefined,
+  view: Pick<TaskOrderView, "grouping"> & { readonly pending: ReadonlySet<string> | undefined },
 ): ReadonlyMap<string, TaskRow> {
-  const moved = (row: TaskRow) => row.kind === TASK_ROW.TASK && pending?.has(row.task.id) === true;
-  return new Map(
-    rows.map((row) => {
-      const key = taskRowKey(row);
-      return [key, moved(row) ? row : (held.get(key) ?? row)] as const;
-    }),
-  );
+  const placeOf = (row: TaskRow) => {
+    const was = held.get(taskRowKey(row));
+    const pending = row.kind === TASK_ROW.TASK && view.pending?.has(row.task.id) === true;
+    return was === undefined ||
+      pending ||
+      groupOf(was, view.grouping) !== groupOf(row, view.grouping)
+      ? row
+      : was;
+  };
+  return new Map(rows.map((row) => [taskRowKey(row), placeOf(row)] as const));
 }
 
 /**
@@ -1968,11 +1990,12 @@ function SidebarColumn({
     createdBy,
     assignedTo,
   };
+  const placing = { grouping: orderView.grouping, pending: tasks.pendingTasks };
   // While the sidebar is in sight each task keeps the place it was first drawn in, so one an update would sort elsewhere stays under the reader's eye.
   const sections = useHeldOrder(orderView, tasks.shown && overlay.inSight, {
     sameOrder: sameTaskOrder,
     draw: (places: ReadonlyMap<string, TaskRow>) => {
-      const placed = taskPlaces(statusRows, places, tasks.pendingTasks);
+      const placed = taskPlaces(statusRows, places, placing);
       const held = taskSections(
         [...placed.values()],
         orderView.grouping,
@@ -1989,7 +2012,7 @@ function SidebarColumn({
       );
       return liveSections(held, new Map(statusRows.map((row) => [taskRowKey(row), row])));
     },
-    placesOf: (_drawn, held) => taskPlaces(statusRows, held, tasks.pendingTasks),
+    placesOf: (_drawn, held) => taskPlaces(statusRows, held, placing),
   });
   // A row names its repository as its group's header would, owner and all where two share a name.
   const named = repositoryGroups(unpinned);
