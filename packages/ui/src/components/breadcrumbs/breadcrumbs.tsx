@@ -1,5 +1,13 @@
 import { type ComponentProps, type ComponentType, type ReactNode, useState } from "react";
 import { pulseOnPress } from "../../press-pulse.js";
+import {
+  Breadcrumb,
+  BreadcrumbItem,
+  BreadcrumbLink,
+  BreadcrumbList,
+  BreadcrumbPage,
+  BreadcrumbSeparator,
+} from "../../shadcn/breadcrumb.js";
 import { useDisclosure } from "../../use-disclosure.js";
 import { BUTTON_VARIANT } from "../button/button.js";
 import { FoldingButton, type FoldingButtonHint } from "../folding-button/folding-button.js";
@@ -37,6 +45,10 @@ import { Tooltip } from "../tooltip/hint.js";
  * (`shownAt`), read off the `BreadcrumbBar` holding the path, the row of
  * the bar it stands in. A crumb may stand for others a narrow bar leaves
  * out, as a "…" naming them in its hint does.
+ *
+ * The path is shadcn/ui's breadcrumb (`../../shadcn/breadcrumb.tsx`), drawn
+ * in Tailwind utilities over the theme; what hangs on the bar's widths, on
+ * `:has()`, or on a keyframe stays in `breadcrumbs.css`.
  */
 
 /** The two looks a path is drawn in. */
@@ -157,31 +169,42 @@ interface Widths {
 }
 
 /**
+ * Each look's utilities by part. Note that a crumb's display, its share of a
+ * narrow bar, and its floor stay in `breadcrumbs.css`, because they hang on
+ * the bar's container widths and on `:has()`, and a utility would outrank
+ * the rules that hide a crumb.
+ */
+const LOOK = {
+  [BREADCRUMBS_VARIANT.CAPTION]: {
+    nav: "text-caption",
+    list: "",
+    item: "",
+    wordsItem: "",
+    separator: "flex-none items-center text-muted-foreground [&>svg]:size-breadcrumb-chevron",
+    words: "",
+  },
+  [BREADCRUMBS_VARIANT.TITLE]: {
+    nav: "text-muted-foreground",
+    list: "gap-breadcrumb-gap",
+    item: "flex-none gap-breadcrumb-gap",
+    wordsItem: "min-w-0 flex-initial gap-breadcrumb-gap",
+    separator: "flex-none items-center [&>svg]:size-breadcrumb-title-chevron",
+    words: "text-dialog font-dialog",
+  },
+} as const;
+
+/**
  * The path's punctuation between two crumbs, drawn at the widths `at` says,
  * the chevron a menu row's submenu points with.
  */
-function Chevron({ at }: { at: Widths }): React.JSX.Element {
+function Chevron({ at, variant }: { at: Widths; variant: BreadcrumbsVariant }): React.JSX.Element {
   return (
-    <span
-      className="luke-breadcrumb-separator"
-      aria-hidden="true"
+    <BreadcrumbSeparator
+      className={`luke-breadcrumb-separator ${LOOK[variant].separator}`}
       data-wide={at.wide}
       data-narrow={at.narrow}
       data-narrowest={at.narrowest}
-    >
-      <svg
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="2"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        aria-hidden="true"
-        focusable="false"
-      >
-        <path d="m9 18 6-6-6-6" />
-      </svg>
-    </span>
+    />
   );
 }
 
@@ -214,8 +237,14 @@ function chevronBefore(crumbs: readonly Crumb[], at: number): Widths | undefined
 }
 
 /** The chevron before a crumb, where one stands at any width. */
-function CrumbChevron({ at }: { at: Widths | undefined }): React.JSX.Element | null {
-  return at === undefined ? null : <Chevron at={at} />;
+function CrumbChevron({
+  at,
+  variant,
+}: {
+  at: Widths | undefined;
+  variant: BreadcrumbsVariant;
+}): React.JSX.Element | null {
+  return at === undefined ? null : <Chevron at={at} variant={variant} />;
 }
 
 /** A crumb's face: its glyph, where it wears one, then its words. */
@@ -231,12 +260,12 @@ function CrumbFace({
   return (
     <>
       {glyph === undefined ? null : (
-        <span className="luke-breadcrumb-glyph" aria-hidden="true">
+        <span className="flex flex-none [&_svg]:size-control-icon" aria-hidden="true">
           {glyph}
         </span>
       )}
       <ClippedLine
-        className="luke-breadcrumb-label"
+        className="luke-breadcrumb-label min-w-0 overflow-hidden whitespace-nowrap"
         as={ONE_LINE_ELEMENT.SPAN}
         end={end}
         words={label}
@@ -250,9 +279,11 @@ function CrumbFace({
 /** One crumb's control: words, a quiet pill, or the toolbar's folding way back. */
 function CrumbControl({
   crumb,
+  variant,
   hint: Hint,
 }: {
   crumb: Crumb;
+  variant: BreadcrumbsVariant;
   hint: BreadcrumbHint;
 }): React.JSX.Element {
   const { label, icon, onPress } = crumb;
@@ -270,13 +301,15 @@ function CrumbControl({
   }
   const control =
     onPress === undefined ? (
-      <span className="luke-breadcrumb-words" aria-current={current}>
+      <BreadcrumbPage
+        className={`flex min-w-0 items-center gap-breadcrumb-gap ${LOOK[variant].words}`}
+        aria-current={current}
+      >
         <CrumbFace glyph={crumb.glyph} label={label} end={crumb.end} />
-      </span>
+      </BreadcrumbPage>
     ) : (
-      <button
-        type="button"
-        className="luke-breadcrumb-button"
+      <BreadcrumbLink
+        render={<button type="button" />}
         aria-label={crumb.name}
         aria-current={current}
         aria-haspopup={crumb.popup}
@@ -284,7 +317,7 @@ function CrumbControl({
         onClick={pulseOnPress((event) => onPress(event.currentTarget))}
       >
         <CrumbFace glyph={crumb.glyph} label={label} end={crumb.end} />
-      </button>
+      </BreadcrumbLink>
     );
   return crumb.hint === undefined && crumb.card === undefined ? (
     control
@@ -311,10 +344,12 @@ const CRUMB_MOTION = {
 function CrumbItem({
   crumb,
   chevron,
+  variant,
   hint,
 }: {
   crumb: Crumb;
   chevron: Widths | undefined;
+  variant: BreadcrumbsVariant;
   hint: BreadcrumbHint;
 }): React.JSX.Element | null {
   const shown = crumb.shown ?? true;
@@ -331,18 +366,20 @@ function CrumbItem({
     : arriving
       ? CRUMB_MOTION.ARRIVING
       : undefined;
+  const words = crumb.icon === undefined && crumb.onPress === undefined;
   return (
-    <li
+    <BreadcrumbItem
       ref={presence.ref}
+      className={words ? LOOK[variant].wordsItem : LOOK[variant].item}
       data-shown={crumb.shownAt ?? BREADCRUMB_SHOWN.ALWAYS}
-      data-words={crumb.icon === undefined && crumb.onPress === undefined}
+      data-words={words}
       data-fixed={crumb.fixed === true ? "true" : undefined}
       data-motion={motion}
       inert={presence.leaving}
     >
-      <CrumbChevron at={chevron} />
-      <CrumbControl crumb={crumb} hint={hint} />
-    </li>
+      <CrumbChevron at={chevron} variant={variant} />
+      <CrumbControl crumb={crumb} variant={variant} hint={hint} />
+    </BreadcrumbItem>
   );
 }
 
@@ -364,13 +401,23 @@ export function Breadcrumbs({
   hint?: BreadcrumbHint | undefined;
 }): React.JSX.Element {
   return (
-    <nav className="luke-breadcrumbs" data-variant={variant} aria-label={label}>
-      <ol>
+    <Breadcrumb
+      className={`luke-breadcrumbs relative min-w-0 flex-initial overflow-clip ${LOOK[variant].nav}`}
+      data-variant={variant}
+      aria-label={label}
+    >
+      <BreadcrumbList className={LOOK[variant].list}>
         {crumbs.map((crumb, at) => (
-          <CrumbItem key={at} crumb={crumb} chevron={chevronBefore(crumbs, at)} hint={hint} />
+          <CrumbItem
+            key={at}
+            crumb={crumb}
+            chevron={chevronBefore(crumbs, at)}
+            variant={variant}
+            hint={hint}
+          />
         ))}
-      </ol>
-    </nav>
+      </BreadcrumbList>
+    </Breadcrumb>
   );
 }
 
@@ -381,5 +428,9 @@ export function Breadcrumbs({
  * own, so the bar keeps its padding, its height, and its gap.
  */
 export function BreadcrumbBar({ children }: { children: ReactNode }): React.JSX.Element {
-  return <div className="luke-breadcrumb-bar">{children}</div>;
+  return (
+    <div className="@container/luke-breadcrumb-bar flex min-w-0 flex-auto items-center gap-[inherit]">
+      {children}
+    </div>
+  );
 }

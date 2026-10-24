@@ -67,8 +67,10 @@ export function ToastStack({
   const list = useStackGlide();
   return (
     <>
-      <section className="luke-toast-stack" aria-label={label}>
-        <ol ref={list}>{children}</ol>
+      <section className="luke-toast-stack pointer-events-none fixed z-toast" aria-label={label}>
+        <ol ref={list} className="m-0 flex list-none flex-col gap-toast-gap p-0">
+          {children}
+        </ol>
       </section>
       <VisuallyHidden as={VISUALLY_HIDDEN_ELEMENT.P} role="status">
         {polite}

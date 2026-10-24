@@ -30,6 +30,11 @@ import { useToastSwipe } from "./toast-swipe.js";
  * What it says aloud is the stack's (`ToastStack`), so the words here are
  * plain text. The toast takes no class or style; where it stands is the
  * stack's.
+ *
+ * It is drawn in Tailwind utilities over the theme; `toast.css` keeps what
+ * those cannot say: its arrival, turn, departure, and countdown, which are
+ * keyframes or read the custom properties its swipe and countdown write, and
+ * what answers the pointer, which reads `:has()` and the screen's hover.
  */
 
 /** What a toast reports, of the status tones: the act done, the act refused, something asked of the developer, or work still under way. */
@@ -47,6 +52,35 @@ const GLYPH_TURN = {
   NOW: "now",
   WAS: "was",
 } as const;
+
+/** The ink each glyph is drawn in: its tone's for what was done and what was refused, and the muted ink for an ask, which is the developer's to answer, and for work not done yet, which a toast says no louder than its words. */
+const GLYPH_INK = {
+  [STATUS_TONE.COMPLETE]: "text-tone-ink",
+  [STATUS_TONE.DANGER]: "text-tone-ink",
+  [STATUS_TONE.ATTENTION]: "text-muted-foreground",
+  [STATUS_TONE.WORKING]: "text-muted-foreground",
+} as const satisfies Record<ToastTone, string>;
+
+/**
+ * The card: its glyph, its words' first line, and its action share a first
+ * row as tall as a control, each centred on it; its words wrap at the card's
+ * own line. One with an action ends a step closer to it, and a finger's
+ * sideways drag on it is the toast's while its up and down stay the page's.
+ */
+const TOAST_CARD =
+  "luke-toast relative flex items-start gap-icon-gap rounded-toast border border-border-strong bg-background px-list-inset py-row-inset shadow-toast data-[action=true]:touch-pan-y data-[action=true]:pr-toast-gap";
+
+/** The one cell its glyphs share, so a turn of tone crossfades them with the card unmoved. */
+const TOAST_GLYPH =
+  "luke-toast-glyph mt-toast-glyph-inset grid size-control-icon flex-none [&_svg]:size-full";
+
+/** Its words and the line under them, a title's step apart, the column standing as far below its last line as above its first. */
+const TOAST_TEXT =
+  "luke-toast-text flex min-w-0 flex-1 flex-col gap-toast-line-gap py-toast-text-inset";
+
+/** A bar along its foot, in the muted ink, faint, draining toward its start. */
+const TOAST_COUNTDOWN =
+  "luke-toast-countdown pointer-events-none absolute inset-x-toast-inset bottom-0 h-toast-line-gap origin-left rounded-full bg-muted-foreground opacity-40";
 
 /** The glyph a toast leads with: a check for what was done, an alert for what was refused, the Inbox's tray for an ask, and the spinner's ring for work under way. */
 function ToneGlyph({ tone }: { tone: ToastTone }): React.JSX.Element {
@@ -120,7 +154,7 @@ export function Toast({
   return (
     <li
       ref={swipe.ref}
-      className="luke-toast"
+      className={TOAST_CARD}
       data-tone={tone}
       data-action={actions === undefined ? undefined : "true"}
       data-leaving={leaving ? "true" : undefined}
@@ -145,10 +179,11 @@ export function Toast({
             },
           })}
     >
-      <span className="luke-toast-glyph" aria-hidden="true">
+      <span className={TOAST_GLYPH} aria-hidden="true">
         {glyphs.map((shown) => (
           <span
             key={shown}
+            className={`col-start-1 row-start-1 flex ${GLYPH_INK[shown]}`}
             data-tone={shown}
             data-turn={shown === turn.now ? GLYPH_TURN.NOW : GLYPH_TURN.WAS}
           >
@@ -156,14 +191,14 @@ export function Toast({
           </span>
         ))}
       </span>
-      <span className="luke-toast-text" key={words}>
-        <span className="luke-toast-words">
+      <span className={TOAST_TEXT} key={words}>
+        <span className="luke-toast-words line-clamp-2 wrap-anywhere">
           <Text variant={TEXT_VARIANT.SECTION} as={TEXT_ELEMENT.SPAN}>
             {words}
           </Text>
         </span>
         {detail === undefined ? null : (
-          <span className="luke-toast-detail">
+          <span className="luke-toast-detail line-clamp-2 wrap-anywhere">
             <Text variant={TEXT_VARIANT.CAPTION} as={TEXT_ELEMENT.SPAN} tone={TEXT_TONE.MUTED}>
               {detail}
             </Text>
@@ -173,7 +208,7 @@ export function Toast({
       {actions}
       {countdown === undefined ? null : (
         <span
-          className="luke-toast-countdown"
+          className={TOAST_COUNTDOWN}
           aria-hidden="true"
           style={cssCustomProperties({
             "--luke-toast-hold": `${countdown}ms`,

@@ -1,6 +1,11 @@
 import { type ReactNode, useState, useSyncExternalStore } from "react";
 import { identityHue, identityLetter } from "../../actor-model.js";
 import { UserIcon } from "../../face/glyphs.js";
+import {
+  Avatar as ShadcnAvatar,
+  AvatarFallback as ShadcnAvatarFallback,
+  AvatarImage as ShadcnAvatarImage,
+} from "../../shadcn/avatar.js";
 
 /**
  * avatar.tsx -- a person drawn as a disc, or an app as a square: their picture, their letter on a hue, a glyph, or a quiet figure.
@@ -26,6 +31,21 @@ import { UserIcon } from "../../face/glyphs.js";
  * off by the ring, so the row reads level with its neighbours, never passes
  * for anyone's face, and the figure, solid rather than traced so it holds at
  * a row's smallest size, tells it from the backlog's dashed status ring.
+ *
+ * It is drawn by shadcn/ui's Base UI avatar (`../../shadcn/avatar.tsx`) in
+ * Tailwind utilities over the theme, each disc's size, corner, ground, ink,
+ * and edge picked here, so no rule weighs one against another. Note that
+ * the picture is Base UI's image held mounted (`keepMounted`) rather than
+ * its default, because the default asks for the picture through an image of
+ * its own off the page and mounts the element only once that has loaded:
+ * a lazy picture would be fetched at once, a server-rendered page would
+ * show no picture without scripts, and the element a caller's test and the
+ * browser answer would not be there while it loads. So the picture stands
+ * in the page from the first frame, hidden until loaded, and how it has
+ * fared is still read off its own load and error and the ref's look at a
+ * picture drawn before the page took over, as before: Base UI's own reading
+ * would call a cached picture with no intrinsic width failed. The stand-in
+ * is Base UI's fallback, drawn while the disc says no picture is shown.
  */
 
 /** How large the disc is drawn: a mark at a row's time, in a line of words, at a control's glyph size, in a facepile, a list row's, the account's, a card head's, a page's head, a detail page's masthead, or a portrait beside a biography. */
@@ -62,6 +82,108 @@ const PICTURE = {
 
 type Picture = (typeof PICTURE)[keyof typeof PICTURE];
 
+/** Each size's box, and its letter at half the box. */
+const SIZE_CLASS: Record<AvatarSize, string> = {
+  [AVATAR_SIZE.MARK]: "size-avatar-mark text-[length:calc(var(--spacing-avatar-mark)*0.5)]",
+  [AVATAR_SIZE.INLINE]: "size-avatar-inline text-[length:calc(var(--spacing-avatar-inline)*0.5)]",
+  [AVATAR_SIZE.GLYPH]: "size-avatar-glyph text-[length:calc(var(--spacing-avatar-glyph)*0.5)]",
+  [AVATAR_SIZE.STACK]: "size-avatar-stack text-[length:calc(var(--spacing-avatar-stack)*0.5)]",
+  [AVATAR_SIZE.ROW]: "size-avatar-row text-[length:calc(var(--spacing-avatar-row)*0.5)]",
+  [AVATAR_SIZE.ACCOUNT]:
+    "size-avatar-account text-[length:calc(var(--spacing-avatar-account)*0.5)]",
+  [AVATAR_SIZE.CARD]: "size-avatar-card text-[length:calc(var(--spacing-avatar-card)*0.5)]",
+  [AVATAR_SIZE.PAGE]: "size-avatar-page text-[length:calc(var(--spacing-avatar-page)*0.5)]",
+  [AVATAR_SIZE.MASTHEAD]:
+    "size-avatar-masthead text-[length:calc(var(--spacing-avatar-masthead)*0.5)]",
+  [AVATAR_SIZE.PORTRAIT]:
+    "size-avatar-portrait text-[length:calc(var(--spacing-avatar-portrait)*0.5)]",
+};
+
+/** Each size's box alone, for no one's outline, which holds no letter. */
+const BOX_CLASS: Record<AvatarSize, string> = {
+  [AVATAR_SIZE.MARK]: "size-avatar-mark",
+  [AVATAR_SIZE.INLINE]: "size-avatar-inline",
+  [AVATAR_SIZE.GLYPH]: "size-avatar-glyph",
+  [AVATAR_SIZE.STACK]: "size-avatar-stack",
+  [AVATAR_SIZE.ROW]: "size-avatar-row",
+  [AVATAR_SIZE.ACCOUNT]: "size-avatar-account",
+  [AVATAR_SIZE.CARD]: "size-avatar-card",
+  [AVATAR_SIZE.PAGE]: "size-avatar-page",
+  [AVATAR_SIZE.MASTHEAD]: "size-avatar-masthead",
+  [AVATAR_SIZE.PORTRAIT]: "size-avatar-portrait",
+};
+
+/**
+ * Each outline's corner: a circle's; a square's, a share of its edge, so it
+ * reads as one shape at every size, rounder than a tile of its size; a
+ * tile's, a quarter of its edge.
+ */
+const SHAPE_CLASS: Record<AvatarShape, string> = {
+  [AVATAR_SHAPE.CIRCLE]: "rounded-full",
+  [AVATAR_SHAPE.SQUARE]: "rounded-avatar-square",
+  [AVATAR_SHAPE.TILE]: "rounded-avatar-tile",
+};
+
+/** The six identity hues a letter stands on, by the hue `identityHue` reads off an id. */
+const HUE_CLASS: Readonly<Record<number, string>> = {
+  1: "bg-identity-1",
+  2: "bg-identity-2",
+  3: "bg-identity-3",
+  4: "bg-identity-4",
+  5: "bg-identity-5",
+  6: "bg-identity-6",
+};
+
+/** The box a glyph stands in: the disc's whole, its glyph a share of it at every size. */
+const GLYPH_BOX = "luke-avatar-glyph grid size-full place-items-center *:size-avatar-glyph-share";
+
+/** What a disc is drawn as, read off its props and how its picture has fared. */
+interface Look {
+  readonly size: AvatarSize;
+  readonly shape: AvatarShape;
+  readonly glyph: boolean;
+  readonly tiled: boolean;
+  readonly edged: boolean;
+  readonly blank: boolean;
+  readonly hue: number | undefined;
+}
+
+/** A disc's letter size: a share of its box, or a tile's caption, a card head's tile a dialog's, so the small tiles keep a readable letter. */
+function typeClass({ size, shape }: Look): string {
+  if (shape !== AVATAR_SHAPE.TILE) return SIZE_CLASS[size];
+  const box = BOX_CLASS[size];
+  return size === AVATAR_SIZE.CARD
+    ? `${box} text-(length:--text-dialog)`
+    : `${box} text-(length:--text-caption)`;
+}
+
+/**
+ * A disc's ground and ink: a letter's identity hue; an app's glyph tiled on
+ * the quiet fill laid over the ground, so it is opaque and a face it
+ * overlaps never shows through; an app's glyph bare, in the ink around it;
+ * a blank tile's nothing until its picture has loaded; or the quiet fill.
+ */
+function groundClass({ glyph, tiled, blank, hue }: Look): string {
+  if (hue !== undefined) return `${HUE_CLASS[hue] ?? ""} text-on-identity`;
+  if (glyph && tiled)
+    return "bg-ground bg-[linear-gradient(var(--color-secondary),var(--color-secondary))] text-inherit";
+  if (glyph) return "bg-transparent text-inherit";
+  if (blank) return "bg-transparent text-muted-foreground";
+  return "bg-secondary text-muted-foreground";
+}
+
+/** A disc's edge: a hairline, so a picture keeps its edge on a ground of its own colour; a tile's, only where it is `edged`; none round an app's glyph. */
+function edgeClass({ shape, glyph, edged }: Look): string {
+  if (glyph) return "after:content-none";
+  if (shape !== AVATAR_SHAPE.TILE) return "after:shadow-avatar-edge";
+  return edged ? "after:shadow-avatar-tile-edge" : "after:content-none";
+}
+
+/** Every class a disc wears, its line closing them so a letter of any size sits at the box's centre. */
+function discClass(look: Look): string {
+  return `luke-avatar ${typeClass(look)} ${SHAPE_CLASS[look.shape]} ${groundClass(look)} ${edgeClass(look)} leading-none`;
+}
+
 interface AvatarProps {
   name: string;
   /** What the hue is read off, so a rename keeps the colour a person is known by. */
@@ -91,10 +213,10 @@ export const UNASSIGNED_WORDS = "Unassigned";
 
 /** What stands on the disc while no picture is shown: the caller's glyph, the letter, or the figure where there is no letter. */
 function standIn(glyph: ReactNode, letter: string): ReactNode {
-  if (glyph !== undefined) return <span className="luke-avatar-glyph">{glyph}</span>;
+  if (glyph !== undefined) return <span className={GLYPH_BOX}>{glyph}</span>;
   if (letter !== "") return letter;
   return (
-    <span className="luke-avatar-glyph">
+    <span className={GLYPH_BOX}>
       <UserIcon />
     </span>
   );
@@ -139,22 +261,27 @@ function AvatarDisc({
     () => true,
     () => false,
   );
+  const hue = lettered ? identityHue(id) : undefined;
+  const look = { size, shape, glyph: glyph !== undefined, tiled, edged, blank, hue };
   return (
-    <span
-      className="luke-avatar"
+    <ShadcnAvatar
+      className={discClass(look)}
       data-size={size}
       data-shape={shape}
       data-glyph={glyph === undefined ? undefined : "true"}
       data-edged={edged ? "true" : undefined}
       data-blank={blank ? "true" : undefined}
       data-tiled={glyph !== undefined && tiled ? "true" : undefined}
-      data-hue={lettered ? identityHue(id) : undefined}
+      data-hue={hue}
       {...named}
     >
-      {shown || blank ? null : standIn(glyph, letter)}
+      {shown || blank ? null : (
+        <ShadcnAvatarFallback>{standIn(glyph, letter)}</ShadcnAvatarFallback>
+      )}
       {url === undefined ? null : (
-        <img
-          className="luke-avatar-picture"
+        <ShadcnAvatarImage
+          keepMounted
+          className="luke-avatar-picture data-[loaded=false]:invisible"
           src={url}
           alt=""
           referrerPolicy="no-referrer"
@@ -171,7 +298,7 @@ function AvatarDisc({
           }}
         />
       )}
-    </span>
+    </ShadcnAvatar>
   );
 }
 
@@ -191,20 +318,37 @@ export function UnassignedAvatar({
   decorative?: boolean;
 }): React.JSX.Element {
   return (
-    <span
-      className="luke-avatar"
+    <ShadcnAvatar
+      className={`luke-avatar ${SIZE_CLASS[size]} rounded-full bg-transparent text-muted-foreground after:content-none leading-none`}
       data-size={size}
       data-unassigned="true"
       {...(decorative ? { "aria-hidden": true } : { role: "img", "aria-label": UNASSIGNED_WORDS })}
     >
-      <svg className="luke-avatar-unassigned" viewBox="0 0 16 16" aria-hidden="true">
-        <circle className="luke-avatar-unassigned-ring" cx="8" cy="8" r="7.3" pathLength="40" />
-        {/* The shoulders are the arc of a circle beneath, closed by the bottom of the seat's own 5.4 circle inside the ring, where the two cross. */}
-        <g className="luke-avatar-unassigned-seat">
+      <svg
+        className="luke-avatar-unassigned absolute inset-0 size-full"
+        viewBox="0 0 16 16"
+        aria-hidden="true"
+      >
+        {/* Note that the ring is held a hairline on its circle itself, because `vector-effect` is not inherited from the outline around it; its eight long dashes are laid evenly round it (`pathLength`) with round ends, so it is never read as the backlog's shorter-dashed status ring. */}
+        <circle
+          className="luke-avatar-unassigned-ring"
+          cx="8"
+          cy="8"
+          r="7.3"
+          pathLength="40"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.25"
+          strokeDasharray="3.2 1.8"
+          strokeLinecap="round"
+          vectorEffect="non-scaling-stroke"
+        />
+        {/* The seat is filled rather than traced, so it holds at a row's smallest size, and fainter than the ring, so the outline leads. The shoulders are the arc of a circle beneath, closed by the bottom of the seat's own 5.4 circle inside the ring, where the two cross. */}
+        <g className="luke-avatar-unassigned-seat" fill="currentColor" opacity="0.62">
           <circle cx="8" cy="6.6" r="2.1" />
           <path d="M4.158 11.795A5.2 5.2 0 0 1 11.842 11.795A5.4 5.4 0 0 1 4.158 11.795Z" />
         </g>
       </svg>
-    </span>
+    </ShadcnAvatar>
   );
 }

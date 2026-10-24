@@ -1,78 +1,30 @@
-/* chip.css -- the chip: a control of the shared contract in one of four
-   looks, in a state's tone where it says one, at its place's width, giving
-   way before the row around it does, its words cut short and fading out
-   rather than pushing past it. A mark beside the words, a glyph or a picture, stands at
-   the control's glyph size, and a menu's chevron is the small, muted one a
-   menu draws. A pill and a filter wear the chip's own opaque face
-   (`--luke-color-chip`), so no ground behind one shows through it. */
+/* chip.css -- what the chip's utilities cannot say (`chip.tsx`, drawn in
+   the shared Tailwind theme): a tone's ink and the dot it draws where the
+   chip leads with no glyph, the motions a chip arrives and waits in, and
+   the fades and cuts its words give way by. */
 
 @layer components {
-  .luke-chip {
-    display: inline-flex;
-    flex: 0 1 auto;
-    align-items: center;
-    justify-content: center;
-    gap: var(--luke-icon-gap);
-    min-width: 0;
-    max-width: 100%;
-    height: var(--luke-control-height);
-    margin: 0;
-    padding: 0 var(--luke-space-8);
-    border: 1px solid transparent;
-    border-radius: var(--luke-control-radius);
-    background: transparent;
-    /* The look's ink, named so an unavailable chip can fade it whatever
-       look it wears. */
-    --luke-chip-ink: var(--luke-color-text-body);
-    color: var(--luke-chip-ink);
-    font-family: var(--luke-font-sans);
-    font-size: var(--luke-type-label-size);
-    line-height: var(--luke-type-label-leading);
-    font-weight: var(--luke-type-label-weight);
-    white-space: nowrap;
-    cursor: pointer;
-    transition:
-      background-color var(--luke-duration-hover) var(--luke-motion-exit),
-      color var(--luke-duration-hover) var(--luke-motion-exit);
-  }
-
-  [data-luke-profile="desktop"] .luke-chip {
-    cursor: default;
-  }
-
   /* A chip's words fade out over their last few pixels only while they are
      measured cut short, as a browser's tab ends a long title, so short words
-     end on their last letter. */
-  .luke-chip-name {
-    overflow: hidden;
-    white-space: nowrap;
-  }
-
+     end on their last letter; words cut in their middle end at an ellipsis
+     instead. Note that the fade stays here, because Tailwind's mask
+     utilities compose the gradient through variables rather than drawing
+     it, as the badge's label fade does (`badge.css`). */
   .luke-chip-name[data-overflow="true"] {
     mask-image: linear-gradient(to left, transparent, #000 var(--luke-label-fade));
   }
 
-  /* Words cut in their middle keep their end whole and give way from the
-     end of their start, at an ellipsis rather than the fade, so the cut
-     reads as one with the words after it. */
   .luke-chip-name[data-cut="middle"] {
-    display: inline-flex;
-    min-width: 0;
     mask-image: none;
-  }
-
-  /* Note that each part keeps its spaces, because a flex item drops one
-     at its edge, which would close up the words either side of the cut. */
-  .luke-chip-name-start {
-    min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: pre;
   }
 
   /* The end stands whole while the start can give way; once the start is
      gone and the chip narrower still, the end gives way from its own start,
-     its last characters kept, rather than losing them at the chip's edge. */
+     its last characters kept, rather than losing them at the chip's edge.
+     Note that it stays here, because the Pull request tab's narrow header
+     test lays this class in markup of its own
+     (`pull-request-header-narrow.test.ts`), and each part keeps its spaces,
+     because a flex item drops one at its edge. */
   .luke-chip-name-end {
     display: inline-flex;
     flex: none;
@@ -83,160 +35,12 @@
     white-space: pre;
   }
 
-  /* Words naming code, a branch, read in the code face at a caption's
-     size, as a terminal would print them. */
-  .luke-chip-name[data-mono="true"] {
-    font-family: var(--luke-font-mono);
-    font-size: var(--luke-type-caption-size);
-  }
-
-  /* All a chip holds stands in one face, so an unavailable chip fades it
-     once, whatever it holds: bare words, a name, a picture, a mark, or the
-     chevron. */
-  .luke-chip-face {
-    display: inline-flex;
-    flex: 0 1 auto;
-    align-items: center;
-    gap: inherit;
-    min-width: 0;
-  }
-
-  .luke-chip-face > :is(svg, img) {
-    flex: none;
-    width: var(--luke-control-icon);
-    height: var(--luke-control-icon);
-  }
-
-  .luke-chip-face > svg.settings-chevron {
-    width: 12px;
-    height: 12px;
-    color: var(--luke-color-text-muted);
-  }
-
-  /* A toolbar chip and a field light under the pointer and while their
-     menu is open, as a quiet button does. */
-  .luke-chip:is([data-look="toolbar"], [data-look="field"]):where(
-    :hover:not(:disabled, [aria-disabled="true"]),
-    [aria-expanded="true"]
-  ) {
-    background: var(--luke-color-fill-selected);
-    --luke-chip-ink: var(--luke-color-text);
-  }
-
-  .luke-chip:is([data-look="toolbar"], [data-look="field"]):active:not(
-    :disabled,
-    [aria-disabled="true"]
-  ) {
-    background: var(--luke-color-fill-pressed);
-  }
-
-  /* A pill names a thing, so it stands on the chip's face inside a hairline
-     at rest, its fill deepening under the pointer rather than taking a
-     button's. */
-  .luke-chip[data-look="pill"] {
-    padding: 0 var(--luke-space-12) 0 var(--luke-space-8);
-    border-color: var(--luke-color-chip-edge);
-    border-radius: var(--luke-radius-full);
-    background: var(--luke-color-chip);
-    --luke-chip-ink: var(--luke-color-text-muted);
-  }
-
-  /* The site's muted ink holds AA on its page's ground and not on a fill,
-     so a pill there names its thing in the text's own ink. */
-  [data-luke-profile="web"] .luke-chip[data-look="pill"] {
-    --luke-chip-ink: var(--luke-color-text);
-  }
-
-  .luke-chip[data-look="pill"]:where(
-    :hover:not(:disabled, [aria-disabled="true"]),
-    [aria-expanded="true"]
-  ) {
-    background: var(--luke-color-chip-hover);
-    --luke-chip-ink: var(--luke-color-text);
-  }
-
-  /* A field is a settings row's value, inside an outlined button's
-     hairline, its words leading and its chevron at the far end. */
-  .luke-chip[data-look="field"] {
-    justify-content: flex-start;
-    padding: 0 var(--luke-space-8) 0 var(--luke-space-12);
-    border-color: var(--luke-color-border);
-    --luke-chip-ink: var(--luke-color-text);
-  }
-
-  .luke-chip[data-look="field"] > .luke-chip-face {
-    flex: 1;
-  }
-
-  /* A field's chevron stands at its far end whatever its words are, a
-     name that fills the field or bare words that do not. */
-  .luke-chip[data-look="field"] .luke-chip-face > .settings-chevron {
-    margin-left: auto;
-  }
-
-  .luke-chip[data-look="field"] .luke-chip-name {
-    flex: 1;
-    text-align: left;
-  }
-
-  /* A filter is a capsule on the chip's face inside its hairline, lighting
-     under the pointer, and while it stands pressed it is drawn in the ink,
-     its words in the ground's colour, as the Ink button is, so the row says
-     at a glance which kind the list is narrowed to. */
-  .luke-chip[data-look="filter"] {
-    padding: 0 var(--luke-space-12);
-    border-color: var(--luke-color-chip-edge);
-    border-radius: var(--luke-radius-full);
-    background: var(--luke-color-chip);
-    --luke-chip-ink: var(--luke-color-text-muted);
-  }
-
-  .luke-chip[data-look="filter"]:hover:not(
-    :disabled,
-    [aria-disabled="true"],
-    [aria-pressed="true"]
-  ) {
-    background: var(--luke-color-chip-hover);
-    --luke-chip-ink: var(--luke-color-text);
-  }
-
-  .luke-chip[data-look="filter"][aria-pressed="true"] {
-    border-color: var(--luke-color-ink);
-    background: var(--luke-color-ink);
-    --luke-chip-ink: var(--luke-color-ink-inverse);
-  }
-
-  /* A count after the words (`ChipCount`), quiet, at fixed figures; on a
-     pressed filter it steps back from the ground's colour its words are in. */
-  .luke-chip-count {
-    color: var(--luke-color-text-muted);
-    font-variant-numeric: tabular-nums;
-  }
-
-  .luke-chip[aria-pressed="true"] .luke-chip-count {
-    color: color-mix(in srgb, var(--luke-color-ink-inverse) 65%, var(--luke-color-ink));
-  }
-
-  /* A removable filter names one applied, so it stands chosen, on the
-     chip's chosen face inside the strong hairline; its × ends it, a round
-     press inside its capsule. */
-  .luke-chip[data-removable="true"] {
-    gap: var(--luke-space-4);
-    padding-inline-end: var(--luke-space-4);
-    cursor: default;
-  }
-
-  .luke-chip[data-look="filter"][data-removable="true"] {
-    border-color: var(--luke-color-chip-edge-strong);
-    background: var(--luke-color-chip-selected);
-    --luke-chip-ink: var(--luke-color-text);
-  }
-
   /* A removable chip was added to the field it stands in, so it springs in
      from a smaller size as it arrives, its opacity over the quick beat and
      its scale on the fast spring. One a `ListMotion` follows
      (`data-motion-key`) arrives and leaves by the motion instead, which
-     scales it the same way, so the two never play at once. */
+     scales it the same way, so the two never play at once. Note that the
+     keyframes stay here, because `attachment-chip.css` springs in by them. */
   .luke-chip[data-removable="true"]:not([data-motion-key]) {
     animation:
       luke-chip-fade-in var(--luke-duration-quick) var(--luke-motion-exit) backwards,
@@ -255,53 +59,11 @@
     }
   }
 
-  .luke-chip-remove {
-    display: grid;
-    flex: none;
-    width: calc(var(--luke-control-height) - var(--luke-space-12));
-    height: calc(var(--luke-control-height) - var(--luke-space-12));
-    place-items: center;
-    margin: 0;
-    padding: 0;
-    border: 0;
-    border-radius: var(--luke-radius-full);
-    background: none;
-    color: var(--luke-color-text-muted);
-    cursor: inherit;
-  }
-
-  .luke-chip-remove:hover {
-    background: var(--luke-color-fill-strong);
-    color: var(--luke-color-text);
-  }
-
-  /* Note that the × is drawn a size under the chevron, because its glyph
-     carries the heavier stroke a small removal needs. */
-  .luke-chip-remove > svg {
-    width: 10px;
-    height: 10px;
-  }
-
-  /* A tone is said in the chip's mark alone, whatever its look: the chip
-     stands on its own face inside its hairline, its words in the text's
-     ink, and its leading glyph wears the state's ink, or, where it leads
-     with none, a dot of it stands before its words, as a task's status mark
-     says where it stands. Under the pointer and while its menu is open its
-     face lights as a pill's does. */
-  .luke-chip[data-look][data-tone] {
-    border-color: var(--luke-color-chip-edge);
-    background: var(--luke-color-chip);
-    --luke-chip-ink: var(--luke-color-text);
-  }
-
-  .luke-chip[data-look][data-tone]:where(
-    :hover:not(:disabled, [aria-disabled="true"], [data-removable]),
-    [aria-expanded="true"]
-  ) {
-    background: var(--luke-color-chip-hover);
-    --luke-chip-ink: var(--luke-color-text);
-  }
-
+  /* A tone is said in the chip's mark alone, whatever its look: its leading
+     glyph wears the state's ink, or, where it leads with none, a dot of it
+     stands before its words, as a task's status mark says where it stands.
+     Note that these stay here, because whether the dot stands turns on what
+     the chip holds (`:has()`), and the glyph and the dot read one ink. */
   .luke-chip[data-tone] .luke-chip-face > :is(svg, img):first-child:not(.settings-chevron) {
     color: var(--luke-chip-tone);
   }
@@ -323,83 +85,9 @@
     --luke-chip-tone: var(--luke-tone-ink);
   }
 
-  /* The widths a place shares: the field column a settings row's pop-ups
-     stand in, at least that column, or half of it for a few short words. A
-     profile with no column (the site's) leaves each chip its words' width. */
-  .luke-chip[data-width="field"] {
-    width: var(--luke-select-field-width);
-  }
-
-  .luke-chip[data-width="min-field"] {
-    min-width: min(var(--luke-select-field-width), 100%);
-  }
-
-  .luke-chip[data-width="fixed"] {
-    width: calc(var(--luke-select-field-width) / 2);
-  }
-
-  /* Drawn as its mark alone, a chip squares its sides around it; its words
-     are still its name, read and drawn nowhere, and its chevron goes. */
-  .luke-chip[data-icon-only="true"] {
-    padding-inline: var(--luke-space-8);
-  }
-
-  .luke-chip[data-icon-only="true"] .luke-chip-name {
-    position: absolute;
-    width: 1px;
-    height: 1px;
-    margin: -1px;
-    clip-path: inset(50%);
-  }
-
-  .luke-chip[data-icon-only="true"] .luke-chip-face > .settings-chevron {
-    display: none;
-  }
-
-  /* Compact, one of a row of small counts: a caption line's pill, in the
-     caption's type, its mark nearer its words. A compact filter stands as
-     any filter does, on the chip's face at rest and in the ink pressed, so
-     the reader's own reaction is the one drawn solid. */
-  .luke-chip[data-size="compact"] {
-    gap: var(--luke-space-4);
-    height: var(--luke-space-20);
-    padding: 0 var(--luke-space-8);
-    font-size: var(--luke-type-caption-size);
-    line-height: var(--luke-type-caption-leading);
-    font-weight: var(--luke-type-caption-weight);
-  }
-
-  /* Compact and drawn as its mark alone, as a task's priority and status
-     on the Tasks page's rows and cards, a chip is a square of its own
-     height, its mark centred in it. */
-  .luke-chip[data-icon-only="true"][data-size="compact"] {
-    flex: none;
-    aspect-ratio: 1;
-    padding: 0;
-  }
-
-  /* A compact pill says where a thing stands among a header's words, a pull
-     request's state, beside a `Badge` that says the same of a state no menu
-     changes, so it is drawn in the badge's box: its height, its side room
-     inside the hairline, its medium caption, and its glyph or dot in the
-     tone's ink. Only the chevron, and the face lighting under the pointer
-     and while its menu is open, say it is pressed. */
-  .luke-chip[data-look="pill"][data-size="compact"] {
-    padding: 0 calc(var(--luke-space-8) - 1px);
-    font-weight: var(--luke-type-tag-weight);
-  }
-
-  .luke-chip[data-look="pill"][data-size="compact"] .luke-chip-face > :is(svg, img) {
-    width: 12px;
-    height: 12px;
-  }
-
   /* Busy, a change it made is out, and what it holds pulses until
-     answered, its face standing whole beneath. */
-  .luke-chip[aria-busy="true"] {
-    cursor: progress;
-  }
-
+     answered, its face standing whole beneath. Note that it stays here for
+     its keyframes, held still with every loop (`--luke-loop-motion`). */
   .luke-chip[aria-busy="true"] > .luke-chip-face {
     animation: luke-chip-wait 1.2s ease-in-out infinite;
     animation-play-state: var(--luke-loop-motion);
@@ -409,13 +97,5 @@
     50% {
       opacity: 0.35;
     }
-  }
-
-  /* Unavailable, what a chip holds fades to 45% while its face and hairline
-     stand whole, so no ground shows through it, and the app's ring around
-     one that keeps the keyboard (`aria-disabled`, so a hint can say why) is
-     drawn at full strength. Busy, it still pulses. */
-  .luke-chip:is(:disabled, [aria-disabled="true"]):not([aria-busy="true"]) > .luke-chip-face {
-    opacity: 0.45;
   }
 }
