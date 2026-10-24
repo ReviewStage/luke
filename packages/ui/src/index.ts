@@ -107,6 +107,7 @@ export * from "./components/settings-row/settings-row.js";
 export * from "./components/settings-section/settings-section.js";
 export * from "./components/shimmer/shimmer.js";
 export * from "./components/shortcut/shortcut.js";
+export * from "./components/show-more-row/show-more-row.js";
 export * from "./components/skeleton/skeleton.js";
 export * from "./components/slider/slider.js";
 export * from "./components/spinner/spinner.js";
