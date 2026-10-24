@@ -300,7 +300,7 @@ test("the Comments tab's Resolved toggle lists the resolved thread whole, where 
   const { container, asked } = drawn("tab");
 
   act(() => container.querySelector<HTMLButtonElement>('button[aria-label="Resolved"]')?.click());
-  assert.ok(container.querySelector(".comments-head")?.textContent?.startsWith("Resolved"));
+  assert.ok(container.querySelector(".luke-pane-bar")?.textContent?.startsWith("Resolved"));
   await act(async () => {
     container.querySelector<HTMLButtonElement>('button[aria-label="Reopen"]')?.click();
   });
@@ -325,7 +325,7 @@ test("the Comments tab's Resolved toggle starts the other list at its top", () =
   });
 
   act(() =>
-    container.querySelector<HTMLButtonElement>(".comments-head button[aria-pressed]")?.click(),
+    container.querySelector<HTMLButtonElement>(".luke-pane-bar button[aria-pressed]")?.click(),
   );
 
   assert.equal(top, 0);

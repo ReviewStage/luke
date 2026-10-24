@@ -29,6 +29,17 @@ export function channelTitle(
   return channel.kind === CHANNEL_KIND.DM ? label : `#${label}`;
 }
 
+/** A task's channel's mark: its task's status glyph, as it stands before its name; nothing before any other channel's. */
+export function ChannelGlyph({ channel }: { channel: ChatChannel }): React.JSX.Element | null {
+  const status = useTaskStatus(channel.kind === CHANNEL_KIND.TASK ? channel.planId : undefined);
+  if (channel.kind !== CHANNEL_KIND.TASK) return null;
+  return (
+    <span className="chat-channel-glyph">
+      <PlanGlyph status={status} />
+    </span>
+  );
+}
+
 /** A channel by name as drawn: a task's glyph before its name, else its name in words (`channelTitle`). */
 export function ChannelName({
   chat,
@@ -39,15 +50,10 @@ export function ChannelName({
   names: ChatNames;
   channel: ChatChannel;
 }): React.JSX.Element {
-  const status = useTaskStatus(channel.kind === CHANNEL_KIND.TASK ? channel.planId : undefined);
-  const title = channelTitle(chat, names, channel);
-  if (channel.kind !== CHANNEL_KIND.TASK) return <>{title}</>;
   return (
     <>
-      <span className="chat-channel-glyph">
-        <PlanGlyph status={status} />
-      </span>
-      {title}
+      <ChannelGlyph channel={channel} />
+      {channelTitle(chat, names, channel)}
     </>
   );
 }

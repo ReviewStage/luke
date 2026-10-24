@@ -32,6 +32,7 @@ import {
   ONE_LINE_ELEMENT,
   ONE_LINE_END,
   OneLine,
+  PaneBar,
   RESIZE_EDGE_SIDE,
   ResizeEdge,
   RowHint,
@@ -1139,18 +1140,23 @@ function ListHead({
         </SidebarSectionHead>
       ) : (
         <>
-          <header className="desktop-toolbar inbox-tasks-bar">
-            <div className="desktop-toolbar-heading">
-              <OneLine
-                as={ONE_LINE_ELEMENT.H1}
-                end={ONE_LINE_END.ELLIPSIS}
-                className="desktop-toolbar-title"
-              >
-                {title}
-              </OneLine>
-            </div>
-            <div className="desktop-toolbar-actions">{options}</div>
-          </header>
+          {/* Note that a task's own Inbox is a tab, whose bar is every tab's; the window's Inbox is a page, whose head glides with the sidebar. */}
+          {view === undefined ? (
+            <PaneBar title={title} actions={options} />
+          ) : (
+            <header className="desktop-toolbar inbox-tasks-bar">
+              <div className="desktop-toolbar-heading">
+                <OneLine
+                  as={ONE_LINE_ELEMENT.H1}
+                  end={ONE_LINE_END.ELLIPSIS}
+                  className="desktop-toolbar-title"
+                >
+                  {title}
+                </OneLine>
+              </div>
+              <div className="desktop-toolbar-actions">{options}</div>
+            </header>
+          )}
           {search}
         </>
       )}

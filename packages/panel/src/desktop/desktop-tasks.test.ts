@@ -476,7 +476,7 @@ async function narrowTaskInbox(
         each === shown ? `[${each.textContent}]` : (each.textContent ?? ""),
       );
       act(() => shown?.click());
-      return [tab.querySelector(".inbox-tasks header h1")?.textContent, ...words];
+      return [tab.querySelector(".inbox-tasks .luke-pane-bar-title")?.textContent, ...words];
     },
     /** Shows the scope named `name` from the view's menu. */
     pressScope: async (name: string) => {
@@ -1058,7 +1058,10 @@ test("a task's Chat tab in the side panel shows its task channel at reading size
   const own = await chatTabMounted(true);
   const tab = own.container.querySelector('section.desktop-task-chat[aria-label="Chat"]');
   assert.ok(tab, "the task's Chat tab");
-  assert.equal(tab.querySelector(".chat-head h1")?.textContent, "teammate-invitations");
+  assert.equal(
+    tab.querySelector(".chat-stream .luke-pane-bar-lead")?.textContent,
+    "teammate-invitations",
+  );
   assert.match(
     tab.querySelector(".chat-composer")?.textContent ?? "",
     /Message #teammate-invitations/u,
