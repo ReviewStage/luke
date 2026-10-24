@@ -8,6 +8,7 @@ import {
   DisclosureSummary,
   GlyphSlot,
   OneLine,
+  useDisclosurePreviewShown,
 } from "@luke/ui";
 import type { ComponentProps, ComponentPropsWithoutRef, ReactNode } from "react";
 
@@ -63,11 +64,21 @@ export function PlanIcon({ children }: { children: ReactNode }): ReactNode {
 export type TaskTitleProps = {
   /** The word before the title, drawn quieter: what kind of thing the card holds. */
   label?: string;
+  /** Whether the title is the body's own first line, which gives way to the label alone while the body is drawn. */
+  previews?: boolean;
   children: string;
 };
 
 /** The plan's title on the header, cut to the line, behind its label where it has one. */
-export function PlanTitle({ label, children }: TaskTitleProps): ReactNode {
+export function PlanTitle({ label, previews = false, children }: TaskTitleProps): ReactNode {
+  const previewed = useDisclosurePreviewShown(previews && label !== undefined);
+  if (label !== undefined && !previewed) {
+    return (
+      <OneLine className="plan-card-title" words={label}>
+        <span className="plan-card-label">{label}</span>
+      </OneLine>
+    );
+  }
   return (
     <OneLine
       className="plan-card-title"
