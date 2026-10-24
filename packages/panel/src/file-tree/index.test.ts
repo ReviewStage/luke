@@ -12,7 +12,8 @@ import { fileTree } from "./index.js";
  * file is viewed; a folder's row says nothing more. A press on the toggle
  * is the toggle's alone, the row neither opening its file nor taking the
  * keyboard, while a press anywhere else on the row opens the file, and V
- * on the row the tree's keyboard stands on presses its toggle. The
+ * on the row the tree's keyboard stands on presses its toggle. A reader
+ * finds the toggle as a checkbox named Viewed. The
  * tree is the bundle's own, Pierre drawing it in jsdom; synthetic paths.
  */
 
@@ -155,4 +156,22 @@ test("a mark that does not say whether its file is viewed draws no toggle", asyn
   await mountMarked([{ path: "src/seats.ts", status: FILE_MARK.MODIFIED, threads: 1 }]);
 
   assert.deepEqual(parts("src/seats.ts"), ["", "1", "", ""]);
+});
+
+test("a row's Viewed toggle is a checkbox named Viewed, checked once its file is viewed, as marks handed again redraw it", async () => {
+  const { handle } = await mountMarked(MARKS);
+
+  const named = (path: string) => {
+    const each = toggle(path);
+    return [each.getAttribute("role"), each.getAttribute("aria-label"), each.ariaChecked];
+  };
+  assert.deepEqual(named("src/seats.ts"), ["checkbox", "Viewed", "false"]);
+  assert.deepEqual(named("src/plan.md"), ["checkbox", "Viewed", "true"]);
+
+  handle.mark(
+    MARKS.map((mark) => (mark.path === "src/seats.ts" ? { ...mark, viewed: true } : mark)),
+  );
+  await settle();
+
+  assert.deepEqual(named("src/seats.ts"), ["checkbox", "Viewed", "true"]);
 });

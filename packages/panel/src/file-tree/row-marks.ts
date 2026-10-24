@@ -34,6 +34,12 @@ import type { FileMark } from "./contract.js";
  * folder row naming several folders (`db / schema`) gives up its last
  * folder first, the same way.
  *
+ * The toggle is a control a reader can find and press: Pierre draws each
+ * part as a bare span with only its colour, so the tree names every toggle
+ * after each drawing, as a checkbox named Viewed, checked once the file is
+ * viewed (`nameToggles`), and a press on it, a reader's own among them, is
+ * heard by the tree (`pressedToggle`).
+ *
  * Note that the sheet is adopted by the tree's shadow root as a
  * constructed sheet rather than handed to Pierre's `unsafeCSS`, because
  * Pierre writes that into a `<style>` element, which the panel's policy
@@ -52,6 +58,9 @@ const PART = {
   REMOVED: 3,
   VIEWED: 4,
 } as const;
+
+/** The role a Viewed toggle plays for a reader: ticked or not, as a review's checkbox. */
+const TOGGLE_ROLE = "checkbox";
 
 /** What a part says, read out in the run's hint. */
 const MARK_WORDS = {
@@ -148,15 +157,50 @@ ${VIEWED_ROW}:not([data-item-selected]) { opacity: 0.6; }
 /** The sheet, made the first time a tree is dressed, where the document can make one. */
 let sheet: CSSStyleSheet | undefined;
 
+/** The shadow roots whose toggles are named each time Pierre draws in them. */
+const watched = new WeakSet<ShadowRoot>();
+
+/**
+ * Names each Viewed toggle drawn under a tree's shadow root as the control
+ * it is: a checkbox named Viewed, checked once its file is viewed, which the
+ * part says by holding the word.
+ */
+function nameToggles(root: ShadowRoot): void {
+  for (const toggle of root.querySelectorAll<HTMLElement>(part(PART.VIEWED))) {
+    toggle.setAttribute("role", TOGGLE_ROLE);
+    toggle.setAttribute("aria-label", MARK_WORDS.VIEWED);
+    toggle.setAttribute("aria-checked", String(toggle.textContent !== ""));
+  }
+}
+
+/**
+ * Names a tree's toggles now and after each time Pierre draws in its shadow
+ * root, once for each root. Note that only the parts' words and rows are
+ * watched, never attributes, so naming a toggle wakes no second naming.
+ */
+function watchToggles(root: ShadowRoot): void {
+  if (watched.has(root)) return;
+  watched.add(root);
+  new MutationObserver(() => nameToggles(root)).observe(root, {
+    childList: true,
+    characterData: true,
+    subtree: true,
+  });
+  nameToggles(root);
+}
+
 /**
  * Adopts the tree's sheet into its shadow root wherever it is not adopted
- * there, beside Pierre's own; call it each time the tree's element joins the
- * document, since Pierre then adopts its own sheet alone.
+ * there, beside Pierre's own, and names its toggles as Pierre draws them;
+ * call it each time the tree's element joins the document, since Pierre then
+ * adopts its own sheet alone.
  */
 export function dress(tree: FileTree): void {
   const root = tree.getFileTreeContainer()?.shadowRoot;
+  if (root === null || root === undefined) return;
+  watchToggles(root);
   // Note that a document that adopts no sheets, as jsdom's, draws the run unstyled.
-  if (root?.adoptedStyleSheets === undefined) return;
+  if (root.adoptedStyleSheets === undefined) return;
   if (sheet === undefined) {
     sheet = new CSSStyleSheet();
     sheet.replaceSync(SHEET);

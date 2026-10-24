@@ -8,6 +8,7 @@ import {
   PauseIcon,
   PlayIcon,
 } from "../../face/glyphs.js";
+import { motionHeld } from "../../motion-timing.js";
 import { notePictureOrigin } from "../../picture-expand.js";
 import { BUTTON_VARIANT, IconButton } from "../button/button.js";
 import { CARD_CORNER, CARD_ELEMENT, CARD_PADDING, Card } from "../card/card.js";
@@ -36,7 +37,8 @@ import { Tooltip } from "../tooltip/hint.js";
  * has a viewer to open hands `onExpand`: Expand pauses the video here and
  * opens the viewer, which grows from the frame as it grows from a picture's
  * tile. In the viewer (`VIEWER`) the video plays at once, as large as the
- * card lets it.
+ * card lets it, unless motion is held still (`motionHeld`: reduced motion or
+ * a capture run), where it waits on its first frame for Play.
  *
  * The bytes arrive as a picture's do, as a `data:` URL the window's picture
  * reads hold (`picture-cache.ts`, the inbox's and the chat's own), and play
@@ -272,6 +274,8 @@ export function VideoPlayer({
   const [full, toggleFullScreen] = useFullScreen(frame);
   const [playback, setPlayback] = useState<Playback>({ playing: false, at: 0, duration: 0 });
   const viewer = place === VIDEO_PLAYER_PLACE.VIEWER;
+  // Note that whether it starts is read once, as it mounts, because a video hears autoplay only then.
+  const [starts] = useState(() => viewer && !motionHeld());
   const read = (shown: HTMLVideoElement) => {
     const duration = Number.isFinite(shown.duration) ? shown.duration : 0;
     // Note that the time is held within the length, because the seek that reads a length stands past it a moment.
@@ -315,7 +319,7 @@ export function VideoPlayer({
           width={size?.width}
           height={size?.height}
           aria-label={label === "" ? VIDEO_LABEL.VIDEO : `${VIDEO_LABEL.VIDEO}: ${label}`}
-          autoPlay={viewer}
+          autoPlay={starts}
           muted
           playsInline
           preload={viewer ? "auto" : "metadata"}
