@@ -200,6 +200,8 @@ function claudeCode(options: RunnerSessionsOptions): RunnerHarness<{ readonly _t
         integrations: yield* options.integrations(agent),
         allowedDomains: [...ALLOWED_DOMAINS],
         installedSkills: NATIVE_SKILLS_PATH.INSTALLED,
+        // The runner stays warm past the agent's turn, for the sweep to retire (`retireWarmRunner`).
+        warm: true,
       };
       return written;
     });

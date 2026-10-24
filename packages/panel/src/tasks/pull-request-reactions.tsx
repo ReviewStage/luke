@@ -30,6 +30,7 @@ import {
   REACTION,
   type Reaction,
 } from "@luke/features/pull-request-write-wire";
+import { andList } from "@luke/features/words";
 import {
   AnchoredPopover,
   Badge,
@@ -72,18 +73,12 @@ const REACTION_ORDER: readonly Reaction[] = Object.values(REACTION);
 
 const ADD_REACTION = "Add reaction";
 
-/** Names in a sentence: "a", "a and b", "a, b, and c". */
-function listed(names: readonly string[]): string {
-  if (names.length <= 2) return names.join(" and ");
-  return `${names.slice(0, -1).join(", ")}, and ${names.at(-1)}`;
-}
-
 /** What a reaction's tooltip says: who gave it, as many as the read named, the rest counted. */
 function reactedWords(names: readonly string[], count: number, name: string): string {
   const others = count - names.length;
   if (names.length === 0) return `${count} reacted with ${name}`;
   const who = others > 0 ? [...names, `${others} more`] : names;
-  return `${listed(who)} reacted with ${name}`;
+  return `${andList(who)} reacted with ${name}`;
 }
 
 /** The reactions as the row draws them: one being given that nobody had given yet stands as a pill of its own, the reader's. */

@@ -8,6 +8,7 @@ import {
   knownResponse,
 } from "@luke/features/chat-wire";
 import { type InboxAsk, inboxResponseAsk } from "@luke/features/inbox-wire";
+import { andList } from "@luke/features/words";
 import {
   CARD_LOOK,
   CARD_PADDING,
@@ -123,9 +124,6 @@ const NEWER_LUKE = "Answer this in a newer Luke.";
 
 /** Whom a pill says an ask waits on where it names no one but is not the reader's to answer. */
 const ANYONE = "an answer";
-
-/** Joins a few names as a reader says them: "Ada and Bob". */
-const NAMES = new Intl.ListFormat("en", { style: "long", type: "conjunction" });
 
 /** What a card is handed by the row it stands in. */
 interface AskCardProps {
@@ -380,7 +378,7 @@ function Waiting({
   actorOf: AskCardProps["actorOf"];
 }): React.JSX.Element {
   const names = waitsOn.map((memberId) => actorName(actorOf(memberId), { sentence: true }));
-  return <WaitingMarker on={names.length === 0 ? ANYONE : NAMES.format(names)} />;
+  return <WaitingMarker on={names.length === 0 ? ANYONE : andList(names)} />;
 }
 
 /** An ask's card: its head, its title, the blocks the row hands it, and its answer as the ask stands. */

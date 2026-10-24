@@ -65,6 +65,7 @@ import {
   type TurnRow,
   turnRows,
 } from "@luke/features/turn-rows";
+import { andList } from "@luke/features/words";
 import type { FormerMember, WorkspaceMember } from "@luke/features/workspace-wire";
 import {
   ACTOR_KIND,
@@ -1144,7 +1145,7 @@ export function longWindowNote(windows: ContextWindows): string {
     parts.push(`${factorLabel(windows.longInputPriceFactor)} for input`);
   if (windows.longOutputPriceFactor !== undefined)
     parts.push(`${factorLabel(windows.longOutputPriceFactor)} for output`);
-  return parts.length === 0 ? `${past} more.` : `${past} ${parts.join(" and ")}.`;
+  return parts.length === 0 ? `${past} more.` : `${past} ${andList(parts)}.`;
 }
 
 /** A choice as the words it is drawn in: the base model's name, and the detail drawn dimmed after it. */

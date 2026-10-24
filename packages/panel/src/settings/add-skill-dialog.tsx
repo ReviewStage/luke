@@ -13,6 +13,7 @@ import {
   type InstalledSkillScope,
 } from "@luke/features/installed-skill-wire";
 import { parseSkillPaste, SKILL_PASTE_KIND } from "@luke/features/skill-paste";
+import { countWords, TERM } from "@luke/features/words";
 import type { Workspace } from "@luke/features/workspace-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import {
@@ -489,7 +490,7 @@ function BrowseHead({
     <Stack gap={GAP.CONTROL}>
       <SearchField
         label={SKILLS_LINE.SEARCH}
-        placeholder={`Search ${count} skills`}
+        placeholder={`Search ${countWords(count, TERM.SKILL)}`}
         value={query}
         onChange={onQuery}
         onClear={() => onQuery("")}

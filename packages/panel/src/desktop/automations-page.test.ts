@@ -36,7 +36,7 @@ import {
 } from "@luke/features/trigger-catalog";
 import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
 import { ACT_KIND } from "@luke/host/acts";
-import type { AppStateSnapshot } from "@luke/host/app-state";
+import type { AppStateDelivery, AppStateSnapshot } from "@luke/host/app-state";
 import type { PortActResult } from "@luke/host/contract";
 import { EXPERIMENT, type Experiment } from "@luke/settings";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
@@ -64,7 +64,7 @@ import {
   fakeAppBridgeCalls,
 } from "../testing/app-bridge.js";
 import { copyingInto, fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
-import { handState, stateWith } from "../testing/app-state.js";
+import { deliveryOf, handState, stateWith } from "../testing/app-state.js";
 import { layContainersAt, shown } from "../testing/container-width.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { restOn } from "../testing/hint-rest.js";
@@ -1512,7 +1512,7 @@ test("another member's automation says which servers its creator switched off, o
 
   assert.match(
     page.textContent ?? "",
-    /Its creator's connected servers, but Sentry, Notion \(account 2\) switched off\./u,
+    /Its creator's connected servers, but Sentry and Notion \(account 2\) switched off\./u,
   );
   assert.equal(
     [...page.querySelectorAll("button")].find(
@@ -2900,7 +2900,8 @@ test("a Code review draft goes back to the list once Code review turns off while
   fakeAppBridge({
     ...fakeAppBridgeCalls(),
     requestAppState: () => Promise.resolve(stateWith(experimentsOn(EXPERIMENT.CODE_REVIEW), {})),
-    onAppState: (listener: (snapshot: AppStateSnapshot) => void) => {
+    onAppState: (heard: (delivery: AppStateDelivery) => void) => {
+      const listener = (snapshot: AppStateSnapshot) => heard(deliveryOf(snapshot));
       listeners.add(listener);
       return () => listeners.delete(listener);
     },

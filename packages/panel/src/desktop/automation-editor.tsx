@@ -76,6 +76,7 @@ import {
   type SentryLevel,
   type SentryTriggerEvent,
 } from "@luke/features/trigger-catalog";
+import { andList, noMatchWords, TERM } from "@luke/features/words";
 import type { Workspace } from "@luke/features/workspace-wire";
 import { EXPERIMENT } from "@luke/settings";
 import { SETTINGS_VIEW } from "@luke/settings/settings-views";
@@ -328,7 +329,7 @@ const TIME_ZONES = timeZoneNames();
 const NO_MATCH = {
   DAYS: "No days match",
   TIMES: "No times match",
-  AGENTS: "No agents match",
+  AGENTS: noMatchWords(TERM.AGENT),
 } as const;
 
 /** Why a save the service refused did not land, as the line under the name says it. */
@@ -473,7 +474,7 @@ function ServersRow({
         description={
           disabled.length === 0
             ? "All of its creator's connected servers."
-            : `Its creator's connected servers, but ${disabled.map(switchedOffName).join(", ")} switched off.`
+            : `Its creator's connected servers, but ${andList(disabled.map(switchedOffName))} switched off.`
         }
       >
         {() => null}
@@ -483,11 +484,9 @@ function ServersRow({
   return <OwnServersRow disabled={disabled} onSwitch={onSwitch} />;
 }
 
-/** Names as a sentence says them: "Linear", "Linear and Notion", "Linear, Notion and Sentry". */
+/** Names as a sentence says them: "Linear", "Linear and Notion", "Linear, Notion, and Sentry". */
 function namesSaid(providers: readonly IntegrationProvider[]): string {
-  const names = providers.map((provider) => INTEGRATION_NAME[provider]);
-  if (names.length < 2) return names.join("");
-  return `${names.slice(0, -1).join(", ")} and ${names.at(-1)}`;
+  return andList(providers.map((provider) => INTEGRATION_NAME[provider]));
 }
 
 /** The most marks the servers chip holds before it counts the rest, so it stays a picker's width. */
@@ -1805,7 +1804,7 @@ function RunsGroup({
             ? "Its task's repository."
             : also.length === 0
               ? undefined
-              : `Runs start here, and also work in ${also.join(", ")}.`
+              : `Runs start here, and also work in ${andList(also)}.`
         }
         error={problems[DRAFT_FIELD.REPOSITORY]}
       >

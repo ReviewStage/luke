@@ -35,6 +35,7 @@ const TASK: Task = {
 };
 
 const roots: Root[] = [];
+const registries: AtomRegistry.AtomRegistry[] = [];
 
 // Landed before any box renders, as the panel lands it after its first paint.
 beforeAll(() => Effect.runPromise(editorBundleLanded));
@@ -62,15 +63,25 @@ beforeEach(() => {
 
 afterEach(() => {
   for (const root of roots.splice(0)) act(() => root.unmount());
+  for (const registry of registries.splice(0)) registry.dispose();
   document.body.innerHTML = "";
 });
 
-/** The plan's page drawn editable with its mentions, its editor opened on Rollout, under the page's mentions where given. */
+/**
+ * The plan's page drawn editable with its mentions, its editor opened on
+ * Rollout, under the page's mentions where given. Note that it draws on a
+ * registry of its own, as the window's root provides one, because the
+ * minute a date's chip is said from is an atom: on the one registry every
+ * test shares, a test before it would have started that minute on the real
+ * clock, and a test that sets the date would read that one instead.
+ */
 async function opened(page?: TaskMentionsValue, task: Task = TASK) {
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
   roots.push(root);
+  const registry = AtomRegistry.make();
+  registries.push(registry);
   const body = createElement(PlanBody, {
     task: task,
     live: false,
@@ -82,11 +93,10 @@ async function opened(page?: TaskMentionsValue, task: Task = TASK) {
       reveal: undefined,
     },
   });
-  // Note that each open gets a registry of its own, because the window's minute tick is an atom the default registry keeps from one test to the next, so a chip's "from today" would count from whichever clock the first test read.
   act(() =>
     root.render(
       onRegistry(
-        AtomRegistry.make(),
+        registry,
         page === undefined ? body : createElement(TaskMentions, { value: page, children: body }),
       ),
     ),

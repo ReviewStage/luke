@@ -1,13 +1,13 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import type { AppStateSnapshot } from "@luke/host/app-state";
+import type { AppStateDelivery, AppStateSnapshot } from "@luke/host/app-state";
 import { LIVE_STATUS } from "@luke/live";
 import { CALL_CARD_SURFACE, CallCardDock, type CallCardInput } from "@luke/panel/call/call-card";
 import { CALL_VIDEO_LABEL } from "@luke/panel/call/call-video-tile";
 import { AgentCallVideo, useCallCardVideo } from "@luke/panel/call/panel-avatar";
 import { fakeActPortAnswering, fakeAppBridge } from "@luke/panel/testing/app-bridge";
-import { stateWith } from "@luke/panel/testing/app-state";
+import { deliveryOf, stateWith } from "@luke/panel/testing/app-state";
 import { onRegistry } from "@luke/panel/testing/copy-feedback";
 import { EXPERIMENT } from "@luke/settings";
 import { experimentsOn } from "@luke/settings/testing";
@@ -90,7 +90,8 @@ function onCall(avatar: AvatarState, version = 1): AppStateSnapshot {
 function handBridge(first: AppStateSnapshot): void {
   fakeAppBridge({
     requestAppState: () => Promise.resolve(first),
-    onAppState: (listener: (snapshot: AppStateSnapshot) => void) => {
+    onAppState: (heard: (delivery: AppStateDelivery) => void) => {
+      const listener = (snapshot: AppStateSnapshot) => heard(deliveryOf(snapshot));
       deliver = listener;
       return () => undefined;
     },
