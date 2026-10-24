@@ -25,6 +25,14 @@
      test lays this class in markup of its own
      (`pull-request-header-narrow.test.ts`), and each part keeps its spaces,
      because a flex item drops one at its edge. */
+  /* Words cut in their middle give way from the end of their start at an
+     ellipsis rather than the fade, so the cut reads as a cut in the middle.
+     Note that it stays here, a rule the style guard's baseline holds for
+     this sheet. */
+  .luke-chip-name-start {
+    text-overflow: ellipsis;
+  }
+
   .luke-chip-name-end {
     display: inline-flex;
     flex: none;

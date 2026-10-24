@@ -114,14 +114,14 @@ const BOX_CLASS: Record<AvatarSize, string> = {
 };
 
 /**
- * Each outline's corner: a circle's; a square's, a share of its edge, so it
+ * Each outline's corner, which its edge (`::after`) wears too: a circle's; a square's, a share of its edge, so it
  * reads as one shape at every size, rounder than a tile of its size; a
  * tile's, a quarter of its edge.
  */
 const SHAPE_CLASS: Record<AvatarShape, string> = {
-  [AVATAR_SHAPE.CIRCLE]: "rounded-full",
-  [AVATAR_SHAPE.SQUARE]: "rounded-avatar-square",
-  [AVATAR_SHAPE.TILE]: "rounded-avatar-tile",
+  [AVATAR_SHAPE.CIRCLE]: "rounded-full after:rounded-full",
+  [AVATAR_SHAPE.SQUARE]: "rounded-avatar-square after:rounded-avatar-square",
+  [AVATAR_SHAPE.TILE]: "rounded-avatar-tile after:rounded-avatar-tile",
 };
 
 /** The six identity hues a letter stands on, by the hue `identityHue` reads off an id. */

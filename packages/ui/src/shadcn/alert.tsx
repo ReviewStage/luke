@@ -87,7 +87,7 @@ const alertGlyphVariants = cva(
 const alertDescriptionVariants = cva("luke-banner-words min-w-0 flex-1", {
   variants: {
     look: {
-      strip: "block overflow-hidden text-ellipsis text-body text-body-foreground",
+      strip: "block overflow-hidden text-body text-body-foreground",
       card: "flex flex-col gap-banner-words-gap",
       row: "flex flex-col gap-banner-words-gap py-banner-row-inset",
     },

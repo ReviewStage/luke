@@ -23,7 +23,7 @@ import { cn } from "../cn.js";
 
 /** The disc: a box that centres its letter or glyph, clips its picture to its corner, and lays an edge over it. */
 export const AVATAR_ROOT =
-  "relative inline-grid flex-none place-items-center overflow-hidden align-middle font-body font-emphasis select-none after:pointer-events-none after:absolute after:inset-0 after:rounded-[inherit]";
+  "relative inline-grid flex-none place-items-center overflow-hidden align-middle font-body font-emphasis select-none after:pointer-events-none after:absolute after:inset-0";
 
 function Avatar({ className, ...props }: AvatarPrimitive.Root.Props) {
   return (

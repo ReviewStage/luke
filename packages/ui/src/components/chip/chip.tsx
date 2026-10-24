@@ -423,7 +423,7 @@ export function ChipName(props: ChipNameProps): React.JSX.Element {
         props.children
       ) : (
         <>
-          <span className="luke-chip-name-start min-w-0 overflow-hidden text-ellipsis whitespace-pre">
+          <span className="luke-chip-name-start min-w-0 overflow-hidden whitespace-pre">
             {props.children.slice(0, -kept.length)}
           </span>
           <span className="luke-chip-name-end">{kept}</span>

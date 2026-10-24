@@ -17,7 +17,11 @@
     max-width: 50%;
   }
 
+  /* Note that a strip's words still end in an ellipsis where they are cut,
+     as they did before the move, a rule the style guard's baseline holds for
+     this sheet until the strip takes the fade. */
   .luke-banner[data-look="strip"] .luke-banner-words {
+    text-overflow: ellipsis;
     white-space: nowrap;
   }
 
