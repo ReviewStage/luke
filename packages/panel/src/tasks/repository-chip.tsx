@@ -1,6 +1,5 @@
 import type { GitHubRepository } from "@luke/features";
 import { GITHUB_ACCESS } from "@luke/features/github-repositories-wire";
-import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
 import { TASK_CALL_FAILURE, type TasksRepositoriesAnswer } from "@luke/features/tasks-view";
 import { countWords, orList, REFRESH_FAILED_WORDS } from "@luke/features/words";
 import { WORKSPACE_ROLE } from "@luke/features/workspace-wire";
@@ -19,7 +18,6 @@ import {
   type MenuRow,
   POPOVER_ALIGN,
   type PopoverAlign,
-  ProviderMark,
   SearchableMenu,
   Spinner,
   TEXT_ELEMENT,
@@ -28,6 +26,7 @@ import {
   Text,
   Tooltip,
 } from "@luke/ui";
+import { GLYPH } from "@luke/ui/icons";
 import { repositoryFailureNote } from "@luke/ui/tasks-model";
 import { useDisclosure } from "@luke/ui/use-disclosure";
 import { useCallback, useEffect, useId, useRef, useState } from "react";
@@ -395,12 +394,11 @@ export function RepositoryChip(props: {
             onClick={press}
           >
             {props.value === null ? (
-              <ProviderMark provider={INTEGRATION_PROVIDER.GITHUB} />
+              <GLYPH.REPOSITORY />
             ) : (
               <RepositoryPicture
                 repository={props.value}
                 pictures={chooser.pictures}
-                fallback={<ProviderMark provider={INTEGRATION_PROVIDER.GITHUB} />}
                 size={AVATAR_SIZE.GLYPH}
               />
             )}

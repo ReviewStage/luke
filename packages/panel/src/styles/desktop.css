@@ -5592,14 +5592,6 @@ ul.actor-stack {
   line-height: var(--luke-type-caption-leading);
 }
 
-/* A row's repository is led by its owner's picture, or a folder's glyph
-   where it has none to draw, at a caption's size. */
-.tasks-list-cell[data-cell="repository"] > .tasks-list-repository-glyph {
-  flex: none;
-  width: var(--luke-space-16);
-  height: var(--luke-space-16);
-}
-
 /* A row's creator's face and each of its agents' and pull requests' marks
    (`task-row-parts.tsx`) are presses of their own, a pull request's a link
    to its page, each hanging its card,

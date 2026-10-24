@@ -1,4 +1,3 @@
-import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
 import type { CatalogModel } from "@luke/features/models-wire";
 import { TASK_ROW_MARK, taskRowMark } from "@luke/features/task-agents-model";
 import type { TaskAgentLine, TaskPullRequestLine, TaskSummary } from "@luke/features/task-wire";
@@ -6,13 +5,14 @@ import type { Workspace } from "@luke/features/workspace-wire";
 import {
   AVATAR_SIZE,
   Badge,
+  CountParts,
   HOVER_CARD_ROW_LOOK,
   HoverCard,
   HoverCardHead,
   HoverCardList,
   HoverCardRow,
   HoverCardRule,
-  ProviderMark,
+  linesCount,
   TaskPriorityMark,
   TaskStatusMark as TaskStatusGlyph,
   TIME_LOOK,
@@ -121,12 +121,7 @@ export function RepositoryDetail({
     <HoverCardRow
       look={HOVER_CARD_ROW_LOOK.DETAIL}
       glyph={
-        <RepositoryPicture
-          repository={repository}
-          pictures={pictures}
-          fallback={<ProviderMark provider={INTEGRATION_PROVIDER.GITHUB} />}
-          size={AVATAR_SIZE.MARK}
-        />
+        <RepositoryPicture repository={repository} pictures={pictures} size={AVATAR_SIZE.MARK} />
       }
       label={repository}
       onPress={() => onOpenGitHub(repositoryPageUrl(repository))}
@@ -227,12 +222,7 @@ export function PullRequestLine({
             {pullRequest.title}
           </>
         }
-        end={
-          <>
-            <span className="agent-published-added">+{pullRequest.additions}</span>{" "}
-            <span className="agent-published-removed">−{pullRequest.deletions}</span>
-          </>
-        }
+        end={<CountParts parts={linesCount(pullRequest.additions, pullRequest.deletions)} />}
         onPress={url === undefined ? undefined : () => openLink(url)}
         linkHref={url}
       />
