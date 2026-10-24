@@ -81,6 +81,7 @@ export * from "./components/note-line/note-line.js";
 export * from "./components/one-line/one-line.js";
 export * from "./components/over-pane/over-pane.js";
 export * from "./components/page-frame/page-frame.js";
+export * from "./components/page-header/page-header.js";
 export * from "./components/page-thumb/page-thumb.js";
 export * from "./components/page-toolbar/page-toolbar.js";
 export * from "./components/pagination/pagination.js";

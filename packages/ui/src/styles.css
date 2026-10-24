@@ -60,6 +60,7 @@
 @import "./components/one-line/one-line.css";
 @import "./components/over-pane/over-pane.css";
 @import "./components/pane-bar/pane-bar.css";
+@import "./components/page-header/page-header.css";
 @import "./components/hold-press/hold-press.css";
 @import "./components/inline-ref/inline-ref.css";
 @import "./components/resize-corner/resize-corner.css";
