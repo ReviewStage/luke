@@ -8,6 +8,7 @@ import {
   type CodingAgentSummary,
   PULL_REQUEST_STATE,
 } from "@luke/features/coding-agent-wire";
+import { INBOX_STATUS, INBOX_WIRE_VERSION, type InboxItem } from "@luke/features/inbox-wire";
 import { pageFrameUrl } from "@luke/features/page-frame";
 import { TASK_STATUS, type Task } from "@luke/features/task-wire";
 import { DOCUMENT_REGION, TASKS_PAGE } from "@luke/ui/tasks-model";
@@ -17,6 +18,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test, vi } from "vitest";
 import { LinkWorkspaceProvider } from "../copy-link-item.js";
 import { ChipCards } from "../tasks/chip-cards.js";
+import type { InboxBoardView } from "../tasks/inbox-model.js";
 import { SIDE_PANEL_TAB } from "../tasks/use-side-panel.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import { copyingInto, fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
@@ -116,7 +118,11 @@ afterEach(() => {
 });
 
 /** The summary of a task whose running agent opened the pull request, the task's column showing `shown`; every agent it opens recorded. */
-function mount(shown: "agent" | "plan", linkWorkspace?: string) {
+function mount(
+  shown: "agent" | "plan",
+  linkWorkspace?: string,
+  inbox: InboxBoardView = { open: [], waiting: [], settled: [] },
+) {
   const opened: string[] = [];
   const base = tasksControl();
   const tasks = tasksControl({
@@ -146,7 +152,7 @@ function mount(shown: "agent" | "plan", linkWorkspace?: string) {
             tasks,
             layout: PINNED,
             cardId: "summary-card",
-            inbox: { open: [], waiting: [], settled: [] },
+            inbox,
             held: HELD,
             repository: "acme/relay",
             onOpenAgent: (agentId) => opened.push(agentId),
@@ -325,6 +331,27 @@ test("an agent's row in the summary offers Copy link on a right-click, copying t
 
   assert.deepEqual(labels, ["Copy link", "Archive"]);
   assert.deepEqual(copied, [`https://tryluke.dev/acme/plan/${AGENT.planId}/agent/${AGENT.id}`]);
+});
+
+test("the Inbox's row counts what needs the reader in the attention tone its rows' marks wear", () => {
+  const asking: InboxItem = {
+    id: "6c1d2e3f-4a5b-4c6d-8e7f-9a0b1c2d3e4f",
+    agentId: AGENT.id,
+    key: "3e4f",
+    revision: 1,
+    version: INBOX_WIRE_VERSION,
+    title: "Expire after 7 days?",
+    needsReply: true,
+    status: INBOX_STATUS.OPEN,
+    postedAt: 1_000,
+    updatedAt: 1_000,
+  };
+  const { page } = mount("plan", undefined, { open: [asking], waiting: [asking], settled: [] });
+  const count =
+    page.querySelector<HTMLElement>(".task-summary .inbox-row-count") ??
+    assert.fail("the Inbox's row counts what needs the reader");
+  assert.equal(count.textContent, "1 needs you");
+  assert.equal(count.dataset.tone, "attention");
 });
 
 /** What the plan's own inbox holds in these tests: nothing. */

@@ -220,7 +220,11 @@ export function InboxItemCard({
       />
       {thread.ask === undefined ? (
         settled === undefined ? null : (
-          <HoverCardRow look={HOVER_CARD_ROW_LOOK.DETAIL} glyph={<CheckIcon />} label={settled} />
+          <HoverCardRow
+            look={HOVER_CARD_ROW_LOOK.DETAIL}
+            glyph={item.status === INBOX_STATUS.CLOSED ? <GLYPH.DISMISSED /> : <CheckIcon />}
+            label={settled}
+          />
         )
       ) : (
         <CardAsk ask={thread.ask} ticked={ticked} title={cardTitle(item.title)} />

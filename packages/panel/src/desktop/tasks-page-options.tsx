@@ -79,6 +79,7 @@ import { useMemberDirectory } from "../member-directory.js";
 import { memberReadNotice, memberRows } from "../member-rows.js";
 import { RepositoryPicture } from "../repository-picture.js";
 import { RepositoryCard, repositoryWords } from "../repository-row.js";
+import { NEEDS_YOU } from "../tasks/inbox-model.js";
 import {
   NO_ASSIGNEE_WORDS,
   TASK_PRIORITY_WORDS,
@@ -218,7 +219,7 @@ const PROPERTY_WORDS = {
   [TASK_PROPERTY.PRIORITY]: "Priority",
   [TASK_PROPERTY.KEY]: "ID",
   [TASK_PROPERTY.STATUS]: "Status",
-  [TASK_PROPERTY.WAITING]: "Needs you",
+  [TASK_PROPERTY.WAITING]: NEEDS_YOU.LABEL,
   [TASK_PROPERTY.REPOSITORY]: "Repository",
   [TASK_PROPERTY.ASSIGNEE]: "Assignee",
   [TASK_PROPERTY.CREATOR]: "Creator",
