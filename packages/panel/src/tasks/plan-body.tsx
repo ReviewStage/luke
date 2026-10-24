@@ -656,18 +656,61 @@ function taskSet(text: string, at: number, line: string, ticked: boolean): strin
 }
 
 /**
- * A plan's ticks in the order they were pressed: the last one out, which the
- * next waits on, and the text the last one saved left, with the drawn text it
- * was saved over, which stands until the saved plan is drawn.
+ * A plan's writes from its words at rest, ticks and dates, in the order they
+ * were made: the last one out, which the next waits on, and the text the last
+ * one saved left, with the task and the drawn text it was written over, which
+ * stands until the saved plan is drawn.
  */
-interface TickQueue {
+interface PlanWrites {
   last: Promise<boolean>;
-  saved: { readonly over: string; readonly text: string } | undefined;
+  saved: { readonly taskId: string; readonly over: string; readonly text: string } | undefined;
 }
 
-/** The plan's text as it stands: the text a tick saved while the plan drawn is still the one it was saved over, or the plan drawn. */
-function planTextNow(queue: TickQueue, drawn: string): string {
-  return queue.saved !== undefined && queue.saved.over === drawn ? queue.saved.text : drawn;
+/** The plan as drawn when a write is sent: its task and its text. */
+interface DrawnPlan {
+  readonly id: string;
+  readonly body: string;
+}
+
+/** The plan's text as it stands: the text a write saved while its task's plan drawn is still the one it was written over, or the plan drawn. */
+function planTextNow(writes: PlanWrites, drawn: DrawnPlan): string {
+  const saved = writes.saved;
+  return saved !== undefined && saved.taskId === drawn.id && saved.over === drawn.body
+    ? saved.text
+    : drawn.body;
+}
+
+/** `write` sent once every write before it settles, answering whether it saved. */
+function queuedWrite(
+  writes: PlanWrites,
+  write: () => Promise<boolean> | boolean,
+): Promise<boolean> {
+  const sent = writes.last.then(write);
+  writes.last = sent;
+  return sent;
+}
+
+/**
+ * The plan saved from `base` to `value` while `drawn` stands, answering
+ * whether it saved; once saved, `kept` stands as the plan's text until the
+ * plan drawn moves, or nothing does where it is not known.
+ */
+function savedOver(
+  writes: PlanWrites,
+  save: PlanEditDoor,
+  drawn: DrawnPlan,
+  edit: { readonly base: string; readonly value: string },
+  kept: string | undefined,
+): Promise<boolean> {
+  return save({ document: edit }).then(
+    (answer) => {
+      if (!("saved" in answer)) return false;
+      writes.saved =
+        kept === undefined ? undefined : { taskId: drawn.id, over: drawn.body, text: kept };
+      return true;
+    },
+    () => false,
+  );
 }
 
 /** What a toast says where a tick or a date written from the plan at rest was not saved. */
@@ -1169,8 +1212,8 @@ export const PlanBody = memo(function PlanBody({
   const scrolledAway = useRef(false);
   /** The caret's jumps when the view last followed it. */
   const followedJumps = useRef(jumps);
-  /** The task items' ticks out, each sent once the one before it settles. */
-  const ticks = useRef<TickQueue>({ last: Promise.resolve(true), saved: undefined });
+  /** The ticks and dates written from the words at rest, each sent once the one before it settles. */
+  const writes = useRef<PlanWrites>({ last: Promise.resolve(true), saved: undefined });
 
   useEffect(() => {
     const element = scroller.current;
@@ -1293,25 +1336,17 @@ export const PlanBody = memo(function PlanBody({
     const item = unit === undefined ? undefined : taskItemAt(unit.text, at);
     const save = onEdit;
     const pressedOn = task.id;
-    const queue = ticks.current;
-    const sent = queue.last.then((): Promise<boolean> | boolean => {
+    const queue = writes.current;
+    const sent = queuedWrite(queue, () => {
       const now = latestPlan.current;
       if (save === undefined || unit === undefined || item === undefined) return false;
       if (now.id !== pressedOn) return false;
-      const base = planTextNow(queue, now.body);
+      const base = planTextNow(queue, now);
       const value = taskSet(base, unit.from + at, item.line, ticked);
       if (value === undefined) return false;
       if (value === base) return true;
-      return save({ document: { base, value } }).then(
-        (answer) => {
-          if (!("saved" in answer)) return false;
-          queue.saved = { over: latestPlan.current.body, text: value };
-          return true;
-        },
-        () => false,
-      );
+      return savedOver(queue, save, now, { base, value }, value);
     });
-    queue.last = sent;
     return sent.then((saved) => {
       if (!saved) sayNotSaved();
       return saved;
@@ -1325,7 +1360,7 @@ export const PlanBody = memo(function PlanBody({
       editable
         ? {
             taskId: () => latestPlan.current.id,
-            text: () => planTextNow(ticks.current, latestPlan.current.body),
+            text: () => planTextNow(writes.current, latestPlan.current),
             from: (section) => {
               const { cut: now, views: drawn } = latestPlan.current;
               const unit = now[section];
@@ -1334,12 +1369,22 @@ export const PlanBody = memo(function PlanBody({
                 : undefined;
             },
             write: (value, base) => {
-              const save = latestPlan.current.onEdit;
+              const { onEdit: save, id: pickedOn } = latestPlan.current;
               if (save === undefined) return;
-              // Note that a save not taken leaves the date as it was, as an unticked box flips back, and says so.
-              save({ document: { base, value } }).then((answer) => {
-                if (!("saved" in answer)) sayNotSaved();
-              }, sayNotSaved);
+              const queue = writes.current;
+              // Note that a date waits its turn behind the ticks out, and that
+              // one saved since the picker read the plan is not under its text,
+              // so nothing after it is written over that text. A save not
+              // taken leaves the date as it was, as an unticked box flips back, and says so.
+              const sent = queuedWrite(queue, () => {
+                const now = latestPlan.current;
+                if (now.id !== pickedOn) return false;
+                const kept = planTextNow(queue, now) === base ? value : undefined;
+                return savedOver(queue, save, now, { base, value }, kept);
+              });
+              sent.then((saved) => {
+                if (!saved) sayNotSaved();
+              });
             },
           }
         : undefined,

@@ -548,6 +548,61 @@ test("a press while a tick is out waits its turn, and both land, the second over
   assert.equal(newestToastSays(), undefined, "nothing is said of ticks that saved");
 });
 
+test("a tick saved on one task is not carried into another whose plan reads the same", async () => {
+  const body = "## Steps\n- [ ] One\n- [ ] Two\n";
+  const { container, sent, render } = mount();
+  render({ ...DOCUMENT_TASK, document: { body, assumptions: [] } });
+  await settle();
+  const one = container.querySelector<HTMLElement>('[role="checkbox"][aria-label="One"]');
+  assert.ok(one, "One is drawn");
+  act(() => one.click());
+  await settle();
+
+  const other = { ...DOCUMENT_TASK, id: "0c4f2e9a-7d1b-4a3e-8f6c-2b9d5e1a7c40" };
+  render({ ...other, document: { body, assumptions: [] } });
+  await settle();
+  const two = container.querySelector<HTMLElement>('[role="checkbox"][aria-label="Two"]');
+  assert.ok(two, "Two is drawn");
+  act(() => two.click());
+  await settle();
+
+  assert.deepEqual(sent.at(-1)?.document, {
+    base: body,
+    value: body.replace("[ ] Two", "[x] Two"),
+  });
+});
+
+test("a plan drawn anew while a tick is out is what the next tick is written over", async () => {
+  const body = "## Steps\n- [ ] One\n- [ ] Two\n";
+  const lukes = `${body}\nLuke's line.\n`;
+  const first = Promise.withResolvers<TasksEditAnswer>();
+  const sent: PlanEditRequest[] = [];
+  const door = (request: PlanEditRequest): Promise<TasksEditAnswer> => {
+    sent.push(request);
+    return sent.length === 1 ? first.promise : Promise.resolve({ saved: true });
+  };
+  const { container, render } = mount();
+  render({ ...DOCUMENT_TASK, document: { body, assumptions: [] } }, door);
+  await settle();
+  const one = container.querySelector<HTMLElement>('[role="checkbox"][aria-label="One"]');
+  assert.ok(one, "One is drawn");
+  act(() => one.click());
+  await settle();
+
+  render({ ...DOCUMENT_TASK, document: { body: lukes, assumptions: [] } }, door);
+  first.resolve({ saved: true });
+  await settle();
+  const two = container.querySelector<HTMLElement>('[role="checkbox"][aria-label="Two"]');
+  assert.ok(two, "Two is drawn");
+  act(() => two.click());
+  await settle();
+
+  assert.deepEqual(sent.at(-1)?.document, {
+    base: lukes,
+    value: lukes.replace("[ ] Two", "[x] Two"),
+  });
+});
+
 test("a tick the service did not answer goes back and says the plan could not be saved", async () => {
   const body = "## Steps\n- [ ] One\n";
   const { container, sent, render } = mount([{ failure: TASK_CALL_FAILURE.UNANSWERED }]);
