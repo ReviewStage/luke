@@ -126,6 +126,26 @@ export const CALL_KIND = {
   OPEN_PULL_REQUEST: "open-pull-request",
   /** A pause a coding agent took (`sleep`) before it checked again on what takes time, its row naming how long. */
   SLEEP: "sleep",
+  /** The workspace's tasks listed (`list_tasks`). */
+  LIST_TASKS: "list-tasks",
+  /** A fact kept in the workspace's shared memory (`remember`), its row saying it. */
+  REMEMBER: "remember",
+  /** The workspace's shared memory searched (`recall`), its row naming the query where there was one. */
+  RECALL: "recall",
+  /** Every open ask waiting on the member listed (`list_open_asks`). */
+  LIST_OPEN_ASKS: "list-open-asks",
+  /** The plan's comment threads read (`read_comments`). */
+  READ_COMMENTS: "read-comments",
+  /** An answer written in one of the plan's comment threads (`reply_to_comment`), its row saying it. */
+  REPLY_TO_COMMENT: "reply-to-comment",
+  /** A comment thread of the plan resolved (`resolve_thread`). */
+  RESOLVE_THREAD: "resolve-thread",
+  /** A resolved comment thread of the plan brought back (`reopen_thread`). */
+  REOPEN_THREAD: "reopen-thread",
+  /** A connection's tools searched (`connection_search`), its row naming the server it searched. */
+  SEARCH_TOOLS: "search-tools",
+  /** A tool of an MCP server or an integration run (`connection_execute`, an integration's own call, a native harness's MCP call), its row naming the tool and the server it ran on. */
+  MCP_TOOL: "mcp-tool",
   OTHER: "other",
 } as const;
 
@@ -193,6 +213,16 @@ export const CALL_WORDS = {
   [CALL_KIND.SHOW_IMAGE]: { verb: "Showed", code: true },
   [CALL_KIND.OPEN_PULL_REQUEST]: { verb: "Opened pull request", code: false },
   [CALL_KIND.SLEEP]: { verb: "Waited", code: false },
+  [CALL_KIND.LIST_TASKS]: { verb: "Listed the tasks", code: false },
+  [CALL_KIND.REMEMBER]: { verb: "Saved to memory:", code: false },
+  [CALL_KIND.RECALL]: { verb: "Searched memory", code: false },
+  [CALL_KIND.LIST_OPEN_ASKS]: { verb: "Listed the open asks", code: false },
+  [CALL_KIND.READ_COMMENTS]: { verb: "Read the comments", code: false },
+  [CALL_KIND.REPLY_TO_COMMENT]: { verb: "Replied to a comment:", code: false },
+  [CALL_KIND.RESOLVE_THREAD]: { verb: "Resolved a thread", code: false },
+  [CALL_KIND.REOPEN_THREAD]: { verb: "Reopened a thread", code: false },
+  [CALL_KIND.SEARCH_TOOLS]: { verb: "Searched the tools", code: false },
+  [CALL_KIND.MCP_TOOL]: { verb: "Ran", code: true },
   [CALL_KIND.OTHER]: { verb: "Used", code: true },
 } as const satisfies Record<CallKind, { verb: string; code: boolean }>;
 
@@ -279,9 +309,11 @@ export function isCommandKind(kind: CallKind): boolean {
 /**
  * Where a call ran, as its row says beside its line, or nothing for a call
  * that ran where its tab says. A command on a Mac ran on the Mac of the
- * agent's starter, whom a row that knows them draws in these words' place.
+ * agent's starter, whom a row that knows them draws in these words' place;
+ * a call of an MCP server's tool ran on the server it names.
  */
-export function callPlace(kind: CallKind): string | undefined {
+export function callPlace(kind: CallKind, server?: string): string | undefined {
+  if (kind === CALL_KIND.MCP_TOOL || kind === CALL_KIND.SEARCH_TOOLS) return server;
   if (kind === CALL_KIND.MAC_COMMAND) return ON_YOUR_MAC;
   return kind === CALL_KIND.BROWSER ? IN_THE_BROWSER : undefined;
 }

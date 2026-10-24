@@ -520,6 +520,7 @@ function ToolCallView({
         state={part.state}
         kind={view.kind}
         provider={view.provider}
+        server={view.server}
         subject={view.subject}
         description={view.description}
         agent={calledAgentActor(part, cards, known)}

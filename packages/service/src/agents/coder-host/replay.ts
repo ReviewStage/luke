@@ -42,6 +42,7 @@ import {
 import { isVideoType } from "@luke/features/conversation-picture-wire";
 import { agentName } from "@luke/features/model-label";
 import type { ModelChoice } from "@luke/features/models-wire";
+import { CALL_KIND, CALL_WORDS as ROW_CALL_WORDS } from "@luke/features/turn-rows";
 import { type FileUIPart, isFileUIPart, isTextUIPart } from "ai";
 import { Effect, Option } from "effect";
 import {
@@ -157,6 +158,11 @@ const CALL_WORDS: ReadonlyMap<string, CallWords> = new Map([
   [CLAUDE_CODE_TOOL.WEB_SEARCH, { verb: "Searched the web for", key: "query" }],
   [CODEX_TOOL.COMMAND_EXECUTION, { verb: "Ran", key: "command" }],
   [CODEX_TOOL.WEB_SEARCH, { verb: "Searched the web for", key: "query" }],
+  // Note that its verb is the transcript's own, which the replay card reads back as the pull request's line.
+  [
+    CODER_TOOL.OPEN_PULL_REQUEST,
+    { verb: ROW_CALL_WORDS[CALL_KIND.OPEN_PULL_REQUEST].verb, key: "title" },
+  ],
 ]);
 
 /** The tools that edit the one file their input names: eve's own, and Claude Code's. */

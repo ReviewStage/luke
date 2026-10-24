@@ -987,6 +987,16 @@ const CALL_ICON = {
   [CALL_KIND.SHOW_IMAGE]: ImageIcon,
   [CALL_KIND.OPEN_PULL_REQUEST]: () => <GLYPH.PULL_REQUEST />,
   [CALL_KIND.SLEEP]: TimerIcon,
+  [CALL_KIND.LIST_TASKS]: () => <GLYPH.TASK />,
+  [CALL_KIND.REMEMBER]: () => <GLYPH.MEMORY />,
+  [CALL_KIND.RECALL]: () => <GLYPH.MEMORY />,
+  [CALL_KIND.LIST_OPEN_ASKS]: () => <GLYPH.INBOX />,
+  [CALL_KIND.READ_COMMENTS]: () => <GLYPH.COMMENT />,
+  [CALL_KIND.REPLY_TO_COMMENT]: () => <GLYPH.COMMENT />,
+  [CALL_KIND.RESOLVE_THREAD]: () => <GLYPH.SETTLED />,
+  [CALL_KIND.REOPEN_THREAD]: () => <GLYPH.COMMENT />,
+  [CALL_KIND.SEARCH_TOOLS]: () => <GLYPH.MCP_SERVER />,
+  [CALL_KIND.MCP_TOOL]: () => <GLYPH.MCP_SERVER />,
   [CALL_KIND.OTHER]: WrenchIcon,
 } as const satisfies Record<CallKind, ComponentType<{ "aria-hidden"?: "true" }>>;
 
@@ -1086,6 +1096,8 @@ export type TranscriptToolProps = Omit<ComponentProps<typeof Tool>, "children"> 
     kind: CallKind;
     /** For a call of an integration's own tool, the integration, whose mark the row wears in its kind's icon's place. */
     provider?: IntegrationProvider | undefined;
+    /** For a call of an MCP server's tool, the server's name, which the row says it ran on beside its line. */
+    server?: string | undefined;
     /** For a command, the plain words the model said it is for, which the row says in its verb's place; the closed row previews the command's first line after them, and the body holds it whole. */
     description?: string | undefined;
     /** For a call about one coding agent, the agent, whose chip the row names it by in the place of "the coding agent"; none where the agent is not known. */
@@ -1111,6 +1123,7 @@ export function TranscriptTool({
   state,
   kind,
   provider,
+  server,
   subject,
   description,
   agent,
@@ -1149,7 +1162,7 @@ export function TranscriptTool({
               {" Mac"}
             </ActorLine>
           ) : (
-            callPlace(kind)
+            callPlace(kind, server)
           )
         }
       />

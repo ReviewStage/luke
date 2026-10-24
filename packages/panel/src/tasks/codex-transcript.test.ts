@@ -130,7 +130,7 @@ const CODEX_ITEMS: readonly {
     tool: "mcpToolCall",
     input: { server: "sentry", tool: "search_issues", arguments: { query: "invoice" } },
     output: "3 issues match invoice",
-    line: ["sentry.search_issues"],
+    line: ["Ran", "search_issues", "Sentry"],
     body: ['"query": "invoice"', "3 issues match invoice"],
   },
 ];
