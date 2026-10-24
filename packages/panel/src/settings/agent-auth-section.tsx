@@ -181,8 +181,7 @@ const WORDS = {
   CONNECT: "Connect",
   VIA_SUBSCRIPTION: "Connected via subscription",
   VIA_API_KEY: "Connected via API key",
-  RECONNECT: "Subscription needs reconnecting",
-  LIMIT: "Limit reached",
+  RECONNECT: "Sign-in expired",
   KEY_ATTENTION: "API key needs attention",
   SUBSCRIPTION: "Subscription",
   API_KEY: "API key",
@@ -203,7 +202,7 @@ const WORDS = {
   TOKEN_INVALID: "Anthropic rejected this token. Paste a new one.",
   TOKEN_QUOTA: "Out of usage on your Claude plan.",
   TOKEN_UNREADABLE: "This token can no longer be read. Paste a new one.",
-  CHATGPT_SIGNED_OUT: "ChatGPT ended this sign-in. Sign in with ChatGPT to connect again.",
+  CHATGPT_SIGNED_OUT: "Sign-in expired. Sign in with ChatGPT to reconnect.",
   CHATGPT_UNREADABLE: "This sign-in can no longer be read. Sign in with ChatGPT to connect again.",
   CHATGPT_INELIGIBLE:
     "OpenAI says this ChatGPT account isn't eligible for Codex. Sign in with ChatGPT to use another.",
@@ -277,7 +276,7 @@ function connectionOf(
   }
   if (plan !== undefined) {
     if (plan.status === PROVIDER_KEY_STATUS.LIMIT_REACHED) {
-      return { words: WORDS.LIMIT, connected: false, attention: true };
+      return { words: WORDS.USAGE_LIMIT, connected: false, attention: true };
     }
     return standing(plan)
       ? { words: WORDS.VIA_SUBSCRIPTION, connected: true, attention: false }

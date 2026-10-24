@@ -301,8 +301,8 @@ type ShownConnection = Pick<WorkspaceGithubInstallation, "login" | "active"> &
 /** What the Linear row's line says, by where the workspace's Linear stands and who is reading it. */
 const LINEAR_LINE = {
   CONNECTED: "Connected for everyone in this workspace",
-  EXPIRED: "Linear stopped honoring this connection. Connect again.",
-  EXPIRED_MEMBER: "Linear stopped honoring this connection. Ask an owner or admin.",
+  EXPIRED: "Sign-in expired.",
+  EXPIRED_MEMBER: "Sign-in expired. Ask an owner or admin.",
   MANAGES: "Not connected.",
   MEMBER: "Not connected. Ask an owner or admin.",
 } as const;
@@ -1417,7 +1417,7 @@ function linearLine(linear: Workspace["linear"], manages: boolean): React.ReactN
 
 /**
  * The workspace's Linear, for an owner or an admin: Connect while none is,
- * or Connect again once Linear stopped honoring it, which opens Linear's
+ * or Reconnect once its sign-in expired, which opens Linear's
  * sign-in in the browser, a sign-in that could not be begun saying why
  * under the row; and a ⋯ once one stands, as Settings › Integrations keeps
  * a connected row quiet, whose menu holds Disconnect, which asks first. A
@@ -1471,7 +1471,7 @@ function ManagedLinear({ workspace }: { workspace: Workspace }): React.JSX.Eleme
                 busyLabel="Connecting"
                 onClick={connect}
               >
-                {linear === undefined ? "Connect" : "Connect again"}
+                {linear === undefined ? "Connect" : "Reconnect"}
               </Button>
             ),
         }}
