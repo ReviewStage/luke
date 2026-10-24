@@ -2,6 +2,7 @@ import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { ARROW_KEY_GUARD_RULE, NAMES_ARROW_KEY } from "./shared/arrow-key-guard.ts";
 import { BUSY_GUARD_RULE } from "./shared/busy-guard.ts";
 import { TYPESCRIPT_SOURCE } from "./shared/effect-edges.ts";
 import { HEADING_GUARD_RULE } from "./shared/heading-guard.ts";
@@ -29,7 +30,9 @@ import { SKELETON_GUARD_RULE } from "./shared/skeleton-guard.ts";
  * `async-press-needs-busy`, whose baseline is the only way past it, on a
  * JSX-capable file outside `@luke/ui` holding one that would silence
  * `no-open-page-from-button`, `no-raw-heading-outside-ui` or
- * `no-hand-written-live-region`, on any TypeScript file holding one that would
+ * `no-hand-written-live-region`, on any TypeScript file outside `@luke/ui`
+ * that names an arrow key and holds one that would silence
+ * `no-hand-written-arrow-keys`, on any TypeScript file holding one that would
  * silence `no-lucide-outside-door` or, where it adds a listener,
  * `no-document-press-listener`, whose baselines are the only way past them, on
  * any TypeScript file that spells
@@ -100,6 +103,17 @@ const GUARDS = [
     watches: (absolute: string) => isOutsideUi(absolute),
     remedy:
       "Say it with `announce` from @luke/ui, or draw the words in FailureNote, ErrorState, EmptyState or NoteLine, instead",
+  },
+  {
+    rule: ARROW_KEY_GUARD_RULE,
+    sources: TYPESCRIPT_SOURCE,
+    // A file that never names an arrow key has nothing to silence; the guards' own tests spell fixtures.
+    watches: (absolute: string) =>
+      isOutsideUi(absolute) &&
+      !path.relative(REPOSITORY_ROOT, absolute).startsWith("tools/anti-slop/") &&
+      existsSync(absolute) &&
+      NAMES_ARROW_KEY.test(readFileSync(absolute, "utf8")),
+    remedy: "Step the list with useRovingKeys or List from @luke/ui instead",
   },
   {
     rule: LUCIDE_GUARD_RULE,
