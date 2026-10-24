@@ -96,6 +96,7 @@ import { SETTINGS_PAGE_EXAMPLE } from "./examples/settings-page";
 import { SETTINGS_ROW_EXAMPLE } from "./examples/settings-row";
 import { SETTINGS_SECTION_EXAMPLE } from "./examples/settings-section";
 import { SHORTCUTS_EXAMPLE } from "./examples/shortcuts";
+import { SHOW_MORE_ROWS_EXAMPLE } from "./examples/show-more-rows";
 import { SKELETONS_EXAMPLE } from "./examples/skeletons";
 import { SLIDER_EXAMPLE } from "./examples/slider";
 import { SPINNERS_EXAMPLE } from "./examples/spinners";
@@ -190,6 +191,7 @@ export const EXAMPLES: readonly Example[] = [
   SWITCHES_EXAMPLE,
   TABS_EXAMPLE,
   LIST_ROW_EXAMPLE,
+  SHOW_MORE_ROWS_EXAMPLE,
   LIST_MOTION_EXAMPLE,
   ROVING_KEYS_EXAMPLE,
   MENU_EXAMPLE,
