@@ -30,7 +30,6 @@ import {
 } from "@luke/ui/actor-model";
 import {
   ArrowDownAZIcon,
-  ArrowDownNarrowWideIcon,
   BotIcon,
   CalendarPlusIcon,
   CircleCheckIcon,
@@ -41,7 +40,6 @@ import {
   ListFilterIcon,
   ListIcon,
   RotateCcwIcon,
-  Rows3Icon,
   SignalHighIcon,
   SlidersHorizontalIcon,
   UserCheckIcon,
@@ -76,6 +74,7 @@ import {
 } from "@luke/ui/tasks-page-model";
 import { type ReactNode, type RefCallback, type RefObject, useMemo, useRef } from "react";
 import { ACTOR_SIZE, ActorMark, actorCard, UnassignedMark } from "../actor-ref.js";
+import { commandHead, PANEL_COMMAND } from "../command-items.js";
 import { useMemberDirectory } from "../member-directory.js";
 import { memberReadNotice, memberRows } from "../member-rows.js";
 import { RepositoryPicture } from "../repository-picture.js";
@@ -695,8 +694,8 @@ function displayEntries({
   return [
     [
       {
-        label: board ? "Columns" : "Group by",
-        icon: <Rows3Icon />,
+        ...commandHead(PANEL_COMMAND.GROUP_BY),
+        ...(board ? { label: "Columns" } : {}),
         items: groupings.map((each) => ({
           label: GROUPING_WORDS[each],
           icon: GROUPING_ICON[each],
@@ -705,8 +704,7 @@ function displayEntries({
         })),
       },
       {
-        label: "Order by",
-        icon: <ArrowDownNarrowWideIcon />,
+        ...commandHead(PANEL_COMMAND.ORDER_BY),
         items: Object.values(TASKS_ORDER).map((each) => ({
           label: ORDER_WORDS[each],
           icon: ORDER_ICON[each],

@@ -71,7 +71,6 @@ import {
   personActor,
 } from "@luke/ui/actor-model";
 import {
-  ArrowDownNarrowWideIcon,
   CheckCheckIcon,
   CheckIcon,
   CircleCheckIcon,
@@ -96,6 +95,7 @@ import { useCallback, useId, useLayoutEffect, useMemo, useRef, useState } from "
 import { ACTOR_SIZE, ActorMark, AutomationCard, actorCard, automationActor } from "../actor-ref.js";
 import { AttentionMark } from "../attention-mark.js";
 import { useAutomation } from "../automation-directory.js";
+import { commandHead, PANEL_COMMAND } from "../command-items.js";
 import { useInboxItemDraft } from "../composer-drafts.js";
 import { useCopyLinkItem } from "../copy-link-item.js";
 import { ActionMenu, type MenuAction, type MenuEntry, rowMenu } from "../desktop/action-menu.js";
@@ -214,7 +214,7 @@ import { cardTitle } from "./tool-call-model.js";
  * the head naming All after the Inbox's name; then Group by, None, one
  * run, by task, by person, or by status (what needs the developer
  * under the attention mark, what waits on others, what is answered, each
- * folding as a task's group does); Sort, the latest
+ * folding as a task's group does); Order by, the latest
  * change first or the oldest first; Whose, everyone's
  * items, the developer's own, or one teammate's by face and name, which a
  * chip over the list then says, its × listing everyone's again; each
@@ -263,9 +263,6 @@ const SECOND_LINE = "Second line";
 
 /** The items whose media the rows show while they show none, kept as one so the reads see no change. */
 const NO_ITEMS: readonly string[] = [];
-
-/** What the view's submenu of groupings is called. */
-const GROUP_BY = "Group by";
 
 /** What the list's placeholder rows say to a reader while its items are first read. */
 const READING_ITEMS = "Reading your inbox…";
@@ -328,8 +325,7 @@ const STATUS_WORDS = {
   [INBOX_STATUS_GROUP.ANSWERED]: "Answered",
 } as const satisfies Record<InboxStatusGroupKind, string>;
 
-/** What the view's submenu of sorts and of whose items are called. */
-const SORT_BY = "Sort";
+/** What the view's submenu of whose items is called. */
 const WHOSE = "Whose";
 
 /** What the chip over the list says its × does. */
@@ -769,7 +765,7 @@ function whoseEntries(
 /**
  * The head's button that drops the view's menu: first the scopes the Inbox
  * offers, To do and All, the one shown checked;
- * then, on the window's Inbox, Group by and Sort, each a submenu with its
+ * then, on the window's Inbox, Group by and Order by, each a submenu with its
  * choice checked; Whose, Anyone, Me, or a teammate by face and name;
  * Media previews; and Mark all as read at its foot.
  */
@@ -833,7 +829,7 @@ export function markAllEntries(readAll: InboxReadAll): MenuEntry[] {
   ];
 }
 
-/** The window's Inbox's own groups of its view's menu, after its scopes: Group by and Sort, Whose, and Media previews. */
+/** The window's Inbox's own groups of its view's menu, after its scopes: Group by and Order by, Whose, and Media previews. */
 function windowEntries(
   choices: InboxViewChoices,
   reader: ReturnType<typeof useMemberDirectory>,
@@ -853,8 +849,7 @@ function windowEntries(
   });
   const view: MenuEntry[] = [
     {
-      label: GROUP_BY,
-      icon: <ListIcon />,
+      ...commandHead(PANEL_COMMAND.GROUP_BY),
       items: [
         groupBy("None", <ListIcon />, INBOX_GROUPING.NONE),
         groupBy("Task", <DocumentIcon />, INBOX_GROUPING.TASK),
@@ -863,8 +858,7 @@ function windowEntries(
       ],
     },
     {
-      label: SORT_BY,
-      icon: <ArrowDownNarrowWideIcon />,
+      ...commandHead(PANEL_COMMAND.ORDER_BY),
       items: [
         sortBy("Latest first", <ClockArrowDownIcon />, INBOX_SORT.LATEST),
         sortBy("Oldest first", <ClockArrowUpIcon />, INBOX_SORT.OLDEST),
