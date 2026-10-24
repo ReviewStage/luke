@@ -1,5 +1,6 @@
-/* swatch.css -- Swatch: a small colour dot that is a toggle, ringed while
-   its colour is the one chosen. The keyboard's ring is the app's reset's. */
+/* swatch.css -- Swatch: a small colour dot that is a toggle, ringed in the
+   text's ink while its colour is the one chosen. The keyboard's ring is the
+   app's reset's, outside the dot, so it never stands for chosen. */
 
 @layer components {
   .luke-swatch {
@@ -23,8 +24,11 @@
     );
   }
 
+  /* Note that chosen is drawn on the dot's own edge and a gap inside it,
+     never as an outline, because the outline is focus's: a chosen dot the
+     keyboard reaches gains the ring around what it already wears. */
   .luke-swatch[aria-pressed="true"] {
-    outline: 2px solid var(--luke-color-focus-ring);
-    outline-offset: 1px;
+    border-color: var(--luke-color-text);
+    box-shadow: inset 0 0 0 2px var(--luke-color-ground);
   }
 }
