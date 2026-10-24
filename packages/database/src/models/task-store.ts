@@ -95,7 +95,7 @@ import {
  * stands and never an insert, so a task deleted before a save lands stays
  * deleted, and a save that fails leaves the document as it was. A task's
  * coding agents' conversations go with the task: deleting the task stamps
- * them `deleted_at`, so the purge takes their words thirty days on. Every function is an effect over the ambient `SqlClient` and names
+ * them `deleted_at`, so the purge takes their words seven days on. Every function is an effect over the ambient `SqlClient` and names
  * no database of its own.
  */
 

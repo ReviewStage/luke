@@ -2800,7 +2800,7 @@ only on production deployments.
 
 The sweep ends what no request will, and it reads no word of any account.
 It runs three things in turn and answers what each did: the purge of
-conversations stamped deleted more than thirty days ago, which is what a
+conversations stamped deleted more than seven days ago, which is what a
 deleted task's agents' conversations come to, counted as `purged`; the
 sweep over turns still running past their kind's bound, an hour for a turn
 of any other conversation and a day and an hour for a coding agent's

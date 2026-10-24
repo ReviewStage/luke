@@ -17,7 +17,7 @@ import {
 } from "../soft-delete.js";
 
 /**
- * soft-delete.test.ts -- a conversation stamped deleted with every one delegated from it, and the purge thirty days on queueing each one's sandbox, a worker's beside its agent's.
+ * soft-delete.test.ts -- a conversation stamped deleted with every one delegated from it, and the purge seven days on queueing each one's sandbox, a worker's beside its agent's.
  *
  * Synthetic accounts and conversations throughout.
  */
@@ -45,7 +45,7 @@ const openConversation = (userId: string, parentConversationId?: string) =>
 
 it.layer(getTestDB())("the soft delete", (it) => {
   it.effect(
-    "an agent's conversation is stamped with its workers' and theirs, a sibling stands, and the purge thirty days on queues every stamped one's sandbox",
+    "an agent's conversation is stamped with its workers' and theirs, a sibling stands, and the purge seven days on queues every stamped one's sandbox",
     () =>
       Effect.gen(function* () {
         const owner = yield* openAccount;
