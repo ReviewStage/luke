@@ -25,6 +25,7 @@ import { type AnyAct, FAKE_ANSWER, type FakeActAnswer, fakeActs } from "../testi
 import { DESKTOP_LINKS, fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import { DESKTOP_CAPABILITIES, handState, stateWith } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
+import { restOn } from "../testing/hint-rest.js";
 import { CodingAgentsPage } from "./coding-agents-page.js";
 
 /**
@@ -374,6 +375,16 @@ test("an API key is pasted into a masked field with an eye, sent once, drawn as 
     [{ provider: PROVIDER_KEY_PROVIDER.ANTHROPIC }],
   );
   assert.equal(rowButton(page, "Claude").textContent, "Connect");
+});
+
+test("resting on Edit key says its name in the window's pill", async () => {
+  held = { keys: [ANTHROPIC_KEY], subscriptions: [] };
+  const page = await mount();
+  const dialog = await open(page, "Claude");
+
+  restOn(button(card(dialog, "API key"), "Edit key"));
+
+  assert.equal(document.querySelector('[role="tooltip"]')?.textContent, "Edit key");
 });
 
 test("editing a saved API key shows Saved where the key would be, never the key, and offers no Show until one is typed", async () => {

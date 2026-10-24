@@ -112,6 +112,7 @@ const MARKED: readonly MarkProvider[] = [
   ...INTEGRATION_PROVIDER_LIST,
   ...LINK_SITE_LIST,
   MARK_PROVIDER.GOOGLE,
+  MARK_PROVIDER.CHATGPT,
 ];
 
 test("every provider's mark lies inside its own box and fills it", () => {

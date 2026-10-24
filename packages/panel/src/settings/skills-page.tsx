@@ -18,7 +18,6 @@ import {
   DIALOG_SIZE,
   Dialog,
   DialogActions,
-  DocumentIcon,
   ErrorState,
   Fact,
   Facts,
@@ -46,9 +45,9 @@ import {
   UpdateIcon,
   useConfirmDialog,
 } from "@luke/ui";
+import { GLYPH } from "@luke/ui/icons";
 import type { SkillOption } from "@luke/ui/skill-mention";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
-import { FolderInputIcon } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useAct } from "../act.js";
 import { MarkdownMessage } from "../markdown-message.js";
@@ -153,8 +152,8 @@ const UNANSWERED_LINE = failureLine({ failure: INSTALLED_SKILL_CALL_FAILURE.UNAN
 
 /** The glyph each of a row's acts leads with. */
 const ACTION_ICON = {
-  [SKILL_ACTION.VIEW]: <DocumentIcon />,
-  [SKILL_ACTION.SHARE]: <FolderInputIcon />,
+  [SKILL_ACTION.VIEW]: <GLYPH.PLAN />,
+  [SKILL_ACTION.SHARE]: <GLYPH.MOVE />,
   [SKILL_ACTION.UPDATE]: <UpdateIcon />,
   [SKILL_ACTION.REMOVE]: <TrashIcon />,
 } as const satisfies Record<SkillAction, React.JSX.Element>;

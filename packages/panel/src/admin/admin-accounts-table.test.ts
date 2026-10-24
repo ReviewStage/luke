@@ -3,6 +3,7 @@ import type { AccountsTableRow } from "@luke/ui/accounts-sort";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, expect, test } from "vitest";
+import { restOn } from "../testing/hint-rest.js";
 import { ACCOUNTS_TABLE_MIN_WIDTH, AccountsTable } from "./accounts-table/accounts-table.js";
 import { type AdminDoors, AdminDoorsProvider } from "./admin-doors.js";
 
@@ -202,6 +203,15 @@ test("a plain press on a row or its name opens the account, a modified one is le
   expect(opened).toEqual(["account-ada", "account-grace"]);
   expect(plain.defaultPrevented).toBe(true);
   expect(modified.defaultPrevented).toBe(false);
+});
+
+test("resting on a star says what its press does, in the words that name it", () => {
+  const { table } = mount([ADA, ZED], { starred: true });
+  const unstar = table.querySelector<HTMLElement>('[aria-label="Unfavorite Zed Example"]');
+
+  restOn(unstar ?? expect.fail("no star"));
+
+  expect(document.querySelector('[role="tooltip"]')?.textContent).toBe("Unfavorite Zed Example");
 });
 
 test("a star's press asks to star or unstar without opening the row, and starred rows lead", () => {

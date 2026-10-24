@@ -21,7 +21,6 @@ import {
   Fill,
   GAP,
   IconButton,
-  ResetIcon,
   SKELETON_SHAPE,
   Skeleton,
   SkeletonRegion,
@@ -34,8 +33,8 @@ import {
   useConfirmDialog,
 } from "@luke/ui";
 import type { PersonActor } from "@luke/ui/actor-model";
+import { GLYPH, HistoryIcon, InfoIcon } from "@luke/ui/icons";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
-import { HistoryIcon, InfoIcon } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { type ActHandle, useAct } from "../act.js";
 import { DocumentScroll } from "../tasks/document-frame.js";
@@ -326,7 +325,7 @@ function TitleActions({
       {custom ? (
         <Button
           variant={BUTTON_VARIANT.OUTLINE}
-          icon={<ResetIcon />}
+          icon={<GLYPH.GO_BACK />}
           busy={resetting}
           busyLabel="Resetting"
           onClick={onReset}
