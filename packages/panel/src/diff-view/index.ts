@@ -609,6 +609,21 @@ function lineHeightOf(look: DiffLook): number {
   return Number(look.fontSize) * Number(LINE_HEIGHT_RATIO[look.lineHeight]);
 }
 
+/** The motion token saying how a scroller a component moves itself gets there, and its value where it gets there at once. */
+const SCROLL_GLIDE = { TOKEN: "--luke-scroll-glide", AT_ONCE: "auto" } as const;
+
+/**
+ * How a list scrolled to a file or a line gets there, as the glide token
+ * stands at its host: Pierre's glide, or at once where motion is held still.
+ * Note that the token is read rather than the system's setting, which Pierre
+ * reads on its own, because a capture run holds motion still at the tokens
+ * and touches no setting.
+ */
+function glideOf(host: HTMLElement): "smooth-auto" | "instant" {
+  const glide = getComputedStyle(host).getPropertyValue(SCROLL_GLIDE.TOKEN).trim();
+  return glide === SCROLL_GLIDE.AT_ONCE ? "instant" : "smooth-auto";
+}
+
 /** A note's place as Pierre takes it, its key carried as the note's own. */
 function annotationsOf(notes: readonly DiffAnnotation[]): DiffLineAnnotation<string>[] {
   return notes.map((note) => ({ side: note.side, lineNumber: note.line, metadata: note.key }));
@@ -1038,7 +1053,7 @@ function mountList(host: HTMLElement, props: DiffListProps): DiffListHandle {
       range: lines,
       align: "start",
       offset: lineHeightOf(latest.look) * REVEAL_LINES_ABOVE,
-      behavior: "smooth-auto",
+      behavior: glideOf(host),
     });
   };
   return {
@@ -1069,7 +1084,7 @@ function mountList(host: HTMLElement, props: DiffListProps): DiffListHandle {
       }
     },
     reveal: (path) =>
-      view.scrollTo({ type: "item", id: path, align: "start", behavior: "smooth-auto" }),
+      view.scrollTo({ type: "item", id: path, align: "start", behavior: glideOf(host) }),
     // Note that Pierre resolves the line against its layout again on every frame until the scroll settles, so files measured on the way do not leave it short.
     revealLine: (path, side, line) =>
       view.scrollTo({
@@ -1079,7 +1094,7 @@ function mountList(host: HTMLElement, props: DiffListProps): DiffListHandle {
         side,
         align: "start",
         offset: lineHeightOf(latest.look) * REVEAL_LINES_ABOVE,
-        behavior: "smooth-auto",
+        behavior: glideOf(host),
       }),
     revealLines,
     unmount: () => {
