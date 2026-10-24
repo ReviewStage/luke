@@ -1,5 +1,5 @@
 /**
- * words.ts -- the words the app says in many places: a count and its noun, a list of names, a read's reading, no-match and failed phrases, and the glossary's fixed terms.
+ * words.ts -- the words the app says in many places: a count and its noun, a list of names, a read's reading, no-match and failed phrases, the glossary's fixed terms, and the voice's failures.
  *
  * Each kind of words has one function here, so a screen names only its noun
  * and every screen, the service's included, says it the same way. It holds no
@@ -92,4 +92,81 @@ export function noneYetWords(noun: Noun): string {
 /** What a read that failed says, of what it read: "Your tasks could not be read." */
 export function readFailedWords(thing: string): string {
   return `${sentenceStart(thing)} could not be read.`;
+}
+
+/**
+ * The voice's failures, each said in words of its own. The notice line and
+ * app state carry only these keys, never a browser's or a provider's text, so
+ * nothing a session carried (an SDP line, a key) can reach the screen. A new
+ * failure is a key here and its words in {@link VOICE_FAILURE_WORDS}, which
+ * the compiler holds to naming every key.
+ */
+export const VOICE_FAILURE = {
+  /** The call could not be built, the host opened no session for it, or it never started. */
+  CALL_NOT_STARTED: "call-not-started",
+  /** The system refused the microphone a call needs. */
+  MICROPHONE_REFUSED: "microphone-refused",
+  /** A call runs on the account's own OpenAI key, and none is saved. */
+  OPENAI_KEY_MISSING: "openai-key-missing",
+  /** No credential of the agent's starter pays for a call into it. */
+  AGENT_KEY_MISSING: "agent-key-missing",
+  /** The agent runs on Claude or Codex, which takes no call yet. */
+  NATIVE_AGENT: "native-agent",
+  /** The hosted service's ceiling is reached. */
+  VOICE_UNAVAILABLE: "voice-unavailable",
+} as const;
+
+export type VoiceFailure = (typeof VOICE_FAILURE)[keyof typeof VOICE_FAILURE];
+
+/** What a failure offers to do about itself, as the button beside its words. */
+export const VOICE_REMEDY = {
+  /** Settings, where the OpenAI key goes. */
+  ADD_OPENAI_KEY: "add-openai-key",
+  /** System Settings, where the microphone is allowed. */
+  ALLOW_MICROPHONE: "allow-microphone",
+} as const;
+
+export type VoiceRemedy = (typeof VOICE_REMEDY)[keyof typeof VOICE_REMEDY];
+
+/** A failure's words, what happened and what to do, and the remedy its button offers where one does it. */
+export interface VoiceFailureWords {
+  readonly words: string;
+  readonly remedy?: VoiceRemedy;
+}
+
+export const VOICE_FAILURE_WORDS = {
+  [VOICE_FAILURE.CALL_NOT_STARTED]: {
+    words: "Luke could not start the call. Try again in a moment.",
+  },
+  [VOICE_FAILURE.MICROPHONE_REFUSED]: {
+    words:
+      "A call needs the microphone. Allow it in System Settings › Privacy & Security › Microphone.",
+    remedy: VOICE_REMEDY.ALLOW_MICROPHONE,
+  },
+  [VOICE_FAILURE.OPENAI_KEY_MISSING]: {
+    words: "Luke could not start the call. A call runs on your OpenAI key, and none is saved.",
+    remedy: VOICE_REMEDY.ADD_OPENAI_KEY,
+  },
+  [VOICE_FAILURE.AGENT_KEY_MISSING]: {
+    words: "Connect an API key in Settings to call this agent.",
+  },
+  [VOICE_FAILURE.NATIVE_AGENT]: {
+    words: "This agent runs on Claude or Codex and can't take calls yet.",
+  },
+  [VOICE_FAILURE.VOICE_UNAVAILABLE]: {
+    words: "Voice is temporarily unavailable. Try again later.",
+  },
+} as const satisfies Record<VoiceFailure, VoiceFailureWords>;
+
+/** The label of each remedy's button. */
+export const VOICE_REMEDY_LABEL = {
+  [VOICE_REMEDY.ADD_OPENAI_KEY]: "Add an OpenAI key",
+  [VOICE_REMEDY.ALLOW_MICROPHONE]: "Open System Settings",
+} as const satisfies Record<VoiceRemedy, string>;
+
+const VOICE_FAILURES: ReadonlySet<string> = new Set(Object.values(VOICE_FAILURE));
+
+/** Whether a value crossing from another window is one of the voice's failures, and no free text. */
+export function isVoiceFailure(value: unknown): value is VoiceFailure {
+  return typeof value === "string" && VOICE_FAILURES.has(value);
 }

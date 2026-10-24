@@ -1,3 +1,4 @@
+import { isVoiceFailure, type VoiceFailure } from "@luke/features/words";
 import { LIVE_STATUS, type LiveStatus, TRANSCRIPT_SPEAKER } from "@luke/live";
 import {
   isOptionalWireString,
@@ -105,8 +106,10 @@ export interface VoiceView extends VoiceSpeakers {
    * above, since a full-duplex session can carry both at once.
    */
   voiceStatus: LiveStatus;
-  voiceError: string | undefined;
-  voiceNotice: string | undefined;
+  /** What went wrong, as its key: never free text, so nothing a browser or provider said can reach app state. */
+  voiceError: VoiceFailure | undefined;
+  /** What is unavailable, as its key, on the same terms. */
+  voiceNotice: VoiceFailure | undefined;
   talkOpening: boolean;
   /** The agent the standing call speaks into, and its task where it has one; none for no call. */
   call: VoiceCallAbout | undefined;
@@ -150,6 +153,25 @@ export const IDLE_VOICE_VIEW: VoiceView = {
   lukeEndedCall: undefined,
   speakerMuted: false,
 };
+
+/**
+ * Which of the notice line's two lines speech hides: a failure yields to
+ * either speaker being heard, since words being said are the thing to read
+ * over words that already failed, and a notice yields to Luke's voice alone,
+ * since a refusal answered while the developer speaks is exactly what the
+ * line should say. Read by the panel, which draws the line, and by the voice
+ * window, whose clock stands still while a line is hidden.
+ */
+export function noticeLinesHidden(speakers: VoiceSpeakers): { error: boolean; notice: boolean } {
+  return {
+    error: speakers.listening || speakers.lukeSpeaking,
+    notice: speakers.lukeSpeaking,
+  };
+}
+
+function isOptionalVoiceFailure(value: UnparsedWireValue): boolean {
+  return value === undefined || isVoiceFailure(value);
+}
 
 /** The statuses of a call still in progress, the ones a call holds the panel open through. */
 const CALL_IN_PROGRESS: ReadonlySet<LiveStatus> = new Set([
@@ -232,7 +254,7 @@ export function callTranscriptChangeBetween(
 export function isVoiceView(value: UnparsedWireValue): value is VoiceView & WireRecord {
   if (!isRecord(value)) return false;
   if (!isLiveStatus(value.voiceStatus)) return false;
-  if (!isOptionalWireString(value.voiceError) || !isOptionalWireString(value.voiceNotice))
+  if (!isOptionalVoiceFailure(value.voiceError) || !isOptionalVoiceFailure(value.voiceNotice))
     return false;
   if (!isWireBoolean(value.talkOpening)) return false;
   if (!isOptionalCallAbout(value.call)) return false;
