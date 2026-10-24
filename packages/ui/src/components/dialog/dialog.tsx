@@ -10,6 +10,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { isComposingKey } from "../../composing-key.js";
 import { motionHeld } from "../../motion-timing.js";
 import type { PictureExpand } from "../../picture-expand.js";
 import { replayMotion } from "../../replay-motion.js";
@@ -545,7 +546,7 @@ export function Dialog({
     // own Enter and Space are its default action, which this leaves alone.
     event.stopPropagation();
     // A key an input method is composing with is the method's, not the dialog's.
-    if (event.nativeEvent.isComposing) return;
+    if (isComposingKey(event)) return;
     if (event.key === "Tab") {
       trappedTab(event);
       return;

@@ -205,6 +205,14 @@ test("an input method's Escape and Return are its own, and the dialog hears its 
   expect(heard.dialogKeys).toEqual(["Enter"]);
 });
 
+test("Safari's composing key, code 229 with isComposing already false, is the input method's too", () => {
+  const { heard } = opened();
+  key("Enter", { keyCode: 229 });
+  expect(heard.dialogKeys).toEqual([]);
+  key("Enter");
+  expect(heard.dialogKeys).toEqual(["Enter"]);
+});
+
 test("no key and no press inside the card reaches the window behind it", () => {
   const { heard } = opened();
   key("a");

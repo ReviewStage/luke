@@ -169,6 +169,13 @@ test("Escape while an input method composes puts nothing away", () => {
   assert.equal(heard.dismissed, 0);
 });
 
+test("Safari's composing Escape, code 229 with isComposing already false, puts nothing away", () => {
+  const heard = heardNothing();
+  drawn(createElement(Stage, { heard, focusField: true }));
+  press("Escape", { keyCode: 229 });
+  assert.equal(heard.dismissed, 0);
+});
+
 test("any other key reaches the owner's own keys", () => {
   const heard = heardNothing();
   drawn(createElement(Stage, { heard, focusField: true }));
