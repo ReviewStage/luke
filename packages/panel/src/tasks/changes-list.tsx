@@ -603,7 +603,15 @@ export function FileHead({
         onPointerDown={onStand}
       >
         <Disclosure open={!collapsed} onOpenChange={onToggle}>
-          <DisclosureSummary look={DISCLOSURE_SUMMARY.ROW}>
+          {/* Note that the summary is named by the file's status and path, because its path stands beside it as the press that copies it. */}
+          <DisclosureSummary
+            look={DISCLOSURE_SUMMARY.ROW}
+            aria-label={
+              file.previousPath === null
+                ? `${STATUS_WORDS[file.status]} ${file.path}`
+                : `${STATUS_WORDS[file.status]} ${file.previousPath} to ${file.path}`
+            }
+          >
             {hinted(STATUS_WORDS[file.status], letter)}
             <FileTypeIcon name={fileName(file.path)} />
           </DisclosureSummary>
