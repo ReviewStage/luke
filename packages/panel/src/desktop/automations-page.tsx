@@ -12,7 +12,11 @@ import {
   automationRunStanding,
   automationTriggerText,
 } from "@luke/features/automation-list-model";
-import type { AutomationView } from "@luke/features/automation-view";
+import {
+  AUTOMATION_CALL_FAILURE,
+  type AutomationCallFailure,
+  type AutomationView,
+} from "@luke/features/automation-view";
 import type { AutomationScope, AutomationSummary } from "@luke/features/automation-wire";
 import { LINK_PLACE } from "@luke/features/link-grammar";
 import { momentText } from "@luke/features/time-format";
@@ -26,8 +30,10 @@ import {
   Button,
   CardPress,
   COLLECTION_STATE,
+  CONFIRM_LOSS,
   CollectionPage,
   type CollectionState,
+  ConfirmDialog,
   DetailPage,
   EmptyState,
   ERROR_STATE_PLACEMENT,
@@ -50,9 +56,13 @@ import {
   Toolbar,
   type ToolbarProps,
   Tooltip,
+  useConfirmDialog,
+  useLeaving,
   useMinute,
   VisuallyHidden,
 } from "@luke/ui";
+import { GLYPH } from "@luke/ui/icons";
+import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { BotIcon, GitPullRequestIcon, PlusIcon, ZapIcon } from "lucide-react";
 import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 import { useAct } from "../act.js";
@@ -64,7 +74,7 @@ import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import { GLYPH_STATE, glyphStateWords, stateEndMark } from "../state-glyph.js";
 import { AUTOMATIONS_PAGE, type TasksControl } from "../tasks/use-tasks-tab.js";
 import { useExperiment } from "../use-app-state.js";
-import { rowMenu } from "./action-menu.js";
+import { type MenuAction, rowMenu } from "./action-menu.js";
 import {
   AutomationEditor,
   AutomationPageSkeleton,
@@ -117,6 +127,23 @@ const ROW_THING = "Automation";
 
 /** What the list is called, and a phone's way back from an automation's page names it. */
 const AUTOMATIONS = "Automations";
+
+/** What a row's Delete asks, as the editor's Delete asks it. */
+const DELETE_BODY = "Its schedule stops and its run history goes. Agents its runs started stay.";
+
+/** Why a row's Delete did not land, as its question goes on saying until it is tried again or let go. */
+const DELETE_REFUSAL_WORDS = {
+  [AUTOMATION_CALL_FAILURE.UNANSWERED]: "The automation could not be deleted. Try again.",
+  [AUTOMATION_CALL_FAILURE.NOT_FOUND]: "This automation, or its workspace, is gone.",
+  [AUTOMATION_CALL_FAILURE.NO_REPOSITORY]: "The automation could not be deleted. Try again.",
+  [AUTOMATION_CALL_FAILURE.REPOSITORY_NOT_REACHABLE]:
+    "The automation could not be deleted. Try again.",
+  [AUTOMATION_CALL_FAILURE.INVALID]: "The automation could not be deleted. Try again.",
+  [AUTOMATION_CALL_FAILURE.NOT_PERMITTED]:
+    "Only its creator, or the workspace's owners and admins, can delete it.",
+} as const satisfies Record<AutomationCallFailure, string>;
+
+const ACCEPTED: ActionResult = { status: ACTION_RESULT_STATUS.ACCEPTED };
 
 /** What the list's acts are called, on their buttons and a phone's ⋯ alike. */
 const NEW_AUTOMATION = "New automation";
@@ -184,8 +211,8 @@ function OwnerCell({
  * own, so they line up down the card whatever each row says. Everything but the switch is one press
  * that opens its page, as a sidebar task's row is, so the row opens wherever
  * it is pressed and the switch beside the press only switches. Its
- * right-click offers Copy link, and hands focus back to its press as the
- * menu closes; a right-click on the switch is the switch's own and opens
+ * right-click offers Copy link, then Delete in red, which asks first, and
+ * hands focus back to its press as the menu closes; a right-click on the switch is the switch's own and opens
  * nothing. A narrow room, a phone's, has no width for the two columns beside
  * the name, so the row keeps its name whole and says when it runs next in
  * the line under it, its owner said by its card's heading instead.
@@ -197,6 +224,7 @@ function AutomationRow({
   narrow,
   onOpen,
   onToggle,
+  onDelete,
 }: {
   automation: AutomationSummary;
   workspace: Workspace | undefined;
@@ -204,6 +232,8 @@ function AutomationRow({
   narrow: boolean;
   onOpen: () => void;
   onToggle: (enabled: boolean) => Promise<AutomationView>;
+  /** Asks whether to delete it. */
+  onDelete: () => void;
 }): React.JSX.Element {
   const state = STANDING_GLYPH[automationRunStanding(automation.lastRun)];
   const next = automationNext(automation);
@@ -213,6 +243,12 @@ function AutomationRow({
     item.current = node?.parentElement ?? null;
   }, []);
   const copyLink = useCopyLinkItem()({ kind: LINK_PLACE.AUTOMATION, automationId: automation.id });
+  const remove: MenuAction = {
+    label: "Delete",
+    icon: <GLYPH.DELETE />,
+    onSelect: onDelete,
+    danger: true,
+  };
   // Note that the glyph is the row's decoration, so its working word is said in the row's words instead.
   const working = state === GLYPH_STATE.WORKING ? glyphStateWords(state, false) : undefined;
   const trigger = automationTriggerText(automation.trigger, automation.repositories ?? []);
@@ -276,9 +312,52 @@ function AutomationRow({
         actions={<AutomationSwitch automation={automation} write={onToggle} />}
         hint={{ Hint: RowHint, label: automation.name }}
         onPress={onOpen}
-        menu={copyLink === undefined ? undefined : rowMenu(ROW_THING, [[copyLink]])}
+        menu={rowMenu(ROW_THING, copyLink === undefined ? [[remove]] : [[copyLink], [remove]])}
+        motionKey={automation.id}
       />
     </RowHintOptions>
+  );
+}
+
+/** What every row of the list is handed: the room it stands in, and the presses on it. */
+interface AutomationRowsShown {
+  workspace: Workspace | undefined;
+  now: number;
+  narrow: boolean;
+  onOpen: (automation: AutomationSummary) => void;
+  onToggle: (automation: AutomationSummary, enabled: boolean) => Promise<AutomationView>;
+  onDelete: (automation: AutomationSummary) => void;
+}
+
+/** An automation's key, by which its row leaves the list (`ListMotion`). */
+function automationKey({ id }: AutomationSummary): string {
+  return id;
+}
+
+/** One owner's rows, a row no longer listed drawn on until its exit has played (`useLeaving`). */
+function AutomationGroupRows({
+  automations,
+  shown,
+}: {
+  automations: readonly AutomationSummary[];
+  shown: AutomationRowsShown;
+}): React.JSX.Element {
+  const drawn = useLeaving(automations, automationKey);
+  return (
+    <>
+      {drawn.map(({ key, value: automation }) => (
+        <AutomationRow
+          key={key}
+          automation={automation}
+          workspace={shown.workspace}
+          now={shown.now}
+          narrow={shown.narrow}
+          onOpen={() => shown.onOpen(automation)}
+          onToggle={(enabled) => shown.onToggle(automation, enabled)}
+          onDelete={() => shown.onDelete(automation)}
+        />
+      ))}
+    </>
   );
 }
 
@@ -291,41 +370,26 @@ function AutomationRow({
  */
 function AutomationList({
   groups,
-  workspace,
-  now,
-  narrow,
-  onOpen,
-  onToggle,
-}: {
+  ...shown
+}: AutomationRowsShown & {
   groups: readonly AutomationGroup[];
-  workspace: Workspace | undefined;
-  now: number;
-  /** Whether the room is a phone's, where a lone owner's card is headed too, since its rows name no owner. */
-  narrow: boolean;
-  onOpen: (automation: AutomationSummary) => void;
-  onToggle: (automation: AutomationSummary, enabled: boolean) => Promise<AutomationView>;
 }): React.JSX.Element {
   return (
     <>
       {groups.map((group) => {
         const name = automationOwnerName(
           group.owner,
-          workspace?.name,
+          shown.workspace?.name,
           group.automations.every((automation) => automation.mine === true),
         );
+        // A phone's lone owner's card is headed too, since its rows name no owner.
         return (
-          <AutomationGroupCard key={group.owner} name={name} headed={groups.length > 1 || narrow}>
-            {group.automations.map((automation) => (
-              <AutomationRow
-                key={automation.id}
-                automation={automation}
-                workspace={workspace}
-                now={now}
-                narrow={narrow}
-                onOpen={() => onOpen(automation)}
-                onToggle={(enabled) => onToggle(automation, enabled)}
-              />
-            ))}
+          <AutomationGroupCard
+            key={group.owner}
+            name={name}
+            headed={groups.length > 1 || shown.narrow}
+          >
+            <AutomationGroupRows automations={group.automations} shown={shown} />
           </AutomationGroupCard>
         );
       })}
@@ -393,6 +457,47 @@ function listState(
   return "failure" in read ? COLLECTION_STATE.ERROR : COLLECTION_STATE.READY;
 }
 
+/**
+ * The question a row's Delete asks, held for the list: which automation it
+ * asks about, standing only while that one is still listed, so one deleted
+ * elsewhere withdraws it, and the deletion itself, which the history hears
+ * of (`onDeleted`) so it passes over the automation's page from then on.
+ */
+function useRowDeletion(
+  groups: readonly AutomationGroup[],
+  remove: ReturnType<typeof useAutomations>["remove"],
+  onDeleted: (automationId: string) => void,
+) {
+  const [asking, setAsking] = useState<AutomationSummary | undefined>(undefined);
+  const asked =
+    asking !== undefined &&
+    groups.some((group) => group.automations.some((each) => each.id === asking.id))
+      ? asking
+      : undefined;
+  const confirm = useConfirmDialog({ subject: asked !== undefined, surfaceOpen: true }, () => {
+    if (asked === undefined) return Promise.resolve(ACCEPTED);
+    return remove(asked.id).then((answer): ActionResult => {
+      if ("failure" in answer) {
+        return {
+          status: ACTION_RESULT_STATUS.REJECTED,
+          reason: DELETE_REFUSAL_WORDS[answer.failure],
+        };
+      }
+      onDeleted(asked.id);
+      return ACCEPTED;
+    });
+  });
+  const { ask: askConfirm } = confirm;
+  const ask = useCallback(
+    (automation: AutomationSummary) => {
+      setAsking(automation);
+      askConfirm();
+    },
+    [askConfirm],
+  );
+  return { asked, confirm, ask };
+}
+
 /** The list's page: the listed workspace's automations, a new one a press away. */
 function ListPage({
   tasks,
@@ -407,13 +512,16 @@ function ListPage({
   useAppCommand(APP_COMMAND.EXIT_AUTOMATIONS, view.onClose);
   const now = useMinute();
   const workspace = tasks.workspace;
-  const { read, reload, toggle } = automations;
+  const { read, reload, toggle, remove } = automations;
   const openNew = () => view.onOpen({ kind: AUTOMATIONS_PAGE.NEW });
   const openSuggested = (preset: AutomationPresetName) =>
     view.onOpen({ kind: AUTOMATIONS_PAGE.NEW, preset });
   const groups =
     read !== undefined && "automations" in read ? automationGroups(read.automations) : [];
   const workspacesUnread = workspace === undefined && tasks.workspacesFailed;
+  const deletion = useRowDeletion(groups, remove, (automationId) =>
+    view.onOpen({ kind: AUTOMATIONS_PAGE.LIST, deleted: automationId }),
+  );
   return (
     <CollectionPage
       frame={PAGE_FRAME.TOOLBAR}
@@ -508,10 +616,22 @@ function ListPage({
               view.onOpen({ kind: AUTOMATIONS_PAGE.EDIT, automationId: automation.id })
             }
             onToggle={(automation, enabled) => toggle(automation.id, enabled)}
+            onDelete={deletion.ask}
           />
           <SuggestedAutomations disabled={workspace === undefined} onStart={openSuggested} />
         </>
       )}
+      <ConfirmDialog
+        open
+        confirm={deletion.confirm}
+        question={{
+          title: `Delete ${deletion.asked?.name ?? "this automation"}?`,
+          body: DELETE_BODY,
+          verb: "Delete",
+          running: "Deleting",
+          loss: CONFIRM_LOSS.IRREVERSIBLE,
+        }}
+      />
     </CollectionPage>
   );
 }

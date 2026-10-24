@@ -20,6 +20,7 @@ import {
   LIST_DENSITY,
   LIST_ROW_CURRENT,
   List,
+  ListMotion,
   ListRow,
   RESIZE_EDGE_SIDE,
   ResizeEdge,
@@ -223,7 +224,8 @@ interface RunsShown {
 /**
  * The runs under their heading, scrolling by themselves: quiet blocks in
  * their place while they are first read, or that there are none yet, or
- * that they could not be read.
+ * that they could not be read. A run that starts slides in at the top, and
+ * the runs under it glide down (`ListMotion`).
  */
 function RunsBody({
   mine,
@@ -235,9 +237,10 @@ function RunsBody({
   onOpenAgent,
 }: RunsShown): React.JSX.Element {
   const now = useMinute();
+  const body = useRef<HTMLDivElement | null>(null);
   return (
     <ScrollArea fade={SCROLL_FADE.START}>
-      <div className="automation-runs-body">
+      <div ref={body} className="automation-runs-body">
         <div className="automation-runs-head">
           <Text variant={TEXT_VARIANT.SECTION} tone={TEXT_TONE.MUTED} as={TEXT_ELEMENT.H2}>
             Runs
@@ -254,8 +257,9 @@ function RunsBody({
         ) : runs.runs.length === 0 ? (
           <EmptyState icon={<ClockIcon />}>{NO_RUNS_LINE}</EmptyState>
         ) : (
-          <List label="Runs" density={LIST_DENSITY.COMPACT}>
-            {runs.runs.map((run) => (
+          <ListMotion root={body}>
+            <List label="Runs" density={LIST_DENSITY.COMPACT} moves>
+              {runs.runs.map((run) => (
               <RunRow
                 key={run.id}
                 run={run}
@@ -266,7 +270,8 @@ function RunsBody({
                 onOpenAgent={onOpenAgent}
               />
             ))}
-          </List>
+            </List>
+          </ListMotion>
         )}
       </div>
     </ScrollArea>

@@ -1415,6 +1415,47 @@ test("a deletion asks first, then goes back to the list without the automation",
   assert.ok(!rows(page).some(([name]) => name === SWEEP.name));
 });
 
+test("a row's Delete asks first, and once confirmed the row leaves the list and the history passes over its page", async () => {
+  const page = mountPages({ kind: AUTOMATIONS_PAGE.LIST });
+  await settle();
+  const row = rowOf(page, SWEEP.name);
+
+  act(() => (row.querySelector('button[aria-label="Automation actions"]') as HTMLElement).click());
+  await settle();
+  act(() => menuItem("Delete").click());
+  await settle();
+
+  assert.deepEqual(deletes, []);
+  assert.ok(rows(page).some(([name]) => name === SWEEP.name));
+  assert.match(
+    document.querySelector("[role=dialog], [role=alertdialog]")?.textContent ?? "",
+    new RegExp(`Delete ${SWEEP.name}\\?`, "u"),
+  );
+
+  act(() => dialogButton("Delete").click());
+  await settle();
+
+  assert.deepEqual(deletes, [SWEEP.id]);
+  assert.ok(!rows(page).some(([name]) => name === SWEEP.name));
+  assert.deepEqual(places.at(-1), { kind: AUTOMATIONS_PAGE.LIST, deleted: SWEEP.id });
+});
+
+test("a row's Delete withdrawn deletes nothing and leaves the row standing", async () => {
+  const page = mountPages({ kind: AUTOMATIONS_PAGE.LIST });
+  await settle();
+  const row = rowOf(page, SWEEP.name);
+
+  act(() => (row.querySelector('button[aria-label="Automation actions"]') as HTMLElement).click());
+  await settle();
+  act(() => menuItem("Delete").click());
+  await settle();
+  act(() => dialogButton("Cancel").click());
+  await settle();
+
+  assert.deepEqual(deletes, []);
+  assert.ok(rows(page).some(([name]) => name === SWEEP.name));
+});
+
 /** The leave dialog's question, while it stands. */
 function leaveAsked(): string | undefined {
   return [...document.querySelectorAll("[role=dialog], [role=alertdialog]")]
@@ -3032,7 +3073,7 @@ test("an automation row's ⋯, its right-click and the menu key open the same me
     assert.equal(openMenus()[0]?.getAttribute("aria-label"), "Automation actions");
     assert.deepEqual(
       items().map((item) => item.textContent),
-      ["Copy link"],
+      ["Copy link", "Delete"],
     );
     await closeMenu();
   }
