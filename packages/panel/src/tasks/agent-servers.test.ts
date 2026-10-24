@@ -547,8 +547,11 @@ test("a server's own error is no part of its row's sentence, and stands quoted a
   restOn(problem);
   const hint = document.querySelector('[role="tooltip"]:not([inert])');
 
-  assert.equal(words, "Could not reach Linear.");
-  assert.equal(hint?.textContent, "Could not reach Linear. Linear said: “workspace is suspended”");
+  assert.equal(words, "Linear could not be reached.");
+  assert.equal(
+    hint?.textContent,
+    "Linear could not be reached. Linear said: “workspace is suspended”",
+  );
 });
 
 test("a server's row hangs the server's card beside it, and a tool a search found hangs the card of its tool", async () => {

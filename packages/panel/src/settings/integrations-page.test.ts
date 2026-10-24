@@ -71,6 +71,8 @@ let refuseRead = false;
 let githubConnected = false;
 /** Whether the account's GitHub disconnect is refused, its refusal the window's toast rather than the page's. */
 let refuseGitHubDisconnect = false;
+/** Whether a rename is refused, its refusal the row's own line. */
+let refuseRename = false;
 /** Where a provider stands where it is not disconnected, GitHub's own aside. */
 const standing = new Map<IntegrationProvider, IntegrationStatus>();
 /** What a provider's server answered when asked for its tools, over the tools it lists. */
@@ -134,6 +136,7 @@ beforeEach(() => {
   refuseRead = false;
   githubConnected = false;
   refuseGitHubDisconnect = false;
+  refuseRename = false;
   standing.clear();
   toolReads.clear();
   sent = [];
@@ -202,6 +205,7 @@ beforeEach(() => {
     // A rename names the account anew, which the next read of the integrations says.
     [ACT_KIND.INTEGRATIONS_RENAME]: (payload) => {
       sent.push({ kind: ACT_KIND.INTEGRATIONS_RENAME, payload });
+      if (refuseRename) return Promise.resolve({ failure: INTEGRATION_CALL_FAILURE.UNANSWERED });
       const { connection, label } = payload;
       accounts = accounts.map((account) =>
         account.connection === connection ? { ...account, label } : account,
@@ -599,7 +603,7 @@ test("a server's own error stands quoted on a plain line under our sentence, nev
   );
 
   assert.deepEqual(lines, [
-    ["Could not reach Slack.", "attention"],
+    ["Slack could not be reached.", "attention"],
     ["Slack said: “App is not enabled for Slack MCP server access”", "plain"],
   ]);
 });
@@ -736,7 +740,7 @@ test("a sign-in Connect refused says so, then Connect's own line quoted under it
   ];
   await focusWindow();
   assert.deepEqual(granolaRow(page), {
-    line: "Could not connect to Granola.\nGranola's sign-in said: “client_assertion aud must be the authorization server issuer”",
+    line: "Granola could not be connected.\nGranola's sign-in said: “client_assertion aud must be the authorization server issuer”",
     buttons: ["Retry"],
   });
 
@@ -753,7 +757,7 @@ test("a sign-in the browser came back from without a grant says it could not con
   touched.set(GRANOLA, INTEGRATION_STATUS.DISCONNECTED);
   await focusWindow();
   assert.deepEqual(granolaRow(page), {
-    line: "Could not connect to Granola: the sign-in came back without access.",
+    line: "Granola could not be connected: the sign-in came back without access.",
     buttons: ["Retry"],
   });
 
@@ -1424,6 +1428,41 @@ test("an account renamed from its row's ⋯ is named in place: Escape keeps its 
   assert.ok(rowOf("Work"), "the row says the new name");
 });
 
+test("a refused rename says the account could not be renamed and what to do, in the one failure sentence", async () => {
+  const notion = INTEGRATION_PROVIDER.NOTION;
+  standing.set(notion, INTEGRATION_STATUS.CONNECTED);
+  accounts = [
+    { provider: notion, connection: "notion", label: "Acme", status: INTEGRATION_STATUS.CONNECTED },
+    {
+      provider: notion,
+      connection: "notion-2",
+      label: "Personal",
+      status: INTEGRATION_STATUS.CONNECTED,
+    },
+  ];
+  refuseRename = true;
+  const page = await mount();
+  const row =
+    [...page.querySelectorAll(".luke-settings-row")].find((each) =>
+      each.querySelector('[id$="label"]')?.textContent?.startsWith("Notion · Acme"),
+    ) ?? assert.fail("Notion has a row");
+
+  await choose(row, "Rename");
+  const field =
+    page.querySelector<HTMLInputElement>('input[aria-label="Notion · Acme account name"]') ??
+    assert.fail("no name field");
+  act(() => {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(field, "Work");
+    field.dispatchEvent(new Event("input", { bubbles: true }));
+    field.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }),
+    );
+  });
+  await settle();
+
+  assert.match(page.textContent ?? "", /Notion · Acme could not be renamed\. Try again\./u);
+});
+
 test("an added account whose first sign-in Connect refused keeps its row with the reason and Retry, which signs in a new account", async () => {
   const notion = INTEGRATION_PROVIDER.NOTION;
   standing.set(notion, INTEGRATION_STATUS.CONNECTED);
@@ -1638,7 +1677,7 @@ test("a statuses read answered after a newer one still says why the sign-in it s
   await settle();
 
   assert.deepEqual(granolaRow(page), {
-    line: "Could not connect to Granola.\nGranola's sign-in said: “access_denied”",
+    line: "Granola could not be connected.\nGranola's sign-in said: “access_denied”",
     buttons: ["Retry"],
   });
 });

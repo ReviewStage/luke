@@ -393,7 +393,7 @@ function AppWindow(): React.JSX.Element {
     } catch {
       return {
         status: ACTION_RESULT_STATUS.REJECTED,
-        reason: "Luke could not delete the account. Try again in a moment.",
+        reason: "The account could not be deleted. Try again.",
       };
     }
   }, [act]);

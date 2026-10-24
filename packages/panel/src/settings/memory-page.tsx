@@ -135,7 +135,7 @@ function MemoryRow({
             ? "Your Luke will not recall it again in this workspace."
             : "No agent will recall it in any later task in this workspace, for anyone.",
           verb: "Forget",
-          running: "Forgetting…",
+          running: "Forgetting",
           loss: CONFIRM_LOSS.IRREVERSIBLE,
         }}
       />

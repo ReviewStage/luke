@@ -415,8 +415,8 @@ test("an API key is pasted into a masked field with an eye, sent once, drawn as 
   await press(card(dialog, "API key"), "Anthropic key actions");
   const remove =
     [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find(
-      (item) => item.textContent === "Remove",
-    ) ?? assert.fail("no Remove");
+      (item) => item.textContent === "Remove key",
+    ) ?? assert.fail("no Remove key");
   act(() => remove.click());
   await settle();
   assert.equal(

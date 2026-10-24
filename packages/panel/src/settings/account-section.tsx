@@ -2,7 +2,7 @@ import type { AccountSnapshot } from "@luke/credentials/snapshot";
 import { ACCOUNT_PROVIDER, type ACCOUNT_STATUS } from "@luke/credentials/snapshot";
 import type { GitHubTokenSummary } from "@luke/features/github-token-wire";
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
-import { VERB } from "@luke/features/words";
+import { IRREVERSIBLE_WORDS, VERB } from "@luke/features/words";
 import { ACT_KIND } from "@luke/host/acts";
 import { SETTINGS_SEARCH_ROW, searchAnchorProps } from "@luke/settings/settings-anchors";
 import {
@@ -34,7 +34,7 @@ import { GitHubTokenDialog, TokenFacts } from "./github-dialog.js";
 const NO_CAPTURE = "ph-no-capture";
 
 /** What the row says where the token could not be read, so what stands is unknown. */
-const TOKEN_READ_FAILED = "Couldn't read the token.";
+const TOKEN_READ_FAILED = "The token could not be read.";
 
 /** What the toast says where signing out was refused, so the account is still signed in. */
 const SIGN_OUT_FAILED = "The account could not be signed out. Try again.";
@@ -206,7 +206,7 @@ export function AccountSection({
         gate={account.email}
         question={{
           title: `Delete the account ${account.email}?`,
-          body: "This cannot be undone.",
+          body: IRREVERSIBLE_WORDS,
           verb: "Delete account",
           running: "Deleting account",
           loss: CONFIRM_LOSS.IRREVERSIBLE,

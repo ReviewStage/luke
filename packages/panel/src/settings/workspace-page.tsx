@@ -165,7 +165,7 @@ const PHOTO_ACCEPT = [...PHOTO_TYPES].join(",");
 /** Why a picked file did not become the workspace's photo, in the words said under its row. */
 const PHOTO_REFUSAL = {
   KIND: (name: string) => `${name} isn't a PNG, JPEG, or WebP image.`,
-  UNREADABLE: (name: string) => `${name} couldn't be read.`,
+  UNREADABLE: (name: string) => `${name} could not be read.`,
   TOO_LARGE: (name: string) => `${name} is too large for a workspace photo.`,
 } as const;
 
@@ -174,7 +174,12 @@ const PHOTO_WORDS = {
   UPLOAD: "Upload photo",
   REPLACE: "Replace photo",
   REMOVE: "Remove photo",
+  /** What goes with a removed photo, which the confirm says in one line. */
+  REMOVE_BODY: "The photo is deleted, and the workspace is marked by its first letter instead.",
 } as const;
+
+/** The member's removal, which the menu item and its confirm both say. */
+const REMOVE_MEMBER = "Remove from workspace";
 
 const ACCEPTED: ActionResult = { status: ACTION_RESULT_STATUS.ACCEPTED };
 
@@ -235,7 +240,7 @@ const LEAVE_WORDS = {
     name === undefined
       ? "Your own workspace isn't affected."
       : `Your own workspace, ${name}, isn't affected.`,
-  LEFT: (name: string) => `You left ${name}.`,
+  LEFT: (name: string) => `You left ${name}`,
 } as const;
 
 /** The role changes in a member's ⋯, the owner's alone. */
@@ -538,7 +543,7 @@ function MemberRow({
   const removeActs = may.remove
     ? [
         {
-          label: "Remove from workspace",
+          label: REMOVE_MEMBER,
           icon: <UserMinusIcon />,
           danger: true,
           onSelect: remove.ask,
@@ -576,7 +581,7 @@ function MemberRow({
         question={{
           title: `Remove ${member.name} from this workspace?`,
           body: "They lose its tasks, agents, and inbox until they are invited again.",
-          verb: "Remove",
+          verb: REMOVE_MEMBER,
           running: "Removing",
           loss: CONFIRM_LOSS.AFFECTS_OTHERS,
         }}
@@ -825,7 +830,7 @@ function OwnerLeave({
           confirm={transfer}
           gate={workspace.name}
           question={{
-            title: `Transfer ownership of ${workspace.name}`,
+            title: `Transfer ownership of ${workspace.name}?`,
             body: TRANSFER_WORDS.BODY,
             verb: TRANSFER_WORDS.VERB,
             running: TRANSFER_WORDS.RUNNING,
@@ -1871,7 +1876,8 @@ function WorkspaceIdentity({ workspace }: { workspace: Workspace }): React.JSX.E
         confirm={remove}
         question={{
           title: `Remove ${workspace.name}'s photo?`,
-          verb: "Remove",
+          body: PHOTO_WORDS.REMOVE_BODY,
+          verb: PHOTO_WORDS.REMOVE,
           running: "Removing",
           loss: CONFIRM_LOSS.AFFECTS_OTHERS,
         }}

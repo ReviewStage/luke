@@ -160,14 +160,14 @@ function failedLine(name: string, failure: SignInFailure | undefined): SignInLin
   }
   if (failure?.message !== undefined) {
     return {
-      text: `Could not connect to ${name}.`,
+      text: `${name} could not be connected.`,
       problem: true,
       said: saidWords(`${name}'s sign-in`, failure.message),
     };
   }
   const why =
     failure === undefined ? "the sign-in came back without access" : "the sign-in was refused";
-  return { text: `Could not connect to ${name}: ${why}.`, problem: true };
+  return { text: `${name} could not be connected: ${why}.`, problem: true };
 }
 
 /** The line a row draws for a sign-in. */
