@@ -125,3 +125,41 @@ it.effect("a follow let go lets its stream go and opens nothing more", () =>
     assert.equal(fake.opens(), 1);
   }),
 );
+
+it.effect("a follow let go while its stream opens lets the stream go once it opens", () =>
+  Effect.gen(function* () {
+    let returned = 0;
+    const late: Stream = {
+      next: () => Promise.withResolvers<IteratorResult<string>>().promise,
+      return: () => {
+        returned += 1;
+        return Promise.resolve({ done: true, value: undefined });
+      },
+      [Symbol.asyncIterator]() {
+        return this;
+      },
+      [Symbol.asyncDispose]: () => Promise.resolve(),
+    };
+    const opening = Promise.withResolvers<Stream>();
+    let opens = 0;
+    const fiber = yield* Effect.forkChild(
+      followStream(
+        () => {
+          opens += 1;
+          return opening.promise;
+        },
+        () => undefined,
+      ),
+    );
+    yield* settle;
+    const letGo = yield* Effect.forkChild(Fiber.interrupt(fiber));
+    yield* settle;
+    opening.resolve(late);
+    yield* Fiber.join(letGo);
+    assert.equal(returned, 1);
+
+    yield* TestClock.adjust("1 minute");
+    yield* settle;
+    assert.equal(opens, 1);
+  }),
+);

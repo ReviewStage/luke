@@ -44,9 +44,12 @@ function letGo<View>(stream: OpenedStream<View>): Effect.Effect<void> {
 
 /**
  * One stream opened and read until it breaks: it succeeds where a word was
- * heard on it first, and fails unheard otherwise. Note that the stream is
- * let go in the scope's finalizer without waiting on its port, because a
- * pending read may hold its `return` until the next word lands.
+ * heard on it first, and fails unheard otherwise. Note that the open is the
+ * release's uninterruptible acquire, so a follow let go while its stream
+ * opens waits for it and then lets it go, rather than leaving the host
+ * following what nobody shows. Note too that the stream is let go in the
+ * scope's finalizer without waiting on its port, because a pending read may
+ * hold its `return` until the next word lands.
  */
 function readOnce<View>(
   open: () => Promise<OpenedStream<View>>,
