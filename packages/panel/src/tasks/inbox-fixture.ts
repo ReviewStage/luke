@@ -547,6 +547,15 @@ export function inboxTasksView(profile: string, list: TasksView): TasksView {
 
 /* ----- The window's document ----- */
 
+/**
+ * The account these profiles sign in as, which reads the fixture's tasks as
+ * its own, so its page and its items say "you"; none under any other
+ * profile, whose invented tasks are nobody's.
+ */
+export function inboxReader(profile: string): string | undefined {
+  return STAGED_PROFILES.has(profile) ? ADA.userId : undefined;
+}
+
 /** Main's inbox slice with the staged tasks laid over it, one object for each of main's. */
 const STAGED_INBOX = new WeakMap<AppStateSnapshot["inbox"], AppStateSnapshot["inbox"]>();
 

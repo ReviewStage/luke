@@ -15,8 +15,11 @@ import { useEffect, useState } from "react";
 type TasksModule = typeof import("./tasks-fixture.js");
 type InboxModule = typeof import("./inbox-fixture.js");
 
-/** The fixture a run draws: the tasks fixture's doors, the Inbox's laid over the three it stages. */
-type TasksFixture = Pick<
+/** The fixture a run draws: the tasks fixture's doors, the Inbox's laid over the three it stages, and the reader it signs in as. */
+type TasksFixture = {
+  /** The account that reads the fixture's tasks as its own, under a profile that signs one in; none under any other. */
+  readonly fixtureReader: (run: { readonly profile: string }) => string | undefined;
+} & Pick<
   TasksModule,
   | "fixtureTasksView"
   | "fixtureSidePanel"
@@ -43,6 +46,7 @@ function laidOver(tasks: TasksModule, inbox: InboxModule): TasksFixture {
       inbox.inboxActAnswer(run.profile, kind, payload) ??
       tasks.fixtureActAnswer(run, kind, payload),
     fixtureAppState: (state) => inbox.inboxAppState(tasks.fixtureAppState(state)),
+    fixtureReader: (run) => inbox.inboxReader(run.profile),
   };
 }
 

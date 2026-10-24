@@ -3485,7 +3485,8 @@ export function useTasksTab(input: {
     resting,
     shown,
     signedIn,
-    me: fixture === undefined ? input.accountId : undefined,
+    // Note that a fixture's invented tasks are nobody's, but those of a profile that signs in its own reader.
+    me: fixture === undefined ? input.accountId : tasksFixture?.fixtureReader(input.run),
     tasks: sidebar,
     listed: {
       tasks: listedSidebar,
