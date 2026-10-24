@@ -164,11 +164,18 @@ test("the chord stands while the field is empty, and the tally while a query doe
   assert.equal(tally(), "3 of 12");
 });
 
-test("the tally is said politely as a query brings it", () => {
+test("the tally is said politely as a query brings it, and taken back once the query is cleared", () => {
   render(createElement(Announcer));
   const page = render(createElement(Held, { tally: { count: 12, at: 2 } }));
   type(fieldOf(page), "deploy");
   assert.equal(document.querySelector('[role="status"]')?.textContent, "3 of 12");
+
+  type(fieldOf(page), "");
+  assert.equal(
+    document.querySelector('[role="status"]')?.textContent,
+    "",
+    "a cleared query takes its tally back",
+  );
 });
 
 test("a tally says none found, how many, or which of how many", () => {

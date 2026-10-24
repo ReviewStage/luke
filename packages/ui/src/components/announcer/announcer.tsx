@@ -22,6 +22,8 @@ import { VISUALLY_HIDDEN_ELEMENT, VisuallyHidden } from "../visually-hidden/visu
  * left as it was. A region holds only its newest words, so a burst of
  * polite ones always ends on the last, and an alert takes the polite
  * region's words with it, interrupting what was still waiting to be read.
+ * Whoever said words takes them back once they stop being true, so a
+ * region never holds a refusal a retry answered.
  *
  * The words are text drawn like any other, so session replay masks them
  * with the rest (`@luke/panel`'s `session-replay.ts`).
@@ -87,10 +89,27 @@ function handOver(): void {
   if (owner !== saying.owner) tell({ ...SILENT, owner });
 }
 
-/** Says `words` through the window's region for `level`; nothing where they are empty or no `Announcer` stands. */
-export function announce(level: Announce, words: string): void {
+/** Takes back what an announcement still says, once what it said is no longer so. */
+export type Retire = () => void;
+
+const NOTHING_TO_RETIRE: Retire = () => undefined;
+
+/** Empties `level`'s region where it still says announcement `id`, and leaves any newer words standing. */
+function retire(level: Announce, id: number): void {
+  if (saying[level]?.id !== id) return;
+  tell({ ...saying, [level]: undefined });
+}
+
+/**
+ * Says `words` through the window's region for `level`; nothing where they
+ * are empty or no `Announcer` stands. Answers how to take them back, which
+ * a caller does once they stop being true (a refusal answered by a retry,
+ * a tally whose query was cleared), so they are not left in the region for
+ * a reader to find; words said since are never taken with them.
+ */
+export function announce(level: Announce, words: string): Retire {
   const spoken = words.trim();
-  if (spoken === "" || saying.owner === undefined) return;
+  if (spoken === "" || saying.owner === undefined) return NOTHING_TO_RETIRE;
   said += 1;
   const now = { id: said, words: spoken };
   tell(
@@ -98,20 +117,25 @@ export function announce(level: Announce, words: string): void {
       ? { owner: saying.owner, polite: undefined, alert: now }
       : { ...saying, polite: now },
   );
+  return () => retire(level, now.id);
 }
 
 /**
  * Says `words` through `level`'s region each time they change, as a live
  * region would: words a component first draws are not said, and empty
- * words say nothing.
+ * words say nothing. Words it said are taken back once they change or the
+ * component leaves, since they describe what it draws.
  */
 export function useAnnounce(level: Announce, words: string): void {
   const last = useRef(words);
+  const taken = useRef<Retire>(NOTHING_TO_RETIRE);
   useEffect(() => {
     if (words === last.current) return;
     last.current = words;
-    announce(level, words);
+    taken.current();
+    taken.current = announce(level, words);
   }, [level, words]);
+  useEffect(() => () => taken.current(), []);
 }
 
 /** One announcement, as a node of its own, so the same words again are read again. */

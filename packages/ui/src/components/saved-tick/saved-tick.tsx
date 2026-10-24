@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { CheckIcon } from "../../face/glyphs.js";
 import { runningMotions } from "../../use-disclosure.js";
-import { ANNOUNCE, announce } from "../announcer/announcer.js";
+import { ANNOUNCE, announce, type Retire } from "../announcer/announcer.js";
 
 /**
  * saved-tick.tsx -- the confirmation an autosave gives once its write lands: a small Saved tick that springs in, stands a moment, and fades.
@@ -35,11 +35,18 @@ export function SavedTick({ saves }: { saves: number }): React.JSX.Element {
   }
   const tick = useRef<HTMLSpanElement | null>(null);
   const said = useRef(saves);
+  const taken = useRef<Retire>(() => undefined);
   useEffect(() => {
     if (seen === said.current) return;
     said.current = seen;
-    announce(ANNOUNCE.POLITE, SAVED);
+    taken.current();
+    taken.current = announce(ANNOUNCE.POLITE, SAVED);
   }, [seen]);
+  // Note that the words leave the region with the tick, and with the tick's owner.
+  useEffect(() => {
+    if (!standing) taken.current();
+  }, [standing]);
+  useEffect(() => () => taken.current(), []);
 
   // Note that the tick is taken once every motion it runs has ended, its
   // exit last, and one cancelled counts as ended; a tick of a later write

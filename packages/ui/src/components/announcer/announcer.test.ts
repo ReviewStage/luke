@@ -1,18 +1,20 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { act, createElement } from "react";
+import { act, createElement, Fragment } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
 import { Dialog } from "../dialog/dialog.js";
-import { ANNOUNCE, Announcer, announce } from "./announcer.js";
+import { ANNOUNCE, Announcer, announce, type Retire, useAnnounce } from "./announcer.js";
 
 /**
  * announcer.test.ts -- `announce` says polite words in the status region and
  * an alert in the alert region; the same words twice are read twice; a burst
  * ends on its last words; an alert takes the polite words waiting with it;
- * nothing is said before an announcer stands; a window holds one pair of
- * regions however many announcers mount; and a modal dialog leaves them heard.
+ * nothing is said before an announcer stands; words taken back leave their
+ * region, never taking newer words with them, and words a component says
+ * leave as they change or it goes; a window holds one pair of regions
+ * however many announcers mount; and a modal dialog leaves them heard.
  */
 
 declare global {
@@ -86,6 +88,46 @@ test("an alert interrupts the polite words still standing", () => {
   act(() => announce(ANNOUNCE.ALERT, "Couldn't save"));
   assert.equal(region("status")?.textContent, "");
   assert.equal(region("alert")?.textContent, "Couldn't save");
+});
+
+test("words taken back leave their region, and words said since stay", () => {
+  mount();
+  let retire: Retire = () => undefined;
+  act(() => {
+    retire = announce(ANNOUNCE.ALERT, "Could not copy");
+  });
+  assert.equal(region("alert")?.textContent, "Could not copy");
+  act(() => retire());
+  assert.equal(region("alert")?.textContent, "");
+
+  act(() => {
+    retire = announce(ANNOUNCE.POLITE, "Copied");
+  });
+  act(() => announce(ANNOUNCE.POLITE, "Task archived"));
+  act(() => retire());
+  assert.equal(region("status")?.textContent, "Task archived");
+});
+
+/** Says `words` politely as they change, as a component's state does. */
+function Saying({ words }: { words: string }): null {
+  useAnnounce(ANNOUNCE.POLITE, words);
+  return null;
+}
+
+test("words a component says leave the region once they are empty, or once it goes", () => {
+  const root = mount();
+  const draw = (saying: React.ReactNode) =>
+    act(() => root.render(createElement(Fragment, null, createElement(Announcer), saying)));
+  draw(createElement(Saying, { words: "" }));
+  draw(createElement(Saying, { words: "3 of 12" }));
+  assert.equal(region("status")?.textContent, "3 of 12");
+  draw(createElement(Saying, { words: "" }));
+  assert.equal(region("status")?.textContent, "");
+
+  draw(createElement(Saying, { words: "2 selected" }));
+  assert.equal(region("status")?.textContent, "2 selected");
+  draw(null);
+  assert.equal(region("status")?.textContent, "");
 });
 
 test("nothing is said before an announcer stands, and its regions arrive empty", () => {

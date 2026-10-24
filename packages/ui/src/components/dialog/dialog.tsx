@@ -1,10 +1,18 @@
 import type { DialogRoot } from "@base-ui/react/dialog";
-import { type Ref, useId, useImperativeHandle, useLayoutEffect, useRef, useState } from "react";
+import {
+  type Ref,
+  useEffect,
+  useId,
+  useImperativeHandle,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
 import type { PictureExpand } from "../../picture-expand.js";
 import { replayMotion } from "../../replay-motion.js";
 import { DialogContent, Dialog as ShadcnDialog } from "../../shadcn/dialog.js";
 import { trappedTab } from "../../trapped-tab.js";
-import { ANNOUNCE, announce } from "../announcer/announcer.js";
+import { ANNOUNCE, announce, type Retire } from "../announcer/announcer.js";
 import { TEXT_ELEMENT, TEXT_VARIANT, Text } from "../text/text.js";
 import { useHeldFocus } from "./held-focus.js";
 
@@ -273,6 +281,9 @@ export function Dialog({
   // dismissal goes through.
   const [held, setHeld] = useState(false);
   if (held && !holding) setHeld(false);
+  // What the held draft's notice said, taken back once the dialog goes, which ends what it told.
+  const heldSaid = useRef<Retire>(() => undefined);
+  useEffect(() => () => heldSaid.current(), []);
 
   useInvokerFocus();
   useHeldFocus<HTMLElement>(initialFocus ?? card, drawn && !busy);
@@ -297,7 +308,7 @@ export function Dialog({
     if (holding && !held) {
       setHeld(true);
       nudge(card.current);
-      announce(ANNOUNCE.POLITE, HELD_NOTICE);
+      heldSaid.current = announce(ANNOUNCE.POLITE, HELD_NOTICE);
       return;
     }
     onDismiss();

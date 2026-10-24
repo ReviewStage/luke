@@ -4,7 +4,7 @@ import * as Atom from "effect/reactivity/Atom";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { CheckIcon } from "../../face/glyphs.js";
 import { GLYPH } from "../../icons/glyph-registry.js";
-import { ANNOUNCE, type Announce, announce } from "../announcer/announcer.js";
+import { ANNOUNCE, type Announce, announce, type Retire } from "../announcer/announcer.js";
 import { type ButtonSize, IconButton } from "../button/button.js";
 import { CHIP_CUT, CHIP_LOOK, CHIP_SIZE, Chip, ChipName } from "../chip/chip.js";
 import { TOAST_HOLD } from "../toast/toast.js";
@@ -20,9 +20,11 @@ import { Tooltip } from "../tooltip/hint.js";
  * answers, the glyph turns to the check, the one a landed button shows, in
  * the success colour, and the window's `Announcer` says "Copied"
  * politely; a clipboard that refused turns it to the alert, in the danger
- * colour, and the announcer says so as an alert. Either stands for the toast's short hold (`TOAST_HOLD.DONE`), so a
- * copy answered on its button and one answered by a toast last the same,
- * then the copy glyph comes back. Its name stays as it was throughout, so
+ * colour, and the announcer says so as an alert. Either stands for the
+ * toast's short hold (`TOAST_HOLD.DONE`), so a copy answered on its button
+ * and one answered by a toast last the same, then the copy glyph comes back
+ * and the announcer's words are taken back with it, as they are by a later
+ * answer, so a refusal a retry answered is left nowhere for a reader. Its name stays as it was throughout, so
  * nothing beside it shifts, and only its hint says what came of the copy
  * while the answer stands.
  *
@@ -176,10 +178,13 @@ export function CopyButton(props: CopyButtonProps): React.JSX.Element {
   // Note that this is a ref, because an answer reads it as it lands, which
   // no render stands between; leaving bumps it, so a late answer lands nowhere.
   const latest = useRef(0);
+  // What the last answer said, taken back once the glyph turns back or a later answer lands.
+  const said = useRef<Retire>(() => undefined);
   useEffect(
     () => () => {
       latest.current += 1;
       hold(Atom.Interrupt);
+      said.current();
     },
     [hold],
   );
@@ -190,8 +195,14 @@ export function CopyButton(props: CopyButtonProps): React.JSX.Element {
     const answer = (state: keyof typeof COPY_ANSWER) => {
       if (pressed !== latest.current) return;
       turn(state);
-      announce(COPY_SAID[state], COPY_ANSWER[state]);
-      hold({ settle: () => turn(COPY_STATE.IDLE) });
+      said.current();
+      said.current = announce(COPY_SAID[state], COPY_ANSWER[state]);
+      hold({
+        settle: () => {
+          turn(COPY_STATE.IDLE);
+          said.current();
+        },
+      });
     };
     // Note that the act is called within the press, because a browser's
     // clipboard takes a write only while the press's activation stands, and

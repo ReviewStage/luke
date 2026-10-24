@@ -97,6 +97,7 @@ test("a press copies its words, shows the check, and turns back to the copy glyp
   expect(shownGlyph()).toBe(drawing(CheckIcon));
   act(() => vi.advanceTimersByTime(1));
   expect(shownGlyph()).toBe(drawing(GLYPH.COPY));
+  expect(said("status")).toBe("");
 });
 
 test("a refused copy shows the alert and says so, then turns back after the hold", async () => {
@@ -114,6 +115,25 @@ test("a refused copy shows the alert and says so, then turns back after the hold
   expect(said("status")).toBe("");
   act(() => vi.advanceTimersByTime(HOLD_MS));
   expect(shownGlyph()).toBe(drawing(GLYPH.COPY));
+  expect(said("alert"), "the refusal is taken back with the glyph").toBe("");
+});
+
+test("a refused copy answered by a retry that lands leaves no refusal behind", async () => {
+  let refuses = true;
+  draw(
+    createElement(CopyButton, {
+      text: "pnpm test",
+      what: "code",
+      copy: () =>
+        refuses ? Promise.reject(new Error("The clipboard refused")) : Promise.resolve(),
+    }),
+  );
+  await press();
+  expect(said("alert")).toBe("Could not copy");
+  refuses = false;
+  await press();
+  expect(said("status")).toBe("Copied");
+  expect(said("alert")).toBe("");
 });
 
 test("a copy act that throws before it answers is a refused copy too", async () => {
@@ -156,4 +176,5 @@ test("a second press starts the hold over from its own answer", async () => {
   expect(shownGlyph()).toBe(drawing(CheckIcon));
   act(() => vi.advanceTimersByTime(1));
   expect(shownGlyph()).toBe(drawing(GLYPH.COPY));
+  expect(said("status")).toBe("");
 });
