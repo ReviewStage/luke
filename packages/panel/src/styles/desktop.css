@@ -148,11 +148,14 @@ body,
 /* A narrow room shows a screen's list or the item chosen in it, one at a
    time, the other hidden (`shell-room.ts`'s `hiddenColumns`): Settings' page
    list or its page and a version history's versions or the version, each the
-   shell's one column. Chat does the same by its own width as well as a
-   narrow room's (`column-split.ts`), its rail or its place the view's one
-   column. The one shown stands alone, so no edge parts it from the other. */
+   shell's one column. Chat, Settings, a version history, and Admin do the
+   same by their own width as well as a narrow room's (`column-split.ts`),
+   their list or its item the screen's one column. The one shown stands
+   alone, so no edge parts it from the other. */
 :where(:root)[data-luke-room="narrow"] .desktop-shell:not([data-sidebar-collapsed]),
-.chat-view[data-single="true"] {
+:where(:root)[data-luke-room="narrow"]
+  :is(.desktop-settings, .desktop-version-history, .desktop-admin),
+:is(.chat-view, .desktop-settings, .desktop-version-history, .desktop-admin)[data-single="true"] {
   grid-template-columns: minmax(0, 1fr);
 }
 
@@ -160,13 +163,16 @@ body,
   .desktop-shell
   :is(.desktop-settings, .desktop-version-history, .desktop-admin)
   > [hidden],
-.chat-view[data-single="true"] > [hidden] {
+:is(.chat-view, .desktop-settings, .desktop-version-history, .desktop-admin)[data-single="true"]
+  > [hidden] {
   display: none;
 }
 
 :where(:root)[data-luke-room="narrow"]
   .desktop-shell
   :is(.settings-pages, .version-log, .admin-sections),
+:is(.desktop-settings, .desktop-version-history, .desktop-admin)[data-single="true"]
+  > :is(.settings-pages, .version-log, .admin-sections),
 .chat-view[data-single="true"] > .chat-rail {
   border-right: 0;
 }
@@ -3180,13 +3186,29 @@ ul.actor-stack {
   padding: var(--luke-space-16);
 }
 
-/* An automation's page's two screens: its setup, toolbar and all, and in a
-   narrow room its runs, which stand one at a time the whole width, the other
-   hidden (`hiddenColumns`). A wide room hides neither and draws no runs
-   screen, its runs standing in their panel beside the setup. */
+/* An automation's page's two screens: its setup, toolbar and all, and in
+   one column, a narrow room's or a page under the split's line, its runs,
+   which stand one at a time the whole width, the other hidden
+   (`hiddenColumns`). A page split hides neither and draws no runs screen,
+   its runs standing in their panel beside the setup. */
 .automation-editor-screen[hidden],
 .automation-runs-screen[hidden] {
   display: none;
+}
+
+/* The runs standing alone beside a folded sidebar stand under the title
+   bar's row, so its buttons stand over the row rather than over their way
+   back. */
+.desktop-shell[data-room="wide"][data-sidebar-collapsed="true"] .automation-runs-screen::before {
+  content: "";
+  flex: 0 0 auto;
+  height: var(--desktop-bar-height);
+}
+
+[data-luke-profile="desktop"]
+  .desktop-shell[data-room="wide"][data-sidebar-collapsed="true"]
+  .automation-runs-screen::before {
+  -webkit-app-region: drag;
 }
 
 /* The runs screen's way back, named for the automation, cut short where the
@@ -3607,10 +3629,38 @@ ul.actor-stack {
 
 /* Settings ------------------------------------------------------------------- */
 
+/* Settings, a version history, and the Admin place each take the whole
+   shell and lay their list and the item chosen in it in columns of their
+   own: the list as wide as the plans' sidebar, but never wider than the
+   share of the stage the split's line leaves its least list (300 of 860,
+   `column-split.ts`), so a sidebar dragged wide leaves the item its room. */
 .desktop-settings,
 .desktop-version-history,
 .desktop-admin {
-  display: contents;
+  display: grid;
+  min-height: 0;
+  grid-column: 1 / -1;
+  grid-template-columns: min(var(--sidebar-width), 35%) minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
+}
+
+/* An item standing alone at the window's edge stands under the title bar's
+   row, as the list beside it does, so the traffic lights stand over the
+   row rather than over its way back. */
+.desktop-shell
+  > :is(.desktop-settings, .desktop-version-history, .desktop-admin)[data-single="true"]
+  > :is(.settings-page, .version-page, .admin-page) {
+  margin-left: var(--sheet-gap);
+}
+
+[data-luke-profile="desktop"]
+  .desktop-shell[data-room="wide"]
+  > [data-single="true"]
+  > :not(nav)::before {
+  content: "";
+  flex: 0 0 auto;
+  height: calc(var(--desktop-bar-height) - var(--sheet-gap));
+  -webkit-app-region: drag;
 }
 
 /* Settings' page list, a plan's version history, and the Admin place's

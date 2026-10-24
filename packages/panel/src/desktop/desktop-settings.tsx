@@ -43,6 +43,7 @@ import { type ReactNode, useEffect, useRef, useState } from "react";
 import { useAppCommand } from "../app-commands.js";
 import { appPlatform } from "../app-platform.js";
 import { ColumnFoot } from "../call/call-card.js";
+import { useListEdge, useScreenRef, useScreenSplit } from "../column-split.js";
 import { LinkWorkspaceProvider, useCopyLinkItem } from "../copy-link-item.js";
 import type { NavigationHistory } from "../navigation-history.js";
 import { AttentionMark } from "../settings/marks.js";
@@ -73,7 +74,7 @@ import { hiddenColumns, SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import { useExperimentChoices } from "../use-app-state.js";
 import { ActionMenu } from "./action-menu.js";
 import { backPlaceOf } from "./back-place.js";
-import { HistoryButtons, useSidebarEdge } from "./desktop-sidebar.js";
+import { HistoryButtons } from "./desktop-sidebar.js";
 import { useNarrowFocus } from "./narrow-focus.js";
 import { PhoneHead } from "./phone-head.js";
 import type { SidebarCollapse } from "./sidebar-collapse.js";
@@ -248,13 +249,17 @@ function PageGroup({
  * head is the one way out a newcomer sees: it and Escape both leave as the
  * back button would.
  *
- * A narrow room shows the list or the page, one at a time, the other column
- * hidden (`hiddenColumns`): Settings opens on its list, a page chosen there,
- * by a search, or by a link stands alone the whole width, and a way back at
- * its head returns to the list. The list's edge resizes nothing then. Each
- * is headed as a phone heads every page (`phone-head.tsx`): the list by its
- * way out and Settings centred, with no Back and Forward; a page by the way
- * back to the list, the name its bar picks up centred, and its reset in a ⋯.
+ * A narrow room, or Settings narrower than the split's line by its own
+ * width (`column-split.ts`), shows the list or the page, one at a time, the
+ * other column hidden (`hiddenColumns`): Settings opens on its list, a page
+ * chosen there, by a search, or by a link stands alone the whole width, and a
+ * way back at its head returns to the list. The list's edge resizes nothing
+ * then. In a narrow room each is headed as a phone heads every page
+ * (`phone-head.tsx`): the list by its way out and Settings centred, with no
+ * Back and Forward; a page by the way back to the list, the name its bar
+ * picks up centred, and its reset in a ⋯. Wider, the list keeps the
+ * window's head, and a page standing alone the phone's, under the title
+ * bar's row.
  */
 export function DesktopSettings({
   sidebar,
@@ -297,12 +302,14 @@ export function DesktopSettings({
   const voiceNote = voicePageAttention(settings.microphone);
   const writes = useSettingsWrites();
   const rows = settingsRowsInput(settings);
+  // A page standing alone is headed as a phone's, whose ⋯ holds its reset.
+  const split = useScreenSplit(room);
   const reset = pageResetControl(
     settings.view,
     settings.settings,
     writes,
     rows,
-    room === SHELL_ROOM.NARROW ? title : undefined,
+    split.single ? title : undefined,
   );
   // Where the page's settings are kept, one quiet line under its title; none before the settings arrive or on a page keeping nothing.
   const pageKeep = rows ? settingsPageKeep(settings.view, rows) : undefined;
@@ -344,10 +351,10 @@ export function DesktopSettings({
   // The opened result stays marked only while its page is the one showing: a
   // page turned some other way, Escape or a voice request, leaves it.
   const marked = opened?.page === settings.view ? opened.id : undefined;
-  const edge = useSidebarEdge(sidebar);
-  const hidden = hiddenColumns(room, step.listed);
-  const screen = useNarrowFocus(room, step.listed);
-  const onList = room === SHELL_ROOM.NARROW ? step.onList : undefined;
+  const edge = useListEdge(sidebar);
+  const hidden = hiddenColumns(split.columns, step.listed);
+  const screen = useScreenRef(useNarrowFocus(split.columns, step.listed), split.ref);
+  const onList = split.single ? step.onList : undefined;
   // The page with a search of its own takes Command-F while it shows; a page hidden behind the list does not.
   const pageSearched =
     settings.view === SETTINGS_VIEW.INTEGRATIONS &&
@@ -368,7 +375,7 @@ export function DesktopSettings({
     );
   }
   return (
-    <div ref={screen} className="desktop-settings">
+    <div ref={screen} className="desktop-settings" data-single={String(split.single)}>
       <nav className="settings-pages" aria-label="Settings pages" hidden={hidden.list}>
         <ListHead room={room} history={history} onExit={onExit} />
         <SettingsSearchField
@@ -416,7 +423,7 @@ export function DesktopSettings({
         </LinkWorkspaceProvider>
         <ColumnFoot />
         {/* Last, so the drag strip above the way back does not take the edge's top from it. */}
-        {room === SHELL_ROOM.WIDE ? <ResizeEdge edge={edge} /> : null}
+        {split.single ? null : <ResizeEdge edge={edge} />}
       </nav>
       {settings.view === SETTINGS_VIEW.PLAN_TEMPLATE ? (
         <PlanTemplatePage

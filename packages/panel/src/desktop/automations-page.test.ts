@@ -48,7 +48,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
 import { runAppCommand } from "../app-commands.js";
 import { OpenFeedbackProvider } from "../open-feedback.js";
-import { SHELL_ROOM } from "../shell-room.js";
+import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import {
   AUTOMATIONS_PAGE,
   type AutomationsPlace,
@@ -3434,12 +3434,12 @@ test("a new automation started from the Code review suggestion is made on pull r
 });
 
 /**
- * The Automations pages on a narrow stage, a phone's, standing on `start`,
- * with the window's stylesheets laid: the page and whether its runs stand
- * alone held as the Plans tab holds them, its runs' screen shown and left
- * by their own presses.
+ * The Automations pages on a narrow stage, a phone's, or the room given,
+ * standing on `start`, with the window's stylesheets laid: the page and
+ * whether its runs stand alone held as the Plans tab holds them, its runs'
+ * screen shown and left by their own presses.
  */
-function mountNarrow(start: AutomationsPlace): HTMLElement {
+function mountNarrow(start: AutomationsPlace, room: ShellRoom = SHELL_ROOM.NARROW): HTMLElement {
   function Pages() {
     const [place, setPlace] = useState(start);
     // As the Plans tab does, a page opened on a run's link stands its runs.
@@ -3460,8 +3460,8 @@ function mountNarrow(start: AutomationsPlace): HTMLElement {
     });
     return createElement(
       "div",
-      { className: "desktop-shell", "data-room": SHELL_ROOM.NARROW },
-      createElement(AutomationsPage, { tasks, room: SHELL_ROOM.NARROW }),
+      { className: "desktop-shell", "data-room": room },
+      createElement(AutomationsPage, { tasks, room }),
     );
   }
   const container = document.createElement("div");
@@ -3497,6 +3497,38 @@ test("on a narrow stage an automation's setup stands the whole width with its ru
     assert.deepEqual(screensShown(page), ["runs"]);
     const runsScreen = page.querySelector("section[aria-label='Runs']");
     assert.equal(runsScreen?.querySelectorAll("li").length, 1, "its runs are listed");
+
+    act(() => button(SWEEP.name).click());
+    assert.deepEqual(screensShown(page), ["setup"]);
+  } finally {
+    sheets.remove();
+  }
+});
+
+test("on a wide stage an automation's page under the split's line by its own width stands its setup alone, its toolbar's Runs standing the runs alone under a way back to the setup", async () => {
+  window.localStorage.clear();
+  runs = [SWEEP_RUN];
+  const sheets = layContainersAt({});
+  vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (
+    this: HTMLElement,
+  ) {
+    return DOMRect.fromRect({ width: this.classList.contains("automations-view") ? 700 : 0 });
+  });
+  try {
+    const page = mountNarrow(
+      { kind: AUTOMATIONS_PAGE.EDIT, automationId: SWEEP.id },
+      SHELL_ROOM.WIDE,
+    );
+    await settle();
+    assert.deepEqual(screensShown(page), ["setup"]);
+    assert.equal(
+      page.querySelector(".automation-runs-pane"),
+      null,
+      "no Runs panel stands beside it",
+    );
+
+    act(() => button("Runs").click());
+    assert.deepEqual(screensShown(page), ["runs"]);
 
     act(() => button(SWEEP.name).click());
     assert.deepEqual(screensShown(page), ["setup"]);

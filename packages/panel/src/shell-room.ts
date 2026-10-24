@@ -73,7 +73,9 @@ export interface HiddenColumns {
  * Which columns of a screen that lists things beside the one chosen, as
  * Settings, a version history, and Chat do, a room hides: neither where it
  * is wide, and where it is narrow the item while the list stands, or the
- * list while the item does, so the one shown takes the whole width.
+ * list while the item does, so the one shown takes the whole width. A
+ * screen hands it the room its own width gives it (`column-split.ts`'s
+ * `useScreenSplit`), narrow under the split's line on a wide stage too.
  */
 export function hiddenColumns(room: ShellRoom, listed: boolean): HiddenColumns {
   const narrow = room === SHELL_ROOM.NARROW;

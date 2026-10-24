@@ -92,7 +92,21 @@ afterEach(() => {
   document.body.innerHTML = "";
   // After the window is gone, since a find bar clears its highlights as it goes.
   vi.unstubAllGlobals();
+  vi.restoreAllMocks();
 });
+
+/** How wide the place is laid out, which jsdom, laying out nothing, leaves to the test. */
+let placeWidth = 0;
+
+/** Lays the place out as wide as `placeWidth` says, every other box it holds left unmeasured. */
+function layPlaceAt(width: number): void {
+  placeWidth = width;
+  vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (
+    this: HTMLElement,
+  ) {
+    return DOMRect.fromRect({ width: this.classList.contains("desktop-admin") ? placeWidth : 0 });
+  });
+}
 
 /** The place on `view`, in `room`, over `history` where one is named, every view it was asked to open and every exit written down. */
 async function open(
@@ -184,6 +198,25 @@ test("a narrow room shows the list or the view, one at a time, and the view's he
   assert.ok(back, "the view's head offers the way back to the list");
   act(() => back.click());
   assert.equal(alone.listings.length, 1);
+});
+
+test("a wide room's place under the split's line by its own width shows the view alone under a way back to the list, and both once it is wide", async () => {
+  layPlaceAt(700);
+  const alone = await open({ kind: "users" }, { room: SHELL_ROOM.WIDE, listed: false });
+  assert.equal(alone.page.querySelector<HTMLElement>(".admin-sections")?.hidden, true);
+  assert.equal(alone.page.querySelector<HTMLElement>(".admin-page")?.hidden, false);
+  const back = alone.page.querySelector<HTMLButtonElement>(".admin-page header button");
+  assert.ok(back, "the view's head offers the way back to the list");
+  act(() => back.click());
+  assert.equal(alone.listings.length, 1);
+
+  act(() => root?.unmount());
+  document.body.innerHTML = "";
+
+  placeWidth = 1200;
+  const split = await open({ kind: "users" }, { room: SHELL_ROOM.WIDE, listed: false });
+  assert.equal(split.page.querySelector<HTMLElement>(".admin-sections")?.hidden, false);
+  assert.equal(split.page.querySelector<HTMLElement>(".admin-page")?.hidden, false);
 });
 
 test("on a phone the list is headed by its way out alone, named for the step Back goes to, and the place's name centred, with no Back and Forward, and the way out steps back as Back did", async () => {
