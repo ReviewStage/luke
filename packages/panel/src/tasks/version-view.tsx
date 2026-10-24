@@ -23,7 +23,7 @@ import {
 import { MARKDOWN_CLASS, markdownClass } from "@luke/ui/markdown-class";
 import { ACTION_RESULT_STATUS } from "@luke/wire";
 import { MarkdownMessage } from "../markdown-message.js";
-import { TOAST_HOLD, type ToastNotice, UNDO_LABEL } from "../toast.js";
+import { TOAST_HOLD, type ToastNotice, undoToast } from "../toast.js";
 import { DocumentScroll } from "./document-frame.js";
 import { VERSION_CHANGE, type VersionDiff, versionDiff } from "./plan-history-model.js";
 import { PlanPictures, usePlanPictureDrawer } from "./plan-pictures.js";
@@ -274,23 +274,18 @@ export function sayRestored(
     toast({ words: VERSION_RESTORED_NOTE, tone: STATUS_TONE.COMPLETE, hold: TOAST_HOLD.DONE });
     return;
   }
-  toast({
-    words: VERSION_RESTORED_NOTE,
-    tone: STATUS_TONE.COMPLETE,
-    action: {
-      label: UNDO_LABEL,
-      onPress: () => {
-        undo().then((undone) => {
-          if (undone) return;
-          toast({
-            words: RESTORE_UNDO_REFUSED_NOTE,
-            tone: STATUS_TONE.DANGER,
-            hold: TOAST_HOLD.FAILED,
-          });
+  toast(
+    undoToast(VERSION_RESTORED_NOTE, () => {
+      undo().then((undone) => {
+        if (undone) return;
+        toast({
+          words: RESTORE_UNDO_REFUSED_NOTE,
+          tone: STATUS_TONE.DANGER,
+          hold: TOAST_HOLD.FAILED,
         });
-      },
-    },
-  });
+      });
+    }),
+  );
 }
 
 /** The page a version stands on: its bar, led by `lead`, naming the version in `title` with `actions` at its end, over the version's document. */
