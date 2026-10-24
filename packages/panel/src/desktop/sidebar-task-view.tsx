@@ -452,11 +452,11 @@ function offer(offered: boolean, changes: boolean, run: () => void): (() => void
 
 /**
  * The view's choices as ⌘K offers them, each only while it would change
- * the list: Group tasks by repository, by creator in a shared workspace, or
- * in one list; Order tasks by last updated, created, or name; Show my tasks,
- * the tasks assigned to the reader whoever created them, and Show everyone's
- * tasks, which lets go of both filters by person, in a shared workspace. They
- * act as the View options menu's choices do.
+ * the list: Group tasks by repository, by assignee or creator in a shared
+ * workspace, or in one list; Order tasks by last updated, created, or name;
+ * Show my tasks, the tasks assigned to the reader whoever created them, and
+ * Show everyone's tasks, which lets go of both filters by person, in a shared
+ * workspace. They act as the View options menu's choices do.
  */
 export function useTaskViewCommands({
   offered,
@@ -478,6 +478,7 @@ export function useTaskViewCommands({
     offer(offered && allowed, grouping !== to, () => control.onGrouping(to));
   const orderBy = (to: typeof order) => offer(offered, order !== to, () => control.onOrder(to));
   useAppCommand(APP_COMMAND.GROUP_TASKS_BY_REPOSITORY, group(TASK_GROUPING.REPOSITORY));
+  useAppCommand(APP_COMMAND.GROUP_TASKS_BY_ASSIGNEE, group(TASK_GROUPING.ASSIGNEE, shared));
   useAppCommand(APP_COMMAND.GROUP_TASKS_BY_CREATOR, group(TASK_GROUPING.CREATOR, shared));
   useAppCommand(APP_COMMAND.LIST_TASKS_UNGROUPED, group(TASK_GROUPING.NONE));
   useAppCommand(APP_COMMAND.ORDER_TASKS_BY_UPDATED, orderBy(TASK_ORDER.UPDATED));
