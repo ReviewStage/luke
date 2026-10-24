@@ -57,7 +57,7 @@ function IntegrationConnected(): React.JSX.Element {
   );
   const { back, open } = useConnectReturn({
     landed: true,
-    settled: words.tone === LANDING_TONE.SETTLED,
+    settled: words.tone === LANDING_TONE.COMPLETE,
   });
   return (
     <AuthPage

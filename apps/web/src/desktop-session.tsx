@@ -121,7 +121,7 @@ function DesktopSession(): React.JSX.Element {
 
   return (
     <AuthPage
-      mark={<AuthMark tone={view.kind === VIEW.SAID ? LANDING_TONE.FAILED : undefined} />}
+      mark={<AuthMark tone={view.kind === VIEW.SAID ? LANDING_TONE.DANGER : undefined} />}
       title={view.kind === VIEW.WORKING ? "Finishing sign-in…" : view.title}
       description={view.kind === VIEW.WORKING ? undefined : view.body}
       error={view.kind === VIEW.SIGN_IN && signInChoices.failed ? SIGN_IN_UNFINISHED : undefined}

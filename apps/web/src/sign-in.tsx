@@ -42,7 +42,7 @@ function SignIn(): React.JSX.Element {
 
   return (
     <AuthPage
-      mark={<AuthMark provider={provider} tone={provider ? undefined : LANDING_TONE.FAILED} />}
+      mark={<AuthMark provider={provider} tone={provider ? undefined : LANDING_TONE.DANGER} />}
       title={provider ? "Sign in to Luke" : "Luke could not continue"}
       description={provider ? undefined : "Start sign-in again."}
       error={failed ? SIGN_IN_UNFINISHED : undefined}

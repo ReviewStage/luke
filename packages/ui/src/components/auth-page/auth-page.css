@@ -85,7 +85,7 @@
     color: var(--luke-color-surface);
   }
 
-  .luke-auth-badge[data-tone="failed"] {
+  .luke-auth-badge[data-tone="danger"] {
     background: var(--luke-color-danger-fill);
     color: var(--luke-color-on-danger);
   }

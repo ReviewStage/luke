@@ -109,7 +109,7 @@ function AuthPages(): React.JSX.Element {
           </div>
           <div className="catalog-screen catalog-screen-phone">
             <AuthPage
-              mark={<AuthMark provider={MARK_PROVIDER.GITHUB} tone={LANDING_TONE.SETTLED} />}
+              mark={<AuthMark provider={MARK_PROVIDER.GITHUB} tone={LANDING_TONE.COMPLETE} />}
               title="GitHub is connected to your workspace"
               description="Everyone in the workspace can use it. You can close this tab."
               action={OPEN_LUKE}
@@ -117,7 +117,7 @@ function AuthPages(): React.JSX.Element {
           </div>
           <div className="catalog-screen catalog-screen-phone">
             <AuthPage
-              mark={<AuthMark provider={MARK_PROVIDER.NOTION} tone={LANDING_TONE.FAILED} />}
+              mark={<AuthMark provider={MARK_PROVIDER.NOTION} tone={LANDING_TONE.DANGER} />}
               title="Luke could not reach Notion"
               description="Try again in a moment."
               action={OPEN_LUKE}
@@ -139,7 +139,7 @@ function AuthPages(): React.JSX.Element {
           </div>
           <div className="catalog-screen catalog-screen-phone">
             <AuthPage
-              mark={<AuthMark tone={LANDING_TONE.FAILED} />}
+              mark={<AuthMark tone={LANDING_TONE.DANGER} />}
               title="Luke could not continue"
               description="Start sign-in again."
             />

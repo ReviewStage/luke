@@ -223,7 +223,7 @@ export function loopbackConsent<Grant extends object>(
     ) {
       if (parameter(parameters, "state") !== state) return NOT_FOUND;
       if (claimed) {
-        return card(RESPONSE_STATUS.ALREADY_USED, LOOPBACK_PAGE_TONE.SETTLED, ALREADY_USED_CARD);
+        return card(RESPONSE_STATUS.ALREADY_USED, LOOPBACK_PAGE_TONE.COMPLETE, ALREADY_USED_CARD);
       }
       claimed = true;
       // The landing card is the last thing the sign-in shows, so the trip is
@@ -261,7 +261,7 @@ export function loopbackConsent<Grant extends object>(
       }
       return card(
         RESPONSE_STATUS.ANSWERED,
-        granted ? LOOPBACK_PAGE_TONE.SETTLED : LOOPBACK_PAGE_TONE.ATTENTION,
+        granted ? LOOPBACK_PAGE_TONE.COMPLETE : LOOPBACK_PAGE_TONE.ATTENTION,
         granted ? options.pages.granted : options.pages.notGranted,
       );
     });

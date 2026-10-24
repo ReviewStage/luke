@@ -13,10 +13,10 @@ import { INTEGRATION_LANDING_STATUS, type IntegrationLandingStatus } from "./int
  * page that offers the way back draws that as its button rather than as words.
  */
 
-/** How a flow ended: settled, or failed. A page still on its way has no tone. */
+/** How a flow ended: complete, or danger, as STATUS_TONE names them. A page still on its way has no tone. */
 export const LANDING_TONE = {
-  SETTLED: "settled",
-  FAILED: "failed",
+  COMPLETE: "complete",
+  DANGER: "danger",
 } as const;
 
 export type LandingTone = (typeof LANDING_TONE)[keyof typeof LANDING_TONE];
@@ -71,17 +71,17 @@ function connectAgain(name: string | undefined): string {
 /** Each outcome's words, for the provider `name`, or none where the page does not know it. */
 const LANDING_WORDS = {
   [LANDING_OUTCOME.CONNECTED]: (name) => ({
-    tone: LANDING_TONE.SETTLED,
+    tone: LANDING_TONE.COMPLETE,
     title: name === undefined ? "Connected to Luke" : `${name} is connected`,
     line: undefined,
   }),
   [LANDING_OUTCOME.WORKSPACE_CONNECTED]: (name) => ({
-    tone: LANDING_TONE.SETTLED,
+    tone: LANDING_TONE.COMPLETE,
     title: `${name ?? "It"} is connected to your workspace`,
     line: "Everyone in the workspace can use it.",
   }),
   [LANDING_OUTCOME.INSTALLED]: (name) => ({
-    tone: LANDING_TONE.SETTLED,
+    tone: LANDING_TONE.COMPLETE,
     title:
       name === undefined
         ? "Luke can see your repositories"
@@ -89,7 +89,7 @@ const LANDING_WORDS = {
     line: undefined,
   }),
   [LANDING_OUTCOME.UPDATED]: (name) => ({
-    tone: LANDING_TONE.SETTLED,
+    tone: LANDING_TONE.COMPLETE,
     title:
       name === undefined
         ? "Luke's repositories were updated"
@@ -97,13 +97,13 @@ const LANDING_WORDS = {
     line: undefined,
   }),
   [LANDING_OUTCOME.REQUESTED]: () => ({
-    tone: LANDING_TONE.SETTLED,
+    tone: LANDING_TONE.COMPLETE,
     // The page knows the provider, never the organization, so it cannot name one.
     title: "Your request went to your organization's owner",
     line: undefined,
   }),
   [LANDING_OUTCOME.NOT_CONFIRMED]: (name) => ({
-    tone: LANDING_TONE.FAILED,
+    tone: LANDING_TONE.DANGER,
     title:
       name === undefined
         ? "Luke could not confirm the installation"
@@ -111,17 +111,17 @@ const LANDING_WORDS = {
     line: connectAgain(name),
   }),
   [LANDING_OUTCOME.NOT_COMPLETED]: (name) => ({
-    tone: LANDING_TONE.FAILED,
+    tone: LANDING_TONE.DANGER,
     title: name === undefined ? "Nothing was connected" : `${name} was not connected`,
     line: connectAgain(name),
   }),
   [LANDING_OUTCOME.UNAVAILABLE]: (name) => ({
-    tone: LANDING_TONE.FAILED,
+    tone: LANDING_TONE.DANGER,
     title: name === undefined ? "Luke could not finish connecting" : `Luke could not reach ${name}`,
     line: "Try again in a moment.",
   }),
   [LANDING_OUTCOME.EXPIRED]: (name) => ({
-    tone: LANDING_TONE.FAILED,
+    tone: LANDING_TONE.DANGER,
     title:
       name === undefined
         ? "This connection link has expired"
@@ -129,7 +129,7 @@ const LANDING_WORDS = {
     line: connectAgain(name),
   }),
   [LANDING_OUTCOME.ALREADY_CONNECTED]: (name) => ({
-    tone: LANDING_TONE.FAILED,
+    tone: LANDING_TONE.DANGER,
     title:
       name === undefined
         ? "That account is connected to another workspace"
@@ -137,12 +137,12 @@ const LANDING_WORDS = {
     line: undefined,
   }),
   [LANDING_OUTCOME.NOTHING_TO_CONNECT]: (name) => ({
-    tone: LANDING_TONE.FAILED,
+    tone: LANDING_TONE.DANGER,
     title: name === undefined ? "Nothing to connect" : `No ${name} connection to finish`,
     line: `Connect ${name ?? "it"} from Luke.`,
   }),
   [LANDING_OUTCOME.LUKE_UNREACHABLE]: () => ({
-    tone: LANDING_TONE.FAILED,
+    tone: LANDING_TONE.DANGER,
     title: "Luke could not be reached",
     line: "Reload this page to try again.",
   }),
