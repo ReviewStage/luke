@@ -166,7 +166,7 @@ function OwnerCell({
 }
 
 /**
- * One automation's row: its clock tile, wearing where its newest run
+ * One automation's row: its tile, the glyph of what fires it wearing where its newest run
  * stands, its name over what fires it, its owner, when it runs next with a
  * failure's mark before it, and its switch, hanging the automation's card. The owner and the next run each keep a column of their
  * own, so they line up down the card whatever each row says. Everything but the switch is one press
