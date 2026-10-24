@@ -31,6 +31,7 @@ export * from "./components/comment/comment.js";
 export * from "./components/composer-frame/composer-foot.js";
 export * from "./components/composer-frame/composer-frame.js";
 export * from "./components/confirm-dialog/confirm-dialog.js";
+export * from "./components/copy-button/copy-button.js";
 export * from "./components/corner-count/corner-count.js";
 export * from "./components/data-table/data-table.js";
 export * from "./components/detail-page/detail-page.js";

@@ -28,6 +28,7 @@
 @import "./components/banner/banner.css";
 @import "./components/breadcrumbs/breadcrumbs.css";
 @import "./components/button/button.css";
+@import "./components/copy-button/copy-button.css";
 @import "./components/swatch/swatch.css";
 @import "./components/calendar/calendar.css";
 @import "./components/block-list/block-list.css";
