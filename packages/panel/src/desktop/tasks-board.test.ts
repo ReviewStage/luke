@@ -650,6 +650,39 @@ test("a right-click on a card drops the task's own menu", async () => {
   assert.deepEqual(opened, []);
 });
 
+test("the menu key drops a card's menu from its press or any control in the card, and its ⋯ is named for the task", async () => {
+  const board = await mountBoard();
+  const key = (target: HTMLElement) =>
+    act(() => {
+      target.dispatchEvent(
+        new KeyboardEvent("keydown", { key: "ContextMenu", bubbles: true, cancelable: true }),
+      );
+    });
+  const offersRename = () =>
+    [...document.querySelectorAll('[role^="menuitem"] .luke-menu-item-label')].some(
+      (label) => label.textContent === "Rename",
+    );
+  const closeMenu = () =>
+    act(() => {
+      document.activeElement?.dispatchEvent(
+        new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }),
+      );
+    });
+
+  key(cardOf(board, "t-40"));
+  assert.ok(offersRename(), "the card's press opens its menu on the menu key");
+  closeMenu();
+  key(chipOf(board, "t-40", "Priority"));
+  assert.ok(offersRename(), "a chip in the card opens the card's menu on the menu key too");
+  assert.equal(
+    board
+      .querySelector('li[data-task-id="t-40"] .tasks-board-card-more button')
+      ?.getAttribute("aria-label"),
+    "Task actions",
+  );
+  assert.deepEqual(opened, []);
+});
+
 test("a press on a card's chip carried onto another column is that chip's, and moves no card", async () => {
   const board = await mountBoard();
   layCardsOut(board);

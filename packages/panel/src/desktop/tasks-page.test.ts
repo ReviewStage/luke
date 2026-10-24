@@ -609,6 +609,31 @@ test("a row's Priority chip sends the priority picked, and its Status chip the s
   assert.deepEqual(opened, [], "a pick opens no task");
 });
 
+/** The words of the menu items standing open now. */
+function menuLabels(): (string | null)[] {
+  return [
+    ...document.querySelectorAll('[role="menu"]:not([data-leaving]) .luke-menu-item-label'),
+  ].map((label) => label.textContent);
+}
+
+/** A row's ⋯, named for what a row's thing is. */
+function rowMore(page: HTMLElement, key: string): HTMLButtonElement {
+  const more = rowOf(page, key).querySelector<HTMLButtonElement>(
+    "button[aria-label='Task actions']",
+  );
+  assert.ok(more, `the row of ${key} offers its ⋯`);
+  return more;
+}
+
+/** Presses `name` on `target` as the keyboard does. */
+function pressKey(target: HTMLElement, name: string, shiftKey = false): void {
+  act(() => {
+    target.dispatchEvent(
+      new KeyboardEvent("keydown", { key: name, shiftKey, bubbles: true, cancelable: true }),
+    );
+  });
+}
+
 test("a right-click on a row drops the task's own menu, and its ⋯ the same", async () => {
   const page = await mountPage();
   act(() => {
@@ -616,20 +641,38 @@ test("a right-click on a row drops the task's own menu, and its ⋯ the same", a
       .querySelector("button")
       ?.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true }));
   });
-  const labels = () =>
-    [...document.querySelectorAll('[role="menu"]:not([data-leaving]) .luke-menu-item-label')].map(
-      (label) => label.textContent,
-    );
-  assert.ok(labels().includes("Rename"), "the menu offers Rename");
+  assert.ok(menuLabels().includes("Rename"), "the menu offers Rename");
   closeMenus();
 
-  const more = rowOf(page, "ACME-40").querySelector<HTMLButtonElement>(
-    "button[aria-label='Actions for Billing after downgrade']",
-  );
-  assert.ok(more, "the row offers its ⋯");
-  act(() => more.click());
-  assert.ok(labels().includes("Rename"), "the ⋯ drops the same menu");
+  act(() => rowMore(page, "ACME-40").click());
+  assert.ok(menuLabels().includes("Rename"), "the ⋯ drops the same menu");
   assert.deepEqual(opened, []);
+});
+
+test("a row's ⋯ is a control a keyboard reaches, described by the row's name, and the menu key on the row or the ⋯ opens the same menu", async () => {
+  const page = await mountPage();
+  const more = rowMore(page, "ACME-40");
+  const row = rowOf(page, "ACME-40");
+  assert.ok(row.hasAttribute("data-row-menu"), "the row marks itself for its ⋯ to come in on");
+  assert.notEqual(more.tabIndex, -1, "the ⋯ takes a Tab stop");
+  act(() => more.focus());
+  assert.equal(document.activeElement, more, "the ⋯ takes the focus the keyboard gives it");
+  const name = more.getAttribute("aria-describedby");
+  assert.equal(
+    name === null ? null : document.getElementById(name)?.textContent?.startsWith("Billing"),
+    true,
+    "a reader hears which task's ⋯ it is",
+  );
+
+  const press = row.querySelector<HTMLElement>("button");
+  assert.ok(press);
+  pressKey(press, "ContextMenu");
+  assert.ok(menuLabels().includes("Rename"), "the menu key on the row's press opens it");
+  closeMenus();
+
+  pressKey(more, "F10", true);
+  assert.ok(menuLabels().includes("Rename"), "⇧F10 on its ⋯ opens it too");
+  assert.deepEqual(opened, [], "no door opens the task");
 });
 
 test("a row draws the pull requests its agents opened, each its mark and its number", async () => {

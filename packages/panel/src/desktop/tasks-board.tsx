@@ -34,7 +34,6 @@ import {
   COLLECTION_STATE,
   CollectionPage,
   type CollectionState,
-  EllipsisIcon,
   EmptyState,
   ERROR_STATE_PLACEMENT,
   ErrorState,
@@ -43,7 +42,6 @@ import {
   GlyphSlot,
   GROUP_SURFACE,
   GroupHeader,
-  IconButton,
   INSET,
   InlineEdit,
   LAYOUT_ELEMENT,
@@ -68,6 +66,7 @@ import {
   Tooltip,
   useLeaving,
   useMinute,
+  useRowMenu,
 } from "@luke/ui";
 import { actorName, creatorActor } from "@luke/ui/actor-model";
 import { TASK_ORDER, taskTime } from "@luke/ui/task-list-model";
@@ -102,8 +101,9 @@ import { useReadMarks } from "../tasks/use-task-looks.js";
 import { useTaskMaker } from "../tasks/use-task-origin.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import { useRefocusAfterEdit } from "../use-refocus-after-edit.js";
+import { rowMenu } from "./action-menu.js";
 import { groupCount } from "./sidebar-fold.js";
-import { useTaskMenu } from "./task-actions.js";
+import { useTaskMenuItems } from "./task-actions.js";
 import { taskCardOf } from "./task-card.js";
 import {
   AssigneeChip,
@@ -135,8 +135,8 @@ import { useRowDrag } from "./use-row-drag.js";
  * stands, the assignee's left off under an assignee's column, its
  * repository, what its agents are doing and the pull requests they opened
  * (`task-row-parts.tsx`), and a ⋯ dropping the task's own menu, the sidebar
- * row's, which a right-click drops too and whose Rename makes the card's
- * name its field. A press anywhere else opens the task. A card hangs no
+ * row's, which a right-click and the menu key drop too (`useRowMenu`) and
+ * whose Rename makes the card's name its field. A press anywhere else opens the task. A card hangs no
  * hover card, since it already says what its row's card would. A card dragged onto another column
  * is sent that column's status or priority, or assigned to its person, No
  * assignee's assigning it to no one, as the task page's chips send them,
@@ -261,12 +261,19 @@ function TaskBoardCard({
   const maker = useTaskMaker(task);
   const reads = useReadMarks();
   const rename = useInlineRename(task.id, tasks.onRenameTask);
-  const actions = useTaskMenu(tasks, task.id, task.name, {
+  const actions = useTaskMenuItems(tasks, task.id, task.name, {
     rename: rename.begin,
     drawn: true,
     unread: reads.markedUnread(task.id),
   });
   const press = useRef<HTMLButtonElement | null>(null);
+  const nameId = useId();
+  const menu = useRowMenu(
+    rename.editing
+      ? undefined
+      : { ...rowMenu("Task", actions.groups(), tasks.shown), footer: actions.footer },
+    { disabled: actions.deletion.busy, opener: press },
+  );
   const item = useRef<HTMLElement | null>(null);
   const drawn = (property: TaskProperty) => properties.includes(property);
   const endedByKey = useRefocusAfterEdit(rename.editing, press);
@@ -313,12 +320,12 @@ function TaskBoardCard({
       padding={CARD_PADDING.NONE}
       shadow={CARD_SHADOW.SOFT}
       hover={CARD_HOVER.LIFT}
-      lit={actions.open}
+      lit={menu.open}
       className="tasks-board-card"
       ref={item}
       data-task-id={task.id}
       {...motionKey(task.id)}
-      data-menu-open={actions.open ? "true" : undefined}
+      {...menu.props}
       data-editing={rename.editing ? "true" : undefined}
     >
       {rename.editing ? (
@@ -343,15 +350,15 @@ function TaskBoardCard({
             ref={press}
             disabled={actions.deletion.busy}
             onPress={() => {
-              actions.close(false);
+              menu.close(false);
               onOpen();
             }}
-            onKeyDown={actions.keyMenu}
-            contextMenu={actions.contextMenu(press)}
           >
             <span className="tasks-board-card-face">
               {head}
-              <span className="tasks-board-name">{task.name}</span>
+              <span id={nameId} className="tasks-board-name">
+                {task.name}
+              </span>
             </span>
           </CardPress>
         </Tooltip>
@@ -385,18 +392,10 @@ function TaskBoardCard({
         )}
         {drawn(TASK_PROPERTY.AGENTS) ? <TaskWorkMarks task={task} /> : null}
         <span className="tasks-board-card-more">
-          <Tooltip label="Task actions">
-            <IconButton
-              icon={<EllipsisIcon />}
-              label={`Actions for ${task.name}`}
-              size={BUTTON_SIZE.COMPACT}
-              disabled={actions.deletion.busy}
-              {...actions.trigger()}
-            />
-          </Tooltip>
+          {menu.more({ size: BUTTON_SIZE.COMPACT, describedBy: nameId })}
         </span>
       </div>
-      {actions.menu}
+      {menu.popup}
       {actions.dialog}
     </Card>
   );

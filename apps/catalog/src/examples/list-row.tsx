@@ -153,6 +153,10 @@ function ListRows(): React.JSX.Element {
               metaAt={LIST_ROW_META.TITLE}
               unread
               onPress={() => undefined}
+              menu={{
+                thing: "Inbox item",
+                groups: [[{ label: "Mark as read", onSelect: ignore }]],
+              }}
             />
             <ListRow
               title="Board cards wrap and hover per part"
@@ -162,6 +166,10 @@ function ListRows(): React.JSX.Element {
               meta="2h"
               metaAt={LIST_ROW_META.TITLE}
               onPress={() => undefined}
+              menu={{
+                thing: "Inbox item",
+                groups: [[{ label: "Mark as unread", onSelect: ignore }]],
+              }}
             />
           </List>
         </div>
