@@ -183,6 +183,35 @@ test("a file taken off before an Escape stays off when Edit opens the line again
   assert.deepEqual(again.ended, [{ words: "Also email the inviter.", files: [] }]);
 });
 
+test("one of two like files taken off stays off after a relaunch, and the other goes", async () => {
+  const picture = {
+    type: "file",
+    mediaType: "image/png",
+    filename: "invite-expired.png",
+    url: `data:image/png;base64,${PIXEL}`,
+  };
+  const twice: CodingAgentMessage = {
+    ...LINE,
+    parts: [{ type: "text", text: "Also email the inviter." }, picture, picture],
+  };
+  const first = await opened(twice, undefined, "Also email the inviter.");
+  const remove = first.button(`Remove invite-expired.png`);
+  assert.ok(remove !== undefined, "the file's chip offers its removal");
+  act(() => remove.click());
+  pressInComposer(first.container, "Escape");
+  first.close();
+
+  const again = await opened(twice, undefined, "Also email the inviter.", AtomRegistry.make());
+  pressInComposer(again.container, "Enter");
+  await settle();
+  assert.deepEqual(again.ended, [
+    {
+      words: "Also email the inviter.",
+      files: [{ name: "invite-expired.png", mediaType: "image/png", data: PIXEL }],
+    },
+  ]);
+});
+
 /** A line whose picture was kept apart, which the window reads through the agent's door. */
 const KEPT: CodingAgentMessage = {
   id: "line-3",

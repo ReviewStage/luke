@@ -74,16 +74,34 @@ export interface EditComposerDoors {
 
 const noop = () => undefined;
 
+/**
+ * The line's files the box does not hold, each matched to a file of the
+ * box's at most once, so where the line carries one file twice and the
+ * box holds it once, one of the two is the one it does not.
+ */
+function unheld(
+  line: readonly LineAttachment[],
+  files: readonly CodingAgentAttachment[],
+): readonly LineAttachment[] {
+  const free = [...files];
+  return line.filter((each) => {
+    const at = free.findIndex((file) => Equal.equals(file, each.attachment));
+    if (at === -1) return true;
+    free.splice(at, 1);
+    return false;
+  });
+}
+
 /** The box's files with the line's joined after them, but for those already there and those it took off. */
 function joined(
   files: readonly CodingAgentAttachment[],
   line: readonly LineAttachment[],
   dropped: readonly string[],
 ): readonly CodingAgentAttachment[] {
-  const joining = line
-    .filter((each) => !dropped.includes(each.key))
-    .filter((each) => !files.some((file) => Equal.equals(file, each.attachment)))
-    .map((each) => each.attachment);
+  const joining = unheld(
+    line.filter((each) => !dropped.includes(each.key)),
+    files,
+  ).map((each) => each.attachment);
   return [...files, ...joining];
 }
 
@@ -121,12 +139,8 @@ export function EditComposer({
   const keep = (text: string, files: readonly CodingAgentAttachment[]) => {
     const dropped = [
       ...held.current.dropped.filter((key) => !line.attachments.some((each) => each.key === key)),
-      ...line.attachments
-        .filter(
-          (each) =>
-            offered.current.has(each.key) &&
-            !files.some((file) => Equal.equals(file, each.attachment)),
-        )
+      ...unheld(line.attachments, files)
+        .filter((each) => offered.current.has(each.key))
         .map((each) => each.key),
     ];
     held.current = { text, attachments: files, dropped };
