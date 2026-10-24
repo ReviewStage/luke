@@ -115,14 +115,17 @@ import {
   useMemo,
   useRef,
   useState,
+  useSyncExternalStore,
 } from "react";
+import { createPortal } from "react-dom";
 import { useDisclosure } from "../../use-disclosure.js";
 import { useStateWithRef } from "../../use-state-with-ref.js";
 import type { ListRowHint } from "../list-row/list-row.js";
 import { useTouchHold } from "../menu/touch-hold.js";
 import type { OneLineHint } from "../one-line/clipped-line.js";
 import { Shortcut } from "../shortcut/shortcut.js";
-import { TOOLTIP_CHORD, TooltipCard, TooltipPill, TooltipWords } from "./tooltip.js";
+import { VisuallyHidden } from "../visually-hidden/visually-hidden.js";
+import { TOOLTIP_CHORD, TooltipCard, TooltipPill } from "./tooltip.js";
 
 /**
  * How long after one pill goes the next shows at once. Note that it is the
@@ -396,6 +399,62 @@ function heardOver(element: HTMLElement, label: string): Heard {
   if (name.replace(SPACING, "").includes(label.replace(SPACING, ""))) return HEARD.NAMED;
   const spoken = !element.matches(TAKES_FOCUS) && !element.matches(HOLDS_NO_WORDS);
   return spoken ? HEARD.SPOKEN : HEARD.DESCRIBED;
+}
+
+/** Hears no change, since whether this is a window never changes once drawn. */
+const noChange = () => () => {};
+
+/** The one element at the window body's end that every hint's words stand in, made with the first. */
+let wordsHome: HTMLElement | undefined;
+
+/**
+ * The element hints' words stand in, made afresh where the body it stood in
+ * was emptied. Note that words are still taken out of one so emptied, which
+ * still holds them, where taken out of the body itself they would throw.
+ */
+function wordsHomeNow(): HTMLElement {
+  if (wordsHome === undefined || !wordsHome.isConnected) {
+    wordsHome = document.createElement("div");
+    document.body.append(wordsHome);
+  }
+  return wordsHome;
+}
+
+/**
+ * A hint's words as a reader hears them, from the control's first render
+ * rather than once the hint is drawn: its description (`aria-describedby`),
+ * heard as focus lands on it, hidden; or, `spoken`, words of a control that
+ * takes no focus, which it owns (`aria-owns`) so a reader's cursor reads them
+ * at its end, drawn nowhere. Either stands at the window body's end rather
+ * than in or beside the control, so the control's own words, and the row or bar
+ * around it, are as they were. Note that a server, which has no body, draws
+ * none, and the window then draws them as it takes the page over.
+ */
+function HintWords({
+  id,
+  words,
+  spoken,
+}: {
+  id: string;
+  words: string;
+  spoken: boolean;
+}): React.ReactNode {
+  const inWindow = useSyncExternalStore(
+    noChange,
+    () => true,
+    () => false,
+  );
+  if (!inWindow) return null;
+  return createPortal(
+    spoken ? (
+      <VisuallyHidden id={id}>{words}</VisuallyHidden>
+    ) : (
+      <span id={id} hidden>
+        {words}
+      </span>
+    ),
+    wordsHomeNow(),
+  );
 }
 
 /** Hands `node` to a ref of any shape, as a control's own ref is handed beside the tooltip's. */
@@ -925,7 +984,7 @@ export function Tooltip({
   return (
     <>
       {anchor}
-      {described || spoken ? <TooltipWords id={wordsId} words={label} spoken={spoken} /> : null}
+      {described || spoken ? <HintWords id={wordsId} words={label} spoken={spoken} /> : null}
       {!pill.mounted || drawn === undefined ? null : (
         <Hint
           id={id}

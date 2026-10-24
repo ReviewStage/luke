@@ -1,16 +1,6 @@
-import {
-  type PointerEvent,
-  type ReactNode,
-  useCallback,
-  useEffect,
-  useRef,
-  useState,
-  useSyncExternalStore,
-} from "react";
-import { createPortal } from "react-dom";
+import { type PointerEvent, type ReactNode, useCallback, useEffect, useRef, useState } from "react";
 import { HoverCard, HoverCardContent } from "../../shadcn/hover-card.js";
 import { Tooltip, TooltipContent } from "../../shadcn/tooltip.js";
-import { VisuallyHidden } from "../visually-hidden/visually-hidden.js";
 
 /**
  * tooltip.tsx -- a hover hint as it is drawn: a small dark pill naming a control and its shortcut, or a light card saying more, hung beside the control it names.
@@ -50,11 +40,6 @@ import { VisuallyHidden } from "../visually-hidden/visually-hidden.js";
  * further up the tree it was drawn from than its presses do, since a list
  * that walks its rows by the arrows would otherwise take them, bar a Command
  * chord, which is still the window's.
- *
- * A reader hears a hint's words apart from either: `TooltipWords` keeps them
- * for the control from its first render, whether or not a hint is drawn,
- * since a reader's focus or cursor rests on a control without resting the
- * pointer or marking the keyboard.
  */
 
 /** What a card holds that a press chooses, and that the keyboard walks once it is entered. */
@@ -87,62 +72,6 @@ function focusInto(card: HTMLElement): () => void {
   return () => cancelAnimationFrame(frame);
 }
 
-/** Hears no change, since whether this is a window never changes once drawn. */
-const noChange = () => () => {};
-
-/** The one element at the window body's end that every hint's words stand in, made with the first. */
-let wordsHome: HTMLElement | undefined;
-
-/**
- * The element hints' words stand in, made afresh where the body it stood in
- * was emptied. Note that words are still taken out of one so emptied, which
- * still holds them, where taken out of the body itself they would throw.
- */
-function wordsHomeNow(): HTMLElement {
-  if (wordsHome === undefined || !wordsHome.isConnected) {
-    wordsHome = document.createElement("div");
-    document.body.append(wordsHome);
-  }
-  return wordsHome;
-}
-
-/**
- * A hint's words as a reader hears them, from the control's first render
- * rather than once the hint is drawn: its description (`aria-describedby`),
- * heard as focus lands on it, hidden; or, `spoken`, words of a control that
- * takes no focus, which it owns (`aria-owns`) so a reader's cursor reads them
- * at its end, drawn nowhere. Either stands at the window body's end rather
- * than in or beside the control, so the control's own words, and the row or bar
- * around it, are as they were. Note that a server, which has no body, draws
- * none, and the window then draws them as it takes the page over.
- */
-export function TooltipWords({
-  id,
-  words,
-  spoken,
-}: {
-  id: string;
-  words: string;
-  spoken: boolean;
-}): React.ReactNode {
-  const inWindow = useSyncExternalStore(
-    noChange,
-    () => true,
-    () => false,
-  );
-  if (!inWindow) return null;
-  return createPortal(
-    spoken ? (
-      <VisuallyHidden id={id}>{words}</VisuallyHidden>
-    ) : (
-      <span id={id} hidden>
-        {words}
-      </span>
-    ),
-    wordsHomeNow(),
-  );
-}
-
 /** How a hint keeps inside the window: turning to the other side where its own ends, and pushed along it where it runs past an edge. */
 const HINT_COLLISION = { side: "flip", align: "shift", fallbackAxisSide: "none" } as const;
 
@@ -152,7 +81,7 @@ export const TOOLTIP_CHORD =
 
 /** What every hint is handed: the control it stands for, and how it shows and goes. */
 interface TooltipBase {
-  /** The hint's own id, apart from its words' (`TooltipWords`), which describe its control. */
+  /** The hint's own id, apart from its words' (`hint.tsx`'s `HintWords`), which describe its control. */
   id: string;
   /** The control it hangs from. */
   anchor: HTMLElement;
