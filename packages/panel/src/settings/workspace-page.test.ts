@@ -2390,6 +2390,20 @@ test("a connected workspace's Linear reads connected for everyone and stands qui
   ]);
 });
 
+test("a workspace's Linear whose sign-in expired says so, offering an admin Reconnect and telling a member to ask", async () => {
+  const expired: Workspace = { ...CONNECTED, linear: { active: false } };
+  const admin = rowNamed((await mount(expired)).page, "Linear");
+  const member = rowNamed(
+    (await mount({ ...expired, role: WORKSPACE_ROLE.MEMBER })).page,
+    "Linear",
+  );
+
+  assert.deepEqual(rowWords(admin), ["Linear", "Sign-in expired."]);
+  assert.ok(button(admin, "Reconnect"));
+  assert.deepEqual(rowWords(member), ["Linear", "Sign-in expired. Ask an owner or admin."]);
+  assert.deepEqual(rowButtons(member), []);
+});
+
 /** The workspace Sentry installs and disconnects sent, by their payloads. */
 const sentrySent = () =>
   sent.flatMap((request) =>

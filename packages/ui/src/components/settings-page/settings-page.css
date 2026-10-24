@@ -110,7 +110,7 @@
 
   /* A container query cannot read a custom property, so the contract's
      width is written here (`tokens/profiles.css`). */
-  @container luke-settings-page (max-width: 479px) {
+  @container luke-settings-page (width < 480px) {
     .luke-settings-page-column {
       padding: var(--luke-page-inset-narrow);
     }

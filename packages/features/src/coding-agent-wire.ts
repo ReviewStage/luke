@@ -819,12 +819,16 @@ export const codingAgentMessageAnswerSchema = EffectSchema.Struct({
  * The asking member's operator in a workspace ensured (PUT
  * `/api/workspaces/{id}/operator`): the one standing, or a fresh one made
  * blank where none stands, or, with `reset`, the standing one archived, its
- * transcript kept, and a fresh one made in its place. `timeZone` is the
+ * transcript kept, and a fresh one made in its place; or, with `restore`,
+ * the member's own operator a Reset archived, by its id, brought back in
+ * place of the one standing, which is archived, as Reset's Undo asks.
+ * `timeZone` is the
  * IANA zone the client runs in, which the heartbeat an ensure that makes the
  * operator aims at it is read in; UTC where it is absent or does not read.
  */
 export const operatorEnsureRequestSchema = EffectSchema.Struct({
   reset: EffectSchema.optionalKey(EffectSchema.Boolean),
+  restore: EffectSchema.optionalKey(EffectSchema.NonEmptyString),
   timeZone: EffectSchema.optionalKey(
     EffectSchema.String.check(EffectSchema.isMaxLength(OPERATOR_TIME_ZONE_MAX_CHARS)),
   ),

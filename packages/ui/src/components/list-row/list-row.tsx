@@ -133,10 +133,11 @@ export type { ListSelection } from "../selection/list-selection.js";
  * that offers them only to the row in hand (`LIST_ROW_ACTIONS.HOVER`), in
  * its metadata's place while the pointer rests on it or it holds the
  * keyboard, the metadata stepping aside as a sidebar row's time does for
- * Pin and Archive. The row keeps their place beside its words whether they
- * show or not, as wide as the wider of them and its metadata, so coming and
- * going they move nothing and cover nothing: the title keeps its room, and
- * the press its ring.
+ * Pin and Archive. While they stand, the row makes room for them beside its
+ * words, so they cover nothing and the press keeps its ring; at rest, where
+ * there is a hover, they take none, so the title runs to the metadata and
+ * is cut anew before them as they come, and the row's ⋯ comes with them, in
+ * the metadata's place, keeping no room of its own.
  *
  * A title cut short, there or anywhere, fades out over its last few pixels
  * instead of ending in an ellipsis, as a browser's tab does; one drawn

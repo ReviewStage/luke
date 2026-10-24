@@ -413,7 +413,8 @@ export function agentsProcedures(seams: AgentsProcedureSeams) {
     /**
      * The asking member's operator in the workspace the path names, the one
      * standing or one made blank now, after the standing one is archived
-     * where the body asks for a Reset (`coder-host/operator.ts`).
+     * where the body asks for a Reset, or the member's own archived one
+     * the body names brought back in its place (`coder-host/operator.ts`).
      */
     ensureOperator: signedIn.ensureOperator.effect(function* ({ input, context }) {
       const { agent, txid, retired } = yield* ensureOperator(
@@ -422,6 +423,7 @@ export function agentsProcedures(seams: AgentsProcedureSeams) {
         input.params.id,
         {
           reset: input.body.reset === true,
+          restore: input.body.restore,
           timeZone: input.body.timeZone,
           stopStanding: (standing) =>
             stoppedForGood(seams, writer, context.request, context.userId, standing),

@@ -42,7 +42,7 @@ import {
   sql,
 } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
-import { DateTime, Effect, Option, Schema, SchemaTransformation } from "effect";
+import { Data, DateTime, Effect, Option, Schema, SchemaTransformation } from "effect";
 import { SqlClient, SqlSchema } from "effect/sql";
 import { Database, type DatabaseServices, queryBuilder, type StoreFailure } from "../core/query.js";
 import { agentPin } from "../schemas/agent-pin.js";
@@ -2431,6 +2431,121 @@ export function archiveOperatorAgent(
       }),
       ([archived]) => Option.fromNullishOr(archived?.id),
     ),
+  );
+}
+
+/** One of the member's own operators in the workspace that a Reset archived, archived still: only theirs, never a teammate's. */
+function archivedOperatorOf(
+  userId: string,
+  organizationId: string,
+  agentId: string,
+): SQL | undefined {
+  return and(
+    eq(codingAgent.id, agentId),
+    eq(codingAgent.organizationId, organizationId),
+    eq(codingAgent.userId, userId),
+    eq(codingAgent.kind, CODING_AGENT_KIND.OPERATOR),
+    isNotNull(codingAgent.archivedAt),
+    workspaceReachableBy(userId, codingAgent.organizationId),
+  );
+}
+
+const findArchivedOperator = SqlSchema.findOneOption({
+  Request: Schema.Struct({
+    userId: Schema.String,
+    organizationId: Schema.String,
+    agentId: Schema.String,
+  }),
+  Result: CodingAgentRowSchema,
+  execute: ({ userId, organizationId, agentId }) =>
+    Database.use((db) =>
+      db
+        .select(CODING_AGENT_COLUMNS)
+        .from(codingAgent)
+        .where(archivedOperatorOf(userId, organizationId, agentId))
+        .limit(1),
+    ),
+});
+
+const unarchiveOperator = SqlSchema.findOneOption({
+  Request: Schema.Struct({
+    userId: Schema.String,
+    organizationId: Schema.String,
+    agentId: Schema.String,
+  }),
+  Result: CommittedAgentRowSchema,
+  execute: ({ userId, organizationId, agentId }) =>
+    Database.use((db) =>
+      db
+        .update(codingAgent)
+        .set({ archivedAt: null, archivedBy: null })
+        .where(and(archivedOperatorOf(userId, organizationId, agentId), not(replacedOperator())))
+        .returning({ ...CODING_AGENT_COLUMNS, txid: TXID }),
+    ),
+});
+
+/** Rolls back a restore whose operator could not be brought back once the one standing was archived. */
+class OperatorNotRestored extends Data.TaggedError("OperatorNotRestored") {}
+
+/** The member's archived operator in the workspace, by its id; none for anyone else's, one standing, or a workspace they are no member of. */
+export function readArchivedOperator(
+  userId: string,
+  organizationId: string,
+  agentId: string,
+): CodingAgentStoreEffect<Option.Option<CodingAgent>> {
+  return findArchivedOperator({ userId, organizationId, agentId });
+}
+
+/** What a restore of an operator came to: the one brought back, the transaction it went in, and the one it archived in its place. */
+export interface OperatorRestored extends CodingAgentCommitted {
+  readonly retiredId: string | undefined;
+}
+
+/**
+ * The member's archived operator in the workspace brought back in place of
+ * the one standing, as an Undo of a Reset does: under the workspace's lock a
+ * Start takes, the one standing archived by the member, but only while it is
+ * `standingId`, the one its caller read and stopped, and then the one named
+ * brought back, in one transaction, so a member is never left with none or
+ * with two. Only the member's own operator, archived, in a workspace they
+ * are a member of, is brought back; none for anything else, and none where
+ * another operator than `standingId` stands, with nothing written.
+ */
+export function restoreOperatorAgent(
+  userId: string,
+  organizationId: string,
+  agentId: string,
+  standingId: string | undefined,
+): CodingAgentStoreEffect<Option.Option<OperatorRestored>> {
+  return Effect.flatMap(SqlClient.SqlClient, (client) =>
+    client
+      .withTransaction(
+        Effect.gen(function* () {
+          const locked = yield* lockReachableWorkspace({ userId, organizationId });
+          if (Option.isNone(locked)) return Option.none<OperatorRestored>();
+          // The one named is read archived before anything is written, so the one standing is never archived in favour of itself.
+          const named = yield* findArchivedOperator({ userId, organizationId, agentId });
+          if (Option.isNone(named)) return Option.none();
+          const standing = yield* findLiveOperator({ userId, organizationId });
+          if (Option.isSome(standing) && standing.value.id !== standingId) return Option.none();
+          const archivedAt = yield* DateTime.nowAsDate;
+          const retired = Option.isSome(standing)
+            ? yield* updateLiveOperatorArchived({
+                userId,
+                organizationId,
+                agentId: standing.value.id,
+                archivedAt,
+                archivedBy: { by: CODING_AGENT_ARCHIVER.MEMBER, userId },
+              })
+            : [];
+          const restored = yield* unarchiveOperator({ userId, organizationId, agentId });
+          // Note that the archive above is taken back where nothing came back, since a member must never be left with no operator.
+          if (Option.isNone(restored)) return yield* Effect.fail(new OperatorNotRestored());
+          const { txid, ...agent } = restored.value;
+          return Option.some({ agent, txid, retiredId: retired[0]?.id });
+        }),
+      )
+      .pipe(Effect.catchTag("OperatorNotRestored", () => Effect.succeed(Option.none()))),
   );
 }
 

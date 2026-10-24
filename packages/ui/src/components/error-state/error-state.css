@@ -103,7 +103,7 @@
 
   /* Narrow, Retry is drawn as a glyph alone is (`IconButton`): a control's
      square in the muted ink, its words kept for a reader and drawn nowhere. */
-  @container luke-error-state (max-width: 360px) {
+  @container luke-error-state (width < 360px) {
     .luke-error-state-retry > .luke-button {
       --luke-button-ink: var(--luke-color-text-muted);
       width: var(--luke-control-height);

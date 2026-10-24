@@ -7,8 +7,8 @@
  * it answers the same room. A narrow room floats the sidebar as a drawer and
  * holds the side panel only full screen (`desktop-shell.tsx`,
  * `use-side-panel.ts`), and shows a screen's list or the item chosen in it
- * one at a time (`hiddenColumns`); the stylesheet reads it off the shell's
- * `data-room`.
+ * one at a time (`hiddenColumns`); the stylesheet reads it off the document
+ * root's `data-luke-room` (`stage-room.ts`).
  * The desktop's window is never narrower than its least width, wider than
  * either line here, and is worked by a mouse, so the desktop is always wide.
  */

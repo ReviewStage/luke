@@ -15,6 +15,7 @@ import { IDLE_TASKS_VIEW } from "@luke/features/tasks-view";
 import type { Workspace, WorkspaceMember } from "@luke/features/workspace-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
+import { CARD_PRESS_SELECTOR } from "@luke/ui";
 import {
   COMPLETED_WINDOW,
   DEFAULT_BOARD_DISPLAY,
@@ -38,7 +39,7 @@ import {
   fakeAppBridge,
 } from "../testing/app-bridge.js";
 import { fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
-import { signedInAs } from "../testing/app-state.js";
+import { handState, signedInAs } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { restOn } from "../testing/hint-rest.js";
 import { tasksControl } from "../testing/tasks-control.js";
@@ -237,7 +238,7 @@ function columns(board: HTMLElement): [string, string[]][] {
 /** The chip on a task's card that changes its `standing`, Priority or Status. */
 function chipOf(board: HTMLElement, taskId: string, standing: string): HTMLButtonElement {
   const chip = board.querySelector<HTMLButtonElement>(
-    `li[data-task-id="${taskId}"] .tasks-board-card-foot button[aria-label^="${standing}:"]`,
+    `li[data-task-id="${taskId}"] button[aria-label^="${standing}:"]`,
   );
   assert.ok(chip, `the card of ${taskId} wears its ${standing} chip`);
   return chip;
@@ -253,7 +254,9 @@ function pick(label: string): void {
 
 /** The card of a task, its press. */
 function cardOf(board: HTMLElement, taskId: string): HTMLButtonElement {
-  const card = board.querySelector<HTMLButtonElement>(`li[data-task-id="${taskId}"] > button`);
+  const card = board.querySelector<HTMLButtonElement>(
+    `li[data-task-id="${taskId}"] ${CARD_PRESS_SELECTOR}`,
+  );
   assert.ok(card, `the card of ${taskId} stands`);
   return card;
 }
@@ -378,12 +381,6 @@ test("a press on a card opens its task", async () => {
   const board = await mountBoard();
   act(() => cardOf(board, "t-42").click());
   assert.deepEqual(opened, ["t-42"]);
-});
-
-test("a card at rest hangs its task's card", async () => {
-  const board = await mountBoard();
-  restOn(cardOf(board, "t-42"));
-  assert.ok(document.querySelector(".luke-tooltip-card [data-task-card]"));
 });
 
 test("the settled finished before the past week give way to a foot counting them, which shows them all; by priority the columns run from the most pressing, empty ones left out where asked", async () => {
@@ -798,10 +795,8 @@ test("a card draws what its agents are doing and the pull requests they opened, 
     },
   };
   const board = await mountBoard([working]);
-  const foot = board.querySelector('li[data-task-id="t-42"] .tasks-board-card-foot');
-  const marks = [...(foot?.querySelectorAll("[data-pull-request-state]") ?? [])].filter((mark) =>
-    mark.matches(".task-work-pull-request"),
-  );
+  const card = board.querySelector('li[data-task-id="t-42"]');
+  const marks = [...(card?.querySelectorAll("[data-task-work='pull-request']") ?? [])];
 
   assert.deepEqual(
     marks.map((mark) => [mark.getAttribute("data-pull-request-state"), mark.textContent]),
@@ -811,7 +806,7 @@ test("a card draws what its agents are doing and the pull requests they opened, 
     ],
   );
   assert.ok(
-    foot?.querySelector(".task-work-marks [data-state='working']"),
+    card?.querySelector("[data-task-work='agents'] [data-state='working']"),
     "an agent at work is marked",
   );
 });
@@ -849,9 +844,7 @@ test("a card draws a tag for each issue its task links, oldest first, a GitHub i
   ]);
 
   const tagsOf = (taskId: string) => [
-    ...board.querySelectorAll<HTMLAnchorElement>(
-      `li[data-task-id="${taskId}"] .tasks-board-tags a`,
-    ),
+    ...board.querySelectorAll<HTMLAnchorElement>(`li[data-task-id="${taskId}"] a[data-task-tag]`),
   ];
   const tags = tagsOf("t-42");
   assert.deepEqual(
@@ -880,6 +873,153 @@ test("a card draws a tag for each issue its task links, oldest first, a GitHub i
   act(() => tags[1]?.click());
   assert.deepEqual(pages, ["https://linear.app/acme/issue/ENG-455"]);
   assert.deepEqual(opened, [], "a press on a tag opens the issue, not the task");
+});
+
+/** A pull request of acme/web numbered `number`, standing in `state`. */
+function pullRequestLine(number: number, state: "open" | "merged" = "open") {
+  return {
+    number,
+    title: `Change ${number}`,
+    state,
+    checks: "failing" as const,
+    additions: 12,
+    deletions: 4,
+    url: `https://github.com/acme/web/pull/${number}`,
+  };
+}
+
+test("a card's pull request hangs that pull request's own card, its key, where it stands, its checks, and its size, and a press opens it; the task's card hangs nowhere", async () => {
+  const board = await mountBoard([
+    {
+      ...task(42, "Fix Safari login", TASK_STATUS.IN_PROGRESS, TASK_PRIORITY.HIGH),
+      agents: {
+        total: 1,
+        working: 0,
+        agents: [],
+        pullRequestTotal: 1,
+        pullRequests: [pullRequestLine(4120)],
+      },
+    },
+  ]);
+  const pill = board.querySelector<HTMLButtonElement>(
+    'li[data-task-id="t-42"] [data-task-work="pull-request"]',
+  );
+  assert.ok(pill, "the card wears its pull request");
+
+  restOn(pill);
+  const card = document.querySelector(".luke-tooltip-card [data-pull-request-card]");
+  assert.equal(card?.querySelector(".luke-hover-card-name")?.textContent, "Change 4120");
+  assert.match(card?.textContent ?? "", /acme\/web#4120 · Open/u);
+  assert.match(card?.textContent ?? "", /Checks failing · \+12 −4/u);
+
+  act(() => pill.click());
+  assert.deepEqual(pages, ["https://github.com/acme/web/pull/4120"]);
+  assert.deepEqual(opened, [], "a press on a pull request opens it, not the task");
+
+  restOn(cardOf(board, "t-42"));
+  assert.equal(document.querySelector("[data-task-card]"), null, "the card hangs no task card");
+});
+
+test("a card's pull requests past the first three are counted, and the count hangs every one of the rest the window holds, counting none", async () => {
+  const all = [4101, 4102, 4103, 4104, 4105, 4106].map((number) => pullRequestLine(number));
+  handState(
+    {},
+    {
+      tasks: {
+        ...IDLE_TASKS_VIEW,
+        taskAgents: [],
+        taskPullRequests: [{ taskId: "t-42", pullRequests: all }],
+      },
+    },
+  );
+  const board = await mountBoard([
+    {
+      ...task(42, "Fix Safari login", TASK_STATUS.IN_PROGRESS, TASK_PRIORITY.HIGH),
+      agents: {
+        total: 1,
+        working: 0,
+        agents: [],
+        pullRequestTotal: 6,
+        pullRequests: all.slice(0, 3),
+      },
+    },
+  ]);
+  const pills = [
+    ...board.querySelectorAll<HTMLButtonElement>('li[data-task-id="t-42"] [data-task-work]'),
+  ];
+  assert.deepEqual(
+    pills.map((pill) => pill.textContent),
+    ["#4101", "#4102", "#4103", "+3"],
+  );
+
+  restOn(pills[3] ?? assert.fail("the count stands"));
+  const card = document.querySelector(".luke-tooltip-card [data-more-pull-requests-card]");
+  assert.deepEqual(
+    [...(card?.querySelectorAll("[data-task-card-pull-request]") ?? [])].map(
+      (row) => row.querySelector(".task-card-number")?.textContent,
+    ),
+    ["#4104", "#4105", "#4106"],
+  );
+  assert.doesNotMatch(card?.textContent ?? "", /more/u, "it counts nothing it leaves out");
+});
+
+test("a card whose window holds every agent but not the pull requests still draws the pull requests its row names", async () => {
+  handState({}, { tasks: { ...IDLE_TASKS_VIEW, taskAgents: [] } });
+  const board = await mountBoard([
+    {
+      ...task(42, "Fix Safari login", TASK_STATUS.IN_PROGRESS, TASK_PRIORITY.HIGH),
+      agents: {
+        total: 1,
+        working: 0,
+        agents: [],
+        pullRequestTotal: 1,
+        pullRequests: [pullRequestLine(4120)],
+      },
+    },
+  ]);
+
+  assert.deepEqual(
+    [...board.querySelectorAll('li[data-task-id="t-42"] [data-task-work="pull-request"]')].map(
+      (pill) => pill.textContent,
+    ),
+    ["#4120"],
+  );
+});
+
+test("a card's assignee hangs the person's card", async () => {
+  const board = await mountBoard([
+    {
+      ...task(39, "Rate limit search", TASK_STATUS.TODO, TASK_PRIORITY.HIGH),
+      assignee: { userId: CHARLES, name: "Charles Pan" },
+    },
+  ]);
+
+  restOn(chipOf(board, "t-39", "Assignee"));
+  const card = document.querySelector(".luke-tooltip-card [data-actor-card]");
+  assert.match(card?.textContent ?? "", /Charles Pan/u);
+});
+
+test("a card's pull request from a service before it sent its page opens the task, so its pill is never a dead press", async () => {
+  const { url: _, ...unaddressed } = pullRequestLine(4120);
+  const board = await mountBoard([
+    {
+      ...task(42, "Fix Safari login", TASK_STATUS.IN_PROGRESS, TASK_PRIORITY.HIGH),
+      agents: {
+        total: 1,
+        working: 0,
+        agents: [],
+        pullRequestTotal: 1,
+        pullRequests: [unaddressed],
+      },
+    },
+  ]);
+  const pill = board.querySelector<HTMLButtonElement>(
+    'li[data-task-id="t-42"] [data-task-work="pull-request"]',
+  );
+
+  act(() => (pill ?? assert.fail("the card wears its pull request")).click());
+  assert.deepEqual(opened, ["t-42"]);
+  assert.deepEqual(pages, []);
 });
 
 test("a tag hangs its issue's card, read as the card is drawn: its title, key and state under GitHub's mark for it, where the workspace's GitHub answers", async () => {
@@ -929,7 +1069,7 @@ test("a tag hangs its issue's card, read as the card is drawn: its title, key an
     [],
     "a Board of tags asks its provider for none until a card is drawn",
   );
-  restOn(board.querySelector(".tasks-board-tags a") ?? assert.fail("the tag"));
+  restOn(board.querySelector("a[data-task-tag]") ?? assert.fail("the tag"));
   await act(async () => {
     for (let tick = 0; tick < 8; tick += 1) await Promise.resolve();
   });

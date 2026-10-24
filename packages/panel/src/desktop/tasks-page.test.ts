@@ -24,6 +24,7 @@ import { runAppCommand } from "../app-commands.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
 import { fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
+import { layContainersAt } from "../testing/container-width.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { restOn } from "../testing/hint-rest.js";
 import { tasksControl } from "../testing/tasks-control.js";
@@ -737,11 +738,11 @@ test("a row whose agents rest keeps the working mark's room before its pull requ
   const page = await mountPage([resting, working, ...TASKS.slice(2)]);
   const lead = (key: string) =>
     [...(rowOf(page, key).querySelector("[data-cell='agents'] .task-work-marks")?.children ?? [])]
-      .map((mark) => mark.className)
+      .map((mark) => mark.getAttribute("data-task-work"))
       .slice(0, 2);
 
-  assert.deepEqual(lead("ACME-38"), ["state-glyph", "task-work-pull-request"]);
-  assert.deepEqual(lead("ACME-39"), ["state-glyph", "task-work-pull-request"]);
+  assert.deepEqual(lead("ACME-38"), ["agents", "pull-request"]);
+  assert.deepEqual(lead("ACME-39"), ["agents", "pull-request"]);
   assert.equal(
     rowOf(page, "ACME-39").querySelector("[data-cell='agents'] [data-state='working']"),
     null,
@@ -1334,4 +1335,115 @@ test("the Filter's Repository leads each repository with its owner's picture, on
   openOptions(page, "Filter");
   choose("Repository");
   assert.deepEqual(offered(), ["https://github.com/acme.png?size=32"]);
+});
+
+test("a row hangs no card for its whole task; its pull request's mark hangs that pull request's card", async () => {
+  const withPullRequest: TaskSummary = {
+    ...task(39, "Rate limit search", TASK_STATUS.TODO, TASK_PRIORITY.HIGH),
+    agents: {
+      total: 1,
+      working: 0,
+      agents: [],
+      pullRequestTotal: 1,
+      pullRequests: [
+        {
+          number: 4222,
+          title: "Rate limit the search endpoint",
+          state: "merged",
+          checks: "passing",
+          additions: 30,
+          deletions: 5,
+          url: "https://github.com/acme/web/pull/4222",
+        },
+      ],
+    },
+  };
+  const page = await mountPage([withPullRequest, ...TASKS.slice(2)]);
+  const row = rowOf(page, "ACME-39");
+
+  restOn(row.querySelector("[data-card-press]") ?? assert.fail("the row has its press"));
+  assert.equal(document.querySelector("[data-task-card]"), null, "the row hangs no task card");
+
+  restOn(
+    row.querySelector("[data-cell='agents'] [data-task-work='pull-request']") ??
+      assert.fail("the row wears its pull request"),
+  );
+  const card = document.querySelector(".luke-tooltip-card [data-pull-request-card]");
+  assert.equal(
+    card?.querySelector(".luke-hover-card-name")?.textContent,
+    "Rate limit the search endpoint",
+  );
+  assert.match(card?.textContent ?? "", /acme\/web#4222 · Merged/u);
+});
+
+test("a row's pull request mark and its count are presses: one from a service before it sent its page opens the task, and so does the count", async () => {
+  const line = (number: number) => ({
+    number,
+    title: `Change ${number}`,
+    state: "open" as const,
+    checks: "passing" as const,
+    additions: 1,
+    deletions: 1,
+  });
+  const withPullRequests: TaskSummary = {
+    ...task(39, "Rate limit search", TASK_STATUS.TODO, TASK_PRIORITY.HIGH),
+    agents: {
+      total: 1,
+      working: 0,
+      agents: [],
+      pullRequestTotal: 2,
+      pullRequests: [line(4222), line(4223)],
+    },
+  };
+  const page = await mountPage([withPullRequests, ...TASKS.slice(2)]);
+  const part = (kind: string) =>
+    rowOf(page, "ACME-39").querySelector<HTMLButtonElement>(
+      `[data-cell='agents'] button[data-task-work='${kind}']`,
+    ) ?? assert.fail(`the row wears its ${kind}`);
+
+  act(() => part("pull-request").click());
+  act(() => part("more").click());
+  assert.deepEqual(opened, ["t-39", "t-39"]);
+});
+
+test("a row's pull request link and its count take the pointer over the row's press, while the rest of the cell lets it through to the press", async () => {
+  const laid = layContainersAt({}, { only: ["./desktop.css"] });
+  const withPullRequests: TaskSummary = {
+    ...task(39, "Rate limit search", TASK_STATUS.TODO, TASK_PRIORITY.HIGH),
+    agents: {
+      total: 1,
+      working: 0,
+      agents: [],
+      pullRequestTotal: 2,
+      pullRequests: [
+        {
+          number: 4222,
+          title: "Rate limit the search endpoint",
+          state: "open",
+          checks: "passing",
+          additions: 30,
+          deletions: 5,
+          url: "https://github.com/acme/web/pull/4222",
+        },
+        {
+          number: 4223,
+          title: "Follow-up",
+          state: "open",
+          checks: "passing",
+          additions: 1,
+          deletions: 1,
+        },
+      ],
+    },
+  };
+  const page = await mountPage([withPullRequests, ...TASKS.slice(2)]);
+  const cell = rowOf(page, "ACME-39").querySelector<HTMLElement>("[data-cell='agents']");
+  const link = cell?.querySelector<HTMLElement>("a[data-task-work='pull-request']");
+  const count = cell?.querySelector<HTMLElement>("button[data-task-work='more']");
+
+  assert.ok(link, "a pull request with a page is a link to it");
+  assert.equal(getComputedStyle(link).pointerEvents, "auto");
+  assert.equal(getComputedStyle(count ?? assert.fail("the count stands")).pointerEvents, "auto");
+  assert.equal(getComputedStyle(cell ?? assert.fail("the cell stands")).pointerEvents, "none");
+  laid.remove();
 });

@@ -22,7 +22,7 @@ import { cn } from "../cn.js";
  */
 
 const buttonVariants = cva(
-  "group/button relative flex-none items-center justify-center max-w-full m-0 border border-solid border-button-edge font-ui no-underline whitespace-nowrap transition-[background-color,color,filter,opacity] duration-(--luke-duration-hover) ease-motion-exit",
+  "group/button relative flex-none items-center justify-center max-w-full m-0 border border-solid border-button-edge font-ui no-underline whitespace-nowrap transition-[--luke-button-fill,background-color,color,filter,opacity] duration-(--luke-duration-hover) ease-motion-exit",
   {
     variants: {
       size: {

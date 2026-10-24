@@ -10,11 +10,11 @@ import {
   inboxList,
   inboxPlaces,
   listedItems,
-  NO_PLACES,
 } from "./inbox-model.js";
+import { type HeldOrder, useHeldOrder } from "./use-held-order.js";
 
 /**
- * use-held-inbox-list.ts -- an Inbox's rows and its steps, held still while
+ * use-held-inbox-list.ts -- an Inbox's rows and its steps, held still (`use-held-order.ts`) while
  * the list is shown, so the row the reader is on stays where it is.
  *
  * The chosen item's row stays while it is chosen, once the list drew it,
@@ -34,14 +34,12 @@ import {
 /** What an Inbox lists and how, bar the item chosen and the places held, which this module adds. */
 type InboxFilter = Omit<Parameters<typeof inboxList>[1], "chosen" | "places">;
 
-/** What the list last drawn held: the filter it was drawn under, the chosen item its rows kept, and each row's place. */
-interface Held {
-  readonly filter: InboxFilter | undefined;
+/** What an Inbox draws: its rows, its steps, and the chosen item its rows kept. */
+interface Drawn {
+  readonly list: InboxListView;
+  readonly steps: InboxListView;
   readonly kept: string | undefined;
-  readonly places: ReadonlyMap<string, InboxPlace>;
 }
-
-const NOTHING_HELD: Held = { filter: undefined, kept: undefined, places: NO_PLACES };
 
 /** Whether two Whose choices name the same people. */
 function sameWhose(a: InboxWhose = EVERYONES, b: InboxWhose = EVERYONES): boolean {
@@ -85,27 +83,29 @@ export function useHeldInboxList(
   chosen: string | undefined,
   shown: boolean,
 ): { readonly list: InboxListView; readonly steps: InboxListView } {
-  const held = useRef<Held>(NOTHING_HELD);
-  const last = held.current;
-  const places = shown && sameOrder(last.filter, filter) ? last.places : NO_PLACES;
-  const matching = inboxList(groups, { ...filter, chosen: undefined, places });
-  const listed = listedItems(matching).some(({ item }) => item.id === chosen);
-  // Note that the chosen row is kept only once the list drew it, so one chosen from outside the scope never gets a row.
-  const kept =
-    chosen !== undefined &&
-    (listed || (shown && last.kept === chosen && sameScope(last.filter, filter)))
-      ? chosen
-      : undefined;
-  const list =
-    kept === undefined || listed
-      ? matching
-      : inboxList(groups, { ...filter, chosen: kept, places });
-  const steps = inboxList(groups, { ...filter, chosen, places });
-  // Note that what was drawn is held once it is on screen, so a render React drops holds nothing.
+  const keptLast = useRef<string | undefined>(undefined);
+  const order: HeldOrder<InboxFilter, InboxPlace, Drawn> = {
+    sameOrder,
+    draw: (places, was) => {
+      const matching = inboxList(groups, { ...filter, chosen: undefined, places });
+      const listed = listedItems(matching).some(({ item }) => item.id === chosen);
+      // Note that the chosen row is kept only once the list drew it, so one chosen from outside the scope never gets a row.
+      const kept =
+        chosen !== undefined && (listed || (keptLast.current === chosen && sameScope(was, filter)))
+          ? chosen
+          : undefined;
+      const list =
+        kept === undefined || listed
+          ? matching
+          : inboxList(groups, { ...filter, chosen: kept, places });
+      const steps = inboxList(groups, { ...filter, chosen, places });
+      return { list, steps, kept };
+    },
+    placesOf: ({ list }, held) => inboxPlaces(list, held),
+  };
+  const { list, steps, kept } = useHeldOrder(filter, shown, order);
   useLayoutEffect(() => {
-    held.current = shown
-      ? { filter, kept, places: inboxPlaces(list, places) }
-      : { filter, kept: undefined, places: NO_PLACES };
+    keptLast.current = shown ? kept : undefined;
   });
   return { list, steps };
 }

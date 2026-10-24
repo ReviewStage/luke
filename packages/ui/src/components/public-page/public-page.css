@@ -22,7 +22,8 @@
 
   /* Under 520px of room the page opens and closes nearer its words and
      sets its sections closer, as the landing does on a phone. */
-  @container (max-width: 519px) {
+  /* off-scale: 520px, a phone's landing */
+  @container (width < 520px) {
     .luke-public-page > * {
       --luke-public-page-start: var(--luke-space-32);
       --luke-public-page-end: var(--luke-space-40);
@@ -109,7 +110,8 @@
 
   /* At 2.25rem the hero needs about 490px, so it steps down before the
      column can squeeze it. */
-  @container (max-width: 575px) {
+  /* off-scale: 576px, where the hero's 2.25rem title needs about 490px and steps down before the column squeezes it */
+  @container (width < 576px) {
     .luke-public-page-title[data-style="hero"] {
       font-size: var(--luke-display-hero-size-narrow, var(--luke-type-title-size));
     }

@@ -3,7 +3,7 @@
  *
  * Which place a pane stands in, beside its tab or over it, is the
  * stylesheet's to say, by the panel's width (`@container side-panel`) and
- * the shell's room (`data-room`): it draws the toggle for the place the pane
+ * the shell's room (`data-luke-room` on the document's root): it draws the toggle for the place the pane
  * can stand and hides the other. The view reads that answer back off its
  * toggle, so the width that moves the pane and the width that moves the
  * toggle are one.

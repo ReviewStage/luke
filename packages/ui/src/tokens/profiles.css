@@ -163,11 +163,15 @@
   --luke-tooltip-card-width: 280px;
 
   /* A hover card's name is a label and the line under it a caption; what it
-     keeps off the type scale is the code in its note, its own glyph, and a
-     count's line under its rows. */
+     keeps off the type scale is the code in its note, its own glyph, and the
+     most a list under a rule stands before it scrolls within the card (some
+     seven rows, less in a short window). */
   --luke-hover-card-code-size: 11px;
   --luke-hover-card-glyph: 14px;
-  --luke-hover-card-more-height: 22px;
+  --luke-hover-card-list-height: min(
+    calc(7.5 * var(--luke-menu-row-height)),
+    calc(var(--luke-stage-height) * 0.4)
+  );
 
   --luke-menu-row-height: 32px;
   --luke-menu-row-radius: var(--luke-radius-8);
@@ -363,11 +367,15 @@
   --luke-tooltip-card-width: 280px;
 
   /* A hover card's name is a label and the line under it a caption; what it
-     keeps off the type scale is the code in its note, its own glyph, and a
-     count's line under its rows. */
+     keeps off the type scale is the code in its note, its own glyph, and the
+     most a list under a rule stands before it scrolls within the card (some
+     seven rows, less in a short window). */
   --luke-hover-card-code-size: 11px;
   --luke-hover-card-glyph: 14px;
-  --luke-hover-card-more-height: 22px;
+  --luke-hover-card-list-height: min(
+    calc(7.5 * var(--luke-menu-row-height)),
+    calc(var(--luke-stage-height) * 0.4)
+  );
 
   /* A web menu's rows are its controls' height, a finger's target. */
   --luke-menu-row-height: 44px;

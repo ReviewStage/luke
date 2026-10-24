@@ -5,10 +5,10 @@ import {
 } from "@luke/features/mac-terminal-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import { BUTTON_SIZE, BUTTON_VARIANT, Button, FILL_FLOW, Fill, PaneBar } from "@luke/ui";
+import { GLYPH, PlayIcon } from "@luke/ui/icons";
 import type { MacTerminalStripTab } from "@luke/ui/tab-strip-model";
 import { Option, Schema } from "effect";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
-import { PlayIcon, SquareIcon, TerminalIcon } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { toastActFailure, useAct } from "../act.js";
 import { TERMINAL_LOAD_FAILED, useSideBundles } from "../bundle-loader.js";
@@ -228,7 +228,7 @@ export function MacTerminalTab({ tab }: { tab: MacTerminalStripTab }): React.JSX
         actions={
           <>
             <Button
-              icon={<TerminalIcon aria-hidden />}
+              icon={<GLYPH.TERMINAL />}
               label="Open in Terminal"
               size={BUTTON_SIZE.COMPACT}
               disabled={branch === undefined || standing.kind === "starting"}
@@ -238,7 +238,7 @@ export function MacTerminalTab({ tab }: { tab: MacTerminalStripTab }): React.JSX
             </Button>
             {running ? (
               <Button
-                icon={<SquareIcon aria-hidden />}
+                icon={<GLYPH.STOP />}
                 variant={BUTTON_VARIANT.DANGER_OUTLINE}
                 size={BUTTON_SIZE.COMPACT}
                 disabled={standing.kind === "stopping"}

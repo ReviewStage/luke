@@ -215,6 +215,12 @@ const TAG_INTEGRATION = {
   [TASK_ISSUE_PROVIDER.LINEAR]: INTEGRATION_PROVIDER.LINEAR,
 } as const satisfies Record<TaskIssueTag["provider"], string>;
 
+/** What a tag's hint calls who holds its issue, before its key. */
+const TAG_WORDS = {
+  [TASK_ISSUE_PROVIDER.GITHUB]: "GitHub issue",
+  [TASK_ISSUE_PROVIDER.LINEAR]: "Linear issue",
+} as const satisfies Record<TaskIssueTag["provider"], string>;
+
 /** A tag's card: the issue's title, key and state as its provider answers them once the card is drawn, and its key alone until then or where it answers nothing. */
 function IssueTagCard({
   tag,
@@ -267,13 +273,13 @@ export function TaskIssueTagChip({
   const openLink = useOpenLink();
   return (
     <Tooltip
-      label={`${tag.key} · ${LINKS_WORDS[tag.relation]}`}
+      label={`${TAG_WORDS[tag.provider]} ${tag.key}`}
       card={<IssueTagCard tag={tag} taskId={taskId} repository={repository} />}
-      overRow
     >
       <Chip
         look={CHIP_LOOK.PILL}
         size={CHIP_SIZE.COMPACT}
+        data-task-tag=""
         data-provider={tag.provider}
         href={tag.url}
         onClick={linkPressOf(openLink, tag.url)}

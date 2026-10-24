@@ -1,4 +1,6 @@
 import { useAtom, useAtomValue } from "@effect/atom-react";
+import { RegistryContext } from "@effect/atom-react/RegistryContext";
+import { ACCOUNT_STATUS } from "@luke/credentials/snapshot";
 import {
   signInBegun as begunSignIn,
   SIGN_IN,
@@ -21,17 +23,21 @@ import {
 import { ACT_KIND } from "@luke/host/acts";
 import { Clock, Context, Duration, Effect } from "effect";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
-import { useCallback, useEffect, useRef, useState } from "react";
+import * as Atom from "effect/reactivity/Atom";
+import { useCallback, useContext, useEffect, useState } from "react";
 import { useAct } from "./act.js";
 import { rendererRuntime } from "./renderer-runtime.js";
+import { APP_SLICE, useAppSlice } from "./use-app-state.js";
 
 /**
  * integration-statuses.ts -- where every one of the account's integrations stands, as every surface that draws one reads it.
  *
- * Read once for all of them, when first drawn and again whenever the window
- * is focused, which is how the developer comes back from a sign-in in the
- * browser. Settings › Integrations and the composer's list of servers draw
- * from it alike, so the two never disagree about a provider, and so does a
+ * Read once for all of them, into one book the window keeps for the account
+ * signed in to it, when a surface is drawn and again whenever the window is
+ * focused, which is how the developer comes back from a sign-in in the
+ * browser. Settings › Integrations, the composer's list of servers, a
+ * server's card, and every other surface read that one book rather than a
+ * copy of their own, so they never disagree about a provider, and so does a
  * sign-in the window waits on (`integration-sign-in.ts`): begun here, ended
  * by the reads, given up on by any read past its own deadline, which the
  * window's focus shortens to a grace and one more read is armed for, and
@@ -178,13 +184,87 @@ function nextDeadline(signIns: SignIns): number | undefined {
   return deadlines.length === 0 ? undefined : Math.min(...deadlines);
 }
 
+/** What every surface shares of one account's integrations: what the reads left, and the sign-ins the window waits on. */
+interface Book {
+  readonly statuses: Standing | undefined;
+  readonly accounts: readonly IntegrationAccount[];
+  readonly addable: readonly IntegrationProvider[];
+  readonly signIns: SignIns;
+  /** Whether the last read answered nothing a surface can draw. */
+  readonly readFailed: boolean;
+}
+
+const NO_BOOK: Book = {
+  statuses: undefined,
+  accounts: NO_ACCOUNTS,
+  addable: [],
+  signIns: NO_SIGN_INS,
+  readFailed: false,
+};
+
+/** The read on its way, by the mark it was sent at, and its answer landing. */
+interface Flight {
+  readonly mark: number;
+  readonly landed: Promise<void>;
+}
+
+/**
+ * What the book's reads keep beside it, which no surface draws: the marks,
+ * the reads sent, the read on its way, and the last focus read for.
+ * Note that it is a mutable record, because a read's answer compares its own
+ * mark with the sign-ins' as it lands, which no render stands between.
+ */
+interface Ledger {
+  marks: number;
+  reads: number;
+  flight: Flight | undefined;
+  focus: Event | undefined;
+}
+
+/**
+ * One account's book and ledger, each made afresh when a surface first
+ * draws it after none did, and let go with the last surface that drew it,
+ * so a window with no integration on screen keeps nothing and its next
+ * surface reads again. Note that neither lingers once let go, because the
+ * next account's surfaces, or a test's, must never meet what the last left.
+ */
+interface Shared {
+  readonly book: Atom.Writable<Book>;
+  readonly ledger: Atom.Atom<Ledger>;
+}
+
+/** Each signed-in account's book apart, so a sign-out leaves nothing of one account's integrations to the next. */
+const sharedOf = Atom.family(
+  (_owner: string | null): Shared => ({
+    book: Atom.make(NO_BOOK).pipe(Atom.setIdleTTL(0)),
+    ledger: Atom.make(
+      (): Ledger => ({ marks: 0, reads: 0, flight: undefined, focus: undefined }),
+    ).pipe(Atom.setIdleTTL(0)),
+  }),
+);
+
+/** The account signed in to the window, by its id or, where it holds none, its address; none while signed out. */
+const ownerAtom: Atom.Atom<string | null> = Atom.map(APP_SLICE.ACCOUNT, (account) =>
+  account?.status === ACCOUNT_STATUS.SIGNED_IN ? (account.id ?? account.email) : null,
+);
+
+/** The book with its sign-ins as `change` leaves them. */
+function withSignIns(book: Book, change: (signIns: SignIns) => SignIns): Book {
+  return { ...book, signIns: change(book.signIns) };
+}
+
+/**
+ * Where every integration stands, from the one book every surface of the
+ * window shares for the account signed in to it: a read, a sign-in begun,
+ * or a Cancel on one surface is what every other draws at once.
+ */
 export function useIntegrationStatuses(): IntegrationStatuses {
   const { act } = useAct();
-  const [statuses, setStatuses] = useState<Standing | undefined>(undefined);
-  const [accounts, setAccounts] = useState(NO_ACCOUNTS);
-  const [addable, setAddable] = useState<readonly IntegrationProvider[]>([]);
-  const [signIns, setSignIns] = useState(NO_SIGN_INS);
-  const [readFailed, setReadFailed] = useState(false);
+  const registry = useContext(RegistryContext);
+  const owner = useAppSlice(ownerAtom);
+  const shared = sharedOf(owner);
+  const { statuses, accounts, addable, signIns, readFailed } = useAtomValue(shared.book);
+  const ledger = useAtomValue(shared.ledger);
   const [waitAtom] = useState(signInWaitAtom);
   const [waited, arm] = useAtom(waitAtom);
   const services = useAtomValue(rendererRuntime);
@@ -193,92 +273,129 @@ export function useIntegrationStatuses(): IntegrationStatuses {
     () => Context.get(AsyncResult.getOrThrow(services), Clock.Clock).currentTimeMillisUnsafe(),
     [services],
   );
-  // Note that the marks are a ref, because a read's answer compares its own
-  // mark with the sign-ins' as it lands, which no render stands between.
-  const marks = useRef(0);
+  const change = useCallback(
+    (next: (book: Book) => Book) => registry.update(shared.book, next),
+    [registry, shared],
+  );
 
   // Note that only the newest read sent is applied, because reads overlap, and one answered after it is from before it; but for the sign-in failures it alone was told.
-  const reads = useRef(0);
-
-  const read = useCallback(() => {
-    marks.current += 1;
-    const mark = marks.current;
-    reads.current += 1;
-    const sentAs = reads.current;
-    setReadFailed(false);
-    return act(ACT_KIND.INTEGRATIONS_STATUS).then(
-      (answer) => {
-        if (sentAs !== reads.current) {
-          const failures = "failure" in answer ? [] : (answer.signInFailures ?? []);
-          if (failures.length > 0) {
-            const at = now();
-            setSignIns((standing) => failuresAfterRead(standing, failures, { mark, at }));
+  const send = useCallback((): Promise<void> => {
+    ledger.marks += 1;
+    const mark = ledger.marks;
+    ledger.reads += 1;
+    const sentAs = ledger.reads;
+    change((book) => (book.readFailed ? { ...book, readFailed: false } : book));
+    const landed = act(ACT_KIND.INTEGRATIONS_STATUS)
+      .then(
+        (answer) => {
+          if (sentAs !== ledger.reads) {
+            const failures = "failure" in answer ? [] : (answer.signInFailures ?? []);
+            if (failures.length > 0) {
+              const at = now();
+              change((book) =>
+                withSignIns(book, (standing) =>
+                  failuresAfterRead(standing, failures, { mark, at }),
+                ),
+              );
+            }
+            return;
           }
-          return;
-        }
-        if ("failure" in answer) {
-          setReadFailed(true);
-          return;
-        }
-        const at = now();
-        const read = standingOfRead(answer.integrations, answer.accounts ?? []);
-        setStatuses(read);
-        setAccounts(answer.accounts ?? NO_ACCOUNTS);
-        setAddable(answer.addable ?? []);
-        setSignIns((standing) =>
-          signInsAfterRead(standing, read, answer.signInFailures ?? [], { mark, at }),
-        );
-      },
-      () => {
-        if (sentAs === reads.current) setReadFailed(true);
-      },
-    );
-  }, [act, now]);
+          if ("failure" in answer) {
+            change((book) => ({ ...book, readFailed: true }));
+            return;
+          }
+          const at = now();
+          const read = standingOfRead(answer.integrations, answer.accounts ?? []);
+          change((book) => ({
+            statuses: read,
+            accounts: answer.accounts ?? NO_ACCOUNTS,
+            addable: answer.addable ?? [],
+            signIns: signInsAfterRead(book.signIns, read, answer.signInFailures ?? [], {
+              mark,
+              at,
+            }),
+            readFailed: false,
+          }));
+        },
+        () => {
+          if (sentAs === ledger.reads) change((book) => ({ ...book, readFailed: true }));
+        },
+      )
+      .finally(() => {
+        if (ledger.flight?.mark === mark) ledger.flight = undefined;
+      });
+    ledger.flight = { mark, landed };
+    return landed;
+  }, [act, change, ledger, now]);
+
+  /**
+   * A read that any read already on its way answers, unless a mark was taken
+   * since it was sent: what a surface drawn, or a deadline passed, asks of
+   * every surface at once, which one read answers for all of them.
+   */
+  const join = useCallback((): Promise<void> => {
+    const flight = ledger.flight;
+    return flight !== undefined && flight.mark === ledger.marks ? flight.landed : send();
+  }, [ledger, send]);
 
   useEffect(() => {
-    void read();
-  }, [read]);
+    void join();
+  }, [join]);
 
   // A deadline passed: one more read, which gives up on a sign-in still pending past it.
   useEffect(() => {
-    if (AsyncResult.isSuccess(waited) && !waited.waiting) void read();
-  }, [waited, read]);
+    if (AsyncResult.isSuccess(waited) && !waited.waiting) void join();
+  }, [waited, join]);
 
   const deadline = nextDeadline(signIns);
   useEffect(() => {
     if (deadline !== undefined) arm(deadline);
   }, [deadline, arm]);
 
-  // The focus is the developer back from the browser, where a sign-in settles; one still pending is given a grace to land.
+  // The focus is the developer back from the browser, where a sign-in settles; one still pending is given a grace to land. Note that every surface listens, so the focus is heard while any one stands, and the first to hear an event reads for all of them, so one focus is one read.
   useEffect(() => {
-    const focused = () => {
+    const focused = (event: Event) => {
+      if (ledger.focus === event) return;
+      ledger.focus = event;
       const at = now();
-      setSignIns((standing) =>
-        standing.size === 0
-          ? standing
-          : new Map([...standing].map(([server, signIn]) => [server, signInGraced(signIn, at)])),
+      change((book) =>
+        book.signIns.size === 0
+          ? book
+          : withSignIns(
+              book,
+              (standing) =>
+                new Map(
+                  [...standing].map(([server, signIn]) => [server, signInGraced(signIn, at)]),
+                ),
+            ),
       );
-      void read();
+      void send();
     };
     window.addEventListener("focus", focused);
     return () => window.removeEventListener("focus", focused);
-  }, [read, now]);
+  }, [ledger, send, now, change]);
 
-  const settle = useCallback((server: string, status: IntegrationStatus) => {
-    setStatuses((standing) => new Map(standing).set(server, status));
-  }, []);
+  const settle = useCallback(
+    (server: string, status: IntegrationStatus) => {
+      change((book) => ({ ...book, statuses: new Map(book.statuses).set(server, status) }));
+    },
+    [change],
+  );
 
   // Note that a connection that stands is not waited on, because the service
   // answers it connected throughout, so no read could say how the sign-in ended.
   const signInBegun = useCallback(
     (server: string) => {
-      if (statuses?.get(server) === INTEGRATION_STATUS.CONNECTED) return;
-      marks.current += 1;
-      const signIn = begunSignIn(marks.current, now(), !byGitHub(server));
-      setStatuses((standing) => new Map(standing).set(server, INTEGRATION_STATUS.PENDING));
-      setSignIns((standing) => new Map(standing).set(server, signIn));
+      if (registry.get(shared.book).statuses?.get(server) === INTEGRATION_STATUS.CONNECTED) return;
+      ledger.marks += 1;
+      const signIn = begunSignIn(ledger.marks, now(), !byGitHub(server));
+      change((book) => ({
+        ...book,
+        statuses: new Map(book.statuses).set(server, INTEGRATION_STATUS.PENDING),
+        signIns: new Map(book.signIns).set(server, signIn),
+      }));
     },
-    [statuses, now],
+    [registry, shared, ledger, now, change],
   );
 
   // Note that GitHub's connect is ended here alone, because the service holds no sign-in of it.
@@ -296,25 +413,30 @@ export function useIntegrationStatuses(): IntegrationStatuses {
       settle(server, answer.status);
       // A first sign-in cancelled is gone from the service, so the account it was to be leaves the list, and Try again adds one.
       if (answer.status === INTEGRATION_STATUS.DISCONNECTED) {
-        setAccounts((listed) => listed.filter((account) => account.connection !== server));
+        change((book) => ({
+          ...book,
+          accounts: book.accounts.filter((account) => account.connection !== server),
+        }));
         // Note that a read follows, because the place it held is free again, which only the service's count says.
-        void read();
+        void send();
       }
       // A sign-in begun again while the Cancel was out still stands, and is waited on for its own whole wait.
       if (answer.status === INTEGRATION_STATUS.PENDING) {
-        marks.current += 1;
-        const begun = begunSignIn(marks.current, now(), true);
-        setSignIns((standing) => new Map(standing).set(server, begun));
+        ledger.marks += 1;
+        const begun = begunSignIn(ledger.marks, now(), true);
+        change((book) => withSignIns(book, (standing) => new Map(standing).set(server, begun)));
         return true;
       }
-      setSignIns((standing) => {
-        const rest = new Map(standing);
-        rest.delete(server);
-        return rest;
-      });
+      change((book) =>
+        withSignIns(book, (standing) => {
+          const rest = new Map(standing);
+          rest.delete(server);
+          return rest;
+        }),
+      );
       return true;
     },
-    [act, settle, now, read],
+    [act, settle, now, send, change, ledger],
   );
 
   /**
@@ -368,7 +490,7 @@ export function useIntegrationStatuses(): IntegrationStatuses {
     canAdd: (provider) => addable.includes(provider),
     signInOf: (server) => signIns.get(server),
     readFailed,
-    read,
+    read: send,
     settle,
     signInBegun,
     cancelSignIn,

@@ -78,7 +78,7 @@ async function draw(node: ReactElement, room?: "narrow" | "wide"): Promise<HTMLE
   const container = document.body.appendChild(document.createElement("div"));
   if (room !== undefined) {
     container.className = "desktop-shell";
-    container.dataset.room = room;
+    document.documentElement.dataset.lukeRoom = room;
   }
   const root = createRoot(container);
   roots.push(root);
@@ -195,7 +195,7 @@ test("on a desktop, New task's dialog lets its field grow to its eight lines wha
 function threadIn(room: "narrow" | "wide"): HTMLElement {
   const shell = document.body.appendChild(document.createElement("div"));
   shell.className = "desktop-shell";
-  shell.dataset.room = room;
+  document.documentElement.dataset.lukeRoom = room;
   const float = shell.appendChild(document.createElement("div"));
   float.className = "comment-float";
   return float;
