@@ -2931,12 +2931,12 @@ test("a tab kept before the scopes opens the Inbox on the scope that lists what 
   assert.deepEqual(scopes(page), ["Inbox", "[To do]", "All"]);
 });
 
-test("Sort in the view's menu offers Latest first and Oldest first, which lists the item changed longest ago first; a Waiting longest kept before is read as Oldest first, and the sort chosen outlives a relaunch", async () => {
+test("Order by in the view's menu offers Latest first and Oldest first, which lists the item changed longest ago first; a Waiting longest kept before is read as Oldest first, and the sort chosen outlives a relaunch", async () => {
   window.localStorage.setItem(SORT_KEY, JSON.stringify("waiting"));
   let { page } = mount();
   await settle();
   openViewOptions(page);
-  act(() => viewItem("Sort").click());
+  act(() => viewItem("Order by").click());
   assert.deepEqual(
     ["Latest first", "Oldest first"].map((each) => viewItem(each).getAttribute("aria-checked")),
     ["false", "true"],
@@ -2950,7 +2950,7 @@ test("Sort in the view's menu offers Latest first and Oldest first, which lists 
     "*Expire after 7 days?",
   ]);
 
-  chooseView(page, "Sort", "Latest first");
+  chooseView(page, "Order by", "Latest first");
   assert.deepEqual(listed(page), [
     "# Billing usage alerts",
     "How is a failed email retried?",
@@ -2963,7 +2963,7 @@ test("Sort in the view's menu offers Latest first and Oldest first, which lists 
   ({ page } = mount());
   await settle();
   openViewOptions(page);
-  act(() => viewItem("Sort").click());
+  act(() => viewItem("Order by").click());
   assert.equal(viewItem("Latest first").getAttribute("aria-checked"), "true");
 });
 
@@ -5894,7 +5894,7 @@ test("Mark all as read in the view's menu, under Group by, marks every unread it
     "All",
     "—",
     "Group by",
-    "Sort",
+    "Order by",
     "—",
     "Whose",
     "—",
