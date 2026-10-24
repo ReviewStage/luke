@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { afterEach, test } from "vitest";
-import { HOST_CAPABILITY } from "./capabilities.js";
+import { HOST_CAPABILITY, type HostCapability } from "./capabilities.js";
 import {
   APP_COMMAND,
   APP_SHORTCUT_GROUPS,
@@ -14,6 +14,8 @@ import {
   FILES_CHANGED_KEYS,
   FILES_CHANGED_SHORTCUT_GROUPS,
   filesChangedKeyFor,
+  IN_CONTEXT_KEY,
+  IN_CONTEXT_SHORTCUTS,
   installCommandKey,
   isAppCommand,
   KEYED_COMMANDS,
@@ -24,6 +26,8 @@ import {
   shortcutGlyphs,
   shortcutMatches,
   shortcutShown,
+  shownShortcutGroups,
+  WRITING_KEYS_IN_CONTEXT,
 } from "./shortcuts.js";
 
 /** What puts back the command key a test installed. */
@@ -62,6 +66,40 @@ test("every keyed command stands in exactly one group of the Keyboard shortcuts 
   const listed = APP_SHORTCUT_GROUPS.flatMap((group) => group.commands);
 
   assert.deepEqual([...listed].sort(), [...KEYED_COMMANDS].sort());
+});
+
+test("every key that answers in place stands in exactly one group of the Keyboard shortcuts page, or under Writing", () => {
+  const listed = [
+    ...APP_SHORTCUT_GROUPS.flatMap((group) => group.keys),
+    ...WRITING_KEYS_IN_CONTEXT,
+  ];
+
+  assert.deepEqual([...listed].sort(), Object.values(IN_CONTEXT_KEY).sort());
+});
+
+test("the Keyboard shortcuts page names the window's Escape once, for every layer it steps back from", () => {
+  const groups = shownShortcutGroups({}, Object.values(HOST_CAPABILITY));
+  const escapes = [
+    ...groups.flatMap((group) => [
+      ...group.commands.map((command) => APP_SHORTCUTS[command].chord),
+      ...group.keys.map((key) => IN_CONTEXT_SHORTCUTS[key].chord),
+    ]),
+  ].filter((chord) => chord.key === SHORTCUT_KEY.ESCAPE);
+
+  assert.equal(escapes.length, 1);
+  assert.ok(
+    groups.some((group) => group.keys.some((key) => key === IN_CONTEXT_KEY.STEP_BACK)),
+    "the one Escape is the step back",
+  );
+});
+
+test("the tab switcher's keys are listed only where the desktop app's switcher stands", () => {
+  const listed = (capabilities: readonly HostCapability[]) =>
+    shownShortcutGroups({}, capabilities).flatMap((group) => group.keys);
+
+  assert.ok(listed([HOST_CAPABILITY.DESKTOP_APP]).includes(IN_CONTEXT_KEY.SWITCHER_GO));
+  assert.equal(listed([]).includes(IN_CONTEXT_KEY.SWITCHER_GO), false);
+  assert.ok(listed([]).includes(IN_CONTEXT_KEY.TAB_STRIP_CLOSE), "a tab strip stands everywhere");
 });
 
 test("every Files changed key stands in exactly one group of its sheet", () => {
