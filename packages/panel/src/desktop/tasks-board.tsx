@@ -126,6 +126,7 @@ import {
   OlderCompleted,
   type TasksViewFrame,
 } from "./tasks-page-options.js";
+import { useHeldTasks } from "./use-held-tasks.js";
 import { useRowDrag } from "./use-row-drag.js";
 
 /**
@@ -609,7 +610,7 @@ function TaskBoardColumnView({
 
 /** The Tasks page's Board: the listed workspace's tasks by status, by priority, or by assignee, under the page's filter. */
 export function TasksBoard({
-  tasks,
+  tasks: control,
   room,
   title,
   frame,
@@ -621,16 +622,15 @@ export function TasksBoard({
   /** The Tasks page's toolbar, filter chips, filter, and the Board's display. */
   frame: TasksViewFrame;
 }): React.JSX.Element {
-  useAppCommand(APP_COMMAND.EXIT_BOARD, tasks.boardView.onClose);
-  const setStanding = useStandingDoor(tasks);
+  useAppCommand(APP_COMMAND.EXIT_BOARD, control.boardView.onClose);
   const now = useMinute();
-  const { waiting } = useSettledWaiting(tasks.listed.inbox, tasks.inboxTaskless);
+  const { waiting } = useSettledWaiting(control.listed.inbox, control.inboxTaskless);
   const waitingOn = new Map(waiting.map((each) => [each.taskId, each.items.length]));
   const ids = useId();
   const board = useRef<HTMLDivElement>(null);
   const crossing = useRovingColumns<HTMLDivElement>();
   const [chosen, setChosen] = useState<string>(FIRST_SHOWN);
-  const listed = tasks.listed.tasks;
+  const listed = control.listed.tasks;
   const { filter, display } = frame;
   const directory = useMemberDirectory();
   const people: ColumnPeople = {
@@ -639,14 +639,21 @@ export function TasksBoard({
     ),
     words: (userId) => assigneeWords(userId, directory, listed),
   };
-  const columns = tasksBoardColumns(listed, {
-    filter,
-    display,
-    readerId: tasks.me,
-    personName: people.words,
-    members: (directory.members ?? []).map((member) => member.userId),
-    now,
-  });
+  // While the page is shown each card keeps the column and the place it was first drawn in, so one a teammate's change would move stays under the reader's eye.
+  const { groups: columns, tasks } = useHeldTasks(
+    control,
+    { workspaceId: control.workspace?.id, filter, display },
+    (standing) =>
+      tasksBoardColumns(standing, {
+        filter,
+        display,
+        readerId: control.me,
+        personName: people.words,
+        members: (directory.members ?? []).map((member) => member.userId),
+        now,
+      }),
+  );
+  const setStanding = useStandingDoor(tasks);
   const narrow = room === SHELL_ROOM.NARROW;
   const values = columns.map((column) => columnValue(column.head));
   // Note that a column gone from the view lets the choice go, so its coming back does not bring it back unasked.
