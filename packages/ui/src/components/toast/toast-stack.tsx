@@ -1,4 +1,5 @@
 import { type ReactNode, type RefObject, useLayoutEffect, useRef } from "react";
+import { MOTION_TOKEN, tokenTiming } from "../../motion-timing.js";
 import { VISUALLY_HIDDEN_ELEMENT, VisuallyHidden } from "../visually-hidden/visually-hidden.js";
 
 /**
@@ -33,20 +34,14 @@ function useStackGlide(): RefObject<HTMLOListElement | null> {
       if (drawn.current.size > 0) drawn.current = new Map();
       return;
     }
-    const style = getComputedStyle(root);
-    const duration = Number.parseFloat(style.getPropertyValue("--luke-duration-fast")) || 0;
-    const easing = style.getPropertyValue("--luke-spring-fast").trim();
+    const timing = tokenTiming(root, MOTION_TOKEN.DURATION_FAST, MOTION_TOKEN.SPRING_FAST);
     const next = new Map<Element, number>();
     for (const toast of root.children) {
       const top = toast.getBoundingClientRect().top;
       const was = drawn.current.get(toast);
       next.set(toast, top);
-      // Note that reduced motion leaves 1ms rather than none, which is no motion either.
-      if (was === undefined || Math.abs(was - top) < STILL || duration <= 1) continue;
-      toast.animate([{ transform: `translateY(${was - top}px)` }, { transform: "none" }], {
-        duration,
-        easing,
-      });
+      if (was === undefined || Math.abs(was - top) < STILL || timing === undefined) continue;
+      toast.animate([{ transform: `translateY(${was - top}px)` }, { transform: "none" }], timing);
     }
     drawn.current = next;
   });

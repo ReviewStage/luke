@@ -23,7 +23,7 @@
     background: var(--luke-color-fill-hover);
     color: var(--luke-color-text-subtle);
     cursor: text;
-    transition: border-color var(--luke-duration-hover) ease;
+    transition: border-color var(--luke-duration-hover) var(--luke-motion-exit);
   }
 
   .luke-search-field > svg {
@@ -103,9 +103,9 @@
     background: transparent;
     color: var(--luke-color-text-muted);
     cursor: default;
-    transition: background-color var(--luke-duration-hover) ease;
+    transition: background-color var(--luke-duration-hover) var(--luke-motion-exit);
     animation:
-      luke-search-clear-fade var(--luke-duration-quick) ease-out backwards,
+      luke-search-clear-fade var(--luke-duration-quick) var(--luke-motion-exit) backwards,
       luke-search-clear-grow var(--luke-duration-fast) var(--luke-spring-fast) backwards;
   }
 

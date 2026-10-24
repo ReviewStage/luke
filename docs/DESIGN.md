@@ -22,12 +22,15 @@ for a frame. Durations and delays come only from the tokens in
 `packages/ui/src/tokens/motion-tokens.css` (`--luke-duration-shape`,
 `--luke-duration-exit`, `--luke-duration-quick`, `--luke-duration-fast`, `--luke-duration-hover`,
 `--luke-duration-pane`, `--luke-motion-exit`, `--luke-motion-pane`, `--luke-row-stagger`,
-`--luke-hint-delay`, `--luke-late-delay`, and `--luke-confirm-delay`, how long an
+`--luke-hint-delay`, `--luke-late-delay`, `--luke-settle-delay`, and `--luke-confirm-delay`, how long an
 autosave's Saved stands). Never write a literal millisecond into a
 rule: reduced motion and capture runs zero the tokens, and a literal is a
-motion those runs cannot stop. The one sanctioned exception is an endless loop
+motion those runs cannot stop. Easings are tokens too, never `ease` or `ease-out`: a fade, a
+hover settle and a press ride `--luke-motion-exit`, a pane and a fold `--luke-motion-pane`,
+and a travel the spring. A script that plays motion reads the same tokens through `tokenTiming`
+(`@luke/ui`), and asks `motionHeld` rather than `matchMedia` whether to move at all. The one sanctioned exception is an endless loop
 (a spinner, a breathing idle, the face's own motions) whose
-`animation-play-state` answers `--loop-motion` or `--luke-face-motion`: those runs
+`animation-play-state` answers `--luke-loop-motion` or `--luke-face-motion`: those runs
 stop it by pausing rather than by zeroing, so its duration may be a literal,
 and a loop that carries one must answer a play-state token. A finite companion
 timed to a generated face gesture may also use the gesture's literal phase,

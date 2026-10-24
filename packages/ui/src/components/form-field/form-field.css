@@ -50,7 +50,7 @@
      pair every arriving element rides. */
   .luke-field-error:not(:empty) {
     animation:
-      luke-field-error-fade var(--luke-duration-quick) ease-out,
+      luke-field-error-fade var(--luke-duration-quick) var(--luke-motion-exit),
       luke-field-error-drop var(--luke-duration-fast) var(--luke-spring-fast);
   }
 

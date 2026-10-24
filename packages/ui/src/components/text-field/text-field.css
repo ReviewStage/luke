@@ -23,8 +23,8 @@
     line-height: var(--luke-type-body-leading);
     font-weight: var(--luke-weight-regular);
     transition:
-      border-color var(--luke-duration-hover) ease,
-      background-color var(--luke-duration-hover) ease;
+      border-color var(--luke-duration-hover) var(--luke-motion-exit),
+      background-color var(--luke-duration-hover) var(--luke-motion-exit);
   }
 
   textarea.luke-text-field {

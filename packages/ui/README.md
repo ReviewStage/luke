@@ -79,7 +79,8 @@ Every token is a `--luke-*` custom property under `src/tokens/`.
   `--luke-duration-shape`, `--luke-spring`, `--luke-spring-fast`, `--luke-motion-exit|pane`,
   `--luke-row-stagger`, `--luke-hint-delay`, `--luke-late-delay`,
   `--luke-confirm-delay` (how long a `SavedTick` stands, which reduced motion
-  keeps, so the words stay to be read), and
+  keeps, so the words stay to be read), `--luke-settle-delay` (the beat a hover
+  card or a delayed spinner waits to see whether the state settles), and
   `--luke-loop-motion`, the play state an endless loop holds, and
   `--luke-face-motion`, the face's. Reduced motion zeroes the durations but
   hover's and pauses both loops. The face's own rules are `face/face.css`, and

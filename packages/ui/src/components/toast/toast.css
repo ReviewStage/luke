@@ -243,8 +243,8 @@
     transform: scale(0.85);
     pointer-events: none;
     transition:
-      opacity var(--luke-duration-hover) ease,
-      transform var(--luke-duration-hover) ease;
+      opacity var(--luke-duration-hover) var(--luke-motion-exit),
+      transform var(--luke-duration-hover) var(--luke-motion-exit);
   }
 
   .luke-toast:focus-within .luke-toast-dismiss {

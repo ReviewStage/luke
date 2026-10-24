@@ -1,7 +1,7 @@
 import { WingFace } from "@luke/ui";
 import { useRef } from "react";
 import { useFaceHover, useFaceMotion } from "../luke-face-mood.js";
-import { usePrefersReducedMotion } from "../use-reduced-motion.js";
+import { useMotionHeld } from "../use-motion-held.js";
 
 /** No one speaking: the head of the sidebar does not follow a call. */
 const QUIET = { speaking: false, microphoneLive: false } as const;
@@ -19,7 +19,7 @@ export function LukeIdentity({ qualifier }: { qualifier?: string | undefined }):
   // The box the hover is read against, not the face itself: the drawing is
   // remounted for every play, and the hover has to survive the trick it fires.
   const faceElement = useRef<HTMLSpanElement>(null);
-  const face = useFaceMotion(QUIET, usePrefersReducedMotion(), useFaceHover(faceElement));
+  const face = useFaceMotion(QUIET, useMotionHeld(), useFaceHover(faceElement));
   return (
     <div className="sidebar-identity">
       <span className="sidebar-identity-face" ref={faceElement}>

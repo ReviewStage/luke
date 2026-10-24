@@ -32,8 +32,8 @@
     white-space: nowrap;
     cursor: pointer;
     transition:
-      background-color var(--luke-duration-hover) ease,
-      color var(--luke-duration-hover) ease;
+      background-color var(--luke-duration-hover) var(--luke-motion-exit),
+      color var(--luke-duration-hover) var(--luke-motion-exit);
   }
 
   [data-luke-profile="desktop"] .luke-chip {
@@ -239,7 +239,7 @@
      scales it the same way, so the two never play at once. */
   .luke-chip[data-removable="true"]:not([data-motion-key]) {
     animation:
-      luke-chip-fade-in var(--luke-duration-quick) ease-out backwards,
+      luke-chip-fade-in var(--luke-duration-quick) var(--luke-motion-exit) backwards,
       luke-chip-pop var(--luke-duration-fast) var(--luke-spring-fast) backwards;
   }
 

@@ -41,7 +41,7 @@
     border-radius: var(--luke-control-radius);
     color: var(--luke-color-text);
     font-family: var(--luke-font-sans);
-    transition: background-color var(--luke-duration-hover) ease;
+    transition: background-color var(--luke-duration-hover) var(--luke-motion-exit);
   }
 
   /* The pointer lights a row that opens something, never past the open
@@ -218,7 +218,7 @@
      the text's own while it is reached for, open, unread, or its menu is. */
   .luke-list-row[data-ink="sidebar"] .luke-list-row-title {
     color: var(--luke-color-sidebar-ink);
-    transition: color var(--luke-duration-hover) ease;
+    transition: color var(--luke-duration-hover) var(--luke-motion-exit);
   }
 
   .luke-list-row[data-ink="sidebar"]:is(
@@ -455,7 +455,7 @@
     flex: none;
     color: var(--luke-color-text-subtle);
     opacity: 0;
-    transition: opacity var(--luke-duration-hover) ease;
+    transition: opacity var(--luke-duration-hover) var(--luke-motion-exit);
   }
 
   .luke-list-row-chevron > svg {
@@ -515,7 +515,7 @@
     pointer-events: none;
     transform: translateX(var(--luke-list-row-step));
     transition:
-      opacity var(--luke-duration-hover) ease,
+      opacity var(--luke-duration-hover) var(--luke-motion-exit),
       transform var(--luke-duration-fast) var(--luke-spring-fast);
   }
 
@@ -527,7 +527,7 @@
 
   .luke-list-row[data-actions="hover"] .luke-list-row-end {
     transition:
-      opacity var(--luke-duration-hover) ease,
+      opacity var(--luke-duration-hover) var(--luke-motion-exit),
       transform var(--luke-duration-fast) var(--luke-spring-fast);
   }
 
@@ -688,7 +688,7 @@
   }
 
   .luke-list-row[data-swipe="moving"] > .luke-list-row-swipe {
-    transition: background-color var(--luke-duration-hover) ease;
+    transition: background-color var(--luke-duration-hover) var(--luke-motion-exit);
   }
 
   .luke-list-row[data-armed="true"] > .luke-list-row-swipe {
@@ -727,7 +727,7 @@
      the jump from the button's middle to the face's edge as the row arms
      glides rather than snaps. */
   .luke-list-row[data-swipe="moving"] .luke-list-row-swipe-label {
-    transition: transform var(--luke-duration-hover) ease-out;
+    transition: transform var(--luke-duration-hover) var(--luke-motion-exit);
   }
 
   .luke-list-row-swipe-label > svg {

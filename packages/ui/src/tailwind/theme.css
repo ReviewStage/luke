@@ -101,7 +101,7 @@
      dropped and named again replays); a hung panel arrives and drops as a
      menu does (`menu.css`'s keyframes); a hint fades and grows in, and fades
      out once seen. */
-  --animate-dialog-scrim: luke-dialog-fade var(--luke-duration-quick) ease-out;
+  --animate-dialog-scrim: luke-dialog-fade var(--luke-duration-quick) var(--luke-motion-exit);
   --animate-dialog-in:
     luke-dialog-fade var(--luke-duration-quick) var(--luke-motion-exit),
     luke-dialog-rise var(--luke-duration-fast) var(--luke-spring-fast);

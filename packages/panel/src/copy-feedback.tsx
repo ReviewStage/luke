@@ -16,6 +16,7 @@ import { VisuallyHidden } from "@luke/ui";
  */
 
 import { useAtom } from "@effect/atom-react";
+import { MOTION_DELAY_MS } from "@luke/brand";
 import { Duration, Effect } from "effect";
 import { CheckIcon, CircleAlertIcon, CopyIcon } from "lucide-react";
 import { useRef, useState } from "react";
@@ -33,7 +34,7 @@ const COPY_STATE = {
 export type CopyState = (typeof COPY_STATE)[keyof typeof COPY_STATE];
 
 /** How long a button's check, or its alert, stands: long enough to see, gone before anyone waits on it. */
-const BUTTON_HOLD = Duration.millis(1_200);
+const BUTTON_HOLD = Duration.millis(MOTION_DELAY_MS.CONFIRM);
 
 /** How long a copy's toast stands before it leaves. */
 const TOAST_HOLD = Duration.millis(1_500);

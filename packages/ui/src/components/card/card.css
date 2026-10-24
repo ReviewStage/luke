@@ -59,7 +59,7 @@
   .luke-card[data-look="well"] {
     border-color: transparent;
     background: var(--luke-color-well);
-    transition: border-color var(--luke-duration-hover) ease;
+    transition: border-color var(--luke-duration-hover) var(--luke-motion-exit);
   }
 
   .luke-card[data-dashed="true"] {
@@ -105,8 +105,8 @@
   .luke-card[data-hover="lift"] {
     transition:
       transform var(--luke-duration-fast) var(--luke-spring-fast),
-      border-color var(--luke-duration-hover) ease,
-      box-shadow var(--luke-duration-hover) ease,
+      border-color var(--luke-duration-hover) var(--luke-motion-exit),
+      box-shadow var(--luke-duration-hover) var(--luke-motion-exit),
       opacity var(--luke-duration-quick) var(--luke-motion-exit);
   }
 

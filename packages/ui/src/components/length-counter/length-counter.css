@@ -15,7 +15,7 @@
     font-weight: var(--luke-weight-regular);
     font-variant-numeric: tabular-nums;
     white-space: nowrap;
-    animation: luke-length-counter-in var(--luke-duration-quick) ease-out backwards;
+    animation: luke-length-counter-in var(--luke-duration-quick) var(--luke-motion-exit) backwards;
   }
 
   .luke-length-counter[data-full="true"] {
@@ -33,14 +33,14 @@
   .luke-length-counter-count[data-move="up"] {
     --luke-length-counter-from: 40%;
     animation:
-      luke-length-counter-in var(--luke-duration-quick) ease-out backwards,
+      luke-length-counter-in var(--luke-duration-quick) var(--luke-motion-exit) backwards,
       luke-length-counter-tick var(--luke-duration-fast) var(--luke-spring-fast) backwards;
   }
 
   .luke-length-counter-count[data-move="down"] {
     --luke-length-counter-from: -40%;
     animation:
-      luke-length-counter-in var(--luke-duration-quick) ease-out backwards,
+      luke-length-counter-in var(--luke-duration-quick) var(--luke-motion-exit) backwards,
       luke-length-counter-tick var(--luke-duration-fast) var(--luke-spring-fast) backwards;
   }
 
