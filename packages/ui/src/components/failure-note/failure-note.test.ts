@@ -1,7 +1,8 @@
 /**
  * failure-note.test.ts -- a failure's line is one alert saying its words and,
- * where it is given a press, Retry, whose press tries again; with none it
- * says its words alone; its mark says nothing to a reader.
+ * where it is given a press, Retry, whose press tries again, then a second
+ * act of the caller's where one is given; with none it says its words alone;
+ * its mark says nothing to a reader.
  */
 
 // @vitest-environment jsdom
@@ -82,4 +83,38 @@ test("a failure's mark says nothing to a reader", () => {
 
   expect(marks).toHaveLength(1);
   expect(marks.every((mark) => mark.closest("[aria-hidden='true']") !== null)).toBe(true);
+});
+
+test("a failure's second act stands after Retry in the same alert, and works alone without one", () => {
+  let tries = 0;
+  let discards = 0;
+  const discard = createElement(
+    "button",
+    {
+      type: "button",
+      onClick: () => {
+        discards += 1;
+      },
+    },
+    "Discard",
+  );
+  const both = mountAlert(
+    createElement(FailureNote, {
+      onRetry: () => {
+        tries += 1;
+      },
+      also: discard,
+      children: WORDS,
+    }),
+  );
+  expect(both.textContent).toBe(`${WORDS}RetryDiscard`);
+
+  const buttons = both.querySelectorAll("button");
+  act(() => buttons[1]?.click());
+  act(() => buttons[0]?.click());
+
+  expect([tries, discards]).toEqual([1, 1]);
+
+  const alone = mountAlert(createElement(FailureNote, { also: discard, children: WORDS }));
+  expect(alone.textContent).toBe(`${WORDS}Discard`);
 });

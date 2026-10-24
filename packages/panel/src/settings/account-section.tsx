@@ -10,6 +10,7 @@ import {
   Button,
   ConfirmDialog,
   DIALOG_TONE,
+  FailureNote,
   OneLine,
   PROVIDER_MARK_SIZE,
   ProviderMark,
@@ -28,13 +29,17 @@ import { GitHubTokenDialog, TokenFacts } from "./github-dialog.js";
 /** The class PostHog's recorder leaves out of a recording, element and children alike. */
 const NO_CAPTURE = "ph-no-capture";
 
+/** What the row says where the token could not be read, so what stands is unknown. */
+const TOKEN_READ_FAILED = "Couldn't read the token.";
+
 /**
  * The member's own GitHub personal access token: its hint, login, and
  * expiry once one is saved, nothing while none is, and Manage or Add, which
  * opens the token's dialog (`github-dialog.tsx`). The token is read as the
  * row is drawn, again for each account it is drawn for (the section keys it
- * by the account); a read that fails draws Try again in place of Add or
- * Manage, since what stands is unknown.
+ * by the account); a read that fails says so under the row in a
+ * `FailureNote` whose Retry reads again, and draws neither Add nor Manage,
+ * since what stands is unknown.
  */
 function GitHubTokenRow(): React.JSX.Element {
   const { act } = useAct();
@@ -66,15 +71,19 @@ function GitHubTokenRow(): React.JSX.Element {
         }
         label="GitHub personal access token"
         description={token ? <TokenFacts token={token} /> : undefined}
+        // Note that a row with nothing below draws no `below` at all, since its box keeps a margin.
+        below={
+          token === undefined && readFailed
+            ? () => (
+                <FailureNote onRetry={() => setAttempt((n) => n + 1)}>
+                  {TOKEN_READ_FAILED}
+                </FailureNote>
+              )
+            : undefined
+        }
       >
         {() =>
-          token === undefined ? (
-            readFailed ? (
-              <Button variant={BUTTON_VARIANT.OUTLINE} onClick={() => setAttempt((n) => n + 1)}>
-                Try again
-              </Button>
-            ) : null
-          ) : (
+          token === undefined ? null : (
             <Button variant={BUTTON_VARIANT.OUTLINE} onClick={() => setManaging(true)}>
               {token === null ? "Add" : "Manage"}
             </Button>
