@@ -12,7 +12,7 @@ import {
   Text,
   TextButton,
 } from "@luke/ui";
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { TERMINAL_LOAD_FAILED } from "../bundle-loader.js";
 import { FIND_STEP, type FindSource, useFindSource } from "../find-in-tab.js";
 import { TERMINAL_FIND, type TerminalFind } from "../terminal/contract.js";
@@ -84,9 +84,15 @@ function StateBar({
   onAction: (action: TerminalAction) => void;
 }): React.JSX.Element {
   const { action } = bar;
-  useAnnounceShown(ANNOUNCE.POLITE, bar.words);
+  // Note that a late bar is hidden until it has held a second, so its words are said once its reveal has run: a blip that mends first is never seen, so it is never said.
+  const [revealed, setRevealed] = useState(false);
+  useAnnounceShown(ANNOUNCE.POLITE, bar.late && !revealed ? "" : bar.words);
   return (
-    <div className="terminal-bar" data-late={String(bar.late)}>
+    <div
+      className="terminal-bar"
+      data-late={String(bar.late)}
+      onAnimationEnd={() => setRevealed(true)}
+    >
       {bar.busy ? (
         <span className="terminal-bar-busy" aria-hidden="true">
           ⋯

@@ -501,10 +501,19 @@ test("an agent that has not opened its sandbox yet shows the waiting bar", async
 });
 
 test("a dropped connection shows its bar, and its action asks for the shell again at once", async () => {
+  mountAnnouncer();
   const tab = await mount();
   const port = main.post(OLDEST);
   port.say({ type: "state", state: "reconnecting" });
   assert.equal(tab.bar(), "Connection lost. Reconnecting…");
+  assert.equal(announcedPolitely(), "", "a bar still hidden says nothing, so a blip is never said");
+  // Note that a DOM without animation events is heard through React's webkit-prefixed name for the end of an animation.
+  act(() => {
+    for (const name of ["animationend", "webkitAnimationEnd"]) {
+      document.querySelector(".terminal-bar")?.dispatchEvent(new Event(name, { bubbles: true }));
+    }
+  });
+  assert.equal(announcedPolitely(), "Connection lost. Reconnecting…", "it is said once shown");
   assert.equal(tab.dimmed(), true);
   const before = main.sent.length;
   await act(async () => tab.action()?.click());
