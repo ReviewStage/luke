@@ -87,8 +87,8 @@ export interface CommandGroup {
   readonly note?: ReactNode;
 }
 
-/** The dimmed window: the card stands a fifth of the way down it rather than in its middle; in a narrow room, against its top and sides. */
-const ROOM = "items-start pt-dialog-command-top room-narrow:p-0";
+/** The dimmed window: the card stands a fifth of the way down it rather than in its middle; in a narrow room, against its top and sides. Its one column is the window's width and no more, since an auto track would grow to the widest row and push the card past the screen. */
+const ROOM = "grid-cols-[minmax(0,1fr)] items-start pt-dialog-command-top room-narrow:p-0";
 
 /** The card: the palette's measure, unpadded, its field, band, list, and foot edge to edge; in a narrow room, a sheet across the screen, edged and rounded only along its foot. */
 const CARD =
