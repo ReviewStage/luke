@@ -15,7 +15,7 @@
   .luke-list {
     display: flex;
     flex-direction: column;
-    gap: var(--luke-space-2);
+    gap: var(--luke-list-gap);
     margin: 0;
     padding: 0;
     list-style: none;
@@ -26,8 +26,8 @@
      only once the words have given all theirs. The insets are the press's,
      which the acts keep too, so each stands as far in from the row's end. */
   .luke-list-row {
-    --luke-list-row-inset-block: var(--luke-space-8);
-    --luke-list-row-inset-inline: var(--luke-space-12);
+    --luke-list-row-inset-block: var(--luke-row-inset);
+    --luke-list-row-inset-inline: var(--luke-list-inset);
 
     display: grid;
     grid-template-columns:
@@ -132,7 +132,7 @@
   /* A compact row keeps its words and gives up some of the room around them. */
   .luke-list[data-density="compact"] > .luke-list-row {
     --luke-list-row-inset-block: var(--luke-space-4);
-    --luke-list-row-inset-inline: var(--luke-space-8);
+    --luke-list-row-inset-inline: var(--luke-row-inset);
   }
 
   /* A list whose rows a finger opens stands each a finger's press tall on a
@@ -149,7 +149,7 @@
      its words cut anew or its acts coming in, lays out that row alone. */
   :is(.luke-list[data-density="dense"] > .luke-list-row, .luke-list-row[data-density="dense"]) {
     --luke-list-row-inset-block: 0px;
-    --luke-list-row-inset-inline: var(--luke-space-8);
+    --luke-list-row-inset-inline: var(--luke-row-inset);
 
     contain: layout style;
   }
@@ -170,7 +170,7 @@
     .luke-list-row-title {
     flex: 0 1 auto;
     font-size: var(--luke-type-body-size);
-    font-weight: var(--luke-weight-regular);
+    font-weight: var(--luke-type-body-weight);
   }
 
   :is(.luke-list[data-density="dense"] > .luke-list-row, .luke-list-row[data-density="dense"])
@@ -211,7 +211,7 @@
     .luke-list[data-density="dense"] > .luke-list-row,
     .luke-list-row[data-density="dense"]
   )[data-unread="true"] .luke-list-row-title {
-    font-weight: var(--luke-weight-semibold);
+    font-weight: var(--luke-type-emphasis-weight);
   }
 
   /* A sidebar's row rests its title in the sidebar's quieter ink, lifted to
@@ -288,7 +288,7 @@
   .luke-list-row-title {
     font-size: var(--luke-type-label-size);
     line-height: var(--luke-type-label-leading);
-    font-weight: var(--luke-weight-medium);
+    font-weight: var(--luke-type-label-weight);
   }
 
   /* A title fades rather than ending in an ellipsis, as a browser's tab
@@ -307,7 +307,7 @@
   /* What has not been seen reads in a heavier weight, and its description
      in the body's ink, until it is, as a mail app's unread threads do. */
   .luke-list-row[data-unread="true"] .luke-list-row-title {
-    font-weight: var(--luke-weight-semibold);
+    font-weight: var(--luke-type-emphasis-weight);
   }
 
   .luke-list-row[data-unread="true"] .luke-list-row-description {
@@ -743,8 +743,8 @@
     align-items: center;
     justify-content: center;
     gap: var(--luke-space-2);
-    font-size: var(--luke-type-caption-size);
-    font-weight: var(--luke-weight-medium);
+    font-size: var(--luke-type-tag-size);
+    font-weight: var(--luke-type-tag-weight);
     opacity: var(--luke-list-row-swipe-shown, 0);
     transform: translateX(var(--luke-list-row-swipe-label, 0px));
     transition: transform var(--luke-duration-fast) var(--luke-spring-fast);

@@ -43,10 +43,10 @@ import { Tooltip } from "../tooltip/hint.js";
  */
 const PANEL = [
   "luke-popover-panel flex flex-col rounded-menu border border-border-strong bg-popover text-popover-foreground shadow-menu animate-menu-in focus-visible:outline-none *:shrink-0",
-  "data-[look=card]:max-h-popover-room data-[look=card]:gap-3 data-[look=card]:overflow-x-hidden data-[look=card]:overflow-y-auto data-[look=card]:overscroll-contain data-[look=card]:px-4 data-[look=card]:pt-3 data-[look=card]:pb-4 data-[look=card]:text-caption",
+  "data-[look=card]:max-h-popover-room data-[look=card]:gap-block-gap data-[look=card]:overflow-x-hidden data-[look=card]:overflow-y-auto data-[look=card]:overscroll-contain data-[look=card]:p-card-inset-snug data-[look=card]:text-caption",
 ].join(" ");
 const HEAD = "-mr-2 flex items-center justify-between gap-control-gap";
-const TITLE = "m-0 text-section font-semibold";
+const TITLE = "m-0 text-section font-section";
 
 /** How the panel is drawn: a card with its head, or a menu's surface whose content is edge to edge. */
 export const POPOVER_PANEL_LOOK = {

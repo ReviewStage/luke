@@ -75,7 +75,7 @@
     gap: var(--luke-space-12);
     min-width: 0;
     margin: 0;
-    padding: var(--luke-space-8) var(--luke-space-12);
+    padding: var(--luke-row-inset) var(--luke-list-inset);
     border: 0;
     border-radius: var(--luke-control-radius);
     /* Note that a row draws the keyboard's ring inside itself, because the
@@ -152,7 +152,7 @@
   .luke-choice-label {
     flex: 1 1 0;
     min-width: 0;
-    font-weight: var(--luke-weight-medium);
+    font-weight: var(--luke-type-label-weight);
     overflow-wrap: anywhere;
   }
 
@@ -255,7 +255,7 @@
     margin-left: var(--luke-space-8);
     color: var(--luke-color-text-muted);
     font-size: var(--luke-type-caption-size);
-    font-weight: var(--luke-weight-regular);
+    font-weight: var(--luke-type-caption-weight);
     white-space: nowrap;
   }
 
@@ -339,7 +339,7 @@
 
   .luke-choice-list[data-look="picture"] > .luke-choice[aria-checked="true"] .luke-choice-name {
     color: var(--luke-color-text);
-    font-weight: var(--luke-weight-semibold);
+    font-weight: var(--luke-type-emphasis-weight);
   }
 
   /* A card holds its radio, what it says at the head's end, and controls of

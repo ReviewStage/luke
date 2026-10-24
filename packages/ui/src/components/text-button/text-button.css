@@ -91,7 +91,7 @@
 
   .luke-text-button[data-tone="accent"] {
     color: var(--luke-color-accent-text);
-    font-weight: var(--luke-weight-medium);
+    font-weight: var(--luke-type-label-weight);
   }
 
   .luke-text-button[data-tone="accent"]:is(:hover, :focus-visible) {

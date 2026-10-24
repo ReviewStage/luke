@@ -25,7 +25,7 @@
   }
 
   .luke-note-line[data-look="list"] {
-    padding: var(--luke-space-8) var(--luke-space-12);
+    padding: var(--luke-row-inset) var(--luke-list-inset);
   }
 
   .luke-note-line[data-fill] {

@@ -19,7 +19,7 @@
      top row's first and last control, Settings' page list. */
   --column-inset: var(--luke-space-12);
   /* A row's own edge to its glyph or words: a sidebar row, a tab, a menu item. */
-  --row-inset: var(--luke-space-8);
+  --row-inset: var(--luke-row-inset);
   /* Where a column's glyphs and words start, which is where a row's padding
      puts them; words drawn on no row (a page's title, the transcript, the
      code's path) start there too, so a column reads down one edge. */

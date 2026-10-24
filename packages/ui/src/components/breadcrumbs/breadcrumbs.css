@@ -214,7 +214,7 @@
 
   .luke-breadcrumbs[data-variant="title"] .luke-breadcrumb-words {
     font-size: var(--luke-type-dialog-size);
-    font-weight: var(--luke-weight-semibold);
+    font-weight: var(--luke-type-dialog-weight);
     line-height: var(--luke-type-dialog-leading);
   }
 
