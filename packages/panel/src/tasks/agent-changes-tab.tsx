@@ -1905,7 +1905,7 @@ export function AgentChangesTab({
           />
         )}
       </Fill>
-      {shown && list.keysShown ? <FilesChangedKeysSheet onDismiss={hideKeys} /> : null}
+      <FilesChangedKeysSheet open={shown && list.keysShown} onDismiss={hideKeys} />
     </Fill>
   );
 }

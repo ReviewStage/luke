@@ -48,6 +48,7 @@ import {
 import { useSettingWrite } from "@luke/ui/use-setting-write";
 import type { ActionResult } from "@luke/wire";
 import { useLayoutEffect, useRef, useState } from "react";
+import { useDrawnThroughExit } from "../use-held-through-exit.js";
 import { SettingMarks } from "./marks.js";
 import { type SamplePlayer, useSamplePlayer } from "./sample-player.js";
 
@@ -129,17 +130,22 @@ function PickedInView({ row }: { row: React.RefObject<HTMLButtonElement | null> 
 
 /** The dialog the chip opens: every value under its heading, the picked one played as it is picked, kept only by Done. */
 function SampledChoiceDialog({
+  open,
   title,
   value,
   options,
   onDone,
   onCancel,
+  onExited,
 }: {
+  /** Whether the card stands; falling, it fades out, then tells its owner it is gone. */
+  open: boolean;
   title: string;
   value: string;
   options: readonly SampledChoiceOption[];
   onDone: (value: string) => void;
   onCancel: () => void;
+  onExited: () => void;
 }): React.JSX.Element {
   const [picked, setPicked] = useState(value);
   const player = useSamplePlayer();
@@ -171,10 +177,12 @@ function SampledChoiceDialog({
   };
   return (
     <Dialog
+      open={open}
       title={title}
       size={DIALOG_SIZE.CONFIRM}
       initialFocus={pickedRow}
       onDismiss={onCancel}
+      onExited={onExited}
       actionsStart={
         <SampleButton
           sample={options.find((option) => option.value === picked)?.sample}
@@ -249,6 +257,8 @@ export function SampledChoiceRow({
 }): React.JSX.Element {
   const { busy, rejection, saves, run } = useSettingWrite(onChange);
   const [open, setOpen] = useState(false);
+  // Note that the card keeps its pick and the sample playing while it is drawn, from its opening until its fade has run, so each opening starts from the stored value.
+  const { drawn, onExited } = useDrawnThroughExit(open);
   const chosen = options.find((option) => option.value === value)?.label ?? value;
   return (
     <SettingsRow
@@ -273,12 +283,14 @@ export function SampledChoiceRow({
           >
             <ChipName>{chosen}</ChipName>
           </Chip>
-          {open ? (
+          {drawn ? (
             <SampledChoiceDialog
+              open={open}
               title={label}
               value={value}
               options={options}
               onCancel={() => setOpen(false)}
+              onExited={onExited}
               onDone={(picked) => {
                 setOpen(false);
                 // A value kept as it stood is no change, so it writes nothing and ends no conversation.

@@ -651,15 +651,21 @@ function SourceRow({
 
 /** The dialog Settings › Skills' Add skill opens, over the workspace the page shows. */
 export function AddSkillDialog({
+  open = true,
   workspace,
   onInstalled,
   onClose,
+  onExited,
   pause = rendererPause,
 }: {
+  /** Whether the card stands; falling, it fades out, then tells its owner it is gone. Standing while mounted where it is left out. */
+  open?: boolean | undefined;
   workspace: Workspace;
   /** The skills an install made, in the order asked: the ones named, then those they pull in. */
   onInstalled: (skills: readonly InstalledSkillSummary[]) => void;
   onClose: () => void;
+  /** Its fade has run and it is gone, which its owner takes it out on. */
+  onExited?: (() => void) | undefined;
   /** The wait before a preview, the renderer's own where none is handed in. */
   pause?: (ms: number) => Promise<void>;
 }): React.JSX.Element {
@@ -818,11 +824,13 @@ export function AddSkillDialog({
 
   return (
     <Dialog
+      open={open}
       title={addSkillTitle(screen, preview)}
       size={DIALOG_SIZE.WIDE}
       busy={installing}
       holding={text.trim() !== ""}
       onDismiss={onClose}
+      onExited={onExited}
       actionsStart={
         scopes.length > 1 ? (
           <ChoiceBar

@@ -25,6 +25,7 @@ import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { useEffect, useState } from "react";
 import { useAct } from "../act.js";
 import { ACTOR_SIZE, ActorMark } from "../actor-ref.js";
+import { useHeldThroughExit } from "../use-held-through-exit.js";
 import { GitHubTokenDialog, TokenFacts } from "./github-dialog.js";
 
 /** The class PostHog's recorder leaves out of a recording, element and children alike. */
@@ -46,6 +47,10 @@ function GitHubTokenRow(): React.JSX.Element {
   const { act } = useAct();
   const [token, setToken] = useState<GitHubTokenSummary | null | undefined>(undefined);
   const [managing, setManaging] = useState(false);
+  // Note that the card is drawn for the token it opened over until its fade has run, so it does not change under its own exit.
+  const { held: drawn, onExited } = useHeldThroughExit(
+    managing && token !== undefined ? token : undefined,
+  );
   const [readFailed, setReadFailed] = useState(false);
   const [attempt, setAttempt] = useState(0);
 
@@ -91,9 +96,15 @@ function GitHubTokenRow(): React.JSX.Element {
           )
         }
       </SettingsRow>
-      {managing && token !== undefined ? (
-        <GitHubTokenDialog token={token} onToken={setToken} onClose={() => setManaging(false)} />
-      ) : null}
+      {drawn === undefined ? null : (
+        <GitHubTokenDialog
+          open={managing && token !== undefined}
+          token={drawn}
+          onToken={setToken}
+          onClose={() => setManaging(false)}
+          onExited={onExited}
+        />
+      )}
     </div>
   );
 }

@@ -48,7 +48,9 @@ import { useHeldFocus } from "./held-focus.js";
  * dimmed window fade out on the exit token, drawn and taking no press until
  * the fade has run, focus handed back to what opened the card as the fade
  * begins. Reduced motion and a capture run, which zero the tokens, take it
- * away at once. An owner that has yet to pass `open` mounts the dialog to
+ * away at once. An owner whose card holds state or reads data while it is
+ * drawn hears `onExited` once the card is gone, and takes it out then. An
+ * owner that has yet to pass `open` mounts the dialog to
  * open it and unmounts it to close it, which goes at once. Asked away while it
  * is at work, by Escape or the dimmed window, the card swells for a moment,
  * so the press is answered even though the owner keeps it open. A dialog
@@ -186,6 +188,8 @@ export type DialogProps = DialogName & {
   initialFocus?: React.RefObject<HTMLElement | null> | undefined;
   /** Escape or a press on the dimmed window: the dialog decides what putting it away costs. */
   onDismiss: () => void;
+  /** Its fade has run and it is gone, which an owner whose card holds state or reads data lets go of it on. */
+  onExited?: (() => void) | undefined;
   /** The dialog's own keys, heard after Tab and Escape and never while an input method composes. */
   onKeyDown?: ((event: React.KeyboardEvent<HTMLDivElement>) => void) | undefined;
   /** What the dimmed window does with a drag, for a dialog that takes files dropped anywhere on it. */
@@ -284,6 +288,7 @@ export function Dialog({
   holding = false,
   initialFocus,
   onDismiss,
+  onExited,
   onKeyDown,
   dropTarget,
   dropping = false,
@@ -340,6 +345,23 @@ export function Dialog({
   };
   useImperativeHandle(ref, () => ({ dismiss }));
 
+  // Note that the owner hears it gone only once the card has stood, because
+  // one that never opened has left nothing to let go of.
+  const stood = useRef(false);
+  useEffect(() => {
+    if (open) stood.current = true;
+  }, [open]);
+  const exited = () => {
+    if (!stood.current) return;
+    stood.current = false;
+    onExited?.();
+  };
+  // Note that a card taken away in the render that closes it is heard here,
+  // because Base UI never sees it leave.
+  useEffect(() => {
+    if (!open && motionHeld()) exited();
+  });
+
   // Note that reduced motion and a capture run take the card away in the
   // render that closes it, rather than a frame later once Base UI finds no
   // fade to wait on.
@@ -371,6 +393,9 @@ export function Dialog({
       modal="trap-focus"
       onOpenChange={(open, details) => {
         if (!open && DISMISSAL.has(details.reason)) dismiss();
+      }}
+      onOpenChangeComplete={(done) => {
+        if (!done) exited();
       }}
     >
       <DialogContent

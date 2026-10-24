@@ -11,12 +11,14 @@ import {
 } from "@luke/features/github-token-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import type { PortActKind } from "@luke/host/contract";
+import { holdExits } from "@luke/ui/testing/held-exits";
 import { ACTION_RESULT_STATUS } from "@luke/wire";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeEach, test } from "vitest";
+import { afterEach, beforeEach, test, vi } from "vitest";
 import { fakeActPort } from "../testing/app-bridge.js";
 import { fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
+import { holdMotion, releaseMotion } from "../testing/motion-held.js";
 import { AccountSection } from "./account-section.js";
 
 /**
@@ -81,6 +83,9 @@ beforeEach(() => {
 afterEach(() => {
   for (const root of roots.splice(0)) act(() => root.unmount());
   document.body.innerHTML = "";
+  releaseMotion();
+  vi.useRealTimers();
+  Reflect.deleteProperty(Element.prototype, "getAnimations");
 });
 
 async function settle(): Promise<void> {
@@ -274,4 +279,42 @@ test("the row reads the token again when Profile is drawn for another account", 
   await settle();
   button("Add");
   assert.ok(!(container.textContent ?? "").includes("octo-member"), "Ada's token is gone");
+});
+
+/** The token dialog opened from the row's Add, which held focus as it was pressed, and then put away by its Done. */
+async function openedThenDone(): Promise<HTMLButtonElement> {
+  await mountAndOpen(false);
+  const opener = button("Add");
+  opener.focus();
+  act(() => opener.click());
+  await settle();
+  act(() => button("Done").click());
+  return opener;
+}
+
+test("Done fades the token dialog out, still drawn and in its ending state with focus already back on its button, then takes it away", async () => {
+  vi.useFakeTimers({ toFake: ["requestAnimationFrame", "cancelAnimationFrame"] });
+  const exits = holdExits();
+  const opener = await openedThenDone();
+  const fading = document.querySelector('[role="dialog"]');
+  const ending = fading?.hasAttribute("data-ending-style");
+  const focused = document.activeElement === opener;
+  act(() => vi.advanceTimersToNextFrame());
+  const stillDrawn = document.querySelector('[role="dialog"]') !== null;
+  await act(async () => exits.finish());
+
+  assert.ok(fading, "the dialog stands while it fades");
+  assert.equal(ending, true, "it is in its ending state");
+  assert.equal(focused, true, "focus is back on the button that opened it");
+  assert.equal(stillDrawn, true, "it stays until its fade has run");
+  assert.equal(document.querySelector('[role="dialog"]'), null);
+});
+
+test("Done takes the token dialog away at once where motion is held", async () => {
+  holdExits();
+  holdMotion();
+  const opener = await openedThenDone();
+
+  assert.equal(document.querySelector('[role="dialog"]'), null);
+  assert.equal(document.activeElement, opener);
 });
