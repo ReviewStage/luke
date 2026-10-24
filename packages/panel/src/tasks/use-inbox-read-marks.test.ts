@@ -129,7 +129,10 @@ function marks(first: readonly InboxItem[]) {
     read,
     /** Each item's dot as the hook draws it. */
     dots: () => drawn.map((each) => [each.id, isUnread(each)]),
-    mark: (target: InboxItem, unread: boolean) => act(() => held().onMark(target, unread)),
+    mark: (target: InboxItem, unread: boolean) =>
+      act(() => {
+        void held().onMark(target, unread);
+      }),
     markAll: (items: readonly InboxItem[]) => act(() => held().onMarkAll(items)),
   };
 }

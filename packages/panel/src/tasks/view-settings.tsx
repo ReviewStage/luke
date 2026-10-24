@@ -23,6 +23,9 @@ import {
   SETTINGS_ROW_DENSITY,
   SettingsRow,
   Shortcut,
+  TEXT_ELEMENT,
+  TEXT_VARIANT,
+  Text,
   Tooltip,
 } from "@luke/ui";
 import { drawnDark } from "@luke/ui/appearance";
@@ -197,9 +200,9 @@ function SettingsGroup({
   const id = useId();
   return (
     <section className="view-settings-group" aria-labelledby={id}>
-      <h3 className="view-settings-heading" id={id}>
+      <Text as={TEXT_ELEMENT.H3} variant={TEXT_VARIANT.GROUP} id={id}>
         {title}
-      </h3>
+      </Text>
       {children}
     </section>
   );
