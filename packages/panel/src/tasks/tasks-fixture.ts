@@ -11,6 +11,7 @@ import {
 import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
 import { RUN_PROFILE } from "@luke/host/app-state";
 import type { PortActKind, PortActPayload, PortActResult } from "@luke/host/contract";
+import { FIXTURE_IDS, FIXTURE_TASK_NAME } from "@luke/host/fixture-stage";
 import { agentActAnswer, agentSidePanel, agentTasksView } from "./agent-fixture.js";
 import {
   SIDE_PANEL_TAB,
@@ -42,7 +43,7 @@ import {
  * no task here is one stranded in a workspace that cannot reach it.
  */
 const FIXTURE_FIRST: Workspace = {
-  id: "workspace-personal",
+  id: FIXTURE_IDS.WORKSPACE,
   name: "Ada Lovelace",
   slug: "personal",
   role: WORKSPACE_ROLE.OWNER,
@@ -101,13 +102,13 @@ const FIXTURE_TEXT = [
     "- An invite expires after 7 days.",
 ].join("\n\n");
 
-/** The reference journey's task, by the id its chat channel names it by too (`chat-fixture.ts`). */
-export const FIXTURE_TASK_ID = "0f6a2c4e-8b1d-4e3f-9a57-1c2b3d4e5f60";
+/** The reference journey's task, by the id its chat channel (`chat-fixture.ts`) and the host's staged call (`@luke/host/fixture-stage`) name it by too. */
+export const FIXTURE_TASK_ID = FIXTURE_IDS.TASK;
 
 const FIXTURE_TASK: Task = {
   id: FIXTURE_TASK_ID,
   workspaceId: FIXTURE_FIRST.id,
-  name: "Teammate invitations",
+  name: FIXTURE_TASK_NAME,
   createdAt: 1,
   updatedAt: 2,
   repository: "ada/relay",
