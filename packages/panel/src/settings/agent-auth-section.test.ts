@@ -466,6 +466,34 @@ test("a Claude setup-token is saved by its kind, refused with why, and disconnec
   assert.equal(rowButton(page, "Claude").textContent, "Connect");
 });
 
+test("a harness's dialog opens on the first field it draws, the setup-token's, else the API key's", async () => {
+  const page = await mount();
+  const claude = await open(page, "Claude");
+  assert.ok(document.activeElement === labelled(claude, "Claude setup-token"), "the setup-token");
+  act(() => button(document, "Done").click());
+  await settle();
+
+  const codex = await open(page, "Codex");
+  assert.ok(document.activeElement === labelled(codex, "OpenAI API key"), "the API key");
+});
+
+test("with both credentials kept, Disconnect's question giving way to the setup-token form leaves focus on its field", async () => {
+  held = { keys: [{ ...ANTHROPIC_KEY }], subscriptions: [CLAUDE_PLAN] };
+  const page = await mount();
+  const dialog = await open(page, "Claude");
+
+  act(() => {
+    button(card(dialog, "Subscription"), "Disconnect").focus();
+    button(card(dialog, "Subscription"), "Disconnect").click();
+  });
+  await settle();
+  await press(question(), "Disconnect");
+  assert.ok(
+    document.activeElement === labelled(dialog, "Claude setup-token"),
+    "the field has focus",
+  );
+});
+
 test("a Claude token Anthropic rejected says so in its card and offers Replace token, without the setup-token hint", async () => {
   held = { keys: [], subscriptions: [{ ...CLAUDE_PLAN, status: PROVIDER_KEY_STATUS.INVALID }] };
   const page = await mount();
