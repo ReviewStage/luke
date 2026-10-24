@@ -24,6 +24,7 @@ import { COMMENTS_EXAMPLE } from "./examples/comments";
 import { COMPOSER_FOOTS_EXAMPLE } from "./examples/composer-foots";
 import { COMPOSER_FRAMES_EXAMPLE } from "./examples/composer-frames";
 import { CONFIRM_DIALOGS_EXAMPLE } from "./examples/confirm-dialogs";
+import { COPY_BUTTONS_EXAMPLE } from "./examples/copy-buttons";
 import { CORNER_COUNTS_EXAMPLE } from "./examples/corner-counts";
 import { DAILY_BARS_EXAMPLE } from "./examples/daily-bars";
 import { DATA_TABLE_EXAMPLE } from "./examples/data-table";
@@ -145,6 +146,7 @@ export const EXAMPLES: readonly Example[] = [
   COLLECTION_PAGE_EXAMPLE,
   COMBOBOX_EXAMPLE,
   CONFIRM_DIALOGS_EXAMPLE,
+  COPY_BUTTONS_EXAMPLE,
   COMMAND_ASK_EXAMPLE,
   COMMENTS_EXAMPLE,
   DAILY_BARS_EXAMPLE,
