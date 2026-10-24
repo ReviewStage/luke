@@ -12,7 +12,6 @@ import {
   automationRunStanding,
   automationTriggerText,
 } from "@luke/features/automation-list-model";
-import { AUTOMATION_CALL_FAILURE, type AutomationView } from "@luke/features/automation-view";
 import type { AutomationScope, AutomationSummary } from "@luke/features/automation-wire";
 import { LINK_PLACE } from "@luke/features/link-grammar";
 import { momentText } from "@luke/features/time-format";
@@ -33,6 +32,7 @@ import {
   ERROR_STATE_PLACEMENT,
   ErrorState,
   FoldingButton,
+  type FoldingButtonHint,
   ListRow,
   NO_CONTEXT_MENU,
   NOT_FOUND_THING,
@@ -67,7 +67,12 @@ import { AUTOMATIONS_PAGE, type TasksControl } from "../tasks/use-tasks-tab.js";
 import { TOAST_HOLD, useToast } from "../toast.js";
 import { useExperiment } from "../use-app-state.js";
 import { rowMenu } from "./action-menu.js";
-import { AutomationEditor, AutomationPageSkeleton, type SentryOffer } from "./automation-editor.js";
+import {
+  AutomationEditor,
+  AutomationPageSkeleton,
+  type SentryOffer,
+  toggleRefusal,
+} from "./automation-editor.js";
 import {
   AutomationGroupCard,
   AutomationListSkeleton,
@@ -123,14 +128,15 @@ const SUGGESTIONS: readonly {
   readonly glyph: React.ReactNode;
 }[] = [{ name: AUTOMATION_PRESET.CODE_REVIEW, glyph: <GitPullRequestIcon /> }];
 
-/** Why a switch did not move, as its toast says it. */
-function toggleRefusal(answer: AutomationView, enabled: boolean): string | undefined {
-  if (!("failure" in answer)) return undefined;
-  if (answer.failure === AUTOMATION_CALL_FAILURE.NOT_PERMITTED) {
-    return "Only its creator, or the workspace's owners and admins, can change it.";
-  }
-  return enabled ? "Could not turn it on. Try again." : "Could not turn it off. Try again.";
-}
+/** Why the bar's two acts are unavailable while no workspace is chosen. */
+const NO_WORKSPACE_HINT = "Choose a workspace first";
+
+/** The hint a folding act of the bar hangs while no workspace is chosen: why it is off, after its words where they are folded. */
+const NoWorkspaceHint: FoldingButtonHint = ({ label, children }) => (
+  <Tooltip label={label === undefined ? NO_WORKSPACE_HINT : `${label}: ${NO_WORKSPACE_HINT}`}>
+    {children}
+  </Tooltip>
+);
 
 /** Who owns an automation, as its row's column says it: the workspace's photo and its name, or the maker's picture and Only you, its name whole on hover where the column cuts it short. */
 function OwnerCell({
@@ -431,16 +437,21 @@ function ListPage({
             icon={<BotIcon />}
             variant={BUTTON_VARIANT.OUTLINE}
             disabled={workspace === undefined}
+            focusableWhenDisabled
+            hint={workspace === undefined ? NoWorkspaceHint : undefined}
             onClick={tasks.onNewAutomationAgent}
           />
-          <Button
-            variant={BUTTON_VARIANT.OUTLINE}
-            icon={<PlusIcon />}
-            disabled={workspace === undefined}
-            onClick={openNew}
-          >
-            New automation
-          </Button>
+          <Tooltip label={workspace === undefined ? NO_WORKSPACE_HINT : undefined}>
+            <Button
+              variant={BUTTON_VARIANT.OUTLINE}
+              icon={<PlusIcon />}
+              disabled={workspace === undefined}
+              focusableWhenDisabled
+              onClick={openNew}
+            >
+              New automation
+            </Button>
+          </Tooltip>
         </AutomationsToolbar>
       }
       state={listState(workspacesUnread, read)}
