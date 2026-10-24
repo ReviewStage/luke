@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import { ISSUE_STATE } from "@luke/features/github-repositories-wire";
 import { TASK_ISSUE_PROVIDER, TASK_ISSUE_RELATION } from "@luke/features/task-issue-wire";
 import {
   TASK_PRIORITY,
@@ -29,9 +30,16 @@ import { afterEach, beforeEach, test, vi } from "vitest";
 import { runAppCommand } from "../app-commands.js";
 import { MemberDirectory } from "../member-directory.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
-import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
+import {
+  type AnyAct,
+  FAKE_ANSWER,
+  type FakeActAnswer,
+  fakeActPort,
+  fakeActs,
+  fakeAppBridge,
+} from "../testing/app-bridge.js";
 import { fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
-import { handState } from "../testing/app-state.js";
+import { handState, signedInAs } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { restOn } from "../testing/hint-rest.js";
 import { tasksControl } from "../testing/tasks-control.js";
@@ -803,7 +811,7 @@ test("a card draws what its agents are doing and the pull requests they opened, 
   );
 });
 
-test("a card draws a tag for each issue its task links, oldest first, a GitHub issue of its own repository by its number, and a press on a tag opens the issue", async () => {
+test("a card draws a tag for each issue its task links, oldest first, a GitHub issue of its own repository by its number and another's by its repository's name before it, and a press on a tag opens the issue", async () => {
   const linked: TaskSummary = {
     ...task(42, "Fix Safari login", TASK_STATUS.IN_PROGRESS, TASK_PRIORITY.HIGH),
     issues: [
@@ -844,7 +852,7 @@ test("a card draws a tag for each issue its task links, oldest first, a GitHub i
     [
       [TASK_ISSUE_PROVIDER.GITHUB, "#312"],
       [TASK_ISSUE_PROVIDER.LINEAR, "ENG-455"],
-      [TASK_ISSUE_PROVIDER.GITHUB, "Acme/Auth#270"],
+      [TASK_ISSUE_PROVIDER.GITHUB, "Auth#270"],
     ],
   );
   assert.deepEqual(
@@ -1012,4 +1020,67 @@ test("a card's pull request from a service before it sent its page opens the tas
   act(() => (pill ?? assert.fail("the card wears its pull request")).click());
   assert.deepEqual(opened, ["t-42"]);
   assert.deepEqual(pages, []);
+});
+
+test("a tag hangs its issue's card, read as the card is drawn: its title, key and state under GitHub's mark for it, where the workspace's GitHub answers", async () => {
+  const github = { ...ACME, github: { login: "acme", active: true } };
+  const linked: TaskSummary = {
+    ...task(42, "Fix Safari login", TASK_STATUS.IN_PROGRESS, TASK_PRIORITY.HIGH),
+    issues: [
+      {
+        id: "00000000-0000-4000-8000-000000000001",
+        provider: TASK_ISSUE_PROVIDER.GITHUB,
+        key: "acme/web#312",
+        url: "https://github.com/acme/web/issues/312",
+        relation: TASK_ISSUE_RELATION.CLOSES,
+      },
+    ],
+  };
+  const asked: AnyAct[] = [];
+  const state = {
+    ...signedInAs({ id: DEAN, email: "dean@acme.dev", name: "Dean Stratakos" }),
+    tasks: { ...IDLE_TASKS_VIEW, tasks: [linked], workspaces: [github] },
+  };
+  fakeActs({
+    onAppState: () => () => undefined,
+    requestAppState: () => Promise.resolve(state),
+    act: (request: AnyAct): Promise<FakeActAnswer> => {
+      asked.push(request);
+      if (request.kind === ACT_KIND.WORKSPACE_MEMBERS_READ) {
+        return Promise.resolve({ status: FAKE_ANSWER.DONE, value: MEMBERS });
+      }
+      const issue = {
+        number: 312,
+        title: "Login fails on Safari 18",
+        url: "https://github.com/acme/web/issues/312",
+        state: ISSUE_STATE.NOT_PLANNED,
+      };
+      return Promise.resolve({
+        status: FAKE_ANSWER.DONE,
+        value: request.kind === ACT_KIND.TASKS_ISSUE ? issue : undefined,
+      });
+    },
+  });
+  const board = await mountBoard([linked]);
+  const issueReads = () => asked.filter((each) => each.kind === ACT_KIND.TASKS_ISSUE);
+
+  assert.deepEqual(
+    issueReads(),
+    [],
+    "a Board of tags asks its provider for none until a card is drawn",
+  );
+  restOn(board.querySelector("a[data-task-tag]") ?? assert.fail("the tag"));
+  await act(async () => {
+    for (let tick = 0; tick < 8; tick += 1) await Promise.resolve();
+  });
+  const card = document.querySelector("[data-issue-card]");
+
+  assert.match(card?.textContent ?? "", /Login fails on Safari 18/);
+  assert.match(card?.textContent ?? "", /acme\/web#312 · Not planned/);
+  assert.match(card?.textContent ?? "", /Closes: Merging closes the issue/);
+  assert.equal(
+    card?.querySelector<SVGElement>("[data-issue-mark]")?.dataset.issueState,
+    ISSUE_STATE.NOT_PLANNED,
+  );
+  assert.equal(issueReads().length, 1);
 });
