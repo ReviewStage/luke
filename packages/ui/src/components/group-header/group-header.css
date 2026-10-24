@@ -172,6 +172,14 @@
     }
   }
 
+  /* A screen with no hover shows the count at rest, since no pointer rests
+     on the head to bring it. */
+  @media (hover: none) {
+    .luke-group-header-count[data-shown="on-hover"] {
+      opacity: 1;
+    }
+  }
+
   .luke-group-header-actions {
     display: flex;
     flex: none;

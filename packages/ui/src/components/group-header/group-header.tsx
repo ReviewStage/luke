@@ -151,7 +151,8 @@ export function GroupHeader({
     fold !== undefined && "defaultOpen" in fold ? fold.defaultOpen : true,
     fold !== undefined && "open" in fold ? fold : undefined,
   );
-  const drawn = !folds || state.drawn;
+  // Note that a group with no rows draws no body, so its fold names none.
+  const rows = (!folds || state.drawn) && said(children);
   const Heading = heading;
   const lead = <Lead glyph={glyph} folds={folds} label={label} mark={mark} count={count} />;
   return (
@@ -172,7 +173,7 @@ export function GroupHeader({
                 type="button"
                 className="luke-group-header-lead"
                 aria-expanded={state.open}
-                aria-controls={state.drawn ? rowsId : undefined}
+                aria-controls={rows ? rowsId : undefined}
                 onClick={pulseOnPress(state.toggle, PRESS_PULSE.QUIET)}
               >
                 {lead}
@@ -184,7 +185,7 @@ export function GroupHeader({
           {said(actions) ? <span className="luke-group-header-actions">{actions}</span> : null}
         </div>
         {/* Note that the rows are the root's own child, the body disclosure.css unrolls and fades. */}
-        {drawn && said(children) ? (
+        {rows ? (
           <div
             ref={folds ? state.body : undefined}
             id={rowsId}

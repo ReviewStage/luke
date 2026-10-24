@@ -76,6 +76,15 @@ test("a group folded from the start draws its head alone, and names its rows onc
   assert.equal(rows?.textContent, ROWS);
 });
 
+test("an open group with no rows names no rows it controls", () => {
+  const container = render(
+    createElement(GroupHeader, { label: "acme/web", fold: { defaultOpen: true } }),
+  );
+  const head = headOf(container);
+  assert.equal(head.getAttribute("aria-expanded"), "true");
+  assert.equal(head.getAttribute("aria-controls"), null);
+});
+
 test("a group its holder keeps folds as the holder says, told of each press", () => {
   const heard: boolean[] = [];
   function Held(): React.JSX.Element {
