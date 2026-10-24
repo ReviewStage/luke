@@ -84,13 +84,15 @@ export function mountWindow(
   const rootElement = document.getElementById("root");
   if (!rootElement) throw new Error("Renderer root element is missing");
   // A surface that fails to render draws its Reload instead, which is no
-  // first paint or usable screen, so both are left untimed as it is reported:
-  // the root reports it as it commits, before the commit's draw is heard.
+  // first paint, so it is left untimed as it is reported: the root reports
+  // it as it commits, before the commit's draw is heard. Note that a nested
+  // boundary's failure is reported here too, but a page that fails once the
+  // window has drawn finds its first paint ended already, and the first
+  // usable screen is the sidebar's to end, which a failed root never draws.
   const draw = createReportingRoot(rootElement, {
     ...sentry,
     reportBlankWindow: (error, why) => {
       leaveWindowSpan(PANEL_SPAN.WINDOW_FIRST_PAINT);
-      leaveWindowSpan(PANEL_SPAN.WINDOW_FIRST_USABLE);
       sentry.reportBlankWindow(error, why);
     },
   });
