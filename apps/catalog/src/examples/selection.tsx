@@ -33,6 +33,7 @@ function ChoosingTasks(): React.JSX.Element {
       <SelectionBar
         count={selected.size}
         onClear={clear}
+        controls="selection-tasks-list"
         acts={[
           { label: "Mark done", icon: <GLYPH.DONE />, onAct: clear },
           {
@@ -42,7 +43,7 @@ function ChoosingTasks(): React.JSX.Element {
           },
         ]}
       />
-      <List label="Tasks" selection={{ selected, onChange: setSelected }}>
+      <List id="selection-tasks-list" label="Tasks" selection={{ selected, onChange: setSelected }}>
         {TASKS.map((task) => (
           <ListRow
             key={task.id}

@@ -337,6 +337,7 @@ function said(words: ReactNode): boolean {
  * selected. A list not asked chooses nothing.
  */
 export function List({
+  id,
   label,
   variant = LIST_VARIANT.PLAIN,
   density = LIST_DENSITY.REGULAR,
@@ -345,6 +346,8 @@ export function List({
   selection,
   children,
 }: {
+  /** The id of the list, which a `SelectionBar` over it names to hand it the focus back. */
+  id?: string | undefined;
   label: string;
   variant?: ListVariant;
   density?: ListDensity;
@@ -364,6 +367,7 @@ export function List({
       onKeyDown={(event) => {
         if (!chooser.onKeyDown(event)) roving.onKeyDown(event);
       }}
+      id={id}
       className="luke-list"
       data-variant={variant}
       data-density={density}

@@ -1,8 +1,15 @@
 import { SELECTION_WORDS, selectedWords } from "@luke/features/words";
-import { type KeyboardEvent, type ReactNode, useId } from "react";
+import {
+  type FocusEvent,
+  type KeyboardEvent,
+  type ReactNode,
+  useId,
+  useLayoutEffect,
+  useRef,
+} from "react";
 import { Button } from "../button/button.js";
 import { Menu, type MenuEntry, useMenu } from "../menu/menu.js";
-import { ROVING_ORIENTATION, useRovingKeys } from "../roving-keys/roving-keys.js";
+import { focusRovingStop, ROVING_ORIENTATION, useRovingKeys } from "../roving-keys/roving-keys.js";
 
 /**
  * selection-bar.tsx -- the bar over a list while some of its rows are chosen: how many ("3 selected"), the acts that take them all at once, and Clear.
@@ -16,7 +23,10 @@ import { ROVING_ORIENTATION, useRovingKeys } from "../roving-keys/roving-keys.js
  * last, chooses none, as Esc does in the list and in the bar alike.
  *
  * The bar is a toolbar (`useRovingKeys`): Tab stops on it once, ←→ walk
- * its buttons.
+ * its buttons. It names the list it acts on (`controls`), and where the
+ * bar held the focus as the last row left the selection, by Clear, Esc,
+ * or an act that took the rows away, it hands the focus to that list's
+ * Tab stop rather than let it fall to the page as its buttons go.
  */
 
 /** One act of the bar: its words, its glyph, and either what it does or the menu of choices it drops. */
@@ -54,6 +64,7 @@ export function SelectionBar({
   count,
   acts,
   onClear,
+  controls,
 }: {
   /** How many rows are chosen. */
   count: number;
@@ -61,10 +72,31 @@ export function SelectionBar({
   acts: readonly SelectionAct[];
   /** Chooses none, as Clear and Esc do. */
   onClear: () => void;
+  /** The id of the list whose rows it acts on (`List`'s `id`), which takes the focus once the bar goes. */
+  controls: string;
 }): React.JSX.Element | null {
   const roving = useRovingKeys<HTMLDivElement>({ orientation: ROVING_ORIENTATION.HORIZONTAL });
   const countId = useId();
+  // Whether the focus stands in the bar, or stood there as its buttons went.
+  const holding = useRef(false);
+  useLayoutEffect(() => {
+    if (count > 0 || !holding.current) return;
+    holding.current = false;
+    // Note that only a focus fallen to the page is handed on, never one something else took.
+    const fell = document.activeElement === null || document.activeElement === document.body;
+    const list = document.getElementById(controls);
+    if (fell && list !== null) focusRovingStop(list);
+  }, [count, controls]);
   if (count <= 0) return null;
+  const onFocus = (event: FocusEvent<HTMLDivElement>) => {
+    holding.current = true;
+    roving.onFocus(event);
+  };
+  // Note that a button taken away blurs with nowhere to go, so only a focus moved somewhere lets go.
+  const onBlur = (event: FocusEvent<HTMLDivElement>) => {
+    const to = event.relatedTarget;
+    if (to instanceof Node && !event.currentTarget.contains(to)) holding.current = false;
+  };
   const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     if (roving.onKeyDown(event) || event.defaultPrevented) return;
     if (event.key !== "Escape" || event.nativeEvent.isComposing) return;
@@ -76,8 +108,11 @@ export function SelectionBar({
     <div
       {...roving}
       onKeyDown={onKeyDown}
+      onFocus={onFocus}
+      onBlur={onBlur}
       role="toolbar"
       aria-labelledby={countId}
+      aria-controls={controls}
       className="luke-selection-bar"
     >
       <span id={countId} role="status" className="luke-selection-bar-count">
