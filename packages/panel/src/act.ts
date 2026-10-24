@@ -122,13 +122,14 @@ export function toastActFailure(error: unknown): void {
 /**
  * An act a person pressed for, whose answer nothing reads: a refusal raises a
  * FAILED toast in its own words, and any other failure one saying it did
- * not go through.
+ * not go through. The promise it returns never rejects, and settles once the
+ * act has, for a button that shows it is busy meanwhile.
  */
 export function pressAct<Kind extends PortActKind>(
   kind: Kind,
   ...[payload]: ActArguments<Kind>
-): void {
-  void performAct(kind, payload).catch(toastActFailure);
+): Promise<void> {
+  return performAct(kind, payload).then(() => undefined, toastActFailure);
 }
 
 /**

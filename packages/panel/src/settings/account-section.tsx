@@ -125,8 +125,6 @@ export function AccountSection({
   });
   const deletion = useConfirmDialog(surroundings, onDeleteAccount);
 
-  const busy = signOut.busy || deletion.busy;
-
   // Note that each row stands in a wrapper wearing its search anchor, because
   // a pressed result lands on and rings the whole row, as it did before the
   // row was shared, and the shared row takes no attribute of a caller's.
@@ -146,7 +144,13 @@ export function AccountSection({
           }
         >
           {() => (
-            <Button variant={BUTTON_VARIANT.OUTLINE} disabled={busy} onClick={signOut.ask}>
+            <Button
+              variant={BUTTON_VARIANT.OUTLINE}
+              busy={signOut.busy}
+              busyLabel="Signing out"
+              disabled={deletion.busy}
+              onClick={signOut.ask}
+            >
               {VERB.SIGN_OUT}
             </Button>
           )}
@@ -156,7 +160,13 @@ export function AccountSection({
       <div {...searchAnchorProps(SETTINGS_SEARCH_ROW.DELETE_ACCOUNT)}>
         <SettingsRow label="Delete account">
           {() => (
-            <Button variant={BUTTON_VARIANT.DANGER_OUTLINE} disabled={busy} onClick={deletion.ask}>
+            <Button
+              variant={BUTTON_VARIANT.DANGER_OUTLINE}
+              busy={deletion.busy}
+              busyLabel="Deleting the account"
+              disabled={signOut.busy}
+              onClick={deletion.ask}
+            >
               Delete account
             </Button>
           )}
