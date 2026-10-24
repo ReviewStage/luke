@@ -102,11 +102,13 @@ test("an agent's tab's video is a rectangle at its picture's own aspect, as tall
 test("a clip still being read beside a call's controls wraps them onto a line of their own where the card is too narrow for both", () => {
   laid = layContainersAt({});
   const foot = document.body.appendChild(document.createElement("div"));
-  foot.className = "prompt-input-footer";
+  foot.className = "luke-composer-foot-bar";
   const strip = foot.appendChild(document.createElement("div"));
-  strip.className = "dictation-strip";
-  const controls = foot.appendChild(document.createElement("fieldset"));
-  controls.className = "agent-call-controls";
+  strip.className = "luke-composer-foot-strip";
+  strip.appendChild(document.createElement("div")).className = "dictation-strip";
+  const controls = foot.appendChild(document.createElement("div"));
+  controls.className = "luke-composer-foot-call";
+  controls.appendChild(document.createElement("fieldset")).className = "agent-call-controls";
   assert.equal(getComputedStyle(foot).flexWrap, "wrap");
   assert.equal(
     getComputedStyle(strip).flexBasis,

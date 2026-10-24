@@ -302,7 +302,7 @@ test("the card holds the composer with its words focused, the repository chip in
   const card = await mount();
   const controls = card.controls();
   const head = card.dialog()?.querySelector(".new-task-head");
-  const foot = card.dialog()?.querySelector(".prompt-input-footer");
+  const foot = card.dialog()?.querySelector(".luke-composer-foot");
 
   assert.equal(document.activeElement, card.field());
   assert.equal(card.placeholder(), "Describe the change for a coding agent…");
@@ -1102,7 +1102,7 @@ test("the Issue chip stands at the right end of the head row, after the reposito
   const head = connected.dialog()?.querySelector(".new-task-head");
   const placed = {
     last: head?.lastElementChild?.querySelector(ISSUE_CHIP) !== null,
-    inFoot: connected.dialog()?.querySelector(`.prompt-input-footer ${ISSUE_CHIP}`) !== null,
+    inFoot: connected.dialog()?.querySelector(`.luke-composer-foot ${ISSUE_CHIP}`) !== null,
   };
   for (const root of roots.splice(0)) act(() => root.unmount());
   document.body.innerHTML = "";

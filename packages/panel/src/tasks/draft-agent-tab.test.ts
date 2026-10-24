@@ -230,8 +230,8 @@ function mount(
       pressInComposer(container, "Enter");
       await settle();
     },
-    note: () => container.querySelector(".agent-composer-note")?.textContent ?? undefined,
-    words: () => sentence(container.querySelector(".agent-composer-note [role='alert']")),
+    note: () => container.querySelector(".luke-composer-foot-note")?.textContent ?? undefined,
+    words: () => sentence(container.querySelector(".luke-composer-foot-note [role='alert']")),
     draft: () => composerEditor(container).textContent,
     button,
     press: async (words: string) => {
@@ -564,7 +564,8 @@ test("a continue's draft names its source alone over the box, stands on a workin
   await tab.send();
   assert.deepEqual(forks, [{ forked: fork, words: "Now add the dark variant." }]);
   assert.match(working() ?? "", /^Copying Queue the invite email's work…/u);
-  assert.equal(tab.button("Send")?.disabled, true, "the box is held while the Start is out");
+  assert.equal(tab.button("Sending")?.disabled, true, "the box is held while the Start is out");
+  assert.equal(tab.button("Sending")?.getAttribute("aria-busy"), "true", "its Send busy");
 
   await act(async () =>
     answers.shift()?.(startFailureNote({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }, TASK_ID)),
