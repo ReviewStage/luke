@@ -26,6 +26,7 @@ import {
   Pin,
   PinOff,
   RotateCcw,
+  Split,
   Unplug,
   Users,
   Zap,
@@ -133,6 +134,8 @@ export const GLYPH = {
   STATUS: lucideGlyph(CircleDotDashed),
   // An agent's to-do list, the same ticked list a plan's to-do block wears.
   TODOS: lucideGlyph(ListChecks),
+  // An ask that wants a choice among options, the Inbox's "decide".
+  DECIDE: lucideGlyph(Split),
   // Word sent back to the makers of Luke, which no comment is.
   FEEDBACK: lucideGlyph(MessageSquareHeart),
 
