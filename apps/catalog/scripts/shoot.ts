@@ -98,7 +98,7 @@ interface ShotResult {
 interface PlaywrightPage {
   goto(url: string): Promise<unknown>;
   waitForSelector(selector: string): Promise<unknown>;
-  waitForFunction(script: string, options?: { timeout: number }): Promise<unknown>;
+  waitForFunction(script: string, arg?: unknown, options?: { timeout: number }): Promise<unknown>;
   waitForTimeout(ms: number): Promise<void>;
   evaluate<Result>(script: string): Promise<Result>;
   on(event: "pageerror", listener: (value: never) => void): void;
@@ -202,6 +202,7 @@ async function shootOne(
   try {
     await page.waitForFunction(
       `!document.querySelector(".catalog-example").textContent.includes(${JSON.stringify(RECORDING_WORDS)})`,
+      undefined,
       { timeout: READY_TIMEOUT_MS },
     );
   } catch {
