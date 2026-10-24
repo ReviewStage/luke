@@ -469,7 +469,7 @@ test("a dialog opened over another is the one Escape puts away, and the one bene
 });
 
 /** A window holding the button that opens a dialog through `open`, whose Done closes it the same way. */
-function OpenOwner(): React.JSX.Element {
+function OpenOwner({ onExited }: { onExited?: (() => void) | undefined }): React.JSX.Element {
   const [open, setOpen] = useState(false);
   return createElement(
     "div",
@@ -479,14 +479,15 @@ function OpenOwner(): React.JSX.Element {
       open,
       title: "Rename plan",
       onDismiss: () => setOpen(false),
+      onExited,
       children: createElement("button", { type: "button", onClick: () => setOpen(false) }, "Done"),
     }),
   );
 }
 
 /** The owner drawn, its dialog opened from its button, and then closed by Done. */
-function closedThroughOpen(): HTMLButtonElement {
-  draw(createElement(OpenOwner));
+function closedThroughOpen(onExited?: () => void): HTMLButtonElement {
+  draw(createElement(OpenOwner, { onExited }));
   const opener = button("Rename");
   opener.focus();
   act(() => opener.click());
@@ -520,4 +521,34 @@ test("a dialog closed through open while motion is held goes at once", () => {
 
   expect(card()).toBeNull();
   expect(holds(opener)).toBe(true);
+});
+
+test("a dialog tells its owner it is gone once its fade has run, and not before", async () => {
+  vi.useFakeTimers({ toFake: ["requestAnimationFrame", "cancelAnimationFrame"] });
+  const exits = holdExits();
+  const gone = vi.fn();
+  closedThroughOpen(gone);
+  act(() => vi.advanceTimersToNextFrame());
+  const whileFading = gone.mock.calls.length;
+  await act(async () => exits.finish());
+
+  expect(whileFading).toBe(0);
+  expect(gone).toHaveBeenCalledTimes(1);
+});
+
+test("a dialog closed while motion is held tells its owner it is gone at once", () => {
+  document.body.style.setProperty(MOTION_TOKEN.DURATION_FAST, "0s");
+  holdExits();
+  const gone = vi.fn();
+  closedThroughOpen(gone);
+
+  expect(card()).toBeNull();
+  expect(gone).toHaveBeenCalledTimes(1);
+});
+
+test("a dialog that never opened has no exit to tell its owner of", () => {
+  const gone = vi.fn();
+  draw(createElement(OpenOwner, { onExited: gone }));
+
+  expect(gone).not.toHaveBeenCalled();
 });

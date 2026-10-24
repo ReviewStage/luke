@@ -1471,18 +1471,16 @@ function ManagedLinear({ workspace }: { workspace: Workspace }): React.JSX.Eleme
             ),
         }}
       />
-      {linear === undefined ? null : (
-        <ConfirmDialog
-          confirm={disconnect}
-          question={{
-            title: `Disconnect Linear from ${workspace.name}?`,
-            body: "Nobody in the workspace can start a task from an issue until Linear is connected again.",
-            verb: "Disconnect",
-            running: "Disconnecting",
-            loss: CONFIRM_LOSS.AFFECTS_OTHERS,
-          }}
-        />
-      )}
+      <ConfirmDialog
+        confirm={disconnect}
+        question={{
+          title: `Disconnect Linear from ${workspace.name}?`,
+          body: "Nobody in the workspace can start a task from an issue until Linear is connected again.",
+          verb: "Disconnect",
+          running: "Disconnecting",
+          loss: CONFIRM_LOSS.AFFECTS_OTHERS,
+        }}
+      />
     </Stack>
   );
 }

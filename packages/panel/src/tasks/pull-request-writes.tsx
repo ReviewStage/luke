@@ -457,12 +457,10 @@ export function PullRequestStateMenu({
       {menu.drawn === undefined ? null : (
         <ActionMenu label={label} menu={menu.drawn} groups={[items]} onClose={menu.close} />
       )}
-      {asked ? (
-        <ConfirmDialog
-          confirm={confirm}
-          question={inQueue ? CLOSE_QUEUED_QUESTION : CLOSE_UNKNOWN_QUESTION}
-        />
-      ) : null}
+      <ConfirmDialog
+        confirm={confirm}
+        question={inQueue ? CLOSE_QUEUED_QUESTION : CLOSE_UNKNOWN_QUESTION}
+      />
     </>
   );
 }

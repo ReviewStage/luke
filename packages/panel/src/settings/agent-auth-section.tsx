@@ -76,6 +76,7 @@ import { useSettleOpenAiKey } from "../openai-key.js";
 import { useOpenLink } from "../tasks/use-open-link.js";
 import { useAnnounceShown } from "../use-announce-shown.js";
 import { useCapability } from "../use-app-state.js";
+import { useHeldThroughExit } from "../use-held-through-exit.js";
 
 /**
  * agent-auth-section.tsx -- Settings › Agents' harnesses: one row each for Claude and Codex, saying how it is connected, and the dialog that connects it.
@@ -604,11 +605,19 @@ function ClaudeTokenPanel({
 }
 
 /** OpenAI's first-sign-in notice: what using the plan means, and Got it. */
-function FirstSignInNotice({ onDismiss }: { onDismiss: () => void }): React.JSX.Element {
+function FirstSignInNotice({
+  open,
+  onDismiss,
+}: {
+  /** Whether the notice stands; falling, it fades out. */
+  open: boolean;
+  onDismiss: () => void;
+}): React.JSX.Element {
   const gotIt = useRef<HTMLButtonElement | null>(null);
   const bodyId = useId();
   return (
     <Dialog
+      open={open}
       title={WORDS.NOTICE_TITLE}
       describedBy={bodyId}
       initialFocus={gotIt}
@@ -754,7 +763,7 @@ function ChatGptPanel({
           loss: CONFIRM_LOSS.REVERSIBLE,
         }}
       />
-      {notice ? <FirstSignInNotice onDismiss={dismissNotice} /> : null}
+      <FirstSignInNotice open={notice} onDismiss={dismissNotice} />
     </>
   );
 }
@@ -926,15 +935,20 @@ function ApiKeyPanel({
 
 /** A harness's dialog: a radio card per credential, the checked one its new agents' default. */
 function AgentAuthDialog({
+  open,
   provider,
   answer,
   onAnswer,
   onClose,
+  onExited,
 }: {
+  /** Whether the card stands; falling, it fades out, then tells its owner it is gone. */
+  open: boolean;
   provider: ProviderKeyProvider;
   answer: ProviderKeysAnswer;
   onAnswer: (answer: ProviderKeysAnswer) => void;
   onClose: () => void;
+  onExited: () => void;
 }): React.JSX.Element {
   const { act } = useAct();
   const openLink = useOpenLink();
@@ -1011,9 +1025,11 @@ function AgentAuthDialog({
 
   return (
     <Dialog
+      open={open}
       title={harness.name}
       size={DIALOG_SIZE.WIDE}
       onDismiss={onClose}
+      onExited={onExited}
       actions={<DialogActions onDone={onClose} />}
     >
       <div className={NO_CAPTURE}>
@@ -1050,6 +1066,8 @@ export function AgentAuthSection({
   const [readFailed, setReadFailed] = useState(false);
   const [attempt, setAttempt] = useState(0);
   const [open, setOpen] = useState<ProviderKeyProvider | undefined>(undefined);
+  // Note that the card is drawn for the provider it opened on until its fade has run, so it does not change under its own exit.
+  const { held: drawn, onExited } = useHeldThroughExit(open);
 
   // The page opening reads the credentials as the service holds them now, which a step may just have marked.
   useEffect(() => {
@@ -1135,12 +1153,14 @@ export function AgentAuthSection({
           />
         )}
       </SettingsSection>
-      {open === undefined || answer === undefined ? null : (
+      {drawn === undefined || answer === undefined ? null : (
         <AgentAuthDialog
-          provider={open}
+          open={open !== undefined}
+          provider={drawn}
           answer={answer}
           onAnswer={setAnswer}
           onClose={() => setOpen(undefined)}
+          onExited={onExited}
         />
       )}
     </div>

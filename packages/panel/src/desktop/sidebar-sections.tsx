@@ -210,52 +210,51 @@ export function useSectionDialogs(tasks: TasksControl, surfaceOpen: boolean): Se
   const form = useFormDialog(confirm, title.trim() !== "");
   const dialog = (
     <>
-      {form.open ? (
-        <Dialog
-          title={editing ? "Edit section" : "New section"}
-          busy={form.settling}
-          refused={form.refusal !== undefined}
-          initialFocus={field}
-          onDismiss={form.dismiss}
-          actions={
-            <DialogActions
-              onCancel={form.dismiss}
-              act={{
-                verb: editing ? "Save" : "Create section",
-                tone: DIALOG_TONE.PRIMARY,
-                running: editing ? "Saving" : "Creating section",
-                ...form.act,
-              }}
-            />
-          }
-        >
-          <TextField
-            ref={field}
-            label="Section title"
-            spellCheck={false}
-            placeholder="Section title"
-            maxLength={TASK_SECTION_BOUNDS.MAX_TITLE_CHARS}
-            value={title}
-            disabled={form.settling}
-            onEnter={form.submit}
-            onChange={(next) => {
-              setTitle(next);
-              // Note that a refused answer has settled, so the refusal alone holds
-              // the card up: the question is asked again rather than cleared, or
-              // the first key typed after it would close the card.
-              if (confirm.rejection !== undefined) confirm.ask();
+      <Dialog
+        open={form.open}
+        title={editing ? "Edit section" : "New section"}
+        busy={form.settling}
+        refused={form.refusal !== undefined}
+        initialFocus={field}
+        onDismiss={form.dismiss}
+        actions={
+          <DialogActions
+            onCancel={form.dismiss}
+            act={{
+              verb: editing ? "Save" : "Create section",
+              tone: DIALOG_TONE.PRIMARY,
+              running: editing ? "Saving" : "Creating section",
+              ...form.act,
             }}
           />
-          {/* Keyed by what was asked, so each opening starts its tab, color, and search afresh from the icon it opened with. */}
-          <SectionIconPicker
-            key={ask?.kind === TASK_SECTION_WRITE.EDIT ? ask.section.id : TASK_SECTION_WRITE.CREATE}
-            icon={icon}
-            disabled={form.settling}
-            onIcon={setIcon}
-          />
-          <ErrorLine>{form.refusal}</ErrorLine>
-        </Dialog>
-      ) : null}
+        }
+      >
+        <TextField
+          ref={field}
+          label="Section title"
+          spellCheck={false}
+          placeholder="Section title"
+          maxLength={TASK_SECTION_BOUNDS.MAX_TITLE_CHARS}
+          value={title}
+          disabled={form.settling}
+          onEnter={form.submit}
+          onChange={(next) => {
+            setTitle(next);
+            // Note that a refused answer has settled, so the refusal alone holds
+            // the card up: the question is asked again rather than cleared, or
+            // the first key typed after it would close the card.
+            if (confirm.rejection !== undefined) confirm.ask();
+          }}
+        />
+        {/* Keyed by what was asked, so each opening starts its tab, color, and search afresh from the icon it opened with. */}
+        <SectionIconPicker
+          key={ask?.kind === TASK_SECTION_WRITE.EDIT ? ask.section.id : TASK_SECTION_WRITE.CREATE}
+          icon={icon}
+          disabled={form.settling}
+          onIcon={setIcon}
+        />
+        <ErrorLine>{form.refusal}</ErrorLine>
+      </Dialog>
     </>
   );
   return {
