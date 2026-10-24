@@ -41,10 +41,12 @@ test("a task's step is named by the task, with the side panel's tab while it is 
   assert.deepEqual(stepTitle(PANEL_TAB.TASKS, onTask(SIDE_PANEL_TAB.CODE)), {
     label: "Auth refactor",
     detail: "Code",
+    panes: { column: undefined, side: "Code" },
   });
   assert.deepEqual(stepTitle(PANEL_TAB.TASKS, onTask({ file: "apps/web/session-store.ts" })), {
     label: "Auth refactor",
     detail: "session-store.ts",
+    panes: { column: undefined, side: "session-store.ts" },
   });
   assert.deepEqual(stepTitle(PANEL_TAB.TASKS, onTask(undefined)), {
     label: "Auth refactor",

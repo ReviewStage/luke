@@ -166,7 +166,8 @@ export function stepTitle(
       ? shownSideTabLabel(tasks.sidePanel.tab, boundFor, tasks)
       : undefined;
   const shown = [column, side].filter((part) => part !== undefined);
-  return { label: name, detail: shown.length === 0 ? undefined : shown.join(" · ") };
+  if (shown.length === 0) return { label: name, detail: undefined };
+  return { label: name, detail: shown.join(" · "), panes: { column, side } };
 }
 
 /** The kinds of step a name is read again for: those naming a task, a task's Inbox item, or a person. */
@@ -197,7 +198,7 @@ export function memberName(
   return members?.find((member) => member.userId === userId)?.name;
 }
 
-/** A task's step named again: its task's name now, and its tabs' where every one is named now, else the words it was kept with. */
+/** A task's step named again: its task's name now, and each of its tabs' now, or as the step called it where nothing names it now. */
 function liveTaskTitle(
   step: Extract<NamedStep, { kind: typeof NAMED_STEP.TASK }>,
   kept: StepTitle | undefined,
@@ -206,9 +207,11 @@ function liveTaskTitle(
   const label = taskName(tasks, step.taskId) ?? kept?.label;
   if (label === undefined) return undefined;
   const { taskId, column, side } = step;
-  // Note that `null` is a pane that showed no tab, and `undefined` a tab named nowhere now, which leaves the words kept, as they named it then.
-  const columnName = column === undefined ? null : columnTabLabel(column, taskId, tasks);
-  const sideName = side === undefined ? null : sideTabLabel(side, taskId, tasks);
+  // Note that `null` is a pane that showed no tab, and `undefined` a tab named neither now nor as kept, which leaves the words kept whole.
+  const columnName =
+    column === undefined ? null : (columnTabLabel(column, taskId, tasks) ?? kept?.panes?.column);
+  const sideName =
+    side === undefined ? null : (sideTabLabel(side, taskId, tasks) ?? kept?.panes?.side);
   if (columnName === undefined || sideName === undefined) return { label, detail: kept?.detail };
   const shown = [columnName, sideName].filter((part) => part !== null);
   return { label, detail: shown.length === 0 ? undefined : shown.join(" · ") };

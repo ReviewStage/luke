@@ -986,6 +986,28 @@ test("Back's list names a task and its agent's tab by the names they go by now, 
   });
 });
 
+test("Back's list names a renamed agent's tab by its name now beside a page's tab named as the window called it there, whose page is read only while its task is open", () => {
+  const page = { page: "page-notes" };
+  const open = onTabs({ column: AGENT_A, side: page });
+  const window = mount(
+    {
+      ...open,
+      sidePanel: { ...open.sidePanel, strip: [page] },
+      tasks: [listedTask("Auth refactor")],
+      agents: codingAgentsControl({ agents: [openAgent("Token refresh")] }),
+      pages: [{ id: page.page, title: "Notes", version: 1, at: 1 }],
+    },
+    memoryHistory(),
+    namedAsShown,
+  );
+  press();
+  window.stand(tasksControl({ tasks: [listedTask("Auth refactor", "Token renewal")] }));
+  assert.deepEqual(window.history().steps.back[0]?.title, {
+    label: "Auth refactor",
+    detail: "Token renewal · Notes",
+  });
+});
+
 test("Back's list names a person's page by the name the workspace's members give them now, and by the name it was opened with while they are unread", async () => {
   let answer: (members: readonly WorkspaceMember[]) => void = () => undefined;
   fakeAppBridge({});

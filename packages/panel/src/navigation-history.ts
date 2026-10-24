@@ -220,6 +220,14 @@ interface KnownStrips {
 export interface StepTitle {
   readonly label: string;
   readonly detail?: string | undefined;
+  /** What a task's step called each of its panes' tabs, which one is named by again where nothing names it now; none on any other step. */
+  readonly panes?: StepPanes | undefined;
+}
+
+/** What a task's step called the tab its column showed and the one its side panel showed, where each showed one. */
+export interface StepPanes {
+  readonly column?: string | undefined;
+  readonly side?: string | undefined;
 }
 
 /** A place with what it was called as the window stood on it, which no comparison of steps reads. */
@@ -1153,6 +1161,8 @@ export function useWindowHistory(input: {
   }
   const titleLabel = input.title?.label;
   const titleDetail = input.title?.detail;
+  const titleColumn = input.title?.panes?.column;
+  const titleSide = input.title?.panes?.side;
   const untitled = useMemo((): Place | undefined => {
     if (!known) return undefined;
     if (tab === PANEL_TAB.SETTINGS) {
@@ -1237,8 +1247,11 @@ export function useWindowHistory(input: {
   ]);
   const place = useMemo((): Titled | undefined => {
     if (untitled === undefined || titleLabel === undefined) return untitled;
-    return { ...untitled, title: { label: titleLabel, detail: titleDetail } };
-  }, [untitled, titleLabel, titleDetail]);
+    const label = { label: titleLabel, detail: titleDetail };
+    const panes = { column: titleColumn, side: titleSide };
+    const unnamed = titleColumn === undefined && titleSide === undefined;
+    return { ...untitled, title: unnamed ? label : { ...label, panes } };
+  }, [untitled, titleLabel, titleDetail, titleColumn, titleSide]);
   // Whether the tabs a task's step showed still stand on its strips, as far as the window last saw them; a task not seen since is taken to.
   const tabsStand = (to: Extract<Place, { kind: typeof PLACE_KIND.TASK }>) => {
     const strips = knownStrips.get(to.taskId);
