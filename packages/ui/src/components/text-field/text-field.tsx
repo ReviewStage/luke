@@ -1,6 +1,9 @@
 import type { ClipboardEvent, KeyboardEvent, Ref } from "react";
+import { cn } from "../../cn.js";
 import { isComposingKey } from "../../composing-key.js";
 import { cssCustomProperties } from "../../css.js";
+import { ShadcnInput } from "../../shadcn/input.js";
+import { ShadcnTextarea } from "../../shadcn/textarea.js";
 import type { FieldControl } from "../form-field/form-field.js";
 
 /**
@@ -30,6 +33,11 @@ import type { FieldControl } from "../form-field/form-field.js";
  * is not yet one (a lone minus sign), as the browser reads it; a busy text
  * area, its words on their way somewhere, takes no typing and answers
  * neither Escape nor ⌘Return until it is not.
+ *
+ * A TextField is drawn by shadcn/ui's input (`../../shadcn/input.tsx`, on
+ * Base UI) and a TextArea by its textarea (`../../shadcn/textarea.tsx`); a
+ * size or look other than the control's well replaces the well's classes
+ * whole, in Tailwind utilities over the theme's field roles.
  */
 
 /** What a one-line field holds: words, an address, a secret, a time of day, or a number. */
@@ -103,6 +111,46 @@ export const ENTER_KEY_HINT = {
 } as const;
 
 export type EnterKeyHint = (typeof ENTER_KEY_HINT)[keyof typeof ENTER_KEY_HINT];
+
+/**
+ * Each size's own classes, in place of the control's well, which a control
+ * keeps. Note that a well-less size grounds its focus too, because the
+ * well's focus ground would otherwise fill it.
+ */
+const TEXT_FIELD_SIZE_CLASS = {
+  [TEXT_FIELD_SIZE.CONTROL]: undefined,
+  /** A page's title written in place: the title's words alone, the caret in them showing focus. */
+  [TEXT_FIELD_SIZE.TITLE]:
+    "h-auto p-0 border-0 bg-transparent focus:bg-transparent text-title font-bold outline-none",
+  /** A step under a control, on the well's ground, its edge lighting while it holds the caret; 16px words under a finger. */
+  [TEXT_FIELD_SIZE.COMPACT]:
+    "h-control-compact rounded-control-compact border-border bg-well px-luke-6 text-caption leading-body text-ellipsis focus:border-muted-foreground focus:bg-well focus:outline-none pointer-coarse:text-caption-touch",
+  /** Words written in place in the body's type: no well, no edge, and no ring. */
+  [TEXT_FIELD_SIZE.INLINE]: "h-auto p-0 border-0 bg-transparent focus:bg-transparent outline-none",
+} as const satisfies Record<TextFieldSize, string | undefined>;
+
+/**
+ * A time is typed or stepped with the arrows, the engine's own clock hidden.
+ * WebKit on iOS draws a time in a box of its own, so its look is let go, its
+ * block inset is the room around one line, and its value starts where every
+ * field's words start.
+ */
+const TIME_FIELD =
+  "appearance-none py-time-inset [&::-webkit-calendar-picker-indicator]:hidden [&::-webkit-date-and-time-value]:m-0 [&::-webkit-date-and-time-value]:min-h-time-value [&::-webkit-date-and-time-value]:text-start";
+
+/** A note that grows with its words from its rows' height, up to the profile's tallest note, with no handle. */
+const TEXT_AREA_GROW =
+  "min-h-text-area-least max-h-text-area-grow-max field-sizing-content resize-none";
+
+/** A text area bare in a card that is its well: no edge, no ground, and no ring, at the insets its card sets. */
+const TEXT_AREA_BARE =
+  "p-0 pt-text-area-inset-start px-text-area-inset-inline pb-text-area-inset-end rounded-none border-0 bg-transparent focus:bg-transparent resize-none outline-none";
+
+/** Each face's class: the body's, which a field wears already, or a fixed width. */
+const TEXT_FIELD_FONT_CLASS = {
+  [TEXT_FIELD_FONT.BODY]: undefined,
+  [TEXT_FIELD_FONT.MONO]: "font-mono",
+} as const satisfies Record<TextFieldFont, string | undefined>;
 
 /**
  * How a text entry is named: by its `FormField`'s label, through the field's
@@ -237,9 +285,13 @@ export function TextField({
     ref?: Ref<HTMLInputElement> | undefined;
   }): React.JSX.Element {
   return (
-    <input
+    <ShadcnInput
       ref={ref}
-      className="luke-text-field"
+      className={cn(
+        TEXT_FIELD_SIZE_CLASS[size],
+        TEXT_FIELD_FONT_CLASS[props.font ?? TEXT_FIELD_FONT.BODY],
+        props.type === TEXT_FIELD_TYPE.TIME && TIME_FIELD,
+      )}
       type={props.type ?? TEXT_FIELD_TYPE.TEXT}
       autoComplete={autoComplete}
       autoCorrect={autoCorrect ? undefined : "off"}
@@ -304,9 +356,15 @@ export function TextArea({
   ref?: Ref<HTMLTextAreaElement> | undefined;
 }): React.JSX.Element {
   return (
-    <textarea
+    <ShadcnTextarea
       ref={ref}
-      className="luke-text-field"
+      className={cn(
+        grow && TEXT_AREA_GROW,
+        look === TEXT_AREA_LOOK.BARE && TEXT_AREA_BARE,
+        grow && look === TEXT_AREA_LOOK.BARE && "min-h-text-area-bare-least",
+        grow && growLimit === TEXT_AREA_GROW_LIMIT.NONE && "max-h-none",
+        TEXT_FIELD_FONT_CLASS[props.font ?? TEXT_FIELD_FONT.BODY],
+      )}
       rows={rows}
       data-grow={grow}
       data-look={look}

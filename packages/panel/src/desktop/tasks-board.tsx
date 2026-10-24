@@ -6,6 +6,7 @@ import {
   type TaskStanding,
   type TaskSummary,
 } from "@luke/features/task-wire";
+import { noneYetWords, readFailedWords, readingWords, TERM } from "@luke/features/words";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
   BUTTON_SIZE,
@@ -147,10 +148,10 @@ import { useRowDrag } from "./use-row-drag.js";
  */
 
 /** What the page is read as while the tasks are. */
-const READING_LINE = "Reading tasks";
+const READING_LINE = readingWords(TERM.TASK.many);
 
 /** What the page says where the tasks could not be read. */
-const UNREAD_LINE = "Your tasks could not be read.";
+const UNREAD_LINE = readFailedWords(`your ${TERM.TASK.many}`);
 
 /** What a column with no task says in its own place. */
 const NO_TASKS = "No tasks";
@@ -668,7 +669,7 @@ export function TasksBoard({
       filters={filters}
       state={boardState(tasks, listed.length === 0)}
       loadingLabel={READING_LINE}
-      empty={<EmptyState icon={<SquareKanbanIcon />}>No tasks yet</EmptyState>}
+      empty={<EmptyState icon={<SquareKanbanIcon />}>{noneYetWords(TERM.TASK)}</EmptyState>}
       error={
         <ErrorState onRetry={tasks.onRetryList} placement={ERROR_STATE_PLACEMENT.CENTRED}>
           {UNREAD_LINE}

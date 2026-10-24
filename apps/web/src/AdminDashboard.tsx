@@ -109,7 +109,7 @@ function AdminDashboardPage(): React.JSX.Element {
     [withdrawSession],
   );
 
-  // Log out in the sidebar's foot leaves whichever view stood for the sign-in
+  // Sign out in the sidebar's foot leaves whichever view stood for the sign-in
   // card. Note that the view is unmounted rather than told, because that drops
   // its read with it: an answer that left carrying the old cookie cannot then
   // put the page back up behind the sign-out.

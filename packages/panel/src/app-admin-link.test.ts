@@ -5,7 +5,7 @@ import { RegistryContext } from "@effect/atom-react/RegistryContext";
 import { LINK_PLACE, type ReadLink } from "@luke/features/luke-link";
 import { IDLE_TASKS_VIEW } from "@luke/features/tasks-view";
 import { WORKSPACE_ROLE } from "@luke/features/workspace-wire";
-import type { AppStateSnapshot } from "@luke/host/app-state";
+import type { AppStateDelivery, AppStateSnapshot } from "@luke/host/app-state";
 import { type AppBridge, bridgeEntries } from "@luke/host/bridge";
 import { PUSH_METHOD } from "@luke/host/contract";
 import { memoryHistory } from "@luke/ui/history-adapter";
@@ -21,7 +21,7 @@ import "./desktop/desktop-admin.js";
 import { installWindowHistory } from "./navigation-history.js";
 import { fakeActPortAnswering, fakeAppBridge, refusedOnPort } from "./testing/app-bridge.js";
 import { fakeAppPlatform, QUIET_PANEL } from "./testing/app-platform.js";
-import { stateWith } from "./testing/app-state.js";
+import { deliveryOf, stateWith } from "./testing/app-state.js";
 
 /**
  * app-admin-link.test.ts -- a link to the Admin place the system hands the
@@ -82,7 +82,8 @@ beforeEach(() => {
   fakeAppBridge({
     ...quiet,
     requestAppState: () => Promise.resolve(structuredClone(FIRST)),
-    onAppState: (listener: (snapshot: AppStateSnapshot) => void) => {
+    onAppState: (heard: (delivery: AppStateDelivery) => void) => {
+      const listener = (snapshot: AppStateSnapshot) => heard(deliveryOf(snapshot));
       listeners.add(listener);
       return () => listeners.delete(listener);
     },

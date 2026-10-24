@@ -41,6 +41,7 @@ import {
   TASK_SKILL_SOURCE,
   type TaskSkillSource,
 } from "@luke/features/task-wire";
+import { andList, countWords, TERM } from "@luke/features/words";
 import type { Workspace, WorkspaceMember } from "@luke/features/workspace-wire";
 import { STATUS_TONE, type StatusTone } from "@luke/ui";
 
@@ -292,9 +293,8 @@ const NAMED_INSTALLS = 2;
 
 /** "grill-me", "grill-me and grilling", "grill-me, grilling, and 3 more". */
 function namesText(names: readonly string[]): string {
-  if (names.length <= NAMED_INSTALLS) return names.join(" and ");
-  const named = names.slice(0, NAMED_INSTALLS).join(", ");
-  return `${named}, and ${names.length - NAMED_INSTALLS} more`;
+  const more = names.length - NAMED_INSTALLS;
+  return andList(more <= 0 ? names : [...names.slice(0, NAMED_INSTALLS), `${more} more`]);
 }
 
 /**
@@ -435,11 +435,6 @@ export function pastedLine(paste: SkillPaste): DetectedLine | undefined {
   }
 }
 
-/** "3 skills", "1 skill". */
-function skillsText(count: number): string {
-  return count === 1 ? "1 skill" : `${count} skills`;
-}
-
 /** What a preview that leaves nothing to show says under the box: no skill in the repository, or a source Luke does not read. */
 export function previewLine(preview: InstalledSkillPreview): DetectedLine | undefined {
   if (preview.kind === SKILL_PASTE_KIND.UNSUPPORTED) {
@@ -513,7 +508,7 @@ export function previewSourceLine(screen: AddSkillScreen, preview: InstalledSkil
   if (preview.kind !== SKILL_PASTE_KIND.SOURCE) return "";
   const where = `${preview.owner}/${preview.repo} @ ${preview.sha.slice(0, SHORT_SHA)}`;
   return screen === ADD_SKILL_SCREEN.BROWSE
-    ? `${where} · ${skillsText(preview.skills.length)}`
+    ? `${where} · ${countWords(preview.skills.length, TERM.SKILL)}`
     : `From ${where}`;
 }
 
@@ -522,7 +517,7 @@ export function missingLine(preview: InstalledSkillPreview): string | undefined 
   if (preview.kind !== SKILL_PASTE_KIND.SOURCE || preview.missing.length === 0) return undefined;
   const names = preview.missing.join(", ");
   const noun = preview.missing.length === 1 ? "skill" : "skills";
-  return `No ${noun} named ${names} in ${preview.owner}/${preview.repo}. Pick from its ${skillsText(preview.skills.length)}.`;
+  return `No ${noun} named ${names} in ${preview.owner}/${preview.repo}. Pick from its ${countWords(preview.skills.length, TERM.SKILL)}.`;
 }
 
 /** "36 other skills in this repo", under the cards. */

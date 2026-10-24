@@ -2844,7 +2844,7 @@ ul.actor-stack {
 }
 
 /* An unread Inbox item wears a mail app's blue dot in a gutter before its
-   tile (`inbox-list.tsx`); the gutter stands on every row, so the tiles
+   words (`inbox-list.tsx`); the gutter stands on every row, so the words
    line up whether a row wears the dot or not. */
 .inbox-row-gutter {
   display: inline-flex;
@@ -2867,8 +2867,9 @@ ul.actor-stack {
 }
 
 /* An Inbox item that needs the developer wears the attention mark before
-   its time (`inbox-list.tsx`), a size under a row glyph's, as a sidebar plan
-   wears it, so the disc's edge reads at the time's height. */
+   its time where its end says where it stands (`InboxItemEnd`: ⌘K's row,
+   the Next row), a size under a row glyph's, as a sidebar plan wears it, so
+   the disc's edge reads at the time's height. */
 .inbox-row-attention {
   display: inline-flex;
 }

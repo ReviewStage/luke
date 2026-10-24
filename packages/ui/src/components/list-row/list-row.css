@@ -376,6 +376,23 @@
     white-space: nowrap;
   }
 
+  /* What a row belongs to may stand on a line of its own instead, between
+     its title and its description: its glyph and its whole name in the
+     description's quieter ink, cut only at the row's end, with no chip
+     round it, since a line of its own needs no box to stand apart. */
+  .luke-list-row-lead[data-at="line"] {
+    display: flex;
+    max-width: none;
+    gap: var(--luke-space-4);
+    margin: 0;
+    padding: 0;
+    border-radius: 0;
+    background: none;
+    color: var(--luke-color-text-muted);
+    font-size: var(--luke-type-caption-size);
+    line-height: var(--luke-type-caption-leading);
+  }
+
   /* The name of what a row belongs to fades where its chip cuts it short. */
   .luke-list-row-lead-label[data-overflow="true"] {
     mask-image: linear-gradient(to left, transparent, #000 var(--luke-label-fade));
@@ -404,7 +421,8 @@
   }
 
   /* Metadata on the title's line ends it, the title giving way first, and
-     the description and attachments run the words' and the end's tracks
+     a lead on a line of its own, the description, and attachments run the
+     words' and the end's tracks
      whole under both; the row's marks stand level with the title's line
      rather than the row's middle. The words and the title's line lend their
      parts to the press's tracks, so each lands in its own. */
@@ -424,8 +442,17 @@
     grid-column: text;
   }
 
-  .luke-list-row[data-meta="title"] :is(.luke-list-row-description, .luke-list-row-attachments) {
+  .luke-list-row[data-meta="title"]
+    :is(
+      .luke-list-row-lead[data-at="line"],
+      .luke-list-row-description,
+      .luke-list-row-attachments
+    ) {
     grid-column: text-start / end-end;
+  }
+
+  .luke-list-row[data-meta="title"] .luke-list-row-lead[data-at="line"] {
+    margin-block-start: var(--luke-space-2);
   }
 
   .luke-list-row[data-meta="title"] .luke-list-row-description {

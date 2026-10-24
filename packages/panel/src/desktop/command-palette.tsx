@@ -53,6 +53,7 @@
 import type { TasklessAgent } from "@luke/features/coding-agent-wire";
 import { TASK_TREE_BOUNDS, TASK_TREE_ENTRY, type TaskSummary } from "@luke/features/task-wire";
 import type { TaskCodeShowing, TasksTreeAnswer } from "@luke/features/tasks-view";
+import { readFailedWords, TERM } from "@luke/features/words";
 import { namesTaskKey, taskKey } from "@luke/features/workspace-key";
 import type { Workspace, WorkspaceMember } from "@luke/features/workspace-wire";
 import type { ExperimentChoices, HostCapability } from "@luke/settings";
@@ -245,7 +246,7 @@ const READING_LINE = "Reading the repository's files…";
 
 /** What the Tasks filter says while the account's tasks are first read, and where that read did not land. */
 const TASKS_READING_LINE = "Reading your tasks…";
-const TASKS_FAILED_LINE = "Your tasks could not be read.";
+const TASKS_FAILED_LINE = readFailedWords(`your ${TERM.TASK.many}`);
 
 /** What the Inbox filter says while its items are first read, and where a read did not land. */
 const INBOX_READING_LINE = "Reading your inbox…";
@@ -673,10 +674,7 @@ function taskRows(
       detail: words.length === 0 ? undefined : words.join(" · "),
       endMark: agentEndMark(agent, archived),
       card: (
-        <AgentCard
-          subject={tasklessRowSubject(agent, tasks.agents)}
-          models={tasks.agents.models}
-        />
+        <AgentCard subject={tasklessRowSubject(agent, tasks.agents)} models={tasks.agents.models} />
       ),
       terms: [name, agent.repository, agent.automationName ?? null].filter((term) => term !== null),
       onChoose: () => openAgent(agent.id),
