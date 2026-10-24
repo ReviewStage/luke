@@ -101,16 +101,22 @@ function writtenByPerson(message: CodingAgentMessage): boolean {
  * to here drops from. Note that a plan the agent was handed is drawn as its
  * card, which offers no Edit, so only a first line drawn as a bubble is
  * written again. Every message but the last is followed by one, which a
- * rewind to just before it drops.
+ * rewind to just before it drops, and so is the last while lines sent and not
+ * yet read back (`pending`) stand after it, since the rewind drops those too.
  */
-export function rewindPoints(messages: readonly CodingAgentMessage[]): {
+export function rewindPoints(
+  messages: readonly CodingAgentMessage[],
+  pending: boolean,
+): {
   readonly editable: ReadonlySet<string>;
   readonly revertsAt: ReadonlyMap<string, string>;
   readonly followed: ReadonlySet<string>;
 } {
   const editable = new Set<string>();
   const revertsAt = new Map<string, string>();
-  const followed = new Set(messages.slice(0, -1).map((message) => message.id));
+  const followed = new Set(
+    (pending ? messages : messages.slice(0, -1)).map((message) => message.id),
+  );
   let next: string | undefined;
   // Read from the end, so each reply finds the opening line nearest after it.
   for (let at = messages.length - 1; at >= 0; at -= 1) {

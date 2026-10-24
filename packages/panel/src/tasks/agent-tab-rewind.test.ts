@@ -101,7 +101,7 @@ async function settle(): Promise<void> {
 }
 
 /** The agent's tab over the transcript, every rewind and send it makes written down in order. */
-async function drawnTab() {
+async function drawnTab(holdSends = false) {
   fakeAppBridge({});
   const calls: string[] = [];
   const control = codingAgentsControl({
@@ -112,7 +112,8 @@ async function drawnTab() {
     },
     onMessage: (_agentId, text) => {
       calls.push(`send:${text}`);
-      return Promise.resolve(REWOUND);
+      // A send held never answers, so its line stays sent and not yet read back.
+      return holdSends ? new Promise(() => undefined) : Promise.resolve(REWOUND);
     },
     transcripts: pushedTranscripts(() => [
       {
@@ -168,7 +169,13 @@ async function drawnTab() {
     await act(async () => button.click());
     await settle();
   };
-  return { container, calls, message, editAndSend, dialog, press };
+  /** Sends words from the box at the tab's foot. */
+  const sendFromFoot = async (words: string) => {
+    typeInComposer(container, words);
+    pressInComposer(container, "Enter");
+    await settle();
+  };
+  return { container, calls, message, editAndSend, sendFromFoot, dialog, press };
 }
 
 test("sending an edited middle message asks first, and Cancel keeps every later message and sends nothing", async () => {
@@ -202,4 +209,14 @@ test("sending an edited last message sends at once, with no question", async () 
 
   assert.equal(tab.dialog(), null);
   assert.deepEqual(tab.calls, ["rewind:last", "send:Now ship it. today"]);
+});
+
+test("a line sent and not yet read back follows the last message, so editing it asks first", async () => {
+  const tab = await drawnTab(true);
+
+  await tab.sendFromFoot("And the docs.");
+  await tab.editAndSend("last", " today");
+
+  assert.ok(tab.dialog(), "the question stands");
+  assert.deepEqual(tab.calls, ["send:And the docs."], "nothing was cut yet");
 });
