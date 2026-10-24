@@ -108,7 +108,6 @@ import { type ReactNode, useId, useRef, useState } from "react";
 import { ACTOR_SIZE, ActorMark, UnassignedMark } from "../actor-ref.js";
 import { useAppCommand } from "../app-commands.js";
 import { FIND_SKIP_ATTRIBUTE } from "../find-matches.js";
-import { readKept, writeKept } from "../kept-storage.js";
 import { useMemberDirectory } from "../member-directory.js";
 import { RepositoryPicture } from "../repository-picture.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
@@ -123,6 +122,7 @@ import { useReadMarks } from "../tasks/use-task-looks.js";
 import { useTaskMaker } from "../tasks/use-task-origin.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import { undoToast, useToast } from "../toast.js";
+import { keptKey, useKept } from "../use-kept.js";
 import { useRefocusAfterEdit } from "../use-refocus-after-edit.js";
 import { sectionGlyph } from "./section-icon-picker.js";
 import { useTaskMenu } from "./task-actions.js";
@@ -170,7 +170,7 @@ import { useRowDrag } from "./use-row-drag.js";
  * field. A press anywhere else on the row opens the task, and resting on it
  * hangs the task's card beside it, as its sidebar row does (`task-card.tsx`).
  *
- * A group's head folds it, kept on this Mac (`LIST_FOLDS_KEY`), its count
+ * A group's head folds it, kept on this Mac (`KEPT.FOLDS`), its count
  * standing beside its name either way. A row is dragged by its press
  * (`use-row-drag.ts`): within Pinned or a section to a new place there; onto
  * another status's, priority's, or assignee's group, which sends it that
@@ -224,9 +224,6 @@ const SELECTION_ACT = {
 /** What a press must land on to carry a row: its press, which reaches every edge of the row but its chips and its ⋯. */
 const ROW_HANDLE = CARD_PRESS_SELECTOR;
 
-/** Where the folded groups are kept in the renderer's storage. */
-const LIST_FOLDS_KEY = "luke.tasksListFolds";
-
 /** The properties a phone's List has no room for beside a name: all but the chips and the time. */
 const NARROW_LEFT_OUT: readonly TaskProperty[] = [
   TASK_PROPERTY.KEY,
@@ -277,6 +274,11 @@ const storedFolds = Schema.fromJsonString(
 );
 
 type ListFolds = typeof storedFolds.Type;
+
+/** The List's folded groups, kept on this Mac. */
+const KEPT = {
+  FOLDS: keptKey("luke.tasksListFolds", storedFolds),
+} as const;
 
 /** A set of folded values with one folded or opened. */
 function flipped<T>(held: readonly T[] | undefined, value: T): readonly T[] {
@@ -333,14 +335,10 @@ function useListFolds(): {
   folded: (head: TasksGroupHead) => boolean;
   toggle: (head: TasksGroupHead) => void;
 } {
-  const [folds, setFolds] = useState<ListFolds>(() => readKept(LIST_FOLDS_KEY, storedFolds, {}));
+  const [folds, keep] = useKept(KEPT.FOLDS, {});
   return {
     folded: (head) => foldedIn(folds, head),
-    toggle: (head) => {
-      const next = toggledIn(folds, head);
-      setFolds(next);
-      writeKept(LIST_FOLDS_KEY, storedFolds, next);
-    },
+    toggle: (head) => keep(toggledIn(folds, head)),
   };
 }
 
@@ -1070,6 +1068,7 @@ export function TasksList({
       width={PAGE_WIDTH.FULL}
       label={TASKS}
       toolbar={frame.toolbar}
+      scrollRef={frame.scroll}
       filters={frame.chips}
       state={listState(tasks, listed.length === 0)}
       loadingLabel={READING_LINE}

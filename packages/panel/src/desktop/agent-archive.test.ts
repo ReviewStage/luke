@@ -38,9 +38,12 @@ afterEach(() => {
   laid?.remove();
   laid = undefined;
   document.body.innerHTML = "";
+  // Note that the fold is kept in the window's storage, so each test starts with it folded.
+  window.localStorage.clear();
 });
 
-test("an archived agent's row hangs its tab's card beside it, its name and when it was archived", () => {
+/** A summary's Archived fold, its one archived agent drawn over a registry of its own. */
+function drawArchived(): HTMLElement {
   const agents = codingAgentsControl({
     archived: [
       {
@@ -65,6 +68,30 @@ test("an archived agent's row hangs its tab's card beside it, its name and when 
       onRegistry(AtomRegistry.make(), createElement(ArchivedAgents, { agents, shown: true })),
     ),
   );
+  return container;
+}
+
+test("an unfolded Archived stands open as the summary is drawn again, and one never unfolded stays folded", () => {
+  const fold = (container: HTMLElement) =>
+    container.querySelector<HTMLButtonElement>("button[aria-expanded]");
+  const first = drawArchived();
+  assert.equal(fold(first)?.getAttribute("aria-expanded"), "false");
+  act(() => fold(first)?.click());
+  assert.equal(fold(first)?.getAttribute("aria-expanded"), "true");
+
+  for (const root of roots.splice(0)) act(() => root.unmount());
+  document.body.innerHTML = "";
+  const again = drawArchived();
+  assert.equal(fold(again)?.getAttribute("aria-expanded"), "true", "it stands as it was left");
+  act(() => fold(again)?.click());
+
+  for (const root of roots.splice(0)) act(() => root.unmount());
+  document.body.innerHTML = "";
+  assert.equal(fold(drawArchived())?.getAttribute("aria-expanded"), "false", "and folded again");
+});
+
+test("an archived agent's row hangs its tab's card beside it, its name and when it was archived", () => {
+  const container = drawArchived();
   const fold = container.querySelector<HTMLButtonElement>("button[aria-expanded]");
   act(() => fold?.click());
   const row = container.querySelector<HTMLElement>(
@@ -79,6 +106,8 @@ test("an archived agent's row hangs its tab's card beside it, its name and when 
 
 /** The notes the card hung over the archived agent's row says, with the reader and who archived it given. */
 function archivedCardNotes(me: string | undefined, archivedBy: CodingAgentArchivedBy): string[] {
+  // Note that each draw unfolds Archived afresh, so the fold the last one kept is let go.
+  window.localStorage.clear();
   const agents = {
     ...codingAgentsControl({
       archived: [

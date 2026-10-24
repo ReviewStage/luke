@@ -673,6 +673,7 @@ export function TasksBoard({
       width={PAGE_WIDTH.FULL}
       label={title}
       toolbar={frame.toolbar}
+      scrollRef={frame.scroll}
       filters={filters}
       state={boardState(tasks, listed.length === 0)}
       loadingLabel={READING_LINE}

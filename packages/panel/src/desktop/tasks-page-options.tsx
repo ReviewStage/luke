@@ -75,7 +75,7 @@ import {
   UserIcon,
   UserXIcon,
 } from "lucide-react";
-import { type ReactNode, type RefObject, useMemo, useRef } from "react";
+import { type ReactNode, type RefCallback, type RefObject, useMemo, useRef } from "react";
 import { ACTOR_SIZE, ActorMark, actorCard, UnassignedMark } from "../actor-ref.js";
 import { useMemberDirectory } from "../member-directory.js";
 import { memberReadNotice, memberRows } from "../member-rows.js";
@@ -123,6 +123,8 @@ export interface TasksViewFrame {
   readonly display: TasksDisplay;
   /** Changes the view's display, as the line under a settled group does. */
   readonly onDisplay: (display: TasksDisplay) => void;
+  /** The page's scroller, whose position the page keeps for the view. */
+  readonly scroll: RefCallback<HTMLDivElement>;
 }
 
 /** What the buttons are called, on their tooltips and their menus alike. */

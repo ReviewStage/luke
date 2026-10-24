@@ -58,6 +58,7 @@ import {
   FOR_YOU,
 } from "@luke/ui/chat-model";
 import { sectionTaskIds, workspaceSections } from "@luke/ui/task-sections-model";
+import { Schema } from "effect";
 import {
   AtSignIcon,
   HashIcon,
@@ -92,6 +93,7 @@ import { markReadItem } from "../tasks/task-menu-items.js";
 import { useTaskStatus } from "../tasks/use-known-names.js";
 import { useOpenLink, useOpenTask } from "../tasks/use-open-link.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
+import { keptKey, useKept } from "../use-kept.js";
 import { ActionMenu, type MenuAction, rowMenu } from "./action-menu.js";
 import { type ChannelDialogs, useChannelDialogs } from "./chat-channel-dialogs.js";
 import { previewWords } from "./chat-preview.js";
@@ -454,20 +456,36 @@ function railGroups(
   };
 }
 
-/** Which of the rail's groups stand folded, for as long as Chat stands: each as it starts until toggled, the toggled kept apart for each space. */
+/** The rail's folds as kept: each space's groups the reader toggled, by key. */
+const storedRailFolds = Schema.fromJsonString(
+  Schema.Struct({
+    [RAIL_SPACE.RAIL]: Schema.Array(Schema.String),
+    [RAIL_SPACE.TASKS]: Schema.Array(Schema.String),
+  }),
+);
+
+/** The view choices Chat keeps on this Mac. */
+const KEPT = {
+  RAIL_FOLDS: keptKey("luke.chatRailFolds", storedRailFolds),
+} as const;
+
+const NO_RAIL_FOLDS = { [RAIL_SPACE.RAIL]: [], [RAIL_SPACE.TASKS]: [] } as const;
+
+/** Which of the rail's groups stand folded: each as it starts until toggled, the toggled kept apart for each space, and kept on this Mac. */
 function useRailFolds() {
-  const [toggled, setToggled] = useState<Readonly<Record<RailSpace, ReadonlySet<string>>>>({
-    [RAIL_SPACE.RAIL]: new Set(),
-    [RAIL_SPACE.TASKS]: new Set(),
-  });
+  const [toggled, keep] = useKept(KEPT.RAIL_FOLDS, NO_RAIL_FOLDS);
   return {
-    folded: (group: RailGroupShown) => group.foldedAtFirst !== toggled[group.space].has(group.key),
-    toggle: (group: RailGroupShown) =>
-      setToggled((was) => {
-        const next = new Set(was[group.space]);
-        if (!next.delete(group.key)) next.add(group.key);
-        return { ...was, [group.space]: next };
-      }),
+    folded: (group: RailGroupShown) =>
+      group.foldedAtFirst !== toggled[group.space].includes(group.key),
+    toggle: (group: RailGroupShown) => {
+      const held = toggled[group.space];
+      keep({
+        ...toggled,
+        [group.space]: held.includes(group.key)
+          ? held.filter((each) => each !== group.key)
+          : [...held, group.key],
+      });
+    },
   };
 }
 

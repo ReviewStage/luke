@@ -311,6 +311,24 @@ test("the Comments tab's Resolved toggle lists the resolved thread whole, where 
   ]);
 });
 
+test("the Comments tab opens on the list its reader last chose, Resolved until they show the open ones again", () => {
+  const heading = (container: HTMLElement) =>
+    container.querySelector(".luke-pane-bar")?.textContent?.split(/\d/u)[0];
+  const toggle = (container: HTMLElement) =>
+    container.querySelector<HTMLButtonElement>(".luke-pane-bar button[aria-pressed]")?.click();
+
+  const first = drawn("tab");
+  assert.equal(heading(first.container), "Open", "no choice kept lists the open threads");
+  act(() => toggle(first.container));
+  assert.equal(heading(first.container), "Resolved");
+
+  const again = drawn("tab");
+  assert.equal(heading(again.container), "Resolved", "the tab drawn again lists the resolved ones");
+  act(() => toggle(again.container));
+
+  assert.equal(heading(drawn("tab").container), "Open", "and the open ones once chosen again");
+});
+
 test("the Comments tab's Resolved toggle starts the other list at its top", () => {
   const { container } = drawn("tab");
   // The list scrolls in the box around its rows (`ScrollArea`).
