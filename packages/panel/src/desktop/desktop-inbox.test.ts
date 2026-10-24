@@ -2979,7 +2979,7 @@ test("an Inbox opened before the account's task list is read stands placeholder 
     [emptyStateIn(page, ".inbox-tasks"), emptyStateIn(page, ".inbox-view-items")],
     [null, null],
   );
-  assert.equal(page.querySelector(".sidebar-note"), null, "no line says nothing needs you");
+  assert.equal(page.querySelector(".luke-note-line"), null, "no line says nothing needs you");
   layOut(page, 800);
   assert.deepEqual(columnsShown(page), ["list"]);
   assert.equal(emptyStateIn(page, ".inbox-tasks"), null);

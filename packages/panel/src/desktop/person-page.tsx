@@ -19,6 +19,8 @@ import {
   IconButton,
   List,
   ListRow,
+  NOTE_LINE_LOOK,
+  NoteLine,
   OneLine,
   PAGE_FRAME,
   RowHint,
@@ -619,9 +621,9 @@ function PersonColumn({
         waiting.length === 0 &&
         automations.length === 0 ? (
         <div className="home-note">
-          <Text tone={TEXT_TONE.MUTED}>
+          <NoteLine look={NOTE_LINE_LOOK.INSET}>
             {you ? "Nothing of yours here yet." : "Nothing of theirs here yet."}
-          </Text>
+          </NoteLine>
         </div>
       ) : null}
     </DetailPage>
