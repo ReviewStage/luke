@@ -4,7 +4,8 @@ import assert from "node:assert/strict";
 import { RegistryContext } from "@effect/atom-react/RegistryContext";
 import { it } from "@effect/vitest";
 import { ACCOUNT_STATUS } from "@luke/credentials/snapshot";
-import { IDLE_TASKS_VIEW } from "@luke/features/tasks-view";
+import { IDLE_TASKS_VIEW, TASK_CALL_FAILURE } from "@luke/features/tasks-view";
+import { ACT_KIND } from "@luke/host/acts";
 import { type AppStateSnapshot, NO_ACCESS, RUN_PROFILE } from "@luke/host/app-state";
 import { type AppBridge, bridgeEntries } from "@luke/host/bridge";
 import { PUSH_METHOD } from "@luke/host/contract";
@@ -185,5 +186,24 @@ it.effect(
         ),
         "the column opens on its New agent tab",
       );
+    }),
+);
+
+it.effect(
+  "a fixture run on the tasks-transcript profile draws the open task's plan with no linked issues, while main answers nothing",
+  () =>
+    Effect.gen(function* () {
+      // Main answers a fixture run's read of the task's linked issues as one the service never answered (`compose-tasks.ts`).
+      fakeActPortAnswering(({ kind }) =>
+        kind === ACT_KIND.TASK_ISSUES_READ
+          ? Promise.resolve({ failure: TASK_CALL_FAILURE.UNANSWERED })
+          : Promise.reject(refusedOnPort("Not here.")),
+      );
+      yield* drawWindow(RUN_PROFILE.TASKS_TRANSCRIPT);
+
+      const links = document.querySelector(".task-issue-links");
+      assert.ok(links, "the plan's Linked issues box stands");
+      assert.match(links.textContent ?? "", /Link issue/u);
+      assert.doesNotMatch(drawn(), /did not answer/u);
     }),
 );
