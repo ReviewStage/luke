@@ -549,7 +549,6 @@ function providerButton(): HTMLButtonElement {
         provider: MARK_PROVIDER.GITHUB,
         name: "GitHub",
         size: PROVIDER_BUTTON_SIZE.GATE,
-        pendingLabel: "Opening GitHub",
         onPress: () => undefined,
       }),
     ),

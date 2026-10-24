@@ -33,7 +33,8 @@ function Acts({ busy = false }: { busy?: boolean }): React.JSX.Element {
         label="Run now"
         icon={<PlusIcon />}
         variant={BUTTON_VARIANT.OUTLINE}
-        busy={busy ? "Running" : undefined}
+        busy={busy}
+        busyLabel="Running"
       />
     </Inline>
   );

@@ -375,8 +375,8 @@ function MethodPress({
         variant={variant}
         icon={icon}
         disabled={busy && busyLabel === undefined}
-        busy={busyLabel}
         onClick={onPress}
+        {...busyProps(busyLabel)}
         menu={{ label: BOX_WORDS.CHOOSE_METHOD, ...menu.trigger() }}
       >
         {words}

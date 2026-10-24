@@ -84,8 +84,8 @@ export function SignInGate({
           size={PROVIDER_BUTTON_SIZE.GATE}
           primary={primary === provider}
           lastUsed={lastUsed === provider}
-          pending={waiting === provider}
-          pendingLabel="Waiting for browser…"
+          busy={waiting === provider}
+          busyLabel="Waiting for browser…"
           disabled={busy}
           onPress={() => onBegin(provider)}
         />
