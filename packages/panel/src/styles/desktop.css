@@ -2413,7 +2413,7 @@ ul.actor-stack {
 }
 
 /* Under the strip, its list's head and its item's bar are the tab's own bar,
-   as tall as every other tab's (`.file-view-bar`) and on its ground, rather
+   as tall as every other tab's (`PaneBar`) and on its ground, rather
    than a top row. */
 .desktop-task-main .inbox-view .desktop-toolbar {
   min-height: var(--secondary-bar-height);
@@ -3550,29 +3550,6 @@ ul.actor-stack {
 
 .task-chat {
   flex: 1;
-}
-
-.chat-head {
-  padding-left: var(--column-inset);
-}
-
-/* A place's name is the toolbar's title, and what is said of it (a topic's
-   purpose) follows on its baseline, giving way first as the head narrows. */
-.chat-head .desktop-toolbar-heading {
-  display: flex;
-  align-items: baseline;
-  gap: var(--luke-space-8);
-}
-
-.chat-head .desktop-toolbar-title {
-  min-width: 0;
-  flex: 0 1 auto;
-}
-
-.chat-head-meta {
-  display: flex;
-  min-width: 0;
-  flex: 0 1000 auto;
 }
 
 /* The place's head is a `PaneBar`, whose detail keeps its width; here it is
