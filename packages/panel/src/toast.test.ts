@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { STATUS_TONE } from "@luke/ui";
+import { STATUS_TONE, TOAST_LOOK, type ToastLook } from "@luke/ui";
 import { Duration } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment } from "react";
@@ -23,7 +23,8 @@ import {
  * there is room again; one whose hold runs down with an action draws that
  * hold as its countdown; work under way settles into its own card in
  * place; and an act's Undo toast takes the act back and stands for the Undo
- * hold. jsdom lays nothing out, so the window's height is given. Synthetic
+ * hold; a window that draws them compact, too small for more, stands
+ * the newest alone. jsdom lays nothing out, so the window's height is given. Synthetic
  * throughout.
  */
 
@@ -55,8 +56,8 @@ function Shower(): null {
   return null;
 }
 
-/** The toasts, mounted as the window's root mounts them, in a window `height` tall. */
-function mount(height: number): void {
+/** The toasts, mounted as the window's root mounts them, in a window `height` tall, in `look`. */
+function mount(height: number, look: ToastLook = TOAST_LOOK.CARD): void {
   vi.spyOn(window, "innerHeight", "get").mockReturnValue(height);
   const container = document.body.appendChild(document.createElement("div"));
   root = createRoot(container);
@@ -66,7 +67,7 @@ function mount(height: number): void {
     root?.render(
       onRegistry(
         held,
-        createElement(Fragment, null, createElement(Shower), createElement(ToastHost)),
+        createElement(Fragment, null, createElement(Shower), createElement(ToastHost, { look })),
       ),
     ),
   );
@@ -128,6 +129,17 @@ test("a window too short for three toasts stands the two newest, and the one set
     "Nightly upgrade couldn't start",
     "Retry the webhook finished",
   ]);
+});
+
+test("a window that draws its toasts compact stands the newest alone, setting the one it pushed aside until it leaves", () => {
+  mount(WINDOW.TALL, TOAST_LOOK.COMPACT);
+
+  act(() => show?.(persisting("Retry the webhook finished")));
+  act(() => show?.(persisting("Nightly upgrade couldn't start")));
+  assert.deepEqual(standing(), ["Nightly upgrade couldn't start"]);
+
+  act(() => toastButton("View").click());
+  assert.deepEqual(standing(), ["Retry the webhook finished"]);
 });
 
 test("a window made too short for three toasts sets the oldest aside, without dismissing it", () => {

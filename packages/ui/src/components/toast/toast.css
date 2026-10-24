@@ -10,7 +10,8 @@
    in Tailwind utilities over the theme (`toast.tsx`, `toast-stack.tsx`,
    `toast-actions.tsx`). What stays here is what those cannot say: where the
    stack stands, which reads the window's keyboard inset and its column's
-   dock; the card's motion, which is keyframes and the offset its swipe
+   dock, or spans the foot of a window too small for the card (the compact
+   look); the card's motion, which is keyframes and the offset its swipe
    writes (`--luke-toast-drag`); the countdown's drain, over the hold and the
    seconds the card writes (`--luke-toast-hold`, `--luke-toast-seconds`); and
    what takes the pointer, which reads `:has()` and the screen's hover. */
@@ -51,6 +52,18 @@
         env(safe-area-inset-right, 0px)
       )
     );
+  }
+
+  /* The compact look's stack, in a window too small for the card (the
+     floating call window, whose card stands a step in from its edges):
+     across the window's foot, inside the card's own edges, over its row of
+     controls for the toast's hold, and up over its head where the words
+     take two lines. */
+  .luke-toast-stack[data-look="compact"] {
+    right: var(--luke-space-12);
+    bottom: var(--luke-space-8);
+    left: var(--luke-space-12);
+    width: auto;
   }
 
   /* Each card rises in on the spring and fades in. Its sideways offset while
