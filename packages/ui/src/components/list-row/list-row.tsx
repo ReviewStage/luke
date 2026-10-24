@@ -11,14 +11,26 @@ import {
   useCallback,
   useContext,
   useEffect,
+  useId,
+  useRef,
 } from "react";
 import { cssCustomProperties } from "../../css.js";
 import { ChevronRightIcon } from "../../face/glyphs.js";
 import { PRESS_PULSE, pulseOnPress, pulsePress } from "../../press-pulse.js";
 import { useClipped } from "../../use-clipped.js";
+import { BUTTON_SIZE } from "../button/button.js";
 import { motionKey, motionRows } from "../list-motion/list-motion.js";
 import { useLinkAddress } from "../menu/link-address.js";
-import { type ContextMenuProps, withContextMenu } from "../menu/menu.js";
+import {
+  type ContextMenuProps,
+  dropBelowStart,
+  Menu,
+  type MenuEntry,
+  opensMenu,
+  useMenu,
+  withContextMenu,
+} from "../menu/menu.js";
+import { MoreButton, moreLabel } from "../more-button/more-button.js";
 import { useRowSwipe } from "./use-row-swipe.js";
 
 /**
@@ -43,9 +55,26 @@ import { useRowSwipe } from "./use-row-swipe.js";
  * one focused) reaches a row's press through `ref` and hears the keys
  * pressed on it through `onKeyDown`; a row that opens nothing takes no
  * focus, so its `ref` reaches its item, to scroll or measure, and it hears
- * no keys, which would only be its acts'. `contextMenu` (`useMenu`'s)
- * hears a right-click or a touch's long press anywhere on the row, its acts
- * included, so the app can open its own menu there.
+ * no keys, which would only be its acts'.
+ *
+ * A row whose thing has acts of its own offers them as one menu (`menu`),
+ * which every door to it opens alike: its ⋯ (`MoreButton`), the last of the
+ * row's acts, drops it from the ⋯; a right-click or a touch's long press
+ * anywhere on the row hangs it at the pointer; and the menu key or ⇧F10,
+ * pressed on the row or any of its acts, hangs it under the row from its
+ * start. The ⋯ is a Tab stop after the row's other acts, so the keyboard
+ * reaches it as it reaches them, and named for the row's thing, "Task
+ * actions", described by the row's title, so a reader hears which row's it
+ * is. It keeps its place at the row's end and shows while the pointer
+ * rests on the row, the row holds the keyboard, or its menu is open, and
+ * always on a screen with no hover, where nothing would reveal it. Its menu
+ * open rings the row; Escape hands focus back to the door it was opened
+ * from: the ⋯, what held the keyboard as the menu key was pressed, or, for
+ * a right-click, the row's press, or its ⋯ where it opens nothing. A row
+ * that offers no acts now, its groups empty, or is unavailable, draws no ⋯
+ * and opens nothing.
+ * `contextMenu` (`useMenu`'s) is the older door, a right-click alone, which
+ * a row wires by hand beside its own ⋯; `menu` takes its place.
  *
  * A list stands plain, its rows apart on the ground, each lit on its own;
  * or as a card (`LIST_VARIANT.CARD`), its rows edge to edge on the card's
@@ -245,6 +274,20 @@ const ListDensityContext = createContext<ListDensity>(LIST_DENSITY.REGULAR);
  */
 const ListVariantContext = createContext<ListVariant>(LIST_VARIANT.PLAIN);
 
+/** A row's menu of its thing's acts: what the thing is, which names its ⋯ and the menu, and the menu's items. */
+export interface ListRowMenu {
+  /** What the row is, as a sentence opens with it: "Task" names its ⋯ and its menu "Task actions". */
+  readonly thing: string;
+  /** The menu's items in groups, a rule between each group; none at all offers no menu. */
+  readonly groups: readonly (readonly MenuEntry[])[];
+  /** A muted line over the items, saying what they act on where the row's words do not. */
+  readonly heading?: ReactNode;
+  /** A muted line under the items, as who made the thing. */
+  readonly footer?: ReactNode;
+  /** Whether the surface the row stands on is shown; its menu closes once it is not, and stands while it is where unsaid. */
+  readonly shown?: boolean | undefined;
+}
+
 /** The act of a row that offers no swipe. */
 const NO_ACT = (): void => undefined;
 
@@ -323,6 +366,7 @@ export function ListRow({
   ref,
   onKeyDown,
   contextMenu,
+  menu,
   swipe,
 }: {
   /** A mark before the title (an avatar, a status's glyph), drawn as decoration. */
@@ -382,19 +426,28 @@ export function ListRow({
   onKeyDown?: ((event: KeyboardEvent<HTMLElement>) => void) | undefined;
   /** The menu a right-click, the menu key, or a long press opens anywhere on the row (`useMenu`'s `contextMenu`). */
   contextMenu?: ContextMenuProps | undefined;
+  /** The menu of the row's thing's acts, opened alike by its ⋯, a right-click, and the menu key; it takes `contextMenu`'s and `menuOpen`'s place. */
+  menu?: ListRowMenu | undefined;
   /** The row's one swipe right; none where it offers none. */
   swipe?: ListRowSwipe | undefined;
 }): React.JSX.Element {
   const swiped = useRowSwipe(swipe?.label, swipe?.onAct ?? NO_ACT);
   // The press hands the row's ref its element, and the link menu the address it opens.
   const linkAddress = useLinkAddress(linkHref);
+  const pressElement = useRef<HTMLButtonElement | null>(null);
   const pressRef = useCallback(
     (element: HTMLButtonElement | null) => {
+      pressElement.current = element;
       ref?.(element);
       linkAddress(element);
     },
     [ref, linkAddress],
   );
+  const titleId = useId();
+  const rowMenu = useMenu(menu?.shown ?? true);
+  const moreElement = useRef<HTMLButtonElement | null>(null);
+  // Note that a row unavailable, or whose thing offers no acts now, opens no menu by any door.
+  const offered = menu !== undefined && !disabled && menu.groups.some((group) => group.length > 0);
   const [titleMeasured, titleClipped] = useClipped(plainWords(title));
   useEffect(() => {
     onTitleClipped?.(titleClipped);
@@ -417,7 +470,12 @@ export function ListRow({
   );
   const [leadMeasured, leadClipped] = useClipped(lead?.label);
   const heading = (
-    <span ref={titleMeasured} className="luke-list-row-title" data-overflow={String(titleClipped)}>
+    <span
+      ref={titleMeasured}
+      id={offered ? titleId : undefined}
+      className="luke-list-row-title"
+      data-overflow={String(titleClipped)}
+    >
       {title}
     </span>
   );
@@ -518,68 +576,108 @@ export function ListRow({
         <hint.Hint label={hint.label}>{press}</hint.Hint>
       )}
       {said(actions) ? <div className="luke-list-row-actions">{actions}</div> : null}
+      {offered ? (
+        <div className="luke-list-row-more">
+          <MoreButton
+            ref={moreElement}
+            thing={menu.thing}
+            size={
+              (density ?? listDensity) === LIST_DENSITY.REGULAR ? undefined : BUTTON_SIZE.COMPACT
+            }
+            aria-describedby={titleId}
+            {...rowMenu.trigger()}
+          />
+        </div>
+      ) : null}
     </>
   );
+  // The menu key, on the row's press or any of its acts, hangs the menu
+  // under the row from its start, and hands focus back to what held it.
+  const menuKey = (event: KeyboardEvent<HTMLLIElement>) => {
+    if (event.defaultPrevented || !opensMenu(event)) return;
+    event.preventDefault();
+    const held = event.target instanceof HTMLElement ? event.target : event.currentTarget;
+    rowMenu.show(dropBelowStart(event.currentTarget), held);
+  };
+  const rightClick = offered
+    ? rowMenu.contextMenu(onPress ? pressElement : moreElement)
+    : contextMenu;
   const { view, item } = swiped;
   const hold = (element: HTMLLIElement | null) => {
     item.ref.current = element;
     if (!onPress) ref?.(element);
   };
   return (
-    <li
-      id={id}
-      {...(followedBy === undefined ? {} : motionKey(followedBy))}
-      ref={swipe === undefined ? (onPress ? undefined : ref) : hold}
-      className="luke-list-row"
-      data-meta={metaAt === LIST_ROW_META.TITLE ? metaAt : undefined}
-      data-actions={actionsAt === LIST_ROW_ACTIONS.HOVER ? actionsAt : undefined}
-      data-current={current === undefined ? undefined : "true"}
-      data-unread={unread === true ? "true" : undefined}
-      data-muted={muted === true ? "true" : undefined}
-      data-density={density}
-      data-ink={ink}
-      data-menu-open={menuOpen ? "true" : undefined}
-      data-swipe={swipe === undefined ? undefined : view.state}
-      data-armed={view.armed ? "true" : undefined}
-      {...withContextMenu(
-        contextMenu,
-        swipe === undefined ? {} : { onPointerDown: item.onPointerDown },
-      )}
-      {...(swipe === undefined
-        ? undefined
-        : {
-            onPointerMove: item.onPointerMove,
-            onPointerUp: item.onPointerUp,
-            onPointerCancel: item.onPointerCancel,
-            onClickCapture: item.onClickCapture,
-            style: cssCustomProperties({
-              "--luke-list-row-swipe": `${view.offset}px`,
-              "--luke-list-row-swipe-label": `${view.label.offset}px`,
-              "--luke-list-row-swipe-shown": view.label.opacity,
-            }),
-          })}
-    >
-      {swipe === undefined ? (
-        row
-      ) : (
-        <>
-          <div className="luke-list-row-swipe">
-            <button
-              type="button"
-              className="luke-list-row-swipe-act"
-              tabIndex={-1}
-              data-swipe-act=""
-              onClick={pulseOnPress(swiped.onPress)}
-            >
-              <span className="luke-list-row-swipe-label">
-                {swipe.icon}
-                <span>{swipe.label}</span>
-              </span>
-            </button>
-          </div>
-          <div className="luke-list-row-slide">{row}</div>
-        </>
-      )}
-    </li>
+    <>
+      <li
+        id={id}
+        {...(followedBy === undefined ? {} : motionKey(followedBy))}
+        ref={swipe === undefined ? (onPress ? undefined : ref) : hold}
+        className="luke-list-row"
+        data-meta={metaAt === LIST_ROW_META.TITLE ? metaAt : undefined}
+        data-actions={actionsAt === LIST_ROW_ACTIONS.HOVER ? actionsAt : undefined}
+        data-current={current === undefined ? undefined : "true"}
+        data-unread={unread === true ? "true" : undefined}
+        data-muted={muted === true ? "true" : undefined}
+        data-density={density}
+        data-ink={ink}
+        data-menu-open={menuOpen || rowMenu.open !== undefined ? "true" : undefined}
+        data-swipe={swipe === undefined ? undefined : view.state}
+        data-armed={view.armed ? "true" : undefined}
+        onKeyDown={offered ? menuKey : undefined}
+        {...withContextMenu(
+          rightClick,
+          swipe === undefined ? {} : { onPointerDown: item.onPointerDown },
+        )}
+        {...(swipe === undefined
+          ? undefined
+          : {
+              onPointerMove: item.onPointerMove,
+              onPointerUp: item.onPointerUp,
+              onPointerCancel: item.onPointerCancel,
+              onClickCapture: item.onClickCapture,
+              style: cssCustomProperties({
+                "--luke-list-row-swipe": `${view.offset}px`,
+                "--luke-list-row-swipe-label": `${view.label.offset}px`,
+                "--luke-list-row-swipe-shown": view.label.opacity,
+              }),
+            })}
+      >
+        {swipe === undefined ? (
+          row
+        ) : (
+          <>
+            <div className="luke-list-row-swipe">
+              <button
+                type="button"
+                className="luke-list-row-swipe-act"
+                tabIndex={-1}
+                data-swipe-act=""
+                onClick={pulseOnPress(swiped.onPress)}
+              >
+                <span className="luke-list-row-swipe-label">
+                  {swipe.icon}
+                  <span>{swipe.label}</span>
+                </span>
+              </button>
+            </div>
+            <div className="luke-list-row-slide">{row}</div>
+          </>
+        )}
+      </li>
+      {/* Note that the menu stands beside the row rather than in it, because a
+          press or a key in the menu's portal would otherwise reach the row's
+          own handlers, a long press on an item opening the menu again. */}
+      {offered && rowMenu.drawn !== undefined ? (
+        <Menu
+          label={moreLabel(menu.thing)}
+          menu={rowMenu.drawn}
+          heading={menu.heading}
+          footer={menu.footer}
+          groups={menu.groups}
+          onClose={rowMenu.close}
+        />
+      ) : null}
+    </>
   );
 }
