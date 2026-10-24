@@ -159,6 +159,7 @@ import {
   workerStatusOf,
   workerToolState,
 } from "./coding-agent-model.js";
+import { ConnectionNames, useServerName } from "./connection-names.js";
 import { ContinueAgent, ContinuedComposerNote, ContinuedTrail } from "./continue-agent.js";
 import { CopyMessageAction } from "./copy-message.js";
 import { EditComposer } from "./edit-composer.js";
@@ -187,6 +188,7 @@ import {
   calledAgent,
   cardTitle,
   delegationView,
+  isServerCallTool,
   loadedSkill,
   sentWords,
   TARGET_HINT,
@@ -506,6 +508,7 @@ function ToolCallView({
   cut?: CutBody | undefined;
 }): ReactNode {
   const view = toolCallView({ ...part, jobs });
+  const server = useServerName(view);
   const known = useKnownNames();
   // Note that the chip of the agent a call is about hangs the card its tab hangs, which the place hands over by the agent's id.
   const called = calledAgent(part);
@@ -520,6 +523,7 @@ function ToolCallView({
         state={part.state}
         kind={view.kind}
         provider={view.provider}
+        server={server}
         subject={view.subject}
         description={view.description}
         agent={calledAgentActor(part, cards, known)}
@@ -1891,6 +1895,16 @@ function AgentTranscriptView({
   const cards = delegation?.cards;
   const chat = delegation?.chat;
   const live = useMemo(() => ({ cards, chat }), [cards, chat]);
+  // Whether a call of a server's tool is held, which is all the accounts' names are read for.
+  const callsServer = useMemo(
+    () =>
+      messages.some((message) =>
+        agentParts(message).some(
+          (part) => part.kind === AGENT_PART.TOOL && isServerCallTool(part.tool),
+        ),
+      ),
+    [messages],
+  );
   // Where each call begins and ends among the rows drawn, a line that reached a turn drawn inside it, and what of the calls heard here no row holds yet.
   const places = useMemo(() => callPlaces(placing.placed.map(callRowOf), calls), [placing, calls]);
   // Note that the clock is the minute's own, so a call's day moves on with it while the rows hold.
@@ -1940,131 +1954,137 @@ function AgentTranscriptView({
     const task = carded || blank ? undefined : first;
     return (
       <LiveDoors value={live}>
-        <Conversation list={log} onNearTop={onOlder}>
-          {/* Note that it floats in a fixed slot over the log's top rather than standing in its flow, so its coming and going moves no row, measured or not. */}
-          {olderFailed && onOlder !== undefined ? (
-            <div className="conversation-older">
-              <ErrorState onRetry={onOlder}>{OLDER_FAILED_LINE}</ErrorState>
-            </div>
-          ) : null}
-          {/* The plan's card stands off the tab row by the gap between a column's groups; lines fade under the bar or banner above. */}
-          <ConversationContent className={overComposer ? "agent-log-over-composer" : undefined}>
-            <ConversationRows
-              keys={rowKeys}
-              estimate={ROW_ESTIMATE_PX}
-              gap={ROW_GAP_PX}
-              rowClassName="agent-log-row"
-              handle={rowsHandle}
-            >
-              {(index) => {
-                const row = placed[index];
-                if (row === undefined) return null;
-                const { message, said, read } = row;
-                return (
-                  <>
-                    {(places.opens.get(message.id) ?? NO_CALLS).map((call) => (
-                      <CallOpen key={call.key} call={call} now={now} />
-                    ))}
-                    {said.map((line) => (
-                      <SteadyAgentMessage
-                        key={line.id}
-                        message={line}
-                        plan={false}
-                        lead={lead}
-                        moving={false}
-                        forkCut={forkCutOf(line, open)}
-                        delegation={delegation}
-                        sender={lineSender(line.sentBy, readerId, members, former)}
-                      />
-                    ))}
-                    <SteadyAgentMessage
-                      message={message === first && opening !== undefined ? opening.brief : message}
-                      plan={message === plan}
-                      taskId={message === plan ? taskId : undefined}
-                      lead={lead}
-                      moving={working && index === placed.length - 1}
-                      said={working && index === placed.length - 1 ? undefined : read}
-                      forkCut={forkCutOf(message, open)}
-                      delegation={delegation}
-                      todos={todos}
-                      briefTitle={briefTitle}
-                      origin={message === plan ? origin : undefined}
-                      sender={
-                        message === task
-                          ? briefSender
-                          : lineSender(message.sentBy, readerId, members, former)
-                      }
-                      arrived={arrivals.get(message.id) ?? NO_ARRIVED}
-                    />
-                    {message === first && opening !== undefined && replay !== undefined ? (
-                      <>
-                        <ReplayCard
-                          replay={opening.replay}
-                          sentAt={first.sentAt}
-                          place={replay}
-                          taskId={taskId}
-                        />
-                        {opening.note === undefined ? null : (
-                          <SteadyAgentMessage
-                            message={opening.note}
-                            plan={false}
-                            lead={lead}
-                            moving={false}
-                            delegation={delegation}
-                            sender={briefSender}
-                          />
-                        )}
-                      </>
-                    ) : null}
-                    {earlierOmitted && message === plan ? (
-                      <TranscriptNote>Earlier steps are not shown.</TranscriptNote>
-                    ) : null}
-                    {(places.closes.get(message.id) ?? NO_CALLS).map((call) => (
-                      <CallClose key={call.key} call={call} />
-                    ))}
-                  </>
-                );
-              }}
-            </ConversationRows>
-            {heard.map((tail) => (
-              <Fragment key={tail.call.key}>
-                <CallOpen call={tail.opened ? undefined : tail.call} now={now} />
-                {tail.lines.map((line) => (
-                  <SteadyAgentMessage
-                    key={line.id}
-                    message={heardLine(line)}
-                    plan={false}
-                    lead={lead}
-                    moving={false}
-                    delegation={delegation}
-                  />
-                ))}
-                <CallClose call={tail.call.live ? undefined : tail.call} />
-              </Fragment>
-            ))}
-            {working ? (
-              <WorkingLine
-                startedAt={startedAt}
-                words={WORKING_PHASE_WORDS[agentWorkingPhase(messages, sessionStarting, rewindOut)]}
-              />
-            ) : null}
-            {ended === undefined && endTrail === undefined ? null : (
-              <div className="agent-end" data-ended={ended === undefined ? undefined : ""}>
-                {ended === undefined ? null : (
-                  <AgentEndRow
-                    ended={ended}
-                    endReason={endReason}
-                    onOpenApiKeys={onOpenApiKeys}
-                    press={endPress}
-                  />
-                )}
-                {endTrail}
+        <ConnectionNames needed={callsServer}>
+          <Conversation list={log} onNearTop={onOlder}>
+            {/* Note that it floats in a fixed slot over the log's top rather than standing in its flow, so its coming and going moves no row, measured or not. */}
+            {olderFailed && onOlder !== undefined ? (
+              <div className="conversation-older">
+                <ErrorState onRetry={onOlder}>{OLDER_FAILED_LINE}</ErrorState>
               </div>
-            )}
-            {failed ? <ErrorState onRetry={onRetry}>{TRANSCRIPT_FAILED_LINE}</ErrorState> : null}
-          </ConversationContent>
-          <ConversationScrollButton />
-        </Conversation>
+            ) : null}
+            {/* The plan's card stands off the tab row by the gap between a column's groups; lines fade under the bar or banner above. */}
+            <ConversationContent className={overComposer ? "agent-log-over-composer" : undefined}>
+              <ConversationRows
+                keys={rowKeys}
+                estimate={ROW_ESTIMATE_PX}
+                gap={ROW_GAP_PX}
+                rowClassName="agent-log-row"
+                handle={rowsHandle}
+              >
+                {(index) => {
+                  const row = placed[index];
+                  if (row === undefined) return null;
+                  const { message, said, read } = row;
+                  return (
+                    <>
+                      {(places.opens.get(message.id) ?? NO_CALLS).map((call) => (
+                        <CallOpen key={call.key} call={call} now={now} />
+                      ))}
+                      {said.map((line) => (
+                        <SteadyAgentMessage
+                          key={line.id}
+                          message={line}
+                          plan={false}
+                          lead={lead}
+                          moving={false}
+                          forkCut={forkCutOf(line, open)}
+                          delegation={delegation}
+                          sender={lineSender(line.sentBy, readerId, members, former)}
+                        />
+                      ))}
+                      <SteadyAgentMessage
+                        message={
+                          message === first && opening !== undefined ? opening.brief : message
+                        }
+                        plan={message === plan}
+                        taskId={message === plan ? taskId : undefined}
+                        lead={lead}
+                        moving={working && index === placed.length - 1}
+                        said={working && index === placed.length - 1 ? undefined : read}
+                        forkCut={forkCutOf(message, open)}
+                        delegation={delegation}
+                        todos={todos}
+                        briefTitle={briefTitle}
+                        origin={message === plan ? origin : undefined}
+                        sender={
+                          message === task
+                            ? briefSender
+                            : lineSender(message.sentBy, readerId, members, former)
+                        }
+                        arrived={arrivals.get(message.id) ?? NO_ARRIVED}
+                      />
+                      {message === first && opening !== undefined && replay !== undefined ? (
+                        <>
+                          <ReplayCard
+                            replay={opening.replay}
+                            sentAt={first.sentAt}
+                            place={replay}
+                            taskId={taskId}
+                          />
+                          {opening.note === undefined ? null : (
+                            <SteadyAgentMessage
+                              message={opening.note}
+                              plan={false}
+                              lead={lead}
+                              moving={false}
+                              delegation={delegation}
+                              sender={briefSender}
+                            />
+                          )}
+                        </>
+                      ) : null}
+                      {earlierOmitted && message === plan ? (
+                        <TranscriptNote>Earlier steps are not shown.</TranscriptNote>
+                      ) : null}
+                      {(places.closes.get(message.id) ?? NO_CALLS).map((call) => (
+                        <CallClose key={call.key} call={call} />
+                      ))}
+                    </>
+                  );
+                }}
+              </ConversationRows>
+              {heard.map((tail) => (
+                <Fragment key={tail.call.key}>
+                  <CallOpen call={tail.opened ? undefined : tail.call} now={now} />
+                  {tail.lines.map((line) => (
+                    <SteadyAgentMessage
+                      key={line.id}
+                      message={heardLine(line)}
+                      plan={false}
+                      lead={lead}
+                      moving={false}
+                      delegation={delegation}
+                    />
+                  ))}
+                  <CallClose call={tail.call.live ? undefined : tail.call} />
+                </Fragment>
+              ))}
+              {working ? (
+                <WorkingLine
+                  startedAt={startedAt}
+                  words={
+                    WORKING_PHASE_WORDS[agentWorkingPhase(messages, sessionStarting, rewindOut)]
+                  }
+                />
+              ) : null}
+              {ended === undefined && endTrail === undefined ? null : (
+                <div className="agent-end" data-ended={ended === undefined ? undefined : ""}>
+                  {ended === undefined ? null : (
+                    <AgentEndRow
+                      ended={ended}
+                      endReason={endReason}
+                      onOpenApiKeys={onOpenApiKeys}
+                      press={endPress}
+                    />
+                  )}
+                  {endTrail}
+                </div>
+              )}
+              {failed ? <ErrorState onRetry={onRetry}>{TRANSCRIPT_FAILED_LINE}</ErrorState> : null}
+            </ConversationContent>
+            <ConversationScrollButton />
+          </Conversation>
+        </ConnectionNames>
       </LiveDoors>
     );
   }

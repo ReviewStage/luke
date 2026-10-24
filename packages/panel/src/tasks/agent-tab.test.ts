@@ -951,7 +951,7 @@ test("a call of an integration's tool is one row wearing the integration's mark,
   assert.equal(container.querySelector("[data-turn-fold] > summary")?.textContent, "1 tool called");
   const row = container.querySelector<HTMLElement>('[data-call-id="call-linear_remote"] summary');
   assert.ok(row, "the call's row is a fold's line");
-  assert.match(row.textContent ?? "", /^Used\s*list_issues/u);
+  assert.match(row.textContent ?? "", /^Ran\s*list_issues\s*Linear$/u);
   assert.equal(
     row.querySelector("svg")?.outerHTML,
     renderToStaticMarkup(createElement(ProviderMark, { provider: INTEGRATION_PROVIDER.LINEAR })),
@@ -968,7 +968,8 @@ test("a connection_execute with no integration's call under it keeps its own row
   assert.ok(execute);
   const { container } = drawn(assistant([execute]), true);
   const row = container.querySelector('[data-call-id="call-connection_execute"] summary');
-  assert.match(row?.textContent ?? "", /^Used\s*connection_execute/u);
+  // Note that it names the tool and the connection its own input names.
+  assert.match(row?.textContent ?? "", /^Ran\s*list_issues\s*Linear$/u);
 });
 
 test("a connection_execute that failed keeps its own row beside the call it ran, so its error is read", () => {
