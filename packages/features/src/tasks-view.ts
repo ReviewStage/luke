@@ -35,7 +35,7 @@ import {
   planCommentsAnswerSchema,
   planCommentThreadAnswerSchema,
 } from "./plan-comment-wire.js";
-import { PLAN_EDIT_REFUSAL, planEditRequestSchema, planEditValueSchema } from "./plan-edit.js";
+import { PLAN_EDIT_REFUSAL, planEditConflictSchema, planEditRequestSchema } from "./plan-edit.js";
 import {
   workspaceSentryAnswerSchema,
   workspaceSentryDisconnectRequestSchema,
@@ -518,12 +518,12 @@ export type TasksEditFailure = (typeof EDIT_FAILURES)[number];
 
 /**
  * An edit as the window hears it: saved, the task arriving on the document
- * as the service answered it; a conflict, with what the field holds now; or
- * why nothing was saved.
+ * as the service answered it; a conflict, with what the field holds now and
+ * who wrote it; or why nothing was saved.
  */
 export const tasksEditAnswerSchema = EffectSchema.Union([
   EffectSchema.Struct({ saved: EffectSchema.Literal(true) }),
-  EffectSchema.Struct({ conflict: EffectSchema.Struct({ current: planEditValueSchema }) }),
+  EffectSchema.Struct({ conflict: planEditConflictSchema }),
   EffectSchema.Struct({ failure: EffectSchema.Literals(EDIT_FAILURES) }),
 ]);
 
