@@ -42,7 +42,7 @@ function SecretFields(): React.JSX.Element {
     <CatalogSection id="secret-field-states" title="States">
       <div className="catalog-column">
         <Stack gap={GAP.FIELD}>
-          <Sample label="Personal access token" start="ghp_16C7e42F292c6912E7710c838347Ae178B4a" />
+          <Sample label="Personal access token" start="ghp_catalog_example_token" />
           <Sample label="Personal access token" saved />
           <Sample
             label="Anthropic API key"
