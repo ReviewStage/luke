@@ -35,7 +35,7 @@ export const COMBOBOX_WELL =
 
 /** An item: its glyph, its name, then its detail and hint at its end, lit while it is the active option. */
 export const COMBOBOX_ITEM =
-  "group/option flex h-menu-row flex-none cursor-default items-center gap-icon-gap rounded-menu-row px-luke-8 font-sans text-body whitespace-nowrap text-foreground select-none aria-selected:not-aria-disabled:bg-secondary aria-disabled:opacity-40";
+  "group/option flex h-menu-row flex-none cursor-default items-center gap-icon-gap rounded-menu-row px-row-inset font-sans text-body whitespace-nowrap text-foreground select-none aria-selected:not-aria-disabled:bg-secondary aria-disabled:opacity-40";
 
 /** What leads an item before its glyph, a task's key say, in a column wide enough for a long one, so the glyphs and names it leads line up down the list. */
 export const COMBOBOX_ITEM_LEAD = "inline-flex min-w-combobox-lead flex-none items-center";
@@ -45,7 +45,7 @@ export const COMBOBOX_ITEM_GLYPH =
   "inline-flex size-menu-glyph flex-none items-center justify-center text-muted-foreground [&_:is(svg,img)]:size-menu-glyph";
 
 /** An item's name, which gives way only after its detail does. */
-export const COMBOBOX_ITEM_LABEL = "min-w-0 flex-initial overflow-hidden font-medium";
+export const COMBOBOX_ITEM_LABEL = "min-w-0 flex-initial overflow-hidden font-label";
 
 /** An item's detail, quieter, giving way first where the row runs short. */
 export const COMBOBOX_ITEM_DETAIL =
@@ -61,8 +61,8 @@ export const COMBOBOX_ITEM_END =
 
 /** A group's heading over its run. */
 export const COMBOBOX_LABEL =
-  "px-luke-8 pt-luke-8 pb-luke-4 text-caption font-medium text-muted-foreground";
+  "px-row-inset pt-row-inset pb-luke-4 text-group font-group text-muted-foreground";
 
 /** What stands where no option does, or after them: one quiet line, centred, a row or two tall. */
 export const COMBOBOX_EMPTY =
-  "m-0 flex min-h-luke-40 items-center justify-center px-luke-12 py-luke-4 text-center text-caption text-muted-foreground";
+  "m-0 flex min-h-luke-40 items-center justify-center px-list-inset py-luke-4 text-center text-caption text-muted-foreground";

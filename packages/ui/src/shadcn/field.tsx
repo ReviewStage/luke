@@ -42,7 +42,7 @@ export function FieldDescription({ className, ...props }: React.ComponentProps<"
     <p
       data-slot="field-description"
       className={cn(
-        "m-0 font-body text-caption font-normal text-muted-foreground wrap-anywhere",
+        "m-0 font-body text-caption font-text text-muted-foreground wrap-anywhere",
         className,
       )}
       {...props}
@@ -56,7 +56,7 @@ export function FieldError({ className, ...props }: React.ComponentProps<"p">) {
       aria-live="polite"
       data-slot="field-error"
       className={cn(
-        "m-0 font-body text-caption font-normal text-danger wrap-anywhere not-empty:animate-drop-in empty:-mt-luke-6",
+        "m-0 font-body text-caption font-text text-danger wrap-anywhere not-empty:animate-drop-in empty:-mt-luke-6",
         className,
       )}
       {...props}

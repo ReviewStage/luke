@@ -93,7 +93,7 @@
   .luke-settings-page-sections {
     display: flex;
     flex-direction: column;
-    gap: var(--luke-settings-section-gap);
+    gap: var(--luke-page-section-gap);
     min-width: 0;
   }
 

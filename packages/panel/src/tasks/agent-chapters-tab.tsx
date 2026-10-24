@@ -781,7 +781,6 @@ function ChaptersReading({
                     <Stack as={LAYOUT_ELEMENT.UL} gap={GAP.CONTROL}>
                       {chapter.keyChanges.map((change, index) => (
                         <KeyChangeItem
-                          // oxlint-disable-next-line react/no-array-index-key -- a chapter's key changes never move.
                           key={index}
                           change={change}
                           paths={row?.paths ?? []}

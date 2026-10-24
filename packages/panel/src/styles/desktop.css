@@ -31,14 +31,6 @@
   /* The window's zoom as a factor, which the page draws every pixel at and
      the renderer keeps here (`window-zoom.ts`). */
   --zoom: 1;
-  /* What a top row at the window's right edge leaves past its last control
-     for the side panel's toggle: the toggle, a row's inset from the edge,
-     and a row's gap between its items. */
-  --panel-toggle-clearance: calc(
-    var(--column-inset) +
-    var(--luke-control-height) +
-    var(--luke-control-gap)
-  );
   /* The margin a comment thread stands in beside the reading width, and the
      gap between them (`tasks/plan-comments.tsx`, which mirrors both). */
   --comment-card-width: 288px;
@@ -1376,6 +1368,21 @@ ul.actor-stack {
 
 [data-luke-profile="desktop"] .desktop-toolbar {
   -webkit-app-region: drag;
+}
+
+/* What a top row at the sheet's right edge leaves past its last control for
+   the side panel's toggle: the toggle, a row's inset from the window's edge,
+   and a row's gap between its items. Note that it is declared on the sheet
+   and less the sheet's own gap, because the toggle stands on the window
+   while the row stands in the sheet, a gap in from the window's edge
+   wherever the sidebar is open. */
+.desktop-main {
+  --panel-toggle-clearance: calc(
+    var(--column-inset) +
+    var(--luke-control-height) +
+    var(--luke-control-gap) -
+    var(--sheet-gap)
+  );
 }
 
 /* Beneath the side panel's toggle, at the window's top right, the toolbar

@@ -1014,7 +1014,7 @@ export function Menu({
         {heading === undefined ? null : (
           <>
             <div
-              className="luke-menu-heading flex flex-col gap-luke-2 px-luke-8 py-luke-4 text-caption leading-[inherit]"
+              className="luke-menu-heading flex flex-col gap-luke-2 px-row-inset py-luke-4 text-caption leading-[inherit]"
               role="none"
             >
               {heading}
@@ -1049,7 +1049,7 @@ export function Menu({
           <>
             <DropdownMenuSeparator className="luke-menu-rule" />
             <div
-              className="luke-menu-footer flex flex-col gap-luke-2 px-luke-8 py-luke-4 text-caption leading-[inherit] text-muted-foreground"
+              className="luke-menu-footer flex flex-col gap-luke-2 px-row-inset py-luke-4 text-caption leading-[inherit] text-muted-foreground"
               role="none"
             >
               {footer}

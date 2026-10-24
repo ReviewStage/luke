@@ -31,7 +31,6 @@ for (const [method, definition] of bridgeEntries()) {
 // itself (`renderer/window-root.tsx`), so nothing here listens for a push.
 function exposedBridge(): PreloadBridge {
   // SAFETY: the loop derives every method and transport from all entries in BRIDGE.
-  // oxlint-disable-next-line anti-slop/no-chained-type-assertions -- The manifest loop proves the dynamically keyed object is the derived bridge.
   return bridge as unknown as PreloadBridge;
 }
 

@@ -1884,7 +1884,7 @@
 .files-changed-keys {
   display: flex;
   flex-direction: column;
-  gap: var(--luke-settings-section-gap);
+  gap: var(--luke-page-section-gap);
 }
 
 /* Files changed's list of diffs (diff-list.tsx): every file under a header

@@ -11,7 +11,7 @@
     min-width: 0;
     height: var(--luke-control-height);
     margin: 0;
-    padding: 0 var(--luke-space-8);
+    padding: 0 var(--luke-row-inset);
     border: 0;
     border-radius: var(--luke-control-radius);
     background: none;
@@ -21,7 +21,7 @@
     font-family: var(--luke-font-sans);
     font-size: var(--luke-type-body-size);
     line-height: var(--luke-type-label-leading);
-    font-weight: var(--luke-weight-regular);
+    font-weight: var(--luke-type-body-weight);
     text-align: left;
     /* Note that a NavItemLink is an anchor, which would otherwise wear the link's underline. */
     text-decoration: none;
@@ -63,15 +63,15 @@
   }
 
   .luke-nav-item[data-unread="true"] .luke-nav-item-name {
-    font-weight: var(--luke-weight-semibold);
+    font-weight: var(--luke-type-emphasis-weight);
   }
 
   /* A fold's head speaks in the headings' voice and draws no fill, since
      the container around it and its actions draws one. */
   .luke-nav-item[data-variant="head"] {
     color: var(--luke-color-text-muted);
-    font-size: var(--luke-type-caption-size);
-    font-weight: var(--luke-weight-medium);
+    font-size: var(--luke-type-group-size);
+    font-weight: var(--luke-type-group-weight);
   }
 
   .luke-nav-item[data-variant="head"]:hover:not(:disabled) {
@@ -87,7 +87,7 @@
   }
 
   .luke-nav-item[data-variant="identity"] .luke-nav-item-name {
-    font-weight: var(--luke-weight-semibold);
+    font-weight: var(--luke-type-emphasis-weight);
   }
 
   /* The glyph and, on a fold's head, the chevron share one cell, only one

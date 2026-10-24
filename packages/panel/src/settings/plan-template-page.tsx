@@ -437,7 +437,6 @@ function TemplateSkeleton(): React.JSX.Element {
                   </Text>
                   <div>
                     {section.lines.map((width, at) => (
-                      // oxlint-disable-next-line react/no-array-index-key -- a placeholder's lines have nothing but their place.
                       <Skeleton key={at} width={width} />
                     ))}
                   </div>

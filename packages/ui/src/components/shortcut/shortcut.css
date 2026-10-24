@@ -19,7 +19,7 @@
        whose ⌘, ⇧, ⌥, arrows, ⌫, and ⏎ stand on the capitals' line. */
     font-family: inherit;
     font-size: var(--luke-shortcut-text, var(--luke-type-caption-size));
-    font-weight: var(--luke-weight-regular);
+    font-weight: var(--luke-type-caption-weight);
     /* Digits and letters at one advance, so ⌘1 and ⌘5 are one width. */
     font-variant-numeric: tabular-nums;
     line-height: 1;

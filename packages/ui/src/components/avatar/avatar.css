@@ -18,7 +18,7 @@
     color: var(--luke-color-text-muted);
     font-family: var(--luke-font-sans);
     font-size: calc(var(--luke-avatar-size) * 0.5);
-    font-weight: var(--luke-weight-semibold);
+    font-weight: var(--luke-type-emphasis-weight);
     line-height: 1;
     vertical-align: middle;
     user-select: none;

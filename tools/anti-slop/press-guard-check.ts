@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 import {
   configWeakensGuard,
   guardSuppressionLines,
+  ignoredFiles,
   isOutsideUi,
   JSX_SOURCE,
   PRESS_GUARD_RULE,
@@ -18,7 +19,8 @@ import { SKELETON_GUARD_RULE } from "./shared/skeleton-guard.ts";
  * after it. It fails on a JSX-capable file outside `@luke/ui` holding a
  * directive that would silence `no-raw-press-outside-ui`, on any JSX-capable
  * file holding one that would silence `skeleton-through-components`, and on
- * an `.oxlintrc.json` that leaves either rule short of an error anywhere.
+ * an `.oxlintrc.json` that leaves either rule short of an error anywhere or
+ * whose `ignorePatterns` hide a file either rule watches.
  */
 const REPOSITORY_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
 
@@ -59,6 +61,12 @@ for (const guard of GUARDS) {
   const problems: string[] = [];
   const weakened = configWeakensGuard(config, guard.rule);
   if (weakened !== undefined) problems.push(`.oxlintrc.json: ${weakened}`);
+  const watched = files.filter((file) => guard.watches(path.join(REPOSITORY_ROOT, file)));
+  for (const [pattern, hidden] of ignoredFiles(config, watched)) {
+    problems.push(
+      `.oxlintrc.json: ignorePatterns entry "${pattern}" hides files it watches, ${hidden[0]} among them`,
+    );
+  }
   for (const file of files) {
     const absolute = path.join(REPOSITORY_ROOT, file);
     if (!guard.watches(absolute) || !existsSync(absolute)) continue;

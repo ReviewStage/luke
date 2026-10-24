@@ -55,7 +55,7 @@ function HoverCardContent({
           data-slot="hover-card-content"
           className={cn(
             TOOLTIP_SURFACE,
-            "luke-tooltip-card ph-no-capture pointer-events-auto flex w-tooltip-card cursor-default flex-col items-stretch gap-1 rounded-menu border border-border-strong bg-popover px-tooltip-card-inline py-1.5 font-normal text-popover-foreground shadow-menu wrap-normal select-text",
+            "luke-tooltip-card ph-no-capture pointer-events-auto flex w-tooltip-card cursor-default flex-col items-stretch gap-1 rounded-menu border border-border-strong bg-popover px-tooltip-card-inline py-1.5 font-text text-popover-foreground shadow-menu wrap-normal select-text",
             className,
           )}
           {...props}

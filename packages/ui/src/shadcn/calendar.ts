@@ -42,7 +42,7 @@ export const CALENDAR = "inline-flex flex-col gap-luke-8";
 export const CALENDAR_CAPTION = "flex items-center justify-between gap-control-gap ps-luke-6";
 
 /** The month's name. */
-export const CALENDAR_CAPTION_LABEL = "font-sans text-label font-semibold text-foreground";
+export const CALENDAR_CAPTION_LABEL = "font-sans text-label font-section text-foreground";
 
 /** The previous and next steps, a hair apart. */
 export const CALENDAR_NAV = "flex gap-luke-2";
@@ -52,7 +52,7 @@ export const CALENDAR_MONTH_GRID = "table-fixed border-separate border-spacing-0
 
 /** A weekday's heading over its column. */
 export const CALENDAR_WEEKDAY =
-  "h-control w-control p-0 text-center font-sans text-caption font-medium text-muted-foreground";
+  "h-control w-control p-0 text-center font-sans text-tag font-tag text-muted-foreground";
 
 /** A day's cell, a control's height across. */
 export const CALENDAR_DAY = "w-control p-0";
@@ -87,4 +87,4 @@ export const CALENDAR_DAY_INK = {
 
 /** Today: semibold, a dot under its number in whatever ink the number is. */
 export const CALENDAR_TODAY =
-  "font-semibold after:absolute after:bottom-luke-2 after:left-1/2 after:size-luke-4 after:-translate-x-1/2 after:rounded-full after:bg-current after:content-['']";
+  "font-emphasis after:absolute after:bottom-luke-2 after:left-1/2 after:size-luke-4 after:-translate-x-1/2 after:rounded-full after:bg-current after:content-['']";

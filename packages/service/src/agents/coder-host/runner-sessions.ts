@@ -611,6 +611,19 @@ function runnerTags(sessionId: string, agentId: string, runner: TaggedRunner) {
   };
 }
 
+/** The runner the sandbox's tags name, where the sandbox is up in the session it was started in, whether or not it has exited since. */
+function runnerInSession(sandbox: ListedSandbox): TaggedRunner | undefined {
+  const runner = taggedRunner(sandbox);
+  if (
+    runner === undefined ||
+    sandbox.status !== SANDBOX_STATUS.RUNNING ||
+    sandbox.currentSessionId !== runner.sandboxSessionId
+  ) {
+    return undefined;
+  }
+  return runner;
+}
+
 /**
  * Whether the sandbox is up in the session its runner was started in, and
  * that runner has not exited. Only an exit Vercel read, or a command it no
@@ -622,14 +635,8 @@ function liveRunner(
   api: VercelSandboxApi,
   sandbox: ListedSandbox,
 ): Effect.Effect<TaggedRunner | undefined, SandboxUnavailable> {
-  const runner = taggedRunner(sandbox);
-  if (
-    runner === undefined ||
-    sandbox.status !== SANDBOX_STATUS.RUNNING ||
-    sandbox.currentSessionId !== runner.sandboxSessionId
-  ) {
-    return Effect.succeed(undefined);
-  }
+  const runner = runnerInSession(sandbox);
+  if (runner === undefined) return Effect.succeed(undefined);
   return api
     .commandExit(runner.sandboxSessionId, runner.commandId)
     .pipe(Effect.map((exit) => (exit === null ? runner : undefined)));
@@ -1246,38 +1253,63 @@ export const runnerSessions = <
           sessionId,
           deliveryId: sent.line.uuid,
         } as const;
-        const running = yield* liveRunner(api, found.value);
-        // A warm runner launched with what has changed since is ended, and the message relaunches it.
-        const stale = running !== undefined && (yield* staleWarm(agent, running));
-        if (running !== undefined && stale) {
-          yield* api.kill(running.sandboxSessionId, running.commandId);
-        }
-        const live = stale ? undefined : running;
-        if (live !== undefined) {
-          // The installation token lives an hour, so each message sets a fresh one; and the
-          // harness's lines (the agent's model and effort as they stand) go ahead of the message,
+        const running = runnerInSession(found.value);
+        if (running !== undefined) {
+          // A warm runner launched with what has changed since is ended, and the message relaunches it.
+          if (yield* staleWarm(agent, running)) {
+            yield* api.kill(running.sandboxSessionId, running.commandId);
+            yield* relaunched(sessionId, agent, found.value.name, running.sandboxSessionId, sent);
+            return accepted;
+          }
+          // The harness's lines (the agent's model and effort as they stand) go ahead of the message,
           // which a change since the launch takes effect from. The choice read here stands until
           // the write: a change of it is handed to the runner by `retune`, which holds the same
           // lease, so it is written after this line, never undone by it.
-          const [, ahead] = yield* Effect.all(
-            [
-              renewCredential(target, agent, live.sandboxSessionId),
-              harness.ahead(agent),
-              filesWritten(live.sandboxSessionId, sent),
-            ],
+          const [ahead] = yield* Effect.all(
+            [harness.ahead(agent), filesWritten(running.sandboxSessionId, sent)],
             { concurrency: "unbounded" },
           );
-          yield* api.writeStdin(
-            live.sandboxSessionId,
-            live.commandId,
-            [...ahead.lines, sent.line].map(line).join(""),
-          );
-          return accepted;
-        }
-        // A warm runner ended above leaves its sandbox up, in which the runner is launched again.
-        if (running !== undefined) {
-          yield* relaunched(sessionId, agent, found.value.name, running.sandboxSessionId, sent);
-          return accepted;
+          // Note that the write is the runner's liveness check: Vercel refuses stdin to a command
+          // that exited (`command_not_found_or_exited`, a 404), which relaunches below, because
+          // reading the exit first waits out `EXIT_WAIT` on a runner that runs, two seconds a message.
+          const wrote = yield* api
+            .writeStdin(
+              running.sandboxSessionId,
+              running.commandId,
+              [...ahead.lines, sent.line].map(line).join(""),
+            )
+            .pipe(
+              Effect.as(true),
+              Effect.catchIf(
+                (failure) => failure.status === NOT_FOUND_STATUS,
+                () => Effect.succeed(false),
+              ),
+            );
+          if (wrote) {
+            // The installation token lives an hour, so each message sets a fresh one, after the
+            // write rather than ahead of it: the model takes seconds to reach its first command, and
+            // the agent hears the message a GitHub mint and a policy update sooner. Note that a
+            // renewal that fails, or outlasts `CODER.CREDENTIAL_RENEWAL`, is logged and the message
+            // stands, since the runner already took it, and a send answered failed, or past the
+            // store's dispatch deadline, would record no line for it; the next message renews it.
+            const renewed = yield* renewCredential(target, agent, running.sandboxSessionId).pipe(
+              Effect.timeoutOption(CODER.CREDENTIAL_RENEWAL),
+              Effect.catch((failure) =>
+                Effect.as(
+                  Effect.logWarning(
+                    `A ${harness.name} runner's credential was not renewed: ${describeFailure(failure)}`,
+                  ),
+                  Option.some(undefined),
+                ),
+              ),
+            );
+            if (Option.isNone(renewed)) {
+              yield* Effect.logWarning(
+                `A ${harness.name} runner's credential renewal outlasted its bound and was given up`,
+              );
+            }
+            return accepted;
+          }
         }
         // The sandbox stopped or the runner ended: resumed, its credential set again, and the runner relaunched on the harness's session.
         // Lowered first, so the session the resume opens lives the timeout, not an old sandbox's day.

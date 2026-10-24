@@ -27,9 +27,11 @@
     box-shadow: inset 0 0 0 1px var(--luke-color-chip-edge);
     color: var(--luke-color-text);
     font-family: var(--luke-font-sans);
-    font-size: var(--luke-type-caption-size);
-    line-height: var(--luke-type-caption-leading);
-    font-weight: var(--luke-weight-medium);
+    font-size: var(--luke-type-tag-size);
+    line-height: var(--luke-type-tag-leading);
+    font-weight: var(--luke-type-tag-weight);
+    /* A badge often holds a count or a time, which must not shift as it ticks. */
+    font-variant-numeric: tabular-nums;
   }
 
   /* A neutral badge says nothing in particular, so its words are muted. */

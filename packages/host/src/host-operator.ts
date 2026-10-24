@@ -1068,7 +1068,6 @@ function record(result: GatewayCallResult): WireRecord | undefined {
 /** One answered value of the host's, as the domain type its method documents. */
 function answered<Value>(value: UnparsedWireValue): Value | undefined {
   // SAFETY: the host is Luke's own authenticated process answering the shape the method documents; the act's own answer guard re-checks it before a renderer sees it.
-  // oxlint-disable-next-line anti-slop/no-chained-type-assertions -- The protocol carries JSON; the domain type is restored at this one boundary.
   return value === undefined ? undefined : (value as unknown as Value);
 }
 

@@ -1,0 +1,9 @@
+/* time.css -- a time drawn in tabular figures, so a run's length that ticks
+   each second, an age that moves each minute, and a column of times in a
+   thread keep the width they had and shift nothing beside them. */
+
+@layer components {
+  .luke-time {
+    font-variant-numeric: tabular-nums;
+  }
+}
