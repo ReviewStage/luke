@@ -13,6 +13,7 @@ import {
   CallBar,
   CallLive,
   CallMute,
+  VIDEO_TOGGLE_LOOK,
   VideoToggle,
 } from "./call-controls.js";
 
@@ -21,7 +22,8 @@ import {
  * is named for what its press will do, says so as it toggles, announces
  * itself pressed while on, and carries its chord; End call is the bar's one
  * control that is no toggle and hands its press back; Video on or off
- * asks for the other; and a box's call status says the call is live, or
+ * asks for the other, round and named by the system's hint on a call and
+ * square and named by a tooltip in a composer's row; and a box's call status says the call is live, or
  * muted, and how long it has run, or that it is connecting or ending, with
  * no count. Synthetic call.
  */
@@ -162,6 +164,26 @@ test("Video on or off asks for the other, named for what its press will do", () 
   const off = draw(createElement(VideoToggle, { on: false, onSetVideo: (to) => asked.push(to) }));
   act(() => button(off, CALL_CONTROL_LABEL.VIDEO_ON).click());
   expect(asked).toEqual([false, true]);
+});
+
+test("Video on or off is round and named by the system's hint on a call, and square with no system hint in a composer's row, as the row's mutes are", () => {
+  const call = draw(createElement(VideoToggle, { on: true, onSetVideo: () => {} }));
+  expect(button(call, CALL_CONTROL_LABEL.VIDEO_OFF).getAttribute("data-shape")).toBe("round");
+  expect(call.querySelector("[title]")?.getAttribute("title")).toBe(CALL_CONTROL_LABEL.VIDEO_OFF);
+
+  const asked: boolean[] = [];
+  const row = draw(
+    createElement(VideoToggle, {
+      on: false,
+      onSetVideo: (to) => asked.push(to),
+      look: VIDEO_TOGGLE_LOOK.COMPOSER_ROW,
+    }),
+  );
+  const toggle = button(row, CALL_CONTROL_LABEL.VIDEO_ON);
+  expect(toggle.getAttribute("data-shape")).toBeNull();
+  expect(row.querySelector("[title]")).toBeNull();
+  act(() => toggle.click());
+  expect(asked).toEqual([true]);
 });
 
 test("a box's call status says the call is live and how long it has run, and says Muted, quietly, with the struck microphone while the microphone is muted", () => {
