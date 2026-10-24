@@ -22,7 +22,7 @@ import { readKept, writeKept } from "../kept-storage.js";
 import { TOAST_HOLD, useToast } from "../toast.js";
 
 /** What a failed run's toast offers, to open the run. */
-const VIEW_LABEL = "View";
+const VIEW_LABEL = "Open";
 
 /** Where the failures seen are kept in the renderer's storage. */
 const STORAGE_KEY = "luke.seenFailedRuns";
