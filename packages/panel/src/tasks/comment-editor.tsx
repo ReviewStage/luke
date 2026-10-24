@@ -1,7 +1,7 @@
 import { PULL_REQUEST_WRITE_BOUNDS } from "@luke/features/pull-request-write-wire";
 import { BLOCK_MENU_GROUP, COMPOSER_LOOK, ComposerFrame, IconButton, Tooltip } from "@luke/ui";
+import { FileDiffIcon } from "@luke/ui/icons";
 import { markdownClass } from "@luke/ui/markdown-class";
-import { FileDiffIcon } from "lucide-react";
 import { type RefObject, useEffect, useRef } from "react";
 import {
   FINISH,
