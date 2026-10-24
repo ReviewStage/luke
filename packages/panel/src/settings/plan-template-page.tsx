@@ -51,8 +51,9 @@ import type { PlanEditDoor } from "../tasks/use-plan-editing.js";
  * page beside Settings' page list, with no top bar: the document is the
  * plan's own (`../tasks/plan-body.tsx`), at the Settings pages' width and
  * in a plan's type, read as sections until a click or Return opens the same
- * editor on the same words with the same keyboard. Its title is the page's
- * name, at a page title's place and size, which is
+ * editor on the same words with the same keyboard. The page names itself
+ * once, by the header every document draws (`PageHeader`): its title, the
+ * page's one `h1`, is the page's name, which is
  * no name of the account's to change, so it is drawn and never edited, and
  * the page's actions stand at the end of its line: the version history
  * (`plan-template-history.tsx`), which the "Edited by" line under the
@@ -295,21 +296,16 @@ function TemplateNote(): React.JSX.Element {
   );
 }
 
-/** Where the page's actions stand, at the end of its title line. */
-function TitleActionsLine({ children }: { children: React.ReactNode }): React.JSX.Element {
-  return <span className="task-title-actions">{children}</span>;
-}
-
 /** The template's document as the page draws it, in a plan's type and kept out of a recording. */
 function TemplateFrame({ children }: { children: React.ReactNode }): React.JSX.Element {
   return <Fill className="desktop-document template-document ph-no-capture">{children}</Fill>;
 }
 
 /**
- * The page's actions at the right end of its title line, as every Settings
- * page carries its own: the version history, and Reset to default while the
- * account holds a template of its own. They are `@luke/ui`'s quiet
- * `IconButton` and outline `Button`.
+ * The page's actions at the end of its header's title line
+ * (`PageHeader`'s actions), as every Settings page carries its own: the
+ * version history, and Reset to default while the account holds a template of
+ * its own. They are `@luke/ui`'s quiet `IconButton` and outline `Button`.
  */
 function TitleActions({
   custom,
@@ -324,7 +320,7 @@ function TitleActions({
   onReset: () => void;
 }): React.JSX.Element {
   return (
-    <TitleActionsLine>
+    <>
       <Tooltip label={HISTORY_LABEL}>
         <IconButton icon={<HistoryIcon />} label={HISTORY_LABEL} onClick={onShowHistory} />
       </Tooltip>
@@ -339,7 +335,7 @@ function TitleActions({
           Reset to default
         </Button>
       ) : null}
-    </TitleActionsLine>
+    </>
   );
 }
 
@@ -396,11 +392,7 @@ function TemplateSkeleton(): React.JSX.Element {
         <PlanBodyColumn>
           <PlanPageHead
             name={TEMPLATE_TITLE}
-            actions={
-              <TitleActionsLine>
-                <Skeleton shape={SKELETON_SHAPE.CONTROL} width="var(--luke-control-height)" />
-              </TitleActionsLine>
-            }
+            actions={<Skeleton shape={SKELETON_SHAPE.CONTROL} width="var(--luke-control-height)" />}
             note={<TemplateNote />}
           />
           <SkeletonRegion label={PAGE_LINE.READING}>

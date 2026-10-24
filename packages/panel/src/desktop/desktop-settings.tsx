@@ -27,6 +27,9 @@ import {
   SettingsPage,
   Shortcut,
   Stack,
+  TEXT_ELEMENT,
+  TEXT_VARIANT,
+  Text,
   useMenu,
   useRovingKeys,
 } from "@luke/ui";
@@ -309,7 +312,10 @@ export function DesktopSettings({
         >
           Back
         </NavItem>
-        <h1 className="settings-pages-title">Settings</h1>
+        {/* A label for the list, no heading: the page beside it is named once, by its own header's `h1`. */}
+        <Text as={TEXT_ELEMENT.DIV} variant={TEXT_VARIANT.INHERIT} className="settings-pages-title">
+          Settings
+        </Text>
         <SettingsSearchField
           find={!pageSearched}
           onFind={hidden.list ? step.onList : undefined}

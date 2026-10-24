@@ -20,6 +20,7 @@ import {
   MoreButton,
   moreLabel,
   motionHeld,
+  PageHeader,
   SavedTick,
   STATUS_TONE,
   TEXT_BUTTON_LINES,
@@ -1048,9 +1049,10 @@ export function PlanBodyColumn({
 }
 
 /**
- * The head of a page drawn as a plan, Settings › Plan template: its name in
- * the title's place with the page's actions on its line, then its last edit
- * and its note, which the page and its placeholder both draw.
+ * The head of a page drawn as a plan, Settings › Plan template: a document's
+ * header (`PageHeader`) naming the page once, as its `h1`, with the page's
+ * actions on its line, then its last edit and its note, which the page and
+ * its placeholder both draw.
  */
 export function PlanPageHead({
   name,
@@ -1064,14 +1066,11 @@ export function PlanPageHead({
   note: React.ReactNode;
 }): React.JSX.Element {
   return (
-    <header className="task-page-head">
-      <div className="task-title-line">
-        <TaskTitle name={name} />
-        {actions}
-      </div>
+    <div className="task-page-head">
+      <PageHeader title={name} actions={actions} />
       {edited}
       {note}
-    </header>
+    </div>
   );
 }
 

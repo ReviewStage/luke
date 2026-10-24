@@ -140,6 +140,7 @@ function settingsProps(
   view: SettingsView,
   onViewChange: (view: SettingsView) => void,
   capabilities: readonly HostCapability[] = DESKTOP_CAPABILITIES,
+  settings: SettingsPanelProps["settings"] = settingsView({ voiceAvailable: true }),
 ) {
   return {
     account: ACCOUNT,
@@ -173,7 +174,7 @@ function settingsProps(
       onInstall: ignore,
       onOpenLatest: ignore,
     },
-    settings: settingsView({ voiceAvailable: true }),
+    settings,
   } satisfies SettingsPanelProps;
 }
 
@@ -184,12 +185,15 @@ function SettingsHarness({
   call,
   onExit = ignore,
   capabilities,
+  stored,
 }: {
   workspace?: WorkspaceSettingsControl;
   opensOn?: SettingsView;
   call?: CallCardInput;
   onExit?: () => void;
   capabilities?: readonly HostCapability[];
+  /** The stored settings the pages read, the defaults where left out. */
+  stored?: SettingsPanelProps["settings"];
 }): React.JSX.Element {
   const [view, setView] = useState<SettingsView>(opensOn);
   // The card is handed down as the window's root hands it, past every page between.
@@ -215,7 +219,7 @@ function SettingsHarness({
     room: SHELL_ROOM.WIDE,
     step: { listed: true, onList: ignore },
     settings: {
-      ...settingsProps(view, setView, capabilities),
+      ...settingsProps(view, setView, capabilities, stored),
       ...(workspace ? { workspace } : undefined),
     },
     onExit,
@@ -312,6 +316,28 @@ test("Settings opens on Profile, and its sidebar lists every page once under Wor
   const current = pageButtons(page).find((each) => each.getAttribute("aria-current") === "page");
   assert.equal(current?.textContent, "Profile");
   assert.equal(shownTitle(page), "Profile");
+});
+
+test("Settings names its page once, by the page's own header, which also holds the page's Reset", () => {
+  const page = mount(
+    createElement(SettingsHarness, {
+      opensOn: SETTINGS_VIEW.APPEARANCE,
+      stored: settingsView({ voiceAvailable: true, zoom: 125 }),
+    }),
+  );
+
+  const titles = [...page.querySelectorAll("h1")];
+
+  assert.deepEqual(
+    titles.map((title) => title.textContent),
+    ["Appearance"],
+  );
+  const header = titles[0]?.closest("header");
+  assert.ok(header, "the title stands in the page's header");
+  assert.deepEqual(
+    [...header.querySelectorAll("button")].map((button) => button.textContent),
+    ["Reset to defaults"],
+  );
 });
 
 test("the sidebar's first group is headed by the listed workspace's name, over its Workspace page", () => {
@@ -825,6 +851,36 @@ test("while the plan template is read its page stands the document's own head, i
   assert.equal(placeholder(), undefined);
   assert.ok(page.querySelector('button[aria-label="Version history"]'), "the template is drawn");
   assert.equal(head(), reading);
+});
+
+test("the plan template names itself once, by a header holding its title and its actions, while it is read and once it lands", async () => {
+  const { promise: read, resolve: land } = Promise.withResolvers<void>();
+  fakeAppBridge({
+    ...fakeAppBridgeCalls(),
+  });
+  fakeActPort({
+    [ACT_KIND.PLAN_TEMPLATE_READ]: () =>
+      read.then(() => ({ template: "# Context\n", custom: false })),
+  });
+  const page = mount(createElement(SettingsHarness, { opensOn: SETTINGS_VIEW.PLAN_TEMPLATE }));
+  /** The page's titles, and the buttons of the header the first stands in. */
+  const named = () => {
+    const titles = [...page.querySelectorAll("h1")];
+    return {
+      titles: titles.map((title) => title.textContent),
+      acts: [...(titles[0]?.closest("header")?.querySelectorAll("button") ?? [])].map((button) =>
+        button.getAttribute("aria-label"),
+      ),
+    };
+  };
+
+  assert.deepEqual(named().titles, ["Plan template"]);
+  land();
+  await act(async () => {
+    for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
+  });
+
+  assert.deepEqual(named(), { titles: ["Plan template"], acts: ["Version history"] });
 });
 
 test("a page's row in the sidebar offers Copy link on a right-click, copying the page's link under the listed workspace", async () => {
