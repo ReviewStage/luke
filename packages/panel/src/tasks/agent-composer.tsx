@@ -126,7 +126,7 @@ import { DICTATION_PHASE } from "./use-dictation.js";
  * is taken, and files dropped on the card are, each drawn as a chip over
  * the foot's bar with its way off (`attached-file-chips.tsx`). A file that
  * cannot come says why under the bar while the rest still come
- * (`attached-files.ts`). A message is words, files, or both, as the wire
+ * (`use-attached-files.ts`). A message is words, files, or both, as the wire
  * takes it (`hasWordsOrFiles`), so files alone send too.
  *
  * Words selected in one of the agent's messages and answered with Reply

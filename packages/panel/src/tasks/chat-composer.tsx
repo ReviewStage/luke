@@ -78,7 +78,7 @@ import { useKnownNames } from "./use-known-names.js";
  * The microphone records a dictation and lays its words in at the
  * caret (`use-dictation.ts`), listening for the chat's members' names and
  * its channels' (`chatKeywords`). Pictures go with a post as files go with an Inbox
- * answer (`attached-files.ts`): the "+" at the foot's left opens the
+ * answer (`use-attached-files.ts`): the "+" at the foot's left opens the
  * system's picker for images, an image pasted into the box is taken, and
  * images dropped on the card are, each drawn as a chip over the foot with
  * its way off, PNG, JPEG, and WebP kept and any other image re-encoded; a
