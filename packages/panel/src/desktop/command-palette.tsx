@@ -118,6 +118,7 @@ import {
 import { COMMAND_PLACE, commandWords, PANEL_COMMAND, panelCommandOf } from "../command-items.js";
 import { type CopyLink, inSidePanel, type LinkAtHand } from "../links-at-hand.js";
 import { memberRows } from "../member-rows.js";
+import { PANEL_SPAN, useKeystrokeSpans } from "../panel-spans.js";
 import { PANEL_TAB, type PanelTab } from "../panel-tabs.js";
 import { Highlighted } from "../search-field.js";
 import { settingsPageOf } from "../settings/pages.js";
@@ -1379,6 +1380,8 @@ export function CommandPalette({
   if (open && !available) setOpen(false);
   const [filter, setFilter] = useState<PaletteFilter>(PALETTE_FILTER.ALL);
   const [query, setQuery] = useState("");
+  // Each key pressed in the search field is timed to the paint after it, which its ranking of every row is among.
+  const keystrokes = useKeystrokeSpans(PANEL_SPAN.KEYSTROKE_COMMAND_PALETTE);
   // The row chosen, by its place in the list, which a new filter puts back on the first.
   const [selected, setSelected] = useState(FIRST_ROW);
   const changeFilter = (next: PaletteFilter) => {
@@ -1691,6 +1694,7 @@ export function CommandPalette({
       band={<PaletteFilters filter={filter} onFilter={changeFilter} />}
       foot={<PaletteFooter typed={query !== ""} />}
       onKeyDown={keyDown}
+      inputRef={keystrokes}
     />
   );
 }

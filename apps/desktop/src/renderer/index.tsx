@@ -28,8 +28,10 @@ mountWindow(
     <PanelAvatarVoice />
     <App />
   </>,
-  // The panel is the window a person waits on, so it alone reports a freeze.
+  // The panel is the window a person waits on, so it alone reports a freeze
+  // and times its start.
   { reportsFreezes: true },
+  { timesStart: true },
 );
 
 // The avatar is subscribed to before anything is drawn, because main hands

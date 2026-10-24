@@ -42,7 +42,7 @@ import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
-import { afterEach, beforeEach, test } from "vitest";
+import { afterEach, beforeEach, test, vi } from "vitest";
 import {
   appCommandOffered,
   runAppCommand,
@@ -50,6 +50,7 @@ import {
   useMenuCommands,
 } from "../app-commands.js";
 import { PageWorkspaceProvider, useCopyLink, usePageWorkspace } from "../links-at-hand.js";
+import { installPanelSpanRecorder, PANEL_SPAN, type PanelSpan } from "../panel-spans.js";
 import { PANEL_TAB, type PanelTab } from "../panel-tabs.js";
 import type { SidePanelControl } from "../tasks/use-side-panel.js";
 import { NO_LOOKS, useTaskLooks } from "../tasks/use-task-looks.js";
@@ -67,6 +68,7 @@ import { DESKTOP_CAPABILITIES, handCapabilities, handState } from "../testing/ap
 import { onRegistry } from "../testing/copy-feedback.js";
 import { sidebarProps } from "../testing/desktop-sidebar.js";
 import { DOCUMENT_TASK } from "../testing/document-task.js";
+import { keyPressed, reportEventTiming } from "../testing/event-timing.js";
 import { followedInboxes } from "../testing/followed-inboxes.js";
 import { restOn } from "../testing/hint-rest.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
@@ -2735,5 +2737,31 @@ test("an Inbox that could not be read says so in the Inbox's own group, beside t
   assert.ok(
     [...(notice?.querySelectorAll("button") ?? [])].some((each) => each.textContent === "Retry"),
     "the failed source offers Retry",
+  );
+});
+
+test("a key pressed in the search field is timed under ⌘K's own keystroke span, how long it waited and nothing of the key", () => {
+  const spans: PanelSpan[] = [];
+  const uninstall = installPanelSpanRecorder((span) => spans.push(span));
+  reportEventTiming();
+  openPalette();
+
+  keyPressed(field(), { startTime: 800, processingStart: 804, processingEnd: 950, duration: 184 });
+  uninstall();
+  vi.unstubAllGlobals();
+
+  assert.deepEqual(
+    spans.map((span) => ({
+      name: span.name,
+      waited: span.endedAt - span.startedAt,
+      measured: span.attributes(),
+    })),
+    [
+      {
+        name: PANEL_SPAN.KEYSTROKE_COMMAND_PALETTE,
+        waited: 184,
+        measured: { "keystroke.input_delay_ms": 4, "keystroke.processing_ms": 146 },
+      },
+    ],
   );
 });

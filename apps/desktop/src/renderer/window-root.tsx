@@ -14,7 +14,13 @@ import { RegistryContext } from "@effect/atom-react/RegistryContext";
 import { ACT_PORT, type PreloadBridge } from "@luke/host/bridge";
 import { actPort, installActPort, installAppBridge, openPushStream } from "@luke/panel/app-bridge";
 import { installAppPlatform } from "@luke/panel/app-platform";
-import { installPanelSpanRecorder } from "@luke/panel/panel-spans";
+import {
+  endWindowSpanOnFirstDraw,
+  installPanelSpanRecorder,
+  leaveWindowSpan,
+  markWindowStart,
+  PANEL_SPAN,
+} from "@luke/panel/panel-spans";
 import { rendererRegistry } from "@luke/panel/renderer-runtime";
 import { appStateFirstRead } from "@luke/panel/use-app-state";
 import { ReloadState } from "@luke/ui/error-boundary";
@@ -24,18 +30,31 @@ import { DESKTOP_PLATFORM } from "./desktop-platform";
 import { BLANK_WINDOW, type DesktopSentryOptions, startDesktopSentry } from "./desktop-sentry";
 import { createReportingRoot, reloadWindow, WINDOW_FAILED } from "./desktop-sentry-root";
 
+/** What a window times of its own start. */
+export interface WindowTiming {
+  /**
+   * Whether the window times its root starting to its first state drawn and
+   * to its first task list read: the panel's alone, the one window a person
+   * waits on, so the other windows' starts never mix with its.
+   */
+  readonly timesStart: boolean;
+}
+
 /**
  * Installs the window's bridge and platform, draws `surface` into its root
  * once the window's document has been read, and then starts its tracing. A
  * window whose document cannot be read draws that failure with Reload in
  * place of the surface, rather than stand blank. What its SDK watches
  * beyond every window's is `sentry`'s to say: the panel's entry asks for
- * its freezes to be reported.
+ * its freezes to be reported, and, by `timing`, for its start to be timed.
  */
 export function mountWindow(
   surface: ReactNode,
   sentryOptions: DesktopSentryOptions = { reportsFreezes: false },
+  timing: WindowTiming = { timesStart: false },
 ): void {
+  // The window's start, which its first paint and first usable screen are timed from.
+  if (timing.timesStart) markWindowStart();
   // The desktop's bridge is the one the preload exposed as `window.luke`, and
   // this is the one place that global is read: everything else reaches main
   // through `appBridge()`, which reads what is installed here before anything
@@ -64,7 +83,19 @@ export function mountWindow(
 
   const rootElement = document.getElementById("root");
   if (!rootElement) throw new Error("Renderer root element is missing");
-  const draw = createReportingRoot(rootElement, sentry);
+  // A surface that fails to render draws its Reload instead, which is no
+  // first paint, so it is left untimed as it is reported: the root reports
+  // it as it commits, before the commit's draw is heard. Note that a nested
+  // boundary's failure is reported here too, but a page that fails once the
+  // window has drawn finds its first paint ended already, and the first
+  // usable screen is the sidebar's to end, which a failed root never draws.
+  const draw = createReportingRoot(rootElement, {
+    ...sentry,
+    reportBlankWindow: (error, why) => {
+      leaveWindowSpan(PANEL_SPAN.WINDOW_FIRST_PAINT);
+      sentry.reportBlankWindow(error, why);
+    },
+  });
 
   void (async () => {
     try {
@@ -89,6 +120,7 @@ export function mountWindow(
       draw(<ReloadState failure={WINDOW_FAILED} onReload={reloadWindow} />);
       return;
     }
+    endWindowSpanOnFirstDraw(rootElement, PANEL_SPAN.WINDOW_FIRST_PAINT);
     draw(<RegistryContext.Provider value={rendererRegistry}>{surface}</RegistryContext.Provider>);
   })();
 }
