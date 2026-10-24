@@ -11,7 +11,7 @@ import { ACT_KIND } from "@luke/host/acts";
 import { DIAGRAM_DRAWING, type DiagramModule } from "@luke/ui/diagram-contract";
 import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
-import { act, createElement, Fragment } from "react";
+import { act, createElement, Fragment, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
 import { type SideBundles, sideBundles } from "../bundle-loader.js";
@@ -33,6 +33,7 @@ import { landedBundles, onSideBundles } from "../testing/side-bundles.js";
 import { newestToastAction, newestToastSays } from "../testing/toast.js";
 import { ToastHost } from "../toast.js";
 import { PlanBody } from "./plan-body.js";
+import { usePlanEditDoor } from "./use-plan-editing.js";
 
 /**
  * The editor itself is TipTap in a bundle of its own (`../plan-editor/`),
@@ -174,29 +175,43 @@ function mount(answers: readonly TasksEditAnswer[] = [], first: Task = DOCUMENT_
     renamed.push(name);
     return Promise.resolve(true);
   };
-  const render = (task: Task, door: typeof onEdit = onEdit) =>
+  const draw = (page: ReactElement) =>
     act(() =>
       root.render(
         onRegistry(
           registry,
-          onSideBundles(
-            bundles,
-            createElement(
-              Fragment,
-              null,
-              createElement(PlanBody, { task, live: false, onEdit: door, onRename }),
-              createElement(ToastHost),
-            ),
-          ),
+          onSideBundles(bundles, createElement(Fragment, null, page, createElement(ToastHost))),
         ),
       ),
     );
+  const render = (task: Task, door: typeof onEdit = onEdit) =>
+    draw(createElement(PlanBody, { task, live: false, onEdit: door, onRename }));
+  /** The plan as a task's page draws it, saving through `edit` by the task's id. */
+  const renderPage = (task: Task, edit: TaskEdit) =>
+    draw(createElement(TaskPage, { task, edit, onRename }));
   render(first);
   const unmount = () => {
     act(() => root.unmount());
     roots.splice(roots.indexOf(root), 1);
   };
-  return { container, sent, renamed, render, unmount };
+  return { container, sent, renamed, render, renderPage, unmount };
+}
+
+/** How a task's page saves a plan's edit: by the task's id. */
+type TaskEdit = (taskId: string, request: PlanEditRequest) => Promise<TasksEditAnswer>;
+
+/** The plan as a task's page draws it, its edits saved through `edit` with the open task's id. */
+function TaskPage({
+  task,
+  edit,
+  onRename,
+}: {
+  task: Task;
+  edit: TaskEdit;
+  onRename: (name: string) => Promise<boolean>;
+}): ReactElement {
+  const onEdit = usePlanEditDoor(task.id, edit);
+  return createElement(PlanBody, { task, live: false, onEdit, onRename });
 }
 
 function block(container: HTMLElement, label: string): HTMLElement {
@@ -729,19 +744,19 @@ test("words left waiting on a conflict are kept and said, and the toast's Keep m
   );
 });
 
-test("the toast's Retry over words a refused save left saves them through the plan they were typed in", async () => {
-  const { container, render } = mount([{ failure: TASK_CALL_FAILURE.UNANSWERED }]);
+test("the toast's Retry over words a refused save left saves them to the plan they were typed in, though the page has opened another since", async () => {
+  const { container, renderPage } = mount();
   const doors: [string, PlanEditRequest][] = [];
   const answers: TasksEditAnswer[] = [{ failure: TASK_CALL_FAILURE.UNANSWERED }, { saved: true }];
-  const door = (taskId: string) => (request: PlanEditRequest) => {
+  const edit: TaskEdit = (taskId, request) => {
     doors.push([taskId, request]);
     return Promise.resolve<TasksEditAnswer>(answers[doors.length - 1] ?? { saved: true });
   };
   const other = { ...DOCUMENT_TASK, id: "0c4f2e9a-7d1b-4a3e-8f6c-2b9d5e1a7c40" };
-  render(DOCUMENT_TASK, door(DOCUMENT_TASK.id));
+  renderPage(DOCUMENT_TASK, edit);
   act(() => block(container, "Goal").click());
   act(() => open().onDraft(`${BODY}Mine.\n`));
-  render(other, door(other.id));
+  renderPage(other, edit);
   await settle();
 
   act(() => newestToastAction()?.click());

@@ -27,9 +27,10 @@ import { Duration, Effect } from "effect";
 import { AsyncResult } from "effect/reactivity";
 import * as Atom from "effect/reactivity/Atom";
 import type * as AtomRegistry from "effect/reactivity/AtomRegistry";
-import { useContext, useEffect, useRef, useState } from "react";
+import { useContext, useEffect, useMemo, useRef, useState } from "react";
 import type { PlanEditorPlacement } from "../plan-editor/contract.js";
 import { rendererRuntime } from "../renderer-runtime.js";
+import { useSteadyDoor } from "../steady-door.js";
 import { type ToastNotice, useToast, useWithdrawToast } from "../toast.js";
 
 /**
@@ -164,6 +165,23 @@ export interface PlanEditing {
   readonly retry: () => void;
   /** How many of this task's saves the service answered saved, which a Saved tick confirms each of. */
   readonly saves: number;
+}
+
+/**
+ * The door a task's plan saves through, bound to that task's id and steady
+ * across its draws. Note that a door calling the newest `edit` with the id
+ * open now would send the words a task was left with, which save after it is
+ * left, to the task opened since.
+ */
+export function usePlanEditDoor(
+  taskId: string | undefined,
+  edit: (taskId: string, request: PlanEditRequest) => Promise<TasksEditAnswer>,
+): PlanEditDoor | undefined {
+  const save = useSteadyDoor(edit);
+  return useMemo(
+    () => (taskId === undefined ? undefined : (request: PlanEditRequest) => save(taskId, request)),
+    [taskId, save],
+  );
 }
 
 /**
