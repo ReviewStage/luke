@@ -34,6 +34,7 @@ import {
   Button,
   ChevronDownIcon,
   ChevronRightIcon,
+  CONFIRM_LOSS,
   ConfirmDialog,
   commandKeyshortcuts,
   ErrorState,
@@ -726,6 +727,7 @@ function IntegrationRow({
               : undefined),
           verb: "Disconnect",
           running: "Disconnecting…",
+          loss: CONFIRM_LOSS.AFFECTS_OTHERS,
         }}
       />
     </Stack>

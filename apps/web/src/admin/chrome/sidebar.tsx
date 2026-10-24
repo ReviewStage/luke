@@ -25,8 +25,8 @@ import { SHELL_ROOM } from "@luke/panel/shell-room";
 import { useStageRoom } from "@luke/panel/stage-room";
 import {
   AVATAR_SIZE,
+  CONFIRM_LOSS,
   ConfirmDialog,
-  DIALOG_TONE,
   IconButton,
   Menu,
   NAV_CURRENT,
@@ -123,7 +123,7 @@ function AccountFoot({
           title: `${VERB.SIGN_OUT} of ${account.email}?`,
           verb: VERB.SIGN_OUT,
           running: "Signing out",
-          tone: DIALOG_TONE.PRIMARY,
+          loss: CONFIRM_LOSS.REVERSIBLE,
         }}
       />
     </>

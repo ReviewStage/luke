@@ -3,7 +3,6 @@ import {
   Button,
   CONFIRM_LOSS,
   ConfirmDialog,
-  DIALOG_TONE,
   type DialogQuestion,
   Inline,
   TextField,
@@ -106,7 +105,7 @@ function Named(): React.JSX.Element {
           title: "New workspace",
           verb: "Create workspace",
           running: "Creating workspace",
-          tone: DIALOG_TONE.PRIMARY,
+          loss: CONFIRM_LOSS.REVERSIBLE,
         }}
       >
         <TextField

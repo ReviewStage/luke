@@ -11,8 +11,8 @@ import {
   BUTTON_SIZE,
   BUTTON_VARIANT,
   type ButtonVariant,
+  CONFIRM_LOSS,
   ConfirmDialog,
-  DIALOG_TONE,
   ExternalIcon,
   FoldingButton,
   type FoldingButtonHint,
@@ -333,7 +333,7 @@ function AccountMenu({
           title: signedIn ? `${VERB.SIGN_OUT} of ${account.email}?` : `${VERB.SIGN_OUT}?`,
           verb: VERB.SIGN_OUT,
           running: "Signing out",
-          tone: DIALOG_TONE.PRIMARY,
+          loss: CONFIRM_LOSS.REVERSIBLE,
         }}
       />
     </>
