@@ -57,6 +57,9 @@ function couldBeClass(node: ESTree.Node): boolean {
       return parent.key !== node;
     case "JSXAttribute":
       return CLASS_ATTRIBUTES.has(attributeName(parent));
+    case "JSXExpressionContainer":
+      // Note that we look past the braces, so `data-kind={"x"}` is read as `data-kind="x"` is.
+      return couldBeClass(parent);
     case "CallExpression":
       return parent.callee.type !== "Identifier" || parent.callee.name !== "require";
     default:

@@ -49,6 +49,7 @@ tester.run("retired (example.json)", retiredRule, {
       code: 'const map = { "retired-example": 1 }; type T = "retired-example"; <div data-kind="retired-example" />;',
       filename: PANEL,
     },
+    { code: '<div data-kind={"retired-example"} />;', filename: PANEL },
   ],
   invalid: [
     {
@@ -68,6 +69,11 @@ tester.run("retired (example.json)", retiredRule, {
       errors: [{ messageId: "retired" }],
     },
     // A class kept in a constant or an object reaches the DOM all the same.
+    {
+      code: '<div className={"retired-example"} />;',
+      filename: PANEL,
+      errors: [{ messageId: "retired" }],
+    },
     {
       code: 'const OLD = "retired-example"; <div className={OLD} />;',
       filename: PANEL,
