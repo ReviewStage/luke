@@ -1,11 +1,13 @@
 import { useAtomValue } from "@effect/atom-react";
 import { CODING_AGENT_STATUS, type CodingAgentSummary } from "@luke/features/coding-agent-wire";
 import { INBOX_BOUNDS, type InboxItem, type InboxMessage } from "@luke/features/inbox-wire";
+import { pasteCutWords } from "@luke/features/words";
 import {
   BUTTON_TYPE,
   BUTTON_VARIANT,
   Button,
   ErrorState,
+  LengthCounter,
   STATUS_TONE,
   SUBMIT_STATE,
   Tooltip,
@@ -241,6 +243,8 @@ interface AnswerFormProps {
   readonly onEnter: () => void;
   /** Takes files pasted into the line, answering whether it took them; none where the box takes no files. */
   readonly onPasteFiles?: ((files: readonly File[]) => boolean) | undefined;
+  /** Told once a paste past `maxLength` has been cut to fit; a box that gives no word of it cuts silently. */
+  readonly onPasteCut?: (() => void) | undefined;
   /** How a quote block the line holds is drawn; none where the box takes no quote. */
   readonly quote?: ((quote: ComposerQuote) => React.ReactNode) | undefined;
   /** What leads the foot, the + of files; nothing where the box takes none. */
@@ -275,6 +279,7 @@ export function AnswerForm({
   maxLength,
   onEnter,
   onPasteFiles,
+  onPasteCut,
   quote,
   tools,
   nod,
@@ -311,6 +316,7 @@ export function AnswerForm({
         {...pickers.field}
         onEnter={onEnter}
         onPasteFiles={onPasteFiles ?? takesNoFiles}
+        onPasteCut={onPasteCut}
         quote={quote}
       />
       {/* The foot is the agent box's: the + at its left, the microphone and Send at its right, a dictation's strip in their place. */}
@@ -321,6 +327,7 @@ export function AnswerForm({
           <>
             <PromptInputTools>{tools}</PromptInputTools>
             <div className="inbox-answer-actions">
+              <LengthCounter length={note.length} limit={maxLength} />
               <DictateButton dictation={dictation} disabled={module === undefined} />
               {nod ? (
                 <Button
@@ -392,6 +399,8 @@ function AnswerCard({
 }: AnswerBoxProps & { statuses: IntegrationStatuses }): React.JSX.Element {
   const toast = useToast();
   const [refusal, setRefusal] = useState<string | undefined>(undefined);
+  // Whether the last paste was cut to the room the box has left, until the words change again.
+  const [cut, setCut] = useState(false);
   // How many hand-offs of files are still being read, during which the answer waits.
   const [reading, setReading] = useState(0);
   const draft = control.draftOf(item);
@@ -422,7 +431,11 @@ function AnswerCard({
   const { dictating } = field.pickers;
   const kept = control.notes.get(item.id);
   const noted = kept === undefined ? undefined : inboxNoteReading(kept, agent);
-  const note = noted?.words ?? refusal ?? (field.failed ? EDITOR_LOAD_FAILED : undefined);
+  const note =
+    noted?.words ??
+    refusal ??
+    (cut ? pasteCutWords(INBOX_BOUNDS.MAX_MESSAGE_CHARS) : undefined) ??
+    (field.failed ? EDITOR_LOAD_FAILED : undefined);
   // Note that the note is let go once the agent is back, since what it said no longer stands, and only that note, never one a later send left meanwhile.
   const unarchive = () =>
     void onUnarchiveAgent().then((result) => {
@@ -432,10 +445,12 @@ function AnswerCard({
     });
   const message = () => {
     setRefusal(undefined);
+    setCut(false);
     control.onMessage(item, draft);
   };
   const acknowledge = () => {
     setRefusal(undefined);
+    setCut(false);
     control.onAcknowledge(item);
   };
   const attach = (files: readonly File[]) => {
@@ -483,7 +498,11 @@ function AnswerCard({
           />
         }
         note={draft.note}
-        onNote={(text) => control.onDraft(item, { ...draft, note: text })}
+        onNote={(text) => {
+          setCut(false);
+          control.onDraft(item, { ...draft, note: text });
+        }}
+        onPasteCut={() => setCut(true)}
         placeholder={placeholder}
         maxLength={INBOX_BOUNDS.MAX_MESSAGE_CHARS}
         onEnter={() => {

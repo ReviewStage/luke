@@ -1,6 +1,8 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import { CHAT_BOUNDS } from "@luke/features/chat-wire";
+import { pasteCutWords } from "@luke/features/words";
 import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
@@ -13,6 +15,7 @@ import {
   composerEditor,
   editorBundleLanded,
   installEditorLayout,
+  pasteInComposer,
   pressInComposer,
   typeInComposer,
 } from "../testing/composer.js";
@@ -277,21 +280,6 @@ test("Escape leaves the box, and its field says what it asks for to assistive te
   assert.equal(boxWords(box), "never mind");
 });
 
-/** Words pasted into the box's editor as the clipboard hands them. */
-function pasteInComposer(box: HTMLElement, words: string): void {
-  const event = new Event("paste", { bubbles: true, cancelable: true });
-  Object.defineProperty(event, "clipboardData", {
-    value: {
-      files: [],
-      types: ["text/plain"],
-      getData: (type: string) => (type === "text/plain" ? words : ""),
-    },
-  });
-  act(() => {
-    composerEditor(box).dispatchEvent(event);
-  });
-}
-
 test("a plan's address pasted whole is drawn as its chip and posted as its link under the chat's workspace", async () => {
   const { container, draw } = page("acme");
   const sent: string[] = [];
@@ -363,4 +351,26 @@ test("a quote handed to a box whose editor still loads is laid in once the edito
     ),
     ["Happy to wait"],
   );
+});
+
+test("a paste past the post's cap is cut to the room left and the note says so, until the words change, and the counter stands from four fifths of the cap", () => {
+  const { container, draw } = page();
+  draw([{ channelId: GENERAL, label: "Message #general", onSend: taken }]);
+  const box = boxNamed(container, "Message #general");
+  const cap = CHAT_BOUNDS.MAX_TEXT_CHARS;
+  const note = () => box.querySelector(".agent-composer-note")?.textContent;
+  const counter = () => box.querySelector(".luke-length-counter")?.textContent;
+  assert.equal(counter(), undefined);
+
+  pasteInComposer(box, "x".repeat(cap + 100));
+  assert.equal(boxWords(box).length, cap);
+  assert.equal(note()?.includes(pasteCutWords(cap)), true);
+  assert.equal(counter(), `${cap}/${cap}`);
+
+  const editor = composerEditor(box).editor;
+  assert.ok(editor);
+  act(() => {
+    editor.view.dispatch(editor.state.tr.delete(1, 2));
+  });
+  assert.equal(note(), undefined, "the note goes once the words change again");
 });

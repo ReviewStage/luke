@@ -27,6 +27,7 @@ import {
   composerEditor,
   editorBundleLanded,
   installEditorLayout,
+  pasteInComposer,
   pressInComposer,
   QUIET_COMPOSER,
   typeInComposer,
@@ -172,21 +173,6 @@ test("the box takes the caret as it opens, Enter sends what was typed, and the b
   assert.equal(box.shown(), "and the next one");
 });
 
-/** A paste of `text` into the box's editor, as the system's clipboard hands one over. */
-function pasteInComposer(container: ParentNode, text: string): void {
-  const event = new Event("paste", { bubbles: true, cancelable: true });
-  Object.defineProperty(event, "clipboardData", {
-    value: {
-      files: [],
-      types: ["text/plain"],
-      getData: (type: string) => (type === "text/plain" ? text : ""),
-    },
-  });
-  act(() => {
-    composerEditor(container).dispatchEvent(event);
-  });
-}
-
 test("a paste past the box's cap is cut to the room left and the note says so, until the words change", async () => {
   const box = await mounted();
   const cap = CODING_AGENT_BOUNDS.MAX_MESSAGE_CHARS;
@@ -210,6 +196,21 @@ test("a paste that fits the cap says nothing of a cut", async () => {
   pasteInComposer(box.container, "x".repeat(1000));
   assert.equal(box.shown().length, 1000);
   assert.equal(box.container.querySelector(".agent-composer-note"), null);
+});
+
+test("a paste into a full box whose message did not go leaves the failure and its Retry standing", async () => {
+  const box = await mounted(() =>
+    Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }),
+  );
+  typeInComposer(box.container, "x".repeat(CODING_AGENT_BOUNDS.MAX_MESSAGE_CHARS));
+  pressInComposer(box.container, "Enter");
+  await settle();
+  const retry = () =>
+    [...box.container.querySelectorAll("button")].find((each) => each.textContent === "Retry");
+  assert.ok(retry(), "Retry is offered");
+
+  pasteInComposer(box.container, "more");
+  assert.ok(retry(), "the cut paste took nothing from the failure");
 });
 
 test("the length counter stands from four fifths of the cap and not before", async () => {

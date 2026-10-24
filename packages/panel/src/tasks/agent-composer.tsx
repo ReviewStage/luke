@@ -520,7 +520,8 @@ export function AgentComposer({
   const words =
     composer.closed ??
     refusal ??
-    (cut ? pasteCutWords(maxLength) : undefined) ??
+    // Note that a send's failure keeps its words and its Retry over the cut paste's, since a paste into a full box changes nothing a send's failure could be taken down by.
+    (cut && composer.note === undefined ? pasteCutWords(maxLength) : undefined) ??
     unloaded ??
     (composer.note === undefined ? model?.note : undefined);
   const note: Failure | undefined =

@@ -5,6 +5,7 @@ import { readFileSync } from "node:fs";
 import {
   PLAN_COMMENT_ACTION,
   PLAN_COMMENT_ACTOR,
+  PLAN_COMMENT_BOUNDS,
   PLAN_COMMENT_ENTRY,
   PLAN_COMMENT_SCOPE,
   PLAN_COMMENT_STATUS,
@@ -13,6 +14,7 @@ import {
   type PlanCommentThread,
 } from "@luke/features/plan-comment-wire";
 import type { Task } from "@luke/features/task-wire";
+import { pasteCutWords } from "@luke/features/words";
 import { ACT_KIND } from "@luke/host/acts";
 import { APP_COMMAND, APP_SHORTCUTS, shortcutAria } from "@luke/settings/shortcuts";
 import { type PlanCommentsControl, PlanCommentsProvider } from "@luke/ui/plan-comments";
@@ -25,8 +27,10 @@ import { useAppKeymap } from "../app-commands.js";
 import { type AnyAct, FAKE_ANSWER, type FakeActAnswer, fakeActs } from "../testing/app-bridge.js";
 import { attachmentChipName } from "../testing/attachment-chip.js";
 import {
+  composerEditor,
   editorBundleLanded,
   installEditorLayout,
+  pasteInComposer,
   pressInComposer,
   typeInComposer,
 } from "../testing/composer.js";
@@ -710,6 +714,39 @@ test("on a plan's page a reply is written in the agent box's editor, its words p
     asked.map(({ action }) => [action.action, "words" in action ? action.words : undefined]),
     [[PLAN_COMMENT_ACTION.REPLY, "Agreed."]],
   );
+});
+
+test("a reply pasted past the comment's cap is cut to the room left and the card says so, until the words change, and the counter stands from four fifths of the cap", () => {
+  installEditorLayout();
+  const { container } = drawn(
+    "page",
+    [THREADS[0] as PlanCommentThread],
+    () => true,
+    PLAN,
+    undefined,
+    PAGE_MENTIONS,
+  );
+  act(() =>
+    container
+      .querySelector<HTMLElement>(`mark.plan-comment-mark[data-threads~="${ID.OPEN}"]`)
+      ?.click(),
+  );
+  const card = container.querySelector<HTMLElement>(`.comment-card[data-thread="${ID.OPEN}"]`);
+  assert.ok(card);
+  const cap = PLAN_COMMENT_BOUNDS.MAX_WORDS_CHARS;
+  const note = () => card.querySelector(".comment-note")?.textContent;
+  assert.equal(card.querySelector(".luke-length-counter"), null);
+
+  pasteInComposer(card, "x".repeat(cap + 100));
+  assert.equal(note(), pasteCutWords(cap));
+  assert.equal(card.querySelector(".luke-length-counter")?.textContent, `${cap}/${cap}`);
+
+  const editor = composerEditor(card).editor;
+  assert.ok(editor);
+  act(() => {
+    editor.view.dispatch(editor.state.tr.delete(1, 2));
+  });
+  assert.equal(note(), undefined, "the note goes once the words change again");
 });
 
 test("a thread at rest draws its comment's mentions as their chips, as it does open, and a press on one opens the thread too", async () => {
