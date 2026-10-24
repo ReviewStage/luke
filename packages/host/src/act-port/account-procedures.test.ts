@@ -1,6 +1,12 @@
 import assert from "node:assert/strict";
 import { afterEach, it } from "@effect/vitest";
-import { ACCOUNT_PROVIDER, ACCOUNT_STATUS, type AccountSnapshot } from "@luke/credentials/snapshot";
+import {
+  ACCOUNT_PROVIDER,
+  ACCOUNT_STATUS,
+  type AccountSnapshot,
+  type SignInAnswer,
+} from "@luke/credentials/snapshot";
+import { SIGN_IN_FAILURE } from "@luke/features/words";
 import { Effect } from "effect";
 import { ACCOUNT_ACT_KIND } from "../contract/index.js";
 import { accountProcedures } from "./account-procedures.js";
@@ -48,12 +54,19 @@ afterEach(() => {
  * sign-out and deletion answer `ended`, recording every ask and every halt
  * and resume of the recording, in order.
  */
-function windowPort(options: { trusted?: boolean; ended?: Effect.Effect<AccountSnapshot> } = {}) {
+function windowPort(
+  options: {
+    trusted?: boolean;
+    ended?: Effect.Effect<AccountSnapshot>;
+    signedIn?: SignInAnswer;
+  } = {},
+) {
   const happened: unknown[] = [];
   const ended = options.ended ?? Effect.succeed(SIGNED_OUT);
+  const signedIn = options.signedIn ?? { account: SIGNED_IN };
   const host: AccountProceduresDependencies["host"] = {
     beginSignIn: (provider) =>
-      Effect.sync(() => happened.push(["beginSignIn", provider])).pipe(Effect.as(SIGNED_IN)),
+      Effect.sync(() => happened.push(["beginSignIn", provider])).pipe(Effect.as(signedIn)),
     signInAgain: (provider) =>
       Effect.sync(() => happened.push(["signInAgain", provider])).pipe(Effect.as(true)),
     cancelSignIn: () => Effect.sync(() => void happened.push(["cancelSignIn"])),
@@ -85,7 +98,7 @@ it("a sign-in reaches the host with its provider, and the host's answer crosses 
 
   assert.deepEqual(
     await client[ACCOUNT_ACT_KIND.ACCOUNT_BEGIN_SIGN_IN]({ provider: ACCOUNT_PROVIDER.GITHUB }),
-    SIGNED_IN,
+    { account: SIGNED_IN },
   );
   assert.equal(
     await client[ACCOUNT_ACT_KIND.ACCOUNT_SIGN_IN_AGAIN]({ provider: ACCOUNT_PROVIDER.GOOGLE }),
@@ -97,6 +110,15 @@ it("a sign-in reaches the host with its provider, and the host's answer crosses 
     ["signInAgain", ACCOUNT_PROVIDER.GOOGLE],
     ["cancelSignIn"],
   ]);
+});
+
+it("a sign-in that ended without landing crosses back as the key of why", async () => {
+  const { client } = windowPort({ signedIn: { failure: SIGN_IN_FAILURE.OFFLINE } });
+
+  assert.deepEqual(
+    await client[ACCOUNT_ACT_KIND.ACCOUNT_BEGIN_SIGN_IN]({ provider: ACCOUNT_PROVIDER.GOOGLE }),
+    { failure: SIGN_IN_FAILURE.OFFLINE },
+  );
 });
 
 it("a sign-out and a deletion stop the recording before the host is asked, and answer the account as it then stands", async () => {

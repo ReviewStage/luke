@@ -1,4 +1,4 @@
-import type { AccountProvider, AccountSnapshot } from "@luke/credentials/snapshot";
+import type { AccountProvider, AccountSnapshot, SignInAnswer } from "@luke/credentials/snapshot";
 import { WORKSPACE_CALL_FAILURE } from "@luke/features";
 import {
   ADMIN_UNANSWERED,
@@ -366,6 +366,7 @@ import {
   terminalStateEventSchema,
   terminalsActAnswerSchema,
 } from "@luke/features/terminal-view";
+import { isSignInFailure } from "@luke/features/words";
 import {
   carried,
   GATEWAY_EVENT,
@@ -470,7 +471,8 @@ export interface HostOperator {
     reporter: string,
   ): Effect.Effect<SettingsUpdateResult>;
   accountSnapshot(): Effect.Effect<Option.Option<AccountSnapshot>>;
-  beginSignIn(provider: AccountProvider): Effect.Effect<AccountSnapshot>;
+  /** The account a sign-in settled on, or the key of why it ended without landing. */
+  beginSignIn(provider: AccountProvider): Effect.Effect<SignInAnswer>;
   /** The sign-in taken again over the session that stands: whether a new session landed. */
   signInAgain(provider: AccountProvider): Effect.Effect<boolean>;
   cancelSignIn(): Effect.Effect<void>;
@@ -1240,9 +1242,16 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         Option.fromUndefinedOr(answered<AccountSnapshot>(record(answer)?.account)),
       ),
     beginSignIn: (provider) =>
-      accountResult(
-        GATEWAY_METHOD.ACCOUNT_BEGIN_SIGN_IN,
+      Effect.flatMap(
         client.call(GATEWAY_METHOD.ACCOUNT_BEGIN_SIGN_IN, { provider }),
+        (answer): Effect.Effect<SignInAnswer> => {
+          const failure = record(answer)?.failure;
+          if (isSignInFailure(failure)) return Effect.succeed({ failure });
+          return Effect.map(
+            accountResult(GATEWAY_METHOD.ACCOUNT_BEGIN_SIGN_IN, Effect.succeed(answer)),
+            (account) => ({ account }),
+          );
+        },
       ),
     signInAgain: (provider) =>
       Effect.flatMap(client.call(GATEWAY_METHOD.ACCOUNT_SIGN_IN_AGAIN, { provider }), (answer) => {
