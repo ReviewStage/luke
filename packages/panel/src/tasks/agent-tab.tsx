@@ -35,6 +35,7 @@ import {
   INLINE_REF_LOOK,
   InlineRef,
   LineSummary,
+  MESSAGE_LINE_ALIGN,
   MessageLine,
   OneLine,
   STATUS_TONE,
@@ -149,6 +150,7 @@ import {
   placedMessages,
   planPayerOf,
   providerOf,
+  receivedLine,
   SENT_LINE_STATE,
   type SentLine,
   type SpokenMessage,
@@ -1350,8 +1352,14 @@ export function AgentMessage({
         </Message>
       );
     }
+    // A line Luke, GitHub, or another agent sent is the other side's, so it stands at the left as a chat notice does.
+    const received = receivedLine(message.sentBy);
     return (
-      <Message from={message.role} data-message-id={message.id}>
+      <Message
+        from={received ? MESSAGE_ROLE.ASSISTANT : message.role}
+        className={received ? "is-chat" : undefined}
+        data-message-id={message.id}
+      >
         <MessageFileChips message={message} sending={sending} />
         {words === "" ? null : (
           <MessageContent>
@@ -1362,6 +1370,7 @@ export function AgentMessage({
         )}
         <UndeliveredMark messageId={message.id} />
         <MessageLine
+          align={received ? MESSAGE_LINE_ALIGN.START : MESSAGE_LINE_ALIGN.END}
           sender={named}
           at={sentAt}
           actions={
