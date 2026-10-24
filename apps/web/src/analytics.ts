@@ -164,10 +164,6 @@ function scrubAuthUrl(value: string): string {
  * rewrites, and an autocaptured element list) and a class instance (the
  * capture result's `Date` timestamp) are each a leaf, left whole.
  */
-/* oxlint-disable anti-slop/no-runtime-typeof, anti-slop/require-safety-comment-for-type-assertion --
-   PostHog's capture result is the untyped JSON this boundary parses, so the
-   walk branches on each node's runtime shape and the assertions restate the
-   branch the `typeof`/prototype guard just proved. */
 export function sanitizeAnalyticsUrls<Value>(value: Value): Value {
   if (typeof value === "string") return scrubAuthUrl(value) as Value;
   if (value !== null && typeof value === "object") {
@@ -180,7 +176,6 @@ export function sanitizeAnalyticsUrls<Value>(value: Value): Value {
   }
   return value;
 }
-/* oxlint-enable anti-slop/no-runtime-typeof, anti-slop/require-safety-comment-for-type-assertion */
 
 /**
  * The client, once it has loaded. It is imported dynamically rather than at

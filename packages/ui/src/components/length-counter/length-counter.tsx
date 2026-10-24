@@ -18,7 +18,7 @@ import { useDisclosure } from "../../use-disclosure.js";
 
 /** The counter: a caption's tabular figures in the muted ink, the danger ink at the limit, fading in and out. */
 const COUNTER =
-  "luke-length-counter inline-flex flex-none whitespace-nowrap font-body text-caption font-normal text-muted-foreground tabular-nums animate-arrive data-[full=true]:text-danger data-[leaving=true]:animate-leave";
+  "luke-length-counter inline-flex flex-none whitespace-nowrap font-body text-caption font-text text-muted-foreground tabular-nums animate-arrive data-[full=true]:text-danger data-[leaving=true]:animate-leave";
 
 /** The count: a figure of its own that ticks in from the way it moved. */
 const COUNT =

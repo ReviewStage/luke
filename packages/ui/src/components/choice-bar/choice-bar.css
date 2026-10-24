@@ -40,7 +40,7 @@
     font-family: var(--luke-font-sans);
     font-size: var(--luke-type-label-size);
     line-height: var(--luke-type-label-leading);
-    font-weight: var(--luke-weight-medium);
+    font-weight: var(--luke-type-label-weight);
     white-space: nowrap;
     cursor: pointer;
     transition:
@@ -91,13 +91,15 @@
     font-size: var(--luke-type-caption-size);
     line-height: var(--luke-type-caption-leading);
     font-variant-numeric: tabular-nums;
-    font-weight: var(--luke-weight-regular);
+    font-weight: var(--luke-type-caption-weight);
   }
 
   .luke-count-part {
     display: inline-flex;
     align-items: center;
     gap: var(--luke-space-2);
+    /* A diff's counts grow as an agent works; the digits keep their width. */
+    font-variant-numeric: tabular-nums;
   }
 
   .luke-count-glyph > svg {

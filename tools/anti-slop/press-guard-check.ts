@@ -7,6 +7,7 @@ import { LUCIDE_GUARD_RULE } from "./shared/lucide-guard.ts";
 import {
   configWeakensGuard,
   guardSuppressionLines,
+  ignoredFiles,
   isOutsideUi,
   JSX_SOURCE,
   PRESS_GUARD_RULE,
@@ -20,8 +21,9 @@ import { SKELETON_GUARD_RULE } from "./shared/skeleton-guard.ts";
  * directive that would silence `no-raw-press-outside-ui`, on any JSX-capable
  * file holding one that would silence `skeleton-through-components`, on any
  * TypeScript file holding one that would silence `no-lucide-outside-door`,
- * whose baseline is the only way past it, and on
- * an `.oxlintrc.json` that leaves any of them short of an error anywhere.
+ * whose baseline is the only way past it, and on an `.oxlintrc.json` that
+ * leaves any of them short of an error anywhere or whose `ignorePatterns`
+ * hide a file one of them watches.
  */
 const REPOSITORY_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
 
@@ -58,8 +60,11 @@ const GUARDS = [
     rule: LUCIDE_GUARD_RULE,
     sources: TYPESCRIPT_SOURCE,
     // The guards' own tests spell bare directives as fixtures, and oxlint ignores that tree anyway.
+    // A file that never names the library has nothing to silence, so an ignored tree of vendored code is no gap.
     watches: (absolute: string) =>
-      !path.relative(REPOSITORY_ROOT, absolute).startsWith("tools/anti-slop/"),
+      !path.relative(REPOSITORY_ROOT, absolute).startsWith("tools/anti-slop/") &&
+      existsSync(absolute) &&
+      readFileSync(absolute, "utf8").includes("lucide-react"),
     remedy: "Import the icon from @luke/ui/icons instead",
   },
 ] as const;
@@ -72,6 +77,14 @@ for (const guard of GUARDS) {
   const problems: string[] = [];
   const weakened = configWeakensGuard(config, guard.rule);
   if (weakened !== undefined) problems.push(`.oxlintrc.json: ${weakened}`);
+  const watched = files.filter(
+    (file) => guard.sources.test(file) && guard.watches(path.join(REPOSITORY_ROOT, file)),
+  );
+  for (const [pattern, hidden] of ignoredFiles(config, watched)) {
+    problems.push(
+      `.oxlintrc.json: ignorePatterns entry "${pattern}" hides files it watches, ${hidden[0]} among them`,
+    );
+  }
   for (const file of files) {
     if (!guard.sources.test(file)) continue;
     const absolute = path.join(REPOSITORY_ROOT, file);

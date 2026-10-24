@@ -206,6 +206,9 @@
   --spacing-menu-row: var(--luke-menu-row-height);
   --spacing-menu-glyph: var(--luke-menu-glyph);
   --spacing-icon-gap: var(--luke-icon-gap);
+  --spacing-block-gap: var(--luke-block-gap);
+  --spacing-row-inset: var(--luke-row-inset);
+  --spacing-list-inset: var(--luke-list-inset);
   --spacing-control-gap: var(--luke-control-gap);
   --spacing-viewport-top: var(--luke-viewport-top);
   --spacing-keyboard-inset: var(--luke-keyboard-inset);
@@ -229,10 +232,7 @@
   --leading-caption: var(--luke-type-caption-leading);
   --text-section: var(--luke-type-section-size);
   --text-section--line-height: var(--luke-type-section-leading);
-  --text-hover-card-name: var(--luke-hover-card-name-size);
-  --text-hover-card-sub: var(--luke-hover-card-sub-size);
   --text-hover-card-code: var(--luke-hover-card-code-size);
-  --text-hover-card-coarse: var(--luke-hover-card-coarse-size);
   --font-sans: var(--luke-font-sans);
   --ease-motion-exit: var(--luke-motion-exit);
   --ease-pane: var(--luke-motion-pane);
@@ -355,6 +355,20 @@
   --spacing-combobox-lead: 9ch;
   --text-label: var(--luke-type-label-size);
   --text-label--line-height: var(--luke-type-label-leading);
+  --text-group: var(--luke-type-group-size);
+  --text-group--line-height: var(--luke-type-group-leading);
+  --text-tag: var(--luke-type-tag-size);
+  --text-tag--line-height: var(--luke-type-tag-leading);
+  /* A role's weight, so a utility reads `font-label` and never `font-medium`:
+     the weight is the role's, which `profiles.css` sets once. */
+  --font-weight-text: var(--luke-type-body-weight);
+  --font-weight-label: var(--luke-type-label-weight);
+  --font-weight-group: var(--luke-type-group-weight);
+  --font-weight-tag: var(--luke-type-tag-weight);
+  --font-weight-section: var(--luke-type-section-weight);
+  --font-weight-emphasis: var(--luke-type-emphasis-weight);
+  --font-weight-title: var(--luke-type-title-weight);
+  --tracking-title: var(--luke-type-title-tracking);
   /* A menu's exit, a fade, over `menu.css`'s keyframes; its entrance is the
      overlays' `--animate-menu-in` above. */
   --animate-menu-leave: luke-menu-leave var(--luke-duration-exit) var(--luke-motion-exit) forwards;

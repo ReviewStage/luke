@@ -22,7 +22,7 @@
     font-family: var(--luke-font-sans);
     font-size: var(--luke-type-body-size);
     line-height: var(--luke-type-body-leading);
-    font-weight: var(--luke-weight-regular);
+    font-weight: var(--luke-type-body-weight);
     transition:
       border-color var(--luke-duration-hover) ease,
       background-color var(--luke-duration-hover) ease;

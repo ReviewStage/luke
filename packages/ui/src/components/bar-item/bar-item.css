@@ -50,7 +50,7 @@
     color: var(--luke-color-ink-inverse);
     font-size: var(--luke-type-caption-size);
     line-height: var(--luke-type-caption-leading);
-    font-weight: var(--luke-weight-semibold);
+    font-weight: var(--luke-type-emphasis-weight);
     font-variant-numeric: tabular-nums;
     text-align: center;
   }
