@@ -53,20 +53,8 @@ import {
 } from "ai";
 import { and, asc, desc, eq, gt, inArray, isNull, lt, ne, or, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
-import {
-  Cause,
-  Data,
-  DateTime,
-  Duration,
-  Effect,
-  Exit,
-  Fiber,
-  Option,
-  Result,
-  Schema,
-} from "effect";
+import { Cause, DateTime, Duration, Effect, Exit, Fiber, Option, Result, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/sql";
-import { isSqlError } from "effect/sql/SqlError";
 import {
   Database,
   type DatabaseServices,
@@ -89,7 +77,13 @@ import {
   nullable,
   TurnUsageColumnSchema,
 } from "./columns.js";
-import { holdConversationDispatch, waitOutConversationDispatch } from "./dispatch-lock.js";
+import {
+  DispatchClaimHeld,
+  dispatchClaimStands,
+  releaseDispatchClaim,
+  takeDispatchClaim,
+  waitingOutDispatchClaim,
+} from "./dispatch-claim.js";
 import { COALESCED_LINE_SEPARATOR, noReceiptOfLine } from "./message-reads.js";
 import { writeOperatorNotice } from "./operator-notices.js";
 
@@ -230,7 +224,7 @@ const NO_TURN: Refused<typeof STORE_WRITE_REFUSAL.NO_TURN> = {
   refusal: STORE_WRITE_REFUSAL.NO_TURN,
 };
 
-/** The conversation's lock stayed held by another write past the bound this write waits for it; nothing was written. */
+/** Another hand-over's dispatch claim stood on the conversation past the bound this write waits for it (`dispatch-claim.ts`); nothing was written. */
 const CONVERSATION_BUSY: Refused<typeof STORE_WRITE_REFUSAL.BUSY> = {
   refusal: STORE_WRITE_REFUSAL.BUSY,
 };
@@ -441,22 +435,6 @@ type AwaitingLineTake =
  */
 const AWAITING_LINE_DISPATCH_DEADLINE = Duration.seconds(30);
 
-/**
- * The longest an awaiting line's write waits for the conversation's dispatch
- * lock (`dispatch-lock.ts`) before it is refused as busy, with nothing written
- * and eve told nothing, which its caller answers as an outage the same key
- * may retry. A write that hands eve something holds that lock for as long as
- * eve takes, up to thirty seconds, and a busy agent's conversation queues several, so with
- * no bound a send waited out the whole queue, or a holder that never let
- * go, until its function was killed at three hundred seconds. Five seconds
- * and the dispatch's thirty are what the client's send deadline outlasts
- * (`HOSTED_DEADLINE.STEER`).
- */
-const AWAITING_LINE_LOCK_WAIT = Duration.seconds(5);
-
-/** A wait for the conversation's lock as long as this is logged, so a slow send names what it waited on. */
-const LOCK_WAIT_LOGGED = Duration.seconds(1);
-
 /** The rows the turn took, by id, oldest first; none where no run of lines with those words awaited; or the turn does not stand. */
 type AwaitingLineTaken = Result.Result<readonly string[], typeof NO_CONVERSATION | typeof NO_TURN>;
 
@@ -540,21 +518,22 @@ export interface StoreWriter {
   latestSpokenLine(target: ConversationTarget, query: SpokenLineQuery): Write<SpokenLineResult>;
   /**
    * Writes the developer's line to a coding agent as a row awaiting its
-   * turn, only once the dispatch handed in has answered that eve took it:
+   * turn, kept only where the dispatch handed in answers that eve took it:
    * the dispatch is the hand-over to eve, run under the conversation's
-   * dispatch lock, which the take of the line into the turn eve opens on it
-   * waits out, so that take finds the row standing; and a dispatch that
-   * answers nothing writes nothing. The row lock is held only for the row's
-   * insert after the hand-over, so the journal of a turn under way never
-   * waits on eve (`locked`). The row stands under the client's key
+   * dispatch claim (`dispatch-claim.ts`) with no transaction open, after
+   * the row is written with the claim, so the take of the line into the
+   * turn eve opens on it finds the row standing; and a dispatch that
+   * answers nothing withdraws the row. No lock is held while eve answers,
+   * so the journal of a turn under way, and every other write of the
+   * conversation, lands meanwhile. The row stands under the client's key
    * for the send (`sentLineId`), and a line already standing under that key
    * is answered as repeated without the dispatch being run, so two sends
    * carrying one key, however they race, hand eve the words once. The whole
    * write cannot be interrupted, because eve takes the message before the
-   * row records it: a caller that went in between would roll the row back
-   * with eve's turn already on its way, so the dispatch is bounded by a
-   * deadline of its own instead, past which it is read as having answered
-   * nothing.
+   * claim records what it answered: a caller that went in between would
+   * leave the claim to expire and the line standing with eve's answer
+   * unread, so the dispatch is bounded by a deadline of its own instead,
+   * past which it is read as having answered nothing.
    */
   writeAwaitingLine(
     target: ConversationTarget,
@@ -734,16 +713,6 @@ const MessageInsertSchema = Schema.Struct({
   senderAgentId: Schema.NullOr(Schema.String),
 });
 
-/** The conversation's lock was not had within the bound the write waits for it. */
-class LockWaitRanOut extends Data.TaggedError("LockWaitRanOut")<Record<never, never>> {}
-
-/** Whether a statement failed because Postgres gave up waiting on a lock (`lock_timeout`, 55P03), beneath Drizzle's error where it wraps one. */
-function lockWaitRanOut(failure: StoreFailure): boolean {
-  const inner = failure._tag === "EffectDrizzleQueryError" ? failure.cause : failure;
-  const beneath = Cause.isCause(inner) ? Cause.squash(inner) : inner;
-  return isSqlError(beneath) && beneath.reason._tag === "LockTimeoutError";
-}
-
 const lockConversation = SqlSchema.findOneOption({
   Request: ConversationTargetSchema,
   Result: Schema.Struct({
@@ -763,69 +732,6 @@ const lockConversation = SqlSchema.findOneOption({
           ),
         )
         .for("update"),
-    ),
-});
-
-/**
- * The conversation's dispatch lock held alone (`dispatch-lock.ts`), as a
- * line's hand-over takes it, waiting for it no longer than the bound: Postgres gives up the wait at `lock_timeout`, which
- * is set for this transaction alone and put back as soon as the lock is had,
- * so no later statement of the write, eve's hand-over among them, is held to
- * it. A wait that ran out fails as `LockWaitRanOut`, and the transaction,
- * aborted by Postgres, is the caller's to roll back. How long the wait took
- * is logged where it was long, by the conversation's id alone.
- */
-const holdDispatchWithin = /* @__PURE__ */ Effect.fnUntraced(function* (
-  target: ConversationTarget,
-  bound: Duration.Duration,
-) {
-  const sql = yield* SqlClient.SqlClient;
-  yield* sql`select set_config('lock_timeout', ${String(Duration.toMillis(bound))}, true)`;
-  const [waited] = yield* Effect.timed(
-    holdConversationDispatch(target.conversationId).pipe(
-      Effect.catchIf(lockWaitRanOut, () =>
-        Effect.andThen(
-          Effect.logWarning("a send gave up waiting for its conversation's dispatch lock", {
-            conversationId: target.conversationId,
-            waitedMs: Duration.toMillis(bound),
-          }),
-          Effect.fail(new LockWaitRanOut()),
-        ),
-      ),
-    ),
-  );
-  yield* sql`set local lock_timeout to default`;
-  if (Duration.isGreaterThanOrEqualTo(waited, LOCK_WAIT_LOGGED)) {
-    yield* Effect.logInfo("a send waited for its conversation's dispatch lock", {
-      conversationId: target.conversationId,
-      waitedMs: Duration.toMillis(waited),
-    });
-  }
-});
-
-/**
- * The conversation as `lockConversation` reads it, without its row lock: what
- * a line's hand-over to eve reads under the dispatch lock alone, so the
- * journal is never kept waiting on eve (`dispatch-lock.ts`).
- */
-const readConversation = SqlSchema.findOneOption({
-  Request: ConversationTargetSchema,
-  Result: Schema.Struct({
-    id: Schema.String,
-    kind: Schema.Literals(Object.values(CONVERSATION_KIND)),
-  }),
-  execute: (target) =>
-    Database.use((db) =>
-      db
-        .select({ id: conversations.id, kind: conversations.kind })
-        .from(conversations)
-        .where(
-          and(
-            eq(conversations.id, target.conversationId),
-            eq(conversations.userId, target.userId),
-            isNull(conversations.deletedAt),
-          ),
-        ),
     ),
 });
 
@@ -2497,26 +2403,34 @@ function dispatchedWithinDeadline(dispatch: Effect.Effect<boolean>): Effect.Effe
   });
 }
 
+/** A line's row written and the dispatch claim its hand-over runs under; or the row a send under the same key already wrote. */
+type LineClaimed = Result.Result<
+  | { readonly id: string; readonly txid: string; readonly claim: string }
+  | { readonly id: string; readonly effect: typeof STORE_WRITE_EFFECT.REPEATED },
+  typeof NO_CONVERSATION | typeof CONVERSATION_BUSY | MessageRefused
+>;
+
 /**
- * The line's hand-over and its row, from inside the dispatch lock: the
- * context is the conversation as read under that lock alone, and `land`
- * writes the admitted row under the row lock once eve took the line.
+ * The line's row and the conversation's dispatch claim, written together
+ * under the row lock before the line is handed over, so the take of the line
+ * into the turn its runtime opens finds it standing (`dispatch-claim.ts`).
+ * Another hand-over's claim standing fails the write as `DispatchClaimHeld`,
+ * nothing written, for the caller to try again; it is read before the repeat
+ * check, so a retry of a send still under way waits for it to be recorded
+ * rather than answering a row its hand-over may yet withdraw.
  */
-const writeAwaitingLine = /* @__PURE__ */ Effect.fnUntraced(function* (
+const claimLine = /* @__PURE__ */ Effect.fnUntraced(function* (
   context: WriterContext,
   line: AwaitingLineWrite,
-  dispatch: Effect.Effect<boolean>,
-  land: (
-    message: StoredUIMessage,
-  ) => Write<Result.Result<{ readonly id: string; readonly txid: string }, typeof NO_CONVERSATION>>,
-): Effect.fn.Return<AwaitingLineWritten, StoreFailure, DatabaseServices> {
+): Effect.fn.Return<LineClaimed, StoreFailure | DispatchClaimHeld, DatabaseServices> {
+  if (yield* dispatchClaimStands(context.target.conversationId)) {
+    return yield* new DispatchClaimHeld();
+  }
   const clientId = sentLineId(line.clientKey);
   // A line already under the key is the send a lost answer was for: eve has it, and hears nothing again.
   const standing = yield* messageByClientId(context, clientId);
   if (Option.isSome(standing)) {
-    return Result.succeed(
-      Option.some({ id: standing.value.id, effect: STORE_WRITE_EFFECT.REPEATED }),
-    );
+    return Result.succeed({ id: standing.value.id, effect: STORE_WRITE_EFFECT.REPEATED });
   }
   const read = yield* admitted(context, {
     id: clientId,
@@ -2525,31 +2439,80 @@ const writeAwaitingLine = /* @__PURE__ */ Effect.fnUntraced(function* (
     parts: lineParts(line.text, line.attachments ?? [], line.mentioned),
   });
   if (Result.isFailure(read)) return Result.fail(read.failure);
-  if (!(yield* dispatchedWithinDeadline(dispatch))) return Result.succeed(Option.none());
-  const landed = yield* land(read.success);
-  if (Result.isFailure(landed)) return Result.fail(landed.failure);
-  return Result.succeed(Option.some({ ...landed.success, effect: STORE_WRITE_EFFECT.WRITTEN }));
+  const { id, txid } = yield* insertMessage(context, {
+    clientId: read.success.id,
+    turnId: undefined,
+    message: read.success,
+    finishedAt: context.now,
+    sender: line.sender,
+  });
+  const claim = yield* takeDispatchClaim(context.target.conversationId, id);
+  return Result.succeed({ id, txid, claim });
 });
 
-/** Writes the line eve took as the row awaiting its turn, under the row lock. */
-const landAwaitingLine = /* @__PURE__ */ Effect.fnUntraced(function* (
-  context: WriterContext,
-  message: StoredUIMessage,
-  sender: LineSender,
-): Effect.fn.Return<
-  Result.Result<{ readonly id: string; readonly txid: string }, never>,
-  StoreFailure,
-  DatabaseServices
-> {
-  const { id, txid } = yield* insertMessage(context, {
-    clientId: message.id,
-    turnId: undefined,
-    message,
-    finishedAt: context.now,
-    sender,
-  });
-  return Result.succeed({ id, txid });
+/** Deletes the line its runtime never took, unless a turn took it all the same, answering whether it went. */
+const deleteUntakenLine = SqlSchema.findAll({
+  Request: Schema.Struct({ conversationId: Schema.String, id: Schema.String }),
+  Result: Schema.Struct({ id: Schema.String }),
+  execute: ({ conversationId, id }) =>
+    Database.use((db) =>
+      db
+        .delete(messages)
+        .where(
+          and(
+            eq(messages.conversationId, conversationId),
+            eq(messages.id, id),
+            isNull(messages.turnId),
+          ),
+        )
+        .returning({ id: messages.id }),
+    ),
 });
+
+/**
+ * Counts the conversation's journal revision up and stamps it as the one a
+ * reader holding an older cursor reads the transcript afresh from, as a
+ * rewind does, since a row it may already have drawn is gone.
+ */
+const markLineWithdrawn = SqlSchema.void({
+  Request: Schema.Struct({ conversationId: Schema.String }),
+  execute: ({ conversationId }) =>
+    Database.use((db) =>
+      db
+        .update(conversations)
+        .set({
+          journalRevision: sql`${conversations.journalRevision} + 1`,
+          rewoundRevision: sql`${conversations.journalRevision} + 1`,
+        })
+        .where(eq(conversations.id, conversationId)),
+    ),
+});
+
+/**
+ * What the hand-over answered, written in a short transaction of its own
+ * after it: the claim released, and a line the runtime did not take
+ * withdrawn. Note that the claim goes first, because its update takes the
+ * conversation's row lock, which every writer takes before a message's.
+ */
+function recordedLine(
+  target: ConversationTarget,
+  claimed: { readonly id: string; readonly claim: string },
+  taken: boolean,
+): Effect.Effect<void, StoreFailure, DatabaseServices> {
+  return Effect.flatMap(SqlClient.SqlClient, (client) =>
+    client.withTransaction(
+      Effect.gen(function* () {
+        yield* releaseDispatchClaim(target.conversationId, claimed.claim);
+        if (taken) return;
+        const removed = yield* deleteUntakenLine({
+          conversationId: target.conversationId,
+          id: claimed.id,
+        });
+        if (removed.length > 0) yield* markLineWithdrawn({ conversationId: target.conversationId });
+      }),
+    ),
+  );
+}
 
 const writeTypedCallLine = /* @__PURE__ */ Effect.fn("web/writeTypedCallLine")(function* (
   context: WriterContext,
@@ -2810,28 +2773,21 @@ export function storeWriter({ tools }: StoreWriterOptions): Effect.Effect<StoreW
    * write's instant is read from the clock once the lock is held, so every
    * row one write stamps carries the same one.
    *
-   * Two locks guard a conversation, always taken in this order: its dispatch
-   * lock (`dispatch-lock.ts`), then its row lock. A hand-over to eve holds the
-   * dispatch lock alone for as long as eve takes to answer, and the row lock
-   * only for the short write of what eve answered after it. Every write here
-   * first waits out such a hand-over, holding the dispatch lock shared, so
-   * the turn eve opens on a line finds the line's row standing when it takes
-   * the line in, as it did when the hand-over ran under the row lock; the run
-   * stream's journal alone (`journal`) skips that wait, since it never reads
-   * a line awaiting its turn and writes four times a second.
+   * Note that no write here waits on a hand-over to the runtime under way: a
+   * hand-over holds no lock while the runtime answers, only its dispatch
+   * claim (`dispatch-claim.ts`), and the line it hands stands before it is
+   * handed, so the turn the runtime opens on it finds it.
    */
-  function locked<A>(
+  function locked<A, E = never>(
     target: ConversationTarget,
-    write: (context: WriterContext) => Write<A>,
+    write: (context: WriterContext) => Effect.Effect<A, StoreFailure | E, DatabaseServices>,
     absent: () => A,
-    journal = false,
-  ): Write<A> {
+  ): Effect.Effect<A, StoreFailure | E, DatabaseServices> {
     return Effect.flatMap(SqlClient.SqlClient, (client) => {
       const notices: WriterContext["notices"] = [];
       return client
         .withTransaction(
           Effect.gen(function* () {
-            if (!journal) yield* waitOutConversationDispatch(target.conversationId);
             const row = yield* lockConversation(target);
             return yield* lockedWrite(target, row, notices, write, absent);
           }),
@@ -2841,50 +2797,62 @@ export function storeWriter({ tools }: StoreWriterOptions): Effect.Effect<StoreW
   }
 
   /**
-   * Hands the line to eve under the conversation's dispatch lock alone, and
-   * writes its row under the row lock only once eve took it, so the journal
-   * of the turn under way keeps landing while eve answers. The repeat check
-   * and the line's admission run under the dispatch lock, which every other
-   * send to the conversation takes too, so two sends under one key still
-   * hand eve the words once, and sends reach eve in the order their rows are
-   * numbered. Note that a conversation Clear stamped while eve answered is
-   * answered as gone, though eve took the words, as it would be a moment later.
+   * Writes the line's row and takes the conversation's dispatch claim in one
+   * short transaction, hands the line over with no transaction open, and
+   * writes what the runtime answered in a second: the claim released, and a
+   * line it did not take withdrawn. The claim is what keeps one hand-over at
+   * a time in the conversation, so sends reach the runtime in the order their
+   * rows are numbered and two sends under one key hand it the words once; a
+   * send finding another's claim waits for it, holding nothing, and is
+   * refused as busy past the wait. A hand-over that dies releases the claim
+   * and leaves the line standing, as a lost answer leaves it, and a holder
+   * that dies with it leaves the claim to expire. Note that a
+   * conversation Clear stamped while the runtime answered keeps the row it
+   * already had, and the send is answered as written, as the runtime took it.
    */
   function dispatchedLine(
     target: ConversationTarget,
     line: AwaitingLineWrite,
     dispatch: Effect.Effect<boolean>,
   ): Write<AwaitingLineWritten> {
-    return Effect.flatMap(SqlClient.SqlClient, (client) =>
-      client
-        .withTransaction(
-          Effect.gen(function* () {
-            yield* holdDispatchWithin(target, AWAITING_LINE_LOCK_WAIT);
-            const row = yield* readConversation(target);
-            if (Option.isNone(row)) return Result.fail(NO_CONVERSATION);
-            // Note that the hand-over settles no turn, so it leaves no notice; the row's insert keeps its own.
-            const context = yield* contextOf(target, row.value.kind, []);
-            return yield* writeAwaitingLine(context, line, dispatch, (message) =>
-              underConversation(target, (held) => landAwaitingLine(held, message, line.sender)),
-            );
-          }),
-        )
-        .pipe(
-          Effect.catchTag("LockWaitRanOut", () =>
-            Effect.succeed<AwaitingLineWritten>(Result.fail(CONVERSATION_BUSY)),
-          ),
+    return Effect.gen(function* () {
+      const claimed = yield* waitingOutDispatchClaim(
+        target.conversationId,
+        locked<LineClaimed, DispatchClaimHeld>(
+          target,
+          (context) => claimLine(context, line),
+          () => Result.fail(NO_CONVERSATION),
         ),
-    );
+      ).pipe(
+        Effect.catchTag("DispatchClaimHeld", () =>
+          Effect.succeed<LineClaimed>(Result.fail(CONVERSATION_BUSY)),
+        ),
+      );
+      if (Result.isFailure(claimed)) return Result.fail(claimed.failure);
+      const written = claimed.success;
+      if (!("claim" in written)) return Result.succeed(Option.some(written));
+      // A hand-over that died says nothing of whether the runtime took the line, which is kept standing.
+      const taken = yield* dispatchedWithinDeadline(dispatch).pipe(
+        Effect.tapCause(() =>
+          Effect.ignore(releaseDispatchClaim(target.conversationId, written.claim)),
+        ),
+      );
+      yield* recordedLine(target, written, taken);
+      if (!taken) return Result.succeed(Option.none());
+      return Result.succeed(
+        Option.some({ id: written.id, effect: STORE_WRITE_EFFECT.WRITTEN, txid: written.txid }),
+      );
+    });
   }
 
   /** The write itself, once the conversation's row is locked or found absent: its instant read once, its journals landed after it. */
-  function lockedWrite<A>(
+  function lockedWrite<A, E>(
     target: ConversationTarget,
     row: Option.Option<{ readonly kind: WriterContext["kind"] }>,
     notices: WriterContext["notices"],
-    write: (context: WriterContext) => Write<A>,
+    write: (context: WriterContext) => Effect.Effect<A, StoreFailure | E, DatabaseServices>,
     absent: () => A,
-  ): Write<A> {
+  ): Effect.Effect<A, StoreFailure | E, DatabaseServices> {
     return Effect.gen(function* () {
       if (Option.isNone(row)) return absent();
       const context = yield* contextOf(target, row.value.kind, notices);
@@ -2909,14 +2877,12 @@ export function storeWriter({ tools }: StoreWriterOptions): Effect.Effect<StoreW
         target,
         (context) => consume(context, event),
         () => Result.fail(NO_CONVERSATION),
-        true,
       ),
     consumeAll: (target, events) =>
       locked<readonly StoreWriteResult[]>(
         target,
         (context) => Effect.forEach(events, (event) => consume(context, event)),
         () => events.map(() => Result.fail(NO_CONVERSATION)),
-        true,
       ),
     enqueueTurn: (target, enqueue) =>
       underConversation(target, (context) => enqueueTurn(context, enqueue)),

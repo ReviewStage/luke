@@ -58,7 +58,6 @@ import { readPlanTemplate } from "./account-store.js";
 import { agentAutomationNameSql } from "./agent-name.js";
 import { moveTaskChat } from "./chat-store.js";
 import { InstantColumnSchema } from "./columns.js";
-import { waitOutConversationDispatch } from "./dispatch-lock.js";
 import { stampSavedAttachments } from "./plan-attachments.js";
 import { readLastEdit, readSectionWriters } from "./plan-revisions.js";
 import { readTemplateAt } from "./plan-template-revisions.js";
@@ -1286,24 +1285,12 @@ const followingAgentsAndInbox = Effect.fnUntraced(function* (
   );
 });
 
-/** The conversations of the task's agents still standing unarchived, in the order `lockStandingAgents` locks them. */
-const findStandingConversations = SqlSchema.findAll({
-  Request: Schema.Struct({ taskId: Schema.String }),
-  Result: Schema.Struct({ conversationId: Schema.String }),
-  execute: ({ taskId }) =>
-    Database.use((db) =>
-      db
-        .select({ conversationId: codingAgent.conversationId })
-        .from(codingAgent)
-        .where(and(eq(codingAgent.taskId, taskId), isNull(codingAgent.archivedAt)))
-        .orderBy(codingAgent.conversationId),
-    ),
-});
-
 /**
  * The task's agents still standing unarchived, each with its conversation
  * locked, the lock every write of its lines and turns takes, in the
  * conversations' order, so two finishes of one task never wait on each other.
+ * A line handed to an agent stands awaiting from before its runtime hears it
+ * (`dispatch-claim.ts`), so the caller's guard reads such an agent at work.
  */
 const lockStandingAgents = SqlSchema.findAll({
   Request: Schema.Struct({ taskId: Schema.String }),
@@ -1328,22 +1315,6 @@ const lockStandingAgents = SqlSchema.findAll({
         .orderBy(conversations.id)
         .for("update", { of: conversations }),
     ),
-});
-
-/**
- * The task's standing agents with their conversations locked, once any
- * hand-over to eve under way in them has been waited out, in the
- * conversations' order (`dispatch-lock.ts`): a line eve took then stands
- * awaiting when the caller's guard reads each agent idle or not, as it did
- * when a hand-over held the row lock. An agent started meanwhile has none
- * under way.
- */
-const lockStandingAgentsAfterHandOvers = Effect.fnUntraced(function* (taskId: string) {
-  const standing = yield* findStandingConversations({ taskId });
-  yield* Effect.forEach(standing, ({ conversationId }) =>
-    waitOutConversationDispatch(conversationId),
-  );
-  return yield* lockStandingAgents({ taskId });
 });
 
 /**
@@ -1643,7 +1614,7 @@ export function finishTaskWork<R = never>(
           return false;
         if (!pullRequests.some(({ state }) => state === PULL_REQUEST_STATE.MERGED)) return false;
         if (Option.isSome(yield* findOpenQuestion({ taskId }))) return false;
-        const agents = yield* lockStandingAgentsAfterHandOvers(taskId);
+        const agents = yield* lockStandingAgents({ taskId });
         if (!(yield* idle(agents))) return false;
         const now = yield* DateTime.nowAsDate;
         const finished = yield* finishTask({ taskId, now });

@@ -199,9 +199,9 @@ const serversOfConversation = (conversationId: string) =>
   ).pipe(Effect.map((rows) => rows[0]?.servers ?? null));
 
 /**
- * What a launch meets as it runs inside a message's hand-over, then its own write: whether the
- * message's transaction holds the agent's row, which a launch writes its runner's bearer to, and
- * the conversation's, which it no longer holds while it hands the words over; and the servers standing.
+ * What a launch meets as it runs inside a message's hand-over, then its own write: whether a
+ * transaction of the message's holds the agent's row, which a launch writes its runner's bearer to,
+ * or the conversation's, neither of which it holds while it hands the words over; and the servers standing.
  * A row the message holds is one a launch on the web's own connection would wait on until the
  * hand-over gave up. The bearer is then recorded as a launch records it.
  */
@@ -433,7 +433,7 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
     );
 
     it.effect(
-      "a message mentioning a server to a Claude Code agent relaunched or launched through the relay holds no row the launch writes, so the launch never waits on it, and its servers stand once the harness took the words; an eve agent's are written before eve hears them, as before",
+      "a message mentioning a server to a Claude Code agent relaunched or launched through the relay holds no row the launch writes, so the launch never waits on it, and its servers stand before the harness hears the words, as an eve agent's stand before eve hears them",
       () =>
         Effect.gen(function* () {
           const { owner, taskId } = yield* openTeam;
@@ -447,8 +447,8 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
             new Date(0),
           );
           // Note that a launch writes the agent's row on the web's own connection in production, so a
-          // row this transaction had already locked and written would hold it until the hand-over gave
-          // up; here the one connection is shared, so what the harness reads is what it would wait on.
+          // row a transaction of the message's had locked and written would hold it until the hand-over
+          // gave up; here the one connection is shared, so what the harness reads is what it would wait on.
           const relay = yield* nativeRelayFake({ onLaunch: launchMeets });
           yield* Effect.addFinalizer(() => Effect.promise(relay.dispose));
           const eveSaw: unknown[] = [];
@@ -457,7 +457,7 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
             ...eve.sessions,
             send: (sessionId, message) =>
               Effect.gen(function* () {
-                // SAFETY: the steer hands eve its words inside the store's transaction, on its services.
+                // SAFETY: the steer hands eve its words on the store's services, outside any transaction.
                 const services =
                   (yield* Effect.context<never>()) as Context.Context<DatabaseServices>;
                 eveSaw.push(
@@ -489,13 +489,25 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
           assert.deepEqual(
             relay.heard.map(({ call, names, seen }) => [call, names, seen]),
             [
-              // The message holds the conversation's dispatch lock alone: neither its row, which the journal
-              // writes, nor the row the launch writes its bearer to.
-              ["send", session, { launchWaits: false, conversationHeld: false, servers: null }],
+              // The message holds no transaction while the harness takes it: neither the conversation's row,
+              // which the journal writes, nor the row the launch writes its bearer to.
+              [
+                "send",
+                session,
+                {
+                  launchWaits: false,
+                  conversationHeld: false,
+                  servers: [INTEGRATION_PROVIDER.LINEAR],
+                },
+              ],
               [
                 "open",
                 launched.conversationId,
-                { launchWaits: false, conversationHeld: false, servers: null },
+                {
+                  launchWaits: false,
+                  conversationHeld: false,
+                  servers: [INTEGRATION_PROVIDER.LINEAR],
+                },
               ],
             ],
           );
