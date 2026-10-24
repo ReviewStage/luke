@@ -30,8 +30,11 @@ import {
   documentOpened,
   documentTook,
   type HeldSources,
+  lineEndingOf,
   RawBlock,
   sourcesOf,
+  withLf,
+  withLineEnding,
 } from "./document-source.js";
 import { mentionNode, pastedMention } from "./mention-node.js";
 import {
@@ -405,7 +408,11 @@ export function mountPlanEditor(host: HTMLElement, props: PlanEditorProps): Plan
     blocks === undefined
       ? undefined
       : planSlash(blocks, (markdown) => manager.parse(markdown).content ?? []);
-  const opened = documentOpened(manager, markdown);
+  // Note that the text is read with LF line endings and written back with its own, so a body saved with CRLF comes back as it was.
+  const ending = lineEndingOf(markdown);
+  const source = withLf(markdown);
+  const written = () => withLineEnding(documentMarkdown(manager, editor.state.doc, held), ending);
+  const opened = documentOpened(manager, source);
   held = { sources: new Map(), lead: opened.lead, ending: opened.ending };
   // The threads the editor carries marks for, and whether they are being laid on, which hands over no draft.
   let carried: readonly string[] = [];
@@ -461,7 +468,8 @@ export function mountPlanEditor(host: HTMLElement, props: PlanEditorProps): Plan
     },
     onUpdate: ({ editor: updated }) => {
       if (laying) return;
-      const markdown = documentMarkdown(manager, updated.state.doc, held);
+      // Note that the threads' words are counted in the text as it is handed over, its own line endings and all, as their anchors were counted in the text it opened on.
+      const markdown = written();
       onDraft(
         markdown,
         anchors === undefined ? undefined : anchorsOf(updated.state.doc, markdown, carried),
@@ -485,13 +493,13 @@ export function mountPlanEditor(host: HTMLElement, props: PlanEditorProps): Plan
   return {
     ...editorFormatting(editor),
     take: (sent, merged) => {
-      const answer = documentTook(editor, manager, held, sent, merged);
+      const answer = documentTook(editor, manager, held, withLf(sent), withLf(merged));
       held = answer.held;
-      return { base: answer.base, text: documentMarkdown(manager, editor.state.doc, held) };
+      return { base: withLineEnding(answer.base, ending), text: written() };
     },
     chooseMention: (mention) => picking?.choose(editor, mention),
     insertBlock: (block) => slash?.insert(editor, block),
-    markdown: () => documentMarkdown(manager, editor.state.doc, held),
+    markdown: written,
     focusAt: (placement) => {
       onWordsAs = undefined;
       const selection = placedOnWords(editor, placement) ?? placed(editor, placement);
@@ -518,7 +526,7 @@ export function mountPlanEditor(host: HTMLElement, props: PlanEditorProps): Plan
     removePicture: (upload) => removedPicture(editor.view, upload),
     selectionSpan: () => {
       const { from, to, empty } = editor.state.selection;
-      return empty ? undefined : editorSpan(editor, manager, held, from, to);
+      return empty ? undefined : editorSpan(editor, written(), from, to);
     },
     blockSpan: (element) => {
       const { doc } = editor.state;
@@ -531,10 +539,10 @@ export function mountPlanEditor(host: HTMLElement, props: PlanEditorProps): Plan
         if (LIST_ITEMS.has(node.type.name)) {
           const start = resolved.start(depth);
           const own = node.firstChild?.nodeSize ?? node.content.size;
-          return editorSpan(editor, manager, held, start, start + own);
+          return editorSpan(editor, written(), start, start + own);
         }
       }
-      return editorSpan(editor, manager, held, resolved.before(1), resolved.after(1));
+      return editorSpan(editor, written(), resolved.before(1), resolved.after(1));
     },
     destroy: () => editor.destroy(),
   };
@@ -543,16 +551,14 @@ export function mountPlanEditor(host: HTMLElement, props: PlanEditorProps): Plan
 /** The nodes a list's bullets are, each commented on alone. */
 const LIST_ITEMS: ReadonlySet<string> = new Set(["listItem", "taskItem"]);
 
-/** The document's stretch from `from` to `to` as a thread started on it anchors it, in the Markdown the editor would hand over now; nothing where it holds no word the text keeps. */
+/** The document's stretch from `from` to `to` as a thread started on it anchors it, in `text`, the Markdown the editor would hand over now; nothing where it holds no word the text keeps. */
 function editorSpan(
   editor: Editor,
-  manager: Parameters<typeof documentMarkdown>[0],
-  held: HeldSources,
+  text: string,
   from: number,
   to: number,
 ): EditorSpan | undefined {
   const { doc } = editor.state;
-  const text = documentMarkdown(manager, doc, held);
   const span = spanIn(doc, text, from, to);
   const quote = doc.textBetween(from, to, "\n", "\uFFFC").trim();
   return span === undefined || quote === "" ? undefined : { ...span, quote, text };

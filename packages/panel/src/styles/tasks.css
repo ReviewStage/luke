@@ -3362,6 +3362,65 @@
   user-select: text;
 }
 
+/* A description open in its editor (`pull-request-description.tsx`) in the
+   drawn description's own type and rhythm, so nothing moves as it opens or
+   closes: its blocks a step apart as the transcript's are, a heading opening
+   the text standing where the drawn one does, its lists in the transcript's
+   indent, and a task's box standing before its words, as GitHub draws it,
+   rather than in the plan's gutter. */
+/* A description with no words, where the member may write them, says so
+   where the editor's placeholder will, in its type. */
+.pull-request-description-empty {
+  margin: 0;
+  color: var(--luke-color-text-subtle);
+}
+
+.pull-request-description-text.plan-document-text > * {
+  margin-block: 0;
+}
+
+.pull-request-description-text.plan-document-text > * + * {
+  margin-top: var(--luke-space-16);
+}
+
+.pull-request-description-text.plan-document-text > :is(h1, h2):first-child {
+  margin-top: var(--luke-space-12);
+}
+
+.pull-request-description-text.plan-document-text > :is(h3, h4, h5, h6):first-child {
+  margin-top: var(--luke-space-8);
+}
+
+.pull-request-description-text :is(ul, ol) {
+  padding-left: var(--luke-space-20);
+}
+
+.pull-request-description-text li + li {
+  margin-top: var(--luke-space-2);
+}
+
+.pull-request-description-text :not(pre) > code {
+  padding: 0.1em 0.35em;
+  border-radius: var(--luke-radius-6);
+  background: var(--luke-color-fill-strong);
+  font-family: var(--luke-font-mono);
+  font-size: 0.9em;
+}
+
+.pull-request-description-text ul[data-type="taskList"] {
+  padding-left: 0;
+}
+
+.pull-request-description-text.plan-document-text li[data-checked] {
+  display: flex;
+  align-items: baseline;
+  gap: var(--luke-space-6);
+}
+
+.pull-request-description-text.plan-document-text li[data-checked] > label {
+  position: static;
+}
+
 /* The comments and reviews, oldest first, each boxed under its head. */
 .pull-request-entry {
   display: flex;
