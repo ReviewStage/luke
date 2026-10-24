@@ -161,6 +161,7 @@ const CHAPTERS_WORDS = {
   GENERATING: "Generating chapters",
   ELSEWHERE: "Chapters are being generated",
   REFRESH: "Refresh",
+  REFRESHING: "Refreshing",
   REFRESH_CHAPTERS: "Refresh chapters",
   REGENERATE: "Regenerate",
   REGENERATE_CHAPTERS: "Regenerate chapters",
@@ -345,7 +346,12 @@ function Generating({
           ) : null}
         </span>
         {ours ? null : (
-          <Button icon={<RotateCwIcon aria-hidden="true" />} disabled={reading} onClick={onRefresh}>
+          <Button
+            icon={<RotateCwIcon aria-hidden="true" />}
+            busy={reading}
+            busyLabel={CHAPTERS_WORDS.REFRESHING}
+            onClick={onRefresh}
+          >
             {CHAPTERS_WORDS.REFRESH}
           </Button>
         )}

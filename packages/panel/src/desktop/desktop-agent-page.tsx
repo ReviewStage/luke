@@ -333,13 +333,13 @@ export function DesktopAgentPage({
   const toast = useToast();
   const openLink = useReadLinkOpener();
   // An Unarchive refused says why, as any other refusal of the agent's does.
-  const unarchive = () => {
+  // Note that it settles once the answer is said, so the note's Unarchive shows busy till then.
+  const unarchive = () =>
     onArchive(agentId, false).then((result) => {
       if (result.status !== ACTION_RESULT_STATUS.ACCEPTED) {
         toast({ words: result.reason, tone: STATUS_TONE.DANGER, hold: TOAST_HOLD.FAILED });
       }
     }, nothing);
-  };
   // The agent's workspace as the account lists it, whose count reads its members again; by its id alone where the list does not hold it yet.
   const { workspaceId, agentRepository } = agents;
   usePageWorkspace(agentId, workspaceId);

@@ -297,7 +297,7 @@ export interface CodingAgentsControl {
     disabledServers?: readonly string[],
   ) => Promise<Failure | undefined>;
   /** Brings back the archived agent a surface draws alone, as its own page does; none from here, where every agent is a task's. */
-  onUnarchive: (() => void) | undefined;
+  onUnarchive: (() => void | Promise<void>) | undefined;
   /** Continues one agent in a new one on its whole transcript, the developer's words and files as its note, its tab opening as a Start's does; present exactly while a Start could run. */
   continueAgent: AgentContinuer | undefined;
   start: {
