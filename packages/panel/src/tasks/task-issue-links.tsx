@@ -15,13 +15,12 @@ import {
   CloseIcon,
   dropBelowStart,
   ExternalIcon,
+  FailureNote,
   GAP,
   Inline,
   LAYOUT_ELEMENT,
   PROVIDER_MARK_SIZE,
   ProviderMark,
-  TEXT_BUTTON_TONE,
-  TextButton,
   Tooltip,
   useMenu,
 } from "@luke/ui";
@@ -53,7 +52,7 @@ import type { TasksControl } from "./use-tasks-tab.js";
  * one whose workspace offers no issue to link and links none draws no row
  * at all. What did not land
  * is said under the chips, and a read that did not land says so in the
- * row's place with a Try again.
+ * row's place with Retry.
  */
 
 /** What the row says. */
@@ -63,7 +62,6 @@ const LINKS_WORDS = {
   [TASK_ISSUE_RELATION.CLOSES]: "Closes",
   [TASK_ISSUE_RELATION.PART_OF]: "Part of",
   UNLINK: "Unlink",
-  RETRY: "Try again",
 } as const;
 
 const RELATIONS = [TASK_ISSUE_RELATION.CLOSES, TASK_ISSUE_RELATION.PART_OF] as const;
@@ -206,12 +204,7 @@ export function TaskIssueLinks({
   if (links === undefined && note !== undefined) {
     return (
       <section className="task-issue-links" aria-label={LINKS_WORDS.HEADING}>
-        <p className="task-issue-links-note" role="alert">
-          {note}{" "}
-          <TextButton tone={TEXT_BUTTON_TONE.QUIET} onClick={control.onRetry}>
-            {LINKS_WORDS.RETRY}
-          </TextButton>
-        </p>
+        <FailureNote onRetry={control.onRetry}>{note}</FailureNote>
       </section>
     );
   }
@@ -256,11 +249,7 @@ export function TaskIssueLinks({
           </li>
         ) : null}
       </Inline>
-      {note === undefined ? null : (
-        <p className="task-issue-links-note" role="alert">
-          {note}
-        </p>
-      )}
+      {note === undefined ? null : <FailureNote>{note}</FailureNote>}
     </section>
   );
 }

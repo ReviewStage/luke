@@ -1251,7 +1251,7 @@ test("a save the service refuses keeps the draft and says why under the name", a
   await settle();
 
   assert.equal(
-    page.querySelector(".automation-save-refusal")?.textContent,
+    page.querySelector("[role='alert']")?.textContent,
     "Only its creator, or the workspace's owners and admins, can change it.",
   );
   assert.equal(
@@ -2403,7 +2403,7 @@ test("a Run now the service refuses says why under the name, and a new automatio
   act(() => button("Run now").click());
   await settle();
   assert.equal(
-    page.querySelector(".automation-save-refusal")?.textContent,
+    page.querySelector("[role='alert']")?.textContent,
     "Only its creator, or the workspace's owners and admins, can run it.",
   );
   act(() => root?.unmount());
