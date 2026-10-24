@@ -19,7 +19,7 @@ import { cn } from "../cn.js";
 
 /** The track: a pill in the switch's track ink that takes its "on" ink while checked. */
 export const SWITCH_TRACK =
-  "peer group/switch relative inline-flex h-5 w-[34px] shrink-0 items-center rounded-full border-0 bg-switch-track p-0.5 transition-colors duration-(--luke-duration-hover) data-checked:bg-switch-on data-disabled:opacity-40 cursor-pointer in-data-[luke-profile=desktop]:cursor-default data-disabled:cursor-default";
+  "peer group/switch relative inline-flex h-5 w-[34px] shrink-0 items-center rounded-full border-0 bg-switch-track p-0.5 transition-colors duration-(--luke-duration-hover) data-checked:bg-switch-on data-disabled:opacity-disabled cursor-pointer in-data-[luke-profile=desktop]:cursor-default data-disabled:cursor-default";
 
 /** The thumb: a round of the switch's thumb ink, lifted by its shadow, slid by transform alone, and giving a little under a press held on an enabled switch. */
 export const SWITCH_THUMB =

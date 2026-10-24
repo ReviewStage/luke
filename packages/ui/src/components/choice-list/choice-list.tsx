@@ -430,7 +430,7 @@ function ChoiceControl({
         radio ? "rounded-[50%]" : "rounded-choice-box",
         // Note that an unsaved credential's radio in a card cannot be picked, so its ring steps back while its label stays readable.
         inCard
-          ? "mt-0 self-center [:disabled>&]:opacity-40"
+          ? "mt-0 self-center [:disabled>&]:opacity-disabled"
           : "self-start mt-[calc((var(--luke-type-body-leading)-var(--luke-space-16))/2)]",
         !checked && "border-muted-foreground",
         checked && (toned ? CONTROL_TONE_FILL : CONTROL_ACCENT_FILL),
@@ -545,7 +545,7 @@ function ChoiceRow({
       ROW_LOOK[look],
       across && !card && ROW_ACROSS,
       "disabled:cursor-default",
-      dims && "disabled:opacity-40",
+      dims && "disabled:opacity-disabled",
     ),
     "data-tone": option.tone,
     disabled,

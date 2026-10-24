@@ -17,10 +17,11 @@ import { Label } from "./label.js";
  * surely than one arriving, and its words are what the caller says rather
  * than a list of validation errors. The classes are Luke's: the parts six
  * apart, the description in the muted caption, and the error in the danger
- * ink, dropping into its line as it arrives and giving back its gap while
- * empty. None of shadcn's ring utilities (`shadcn-focus.test.ts`).
- * `@luke/ui`'s `FormField` (`components/form-field`) is what an app draws;
- * this is its inside.
+ * ink, dropping into its line as it arrives and, while empty, standing out
+ * of the flow, so it gives back the gap before it in whatever stack holds it.
+ * None of shadcn's ring utilities (`shadcn-focus.test.ts`). `@luke/ui`'s
+ * `FormField` (`components/form-field`) is what an app draws, and its
+ * `ErrorLine` (`components/error-line`) the error alone; this is their inside.
  */
 
 export function Field({ className, ...props }: React.ComponentProps<"div">) {
@@ -56,7 +57,7 @@ export function FieldError({ className, ...props }: React.ComponentProps<"p">) {
       aria-live="polite"
       data-slot="field-error"
       className={cn(
-        "m-0 font-body text-caption font-text text-danger wrap-anywhere not-empty:animate-drop-in empty:-mt-luke-6",
+        "m-0 font-body text-caption font-text text-danger wrap-anywhere not-empty:animate-drop-in empty:absolute",
         className,
       )}
       {...props}

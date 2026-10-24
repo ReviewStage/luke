@@ -1471,7 +1471,7 @@ test("a removal the account's role does not allow says so in the dialog that ask
   await confirm("Remove");
 
   assert.equal(
-    dialog().querySelector('[role="alert"]')?.textContent,
+    dialog().querySelector('[data-slot="field-error"]:not(:empty)')?.textContent,
     WORKSPACE_NOT_PERMITTED_REFUSAL,
   );
 });
