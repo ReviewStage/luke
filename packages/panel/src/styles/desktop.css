@@ -4811,12 +4811,23 @@ ul.actor-stack {
 }
 
 /* The title says what starts, "New task", then the repository's chip in
-   the title's own line, as Linear's team chip stands in its title. */
+   the title's own line, as Linear's team chip stands in its title. The
+   chip keeps a floor of room, so the repository can always be chosen. */
 .new-task-title {
+  --new-task-chip-floor: calc(var(--luke-control-height) * 2);
   display: flex;
   min-width: 0;
   align-items: center;
   gap: var(--luke-item-gap);
+}
+
+/* The title keeps its own width, so a phone's narrow head gives the room
+   that is left to the chips after it, which fade where they are cut, and
+   "New task" stays on one line. Only a longer title, such as "Create with
+   an agent" on a zoomed phone, wraps, short of the chip's floor. */
+.new-task-title > h2 {
+  flex-shrink: 0;
+  max-width: calc(100% - var(--new-task-chip-floor) - var(--luke-item-gap));
 }
 
 /* New task's chips are Settings pickers (`settings/picker-row.tsx`)
