@@ -61,7 +61,7 @@ import {
 } from "../tasks/inbox-model.js";
 import { inboxNext, useInboxPager } from "../tasks/inbox-pager.js";
 import { InboxPane } from "../tasks/inbox-pane.js";
-import { PlanBody, type SectionLinks } from "../tasks/plan-body.js";
+import { PlanBody, type SectionLinks, type TitleRename } from "../tasks/plan-body.js";
 import { CommentFocusScope } from "../tasks/plan-comments.js";
 import { CHIP_PLACE, RepositoryChip } from "../tasks/repository-chip.js";
 import { SkillFiles } from "../tasks/skill-chip.js";
@@ -73,7 +73,7 @@ import {
   type TaskMentionsValue,
   useMentionAgentsReader,
 } from "../tasks/task-mentions.js";
-import { taskLinkPlace } from "../tasks/task-menu-items.js";
+import { taskLinkPlace, useOfferTaskRename } from "../tasks/task-menu-items.js";
 import { TerminalCommands } from "../tasks/terminal-commands.js";
 import { TOOL_TARGET, type ToolTarget } from "../tasks/tool-call-model.js";
 import { useHeldInboxList } from "../tasks/use-held-inbox-list.js";
@@ -709,6 +709,28 @@ function PlanDocument({
     if (taskId !== undefined && inbox.read) onInboxRead(taskId, waiting);
   }, [taskId, inbox.read, waiting, onInboxRead]);
   const rename = useInlineRename(taskId, tasks.onRenameTask);
+  // The open task's one rename door, which its toolbar's ⋯, its title's ⋯,
+  // and ⌘K all ask. On a phone it opens the head's field; wider, it puts the
+  // caret in the plan's own title, showing the plan first where the panel
+  // hides it. Note that the title is asked once the plan stands, because a
+  // title drawn afresh takes only the asks that come after it.
+  const [titleAsked, setTitleAsked] = useState(false);
+  const [titleAsks, setTitleAsks] = useState(0);
+  const planShown = panelOpen && panelTab === SIDE_PANEL_TAB.PLAN;
+  useEffect(() => {
+    if (!titleAsked || !planShown) return;
+    setTitleAsked(false);
+    setTitleAsks((count) => count + 1);
+  }, [titleAsked, planShown]);
+  const beginRename = useSteadyDoor(() => {
+    if (room === SHELL_ROOM.NARROW) {
+      rename.begin();
+      return;
+    }
+    if (!planShown) tasks.sidePanel.onChoose(SIDE_PANEL_TAB.PLAN);
+    setTitleAsked(true);
+  });
+  useOfferTaskRename(taskId, beginRename);
   // A terminal shown hands the keys to the side panel, where it stands; an
   // agent's tab's Show terminal always opens that agent's own.
   const showSide = () => setFocus(COLUMN.SIDE);
@@ -875,6 +897,10 @@ function PlanDocument({
   });
   const editDoor = usePlanEditDoor(opened?.id, tasks.edit);
   const renameDoor = useSteadyDoor((name: string) => rename.end(name));
+  const titleRename = useMemo<TitleRename>(
+    () => ({ asks: titleAsks, asked: rename.asked, onBegin: beginRename }),
+    [titleAsks, rename.asked, beginRename],
+  );
   const draftNameDoor = useSteadyDoor(
     opened === undefined
       ? undefined
@@ -1132,6 +1158,7 @@ function PlanDocument({
         // The title renames as the chip's field does, so a refusal is said beside it.
         onRename={renameDoor}
         onDraftName={draftNameDoor}
+        rename={titleRename}
         looks={looks}
         readMark={readMark}
         sectionLinks={sectionLinks}
@@ -1193,7 +1220,7 @@ function PlanDocument({
       tasks={tasks}
       task={task}
       button
-      onRename={rename.begin}
+      onRename={beginRename}
       lead={
         switched
           ? (opener) => [taskPaneItems(pane, choosePane), ...shownTabGroups(onTab, opener)]

@@ -1,12 +1,15 @@
+import { useAtomSet, useAtomValue } from "@effect/atom-react";
 import { encodeMention, MENTION_KIND, type MentionPlace } from "@luke/features/mention-link";
 import type { TaskSummary } from "@luke/features/task-wire";
 import type { Workspace } from "@luke/features/workspace-wire";
+import { Atom } from "effect/reactivity";
+import { useEffect } from "react";
 import { commandAction, PANEL_COMMAND } from "../command-items.js";
 import { LINK_COPY } from "../copy-feedback.js";
 import type { MenuAction } from "../desktop/action-menu.js";
 
 /**
- * task-menu-items.tsx -- the items a task's ⋯ menu and the ⋯ beside its title both offer: Copy link, Mark as unread, Rename, and Version history.
+ * task-menu-items.tsx -- the items a task's ⋯ menu and the ⋯ beside its title both offer: Copy link, Mark as unread, Rename, and Version history, and the open task's one rename door ⌘K reaches.
  *
  * Each menu says what pressing one does where it is drawn, so the sidebar's
  * Rename edits the row and the title's edits the title, but both draw the
@@ -60,7 +63,37 @@ export function markReadItem({ unread, onMark }: ReadMark): MenuAction {
 
 /** Rename, editing the name where the menu's door draws it. */
 export function renameTaskItem(rename: () => void): MenuAction {
-  return commandAction(PANEL_COMMAND.RENAME, rename, false);
+  return commandAction(PANEL_COMMAND.RENAME_TASK, rename, false);
+}
+
+/** The open task's rename door, by the task it renames: what its page offers while it stands. */
+export interface OpenTaskRename {
+  readonly taskId: string;
+  readonly begin: () => void;
+}
+
+/** The rename door the open task's page offers, none while no task's page stands. */
+const openTaskRenameAtom = Atom.keepAlive(Atom.make<OpenTaskRename | undefined>(undefined));
+
+/**
+ * Offers the open task's rename door for as long as its page stands, so a
+ * place drawn apart from the page, ⌘K, asks for the name where the page
+ * draws it, as the page's own ⋯ and its title's do. Note that `begin` is
+ * read as it is called, so it should be a steady door.
+ */
+export function useOfferTaskRename(taskId: string | undefined, begin: () => void): void {
+  const offer = useAtomSet(openTaskRenameAtom);
+  useEffect(() => {
+    if (taskId === undefined) return;
+    const offered = { taskId, begin };
+    offer(offered);
+    return () => offer((held) => (held === offered ? undefined : held));
+  }, [taskId, begin, offer]);
+}
+
+/** The rename door the open task's page offers now, none while no task's page stands. */
+export function useTaskRenameOffer(): OpenTaskRename | undefined {
+  return useAtomValue(openTaskRenameAtom);
 }
 
 /** Version history, opening the plan's versions over the window. */

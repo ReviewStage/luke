@@ -3,9 +3,9 @@
 import assert from "node:assert/strict";
 import { pageFrameUrl } from "@luke/features/page-frame";
 import type { Task } from "@luke/features/task-wire";
-import { DOCUMENT_REGION, TASKS_PAGE } from "@luke/ui/tasks-model";
+import { DOCUMENT_REGION, RENAME_FAILED_NOTE, TASKS_PAGE } from "@luke/ui/tasks-model";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
-import { act, createElement } from "react";
+import { act, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
@@ -30,7 +30,7 @@ function page(container: HTMLElement): HTMLButtonElement[] {
 }
 
 /**
- * task-pane-switcher.test.ts -- a phone's task is headed by one row, the way back, the title of what is on screen, and one ⋯ whose menu leads with Plan, Agents, and Activity: each view reads what the panel holds, Activity lists every tab but the plan's and shows the one pressed, a tab shown names the row and leads back to the list, and a wide window keeps its strip and toolbar.
+ * task-pane-switcher.test.ts -- a phone's task is headed by one row, the way back, the title of what is on screen, and one ⋯ whose menu leads with Plan, Agents, and Activity: each view reads what the panel holds, Activity lists every tab but the plan's and shows the one pressed, a tab shown names the row and leads back to the list, and a wide window keeps its strip and toolbar, its ⋯ renaming the task in the plan's own title.
  */
 
 const TASK: Task = {
@@ -426,4 +426,90 @@ test("on a phone the task's Inbox tab draws no head over its list, its search st
     ),
     "the list's own View options menu stands open",
   );
+});
+
+/** Chooses Rename from the ⋯ of a wide window's toolbar. */
+function chooseToolbarRename(container: HTMLElement): void {
+  const more = container.querySelector<HTMLButtonElement>('[aria-label="Task actions"]');
+  assert.ok(more, "the column's toolbar holds the task's ⋯");
+  act(() => more.click());
+  const rename = [...document.querySelectorAll<HTMLElement>('[role="menu"] button')].find(
+    (each) => itemWords(each) === "Rename",
+  );
+  assert.ok(rename, "the ⋯ offers Rename");
+  act(() => rename.click());
+}
+
+/** The plan's own title, which a wide window renames the task in. */
+function planTitle(container: HTMLElement): HTMLElement | null {
+  return container.querySelector<HTMLElement>('[role="textbox"][aria-label="Task name"]');
+}
+
+test("on a wide window the toolbar's ⋯ › Rename puts the caret in the plan's own title, and draws no phone's field", () => {
+  const page = mount(SHELL_ROOM.WIDE);
+  chooseToolbarRename(page.container);
+
+  assert.ok(planTitle(page.container), "the plan's title is drawn");
+  assert.ok(
+    document.activeElement === planTitle(page.container),
+    "the caret is in the plan's title",
+  );
+  assert.equal(page.container.querySelector('input[aria-label="Task name"]'), null);
+});
+
+test("on a wide window whose panel is shut, the toolbar's ⋯ › Rename shows the plan and puts the caret in its title once it stands", () => {
+  const page = mount(SHELL_ROOM.WIDE, false);
+  chooseToolbarRename(page.container);
+  assert.deepEqual(page.told, [`choose ${SIDE_PANEL_TAB.PLAN}`]);
+
+  page.draw(true, SIDE_PANEL_TAB.PLAN);
+
+  assert.ok(
+    document.activeElement === planTitle(page.container),
+    "the caret is in the plan's title",
+  );
+});
+
+/** A wide window's task whose renames are all refused, its name drawn as the title's words are typed, as the window draws a draft. */
+function RefusingTask(): React.JSX.Element {
+  const [draft, setDraft] = useState<string | undefined>(undefined);
+  const task = { ...TASK, name: draft ?? TASK.name };
+  return createElement(DesktopTasks, {
+    summary: UNPINNED_SUMMARY,
+    looks: NO_LOOKS,
+    room: SHELL_ROOM.WIDE,
+    tasks: tasksControl({
+      page: TASKS_PAGE.DOCUMENT,
+      activeTaskId: TASK.id,
+      region: { kind: DOCUMENT_REGION.READY, task },
+      onDraftName: (_taskId, name) => setDraft(name),
+      onRenameTask: () => Promise.resolve(false),
+      sidePanel: {
+        ...tasksControl().sidePanel,
+        open: true,
+        tabs: [SIDE_PANEL_TAB.PLAN],
+        strip: [SIDE_PANEL_TAB.PLAN],
+        tab: SIDE_PANEL_TAB.PLAN,
+      },
+    }),
+  });
+}
+
+test("on a wide window a refused rename keeps the name typed in the plan's title, with the refusal beside it", async () => {
+  const container = document.body.appendChild(document.createElement("div"));
+  const root = createRoot(container);
+  roots.push(root);
+  act(() => root.render(onRegistry(AtomRegistry.make(), createElement(RefusingTask))));
+  const title = planTitle(container);
+  assert.ok(title, "the plan's title is drawn");
+
+  act(() => {
+    title.focus();
+    title.textContent = "Invite teammates";
+    title.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  await act(async () => title.blur());
+
+  assert.equal(planTitle(container)?.textContent, "Invite teammates");
+  assert.match(container.textContent ?? "", new RegExp(RENAME_FAILED_NOTE, "u"));
 });

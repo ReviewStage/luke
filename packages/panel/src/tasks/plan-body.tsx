@@ -1075,13 +1075,26 @@ export function PlanPageHead({
 }
 
 /**
+ * The open task's one rename door as its title reads it (`desktop-tasks.tsx`):
+ * how many times Rename was asked for, each putting the caret in the title,
+ * the name a refused rename asked for, which the title goes on drawing until
+ * the next, and how the title's ⋯ asks.
+ */
+export interface TitleRename {
+  readonly asks: number;
+  readonly asked: string | undefined;
+  readonly onBegin: () => void;
+}
+
+/**
  * The task's document: its name as the title over its text. `live` is the
  * task's call in progress, which keeps the caret waiting where the typing
  * last stopped; `onShowHistory` opens the plan's version history from the
  * byline's "Last edited by", on the plan as it stands, and from a section's, on the
  * revision of the save it names. With `onEdit`, the text is edited whole in
  * place, and with `onRename` the title too, its words drawn as the task's
- * name through `onDraftName` as they are typed; without them the document is
+ * name through `onDraftName` as they are typed, and with `rename` the title's ⋯
+ * offers Rename through the open task's door; without them the document is
  * drawn read-only. A date chip in an editable plan's words at rest opens
  * its picker where it stands, and a date changed there saves the plan
  * through `onEdit` with the date written anew (`SectionDates`), as a task
@@ -1106,6 +1119,7 @@ export const PlanBody = memo(function PlanBody({
   onEdit,
   onRename,
   onDraftName = NO_DRAFT,
+  rename,
   looks = NO_LOOKS,
   readMark,
   page,
@@ -1124,6 +1138,8 @@ export const PlanBody = memo(function PlanBody({
   onRename?: ((name: string) => Promise<boolean>) | undefined;
   /** Draws the name typed into the title wherever the task is named, or none once it is left. */
   onDraftName?: ((name: string | undefined) => void) | undefined;
+  /** The open task's rename door, which the title's ⋯ asks and whose asks put the caret in the title; without it, the ⋯ offers no Rename. */
+  rename?: TitleRename | undefined;
   looks?: TaskLooks;
   /** Whether the plan is marked unread, and the mark the title's ⋯ sets; without it, the ⋯ offers none. */
   readMark?: ReadMark;
@@ -1196,8 +1212,6 @@ export const PlanBody = memo(function PlanBody({
     open: false,
     onPlace: editable && editing.editor === undefined ? editing.open : undefined,
   });
-  // How many times Rename was chosen from the title's ⋯, each putting the caret in the title.
-  const [renaming, setRenaming] = useState(0);
   const anchors = sectionAnchors(views.map((view) => view.heading));
   const linkedWorkspace = sectionLinks?.workspace;
   const linked = useMemo<LinkedTask | undefined>(
@@ -1467,7 +1481,7 @@ export const PlanBody = memo(function PlanBody({
         // Note that a document that cannot be edited has no block Tab stop, so the ⋯ is one.
         tabbable={editable ? entry === EDITOR_PLACE.TITLE : true}
         readMark={readMark}
-        onRename={titled ? () => setRenaming((count) => count + 1) : undefined}
+        onRename={titled ? rename?.onBegin : undefined}
         onShowHistory={onShowHistory}
       />
     );
@@ -1488,10 +1502,11 @@ export const PlanBody = memo(function PlanBody({
               // Keyed by the plan, so words typed for one are saved to it as another opens.
               <EditableTitle
                 key={task.id}
-                name={task.name}
+                // A refused name stays in the title, beside the refusal, until the next rename.
+                name={rename?.asked ?? task.name}
                 entry={entry === EDITOR_PLACE.TITLE}
                 editing={editing}
-                renaming={renaming}
+                renaming={rename?.asks ?? 0}
                 actions={titleMenu}
                 onRename={onRename}
                 onDraft={onDraftName}
