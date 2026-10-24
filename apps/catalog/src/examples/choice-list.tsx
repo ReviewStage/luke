@@ -72,7 +72,7 @@ const WORKSPACES: readonly ChoiceOption<string>[] = [
   {
     value: "globex",
     label: "Globex",
-    detail: "No GitHub connected · can’t reach acme/api",
+    detail: "No GitHub connected · cannot reach acme/api",
     mark: <Avatar name="Globex" decorative />,
     disabled: true,
   },

@@ -116,7 +116,7 @@ const NONE_LABEL = "No repository";
 
 /** What the menu says in the list's place. */
 const MENU_NOTE = {
-  NONE_REACHED: "Luke can't see any repository yet.",
+  NONE_REACHED: "Luke cannot see any repository yet.",
   NOT_CONNECTED: "No GitHub is connected to this workspace yet.",
   NOT_CONNECTED_IN: (workspace: string) => `${workspace} has no GitHub connected yet.`,
   LAPSED: "This workspace's GitHub connection was removed or suspended on GitHub.",

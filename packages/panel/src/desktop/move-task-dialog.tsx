@@ -1,4 +1,5 @@
 import type { TaskSummary } from "@luke/features/task-wire";
+import { countWords, TERM } from "@luke/features/words";
 import type { Workspace } from "@luke/features/workspace-wire";
 import {
   ChoiceList,
@@ -72,7 +73,7 @@ function rowLine(
   }
   const github =
     workspace.github === null ? "No GitHub connected" : `${workspace.github.login} on GitHub`;
-  return `${github} · can’t reach ${repository}`;
+  return `${github} · cannot reach ${repository}`;
 }
 
 /**
@@ -83,11 +84,11 @@ function rowLine(
  */
 function lossLine(from: Workspace | undefined, to: Workspace): string {
   const losing = "lose access to it, its calls, and its agents.";
-  if (from === undefined) return `Members of its workspace who aren't in ${to.name} ${losing}`;
+  if (from === undefined) return `Members of its workspace who are not in ${to.name} ${losing}`;
   if (from.memberCount !== undefined && from.memberCount <= 1) {
     return `Nobody loses access: only you are in ${from.name}.`;
   }
-  return `Members of ${from.name} who aren't in ${to.name} ${losing}`;
+  return `Members of ${from.name} who are not in ${to.name} ${losing}`;
 }
 
 /** Who in the workspace chosen gains it: its members counted, or named as its members where they are not. */
@@ -95,7 +96,7 @@ function gainLine(to: Workspace): string {
   const { memberCount, name } = to;
   if (memberCount === undefined) return `Members of ${name} can read and edit it.`;
   if (memberCount <= 1) return `Only you can read and edit it in ${name}.`;
-  return `${memberCount} people in ${name} can read and edit it.`;
+  return `${countWords(memberCount, TERM.MEMBER)} in ${name} can read and edit it.`;
 }
 
 /** The workspaces as a radio group: a tile, a name, and a line each, the chosen one checked and the keyboard's one stop. */

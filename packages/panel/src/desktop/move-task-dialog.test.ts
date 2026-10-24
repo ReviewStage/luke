@@ -205,12 +205,12 @@ test("the dialog lists the other workspaces, disables one whose GitHub cannot re
   }));
   assert.deepEqual(rows, [
     {
-      words: "NNorthwindNo GitHub connected · can’t reach acme-corp/relay",
+      words: "NNorthwindNo GitHub connected · cannot reach acme-corp/relay",
       disabled: true,
       checked: "false",
     },
     {
-      words: "OOctoocto on GitHub · can’t reach acme-corp/relay",
+      words: "OOctoocto on GitHub · cannot reach acme-corp/relay",
       disabled: true,
       checked: "false",
     },
@@ -219,8 +219,8 @@ test("the dialog lists the other workspaces, disables one whose GitHub cannot re
   assert.deepEqual(
     [...moving.querySelectorAll(".move-effects li")].map((line) => line.textContent),
     [
-      "Members of Studio who aren't in Acme lose access to it, its calls, and its agents.",
-      "5 people in Acme can read and edit it.",
+      "Members of Studio who are not in Acme lose access to it, its calls, and its agents.",
+      "5 members in Acme can read and edit it.",
       "Its agents keep running, now in Acme.",
     ],
   );

@@ -118,7 +118,7 @@ function githubSection(repository: string): string {
 
 /** The grant row's words, for the repository whose issues cannot be read. */
 function grantLabel(repository: string): string {
-  return `Luke can't read ${repository}'s issues yet`;
+  return `Luke cannot read ${repository}'s issues yet`;
 }
 
 /** The ids of the GitHub section's rows that are no issue. */

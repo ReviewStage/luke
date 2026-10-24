@@ -212,6 +212,47 @@ test("the assignee's menu says it is reading while the members are unread, and n
   assert.equal(document.querySelector(".luke-combobox-empty"), null);
 });
 
+test("the assignee's menu says No members match when a search finds nobody", async () => {
+  fakeAppBridge({});
+  fakeActPort({
+    [ACT_KIND.WORKSPACE_MEMBERS_READ]: () =>
+      Promise.resolve([
+        {
+          userId: "user-ada",
+          name: "Ada Lovelace",
+          email: "user-ada@acme.test",
+          role: WORKSPACE_ROLE.MEMBER,
+        },
+      ]),
+    [ACT_KIND.WORKSPACE_FORMER_MEMBERS_READ]: () => Promise.resolve([]),
+  });
+  const host = document.createElement("div");
+  document.body.append(host);
+  const root = createRoot(host);
+  roots.push(root);
+  await act(async () => {
+    root.render(
+      createElement(MemberDirectory, {
+        workspace: { id: "workspace-acme", memberCount: 1 },
+        readerId: "user-dean",
+        children: createElement(TaskStandingChips, { task: TASK, onSet: () => undefined }),
+      }),
+    );
+  });
+
+  act(() => chip(host, "Assignee").click());
+  const input = document.querySelector<HTMLInputElement>('input[role="combobox"]');
+  // Note that the value goes in through the prototype's setter, because React
+  // tracks the field's own and would read a change made there as none.
+  const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+  act(() => {
+    setValue?.call(input, "zzz");
+    input?.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+
+  assert.equal(document.querySelector(".luke-combobox-empty")?.textContent, "No members match");
+});
+
 test("the assignee's menu says the members could not be read, with Retry, never that none match, and Retry reads them again", async () => {
   let reads = 0;
   fakeAppBridge({});

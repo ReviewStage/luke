@@ -9,7 +9,7 @@ import {
   type TaskStatus,
   type TaskSummary,
 } from "@luke/features/task-wire";
-import { readFailedWords, TERM } from "@luke/features/words";
+import { noMatchWords, readFailedWords, TERM } from "@luke/features/words";
 import { taskKey } from "@luke/features/workspace-key";
 import type { WorkspaceMember } from "@luke/features/workspace-wire";
 import {
@@ -149,7 +149,7 @@ function TaskAssigneePicker({
       }
       rows={assigneeRows(members, readerId)}
       placeholder="Assign to…"
-      noMatch="No people match"
+      noMatch={noMatchWords(TERM.MEMBER)}
       note={
         membersRefused ? (
           <ErrorState onRetry={retry}>{readFailedWords(TERM.MEMBER.many)}</ErrorState>
