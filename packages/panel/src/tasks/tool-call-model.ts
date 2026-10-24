@@ -99,6 +99,8 @@ export interface ToolCallView {
   readonly provider?: IntegrationProvider;
   /** For a call of an MCP server's tool, or a search of its tools, the server's name as its card gives it, which the row says it ran on. */
   readonly server?: string;
+  /** For the same calls, the connection they ran on, which the window names by the account's own name where it holds more than one (`connection-names.tsx`); `server` stands where it does not know it. */
+  readonly connection?: string;
 }
 
 /** The escape every terminal colour and cursor sequence starts with. */
@@ -802,6 +804,7 @@ function remoteToolView(
     kind: CALL_KIND.MCP_TOOL,
     subject: remote.call.remoteTool,
     server: connectionName(remote.call.connection ?? remote.provider),
+    connection: remote.call.connection ?? remote.provider,
     provider: remote.provider,
     input: jsonBlock(remote.call.input),
     output: output === undefined ? undefined : jsonBlock(output),
@@ -817,12 +820,22 @@ const CODEX_MCP = /^([^.]+)\.(.+)$/u;
 /** A call of a tool of an MCP server a native harness made, as it names it: the server by the name its card gives and the tool's own name; nothing for any other tool. */
 function nativeMcpCall(
   tool: string,
-): { readonly server: string; readonly name: string } | undefined {
+): { readonly server: string; readonly connection: string; readonly name: string } | undefined {
   const match = CLAUDE_CODE_MCP.exec(tool) ?? CODEX_MCP.exec(tool);
-  const [, server, name] = match ?? [];
-  return server === undefined || name === undefined
+  const [, connection, name] = match ?? [];
+  return connection === undefined || name === undefined
     ? undefined
-    : { server: connectionName(server), name };
+    : { server: connectionName(connection), connection, name };
+}
+
+/** Whether a tool's call runs on a server, which its row names: an integration's own, a connection's search or run, or a native harness's MCP call. */
+export function isServerCallTool(tool: string): boolean {
+  return (
+    integrationOfRemoteTool(tool) !== undefined ||
+    tool === CONNECTION_TOOL.SEARCH ||
+    tool === CONNECTION_TOOL.EXECUTE ||
+    nativeMcpCall(tool) !== undefined
+  );
 }
 
 /** A call of an MCP server's tool a native harness made, drawn as the tool it ran on its server, its input and answer as JSON. */
@@ -837,6 +850,7 @@ function nativeMcpView(
     kind: CALL_KIND.MCP_TOOL,
     subject: call.name,
     server: call.server,
+    connection: call.connection,
     input: input === undefined ? textBlock("") : jsonBlock(input),
     output: output === undefined ? undefined : jsonBlock(output),
   };
@@ -852,7 +866,7 @@ function connectionCall(
   const connection = stringAt(input, "connection");
   return {
     ...namedCall(kind, input, output, field),
-    ...(connection === undefined ? undefined : { server: connectionName(connection) }),
+    ...(connection === undefined ? undefined : { server: connectionName(connection), connection }),
   };
 }
 

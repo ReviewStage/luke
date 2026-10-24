@@ -147,6 +147,21 @@ function wordsOf(
 }
 
 /**
+ * A server's name as its row and card say it: its provider's, and where the
+ * provider holds more than one account, the account's name after it.
+ */
+export function serverName(
+  provider: IntegrationProvider,
+  connection: string,
+  accounts: readonly IntegrationAccount[],
+): string {
+  const named = integrationAccountNames(accounts).get(connection);
+  return named !== undefined && accounts.length > 1
+    ? `${INTEGRATION_NAME[provider]} · ${named}`
+    : INTEGRATION_NAME[provider];
+}
+
+/**
  * Every offered server's row, from where each connection stands, how each
  * connected server answered, the sign-ins the window waits on or last
  * waited on, and the servers the agent switched off. A
@@ -168,7 +183,6 @@ export function serverRows(input: {
   );
   return offered.flatMap((provider) => {
     const accounts = input.accountsOf?.(provider) ?? [];
-    const names = integrationAccountNames(accounts);
     const servers = accounts.length > 0 ? accounts : [undefined];
     return servers.map((account): ServerRow => {
       const connection = account?.connection ?? provider;
@@ -176,16 +190,12 @@ export function serverRows(input: {
       const health = input.healthOf(connection);
       const signIn = input.signInOf(connection);
       const connected = status === INTEGRATION_STATUS.CONNECTED;
-      const named = names.get(connection);
       return {
         provider,
         connection,
         ...(account !== undefined ? { account } : undefined),
         accounts: accounts.length,
-        name:
-          named !== undefined && accounts.length > 1
-            ? `${INTEGRATION_NAME[provider]} · ${named}`
-            : INTEGRATION_NAME[provider],
+        name: serverName(provider, connection, accounts),
         kind: kindOf(status, health, signIn, input.readFailed),
         on: !input.disabled.includes(connection),
         ...(connected && health.kind === CONNECTION_HEALTH.WORKING
