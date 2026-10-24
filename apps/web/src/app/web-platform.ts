@@ -14,6 +14,7 @@ import { openTargetOf } from "@luke/features/open-address";
 import { isGitHubAddress, isWebAddress } from "@luke/host/acts";
 import type { AppPlatform } from "@luke/panel/app-platform";
 import type { ShellBundles } from "@luke/panel/shell-bundles";
+import { COMMAND_KEY, type CommandKey } from "@luke/settings/shortcuts";
 import { NOTIFICATIONS_GRANTOR } from "@luke/voice/settings-controls";
 import { browserLinkPlatform } from "../link-platform";
 import { PANEL_ASSET_BASE } from "./web-address";
@@ -24,6 +25,11 @@ import { askNotificationsPermission } from "./web-notices";
 const PAGE_IN_MAC_APP = "/page-in-mac-app.html";
 
 const ignore = (): void => undefined;
+
+/** A browser's `navigator` as far as it names its system: `userAgentData`, where the browser has it, is in no DOM type yet. */
+type SystemNaming = Pick<Navigator, "platform"> & {
+  readonly userAgentData?: { readonly platform: string };
+};
 
 /**
  * The address of the file last downloaded, let go of once the next download
@@ -115,6 +121,17 @@ function lazySessionReplay(): AppPlatform["applySessionReplay"] {
 }
 
 /**
+ * The key a chord's Command is pressed with in this browser: ⌘ on Apple's
+ * systems, an iPad's keyboard among them, and Ctrl on every other, read from
+ * the system the browser names, `userAgentData`'s where it has one and the
+ * older `platform` where it does not.
+ */
+export function browserCommandKey(browser: SystemNaming = navigator): CommandKey {
+  const system = browser.userAgentData?.platform ?? browser.platform;
+  return /^(?:mac|iphone|ipad|ipod)/iu.test(system) ? COMMAND_KEY.META : COMMAND_KEY.CONTROL;
+}
+
+/**
  * The tab's platform. A browser has no menu bar, so that answers nothing; focus is the tab's own, so bringing the panel forward is
  * asking the window for it; a surface event is counted by the host in the
  * tab, as every other event is; notifications are the browser's to grant,
@@ -122,13 +139,16 @@ function lazySessionReplay(): AppPlatform["applySessionReplay"] {
  * by the tab's ways out (`page-leave.ts`); session replay is the desktop's
  * own masked recording (`web-session-replay.ts`); a cloud Browser tab's
  * live view is a socket the page opens itself (`web-browser-live.ts`); and the way to the Mac
- * app is offered only on the `linkPlatform` that can open it, a Mac.
+ * app is offered only on the `linkPlatform` that can open it, a Mac; and a
+ * chord's Command is pressed with the browser's own `commandKey`, Ctrl off a Mac.
  */
 export function webPlatform(
   shell: Pick<AppPlatform, "recordSurfaceEvent" | "unsavedWork" | "unsavedPlanWords">,
   linkPlatform: LinkPlatform = browserLinkPlatform(),
+  commandKey: CommandKey = browserCommandKey(),
 ): AppPlatform {
   const platform: AppPlatform = {
+    commandKey,
     copyText: (words) => navigator.clipboard.writeText(words),
     copyImage: copyPng,
     saveFile: downloadText,

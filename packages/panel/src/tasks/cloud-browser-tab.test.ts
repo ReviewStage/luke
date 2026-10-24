@@ -15,6 +15,7 @@ import {
   type TasksBrowserTabOpenParams,
 } from "@luke/features/tasks-view";
 import { ACT_KIND } from "@luke/host/acts";
+import { COMMAND_KEY } from "@luke/settings/shortcuts";
 import type { WireBoundaryInput } from "@luke/wire";
 import { Duration } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
@@ -405,6 +406,61 @@ test("while the member drives, a paste reaches the page as text, Control-V and â
     ),
     [{ type: BROWSER_LIVE_CLIENT.TEXT, text: "hello" }],
   );
+});
+
+test("off a Mac, while the member drives, a Ctrl chord the window has a command for goes to the page, and the window never hears it", async () => {
+  const sent: { type: string; key?: string }[] = [];
+  let listener: BrowserLiveListener | undefined;
+  fakeAppPlatform({
+    commandKey: COMMAND_KEY.CONTROL,
+    openBrowserLive: (_target, heard) => {
+      listener = heard;
+      return { send: (text) => sent.push(JSON.parse(text)), close: () => undefined };
+    },
+  });
+  draw(
+    createElement(CloudBrowserPane, {
+      taskId: TASK,
+      tab: LISTED,
+      owner: LUKE_OWNER,
+      shown: true,
+      memberName: () => undefined,
+    }),
+  );
+  await settle();
+  await act(async () =>
+    listener?.message(
+      JSON.stringify({
+        type: BROWSER_LIVE_SERVER.DRIVER,
+        driver: { userId: "user-dean", heldUntil: 60_000 },
+        yours: true,
+      }),
+    ),
+  );
+  await settle();
+  const canvas = document.querySelector("canvas");
+  assert.ok(canvas);
+  const heard: KeyboardEvent[] = [];
+  const hear = (event: KeyboardEvent) => heard.push(event);
+  window.addEventListener("keydown", hear);
+  act(() => {
+    canvas.dispatchEvent(
+      new KeyboardEvent("keydown", {
+        key: "b",
+        code: "KeyB",
+        ctrlKey: true,
+        bubbles: true,
+        cancelable: true,
+      }),
+    );
+  });
+  window.removeEventListener("keydown", hear);
+
+  assert.deepEqual(
+    sent.filter((message) => message.type === BROWSER_LIVE_CLIENT.KEY).map(({ key }) => key),
+    ["b"],
+  );
+  assert.deepEqual(heard, [], "the window's keymap yields the press, so the sidebar stays put");
 });
 
 test("a tab the member opened here is listed before the service lists it, and let go once it does", async () => {

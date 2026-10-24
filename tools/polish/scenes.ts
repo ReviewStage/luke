@@ -36,7 +36,7 @@ export type SceneWindow = (typeof WINDOW)[keyof typeof WINDOW];
 
 /** What a step does. */
 export const STEP = {
-  /** Presses a chord, Playwright's spelling (`Meta+K`). */
+  /** Presses a chord, Playwright's spelling (`ControlOrMeta+K`), as the client presses it (`pressedOn`). */
   PRESS: "press",
   /** Clicks the first element of an ARIA role and accessible name. */
   CLICK: "click",
@@ -105,8 +105,8 @@ const PLACE = {
 export const PLACES: readonly string[] = Object.values(PLACE);
 
 // The steps a few scenes share.
-// Note that this is Meta, never `ControlOrMeta`: the app answers ⌘K on every platform and refuses a Ctrl chord (`shortcutMatches`, `packages/settings/src/shortcuts.ts`), so Ctrl+K on Linux opens nothing.
-const OPEN_PALETTE: Step = { kind: STEP.PRESS, keys: "Meta+K" };
+// Note that this is `ControlOrMeta`, which Playwright presses as Ctrl off a Mac, because the web client presses Command as Ctrl there (`COMMAND_KEY`, `packages/settings/src/shortcuts.ts`); the desktop presses it as Meta (`pressedOn`).
+const OPEN_PALETTE: Step = { kind: STEP.PRESS, keys: "ControlOrMeta+K" };
 
 // A phone opens on the task's panel: back to the task, then back to the Tasks list.
 const MAIN = { role: "main" } as const;
@@ -117,6 +117,16 @@ const PHONE_TO_LIST: readonly Step[] = [
 const PHONE_PLACES = { role: "navigation", name: "Places" } as const;
 
 const DESKTOP_ONLY: readonly Client[] = [CLIENT.DESKTOP];
+
+/**
+ * The keys a press step presses on `client`. The web client presses Command
+ * as its browser's system has it, which is Playwright's `ControlOrMeta` on
+ * the machine shooting it; the desktop app is a Mac's alone and presses it as
+ * ⌘ wherever it is shot, Linux under xvfb too, so there it is Meta.
+ */
+export function pressedOn(keys: string, client: Client): string {
+  return client === CLIENT.DESKTOP ? keys.replaceAll("ControlOrMeta", "Meta") : keys;
+}
 
 /** Whether `client` draws `scene`: every client does where the scene names none. */
 export function drawsOn(scene: Scene, client: Client): boolean {

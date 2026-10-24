@@ -4,7 +4,8 @@
  * Every shortcut but Escape, the Inbox's and Chat's J and K, and the tab switcher's
  * ⌃Tab holds Command, the way a
  * Mac app's own chords do, since Command chords belong to whichever app is
- * frontmost. J
+ * frontmost; in a browser on Windows or Linux, Command is pressed as Ctrl, as
+ * every app there has it, and drawn so (`COMMAND_KEY`). J
  * and K are a letter alone, as Linear's and Superhuman's are, and R, which
  * replies to an agent's words selected as GitHub's R quotes them, answered
  * only where the press is not typing, and the menu bar never offers them. Each is a command the window runs and
@@ -255,6 +256,34 @@ const KEY_GLYPHS: ReadonlyMap<string, string> = new Map(
   Object.values(SHORTCUT_KEY).map((key) => [key.accelerator, key.glyph]),
 );
 
+/**
+ * The key a chord's Command is pressed with: ⌘ on a Mac, as every Mac app has
+ * it, and Ctrl on Windows and Linux, as every app there has it, where Meta is
+ * the Windows key the system keeps for itself. The window's shell names it
+ * once (`installCommandKey`); the desktop is a Mac's alone and names none.
+ */
+export const COMMAND_KEY = {
+  META: "meta",
+  CONTROL: "control",
+} as const;
+
+export type CommandKey = (typeof COMMAND_KEY)[keyof typeof COMMAND_KEY];
+
+/**
+ * The window's command key, ⌘ until its shell installs another. Note that this
+ * is module state, as `@luke/panel`'s platform door is, because every reader
+ * (a press matched, a chord drawn or spelled for a reader) reads it at the
+ * moment it reads, never at load, and the shell knows it before anything is
+ * drawn.
+ */
+let commandKey: CommandKey = COMMAND_KEY.META;
+
+/** How `aria-keyshortcuts` names each command key. */
+const COMMAND_ARIA = {
+  [COMMAND_KEY.META]: "Meta",
+  [COMMAND_KEY.CONTROL]: "Control",
+} as const satisfies Record<CommandKey, string>;
+
 /** The modifiers' glyphs in the order macOS writes a chord in. */
 const MODIFIER_GLYPHS = ["⌃", "⌥", "⇧", "⌘"] as const;
 
@@ -271,10 +300,33 @@ const MODIFIER_GLYPH = {
   CmdOrCtrl: "⌘",
 } as const satisfies Record<string, (typeof MODIFIER_GLYPHS)[number]>;
 
+/** The modifiers' words in the order Windows and Linux write a chord in, where Command is pressed as Ctrl. */
+const MODIFIER_WORDS = ["Ctrl", "Alt", "Shift"] as const;
+
+/** The same names folded to the word Windows and Linux spell each in: Command is Ctrl there, so it and Control are one key. */
+const MODIFIER_WORD = {
+  Control: "Ctrl",
+  Ctrl: "Ctrl",
+  Alt: "Alt",
+  Option: "Alt",
+  Shift: "Shift",
+  Command: "Ctrl",
+  Cmd: "Ctrl",
+  CommandOrControl: "Ctrl",
+  CmdOrCtrl: "Ctrl",
+} as const satisfies Record<keyof typeof MODIFIER_GLYPH, (typeof MODIFIER_WORDS)[number]>;
+
+/** How a chord's modifiers are drawn for each command key: their order, and the name each accelerator's modifier is drawn as. */
+const MODIFIER_SPELLING = {
+  [COMMAND_KEY.META]: { order: MODIFIER_GLYPHS, names: MODIFIER_GLYPH },
+  [COMMAND_KEY.CONTROL]: { order: MODIFIER_WORDS, names: MODIFIER_WORD },
+} as const;
+
 function modifierGlyph(name: string): string {
-  if (!Object.hasOwn(MODIFIER_GLYPH, name)) return name;
+  const { names } = MODIFIER_SPELLING[commandKey];
+  if (!Object.hasOwn(names, name)) return name;
   // SAFETY: Object.hasOwn narrows name to a key the glyph table documents.
-  return MODIFIER_GLYPH[name as keyof typeof MODIFIER_GLYPH];
+  return names[name as keyof typeof names];
 }
 
 /**
@@ -1060,31 +1112,64 @@ export function shortcutAccelerator(chord: ShortcutChord): string {
     .join("+");
 }
 
+/** Installs the window's command key, which its shell names once before anything is drawn; answers the function that puts back the one before. */
+export function installCommandKey(key: CommandKey): () => void {
+  const before = commandKey;
+  commandKey = key;
+  return () => {
+    commandKey = before;
+  };
+}
+
 /**
  * Any chord's glyphs as the window draws them, one per key: the modifiers in
- * the order macOS writes them, ⌃⌥⇧⌘, then the key. It reads Electron's
- * accelerator, the one spelling the window's chords (`shortcutAccelerator`)
- * share, so every chord is drawn by one rule: a key the window's table names
- * takes its glyph, ⏎ for Return and ⌫
- * for Delete, and any other, Space or a letter, its name.
+ * the order macOS writes them, ⌃⌥⇧⌘, then the key, or, where Command is Ctrl
+ * (`COMMAND_KEY.CONTROL`), the modifiers' words in the order Windows writes
+ * them, Ctrl Alt Shift. It reads Electron's accelerator, the one spelling the
+ * window's chords (`shortcutAccelerator`) share, so every chord is drawn by
+ * one rule: a key the window's table names takes its glyph, ⏎ for Return and
+ * ⌫ for Delete, and any other, Space or a letter, its name.
  */
 export function shortcutGlyphs(accelerator: string): readonly string[] {
+  const { order } = MODIFIER_SPELLING[commandKey];
   const parts = accelerator.split("+");
   const key = parts.at(-1) ?? "";
   const held = new Set(parts.slice(0, -1).map(modifierGlyph));
   // A name no modifier answers to is kept, ahead of the ones that do, rather than dropped.
-  const unknown = [...held].filter((glyph) => !MODIFIER_GLYPHS.some((each) => each === glyph));
-  const ordered = MODIFIER_GLYPHS.filter((glyph) => held.has(glyph));
+  const unknown = [...held].filter((glyph) => !order.some((each) => each === glyph));
+  const ordered = order.filter((glyph) => held.has(glyph));
   return [...unknown, ...ordered, KEY_GLYPHS.get(key) ?? key];
 }
 
-/** The chord as `aria-keyshortcuts` spells it. */
+/** The window's command key now, which a chord drawn in words reads. */
+export function commandKeyNow(): CommandKey {
+  return commandKey;
+}
+
+/**
+ * Whether a press on a surface that hands keys on to something of its own, a
+ * terminal's shell or a remote page, stays that surface's, the window
+ * yielding it. Where Command is Ctrl, every Ctrl chord does, as VS Code's
+ * terminal keeps them on Windows and Linux, because a shell and a page read
+ * Ctrl as their own (Ctrl+C, Ctrl+[ for Escape, Ctrl+B for bold). On a Mac
+ * none does here, since the window's chords there are ⌘ ones, which each
+ * surface sorts itself.
+ */
+export function surfaceKeepsPress(press: { ctrlKey: boolean; metaKey: boolean }): boolean {
+  return commandKey === COMMAND_KEY.CONTROL && press.ctrlKey && !press.metaKey;
+}
+
+/** The chord as `aria-keyshortcuts` spells it, its Command as the window's command key. */
 export function shortcutAria(chord: ShortcutChord): string {
-  return [
-    commandless(chord) ? undefined : "Meta",
+  // Note that a set, because where Command is Ctrl a chord naming Control too names one key.
+  const held = new Set([
+    commandless(chord) ? undefined : COMMAND_ARIA[commandKey],
     chord.control ? "Control" : undefined,
     chord.option ? "Alt" : undefined,
     chord.shift ? "Shift" : undefined,
+  ]);
+  return [
+    ...held,
     chord.key.aria ?? (chord.key.key.length === 1 ? chord.key.key.toUpperCase() : chord.key.key),
   ]
     .filter((part) => part !== undefined)
@@ -1104,10 +1189,31 @@ interface ShortcutKeyPress {
   ctrlKey: boolean;
   metaKey: boolean;
   shiftKey: boolean;
+  /** `KeyboardEvent.getModifierState`, which tells AltGr, which Windows reports as Ctrl and Alt, from the two held. */
+  getModifierState?(key: string): boolean;
 }
 
 /**
- * Whether a key press is the chord: Command, unless the chord goes without, and exactly the chord's other
+ * Whether the press holds exactly the chord's Control and Command, Command
+ * pressed as the window's command key. Where that is ⌘, Control is the chord's
+ * own. Where it is Ctrl, Meta is never the window's, since Windows keeps it,
+ * and the tab switcher's ⌃Tab, a Control chord without Command, is Ctrl too;
+ * no chord with Command is Tab, so the two stay apart.
+ */
+function heldAsChord(chord: ShortcutChord, event: ShortcutKeyPress): boolean {
+  const command = !commandless(chord);
+  const control = chord.control === true;
+  if (commandKey === COMMAND_KEY.META)
+    return event.metaKey === command && event.ctrlKey === control;
+  // Note that a chord naming both, the system's ⌃⌘F, has no spelling where Ctrl is Command, and that AltGr is typing, never Ctrl and Alt.
+  if (command && control) return false;
+  if (event.getModifierState?.("AltGraph") === true) return false;
+  return !event.metaKey && event.ctrlKey === (command || control);
+}
+
+/**
+ * Whether a key press is the chord: Command, pressed as the window's command
+ * key, unless the chord goes without, and exactly the chord's other
  * modifiers, and the key. The character is read where it can be,
  * which is what the menu bar matches too, and the physical key where Option
  * has changed the character, or where a plain chord's key is read by its
@@ -1116,8 +1222,7 @@ interface ShortcutKeyPress {
  * is the keyboard layout's to say.
  */
 export function shortcutMatches(chord: ShortcutChord, event: ShortcutKeyPress): boolean {
-  if (event.metaKey === commandless(chord)) return false;
-  if (event.ctrlKey !== (chord.control === true)) return false;
+  if (!heldAsChord(chord, event)) return false;
   const shiftFree = chord.key.unshifted !== undefined;
   if (event.altKey !== (chord.option === true)) return false;
   if (!shiftFree && event.shiftKey !== (chord.shift === true)) return false;

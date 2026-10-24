@@ -46,6 +46,7 @@ import {
   type Client,
   drawsOn,
   PLACES,
+  pressedOn,
   SCENES,
   type Scene,
   STEP,
@@ -300,13 +301,17 @@ function targetOf(
   return scope.getByRole(target.role, { name: target.name }).first();
 }
 
-/** Runs `step` on `page`, answering what went wrong, or nothing. */
-async function runStep(page: PlaywrightPage, step: Step): Promise<string | undefined> {
+/** Runs `step` on `page`, `client`'s, answering what went wrong, or nothing. */
+async function runStep(
+  page: PlaywrightPage,
+  client: Client,
+  step: Step,
+): Promise<string | undefined> {
   const options = { timeout: STEP_TIMEOUT_MS };
   try {
     switch (step.kind) {
       case STEP.PRESS:
-        await page.keyboard.press(step.keys);
+        await page.keyboard.press(pressedOn(step.keys, client));
         break;
       case STEP.CLICK:
         await targetOf(page, step).click(options);
@@ -332,10 +337,14 @@ async function runStep(page: PlaywrightPage, step: Step): Promise<string | undef
 }
 
 /** Floats the sidebar open where the window has folded it away, which its toggle offers as "Show sidebar" and only then; a pinned sidebar offers "Hide sidebar", so nothing is pressed. */
-async function showSidebar(page: PlaywrightPage, problems: string[]): Promise<void> {
+async function showSidebar(
+  page: PlaywrightPage,
+  client: Client,
+  problems: string[],
+): Promise<void> {
   const toggle = page.getByRole("button", { name: "Show sidebar", exact: true }).first();
   if (!(await toggle.isVisible())) return;
-  const problem = await runStep(page, {
+  const problem = await runStep(page, client, {
     kind: STEP.CLICK,
     role: "button",
     name: "Show sidebar",
@@ -346,6 +355,7 @@ async function showSidebar(page: PlaywrightPage, problems: string[]): Promise<vo
 /** Waits for the panel's stage and its fonts, then runs the scene's steps, answering their problems. A scene that steps into the sidebar has it shown first, except in the phone's layout, whose drawer its own steps open. */
 async function stageScene(
   page: PlaywrightPage,
+  client: Client,
   scene: Scene,
   phone: boolean,
   problems: string[],
@@ -358,9 +368,9 @@ async function stageScene(
   } catch {
     problems.push("still reading when shot");
   }
-  if (scene.sidebar === true && !phone) await showSidebar(page, problems);
+  if (scene.sidebar === true && !phone) await showSidebar(page, client, problems);
   for (const step of (phone ? scene.phoneSteps : undefined) ?? scene.steps ?? []) {
-    const problem = await runStep(page, step);
+    const problem = await runStep(page, client, step);
     if (problem !== undefined) problems.push(problem);
   }
 }
@@ -445,7 +455,7 @@ async function shootDesktop(
     await page.evaluate(stillPageScript(shot.theme));
     if (shot.scene.window === WINDOW.CALL) await page.waitForTimeout(LOAD_SETTLE_MS);
     // Note that the zoomed size's 608 CSS px is under the panel's narrow line (`shell-room.ts`), so it draws the phone's layout.
-    else await stageScene(page, shot.scene, shot.size === SIZE.NARROW, problems);
+    else await stageScene(page, CLIENT.DESKTOP, shot.scene, shot.size === SIZE.NARROW, problems);
     await page.screenshot({ path: file, animations: "disabled", caret: "hide" });
   } finally {
     await app.close();
@@ -512,7 +522,7 @@ async function shootBrowser(
     await page.goto(webAddress(base, shot.scene), {
       timeout: firstLoad ? FIRST_LOAD_TIMEOUT_MS : READY_TIMEOUT_MS,
     });
-    await stageScene(page, shot.scene, phone, problems);
+    await stageScene(page, CLIENT.WEB, shot.scene, phone, problems);
     await page.screenshot({ path: file, animations: "disabled", caret: "hide" });
   } finally {
     await context.close();
