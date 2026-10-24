@@ -4457,8 +4457,10 @@ ul.actor-stack {
 
 /* Over a File tab the bar stands just under the file's own bar
    (`tasks.css`), whose controls it would otherwise cover: that bar's
-   buttons, its padding, and its hairline. */
-.find-scope:has(> .file-view) > .find-bar {
+   buttons, its padding, and its hairline. The side panel holds its tab in
+   `.side-panel-keeps`, which lays nothing out but stands between the scope
+   and the tab, so the tab is looked for there too. */
+.find-scope:has(> .file-view, > .side-panel-keeps > .file-view) > .find-bar {
   top: calc(var(--luke-control-height) + 2 * var(--luke-space-4) + 1px + var(--luke-space-8));
 }
 
@@ -5810,7 +5812,11 @@ ul.actor-stack {
    New task's composer, the card as wide as the page's measure. */
 .home-welcome {
   align-items: center;
-  justify-content: center;
+  /* Note that `safe` keeps the page's top reachable where it is taller than
+     the window, because plain centring overflows both ends and the shell
+     clips what stands above its top; the page scrolls instead. */
+  justify-content: safe center;
+  overflow-y: auto;
   gap: var(--luke-space-12);
   padding: var(--luke-page-inset);
   text-align: center;

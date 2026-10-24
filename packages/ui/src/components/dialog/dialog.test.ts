@@ -300,6 +300,33 @@ test("a dialog given a title and actions is named by its title, and what it hold
   expect(holds(field.current)).toBe(true);
 });
 
+test("what a dialog holds stands in one middle between its head and its foot, so a short window scrolls the middle and keeps the title and the answers", () => {
+  draw(
+    createElement(Dialog, {
+      title: "New section",
+      onDismiss: () => undefined,
+      actions: createElement("button", { type: "button" }, "Save"),
+      children: [
+        createElement("input", { key: "title", "aria-label": "Section title" }),
+        createElement("p", { key: "icons" }, "Icons"),
+      ],
+    }),
+  );
+  const dialog = card() ?? expect.fail("the dialog opens");
+  const middle =
+    dialog.querySelector('[data-slot="dialog-body"]') ?? expect.fail("a middle stands");
+  const head = dialog.querySelector("h2") ?? expect.fail("a head stands");
+  expect(middle.contains(dialog.querySelector("input"))).toBe(true);
+  expect(middle.contains(dialog.querySelector("p"))).toBe(true);
+  expect(middle.contains(head)).toBe(false);
+  expect(middle.contains(button("Save"))).toBe(false);
+  // Note that the head comes before the middle and the foot after it, in the card's own column.
+  expect(head.compareDocumentPosition(middle) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  expect(
+    middle.compareDocumentPosition(button("Save")) & Node.DOCUMENT_POSITION_FOLLOWING,
+  ).toBeTruthy();
+});
+
 /** A dialog whose act its owner refuses or lets through, at the owner's word. */
 function Refusing({ refused }: { refused: boolean }): React.JSX.Element {
   return createElement(Dialog, {
