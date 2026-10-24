@@ -1234,14 +1234,6 @@
   --trees-bg-override: var(--luke-color-overlay);
 }
 
-.file-crumb-notice {
-  margin: 0;
-  padding: var(--luke-space-4) var(--luke-space-8);
-  color: var(--luke-color-text-muted);
-  font-size: var(--luke-type-caption-size);
-  line-height: var(--luke-type-caption-leading);
-}
-
 /* The box a pane's toggle stands in, which names the place it opens the
    pane (file-view.tsx): one place is shown at a time, by the panel's width. */
 .file-tree-toggle {
@@ -2038,12 +2030,6 @@
   grid-area: 1 / 1;
   border: 0;
   background-color: var(--luke-color-code-ground);
-}
-
-.image-diff-note {
-  margin: 0;
-  color: var(--luke-color-text-muted);
-  font-size: var(--luke-type-caption-size);
 }
 
 /* The tree's search field and its filter, in one row over the tree. */
@@ -4092,18 +4078,6 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
   color: var(--luke-color-text-muted);
 }
 
-.tool-error {
-  margin: 0;
-  padding: var(--luke-space-8) var(--luke-space-12);
-  color: var(--luke-color-danger-text);
-  font-family: var(--luke-font-mono);
-  font-size: var(--luke-type-caption-size);
-  line-height: var(--luke-type-reading-leading);
-  overflow-wrap: anywhere;
-  user-select: text;
-  white-space: pre-wrap;
-}
-
 /* Show more, under an answer cut to its first lines: a quiet strip across
    the card's width. */
 .tool-more {
@@ -4492,25 +4466,10 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
   opacity: 0.6;
 }
 
-/* A line the agent refused for good (`undelivered-mark.tsx`): its bubble
-   and files faded, as words that did not go, and the quiet mark under
-   them in the danger red a failure note speaks in. */
-.agent-undelivered {
-  display: flex;
-  align-items: center;
-  gap: var(--luke-space-4);
-  margin: 0;
-  color: var(--luke-color-danger-text);
-  font-size: var(--luke-type-caption-size);
-}
-
-.agent-undelivered > svg {
-  width: var(--luke-control-icon);
-  height: var(--luke-control-icon);
-  flex: none;
-}
-
-.is-user:has(> .agent-undelivered) > :not(.agent-undelivered, .luke-message-line) {
+/* A line the agent refused for good or for now (`undelivered-mark.tsx`): its
+   bubble and files faded, as words that did not go, under the failure note
+   that says so. */
+.is-user:has(> .luke-failure-note) > :not(.luke-failure-note, .luke-message-line) {
   opacity: 0.6;
 }
 
@@ -4690,13 +4649,6 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
 .todos-body {
   margin: var(--luke-space-2) 0 var(--luke-space-4) var(--transcript-gutter);
   user-select: text;
-}
-
-.todos-error {
-  margin: var(--luke-space-4) 0 0;
-  color: var(--luke-color-danger-text);
-  overflow-wrap: anywhere;
-  white-space: pre-wrap;
 }
 
 /* A list's items, each behind the glyph of where it stands, in a 16px
@@ -6020,13 +5972,6 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
   line-height: var(--luke-type-caption-leading);
 }
 
-.task-issue-links-note {
-  margin: var(--luke-space-6) 0 0;
-  color: var(--luke-color-danger-text);
-  font-size: var(--luke-type-caption-size);
-  line-height: var(--luke-type-caption-leading);
-}
-
 /* The pull request's row pinned over the composer, a card of one row
    (`@luke/ui`'s List). The lines it adds and removes read in the success
    green and the danger red, in tabular numerals so a count does not shift as
@@ -6119,16 +6064,6 @@ svg.lucide {
 .subagent-pair,
 .subagent-time {
   flex-shrink: 0;
-}
-
-/* Why a call failed, under the job, past the line's 4px padding, mark, and
-   gap. */
-.subagent-error {
-  margin: var(--luke-space-4) 0 0 var(--transcript-gutter);
-  color: var(--luke-color-danger-text);
-  font-size: var(--luke-type-caption-size);
-  overflow-wrap: anywhere;
-  white-space: pre-wrap;
 }
 
 /* Too narrow for the job beside the model and effort: they go first, as

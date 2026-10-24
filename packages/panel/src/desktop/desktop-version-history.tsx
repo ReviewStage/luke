@@ -829,9 +829,12 @@ export function DesktopVersionHistory({
                       onBack={closeSections}
                     />
                     {failed ? (
-                      <div className="sidebar-note">
-                        <ErrorState onRetry={versions.onRetryVersion}>{SECTIONS_FAILED}</ErrorState>
-                      </div>
+                      <ErrorState
+                        onRetry={versions.onRetryVersion}
+                        placement={ERROR_STATE_PLACEMENT.ROWS}
+                      >
+                        {SECTIONS_FAILED}
+                      </ErrorState>
                     ) : sections === undefined ? (
                       <SectionsSkeleton />
                     ) : null}

@@ -12,6 +12,7 @@ import {
   EMPTY_STATE_ACTION_LOOK,
   EmptyState,
   type EmptyStateAction,
+  ERROR_STATE_PLACEMENT,
   ErrorState,
   GAP,
   HoverCard,
@@ -1222,9 +1223,9 @@ export function InboxListNote({
 }): React.JSX.Element | null {
   if (failed) {
     return (
-      <div className="sidebar-note">
-        <ErrorState onRetry={onRetry}>{INBOX_NOT_READ}</ErrorState>
-      </div>
+      <ErrorState onRetry={onRetry} placement={ERROR_STATE_PLACEMENT.ROWS}>
+        {INBOX_NOT_READ}
+      </ErrorState>
     );
   }
   if (!empty) return null;
