@@ -16,7 +16,10 @@
  * on screen and able right now (`app-commands.ts`), so a row runs exactly
  * what its shortcut would, Delete task's question included, and it opens a
  * task through the same select the sidebar does, which takes its ask back
- * when the host does not open the task. Each task names its repository
+ * when the host does not open the task. A command is worded, marked, and
+ * keyed as the menus that offer it are, from the window's one list
+ * (`command-items.tsx`), and one whose only key is Esc, the window's step
+ * back, is no row at all. Each task names its repository
  * beside it, so two tasks of one name can be told apart, and hangs the
  * task's card beside its row, as its sidebar row does. An agent opens its tab as the column's "+" would, hanging
  * its tab's card beside its row while the pointer rests on it, as every
@@ -81,9 +84,7 @@ import {
   GearIcon,
   NOTE_LINE_LOOK,
   NoteLine,
-  PinIcon,
   Shortcut,
-  UnpinIcon,
   useMinute,
   WingFace,
 } from "@luke/ui";
@@ -106,7 +107,6 @@ import {
   taskRow,
 } from "@luke/ui/task-list-model";
 import { DOCUMENT_REGION, TASK_MARK } from "@luke/ui/tasks-model";
-import { LinkIcon } from "lucide-react";
 import { type ReactNode, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { AssigneeFaceMark } from "../actor-ref.js";
 import {
@@ -115,6 +115,7 @@ import {
   useAppCommand,
   useOverlayHold,
 } from "../app-commands.js";
+import { COMMAND_PLACE, commandWords, PANEL_COMMAND, panelCommandOf } from "../command-items.js";
 import { type CopyLink, inSidePanel, type LinkAtHand } from "../links-at-hand.js";
 import { memberRows } from "../member-rows.js";
 import { PANEL_TAB, type PanelTab } from "../panel-tabs.js";
@@ -337,9 +338,21 @@ const SETTINGS_WORD = "Settings";
 /** What an archived agent's detail says of it. */
 const ARCHIVED_WORD = "Archived";
 
-/** The commands the palette lists: the Keyboard shortcuts page's, then the menu bar's own dialogs, then its own, the sidebar's view of its tasks. */
+/**
+ * Whether a command's only key is Esc: the window's step back out of what
+ * stands, Exit settings and Back to inbox list among them, which the
+ * Keyboard shortcuts page names but which is a key to press rather than a
+ * command to find, so the palette lists none of them.
+ */
+function escapeOnly(command: KeyedCommand): boolean {
+  return APP_SHORTCUTS[command].chord.key === SHORTCUT_KEY.ESCAPE;
+}
+
+/** The commands the palette lists: the Keyboard shortcuts page's but the Esc-only, then the menu bar's own dialogs, then its own, the sidebar's view of its tasks. */
 const LISTED_COMMANDS: readonly AppCommand[] = [
-  ...APP_SHORTCUT_GROUPS.flatMap((group) => group.commands),
+  ...APP_SHORTCUT_GROUPS.flatMap((group) => group.commands).filter(
+    (command) => !escapeOnly(command),
+  ),
   APP_COMMAND.NEW_TERMINAL,
   APP_COMMAND.SEND_FEEDBACK,
   APP_COMMAND.SUGGEST_FEATURE,
@@ -896,7 +909,7 @@ function inboxRows(
   });
 }
 
-/** The commands offered now, the palette's own left out, each with its chord. */
+/** The commands offered now, the palette's own left out, each with its chord, and the glyph its menu item wears where a menu offers it too (`command-items.tsx`). */
 function actionRows(run: (command: AppCommand) => void): readonly PaletteRow[] {
   return LISTED_COMMANDS.filter(
     (command) =>
@@ -904,12 +917,18 @@ function actionRows(run: (command: AppCommand) => void): readonly PaletteRow[] {
       command !== APP_COMMAND.COPY_LINK &&
       command !== APP_COMMAND.ASK_LUKE &&
       appCommandOffered(command),
-  ).map((command) => ({
-    label: appCommandLabel(command),
-    command: isKeyedCommand(command) ? command : undefined,
-    terms: [appCommandLabel(command)],
-    onChoose: () => run(command),
-  }));
+  ).map((command) => {
+    const item = panelCommandOf(command);
+    const label =
+      item === undefined ? appCommandLabel(command) : commandWords(item, COMMAND_PLACE.PALETTE);
+    return {
+      icon: item?.icon,
+      label,
+      command: isKeyedCommand(command) ? command : undefined,
+      terms: [label],
+      onChoose: () => run(command),
+    };
+  });
 }
 
 /**
@@ -943,13 +962,14 @@ function copyLinkRows(
   links: readonly LinkAtHand[],
   copy: (held: LinkAtHand) => void,
 ): readonly PaletteRow[] {
+  const item = PANEL_COMMAND.COPY_LINK;
   return links.map((held, index) => {
-    const label = `${appCommandLabel(APP_COMMAND.COPY_LINK)} to ${held.thing}`;
+    const label = `${commandWords(item, COMMAND_PLACE.PALETTE)} to ${held.thing}`;
     return {
-      icon: <LinkIcon aria-hidden="true" />,
+      icon: item.icon,
       label,
       detail: held.name,
-      command: index === 0 ? APP_COMMAND.COPY_LINK : undefined,
+      command: index === 0 ? item.command : undefined,
       terms: [label, ...COPY_LINK_TERMS],
       onChoose: () => copy(held),
     };
@@ -1062,11 +1082,12 @@ function taskPinRows(
   const task = reads.watched === undefined ? undefined : taskOf(tasks, reads.watched);
   if (task === undefined) return [];
   const pinned = task.pinnedAt !== undefined;
-  const label = pinned ? "Unpin task" : "Pin task";
+  const item = pinned ? PANEL_COMMAND.UNPIN_TASK : PANEL_COMMAND.PIN_TASK;
+  const label = commandWords(item, COMMAND_PLACE.PALETTE);
   const mark = pinned ? TASK_MARK.UNPIN : TASK_MARK.PIN;
   return [
     {
-      icon: pinned ? <UnpinIcon /> : <PinIcon />,
+      icon: item.icon,
       label,
       terms: [label],
       onChoose: () => choose(() => tasks.onMarkTask(task.id, mark)),
@@ -1088,10 +1109,11 @@ function agentPinRows(
   const agent = tasks.listedAgents.standing.find((each) => each.id === agentId);
   if (agent === undefined) return [];
   const pinned = agent.pinnedAt !== undefined;
-  const label = pinned ? "Unpin agent" : "Pin agent";
+  const item = pinned ? PANEL_COMMAND.UNPIN_AGENT : PANEL_COMMAND.PIN_AGENT;
+  const label = commandWords(item, COMMAND_PLACE.PALETTE);
   return [
     {
-      icon: pinned ? <UnpinIcon /> : <PinIcon />,
+      icon: item.icon,
       label,
       terms: [label],
       onChoose: () => choose(() => tasks.onPinAgent(agent.id, !pinned)),

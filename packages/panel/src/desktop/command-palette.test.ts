@@ -52,7 +52,7 @@ import {
 import { PageWorkspaceProvider, useCopyLink, usePageWorkspace } from "../links-at-hand.js";
 import { PANEL_TAB, type PanelTab } from "../panel-tabs.js";
 import type { SidePanelControl } from "../tasks/use-side-panel.js";
-import { useTaskLooks } from "../tasks/use-task-looks.js";
+import { NO_LOOKS, useTaskLooks } from "../tasks/use-task-looks.js";
 import { AUTOMATIONS_PAGE, type InboxChoice, type TasksControl } from "../tasks/use-tasks-tab.js";
 import {
   fakeActPort,
@@ -70,11 +70,12 @@ import { DOCUMENT_TASK } from "../testing/document-task.js";
 import { followedInboxes } from "../testing/followed-inboxes.js";
 import { restOn } from "../testing/hint-rest.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
-import { codingAgentsControl, tasksControl } from "../testing/tasks-control.js";
+import { codingAgentsControl, tasksControl, UNPINNED_SUMMARY } from "../testing/tasks-control.js";
 import { newestToastSays } from "../testing/toast.js";
 import { ToastHost } from "../toast.js";
 import { CommandPalette } from "./command-palette.js";
 import { DesktopSidebar } from "./desktop-sidebar.js";
+import { DesktopTasks } from "./desktop-tasks.js";
 import { ListedAutomations } from "./listed-automations.js";
 import { panelEntries } from "./side-panel.js";
 
@@ -1478,6 +1479,77 @@ test("a command ⌘K alone offers, the sidebar's Show my tasks, is listed by its
   assert.equal(row?.querySelector(".luke-combobox-option-hint"), null, "no chord is printed");
   press("Show my tasks");
   assert.deepEqual(ran, ["show my tasks"]);
+});
+
+/** Offers two commands whose only key is Esc, as Settings and the Inbox's item do while they stand, and records each run. */
+function OffersEscapes({ ran }: { ran: string[] }): null {
+  useAppCommand(APP_COMMAND.EXIT_SETTINGS, () => ran.push("exit settings"));
+  useAppCommand(APP_COMMAND.INBOX_LIST, () => ran.push("back to inbox list"));
+  return null;
+}
+
+test("a command whose only key is Esc is no row in ⌘K, though it is still offered", () => {
+  const ran: string[] = [];
+  const root = createRoot(document.body.appendChild(document.createElement("div")));
+  roots.push(root);
+  act(() => root.render(createElement(OffersEscapes, { ran })));
+  openPalette();
+  chooseFilter("Actions");
+  type("exit settings");
+  assert.equal(rows().includes("Exit settings"), false);
+  type("back to inbox list");
+  assert.equal(rows().includes("Back to inbox list"), false);
+  assert.ok(appCommandOffered(APP_COMMAND.EXIT_SETTINGS), "Exit settings is still offered");
+});
+
+/** The chord's glyphs at the end of the palette's row listed as exactly these words, or nothing where it prints none. */
+function rowChord(listed: string): string | null {
+  const row = document.querySelectorAll('[role="option"]')[rows().indexOf(listed)];
+  assert.ok(row, `${listed} is listed`);
+  return row.querySelector(".luke-shortcut")?.textContent ?? null;
+}
+
+/** The chord's glyphs at the end of the open menu's item that says exactly these words, or nothing where it prints none. */
+function itemChord(label: string): string | null {
+  const item = [...document.querySelectorAll('[role="menu"] [role="menuitem"]')].find(
+    (each) => each.querySelector(".luke-menu-item-label")?.textContent === label,
+  );
+  assert.ok(item, `the menu offers ${label}`);
+  return item.querySelector(".luke-shortcut")?.textContent ?? null;
+}
+
+test("a task's command wears the same chord in ⌘K as in the open task's ⋯, ⌘K naming the task where the ⋯ says the verb alone", () => {
+  const tasks = tasksControl({
+    page: TASKS_PAGE.DOCUMENT,
+    activeTaskId: DOCUMENT_TASK.id,
+    region: { kind: DOCUMENT_REGION.READY, task: DOCUMENT_TASK },
+  });
+  const host = document.body.appendChild(document.createElement("div"));
+  const root = createRoot(host);
+  roots.push(root);
+  act(() =>
+    root.render(createElement(DesktopTasks, { summary: UNPINNED_SUMMARY, looks: NO_LOOKS, tasks })),
+  );
+  openPalette(tasks);
+  type("permanently delete");
+  const deleteKeys = rowChord("Permanently delete task");
+  type("mark done");
+  const doneKeys = rowChord("Mark done");
+  type("copy plan");
+  const copyKeys = rowChord("Copy plan");
+  act(() => {
+    assert.ok(runAppCommand(APP_COMMAND.COMMAND_PALETTE), "⌘K closes");
+  });
+
+  const more = host.querySelector<HTMLButtonElement>('[aria-label="Task actions"]');
+  assert.ok(more, "the task's ⋯ is drawn");
+  act(() => more.click());
+  assert.equal(deleteKeys, "⌘⌫");
+  assert.equal(itemChord("Permanently delete"), deleteKeys);
+  assert.equal(doneKeys, "⇧⌘A");
+  assert.equal(itemChord("Mark done"), doneKeys);
+  assert.equal(copyKeys, "⇧⌘C");
+  assert.equal(itemChord("Copy plan"), copyKeys);
 });
 
 /** Main's clipboard, keeping each copy the window asks of it. */
