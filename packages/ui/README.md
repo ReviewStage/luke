@@ -281,7 +281,7 @@ What the barrel holds (`src/index.ts`):
 | Entry | `FormField` (with `LengthCounter`), `TextField`, `TextArea`, `SearchField`, `Checkbox`, `ChoiceList`, `Switch`, `ChoiceBar` (with `CountPart`, `linesCount`), `Combobox` (with `ComboboxList`, `ComboboxListBox`, `ComboboxOptionItem`), `Calendar` |
 | Status | `Badge`, `Avatar`, `Spinner`, `BusyLabel`, `SavedTick`, `Skeleton`, `EmptyState`, `ErrorState`, `FailureNote`, `NoteLine` |
 | Overlays | `Dialog`, `ConfirmDialog` (with `useConfirmDialog`), `AnchoredPopover`, `Menu` (with `useMenu`), `TooltipPill`, `TooltipCard`, `HoverCard` |
-| Patterns | `PageToolbar`, `SettingsRow`, `SettingsSection` (with `SettingsRowsSkeleton`, `SettingsSectionsSkeleton`), `SettingsPage`, `ListRow`, `CollectionPage`, `DetailPage`, `AuthPage`, `PublicPage` (with `PublicSection`, `PublicMedia`) |
+| Patterns | `Toolbar` (a workspace's top bar, with `NotFound` under it; `PageToolbar` until its callers move), `SettingsRow`, `SettingsSection` (with `SettingsRowsSkeleton`, `SettingsSectionsSkeleton`), `SettingsPage`, `ListRow`, `CollectionPage`, `DetailPage`, `AuthPage`, `PublicPage` (with `PublicSection`, `PublicMedia`) |
 | Brand | `WingFace`, the glyphs (`face/glyphs.tsx`), `ProviderMark` |
 
 Each component's design comment, at the top of its `.tsx`, says what it owns
