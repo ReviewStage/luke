@@ -1,7 +1,6 @@
 import {
   AVATAR_SIZE,
   Avatar,
-  BADGE_TONE,
   BackIcon,
   Badge,
   ChevronDownIcon,
@@ -9,12 +8,12 @@ import {
   FolderIcon,
   GearIcon,
   NAV_COUNT_SHOWN,
-  NAV_COUNT_TONE,
   NAV_CURRENT,
   NAV_ITEM_VARIANT,
   NavItem,
   NavItemLink,
   SearchIcon,
+  STATUS_TONE,
   useMenu,
 } from "@luke/ui";
 import { useState } from "react";
@@ -49,7 +48,7 @@ function Places(): React.JSX.Element {
       </NavItem>
       <NavItem
         icon={<FolderIcon />}
-        count={{ value: 3, noun: "waiting on you", tone: NAV_COUNT_TONE.ACCENT }}
+        count={{ value: 3, noun: "waiting on you", tone: STATUS_TONE.ATTENTION }}
         shortcut={<Chord keys="⇧⌘I" />}
         {...place("inbox")}
       >
@@ -61,7 +60,7 @@ function Places(): React.JSX.Element {
       <NavItem icon={<FolderIcon />} disabled>
         Automations
       </NavItem>
-      <NavItem icon={<BackIcon />} mark={<Badge tone={BADGE_TONE.ATTENTION}>Needs you</Badge>}>
+      <NavItem icon={<BackIcon />} mark={<Badge tone={STATUS_TONE.ATTENTION}>Needs you</Badge>}>
         Back
       </NavItem>
     </div>

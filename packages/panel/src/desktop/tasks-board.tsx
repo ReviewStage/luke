@@ -532,7 +532,7 @@ function TaskBoardColumnView({
           {words}
         </Text>
         {column.tasks.length === 0 ? null : (
-          <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.SUBTLE}>
+          <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
             {column.tasks.length}
           </Text>
         )}

@@ -1,6 +1,7 @@
 import type { ComponentPropsWithRef, ReactNode } from "react";
 import { ChevronDownIcon, RemoveIcon } from "../../face/glyphs.js";
 import { PRESS_FACE, PRESS_PULSE, pulseOnPress } from "../../press-pulse.js";
+import type { StatusTone } from "../../status-tone.js";
 import { useClipped } from "../../use-clipped.js";
 import { motionKey as motionKeyAttribute } from "../list-motion/list-motion.js";
 
@@ -76,17 +77,6 @@ export const CHIP_SIZE = {
 
 export type ChipSize = (typeof CHIP_SIZE)[keyof typeof CHIP_SIZE];
 
-/** Where the thing a chip names stands, in the state palette `Badge` says it in. */
-export const CHIP_TONE = {
-  NEUTRAL: "neutral",
-  ATTENTION: "attention",
-  COMPLETE: "complete",
-  MERGED: "merged",
-  DANGER: "danger",
-} as const;
-
-export type ChipTone = (typeof CHIP_TONE)[keyof typeof CHIP_TONE];
-
 /**
  * How wide a chip stands: its words' own width; the field column a settings
  * row's pop-ups share, so a change of value cannot re-shape its row; at least
@@ -134,7 +124,7 @@ function keptEnd(name: string): string {
 interface ChipFace {
   look: ChipLook;
   /** Where the thing it names stands; the look's own ink where none is named. */
-  tone?: ChipTone | undefined;
+  tone?: StatusTone | undefined;
   /** How wide it stands; its words' own width where none is named. */
   width?: ChipWidth | undefined;
   /** How big it is; the control's own size where none is named. */
@@ -277,8 +267,8 @@ export function ChipName(props: ChipNameProps): React.JSX.Element {
 
 /**
  * The quiet count after a chip's words, what a filter would leave out: in the
- * subtle ink at fixed figures, and on a pressed filter stepped back from the
- * ground's colour its words are in, rather than the subtle ink it would
+ * muted ink at fixed figures, and on a pressed filter stepped back from the
+ * ground's colour its words are in, rather than the muted ink it would
  * vanish into there. A reader hears the count where the chip's name or its
  * description says it, so it is hidden from them here.
  */

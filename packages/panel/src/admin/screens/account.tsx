@@ -4,12 +4,12 @@ import { formatCount } from "@luke/features/number-format";
 import { formatDate, formatDayTick, formatInstant } from "@luke/features/time-format";
 import {
   AVATAR_SIZE,
-  BADGE_TONE,
   Badge,
   GAP,
   Inline,
   SKELETON_SHAPE,
   Skeleton,
+  STATUS_TONE,
   Stack,
   TEXT_ELEMENT,
   TEXT_TONE,
@@ -150,7 +150,7 @@ function Masthead({ detail }: { detail: AdminUserDetail }): React.JSX.Element {
       email={
         <Inline>
           <Text tone={TEXT_TONE.MUTED}>{subject.email}</Text>
-          {subject.admin ? <Badge tone={BADGE_TONE.NEUTRAL}>Admin</Badge> : null}
+          {subject.admin ? <Badge tone={STATUS_TONE.NEUTRAL}>Admin</Badge> : null}
         </Inline>
       }
       joined={

@@ -590,7 +590,7 @@
 .plan-document-text > .is-empty::before {
   float: left;
   height: 0;
-  color: var(--luke-color-text-subtle);
+  color: var(--luke-color-text-muted);
   content: attr(data-placeholder);
   pointer-events: none;
 }
@@ -660,7 +660,7 @@
   align-items: center;
   justify-content: space-between;
   margin-bottom: var(--luke-space-8);
-  color: var(--luke-color-text-subtle);
+  color: var(--luke-color-text-muted);
   font-size: var(--luke-type-caption-size);
   font-weight: var(--luke-weight-semibold);
 }
@@ -916,7 +916,7 @@
 
   /* How long ago a thread's line says something happened. */
   .thread-time {
-    color: var(--luke-color-text-subtle);
+    color: var(--luke-color-text-muted);
     font-size: var(--luke-type-caption-size);
     line-height: var(--luke-type-caption-leading);
     font-variant-numeric: tabular-nums;
@@ -1257,7 +1257,7 @@
 /* The commit a pinned read is at, quiet beside the path. */
 .file-view-commit {
   flex: 0 0 auto;
-  color: var(--luke-color-text-subtle);
+  color: var(--luke-color-text-muted);
   font-family: var(--luke-font-mono);
   white-space: nowrap;
 }
@@ -1997,7 +1997,7 @@
 .diff-list-refused {
   margin: 0;
   padding: var(--luke-space-4) var(--luke-space-12) var(--luke-space-4) var(--luke-space-40);
-  color: var(--luke-color-text-subtle);
+  color: var(--luke-color-text-muted);
   font-size: var(--luke-type-caption-size);
 }
 
@@ -2232,7 +2232,7 @@
 
 [data-review-state="commented"],
 [data-review-state="dismissed"] {
-  --review-tone: var(--luke-color-text-subtle);
+  --review-tone: var(--luke-color-text-muted);
 }
 
 .review-state {
@@ -2285,7 +2285,7 @@
 }
 
 .changes-comment-time {
-  color: var(--luke-color-text-subtle);
+  color: var(--luke-color-text-muted);
 }
 
 /* An agent's Pull request tab (`agent-pull-request-tab.tsx`): a header of
@@ -3012,7 +3012,7 @@
 
 .pull-request-branches-arrow {
   flex: none;
-  color: var(--luke-color-text-subtle);
+  color: var(--luke-color-text-muted);
 }
 
 /* A branch's glyph: the branch at rest, the copy glyph under the pointer
@@ -3023,7 +3023,7 @@
   flex: none;
   width: 12px;
   height: 12px;
-  color: var(--luke-color-text-subtle);
+  color: var(--luke-color-text-muted);
 }
 
 .pull-request-branch-glyph > *,
@@ -3089,7 +3089,7 @@
 
 /* "Stack 2/4", an outlined button whose menu lists the stack: its count quieter. */
 .pull-request-stack-count {
-  color: var(--luke-color-text-subtle);
+  color: var(--luke-color-text-muted);
   font-variant-numeric: tabular-nums;
 }
 
@@ -3207,7 +3207,7 @@
 }
 
 .pull-request-number {
-  color: var(--luke-color-text-subtle);
+  color: var(--luke-color-text-muted);
   font-weight: var(--luke-weight-regular);
 }
 
@@ -3243,7 +3243,7 @@
 }
 
 .pull-request-quiet {
-  color: var(--luke-color-text-subtle);
+  color: var(--luke-color-text-muted);
 }
 
 /* The merge control at the title row's end (`merge-box.tsx`), as
@@ -3280,7 +3280,7 @@
 }
 
 .pull-request-count {
-  color: var(--luke-color-text-subtle);
+  color: var(--luke-color-text-muted);
   font-variant-numeric: tabular-nums;
   font-weight: var(--luke-weight-regular);
 }
@@ -3342,12 +3342,13 @@
   --check-tone: var(--luke-color-danger);
 }
 
+/* A check still running is work under way, not something that needs you. */
 [data-check-state="pending"] {
-  --check-tone: var(--luke-color-attention);
+  --check-tone: var(--luke-color-working);
 }
 
 [data-check-state="skipped"] {
-  --check-tone: var(--luke-color-text-subtle);
+  --check-tone: var(--luke-color-text-muted);
 }
 
 /* Words written on GitHub, drawn at the transcript's own size, a step over
@@ -3572,7 +3573,7 @@
 .annotation-where-lines {
   flex: none;
   margin-inline-start: var(--luke-space-8);
-  color: var(--luke-color-text-subtle);
+  color: var(--luke-color-text-muted);
 }
 
 /* The head: one line that never wraps, the name giving way first, its whole
@@ -3625,7 +3626,7 @@
 
 .annotation-card-time {
   flex: none;
-  color: var(--luke-color-text-subtle);
+  color: var(--luke-color-text-muted);
 }
 
 /* A state the card is in, `@luke/ui`'s Badge, never giving way. */
@@ -3639,7 +3640,7 @@
   flex: none;
   align-items: center;
   gap: var(--luke-space-4);
-  color: var(--luke-color-text-subtle);
+  color: var(--luke-color-text-muted);
 }
 
 .annotation-card-count > svg {
@@ -3831,7 +3832,7 @@
 .file-tab-snippet-label {
   margin: 0;
   padding: var(--luke-space-8) var(--luke-space-12) var(--luke-space-4);
-  color: var(--luke-color-text-subtle);
+  color: var(--luke-color-text-muted);
   font-size: var(--luke-type-caption-size);
 }
 
@@ -4428,7 +4429,7 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
    doing. */
 .agent-end-line {
   margin: 0;
-  color: var(--luke-color-text-subtle);
+  color: var(--luke-color-text-muted);
   font-size: var(--luke-type-caption-size);
   line-height: var(--luke-type-caption-leading);
 }
@@ -4471,7 +4472,7 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
   align-items: baseline;
   gap: var(--luke-space-4);
   margin: 0;
-  color: var(--luke-color-text-subtle);
+  color: var(--luke-color-text-muted);
   font-size: var(--luke-type-caption-size);
 }
 
@@ -4560,7 +4561,7 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
   align-items: center;
   gap: var(--luke-space-4);
   margin: var(--luke-space-2) 0 0;
-  color: var(--luke-color-text-subtle);
+  color: var(--luke-color-text-muted);
   font-size: var(--luke-type-caption-size);
 }
 
@@ -5612,7 +5613,7 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
 }
 
 .terminal-bar-busy {
-  color: var(--luke-color-text-subtle);
+  color: var(--luke-color-text-muted);
   letter-spacing: 1px;
 }
 
@@ -5624,7 +5625,7 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
 }
 
 .terminal-bar-note {
-  color: var(--luke-color-text-subtle);
+  color: var(--luke-color-text-muted);
 }
 
 /* The action's key, after its words, in the action's own ink. */
@@ -5730,7 +5731,7 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
 
 .agent-servers-count {
   flex: none;
-  color: var(--luke-color-text-subtle);
+  color: var(--luke-color-text-muted);
   font-size: var(--luke-type-caption-size);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
@@ -5894,7 +5895,7 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
 
 .agent-context-note {
   margin: 0;
-  color: var(--luke-color-text-subtle);
+  color: var(--luke-color-text-muted);
   font-size: var(--luke-type-caption-size);
 }
 
@@ -5930,7 +5931,7 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
 }
 
 [data-pull-request-state="draft"] {
-  --pull-request-tone: var(--luke-color-text-subtle);
+  --pull-request-tone: var(--luke-color-text-muted);
 }
 
 [data-pull-request-state="merged"] {
@@ -5942,9 +5943,9 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
 }
 
 /* An open pull request GitHub holds in its merge queue, as its Pull request
-   tab's pill says it: in the attention tone. */
+   tab's pill says it: in the working tone, since it is on its way in. */
 [data-pull-request-state="queued"] {
-  --pull-request-tone: var(--luke-color-attention);
+  --pull-request-tone: var(--luke-color-working);
 }
 
 .pull-request-mark {
@@ -5977,7 +5978,7 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
 }
 
 .issue-mark[data-issue-state="not-planned"] {
-  color: var(--luke-color-text-subtle);
+  color: var(--luke-color-text-muted);
 }
 
 /* A task's linked issues under its status and priority
@@ -6004,12 +6005,12 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
 
 .task-issue-link-unread {
   flex: none;
-  color: var(--luke-color-text-subtle);
+  color: var(--luke-color-text-muted);
 }
 
 .task-issue-link-key {
   flex: none;
-  color: var(--luke-color-text-subtle);
+  color: var(--luke-color-text-muted);
   font-family: var(--luke-font-mono);
   font-size: var(--luke-type-caption-size);
   font-weight: var(--luke-weight-regular);
@@ -6031,7 +6032,7 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
 }
 
 .task-issue-link-heading-state {
-  color: var(--luke-color-text-subtle);
+  color: var(--luke-color-text-muted);
   font-size: var(--luke-type-caption-size);
   line-height: var(--luke-type-caption-leading);
 }
@@ -6689,7 +6690,7 @@ svg.lucide {
 }
 
 .comment-time {
-  color: var(--luke-color-text-subtle);
+  color: var(--luke-color-text-muted);
   font-size: 11.5px;
   font-variant-numeric: tabular-nums;
   font-weight: 400;

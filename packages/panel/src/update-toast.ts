@@ -11,11 +11,12 @@
 
 import { ACT_KIND } from "@luke/host/acts";
 import { UPDATE_STATUS, type UpdateSnapshot } from "@luke/settings/update";
+import { STATUS_TONE } from "@luke/ui";
 import { Option, Schema } from "effect";
 import { useEffect } from "react";
 import { useAct } from "./act.js";
 import { readKeptOption, writeKept } from "./kept-storage.js";
-import { TOAST_TONE, useToast } from "./toast.js";
+import { useToast } from "./toast.js";
 
 /** The storage key the version last announced is kept under. */
 const ANNOUNCED_KEY = "luke.update-announced";
@@ -40,7 +41,7 @@ export function useUpdatedToast(update: UpdateSnapshot | undefined): void {
     keepAnnounced(version);
     toast({
       words: `Updated to ${version}`,
-      tone: TOAST_TONE.DONE,
+      tone: STATUS_TONE.COMPLETE,
       action: { label: "What's new", onPress: () => tell(ACT_KIND.UPDATE_OPEN_CHANGELOG) },
     });
   }, [toast, tell, version]);

@@ -4,7 +4,6 @@ import type { Workspace } from "@luke/features/workspace-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import { SETTINGS_SEARCH_ROW } from "@luke/settings/settings-anchors";
 import {
-  BADGE_TONE,
   Badge,
   ConfirmDialog,
   ErrorState,
@@ -13,6 +12,7 @@ import {
   type SettingsRowSkeletonShape,
   SettingsRowsSkeleton,
   SettingsSection,
+  STATUS_TONE,
   TEXT_TONE,
   TEXT_VARIANT,
   Text,
@@ -118,7 +118,7 @@ function MemoryRow({
         row={{
           label: <span className="memory-text">{memory.text}</span>,
           adornment: memory.private ? (
-            <Badge tone={BADGE_TONE.NEUTRAL}>{PAGE_LINE.PRIVATE}</Badge>
+            <Badge tone={STATUS_TONE.NEUTRAL}>{PAGE_LINE.PRIVATE}</Badge>
           ) : undefined,
           description: `Kept by ${keeperOf(memory, readerId)} · ${dayText(memory.updatedAt)}`,
         }}
@@ -245,7 +245,7 @@ export function MemorySection({
   if (workspace === undefined) return <SettingsLine>{PAGE_LINE.NO_WORKSPACE}</SettingsLine>;
   return (
     <>
-      <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.SUBTLE}>
+      <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
         {noteFor(workspace)}
       </Text>
       <div className={NO_CAPTURE}>

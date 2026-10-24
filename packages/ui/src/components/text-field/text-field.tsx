@@ -124,7 +124,7 @@ const TEXT_FIELD_SIZE_CLASS = {
     "h-auto p-0 border-0 bg-transparent focus:bg-transparent text-title font-title tracking-title outline-none",
   /** A step under a control, on the well's ground, its edge lighting while it holds the caret; 16px words under a finger. */
   [TEXT_FIELD_SIZE.COMPACT]:
-    "h-control-compact rounded-control-compact border-border bg-well px-luke-6 text-caption leading-body text-ellipsis focus:border-subtle-foreground focus:bg-well focus:outline-none pointer-coarse:text-caption-touch",
+    "h-control-compact rounded-control-compact border-border bg-well px-luke-6 text-caption leading-body text-ellipsis focus:border-muted-foreground focus:bg-well focus:outline-none pointer-coarse:text-caption-touch",
   /** Words written in place in the body's type: no well, no edge, and no ring. */
   [TEXT_FIELD_SIZE.INLINE]: "h-auto p-0 border-0 bg-transparent focus:bg-transparent outline-none",
 } as const satisfies Record<TextFieldSize, string | undefined>;

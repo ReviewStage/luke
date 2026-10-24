@@ -975,11 +975,7 @@ function EditorToolbar({
     >
       {codeReview ? <SendFeedbackButton experiment={EXPERIMENT.CODE_REVIEW} /> : null}
       <EditorStatus>
-        <Text
-          variant={TEXT_VARIANT.CAPTION}
-          tone={dirty ? TEXT_TONE.MUTED : TEXT_TONE.SUBTLE}
-          as={TEXT_ELEMENT.SPAN}
-        >
+        <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED} as={TEXT_ELEMENT.SPAN}>
           {status}
         </Text>
       </EditorStatus>

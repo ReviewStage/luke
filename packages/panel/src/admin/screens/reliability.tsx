@@ -19,7 +19,6 @@ import { formatCount, formatPercent } from "@luke/features/number-format";
 import { PROVIDER_KEY_STATUS } from "@luke/features/provider-key-wire";
 import { formatDate } from "@luke/features/time-format";
 import {
-  BADGE_TONE,
   Badge,
   Card,
   DATA_TABLE_COLUMN_KIND,
@@ -30,6 +29,7 @@ import {
   List,
   ListRow,
   Skeleton,
+  STATUS_TONE,
   TEXT_LINK_LOOK,
   TEXT_TONE,
   Text,
@@ -165,7 +165,7 @@ function IntegrationRow({ integration }: { integration: AdminIntegration }): Rea
     <ListRow
       title={integration.label}
       meta={
-        <Badge tone={integration.configured ? BADGE_TONE.COMPLETE : BADGE_TONE.ATTENTION}>
+        <Badge tone={integration.configured ? STATUS_TONE.COMPLETE : STATUS_TONE.ATTENTION}>
           {integration.configured ? "Configured" : "Not configured"}
         </Badge>
       }
@@ -199,7 +199,7 @@ function attentionColumns(
       cell: (row) => (
         <Inline>
           {row.problems.map((problem) => (
-            <Badge key={problemLabel(problem)} tone={BADGE_TONE.ATTENTION}>
+            <Badge key={problemLabel(problem)} tone={STATUS_TONE.ATTENTION}>
               {problemLabel(problem)}
             </Badge>
           ))}
@@ -470,7 +470,9 @@ function SystemHealth({
             hint={`probe round-trip ${formatCount(health.database.latencyMs)} ms`}
           >
             <Inline>
-              <Badge tone={health.database.reachable ? BADGE_TONE.COMPLETE : BADGE_TONE.ATTENTION}>
+              <Badge
+                tone={health.database.reachable ? STATUS_TONE.COMPLETE : STATUS_TONE.ATTENTION}
+              >
                 {health.database.reachable ? "Reachable" : "Unreachable"}
               </Badge>
             </Inline>
