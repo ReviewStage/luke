@@ -390,6 +390,9 @@ function topAccount(id: string, name: string, activeDays: number, admin = false)
 /** How many of the fixture's accounts are admins, whom the Overview leaves out unless asked for everyone. */
 const ADMIN_ACCOUNTS = 3;
 
+/** Every other account, more than a quarter's signups add up to, so no window counts more new accounts than there are. */
+const NON_ADMIN_ACCOUNTS = 640;
+
 /**
  * The Overview's numbers over the window the read asks for, the last 30 days
  * where it names none, and over every account or every account but the
@@ -438,7 +441,7 @@ function adminMetrics(query: Readonly<Record<string, string>>): AdminMetrics {
     generatedAt: NOW,
     windowDays,
     users: {
-      total: adminsHidden ? 312 : 312 + ADMIN_ACCOUNTS,
+      total: adminsHidden ? NON_ADMIN_ACCOUNTS : NON_ADMIN_ACCOUNTS + ADMIN_ACCOUNTS,
       newInWindow: signedUp,
       signupTrend: { days: 7, recent: 18, prior: 14 },
       dailySignups,

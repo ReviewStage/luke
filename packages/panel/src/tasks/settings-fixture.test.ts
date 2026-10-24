@@ -3,6 +3,7 @@ import type { AdminMetrics } from "@luke/features/admin-answer-wire";
 import {
   ADMIN_METRICS_SCOPE,
   ADMIN_METRICS_SCOPE_PARAM,
+  ADMIN_METRICS_WINDOW,
   ADMIN_METRICS_WINDOW_PARAM,
   ADMIN_READ,
 } from "@luke/features/admin-wire";
@@ -197,6 +198,10 @@ test("Admin's Overview answers the window and the scope its controls ask for, it
     week.users.dailySignups.reduce((sum, day) => sum + day.count, 0),
   );
   assert.equal(week.overview.funnel[0]?.accounts, week.users.newInWindow);
+  for (const days of Object.values(ADMIN_METRICS_WINDOW)) {
+    const window = metrics({ [ADMIN_METRICS_WINDOW_PARAM]: String(days) });
+    assert.ok(window.users.newInWindow <= window.users.total, `${days} days`);
+  }
   assert.equal(byDefault.windowDays, 30);
   assert.ok(byDefault.overview.topAccounts.every((account) => !account.admin));
   assert.ok(everyone.overview.topAccounts.some((account) => account.admin));
