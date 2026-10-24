@@ -19,6 +19,7 @@ import {
   usePullRequestWrites,
   WRITE_NOTE,
   type WriteNote,
+  type WriteOutcome,
 } from "./pull-request-writes.js";
 
 /**
@@ -121,6 +122,22 @@ function holdDraft(agentId: string, number: number, draft: HeldDraft | undefined
   else heldDrafts.set(agentId, kept);
 }
 
+/**
+ * Whether two descriptions read as the same words, line endings aside, as
+ * the service compares them, so one saved with mixed line endings, which the
+ * editor hands back with one kind, writes nothing untouched.
+ */
+function sameWords(one: string, other: string): boolean {
+  return one.replaceAll("\r\n", "\n") === other.replaceAll("\r\n", "\n");
+}
+
+/** A write of the description still out: its words, the words it began from, and how it goes. */
+interface WriteOut {
+  readonly body: string;
+  readonly base: string;
+  readonly outcome: Promise<WriteOutcome>;
+}
+
 /** Why the last write was refused, under the editor: the description changed on GitHub, with Reload; otherwise the write line's own words. */
 function DescriptionNote({
   note,
@@ -193,6 +210,8 @@ export function PullRequestDescription({
   const draft = useRef<string | undefined>(undefined);
   // Whether the block takes the keyboard back as the editor closes, as it does closed by the keyboard.
   const refocus = useRef(false);
+  // The write still out, which a leaving waits on, since only one goes at a time.
+  const out = useRef<WriteOut | undefined>(undefined);
   const note = writes.note ?? heldNote;
   const dismiss = () => {
     writes.dismiss();
@@ -217,24 +236,29 @@ export function PullRequestDescription({
     if (editing.kind !== EDITING.OPEN || writes.pending !== undefined) return;
     const words = draft.current ?? editing.opened;
     refocus.current = byKeyboard;
-    if (words === editing.base) {
+    if (sameWords(words, editing.base)) {
       close();
       return;
     }
     setHeldNote(undefined);
-    void writes.write(
+    const outcome = writes.write(
       { action: PULL_REQUEST_ACTION.EDIT_DESCRIPTION, body: words, expectedBody: editing.base },
       () =>
         setEditing((was) =>
           was.kind === EDITING.OPEN ? { ...was, base: words, written: pullRequest } : was,
         ),
     );
+    const sent: WriteOut = { body: words, base: editing.base, outcome };
+    out.current = sent;
+    void outcome.then(() => {
+      if (out.current === sent) out.current = undefined;
+    });
   };
   // Once the read after a write lands, the editor closes onto GitHub's rendering of it, unless words were typed since.
   useEffect(() => {
     if (editing.kind === EDITING.OPEN && editing.written !== undefined) {
       if (pullRequest === editing.written) return;
-      if ((draft.current ?? editing.opened) === editing.base) close();
+      if (sameWords(draft.current ?? editing.opened, editing.base)) close();
       else setEditing({ ...editing, written: undefined });
       return;
     }
@@ -254,23 +278,31 @@ export function PullRequestDescription({
     block.current?.focus();
   });
   // Note that words changed as the description goes are written as they
-  // stand, because no finish reaches an editor taken out of the page; one
-  // GitHub refuses is held for the next time it is drawn.
-  const latest = useRef({ editing, write: writes.write, note });
-  latest.current = { editing, write: writes.write, note };
+  // stand, because no finish reaches an editor taken out of the page, once
+  // a write still out has answered, against the words GitHub then holds;
+  // ones GitHub refuses are held, with why, for the next time it is drawn.
+  const latest = useRef({ editing, write: writes.write });
+  latest.current = { editing, write: writes.write };
   useEffect(
     () => () => {
       const { editing: was, write } = latest.current;
       if (was.kind !== EDITING.OPEN) return;
       const words = draft.current ?? was.opened;
-      if (words === was.base) return;
-      void write({
-        action: PULL_REQUEST_ACTION.EDIT_DESCRIPTION,
-        body: words,
-        expectedBody: was.base,
-      }).then((outcome) => {
-        if (outcome.done) return;
-        holdDraft(agentId, number, { draft: words, base: was.base, note: latest.current.note });
+      const sent = out.current;
+      const base =
+        sent === undefined
+          ? Promise.resolve(was.base)
+          : sent.outcome.then((outcome) => (outcome.done ? sent.body : sent.base));
+      void base.then((expectedBody) => {
+        if (sameWords(words, expectedBody)) return;
+        void write({
+          action: PULL_REQUEST_ACTION.EDIT_DESCRIPTION,
+          body: words,
+          expectedBody,
+        }).then((outcome) => {
+          if (outcome.done) return;
+          holdDraft(agentId, number, { draft: words, base: expectedBody, note: outcome.note });
+        });
       });
     },
     [],

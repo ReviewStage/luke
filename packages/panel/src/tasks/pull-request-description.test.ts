@@ -105,6 +105,8 @@ let onGitHub = BODY;
 let changes: PullRequestActionRequest[] = [];
 /** How the service answers the next change asked for. */
 let changeAnswer: PullRequestWriteAnswer = { outcome: PULL_REQUEST_WRITE_OUTCOME.DONE };
+/** What the service waits on before it answers a change, where a test holds it; none answers at once. */
+let changeHeld: Promise<void> | undefined;
 
 beforeAll(async () => {
   bundles = await Effect.runPromise(
@@ -121,6 +123,7 @@ beforeEach(() => {
   onGitHub = BODY;
   changes = [];
   changeAnswer = { outcome: PULL_REQUEST_WRITE_OUTCOME.DONE };
+  changeHeld = undefined;
   fakeAppPlatform(DESKTOP_LINKS);
   fakeAppBridge({});
   fakeActPort({
@@ -133,7 +136,8 @@ beforeEach(() => {
       ) {
         onGitHub = request.body;
       }
-      return Promise.resolve(changeAnswer);
+      const answer = changeAnswer;
+      return (changeHeld ?? Promise.resolve()).then(() => answer);
     },
   });
 });
@@ -381,4 +385,43 @@ test("a member who may not edit the description gets no editor", async () => {
     null,
     "nothing takes the keyboard to open it",
   );
+});
+
+test("a description saved with mixed line endings, its words typed and taken out again, writes nothing", async () => {
+  onGitHub = "## Summary\r\n\r\nExpires invitations after seven days.\n";
+  const container = await drawTab();
+  await clickWords(container, "Expires invitations after seven days.");
+  const element = editorIn(container) ?? assert.fail("the editor opens");
+  const editor = element.editor ?? assert.fail("the editor is running");
+
+  typeAtEnd(element, " Mine.");
+  act(() => {
+    const end = editor.state.selection.from;
+    editor.view.dispatch(editor.state.tr.delete(end - " Mine.".length, end));
+  });
+  await press(element, "Escape");
+
+  assert.deepEqual(changes, []);
+  assert.equal(editorIn(container), null);
+});
+
+test("leaving while an edit is on its way to GitHub writes it once, and holds no draft once GitHub took it", async () => {
+  const container = await drawTab();
+  await clickWords(container, "Expires invitations after seven days.");
+  const editor = editorIn(container) ?? assert.fail("the editor opens");
+  const { promise, resolve } = Promise.withResolvers<void>();
+  changeHeld = promise;
+
+  typeAtEnd(editor, " Accepted ones stay.");
+  await press(editor, "Escape");
+  act(() => root?.unmount());
+  root = undefined;
+  resolve();
+  await settle();
+
+  assert.equal(changes.length, 1, "the edit is written once");
+  changeHeld = undefined;
+  const again = await drawTab();
+  assert.equal(editorIn(again), null, "no refused draft opens again");
+  assert.match(description(again).textContent ?? "", /Accepted ones stay\./u);
 });

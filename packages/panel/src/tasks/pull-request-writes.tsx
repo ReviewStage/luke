@@ -154,11 +154,18 @@ export type WriteNote =
       readonly reason?: PullRequestRefusal | undefined;
     };
 
-/** How a change went, for a press that waits on it, such as a question's answer: made, or not, in the words the line says why. */
-type WriteOutcome = { readonly done: true } | { readonly done: false; readonly words: string };
+/** How a change went, for a press that waits on it, such as a question's answer: made, or not, in the words the line says why, and the note it left. */
+export type WriteOutcome =
+  | { readonly done: true }
+  | { readonly done: false; readonly words: string; readonly note: WriteNote };
 
 /** What a press sent while another change is out is told: it was not sent. */
-const NOT_SENT: WriteOutcome = { done: false, words: "Another change is on its way to GitHub." };
+const NOT_SENT_WORDS = "Another change is on its way to GitHub.";
+const NOT_SENT: WriteOutcome = {
+  done: false,
+  words: NOT_SENT_WORDS,
+  note: { kind: WRITE_NOTE.WORDS, words: NOT_SENT_WORDS },
+};
 
 /** How an answer went, in the words its line says where GitHub did not make the change. */
 function outcomeOf(note: WriteNote | undefined): WriteOutcome {
@@ -166,6 +173,7 @@ function outcomeOf(note: WriteNote | undefined): WriteOutcome {
   return {
     done: false,
     words: note.kind === WRITE_NOTE.SIGN_IN ? WRITE_WORDS.SIGN_IN : note.words,
+    note,
   };
 }
 

@@ -468,17 +468,17 @@ export function mountPlanEditor(host: HTMLElement, props: PlanEditorProps): Plan
     },
     onUpdate: ({ editor: updated }) => {
       if (laying) return;
-      const markdown = documentMarkdown(manager, updated.state.doc, held);
-      // Note that the threads' words are counted in the text as the editor writes it, a plan's, whose lines end in LF alone.
+      // Note that the threads' words are counted in the text as it is handed over, its own line endings and all, as their anchors were counted in the text it opened on.
+      const markdown = written();
       onDraft(
-        withLineEnding(markdown, ending),
+        markdown,
         anchors === undefined ? undefined : anchorsOf(updated.state.doc, markdown, carried),
       );
     },
   });
   // Note that the threads' marks are laid on before each block's source is known by its node, so a block marked as it opens still writes its source.
   laying = true;
-  carried = anchors === undefined ? [] : anchorsLaidIn(editor, source, anchors);
+  carried = anchors === undefined ? [] : anchorsLaidIn(editor, markdown, anchors);
   laying = false;
   if (picking !== undefined) editor.registerPlugin(picking.plugin);
   if (slash !== undefined) editor.registerPlugin(slash.plugin);
@@ -526,7 +526,7 @@ export function mountPlanEditor(host: HTMLElement, props: PlanEditorProps): Plan
     removePicture: (upload) => removedPicture(editor.view, upload),
     selectionSpan: () => {
       const { from, to, empty } = editor.state.selection;
-      return empty ? undefined : editorSpan(editor, manager, held, from, to);
+      return empty ? undefined : editorSpan(editor, written(), from, to);
     },
     blockSpan: (element) => {
       const { doc } = editor.state;
@@ -539,10 +539,10 @@ export function mountPlanEditor(host: HTMLElement, props: PlanEditorProps): Plan
         if (LIST_ITEMS.has(node.type.name)) {
           const start = resolved.start(depth);
           const own = node.firstChild?.nodeSize ?? node.content.size;
-          return editorSpan(editor, manager, held, start, start + own);
+          return editorSpan(editor, written(), start, start + own);
         }
       }
-      return editorSpan(editor, manager, held, resolved.before(1), resolved.after(1));
+      return editorSpan(editor, written(), resolved.before(1), resolved.after(1));
     },
     destroy: () => editor.destroy(),
   };
@@ -551,16 +551,14 @@ export function mountPlanEditor(host: HTMLElement, props: PlanEditorProps): Plan
 /** The nodes a list's bullets are, each commented on alone. */
 const LIST_ITEMS: ReadonlySet<string> = new Set(["listItem", "taskItem"]);
 
-/** The document's stretch from `from` to `to` as a thread started on it anchors it, in the Markdown the editor would hand over now; nothing where it holds no word the text keeps. */
+/** The document's stretch from `from` to `to` as a thread started on it anchors it, in `text`, the Markdown the editor would hand over now; nothing where it holds no word the text keeps. */
 function editorSpan(
   editor: Editor,
-  manager: Parameters<typeof documentMarkdown>[0],
-  held: HeldSources,
+  text: string,
   from: number,
   to: number,
 ): EditorSpan | undefined {
   const { doc } = editor.state;
-  const text = documentMarkdown(manager, doc, held);
   const span = spanIn(doc, text, from, to);
   const quote = doc.textBetween(from, to, "\n", "\uFFFC").trim();
   return span === undefined || quote === "" ? undefined : { ...span, quote, text };
