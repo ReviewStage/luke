@@ -17,7 +17,6 @@ import {
   ConfirmDialog,
   type DialogQuestion,
   EmptyState,
-  ERROR_STATE_PLACEMENT,
   ErrorState,
   Fill,
   GAP,
@@ -51,8 +50,9 @@ import type { PlanEditDoor } from "../tasks/use-plan-editing.js";
  * page beside Settings' page list, with no top bar: the document is the
  * plan's own (`../tasks/plan-body.tsx`), at the Settings pages' width and
  * in a plan's type, read as sections until a click or Return opens the same
- * editor on the same words with the same keyboard. Its title is the page's
- * name, at a page title's place and size, which is
+ * editor on the same words with the same keyboard. The page names itself
+ * once, by the header every document draws (`PageHeader`): its title, the
+ * page's one `h1`, is the page's name, which is
  * no name of the account's to change, so it is drawn and never edited, and
  * the page's actions stand at the end of its line: the version history
  * (`plan-template-history.tsx`), which the "Edited by" line under the
@@ -295,21 +295,16 @@ function TemplateNote(): React.JSX.Element {
   );
 }
 
-/** Where the page's actions stand, at the end of its title line. */
-function TitleActionsLine({ children }: { children: React.ReactNode }): React.JSX.Element {
-  return <span className="task-title-actions">{children}</span>;
-}
-
 /** The template's document as the page draws it, in a plan's type and kept out of a recording. */
 function TemplateFrame({ children }: { children: React.ReactNode }): React.JSX.Element {
   return <Fill className="desktop-document template-document ph-no-capture">{children}</Fill>;
 }
 
 /**
- * The page's actions at the right end of its title line, as every Settings
- * page carries its own: the version history, and Reset to default while the
- * account holds a template of its own. They are `@luke/ui`'s quiet
- * `IconButton` and outline `Button`.
+ * The page's actions at the end of its header's title line
+ * (`PageHeader`'s actions), as every Settings page carries its own: the
+ * version history, and Reset to default while the account holds a template of
+ * its own. They are `@luke/ui`'s quiet `IconButton` and outline `Button`.
  */
 function TitleActions({
   custom,
@@ -324,7 +319,7 @@ function TitleActions({
   onReset: () => void;
 }): React.JSX.Element {
   return (
-    <TitleActionsLine>
+    <>
       <Tooltip label={HISTORY_LABEL}>
         <IconButton icon={<HistoryIcon />} label={HISTORY_LABEL} onClick={onShowHistory} />
       </Tooltip>
@@ -339,7 +334,7 @@ function TitleActions({
           Reset to default
         </Button>
       ) : null}
-    </TitleActionsLine>
+    </>
   );
 }
 
@@ -383,49 +378,62 @@ function TemplateDocument({
 }
 
 /**
- * The template while it is read, drawn in the document's own frame: the
- * page's head as the document draws it, its name and note whole, since
- * neither waits on the read, and a block for its history's press; then
- * headings over their lines in the plan's own type, so the template lands
- * where the blocks stood.
+ * What stands under the page's head while the template is not drawn, in the
+ * document's own frame: the page's head as the document draws it, its name and
+ * note whole, since neither waits on the read, and `children` under it. The
+ * head names the page once in every state, so a page with no template to show
+ * still has its heading.
  */
-function TemplateSkeleton(): React.JSX.Element {
+function TemplateHeadFrame({
+  actions,
+  children,
+}: {
+  actions: React.ReactNode;
+  children: React.ReactNode;
+}): React.JSX.Element {
   return (
     <TemplateFrame>
       <DocumentScroll>
         <PlanBodyColumn>
-          <PlanPageHead
-            name={TEMPLATE_TITLE}
-            actions={
-              <TitleActionsLine>
-                <Skeleton shape={SKELETON_SHAPE.CONTROL} width="var(--luke-control-height)" />
-              </TitleActionsLine>
-            }
-            note={<TemplateNote />}
-          />
-          <SkeletonRegion label={PAGE_LINE.READING}>
-            <Stack gap={GAP.SECTION}>
-              {TEMPLATE_SKELETON.map((section) => (
-                <Stack key={section.heading} gap={GAP.TIGHT}>
-                  <Text variant={TEXT_VARIANT.SECTION} as={TEXT_ELEMENT.DIV}>
-                    <Skeleton width={section.heading} />
-                  </Text>
-                  <div>
-                    {section.lines.map((width, at) => (
-                      <Skeleton key={at} width={width} />
-                    ))}
-                  </div>
-                </Stack>
-              ))}
-            </Stack>
-          </SkeletonRegion>
+          <PlanPageHead name={TEMPLATE_TITLE} actions={actions} note={<TemplateNote />} />
+          {children}
         </PlanBodyColumn>
       </DocumentScroll>
     </TemplateFrame>
   );
 }
 
-/** What stands in the document's place: no account, the read under way, or the read failed with its Retry. */
+/**
+ * The template while it is read: the head, and a block for its history's
+ * press; then headings over their lines in the plan's own type, so the
+ * template lands where the blocks stood.
+ */
+function TemplateSkeleton(): React.JSX.Element {
+  return (
+    <TemplateHeadFrame
+      actions={<Skeleton shape={SKELETON_SHAPE.CONTROL} width="var(--luke-control-height)" />}
+    >
+      <SkeletonRegion label={PAGE_LINE.READING}>
+        <Stack gap={GAP.SECTION}>
+          {TEMPLATE_SKELETON.map((section) => (
+            <Stack key={section.heading} gap={GAP.TIGHT}>
+              <Text variant={TEXT_VARIANT.SECTION} as={TEXT_ELEMENT.DIV}>
+                <Skeleton width={section.heading} />
+              </Text>
+              <div>
+                {section.lines.map((width, at) => (
+                  <Skeleton key={at} width={width} />
+                ))}
+              </div>
+            </Stack>
+          ))}
+        </Stack>
+      </SkeletonRegion>
+    </TemplateHeadFrame>
+  );
+}
+
+/** What stands in the document's place: no account, the read under way, or the read failed with its Retry, each under the page's head. */
 function TemplateState({
   signedIn,
   template,
@@ -435,18 +443,16 @@ function TemplateState({
 }): React.JSX.Element {
   if (!signedIn) {
     return (
-      <Fill className="desktop-empty-region">
+      <TemplateHeadFrame actions={null}>
         <EmptyState>{PAGE_LINE.SIGNED_OUT}</EmptyState>
-      </Fill>
+      </TemplateHeadFrame>
     );
   }
   if (template.read === TEMPLATE_READ.FAILED) {
     return (
-      <Fill className="desktop-empty-region">
-        <ErrorState onRetry={template.retry} placement={ERROR_STATE_PLACEMENT.CENTRED}>
-          {PAGE_LINE.READ_FAILED}
-        </ErrorState>
-      </Fill>
+      <TemplateHeadFrame actions={null}>
+        <ErrorState onRetry={template.retry}>{PAGE_LINE.READ_FAILED}</ErrorState>
+      </TemplateHeadFrame>
     );
   }
   // While the read is out the page's head stands where the document's will, the template's blocks under it.
