@@ -33,7 +33,7 @@ export interface SettingsDoors {
   onViewChange: (view: SettingsView) => void;
   onSignOut: () => Promise<void>;
   onDeleteAccount: () => Promise<ActionResult>;
-  onRequestMicrophone: () => void;
+  onRequestMicrophone: () => void | Promise<void>;
   workspace: WorkspaceSettingsControl;
 }
 

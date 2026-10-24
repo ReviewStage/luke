@@ -158,7 +158,6 @@ function mount(tasks: TasksControl) {
           createElement(DesktopTasks, {
             summary: UNPINNED_SUMMARY,
             looks: NO_LOOKS,
-            notice: undefined,
             tasks: next,
           }),
         ),
@@ -210,7 +209,7 @@ test("opening a task on its agent passes through one placeholder, from the task'
   await settle();
   const seen = [columnLog(page.container)];
   const tabBlock = () =>
-    page.container.querySelector(".desktop-toolbar-heading .luke-skeleton")?.getAttribute("style");
+    page.container.querySelector(".luke-toolbar-heading .luke-skeleton")?.getAttribute("style");
   const tabWhileRead = tabBlock();
 
   page.draw(opened({ read: true, listed: false, follower: held.follower }));

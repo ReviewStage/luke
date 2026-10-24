@@ -1,4 +1,6 @@
 import {
+  ANNOUNCE,
+  Announcer,
   ArrowLeftIcon,
   BUTTON_VARIANT,
   COMMAND_LINK_ELEMENT,
@@ -17,6 +19,7 @@ import {
   type StripMark,
   TEXT_TONE,
   Text,
+  useAnnounce,
   useMenu,
 } from "@luke/ui";
 import { useRef, useState } from "react";
@@ -78,7 +81,8 @@ function HeardSplit({ onDone }: { onDone: (what: string) => void }): React.JSX.E
     <SplitButton
       variant={BUTTON_VARIANT.OUTLINE}
       icon={<PlayIcon />}
-      busy="Starting"
+      busy
+      busyLabel="Starting"
       onClick={() => onDone("Started")}
       onMainPress={() => onDone("Heard a press of Start")}
       menu={{ label: "Choose a model to start with", ...menu.trigger() }}
@@ -108,13 +112,11 @@ const BARS: readonly StripMark[] = [
 
 function PressShortcuts(): React.JSX.Element {
   const [done, setDone] = useState("Nothing yet");
-  const said = (
-    <Text tone={TEXT_TONE.MUTED} aria-live="polite">
-      {done}
-    </Text>
-  );
+  const said = <Text tone={TEXT_TONE.MUTED}>{done}</Text>;
+  useAnnounce(ANNOUNCE.POLITE, done);
   return (
     <>
+      <Announcer />
       <CatalogSection id="press-hold" title="Held, or right-clicked: Back lists its steps">
         <Inline gap={GAP.CONTROL}>
           <HeldBack onDone={setDone} />

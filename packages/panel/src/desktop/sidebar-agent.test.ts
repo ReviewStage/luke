@@ -48,6 +48,10 @@ const RUN: TasklessAgent = {
   activityAt: 2,
 };
 
+/** Who reads the sidebar, and a teammate who started an agent of theirs. */
+const ME = "user-me";
+const ADA = { userId: "user-ada", name: "Ada Lovelace" };
+
 /** Where the agent stands as its own page reads it, which may have moved since the list was read. */
 let standing: TasklessAgent = RUN;
 /** Every archive or Unarchive asked, in order. */
@@ -99,6 +103,7 @@ function mount(
   unread = false,
 ): HTMLElement {
   const agents = codingAgentsControl({
+    me: ME,
     pullRequests,
     onArchive: (agentId, archived) => {
       archives.push({ agentId, archived });
@@ -166,7 +171,7 @@ function item(items: readonly HTMLButtonElement[], label: string): HTMLButtonEle
 
 test("an agent at rest is archived from its row's right-click at once, once its own page reads it at rest too", async () => {
   const row = mount(RUN);
-  const archive = item(rightClick(row), "Archive agent");
+  const archive = item(rightClick(row), "Archive");
   await act(async () => archive.click());
   await settle();
 
@@ -174,10 +179,21 @@ test("an agent at rest is archived from its row's right-click at once, once its 
   assert.equal(document.querySelector('[role="alertdialog"]'), null, "nothing was asked");
 });
 
-test("an agent the list read at rest but whose page reads it working is asked about first, and archived only once asked", async () => {
+test("the reader's own working agent is archived at once from its row, asking nothing, since its toast's Undo brings it back", async () => {
   standing = { ...RUN, status: CODING_AGENT_STATUS.RUNNING };
-  const row = mount(RUN);
-  const archive = item(rightClick(row), "Archive agent");
+  const row = mount({ ...RUN, status: CODING_AGENT_STATUS.RUNNING });
+  const archive = item(rightClick(row), "Archive");
+  await act(async () => archive.click());
+  await settle();
+
+  assert.equal(document.querySelector('[role="alertdialog"]'), null, "nothing was asked");
+  assert.deepEqual(archives, [{ agentId: AGENT_ID, archived: true }]);
+});
+
+test("a teammate's agent the list read at rest but whose page reads it working is asked about first, and archived only once asked", async () => {
+  standing = { ...RUN, startedBy: ADA, status: CODING_AGENT_STATUS.RUNNING };
+  const row = mount({ ...RUN, startedBy: ADA });
+  const archive = item(rightClick(row), "Archive");
   await act(async () => archive.click());
   await settle();
 
@@ -192,11 +208,30 @@ test("an agent the list read at rest but whose page reads it working is asked ab
   assert.deepEqual(archives, [{ agentId: AGENT_ID, archived: true }]);
 });
 
+test("stopping a teammate's working agent to archive it draws its act in the accent, since Unarchive brings it back", async () => {
+  standing = { ...RUN, startedBy: ADA, status: CODING_AGENT_STATUS.RUNNING };
+  const row = mount({ ...RUN, startedBy: ADA });
+  const archive = item(rightClick(row), "Archive");
+  await act(async () => archive.click());
+  await settle();
+
+  assert.equal(dialogAnswer("Stop and archive").getAttribute("data-variant"), "primary");
+});
+
+test("Permanently delete draws its act in the danger colour, since an agent is not brought back", async () => {
+  const row = mount(RUN);
+  const remove = item(rightClick(row), "Permanently delete");
+  act(() => remove.click());
+  await settle();
+
+  assert.equal(dialogAnswer("Permanently delete").getAttribute("data-variant"), "danger");
+});
+
 test("an archived agent's row offers Unarchive in Archive's place and no pin, and Unarchive brings it back", async () => {
   const row = mount({ ...RUN, archivedAt: 3 });
   const items = rightClick(row);
   const labels = items.map((each) => each.textContent);
-  assert.ok(!labels.includes("Archive agent"));
+  assert.ok(!labels.includes("Archive"));
   assert.ok(!labels.includes("Pin"));
   await act(async () => item(items, "Unarchive").click());
   await settle();
@@ -498,4 +533,25 @@ test("every action an agent's tab and page offer stands in its row's right-click
       "place each on the row (sidebar-agent.tsx) or name it in NOT_ON_A_ROW",
     );
   }
+});
+
+test("an agent row's ⋯ opens the menu its right-click does, the ⋯ a Tab stop after its press", () => {
+  const row = mount(RUN);
+  const more = row.querySelector<HTMLButtonElement>('button[aria-label="Agent actions"]');
+  assert.ok(more, "the row draws a ⋯");
+  assert.equal(more.tabIndex, 0);
+  const labels = () =>
+    [...document.querySelectorAll('[role="menuitem"]')].map((each) => each.textContent);
+  act(() => more.click());
+  const fromMore = labels();
+  assert.ok(fromMore.includes("Archive"));
+  act(() => {
+    document.activeElement?.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "Escape", bubbles: true }),
+    );
+  });
+  assert.deepEqual(
+    rightClick(row).map((each) => each.textContent),
+    fromMore,
+  );
 });

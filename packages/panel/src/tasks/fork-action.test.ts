@@ -115,7 +115,7 @@ test("an agent's own settled message offers Fork to new agent after Copy, and it
   const labels = [...view.container.querySelectorAll("button[aria-label]")].map((each) =>
     each.getAttribute("aria-label"),
   );
-  assert.deepEqual(labels.slice(-2), ["Copy", FORK_LABEL], "it stands after Copy");
+  assert.deepEqual(labels.slice(-2), ["Copy message", FORK_LABEL], "it stands after Copy");
   act(() => view.fork?.click());
   assert.deepEqual(view.forks, [
     { agentId: SOURCE, messageId: TURN, opening: "I moved the invite email to the queue…" },
@@ -138,7 +138,7 @@ test("a settled turn of no words, its calls alone or failed before it said anyth
   };
   const view = drawn({ message: callsOnly });
   assert.ok(view.fork, "the action is drawn");
-  assert.equal(view.container.querySelector('button[aria-label="Copy"]'), null, "no Copy");
+  assert.equal(view.container.querySelector('button[aria-label="Copy message"]'), null, "no Copy");
   act(() => view.fork?.click());
   assert.deepEqual(view.forks, [{ agentId: SOURCE, messageId: TURN, opening: "" }]);
 });
@@ -167,7 +167,7 @@ test("no fork is offered on the developer's message, a task archived, a place th
     assert.equal(view.fork, null, `${name} offers no fork`);
   }
   assert.ok(
-    cases["the developer's message"].container.querySelector('button[aria-label="Copy"]'),
+    cases["the developer's message"].container.querySelector('button[aria-label="Copy message"]'),
     "the developer's message keeps its Copy",
   );
 });

@@ -4,8 +4,14 @@ import assert from "node:assert/strict";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { act, createElement, useRef, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeAll, test } from "vitest";
-import { ConfirmDialog, useConfirmDialog } from "./confirm-dialog.js";
+import { afterEach, beforeAll, test, vi } from "vitest";
+import { holdExits } from "../../testing/held-exits.js";
+import {
+  CONFIRM_LOSS,
+  ConfirmDialog,
+  type DialogQuestion,
+  useConfirmDialog,
+} from "./confirm-dialog.js";
 
 /**
  * confirm-dialog.test.ts -- a question opened from a button lands on
@@ -15,8 +21,11 @@ import { ConfirmDialog, useConfirmDialog } from "./confirm-dialog.js";
  * act can be tried again; and the question goes the moment its subject or
  * its surface does, a refusal with it, while an answer already given
  * finishes unseen. An answer that lands shows its check in the act's place
- * until the check has been seen; a refusal shakes the card; and a gated
+ * until the check has been seen, and the card fades out still wearing it,
+ * drawn until its fade has run; a refusal shakes the card; and a gated
  * question offers its act only once the subject's name is typed exactly.
+ * Only an act past undoing is drawn red; one that can be undone but reaches
+ * someone else asks in the accent.
  */
 
 /** The answers the owner's act is waiting on, settled by the test in the order they were asked. */
@@ -65,12 +74,14 @@ function Owner({
     createElement("button", { type: "button", onClick: () => setSubject((v) => !v) }, "Key"),
     createElement("button", { type: "button", onClick: () => setSurfaceOpen((v) => !v) }, "Page"),
     createElement(ConfirmDialog, {
+      open: true,
       confirm,
       question: {
         title: "Delete the OpenAI key?",
         body: "Luke stops using it at once.",
         verb: "Delete",
         running: "Deleting",
+        loss: CONFIRM_LOSS.IRREVERSIBLE,
       },
       field: withField ? field : undefined,
       gate,
@@ -115,6 +126,11 @@ function composingEnter(init: KeyboardEventInit): void {
 /** The question's card, while it stands. */
 function question(): HTMLElement | null {
   return document.querySelector<HTMLElement>('[role="alertdialog"]');
+}
+
+/** What the card's error line says, which is nothing while the act was not refused. */
+function refusal(): string | undefined {
+  return question()?.querySelector('[data-slot="field-error"]')?.textContent ?? undefined;
 }
 
 /**
@@ -174,10 +190,10 @@ test("a refusal keeps the card up saying why, and the act can be tried again", a
   const { settle } = asked();
   press("Delete");
   await settle(REFUSED);
-  assert.equal(document.querySelector('[role="alert"]')?.textContent, "The key is in use.");
+  assert.equal(refusal(), "The key is in use.");
   assert.ok(holds(button("Cancel")), "focus comes back to Cancel");
   press("Delete");
-  assert.equal(document.querySelector('[role="alert"]'), null, "a fresh try clears the refusal");
+  assert.equal(refusal(), "", "a fresh try clears the refusal");
   await settle(ACCEPTED);
   assert.equal(question(), null);
 });
@@ -202,7 +218,7 @@ test("a refusal goes with its surface and is not drawn again when the surface co
   const { settle } = asked();
   press("Delete");
   await settle(REFUSED);
-  assert.ok(document.querySelector('[role="alert"]'));
+  assert.equal(refusal(), "The key is in use.");
   press("Page");
   assert.equal(question(), null);
   press("Page");
@@ -249,14 +265,43 @@ test("an answer that lands shows its check in the act's place, the card standing
   const cancelStilled = button("Cancel")?.disabled;
   key("Escape");
   const keptByEscape = question() !== null;
-  act(() => motion.dispatchEvent(new Event("finish")));
+  // Note that the engine goes before the check's motion ends, so the card's
+  // own fade, which jsdom cannot run, does not hold it.
   Reflect.deleteProperty(HTMLElement.prototype, "getAnimations");
+  act(() => motion.dispatchEvent(new Event("finish")));
 
   assert.ok(card, "the card stands while the check shows");
   assert.equal(checked, "true", "the act wears its check");
   assert.equal(cancelStilled, true);
   assert.equal(keptByEscape, true, "Escape does not cut the check short");
   assert.equal(question(), null, "the card goes once the check has been seen");
+  assert.ok(holds(opener), "focus goes back to the opener");
+});
+
+test("a card whose check has been seen fades out still wearing it, and goes once its fade has run", async () => {
+  vi.useFakeTimers({ toFake: ["requestAnimationFrame", "cancelAnimationFrame"] });
+  const exits = holdExits(
+    (element) =>
+      element.classList.contains("luke-button-done") || element.hasAttribute("data-ending-style"),
+  );
+  const { opener, settle } = asked();
+  press("Delete");
+  await settle(ACCEPTED);
+  act(() => exits.finish());
+  const leaving = question();
+  const ending = leaving?.hasAttribute("data-ending-style");
+  const checked = button("Delete")?.getAttribute("data-done");
+  act(() => vi.advanceTimersToNextFrame());
+  const standsAFrameOn = question() !== null;
+  await act(async () => exits.finish());
+  exits.restore();
+  vi.useRealTimers();
+
+  assert.ok(leaving, "the card stands as it fades");
+  assert.equal(ending, true, "the card is in its ending state");
+  assert.equal(checked, "true", "the act still wears its check");
+  assert.equal(standsAFrameOn, true, "the card waits on its fade");
+  assert.equal(question(), null, "the card goes once its fade has run");
   assert.ok(holds(opener), "focus goes back to the opener");
 });
 
@@ -314,4 +359,38 @@ test("an Enter that confirms an input method's composition does not answer a fie
 
   assert.equal(runningAfterComposing, false, "a composing Enter does not press the act");
   assert.equal(running, true, "the Enter after the composition answers");
+});
+
+/** A question asked with `loss` on its act, already open, and the look its act is drawn in. */
+function actLook(loss: DialogQuestion["loss"]): string | null {
+  function Asked() {
+    const confirm = useConfirmDialog({ subject: true, surfaceOpen: true }, () =>
+      Promise.resolve(ACCEPTED),
+    );
+    const [asked, setAsked] = useState(false);
+    if (!asked) {
+      setAsked(true);
+      confirm.ask();
+    }
+    return createElement(ConfirmDialog, {
+      open: true,
+      confirm,
+      question: { title: "Remove Ada?", verb: "Remove", running: "Removing", loss },
+    });
+  }
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  roots.push(root);
+  act(() => root.render(createElement(Asked)));
+  const look = button("Remove")?.getAttribute("data-variant") ?? null;
+  act(() => root.unmount());
+  roots.splice(roots.indexOf(root), 1);
+  return look;
+}
+
+test("only an act past undoing is drawn red; one that reaches someone else asks in the accent", () => {
+  assert.equal(actLook(CONFIRM_LOSS.IRREVERSIBLE), "danger");
+  assert.equal(actLook(CONFIRM_LOSS.AFFECTS_OTHERS), "primary");
+  assert.equal(actLook(CONFIRM_LOSS.REVERSIBLE), "primary");
 });

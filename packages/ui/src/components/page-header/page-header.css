@@ -1,0 +1,39 @@
+/* page-header.css -- a document's header: its title and the line under it,
+   and the page's acts centred on the title's first line, wrapping under it
+   when the title needs the line. The room around the header is the page's,
+   which places it at its inset and measure. */
+
+@layer components {
+  .luke-page-header {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    gap: var(--luke-control-gap);
+  }
+
+  .luke-page-header-heading {
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+    gap: var(--luke-space-4);
+    min-width: 0;
+  }
+
+  .luke-page-header-actions {
+    display: flex;
+    flex: 0 1 auto;
+    flex-wrap: wrap;
+    align-items: center;
+    min-width: 0;
+    gap: var(--luke-control-gap);
+    margin-top: calc((var(--luke-type-title-leading) - var(--luke-control-height)) / 2);
+  }
+
+  /* A quiet act ends with its words on the content's edge. Note that the
+     actions take the margin rather than the button, because a button wider
+     than its container by its own negative margin would be held to it and
+     cut short. */
+  .luke-page-header[data-end="words"] > .luke-page-header-actions {
+    margin-inline-end: calc(-1 * var(--luke-control-inset));
+  }
+}

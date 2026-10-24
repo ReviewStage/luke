@@ -2,7 +2,6 @@
 
 import assert from "node:assert/strict";
 import { PLAN_ACTOR, type Task } from "@luke/features/task-wire";
-import { CONFIRM_STAGE } from "@luke/ui/confirm-state";
 import { Effect } from "effect";
 import { act, createElement, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -202,16 +201,7 @@ test("the plan's version history, off the plan's page, reads a version's mention
         current: true,
         read: { kind: HISTORY_READ.READY, document, previous: document },
       },
-      restore: {
-        stage: CONFIRM_STAGE.RESTING,
-        rejection: undefined,
-        busy: false,
-        standing: false,
-        ask: () => undefined,
-        keep: () => undefined,
-        run: () => undefined,
-        clear: () => undefined,
-      },
+      restore: { busy: false, onRestore: () => undefined },
       task: { taskId: TASK_ID, place: PAGE.doors.place, anchors: PAGE.doors.anchors },
     }),
   );

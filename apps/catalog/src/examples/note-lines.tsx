@@ -5,7 +5,7 @@ import { CatalogSection } from "../section";
 /**
  * note-lines.tsx -- the centred line a combobox says where its rows would
  * stand, the same line as a status, and the quiet list line at the start of
- * a room.
+ * a room, and the line that stands at a sidebar's rows' inset.
  */
 
 function NoteLines(): React.JSX.Element {
@@ -29,6 +29,11 @@ function NoteLines(): React.JSX.Element {
       <CatalogSection id="note-line-inset" title="Inset by its container">
         <div className="catalog-frame">
           <NoteLine look={NOTE_LINE_LOOK.INSET}>Drag tasks here</NoteLine>
+        </div>
+      </CatalogSection>
+      <CatalogSection id="note-line-rows" title="At the rows' inset">
+        <div className="catalog-frame">
+          <NoteLine look={NOTE_LINE_LOOK.ROWS}>No tasks yet.</NoteLine>
         </div>
       </CatalogSection>
     </>

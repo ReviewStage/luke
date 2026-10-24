@@ -18,6 +18,7 @@ import type { Workspace } from "@luke/features/workspace-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import {
   ALIGN,
+  ANNOUNCE,
   Badge,
   BUTTON_VARIANT,
   Button,
@@ -60,6 +61,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useAct } from "../act.js";
 import { rendererPause } from "../renderer-runtime.js";
 import { SkillMark } from "../tasks/skill-ref.js";
+import { useAnnounceShown } from "../use-announce-shown.js";
 import {
   ADD_SKILL_SCREEN,
   addSkillScreen,
@@ -162,10 +164,14 @@ interface SkillContext {
   readonly disabled: boolean;
 }
 
-/** A line in its tone's tint, announced as it changes. */
+/** A line in its tone's tint, announced as it lands and as it changes: an alert where it needs a hand. */
 function DetectedText({ line }: { line: DetectedLine }): React.JSX.Element {
+  useAnnounceShown(
+    line.tone === STATUS_TONE.ATTENTION ? ANNOUNCE.ALERT : ANNOUNCE.POLITE,
+    line.text,
+  );
   return (
-    <span className="settings-state" data-state={LINE_STATE[line.tone]} role="status">
+    <span className="settings-state" data-state={LINE_STATE[line.tone]}>
       {line.text}
     </span>
   );
@@ -651,15 +657,21 @@ function SourceRow({
 
 /** The dialog Settings › Skills' Add skill opens, over the workspace the page shows. */
 export function AddSkillDialog({
+  open = true,
   workspace,
   onInstalled,
   onClose,
+  onExited,
   pause = rendererPause,
 }: {
+  /** Whether the card stands; falling, it fades out, then tells its owner it is gone. Standing while mounted where it is left out. */
+  open?: boolean | undefined;
   workspace: Workspace;
   /** The skills an install made, in the order asked: the ones named, then those they pull in. */
   onInstalled: (skills: readonly InstalledSkillSummary[]) => void;
   onClose: () => void;
+  /** Its fade has run and it is gone, which its owner takes it out on. */
+  onExited?: (() => void) | undefined;
   /** The wait before a preview, the renderer's own where none is handed in. */
   pause?: (ms: number) => Promise<void>;
 }): React.JSX.Element {
@@ -818,11 +830,13 @@ export function AddSkillDialog({
 
   return (
     <Dialog
+      open={open}
       title={addSkillTitle(screen, preview)}
       size={DIALOG_SIZE.WIDE}
       busy={installing}
       holding={text.trim() !== ""}
       onDismiss={onClose}
+      onExited={onExited}
       actionsStart={
         scopes.length > 1 ? (
           <ChoiceBar
@@ -905,13 +919,7 @@ export function AddSkillDialog({
           />
         ) : null}
         {folded && refusal !== undefined ? (
-          <span
-            className="settings-state"
-            data-state={LINE_STATE[STATUS_TONE.ATTENTION]}
-            role="alert"
-          >
-            {refusal}
-          </span>
+          <DetectedText line={{ text: refusal, tone: STATUS_TONE.ATTENTION }} />
         ) : null}
       </Stack>
       {screen === ADD_SKILL_SCREEN.PASTE ? null : (

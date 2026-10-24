@@ -43,7 +43,7 @@ import {
 } from "../composer-drafts.js";
 import { rendererPause } from "../renderer-runtime.js";
 import { useSteadyDoor, useSteadyDoors } from "../steady-door.js";
-import { TOAST_HOLD, UNDO_LABEL, useToast, useWithdrawToast } from "../toast.js";
+import { TOAST_HOLD, undoToast, useToast, useWithdrawToast } from "../toast.js";
 import { useChatOn } from "./chat-gate.js";
 import {
   type AgentRun,
@@ -297,7 +297,7 @@ export interface CodingAgentsControl {
     disabledServers?: readonly string[],
   ) => Promise<Failure | undefined>;
   /** Brings back the archived agent a surface draws alone, as its own page does; none from here, where every agent is a task's. */
-  onUnarchive: (() => void) | undefined;
+  onUnarchive: (() => void | Promise<void>) | undefined;
   /** Continues one agent in a new one on its whole transcript, the developer's words and files as its note, its tab opening as a Start's does; present exactly while a Start could run. */
   continueAgent: AgentContinuer | undefined;
   start: {
@@ -1191,10 +1191,8 @@ export function useCodingAgents(input: {
     if (closed === undefined) return;
     undoable.current = closed.choices.id;
     toast({
-      words: DRAFT_CLOSED,
-      tone: STATUS_TONE.COMPLETE,
+      ...undoToast(DRAFT_CLOSED, () => restoreNow.current(closed)),
       subject: closed.choices.id,
-      action: { label: UNDO_LABEL, onPress: () => restoreNow.current(closed) },
     });
   };
 
@@ -1447,14 +1445,7 @@ export function useCodingAgents(input: {
     setList((was) =>
       was.agents === undefined ? was : { ...was, agents: withAgent(was.agents, answer.agent) },
     );
-    toast({
-      words: words.done,
-      tone: STATUS_TONE.COMPLETE,
-      action: {
-        label: UNDO_LABEL,
-        onPress: () => archiveNow.current(agentId, !archived).then(sayRefusal),
-      },
-    });
+    toast(undoToast(words.done, () => archiveNow.current(agentId, !archived).then(sayRefusal)));
     readAgain();
     return { status: ACTION_RESULT_STATUS.ACCEPTED };
   };

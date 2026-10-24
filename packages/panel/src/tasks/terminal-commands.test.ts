@@ -190,7 +190,7 @@ async function mount(input: {
 
 /** The picker, while it stands: what its field asks, and its rows' names, details, whether their glyph wears the working mark, and which is chosen. */
 function picker() {
-  const dialog = document.querySelector('[role="dialog"].terminal-picker');
+  const dialog = document.querySelector('[role="dialog"]');
   if (dialog === null) return undefined;
   return {
     question: dialog.querySelector("input")?.getAttribute("placeholder"),
@@ -283,9 +283,9 @@ test("the panel's + lists each agent's terminal under Terminal, says how it stan
   assert.ok(add, "the panel's +");
   await act(async () => add.click());
   await settle();
-  const rows = [...document.querySelectorAll<HTMLElement>('.tab-add-menu [role="option"]')].filter(
-    (row) => row.closest('[role="group"]')?.textContent?.startsWith("Terminal") === true,
-  );
+  const rows = [
+    ...document.querySelectorAll<HTMLElement>('.luke-searchable-menu [role="option"]'),
+  ].filter((row) => row.closest('[role="group"]')?.textContent?.startsWith("Terminal") === true);
   assert.deepEqual(
     rows.map((row) => [
       row.querySelector(".luke-combobox-option-label")?.textContent,
@@ -321,7 +321,7 @@ function menuItem(label: string) {
 /** Opens the right-click menu of the task's column's tab named `name`. */
 function rightClickTab(name: string): void {
   const tab = [
-    ...document.querySelectorAll<HTMLElement>('.desktop-task-main .desktop-toolbar [role="tab"]'),
+    ...document.querySelectorAll<HTMLElement>('.desktop-task-main .luke-toolbar [role="tab"]'),
   ].find((each) => each.textContent?.includes(name) === true);
   assert.ok(tab, `the column has a tab named ${name}`);
   act(() => {
@@ -331,7 +331,7 @@ function rightClickTab(name: string): void {
   });
 }
 
-test("an agent's tab offers Open terminal on its right-click, which opens that agent's own terminal, adding no shell, and its composer wears no Terminal chip", async () => {
+test("an agent's tab offers Show terminal on its right-click, which opens that agent's own terminal, adding no shell, and its composer wears no Terminal chip", async () => {
   const task = await mount({
     agents: [WORKING, DONE],
     main: { agent: WORKING.id },
@@ -345,13 +345,13 @@ test("an agent's tab offers Open terminal on its right-click, which opens that a
   );
   // The chosen tab's right-click says ⌘J, which opens the same terminal from here.
   rightClickTab("Invite flow");
-  const fromChosen = menuItem("Open terminal");
+  const fromChosen = menuItem("Show terminal");
   assert.equal(fromChosen.hint, "⌘J");
   await fromChosen.press();
   assert.deepEqual(task.shown, [{ terminal: WORKING.id }]);
   // Another agent's tab opens its own terminal, which ⌘J would not from here, so it says no shortcut.
   rightClickTab("Expiry job");
-  const fromOther = menuItem("Open terminal");
+  const fromOther = menuItem("Show terminal");
   assert.equal(fromOther.hint, undefined);
   await fromOther.press();
   assert.deepEqual(task.shown.at(-1), { terminal: DONE.id });
@@ -375,7 +375,7 @@ async function mountOn(
   return mount(input);
 }
 
-test("on a platform that runs no terminals, neither ⌘J nor New terminal stands, the panel's + offers no Terminal, and an agent's tab offers no Open terminal", async () => {
+test("on a platform that runs no terminals, neither ⌘J nor New terminal stands, the panel's + offers no Terminal, and an agent's tab offers no Show terminal", async () => {
   const offered = (each: HostCapability) =>
     each !== HOST_CAPABILITY.TERMINALS && each !== HOST_CAPABILITY.MAC_TERMINAL;
   await mountOn(DESKTOP_CAPABILITIES, {
@@ -401,12 +401,12 @@ test("on a platform that runs no terminals, neither ⌘J nor New terminal stands
   assert.ok(add, "the panel's +");
   await act(async () => add.click());
   await settle();
-  const groups = [...document.querySelectorAll('.tab-add-menu [role="group"]')].map(
+  const groups = [...document.querySelectorAll('.luke-searchable-menu [role="group"]')].map(
     (group) => group.textContent ?? "",
   );
 
-  assert.ok(onDesktop.includes("Open terminal"), "the desktop offers it");
-  assert.equal(without.includes("Open terminal"), false);
+  assert.ok(onDesktop.includes("Show terminal"), "the desktop offers it");
+  assert.equal(without.includes("Show terminal"), false);
   assert.equal(
     groups.some((group) => group.startsWith("Terminal")),
     false,
@@ -438,7 +438,7 @@ test("while the plan's agents are still being read, the picker says so and offer
   await task.run(APP_COMMAND.NEW_TERMINAL);
   assert.deepEqual(picker()?.rows, []);
   assert.equal(
-    document.querySelector(".terminal-picker .luke-note-line")?.textContent,
+    document.querySelector('[role="dialog"] .luke-note-line')?.textContent,
     "Reading the task’s agents…",
   );
   assert.deepEqual(task.shown, []);
@@ -453,7 +453,7 @@ const FAILED = agent(
 test("the picker marks a failed agent's row as its tab is marked, and no other", async () => {
   const task = await mount({ agents: [WORKING, FAILED] });
   await task.run(APP_COMMAND.NEW_TERMINAL);
-  const marked = [...document.querySelectorAll('.terminal-picker [role="option"]')].map(
+  const marked = [...document.querySelectorAll('[role="dialog"] [role="option"]')].map(
     (row) => row.querySelector('[role="img"][aria-label="Failed"]') !== null,
   );
   assert.deepEqual(marked, [false, true]);
@@ -462,7 +462,7 @@ test("the picker marks a failed agent's row as its tab is marked, and no other",
 test("a row at rest hangs its agent's card beside it, naming the agent", async () => {
   const task = await mount({ agents: [WORKING, DONE] });
   await task.run(APP_COMMAND.NEW_TERMINAL);
-  const row = [...document.querySelectorAll('.terminal-picker [role="option"]')].at(-1);
+  const row = [...document.querySelectorAll('[role="dialog"] [role="option"]')].at(-1);
   assert.ok(row, "a row");
   restOn(row);
   await settle();

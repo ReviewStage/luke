@@ -2,29 +2,14 @@ import { useAtomValue } from "@effect/atom-react";
 import { CODING_AGENT_STATUS, type CodingAgentSummary } from "@luke/features/coding-agent-wire";
 import { INBOX_BOUNDS, type InboxItem, type InboxMessage } from "@luke/features/inbox-wire";
 import { pasteCutWords } from "@luke/features/words";
-import {
-  BUTTON_TYPE,
-  BUTTON_VARIANT,
-  Button,
-  ErrorState,
-  LengthCounter,
-  STATUS_TONE,
-  SUBMIT_STATE,
-  Tooltip,
-} from "@luke/ui";
+import type { ShortcutChord } from "@luke/settings/shortcuts";
+import { ComposerFoot, type ComposerNote, STATUS_TONE, TEXT_AREA_SUBMIT } from "@luke/ui";
 import { SERVER_HANDED } from "@luke/ui/agent-servers-model";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import { type RefObject, useRef, useState } from "react";
-import {
-  PromptInput,
-  PromptInputFooter,
-  PromptInputSubmit,
-  PromptInputTools,
-  submitPromptInput,
-} from "../ai-elements/prompt-input.js";
+import { PromptInput, submitPromptInput } from "../ai-elements/prompt-input.js";
 import { useSideBundles } from "../bundle-loader.js";
-import { imageFiles } from "../feedback-images.js";
 import { type IntegrationStatuses, useIntegrationStatuses } from "../integration-statuses.js";
 import {
   COMPOSER_INPUT,
@@ -33,19 +18,21 @@ import {
   type PlanEditorModule,
 } from "../plan-editor/contract.js";
 import { TOAST_HOLD, useToast } from "../toast.js";
-import { useFileDrop } from "../use-file-drop.js";
+import { useAttachedFiles } from "../use-attached-files.js";
 import { AttachFilesButton } from "./attach-files-button.js";
 import { AttachedFileChips, attachmentChips } from "./attached-file-chips.js";
-import { readFiles, withFiles } from "./attached-files.js";
 import { ComposerField } from "./composer-field.js";
 import { type ComposerPickers, useComposerPickers } from "./composer-pickers.js";
 import { DictateButton, DictationStrip } from "./dictation-strip.js";
+import { askSendChord } from "./inbox-ask-controls.js";
 import {
   acknowledgedOnOpen,
   awaitsNod,
   type InboxDraft,
   inboxNoteReading,
   inboxThreadSend,
+  knownAsk,
+  openAskOf,
 } from "./inbox-model.js";
 import { ComposerQuoteView, ReplyToSelection } from "./reply-to-selection.js";
 import type { SkillSource } from "./skill-picker.js";
@@ -92,11 +79,11 @@ import type { TaskInboxControl } from "./use-task-inbox.js";
  * because K and J step the list and the number keys pick while the caret
  * is elsewhere.
  *
- * Files go with a reply as they go with a message (`attached-files.ts`):
+ * Files go with a reply as they go with a message (`use-attached-files.ts`):
  * the + at the foot's left opens the system's file picker, an image pasted
  * into the box is taken, and files dropped on the card are, each drawn as a
- * chip over the foot with its way off; a file that cannot come says why
- * under the card. Files stand for the developer's own words where they
+ * chip over the foot's bar with its way off; a file that cannot come says
+ * why under it. Files stand for the developer's own words where they
  * wrote none, and while they are read the reply waits for them.
  *
  * Words selected in the agent's part of the thread and answered with Reply
@@ -109,7 +96,7 @@ import type { TaskInboxControl } from "./use-task-inbox.js";
  * a press lets the selection go.
  *
  * Why a reply did not go, a file did not come, or a dictation left
- * nothing, is said under the card. A send refused because the agent is
+ * nothing, is said under the foot's bar. A send refused because the agent is
  * archived says so, with Unarchive after it, which brings the agent back and
  * lets the note go, so the words kept in the box are sent again by a press.
  * Once the item is settled, answered or taken back, the same box writes a
@@ -133,6 +120,9 @@ export const EDITOR_LOAD_FAILED = "The answer box could not be loaded.";
 
 /** What the box's round Send is called, which is its tooltip too. */
 const SEND = "Send";
+
+/** What Send is named while its send is out. */
+const SENDING = "Sending";
 
 /** What Send reads on an empty notice that waits on the reader's nod, which settles it without messaging the agent. */
 const GOT_IT = "Got it";
@@ -249,8 +239,12 @@ interface AnswerFormProps {
   readonly quote?: ((quote: ComposerQuote) => React.ReactNode) | undefined;
   /** What leads the foot, the + of files; nothing where the box takes none. */
   readonly tools?: React.ReactNode;
+  /** What the foot says under its bar: why a send did not go, a file did not come, or a dictation left nothing; nothing where it has nothing to say. */
+  readonly says?: ComposerNote | undefined;
   /** Whether Send reads Got it, a nod that messages nobody. */
   readonly nod: boolean;
+  /** The key Send's hint names, where Enter does not send; none where it does. */
+  readonly sendChord?: ShortcutChord | undefined;
   readonly sending: boolean;
   /** Whether a send waits, while one is out or files are read. */
   readonly held: boolean;
@@ -262,10 +256,11 @@ interface AnswerFormProps {
 }
 
 /**
- * A box's card: the question's controls as its body, the files it holds,
- * the note line on its own over the foot, and the foot's + at its left and
- * the microphone and Send at its right, a dictation's strip in their place;
- * Send reading Got it where the box nods.
+ * A box's card: the question's controls as its body, the note line on its
+ * own over the foot, and the foot (`ComposerFoot`), which holds the files the
+ * box has, the + at its left, the counter, the microphone and Send at its
+ * right, a dictation's strip in their place, and what the box says under
+ * them; Send reading Got it where the box nods.
  */
 export function AnswerForm({
   field,
@@ -282,7 +277,9 @@ export function AnswerForm({
   onPasteCut,
   quote,
   tools,
+  says,
   nod,
+  sendChord,
   sending,
   held,
   sendable,
@@ -300,7 +297,6 @@ export function AnswerForm({
       onSubmit={onSubmit}
     >
       {controls}
-      {chips}
       {/* The note line stands on its own over the foot, as the agent's box's field does. */}
       <ComposerField
         module={module}
@@ -315,43 +311,29 @@ export function AnswerForm({
         takesFocus={false}
         {...pickers.field}
         onEnter={onEnter}
+        // Note that the note's Enter is a new line wherever the form's own is, since a partly filled form is already sendable.
+        submitKey={sendChord === undefined ? undefined : TEXT_AREA_SUBMIT.MOD_ENTER}
         onPasteFiles={onPasteFiles ?? takesNoFiles}
         onPasteCut={onPasteCut}
         quote={quote}
       />
-      {/* The foot is the agent box's: the + at its left, the microphone and Send at its right, a dictation's strip in their place. */}
-      <PromptInputFooter className="inbox-answer-foot">
-        {dictating ? (
-          <DictationStrip dictation={dictation} />
-        ) : (
-          <>
-            <PromptInputTools>{tools}</PromptInputTools>
-            <div className="inbox-answer-actions">
-              <LengthCounter length={note.length} limit={maxLength} />
-              <DictateButton dictation={dictation} disabled={module === undefined} />
-              {nod ? (
-                <Button
-                  type={BUTTON_TYPE.SUBMIT}
-                  variant={BUTTON_VARIANT.INK}
-                  busy={sending}
-                  busyLabel="Sending"
-                  disabled={held}
-                >
-                  {GOT_IT}
-                </Button>
-              ) : (
-                <Tooltip label={SEND}>
-                  <PromptInputSubmit
-                    label={SEND}
-                    status={sending ? SUBMIT_STATE.SUBMITTED : SUBMIT_STATE.READY}
-                    disabled={held || !sendable}
-                  />
-                </Tooltip>
-              )}
-            </div>
-          </>
-        )}
-      </PromptInputFooter>
+      <ComposerFoot
+        files={chips}
+        tools={tools}
+        counter={{ length: note.length, limit: maxLength }}
+        actions={<DictateButton dictation={dictation} disabled={module === undefined} />}
+        strip={dictating ? <DictationStrip dictation={dictation} /> : undefined}
+        send={{
+          label: nod ? GOT_IT : SEND,
+          inWords: nod,
+          chord: sendChord,
+          empty: !sendable,
+          held,
+          busy: sending,
+          busyLabel: SENDING,
+        }}
+        note={says}
+      />
     </PromptInput>
   );
 }
@@ -401,21 +383,25 @@ function AnswerCard({
   const [refusal, setRefusal] = useState<string | undefined>(undefined);
   // Whether the last paste was cut to the room the box has left, until the words change again.
   const [cut, setCut] = useState(false);
-  // How many hand-offs of files are still being read, during which the answer waits.
-  const [reading, setReading] = useState(0);
   const draft = control.draftOf(item);
   const sending = control.sending.has(item.id);
-  // Note that the item is read through a ref, because reading files takes a
-  // while and the item they land on is whichever revision is current by then.
-  const latest = useRef(item);
-  latest.current = item;
+  // Note that the answer waits while files are read, and files read for an item its agent revised meanwhile land nowhere, as its words were let go.
+  const files = useAttachedFiles({
+    holder: {
+      attachments: draft.attachments,
+      update: (next) => control.onAttachments(item, next),
+    },
+    place: { key: item.revision, moved: ITEM_CHANGED },
+    onRefusal: setRefusal,
+  });
   // Note that a notice opening acknowledges offers no Got it, since opening it was the nod (`useNodOnOpen`), save while its holder's held read has failed, when opening acknowledges nothing.
   const nodded = acknowledgedOnOpen(item, readerId) && !control.failed;
   const nod = awaitsNod(item) && emptyBox(draft) && !nodded;
-  const held = sending || reading > 0;
+  const held = sending || files.reading;
   // Note that Send lights only where the box holds a reply the service takes: an answer to the open ask attached, or words or files, a notice's nod being Got it's.
   const sendable = nod || inboxThreadSend(thread, draft) !== undefined;
   const asks = controls !== undefined;
+  const asking = openAskOf(thread);
   const placeholder = answerPlaceholder(asks, undefined);
   const field = useAnswerField({
     draft: draft.note,
@@ -453,49 +439,18 @@ function AnswerCard({
     setCut(false);
     control.onAcknowledge(item);
   };
-  const attach = (files: readonly File[]) => {
-    if (files.length === 0) return;
-    const { revision } = item;
-    setReading((count) => count + 1);
-    readFiles(files)
-      .then((read) => {
-        // Files read for an item its agent changed meanwhile land nowhere, as its words were let go.
-        const now = latest.current;
-        if (now.revision !== revision) {
-          setRefusal(ITEM_CHANGED);
-          return;
-        }
-        // Taken after whatever the card holds as the write lands, so neither a
-        // read that landed first nor a chip taken off meanwhile is undone.
-        let refusal = read.refusal;
-        control.onAttachments(now, (was) => {
-          const taken = withFiles(was, read);
-          refusal = taken.refusal;
-          return taken.attachments;
-        });
-        setRefusal(refusal);
-      })
-      .finally(() => setReading((count) => count - 1));
-  };
-  const fileDrop = useFileDrop((files) => attach(Array.from(files)));
   // Note that Reply stands only while the editor stands and takes a quote, and no send is out, since a press lets the selection go.
   const quotes = !sending && !dictating && module !== undefined;
   return (
-    <div className="agent-composer" {...fileDrop.target}>
+    <div className="agent-composer" {...files.drop.target}>
       <AnswerForm
-        dropping={fileDrop.dropping}
+        dropping={files.drop.dropping}
         field={field}
         asks={asks}
         messages
         controls={controls}
         chips={
-          <AttachedFileChips
-            files={attachmentChips(draft.attachments)}
-            onRemove={(index) => {
-              setRefusal(undefined);
-              control.onAttachments(item, (was) => was.filter((_, at) => at !== index));
-            }}
-          />
+          <AttachedFileChips files={attachmentChips(files.attachments)} onRemove={files.remove} />
         }
         note={draft.note}
         onNote={(text) => {
@@ -512,34 +467,31 @@ function AnswerCard({
         onEnter={() => {
           if (room.current !== null) submitPromptInput(room.current);
         }}
-        onPasteFiles={(files) => {
-          // Only images are taken from the clipboard; text pastes as it always does.
-          const pasted = imageFiles(files);
-          if (pasted.length === 0) return false;
-          attach(pasted);
-          return true;
-        }}
+        onPasteFiles={files.paste}
         quote={(quote) => <ComposerQuoteView quote={quote} held={false} />}
-        tools={<AttachFilesButton onFiles={attach} />}
+        tools={<AttachFilesButton onFiles={files.attach} />}
+        says={
+          note === undefined
+            ? undefined
+            : noted?.unarchive === true
+              ? { words: note, remedy: { label: UNARCHIVE, onClick: unarchive } }
+              : { words: note }
+        }
         nod={nod}
+        sendChord={
+          asks && asking !== undefined && knownAsk(asking.ask)
+            ? askSendChord(asking.ask)
+            : undefined
+        }
         sending={sending}
         held={held}
         sendable={sendable}
         onSubmit={() => {
-          if (reading > 0) return;
+          if (files.reading) return;
           if (nod) acknowledge();
           else message();
         }}
       />
-      {note === undefined ? null : noted?.unarchive === true ? (
-        <div className="agent-composer-note">
-          <ErrorState remedy={{ label: UNARCHIVE, onClick: unarchive }}>{note}</ErrorState>
-        </div>
-      ) : (
-        <p className="error-message agent-composer-note" role="alert">
-          {note}
-        </p>
-      )}
       {quotes ? (
         <ReplyToSelection
           scope={replyScope}

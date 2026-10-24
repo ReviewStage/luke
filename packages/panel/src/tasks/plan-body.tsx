@@ -17,9 +17,10 @@ import { agoText, momentText, sinceText } from "@luke/features/time-format";
 import {
   Button,
   EDITABLE_BLOCK_CLASS,
-  EllipsisIcon,
-  IconButton,
+  MoreButton,
+  moreLabel,
   motionHeld,
+  PageHeader,
   SavedTick,
   STATUS_TONE,
   TEXT_BUTTON_LINES,
@@ -172,10 +173,10 @@ interface LinkedTask {
 }
 
 /** What a section's ⋯ is called. */
-const SECTION_MENU_LABEL = "Section actions";
+const SECTION_THING = "Section";
 
 /** What the title's ⋯ is called. */
-const TITLE_MENU_LABEL = "Title actions";
+const TITLE_THING = "Title";
 
 /** The room left above a section scrolled to, so its heading does not stand flush against the document's top edge. */
 const REVEAL_MARGIN = 16;
@@ -492,9 +493,6 @@ function pictureNoteOf(marks: SectionMarks, heading: string): React.JSX.Element 
 /** The class every unit of the text wears, one per section in the order the sections stand. */
 const UNIT_CLASS = "plan-unit";
 
-/** The class of a unit lit as it settles. */
-const FRESH_CLASS = "plan-fresh";
-
 /** The class of the unit the caret is typing in, whose heading wears the writing mark. */
 const WRITING_CLASS = "plan-writing";
 
@@ -578,9 +576,9 @@ function unitClass(view: UnitView, changed: boolean): string {
   const lit = changed ? ` ${CHANGED_CLASS}` : "";
   if (view.writing) return `${UNIT_CLASS} ${WRITING_CLASS}${lit}`;
   if (view.resting) {
-    return `${UNIT_CLASS} ${RESTING_CLASS}${view.fresh ? ` ${FRESH_CLASS}` : ""}${lit}`;
+    return `${UNIT_CLASS} ${RESTING_CLASS}${lit}`;
   }
-  return view.fresh ? `${UNIT_CLASS} ${FRESH_CLASS}${lit}` : `${UNIT_CLASS}${lit}`;
+  return `${UNIT_CLASS}${lit}`;
 }
 
 /**
@@ -747,11 +745,12 @@ function attributed(
  * menu over `items`, shown while the pointer or the keyboard is on its unit.
  */
 function UnitMenu({
-  label,
+  thing,
   items,
   tabbable,
 }: {
-  label: string;
+  /** What the unit is, which names its ⋯ and its menu. */
+  thing: string;
   items: readonly MenuAction[];
   /** Whether it is a Tab stop: only beside the document's one, its unit's block. */
   tabbable: boolean;
@@ -762,22 +761,24 @@ function UnitMenu({
     <>
       {/* The box shows the ⋯ while the pointer or the keyboard is on its unit. */}
       <span className="plan-unit-more">
-        <Tooltip label={label}>
-          <IconButton
-            icon={<EllipsisIcon />}
-            label={label}
-            tabbable={tabbable}
-            {...trigger}
-            onClick={(event) => {
-              // Note that the press stops here, because a click into a section opens its editor.
-              event.stopPropagation();
-              trigger.onClick(event);
-            }}
-          />
-        </Tooltip>
+        <MoreButton
+          thing={thing}
+          tabbable={tabbable}
+          {...trigger}
+          onClick={(event) => {
+            // Note that the press stops here, because a click into a section opens its editor.
+            event.stopPropagation();
+            trigger.onClick(event);
+          }}
+        />
       </span>
       {menu.drawn === undefined ? null : (
-        <ActionMenu label={label} menu={menu.drawn} groups={[items]} onClose={menu.close} />
+        <ActionMenu
+          label={moreLabel(thing)}
+          menu={menu.drawn}
+          groups={[items]}
+          onClose={menu.close}
+        />
       )}
     </>
   );
@@ -805,7 +806,7 @@ function SectionMenu({
     icon: <LinkIcon aria-hidden="true" />,
     onSelect: copyLink,
   };
-  return <UnitMenu label={SECTION_MENU_LABEL} items={[item]} tabbable={tabbable} />;
+  return <UnitMenu thing={SECTION_THING} items={[item]} tabbable={tabbable} />;
 }
 
 /**
@@ -835,7 +836,7 @@ function TitleMenu({
     ...(onRename === undefined ? [] : [renameTaskItem(onRename)]),
     ...(onShowHistory === undefined ? [] : [versionHistoryItem(() => onShowHistory(undefined))]),
   ];
-  return <UnitMenu label={TITLE_MENU_LABEL} items={items} tabbable={tabbable} />;
+  return <UnitMenu thing={TITLE_THING} items={items} tabbable={tabbable} />;
 }
 
 /**
@@ -970,6 +971,7 @@ const DocumentUnit = memo(function DocumentUnit({
     <MarkdownMessage
       words={view.words}
       className={unitClass(view, changed)}
+      landed={view.fresh}
       edit={edit}
       link={link}
       openLink={openLink}
@@ -1047,9 +1049,10 @@ export function PlanBodyColumn({
 }
 
 /**
- * The head of a page drawn as a plan, Settings › Plan template: its name in
- * the title's place with the page's actions on its line, then its last edit
- * and its note, which the page and its placeholder both draw.
+ * The head of a page drawn as a plan, Settings › Plan template: a document's
+ * header (`PageHeader`) naming the page once, as its `h1`, with the page's
+ * actions on its line, then its last edit and its note, which the page and
+ * its placeholder both draw.
  */
 export function PlanPageHead({
   name,
@@ -1063,14 +1066,11 @@ export function PlanPageHead({
   note: React.ReactNode;
 }): React.JSX.Element {
   return (
-    <header className="task-page-head">
-      <div className="task-title-line">
-        <TaskTitle name={name} />
-        {actions}
-      </div>
+    <div className="task-page-head">
+      <PageHeader title={name} actions={actions} />
       {edited}
       {note}
-    </header>
+    </div>
   );
 }
 
@@ -1485,22 +1485,19 @@ export const PlanBody = memo(function PlanBody({
               <TaskKeyLine task={task} workspaceName={taskStanding.workspaceName} />
             )}
             {titled ? (
-              attributed(
-                // Keyed by the plan, so words typed for one are saved to it as another opens.
-                <EditableTitle
-                  key={task.id}
-                  name={task.name}
-                  entry={entry === EDITOR_PLACE.TITLE}
-                  editing={editing}
-                  renaming={renaming}
-                  onRename={onRename}
-                  onDraft={onDraftName}
-                />,
-                null,
-                titleMenu,
-              )
+              // Keyed by the plan, so words typed for one are saved to it as another opens.
+              <EditableTitle
+                key={task.id}
+                name={task.name}
+                entry={entry === EDITOR_PLACE.TITLE}
+                editing={editing}
+                renaming={renaming}
+                actions={titleMenu}
+                onRename={onRename}
+                onDraft={onDraftName}
+              />
             ) : page === undefined ? (
-              attributed(<TaskTitle name={task.name} />, null, titleMenu)
+              <TaskTitle name={task.name} actions={titleMenu} />
             ) : (
               <PlanPageHead
                 name={task.name}

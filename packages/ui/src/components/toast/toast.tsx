@@ -1,3 +1,4 @@
+import { Duration } from "effect";
 import { type KeyboardEvent, type ReactNode, useRef, useState } from "react";
 import { cssCustomProperties } from "../../css.js";
 import { AlertIcon, CircleCheckIcon, InboxIcon } from "../../icons/lucide-glyphs.js";
@@ -43,6 +44,24 @@ export type ToastTone =
   | typeof STATUS_TONE.DANGER
   | typeof STATUS_TONE.ATTENTION
   | typeof STATUS_TONE.WORKING;
+
+/**
+ * How long a toast stands, by what it reports, and the only holds a toast
+ * names: a change carried, which is short; one carried that its Undo takes
+ * back, long enough to reach for Undo, and what any toast with an action
+ * stands for where it names no hold; one refused, which takes longer to read
+ * and to act on; or news an agent or an automation sent while the developer
+ * was looking elsewhere in the window, which has the longest, since it
+ * arrives unbidden and carries a View to reach for. A confirmation drawn on
+ * its own control, a `CopyButton`'s check, stands for `DONE` too, so a copy
+ * answered on its button and one answered by a toast last the same.
+ */
+export const TOAST_HOLD = {
+  DONE: Duration.seconds(3),
+  UNDO: Duration.seconds(5),
+  FAILED: Duration.seconds(6),
+  NEWS: Duration.seconds(8),
+} as const;
 
 /** A second, in milliseconds: the notch a countdown drains by under reduced motion. */
 const SECOND_MS = 1000;

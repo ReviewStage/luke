@@ -42,6 +42,17 @@ export const VERB = {
   RESET_TO_DEFAULTS: "Reset to defaults",
 } as const;
 
+/**
+ * What a form says beside a field: that it may be left empty, that the secret
+ * it takes is already kept, and the press that shows or hides what is typed.
+ */
+export const FIELD_WORDS = {
+  OPTIONAL: "Optional",
+  SAVED: "Saved",
+  SHOW: "Show",
+  HIDE: "Hide",
+} as const;
+
 /** How English counts: "one" for 1, "other" for 0, 2, and 1.5. */
 const PLURAL = new Intl.PluralRules("en-US");
 
@@ -81,6 +92,11 @@ export function readingWords(things: string): string {
   return `Reading ${things}`;
 }
 
+/** What a way back says of where it leads, the place named as it stands mid-sentence: "Back to chat", "Back to MCP servers". */
+export function backToWords(place: string): string {
+  return `Back to ${place}`;
+}
+
 /** What a search or filter that found nothing says: "No tasks match". */
 export function noMatchWords(noun: Noun): string {
   return `No ${noun.many} match`;
@@ -99,6 +115,48 @@ export function readFailedWords(thing: string): string {
 /** What a paste that ran past a box's limit says of that limit, once the box has cut it to fit: "Your paste was cut to fit the 16,000-character limit." */
 export function pasteCutWords(limit: number): string {
   return `Your paste was cut to fit the ${formatCount(limit)}-character limit.`;
+}
+
+/** What the foot of a capped list says of the rows it leaves out: "Show 3 more". */
+export function showMoreWords(count: number): string {
+  return `Show ${formatCount(count)} more`;
+}
+
+/** What the foot of a capped list says once it shows every row, which puts them back. */
+export const SHOW_LESS_WORDS = "Show less";
+
+/** What a list's selection bar says of the rows chosen: "3 selected". */
+export function selectedWords(count: number): string {
+  return `${formatCount(count)} selected`;
+}
+
+/** What a selection says of a row in it, the selection bar's Clear, and the name that Clear is heard by. */
+export const SELECTION_WORDS = {
+  SELECTED: "Selected",
+  CLEAR: "Clear",
+  CLEAR_SELECTION: "Clear selection",
+} as const;
+
+/** An Inbox item as a count of arrivals names it: "1 new item", "2 new items". */
+const NEW_INBOX_ITEM: Noun = {
+  one: `new ${TERM.INBOX_ITEM.one}`,
+  many: `new ${TERM.INBOX_ITEM.many}`,
+};
+
+/**
+ * What items that landed in the Inbox together are said as: one by its own
+ * words, "New in your inbox: Push to the release branch?", and several by
+ * their count, "2 new items in your inbox".
+ */
+export function inboxArrivalWords(said: readonly string[]): string {
+  const [only] = said;
+  if (said.length === 1 && only !== undefined) return `New in your inbox: ${only}`;
+  return `${countWords(said.length, NEW_INBOX_ITEM)} in your inbox`;
+}
+
+/** What a reply an agent finished is said as: who sent it, then its lead where the reader is not already at it. */
+export function replyFromWords(agent: string, lead?: string): string {
+  return lead === undefined || lead === "" ? `Reply from ${agent}` : `Reply from ${agent}: ${lead}`;
 }
 
 /** What a refresh that failed says beside the last good read, which stays drawn; Retry stands with it. */

@@ -165,13 +165,15 @@ test("a file change's update marks the lines Codex's diff changed, a file delete
   assert.ok(line.textContent?.includes(`${CHECKOUT}/src/a.ts +1`), line.textContent ?? "");
   act(() => line.click());
   const marked = (kind: string) =>
-    [...container.querySelectorAll(`[data-line="${kind}"]`)].map((each) => each.textContent);
+    [...container.querySelectorAll(`[data-row="${kind}"]`)].map((each) => each.textContent);
   assert.deepEqual(marked("removed"), ["-b;", "-gone;"]);
   assert.deepEqual(marked("added"), ["+c;", "+d;"]);
-  assert.deepEqual(marked("mark"), [
+  // Note that the lines naming a file or a hunk, and a line that stood, are tinted as neither.
+  assert.deepEqual(marked("context"), [
     `*** Update File: ${CHECKOUT}/src/a.ts`,
     `*** Move to: ${CHECKOUT}/src/b.ts`,
     "@@ -1 +1,2 @@",
+    " a;",
     `*** Delete File: ${CHECKOUT}/src/old.ts`,
   ]);
 });
@@ -197,7 +199,10 @@ test("a spawned subagent is drawn as a subagent's row on the model and effort it
     errorText: "interrupted",
   }).container;
   assert.ok(interrupted.querySelector("[data-subagent-row]"));
-  assert.equal(interrupted.querySelector(".subagent-error")?.textContent, "interrupted");
+  assert.equal(
+    interrupted.querySelector(".subagent-row [role='alert']")?.textContent,
+    "interrupted",
+  );
 });
 
 test("a command that failed says its exit code, and one still running draws its row from its input alone", () => {

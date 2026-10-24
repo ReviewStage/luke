@@ -1,18 +1,22 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { PLAN_ACTOR, TASK_STATUS, type Task, type TaskSummary } from "@luke/features/task-wire";
+import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
+import {
+  PLAN_ACTOR,
+  TASK_STATUS,
+  type Task,
+  type TaskStatus,
+  type TaskSummary,
+} from "@luke/features/task-wire";
 import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
 import { ACT_KIND } from "@luke/host/acts";
-import {
-  DOCUMENT_REGION,
-  type SettledStatus,
-  TASKS_PAGE,
-  type TaskMark,
-} from "@luke/ui/tasks-model";
+import { ProviderMark } from "@luke/ui";
+import { DOCUMENT_REGION, TASKS_PAGE, type TaskMark } from "@luke/ui/tasks-model";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { act, createElement, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
+import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, test } from "vitest";
 import { MemberDirectory } from "../member-directory.js";
 import { OpenPersonProvider } from "../person-door.js";
@@ -205,8 +209,19 @@ function rightClick(row: HTMLElement, clientX: number, clientY: number): void {
 function menuItems(): HTMLButtonElement[] {
   return [...document.querySelectorAll<HTMLButtonElement>('[role="menu"] [role="menuitem"]')];
 }
+/** What an item says, without the chord printed at its end. */
+function itemLabel(item: HTMLElement): string | null {
+  return item.querySelector(".luke-menu-item-label")?.textContent ?? null;
+}
+/** Each item of the open menu that prints a chord, as what it says and the chord's glyphs. */
+function itemChords(): [string | null, string][] {
+  return menuItems().flatMap((item): [string | null, string][] => {
+    const keys = item.querySelector(".luke-shortcut");
+    return keys === null ? [] : [[itemLabel(item), keys.textContent ?? ""]];
+  });
+}
 function choose(label: string): void {
-  const item = menuItems().find((candidate) => candidate.textContent === label);
+  const item = menuItems().find((candidate) => itemLabel(candidate) === label);
   assert.ok(item, `the menu offers ${label}`);
   act(() => item.click());
 }
@@ -265,6 +280,14 @@ test("Permanently delete asks in a dialog naming the plan, from the ⋯ and from
   await confirmDelete();
 
   assert.deepEqual(asked.deleted, [TASK.id, OTHER.id]);
+});
+test("Permanently delete draws its act in the danger colour, since a deleted task is not brought back", () => {
+  const { tasks } = openTab();
+  openMenu(mountToolbar(tasks));
+
+  choose("Permanently delete");
+
+  assert.equal(answer("Permanently delete").getAttribute("data-variant"), "danger");
 });
 test("the plan's name reaches the recording only as masked text, never in an attribute", () => {
   const { tasks } = openTab();
@@ -416,7 +439,7 @@ test("Start and the task's ⋯ stand in the task's toolbar whichever tab its col
         tasks: sharedTab(DEAN.userId, tab),
       }),
     );
-    const toolbar = container.querySelector(".desktop-toolbar");
+    const toolbar = container.querySelector(".luke-toolbar");
     const shown = ["Start a coding agent", "Task actions"].filter(
       (label) => toolbar?.querySelector(`[aria-label="${label}"]`) !== null,
     );
@@ -521,7 +544,7 @@ test("Copy link copies the plan's address on tryluke.dev, alike from the toolbar
   };
   const link = `https://tryluke.dev/dean/plan/${TASK.id}`;
   const copyFromMenu = async () => {
-    const item = menuItems().find((candidate) => candidate.textContent === "Copy link");
+    const item = menuItems().find((candidate) => itemLabel(candidate) === "Copy link");
     assert.ok(item, "the menu offers Copy link");
     await act(async () => item.click());
   };
@@ -673,7 +696,7 @@ test("Mark done marks a task with agents done at once, from its row's check and 
     agents: { total: 2, working: 1, agents: [], pullRequestTotal: 0, pullRequests: [] },
   };
   const done: TaskSummary = { ...working, status: TASK_STATUS.DONE };
-  const settled: [string[], SettledStatus][] = [];
+  const settled: [string[], TaskStatus][] = [];
   const tasks = tasksControl({
     tasks: [working],
     onSettleTasks: (taskIds, status) => settled.push([[...taskIds], status]),
@@ -699,7 +722,7 @@ test("Mark done marks a task with agents done at once, from its row's check and 
   rightClick(rowButton, 40, 60);
   choose("Mark done");
   rightClick(rowButton, 40, 60);
-  const cancel = menuItems().find((item) => item.textContent === "Cancel task");
+  const cancel = menuItems().find((item) => itemLabel(item) === "Cancel task");
   assert.equal(cancel?.dataset.danger, "true", "Cancel task is drawn red");
   choose("Cancel task");
   assert.deepEqual(settled, [
@@ -714,9 +737,31 @@ test("Mark done marks a task with agents done at once, from its row's check and 
   const doneRowButton = doneRow.querySelector("ul > li > button");
   assert.ok(doneRowButton instanceof HTMLButtonElement);
   rightClick(doneRowButton, 40, 60);
-  const labels = menuItems().map((item) => item.textContent);
+  const labels = menuItems().map(itemLabel);
   assert.equal(labels.includes("Mark done"), false);
   assert.equal(labels.includes("Cancel task"), true);
+});
+
+test("the open task's ⋯ prints the chords of Copy plan, Mark done, and Permanently delete, which act on it, another task's menu prints none, and Open on GitHub wears the GitHub mark", () => {
+  const { tasks, asked } = openTab({ [TASK.id]: "acme/app", [OTHER.id]: "acme/app" });
+
+  openMenu(mountToolbar(tasks));
+  assert.deepEqual(itemChords(), [
+    ["Copy plan", "⇧⌘C"],
+    ["Mark done", "⇧⌘A"],
+    ["Permanently delete", "⌘⌫"],
+  ]);
+  const github = menuItems().find((item) => itemLabel(item) === "Open on GitHub");
+  assert.equal(
+    github?.querySelector(".luke-menu-item-glyph")?.innerHTML,
+    renderToStaticMarkup(createElement(ProviderMark, { provider: INTEGRATION_PROVIDER.GITHUB })),
+    "Open on GitHub wears the GitHub mark",
+  );
+
+  unmountAll();
+  rightClick(mountSidebarTask(tasks, OTHER, asked), 40, 60);
+  assert.ok(menuItems().some((item) => itemLabel(item) === "Mark done"));
+  assert.deepEqual(itemChords(), [], "no chord acts on a task that is not open");
 });
 
 test("a task is found in the list the control hands down now, a renamed one by its new name and an added one at once, else in the open document", () => {
@@ -737,4 +782,64 @@ test("a task is found in the list the control hands down now, a renamed one by i
 
   const opened = tasksControl({ region: { kind: DOCUMENT_REGION.READY, task: TASK } });
   assert.equal(taskOf(opened, TASK.id)?.id, TASK.id, "the open document's task");
+});
+
+/** The open menu's name and its items' words, or nothing where none stands. */
+function openedMenu(): { label: string | null; items: (string | null)[] } | undefined {
+  const menu = document.querySelector<HTMLElement>('[role="menu"]');
+  if (menu === null) return undefined;
+  return {
+    label: menu.getAttribute("aria-label"),
+    items: menuItems().map(itemLabel),
+  };
+}
+
+/** Presses `name` on `target`, as a keyboard does. */
+function pressKey(target: HTMLElement, name: string, shiftKey = false): void {
+  act(() => {
+    target.dispatchEvent(
+      new KeyboardEvent("keydown", { key: name, shiftKey, bubbles: true, cancelable: true }),
+    );
+  });
+}
+
+test("a sidebar task's ⋯, a right-click on it, and the menu key open the same menu, and the ⋯ is a Tab stop after its press", () => {
+  const { tasks, asked } = openTab();
+  const press = mountSidebarTask(tasks, OTHER, asked);
+  const more = document.querySelector<HTMLButtonElement>('li button[aria-label="Task actions"]');
+  assert.ok(more, "the row draws a ⋯");
+  assert.equal(more.tabIndex, 0, "the ⋯ is reached by Tab");
+  assert.equal(
+    press.compareDocumentPosition(more) & Node.DOCUMENT_POSITION_FOLLOWING,
+    Node.DOCUMENT_POSITION_FOLLOWING,
+    "after the row's press",
+  );
+
+  openMenu(more);
+  const fromMore = openedMenu();
+  assert.equal(fromMore?.label, "Task actions");
+  assert.ok(fromMore?.items.includes("Permanently delete"));
+  pressKey(document.activeElement as HTMLElement, "Escape");
+  assert.equal(openedMenu(), undefined);
+
+  rightClick(press, 40, 60);
+  assert.deepEqual(openedMenu(), fromMore);
+  pressKey(document.activeElement as HTMLElement, "Escape");
+
+  pressKey(press, "ContextMenu");
+  assert.deepEqual(openedMenu(), fromMore);
+  pressKey(document.activeElement as HTMLElement, "Escape");
+
+  pressKey(press, "F10", true);
+  assert.deepEqual(openedMenu(), fromMore);
+  assert.deepEqual(asked.opened, [], "the row itself opened nothing");
+});
+
+test("a sidebar task being renamed draws no ⋯ and offers no menu", () => {
+  const { tasks, asked } = openTab();
+  const press = mountSidebarTask(tasks, OTHER, asked);
+  rightClick(press, 40, 60);
+  choose("Rename");
+  assert.equal(document.querySelector('li button[aria-label="Task actions"]'), null);
+  assert.equal(openedMenu(), undefined);
 });

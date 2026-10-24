@@ -15,10 +15,10 @@
  */
 
 import type { CodingAgentPullRequest } from "@luke/features/coding-agent-wire";
+import type { MenuRow } from "@luke/ui";
 import { ACTOR_KIND, type EditReader, teammateCreator } from "@luke/ui/actor-model";
 import { ACTOR_SIZE, ActorMark } from "../actor-ref.js";
 import { useMemberDirectory } from "../member-directory.js";
-import type { MenuRow } from "../searchable-menu.js";
 import { AgentCard, AgentHoverCard, agentSubject, NOTHING_HELD } from "./agent-ref.js";
 import { agentName } from "./coding-agent-model.js";
 import type { MentionableAgent } from "./mention-picker.js";

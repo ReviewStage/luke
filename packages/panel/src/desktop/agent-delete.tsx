@@ -1,6 +1,7 @@
 import type { CodingAgentSummary } from "@luke/features/coding-agent-wire";
-import { ConfirmDialog, type DialogQuestion, TrashIcon, useConfirmDialog } from "@luke/ui";
+import { CONFIRM_LOSS, ConfirmDialog, type DialogQuestion, useConfirmDialog } from "@luke/ui";
 import { ACTION_RESULT_STATUS } from "@luke/wire";
+import { commandAction, PANEL_COMMAND } from "../command-items.js";
 import { agentName } from "../tasks/coding-agent-model.js";
 import type { CodingAgentsControl } from "../tasks/use-coding-agents.js";
 import type { MenuAction } from "./action-menu.js";
@@ -19,17 +20,15 @@ import type { MenuAction } from "./action-menu.js";
  * tab or its page (`onDeleted`).
  */
 
-/** What the item says, as a task's does. */
-const DELETE_LABEL = "Permanently delete";
-
 /** What asking to delete an agent says: what goes, and, for one not archived, the archive that keeps it instead. */
 function deleteQuestion(name: string, archived: boolean): DialogQuestion {
   const lost = `“${name}” and its transcript will be deleted. This can’t be undone.`;
   return {
     title: "Permanently delete agent?",
     body: archived ? lost : `${lost} To keep it out of the way instead, archive it.`,
-    verb: DELETE_LABEL,
+    verb: PANEL_COMMAND.DELETE_AGENT.verb,
     running: "Deleting",
+    loss: CONFIRM_LOSS.IRREVERSIBLE,
   };
 }
 
@@ -58,9 +57,10 @@ export function useAgentDelete(
     }),
   );
   return {
-    action: { label: DELETE_LABEL, icon: <TrashIcon />, onSelect: confirm.ask, danger: true },
+    action: { ...commandAction(PANEL_COMMAND.DELETE_AGENT, confirm.ask, false), danger: true },
     dialog: (
       <ConfirmDialog
+        open
         confirm={confirm}
         question={deleteQuestion(agentName(agent, agents.models), agent.archivedAt !== undefined)}
       />

@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import { MOTION_DURATION_MS } from "@luke/brand";
 import {
   CODING_AGENT_CALL_FAILURE,
   type CodingAgentPullRequestViewedAnswerView,
@@ -49,6 +50,7 @@ import {
 import type { FileMark, FileTreeModule, FileTreeProps } from "../file-tree/contract.js";
 import { findRanges, reveal } from "../find-matches.js";
 import { rendererRegistry } from "../renderer-runtime.js";
+import { announcedPolitely, mountAnnouncer } from "../testing/announcer.js";
 import {
   type AnyAct,
   FAKE_ANSWER,
@@ -61,6 +63,7 @@ import {
 } from "../testing/app-bridge.js";
 import { copyingInto, fakeAppPlatform } from "../testing/app-platform.js";
 import { handSettings } from "../testing/app-state.js";
+import { layContainersAt } from "../testing/container-width.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { focusRestOn, restOn } from "../testing/hint-rest.js";
 import { relayout } from "../testing/resize-observer.js";
@@ -270,6 +273,9 @@ afterEach(() => {
   root = undefined;
   document.body.innerHTML = "";
   vi.restoreAllMocks();
+  vi.useRealTimers();
+  for (const style of document.head.querySelectorAll("style")) style.remove();
+  document.body.style.removeProperty("--luke-duration-pane");
 });
 
 /** The window's keymap with the Inbox's J offered, as the Inbox offers it while it stands, counting each run. */
@@ -636,12 +642,16 @@ test("while the tree is hidden a strip stands in its place, a mark for each file
       ["attention", false, false],
     ],
   );
-  assert.equal(document.querySelector(".file-tree-pane"), null);
+  assert.equal(document.querySelector('[aria-label="Changed files"]'), null);
 
   act(() => strip.dispatchEvent(new PointerEvent("pointerover", { bubbles: true })));
   await flush();
   assert.equal(document.querySelector(".file-view")?.getAttribute("data-pane-over"), "peek");
-  assert.notEqual(document.querySelector(".file-tree-pane"), null, "the tree peeks out");
+  assert.notEqual(
+    document.querySelector('[aria-label="Changed files"]'),
+    null,
+    "the tree peeks out",
+  );
 });
 
 test("J and K step through the files inside the view, ; and ⇧; fold, and Escape lets go of the file", async () => {
@@ -1559,7 +1569,7 @@ const MARKED: CodingAgentPullRequestViewedAnswerView = {
 /** What the bar's count of the files viewed says. */
 function viewedCount(): string {
   return (
-    document.querySelector(".file-view-bar .files-viewed")?.textContent ??
+    document.querySelector(".luke-pane-bar .files-viewed")?.textContent ??
     assert.fail("the bar counts the files viewed")
   );
 }
@@ -1604,6 +1614,19 @@ test("the member's viewed marks tick their files, count toward the bar's progres
   assert.equal(viewedCount(), "1 / 3 files viewed");
 });
 
+test("the count of files viewed is announced politely as a tick changes it", async () => {
+  viewedAnswer = MARKED;
+  answerMarks(() => ({ outcome: PULL_REQUEST_WRITE_OUTCOME.DONE }));
+  files = [changed("a.ts"), changed("b.ts"), changed("c.ts")];
+  await drawTab();
+  mountAnnouncer();
+  assert.equal(announcedPolitely(), "", "the count first drawn is not read out");
+
+  act(() => viewedBox("c.ts").click());
+  await flush();
+  assert.equal(announcedPolitely(), "2 / 3 files viewed");
+});
+
 test("ticking a file's box marks it viewed on GitHub at once and folds it; one GitHub refuses goes back and says why", async () => {
   viewedAnswer = MARKED;
   let refuse = false;
@@ -1640,11 +1663,11 @@ test("the bar leads with the count of files viewed in the crumbs' place, polite 
   files = [changed("src/billing/a.ts"), changed("b.ts"), changed("c.ts")];
   await drawTab({ treeOpen: true });
 
-  const bar = document.querySelector(".file-view-bar") ?? assert.fail("a bar");
+  const bar = document.querySelector(".luke-pane-bar") ?? assert.fail("a bar");
   assert.equal(bar.querySelector(".luke-breadcrumbs"), null, "no crumbs");
   assert.doesNotMatch(bar.textContent ?? "", /billing/u, "the bar names no file");
   const count = bar.querySelector(".files-viewed") ?? assert.fail("a count");
-  assert.equal(count.getAttribute("aria-live"), "polite");
+  assert.equal(count.hasAttribute("aria-live"), false, "it is said through the announcer");
   assert.equal(count.querySelector("button, input"), null, "the count is words, not a control");
   assert.doesNotMatch(
     document.body.textContent ?? "",
@@ -2558,4 +2581,81 @@ test("a file's header draws the whole file on Expand full file, read once, and b
     2,
     "each file is read once",
   );
+});
+
+/** The tree's pane over the list, as it floats where the panel has no room for it beside, named as the view names it. */
+function floatedTree(): HTMLElement | null {
+  return document.querySelector<HTMLElement>('[aria-label="Changed files"]');
+}
+
+/** The toggle that floats the tree, which the stylesheet draws in a narrow panel alone. */
+function overToggle(): HTMLButtonElement {
+  return (
+    document.querySelector<HTMLButtonElement>('.file-tree-toggle[data-place="over"] button') ??
+    assert.fail("the toggle that floats the tree is drawn")
+  );
+}
+
+/** A narrow panel with the tree's toggle pressed, the pane's slide left to play out. */
+async function narrowTreeOpened(): Promise<void> {
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+  document.body.style.setProperty("--luke-duration-pane", `${MOTION_DURATION_MS.PANE}ms`);
+  layContainersAt({ "side-panel": 300 });
+  files = [changed("a.ts"), changed("b.ts")];
+  const { tree } = heldTree(false);
+  await drawTab({ tree });
+  assert.equal(floatedTree(), null, "the tree is away until its toggle is pressed");
+  act(() => overToggle().focus());
+  act(() => overToggle().click());
+}
+
+test("in a narrow panel the tree opens over the list, stays drawn through its exit once its toggle is pressed again, then is let go", async () => {
+  await narrowTreeOpened();
+  const pane = floatedTree() ?? assert.fail("the tree opens over the list");
+  assert.equal(pane.getAttribute("data-state"), "open");
+  assert.equal(pane.classList.contains("luke-over-pane"), true);
+
+  act(() => overToggle().click());
+  const leaving = floatedTree() ?? assert.fail("the tree stays through its exit");
+  assert.equal(leaving.getAttribute("data-state"), "leaving");
+  assert.equal(leaving.hasAttribute("inert"), true);
+  act(() => vi.advanceTimersByTime(MOTION_DURATION_MS.PANE - 1));
+  assert.notEqual(floatedTree(), null, "the exit has not finished");
+  act(() => vi.advanceTimersByTime(1));
+  assert.equal(floatedTree(), null, "the tree is let go once its exit has played");
+});
+
+test("Escape in the tree floated over the list puts it away and gives the keyboard back to its toggle", async () => {
+  await narrowTreeOpened();
+  const field =
+    floatedTree()?.querySelector<HTMLInputElement>('input[aria-label="Search files"]') ??
+    assert.fail("the tree's search takes the keyboard as it opens");
+  assert.equal(document.activeElement, field);
+
+  assert.equal(press(field, { key: "Escape" }), true);
+  assert.equal(floatedTree()?.getAttribute("data-state"), "leaving");
+  assert.equal(document.activeElement, overToggle());
+  act(() => vi.advanceTimersByTime(MOTION_DURATION_MS.PANE));
+  assert.equal(floatedTree(), null);
+});
+
+test("the pointer leaving the strip for the tree it peeked keeps the tree, and leaving it for anywhere else puts it away", async () => {
+  files = [changed("a.ts"), changed("b.ts")];
+  const { tree } = heldTree(false);
+  await drawTab({ tree });
+  const strip =
+    document.querySelector<HTMLElement>(".file-tree-strip .luke-mark-strip") ??
+    assert.fail("a strip");
+  const leave = (to: Element) =>
+    act(() =>
+      strip.dispatchEvent(new PointerEvent("pointerout", { bubbles: true, relatedTarget: to })),
+    );
+
+  act(() => strip.dispatchEvent(new PointerEvent("pointerover", { bubbles: true })));
+  await flush();
+  leave(floatedTree() ?? assert.fail("the tree peeks out"));
+  assert.equal(document.querySelector(".file-view")?.getAttribute("data-pane-over"), "peek");
+
+  leave(document.body);
+  assert.equal(document.querySelector(".file-view")?.getAttribute("data-pane-over"), "closed");
 });

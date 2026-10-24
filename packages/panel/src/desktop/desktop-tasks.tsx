@@ -9,11 +9,16 @@ import {
   EmptyState,
   ERROR_STATE_PLACEMENT,
   ErrorState,
+  FailureNote,
   FILL_ELEMENT,
   Fill,
-  PageToolbar,
+  NOT_FOUND_THING,
+  NotFound,
   SKELETON_SHAPE,
   Skeleton,
+  TOOLBAR_INSET,
+  TOOLBAR_LOOK,
+  Toolbar,
   useMinute,
 } from "@luke/ui";
 import { openThread, PlanCommentsProvider, usePlanComments } from "@luke/ui/plan-comments";
@@ -30,10 +35,8 @@ import { AutomationDirectory } from "../automation-directory.js";
 import { LinkWorkspaceProvider } from "../copy-link-item.js";
 import { FindScope } from "../find-in-tab.js";
 import { MemberDirectory } from "../member-directory.js";
-import { NOT_FOUND_THING, NotFound } from "../not-found.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import { useSteadyDoor } from "../steady-door.js";
-import { CallNotice } from "../tasks/agent-call.js";
 import { AgentCard, agentSubject } from "../tasks/agent-ref.js";
 import { StartingAgentTab } from "../tasks/agent-tab.js";
 import { AgentTabSkeleton } from "../tasks/agent-tab-skeleton.js";
@@ -264,8 +267,11 @@ function TaskPageSkeleton({
       fullScreen={panel?.fullScreen === true}
       column={
         <>
-          <PageToolbar
-            lead={<MainTabStripSkeleton />}
+          <Toolbar
+            start={TOOLBAR_INSET.COLUMN}
+            look={TOOLBAR_LOOK.TABS}
+            measure
+            title={<MainTabStripSkeleton />}
             actions={<TaskActionsSkeleton summary={summary.holds} />}
           />
           <TaskBody>
@@ -405,7 +411,12 @@ function TaskInboxTab({
   });
   // A notice of the reader's own is acknowledged as it opens, as the window's Inbox acknowledges it.
   useNodOnOpen({ shown: opened, readerId: tasks.me, control: inbox });
-  const { pager, direction } = useInboxPager(steps, list, chosen?.item.id, choose, {
+  // K and J choose the item above or below, the keyboard following it to its row.
+  const step = (listed: InboxListed) => {
+    choose(listed);
+    columns.onStep();
+  };
+  const { pager, direction } = useInboxPager(steps, list, chosen?.item.id, step, {
     shown,
     folded: NO_FOLDS,
   });
@@ -443,9 +454,9 @@ function TaskInboxTab({
           inbox.reading ? (
             <InboxListSkeleton />
           ) : inbox.failed && listed.length === 0 ? (
-            <div className="sidebar-note">
-              <ErrorState onRetry={inbox.onRetry}>The inbox could not be read.</ErrorState>
-            </div>
+            <ErrorState onRetry={inbox.onRetry} placement={ERROR_STATE_PLACEMENT.ROWS}>
+              The inbox could not be read.
+            </ErrorState>
           ) : inbox.read && searched !== undefined && listed.length === 0 ? (
             <SearchEmpty searched={searched} />
           ) : inbox.read && filteredOut ? (
@@ -466,7 +477,7 @@ function TaskInboxTab({
           hidden={columns.shown !== INBOX_COLUMNS.BOTH}
         >
           {/* The empty pane keeps a bar the list's head's height, as the window's Inbox does. */}
-          <PageToolbar />
+          <Toolbar />
           {/* Note that the list says what its tab or its search left out, so the pane beside it stands bare. */}
           {inbox.read && listed.length === 0 && !filteredOut && searched === undefined ? (
             <EmptyState icon={<InboxIcon />}>{NEEDS_YOU.NONE}</EmptyState>
@@ -514,20 +525,17 @@ function shownTabGroups(shown: ShownTab | undefined): MenuAction[][] {
  * While the task is read, its strip holds one tab-shaped skeleton where the
  * plan's tab will stand, so the row does not move when the task is drawn,
  * and no name is guessed before the read says it; a task that could not be
- * drawn has no tab at all. The voice's notice line, handed in while the
- * task is drawn, rides the foot of the call's agent's tab.
+ * drawn has no tab at all.
  */
 function PlanDocument({
   tasks,
   looks,
-  notice,
   summary,
   room,
   away,
 }: {
   tasks: TasksControl;
   looks: TaskLooks;
-  notice: React.ReactNode;
   summary: SummaryPin;
   room: ShellRoom;
   away: TaskHeadBack;
@@ -556,6 +564,7 @@ function PlanDocument({
   const inbox = useTaskInbox({
     taskId: inboxTaskId,
     shown: tasks.shown,
+    onScreen: inboxTaskId !== undefined && tasks.inboxShown === inboxTaskId,
     waiting: tasks.inbox.some((task) => task.taskId === inboxTaskId),
     readerId: tasks.me,
     agents: tasks.agents,
@@ -622,9 +631,9 @@ function PlanDocument({
   }, [taskId, inbox.read, waiting, onInboxRead]);
   const rename = useInlineRename(taskId, tasks.onRenameTask);
   // A terminal shown hands the keys to the side panel, where it stands; an
-  // agent's tab's Open terminal always opens that agent's own.
+  // agent's tab's Show terminal always opens that agent's own.
   const showSide = () => setFocus(COLUMN.SIDE);
-  // Open terminal opens an agent's terminal as on every surface that draws it (`agent-actions.tsx`).
+  // Show terminal opens an agent's terminal as on every surface that draws it (`agent-actions.tsx`).
   const terminalDoors = useAgentTerminalDoors(
     tasks.sidePanel,
     region.kind === DOCUMENT_REGION.READY ? region.task.repository : null,
@@ -950,27 +959,26 @@ function PlanDocument({
         : "Choose a task, or start a new one.";
     // A plan that cannot be drawn offers no menu, so its way out is said here.
     const close = { label: "Close task", onClick: tasks.onLeaveTask };
+    // A plan the service would not hand the reader is not there for them, whether it was deleted or never theirs.
+    if (region.kind === DOCUMENT_REGION.MISSING) {
+      return <NotFound thing={NOT_FOUND_THING.TASK} bar={{}} action={close} />;
+    }
     return (
       <>
-        <PageToolbar heading={null} />
-        {/* A plan the service would not hand the reader is not there for them, whether it was deleted or never theirs. */}
-        {region.kind === DOCUMENT_REGION.MISSING ? (
-          <NotFound thing={NOT_FOUND_THING.TASK} action={close} />
-        ) : (
-          <Fill as={FILL_ELEMENT.SECTION} className="desktop-empty-region">
-            {region.kind === DOCUMENT_REGION.FAILED ? (
-              <ErrorState
-                onRetry={tasks.onRetryDocument}
-                placement={ERROR_STATE_PLACEMENT.CENTRED}
-                exit={close}
-              >
-                {line}
-              </ErrorState>
-            ) : (
-              <EmptyState>{line}</EmptyState>
-            )}
-          </Fill>
-        )}
+        <Toolbar />
+        <Fill as={FILL_ELEMENT.SECTION} className="desktop-empty-region">
+          {region.kind === DOCUMENT_REGION.FAILED ? (
+            <ErrorState
+              onRetry={tasks.onRetryDocument}
+              placement={ERROR_STATE_PLACEMENT.CENTRED}
+              exit={close}
+            >
+              {line}
+            </ErrorState>
+          ) : (
+            <EmptyState>{line}</EmptyState>
+          )}
+        </Fill>
       </>
     );
   }
@@ -1131,8 +1139,11 @@ function PlanDocument({
                     fullScreen={sidePanel.fullScreen}
                     column={
                       <>
-                        <PageToolbar
-                          lead={
+                        <Toolbar
+                          start={TOOLBAR_INSET.COLUMN}
+                          look={TOOLBAR_LOOK.TABS}
+                          measure
+                          title={
                             <MainTabStrip
                               task={task}
                               main={mainTabs}
@@ -1153,14 +1164,10 @@ function PlanDocument({
                           actions={
                             <>
                               {rename.refused ? (
-                                <p className="error-message" role="alert">
-                                  {RENAME_FAILED_NOTE}
-                                </p>
+                                <FailureNote>{RENAME_FAILED_NOTE}</FailureNote>
                               ) : null}
                               {repositoryNote !== undefined ? (
-                                <p className="error-message" role="alert">
-                                  {repositoryNote}
-                                </p>
+                                <FailureNote>{repositoryNote}</FailureNote>
                               ) : null}
                               <CopyChord copy={tasks.copy} />
                               {terminalDoors.terminals ? (
@@ -1215,24 +1222,22 @@ function PlanDocument({
                                 </AgentColumn>
                               ) : null
                             ) : (
-                              <CallNotice.Provider value={notice}>
-                                <AgentPane
-                                  call={calls}
-                                  label={mainTabLabel(tab, agents)}
-                                  tabbed
-                                  tab={tab}
-                                  agents={agents}
-                                  shown={tasks.shown && !sidePanel.fullScreen}
-                                  views={views}
-                                  onOpenDelegation={openDelegationDoor}
-                                  onOpenPullRequest={openPullRequestDoor}
-                                  onOpenTarget={openTargetDoor}
-                                  cards={cards}
-                                  chat={chat}
-                                  onFork={forkDoor}
-                                  onContinue={continueDoor}
-                                />
-                              </CallNotice.Provider>
+                              <AgentPane
+                                call={calls}
+                                label={mainTabLabel(tab, agents)}
+                                tabbed
+                                tab={tab}
+                                agents={agents}
+                                shown={tasks.shown && !sidePanel.fullScreen}
+                                views={views}
+                                onOpenDelegation={openDelegationDoor}
+                                onOpenPullRequest={openPullRequestDoor}
+                                onOpenTarget={openTargetDoor}
+                                cards={cards}
+                                chat={chat}
+                                onFork={forkDoor}
+                                onContinue={continueDoor}
+                              />
                             )}
                           </FindScope>
                           <TaskSummary
@@ -1348,7 +1353,6 @@ function StartingTaskPage({
 export const DesktopTasks = memo(function DesktopTasks({
   tasks,
   looks,
-  notice,
   summary,
   room = SHELL_ROOM.WIDE,
   away,
@@ -1356,8 +1360,6 @@ export const DesktopTasks = memo(function DesktopTasks({
   tasks: TasksControl;
   /** The open plan's sections changed since the developer last looked, held by the shell across the plan's version history. */
   looks: TaskLooks;
-  /** The voice's notice line, while it rides the foot of the open task's call. */
-  notice?: React.ReactNode;
   /** Whether the task's summary stands pinned beside its column where it fits, rather than collapsed to its rail, and whether it fits, held by the shell, whose panes glide as either turns. */
   summary: SummaryPin;
   /** The room the panel's stage gives; narrow, a task is headed by one row of its own (`task-pane-switcher.tsx`). */
@@ -1368,7 +1370,7 @@ export const DesktopTasks = memo(function DesktopTasks({
   // The second call's question stands over either page: a Talk press on a
   // task's page asks it, and so does a task started from the New task dialog.
   const secondCall = (
-    <ConfirmDialog confirm={tasks.secondCall.confirm} question={tasks.secondCall.question} />
+    <ConfirmDialog open confirm={tasks.secondCall.confirm} question={tasks.secondCall.question} />
   );
   // A task New task is starting with its agent stands as its page until the start answers.
   if (tasks.starting !== undefined) {
@@ -1386,7 +1388,6 @@ export const DesktopTasks = memo(function DesktopTasks({
           <PlanDocument
             tasks={tasks}
             looks={looks}
-            notice={notice}
             summary={summary}
             room={room}
             away={away ?? { label: TASKS_BACK, onPress: tasks.boardView.onOpen }}

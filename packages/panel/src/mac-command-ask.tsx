@@ -4,6 +4,7 @@ import { MAC_COMMAND_DECISION, type MacCommandDecision } from "@luke/host/contra
 import { CommandAsk } from "@luke/ui";
 import { useAct } from "./act.js";
 import { APP_SLICE, useAppSlice } from "./use-app-state.js";
+import { useHeldThroughExit } from "./use-held-through-exit.js";
 
 /**
  * mac-command-ask.tsx -- the command an agent asks to run on this Mac, put to the developer over the window while main holds it.
@@ -14,7 +15,7 @@ import { APP_SLICE, useAppSlice } from "./use-app-state.js";
  * asks waiting. The earliest is drawn, and the next takes its place as it
  * goes; the answer goes back by the ask's id, and the card goes as main
  * drops the ask, so one answered elsewhere or timed out leaves no card
- * standing. An answer main refuses says why in a toast, as every press does.
+ * standing once it has faded out. An answer main refuses says why in a toast, as every press does.
  */
 
 /** The ask drawn: the earliest waiting, which main lists first. */
@@ -23,14 +24,18 @@ function firstAsk(asks: readonly MacCommandAsk[] | undefined): MacCommandAsk | u
 }
 
 export function MacCommandAskDialog(): React.JSX.Element | null {
-  const ask = firstAsk(useAppSlice(APP_SLICE.MAC_COMMANDS)?.asks);
+  const waiting = firstAsk(useAppSlice(APP_SLICE.MAC_COMMANDS)?.asks);
   const { press } = useAct();
+  // Note that the card is drawn for the ask it was opened over until its fade has run, so its words do not change under its own exit.
+  const { held: ask, onExited } = useHeldThroughExit(waiting);
   if (ask === undefined) return null;
   const answer = (decision: MacCommandDecision) =>
     press(ACT_KIND.MAC_COMMAND_ANSWER, { id: ask.id, decision });
   return (
     <CommandAsk
       key={ask.id}
+      open={waiting !== undefined}
+      onExited={onExited}
       command={ask.command}
       onAllowOnce={() => answer(MAC_COMMAND_DECISION.ALLOW_ONCE)}
       onAllowAlways={() => answer(MAC_COMMAND_DECISION.ALLOW_ALWAYS)}

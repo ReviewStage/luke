@@ -16,7 +16,7 @@ import { appSettingsView, SETTINGS_RESET_SCOPE } from "@luke/settings/wire";
 import { BUTTON_VARIANT, Button, ResetIcon, STATUS_TONE } from "@luke/ui";
 import { useSettingWrite } from "@luke/ui/use-setting-write";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
-import { TOAST_HOLD, UNDO_LABEL, useToast } from "../toast.js";
+import { TOAST_HOLD, undoToast, useToast } from "../toast.js";
 import type { SettingsWrites } from "./writes.js";
 
 /** What the toast says once a page's reset landed, by the group it reset. */
@@ -131,11 +131,7 @@ function ResetPageButton({
           if (taken) return;
           toast({ words: UNDO_REFUSED_NOTE, tone: STATUS_TONE.DANGER, hold: TOAST_HOLD.FAILED });
         });
-      toast({
-        words: RESET_NOTES[asked],
-        tone: STATUS_TONE.COMPLETE,
-        action: { label: UNDO_LABEL, onPress: undo },
-      });
+      toast(undoToast(RESET_NOTES[asked], undo));
       return result;
     });
   };
@@ -144,7 +140,8 @@ function ResetPageButton({
     <Button
       variant={BUTTON_VARIANT.QUIET}
       icon={<ResetIcon />}
-      disabled={busy}
+      busy={busy}
+      busyLabel="Resetting"
       onClick={() => run(scope)}
     >
       Reset to defaults

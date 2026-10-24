@@ -1,4 +1,4 @@
-import type { HTMLAttributes, ReactNode } from "react";
+import type { HTMLAttributes, ReactNode, Ref } from "react";
 
 /**
  * text.tsx -- words set in one of the type roles every app shares, on whichever element their meaning asks for.
@@ -87,6 +87,8 @@ export const TEXT_ELEMENT = {
   H2: "h2",
   H3: "h3",
   H4: "h4",
+  H5: "h5",
+  H6: "h6",
 } as const;
 
 export type TextElement = (typeof TEXT_ELEMENT)[keyof typeof TEXT_ELEMENT];
@@ -100,6 +102,7 @@ export function Text({
   truncate = false,
   id,
   className,
+  ref,
   children,
   ...attributes
 }: {
@@ -113,11 +116,15 @@ export function Text({
   id?: string | undefined;
   /** A hook for the caller's own layout (a flex share, a margin), beside the shared class. */
   className?: string | undefined;
+  /** The element the words stand in, for a caller that watches it (a heading scrolling out of view). */
+  ref?: Ref<HTMLElement> | undefined;
   children: ReactNode;
 } & Omit<HTMLAttributes<HTMLElement>, "children" | "className" | "id">): React.JSX.Element {
   return (
     <Element
       {...attributes}
+      // Note that every element a role may stand in is a plain HTMLElement to a ref's reader, so the union's one element type is named here.
+      ref={ref as Ref<HTMLDivElement> | undefined}
       className={className === undefined ? "luke-text" : `luke-text ${className}`}
       data-variant={variant}
       data-tone={tone}

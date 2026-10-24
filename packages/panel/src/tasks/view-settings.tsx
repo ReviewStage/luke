@@ -23,6 +23,9 @@ import {
   SETTINGS_ROW_DENSITY,
   SettingsRow,
   Shortcut,
+  TEXT_ELEMENT,
+  TEXT_VARIANT,
+  Text,
   Tooltip,
 } from "@luke/ui";
 import { drawnDark } from "@luke/ui/appearance";
@@ -197,9 +200,9 @@ function SettingsGroup({
   const id = useId();
   return (
     <section className="view-settings-group" aria-labelledby={id}>
-      <h3 className="view-settings-heading" id={id}>
+      <Text as={TEXT_ELEMENT.H3} variant={TEXT_VARIANT.GROUP} id={id}>
         {title}
-      </h3>
+      </Text>
       {children}
     </section>
   );
@@ -408,11 +411,14 @@ function DiffSettingsRows({ roomy }: { roomy: boolean }): React.JSX.Element {
 
 /** The popover: its title and ×, then the rows (`PopoverPanel`). */
 function ViewSettingsPopover({
+  open,
   id,
   scope,
   onClose,
   onLeave,
 }: {
+  /** Whether it stands; closed, it fades out. */
+  open: boolean;
   id: string;
   scope: ViewSettingsScope;
   /** Closes the popover and hands the keyboard back to the button. */
@@ -422,6 +428,7 @@ function ViewSettingsPopover({
 }): React.JSX.Element {
   return (
     <PopoverPanel
+      open={open}
       id={id}
       title={VIEW_SETTINGS_LABEL}
       closeLabel="Close"
@@ -468,18 +475,17 @@ export function ViewSettingsButton({ scope }: { scope: ViewSettingsScope }): Rea
           onClick={() => setOpen(!open)}
         />
       </Tooltip>
-      {open ? (
-        <AnchoredPopover align={POPOVER_ALIGN.END}>
-          <ViewSettingsPopover
-            id={popoverId}
-            scope={scope}
-            onClose={close}
-            onLeave={(left) => {
-              if (!(left instanceof Node && root.current?.contains(left))) setOpen(false);
-            }}
-          />
-        </AnchoredPopover>
-      ) : null}
+      <AnchoredPopover open={open} align={POPOVER_ALIGN.END}>
+        <ViewSettingsPopover
+          open={open}
+          id={popoverId}
+          scope={scope}
+          onClose={close}
+          onLeave={(left) => {
+            if (!(left instanceof Node && root.current?.contains(left))) setOpen(false);
+          }}
+        />
+      </AnchoredPopover>
     </div>
   );
 }

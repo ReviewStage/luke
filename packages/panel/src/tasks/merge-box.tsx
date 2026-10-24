@@ -18,8 +18,8 @@ import {
   BUTTON_VARIANT,
   Button,
   type ButtonVariant,
+  CONFIRM_LOSS,
   ConfirmDialog,
-  DIALOG_TONE,
   type DialogQuestion,
   SPINNER_SIZE,
   SpinnerRing,
@@ -37,7 +37,7 @@ import { Schema } from "effect";
 import { CircleXIcon, GitMergeIcon, TriangleAlertIcon, UserRoundIcon } from "lucide-react";
 import { type ReactNode, useState } from "react";
 import { ActionMenu, type MenuAction } from "../desktop/action-menu.js";
-import { readKept, writeKept } from "../kept-storage.js";
+import { keptKey, useKept } from "../use-kept.js";
 import { type PullRequestWrites, QUEUE_WARNING } from "./pull-request-writes.js";
 
 /**
@@ -204,26 +204,25 @@ function sentenceOf(pullRequest: CodingAgentOverviewPullRequest): string {
   return lead === undefined ? standing : `${lead}. ${standing}`;
 }
 
-/** Where the method chosen is kept, by repository. */
-const METHODS_KEY = "luke.pullRequestMergeMethods";
-
 const storedMethods = Schema.fromJsonString(
   Schema.Record(Schema.String, Schema.Literals(Object.values(MERGE_METHOD))),
 );
+
+/** Where the method chosen is kept, by repository. */
+const KEPT = { METHODS: keptKey("luke.pullRequestMergeMethods", storedMethods) } as const;
 
 /** The method chosen for the repository, kept across launches: the one last chosen where the repository still allows it, else the first it allows. */
 function useMergeMethod(
   repository: string | null,
   allowed: readonly MergeMethod[],
 ): readonly [MergeMethod | undefined, (method: MergeMethod) => void] {
-  const [kept, setKept] = useState(() => readKept(METHODS_KEY, storedMethods, {}));
+  const [kept, , change] = useKept(KEPT.METHODS, {});
   const chosen = repository === null ? undefined : kept[repository];
   const method = chosen !== undefined && allowed.includes(chosen) ? chosen : allowed[0];
   const choose = (next: MergeMethod) => {
     if (repository === null) return;
-    const now = { ...readKept(METHODS_KEY, storedMethods, {}), [repository]: next };
-    writeKept(METHODS_KEY, storedMethods, now);
-    setKept(now);
+    // Note that the record is read again before it is written, so another window's method for another repository is kept.
+    change((held) => ({ ...held, [repository]: next }));
   };
   return [method, choose];
 }
@@ -375,8 +374,8 @@ function MethodPress({
         variant={variant}
         icon={icon}
         disabled={busy && busyLabel === undefined}
-        busy={busyLabel}
         onClick={onPress}
+        {...busyProps(busyLabel)}
         menu={{ label: BOX_WORDS.CHOOSE_METHOD, ...menu.trigger() }}
       >
         {words}
@@ -399,7 +398,7 @@ const DEQUEUE_QUESTION: DialogQuestion = {
   body: QUEUE_WARNING,
   verb: BOX_WORDS.DEQUEUE,
   running: BUSY_WORDS[PULL_REQUEST_ACTION.DEQUEUE],
-  tone: DIALOG_TONE.DANGER,
+  loss: CONFIRM_LOSS.AFFECTS_OTHERS,
 };
 
 /**
@@ -528,7 +527,7 @@ export function MergeControl({
     <span className="merge-control">
       {face === undefined ? null : <MergeChip face={face} sentence={sentenceOf(pullRequest)} />}
       {drawn}
-      {asked ? <ConfirmDialog confirm={confirm} question={DEQUEUE_QUESTION} /> : null}
+      <ConfirmDialog open confirm={confirm} question={DEQUEUE_QUESTION} />
     </span>
   );
 }

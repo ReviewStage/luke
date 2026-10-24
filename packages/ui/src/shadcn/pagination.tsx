@@ -39,7 +39,7 @@ import { cn } from "../cn.js";
 
 /** Every item's box: a step, a page's number, the current page, or an elision. */
 export const PAGINATION_ITEM =
-  "luke-pagination-item box-border inline-flex h-pagination-item min-w-pagination-item items-center justify-center rounded-control border border-transparent px-pagination-item-inset font-mono text-caption text-muted-foreground no-underline whitespace-nowrap transition-[background-color,color] duration-(--luke-duration-hover) ease-plain [a&:hover]:bg-muted [a&:hover]:text-foreground aria-[current=page]:border-border aria-[current=page]:bg-muted aria-[current=page]:font-emphasis aria-[current=page]:text-foreground data-[idle=true]:opacity-40";
+  "luke-pagination-item box-border inline-flex h-pagination-item min-w-pagination-item items-center justify-center rounded-control border border-transparent px-pagination-item-inset font-mono text-caption text-muted-foreground no-underline whitespace-nowrap transition-[background-color,color] duration-(--luke-duration-hover) ease-plain [a&:hover]:bg-muted [a&:hover]:text-foreground aria-[current=page]:border-border aria-[current=page]:bg-muted aria-[current=page]:font-emphasis aria-[current=page]:text-foreground data-[idle=true]:opacity-disabled";
 
 function Pagination({ className, ...props }: React.ComponentProps<"nav">) {
   return (

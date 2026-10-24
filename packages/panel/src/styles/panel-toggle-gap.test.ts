@@ -33,13 +33,17 @@ afterEach(() => {
 /** Where each side's value stands in a box shorthand of one to four values. */
 const RIGHT_OF = [0, 1, 1, 1] as const;
 
-/** `value` as `element` reads it, every custom property it names spelled out. */
+/** `value` as `element` reads it, every custom property it names spelled out, or its fallback where it names none. */
 function resolved(element: Element, value: string): string {
   const style = getComputedStyle(element);
-  return value.replace(/var\((--[\w-]+)\)/g, (whole, name: string) => {
-    const own = style.getPropertyValue(name).trim();
-    return own === "" ? whole : resolved(element, own);
-  });
+  return value.replace(
+    /var\((--[\w-]+)(?:,\s*((?:[^()]|\([^()]*\))*))?\)/g,
+    (whole, name: string, fallback: string | undefined) => {
+      const own = style.getPropertyValue(name).trim();
+      if (own !== "") return resolved(element, own);
+      return fallback === undefined ? whole : resolved(element, fallback);
+    },
+  );
 }
 
 /** A length in pixels from a sum of pixel lengths, `calc()` or bare, which is every length these rows are built from. */
@@ -123,7 +127,7 @@ function drawn({ profile, room, sidebarCollapsed, panelOpen }: Shell) {
   const column = task.appendChild(document.createElement("div"));
   column.className = "desktop-task-main";
   const toolbar = column.appendChild(document.createElement("div"));
-  toolbar.className = "desktop-toolbar";
+  toolbar.className = "luke-toolbar";
   const panel = task.appendChild(document.createElement("aside"));
   panel.className = "side-panel";
   const bar = panel.appendChild(document.createElement("div"));

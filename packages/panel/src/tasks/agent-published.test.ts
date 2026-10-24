@@ -53,11 +53,11 @@ function doorsAsked(withPanel: boolean) {
 }
 
 /** Draws `element` and answers the button it stands as. */
-function drawn(element: React.ReactElement): HTMLButtonElement | null {
+function drawn(element: React.ReactElement): HTMLElement | null {
   const container = document.body.appendChild(document.createElement("div"));
   root = createRoot(container);
   act(() => root?.render(element));
-  return container.querySelector<HTMLButtonElement>("button");
+  return container.querySelector<HTMLElement>("a, button");
 }
 
 /** Draws the pinned row over the doors given. */

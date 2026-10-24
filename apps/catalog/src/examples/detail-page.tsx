@@ -5,9 +5,8 @@ import {
   ChoiceBar,
   DETAIL_PAGE_INSET,
   DetailPage,
-  EllipsisIcon,
   GAP,
-  IconButton,
+  MoreButton,
   PAGE_FRAME,
   PencilIcon,
   Stack,
@@ -23,7 +22,8 @@ import { CatalogSection } from "../section";
  * detail-page.tsx -- one thing's page with a secondary column beside its
  * main content, each scrolling on its own; the same page with no secondary
  * column; and the page in a phone's width, where the secondary column
- * follows the main content in the one scroll; and the page under a window's
+ * follows the main content in the one scroll; a long page whose bar picks up
+ * its title once the header scrolls away; and the page under a window's
  * toolbar, which holds its title and acts; and the page in a side panel
  * under its tabs, its words at the tabs' column inset. Every name is made up.
  */
@@ -104,6 +104,7 @@ function Facts(): React.JSX.Element {
 function Task({ secondary }: { secondary: boolean }): React.JSX.Element {
   return (
     <DetailPage
+      frame={PAGE_FRAME.PAGE}
       title={TITLE}
       description="A task in the platform workspace."
       actions={
@@ -111,12 +112,28 @@ function Task({ secondary }: { secondary: boolean }): React.JSX.Element {
           <Button variant={BUTTON_VARIANT.OUTLINE} icon={<PencilIcon />}>
             Edit
           </Button>
-          <IconButton icon={<EllipsisIcon />} label="More for this task" />
+          <MoreButton thing="Task" />
         </>
       }
       secondary={secondary ? { label: "Details", content: <Facts /> } : undefined}
     >
       <Sections />
+    </DetailPage>
+  );
+}
+
+/** A page long enough to scroll its header away, so its bar picks up the title. */
+function LongTask(): React.JSX.Element {
+  return (
+    <DetailPage
+      frame={PAGE_FRAME.PAGE}
+      title={TITLE}
+      description="Scroll down: the bar names the task once its title is gone."
+    >
+      <Stack gap={GAP.SECTION}>
+        <Sections />
+        <Sections />
+      </Stack>
     </DetailPage>
   );
 }
@@ -128,11 +145,17 @@ function TaskUnderToolbar(): React.JSX.Element {
       label={TITLE}
       toolbar={
         <header className="catalog-window-toolbar">
-          <h1 className="catalog-window-toolbar-title">{TITLE}</h1>
+          <Text
+            as={TEXT_ELEMENT.H1}
+            variant={TEXT_VARIANT.TOOLBAR_TITLE}
+            className="catalog-window-toolbar-title"
+          >
+            {TITLE}
+          </Text>
           <Button variant={BUTTON_VARIANT.OUTLINE} icon={<PencilIcon />}>
             Edit
           </Button>
-          <IconButton icon={<EllipsisIcon />} label="More for this task" />
+          <MoreButton thing="Task" />
         </header>
       }
       secondary={{ label: "Details", content: <Facts /> }}
@@ -189,6 +212,14 @@ function DetailPages(): React.JSX.Element {
       >
         <div className="catalog-screen catalog-screen-phone catalog-screen-detail">
           <Task secondary />
+        </div>
+      </CatalogSection>
+      <CatalogSection
+        id="detail-page-pick-up"
+        title="Its title in the bar once the header scrolls away"
+      >
+        <div className="catalog-screen catalog-screen-detail">
+          <LongTask />
         </div>
       </CatalogSection>
       <CatalogSection id="detail-page-toolbar" title="Under the window's toolbar">

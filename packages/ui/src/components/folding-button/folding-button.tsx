@@ -13,6 +13,7 @@ import { cn } from "../../cn.js";
 import {
   BUTTON_SHAPE,
   BUTTON_VARIANT,
+  type BusyProps,
   Button,
   type ButtonShape,
   type ButtonSize,
@@ -109,6 +110,10 @@ interface FoldingButtonDoors {
   "aria-haspopup"?: "menu" | "listbox" | "dialog" | undefined;
   "aria-expanded"?: boolean | undefined;
   "aria-controls"?: string | undefined;
+  /** Whether a pointer's press leaves the focus where it is (Button's `keepFocus`). */
+  keepFocus?: boolean | undefined;
+  /** Whether it stands in the tab order (Button's `tabbable`). */
+  tabbable?: boolean | undefined;
   ref?: Ref<HTMLButtonElement> | undefined;
 }
 
@@ -126,6 +131,7 @@ function FoldingBox({
   shape,
   size,
   busy,
+  busyLabel,
   succeeded,
   turns,
   disabled,
@@ -141,7 +147,8 @@ function FoldingBox({
   variant: ButtonVariant;
   shape: ButtonShape | undefined;
   size: ButtonSize | undefined;
-  busy: string | undefined;
+  busy: boolean | undefined;
+  busyLabel: string | undefined;
   succeeded: boolean | undefined;
   turns: boolean | undefined;
   disabled: boolean | undefined;
@@ -149,7 +156,7 @@ function FoldingBox({
   trailing: ReactNode;
 }): React.JSX.Element {
   // Note that the main part is told how its press landed while it is not busy too, since the ring's leaving is what it reads it at.
-  const busyProps = { busy: busy !== undefined, busyLabel: busy ?? "", succeeded };
+  const busyProps = { busy: busy === true, busyLabel: busyLabel ?? "", succeeded };
   return (
     <span
       ref={measured}
@@ -170,6 +177,8 @@ function FoldingBox({
         aria-haspopup={doors["aria-haspopup"]}
         aria-expanded={doors["aria-expanded"]}
         aria-controls={doors["aria-controls"]}
+        keepFocus={doors.keepFocus}
+        tabbable={doors.tabbable}
         {...busyProps}
         {...hinted}
       >
@@ -187,6 +196,7 @@ export function FoldingButton({
   shape,
   size,
   busy,
+  busyLabel,
   succeeded,
   turns,
   disabled,
@@ -194,28 +204,27 @@ export function FoldingButton({
   trailing,
   hint: Hint = Tooltip,
   ...doors
-}: FoldingButtonDoors & {
-  /** Its words, and so its name, folded or not. */
-  label: string;
-  icon: ReactNode;
-  variant?: ButtonVariant;
-  /** Its outline: the control's corner, or round, a pill drawn and a disc folded. */
-  shape?: ButtonShape | undefined;
-  /** How big it is: the control's own, or a row mark's height in the caption's type. */
-  size?: ButtonSize | undefined;
-  /** While its press is out, what it is doing ("Running"): a ring stands over it under that name. */
-  busy?: string | undefined;
-  /** Whether the press its ring stood for landed, read as the ring leaves (Button's `succeeded`). */
-  succeeded?: boolean | undefined;
-  /** Whether its glyph turns once as a press lands, as a retry's arrow does (Button's `turns`). */
-  turns?: boolean | undefined;
-  disabled?: boolean | undefined;
-  onClick?: ((event: MouseEvent<HTMLButtonElement>) => void) | undefined;
-  /** A count after its words, inside the button's fill; it stays drawn when the words fold. */
-  trailing?: ReactNode;
-  /** The hint raising the words while they are folded: the window's tooltip, unless the caller hangs one of its own. */
-  hint?: FoldingButtonHint | undefined;
-}): React.JSX.Element {
+}: FoldingButtonDoors &
+  BusyProps & {
+    /** Its words, and so its name, folded or not. */
+    label: string;
+    icon: ReactNode;
+    variant?: ButtonVariant;
+    /** Its outline: the control's corner, or round, a pill drawn and a disc folded. */
+    shape?: ButtonShape | undefined;
+    /** How big it is: the control's own, or a row mark's height in the caption's type. */
+    size?: ButtonSize | undefined;
+    /** Whether the press its ring stood for landed, read as the ring leaves (Button's `succeeded`). */
+    succeeded?: boolean | undefined;
+    /** Whether its glyph turns once as a press lands, as a retry's arrow does (Button's `turns`). */
+    turns?: boolean | undefined;
+    disabled?: boolean | undefined;
+    onClick?: ((event: MouseEvent<HTMLButtonElement>) => void) | undefined;
+    /** A count after its words, inside the button's fill; it stays drawn when the words fold. */
+    trailing?: ReactNode;
+    /** The hint raising the words while they are folded: the window's tooltip, unless the caller hangs one of its own. */
+    hint?: FoldingButtonHint | undefined;
+  }): React.JSX.Element {
   const [measured, folded] = useFolded();
   const box = (
     <FoldingBox
@@ -226,6 +235,7 @@ export function FoldingButton({
       shape={shape}
       size={size}
       busy={busy}
+      busyLabel={busyLabel}
       succeeded={succeeded}
       turns={turns}
       disabled={disabled}

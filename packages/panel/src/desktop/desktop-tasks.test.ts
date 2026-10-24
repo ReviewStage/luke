@@ -113,6 +113,9 @@ test("a task the service will not hand the reader, as a link to another workspac
     container.textContent ?? "",
     /Not foundThis task doesn't exist, or you don't have access to it\./u,
   );
+  // The frame keeps the window's bar, which the words saying so stand under.
+  const frame = container.querySelector("section[aria-label='Not found']");
+  assert.equal(frame?.firstElementChild?.tagName, "HEADER");
   assert.deepEqual(left, [TASK.id]);
   act(() => root.unmount());
   container.remove();
@@ -139,9 +142,12 @@ test("while the task is read, its column's toolbar and the side panel stand thei
   const blocks = (row: Element | null) =>
     [...(row?.querySelectorAll(":scope > .luke-skeleton") ?? [])].length;
 
-  assert.equal(blocks(container.querySelector(".desktop-toolbar > .main-tabs")), 2);
+  assert.equal(
+    blocks(container.querySelector(".luke-toolbar > .luke-toolbar-heading > .main-tabs")),
+    2,
+  );
   assert.equal(blocks(container.querySelector("aside[aria-label='Panel'] .side-panel-tabs")), 2);
-  const acts = [...container.querySelectorAll(".desktop-toolbar-actions > .luke-skeleton")];
+  const acts = [...container.querySelectorAll(".luke-toolbar-actions > .luke-skeleton")];
   assert.equal(
     acts.at(-1)?.getAttribute("style"),
     "--luke-skeleton-width: var(--luke-control-height);",
@@ -298,7 +304,6 @@ test("a plan's Inbox tab whose read holds nothing says nothing needs you under t
         createElement(DesktopTasks, {
           summary: UNPINNED_SUMMARY,
           looks: NO_LOOKS,
-          notice: undefined,
           tasks: tasksControl({
             page: TASKS_PAGE.DOCUMENT,
             activeTaskId: TASK.id,
@@ -427,7 +432,6 @@ async function narrowTaskInbox(
         createElement(DesktopTasks, {
           summary: UNPINNED_SUMMARY,
           looks: NO_LOOKS,
-          notice: undefined,
           tasks: tasksControl({
             page: TASKS_PAGE.DOCUMENT,
             activeTaskId: TASK.id,
@@ -476,7 +480,7 @@ async function narrowTaskInbox(
         each === shown ? `[${each.textContent}]` : (each.textContent ?? ""),
       );
       act(() => shown?.click());
-      return [tab.querySelector(".inbox-tasks header h1")?.textContent, ...words];
+      return [tab.querySelector(".inbox-tasks .luke-pane-bar-title")?.textContent, ...words];
     },
     /** Shows the scope named `name` from the view's menu. */
     pressScope: async (name: string) => {
@@ -509,9 +513,9 @@ async function narrowTaskInbox(
       return [alert?.textContent?.includes("The inbox could not be read.") ?? false, retry];
     },
     back: () =>
-      [
-        ...tab.querySelectorAll<HTMLButtonElement>(".inbox-view-items > .desktop-toolbar button"),
-      ].find((button) => button.textContent === "Inbox") ?? null,
+      [...tab.querySelectorAll<HTMLButtonElement>(".inbox-view-items > .luke-toolbar button")].find(
+        (button) => button.textContent === "Inbox",
+      ) ?? null,
     row: (title: string) =>
       [
         ...tab.querySelectorAll<HTMLButtonElement>(".inbox-tasks li button.luke-list-row-main"),
@@ -861,7 +865,7 @@ test("a plan's document opens on its title, with who created it and last edited 
 
   assert.equal(container.querySelector('nav[aria-label="Where this task is"]'), null);
   assert.equal(body?.previousElementSibling, null, "nothing stands over the document's title");
-  assert.ok(first?.querySelector(".task-title"), "the title leads the document");
+  assert.equal(first?.querySelector("h1")?.textContent, task.name, "the title leads the document");
   assert.ok(byline?.classList.contains("plan-byline"), "the byline stands under the title");
   assert.match(byline?.textContent ?? "", /^Created by .*Last edited by .*Lee Park/u);
   act(() => root.unmount());
@@ -1031,7 +1035,6 @@ async function chatTabMounted(
         createElement(DesktopTasks, {
           summary: UNPINNED_SUMMARY,
           looks: NO_LOOKS,
-          notice: undefined,
           tasks: tasksControl({
             page: TASKS_PAGE.DOCUMENT,
             activeTaskId: TASK.id,
@@ -1058,7 +1061,10 @@ test("a task's Chat tab in the side panel shows its task channel at reading size
   const own = await chatTabMounted(true);
   const tab = own.container.querySelector('section.desktop-task-chat[aria-label="Chat"]');
   assert.ok(tab, "the task's Chat tab");
-  assert.equal(tab.querySelector(".chat-head h1")?.textContent, "teammate-invitations");
+  assert.equal(
+    tab.querySelector(".chat-stream .luke-pane-bar-lead")?.textContent,
+    "teammate-invitations",
+  );
   assert.match(
     tab.querySelector(".chat-composer")?.textContent ?? "",
     /Message #teammate-invitations/u,
@@ -1223,7 +1229,6 @@ function panelPage(tab: SidePanelTab, overrides: Partial<TasksControl> = {}) {
           createElement(DesktopTasks, {
             summary: UNPINNED_SUMMARY,
             looks: NO_LOOKS,
-            notice: undefined,
             tasks: tasksControl({
               page: TASKS_PAGE.DOCUMENT,
               activeTaskId: TASK.id,

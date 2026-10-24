@@ -1,6 +1,6 @@
-/* nav-item.css -- NavItem: a place in a column, a fold's head, or who and
-   where, each with its glyph, its name, and its end; the keyboard's ring is
-   the app's reset's, as it is for every control. */
+/* nav-item.css -- NavItem: a place in a column, or who and where, each
+   with its glyph, its name, and its end; the keyboard's ring is the app's
+   reset's, as it is for every control. */
 
 @layer components {
   .luke-nav-item {
@@ -54,7 +54,7 @@
   }
 
   .luke-nav-item:disabled {
-    opacity: 0.45;
+    opacity: var(--luke-disabled-opacity);
     cursor: default;
   }
 
@@ -64,18 +64,6 @@
 
   .luke-nav-item[data-unread="true"] .luke-nav-item-name {
     font-weight: var(--luke-type-emphasis-weight);
-  }
-
-  /* A fold's head speaks in the headings' voice and draws no fill, since
-     the container around it and its actions draws one. */
-  .luke-nav-item[data-variant="head"] {
-    color: var(--luke-color-text-muted);
-    font-size: var(--luke-type-group-size);
-    font-weight: var(--luke-type-group-weight);
-  }
-
-  .luke-nav-item[data-variant="head"]:hover:not(:disabled) {
-    background: none;
   }
 
   /* Who or where stands tall enough for a face, in the primary ink. */
@@ -90,8 +78,7 @@
     font-weight: var(--luke-type-emphasis-weight);
   }
 
-  /* The glyph and, on a fold's head, the chevron share one cell, only one
-     of them drawn, so the swap crossfades in place and the name never moves. */
+  /* The glyph's cell. */
   .luke-nav-item-glyph {
     display: grid;
     flex: none;
@@ -102,65 +89,12 @@
 
   .luke-nav-item-glyph > * {
     display: grid;
-    grid-area: 1 / 1;
     place-items: center;
-    transition:
-      opacity var(--luke-duration-hover) var(--luke-motion-exit),
-      transform var(--luke-duration-hover) var(--luke-motion-exit);
   }
 
   .luke-nav-item-icon > svg {
     width: var(--luke-control-icon);
     height: var(--luke-control-icon);
-  }
-
-  .luke-nav-item-chevron {
-    opacity: 0;
-  }
-
-  .luke-nav-item-chevron > svg {
-    width: 12px; /* off-scale: the muted chevron a fold and a field share */
-    height: 12px; /* off-scale: the muted chevron a fold and a field share */
-  }
-
-  .luke-nav-item[aria-expanded="true"] .luke-nav-item-chevron {
-    transform: rotate(90deg);
-  }
-
-  .luke-nav-item:focus-visible
-    .luke-nav-item-glyph:has(.luke-nav-item-chevron)
-    > .luke-nav-item-icon {
-    opacity: 0;
-  }
-
-  .luke-nav-item:focus-visible .luke-nav-item-chevron {
-    opacity: 1;
-  }
-
-  /* Note that the pointer's own reveals, here and below, stand only where
-     there is a hover, because iOS plays a first tap as a hover and spends
-     it on a reveal: the row goes where it leads on the second tap alone. */
-  @media (hover: hover) {
-    .luke-nav-item:hover .luke-nav-item-glyph:has(.luke-nav-item-chevron) > .luke-nav-item-icon {
-      opacity: 0;
-    }
-
-    .luke-nav-item:hover .luke-nav-item-chevron {
-      opacity: 1;
-    }
-  }
-
-  /* A screen with no hover draws a fold's chevron at rest in its glyph's
-     place, since no pointer rests on the head to bring it, and a fold
-     should say it folds. */
-  @media (hover: none) {
-    .luke-nav-item-glyph:has(.luke-nav-item-chevron) > .luke-nav-item-icon {
-      opacity: 0;
-    }
-
-    .luke-nav-item-chevron {
-      opacity: 1;
-    }
   }
 
   /* A name cut short fades out over its last few pixels (`one-line.css`),
@@ -182,8 +116,7 @@
     white-space: nowrap;
   }
 
-  /* A place's end stands at the row's end; a fold's head says its count
-     and mark right after its name. */
+  /* A place's end stands at the row's end. */
   .luke-nav-item-rest,
   .luke-nav-item-shortcut {
     display: inline-flex;
@@ -192,7 +125,7 @@
     gap: var(--luke-space-6);
   }
 
-  .luke-nav-item:not([data-variant="head"]) > :is(.luke-nav-item-rest, .luke-nav-item-shortcut) {
+  .luke-nav-item > :is(.luke-nav-item-rest, .luke-nav-item-shortcut) {
     margin-left: auto;
   }
 

@@ -208,3 +208,57 @@ test("Cancel, unlike Esc, lets a reply's words go", async () => {
   act(() => button(container, "Reply…").click());
   assert.equal(box(container, "Reply").textContent, "");
 });
+
+/** The reply or the edit as drawn: its box, and the one foot that holds its Cancel and its send. */
+function foot(container: HTMLElement, label: string): HTMLElement {
+  const frame = box(container, label).closest(".luke-composer-frame") ?? assert.fail("a frame");
+  return frame.querySelector<HTMLElement>(".luke-composer-foot") ?? assert.fail("a foot");
+}
+
+/** The kind of every change asked of GitHub so far. */
+function actionsSent(): string[] {
+  return changes.map((change) => change.action);
+}
+
+/** The words of every button in the foot. */
+function footPresses(element: HTMLElement): string[] {
+  return [...element.querySelectorAll("button")].map((each) => each.textContent ?? "");
+}
+
+test("a thread's reply and a pending comment's edit both stand on the one foot, with Cancel and their send in it", () => {
+  const container = draw();
+
+  act(() => button(container, "Reply…").click());
+  assert.deepEqual(footPresses(foot(container, "Reply")), ["Cancel", "Reply"]);
+
+  act(() => button(container, "Edit").click());
+  assert.deepEqual(footPresses(foot(container, "Pending comment")), ["Cancel", "Save"]);
+});
+
+test("Ctrl+Enter sends a reply and saves an edit, and a bare Enter sends neither", async () => {
+  const container = draw();
+  const press = (element: HTMLElement, init: KeyboardEventInit) =>
+    act(() => {
+      element.dispatchEvent(
+        new KeyboardEvent("keydown", { bubbles: true, cancelable: true, ...init }),
+      );
+    });
+
+  act(() => button(container, "Reply…").click());
+  typeAtEnd(box(container, "Reply"), "Thanks");
+  press(box(container, "Reply"), { key: "Enter" });
+  await settle();
+  assert.deepEqual(actionsSent(), [], "a bare Enter sends nothing");
+  press(box(container, "Reply"), { key: "Enter", ctrlKey: true });
+  await settle();
+  assert.deepEqual(actionsSent(), [PULL_REQUEST_ACTION.REPLY_TO_THREAD]);
+
+  act(() => button(container, "Edit").click());
+  typeAtEnd(box(container, "Pending comment"), "!");
+  press(box(container, "Pending comment"), { key: "Enter", ctrlKey: true });
+  await settle();
+  assert.deepEqual(actionsSent(), [
+    PULL_REQUEST_ACTION.REPLY_TO_THREAD,
+    PULL_REQUEST_ACTION.EDIT_REVIEW_COMMENT,
+  ]);
+});

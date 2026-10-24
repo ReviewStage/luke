@@ -9,28 +9,29 @@ import {
 import { dayText } from "@luke/features/time-format";
 import { ACT_KIND } from "@luke/host/acts";
 import {
+  ANNOUNCE,
   BUTTON_TYPE,
   BUTTON_VARIANT,
   Button,
+  CONFIRM_LOSS,
   ConfirmDialog,
   DIALOG_SIZE,
   Dialog,
+  DialogActions,
   GAP,
   Inline,
   JUSTIFY,
   LAYOUT_ELEMENT,
   SETTINGS_ROW_STATE,
+  SecretField,
   SettingsFacts,
   SettingsRowStateLine,
   Stack,
   TEXT_ELEMENT,
-  TEXT_FIELD_AUTO_COMPLETE,
-  TEXT_FIELD_TYPE,
   TEXT_FONT,
   TEXT_LINK_LOOK,
   TEXT_VARIANT,
   Text,
-  TextField,
   TextLink,
   useConfirmDialog,
 } from "@luke/ui";
@@ -38,6 +39,7 @@ import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { useState } from "react";
 import { useAct } from "../act.js";
 import { useOpenLink } from "../tasks/use-open-link.js";
+import { useAnnounceShown } from "../use-announce-shown.js";
 
 /**
  * github-dialog.tsx -- Settings › Profile › GitHub personal access token: the member's own classic token, added, shown, and removed.
@@ -95,10 +97,9 @@ function statusLabel(status: GitHubTokenStatus): string | undefined {
 
 /** A problem said in the attention tint, announced as it lands. */
 function Problem({ children }: { children: string }): React.JSX.Element {
+  useAnnounceShown(ANNOUNCE.ALERT, children);
   return (
-    <SettingsRowStateLine state={SETTINGS_ROW_STATE.ATTENTION} role="alert">
-      {children}
-    </SettingsRowStateLine>
+    <SettingsRowStateLine state={SETTINGS_ROW_STATE.ATTENTION}>{children}</SettingsRowStateLine>
   );
 }
 
@@ -137,12 +138,23 @@ function SavedToken({
   return (
     <Inline justify={JUSTIFY.BETWEEN}>
       <TokenFacts token={token} />
-      <Button variant={BUTTON_VARIANT.DANGER_OUTLINE} disabled={removal.busy} onClick={removal.ask}>
+      <Button
+        variant={BUTTON_VARIANT.DANGER_OUTLINE}
+        busy={removal.busy}
+        busyLabel="Removing"
+        onClick={removal.ask}
+      >
         Remove
       </Button>
       <ConfirmDialog
+        open
         confirm={removal}
-        question={{ title: "Remove your GitHub token?", verb: "Remove", running: "Removing…" }}
+        question={{
+          title: "Remove your GitHub token?",
+          verb: "Remove",
+          running: "Removing…",
+          loss: CONFIRM_LOSS.IRREVERSIBLE,
+        }}
       />
     </Inline>
   );
@@ -170,29 +182,25 @@ function TokenForm({
     });
   };
   return (
-    <Stack gap={GAP.TIGHT}>
-      <Inline
-        as={LAYOUT_ELEMENT.FORM}
-        justify={JUSTIFY.END}
-        growFirst
-        onSubmit={(event) => {
-          event.preventDefault();
-          save();
+    <Stack
+      as={LAYOUT_ELEMENT.FORM}
+      onSubmit={(event) => {
+        event.preventDefault();
+        save();
+      }}
+    >
+      <SecretField
+        label="Personal access token"
+        error={problem}
+        placeholder="ghp_…"
+        disabled={saving}
+        value={pasted}
+        onChange={(value) => {
+          setPasted(value);
+          setProblem(undefined);
         }}
-      >
-        <TextField
-          type={TEXT_FIELD_TYPE.PASSWORD}
-          autoComplete={TEXT_FIELD_AUTO_COMPLETE.OFF}
-          label="Personal access token"
-          placeholder="ghp_…"
-          spellCheck={false}
-          disabled={saving}
-          value={pasted}
-          onChange={(value) => {
-            setPasted(value);
-            setProblem(undefined);
-          }}
-        />
+      />
+      <Inline justify={JUSTIFY.END}>
         <Button
           type={BUTTON_TYPE.SUBMIT}
           variant={BUTTON_VARIANT.PRIMARY}
@@ -203,22 +211,26 @@ function TokenForm({
           Save
         </Button>
       </Inline>
-      {problem === undefined ? null : <Problem>{problem}</Problem>}
     </Stack>
   );
 }
 
 /** The dialog the Profile row's Add or Manage opens, over the token as the row last read it. */
 export function GitHubTokenDialog({
+  open,
   token,
   onToken,
   onClose,
+  onExited,
 }: {
+  /** Whether the card stands; falling, it fades out, then tells its owner it is gone. */
+  open: boolean;
   /** The saved token, or null where none is. */
   token: GitHubTokenSummary | null;
   /** The token as the service answered a save or a removal. */
   onToken: (token: GitHubTokenSummary | null) => void;
   onClose: () => void;
+  onExited: () => void;
 }): React.JSX.Element {
   const { act } = useAct();
   const openLink = useOpenLink();
@@ -245,9 +257,11 @@ export function GitHubTokenDialog({
 
   return (
     <Dialog
+      open={open}
       title="Personal access token"
       size={DIALOG_SIZE.WIDE}
       onDismiss={onClose}
+      onExited={onExited}
       actionsStart={
         <TextLink
           look={TEXT_LINK_LOOK.UNDERLINED}
@@ -261,11 +275,7 @@ export function GitHubTokenDialog({
           Create token
         </TextLink>
       }
-      actions={
-        <Button variant={BUTTON_VARIANT.PRIMARY} onClick={onClose}>
-          Done
-        </Button>
-      }
+      actions={<DialogActions onDone={onClose} />}
     >
       <div className={NO_CAPTURE}>
         {token === null ? (

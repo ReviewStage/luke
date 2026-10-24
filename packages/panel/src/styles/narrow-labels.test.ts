@@ -77,11 +77,13 @@ function itemCrumbs(room: string): HTMLElement {
   const pane = shell.appendChild(document.createElement("section"));
   pane.className = "inbox-view-items";
   const bar = pane.appendChild(document.createElement("header"));
-  bar.className = "desktop-toolbar";
-  bar.appendChild(document.createElement("button")).textContent = "Inbox";
-  const crumbs = bar.appendChild(document.createElement("div"));
+  bar.className = "luke-toolbar";
+  const box = bar.appendChild(document.createElement("div"));
+  box.className = "inbox-item-bar";
+  box.appendChild(document.createElement("button")).textContent = "Inbox";
+  const crumbs = box.appendChild(document.createElement("div"));
   crumbs.className = "inbox-crumbs";
-  bar.appendChild(document.createElement("button")).textContent = "Resolve";
+  box.appendChild(document.createElement("button")).textContent = "Resolve";
   return crumbs;
 }
 
@@ -97,14 +99,14 @@ test("on the desktop's width an Inbox item's crumbs stand in its bar's one row, 
 
 /** Start in a task's bar at a phone's width, in a shell of the room given, answering how it folds. */
 function startFold(room: string): string {
-  laid = layContainersAt({ "plan-toolbar": 300 }, { touch: room === "narrow" });
+  laid = layContainersAt({ "luke-toolbar": 300 }, { touch: room === "narrow" });
   const shell = document.body.appendChild(document.createElement("div"));
   shell.className = "desktop-shell";
   shell.dataset.room = room;
   const main = shell.appendChild(document.createElement("div"));
   main.className = "desktop-task-main";
   const bar = main.appendChild(document.createElement("header"));
-  bar.className = "desktop-toolbar";
+  bar.className = "luke-toolbar";
   const start = bar.appendChild(document.createElement("div"));
   start.className = "start-agent";
   return getComputedStyle(start).getPropertyValue("--luke-fold").trim();
@@ -125,7 +127,7 @@ function byline(room: string) {
   shell.className = "desktop-shell";
   shell.dataset.room = room;
   const meta = shell.appendChild(document.createElement("div"));
-  meta.className = "message-meta";
+  meta.className = "luke-message-line";
   const part = (className: string) => {
     const element = meta.appendChild(document.createElement("div"));
     element.className = className;
@@ -133,8 +135,8 @@ function byline(room: string) {
   };
   return {
     actions: part("luke-message-actions"),
-    sender: part("message-sender"),
-    sentAt: part("message-sent-at"),
+    sender: part("luke-message-line-sender"),
+    sentAt: part("luke-message-line-time"),
   };
 }
 

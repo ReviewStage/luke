@@ -1,4 +1,4 @@
-/* settings-page.css -- a settings page: a column at its measure, inset from
+/* settings-page.css -- a settings page under its bar: a column at its measure, inset from
    the page's edges, scrolling inside them, with the title's line above the
    sections and a section's gap between each and the next. The sections'
    own heading and card are theirs (`settings-section.css`). Rows scrolled
@@ -24,6 +24,17 @@
 }
 
 @layer components {
+  /* The page under its bar: the bar still, the page taking the rest of the
+     room its frame leaves it, beside a drag strip in a column too. */
+  .luke-settings-page-frame {
+    display: flex;
+    flex: 1 1 0;
+    flex-direction: column;
+    block-size: 100%;
+    min-block-size: 0;
+    min-width: 0;
+  }
+
   /* Note that the page is its own container, and its inset is its column's,
      because the contract's 480px is the width the page's content stands in,
      inside the scroll bar's gutter, and a container query reads its
@@ -34,9 +45,8 @@
     --luke-settings-page-measure: var(--luke-settings-measure);
     container: luke-settings-page / inline-size;
     box-sizing: border-box;
-    /* The room its frame leaves it, beside a drag strip in a column too. */
+    /* The room the bar leaves it. */
     flex: 1 1 0;
-    block-size: 100%;
     min-block-size: 0;
     min-width: 0;
     overflow-x: clip;
@@ -63,31 +73,9 @@
     padding: var(--luke-page-inset);
   }
 
-  /* The title and the page's actions on one line, the actions dropping
-     below the title when both do not fit. */
+  /* The header (`PageHeader`), the room under it before the sections. */
   .luke-settings-page-head {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    justify-content: space-between;
-    gap: var(--luke-control-gap);
     margin-bottom: var(--luke-space-24);
-  }
-
-  .luke-settings-page-head > .luke-text {
-    min-width: 0;
-  }
-
-  /* A quiet act ends the line flush with the cards' edge. Note that the
-     actions take the margin rather than the button, because a button wider
-     than its container by its own negative margin would be held to it and
-     cut short. */
-  .luke-settings-page-actions {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: var(--luke-control-gap);
-    margin-inline-end: calc(-1 * var(--luke-control-inset));
   }
 
   .luke-settings-page-sections {

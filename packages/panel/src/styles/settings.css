@@ -11,48 +11,19 @@
   gap: var(--luke-space-12);
 }
 
-/* A row's picker: the chip naming the value, and the app's own menu under
-   it, drawn the way the composer's chips and menus are so Settings reads as
-   the rest of the app. Every chip shares one width, like a column of macOS
-   pop-up buttons: the control sizes the face, not whichever value happens to
-   be chosen, so the rows read as one aligned column and a change of value
-   cannot re-shape its row. The width fits the longest faces a build ships,
-   and a longer model name ellipsizes rather than growing. */
+/* A row's picker: the chip naming the value, and the app's own menu hung
+   from it (`@luke/ui`'s `SearchableMenu`), drawn the way the composer's
+   chips and menus are so Settings reads as the rest of the app. Every chip
+   shares one width, like a column of macOS pop-up buttons: the control
+   sizes the face, not whichever value happens to be chosen, so the rows
+   read as one aligned column and a change of value cannot re-shape its row.
+   The width fits the longest faces a build ships, and a longer model name
+   ellipsizes rather than growing. */
 .settings-picker {
   position: relative;
   display: inline-flex;
   flex: 0 0 auto;
   align-items: center;
-}
-
-/* The menu hangs from the chip's trailing edge, where the column is, and
-   stands above the chip instead where the window leaves more room there.
-   Its list is capped to that room, and it takes the chip's other edge, or
-   is pushed back over the chip (`--settings-picker-inset`), where its far
-   side would run past what clips it, so it never scrolls the page behind
-   sideways, and the list scrolls inside the menu rather than the page.
-   Scoped under the picker, because the menu classes it adds to are written
-   in desktop.css, after this sheet, and would otherwise win back the
-   composer's 340px width at equal specificity. */
-.settings-picker .settings-picker-menu {
-  right: var(--settings-picker-inset, 0px);
-  left: auto;
-  width: 280px;
-  max-width: var(--settings-picker-width-max, none);
-}
-
-.settings-picker[data-align="start"] .settings-picker-menu {
-  right: auto;
-  left: var(--settings-picker-inset, 0px);
-}
-
-.settings-picker[data-side="above"] .settings-picker-menu {
-  top: auto;
-  bottom: calc(100% + var(--luke-space-6));
-}
-
-.settings-picker {
-  --luke-combobox-list-max: min(280px, var(--settings-picker-list-max, 280px));
 }
 
 /* The provider the account signed in with, its mark beside its name as the

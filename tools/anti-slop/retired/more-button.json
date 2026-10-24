@@ -1,0 +1,25 @@
+{
+  "instead": "Draw a thing's ⋯ with MoreButton from @luke/ui, or give a row its menu through ListRow's menu prop (useRowMenu), which draws it; the ⋯ glyph is imported only there. A navigation bar's More tab is no thing's actions and names its files.",
+  "glyphs": [
+    { "glyph": "GLYPH.MORE", "allow": ["packages/ui/src/components/more-button/"] },
+    { "glyph": "Ellipsis", "allow": ["packages/ui/src/components/more-button/"] },
+    { "glyph": "EllipsisVertical", "allow": ["packages/ui/src/components/more-button/"] },
+    { "glyph": "MoreHorizontal", "allow": ["packages/ui/src/components/more-button/"] },
+    { "glyph": "MoreVertical", "allow": ["packages/ui/src/components/more-button/"] }
+  ],
+  "patterns": [
+    {
+      "import": "@luke/ui",
+      "names": ["EllipsisIcon"],
+      "allow": [
+        "apps/catalog/src/examples/bar-items.tsx",
+        "packages/panel/src/desktop/mobile-bar.tsx"
+      ]
+    },
+    {
+      "import": "../face/glyphs.js",
+      "names": ["EllipsisIcon"],
+      "allow": ["packages/ui/src/icons/glyph-registry.tsx"]
+    }
+  ]
+}

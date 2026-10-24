@@ -5,8 +5,8 @@ import {
   COMMENT_ELEMENT,
   Comment,
   GAP,
-  IconButton,
   LAYOUT_ELEMENT,
+  MoreButton,
   STATUS_TONE,
   Stack,
 } from "@luke/ui";
@@ -56,12 +56,7 @@ function Comments(): React.JSX.Element {
               at={now - 40 * MINUTE}
               now={now}
               trailing={
-                <IconButton
-                  icon={<GLYPH.MORE />}
-                  label="Comment actions"
-                  size={BUTTON_SIZE.COMPACT}
-                  onClick={() => {}}
-                />
+                <MoreButton thing="Comment" size={BUTTON_SIZE.COMPACT} onClick={() => {}} />
               }
             >
               Yes. It waits on the drain now, and the spec passed ten runs in a row.

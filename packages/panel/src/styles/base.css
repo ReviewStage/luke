@@ -30,8 +30,6 @@
   --voice-luke: var(--luke-color-working);
   /* The keyboard's ring, how thick and how far off the edge, is the
      profile's `--luke-focus-ring-*` (`tokens/profiles.css`). */
-  /* The voice's notice line's ground, opaque because the document scrolls on beneath it. */
-  --surface-notice: var(--luke-color-overlay);
   /* The code on screen, in the inks of GitHub's themes on its ground
      (`--luke-color-code-ground`), and the mark beside a line changed in that
      theme's blue. */
@@ -318,80 +316,6 @@ body,
   height: 52px;
 }
 
-/* Voice notice ------------------------------------------------------------ */
-
-/* The voice's notice line (voice-notice-strip.tsx): a failure, a notice, or
-   the hint that the Mac's output is off, never spoken words. One element in
-   every state so both edges of its fade can run; where it stands is the
-   window's layout (desktop.css). It takes no pointer but the hint's button,
-   so the document beneath it keeps answering. */
-.voice-notice {
-  position: absolute;
-  z-index: 6;
-  left: 50%;
-  padding: var(--luke-space-8) var(--luke-space-12);
-  border: 1px solid var(--luke-color-border);
-  border-radius: var(--luke-radius-14);
-  /* Opaque, because the document scrolls on beneath it. */
-  background: var(--surface-notice);
-  box-shadow: 0 var(--luke-space-8) var(--luke-space-24) var(--luke-color-shadow-soft);
-  opacity: 0;
-  pointer-events: none;
-  transform: translate(-50%, var(--luke-space-6));
-  transition:
-    opacity var(--luke-duration-exit) var(--luke-motion-exit),
-    transform var(--luke-duration-exit) var(--luke-motion-exit);
-}
-
-.voice-notice[data-shown="true"] {
-  opacity: 1;
-  transform: translate(-50%, 0);
-  transition:
-    opacity var(--luke-duration-quick) var(--luke-motion-exit),
-    transform var(--luke-duration-shape) var(--luke-spring);
-}
-
-/* The words, and the hint's Got it at their right, the one part of the line
-   that takes the pointer. */
-.voice-notice-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--luke-control-gap);
-}
-
-.voice-notice-row > button {
-  pointer-events: auto;
-}
-
-.voice-notice-text {
-  display: block;
-  min-width: 0;
-  font-size: var(--luke-type-label-size);
-  font-weight: var(--luke-weight-medium);
-  line-height: var(--luke-type-label-leading);
-}
-
-/* A voice failure in the `.error-message` red, because it is a fault being
-   reported. */
-.voice-notice[data-tone="error"] .voice-notice-text {
-  color: var(--luke-color-danger-text);
-}
-
-/* A state notice more quietly, and the volume hint, the one line that asks
-   the user to do something, in the attention orange: temporary
-   unavailability must not wear a fault's red. */
-.voice-notice:is([data-tone="notice"], [data-tone="volume"]) .voice-notice-text {
-  color: var(--luke-color-attention);
-}
-
-/* A quote keeps the tone's colour and is set off by its rule alone, because
-   a quote's quiet ink would read as words that are not the fault or the
-   notice. */
-.voice-notice .markdown-quote {
-  color: inherit;
-}
-
 /* Where a piece of work stands, on its own glyph (`state-glyph.tsx`). Working,
    the working mark stands in the glyph's place, centred in the glyph's own
    footprint, so a tab or a row moves nothing as its work starts or ends.
@@ -450,17 +374,6 @@ body,
 .draft-mark > svg {
   width: 100%;
   height: 100%;
-}
-
-/* A fault's words, in the danger text colour: a refusal under the row or
-   the dialog it answers, and a press that did not land. The one class for
-   them, so a failure reads alike wherever it is said. A read that did not
-   land is said more quietly, its glyph alone in red (`@luke/ui`'s
-   `ErrorState`). */
-.error-message {
-  margin: 0;
-  color: var(--luke-color-danger-text);
-  font-size: var(--luke-type-caption-size);
 }
 
 /* Session primitives ----------------------------------------------------- */

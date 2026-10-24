@@ -14,21 +14,26 @@ import {
   Button,
   DetailPage,
   ErrorState,
-  FILL_ELEMENT,
-  Fill,
-  IconButton,
+  GAP,
   List,
   ListRow,
+  MoreButton,
+  moreLabel,
+  NOT_FOUND_THING,
+  NOTE_LINE_LOOK,
+  NoteLine,
+  NotFound,
   OneLine,
   PAGE_FRAME,
   RowHint,
   RowHintOptions,
+  ShowMoreRow,
+  Stack,
   TEXT_ELEMENT,
   TEXT_TONE,
   TEXT_VARIANT,
   Text,
   Time,
-  Tooltip,
   useMenu,
   useMinute,
 } from "@luke/ui";
@@ -48,13 +53,12 @@ import {
   personPageEmpty,
   personRef,
 } from "@luke/ui/person-page-model";
-import { EllipsisIcon, LinkIcon, ListFilterIcon, MailIcon, UsersIcon } from "lucide-react";
+import { LinkIcon, ListFilterIcon, MailIcon, UsersIcon } from "lucide-react";
 import { type ReactNode, useCallback, useRef } from "react";
 import { ACTOR_SIZE, ActorMark, AutomationCard, automationActor, YouBadge } from "../actor-ref.js";
 import { useAppCommand } from "../app-commands.js";
 import { LINK_COPY, useCopyToast } from "../copy-feedback.js";
 import { MemberDirectory, useMemberDirectory } from "../member-directory.js";
-import { NOT_FOUND_THING, NotFound } from "../not-found.js";
 import { useOpenSettings } from "../open-settings.js";
 import { stateEndMark } from "../state-glyph.js";
 import { AgentCard, lineSubject } from "../tasks/agent-ref.js";
@@ -67,11 +71,11 @@ import { ActionMenu, type MenuAction } from "./action-menu.js";
 import { STANDING_GLYPH } from "./automation-runs-panel.js";
 import { automationNextText } from "./automation-words.js";
 import {
-  PersonHeadFrame,
-  PersonHeadSkeleton,
-  PersonNameSkeleton,
+  PersonLineSkeleton,
+  PersonReadingSkeleton,
   PersonSectionFrame,
-  PersonToolbar,
+  PersonTitle,
+  PersonTitleSkeleton,
   PersonTop,
   PROFILE,
   RowsSkeleton,
@@ -177,10 +181,10 @@ function AgentRow({
 }
 
 /** What the page's ⋯ is called, on its button and its menu alike. */
-const MORE = "More";
+const PERSON = "Person";
 
 /**
- * The toolbar's end: their tasks in the sidebar, where the workspace is
+ * The header's end: their tasks in the sidebar, where the workspace is
  * shared and so filters by who created a task; and ⋯, holding Copy email for a
  * member and the workspace's members in Settings for its owners and admins.
  */
@@ -265,11 +269,14 @@ function PersonActions({
       ) : null}
       {actions.length === 0 ? null : (
         <>
-          <Tooltip label={MORE}>
-            <IconButton icon={<EllipsisIcon />} label={MORE} {...menu.trigger()} />
-          </Tooltip>
+          <MoreButton thing={PERSON} {...menu.trigger()} />
           {menu.drawn === undefined ? null : (
-            <ActionMenu label={MORE} menu={menu.drawn} groups={actions} onClose={menu.close} />
+            <ActionMenu
+              label={moreLabel(PERSON)}
+              menu={menu.drawn}
+              groups={actions}
+              onClose={menu.close}
+            />
           )}
         </>
       )}
@@ -359,28 +366,26 @@ function AutomationRow({
   );
 }
 
-/** The page's head: their face, their name and You where it is the reader, and who they are here. */
-function PersonHead({ person }: { person: Actor }): React.JSX.Element {
-  const line = headLine(person);
+/** The page's title: their face beside their name, which is the page's one `h1`. */
+function PersonHeading({ person }: { person: Actor }): React.JSX.Element {
   return (
-    <PersonHeadFrame
+    <PersonTitle
       face={<ActorMark actor={person} size={ACTOR_SIZE.PAGE} />}
-      name={
-        <>
-          <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.TITLE}>
-            {headName(person)}
-          </Text>
-          {person.kind === ACTOR_KIND.PERSON && person.you ? <YouBadge /> : null}
-        </>
-      }
-      line={
-        line === undefined ? null : (
-          <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
-            {line}
-          </Text>
-        )
-      }
+      name={headName(person)}
     />
+  );
+}
+
+/** The line under the title: You where it is the reader, and who they are here. */
+function PersonLine({ person }: { person: Actor }): React.ReactNode {
+  const line = headLine(person);
+  const you = person.kind === ACTOR_KIND.PERSON && person.you;
+  if (!you) return line;
+  return (
+    <>
+      <YouBadge />
+      {line === undefined ? null : ` ${line}`}
+    </>
   );
 }
 
@@ -388,7 +393,8 @@ function PersonHead({ person }: { person: Actor }): React.JSX.Element {
  * One section of a person's tasks, the first `PERSON_TASKS_SHOWN` of them,
  * newest first, wearing no face, since the page's head says whose they
  * are; and under it, where it leaves some out and the sidebar filters by
- * person, Show all, which lists every one there (`onShowAll`).
+ * person, the foot that says how many more there are and lists every one
+ * in the sidebar (`onShowAll`).
  */
 function PersonTasks({
   title,
@@ -404,8 +410,9 @@ function PersonTasks({
   onShowAll: (() => void) | undefined;
 }): React.JSX.Element | null {
   if (listed.length === 0) return null;
+  // Note that the section and its foot are one block of the page, so the page's gap between sections stands above both and the foot stands close under the rows.
   return (
-    <>
+    <Stack gap={GAP.TIGHT}>
       <PersonSection title={title} count={listed.length}>
         {listed.slice(0, PERSON_TASKS_SHOWN).map((task) => (
           <RecentRow
@@ -418,12 +425,10 @@ function PersonTasks({
           />
         ))}
       </PersonSection>
-      {listed.length > PERSON_TASKS_SHOWN && onShowAll !== undefined ? (
-        <p className="person-section-foot">
-          <Button onClick={onShowAll}>{`Show all ${listed.length} in sidebar`}</Button>
-        </p>
-      ) : null}
-    </>
+      {onShowAll === undefined ? null : (
+        <ShowMoreRow more={listed.length - PERSON_TASKS_SHOWN} shown={false} onToggle={onShowAll} />
+      )}
+    </Stack>
   );
 }
 
@@ -478,44 +483,49 @@ function PersonColumn({
   // Nobody the workspace's members or those who left name, as a link to someone outside it opens, is not found here; until both are read, nobody is.
   const unnamed = person.kind === ACTOR_KIND.SOMEONE && person.reason === SOMEONE_REASON.UNNAMED;
   if (unnamed && members !== undefined && former !== undefined) {
-    return (
-      <Fill as={FILL_ELEMENT.SECTION} className="automations-view" aria-label={PROFILE}>
-        <NotFound thing={NOT_FOUND_THING.PERSON} />
-      </Fill>
-    );
+    return <NotFound thing={NOT_FOUND_THING.PERSON} bar={{}} />;
   }
   // Note that someone nothing names yet is drawn as a placeholder, because only settled reads may say they are not in the workspace.
-  const name = unnamed ? undefined : headName(person);
   const theirs = you ? "your" : "their";
-  // A refused read will not name them, so the head says so and offers Retry rather than wait.
-  const head = !unnamed ? (
-    <PersonHead person={person} />
-  ) : refused ? (
-    <div className="home-note">
-      <ErrorState
-        onRetry={retry}
-      >{`${you ? "Your" : "Their"} profile could not be read.`}</ErrorState>
-    </div>
-  ) : (
-    <PersonHeadSkeleton />
-  );
+  // A refused read will not name them, so the page says so and offers Retry rather than wait.
+  const note =
+    refused && unnamed ? (
+      <div className="home-note">
+        <ErrorState
+          onRetry={retry}
+        >{`${you ? "Your" : "Their"} profile could not be read.`}</ErrorState>
+      </div>
+    ) : unnamed ? (
+      <PersonReadingSkeleton />
+    ) : null;
   return (
     <DetailPage
-      frame={PAGE_FRAME.TOOLBAR}
-      label={name ?? PROFILE}
-      toolbar={
-        <PersonToolbar name={name ?? (refused ? PROFILE : <PersonNameSkeleton />)} words={name}>
-          <PersonActions
-            tasks={tasks}
-            userId={userId}
-            person={person}
-            shared={shared}
-            onShowTasks={showTasks}
-          />
-        </PersonToolbar>
+      frame={PAGE_FRAME.PAGE}
+      title={
+        unnamed ? (
+          refused ? (
+            PROFILE
+          ) : (
+            <PersonTitleSkeleton name={undefined} />
+          )
+        ) : (
+          <PersonHeading person={person} />
+        )
+      }
+      description={
+        unnamed ? refused ? undefined : <PersonLineSkeleton /> : <PersonLine person={person} />
+      }
+      actions={
+        <PersonActions
+          tasks={tasks}
+          userId={userId}
+          person={person}
+          shared={shared}
+          onShowTasks={showTasks}
+        />
       }
     >
-      <PersonTop>{head}</PersonTop>
+      <PersonTop>{note}</PersonTop>
       {tasks.listFailed ? (
         <div className="home-note">
           <ErrorState onRetry={tasks.onRetryList}>
@@ -619,9 +629,9 @@ function PersonColumn({
         waiting.length === 0 &&
         automations.length === 0 ? (
         <div className="home-note">
-          <Text tone={TEXT_TONE.MUTED}>
+          <NoteLine look={NOTE_LINE_LOOK.INSET}>
             {you ? "Nothing of yours here yet." : "Nothing of theirs here yet."}
-          </Text>
+          </NoteLine>
         </div>
       ) : null}
     </DetailPage>

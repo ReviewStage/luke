@@ -1,4 +1,4 @@
-import type { ComponentPropsWithRef, ReactNode } from "react";
+import type { ComponentPropsWithRef, MouseEvent, ReactNode } from "react";
 import { ChevronDownIcon, RemoveIcon } from "../../face/glyphs.js";
 import { PRESS_FACE, PRESS_PULSE, pulseOnPress } from "../../press-pulse.js";
 import type { StatusTone } from "../../status-tone.js";
@@ -31,7 +31,10 @@ import { motionKey as motionKeyAttribute } from "../list-motion/list-motion.js";
  * where it leads with none, its face staying the chip's own, as a pull
  * request's state is; stand at a width its place shares (`width`); and draw its mark
  * alone where its place has no room for its words (`iconOnly`), its words
- * still read as its name. A removable chip (`onRemove`) is no button of its
+ * still read as its name. A chip that opens a page (`href`) is a link in the
+ * same face, so it is found, copied and opened as any link is; a window that
+ * opens addresses through its own door stops the browser's follow in
+ * `onClick`. A removable chip (`onRemove`) is no button of its
  * own: it names what stands, a filter applied, a mention or a label added to
  * a field, and ends in a × named for what lifting it does, which its caller
  * answers at once, so what it named is gone on the press. It springs in as
@@ -150,7 +153,19 @@ type ButtonChipProps = ChipFace & {
   busy?: boolean | undefined;
   onRemove?: never;
   motionKey?: never;
+  href?: never;
 } & Omit<ComponentPropsWithRef<"button">, "type" | "style" | "className" | "aria-busy">;
+
+/** A chip that is a link: its face, and the address a press goes to. */
+type LinkChipProps = ChipFace & {
+  href: string;
+  /** Called as the press leaves, before the browser follows the link; `preventDefault` leaves the following to the caller. */
+  onClick?: ((event: MouseEvent<HTMLAnchorElement>) => void) | undefined;
+  chevron?: never;
+  busy?: never;
+  onRemove?: never;
+  motionKey?: never;
+} & Omit<ComponentPropsWithRef<"a">, "style" | "className" | "href" | "onClick">;
 
 /** A chip naming what stands, ended by the × that lifts it. */
 type RemovableChipProps = ChipFace & {
@@ -160,14 +175,15 @@ type RemovableChipProps = ChipFace & {
   removeLabel: string;
   /** The key a `ListMotion` around its row follows it by, which plays its arrival and its exit. */
   motionKey?: string | undefined;
+  href?: never;
   children: ReactNode;
 };
 
-export type ChipProps = ButtonChipProps | RemovableChipProps;
+export type ChipProps = ButtonChipProps | LinkChipProps | RemovableChipProps;
 
 /** What every chip draws: a control's box, its words at the label's type, and the group its parts answer. */
 const CHIP_BASE =
-  "luke-chip group/chip m-0 inline-flex max-w-full items-center border font-body whitespace-nowrap transition-[background-color,color] duration-(--luke-duration-hover) ease-plain";
+  "luke-chip group/chip m-0 inline-flex max-w-full items-center border font-body no-underline whitespace-nowrap transition-[background-color,color] duration-(--luke-duration-hover) ease-plain";
 
 /**
  * Each look's face at rest and under the pointer, while its menu is open,
@@ -302,7 +318,7 @@ function faceClasses(
     look === CHIP_LOOK.FIELD ? "flex-1 [&>.settings-chevron]:ml-auto" : "flex-initial",
     iconOnly ? "[&>.settings-chevron]:hidden" : "",
     // Note that a busy chip's face pulses whole rather than standing faded, so only an idle one fades.
-    busy ? "" : "group-disabled/chip:opacity-45 group-aria-disabled/chip:opacity-45",
+    busy ? "" : "group-disabled/chip:opacity-disabled group-aria-disabled/chip:opacity-disabled",
   ]
     .filter((part) => part !== "")
     .join(" ");
@@ -357,9 +373,37 @@ function RemovableChip({
   );
 }
 
-/** A chip: a button in the look of its place, or a removable chip where `onRemove` is given. */
+/** A chip that is a link, in the look of its place. */
+function LinkChip({
+  look,
+  tone,
+  width,
+  size,
+  iconOnly,
+  href,
+  onClick,
+  children,
+  ...anchor
+}: LinkChipProps): React.JSX.Element {
+  return (
+    <a
+      {...anchor}
+      className={chipClasses({ look, tone, width, size, iconOnly }, false, false)}
+      {...faceAttributes({ look, tone, width, size, iconOnly })}
+      href={href}
+      onClick={pulseOnPress(onClick, PRESS_PULSE.FACE)}
+    >
+      <span className={faceClasses({ look, size, iconOnly }, false)} {...PRESS_FACE}>
+        {children}
+      </span>
+    </a>
+  );
+}
+
+/** A chip: a button in the look of its place, a link where `href` is given, or a removable chip where `onRemove` is given. */
 export function Chip(props: ChipProps): React.JSX.Element {
   if (props.onRemove !== undefined) return <RemovableChip {...props} />;
+  if (props.href !== undefined) return <LinkChip {...props} />;
   const { look, tone, width, size, iconOnly, chevron = false, busy, children, ...button } = props;
   return (
     <button

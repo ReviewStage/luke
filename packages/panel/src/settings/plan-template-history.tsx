@@ -133,7 +133,6 @@ export function TemplateVersionHistory({
     versions,
     noun: "template",
     title: TEMPLATE_TITLE,
-    shown: true,
     agents: [],
     summary: templateRevisionSummary,
     onShowSource: undefined,
@@ -149,6 +148,7 @@ export function TemplateVersionHistory({
       account={account}
       onExit={onExit}
       onRestored={onExit}
+      exitPlace={TEMPLATE_TITLE}
     />
   );
 }

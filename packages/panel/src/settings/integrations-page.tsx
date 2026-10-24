@@ -29,10 +29,12 @@ import { readFailedWords } from "@luke/features/words";
 import { ACT_KIND } from "@luke/host/acts";
 import { APP_COMMAND, APP_SHORTCUTS } from "@luke/settings/shortcuts";
 import {
+  ANNOUNCE,
   BUTTON_VARIANT,
   Button,
   ChevronDownIcon,
   ChevronRightIcon,
+  CONFIRM_LOSS,
   ConfirmDialog,
   commandKeyshortcuts,
   ErrorState,
@@ -88,6 +90,7 @@ import {
 } from "../integration-tool-list.js";
 import { useIntegrationToolReads } from "../integration-tools.js";
 import { focusSearchField, Highlighted } from "../search-field.js";
+import { useAnnounceShown } from "../use-announce-shown.js";
 import { MenuRow } from "./menu-row.js";
 
 /**
@@ -360,15 +363,6 @@ function ToolsLine({
   );
 }
 
-/** The keys that move the list's tool, by how far each moves it in a list of `count`. */
-function movedTo(key: string, at: number, count: number): number | undefined {
-  if (key === "ArrowDown") return Math.min(at + 1, count - 1);
-  if (key === "ArrowUp") return Math.max(at - 1, 0);
-  if (key === "Home") return 0;
-  if (key === "End") return count - 1;
-  return undefined;
-}
-
 /** A row's tools, opened in place under it: the list, and beside it the page of the tool it holds. */
 function RowToolsPanel({
   id,
@@ -395,17 +389,20 @@ function RowToolsPanel({
     keepInView(list.current, row?.closest("li") ?? null);
   };
 
+  // The list's own arrows move the focus (`List`), and the tool held follows it, as a press on a row holds it.
+  const onRowFocus = (event: React.FocusEvent) => {
+    const stepped = [...rows.current].some(([, row]) => row === event.relatedTarget);
+    const landed = [...rows.current].find(([, row]) => row === event.target);
+    if (!stepped || landed === undefined) return;
+    setHeld(landed[0]);
+    keepInView(list.current, landed[1].closest("li"));
+  };
+
   const onRowKey = (event: React.KeyboardEvent<HTMLElement>, tool: IntegrationTool) => {
-    const at = shown.indexOf(tool);
-    const to = movedTo(event.key, at, shown.length);
-    if (to !== undefined) {
-      event.preventDefault();
-      hold(shown[to]);
-    } else if (event.key === "Enter" || event.key === "ArrowRight") {
-      event.preventDefault();
-      setHeld(tool.name);
-      body.current?.focus();
-    }
+    if (event.key !== "Enter" && event.key !== "ArrowRight") return;
+    event.preventDefault();
+    setHeld(tool.name);
+    body.current?.focus();
   };
 
   const onBodyKey = (event: React.KeyboardEvent<HTMLDivElement>) => {
@@ -420,7 +417,8 @@ function RowToolsPanel({
     <div id={id} className="integration-tools-panel">
       <div className="integration-tools-split">
         <ScrollArea ref={list}>
-          <div className="integration-tools-list">
+          {/* biome-ignore lint/a11y/noStaticElementInteractions: the focus is the rows' own, which the box only hears bubble. */}
+          <div className="integration-tools-list" onFocus={onRowFocus}>
             <IntegrationToolList
               server={name}
               tools={shown}
@@ -547,6 +545,8 @@ function IntegrationRow({
   const github = useGitHubConnection();
   const signIn = statuses.signInOf(connection);
   const [connecting, setConnecting] = useState(false);
+  // Note that the sign-in's own Cancel is the one busy while it is called off, as Connect is while one begins.
+  const [cancelling, setCancelling] = useState(false);
   const [editing, setEditing] = useState(false);
   const [rejection, setRejection] = useState<string | undefined>(undefined);
   // Several accounts at a provider each name themselves; one alone is the provider, as ever.
@@ -575,9 +575,11 @@ function IntegrationRow({
 
   const cancel = useCallback(() => {
     setConnecting(true);
+    setCancelling(true);
     setRejection(undefined);
     void cancelSignIn(connection).then((cancelled) => {
       setConnecting(false);
+      setCancelling(false);
       if (!cancelled)
         setRejection(`Luke could not cancel connecting ${name}. Try again in a moment.`);
     });
@@ -643,7 +645,7 @@ function IntegrationRow({
   return (
     <Stack gap={GAP.NONE}>
       <MenuRow
-        label={`${name} actions`}
+        thing={name}
         actions={actions}
         anchor={connection}
         {...(bySignIn ? { heading: PAGE_LINE.GITHUB_SIGN_IN } : undefined)}
@@ -674,10 +676,22 @@ function IntegrationRow({
           error: rejection,
           control: waiting ? (
             <>
-              <Button variant={BUTTON_VARIANT.QUIET} disabled={connecting} onClick={connect}>
+              <Button
+                variant={BUTTON_VARIANT.QUIET}
+                busy={connecting && !cancelling}
+                busyLabel="Reopening the sign-in"
+                disabled={cancelling}
+                onClick={connect}
+              >
                 {SIGN_IN_ACTION.REOPEN}
               </Button>
-              <Button variant={BUTTON_VARIANT.OUTLINE} disabled={connecting} onClick={cancel}>
+              <Button
+                variant={BUTTON_VARIANT.OUTLINE}
+                busy={cancelling}
+                busyLabel="Canceling the sign-in"
+                disabled={connecting && !cancelling}
+                onClick={cancel}
+              >
                 {SIGN_IN_ACTION.CANCEL}
               </Button>
             </>
@@ -686,7 +700,12 @@ function IntegrationRow({
           ) : status === undefined ||
             status === INTEGRATION_STATUS.UNAVAILABLE ||
             (connected && !broken) ? null : (
-            <Button variant={BUTTON_VARIANT.OUTLINE} disabled={connecting} onClick={connect}>
+            <Button
+              variant={BUTTON_VARIANT.OUTLINE}
+              busy={connecting}
+              busyLabel="Connecting"
+              onClick={connect}
+            >
               {grantLabel(status, signIn)}
             </Button>
           ),
@@ -696,6 +715,7 @@ function IntegrationRow({
         <RowToolsPanel id={panelId} name={name} tools={tools} />
       ) : null}
       <ConfirmDialog
+        open
         confirm={disconnect}
         question={{
           title: `Disconnect ${name}?`,
@@ -708,6 +728,7 @@ function IntegrationRow({
               : undefined),
           verb: "Disconnect",
           running: "Disconnecting…",
+          loss: CONFIRM_LOSS.AFFECTS_OTHERS,
         }}
       />
     </Stack>
@@ -757,6 +778,13 @@ function turned(set: ReadonlySet<string>, server: string): ReadonlySet<string> {
   const next = new Set(set);
   if (!next.delete(server)) next.add(server);
   return next;
+}
+
+/** What stands where the search finds nothing, said politely as it lands and as the query changes. */
+function NoMatchNote({ query }: { query: string }): React.JSX.Element {
+  const words = `No integrations or tools match “${query.trim()}”`;
+  useAnnounceShown(ANNOUNCE.POLITE, words);
+  return <PageNote>{words}</PageNote>;
 }
 
 /**
@@ -841,11 +869,7 @@ function IntegrationRows({ filter }: { filter: IntegrationsFilter }): React.JSX.
         </SettingsSection>
       ) : null}
       {groups.length === 0 ? <PageNote>{PAGE_LINE.NONE_OFFERED}</PageNote> : null}
-      {groups.length > 0 && found.length === 0 ? (
-        <div role="status">
-          <PageNote>{`No integrations or tools match “${query.trim()}”`}</PageNote>
-        </div>
-      ) : null}
+      {groups.length > 0 && found.length === 0 ? <NoMatchNote query={query} /> : null}
       {found.map((group) => (
         <SettingsSection key={group.heading ?? "unread"} title={group.heading}>
           {group.rows.map((found) => (

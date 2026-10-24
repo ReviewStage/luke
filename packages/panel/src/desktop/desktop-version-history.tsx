@@ -6,43 +6,38 @@ import { planSections } from "@luke/features/plan-document";
 import type { PlanRevisionLine } from "@luke/features/task-wire";
 import { readFailedWords } from "@luke/features/words";
 import type { FormerMember, Workspace, WorkspaceMember } from "@luke/features/workspace-wire";
-import { APP_COMMAND, APP_SHORTCUTS } from "@luke/settings/shortcuts";
-import type { DialogConfirm } from "@luke/ui";
+import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
-  BackIcon,
-  BUTTON_SIZE,
-  BusyLabel,
-  commandKeyshortcuts,
-  EllipsisIcon,
+  BACK_BUTTON_LOOK,
+  BackButton,
   EmptyState,
   ERROR_STATE_PLACEMENT,
   ErrorState,
+  FailureNote,
   FILL_ELEMENT,
   Fill,
-  FoldingButton,
-  IconButton,
   LIST_ROW_ACTIONS,
   LIST_ROW_CURRENT,
   List,
   ListRow,
-  NavItem,
   OneLine,
-  PageToolbar,
   ResizeEdge,
-  RetryRowLabel,
   RowHint,
   RowHintOptions,
   SCROLL_FADE,
   ScrollArea,
-  Shortcut,
+  ShowMoreRow,
   SKELETON_SHAPE,
   Skeleton,
   SkeletonRegion,
-  TEXT_BUTTON_LINES,
+  TEXT_ELEMENT,
+  TEXT_VARIANT,
+  Text,
   TextButton,
   Time,
+  TOOLBAR_INSET,
+  Toolbar,
   Tooltip,
-  useMenu,
   useMinute,
 } from "@luke/ui";
 import { type Actor, actorName } from "@luke/ui/actor-model";
@@ -80,8 +75,14 @@ import {
 } from "../tasks/use-plan-history.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import { useFormerMembers, useWorkspaceMembers } from "../tasks/use-workspace-members.js";
-import { useVersionRestore, VersionPageSkeleton, VersionView } from "../tasks/version-view.js";
-import { ActionMenu, type MenuAction } from "./action-menu.js";
+import {
+  useVersionRestore,
+  VersionPageSkeleton,
+  type VersionRestore,
+  VersionView,
+} from "../tasks/version-view.js";
+import { type MenuAction, rowMenu } from "./action-menu.js";
+import { backPlaceOf } from "./back-place.js";
 import { HistoryButtons, useSidebarEdge } from "./desktop-sidebar.js";
 import { useNarrowFocus } from "./narrow-focus.js";
 import type { SidebarCollapse } from "./sidebar-collapse.js";
@@ -103,11 +104,10 @@ import type { SidebarCollapse } from "./sidebar-collapse.js";
  * the version that made the section's last change instead, its row brought
  * into the list's view. Choosing a row, or stepping with the up and down
  * arrows, draws that version beside the list (`version-view.tsx`), and older
- * versions are read a page at a time from the list's foot. A row's ⋯, which
- * stands in its time's place while the row is hovered or holds the
- * keyboard as a sidebar task's Pin and Archive do, and its right-click offer
- * what applies to its version: Show changes, its Open, and its Restore. Show
- * changes, or the right arrow, slides the column one level over, as a nested
+ * versions are read a page at a time from the list's foot. A row's ⋯, shown
+ * while the row is hovered or holds the keyboard, its right-click and the
+ * menu key offer what applies to its version: Show changes, its Open, and
+ * its Restore. Show changes, or the right arrow, slides the column one level over, as a nested
  * page of System Settings does, the title going with the list: All versions
  * at its head, who wrote the version, which opens where it was written, then
  * a row for each section it changed, a section added or removed saying so.
@@ -140,8 +140,6 @@ export interface VersionSubject {
   /** What the versions are of, in the view's own words: "plan", or "template". */
   readonly noun: string;
   readonly title: string | undefined;
-  /** Whether the view is on screen, which the restore's question stands on. */
-  readonly shown: boolean;
   /** The coding agents whose harness a revision of theirs wears. */
   readonly agents: readonly Pick<CodingAgentSummary, "id" | "model">[];
   /** What a revision did, in a few words. */
@@ -162,8 +160,11 @@ const NO_HISTORY_LINE = "No versions yet.";
 /** What the menu item that opens a revision's sections says. */
 const SECTIONS_LABEL = "Show changes";
 
-/** What a row's ⋯ says. */
-const ACTIONS_LABEL = "Version actions";
+/** What a version's row is, which names its ⋯ and its menu. */
+const VERSION_THING = "Version";
+
+/** What a changed section's row is, which names its ⋯ and its menu. */
+const SECTION_THING = "Section";
 
 /** The word a changed section wears beside its name: none for an edit, which most are. */
 const SECTION_CHANGE_WORDS = {
@@ -208,10 +209,9 @@ function sourceItem(source: SourceDoor): MenuAction {
 
 /**
  * One revision's row: who wrote it, what it did, and when; lit while its
- * version is drawn. Its ⋯ stands over the time while the row is hovered or
- * holds the keyboard, a button beside the row rather than inside it, since a
- * button holds no other, and drops the same menu the row's right-click
- * hangs at the pointer. A row with nothing to offer has neither.
+ * version is drawn. Its ⋯ (`ListRow`'s `menu`) shows while the row is hovered
+ * or holds the keyboard, and drops the same menu the row's right-click and
+ * the menu key hang. A row with nothing to offer has none of them.
  */
 function RevisionRow({
   line,
@@ -236,7 +236,7 @@ function RevisionRow({
   onOpenSections: (() => void) | undefined;
   /** The way to the place that wrote the revision; none where nothing else in the window did. */
   source: SourceDoor | undefined;
-  /** Chooses the version and asks to restore it; none for the plan as it stands. */
+  /** Restores the version, asking nothing; none for the plan as it stands. */
   onRestore: (() => void) | undefined;
   /** Copies the version's link; none for a history with no link of its own. */
   onCopyLink: (() => void) | undefined;
@@ -244,8 +244,6 @@ function RevisionRow({
   summary: string;
 }): React.JSX.Element {
   const { lastEdit } = line;
-  const menu = useMenu(true);
-  const ellipsis = useRef<HTMLButtonElement | null>(null);
   const groups = [
     [
       ...(onOpenSections === undefined
@@ -262,53 +260,34 @@ function RevisionRow({
       ? []
       : [{ label: "Restore this version", icon: <RotateCcwIcon />, onSelect: onRestore }],
   ].filter((group) => group.length > 0);
-  const offered = groups.length > 0;
-  // Note that the ⋯ is what a right-click's menu hands focus back to, since
-  // it is the menu's own door from the keyboard.
-  const showMenu = menu.contextMenu(ellipsis);
   // Note that the author's card hangs beside the row as the pointer rests on it; an author with none, Luke or an agent, hangs nothing.
   const card = actorCard(author);
   return (
-    <>
-      <RowHintOptions card={card} cardBeside>
-        <ListRow
-          ref={rowRef}
-          leading={<ActorMark actor={author} size={ACTOR_SIZE.ROW} />}
-          title={
-            <span className="version-row-author" data-author={author.kind}>
-              {actorName(author)}
-              <LeftWords actor={author} />
-            </span>
-          }
-          description={<span className="version-row-summary">{summary}</span>}
-          meta={<Time at={lastEdit.at} now={now} />}
-          current={selected ? LIST_ROW_CURRENT.ITEM : undefined}
-          onPress={onSelect}
-          contextMenu={offered ? showMenu : undefined}
-          actionsAt={LIST_ROW_ACTIONS.HOVER}
-          menuOpen={menu.open !== undefined}
-          hint={card === undefined ? undefined : { Hint: RowHint, label: actorName(author) }}
-          actions={
-            offered ? (
-              <Tooltip label={ACTIONS_LABEL}>
-                <IconButton
-                  ref={ellipsis}
-                  icon={<EllipsisIcon />}
-                  label={ACTIONS_LABEL}
-                  size={BUTTON_SIZE.COMPACT}
-                  {...menu.trigger()}
-                />
-              </Tooltip>
-            ) : null
-          }
-        />
-      </RowHintOptions>
-      {menu.drawn === undefined ? null : (
-        <ActionMenu label={ACTIONS_LABEL} menu={menu.drawn} groups={groups} onClose={menu.close} />
-      )}
-    </>
+    <RowHintOptions card={card} cardBeside>
+      <ListRow
+        ref={rowRef}
+        leading={<ActorMark actor={author} size={ACTOR_SIZE.ROW} />}
+        title={
+          <span className="version-row-author" data-author={author.kind}>
+            {actorName(author)}
+            <LeftWords actor={author} />
+          </span>
+        }
+        description={<span className="version-row-summary">{summary}</span>}
+        meta={<Time at={lastEdit.at} now={now} />}
+        current={selected ? LIST_ROW_CURRENT.ITEM : undefined}
+        onPress={onSelect}
+        actionsAt={LIST_ROW_ACTIONS.HOVER}
+        hint={card === undefined ? undefined : { Hint: RowHint, label: actorName(author) }}
+        menu={rowMenu(VERSION_THING, groups)}
+      />
+    </RowHintOptions>
   );
 }
+
+/** What the way back from a revision's sections to the versions says, and where it leads as a hint names it. */
+const ALL_VERSIONS = "All versions";
+const ALL_VERSIONS_PLACE = "all versions";
 
 /**
  * The head of a revision's sections: the way back to every version, and who
@@ -332,9 +311,12 @@ function SectionsHead({
   );
   return (
     <>
-      <NavItem icon={<BackIcon />} onClick={onBack}>
-        All versions
-      </NavItem>
+      <BackButton
+        look={BACK_BUTTON_LOOK.COLUMN}
+        label={ALL_VERSIONS}
+        place={ALL_VERSIONS_PLACE}
+        onBack={onBack}
+      />
       <p className="version-sections-head">
         <ActorMark actor={author} size={ACTOR_SIZE.ROW} />
         {source === undefined ? (
@@ -365,26 +347,15 @@ function SectionRow({
   source: SourceDoor | undefined;
 }): React.JSX.Element {
   const word = SECTION_CHANGE_WORDS[section.change];
-  const menu = useMenu(true);
   return (
-    <>
-      <ListRow
-        ref={rowRef}
-        title={sectionName(section.heading)}
-        meta={word}
-        current={selected ? LIST_ROW_CURRENT.ITEM : undefined}
-        onPress={onSelect}
-        contextMenu={source === undefined ? undefined : menu.contextMenu()}
-      />
-      {menu.drawn === undefined || source === undefined ? null : (
-        <ActionMenu
-          label="Section actions"
-          menu={menu.drawn}
-          groups={[[sourceItem(source)]]}
-          onClose={menu.close}
-        />
-      )}
-    </>
+    <ListRow
+      ref={rowRef}
+      title={sectionName(section.heading)}
+      meta={word}
+      current={selected ? LIST_ROW_CURRENT.ITEM : undefined}
+      onPress={onSelect}
+      menu={source === undefined ? undefined : rowMenu(SECTION_THING, [[sourceItem(source)]])}
+    />
   );
 }
 
@@ -439,18 +410,25 @@ function SectionsSkeleton(): React.JSX.Element {
 }
 
 /**
- * The foot of the list while an older page stands: read on its press, and
- * offered again after a read that failed. Note that it is a text button
- * rather than `@luke/ui`'s Button, because its failure and Retry run to two
- * lines in a column the sidebar's width, which a control's one line would
- * cut short.
+ * The foot of the list while an older page stands: how many older versions
+ * wait, read a page of them on its press, and a failed read said above it
+ * with Retry. Note that the count is the versions numbered below `before`,
+ * the oldest one the list holds, since a plan's versions are numbered from
+ * one without gaps.
  */
-function EarlierRow({ onRead }: { onRead: () => Promise<boolean> }): React.JSX.Element {
+function EarlierRow({
+  before,
+  onRead,
+}: {
+  before: number;
+  onRead: () => Promise<boolean>;
+}): React.JSX.Element {
   const [reading, setReading] = useState(false);
   const [failed, setFailed] = useState(false);
   const read = () => {
     if (reading) return;
     setReading(true);
+    setFailed(false);
     onRead().then(
       (landed) => {
         setReading(false);
@@ -463,81 +441,88 @@ function EarlierRow({ onRead }: { onRead: () => Promise<boolean> }): React.JSX.E
     );
   };
   return (
-    <p className="version-earlier">
-      <TextButton lines={TEXT_BUTTON_LINES.TWO} onClick={read}>
-        <BusyLabel delay busy={reading} label="Loading older versions">
-          {failed ? (
-            <RetryRowLabel failure="Could not read older versions." />
-          ) : (
-            "Show older versions"
-          )}
-        </BusyLabel>
-      </TextButton>
-    </p>
+    <div className="version-earlier">
+      {failed ? (
+        <FailureNote onRetry={read}>Could not read older versions.</FailureNote>
+      ) : (
+        <ShowMoreRow
+          more={before - 1}
+          shown={false}
+          onToggle={read}
+          busy={reading}
+          busyLabel="Loading older versions"
+        />
+      )}
+    </div>
   );
 }
 
-/** Whether a key press belongs to something that takes keys of its own: a field, a dialog over the window, or a menu open over a row. */
-function keysTaken(target: EventTarget | null): boolean {
-  if (!(target instanceof HTMLElement)) return false;
-  return (
-    target.isContentEditable ||
-    target.closest('input, textarea, select, dialog, [role="menu"]') !== null
-  );
-}
-
-/** What a list does with the arrow keys: up and down step through it, and right and left go into a row and back out, where the list offers them. */
-interface ArrowKeys {
-  /** Steps one row down or up; answers whether there was a row to step to. */
-  readonly step: (by: 1 | -1) => boolean;
-  /** Goes into the chosen row; answers whether it opens anything. */
-  readonly open?: () => boolean;
-  readonly back?: () => void;
+/** The key of the row among `rows` that is `element`, where it is one. */
+function keyOfRow<K>(rows: Map<K, HTMLElement>, element: EventTarget | null): K | undefined {
+  for (const [key, row] of rows) if (row === element) return key;
+  return undefined;
 }
 
 /**
- * The arrows, anywhere in the view but a field or a dialog, as the list on
- * show takes them: the versions, or the sections of the one opened. Note
- * that the handler reads the keys through a ref, so a list re-rendered on
- * every step does not take the listener down and up again with it.
+ * Chooses the row the focus stepped onto from another row of the same
+ * list, which is what its ↑↓ do (`List`'s roving keys). Note that a focus
+ * that comes into the list from outside chooses nothing, so Tab lands on a
+ * row without changing the version shown.
  */
-function useArrowKeys(keys: ArrowKeys): void {
-  const latest = useRef(keys);
-  latest.current = keys;
-  useEffect(() => {
-    const handleKey = (event: KeyboardEvent) => {
-      if (event.defaultPrevented || keysTaken(event.target)) return;
-      if (event.metaKey || event.ctrlKey || event.altKey || event.shiftKey) return;
-      const held = latest.current;
-      const step = event.key === "ArrowDown" ? 1 : event.key === "ArrowUp" ? -1 : undefined;
-      let handled = false;
-      if (step !== undefined) handled = held.step(step);
-      else if (event.key === "ArrowRight") handled = held.open?.() ?? false;
-      else if (event.key === "ArrowLeft" && held.back !== undefined) {
-        held.back();
-        handled = true;
-      }
-      if (handled) event.preventDefault();
-    };
-    window.addEventListener("keydown", handleKey);
-    return () => window.removeEventListener("keydown", handleKey);
-  }, []);
+function chooseSteppedRow<K>(
+  rows: Map<K, HTMLElement>,
+  choose: (key: K) => void,
+): (event: React.FocusEvent) => void {
+  return (event) => {
+    if (keyOfRow(rows, event.relatedTarget) === undefined) return;
+    const key = keyOfRow(rows, event.target);
+    if (key !== undefined) choose(key);
+  };
 }
 
-/** The row `step` away from the one whose key is `at` among `keys`, chosen and focused, which brings it into its list's view; false where there is none. */
-function stepThrough<K>(
-  keys: readonly K[],
-  at: K | undefined,
-  step: 1 | -1,
-  choose: (key: K) => void,
+/**
+ * ← and → on a row: → goes into the row's sections where it has them, and
+ * ← comes back out. Note that they are heard on the list's own box, so a
+ * field, a dialog, or a menu over a row, whose keys bubble through React's
+ * tree, are never taken for a row's.
+ */
+function goThroughRow<K>(
   rows: Map<K, HTMLElement>,
-): boolean {
-  const index = at === undefined ? -1 : keys.indexOf(at);
-  const next = keys[index + step];
-  if (index === -1 || next === undefined) return false;
-  choose(next);
-  rows.get(next)?.focus();
-  return true;
+  keys: { readonly open?: (key: K) => boolean; readonly back?: () => void },
+): (event: React.KeyboardEvent) => void {
+  return (event) => {
+    if (event.defaultPrevented) return;
+    if (event.metaKey || event.ctrlKey || event.altKey || event.shiftKey) return;
+    const key = keyOfRow(rows, event.target);
+    if (key === undefined) return;
+    if (event.key === "ArrowRight" && keys.open?.(key) === true) event.preventDefault();
+    else if (event.key === "ArrowLeft" && keys.back !== undefined) {
+      event.preventDefault();
+      keys.back();
+    }
+  };
+}
+
+/**
+ * Hands the focus to the chosen section once a revision's sections are
+ * drawn, because the list of versions goes inert as they open and the focus
+ * with it, and the sections' arrows need a row to walk from. Note that it
+ * only takes a focus that was lost, never one the reader put somewhere.
+ */
+function useSectionsFocused(
+  opened: number | undefined,
+  unit: number | undefined,
+  sectionRows: Map<number, HTMLElement>,
+): void {
+  const focused = useRef<number | undefined>(undefined);
+  useEffect(() => {
+    if (opened === undefined) focused.current = undefined;
+    if (opened === undefined || unit === undefined || focused.current === opened) return;
+    const row = sectionRows.get(unit);
+    if (row === undefined) return;
+    focused.current = opened;
+    if (document.activeElement === null || document.activeElement === document.body) row.focus();
+  }, [opened, unit, sectionRows]);
 }
 
 /**
@@ -595,7 +580,7 @@ function VersionPage({
   lead,
 }: {
   subject: VersionSubject;
-  restore: DialogConfirm;
+  restore: VersionRestore;
   /** The one unit of the version drawn alone, while a section of its revision is open. */
   section: number | undefined;
   /** What leads the page's bar: the way back to the list, where the page stands alone. */
@@ -608,7 +593,6 @@ function VersionPage({
         viewing={versions.viewing}
         restore={restore}
         title={subject.title}
-        noun={subject.noun}
         section={section}
         task={subject.task}
         lead={lead}
@@ -624,7 +608,7 @@ function VersionPage({
   }
   return (
     <>
-      {lead === undefined ? <div className="desktop-drag-strip" /> : <PageToolbar lead={lead} />}
+      <Toolbar lead={lead} start={lead === undefined ? undefined : TOOLBAR_INSET.COLUMN} />
       <Fill className="desktop-empty-region">
         {list.kind === HISTORY_READ.FAILED ? (
           <ErrorState onRetry={versions.onRetry} placement={ERROR_STATE_PLACEMENT.CENTRED}>
@@ -640,6 +624,9 @@ function VersionPage({
 
 /** What the way back from a version to the list says, in a narrow room. */
 const VERSION_LIST = "Versions";
+
+/** Where the way back from a version to the list leads, as a hint names it. */
+const VERSION_LIST_PLACE = "versions";
 
 /** The open plan's history as the view's subject: its name, its agents, and the places in the window its revisions were written. */
 export function taskVersionSubject(tasks: TasksControl): VersionSubject {
@@ -662,7 +649,6 @@ export function taskVersionSubject(tasks: TasksControl): VersionSubject {
     versions: tasks.history,
     noun: "plan",
     title: task?.name,
-    shown: tasks.shown,
     agents: tasks.agents.agents ?? [],
     summary: revisionSummary,
     onShowSource:
@@ -688,6 +674,7 @@ export function DesktopVersionHistory({
   account,
   onExit,
   onRestored,
+  exitPlace,
 }: {
   sidebar: SidebarCollapse;
   room: ShellRoom;
@@ -697,6 +684,8 @@ export function DesktopVersionHistory({
   account: AccountSnapshot;
   onExit: () => void;
   onRestored: () => void;
+  /** Where `onExit` leads where it is no step of the window's history, as the Back row's hint names it; the step behind where none is named. */
+  exitPlace?: string | undefined;
 }): React.JSX.Element {
   const now = useMinute();
   const { versions, agents } = subject;
@@ -714,7 +703,7 @@ export function DesktopVersionHistory({
   const former = useFormerMembers(subject.workspace);
   const reader = readerOf(account, members, former);
   // A restore that lands leaves for the task it restored, which is not always the one Back returns to.
-  const restore = useVersionRestore(versions, subject.shown, onRestored);
+  const restore = useVersionRestore(versions, onRestored);
   const sections = openedSections(versions.viewing, opened);
   const failed = sectionsFailed(versions.viewing, opened);
   const sourceOf = (line: PlanRevisionLine, author: Actor): SourceDoor | undefined => {
@@ -739,10 +728,7 @@ export function DesktopVersionHistory({
   const restoreOf = (line: PlanRevisionLine): (() => void) | undefined => {
     const newest = revisions[0]?.seq;
     if (line.seq === newest) return undefined;
-    return () => {
-      versions.onSelect(line.seq);
-      restore.ask();
-    };
+    return () => restore.onRestore(line.seq);
   };
   const closeSections = () => {
     if (opened === undefined) return;
@@ -753,24 +739,16 @@ export function DesktopVersionHistory({
   const chooseUnit = (at: number) => {
     versions.onChooseSection(sections?.find((section) => section.unit === at)?.heading);
   };
-  const units = sections?.map((section) => section.unit) ?? [];
-  const seqs = revisions.map((line) => line.seq);
-  useArrowKeys(
-    opened === undefined
-      ? {
-          step: (by) => stepThrough(seqs, versions.selected, by, versions.onSelect, rows),
-          open: () => {
-            const line = revisions.find((each) => each.seq === versions.selected);
-            if (line === undefined || !opensSections(line)) return false;
-            openSections(line.seq);
-            return true;
-          },
-        }
-      : {
-          step: (by) => stepThrough(units, unit, by, chooseUnit, sectionRows),
-          back: closeSections,
-        },
-  );
+  const versionKeys = goThroughRow(rows, {
+    open: (seq) => {
+      const line = revisions.find((each) => each.seq === seq);
+      if (line === undefined || !opensSections(line)) return false;
+      openSections(seq);
+      return true;
+    },
+  });
+  const sectionKeys = goThroughRow(sectionRows, { back: closeSections });
+  useSectionsFocused(opened?.seq, unit, sectionRows);
   useOpenedRowShown(versions.selected, rows, log);
   const hidden = hiddenColumns(room, versions.listed);
   const screen = useNarrowFocus(room, versions.listed);
@@ -780,20 +758,26 @@ export function DesktopVersionHistory({
       <nav className="version-log ph-no-capture" aria-label="Versions" hidden={hidden.list}>
         <div className="desktop-drag-strip" />
         <HistoryButtons history={history} room={room} />
-        <NavItem
-          icon={<BackIcon />}
-          aria-keyshortcuts={commandKeyshortcuts(APP_COMMAND.EXIT_VERSION_HISTORY)}
-          shortcut={<Shortcut chord={APP_SHORTCUTS[APP_COMMAND.EXIT_VERSION_HISTORY].chord} />}
-          onClick={onExit}
-        >
-          Back
-        </NavItem>
+        <BackButton
+          look={BACK_BUTTON_LOOK.COLUMN}
+          label="Back"
+          place={exitPlace ?? backPlaceOf(history, subject.title ?? subject.noun)}
+          command={APP_COMMAND.EXIT_VERSION_HISTORY}
+          onBack={onExit}
+        />
         <div className="version-log-track" data-opened={String(opened !== undefined)}>
           <div className="version-log-pane" inert={opened !== undefined}>
-            <h1 className="version-log-title">Version history</h1>
+            <Text as={TEXT_ELEMENT.H1} variant={TEXT_VARIANT.TITLE} className="version-log-title">
+              Version history
+            </Text>
             <Fill className="sidebar-section">
               <ScrollArea ref={log} fade={SCROLL_FADE.BOTH}>
-                <div className="sidebar-section-body">
+                {/* biome-ignore lint/a11y/noStaticElementInteractions: the keys and the focus are the rows' own, which the box only hears bubble. */}
+                <div
+                  className="sidebar-section-body"
+                  onFocus={chooseSteppedRow(rows, versions.onSelect)}
+                  onKeyDown={versionKeys}
+                >
                   {list.kind === HISTORY_READ.READING ? <LogSkeleton /> : null}
                   <List label={LIST_LABEL.VERSIONS}>
                     {revisions.map((line) => {
@@ -837,7 +821,7 @@ export function DesktopVersionHistory({
                     })}
                   </List>
                   {list.kind === HISTORY_READ.READY && list.earlier !== undefined ? (
-                    <EarlierRow onRead={versions.onLoadEarlier} />
+                    <EarlierRow before={list.earlier} onRead={versions.onLoadEarlier} />
                   ) : null}
                 </div>
               </ScrollArea>
@@ -850,7 +834,12 @@ export function DesktopVersionHistory({
             inert={opened === undefined}
           >
             <ScrollArea fade={SCROLL_FADE.BOTH}>
-              <div className="sidebar-section-body">
+              {/* biome-ignore lint/a11y/noStaticElementInteractions: the keys and the focus are the rows' own, which the box only hears bubble. */}
+              <div
+                className="sidebar-section-body"
+                onFocus={chooseSteppedRow(sectionRows, chooseUnit)}
+                onKeyDown={sectionKeys}
+              >
                 {openedLine === undefined ? null : (
                   <>
                     <SectionsHead
@@ -861,9 +850,12 @@ export function DesktopVersionHistory({
                       onBack={closeSections}
                     />
                     {failed ? (
-                      <div className="sidebar-note">
-                        <ErrorState onRetry={versions.onRetryVersion}>{SECTIONS_FAILED}</ErrorState>
-                      </div>
+                      <ErrorState
+                        onRetry={versions.onRetryVersion}
+                        placement={ERROR_STATE_PLACEMENT.ROWS}
+                      >
+                        {SECTIONS_FAILED}
+                      </ErrorState>
                     ) : sections === undefined ? (
                       <SectionsSkeleton />
                     ) : null}
@@ -900,7 +892,11 @@ export function DesktopVersionHistory({
             section={opened === undefined ? undefined : unit}
             lead={
               room === SHELL_ROOM.NARROW ? (
-                <FoldingButton label={VERSION_LIST} icon={<BackIcon />} onClick={versions.onList} />
+                <BackButton
+                  label={VERSION_LIST}
+                  place={VERSION_LIST_PLACE}
+                  onBack={versions.onList}
+                />
               ) : undefined
             }
           />

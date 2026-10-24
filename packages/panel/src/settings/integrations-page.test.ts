@@ -36,6 +36,7 @@ import { runAppCommand } from "../app-commands.js";
 import { GitHubConnectProvider } from "../github-connect.js";
 import { OpenSettingsProvider } from "../open-settings.js";
 import { rendererRuntime } from "../renderer-runtime.js";
+import { announcedPolitely, mountAnnouncer } from "../testing/announcer.js";
 import { type AnyAct, fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { IntegrationsSection } from "./integrations-page.js";
@@ -903,15 +904,14 @@ test("a query finds an integration by what it is for, keeping its section", asyn
 
 test("a query that finds nothing says so, and clearing it brings every row back", async () => {
   connectVercelAndLinear();
+  mountAnnouncer();
   const page = await mount();
 
   await searchFor(page, "frobnicate");
 
   assert.deepEqual(sections(page), []);
-  assert.equal(
-    page.querySelector('[role="status"]')?.textContent,
-    "No integrations or tools match “frobnicate”",
-  );
+  assert.equal(page.textContent?.includes("No integrations or tools match “frobnicate”"), true);
+  assert.equal(announcedPolitely(), "No integrations or tools match “frobnicate”");
 
   const clear =
     page.querySelector<HTMLButtonElement>('button[aria-label="Clear search"]') ??
@@ -921,6 +921,7 @@ test("a query that finds nothing says so, and clearing it brings every row back"
 
   assert.equal(rowNames(page).length, INTEGRATION_PROVIDER_LIST.length);
   assert.equal(document.activeElement, searchField(page));
+  assert.equal(announcedPolitely(), "", "the words go once the rows are back");
 });
 
 test("while where the providers stand is read, the search stands usable above placeholder sections, and the rows land in their place", async () => {
@@ -1054,7 +1055,7 @@ test("an opened row holds its first tool, whose page stands beside the list, and
   assert.equal(detail.querySelector(".integration-tool-parameter-name")?.textContent, "limit");
 });
 
-test("the arrows, Home, and End move the tool an opened row holds, its page following, and the list is one stop for Tab", async () => {
+test("the list is one Tab stop, and the arrows, Home, and End, wrapping, move the tool an opened row holds, its page following", async () => {
   connectVercelAndLinear();
   const page = await mount();
   openRow(page, "Vercel");
@@ -1074,7 +1075,7 @@ test("the arrows, Home, and End move the tool an opened row holds, its page foll
   assert.deepEqual(held(page), ["list_projects", "list_projects"]);
   assert.equal(toolName(document.activeElement), "list_projects");
   keyAtFocus("ArrowDown");
-  assert.deepEqual(held(page), ["list_projects", "list_projects"]);
+  assert.deepEqual(held(page), ["delete_project", "delete_project"], "↓ wraps at the end");
   keyAtFocus("Home");
   assert.deepEqual(held(page), ["delete_project", "delete_project"]);
   keyAtFocus("End");

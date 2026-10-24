@@ -17,7 +17,7 @@ import { LINK_PLACE, markdownLink } from "@luke/features/link-grammar";
 import type { CatalogModel } from "@luke/features/models-wire";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
-  BackIcon,
+  BackButton,
   Badge,
   Breadcrumbs,
   CARD_LOOK,
@@ -25,22 +25,22 @@ import {
   Card,
   CardHead,
   type Crumb,
-  EllipsisIcon,
   ErrorState,
   Fill,
-  FoldingButton,
-  type FoldingButtonHint,
   GAP,
-  IconButton,
   LAYOUT_ELEMENT,
+  MoreButton,
+  moreLabel,
   ONE_LINE_END,
   PageToolbar,
   STATUS_TONE,
   Stack,
   SteppedBack,
+  TEXT_ELEMENT,
   TEXT_TONE,
+  TEXT_VARIANT,
   Text,
-  Time,
+  TOOLBAR_INSET,
   Tooltip,
   useMenu,
   useMinute,
@@ -56,7 +56,7 @@ import {
 import { isWireString } from "@luke/wire";
 import { CheckIcon } from "lucide-react";
 import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { ActorLine, ActorRef, AutomationCard } from "../actor-ref.js";
+import { ActorLine, ActorRef, AutomationCard, commentAuthor } from "../actor-ref.js";
 import {
   Conversation,
   ConversationContent,
@@ -95,7 +95,7 @@ import {
 import { askHeadWords } from "./inbox-ask-words.js";
 import { type InboxCloser, useInboxClose } from "./inbox-close.js";
 import type { InboxCodeDoors } from "./inbox-code-card.js";
-import { COMMENT, Comment, CommentName, THREAD_TIME_CLASS } from "./inbox-comment.js";
+import { COMMENT, InboxComment } from "./inbox-comment.js";
 import type { FormTextDoors } from "./inbox-form-text.js";
 import { HolderGlyph } from "./inbox-item-parts.js";
 import {
@@ -207,19 +207,8 @@ const INBOX_FAILED_LINE = "The inbox could not be read.";
 /** What an answer says of the files whose read did not answer. */
 const FILES_FAILED_LINE = "Some files could not be read.";
 
-/** What the way back from an item standing alone to the list says it does. */
-const BACK_TO_INBOX = "Back to inbox";
-
-/**
- * The way back's pill, which says where it goes and names Back's chord
- * whether its word is folded away or not. Note that it drops the folded
- * label it is handed, because the pill says more than the word does.
- */
-const BackHint: FoldingButtonHint = ({ children }) => (
-  <Tooltip label={BACK_TO_INBOX} command={APP_COMMAND.BACK}>
-    {children}
-  </Tooltip>
-);
+/** Where the way back from an item standing alone leads, as its hint names it. */
+const INBOX_PLACE = "inbox";
 
 /**
  * A link block, drawn as a link alone in its paragraph of the item's own words is: the card of what it names where it earns one (`lone-link-card.tsx`), else its chip. Note that it is handed to the words as a markdown link, because that one path is what gives a link its mark, its live label, its card, and the door it opens; an address that opens nowhere keeps its label with the address beside it to copy.
@@ -308,9 +297,9 @@ interface ItemAgent {
   readonly onOpen: () => void;
 }
 
-/** The agent in a line of the thread: its tile and name, which hang its card and open its tab. */
+/** The agent named in a line of the thread, whose tile its comment's face draws: its name, which hangs its card and opens its tab. */
 function AgentName({ by }: { by: ItemAgent }): React.JSX.Element {
-  return <AgentActorRef subject={by.subject} models={by.models} onOpen={by.onOpen} />;
+  return <AgentActorRef subject={by.subject} models={by.models} onOpen={by.onOpen} nameOnly />;
 }
 
 /** What the draft reply's head names the reader by, where nothing else names them. */
@@ -348,16 +337,13 @@ function DraftReply({
 }): React.JSX.Element {
   const reader = useReader(readerId);
   return (
-    <Comment
+    <InboxComment
       kind={COMMENT.DRAFT}
-      head={
-        <CommentName>
-          <ActorRef actor={reader} />
-        </CommentName>
-      }
+      author={commentAuthor(reader)}
+      nameRef={<ActorRef actor={reader} nameOnly />}
     >
       {children}
-    </Comment>
+    </InboxComment>
   );
 }
 
@@ -801,19 +787,13 @@ function ThreadMessage({
   const answers = message.answers;
   const answered = answers === undefined ? undefined : answeredAsk(thread, answers);
   return (
-    <Comment
+    <InboxComment
       kind={COMMENT.MESSAGE}
       messageId={message.id}
-      head={
-        <>
-          <CommentName>
-            {fromAgent ? <AgentName by={by} /> : <ActorRef actor={member} />}
-          </CommentName>
-          <span className="inbox-comment-when">
-            <Time className={THREAD_TIME_CLASS} at={message.createdAt} now={now} />
-          </span>
-        </>
-      }
+      author={commentAuthor(fromAgent ? by.subject.tile : member)}
+      nameRef={fromAgent ? <AgentName by={by} /> : <ActorRef actor={member} nameOnly />}
+      at={message.createdAt}
+      now={now}
     >
       {answers === undefined ? null : answered !== undefined && knownAsk(answered) ? (
         <AnsweredCard ask={answered} title={cardTitle(item.title)} answers={answers} />
@@ -855,12 +835,12 @@ function ThreadMessage({
           waitingOn={waitingOn}
         />
       )}
-    </Comment>
+    </InboxComment>
   );
 }
 
 /** What the pane's ⋯ menu is called, which is its tooltip too. */
-const ITEM_MENU_LABEL = "Item actions";
+const ITEM_THING = "Item";
 
 /**
  * The item's ⋯ menu at the end of the pane's bar, as an issue's page and an
@@ -905,12 +885,10 @@ function InboxItemMenu({
   if (groups.length === 0) return null;
   return (
     <>
-      <Tooltip label={ITEM_MENU_LABEL}>
-        <IconButton icon={<EllipsisIcon />} label={ITEM_MENU_LABEL} {...menu.trigger()} />
-      </Tooltip>
+      <MoreButton thing={ITEM_THING} {...menu.trigger()} />
       {menu.drawn === undefined ? null : (
         <ActionMenu
-          label={ITEM_MENU_LABEL}
+          label={moreLabel(ITEM_THING)}
           menu={menu.drawn}
           groups={groups}
           onClose={menu.close}
@@ -935,9 +913,15 @@ function Subject({
 }): React.JSX.Element {
   return (
     <header className="inbox-subject">
-      <h2 ref={heading} className="inbox-subject-title" data-inbox-title="">
+      <Text
+        as={TEXT_ELEMENT.H2}
+        variant={TEXT_VARIANT.DIALOG}
+        ref={heading}
+        className="inbox-subject-title"
+        data-inbox-title=""
+      >
         {cardTitle(item.title)}
-      </h2>
+      </Text>
     </header>
   );
 }
@@ -1186,7 +1170,7 @@ export function InboxPane({
   const wordsAlone = openAsk?.type === INBOX_ASK.ANSWER && openAsk.fields === undefined;
   const question =
     openAsk === undefined || wordsAlone ? undefined : (
-      <DraftQuestion pane={pane}>
+      <DraftQuestion pane={pane} ask={openAsk}>
         <AskControls
           ask={openAsk}
           title={cardTitle(item.title)}
@@ -1221,10 +1205,11 @@ export function InboxPane({
       hidden={hidden}
     >
       <PageToolbar
+        start={TOOLBAR_INSET.COLUMN}
         lead={
-          <>
+          <div className="inbox-item-bar">
             {onBack === undefined ? null : (
-              <FoldingButton label="Inbox" icon={<BackIcon />} onClick={onBack} hint={BackHint} />
+              <BackButton label="Inbox" place={INBOX_PLACE} onBack={onBack} />
             )}
             <Crumbs
               holder={holder}
@@ -1234,7 +1219,7 @@ export function InboxPane({
               titleShown={headingAway}
             />
             {/* The bar ends in the pager, where the item stands alone, and the item's ⋯ menu. */}
-            <div className="desktop-toolbar-actions inbox-item-actions">
+            <div className="luke-toolbar-actions inbox-item-actions">
               {pager === undefined ||
               (pager.onPrevious === undefined && pager.onNext === undefined) ? null : (
                 <InboxPagerControls pager={pager} />
@@ -1248,7 +1233,7 @@ export function InboxPane({
                 onClose={doors.onClose}
               />
             </div>
-          </>
+          </div>
         }
       />
       <Fill className="desktop-inbox">

@@ -1,7 +1,9 @@
 import type { CodingAgentOverviewPullRequest } from "@luke/features/coding-agent-wire";
 import { PULL_REQUEST_ACTION, PULL_REQUEST_REFUSAL } from "@luke/features/pull-request-write-wire";
 import {
+  ANNOUNCE,
   Button,
+  CONFIRM_LOSS,
   ConfirmDialog,
   type DialogQuestion,
   EDITABLE_BLOCK_KIND,
@@ -12,6 +14,7 @@ import { ACTION_RESULT_STATUS } from "@luke/wire";
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import { usePrefetchEditorBundle } from "../bundle-loader.js";
 import { PLACEMENT_END, type PlanEditorPlacement } from "../plan-editor/contract.js";
+import { useAnnounceShown } from "../use-announce-shown.js";
 import { MarkdownEditor } from "./markdown-editor.js";
 import { documentWordsUnder, editsOnClick } from "./plan-document-editor.js";
 import {
@@ -62,6 +65,7 @@ const RELOAD_QUESTION: DialogQuestion = {
   body: "Your changes are discarded, and the description opens as it stands on GitHub now. This can't be undone.",
   verb: "Reload",
   running: "Reloading",
+  loss: CONFIRM_LOSS.IRREVERSIBLE,
 };
 
 /** Where the description stands: drawn, open in its editor, or waiting on its read to open again on GitHub's words. */
@@ -148,9 +152,12 @@ function DescriptionNote({
   onDismiss: () => void;
   onReload: () => void;
 }): React.JSX.Element | null {
-  if (note?.kind === WRITE_NOTE.WORDS && note.reason === PULL_REQUEST_REFUSAL.DESCRIPTION_CHANGED) {
+  const changed =
+    note?.kind === WRITE_NOTE.WORDS && note.reason === PULL_REQUEST_REFUSAL.DESCRIPTION_CHANGED;
+  useAnnounceShown(ANNOUNCE.ALERT, changed ? DESCRIPTION_WORDS.CHANGED : "");
+  if (changed) {
     return (
-      <div className="plan-editor-note" role="alert">
+      <div className="plan-editor-note">
         <span>{DESCRIPTION_WORDS.CHANGED}</span>
         <Button onClick={onReload}>{DESCRIPTION_WORDS.RELOAD}</Button>
       </div>
@@ -373,7 +380,7 @@ export function PullRequestDescription({
       >
         <DescriptionNote note={note} onDismiss={dismiss} onReload={reload.ask} />
       </MarkdownEditor>
-      <ConfirmDialog confirm={reload} question={RELOAD_QUESTION} />
+      <ConfirmDialog open confirm={reload} question={RELOAD_QUESTION} />
     </>
   );
 }

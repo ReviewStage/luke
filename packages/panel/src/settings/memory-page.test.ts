@@ -181,8 +181,8 @@ const button = (within: Element, label: string) =>
 const dialog = () =>
   document.querySelector<HTMLElement>('[role="alertdialog"]') ?? assert.fail("no question");
 
-/** Chooses Forget in a memory's ⋯, then the dialog's own Forget; answers whether it asked before forgetting. */
-async function forget(page: HTMLElement, memory: MemorySummary): Promise<boolean> {
+/** Chooses Forget in a memory's ⋯, which puts its question up. */
+function askForget(page: HTMLElement, memory: MemorySummary): void {
   const ellipsis =
     rowOf(page, memory).querySelector<HTMLButtonElement>('button[aria-haspopup="menu"]') ??
     assert.fail("no ⋯");
@@ -194,6 +194,11 @@ async function forget(page: HTMLElement, memory: MemorySummary): Promise<boolean
       ) ?? assert.fail("no Forget in the ⋯")
     ).click(),
   );
+}
+
+/** Asks Forget, then presses the dialog's own Forget; answers whether it asked before forgetting. */
+async function forget(page: HTMLElement, memory: MemorySummary): Promise<boolean> {
+  askForget(page, memory);
   const askedFirst = !sent.some((request) => request.kind === ACT_KIND.MEMORIES_FORGET);
   act(() => button(dialog(), "Forget").click());
   await settle();
@@ -236,6 +241,14 @@ test("Forget asks first, then forgets the memory for good and lists what the ser
   assert.equal(document.querySelector('[role="alertdialog"]'), null);
 });
 
+test("Forget is drawn red, since a forgotten memory cannot be got back", async () => {
+  const { page } = await mount();
+
+  askForget(page, DEPLOYS);
+
+  assert.equal(button(dialog(), "Forget").getAttribute("data-variant"), "danger");
+});
+
 test("a forget that fails says so in the dialog and keeps the memory listed", async () => {
   refuseForget = true;
   const { page } = await mount();
@@ -244,7 +257,7 @@ test("a forget that fails says so in the dialog and keeps the memory listed", as
 
   assert.deepEqual(words(page), [DEPLOYS.text, TESTS.text]);
   assert.equal(
-    dialog().querySelector('[role="alert"]')?.textContent,
+    dialog().querySelector('[data-slot="field-error"]:not(:empty)')?.textContent,
     "The memory could not be forgotten. Try again.",
   );
 });

@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import { MOTION_DELAY_MS } from "@luke/brand";
 import { ACCOUNT_STATUS } from "@luke/credentials/snapshot";
 import { SETTINGS_VIEW } from "@luke/settings/settings-views";
 import { settingsView } from "@luke/settings/testing";
@@ -16,7 +17,7 @@ import { ACTION_RESULT_STATUS } from "@luke/wire";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeEach, test } from "vitest";
+import { afterEach, beforeEach, test, vi } from "vitest";
 import { FAKE_ANSWER } from "../testing/app-bridge.js";
 import { DESKTOP_CAPABILITIES } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
@@ -116,6 +117,7 @@ beforeEach(() => {
 afterEach(() => {
   for (const each of roots.splice(0)) act(() => each.unmount());
   document.body.innerHTML = "";
+  vi.useRealTimers();
 });
 
 test("while voice cannot run, the page says how to turn it on and offers nothing else", () => {
@@ -169,4 +171,31 @@ test("once the microphone is allowed, the conversation's controls stand under it
     ["Permissions", "Conversation"],
   );
   assert.equal(button(container, "Allow"), undefined);
+});
+
+test("Allow shows its ring once the request has been out the settle delay, and stops when it settles", async () => {
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+  let answer: () => void = ignore;
+  const { container } = draw(
+    microphoneAt(MICROPHONE_STATUS.NOT_DETERMINED, {
+      onRequest: () => new Promise<void>((settle) => (answer = settle)),
+    }),
+  );
+  const ringIn = (each: HTMLElement) => each.querySelector(".luke-spinner-ring") !== null;
+
+  act(() => button(container, "Allow")?.click());
+  const busy = button(container, "Asking for access");
+  assert.ok(busy);
+  assert.equal(busy.getAttribute("aria-busy"), "true");
+  act(() => vi.advanceTimersByTime(MOTION_DELAY_MS.SETTLE - 1));
+  assert.equal(ringIn(busy), false);
+  act(() => vi.advanceTimersByTime(1));
+  assert.equal(ringIn(busy), true);
+
+  await act(async () => answer());
+
+  const allow = button(container, "Allow");
+  assert.ok(allow);
+  assert.equal(allow.getAttribute("aria-busy"), null);
+  assert.equal(ringIn(allow), false);
 });

@@ -52,7 +52,7 @@ import {
 import { PageWorkspaceProvider, useCopyLink, usePageWorkspace } from "../links-at-hand.js";
 import { PANEL_TAB, type PanelTab } from "../panel-tabs.js";
 import type { SidePanelControl } from "../tasks/use-side-panel.js";
-import { useTaskLooks } from "../tasks/use-task-looks.js";
+import { NO_LOOKS, useTaskLooks } from "../tasks/use-task-looks.js";
 import { AUTOMATIONS_PAGE, type InboxChoice, type TasksControl } from "../tasks/use-tasks-tab.js";
 import {
   fakeActPort,
@@ -63,18 +63,19 @@ import {
   type SentPortAct,
 } from "../testing/app-bridge.js";
 import { copyingInto, fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
-import { DESKTOP_CAPABILITIES, handState } from "../testing/app-state.js";
+import { DESKTOP_CAPABILITIES, handCapabilities, handState } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { sidebarProps } from "../testing/desktop-sidebar.js";
 import { DOCUMENT_TASK } from "../testing/document-task.js";
 import { followedInboxes } from "../testing/followed-inboxes.js";
 import { restOn } from "../testing/hint-rest.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
-import { codingAgentsControl, tasksControl } from "../testing/tasks-control.js";
+import { codingAgentsControl, tasksControl, UNPINNED_SUMMARY } from "../testing/tasks-control.js";
 import { newestToastSays } from "../testing/toast.js";
 import { ToastHost } from "../toast.js";
 import { CommandPalette } from "./command-palette.js";
 import { DesktopSidebar } from "./desktop-sidebar.js";
+import { DesktopTasks } from "./desktop-tasks.js";
 import { ListedAutomations } from "./listed-automations.js";
 import { panelEntries } from "./side-panel.js";
 
@@ -233,7 +234,7 @@ test("⌘K marks the task on screen unread and then read, and offers no mark for
 });
 
 function field(): HTMLInputElement {
-  const input = document.querySelector<HTMLInputElement>(".command-palette-search input");
+  const input = document.querySelector<HTMLInputElement>('[role="dialog"] input[role="combobox"]');
   assert.ok(input, "the search field is drawn");
   return input;
 }
@@ -396,9 +397,9 @@ const RIGHT = { key: "ArrowRight", code: "ArrowRight" } as const;
 const BACK = { key: "[", code: "BracketLeft", metaKey: true } as const;
 const FORWARD = { key: "]", code: "BracketRight", metaKey: true } as const;
 
-/** The footer's hints, each its keys and then its words. */
+/** The footer's hints, each its keys and then its words: the hints along the foot, the last thing the palette draws. */
 function footer(): (string | null)[] {
-  return [...document.querySelectorAll(".command-palette-footer-hint")].map(
+  return [...(document.querySelector("[cmdk-root]")?.lastElementChild?.children ?? [])].map(
     (hint) => hint.textContent,
   );
 }
@@ -500,13 +501,13 @@ test("in a row too narrow for every filter, the filter a key chooses is scrolled
 
 test("the footer names the keys that step the filters now: ← → while the field is empty, ⌘[ ⌘] once typed", () => {
   openPalette();
-  assert.deepEqual(footer(), ["↑↓Select", "⏎Open", "←→Filter"]);
+  assert.deepEqual(footer(), ["↑↓ Select", "⏎ Open", "←→ Filter"]);
 
   type("invite");
-  assert.deepEqual(footer(), ["↑↓Select", "⏎Open", "⌘[⌘]Filter"]);
+  assert.deepEqual(footer(), ["↑↓ Select", "⏎ Open", "⌘[⌘] Filter"]);
 
   type("");
-  assert.deepEqual(footer(), ["↑↓Select", "⏎Open", "←→Filter"]);
+  assert.deepEqual(footer(), ["↑↓ Select", "⏎ Open", "←→ Filter"]);
 });
 
 /** The window behind the palette, running the menu bar's commands, its Back and Forward recorded. */
@@ -1480,6 +1481,124 @@ test("a command ⌘K alone offers, the sidebar's Show my tasks, is listed by its
   assert.deepEqual(ran, ["show my tasks"]);
 });
 
+/** Offers two commands whose only key is Esc, as Settings and the Inbox's item do while they stand, and records each run. */
+function OffersEscapes({ ran }: { ran: string[] }): null {
+  useAppCommand(APP_COMMAND.EXIT_SETTINGS, () => ran.push("exit settings"));
+  useAppCommand(APP_COMMAND.INBOX_LIST, () => ran.push("back to inbox list"));
+  return null;
+}
+
+test("a command whose only key is Esc is no row in ⌘K, though it is still offered", () => {
+  const ran: string[] = [];
+  const root = createRoot(document.body.appendChild(document.createElement("div")));
+  roots.push(root);
+  act(() => root.render(createElement(OffersEscapes, { ran })));
+  openPalette();
+  chooseFilter("Actions");
+  type("exit settings");
+  assert.equal(rows().includes("Exit settings"), false);
+  type("back to inbox list");
+  assert.equal(rows().includes("Back to inbox list"), false);
+  assert.ok(appCommandOffered(APP_COMMAND.EXIT_SETTINGS), "Exit settings is still offered");
+});
+
+/** The chord's glyphs at the end of the palette's row listed as exactly these words, or nothing where it prints none. */
+function rowChord(listed: string): string | null {
+  const row = document.querySelectorAll('[role="option"]')[rows().indexOf(listed)];
+  assert.ok(row, `${listed} is listed`);
+  return row.querySelector(".luke-shortcut")?.textContent ?? null;
+}
+
+/** The chord's glyphs at the end of the open menu's item that says exactly these words, or nothing where it prints none. */
+function itemChord(label: string): string | null {
+  const item = [...document.querySelectorAll('[role="menu"] [role="menuitem"]')].find(
+    (each) => each.querySelector(".luke-menu-item-label")?.textContent === label,
+  );
+  assert.ok(item, `the menu offers ${label}`);
+  return item.querySelector(".luke-shortcut")?.textContent ?? null;
+}
+
+test("a task's command wears the same chord in ⌘K as in the open task's ⋯, ⌘K naming the task where the ⋯ says the verb alone", () => {
+  const tasks = tasksControl({
+    page: TASKS_PAGE.DOCUMENT,
+    activeTaskId: DOCUMENT_TASK.id,
+    region: { kind: DOCUMENT_REGION.READY, task: DOCUMENT_TASK },
+  });
+  const host = document.body.appendChild(document.createElement("div"));
+  const root = createRoot(host);
+  roots.push(root);
+  act(() =>
+    root.render(createElement(DesktopTasks, { summary: UNPINNED_SUMMARY, looks: NO_LOOKS, tasks })),
+  );
+  openPalette(tasks);
+  type("permanently delete");
+  const deleteKeys = rowChord("Permanently delete task");
+  type("mark done");
+  const doneKeys = rowChord("Mark done");
+  type("copy plan");
+  const copyKeys = rowChord("Copy plan");
+  act(() => {
+    assert.ok(runAppCommand(APP_COMMAND.COMMAND_PALETTE), "⌘K closes");
+  });
+
+  const more = host.querySelector<HTMLButtonElement>('[aria-label="Task actions"]');
+  assert.ok(more, "the task's ⋯ is drawn");
+  act(() => more.click());
+  assert.equal(deleteKeys, "⌘⌫");
+  assert.equal(itemChord("Permanently delete"), deleteKeys);
+  assert.equal(doneKeys, "⇧⌘A");
+  assert.equal(itemChord("Mark done"), doneKeys);
+  assert.equal(copyKeys, "⇧⌘C");
+  assert.equal(itemChord("Copy plan"), copyKeys);
+});
+
+test("an agent tab's right-click words and keys Close and Show terminal as ⌘K does, ⌘K naming the tab where the menu says the verb alone", async () => {
+  fakeAppBridge({});
+  fakeActPort({});
+  handCapabilities(DESKTOP_CAPABILITIES);
+  const tasks = tasksControl({
+    ...ON_AGENT_TAB,
+    mainTabs: {
+      ...ON_AGENT_TAB.mainTabs,
+      tabs: [{ agent: LINKED_AGENT }],
+      openAgents: [LINKED_AGENT],
+    },
+  });
+  const host = document.body.appendChild(document.createElement("div"));
+  const root = createRoot(host);
+  roots.push(root);
+  act(() =>
+    root.render(
+      onRegistry(
+        AtomRegistry.make(),
+        createElement(DesktopTasks, { summary: UNPINNED_SUMMARY, looks: NO_LOOKS, tasks }),
+      ),
+    ),
+  );
+  // The document arrives a few microtasks after the window first draws.
+  await settle();
+  openPalette(tasks);
+  type("close tab");
+  const closeKeys = rowChord("Close tab");
+  type("show terminal");
+  const terminalKeys = rowChord("Show terminal");
+  act(() => {
+    assert.ok(runAppCommand(APP_COMMAND.COMMAND_PALETTE), "⌘K closes");
+  });
+
+  const tab = host.querySelector<HTMLElement>('[role="tab"][aria-selected="true"]');
+  assert.ok(tab, "the agent's tab is chosen");
+  act(() => {
+    tab.dispatchEvent(
+      new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: 40, clientY: 20 }),
+    );
+  });
+  assert.equal(closeKeys, "⌘W");
+  assert.equal(itemChord("Close"), closeKeys);
+  assert.equal(terminalKeys, "⌘J");
+  assert.equal(itemChord("Show terminal"), terminalKeys);
+});
+
 /** Main's clipboard, keeping each copy the window asks of it. */
 function installClipboard(): string[] {
   const copied: string[] = [];
@@ -1799,8 +1918,7 @@ test("People lists the listed workspace's members as every people menu does, the
 /** What the list says where no row stands: its notice, or "Nothing matches.". */
 function emptyLine(): string | undefined {
   return (
-    document.querySelector(".luke-note-line, .command-palette-notice-slot")?.textContent ??
-    undefined
+    document.querySelector(".luke-note-line, [cmdk-list] [role=alert]")?.textContent ?? undefined
   );
 }
 
@@ -1890,7 +2008,7 @@ test("People says the members are being read until they answer, and a refused re
 
   await act(async () => answers.shift()?.refuse());
   await settle();
-  const alert = document.querySelector(".command-palette-notice-slot [role=alert]");
+  const alert = document.querySelector("[cmdk-list] [role=alert]");
   assert.match(alert?.textContent ?? "", /The workspace's members could not be read\./u);
   assert.doesNotMatch(document.body.textContent ?? "", /Nothing matches/u);
 
@@ -1927,7 +2045,7 @@ test("Tasks says a refused list with a Retry that reads it again", () => {
     }),
   );
   chooseFilter("Tasks");
-  const alert = document.querySelector(".command-palette-notice-slot [role=alert]");
+  const alert = document.querySelector("[cmdk-list] [role=alert]");
   assert.match(alert?.textContent ?? "", /Your tasks could not be read\./u);
   const retry = [...document.querySelectorAll<HTMLButtonElement>("button")].find(
     (each) => each.textContent === "Retry",
@@ -2604,7 +2722,7 @@ test("an Inbox that could not be read says so in the Inbox's own group, beside t
     rows().includes("Billing usage alerts · relay"),
     "the task the Tasks group matched is listed",
   );
-  const notice = document.querySelector(".command-palette-notice-slot");
+  const notice = document.querySelector("[cmdk-list] [role=alert]");
   assert.equal(notice?.textContent?.startsWith("Your inbox could not be read."), true);
   const group = notice?.closest("[cmdk-group]");
   assert.equal(group?.querySelector("[cmdk-group-heading]")?.textContent, "Inbox");

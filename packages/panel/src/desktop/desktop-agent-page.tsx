@@ -9,20 +9,21 @@ import { encodeMention, MENTION_KIND } from "@luke/features/mention-link";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
   ConfirmDialog,
-  EllipsisIcon,
   ERROR_STATE_PLACEMENT,
   ErrorState,
   FILL_ELEMENT,
   Fill,
-  IconButton,
   InlineEdit,
+  MoreButton,
+  moreLabel,
+  NOT_FOUND_THING,
+  NotFound,
   ONE_LINE_ELEMENT,
   ONE_LINE_END,
   OneLine,
-  PageToolbar,
   SpinnerRegion,
   STATUS_TONE,
-  Tooltip,
+  Toolbar,
   useMenu,
 } from "@luke/ui";
 import { pullRequestAgentOf, repositoryPullRequestOf } from "@luke/ui/pull-request-link";
@@ -37,9 +38,7 @@ import { LinkWorkspaceProvider } from "../copy-link-item.js";
 import { FindScope } from "../find-in-tab.js";
 import { usePageWorkspace } from "../links-at-hand.js";
 import { MemberDirectory } from "../member-directory.js";
-import { NOT_FOUND_THING, NotFound } from "../not-found.js";
 import { useSteadyDoor, useSteadyDoors } from "../steady-door.js";
-import { CallNotice } from "../tasks/agent-call.js";
 import { agentSubject } from "../tasks/agent-ref.js";
 import { peopleOf } from "../tasks/changes-card.js";
 import { agentName } from "../tasks/coding-agent-model.js";
@@ -112,8 +111,8 @@ import { tabCard } from "./tab-card.js";
  * one, since the agent's own column opens no tab. Its title names the agent as
  * its tab would, and its ⋯ offers the agent's own actions, the very ones its
  * tab's ⋯ offers on a task (`agent-actions.tsx`): Rename, which turns the
- * title into its name's field, Open terminal, Copy link, the
- * transcript's two copies, and Archive agent, so an agent with no task is
+ * title into its name's field, Show terminal, Copy link, the
+ * transcript's two copies, and Archive, so an agent with no task is
  * acted on as a task's is; ⌘J and New terminal open its terminal as on a
  * task (`terminal-commands.tsx`). An archived agent takes no message, so
  * its composer gives way to its own Unarchive, which its ⋯ offers in
@@ -142,18 +141,18 @@ const nothing = (): void => undefined;
 const NO_UNREAD: readonly StripTab[] = [];
 
 /** What the page's ⋯ is called. */
-const ACTIONS_LABEL = "Agent actions";
+const ACTIONS_THING = "Agent";
 
 /** What the title's field is called for a reader, as an agent's tab calls its own. */
 const NAME_LABEL = "Agent name";
 
 /**
- * The page's title and its ⋯, which offer the agent's own actions as its
+ * The page's bar: its title and its ⋯, which offer the agent's own actions as its
  * tab in a task's column does (`agent-actions.tsx`): its title turned into
  * its name's field by Rename, and every action of the tab's ⋯, in the same
  * groups (`strip-tabs.tsx`'s `contentActionGroups`).
  */
-function AgentPageHeading({
+function AgentPageBar({
   agent,
   agents,
   shown,
@@ -185,13 +184,13 @@ function AgentPageHeading({
   });
   const rename = luke ? undefined : actions.rename;
   return (
-    <>
-      <div className="desktop-toolbar-heading">
-        {rename?.editing === true ? (
+    <Toolbar
+      title={
+        rename?.editing === true ? (
           <OneLine
             as={ONE_LINE_ELEMENT.H1}
             end={ONE_LINE_END.ELLIPSIS}
-            className="desktop-toolbar-title"
+            className="luke-toolbar-title"
           >
             <InlineEdit
               value={label}
@@ -204,26 +203,24 @@ function AgentPageHeading({
             />
           </OneLine>
         ) : (
-          <OneLine as={ONE_LINE_ELEMENT.H1} className="desktop-toolbar-title">
-            {label}
-          </OneLine>
-        )}
-      </div>
-      <div className="desktop-toolbar-actions">
-        <Tooltip label={ACTIONS_LABEL}>
-          <IconButton icon={<EllipsisIcon />} label={ACTIONS_LABEL} {...menu.trigger()} />
-        </Tooltip>
-        {menu.drawn === undefined ? null : (
-          <ActionMenu
-            label={ACTIONS_LABEL}
-            menu={menu.drawn}
-            groups={groups}
-            onClose={menu.close}
-          />
-        )}
-        {actions.dialog}
-      </div>
-    </>
+          label
+        )
+      }
+      actions={
+        <>
+          <MoreButton thing={ACTIONS_THING} {...menu.trigger()} />
+          {menu.drawn === undefined ? null : (
+            <ActionMenu
+              label={moreLabel(ACTIONS_THING)}
+              menu={menu.drawn}
+              groups={groups}
+              onClose={menu.close}
+            />
+          )}
+          {actions.dialog}
+        </>
+      }
+    />
   );
 }
 
@@ -269,12 +266,9 @@ function useTaskAgentsFollow(
 export function DesktopAgentPage({
   tasks,
   agentId,
-  notice,
 }: {
   tasks: TasksControl;
   agentId: string;
-  /** The voice's notice line, while it rides the foot of the page's agent's call. */
-  notice?: React.ReactNode;
 }): React.JSX.Element {
   // The draft a Fork or a Continue opened on the page, by its key, which the pane shows in the agent's place.
   const [drafting, setDrafting] = useState<{ agentId: string; draftId: string } | undefined>(
@@ -333,17 +327,17 @@ export function DesktopAgentPage({
   const toast = useToast();
   const openLink = useReadLinkOpener();
   // An Unarchive refused says why, as any other refusal of the agent's does.
-  const unarchive = () => {
+  // Note that it settles once the answer is said, so the note's Unarchive shows busy till then.
+  const unarchive = () =>
     onArchive(agentId, false).then((result) => {
       if (result.status !== ACTION_RESULT_STATUS.ACCEPTED) {
         toast({ words: result.reason, tone: STATUS_TONE.DANGER, hold: TOAST_HOLD.FAILED });
       }
     }, nothing);
-  };
   // The agent's workspace as the account lists it, whose count reads its members again; by its id alone where the list does not hold it yet.
   const { workspaceId, agentRepository } = agents;
   usePageWorkspace(agentId, workspaceId);
-  // Open terminal, ⌘J, and New terminal open the agent's terminals in the side panel, as its tab's do on a task.
+  // Show terminal, ⌘J, and New terminal open the agent's terminals in the side panel, as its tab's do on a task.
   const terminalDoors = useAgentTerminalDoors(sidePanel, agentRepository, () =>
     setFocus(COLUMN.SIDE),
   );
@@ -502,28 +496,24 @@ export function DesktopAgentPage({
   );
   const toolbar =
     agent === undefined ? (
-      <PageToolbar heading={null} />
+      <Toolbar />
     ) : (
-      <PageToolbar
-        lead={
-          <AgentPageHeading
-            agent={agent}
-            agents={control}
-            shown={tasks.shown}
-            terminals={terminalDoors}
-            onClose={tasks.agentView.onClose}
-            luke={luke}
-          />
-        }
+      <AgentPageBar
+        agent={agent}
+        agents={control}
+        shown={tasks.shown}
+        terminals={terminalDoors}
+        onClose={tasks.agentView.onClose}
+        luke={luke}
       />
     );
   if (agent === undefined) {
+    // A page the service would not hand the reader keeps its bar over the words saying so.
+    if (agents.listMissing) return <NotFound thing={NOT_FOUND_THING.AGENT} bar={{}} />;
     return (
       <Fill as={FILL_ELEMENT.SECTION} className="agent-page" aria-label="Agent">
         {toolbar}
-        {agents.listMissing ? (
-          <NotFound thing={NOT_FOUND_THING.AGENT} />
-        ) : agents.listFailed ? (
+        {agents.listFailed ? (
           <ErrorState onRetry={agents.onRetryList} placement={ERROR_STATE_PLACEMENT.CENTRED}>
             {NOT_READ}
           </ErrorState>
@@ -574,23 +564,21 @@ export function DesktopAgentPage({
                           active={tasks.shown && !sideFocused}
                           subject={tab}
                         >
-                          <CallNotice.Provider value={notice}>
-                            <AgentPane
-                              call={calls}
-                              label={luke ? LUKE_NAME : agentName(agent, control.models)}
-                              tabbed={false}
-                              tab={paneTab}
-                              agents={control}
-                              shown={shown}
-                              views={views}
-                              onOpenDelegation={openDelegation}
-                              onOpenPullRequest={openPullRequest}
-                              onOpenTarget={openTarget}
-                              cards={cards}
-                              onFork={draftDoors.onFork}
-                              onContinue={draftDoors.onContinue}
-                            />
-                          </CallNotice.Provider>
+                          <AgentPane
+                            call={calls}
+                            label={luke ? LUKE_NAME : agentName(agent, control.models)}
+                            tabbed={false}
+                            tab={paneTab}
+                            agents={control}
+                            shown={shown}
+                            views={views}
+                            onOpenDelegation={openDelegation}
+                            onOpenPullRequest={openPullRequest}
+                            onOpenTarget={openTarget}
+                            cards={cards}
+                            onFork={draftDoors.onFork}
+                            onContinue={draftDoors.onContinue}
+                          />
                         </FindScope>
                       </Fill>
                       {drawing.panel ? (
@@ -617,6 +605,7 @@ export function DesktopAgentPage({
                     </div>
                     {/* The second call's question, which a Call press here asks over another agent's call. */}
                     <ConfirmDialog
+                      open
                       confirm={tasks.secondCall.confirm}
                       question={tasks.secondCall.question}
                     />

@@ -1,0 +1,8 @@
+{
+  "instead": "Hold an overlay's exit through Dialog, ConfirmDialog, PopoverPanel or AnchoredPopover from @luke/ui, which take `open` and fade out on the exit token; a card or popover of its own rides `luke-dialog-*`, `luke-menu-*` and `luke-card-*`.",
+  "classes": [
+    { "class": "luke-sheet-drop", "allow": [] },
+    { "class": "luke-scale-in-centered", "allow": [] },
+    { "class": "luke-scale-in-centered-x", "allow": [] }
+  ]
+}

@@ -129,9 +129,11 @@ async function drawnAt(width: number, status: CodingAgentStatus = CODING_AGENT_S
   );
   const foot =
     container.querySelector<HTMLElement>("form > :last-child") ?? assert.fail("the foot stands");
+  const card =
+    container.querySelector<HTMLElement>(".agent-composer") ?? assert.fail("the card stands");
   return {
     container,
-    foot,
+    card,
     press: (name: string) =>
       foot.querySelector<HTMLButtonElement>(`button[aria-label="${name}"]`) ??
       assert.fail(`${name} stands`),
@@ -140,7 +142,7 @@ async function drawnAt(width: number, status: CodingAgentStatus = CODING_AGENT_S
 
 test("at 220px wide, while a turn runs, the ⋯ offers every press it hid", async () => {
   const box = await drawnAt(CARD.NARROWEST, CODING_AGENT_STATUS.RUNNING);
-  act(() => box.press("More").click());
+  act(() => box.press("Composer actions").click());
   const offered = [...document.querySelectorAll('[role="menuitem"]')].map(
     (item) => item.textContent,
   );
@@ -149,7 +151,7 @@ test("at 220px wide, while a turn runs, the ⋯ offers every press it hid", asyn
 
 test("the ⋯ offers only what it hid: at 320px the + still stands beside it, so the ⋯ offers no Attach files", async () => {
   const box = await drawnAt(CARD.NARROW);
-  act(() => box.press("More").click());
+  act(() => box.press("Composer actions").click());
   const offered = [...document.querySelectorAll('[role="menuitem"]')].map(
     (item) => item.textContent,
   );
@@ -158,7 +160,7 @@ test("the ⋯ offers only what it hid: at 320px the + still stands beside it, so
 
 test("MCP servers chosen from the ⋯ opens the servers popover its hidden press would have, and Escape hands the keyboard back to the ⋯", async () => {
   const box = await drawnAt(CARD.NARROWEST);
-  act(() => box.press("More").click());
+  act(() => box.press("Composer actions").click());
   const servers = [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find(
     (item) => item.textContent === "MCP servers",
   );
@@ -174,19 +176,19 @@ test("MCP servers chosen from the ⋯ opens the servers popover its hidden press
     search.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
   });
   assert.equal(box.container.querySelector(".agent-servers [role='dialog']"), null);
-  assert.equal(document.activeElement?.getAttribute("aria-label"), "More");
+  assert.equal(document.activeElement?.getAttribute("aria-label"), "Composer actions");
 });
 
 test("the ⋯'s menu closes once the card changes width, as a panel dragged narrower would, so it never offers a stale set of presses", async () => {
   const box = await drawnAt(CARD.NARROW);
-  const width = vi.spyOn(box.foot, "getBoundingClientRect");
+  const width = vi.spyOn(box.card, "getBoundingClientRect");
   width.mockReturnValue(DOMRect.fromRect({ width: CARD.NARROW }));
   // What the standing menu offers; a closed one, held drawn while its exit plays, is inert.
   const offered = () =>
     [...document.querySelectorAll('[role="menuitem"]')]
       .filter((item) => item.closest("[inert]") === null)
       .map((item) => item.textContent);
-  act(() => box.press("More").click());
+  act(() => box.press("Composer actions").click());
   assert.deepEqual(offered(), ["MCP servers", "62% of context used", "Dictate"]);
 
   // Laid out again at the same width, as a scroll would, it stays.

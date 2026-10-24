@@ -31,6 +31,7 @@ import {
   DisclosureBody,
   DisclosureChevron,
   DisclosureSummary,
+  FailureNote,
   GAP,
   GLYPH_ARRIVAL,
   GLYPH_INK,
@@ -1166,7 +1167,7 @@ export function TranscriptTool({
           )
         }
       />
-      <ToolContent>
+      <ToolContent bare>
         <ToolInput block={input} />
         {cut === undefined ? (
           <ToolOutput block={output} errorText={errorText} />
@@ -1447,11 +1448,7 @@ export function TranscriptTodos({
       />
       <FoldBody className="todos-body">
         <TodoItems todos={todos} live={live} />
-        {errorText === undefined ? null : (
-          <p className="todos-error" role="alert">
-            {errorText}
-          </p>
-        )}
+        {errorText === undefined ? null : <FailureNote>{errorText}</FailureNote>}
       </FoldBody>
     </Tool>
   );
@@ -1593,7 +1590,7 @@ export function TranscriptSubagent({
         <LineSummary data-subagent-row="" data-call-id={callId}>
           {line}
         </LineSummary>
-        <ToolContent>
+        <ToolContent bare>
           <ToolInput block={body.input} />
           <ToolOutput block={body.output} errorText={undefined} />
         </ToolContent>
@@ -1612,11 +1609,7 @@ export function TranscriptSubagent({
   return (
     <div className="subagent-row">
       {row}
-      {errorText === undefined ? null : (
-        <p className="subagent-error" role="alert">
-          {errorText}
-        </p>
-      )}
+      {errorText === undefined ? null : <FailureNote>{errorText}</FailureNote>}
     </div>
   );
 }

@@ -1,5 +1,6 @@
 import type { ReviewThread } from "@luke/features/coding-agent-wire";
 import type { PullRequestThreadView } from "@luke/features/link-grammar";
+import { LANDED_ANIMATION } from "@luke/ui/landed";
 import {
   type AnimationEvent,
   createContext,
@@ -22,9 +23,9 @@ import { focusSeek } from "../focus-seek.js";
  * Whichever view the thread is drawn in hands its cards the thread to land
  * on (`ThreadLandingProvider`): the card opens itself, a minimized one's
  * chip with it, waits until it stands in sight, the view having scrolled it
- * there, takes the focus without scrolling again, and is ringed once, as a
- * search result landed on is (`data-search-landed`). The ring's end is told
- * back, which lets go of the lines the view lit for it.
+ * there, takes the focus without scrolling again, and is lit once, as every
+ * place landed on is (`@luke/ui/landed`). The light's end is told back,
+ * which lets go of the lines the view lit for it.
  */
 
 /** What a thread revealed says where it cannot be shown. */
@@ -34,7 +35,7 @@ export const THREAD_REVEAL_WORDS = {
   VIEW_FILES: "View in Files changed",
   VIEW_CONVERSATION: "View in Conversation",
   /** The name of a thread's ⋯. */
-  MENU: "Comment actions",
+  THING: "Comment",
 } as const;
 
 /** An ask to bring one review thread of an agent's pull request into view, on one of its tab's views; counted, so each ask is its own. */
@@ -89,7 +90,7 @@ export const ThreadLandingProvider = ThreadLandingContext.Provider;
 export interface LandedCard {
   /** Holds the card's element, the one ringed and scrolled to. */
   readonly ref: (card: HTMLElement | null) => void;
-  /** Whether the card wears its ring, `data-search-landed`. */
+  /** Whether the card is lit as landed on (`landedMark`). */
   readonly ringed: boolean;
   readonly onAnimationEnd: (event: AnimationEvent<HTMLElement>) => void;
 }
@@ -99,9 +100,6 @@ export interface LandedThread extends LandedCard {
   readonly open: boolean;
   readonly onOpenChange: (open: boolean) => void;
 }
-
-/** The ring's animation (`search.css`'s `search-landed`), whose end is the landing's. */
-const RING_ANIMATION = "search-landed";
 
 /** How many frames a card is waited for where the view says no other. */
 const LANDING_FRAMES = 60;
@@ -171,7 +169,7 @@ function useLanding(
     ringed,
     // Note that only the card's own ring ends the landing, since its body's motion bubbles here too.
     onAnimationEnd: (event) => {
-      if (event.target !== event.currentTarget || event.animationName !== RING_ANIMATION) return;
+      if (event.target !== event.currentTarget || event.animationName !== LANDED_ANIMATION) return;
       setRinged(false);
       fade.current?.();
       fade.current = undefined;

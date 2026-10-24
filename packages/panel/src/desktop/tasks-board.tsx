@@ -15,6 +15,7 @@ import {
 } from "@luke/features/words";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
+  ANNOUNCE,
   BUTTON_SIZE,
   CARD_CORNER,
   CARD_ELEMENT,
@@ -34,14 +35,14 @@ import {
   COLLECTION_STATE,
   CollectionPage,
   type CollectionState,
-  EllipsisIcon,
   EmptyState,
   ERROR_STATE_PLACEMENT,
   ErrorState,
   GAP,
   GLYPH_INK,
   GlyphSlot,
-  IconButton,
+  GROUP_SURFACE,
+  GroupHeader,
   INSET,
   InlineEdit,
   LAYOUT_ELEMENT,
@@ -66,6 +67,9 @@ import {
   Tooltip,
   useLeaving,
   useMinute,
+  useRovingColumns,
+  useRovingKeys,
+  useRowMenu,
 } from "@luke/ui";
 import { actorName, creatorActor } from "@luke/ui/actor-model";
 import { TASK_ORDER, taskTime } from "@luke/ui/task-list-model";
@@ -95,12 +99,15 @@ import {
   TASK_STATUS_WORDS,
   TaskKey,
 } from "../tasks/task-standing.js";
-import { useOpenLink } from "../tasks/use-open-link.js";
+import { linkPressOf, useOpenLink } from "../tasks/use-open-link.js";
 import { useReadMarks } from "../tasks/use-task-looks.js";
 import { useTaskMaker } from "../tasks/use-task-origin.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
+import { useAnnounceShown } from "../use-announce-shown.js";
 import { useRefocusAfterEdit } from "../use-refocus-after-edit.js";
-import { useTaskMenu } from "./task-actions.js";
+import { rowMenu } from "./action-menu.js";
+import { groupCount } from "./sidebar-fold.js";
+import { useTaskMenuItems } from "./task-actions.js";
 import { taskCardOf } from "./task-card.js";
 import {
   AssigneeChip,
@@ -132,8 +139,8 @@ import { useRowDrag } from "./use-row-drag.js";
  * stands, the assignee's left off under an assignee's column, its
  * repository, what its agents are doing and the pull requests they opened
  * (`task-row-parts.tsx`), and a ⋯ dropping the task's own menu, the sidebar
- * row's, which a right-click drops too and whose Rename makes the card's
- * name its field. A press anywhere else opens the task. A card hangs no
+ * row's, which a right-click and the menu key drop too (`useRowMenu`) and
+ * whose Rename makes the card's name its field. A press anywhere else opens the task. A card hangs no
  * hover card, since it already says what its row's card would. A card dragged onto another column
  * is sent that column's status or priority, or assigned to its person, No
  * assignee's assigning it to no one, as the task page's chips send them,
@@ -211,7 +218,8 @@ function TaskBoardTags({ task }: { task: TaskSummary }): React.JSX.Element | nul
           look={CHIP_LOOK.PILL}
           size={CHIP_SIZE.COMPACT}
           data-provider={tag.provider}
-          onClick={() => openLink(tag.url)}
+          href={tag.url}
+          onClick={linkPressOf(openLink, tag.url)}
         >
           <ProviderMark provider={TAG_MARK[tag.provider]} size={PROVIDER_MARK_SIZE.CAPTION} />
           <ChipName mono>{issueTagWords(tag, task.repository)}</ChipName>
@@ -257,12 +265,20 @@ function TaskBoardCard({
   const maker = useTaskMaker(task);
   const reads = useReadMarks();
   const rename = useInlineRename(task.id, tasks.onRenameTask);
-  const actions = useTaskMenu(tasks, task.id, task.name, {
+  useAnnounceShown(ANNOUNCE.ALERT, rename.refused ? RENAME_FAILED_NOTE : "");
+  const actions = useTaskMenuItems(tasks, task.id, task.name, {
     rename: rename.begin,
     drawn: true,
     unread: reads.markedUnread(task.id),
   });
   const press = useRef<HTMLButtonElement | null>(null);
+  const nameId = useId();
+  const menu = useRowMenu(
+    rename.editing
+      ? undefined
+      : { ...rowMenu("Task", actions.groups(), tasks.shown), footer: actions.footer },
+    { disabled: actions.deletion.busy, opener: press },
+  );
   const item = useRef<HTMLElement | null>(null);
   const drawn = (property: TaskProperty) => properties.includes(property);
   const endedByKey = useRefocusAfterEdit(rename.editing, press);
@@ -309,12 +325,12 @@ function TaskBoardCard({
       padding={CARD_PADDING.NONE}
       shadow={CARD_SHADOW.SOFT}
       hover={CARD_HOVER.LIFT}
-      lit={actions.open}
+      lit={menu.open}
       className="tasks-board-card"
       ref={item}
       data-task-id={task.id}
       {...motionKey(task.id)}
-      data-menu-open={actions.open ? "true" : undefined}
+      {...menu.props}
       data-editing={rename.editing ? "true" : undefined}
     >
       {rename.editing ? (
@@ -338,25 +354,22 @@ function TaskBoardCard({
           <CardPress
             ref={press}
             disabled={actions.deletion.busy}
+            roving
             onPress={() => {
-              actions.close(false);
+              menu.close(false);
               onOpen();
             }}
-            onKeyDown={actions.keyMenu}
-            contextMenu={actions.contextMenu(press)}
           >
             <span className="tasks-board-card-face">
               {head}
-              <span className="tasks-board-name">{task.name}</span>
+              <span id={nameId} className="tasks-board-name">
+                {task.name}
+              </span>
             </span>
           </CardPress>
         </Tooltip>
       )}
-      {rename.refused ? (
-        <span className="tasks-board-card-note" role="alert">
-          {RENAME_FAILED_NOTE}
-        </span>
-      ) : null}
+      {rename.refused ? <span className="tasks-board-card-note">{RENAME_FAILED_NOTE}</span> : null}
       <TaskBoardTags task={task} />
       <div className="tasks-board-card-foot">
         {/* Note that a task from a service before priorities offers No priority, as one before statuses stands under Todo. */}
@@ -381,18 +394,10 @@ function TaskBoardCard({
         )}
         {drawn(TASK_PROPERTY.AGENTS) ? <TaskWorkMarks task={task} /> : null}
         <span className="tasks-board-card-more">
-          <Tooltip label="Task actions">
-            <IconButton
-              icon={<EllipsisIcon />}
-              label={`Actions for ${task.name}`}
-              size={BUTTON_SIZE.COMPACT}
-              disabled={actions.deletion.busy}
-              {...actions.trigger()}
-            />
-          </Tooltip>
+          {menu.more({ size: BUTTON_SIZE.COMPACT, describedBy: nameId })}
         </span>
       </div>
-      {actions.menu}
+      {menu.popup}
       {actions.dialog}
     </Card>
   );
@@ -519,6 +524,8 @@ function TaskBoardColumnView({
       ? properties.filter((property) => property !== TASK_PROPERTY.ASSIGNEE)
       : properties;
   const cards = useLeaving(column.tasks, taskIdOf);
+  // A column's cards are one Tab stop that ↑↓ walk; ←→ cross to the next column's (`useRovingColumns`).
+  const roving = useRovingKeys<HTMLDivElement>();
   return (
     <Card
       as={CARD_ELEMENT.SECTION}
@@ -532,17 +539,12 @@ function TaskBoardColumnView({
       id={narrow ? panelId : undefined}
       role={narrow ? "tabpanel" : undefined}
     >
-      <h2 className="tasks-board-column-head">
-        {mark}
-        <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.SECTION} truncate>
-          {words}
-        </Text>
-        {column.tasks.length === 0 ? null : (
-          <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
-            {column.tasks.length}
-          </Text>
-        )}
-      </h2>
+      <GroupHeader
+        label={words}
+        glyph={mark}
+        count={column.tasks.length === 0 ? undefined : groupCount(column.tasks.length)}
+        surface={GROUP_SURFACE.WIDE}
+      />
       {cards.length === 0 ? (
         column.older === undefined ? (
           <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED} className="tasks-board-empty">
@@ -550,7 +552,7 @@ function TaskBoardColumnView({
           </Text>
         ) : null
       ) : (
-        <div className="tasks-board-column-scroll">
+        <div className="tasks-board-column-scroll" {...roving}>
           {/* Note that the cards hand a swipe on, because a contained area swallows a sideways one it cannot scroll, and the board scrolls sideways under them. */}
           <ScrollArea
             size={narrow ? SCROLL_SIZE.FILL : SCROLL_SIZE.CONTENT}
@@ -609,6 +611,7 @@ export function TasksBoard({
   const waitingOn = new Map(waiting.map((each) => [each.taskId, each.items.length]));
   const ids = useId();
   const board = useRef<HTMLDivElement>(null);
+  const crossing = useRovingColumns<HTMLDivElement>();
   const [chosen, setChosen] = useState<string>(FIRST_SHOWN);
   const listed = tasks.listed.tasks;
   const { filter, display } = frame;
@@ -672,6 +675,7 @@ export function TasksBoard({
       width={PAGE_WIDTH.FULL}
       label={title}
       toolbar={frame.toolbar}
+      scrollRef={frame.scroll}
       filters={filters}
       state={boardState(tasks, listed.length === 0)}
       loadingLabel={READING_LINE}
@@ -687,7 +691,7 @@ export function TasksBoard({
         <ErrorState onRetry={tasks.onRetryList}>{REFRESH_FAILED_WORDS}</ErrorState>
       ) : null}
       <ListMotion root={board}>
-        <div ref={board} className="tasks-board" data-row-drop-scope="">
+        <div ref={board} className="tasks-board" data-row-drop-scope="" {...crossing}>
           {columns.length === 0 ? (
             <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
               {NONE_STANDING}

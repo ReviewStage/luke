@@ -26,20 +26,19 @@ import { INBOX_BOUNDS, type InboxItem } from "@luke/features/inbox-wire";
 import { encodeMention, MENTION_KIND } from "@luke/features/mention-link";
 import { pasteCutWords } from "@luke/features/words";
 import { ACT_KIND } from "@luke/host/acts";
-import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
-  BackIcon,
+  BackButton,
   BUTTON_VARIANT,
   Button,
   CHIP_WIDTH,
-  FoldingButton,
-  type FoldingButtonHint,
-  PageToolbar,
+  FormField,
+  matchingRows,
+  POPOVER_ALIGN,
   Spinner,
-  STATUS_TONE,
   TEXT_FIELD_SIZE,
   TextField,
-  Tooltip,
+  TOOLBAR_INSET,
+  Toolbar,
 } from "@luke/ui";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useAct } from "../act.js";
@@ -52,16 +51,13 @@ import {
   useDraft,
   useDraftWriter,
 } from "../composer-drafts.js";
-import { imageFiles } from "../feedback-images.js";
 import { useIntegrationStatuses } from "../integration-statuses.js";
-import { matchingRows } from "../searchable-menu.js";
-import { PICKER_ALIGN, Picker } from "../settings/picker-row.js";
-import { UNDO_LABEL, useToast } from "../toast.js";
-import { useFileDrop } from "../use-file-drop.js";
+import { Picker } from "../settings/picker-row.js";
+import { undoToast, useToast } from "../toast.js";
+import { useAttachedFiles } from "../use-attached-files.js";
 import { type AgentRowPlace, agentMenuRow, useAgentRowPlace } from "./agent-menu-row.js";
 import { AttachFilesButton } from "./attach-files-button.js";
 import { AttachedFileChips, attachmentChips } from "./attached-file-chips.js";
-import { readFiles, withFiles } from "./attached-files.js";
 import { messageFailureWords } from "./coding-agent-model.js";
 import { AnswerForm, EDITOR_LOAD_FAILED, useAnswerField } from "./inbox-answer-box.js";
 import type { MentionDoors } from "./mention-chip.js";
@@ -83,16 +79,9 @@ const NO_AGENT = "Choose an agent";
 const NO_MATCH = "No agent matches";
 const NO_AGENTS = "No agents in this workspace yet.";
 const AGENTS_FAILED = "The workspace's agents could not be read.";
-const SUBJECT_PLACEHOLDER = "Optional";
-const BACK_TO_INBOX = "Back to inbox";
+const INBOX = "Inbox";
+const INBOX_PLACE = "inbox";
 const DISCARDED = "Draft discarded";
-
-/** The way back's pill, which names Back's chord as the item pane's does. */
-const BackHint: FoldingButtonHint = ({ children }) => (
-  <Tooltip label={BACK_TO_INBOX} command={APP_COMMAND.BACK}>
-    {children}
-  </Tooltip>
-);
 
 /** The workspace's agents as To offers them: read, failed, or not yet read. */
 type AgentsRead = { readonly agents: readonly MentionableAgent[] } | { readonly failed: true };
@@ -354,7 +343,6 @@ function ComposeCard({
   const { read, listed, asked, agent } = composeTo;
   const toast = useToast();
   const [sending, setSending] = useState(false);
-  const [reading, setReading] = useState(0);
   const [refusal, setRefusal] = useState<string | undefined>(undefined);
   // Whether the last paste was cut to the room the box has left, until the words change again.
   const [cut, setCut] = useState(false);
@@ -365,7 +353,6 @@ function ComposeCard({
   latestAgent.current = agent;
   const chosen = agent === undefined ? undefined : agentMenuRow(agent, place);
   const placeholder = agent === undefined ? "Write a message" : `Write to ${agent.name}`;
-  const fileDrop = useFileDrop((files) => attach(Array.from(files)));
   const field = useAnswerField({
     draft: draft.text,
     placeholder,
@@ -383,13 +370,21 @@ function ComposeCard({
       const id = latestAgent.current?.id;
       return id === undefined ? drafted : { ...drafted, to: id };
     });
+  // Note that a send waits while files handed to the box are still read.
+  const files = useAttachedFiles({
+    holder: {
+      attachments: draft.attachments,
+      update: (next) => write((was) => ({ ...was, attachments: next(was.attachments) })),
+    },
+    onRefusal: setRefusal,
+  });
   const text = draft.text.trim();
   const sendable =
     agent !== undefined &&
     (text !== "" || draft.attachments.length > 0) &&
     text.length <= INBOX_BOUNDS.MAX_MESSAGE_CHARS;
   const send = () => {
-    if (!sendable || sending || reading > 0) return;
+    if (!sendable || sending || files.reading) return;
     const words = sendWords(agent.id, draft);
     const key = attempt.current?.words === words ? attempt.current.key : crypto.randomUUID();
     attempt.current = { key, words };
@@ -423,33 +418,12 @@ function ComposeCard({
     update(() => EMPTY_DRAFT);
     onDiscard();
     if (!written(kept)) return;
-    toast({
-      words: DISCARDED,
-      tone: STATUS_TONE.COMPLETE,
-      action: {
-        label: UNDO_LABEL,
-        onPress: () => {
-          update(() => kept);
-          onRestore();
-        },
-      },
-    });
-  };
-  const attach = (files: readonly File[]) => {
-    if (files.length === 0) return;
-    setReading((count) => count + 1);
-    readFiles(files)
-      .then((filesRead) => {
-        // Taken after whatever the box holds as the read lands, so a chip taken off meanwhile is not undone.
-        let refused = filesRead.refusal;
-        write((was) => {
-          const taken = withFiles(was.attachments, filesRead);
-          refused = taken.refusal;
-          return { ...was, attachments: taken.attachments };
-        });
-        setRefusal(refused);
-      })
-      .finally(() => setReading((count) => count - 1));
+    toast(
+      undoToast(DISCARDED, () => {
+        update(() => kept);
+        onRestore();
+      }),
+    );
   };
   const note =
     refusal ??
@@ -457,13 +431,14 @@ function ComposeCard({
     (field.failed ? EDITOR_LOAD_FAILED : undefined);
   return (
     <section className="inbox-view-items" aria-label={NEW_THREAD} hidden={hidden}>
-      <PageToolbar
+      <Toolbar
+        start={TOOLBAR_INSET.COLUMN}
         lead={
           onBack === undefined ? null : (
-            <FoldingButton label="Inbox" icon={<BackIcon />} onClick={onBack} hint={BackHint} />
+            <BackButton label={INBOX} place={INBOX_PLACE} onBack={onBack} />
           )
         }
-        heading={<h1 className="desktop-toolbar-title">{NEW_THREAD}</h1>}
+        title={NEW_THREAD}
         actions={
           <Button variant={BUTTON_VARIANT.QUIET} onClick={discard} disabled={sending}>
             {DISCARD}
@@ -476,7 +451,7 @@ function ComposeCard({
             <span className="inbox-compose-label">{TO}</span>
             <Picker
               label={TO}
-              align={PICKER_ALIGN.START}
+              align={POPOVER_ALIGN.START}
               width={CHIP_WIDTH.AUTO}
               value={agent?.id}
               valueLabel={chosen === undefined ? NO_AGENT : chosen.label}
@@ -503,38 +478,34 @@ function ComposeCard({
               }}
             />
           </div>
-          <div className="inbox-compose-row">
-            <span className="inbox-compose-label">{SUBJECT}</span>
-            <TextField
-              label={SUBJECT}
-              size={TEXT_FIELD_SIZE.INLINE}
-              value={draft.title ?? ""}
-              placeholder={SUBJECT_PLACEHOLDER}
-              maxLength={INBOX_BOUNDS.MAX_TITLE_CHARS}
-              disabled={sending}
-              autoFocus
-              onChange={(title) => write((was) => ({ ...was, title }))}
-              onEnter={() => field.editor.current?.focus()}
-            />
+          <div className="inbox-compose-row" data-field="">
+            <FormField label={SUBJECT} optional>
+              {(control) => (
+                <TextField
+                  field={control}
+                  size={TEXT_FIELD_SIZE.INLINE}
+                  value={draft.title ?? ""}
+                  maxLength={INBOX_BOUNDS.MAX_TITLE_CHARS}
+                  disabled={sending}
+                  autoFocus
+                  onChange={(title) => write((was) => ({ ...was, title }))}
+                  onEnter={() => field.editor.current?.focus()}
+                />
+              )}
+            </FormField>
           </div>
         </div>
-        <div className="agent-composer inbox-compose-box" {...fileDrop.target}>
+        <div className="agent-composer inbox-compose-box" {...files.drop.target}>
           <AnswerForm
-            dropping={fileDrop.dropping}
+            dropping={files.drop.dropping}
             field={field}
             asks={false}
             messages
             controls={undefined}
             chips={
               <AttachedFileChips
-                files={attachmentChips(draft.attachments)}
-                onRemove={(index) => {
-                  setRefusal(undefined);
-                  write((was) => ({
-                    ...was,
-                    attachments: was.attachments.filter((_, at) => at !== index),
-                  }));
-                }}
+                files={attachmentChips(files.attachments)}
+                onRemove={files.remove}
               />
             }
             note={draft.text}
@@ -546,25 +517,15 @@ function ComposeCard({
             placeholder={placeholder}
             maxLength={INBOX_BOUNDS.MAX_MESSAGE_CHARS}
             onEnter={() => field.room.current?.closest("form")?.requestSubmit()}
-            onPasteFiles={(files) => {
-              // Only images are taken from the clipboard; text pastes as it always does.
-              const pasted = imageFiles(files);
-              if (pasted.length === 0) return false;
-              attach(pasted);
-              return true;
-            }}
-            tools={<AttachFilesButton onFiles={attach} />}
+            onPasteFiles={files.paste}
+            tools={<AttachFilesButton onFiles={files.attach} />}
+            says={note === undefined ? undefined : { words: note }}
             nod={false}
             sending={sending}
-            held={sending || reading > 0}
+            held={sending || files.reading}
             sendable={sendable}
             onSubmit={send}
           />
-          {note === undefined ? null : (
-            <p className="error-message agent-composer-note" role="alert">
-              {note}
-            </p>
-          )}
         </div>
       </div>
     </section>

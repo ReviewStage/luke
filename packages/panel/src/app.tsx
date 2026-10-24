@@ -694,9 +694,14 @@ function AppWindow(): React.JSX.Element {
   useEffect(() => installPressIntent(window), []);
 
   // The doors the window hands every page are held across draws, each part that reads one holding while it does.
+  // Note that the request answers once the host has handed it on, which is how Allow knows to stop waiting; the system's own prompt follows, and its answer arrives as the microphone's status.
   const requestMicrophone = useCallback(
-    () => tell(ACT_KIND.VOICE_COMMAND, { command: VOICE_COMMAND.REQUEST_MICROPHONE_ACCESS }),
-    [tell],
+    () =>
+      act(ACT_KIND.VOICE_COMMAND, { command: VOICE_COMMAND.REQUEST_MICROPHONE_ACCESS }).then(
+        () => undefined,
+        () => undefined,
+      ),
+    [act],
   );
   const leftWorkspace = useSteadyDoor((workspaceId: string) => {
     tasks.onLeftWorkspace(workspaceId);

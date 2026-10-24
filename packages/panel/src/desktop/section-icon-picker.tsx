@@ -13,6 +13,8 @@ import {
   CHOICE_BAR_LOOK,
   ChoiceBar,
   IconButton,
+  NOTE_LINE_LOOK,
+  NoteLine,
   ScrollArea,
   SearchField,
   Swatch,
@@ -251,7 +253,7 @@ function PanelNote({
     : AsyncResult.isSuccess(loaded)
       ? `Nothing matches “${query.trim()}”.`
       : "Loading…";
-  return <p className="section-icon-note">{words}</p>;
+  return <NoteLine look={NOTE_LINE_LOOK.LIST}>{words}</NoteLine>;
 }
 
 /** The Icons tab: every glyph the search finds, each in the color chosen; the one chosen, or the first, is the grid's tab stop. */
@@ -313,7 +315,13 @@ const EmojiPanel = memo(function EmojiPanel({
     <>
       {found.map((group) => (
         <section key={group.name} className="section-emoji-group" aria-label={group.name}>
-          <h3 className="section-emoji-group-name">{group.name}</h3>
+          <Text
+            as={TEXT_ELEMENT.H3}
+            variant={TEXT_VARIANT.GROUP}
+            className="section-emoji-group-name"
+          >
+            {group.name}
+          </Text>
           <div className="section-icon-grid">
             {group.emojis.map((one) => (
               <GridChoice

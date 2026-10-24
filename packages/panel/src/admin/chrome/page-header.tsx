@@ -2,20 +2,17 @@ import {
   AVATAR_SIZE,
   Avatar,
   type AvatarSize,
-  BREADCRUMBS_VARIANT,
-  Breadcrumbs,
   CollectionPage,
   type CollectionState,
   DetailPage,
-  ONE_LINE_ELEMENT,
-  ONE_LINE_END,
-  OneLine,
   PAGE_FRAME,
   Skeleton,
   TEXT_ELEMENT,
   TEXT_TONE,
   TEXT_VARIANT,
   Text,
+  TOOLBAR_INSET,
+  Toolbar,
 } from "@luke/ui";
 import { accountLabel } from "@luke/ui/account-initials";
 import { createContext, useContext } from "react";
@@ -64,21 +61,6 @@ export interface AdminWayBack {
   onBack: () => void;
 }
 
-/** A page under a section, headed by the way back to it and then its own name, in the toolbar's heading type. */
-function WayBackHeading({ title, back }: { title: string; back: AdminWayBack }): React.JSX.Element {
-  const section = adminPlace(back.tab);
-  return (
-    <Breadcrumbs
-      label="Path"
-      variant={BREADCRUMBS_VARIANT.TITLE}
-      crumbs={[
-        { label: section.label, icon: section.icon, onPress: back.onBack },
-        { label: title, current: true },
-      ]}
-    />
-  );
-}
-
 /**
  * What leads every admin toolbar under it, before the page's heading: the
  * app's way back to the section list where a narrow room stands a view
@@ -96,10 +78,10 @@ export function useAdminToolbarLead(): React.ReactNode {
 }
 
 /**
- * The page's toolbar, the app's own (`shell.css`): the page's title at the
- * dialog heading's size, or, under a section, the way back to it and then
- * the page's name; and the view's controls at its end. It stands still over
- * the page's scroll, and a folded sidebar's toggle stands over its start.
+ * The page's toolbar: the page's title, or, under a section, the way back to
+ * it and then the page's name; the note on what it covers after it; and the
+ * view's controls at its end. It stands still over the page's scroll, and a
+ * folded sidebar's toggle stands over its start.
  */
 function AdminToolbar({
   title,
@@ -114,35 +96,26 @@ function AdminToolbar({
   controls: React.ReactNode;
 }): React.JSX.Element {
   const lead = useContext(AdminToolbarLeadContext);
-  // Note that a narrow room's toolbar wraps its controls under its heading
-  // rather than cut the heading down to a letter or two; the heading then
-  // asks for its words' width, which the shared sheet's `flex: 1` gives up,
-  // and stands a control's height, so its words stay level with the toggle.
+  const section = back === undefined ? undefined : adminPlace(back.tab);
   return (
-    <header className="desktop-toolbar in-data-[room=narrow]:flex-wrap">
-      {lead}
-      <div className="desktop-toolbar-heading flex items-baseline gap-(--luke-space-8) in-data-[room=narrow]:min-h-(--luke-control-height) in-data-[room=narrow]:basis-auto! in-data-[room=narrow]:items-center">
-        {back === undefined ? (
-          <OneLine
-            as={ONE_LINE_ELEMENT.H1}
-            end={ONE_LINE_END.ELLIPSIS}
-            className="desktop-toolbar-title"
-          >
-            {title}
-          </OneLine>
-        ) : (
-          <WayBackHeading title={title} back={back} />
-        )}
-        {note === undefined ? null : (
+    <Toolbar
+      lead={lead}
+      start={lead === undefined ? undefined : TOOLBAR_INSET.COLUMN}
+      title={title}
+      trail={
+        back === undefined || section === undefined
+          ? undefined
+          : [{ label: section.label, icon: section.icon, onPress: back.onBack }]
+      }
+      tag={
+        note === undefined ? undefined : (
           <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
             {note}
           </Text>
-        )}
-      </div>
-      {controls === null || controls === undefined ? null : (
-        <div className="desktop-toolbar-actions">{controls}</div>
-      )}
-    </header>
+        )
+      }
+      actions={controls}
+    />
   );
 }
 

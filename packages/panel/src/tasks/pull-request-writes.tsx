@@ -26,9 +26,9 @@ import {
   Chip,
   ChipName,
   COMMAND_LINK_ELEMENT,
+  CONFIRM_LOSS,
   CommandLink,
   ConfirmDialog,
-  DIALOG_TONE,
   type DialogQuestion,
   ErrorState,
   IconButton,
@@ -36,6 +36,9 @@ import {
   InlineEdit,
   type InlineEditEnd,
   STATUS_TONE,
+  TEXT_ELEMENT,
+  TEXT_VARIANT,
+  Text,
   Tooltip,
   useConfirmDialog,
   useMenu,
@@ -311,7 +314,7 @@ const CLOSE_QUEUED_QUESTION: DialogQuestion = {
   body: `Closing it takes it out of the merge queue, and reopening it does not queue it again. ${QUEUE_WARNING}`,
   verb: ACTION_WORDS[PULL_REQUEST_ACTION.CLOSE],
   running: "Closing",
-  tone: DIALOG_TONE.DANGER,
+  loss: CONFIRM_LOSS.AFFECTS_OTHERS,
 };
 
 /** The question Close asks of an open pull request whose place in the merge queue could not be read, since it may be in it. */
@@ -452,12 +455,11 @@ export function PullRequestStateMenu({
       {menu.drawn === undefined ? null : (
         <ActionMenu label={label} menu={menu.drawn} groups={[items]} onClose={menu.close} />
       )}
-      {asked ? (
-        <ConfirmDialog
-          confirm={confirm}
-          question={inQueue ? CLOSE_QUEUED_QUESTION : CLOSE_UNKNOWN_QUESTION}
-        />
-      ) : null}
+      <ConfirmDialog
+        open
+        confirm={confirm}
+        question={inQueue ? CLOSE_QUEUED_QUESTION : CLOSE_UNKNOWN_QUESTION}
+      />
     </>
   );
 }
@@ -511,9 +513,13 @@ export function PullRequestTitleLine({
   children: ReactNode;
 }): React.JSX.Element {
   return (
-    <h2 className={field ? "pull-request-title pull-request-title-field" : "pull-request-title"}>
+    <Text
+      as={TEXT_ELEMENT.H2}
+      variant={TEXT_VARIANT.DIALOG}
+      className={field ? "pull-request-title pull-request-title-field" : "pull-request-title"}
+    >
       {children}
-    </h2>
+    </Text>
   );
 }
 

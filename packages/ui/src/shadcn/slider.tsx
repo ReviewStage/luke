@@ -50,7 +50,7 @@ function Slider({
       thumbAlignment="edge"
       {...props}
     >
-      <SliderPrimitive.Control className="relative flex w-full touch-none items-center select-none data-disabled:opacity-50 data-vertical:h-full data-vertical:min-h-40 data-vertical:w-auto data-vertical:flex-col">
+      <SliderPrimitive.Control className="relative flex w-full touch-none items-center select-none data-disabled:opacity-disabled data-vertical:h-full data-vertical:min-h-40 data-vertical:w-auto data-vertical:flex-col">
         <SliderPrimitive.Track
           data-slot="slider-track"
           className="relative grow overflow-hidden rounded-luke-full bg-switch-track select-none data-horizontal:h-1 data-horizontal:w-full data-vertical:h-full data-vertical:w-1"
@@ -66,7 +66,7 @@ function Slider({
             key={index}
             getAriaLabel={thumbLabel === undefined ? undefined : () => thumbLabel}
             getAriaValueText={thumbValueText === undefined ? undefined : () => thumbValueText}
-            className="relative block size-4 shrink-0 rounded-luke-full bg-switch-thumb shadow-switch-thumb transition-transform duration-(--luke-duration-fast) ease-spring-fast select-none after:absolute after:-inset-2 cursor-pointer in-data-[luke-profile=desktop]:cursor-default active:scale-[0.85] disabled:pointer-events-none disabled:opacity-50"
+            className="relative block size-4 shrink-0 rounded-luke-full bg-switch-thumb shadow-switch-thumb transition-transform duration-(--luke-duration-fast) ease-spring-fast select-none after:absolute after:-inset-2 cursor-pointer in-data-[luke-profile=desktop]:cursor-default active:scale-[0.85] disabled:pointer-events-none disabled:opacity-disabled"
           />
         ))}
       </SliderPrimitive.Control>

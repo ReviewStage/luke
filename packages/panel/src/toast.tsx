@@ -24,7 +24,9 @@
  * an agent's unseen dot, a plan's Inbox, the Automations mark. Only one
  * whose action is the one way back to something the developer would
  * otherwise lose, such as words a save left unsaved, persists until it is
- * dismissed. One whose hold runs down by itself with an action drains a bar
+ * dismissed, and one with no action persists only while what it says still
+ * stands, until whoever showed it withdraws it, as the voice's notices are
+ * (`voice-notice-toast.ts`). One whose hold runs down by itself with an action drains a bar
  * along its foot over that hold, paused with it. One saying work is under
  * way (`useWorkingToast`) stands until the work settles, then turns in
  * place into what came of it, done or failed, and stands for that one's
@@ -49,7 +51,7 @@
 
 import { useAtomSet, useAtomValue } from "@effect/atom-react";
 import { MOTION_DURATION_MS } from "@luke/brand";
-import { STATUS_TONE, Toast, ToastActions, ToastStack, type ToastTone } from "@luke/ui";
+import { STATUS_TONE, TOAST_HOLD, Toast, ToastActions, ToastStack, type ToastTone } from "@luke/ui";
 import { visibleViewport } from "@luke/ui/visible-viewport";
 import { Clock, Duration, Effect } from "effect";
 import * as Atom from "effect/reactivity/Atom";
@@ -67,28 +69,16 @@ const POLITE_TONES: ReadonlySet<ToastTone> = new Set([
 /** The tone said in the alert region: a refusal. */
 const ALERT_TONES: ReadonlySet<ToastTone> = new Set([STATUS_TONE.DANGER]);
 
-/**
- * How long a toast stands, by what it reports, and the only holds a toast
- * names: a change carried, which is short; one carried that its Undo takes
- * back, long enough to reach for Undo, and what any toast with an action
- * stands for where it names no hold; one refused, which takes longer to read
- * and to act on; or news an agent or an automation sent while the developer
- * was looking elsewhere in the window, which has the longest, since it
- * arrives unbidden and carries a View to reach for.
- */
-export const TOAST_HOLD = {
-  DONE: Duration.seconds(3),
-  UNDO: Duration.seconds(5),
-  FAILED: Duration.seconds(6),
-  NEWS: Duration.seconds(8),
-} as const;
+/** How long a toast stands, by what it reports: `@luke/ui`'s, which a copy button's check reads too. */
+export { TOAST_HOLD };
 
 /** What a toast's action says when it takes back what the toast reports. */
-export const UNDO_LABEL = "Undo";
+const UNDO_LABEL = "Undo";
 
-/** A toast's one action: its button's label, and what a press of it does. */
+/** A toast's one action: its button's label, and what a press of it does; one that opens a page names it as `href`, so it is drawn as a link, and its press opens it through the window's door. */
 interface ToastAction {
   readonly label: string;
+  readonly href?: string | undefined;
   readonly onPress: () => void;
 }
 
@@ -98,7 +88,8 @@ interface ToastAction {
  * carries, with its own hold, the action's where it names none, or, where
  * it `persists`, none at all, standing until it is dismissed: kept for an
  * action that is the one way back to something the developer would
- * otherwise lose. One that `waits` stands only once fewer than three do,
+ * otherwise lose, or, with no action, for what stands only as long as
+ * whoever showed it says so, which withdraws it by its `subject`. One that `waits` stands only once fewer than three do,
  * rather than pushing the oldest out, for news that arrives in runs and
  * each piece of which is the developer's to act on. Its `subject` is what it
  * is about, by which whoever showed it may withdraw it once it is stale.
@@ -115,6 +106,12 @@ export type ToastNotice = {
   | { readonly hold: Duration.Duration; readonly action?: never; readonly persists?: never }
   | { readonly action: ToastAction; readonly hold?: Duration.Duration; readonly persists?: never }
   | { readonly action: ToastAction; readonly persists: true; readonly hold?: never }
+  | {
+      readonly subject: string;
+      readonly persists: true;
+      readonly action?: never;
+      readonly hold?: never;
+    }
   | {
       readonly tone: typeof STATUS_TONE.WORKING;
       readonly hold?: never;
@@ -514,6 +511,7 @@ function ToastCard({
         action === undefined ? undefined : (
           <ToastActions
             label={action.label}
+            href={action.href}
             onPress={action.onPress}
             dismissLabel={DISMISS_LABEL}
             onDismiss={dismiss}

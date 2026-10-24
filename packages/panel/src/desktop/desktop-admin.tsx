@@ -19,12 +19,11 @@
  * `admin/admin-place.tsx`'s.
  */
 
-import { APP_COMMAND, APP_SHORTCUTS } from "@luke/settings/shortcuts";
+import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
-  BackIcon,
-  commandKeyshortcuts,
+  BACK_BUTTON_LOOK,
+  BackButton,
   Fill,
-  FoldingButton,
   GAP,
   LAYOUT_ELEMENT,
   NAV_CURRENT,
@@ -33,8 +32,10 @@ import {
   ResizeEdge,
   SCROLL_FADE,
   ScrollArea,
-  Shortcut,
   Stack,
+  TEXT_ELEMENT,
+  TEXT_VARIANT,
+  Text,
 } from "@luke/ui";
 import { ExternalLinkIcon } from "lucide-react";
 import { AdminPlace, adminSectionOf, adminSectionView } from "../admin/admin-place.js";
@@ -47,12 +48,19 @@ import { ColumnFoot } from "../call/call-card.js";
 import { FIND_PAGE, PageFind } from "../find-in-tab.js";
 import type { NavigationHistory } from "../navigation-history.js";
 import { hiddenColumns, SHELL_ROOM, type ShellRoom } from "../shell-room.js";
+import { backPlaceOf } from "./back-place.js";
 import { HistoryButtons, useSidebarEdge } from "./desktop-sidebar.js";
 import { useNarrowFocus } from "./narrow-focus.js";
 import type { SidebarCollapse } from "./sidebar-collapse.js";
 
 /** The place's name, at the list's head and on the way back to it in a narrow room. */
 const ADMIN_TITLE = "Admin";
+
+/** Where the way back from a view to the section list leads, as a hint names it. */
+const ADMIN_PLACE_NAME = "admin";
+
+/** Where the place's way out leads where no step stands behind it, as a hint names it. */
+const ADMIN_EXIT_PLACE = "tasks";
 
 /** What the row that opens the web page says. */
 const OPEN_IN_BROWSER = "Open in browser";
@@ -115,15 +123,16 @@ export function DesktopAdmin({
       <nav className="admin-sections" aria-label="Admin sections" hidden={hidden.list}>
         <div className="desktop-drag-strip" />
         <HistoryButtons history={history} room={room} />
-        <NavItem
-          icon={<BackIcon />}
-          aria-keyshortcuts={commandKeyshortcuts(APP_COMMAND.EXIT_ADMIN)}
-          shortcut={<Shortcut chord={APP_SHORTCUTS[APP_COMMAND.EXIT_ADMIN].chord} />}
-          onClick={onExit}
-        >
-          Back
-        </NavItem>
-        <h1 className="admin-sections-title">{ADMIN_TITLE}</h1>
+        <BackButton
+          look={BACK_BUTTON_LOOK.COLUMN}
+          label="Back"
+          place={backPlaceOf(history, ADMIN_EXIT_PLACE)}
+          command={APP_COMMAND.EXIT_ADMIN}
+          onBack={onExit}
+        />
+        <Text as={TEXT_ELEMENT.H1} variant={TEXT_VARIANT.TITLE} className="admin-sections-title">
+          {ADMIN_TITLE}
+        </Text>
         <Fill className="sidebar-section">
           <ScrollArea fade={SCROLL_FADE.BOTH}>
             <div className="sidebar-section-body">
@@ -160,7 +169,7 @@ export function DesktopAdmin({
         <AdminToolbarLead
           value={
             room === SHELL_ROOM.NARROW ? (
-              <FoldingButton label={ADMIN_TITLE} icon={<BackIcon />} onClick={onList} />
+              <BackButton label={ADMIN_TITLE} place={ADMIN_PLACE_NAME} onBack={onList} />
             ) : undefined
           }
         >

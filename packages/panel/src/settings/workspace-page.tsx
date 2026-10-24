@@ -23,6 +23,7 @@ import { ACT_KIND } from "@luke/host/acts";
 import { HOST_CAPABILITY } from "@luke/settings";
 import { SETTINGS_SECTION } from "@luke/settings/settings-views";
 import {
+  ALIGN,
   BUTTON_TYPE,
   BUTTON_VARIANT,
   Button,
@@ -30,6 +31,7 @@ import {
   CHIP_WIDTH,
   Chip,
   ChipName,
+  CONFIRM_LOSS,
   ConfirmDialog,
   ErrorState,
   FormField,
@@ -174,6 +176,11 @@ const ACCEPTED: ActionResult = { status: ACTION_RESULT_STATUS.ACCEPTED };
 /** The roles an invitation offers, in the order the role's menu lists them, the default first. */
 const INVITATION_ROLES = [INVITATION_ROLE.MEMBER, INVITATION_ROLE.ADMIN] as const;
 
+/** The writes the invitations list takes, one out at a time. */
+const INVITATION_WRITE = { INVITE: "invite", CANCEL: "cancel" } as const;
+
+type InvitationWrite = (typeof INVITATION_WRITE)[keyof typeof INVITATION_WRITE];
+
 /** What each role may do, as the role menu's second lines say it. */
 const ROLE_DETAIL = {
   [INVITATION_ROLE.MEMBER]: "Works on tasks and agents",
@@ -202,6 +209,7 @@ const READ_FAILED = {
  * fails as `creator-left`.
  */
 const LEAVE_WORDS = {
+  RUNNING: "Leaving",
   LINE: "You lose its tasks, agents, and Inbox until someone invites you again.",
   TASKS: (name: string) => `Tasks you wrote stay in ${name}.`,
   AGENTS: "Agents you started that are still working stop.",
@@ -521,7 +529,7 @@ function MemberRow({
   return (
     <Stack gap={GAP.NONE}>
       <MenuRow
-        label={`${member.name} actions`}
+        thing={member.name}
         actions={[profileActs, roleActs, removeActs]}
         row={{
           leading: <ActorMark actor={memberActor(member, readerId)} size={ACTOR_SIZE.CARD} />,
@@ -543,21 +551,25 @@ function MemberRow({
         }}
       />
       <ConfirmDialog
+        open
         confirm={remove}
         question={{
           title: `Remove ${member.name} from this workspace?`,
           body: "They lose its tasks, agents, and Inbox until they are invited again.",
           verb: "Remove",
           running: "Removing",
+          loss: CONFIRM_LOSS.AFFECTS_OTHERS,
         }}
       />
       <ConfirmDialog
+        open
         confirm={makeOwner}
         question={{
           title: `Make ${member.name} the owner of ${workspace.name}?`,
           body: TRANSFER_WORDS.ONE_BODY(member.name),
           verb: ROLE_ACT.MAKE_OWNER,
           running: TRANSFER_WORDS.RUNNING,
+          loss: CONFIRM_LOSS.AFFECTS_OTHERS,
         }}
       />
     </Stack>
@@ -636,7 +648,8 @@ function MemberLeave({
         {() => (
           <Button
             variant={BUTTON_VARIANT.DANGER_OUTLINE}
-            disabled={leave.busy}
+            busy={leave.busy}
+            busyLabel={LEAVE_WORDS.RUNNING}
             onClick={() => {
               automations.read();
               leave.ask();
@@ -647,12 +660,14 @@ function MemberLeave({
         )}
       </SettingsRow>
       <ConfirmDialog
+        open
         confirm={leave}
         question={{
           title: `Leave ${workspace.name}?`,
           body: LEAVE_WORDS.LINE,
           verb: `Leave ${workspace.name}`,
-          running: "Leaving",
+          running: LEAVE_WORDS.RUNNING,
+          loss: CONFIRM_LOSS.IRREVERSIBLE,
         }}
       >
         <ul className="leave-consequences">
@@ -775,7 +790,8 @@ function OwnerLeave({
           heir === undefined ? null : (
             <Button
               variant={BUTTON_VARIANT.OUTLINE}
-              disabled={transfer.busy}
+              busy={transfer.busy}
+              busyLabel={TRANSFER_WORDS.RUNNING}
               onClick={() => transfer.ask()}
             >
               {TRANSFER_WORDS.VERB}
@@ -785,6 +801,7 @@ function OwnerLeave({
       </SettingsRow>
       {heir === undefined ? null : (
         <ConfirmDialog
+          open
           confirm={transfer}
           gate={workspace.name}
           question={{
@@ -792,6 +809,7 @@ function OwnerLeave({
             body: TRANSFER_WORDS.BODY,
             verb: TRANSFER_WORDS.VERB,
             running: TRANSFER_WORDS.RUNNING,
+            loss: CONFIRM_LOSS.AFFECTS_OTHERS,
           }}
         >
           <FormField label="New owner">
@@ -948,7 +966,8 @@ function RoleChip({
  * invites an address as a member or an admin, then those still pending,
  * each under the outline face a person not yet in wears, saying as what and
  * until when, with its link to copy and Cancel invitation in its ⋯, which asks
- * nothing first since inviting the address again undoes it. A refusal is
+ * first in the accent rather than red: inviting the address again undoes it,
+ * but the link already sent to the invitee stops working. A refusal is
  * said under the form. The form is `@luke/ui`'s `TextField`, the role's
  * chip, and Invite its outline `Button`; each pending one is a `SettingsRow`
  * led by the face, through `MenuRow`, Copy link its outline `Button`.
@@ -977,7 +996,8 @@ function Invitations({
   const emailField = useRef<HTMLInputElement>(null);
   const [role, setRole] = useState<WorkspaceInvitation["role"]>(INVITATION_ROLE.MEMBER);
   const [note, setNote] = useState<string>();
-  const [busy, setBusy] = useState(false);
+  const [writing, setWriting] = useState<InvitationWrite>();
+  const busy = writing !== undefined;
   // Note that the press reads a ref rather than `busy`, because a second
   // press can land before the render that would disable the button.
   const sending = useRef(false);
@@ -1004,10 +1024,14 @@ function Invitations({
   };
   // Note that one write runs at a time, invite or cancel, so no list read
   // after one can see the service before another has settled.
-  const write = <A,>(made: () => Promise<A>, done: (answer: A, fresh: boolean) => void) => {
+  const write = <A,>(
+    which: InvitationWrite,
+    made: () => Promise<A>,
+    done: (answer: A, fresh: boolean) => void,
+  ) => {
     if (sending.current) return;
     sending.current = true;
-    setBusy(true);
+    setWriting(which);
     setNote(undefined);
     const before = streamed.current;
     made()
@@ -1017,7 +1041,7 @@ function Invitations({
       )
       .finally(() => {
         sending.current = false;
-        setBusy(false);
+        setWriting(undefined);
       });
   };
 
@@ -1055,6 +1079,7 @@ function Invitations({
   const invite = (event: React.FormEvent) => {
     event.preventDefault();
     write(
+      INVITATION_WRITE.INVITE,
       () => act(ACT_KIND.WORKSPACE_INVITE, { workspaceId, email, role }),
       (made, fresh) => {
         setEmail("");
@@ -1067,6 +1092,7 @@ function Invitations({
 
   const cancel = (invitationId: string) =>
     write(
+      INVITATION_WRITE.CANCEL,
       () => act(ACT_KIND.WORKSPACE_INVITATION_CANCEL, { workspaceId, invitationId }),
       // The cancel's own answer is the list after it, so a read out before it is passed over.
       (left, fresh) => {
@@ -1076,27 +1102,57 @@ function Invitations({
       },
     );
 
+  // Note that the question goes with its invitation, canceled or accepted meanwhile.
+  const [cancelling, setCancelling] = useState<WorkspaceInvitation>();
+  const cancellation = useConfirmDialog(
+    {
+      subject: cancelling !== undefined && (pending ?? []).some((one) => one.id === cancelling.id),
+      surfaceOpen: true,
+    },
+    () => {
+      if (cancelling !== undefined) cancel(cancelling.id);
+      return Promise.resolve(ACCEPTED);
+    },
+  );
+
   return (
     <>
       <Stack gap={GAP.NONE}>
         <div className="workspace-invite">
-          <Inline as={LAYOUT_ELEMENT.FORM} justify={JUSTIFY.END} grow growFirst onSubmit={invite}>
-            <TextField
-              ref={emailField}
-              type={TEXT_FIELD_TYPE.EMAIL}
-              required
-              label="Email address"
-              placeholder="name@example.com"
-              autoComplete={TEXT_FIELD_AUTO_COMPLETE.OFF}
-              spellCheck={false}
-              value={email}
-              disabled={busy}
-              // Note that Escape lets go of the field and keeps the words, rather than leaving Settings.
-              onEscape={() => emailField.current?.blur()}
-              onChange={setEmail}
-            />
+          <Inline
+            as={LAYOUT_ELEMENT.FORM}
+            align={ALIGN.END}
+            justify={JUSTIFY.END}
+            grow
+            growFirst
+            onSubmit={invite}
+          >
+            <FormField label="Email address">
+              {(field) => (
+                <TextField
+                  ref={emailField}
+                  field={field}
+                  type={TEXT_FIELD_TYPE.EMAIL}
+                  required
+                  placeholder="name@example.com"
+                  autoComplete={TEXT_FIELD_AUTO_COMPLETE.OFF}
+                  spellCheck={false}
+                  value={email}
+                  disabled={busy}
+                  // Note that Escape lets go of the field and keeps the words, rather than leaving Settings.
+                  onEscape={() => emailField.current?.blur()}
+                  onChange={setEmail}
+                />
+              )}
+            </FormField>
             <RoleChip value={role} disabled={busy} adminAllowed={owner} onChange={setRole} />
-            <Button type={BUTTON_TYPE.SUBMIT} variant={BUTTON_VARIANT.OUTLINE} disabled={busy}>
+            <Button
+              type={BUTTON_TYPE.SUBMIT}
+              variant={BUTTON_VARIANT.OUTLINE}
+              busy={writing === INVITATION_WRITE.INVITE}
+              busyLabel="Inviting"
+              disabled={writing === INVITATION_WRITE.CANCEL}
+            >
               Invite
             </Button>
           </Inline>
@@ -1117,14 +1173,17 @@ function Invitations({
       {(pending ?? []).map((one) => (
         <MenuRow
           key={one.id}
-          label={`${one.email} actions`}
+          thing={one.email}
           actions={[
             {
               label: "Cancel invitation",
               icon: <XIcon />,
               danger: true,
               disabled: busy,
-              onSelect: () => cancel(one.id),
+              onSelect: () => {
+                setCancelling(one);
+                cancellation.ask();
+              },
             },
           ]}
           row={{
@@ -1143,6 +1202,17 @@ function Invitations({
           }}
         />
       ))}
+      <ConfirmDialog
+        open
+        confirm={cancellation}
+        question={{
+          title: "Cancel invitation?",
+          body: `The link sent to ${cancelling?.email ?? ""} stops working. Inviting the address again sends a new one.`,
+          verb: "Cancel invitation",
+          running: "Canceling",
+          loss: CONFIRM_LOSS.AFFECTS_OTHERS,
+        }}
+      />
     </>
   );
 }
@@ -1227,11 +1297,20 @@ function ManagedGitHub({
   const { act } = useAct();
   const workspaceId = workspace.id;
   const [refusal, setRefusal] = useState<string>();
+  // Note that a second press while the browser is being sent is taken as none, as Linear's is.
+  const [opening, setOpening] = useState(false);
+  const underWay = useRef(false);
   const open = () => {
+    if (underWay.current) return;
+    underWay.current = true;
+    setOpening(true);
     setRefusal(undefined);
-    act(ACT_KIND.WORKSPACE_GITHUB_CONNECT, { workspaceId }).catch((refused: Error) =>
-      setRefusal(refused.message),
-    );
+    act(ACT_KIND.WORKSPACE_GITHUB_CONNECT, { workspaceId })
+      .catch((refused: Error) => setRefusal(refused.message))
+      .finally(() => {
+        underWay.current = false;
+        setOpening(false);
+      });
   };
   const connected = connections.length > 0;
   return (
@@ -1249,12 +1328,19 @@ function ManagedGitHub({
               <Button
                 variant={BUTTON_VARIANT.OUTLINE}
                 icon={<ExternalLinkIcon aria-hidden="true" />}
+                busy={opening}
+                busyLabel="Opening GitHub"
                 onClick={open}
               >
                 Manage on GitHub
               </Button>
             ) : (
-              <Button variant={BUTTON_VARIANT.OUTLINE} onClick={open}>
+              <Button
+                variant={BUTTON_VARIANT.OUTLINE}
+                busy={opening}
+                busyLabel="Connecting"
+                onClick={open}
+              >
                 Connect
               </Button>
             )}
@@ -1370,7 +1456,7 @@ function ManagedLinear({ workspace }: { workspace: Workspace }): React.JSX.Eleme
   return (
     <Stack gap={GAP.NONE}>
       <MenuRow
-        label="Linear actions"
+        thing="Linear"
         actions={actions}
         row={{
           leading: LINEAR_MARK,
@@ -1390,17 +1476,17 @@ function ManagedLinear({ workspace }: { workspace: Workspace }): React.JSX.Eleme
             ),
         }}
       />
-      {linear === undefined ? null : (
-        <ConfirmDialog
-          confirm={disconnect}
-          question={{
-            title: `Disconnect Linear from ${workspace.name}?`,
-            body: "Nobody in the workspace can start a task from an issue until Linear is connected again.",
-            verb: "Disconnect",
-            running: "Disconnecting",
-          }}
-        />
-      )}
+      <ConfirmDialog
+        open
+        confirm={disconnect}
+        question={{
+          title: `Disconnect Linear from ${workspace.name}?`,
+          body: "Nobody in the workspace can start a task from an issue until Linear is connected again.",
+          verb: "Disconnect",
+          running: "Disconnecting",
+          loss: CONFIRM_LOSS.AFFECTS_OTHERS,
+        }}
+      />
     </Stack>
   );
 }
@@ -1502,7 +1588,7 @@ function ManagedSentry({
   return (
     <Stack gap={GAP.NONE}>
       <MenuRow
-        label="Sentry actions"
+        thing="Sentry"
         actions={actions}
         row={{
           leading: SENTRY_MARK,
@@ -1523,12 +1609,14 @@ function ManagedSentry({
         }}
       />
       <ConfirmDialog
+        open
         confirm={disconnect}
         question={{
           title: `Disconnect Sentry from ${workspace.name}?`,
           body: "Its alerts and new issues stop triggering this workspace's automations. Uninstall Luke in Sentry's settings to remove it there too.",
           verb: "Disconnect",
           running: "Disconnecting",
+          loss: CONFIRM_LOSS.AFFECTS_OTHERS,
         }}
       />
     </Stack>
@@ -1718,7 +1806,7 @@ function WorkspaceIdentity({ workspace }: { workspace: Workspace }): React.JSX.E
   return (
     <Stack gap={GAP.NONE}>
       <MenuRow
-        label="Workspace actions"
+        thing="Workspace"
         actions={actions}
         row={{
           leading: <WorkspaceTile workspace={workspace} size={TILE_SIZE.HEAD} />,
@@ -1743,11 +1831,13 @@ function WorkspaceIdentity({ workspace }: { workspace: Workspace }): React.JSX.E
         }}
       />
       <ConfirmDialog
+        open
         confirm={remove}
         question={{
           title: `Remove ${workspace.name}'s photo?`,
           verb: "Remove",
           running: "Removing",
+          loss: CONFIRM_LOSS.AFFECTS_OTHERS,
         }}
       />
     </Stack>

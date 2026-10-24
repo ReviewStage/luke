@@ -27,6 +27,8 @@ import {
   LIST_DENSITY,
   List,
   ListRow,
+  type MenuRow,
+  MenuRowList,
   RESIZE_EDGE_SIDE,
   ResizeEdge,
   type ResizeEdgeHandle,
@@ -87,7 +89,6 @@ import { FindScope } from "../find-in-tab.js";
 import { drawnVisibly, focusSeek } from "../focus-seek.js";
 import { panelTabPlace } from "../links-at-hand.js";
 import { useMemberDirectory } from "../member-directory.js";
-import { type MenuRow, MenuRowList } from "../searchable-menu.js";
 import { GLYPH_STATE, type GlyphState, stateEndMark } from "../state-glyph.js";
 import { AgentActorRef, agentSubject, NOTHING_HELD } from "../tasks/agent-ref.js";
 import { AgentSubagentTab, type BriefTask, type TranscriptCards } from "../tasks/agent-tab.js";
@@ -1116,7 +1117,7 @@ function stripTabs(input: {
  * (`use-side-panel.ts`). A tab pinned to the sidebar is drawn and moved as
  * any other. Every tab's right-click offers Close, Close others, which
  * closes every tab but it and chooses it, and a fixed tab's, a file's, and
- * a Changes tab's Pin tab or Unpin tab, which puts it in the sidebar or takes it out; a
+ * a Changes tab's Pin or Unpin, which puts it in the sidebar or takes it out; a
  * subagent's adds the two copies of its transcript, built from the rows the
  * tab draws (`transcript-copy.ts`) and answered with the window's toast,
  * which the bar's ⋯ also offers while the subagent's tab is the chosen one.

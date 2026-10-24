@@ -8,9 +8,7 @@ import {
   LIST_ROW_META,
   List,
   ListRow,
-  MESSAGE_ACTIONS_PLACEMENT,
   MessageActions,
-  type MessageActionsPlacement,
 } from "@luke/ui";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -25,7 +23,7 @@ import { layContainersAt } from "../testing/container-width.js";
  * row offering its acts to the row in hand keeps its metadata on a touch
  * screen, its acts in its menu, but for the open row, which shows them as
  * the hovered row does. A failed agent's tab keeps its mark rather than its
- * ×, a thread's event line keeps its time, and a transcript message's
+ * ×, and a transcript message's
  * actions stay hidden until the message is tapped. jsdom answers no media
  * query, so the sheets are laid for a touch screen or a mouse
  * (`testing/container-width.ts`), and each group is drawn in the markup its
@@ -99,12 +97,12 @@ const HOVER_ONLY: readonly {
   press?: string;
 }[] = [
   {
-    name: "a repository header's ⋯ and +",
+    name: "a group header's ⋯ and +",
     piece: {
-      className: "sidebar-repository-header",
-      children: [{ tag: "span", className: "sidebar-repository-actions" }],
+      className: "luke-group-header-head",
+      children: [{ tag: "span", className: "luke-group-header-actions" }],
     },
-    control: ".sidebar-repository-actions",
+    control: ".luke-group-header-actions",
   },
   {
     name: "a tab's × other than the chosen tab's",
@@ -147,21 +145,7 @@ const HOVER_ONLY: readonly {
   },
   {
     name: "a comment's tools",
-    piece: {
-      className: "comment-entry",
-      children: [
-        {
-          className: "comment-head",
-          children: [
-            {
-              tag: "span",
-              className: "comment-head-end",
-              children: [{ className: "comment-tools" }],
-            },
-          ],
-        },
-      ],
-    },
+    piece: { className: "comment-entry", children: [{ className: "comment-tools" }] },
     control: ".comment-tools",
   },
   {
@@ -170,9 +154,19 @@ const HOVER_ONLY: readonly {
       className: "chat-message",
       children: [
         {
-          tag: "p",
-          className: "chat-byline",
-          children: [{ tag: "span", className: "chat-byline-action" }],
+          className: "luke-comment",
+          children: [
+            {
+              className: "luke-comment-head",
+              children: [
+                {
+                  tag: "span",
+                  className: "luke-comment-trailing",
+                  children: [{ tag: "span", className: "chat-byline-action" }],
+                },
+              ],
+            },
+          ],
         },
       ],
     },
@@ -203,50 +197,6 @@ for (const { name, piece, control, press } of HOVER_ONLY) {
   });
 }
 
-test("on a touch screen a comment's time gives its place to the tools, as under the pointer", () => {
-  layFor(true);
-  const time = drawn(
-    {
-      className: "comment-entry",
-      children: [
-        {
-          tag: "span",
-          className: "comment-head-end",
-          children: [{ tag: "span", className: "comment-time" }, { className: "comment-tools" }],
-        },
-      ],
-    },
-    ".comment-time",
-  );
-
-  assert.ok(faded(time));
-  assert.equal(getComputedStyle(time).pointerEvents, "none");
-});
-
-test("on a touch screen a thread's event line, offering no tools, keeps its time", () => {
-  layFor(true);
-  const time = drawn(
-    {
-      className: "comment-event",
-      children: [
-        {
-          className: "comment-head",
-          children: [
-            {
-              tag: "span",
-              className: "comment-head-end",
-              children: [{ tag: "span", className: "comment-time" }],
-            },
-          ],
-        },
-      ],
-    },
-    ".comment-time",
-  );
-
-  assert.equal(getComputedStyle(time).opacity, "1");
-});
-
 test("on a touch screen a failed agent's tab keeps its mark rather than its ×", () => {
   layFor(true);
   const close = drawn(
@@ -269,8 +219,8 @@ test("on a touch screen a failed agent's tab keeps its mark rather than its ×",
   assert.ok(faded(close));
 });
 
-/** A message drawn as the transcript draws it, its words and its actions set where `placement` says, worked by a finger. */
-function tappableMessage(placement: MessageActionsPlacement) {
+/** A message drawn as the transcript draws it, its words and its actions in the line under it, worked by a finger. */
+function tappableMessage() {
   layFor(true);
   vi.stubGlobal("matchMedia", (query: string) => ({ matches: query === "(hover: none)" }));
   const container = document.body.appendChild(document.createElement("div"));
@@ -284,7 +234,7 @@ function tappableMessage(placement: MessageActionsPlacement) {
         createElement(MessageContent, null, "Rerunning the spec on WebKit."),
         createElement(
           MessageActions,
-          { placement },
+          null,
           createElement(MessageAction, { label: "Copy", onClick: () => undefined, children: "⧉" }),
         ),
       ),
@@ -298,23 +248,21 @@ function tappableMessage(placement: MessageActionsPlacement) {
   };
 }
 
-for (const placement of Object.values(MESSAGE_ACTIONS_PLACEMENT)) {
-  test(`on a touch screen a message's ${placement} actions stay hidden at rest, so the transcript is not a column of buttons, stand once the message is tapped, and go with another tap`, () => {
-    const message = tappableMessage(placement);
-    assert.ok(faded(message.actions()));
-    assert.equal(getComputedStyle(message.actions()).pointerEvents, "none");
+test("on a touch screen a message's actions stay hidden at rest, so the transcript is not a column of buttons, stand once the message is tapped, and go with another tap", () => {
+  const message = tappableMessage();
+  assert.ok(faded(message.actions()));
+  assert.equal(getComputedStyle(message.actions()).pointerEvents, "none");
 
-    message.tap(".message-content");
-    assert.ok(standing(message.actions()), "a tap on the message shows them");
-    message.tap("button");
-    assert.ok(standing(message.actions()), "a tap on one of them keeps them");
-    message.tap(".message-content");
-    assert.ok(faded(message.actions()), "another tap on the message hides them");
-  });
-}
+  message.tap(".message-content");
+  assert.ok(standing(message.actions()), "a tap on the message shows them");
+  message.tap("button");
+  assert.ok(standing(message.actions()), "a tap on one of them keeps them");
+  message.tap(".message-content");
+  assert.ok(faded(message.actions()), "another tap on the message hides them");
+});
 
 test("on a touch screen a press that ends a selection of a message's words leaves its actions as they were", () => {
-  const message = tappableMessage(MESSAGE_ACTIONS_PLACEMENT.FLOATING);
+  const message = tappableMessage();
   const words = document.querySelector(".message-content") ?? assert.fail("the words");
   window.getSelection()?.selectAllChildren(words);
   message.tap(".message-content");

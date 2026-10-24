@@ -4,14 +4,17 @@ import {
   type VoiceFailureWords,
   type VoiceRemedy,
 } from "@luke/features/words";
+import { TOAST_HOLD } from "@luke/ui";
 import type { VoiceSpeakers } from "@luke/voice/voice-view";
+import { Duration } from "effect";
 import { useEffect, useRef, useState } from "react";
 import { voiceErrorToShow, voiceNoticeToShow } from "./use-voice-view.js";
 
 /**
- * use-voice-notice.ts -- what the voice's notice line says this frame: a failure, a notice, or the hint that the Mac's output is off, and the moment it stays once it clears.
+ * use-voice-notice.ts -- what the voice's notice says this frame: a failure, a notice, or the hint that the Mac's output is off, and the moment it stays once it clears.
  *
- * The line carries no spoken words: what is said streams into the agent's
+ * The notice is drawn as a toast in the window's one stack
+ * (`voice-notice-toast.ts`). It carries no spoken words: what is said streams into the agent's
  * transcript as it is heard. It carries what the voice has to say about
  * itself, one thing at a time: a failure first, then a notice, then, while
  * Luke speaks into a Mac whose output is muted or at zero, the hint that he
@@ -19,9 +22,9 @@ import { voiceErrorToShow, voiceNoticeToShow } from "./use-voice-view.js";
  */
 
 /**
- * What the line is carrying, which is what colours it: a failure in the
- * error red, a notice in the attention orange for a temporary state rather
- * than a fault, or the volume hint, which alone offers a press.
+ * What the notice is carrying, which picks its toast's tone: a failure, a
+ * notice of a temporary state rather than a fault, or the volume hint, which
+ * alone offers "Got it".
  */
 export const VOICE_NOTICE_TONE = {
   ERROR: "error",
@@ -29,26 +32,26 @@ export const VOICE_NOTICE_TONE = {
   VOLUME: "volume",
 } as const;
 
-type VoiceNoticeTone = (typeof VOICE_NOTICE_TONE)[keyof typeof VOICE_NOTICE_TONE];
+export type VoiceNoticeTone = (typeof VOICE_NOTICE_TONE)[keyof typeof VOICE_NOTICE_TONE];
 
 /**
- * How long the last words stay once nothing asks for them: long enough to
- * finish reading the line, short enough that it is gone before the next
- * thing happens.
+ * How long the last words stay once nothing asks for them: a toast's hold
+ * for a change carried, long enough to finish reading them, short enough
+ * that they are gone before the next thing happens.
  */
-const NOTICE_LINGER_MS = 3_000;
+const NOTICE_LINGER_MS = Duration.toMillis(TOAST_HOLD.DONE);
 
-/** The line's words, what they are, and the remedy its button offers where one does something about them. */
-interface VoiceNoticeContent {
+/** The notice's words, what they are, and the remedy its button offers where one does something about them. */
+export interface VoiceNoticeContent {
   tone: VoiceNoticeTone;
   words: string;
   remedy?: VoiceRemedy | undefined;
 }
 
 export interface VoiceNoticePresentation {
-  /** The words the line holds: the live ones, or the last ones after they clear, so its exit has words to fade. */
+  /** The words the notice holds: the live ones, or the last ones after they clear, for the linger. */
   content: VoiceNoticeContent | undefined;
-  /** Whether the line is drawn: while something asks for it, and for the linger after. */
+  /** Whether the notice stands: while something asks for it, and for the linger after. */
   shown: boolean;
 }
 
@@ -62,13 +65,13 @@ interface UseVoiceNoticeOptions {
   volumeHint: { wanted: boolean; text: string };
 }
 
-/** A failure as the line says it: its words from the words module, never text the voice was handed. */
+/** A failure as the notice says it: its words from the words module, never text the voice was handed. */
 function failureContent(tone: VoiceNoticeTone, failure: VoiceFailure): VoiceNoticeContent {
   const said: VoiceFailureWords = VOICE_FAILURE_WORDS[failure];
   return { tone, words: said.words, remedy: said.remedy };
 }
 
-/** What the line is being handed live this frame. */
+/** What the notice is being handed live this frame. */
 function liveContent(options: UseVoiceNoticeOptions): VoiceNoticeContent | undefined {
   const { speakers, fixtureSpeaking, volumeHint } = options;
   const error = voiceErrorToShow({ fixtureSpeaking, speakers, error: options.voiceError });
@@ -83,11 +86,10 @@ function liveContent(options: UseVoiceNoticeOptions): VoiceNoticeContent | undef
 }
 
 /**
- * The notice line's words. Live words always win; once a failure or a
+ * The voice notice's words. Live words always win; once a failure or a
  * notice clears, its words stay for {@link NOTICE_LINGER_MS} and then leave,
  * while the volume hint leaves at once, since it is cleared by being
- * answered; either is held after that, undrawn, so the line's fade has words
- * to fade.
+ * answered.
  */
 export function useVoiceNotice(options: UseVoiceNoticeOptions): VoiceNoticePresentation {
   const live = liveContent(options);

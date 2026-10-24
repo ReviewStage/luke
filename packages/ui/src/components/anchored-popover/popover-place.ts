@@ -26,6 +26,19 @@ export const POPOVER_ALIGN = {
 
 export type PopoverAlign = (typeof POPOVER_ALIGN)[keyof typeof POPOVER_ALIGN];
 
+/**
+ * The widths a popover may ask for by name, each a `--luke-popover-width-*`
+ * token: a Settings picker's, the composer's menu's, and one that holds an
+ * issue's title with its key and state after it.
+ */
+export const POPOVER_WIDTH = {
+  NARROW: "narrow",
+  REGULAR: "regular",
+  WIDE: "wide",
+} as const;
+
+export type PopoverWidth = (typeof POPOVER_WIDTH)[keyof typeof POPOVER_WIDTH];
+
 /** The gap between the anchor and its popover, which is the stylesheet's `--luke-space-4`. */
 const POPOVER_GAP = 4;
 

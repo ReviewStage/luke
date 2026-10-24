@@ -1,5 +1,6 @@
 import type { HTMLAttributes, ReactNode, Ref } from "react";
 import { Card as ShadcnCard } from "../../shadcn/card.js";
+import { TEXT_ELEMENT, TEXT_VARIANT, Text } from "../text/text.js";
 
 /**
  * card.tsx -- a surface that frames one group of content on a page: its edge, its corner, its ground, and the room inside it.
@@ -265,11 +266,15 @@ export function Card({
   );
 }
 
-/** A card's head: a line of muted caption words, a kind and where it stands, wrapping where the room runs out. */
+/** A card's head: a line in the group role, a kind and where it stands, wrapping where the room runs out. */
 export function CardHead({ children }: { children: ReactNode }): React.JSX.Element {
   return (
-    <div className="luke-card-head flex min-h-control min-w-0 flex-wrap items-center justify-between gap-x-card-head-gap gap-y-card-head-block px-card-head-inline py-card-head-block text-group font-group text-muted-foreground">
+    <Text
+      as={TEXT_ELEMENT.DIV}
+      variant={TEXT_VARIANT.GROUP}
+      className="luke-card-head flex min-h-control min-w-0 flex-wrap items-center justify-between gap-x-card-head-gap gap-y-card-head-block px-card-head-inline py-card-head-block"
+    >
       {children}
-    </div>
+    </Text>
   );
 }

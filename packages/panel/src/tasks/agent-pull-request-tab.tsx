@@ -45,6 +45,7 @@ import {
   BlockListItem,
   BUTTON_VARIANT,
   Button,
+  ButtonLink,
   CHIP_LOOK,
   CHOICE_BAR_FOLD,
   CHOICE_BAR_LOOK,
@@ -53,6 +54,7 @@ import {
   ChipName,
   ChoiceBar,
   type ChoiceItem,
+  Comment,
   type CountPart,
   DETAIL_PAGE_INSET,
   DetailPage,
@@ -64,7 +66,6 @@ import {
   ErrorState,
   Fill,
   GAP,
-  IconButton,
   LAYOUT_ELEMENT,
   LINE_BUTTON_LOOK,
   LIST_DENSITY,
@@ -73,7 +74,10 @@ import {
   List,
   ListRow,
   linesCount,
+  MoreButton,
+  moreLabel,
   PAGE_FRAME,
+  PaneBar,
   ProviderMark,
   SCROLL_FADE,
   SCROLL_FADE_INSET,
@@ -86,11 +90,11 @@ import {
   STATUS_TONE,
   Stack,
   type StatusTone,
-  TEXT_BUTTON_TONE,
   TEXT_ELEMENT,
+  TEXT_LINK_LOOK,
   TEXT_VARIANT,
   Text,
-  TextButton,
+  TextLink,
   TIME_LOOK,
   Time,
   Tooltip,
@@ -99,6 +103,7 @@ import {
   VisuallyHidden,
 } from "@luke/ui";
 import { actorName } from "@luke/ui/actor-model";
+import { landedMark } from "@luke/ui/landed";
 import { PICTURE_STATE, usePicture } from "@luke/ui/picture-cache";
 import {
   BookOpenIcon,
@@ -107,7 +112,6 @@ import {
   CircleCheckIcon,
   CircleDotIcon,
   CircleSlashIcon,
-  EllipsisIcon,
   ExternalLinkIcon,
   FileDiffIcon,
   GitPullRequestIcon,
@@ -131,7 +135,7 @@ import {
   useRef,
   useState,
 } from "react";
-import { ACTOR_SIZE, ActorMark, ActorRef } from "../actor-ref.js";
+import { ACTOR_SIZE, ActorMark, ActorRef, commentAuthor } from "../actor-ref.js";
 import { Fold, FoldBody } from "../ai-elements/fold.js";
 import { appPlatform } from "../app-platform.js";
 import { useCopyLinkItem } from "../copy-link-item.js";
@@ -155,6 +159,7 @@ import {
   AnnotationCard,
   AnnotationComment,
   AnnotationComments,
+  type AnnotationReply,
   type AnnotationState,
 } from "./annotation-card.js";
 import { threadPreview } from "./changes-model.js";
@@ -193,13 +198,7 @@ import {
 import { PullRequestDescription } from "./pull-request-description.js";
 import { PullRequestLabels } from "./pull-request-labels.js";
 import { PullRequestNumberProvider, pullRequestOfTab } from "./pull-request-number.js";
-import {
-  HeaderReviewers,
-  OpenedLine,
-  PersonRef,
-  ReviewStanding,
-  useNamer,
-} from "./pull-request-people.js";
+import { HeaderReviewers, OpenedLine, ReviewStanding, useNamer } from "./pull-request-people.js";
 import {
   LabelPicker,
   ReviewerPicker,
@@ -230,7 +229,13 @@ import {
 import { type GitHubPictureDrawer, GitHubWords, TranscriptWords } from "./transcript-blocks.js";
 import { usePushedLineMoved } from "./use-agent-pull-request.js";
 import type { CodingAgentsControl } from "./use-coding-agents.js";
-import { type OpenHere, OpenHereFirst, useOpenLink, useOpenPlace } from "./use-open-link.js";
+import {
+  linkPressOf,
+  type OpenHere,
+  OpenHereFirst,
+  useOpenLink,
+  useOpenPlace,
+} from "./use-open-link.js";
 import { PULL_REQUEST_VIEW, type PullRequestView } from "./use-side-panel.js";
 
 /**
@@ -981,13 +986,11 @@ function ThreadMenu({
     ...(copy === undefined ? [] : [copy]),
   ];
   if (actions.length === 0) return null;
-  const label = THREAD_REVEAL_WORDS.MENU;
+  const label = moreLabel(THREAD_REVEAL_WORDS.THING);
   return (
     <DisclosureAction>
       <span className="pull-request-thread-menu">
-        <Tooltip label={label}>
-          <IconButton icon={<EllipsisIcon />} label={label} {...menu.trigger()} />
-        </Tooltip>
+        <MoreButton thing={THREAD_REVEAL_WORDS.THING} {...menu.trigger()} />
         {menu.drawn === undefined ? null : (
           <ActionMenu label={label} menu={menu.drawn} groups={[actions]} onClose={menu.close} />
         )}
@@ -1184,17 +1187,14 @@ function ThreadComment({
   const draft = usePendingComment(comment.url);
   const writer = useNamer()(comment.by);
   const words = <EntryWords entry={comment} picture={picture} />;
-  const reply = first
+  const reply: AnnotationReply | undefined = first
     ? undefined
     : {
-        face: <ActorMark actor={writer} size={ACTOR_SIZE.ROW} />,
-        meta: (
-          <>
-            <ActorRef actor={writer} nameOnly />
-            <Time className="annotation-card-time" at={comment.at} now={now} />
-            {draft === undefined ? null : <PendingBadge />}
-          </>
-        ),
+        author: commentAuthor(writer),
+        nameRef: <ActorRef actor={writer} nameOnly />,
+        at: comment.at,
+        now,
+        trailing: draft === undefined ? undefined : <PendingBadge />,
       };
   return (
     <AnnotationComment reply={reply} className="pull-request-thread-comment">
@@ -1237,17 +1237,27 @@ function PendingList({
           </Text>
           <PendingComment
             draft={draft}
-            head={
-              <>
-                <PersonRef person={draft.by} />
-                <Time className="changes-comment-time" at={draft.at} now={now} />
-              </>
-            }
+            head={{ person: draft.by, at: draft.at, now }}
             words={<EntryWords entry={draft} picture={picture} />}
           />
         </BlockListItem>
       ))}
     </BlockList>
+  );
+}
+
+/** Words that say what a read left on GitHub, a link to the page that holds it, opened through the window's link-open act. */
+function OnGitHubLink({ href, children }: { href: string; children: string }): React.JSX.Element {
+  const openLink = useOpenLink();
+  return (
+    <TextLink
+      href={href}
+      look={TEXT_LINK_LOOK.UNDERLINED}
+      external
+      onClick={linkPressOf(openLink, href)}
+    >
+      {children}
+    </TextLink>
   );
 }
 
@@ -1261,7 +1271,6 @@ function ThreadComments({
   now: number;
   picture: GitHubPictureDrawer;
 }): React.JSX.Element {
-  const openLink = useOpenLink();
   const last = thread.comments.at(-1);
   return (
     <>
@@ -1278,13 +1287,7 @@ function ThreadComments({
       </AnnotationComments>
       {thread.more === 0 || last === undefined ? null : (
         <p className="pull-request-more annotation-card-more">
-          <TextButton
-            tone={TEXT_BUTTON_TONE.LINK}
-            onClick={() => openLink(last.url)}
-            linkHref={last.url}
-          >
-            {PULL_REQUEST_WORDS.moreReplies(thread.more)}
-          </TextButton>
+          <OnGitHubLink href={last.url}>{PULL_REQUEST_WORDS.moreReplies(thread.more)}</OnGitHubLink>
         </p>
       )}
     </>
@@ -1367,7 +1370,7 @@ function EntryFrame({
   );
 }
 
-/** An entry's head: who, where a review left them, and when. */
+/** A skeleton entry's head, where who stands before the words are read. */
 function EntryHead({ children }: { children: ReactNode }): React.JSX.Element {
   return <span className="changes-comment-head">{children}</span>;
 }
@@ -1383,22 +1386,26 @@ function EntryCard({
   picture: GitHubPictureDrawer;
 }): React.JSX.Element {
   const threads = entry.threads ?? [];
+  const writer = useNamer()(entry.by);
   const landed = useLandedEntry(entry.url);
   return (
     <EntryFrame
       ref={landed.ref}
       // Note that the entry takes the focus a link to it on GitHub brings, though no key reaches it.
       tabIndex={-1}
-      data-search-landed={landed.ringed ? "" : undefined}
+      {...landedMark(landed.ringed)}
       onAnimationEnd={landed.onAnimationEnd}
     >
-      <EntryHead>
-        <PersonRef person={entry.by} />
-        {entry.state === undefined ? null : <ReviewStanding state={entry.state} />}
-        <Time className="changes-comment-time" at={entry.at} now={now} />
-      </EntryHead>
-      <EntryWords entry={entry} picture={picture} />
-      <Reactions reactions={entry.reactions} subject={entry.subject} />
+      <Comment
+        author={commentAuthor(writer)}
+        nameRef={<ActorRef actor={writer} nameOnly />}
+        at={entry.at}
+        now={now}
+        trailing={entry.state === undefined ? undefined : <ReviewStanding state={entry.state} />}
+      >
+        <EntryWords entry={entry} picture={picture} />
+        <Reactions reactions={entry.reactions} subject={entry.subject} />
+      </Comment>
       {threads.length === 0 ? null : (
         <Stack as={LAYOUT_ELEMENT.OL} gap={GAP.ITEM} className="pull-request-threads">
           {threads.map((thread, at) => (
@@ -1584,14 +1591,15 @@ function PreviewControl({
   if (serving.length === 1) {
     return (
       <Tooltip label={only.environment}>
-        <Button
+        <ButtonLink
           variant={BUTTON_VARIANT.OUTLINE}
           icon={<ScanSearchIcon />}
           label={`${PULL_REQUEST_WORDS.PREVIEW} ${only.environment}`}
-          onClick={() => openLink(only.url)}
+          href={only.url}
+          onClick={linkPressOf(openLink, only.url)}
         >
           {PULL_REQUEST_WORDS.PREVIEW}
-        </Button>
+        </ButtonLink>
       </Tooltip>
     );
   }
@@ -1736,7 +1744,6 @@ function ConversationPart({
   now: number;
   picture: GitHubPictureDrawer;
 }): React.JSX.Element {
-  const openLink = useOpenLink();
   const part = parts.conversation;
   if (part.kind !== PART.LANDED) {
     return (
@@ -1764,9 +1771,7 @@ function ConversationPart({
       {/* The earlier entries a read left on GitHub are counted where they would stand, first. */}
       {earlier === 0 || url === undefined ? null : (
         <p className="pull-request-more pull-request-earlier">
-          <TextButton tone={TEXT_BUTTON_TONE.LINK} onClick={() => openLink(url)} linkHref={url}>
-            {PULL_REQUEST_WORDS.earlier(earlier)}
-          </TextButton>
+          <OnGitHubLink href={url}>{PULL_REQUEST_WORDS.earlier(earlier)}</OnGitHubLink>
         </p>
       )}
       {conversation.length === 0 ? (
@@ -2686,8 +2691,8 @@ function PullRequestTabBody({
                     editing={{ options, refreshing: pullRequestRead.out }}
                   />
                 </header>
-                <div className="pull-request-tabs">
-                  <div className="pull-request-tab-bar">
+                <PaneBar
+                  middle={
                     <ChoiceBar<PullRequestView>
                       label="Pull request"
                       items={tabsOf(parts, published, held, changes, chapters)}
@@ -2697,19 +2702,21 @@ function PullRequestTabBody({
                       fold={tabsFold}
                       panels={ids}
                     />
-                  </div>
-                  {reviewable ? (
-                    <PullRequestReview
-                      writes={review}
-                      pending={pendingReview}
-                      pendingList={
-                        drafts === undefined || drafts.length === 0 ? null : (
-                          <PendingList drafts={drafts} now={now} picture={picture} />
-                        )
-                      }
-                    />
-                  ) : null}
-                </div>
+                  }
+                  actions={
+                    reviewable ? (
+                      <PullRequestReview
+                        writes={review}
+                        pending={pendingReview}
+                        pendingList={
+                          drafts === undefined || drafts.length === 0 ? null : (
+                            <PendingList drafts={drafts} now={now} picture={picture} />
+                          )
+                        }
+                      />
+                    ) : null
+                  }
+                />
                 <Fill
                   className="pull-request-view"
                   role="tabpanel"

@@ -110,6 +110,7 @@ import { relayout } from "../testing/resize-observer.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
 import { readSegmented, segment, segmentedGroup } from "../testing/segmented.js";
 import { tasksControl, waitingOf } from "../testing/tasks-control.js";
+import { newestToastAction, newestToastSays } from "../testing/toast.js";
 import { ToastHost } from "../toast.js";
 import { DesktopInbox } from "./desktop-inbox.js";
 import { DesktopSidebar } from "./desktop-sidebar.js";
@@ -755,7 +756,7 @@ function heardName(button: Element): string {
 function listed(page: HTMLElement): string[] {
   const list = page.querySelector(".inbox-tasks");
   assert.ok(list, "the list is drawn");
-  const fold = ".sidebar-repository-header button[aria-expanded]:not([aria-haspopup])";
+  const fold = ".luke-group-header-head button[aria-expanded]:not([aria-haspopup])";
   return [...list.querySelectorAll(`${fold}, li button.luke-list-row-main`)].map((node) => {
     if (node.matches(fold) || !(node instanceof HTMLButtonElement)) return `# ${heardName(node)}`;
     const name = node.querySelector(ROW_TITLE)?.textContent ?? "";
@@ -805,7 +806,7 @@ const SCOPE_NAMES = ["To do", "All", "Archived"] as const;
 
 /** The Inbox's name as the list's head says it. */
 function headTitle(page: HTMLElement): string | null | undefined {
-  return page.querySelector(".inbox-tasks .desktop-toolbar-title")?.textContent;
+  return page.querySelector(".inbox-tasks .luke-toolbar-title")?.textContent;
 }
 
 /** Shows the scope `name` from the list's View options. */
@@ -1197,7 +1198,7 @@ test("an open item's ⋯ menu in the pane's bar offers Mark as read or unread, C
   const sent = takenCloses();
   const ellipsis = () =>
     itemPane(page).querySelector<HTMLButtonElement>(
-      '.desktop-toolbar button[aria-label="Item actions"]',
+      '.luke-toolbar button[aria-label="Item actions"]',
     ) ?? assert.fail("the pane's bar ends in its ⋯ menu");
 
   act(() => ellipsis().click());
@@ -1269,6 +1270,177 @@ test("an open item's row offers Resolve without answering beside its mark and la
   assert.equal(hoverClose(threshold), null, "the closed row offers Close no longer");
 });
 
+/** ⌘-clicks the row of the item so titled, as a Mac's list chooses a row in or out. */
+function commandClick(page: HTMLElement, title: string): void {
+  act(() => {
+    rowNamed(page, title).dispatchEvent(
+      new MouseEvent("click", { bubbles: true, cancelable: true, metaKey: true }),
+    );
+  });
+}
+
+/** The titles of the rows the list holds chosen, in the order drawn. */
+function picked(page: HTMLElement): string[] {
+  return [...page.querySelectorAll<HTMLButtonElement>(".inbox-tasks li button.luke-list-row-main")]
+    .filter((row) => row.getAttribute("aria-description") === "Selected")
+    .map((row) => row.querySelector(ROW_TITLE)?.textContent ?? "");
+}
+
+/** The selection's bar under the list, or none while nothing is chosen. */
+function selectionBar(page: HTMLElement): HTMLElement | null {
+  return page.querySelector<HTMLElement>(".inbox-tasks .luke-selection-bar");
+}
+
+/** The selection bar's button named `name`. */
+function barButton(page: HTMLElement, name: string): HTMLButtonElement {
+  const button = [
+    ...(selectionBar(page) ?? assert.fail("the bar stands")).querySelectorAll<HTMLButtonElement>(
+      "button",
+    ),
+  ].find((each) => each.textContent?.trim() === name);
+  assert.ok(button, `the bar offers ${name}`);
+  return button;
+}
+
+/** Whether the row of the item so titled says to a reader that it is unread. */
+function rowUnread(page: HTMLElement, title: string): boolean {
+  return [...rowNamed(page, title).querySelectorAll(".luke-visually-hidden")].some(
+    (each) => each.textContent === "Unread",
+  );
+}
+
+test("⌘-clicking two open items chooses both across their groups, opening neither, and the bar's Resolve asks once for both, red, then resolves each at the revision drawn and lets the selection go", async () => {
+  const { page } = mount();
+  await settle();
+  const sent = takenCloses();
+  const threshold = "Alert at 80%?";
+  const expiry = "Expire after 7 days?";
+  assert.deepEqual(picked(page), [], "nothing stands chosen before");
+
+  commandClick(page, threshold);
+  commandClick(page, expiry);
+  assert.deepEqual(picked(page), [threshold, expiry]);
+  assert.match(selectionBar(page)?.textContent ?? "", /2 selected/u);
+
+  act(() => barButton(page, "Resolve").click());
+  await settle();
+  assert.deepEqual(sent, [], "Resolve asks first");
+  const question =
+    document.querySelector<HTMLElement>('[role="alertdialog"]') ?? assert.fail("Resolve asks");
+  assert.match(question.textContent ?? "", /Resolve 2 items without answering\?/u);
+  assert.match(question.textContent ?? "", /Their agents are told/u);
+  const resolve = [...question.querySelectorAll("button")].find(
+    (button) => button.textContent === "Resolve",
+  );
+  assert.equal(resolve?.getAttribute("data-variant"), "danger", "it can't be undone, so it is red");
+  await confirmClose();
+
+  assert.deepEqual(
+    sent.map(({ itemId }) => itemId).sort(),
+    [THRESHOLD.id, EXPIRY.id].sort(),
+    "both items are resolved",
+  );
+  assert.equal(selectionBar(page), null, "the selection is let go");
+  assert.deepEqual(picked(page), []);
+});
+
+test("an agent changing an item the bar's Resolve asks about withdraws the question whole, resolving nothing", async () => {
+  const { page } = mount();
+  await settle();
+  const sent = takenCloses();
+  commandClick(page, "Alert at 80%?");
+  commandClick(page, "Expire after 7 days?");
+  act(() => barButton(page, "Resolve").click());
+  await settle();
+  assert.ok(document.querySelector('[role="alertdialog"]'), "Resolve asks first");
+
+  // The agent asks again under the same key, and main says the plan moved.
+  inboxes.set(BILLING.id, [{ ...THRESHOLD, revision: 2, updatedAt: 7_000 }, RETRY]);
+  act(() =>
+    setHolding([
+      { taskId: BILLING.id, items: 2, updatedAt: 7_000 },
+      { taskId: INVITES.id, items: 1, updatedAt: 4_000 },
+    ]),
+  );
+  await settle();
+
+  assert.equal(document.querySelector('[role="alertdialog"]'), null, "the question goes");
+  assert.deepEqual(sent, []);
+  assert.deepEqual(picked(page), ["Alert at 80%?", "Expire after 7 days?"], "the selection stands");
+});
+
+test("the bar's Mark as unread marks every item chosen at once under one toast, whose Undo marks each read again as it stood", async () => {
+  const { page } = mount([], { toasts: true });
+  await settle();
+  const expiry = "Expire after 7 days?";
+  const retry = "How is a failed email retried?";
+  readMarks = [];
+
+  commandClick(page, expiry);
+  commandClick(page, retry);
+  act(() => barButton(page, "Mark as unread").click());
+  await settle();
+
+  assert.deepEqual(readMarks.sort(), [`unread:${EXPIRY.id}`, `unread:${RETRY.id}`].sort());
+  assert.ok(rowUnread(page, expiry) && rowUnread(page, retry), "both rows read as unread");
+  assert.equal(selectionBar(page), null, "the selection is let go");
+  assert.match(newestToastSays() ?? "", /2 items marked unread/u);
+
+  readMarks = [];
+  const undo = newestToastAction() ?? assert.fail("the toast offers Undo");
+  assert.equal(undo.textContent, "Undo");
+  await act(async () => undo.click());
+  await settle();
+  assert.deepEqual(readMarks.sort(), [`read:${EXPIRY.id}`, `read:${RETRY.id}`].sort());
+  assert.ok(!rowUnread(page, expiry) && !rowUnread(page, retry), "both rows read as read again");
+});
+
+test("the bar's marks say in one toast how many the service refused", async () => {
+  const { page } = mount([], { toasts: true });
+  await settle();
+  readMarkRefused = true;
+  commandClick(page, "Expire after 7 days?");
+  commandClick(page, "How is a failed email retried?");
+  act(() => barButton(page, "Mark as unread").click());
+  await settle();
+  assert.equal(newestToastSays(), "Could not mark 2 items unread");
+});
+
+test("Esc lets the selection go, in the list as in its bar", async () => {
+  const { page, asked } = mount();
+  await settle();
+  const expiry = "Expire after 7 days?";
+  const retry = "How is a failed email retried?";
+
+  commandClick(page, expiry);
+  commandClick(page, retry);
+  act(() => rowNamed(page, retry).focus());
+  keyOn(rowNamed(page, retry), "Escape");
+  assert.deepEqual(picked(page), [], "Esc in the list chooses none");
+  assert.equal(selectionBar(page), null);
+  assert.equal(asked.closed, 0, "the key goes no further than the list");
+
+  commandClick(page, expiry);
+  keyOn(barButton(page, "Clear"), "Escape");
+  assert.deepEqual(picked(page), [], "Esc in the bar chooses none");
+});
+
+test("a plain click still opens its item, leaving what is chosen as it stands", async () => {
+  const { page } = mount();
+  await settle();
+  const expiry = "Expire after 7 days?";
+  const retry = "How is a failed email retried?";
+
+  commandClick(page, expiry);
+  act(() => rowNamed(page, retry).click());
+  await settle();
+
+  assert.equal(rowNamed(page, retry).getAttribute("aria-current"), "page", "the item opens");
+  assert.notEqual(rowNamed(page, expiry).getAttribute("aria-current"), "page");
+  assert.deepEqual(picked(page), [expiry], "the selection stands");
+  assert.match(selectionBar(page)?.textContent ?? "", /1 selected/u);
+});
+
 /** The act channel answering every close as `answer` does, written down by item. */
 function answeredCloses(answer: (itemId: string) => { item: InboxItem; taken: boolean }): string[] {
   const sent: string[] = [];
@@ -1292,7 +1464,7 @@ function answeredCloses(answer: (itemId: string) => { item: InboxItem; taken: bo
 async function closeFromPane(page: HTMLElement): Promise<void> {
   const ellipsis =
     itemPane(page).querySelector<HTMLButtonElement>(
-      '.desktop-toolbar button[aria-label="Item actions"]',
+      '.luke-toolbar button[aria-label="Item actions"]',
     ) ?? assert.fail("the pane's bar ends in its ⋯ menu");
   act(() => ellipsis.click());
   act(() => menuItem("Resolve without answering").click());
@@ -1327,7 +1499,7 @@ test("a paste past an item's reply cap is cut to the room left and its note line
   await settle();
   const pane = itemPane(page);
   const cap = INBOX_BOUNDS.MAX_MESSAGE_CHARS;
-  const note = () => pane.querySelector(".agent-composer-note")?.textContent;
+  const note = () => pane.querySelector(".luke-composer-foot-note")?.textContent;
   assert.equal(pane.querySelector(".luke-length-counter"), null);
 
   pasteInComposer(pane, "x".repeat(cap + 100));
@@ -1424,7 +1596,7 @@ function footWords(pane: HTMLElement): string {
   const copy = box.cloneNode(true);
   assert.ok(copy instanceof Element);
   for (const part of copy.querySelectorAll(
-    ":scope > :is([data-inbox-draft-ask], .attached-files, .agent-composer-field)",
+    ":scope > :is([data-inbox-draft-ask], .agent-composer-field), .attached-files, .luke-composer-foot-note",
   )) {
     part.remove();
   }
@@ -1444,7 +1616,7 @@ function boxParts(pane: HTMLElement): string[] {
       const line = part.querySelector(".composer-editor") ?? assert.fail("the line's editor");
       return [`line: ${line.getAttribute("aria-label")}`];
     }
-    if (part.matches(".inbox-answer-foot")) {
+    if (part.matches(".luke-composer-foot")) {
       const presses = [...part.querySelectorAll<HTMLElement>("button, .composer-editor")].map(
         (press) => press.getAttribute("aria-label") ?? press.textContent,
       );
@@ -1586,7 +1758,7 @@ test("a waiting choice of several is a checkbox list whose box counts nothing on
   assert.deepEqual(answeredPicks(page), ["Email", "Pager"], "Enter let no pick go");
 });
 
-test("Enter anywhere in a form, in a short number field or its text field's composer, sends what is filled, a required field left empty absent from it, and with nothing filled sends nothing, the box naming nothing; Shift+Enter in a text field is a new line, and an @ there picks a mention written in as its link", async () => {
+test("⌘Enter anywhere in a form of several fields sends what is filled, a required field left empty absent from it, and with nothing filled sends nothing, the box naming nothing; a bare Enter in its number field or its text field's composer sends nothing, and in a text field adds a line, and an @ there picks a mention written in as its link", async () => {
   const form = asking(EXPIRY, {
     type: INBOX_ASK.ANSWER,
     fields: [
@@ -1610,7 +1782,7 @@ test("Enter anywhere in a form, in a short number field or its text field's comp
   const retries = field("Retries").querySelector("input") ?? assert.fail("no Retries input");
 
   act(() => retries.focus());
-  keyOn(retries, "Enter");
+  keyOn(retries, "Enter", { metaKey: true });
   await settle();
   assert.deepEqual(sent, []);
   assert.equal(footWords(pane), "");
@@ -1621,6 +1793,9 @@ test("Enter anywhere in a form, in a short number field or its text field's comp
   await settle();
   assert.deepEqual(sent, [], "the first Enter picks the mention");
   pressInComposer(field("Reason"), "Enter");
+  await settle();
+  assert.deepEqual(sent, [], "a bare Enter in a form of several fields is a new line, no send");
+  pressInComposer(field("Reason"), "Enter", { metaKey: true });
   await settle();
   const file = mentionMarkdown(
     { kind: MENTION_KIND.FILE, path: "apps/web/rollout-store.ts" },
@@ -1640,6 +1815,81 @@ test("Enter anywhere in a form, in a short number field or its text field's comp
       },
     ],
   );
+});
+
+test("in a form of three fields Enter on a focused select option only picks it, ⌘Enter sends the form from there, Send's hint names ⌘↩, and a form of one field keeps Enter as its send with no such hint", async () => {
+  const form = asking(EXPIRY, {
+    type: INBOX_ASK.ANSWER,
+    fields: [
+      { type: INBOX_FIELD.SELECT, label: "Severity", required: true, options: ["Low", "High"] },
+      { type: INBOX_FIELD.NUMBER, label: "Retries" },
+      { type: INBOX_FIELD.BOOLEAN, label: "Page on-call" },
+    ],
+  });
+  const single = asking(THRESHOLD, {
+    type: INBOX_ASK.ANSWER,
+    fields: [{ type: INBOX_FIELD.SELECT, label: "Severity", options: ["Low", "High"] }],
+  });
+  inboxes.set(INVITES.id, [form]);
+  inboxes.set(BILLING.id, [single]);
+  const { page } = mount();
+  await settle();
+  // Note that the fake bridge holds one answer, so one send tells the two items' replies apart by the ask answered.
+  const sent = heldMessages((params) =>
+    repliedOn(
+      params.answers?.ask === askIdOf(EXPIRY.id) ? form : single,
+      "c1b2c3d4-0000-4000-8000-000000000093",
+    )(params),
+  );
+  const sentAbout = (id: string) =>
+    sent.filter(({ answers }) => answers?.ask === askIdOf(id)).map(({ answers }) => answers);
+
+  act(() => rowNamed(page, "Expire after 7 days?").click());
+  await settle();
+  const pane = itemPane(page);
+  const high = [...pane.querySelectorAll<HTMLButtonElement>('[role="radio"]')].find((option) =>
+    option.textContent?.includes("High"),
+  );
+  assert.ok(high, "the High option");
+  act(() => high.focus());
+  keyOn(high, "Enter");
+  await settle();
+  assert.deepEqual(sentAbout(EXPIRY.id), [], "Enter on an option sends no form of several fields");
+  assert.equal(high.getAttribute("aria-checked"), "true", "it picked the option");
+  assert.equal(
+    answerSend(pane).getAttribute("aria-keyshortcuts"),
+    "Meta+Enter",
+    "Send's hint names ⌘↩",
+  );
+
+  pressInComposer(pane, "Enter");
+  await settle();
+  assert.deepEqual(sentAbout(EXPIRY.id), [], "nor does Enter in the note, a new line there");
+
+  keyOn(high, "Enter", { metaKey: true });
+  await settle();
+  assert.deepEqual(sentAbout(EXPIRY.id), [
+    {
+      ask: askIdOf(EXPIRY.id),
+      reply: INBOX_REPLY.SUBMITTED,
+      values: [
+        { label: "Severity", value: "High" },
+        { label: "Page on-call", value: false },
+      ],
+    },
+  ]);
+
+  act(() => rowNamed(page, "Alert at 80%?").click());
+  await settle();
+  const only = [...itemPane(page).querySelectorAll<HTMLButtonElement>('[role="radio"]')].find(
+    (option) => option.textContent?.includes("Low"),
+  );
+  assert.ok(only, "the Low option");
+  assert.equal(answerSend(itemPane(page)).hasAttribute("aria-keyshortcuts"), false);
+  act(() => only.click());
+  keyOn(only, "Enter");
+  await settle();
+  assert.equal(sentAbout(THRESHOLD.id).length, 1, "Enter on the one field's option still sends");
 });
 
 test("a settled choice whose pick is not the one recommended marks each apart: the pick checked, and the recommended option by its badge", async () => {
@@ -1682,12 +1932,8 @@ test("a teammate's answer names them by their disc and name, their pick checked 
   assert.deepEqual(answeredPicks(page), ["Retry 3 times over an hour"]);
   const reply =
     answeredControls(page).closest<HTMLElement>(".inbox-comment") ?? assert.fail("their answer");
-  assert.match(wordsOf(reply.querySelector(".inbox-comment-head")) ?? "", /^Charles Pan/u);
-  assert.equal(
-    reply.querySelector<HTMLElement>(".inbox-comment-head [data-actor-ref] .actor-mark")?.dataset
-      .kind,
-    "person",
-  );
+  assert.match(wordsOf(reply.querySelector(".luke-comment-head")) ?? "", /^Charles Pan/u);
+  assert.equal(faceKind(reply.querySelector(".luke-comment-face")), "person");
 
   const answerer = reply.querySelector("[data-actor-ref]") ?? assert.fail("the answerer is named");
   restOn(answerer);
@@ -1787,7 +2033,7 @@ test("the pane's crumbs lead with their tabs' glyphs, the plan's document and th
     "the agent's crumb wears its mark",
   );
   assert.deepEqual(
-    [...page.querySelectorAll(".inbox-view-items .desktop-toolbar button")]
+    [...page.querySelectorAll(".inbox-view-items .luke-toolbar button")]
       .map((button) => button.getAttribute("aria-label") ?? button.textContent)
       .slice(2),
     ["Item actions"],
@@ -2237,8 +2483,9 @@ test("the thread names its agent as one button wherever it does, its message's c
   const asking =
     page.querySelector('[data-inbox-comment="message"]') ??
     assert.fail("the agent's message is a comment");
-  assert.ok(
-    asking.querySelector('.inbox-comment-head [data-actor-ref] .actor-mark[data-kind="agent"]'),
+  assert.equal(
+    faceKind(asking.querySelector(".luke-comment-face")),
+    "agent",
     "the agent's tile leads its comment",
   );
   reach(comment);
@@ -2803,7 +3050,7 @@ test("a folded plan counts what in it needs you, and one where nothing does coun
   await settle();
   const headers = () => [
     ...page.querySelectorAll<HTMLButtonElement>(
-      ".inbox-tasks .sidebar-repository-header button[aria-expanded]:not([aria-haspopup])",
+      ".inbox-tasks .luke-group-header-head button[aria-expanded]:not([aria-haspopup])",
     ),
   ];
   for (const header of headers()) act(() => header.click());
@@ -2880,7 +3127,7 @@ function columnsShown(page: HTMLElement): string[] {
 /** The item's bar's press named Inbox, the way back to the list, where there is one. */
 function wayBack(page: HTMLElement): HTMLButtonElement | undefined {
   return [
-    ...page.querySelectorAll<HTMLButtonElement>(".inbox-view-items > .desktop-toolbar button"),
+    ...page.querySelectorAll<HTMLButtonElement>(".inbox-view-items > .luke-toolbar button"),
   ].find((button) => button.textContent === "Inbox");
 }
 
@@ -2982,7 +3229,7 @@ test("an Inbox opened before the account's task list is read stands placeholder 
     [emptyStateIn(page, ".inbox-tasks"), emptyStateIn(page, ".inbox-view-items")],
     [null, null],
   );
-  assert.equal(page.querySelector(".sidebar-note"), null, "no line says nothing needs you");
+  assert.equal(page.querySelector(".luke-note-line"), null, "no line says nothing needs you");
   layOut(page, 800);
   assert.deepEqual(columnsShown(page), ["list"]);
   assert.equal(emptyStateIn(page, ".inbox-tasks"), null);
@@ -3361,6 +3608,79 @@ test("split, K and J move the chosen row and the item beside it, which draws no 
   pressKey("j", box);
   assert.equal(readTitle(page), "Alert at 80%?", "the letter is the box's");
   act(() => keys.unmount());
+});
+
+test("split, K and J hand the keyboard to the row they choose, so the arrows go on from there", async () => {
+  const { page } = mount();
+  await settle();
+  const keys = standKeymap();
+  act(() => rowNamed(page, "Alert at 80%?").focus());
+
+  pressKey("j", document.activeElement ?? document.body);
+  assert.equal(readTitle(page), "Expire after 7 days?");
+  assert.equal(
+    document.activeElement,
+    rowNamed(page, "Expire after 7 days?"),
+    "J's row holds the keyboard",
+  );
+  pressKey("k", document.activeElement ?? document.body);
+  assert.equal(readTitle(page), "Alert at 80%?");
+  assert.equal(
+    document.activeElement,
+    rowNamed(page, "Alert at 80%?"),
+    "K's row holds the keyboard",
+  );
+  pressKey("ArrowUp", document.activeElement ?? document.body);
+  assert.equal(
+    document.activeElement,
+    rowNamed(page, "How is a failed email retried?"),
+    "↑ goes on from the row K reached",
+  );
+  act(() => keys.unmount());
+});
+
+/** The titles of the list's rows Tab stops on, in the order drawn. */
+function rowTabStops(page: HTMLElement): (string | null | undefined)[] {
+  return [...page.querySelectorAll<HTMLButtonElement>(".inbox-tasks li button.luke-list-row-main")]
+    .filter((row) => row.tabIndex === 0)
+    .map((row) => row.querySelector(ROW_TITLE)?.textContent);
+}
+
+test("the list's rows are one Tab stop, across its plans, that ↓ walks and End ends, the walk wrapping and the stop following the row last focused", async () => {
+  const { page } = mount();
+  await settle();
+  assert.deepEqual(rowTabStops(page), ["How is a failed email retried?"], "Tab lands on one row");
+
+  act(() => rowNamed(page, "How is a failed email retried?").focus());
+  pressKey("ArrowDown", document.activeElement ?? document.body);
+  pressKey("ArrowDown", document.activeElement ?? document.body);
+  assert.equal(
+    document.activeElement,
+    rowNamed(page, "Expire after 7 days?"),
+    "↓↓ goes two rows on, into the next plan",
+  );
+  assert.deepEqual(rowTabStops(page), ["Expire after 7 days?"], "Tab comes back to the row left");
+  pressKey("ArrowDown", document.activeElement ?? document.body);
+  assert.equal(
+    document.activeElement,
+    rowNamed(page, "How is a failed email retried?"),
+    "it wraps",
+  );
+  pressKey("End", document.activeElement ?? document.body);
+  assert.equal(document.activeElement, rowNamed(page, "Expire after 7 days?"));
+});
+
+test("↓ passes over a folded plan's rows", async () => {
+  const { page } = mount();
+  await settle();
+  act(() => headerNamed(page, "Invites").click());
+  act(() => rowNamed(page, "Alert at 80%?").focus());
+  pressKey("ArrowDown", document.activeElement ?? document.body);
+  assert.equal(
+    document.activeElement,
+    rowNamed(page, "How is a failed email retried?"),
+    "Invites' row is passed over, the walk wrapping to the first",
+  );
 });
 
 test("a folded plan's items have no row, so K and J pass over them and the pager counts the rows a reader finds", async () => {
@@ -4159,7 +4479,7 @@ const BUMP: InboxItem = {
 function headerNamed(page: HTMLElement, name: string): HTMLButtonElement {
   const header = [
     ...page.querySelectorAll<HTMLButtonElement>(
-      ".inbox-tasks .sidebar-repository-header button[aria-expanded]:not([aria-haspopup])",
+      ".inbox-tasks .luke-group-header-head button[aria-expanded]:not([aria-haspopup])",
     ),
   ].find((each) => heardName(each) === name);
   assert.ok(header, `no header for ${name}`);
@@ -4711,6 +5031,13 @@ function inOrder(on: InboxItem, messages: readonly InboxMessage[]): InboxMessage
   return [...(on.thread ?? []), ...messages].toSorted((a, b) => a.createdAt - b.createdAt);
 }
 
+/** The kind of writer a comment's face draws, as its avatar's outline says it: a person's circle, or an agent's square. */
+function faceKind(face: Element | null | undefined): string | undefined {
+  const disc = face?.querySelector<HTMLElement>(".luke-avatar");
+  if (disc === null || disc === undefined) return undefined;
+  return disc.dataset.shape === "square" ? "agent" : "person";
+}
+
 /** The shown item's thread as a reader meets it: each comment's kind, its writer's face, its writer by name, and a message's words. */
 function threadOf(page: HTMLElement): (string | null | undefined)[][] {
   return [
@@ -4719,9 +5046,8 @@ function threadOf(page: HTMLElement): (string | null | undefined)[][] {
     ),
   ].map((entry) => [
     entry.dataset.inboxComment ?? (entry.dataset.inboxEarlier === undefined ? "?" : "earlier"),
-    entry.querySelector<HTMLElement>(".inbox-comment-head [data-actor-ref] .actor-mark")?.dataset
-      .kind,
-    wordsOf(entry.querySelector(".inbox-comment-name")),
+    faceKind(entry.querySelector(".luke-comment-face")),
+    wordsOf(entry.querySelector(".luke-comment-name")),
     wordsOf(entry.querySelector("[data-inbox-message-text]")),
   ]);
 }
@@ -5029,7 +5355,7 @@ test("a message refused as naming no agent says the agent is archived where it i
   const pane = itemPane(page);
   const note = () => pane.querySelector('.agent-composer [role="alert"]');
   const unarchive = () =>
-    [...pane.querySelectorAll<HTMLButtonElement>(".agent-composer-note button")].find(
+    [...pane.querySelectorAll<HTMLButtonElement>(".luke-composer-foot-note button")].find(
       (button) => button.textContent === "Unarchive",
     );
 
@@ -5059,7 +5385,11 @@ test("a message refused as naming no agent says the agent is archived where it i
     goneItem.querySelector('.agent-composer [role="alert"]')?.textContent,
     "This agent no longer exists.",
   );
-  assert.equal(goneItem.querySelector(".agent-composer-note button"), null, "nothing to unarchive");
+  assert.equal(
+    goneItem.querySelector(".luke-composer-foot-note button"),
+    null,
+    "nothing to unarchive",
+  );
 });
 
 test("an Unarchive that lands after another send was refused lets only the archived note go, so the newer refusal still says why", async () => {
@@ -5098,7 +5428,7 @@ test("an Unarchive that lands after another send was refused lets only the archi
   send();
   await settle();
   const unarchive = [
-    ...pane.querySelectorAll<HTMLButtonElement>(".agent-composer-note button"),
+    ...pane.querySelectorAll<HTMLButtonElement>(".luke-composer-foot-note button"),
   ].find((button) => button.textContent === "Unarchive");
   act(() => (unarchive ?? assert.fail("Unarchive follows the note")).click());
   refusal = CODING_AGENT_CALL_FAILURE.UNANSWERED;
@@ -5360,7 +5690,7 @@ test("a teammate's open item of an agent with no plan is listed under the automa
   );
   const header = [
     ...page.querySelectorAll<HTMLButtonElement>(
-      ".inbox-tasks .sidebar-repository-header button[aria-expanded]:not([aria-haspopup])",
+      ".inbox-tasks .luke-group-header-head button[aria-expanded]:not([aria-haspopup])",
     ),
   ].find((each) => heardName(each) === "Charles Pan");
   assert.ok(header, "Charles Pan heads a group");
@@ -5668,7 +5998,7 @@ const THRESHOLD_ANSWERED: InboxItem = {
 function foldedCounts(page: HTMLElement): (string | null)[] {
   const headers = () => [
     ...page.querySelectorAll<HTMLButtonElement>(
-      ".inbox-tasks .sidebar-repository-header button[aria-expanded]:not([aria-haspopup])",
+      ".inbox-tasks .luke-group-header-head button[aria-expanded]:not([aria-haspopup])",
     ),
   ];
   for (const header of headers()) {
@@ -6083,11 +6413,11 @@ test("grouped by status, what needs you stands under the attention mark, then wh
   const header = (name: string) =>
     [
       ...page.querySelectorAll<HTMLButtonElement>(
-        ".inbox-tasks .sidebar-repository-header button[aria-expanded]:not([aria-haspopup])",
+        ".inbox-tasks .luke-group-header-head button[aria-expanded]:not([aria-haspopup])",
       ),
     ].find((each) => heardName(each) === name);
   assert.ok(
-    header("Needs you")?.closest(".sidebar-repository-header")?.querySelector(".attention-mark"),
+    header("Needs you")?.closest(".luke-group-header-head")?.querySelector(".attention-mark"),
     "Needs you's group wears the attention mark",
   );
   act(() => header("Waiting on others")?.click());
@@ -6420,7 +6750,7 @@ function draftReply(pane: HTMLElement): (string | null)[] {
   const draft =
     pane.querySelector<HTMLElement>(".inbox-thread > li:last-child") ?? assert.fail("no thread");
   assert.equal(draft.dataset.inboxComment, "draft", "the draft reply ends the thread");
-  const head = wordsOf(draft.querySelector(".inbox-comment-head"));
+  const head = wordsOf(draft.querySelector(".luke-comment-head"));
   const question = draft.querySelector("form.inbox-answer > [data-inbox-draft-ask]");
   if (question === null) return [head];
   assert.doesNotMatch(
@@ -6466,24 +6796,20 @@ function repliedOn(item: InboxItem, id: string) {
   };
 }
 
-/** Each comment of the shown thread as its head draws its writer: its kind, then the kind of each face its head draws, each as the chip naming them holds it, and the faces drawn anywhere but in its head or its body. */
+/** Each comment of the shown thread as its head draws its writer: its kind, then the kind of each face it draws, and the marks drawn anywhere but in its head or its body. */
 function commentHeads(pane: HTMLElement): (string | undefined | (string | undefined)[])[][] {
   return [...pane.querySelectorAll<HTMLElement>(".inbox-thread > .inbox-comment")].map(
     (comment) => [
       comment.dataset.inboxComment,
-      [
-        ...comment.querySelectorAll<HTMLElement>(
-          ".inbox-comment-head > .inbox-comment-name > [data-actor-ref] .actor-mark",
-        ),
-      ].map((mark) => mark.dataset.kind),
+      [...comment.querySelectorAll<HTMLElement>(".luke-comment-face")].map(faceKind),
       [...comment.querySelectorAll<HTMLElement>(".actor-mark")]
-        .filter((mark) => mark.closest(".inbox-comment-head, .inbox-comment-body") === null)
+        .filter((mark) => mark.closest(".luke-comment-head, .inbox-comment-body") === null)
         .map((mark) => mark.dataset.kind),
     ],
   );
 }
 
-test("each comment of a thread is headed by its writer's chip, their face and name as one target, its face the thread's gutter with no face drawn apart from it; the draft reply's head is the reader's chip, \"You\", with nothing after it", async () => {
+test("each comment of a thread is headed by its writer's face and name, its face the thread's gutter with no face drawn apart from it; the draft reply's head is the reader's, \"You\", with nothing after it", async () => {
   const shown = threadItem([
     askingMessage(EXPIRY_ASK),
     threadMessage(
@@ -6501,12 +6827,12 @@ test("each comment of a thread is headed by its writer's chip, their face and na
     ["draft", ["person"], []],
   ]);
   const draft =
-    pane.querySelector<HTMLElement>('[data-inbox-comment="draft"] .inbox-comment-head') ??
+    pane.querySelector<HTMLElement>('[data-inbox-comment="draft"] .luke-comment-head') ??
     assert.fail("the draft reply has a head");
-  assert.equal(wordsOf(draft), "You", "the reader's chip alone, no draft and no time after it");
+  assert.equal(wordsOf(draft), "You", "the reader's name alone, no draft and no time after it");
   assert.ok(
-    draft.querySelector('.inbox-comment-name > [data-actor-ref][data-kind="person"] .actor-mark'),
-    "the reader is named by their chip, its face and name",
+    draft.querySelector('.luke-comment-name > [data-actor-ref][data-kind="person"]'),
+    "the reader is named by their ref",
   );
 });
 
@@ -6548,14 +6874,16 @@ test("a thread draws every message, the agent's by its tile and name alone, no t
     ["message", "agent", "Alerts", "That is the default elsewhere."],
   ]);
   assert.deepEqual(
-    [...pane.querySelectorAll(".inbox-thread .inbox-comment-head")].map((head) =>
-      [...head.children].map((part) => part.className),
+    [...pane.querySelectorAll(".inbox-thread .luke-comment-head")].map((head) =>
+      [...head.children].map((part) =>
+        [...part.classList].find((name) => name.startsWith("luke-comment-")),
+      ),
     ),
     [
-      ["inbox-comment-name", "inbox-comment-when"],
-      ["inbox-comment-name", "inbox-comment-when"],
-      ["inbox-comment-name", "inbox-comment-when"],
-      ["inbox-comment-name"],
+      ["luke-comment-name", "luke-comment-time"],
+      ["luke-comment-name", "luke-comment-time"],
+      ["luke-comment-name", "luke-comment-time"],
+      ["luke-comment-name"],
     ],
     "an agent's message, as a member's, is headed by its chip and when alone, with no tag after its chip, and the draft by the reader's chip alone",
   );
@@ -7553,7 +7881,7 @@ test("an answered decide's card leaves the agent's message for the head of the r
     pane.querySelector(`[data-message-id="${ASKING_ID}"]`) ?? assert.fail("the agent's message");
   assert.equal(asked.querySelector(".inbox-ask"), null, "the agent's message ends with its words");
   const reply = pane.querySelector(`[data-message-id="${ANSWER_ID}"]`) ?? assert.fail("the reply");
-  assert.equal(wordsOf(reply.querySelector(".inbox-comment-name")), "You", "the answerer heads it");
+  assert.equal(wordsOf(reply.querySelector(".luke-comment-name")), "You", "the answerer heads it");
   const box = answeredBox(pane);
   const rows = [...box.querySelectorAll<HTMLButtonElement>('[role="radio"]')];
   assert.deepEqual(
@@ -8014,7 +8342,7 @@ function searchList(page: HTMLElement, words: string): void {
 function sidebarMagnifier(page: HTMLElement): HTMLButtonElement {
   return (
     page.querySelector<HTMLButtonElement>(
-      '.desktop-sidebar .sidebar-section-head button[aria-label="Search inbox"]',
+      '.desktop-sidebar .luke-group-header-head button[aria-label="Search inbox"]',
     ) ?? assert.fail("the sidebar's head offers the search")
   );
 }
@@ -8031,7 +8359,7 @@ test("on a phone the Inbox's list is headed by New task and one ⋯, its title c
   assert.ok(head, "the phone's head stands");
   assert.deepEqual(
     [...head.querySelectorAll("button")].map((each) => each.getAttribute("aria-label")),
-    ["New task", "More"],
+    ["New task", "Inbox actions"],
   );
   assert.match(head.querySelector("h1")?.textContent ?? "", /^Inbox/);
   const field = page.querySelector<HTMLInputElement>(
@@ -8041,7 +8369,8 @@ test("on a phone the Inbox's list is headed by New task and one ⋯, its title c
   assert.equal(head.contains(field), false, "outside the head, which keeps its title");
 
   const more = () =>
-    head.querySelector<HTMLButtonElement>('[aria-label="More"]') ?? assert.fail("the ⋯ stands");
+    head.querySelector<HTMLButtonElement>('[aria-label="Inbox actions"]') ??
+    assert.fail("the ⋯ stands");
   const pick = (name: string) => {
     act(() => more().click());
     const item = [
@@ -8078,8 +8407,8 @@ test("the list's search stands under the Inbox's head, its name and buttons neve
   await settle();
   const title = headTitle(page);
   const buttons = () =>
-    [...(page.querySelector(".inbox-tasks-bar")?.querySelectorAll("button") ?? [])].map((each) =>
-      each.getAttribute("aria-label"),
+    [...(page.querySelector(".inbox-tasks > .luke-toolbar")?.querySelectorAll("button") ?? [])].map(
+      (each) => each.getAttribute("aria-label"),
     );
   assert.deepEqual(buttons(), ["New thread", "View options"]);
   const input = page.querySelector<HTMLInputElement>(
@@ -8128,7 +8457,7 @@ test("with the inbox-first sidebar, a press on View options while the search sta
   await settle();
   act(() => sidebarMagnifier(page).click());
   const options = page.querySelector<HTMLButtonElement>(
-    '.desktop-sidebar .sidebar-section-head button[aria-label="View options"]',
+    '.desktop-sidebar .luke-group-header-head button[aria-label="View options"]',
   );
   assert.ok(options, "the head keeps the view's menu beside the field");
 
@@ -8146,7 +8475,7 @@ test("with the inbox-first sidebar, New thread keeps its place as the search unf
   const { page } = mount([], { sidebar: true });
   await settle();
   const head = () =>
-    page.querySelector<HTMLElement>(".desktop-sidebar .sidebar-section-head") ??
+    sidebarMagnifier(page).closest<HTMLElement>(".luke-group-header-head") ??
     assert.fail("the sidebar's list head stands");
   const buttons = () =>
     [...head().querySelectorAll("button")].map((each) => each.getAttribute("aria-label"));
@@ -8240,9 +8569,12 @@ test("New thread in the Inbox's head opens a draft in the pane, To naming the ag
   typeInComposer(pane, "Draft the annual plan's line too.");
   assert.equal(send().disabled, false, "To and words light Send, the subject being optional");
 
-  const subject =
-    pane.querySelector<HTMLInputElement>('input[aria-label="Subject"]') ??
-    assert.fail("the draft has a Subject");
+  const subject = subjectField(pane);
+  assert.equal(
+    subjectLabel(pane).textContent,
+    "SubjectOptional",
+    "the Subject says it may be left empty, in its label",
+  );
   const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
   act(() => {
     setValue?.call(subject, "Annual plan copy");
@@ -8298,6 +8630,32 @@ test("Discard takes a New thread away and shows the item it stood over again, as
   assert.equal(itemPane(page).getAttribute("aria-label"), RETRY.title);
 });
 
+test("New thread's bar leads with the way back to the Inbox, titles itself New thread, and ends in Discard", async () => {
+  listedWorkspace = ACME;
+  inboxes = new Map([[BILLING.id, [THRESHOLD, RETRY]]]);
+  heldStarts([AGENT]);
+  const { page } = mount();
+  await settle();
+  layOut(page, 700);
+  await settle();
+  act(() =>
+    (
+      page.querySelector<HTMLButtonElement>('button[aria-label="New thread"]') ??
+      assert.fail("the head offers New thread")
+    ).click(),
+  );
+  await settle();
+
+  const bar = itemPane(page).querySelector("header") ?? assert.fail("New thread draws a bar");
+  const words = (selector: string) =>
+    [...bar.querySelectorAll(selector)].map(
+      (each) => each.getAttribute("aria-label") ?? each.textContent,
+    );
+  assert.deepEqual(words(".luke-toolbar-lead button"), ["Inbox"], "the way back leads");
+  assert.deepEqual(words("h1.luke-toolbar-title"), ["New thread"], "the title names it");
+  assert.deepEqual(words(".luke-toolbar-actions button"), ["Discard"], "Discard ends the bar");
+});
+
 /** Opens a New thread from the Inbox's head and hands back its pane. */
 async function openNewThread(page: HTMLElement): Promise<HTMLElement> {
   act(() =>
@@ -8312,11 +8670,23 @@ async function openNewThread(page: HTMLElement): Promise<HTMLElement> {
   return pane;
 }
 
+/** The label of a New thread's Subject. */
+function subjectLabel(pane: HTMLElement): HTMLLabelElement {
+  return (
+    [...pane.querySelectorAll("label")].find((label) => label.textContent?.startsWith("Subject")) ??
+    assert.fail("the draft has a Subject")
+  );
+}
+
+/** The field a New thread's Subject label names. */
+function subjectField(pane: HTMLElement): HTMLInputElement {
+  const field = pane.querySelector<HTMLInputElement>(`input[id="${subjectLabel(pane).htmlFor}"]`);
+  return field ?? assert.fail("the Subject label names a field");
+}
+
 /** Types `words` into a New thread's Subject. */
 function typeSubject(pane: HTMLElement, words: string): void {
-  const subject =
-    pane.querySelector<HTMLInputElement>('input[aria-label="Subject"]') ??
-    assert.fail("the draft has a Subject");
+  const subject = subjectField(pane);
   const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
   act(() => {
     setValue?.call(subject, words);
@@ -8328,7 +8698,7 @@ function typeSubject(pane: HTMLElement, words: string): void {
 function threadDraft(pane: HTMLElement) {
   return {
     to: pane.querySelector('[aria-label^="To: "]')?.getAttribute("aria-label"),
-    subject: pane.querySelector<HTMLInputElement>('input[aria-label="Subject"]')?.value,
+    subject: subjectField(pane).value,
     words: composerEditor(pane).textContent,
     files: attachedNames(pane),
   };
@@ -8480,7 +8850,7 @@ test("a paste past a New thread's cap is cut to the room left and its note line 
   await settle();
   const pane = await openNewThread(page);
   const cap = INBOX_BOUNDS.MAX_MESSAGE_CHARS;
-  const note = () => pane.querySelector(".agent-composer-note")?.textContent;
+  const note = () => pane.querySelector(".luke-composer-foot-note")?.textContent;
 
   pasteInComposer(pane, "x".repeat(cap + 100));
   await settle();
@@ -8544,7 +8914,9 @@ function toMenuRows(): string[] {
   const menu = document.querySelector('[role="dialog"][aria-label="To"]');
   assert.ok(menu, "To's menu is open");
   return [
-    ...menu.querySelectorAll('.luke-combobox-heading, .menu-row-list-heading, [role="option"]'),
+    ...menu.querySelectorAll(
+      '.luke-combobox-heading, .luke-searchable-menu-heading, [role="option"]',
+    ),
   ].map((node) => {
     if (!node.matches('[role="option"]')) return `# ${node.textContent}`;
     const name = node.querySelector(".luke-combobox-option-label")?.textContent ?? "";

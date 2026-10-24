@@ -3,7 +3,7 @@ import {
   type CodingAgentAttachment,
   type CodingAgentMessage,
 } from "@luke/features/coding-agent-wire";
-import { ConfirmDialog, type DialogQuestion, useConfirmDialog } from "@luke/ui";
+import { CONFIRM_LOSS, ConfirmDialog, type DialogQuestion, useConfirmDialog } from "@luke/ui";
 import { ACTION_RESULT_STATUS, MESSAGE_ROLE } from "@luke/wire";
 import { PencilIcon, Undo2Icon } from "lucide-react";
 import { createContext, type ReactNode, useContext } from "react";
@@ -46,6 +46,7 @@ const REVERT_QUESTION: DialogQuestion = {
   body: "Everything after it will be removed from the conversation, and the agent stopped if it is working. Changes the agent made to its files stay as they are.",
   verb: "Revert",
   running: "Reverting",
+  loss: CONFIRM_LOSS.IRREVERSIBLE,
 };
 
 /** What an agent's tab hands its messages: Edit of a line, and Revert to here of a reply. */
@@ -178,7 +179,7 @@ export function RevertMessageAction({ messageId }: { messageId: string }): React
       >
         <Undo2Icon />
       </MessageAction>
-      <ConfirmDialog confirm={confirm} question={REVERT_QUESTION} />
+      <ConfirmDialog open confirm={confirm} question={REVERT_QUESTION} />
     </>
   );
 }

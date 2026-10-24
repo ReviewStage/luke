@@ -1,0 +1,71 @@
+/* pane-bar.css -- PaneBar: the bar across the top of a tab or a dock, one
+   height whatever it holds, its words in the caption's type; the lead
+   starting at a row's inset and its title fading where cut (one-line.css),
+   the middle taking the room left, and the actions at the end, their glyphs
+   close. The bar's groups stand a control's gap apart. */
+
+@layer components {
+  .luke-pane-bar {
+    display: flex;
+    box-sizing: border-box;
+    min-width: 0;
+    min-height: var(--luke-pane-bar-height);
+    flex: none;
+    align-items: center;
+    gap: var(--luke-control-gap);
+    padding: var(--luke-tight-gap) var(--luke-list-inset);
+    border-bottom: 1px solid var(--luke-color-border);
+    background: var(--luke-color-fill-hover);
+    color: var(--luke-color-text-muted);
+    font-family: var(--luke-font-sans);
+    font-size: var(--luke-type-caption-size);
+    line-height: var(--luke-type-caption-leading);
+  }
+
+  /* Words leading the bar start where a tab's glyph does, a row's inset in. */
+  .luke-pane-bar-lead {
+    display: flex;
+    min-width: 0;
+    flex: 0 1 auto;
+    align-items: center;
+    gap: var(--luke-item-gap);
+    padding-left: var(--luke-row-inset);
+    white-space: nowrap;
+  }
+
+  .luke-pane-bar-mark {
+    display: flex;
+    flex: none;
+    align-items: center;
+  }
+
+  .luke-pane-bar-mark > svg {
+    width: var(--luke-control-icon);
+    height: var(--luke-control-icon);
+  }
+
+  .luke-pane-bar-title {
+    flex: 0 1 auto;
+    color: var(--luke-color-text);
+  }
+
+  .luke-pane-bar-detail {
+    flex: none;
+  }
+
+  .luke-pane-bar-middle {
+    display: flex;
+    min-width: 0;
+    flex: 1 1 auto;
+    align-items: center;
+    gap: var(--luke-control-gap);
+  }
+
+  .luke-pane-bar-actions {
+    display: flex;
+    flex: none;
+    align-items: center;
+    gap: var(--luke-space-2);
+    margin-left: auto;
+  }
+}

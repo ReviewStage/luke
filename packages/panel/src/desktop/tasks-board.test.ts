@@ -202,6 +202,7 @@ async function mountBoard(
                 filter: NO_TASKS_FILTER,
                 display: shown,
                 onDisplay: (next) => displayed.push(next),
+                scroll: () => undefined,
               },
             }),
           }),
@@ -275,6 +276,48 @@ test("each status has its column, its cards the most pressing first, each its ke
   assert.equal(card.querySelector(".actor-mark"), null, "the card wears no creator's face");
 });
 
+/** Presses `key` where the keyboard stands. */
+function pressHere(key: string): void {
+  const target = document.activeElement ?? document.body;
+  act(() => {
+    target.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true }));
+  });
+}
+
+/** The id of the task whose card holds the keyboard, if one does. */
+function focusedTask(): string | null | undefined {
+  return document.activeElement?.closest("li[data-task-id]")?.getAttribute("data-task-id");
+}
+
+test("each column's cards are one Tab stop that ↓ and ↑ walk, and ← and → cross to the next column's stop, wrapping at the board's ends", async () => {
+  const board = await mountBoard(TASKS, SHELL_ROOM.WIDE, {
+    ...DEFAULT_BOARD_DISPLAY,
+    completed: COMPLETED_WINDOW.ALL,
+  });
+  const stops = () =>
+    [...board.querySelectorAll<HTMLElement>("[data-task-column]")].map(
+      (column) =>
+        [...column.querySelectorAll<HTMLElement>("[data-card-press]")].filter(
+          (press) => press.tabIndex === 0,
+        ).length,
+    );
+  assert.deepEqual(stops(), [1, 1, 1, 1, 1], "Tab lands once in each column");
+
+  act(() => cardOf(board, "t-38").focus());
+  pressHere("ArrowDown");
+  assert.equal(focusedTask(), "t-36");
+  pressHere("ArrowRight");
+  assert.equal(focusedTask(), "t-40", "→ lands on Todo's stop, its first card");
+  pressHere("ArrowDown");
+  assert.equal(focusedTask(), "t-39");
+  pressHere("ArrowLeft");
+  assert.equal(focusedTask(), "t-36", "← lands back on the card Backlog was left at");
+  pressHere("ArrowLeft");
+  assert.equal(focusedTask(), "t-33", "← from the first column wraps to the last");
+  pressHere("ArrowRight");
+  assert.equal(focusedTask(), "t-36");
+});
+
 test("a refresh that failed after the tasks were read keeps the columns drawn under Could not refresh and Retry, where a first read that failed draws the error alone", async () => {
   let retried = 0;
   const onRetryList = () => {
@@ -333,7 +376,7 @@ test("a card at rest hangs its task's card", async () => {
   assert.ok(document.querySelector(".luke-tooltip-card [data-task-card]"));
 });
 
-test("the settled finished before the past week give way to a line counting them, which shows them all; by priority the columns run from the most pressing, empty ones left out where asked", async () => {
+test("the settled finished before the past week give way to a foot counting them, which shows them all; by priority the columns run from the most pressing, empty ones left out where asked", async () => {
   const board = await mountBoard();
   const done = board.querySelector<HTMLElement>('[data-task-column="done"]');
   assert.deepEqual(columns(board).slice(-2), [
@@ -341,9 +384,9 @@ test("the settled finished before the past week give way to a line counting them
     ["Canceled", []],
   ]);
   const older = [...(done?.querySelectorAll<HTMLElement>("button") ?? [])].find(
-    (button) => button.textContent === "+ 1 older",
+    (button) => button.textContent === "Show 1 more",
   );
-  act(() => (older ?? assert.fail("no older line under Done")).click());
+  act(() => (older ?? assert.fail("no Show more line under Done")).click());
   assert.deepEqual(
     displayed.map((each) => each.completed),
     [COMPLETED_WINDOW.ALL],
@@ -649,6 +692,39 @@ test("a right-click on a card drops the task's own menu", async () => {
   assert.deepEqual(opened, []);
 });
 
+test("the menu key drops a card's menu from its press or any control in the card, and its ⋯ is named for the task", async () => {
+  const board = await mountBoard();
+  const key = (target: HTMLElement) =>
+    act(() => {
+      target.dispatchEvent(
+        new KeyboardEvent("keydown", { key: "ContextMenu", bubbles: true, cancelable: true }),
+      );
+    });
+  const offersRename = () =>
+    [...document.querySelectorAll('[role^="menuitem"] .luke-menu-item-label')].some(
+      (label) => label.textContent === "Rename",
+    );
+  const closeMenu = () =>
+    act(() => {
+      document.activeElement?.dispatchEvent(
+        new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }),
+      );
+    });
+
+  key(cardOf(board, "t-40"));
+  assert.ok(offersRename(), "the card's press opens its menu on the menu key");
+  closeMenu();
+  key(chipOf(board, "t-40", "Priority"));
+  assert.ok(offersRename(), "a chip in the card opens the card's menu on the menu key too");
+  assert.equal(
+    board
+      .querySelector('li[data-task-id="t-40"] .tasks-board-card-more button')
+      ?.getAttribute("aria-label"),
+    "Task actions",
+  );
+  assert.deepEqual(opened, []);
+});
+
 test("a press on a card's chip carried onto another column is that chip's, and moves no card", async () => {
   const board = await mountBoard();
   layCardsOut(board);
@@ -763,8 +839,8 @@ test("a card draws a tag for each issue its task links, oldest first, a GitHub i
   ]);
 
   const tagsOf = (taskId: string) => [
-    ...board.querySelectorAll<HTMLButtonElement>(
-      `li[data-task-id="${taskId}"] .tasks-board-tags button`,
+    ...board.querySelectorAll<HTMLAnchorElement>(
+      `li[data-task-id="${taskId}"] .tasks-board-tags a`,
     ),
   ];
   const tags = tagsOf("t-42");
@@ -775,6 +851,15 @@ test("a card draws a tag for each issue its task links, oldest first, a GitHub i
       [TASK_ISSUE_PROVIDER.LINEAR, "ENG-455"],
       [TASK_ISSUE_PROVIDER.GITHUB, "Acme/Auth#270"],
     ],
+  );
+  assert.deepEqual(
+    tags.map((tag) => tag.getAttribute("href")),
+    [
+      "https://github.com/acme/web/issues/312",
+      "https://linear.app/acme/issue/ENG-455",
+      "https://github.com/acme/auth/issues/270",
+    ],
+    "each tag is a link to its issue",
   );
   assert.ok(
     tags.every((tag) => tag.querySelector("svg")),

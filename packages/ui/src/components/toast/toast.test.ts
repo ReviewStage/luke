@@ -16,7 +16,7 @@ import { ToastStack } from "./toast-stack.js";
  * held; a turn of tone keeps the glyph it led with to fade under the new
  * one; a drag or a trackpad sweep past the threshold sends it away and one
  * short of it puts it back; the stack names itself and says the newest words
- * through its two live regions.
+ * through the window's announcer.
  */
 
 declare global {
@@ -115,6 +115,41 @@ test("Escape in a toast with an action dismisses it, and its action dismisses be
   assert.deepEqual(calls, ["dismiss", "dismiss", "press"]);
 });
 
+test("an action given an href is a link to it in the action's look, and its press dismisses, then presses, without the browser following it", () => {
+  const calls: string[] = [];
+  const view = render(
+    createElement(
+      "ol",
+      null,
+      createElement(Toast, {
+        tone: STATUS_TONE.DANGER,
+        words: "Out of credit",
+        actions: createElement(ToastActions, {
+          label: "Add credit",
+          href: "https://example.test/billing",
+          onPress: () => calls.push("press"),
+          dismissLabel: "Dismiss",
+          onDismiss: () => calls.push("dismiss"),
+        }),
+      }),
+    ),
+  );
+  const link = [...view.querySelectorAll("a")].find((a) => a.textContent === "Add credit");
+  assert.ok(link !== undefined, "the action is a link");
+  assert.equal(link.getAttribute("href"), "https://example.test/billing");
+  assert.equal(
+    [...view.querySelectorAll("button")].some((b) => b.textContent === "Add credit"),
+    false,
+    "and no button",
+  );
+  const click = new MouseEvent("click", { bubbles: true, cancelable: true });
+  act(() => {
+    link.dispatchEvent(click);
+  });
+  assert.deepEqual(calls, ["dismiss", "press"]);
+  assert.equal(click.defaultPrevented, true);
+});
+
 test("a toast with no action takes no press and no hold", () => {
   const view = render(
     createElement(
@@ -130,18 +165,20 @@ test("a toast with no action takes no press and no hold", () => {
   assert.equal(toast.querySelector(".luke-toast-detail")?.textContent, "Offline");
 });
 
-test("the stack is a named landmark with a polite and an alert region", () => {
-  const view = render(
-    createElement(ToastStack, {
-      label: "Notifications",
-      polite: "Link copied",
-      alert: "Couldn't save",
-      children: null,
-    }),
-  );
-  assert.equal(view.querySelector("section")?.getAttribute("aria-label"), "Notifications");
-  assert.equal(view.querySelector('[role="status"]')?.textContent, "Link copied");
-  assert.equal(view.querySelector('[role="alert"]')?.textContent, "Couldn't save");
+test("the stack is a named landmark that says the newest words through the window's announcer", () => {
+  const stack = (polite: string, alert: string) =>
+    createElement(ToastStack, { label: "Notifications", polite, alert, children: null });
+  const container = document.body.appendChild(document.createElement("div"));
+  const root = createRoot(container);
+  roots.push(root);
+  act(() => root.render(stack("", "")));
+  assert.equal(container.querySelector("section")?.getAttribute("aria-label"), "Notifications");
+
+  act(() => root.render(stack("Link copied", "")));
+  assert.equal(container.querySelector('[role="status"]')?.textContent, "Link copied");
+
+  act(() => root.render(stack("Link copied", "Couldn't save")));
+  assert.equal(container.querySelector('[role="alert"]')?.textContent, "Couldn't save");
 });
 
 /** A pointer's press, travel, or release on `target`, at `x` across and `y` down. */

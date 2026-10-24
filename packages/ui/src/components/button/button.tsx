@@ -1,4 +1,5 @@
 import {
+  type AnchorHTMLAttributes,
   type ButtonHTMLAttributes,
   type MouseEvent,
   type ReactNode,
@@ -13,6 +14,8 @@ import { CheckIcon } from "../../face/glyphs.js";
 import { PRESS_FACE, PRESS_PULSE, pulsePress } from "../../press-pulse.js";
 import { replayMotion } from "../../replay-motion.js";
 import { buttonVariants, Button as ShadcnButton } from "../../shadcn/button.js";
+import { rovingItem } from "../roving-keys/roving-keys.js";
+import { useSettled } from "../spinner/settle-wait.js";
 import { SpinnerRing } from "../spinner/spinner.js";
 
 /**
@@ -44,8 +47,9 @@ import { SpinnerRing } from "../spinner/spinner.js";
  * microphone muted is never read as one hearing you.
  *
  * A button that is not `tabbable` is out of the tab order but takes the
- * focus when it is handed it, for a roving stop: one of a group the
- * keyboard enters at one place and moves through by its own keys.
+ * focus when it is handed it. A `roving` one is an item of a roving set
+ * (`useRovingKeys`): one of a group the keyboard enters at one place and
+ * moves through by the arrows, whose box keeps its tab order.
  *
  * A button that keeps focus (`keepFocus`) leaves the focus where it is
  * when a pointer presses it, so a field beside it that holds the keys, as a
@@ -56,9 +60,12 @@ import { SpinnerRing } from "../spinner/spinner.js";
  * `focusableWhenDisabled`, where it stays in it, so a hint over it can say
  * why, and refuses its press instead, with a shake. Every press a button
  * or a link drawn as one takes is answered with a pulse of its face, and a
- * submit's arrow lifts as it sends. A busy button keeps its width, its
- * words standing hidden under a turning ring, refuses its press, and is
- * named by `busyLabel` ("Saving") for as long as the ring stands. A labelled
+ * submit's arrow lifts as it sends. A busy button refuses its press and is
+ * named by `busyLabel` ("Saving") from the press on; once its press has been
+ * out `--luke-settle-delay` (180ms) it keeps its width, its words standing
+ * hidden under the one ring every wait turns (`SpinnerRing`), so an act that
+ * lands at once never flashes one. Every kind of button, a split one's, a
+ * folding one's, a provider's, takes the same two (`BusyProps`). A labelled
  * button whose act has landed may say so, `done`: a check springs in where
  * its words stood, it refuses another press, and `onDone` hears once the
  * check has been seen, at once where no motion runs. A busy button told its
@@ -82,8 +89,11 @@ import { SpinnerRing } from "../spinner/spinner.js";
  * somewhere: a download, another site, an app's own scheme. The browser
  * follows its address, so it opens in a new tab, copies, and hands off as
  * any link does; it is never unavailable or busy, since a link that cannot
- * be followed is not drawn. An IconButtonLink is an IconButton's look on a
- * link, named by its `label`, which may open in a `newTab`.
+ * be followed is not drawn. A window that opens addresses through its own
+ * door stops the browser's follow in `onClick`, and the link is still what a
+ * right-click, a reader's link list and ⌘-click find. An IconButtonLink is an
+ * IconButton's look on a link, named by its `label`, which may open in a
+ * `newTab`.
  *
  * A labelled button is named by its words, unless it is given a `label`
  * that says more of what it does than they have room for ("Start a coding
@@ -173,18 +183,22 @@ export type ButtonType = (typeof BUTTON_TYPE)[keyof typeof BUTTON_TYPE];
 /**
  * A button that can be busy names what it is doing while it is, since its
  * words stand hidden under the ring and name nothing then; one that never is
- * names nothing more.
+ * names nothing more. Every kind of button takes this one shape.
  */
-type BusyProps =
-  | { busy?: false | undefined; busyLabel?: undefined; succeeded?: undefined }
+export type BusyProps =
+  | { busy?: false | undefined; busyLabel?: undefined }
   | {
-      /** Whether its press is out: it refuses another and shows a ring in place of its words. */
+      /** Whether its press is out: it refuses another and, once it has been out a moment, shows a ring in place of its words. */
       busy: boolean;
-      /** What it is named while busy, the act in progress ("Saving"). */
+      /** What it is named while busy, the act in progress ("Saving"), which a reader hears. */
       busyLabel: string;
-      /** Whether the press the ring stood for landed, read as the ring leaves: a check stands for a moment before its words come back. */
-      succeeded?: boolean | undefined;
     };
+
+/** A busy button's shape, and how its press landed. */
+type LandingProps = BusyProps & {
+  /** Whether the press the ring stood for landed, read as the ring leaves: a check stands for a moment before its words come back. */
+  succeeded?: boolean | undefined;
+};
 
 /** What an app's hint hands the button it wraps: when to show and go, and the chord it names. */
 type HintProps = Pick<
@@ -192,8 +206,21 @@ type HintProps = Pick<
   "onPointerEnter" | "onPointerLeave" | "onPointerDown" | "onFocus" | "onBlur" | "aria-keyshortcuts"
 >;
 
+/** What an app's hint hands the link it wraps: when to show and go, and the chord it names. */
+type LinkHintProps = Pick<
+  AnchorHTMLAttributes<HTMLAnchorElement>,
+  | "onPointerEnter"
+  | "onPointerLeave"
+  | "onPointerDown"
+  | "onTouchEnd"
+  | "onFocus"
+  | "onBlur"
+  | "aria-describedby"
+  | "aria-keyshortcuts"
+>;
+
 /** What every button takes, labelled or not. */
-type ButtonBase = BusyProps &
+type ButtonBase = LandingProps &
   HintProps & {
     variant?: ButtonVariant;
     shape?: ButtonShape;
@@ -206,6 +233,8 @@ type ButtonBase = BusyProps &
     focusableWhenDisabled?: boolean | undefined;
     /** Whether Tab stops on it; one that is not still takes the focus a roving group hands it. */
     tabbable?: boolean | undefined;
+    /** Whether it is an item of a `useRovingKeys` box, which keeps its tab order and walks it with the arrows. */
+    roving?: boolean | undefined;
     /** Whether a pointer's press leaves the focus where it is, as on a field beside it that holds the keys. */
     keepFocus?: boolean | undefined;
     /** Whether its glyph turns once as a press lands, as a refresh's or a retry's arrow does. */
@@ -283,7 +312,7 @@ function buttonLook({
     className: cn(
       "luke-button",
       busy ? "cursor-progress" : settled ? "cursor-default" : PRESSABLE_CURSOR,
-      fades && "disabled:opacity-45",
+      fades && "disabled:opacity-disabled",
     ),
   };
 }
@@ -293,13 +322,22 @@ function linkClasses(look: ButtonLook): string {
   return cn(buttonVariants(look));
 }
 
-/** The classes of a button's face, which hides under a busy ring and fades under a done check. */
-function faceClasses(size: BoxSize | undefined, busy: boolean, done: boolean): string {
+/** The classes of a button's face, which hides under a busy ring once it shows and fades under a done check. */
+function faceClasses(size: BoxSize | undefined, ringShown: boolean, done: boolean): string {
   return cn(
     "luke-button-face inline-flex items-center gap-icon-gap min-w-0",
     size === "compact" && "gap-1",
-    busy && "invisible",
+    ringShown && "invisible",
     done && "opacity-0",
+  );
+}
+
+/** The ring a busy button turns over its hidden face, the glyph's size, centred in its box. */
+function BusyRing(): React.JSX.Element {
+  return (
+    <span className="luke-button-ring absolute inset-0 m-auto size-control-icon" aria-hidden="true">
+      <SpinnerRing />
+    </span>
   );
 }
 
@@ -343,6 +381,7 @@ function stateProps(props: ButtonBase, name: string | undefined, done = false) {
     ref: props.ref,
     disabled: props.disabled === true && props.focusableWhenDisabled !== true,
     tabIndex: props.tabbable === false ? -1 : undefined,
+    ...(props.roving === true ? rovingItem() : undefined),
     "aria-disabled": refusing ? true : undefined,
     "aria-busy": props.busy === true ? true : undefined,
     "aria-label": busyName ?? name,
@@ -435,7 +474,7 @@ function DoneMark({
  * `settle` ends. Note that the ring's leaving is read as the draw sees it
  * rather than in an effect, so the check is in the first frame without it.
  */
-function useLanded(props: BusyProps): { landed: boolean; settle: () => void } {
+function useLanded(props: LandingProps): { landed: boolean; settle: () => void } {
   const busy = props.busy === true;
   const [wasBusy, setWasBusy] = useState(busy);
   const [landed, setLanded] = useState(false);
@@ -488,6 +527,7 @@ export function Button({
 }): React.JSX.Element {
   const { landed, settle } = useLanded(props);
   const busy = props.busy === true;
+  const ringShown = useSettled(busy);
   const shown = done || landed;
   const state = stateProps(
     readOnly ? { ...props, disabled: true } : landedProps(props, landed),
@@ -512,7 +552,7 @@ export function Button({
       aria-pressed={pressed}
     >
       <span
-        className={faceClasses(boxSize(props.variant, size, false), busy, shown)}
+        className={faceClasses(boxSize(props.variant, size, false), ringShown, shown)}
         {...PRESS_FACE}
       >
         {icon}
@@ -523,6 +563,7 @@ export function Button({
           </span>
         )}
       </span>
+      {ringShown ? <BusyRing /> : null}
       {done ? <DoneMark onShown={onDone} /> : landed ? <DoneMark hold onShown={settle} /> : null}
     </ShadcnButton>
   );
@@ -533,15 +574,19 @@ export function ButtonLink({
   href,
   variant,
   icon,
+  label,
   onClick,
   children,
-}: {
+  ...hint
+}: LinkHintProps & {
   href: string;
   variant?: ButtonVariant;
-  /** Called as the press leaves, before the browser follows the link. */
+  /** Called as the press leaves, before the browser follows the link; a press that is the window's to carry out stops the browser's with `preventDefault`. */
   onClick?: ((event: MouseEvent<HTMLAnchorElement>) => void) | undefined;
   /** The glyph before its words. */
   icon?: ReactNode;
+  /** Its accessible name, where it says more of what it does than its words have room for; it holds them. */
+  label?: string | undefined;
   children: ReactNode;
 }): React.JSX.Element {
   return (
@@ -550,7 +595,9 @@ export function ButtonLink({
         buttonLook({ variant, size: undefined, shape: undefined, iconOnly: false }),
       )}
       data-variant={variant ?? BUTTON_VARIANT.QUIET}
+      {...hint}
       href={href}
+      aria-label={label}
       onClick={(event) => {
         pulse(event.currentTarget, variant);
         onClick?.(event);
@@ -574,7 +621,9 @@ export function IconButtonLink({
   label,
   variant,
   newTab = false,
-}: {
+  onClick,
+  ...hint
+}: LinkHintProps & {
   href: string;
   icon: ReactNode;
   /** Its accessible name, which a sighted reader has from the glyph. */
@@ -582,6 +631,8 @@ export function IconButtonLink({
   variant?: ButtonVariant;
   /** Whether it opens in a new tab, leaving the page it is on where it was. */
   newTab?: boolean;
+  /** Called as the press leaves, before the browser follows the link; a press that is the window's to carry out stops the browser's with `preventDefault`. */
+  onClick?: ((event: MouseEvent<HTMLAnchorElement>) => void) | undefined;
 }): React.JSX.Element {
   return (
     <a
@@ -590,9 +641,13 @@ export function IconButtonLink({
       )}
       data-icon-only="true"
       data-variant={variant ?? BUTTON_VARIANT.QUIET}
+      {...hint}
       href={href}
       aria-label={label}
-      onClick={(event) => pulse(event.currentTarget, variant)}
+      onClick={(event) => {
+        pulse(event.currentTarget, variant);
+        onClick?.(event);
+      }}
       target={newTab ? "_blank" : undefined}
       rel={newTab ? "noreferrer" : undefined}
     >
@@ -689,6 +744,7 @@ export function IconButton({
   }): React.JSX.Element {
   const { landed, settle } = useLanded(props);
   const busy = props.busy === true;
+  const ringShown = useSettled(busy);
   const state = stateProps(
     submit === undefined ? landedProps(props, landed) : { ...props, shape: BUTTON_SHAPE.ROUND },
     label,
@@ -713,9 +769,10 @@ export function IconButton({
       data-done={landed || undefined}
       aria-pressed={pressed}
     >
-      <span className={faceClasses("icon", busy, landed)} {...PRESS_FACE}>
+      <span className={faceClasses("icon", ringShown, landed)} {...PRESS_FACE}>
         {submit === undefined ? icon : submitGlyph(submit)}
       </span>
+      {ringShown ? <BusyRing /> : null}
       {landed ? <DoneMark hold onShown={settle} /> : null}
     </ShadcnButton>
   );

@@ -64,6 +64,7 @@ import {
 import { useStateWithRef } from "@luke/ui/use-state-with-ref";
 import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { useAct } from "./act.js";
+import { modEnterSends } from "./enter-sends.js";
 import { encodeImage, imageFiles } from "./feedback-images.js";
 import { TOAST_HOLD, type ToastNotice, useToast } from "./toast.js";
 import { DROP_LEAVE, useFileDrop } from "./use-file-drop.js";
@@ -328,20 +329,30 @@ export function FeedbackDialog({
     showToast(SENT_NOTICE);
   };
 
-  // Command-Return sends from anywhere in the card.
+  // Command or Ctrl with Return sends from anywhere in the card.
   const sendKey = (event: React.KeyboardEvent<HTMLDivElement>) => {
-    if (event.key !== "Enter" || !(event.metaKey || event.ctrlKey)) return;
+    if (!modEnterSends(event)) return;
     event.preventDefault();
     void send();
   };
 
+  // Note that the card is drawn as it last stood while it fades out, because
+  // what it was opened with, and the draft a send has emptied, are let go
+  // the moment it closes.
+  const standing = useRef<
+    { kind: FeedbackKind; about: Experiment | undefined; draft: FeedbackDraft } | undefined
+  >(undefined);
+  if (kind !== undefined) standing.current = { kind, about, draft };
+  const shown = standing.current;
+
   const full = draft.images.length >= FEEDBACK_LIMITS.MAX_IMAGES;
 
-  return kind === undefined ? null : (
+  return shown === undefined ? null : (
     // The whole dimmed window takes a dropped screenshot.
     <Dialog
+      open={open}
       size={DIALOG_SIZE.WIDE}
-      title={dialogTitle(kind, about)}
+      title={dialogTitle(shown.kind, shown.about)}
       busy={busy}
       refused={rejection !== undefined}
       holding={hasWords(draft)}
@@ -385,10 +396,10 @@ export function FeedbackDialog({
       <div className="feedback-dialog ph-no-capture">
         <TextArea
           ref={field}
-          label={FEEDBACK_COPY[kind].field}
-          placeholder={FEEDBACK_COPY[kind].placeholder}
+          label={FEEDBACK_COPY[shown.kind].field}
+          placeholder={FEEDBACK_COPY[shown.kind].placeholder}
           maxLength={FEEDBACK_LIMITS.MESSAGE_MAX_LENGTH}
-          value={draft.message}
+          value={shown.draft.message}
           disabled={busy}
           rows={MESSAGE_ROWS}
           grow
@@ -402,7 +413,7 @@ export function FeedbackDialog({
             void attach(pasted);
           }}
         />
-        {draft.images.length > 0 ? (
+        {shown.draft.images.length > 0 ? (
           <Inline
             as={LAYOUT_ELEMENT.UL}
             gap={GAP.CONTROL}
@@ -410,7 +421,7 @@ export function FeedbackDialog({
             className="feedback-dialog-images"
             aria-label="Screenshots"
           >
-            {draft.images.map((image, index) => (
+            {shown.draft.images.map((image, index) => (
               <AttachmentChip
                 key={`${image.name}-${String(index)}`}
                 name={image.name}
@@ -418,7 +429,7 @@ export function FeedbackDialog({
                 removeDisabled={busy}
                 onRemove={() =>
                   changeDraft({
-                    images: latestDrafts()[kind].images.filter((_, held) => held !== index),
+                    images: latestDrafts()[shown.kind].images.filter((_, held) => held !== index),
                   })
                 }
               />
@@ -428,7 +439,7 @@ export function FeedbackDialog({
         {signature ? (
           <div className="feedback-dialog-signature">
             <Checkbox
-              checked={draft.signed}
+              checked={shown.draft.signed}
               disabled={busy}
               aria-describedby={signatureId}
               onChange={(signed) => changeDraft({ signed })}
@@ -442,7 +453,7 @@ export function FeedbackDialog({
               id={signatureId}
               className="feedback-dialog-identity"
             >
-              {draft.signed
+              {shown.draft.signed
                 ? `Sending as ${[signature.name, signature.email].filter(Boolean).join(" · ")}`
                 : null}
             </Text>

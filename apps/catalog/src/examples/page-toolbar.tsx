@@ -1,8 +1,7 @@
 import {
-  BackIcon,
+  BackButton,
   BUTTON_VARIANT,
   Button,
-  FoldingButton,
   ONE_LINE_ELEMENT,
   OneLine,
   PageToolbar,
@@ -35,7 +34,7 @@ function PageToolbars(): React.JSX.Element {
       </CatalogSection>
       <CatalogSection id="page-toolbar-lead" title="Led by a way back">
         <PageToolbar
-          lead={<FoldingButton label="Inbox" icon={<BackIcon />} onClick={stay} />}
+          lead={<BackButton label="Inbox" place="inbox" onBack={stay} />}
           heading={<OneLine as={ONE_LINE_ELEMENT.H1}>New thread</OneLine>}
           actions={
             <Button variant={BUTTON_VARIANT.QUIET} onClick={stay}>
@@ -45,7 +44,7 @@ function PageToolbars(): React.JSX.Element {
         />
       </CatalogSection>
       <CatalogSection id="page-toolbar-back" title="A way back alone">
-        <PageToolbar lead={<FoldingButton label="Settings" icon={<BackIcon />} onClick={stay} />} />
+        <PageToolbar lead={<BackButton label="Settings" place="settings" onBack={stay} />} />
       </CatalogSection>
     </>
   );

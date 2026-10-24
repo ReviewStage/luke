@@ -10,7 +10,7 @@ import type {
   ChatMessageToast,
   FailedRunPlace,
   FailedRunToast,
-  InboxItemToast,
+  InboxItemsToast,
 } from "@luke/host/agent-notices";
 import type { AppStateSnapshot, AppWindowFacts } from "@luke/host/app-state";
 import { applyThemePreference, NativeTheme } from "@luke/host/appearance";
@@ -118,7 +118,7 @@ export interface WindowService extends DesktopService {
   /** Asks the panels to open Settings: the menu bar's Check for Updates, whose answer is drawn there. */
   showSettings: () => void;
   /** Asks the panels to say an inbox item opened in their toast: one that opened while the window is focused. */
-  toastInboxItem: (item: InboxItemToast) => void;
+  toastInboxItem: (opened: InboxItemsToast) => void;
   /** Asks the panels to open a failed run in its automation's workspace: its notification's click. */
   showFailedRun: (place: FailedRunPlace) => void;
   /** Asks the panels to say a run failed to start in their toast: one that failed while the window is focused. */
@@ -325,8 +325,8 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
     panels.broadcast(PUSH.MENU_COMMAND, APP_COMMAND.SETTINGS);
   }
 
-  function toastInboxItem(item: InboxItemToast): void {
-    panels.broadcast(PUSH.INBOX_ITEM_OPENED, item);
+  function toastInboxItem(opened: InboxItemsToast): void {
+    panels.broadcast(PUSH.INBOX_ITEM_OPENED, opened);
   }
 
   function showFailedRun(place: FailedRunPlace): void {

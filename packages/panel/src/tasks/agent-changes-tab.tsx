@@ -13,6 +13,7 @@ import { TASK_FILE_REFUSAL, type TaskFileRefusal } from "@luke/features/task-wir
 import { REFRESH_FAILED_WORDS } from "@luke/features/words";
 import { ACT_KIND } from "@luke/host/acts";
 import {
+  ANNOUNCE,
   BUTTON_SIZE,
   Button,
   Checkbox,
@@ -27,6 +28,7 @@ import {
   IconButton,
   INSET,
   LAYOUT_ELEMENT,
+  type PaneBarMenu,
   SpinnerRegion,
   Stack,
   TEXT_BUTTON_TONE,
@@ -35,6 +37,7 @@ import {
   Text,
   TextButton,
   Tooltip,
+  useAnnounce,
 } from "@luke/ui";
 import {
   CheckIcon,
@@ -111,7 +114,7 @@ import {
   PierreDiffList,
 } from "./diff-list.js";
 import { useDiffLook, useSplitRoom } from "./file-diff.js";
-import { BarMenu, useSaveText } from "./file-menu.js";
+import { useSaveText } from "./file-menu.js";
 import { FileTreePane } from "./file-tree-pane.js";
 import { FileViewBar, type TreeShown, usePaneRoom, useTreeEdge } from "./file-view.js";
 import { useFileViewSettings } from "./file-view-settings.js";
@@ -263,8 +266,15 @@ function ViewedCount({
   const count = files.length;
   const seen = viewed === undefined ? undefined : files.filter((file) => viewed(file.path)).length;
   const complete = seen === count && !truncated;
+  const words =
+    seen === undefined
+      ? LIST_WORDS.filesOf(count)
+      : complete
+        ? LIST_WORDS.allViewed(count)
+        : LIST_WORDS.viewedOf(seen, count);
+  useAnnounce(ANNOUNCE.POLITE, words);
   return (
-    <p className="files-viewed" aria-live="polite" data-complete={complete ? "" : undefined}>
+    <p className="files-viewed" data-complete={complete ? "" : undefined}>
       {complete ? <CheckIcon aria-hidden="true" /> : null}
       <Text
         as={TEXT_ELEMENT.SPAN}
@@ -272,11 +282,7 @@ function ViewedCount({
         truncate
         className="files-viewed-words"
       >
-        {seen === undefined
-          ? LIST_WORDS.filesOf(count)
-          : complete
-            ? LIST_WORDS.allViewed(count)
-            : LIST_WORDS.viewedOf(seen, count)}
+        {words}
       </Text>
     </p>
   );
@@ -299,34 +305,36 @@ const CHANGES_MENU_WORDS = {
  * in the list's order (`pullRequestPatch`), and the changes read again. The
  * patch is not offered, and says why, where the read stopped short of every
  * file, since it would not be the pull request's. A file's own path is
- * copied from its header (`FileHead`).
+ * copied from its header (`FileHead`). `PaneBar` draws it as its ⋯.
  */
-function ChangesMenu({
+function useChangesMenu({
   pullRequest,
   reading,
   onRefresh,
 }: {
+  /** The pull request read; none, while there is none to act on, draws no ⋯. */
   pullRequest: {
     readonly url: string;
     readonly truncated: boolean;
     readonly files: readonly CodingAgentChangedFile[];
-  };
+  } | null;
   /** Whether a read is out, which a refresh would only repeat. */
   reading: boolean;
   onRefresh: () => void;
-}): React.JSX.Element {
+}): PaneBarMenu | undefined {
   const copyWithToast = useCopyToast();
   const saveText = useSaveText();
+  if (pullRequest === null) return undefined;
   const patch = pullRequest.truncated ? undefined : pullRequestPatch(treeOrder(pullRequest.files));
   const why = pullRequest.truncated
     ? CHANGES_MENU_WORDS.TRUNCATED
     : patch === undefined
       ? CHANGES_MENU_WORDS.NO_PATCH
       : undefined;
-  return (
-    <BarMenu
-      label="Changes actions"
-      actions={[
+  return {
+    thing: "Changes",
+    groups: [
+      [
         {
           label: CHANGES_MENU_WORDS.COPY_PATCH,
           icon: <ClipboardCopyIcon aria-hidden="true" />,
@@ -353,9 +361,9 @@ function ChangesMenu({
           disabled: reading,
           onSelect: onRefresh,
         },
-      ]}
-    />
-  );
+      ],
+    ],
+  };
 }
 
 /** A pull request's review threads as Files changed draws them on their lines: the threads, and the door that draws one. */
@@ -1780,6 +1788,7 @@ export function AgentChangesTab({
     ask();
     threads?.refresh?.();
   };
+  const changesMenu = useChangesMenu({ pullRequest, reading: out, onRefresh: refresh });
   const taskId = control.agents?.find((each) => each.id === agentId)?.planId ?? null;
   const texts = useFileTexts(taskId, repository, pullRequest, changed.files);
   const commenting = useListCommenting(
@@ -1837,14 +1846,17 @@ export function AgentChangesTab({
             truncated={pullRequest.truncated}
           />
         }
-        onGitHub={() => appPlatform().openGitHub(`${pullRequest.url}/files`)}
+        github={{
+          href: `${pullRequest.url}/files`,
+          open: (url) => appPlatform().openGitHub(url),
+        }}
         menu={
           <>
             <ViewSettingsButton scope={{ kind: VIEW_SETTINGS_SCOPE.DIFF, roomy }} />
             <FoldAllButton list={list} />
-            <ChangesMenu pullRequest={pullRequest} reading={out} onRefresh={refresh} />
           </>
         }
+        more={changesMenu}
         tree={room.toggles}
       />
       <PullRequestWriteNote writes={viewedFiles} />
@@ -1873,23 +1885,22 @@ export function AgentChangesTab({
           }
           flash={flash}
         />
-        {room.drawn ? (
-          <FileTreePane
-            file={shownFile.path}
-            only={changed.paths}
-            marks={marks}
-            label="Changed files"
-            listFolder={changed.folders}
-            search={{ query: list.query, onQuery: list.onQuery }}
-            onOpen={choose}
-            onViewed={list.markViewed}
-            pane={room.beside.pane}
-            float={room.pane}
-            leaving={room.beside.leaving}
-            width={tree.width?.width}
-            edge={edge}
-          />
-        ) : null}
+        <FileTreePane
+          file={shownFile.path}
+          only={changed.paths}
+          marks={marks}
+          label="Changed files"
+          listFolder={changed.folders}
+          search={{ query: list.query, onQuery: list.onQuery }}
+          onOpen={choose}
+          onViewed={list.markViewed}
+          over={room.docked ? undefined : room.over}
+          narrow={room.narrow}
+          pane={room.beside.pane}
+          leaving={room.beside.leaving}
+          width={tree.width?.width}
+          edge={edge}
+        />
         {tree.open ? null : (
           <ChangesStrip
             files={changed.ordered}
@@ -1899,7 +1910,7 @@ export function AgentChangesTab({
           />
         )}
       </Fill>
-      {shown && list.keysShown ? <FilesChangedKeysSheet onDismiss={hideKeys} /> : null}
+      <FilesChangedKeysSheet open={shown && list.keysShown} onDismiss={hideKeys} />
     </Fill>
   );
 }

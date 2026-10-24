@@ -638,6 +638,8 @@ class ListMotionPlayer extends Component<
     const { before } = batch;
     const leaving = this.leavingOf(root, batch.leavers, before);
     if (leaving.length > 0) this.holdHeight(root);
+    // Note that a root holding no mover and losing none has nothing to play, as a message box's row of files does while it holds none, so its tokens are never read on every keystroke.
+    if (leaving.length === 0 && moversOf(root).length === 0) return;
     // Note that a DOM with no animation engine, a test's, marks what leaves and lets it go at once.
     const engine = animates(root);
     const exit = engine

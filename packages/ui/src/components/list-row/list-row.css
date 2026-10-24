@@ -3,8 +3,8 @@
    The fill is the item's, so the pointer anywhere on the row, an act
    included, lights the whole of it as one.
 
-   A row is a grid of four tracks: its leading mark, its words, its end (the
-   metadata and the chevron), and its acts. The press spans the first three
+   A row is a grid of five tracks: its leading mark, its words, its end (the
+   metadata and the chevron), its acts, and its ⋯. The press spans the first three
    and lays its parts in the row's own tracks (`subgrid`), so an act offered
    only to the row in hand can stand in the end's track beside the press
    rather than inside it, a button holding no button: that track is as wide
@@ -35,7 +35,8 @@
       [leading-end text-start] minmax(0, 1fr)
       [text-end end-start] minmax(0, auto)
       [end-end acts-start] auto
-      [acts-end];
+      [acts-end more-start] auto
+      [more-end];
     align-items: center;
     min-width: 0;
     border-radius: var(--luke-control-radius);
@@ -45,8 +46,11 @@
   }
 
   /* The pointer lights a row that opens something, never past the open
-     row's own stronger fill. */
-  .luke-list-row:has(> button.luke-list-row-main):hover:not([data-current="true"]) {
+     row's own stronger fill or a chosen row's. */
+  .luke-list-row:has(> button.luke-list-row-main):hover:not(
+    [data-current="true"],
+    [data-selected="true"]
+  ) {
     background: var(--luke-color-fill-hover);
   }
 
@@ -63,6 +67,12 @@
     box-shadow:
       0 0 0 1px var(--luke-color-border),
       0 1px 2px var(--luke-color-shadow-soft);
+  }
+
+  /* A row chosen in its list's selection is filled as a Mac's list fills
+     the rows chosen, over the open row's ground where it is both. */
+  .luke-list-row[data-selected="true"] {
+    background: var(--luke-color-fill-selected);
   }
 
   /* The press spans the mark, the words, and the end, its parts standing
@@ -238,6 +248,13 @@
   .luke-list-row:not([data-actions="hover"])
     > .luke-list-row-slide:has(> .luke-list-row-actions)
     > .luke-list-row-main {
+    padding-inline-end: 0;
+  }
+
+  /* Beside its ⋯, the row's press gives its end inset to the ⋯ too, its
+     acts on hover or none, since the ⋯ stands in a track of its own. */
+  .luke-list-row:has(> .luke-list-row-more) > .luke-list-row-main,
+  .luke-list-row > .luke-list-row-slide:has(> .luke-list-row-more) > .luke-list-row-main {
     padding-inline-end: 0;
   }
 
@@ -475,6 +492,56 @@
     padding-inline-end: var(--luke-list-row-inset-inline);
   }
 
+  /* A row's ⋯ stands last, in its own track, as far in from the row's end
+     as its press's words are, its room kept whether it shows or not so its
+     coming and going moves nothing. Beside acts that always stand it keeps
+     their own gap and takes their end inset. */
+  .luke-list-row-more {
+    display: flex;
+    grid-column: more;
+    grid-row: 1;
+    align-items: center;
+    margin-inline-start: var(--luke-control-gap);
+    padding-inline-end: var(--luke-list-row-inset-inline);
+    opacity: 0;
+    transition: opacity var(--luke-duration-hover) var(--luke-motion-exit);
+  }
+
+  /* A mail-style row, whose metadata stands on its title's line, keeps its
+     ⋯ on that line too, level with the metadata and the acts beside it. */
+  .luke-list-row[data-meta="title"] .luke-list-row-more {
+    align-self: start;
+    height: var(--luke-type-label-leading);
+    margin-block-start: var(--luke-list-row-inset-block);
+  }
+
+  .luke-list-row:not([data-actions="hover"]) .luke-list-row-actions:has(+ .luke-list-row-more) {
+    padding-inline-end: 0;
+  }
+
+  .luke-list-row:not([data-actions="hover"]) .luke-list-row-actions + .luke-list-row-more {
+    margin-inline-start: var(--luke-space-4);
+  }
+
+  /* The ⋯ shows while the row holds the keyboard or its menu is open, and
+     while the pointer rests on it where there is a hover; a screen with no
+     hover shows it always, since nothing there would reveal it. */
+  .luke-list-row:is(:has(:focus-visible), [data-menu-open="true"]) .luke-list-row-more {
+    opacity: 1;
+  }
+
+  @media (hover: hover) {
+    .luke-list-row:hover .luke-list-row-more {
+      opacity: 1;
+    }
+  }
+
+  @media (hover: none) {
+    .luke-list-row-more {
+      opacity: 1;
+    }
+  }
+
   /* A row that goes deeper wears its chevron at its end, shown while the
      row is reached for or open, its room kept so nothing moves as it shows. */
   .luke-list-row-chevron {
@@ -657,7 +724,10 @@
     touch-action: pan-y;
   }
 
-  .luke-list-row[data-swipe]:has(button.luke-list-row-main):hover:not([data-current="true"]) {
+  .luke-list-row[data-swipe]:has(button.luke-list-row-main):hover:not(
+    [data-current="true"],
+    [data-selected="true"]
+  ) {
     --luke-list-row-fill: var(--luke-color-fill-hover);
 
     background: none;
@@ -665,6 +735,12 @@
 
   .luke-list-row[data-swipe][data-current="true"] {
     --luke-list-row-fill: var(--luke-color-ground);
+
+    background: none;
+  }
+
+  .luke-list-row[data-swipe][data-selected="true"] {
+    --luke-list-row-fill: var(--luke-color-fill-selected);
 
     background: none;
   }

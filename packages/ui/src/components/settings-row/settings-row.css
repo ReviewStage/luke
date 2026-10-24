@@ -121,27 +121,14 @@
     font-weight: var(--luke-type-label-weight);
   }
 
-  :is(.luke-settings-row-description, .luke-settings-row-error) {
+  .luke-settings-row-description {
     margin: 0;
+    color: var(--luke-color-text-muted);
     font-family: var(--luke-font-sans);
     font-size: var(--luke-type-caption-size);
     line-height: var(--luke-type-caption-leading);
     font-weight: var(--luke-type-caption-weight);
     overflow-wrap: anywhere;
-  }
-
-  .luke-settings-row-description {
-    color: var(--luke-color-text-muted);
-  }
-
-  .luke-settings-row-error {
-    color: var(--luke-color-danger-text);
-  }
-
-  /* Empty, it keeps its place in the tree, so its live region is standing
-     when an error arrives, and gives back the gap before it. */
-  .luke-settings-row-error:empty {
-    margin-top: calc(-1 * var(--luke-space-4));
   }
 
   .luke-settings-row-controls {
@@ -296,39 +283,5 @@
   .luke-settings-attention-mark > svg {
     width: 16px;
     height: 16px;
-  }
-
-  /* A row that just arrived lights once: a wash laid over it, inset a step so
-     it keeps clear of the card's corner and under its words, its opacity
-     alone fading out. Held
-     long enough to find, as a search's landing is, on the shared tokens, so
-     reduced motion and a capture run settle it unlit at once. */
-  .luke-settings-row[data-landed] {
-    position: relative;
-    isolation: isolate;
-  }
-
-  .luke-settings-row[data-landed]::after {
-    content: "";
-    position: absolute;
-    inset: var(--luke-space-2);
-    border-radius: calc(var(--luke-control-radius) - var(--luke-space-2));
-    background: var(--luke-color-fill-hover);
-    box-shadow: inset 0 0 0 1px var(--luke-color-border-selected);
-    opacity: 0;
-    z-index: -1;
-    pointer-events: none;
-    animation: luke-settings-row-landed calc(var(--luke-duration-shape) * 4) var(--luke-motion-exit);
-  }
-
-  @keyframes luke-settings-row-landed {
-    from,
-    50% {
-      opacity: 1;
-    }
-
-    to {
-      opacity: 0;
-    }
   }
 }

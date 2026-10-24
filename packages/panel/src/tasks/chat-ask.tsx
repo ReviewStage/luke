@@ -14,20 +14,19 @@ import {
   CARD_PADDING,
   Card,
   CardHead,
-  ErrorState,
   GAP,
   LAYOUT_ELEMENT,
   Stack,
+  TEXT_ELEMENT,
   TEXT_TONE,
   TEXT_VARIANT,
   Text,
-  Time,
 } from "@luke/ui";
 import { type Actor, actorName } from "@luke/ui/actor-model";
 import type { ChatAskAnswer } from "@luke/ui/chat-model";
 import { CheckIcon } from "lucide-react";
 import { type RefObject, useRef, useState } from "react";
-import { ActorLine, ActorRef } from "../actor-ref.js";
+import { ActorLine, ActorRef, commentAuthor } from "../actor-ref.js";
 import { DRAFT_PLACE, type Draft, EMPTY_DRAFT, useDraft } from "../composer-drafts.js";
 import { useIntegrationStatuses } from "../integration-statuses.js";
 import {
@@ -50,6 +49,7 @@ import {
   ANSWERED,
   AnsweredCard,
   AskControls,
+  askSendChord,
   bareKey,
   DraftQuestion,
   focusMissing,
@@ -63,7 +63,7 @@ import {
   WithdrawnWords,
 } from "./inbox-ask-controls.js";
 import { askHeadWords } from "./inbox-ask-words.js";
-import { COMMENT, Comment, CommentName, THREAD_TIME_CLASS } from "./inbox-comment.js";
+import { COMMENT, InboxComment } from "./inbox-comment.js";
 import type { FormTextDoors } from "./inbox-form-text.js";
 import {
   answerDid,
@@ -278,7 +278,7 @@ function Answer({
   };
   const controls =
     asked === undefined || !asks ? undefined : (
-      <DraftQuestion pane={box}>
+      <DraftQuestion pane={box} ask={asked}>
         <AskControls
           ask={asked}
           title={undefined}
@@ -326,18 +326,15 @@ function Answer({
         maxLength={CHAT_BOUNDS.MAX_NOTE_CHARS}
         onEnter={() => field.room.current?.closest("form")?.requestSubmit()}
         quote={(quote) => <ComposerQuoteView quote={quote} held={sending} />}
+        says={note === undefined ? undefined : { words: note }}
         nod={nod}
+        sendChord={asks ? askSendChord(asked) : undefined}
         sending={sending}
         held={sending}
         // Note that a form of fields none of which must be filled is answered empty, so it holds an answer before anything is in it.
         sendable={nod || chatAskHolds(draft) || chatAskReply(response, draft) !== undefined}
         onSubmit={send}
       />
-      {note === undefined ? null : (
-        <div className="agent-composer-note">
-          <ErrorState>{note}</ErrorState>
-        </div>
-      )}
     </div>
   );
 }
@@ -382,22 +379,16 @@ function AnsweredComment({
   const answerer = actorOf(answeredBy ?? "");
   return (
     <Stack as={LAYOUT_ELEMENT.OL} gap={GAP.NONE} className="inbox-thread" aria-label="Answer">
-      <Comment
+      <InboxComment
         kind={COMMENT.ANSWERED}
-        head={
-          <>
-            <CommentName>
-              <ActorRef actor={answerer} />
-            </CommentName>
-            <span className="inbox-comment-when">
-              {at === undefined ? null : (
-                <>
-                  <Time className={THREAD_TIME_CLASS} at={at} now={now} /> ·{" "}
-                </>
-              )}
-              <Delivered heard={ask.needsReply} poster={actorOf(message.authorId)} />
-            </span>
-          </>
+        author={commentAuthor(answerer)}
+        nameRef={<ActorRef actor={answerer} nameOnly />}
+        at={at}
+        now={now}
+        trailing={
+          <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED} as={TEXT_ELEMENT.SPAN}>
+            <Delivered heard={ask.needsReply} poster={actorOf(message.authorId)} />
+          </Text>
         }
       >
         {drawn ? <AnsweredCard ask={asked} title={undefined} answers={answers} /> : null}
@@ -413,7 +404,7 @@ function AnsweredComment({
             <SentWords text={answer.note} asDocument />
           </div>
         )}
-      </Comment>
+      </InboxComment>
     </Stack>
   );
 }

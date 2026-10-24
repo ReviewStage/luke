@@ -138,20 +138,18 @@ function stage(room: "narrow" | "wide", overlay: "closed" | "open"): void {
                                         className: "sidebar-repository",
                                         children: [
                                           {
-                                            className: "sidebar-repository-header",
+                                            className: "luke-group-header-head",
                                             children: [
                                               {
                                                 tag: "button",
-                                                className: "luke-nav-item",
-                                                data: { variant: "head" },
+                                                className: "luke-group-header-lead",
                                                 children: [
                                                   {
                                                     tag: "span",
-                                                    className: "luke-nav-item-rest",
                                                     children: [
                                                       {
                                                         tag: "span",
-                                                        className: "luke-nav-item-mark",
+                                                        className: "luke-group-header-mark",
                                                         children: [
                                                           {
                                                             tag: "span",

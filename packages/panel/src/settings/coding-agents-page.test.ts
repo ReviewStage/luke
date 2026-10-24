@@ -161,9 +161,9 @@ const fastSwitch = (page: HTMLElement) =>
   page.querySelector<HTMLButtonElement>('[role="switch"][aria-label="Fast"]') ??
   assert.fail("no Fast switch");
 
-/** What the page announces now: its alerts and its live regions that say something. */
+/** What the page announces now: its alerts and its error lines that say something. */
 const announced = (page: HTMLElement) =>
-  [...page.querySelectorAll('[role="alert"], [aria-live]')]
+  [...page.querySelectorAll('[role="alert"], [data-slot="field-error"]')]
     .map((each) => each.textContent ?? "")
     .filter((words) => words !== "");
 
@@ -344,9 +344,11 @@ test("replacing the account's own Anthropic key reads the models again, so Fast 
       assert.fail("no Edit key")
     ).click(),
   );
-  const field =
-    document.querySelector<HTMLInputElement>('input[aria-label="Anthropic API key"]') ??
-    assert.fail("no Anthropic field");
+  const label =
+    [...document.querySelectorAll("label")].find(
+      (each) => each.textContent === "Anthropic API key",
+    ) ?? assert.fail("no Anthropic field");
+  const field = label.control instanceof HTMLInputElement ? label.control : assert.fail();
   act(() => {
     Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(
       field,

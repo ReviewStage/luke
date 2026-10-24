@@ -5,6 +5,7 @@ import { CheckIcon, ChevronRightIcon } from "../../face/glyphs.js";
 import { PRESS_PULSE, pulseOnPress } from "../../press-pulse.js";
 import {
   COMBOBOX_EMPTY,
+  COMBOBOX_HEADING,
   COMBOBOX_ITEM,
   COMBOBOX_ITEM_DETAIL,
   COMBOBOX_ITEM_END,
@@ -12,11 +13,11 @@ import {
   COMBOBOX_ITEM_HINT,
   COMBOBOX_ITEM_LABEL,
   COMBOBOX_ITEM_LEAD,
-  COMBOBOX_LABEL,
   COMBOBOX_LIST,
   COMBOBOX_WELL,
 } from "../../shadcn/combobox.js";
 import { OneLine } from "../one-line/one-line.js";
+import { TEXT_ELEMENT, TEXT_VARIANT, Text } from "../text/text.js";
 import { Tooltip } from "../tooltip/hint.js";
 import { type ComboboxField, useComboboxField } from "./use-combobox-field.js";
 
@@ -375,9 +376,14 @@ export function ComboboxList({
           // biome-ignore lint/a11y/useSemanticElements: a listbox's section is a group of options, which a <fieldset> of form controls is not.
           <div key={start} role="group" aria-label={group.label}>
             {headed ? (
-              <div className={cn("luke-combobox-heading", COMBOBOX_LABEL)} aria-hidden="true">
+              <Text
+                as={TEXT_ELEMENT.DIV}
+                variant={TEXT_VARIANT.GROUP}
+                className={cn("luke-combobox-heading", COMBOBOX_HEADING)}
+                aria-hidden="true"
+              >
                 {group.label}
-              </div>
+              </Text>
             ) : null}
             {rows}
           </div>

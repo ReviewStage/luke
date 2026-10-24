@@ -18,7 +18,7 @@ import { onRegistry } from "../testing/copy-feedback.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
 import { installScrollTo, wholeFileDrawn, wholeFileRoot } from "../testing/whole-file.js";
 import { WHOLE_TEXT } from "./file-tab-model.js";
-import { FileView, FileViewMenu } from "./file-view.js";
+import { FileView, FileViewBar, useFileViewEnd } from "./file-view.js";
 import { WholeFile } from "./whole-file.js";
 
 const PATH = "src/billing/plan.ts";
@@ -69,6 +69,16 @@ function drawnLines(container: HTMLElement) {
   };
 }
 
+/** A File tab's bar with the end its tab hands it. */
+function Bar(): React.JSX.Element {
+  const end = useFileViewEnd({
+    path: PATH,
+    ready: true,
+    readText: () => Promise.resolve({ kind: WHOLE_TEXT.READ, text: "" }),
+  });
+  return createElement(FileViewBar, { lead: null, github: undefined, ...end });
+}
+
 /** Draws the bar's end beside the look the tab's lines follow. */
 function mount(): HTMLElement {
   const container = document.body.appendChild(document.createElement("div"));
@@ -78,16 +88,7 @@ function mount(): HTMLElement {
     root.render(
       onRegistry(
         AtomRegistry.make(),
-        createElement(
-          "div",
-          null,
-          createElement(FileViewMenu, {
-            path: PATH,
-            ready: true,
-            readText: () => Promise.resolve({ kind: WHOLE_TEXT.READ, text: "" }),
-          }),
-          createElement(DrawnLines),
-        ),
+        createElement("div", null, createElement(Bar), createElement(DrawnLines)),
       ),
     ),
   );

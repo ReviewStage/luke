@@ -1,17 +1,9 @@
-import {
-  CopyIcon,
-  DownloadIcon,
-  EllipsisIcon,
-  IconButton,
-  STATUS_TONE,
-  Tooltip,
-  useMenu,
-} from "@luke/ui";
+import { CopyIcon, DownloadIcon, type PaneBarMenu, STATUS_TONE } from "@luke/ui";
 import { fileName } from "@luke/voice/code-pane-model";
 import { ClipboardCopyIcon, FolderTreeIcon } from "lucide-react";
 import { appPlatform } from "../app-platform.js";
 import { useCopyToast } from "../copy-feedback.js";
-import { ActionMenu, type MenuAction } from "../desktop/action-menu.js";
+import type { MenuAction } from "../desktop/action-menu.js";
 import { TOAST_HOLD, useToast } from "../toast.js";
 import { WHOLE_TEXT, type WholeText } from "./file-tab-model.js";
 
@@ -26,10 +18,10 @@ import { WHOLE_TEXT, type WholeText } from "./file-tab-model.js";
  * the file as it holds it, its long lines uncut, rather than the lines the
  * tab draws, which the service cuts.
  *
- * Every bar over lines hangs the same ⋯ with its own actions (`BarMenu`),
- * an agent's Files changed view and a page's source alike; how the lines
- * are drawn is set from the View settings button beside it
- * (`view-settings.tsx`), never from the ⋯.
+ * The File tab hands its bar this menu's definition (`useFileMenu`) for
+ * `PaneBar` to draw as its ⋯, and an agent's Files changed view hands its
+ * own (`useChangesMenu`); how the lines are drawn is set from the View
+ * settings button beside it (`view-settings.tsx`), never from the ⋯.
  */
 
 /** What the menu says where the file's text could not be read, or the service will not carry it whole. */
@@ -53,28 +45,6 @@ function copyPathAction(path: string, copy: (text: string, words: string) => voi
   };
 }
 
-/** The ⋯ at the end of a bar over lines: the actions given. */
-export function BarMenu({
-  label,
-  actions,
-}: {
-  /** What the ⋯ and its menu are called. */
-  label: string;
-  actions: readonly MenuAction[];
-}): React.JSX.Element {
-  const menu = useMenu(true);
-  return (
-    <>
-      <Tooltip label={label}>
-        <IconButton icon={<EllipsisIcon />} label={label} {...menu.trigger()} />
-      </Tooltip>
-      {menu.drawn === undefined ? null : (
-        <ActionMenu label={label} menu={menu.drawn} groups={[actions]} onClose={menu.close} />
-      )}
-    </>
-  );
-}
-
 /** Saves text where the system's save dialog chooses, as a file of the name given, the save or its failure said in a toast. */
 export function useSaveText(): (name: string, text: string) => Promise<void> {
   const show = useToast();
@@ -95,7 +65,7 @@ export function useSaveText(): (name: string, text: string) => Promise<void> {
       );
 }
 
-export function FileMenu({
+export function useFileMenu({
   path,
   ready,
   readText,
@@ -106,7 +76,7 @@ export function FileMenu({
   ready: boolean;
   /** The file's whole text, read a window at a time, or why it is not at hand. */
   readText: () => Promise<WholeText>;
-}): React.JSX.Element {
+}): PaneBarMenu {
   const copyWithToast = useCopyToast();
   const show = useToast();
   const saveText = useSaveText();
@@ -121,10 +91,10 @@ export function FileMenu({
       }
     });
 
-  return (
-    <BarMenu
-      label="File actions"
-      actions={[
+  return {
+    thing: "File",
+    groups: [
+      [
         {
           label: "Copy file name",
           icon: <CopyIcon />,
@@ -143,7 +113,7 @@ export function FileMenu({
           disabled: !ready,
           onSelect: () => withText((text) => saveText(name, text)),
         },
-      ]}
-    />
-  );
+      ],
+    ],
+  };
 }

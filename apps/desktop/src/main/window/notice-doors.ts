@@ -4,7 +4,7 @@ import {
   type AgentNoticeDoorsSurface,
   type ChatMessageToast,
   type FailedRunToast,
-  type InboxItemToast,
+  type InboxItemsToast,
   NOTICE_KIND,
 } from "@luke/host/agent-notices";
 import { NOTIFICATIONS_STATUS, type NotificationsStatus } from "@luke/voice/settings-controls";
@@ -46,7 +46,7 @@ export interface ElectronNoticeDoors extends AgentNoticeDoorsSurface {
  */
 export function electronNoticeDoors(dependencies: {
   toPanels: (end: AgentEndToast) => void;
-  inboxToPanels: (item: InboxItemToast) => void;
+  inboxToPanels: (opened: InboxItemsToast) => void;
   failedRunToPanels: (run: FailedRunToast) => void;
   chatToPanels: (message: ChatMessageToast) => void;
   /** macOS showed a notification, or refused one: whether notifications are on for Luke. */

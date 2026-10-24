@@ -128,6 +128,51 @@ describe("a stylesheet", () => {
     expect(sheetRules(css)).toEqual([STYLE_RULE.EASING, STYLE_RULE.EASING, STYLE_RULE.EASING]);
   });
 
+  it("refuses a literal width on a picker's, popover's or menu's box, outside @luke/ui, and passes a token, a share, and a glyph in one", () => {
+    const panel = "packages/panel/src/styles/tasks.css";
+    const css = `.mention-menu { width: 360px; max-width: 100%; }
+      .composer .skill-menu { min-width: 20rem; }
+      .settings-picker, .thing { max-width: 420px; }
+      .a-popover { width: calc(100% - 2 * var(--luke-space-8)); max-width: 100%; }
+      .b-menu { width: var(--luke-popover-width-regular); }
+      .issue-picker-detail > svg { width: 12px; }
+      .menubar { width: 200px; }
+      .automation-field { width: 200px; }`;
+    expect(sheetRules(css, panel)).toEqual([
+      STYLE_RULE.PICKER_WIDTH,
+      STYLE_RULE.PICKER_WIDTH,
+      STYLE_RULE.PICKER_WIDTH,
+    ]);
+    expect(sheetRules(css, "packages/ui/src/components/thing/thing.css")).toEqual([]);
+  });
+
+  it("refuses a pixel or rem literal on a space in the panel's sheets, and passes a role, a step, zero, auto and a hairline", () => {
+    const panel = "packages/panel/src/styles/tasks.css";
+    const css = `.a { padding: 8px 12px; margin-left: -5px; gap: 0.5rem; row-gap: 6px; }
+      .b { padding-block: max(0px, calc((14px - 1lh) / 2)); margin-inline-start: 4PX; }
+      .c { padding: var(--luke-row-inset) var(--luke-list-inset); gap: var(--luke-space-6); }
+      .d { margin: 0 auto; padding: 0px; gap: 0; margin-top: 1px; margin-bottom: -1px; }
+      .e { padding: var(--luke-card-inset, 12px); margin-left: 0.3em; width: 12px; top: 8px; }
+      .f { --people-gap: 8px; scroll-margin-top: 8px; }
+      :root { --column-inset: 12px; }`;
+    expect(sheetRules(css, panel)).toEqual([
+      STYLE_RULE.SPACING,
+      STYLE_RULE.SPACING,
+      STYLE_RULE.SPACING,
+      STYLE_RULE.SPACING,
+      STYLE_RULE.SPACING,
+      STYLE_RULE.SPACING,
+    ]);
+  });
+
+  it("reads the spacing rule in the panel's sheets alone", () => {
+    const css = ".a { padding: 8px; }";
+    expect(sheetRules(css, "packages/panel/src/styles/desktop.css")).toEqual([STYLE_RULE.SPACING]);
+    expect(sheetRules(css, "packages/panel/src/tasks/thing.css")).toEqual([]);
+    expect(sheetRules(css, "packages/ui/src/components/thing/thing.css")).toEqual([]);
+    expect(sheetRules(css, "apps/catalog/src/catalog.css")).toEqual([]);
+  });
+
   it("reads declarations through nesting, layers, strings, and comments", () => {
     const css = `@layer components {
       .a {

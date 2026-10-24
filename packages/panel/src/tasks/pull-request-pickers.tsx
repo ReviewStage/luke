@@ -8,7 +8,11 @@ import type {
   PullRequestLabel,
   PullRequestReviewTeam,
 } from "@luke/features/coding-agent-wire";
-import { PULL_REQUEST_ACTION, REVIEWER_KIND } from "@luke/features/pull-request-write-wire";
+import {
+  PULL_REQUEST_ACTION,
+  type PullRequestAction,
+  REVIEWER_KIND,
+} from "@luke/features/pull-request-write-wire";
 import {
   BUTTON_SIZE,
   BUTTON_VARIANT,
@@ -41,7 +45,9 @@ import type { PullRequestWrites } from "./pull-request-writes.js";
  * GitHub holds rather than what the press assumed; GitHub's refusal stands
  * on the tab's line under the bar. While a change is out, and until the
  * read after it lands, the pickers stand disabled, so none is chosen from
- * what the pull request held before. A pull request merged or closed asks no review, so only its
+ * what the pull request held before; the picker whose change is out is the
+ * one that shows busy, named for what it does, so a choice made in its menu
+ * is seen to be working. A pull request merged or closed asks no review, so only its
  * labels are offered.
  */
 
@@ -51,6 +57,8 @@ const PICKER_WORDS = {
   LABELS: "Edit labels",
   REVIEWER: "Reviewer",
   LABEL: "Label",
+  REVIEWERS_BUSY: "Updating reviewers",
+  LABELS_BUSY: "Updating labels",
   REVIEWERS_MENU: "Request a review",
   LABELS_MENU: "Labels",
   READING: "Reading the repository…",
@@ -59,6 +67,16 @@ const PICKER_WORDS = {
   NO_LABELS: "This repository has no labels.",
   TEAM: "Team",
 } as const;
+
+/** The changes each picker's menu sends, which show its button busy while one is out. */
+const REVIEWER_ACTIONS: readonly PullRequestAction[] = [
+  PULL_REQUEST_ACTION.REQUEST_REVIEW,
+  PULL_REQUEST_ACTION.REMOVE_REVIEW_REQUEST,
+];
+const LABEL_ACTIONS: readonly PullRequestAction[] = [
+  PULL_REQUEST_ACTION.ADD_LABEL,
+  PULL_REQUEST_ACTION.REMOVE_LABEL,
+];
 
 /** Where the read of what the pickers offer stands. */
 const OPTIONS = {
@@ -138,12 +156,17 @@ function PickerButton({
   label,
   word,
   disabled,
+  busy,
+  busyLabel,
   trigger,
 }: {
   label: string;
   /** What it adds, in a word: “Reviewer”, “Label”. */
   word: string;
   disabled: boolean;
+  /** Whether a change its menu sent is out, and what it is named meanwhile. */
+  busy: boolean;
+  busyLabel: string;
   trigger: {
     readonly "aria-haspopup": "menu";
     readonly "aria-expanded": boolean;
@@ -158,6 +181,8 @@ function PickerButton({
         variant={BUTTON_VARIANT.SUBTLE}
         size={BUTTON_SIZE.COMPACT}
         disabled={disabled}
+        busy={busy}
+        busyLabel={busyLabel}
         {...trigger}
       >
         {word}
@@ -175,6 +200,8 @@ function OptionsPicker({
   label,
   word,
   heading,
+  busyLabel,
+  busyOn,
   groups,
   options,
   writes,
@@ -184,18 +211,26 @@ function OptionsPicker({
   /** What it adds, in a word: “Reviewer”, “Label”. */
   word: string;
   heading: string;
+  /** What the button is named while a change of its own is out. */
+  busyLabel: string;
+  /** The changes its menu sends, any of which out makes its button busy. */
+  busyOn: readonly PullRequestAction[];
   groups: readonly (readonly MenuAction[])[];
   options: ReviewOptions;
   writes: PullRequestWrites;
   refreshing: boolean;
 }): React.JSX.Element {
   const menu = useMenu(true);
+  const busy = writes.pending !== undefined && busyOn.includes(writes.pending);
   return (
     <>
       <PickerButton
         label={label}
         word={word}
-        disabled={writes.pending !== undefined || refreshing}
+        // Note that a busy button takes no press of its own, so it is left to say so rather than drawn disabled.
+        disabled={(writes.pending !== undefined && !busy) || refreshing}
+        busy={busy}
+        busyLabel={busyLabel}
         trigger={{
           ...menu.trigger(dropBelowStart),
           onClick: (event: React.MouseEvent<HTMLElement>) => {
@@ -248,6 +283,8 @@ export function ReviewerPicker({
       label={PICKER_WORDS.REVIEWERS}
       word={PICKER_WORDS.REVIEWER}
       heading={PICKER_WORDS.REVIEWERS_MENU}
+      busyLabel={PICKER_WORDS.REVIEWERS_BUSY}
+      busyOn={REVIEWER_ACTIONS}
       groups={reviewerGroups(options.read, author, asked, askedTeams, writes, name)}
       options={options}
       writes={writes}
@@ -333,6 +370,8 @@ export function LabelPicker({
       label={PICKER_WORDS.LABELS}
       word={PICKER_WORDS.LABEL}
       heading={PICKER_WORDS.LABELS_MENU}
+      busyLabel={PICKER_WORDS.LABELS_BUSY}
+      busyOn={LABEL_ACTIONS}
       groups={[labelItems(options.read, on, writes)]}
       options={options}
       writes={writes}

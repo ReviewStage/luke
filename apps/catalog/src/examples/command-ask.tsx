@@ -7,7 +7,7 @@ import { CatalogSection } from "../section";
  * command-ask.tsx -- a command an agent asks to run on this Mac, put to the
  * developer over the window: a short one, and a long one that scrolls
  * inside its card, each opened from its button and put away by any of its
- * answers, Escape, or a press on the dimmed window.
+ * answers, Escape, or a press on the dimmed window, fading out as it goes.
  */
 
 const SHORT_COMMAND = "git -C ~/code/app status --short";
@@ -29,9 +29,13 @@ function Asking({ label, command }: { label: string; command: string }): React.J
       <Button variant={BUTTON_VARIANT.OUTLINE} aria-haspopup="dialog" onClick={() => setOpen(true)}>
         {label}
       </Button>
-      {open ? (
-        <CommandAsk command={command} onAllowOnce={close} onAllowAlways={close} onDeny={close} />
-      ) : null}
+      <CommandAsk
+        open={open}
+        command={command}
+        onAllowOnce={close}
+        onAllowAlways={close}
+        onDeny={close}
+      />
     </>
   );
 }

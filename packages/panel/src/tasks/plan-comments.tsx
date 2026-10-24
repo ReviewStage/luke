@@ -17,6 +17,7 @@ import type { PlanSection } from "@luke/features/plan-document";
 import { pasteCutWords } from "@luke/features/words";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
+  ANNOUNCE,
   BUTTON_SIZE,
   BUTTON_VARIANT,
   Button,
@@ -33,27 +34,30 @@ import {
   CardPress,
   type CardShadow,
   COMPOSER_LOOK,
+  CONFIRM_LOSS,
+  Comment,
+  type CommentAuthor,
   CommentsIcon,
+  ComposerFoot,
   ComposerFrame,
   ConfirmDialog,
-  DIALOG_TONE,
   type DialogQuestion,
-  EllipsisIcon,
   EmptyState,
   ERROR_STATE_PLACEMENT,
   ErrorState,
   Fill,
   IconButton,
-  LengthCounter,
   LINE_BUTTON_LOOK,
   LineButton,
   MENU_SURFACE_FLOW,
   MenuSurface,
+  MoreButton,
+  moreLabel,
+  PaneBar,
   SCROLL_FADE,
   ScrollArea,
   Skeleton,
   SkeletonRegion,
-  SUBMIT_STATE,
   TEXT_AREA_GROW_LIMIT,
   TEXT_AREA_LOOK,
   TEXT_ELEMENT,
@@ -67,6 +71,7 @@ import {
   useConfirmDialog,
   useMenu,
   useMinute,
+  usePressAway,
   VisuallyHidden,
 } from "@luke/ui";
 import { type Actor, LUKE_ACTOR } from "@luke/ui/actor-model";
@@ -80,6 +85,7 @@ import {
 } from "@luke/ui/plan-comments";
 import { visibleViewport } from "@luke/ui/visible-viewport";
 import { ACTION_RESULT_STATUS } from "@luke/wire";
+import { Schema } from "effect";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import {
   CheckIcon,
@@ -101,7 +107,7 @@ import {
   useRef,
   useState,
 } from "react";
-import { ActorMark, ActorRef } from "../actor-ref.js";
+import { ActorMark, ActorRef, commentAuthor } from "../actor-ref.js";
 import { useAppCommand } from "../app-commands.js";
 import { useSideBundles } from "../bundle-loader.js";
 import { coarsePointerNow, FINGER_SELECTION_GAP } from "../coarse-pointer.js";
@@ -125,7 +131,10 @@ import {
   type PlanEditorHandle,
   type PlanEditorModule,
 } from "../plan-editor/contract.js";
-import { useFileDrop } from "../use-file-drop.js";
+import { useBusyPress } from "../settings/busy-press.js";
+import { useAnnounceShown } from "../use-announce-shown.js";
+import { useAttachedFiles } from "../use-attached-files.js";
+import { keptKey, useKept } from "../use-kept.js";
 import { AgentActorRef, agentSubject, NOTHING_HELD } from "./agent-ref.js";
 import { AttachFilesButton } from "./attach-files-button.js";
 import { AttachedFileChips, attachmentChips } from "./attached-file-chips.js";
@@ -134,7 +143,7 @@ import { DictateButton, DictationStrip } from "./dictation-strip.js";
 import type { EditAgents } from "./edit-ref.js";
 import { MentionNodeChip, pastedMentionNode } from "./mention-chip.js";
 import { MENTION_MENU_SIDE, useMentionPicker } from "./mention-picker.js";
-import { CommentFiles, useCommentAttaching } from "./plan-comment-files.js";
+import { CommentFiles } from "./plan-comment-files.js";
 import { EDITOR_ROOM_CLASS } from "./plan-document-editor.js";
 import { type TaskMentionsValue, useMentionLink, useTaskMentions } from "./task-mentions.js";
 import { DICTATION_PHASE, type DictationControl, useDictation } from "./use-dictation.js";
@@ -215,12 +224,15 @@ const COMMENT_WORDS = {
   ADD: "Add a comment",
   REPLY: "Reply",
   RESOLVE: "Resolve",
+  RESOLVING: "Resolving",
   REOPEN: "Reopen",
-  MORE: "More",
+  REOPENING: "Reopening",
+  THING: "Comment",
   EDIT: "Edit",
   DELETE: "Delete",
   DELETE_THREAD: "Delete thread",
   SAVE: "Save",
+  SAVING: "Saving",
   CANCEL: "Cancel",
   GONE: "Original content deleted",
   RESOLVED_IT: "resolved this",
@@ -228,6 +240,7 @@ const COMMENT_WORDS = {
   EDITED: "edited",
   OPEN_THREAD: "Open thread",
   SHOW_WORDS: "Show in the plan",
+  SENDING: "Sending",
 } as const;
 
 /** Which thread is open, and the one being started, shared by the marks that open them and the margin that draws them. */
@@ -254,16 +267,15 @@ export function useCommentFocus(): CommentFocus {
   return useContext(CommentFocusContext);
 }
 
-/** Who wrote an entry, as every place naming an actor draws them. */
-function WriterRef({
-  writer,
-  agents,
-}: {
-  writer: PlanCommentWriter;
-  agents: EditAgents | undefined;
-}): ReactNode {
+/** Who wrote an entry as a comment draws them: their face, and their name as every place naming an actor draws it. */
+function useWriter(
+  writer: PlanCommentWriter,
+  agents: EditAgents | undefined,
+): { author: CommentAuthor; nameRef: ReactNode } {
   const person = usePerson(writer.by);
-  if (writer.actor === PLAN_COMMENT_ACTOR.LUKE) return <ActorRef actor={LUKE_ACTOR} />;
+  if (writer.actor === PLAN_COMMENT_ACTOR.LUKE) {
+    return { author: commentAuthor(LUKE_ACTOR), nameRef: <ActorRef actor={LUKE_ACTOR} nameOnly /> };
+  }
   if (
     writer.actor === PLAN_COMMENT_ACTOR.AGENT &&
     writer.agentId !== undefined &&
@@ -271,15 +283,61 @@ function WriterRef({
   ) {
     const { agentId } = writer;
     const subject = agentSubject(agents.control, agentId, NOTHING_HELD, false);
-    return (
-      <AgentActorRef
-        subject={subject}
-        models={agents.control.models}
-        onOpen={() => agents.onOpen?.(agentId)}
-      />
-    );
+    return {
+      author: commentAuthor(subject.tile),
+      nameRef: (
+        <AgentActorRef
+          subject={subject}
+          models={agents.control.models}
+          onOpen={() => agents.onOpen?.(agentId)}
+          nameOnly
+        />
+      ),
+    };
   }
-  return <ActorRef actor={person} />;
+  return { author: commentAuthor(person), nameRef: <ActorRef actor={person} nameOnly /> };
+}
+
+/** One entry of a thread as a comment (`Comment`): its writer's face and name, when it was written, what stands at the head's end, then its words. */
+function WrittenComment({
+  writer,
+  agents,
+  said,
+  at,
+  now,
+  trailing,
+  children,
+}: {
+  writer: PlanCommentWriter;
+  agents: EditAgents | undefined;
+  /** What the writer did, said after their name, for a line of what happened to a thread. */
+  said?: string;
+  at: number;
+  now: number;
+  trailing?: ReactNode;
+  children?: ReactNode;
+}): React.JSX.Element {
+  const { author, nameRef } = useWriter(writer, agents);
+  return (
+    <Comment
+      author={author}
+      nameRef={
+        said === undefined ? (
+          nameRef
+        ) : (
+          <>
+            {nameRef}
+            <span className="comment-event-words">{` ${said}`}</span>
+          </>
+        )
+      }
+      at={at}
+      now={now}
+      trailing={trailing}
+    >
+      {children}
+    </Comment>
+  );
 }
 
 /** The mark of who wrote an entry, alone, for a thread at rest's faces. */
@@ -324,17 +382,17 @@ function EventLine({
 }): React.JSX.Element {
   return (
     <div className="comment-event" data-kind={entry.kind}>
-      <div className="comment-head">
-        <WriterRef writer={entry.writer} agents={agents} />
-        <span className="comment-event-words">
-          {` ${entry.kind === PLAN_COMMENT_ENTRY.RESOLVED ? COMMENT_WORDS.RESOLVED_IT : COMMENT_WORDS.REOPENED_IT}`}
-        </span>
-        <span className="comment-head-end">
-          <span className="comment-time">
-            <Time at={entry.at} now={now} />
-          </span>
-        </span>
-      </div>
+      <WrittenComment
+        writer={entry.writer}
+        agents={agents}
+        said={
+          entry.kind === PLAN_COMMENT_ENTRY.RESOLVED
+            ? COMMENT_WORDS.RESOLVED_IT
+            : COMMENT_WORDS.REOPENED_IT
+        }
+        at={entry.at}
+        now={now}
+      />
     </div>
   );
 }
@@ -351,7 +409,7 @@ const DELETE_QUESTION: DialogQuestion = {
   title: "Delete this comment?",
   verb: "Delete",
   running: "Deleting…",
-  tone: DIALOG_TONE.DANGER,
+  loss: CONFIRM_LOSS.IRREVERSIBLE,
 };
 
 const DELETE_THREAD_QUESTION: DialogQuestion = {
@@ -359,7 +417,7 @@ const DELETE_THREAD_QUESTION: DialogQuestion = {
   body: "Every comment in it is deleted with it.",
   verb: "Delete thread",
   running: "Deleting…",
-  tone: DIALOG_TONE.DANGER,
+  loss: CONFIRM_LOSS.IRREVERSIBLE,
 };
 
 /** What a delete that did not land says. */
@@ -449,6 +507,13 @@ function CommentEntry({
       : []),
   ];
   const settle = first && openThread(thread);
+  // Note that the check is busy from its press until the service answers, so a slow answer is seen working, and a refusal is the thread's note to say.
+  const settling = useBusyPress(() =>
+    doors.control.act(thread.id, {
+      action: settle ? PLAN_COMMENT_ACTION.RESOLVE : PLAN_COMMENT_ACTION.REOPEN,
+    }),
+  );
+  const [saving, setSaving] = useState(false);
   // The reader's own words take a date changed from its chip, as their editor would, saved as an edit of the comment.
   const openDate = useWordsDatePicker();
   const latestWords = useRef(entry.words);
@@ -488,91 +553,98 @@ function CommentEntry({
       deleting.ask();
       return;
     }
+    if (saving) return;
+    setSaving(true);
     void doors.control
       .act(thread.id, { action: PLAN_COMMENT_ACTION.EDIT, entry: entry.id, words })
       .then((done) => {
         if (!done) return;
         setEditing(undefined);
         edited.update(() => EMPTY_DRAFT);
-      });
+      })
+      .finally(() => setSaving(false));
   };
   return (
     <div className="comment-entry" data-entry={entry.id}>
-      {/* Note that the time and the tools share the row's end, the tools in the time's place under the pointer, so a long name gives way to neither and nothing stands over it. */}
-      <div className="comment-head">
-        <WriterRef writer={entry.writer} agents={doors.agents} />
-        <span className="comment-head-end">
-          <span className="comment-time">
-            <Time at={entry.at} now={now} />
-            {entry.editedAt === undefined ? null : ` · ${COMMENT_WORDS.EDITED}`}
-          </span>
-          <div className="comment-tools">
-            {first ? (
-              <Tooltip label={settle ? COMMENT_WORDS.RESOLVE : COMMENT_WORDS.REOPEN}>
-                <IconButton
-                  size={BUTTON_SIZE.COMPACT}
-                  icon={settle ? <CheckIcon /> : <RotateCcwIcon />}
-                  label={settle ? COMMENT_WORDS.RESOLVE : COMMENT_WORDS.REOPEN}
-                  onClick={() =>
-                    void doors.control.act(thread.id, {
-                      action: settle ? PLAN_COMMENT_ACTION.RESOLVE : PLAN_COMMENT_ACTION.REOPEN,
-                    })
-                  }
-                />
-              </Tooltip>
-            ) : null}
-            <Tooltip label={COMMENT_WORDS.MORE}>
-              <IconButton
-                size={BUTTON_SIZE.COMPACT}
-                icon={<EllipsisIcon />}
-                label={COMMENT_WORDS.MORE}
-                {...trigger}
-              />
-            </Tooltip>
-            {menu.drawn === undefined ? null : (
-              <ActionMenu
-                label={COMMENT_WORDS.MORE}
-                menu={menu.drawn}
-                groups={[items]}
-                onClose={menu.close}
-              />
+      {/* Note that the tools stand at the head's end, shown under the pointer or the keyboard, so a long name gives way to them and nothing stands over it. */}
+      <WrittenComment
+        writer={entry.writer}
+        agents={doors.agents}
+        at={entry.at}
+        now={now}
+        trailing={
+          <>
+            {entry.editedAt === undefined ? null : (
+              <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED} as={TEXT_ELEMENT.SPAN}>
+                {COMMENT_WORDS.EDITED}
+              </Text>
             )}
-          </div>
-          <ConfirmDialog
-            confirm={deleting}
-            question={first ? DELETE_THREAD_QUESTION : DELETE_QUESTION}
-          />
-        </span>
-      </div>
-      {lead}
-      {editing === undefined ? (
-        <>
-          {/* Note that a comment's files stand over its words, as the field held them and as every message's do. */}
-          {entry.files === undefined ? null : (
-            <CommentFiles planId={doors.control.planId} files={entry.files} />
-          )}
-          <WordsDatesContext.Provider value={dates}>
-            <CommentWords words={entry.words ?? ""} />
-          </WordsDatesContext.Provider>
-        </>
-      ) : (
-        <ComposerFrame look={COMPOSER_LOOK.FIELD} className="comment-field comment-editing">
-          <CommentText
-            value={editing}
-            label={COMMENT_WORDS.EDIT}
-            onChange={write}
-            onSubmit={save}
-            onCancel={() => setEditing(undefined)}
-            autoFocus
-          />
-          <div className="comment-field-foot">
-            <Button onClick={() => setEditing(undefined)}>{COMMENT_WORDS.CANCEL}</Button>
-            <Button variant={BUTTON_VARIANT.PRIMARY} onClick={save}>
-              {COMMENT_WORDS.SAVE}
-            </Button>
-          </div>
-        </ComposerFrame>
-      )}
+            <div className="comment-tools">
+              {first ? (
+                <Tooltip label={settle ? COMMENT_WORDS.RESOLVE : COMMENT_WORDS.REOPEN}>
+                  <IconButton
+                    size={BUTTON_SIZE.COMPACT}
+                    icon={settle ? <CheckIcon /> : <RotateCcwIcon />}
+                    label={settle ? COMMENT_WORDS.RESOLVE : COMMENT_WORDS.REOPEN}
+                    busy={settling.busy}
+                    busyLabel={settle ? COMMENT_WORDS.RESOLVING : COMMENT_WORDS.REOPENING}
+                    onClick={settling.onPress}
+                  />
+                </Tooltip>
+              ) : null}
+              <MoreButton thing={COMMENT_WORDS.THING} size={BUTTON_SIZE.COMPACT} {...trigger} />
+              {menu.drawn === undefined ? null : (
+                <ActionMenu
+                  label={moreLabel(COMMENT_WORDS.THING)}
+                  menu={menu.drawn}
+                  groups={[items]}
+                  onClose={menu.close}
+                />
+              )}
+            </div>
+            <ConfirmDialog
+              open
+              confirm={deleting}
+              question={first ? DELETE_THREAD_QUESTION : DELETE_QUESTION}
+            />
+          </>
+        }
+      >
+        {lead}
+        {editing === undefined ? (
+          <>
+            {/* Note that a comment's files stand over its words, as the field held them and as every message's do. */}
+            {entry.files === undefined ? null : (
+              <CommentFiles planId={doors.control.planId} files={entry.files} />
+            )}
+            <WordsDatesContext.Provider value={dates}>
+              <CommentWords words={entry.words ?? ""} />
+            </WordsDatesContext.Provider>
+          </>
+        ) : (
+          <ComposerFrame look={COMPOSER_LOOK.FIELD} className="comment-field comment-editing">
+            <CommentText
+              value={editing}
+              label={COMMENT_WORDS.EDIT}
+              onChange={write}
+              onSubmit={save}
+              onCancel={() => setEditing(undefined)}
+              autoFocus
+            />
+            <div className="comment-field-foot">
+              <Button onClick={() => setEditing(undefined)}>{COMMENT_WORDS.CANCEL}</Button>
+              <Button
+                variant={BUTTON_VARIANT.PRIMARY}
+                busy={saving}
+                busyLabel={COMMENT_WORDS.SAVING}
+                onClick={save}
+              >
+                {COMMENT_WORDS.SAVE}
+              </Button>
+            </div>
+          </ComposerFrame>
+        )}
+      </WrittenComment>
     </div>
   );
 }
@@ -780,8 +852,9 @@ function ReplyField({
     setCut(false);
     update((was) => ({ ...was, text }));
   };
-  const files = useCommentAttaching();
-  const fileDrop = useFileDrop((dropped) => files.attach(Array.from(dropped)));
+  // Why the last files handed to the field did not all come; nothing once they did.
+  const [refusal, setRefusal] = useState<string | undefined>(undefined);
+  const files = useAttachedFiles({ onRefusal: setRefusal });
   // The words sent and not yet answered, which the field holds as a draft while it stands empty, so a send that fails finds them.
   const [inFlight, setInFlight] = useState("");
   const attempt = useRef<
@@ -789,9 +862,10 @@ function ReplyField({
   >(undefined);
   // Note that a dictation's note is said before the cut paste's, and only the agent box's editor cuts a paste.
   const said = heard ?? (cut ? pasteCutWords(PLAN_COMMENT_BOUNDS.MAX_WORDS_CHARS) : undefined);
+  const note = refusal ?? said;
   const send = () => {
     const trimmed = words.trim();
-    if (trimmed === "" || sending || files.reading > 0) return;
+    if (trimmed === "" || sending || files.reading) return;
     const { attachments } = files;
     const was = attempt.current;
     const same = was?.words === trimmed && sameFiles(was.attachments, attachments);
@@ -816,17 +890,13 @@ function ReplyField({
       look={variant === REPLY_VARIANT.FIRST ? COMPOSER_LOOK.BARE : COMPOSER_LOOK.CARD}
       className="comment-field"
       data-variant={variant}
-      dropping={fileDrop.dropping}
+      dropping={files.drop.dropping}
       // Note that the words in flight, held files and files still being read, and a dictation whose words land once heard, hold the field, so a press away keeps a thread being started; typed words are kept as its draft and hold nothing.
       data-held={
-        inFlight.trim() !== "" || files.attachments.length > 0 || files.reading > 0 || dictating
+        inFlight.trim() !== "" || files.attachments.length > 0 || files.reading || dictating
       }
-      {...fileDrop.target}
+      {...files.drop.target}
     >
-      <AttachedFileChips
-        files={attachmentChips(files.attachments)}
-        onRemove={sending ? undefined : files.remove}
-      />
       <CommentText
         value={words}
         label={label}
@@ -843,38 +913,32 @@ function ReplyField({
           setCut(true);
         }}
       />
-      {said === undefined ? null : (
-        <div className="comment-note" role="alert">
-          {said}
-        </div>
-      )}
-      {files.refusal === undefined ? null : (
-        <div className="comment-note" role="alert">
-          {files.refusal}
-        </div>
-      )}
-      <div className="comment-field-foot">
-        {dictating ? (
-          <DictationStrip dictation={dictation} />
-        ) : (
-          <>
-            <AttachFilesButton disabled={sending} onFiles={files.attach} />
-            <span className="comment-field-tools">
-              {dictates ? (
-                <LengthCounter length={words.length} limit={PLAN_COMMENT_BOUNDS.MAX_WORDS_CHARS} />
-              ) : null}
-              {dictates ? <DictateButton dictation={dictation} disabled={sending} /> : null}
-              <IconButton
-                submit={sending ? SUBMIT_STATE.SUBMITTED : SUBMIT_STATE.READY}
-                variant={BUTTON_VARIANT.INK}
-                label={label === COMMENT_WORDS.ADD ? COMMENT_WORDS.COMMENT : COMMENT_WORDS.REPLY}
-                disabled={words.trim() === "" || sending || files.reading > 0}
-                onClick={send}
-              />
-            </span>
-          </>
-        )}
-      </div>
+      <ComposerFoot
+        files={
+          <AttachedFileChips
+            files={attachmentChips(files.attachments)}
+            onRemove={sending ? undefined : files.remove}
+          />
+        }
+        tools={<AttachFilesButton disabled={sending} onFiles={files.attach} />}
+        counter={
+          dictates
+            ? { length: words.length, limit: PLAN_COMMENT_BOUNDS.MAX_WORDS_CHARS }
+            : undefined
+        }
+        actions={dictates ? <DictateButton dictation={dictation} disabled={sending} /> : undefined}
+        strip={dictating ? <DictationStrip dictation={dictation} /> : undefined}
+        send={{
+          label: label === COMMENT_WORDS.ADD ? COMMENT_WORDS.COMMENT : COMMENT_WORDS.REPLY,
+          empty: words.trim() === "",
+          held: files.reading,
+          onSend: send,
+          busy: sending,
+          busyLabel: COMMENT_WORDS.SENDING,
+        }}
+        // Note that a file refused is said over a dictation's note or a cut paste, as the agent box says it.
+        note={note === undefined ? undefined : { words: note }}
+      />
     </ComposerFrame>
   );
 }
@@ -1044,6 +1108,7 @@ function ThreadCard({
   const [first] = comments;
   const gone = thread.anchor === undefined;
   const note = doors.control.notes.get(thread.id);
+  useAnnounceShown(ANNOUNCE.ALERT, note ?? "");
   const head = (
     <>
       {gone ? <GoneQuote thread={thread} onShowWords={onShowWords} /> : null}
@@ -1065,19 +1130,13 @@ function ThreadCard({
         data-thread={thread.id}
       >
         {head}
-        {first === undefined ? null : (
-          <div className="comment-head">
-            <WriterRef writer={first.writer} agents={doors.agents} />
-            <span className="comment-time">
-              <Time at={first.at} now={now} />
-            </span>
-          </div>
-        )}
         {/* Note that the words are drawn as they are open, their chips with them, clamped; the card's press opens the thread. */}
         {first === undefined ? null : (
-          <div className="comment-clamp">
-            <CommentWords words={first.words ?? ""} />
-          </div>
+          <WrittenComment writer={first.writer} agents={doors.agents} at={first.at} now={now}>
+            <div className="comment-clamp">
+              <CommentWords words={first.words ?? ""} />
+            </div>
+          </WrittenComment>
         )}
         {/* Note that the whole card at rest is one press that opens it, but for a control of its own inside it, an agent's name say, and a mention's chip opens it as it takes its own press; its button is the keyboard's way in, the replies drawn on it, or its name alone where there are none. */}
         <CardPress
@@ -1125,11 +1184,7 @@ function ThreadCard({
           <EventLine key={entry.id} entry={entry} agents={doors.agents} now={now} />
         ),
       )}
-      {note === undefined ? null : (
-        <div className="comment-note" role="alert">
-          {note}
-        </div>
-      )}
+      {note === undefined ? null : <div className="comment-note">{note}</div>}
       {thread.status === PLAN_COMMENT_STATUS.OPEN ? (
         <ReplyField
           label={COMMENT_WORDS.REPLY}
@@ -1176,13 +1231,10 @@ function PendingCard({
 }): React.JSX.Element {
   const [sending, setSending] = useState(false);
   const [note, setNote] = useState<string | undefined>(undefined);
+  useAnnounceShown(ANNOUNCE.ALERT, note ?? "");
   return (
     <CommentCard place={THREAD_PLACE.MARGIN} open data-thread={PENDING_THREAD}>
-      {note === undefined ? null : (
-        <div className="comment-note" role="alert">
-          {note}
-        </div>
-      )}
+      {note === undefined ? null : <div className="comment-note">{note}</div>}
       <ReplyField
         label={COMMENT_WORDS.ADD}
         place={{
@@ -1359,6 +1411,9 @@ const KEEPS_THREAD_OPEN = [
   '[role="dialog"]',
   '[role="alertdialog"]',
 ].join(", ");
+
+/** The thread's cards are several boxes, which `KEEPS_THREAD_OPEN` names, so its press away stands by no layer of its own. */
+const NO_LAYER: RefObject<HTMLElement | null> = { current: null };
 
 export function PlanCommentLayer({
   body,
@@ -1734,21 +1789,22 @@ export function PlanCommentLayer({
     return () => editorOpenThread(undefined);
   }, [editorActive]);
   // A press anywhere but the thread, its words, or what it opened over the page closes it, its words kept as its draft; a thread being started goes too, but while its words are sent or it holds files or a dictation, which no draft keeps.
-  useEffect(() => {
-    if (active === undefined) return;
-    const away = (event: PointerEvent) => {
-      if (event.target instanceof Element && event.target.closest(KEEPS_THREAD_OPEN) !== null) {
-        return;
-      }
-      if (active === PENDING_THREAD) {
-        if (cards.current.get(PENDING_THREAD)?.querySelector('[data-held="true"]')) return;
-        setPending(undefined);
-      }
-      onActive(undefined);
-    };
-    document.addEventListener("pointerdown", away);
-    return () => document.removeEventListener("pointerdown", away);
-  }, [active, onActive, setPending]);
+  usePressAway(NO_LAYER, () => undefined, {
+    onPressAway:
+      active === undefined
+        ? undefined
+        : () => {
+            if (
+              active === PENDING_THREAD &&
+              cards.current.get(PENDING_THREAD)?.querySelector('[data-held="true"]')
+            ) {
+              return;
+            }
+            if (active === PENDING_THREAD) setPending(undefined);
+            onActive(undefined);
+          },
+    holds: (target) => target instanceof Element && target.closest(KEEPS_THREAD_OPEN) !== null,
+  });
   const slotStyle = (id: string) => ({ transform: `translateY(${tops.get(id) ?? 0}px)` });
   const close = () => {
     onActive(undefined);
@@ -1976,6 +2032,14 @@ const COMMENTS_FILTER = { OPEN: "open", RESOLVED: "resolved" } as const;
 
 type CommentsFilter = (typeof COMMENTS_FILTER)[keyof typeof COMMENTS_FILTER];
 
+/** The Comments tab's filter, kept on this Mac, one for every plan. */
+const KEPT = {
+  FILTER: keptKey<CommentsFilter>(
+    "luke.commentsFilter",
+    Schema.fromJsonString(Schema.Literals(Object.values(COMMENTS_FILTER))),
+  ),
+} as const;
+
 /** What the Comments tab's head names the threads it lists, by its filter. */
 const COMMENTS_FILTER_WORDS = {
   [COMMENTS_FILTER.OPEN]: "Open",
@@ -2061,7 +2125,7 @@ export function PlanCommentsTab({
 }): React.JSX.Element | null {
   const control = usePlanCommentsControlOrUndefined();
   const { reveal, revealed } = useCommentFocus();
-  const [filter, setFilter] = useState<CommentsFilter>(COMMENTS_FILTER.OPEN);
+  const [filter, setFilter] = useKept(KEPT.FILTER, COMMENTS_FILTER.OPEN);
   // A resolved thread asked to be shown, as a link to it asks, is listed here under Resolved, the plan holding no card of it.
   const shownAsk = useRef<number | undefined>(undefined);
   const resolvedAsked =
@@ -2095,24 +2159,20 @@ export function PlanCommentsTab({
   return (
     <Fill className="comments-tab">
       <WordsDatePickerRoom>
-        <div className="comments-head">
-          <span className="comments-head-title">
-            <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
-              {COMMENTS_FILTER_WORDS[filter]}
-            </Text>
-            <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
-              {listed.length}
-            </Text>
-          </span>
-          <ResolvedOnly
-            shown={filter === COMMENTS_FILTER.RESOLVED}
-            onShown={(shown) => {
-              setFilter(shown ? COMMENTS_FILTER.RESOLVED : COMMENTS_FILTER.OPEN);
-              // Note that the other list starts at its top, not where the one it replaces was scrolled to.
-              if (list.current !== null) list.current.scrollTop = 0;
-            }}
-          />
-        </div>
+        <PaneBar
+          title={COMMENTS_FILTER_WORDS[filter]}
+          detail={listed.length}
+          actions={
+            <ResolvedOnly
+              shown={filter === COMMENTS_FILTER.RESOLVED}
+              onShown={(shown) => {
+                setFilter(shown ? COMMENTS_FILTER.RESOLVED : COMMENTS_FILTER.OPEN);
+                // Note that the other list starts at its top, not where the one it replaces was scrolled to.
+                if (list.current !== null) list.current.scrollTop = 0;
+              }}
+            />
+          }
+        />
         <ScrollArea ref={list} fade={SCROLL_FADE.BOTH}>
           <div
             className="comments-list"

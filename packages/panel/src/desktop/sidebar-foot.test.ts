@@ -357,7 +357,10 @@ test("a Sign out that fails keeps the dialog up saying so, and the account still
 
   await act(async () => dialogButton("Sign out").click());
 
-  assert.match(dialog()?.querySelector('[role="alert"]')?.textContent ?? "", /could not log out/u);
+  assert.match(
+    dialog()?.querySelector('[data-slot="field-error"]:not(:empty)')?.textContent ?? "",
+    /could not log out/u,
+  );
 });
 
 test("signed out, the account says so and its menu names no one and offers no Sign out", async () => {
@@ -440,7 +443,7 @@ test("the Mac offline says so in the foot, and nothing does while it is online",
     await act(async () => {
       for (let tick = 0; tick < 8; tick += 1) await Promise.resolve();
     });
-    const mark = document.querySelector('[role="status"][aria-label="Offline"]');
+    const mark = document.querySelector('.offline-mark[aria-label="Offline"]');
     const words = mark?.textContent ?? null;
     for (const root of roots.splice(0)) act(() => root.unmount());
     return words;

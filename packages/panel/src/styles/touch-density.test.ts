@@ -243,10 +243,7 @@ function smallTargets(): ReadonlyMap<string, Element> {
     [
       "a toolbar's glyph button",
       buttonIn(
-        drawn(
-          createElement(IconButton, { icon: "+", label: "New tab" }),
-          "desktop-toolbar-actions",
-        ),
+        drawn(createElement(IconButton, { icon: "+", label: "New tab" }), "luke-toolbar-actions"),
       ),
     ],
   ]);
@@ -436,8 +433,8 @@ function pointerOnlyPresses(): ReadonlyMap<string, HTMLElement> {
     [
       "a fold's chevron",
       built(
-        '<button class="luke-nav-item" aria-expanded="false"><span class="luke-nav-item-glyph"><span class="luke-nav-item-icon"></span><span class="luke-nav-item-chevron"></span></span></button>',
-        ".luke-nav-item-chevron",
+        '<button class="luke-group-header-lead" aria-expanded="false"><span class="luke-group-header-glyph"><span class="luke-group-header-icon"></span><span class="luke-group-header-chevron"></span></span></button>',
+        ".luke-group-header-chevron",
       ),
     ],
     [
@@ -549,7 +546,6 @@ function providerButton(): HTMLButtonElement {
         provider: MARK_PROVIDER.GITHUB,
         name: "GitHub",
         size: PROVIDER_BUTTON_SIZE.GATE,
-        pendingLabel: "Opening GitHub",
         onPress: () => undefined,
       }),
     ),
@@ -562,7 +558,7 @@ function threadPresses(): ReadonlyMap<string, HTMLElement> {
     [
       "a quiet message's Reply",
       built(
-        '<div class="chat-byline"><span class="chat-byline-action"><button class="luke-text-button">Reply</button></span></div>',
+        '<div class="luke-comment-head"><span class="luke-comment-trailing"><span class="chat-byline-action"><button class="luke-text-button">Reply</button></span></span></div>',
         "button",
       ),
     ],

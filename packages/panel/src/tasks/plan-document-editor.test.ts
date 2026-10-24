@@ -285,8 +285,7 @@ test("the open text wears every class its drawn sections wear, so a list keeps i
     document: { body: "- reproduce\n  - twice\n- fix\n", assumptions: [] },
   });
   const drawn = container.querySelector<HTMLElement>(".luke-editable-block .plan-unit");
-  // Note that a section's arrival light is left out, since it comes and goes with the reveal's frames and moves nothing.
-  const worn = [...(drawn?.classList ?? [])].filter((name) => name !== "plan-fresh");
+  const worn = [...(drawn?.classList ?? [])];
   assert.ok(worn.includes("plan-unit"), "the plan's words are drawn");
 
   act(() => {
@@ -939,6 +938,26 @@ test("a title typed in is unsaved work until its rename answers", async () => {
   await settle();
   assert.deepEqual(renamed, ["Beta"]);
   assert.equal(unsavedWords(container), false);
+});
+
+test("the plan's title is the page's one h1, and editing it in place still renames the plan", async () => {
+  const { container, renamed } = mount();
+
+  const headings = container.querySelectorAll("h1");
+  assert.equal(headings.length, 1, "the plan page names itself once");
+  assert.equal(headings[0]?.textContent, DOCUMENT_NAME);
+  assert.ok(headings[0]?.contains(title(container)), "the title edited is the h1's own words");
+
+  act(() => {
+    title(container).focus();
+    title(container).textContent = "Beta";
+    title(container).dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  act(() => title(container).blur());
+  await settle();
+
+  assert.deepEqual(renamed, ["Beta"]);
+  assert.equal(container.querySelector("h1")?.textContent, "Beta");
 });
 
 test("a conflict over a teammate's words names them on its note and its button, which takes their words and closes the editor", async () => {

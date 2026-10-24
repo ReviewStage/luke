@@ -10,7 +10,13 @@ import type {
 import { useCallback, useRef } from "react";
 import { cn } from "../../cn.js";
 import { ChevronDownIcon } from "../../face/glyphs.js";
-import { BUTTON_VARIANT, Button, type ButtonVariant, IconButton } from "../button/button.js";
+import {
+  BUTTON_VARIANT,
+  type BusyProps,
+  Button,
+  type ButtonVariant,
+  IconButton,
+} from "../button/button.js";
 import { Tooltip } from "../tooltip/hint.js";
 
 /**
@@ -23,8 +29,9 @@ import { Tooltip } from "../tooltip/hint.js";
  * look draws around and between them, and each keeps its own hover.
  *
  * Unavailable, both halves say so and refuse their press, kept in the tab
- * order so a hint over the main part can say why. Busy, the main part
- * stands under its ring as a busy Button does while the chevron still
+ * order so a hint over the main part can say why. Busy (`busy` and the
+ * `busyLabel` it is named by, a Button's own two), the main part refuses its
+ * press and stands under its ring as a busy Button does while the chevron still
  * opens the options, and one whose press `succeeded` lands on a check as a
  * busy Button's does. A toolbar short of room folds the main part's words
  * away with `--luke-fold: folded`, as it folds a FoldingButton's, leaving
@@ -114,12 +121,13 @@ export function SplitButton({
   onClick,
   disabled,
   busy,
+  busyLabel,
   succeeded,
   hint: Hint = Tooltip,
   hintLabel,
   menu,
   onMainPress,
-}: {
+}: BusyProps & {
   variant?: ButtonVariant | undefined;
   /** The glyph before the main part's words, which stands alone where they are folded. */
   icon?: ReactNode;
@@ -130,8 +138,6 @@ export function SplitButton({
   onClick?: ((event: MouseEvent<HTMLButtonElement>) => void) | undefined;
   /** Whether both halves are unavailable: they refuse their press, and stay reachable so a hint can say why. */
   disabled?: boolean | undefined;
-  /** While the main part's press is out, what it is doing ("Starting"): a ring stands over it under that name. */
-  busy?: string | undefined;
   /** Whether the main part's press landed, read as its ring leaves: a check stands a moment before its words come back (Button's `succeeded`). */
   succeeded?: boolean | undefined;
   /** The hint over the main part: the window's tooltip, unless the caller hangs one of its own. */
@@ -155,7 +161,7 @@ export function SplitButton({
     [triggerRef],
   );
   // Note that the main part is told how its press landed while it is not busy too, since the ring's leaving is what it reads it at.
-  const busyProps = { busy: busy !== undefined, busyLabel: busy ?? "", succeeded };
+  const busyProps = { busy: busy === true, busyLabel: busyLabel ?? "", succeeded };
   const main = (
     <Button
       variant={variant}

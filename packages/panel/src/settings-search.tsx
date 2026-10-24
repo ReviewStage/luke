@@ -40,14 +40,18 @@ import {
 import {
   commandKeyshortcuts,
   GAP,
+  GroupHeader,
   LAYOUT_ELEMENT,
   NAV_CURRENT,
   NavItem,
+  NOTE_LINE_LOOK,
+  NoteLine,
   SearchField,
   Shortcut,
   Stack,
 } from "@luke/ui";
 import { integrationLines } from "@luke/ui/integration-search";
+import { land } from "@luke/ui/landed";
 import { matchesTokens, searchTokens } from "@luke/ui/search-tokens";
 import { useStateWithRef } from "@luke/ui/use-state-with-ref";
 import { useEffect, useRef } from "react";
@@ -461,20 +465,14 @@ export function searchSettings(
 const FOCUSABLE = "button, select, input, textarea, [tabindex]";
 
 /**
- * What a landed row wears for the stylesheet to ring it once, so the eye finds
- * the row the view just moved to. The ring is a one-shot animation in
- * `search.css`; the attribute stays until the row is landed on again.
- */
-const SETTINGS_SEARCH_LANDED_ATTRIBUTE = "data-search-landed";
-
-/**
  * Takes the view to the row a pressed result named, waiting out the page swap
  * the press asked for — the same frame-by-frame seek the session search field
  * needs, because the row is not drawn until React has answered. The row is
  * found by the anchor it wears, and is scrolled to the top of the view — the
  * scroller's own scroll padding keeps it clear of a pinned header — with a
  * control also taking the keyboard, without a second scroll of its own, and
- * the row ringed for a moment. It lands after the page's own header focus on
+ * the row lit for a moment, as every place landed on is (`land`), once more
+ * each time it is landed on. It lands after the page's own header focus on
  * purpose: the result named a row, so the row is where the view belongs. A
  * row the page is not drawing is given up on quietly.
  */
@@ -489,12 +487,7 @@ export function landOnSettingsRow(id: string): () => void {
       // keyboard; a row of several anchors the row and takes none, since
       // choosing among its buttons is not the landing's to do.
       if (element.matches(FOCUSABLE)) element.focus({ preventScroll: true });
-      // Note that the attribute comes off and back on across a style flush,
-      // because an animation only restarts when its rule is matched afresh,
-      // and a row landed on twice should ring twice.
-      element.removeAttribute(SETTINGS_SEARCH_LANDED_ATTRIBUTE);
-      element.getBoundingClientRect();
-      element.setAttribute(SETTINGS_SEARCH_LANDED_ATTRIBUTE, "");
+      land(element);
     },
   });
 }
@@ -639,28 +632,30 @@ export function SettingsSearchResults({
 }): React.JSX.Element {
   if (search.matched === 0) {
     return (
-      <p className="sidebar-note" role="status">
+      <NoteLine look={NOTE_LINE_LOOK.ROWS} status>
         No results
-      </p>
+      </NoteLine>
     );
   }
   return (
     <div className="settings-search-results">
       {search.groups.map((group) => (
         <section key={group.page} aria-label={resultPageWord(group.page)}>
-          <h2 className="section-heading">{resultPageWord(group.page)}</h2>
-          <Stack as={LAYOUT_ELEMENT.UL} gap={GAP.ROW}>
-            {group.items.map((entry) => (
-              <li key={entry.id}>
-                <NavItem
-                  current={entry.id === opened ? NAV_CURRENT.LOCATION : undefined}
-                  onClick={() => onOpen(entry)}
-                >
-                  <Highlighted text={entry.label} tokens={search.tokens} />
-                </NavItem>
-              </li>
-            ))}
-          </Stack>
+          <GroupHeader label={resultPageWord(group.page)}>
+            <Stack as={LAYOUT_ELEMENT.UL} gap={GAP.ROW}>
+              {group.items.map((entry) => (
+                <li key={entry.id}>
+                  <NavItem
+                    current={entry.id === opened ? NAV_CURRENT.LOCATION : undefined}
+                    roving
+                    onClick={() => onOpen(entry)}
+                  >
+                    <Highlighted text={entry.label} tokens={search.tokens} />
+                  </NavItem>
+                </li>
+              ))}
+            </Stack>
+          </GroupHeader>
         </section>
       ))}
     </div>

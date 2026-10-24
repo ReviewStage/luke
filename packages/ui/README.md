@@ -43,6 +43,7 @@ Every token is a `--luke-*` custom property under `src/tokens/`.
   | --- | ---: | ---: | ---: |
   | `--luke-control-height` | 30px | 44px | 32px |
   | `--luke-control-radius` | 10px | 10px | 10px |
+  | `--luke-pane-bar-height` (`PaneBar`) | 39px | 53px | 41px |
   | `--luke-control-icon` | 16px | 16px | 16px |
   | `--luke-type-body-*` (size / leading) | 13 / 20 | 16 / 24 | 14 / 20 |
   | `--luke-type-label-*` | 13 / 18 | 14 / 20 | 13 / 18 |
@@ -133,6 +134,9 @@ Every token is a `--luke-*` custom property under `src/tokens/`.
   unset), and a component's own glyph slot sets it for the glyph an app
   hands it, a tab's or a tab card's, so a container whose glyphs stand
   larger or smaller, a review card's face, says so once.
+  `--luke-call-video-height` sets the height a `CallVideoTile` drawn at
+  `CALL_VIDEO_FIT.CARD` stands at (the card's width at 16:9 where unset),
+  for a window whose own height is fixed around it.
 
 ## Built on shadcn/ui
 
@@ -161,7 +165,10 @@ Base UI. When a hint shows and goes stays `Tooltip`'s own (`hint.tsx`), and
 `AnchoredPopover` keeps its own placement (`popover-place.ts`), which holds
 an open menu by the edge of the button it hangs from as that button grows;
 it, `PopoverPanel`, the hover card's parts, `DrawerScrim`, and `PortalFence`
-are drawn in the theme's utilities.
+are drawn in the theme's utilities. A popover or menu closes on a press outside
+it through `onPressAway` on its `AnchoredPopover` or `RectFloat` (`usePressAway`
+hears the window's presses once), never a listener on the document of its own
+(`anti-slop/no-document-press-listener`, from a baseline that only shrinks).
 
 The buttons and toggles: `Button`, `IconButton`, and `ButtonLink` stand on
 shadcn's button, which `SplitButton` and `FoldingButton` join and fold;
@@ -243,6 +250,31 @@ import { BUTTON_VARIANT, Button, GAP, Inline, TEXT_ELEMENT, TEXT_VARIANT, Text }
 - **Finite variants.** Every choice is an `as const` object with its type
   derived from it (`BUTTON_VARIANT` / `ButtonVariant`, `GAP` / `Gap`); pass the
   constant, never a string.
+- **A press that waits is busy.** A button whose press starts an act or returns
+  a promise passes `busy` and `busyLabel`, the one busy shape every kind takes
+  (`anti-slop/async-press-needs-busy` refuses one that does not, past
+  `tools/anti-slop/busy-baseline.json`, which only shrinks).
+- **A page to open is a link.** Outside this package a button's press never
+  opens a page (`anti-slop/no-open-page-from-button`): draw a `ButtonLink`, a
+  `TextLink`, a `Chip` with `href`, or a toast action with `href`, so a
+  right-click, ⌘-click and a reader's link list find it.
+- **A heading is `Text`.** Outside this package an intrinsic `h1`–`h6` is
+  refused (`anti-slop/no-raw-heading-outside-ui`): draw it with `Text`,
+  `as={TEXT_ELEMENT.H2}` for the outline and a type role (`TEXT_VARIANT.GROUP`,
+  `SECTION`, `DIALOG`, `TITLE`) for the look, so no sheet sets a heading's font.
+- **Words read aloud go through `announce`.** Outside this package an
+  intrinsic `role="status"`, `role="alert"`, `role="log"` or `aria-live` is
+  refused (`anti-slop/no-hand-written-live-region`): say it with
+  `announce(ANNOUNCE.POLITE | ANNOUNCE.ALERT, words)` and the one `Announcer`.
+  The blocks that stand in the page keep their roles here: `ErrorState`,
+  `FailureNote`, `EmptyState`, `NoteLine`, the toast stack and the announcer.
+- **Lists and menus are stepped by `useRovingKeys` and `List`.** Outside this
+  package a key read off an event and matched to `ArrowUp`, `ArrowDown`,
+  `ArrowLeft`, `ArrowRight`, `Home` or `End` is refused
+  (`anti-slop/no-hand-written-arrow-keys`). The editors and the terminal, which
+  need the raw keys, are exempt by name in `tools/anti-slop/arrow-keys.json`
+  with a reason each; the files still stepping by hand sit on its baseline,
+  which only shrinks.
 - **No `className` or `style`.** A control owns its height, padding, type, and
   states. Where it stands, and the room around it, is its container's: a
   `Stack` or `Inline` with a `GAP` role, or a page pattern. A frame that is
@@ -271,12 +303,13 @@ What the barrel holds (`src/index.ts`):
 | Kind | Components |
 | --- | --- |
 | Type and layout | `Text`, `Stack`, `Inline`, `ScrollArea`, `Card`, `Prose`, `FileText`, `GlyphSlot` |
-| Actions | `Button`, `IconButton`, `ButtonLink`, `FoldingButton`, `RetryButton`, `Chip`, `AttachmentChip`, `InlineRef`, `NavItem`, `NavItemLink` |
+| Actions | `Button`, `IconButton`, `ButtonLink`, `FoldingButton`, `RetryButton`, `MoreButton` (a header's ⋯; a row's is `ListRow`'s `menu`), `Chip`, `AttachmentChip`, `InlineRef`, `NavItem`, `NavItemLink` |
+| Calls | `CallBar`, `CallLive` (a call's status in a message box's foot), `CallMute`, `VideoToggle`, `EndCallButton` (the one red End call), `CallVideoTile` (with `AvatarVoice`) |
 | Press shortcuts | `HoldPress`, `MarkStrip`, `CommandLink`: a pointer's second way in beside a control's own (a held press, a strip standing for a hidden rail, a ⌘-click) |
 | Entry | `FormField` (with `LengthCounter`), `TextField`, `TextArea`, `SearchField`, `Checkbox`, `ChoiceList`, `Switch`, `ChoiceBar` (with `CountPart`, `linesCount`), `Combobox` (with `ComboboxList`, `ComboboxListBox`, `ComboboxOptionItem`), `Calendar` |
-| Status | `Badge`, `Avatar`, `Spinner`, `BusyLabel`, `SavedTick`, `Skeleton`, `EmptyState`, `ErrorState` |
+| Status | `Badge`, `Avatar`, `Spinner`, `BusyLabel`, `SavedTick`, `Skeleton`, `EmptyState`, `ErrorState`, `FailureNote`, `NoteLine` |
 | Overlays | `Dialog`, `ConfirmDialog` (with `useConfirmDialog`), `AnchoredPopover`, `Menu` (with `useMenu`), `TooltipPill`, `TooltipCard`, `HoverCard` |
-| Patterns | `PageToolbar`, `SettingsRow`, `SettingsSection` (with `SettingsRowsSkeleton`, `SettingsSectionsSkeleton`), `SettingsPage`, `ListRow`, `CollectionPage`, `DetailPage`, `AuthPage`, `PublicPage` (with `PublicSection`, `PublicMedia`) |
+| Patterns | `Toolbar` (a workspace's top bar, with `NotFound` under it; `PageToolbar` until its callers move), `PageHeader` (a document's own, which `SettingsPage`, `CollectionPage`, and `DetailPage` head themselves with), `SettingsRow`, `SettingsSection` (with `SettingsRowsSkeleton`, `SettingsSectionsSkeleton`), `SettingsPage`, `ListRow`, `CollectionPage`, `DetailPage`, `AuthPage`, `PublicPage` (with `PublicSection`, `PublicMedia`) |
 | Brand | `WingFace`, the glyphs (`face/glyphs.tsx`), `ProviderMark` |
 
 Each component's design comment, at the top of its `.tsx`, says what it owns
@@ -315,6 +348,8 @@ is refused where it reaches Tailwind's own scale (`text-sm`, `font-medium`,
 | `ellipsis` | `text-overflow: ellipsis`, `truncate`, `text-ellipsis` | A cut line fades rather than ending in "…": mask the end it is cut at, `mask-image: linear-gradient(to left, transparent, #000 var(--luke-label-fade))`, as `Chip` and `ListRow` do |
 | `literal-duration` | A literal duration or delay, or `duration-150` | Read a motion token (`--luke-duration-*`, `--luke-*-delay`). An endless loop whose `animation-play-state` answers `--luke-loop-motion` or `--luke-face-motion` may keep its literal |
 | `literal-easing` | `ease`, `linear`, `cubic-bezier()`, `steps()` in a transition or animation, or `ease-in-out` | Read `--luke-spring`, `--luke-spring-fast`, `--luke-motion-exit`, or `--luke-motion-pane`; a hover's `ease` is the default, so drop it |
+| `literal-picker-width` | A literal `width`, `min-width` or `max-width` on a picker's, popover's or menu's class, outside `@luke/ui` | Hang the layer at one of `POPOVER_WIDTH`'s three widths (`AnchoredPopover`'s or `RectFloat`'s `width`), and let what it holds fill it |
+| `literal-spacing` | A `px` or `rem` literal on `padding`, `margin`, `gap`, `row-gap` or `column-gap` in `packages/panel/src/styles/*.css`; `0`, `auto` and `1px` pass | Read the spacing role (`--luke-list-gap`, `--luke-tight-gap`, `--luke-control-gap`, `--luke-row-inset`, `--luke-section-gap`, `--luke-page-section-gap`) or, where no role fits, a `--luke-space-*` step |
 
 No comment silences it, and it refuses one that asks to
 (`style-guard-disable`); the face's generated `face/face-motion.css` is the one
@@ -324,7 +359,7 @@ counts each file's places, and the guard fails on a file holding more than its
 count and on a count above what the file still holds. So the change that fixes a
 place lowers its count; `node tools/anti-slop/style-guard.ts --shrink` lowers
 every count to what the files hold and never raises one. A rule that started
-clean (`literal-duration`) takes no baseline at all, and a baseline is deleted
+clean (`literal-duration`, `literal-picker-width`) takes no baseline at all, and a baseline is deleted
 from nothing: once every count is gone, its file is `{}`.
 
 ### Folding in a narrow container

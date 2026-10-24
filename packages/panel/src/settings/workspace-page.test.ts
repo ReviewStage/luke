@@ -737,9 +737,9 @@ async function confirm(verb: string): Promise<void> {
 const identity = (page: HTMLElement) =>
   page.querySelector<HTMLElement>(".menu-row") ?? assert.fail("no identity row");
 
-/** What a row says its last act was refused with, in its announced line, or nothing while that is empty. */
+/** What a row says its last act was refused with, in its error line, or nothing while that is empty. */
 const refusalOf = (within: Element) =>
-  [...within.querySelectorAll('[aria-live="polite"]')]
+  [...within.querySelectorAll('[data-slot="field-error"]')]
     .map((each) => each.textContent)
     .find((words) => words !== null && words !== "");
 
@@ -1161,6 +1161,14 @@ test("an admin is offered Remove for a member but not for the owner, and Remove 
   );
 });
 
+test("Remove from workspace is drawn in the accent, not red, since a removed member can be invited again", async () => {
+  const { page } = await mount({ ...ACME, role: WORKSPACE_ROLE.ADMIN });
+
+  await chooseAction(memberNamed(page, "Sam"), "Remove from workspace");
+
+  assert.equal(button(dialog(), "Remove").getAttribute("data-variant"), "primary");
+});
+
 test("an admin is offered no Remove on their own row, since their way out is Leave", async () => {
   stored = [
     { ...OWNER, userId: "user-ola", name: "Ola", email: "ola@example.com" },
@@ -1471,7 +1479,7 @@ test("a removal the account's role does not allow says so in the dialog that ask
   await confirm("Remove");
 
   assert.equal(
-    dialog().querySelector('[role="alert"]')?.textContent,
+    dialog().querySelector('[data-slot="field-error"]:not(:empty)')?.textContent,
     WORKSPACE_NOT_PERMITTED_REFUSAL,
   );
 });
@@ -1749,8 +1757,13 @@ test("the repositories members added on their tokens stand under GitHub's accoun
   assert.deepEqual(rowButtons(rowNamed(group, "octo-member/side")), []);
 
   act(() => button(rowNamed(group, "acme/relay"), "Remove").click());
+  const asked = sent.some((one) => one.kind === ACT_KIND.WORKSPACE_TOKEN_REPOSITORY_SET);
+  // The repository goes for every member's agents, so its removal asks first, in the accent.
+  assert.equal(button(dialog(), "Remove").getAttribute("data-variant"), "primary");
+  act(() => button(dialog(), "Remove").click());
   await settle();
 
+  assert.equal(asked, false, "nothing is sent while it asks");
   assert.deepEqual(
     sent
       .filter((one) => one.kind === ACT_KIND.WORKSPACE_TOKEN_REPOSITORY_SET)
@@ -1980,6 +1993,18 @@ test("the invitations the host streams are drawn, another Mac's invitation among
   );
 });
 
+test("the invite form's address field is named by a visible label, and, being required, is not marked Optional", async () => {
+  const { page } = await mount({ ...ACME, role: WORKSPACE_ROLE.OWNER });
+  const form =
+    page.querySelector<HTMLFormElement>(".workspace-invite form") ?? assert.fail("no form");
+  const address = form.querySelector("input") ?? assert.fail("no address field");
+  assert.deepEqual(
+    [...(address.labels ?? [])].map((each) => each.textContent),
+    ["Email address"],
+  );
+  assert.equal(address.required, true);
+});
+
 test("the owner invites an address as a role, sees it pending with its link to copy, and cancels it from its ⋯", async () => {
   const copied: string[] = [];
   fakeAppPlatform({ ...QUIET_PANEL, ...copyingInto(copied) });
@@ -1991,6 +2016,8 @@ test("the owner invites an address as a role, sees it pending with its link to c
   const listed = [addressOf(row)?.textContent, row.querySelector("p")?.textContent];
   act(() => button(row, "Copy link").click());
   await chooseAction(row, "Cancel invitation");
+  act(() => button(dialog(), "Cancel invitation").click());
+  await settle();
 
   assert.deepEqual(listed, [
     "alan@example.com",
@@ -2122,6 +2149,26 @@ test("an invitation's answer that lands after the stream told a newer list does 
   release();
   await settle();
 
+  assert.deepEqual(invitationRows(page), []);
+});
+
+test("Cancelling an invitation asks first, in the accent rather than red, and sends nothing until it is answered", async () => {
+  const { page } = await mount({ ...ACME, role: WORKSPACE_ROLE.OWNER });
+  await invite(page, "alan@example.com", WORKSPACE_ROLE.MEMBER);
+  const row = invitationRows(page)[0] ?? assert.fail("no pending invitation");
+  const cancels = () =>
+    sent.filter((request) => request.kind === ACT_KIND.WORKSPACE_INVITATION_CANCEL).length;
+
+  await chooseAction(row, "Cancel invitation");
+  const asked = cancels();
+  const answer = button(dialog(), "Cancel invitation");
+
+  assert.equal(asked, 0, "nothing is sent while it asks");
+  assert.match(dialog().textContent ?? "", /alan@example\.com/u);
+  assert.equal(answer.getAttribute("data-variant"), "primary");
+  act(() => answer.click());
+  await settle();
+  assert.equal(cancels(), 1);
   assert.deepEqual(invitationRows(page), []);
 });
 

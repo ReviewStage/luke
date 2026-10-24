@@ -4,6 +4,8 @@ import {
   CircleAlert,
   CircleCheck,
   Code,
+  Eye,
+  EyeOff,
   Heading1,
   Heading2,
   Heading3,
@@ -20,6 +22,7 @@ import {
   PinOff,
   Plug,
   RotateCw,
+  SearchX,
   SquareCode,
   Strikethrough,
   Table,
@@ -55,6 +58,9 @@ export const RetryIcon = lucideGlyph(RotateCw, "icon-button-glyph");
 
 /** A ring round a mark of exclamation: something did not land. */
 export const AlertIcon = lucideGlyph(CircleAlert, "luke-glyph");
+
+/** A magnifier struck through: a place the window cannot show, gone or not the reader's. */
+export const NotFoundIcon = lucideGlyph(SearchX, "luke-glyph");
 
 /** A ring round a check: something was done. */
 export const CircleCheckIcon = lucideGlyph(CircleCheck, "luke-glyph");
@@ -127,3 +133,9 @@ export const TableIcon = lucideGlyph(Table, "icon-button-glyph");
 
 /** A speech bubble with a plus: a comment begun on words. */
 export const CommentAddIcon = lucideGlyph(MessageSquarePlus, "icon-button-glyph");
+
+/** An open eye: shows a secret's typed characters. */
+export const ShowSecretIcon = lucideGlyph(Eye, "icon-button-glyph");
+
+/** The eye struck through: masks a secret's typed characters again. */
+export const HideSecretIcon = lucideGlyph(EyeOff, "icon-button-glyph");

@@ -65,10 +65,12 @@ function the(selector: string): HTMLElement {
   return element;
 }
 
-/** A length with every `var()` in it read off `element`, through as many as it names. */
+/** A length with every `var()` in it read off `element`, through as many as it names, a fallback standing where one names nothing. */
 function resolved(element: Element, length: string): string {
-  const once = length.replace(/var\((--[\w-]+)\)/g, (_, name: string) =>
-    getComputedStyle(element).getPropertyValue(name).trim(),
+  const once = length.replace(
+    /var\((--[\w-]+)(?:,\s*((?:[^()]|\([^()]*\))*))?\)/g,
+    (_, name: string, fallback: string | undefined) =>
+      getComputedStyle(element).getPropertyValue(name).trim() || (fallback ?? ""),
   );
   return once === length ? once : resolved(element, once);
 }
@@ -82,9 +84,14 @@ function pixels(element: Element, length: string): number {
 
 /** The shell in the room given, its sheet holding its task's column and its side panel standing full screen, each bar with its tabs and its actions. */
 function shell(room: string): void {
-  const bar = (className: string, tabs: string, actions: string): Piece => ({
+  const bar = (className: string, tabs: Piece, actions: string, data?: Piece["data"]): Piece => ({
     className,
-    children: [{ className: tabs, children: [{ className: "luke-tabs" }] }, { className: actions }],
+    ...(data === undefined ? {} : { data }),
+    children: [tabs, { className: actions }],
+  });
+  const strip = (className: string): Piece => ({
+    className,
+    children: [{ className: "luke-tabs" }],
   });
   built(document.body, {
     className: "desktop-shell",
@@ -98,9 +105,10 @@ function shell(room: string): void {
             className: "desktop-task-main",
             children: [
               bar(
-                "desktop-toolbar",
-                "desktop-toolbar-heading main-tabs",
-                "desktop-toolbar-actions",
+                "luke-toolbar",
+                { className: "luke-toolbar-heading", children: [strip("main-tabs")] },
+                "luke-toolbar-actions",
+                { look: "tabs" },
               ),
             ],
           },
@@ -108,7 +116,7 @@ function shell(room: string): void {
             tag: "aside",
             className: "side-panel",
             data: { fullScreen: "true" },
-            children: [bar("side-panel-bar", "side-panel-tabs", "toolbar-tab-actions")],
+            children: [bar("side-panel-bar", strip("side-panel-tabs"), "toolbar-tab-actions")],
           },
         ],
       },
@@ -116,10 +124,10 @@ function shell(room: string): void {
   });
 }
 
-/** The bars that hold a task's tabs, each by what the developer calls it, with its tabs and what follows them. */
+/** The bars that hold a task's tabs, each by what the developer calls it, the box of its bar its tabs stand in, and the tabs: a column's stand in its toolbar's title. */
 const BARS = [
-  ["the task's column", ".desktop-toolbar", ".main-tabs"],
-  ["the side panel", ".side-panel-bar", ".side-panel-tabs"],
+  ["the task's column", ".luke-toolbar", ".luke-toolbar-heading", ".main-tabs"],
+  ["the side panel", ".side-panel-bar", ".side-panel-tabs", ".side-panel-tabs"],
 ] as const;
 
 /** Where a bar's row of tabs starts and ends from the column's edges: the bar's padding and the row's margin together. */
@@ -136,9 +144,9 @@ test("in a narrow room a task's tabs take a row of their own under the bar's but
   layFor("web", true);
   shell("narrow");
   const inset = pixels(document.body, "var(--column-inset)");
-  for (const [name, barSelector, tabsSelector] of BARS) {
+  for (const [name, barSelector, rowSelector, tabsSelector] of BARS) {
     const bar = the(barSelector);
-    const tabs = the(`${barSelector} > ${tabsSelector}`);
+    const tabs = the(`${barSelector} > ${rowSelector}`);
     assert.equal(getComputedStyle(bar).flexWrap, "wrap", `${name}'s bar wraps`);
     assert.equal(getComputedStyle(tabs).order, "1", `${name}'s tabs stand after its buttons`);
     assert.deepEqual(tabRowInsets(bar, tabs), { start: inset, end: inset }, `${name}'s tab row`);
@@ -155,9 +163,9 @@ test("in a narrow room a task's tabs take a row of their own under the bar's but
 test("in a wide room a task's tabs stand in the bar's one row, beside its buttons", () => {
   layFor("web", false);
   shell("wide");
-  for (const [name, barSelector, tabsSelector] of BARS) {
+  for (const [name, barSelector, rowSelector] of BARS) {
     assert.notEqual(getComputedStyle(the(barSelector)).flexWrap, "wrap", `${name}'s bar`);
-    assert.notEqual(getComputedStyle(the(`${barSelector} > ${tabsSelector}`)).order, "1");
+    assert.notEqual(getComputedStyle(the(`${barSelector} > ${rowSelector}`)).order, "1");
   }
 });
 
