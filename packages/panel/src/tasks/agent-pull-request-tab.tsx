@@ -228,6 +228,7 @@ import {
   useWindowThreadReveal,
 } from "./thread-reveal.js";
 import { type GitHubPictureDrawer, GitHubWords, TranscriptWords } from "./transcript-blocks.js";
+import { usePushedLineMoved } from "./use-agent-pull-request.js";
 import type { CodingAgentsControl } from "./use-coding-agents.js";
 import { type OpenHere, OpenHereFirst, useOpenLink, useOpenPlace } from "./use-open-link.js";
 import { PULL_REQUEST_VIEW, type PullRequestView } from "./use-side-panel.js";
@@ -2545,6 +2546,8 @@ function PullRequestTabBody({
     [url, reading],
   );
   useHandedTabActions(onActions, handed);
+  // Note that the reads Refresh runs run again as the task list's pushed line of the pull request moves (its state, its checks, or its place in the queue), so an open tab and its merge box never go stale.
+  usePushedLineMoved(url, shown, () => refreshNow.current());
   // Files changed's reads, held here so its tab's count reads the same marks it draws, and the
   // Chapters view draws the same files and marks; asked as either is first shown.
   const changes = useChangesReads(
