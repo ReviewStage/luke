@@ -197,7 +197,9 @@ test("New workspace asks a name and creates it, and a refusal is said on the car
   await act(async () => {
     field.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
   });
-  const refused = document.querySelector('[role="alertdialog"] [data-slot="field-error"]:not(:empty)')?.textContent;
+  const refused = document.querySelector(
+    '[role="alertdialog"] [data-slot="field-error"]:not(:empty)',
+  )?.textContent;
   refusal = undefined;
   const create = [
     ...document.querySelectorAll<HTMLButtonElement>('[role="alertdialog"] button'),
@@ -261,7 +263,9 @@ test("a name typed after a refusal keeps the card up, takes the refusal away, an
   await act(async () => {
     field.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
   });
-  const refused = document.querySelector('[role="alertdialog"] [data-slot="field-error"]:not(:empty)')?.textContent;
+  const refused = document.querySelector(
+    '[role="alertdialog"] [data-slot="field-error"]:not(:empty)',
+  )?.textContent;
 
   const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
   act(() => {
@@ -271,7 +275,9 @@ test("a name typed after a refusal keeps the card up, takes the refusal away, an
   const typed = document.querySelector<HTMLInputElement>(
     '[role="alertdialog"] input[aria-label="Workspace name"]',
   )?.value;
-  const refusalAfterTyping = document.querySelector('[role="alertdialog"] [data-slot="field-error"]:not(:empty)');
+  const refusalAfterTyping = document.querySelector(
+    '[role="alertdialog"] [data-slot="field-error"]:not(:empty)',
+  );
   await act(async () => {
     field.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
   });

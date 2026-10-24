@@ -2126,7 +2126,9 @@ test("a delete the service refused for an agent still starting says why in the d
   await settle();
 
   assert.deepEqual(deletes, [AGENT_ID]);
-  const reason = document.querySelector('[role="alertdialog"] [data-slot="field-error"]:not(:empty)');
+  const reason = document.querySelector(
+    '[role="alertdialog"] [data-slot="field-error"]:not(:empty)',
+  );
   assert.equal(reason?.textContent, "The agent is still starting its turn. Try again in a moment.");
   assert.equal(closed, 0);
 });

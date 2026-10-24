@@ -578,7 +578,9 @@ test("a title typed after a refusal keeps the card up, takes the refusal away, a
   openMoveToSection(sidebar, "Retry audit");
   act(() => item("New section…").click());
   await act(async () => dialogButton("Create section").click());
-  const refused = document.querySelector('[role="alertdialog"] [data-slot="field-error"]:not(:empty)')?.textContent;
+  const refused = document.querySelector(
+    '[role="alertdialog"] [data-slot="field-error"]:not(:empty)',
+  )?.textContent;
   const title = document.querySelector<HTMLInputElement>('[aria-label="Section title"]');
   assert.ok(title);
   const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
@@ -589,7 +591,9 @@ test("a title typed after a refusal keeps the card up, takes the refusal away, a
   const typed = document.querySelector<HTMLInputElement>(
     '[role="alertdialog"] [aria-label="Section title"]',
   )?.value;
-  const refusalAfterTyping = document.querySelector('[role="alertdialog"] [data-slot="field-error"]:not(:empty)');
+  const refusalAfterTyping = document.querySelector(
+    '[role="alertdialog"] [data-slot="field-error"]:not(:empty)',
+  );
   await act(async () => dialogButton("Create section").click());
 
   assert.equal(refused, "Name the section.");

@@ -96,6 +96,9 @@ test("a Sign out the host refused keeps its dialog up saying so", async () => {
   const dialog = () => document.querySelector<HTMLElement>('[role="alertdialog"]');
   await act(async () => button(dialog() ?? assert.fail("Sign out asks first"), "Sign out").click());
 
-  assert.match(dialog()?.querySelector('[data-slot="field-error"]:not(:empty)')?.textContent ?? "", /could not sign out/u);
+  assert.match(
+    dialog()?.querySelector('[data-slot="field-error"]:not(:empty)')?.textContent ?? "",
+    /could not sign out/u,
+  );
   act(() => root.unmount());
 });
