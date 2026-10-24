@@ -5,6 +5,7 @@ import { act, createElement, type ReactElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
 import { holdExits } from "../../testing/held-exits.js";
+import { Announcer } from "../announcer/announcer.js";
 import { ComboboxList, comboboxOptionId } from "../combobox/combobox.js";
 import { useComboboxField } from "../combobox/use-combobox-field.js";
 import { SEARCH_FIELD_LOOK, SearchField, type SearchTally } from "./search-field.js";
@@ -152,7 +153,7 @@ test("a field that answers no Escape lets it reach what stands behind", () => {
 test("the chord stands while the field is empty, and the tally while a query does", () => {
   const page = render(createElement(Held, { tally: { count: 12, at: 2 } }));
   const field = fieldOf(page);
-  const tally = () => page.querySelector('[aria-live="polite"]')?.textContent;
+  const tally = () => page.querySelector(".luke-search-field-tally")?.textContent;
 
   assert.equal(page.querySelector("kbd")?.textContent, "⌘F");
   assert.equal(tally(), undefined);
@@ -163,12 +164,19 @@ test("the chord stands while the field is empty, and the tally while a query doe
   assert.equal(tally(), "3 of 12");
 });
 
+test("the tally is said politely as a query brings it", () => {
+  render(createElement(Announcer));
+  const page = render(createElement(Held, { tally: { count: 12, at: 2 } }));
+  type(fieldOf(page), "deploy");
+  assert.equal(document.querySelector('[role="status"]')?.textContent, "3 of 12");
+});
+
 test("a tally says none found, how many, or which of how many", () => {
   const said = (tally: SearchTally) => {
     const page = render(
       createElement(SearchField, { label: "Find", value: "x", onChange: () => undefined, tally }),
     );
-    return page.querySelector('[aria-live="polite"]')?.textContent;
+    return page.querySelector(".luke-search-field-tally")?.textContent;
   };
 
   assert.deepEqual(

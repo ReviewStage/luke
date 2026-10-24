@@ -161,9 +161,9 @@ const fastSwitch = (page: HTMLElement) =>
   page.querySelector<HTMLButtonElement>('[role="switch"][aria-label="Fast"]') ??
   assert.fail("no Fast switch");
 
-/** What the page announces now: its alerts and its live regions that say something. */
+/** What the page announces now: its alerts and its error lines that say something. */
 const announced = (page: HTMLElement) =>
-  [...page.querySelectorAll('[role="alert"], [aria-live]')]
+  [...page.querySelectorAll('[role="alert"], [data-slot="field-error"]')]
     .map((each) => each.textContent ?? "")
     .filter((words) => words !== "");
 

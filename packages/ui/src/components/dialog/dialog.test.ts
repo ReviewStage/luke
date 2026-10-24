@@ -3,6 +3,7 @@
 import { act, createElement, createRef, useId, useRef, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, expect, test } from "vitest";
+import { Announcer } from "../announcer/announcer.js";
 import { DIALOG_ROLE, Dialog, type DialogHandle } from "./dialog.js";
 
 /**
@@ -370,6 +371,7 @@ test("a dialog holding a draft is nudged and kept by the first Escape or press o
       },
       children: createElement("textarea", { "aria-label": "Feedback" }),
     });
+  draw(createElement(Announcer));
   draw(drawn(true));
   const root = roots.at(-1) ?? expect.fail("no root");
   const dialog = card() ?? expect.fail("the dialog opens");
@@ -378,7 +380,7 @@ test("a dialog holding a draft is nudged and kept by the first Escape or press o
   const afterFirst = {
     dismissals,
     nudge: dialog.getAttribute("data-nudge"),
-    told: dialog.querySelector('[role="status"]')?.textContent,
+    told: document.querySelector('[role="status"]')?.textContent,
   };
   key("Escape");
   const afterSecond = dismissals;

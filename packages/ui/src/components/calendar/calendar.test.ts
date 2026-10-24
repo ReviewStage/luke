@@ -3,6 +3,7 @@
 import { act, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, expect, test } from "vitest";
+import { Announcer } from "../announcer/announcer.js";
 import { Calendar } from "./calendar.js";
 
 /**
@@ -253,6 +254,19 @@ test("the steps above the grid ask for the month either side", () => {
   act(() => step("Next month")?.click());
   act(() => step("Next month")?.click());
   expect(heard.months).toEqual(["2025-12", "2026-01", "2026-02"]);
+});
+
+test("each month paged to is said politely, and the month first shown is not", () => {
+  const announcer = document.body.appendChild(document.createElement("div"));
+  const root = createRoot(announcer);
+  roots.push(root);
+  act(() => root.render(createElement(Announcer)));
+  const { container } = draw("2026-01");
+  const said = () => document.querySelector('[role="status"]')?.textContent;
+  expect(said()).toBe("");
+
+  act(() => container.querySelector<HTMLButtonElement>('button[aria-label="Next month"]')?.click());
+  expect(said()).toBe("February 2026");
 });
 
 test("a step into a month the caller shows later takes the keyboard there once it does", () => {

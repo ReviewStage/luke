@@ -4,11 +4,11 @@ import * as Atom from "effect/reactivity/Atom";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { CheckIcon } from "../../face/glyphs.js";
 import { GLYPH } from "../../icons/glyph-registry.js";
+import { ANNOUNCE, type Announce, announce } from "../announcer/announcer.js";
 import { type ButtonSize, IconButton } from "../button/button.js";
 import { CHIP_CUT, CHIP_LOOK, CHIP_SIZE, Chip, ChipName } from "../chip/chip.js";
 import { TOAST_HOLD } from "../toast/toast.js";
 import { Tooltip } from "../tooltip/hint.js";
-import { VisuallyHidden } from "../visually-hidden/visually-hidden.js";
 
 /**
  * copy-button.tsx -- the window's one Copy: a glyph button named "Copy {what}" that copies the words it is given and answers on itself.
@@ -18,9 +18,9 @@ import { VisuallyHidden } from "../visually-hidden/visually-hidden.js";
  * press hands its words to the copy act its caller passes in, the shell's
  * clipboard, so this package reaches no platform of its own. Once the act
  * answers, the glyph turns to the check, the one a landed button shows, in
- * the success colour, and a polite line says "Copied"; a clipboard that
- * refused turns it to the alert, in the danger colour, and an alert says
- * so. Either stands for the toast's short hold (`TOAST_HOLD.DONE`), so a
+ * the success colour, and the window's `Announcer` says "Copied"
+ * politely; a clipboard that refused turns it to the alert, in the danger
+ * colour, and the announcer says so as an alert. Either stands for the toast's short hold (`TOAST_HOLD.DONE`), so a
  * copy answered on its button and one answered by a toast last the same,
  * then the copy glyph comes back. Its name stays as it was throughout, so
  * nothing beside it shifts, and only its hint says what came of the copy
@@ -64,6 +64,12 @@ const COPY_ANSWER = {
   [COPY_STATE.COPIED]: "Copied",
   [COPY_STATE.FAILED]: "Could not copy",
 } as const;
+
+/** How loudly each answer is said: a copy made politely, a refused one as an alert. */
+const COPY_SAID = {
+  [COPY_STATE.COPIED]: ANNOUNCE.POLITE,
+  [COPY_STATE.FAILED]: ANNOUNCE.ALERT,
+} as const satisfies Record<keyof typeof COPY_ANSWER, Announce>;
 
 /** The glyph each state draws. */
 const COPY_GLYPH = {
@@ -181,9 +187,10 @@ export function CopyButton(props: CopyButtonProps): React.JSX.Element {
   const press = () => {
     latest.current += 1;
     const pressed = latest.current;
-    const answer = (state: CopyState) => {
+    const answer = (state: keyof typeof COPY_ANSWER) => {
       if (pressed !== latest.current) return;
       turn(state);
+      announce(COPY_SAID[state], COPY_ANSWER[state]);
       hold({ settle: () => turn(COPY_STATE.IDLE) });
     };
     // Note that the act is called within the press, because a browser's
@@ -202,16 +209,6 @@ export function CopyButton(props: CopyButtonProps): React.JSX.Element {
   };
   const { state, turns } = shown;
   const hint = state === COPY_STATE.IDLE ? label : COPY_ANSWER[state];
-  const answers = (
-    <>
-      <VisuallyHidden role="status">
-        {state === COPY_STATE.COPIED ? COPY_ANSWER[state] : ""}
-      </VisuallyHidden>
-      <VisuallyHidden role="alert">
-        {state === COPY_STATE.FAILED ? COPY_ANSWER[state] : ""}
-      </VisuallyHidden>
-    </>
-  );
   if (props.look === COPY_LOOK.CHIP) {
     return (
       <Tooltip label={state === COPY_STATE.IDLE ? text : COPY_ANSWER[state]}>
@@ -226,7 +223,6 @@ export function CopyButton(props: CopyButtonProps): React.JSX.Element {
           <ChipName mono cut={CHIP_CUT.MIDDLE}>
             {text}
           </ChipName>
-          {answers}
         </Chip>
       </Tooltip>
     );
@@ -234,12 +230,7 @@ export function CopyButton(props: CopyButtonProps): React.JSX.Element {
   return (
     <Tooltip label={hint}>
       <IconButton
-        icon={
-          <>
-            <CopyGlyph state={state} turns={turns} />
-            {answers}
-          </>
-        }
+        icon={<CopyGlyph state={state} turns={turns} />}
         label={label}
         {...(props.size === undefined ? {} : { size: props.size })}
         disabled={disabled}

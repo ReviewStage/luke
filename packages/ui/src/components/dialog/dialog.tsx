@@ -4,6 +4,7 @@ import type { PictureExpand } from "../../picture-expand.js";
 import { replayMotion } from "../../replay-motion.js";
 import { DialogContent, Dialog as ShadcnDialog } from "../../shadcn/dialog.js";
 import { trappedTab } from "../../trapped-tab.js";
+import { ANNOUNCE, announce } from "../announcer/announcer.js";
 import { TEXT_ELEMENT, TEXT_VARIANT, Text } from "../text/text.js";
 import { useHeldFocus } from "./held-focus.js";
 
@@ -42,7 +43,7 @@ import { useHeldFocus } from "./held-focus.js";
  * failure reads before its words are read. A dialog holding a draft, words
  * written and not yet sent, answers the first Escape or press on the dimmed
  * window with the same swell and stays, its draft as it was, and is put away
- * by the next one; a reader is told so, since a card that stays is otherwise a press gone nowhere. The card is the
+ * by the next one; a reader is told so through the window's `Announcer`, since a card that stays is otherwise a press gone nowhere. The card is the
  * profile's dialog card, its inset and its corners, at a question's
  * measure, wider for a note being written, or fitted edge to edge to a file
  * shown; what it holds lays itself out inside. A dialog that takes files dropped on the dimmed window rings its
@@ -296,6 +297,7 @@ export function Dialog({
     if (holding && !held) {
       setHeld(true);
       nudge(card.current);
+      announce(ANNOUNCE.POLITE, HELD_NOTICE);
       return;
     }
     onDismiss();
@@ -367,11 +369,6 @@ export function Dialog({
         <div data-slot="dialog-body" data-size={size} className={MIDDLE}>
           {children}
         </div>
-        {holding ? (
-          <span className="luke-visually-hidden" role="status">
-            {held ? HELD_NOTICE : ""}
-          </span>
-        ) : null}
         {actions === undefined && actionsStart === undefined ? null : (
           <div className={FOOT}>
             {actionsStart}

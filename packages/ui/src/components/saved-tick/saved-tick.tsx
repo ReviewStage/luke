@@ -1,6 +1,7 @@
-import { useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { CheckIcon } from "../../face/glyphs.js";
 import { runningMotions } from "../../use-disclosure.js";
+import { ANNOUNCE, announce } from "../announcer/announcer.js";
 
 /**
  * saved-tick.tsx -- the confirmation an autosave gives once its write lands: a small Saved tick that springs in, stands a moment, and fades.
@@ -11,14 +12,17 @@ import { runningMotions } from "../../use-disclosure.js";
  * count moves: it fades and springs in, stands for `--luke-confirm-delay`,
  * and fades out over the exit, held drawn through it and taken once it is
  * done. A count the tick first stands at says nothing, since no write landed
- * while it watched, and a write landing while one stands starts it over. The
- * words stand in a polite live region from the first render, so a reader
- * hears Saved as a sighted one sees it. Reduced motion zeroes its motions
+ * while it watched, and a write landing while one stands starts it over.
+ * Each write it shows is said politely through the window's `Announcer`, so
+ * a reader hears Saved as a sighted one sees it. Reduced motion zeroes its motions
  * but not its stand, so the words are still there to read.
  *
  * It takes no class or style: where it stands, the line after what it
  * confirms, is its caller's.
  */
+
+/** What the tick says. */
+const SAVED = "Saved";
 
 /** Saved, for a moment, each time `saves` moves. */
 export function SavedTick({ saves }: { saves: number }): React.JSX.Element {
@@ -30,6 +34,12 @@ export function SavedTick({ saves }: { saves: number }): React.JSX.Element {
     setStanding(true);
   }
   const tick = useRef<HTMLSpanElement | null>(null);
+  const said = useRef(saves);
+  useEffect(() => {
+    if (seen === said.current) return;
+    said.current = seen;
+    announce(ANNOUNCE.POLITE, SAVED);
+  }, [seen]);
 
   // Note that the tick is taken once every motion it runs has ended, its
   // exit last, and one cancelled counts as ended; a tick of a later write
@@ -57,12 +67,12 @@ export function SavedTick({ saves }: { saves: number }): React.JSX.Element {
   }, [standing, seen]);
 
   return (
-    <span className="luke-saved-tick-region" role="status">
+    <span className="luke-saved-tick-region">
       {standing ? (
         // Note that each write lands a tick of its own, so one landing while another stands starts its motion over.
         <span key={saves} ref={tick} className="luke-saved-tick">
           <CheckIcon />
-          Saved
+          {SAVED}
         </span>
       ) : null}
     </span>

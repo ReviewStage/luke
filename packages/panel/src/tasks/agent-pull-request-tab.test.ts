@@ -3213,7 +3213,6 @@ it.effect(
       });
       assert.deepEqual(copied, ["luke/expiry-job"]);
       assert.equal(glyph(), "copied");
-      assert.equal(head.querySelector('[role="status"]')?.textContent, "Copied");
       assert.equal(
         head.getAttribute("aria-label"),
         "Copy branch luke/expiry-job",
