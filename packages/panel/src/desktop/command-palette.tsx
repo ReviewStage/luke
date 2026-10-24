@@ -111,6 +111,7 @@ import {
   searchHit,
 } from "@luke/ui/search-score";
 import { type MatchRange, matchesTokens, matchRanges, searchTokens } from "@luke/ui/search-tokens";
+import { inTaskOrder } from "@luke/ui/tab-strip-model";
 import {
   agentRow,
   orderTaskRows,
@@ -121,7 +122,7 @@ import {
   taskRow,
 } from "@luke/ui/task-list-model";
 import { DOCUMENT_REGION, SETTLED_STATUS, settleOffered, TASK_MARK } from "@luke/ui/tasks-model";
-import { fileName } from "@luke/voice/code-pane-model";
+import { fileName, shownFiles } from "@luke/voice/code-pane-model";
 import {
   isValidElement,
   type ReactNode,
@@ -175,7 +176,7 @@ import { cardTitle } from "../tasks/tool-call-model.js";
 import { type CodingAgentsControl, readAgentById } from "../tasks/use-coding-agents.js";
 import { choiceOf } from "../tasks/use-inbox-listing.js";
 import { type InboxSearch, useInboxSearch } from "../tasks/use-inbox-search.js";
-import { SIDE_PANEL_TAB_KIND } from "../tasks/use-side-panel.js";
+import { SIDE_PANEL_TAB_KIND, type SidePanelControl } from "../tasks/use-side-panel.js";
 import { type ReadMarks, useReadMarks } from "../tasks/use-task-looks.js";
 import { useTaskOrigin } from "../tasks/use-task-origin.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
@@ -493,6 +494,47 @@ function ranked<Item>(
     .sort((first, second) => second.score - first.score)
     .slice(0, limit)
     .map((each) => each.item);
+}
+
+/**
+ * The open task's files at hand, each once: its file tabs the strip draws,
+ * in the strip's order, a tab moved among them included (`inTaskOrder`),
+ * then the files shown on it in its repository, as the "+" offers them
+ * (`side-panel.tsx`).
+ */
+function filesAtHand(
+  panel: Pick<SidePanelControl, "files" | "order">,
+  shownCode: readonly TaskCodeShowing[],
+  place: { readonly taskId: string | undefined; readonly repository: string | null },
+): readonly string[] {
+  const shown = shownFiles(shownCode.filter(({ code }) => code.repository === place.repository));
+  const drawn = panel.files.filter(
+    (file) => file.browsedOn === place.taskId || shown.some((ref) => ref.path === file.path),
+  );
+  const placed = inTaskOrder(drawn, panel.order, (file) => ({ file: file.path }));
+  return [...new Set([...placed.map((file) => file.path), ...shown.map((ref) => ref.path)])];
+}
+
+/**
+ * The paths Files lists with nothing typed, as many as `limit`: those of
+ * `leading` the listing holds first, in their order, then the rest in the
+ * listing's. Note that the rest is walked only as far as the limit, since
+ * it is asked on every render.
+ */
+function leadingPaths(
+  paths: readonly string[],
+  listed: ReadonlySet<string>,
+  leading: readonly string[],
+  limit: number,
+): readonly string[] {
+  const lead = leading.filter((path) => listed.has(path)).slice(0, limit);
+  const led = new Set(lead);
+  const rest: string[] = [];
+  for (const path of paths) {
+    if (lead.length + rest.length >= limit) break;
+    if (!led.has(path)) rest.push(path);
+  }
+  return [...lead, ...rest];
 }
 
 /** The repository's listing as the palette holds it: its files alone, by path, or why not. */
@@ -1028,6 +1070,43 @@ const PLACE_COMMANDS: ReadonlySet<AppCommand> = new Set([
   APP_COMMAND.ADMIN,
 ]);
 
+/**
+ * The commands a chord reaches that act on the open thing, its plan, its
+ * selection, or its Inbox item, in the order ⌘K lists them after its Copy
+ * link and ahead of the open thing's menu rows; each is offered only while
+ * something open takes it.
+ */
+const OPEN_THING_COMMANDS: readonly AppCommand[] = [
+  APP_COMMAND.COPY_PLAN,
+  APP_COMMAND.COMMENT_ON_SELECTION,
+  APP_COMMAND.REPLY_TO_SELECTION,
+  APP_COMMAND.MENTION_LINES,
+  APP_COMMAND.INSERT_PICTURE,
+  APP_COMMAND.TOGGLE_INBOX_ITEM_READ,
+  APP_COMMAND.MARK_TASK_DONE,
+];
+
+/** The open thing's Show terminal, listed beside its other Show rows. */
+const OPEN_THING_SHOW_COMMANDS: readonly AppCommand[] = [APP_COMMAND.SHOW_TERMINAL];
+
+/** The open thing's command that cannot be undone, which ends its commands as it ends the task's ⋯ menu. */
+const OPEN_THING_LAST_COMMANDS: readonly AppCommand[] = [APP_COMMAND.DELETE_TASK];
+
+/** Every command the open thing's runs name, which the window's run leaves out. */
+const OPEN_THING_ALL: ReadonlySet<AppCommand> = new Set([
+  ...OPEN_THING_COMMANDS,
+  ...OPEN_THING_SHOW_COMMANDS,
+  ...OPEN_THING_LAST_COMMANDS,
+]);
+
+/** The places ⌘K goes to, in the Keyboard shortcuts page's order, which it lists after the open thing's commands. */
+const GO_TO_COMMANDS = LISTED_COMMANDS.filter((command) => PLACE_COMMANDS.has(command));
+
+/** The window's own commands, every listed one neither the open thing's nor a place, in the Keyboard shortcuts page's order, which ⌘K lists last. */
+const WINDOW_COMMANDS = LISTED_COMMANDS.filter(
+  (command) => !PLACE_COMMANDS.has(command) && !OPEN_THING_ALL.has(command),
+);
+
 /** What a command's row says: a place as "Go to" it, and else the words its menu item or its shortcut says. */
 function actionLabel(command: AppCommand): string {
   if (PLACE_COMMANDS.has(command)) return `Go to ${appCommandLabel(command).toLowerCase()}`;
@@ -1036,28 +1115,35 @@ function actionLabel(command: AppCommand): string {
 }
 
 /**
- * The commands offered now, the palette's own left out, each with its chord,
- * and the glyph its menu item wears where a menu offers it too
- * (`command-items.tsx`). Note that one no menu offers keeps its glyph's room
- * empty, so every name in the group starts at one edge.
+ * The commands of `commands` the palette lists and the window offers now,
+ * in that order, the palette's own left out, each with its chord, and the
+ * glyph its menu item wears where a menu offers it too (`command-items.tsx`).
+ * Note that one no menu offers keeps its glyph's room empty, so every name
+ * in the group starts at one edge.
  */
-function actionRows(run: (command: AppCommand) => void): readonly PaletteRow[] {
-  return LISTED_COMMANDS.filter(
-    (command) =>
-      command !== APP_COMMAND.COMMAND_PALETTE &&
-      command !== APP_COMMAND.COPY_LINK &&
-      command !== APP_COMMAND.ASK_LUKE &&
-      appCommandOffered(command),
-  ).map((command) => {
-    const label = actionLabel(command);
-    return {
-      icon: panelCommandOf(command)?.icon ?? null,
-      label,
-      command: isKeyedCommand(command) ? command : undefined,
-      terms: [label],
-      onChoose: () => run(command),
-    };
-  });
+function actionRows(
+  commands: readonly AppCommand[],
+  run: (command: AppCommand) => void,
+): readonly PaletteRow[] {
+  return commands
+    .filter(
+      (command) =>
+        LISTED_COMMANDS.includes(command) &&
+        command !== APP_COMMAND.COMMAND_PALETTE &&
+        command !== APP_COMMAND.COPY_LINK &&
+        command !== APP_COMMAND.ASK_LUKE &&
+        appCommandOffered(command),
+    )
+    .map((command) => {
+      const label = actionLabel(command);
+      return {
+        icon: panelCommandOf(command)?.icon ?? null,
+        label,
+        command: isKeyedCommand(command) ? command : undefined,
+        terms: [label],
+        onChoose: () => run(command),
+      };
+    });
 }
 
 /**
@@ -1833,19 +1919,35 @@ export function CommandPalette({
 
   const paths = held?.read === FILES_READ.LISTED ? held.paths : undefined;
   const fileQuery = filter === PALETTE_FILTER.FILES || tokens.length > 0 ? sought : undefined;
+  const blankFiles = fileQuery !== undefined && searchTokens(fileQuery).length === 0;
   // Ranked once a query or the listing changes, not on every render, since
   // a repository may list tens of thousands of paths.
-  const matchedPaths = useMemo(
+  const rankedPaths = useMemo(
     () =>
       paths === undefined || fileQuery === undefined
         ? []
         : ranked(paths, fileQuery, limit, (path) => pathScore(path, fileQuery)),
     [paths, fileQuery, limit],
   );
+  const listedPaths = useMemo(
+    () => (paths === undefined || !blankFiles ? undefined : new Set(paths)),
+    [paths, blankFiles],
+  );
+  // Note that with nothing typed the files open in the strip and shown on the task lead, since they are the likeliest sought.
+  const matchedPaths =
+    paths === undefined || listedPaths === undefined
+      ? rankedPaths
+      : leadingPaths(
+          paths,
+          listedPaths,
+          filesAtHand(tasks.sidePanel, tasks.shownCode ?? [], { taskId, repository }),
+          limit,
+        );
 
   // Each kind's rows in tiers, built only for the filter shown and only
   // while open: every row a tier matches ranks above the next tier's.
   const byRow = (row: PaletteRow) => rowScore(row, sought);
+  const runCommand = (command: AppCommand) => choose(() => runAppCommand(command));
   const tiersOf = {
     [PALETTE_FILTER.TASKS]: () => [
       tasks.signedIn
@@ -1877,17 +1979,23 @@ export function CommandPalette({
     ],
     [PALETTE_FILTER.FILES]: () => [],
     // Note that a command is found by its letters in order too, as a path is, since a command's name is typed by its first letters.
+    // Note that the commands are one tier, so a query ranks them all alike, and their order
+    // is what an empty field lists and what breaks a tie: the open thing's, then Go to, then the window's.
     [PALETTE_FILTER.COMMANDS]: () => [
       [
         ...copyLinkRows(links.linksAt(fromPanel), (held) => choose(() => links.copy(held))),
-        ...actionRows((command) => choose(() => runAppCommand(command))),
-        ...panelTabRows(tasks, chatOn, onTasks),
+        ...actionRows(OPEN_THING_COMMANDS, runCommand),
         ...readMarkRows(tasks, reads, choose),
         ...agentReadMarkRows(listedTasks, agentReads, choose),
         ...taskPinRows(tasks, reads, choose),
         ...agentPinRows(listedTasks, choose),
         ...taskCommandRows(tasks, reads, renameOffer, choose),
         ...agentArchiveRows(openAgent, askArchive, choose),
+        ...panelTabRows(tasks, chatOn, onTasks),
+        ...actionRows(OPEN_THING_SHOW_COMMANDS, runCommand),
+        ...actionRows(OPEN_THING_LAST_COMMANDS, runCommand),
+        ...actionRows(GO_TO_COMMANDS, runCommand),
+        ...actionRows(WINDOW_COMMANDS, runCommand),
       ].map((row) => ({ ...row, loose: true })),
     ],
     [PALETTE_FILTER.SETTINGS]: () => [
