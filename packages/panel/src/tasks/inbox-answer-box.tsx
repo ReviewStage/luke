@@ -79,7 +79,7 @@ import type { TaskInboxControl } from "./use-task-inbox.js";
  * because K and J step the list and the number keys pick while the caret
  * is elsewhere.
  *
- * Files go with a reply as they go with a message (`attached-files.ts`):
+ * Files go with a reply as they go with a message (`use-attached-files.ts`):
  * the + at the foot's left opens the system's file picker, an image pasted
  * into the box is taken, and files dropped on the card are, each drawn as a
  * chip over the foot's bar with its way off; a file that cannot come says

@@ -4297,27 +4297,11 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
 }
 
 /* The shared composer card (../ai-elements/prompt-input.tsx), `@luke/ui`'s
-   `ComposerFrame`: its field over the foot, with the owner's controls at
-   its left and the round submit at its right. */
+   `ComposerFrame`: its field over its foot (`ComposerFoot`). */
 .prompt-input {
   display: flex;
   width: 100%;
   flex-direction: column;
-}
-
-.prompt-input-footer {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--luke-space-12);
-  padding: 0 var(--luke-space-12) var(--luke-space-12);
-}
-
-.prompt-input-tools {
-  display: flex;
-  min-width: 0;
-  align-items: center;
-  gap: var(--luke-space-4);
 }
 
 /* The composer: the shared card (../ai-elements/prompt-input.tsx) at its
@@ -4330,16 +4314,6 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
   flex-direction: column;
   gap: var(--luke-space-8);
   padding: 0 var(--luke-space-16) var(--luke-space-12);
-}
-
-/* A message that did not go: the failure's line (`ErrorState`), and under
-   it, where the agent takes no more, the press that continues it. */
-.agent-composer-note {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: var(--luke-space-4);
-  padding-left: var(--luke-space-4);
 }
 
 /* The box's field (`composer-field.tsx`): its editor in the body type, one
@@ -4502,17 +4476,6 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
   }
 }
 
-/* The Inbox's answer box draws the same card, field, and foot
-   (`inbox-answer-box.tsx`): the note line on its own over the foot, the +
-   at the foot's left, and the microphone and Send at its right, which
-   never give way, since nothing else stands in the row. */
-.inbox-answer-actions {
-  display: flex;
-  flex: none;
-  align-items: center;
-  gap: var(--luke-space-4);
-}
-
 /* A dictation standing in place of the card's foot: the voice's bars
    across it, newest at the right, the time so far, and the two ways out,
    ✓ as round as the Send it stands in for. */
@@ -4629,13 +4592,9 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
 }
 
 /* The files on a message: a row of chips (`@luke/ui`'s AttachmentChip) over
-   the box's words, and over the developer's bubble in the transcript, at its
-   right as the bubble is; and the pictures a call answered
-   (`agent-pictures.tsx`), on the same chips. */
-.agent-composer .prompt-input > .attached-files {
-  padding: var(--luke-space-12) var(--luke-space-12) 0;
-}
-
+   the developer's bubble in the transcript, at its right as the bubble is;
+   and the pictures a call answered (`agent-pictures.tsx`), on the same
+   chips. A box's own files stand in its foot (`ComposerFoot`). */
 .is-user > .attached-files {
   justify-content: flex-end;
 }
@@ -6311,11 +6270,6 @@ svg.lucide {
 .comment-field[data-variant="first"] .luke-composer-foot {
   padding-right: 0;
   padding-left: 0;
-}
-
-/* The files a comment's field holds, over its words, at its padding. */
-.comment-field > .attached-files {
-  padding: var(--luke-space-8) var(--comment-field-inline) 0;
 }
 
 /* The files a sent comment carries, over its words, level with them. */
