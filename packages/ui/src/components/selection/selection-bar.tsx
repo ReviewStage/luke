@@ -1,15 +1,8 @@
 import { SELECTION_WORDS, selectedWords } from "@luke/features/words";
-import {
-  type FocusEvent,
-  type KeyboardEvent,
-  type ReactNode,
-  useId,
-  useLayoutEffect,
-  useRef,
-} from "react";
+import { type FocusEvent, type KeyboardEvent, useId, useLayoutEffect, useRef } from "react";
 import { ANNOUNCE, useAnnounce } from "../announcer/announcer.js";
 import { Button } from "../button/button.js";
-import { Menu, type MenuEntry, useMenu } from "../menu/menu.js";
+import { Menu, type MenuAction, useMenu } from "../menu/menu.js";
 import { focusRovingStop, ROVING_ORIENTATION, useRovingKeys } from "../roving-keys/roving-keys.js";
 import { focusChoosable } from "./list-selection.js";
 
@@ -33,13 +26,17 @@ import { focusChoosable } from "./list-selection.js";
  * the page as its buttons go.
  */
 
-/** One act of the bar: its words, its glyph, and either what it does or the menu of choices it drops. */
+/**
+ * One act of the bar: its words, its glyph, and either what it does or the
+ * menu of choices it drops, which a chosen row's menu offers as a submenu
+ * (`selectionMenu`), so a choice is an action rather than a submenu of its own.
+ */
 export type SelectionAct = {
   readonly label: string;
-  readonly icon?: ReactNode;
+  readonly icon?: React.JSX.Element;
 } & (
   | { readonly onAct: () => void; readonly menu?: undefined }
-  | { readonly menu: readonly (readonly MenuEntry[])[]; readonly onAct?: undefined }
+  | { readonly menu: readonly (readonly MenuAction[])[]; readonly onAct?: undefined }
 );
 
 /** An act that drops a menu of choices under its button. */
@@ -48,7 +45,7 @@ function MenuAct({
   menu,
 }: {
   act: SelectionAct;
-  menu: readonly (readonly MenuEntry[])[];
+  menu: readonly (readonly MenuAction[])[];
 }): React.JSX.Element {
   const drop = useMenu(true);
   return (
