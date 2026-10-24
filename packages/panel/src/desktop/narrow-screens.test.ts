@@ -496,10 +496,7 @@ test("Chat on a narrow stage opens on its rail, a place chosen stands alone unde
   assert.equal(the(page, CHAT_COLUMNS.place).getAttribute("aria-label"), "For you");
   // A phone heads the place as it heads every page: the way back's glyph alone, the name centred, nothing else.
   const head = the(page, ".chat-place-head");
-  assert.deepEqual(
-    [...head.querySelectorAll("button")].map(controlName),
-    [BACK_TO_CHAT],
-  );
+  assert.deepEqual([...head.querySelectorAll("button")].map(controlName), [BACK_TO_CHAT]);
   assert.equal(head.querySelector("h1")?.textContent, "For you");
 
   press(the(page, CHAT_COLUMNS.place), BACK_TO_CHAT);
@@ -585,11 +582,7 @@ test("a place chosen in a narrow Chat takes the focus to its way back, and Back 
     forYou.click();
   });
   assert.equal(focusIn(page, CHAT_COLUMNS), "place");
-  assert.equal(
-    controlName(document.activeElement),
-    BACK_TO_CHAT,
-    "the way back to the rail",
-  );
+  assert.equal(controlName(document.activeElement), BACK_TO_CHAT, "the way back to the rail");
 
   pressFocused(the(page, CHAT_COLUMNS.place), BACK_TO_CHAT);
   assert.equal(document.activeElement, forYou, "the row chosen");
@@ -645,9 +638,5 @@ test("a link to a chat place on a narrow stage opened while the read is out hand
   );
   act(() => landChatRead?.());
   assert.equal(focusIn(page, CHAT_COLUMNS), "place");
-  assert.equal(
-    controlName(document.activeElement),
-    BACK_TO_CHAT,
-    "the way back to the rail",
-  );
+  assert.equal(controlName(document.activeElement), BACK_TO_CHAT, "the way back to the rail");
 });
