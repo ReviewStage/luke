@@ -20,11 +20,13 @@ import { windowPushes } from "./window-pushes";
  * timer, since it is a plain `setTimeout`.
  */
 
-const { windows, sheets, FakeBrowserWindow } = await vi.hoisted(async () => {
+const { windows, sheets, quit, FakeBrowserWindow } = await vi.hoisted(async () => {
   const { EventEmitter } = await import("node:events");
   const windows: InstanceType<typeof FakeBrowserWindow>[] = [];
   /** The answers the next sheets give, by button, and the windows each was shown on. */
   const sheets = { answers: [] as number[], shownOn: [] as unknown[] };
+  /** Whether a quit asked for tears the launch down, or a live call holds it; and whether it was asked. */
+  const quit = { goes: true, asked: false, tearingDown: false };
   class FakeWebContents extends EventEmitter {
     setBackgroundThrottling(): void {}
     setWindowOpenHandler(): void {}
@@ -55,14 +57,20 @@ const { windows, sheets, FakeBrowserWindow } = await vi.hoisted(async () => {
       this.destroyed = true;
     };
   }
-  return { windows, sheets, FakeBrowserWindow };
+  return { windows, sheets, quit, FakeBrowserWindow };
 });
 
 const DISPLAY = { id: 1, workArea: { x: 0, y: 0, width: 1600, height: 1000 } };
 
 vi.mock("electron", () => ({
   BrowserWindow: FakeBrowserWindow,
-  app: { focus: () => undefined, quit: () => undefined },
+  app: {
+    focus: () => undefined,
+    quit: () => {
+      quit.asked = true;
+      if (quit.goes) quit.tearingDown = true;
+    },
+  },
   dialog: {
     showMessageBox: (window: unknown) => {
       sheets.shownOn.push(window);
@@ -102,7 +110,7 @@ function drawnPanel() {
     rendererUrl: "file:///index.html",
     zoomFactor: () => 1,
     placementPath: undefined,
-    closing: () => false,
+    closing: () => quit.tearingDown,
     onRendererGone: (reason) => gone.push(reason),
   });
   panels.reconcile();
@@ -135,6 +143,7 @@ beforeEach(() => {
   windows.length = 0;
   sheets.answers.length = 0;
   sheets.shownOn.length = 0;
+  Object.assign(quit, { goes: true, asked: false, tearingDown: false });
 });
 
 afterEach(() => {
@@ -188,6 +197,30 @@ test("past the bound the panel stops reloading and asks, and Reload loads it onc
     vi.advanceTimersByTime(PAST_THE_PAUSE_MS);
   }
   expect(window.loads).toBe(8);
+});
+
+/** Crashes the panel's renderer past the bound and lets the sheet answer `answer`. */
+async function crashPastTheBound(window: InstanceType<typeof FakeBrowserWindow>, answer: number) {
+  sheets.answers.push(answer);
+  for (let death = 0; death < 4; death += 1) {
+    crash(window);
+    await vi.advanceTimersByTimeAsync(PAST_THE_PAUSE_MS);
+  }
+}
+
+test("Quit Luke quits, and loads nothing more", async () => {
+  const { window } = drawnPanel();
+  await crashPastTheBound(window, 1);
+  expect(quit.asked).toBe(true);
+  expect(window.loads).toBe(4);
+});
+
+test("Quit Luke held by a live call that is kept loads the panel once more rather than leaving it blank", async () => {
+  quit.goes = false;
+  const { window } = drawnPanel();
+  await crashPastTheBound(window, 1);
+  expect(quit.asked).toBe(true);
+  expect(window.loads).toBe(5);
 });
 
 test("a load that finishes between deaths starts the count over", () => {

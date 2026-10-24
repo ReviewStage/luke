@@ -535,7 +535,7 @@ export class PanelManager {
    * avatar's grant reaches no page, and the reload's first frame is handed
    * it (`drew`). Past the bound the window is shown with the question of
    * reloading once more, since a window that crash-loops unasked would spin
-   * the process. A quit's own teardown is no death.
+   * the process, or quitting. A quit's own teardown is no death.
    */
   #followDeaths(window: BrowserWindow): RendererRevival {
     const revival: RendererRevival = new RendererRevival({
@@ -545,8 +545,11 @@ export class PanelManager {
         this.#onRendererGone?.(`${reason} It stopped reloading, so the developer was asked.`);
         void askReloadPanel(window).then((reload) => {
           if (window.isDestroyed() || this.#closing()) return;
-          if (reload) revival.restart();
-          else app.quit();
+          if (!reload) app.quit();
+          // Note that a quit a live call holds leaves the launch standing,
+          // and declining to end the call keeps it so, so the page is loaded
+          // once more rather than left blank with no question on it.
+          if (!this.#closing()) revival.restart();
         });
       },
     });
