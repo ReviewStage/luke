@@ -779,7 +779,7 @@ function unreachedFailure(
   }
   // The member's token is theirs to add or replace in Settings, so each of its cases carries that remedy and needs no task.
   if (unreached?.reason === REPOSITORY_UNREACHED.NO_TOKEN) {
-    return { reason: FAILURE_REASON.GITHUB_TOKEN, text: "No GitHub token saved." };
+    return { reason: FAILURE_REASON.GITHUB_TOKEN, text: "No GitHub token saved.", noneSaved: true };
   }
   if (unreached?.reason === REPOSITORY_UNREACHED.TOKEN_NO_ACCESS) {
     return {

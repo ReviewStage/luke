@@ -78,7 +78,13 @@ export type Failure =
       readonly provider?: ModelProvider | undefined;
     }
   | {
-      readonly reason: typeof FAILURE_REASON.GITHUB_TOKEN | typeof FAILURE_REASON.OTHER;
+      readonly reason: typeof FAILURE_REASON.GITHUB_TOKEN;
+      readonly text: string;
+      /** No token is saved, so the press adds one where a refused token is updated. */
+      readonly noneSaved?: boolean | undefined;
+    }
+  | {
+      readonly reason: typeof FAILURE_REASON.OTHER;
       readonly text: string;
     };
 
@@ -105,7 +111,7 @@ export function remedyLabel(failure: Failure): string | undefined {
     case FAILURE_REASON.MOVE_TASK:
       return `Move task to ${failure.workspace.name}`;
     case FAILURE_REASON.GITHUB_TOKEN:
-      return "Update GitHub token";
+      return failure.noneSaved === true ? "Add GitHub token" : "Update GitHub token";
     case FAILURE_REASON.AUTHORIZE_TOKEN:
       return `Authorize token for ${failure.organization}`;
     case FAILURE_REASON.CONNECT_AGENTS:

@@ -643,7 +643,7 @@ test("a message refused for a repository out of reach names the plan's remedy on
   });
 });
 
-test("a refusal for the member's own GitHub token reads with its remedy, Update GitHub token, with or without a task", () => {
+test("a refusal for the member's own GitHub token reads with its remedy, Add GitHub token where none is saved and Update GitHub token otherwise, with or without a task", () => {
   const refused = (reason: "no-token" | "token-no-access" | "token-cannot-push") =>
     ({
       failure: CODING_AGENT_CALL_FAILURE.REPOSITORY_NOT_REACHABLE,
@@ -660,6 +660,7 @@ test("a refusal for the member's own GitHub token reads with its remedy, Update 
   assert.deepEqual(noToken, {
     reason: FAILURE_REASON.GITHUB_TOKEN,
     text: "No GitHub token saved.",
+    noneSaved: true,
   });
   assert.deepEqual(noAccess, {
     reason: FAILURE_REASON.GITHUB_TOKEN,
@@ -669,6 +670,20 @@ test("a refusal for the member's own GitHub token reads with its remedy, Update 
     reason: FAILURE_REASON.GITHUB_TOKEN,
     text: "Your GitHub token cannot push to acme/relay. Ask its owner to give your GitHub account write access.",
   });
+  assert.equal(remedyLabel(noToken), "Add GitHub token");
+  assert.equal(
+    remedyLabel(
+      startFailureNote(
+        {
+          failure: CODING_AGENT_CALL_FAILURE.REPOSITORY_NOT_REACHABLE,
+          unreached: { reason: REPOSITORY_UNREACHED.TOKEN_INVALID, repository: "acme/relay" },
+        },
+        null,
+      ),
+    ),
+    "Update GitHub token",
+  );
+  assert.equal(remedyLabel(noAccess), "Update GitHub token");
   assert.equal(remedyLabel(cannotPush), "Update GitHub token");
 });
 
