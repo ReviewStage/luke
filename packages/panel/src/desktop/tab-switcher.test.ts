@@ -1,7 +1,11 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { CODING_AGENT_STATUS, type TasklessAgent } from "@luke/features/coding-agent-wire";
+import {
+  CODING_AGENT_STATUS,
+  type CodingAgentSummary,
+  type TasklessAgent,
+} from "@luke/features/coding-agent-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import { HOST_CAPABILITY } from "@luke/settings";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
@@ -20,7 +24,7 @@ import { DESKTOP_CAPABILITIES, handCapabilities } from "../testing/app-state.js"
 import { onRegistry } from "../testing/copy-feedback.js";
 import { DOCUMENT_TASK } from "../testing/document-task.js";
 import { holdMotion, releaseMotion } from "../testing/motion-held.js";
-import { tasksControl } from "../testing/tasks-control.js";
+import { codingAgentsControl, tasksControl } from "../testing/tasks-control.js";
 import { TabSwitcher } from "./tab-switcher.js";
 
 /**
@@ -318,6 +322,46 @@ test("a task's card is named as Back's list names the screen: the task, then its
     [DOCUMENT_TASK.name, "Code"],
     [DOCUMENT_TASK.name, "Plan"],
   ]);
+});
+
+test("a task's card says the task and its agent's tab by the names they go by now, and the agent as Back's list called it where nothing names it now", async () => {
+  handCapabilities(DESKTOP_CAPABILITIES);
+  const told = asked();
+  const window = await mounted();
+  const column = { agent: "agent-token" };
+  const agent = (title: string): CodingAgentSummary => ({
+    id: column.agent,
+    planId: TASK,
+    model: "anthropic/claude-opus-5.5",
+    effort: "high",
+    title,
+    createdAt: 1,
+    status: CODING_AGENT_STATUS.COMPLETED,
+    turnId: null,
+  });
+  const named = (title: string | undefined, name = DOCUMENT_TASK.name) => ({
+    tasks: [{ ...DOCUMENT_TASK, name }],
+    agents: codingAgentsControl({ agents: title === undefined ? [] : [agent(title)] }),
+  });
+  await window.draw(onTask(SIDE_PANEL_TAB.PLAN, told, named("Token refresh"), column));
+  press();
+  await window.draw(
+    onTask(SIDE_PANEL_TAB.CODE, told, named("Token renewal", "Auth rewrite"), column),
+  );
+
+  tab();
+  tab();
+  const left = () => {
+    const card = cards()[1];
+    return [
+      card?.querySelector(".luke-tab-card-name")?.textContent,
+      card?.querySelector(".luke-tab-card-detail")?.textContent,
+    ];
+  };
+  assert.deepEqual(left(), ["Auth rewrite", "Token renewal · Plan"]);
+
+  await window.draw(onTask(SIDE_PANEL_TAB.CODE, told, named(undefined, "Auth rewrite"), column));
+  assert.deepEqual(left(), ["Auth rewrite", "Token refresh · Plan"]);
 });
 
 test("a person's page card wears their face and name, not a generic icon", async () => {

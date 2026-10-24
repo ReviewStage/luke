@@ -1,7 +1,10 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { WORKSPACE_ROLE } from "@luke/features/workspace-wire";
+import { CODING_AGENT_STATUS, type CodingAgentSummary } from "@luke/features/coding-agent-wire";
+import type { TaskSummary } from "@luke/features/task-wire";
+import { WORKSPACE_ROLE, type WorkspaceMember } from "@luke/features/workspace-wire";
+import { ACT_KIND } from "@luke/host/acts";
 import { EXPERIMENT } from "@luke/settings";
 import { SETTINGS_VIEW } from "@luke/settings/settings-views";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
@@ -14,6 +17,7 @@ import { act, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
 import { runAppCommand } from "./app-commands.js";
+import { stepTitle } from "./history-titles.js";
 import { useCopyLink } from "./links-at-hand.js";
 import {
   installWindowHistory,
@@ -34,11 +38,12 @@ import {
   type LeaveAsk,
   type TasksControl,
 } from "./tasks/use-tasks-tab.js";
+import { fakeActPort, fakeAppBridge } from "./testing/app-bridge.js";
 import { copyingInto, fakeAppPlatform, QUIET_PANEL } from "./testing/app-platform.js";
 import { handState } from "./testing/app-state.js";
 import { onRegistry } from "./testing/copy-feedback.js";
 import { DOCUMENT_TASK } from "./testing/document-task.js";
-import { tasksControl } from "./testing/tasks-control.js";
+import { codingAgentsControl, tasksControl } from "./testing/tasks-control.js";
 
 /** A place as the window's history holds it. */
 type HeldPlace = ReturnType<
@@ -914,6 +919,120 @@ function onTabs(input: {
     },
   });
 }
+
+/** Each step named as the window's root names the one it stands on (`stepTitle`). */
+const namedAsShown = (tasks: TasksControl): StepTitle | undefined =>
+  stepTitle(PANEL_TAB.TASKS, tasks);
+
+/** The task the window lists, under `name`, its row naming agent A under `agentTitle` where one is given. */
+function listedTask(name: string, agentTitle?: string): TaskSummary {
+  const task: TaskSummary = {
+    id: TASK_ID,
+    workspaceId: "workspace",
+    name,
+    createdAt: 1,
+    updatedAt: 2,
+    repository: "acme/relay",
+  };
+  if (agentTitle === undefined) return task;
+  const line = {
+    id: AGENT_A.agent,
+    title: agentTitle,
+    model: "anthropic/claude-opus-5.5",
+    effort: "high",
+    status: CODING_AGENT_STATUS.COMPLETED,
+  };
+  const agents = { total: 1, working: 0, agents: [line], pullRequestTotal: 0, pullRequests: [] };
+  return { ...task, agents };
+}
+
+/** Agent A as the open task's agents read it, under `title`. */
+function openAgent(title: string): CodingAgentSummary {
+  return {
+    id: AGENT_A.agent,
+    planId: TASK_ID,
+    model: "anthropic/claude-opus-5.5",
+    effort: "high",
+    title,
+    createdAt: 1,
+    status: CODING_AGENT_STATUS.COMPLETED,
+    turnId: null,
+  };
+}
+
+test("Back's list names a task and its agent's tab by the names they go by now, and an agent named nowhere now as the window called it there", () => {
+  const open = onTabs({ column: AGENT_A });
+  const window = mount(
+    {
+      ...open,
+      tasks: [listedTask("Auth refactor")],
+      agents: codingAgentsControl({ agents: [openAgent("Token refresh")] }),
+    },
+    memoryHistory(),
+    namedAsShown,
+  );
+  press();
+  window.stand(tasksControl({ tasks: [listedTask("Auth rewrite", "Token renewal")] }));
+  assert.deepEqual(window.history().steps.back[0]?.title, {
+    label: "Auth rewrite",
+    detail: "Token renewal",
+  });
+
+  // The task's row no longer names the agent: its tab keeps the name it had.
+  window.stand(tasksControl({ tasks: [listedTask("Auth rewrite")] }));
+  assert.deepEqual(window.history().steps.back[0]?.title, {
+    label: "Auth rewrite",
+    detail: "Token refresh",
+  });
+});
+
+test("Back's list names a person's page by the name the workspace's members give them now, and by the name it was opened with while they are unread", async () => {
+  let answer: (members: readonly WorkspaceMember[]) => void = () => undefined;
+  fakeAppBridge({});
+  fakeActPort({
+    [ACT_KIND.WORKSPACE_MEMBERS_READ]: () =>
+      new Promise((resolve) => {
+        answer = resolve;
+      }),
+  });
+  const workspace = {
+    id: "workspace-acme",
+    name: "Acme",
+    role: WORKSPACE_ROLE.MEMBER,
+    github: null,
+  };
+  const base = tasksControl();
+  const window = mount(
+    tasksControl({
+      workspace,
+      personView: {
+        ...base.personView,
+        userId: "user-lee",
+        name: "Lee Park",
+        workspaceId: workspace.id,
+      },
+    }),
+    memoryHistory(),
+    namedAsShown,
+  );
+  press();
+  window.stand(
+    tasksControl({
+      workspace,
+      page: TASKS_PAGE.DOCUMENT,
+      activeTaskId: TASK_ID,
+      boundFor: TASK_ID,
+      tasks: [listedTask("Auth refactor")],
+    }),
+  );
+  await settle();
+  assert.equal(window.history().steps.back[0]?.title?.label, "Lee Park");
+
+  const lee = { userId: "user-lee", name: "Lee Chen", email: "lee@example.com" };
+  answer([{ ...lee, role: WORKSPACE_ROLE.MEMBER }]);
+  await settle();
+  assert.equal(window.history().steps.back[0]?.title?.label, "Lee Chen");
+});
 
 test("a tab chosen in the task's column or its side panel by a press is a step of its own, which Back goes back to on that tab", () => {
   const shown: string[] = [];

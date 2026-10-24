@@ -235,6 +235,34 @@ test("a pinned Changes tab wears its pull request's mark and current label where
   assert.equal(unknown.querySelector("[data-pull-request-mark]"), null);
 });
 
+test("a pinned agent's tab of a task not open says its agent's name as the task's row says it now, and the label it was pinned under where the row names no such agent", () => {
+  const renamed: TaskSummary = {
+    ...TASK,
+    agents: {
+      total: 1,
+      working: 0,
+      agents: [
+        {
+          id: AGENT,
+          title: "Expire stale invitations",
+          model: "anthropic/claude-opus-5.5",
+          effort: "high",
+          status: CODING_AGENT_STATUS.COMPLETED,
+        },
+      ],
+      pullRequestTotal: 0,
+      pullRequests: [],
+    },
+  };
+  const live = drawPin(PIN, renamed);
+  assert.equal(live.textContent, "Expire stale invitations");
+
+  act(() => root?.unmount());
+  document.body.replaceChildren();
+  const unnamed = drawPin(PIN, TASK);
+  assert.equal(unnamed.textContent, "Expiry job");
+});
+
 test("a pinned Changes tab of an agent that shares its pull request with a newer one wears the open task's read of its own", () => {
   const pin: PinnedTab = { task: TASK.id, tab: { changes: AGENT }, label: "#42 Old title", at: 1 };
   const newer = "9d2b7b5f-4e3f-4e9c-9c77-7a5d8b3f4c32";

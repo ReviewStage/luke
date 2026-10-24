@@ -91,6 +91,7 @@ import {
   useSyncExternalStore,
 } from "react";
 import { ADMIN_PAGE, type AdminView } from "./admin/routing.js";
+import { liveStepTitle, NAMED_STEP, type NamedStep } from "./history-titles.js";
 import { PANEL_TAB, type PanelTab } from "./panel-tabs.js";
 import { settingsPageExperimentStands } from "./settings/settings-rows.js";
 import { SHELL_ROOM, type ShellRoom } from "./shell-room.js";
@@ -106,6 +107,7 @@ import {
   type LeaveGuard,
   type TasksControl,
 } from "./tasks/use-tasks-tab.js";
+import { useWorkspaceMembersRead } from "./tasks/use-workspace-members.js";
 import { useAdminAccess, useAdminAccessPending, useExperimentChoices } from "./use-app-state.js";
 
 /** `MouseEvent.button` for the mouse's own back and forward buttons. */
@@ -229,6 +231,29 @@ type Trail = HistorySnapshot<Place>;
 /** What a place was called as the window stood on it, where it was told. */
 function titleOf(place: Place | undefined): StepTitle | undefined {
   return place === undefined ? undefined : (place as Titled).title;
+}
+
+/** What a place names by id, which its name is read again from as it is listed (`liveStepTitle`); none for a place named by its kind alone. */
+function namedStepOf(place: Place): NamedStep | undefined {
+  switch (place.kind) {
+    case PLACE_KIND.TASK: {
+      // A narrow room keeps the side panel's tab in its pane of its own, named as a wide room's side is.
+      const panelTab = place.panel?.open === true ? place.panel.tab : undefined;
+      const side = place.side ?? panelTab;
+      return { kind: NAMED_STEP.TASK, taskId: place.taskId, column: place.column, side };
+    }
+    case PLACE_KIND.VERSION_HISTORY:
+      return { kind: NAMED_STEP.VERSION_HISTORY, taskId: place.taskId };
+    case PLACE_KIND.INBOX: {
+      const { chosen } = place;
+      const taskId = chosen !== undefined && "taskId" in chosen ? chosen.taskId : undefined;
+      return { kind: NAMED_STEP.INBOX, taskId };
+    }
+    case PLACE_KIND.PERSON:
+      return { kind: NAMED_STEP.PERSON, userId: place.userId };
+    default:
+      return undefined;
+  }
 }
 
 /** Whether two places were called the same. */
@@ -579,7 +604,6 @@ function asking(
     : latest.guard;
 }
 
-/** One step of the trail as Back's and Forward's lists draw it: where it stands on the trail, what it was called, and which page it was. */
 /**
  * The page a step stood on: its place's kind, and which of that kind's pages
  * it was, where the kind has more than one (a task's, an agent's, an
@@ -590,6 +614,7 @@ export interface HistoryPage {
   readonly of: string | undefined;
 }
 
+/** One step of the trail as Back's and Forward's lists draw it: where it stands on the trail, what it is called now, and which page it was. */
 export interface HistoryStep {
   readonly at: number;
   readonly title: StepTitle | undefined;
@@ -647,6 +672,7 @@ function listedSteps(
   trail: Trail,
   way: -1 | 1,
   reachable: (place: Place) => boolean,
+  named: (place: Place) => StepTitle | undefined,
 ): HistoryStep[] {
   const listed: HistoryStep[] = [];
   let from = trail.at;
@@ -654,7 +680,7 @@ function listedSteps(
     const at = nearest({ entries: trail.entries, at: from }, way, reachable);
     const place = at === undefined ? undefined : trail.entries[at]?.state;
     if (at === undefined || place === undefined) break;
-    listed.push({ at, title: titleOf(place), page: pageOf(place) });
+    listed.push({ at, title: named(place), page: pageOf(place) });
     from = at;
   }
   return listed;
@@ -796,6 +822,8 @@ function useHistory(input: {
   /** The address the place stands at. */
   address: string;
   reachable: (place: Place) => boolean;
+  /** What a place is called as Back's and Forward's lists name it now. */
+  named: (place: Place) => StepTitle | undefined;
   go: (place: Place) => void;
   /** Asks first, while a page holds unsaved work, before a step moves the trail at all. */
   guard: LeaveGuard["guard"];
@@ -809,7 +837,7 @@ function useHistory(input: {
   /** Goes back to that step, answering whether one stood there to go to. */
   stepAway: () => boolean;
 } {
-  const { place, address, reachable, guard } = input;
+  const { place, address, reachable, named, guard } = input;
   const history = windowHistory();
   const trail = useSyncExternalStore(history.subscribe, history.current);
   // Note that the presses read the trail from the adapter as they land, because a
@@ -973,22 +1001,27 @@ function useHistory(input: {
     onBack: useCallback(() => step(-1), [step]),
     onForward: useCallback(() => step(1), [step]),
     steps: {
-      back: listedSteps(trail, -1, reachable),
-      forward: listedSteps(trail, 1, reachable),
+      back: listedSteps(trail, -1, reachable, named),
+      forward: listedSteps(trail, 1, reachable, named),
     },
     onGoTo: goTo,
     backTo,
     upTo,
     stepBack: () => step(-1),
-    away: awayStep(trail, reachable),
+    away: awayStep(trail, reachable, named),
     stepAway: () => goTo(awayFrom(history.current(), latest.current.reachable)),
   };
 }
 
-/** The step behind on another page (`awayFrom`), as a way out names it. */
-function awayStep(trail: Trail, reachable: (place: Place) => boolean): AwayStep | undefined {
+/** The step behind on another page (`awayFrom`), as a way out names it now. */
+function awayStep(
+  trail: Trail,
+  reachable: (place: Place) => boolean,
+  named: (place: Place) => StepTitle | undefined,
+): AwayStep | undefined {
   const at = awayFrom(trail, reachable);
-  return at === undefined ? undefined : { title: titleOf(trail.entries[at]?.state) };
+  const place = at === undefined ? undefined : trail.entries[at]?.state;
+  return place === undefined ? undefined : { title: named(place) };
 }
 
 /**
@@ -1044,6 +1077,8 @@ export function useWindowHistory(input: {
     | "sidePanel"
     | "mainTabs"
     | "activeTaskId"
+    | "agents"
+    | "pages"
   >;
 }): WindowHistoryLists {
   const { tab, settingsView, settingsListed, tasks } = input;
@@ -1344,10 +1379,16 @@ export function useWindowHistory(input: {
     if (panel.open && panel.tab !== undefined) sidePanel.onShow(taskId, panel.tab);
     else sidePanel.onSetOpen(panel.open);
   };
+  // The workspace's members, read only while a person's page stands on the trail, whose step is listed by the name they go by now.
+  const trail = useSyncExternalStore(windowHistory().subscribe, windowHistory().current);
+  const personListed = trail.entries.some((entry) => entry.state?.kind === PLACE_KIND.PERSON);
+  const { members } = useWorkspaceMembersRead(personListed ? tasks.workspace : undefined);
+  const named = (to: Place) => liveStepTitle(namedStepOf(to), titleOf(to), tasks, members);
   const { backTo, upTo, stepBack, stepAway, ...history } = useHistory({
     place,
     address: addressOf(input.link),
     reachable,
+    named,
     go,
     guard: tasks.leaveGuard.guard,
   });
