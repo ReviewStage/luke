@@ -9,15 +9,19 @@
  * `use-side-panel.ts`), and shows a screen's list or the item chosen in it
  * one at a time (`hiddenColumns`); the stylesheet reads it off the document
  * root's `data-luke-room` (`stage-room.ts`).
- * The desktop's window is never narrower than its least width, wider than
- * either line here, and is worked by a mouse, so the desktop is always wide.
+ * The desktop's window is never narrower than its least width (760), wider
+ * than either line here, but zoom shrinks the CSS pixels the stage is
+ * measured in: at 125% the least window is 608 wide, at 200% it is 380. So
+ * the desktop can be narrow when zoomed, and then stands as the phone's
+ * layout under a mouse. That is the responsive layout doing its job, not a
+ * state to prevent (`desktop/shell-room.test.ts` drives it at both).
  */
 
 /** How much room the stage gives the panel. */
 export const SHELL_ROOM = {
   /** Panes stand side by side: the desktop's window, a laptop's tab. */
   WIDE: "wide",
-  /** One pane at a time: a phone's width. */
+  /** One pane at a time: a phone's width, or a desktop window zoomed down to one. */
   NARROW: "narrow",
 } as const;
 

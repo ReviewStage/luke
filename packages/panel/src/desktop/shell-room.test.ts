@@ -244,6 +244,49 @@ test("a stage narrowed below 640 stands the window as one pane, and only at 672 
   assert.equal(roomOf(page), "wide", "a stage narrowed within the band stays wide");
 });
 
+/**
+ * The desktop's least window, 760 wide, as the stage measures it once zoom
+ * shrinks the CSS pixel: 760 / 1.25 at 125%, and 760 / 2 at 200%. Under a
+ * mouse, as `beforeEach` leaves the pointer.
+ */
+const ZOOMED_LEAST_WINDOW = [
+  { zoom: 125, width: 608 },
+  { zoom: 200, width: 380 },
+] as const;
+
+for (const { zoom, width } of ZOOMED_LEAST_WINDOW) {
+  test(`the least desktop window at ${zoom}% zoom, ${width} CSS px under a mouse, stands as one pane with a drawer, and unzoomed it is wide again`, () => {
+    const page = mount(width);
+    assert.equal(roomOf(page), "narrow");
+    assert.deepEqual(panelOf(page), {
+      fullScreen: true,
+      resizable: false,
+      fullScreenButton: false,
+    });
+    assert.equal(
+      page.querySelector(".desktop-shell > .title-bar-controls"),
+      null,
+      "the task's header stands for the sidebar's toggle",
+    );
+
+    resizeStage(760);
+    assert.equal(roomOf(page), "wide", "the same window unzoomed is wide");
+    assert.equal(
+      panelOf(page).fullScreen,
+      false,
+      "the panel stands beside the document once the room is wide",
+    );
+  });
+
+  test(`the sidebar at ${zoom}% zoom, ${width} CSS px, is a drawer that the places bar's More opens`, () => {
+    const page = mount(width, false);
+    assert.equal(roomOf(page), "narrow");
+    assert.equal(sidebarStanding(page), "away");
+    act(() => drawerMore(page).click());
+    assert.equal(sidebarStanding(page), "drawer");
+  });
+}
+
 /** The phone's view of the task named `name`, from the ⋯ heading it in the panel's toggle's place, its menu opened to find it. */
 function paneView(page: HTMLElement, name: string): HTMLElement {
   const more = page.querySelector<HTMLButtonElement>('.task-head [aria-label="Task actions"]');
