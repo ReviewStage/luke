@@ -2191,7 +2191,7 @@ function AgentTabView({
   delegationStarts: ReadonlyMap<string, number> | undefined;
   onStop: () => Promise<void>;
   /** Brings the agent back from the archive; present exactly while it is archived, when no message is sent. */
-  onUnarchive?: (() => void) | undefined;
+  onUnarchive?: (() => void | Promise<void>) | undefined;
   /** Opens one of the agent's workers in a tab of the panel's own; none where the view stands in no panel. */
   onOpenSubagent?: DelegationDoors["onOpen"];
   /** Opens what one of its calls is about; none where nothing opens it. */
