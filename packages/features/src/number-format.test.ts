@@ -20,10 +20,10 @@ test("a compact count is one style: K and M, one place where it is not a zero", 
   assert.equal(formatCompact(1_900_000), "1.9M");
 });
 
-test("a size counts in thousands and says KB and MB", () => {
+test("a size counts in thousands and says kB and MB", () => {
   assert.equal(formatBytes(300), "300 B");
-  assert.equal(formatBytes(4_200), "4.2 KB");
-  assert.equal(formatBytes(48_000), "48 KB");
+  assert.equal(formatBytes(4_200), "4.2 kB");
+  assert.equal(formatBytes(48_000), "48 kB");
   assert.equal(formatBytes(1_500_000), "1.5 MB");
   assert.equal(formatBytes(2_500_000_000), "2.5 GB");
   assert.equal(formatBytes(-5), "0 B");

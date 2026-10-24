@@ -3,9 +3,9 @@
  *
  * Every figure is set in US English whatever the Mac's own region, as the
  * words around it are (`time-format.ts` says the same of its clocks), so a
- * count reads "1,234" and a size "48 KB" in every window. A compact count
- * is an `Intl` one: "812", "12K", "1.9M". A size counts in thousands, as
- * Finder does, and spells its units "KB" and "MB".
+ * count reads "1,234" and a size "48 kB" in every window. A compact count
+ * is an `Intl` one: "812", "12K", "1.9M". A size counts in thousands and
+ * spells its units as SI does for a thousand: "kB", "MB", "GB".
  */
 
 /** The locale every figure is said in, the window's words being English. */
@@ -53,13 +53,13 @@ export function formatCompact(value: number): string {
   return COMPACT.format(value);
 }
 
-/** A size in bytes as a line says it: "300 B", "4.2 KB", "48 KB", "1.5 MB", counted in thousands. */
+/** A size in bytes as a line says it: "300 B", "4.2 kB", "48 kB", "1.5 MB", counted in thousands. */
 export function formatBytes(bytes: number): string {
   const size = Math.max(0, bytes);
   if (size < KILOBYTE) return `${Math.round(size)} B`;
   const [span, unit] =
     size < MEGABYTE
-      ? ([KILOBYTE, "KB"] as const)
+      ? ([KILOBYTE, "kB"] as const)
       : size < GIGABYTE
         ? ([MEGABYTE, "MB"] as const)
         : ([GIGABYTE, "GB"] as const);

@@ -524,7 +524,7 @@ export function othersLine(count: number): string {
   return `${count} other ${count === 1 ? "skill" : "skills"} in this repo`;
 }
 
-/** What a found skill holds and where: "2 files · 0.4 KB · skills/productivity/grill-me". */
+/** What a found skill holds and where: "2 files · 0.4 kB · skills/productivity/grill-me". */
 export function candidateFacts(candidate: InstalledSkillCandidate): string {
   const where = candidate.path === "" ? "repository root" : candidate.path;
   return `${filesText(candidate.fileCount)} · ${formatBytes(candidate.bytes)} · ${where}`;
