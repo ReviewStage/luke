@@ -9,8 +9,8 @@ import {
   STATUS_TONE,
   useConfirmDialog,
 } from "@luke/ui";
+import { GLYPH } from "@luke/ui/icons";
 import { ACTION_RESULT_STATUS } from "@luke/wire";
-import { CircleSlashIcon } from "lucide-react";
 import { useCallback, useRef, useState } from "react";
 import type { ActHandle } from "../act.js";
 import { DRAFT_PLACE, useDraftWriter } from "../composer-drafts.js";
@@ -216,7 +216,7 @@ export function useInboxClose(
     action:
       closer === undefined || !open
         ? undefined
-        : { label: CLOSE_ITEM_LABEL, icon: <CircleSlashIcon />, onSelect: ask },
+        : { label: CLOSE_ITEM_LABEL, icon: <GLYPH.CLOSE />, onSelect: ask },
     dialog: <ConfirmDialog open confirm={confirm} question={closeQuestion(item)} />,
   };
 }
