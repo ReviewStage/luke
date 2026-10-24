@@ -446,7 +446,21 @@ function InboxShown({
                 )}
                 {compose.on ? (
                   <InboxCompose
+                    // Note that the pane is the listed workspace's, so another listed starts it afresh, its To and its agents read there.
+                    key={listedWorkspace?.id}
                     hidden={columns.shown === INBOX_COLUMNS.LIST}
+                    workspace={
+                      listedWorkspace === undefined
+                        ? undefined
+                        : {
+                            workspace: listedWorkspace.slug ?? listedWorkspace.id,
+                            workspaceId: listedWorkspace.id,
+                          }
+                    }
+                    repositoryOf={(id) =>
+                      tasks.tasks.find((each) => each.id === id)?.repository ?? null
+                    }
+                    onShowMention={tasks.onShowMention}
                     onBack={columns.onBack}
                     readAgents={readWorkspaceAgents}
                     to={chosen?.item.agentId}
@@ -463,6 +477,7 @@ function InboxShown({
                       });
                     }}
                     onDiscard={compose.onEnd}
+                    onRestore={() => onCompose?.()}
                   />
                 ) : chosen === undefined ? (
                   <section
