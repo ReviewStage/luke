@@ -295,23 +295,30 @@ export function useSkillPicker({
     return false;
   };
 
-  // The list hangs by the slash's line, on the side asked; a press outside it and the box closes it as Escape does.
-  const menu = !open ? null : (
+  // The list hangs by the slash's line, on the side asked; a press outside it and the box closes it as Escape does, and it fades as it closes.
+  const menu = (
     <RectFloat
-      anchor={() => wordBox(mention)}
+      open={open}
+      anchor={() => (mention === undefined ? undefined : wordBox(mention))}
       side={side}
       width={POPOVER_WIDTH.REGULAR}
-      onPressAway={() => setClosedAt(mention.start)}
+      onPressAway={() => {
+        if (mention !== undefined) setClosedAt(mention.start);
+      }}
       holds={(target) => room.current?.contains(target) === true}
     >
-      <SkillMenu
-        id={listId}
-        rows={rows}
-        at={at}
-        read={skills}
-        onHover={(index) => setHighlight({ start: mention.start, query: mention.query, at: index })}
-        onChoose={choose}
-      />
+      {!open ? null : (
+        <SkillMenu
+          id={listId}
+          rows={rows}
+          at={at}
+          read={skills}
+          onHover={(index) =>
+            setHighlight({ start: mention.start, query: mention.query, at: index })
+          }
+          onChoose={choose}
+        />
+      )}
     </RectFloat>
   );
 
@@ -319,10 +326,10 @@ export function useSkillPicker({
     menu,
     aria: {
       "aria-autocomplete": "list",
-      "aria-expanded": String(menu !== null),
-      "aria-controls": menu === null ? undefined : listId,
+      "aria-expanded": String(open),
+      "aria-controls": open ? listId : undefined,
       "aria-activedescendant":
-        menu === null || rows.length === 0 ? undefined : comboboxOptionId(listId, at),
+        !open || rows.length === 0 ? undefined : comboboxOptionId(listId, at),
     },
     names,
     onTrigger: setTrigger,

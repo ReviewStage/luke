@@ -1964,32 +1964,36 @@ export function useMentionPicker({
     const commit = openFiles.find((file) => file.path === path)?.commit;
     return <FileCard path={path} note={newestFileNote(shownCode, path, { repository, commit })} />;
   };
-  // The list hangs by the word's line, on the side asked; a press outside it and the room closes it as Escape does.
-  const list = !shown ? null : (
+  // The list hangs by the word's line, on the side asked; a press outside it and the room closes it as Escape does, and it fades as it closes.
+  const rowsShown = !shown ? null : (
+    <MentionMenu
+      id={listId}
+      crumb={
+        scope?.kind === undefined
+          ? undefined
+          : { kind: scope.kind, folder: scope.walked.at(-1)?.path, back }
+      }
+      groups={groups}
+      query={naming ? trigger.query : term}
+      at={at}
+      keys={keys}
+      reading={reading}
+      failures={failures}
+      fileCard={fileCard}
+      onHover={(index) => setHighlight({ start: trigger.start, query: trigger.query, at: index })}
+      onChoose={choose}
+    />
+  );
+  const list = (
     <RectFloat
-      anchor={() => wordBox(trigger)}
+      open={shown}
+      anchor={() => (trigger === undefined ? undefined : wordBox(trigger))}
       side={side}
       width={POPOVER_WIDTH.REGULAR}
       onPressAway={closeList}
       holds={(target) => room.current?.contains(target) === true}
     >
-      <MentionMenu
-        id={listId}
-        crumb={
-          scope?.kind === undefined
-            ? undefined
-            : { kind: scope.kind, folder: scope.walked.at(-1)?.path, back }
-        }
-        groups={groups}
-        query={naming ? trigger.query : term}
-        at={at}
-        keys={keys}
-        reading={reading}
-        failures={failures}
-        fileCard={fileCard}
-        onHover={(index) => setHighlight({ start: trigger.start, query: trigger.query, at: index })}
-        onChoose={choose}
-      />
+      {rowsShown}
     </RectFloat>
   );
 
@@ -2003,9 +2007,9 @@ export function useMentionPicker({
   // The field names the list it opened and the row highlighted in it, as any combobox's does.
   const aria = {
     "aria-autocomplete": "list",
-    "aria-expanded": String(list !== null),
-    "aria-controls": list === null ? undefined : listId,
-    "aria-activedescendant": list === null ? undefined : activeId,
+    "aria-expanded": String(shown),
+    "aria-controls": shown ? listId : undefined,
+    "aria-activedescendant": shown ? activeId : undefined,
   };
 
   return {
