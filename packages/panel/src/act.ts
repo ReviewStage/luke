@@ -29,6 +29,7 @@ import {
 import type { AppSettingField, AppSettingValue } from "@luke/settings";
 import type { SettingsUpdateResult } from "@luke/settings/wire";
 import { STATUS_TONE } from "@luke/ui";
+import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { ORPCError } from "@orpc/client";
 import { useMemo } from "react";
 import { actPort } from "./app-bridge.js";
@@ -121,6 +122,21 @@ export function pressAct<Kind extends PortActKind>(
     const words = error instanceof ActRefusal ? error.message : PRESS_FAILED_WORDS;
     showToast({ words, tone: STATUS_TONE.DANGER, hold: TOAST_HOLD.FAILED });
   });
+}
+
+/**
+ * An act whose answer a row reads as an `ActionResult`, a refusal and any
+ * other failure settled into the REJECTED one carrying the sentence a
+ * refusal drew, or the press door's words, so a control that waits on the
+ * answer is never left waiting on a rejection.
+ */
+export async function askActResult(asked: Promise<ActionResult>): Promise<ActionResult> {
+  try {
+    return await asked;
+  } catch (error) {
+    const reason = error instanceof ActRefusal ? error.message : PRESS_FAILED_WORDS;
+    return { status: ACTION_RESULT_STATUS.REJECTED, reason };
+  }
 }
 
 /**

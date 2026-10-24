@@ -48,6 +48,7 @@ import {
 } from "../diff-view/contract.js";
 import type { FileMark, FileTreeModule, FileTreeProps } from "../file-tree/contract.js";
 import { findRanges, reveal } from "../find-matches.js";
+import { rendererRegistry } from "../renderer-runtime.js";
 import {
   type AnyAct,
   FAKE_ANSWER,
@@ -65,6 +66,8 @@ import { focusRestOn, restOn } from "../testing/hint-rest.js";
 import { relayout } from "../testing/resize-observer.js";
 import { landedBundles, onSideBundles } from "../testing/side-bundles.js";
 import { codingAgentsControl } from "../testing/tasks-control.js";
+import { newestToastSays } from "../testing/toast.js";
+import { ToastHost } from "../toast.js";
 import type { ChangesThreads } from "./agent-changes-tab.js";
 import { blobShaOf } from "./changes-model.js";
 import type { TreeShown } from "./file-view.js";
@@ -1115,25 +1118,23 @@ test("a write answered while a later one to the same setting is out leaves the l
   assert.equal(lastDrawn().look.layout, "split");
 });
 
-test("a refused write is said under its row, and the row can be pressed again", async () => {
-  await drawTab();
+test("a refused write flips the switch back and is said in a toast, and the switch can be pressed again", async () => {
+  await drawTab({ beside: onRegistry(rendererRegistry, createElement(ToastHost)) });
   const held = holdSettingWrites();
   const popover = openSettings();
 
   act(() => settingControl(popover, '[role="switch"]', "Ligatures").click());
+  assert.equal(
+    settingControl(popover, '[role="switch"]', "Ligatures").getAttribute("aria-checked"),
+    "true",
+    "the switch flips before the write answers",
+  );
   held[0]?.("Could not save that setting.");
   await flush();
 
   const ligatures = settingControl(popover, '[role="switch"]', "Ligatures");
-  assert.equal(ligatures.getAttribute("aria-invalid"), "true", "the refusal is said");
-  assert.match(
-    (ligatures.getAttribute("aria-describedby") ?? "")
-      .split(" ")
-      .map((id) => document.getElementById(id)?.textContent ?? "")
-      .join(" "),
-    /Could not save that setting/u,
-    "under its own row",
-  );
+  assert.equal(ligatures.getAttribute("aria-checked"), "false");
+  assert.equal(newestToastSays(), "Could not save that setting on this system.");
   assert.equal(ligatures.disabled, false);
   assert.equal(lastDrawn().look.ligatures, false);
 });
