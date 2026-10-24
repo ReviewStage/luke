@@ -77,3 +77,36 @@ test("Esc in the comment box lets go of it, keeps its words, and never reaches t
   assert.notEqual(document.activeElement, element, "the caret is let go");
   assert.equal(editor.getText(), "Looks right to me.");
 });
+
+test("Esc that closes the / menu keeps the caret in the box, and the next Esc lets go of it", () => {
+  const holder = document.body.appendChild(document.createElement("div"));
+  const root = createRoot(holder);
+  roots.push(root);
+  act(() => root.render(createElement(Tab, { start: "Looks right" })));
+  const element =
+    holder.querySelector<TiptapEditorHTMLElement>('.ProseMirror[aria-label="Comment"]') ??
+    assert.fail("the box's editor is mounted");
+  const editor: Editor = element.editor ?? assert.fail("the box's editor is running");
+  const escape = () =>
+    act(() => {
+      element.dispatchEvent(
+        new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }),
+      );
+    });
+  act(() => {
+    editor.view.focus();
+    editor.commands.setTextSelection(editor.state.doc.content.size - 1);
+  });
+  act(() => {
+    editor.view.dispatch(editor.state.tr.insertText(" /"));
+  });
+  const opened = holder.querySelector('[role="listbox"]') !== null;
+
+  escape();
+  const afterFirst = document.activeElement;
+  escape();
+
+  assert.ok(opened, "the / menu opens");
+  assert.equal(afterFirst, element, "the first Esc closes the menu and keeps the caret");
+  assert.notEqual(document.activeElement, element, "the second Esc lets go of the box");
+});

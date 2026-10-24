@@ -401,6 +401,9 @@ export function sameTrigger(
   );
 }
 
+/** The editor's root element, whichever it names itself: a textbox, or a combobox while a list over it stands (`rootAria`). */
+export const EDITOR_ROOT_SELECTOR = ".ProseMirror";
+
 /** An editor root's attributes for assistive technology, each a string, or none where it takes one away. */
 export type EditorAria = Readonly<Record<string, string | undefined>>;
 
