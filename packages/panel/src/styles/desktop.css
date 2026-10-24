@@ -3301,18 +3301,15 @@ ul.actor-stack {
 
 /* The Automations list's toolbar: where its two acts' words would crowd the
    title, Create with an agent folds to its glyph, named by its pill
-   (`folding-button.tsx`), and New automation keeps its words. */
+   (`folding-button.tsx`), and New automation keeps its words. The bar's own
+   width, its insets included, is what the query reads. */
 .automations-toolbar {
-  display: flex;
-  min-width: 0;
-  flex: 1;
-  align-items: center;
-  gap: var(--luke-control-gap);
+  flex: none;
   container: automations-toolbar / inline-size;
 }
 
-@container automations-toolbar (max-width: 559px) {
-  .automations-toolbar > * {
+@container automations-toolbar (max-width: 599px) {
+  .automations-toolbar .luke-toolbar-actions {
     --luke-fold: folded;
   }
 }
@@ -5709,20 +5706,12 @@ ul.actor-stack {
   flex: 1 1 auto;
 }
 
-/* The Tasks page (`tasks-page.tsx`): its
-   List | Board switch stands beside its title, and the List runs its groups
-   down the page, each headed as a Board's column is, its rows the page's
-   own `ListRow`s led by the task's priority, key, and status. */
-.desktop-toolbar-heading.tasks-page-heading {
-  display: flex;
-  align-items: center;
-  gap: var(--luke-space-12);
-}
-
-/* The List is one grid (`tasks-list.tsx`), its columns the properties the
-   view draws (`--tasks-list-columns`), and every group and every row a
-   subgrid of it, so each column lines up down the whole page whatever any
-   one row holds, as Linear's list stands its rows. */
+/* The Tasks page's List (`tasks-list.tsx`) runs its groups down the page,
+   each headed as a Board's column is, its rows the page's own `ListRow`s
+   led by the task's priority, key, and status. It is one grid, its columns
+   the properties the view draws (`--tasks-list-columns`), and every group
+   and every row a subgrid of it, so each column lines up down the whole
+   page whatever any one row holds, as Linear's list stands its rows. */
 .tasks-list {
   display: grid;
   grid-template-columns: var(--tasks-list-columns);

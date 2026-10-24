@@ -2,16 +2,13 @@ import {
   LIST_VARIANT,
   List,
   ListRow,
-  ONE_LINE_ELEMENT,
-  ONE_LINE_END,
-  OneLine,
-  PageToolbar,
   SETTINGS_SECTION_FRAME,
   SETTINGS_SKELETON_CONTROL,
   SettingsControlSkeleton,
   SettingsSection,
   SKELETON_SHAPE,
   Skeleton,
+  Toolbar,
 } from "@luke/ui";
 import type { ReactNode } from "react";
 
@@ -47,24 +44,11 @@ const SKELETON_ACTS = { AGENT: "168px", NEW: "140px" } as const;
 
 /** The list's toolbar: its title, and its acts at its end, folded to their glyphs as its own width narrows. */
 export function AutomationsToolbar({ children }: { children: ReactNode }): React.JSX.Element {
+  // The toolbar's own width, which a container query reads, folds Create with an agent to its glyph before it crowds the title.
   return (
-    <PageToolbar
-      lead={
-        // The toolbar's own width, which a container query reads, folds Create with an agent to its glyph before it crowds the title.
-        <div className="automations-toolbar">
-          <div className="desktop-toolbar-heading">
-            <OneLine
-              as={ONE_LINE_ELEMENT.H1}
-              end={ONE_LINE_END.ELLIPSIS}
-              className="desktop-toolbar-title"
-            >
-              Automations
-            </OneLine>
-          </div>
-          <div className="desktop-toolbar-actions">{children}</div>
-        </div>
-      }
-    />
+    <div className="automations-toolbar">
+      <Toolbar title="Automations" actions={children} />
+    </div>
   );
 }
 

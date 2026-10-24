@@ -34,9 +34,10 @@ import {
   FoldingButton,
   ListRow,
   NO_CONTEXT_MENU,
+  NOT_FOUND_THING,
+  NotFound,
   OneLine,
   PAGE_FRAME,
-  PageToolbar,
   RowHint,
   RowHintOptions,
   STATUS_TONE,
@@ -45,6 +46,9 @@ import {
   TEXT_TONE,
   TEXT_VARIANT,
   Text,
+  TOOLBAR_INSET,
+  Toolbar,
+  type ToolbarProps,
   Tooltip,
   useMinute,
   VisuallyHidden,
@@ -55,7 +59,6 @@ import { useAct } from "../act.js";
 import { ACTOR_SIZE, ActorMark, AutomationCard, automationActor } from "../actor-ref.js";
 import { useAppCommand } from "../app-commands.js";
 import { LinkWorkspaceProvider, useCopyLinkItem } from "../copy-link-item.js";
-import { NOT_FOUND_THING, NotFound } from "../not-found.js";
 import { useSentryRead } from "../settings/use-sentry-read.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import { GLYPH_STATE, glyphStateWords, stateEndMark } from "../state-glyph.js";
@@ -475,6 +478,18 @@ function ListPage({
   );
 }
 
+/** The bar of an automation's page that has no automation to show: its way back to the list, at the column's edge. */
+function backBar(onBack: () => void): ToolbarProps {
+  return {
+    lead: (
+      <Button variant={BUTTON_VARIANT.QUIET} icon={<ZapIcon />} onClick={onBack}>
+        Automations
+      </Button>
+    ),
+    start: TOOLBAR_INSET.COLUMN,
+  };
+}
+
 /** One automation's page that has no automation to show: its way back over `children`, which say why. */
 function AutomationAbsentPage({
   onBack,
@@ -488,15 +503,7 @@ function AutomationAbsentPage({
     <DetailPage
       frame={PAGE_FRAME.TOOLBAR}
       label="Automation"
-      toolbar={
-        <PageToolbar
-          heading={
-            <Button variant={BUTTON_VARIANT.QUIET} icon={<ZapIcon />} onClick={onBack}>
-              Automations
-            </Button>
-          }
-        />
-      }
+      toolbar={<Toolbar {...backBar(onBack)} />}
     >
       {children}
     </DetailPage>
@@ -524,11 +531,8 @@ function UnreadPage({
 
 /** One automation's page that names an automation the list does not hold: it was deleted, or is of a workspace the reader is not in, as a link may name. */
 function GonePage({ onBack }: { onBack: () => void }): React.JSX.Element {
-  return (
-    <AutomationAbsentPage onBack={onBack}>
-      <NotFound thing={NOT_FOUND_THING.AUTOMATION} />
-    </AutomationAbsentPage>
-  );
+  useAppCommand(APP_COMMAND.EXIT_AUTOMATIONS, onBack);
+  return <NotFound thing={NOT_FOUND_THING.AUTOMATION} bar={backBar(onBack)} />;
 }
 
 /** One automation's page opened before the list is first read: the editor's own frame as quiet blocks (`AutomationPageSkeleton`), and its way back. */

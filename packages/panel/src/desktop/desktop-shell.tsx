@@ -11,12 +11,8 @@ import {
   DrawerScrim,
   IconButton,
   NavItem,
-  ONE_LINE_ELEMENT,
-  ONE_LINE_END,
-  OneLine,
   PAGE_FRAME,
   PANE_PIN_ELEMENT,
-  PageToolbar,
   PanePin,
   ScrollArea,
   SETTINGS_ROW_MARK_WIDTH,
@@ -25,6 +21,7 @@ import {
   type SettingsSectionSkeletonShape,
   Shortcut,
   SidebarIcon,
+  Toolbar,
   Tooltip,
   useDrawerSwipe,
 } from "@luke/ui";
@@ -121,19 +118,7 @@ function TasksLoading({ onExit }: { onExit: () => void }): React.JSX.Element {
     <CollectionPage
       frame={PAGE_FRAME.TOOLBAR}
       label="Tasks"
-      toolbar={
-        <PageToolbar
-          heading={
-            <OneLine
-              as={ONE_LINE_ELEMENT.H1}
-              end={ONE_LINE_END.ELLIPSIS}
-              className="desktop-toolbar-title"
-            >
-              Tasks
-            </OneLine>
-          }
-        />
-      }
+      toolbar={<Toolbar title="Tasks" />}
       state={COLLECTION_STATE.LOADING}
       loadingLabel="Reading tasks"
     />
@@ -159,19 +144,7 @@ function AdminLoading({
         <CollectionPage
           frame={PAGE_FRAME.TOOLBAR}
           label="Admin"
-          toolbar={
-            <PageToolbar
-              heading={
-                <OneLine
-                  as={ONE_LINE_ELEMENT.H1}
-                  end={ONE_LINE_END.ELLIPSIS}
-                  className="desktop-toolbar-title"
-                >
-                  Overview
-                </OneLine>
-              }
-            />
-          }
+          toolbar={<Toolbar title="Overview" />}
           state={COLLECTION_STATE.LOADING}
           loadingLabel="Reading the dashboard…"
         />

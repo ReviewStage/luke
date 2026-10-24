@@ -1,13 +1,5 @@
 import { TASK_PRIORITY_ORDER, TASK_STATUS } from "@luke/features/task-wire";
-import {
-  CHOICE_BAR_LOOK,
-  CHOICE_BAR_SIZE,
-  ChoiceBar,
-  ONE_LINE_ELEMENT,
-  ONE_LINE_END,
-  OneLine,
-  PageToolbar,
-} from "@luke/ui";
+import { CHOICE_BAR_LOOK, CHOICE_BAR_SIZE, ChoiceBar, Toolbar } from "@luke/ui";
 import {
   BOARD_PROPERTIES,
   COMPLETED_WINDOW,
@@ -272,19 +264,9 @@ export function TasksPage({
   const toolbar = phone ? (
     phoneHead
   ) : (
-    <PageToolbar
-      lead={
-        <div className="desktop-toolbar-heading tasks-page-heading">
-          <OneLine
-            as={ONE_LINE_ELEMENT.H1}
-            end={ONE_LINE_END.ELLIPSIS}
-            className="desktop-toolbar-title"
-          >
-            {TASKS}
-          </OneLine>
-          <ViewSwitch view={view} onView={choose} />
-        </div>
-      }
+    <Toolbar
+      title={TASKS}
+      tag={<ViewSwitch view={view} onView={choose} />}
       actions={
         <>
           <TasksFilterButton

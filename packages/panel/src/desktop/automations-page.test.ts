@@ -784,6 +784,37 @@ test("with no automations the page says what one is, and with no workspace liste
   assert.deepEqual(listed, []);
 });
 
+/** The window's bar over `page`, its parts in the order they stand, each by its text. */
+function bar(page: HTMLElement): { banner: HTMLElement; parts: Element[] } {
+  const banner = page.querySelector<HTMLElement>("header") ?? assert.fail("no bar");
+  return { banner, parts: [...banner.children] };
+}
+
+test("the list's title is its bar's heading, and Create with an agent and New automation end the bar", async () => {
+  const page = mountPages({ kind: AUTOMATIONS_PAGE.LIST });
+  await settle();
+
+  const { banner, parts } = bar(page);
+  assert.equal(banner.querySelectorAll("h1").length, 1);
+  assert.equal(parts.length, 2, "a heading and the acts, with no box of the page's own between");
+  const [heading, actions] = parts;
+  assert.equal(heading?.querySelector("h1")?.textContent, "Automations");
+  assert.deepEqual(
+    [...(actions?.querySelectorAll("button") ?? [])].map(
+      (each) => each.getAttribute("aria-label") ?? each.textContent,
+    ),
+    ["Create with an agent", "New automation"],
+  );
+});
+
+test("New automation, in the bar, opens a new automation's page", async () => {
+  mountPages({ kind: AUTOMATIONS_PAGE.LIST });
+  await settle();
+
+  act(() => button("New automation").click());
+  assert.deepEqual(places.at(-1), { kind: AUTOMATIONS_PAGE.NEW });
+});
+
 test("while the list is first read it stands as quiet rows under its toolbar, said to a reader as being read", async () => {
   listHeld = true;
   const page = mount();
@@ -792,10 +823,9 @@ test("while the list is first read it stands as quiet rows under its toolbar, sa
   const wait = page.querySelector("[role=status][aria-busy=true]");
   assert.equal(wait?.textContent, "Reading your automations…");
   assert.ok((wait?.querySelectorAll(".luke-skeleton").length ?? 0) > 0);
-  assert.ok(
-    page.querySelector("h1")?.textContent === "Automations",
-    "its toolbar stands over them",
-  );
+  const { parts } = bar(page);
+  assert.equal(parts[0]?.querySelector("h1")?.textContent, "Automations");
+  assert.ok(parts[1]?.querySelector("button"), "its acts stand at the bar's end");
 });
 
 test("while the list is first read its blocks stand in an owner's card of rows, each with its clock tile, its owner's and next run's columns, and its switch's place, as a row of the list does", async () => {
@@ -1746,6 +1776,22 @@ test("a page naming an automation the list does not hold, as a link to another w
     page.textContent ?? "",
     /Not foundThis automation doesn't exist, or you don't have access to it\./u,
   );
+});
+
+test("a page naming an automation the list does not hold keeps its bar, its way back to the list standing in it", async () => {
+  const page = mountPages({
+    kind: AUTOMATIONS_PAGE.EDIT,
+    automationId: "3f0e6f5c-7d1a-4f6e-9a55-999999999999",
+  });
+  await settle();
+
+  const { banner } = bar(page);
+  assert.equal(banner.parentElement?.getAttribute("aria-label"), "Not found");
+  const back = [...banner.querySelectorAll("button")].find(
+    (each) => each.textContent === "Automations",
+  );
+  act(() => back?.click());
+  assert.deepEqual(places.at(-1), { kind: AUTOMATIONS_PAGE.LIST });
 });
 
 test("an automation's page opened before the list is read stands its toolbar's way back over its form as quiet blocks", async () => {
