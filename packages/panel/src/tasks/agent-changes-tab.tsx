@@ -1332,6 +1332,7 @@ function SourceToggle({
       <IconButton
         icon={source ? <ImageIcon aria-hidden="true" /> : <CodeIcon aria-hidden="true" />}
         label={label}
+        size={BUTTON_SIZE.COMPACT}
         onClick={onToggle}
       />
     </Tooltip>
