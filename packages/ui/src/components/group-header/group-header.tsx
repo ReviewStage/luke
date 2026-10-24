@@ -174,6 +174,20 @@ export function GroupHeader({
   const Heading = heading;
   const lead = <Lead glyph={glyph} folds={folds} label={label} mark={mark} count={count} />;
   const hint = tooltip ?? (card === undefined ? undefined : label);
+  // Note that only a head with a hint or a card is wrapped, because the tooltip hands its control a click handler of its own, which a head that folds nothing must not hear.
+  const control = folds ? (
+    <button
+      type="button"
+      className="luke-group-header-lead"
+      aria-expanded={state.open}
+      aria-controls={rows ? rowsId : undefined}
+      onClick={pulseOnPress(state.toggle, PRESS_PULSE.QUIET)}
+    >
+      {lead}
+    </button>
+  ) : (
+    <span className="luke-group-header-lead">{lead}</span>
+  );
   return (
     <DisclosureScope state={state}>
       <div
@@ -187,21 +201,13 @@ export function GroupHeader({
           {...withContextMenu<HTMLDivElement>(contextMenu, {})}
         >
           <Heading className="luke-group-header-heading">
-            <Tooltip label={hint} card={card}>
-              {folds ? (
-                <button
-                  type="button"
-                  className="luke-group-header-lead"
-                  aria-expanded={state.open}
-                  aria-controls={rows ? rowsId : undefined}
-                  onClick={pulseOnPress(state.toggle, PRESS_PULSE.QUIET)}
-                >
-                  {lead}
-                </button>
-              ) : (
-                <span className="luke-group-header-lead">{lead}</span>
-              )}
-            </Tooltip>
+            {hint === undefined ? (
+              control
+            ) : (
+              <Tooltip label={hint} card={card}>
+                {control}
+              </Tooltip>
+            )}
           </Heading>
           {said(actions) ? <span className="luke-group-header-actions">{actions}</span> : null}
         </div>
