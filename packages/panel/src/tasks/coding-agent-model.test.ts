@@ -803,7 +803,7 @@ test("a message to a teammate's agent its starter's own key refused names the st
       },
       {
         reason: FAILURE_REASON.OTHER,
-        text: "Ada has no API key or plan connected for this agent. They connect one in Settings to unblock it.",
+        text: "Ada has no API key or subscription connected for this agent. They connect one in Settings to unblock it.",
       },
     ],
   );

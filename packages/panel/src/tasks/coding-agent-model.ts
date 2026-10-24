@@ -918,7 +918,7 @@ function starterKeyWords(failure: CodingAgentCallFailure, starter: string): stri
     return `${starter}'s saved API key can't be read. They save it again in Settings to unblock this agent.`;
   }
   if (failure === CODING_AGENT_CALL_FAILURE.AGENT_CREDENTIAL_MISSING) {
-    return `${starter} has no API key or plan connected for this agent. They connect one in Settings to unblock it.`;
+    return `${starter} has no API key or subscription connected for this agent. They connect one in Settings to unblock it.`;
   }
   return undefined;
 }
