@@ -111,6 +111,38 @@ test("a call with no OpenAI key saved says so as an alert, with the button that 
   assert.deepEqual(remedies, [VOICE_REMEDY.ADD_OPENAI_KEY]);
 });
 
+test("a call whose OpenAI key was refused or is out of credit says which as an alert, with the button that fixes it", () => {
+  const cases = [
+    {
+      failure: VOICE_FAILURE.OPENAI_KEY_REFUSED,
+      words: "Luke could not start the call. OpenAI refused your key, which may have been revoked.",
+      label: "Add an OpenAI key",
+      remedy: VOICE_REMEDY.ADD_OPENAI_KEY,
+    },
+    {
+      failure: VOICE_FAILURE.OPENAI_KEY_UNFUNDED,
+      words: "Luke could not start the call. Your OpenAI account is out of credit.",
+      label: "Add OpenAI credit",
+      remedy: VOICE_REMEDY.ADD_OPENAI_CREDIT,
+    },
+  ] as const;
+  for (const { failure, words, label, remedy } of cases) {
+    const remedies: VoiceRemedy[] = [];
+    const line = drawn({
+      speakers: NOBODY,
+      error: failure,
+      onRemedy: (pressed) => remedies.push(pressed),
+    });
+    const alert = line.querySelector('[role="alert"]');
+    assert.ok(alert);
+    assert.equal(alert.querySelector(".voice-notice-text")?.textContent, words);
+    const button = alert.querySelector("button");
+    assert.equal(button?.textContent, label);
+    act(() => button?.click());
+    assert.deepEqual(remedies, [remedy]);
+  }
+});
+
 test("while Luke speaks into a Mac whose output is off, the line says so with a Got it that quiets it", () => {
   const dismissed: string[] = [];
   const line = drawn({

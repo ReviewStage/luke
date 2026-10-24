@@ -146,3 +146,22 @@ it.effect(
       assert.equal(hostedVoiceFailure(source.diagnostics()), VOICE_FAILURE.NATIVE_AGENT);
     }),
 );
+
+it.effect(
+  "a call whose OpenAI key OpenAI refused, or found out of credit, fails as that, not as a call that did not start",
+  () =>
+    Effect.gen(function* () {
+      const cases = [
+        [HOSTED_API_ERROR.OPENAI_KEY_REFUSED, VOICE_FAILURE.OPENAI_KEY_REFUSED],
+        [HOSTED_API_ERROR.OPENAI_KEY_UNFUNDED, VOICE_FAILURE.OPENAI_KEY_UNFUNDED],
+      ] as const;
+      for (const [error, failure] of cases) {
+        const source = hosted(scriptedOpenSocket([answering({ error })]));
+        assert.equal(
+          yield* source.create({ sdpOffer: SDP_OFFER, taskId: TASK_ID, agentId: AGENT_ID }),
+          undefined,
+        );
+        assert.equal(hostedVoiceFailure(source.diagnostics()), failure);
+      }
+    }),
+);
