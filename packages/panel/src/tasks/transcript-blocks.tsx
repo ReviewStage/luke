@@ -1167,7 +1167,7 @@ export function TranscriptTool({
           )
         }
       />
-      <ToolContent>
+      <ToolContent bare>
         <ToolInput block={input} />
         {cut === undefined ? (
           <ToolOutput block={output} errorText={errorText} />
@@ -1590,7 +1590,7 @@ export function TranscriptSubagent({
         <LineSummary data-subagent-row="" data-call-id={callId}>
           {line}
         </LineSummary>
-        <ToolContent>
+        <ToolContent bare>
           <ToolInput block={body.input} />
           <ToolOutput block={body.output} errorText={undefined} />
         </ToolContent>

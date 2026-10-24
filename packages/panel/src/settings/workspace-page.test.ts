@@ -1161,6 +1161,14 @@ test("an admin is offered Remove for a member but not for the owner, and Remove 
   );
 });
 
+test("Remove from workspace is drawn in the accent, not red, since a removed member can be invited again", async () => {
+  const { page } = await mount({ ...ACME, role: WORKSPACE_ROLE.ADMIN });
+
+  await chooseAction(memberNamed(page, "Sam"), "Remove from workspace");
+
+  assert.equal(button(dialog(), "Remove").getAttribute("data-variant"), "primary");
+});
+
 test("an admin is offered no Remove on their own row, since their way out is Leave", async () => {
   stored = [
     { ...OWNER, userId: "user-ola", name: "Ola", email: "ola@example.com" },

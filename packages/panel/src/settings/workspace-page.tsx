@@ -31,6 +31,7 @@ import {
   CHIP_WIDTH,
   Chip,
   ChipName,
+  CONFIRM_LOSS,
   ConfirmDialog,
   ErrorState,
   FormField,
@@ -556,6 +557,7 @@ function MemberRow({
           body: "They lose its tasks, agents, and Inbox until they are invited again.",
           verb: "Remove",
           running: "Removing",
+          loss: CONFIRM_LOSS.AFFECTS_OTHERS,
         }}
       />
       <ConfirmDialog
@@ -565,6 +567,7 @@ function MemberRow({
           body: TRANSFER_WORDS.ONE_BODY(member.name),
           verb: ROLE_ACT.MAKE_OWNER,
           running: TRANSFER_WORDS.RUNNING,
+          loss: CONFIRM_LOSS.AFFECTS_OTHERS,
         }}
       />
     </Stack>
@@ -661,6 +664,7 @@ function MemberLeave({
           body: LEAVE_WORDS.LINE,
           verb: `Leave ${workspace.name}`,
           running: LEAVE_WORDS.RUNNING,
+          loss: CONFIRM_LOSS.IRREVERSIBLE,
         }}
       >
         <ul className="leave-consequences">
@@ -801,6 +805,7 @@ function OwnerLeave({
             body: TRANSFER_WORDS.BODY,
             verb: TRANSFER_WORDS.VERB,
             running: TRANSFER_WORDS.RUNNING,
+            loss: CONFIRM_LOSS.AFFECTS_OTHERS,
           }}
         >
           <FormField label="New owner">
@@ -1447,6 +1452,7 @@ function ManagedLinear({ workspace }: { workspace: Workspace }): React.JSX.Eleme
             body: "Nobody in the workspace can start a task from an issue until Linear is connected again.",
             verb: "Disconnect",
             running: "Disconnecting",
+            loss: CONFIRM_LOSS.AFFECTS_OTHERS,
           }}
         />
       )}
@@ -1578,6 +1584,7 @@ function ManagedSentry({
           body: "Its alerts and new issues stop triggering this workspace's automations. Uninstall Luke in Sentry's settings to remove it there too.",
           verb: "Disconnect",
           running: "Disconnecting",
+          loss: CONFIRM_LOSS.AFFECTS_OTHERS,
         }}
       />
     </Stack>
@@ -1797,6 +1804,7 @@ function WorkspaceIdentity({ workspace }: { workspace: Workspace }): React.JSX.E
           title: `Remove ${workspace.name}'s photo?`,
           verb: "Remove",
           running: "Removing",
+          loss: CONFIRM_LOSS.AFFECTS_OTHERS,
         }}
       />
     </Stack>

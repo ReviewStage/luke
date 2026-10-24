@@ -93,50 +93,47 @@ function copyAnswer(
 /** A button's own hold, as an atom whose work is the wait: waiting exactly as long as the glyph stands. */
 const buttonHoldAtom = () => rendererRuntime.fn(() => Effect.sleep(BUTTON_HOLD));
 
-/** A copy button's state, the picture at whose address it was answered for where a picture's copy answered it, and its press: of words, or of a picture. */
+/** A copy button's state and its press. */
 interface CopyFeedback {
   readonly state: CopyState;
-  readonly answeredImage: string | undefined;
   readonly copy: (words: string) => void;
-  readonly copyImage: (url: string) => void;
 }
 
 /**
- * One copy button's state and its press. The press hands the words, or the
- * picture, to the shell's clipboard and, once it answers, shows the check or
- * the alert for the hold; a press while one stands starts the hold again
- * from its own answer.
+ * One copy button's state and its press. The press hands the words to the
+ * shell's clipboard and, once it answers, shows the check or the alert for
+ * the hold; a press while one stands starts the hold again from its own
+ * answer.
  */
 export function useCopyFeedback(): CopyFeedback {
   const [hold] = useState(buttonHoldAtom);
   const [held, restart] = useAtom(hold);
-  const [landed, setLanded] = useState<{
-    readonly state: CopyState;
-    readonly image: string | undefined;
-  }>({ state: COPY_STATE.IDLE, image: undefined });
+  const [landed, setLanded] = useState<CopyState>(COPY_STATE.IDLE);
   // Note that this is a ref, because an answer reads it as it lands, which
   // no render stands between.
   const latest = useRef(0);
-  const answer = (copying: () => Promise<void>, image: string | undefined) => {
-    latest.current += 1;
-    const press = latest.current;
-    copyAnswer(copying()).then((answered) => {
-      if (press !== latest.current) return;
-      setLanded({ state: answered, image });
-      restart();
-    });
-  };
   return {
-    state: held.waiting ? landed.state : COPY_STATE.IDLE,
-    answeredImage: landed.image,
-    copy: (words) => answer(() => appPlatform().copyText(words), undefined),
-    copyImage: (url) => answer(() => appPlatform().copyImage(pngBase64Of(url)), url),
+    state: held.waiting ? landed : COPY_STATE.IDLE,
+    copy: (words) => {
+      latest.current += 1;
+      const press = latest.current;
+      copyAnswer(appPlatform().copyText(words)).then((answered) => {
+        if (press !== latest.current) return;
+        setLanded(answered);
+        restart();
+      });
+    },
   };
 }
 
 /** The copy act a `@luke/ui` copy button is handed: the words on the shell's clipboard, a refusal rejecting. */
 export function copyThroughShell(words: string): Promise<void> {
   return appPlatform().copyText(words);
+}
+
+/** The copy act a `@luke/ui` copy button is handed for a picture: the one at `url` on the shell's clipboard, a refusal rejecting. */
+export function copyImageThroughShell(url: string): Promise<void> {
+  return appPlatform().copyImage(pngBase64Of(url));
 }
 
 /** What a copy button's hint says in this state: its own label at rest. */
