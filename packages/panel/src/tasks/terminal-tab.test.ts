@@ -36,6 +36,7 @@ import { announcedPolitely, mountAnnouncer } from "../testing/announcer.js";
 import { type AnyAct, fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
 import { layContainersAt } from "../testing/container-width.js";
 import { onRegistry } from "../testing/copy-feedback.js";
+import { onPhone } from "../testing/phone-tab.js";
 import { bundleLanded, onSideBundles } from "../testing/side-bundles.js";
 import { codingAgentsControl } from "../testing/tasks-control.js";
 import { TerminalCardFoot, TerminalStanding } from "./terminal-shells.js";
@@ -278,6 +279,8 @@ async function mount(
   findable = false,
   /** The bundles the tab reads its terminal from; the window's own, landed, unless a test hands others. */
   bundles: SideBundles = SIDE_BUNDLES,
+  /** Whether the tab is drawn as a phone's panel draws it, what it hands the task's header's ⋯ held. */
+  phone = false,
 ) {
   const container = document.createElement("div");
   document.body.append(container);
@@ -296,34 +299,34 @@ async function mount(
       : tab;
   let closed = 0;
   let toggled = 0;
-  const render = (on: boolean) =>
+  let agentOpened = 0;
+  let handed = onPhone(null).handed;
+  const render = (on: boolean) => {
+    const tab = createElement(TerminalTab, {
+      agentId: AGENT.id,
+      agents,
+      shown: on,
+      onOpenAgent: () => {
+        agentOpened += 1;
+      },
+      onClose: () => {
+        closed += 1;
+      },
+      shells: {
+        open: shellsOpen,
+        onToggle: () => {
+          toggled += 1;
+        },
+      },
+    });
+    const drawn = onPhone(tab);
+    handed = drawn.handed;
     act(() =>
       root.render(
-        onRegistry(
-          registry,
-          onSideBundles(
-            bundles,
-            wrapped(
-              createElement(TerminalTab, {
-                agentId: AGENT.id,
-                agents,
-                shown: on,
-                onOpenAgent: () => undefined,
-                onClose: () => {
-                  closed += 1;
-                },
-                shells: {
-                  open: shellsOpen,
-                  onToggle: () => {
-                    toggled += 1;
-                  },
-                },
-              }),
-            ),
-          ),
-        ),
+        onRegistry(registry, onSideBundles(bundles, wrapped(phone ? drawn.element : tab))),
       ),
     );
+  };
   render(shown);
   await settle();
   const keyboard = () => {
@@ -333,6 +336,10 @@ async function mount(
   };
   return {
     container,
+    /** What the tab handed the task's header's ⋯, drawn on a phone. */
+    handed: () => handed,
+    /** How many times the tab asked to open its agent. */
+    agentOpened: () => agentOpened,
     render: async (on: boolean) => {
       render(on);
       await settle();
@@ -1397,4 +1404,20 @@ test("a shell chosen in the list floated over the screen takes the list down", a
   await act(async () => shellsToggle(tab).click());
   await tab.choose("dev server");
   assert.equal(floatedShells(tab)?.getAttribute("data-state"), "leaving");
+});
+
+test("on a phone the tab draws no bar over the screen, and the task's header's ⋯ shows the shells over it and opens the agent, saying where the sandbox stands", async () => {
+  const tab = await mount(true, false, undefined, false, SIDE_BUNDLES, true);
+
+  assert.equal(tab.container.querySelector(".file-view-bar"), null);
+  assert.deepEqual(tab.handed().labels(), ["Show shells", "Open agent"]);
+  assert.match(tab.handed().item("Show shells").detail ?? "", /^Sandbox · /u);
+
+  tab.handed().press("Open agent");
+  assert.equal(tab.agentOpened(), 1);
+
+  tab.handed().press("Show shells");
+  await settle();
+  assert.equal(tab.toggled(), 0, "the shells float over the screen, the panel's choice untouched");
+  assert.deepEqual(tab.handed().labels(), ["Hide shells", "Open agent"]);
 });

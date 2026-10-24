@@ -4720,6 +4720,33 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
   margin-right: var(--luke-tight-gap);
 }
 
+/* A phone's header over the file (`attachment-viewer.tsx`, `phone-head.tsx`):
+   the file's name centred over its size and note, between Close and the ⋯. */
+.attachment-viewer-heading {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  align-items: center;
+}
+
+.attachment-viewer-heading > .attachment-viewer-title {
+  max-width: 100%;
+}
+
+.attachment-viewer-about {
+  display: flex;
+  max-width: 100%;
+  min-width: 0;
+}
+
+.attachment-viewer-about > .attachment-viewer-size {
+  margin: 0;
+}
+
+.attachment-viewer-about > .attachment-viewer-note {
+  margin: 0 0 0 var(--luke-space-8);
+}
+
 .attachment-viewer-title {
   overflow: hidden;
   margin: 0;

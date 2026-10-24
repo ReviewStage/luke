@@ -44,6 +44,8 @@ import { createRoot } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeAll, test, vi } from "vitest";
 import { runAppCommand } from "../app-commands.js";
+import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
+import { ShellRoomContext } from "../stage-room.js";
 import { fixtureChat } from "../tasks/chat-fixture.js";
 import { PULL_REQUEST_VIEW, SIDE_PANEL_TAB, type SidePanelTab } from "../tasks/use-side-panel.js";
 import { NO_LOOKS } from "../tasks/use-task-looks.js";
@@ -1004,6 +1006,7 @@ test("a chip in the plan naming a pull request one of the task's agents opened o
 async function chatTabMounted(
   ownChannel: boolean,
   view: Partial<ReturnType<typeof tasksControl>["chatView"]> = {},
+  room: ShellRoom = SHELL_ROOM.WIDE,
 ) {
   Object.defineProperty(window, "matchMedia", {
     configurable: true,
@@ -1032,21 +1035,30 @@ async function chatTabMounted(
     root.render(
       onRegistry(
         AtomRegistry.make(),
-        createElement(DesktopTasks, {
-          summary: UNPINNED_SUMMARY,
-          looks: NO_LOOKS,
-          tasks: tasksControl({
-            page: TASKS_PAGE.DOCUMENT,
-            activeTaskId: TASK.id,
-            region: { kind: DOCUMENT_REGION.READY, task: TASK },
-            sidePanel: {
-              ...tasksControl().sidePanel,
-              open: true,
-              tab: SIDE_PANEL_TAB.CHAT,
-            },
-            chatView: { ...tasksControl().chatView, available: true, chat, ...view },
+        // Note that the shell hands its room to every tab's body, as the window's root does.
+        createElement(
+          ShellRoomContext.Provider,
+          { value: room },
+          createElement(DesktopTasks, {
+            summary: UNPINNED_SUMMARY,
+            looks: NO_LOOKS,
+            room,
+            away: { label: "Inbox", onPress: () => undefined },
+            tasks: tasksControl({
+              page: TASKS_PAGE.DOCUMENT,
+              activeTaskId: TASK.id,
+              region: { kind: DOCUMENT_REGION.READY, task: TASK },
+              sidePanel: {
+                ...tasksControl().sidePanel,
+                open: true,
+                fullScreen: room === SHELL_ROOM.NARROW,
+                fullScreenOnly: room === SHELL_ROOM.NARROW,
+                tab: SIDE_PANEL_TAB.CHAT,
+              },
+              chatView: { ...tasksControl().chatView, available: true, chat, ...view },
+            }),
           }),
-        }),
+        ),
       ),
     ),
   );
@@ -1127,6 +1139,21 @@ test("a task's Chat tab whose chat could not be read says so with Retry, never t
   assert.doesNotMatch(container.textContent ?? "", /Nothing is posted/u);
   act(() => root.unmount());
   container.remove();
+});
+
+test("on a phone a task's Chat tab draws no channel head under the task's header, which names it, and keeps its composer", async () => {
+  handState(experimentsOn(EXPERIMENT.CHAT));
+  const phone = await chatTabMounted(true, {}, SHELL_ROOM.NARROW);
+  const tab = phone.container.querySelector('section.desktop-task-chat[aria-label="Chat"]');
+  assert.ok(tab, "the task's Chat tab");
+  assert.equal(tab.querySelector(".chat-stream .luke-pane-bar"), null, "no channel head");
+  assert.match(
+    tab.querySelector(".chat-composer")?.textContent ?? "",
+    /Message #teammate-invitations/u,
+  );
+  assert.equal(phone.container.querySelector(".task-head h1")?.textContent, "Chat");
+  act(() => phone.root.unmount());
+  phone.container.remove();
 });
 
 test("with Chat off for the account, a Chat tab kept in the side panel draws nothing", async () => {

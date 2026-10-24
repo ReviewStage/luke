@@ -63,7 +63,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
 import type { SideBundles } from "../bundle-loader.js";
 import { LinkWorkspaceProvider } from "../copy-link-item.js";
-import type { MenuAction } from "../desktop/action-menu.js";
+import type { TabActionGroups } from "../desktop/strip-tabs.js";
 import {
   DIFF_SELECTION_SIDE,
   type DiffListProps,
@@ -75,6 +75,8 @@ import type { FileTreeModule } from "../file-tree/contract.js";
 import { type GitHubConnectControl, GitHubConnectProvider } from "../github-connect.js";
 import { MemberDirectory } from "../member-directory.js";
 import { rendererRuntime } from "../renderer-runtime.js";
+import { SHELL_ROOM } from "../shell-room.js";
+import { ShellRoomContext } from "../stage-room.js";
 import { fakeActPort, fakeAppBridge, fakeAppBridgeCalls } from "../testing/app-bridge.js";
 import { copyingInto, DESKTOP_LINKS, fakeAppPlatform } from "../testing/app-platform.js";
 import { deliveryOf, handSettings, stateWith } from "../testing/app-state.js";
@@ -393,13 +395,16 @@ function held<A>() {
 function Switching({
   control,
   first,
+  onRun,
 }: {
   control: CodingAgentsControl;
   /** The tab it opens on, as the chip that opened it asked. */
   first: PullRequestView;
+  /** Runs the branch on this Mac, as the side panel offers where the platform has a Mac terminal; none elsewhere. */
+  onRun?: () => void;
 }) {
   const [view, setView] = useState<PullRequestView>(first);
-  const [actions, setActions] = useState<MenuAction[] | undefined>(undefined);
+  const [actions, setActions] = useState<TabActionGroups | undefined>(undefined);
   return createElement(
     Fragment,
     null,
@@ -413,19 +418,26 @@ function Switching({
       view,
       onView: setView,
       onActions: setActions,
+      onRun,
     }),
   );
 }
 
 /** What the side panel's toolbar ⋯ offers for the tab, as a row of presses: its items as the tab hands them up. */
-function Toolbar({ actions }: { actions: MenuAction[] | undefined }) {
+function Toolbar({ actions }: { actions: TabActionGroups | undefined }) {
   return createElement(
     "div",
     { "data-toolbar": "" },
-    (actions ?? []).map((action) =>
+    (actions ?? []).flat().map((action) =>
       createElement(
         "button",
-        { key: action.label, type: "button", disabled: action.disabled, onClick: action.onSelect },
+        {
+          key: action.label,
+          type: "button",
+          disabled: action.disabled,
+          onClick: (event: React.MouseEvent<HTMLElement>) =>
+            "onAsk" in action ? action.onAsk(event.currentTarget) : action.onSelect(),
+        },
         action.label,
       ),
     ),
@@ -6002,4 +6014,95 @@ test("the member's pending comments stand on their lines in Files changed, marke
   await act(async () => option(tab, "Conversation").click());
   await settle();
   assert.equal(document.querySelector('[role="alertdialog"]'), null);
+});
+
+test("on a phone no Preview or Run stands beside the title, and Files changed draws no bar: the task's header's ⋯ offers each after the pull request's own, the merge staying in the header", async () => {
+  const ran: string[] = [];
+  const readChanges: CodingAgentsControl["readChanges"] = () =>
+    Promise.resolve({
+      pullRequest: {
+        url: PAGE,
+        truncated: false,
+        files: [
+          {
+            path: "src/invite.ts",
+            previousPath: null,
+            status: CHANGED_FILE_STATUS.MODIFIED,
+            additions: 1,
+            deletions: 0,
+            omitted: null,
+            patch: "@@ -1,1 +1,2 @@\n const seats = 3;\n+const plan = 1;",
+          },
+        ],
+      },
+    });
+  const control = controlAnswering(
+    {
+      checks: () =>
+        Promise.resolve({
+          pullRequest: {
+            ...CHECKS,
+            deployments: [
+              {
+                environment: "Preview – luke-web",
+                state: DEPLOYMENT_STATE.READY,
+                url: "https://luke-web-git-expiry.vercel.app",
+              },
+            ],
+          },
+        }),
+    },
+    PULL_REQUEST_STATE.OPEN,
+    readChanges,
+  );
+  const tab = await drawn(
+    createElement(
+      ShellRoomContext.Provider,
+      { value: SHELL_ROOM.NARROW },
+      createElement(Switching, {
+        control,
+        first: PULL_REQUEST_VIEW.CONVERSATION,
+        onRun: () => ran.push("run"),
+      }),
+    ),
+  );
+
+  assert.deepEqual(
+    words(tab, ".pull-request-title-actions button").filter((each) => /Preview|Run/u.test(each)),
+    [],
+    "beside the title stands the merge alone",
+  );
+  assert.deepEqual(toolbarItems(tab), [
+    "Open on GitHub",
+    "Refresh",
+    "Preview – luke-web",
+    "Run on this Mac",
+  ]);
+  await pressToolbar(tab, "Preview – luke-web");
+  await pressToolbar(tab, "Run on this Mac");
+  assert.deepEqual(opened, ["https://luke-web-git-expiry.vercel.app"]);
+  assert.deepEqual(ran, ["run"]);
+
+  await choose(tab, "Files changed");
+  assert.equal(tab.querySelector(".file-view-bar"), null, "Files changed draws no bar");
+  assert.deepEqual(toolbarItems(tab), [
+    "Open on GitHub",
+    "Refresh",
+    "Preview – luke-web",
+    "Run on this Mac",
+    "Show files",
+    "Open files on GitHub",
+    "View options",
+    "Collapse all files",
+    "Copy patch",
+    "Download patch",
+    "Refresh changes",
+  ]);
+
+  await choose(tab, "Conversation");
+  assert.deepEqual(
+    toolbarItems(tab).slice(4),
+    [],
+    "Files changed's items go with it once another view is shown",
+  );
 });

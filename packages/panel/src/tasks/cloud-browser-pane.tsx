@@ -51,7 +51,9 @@ import {
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useAct } from "../act.js";
 import { appPlatform } from "../app-platform.js";
+import { useTabActions } from "../desktop/strip-tabs.js";
 import { rendererRuntime } from "../renderer-runtime.js";
+import { usePhoneRoom } from "../stage-room.js";
 import { useAnnounceShown } from "../use-announce-shown.js";
 import { CloudBrowserCursor, cursorPlacement } from "./cloud-browser-cursor.js";
 import {
@@ -223,40 +225,73 @@ function CloudBrowserBar({
   };
   // Note that a step's hint is its name while it works, and the name with the reason while it is off.
   const hintOf = (name: string) => (onStep === undefined ? `${name}: ${whyOff}` : name);
+  // A phone keeps the address as the page's own field, its steps items of the task's header's ⋯.
+  const phone = usePhoneRoom();
+  useTabActions(
+    phone
+      ? [
+          [
+            {
+              label: "Back",
+              icon: <ArrowLeftIcon aria-hidden="true" />,
+              detail: onStep === undefined ? whyOff : undefined,
+              disabled: onStep === undefined,
+              onSelect: () => onStep?.(BROWSER_LIVE_HISTORY.BACK),
+            },
+            {
+              label: "Forward",
+              icon: <ArrowRightIcon aria-hidden="true" />,
+              detail: onStep === undefined ? whyOff : undefined,
+              disabled: onStep === undefined,
+              onSelect: () => onStep?.(BROWSER_LIVE_HISTORY.FORWARD),
+            },
+            {
+              label: "Reload",
+              icon: <RotateCwIcon aria-hidden="true" />,
+              detail: onStep === undefined ? whyOff : undefined,
+              disabled: onStep === undefined,
+              onSelect: () => onStep?.(BROWSER_LIVE_HISTORY.RELOAD),
+            },
+          ],
+        ]
+      : undefined,
+  );
   return (
     <PaneBar
       middle={
         <>
-          <div className="file-view-history">
-            <Tooltip label={hintOf("Back")}>
-              <IconButton
-                icon={<ArrowLeftIcon aria-hidden="true" />}
-                label="Back"
-                disabled={onStep === undefined}
-                focusableWhenDisabled
-                onClick={() => onStep?.(BROWSER_LIVE_HISTORY.BACK)}
-              />
-            </Tooltip>
-            <Tooltip label={hintOf("Forward")}>
-              <IconButton
-                icon={<ArrowRightIcon aria-hidden="true" />}
-                label="Forward"
-                disabled={onStep === undefined}
-                focusableWhenDisabled
-                onClick={() => onStep?.(BROWSER_LIVE_HISTORY.FORWARD)}
-              />
-            </Tooltip>
-            <Tooltip label={hintOf("Reload")}>
-              <IconButton
-                icon={<RotateCwIcon aria-hidden="true" />}
-                label="Reload"
-                turns
-                disabled={onStep === undefined}
-                focusableWhenDisabled
-                onClick={() => onStep?.(BROWSER_LIVE_HISTORY.RELOAD)}
-              />
-            </Tooltip>
-          </div>
+          {phone ? null : (
+            <div className="file-view-history">
+              <Tooltip label={hintOf("Back")}>
+                <IconButton
+                  icon={<ArrowLeftIcon aria-hidden="true" />}
+                  label="Back"
+                  disabled={onStep === undefined}
+                  focusableWhenDisabled
+                  onClick={() => onStep?.(BROWSER_LIVE_HISTORY.BACK)}
+                />
+              </Tooltip>
+              <Tooltip label={hintOf("Forward")}>
+                <IconButton
+                  icon={<ArrowRightIcon aria-hidden="true" />}
+                  label="Forward"
+                  disabled={onStep === undefined}
+                  focusableWhenDisabled
+                  onClick={() => onStep?.(BROWSER_LIVE_HISTORY.FORWARD)}
+                />
+              </Tooltip>
+              <Tooltip label={hintOf("Reload")}>
+                <IconButton
+                  icon={<RotateCwIcon aria-hidden="true" />}
+                  label="Reload"
+                  turns
+                  disabled={onStep === undefined}
+                  focusableWhenDisabled
+                  onClick={() => onStep?.(BROWSER_LIVE_HISTORY.RELOAD)}
+                />
+              </Tooltip>
+            </div>
+          )}
           <AddressField
             ref={field}
             value={typed ?? address}

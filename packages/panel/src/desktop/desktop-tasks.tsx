@@ -484,6 +484,7 @@ function TaskInboxTab({
           show,
           view: undefined,
           search: { query, onQuery: setQuery },
+          tab: true,
         }}
         models={tasks.agents.models}
         readerId={tasks.me}
@@ -551,10 +552,10 @@ function TaskInboxTab({
  * says under it what it acts on, the tab, so the tab's Copy link is told
  * from the task's beneath it.
  */
-function shownTabGroups(shown: ShownTab | undefined): MenuAction[][] {
+function shownTabGroups(shown: ShownTab | undefined, opener: HTMLElement): MenuAction[][] {
   if (shown === undefined) return [];
   return shown
-    .groups()
+    .groups(opener)
     .map((group) => group.map((item) => ({ ...item, detail: item.detail ?? shown.label })));
 }
 
@@ -1147,7 +1148,9 @@ function PlanDocument({
       button
       onRename={rename.begin}
       lead={
-        switched ? () => [taskPaneItems(pane, choosePane), ...shownTabGroups(onTab)] : undefined
+        switched
+          ? (opener) => [taskPaneItems(pane, choosePane), ...shownTabGroups(onTab, opener)]
+          : undefined
       }
     />
   );
