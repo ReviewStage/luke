@@ -59,8 +59,7 @@ import { type TabMove, useTabDrag } from "./use-tab-drag.js";
  * along it (`use-tab-drag.ts`), or the focused one stepped a place either
  * way by the owner's own chords through `controls`, with focus kept on it.
  * Either way the strip says where the tab now stands to whoever reads it
- * aloud. A tab anchored at the strip's start stands there for good, as a
- * browser's pinned tab does: it is not moved, and no tab is moved before it.
+ * aloud.
  *
  * A tab something arrived on while another was chosen reads in semibold
  * until it is chosen, and says "New result" in its hint and to a reader. A
@@ -123,9 +122,6 @@ const TAB_BUTTON =
 const END_SLOT =
   "absolute top-1/2 right-(--luke-tab-close-inset) [transform:translateY(-50%)] transition-opacity duration-(--luke-duration-hover) ease-motion-exit";
 
-/** A tab that moves: every one but those anchored at the strip's start. */
-const MOVABLE_TAB = `.luke-tab:not([data-anchored="true"]) ${TAB}`;
-
 /** What a wheel's delta counts, as its `deltaMode` says: pixels, lines, or pages. */
 const WHEEL_DELTA = {
   PIXEL: 0,
@@ -172,7 +168,7 @@ export interface TabPlace {
 export interface TabsControls {
   /** Moves the focused tab `by` places along, keeping focus on it; nothing where no tab that moves has focus, or past an end. */
   readonly step: (by: number) => void;
-  /** Where `tab`, a tab of the strip, stands among the tabs that move; none for one anchored, or a strip whose tabs stay put. */
+  /** Where `tab`, a tab of the strip, stands among the tabs that move; none for a strip whose tabs stay put. */
   readonly placeOf: (tab: HTMLElement) => TabPlace | undefined;
 }
 
@@ -278,7 +274,7 @@ export function tabMenuPlacement(tab: HTMLElement): MenuPlacement {
 
 /** The strip's tabs that move, in order. */
 function movableTabs(strip: HTMLElement | null): HTMLElement[] {
-  return [...(strip?.querySelectorAll<HTMLElement>(MOVABLE_TAB) ?? [])];
+  return [...(strip?.querySelectorAll<HTMLElement>(TAB) ?? [])];
 }
 
 /**
@@ -342,8 +338,6 @@ export function Tabs({
     revealed.current = chosen;
     reveal(strip.current, chosen, drawn);
   });
-  // Note that a move's places count the tabs that move alone, as the drag
-  // does, so a tab anchored at the start is no place of theirs.
   const move =
     onMove === undefined
       ? undefined
@@ -444,10 +438,7 @@ export function Tabs({
  * own, with ⌘W on the chosen tab's alone. `contextMenu`
  * (`useMenu`'s) opens the tab's own actions from a right-click or a long
  * press, and `onMenu` opens them where it says from the keyboard's menu
- * keys. A `quiet` tab draws no fill at rest, chosen or not, and the hover
- * fill under the pointer: a lone tab, always the chosen one, need not be
- * told from the others. An `anchored` tab stands at the strip's start for
- * good, never moved.
+ * keys.
  */
 export function Tab({
   id,
@@ -462,8 +453,6 @@ export function Tab({
   hint: Hint,
   editor,
   tabRef,
-  quiet = false,
-  anchored = false,
   preview = false,
   onSelect,
   onKeep,
@@ -490,8 +479,6 @@ export function Tab({
   hint?: TabHint | undefined;
   editor?: ReactNode;
   tabRef?: RefObject<HTMLButtonElement | null> | undefined;
-  quiet?: boolean;
-  anchored?: boolean;
   /** Stands as its strip's preview, which the next one opened takes the place of: its label in italics, as VS Code draws one. */
   preview?: boolean;
   onSelect: () => void;
@@ -584,8 +571,6 @@ export function Tab({
       className={PILL}
       data-selected={String(selected)}
       data-closable={String(onClose !== undefined)}
-      data-quiet={String(quiet)}
-      data-anchored={String(anchored)}
       data-preview={String(preview)}
       data-unread={String(unread)}
       data-marked={String(endMark !== undefined)}

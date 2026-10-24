@@ -217,22 +217,6 @@
     flex-basis: var(--luke-tab-widest);
   }
 
-  /* A quiet tab, a column's lone one, wears no fill at rest even chosen,
-     and the hover fill under the pointer, as a title does; chosen, it still
-     stands on the strip's ground, so no tab shows through it where it is
-     pinned. */
-  .luke-tab[data-quiet="true"]:not(:hover) {
-    background: none;
-  }
-
-  .luke-tab[data-selected="true"][data-quiet="true"]:not(:hover) {
-    background: var(--luke-tabs-ground);
-  }
-
-  .luke-tab[data-quiet="true"]:hover {
-    background: var(--luke-color-fill-hover);
-  }
-
   /* Pinned, it fades the tabs passing beneath its inner edge as the strip's
      ends do. */
   @container pinned scroll-state(stuck: left) {
@@ -377,13 +361,6 @@
     .luke-tab[data-marked="true"] .luke-tab-close {
       opacity: 0;
     }
-  }
-
-  /* A quiet tab, a column's lone one, takes the room its row has rather
-     than a tab's widest, giving way to the buttons beside it as any tab
-     gives way. */
-  .luke-tab[data-quiet="true"] {
-    max-width: 100%;
   }
 
   /* Folded to glyphs, a tab other than the chosen one narrower than 72px is

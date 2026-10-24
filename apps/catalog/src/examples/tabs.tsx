@@ -21,10 +21,9 @@ import { CatalogSection } from "../section";
 /**
  * tabs.tsx -- a strip of tabs to choose, close, and drag along, the chosen
  * one raised: one with a count after its name, one marked failed, one that
- * something arrived on, a preview, and one anchored at the start for good;
- * the same strip in a narrow row, where it scrolls along with the chosen tab
- * pinned; a lone quiet tab; and a switcher's row of recent cards, a still
- * and glyphs, one chosen and the screen here dimmed.
+ * something arrived on, and a preview; the same strip in a narrow row, where
+ * it scrolls along with the chosen tab pinned; and a switcher's row of recent
+ * cards, a still and glyphs, one chosen and the screen here dimmed.
  */
 
 /** One tab of the example strips: its key, glyph, name, and what it wears. */
@@ -36,11 +35,10 @@ interface SampleTab {
   readonly failed?: boolean;
   readonly unread?: boolean;
   readonly preview?: boolean;
-  readonly anchored?: boolean;
 }
 
 const SAMPLE_TABS: readonly SampleTab[] = [
-  { id: "plan", icon: <DocumentIcon />, label: "Plan", anchored: true },
+  { id: "plan", icon: <DocumentIcon />, label: "Plan" },
   { id: "inbox", icon: <FolderIcon />, label: "Inbox", detail: "3" },
   { id: "agent", icon: <UserIcon />, label: "Refresh tokens before they expire" },
   { id: "failed", icon: <UserIcon />, label: "Migrate the sessions table", failed: true },
@@ -49,13 +47,12 @@ const SAMPLE_TABS: readonly SampleTab[] = [
   { id: "board", icon: <BoardIcon />, label: "token-refresh.ts", preview: true },
 ];
 
-/** The ids of every tab but the anchored ones, in their order now. */
-function movedIds(tabs: readonly SampleTab[], from: number, to: number): SampleTab[] {
-  const anchored = tabs.filter((tab) => tab.anchored === true);
-  const moving = tabs.filter((tab) => tab.anchored !== true);
-  const [taken] = moving.splice(from, 1);
-  if (taken !== undefined) moving.splice(to, 0, taken);
-  return [...anchored, ...moving];
+/** The tabs in their order now, the one at `from` taken to `to`. */
+function movedTabs(tabs: readonly SampleTab[], from: number, to: number): SampleTab[] {
+  const moved = [...tabs];
+  const [taken] = moved.splice(from, 1);
+  if (taken !== undefined) moved.splice(to, 0, taken);
+  return moved;
 }
 
 /** A strip of the sample tabs, chosen, closed, kept, and moved for real. */
@@ -68,7 +65,7 @@ function Strip({ narrow = false }: { narrow?: boolean }): React.JSX.Element {
       <Tabs
         label={narrow ? "Narrow tabs" : "Tabs"}
         ground={TABS_GROUND.GROUND}
-        onMove={(from, to) => setTabs((was) => movedIds(was, from, to))}
+        onMove={(from, to) => setTabs((was) => movedTabs(was, from, to))}
       >
         {tabs.map((tab) => (
           <Tab
@@ -85,7 +82,6 @@ function Strip({ narrow = false }: { narrow?: boolean }): React.JSX.Element {
             }
             unread={tab.unread === true && !seen.has(tab.id)}
             preview={tab.preview === true}
-            anchored={tab.anchored === true}
             selected={tab.id === chosen}
             onSelect={() => {
               setChosen(tab.id);
@@ -96,14 +92,11 @@ function Strip({ narrow = false }: { narrow?: boolean }): React.JSX.Element {
                 was.map((each) => (each.id === tab.id ? { ...each, preview: false } : each)),
               )
             }
-            onClose={
-              tab.anchored === true
-                ? undefined
-                : () => {
-                    setTabs((was) => was.filter((each) => each.id !== tab.id));
-                    if (tab.id === chosen) setChosen("plan");
-                  }
-            }
+            onClose={() => {
+              const rest = tabs.filter((each) => each.id !== tab.id);
+              setTabs(rest);
+              if (tab.id === chosen) setChosen(rest[0]?.id ?? "");
+            }}
           />
         ))}
       </Tabs>
@@ -164,13 +157,6 @@ function TabsExamples(): React.JSX.Element {
       </CatalogSection>
       <CatalogSection id="tabs-narrow" title="Narrow: the strip scrolls, the chosen tab pinned">
         <Strip narrow />
-      </CatalogSection>
-      <CatalogSection id="tabs-quiet" title="A lone quiet tab">
-        <div className="catalog-tab-row catalog-tab-row-narrow">
-          <Tabs label="Lone tab" ground={TABS_GROUND.GROUND}>
-            <Tab icon={<DocumentIcon />} label="Plan" selected quiet onSelect={() => undefined} />
-          </Tabs>
-        </div>
       </CatalogSection>
       <CatalogSection id="tabs-cards" title="A switcher's recent cards">
         <Cards />
