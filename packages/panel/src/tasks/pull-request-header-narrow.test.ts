@@ -149,10 +149,10 @@ test("in a side panel of any width the header and its row of tabs span the panel
     laid = layContainersAt({ "pull-request-header": width, "pull-request-tab": width });
     document.body.innerHTML = [
       '<div class="side-panel-content"><div class="file-view pull-request-tab">',
-      '<header class="pull-request-header"></header><div class="pull-request-tabs"></div>',
+      '<header class="pull-request-header"></header><div class="luke-pane-bar"></div>',
       "</div></div>",
     ].join("");
-    for (const selector of [".pull-request-header", ".pull-request-tabs"]) {
+    for (const selector of [".pull-request-header", ".luke-pane-bar"]) {
       const style = getComputedStyle(document.querySelector(selector) ?? assert.fail(selector));
       for (const side of [style.paddingLeft, style.paddingRight, style.paddingInline]) {
         assert.doesNotMatch(side, /reading-room/u, `${selector} at ${width}px`);
