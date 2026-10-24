@@ -1,11 +1,13 @@
 import assert from "node:assert/strict";
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
 import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
+import { HOST_CAPABILITY } from "@luke/settings";
 import { SETTINGS_SEARCH_ROW } from "@luke/settings/settings-anchors";
 import { SETTINGS_SECTION, SETTINGS_VIEW } from "@luke/settings/settings-views";
 import { settingsView } from "@luke/settings/testing";
 import { test } from "vitest";
 import {
+  SETTINGS_NO_MATCH_WORDS,
   type SettingsSearchInput,
   searchSettings,
   settingsSearchEntries,
@@ -202,13 +204,13 @@ test("an experiment is found by its name, what it brings, and what other apps ca
     assert.deepEqual(
       experimentalFound(query, true),
       [
+        "Memory",
         "Luke, your operator",
         "Inbox-first sidebar",
         "Code review",
         "Browser tab",
         "Chat",
         "Video calls",
-        "Memory",
       ],
       query,
     );
@@ -262,4 +264,73 @@ test("a writing chord is found by its name and by the Markdown typed for it, on 
   assert.deepEqual(shortcutsFound("Strikethrough"), ["Strikethrough"]);
   assert.deepEqual(shortcutsFound("~~"), ["Strikethrough"]);
   assert.ok(shortcutsFound("markdown").includes("Divider"), "a rule with no chord is listed too");
+});
+
+/** Every page's rows as a signed-in desktop reader of a workspace they administer sees them. */
+const FULL_INPUT: SettingsSearchInput = {
+  settings: settingsView({ voiceAvailable: true }),
+  voiceControlsDrawn: true,
+  accountDrawn: true,
+  capabilities: DESKTOP_CAPABILITIES,
+  workspace: { ...TEAM, role: WORKSPACE_ROLE.ADMIN },
+};
+
+/** The labels of the rows `query` finds, in the order they are listed. */
+function labelsFound(query: string, input: SettingsSearchInput = FULL_INPUT): readonly string[] {
+  return (searchSettings(settingsSearchEntries(input), query)?.groups ?? []).flatMap((group) =>
+    group.items.map((entry) => entry.label),
+  );
+}
+
+test("repositories, skills, test notification and rename each find the row the page draws", () => {
+  assert.ok(labelsFound("repositories").includes("Repositories on this Mac"));
+  assert.ok(labelsFound("skills").includes("Add a skill"));
+  assert.deepEqual(labelsFound("test notification"), ["Test notification"]);
+  assert.deepEqual(labelsFound("rename"), ["Rename workspace"]);
+});
+
+test("the Mac repositories need a terminal here, and renaming needs a workspace the reader manages that is not their own first", () => {
+  const withoutTerminal = {
+    ...FULL_INPUT,
+    capabilities: DESKTOP_CAPABILITIES.filter(
+      (capability) => capability !== HOST_CAPABILITY.MAC_TERMINAL,
+    ),
+  };
+  assert.equal(
+    labelsFound("repositories", withoutTerminal).includes("Repositories on this Mac"),
+    false,
+  );
+  assert.equal(
+    labelsFound("add a skill", { ...FULL_INPUT, workspace: undefined }).includes("Add a skill"),
+    false,
+    "the Skills page draws no Add a skill row while its workspace is unread or failed",
+  );
+  assert.deepEqual(labelsFound("rename", { ...FULL_INPUT, workspace: TEAM }), []);
+  assert.deepEqual(
+    labelsFound("rename", { ...FULL_INPUT, workspace: { ...FIRST, personal: true } }),
+    [],
+  );
+});
+
+test("model finds the default model and the Chapters model, each under a label no other page's row wears", () => {
+  assert.deepEqual(
+    labelsFound("model").filter((label) => label.toLowerCase().includes("model")),
+    ["Default model", "Chapters model"],
+  );
+});
+
+test("no two rows on different pages wear the same label", () => {
+  const pagesOf = new Map<string, Set<string>>();
+  for (const entry of settingsSearchEntries(FULL_INPUT)) {
+    pagesOf.set(entry.label, (pagesOf.get(entry.label) ?? new Set()).add(entry.page));
+  }
+  assert.deepEqual(
+    [...pagesOf].filter(([, pages]) => pages.size > 1).map(([label]) => label),
+    [],
+  );
+});
+
+test("a search that finds nothing says what to try", () => {
+  assert.equal(searchSettings(settingsSearchEntries(FULL_INPUT), "zzzz")?.matched, 0);
+  assert.match(SETTINGS_NO_MATCH_WORDS, /^No results match\. Try /u);
 });

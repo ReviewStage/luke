@@ -50,6 +50,9 @@ const SETTINGS_PAGE = {
  */
 export const WORKSPACE_CONNECTIONS = "Workspace connections";
 
+/** The Workspace page's group of where each repository is cloned on this Mac, its heading and its search result alike. */
+export const MAC_REPOSITORIES = "Repositories on this Mac";
+
 /** What each of the Settings sidebar's groups is headed by where no workspace is listed to name the first. */
 const SETTINGS_GROUP_HEADING = {
   [SETTINGS_PAGE_GROUP.WORKSPACE]: "Workspace",

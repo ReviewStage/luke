@@ -38,6 +38,12 @@ export const SETTINGS_SEARCH_ROW = {
   CHAPTERS_MODEL: "chapters-model",
   API_KEY_ANTHROPIC: "api-key-anthropic",
   API_KEY_OPENAI: "api-key-openai",
+  /** Skills' Add a skill row. */
+  ADD_SKILL: "add-skill",
+  /** Notifications' Test notification row. */
+  TEST_NOTIFICATION: "test-notification",
+  /** The Workspace page's identity row, where an owner or an admin renames the workspace. */
+  WORKSPACE_RENAME: "workspace-rename",
 } as const;
 
 /**

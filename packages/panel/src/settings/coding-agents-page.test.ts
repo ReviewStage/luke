@@ -374,17 +374,19 @@ test("replacing the account's own Anthropic key reads the models again, so Fast 
   assert.equal(fastSwitch(page).disabled, false);
 });
 
-test("a catalog that could not be read says so in the Model menu with Retry, and Retry reads it again", async () => {
+test("a catalog that could not be read says so in the Default model menu with Retry, and Retry reads it again", async () => {
   refuseModels = true;
   const page = await mount();
   assert.equal(placeholders(page).length, 0, "the page does not read for ever");
 
   act(() =>
     (
-      page.querySelector<HTMLButtonElement>('button[aria-label^="Model: "]') ?? assert.fail()
+      page.querySelector<HTMLButtonElement>('button[aria-label^="Default model: "]') ??
+      assert.fail()
     ).click(),
   );
-  const menu = document.querySelector('[role="dialog"][aria-label="Model"]') ?? assert.fail();
+  const menu =
+    document.querySelector('[role="dialog"][aria-label="Default model"]') ?? assert.fail();
   assert.equal(
     menu.querySelector('[role="alert"]')?.textContent,
     "The models could not be read.Retry",
@@ -428,7 +430,7 @@ test("a default nothing pays for, as Claude on an OpenAI key alone, says it cann
   };
 
   const picker =
-    page.querySelector<HTMLButtonElement>('button[aria-label^="Model: "]') ?? assert.fail();
+    page.querySelector<HTMLButtonElement>('button[aria-label^="Default model: "]') ?? assert.fail();
   const row = picker.closest(".luke-settings-row") ?? assert.fail("no Model row");
   assert.match(
     row.textContent ?? "",
@@ -442,7 +444,8 @@ test("a default nothing pays for, as Claude on an OpenAI key alone, says it cann
   assert.deepEqual(opened, [claudeRow]);
 
   act(() => picker.click());
-  const menu = document.querySelector('[role="dialog"][aria-label="Model"]') ?? assert.fail();
+  const menu =
+    document.querySelector('[role="dialog"][aria-label="Default model"]') ?? assert.fail();
   const option = [...menu.querySelectorAll<HTMLElement>('[role="option"]')].find((each) =>
     (each.textContent ?? "").startsWith("Sonnet 5.5"),
   );

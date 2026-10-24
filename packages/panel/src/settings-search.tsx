@@ -1,5 +1,6 @@
 import { PRODUCT_SEARCH_SURFACE, PRODUCT_SURFACE_EVENT } from "@luke/features/analytics";
 import { INTEGRATION_NAME, INTEGRATION_PROVIDER_LIST } from "@luke/features/integration-wire";
+import { noMatchWords, TERM } from "@luke/features/words";
 import { managesWorkspace } from "@luke/features/workspace-role";
 import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
 import {
@@ -59,7 +60,7 @@ import { useAppCommand } from "./app-commands.js";
 import { appPlatform } from "./app-platform.js";
 import { drawnVisibly, focusSeek } from "./focus-seek.js";
 import { focusSearchField, Highlighted } from "./search-field.js";
-import { settingsPageOf, WORKSPACE_CONNECTIONS } from "./settings/pages.js";
+import { MAC_REPOSITORIES, settingsPageOf, WORKSPACE_CONNECTIONS } from "./settings/pages.js";
 import { settingsPageShown } from "./settings/settings-rows.js";
 
 /**
@@ -126,6 +127,12 @@ export type SettingsSearchInput = SettingsRowsInput & {
 export function resultPageWord(page: SettingsView): string {
   return settingsPageOf(page).title;
 }
+
+/**
+ * What an empty search says, the words module's miss line and then what to try,
+ * because a miss that only says it missed leaves the reader nothing to do.
+ */
+export const SETTINGS_NO_MATCH_WORDS = `${noMatchWords(TERM.RESULT)}. Try a page's name, such as Voice, or fewer words.`;
 
 /** The words every integration's row can be found by, beside its own name. */
 const INTEGRATION_WORDS = "connect disconnect integration mcp";
@@ -243,9 +250,9 @@ function fixedEntries(input: SettingsSearchInput): readonly SettingsSearchEntry[
     input.accountDrawn
       ? {
           id: SETTINGS_SEARCH_ROW.CODING_AGENT_MODEL,
-          label: "Model",
+          label: "Default model",
           page: SETTINGS_VIEW.CODING_AGENTS,
-          haystack: ["Model", "default model coding agent claude gpt start"],
+          haystack: ["Default model", "model coding agent claude gpt start"],
         }
       : undefined,
     input.accountDrawn
@@ -337,6 +344,48 @@ function fixedEntries(input: SettingsSearchInput): readonly SettingsSearchEntry[
           ],
         }
       : undefined,
+    // Where each repository is cloned on this Mac, drawn on the Workspace page only where the app can run a terminal there.
+    input.workspace && input.capabilities.includes(HOST_CAPABILITY.MAC_TERMINAL)
+      ? {
+          id: SETTINGS_SECTION.MAC_REPOSITORIES,
+          label: MAC_REPOSITORIES,
+          page: SETTINGS_VIEW.WORKSPACE,
+          haystack: [
+            MAC_REPOSITORIES,
+            "repository repositories clone folder checkout git command run checks terminal path",
+          ],
+        }
+      : undefined,
+    // The workspace's name, which an owner or an admin changes on the identity row, but not the account's first workspace, which its owner's account name names.
+    input.workspace !== undefined &&
+    managesWorkspace(input.workspace) &&
+    input.workspace.personal !== true
+      ? {
+          id: SETTINGS_SEARCH_ROW.WORKSPACE_RENAME,
+          label: "Rename workspace",
+          page: SETTINGS_VIEW.WORKSPACE,
+          haystack: ["Rename workspace", "rename name change workspace photo"],
+        }
+      : undefined,
+    // The Skills page's one standing row, drawn once the page has the workspace it lists the skills of: the skills themselves are read from the service and listed under it.
+    input.workspace
+      ? {
+          id: SETTINGS_SEARCH_ROW.ADD_SKILL,
+          label: "Add a skill",
+          page: SETTINGS_VIEW.SKILLS,
+          haystack: [
+            "Add a skill",
+            "skills skill install import github repository SKILL.md instructions agents",
+          ],
+        }
+      : undefined,
+    // The Notifications page's test, drawn wherever the page is.
+    {
+      id: SETTINGS_SEARCH_ROW.TEST_NOTIFICATION,
+      label: "Test notification",
+      page: SETTINGS_VIEW.NOTIFICATIONS,
+      haystack: ["Test notification", "notifications send alert banner permission allow"],
+    },
     // The window's own chords, fixed rather than chosen, listed below them; a gated feature's only while its experiment is on.
     ...shownShortcutGroups(input.settings.experiments, input.capabilities).flatMap((group) =>
       group.commands.map((command) => ({
@@ -633,7 +682,7 @@ export function SettingsSearchResults({
   if (search.matched === 0) {
     return (
       <NoteLine look={NOTE_LINE_LOOK.ROWS} status>
-        No results
+        {SETTINGS_NO_MATCH_WORDS}
       </NoteLine>
     );
   }

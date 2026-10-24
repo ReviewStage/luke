@@ -11,6 +11,7 @@ import { formatBytes } from "@luke/features/number-format";
 import { readingWords } from "@luke/features/words";
 import type { Workspace } from "@luke/features/workspace-wire";
 import { ACT_KIND } from "@luke/host/acts";
+import { SETTINGS_SEARCH_ROW } from "@luke/settings/settings-anchors";
 import {
   BUTTON_VARIANT,
   Button,
@@ -522,7 +523,7 @@ function ShownSkills({
 
   return (
     <>
-      <SettingsSection>
+      <SettingsSection anchor={SETTINGS_SEARCH_ROW.ADD_SKILL}>
         <SettingsRow label="Add a skill" description={SKILLS_LINE.ABOUT}>
           {() => (
             <Button

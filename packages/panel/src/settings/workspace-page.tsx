@@ -23,6 +23,7 @@ import {
 } from "@luke/features/workspace-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import { HOST_CAPABILITY } from "@luke/settings";
+import { SETTINGS_SEARCH_ROW, searchAnchorProps } from "@luke/settings/settings-anchors";
 import { SETTINGS_SECTION } from "@luke/settings/settings-views";
 import {
   ALIGN,
@@ -1845,7 +1846,7 @@ function WorkspaceIdentity({ workspace }: { workspace: Workspace }): React.JSX.E
     ) : null;
   const photoPicker = manages ? picker.input : null;
   return (
-    <Stack gap={GAP.NONE}>
+    <Stack gap={GAP.NONE} {...searchAnchorProps(SETTINGS_SEARCH_ROW.WORKSPACE_RENAME)}>
       <MenuRow
         thing="Workspace"
         actions={actions}

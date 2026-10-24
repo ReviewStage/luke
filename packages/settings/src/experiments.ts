@@ -46,6 +46,15 @@ export interface ExperimentEntry {
  */
 export const EXPERIMENTS = [
   {
+    key: EXPERIMENT.MEMORY,
+    name: "Memory",
+    detail:
+      "Your coding agents keep settled facts about how your team works and recall them in later work, " +
+      "shared across your workspace and reviewed in Settings › Memory.",
+    owner: "Dean",
+    since: "2026-10-23",
+  },
+  {
     key: EXPERIMENT.OPERATOR,
     name: "Luke, your operator",
     detail:
@@ -97,15 +106,6 @@ export const EXPERIMENTS = [
       "Keyframe. Your own voice never does.",
     owner: "Charles",
     since: "2026-10-15",
-  },
-  {
-    key: EXPERIMENT.MEMORY,
-    name: "Memory",
-    detail:
-      "Your coding agents keep settled facts about how your team works and recall them in later work, " +
-      "shared across your workspace and reviewed in Settings › Memory.",
-    owner: "Dean",
-    since: "2026-10-23",
   },
 ] as const satisfies readonly ExperimentEntry[];
 
