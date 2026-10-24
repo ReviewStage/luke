@@ -23,6 +23,7 @@ import {
   type InstalledSkillScope,
   type InstalledSkillSource,
 } from "@luke/features/installed-skill-wire";
+import { formatBytes, formatExactBytes } from "@luke/features/number-format";
 import {
   readSkillFile,
   SKILL_FILE_BOUNDS,
@@ -62,8 +63,6 @@ import type { Workspace, WorkspaceMember } from "@luke/features/workspace-wire";
 
 /** How many characters of a commit a row and the dialog show. */
 const SHORT_SHA = 7;
-
-const BYTES_PER_KB = 1024;
 
 /** What the page and the dialog say that no row's data says. */
 export const SKILLS_LINE = {
@@ -111,13 +110,6 @@ export function workspaceGroupTitle(workspace: Pick<Workspace, "name">): string 
 /** "Everyone in Stage": the dialog's workspace scope, named for the workspace. */
 function everyoneIn(workspace: Pick<Workspace, "name">): string {
   return `Everyone in ${workspace.name}`;
-}
-
-/** A size as a line says it: bytes under a kilobyte, kilobytes to one place under ten, else whole. */
-export function sizeText(bytes: number): string {
-  if (bytes < BYTES_PER_KB) return `${bytes} B`;
-  const kb = bytes / BYTES_PER_KB;
-  return `${kb < 10 ? kb.toFixed(1) : Math.round(kb)} KB`;
 }
 
 /** "1 file", "4 files". */
@@ -323,10 +315,10 @@ const FILES_REFUSAL_WORDS = {
   [INSTALLED_SKILL_FILES_REFUSAL.NO_SKILL_FILE]: "has no SKILL.md in its folder.",
   [INSTALLED_SKILL_FILES_REFUSAL.DUPLICATE_PATH]: "holds two files at one path.",
   [INSTALLED_SKILL_FILES_REFUSAL.TOO_MANY_FILES]: `holds more than ${INSTALLED_SKILL_BOUNDS.MAX_FILES} files.`,
-  [INSTALLED_SKILL_FILES_REFUSAL.TOO_LARGE]: `is larger than ${sizeText(INSTALLED_SKILL_BOUNDS.MAX_TOTAL_BYTES)} altogether.`,
+  [INSTALLED_SKILL_FILES_REFUSAL.TOO_LARGE]: `is larger than ${formatExactBytes(INSTALLED_SKILL_BOUNDS.MAX_TOTAL_BYTES)} altogether.`,
   [INSTALLED_SKILL_FILES_REFUSAL.SKILL_FILE_INVALID]:
     "needs a valid name and a description in its SKILL.md.",
-  [INSTALLED_SKILL_FILES_REFUSAL.SKILL_FILE_TOO_LARGE]: `has a SKILL.md larger than ${sizeText(SKILL_FILE_BOUNDS.MAX_FILE_BYTES)}.`,
+  [INSTALLED_SKILL_FILES_REFUSAL.SKILL_FILE_TOO_LARGE]: `has a SKILL.md larger than ${formatExactBytes(SKILL_FILE_BOUNDS.MAX_FILE_BYTES)}.`,
   [INSTALLED_SKILL_FILES_REFUSAL.CREDENTIAL_SHAPED]:
     "holds what looks like a credential. A skill must never carry one.",
 } as const satisfies Record<InstalledSkillFilesRefusal, string>;
@@ -371,10 +363,10 @@ const PROBLEM_WORDS = {
   [INSTALLED_SKILL_PROBLEM.DESCRIPTION_MISSING]: "No description",
   [INSTALLED_SKILL_PROBLEM.DESCRIPTION_TOO_LONG]: `Description over ${TASK_SKILL_BOUNDS.MAX_DESCRIPTION_CHARS} characters`,
   [INSTALLED_SKILL_PROBLEM.FRONTMATTER_UNCLOSED]: "Frontmatter never closed",
-  [INSTALLED_SKILL_PROBLEM.TOO_LARGE]: `SKILL.md over ${sizeText(SKILL_FILE_BOUNDS.MAX_FILE_BYTES)}`,
+  [INSTALLED_SKILL_PROBLEM.TOO_LARGE]: `SKILL.md over ${formatExactBytes(SKILL_FILE_BOUNDS.MAX_FILE_BYTES)}`,
   [INSTALLED_SKILL_PROBLEM.CREDENTIAL_SHAPED]: "Holds what looks like a credential",
   [INSTALLED_SKILL_PROBLEM.TOO_MANY_FILES]: `More than ${INSTALLED_SKILL_BOUNDS.MAX_FILES} files`,
-  [INSTALLED_SKILL_PROBLEM.FILES_TOO_LARGE]: `Over ${sizeText(INSTALLED_SKILL_BOUNDS.MAX_TOTAL_BYTES)} of files`,
+  [INSTALLED_SKILL_PROBLEM.FILES_TOO_LARGE]: `Over ${formatExactBytes(INSTALLED_SKILL_BOUNDS.MAX_TOTAL_BYTES)} of files`,
 } as const satisfies Record<InstalledSkillProblem, string>;
 
 /** A skill's problems, joined into one line. */
@@ -506,7 +498,7 @@ export function addSkillTitle(
 
 /** The one line the box folds into once previewed: where the skills come from, or the text's size. */
 export function previewSourceLine(screen: AddSkillScreen, preview: InstalledSkillPreview): string {
-  if (preview.kind === SKILL_PASTE_KIND.TEXT) return `Pasted text · ${sizeText(preview.bytes)}`;
+  if (preview.kind === SKILL_PASTE_KIND.TEXT) return `Pasted text · ${formatBytes(preview.bytes)}`;
   if (preview.kind !== SKILL_PASTE_KIND.SOURCE) return "";
   const where = `${preview.owner}/${preview.repo} @ ${preview.sha.slice(0, SHORT_SHA)}`;
   return screen === ADD_SKILL_SCREEN.BROWSE
@@ -527,10 +519,10 @@ export function othersLine(count: number): string {
   return `${count} other ${count === 1 ? "skill" : "skills"} in this repo`;
 }
 
-/** What a found skill holds and where: "2 files · 0.4 KB · skills/productivity/grill-me". */
+/** What a found skill holds and where: "2 files · 0.4 kB · skills/productivity/grill-me". */
 export function candidateFacts(candidate: InstalledSkillCandidate): string {
   const where = candidate.path === "" ? "repository root" : candidate.path;
-  return `${filesText(candidate.fileCount)} · ${sizeText(candidate.bytes)} · ${where}`;
+  return `${filesText(candidate.fileCount)} · ${formatBytes(candidate.bytes)} · ${where}`;
 }
 
 /** Whether a found skill may be ticked at all: one with problems never installs. */

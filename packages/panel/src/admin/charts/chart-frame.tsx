@@ -10,6 +10,7 @@
  */
 
 import type { AdminTrend } from "@luke/features/admin-answer-wire";
+import { formatCount } from "@luke/features/number-format";
 import {
   ALIGN,
   Card,
@@ -25,7 +26,6 @@ import {
   Text,
 } from "@luke/ui";
 import { formatTrendMove, TREND_DIRECTION, trendDirection } from "@luke/ui/admin-format";
-import { formatCount } from "@luke/ui/time-format";
 import { CARD_GAP } from "./stat-card.js";
 
 /** The ink a trend's move is drawn in: a rise complete, a fall attention, no move muted. */

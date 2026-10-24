@@ -7,6 +7,7 @@ import type { IntegrationProvider } from "@luke/features/integration-wire";
 import { readLink } from "@luke/features/luke-link";
 import { mayNameMention } from "@luke/features/mention-link";
 import type { CatalogModel, ModelChoice } from "@luke/features/models-wire";
+import { formatBytes } from "@luke/features/number-format";
 import { planAttachmentOf } from "@luke/features/plan-attachment-link";
 import {
   agentCallLine,
@@ -592,7 +593,10 @@ function remarkPluginsFor(
  * task's page it is drawn on, or the window's doors off one; a link as any
  * other is where it names none.
  */
-function MentionElement({ node, children }: MarkdownNodeProps & { children?: ReactNode }): ReactNode {
+function MentionElement({
+  node,
+  children,
+}: MarkdownNodeProps & { children?: ReactNode }): ReactNode {
   const doors = useMentionDoors();
   const target = String(node?.properties[MENTION_ELEMENT.TARGET] ?? "");
   const words = node === undefined ? "" : wordsOf(node);
@@ -607,7 +611,10 @@ function MentionElement({ node, children }: MarkdownNodeProps & { children?: Rea
 }
 
 /** A link standing alone in its paragraph of a document: the card of what it names, or the paragraph as it was where it earns none (`lone-link-card.tsx`). */
-function LoneLinkElement({ node, children }: MarkdownNodeProps & { children?: ReactNode }): ReactNode {
+function LoneLinkElement({
+  node,
+  children,
+}: MarkdownNodeProps & { children?: ReactNode }): ReactNode {
   const target = String(node?.properties[LONE_LINK_ELEMENT.TARGET] ?? "");
   const words = String(node?.properties[LONE_LINK_ELEMENT.WORDS] ?? "");
   return <LoneLinkCard target={target} words={words} fallback={<p>{children}</p>} />;
@@ -883,15 +890,9 @@ const CUT_WORDS = {
   OUTPUT: "Reading the whole output…",
 } as const;
 
-/** A size in bytes as a reader says it. */
-function sizeWords(bytes: number): string {
-  const kilobytes = bytes / 1024;
-  return kilobytes < 1024 ? `${Math.round(kilobytes)} kB` : `${(kilobytes / 1024).toFixed(1)} MB`;
-}
-
 /** A cut part's two ends, the middle that could not be read said between them. */
 function cutText(cut: CutBody): string {
-  return `${cut.head}\n\n… ${sizeWords(cut.bytes)} in all; only its start and end could be read …\n\n${cut.tail}`;
+  return `${cut.head}\n\n… ${formatBytes(cut.bytes)} in all; only its start and end could be read …\n\n${cut.tail}`;
 }
 
 /**

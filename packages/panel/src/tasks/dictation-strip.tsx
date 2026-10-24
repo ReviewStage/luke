@@ -1,3 +1,4 @@
+import { playheadText } from "@luke/features/time-format";
 import {
   BUTTON_SHAPE,
   BUTTON_VARIANT,
@@ -52,15 +53,7 @@ const REST_SCALE = 0.08;
 
 const BAR_INDEXES = Array.from({ length: BAR_COUNT }, (_, index) => index);
 
-const SECONDS_PER_MINUTE = 60;
 const MS_PER_SECOND = 1_000;
-
-/** A length as `m:ss`. */
-function clockOf(ms: number): string {
-  const seconds = Math.floor(ms / MS_PER_SECOND);
-  const minutes = Math.floor(seconds / SECONDS_PER_MINUTE);
-  return `${minutes}:${String(seconds % SECONDS_PER_MINUTE).padStart(2, "0")}`;
-}
 
 /** The microphone press at the card's foot; held boxes take none. */
 export function DictateButton({
@@ -154,7 +147,7 @@ function DictationClock({ startedAt }: { startedAt: number | undefined }): React
 
   return (
     <span className="dictation-clock" role="timer">
-      {clockOf(elapsed)}
+      {playheadText(elapsed)}
     </span>
   );
 }

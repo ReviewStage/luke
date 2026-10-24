@@ -4,7 +4,7 @@
  * Each kind of words has one function here, so a screen names only its noun
  * and every screen, the service's included, says it the same way. It holds no
  * DOM and no React, so the service and every client read it alike. Times and
- * numbers are `@luke/ui/time-format`'s, not this module's.
+ * numbers are `time-format.ts`'s and `number-format.ts`'s, not this module's.
  */
 
 /** A noun as a count says it: its one form and its many form. */

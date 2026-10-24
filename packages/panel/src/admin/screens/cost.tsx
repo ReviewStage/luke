@@ -9,6 +9,7 @@ import {
   type AdminCostModel,
 } from "@luke/features/admin-cost-wire";
 import { ADMIN_READ, type AdminMetricsWindow } from "@luke/features/admin-wire";
+import { formatCompact, formatCount, formatUsd } from "@luke/features/number-format";
 import {
   BADGE_TONE,
   Badge,
@@ -20,8 +21,7 @@ import {
   TEXT_TONE,
   Text,
 } from "@luke/ui";
-import { formatCompact, formatTrendMove, formatUsd } from "@luke/ui/admin-format";
-import { formatCount } from "@luke/ui/time-format";
+import { formatTrendMove } from "@luke/ui/admin-format";
 import { AccountCell, AccountCellSkeleton } from "../accounts-table/accounts-table.js";
 import { useAdminDoors } from "../admin-doors.js";
 import { adminReadView } from "../admin-read-view.js";

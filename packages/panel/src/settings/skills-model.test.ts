@@ -302,7 +302,7 @@ test("the title names the one skill confirmed or the repository browsed, and the
       bytes: 1229,
       problems: [],
     }),
-    "Pasted text · 1.2 KB",
+    "Pasted text · 1.2 kB",
   );
   assert.equal(
     missingLine({ ...MATT, missing: ["grill-mee"] }),

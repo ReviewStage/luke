@@ -1,5 +1,6 @@
 import type { CodingAgentSummary } from "@luke/features/coding-agent-wire";
 import { PLAN_ACTOR, type PlanLastEdit, type PlanSectionEdit } from "@luke/features/task-wire";
+import { agoText } from "@luke/features/time-format";
 import { useMinute, VisuallyHidden } from "@luke/ui";
 import {
   ACTOR_KIND,
@@ -16,7 +17,6 @@ import {
   LUKE_ACTOR,
   latestActivity,
 } from "@luke/ui/actor-model";
-import { agoText } from "@luke/ui/time-format";
 import { type ReactNode, useMemo } from "react";
 import { ActorRef, LukeCard, PersonCard } from "../actor-ref.js";
 import { useMemberDirectory } from "../member-directory.js";

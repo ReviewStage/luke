@@ -156,7 +156,9 @@
     "./automation-list-model": "./src/automation-list-model.js",
     "./automation-draft-model": "./src/automation-draft-model.js",
     "./terminal-store": "./src/terminal-store.js",
-    "./trigger-catalog": "./src/trigger-catalog.js"
+    "./trigger-catalog": "./src/trigger-catalog.js",
+    "./time-format": "./src/time-format.js",
+    "./number-format": "./src/number-format.js"
   },
   "types": "./src/index.ts",
   "scripts": {
