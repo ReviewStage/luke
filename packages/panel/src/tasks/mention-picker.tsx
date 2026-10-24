@@ -37,6 +37,7 @@ import {
   MenuGlyph,
   type MenuKey,
   MenuKeys,
+  type MenuRow,
   MenuSurface,
   ProviderMark,
   Spinner,
@@ -71,7 +72,6 @@ import { type IntegrationToolsReads, useIntegrationTools } from "../integration-
 import { useMemberDirectory } from "../member-directory.js";
 import { memberRows, YOU_WORD } from "../member-rows.js";
 import type { ComposerTrigger, MentionNode } from "../plan-editor/contract.js";
-import type { MenuRow } from "../searchable-menu.js";
 import { appStateDerivedAtom, useAppSlice } from "../use-app-state.js";
 import { type AgentRowPlace, agentMenuRow, useAgentRowPlace } from "./agent-menu-row.js";
 import {

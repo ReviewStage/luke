@@ -1,0 +1,38 @@
+/* copy-button.css -- a copy button's glyph (`copy-button.tsx`): the copy at
+   rest, the check in the complete ink once a copy lands, and the alert in
+   the danger ink once one is refused, each fading and springing in where
+   the last stood, so the button never moves. The first draw stands still. */
+
+@layer components {
+  .luke-copy-glyph {
+    display: inline-grid;
+    flex: none;
+    place-items: center;
+  }
+
+  .luke-copy-glyph[data-turned] {
+    animation:
+      luke-copy-glyph-fade var(--luke-duration-quick) var(--luke-motion-exit) backwards,
+      luke-copy-glyph-pop var(--luke-duration-fast) var(--luke-spring-fast) backwards;
+  }
+
+  .luke-copy-glyph[data-state="copied"] {
+    color: var(--luke-color-complete);
+  }
+
+  .luke-copy-glyph[data-state="failed"] {
+    color: var(--luke-color-danger-text);
+  }
+
+  @keyframes luke-copy-glyph-fade {
+    from {
+      opacity: 0;
+    }
+  }
+
+  @keyframes luke-copy-glyph-pop {
+    from {
+      transform: scale(0.6);
+    }
+  }
+}

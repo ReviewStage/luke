@@ -49,7 +49,7 @@
 
 import { useAtomSet, useAtomValue } from "@effect/atom-react";
 import { MOTION_DURATION_MS } from "@luke/brand";
-import { STATUS_TONE, Toast, ToastActions, ToastStack, type ToastTone } from "@luke/ui";
+import { STATUS_TONE, TOAST_HOLD, Toast, ToastActions, ToastStack, type ToastTone } from "@luke/ui";
 import { visibleViewport } from "@luke/ui/visible-viewport";
 import { Clock, Duration, Effect } from "effect";
 import * as Atom from "effect/reactivity/Atom";
@@ -67,21 +67,8 @@ const POLITE_TONES: ReadonlySet<ToastTone> = new Set([
 /** The tone said in the alert region: a refusal. */
 const ALERT_TONES: ReadonlySet<ToastTone> = new Set([STATUS_TONE.DANGER]);
 
-/**
- * How long a toast stands, by what it reports, and the only holds a toast
- * names: a change carried, which is short; one carried that its Undo takes
- * back, long enough to reach for Undo, and what any toast with an action
- * stands for where it names no hold; one refused, which takes longer to read
- * and to act on; or news an agent or an automation sent while the developer
- * was looking elsewhere in the window, which has the longest, since it
- * arrives unbidden and carries a View to reach for.
- */
-export const TOAST_HOLD = {
-  DONE: Duration.seconds(3),
-  UNDO: Duration.seconds(5),
-  FAILED: Duration.seconds(6),
-  NEWS: Duration.seconds(8),
-} as const;
+/** How long a toast stands, by what it reports: `@luke/ui`'s, which a copy button's check reads too. */
+export { TOAST_HOLD };
 
 /** What a toast's action says when it takes back what the toast reports. */
 export const UNDO_LABEL = "Undo";

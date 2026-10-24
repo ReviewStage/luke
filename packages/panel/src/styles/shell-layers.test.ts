@@ -116,7 +116,7 @@ function shell(room: string, overlay: string): HTMLElement {
                         children: [
                           {
                             className: "luke-anchored-popover",
-                            children: [{ className: "searchable-menu tab-add-menu" }],
+                            children: [{ className: "luke-searchable-menu" }],
                           },
                         ],
                       },
@@ -145,7 +145,7 @@ for (const [where, room, overlay, touch] of [
       ".desktop-toolbar",
       ".luke-tabs",
       '.luke-tab[data-selected="true"]',
-      ".tab-add-menu",
+      ".luke-searchable-menu",
     ]) {
       assert.ok(over(sidebar, the(selector), root), `the sidebar draws over ${selector}`);
     }

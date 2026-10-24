@@ -21,9 +21,12 @@ import {
   ChipName,
   GAP,
   Inline,
+  type MenuRow,
   POPOVER_ALIGN,
+  POPOVER_WIDTH,
   PopoverPanel,
   SETTINGS_ROW_DENSITY,
+  SearchableMenu,
   SettingsRow,
   Stack,
   TEXT_FIELD_TYPE,
@@ -41,7 +44,6 @@ import {
   useState,
 } from "react";
 import type { MentionNode } from "../plan-editor/contract.js";
-import { type MenuRow, SearchableMenu } from "../searchable-menu.js";
 import { SwitchRow } from "../settings/switch-row.js";
 
 /**
@@ -66,14 +68,14 @@ import { SwitchRow } from "../settings/switch-row.js";
  *
  * Time zone opens on the reader's own zone, and its field turns the card to
  * a page of every zone the runtime knows, searched as the window's other
- * long lists are (`../searchable-menu.tsx`), in the room the card stood in
- * rather than hung over it, so nothing of it is cut by the card's edge and
- * focus never leaves the picker. A zone picked, or Escape, turns back to
- * the card, focus on the field. A zone picked keeps the times as written,
- * as Notion's does: 3:00 PM stays 3:00 PM, now in the zone picked, and the
- * date is written with that zone's offset and named in its words. A date
- * holds an offset rather than a zone's name, so a date opened again opens
- * on the reader's zone, its times as that zone reads them.
+ * long lists are (`@luke/ui`'s `SearchableMenu`), hung from the same place
+ * the card was, so focus never leaves the picker. A zone picked, or
+ * Escape, turns back to the card, focus on the field. A zone picked keeps
+ * the times as written, as Notion's does: 3:00 PM stays 3:00 PM, now in
+ * the zone picked, and the date is written with that zone's offset and
+ * named in its words. A date holds an offset rather than a zone's name,
+ * so a date opened again opens on the reader's zone, its times as that
+ * zone reads them.
  *
  * What the developer changes is held here until the picker closes, as
  * Notion applies a change: Escape, Enter in its words, a press outside, or
@@ -554,11 +556,12 @@ function DatePickerPanel({
           zoneMenu.current = element;
         }}
         label={WORDS.ZONE}
-        className="date-zone-menu"
         placeholder={WORDS.ZONE_SEARCH}
         rows={zones}
         value={zone}
         noMatch={WORDS.ZONE_NO_MATCH}
+        align={POPOVER_ALIGN.START}
+        width={POPOVER_WIDTH.NARROW}
         onPick={zonePicked}
         onClose={() => turnTo(DATE_PICKER_PAGE.DATE)}
         onLeave={(left) => {
@@ -569,83 +572,85 @@ function DatePickerPanel({
   }
 
   return (
-    <PopoverPanel
-      title={WORDS.TITLE}
-      closeLabel={WORDS.CLOSE}
-      initialFocus={from === DATE_PICKER_PAGE.ZONE ? zoneField : field}
-      onDismiss={() => finish(DATE_PICKER_CLOSE.KEY)}
-      onLeave={leave}
-    >
-      <Stack gap={GAP.TIGHT}>
-        {timed ? (
-          <>
+    <AnchoredPopover align={POPOVER_ALIGN.START} width={DATE_PICKER_WIDTH}>
+      <PopoverPanel
+        title={WORDS.TITLE}
+        closeLabel={WORDS.CLOSE}
+        initialFocus={from === DATE_PICKER_PAGE.ZONE ? zoneField : field}
+        onDismiss={() => finish(DATE_PICKER_CLOSE.KEY)}
+        onLeave={leave}
+      >
+        <Stack gap={GAP.TIGHT}>
+          {timed ? (
+            <>
+              <Inline gap={GAP.CONTROL} wrap={false}>
+                {dateField(DATE_END.START, start)}
+                {timeField(DATE_END.START, start)}
+              </Inline>
+              {end === undefined ? null : (
+                <Inline gap={GAP.CONTROL} wrap={false}>
+                  {dateField(DATE_END.END, end)}
+                  {timeField(DATE_END.END, end)}
+                </Inline>
+              )}
+            </>
+          ) : (
             <Inline gap={GAP.CONTROL} wrap={false}>
               {dateField(DATE_END.START, start)}
-              {timeField(DATE_END.START, start)}
+              {end === undefined ? null : dateField(DATE_END.END, end)}
             </Inline>
-            {end === undefined ? null : (
-              <Inline gap={GAP.CONTROL} wrap={false}>
-                {dateField(DATE_END.END, end)}
-                {timeField(DATE_END.END, end)}
-              </Inline>
-            )}
-          </>
-        ) : (
-          <Inline gap={GAP.CONTROL} wrap={false}>
-            {dateField(DATE_END.START, start)}
-            {end === undefined ? null : dateField(DATE_END.END, end)}
-          </Inline>
-        )}
-      </Stack>
-      <Calendar
-        month={month}
-        today={today}
-        start={start.day}
-        end={end?.day}
-        onPick={(day) => {
-          update(dayPicked(latest.current, day));
-          setMonth(day.slice(0, 7));
-        }}
-        onShowMonth={setMonth}
-      />
-      <Stack gap={GAP.TIGHT}>
-        <SwitchRow
-          density={SETTINGS_ROW_DENSITY.COMPACT}
-          label={WORDS.END}
-          checked={end !== undefined}
-          onChange={(on) => update(endSwitched(latest.current, on))}
+          )}
+        </Stack>
+        <Calendar
+          month={month}
+          today={today}
+          start={start.day}
+          end={end?.day}
+          onPick={(day) => {
+            update(dayPicked(latest.current, day));
+            setMonth(day.slice(0, 7));
+          }}
+          onShowMonth={setMonth}
         />
-        <SwitchRow
-          density={SETTINGS_ROW_DENSITY.COMPACT}
-          label={WORDS.TIME}
-          checked={timed}
-          onChange={(on) => update(timeSwitched(latest.current, on))}
-        />
-        {timed ? (
-          <SettingsRow density={SETTINGS_ROW_DENSITY.COMPACT} label={WORDS.ZONE}>
-            {(control) => (
-              <Chip
-                ref={zoneField}
-                look={CHIP_LOOK.FIELD}
-                width={CHIP_WIDTH.AUTO}
-                chevron
-                aria-label={`${WORDS.ZONE}: ${zoneLabel(zone)}`}
-                aria-describedby={control["aria-describedby"]}
-                aria-haspopup="dialog"
-                onClick={() => turnTo(DATE_PICKER_PAGE.ZONE)}
-              >
-                <ChipName>{zonePlace(zone)}</ChipName>
-              </Chip>
-            )}
-          </SettingsRow>
-        ) : null}
-      </Stack>
-      <div className="date-picker-foot">
-        <Button variant={BUTTON_VARIANT.ROW} onClick={() => finish(DATE_PICKER_CLOSE.CLEAR)}>
-          {WORDS.CLEAR}
-        </Button>
-      </div>
-    </PopoverPanel>
+        <Stack gap={GAP.TIGHT}>
+          <SwitchRow
+            density={SETTINGS_ROW_DENSITY.COMPACT}
+            label={WORDS.END}
+            checked={end !== undefined}
+            onChange={(on) => update(endSwitched(latest.current, on))}
+          />
+          <SwitchRow
+            density={SETTINGS_ROW_DENSITY.COMPACT}
+            label={WORDS.TIME}
+            checked={timed}
+            onChange={(on) => update(timeSwitched(latest.current, on))}
+          />
+          {timed ? (
+            <SettingsRow density={SETTINGS_ROW_DENSITY.COMPACT} label={WORDS.ZONE}>
+              {(control) => (
+                <Chip
+                  ref={zoneField}
+                  look={CHIP_LOOK.FIELD}
+                  width={CHIP_WIDTH.AUTO}
+                  chevron
+                  aria-label={`${WORDS.ZONE}: ${zoneLabel(zone)}`}
+                  aria-describedby={control["aria-describedby"]}
+                  aria-haspopup="dialog"
+                  onClick={() => turnTo(DATE_PICKER_PAGE.ZONE)}
+                >
+                  <ChipName>{zonePlace(zone)}</ChipName>
+                </Chip>
+              )}
+            </SettingsRow>
+          ) : null}
+        </Stack>
+        <div className="date-picker-foot">
+          <Button variant={BUTTON_VARIANT.ROW} onClick={() => finish(DATE_PICKER_CLOSE.CLEAR)}>
+            {WORDS.CLEAR}
+          </Button>
+        </div>
+      </PopoverPanel>
+    </AnchoredPopover>
   );
 }
 
@@ -703,16 +708,14 @@ export function useDatePicker(room: RefObject<HTMLElement | null>): DatePicker {
   const popover =
     opened === undefined ? null : (
       <div className="date-picker-anchor" style={opened.box}>
-        <AnchoredPopover align={POPOVER_ALIGN.START} width={DATE_PICKER_WIDTH}>
-          <DatePickerPanel
-            key={opened.key}
-            date={opened.opening.date}
-            onClose={(picked) => {
-              setOpened(undefined);
-              opened.opening.onClose(picked);
-            }}
-          />
-        </AnchoredPopover>
+        <DatePickerPanel
+          key={opened.key}
+          date={opened.opening.date}
+          onClose={(picked) => {
+            setOpened(undefined);
+            opened.opening.onClose(picked);
+          }}
+        />
       </div>
     );
   return { popover, open };

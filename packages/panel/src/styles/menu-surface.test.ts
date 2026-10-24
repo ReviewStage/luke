@@ -84,7 +84,7 @@ test("a list hung by its owner wears the menu's own ground, edge, corner, and sh
     "searchable-menu",
     "searchable-menu mention-menu",
     "searchable-menu skill-menu",
-    "task-compose-submenu",
+    "luke-searchable-menu-submenu",
     "file-crumb-tree",
     "find-bar",
   ]) {
@@ -97,7 +97,11 @@ test("a list hung by its owner wears the menu's own ground, edge, corner, and sh
 });
 
 test("a searchable list runs edge to edge, and a press offered on the surface keeps the menu's inset", () => {
-  for (const owner of ["searchable-menu", "searchable-menu mention-menu", "task-compose-submenu"]) {
+  for (const owner of [
+    "searchable-menu",
+    "searchable-menu mention-menu",
+    "luke-searchable-menu-submenu",
+  ]) {
     assert.match(surface(owner, MENU_SURFACE_INSET.NONE)("padding") ?? "", /^0(px)?$/, owner);
   }
   for (const owner of ["file-crumb-tree"]) {

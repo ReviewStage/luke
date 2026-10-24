@@ -161,7 +161,7 @@ function CrumbTree({
     // from out of sight (planning.css), so the tree goes, as it does when the
     // window resizes. Note that it watches only while a tree stands, and
     // reads nothing of the layout.
-    const bar = opener.closest(".file-view-bar");
+    const bar = opener.closest(".luke-pane-bar");
     let first = true;
     const folded = new ResizeObserver(() => {
       if (first) first = false;

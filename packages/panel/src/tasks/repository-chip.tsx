@@ -16,7 +16,11 @@ import {
   type ChipWidth,
   ErrorState,
   GearIcon,
+  type MenuRow,
+  POPOVER_ALIGN,
+  type PopoverAlign,
   ProviderMark,
+  SearchableMenu,
   Spinner,
   TEXT_ELEMENT,
   TEXT_TONE,
@@ -30,8 +34,6 @@ import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { OPEN_SETTINGS_LABEL, useOpenSettings } from "../open-settings.js";
 import { RepositoryPicture } from "../repository-picture.js";
 import { RepositoryCard, repositoryMenuRow } from "../repository-row.js";
-import { type MenuRow, SearchableMenu } from "../searchable-menu.js";
-import { PICKER_ALIGN, type PickerAlign, usePickerPlacement } from "../settings/picker-row.js";
 import { useWorkspaceMembers } from "./use-workspace-members.js";
 
 /**
@@ -240,7 +242,7 @@ export function RepositoryChip(props: {
   openRequest?: number | undefined;
   place: ChipPlace;
   /** A form row's chip: the edge its menu hangs from, the trailing one where none is named, as a Settings picker's does. */
-  align?: PickerAlign | undefined;
+  align?: PopoverAlign | undefined;
   /** A form row's chip: how wide it stands, its words' own width where none is named. */
   width?: ChipWidth | undefined;
   /** A form row's chip: the ids of the row's words that describe it, its error among them while it has one. */
@@ -258,7 +260,6 @@ export function RepositoryChip(props: {
   const menuId = useId();
   const chip = useRef<HTMLDivElement>(null);
   const trigger = useRef<HTMLButtonElement>(null);
-  const placement = usePickerPlacement(open, trigger, props.align ?? PICKER_ALIGN.END, menuId);
   /** What held focus as the menu opened, which closing hands it back to. */
   const opener = useRef<HTMLElement | null>(null);
   // Note that the chooser is read through a ref, because the tab hands a
@@ -371,7 +372,7 @@ export function RepositoryChip(props: {
     ) : undefined;
 
   return (
-    <div className="repository-chip" data-place={props.place} {...placement} ref={chip}>
+    <div className="repository-chip" data-place={props.place} ref={chip}>
       {triggerDrawn ? (
         <Tooltip
           label={open ? undefined : (props.value ?? undefined)}
@@ -418,6 +419,7 @@ export function RepositoryChip(props: {
           value={props.value ?? undefined}
           note={note}
           noMatch={MENU_NOTE.NO_MATCH}
+          align={props.align ?? POPOVER_ALIGN.END}
           onPick={(repository) => choose(() => props.onChoose(repository))}
           onClose={close}
           onLeave={(left) => {

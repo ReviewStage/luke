@@ -909,11 +909,11 @@ test("its last tab closed shuts the panel, and shown again it offers in place ev
   assert.ok(add, "the panel offers its +");
   act(() => add.click());
   await settle();
-  const offered = [...document.querySelectorAll(".tab-add-menu [role='option']")].map(
+  const offered = [...document.querySelectorAll(".luke-searchable-menu [role='option']")].map(
     (each) => each.textContent,
   );
-  const headings = [...document.querySelectorAll(".tab-add-menu [role='group']")].map((each) =>
-    each.getAttribute("aria-label"),
+  const headings = [...document.querySelectorAll(".luke-searchable-menu [role='group']")].map(
+    (each) => each.getAttribute("aria-label"),
   );
   act(() => add.click());
   await settle();
