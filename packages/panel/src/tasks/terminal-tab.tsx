@@ -158,6 +158,8 @@ export function TerminalTab({
   const room = usePaneRoom(shells);
   // A phone draws no bar over the screen: its header's ⋯ opens the agent and the shells, saying where the sandbox stands.
   const phone = usePhoneRoom();
+  // Note that a phone has no title bar to carry "connecting…", so a state only that bar says is said in a bar over the screen.
+  const bar = look.bar ?? (phone ? look.phoneBar : undefined);
   useTabActions(
     phone
       ? [
@@ -201,9 +203,9 @@ export function TerminalTab({
       )}
       <Fill flow={FILL_FLOW.ROW} clip className="terminal-tab-body" {...room.body}>
         <div className="terminal-tab-host">
-          {look.bar === undefined ? null : (
-            // Note that each entry into a late bar is a bar of its own, because its reveal runs again and its words wait for it.
-            <StateBar key={String(look.bar.late)} bar={look.bar} onAction={session.onAction} />
+          {bar === undefined ? null : (
+            // Note that each entry into a state's bar is a bar of its own, because a late bar's reveal runs again and its words wait for it, even when the state it follows was late too.
+            <StateBar key={session.state.kind} bar={bar} onAction={session.onAction} />
           )}
           {session.failed ? (
             <ErrorState placement={ERROR_STATE_PLACEMENT.CENTRED} onRetry={session.retryBundle}>

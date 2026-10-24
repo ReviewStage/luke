@@ -90,6 +90,8 @@ export interface TerminalBar {
 export interface TerminalLook {
   readonly words: string;
   readonly bar: TerminalBar | undefined;
+  /** The bar a phone draws where the wide layout's title bar is the only place that says the state; the wide layout leaves it out. */
+  readonly phoneBar: TerminalBar | undefined;
   /** The line the terminal prints at the end of its scrollback, as it enters the state. */
   readonly line: string | undefined;
   readonly dim: boolean;
@@ -119,13 +121,27 @@ function exitedLine(code: number | undefined): string {
 export function terminalLook(state: TerminalState): TerminalLook {
   switch (state.kind) {
     case TERMINAL_STATE.CONNECTING:
-      return { words: "connecting…", bar: undefined, line: undefined, dim: false };
+      return {
+        words: "connecting…",
+        bar: undefined,
+        // Note that it is late, so a connect that lands at once draws no bar, and the screen does not jump for it.
+        phoneBar: { words: "Connecting…", busy: true, late: true },
+        line: undefined,
+        dim: false,
+      };
     case TERMINAL_STATE.ATTACHED:
-      return { words: "connected", bar: undefined, line: undefined, dim: false };
+      return {
+        words: "connected",
+        bar: undefined,
+        phoneBar: undefined,
+        line: undefined,
+        dim: false,
+      };
     case TERMINAL_STATE.RECONNECTING:
       return {
         words: "reconnecting…",
         bar: { words: "Connection lost. Reconnecting…", action: RETRY, busy: true, late: true },
+        phoneBar: undefined,
         line: undefined,
         dim: true,
       };
@@ -133,6 +149,7 @@ export function terminalLook(state: TerminalState): TerminalLook {
       return {
         words: "disconnected",
         bar: undefined,
+        phoneBar: undefined,
         line: "[Disconnected after 5 min without typing. Press any key to reconnect.]",
         dim: true,
       };
@@ -146,6 +163,7 @@ export function terminalLook(state: TerminalState): TerminalLook {
           busy: false,
           late: false,
         },
+        phoneBar: undefined,
         line: undefined,
         dim: true,
       };
@@ -158,6 +176,7 @@ export function terminalLook(state: TerminalState): TerminalLook {
           busy: true,
           late: false,
         },
+        phoneBar: undefined,
         line: undefined,
         dim: true,
       };
@@ -165,15 +184,23 @@ export function terminalLook(state: TerminalState): TerminalLook {
       return {
         words: "waiting for sandbox",
         bar: { words: "Waiting for the agent to open its sandbox…", busy: true, late: false },
+        phoneBar: undefined,
         line: undefined,
         dim: false,
       };
     case TERMINAL_STATE.EXITED:
-      return { words: "connected", bar: undefined, line: exitedLine(state.code), dim: false };
+      return {
+        words: "connected",
+        bar: undefined,
+        phoneBar: undefined,
+        line: exitedLine(state.code),
+        dim: false,
+      };
     case TERMINAL_STATE.UNREACHABLE:
       return {
         words: "unreachable",
         bar: { words: UNREACHED_WORDS[state.why], action: RETRY, busy: false, late: false },
+        phoneBar: undefined,
         line: undefined,
         dim: true,
       };
