@@ -1696,8 +1696,12 @@ export function useTasksTab(input: {
   // that nothing reaches the service until the draft is sent or called.
   const openDraftNow = useRef(agents.onNewDraft);
   openDraftNow.current = agents.onNewDraft;
+  // Note that an archive still out wants none, since the agent it took comes back if refused.
   const draftWanted =
-    mainTabs.tab === undefined && agents.agentIds !== undefined && agents.onUnarchive === undefined;
+    mainTabs.tab === undefined &&
+    agents.agentIds !== undefined &&
+    agents.onUnarchive === undefined &&
+    agents.pending.archives.size === 0;
   const draftTask = viewed.activeTaskId;
   useEffect(() => {
     if (draftWanted && draftTask !== undefined) openDraftNow.current();

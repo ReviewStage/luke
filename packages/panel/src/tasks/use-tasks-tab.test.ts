@@ -3307,6 +3307,30 @@ test("New task's Agent mode sends one start carrying the agent, its words and mo
   assert.deepEqual(tab.control().mainTabs.tab, { agent: AGENT_ID }, "the task opens on its tab");
 });
 
+test("archiving a task's last agent opens no draft while the archive is out, so a refused one brings the agent back alone", async () => {
+  const archived = Promise.withResolvers<PortActResult<typeof ACT_KIND.CODING_AGENTS_ARCHIVE>>();
+  const tab = mount(
+    { shown: true, tasks: OPEN },
+    {
+      [ACT_KIND.CODING_AGENTS_LIST]: () => Promise.resolve({ agents: [RUNNING_AGENT] }),
+      [ACT_KIND.CODING_AGENTS_ARCHIVE]: () => archived.promise,
+    },
+  );
+  await settle();
+  assert.deepEqual(tab.control().mainTabs.tab, { agent: AGENT_ID });
+
+  await act(async () => {
+    void tab.control().agents.onArchive(AGENT_ID, true);
+  });
+  assert.deepEqual(tab.control().mainTabs.tabs, [], "the agent leaves at once");
+  assert.equal(tab.control().agents.draft, undefined, "no draft opens while the archive is out");
+
+  await act(async () => archived.resolve({ failure: CODING_AGENT_CALL_FAILURE.NOT_FOUND }));
+  await settle();
+  assert.deepEqual(tab.control().mainTabs.tab, { agent: AGENT_ID });
+  assert.equal(tab.control().agents.draft, undefined);
+});
+
 test("a task started, with an agent or without, leaves a hidden side panel hidden", async () => {
   const started = { ...RUNNING_AGENT, planId: OTHER_TASK_ID };
   const tab = mount(

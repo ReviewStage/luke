@@ -13,7 +13,7 @@ import { PULL_REQUEST_CHAPTERS_CALL_FAILURE } from "@luke/features/pull-request-
 import { PULL_REQUEST_CHAPTERS_STATE } from "@luke/features/pull-request-chapters-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import type { PortActKind, PortActPayload } from "@luke/host/contract";
-import { ACTION_RESULT_STATUS, type WireBoundaryInput } from "@luke/wire";
+import { ACTION_RESULT_STATUS, type ActionResult, type WireBoundaryInput } from "@luke/wire";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -22,6 +22,7 @@ import type { ActHandle } from "../act.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { ToastHost } from "../toast.js";
 import {
+  ARCHIVE_DRAWN,
   type CodingAgentsControl,
   type DraftCallStart,
   useCodingAgents,
@@ -234,6 +235,26 @@ test("an archive moves the agent under Archived at once, and back among the stan
   await settle();
   assert.deepEqual(tab.control().agentIds, [AGENT]);
   assert.deepEqual(tab.control().archived, []);
+});
+
+test("an archive a dialog asked about waits on the answer, so the dialog still stands to say a refusal", async () => {
+  const tab = mount({ taskId: TASK, repository: "acme/relay" });
+  tab.answer(ACT_KIND.CODING_AGENTS_LIST, { agents: [STARTED] });
+  const archived = Promise.withResolvers<WireBoundaryInput>();
+  tab.answer(ACT_KIND.CODING_AGENTS_ARCHIVE, archived.promise);
+  await tab.mount();
+
+  let result: Promise<ActionResult> | undefined;
+  act(() => {
+    result = tab.control().onArchive(AGENT, true, ARCHIVE_DRAWN.ON_ANSWER);
+  });
+  await settle();
+  assert.deepEqual(tab.control().agentIds, [AGENT], "the agent stands while the answer is out");
+
+  archived.resolve({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED });
+  await settle();
+  assert.equal((await result)?.status, ACTION_RESULT_STATUS.REJECTED);
+  assert.deepEqual(tab.control().agentIds, [AGENT]);
 });
 
 test("a name given an agent another list draws stands over that list until it carries the name", async () => {

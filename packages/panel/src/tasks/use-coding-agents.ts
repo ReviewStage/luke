@@ -357,11 +357,12 @@ export interface CodingAgentsControl {
   onRename: (agentId: string, title: string) => Promise<boolean>;
   /**
    * Archives one agent, a turn it still runs stopped first, or brings it
-   * back, drawn at once, taking the agent as the service answers it and
-   * offering Undo in a toast; a refusal puts it back and is answered rather
-   * than said, for the caller to say in its dialog or a toast of its own.
+   * back, drawn at once unless `drawn` waits on the answer, taking the agent
+   * as the service answers it and offering Undo in a toast; a refusal puts
+   * it back and is answered rather than said, for the caller to say in its
+   * dialog or a toast of its own.
    */
-  onArchive: (agentId: string, archived: boolean) => Promise<ActionResult>;
+  onArchive: (agentId: string, archived: boolean, drawn?: ArchiveDrawn) => Promise<ActionResult>;
   /**
    * Deletes one agent for good, a turn it still runs stopped first, taking
    * it out of the list and saying so in a toast; a refusal is answered
@@ -672,6 +673,18 @@ function sameChoice(a: ModelChoice | undefined, b: ModelChoice | undefined): boo
       (b?.contextWindow === CONTEXT_WINDOW.STANDARD)
   );
 }
+
+/**
+ * When an archive is drawn: at once, before the service answers, or once
+ * it has, as a dialog that asked does, since the agent leaving would take
+ * the dialog, and the refusal it would say, with it.
+ */
+export const ARCHIVE_DRAWN = {
+  AT_ONCE: "at-once",
+  ON_ANSWER: "on-answer",
+} as const;
+
+export type ArchiveDrawn = (typeof ARCHIVE_DRAWN)[keyof typeof ARCHIVE_DRAWN];
 
 /**
  * The names and archives given here that no view carries yet, by agent id:
@@ -1541,15 +1554,19 @@ export function useCodingAgents(input: {
 
   // Note that the archive is read through a ref from its toast's Undo,
   // because the press lands renders after the toast was raised. The agent
-  // moves at once, and back where the service refuses.
-  const onArchive = async (agentId: string, archived: boolean): Promise<ActionResult> => {
+  // moves at once, and back where the service refuses, unless a dialog that asked waits on it.
+  const onArchive = async (
+    agentId: string,
+    archived: boolean,
+    drawn: ArchiveDrawn = ARCHIVE_DRAWN.AT_ONCE,
+  ): Promise<ActionResult> => {
     const asked = pendingValue(
       archives.get(agentId),
       archived ? Date.now() : null,
       archiveOf(viewedAgent(agentId)),
       sameArchive,
     );
-    setArchives((was) => new Map(was).set(agentId, asked));
+    if (drawn === ARCHIVE_DRAWN.AT_ONCE) setArchives((was) => new Map(was).set(agentId, asked));
     const answer: CodingAgentAgentAnswer = await act(ACT_KIND.CODING_AGENTS_ARCHIVE, {
       agentId,
       archived,
