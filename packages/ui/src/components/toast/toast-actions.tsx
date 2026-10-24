@@ -1,5 +1,6 @@
 import { CloseIcon } from "../../face/glyphs.js";
 import { BUTTON_SIZE, BUTTON_VARIANT, Button, ButtonLink, IconButton } from "../button/button.js";
+import { Tooltip } from "../tooltip/hint.js";
 
 /**
  * toast-actions.tsx -- what stands at a toast's end when it carries an action: the action's outline button, and a × that dismisses it.
@@ -58,12 +59,14 @@ export function ToastActions({
         </ButtonLink>
       )}
       <span className="luke-toast-dismiss absolute -top-toast-gap -left-toast-gap flex rounded-full border border-border-strong bg-background shadow-toast-dismiss">
-        <IconButton
-          icon={<CloseIcon />}
-          label={dismissLabel}
-          size={BUTTON_SIZE.COMPACT}
-          onClick={onDismiss}
-        />
+        <Tooltip label={dismissLabel}>
+          <IconButton
+            icon={<CloseIcon />}
+            label={dismissLabel}
+            size={BUTTON_SIZE.COMPACT}
+            onClick={onDismiss}
+          />
+        </Tooltip>
       </span>
     </>
   );
