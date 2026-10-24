@@ -1135,39 +1135,6 @@
   position: relative;
 }
 
-/* The bar: history, the path, then the file's actions and the tree's
-   toggle at its end, in the window's toolbar buttons. It stands the one
-   height of a tab's bar whatever it holds, words alone or nothing yet, its
-   words in the caption's type.
-
-   Every tab's bar is this one (File, Changes, Page, Terminal, Pull
-   request), and each keeps to the panel's top row's two edges, so the tab
-   reads down from the strip above it: a control at its start stands where
-   the row's first tab does, its last control ends where the row's last
-   control ends, and words leading the bar start at the content inset,
-   where a tab's glyph does. Its groups stand a control's gap apart, the
-   glyphs within a group close. */
-.file-view-bar {
-  display: flex;
-  min-width: 0;
-  min-height: var(--secondary-bar-height);
-  flex: 0 0 auto;
-  align-items: center;
-  gap: var(--luke-control-gap);
-  padding: var(--luke-space-4) var(--column-inset);
-  border-bottom: 1px solid var(--luke-color-border);
-  background: var(--luke-color-fill-hover);
-  font-size: var(--luke-type-caption-size);
-  line-height: var(--luke-type-caption-leading);
-}
-
-/* Words leading the bar, with no control before them. */
-.file-view-bar > .page-view-title,
-.file-view-bar > .terminal-tab-title,
-.file-view-bar :is(.file-view-path, .files-viewed):first-child {
-  padding-left: var(--row-inset);
-}
-
 /* How many of Files changed's files are viewed, leading its bar in the
    window's own type, quiet, cut short at its end where the bar is narrow;
    a check and the palette's green once every one is (agent-changes-tab.tsx). */
@@ -2246,7 +2213,7 @@
    chip does, and every word and glyph at the content inset, where a tab's
    glyph does, a box holding its own at a row's inset within; each row's
    last control ends where the row's last control ends, as every tab's
-   bar's does (`.file-view-bar`). A boxed thing's hairline counts toward its inset
+   bar's does (`PaneBar`). A boxed thing's hairline counts toward its inset
    (`--boxed-inset`), so what it holds lands on the content inset to the
    pixel. */
 .pull-request-tab {
@@ -2390,27 +2357,6 @@
   border-bottom: 1px solid var(--luke-color-border);
 }
 
-.chapter-head-row {
-  display: flex;
-  min-width: 0;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--luke-control-gap);
-}
-
-.chapter-head-title {
-  min-width: 0;
-  overflow-wrap: anywhere;
-}
-
-.chapter-head-actions {
-  display: flex;
-  flex: none;
-  align-items: center;
-  gap: var(--luke-control-gap);
-  margin-left: auto;
-}
-
 .chapter-viewed {
   display: flex;
   align-items: center;
@@ -2444,21 +2390,6 @@
 /* A key change's lines named alone, while stale chapters draw no diff to bring them into. */
 .chapter-key-change-ref {
   color: var(--luke-color-text-muted);
-}
-
-.chapter-foot {
-  display: flex;
-  flex: none;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--luke-control-gap);
-  padding: var(--luke-space-4) var(--column-inset);
-  border-top: 1px solid var(--luke-color-border);
-}
-
-.chapter-foot-place {
-  color: var(--luke-color-text-muted);
-  font-size: var(--luke-type-caption-size);
 }
 
 /* Chapters being made: how long it has been, then blocks where the rail
@@ -2564,12 +2495,6 @@
   gap: var(--luke-control-gap);
   padding: var(--luke-space-6) var(--column-inset);
   border-bottom: 1px solid var(--luke-color-border);
-}
-
-/* The tabs take what room Review leaves them. */
-.pull-request-tab-bar {
-  min-width: 0;
-  flex: 1 1 0;
 }
 
 .pull-request-tabs > .pull-request-review {
@@ -5485,23 +5410,6 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
   right: 0;
 }
 
-.terminal-shells-head {
-  display: flex;
-  min-height: 35px;
-  align-items: center;
-  gap: var(--luke-space-4);
-  padding: var(--luke-space-4) var(--luke-space-6) var(--luke-space-4) var(--luke-space-12);
-  border-bottom: 1px solid var(--luke-color-border);
-  color: var(--luke-color-text-muted);
-  font-size: var(--luke-type-caption-size);
-  line-height: var(--luke-type-caption-leading);
-  font-weight: var(--luke-weight-semibold);
-}
-
-.terminal-shells-title {
-  flex: 1;
-}
-
 /* The shells' rows, inside the `ScrollArea` that scrolls them. */
 .terminal-shells-rows {
   padding: var(--luke-space-4);
@@ -6855,24 +6763,6 @@ svg.lucide {
 .comments-tab {
   position: relative;
   height: 100%;
-}
-
-/* The tab's head, as the sidebar's section heads are: the list's name in
-   the quiet ink, how many it holds after it, and its toggle at the end. */
-.comments-head {
-  display: flex;
-  height: var(--luke-control-height);
-  flex: none;
-  align-items: center;
-  justify-content: space-between;
-  margin: var(--luke-space-6) var(--column-inset) var(--luke-space-2) var(--luke-space-16);
-}
-
-.comments-head-title {
-  display: inline-flex;
-  align-items: baseline;
-  gap: var(--luke-space-6);
-  padding-left: var(--luke-space-12);
 }
 
 /* A list with nothing in it lays its empty state out as the column it fills (`empty-state.tsx`). */
