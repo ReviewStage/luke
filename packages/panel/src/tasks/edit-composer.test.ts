@@ -72,6 +72,7 @@ async function opened(
   door?: AgentPictureDoor,
   words = "Also email the inviter.",
   registry = AtomRegistry.make(),
+  cut: { cuts: boolean; takes?: string | undefined } = { cuts: false },
 ) {
   const ended: { words: string; files: readonly CodingAgentAttachment[] }[] = [];
   let cancelled = 0;
@@ -93,7 +94,7 @@ async function opened(
               agentId: "agent-1",
               doors: { openGitHub: () => undefined, copy: () => undefined },
               dictates: true,
-              cuts: false,
+              ...cut,
               onCancel: () => {
                 cancelled += 1;
               },
@@ -282,4 +283,32 @@ test("a picture still being read holds Send, and joins the box once it lands", a
       files: [{ name: "kept.png", mediaType: "image/png", data: PIXEL }],
     },
   ]);
+});
+
+test("Send asks what it drops where messages follow, naming a teammate's among them", async () => {
+  const body = async (takes: string | undefined) => {
+    const box = await opened(LINE, undefined, "Also email the inviter.", AtomRegistry.make(), {
+      cuts: true,
+      takes,
+    });
+    pressInComposer(box.container, "Enter");
+    await settle();
+    const text = document.querySelector('[role="alertdialog"]')?.textContent;
+    await box.close();
+    return text;
+  };
+
+  const plain = await body(undefined);
+  assert.ok(
+    plain?.includes("Everything after it will be removed from the conversation"),
+    String(plain),
+  );
+  assert.ok(!plain?.includes("including"), String(plain));
+  const named = await body("2 messages from Sam");
+  assert.ok(
+    named?.includes(
+      "Everything after it, including 2 messages from Sam, will be removed from the conversation",
+    ),
+    String(named),
+  );
 });

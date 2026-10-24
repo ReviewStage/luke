@@ -52,14 +52,19 @@ import type { AgentComposerControl } from "./use-agent-composer.js";
 /** What the foot's Cancel says. */
 const CANCEL_WORDS = "Cancel";
 
-/** What Send asks before it drops the messages after the line. */
-const SEND_QUESTION: DialogQuestion = {
-  title: "Send the edited message?",
-  body: "Everything after it will be removed from the conversation, and the agent stopped if it is working. Changes the agent made to its files stay as they are.",
-  verb: "Send",
-  running: "Sending",
-  loss: CONFIRM_LOSS.IRREVERSIBLE,
-};
+/**
+ * What Send asks before it drops the messages after the line. Where `takes`
+ * names another member's messages among them, the body says so.
+ */
+function sendQuestion(takes: string | undefined): DialogQuestion {
+  return {
+    title: "Send the edited message?",
+    body: `Everything after it${takes === undefined ? "" : `, including ${takes},`} will be removed from the conversation, and the agent stopped if it is working. Changes the agent made to its files stay as they are.`,
+    verb: "Send",
+    running: "Sending",
+    loss: CONFIRM_LOSS.IRREVERSIBLE,
+  };
+}
 
 /** What the box hands on as it sends, and the doors it is drawn with beside the tab's own box. */
 export interface EditComposerDoors {
@@ -70,6 +75,8 @@ export interface EditComposerDoors {
   readonly dictates: boolean;
   /** Whether messages follow the line, which its send drops, so Send asks first. */
   readonly cuts: boolean;
+  /** What the send drops of other members' messages, as "2 messages from Sam"; none where it drops none of theirs. */
+  readonly takes?: string | undefined;
   readonly onCancel: () => void;
   readonly onSend: (words: string, attachments: readonly CodingAgentAttachment[]) => void;
 }
@@ -234,7 +241,7 @@ export function EditComposer({
           </Button>
         )}
       />
-      <ConfirmDialog open confirm={confirm} question={SEND_QUESTION} />
+      <ConfirmDialog open confirm={confirm} question={sendQuestion(edit.takes)} />
     </>
   );
 }
