@@ -31,12 +31,14 @@ export function automationNextText(automation: AutomationSummary, now: number): 
   }
 }
 
-/** An owner as a place names it: the workspace by its name, or Personal. */
+/** An owner as a place names it: the workspace by its name, a personal one the reader made as Only you, and one a teammate made, an admin's to see, as Personal. */
 export function automationOwnerName(
   owner: AutomationScope,
   workspaceName: string | undefined,
+  mine: boolean,
 ): string {
-  return owner === AUTOMATION_SCOPE.WORKSPACE ? (workspaceName ?? "Workspace") : "Personal";
+  if (owner === AUTOMATION_SCOPE.WORKSPACE) return workspaceName ?? "Workspace";
+  return mine ? "Only you" : "Personal";
 }
 
 /**

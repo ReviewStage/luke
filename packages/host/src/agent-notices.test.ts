@@ -1143,7 +1143,7 @@ it.effect(
       assert.deepEqual(f.said(), [
         {
           title: "Flaky test sweep",
-          body: "A run couldn't start. Luke can no longer reach its repository on GitHub.",
+          body: "A run could not start. Luke can no longer reach its repository on GitHub.",
         },
       ]);
       f.posted[0]?.onClick();
@@ -1175,7 +1175,7 @@ it.effect(
       assert.deepEqual(f.runsToasted, [
         {
           place: { automationId: AUTOMATION_ID, runId: RUN_ID, workspaceId: "workspace-acme" },
-          words: "A run couldn't start. Luke can no longer reach its repository on GitHub.",
+          words: "A run could not start. Luke can no longer reach its repository on GitHub.",
           detail: "Flaky test sweep",
         },
       ]);

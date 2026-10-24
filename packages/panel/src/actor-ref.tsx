@@ -689,7 +689,11 @@ export function AutomationCard({
       <ActorHead
         actor={actor}
         sub={automationTriggerText(automation.trigger, automation.repositories ?? [])}
-        corner={automationOwnerName(automationOwner(automation), workspaceName)}
+        corner={automationOwnerName(
+          automationOwner(automation),
+          workspaceName,
+          automation.mine === true,
+        )}
         onOpen={onOpen}
       />
       <HoverCardNote>{automationNextText(automation, now)}</HoverCardNote>
