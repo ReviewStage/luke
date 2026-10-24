@@ -1,5 +1,14 @@
 import type { DialogRoot } from "@base-ui/react/dialog";
-import { type Ref, useId, useImperativeHandle, useLayoutEffect, useRef, useState } from "react";
+import {
+  type Ref,
+  useEffect,
+  useId,
+  useImperativeHandle,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
+import { motionHeld } from "../../motion-timing.js";
 import type { PictureExpand } from "../../picture-expand.js";
 import { replayMotion } from "../../replay-motion.js";
 import { DialogContent, Dialog as ShadcnDialog } from "../../shadcn/dialog.js";
@@ -25,8 +34,8 @@ import { useHeldFocus } from "./held-focus.js";
  * It is drawn by shadcn/ui's Base UI dialog (`../../shadcn/dialog.tsx`),
  * trapping focus, which hears Escape (never while an input method composes)
  * and a press that begins and ends on the dimmed window, and keeps a dialog
- * opened over another the one Escape reaches. It stands open for as long as
- * it is mounted, so what Base UI hears as a dismissal is handed to the
+ * opened over another the one Escape reaches. Whether it stands is its
+ * owner's (`open`), so what Base UI hears as a dismissal is handed to the
  * dialog's own `dismiss`, which decides whether the card goes; Tab's own
  * move among the card's controls, and handing focus back to what opened the
  * card, stay the dialog's. Its portal stands its card a render after the
@@ -34,8 +43,12 @@ import { useHeldFocus } from "./held-focus.js";
  * picker's row scrolled into view), never from an effect of the dialog's
  * owner as it opens.
  *
- * The dialog stands only while it is open, so mounting it is opening and
- * unmounting it is closing, however it came to close. Asked away while it
+ * The dialog stands while it is `open`, and as `open` falls the card and its
+ * dimmed window fade out on the exit token, drawn and taking no press until
+ * the fade has run, focus handed back to what opened the card as the fade
+ * begins. Reduced motion and a capture run, which zero the tokens, take it
+ * away at once. An owner that has yet to pass `open` mounts the dialog to
+ * open it and unmounts it to close it, which goes at once. Asked away while it
  * is at work, by Escape or the dimmed window, the card swells for a moment,
  * so the press is answered even though the owner keeps it open. A dialog
  * whose act was refused shakes its card once as the refusal lands, so the
@@ -155,6 +168,8 @@ const HELD_NOTICE = "Your draft is kept. Press Escape again to close.";
 /** What a dialog is told: who names it, whether it is at work, where focus lands, and how it is put away. */
 export type DialogProps = DialogName & {
   ref?: Ref<DialogHandle> | undefined;
+  /** Whether the card stands; falling, it fades out before it goes. Open while mounted where it is left out. */
+  open?: boolean | undefined;
   role?: DialogRole | undefined;
   /** How wide the card stands, a question's measure unless asked. */
   size?: DialogSize | undefined;
@@ -217,21 +232,34 @@ function useRefusalShake(card: React.RefObject<HTMLDivElement | null>, refused: 
   }, [card, refused]);
 }
 
+/** Hands focus back to `invoker` and forgets it, unless it has left the window meanwhile. */
+function handBack(invoker: React.RefObject<HTMLElement | null>): void {
+  const back = invoker.current;
+  invoker.current = null;
+  if (back?.isConnected) back.focus({ preventScroll: true });
+}
+
 /**
  * Remembers what held focus as the dialog opened and hands focus back to it
- * as the dialog closes, unless it has left the window meanwhile.
+ * as the dialog closes, as its fade begins or as it is unmounted, unless it
+ * has left the window meanwhile.
  *
  * Note that the invoker is read in a layout effect, because the card's own
  * focus lands in a later effect, and once it has, the control that opened
- * the card no longer holds it.
+ * the card no longer holds it; and that a close through `open` hands focus
+ * back in an effect, after Base UI's own have let go of the card's trap,
+ * which would otherwise take focus back into the card on its way out.
  */
-function useInvokerFocus(): void {
+function useInvokerFocus(open: boolean): void {
+  const invoker = useRef<HTMLElement | null>(null);
   useLayoutEffect(() => {
-    const invoker = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    return () => {
-      if (invoker?.isConnected) invoker.focus({ preventScroll: true });
-    };
-  }, []);
+    if (!open) return;
+    invoker.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+  }, [open]);
+  useEffect(() => {
+    if (!open) handBack(invoker);
+  }, [open]);
+  useLayoutEffect(() => () => handBack(invoker), []);
 }
 
 /**
@@ -244,6 +272,7 @@ function useInvokerFocus(): void {
  */
 export function Dialog({
   ref,
+  open = true,
   role = DIALOG_ROLE.DIALOG,
   size = DIALOG_SIZE.CONFIRM,
   title,
@@ -261,7 +290,7 @@ export function Dialog({
   actionsStart,
   expand,
   children,
-}: DialogProps): React.JSX.Element {
+}: DialogProps): React.JSX.Element | null {
   const card = useRef<HTMLDivElement | null>(null);
   // Note that the card stands a render after the dialog mounts, because
   // Base UI's portal makes its node first, so what reaches the card waits
@@ -269,13 +298,14 @@ export function Dialog({
   const [drawn, setDrawn] = useState(false);
   const titleId = useId();
   // Whether a draft has already held the card back once, which the next
-  // dismissal goes through.
+  // dismissal goes through; a card opened again holds its draft afresh.
   const [held, setHeld] = useState(false);
-  if (held && !holding) setHeld(false);
+  if (held && (!holding || !open)) setHeld(false);
 
-  useInvokerFocus();
-  useHeldFocus<HTMLElement>(initialFocus ?? card, drawn && !busy);
-  useHeldFocus(card, drawn && busy);
+  useInvokerFocus(open);
+  // Note that a card on its way out holds no focus, which has gone back to what opened it.
+  useHeldFocus<HTMLElement>(initialFocus ?? card, open && drawn && !busy);
+  useHeldFocus(card, open && drawn && busy);
   useRefusalShake(card, refused);
   // Note that this runs before the card's first paint, so its own entrance
   // is stood down before a frame of it is drawn.
@@ -302,6 +332,11 @@ export function Dialog({
   };
   useImperativeHandle(ref, () => ({ dismiss }));
 
+  // Note that reduced motion and a capture run take the card away in the
+  // render that closes it, rather than a frame later once Base UI finds no
+  // fade to wait on.
+  if (!open && motionHeld()) return null;
+
   const keyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
     // Note that no key pressed in the card goes on to the window. A button's
     // own Enter and Space are its default action, which this leaves alone.
@@ -321,7 +356,7 @@ export function Dialog({
 
   return (
     <ShadcnDialog
-      open
+      open={open}
       // Note that the card traps focus without locking the page's scroll,
       // as it always has: the dimmed window already takes every press
       // outside the card, and a lock would shift a page with a scrollbar.
@@ -346,8 +381,8 @@ export function Dialog({
         tabIndex={-1}
         initialFocus={() => (busy ? card.current : (initialFocus?.current ?? card.current))}
         // Note that focus goes back to what opened the card through
-        // `useInvokerFocus`, because the card closes by being unmounted, which
-        // a close of Base UI's own never sees.
+        // `useInvokerFocus`, because a card its owner unmounts closes with no
+        // close of Base UI's own to hand it back.
         finalFocus={false}
         onKeyDown={keyDown}
         viewport={{

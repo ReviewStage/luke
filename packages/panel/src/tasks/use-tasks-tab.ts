@@ -50,6 +50,7 @@ import type { ChatShown } from "@luke/host/contract";
 import { EXPERIMENT, HOST_CAPABILITY } from "@luke/settings";
 import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsLink } from "@luke/settings/settings-views";
 import {
+  CONFIRM_LOSS,
   DIALOG_TONE,
   type DialogConfirm,
   type DialogQuestion,
@@ -1176,6 +1177,7 @@ function secondCallQuestion(taskName: string): DialogQuestion {
     body: "What was said on that call stays in its agent's transcript.",
     verb: "Start new call",
     running: "Starting",
+    loss: CONFIRM_LOSS.REVERSIBLE,
     tone: DIALOG_TONE.PRIMARY,
   };
 }

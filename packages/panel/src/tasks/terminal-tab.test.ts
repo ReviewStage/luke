@@ -1316,11 +1316,12 @@ function shellsToggle(tab: { container: HTMLElement }): HTMLButtonElement {
 async function narrowTab() {
   vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
   document.body.style.setProperty("--luke-duration-pane", `${MOTION_DURATION_MS.PANE}ms`);
-  layContainersAt({ "side-panel": 400 });
+  // Only the sheet that draws the toggles, since each style read weighs every rule laid.
+  layContainersAt({ "side-panel": 400 }, { only: ["./tasks.css"] });
   return mount(true, false);
 }
 
-test("in a narrow panel the shells open over the screen, stay drawn through their exit, then are let go", async () => {
+test("in a narrow panel the shells open over the screen", async () => {
   const tab = await narrowTab();
   assert.equal(floatedShells(tab), null, "the shells are away until their toggle is pressed");
 
@@ -1329,6 +1330,12 @@ test("in a narrow panel the shells open over the screen, stay drawn through thei
   assert.equal(opened?.getAttribute("data-state"), "open");
   assert.equal(opened?.classList.contains("luke-over-pane"), true);
   assert.equal(tab.toggled(), 0, "the panel's own place for the list is left as it was");
+});
+
+test("shells floated over the screen stay drawn through their exit, then are let go", async () => {
+  const tab = await narrowTab();
+  await act(async () => shellsToggle(tab).click());
+  assert.equal(floatedShells(tab)?.getAttribute("data-state"), "open");
 
   await act(async () => shellsToggle(tab).click());
   assert.equal(floatedShells(tab)?.getAttribute("data-state"), "leaving");

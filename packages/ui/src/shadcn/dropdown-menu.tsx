@@ -17,8 +17,9 @@ import { ChevronRightIcon } from "../face/glyphs.js";
  *   from. The popup draws Luke's menu surface: the overlay ground, the
  *   strong edge, the menu's corner, shadow, and inset, a menu's width
  *   bounds, and its entrance, a fade and a drop; and while its owner holds
- *   it drawn through its exit (`data-leaving`), its fade out, taking no
- *   press. None of shadcn's ring or outline utilities, because the
+ *   it drawn through its exit (`data-leaving`), or Base UI does as it
+ *   closes (`data-ending-style`), as a submenu does when its menu closes it
+ *   alone, its fade out, taking no press. None of shadcn's ring or outline utilities, because the
  *   window's own focus ring draws the keyboard's (`shadcn-focus.test.ts`);
  *   a row marks its focus with its fill instead, which `menu.css` says.
  * - An item is a menu row: one fixed height (or grown to hold a second
@@ -53,7 +54,7 @@ const DROPDOWN_MENU_ITEM_LIT =
 
 /** The surface every menu stands on, a list its owner hangs and keys itself included. */
 export const DROPDOWN_MENU_SURFACE =
-  "flex flex-col rounded-menu border border-border-strong bg-background p-menu-inset text-foreground shadow-menu animate-menu-in data-[leaving=true]:pointer-events-none data-[leaving=true]:animate-menu-leave data-[leaving=true]:transition-none data-[placed=false]:invisible";
+  "flex flex-col rounded-menu border border-border-strong bg-background p-menu-inset text-foreground shadow-menu animate-menu-in data-[leaving=true]:pointer-events-none data-[leaving=true]:animate-menu-leave data-[leaving=true]:transition-none data-ending-style:pointer-events-none data-ending-style:animate-menu-leave data-ending-style:transition-none data-[placed=false]:invisible";
 
 /** A menu's own popup on that surface: a menu's width, and as tall as can be seen, scrolling down and never sideways. */
 const DROPDOWN_MENU_POPUP =

@@ -30,7 +30,9 @@ import { TEXT_FIELD_AUTO_COMPLETE, TextField } from "../text-field/text-field.js
  * it acts only from the act's button.
  *
  * The question is `confirm-state.ts`'s, so it withdraws the render its subject
- * or its surface goes. An answer already given finishes where it stands with
+ * or its surface goes. However it goes, the card fades out on the exit token
+ * as it stood, a landed act still wearing its check, rather than vanishing.
+ * An answer already given finishes where it stands with
  * both buttons stilled; one that was refused keeps the card up saying why,
  * in the one `ErrorLine` every form part says what went wrong in, so the act
  * can be tried again or let go.
@@ -120,9 +122,10 @@ interface ActState {
 
 /**
  * The card itself, drawn afresh on each opening, so a gate's words start
- * empty every time it is asked.
+ * empty every time it is asked, and kept through its fade as it closes.
  */
 function ConfirmCard({
+  open,
   confirm,
   question,
   field,
@@ -130,6 +133,7 @@ function ConfirmCard({
   act,
   children,
 }: {
+  open: boolean;
   confirm: DialogConfirm;
   question: DialogQuestion;
   field: React.RefObject<HTMLInputElement | null> | undefined;
@@ -167,6 +171,7 @@ function ConfirmCard({
 
   return (
     <Dialog
+      open={open}
       role={DIALOG_ROLE.ALERT_DIALOG}
       title={question.title}
       describedBy={question.body ? bodyId : undefined}
@@ -229,15 +234,18 @@ function ConfirmCard({
 /**
  * The question over the window while it is asked, running, or refused, and
  * for the beat its check shows once the act lands, and nothing otherwise,
- * in the shared `Dialog`.
+ * in the shared `Dialog`, fading out as it goes.
  */
 export function ConfirmDialog({
+  open = true,
   confirm,
   question,
   field,
   gate,
   children,
 }: {
+  /** Whether its owner shows it at all; falling, the card fades out. Shown while mounted where it is left out. */
+  open?: boolean | undefined;
   confirm: DialogConfirm;
   question: DialogQuestion;
   /** A field the question asks to be filled, which takes focus in Cancel's place; Enter in it answers. */
@@ -250,32 +258,43 @@ export function ConfirmDialog({
   gate?: string | undefined;
   /** What the card holds under its body: the field, where the question asks one. */
   children?: React.ReactNode;
-}): React.JSX.Element | null {
+}): React.JSX.Element {
   const { stage, rejection } = confirm;
   const acting = stage === CONFIRM_STAGE.ACTING;
   // Note that an act landing is noticed in the render that sees it leave
   // its run with no refusal, because a card closed an effect later would
   // draw one frame with nothing there before its check.
-  const [wasActing, setWasActing] = useState(acting);
+  const [wasStage, setWasStage] = useState(stage);
   const [landed, setLanded] = useState(false);
-  if (acting !== wasActing) {
-    setWasActing(acting);
-    setLanded(!acting && rejection === undefined && confirm.standing);
+  // Whether the landed check has been seen, which puts the card away still
+  // wearing it, so it fades as it stood rather than as a question again.
+  const [seen, setSeen] = useState(false);
+  // Each question asked anew draws a fresh card.
+  const [openings, setOpenings] = useState(0);
+  if (stage !== wasStage) {
+    setWasStage(stage);
+    setLanded(wasStage === CONFIRM_STAGE.ACTING && rejection === undefined && confirm.standing);
+    setSeen(false);
+    if (wasStage === CONFIRM_STAGE.RESTING) setOpenings((count) => count + 1);
   }
   if (landed && !confirm.standing) setLanded(false);
   // Note that an answer under way is hidden with its surface rather than
   // drawn over whatever stands in its place, because the window then
   // presents something else; the act itself finishes all the same.
-  const open = confirm.standing && (confirmAsked(stage) || rejection !== undefined || landed);
+  const shown =
+    open &&
+    confirm.standing &&
+    (confirmAsked(stage) || rejection !== undefined || (landed && !seen));
 
-  if (!open) return null;
   return (
     <ConfirmCard
+      key={openings}
+      open={shown}
       confirm={confirm}
       question={question}
       field={field}
       gate={gate}
-      act={{ acting, landed, onShown: () => setLanded(false) }}
+      act={{ acting, landed, onShown: () => setSeen(true) }}
     >
       {children}
     </ConfirmCard>

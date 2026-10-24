@@ -192,6 +192,25 @@ test("an agent the list read at rest but whose page reads it working is asked ab
   assert.deepEqual(archives, [{ agentId: AGENT_ID, archived: true }]);
 });
 
+test("stopping a working agent to archive it draws its act in the accent, since Unarchive brings it back", async () => {
+  standing = { ...RUN, status: CODING_AGENT_STATUS.RUNNING };
+  const row = mount(RUN);
+  const archive = item(rightClick(row), "Archive agent");
+  await act(async () => archive.click());
+  await settle();
+
+  assert.equal(dialogAnswer("Stop and archive").getAttribute("data-variant"), "primary");
+});
+
+test("Permanently delete draws its act in the danger colour, since an agent is not brought back", async () => {
+  const row = mount(RUN);
+  const remove = item(rightClick(row), "Permanently delete");
+  act(() => remove.click());
+  await settle();
+
+  assert.equal(dialogAnswer("Permanently delete").getAttribute("data-variant"), "danger");
+});
+
 test("an archived agent's row offers Unarchive in Archive's place and no pin, and Unarchive brings it back", async () => {
   const row = mount({ ...RUN, archivedAt: 3 });
   const items = rightClick(row);

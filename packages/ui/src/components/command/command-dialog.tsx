@@ -30,7 +30,8 @@ import { Tooltip } from "../tooltip/hint.js";
  * dialog away, and hands focus back to whatever held it once it has gone.
  * The card stands high in the window rather than in its middle, so the
  * field stays where it is while the rows under it come and go, and it
- * fades out over `--luke-duration-exit` as it closes, inert while it does.
+ * fades out over `--luke-duration-exit` as it closes, inert while it does,
+ * as every dialog does.
  * In a narrow room, a phone's, it is a sheet hung from the top of what is
  * seen rather than a card floating in it: the screen's whole width, its
  * corners rounded only where it ends. Under a finger its foot, whose keys
@@ -85,13 +86,12 @@ export interface CommandGroup {
   readonly note?: ReactNode;
 }
 
-/** The dimmed window: the card stands a fifth of the way down it rather than in its middle, and fades out with it; in a narrow room, against its top and sides. */
-const ROOM =
-  "items-start pt-dialog-command-top data-ending-style:pointer-events-none data-ending-style:animate-leave room-narrow:p-0";
+/** The dimmed window: the card stands a fifth of the way down it rather than in its middle; in a narrow room, against its top and sides. */
+const ROOM = "items-start pt-dialog-command-top room-narrow:p-0";
 
-/** The card: the palette's measure, unpadded, its field, band, list, and foot edge to edge, fading out as it closes; in a narrow room, a sheet across the screen, edged and rounded only along its foot. */
+/** The card: the palette's measure, unpadded, its field, band, list, and foot edge to edge; in a narrow room, a sheet across the screen, edged and rounded only along its foot. */
 const CARD =
-  "w-dialog-command max-h-dialog-command-room gap-0 overflow-clip p-0 focus:outline-none data-ending-style:pointer-events-none data-ending-style:animate-leave room-narrow:w-full room-narrow:max-h-dialog-command-sheet room-narrow:rounded-t-none room-narrow:border-x-0 room-narrow:border-t-0";
+  "w-dialog-command max-h-dialog-command-room gap-0 overflow-clip p-0 focus:outline-none room-narrow:w-full room-narrow:max-h-dialog-command-sheet room-narrow:rounded-t-none room-narrow:border-x-0 room-narrow:border-t-0";
 
 /** cmdk's root: a column that gives way to the card's height, so the list scrolls inside it. */
 const ROOT = "flex min-h-0 flex-1 flex-col outline-none";

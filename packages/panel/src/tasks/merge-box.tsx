@@ -18,6 +18,7 @@ import {
   BUTTON_VARIANT,
   Button,
   type ButtonVariant,
+  CONFIRM_LOSS,
   ConfirmDialog,
   DIALOG_TONE,
   type DialogQuestion,
@@ -399,6 +400,7 @@ const DEQUEUE_QUESTION: DialogQuestion = {
   body: QUEUE_WARNING,
   verb: BOX_WORDS.DEQUEUE,
   running: BUSY_WORDS[PULL_REQUEST_ACTION.DEQUEUE],
+  loss: CONFIRM_LOSS.AFFECTS_OTHERS,
   tone: DIALOG_TONE.DANGER,
 };
 

@@ -281,6 +281,14 @@ test("Permanently delete asks in a dialog naming the plan, from the ⋯ and from
 
   assert.deepEqual(asked.deleted, [TASK.id, OTHER.id]);
 });
+test("Permanently delete draws its act in the danger colour, since a deleted task is not brought back", () => {
+  const { tasks } = openTab();
+  openMenu(mountToolbar(tasks));
+
+  choose("Permanently delete");
+
+  assert.equal(answer("Permanently delete").getAttribute("data-variant"), "danger");
+});
 test("the plan's name reaches the recording only as masked text, never in an attribute", () => {
   const { tasks } = openTab();
   openMenu(mountToolbar(tasks));
