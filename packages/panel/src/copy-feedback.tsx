@@ -22,7 +22,7 @@ import { CheckIcon, CircleAlertIcon, CopyIcon } from "lucide-react";
 import { useRef, useState } from "react";
 import { appPlatform } from "./app-platform.js";
 import { rendererRuntime } from "./renderer-runtime.js";
-import { useToast } from "./toast.js";
+import { TOAST_HOLD, useToast } from "./toast.js";
 
 /** What a copy button shows: its resting glyph, the check, or the alert. */
 const COPY_STATE = {
@@ -35,9 +35,6 @@ export type CopyState = (typeof COPY_STATE)[keyof typeof COPY_STATE];
 
 /** How long a button's check, or its alert, stands: long enough to see, gone before anyone waits on it. */
 const BUTTON_HOLD = Duration.millis(MOTION_DELAY_MS.CONFIRM);
-
-/** How long a copy's toast stands before it leaves. */
-const TOAST_HOLD = Duration.millis(1_500);
 
 /** What a copy button's hint says while its check or its alert stands. */
 const COPY_HINT = {
@@ -174,8 +171,8 @@ export function useCopyToast(): (words: string, label: string) => void {
       if (press !== latestMenuCopy) return;
       show(
         answer === COPY_STATE.COPIED
-          ? { words: label, tone: STATUS_TONE.COMPLETE, hold: TOAST_HOLD }
-          : { words: COPY_FAILED_NOTE, tone: STATUS_TONE.DANGER, hold: TOAST_HOLD },
+          ? { words: label, tone: STATUS_TONE.COMPLETE, hold: TOAST_HOLD.DONE }
+          : { words: COPY_FAILED_NOTE, tone: STATUS_TONE.DANGER, hold: TOAST_HOLD.FAILED },
       );
     });
   };

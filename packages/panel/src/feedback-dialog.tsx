@@ -62,11 +62,10 @@ import {
   useFilePicker,
 } from "@luke/ui";
 import { useStateWithRef } from "@luke/ui/use-state-with-ref";
-import { Duration } from "effect";
 import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { useAct } from "./act.js";
 import { encodeImage, imageFiles } from "./feedback-images.js";
-import { type ToastNotice, useToast } from "./toast.js";
+import { TOAST_HOLD, type ToastNotice, useToast } from "./toast.js";
 import { DROP_LEAVE, useFileDrop } from "./use-file-drop.js";
 
 /**
@@ -109,7 +108,7 @@ const SEND_CHORD: ShortcutChord = { key: SHORTCUT_KEY.ENTER };
 const SENT_NOTICE: ToastNotice = {
   words: "Sent",
   tone: STATUS_TONE.COMPLETE,
-  hold: Duration.seconds(3),
+  hold: TOAST_HOLD.DONE,
 };
 
 /** The note as it stands between openings: its words, its screenshots, and whether it is signed. */
