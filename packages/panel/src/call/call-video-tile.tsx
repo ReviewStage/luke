@@ -39,7 +39,12 @@ import {
   VideoOffIcon,
   WingFace,
 } from "@luke/ui";
-import { AVATAR_STATUS, type AvatarStatus } from "@luke/voice/avatar";
+import {
+  AVATAR_END_REASON,
+  AVATAR_STATUS,
+  type AvatarEndReason,
+  type AvatarStatus,
+} from "@luke/voice/avatar";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 /** What the tile says, for a reader and on screen. */
@@ -51,6 +56,20 @@ export const CALL_VIDEO_LABEL = {
   VIDEO_ON: "Turn video on",
   RESTART: "Restart video",
 } as const;
+
+/**
+ * Why the avatar went down, in the words the tile says beside "Video ended":
+ * what happened, as {@link VOICE_FAILURE_WORDS} says a failure, with no
+ * remedy of its own, since Restart video stands beside it.
+ */
+export const AVATAR_END_WORDS = {
+  [AVATAR_END_REASON.USER]: "You turned video off.",
+  [AVATAR_END_REASON.SERVER_CLOSED]: "Keyframe closed the video session.",
+  [AVATAR_END_REASON.NO_CAPACITY]: "Every video session on your plan is in use.",
+  [AVATAR_END_REASON.UNAVAILABLE]: "Luke could not start video.",
+  [AVATAR_END_REASON.ERROR]: "The video session failed.",
+  [AVATAR_END_REASON.CALL_ENDED]: "The call ended.",
+} as const satisfies Record<AvatarEndReason, string>;
 
 /** Plays one track on the element it is handed, for as long as the track stands. */
 function useTrack(
@@ -197,11 +216,13 @@ function AvatarWaiting({ gone = false }: { gone?: boolean }): React.JSX.Element 
 function TileGround({
   status,
   video,
+  endReason,
   onRestart,
   onAspect,
 }: {
   status: AvatarStatus;
   video: MediaStreamTrack | undefined;
+  endReason: AvatarEndReason | undefined;
   onRestart: () => void;
   onAspect: ((aspect: number) => void) | undefined;
 }): React.JSX.Element {
@@ -223,6 +244,11 @@ function TileGround({
         <span className="call-video-note">
           <span className="call-video-note-words">{CALL_VIDEO_LABEL.ENDED}</span>
         </span>
+        {endReason === undefined ? null : (
+          <span className="call-video-note-reason call-video-note-words">
+            {AVATAR_END_WORDS[endReason]}
+          </span>
+        )}
         <span className="call-video-restart" data-room="wide">
           <Button variant={BUTTON_VARIANT.OUTLINE} icon={<ResetIcon />} onClick={onRestart}>
             {CALL_VIDEO_LABEL.RESTART}
@@ -315,12 +341,15 @@ export function VideoToggle({
 export function CallVideoTile({
   video,
   status,
+  endReason,
   onSetVideo,
   toggles = true,
   onAspect,
 }: {
   video: MediaStreamTrack | undefined;
   status: AvatarStatus | undefined;
+  /** Why the avatar ended, said beside "Video ended" while the status is `ENDED`. */
+  endReason?: AvatarEndReason | undefined;
   /** Asks main to put the avatar up, a fresh session, or take it down with the developer's own reason. */
   onSetVideo: (on: boolean) => void;
   /** Whether the tile offers its own Video off; the call card's does, an agent's tab's does not. */
@@ -334,6 +363,7 @@ export function CallVideoTile({
       <TileGround
         status={status}
         video={video}
+        endReason={endReason}
         onRestart={() => onSetVideo(true)}
         onAspect={onAspect}
       />

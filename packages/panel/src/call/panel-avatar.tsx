@@ -24,7 +24,7 @@ import {
   type ResizeTravel,
 } from "@luke/ui";
 import { agentCallVideoStatus } from "@luke/ui/call-card-model";
-import { AVATAR_STATUS, type AvatarStatus } from "@luke/voice/avatar";
+import { AVATAR_STATUS, type AvatarEndReason, type AvatarStatus } from "@luke/voice/avatar";
 import { Option } from "effect";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import { useMemo, useState } from "react";
@@ -72,6 +72,8 @@ export interface AgentCallVideoState {
   /** The avatar's status on a call into the agent, `OFF` once video is down, and none where no video is offered. */
   status: AvatarStatus | undefined;
   video: MediaStreamTrack | undefined;
+  /** Why the avatar ended, once it has. */
+  endReason: AvatarEndReason | undefined;
   /** Asks main to put the avatar up again, a fresh session, or take it down. */
   onSetVideo: (on: boolean) => void;
 }
@@ -90,6 +92,7 @@ export function useAgentCallVideo(agentId: string): AgentCallVideoState {
   return {
     status: agentCallVideoStatus({ view, avatar, agentId, videoCalls }),
     video: useAvatarTracks().video,
+    endReason: avatar.endReason,
     onSetVideo: (on) => tell(ACT_KIND.VOICE_SET_VIDEO, { on }),
   };
 }
@@ -131,7 +134,7 @@ function cornerGrowth(corner: ResizeCornerSide, aspect: number, travel: ResizeTr
  * offers neither.
  */
 export function AgentCallVideo({ agentId }: { agentId: string }): React.JSX.Element | null {
-  const { status, video, onSetVideo } = useAgentCallVideo(agentId);
+  const { status, video, endReason, onSetVideo } = useAgentCallVideo(agentId);
   const { height, onResize } = useCallVideoHeight();
   const [aspect, setAspect] = useState(SQUARE);
   const [hovered, setHovered] = useState(false);
@@ -153,6 +156,7 @@ export function AgentCallVideo({ agentId }: { agentId: string }): React.JSX.Elem
           <CallVideoTile
             video={video}
             status={status}
+            endReason={endReason}
             onSetVideo={onSetVideo}
             toggles={false}
             onAspect={setAspect}

@@ -244,3 +244,34 @@ test("the floating call window draws Luke's video while the avatar is live, its 
   assert.equal(tileIn(card(page)), null);
   assert.equal(page.querySelector(`button[aria-label="${CALL_VIDEO_LABEL.VIDEO_ON}"]`), null);
 });
+
+/** ⇧⌘ and a letter, as the window hears the chord a hint names. */
+function pressShiftCommand(code: string, key: string): KeyboardEvent {
+  const event = new KeyboardEvent("keydown", {
+    code,
+    key,
+    metaKey: true,
+    shiftKey: true,
+    bubbles: true,
+    cancelable: true,
+  });
+  act(() => {
+    window.dispatchEvent(event);
+  });
+  return event;
+}
+
+test("in the floating call window ⇧⌘M and ⇧⌘S answer, as the mute hints name them, and are claimed from the menu bar", async () => {
+  handBridge(onCall({ status: AVATAR_STATUS.OFF }));
+  mount(createElement(CallWindowCard));
+  await settle();
+
+  const microphone = pressShiftCommand("KeyM", "M");
+  await settle();
+  assert.equal(microphone.defaultPrevented, true);
+  assert.deepEqual(sent, [{ kind: "voice.command", payload: { command: "toggle-microphone" } }]);
+
+  pressShiftCommand("KeyS", "S");
+  await settle();
+  assert.deepEqual(sent.at(-1), { kind: "voice.command", payload: { command: "mute-speaker" } });
+});
