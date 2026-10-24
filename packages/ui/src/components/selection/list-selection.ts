@@ -96,6 +96,13 @@ function choosableOf(list: Element): Choosable[] {
     .map((press) => ({ key: press.getAttribute(KEY_ATTRIBUTE) ?? "", press }));
 }
 
+/** Focuses the first available row of `box` that can be chosen, where a region of the app's own rows keeps no roving Tab stop; answers whether one took it. */
+export function focusChoosable(box: Element): boolean {
+  const first = choosableOf(box)[0];
+  first?.press.focus();
+  return first !== undefined;
+}
+
 /** Whether `a` and `b` hold the same keys. */
 function sameKeys(a: ReadonlySet<string>, b: ReadonlySet<string>): boolean {
   return a.size === b.size && [...a].every((key) => b.has(key));

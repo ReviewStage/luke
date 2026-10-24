@@ -73,6 +73,7 @@ import {
   isAgentEntry,
   placeAllWrites,
   placeWrites,
+  restoreWrites,
   sectionEntries,
   sectionOrder,
   sectionTaskIds,
@@ -508,37 +509,38 @@ function movedNote(count: number, title: string | null): string {
 /**
  * Moves tasks into a section, on top of it in their order, or out of every
  * section where `sectionId` is null, and answers with one toast whose Undo
- * puts each back in the section it stood in, at its place there, or in none.
- * A task already where it is sent is left as it stands.
+ * puts each back in the section it stood in, under the rows it stood under,
+ * or in none. A task already where it is sent is left as it stands, and the
+ * Undo leaves one moved again since where it was moved, reading the tab as
+ * it stands when Undo is pressed (`latest`).
  */
 function moveToSection(
   tasks: TasksControl,
+  latest: () => TasksControl,
   taskIds: readonly string[],
   sectionId: string | null,
   toast: (notice: ReturnType<typeof undoToast>) => void,
 ): void {
-  const entries = sectionEntries(tasks.taskSections);
+  const before = tasks.taskSections;
+  const entries = sectionEntries(before);
   const moving = taskIds.filter((taskId) => (entries.get(taskId)?.sectionId ?? null) !== sectionId);
   if (moving.length === 0) return;
   const members = moving.map((id) => ({ agent: false, id }));
-  const back = moving.map((taskId): TaskSectionWrite => {
-    const was = entries.get(taskId);
-    if (was === undefined) return { kind: TASK_SECTION_WRITE.PLACE, taskId, sectionId: null };
-    const { sectionId: from, position } = was;
-    return position === undefined
-      ? { kind: TASK_SECTION_WRITE.PLACE, taskId, sectionId: from }
-      : { kind: TASK_SECTION_WRITE.PLACE, taskId, sectionId: from, position };
-  });
   tasks.onWriteSections(
     sectionId === null
       ? unplaceAllWrites(members)
-      : placeAllWrites(tasks.taskSections, members, sectionId, Date.now()),
+      : placeAllWrites(before, members, sectionId, Date.now()),
   );
   const title =
     sectionId === null
       ? null
-      : (tasks.taskSections.sections.find((section) => section.id === sectionId)?.title ?? "");
-  toast(undoToast(movedNote(moving.length, title), () => tasks.onWriteSections(back)));
+      : (before.sections.find((section) => section.id === sectionId)?.title ?? "");
+  const undo = () => {
+    const now = latest();
+    const writes = restoreWrites(before, now.taskSections, members, sectionId, Date.now());
+    if (writes.length > 0) now.onWriteSections(writes);
+  };
+  toast(undoToast(movedNote(moving.length, title), undo));
 }
 
 /** A section's entries for the tasks its group draws, in its own order; its agents, which the List draws not, left out. */
@@ -938,6 +940,7 @@ function TasksListGroup({
  */
 function selectionActs(
   tasks: TasksControl,
+  latest: () => TasksControl,
   taskIds: readonly string[],
   toast: (notice: ReturnType<typeof undoToast>) => void,
   onActed: () => void,
@@ -956,7 +959,7 @@ function selectionActs(
   const sections =
     workspaceId === undefined ? [] : workspaceSections(tasks.taskSections, workspaceId);
   const move = (sectionId: string | null) =>
-    acted(() => moveToSection(tasks, taskIds, sectionId, toast));
+    acted(() => moveToSection(tasks, latest, taskIds, sectionId, toast));
   const sectionMenu = [
     sections.map((section) => ({
       label: section.title,
@@ -1055,7 +1058,12 @@ export function TasksList({
     groups.flatMap((group) => (folds.folded(group.head) ? [] : group.tasks.map(taskIdOf))),
   );
   const selected: ReadonlySet<string> = new Set([...chosen].filter((id) => drawnIds.has(id)));
+  // Note that a row no longer drawn leaves the selection for good, so reopening its group chooses nothing anew.
+  if (selected.size !== chosen.size) setChosen(selected);
   const clear = () => setChosen(new Set());
+  // The tab as it stands, which an Undo pressed renders after its act reads.
+  const latest = useRef(tasks);
+  latest.current = tasks;
   return (
     <CollectionPage
       frame={PAGE_FRAME.TOOLBAR}
@@ -1133,7 +1141,7 @@ export function TasksList({
       <div className="tasks-list-selection">
         <SelectionBar
           count={selected.size}
-          acts={selectionActs(tasks, [...selected], toast, clear)}
+          acts={selectionActs(tasks, () => latest.current, [...selected], toast, clear)}
           onClear={clear}
           controls={regionId}
         />

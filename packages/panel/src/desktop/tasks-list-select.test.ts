@@ -370,3 +370,20 @@ test("Move to section keeps every task chosen in the section picked, and its Und
     ["t-42", null],
   ]);
 });
+
+test("a task folded away leaves the selection, and reopening its group chooses it no more", async () => {
+  const { page } = await mountPage();
+  commandClick(page, "ACME-39");
+  const fold = () => {
+    const head = page.querySelector<HTMLButtonElement>('section[aria-label="Todo"] h2 button');
+    assert.ok(head, "Todo folds by its head");
+    act(() => head.click());
+  };
+
+  fold();
+  assert.equal(page.querySelector('[role="toolbar"]'), null);
+  fold();
+
+  assert.deepEqual(chosen(page), []);
+  assert.equal(page.querySelector('[role="toolbar"]'), null);
+});

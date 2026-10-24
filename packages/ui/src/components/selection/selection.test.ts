@@ -417,6 +417,12 @@ function ChoosingCards(): React.JSX.Element {
   return createElement(
     Fragment,
     null,
+    createElement(SelectionBar, {
+      count: selected.size,
+      acts: [],
+      onClear: () => setSelected(new Set()),
+      controls: "places",
+    }),
     createElement(SelectionRegion, {
       id: "places",
       selection: { selected, onChange: setSelected },
@@ -459,4 +465,21 @@ test("a region chooses its card presses across its lists: ⌘-click one, ⇧-cli
   expect(chosen()).toBe("");
   click("Inbox");
   expect(page.querySelector("[data-opened]")?.textContent).toBe("Inbox");
+});
+
+test("Clear in the bar over a region hands the focus to the region's first card rather than the page", () => {
+  const page = draw(createElement(ChoosingCards));
+  const cards = () => [...page.querySelectorAll<HTMLButtonElement>("[data-card-press]")];
+  act(() => {
+    cards()[2]?.dispatchEvent(new MouseEvent("click", { bubbles: true, metaKey: true }));
+  });
+  const clear = page.querySelector<HTMLButtonElement>(
+    '[role="toolbar"] button[aria-label="Clear selection"]',
+  );
+  if (clear === null) throw new Error("no Clear in the bar");
+  act(() => clear.focus());
+  act(() => clear.click());
+
+  expect(page.querySelector('[role="toolbar"]')).toBeNull();
+  expect(document.activeElement).toBe(cards()[0]);
 });

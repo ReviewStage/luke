@@ -10,6 +10,7 @@ import {
 import { Button } from "../button/button.js";
 import { Menu, type MenuEntry, useMenu } from "../menu/menu.js";
 import { focusRovingStop, ROVING_ORIENTATION, useRovingKeys } from "../roving-keys/roving-keys.js";
+import { focusChoosable } from "./list-selection.js";
 
 /**
  * selection-bar.tsx -- the bar over a list while some of its rows are chosen: how many ("3 selected"), the acts that take them all at once, and Clear.
@@ -26,7 +27,8 @@ import { focusRovingStop, ROVING_ORIENTATION, useRovingKeys } from "../roving-ke
  * its buttons. It names the list it acts on (`controls`), and where the
  * bar held the focus as the last row left the selection, by Clear, Esc,
  * or an act that took the rows away, it hands the focus to that list's
- * Tab stop rather than let it fall to the page as its buttons go.
+ * Tab stop, or a `SelectionRegion`'s first row, rather than let it fall to
+ * the page as its buttons go.
  */
 
 /** One act of the bar: its words, its glyph, and either what it does or the menu of choices it drops. */
@@ -85,7 +87,8 @@ export function SelectionBar({
     // Note that only a focus fallen to the page is handed on, never one something else took.
     const fell = document.activeElement === null || document.activeElement === document.body;
     const list = document.getElementById(controls);
-    if (fell && list !== null) focusRovingStop(list);
+    // Note that a region of the app's own rows keeps no roving Tab stop, so its first row takes the focus instead.
+    if (fell && list !== null && !focusRovingStop(list)) focusChoosable(list);
   }, [count, controls]);
   if (count <= 0) return null;
   const onFocus = (event: FocusEvent<HTMLDivElement>) => {
