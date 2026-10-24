@@ -24,7 +24,8 @@ import type { TaskHeadBack } from "./task-pane-switcher.js";
  * end corner holding everything else the page offers; and the title of what
  * is on screen between them. The corners are one control wide each, so the
  * title's centre is the row's, and it truncates between them (`Toolbar`'s
- * phone look).
+ * phone look). A corner's control draws its glyph alone, named still, so a
+ * way back (`BackButton`) is its back glyph, hinted "Back to {place}".
  *
  * A menu the page already drops from a button of its own, its View options
  * or its Filter, is kept whole rather than folded into the ⋯: the ⋯ offers

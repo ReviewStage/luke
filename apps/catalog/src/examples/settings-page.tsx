@@ -1,4 +1,5 @@
 import {
+  BackButton,
   BUTTON_VARIANT,
   Button,
   EmptyState,
@@ -7,6 +8,8 @@ import {
   SettingsRow,
   SettingsSection,
   Switch,
+  TOOLBAR_LOOK,
+  type ToolbarLook,
 } from "@luke/ui";
 import { useState } from "react";
 import type { Example } from "../examples";
@@ -16,8 +19,9 @@ import { CatalogSection } from "../section";
  * settings-page.tsx -- a page of sections with a Reset at the end of its
  * title's line, tall enough to scroll inside its frame; and the same page
  * in a frame narrower than the 480px a desktop page insets less under, its
- * long title pushing the Reset below it; and a page whose content is an
- * empty state, standing in the room under its title.
+ * long title pushing the Reset below it; the page on a phone, its way back
+ * and Reset in its bar's corners; and a page whose content is an empty
+ * state, standing in the room under its title.
  */
 
 function HeldSwitch({ label, describedBy }: { label: string; describedBy: string | undefined }) {
@@ -33,9 +37,18 @@ function SwitchRow({ label, description }: { label: string; description?: string
   );
 }
 
-function Page({ title }: { title: string }): React.JSX.Element {
+function Page({ title, look }: { title: string; look?: ToolbarLook }): React.JSX.Element {
   return (
-    <SettingsPage title={title} actions={<Button variant={BUTTON_VARIANT.QUIET}>Reset</Button>}>
+    <SettingsPage
+      title={title}
+      look={look}
+      lead={
+        look === TOOLBAR_LOOK.PHONE ? (
+          <BackButton label="Settings" place="settings" onBack={() => undefined} />
+        ) : undefined
+      }
+      actions={<Button variant={BUTTON_VARIANT.QUIET}>Reset</Button>}
+    >
       <SettingsSection title="General">
         <SwitchRow
           label="Launch at login"
@@ -79,6 +92,11 @@ function SettingsPages(): React.JSX.Element {
       <CatalogSection id="settings-page-narrow" title="Narrower than 480px, a long title">
         <div className="catalog-settings-frame catalog-settings-frame-narrow">
           <Page title="Coding agents and their pull requests" />
+        </div>
+      </CatalogSection>
+      <CatalogSection id="settings-page-phone" title="On a phone, its actions ending the bar">
+        <div className="catalog-settings-frame catalog-settings-frame-narrow">
+          <Page title="General" look={TOOLBAR_LOOK.PHONE} />
         </div>
       </CatalogSection>
       <CatalogSection id="settings-page-empty" title="An empty state filling the page">
