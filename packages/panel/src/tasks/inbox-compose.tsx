@@ -49,6 +49,7 @@ import {
   EMPTY_DRAFT,
   type NewThreadPlace,
   useDraft,
+  useDraftWriter,
 } from "../composer-drafts.js";
 import { imageFiles } from "../feedback-images.js";
 import { useIntegrationStatuses } from "../integration-statuses.js";
@@ -226,6 +227,15 @@ export function InboxCompose(props: InboxComposeProps): React.JSX.Element {
   const [query, setQuery] = useState("");
   const [picked, setPicked] = useState<MentionableAgent | undefined>(undefined);
   const { draft, update } = useDraft(threadPlace(workspace));
+  // Words written before the workspaces were read become the workspace's draft once it is known, over one it kept, as the words written last win.
+  const loose = useDraft(threadPlace(undefined)).draft;
+  const writer = useDraftWriter();
+  const knownId = workspace?.workspaceId;
+  useEffect(() => {
+    if (knownId === undefined || !written(loose)) return;
+    writer.update({ kind: DRAFT_PLACE.NEW_THREAD, workspaceId: knownId }, () => loose);
+    writer.update(threadPlace(undefined), () => EMPTY_DRAFT);
+  }, [knownId, loose, writer]);
   const place = useAgentRowPlace();
   // Note that a draft's own agent outranks the item read as it opened, and one it names that this window cannot name leaves To to be chosen again.
   const agent = picked ?? (draft.to === undefined ? agentOf(read, to) : agentOf(read, draft.to));

@@ -8332,6 +8332,66 @@ test("a New thread's To, Subject, words, and files outlast a row pressed meanwhi
   });
 });
 
+test("words written in a New thread before the workspaces are read stay in it once they are, as the workspace's draft", async () => {
+  inboxes = new Map([[BILLING.id, [THRESHOLD]]]);
+  heldStarts([AGENT]);
+  const { page } = mount();
+  await settle();
+  const pane = await openNewThread(page);
+  typeSubject(pane, "Annual plan copy");
+  typeInComposer(pane, "Draft the annual plan's line too.");
+
+  listedWorkspace = ACME;
+  act(() => setTasks([BILLING, INVITES]));
+  await settle();
+
+  const now = threadDraft(itemPane(page));
+  assert.deepEqual(
+    { subject: now.subject, words: now.words },
+    { subject: "Annual plan copy", words: "Draft the annual plan's line too." },
+  );
+});
+
+test("a New thread open as another workspace is listed starts on that workspace's draft, leaving the agent picked in the last one behind", async () => {
+  listedWorkspace = ACME;
+  inboxes = new Map([[BILLING.id, [THRESHOLD]]]);
+  const OLDER: CodingAgentSummary = {
+    ...AGENT,
+    id: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b28",
+    planId: INVITES.id,
+    title: "Seat limits",
+  };
+  heldStarts([AGENT], (words) => (words === "seat" ? [OLDER] : []));
+  const { page } = mount();
+  await settle();
+  const pane = await openTo(page);
+  const search =
+    document.querySelector<HTMLInputElement>('[role="dialog"][aria-label="To"] input') ??
+    assert.fail("To's menu has a search field");
+  const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+  act(() => {
+    setValue?.call(search, "seat");
+    search.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  await settle();
+  act(() =>
+    (
+      document.querySelector<HTMLElement>('[role="dialog"][aria-label="To"] [role="option"]') ??
+      assert.fail("To lists the agent found")
+    ).click(),
+  );
+  await settle();
+  typeInComposer(pane, "Raise the seat limit.");
+  assert.equal(threadDraft(pane).to, "To: Seat limits");
+
+  listedWorkspace = { ...ACME, id: "workspace-globex", slug: "globex" };
+  act(() => setTasks([BILLING, INVITES]));
+  await settle();
+
+  const now = threadDraft(itemPane(page));
+  assert.deepEqual({ to: now.to, words: now.words }, { to: "To: Alerts", words: "" });
+});
+
 test("Discard takes a written New thread away at once and offers Undo, which opens it again holding everything written", async () => {
   listedWorkspace = ACME;
   inboxes = new Map([[BILLING.id, [THRESHOLD]]]);
