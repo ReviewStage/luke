@@ -33,3 +33,17 @@ test("a turn Anthropic refused a fast step of says it ran at standard speed, and
   assert.doesNotMatch(card(), /standard speed/u);
   assert.doesNotMatch(card(false), /standard speed/u);
 });
+
+test("a turn that ran out of time says Failed and why, never Abandoned", () => {
+  const html = renderToStaticMarkup(
+    createElement(TurnCard, {
+      startedAt: STARTED_AT,
+      endedAt: ENDED_AT,
+      record: { model: "anthropic/claude-opus-5.5", effort: "high", ending: "abandoned" },
+      models: [],
+    }),
+  );
+  assert.match(html, /Failed/u);
+  assert.match(html, /it ran out of time/u);
+  assert.doesNotMatch(html, /Abandoned/u);
+});

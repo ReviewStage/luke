@@ -20,7 +20,7 @@ const AGENT_FAILURE_WORDS = {
   [CODING_AGENT_FAILURE.MODEL]: "the model call failed",
   [CODING_AGENT_FAILURE.SANDBOX]: "the sandbox or checkout failed",
   [CODING_AGENT_FAILURE.GITHUB]: "GitHub refused or could not be reached",
-  [CODING_AGENT_FAILURE.ABANDONED]: "the turn ran past its bound and was ended",
+  [CODING_AGENT_FAILURE.ABANDONED]: "it ran out of time",
   [CODING_AGENT_FAILURE.PROVIDER_KEY]: "your API key was refused or cannot be read",
   [CODING_AGENT_FAILURE.NOT_STARTED]: "the agent never started",
   [CODING_AGENT_FAILURE.FAST_ON_OWN_KEY]:
