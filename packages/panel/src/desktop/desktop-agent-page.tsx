@@ -9,20 +9,19 @@ import { encodeMention, MENTION_KIND } from "@luke/features/mention-link";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
   ConfirmDialog,
-  EllipsisIcon,
   ERROR_STATE_PLACEMENT,
   ErrorState,
   FILL_ELEMENT,
   Fill,
-  IconButton,
   InlineEdit,
+  MoreButton,
+  moreLabel,
   ONE_LINE_ELEMENT,
   ONE_LINE_END,
   OneLine,
   PageToolbar,
   SpinnerRegion,
   STATUS_TONE,
-  Tooltip,
   useMenu,
 } from "@luke/ui";
 import { pullRequestAgentOf, repositoryPullRequestOf } from "@luke/ui/pull-request-link";
@@ -142,7 +141,7 @@ const nothing = (): void => undefined;
 const NO_UNREAD: readonly StripTab[] = [];
 
 /** What the page's ⋯ is called. */
-const ACTIONS_LABEL = "Agent actions";
+const ACTIONS_THING = "Agent";
 
 /** What the title's field is called for a reader, as an agent's tab calls its own. */
 const NAME_LABEL = "Agent name";
@@ -210,12 +209,10 @@ function AgentPageHeading({
         )}
       </div>
       <div className="desktop-toolbar-actions">
-        <Tooltip label={ACTIONS_LABEL}>
-          <IconButton icon={<EllipsisIcon />} label={ACTIONS_LABEL} {...menu.trigger()} />
-        </Tooltip>
+        <MoreButton thing={ACTIONS_THING} {...menu.trigger()} />
         {menu.drawn === undefined ? null : (
           <ActionMenu
-            label={ACTIONS_LABEL}
+            label={moreLabel(ACTIONS_THING)}
             menu={menu.drawn}
             groups={groups}
             onClose={menu.close}

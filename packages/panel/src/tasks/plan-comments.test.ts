@@ -457,7 +457,9 @@ test("deleting a thread asks first, and only the confirm deletes it", async () =
       ?.click(),
   );
   const card = container.querySelector(`.comment-card[data-thread="${ID.OPEN}"]`);
-  act(() => card?.querySelector<HTMLButtonElement>('button[aria-label="More"]')?.click());
+  act(() =>
+    card?.querySelector<HTMLButtonElement>('button[aria-label="Comment actions"]')?.click(),
+  );
   const item = [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find(
     (each) => each.textContent === "Delete thread",
   );
@@ -1695,7 +1697,9 @@ function ownComment() {
   const drawnTab = drawn("tab", [datedThread({ userId: "u-dean", name: "Dean" })]);
   const { container } = drawnTab;
   const edit = () => {
-    act(() => container.querySelector<HTMLButtonElement>('button[aria-label="More"]')?.click());
+    act(() =>
+      container.querySelector<HTMLButtonElement>('button[aria-label="Comment actions"]')?.click(),
+    );
     const item = [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find(
       (each) => each.textContent === "Edit",
     );

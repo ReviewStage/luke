@@ -7,7 +7,6 @@ import {
   ConfirmDialog,
   CopyIcon,
   type DialogQuestion,
-  EllipsisIcon,
   ExternalIcon,
   IconButton,
   InlineEdit,
@@ -17,6 +16,7 @@ import {
   LIST_ROW_INK,
   ListRow,
   MarkDoneIcon,
+  MoreButton,
   OneLine,
   PinIcon,
   ProviderMark,
@@ -553,16 +553,7 @@ export function TaskActions({
   useAppCommand(APP_COMMAND.MARK_TASK_DONE, actions.markDone);
   return (
     <>
-      {button ? (
-        <Tooltip label="Task actions">
-          <IconButton
-            icon={<EllipsisIcon />}
-            label="Task actions"
-            disabled={deletion.busy}
-            {...actions.trigger()}
-          />
-        </Tooltip>
-      ) : null}
+      {button ? <MoreButton thing="Task" disabled={deletion.busy} {...actions.trigger()} /> : null}
       {actions.menu}
       {actions.dialog}
     </>
