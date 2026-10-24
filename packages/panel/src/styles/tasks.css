@@ -96,19 +96,6 @@
   user-select: text;
 }
 
-.plan-body {
-  font-size: var(--luke-type-caption-size);
-  line-height: var(--luke-type-reading-leading);
-}
-
-/* A plan is a document rather than a message, so its sections breathe. Every
-   unit after the header block opens on a section heading. Note that the gap
-   is the body's children's rather than `.plan-unit`'s own, because a unit is
-   drawn inside a wrapper where it carries a byline. */
-.plan-body > * + * {
-  margin-top: 1.1em;
-}
-
 /* The caret a save is typed behind: solid, as a caret is while someone types.
    Note that it and the selection are inline, so they take none of the gap
    a note (`@luke/ui`'s prose.css) opens between a list item's blocks, which as an inline-block
@@ -470,14 +457,27 @@
 .plan-document-text :is(h1, h2, h3, h4, h5, h6),
 .plan-document-text p {
   margin: 0;
+}
+
+/* Note that the first three levels keep prose's sizes (`@luke/ui`'s
+   prose.css), as the read view does, so a heading does not shrink to the
+   text's size as its section opens. */
+.plan-document-text :is(h4, h5, h6),
+.plan-document-text p {
   font-size: inherit;
 }
 
 /* Note that a drawn section's heading margin folds into the gap above its
-   section, so a heading in the editor stands the gap alone. */
+   section, so a heading in the editor stands the gap alone. An h3 after a
+   block stands it too, as it does drawn (desktop.css), so opening the text
+   does not pull it up onto the block before it. */
 .desktop-document
   .plan-document-text
-  > .luke-markdown-heading:is([data-level="1"], [data-level="2"]):not(:first-child) {
+  > .luke-markdown-heading:is([data-level="1"], [data-level="2"]):not(:first-child),
+.desktop-document
+  .plan-document-text
+  > :not(.luke-markdown-heading)
+  + .luke-markdown-heading[data-level="3"] {
   margin-top: var(--plan-section-gap);
 }
 
