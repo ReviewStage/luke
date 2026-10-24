@@ -344,7 +344,7 @@ test("an archived agent's chip, which no list the window holds names, wears the 
   assert.deepEqual(marks, [MODEL_PROVIDER.OPENAI, MODEL_PROVIDER.ANTHROPIC]);
 });
 
-test("an automation's chip and its run's wear its clock tile, and only the Automations place keeps the lightning bolt", async () => {
+test("an automation's chip and its run's wear its Zap tile, and the Automations place wears the bare bolt", async () => {
   const container = await drawn(
     [
       `${HOME}/automation/${TRIAGE}`,
@@ -362,8 +362,8 @@ test("an automation's chip and its run's wear its clock tile, and only the Autom
     "the automation's tile",
   );
   assert.ok(run?.querySelector('.actor-mark[data-kind="automation"]'), "the run's tile");
-  assert.equal(automation?.querySelector(".lucide-zap"), null);
-  assert.equal(run?.querySelector(".lucide-zap"), null);
-  assert.ok(place?.querySelector(".lucide-zap"), "the Automations page keeps its bolt");
+  assert.ok(automation?.querySelector(".actor-mark .lucide-zap"), "the automation's tile is Zap");
+  assert.ok(run?.querySelector(".actor-mark .lucide-zap"), "the run's tile is Zap");
+  assert.ok(place?.querySelector(".lucide-zap"), "the Automations page wears its bolt");
   assert.equal(place?.querySelector(".actor-mark"), null);
 });

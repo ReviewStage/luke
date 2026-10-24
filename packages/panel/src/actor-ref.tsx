@@ -49,7 +49,8 @@ import {
   ROLE_WORDS,
   SOMEONE_REASON,
 } from "@luke/ui/actor-model";
-import { BotIcon, ClockIcon, HistoryIcon, UserRoundIcon, UserRoundXIcon } from "lucide-react";
+import { GLYPH } from "@luke/ui/icons";
+import { BotIcon, HistoryIcon, UserRoundIcon, UserRoundXIcon } from "lucide-react";
 import { type ReactNode, useEffect } from "react";
 import { useAutomation } from "./automation-directory.js";
 import { automationNextText, automationOwnerName } from "./desktop/automation-words.js";
@@ -75,7 +76,7 @@ import { AgentMark } from "./tasks/tab-look.js";
  * is drawn, so a Retina screen draws it sharp and nothing larger is
  * fetched. Luke's square holds
  * his face in his own blue, an agent's its harness, swapped for the working
- * mark while it writes as its tab's glyph is, and an automation's its clock,
+ * mark while it writes as its tab's glyph is, and an automation's its Zap,
  * each its glyph alone on the ground beneath it, as a tab's is. In a
  * facepile (`ActorStack`) whose faces overlap each stands on one solid
  * neutral tile instead, so the face it overlaps never shows through it. A disc is one size per place
@@ -202,9 +203,9 @@ function SomeoneDisc({ glyph, size }: { glyph: ReactNode; size: ActorSize }): Re
   return <Avatar name="" glyph={glyph} size={AVATAR_OF_SIZE[size]} decorative />;
 }
 
-/** An automation's glyph on its square: what fires it, GitHub's or Sentry's mark among them, or the clock where only its name is known, wearing where its newest run stands. */
+/** An automation's glyph on its square: what fires it, GitHub's or Sentry's mark among them, or the automation's own glyph where only its name is known, wearing where its newest run stands. */
 function automationGlyph(actor: ActorOf<typeof ACTOR_KIND.AUTOMATION>): React.JSX.Element {
-  const glyph = actor.trigger === undefined ? <ClockIcon /> : <FiringGlyph of={actor.trigger} />;
+  const glyph = actor.trigger === undefined ? <GLYPH.AUTOMATION /> : <FiringGlyph of={actor.trigger} />;
   return <StateGlyph glyph={glyph} state={GLYPH_OF_STATE[actor.state]} />;
 }
 

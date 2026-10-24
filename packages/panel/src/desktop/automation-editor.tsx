@@ -158,7 +158,8 @@ import { useDisclosure } from "@luke/ui/use-disclosure";
 import { useOptimisticSettingWrite } from "@luke/ui/use-setting-write";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { Result } from "effect";
-import { HistoryIcon, PlayIcon, SaveIcon, Trash2Icon, ZapIcon } from "lucide-react";
+import { GLYPH } from "@luke/ui/icons";
+import { HistoryIcon, PlayIcon, SaveIcon, ZapIcon } from "lucide-react";
 import {
   type ReactNode,
   type Ref,
@@ -942,7 +943,7 @@ function AutomationActions({
       : linkItem({ kind: LINK_PLACE.AUTOMATION, automationId: automation.id });
   const remove: MenuAction = {
     label: "Delete",
-    icon: <Trash2Icon />,
+    icon: <GLYPH.DELETE />,
     onSelect: onDelete,
     danger: true,
   };
