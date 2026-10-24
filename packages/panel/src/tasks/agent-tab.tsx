@@ -19,9 +19,11 @@ import type { KnownNames } from "@luke/features/place-chip-model";
 import type { TaskStatus } from "@luke/features/task-wire";
 import { TRANSCRIPT_PART_TYPE } from "@luke/features/transcript-wire";
 import { CALL_KIND, CALL_WORDS } from "@luke/features/turn-rows";
+import { replyFromWords } from "@luke/features/words";
 import { ACT_KIND } from "@luke/host/acts";
 import {
   ANNOUNCE,
+  announce,
   BUTTON_VARIANT,
   Button,
   CodeCard,
@@ -138,6 +140,7 @@ import {
   endLineOffersContinue,
   endLineParts,
   endLineReason,
+  finishedReplyLead,
   lineSender,
   macOwnerOf,
   messageWords,
@@ -1760,6 +1763,47 @@ function useArrivals(
 }
 
 /**
+ * Says an agent's reply once its turn is whole, since its log is no live
+ * region (`ConversationContent`'s `streams`) and a reply read as it
+ * streamed would be heard in fragments. The rule: a page that says the turn
+ * completed, after one that said it was still writing, says its newest
+ * reply once, politely, as "Reply from {agent}: {its first sentence}"; a
+ * reader whose focus stands in the log is already at the reply, so they
+ * hear only who it is from. A tab opened on a finished turn says nothing,
+ * and a stop or a failure says its own end line instead.
+ */
+function useReplySaid({
+  messages,
+  status,
+  name,
+  quiet,
+  tab,
+}: {
+  messages: readonly CodingAgentMessage[];
+  /** Where the agent stood as the page holding `messages` said; none before a page landed. */
+  status: CodingAgentStatus | undefined;
+  name: string;
+  /** Whether a quiet reply leaves the reader nothing to hear, as an operator's does. */
+  quiet: boolean;
+  tab: RefObject<HTMLElement | null>;
+}): void {
+  const writing = useRef<boolean | undefined>(undefined);
+  const said = useRef<string | undefined>(undefined);
+  useEffect(() => {
+    if (status === undefined) return;
+    const was = writing.current;
+    writing.current = agentStillWriting(status);
+    if (was !== true || status !== CODING_AGENT_STATUS.COMPLETED) return;
+    const reply = finishedReplyLead(messages, quiet);
+    if (reply === undefined || reply.messageId === said.current) return;
+    said.current = reply.messageId;
+    const log = tab.current?.querySelector('[role="log"]');
+    const reading = log?.contains(document.activeElement) === true;
+    announce(ANNOUNCE.POLITE, replyFromWords(name, reading ? undefined : reply.lead));
+  }, [messages, status, name, quiet, tab]);
+}
+
+/**
  * How a transcript's messages are placed, read once for the messages held
  * rather than on every draw: where the to-do lists stand, which message
  * opens it, the replay it opens on, each message with the lines that
@@ -1960,7 +2004,10 @@ function AgentTranscriptView({
               </div>
             ) : null}
             {/* The plan's card stands off the tab row by the gap between a column's groups; lines fade under the bar or banner above. */}
-            <ConversationContent className={overComposer ? "agent-log-over-composer" : undefined}>
+            <ConversationContent
+              className={overComposer ? "agent-log-over-composer" : undefined}
+              streams
+            >
               <ConversationRows
                 keys={rowKeys}
                 estimate={ROW_ESTIMATE_PX}
@@ -2272,6 +2319,15 @@ function AgentTabView({
   );
   const chatOn = useChatOn();
   const working = agentStillWriting(agent.status);
+  const name = agentName(agent, models);
+  const tab = useRef<HTMLElement>(null);
+  useReplySaid({
+    messages: transcript.messages,
+    status: transcript.pageStatus,
+    name,
+    quiet: agent.kind === CODING_AGENT_KIND.OPERATOR,
+    tab,
+  });
   const steering = useKept(
     new Set(composer.sent.filter((line) => line.steers).map((line) => line.id)),
     sameSet,
@@ -2305,7 +2361,6 @@ function AgentTabView({
   const pictures = useAgentPictureDoor(agent.id);
   const wholeParts = useWholePartDoor(agent.id);
   const { members, former } = useMemberDirectory();
-  const tab = useRef<HTMLElement>(null);
   // The door the box hands Reply, which lays a quote in at its caret.
   const replyDoor = useRef<((words: string) => void) | undefined>(undefined);
   const macOwner = useKept(macOwnerOf(agent.startedBy, members, readerId, former), sameFields);
@@ -2340,7 +2395,7 @@ function AgentTabView({
     [automationId, automationName, brief, run, tasked, openTarget, originStarter, steadyGitHub],
   );
   return (
-    <AgentTabFrame ref={tab} label={agentName(agent, models)}>
+    <AgentTabFrame ref={tab} label={name}>
       <MacOwnerProvider value={macOwner}>
         <AgentPicturesProvider value={pictures}>
           <WholePartsProvider value={wholeParts}>

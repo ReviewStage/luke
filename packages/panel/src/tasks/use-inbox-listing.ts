@@ -151,6 +151,7 @@ export function useInboxListing(
     taskId: taskId ?? chosenAgentId,
     kind: chosenAgentId === undefined ? INBOX_SCOPE_KIND.PLAN : INBOX_SCOPE_KIND.AGENT,
     shown: tasks.shown,
+    onScreen: taskId !== undefined && tasks.inboxShown === taskId,
     waiting:
       tasks.inbox.some((each) => each.taskId === taskId) ||
       waitingTaskless.some((each) => each.agentId === chosenAgentId),

@@ -97,6 +97,7 @@ import { GLYPH_STATE, type GlyphState, glyphStateWords } from "../state-glyph.js
 import { drawnCall } from "./native-tool-calls.js";
 import {
   changesSidebar,
+  plainWords,
   remoteCallOf,
   TOOL_TARGET,
   todosView,
@@ -2091,6 +2092,37 @@ export function messageWords(message: CodingAgentMessage): string {
   return agentParts(message)
     .flatMap((part) => (part.kind === AGENT_PART.TEXT ? [part.text] : []))
     .join("\n\n");
+}
+
+/** How many words a reply's lead holds at most, where its first sentence runs on. */
+const REPLY_LEAD_WORDS = 24;
+
+/** A sentence's end: its stop, then a space or the end of the words. */
+const SENTENCE_END = /[.!?](?=\s|$)/u;
+
+/**
+ * What a turn that finished replied, as a reader hears it: its newest
+ * reply's last stretch of words, after the turn's last call, cut to its
+ * first sentence, or to its first words where that runs on. Nothing where
+ * there is no reply, it holds no words, or it is an operator's quiet reply
+ * (`quiet`), which leaves its member nothing to read.
+ */
+export function finishedReplyLead(
+  messages: readonly CodingAgentMessage[],
+  quiet: boolean,
+): { readonly messageId: string; readonly lead: string } | undefined {
+  const reply = messages.findLast((message) => message.role === MESSAGE_ROLE.ASSISTANT);
+  if (reply === undefined) return undefined;
+  if (quiet && isQuietReply(reply)) return undefined;
+  const last = agentParts(reply).findLast((part) => part.kind === AGENT_PART.TEXT);
+  const words = last?.kind === AGENT_PART.TEXT ? plainWords(last.text) : "";
+  if (words === "") return undefined;
+  const end = SENTENCE_END.exec(words);
+  const sentence = end === null ? words : words.slice(0, end.index + 1);
+  const cut = sentence.split(/\s+/u);
+  const lead =
+    cut.length <= REPLY_LEAD_WORDS ? sentence : `${cut.slice(0, REPLY_LEAD_WORDS).join(" ")}…`;
+  return { messageId: reply.id, lead };
 }
 
 /** Where a line the developer sent stands, before the service's row for it lands. */
