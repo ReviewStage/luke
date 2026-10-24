@@ -23,11 +23,13 @@ declare global {
 }
 
 /** What a window of each height is, in pixels, and what a row of the list is. */
-const WINDOW = { TALL: 900, SHORT: 260 } as const;
+const WINDOW = { TALL: 900, SHORT: 360, TINY: 260 } as const;
 const MENU_ROW = 32;
 const ROWS_KEPT = 3;
-/** What the card's field, band and foot take of its height, as drawn. */
-const CHROME = 125;
+/** What the card's field, filter band, foot, list padding and one group heading take of its height, as drawn. */
+const CHROME = 161;
+/** The margin a card keeps from the window's edge. */
+const MARGIN = 8;
 
 const roots: Root[] = [];
 
@@ -118,6 +120,12 @@ test("in a short window, ⌘K's card keeps three rows of its list beside its chr
     top + height <= WINDOW.SHORT,
     `the card ends at ${top + height}px in a window ${WINDOW.SHORT}px tall`,
   );
+});
+
+test("in a window too short for three rows, ⌘K's card takes the window less its margins and moves to its top", async () => {
+  const { card, viewport } = await paletteIn(WINDOW.TINY, "wide");
+  assert.equal(pixels(card, getComputedStyle(card).maxHeight), WINDOW.TINY - 2 * MARGIN);
+  assert.equal(pixels(viewport, getComputedStyle(viewport).paddingTop), MARGIN);
 });
 
 test("in a short narrow window, ⌘K's sheet keeps three rows of its list beside its chrome, and stands no taller than the window", async () => {

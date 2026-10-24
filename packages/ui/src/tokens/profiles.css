@@ -153,15 +153,22 @@
     0 24px 64px var(--luke-color-shadow-deep);
   /* The room a dialog's card may stand in: the window seen, less its margins. */
   --luke-dialog-room: calc(var(--luke-stage-height) - 2 * var(--luke-space-24));
-  /* ⌘K's card: a field, a band and a foot of chrome around a list that keeps
-     at least three rows however short the window is, so the card stands
-     two thirds of the window tall (four fifths as a sheet) or what that
-     takes, never past the window, and its top yields to make room. */
+  /* ⌘K's card: the chrome around its list is a field, a filter band and a
+     foot, the list's own padding, a group's heading and the three hairlines
+     between them; the list keeps three rows beside that however short the
+     window is, so the card stands two thirds of the window tall (four fifths
+     as a sheet) or what that takes, never past the window less a margin,
+     and its top yields to make room. Where the window cannot hold all of
+     it, the card takes the window and the list scrolls. */
   --luke-command-chrome: calc(
     var(--luke-touch-target) +
     var(--luke-control-height) +
     4 *
-    var(--luke-space-16)
+    var(--luke-space-16) +
+    var(--luke-row-inset) +
+    var(--luke-type-group-leading) +
+    2 *
+    var(--luke-menu-inset)
   );
   --luke-command-least: calc(var(--luke-command-chrome) + 3 * var(--luke-menu-row-height));
   --luke-command-room: min(
@@ -381,15 +388,22 @@
     0 24px 64px var(--luke-color-shadow-deep);
   /* The room a dialog's card may stand in: the window seen, less its margins. */
   --luke-dialog-room: calc(var(--luke-stage-height) - 2 * var(--luke-space-24));
-  /* ⌘K's card: a field, a band and a foot of chrome around a list that keeps
-     at least three rows however short the window is, so the card stands
-     two thirds of the window tall (four fifths as a sheet) or what that
-     takes, never past the window, and its top yields to make room. */
+  /* ⌘K's card: the chrome around its list is a field, a filter band and a
+     foot, the list's own padding, a group's heading and the three hairlines
+     between them; the list keeps three rows beside that however short the
+     window is, so the card stands two thirds of the window tall (four fifths
+     as a sheet) or what that takes, never past the window less a margin,
+     and its top yields to make room. Where the window cannot hold all of
+     it, the card takes the window and the list scrolls. */
   --luke-command-chrome: calc(
     var(--luke-touch-target) +
     var(--luke-control-height) +
     4 *
-    var(--luke-space-16)
+    var(--luke-space-16) +
+    var(--luke-row-inset) +
+    var(--luke-type-group-leading) +
+    2 *
+    var(--luke-menu-inset)
   );
   --luke-command-least: calc(var(--luke-command-chrome) + 3 * var(--luke-menu-row-height));
   --luke-command-room: min(
