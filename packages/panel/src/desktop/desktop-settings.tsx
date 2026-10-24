@@ -3,7 +3,12 @@ import { PRODUCT_SURFACE_EVENT } from "@luke/features/analytics";
 import { INTEGRATION_PROVIDER_LIST } from "@luke/features/integration-wire";
 import { LINK_PLACE } from "@luke/features/link-grammar";
 import type { Workspace } from "@luke/features/workspace-wire";
-import { type HostCapability, SETTINGS_VIEW_COUNTED_AS } from "@luke/settings";
+import {
+  type HostCapability,
+  SETTINGS_VIEW_COUNTED_AS,
+  settingKeepWords,
+  settingsPageKeep,
+} from "@luke/settings";
 import {
   SETTINGS_PAGE_GROUP,
   SETTINGS_VIEW,
@@ -215,7 +220,10 @@ function PageGroup({
  * This Mac. Settings opens on Profile, Account's first page, with the caret
  * in the search. The page is a document: its title heads its column, under
  * the page's bar (`SettingsPage`), which picks up the title once it scrolls
- * away, and a page's reset ends the title's line. The Workspace page's title is
+ * away, and a page's reset ends the title's line. One quiet line under the
+ * title says where the page's settings are kept (`settingsPageKeep`): on this
+ * Mac, in this browser on the web, or following the account or the workspace;
+ * a row kept elsewhere says so under its own label. The Workspace page's title is
  * the listed workspace's name, since that is the workspace it shows. The
  * plan template is the one page drawn apart from the panel: it is a plan's
  * page, document and all
@@ -296,6 +304,10 @@ export function DesktopSettings({
     rows,
     room === SHELL_ROOM.NARROW ? title : undefined,
   );
+  // Where the page's settings are kept, one quiet line under its title; none before the settings arrive or on a page keeping nothing.
+  const pageKeep = rows ? settingsPageKeep(settings.view, rows) : undefined;
+  const keepLine =
+    pageKeep === undefined ? undefined : settingKeepWords(pageKeep, settings.capabilities);
   // Built only while a query stands: an empty field searches nothing.
   const search =
     rows && query !== "" ? searchSettings(settingsSearchEntries(rows), query) : undefined;
@@ -423,6 +435,7 @@ export function DesktopSettings({
           <SettingsPage
             key={settings.view}
             title={title}
+            description={keepLine}
             actions={reset}
             lead={onList === undefined ? undefined : <ListBack onList={onList} />}
             look={onList === undefined ? TOOLBAR_LOOK.WINDOW : TOOLBAR_LOOK.PHONE}

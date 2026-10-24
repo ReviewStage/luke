@@ -2,6 +2,7 @@ import type { ProductSettingValue } from "@luke/features/analytics";
 import { isRecord, isWireString, type UnparsedWireValue } from "@luke/wire";
 import type { AppSettingId, DescribedSetting } from "@luke/wire/app-settings";
 import { Schema } from "effect";
+import { HOST_CAPABILITY, type HostCapability } from "./capabilities.js";
 import type { ExperimentChoices } from "./experiments.js";
 import { APP_SETTING_SCHEMA } from "./schema.js";
 import type {
@@ -15,7 +16,7 @@ import type {
   SettingsVisibility,
   StoredSettingValue,
 } from "./schema-types.js";
-import { SETTING_ROWS, SETTINGS_RESET_SCOPE } from "./schema-types.js";
+import { SETTING_ROWS, SETTINGS_PAGE, SETTINGS_RESET_SCOPE } from "./schema-types.js";
 import type { RuntimeStatus } from "./status.js";
 
 type GuardValue<Definition> = Definition extends {
@@ -312,6 +313,8 @@ interface SchemaSettingRow {
   changed: boolean;
   /** The pop-up's own current token and options, for a choice row. */
   control?: { value: string; options: readonly SettingOption[]; search?: string | undefined };
+  /** Where the setting is kept, for a row kept elsewhere than its page's line says. */
+  keptElsewhere?: SettingKeep;
 }
 
 /**
@@ -335,6 +338,7 @@ export function settingRowsForPage(
   view: SettingsRowsInput,
 ): readonly SchemaSettingRow[] {
   const read = settingReader(view.settings);
+  const pageKeep = settingsPageKeep(page, view);
   return APP_SETTING_FIELDS.flatMap((field): SchemaSettingRow[] => {
     const definition = APP_SETTING_SCHEMA[field];
     if (definition.rows !== SETTING_ROWS.SCHEMA) return [];
@@ -342,10 +346,12 @@ export function settingRowsForPage(
     if (!settingVisible(field, view)) return [];
     const control = settingControl(field);
     const stored = view.settings[field];
+    const keep = settingKeepOf(field);
     return descriptionsFor(field, read).map((entry) => ({
       field,
       entry,
       changed: stored !== definition.default,
+      ...(keep === pageKeep ? undefined : { keptElsewhere: keep }),
       ...(control
         ? {
             control: {
@@ -357,6 +363,90 @@ export function settingRowsForPage(
         : undefined),
     }));
   });
+}
+
+/**
+ * Where a setting is kept: on the device it was set on, with the account on
+ * each of its Macs and the web, or with the workspace for each of its members.
+ */
+export const SETTING_KEEP = {
+  DEVICE: "device",
+  ACCOUNT: "account",
+  WORKSPACE: "workspace",
+} as const;
+
+export type SettingKeep = (typeof SETTING_KEEP)[keyof typeof SETTING_KEEP];
+
+/**
+ * Where the service keeps a page's own rows, the ones that are no stored
+ * setting: the account itself and its GitHub token, its agents' keys and
+ * model, integrations, skills, plan template, and experiments; a workspace's
+ * members, connections, and memory. Nothing for a page whose every row is a
+ * stored setting or the device's own, whose keep its settings answer.
+ */
+const SERVICE_KEEP_OF_PAGE = {
+  [SETTINGS_PAGE.ACCOUNT]: SETTING_KEEP.ACCOUNT,
+  [SETTINGS_PAGE.VOICE]: null,
+  [SETTINGS_PAGE.APPEARANCE]: null,
+  [SETTINGS_PAGE.SHORTCUTS]: null,
+  [SETTINGS_PAGE.PLAN_TEMPLATE]: SETTING_KEEP.ACCOUNT,
+  [SETTINGS_PAGE.MEMORY]: SETTING_KEEP.WORKSPACE,
+  [SETTINGS_PAGE.CODING_AGENTS]: SETTING_KEEP.ACCOUNT,
+  [SETTINGS_PAGE.INTEGRATIONS]: SETTING_KEEP.ACCOUNT,
+  [SETTINGS_PAGE.SKILLS]: SETTING_KEEP.ACCOUNT,
+  [SETTINGS_PAGE.WORKSPACE]: SETTING_KEEP.WORKSPACE,
+  [SETTINGS_PAGE.NOTIFICATIONS]: null,
+  [SETTINGS_PAGE.THIS_MAC]: null,
+  [SETTINGS_PAGE.EXPERIMENTAL]: SETTING_KEEP.ACCOUNT,
+  [SETTINGS_PAGE.ABOUT]: null,
+} as const satisfies Record<SettingsPage, SettingKeep | null>;
+
+/** The line saying where a page's settings are kept, as a Mac's app says it. */
+const SETTING_KEEP_WORDS = {
+  [SETTING_KEEP.DEVICE]: "Kept on this Mac",
+  [SETTING_KEEP.ACCOUNT]: "Follows your account",
+  [SETTING_KEEP.WORKSPACE]: "Follows your workspace",
+} as const satisfies Record<SettingKeep, string>;
+
+/** The device's line in a browser, which keeps its own store rather than a Mac's. */
+const BROWSER_KEEP_WORDS = "Kept in this browser";
+
+/** Where one stored setting is kept: with the account where it is an account preference, on the device otherwise. */
+export function settingKeepOf(field: AppSettingField): SettingKeep {
+  return ACCOUNT_PREFERENCE_FIELD_SET.has(field) ? SETTING_KEEP.ACCOUNT : SETTING_KEEP.DEVICE;
+}
+
+/**
+ * Where a page's settings are kept, said once at its head: where the service
+ * keeps the page's own rows while an account is there to keep them, else where
+ * most of its drawn settings are, the device on a tie. Nothing for a page that
+ * draws nothing kept, About and Keyboard shortcuts, or a page whose rows stand
+ * hidden, so no line stands over an empty page. A row kept elsewhere says so
+ * itself (`keptElsewhere`), rather than every row wearing a mark.
+ */
+export function settingsPageKeep(
+  page: SettingsPage,
+  view: SettingsVisibility,
+): SettingKeep | undefined {
+  const service = SERVICE_KEEP_OF_PAGE[page];
+  if (service !== null && view.accountDrawn) return service;
+  const keeps = APP_SETTING_FIELDS.filter(
+    (field) => APP_SETTING_SCHEMA[field].page === page && settingVisible(field, view),
+  ).map(settingKeepOf);
+  if (keeps.length === 0) return undefined;
+  const followed = keeps.filter((keep) => keep === SETTING_KEEP.ACCOUNT).length;
+  return followed > keeps.length - followed ? SETTING_KEEP.ACCOUNT : SETTING_KEEP.DEVICE;
+}
+
+/** The words saying where `keep` is: the device is this Mac in the app installed there, and this browser elsewhere. */
+export function settingKeepWords(
+  keep: SettingKeep,
+  capabilities: readonly HostCapability[],
+): string {
+  if (keep === SETTING_KEEP.DEVICE && !capabilities.includes(HOST_CAPABILITY.DESKTOP_APP)) {
+    return BROWSER_KEEP_WORDS;
+  }
+  return SETTING_KEEP_WORDS[keep];
 }
 
 /**

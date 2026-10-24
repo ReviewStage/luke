@@ -1172,3 +1172,69 @@ test("the page list is one Tab stop, and ↑ and ↓ walk its pages across the g
   assert.equal(shownTitle(page), "Account", "walking the list opens no page");
   assert.equal(buttons.filter((each) => each.tabIndex === 0).length, 1);
 });
+
+/** Every line that says where a page's settings are kept. */
+const KEEP_WORDS = [
+  "Kept on this Mac",
+  "Kept in this browser",
+  "Follows your account",
+  "Follows your workspace",
+];
+
+/** Each line saying where settings are kept that stands whole in `drawn`, the page's head's and any section's alike. */
+function keepLines(drawn: HTMLElement): string[] {
+  return [...drawn.querySelectorAll("*")]
+    .filter((each) => each.children.length === 0)
+    .map((each) => each.textContent ?? "")
+    .filter((words) => KEEP_WORDS.includes(words));
+}
+
+/** Where each page drawn through Settings' own head says its settings are kept, or nothing for one keeping nothing. */
+const PAGE_KEEPS = [
+  { title: "Account", keep: ["Follows your account"] },
+  { title: "Workspace", keep: ["Follows your workspace"] },
+  { title: "Agents", keep: ["Follows your account"] },
+  { title: "Integrations", keep: ["Follows your account"] },
+  { title: "Skills", keep: ["Follows your account"] },
+  { title: "Experimental", keep: ["Follows your account"] },
+  { title: "Voice", keep: ["Kept on this Mac"] },
+  { title: "Appearance", keep: ["Kept on this Mac"] },
+  { title: "Notifications", keep: ["Kept on this Mac"] },
+  { title: "This Mac", keep: ["Kept on this Mac"] },
+  { title: "About", keep: [] },
+  { title: "Keyboard shortcuts", keep: [] },
+];
+
+test("each Settings page says once, under its title, where its settings are kept, and a row kept elsewhere says so under its label", () => {
+  const page = mount(createElement(SettingsHarness));
+  for (const { title, keep } of PAGE_KEEPS) {
+    const drawn = openPage(page, title);
+    assert.deepEqual(keepLines(drawn), keep, title);
+    const header =
+      drawn.querySelector<HTMLElement>(".luke-page-header") ?? assert.fail(`${title} has a header`);
+    assert.deepEqual(keepLines(header), keep, `${title}'s line stands in its head`);
+  }
+
+  const account = openPage(page, "Account").textContent ?? "";
+  assert.ok(account.includes("Never what you type or say. Kept on this Mac."));
+  const voice = openPage(page, "Voice").textContent ?? "";
+  assert.ok(
+    voice.includes("Choosing one ends the conversation in progress. Follows your account."),
+  );
+});
+
+test("a browser says its own store is this browser's, never this Mac's", () => {
+  const page = mount(
+    createElement(SettingsHarness, {
+      capabilities: DESKTOP_CAPABILITIES.filter((each) => each !== HOST_CAPABILITY.DESKTOP_APP),
+    }),
+  );
+  const said = pageButtons(page).flatMap((button) => {
+    const title = button.textContent ?? "";
+    return title === "Plan template" ? [] : keepLines(openPage(page, title));
+  });
+
+  assert.ok(said.includes("Kept in this browser"));
+  assert.equal(said.includes("Kept on this Mac"), false);
+  assert.equal(document.body.textContent?.includes("Kept on this Mac"), false);
+});

@@ -27,6 +27,8 @@ import { TOOLBAR_INSET, TOOLBAR_LOOK, Toolbar, type ToolbarLook } from "../toolb
  * itself with a document's header (`PageHeader`): the title is the page's
  * `h1`, which each section's `h2` heads a part of. What acts on the whole
  * page, a quiet reset, ends the title's line flush with the cards' edge,
+ * and one quiet line under the title says what holds for all of it, where
+ * its settings are kept,
  * its words rather than its hover's pill standing in the column, and drops
  * below the title when the column is too narrow for both, rather than
  * breaking the title inside a word.
@@ -57,9 +59,10 @@ import { TOOLBAR_INSET, TOOLBAR_LOOK, Toolbar, type ToolbarLook } from "../toolb
  */
 const SKELETON_TITLE_WIDTH = "calc(5 * var(--luke-control-height))";
 
-/** A column of `children`, one section each, under `title` and beside it `actions`, or on a phone under a bar ending with them. */
+/** A column of `children`, one section each, under `title` and its `description`, beside them `actions`, or on a phone under a bar ending with them. */
 export function SettingsPage({
   title,
+  description,
   actions,
   lead,
   look = TOOLBAR_LOOK.WINDOW,
@@ -67,6 +70,8 @@ export function SettingsPage({
 }: {
   /** The page's name, its `h1`. */
   title: ReactNode;
+  /** One quiet line under the title that holds for the whole page: where its settings are kept. */
+  description?: ReactNode;
   /** What acts on the whole page, at the end of the title's line, or on a phone at the end of the bar. */
   actions?: ReactNode;
   /** What leads the bar above the page: a way back, where the window gives one. */
@@ -101,6 +106,7 @@ export function SettingsPage({
           <div ref={head} className="luke-settings-page-head">
             <PageHeader
               title={title}
+              description={description}
               actions={phone ? undefined : actions}
               end={PAGE_HEADER_END.WORDS}
             />

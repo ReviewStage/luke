@@ -2,9 +2,11 @@ import {
   isAppSettingId,
   type SETTINGS_PAGE as SCHEMA_SETTINGS_PAGE,
   SETTING_SECTION,
+  type SettingKeep,
   type SettingSection,
   type SettingsRowsInput,
   settingFromOption,
+  settingKeepWords,
   settingRowsForPage,
 } from "@luke/settings";
 import type { ActionResult } from "@luke/wire";
@@ -65,10 +67,25 @@ function SchemaChoiceRow({
 }
 
 /**
+ * The line under a row's label: its own detail, then where it is kept where
+ * that is not where its page's head says, as a sentence of its own.
+ */
+function keptDetail(
+  detail: string | undefined,
+  kept: SettingKeep | undefined,
+  view: SettingsRowsInput,
+): string | undefined {
+  if (kept === undefined) return detail;
+  const where = `${settingKeepWords(kept, view.capabilities)}.`;
+  return detail === undefined ? where : `${detail} ${where}`;
+}
+
+/**
  * Every ordinary row one section of a settings page draws, from the schema and
  * nothing else: which page and section a setting stands in, where in that
  * section, whether it is drawn right now, what its control offers, and the
- * line drawn under its label are the entry's own answers. A page component that decided any of it for itself would
+ * line drawn under its label are the entry's own answers, the line ending
+ * in where the setting is kept where that differs from its page's. A page component that decided any of it for itself would
  * be a second record of the same fact, and the two would drift.
  */
 export function SchemaSettingRows({
@@ -84,13 +101,14 @@ export function SchemaSettingRows({
 }): React.JSX.Element {
   const rows = settingRowsForPage(page, section, view).flatMap((row) => {
     const { field, entry, changed, control } = row;
+    const detail = keptDetail(entry.detail, row.keptElsewhere, view);
     if (entry.kind === APP_SETTING_KIND.TOGGLE) {
       return [
         <SwitchRow
           key={entry.id}
           {...(isAppSettingId(entry.id) ? { anchor: entry.id } : undefined)}
           label={entry.label}
-          detail={entry.detail}
+          detail={detail}
           changed={changed}
           checked={entry.value === APP_TOGGLE_VALUE.ON}
           onChange={(enabled) => writes.setting(field, enabled)}
@@ -108,7 +126,7 @@ export function SchemaSettingRows({
           key={entry.id}
           label={entry.label}
           {...(isAppSettingId(entry.id) ? { anchor: entry.id } : undefined)}
-          detail={entry.detail}
+          detail={detail}
           changed={changed}
           value={control.value}
           options={pictured}
@@ -126,7 +144,7 @@ export function SchemaSettingRows({
           key={entry.id}
           label={entry.label}
           {...(isAppSettingId(entry.id) ? { anchor: entry.id } : undefined)}
-          detail={entry.detail}
+          detail={detail}
           changed={changed}
           value={control.value}
           options={sampled}
@@ -139,7 +157,7 @@ export function SchemaSettingRows({
         key={entry.id}
         id={entry.id}
         label={entry.label}
-        detail={entry.detail}
+        detail={detail}
         changed={changed}
         value={control.value}
         options={control.options}
