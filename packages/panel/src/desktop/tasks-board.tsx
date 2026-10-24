@@ -6,7 +6,13 @@ import {
   type TaskStanding,
   type TaskSummary,
 } from "@luke/features/task-wire";
-import { noneYetWords, readFailedWords, readingWords, TERM } from "@luke/features/words";
+import {
+  noneYetWords,
+  REFRESH_FAILED_WORDS,
+  readFailedWords,
+  readingWords,
+  TERM,
+} from "@luke/features/words";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
   BUTTON_SIZE,
@@ -676,6 +682,10 @@ export function TasksBoard({
         </ErrorState>
       }
     >
+      {/* A refresh that failed after the tasks were read leaves them drawn, with a line over them. */}
+      {tasks.listFailed && listed.length > 0 ? (
+        <ErrorState onRetry={tasks.onRetryList}>{REFRESH_FAILED_WORDS}</ErrorState>
+      ) : null}
       <ListMotion root={board}>
         <div ref={board} className="tasks-board" data-row-drop-scope="">
           {columns.length === 0 ? (
