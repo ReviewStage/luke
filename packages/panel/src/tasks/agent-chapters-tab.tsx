@@ -180,7 +180,7 @@ const CHAPTERS_WORDS = {
   SHOW_RAIL: "Show chapters",
   HIDE_RAIL: "Hide chapters",
   RAIL: "Chapters",
-  ACTIONS: "Chapters actions",
+  THING: "Chapters",
   RISK_REASONS: "Why",
   /** A chapter's place among them, as its foot says it. */
   of: (at: number, count: number) => `Chapter ${at} of ${count}`,
@@ -752,7 +752,7 @@ function ChaptersReading({
                       </Tooltip>
                     )}
                     <BarMenu
-                      label={CHAPTERS_WORDS.ACTIONS}
+                      thing={CHAPTERS_WORDS.THING}
                       actions={[
                         {
                           label: CHAPTERS_WORDS.REFRESH_CHAPTERS,

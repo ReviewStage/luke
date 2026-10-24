@@ -490,12 +490,12 @@ test("on a phone the page is headed by New task and one ⋯, its title centred b
   const page = await mountPage(TASKS, SHELL_ROOM.NARROW);
   assert.deepEqual(
     [...page.querySelectorAll(".tasks-head button")].map((each) => each.getAttribute("aria-label")),
-    ["New task", "More"],
+    ["New task", "Task list actions"],
   );
   assert.equal(page.querySelector(".tasks-head h1")?.textContent, "Tasks");
   assert.equal(page.querySelector('[role="radiogroup"]'), null, "no List | Board bar in the head");
 
-  openOptions(page, "More");
+  openOptions(page, "Task list actions");
   choose("Filter");
   choose("Priority", "High", "Urgent");
   closeMenus();
@@ -506,7 +506,7 @@ test("on a phone the page is headed by New task and one ⋯, its title centred b
   );
   assert.match(page.textContent ?? "", /Priority: Urgent, High/);
 
-  openOptions(page, "More");
+  openOptions(page, "Task list actions");
   choose("View options");
   assert.ok(
     document.querySelector('[role="menu"][aria-label="View options"]:not([data-leaving])'),
@@ -514,7 +514,7 @@ test("on a phone the page is headed by New task and one ⋯, its title centred b
   );
   closeMenus();
 
-  openOptions(page, "More");
+  openOptions(page, "Task list actions");
   choose("Board");
   assert.ok(page.querySelector("[data-task-column]"), "the Board's columns stand");
   assert.equal(

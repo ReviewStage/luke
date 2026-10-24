@@ -325,7 +325,7 @@ function ChangesMenu({
       : undefined;
   return (
     <BarMenu
-      label="Changes actions"
+      thing="Changes"
       actions={[
         {
           label: CHANGES_MENU_WORDS.COPY_PATCH,

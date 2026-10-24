@@ -94,12 +94,13 @@ import {
   ConfirmDialog,
   cssCustomProperties,
   DetailPage,
-  EllipsisIcon,
   ErrorState,
   Fill,
   FoldingButton,
   IconButton,
+  MoreButton,
   matchingRows,
+  moreLabel,
   OneLine,
   PAGE_FRAME,
   PageToolbar,
@@ -802,7 +803,7 @@ const READING_AUTOMATION = "Reading the automation…";
 const NEW_AUTOMATION = "New automation";
 
 /** What the editor's ⋯ is called. */
-const ACTIONS_LABEL = "Automation actions";
+const ACTIONS_THING = "Automation";
 
 /** The editor's ⋯: Copy link, the automation's, where the page hands down a workspace, and Delete, red, which asks first. */
 function AutomationActions({
@@ -822,12 +823,10 @@ function AutomationActions({
   };
   return (
     <>
-      <Tooltip label={ACTIONS_LABEL}>
-        <IconButton icon={<EllipsisIcon />} label={ACTIONS_LABEL} {...menu.trigger()} />
-      </Tooltip>
+      <MoreButton thing={ACTIONS_THING} {...menu.trigger()} />
       {menu.drawn === undefined ? null : (
         <ActionMenu
-          label={ACTIONS_LABEL}
+          label={moreLabel(ACTIONS_THING)}
           menu={menu.drawn}
           groups={copyLink === undefined ? [[remove]] : [[copyLink], [remove]]}
           onClose={menu.close}

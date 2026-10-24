@@ -80,3 +80,8 @@ test("an unavailable ⋯ drops nothing", () => {
   act(() => more().click());
   expect(document.querySelector('[role="menu"]')).toBeNull();
 });
+
+test("a ⋯ that is not tabbable stays out of the tab order but still opens its menu", () => {
+  draw(createElement(MoreButton, { thing: "Section", tabbable: false }));
+  expect(more().tabIndex).toBe(-1);
+});

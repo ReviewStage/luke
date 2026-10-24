@@ -1,11 +1,10 @@
 import {
   CopyIcon,
   DownloadIcon,
-  EllipsisIcon,
-  IconButton,
+  MoreButton,
+  moreLabel,
   type PaneBarMenu,
   STATUS_TONE,
-  Tooltip,
   useMenu,
 } from "@luke/ui";
 import { fileName } from "@luke/voice/code-pane-model";
@@ -56,21 +55,24 @@ function copyPathAction(path: string, copy: (text: string, words: string) => voi
 
 /** The ⋯ at the end of a bar over lines: the actions given. */
 export function BarMenu({
-  label,
+  thing,
   actions,
 }: {
-  /** What the ⋯ and its menu are called. */
-  label: string;
+  /** What the bar is over, which names the ⋯ and its menu: "File" makes "File actions". */
+  thing: string;
   actions: readonly MenuAction[];
 }): React.JSX.Element {
   const menu = useMenu(true);
   return (
     <>
-      <Tooltip label={label}>
-        <IconButton icon={<EllipsisIcon />} label={label} {...menu.trigger()} />
-      </Tooltip>
+      <MoreButton thing={thing} {...menu.trigger()} />
       {menu.drawn === undefined ? null : (
-        <ActionMenu label={label} menu={menu.drawn} groups={[actions]} onClose={menu.close} />
+        <ActionMenu
+          label={moreLabel(thing)}
+          menu={menu.drawn}
+          groups={[actions]}
+          onClose={menu.close}
+        />
       )}
     </>
   );
