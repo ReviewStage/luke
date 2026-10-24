@@ -13,6 +13,7 @@ import {
 } from "@luke/features/automation-wire";
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
 import { LINK_PLACE } from "@luke/features/link-grammar";
+import { momentText, sinceText } from "@luke/features/time-format";
 import { TRIGGER_CATALOG } from "@luke/features/trigger-catalog";
 import {
   BackIcon,
@@ -44,7 +45,6 @@ import {
   useMinute,
   useResizeEdge,
 } from "@luke/ui";
-import { momentText, sinceText } from "@luke/ui/time-format";
 import { ClockIcon, ExternalLinkIcon, PlayIcon, WebhookIcon } from "lucide-react";
 import { useEffect, useRef } from "react";
 import { useCopyLinkItem } from "../copy-link-item.js";

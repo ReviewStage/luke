@@ -1,5 +1,7 @@
 import type { AdminUserDetail } from "@luke/features/admin-answer-wire";
 import { ADMIN_READ, type AdminMetricsWindow } from "@luke/features/admin-wire";
+import { formatCount } from "@luke/features/number-format";
+import { formatDate, formatDayTick, formatInstant } from "@luke/features/time-format";
 import {
   AVATAR_SIZE,
   BADGE_TONE,
@@ -16,7 +18,6 @@ import {
 } from "@luke/ui";
 import { accountLabel } from "@luke/ui/account-initials";
 import { signInMethodLabel } from "@luke/ui/admin-format";
-import { formatCount, formatDate, formatDayTick, formatInstant } from "@luke/ui/time-format";
 import { NOT_FOUND_THING, NotFound } from "../../not-found.js";
 import { useAdminDoors } from "../admin-doors.js";
 import { adminReadView } from "../admin-read-view.js";

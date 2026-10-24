@@ -43,7 +43,8 @@
  */
 
 import type { ReactNode } from "react";
-import { AlertIcon, CloseIcon, RetryIcon } from "../../face/glyphs.js";
+import { CloseIcon } from "../../face/glyphs.js";
+import { AlertIcon, RetryIcon } from "../../icons/lucide-glyphs.js";
 import { BUTTON_VARIANT, Button, IconButton } from "../button/button.js";
 import { EmptyState } from "../empty-state/empty-state.js";
 

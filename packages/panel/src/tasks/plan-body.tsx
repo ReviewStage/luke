@@ -13,6 +13,7 @@ import {
   type PlanSectionEdit,
   type Task,
 } from "@luke/features/task-wire";
+import { agoText, momentText, sinceText } from "@luke/features/time-format";
 import {
   Button,
   EDITABLE_BLOCK_CLASS,
@@ -30,7 +31,6 @@ import {
 import { actorName } from "@luke/ui/actor-model";
 import type { MarkdownTaskToggler } from "@luke/ui/markdown";
 import { commentSpansIn, usePlanCommentsControl } from "@luke/ui/plan-comments";
-import { agoText, momentText, sinceText } from "@luke/ui/time-format";
 import { LinkIcon } from "lucide-react";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ActorStack } from "../actor-ref.js";

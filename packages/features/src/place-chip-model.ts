@@ -1,5 +1,6 @@
 import { LINK_PLACE, type LinkPlace } from "./link-grammar.js";
 import { UNTITLED_TASK_NAME } from "./task-wire.js";
+import { NOTHING_SAID, thingName, thingOfPlace } from "./thing-kind.js";
 
 /**
  * place-chip-model.ts -- a Luke link drawn in words as its chip says it: the name of the place it opens, as the window already knows it, and the task it stands under.
@@ -64,50 +65,6 @@ const KIND_NAME = {
   [LINK_PLACE.ADMIN]: "Admin",
 } as const satisfies Record<LinkPlace["kind"], string>;
 
-/** The places a chip calls by the name the window holds now over the words its link was labelled with. */
-const LIVE_NAMED: ReadonlySet<LinkPlace["kind"]> = new Set([
-  LINK_PLACE.TASK,
-  LINK_PLACE.PAGE,
-  LINK_PLACE.AGENT,
-  LINK_PLACE.INBOX_ITEM,
-  LINK_PLACE.PERSON,
-]);
-
-/** The name the window holds for the place itself, where it holds one. */
-function heldName(place: LinkPlace, known: KnownNames): string | undefined {
-  switch (place.kind) {
-    case LINK_PLACE.TASK:
-      return known.tasks.get(place.planId);
-    case LINK_PLACE.VERSION: {
-      const taskName = known.tasks.get(place.planId);
-      return taskName === undefined ? undefined : `${taskName}, version ${place.revision}`;
-    }
-    case LINK_PLACE.PAGE:
-      return "planId" in place && place.planId === known.pagesTaskId
-        ? known.pages.get(place.pageId)
-        : undefined;
-    case LINK_PLACE.AGENT:
-      return known.agents.get(place.agentId);
-    case LINK_PLACE.CHANGES: {
-      const agent = known.agents.get(place.agentId);
-      return agent === undefined ? undefined : `Changes by ${agent}`;
-    }
-    case LINK_PLACE.MESSAGE: {
-      const agent = known.agents.get(place.agentId);
-      return agent === undefined ? undefined : `Message from ${agent}`;
-    }
-    case LINK_PLACE.INBOX_ITEM:
-      return known.inboxItems.get(place.itemId);
-    case LINK_PLACE.AUTOMATION:
-    case LINK_PLACE.AUTOMATION_RUN:
-      return known.automations.get(place.automationId);
-    case LINK_PLACE.PERSON:
-      return known.people.get(place.userId);
-    default:
-      return undefined;
-  }
-}
-
 /** The task a place stands under, by its id, where it stands under one and is not the task itself. */
 function taskOf(place: LinkPlace): string | undefined {
   if (place.kind === LINK_PLACE.TASK || place.kind === LINK_PLACE.VERSION) return undefined;
@@ -115,8 +72,8 @@ function taskOf(place: LinkPlace): string | undefined {
 }
 
 /**
- * What a chip says of the place a Luke link opens: for a place named live
- * (`LIVE_NAMED`), the name the window holds for it, else the words it was
+ * What a chip says of the place a Luke link opens: for a thing named live
+ * (`THING_NAME`), the name the window holds for it, else the words it was
  * labelled with; for any other, the words first, then the name held; else
  * its kind; and the task it stands under, by the name the window holds for it.
  */
@@ -127,9 +84,10 @@ export function placeChipLook(
 ): PlaceChipLook {
   const taskId = taskOf(place);
   const under = taskId === undefined ? undefined : known.tasks.get(taskId);
-  const held = heldName(place, known);
+  const named = thingName(thingOfPlace(place), known, NOTHING_SAID);
+  const held = named.held;
   const untitled = place.kind === LINK_PLACE.TASK && held === UNTITLED_TASK_NAME;
-  const live = LIVE_NAMED.has(place.kind) && !untitled;
+  const live = named.live && !untitled;
   const name = (live ? (held ?? label) : (label ?? held)) ?? KIND_NAME[place.kind];
   return { name, under };
 }

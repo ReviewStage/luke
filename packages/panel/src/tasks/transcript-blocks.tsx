@@ -7,6 +7,7 @@ import type { IntegrationProvider } from "@luke/features/integration-wire";
 import { readLink } from "@luke/features/link-grammar";
 import { mayNameMention } from "@luke/features/mention-link";
 import type { CatalogModel, ModelChoice } from "@luke/features/models-wire";
+import { formatBytes } from "@luke/features/number-format";
 import { planAttachmentOf } from "@luke/features/plan-attachment-link";
 import {
   agentCallLine,
@@ -889,15 +890,9 @@ const CUT_WORDS = {
   OUTPUT: "Reading the whole output…",
 } as const;
 
-/** A size in bytes as a reader says it. */
-function sizeWords(bytes: number): string {
-  const kilobytes = bytes / 1024;
-  return kilobytes < 1024 ? `${Math.round(kilobytes)} kB` : `${(kilobytes / 1024).toFixed(1)} MB`;
-}
-
 /** A cut part's two ends, the middle that could not be read said between them. */
 function cutText(cut: CutBody): string {
-  return `${cut.head}\n\n… ${sizeWords(cut.bytes)} in all; only its start and end could be read …\n\n${cut.tail}`;
+  return `${cut.head}\n\n… ${formatBytes(cut.bytes)} in all; only its start and end could be read …\n\n${cut.tail}`;
 }
 
 /**
