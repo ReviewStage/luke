@@ -9,6 +9,6 @@
   "packages/ui/src/components/one-line/one-line.css": 1,
   "packages/ui/src/components/tabs/tabs.css": 2,
   "packages/ui/src/components/text-button/text-button.css": 1,
-  "packages/ui/src/components/text-field/text-field.css": 1,
+  "packages/ui/src/components/text-field/text-field.tsx": 1,
   "packages/ui/src/components/text/text.css": 1
 }
