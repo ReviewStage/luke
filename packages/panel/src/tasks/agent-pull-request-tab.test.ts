@@ -83,6 +83,8 @@ import { restOn } from "../testing/hint-rest.js";
 import { markdownHtmlParserLanded } from "../testing/markdown.js";
 import { landedBundles, onSideBundles } from "../testing/side-bundles.js";
 import { codingAgentsControl } from "../testing/tasks-control.js";
+import { newestToastAction, newestToastSays } from "../testing/toast.js";
+import { ToastHost } from "../toast.js";
 import { AgentPullRequestTab } from "./agent-pull-request-tab.js";
 import { TAB_KIND, tabLook } from "./tab-look.js";
 import { type ThreadReveal, ThreadRevealProvider } from "./thread-reveal.js";
@@ -543,10 +545,14 @@ async function drawn(
             children: createElement(MemberDirectory, {
               workspace: { id: "workspace-acme", memberCount: 2 },
               readerId: "user-dana",
-              children:
+              children: createElement(
+                Fragment,
+                null,
+                createElement(ToastHost),
                 openPlace === undefined
                   ? tab
                   : createElement(OpenLinkProvider, { value: openPlace, children: tab }),
+              ),
             }),
           }),
         ),
@@ -3822,7 +3828,14 @@ test("a tab naming another pull request of the agent's repository by its number 
   const control = {
     ...controlAnswering({
       pullRequest: recorded("pull request", {
-        pullRequest: { ...PULL_REQUEST, number: 41, title: earlier.title, url },
+        pullRequest: {
+          ...PULL_REQUEST,
+          number: 41,
+          title: earlier.title,
+          url,
+          merge: MERGE_STATE.CLEAN,
+          merging: MERGING,
+        },
       }),
       conversation: recorded("conversation", { pullRequest: CONVERSATION }),
     }),
@@ -3881,7 +3894,7 @@ test("a numbered pull request nothing published shows how its checks went on its
 });
 
 test("an open pull request's pill offers Close and a closed one's Reopen, each asked of the service for the agent", async () => {
-  const open = await draw(controlAnswering());
+  const open = await draw(merging(MERGE_STATE.CLEAN));
   await pressAction(open, "Close pull request");
   act(() => root?.unmount());
   root = undefined;
@@ -3898,6 +3911,97 @@ test("an open pull request's pill offers Close and a closed one's Reopen, each a
     [AGENT.id, { action: PULL_REQUEST_ACTION.CLOSE }],
     [AGENT.id, { action: PULL_REQUEST_ACTION.REOPEN }],
   ]);
+});
+
+test("Close acts at once on an open pull request and a draft, a toast offering Reopen, which sends the reopen and goes", async () => {
+  const question = () => document.querySelector('[role="dialog"], [role="alertdialog"]') !== null;
+  const tab = await draw(merging(MERGE_STATE.CLEAN));
+  await pressAction(tab, "Close pull request");
+
+  assert.equal(question(), false, "closing is not asked about");
+  assert.deepEqual(changes, [[AGENT.id, { action: PULL_REQUEST_ACTION.CLOSE }]]);
+  assert.equal(newestToastSays(), "Pull request closedReopen");
+
+  act(() => newestToastAction()?.click());
+  await settle();
+  assert.deepEqual(changes, [
+    [AGENT.id, { action: PULL_REQUEST_ACTION.CLOSE }],
+    [AGENT.id, { action: PULL_REQUEST_ACTION.REOPEN }],
+  ]);
+  assert.notEqual(newestToastSays(), "Pull request closedReopen", "the toast goes with its press");
+  act(() => root?.unmount());
+  root = undefined;
+  changes.length = 0;
+
+  const draft = await draw(
+    controlAnswering(
+      {
+        pullRequest: () =>
+          Promise.resolve({
+            pullRequest: { ...PULL_REQUEST, state: PULL_REQUEST_STATE.DRAFT },
+          }),
+      },
+      PULL_REQUEST_STATE.DRAFT,
+    ),
+  );
+  await pressAction(draft, "Close pull request");
+  assert.equal(question(), false, "a draft's Close is not asked about either");
+  assert.equal(newestToastSays(), "Pull request closedReopen");
+});
+
+test("a Close GitHub would not take offers no Reopen", async () => {
+  changeAnswer = { outcome: PULL_REQUEST_WRITE_OUTCOME.REFUSED, words: "Not allowed." };
+  const tab = await draw(merging(MERGE_STATE.CLEAN));
+  await pressAction(tab, "Close pull request");
+
+  assert.equal(newestToastSays(), undefined);
+  assert.match(tab.querySelector(".pull-request-write-note")?.textContent ?? "", /Not allowed\./u);
+});
+
+test("Close on an open pull request whose merge status could not be read asks first, since it may be queued, and sends nothing until it is answered", async () => {
+  const tab = await draw(controlAnswering());
+  await pressAction(tab, "Close pull request");
+
+  const question = document.querySelector('[role="dialog"], [role="alertdialog"]');
+  assert.match(
+    question?.textContent ?? "",
+    /could not read whether this pull request is in the merge queue/u,
+  );
+  assert.deepEqual(changes, []);
+});
+
+test("Close on a pull request in the merge queue asks first with the queue's warning, sending nothing until it is answered, and Cancel leaves it queued", async () => {
+  const tab = await draw(
+    merging(MERGE_STATE.CLEAN, {
+      queue: true,
+      queued: { position: 2 },
+      autoMerge: { method: null },
+    }),
+  );
+  const question = () =>
+    document.querySelector('[role="dialog"], [role="alertdialog"]')?.textContent ?? undefined;
+  await pressAction(tab, "Close pull request");
+
+  assert.match(question() ?? "", /Close this pull request\?/u);
+  assert.match(
+    question() ?? "",
+    /Removing this pull request from the queue could impact other pull requests in the queue\./u,
+  );
+  assert.deepEqual(changes, [], "nothing is sent while it is asked");
+
+  await answerQuestion("Cancel");
+  assert.equal(question(), undefined);
+  assert.deepEqual(changes, []);
+  assert.equal(newestToastSays(), undefined);
+
+  await pressAction(tab, "Close pull request");
+  await answerQuestion("Close pull request");
+  assert.deepEqual(changes, [[AGENT.id, { action: PULL_REQUEST_ACTION.CLOSE }]]);
+  assert.equal(
+    newestToastSays(),
+    undefined,
+    "reopening does not queue it again, so none is offered",
+  );
 });
 
 test("an open pull request GitHub holds in its merge queue says Queued and its place in the pill, in the working tone rather than the needs-you one, its menu offering Close and never Convert to draft; the merge control draws no chip, only Remove from queue", async () => {

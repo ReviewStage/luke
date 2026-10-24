@@ -27,6 +27,9 @@ import {
   ChipName,
   COMMAND_LINK_ELEMENT,
   CommandLink,
+  ConfirmDialog,
+  DIALOG_TONE,
+  type DialogQuestion,
   ErrorState,
   IconButton,
   INLINE_EDIT_LOOK,
@@ -34,9 +37,11 @@ import {
   type InlineEditEnd,
   STATUS_TONE,
   Tooltip,
+  useConfirmDialog,
   useMenu,
 } from "@luke/ui";
 import { useClipped } from "@luke/ui/use-clipped";
+import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import {
   GitMergeIcon,
   GitPullRequestClosedIcon,
@@ -44,10 +49,11 @@ import {
   GitPullRequestIcon,
   PencilIcon,
 } from "lucide-react";
-import { type ReactNode, useCallback, useRef, useState } from "react";
+import { type ReactNode, useCallback, useId, useRef, useState } from "react";
 import { useAct } from "../act.js";
 import { ActionMenu, type MenuAction } from "../desktop/action-menu.js";
 import { useGitHubConnection } from "../github-connect.js";
+import { useToast, useWithdrawToast } from "../toast.js";
 import { PULL_REQUEST_TONE, PullRequestMark } from "./pull-request-mark.js";
 import { pullRequestAsked, usePullRequestNumber } from "./pull-request-number.js";
 
@@ -71,7 +77,9 @@ import { pullRequestAsked, usePullRequestNumber } from "./pull-request-number.js
  * be done from there: Ready for review for a draft and Convert to draft for
  * one open, each with Close pull request, drawn red as every item that
  * ends what it acts on is, and
- * Reopen pull request for one closed; once merged it is a badge in that
+ * Reopen pull request for one closed. Close acts at once and a toast offers
+ * Reopen, except for one in the merge queue, where it asks first with the
+ * queue's warning, since reopening does not queue it again; once merged it is a badge in that
  * tone, with nothing left to press. The title is edited in place, as
  * stage-cli's is: its pencil opens a field over it, Enter or the check keeps
  * the words, and Escape or the cross keeps the title as it stood. The pill,
@@ -293,12 +301,39 @@ function queuedWords(queued: { readonly position?: number | undefined }): string
   return queued.position === undefined ? "Queued" : `Queued #${queued.position}`;
 }
 
+/** What leaving GitHub's merge queue costs the pull requests behind it, said as the merge box's Remove from queue and a queued Close each ask. */
+export const QUEUE_WARNING =
+  "Removing this pull request from the queue could impact other pull requests in the queue.";
+
+/** The question Close asks of a pull request in the merge queue, since reopening it does not queue it again. */
+const CLOSE_QUEUED_QUESTION: DialogQuestion = {
+  title: "Close this pull request?",
+  body: `Closing it takes it out of the merge queue, and reopening it does not queue it again. ${QUEUE_WARNING}`,
+  verb: ACTION_WORDS[PULL_REQUEST_ACTION.CLOSE],
+  running: "Closing",
+  tone: DIALOG_TONE.DANGER,
+};
+
+/** The question Close asks of an open pull request whose place in the merge queue could not be read, since it may be in it. */
+const CLOSE_UNKNOWN_QUESTION: DialogQuestion = {
+  ...CLOSE_QUEUED_QUESTION,
+  body: `Luke could not read whether this pull request is in the merge queue. If it is, closing it takes it out, and reopening it does not queue it again. ${QUEUE_WARNING}`,
+};
+
+/** What the toast says once a pull request is closed, and its one way back. */
+const CLOSED_TOAST = {
+  WORDS: "Pull request closed",
+  REOPEN: "Reopen",
+} as const;
+
 /**
  * The pill saying where the pull request stands, in its tone; a press
  * opens the changes that may be made from there, and a merged pull request,
  * which no change leaves, is a badge. An open one GitHub holds in its merge
  * queue says so in the pill, as stage-cli's does: Queued and its place, in
- * the working tone with the merge's mark, its menu offering Close alone.
+ * the working tone with the merge's mark, its menu offering Close alone,
+ * which asks first, since reopening does not queue it again; any other Close
+ * acts at once and a toast offers Reopen.
  * Note that the pill is a compact one, which `@luke/ui` draws in a badge's
  * box, so every state stands at the one size the app's status badges do,
  * the one with a menu adding its chevron.
@@ -306,17 +341,43 @@ function queuedWords(queued: { readonly position?: number | undefined }): string
 export function PullRequestStateMenu({
   pullRequest,
   queued,
+  shown = true,
   writes,
 }: {
   pullRequest: Pick<CodingAgentPullRequest, "number" | "state" | "checks">;
   /** Where GitHub's merge queue holds it, as the merge control read it; none where it holds it nowhere. */
   queued?: { readonly position?: number | undefined } | null | undefined;
+  /** Whether the panel the pill stands in is on screen; a question asked goes with it. */
+  shown?: boolean;
   writes: PullRequestWrites;
 }): React.JSX.Element {
   const inQueue =
     queued !== null && queued !== undefined && pullRequest.state === PULL_REQUEST_STATE.OPEN;
   const actions = actionsFrom(pullRequest.state, inQueue);
   const menu = useMenu(actions.length > 0);
+  const toast = useToast();
+  const withdrawToast = useWithdrawToast();
+  const toastSubject = useId();
+  // Read as a press lands, so the toast's Reopen, which outlives this render, sends through the newest writes.
+  const newestWrites = useRef(writes);
+  newestWrites.current = writes;
+  // Whether Close is being asked about; the question goes once a read finds it out of the queue, so it never closes what no longer stands in it.
+  const [asked, setAsked] = useState(false);
+  // Note that a place in the queue left unread, as a failed merge read leaves it, may be one, so it is asked about as one is: only a read saying it holds it nowhere lets Close act at once.
+  const unread = queued === undefined && pullRequest.state === PULL_REQUEST_STATE.OPEN;
+  const mayBeQueued = inQueue || unread;
+  const confirm = useConfirmDialog({ subject: asked && mayBeQueued, surfaceOpen: shown }, () =>
+    writes
+      .write({ action: PULL_REQUEST_ACTION.CLOSE })
+      .then(
+        (outcome): ActionResult =>
+          outcome.done
+            ? { status: ACTION_RESULT_STATUS.ACCEPTED }
+            : { status: ACTION_RESULT_STATUS.REJECTED, reason: outcome.words },
+      ),
+  );
+  // Note that a question left behind as its panel hides is let go whole, so the panel comes back asking nothing; one already answered finishes.
+  if ((!shown || !mayBeQueued) && asked && !confirm.busy) setAsked(false);
   const words = inQueue ? queuedWords(queued) : STATE_WORDS[pullRequest.state];
   const label = `Pull request ${words}`;
   const tone = inQueue ? STATUS_TONE.WORKING : PULL_REQUEST_TONE[pullRequest.state];
@@ -339,12 +400,37 @@ export function PullRequestStateMenu({
       </Badge>
     );
   }
+  // Note that a Close that may leave the queue asks first, and every other change acts at once, a Close offering Reopen in a toast since it can be taken back.
+  const select = (action: StateAction) => {
+    if (action === PULL_REQUEST_ACTION.REOPEN) withdrawToast(toastSubject);
+    if (action === PULL_REQUEST_ACTION.CLOSE && mayBeQueued) {
+      setAsked(true);
+      confirm.ask();
+      return;
+    }
+    void writes.write(
+      { action },
+      action === PULL_REQUEST_ACTION.CLOSE
+        ? () =>
+            toast({
+              words: CLOSED_TOAST.WORDS,
+              tone: STATUS_TONE.COMPLETE,
+              subject: toastSubject,
+              action: {
+                label: CLOSED_TOAST.REOPEN,
+                onPress: () =>
+                  void newestWrites.current.write({ action: PULL_REQUEST_ACTION.REOPEN }),
+              },
+            })
+        : undefined,
+    );
+  };
   const items: MenuAction[] = actions.map((action) => ({
     label: ACTION_WORDS[action],
     icon: ACTION_GLYPHS[action],
     danger: action === PULL_REQUEST_ACTION.CLOSE,
     disabled: writes.pending !== undefined,
-    onSelect: () => writes.write({ action }),
+    onSelect: () => select(action),
   }));
   return (
     <>
@@ -366,6 +452,12 @@ export function PullRequestStateMenu({
       {menu.drawn === undefined ? null : (
         <ActionMenu label={label} menu={menu.drawn} groups={[items]} onClose={menu.close} />
       )}
+      {asked ? (
+        <ConfirmDialog
+          confirm={confirm}
+          question={inQueue ? CLOSE_QUEUED_QUESTION : CLOSE_UNKNOWN_QUESTION}
+        />
+      ) : null}
     </>
   );
 }

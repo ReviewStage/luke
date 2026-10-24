@@ -2648,6 +2648,7 @@ function PullRequestTabBody({
                         <PullRequestStateMenu
                           pullRequest={held}
                           queued={overview?.merging?.queued}
+                          shown={shown}
                           writes={writes}
                         />
                       </div>
