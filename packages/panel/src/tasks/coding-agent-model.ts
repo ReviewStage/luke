@@ -128,8 +128,8 @@ const LINE_SEPARATOR = " · ";
 
 /** The plans an agent may be paid for by, each as its usage line names it; a key is billed by the token and names none. */
 const PLAN_USAGE: Partial<Record<CodingAgentPayer, string>> = {
-  [CODING_AGENT_PAYER.CLAUDE_SUBSCRIPTION]: "Claude plan",
-  [CODING_AGENT_PAYER.CHATGPT_SUBSCRIPTION]: "ChatGPT plan",
+  [CODING_AGENT_PAYER.CLAUDE_SUBSCRIPTION]: "Claude subscription",
+  [CODING_AGENT_PAYER.CHATGPT_SUBSCRIPTION]: "ChatGPT subscription",
 };
 
 /**
@@ -427,13 +427,13 @@ const SHARED_FAILURE_NOTE = {
     "The agent's image is taking too long to prepare. Try again in a few minutes.",
   [CODING_AGENT_CALL_FAILURE.NATIVE_AGENT_NOT_HERE]: "This agent cannot be reached from here yet.",
   [CODING_AGENT_CALL_FAILURE.AGENT_PLAN_SIGNED_OUT]:
-    "The plan paying for this agent is signed out. Its starter signs in again in Settings.",
+    "The subscription paying for this agent is signed out. Its starter signs in again in Settings.",
   [CODING_AGENT_CALL_FAILURE.AGENT_PLAN_UNREACHABLE]:
-    "The plan's provider didn't answer. Try again in a moment.",
+    "The subscription's provider didn't answer. Try again in a moment.",
   [CODING_AGENT_CALL_FAILURE.AGENT_PLAN_LIMIT_REACHED]:
-    "The plan paying for this agent has reached its usage limit. It waits until the limit resets.",
+    "The subscription paying for this agent has reached its usage limit. It waits until the limit resets.",
   [CODING_AGENT_CALL_FAILURE.AGENT_PLAN_INELIGIBLE]:
-    "The plan paying for this agent isn't eligible to run it.",
+    "The subscription paying for this agent isn't eligible to run it.",
 } as const;
 
 /** What a Start, or a message, says while the agent's image is still being prepared and the panel asks again. */
@@ -687,16 +687,17 @@ export function planPayerOf(runtime: CodingAgentRuntime | undefined): CodingAgen
 
 /** What a message refused by the Claude plan that pays for its agent says. */
 const CLAUDE_PLAN_REFUSAL = {
-  SIGNED_OUT: "Your Claude plan needs reconnecting in Settings.",
-  LIMIT_REACHED: "Your Claude plan has reached its usage limit. It waits until the limit resets.",
+  SIGNED_OUT: "Your Claude subscription needs reconnecting in Settings.",
+  LIMIT_REACHED:
+    "Your Claude subscription has reached its usage limit. It waits until the limit resets.",
 } as const;
 
 /** The plan's reached limit said with when it resets, in place of waiting for a reset no one named. */
 function limitResetsWords(payer: CodingAgentPayer | undefined, resetsAt: number): string {
   const whose =
     payer === CODING_AGENT_PAYER.CLAUDE_SUBSCRIPTION
-      ? "Your Claude plan has"
-      : "The plan paying for this agent has";
+      ? "Your Claude subscription has"
+      : "The subscription paying for this agent has";
   return `${whose} reached its usage limit. It resets ${dayAndTimeText(resetsAt)}.`;
 }
 

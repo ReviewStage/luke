@@ -690,10 +690,10 @@ test("a message a Claude plan refused says to reconnect it, a limit says when it
       messageFailureNote({ failure: CODING_AGENT_CALL_FAILURE.AGENT_PLAN_SIGNED_OUT }, null).text,
     ],
     [
-      "Your Claude plan needs reconnecting in Settings.",
-      `Your Claude plan has reached its usage limit. It resets ${dayAndTimeText(resetsAt)}.`,
-      "Your Claude plan has reached its usage limit. It waits until the limit resets.",
-      `The plan paying for this agent has reached its usage limit. It resets ${dayAndTimeText(resetsAt)}.`,
+      "Your Claude subscription needs reconnecting in Settings.",
+      `Your Claude subscription has reached its usage limit. It resets ${dayAndTimeText(resetsAt)}.`,
+      "Your Claude subscription has reached its usage limit. It waits until the limit resets.",
+      `The subscription paying for this agent has reached its usage limit. It resets ${dayAndTimeText(resetsAt)}.`,
       messageFailureWords(CODING_AGENT_CALL_FAILURE.AGENT_PLAN_SIGNED_OUT),
     ],
   );

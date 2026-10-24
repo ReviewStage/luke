@@ -70,7 +70,7 @@ export const CHATGPT_SIGN_IN_REASON = {
   UNREACHABLE: "Luke couldn't reach ChatGPT. Try again.",
   NOT_REGISTERED: "ChatGPT didn't finish connecting Luke. Try again.",
   USAGE_NOT_ENABLED:
-    "ChatGPT plan use wasn't enabled for Luke. Try again and allow it in the browser.",
+    "ChatGPT subscription use wasn't enabled for Luke. Try again and allow it in the browser.",
   NOT_VERIFIED: "Luke couldn't verify the ChatGPT sign-in. Try again.",
 } as const;
 

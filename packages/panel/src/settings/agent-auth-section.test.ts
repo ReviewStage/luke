@@ -500,7 +500,7 @@ test("a Claude setup-token is saved by its kind, refused with why, and disconnec
   assert.ok(!document.body.innerHTML.includes(TOKEN));
 
   await press(plan, "Disconnect");
-  assert.match(question().textContent ?? "", /Disconnect your Claude plan\?/u);
+  assert.match(question().textContent ?? "", /Disconnect your Claude subscription\?/u);
   assert.equal(actLook("Disconnect"), "danger", "a token he deletes is past undoing");
   await press(question(), "Disconnect");
   assert.deepEqual(

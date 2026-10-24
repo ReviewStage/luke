@@ -259,14 +259,14 @@ test("a GPT model whose ChatGPT plan pays draws no Fast row in the menu, not eve
   assert.match(opus.foot, /Fast/u);
 });
 
-test("a Codex agent's menu ends on \"Using ChatGPT plan · Manage usage\", the link opening ChatGPT's usage settings, while a Claude Code or eve agent's names no plan", () => {
+test("a Codex agent's menu ends on \"Using ChatGPT subscription · Manage usage\", the link opening ChatGPT's usage settings, while a Claude Code or eve agent's names no plan", () => {
   const opened: string[] = [];
   fakeAppPlatform({ assetBase: () => "https://luke.test/", openWeb: (href) => opened.push(href) });
   const codex = openMenuOn(CODING_AGENT_RUNTIME.CODEX, {
     model: "openai/gpt-6.1-sol",
     effort: "low",
   });
-  assert.match(codex.foot, /Using ChatGPT plan · Manage usage$/u);
+  assert.match(codex.foot, /Using ChatGPT subscription · Manage usage$/u);
   const link = [...codex.menu.querySelectorAll("a")].find((a) => a.textContent === "Manage usage");
   assert.ok(link, "Manage usage is a link");
   act(() => link.click());

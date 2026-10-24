@@ -2236,7 +2236,7 @@ export function runStopAgent(
       if (agent.archivedAt !== null) return agentToolRejected(STOP_AGENT_REFUSAL.ARCHIVED);
       if (!(yield* writesAsPlanPolicy(callerUserId(caller), agent))) {
         return agentToolRejected(
-          `Not stopped: ${yield* agentStarterName(agent)}'s own plan pays for that agent, so only they and their agents can stop it.`,
+          `Not stopped: ${yield* agentStarterName(agent)}'s own subscription pays for that agent, so only they and their agents can stop it.`,
         );
       }
       const stop = yield* Effect.result(stopOf(eve, call.writer, agent, call.clientKey));
