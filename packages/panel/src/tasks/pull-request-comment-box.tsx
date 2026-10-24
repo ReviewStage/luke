@@ -27,7 +27,7 @@ import {
 const COMMENT_WORDS = {
   TITLE: "Add a comment",
   FIELD: "Comment",
-  PLACEHOLDER: "Leave a comment in Markdown…",
+  PLACEHOLDER: "Add a comment",
   SEND: "Comment",
   SENDING: "Commenting",
 } as const;

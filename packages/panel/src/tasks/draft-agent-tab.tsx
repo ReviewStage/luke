@@ -9,7 +9,7 @@ import { AgentComposer } from "./agent-composer.js";
 import type { TranscriptCards } from "./agent-tab.js";
 import { AgentTabFoot, AgentTabFrame } from "./agent-tab-frame.js";
 import { ArchivedComposerNote } from "./archived-note.js";
-import { agentName } from "./coding-agent-model.js";
+import { agentName, modelLabel } from "./coding-agent-model.js";
 import { ForkChip } from "./fork-action.js";
 import { forkChoice, startingWords } from "./fork-model.js";
 import type { AgentComposerControl } from "./use-agent-composer.js";
@@ -243,7 +243,7 @@ export function DraftAgentTab({
           }}
           doors={NO_DOORS}
           onStop={NOTHING_TO_STOP}
-          followsUp={false}
+          agentName={choice === undefined ? undefined : modelLabel(choice.model, control.models)}
           keywords={control.keywords}
           skills={control.readSkills}
           call={

@@ -145,12 +145,12 @@ function ComposerFoots(): React.JSX.Element {
               send={{ label: "Send", empty: false, busy: true, busyLabel: "Sending" }}
             />
             <Box
-              words="Ask to make changes"
+              words="Message Ada"
               send={{ label: "Send", empty: true }}
               stop={{ label: "Stop", onStop: ignore }}
             />
             <Box
-              words="Ask to make changes"
+              words="Message Ada"
               send={{ label: "Send", empty: true }}
               stop={{ label: "Stop", onStop: ignore, busy: true, busyLabel: "Stopping…" }}
             />

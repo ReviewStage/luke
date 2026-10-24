@@ -94,8 +94,8 @@ const EVENT_OPTIONS = [
 /** The field's prompt, by what the review says: changes asked for want their summary. */
 function placeholderOf(event: ReviewEvent): string {
   return event === REVIEW_EVENT.REQUEST_CHANGES
-    ? "Summarize the requested changes…"
-    : "Leave a summary comment (optional)…";
+    ? "Summarize the requested changes"
+    : "Leave a summary comment (optional)";
 }
 
 /**

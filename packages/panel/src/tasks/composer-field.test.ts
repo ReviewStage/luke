@@ -53,7 +53,7 @@ function Box(): ReactNode {
     send: () => new Promise(() => undefined),
     onStatus: () => undefined,
   });
-  return createElement(AgentComposer, { ...QUIET_COMPOSER, composer });
+  return createElement(AgentComposer, { ...QUIET_COMPOSER, agentName: "Ada", composer });
 }
 
 test("a box drawn before the editor bundle lands is inert with its placeholder, and takes the caret as the bundle runs", async () => {
@@ -77,7 +77,7 @@ test("a box drawn before the editor bundle lands is inert with its placeholder, 
   assert.equal(container.querySelector(".composer-editor"), null);
   assert.equal(
     container.querySelector(".agent-composer-placeholder")?.textContent,
-    "Send a follow up",
+    "Message Ada",
   );
   assert.equal(
     container.querySelector<HTMLButtonElement>('button[aria-label="Dictate"]')?.disabled,

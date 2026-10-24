@@ -36,7 +36,7 @@ import { PullRequestWriteNote, usePullRequestWrites, WRITE_NOTE } from "./pull-r
 /** The comment's own words. */
 const LINE_WORDS = {
   FIELD: "Comment",
-  PLACEHOLDER: "Leave a comment in Markdown…",
+  PLACEHOLDER: "Add a comment",
   CANCEL: "Cancel",
   SINGLE: "Add single comment",
   START: "Start a review",
