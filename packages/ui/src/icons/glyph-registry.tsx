@@ -4,22 +4,29 @@ import {
   BookOpen,
   Bot,
   CircleDot,
+  CircleDotDashed,
   CircleSlash,
+  ClipboardCheck,
   Clock,
   File,
   FileDiff,
+  FilePenLine,
   Folder,
   FolderGit,
   FolderInput,
+  FolderKanban,
   GitBranch,
   GitPullRequest,
   Hash,
   Layers,
+  ListChecks,
   ListTodo,
+  MessageSquareHeart,
   PhoneOff,
   Pin,
   PinOff,
   RotateCcw,
+  Unplug,
   Users,
   Zap,
 } from "lucide-react";
@@ -96,12 +103,18 @@ export const GLYPH = {
   PULL_REQUEST_STACK: lucideGlyph(Layers),
   PULL_REQUEST_CHANGES: lucideGlyph(FileDiff),
   PULL_REQUEST_CHAPTERS: lucideGlyph(BookBookmark),
+  // A pull request's CI checks, GitHub's Checks tab and its summary.
+  CHECKS: lucideGlyph(ClipboardCheck),
   ISSUE: lucideGlyph(CircleDot),
   FILE: lucideGlyph(File),
   FOLDER: lucideGlyph(Folder),
+  // A section a person keeps tasks in, where it was given no glyph of its own.
+  SECTION: lucideGlyph(FolderKanban),
   REPOSITORY: lucideGlyph(FolderGit),
   PAGE: lucideGlyph(AppWindow),
   PLAN: DocumentIcon,
+  // What one version of a plan changed: its changed sections.
+  VERSION_CHANGES: lucideGlyph(FilePenLine),
   INBOX: InboxIcon,
   AUTOMATION: lucideGlyph(Zap),
   PERSON: UserIcon,
@@ -116,6 +129,12 @@ export const GLYPH = {
   CALL: WaveformIcon,
   SETTINGS: GearIcon,
   TIME: lucideGlyph(Clock),
+  // A task's or an item's status as a field: what a filter or a grouping is by.
+  STATUS: lucideGlyph(CircleDotDashed),
+  // An agent's to-do list, the same ticked list a plan's to-do block wears.
+  TODOS: lucideGlyph(ListChecks),
+  // Word sent back to the makers of Luke, which no comment is.
+  FEEDBACK: lucideGlyph(MessageSquareHeart),
 
   // States.
   DONE: MarkDoneIcon,
@@ -143,6 +162,8 @@ export const GLYPH = {
   ARCHIVE: ArchiveIcon,
   UNARCHIVE: UnarchiveIcon,
   MOVE: lucideGlyph(FolderInput),
+  // Ending a connection to a service, which deletes nothing of it.
+  DISCONNECT: lucideGlyph(Unplug),
   OPEN_EXTERNALLY: ExternalIcon,
   OPEN_ON_GITHUB: GitHubMarkGlyph,
 } as const;
