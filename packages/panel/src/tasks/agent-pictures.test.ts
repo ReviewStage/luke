@@ -214,6 +214,35 @@ test("an integration's call keeps its row and gains its pictures as tiles, one l
   assert.equal(tiles[1]?.querySelector("button"), null, "a picture not kept opens nothing");
 });
 
+test("a call whose first six pictures were not kept still draws the kept one after them first, which opens", async () => {
+  const kept = picture(390, 700);
+  const omitted = {
+    type: "image",
+    mimeType: "image/png",
+    omitted: PICTURE_OMISSION.TOO_LARGE,
+    byteCount: 6_400_000,
+  };
+  const answered = await drawn({
+    id: "turn",
+    role: MESSAGE_ROLE.ASSISTANT,
+    parts: [
+      toolPart("linear_remote", "call-late-kept", { remoteTool: "extract_images" }, [
+        ...Array.from({ length: 6 }, () => omitted),
+        { type: "image", mimeType: "image/png", picture: kept },
+      ]),
+    ],
+  });
+  const tiles = [
+    ...answered.container.querySelectorAll('ul[aria-label="Pictures the call answered"] > li'),
+  ];
+  const open = tiles[0]?.querySelector<HTMLButtonElement>("button");
+
+  assert.equal(tiles.length, 6);
+  assert.equal(open?.getAttribute("aria-label"), "Enlarge extract_images-7");
+  await act(async () => open?.click());
+  assert.ok(document.querySelector('[role="dialog"] img'), "the viewer opens on the kept picture");
+});
+
 test("a browser call's screenshots are thumbnails in a strip under its row, masked from the replay, and a press opens the window's viewer walking them", async () => {
   const [first, second] = [picture(1280, 800), picture(1280, 800)];
   assert.ok(first && second);
