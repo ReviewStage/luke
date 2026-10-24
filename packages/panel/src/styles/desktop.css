@@ -57,11 +57,15 @@
    green one ends, its x plus the three lights' 61px on macOS 26, and the
    height their middle sits at, its y plus half a 14px light. The lights never
    scale with the page, so their width is divided by the zoom; main moves them
-   down with it instead, so their middle stays where it is drawn here. */
+   down with it instead, so their middle stays where it is drawn here. They
+   stand on the window rather than the sheet, so they set the top row's half
+   to what puts its middle on theirs a sheet's gap down the window: every top
+   row stands at that one height, and the title bar's buttons beside the
+   lights are level with them and with every row. */
 :root[data-luke-profile="desktop"] {
   --traffic-lights-end: calc(79px / var(--zoom));
-  --traffic-lights-middle: 25px;
-  --title-bar-middle: var(--traffic-lights-middle);
+  --traffic-lights-middle: 33px;
+  --bar-middle: calc(var(--traffic-lights-middle) - var(--sheet-gap));
   /* The title bar's own buttons beside them, each a toolbar icon button and
      the first this far past the green light: about what the lights leave
      between themselves. The buttons stand edge to edge, so each glyph is as
@@ -70,10 +74,17 @@
   --title-bar-left: calc(var(--traffic-lights-end) + var(--title-bar-inset));
 }
 
+/* Wherever the lights stand, the title bar's middle stays on theirs, a
+   folded shell's included (shell.css), whose top row grows to meet it. */
+:root[data-luke-profile="desktop"]:not([data-full-screen="true"]) .desktop-shell {
+  --title-bar-middle: var(--traffic-lights-middle);
+}
+
 /* In full screen macOS hides the traffic lights, so the title bar's buttons
    stand at the window's edge, as far in from it as the side panel's toggle
    stands from the other, and every row that clears them starts that much
-   sooner (`window-full-screen.ts`). */
+   sooner (`window-full-screen.ts`); a top row at the window's own top keeps
+   its one height, there being no lights to grow to. */
 :root[data-full-screen="true"] {
   --title-bar-left: var(--column-inset);
 }
@@ -254,6 +265,14 @@ body,
   left: auto;
   border-radius: var(--luke-control-radius);
   background: var(--title-bar-ground);
+}
+
+/* Over a sheet standing a gap in from the window's edge, the toggle keeps a
+   row's inset from the sheet's edge rather than the window's, as the last
+   control of the bar beneath it would, a control's gap past the bar's own. */
+.desktop-shell:not([data-room="narrow"], [data-sidebar-collapsed="true"])
+.title-bar-controls[data-edge="end"] {
+  right: calc(var(--sheet-gap) + var(--column-inset));
 }
 
 /* Back and forward at the right of the left column's title-bar row, the

@@ -21,9 +21,11 @@ import type { Point, WebContents } from "electron";
 /**
  * Where the close button's corner sits at actual size, and a light's size.
  * desktop.css's `--traffic-lights-*` are measured from it, so the title bar's
- * own buttons clear the lights.
+ * own buttons clear the lights. The lights stand on the window, and the top
+ * rows beside them on a sheet a gap in from its frame, so they stand that
+ * gap lower than a row on the window would put them, level with the rows.
  */
-const TRAFFIC_LIGHTS = { X: 18, Y: 18, SIZE: 14 } as const;
+const TRAFFIC_LIGHTS = { X: 18, Y: 26, SIZE: 14 } as const;
 
 /**
  * One panel window as zoom meets it: its page, and its traffic lights where it
