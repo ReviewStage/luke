@@ -60,6 +60,7 @@ import {
   moreLabel,
   PaneBar,
   SCROLL_FADE,
+  SCROLL_OVERSCROLL,
   SCROLL_SIZE,
   ScrollArea,
   Skeleton,
@@ -1290,8 +1291,12 @@ function ThreadCard({
   }
   return (
     <CommentCard place={place} open data-thread={thread.id}>
-      {/* Note that the entries scroll inside a card taller than the room it stands in, so the field that answers them stays in view under them. */}
-      <ScrollArea size={SCROLL_SIZE.CONTENT} fade={SCROLL_FADE.BOTH}>
+      {/* Note that the entries scroll inside a card taller than the room it stands in, so the field that answers them stays in view under them; a swipe past their end, or over a card with nothing to scroll, moves the plan. */}
+      <ScrollArea
+        size={SCROLL_SIZE.CONTENT}
+        fade={SCROLL_FADE.BOTH}
+        overscroll={SCROLL_OVERSCROLL.CHAIN}
+      >
         <div className="comment-entries">
           {first === undefined ? head : null}
           {thread.entries.map((entry) =>
@@ -2104,7 +2109,7 @@ export function PlanCommentLayer({
           ref={cardRef(shown.id)}
         >
           {/* Note that a line holding more threads than the view has room for scrolls them all, so no card is pressed below its own reply field. */}
-          <ScrollArea size={SCROLL_SIZE.CONTENT}>
+          <ScrollArea size={SCROLL_SIZE.CONTENT} overscroll={SCROLL_OVERSCROLL.CHAIN}>
             <div className="comment-float-cards">
               {(counts.get(shownTop) ?? [shown]).map((thread) => (
                 <ThreadCard
