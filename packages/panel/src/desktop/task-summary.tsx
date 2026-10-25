@@ -5,6 +5,7 @@ import {
   CARD_PADDING,
   CARD_SHADOW,
   Card,
+  cn,
   GAP,
   IconButton,
   LAYOUT_ELEMENT,
@@ -48,8 +49,8 @@ import { SIDE_PANEL_TAB } from "../tasks/use-side-panel.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import { keptFlag, keptKey, useKept } from "../use-kept.js";
 import { rowMenu } from "./action-menu.js";
-import { ArchivedAgents, useAgentArchive } from "./agent-archive.js";
-import { AGENTS_SECTION, agentEntries, INBOX_ROW, inboxEntry } from "./main-tabs.js";
+import { ArchivedAgents, SUMMARY_GLYPH, useAgentArchive } from "./agent-archive.js";
+import { AGENTS_SECTION, agentEntries, INBOX_ROW, inboxEntry, ROW_COUNT } from "./main-tabs.js";
 import { ADD_SECTION, type ChangesOffer, changesOffers, panelEntries } from "./side-panel.js";
 import type { AddEntry, HeldTranscripts } from "./strip-tabs.js";
 import { type CardSubject, tabCard } from "./tab-card.js";
@@ -301,7 +302,7 @@ export function SummaryButton({
     : cardControl(layout, cardId);
   // Note that the box carries the opener's mark, which the shared button takes no attribute for.
   return (
-    <span className="summary-toggle" data-summary-opener={CARD_FROM.TOOLBAR}>
+    <span className="summary-toggle contents" data-summary-opener={CARD_FROM.TOOLBAR}>
       <Tooltip label={label}>
         <IconButton icon={<ListIcon />} label={label} {...state} onClick={layout.onToggle} />
       </Tooltip>
@@ -449,7 +450,7 @@ function countedEntry(
   count: number,
 ): AddEntry {
   const row = { id: tab, ...tabLook({ kind: TAB_KIND.PANEL, tab }) };
-  const endMark = count === 0 ? undefined : <span className="inbox-row-count">{count}</span>;
+  const endMark = count === 0 ? undefined : <span className={ROW_COUNT}>{count}</span>;
   return { row, endMark, onPick };
 }
 
@@ -518,7 +519,7 @@ function SummaryRow({
   return (
     <RowHintOptions card={entry.card} cardBeside>
       <ListRow
-        leading={<span className="task-summary-glyph">{entry.row.icon}</span>}
+        leading={<span className={SUMMARY_GLYPH}>{entry.row.icon}</span>}
         title={entry.row.label}
         description={entry.row.detail}
         meta={entry.endMark}
@@ -571,7 +572,7 @@ function RailRow({ entry }: { entry: AddEntry }) {
     <li>
       <Tooltip label={entry.row.terms?.[0] ?? entry.row.label}>
         <IconButton
-          icon={<span className="task-summary-glyph">{entry.row.icon}</span>}
+          icon={<span className={SUMMARY_GLYPH}>{entry.row.icon}</span>}
           label={entry.row.label}
           onClick={entry.onPick}
         />
@@ -712,7 +713,7 @@ function SummaryCard({
       shadow={CARD_SHADOW.MENU}
       ref={drawn}
       id={id}
-      className="task-summary-card"
+      className="task-summary-card absolute top-0 right-0 z-2 box-border flex max-h-full w-summary origin-top-right animate-card-grow-in flex-col outline-none data-[leaving=true]:pointer-events-none data-[leaving=true]:animate-card-leave data-[leaving=true]:transition-none"
       role="dialog"
       aria-label="Summary"
       tabIndex={-1}
@@ -720,7 +721,7 @@ function SummaryCard({
       inert={leaving}
     >
       <ScrollArea size={SCROLL_SIZE.CONTENT}>
-        <div className="task-summary-card-body">
+        <div className="task-summary-card-body relative flex flex-col gap-section-gap px-menu-inset pt-summary-card-inset pb-list-inset">
           <span className="task-summary-collapse">
             <Tooltip label="Collapse summary">
               <IconButton
@@ -786,7 +787,10 @@ function SummaryRoom({
 }): React.JSX.Element {
   return (
     <aside
-      className="task-summary"
+      className={cn(
+        "task-summary relative box-border flex w-summary flex-none flex-col bg-ground",
+        mode === SUMMARY_MODE.RAIL && "w-summary-rail pt-column-inset",
+      )}
       aria-label={kept ? undefined : "Summary"}
       aria-hidden={kept || undefined}
       data-mode={mode}
@@ -853,7 +857,12 @@ export function TaskSummary({
           {/* Note that the chevron stands outside what scrolls, at one place in both modes, so its press keeps the focus as the summary turns and the fade never reaches it. */}
           <SummaryChevron layout={layout} cardId={cardId} />
           <ScrollArea fade={SCROLL_FADE.BOTH}>
-            <div className="task-summary-body">
+            <div
+              className={cn(
+                "task-summary-body flex flex-col gap-section-gap p-column-inset",
+                layout.mode === SUMMARY_MODE.RAIL && "items-center pt-ring-reach",
+              )}
+            >
               {layout.mode === SUMMARY_MODE.COLUMN ? (
                 <SummaryList sections={sections} agents={tasks.agents} shown={tasks.shown} />
               ) : kinds.length === 0 ? null : (

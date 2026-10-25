@@ -99,6 +99,14 @@ import { TabStrip } from "./tab-strip.js";
  * only the agents to read, and its agents are not renamed.
  */
 
+/**
+ * A count at a summary row's end, or a tab's, in the quiet count a folded
+ * sidebar group shows after its name; the Inbox's, of what needs the reader,
+ * in the tone its `data-tone` names.
+ */
+export const ROW_COUNT =
+  "inbox-row-count flex-none text-caption-inline text-muted-foreground tabular-nums data-[tone]:text-tone-ink";
+
 /** The "+" menu's section for the task's agents, which the task's summary lists under the same heading. */
 export const AGENTS_SECTION = "Agents";
 
@@ -347,7 +355,7 @@ export function inboxEntry(onPick: () => void, waiting: number): AddEntry {
   const row = { id: INBOX_ROW, ...tabLook({ kind: TAB_KIND.INBOX }) };
   const endMark =
     waiting === 0 ? undefined : (
-      <span className="inbox-row-count" data-tone={STATUS_TONE.ATTENTION}>
+      <span className={ROW_COUNT} data-tone={STATUS_TONE.ATTENTION}>
         {waiting}
         <VisuallyHidden>
           {" "}
@@ -407,7 +415,7 @@ function addEntries(
 
 /** The row the column's tabs stand in, which is its toolbar's title: the strip, what follows it, and the "+" last. */
 function MainTabsRow({ children }: { children: React.ReactNode }): React.JSX.Element {
-  return <div className="main-tabs">{children}</div>;
+  return <div className="main-tabs flex items-center gap-list-gap">{children}</div>;
 }
 
 /**

@@ -175,6 +175,25 @@ const PANEL_SHELL = {
   radius: ["luke-14"],
 } as const;
 
+/**
+ * The names the panel side panel's block of the theme adds (the plan's
+ * summary, the side panel's widths, a note's share of the toolbar, the
+ * summary card's motion), by the group tailwind-merge reads each in.
+ */
+const PANEL_SIDE = {
+  spacing: [
+    "column-inset",
+    "half-container",
+    "ring-reach",
+    "side-panel",
+    "side-panel-no-tabs",
+    "summary",
+    "summary-card-inset",
+    "summary-rail",
+  ],
+  animate: ["card-grow-in", "card-leave"],
+} as const;
+
 const merge = extendTailwindMerge({
   extend: {
     theme: {
@@ -281,6 +300,7 @@ const merge = extendTailwindMerge({
         ...CONTENT_TEXT.spacing,
         ...ROWS_NAVIGATION.spacing,
         ...PANEL_SHELL.spacing,
+        ...PANEL_SIDE.spacing,
       ],
       radius: [
         "control",
@@ -334,6 +354,7 @@ const merge = extendTailwindMerge({
         "menu-in",
         "tooltip-in",
         "tooltip-leave",
+        ...PANEL_SIDE.animate,
       ],
     },
     classGroups: {

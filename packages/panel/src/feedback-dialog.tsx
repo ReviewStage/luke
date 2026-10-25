@@ -410,7 +410,7 @@ export function FeedbackDialog({
         </>
       }
     >
-      <div className="feedback-dialog ph-no-capture">
+      <div className="feedback-dialog ph-no-capture flex min-h-0 flex-col gap-block-gap">
         <FormField
           label={FEEDBACK_COPY[shown.kind].field}
           description={
@@ -472,7 +472,7 @@ export function FeedbackDialog({
           </Inline>
         ) : null}
         {signature ? (
-          <div className="feedback-dialog-signature">
+          <div className="feedback-dialog-signature flex min-w-0 items-center gap-control-gap">
             <Checkbox
               checked={shown.draft.signed}
               disabled={busy}
@@ -486,7 +486,7 @@ export function FeedbackDialog({
               variant={TEXT_VARIANT.INHERIT}
               truncate
               id={signatureId}
-              className="feedback-dialog-identity"
+              className="feedback-dialog-identity ml-auto text-caption text-muted-foreground"
             >
               {shown.draft.signed
                 ? `Sending as ${[signature.name, signature.email].filter(Boolean).join(" · ")}`

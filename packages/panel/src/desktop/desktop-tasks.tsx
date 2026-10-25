@@ -209,7 +209,11 @@ function TaskPage({
   children?: React.ReactNode;
 }): React.JSX.Element {
   return (
-    <div ref={areaRef} className="desktop-task" data-panel-open={String(panelOpen)}>
+    <div
+      ref={areaRef}
+      className="desktop-task relative flex min-h-0 flex-1"
+      data-panel-open={String(panelOpen)}
+    >
       <Fill ref={columnRef} className="desktop-task-main" hidden={fullScreen}>
         {column}
       </Fill>
@@ -220,7 +224,7 @@ function TaskPage({
 
 /** The column's body under its toolbar: what the column shows, and the summary beside it. */
 function TaskBody({ children }: { children: React.ReactNode }): React.JSX.Element {
-  return <div className="desktop-plan-body">{children}</div>;
+  return <div className="desktop-plan-body relative flex min-h-0 flex-1">{children}</div>;
 }
 
 /** The task's actions at the toolbar's right while the task is read, as the toolbar lands them: the repository's chip, Start, the ⋯, and the summary's toggle where the summary holds something. */

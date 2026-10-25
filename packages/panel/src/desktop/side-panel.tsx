@@ -1483,9 +1483,9 @@ export function ActivityList({
   );
   return (
     <ScrollArea size={SCROLL_SIZE.CONTENT}>
-      <div className="side-panel-activity">
+      <div className="side-panel-activity flex flex-col gap-section-gap px-column-inset py-row-inset">
         {open.length === 0 ? (
-          <div className="side-panel-no-tabs-line">
+          <div className="side-panel-no-tabs-line mb-control-gap px-row-inset">
             <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
               Nothing open past the plan
             </Text>
@@ -1525,7 +1525,7 @@ export function ActivityList({
           </List>
         )}
         {more.length === 0 ? null : (
-          <div className="side-panel-no-tabs-line">
+          <div className="side-panel-no-tabs-line mb-control-gap px-row-inset">
             <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
               Open more
             </Text>
@@ -1556,8 +1556,8 @@ export function ActivityList({
 function NoTabs({ entries }: { entries: readonly AddEntry[] }): React.JSX.Element {
   return (
     <ScrollArea size={SCROLL_SIZE.CONTENT}>
-      <div className="side-panel-no-tabs">
-        <div className="side-panel-no-tabs-line">
+      <div className="side-panel-no-tabs flex flex-col px-side-panel-no-tabs py-luke-48">
+        <div className="side-panel-no-tabs-line mb-control-gap px-row-inset">
           <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
             No tabs open
           </Text>
@@ -2728,7 +2728,12 @@ export function SidePanel({
           }
         />
       }
-      actions={<span ref={setActionsSlot} className="toolbar-tab-actions" />}
+      actions={
+        <span
+          ref={setActionsSlot}
+          className="toolbar-tab-actions flex min-w-control flex-none items-center"
+        />
+      }
     >
       {/* A panel with nothing to offer but kinds it has never closed stands
             empty, the "+" above offering any; otherwise every tab closed, it
@@ -2834,7 +2839,11 @@ export function SidePanel({
 
 /** The row a panel's tabs stand in, beside its actions: the strip, then the "+". */
 function PanelTabsRow({ children }: { children: React.ReactNode }): React.JSX.Element {
-  return <div className="side-panel-tabs">{children}</div>;
+  return (
+    <div className="side-panel-tabs flex min-w-0 flex-auto items-center gap-list-gap">
+      {children}
+    </div>
+  );
 }
 
 /**
@@ -2987,11 +2996,15 @@ function PanelFrame({
       {/* Shut, it gives the document its room back at once, to glide into. A
           panel only ever full screen is never uncovered beside it, so it keeps none. */}
       {panel.fullScreen && !panel.fullScreenOnly && leaving !== PANEL_LEAVING.CLOSE ? (
-        <div ref={room} className="side-panel-room" style={{ width: panel.width }} />
+        <div
+          ref={room}
+          className="side-panel-room min-w-0 max-w-side-panel flex-none"
+          style={{ width: panel.width }}
+        />
       ) : null}
       <aside
         ref={aside}
-        className="side-panel"
+        className="side-panel relative flex min-w-0 max-w-side-panel flex-none flex-col border-l border-border bg-well"
         aria-label={label}
         inert={leaving !== PANEL_LEAVING.NONE}
         data-full-screen={String(panel.fullScreen)}
