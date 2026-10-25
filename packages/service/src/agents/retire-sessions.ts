@@ -146,12 +146,15 @@ export function retireSessions(
 }
 
 /**
- * What a task's or an agent's delete runs under its lock before anything
- * goes: the sessions its conversations run in, retired while those still
- * stand, since eve's door admits no one to a cleared conversation's session.
- * Inside the transaction, since outside it a refused delete would leave a
- * standing agent's session retired; the retires' own budget bounds how long
- * they hold the lock.
+ * What a task's or an agent's delete runs before anything goes: the sessions
+ * its conversations run in, retired while those still stand, since eve's
+ * door admits no one to a cleared conversation's session. A task's delete
+ * runs it before its transaction, over the agents it stopped alone, so no
+ * lock waits on eve, and an agent started meanwhile keeps its session and
+ * refuses the delete under the task's lock. An agent's delete still runs it
+ * under its conversation's lock once it reads the agent stopped, since a
+ * message that woke the agent would otherwise lose its session to a delete
+ * then refused; the retires' own budget bounds how long they hold it.
  */
 export function retiredBeforeDelete(
   eveAt: EveAt,
