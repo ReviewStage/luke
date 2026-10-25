@@ -38,8 +38,6 @@ interface WindowSurfaceDependencies {
   microphoneRouteWatcher: () => MicrophoneRouteWatch | undefined;
   recordProductEvent: RecordProductEvent;
   openExternal: (url: string) => Promise<void>;
-  /** Posts Settings' test notification now. */
-  testNotification: () => void;
   /** Writes words to the system's clipboard. */
   copyText: (words: string) => void;
   /** Writes a PNG, its bytes in base64, to the system's clipboard as a picture; answers false where the bytes draw no picture. */
@@ -119,9 +117,6 @@ export function windowSurfaceProcedures(
         "x-apple.systempreferences:com.apple.Notifications-Settings.extension",
       ),
     ),
-    [WINDOW_SURFACE_ACT_KIND.NOTIFICATIONS_TEST]: surfacePort[
-      WINDOW_SURFACE_ACT_KIND.NOTIFICATIONS_TEST
-    ].handler(() => dependencies.testNotification()),
     [WINDOW_SURFACE_ACT_KIND.CONTACT_EMAIL]: surfacePort[
       WINDOW_SURFACE_ACT_KIND.CONTACT_EMAIL
     ].handler(() => dependencies.openExternal(CONTACT_MAILTO)),

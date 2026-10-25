@@ -82,9 +82,10 @@ import {
   ConversationEmptyState,
   ConversationRows,
   ConversationScrollButton,
+  FLOATING_OVER_LOG_CLASS,
 } from "../ai-elements/conversation.js";
 import { Fold, FoldBody } from "../ai-elements/fold.js";
-import { Message, MessageContent } from "../ai-elements/message.js";
+import { CHAT_MESSAGE_CLASS, Message, MessageContent } from "../ai-elements/message.js";
 import { Plan, PlanContent, PlanHeader, PlanIcon, PlanTitle } from "../ai-elements/plan.js";
 import { TOOL_BLOCK, TOOL_STATE } from "../ai-elements/tool.js";
 import { appPlatform } from "../app-platform.js";
@@ -1377,7 +1378,7 @@ export function AgentMessage({
     return (
       <Message
         from={received ? MESSAGE_ROLE.ASSISTANT : message.role}
-        className={received ? "is-chat" : undefined}
+        className={received ? CHAT_MESSAGE_CLASS : undefined}
         data-message-id={message.id}
       >
         <MessageFileChips message={message} sending={sending} />
@@ -2054,7 +2055,9 @@ function AgentTranscriptView({
           <Conversation list={log} onNearTop={onOlder}>
             {/* Note that it floats in a fixed slot over the log's top rather than standing in its flow, so its coming and going moves no row, measured or not. */}
             {olderFailed && onOlder !== undefined ? (
-              <div className="conversation-older">
+              <div
+                className={`${FLOATING_OVER_LOG_CLASS} top-luke-8 z-1 max-w-conversation-older bg-well px-list-inset py-tight-gap`}
+              >
                 <ErrorState onRetry={onOlder}>{OLDER_FAILED_LINE}</ErrorState>
               </div>
             ) : null}

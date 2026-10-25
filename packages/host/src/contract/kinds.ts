@@ -140,9 +140,8 @@ export const AGENT_ACT_KIND = {
   CODING_AGENTS_ENSURE_OPERATOR: "codingAgents.ensureOperator",
   CODING_AGENTS_DELETE: "codingAgents.delete",
   /**
-   * Which agent's tab the panel shows, or none, and which task's Inbox tab,
-   * or none: what main's notification of an agent's end or of an inbox item
-   * is held back by, and what clears an agent's tab's unseen dot.
+   * Which agent's tab the panel shows, or none: what an agent's end leaves no
+   * unseen dot for while the window is focused, and what clears that dot.
    */
   CODING_AGENTS_SHOWN: "codingAgents.shown",
   /** An agent's unseen dot cleared by hand, without its page being shown: its row's Mark as read. */
@@ -539,8 +538,7 @@ export const WORKSPACE_ACT_KIND = {
 
 /**
  * What a window asks of the system it is drawn on: the microphone asked for
- * and its route read afresh, the notification settings opened and a test
- * notification posted, a new mail to the people who make Luke, the panel
+ * and its route read afresh, the notification settings opened, a new mail to the people who make Luke, the panel
  * focused, words copied, a file saved, and feedback sent.
  */
 export const WINDOW_SURFACE_ACT_KIND = {
@@ -553,8 +551,6 @@ export const WINDOW_SURFACE_ACT_KIND = {
    */
   MICROPHONE_ROUTE: "microphone.route",
   NOTIFICATIONS_OPEN_SETTINGS: "notifications.openSettings",
-  /** A notification posted right away, whatever window is in front, to learn whether macOS shows Luke's. */
-  NOTIFICATIONS_TEST: "notifications.test",
   /** A new message to the people who make Luke, in the system's mail app, to the address main holds. */
   CONTACT_EMAIL: "contact.email",
   WINDOW_FOCUS_PANEL: "window.focusPanel",

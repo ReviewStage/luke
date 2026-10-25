@@ -336,15 +336,31 @@ test("on a phone the toasts stand above the places bar, and their room is what t
   assert.equal(written("--luke-toast-room"), "68px");
 });
 
-/** Where the window lays out a phone's call card and its video tile, which a rise or a lift moves only on screen, by `data-staged` name. */
-const LAID_OUT: ReadonlyMap<string, { top: number; height: number; width: number }> = new Map([
-  ["card", { top: 175, height: 225, width: 248 }],
-  ["tile", { top: 0, height: 125, width: 222 }],
+/** What the card's tile draws in its video's place: nothing, its still saying the video ended, or its wait, gone from over the first frame but still laid out. */
+const STILL = { NONE: "none", ENDED: "ended", GONE: "gone" } as const;
+
+type Still = (typeof STILL)[keyof typeof STILL];
+
+/** Where the window lays out a phone's call card, its video tile, and the lines of the tile's still, which a rise or a lift moves only on screen, by `data-staged` name. */
+const LAID_OUT: ReadonlyMap<
+  string,
+  { top: number; height: number; width: number; client: number }
+> = new Map([
+  ["card", { top: 175, height: 225, width: 248, client: 225 }],
+  ["tile", { top: 0, height: 125, width: 222, client: 123 }],
+  ["face", { top: 8, height: 40, width: 40, client: 40 }],
+  ["restart", { top: 80, height: 30, width: 30, client: 30 }],
 ]);
 
-/** A phone's side panel filling the window, a pull request's tab bar at its head, and the call card floating over it with its video up. */
-function PhoneCardShell(): React.JSX.Element {
+/** A phone's side panel filling the window, a pull request's tab bar in it, a Chapters view's own head under it where one is staged, and the call card floating over it with its video up (`STILL`). */
+function PhoneCardShell({ still }: { still: Still }): React.JSX.Element {
   const shell = useRef<HTMLDivElement>(null);
+  const words = createElement(
+    "div",
+    { className: "luke-call-video-still", style: { padding: "8px" } },
+    createElement("span", { "data-staged": "face" }),
+    createElement("span", { "data-staged": "restart" }),
+  );
   useColumnDock(shell, true, true, "panel");
   return createElement(
     "div",
@@ -353,25 +369,70 @@ function PhoneCardShell(): React.JSX.Element {
       "aside",
       { className: "side-panel", "data-staged": "panel" },
       createElement("header", { className: "luke-pane-bar", "data-staged": "tabs" }),
+      createElement("header", { className: "luke-pane-bar", "data-staged": "chapter" }),
     ),
     createElement(
       "section",
       { className: "call-card", "data-surface": "floating", "data-staged": "card" },
-      createElement("div", { className: "luke-call-video-tile", "data-staged": "tile" }),
+      createElement(
+        "div",
+        { className: "luke-call-video-tile", "data-staged": "tile" },
+        still === STILL.NONE
+          ? null
+          : still === STILL.ENDED
+            ? words
+            : createElement(
+                "div",
+                { className: "luke-call-video-waiting", "data-gone": "true" },
+                words,
+              ),
+      ),
     ),
   );
 }
 
 test.each([
-  { room: "a tab bar the full card would reach over", tabsFoot: 222, height: "70px" },
-  { room: "no room under the tab bar at all", tabsFoot: 380, height: "30px" },
+  {
+    room: "a tab bar the full card would reach over",
+    tabs: [181, 222],
+    still: STILL.NONE,
+    height: "70px",
+  },
+  { room: "no room under the tab bar at all", tabs: [181, 380], still: STILL.NONE, height: "30px" },
+  {
+    room: "a tab bar a wrapped title pushes past the middle",
+    tabs: [300, 341],
+    still: STILL.NONE,
+    height: "30px",
+  },
+  { room: "its video ended over a tab bar", tabs: [181, 222], still: STILL.ENDED, height: "120px" },
+  {
+    room: "its video's first frame drawn, its wait gone but laid out",
+    tabs: [181, 222],
+    still: STILL.GONE,
+    height: "70px",
+  },
+  {
+    room: "a Chapters head under the tab bar that it cannot clear too",
+    tabs: [181, 222],
+    chapter: [250, 290],
+    still: STILL.NONE,
+    height: "70px",
+  },
 ])(
-  "on a phone, with $room, the card's video gives up what it must, down to a control's height",
-  ({ tabsFoot, height }) => {
+  "on a phone, with $room, the card's video gives up what it must, down to a control's height or what its words need",
+  ({ tabs, chapter, still, height }) => {
+    const bar = ([top = 0, bottom = 0]: readonly number[]) => ({
+      left: 0,
+      right: 608,
+      top,
+      bottom,
+    });
     stage(
       new Map([
         ["panel", { left: 0, right: 608, top: 49, bottom: 416 }],
-        ["tabs", { left: 0, right: 608, top: 181, bottom: tabsFoot }],
+        ["tabs", bar(tabs)],
+        ...(chapter === undefined ? [] : [["chapter", bar(chapter)] as const]),
         ["card", { left: 16, right: 264, top: 175, bottom: 400 }],
       ]),
     );
@@ -379,6 +440,7 @@ test.each([
       ["offsetTop", "top"],
       ["offsetHeight", "height"],
       ["offsetWidth", "width"],
+      ["clientHeight", "client"],
     ] as const)
       vi.spyOn(HTMLElement.prototype, side, "get").mockImplementation(function (this: HTMLElement) {
         return LAID_OUT.get(this.dataset.staged ?? "")?.[read] ?? 0;
@@ -389,7 +451,7 @@ test.each([
     tokens.setProperty("--luke-control-height", "30px");
     const container = document.body.appendChild(document.createElement("div"));
     root = createRoot(container);
-    act(() => root?.render(createElement(PhoneCardShell)));
+    act(() => root?.render(createElement(PhoneCardShell, { still })));
     const card = document.querySelector<HTMLElement>(".call-card");
     assert.equal(card?.style.getPropertyValue("--luke-call-video-height"), height);
   },

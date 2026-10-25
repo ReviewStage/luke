@@ -45,17 +45,14 @@ function copyPathAction(path: string, copy: (text: string, words: string) => voi
   };
 }
 
-/** Saves text where the system's save dialog chooses, as a file of the name given, the save or its failure said in a toast. */
+/** Saves text where the system's save dialog chooses, as a file of the name given, its failure said in a toast. */
 export function useSaveText(): (name: string, text: string) => Promise<void> {
   const show = useToast();
   return (name, text) =>
     appPlatform()
       .saveFile({ name, text })
       .then(
-        (saved) => {
-          if (saved)
-            show({ words: "File saved", tone: STATUS_TONE.COMPLETE, hold: TOAST_HOLD.DONE });
-        },
+        () => undefined,
         () =>
           show({
             words: "The file could not be saved. Try again.",

@@ -197,7 +197,11 @@ const CALLING_WORDS = "On a call";
  */
 function CallingGlyph(): React.JSX.Element {
   return (
-    <span className="state-glyph agent-calling-glyph" role="img" aria-label={CALLING_WORDS}>
+    <span
+      className="state-glyph agent-calling-glyph text-complete"
+      role="img"
+      aria-label={CALLING_WORDS}
+    >
       <GLYPH.CALL />
     </span>
   );

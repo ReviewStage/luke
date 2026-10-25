@@ -226,8 +226,6 @@ const SAMPLE_VALUE = {
   voice: LIVE_VOICE.MARIN,
   duckOtherMedia: false,
   preferBuiltInMicrophone: false,
-  // On is the default, so Off is the choice that has to survive a reopen.
-  agentNotifications: false,
   // Ask is the default, so Never is the choice that has to survive a reopen.
   macCommands: MAC_COMMAND_MODE.NEVER,
   // Atlas is the default, so another is the choice that has to survive a reopen.
@@ -402,6 +400,18 @@ test("the Mac commands switch an earlier build stored reads as a mode: on as Ask
 
   await fs.writeFile(file, stored.replace(`"${MAC_COMMAND_MODE.ALWAYS}"`, "false"));
   assert.equal(await storeIn(directory).get("macCommands"), MAC_COMMAND_MODE.NEVER);
+});
+
+test("the notifications switch an earlier build stored is let go unread, and the choices beside it stay", async (t) => {
+  const directory = await temporaryDirectory(t, "luke-settings-");
+  await storeIn(directory).set("videoAvatar", VIDEO_AVATAR.CELIA);
+  const file = path.join(directory, SETTINGS_FILE_NAME);
+  const stored = JSON.parse(await readSettingsFile(directory));
+  await fs.writeFile(file, JSON.stringify({ ...stored, agentNotifications: false }));
+
+  const reopened = storeIn(directory);
+  assert.equal(await reopened.get("videoAvatar"), VIDEO_AVATAR.CELIA);
+  assert.equal("agentNotifications" in appSettingsView(await reopened.snapshot()), false);
 });
 
 test("every provider key an earlier build stored is dropped, and the choices beside it stay", async (t) => {
