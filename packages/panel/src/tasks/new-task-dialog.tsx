@@ -93,7 +93,7 @@ function NewTaskCard({
       onDismiss={close}
       onExited={onExited}
     >
-      <div className="new-task ph-no-capture" ref={body}>
+      <div className="new-task ph-no-capture flex min-h-0 flex-col gap-block-gap" ref={body}>
         <NewTaskComposer
           newTask={newTask}
           workspaceId={newTask.workspaceId}

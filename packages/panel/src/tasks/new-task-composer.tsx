@@ -539,10 +539,15 @@ export function NewTaskComposer({
 
   const card = (
     // biome-ignore lint/a11y/noStaticElementInteractions: ⌘L is read as it bubbles from the card's own controls, the field first, which are what take the keys.
-    <div className="new-task-composer" onKeyDown={onCardKey}>
-      <div className="new-task-head">
-        <div className="new-task-title">
-          <Text variant={TEXT_VARIANT.DIALOG} as={TEXT_ELEMENT.H2} id={titleId}>
+    <div className="new-task-composer flex min-w-0 flex-col gap-control-gap" onKeyDown={onCardKey}>
+      <div className="new-task-head flex min-w-0 items-center justify-between gap-block-gap">
+        <div className="new-task-title flex min-w-0 items-center gap-item-gap">
+          <Text
+            variant={TEXT_VARIANT.DIALOG}
+            as={TEXT_ELEMENT.H2}
+            id={titleId}
+            className="max-w-new-task-title shrink-0"
+          >
             {PURPOSE_HEADING[purpose]}
           </Text>
           {repositoryChip}

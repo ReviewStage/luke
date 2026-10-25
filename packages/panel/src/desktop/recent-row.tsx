@@ -7,6 +7,7 @@ import { useInlineRename } from "@luke/ui/use-inline-rename";
 import { useCallback, useMemo, useRef } from "react";
 import { AssigneeFaceMark } from "../actor-ref.js";
 import { useMemberDirectory } from "../member-directory.js";
+import { HOME_ROW_CONTEXT, HOME_ROW_META } from "../tasks/home-row.js";
 import { PlanGlyph } from "../tasks/tab-look.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import { useAnnounceShown } from "../use-announce-shown.js";
@@ -92,8 +93,8 @@ export function RecentRow({
           description={rename.refused ? <span>{RENAME_FAILED_NOTE}</span> : undefined}
           meta={
             rename.editing ? null : (
-              <span className="home-row-meta">
-                <OneLine className="home-row-context" words={task.repository ?? "No repository"}>
+              <span className={HOME_ROW_META}>
+                <OneLine className={HOME_ROW_CONTEXT} words={task.repository ?? "No repository"}>
                   {task.repository ?? "No repository"}
                 </OneLine>
                 {worn === undefined ? null : <AssigneeFaceMark face={worn} />}

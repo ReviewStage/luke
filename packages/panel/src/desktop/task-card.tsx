@@ -219,7 +219,9 @@ export function PullRequestLine({
         glyph={<PullRequestMark pullRequest={pullRequest} className="task-mark-glyph" />}
         label={
           <>
-            <span className="task-card-number">{pullRequestNumberLabel(pullRequest)}</span>{" "}
+            <span className="task-card-number text-muted-foreground tabular-nums">
+              {pullRequestNumberLabel(pullRequest)}
+            </span>{" "}
             {pullRequest.title}
           </>
         }

@@ -195,7 +195,7 @@ function MoveTaskCard({
         />
       }
     >
-      <div className="move-dialog">
+      <div className="move-dialog flex min-h-0 flex-col gap-block-gap">
         <WorkspaceChoices
           workspaces={workspaces}
           personalId={personalId}
@@ -206,7 +206,7 @@ function MoveTaskCard({
           onChoose={onChoose}
         />
         {chosen === undefined ? null : (
-          <ul className="move-effects">
+          <ul className="move-effects m-0 grid gap-tight-gap rounded-control bg-muted p-card-inset-snug pl-luke-24 text-body-foreground text-caption">
             <li>{lossLine(from, chosen)}</li>
             <li>{gainLine(chosen)}</li>
             <li>{`Its agents keep running, now in ${chosen.name}.`}</li>

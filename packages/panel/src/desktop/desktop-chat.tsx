@@ -83,6 +83,7 @@ import { AgentCard, lineSubject } from "../tasks/agent-ref.js";
 import { useChatActor, useChatNames } from "../tasks/chat-actors.js";
 import { channelTitle } from "../tasks/chat-channel-name.js";
 import { CHAT_STREAM, ChatPane, type ChatTaskDoors } from "../tasks/chat-pane.js";
+import { HOME_ROW_META } from "../tasks/home-row.js";
 import type { InboxCodeDoors } from "../tasks/inbox-code-card.js";
 import { VIEW_OPTIONS } from "../tasks/inbox-columns.js";
 import { INBOX_ROW_ATTENTION, INBOX_ROW_MARK } from "../tasks/inbox-item-parts.js";
@@ -726,7 +727,7 @@ function PlaceRow({
         title={title}
         description={preview}
         meta={
-          <span className="home-row-meta">
+          <span className={HOME_ROW_META}>
             {unread ? <VisuallyHidden>{UNREAD_WORDS}</VisuallyHidden> : null}
             {needsYou ? (
               <span className={INBOX_ROW_ATTENTION}>

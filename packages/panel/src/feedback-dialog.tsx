@@ -394,7 +394,10 @@ export function FeedbackDialog({
             onClick={() => void send()}
           >
             Send
-            <Shortcut chord={SEND_CHORD} className="button-chord" />
+            <Shortcut
+              chord={SEND_CHORD}
+              className="button-chord ms-icon-gap [--luke-shortcut-ink:var(--luke-color-on-accent-muted)]"
+            />
           </Button>
         </>
       }
