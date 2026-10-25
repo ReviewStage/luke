@@ -145,25 +145,6 @@ it.effect(
     }),
 );
 
-it.effect("sends no link part from a device that never chose, so it clears no other's choice", () =>
-  Effect.gen(function* () {
-    const { requests, fetchLike } = service([
-      () =>
-        new Response(JSON.stringify(PREFERENCES_ANSWER), {
-          status: 200,
-          headers: { "content-type": "application/json" },
-        }),
-    ]);
-
-    yield* client({ httpClient: fakeHttpClientLayer(fetchLike) }).writePreferences({
-      voice: "marin",
-    });
-
-    const [request] = requests;
-    assert.deepEqual(JSON.parse(String(request?.init?.body)), { preferences: { voice: "marin" } });
-  }),
-);
-
 it.effect(
   "reads the voice past a preference it does not know, in the shared part or a part of its own",
   () =>

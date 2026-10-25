@@ -2,7 +2,8 @@
  * banners.tsx -- a notice in each look: a strip across a column in the
  * attention tone, a card over a document in either tone, and a quiet row in
  * its place's frame; then each in a narrow column, where the presses drop
- * beneath the words.
+ * beneath the words; and a strip whose words its column cuts short, fading
+ * out at their end.
  */
 
 import {
@@ -72,6 +73,19 @@ function Banners(): React.JSX.Element {
       <CatalogSection id="banner-narrow" title="Narrow column">
         <div className="catalog-narrow">
           <Looks />
+        </div>
+      </CatalogSection>
+      <CatalogSection id="banner-cut" title="A strip's words cut short">
+        <div className="catalog-strip-room">
+          <Banner
+            look={BANNER_LOOK.STRIP}
+            tone={STATUS_TONE.ATTENTION}
+            glyph={<AlertIcon />}
+            actions={<Button variant={BUTTON_VARIANT.OUTLINE}>Move to Acme</Button>}
+          >
+            This plan's repository, acme/relay, belongs to the Acme workspace, which this account
+            cannot push to.
+          </Banner>
         </div>
       </CatalogSection>
     </>

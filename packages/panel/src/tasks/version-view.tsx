@@ -59,6 +59,9 @@ import { HISTORY_READ, type PlanHistoryControl, type ViewedVersion } from "./use
  * versions, when the version was saved, and a ⋯ holding its restore.
  */
 
+/** A line over a version: what it is compared with, or why it is not drawn, in the body's muted type a group's gap over the version. */
+const VERSION_NOTE = "version-note mt-0 mb-section-gap text-body text-muted-foreground";
+
 /** What the view says over a version that changed nothing from the one before it. */
 const NO_CHANGE_LINE = "This version changed nothing from the one before it.";
 
@@ -215,7 +218,7 @@ function VersionContent({
     return <VersionSkeleton title={title} section={section} />;
   if (read.kind === HISTORY_READ.FAILED) {
     return (
-      <div className="version-note">
+      <div className={VERSION_NOTE}>
         <ErrorState onRetry={onRetry}>{VERSION_FAILED}</ErrorState>
       </div>
     );
@@ -225,7 +228,7 @@ function VersionContent({
   const unchanged = read.previous !== null && !diff.changed;
   return (
     <>
-      {unchanged ? <p className="version-note">{NO_CHANGE_LINE}</p> : null}
+      {unchanged ? <p className={VERSION_NOTE}>{NO_CHANGE_LINE}</p> : null}
       {task === undefined ? (
         <VersionBody diff={diff} title={title} section={section} task={task} />
       ) : (
@@ -333,7 +336,7 @@ function VersionPageFrame({
       ) : (
         <PhoneHead place="version" start={lead} title={titled} end={more} />
       )}
-      <Fill className="desktop-document">
+      <Fill className="desktop-document @container/plan-document">
         <DocumentScroll>{children}</DocumentScroll>
       </Fill>
     </>

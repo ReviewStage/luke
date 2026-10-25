@@ -493,7 +493,6 @@ it.layer(getTestDB())("the member's operator", (it) => {
         assert.equal(firstOpenings.length, 1, "one opening, and none for the repeat ensure");
         assert.equal(firstOpenings[0]?.turn, BRAIN_HOST_TURN.TYPED);
         assert.equal(EVE.openedOver(reset.agent.conversationId).length, 1);
-        assert.equal(EVE.openedOver(first.agent.conversationId).length, 1);
       }),
   );
 

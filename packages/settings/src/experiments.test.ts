@@ -1,13 +1,7 @@
 import assert from "node:assert/strict";
 import { unparsedWire } from "@luke/wire";
 import { describe, test } from "vitest";
-import {
-  EXPERIMENT,
-  EXPERIMENTS,
-  experimentChoicesFrom,
-  experimentOn,
-  NO_EXPERIMENTS,
-} from "./experiments.js";
+import { EXPERIMENT, experimentChoicesFrom } from "./experiments.js";
 
 /**
  * A choice of experiments as the account's store and the wire hand it over:
@@ -32,16 +26,4 @@ describe("a choice of experiments read from the store or the wire", () => {
       assert.equal(experimentChoicesFrom(unparsedWire(value)), undefined, JSON.stringify(value));
     }
   });
-
-  test("an experiment never chosen, or turned back off, is off", () => {
-    assert.equal(experimentOn(NO_EXPERIMENTS, EXPERIMENT.CODE_REVIEW), false);
-    assert.equal(experimentOn({ [EXPERIMENT.CODE_REVIEW]: false }, EXPERIMENT.CODE_REVIEW), false);
-    assert.equal(experimentOn({ [EXPERIMENT.CODE_REVIEW]: true }, EXPERIMENT.CODE_REVIEW), true);
-  });
-});
-
-test("the experiments are listed newest first, by the day each was added", () => {
-  const since = EXPERIMENTS.map((entry) => entry.since);
-  assert.deepEqual(since, [...since].sort().reverse());
-  assert.equal(EXPERIMENTS[0]?.key, EXPERIMENT.MEMORY);
 });

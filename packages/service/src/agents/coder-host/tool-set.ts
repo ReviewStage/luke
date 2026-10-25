@@ -43,9 +43,7 @@ import { BRAIN_HOST_TURN, type BrainHostTurn } from "../brain-host/bounds.js";
 /**
  * The tools the coding agent is offered, by the name eve mounts each under:
  * the coder's in the registry (`../agent-runtime/tools.ts`), named here for
- * the callers that pick one out. Its test holds this to the registry's role,
- * and `../agent-runtime/coder-tool-files.test.ts` the files under
- * `apps/dev/tools/` to this.
+ * the callers that pick one out. Its test holds this to the registry's role.
  */
 export const CODER_TOOL = {
   BASH: AGENT_TOOL.BASH,

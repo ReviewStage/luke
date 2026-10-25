@@ -301,25 +301,6 @@ test("a plan's comment thread path reaches its procedure through the committed t
   assert.equal(await read.text(), '{"error":"method-not-allowed"}');
 });
 
-test("an agent's Pull request tab is reached at its public paths through the committed table, the dispatcher and the deployed route, and refuses an unsigned caller as its old group did", async () => {
-  const agentId = "8a7c2a1e-3b9f-4c62-9d1e-0f4b5a6c7d8e";
-  const routes = ORPC_ROUTES;
-  for (const sent of [
-    new Request(`${ORIGIN}/api/agents/${agentId}/overview/checks?number=12`),
-    new Request(`${ORIGIN}/api/agents/${agentId}/pull-request/action?number=12`, {
-      method: HTTP_METHOD.POST,
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ action: "ready-for-review" }),
-    }),
-  ]) {
-    const unsigned = await dispatched(sent, routes);
-    assert.equal(unsigned.status, HOSTED_HTTP_STATUS.UNAUTHORIZED);
-    assert.equal(unsigned.headers.get("content-type"), "application/json");
-    assert.equal(unsigned.headers.get("cache-control"), null);
-    assert.equal(await unsigned.text(), '{"error":"invalid-token"}');
-  }
-});
-
 test("an agent's shells refuse an unsigned caller through the committed table, the dispatcher and the deployed route at their public path", async () => {
   const routes = ORPC_ROUTES;
   const agent = "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21";

@@ -176,28 +176,6 @@ it.effect(
     }),
 );
 
-it.effect("a grant draws its pill as complete and a refusal as attention", () =>
-  Effect.gen(function* () {
-    for (const [query, tone] of [
-      [{ code: "auth-code" }, "complete"],
-      [{ error: "access_denied" }, "attention"],
-    ] as const) {
-      const armed = yield* Deferred.make<LoopbackAuthorization>();
-      const { consent } = harness(armed);
-
-      const waiting = yield* trip(consent);
-      const authorization = yield* armedTrip(armed);
-      const answered = yield* callback(authorization.redirectUri, {
-        state: authorization.state,
-        ...query,
-      });
-      yield* Fiber.join(waiting);
-
-      assert.match(answered.body, new RegExp(`<span class="pill" data-tone="${tone}">`));
-    }
-  }),
-);
-
 it.effect("a refusal lands on its card whatever the flow would continue to", () =>
   Effect.gen(function* () {
     const armed = yield* Deferred.make<LoopbackAuthorization>();

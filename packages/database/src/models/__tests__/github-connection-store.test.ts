@@ -78,31 +78,26 @@ const linkProvider = (
   );
 
 it.layer(getTestDB())("the GitHub connection store", (it) => {
-  it.effect(
-    "an intent is claimed by its own account as often as asked, never by another, and expires after ten minutes",
-    () =>
-      Effect.gen(function* () {
-        const { owner, other } = yield* openAccounts;
-        const intent = yield* openGitHubConnectIntent(owner);
+  it.effect("an intent is claimed by its own account as often as asked, never by another", () =>
+    Effect.gen(function* () {
+      const { owner, other } = yield* openAccounts;
+      const intent = yield* openGitHubConnectIntent(owner);
 
-        assert.equal(
-          yield* claimGitHubConnectIntent(intent, other),
-          GITHUB_CONNECT_CLAIM.OTHER_ACCOUNT,
-        );
-        assert.equal(yield* claimGitHubConnectIntent(intent, owner), GITHUB_CONNECT_CLAIM.CLAIMED);
-        assert.equal(yield* claimGitHubConnectIntent(intent, owner), GITHUB_CONNECT_CLAIM.CLAIMED);
-        assert.equal(
-          yield* claimGitHubConnectIntent(intent, other),
-          GITHUB_CONNECT_CLAIM.OTHER_ACCOUNT,
-        );
-        assert.equal(
-          yield* claimGitHubConnectIntent("never-minted", owner),
-          GITHUB_CONNECT_CLAIM.EXPIRED,
-        );
-
-        yield* TestClock.adjust(GITHUB_CONNECT_INTENT_LIFETIME);
-        assert.equal(yield* claimGitHubConnectIntent(intent, owner), GITHUB_CONNECT_CLAIM.EXPIRED);
-      }),
+      assert.equal(
+        yield* claimGitHubConnectIntent(intent, other),
+        GITHUB_CONNECT_CLAIM.OTHER_ACCOUNT,
+      );
+      assert.equal(yield* claimGitHubConnectIntent(intent, owner), GITHUB_CONNECT_CLAIM.CLAIMED);
+      assert.equal(yield* claimGitHubConnectIntent(intent, owner), GITHUB_CONNECT_CLAIM.CLAIMED);
+      assert.equal(
+        yield* claimGitHubConnectIntent(intent, other),
+        GITHUB_CONNECT_CLAIM.OTHER_ACCOUNT,
+      );
+      assert.equal(
+        yield* claimGitHubConnectIntent("never-minted", owner),
+        GITHUB_CONNECT_CLAIM.EXPIRED,
+      );
+    }),
   );
 
   it.effect("an intent stands for ten minutes and no longer", () =>

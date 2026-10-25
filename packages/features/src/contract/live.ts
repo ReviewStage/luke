@@ -30,7 +30,11 @@
 import { HTTP_METHOD } from "@luke/wire";
 import { openapi } from "@orpc/openapi";
 import { Schema as EffectSchema } from "effect";
-import { automationRunsLiveAnswerSchema, automationsLiveAnswerSchema } from "../automation-live.js";
+import {
+  automationRunsLiveAnswerSchema,
+  automationsLiveAnswerSchema,
+  automationWorkspaceRunsLiveAnswerSchema,
+} from "../automation-live.js";
 import {
   accountInboxLiveAnswerSchema,
   agentTranscriptLiveAnswerSchema,
@@ -164,6 +168,15 @@ export const liveContract = {
       }),
     )
     .output(EffectSchema.flip(automationsLiveAnswerSchema)),
+  automationWorkspaceRuns: hostedProcedure
+    .meta(
+      openapi({
+        method: HTTP_METHOD.GET,
+        path: HOSTED_SERVICE_PATH.LIVE_AUTOMATION_WORKSPACE_RUNS,
+      }),
+    )
+    .input(liveWorkspaceSchema)
+    .output(EffectSchema.flip(automationWorkspaceRunsLiveAnswerSchema)),
   automationRuns: hostedProcedure
     .meta(openapi({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.LIVE_AUTOMATION_RUNS }))
     .input(liveTaskSchema)
