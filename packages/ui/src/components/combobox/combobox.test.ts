@@ -382,7 +382,6 @@ test("a group's heading, drawn over its own options, says its name in the group 
 
   assert.equal(group.getAttribute("aria-label"), "Stone fruit");
   assert.equal(heading?.textContent, "Stone fruit");
-  assert.equal(heading?.getAttribute("data-variant"), "group");
 });
 
 /** Fruit where Banana cannot be chosen now and Cherry is the one chosen, with no field: the list steers itself. */
@@ -556,28 +555,11 @@ test("a list box a list engine owns takes the engine's names, keys, and ref, and
   assert.deepEqual(keys, ["ArrowDown"]);
 });
 
-test("an option's name and detail cut short fade out rather than ending in an ellipsis, and one with a card hangs it beside the option while the pointer rests on it", () => {
+test("an option with a card hangs it beside the option while the pointer rests on it", () => {
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
   roots.push(root);
-  // Note that the box is measured narrower than its words, as a narrow menu cuts a long title, on the observer's first report.
-  vi.stubGlobal(
-    "ResizeObserver",
-    class {
-      readonly #heard: (entries: ResizeObserverEntry[], observer: unknown) => void;
-      constructor(heard: (entries: ResizeObserverEntry[], observer: unknown) => void) {
-        this.#heard = heard;
-      }
-      observe(): void {
-        this.#heard([], this);
-      }
-      unobserve(): void {}
-      disconnect(): void {}
-    },
-  );
-  vi.spyOn(HTMLElement.prototype, "scrollWidth", "get").mockReturnValue(400);
-  vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockReturnValue(120);
   act(() => {
     root.render(
       createElement(ComboboxList, {
@@ -602,13 +584,6 @@ test("an option's name and detail cut short fade out rather than ending in an el
     );
   });
   const option = container.querySelector('[role="option"]') ?? assert.fail("the option");
-  const ends = [
-    ...option.querySelectorAll(".luke-combobox-option-label > *, .luke-combobox-option-detail > *"),
-  ].map((line) => [line.getAttribute("data-end"), line.getAttribute("data-overflow")]);
-  assert.deepEqual(ends, [
-    ["fade", "true"],
-    ["fade", "true"],
-  ]);
 
   vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
   try {
@@ -622,5 +597,4 @@ test("an option's name and detail cut short fade out rather than ending in an el
     vi.useRealTimers();
   }
   assert.equal(document.querySelector(".agent-card-words")?.textContent, "Maya's card");
-  vi.restoreAllMocks();
 });

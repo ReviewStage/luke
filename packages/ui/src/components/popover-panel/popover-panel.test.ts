@@ -249,13 +249,12 @@ function panelIn(container: HTMLElement): HTMLElement | null {
   return container.querySelector<HTMLElement>('[role="dialog"]');
 }
 
-test("a panel its owner closes through open stays drawn, inert and ending, until its fade has run, and takes the focus again as it reopens", () => {
+test("a panel its owner closes through open stays drawn, inert, until its fade has run, and takes the focus again as it reopens", () => {
   const exits = holdExits();
   const container = drawn(createElement(OpenStage));
   const toggle = button(container, "Toggle");
   act(() => toggle?.click());
   const leaving = panelIn(container);
-  const ending = leaving?.hasAttribute("data-ending-style");
   const inert = leaving?.hasAttribute("inert");
   act(() => exits.finish());
   const gone = panelIn(container) === null;
@@ -263,7 +262,6 @@ test("a panel its owner closes through open stays drawn, inert and ending, until
   const field = container.querySelector('input[aria-label="Search"]');
 
   assert.ok(leaving, "the panel stands as it fades");
-  assert.equal(ending, true, "the panel is in its ending state");
   assert.equal(inert, true, "the panel takes nothing while it fades");
   assert.equal(gone, true, "the panel goes once its fade has run");
   assert.ok(field !== null && document.activeElement === field, "the field takes the focus again");

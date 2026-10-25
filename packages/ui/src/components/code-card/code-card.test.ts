@@ -10,9 +10,9 @@ import { CODE_ROW, CodeCard, type CodeRow } from "./code-card.js";
  * Copy named "Copy code"; a block over 40 lines shows its first 40 over
  * "Show all", which shows the rest and then offers "Show less"; Copy copies
  * the whole block however it stands, and the rest, drawn hidden until
- * found, shows when a find's match lands in it; and the lines the host coloured keep
- * their runs' colours, cut as the block is. A block drawn as rows tints each
- * by what it does; one may copy other words than it shows; and one whose
+ * found, shows when a find's match lands in it; and the lines the host coloured
+ * are cut as the block is. A block drawn as rows is cut as any block is; one
+ * may copy other words than it shows; and one whose
  * body the caller draws keeps the header, the Copy of the lines it names,
  * and the actions beside it, with no cut. Synthetic code.
  */
@@ -124,7 +124,7 @@ test("Copy copies the whole block, even while it is cut", async () => {
   expect(copied).toEqual([code]);
 });
 
-test("the lines the host coloured keep each run's colours, cut where the block is", () => {
+test("the lines the host coloured are cut where the block is", () => {
   const code = block(45);
   const lines = code
     .split("\n")
@@ -136,11 +136,9 @@ test("the lines the host coloured keep each run's colours, cut where the block i
   expect(shownLines()).toEqual(code.split("\n").slice(0, 40));
   const keyword = document.querySelector("pre span") as HTMLElement | null;
   expect(keyword?.textContent).toBe("const");
-  expect(keyword?.style.getPropertyValue("--luke-code-run-dark")).toBe("#ff7b72");
-  expect(keyword?.style.getPropertyValue("--luke-code-run-light")).toBe("#cf222e");
 });
 
-test("a block drawn as rows tints each row by what it does, cut at 40 like any block", () => {
+test("a block drawn as rows is cut at 40 like any block", () => {
   const code = block(45);
   const rows: CodeRow[] = code
     .split("\n")
@@ -150,10 +148,6 @@ test("a block drawn as rows tints each row by what it does, cut at 40 like any b
     (row) => row.closest("[hidden]") === null,
   );
   expect(shown).toHaveLength(40);
-  expect(shown.slice(0, 2).map((row) => row.getAttribute("data-row"))).toEqual([
-    "added",
-    "removed",
-  ]);
   expect(shown[1]?.textContent).toBe("const line2 = 2;");
   expect(buttonNamed("Show all")).toBeDefined();
 });

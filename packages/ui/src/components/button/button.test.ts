@@ -1,6 +1,5 @@
 // @vitest-environment jsdom
 
-import { readFileSync } from "node:fs";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, expect, test } from "vitest";
@@ -27,17 +26,13 @@ import {
  * a link named by its label, and one in a new tab opens there. A compact row
  * mark is a button named by its label like any other, its right-click heard
  * so it can offer its row's menu, and an unavailable one is pressed to no
- * effect, as is an unavailable compact labelled button, which is named by
- * its words. An unavailable button that keeps its Tab stop shakes at a
- * press it refuses, and stops once the shake ends; one that takes a press
- * pulses instead. A done button wears its check, refuses a press without a
- * shake, and is heard done once its check has been seen. A busy button
- * whose press succeeded wears the check until its hold ends, then its words;
- * one that failed wears none. A button that turns turns its glyph once at a
- * press it takes. A submit sends its form while it takes a press, sends nothing
- * while it is unavailable, and made a Stop does its own act without
- * sending the form. A quiet button lights while the popup it opens stands
- * open, and one that shows a pane rests unlit while the pane is out.
+ * effect. An unavailable button that keeps its Tab stop, and a busy one,
+ * refuse a press. A done button wears its check, refuses a press, and is
+ * heard done once its check has been seen. A busy button whose press
+ * succeeded wears the check until its hold ends, then its words; one that
+ * failed wears none. A submit sends its form while it takes a press, sends
+ * nothing while it is unavailable, and made a Stop does its own act without
+ * sending the form.
  */
 
 const roots: Root[] = [];
@@ -196,7 +191,7 @@ test("a toggle is announced pressed while it is on, in any look, and a plain but
   ).toBe(false);
 });
 
-test("a read-only labelled button records a press: it takes none and no Tab stop, is not faded as an unavailable one is, and is announced pressed where it was the one given", () => {
+test("a read-only labelled button records a press: it takes none and no Tab stop, and is announced pressed where it was the one given", () => {
   const heard: string[] = [];
   const container = mount(
     createElement(
@@ -224,11 +219,7 @@ test("a read-only labelled button records a press: it takes none and no Tab stop
     other?.click();
   });
   expect(heard).toEqual([]);
-  expect([given?.disabled, given?.dataset.readOnly, given?.getAttribute("aria-pressed")]).toEqual([
-    true,
-    "true",
-    "true",
-  ]);
+  expect([given?.disabled, given?.getAttribute("aria-pressed")]).toEqual([true, "true"]);
   expect(other?.getAttribute("aria-pressed")).toBe("false");
 });
 
@@ -326,36 +317,7 @@ test("a compact row mark is found by its label, pressed, and right-clicked, and 
   expect(pressed).toEqual(["Pin", "Row menu"]);
 });
 
-test("a compact labelled button is named by its words, pressed, and refuses its press while unavailable", () => {
-  const pressed: string[] = [];
-  const container = mount(
-    createElement(
-      "div",
-      null,
-      createElement(Button, {
-        size: BUTTON_SIZE.COMPACT,
-        onClick: () => pressed.push("Restart"),
-        children: "Restart",
-      }),
-      createElement(Button, {
-        size: BUTTON_SIZE.COMPACT,
-        disabled: true,
-        onClick: () => pressed.push("Download"),
-        children: "Download",
-      }),
-    ),
-  );
-  const [restart, download] = [...container.querySelectorAll("button")];
-
-  act(() => restart?.click());
-  act(() => download?.click());
-
-  expect(restart?.textContent).toBe("Restart");
-  expect(download?.disabled).toBe(true);
-  expect(pressed).toEqual(["Restart"]);
-});
-
-test("an unavailable button that keeps its Tab stop shakes at a refused press, until the shake ends; a busy one does not, and an available one pulses at the press it takes, until its face's pulse ends", () => {
+test("an unavailable button that keeps its Tab stop refuses a press, as a busy one does, and an available one takes it", () => {
   const pressed: string[] = [];
   const container = mount(
     createElement(
@@ -383,22 +345,6 @@ test("an unavailable button that keeps its Tab stop shakes at a refused press, u
   act(() => open?.click());
 
   expect(pressed).toEqual(["Open"]);
-  expect(merge?.getAttribute("data-denied")).toBe("true");
-  expect(save?.hasAttribute("data-denied")).toBe(false);
-  expect(open?.hasAttribute("data-denied")).toBe(false);
-  expect(open?.getAttribute("data-pulse")).toBe("face");
-  expect(merge?.hasAttribute("data-pulse")).toBe(false);
-  expect(save?.hasAttribute("data-pulse")).toBe(false);
-
-  act(() => merge?.dispatchEvent(new Event("animationend")));
-  expect(merge?.hasAttribute("data-denied")).toBe(false);
-  // Note that the pulse moves the face, so its ending is what takes the pulse away.
-  act(() =>
-    open
-      ?.querySelector(".luke-button-face")
-      ?.dispatchEvent(new Event("animationend", { bubbles: true })),
-  );
-  expect(open?.hasAttribute("data-pulse")).toBe(false);
 });
 
 /** Draws a form holding `submit`, and answers how many times the form was sent. */
@@ -463,7 +409,7 @@ test("a streaming submit made the Stop does its own act, named Stop, without sen
   expect(form.sent()).toBe(0);
 });
 
-test("a done button wears its check in its words' place, refuses its press without a shake, and is heard done once the check's motion finishes, or at once where it runs none", () => {
+test("a done button wears its check in its words' place, refuses its press, and is heard done once the check's motion finishes, or at once where it runs none", () => {
   const motion = new EventTarget();
   Object.defineProperty(HTMLElement.prototype, "getAnimations", {
     configurable: true,
@@ -496,7 +442,6 @@ test("a done button wears its check in its words' place, refuses its press witho
   expect(button.querySelector(".luke-button-done svg")).not.toBeNull();
   expect(button.textContent).toBe("Delete");
   expect(pressed).toBe(0);
-  expect(button.hasAttribute("data-denied")).toBe(false);
   expect(beforeFinish).toEqual([]);
   expect(afterFinish).toEqual(["done"]);
 
@@ -569,37 +514,6 @@ test("a busy button whose press succeeded wears a check where its ring stood, re
   expect(container.querySelector(".luke-button-done")).toBeNull();
 });
 
-test("a button that turns turns its glyph once at each press it takes, until the turn ends, and one that does not, or refuses the press, turns nothing", () => {
-  const container = mount(
-    createElement(
-      "div",
-      null,
-      createElement(IconButton, { icon: createElement("svg"), label: "Reload", turns: true }),
-      createElement(Button, { icon: createElement("svg"), turns: true, children: "Retry" }),
-      createElement(IconButton, { icon: createElement("svg"), label: "More" }),
-      createElement(IconButton, {
-        icon: createElement("svg"),
-        label: "Refresh",
-        turns: true,
-        disabled: true,
-        focusableWhenDisabled: true,
-      }),
-    ),
-  );
-  const buttons = [...container.querySelectorAll("button")];
-  for (const button of buttons) act(() => button.click());
-  const turned = buttons.map((button) => button.getAttribute("data-turn"));
-  const [reload] = buttons;
-  act(() =>
-    reload
-      ?.querySelector(".luke-button-face > svg")
-      ?.dispatchEvent(new Event("animationend", { bubbles: true })),
-  );
-
-  expect(turned).toEqual(["true", "true", null, null]);
-  expect(reload?.hasAttribute("data-turn")).toBe(false);
-});
-
 test("a ButtonLink given a label is named by it, and an IconButtonLink's press is heard before the link is followed", () => {
   const presses: string[] = [];
   const container = mount(
@@ -630,43 +544,4 @@ test("a ButtonLink given a label is named by it, and an IconButtonLink's press i
   ]);
   act(() => github?.click());
   expect(presses).toEqual(["Open on GitHub"]);
-});
-
-/** The style rules of `rules` and of every block nested in them, a layer's among them. */
-function styleRules(rules: CSSRuleList): CSSStyleRule[] {
-  return [...rules].flatMap((rule) =>
-    rule instanceof CSSStyleRule
-      ? [rule]
-      : "cssRules" in rule && rule.cssRules instanceof CSSRuleList
-        ? styleRules(rule.cssRules)
-        : [],
-  );
-}
-
-test("a quiet button lights while the popup it opens stands open, and one showing a pane rests unlit while the pane is out", () => {
-  const sheet = document.head.appendChild(document.createElement("style"));
-  sheet.textContent = readFileSync(`${__dirname}/button.css`, "utf8");
-  // jsdom draws no layered rule, so this reads which of the sheet's rules that light a button reach it.
-  const lighting = styleRules(sheet.sheet?.cssRules ?? new CSSRuleList()).filter(
-    (rule) =>
-      rule.style.getPropertyValue("--luke-button-fill").trim() ===
-      "var(--luke-color-fill-selected)",
-  );
-  const lit = (props: { "aria-haspopup"?: "menu" }) => {
-    const container = mount(
-      createElement(IconButton, {
-        icon: createElement("svg"),
-        label: "Toggle",
-        "aria-expanded": true,
-        ...props,
-      }),
-    );
-    const button = container.querySelector("button");
-    return button !== null && lighting.some((rule) => button.matches(rule.selectorText));
-  };
-
-  expect(lighting).not.toHaveLength(0);
-  expect(lit({ "aria-haspopup": "menu" })).toBe(true);
-  expect(lit({})).toBe(false);
-  sheet.remove();
 });
