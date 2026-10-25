@@ -1375,26 +1375,6 @@ ul.actor-stack {
   z-index: calc(var(--luke-z-dialog) + 1);
 }
 
-/* Each a line naming an actor (`.actor-line`), whose spaces it keeps,
-   wrapping between its words and names rather than cutting a name short.
-   It clips past the ring an actor's hover fill bleeds by, so the ring is
-   drawn whole. */
-.task-menu-note {
-  flex-wrap: wrap;
-  margin: 0;
-  overflow: clip;
-  overflow-clip-margin: var(--luke-focus-ring-room);
-}
-
-.account-menu-name {
-  color: var(--luke-color-text);
-  font-weight: var(--luke-weight-semibold);
-}
-
-.account-menu-email {
-  color: var(--luke-color-text-muted);
-}
-
 /* Empty and waiting states ---------------------------------------------- */
 
 /* A pane that scrolls a list lays its empty state out as a column the state
@@ -1407,24 +1387,6 @@ ul.actor-stack {
   flex-direction: column;
 }
 
-/* Something wanting a hand (`attention-mark.tsx`): a white exclamation on a
-   disc of the attention orange, at a row glyph's size. */
-.attention-mark {
-  display: inline-grid;
-  width: 14px;
-  height: 14px;
-  flex: none;
-  place-items: center;
-  border-radius: 50%;
-  background: var(--luke-color-attention-fill);
-  color: var(--luke-color-on-attention);
-}
-
-.attention-mark svg {
-  width: 12px;
-  height: 12px;
-}
-
 /* A notice about the whole plan (`task-banner.tsx`), `@luke/ui`'s strip:
    the workspace it names reads at the line's own weight. */
 .task-banner-words .workspace-ref {
@@ -1434,18 +1396,6 @@ ul.actor-stack {
 }
 
 /* The document ------------------------------------------------------------- */
-
-/* The document's column answers its own width (`@container plan-document`
-   below), the room the summary's rail leaves it included. */
-.desktop-document {
-  container: plan-document / inline-size;
-}
-
-/* Laid out still, but not drawn, while an agent's tab is the column's
-   chosen one, so the plan is found where it was left. */
-.desktop-document[hidden] {
-  display: none;
-}
 
 /* An agent's or the draft's tab in the plan's column: its transcript, its
    docked to-do list, and its composer, each keeping to the document's
@@ -1519,20 +1469,6 @@ ul.actor-stack {
   padding: 0;
 }
 
-.edit-composer {
-  transform-origin: top right;
-  animation:
-    luke-menu-arrive var(--luke-duration-quick) var(--luke-motion-exit) both,
-    luke-card-grow var(--luke-duration-fast) var(--luke-spring-fast) both;
-}
-
-/* Let go, it shrinks back into the bubble's corner and fades before the bubble stands again. */
-.edit-composer[data-leaving] {
-  animation:
-    luke-menu-leave var(--luke-duration-exit) var(--luke-motion-exit) both,
-    luke-card-shrink var(--luke-duration-exit) var(--luke-motion-exit) both;
-}
-
 /* What a transcript opens on, the plan, an automation's prompt, or a
    worker's task, stands as a sent message does, at the right over the line
    naming who sent it and when, its card across the message's whole measure,
@@ -1550,50 +1486,6 @@ ul.actor-stack {
 .agent-origin > .luke-message-line > .luke-message-line-sender > .actor-words {
   flex-wrap: wrap;
   row-gap: var(--luke-list-gap);
-}
-
-/* A task named as the sender of its plan: its document glyph standing in a
-   16px mark's place, in the line's own quiet ink. */
-.agent-origin-glyph {
-  display: inline-grid;
-  flex: none;
-  place-items: center;
-  width: 16px;
-  height: 16px;
-  color: var(--luke-color-text-muted);
-}
-
-.agent-origin-glyph > svg {
-  width: 14px;
-  height: 14px;
-}
-
-/* The issue or pull request a run's event named, cut to the line. */
-.agent-origin-subject {
-  min-width: 0;
-  overflow: hidden;
-}
-
-/* Or its chip, as the transcript draws one, which cuts its own name to the
-   line: held to the line's width so a narrow line cuts the title, never the
-   state after it. */
-.agent-origin-chip {
-  display: inline-flex;
-  min-width: 0;
-  max-width: 100%;
-}
-
-/* A webhook call's body, folded inside the card under a line of its own: a
-   call's line in the muted ink, its hover fill bringing the full ink, and
-   the body as the caller sent it in a code card. */
-.agent-origin-body {
-  font-size: var(--luke-type-caption-size);
-}
-
-.agent-origin-body-icon {
-  width: 16px;
-  height: 16px;
-  flex-shrink: 0;
 }
 
 /* A teammate's call at its divider: their mark and name, then when it
@@ -1617,15 +1509,6 @@ ul.actor-stack {
    the words around it. */
 .plan-edit-note {
   flex-wrap: wrap;
-}
-
-/* A line over a version: what it is compared with, or why it is not drawn. */
-.version-note {
-  margin-top: 0;
-  margin-bottom: var(--luke-section-gap);
-  color: var(--luke-color-text-muted);
-  font-size: var(--luke-type-body-size);
-  line-height: var(--luke-type-body-leading);
 }
 
 /* A unit only one side holds is drawn whole: one written in on the green
@@ -1735,59 +1618,7 @@ ul.actor-stack {
 
 /* The call's room --------------------------------------------------------- */
 
-/* While a call into an agent stands, its tab's foot holds the call: Luke's
-   video in a room of its own between the transcript and the composer, which
-   the transcript ends above, so no word is ever drawn under the video. The
-   room goes as video goes off or the call ends. */
-.agent-call-foot {
-  position: relative;
-}
-
-/* The video's room: the video centred in it, as tall as the developer left
-   it (`use-call-video-size.ts`) and as wide as its own picture's aspect makes
-   that, never wider than the tab nor taller than two fifths of the stage, so
-   a short window keeps the transcript readable. */
-.agent-call-video {
-  display: flex;
-  justify-content: center;
-  padding: var(--luke-row-inset) var(--luke-space-16);
-}
-
-.agent-call-video-frame {
-  width: min(
-    100%,
-    calc(var(--call-video-height) * var(--call-video-aspect)),
-    calc(var(--luke-stage-height) * 0.4 * var(--call-video-aspect))
-  );
-  aspect-ratio: var(--call-video-aspect);
-}
-
 /* The repository chip ------------------------------------------------------ */
-
-.repository-chip {
-  position: relative;
-  min-width: 0;
-}
-
-/* The chip in the toolbar stands in the actions row beside Start, so it is
-   the toolbar chip (`chip.tsx`). Its box is the anchor its menu hangs from
-   (`@luke/ui`'s `SearchableMenu`), and draws nothing of its own, so a plan
-   whose chip is not drawn leaves no gap in the row while the menu is shut. */
-.repository-chip[data-place="toolbar"] {
-  display: flex;
-}
-
-.repository-chip[data-place="toolbar"]:empty {
-  display: none;
-}
-
-/* New task's Issue chip (`issue-picker-chip.tsx`) stands at the right end
-   of the dialog's head row, or after the repository chip in Home's card
-   foot, the box its menu hangs from. */
-.issue-picker-chip {
-  position: relative;
-  min-width: 0;
-}
 
 /* An integration whose brand publishes its one-colour mark in named inks
    wears them by the ground: Executor's and Notion's pure white on dark and
@@ -1822,117 +1653,15 @@ ul.actor-stack {
   color: var(--integration-ink-sentry);
 }
 
-.task-compose-menu-foot {
-  display: block;
-  flex: 0 0 auto;
-  padding: var(--luke-menu-inset);
-  border-top: 1px solid var(--luke-color-border);
-}
-
-/* An integration's tools (`integration-tool-list.tsx`), in the MCP
-   popover's server page and in Settings › Integrations alike: one list of
-   `@luke/ui`'s rows, each tool's title with its name after it in the code
-   face, muted, and its badge (`@luke/ui`'s Badge). The name gives way first
-   where the row is narrow, then the title, never the badge. */
-.integration-tool-name {
-  display: flex;
-  min-width: 0;
-  align-items: baseline;
-  gap: var(--luke-item-gap);
-}
-
-.integration-tool-title {
-  overflow: hidden;
-  flex: 0 1 auto;
-  white-space: nowrap;
-}
-
-/* A tool its server gave no title is called by its name, in the code face. */
-:is(.integration-tool-title, .integration-tool-detail-title).integration-tool-code {
-  font-family: var(--luke-font-mono);
-  font-size: var(--luke-type-caption-size);
-}
-
-.integration-tool-id {
-  overflow: hidden;
-  flex: 0 100 auto;
-  min-width: 0;
-  color: var(--luke-color-text-muted);
-  font-family: var(--luke-font-mono);
-  font-size: var(--luke-type-caption-size);
-  font-weight: var(--luke-weight-regular);
-  white-space: nowrap;
-}
-
-/* The badge keeps its words whole on one line, centred on the title's,
-   whose line is the badge's height, so a row with one stands no taller. */
-.integration-tool-name > .luke-badge {
-  flex: none;
-  align-self: center;
-}
-
-/* A tool's page: its head at a server page's head's height over a hairline,
-   the title in the head's weight and the name after it in the code face,
-   then one scroller holding its hints, what it does as rendered markdown,
-   selectable, and its parameters. A hint is a Badge, the danger tone for
-   Destructive. A parameter is its name and type in the code face, required in the
-   attention tint, and under them what it is, the values it takes as chips,
-   its default outlined; where the page is wide enough, the name and type
-   stand in a column of their own beside the rest. */
-.integration-tool-detail-head {
-  display: flex;
-  min-width: 0;
-  flex: 0 0 auto;
-  align-items: center;
-  gap: var(--luke-icon-gap);
-  height: var(--luke-pane-bar-height);
-  padding: 0 var(--luke-list-inset);
-  border-bottom: 1px solid var(--luke-color-border);
-}
-
+/* A tool's page reached from its server's list leads its head with the way
+   back, folded to its glyph (`integration-tool-list.tsx`). */
 .integration-tool-detail-head:has(.luke-button) {
   --luke-fold: folded;
   padding-left: var(--luke-item-gap);
 }
 
-.integration-tool-detail-title {
-  overflow: hidden;
-  flex: 0 1 auto;
-  margin: 0;
-  color: var(--luke-color-text);
-  font-size: var(--luke-type-section-size);
-  line-height: var(--luke-type-section-leading);
-  font-weight: var(--luke-weight-semibold);
-  white-space: nowrap;
-}
-
-.integration-tool-detail-name {
-  overflow: hidden;
-  flex: 0 100 auto;
-  min-width: 0;
-  color: var(--luke-color-text-muted);
-  font-family: var(--luke-font-mono);
-  font-size: var(--luke-type-caption-size);
-  white-space: nowrap;
-  user-select: text;
-}
-
-/* A tool's page, inside the `ScrollArea` that scrolls it and takes the focus. */
-.integration-tool-detail-body {
-  display: flex;
-  flex-direction: column;
-  gap: var(--luke-block-gap);
-  padding: var(--luke-row-inset) var(--luke-list-inset) var(--luke-list-inset);
-}
-
-.integration-tool-description-whole {
-  color: var(--luke-color-text-muted);
-  font-size: var(--luke-type-caption-size);
-  line-height: 1.5;
-  user-select: text;
-  cursor: text;
-}
-
+/* What a tool does, rendered as markdown: its emphasis, headings, and code
+   in the full ink, its headings at the words' own size. */
 .integration-tool-description-whole :is(strong, .luke-markdown-heading, code) {
   color: var(--luke-color-text);
 }
@@ -1940,102 +1669,6 @@ ul.actor-stack {
 .integration-tool-description-whole .luke-markdown-heading {
   margin-top: 0.9em;
   font-size: 1em;
-}
-
-.integration-tool-parameters {
-  container-type: inline-size;
-}
-
-.integration-tool-section {
-  display: flex;
-  align-items: baseline;
-  gap: var(--luke-item-gap);
-  margin: 0 0 var(--luke-tight-gap);
-}
-
-.integration-tool-section-count {
-  font-variant-numeric: tabular-nums;
-}
-
-.integration-tool-parameter-list {
-  display: flex;
-  flex-direction: column;
-  margin: 0;
-}
-
-.integration-tool-parameter {
-  display: flex;
-  flex-direction: column;
-  gap: var(--luke-list-gap);
-  padding: var(--luke-item-gap) 0;
-  border-top: 1px solid var(--luke-color-border);
-}
-
-.integration-tool-parameter-head {
-  display: flex;
-  min-width: 0;
-  flex-wrap: wrap;
-  align-items: baseline;
-  column-gap: var(--luke-item-gap);
-}
-
-.integration-tool-parameter-name {
-  color: var(--luke-color-text);
-  font-family: var(--luke-font-mono);
-  font-size: var(--luke-type-caption-size);
-  overflow-wrap: anywhere;
-  user-select: text;
-}
-
-.integration-tool-parameter-type {
-  color: var(--luke-color-text-muted);
-  font-family: var(--luke-font-mono);
-  font-size: var(--luke-type-caption-size);
-}
-
-.integration-tool-parameter-required {
-  margin-left: auto;
-  color: var(--luke-color-attention);
-  font-size: var(--luke-type-caption-size);
-  font-weight: var(--luke-weight-semibold);
-}
-
-.integration-tool-parameter-body {
-  display: flex;
-  flex-direction: column;
-  gap: var(--luke-tight-gap);
-  margin: 0;
-  color: var(--luke-color-text-muted);
-  font-size: var(--luke-type-caption-size);
-  line-height: var(--luke-type-caption-leading);
-  user-select: text;
-}
-
-.integration-tool-parameter-description code {
-  color: var(--luke-color-text);
-}
-
-.integration-tool-parameter-values {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: var(--luke-tight-gap);
-  color: var(--luke-color-text-muted);
-}
-
-.integration-tool-parameter-values code {
-  padding: 0 var(--luke-tight-gap);
-  border-radius: var(--luke-radius-6);
-  background: var(--luke-color-fill-strong);
-  color: var(--luke-color-text-muted);
-  font-family: var(--luke-font-mono);
-  font-size: var(--luke-type-caption-size);
-  line-height: var(--luke-type-caption-leading);
-}
-
-.integration-tool-parameter-values code[data-default="true"] {
-  box-shadow: inset 0 0 0 1px var(--luke-color-border-strong);
-  color: var(--luke-color-text);
 }
 
 /* off-scale: 440px, where a tool parameter's name and values fit side by side */
@@ -3448,6 +3081,22 @@ ul.actor-stack {
   margin-top: var(--luke-tight-gap);
 }
 
+/* A root's thread stands in a slot of its own after the message, so its open
+   box outlives the message turning from continued to named (`ThreadRow`): it
+   lines up under the words, in the words' column of a continued message, and
+   under a named one's comment past its face, as it stood inside them. */
+.chat-message > .chat-thread {
+  grid-column: 2;
+  margin-top: calc(var(--luke-tight-gap) + var(--luke-list-gap));
+}
+
+/* Note that a named message's words stand past its comment's face, a list
+   row's disc (`AVATAR_SIZE.ROW`, `--luke-space-20`), and the gap after it. */
+.chat-message > .luke-comment ~ .chat-thread {
+  grid-column: 1 / -1;
+  padding-inline-start: calc(var(--luke-space-20) + var(--luke-icon-gap));
+}
+
 /* A folded thread's press follows its repliers' faces, each hanging its
    card, and says how many replied, as a plan comment's thread at rest is
    summed up. */
@@ -3623,17 +3272,10 @@ ul.actor-stack {
 
 /* Find in a tab --------------------------------------------------------- */
 
-/* The tab a find searches holds its bar at its top right, over what it
-   shows, as a browser's find bar stands over the page. It answers its own
-   width, so a column too narrow for the bar's own width spans the bar
-   across it, inset alike at both sides, and the field takes what the
-   buttons leave it. A scope that names a container of its own lists
-   `find-scope` among its names, as `.side-panel-content` does. */
-.find-scope {
-  position: relative;
-  container: find-scope / inline-size;
-}
-
+/* The tab a find searches holds its bar at its top right (`find-in-tab.tsx`),
+   as a browser's find bar stands over the page. It answers its own width, so
+   a column too narrow for the bar's own width spans the bar across it, inset
+   alike at both sides, and the field takes what the buttons leave it. */
 /* off-scale: 400px, where the column is too narrow for the find bar's own width */
 @container find-scope (width < 400px) {
   .find-scope > .find-bar {
@@ -3663,17 +3305,6 @@ ul.actor-stack {
   top: calc(var(--desktop-bar-height) + var(--luke-space-8));
 }
 
-/* Home has no toolbar, so its bar stands at the page's top, clear of the
-   greeting and its New task. */
-/* The bar floats on the menu's surface (`MenuSurface`, a row of its field
-   and buttons), and claims its presses back from any drag strip beneath it. */
-.find-bar {
-  position: absolute;
-  z-index: 3;
-  top: var(--luke-space-8);
-  right: var(--column-inset);
-}
-
 [data-luke-profile="desktop"] .find-bar {
   -webkit-app-region: no-drag;
 }
@@ -3685,13 +3316,6 @@ ul.actor-stack {
    and the tab, so the tab is looked for there too. */
 .find-scope:has(> .file-view, > .side-panel-keeps > .file-view) > .find-bar {
   top: calc(var(--luke-control-height) + 2 * var(--luke-tight-gap) + 1px + var(--luke-space-8));
-}
-
-/* The field keeps one width whatever is typed or tallied, so the buttons
-   beside it never move. */
-.find-bar-field {
-  width: 240px;
-  margin-right: var(--luke-list-gap);
 }
 
 /* Each match, then the one the find is at over it (`find-matches.ts`). */
@@ -3751,54 +3375,9 @@ ul.actor-stack {
 
 /* Version history ------------------------------------------------------------ */
 
-/* Who wrote a version, in the label's type, on its row and over its
-   sections alike. */
-.version-row-author {
-  min-width: 0;
-  overflow: hidden;
-  color: var(--luke-color-text);
-  font-size: var(--luke-type-label-size);
-  font-weight: var(--luke-weight-medium);
-  line-height: var(--luke-type-label-leading);
-  white-space: nowrap;
-}
-
-/* What a version did runs to two lines before it is cut short, so a
-   restore's row says which version it brought back in a column the folded
-   sidebar's width. */
-.version-row-summary {
-  display: -webkit-box;
-  overflow: hidden;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-  white-space: normal;
-}
-
-/* The versions and the sections of the one opened stand side by side in a
-   track as wide as the column, the sections slid in over the column's own
-   edge the way a nested page of System Settings is, on transform alone. The
-   track reaches the keyboard ring's width past the column's content on
-   either side, each pane giving it back as padding, so it clips what slides
-   past it and not a row's ring; it clips across alone, since its panes
-   scroll their own height. */
-.version-log-track {
-  display: grid;
-  min-height: 0;
-  flex: 1;
-  grid-template-columns: 100% 100%;
-  grid-template-rows: minmax(0, 1fr);
-  margin-inline: calc(-1 * var(--luke-focus-ring-reach));
-  overflow-x: clip;
-}
-
 /* The view's title heads the versions' pane rather than the column, so it
    slides away with them and the sections' own head stands in its place. */
 .version-log-pane {
-  display: flex;
-  min-width: 0;
-  min-height: 0;
-  flex-direction: column;
-  padding-inline: var(--luke-focus-ring-reach);
   transition: transform var(--luke-duration-pane) var(--luke-motion-pane);
 }
 
@@ -3812,38 +3391,6 @@ ul.actor-stack {
 
 .version-log-track[data-opened="true"] > .version-log-pane {
   transform: translateX(-100%);
-}
-
-/* Who wrote the revision, on the one line over its sections, their name
-   the press that goes where the revision was written, where anywhere in the
-   window wrote it. */
-.version-sections-head {
-  display: flex;
-  min-width: 0;
-  flex: none;
-  align-items: center;
-  gap: var(--luke-control-gap);
-  margin: var(--luke-control-gap) 0;
-  padding: var(--luke-item-gap) var(--row-inset);
-  white-space: nowrap;
-}
-
-/* Who wrote it stands as a box of its own over a revision's sections, a
-   flex item there and a block inside the press that opens where it was
-   written, so it is its own box that cuts the name and fades it
-   (`@luke/ui`'s OneLine), never the press's ellipsis around an inline line. */
-.version-sections-head .version-row-author {
-  display: block;
-}
-
-/* The list's foot, a row in the caption's type whose failure wraps under
-   its words rather than being cut short. */
-.version-earlier {
-  margin: var(--luke-control-gap) 0 0;
-  padding: var(--luke-row-inset) var(--row-inset);
-  color: var(--luke-color-text-muted);
-  font-size: var(--luke-type-caption-size);
-  line-height: var(--luke-type-caption-leading);
 }
 
 /* No call bar stands below a version, so it needs no room under its last line. */

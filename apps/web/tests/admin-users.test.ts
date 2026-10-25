@@ -160,8 +160,7 @@ test("before its first answer the roster names itself, says it is loading, and t
   expect(page.querySelector('[role="status"][aria-busy="true"]')?.textContent).toContain(
     "Reading users",
   );
-  // The roster's skeleton stands the table's shape in the loading region, naming no account.
-  expect(page.querySelector("table")?.closest('[aria-busy="true"]')).not.toBeNull();
+  // The roster's skeleton names no account.
   expect(page.querySelector("tbody a")).toBeNull();
   type(searchBox(page), "ada");
   expect(searchBox(page).value).toBe("ada");

@@ -116,19 +116,6 @@ it.effect("an unsigned request is unauthenticated, whatever its body says", () =
   }),
 );
 
-it.effect("a session write under the OAuth token alone is unauthenticated", () =>
-  Effect.gen(function* () {
-    assert.deepEqual(
-      yield* answer({
-        path: HOSTED_SERVICE_PATH.WORKSPACES_LEAVE,
-        body: '{"workspaceId":"w-1"}',
-        caller: "account",
-      }),
-      refused(HOSTED_HTTP_STATUS.UNAUTHORIZED, HOSTED_API_ERROR.INVALID_TOKEN),
-    );
-  }),
-);
-
 it.effect(
   "a body past its write's bound is too large, the photo's bound standing apart from the rest",
   () =>

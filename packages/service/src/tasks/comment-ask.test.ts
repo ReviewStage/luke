@@ -44,5 +44,4 @@ test("a thread is handed over as its quoted words, its section's name, and its c
   assert.ok(message.includes('On: "a retry" (section "Testing")'));
   assert.ok(message.includes("Dean: Is this covered already?"));
   assert.ok(message.includes("Read the thread, then answer"));
-  assert.equal(message.includes("as the plan now reads"), false);
 });

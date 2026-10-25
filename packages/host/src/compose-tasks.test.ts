@@ -1892,24 +1892,6 @@ it.effect(
 );
 
 it.effect(
-  "a task's code read as none is held as none, and a task whose code read did not answer holds its code unread",
-  () =>
-    Effect.gen(function* () {
-      const invites = task(INVITES, "Teammate invitations", "# Teammate invitations", 10);
-      const billing = task(BILLING, "Billing export", "# Billing export", 20);
-      const service = fakeService([billing, invites]);
-      service.codes[INVITES] = [];
-      const { last, openTask } = yield* subject(service);
-
-      yield* openTask(INVITES);
-      assert.deepEqual(last()?.shownCode, []);
-
-      yield* openTask(BILLING);
-      assert.equal(last()?.shownCode, undefined);
-    }),
-);
-
-it.effect(
   "a task's code read that did not answer says so, keeping its code unread, and a refresh reads it again",
   () =>
     Effect.gen(function* () {

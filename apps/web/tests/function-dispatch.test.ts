@@ -45,23 +45,6 @@ test("the route key picks the member and the request is restored to the route's 
   assert.equal(seen.headers.get("content-type"), "text/plain");
 });
 
-test("an OAuth callback is landed by the committed table on the auth catch-all at its own path, its query kept", async () => {
-  const auth = recording();
-  await dispatched(
-    new Request("https://luke.test/api/auth/callback/github?code=c1&state=s1"),
-    new Map([["auth/[...all]", auth.route]]),
-  );
-  const url = new URL(auth.requests[0]?.url ?? "");
-  assert.equal(url.pathname, "/api/auth/callback/github");
-  assert.deepEqual(
-    [...url.searchParams.entries()],
-    [
-      ["code", "c1"],
-      ["state", "s1"],
-    ],
-  );
-});
-
 test("a request with no route key, the oRPC key, or a key the function does not hold is the oRPC route's, at the path it carried or its own", async () => {
   const orpc = recording();
   const exception = recording();

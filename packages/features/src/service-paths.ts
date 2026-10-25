@@ -117,6 +117,8 @@ export const HOSTED_SERVICE_PATH = {
   LIVE_AUTOMATIONS: "/api/live/automations",
   /** One automation's runs under `?id=`, sealed for following over Neon Realtime (GET), or `not-found` or `unavailable`. */
   LIVE_AUTOMATION_RUNS: "/api/live/automation-runs",
+  /** A workspace's newest runs of every automation the account reads, under `?workspaceId=`, sealed for following over Neon Realtime (GET), or `unavailable`. */
+  LIVE_AUTOMATION_WORKSPACE_RUNS: "/api/live/automation-workspace-runs",
   /** The account's workspaces, sealed for following over Neon Realtime (GET): the workspaces and their installations, or their rows inline where polled. */
   LIVE_WORKSPACES: "/api/live/workspaces",
   /** The account's sidebar sections, the tasks in them, and its pinned repositories, sealed for following over Neon Realtime (GET), or their rows inline where polled. */

@@ -5,6 +5,7 @@ import type { CallCredential } from "./account-call.js";
 import {
   type AutomationRunsLiveAnswer,
   type AutomationsLiveAnswer,
+  type AutomationWorkspaceRunsLiveAnswer,
   withWebhookUrl,
 } from "./automation-live.js";
 import {
@@ -260,6 +261,27 @@ export class HostedAutomationClient {
     return liveAnswered(
       askLive(
         this.#hosted.live.automations,
+        { workspaceId, [LIVE_USER_QUERY]: userId },
+        poll,
+        after,
+      ),
+    );
+  }
+
+  /** Every run of a workspace's automations the account reads, sealed for following over Neon Realtime, on the terms the list is. */
+  workspaceRunsLive(
+    workspaceId: string,
+    userId: string,
+    poll = false,
+    after?: string,
+  ): Effect.Effect<
+    AutomationWorkspaceRunsLiveAnswer | Failed | typeof LIVE_SIGNED_OUT,
+    never,
+    HttpClient.HttpClient
+  > {
+    return liveAnswered(
+      askLive(
+        this.#hosted.live.automationWorkspaceRuns,
         { workspaceId, [LIVE_USER_QUERY]: userId },
         poll,
         after,

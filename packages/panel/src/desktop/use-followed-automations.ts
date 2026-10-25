@@ -4,13 +4,14 @@ import {
   type AutomationFollow,
   type AutomationListView,
   type AutomationRunsView,
+  type AutomationWorkspaceRunsView,
 } from "@luke/features/automation-view";
 import { ACT_KIND } from "@luke/host/acts";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { askAct } from "../act.js";
 
 /**
- * use-followed-automations.ts -- a workspace's automations, or an automation's runs, pushed to the page that draws them while it stands.
+ * use-followed-automations.ts -- a workspace's automations, an automation's runs, or a workspace's runs, pushed to the page that draws them while it stands.
  *
  * The page holds its stream open on the act port (`automations.follow`) while
  * it is drawn and closes it when it is not; the host follows what it names
@@ -27,7 +28,9 @@ function follow<View>(
   hear: (view: View | typeof UNANSWERED) => void,
 ): () => void {
   let stopped = false;
-  let stream: AsyncIteratorObject<AutomationListView | AutomationRunsView> | undefined;
+  let stream:
+    | AsyncIteratorObject<AutomationListView | AutomationRunsView | AutomationWorkspaceRunsView>
+    | undefined;
   const following = askAct(ACT_KIND.AUTOMATIONS_FOLLOW, scope).then(async (opened) => {
     stream = opened;
     // A stream that opened only after the page let it go is closed at once.
@@ -36,7 +39,7 @@ function follow<View>(
       return;
     }
     for await (const view of opened) {
-      // SAFETY: a stream of a workspace pushes its list and one of runs its runs, as the host's follow names them.
+      // SAFETY: a stream of a workspace pushes its list, one of runs its runs, and one of a workspace's runs those, as the host's follow names them.
       if (!stopped) hear(view as View);
     }
   });
@@ -80,4 +83,16 @@ export function useFollowedRuns(
   hear: (view: AutomationRunsView) => void,
 ): () => void {
   return useFollowed<AutomationRunsView>(AUTOMATION_FOLLOW.RUNS, automationId, hear);
+}
+
+/** A workspace's runs as pushed while its Runs tab stands. */
+export function useFollowedWorkspaceRuns(
+  workspaceId: string | undefined,
+  hear: (view: AutomationWorkspaceRunsView) => void,
+): () => void {
+  return useFollowed<AutomationWorkspaceRunsView>(
+    AUTOMATION_FOLLOW.WORKSPACE_RUNS,
+    workspaceId,
+    hear,
+  );
 }
