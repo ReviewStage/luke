@@ -7,6 +7,7 @@ import { BUTTON_VARIANT, Button, CARD_CORNER, CARD_PADDING, Card } from "@luke/u
 import { useState } from "react";
 import { type CommentLines, commentLinesLabel } from "./changes-model.js";
 import { CommentEditor, overCommentBound } from "./comment-editor.js";
+import { ACTS_AT_END_CLASS } from "./pull-request-look.js";
 import { PullRequestWriteNote, usePullRequestWrites, WRITE_NOTE } from "./pull-request-writes.js";
 
 /**
@@ -32,6 +33,9 @@ import { PullRequestWriteNote, usePullRequestWrites, WRITE_NOTE } from "./pull-r
  * its words offer a suggestion, GitHub's ```suggestion block holding those
  * lines as they read now (`comment-editor.tsx`).
  */
+
+/** A quiet line under the words: why no comment can be sent yet, or GitHub's refusal of the last. */
+const NOTE_CLASS = "line-comment-note m-0 text-caption-inline text-muted-foreground";
 
 /** The comment's own words. */
 const LINE_WORDS = {
@@ -113,7 +117,7 @@ export function LineComment({
     <Card
       corner={CARD_CORNER.CONTROL}
       padding={CARD_PADDING.NONE}
-      className="line-comment"
+      className="line-comment flex max-w-line-comment flex-col gap-control-gap px-list-inset pt-row-inset pb-list-inset"
       onFocus={onActive}
       onKeyDown={(event) => {
         if (event.key !== "Escape" || sending) return;
@@ -122,7 +126,9 @@ export function LineComment({
         onClose();
       }}
     >
-      <p className="line-comment-head">{LINE_WORDS.on(commentLinesLabel(lines))}</p>
+      <p className="line-comment-head m-0 text-caption-inline font-luke-semibold text-muted-foreground">
+        {LINE_WORDS.on(commentLinesLabel(lines))}
+      </p>
       <CommentEditor
         label={LINE_WORDS.FIELD}
         placeholder={LINE_WORDS.PLACEHOLDER}
@@ -136,9 +142,9 @@ export function LineComment({
         }}
         suggestion={suggestion}
       />
-      {headSha === undefined ? <p className="line-comment-note">{LINE_WORDS.NO_HEAD}</p> : null}
-      <PullRequestWriteNote writes={writes} className="line-comment-note" />
-      <div className="line-comment-foot">
+      {headSha === undefined ? <p className={NOTE_CLASS}>{LINE_WORDS.NO_HEAD}</p> : null}
+      <PullRequestWriteNote writes={writes} className={NOTE_CLASS} />
+      <div className={`line-comment-foot flex-wrap ${ACTS_AT_END_CLASS}`}>
         {headSha === undefined || writes.note?.kind === WRITE_NOTE.WORDS ? (
           <Button onClick={onRefresh}>{LINE_WORDS.REFRESH}</Button>
         ) : null}

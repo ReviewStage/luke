@@ -24,6 +24,7 @@ import {
   SidePanelIcon,
   STATUS_TONE,
   Toolbar,
+  type ToolbarPlace,
   useMenu,
 } from "@luke/ui";
 import { pullRequestAgentOf, repositoryPullRequestOf } from "@luke/ui/pull-request-link";
@@ -72,6 +73,12 @@ import {
   useAgentDraftDoors,
   useAgentTerminalDoors,
 } from "./agent-actions.js";
+import {
+  AutomationRunSteps,
+  AutomationRunStrip,
+  automationTrail,
+  useAutomationRunPlace,
+} from "./automation-agent-run.js";
 import { isLuke, LUKE_NAME, useLukeOperator } from "./luke-operator.js";
 import { AgentPane } from "./main-tabs.js";
 import { PhoneBack, PhoneHead, phoneBar } from "./phone-head.js";
@@ -124,7 +131,10 @@ import type { TaskHeadBack } from "./task-pane-switcher.js";
  * found, and nothing of it is drawn. Whoever sent it a message is read against its
  * workspace's members, as on a plan, and the automation whose run started
  * it against its workspace's automations, so the prompt it opens on names
- * the automation and opens its page. Escape leaves it for wherever it was
+ * the automation and opens its page. An agent an automation's run started
+ * leads its bar with the path to that automation, says under it what fired
+ * the run, and steps through the automation's other runs' agents from the
+ * bar's end (`automation-agent-run.tsx`). Escape leaves it for wherever it was
  * opened from, and so does any row of the sidebar. Its composer offers Call
  * as its tab's does, through the window's same press (`agent-actions.tsx`'s
  * `useAgentCallDoors`), told the agent's own task, or none, whatever task is
@@ -163,10 +173,16 @@ function AgentPageBar({
   onClose,
   luke,
   phone,
+  trail,
+  steps,
 }: {
   agent: CodingAgentSummary;
   agents: CodingAgentsControl;
   shown: boolean;
+  /** The places above the page, an automation's agent's alone: Automations and its automation (`automation-agent-run.tsx`). */
+  trail: readonly ToolbarPlace[] | undefined;
+  /** What stands before the ⋯: the arrows through its automation's runs, an automation's agent's alone. */
+  steps: React.ReactNode;
   terminals: Pick<AgentTerminalDoors, "onOpenTerminal">;
   /** Leaves the page, as Escape does, once the agent is deleted. */
   onClose: () => void;
@@ -231,7 +247,18 @@ function AgentPageBar({
       <PhoneHead place="agent" start={<PhoneBack back={phone.back} />} title={title} end={more} />
     );
   }
-  return <Toolbar title={title} actions={more} />;
+  return (
+    <Toolbar
+      title={title}
+      trail={trail}
+      actions={
+        <>
+          {steps}
+          {more}
+        </>
+      }
+    />
+  );
 }
 
 /** What a phone's way back out of a draft calls the agent, before the agent is read. */
@@ -455,6 +482,8 @@ export function DesktopAgentPage({
     [openLink, agentId],
   );
   const shown = tasks.shown && !sidePanel.fullScreen;
+  // An agent an automation's run started: its run among the automation's, followed live.
+  const runPlace = useAutomationRunPlace(agent);
   const sideTab = sidePanel.tab;
   const planId = agent?.planId ?? null;
   const cards = useMemo(
@@ -559,6 +588,12 @@ export function DesktopAgentPage({
         onClose={tasks.agentView.onClose}
         luke={luke}
         phone={phoneHead}
+        trail={automationTrail(agent, tasks)}
+        steps={
+          runPlace === undefined ? null : (
+            <AutomationRunSteps place={runPlace} onOpenAgent={tasks.agentView.onOpen} />
+          )
+        }
       />
     );
   if (agent === undefined) {
@@ -630,6 +665,9 @@ export function DesktopAgentPage({
                         hidden={sidePanel.fullScreen}
                       >
                         {toolbar}
+                        {runPlace === undefined ? null : (
+                          <AutomationRunStrip place={runPlace} status={agent.status} />
+                        )}
                         <FindScope
                           className="desktop-task-column"
                           active={tasks.shown && !sideFocused}

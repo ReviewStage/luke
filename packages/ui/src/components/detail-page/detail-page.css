@@ -1,13 +1,15 @@
-/* detail-page.css -- one thing's page: a still bar over a main column
-   and an optional secondary column, each its own scroll, at one measure
-   centred in the room. The measure is a collection page's, a plan's
-   reading width in the window and the admin's wider column on the web,
-   and the secondary column takes its share from the measure's end. The
-   page queries its own width rather than the viewport's, so a page in a
-   narrow pane narrows as it would in a narrow window; a container query
-   cannot read a custom property, so the widths it narrows under are
-   literals here. The header opens the main column's scroll under the
-   page's bar. Under the window's toolbar the page draws neither, and
+/* detail-page.css -- what a detail page's utilities (`detail-page.tsx`)
+   cannot say: its measure, inset, and the room either side of them, which
+   its profile and its own width set; the columns' grid, scrolls, and
+   insets, which a narrow pane's container query and the secondary column's
+   `:has()` undo, so they stay in this layer, which cannot undo a utility;
+   and the reach of what the caller lays in. The measure is a collection
+   page's, a plan's reading width in the window and the admin's wider
+   column on the web, and the secondary column takes its share from the
+   measure's end. The page queries its own width rather than the
+   viewport's, so a page in a narrow pane narrows as it would in a narrow
+   window; a container query cannot read a custom property, so the widths
+   it narrows under are literals here. Under the window's toolbar the page
    stands across the room on the toolbar's edges. */
 
 @layer components {
@@ -15,17 +17,6 @@
     --luke-detail-page-width: var(--luke-page-measure);
     --luke-detail-page-secondary-width: 240px;
     --luke-detail-page-inset: var(--luke-page-inset);
-    container-type: inline-size;
-    display: flex;
-    flex: 1;
-    flex-direction: column;
-    min-width: 0;
-    height: 100%;
-    min-height: 0;
-    color: var(--luke-color-text);
-    font-family: var(--luke-font-sans);
-    font-size: var(--luke-type-body-size);
-    line-height: var(--luke-type-body-leading);
   }
 
   [data-luke-profile="web"] .luke-detail-page {
@@ -74,14 +65,7 @@
     }
   }
 
-  /* The header (`PageHeader`) opens the main column at the page's inset
-     below the bar, and scrolls with it, so it can scroll away and the bar
-     pick up its name; its end gap is the content's room under it. */
-  .luke-detail-page-header {
-    padding: var(--luke-detail-page-inset) 0 var(--luke-section-gap);
-  }
-
-  /* Beside it, the secondary column opens level with the title. */
+  /* Beside the header, the secondary column opens level with the title. */
   .luke-detail-page[data-frame="page"] .luke-detail-page-secondary > .luke-detail-page-content {
     padding-top: var(--luke-detail-page-inset);
   }
@@ -91,9 +75,7 @@
      moves it from anywhere over it. */
   .luke-detail-page-body {
     display: grid;
-    flex: 1;
     grid-template-columns: minmax(0, 1fr);
-    min-height: 0;
   }
 
   .luke-detail-page-body:has(> .luke-detail-page-secondary) {
@@ -104,16 +86,8 @@
 
   .luke-detail-page-main,
   .luke-detail-page-secondary {
-    box-sizing: border-box;
-    min-width: 0;
-    min-height: 0;
     overflow-x: hidden;
     overflow-y: auto;
-    overscroll-behavior: contain;
-    scrollbar-gutter: stable;
-    /* Note that a column draws the keyboard's ring inside itself, because
-       the page clips anything drawn past its edge. */
-    outline-offset: calc(-1 * var(--luke-focus-ring-width));
   }
 
   .luke-detail-page-main {
@@ -128,20 +102,6 @@
 
   .luke-detail-page-secondary {
     padding-inline-end: var(--luke-detail-page-side);
-  }
-
-  /* Its end leaves free what the standing toasts take of the window's foot
-     (`--luke-toast-room`, which the shell measures), and what a phone's call
-     card takes of it (`--luke-card-room`, which the shell says), so its last
-     row can be scrolled clear of them rather than read through a toast or
-     left under the card. */
-  .luke-detail-page-content {
-    padding-bottom: max(
-      var(--luke-detail-page-inset),
-      var(--luke-toast-room, 0px),
-      var(--luke-card-room, 0px)
-    );
-    overflow-wrap: anywhere;
   }
 
   /* A plain list in the content, straight or under one of its sections,

@@ -60,6 +60,7 @@ import { useIntegrationStatuses } from "../integration-statuses.js";
 import { Picker } from "../settings/picker-row.js";
 import { undoToast, useToast } from "../toast.js";
 import { useAttachedFiles } from "../use-attached-files.js";
+import { COMPOSER_ROOM_CLASS } from "./agent-composer.js";
 import { type AgentRowPlace, agentMenuRow, useAgentRowPlace } from "./agent-menu-row.js";
 import { AttachFilesButton } from "./attach-files-button.js";
 import { AttachedFileChips, attachmentChips } from "./attached-file-chips.js";
@@ -477,7 +478,8 @@ function ComposeCard({
         />
       ) : (
         <Toolbar
-          start={TOOLBAR_INSET.COLUMN}
+          // Note that a title with no way back before it starts where the other bars' titles do, not at the column's edge, which is for a control's fill.
+          start={onBack === undefined ? undefined : TOOLBAR_INSET.COLUMN}
           lead={
             onBack === undefined ? null : (
               <BackButton label={INBOX} place={INBOX_PLACE} onBack={onBack} />
@@ -545,7 +547,7 @@ function ComposeCard({
             </FormField>
           </div>
         </div>
-        <div className="agent-composer inbox-compose-box" {...files.drop.target}>
+        <div className={`${COMPOSER_ROOM_CLASS} inbox-compose-box`} {...files.drop.target}>
           <AnswerForm
             dropping={files.drop.dropping}
             field={field}

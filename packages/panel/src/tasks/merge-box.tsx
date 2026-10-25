@@ -297,7 +297,7 @@ function chipOf(
 function MergeChip({ face, sentence }: { face: ChipFace; sentence: string }): React.JSX.Element {
   return (
     <Tooltip label={sentence}>
-      <span className="merge-chip">
+      <span className="merge-chip inline-flex min-w-0">
         <Badge tone={face.tone} icon={face.icon} hideWordsUnder={VISUALLY_HIDDEN_UNDER.SNUG}>
           {face.label}
         </Badge>
@@ -524,7 +524,7 @@ export function MergeControl({
   const drawn = press();
   if (face === undefined && drawn === null && !asked) return null;
   return (
-    <span className="merge-control">
+    <span className="merge-control flex min-h-control min-w-0 items-center gap-control-gap">
       {face === undefined ? null : <MergeChip face={face} sentence={sentenceOf(pullRequest)} />}
       {drawn}
       <ConfirmDialog open confirm={confirm} question={DEQUEUE_QUESTION} />

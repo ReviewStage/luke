@@ -1,9 +1,11 @@
-/* settings-page.css -- a settings page under its bar: a column at its measure, inset from
-   the page's edges, scrolling inside them, with the title's line above the
-   sections and a section's gap between each and the next. The sections'
-   own heading and card are theirs (`settings-section.css`). Rows scrolled
-   up dissolve into the page's top edge, and an empty state that is the
-   page's content fills the room under the title. */
+/* settings-page.css -- what a settings page's utilities (`settings-page.tsx`)
+   cannot say: rows scrolled up dissolve into the page's top edge, on a scroll
+   timeline; an empty state that is the page's content fills the room under
+   the title; and the column's inset narrows under 480px of the page, which is
+   a container of its own (`@container/luke-settings-page`). The frame, the
+   page's scroller, the room under the head, and the sections' gap are
+   utilities; the sections' own heading and card are theirs
+   (`settings-section.tsx`). */
 
 /* The depth of the top's fade, a registered length so a scroll timeline can
    ease it from none to the whole fade over the page's first scroll. */
@@ -24,65 +26,28 @@
 }
 
 @layer components {
-  /* The page under its bar: the bar still, the page taking the rest of the
-     room its frame leaves it, beside a drag strip in a column too. */
-  .luke-settings-page-frame {
-    display: flex;
-    flex: 1 1 0;
-    flex-direction: column;
-    block-size: 100%;
-    min-block-size: 0;
-    min-width: 0;
-  }
-
-  /* Note that the page is its own container, and its inset is its column's,
-     because the contract's 480px is the width the page's content stands in,
-     inside the scroll bar's gutter, and a container query reads its
-     container's content box. The scroll bar takes its room
-     on every page, so the column never slides when one page scrolls and the
-     next does not. */
+  /* The page's measure, which its column and an empty state's column read;
+     and the fade its rows dissolve into at the top. Note that the fade is a
+     mask, so its black is an alpha and the rows dissolve into whatever
+     ground the page stands on. It deepens over the first stretch of
+     scrolling, so a page at rest at its top, or one with nothing to scroll,
+     whose timeline never runs, is left whole. A scroll timeline is not
+     motion, so reduced motion leaves it be. */
   .luke-settings-page {
     --luke-settings-page-measure: var(--luke-settings-measure);
-    container: luke-settings-page / inline-size;
-    box-sizing: border-box;
-    /* The room the bar leaves it. */
-    flex: 1 1 0;
-    min-block-size: 0;
-    min-width: 0;
-    overflow-x: clip;
-    overflow-y: auto;
-    overscroll-behavior: contain;
-    scrollbar-gutter: stable;
-    /* A control a search lands on scrolls to the inset's line, not the edge. */
-    scroll-padding-block: var(--luke-page-inset);
-    /* Note that the fade is a mask, so its black is an alpha and the rows
-       dissolve into whatever ground the page stands on. It deepens over the
-       first stretch of scrolling, so a page at rest at its top, or one with
-       nothing to scroll, whose timeline never runs, is left whole. A scroll
-       timeline is not motion, so reduced motion leaves it be. */
     mask-image: linear-gradient(to bottom, transparent, #000 var(--luke-settings-page-fade));
     animation: luke-settings-page-fade linear both;
     animation-timeline: scroll(self block);
     animation-range: 0 var(--luke-space-24);
   }
 
+  /* Note that the column's box, measure, and inset stay here rather than in
+     utilities, because the rules below for an empty state and a narrow page
+     undo them, and a rule in this layer cannot undo a utility. */
   .luke-settings-page-column {
     box-sizing: content-box;
     max-width: var(--luke-settings-page-measure);
-    margin: 0 auto;
     padding: var(--luke-page-inset);
-  }
-
-  /* The header (`PageHeader`), the room under it before the sections. */
-  .luke-settings-page-head {
-    margin-bottom: var(--luke-space-24);
-  }
-
-  .luke-settings-page-sections {
-    display: flex;
-    flex-direction: column;
-    gap: var(--luke-page-section-gap);
-    min-width: 0;
   }
 
   /* A page whose content is an empty state gives it the room under the

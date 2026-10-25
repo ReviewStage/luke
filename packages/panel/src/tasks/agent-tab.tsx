@@ -99,7 +99,7 @@ import {
   AgentCallFoot,
   useAgentOnCall,
 } from "./agent-call.js";
-import { AgentComposer } from "./agent-composer.js";
+import { AgentComposer, COMPOSER_DOCK_CLASS, LOG_OVER_COMPOSER_CLASS } from "./agent-composer.js";
 import {
   AgentPicturesProvider,
   CallPictures,
@@ -696,7 +696,7 @@ function TodosDock({
   const docked = dockedTodos(newestTodos(messages), working);
   if (docked === undefined) return null;
   return (
-    <div className="agent-todos-dock">
+    <div className={`agent-todos-dock ${COMPOSER_DOCK_CLASS}`}>
       <TranscriptTodosDock todos={docked.todos} focus={todoFocus(docked.todos)} />
     </div>
   );
@@ -712,7 +712,7 @@ function PublishedDock({
 }): ReactNode {
   if (published === undefined || published.pullRequest === null) return null;
   return (
-    <div className="agent-published-dock">
+    <div className={`agent-published-dock ${COMPOSER_DOCK_CLASS}`}>
       <PublishedRow pullRequest={published.pullRequest} branch={published.branch} doors={doors} />
     </div>
   );
@@ -1263,7 +1263,11 @@ function heardLine(line: UIMessage): CodingAgentMessage {
 function TurnFoot({ workedFor, copy }: { workedFor: ReactNode; copy: ReactNode }): ReactNode {
   if (workedFor === null && copy === null) return null;
   return (
-    <div className="agent-turn-foot" data-turn-foot="">
+    // Note that the room above is the row's rather than the worked line's, because the buttons are taller than the words and centring them would push the words down.
+    <div
+      className="agent-turn-foot mt-tight-gap flex min-w-0 items-center gap-tight-gap"
+      data-turn-foot=""
+    >
       {workedFor}
       {copy}
     </div>
@@ -1510,7 +1514,7 @@ function AgentEndLine({
       : undefined;
   const remedyButton =
     remedy === undefined ? null : (
-      <span className="agent-end-remedy">
+      <span className="ml-control-gap align-middle">
         <Button variant={BUTTON_VARIANT.OUTLINE} onClick={onOpenApiKeys}>
           {remedy}
         </Button>
@@ -1518,7 +1522,7 @@ function AgentEndLine({
     );
   if (ended.failed) {
     return (
-      <div className="agent-end-line" data-ended="" data-failed="">
+      <div className={END_LINE_CLASS} data-ended="" data-failed="">
         <FailureNote>
           {ended.words}
           {remedyButton}
@@ -1527,12 +1531,20 @@ function AgentEndLine({
     );
   }
   return (
-    <p className="agent-end-line" data-ended="">
+    <p className={END_LINE_CLASS} data-ended="">
       <span className="agent-end-words">{ended.words}</span>
       {remedyButton}
     </p>
   );
 }
+
+/**
+ * The end line: a failure's mark, its words, then what the turn cost after
+ * a dot, flowing as one sentence in the caption role, so a long failure
+ * wraps under its own words. Only a failure is drawn in the danger ink
+ * (`FailureNote`): a stop is the developer's own doing.
+ */
+const END_LINE_CLASS = "agent-end-line m-0 text-caption text-muted-foreground";
 
 /**
  * The end line's row: the line, then the press it ends on (Continue in new
@@ -1545,15 +1557,21 @@ function AgentEndRow({
   keyProvider,
   onOpenApiKeys,
   press,
+  centred = false,
 }: {
   ended: EndLineParts;
   endReason: FailureReason | undefined;
   keyProvider: ModelProvider | undefined;
   onOpenApiKeys: (() => void) | undefined;
   press: ReactNode;
+  /** Whether it stands in the empty state's own centred column, centred as its column is. */
+  centred?: boolean;
 }): React.JSX.Element {
+  // Note that the line is one flex item, so a failure too long to share the row takes it whole and the press wraps under it, never between its words.
   return (
-    <div className="agent-end-row">
+    <div
+      className={`agent-end-row flex max-w-full flex-wrap items-center gap-control-gap${centred ? " justify-center" : ""}`}
+    >
       <AgentEndLine
         ended={ended}
         endReason={endReason}
@@ -2042,7 +2060,7 @@ function AgentTranscriptView({
             ) : null}
             {/* The plan's card stands off the tab row by the gap between a column's groups; lines fade under the bar or banner above. */}
             <ConversationContent
-              className={overComposer ? "agent-log-over-composer" : undefined}
+              className={overComposer ? LOG_OVER_COMPOSER_CLASS : undefined}
               streams
             >
               <ConversationRows
@@ -2149,7 +2167,10 @@ function AgentTranscriptView({
                 />
               ) : null}
               {ended === undefined && endTrail === undefined ? null : (
-                <div className="agent-end" data-ended={ended === undefined ? undefined : ""}>
+                <div
+                  className="agent-end flex flex-col items-start gap-control-gap"
+                  data-ended={ended === undefined ? undefined : ""}
+                >
                   {ended === undefined ? null : (
                     <AgentEndRow
                       ended={ended}
@@ -2193,6 +2214,7 @@ function AgentTranscriptView({
               keyProvider={keyProvider}
               onOpenApiKeys={onOpenApiKeys}
               press={endPress}
+              centred
             />
           )}
           {endTrail}

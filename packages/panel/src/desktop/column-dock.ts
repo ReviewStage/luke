@@ -50,13 +50,16 @@ const TILE_FLOOR = "--luke-control-height";
 /** The tile's own aspect on a card, height over width (`CALL_VIDEO_FIT.CARD`). */
 const TILE_ASPECT = 9 / 16;
 
+/** What docks under the toasts besides a column's parts: a phone's places bar at the screen's foot (`mobile-bar.tsx`). */
+const TOAST_DOCKED = ".mobile-bar";
+
 /** The window's toasts, portalled out of the shell to the document's body (`@luke/ui`'s `ToastStack`). */
 const TOAST_STACK = ".luke-toast-stack";
 
 /** The length the dock under the toasts is written in, beside the work, where they stand in the window's corner rather than across a column. */
 const TOAST_DOCK = "--luke-toast-dock";
 
-/** The length the toasts standing take of the window's foot is written in, which a page's scroll leaves free at its end. */
+/** The length the toasts standing take of the window's foot over the dock under them is written in, which a page's or a log's scroll leaves free at its end. */
 const TOAST_ROOM = "--luke-toast-room";
 
 /** The token the toasts' corner stands in from the window's by. */
@@ -194,9 +197,12 @@ function cornerStep(root: HTMLElement): number {
  * From the window's foot to the top of the highest docked part on screen
  * under the toasts' corner, or nothing where none stands there. A part
  * counts only once one under the corner reaches into where the toasts rest
- * (their height and the corner's step up from the window's foot): a draft
- * reply that flows at a short thread's end, well above the foot, leaves
- * them in their corner, over the empty room below it.
+ * (their height and the corner's step up from the window's foot). Note
+ * that a draft reply flowing at a thread's end therefore lifts them only
+ * while the reader has it partly scrolled under them, and then by as much
+ * of it as shows: at the end, the log leaves their room under it
+ * (`--luke-toast-room`), so it stands above where they rest, and they stay
+ * in their corner rather than over the newest message above it.
  */
 function toastDockHeight(shell: Element, docked: string, stack: DOMRect, step: number): number {
   const foot = shell.getBoundingClientRect().bottom;
@@ -231,10 +237,11 @@ function toastDockHeight(shell: Element, docked: string, stack: DOMRect, step: n
  * The toasts stand in the window's corner, over whichever column reaches
  * it, so they read a dock of their own too (`--luke-toast-dock`): the
  * docked parts on screen under their corner, whatever column holds them, a
- * draft reply at the foot of an Inbox thread among them. In any room, how much of the window's foot the
- * standing toasts take (`--luke-toast-room`) is written too, which a page's
- * scroll leaves free at its end, so its last row can always be scrolled
- * clear of them.
+ * phone's places bar among them. In any room, how much the standing toasts
+ * take of the window's foot over that dock (`--luke-toast-room`) is written
+ * too, which a page's scroll or a log's leaves free at its end, so its last
+ * row, or the newest message and the draft reply under it, can always be
+ * scrolled clear of them.
  *
  * One ResizeObserver follows the column, the docked parts, the card, and
  * the toasts; a scroll anywhere under the shell re-reads, since it moves a
@@ -267,6 +274,7 @@ export function useColumnDock(
       ? ".side-panel"
       : ".desktop-task-main, .agent-page, .chat-view";
     const docked = `${DOCKED}, ${CHAT_DOCKED}`;
+    const toastDocked = `${docked}, ${TOAST_DOCKED}`;
     // Beside the work only the card reads the dock, so a chat's composer docks only under it.
     const besideCard = !panelFull && !narrow;
     let column = shownColumn(host, columnSelector);
@@ -286,13 +294,11 @@ export function useColumnDock(
       );
       fitTile(card, narrow ? column : null, dock ?? 0, root);
       const stack = root.querySelector(TOAST_STACK);
-      writeLength(
-        root,
-        TOAST_DOCK,
+      const toastDock =
         stack === null
           ? undefined
-          : `${toastDockHeight(host, docked, stack.getBoundingClientRect(), cornerStep(root))}px`,
-      );
+          : toastDockHeight(host, toastDocked, stack.getBoundingClientRect(), cornerStep(root));
+      writeLength(root, TOAST_DOCK, toastDock === undefined ? undefined : `${toastDock}px`);
       // Note that the room is read once the dock above is written, since the dock moves the stack.
       const standing = stack?.getBoundingClientRect();
       writeLength(
@@ -300,7 +306,7 @@ export function useColumnDock(
         TOAST_ROOM,
         standing === undefined || standing.height === 0
           ? undefined
-          : `${Math.max(0, host.getBoundingClientRect().bottom - standing.top)}px`,
+          : `${Math.max(0, host.getBoundingClientRect().bottom - (toastDock ?? 0) - standing.top)}px`,
       );
     }
     function follow(): void {
@@ -308,7 +314,7 @@ export function useColumnDock(
       const card = host.querySelector(FLOATING_CARD);
       const stack = root.querySelector(TOAST_STACK);
       // The toasts read docked parts in any column, so each is followed.
-      const elsewhere = [...host.querySelectorAll(docked)].filter(
+      const elsewhere = [...host.querySelectorAll(toastDocked)].filter(
         (part) => !column?.contains(part),
       );
       const standing = [

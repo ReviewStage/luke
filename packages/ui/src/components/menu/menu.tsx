@@ -18,6 +18,7 @@ import { useDisclosure } from "../../use-disclosure.js";
 import { visibleViewport } from "../../visible-viewport.js";
 import { OneLine } from "../one-line/one-line.js";
 import { ROVING_STOP, rovingItem, useRovingKeys } from "../roving-keys/roving-keys.js";
+import { SCROLL_FADE, SCROLL_SIZE, ScrollArea } from "../scroll-area/scroll-area.js";
 import { SwitchMark } from "../switch/switch.js";
 import { hintedControlOf, Tooltip } from "../tooltip/hint.js";
 import { MenuGlyph } from "./menu-surface.js";
@@ -681,6 +682,20 @@ function SteeredItem({
 }
 
 /**
+ * A menu's rows, its heading and footer among them, scrolling inside its
+ * surface where the room Base UI found for it cannot hold them all, the cut
+ * edge fading as every scroller's does, so the surface keeps its edge,
+ * corner, and shadow whole rather than being sliced by the window.
+ */
+function MenuRows({ children }: { children: React.ReactNode }): React.JSX.Element {
+  return (
+    <ScrollArea size={SCROLL_SIZE.CONTENT} fade={SCROLL_FADE.BOTH}>
+      <div className="flex flex-col">{children}</div>
+    </ScrollArea>
+  );
+}
+
+/**
  * How far a submenu stands from its item so it stands a drop beside its
  * menu's edge: the item stands the menu's inset and edge inside it, read
  * from where both are drawn as the submenu is placed.
@@ -822,9 +837,11 @@ function Submenu({
         data-roving={roving["data-roving"]}
         onKeyDown={keyDown}
       >
-        {entry.items.map((action) => (
-          <MenuItem key={action.label} action={action} onChoose={() => onChoose(action)} />
-        ))}
+        <MenuRows>
+          {entry.items.map((action) => (
+            <MenuItem key={action.label} action={action} onChoose={() => onChoose(action)} />
+          ))}
+        </MenuRows>
       </DropdownMenuSubContent>
     </DropdownMenuSub>
   );
@@ -987,51 +1004,53 @@ export function Menu({
         onKeyDown={keyDown}
         onPointerOver={pointerOver}
       >
-        {heading === undefined ? null : (
-          <>
-            <div
-              className="luke-menu-heading flex flex-col gap-luke-2 px-row-inset py-luke-4 text-caption leading-[inherit]"
-              role="none"
-            >
-              {heading}
-            </div>
-            <DropdownMenuSeparator className="luke-menu-rule" />
-          </>
-        )}
-        {groups.map((group, index) => (
-          <Fragment key={group[0]?.label}>
-            {index > 0 ? <DropdownMenuSeparator className="luke-menu-rule" /> : null}
-            {group.map((entry) =>
-              "items" in entry ? (
-                <Submenu
-                  key={entry.label}
-                  entry={entry}
-                  open={submenu === entry.label && !leaving}
-                  layer={layer}
-                  seen={seen}
-                  leaving={leaving}
-                  surface={submenuElement}
-                  onOpen={() => setSubmenu(entry.label)}
-                  onBack={() => setSubmenu(undefined)}
-                  onChoose={choose}
-                />
-              ) : (
-                <MenuItem key={entry.label} action={entry} onChoose={() => choose(entry)} />
-              ),
-            )}
-          </Fragment>
-        ))}
-        {footer === undefined ? null : (
-          <>
-            <DropdownMenuSeparator className="luke-menu-rule" />
-            <div
-              className="luke-menu-footer flex flex-col gap-luke-2 px-row-inset py-luke-4 text-caption leading-[inherit] text-muted-foreground"
-              role="none"
-            >
-              {footer}
-            </div>
-          </>
-        )}
+        <MenuRows>
+          {heading === undefined ? null : (
+            <>
+              <div
+                className="luke-menu-heading flex flex-col gap-luke-2 px-row-inset py-luke-4 text-caption leading-[inherit]"
+                role="none"
+              >
+                {heading}
+              </div>
+              <DropdownMenuSeparator className="luke-menu-rule" />
+            </>
+          )}
+          {groups.map((group, index) => (
+            <Fragment key={group[0]?.label}>
+              {index > 0 ? <DropdownMenuSeparator className="luke-menu-rule" /> : null}
+              {group.map((entry) =>
+                "items" in entry ? (
+                  <Submenu
+                    key={entry.label}
+                    entry={entry}
+                    open={submenu === entry.label && !leaving}
+                    layer={layer}
+                    seen={seen}
+                    leaving={leaving}
+                    surface={submenuElement}
+                    onOpen={() => setSubmenu(entry.label)}
+                    onBack={() => setSubmenu(undefined)}
+                    onChoose={choose}
+                  />
+                ) : (
+                  <MenuItem key={entry.label} action={entry} onChoose={() => choose(entry)} />
+                ),
+              )}
+            </Fragment>
+          ))}
+          {footer === undefined ? null : (
+            <>
+              <DropdownMenuSeparator className="luke-menu-rule" />
+              <div
+                className="luke-menu-footer flex flex-col gap-luke-2 px-row-inset py-luke-4 text-caption leading-[inherit] text-muted-foreground"
+                role="none"
+              >
+                {footer}
+              </div>
+            </>
+          )}
+        </MenuRows>
       </DropdownMenuContent>
     </DropdownMenu>
   );

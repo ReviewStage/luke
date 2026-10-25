@@ -191,6 +191,17 @@ describe("a stylesheet", () => {
     expect(sheetRules(css, "apps/catalog/src/catalog.css")).toEqual([]);
   });
 
+  it("refuses the hand spelled out or a cursor chosen per profile, and passes the press and link roles and the other cursors", () => {
+    const css = `.a { cursor: pointer; }
+      [data-luke-profile="desktop"] .b { cursor: default; }
+      .c { cursor: var(--luke-cursor-press); }
+      .d { cursor: var(--luke-cursor-link); }
+      .e { cursor: col-resize; }
+      .f:disabled { cursor: default; }
+      .g { --luke-cursor-press: pointer; }`;
+    expect(sheetRules(css)).toEqual([STYLE_RULE.CURSOR, STYLE_RULE.CURSOR]);
+  });
+
   it("reads declarations through nesting, layers, strings, and comments", () => {
     const css = `@layer components {
       .a {
@@ -256,6 +267,11 @@ describe("a module's class strings", () => {
     expect(violations.map((violation) => [violation.rule, violation.line])).toEqual([
       [STYLE_RULE.ELLIPSIS, 4],
     ]);
+  });
+
+  it("refuses cursor-pointer and a cursor chosen per profile, and passes cursor-press, cursor-link and the other cursors", () => {
+    const source = `const a = cn("cursor-pointer in-data-[luke-profile=desktop]:cursor-default", "cursor-press disabled:cursor-default cursor-link cursor-progress cursor-text");`;
+    expect(classRules(source)).toEqual([STYLE_RULE.CURSOR, STYLE_RULE.CURSOR]);
   });
 
   it("reads a class list whose arbitrary value holds a character no class name has", () => {

@@ -1167,7 +1167,7 @@ function MentionCrumb({ crumb }: { crumb: Crumb }): React.JSX.Element {
   const { kind, folder, back } = crumb;
   return (
     // Note that a press on the crumb keeps the caret in the editor, where the keys are read.
-    <KeepFocus className="agent-servers-page-head mention-menu-crumb">
+    <KeepFocus className="agent-servers-page-head mention-menu-crumb [--luke-fold:folded]">
       {back === undefined ? null : (
         <BackButton
           label={folder === undefined ? BACK_LABEL.WIDEN : BACK_LABEL.UP}
