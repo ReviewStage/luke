@@ -2234,6 +2234,10 @@ test("a schedule's time is written as its summary says it, and a time that canno
   assert.equal(field().value, "7:30 AM");
   assert.match(page.textContent ?? "", /Wednesdays? at 7:30 AM/u);
 
+  assert.equal(button("Save").disabled, true, "nothing is written yet");
+  type(field(), "soon");
+  assert.equal(button("Save").disabled, false, "words that are no time are unsaved work");
+
   // Note that "2" reads as 2:00 AM and moves the schedule before the colon after it makes the words unreadable.
   type(field(), "2");
   type(field(), "2:");

@@ -2580,12 +2580,14 @@ export function AutomationEditor({
   const saved = automation === undefined ? undefined : automationDraft(automation, defaults);
   // Note that a draft is unsaved wherever it differs from the automation, even where what differs
   // cannot be written yet, a same agent with none chosen, so Save stands to say what is missing.
-  const dirty = saved === undefined || !sameDraft(draft, saved);
+  // Note that words the time's field holds that are no time are unsaved work too, though no draft holds them.
+  const [unreadableTime, setUnreadableTime] = useState(false);
+  const dirty = saved === undefined || !sameDraft(draft, saved) || unreadableTime;
   // Note that the saved agent is offered back only on the repository it was saved on, because an agent works in its own repository.
   const savedAgentId =
     saved !== undefined && saved.repository === draft.repository ? saved.agentId : null;
   // Note that a new draft nothing was changed in is no work to lose, so Escape may leave it.
-  const written = automation === undefined ? !sameDraft(draft, start) : dirty;
+  const written = automation === undefined ? unreadableTime || !sameDraft(draft, start) : dirty;
   const narrow = room === SHELL_ROOM.NARROW;
   // One column's runs stand as a screen of their own over the setup, and the setup the whole width.
   const split = useScreenSplit(room);
@@ -2611,7 +2613,6 @@ export function AutomationEditor({
   useEffect(() => {
     if (linked?.runId !== undefined) showRuns.current();
   }, [linked]);
-  const [unreadableTime, setUnreadableTime] = useState(false);
   const drafted = draftProblems(draft, repositoryHeld(draft, automation), new Date());
   // Note that a time the field cannot read stops a save as the schedule's own problem does, since the draft holds only what read before it.
   const problems: DraftProblems =
