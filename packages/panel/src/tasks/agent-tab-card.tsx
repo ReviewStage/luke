@@ -162,7 +162,10 @@ function headCorner(
   if (pullRequest === undefined) return standing;
   return (
     <>
-      <PullRequestMark pullRequest={pullRequest} className="card-corner-mark" />
+      <PullRequestMark
+        pullRequest={pullRequest}
+        className="card-corner-mark mr-tight-gap size-luke-12 align-[-2px]"
+      />
       {pullRequestNumberLabel(pullRequest)}
       {standing === undefined ? null : ENDED_SEPARATOR}
       {standing}

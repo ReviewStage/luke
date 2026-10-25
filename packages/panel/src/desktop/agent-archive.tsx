@@ -76,6 +76,10 @@ import { type CountNoun, foldedCount } from "./sidebar-fold.js";
  * starts folded, then stands as the reader left it, kept on this Mac.
  */
 
+/** A summary row's glyph, at a control's glyph size in the muted ink; one wearing where its work stands takes a glyph's footprint, so every row's label starts on one edge. */
+export const SUMMARY_GLYPH =
+  "task-summary-glyph flex flex-none text-muted-foreground [&_.state-glyph]:[--state-glyph-size:var(--spacing-control-icon)] [&_svg]:size-control-icon";
+
 /** Whether the reader left Archived open, one choice for every task's summary, kept on this Mac. */
 const KEPT = {
   UNFOLDED: keptKey("luke.taskArchivedUnfolded", Schema.fromJsonString(Schema.Boolean)),
@@ -201,22 +205,22 @@ function ArchivedAgentRow({
   const unarchiving = useBusyPress(() => press(agent.id, false, ARCHIVE_DRAWN.ON_ANSWER));
   const subject = agentSubject(agents, agent.id, NOTHING_HELD, false);
   return (
-    <li ref={item} className="task-summary-archived-agent" {...menu.contextMenu()}>
+    <li ref={item} className="task-summary-archived-agent relative" {...menu.contextMenu()}>
       <Tooltip
         label={subject.name}
         card={<AgentCard subject={subject} models={agents.models} />}
         cardBeside
         cardRegion={item}
       >
-        <span className="task-summary-row">
-          <span className="task-summary-glyph">
+        <span className="task-summary-row flex h-control w-full items-center gap-icon-gap rounded-control bg-none px-row-inset text-left text-body-size text-foreground transition-[background-color] duration-(--luke-duration-hover) ease-motion-exit">
+          <span className={SUMMARY_GLYPH}>
             <AgentGlyph agent={agent} />
           </span>
-          <OneLine className="task-summary-label">{subject.name}</OneLine>
+          <OneLine className="task-summary-label min-w-0 flex-1">{subject.name}</OneLine>
           {agentEndMark(agent, false)}
         </span>
       </Tooltip>
-      <span className="task-summary-marks">
+      <span className="task-summary-marks pointer-events-none absolute top-0 right-luke-4 flex h-control items-center opacity-0">
         <Tooltip label={UNARCHIVE.label}>
           <IconButton
             icon={UNARCHIVE.icon}
@@ -253,7 +257,7 @@ export function ArchivedAgents({
   const archived = agents.archived ?? [];
   if (archived.length === 0) return null;
   return (
-    <div className="task-summary-archived">
+    <div className="task-summary-archived mt-list-gap">
       <GroupHeader
         heading={GROUP_HEADING.NONE}
         glyph={<ArchiveIcon />}

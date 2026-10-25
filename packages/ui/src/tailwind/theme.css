@@ -48,6 +48,29 @@
   --text-caption--line-height: var(--luke-type-caption-leading);
   --spacing-control: var(--luke-control-height);
   --spacing-control-inset: var(--luke-control-inset);
+
+  /* The panel's side panel and the plan's summary beside the document
+     (`@luke/panel`): the summary's width and its rail's, both said once on
+     the task's column (`desktop.css`'s `.desktop-task-main`); the card's
+     inset, the rail's less its 1px border; the panel's widest, which leaves
+     the document its reserve; the empty panel's column, 300px at most; a
+     note's share of the toolbar; and the card's arrival and leaving. */
+  --spacing-summary: var(--summary-width);
+  --spacing-summary-rail: var(--summary-rail-width);
+  --spacing-summary-card-inset: calc(var(--luke-space-12) - 1px);
+  --spacing-side-panel: max(
+    280px,
+    calc(100% - var(--document-reserve))
+  ); /* off-scale: the panel's least width */
+  --spacing-side-panel-no-tabs: max(
+    var(--luke-space-16),
+    calc((100% - 300px) / 2 + var(--luke-space-16))
+  ); /* off-scale: the empty panel's 300px column */
+  --spacing-half-container: 50cqi;
+  --animate-card-grow-in:
+    luke-menu-arrive var(--luke-duration-quick) var(--luke-motion-exit) both,
+    luke-card-grow var(--luke-duration-fast) var(--luke-spring-fast) both;
+  --animate-card-leave: luke-menu-leave var(--luke-duration-exit) var(--luke-motion-exit) forwards;
   --spacing-control-icon: var(--luke-control-icon);
   --spacing-icon-gap: var(--luke-icon-gap);
   --spacing-menu-row: var(--luke-menu-row-height);
