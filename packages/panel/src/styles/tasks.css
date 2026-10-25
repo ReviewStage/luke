@@ -1298,6 +1298,15 @@
   flex: 1;
 }
 
+/* The sheet rounds its corners without clipping what it holds (shell.css), so
+   a page's white would stand to a square corner at the rounded sheet's. The
+   room clips its own bottom corners to the sheet's radius, which a narrow
+   room, full bleed, does not have. */
+:where(:root):not([data-luke-room="narrow"]) .page-view-frame-room {
+  overflow: clip;
+  border-radius: 0 0 var(--sheet-radius, 0) var(--sheet-radius, 0);
+}
+
 .page-view-frame {
   display: block;
   width: 100%;

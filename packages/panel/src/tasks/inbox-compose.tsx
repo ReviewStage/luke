@@ -477,7 +477,8 @@ function ComposeCard({
         />
       ) : (
         <Toolbar
-          start={TOOLBAR_INSET.COLUMN}
+          // Note that a title with no way back before it starts where the other bars' titles do, not at the column's edge, which is for a control's fill.
+          start={onBack === undefined ? undefined : TOOLBAR_INSET.COLUMN}
           lead={
             onBack === undefined ? null : (
               <BackButton label={INBOX} place={INBOX_PLACE} onBack={onBack} />

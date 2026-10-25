@@ -95,6 +95,12 @@
     align-items: center;
   }
 
+  /* A face's width, which a mark in the card beside it stands centred in. */
+  .luke-settings-row[data-lead="face"] .luke-settings-row-leading {
+    width: var(--spacing-avatar-card);
+    justify-content: center;
+  }
+
   .luke-settings-row-copy {
     display: flex;
     flex: 1 1 0;
@@ -260,9 +266,19 @@
     width: fit-content;
   }
 
+  /* Note that the parts of a wrapping line are spaced by the spaces written
+     between them, kept by `pre`, since a flex gap would stand beside the
+     space a part ends in, once the line's own space has been trimmed from
+     the end of that part, and leave a wider gap after a separator than
+     before it. The state's dot keeps its own gap. */
   .luke-settings-row-state[data-wrap] {
+    column-gap: 0;
     flex-wrap: wrap;
-    white-space: nowrap;
+    white-space: pre;
+  }
+
+  .luke-settings-row-state[data-wrap]::before {
+    margin-inline-end: var(--luke-space-6);
   }
 
   .luke-settings-row-state[data-state="connected"]::before {

@@ -51,7 +51,7 @@ const badgeVariants = cva(
         danger: "",
       },
       face: {
-        plain: "bg-chip inset-ring-chip-edge",
+        plain: "bg-chip inset-ring-border-strong",
         filled: "bg-badge-fill inset-ring-badge-fill-edge text-badge-fill-words whitespace-nowrap",
         lit: "bg-ink inset-ring-ink text-ink-foreground",
       },

@@ -88,6 +88,14 @@ export const SETTINGS_ROW_INDENT = {
 
 export type SettingsRowIndent = (typeof SETTINGS_ROW_INDENT)[keyof typeof SETTINGS_ROW_INDENT];
 
+/** How wide the row's lead stands: a provider's mark at its own width, or a face's, in which a mark standing in a card beside a face's row is centred so both rows' words start together. */
+export const SETTINGS_ROW_LEAD = {
+  MARK: "mark",
+  FACE: "face",
+} as const;
+
+export type SettingsRowLead = (typeof SETTINGS_ROW_LEAD)[keyof typeof SETTINGS_ROW_LEAD];
+
 /** What a row hands the controls it holds. */
 export interface SettingsRowControl {
   /** The label's id, for a control named by `aria-labelledby`. */
@@ -136,6 +144,7 @@ export function SettingsRow({
   adornment,
   density = SETTINGS_ROW_DENSITY.CARD,
   indent = SETTINGS_ROW_INDENT.NONE,
+  lead = SETTINGS_ROW_LEAD.MARK,
   labelsControl = false,
   landed = false,
   children,
@@ -153,6 +162,8 @@ export function SettingsRow({
   density?: SettingsRowDensity | undefined;
   /** Where the row's edge stands; at the card's where none is named. */
   indent?: SettingsRowIndent | undefined;
+  /** How wide the lead stands; a mark's where none is named, a face's for a row that stands beside rows led by faces. */
+  lead?: SettingsRowLead | undefined;
   /** Whether the row's words label its one control, a switch, wearing `controlId`: a press on them sets it, and it stays beside them. */
   labelsControl?: boolean | undefined;
   /** Whether the row just arrived, which lights it once. */
@@ -185,6 +196,7 @@ export function SettingsRow({
       data-invalid={failed}
       data-density={density}
       data-indent={indent}
+      data-lead={lead}
       data-labels-control={labelsControl}
       {...landedMark(landed, LANDED.WITHIN)}
     >

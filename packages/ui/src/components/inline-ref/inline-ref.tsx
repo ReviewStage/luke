@@ -168,7 +168,8 @@ function rootClass({
 
 /** A token's glyph, centred in a box the line's size; a pill's in the muted ink. */
 function glyphClass(look: InlineRefLook): string {
-  const glyph = "luke-inline-ref-glyph inline-grid flex-none place-items-center [&>svg]:size-[1em]";
+  const glyph =
+    "luke-inline-ref-glyph inline-grid flex-none place-items-center empty:hidden [&>svg]:size-[1em]";
   return look === INLINE_REF_LOOK.PILL ? `${glyph} size-[1em] text-muted-foreground` : glyph;
 }
 
