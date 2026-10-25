@@ -440,7 +440,7 @@ const SHARED_FAILURE_NOTE = {
 const START_RETIRED = "This agent has ended. Start a new one.";
 
 /** What a message to an agent whose session has ended says where only the words are drawn, as an Inbox answer's are. */
-export const MESSAGE_RETIRED = "This agent has ended. Continue in a new one.";
+const MESSAGE_RETIRED = "This agent has ended. Continue in a new one.";
 
 /** What the agent's own box says once a message closed it on an ended agent, beside the press that continues it in a new one (`ContinueAgent`), which says the rest. */
 const BOX_RETIRED = "This agent has ended.";
@@ -460,7 +460,7 @@ export const CONTINUED_IN = "Continued in";
  * order started. Note that a fork names the message it was cut at, so it
  * continues nothing.
  */
-export function continuationsOf(
+function continuationsOf(
   agentId: string,
   agents: readonly CodingAgentSummary[] | undefined,
   archived: readonly CodingAgentSummary[] | undefined,
@@ -499,7 +499,7 @@ export function continuedByTitles(agent: CodingAgentSummary): ReadonlyMap<string
 }
 
 /** Whether a turn's end line is where an agent may be continued: it failed, and not on a refused API key, which a new agent would meet the same. */
-export function endLineContinues(status: CodingAgentStatus, endReason: FailureReason): boolean {
+function endLineContinues(status: CodingAgentStatus, endReason: FailureReason): boolean {
   return status === CODING_AGENT_STATUS.FAILED && endReason !== FAILURE_REASON.API_KEY;
 }
 
@@ -649,7 +649,7 @@ export function unrunnableChoice(
 }
 
 /** What an agent Luke's key paid for says to a message, since it never moves to another payer. */
-export const LUKE_PAID_REFUSAL = "Luke's key no longer runs agents. Continue in a new one.";
+const LUKE_PAID_REFUSAL = "Luke's key no longer runs agents. Continue in a new one.";
 
 /** The one sentence a missing credential says: the harness to connect, by the provider the service named, and what it unblocks. */
 function credentialMissingWords(

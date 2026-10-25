@@ -8,7 +8,6 @@ import {
   STOP_KIND,
   type Stop,
   SWITCH_STEP,
-  SWITCHER_CARDS,
   SWITCHER_LET_GO,
   SWITCHER_PLACE,
   type SwitcherState,
@@ -189,7 +188,7 @@ describe("⌃Tab", () => {
     );
     const state = pressed(many, many[0], SWITCH_STEP.BACK);
     assert.ok(state.held);
-    assert.equal(state.cards.length, SWITCHER_CARDS);
+    assert.equal(state.cards.length, 5);
     assert.deepEqual(switcherTarget(state), screen("a", { agent: "4" }));
   });
 

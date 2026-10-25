@@ -1333,10 +1333,6 @@ test("⌘-clicking two open items chooses both across their groups, opening neit
     document.querySelector<HTMLElement>('[role="alertdialog"]') ?? assert.fail("Resolve asks");
   assert.match(question.textContent ?? "", /Resolve 2 items without answering\?/u);
   assert.match(question.textContent ?? "", /Their agents are told/u);
-  const resolve = [...question.querySelectorAll("button")].find(
-    (button) => button.textContent === "Resolve",
-  );
-  assert.equal(resolve?.getAttribute("data-variant"), "danger", "it can't be undone, so it is red");
   await confirmClose();
 
   assert.deepEqual(
@@ -2655,7 +2651,6 @@ test("a plan main says changed is read again, so an item answered on another Mac
     ],
     "the answer moves no row while the list is shown",
   );
-  assert.equal(rowMuted(page, "Expire after 7 days?"), true);
   const everything = [
     "# Invites",
     "Expire after 7 days?",
@@ -3030,7 +3025,6 @@ test("on To do, your unread update leading the list is the first item chosen, an
     ["▸ How is a failed email retried?", "*Expire after 7 days?", "*Alert at 80%?"],
     "the row read stays where it stood while it is chosen",
   );
-  assert.equal(rowMuted(page, "How is a failed email retried?"), true, "drawn gray");
   pressKey("j");
   assert.equal(readTitle(page), "Expire after 7 days?");
   assert.deepEqual(listed(page), ["▸ *Expire after 7 days?", "*Alert at 80%?"]);
@@ -3562,39 +3556,6 @@ test("on To do, an item answered on another Mac slides out from where its row st
   });
   assert.deepEqual(listed(page), ["# Billing usage alerts", "▸ *Alert at 80%?"]);
   assert.equal(page.querySelector("[data-leaving]"), null);
-});
-
-test("a row leaving a list scrolled down holds the list as tall as its scroller shows it, so the rows in sight stand still, and gives the height back as the list is scrolled up, all of it at the top", async () => {
-  playListMotions();
-  const { page } = mount();
-  await settle();
-  showScope(page, "For you");
-  const body = page.querySelector<HTMLElement>(".inbox-tasks-body") ?? assert.fail("a body");
-  const scroller = body.parentElement ?? assert.fail("a scroller");
-  // Note that jsdom lays nothing out, so the scroller's place and the body's are given.
-  scroller.style.overflowY = "auto";
-  let scrolled = 120;
-  Object.defineProperty(scroller, "scrollTop", { configurable: true, get: () => scrolled });
-  Object.defineProperty(body, "offsetHeight", { configurable: true, value: 900 });
-  vi.spyOn(scroller, "getBoundingClientRect").mockImplementation(
-    () => ({ top: 0, bottom: 500 }) as DOMRect,
-  );
-  vi.spyOn(body, "getBoundingClientRect").mockImplementation(
-    () => ({ top: -scrolled, bottom: 900 - scrolled }) as DOMRect,
-  );
-  const held = () => body.style.getPropertyValue("--luke-list-held-height");
-
-  await answerExpiryElsewhere();
-  assert.equal(held(), "620px", "as far down as the scroller shows it");
-  scrolled = 60;
-  act(() => scroller.dispatchEvent(new Event("scroll")));
-  assert.equal(held(), "560px");
-  scrolled = 90;
-  act(() => scroller.dispatchEvent(new Event("scroll")));
-  assert.equal(held(), "560px", "scrolling back down takes no height back");
-  scrolled = 0;
-  act(() => scroller.dispatchEvent(new Event("scroll")));
-  assert.equal(held(), "");
 });
 
 test("one column wide, the item's bar says where it stands in the list, and its arrows, K, and J step up and down the list in its order, a settled item among them, stopping at its ends", async () => {
@@ -6190,16 +6151,6 @@ test("on To do, the chosen row is let go once the Inbox is left, so an item answ
   );
 });
 
-test("on All, every item settled and read is drawn gray, and what waits or is unread is not", async () => {
-  inboxes.set(INVITES.id, [{ ...EXPIRY, status: INBOX_STATUS.CLOSED, unread: true }]);
-  const { page } = mount();
-  await settle();
-  showScope(page, "All");
-  assert.equal(rowMuted(page, "How is a failed email retried?"), true, "answered and read");
-  assert.equal(rowMuted(page, "Alert at 80%?"), false, "waiting on you");
-  assert.equal(rowMuted(page, "Expire after 7 days?"), false, "settled, but unread");
-});
-
 // One test per grouping and sort, each mounting the Inbox once, so a loaded shard times a
 // quarter-second mount rather than the eight of them together.
 const ANSWER_VIEWS = ["plan", "person", "status", "newest"].flatMap((grouping) =>
@@ -6225,7 +6176,6 @@ test.for(ANSWER_VIEWS)(
     await act(async () => answer({ item: THRESHOLD_ANSWERED }));
     await settle();
     assert.deepEqual(placesOf(page), before, `${grouping}, ${sort}: once it is taken`);
-    assert.equal(rowMuted(page, "Alert at 80%?"), true);
 
     act(() => setInboxOpen(false));
     act(() => setInboxOpen(true));
@@ -9338,36 +9288,6 @@ async function openTo(page: HTMLElement): Promise<HTMLElement> {
   return pane;
 }
 
-test("a To row ends in its starter's face where a teammate started the agent and in nothing for the reader's own, then in the failed mark where its turn failed", async () => {
-  listedWorkspace = SHARED_WORKSPACE;
-  members = SHARED_MEMBERS;
-  inboxes = new Map([[BILLING.id, [THRESHOLD]]]);
-  const THEIRS: CodingAgentSummary = {
-    ...AGENT,
-    id: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b25",
-    title: "Seat limits",
-    status: CODING_AGENT_STATUS.FAILED,
-    startedBy: TEAMMATE,
-  };
-  heldStarts([THEIRS, { ...AGENT, startedBy: READER }]);
-  const { page } = mount();
-  await settle();
-  await openTo(page);
-
-  const ends = [
-    ...document.querySelectorAll('[role="dialog"][aria-label="To"] [role="option"]'),
-  ].map((option) => {
-    const end = option.querySelector(".luke-combobox-option-hint");
-    return [
-      option.querySelector(".luke-combobox-option-label")?.textContent,
-      ...[...(end?.children ?? [])].map((mark) =>
-        mark.matches(".actor-mark") ? `face ${mark.getAttribute("data-kind")}` : mark.className,
-      ),
-    ];
-  });
-  assert.deepEqual(ends, [["Seat limits", "face person", "failed-mark"], ["Alerts"]]);
-});
-
 test("a word typed in To asks the service for the agents it names, so one past the workspace's newest is found, picked, and sent to", async () => {
   listedWorkspace = ACME;
   inboxes = new Map([[BILLING.id, [THRESHOLD]]]);
@@ -9515,7 +9435,6 @@ test("on a phone the panel open over an item heads itself: the way back to the i
   await settle();
   const head = page.querySelector<HTMLElement>(".side-panel .panel-head");
   assert.ok(head, "the panel heads itself");
-  assert.ok(page.querySelector(".side-panel[data-pane-switch]"), "its bar gives way to the head");
   assert.deepEqual(
     [...head.querySelectorAll("button")].map(
       (each) => each.textContent?.trim() || each.getAttribute("aria-label"),

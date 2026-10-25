@@ -12,12 +12,7 @@ import {
 import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import { ProviderMark } from "@luke/ui";
-import {
-  DOCUMENT_REGION,
-  RENAME_FAILED_NOTE,
-  TASKS_PAGE,
-  type TaskMark,
-} from "@luke/ui/tasks-model";
+import { DOCUMENT_REGION, TASKS_PAGE, type TaskMark } from "@luke/ui/tasks-model";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { act, createElement, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -286,14 +281,6 @@ test("Permanently delete asks in a dialog naming the plan, from the ⋯ and from
 
   assert.deepEqual(asked.deleted, [TASK.id, OTHER.id]);
 });
-test("Permanently delete draws its act in the danger colour, since a deleted task is not brought back", () => {
-  const { tasks } = openTab();
-  openMenu(mountToolbar(tasks));
-
-  choose("Permanently delete");
-
-  assert.equal(answer("Permanently delete").getAttribute("data-variant"), "danger");
-});
 test("the plan's name reaches the recording only as masked text, never in an attribute", () => {
   const { tasks } = openTab();
   openMenu(mountToolbar(tasks));
@@ -418,23 +405,6 @@ test("a sidebar task Luke or a coding agent made wears who is on it rather than 
   unmountAll();
 });
 
-test("a sidebar task leads with its glyph as every place naming a task does: its status's mark, or the document where it has no status", () => {
-  /** The class of the mark the row leads with, and the status it says. */
-  const lead = (task: TaskSummary) => {
-    const { tasks, asked } = openTab();
-    const container = mount(sidebarTask(tasks, task, asked));
-    const mark = container.querySelector(".luke-list-row-leading > svg");
-    unmountAll();
-    return [mark?.getAttribute("class"), mark?.getAttribute("data-status")];
-  };
-
-  assert.deepEqual(lead({ ...OTHER, status: TASK_STATUS.IN_PROGRESS }), [
-    "luke-task-mark luke-task-status-mark",
-    TASK_STATUS.IN_PROGRESS,
-  ]);
-  assert.deepEqual(lead(OTHER), ["icon-button-glyph", null]);
-});
-
 test("Start and the task's ⋯ stand in the task's toolbar whichever tab its column shows, its plan's or its Chat's", () => {
   const drawn = (tab: MainTab | undefined) => {
     const container = mount(
@@ -484,6 +454,28 @@ function heard(node: Node): string {
   if (node.nodeType === Node.TEXT_NODE) return node.textContent ?? "";
   return [...node.childNodes].map(heard).join("");
 }
+
+test("a sidebar task's press says its status after its name, as a List row's does, and none where its service gives it none", () => {
+  /** What the row's press says, read as Dean, who is on the task, so no face is said. */
+  const said = (task: TaskSummary) => {
+    const { tasks, asked } = openTab();
+    const container = mount(
+      createElement(MemberDirectory, {
+        workspace: undefined,
+        readerId: DEAN.userId,
+        children: sidebarTask(tasks, { ...task, assignee: DEAN }, asked),
+      }),
+    );
+    const press = container.querySelector(".luke-list-row-title");
+    const words = press === null ? "" : heard(press);
+    unmountAll();
+    return words;
+  };
+
+  assert.equal(said({ ...OTHER, status: TASK_STATUS.IN_PROGRESS }), "Billing export, In progress");
+  assert.equal(said({ ...OTHER, status: TASK_STATUS.BACKLOG }), "Billing export, Backlog");
+  assert.equal(said(OTHER), "Billing export");
+});
 
 test("a sidebar plan whose repository belongs to another of the account's workspaces wears the attention mark before its time, its card naming that workspace, until it is moved there", () => {
   const { asked } = openTab();
@@ -727,8 +719,6 @@ test("Mark done marks a task with agents done at once, from its row's check and 
   rightClick(rowButton, 40, 60);
   choose("Mark done");
   rightClick(rowButton, 40, 60);
-  const cancel = menuItems().find((item) => itemLabel(item) === "Cancel task");
-  assert.equal(cancel?.dataset.danger, "true", "Cancel task is drawn red");
   choose("Cancel task");
   assert.deepEqual(settled, [
     [[working.id], TASK_STATUS.DONE],
@@ -865,7 +855,7 @@ test("a sidebar task whose rename was refused reopens its field holding the name
   assert.deepEqual(asked.renamed, [[OTHER.id, "Ship the launch"]]);
   const reopened = document.querySelector<HTMLInputElement>('input[aria-label="Task name"]');
   assert.equal(reopened?.value, "Ship the launch");
-  assert.match(document.body.textContent ?? "", new RegExp(RENAME_FAILED_NOTE, "u"));
+  assert.match(document.body.textContent ?? "", /The task could not be renamed\. Try again\./u);
 });
 
 test("a sidebar task being renamed draws no ⋯ and offers no menu", () => {

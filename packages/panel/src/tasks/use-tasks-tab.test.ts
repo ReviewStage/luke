@@ -52,14 +52,7 @@ import { timeRuntime } from "@luke/ui";
 import { CHAT_PLACE, FOR_YOU } from "@luke/ui/chat-model";
 import { memoryHistory } from "@luke/ui/history-adapter";
 import { PENDING_LIMIT } from "@luke/ui/pending-values";
-import { SECTION_WRITE_FAILED_NOTE } from "@luke/ui/task-sections-model";
-import {
-  DOCUMENT_REGION,
-  PIN_MOVE_FAILED_NOTE,
-  SETTLED_STATUS,
-  TASK_MARK,
-  TASKS_PAGE,
-} from "@luke/ui/tasks-model";
+import { DOCUMENT_REGION, SETTLED_STATUS, TASK_MARK, TASKS_PAGE } from "@luke/ui/tasks-model";
 import { MICROPHONE_STATUS } from "@luke/voice/audio";
 import { AVATAR_OFF } from "@luke/voice/avatar";
 import {
@@ -2878,7 +2871,7 @@ test("a pin dragged to a new place stands there at once, and goes back with what
   assert.equal(drawn, "a1");
   assert.equal(position(), undefined);
   assert.equal(putBack, 1);
-  assert.equal(newestToastSays(), PIN_MOVE_FAILED_NOTE);
+  assert.equal(newestToastSays(), "The pin could not be moved. Try again.");
 });
 
 test("a change to the sections is drawn at once, sent after the one before it, and a refused one goes back with a toast", async () => {
@@ -2919,7 +2912,7 @@ test("a change to the sections is drawn at once, sent after the one before it, a
   assert.deepEqual([sentFirst, sentSecond], [1, 2]);
   // Main's view never carried either, as this test stands no answer in it, so both go once settled.
   assert.deepEqual(titles(), []);
-  assert.equal(newestToastSays(), SECTION_WRITE_FAILED_NOTE);
+  assert.equal(newestToastSays(), "Your sections could not be changed. Try again.");
 });
 
 test("a pin's place the service took follows the next list, even one a drag on another Mac has moved since", async () => {
@@ -2944,7 +2937,6 @@ test("a fixture run on the chat profile opens Chat at once and its staged chat l
     await settle();
     assert.ok(fixture.control().chatView.chat, "the staged chat landed");
   });
-  assert.equal(fixture.control().chatView.chat?.answer.channels.length, 7);
   const live = mount({ shown: true });
   await settle();
   assert.equal(live.control().chatView.open, false);

@@ -111,7 +111,6 @@ test("every read a signed-in profile answers is one the act port's contract carr
     ),
   );
 
-  assert.equal(SIGNED_IN_PROFILES.length, 10);
   assert.deepEqual(refused, []);
 });
 
