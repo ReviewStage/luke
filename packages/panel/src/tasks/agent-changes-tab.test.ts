@@ -1500,7 +1500,7 @@ test("an image side whose read did not land is asked for again when the changes 
   ];
   await drawTab();
   let slot = await standNearView("logo.png");
-  assert.match(slot.textContent ?? "", /could not be shown/u);
+  assert.match(slot.textContent ?? "", /This picture could not be read\./u);
 
   refusing.clear();
   const options = document.querySelector<HTMLButtonElement>('button[aria-label="Changes actions"]');
@@ -1511,6 +1511,33 @@ test("an image side whose read did not land is asked for again when the changes 
   act(() => refresh?.click());
   await flush();
   slot = await standNearView("logo.png");
+
+  assert.deepEqual(asked, [after, after]);
+  assert.equal(slot.querySelector("img")?.alt, "Added");
+});
+
+test("an image side whose read did not land offers Retry, which reads it again and draws it", async () => {
+  vi.stubGlobal("IntersectionObserver", StandInIntersectionObserver);
+  const after = `https://raw.githubusercontent.com/acme/relay/${"9".repeat(40)}/logo.png`;
+  const refusing = new Set([after]);
+  const asked = answerImages(refusing);
+  commits = { headSha: "9".repeat(40) };
+  files = [
+    changed("logo.png", {
+      status: CHANGED_FILE_STATUS.ADDED,
+      omitted: PATCH_OMITTED.BINARY,
+      patch: null,
+    }),
+  ];
+  await drawTab();
+  const slot = await standNearView("logo.png");
+  const retry = [...slot.querySelectorAll<HTMLButtonElement>("button")].find(
+    (each) => each.textContent === "Retry",
+  );
+
+  refusing.clear();
+  act(() => retry?.click());
+  await flush();
 
   assert.deepEqual(asked, [after, after]);
   assert.equal(slot.querySelector("img")?.alt, "Added");

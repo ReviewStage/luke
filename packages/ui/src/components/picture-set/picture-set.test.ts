@@ -11,8 +11,9 @@ import { PICTURE_STATE } from "../../picture-cache.js";
  * few stand captioned, each opening at a press, while many say how many
  * they hold, the last tile drawn saying how many more; a gone picture says
  * so in its words, or why where its place says, and opens nothing, as does
- * one whose place gives nothing to open; and a picture still read is said
- * as reading it.
+ * one whose place gives nothing to open; a picture whose read did not land
+ * offers Retry in its press's place; and a picture still read is said as
+ * reading it.
  */
 
 const roots: Root[] = [];
@@ -130,4 +131,53 @@ test("a gone picture with no words of its own says the picture is not available"
   );
 
   expect(container.textContent).toBe("This picture is not available");
+});
+
+test("a picture whose read did not land says it could not be read, and its Retry reads it again rather than opening it", () => {
+  const pressed: string[] = [];
+  const container = mount(
+    createElement(
+      PictureSet,
+      { label: "Pictures the call answered", count: 1, thumbnails: true, children: undefined },
+      createElement(PictureSetTile, {
+        key: "failed",
+        state: { kind: PICTURE_STATE.FAILED, retry: () => pressed.push("retry") },
+        words: "Members",
+        onOpen: () => pressed.push("open"),
+      }),
+    ),
+  );
+  const presses = [...container.querySelectorAll("button")];
+
+  expect(container.querySelector('[role="alert"]')?.textContent).toContain(
+    "Members could not be read.",
+  );
+  expect(presses.map((press) => press.textContent)).toEqual(["Retry"]);
+  act(() => (presses[0] as HTMLButtonElement).click());
+  expect(pressed).toEqual(["retry"]);
+});
+
+test("the last tile drawn, failed, keeps its Retry in reach rather than under how many more there are", () => {
+  const retried: string[] = [];
+  const container = mount(
+    createElement(
+      PictureSet,
+      { label: "Pictures", count: 7, children: undefined },
+      Array.from({ length: 6 }, (_, at) =>
+        createElement(PictureSetTile, {
+          key: String(at),
+          state:
+            at === 5 ? { kind: PICTURE_STATE.FAILED, retry: () => retried.push("sixth") } : READY,
+          words: `Screen ${String(at + 1)}`,
+          onOpen: () => undefined,
+        }),
+      ),
+    ),
+  );
+  const sixth = container.querySelectorAll("li")[5];
+
+  expect(sixth?.textContent).not.toContain("+1");
+  act(() => sixth?.querySelector("button")?.click());
+  expect(retried).toEqual(["sixth"]);
+  expect(container.querySelector("figcaption")?.textContent).toBe("7 pictures");
 });

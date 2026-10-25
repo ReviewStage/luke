@@ -92,10 +92,10 @@ function PictureSets(): React.JSX.Element {
       </CatalogSection>
       <CatalogSection
         id="picture-sets-call"
-        title="A call's, as thumbnails: one read, one still read, one gone, one not kept"
+        title="A call's, as thumbnails: one read, one still read, one gone, one not kept, one failed"
       >
         <div className="catalog-column">
-          <PictureSet label="Pictures the call answered" count={4} thumbnails>
+          <PictureSet label="Pictures the call answered" count={5} thumbnails>
             <PictureSetTile
               state={screenshot(1280, 800, "#7aa7f4", "#3d5ac8")}
               width={1280}
@@ -116,14 +116,29 @@ function PictureSets(): React.JSX.Element {
               words="screenshot-4"
               why="not kept · 6.4 MB"
             />
+            <PictureSetTile
+              state={{ kind: PICTURE_STATE.FAILED, retry: () => undefined }}
+              width={1280}
+              height={800}
+              words="screenshot-5"
+              onOpen={open}
+            />
           </PictureSet>
         </div>
       </CatalogSection>
-      <CatalogSection id="picture-sets-stand-in" title="In a picture's place: read, and gone">
+      <CatalogSection
+        id="picture-sets-stand-in"
+        title="In a picture's place: read, gone, and failed"
+      >
         <div className="catalog-stack">
           <PictureStandIn state={PICTURE_STATE.READING} words="Members page" />
           <PictureStandIn state={PICTURE_STATE.MISSING} words="Members page" />
           <PictureStandIn state={PICTURE_STATE.MISSING} words="" />
+          <PictureStandIn
+            state={PICTURE_STATE.FAILED}
+            words="Members page"
+            onRetry={() => undefined}
+          />
         </div>
       </CatalogSection>
     </>

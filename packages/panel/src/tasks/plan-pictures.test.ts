@@ -271,12 +271,17 @@ test("once the window lets go of its pictures, as an account change asks, each i
   assert.equal(view.querySelector(".picture-block")?.textContent, "Invite email · not available");
 });
 
-test("a picture whose read went unanswered says so alone, and the picture drawn in its place next is read", async () => {
+test("a picture whose read went unanswered says it could not be read, with Retry, and the picture drawn in its place next is read", async () => {
   const taskId = "3c4d5e6f-7a8b-4c9d-0e1f-2a3b4c5d6e7f";
   standHost(new Set([SECOND]), [], new Set([MOCK]));
   const first = `## Approach\n\n![First mock](${picture(taskId, MOCK)})`;
   const view = await drawn(createElement(PlanBody, { task: taskOf(taskId, first), live: false }));
-  assert.equal(view.querySelector(".picture-block")?.textContent, "First mock · not available");
+  const failed = view.querySelector(".picture-block");
+  assert.match(
+    failed?.querySelector('[role="alert"]')?.textContent ?? "",
+    /^First mock could not be read\./u,
+  );
+  assert.equal(failed?.querySelector("button")?.textContent, "Retry");
 
   // A plan drawn again asks whether motion is held still, which a page with no stylesheet cannot say.
   holdMotion();

@@ -91,6 +91,13 @@
     padding: var(--luke-space-8);
   }
 
+  /* A failed picture's sentence and Retry, inset as a gone one's words are,
+     a file's long name wrapping rather than running out of the frame. */
+  .luke-picture-set-frame > .luke-error-state {
+    padding: var(--luke-space-8);
+    overflow-wrap: anywhere;
+  }
+
   .luke-picture-stand-in > svg {
     width: var(--luke-icon-16);
     height: var(--luke-icon-16);

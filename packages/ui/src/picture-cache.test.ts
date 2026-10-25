@@ -10,14 +10,16 @@ import {
   PICTURE_BYTE_BUDGET,
   PICTURE_STATE,
   type PictureAnswer,
+  type PictureState,
   pictureNow,
   usePicture,
 } from "./picture-cache.js";
 
 /**
  * picture-cache.test.ts -- the pictures a window keeps stand within a byte
- * budget: the one drawn longest ago is let go first, and the newest stays.
- * Synthetic URLs of the size the case needs.
+ * budget: the one drawn longest ago is let go first, and the newest stays;
+ * a read that did not land draws as failed until its retry lands it, apart
+ * from a picture gone. Synthetic URLs of the size the case needs.
  */
 
 const OWNER = "plan-1";
@@ -126,4 +128,51 @@ test("pictures read ahead and drawn nowhere are let go by the budget, the newest
 
   assert.equal(pictureNow(OWNER, "a").kind, PICTURE_STATE.READING);
   assert.equal(pictureNow(OWNER, "f").kind, PICTURE_STATE.READY);
+});
+
+/** Draws the picture `id` read through `read`, keeping the state it was drawn in last. */
+async function drawPicture(
+  id: string,
+  read: (owner: string, id: string) => Promise<PictureAnswer>,
+): Promise<{ readonly now: () => PictureState }> {
+  let drawn: PictureState = { kind: PICTURE_STATE.READING };
+  function Picture(): null {
+    drawn = usePicture(OWNER, id, read);
+    return null;
+  }
+  const root = createRoot(document.createElement("div"));
+  roots.push(root);
+  await act(async () => root.render(createElement(Picture)));
+  return { now: () => drawn };
+}
+
+test("a read that did not land draws as failed, and its retry reads it again until it lands", async () => {
+  const base64 = "iVBORw==";
+  let reads = 0;
+  const read = () => {
+    reads += 1;
+    return reads === 1
+      ? Promise.reject(new Error("the host did not answer"))
+      : Promise.resolve<PictureAnswer>({ contentType: "image/png", base64 });
+  };
+  const picture = await drawPicture("a", read);
+  const failed = picture.now();
+  assert.equal(failed.kind, PICTURE_STATE.FAILED);
+
+  await act(async () => {
+    if (failed.kind === PICTURE_STATE.FAILED) failed.retry();
+  });
+
+  assert.deepEqual(picture.now(), {
+    kind: PICTURE_STATE.READY,
+    url: `data:image/png;base64,${base64}`,
+  });
+});
+
+test("a failure the read answers draws as failed, and a picture gone draws as missing, with no retry", async () => {
+  const refused = await drawPicture("a", () => Promise.resolve({ failure: "unreachable" }));
+  const gone = await drawPicture("b", () => Promise.resolve({ failure: "not-found" }));
+
+  assert.equal(refused.now().kind, PICTURE_STATE.FAILED);
+  assert.deepEqual(gone.now(), { kind: PICTURE_STATE.MISSING });
 });

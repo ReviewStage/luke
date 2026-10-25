@@ -4,6 +4,7 @@ import { cssCustomProperties } from "../../css.js";
 import { ImageOffIcon } from "../../icons/icons.js";
 import { PICTURE_STATE, type PictureState } from "../../picture-cache.js";
 import { CARD_CORNER, CARD_ELEMENT, CARD_PADDING, Card } from "../card/card.js";
+import { ERROR_STATE_ELEMENT, ErrorState } from "../error-state/error-state.js";
 import { PictureTile } from "../picture-tile/picture-tile.js";
 import { Spinner } from "../spinner/spinner.js";
 import { TEXT_ELEMENT, TEXT_TONE, TEXT_VARIANT, Text } from "../text/text.js";
@@ -21,13 +22,15 @@ import { Tooltip } from "../tooltip/hint.js";
  * holds. A set that stands beside something else, as the pictures under a
  * call's row do, is thumbnails however few it holds (`thumbnails`). A set's
  * caller draws six (`PICTURE_SET_SHOWN`) and the last of them
- * wears a veil saying how many more the viewer holds.
+ * wears a veil saying how many more the viewer holds, unless its read
+ * failed, since the veil would cover its Retry.
  *
  * Each tile is a `PictureTile` whose face is the picture, the spinner while
- * its bytes are read, or, where they are gone, the glyph and its words
- * (`PictureStandIn`, which a picture standing alone draws too). A gone
- * tile opens nothing, so it is no press; nor is one whose place drawing it
- * gives no `onOpen`. The set is left out of the screen recording, because a
+ * its bytes are read, where they are gone the glyph and its words, or, where
+ * the read did not land this time, the failure's sentence and Retry
+ * (`PictureStandIn`, which a picture standing alone draws too). A gone or
+ * failed tile opens nothing, so it is no press, and a failed one's Retry is
+ * its press instead; nor is one whose place drawing it gives no `onOpen`. The set is left out of the screen recording, because a
  * picture can hold words and the recording carries none, and it is a list
  * its caller names (`label`).
  */
@@ -47,6 +50,9 @@ const READING_LABEL = "Reading the picture";
 /** What a picture that is not there says, after its words, where its place says no more. */
 const NOT_AVAILABLE = "not available";
 
+/** What a picture whose read did not land says, after its words. */
+const COULD_NOT_READ = "could not be read.";
+
 /** What a set counts its pictures as. */
 const PICTURE = { one: "picture", many: "pictures" } as const;
 
@@ -63,24 +69,41 @@ function goneWords(words: string, why: string): string {
   return words === "" ? `This picture is ${why}` : `${words} · ${why}`;
 }
 
+/** The sentence a picture whose read did not land says: its own words first, or this picture where it has none. */
+function failedWords(words: string): string {
+  return `${words === "" ? "This picture" : words} ${COULD_NOT_READ}`;
+}
+
 /**
  * What stands in a picture's place while it is not drawn: the window's
- * spinner, said as reading the picture, while its bytes are read, and the
+ * spinner, said as reading the picture, while its bytes are read; the
  * glyph of a picture gone and its words, with why (`not available` unless
- * its place says more), where they are gone.
+ * its place says more), where they are gone; and, where the read did not
+ * land this time, the failure's sentence and Retry (`ErrorState`), a span
+ * since a picture may stand inside a paragraph.
  */
 export function PictureStandIn({
   state,
   words,
   why = NOT_AVAILABLE,
+  onRetry,
 }: {
-  state: typeof PICTURE_STATE.READING | typeof PICTURE_STATE.MISSING;
+  state: typeof PICTURE_STATE.READING | typeof PICTURE_STATE.MISSING | typeof PICTURE_STATE.FAILED;
   /** The picture's words, its alt text or caption; empty where it has none. */
   words: string;
   /** Why a gone picture is not there, after its words. */
   why?: string | undefined;
+  /** Reads a failed picture again. */
+  onRetry?: (() => void) | undefined;
 }): React.JSX.Element {
   if (state === PICTURE_STATE.READING) return <Spinner delay label={READING_LABEL} />;
+  if (state === PICTURE_STATE.FAILED) {
+    return (
+      <ErrorState as={ERROR_STATE_ELEMENT.SPAN} onRetry={onRetry}>
+        {failedWords(words)}
+      </ErrorState>
+    );
+  }
   return (
     <span className="luke-picture-stand-in">
       <ImageOffIcon aria-hidden="true" />
@@ -99,6 +122,9 @@ function TileFace({
   words: string;
   why: string | undefined;
 }): ReactNode {
+  if (state.kind === PICTURE_STATE.FAILED) {
+    return <PictureStandIn state={state.kind} words={words} onRetry={state.retry} />;
+  }
   if (state.kind !== PICTURE_STATE.READY) {
     return <PictureStandIn state={state.kind} words={words} why={why} />;
   }
@@ -116,7 +142,7 @@ function TileFace({
 /**
  * One picture of a set, by where its read stands: at its own shape (`width`
  * by `height`), or a screenshot's until its size is known; opening it on a
- * press unless it is gone or its place gives nothing to open.
+ * press unless it is gone, failed, or its place gives nothing to open.
  */
 export function PictureSetTile({
   state,
@@ -143,6 +169,7 @@ export function PictureSetTile({
   const { many, more } = useContext(TilePlaceContext);
   const ratio = width === undefined || height === undefined ? WAITING_RATIO : width / height;
   const gone = state.kind === PICTURE_STATE.MISSING;
+  const failed = state.kind === PICTURE_STATE.FAILED;
   const frame = (
     <Card
       as={CARD_ELEMENT.SPAN}
@@ -154,7 +181,8 @@ export function PictureSetTile({
       className="luke-picture-set-frame grid w-full place-items-center"
     >
       <TileFace state={state} words={words} why={why} />
-      {more > 0 ? (
+      {/* Note that a failed tile wears no veil, because the veil would cover its Retry, and the words under the set still say how many it holds. */}
+      {more > 0 && !failed ? (
         <span className="luke-picture-set-more" aria-hidden="true">
           +{more}
         </span>
@@ -172,7 +200,7 @@ export function PictureSetTile({
       className="luke-picture-set-tile"
       style={cssCustomProperties({ "--luke-picture-ratio": ratio })}
     >
-      {gone || onOpen === undefined ? (
+      {gone || failed || onOpen === undefined ? (
         <span className="luke-picture-set-still">
           {frame}
           {said}

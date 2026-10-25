@@ -361,20 +361,49 @@ test("a tile of a set whose bytes are gone says so in its words and opens nothin
     finished([shown("call-gone", [kept, gone]), text("Two.")]),
     false,
     (id) =>
-      id === gone.id
-        ? Promise.reject(new Error("The picture was deleted."))
-        : Promise.resolve({ contentType: INBOX_IMAGE_TYPE.PNG, base64: "iVBORw==" }),
+      Promise.resolve(
+        id === gone.id
+          ? { failure: "not-found" }
+          : { contentType: INBOX_IMAGE_TYPE.PNG, base64: "iVBORw==" },
+      ),
   );
   const tiles = [...container.querySelectorAll(SHOWN_TILES)];
 
   assert.equal(tiles.length, 2);
   assert.ok(tiles[0]?.querySelector("button"), "the picture still here opens");
-  assert.equal(tiles[1]?.querySelector("button"), null, "the one gone opens nothing");
+  assert.equal(tiles[1]?.querySelectorAll("button").length, 0, "the one gone opens nothing");
   assert.equal(
     tiles[1]?.querySelector('[role="img"]')?.getAttribute("aria-label"),
     "Screen 2 · not available",
   );
   assert.match(tiles[1]?.textContent ?? "", /Screen 2 · not available/u);
+});
+
+test("a tile whose read did not land says it could not be read, and its Retry reads it again and opens it", async () => {
+  const [kept, failing] = [picture(800, 450), picture(800, 450)];
+  assert.ok(kept && failing);
+  let refusing = true;
+  const { container, read } = await drawn(
+    finished([shown("call-failed", [kept, failing]), text("Two.")]),
+    false,
+    (id) =>
+      id === failing.id && refusing
+        ? Promise.reject(new Error("The host did not answer."))
+        : Promise.resolve({ contentType: INBOX_IMAGE_TYPE.PNG, base64: "iVBORw==" }),
+  );
+  const failed = () => [...container.querySelectorAll(SHOWN_TILES)][1];
+  assert.match(failed()?.textContent ?? "", /Screen 2 could not be read\./u);
+  const retry = failed()?.querySelector("button");
+  assert.equal(retry?.textContent, "Retry");
+
+  refusing = false;
+  await act(async () => retry?.click());
+
+  assert.deepEqual(
+    read.filter((id) => id === failing.id),
+    [failing.id, failing.id],
+  );
+  assert.equal(failed()?.querySelector("button")?.getAttribute("aria-label"), "Enlarge Screen 2");
 });
 
 test("a set of eight draws six, the last saying how many more, and says how many it holds", async () => {
