@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { and, eq, lt, sql } from "drizzle-orm";
-import { Data, DateTime, Duration, Effect, Option, Ref, Schedule, Schema } from "effect";
+import { Data, DateTime, Duration, Effect, Option, Schedule, Schema } from "effect";
 import { SqlSchema } from "effect/sql";
 import { Database, type DatabaseServices, type StoreFailure } from "../core/query.js";
 import { conversations, dispatchWaiters } from "../schemas/storage.js";
@@ -31,7 +31,7 @@ import { InstantColumnSchema } from "./columns.js";
  *
  * Note that the claim goes to waiters in the order they queued, as the
  * advisory lock's waiters were served, so sends reach the runtime in the
- * order they arrived: a claimant that finds the claim taken queues
+ * order they arrived: every claimant queues as it arrives
  * (`dispatch_waiters`, numbered by the database), and a claim is taken only
  * while no live waiter queued before the claimant. A waiter is live while
  * it keeps asking, judged by the database's own clock, so one that died
@@ -175,9 +175,9 @@ const removeStaleWaiters = SqlSchema.void({
     ),
 });
 
-/** A live waiter of the conversation that queued before the place given, or any live waiter where none is given. */
+/** A live waiter of the conversation that queued before the place given. */
 const findWaiterAhead = SqlSchema.findAll({
-  Request: Schema.Struct({ conversationId: Schema.String, place: Schema.NullOr(Schema.Number) }),
+  Request: Schema.Struct({ conversationId: Schema.String, place: Schema.Number }),
   Result: PlaceSchema,
   execute: ({ conversationId, place }) =>
     Database.use((db) =>
@@ -188,7 +188,7 @@ const findWaiterAhead = SqlSchema.findAll({
           and(
             eq(dispatchWaiters.conversationId, conversationId),
             sql`${dispatchWaiters.seenAt} > ${waiterStaleBefore}`,
-            place === null ? undefined : lt(dispatchWaiters.place, place),
+            lt(dispatchWaiters.place, place),
           ),
         )
         .limit(1),
@@ -217,18 +217,18 @@ const claimStanding = /* @__PURE__ */ Effect.fnUntraced(function* (
 /**
  * Whether the conversation is not this claimant's to claim yet, read under
  * its row lock, which this takes and the caller's transaction keeps: another
- * hand-over's claim stands, or a live waiter queued before the claimant, at
- * the place it holds (`waitingOutDispatchClaim`), or at all where it holds
- * none. A claimant holding a place asks again here, which keeps it live.
+ * hand-over's claim stands, or a live waiter queued before the place the
+ * claimant holds (`waitingOutDispatchClaim`). Asking here keeps the
+ * claimant live.
  */
 export const dispatchClaimStands = /* @__PURE__ */ Effect.fnUntraced(function* (
   conversationId: string,
-  place?: number,
+  place: number,
 ): Effect.fn.Return<boolean, StoreFailure, DatabaseServices> {
   const row = yield* lockClaim({ conversationId });
-  if (place !== undefined) yield* refreshWaiter({ place });
+  yield* refreshWaiter({ place });
   if (yield* claimStanding(conversationId, row)) return true;
-  const ahead = yield* findWaiterAhead({ conversationId, place: place ?? null });
+  const ahead = yield* findWaiterAhead({ conversationId, place });
   return ahead.length > 0;
 });
 
@@ -240,12 +240,12 @@ export const dispatchClaimStands = /* @__PURE__ */ Effect.fnUntraced(function* (
  */
 export const takeDispatchClaim = /* @__PURE__ */ Effect.fnUntraced(function* (
   conversationId: string,
+  place: number,
   line?: string,
-  place?: number,
 ): Effect.fn.Return<string, StoreFailure, DatabaseServices> {
   const claim = randomUUID();
   yield* writeClaim({ conversationId, claim, at: yield* DateTime.nowAsDate, line: line ?? null });
-  if (place !== undefined) yield* removeWaiter({ place });
+  yield* removeWaiter({ place });
   yield* removeStaleWaiters({ conversationId });
   return claim;
 });
@@ -285,42 +285,33 @@ export function releaseDispatchClaim(
  * Runs the attempt again while it fails because another claim stands, a
  * short while apart and no longer than the bound, `DISPATCH_CLAIM.WAIT`
  * unless the caller names another, holding nothing between tries; past the
- * wait it fails as `DispatchClaimHeld`. The first refusal queues the
- * claimant, and every later try is handed the place it holds, which the
- * attempt passes to `dispatchClaimStands` and `takeDispatchClaim`; the place
- * is given up however the wait ends. How long the wait took is logged where
- * it was long, by the conversation's id alone.
+ * wait it fails as `DispatchClaimHeld`. The claimant queues before its
+ * first try, so its place is its arrival, and every try is handed that
+ * place, which the attempt passes to `dispatchClaimStands` and
+ * `takeDispatchClaim`; the place is given up however the wait ends. How
+ * long the wait took is logged where it was long, by the conversation's id
+ * alone.
  */
 export function waitingOutDispatchClaim<A, E, R>(
   conversationId: string,
-  attempt: (place: number | undefined) => Effect.Effect<A, E | DispatchClaimHeld, R>,
+  attempt: (place: number) => Effect.Effect<A, E | DispatchClaimHeld, R>,
   bound: Duration.Duration = DISPATCH_CLAIM.WAIT,
 ): Effect.Effect<A, E | DispatchClaimHeld | StoreFailure, R | DatabaseServices> {
   return Effect.gen(function* () {
-    const queued = yield* Ref.make<number | undefined>(undefined);
-    const once = Effect.flatMap(Ref.get(queued), (place) =>
-      attempt(place).pipe(
-        Effect.tapError((failure) =>
-          failure instanceof DispatchClaimHeld && place === undefined
-            ? Effect.flatMap(queueWaiter({ conversationId }), ([waiter]) =>
-                waiter === undefined
-                  ? Effect.die(new Error("the waiter's insert answered no place"))
-                  : Ref.set(queued, waiter.place),
-              )
-            : Effect.void,
-        ),
-      ),
-    );
+    // Note that the claimant queues before it first asks, because a claim cleared between a refused
+    // first ask and a queueing after it would let a later arrival claim ahead of it.
+    const [waiter] = yield* queueWaiter({ conversationId });
+    if (waiter === undefined)
+      return yield* Effect.die(new Error("the waiter's insert answered no place"));
     const [waited, exit] = yield* Effect.timed(
       Effect.exit(
-        Effect.retry(once, {
+        Effect.retry(attempt(waiter.place), {
           schedule: claimRetry(bound),
           while: (failure) => failure instanceof DispatchClaimHeld,
         }),
       ),
     );
-    const place = yield* Ref.get(queued);
-    if (place !== undefined) yield* removeWaiter({ place });
+    yield* removeWaiter({ place: waiter.place });
     if (Duration.isGreaterThanOrEqualTo(waited, CLAIM_WAIT_LOGGED)) {
       yield* Effect.logInfo("a write waited for its conversation's dispatch claim", {
         conversationId,

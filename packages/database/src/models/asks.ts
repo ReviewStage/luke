@@ -677,7 +677,7 @@ type AskClaimed =
 const claimAsk = /* @__PURE__ */ Effect.fnUntraced(function* (
   target: ConversationTarget,
   id: string,
-  place: number | undefined,
+  place: number,
 ): Effect.fn.Return<AskClaimed, StoreFailure | DispatchClaimHeld, DatabaseServices> {
   const standingConversation = yield* readConversation(target);
   if (Option.isNone(standingConversation)) {
@@ -700,7 +700,7 @@ const claimAsk = /* @__PURE__ */ Effect.fnUntraced(function* (
     yield* recordedRuntimeSession(target),
     yield* latestSessionOf(target),
   );
-  const claim = yield* takeDispatchClaim(target.conversationId, undefined, place);
+  const claim = yield* takeDispatchClaim(target.conversationId, place);
   yield* markAskClaimed({ id, claim });
   return { standing, session, claim };
 });

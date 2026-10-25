@@ -2423,7 +2423,7 @@ type LineClaimed = Result.Result<
 const claimLine = /* @__PURE__ */ Effect.fnUntraced(function* (
   context: WriterContext,
   line: AwaitingLineWrite,
-  place: number | undefined,
+  place: number,
 ): Effect.fn.Return<LineClaimed, StoreFailure | DispatchClaimHeld, DatabaseServices> {
   if (yield* dispatchClaimStands(context.target.conversationId, place)) {
     return yield* new DispatchClaimHeld();
@@ -2448,7 +2448,7 @@ const claimLine = /* @__PURE__ */ Effect.fnUntraced(function* (
     finishedAt: context.now,
     sender: line.sender,
   });
-  const claim = yield* takeDispatchClaim(context.target.conversationId, id, place);
+  const claim = yield* takeDispatchClaim(context.target.conversationId, place, id);
   return Result.succeed({ id, txid, claim });
 });
 

@@ -316,7 +316,7 @@ const cutPoint = (conversationId: string, messageId: string) =>
   });
 
 /** The cut, under the conversation's row lock and with no hand-over under way, answering what it cut or why it could not. */
-const cut = (target: ConversationTarget, messageId: string, place: number | undefined) =>
+const cut = (target: ConversationTarget, messageId: string, place: number) =>
   Effect.gen(function* () {
     const { conversationId } = target;
     const held = yield* lockConversation(target);
