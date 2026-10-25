@@ -272,7 +272,7 @@ export function CodePane({
   return (
     <Fill as={FILL_ELEMENT.SECTION} className="code-pane ph-no-capture" aria-label="Code shown">
       <Conversation>
-        <ConversationContent className="checkpoint-log" fadeInset={SCROLL_FADE_INSET.BAND}>
+        <ConversationContent className="checkpoint-log pt-0" fadeInset={SCROLL_FADE_INSET.BAND}>
           {codeFeedCalls(shown, calls).map((call) => (
             <CodeFeedRun
               key={call.key}

@@ -69,23 +69,26 @@ export type TaskTitleProps = {
   children: string;
 };
 
-/** The plan's title on the header, cut to the line, behind its label where it has one. */
+/** The title's line, taking the head's room and cut to it. */
+const TITLE_CLASS = "min-w-0 flex-1 overflow-hidden whitespace-nowrap";
+
+/** The plan's title on the header, cut to the line, behind its label in the muted ink where it has one. */
 export function PlanTitle({ label, previews = false, children }: TaskTitleProps): ReactNode {
   const previewed = useDisclosurePreviewShown(previews && label !== undefined);
   if (label !== undefined && !previewed) {
     return (
-      <OneLine className="plan-card-title" words={label}>
-        <span className="plan-card-label">{label}</span>
+      <OneLine className={TITLE_CLASS} words={label}>
+        <span className="text-muted-foreground">{label}</span>
       </OneLine>
     );
   }
   return (
     <OneLine
-      className="plan-card-title"
+      className={TITLE_CLASS}
       words={label === undefined ? children : `${label} · ${children}`}
     >
-      {label === undefined ? null : <span className="plan-card-label">{label} · </span>}
-      <span className="plan-card-name">{children}</span>
+      {label === undefined ? null : <span className="text-muted-foreground">{label} · </span>}
+      <span className="font-luke-medium">{children}</span>
     </OneLine>
   );
 }
@@ -102,7 +105,11 @@ export function PlanContent({
 }: TaskContentProps): ReactNode {
   return (
     <DisclosureBody inset={DISCLOSURE_BODY.CARD}>
-      <div className="plan-card-body" data-layout={layout} {...props}>
+      <div
+        className="plan-card-body text-body data-[layout=stack]:flex data-[layout=stack]:flex-col data-[layout=stack]:gap-block-gap"
+        data-layout={layout}
+        {...props}
+      >
         {children}
       </div>
     </DisclosureBody>
