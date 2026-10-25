@@ -381,9 +381,15 @@ test("the picker stays hung from its chip as the words under it scroll", async (
   const chip = chipIn(container);
   let top = 120;
   vi.spyOn(chip, "getBoundingClientRect").mockImplementation(() => new DOMRect(40, top, 60, 20));
+  // Note that jsdom lays nothing out, so the box the picker is laid in is named for it.
+  vi.spyOn(HTMLElement.prototype, "offsetParent", "get").mockReturnValue(document.body);
 
-  const dialog = await pressChip(container);
-  const hung = dialog.closest<HTMLElement>(".date-picker-anchor");
+  await pressChip(container);
+  const dialog = [...container.querySelectorAll<HTMLElement>('[role="dialog"]')].find(
+    (each) =>
+      document.getElementById(each.getAttribute("aria-labelledby") ?? "")?.textContent === "Date",
+  );
+  const hung = dialog?.parentElement;
   const before = hung?.style.top;
   top = 60;
   act(() => {

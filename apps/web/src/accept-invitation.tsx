@@ -9,6 +9,7 @@ import { AuthPage, BUTTON_VARIANT, Button, SocialSignInCard } from "@luke/ui";
 import { organizationClient } from "better-auth/client/plugins";
 import { createAuthClient } from "better-auth/react";
 import { useEffect, useState } from "react";
+import { WEB_APP_URL } from "./SiteChrome";
 import { useSocialSignIn } from "./sign-in-choices";
 import "./styles.css";
 import { mountPrerenderedPage } from "./mount-page";
@@ -42,13 +43,19 @@ const INVITATION_ERROR = {
 /** The HTTP status Better Auth answers an expired, used, canceled, or unknown invitation with. */
 const SPENT_STATUS = 400;
 
-/** What the page shows: the work under way, a sign-in, the invitation to accept, or how it settled. */
-const VIEW = { WORKING: "working", SIGN_IN: "sign-in", OFFER: "offer", SAID: "said" } as const;
+/** What the page shows: the work under way, a sign-in, the invitation to accept, how it settled, or that it was accepted. */
+const VIEW = {
+  WORKING: "working",
+  SIGN_IN: "sign-in",
+  OFFER: "offer",
+  SAID: "said",
+  JOINED: "joined",
+} as const;
 
 type View =
   | { readonly kind: typeof VIEW.WORKING }
   | {
-      readonly kind: typeof VIEW.SIGN_IN | typeof VIEW.SAID;
+      readonly kind: typeof VIEW.SIGN_IN | typeof VIEW.SAID | typeof VIEW.JOINED;
       readonly title: string;
       readonly body: string;
     }
@@ -62,6 +69,12 @@ type View =
     };
 
 const WORKING: View = { kind: VIEW.WORKING };
+
+/** What the joined page says beneath its title, which keeps the way back to the Mac app. */
+const JOINED_BODY = "Return to Luke. You can close this tab.";
+
+/** The way on the joined page offers to a reader with no Mac app to return to. */
+const OPEN_ON_THE_WEB = { label: "Open Luke on the web", href: WEB_APP_URL } as const;
 
 const SPENT: View = said(
   "This invitation is no longer valid",
@@ -149,7 +162,7 @@ async function readInvitation(query: InvitationAcceptQuery, signedIn: string): P
 async function accept(offer: { id: string; name: string }, addresses: Addresses): Promise<View> {
   const accepted = await authClient.organization.acceptInvitation({ invitationId: offer.id });
   if (accepted.error) return refused(accepted.error, addresses);
-  return said(`You joined ${offer.name}`, "Return to Luke. You can close this tab.");
+  return { kind: VIEW.JOINED, title: `You joined ${offer.name}`, body: JOINED_BODY };
 }
 
 function titleOf(view: View): string {
@@ -228,7 +241,11 @@ function AcceptInvitation(): React.JSX.Element {
 
   if (view.kind === VIEW.SIGN_IN) return <SignInCard title={view.title} body={view.body} />;
   return (
-    <AuthPage title={titleOf(view)} description={descriptionOf(view)}>
+    <AuthPage
+      title={titleOf(view)}
+      description={descriptionOf(view)}
+      action={view.kind === VIEW.JOINED ? OPEN_ON_THE_WEB : undefined}
+    >
       {view.kind === VIEW.OFFER ? (
         <Button
           variant={BUTTON_VARIANT.OUTLINE}

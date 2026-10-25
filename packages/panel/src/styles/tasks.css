@@ -331,15 +331,6 @@
   max-width: var(--luke-inline-ref-pill-stated-width);
 }
 
-/* The date picker (`date-picker.tsx`), hung from a chip or an @ word in
-   the room the @ list stands in, over the editor. Its anchor stands over
-   the chip and takes no press, so the chip under it still does. */
-.date-picker-anchor {
-  position: absolute;
-  z-index: 3;
-  pointer-events: none;
-}
-
 /* The room a date picker opened from words at rest hangs in
    (`words-dates.tsx`): laid over the words whole, so the picker is placed
    from the room's own box wherever it stands, and only the picker takes
@@ -351,7 +342,7 @@
   pointer-events: none;
 }
 
-.date-picker-anchor > * {
+.words-date-room > * {
   pointer-events: auto;
 }
 

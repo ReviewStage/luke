@@ -36,6 +36,13 @@ import { Tooltip } from "./hint.js";
  * entered from a control on another card steps back one card per Escape,
  * as does one the pointer hung over an entered card, the window's own
  * Escape left alone either way.
+ *
+ * A reader hears a hint without the pointer or the keyboard: from its first
+ * render, a control is described by its hint's words, beside a description
+ * of its own, whether the control is the page's own element or a component;
+ * words that take no focus, which a reader's cursor only walks over, own
+ * them as hidden text read at their end, their own words as they were; and a
+ * control whose own name says them is told them by no other way.
  */
 
 const roots: Root[] = [];
@@ -739,4 +746,123 @@ test("a card the pointer hangs over an entered card goes alone on Escape, and th
   assert.equal(cardsStanding(), 1, "only the inner card goes");
   assert.ok(pressed.defaultPrevented, "the window's layered Escape is left alone");
   assert.ok(focused() === sweep, "focus stays in the entered card");
+});
+
+/** The words of each element `control` names in its `attribute`, in turn, as a reader hears them. */
+function wordsNamedBy(control: Element, attribute = "aria-describedby"): string[] {
+  return (control.getAttribute(attribute) ?? "")
+    .split(" ")
+    .filter((id) => id !== "")
+    .map((id) => document.getElementById(id)?.textContent ?? "");
+}
+
+test("a control is described by its hint from its first render, before any pointer or focus, beside a description of its own", () => {
+  const container = mount(
+    createElement(
+      Fragment,
+      null,
+      createElement("p", { id: "own" }, "Copies the address"),
+      createElement(Tooltip, {
+        label: "Copy link",
+        children: createElement(
+          "button",
+          { type: "button", "aria-label": "Copy", "aria-describedby": "own" },
+          "⧉",
+        ),
+      }),
+      createElement(Tooltip, {
+        label: "Stop the agent",
+        children: createElement(Button, { onClick: () => undefined, children: "Stop" }),
+      }),
+    ),
+  );
+  const [copy, stop] = [...container.querySelectorAll("button")];
+  assert.ok(copy && stop);
+  assert.equal(document.querySelector('[role="tooltip"]'), null, "no hint is drawn");
+  assert.deepEqual(wordsNamedBy(copy), ["Copies the address", "Copy link"]);
+  assert.deepEqual(wordsNamedBy(stop), ["Stop the agent"]);
+});
+
+test("a control whose own name already says its hint is told it by its name alone", () => {
+  const container = mount(
+    createElement(
+      Fragment,
+      null,
+      createElement(Tooltip, {
+        label: "Fix the refresh",
+        card: createElement("p", null, "Fix the refresh, opened by Ada"),
+        children: createElement(
+          "button",
+          { type: "button", "aria-describedby": undefined },
+          "Fix the refresh",
+        ),
+      }),
+      createElement(Tooltip, {
+        label: "Archive",
+        children: createElement(
+          "button",
+          { type: "button", "aria-label": "Archive task", "aria-describedby": undefined },
+          "×",
+        ),
+      }),
+      createElement(Tooltip, {
+        label: "a-long-name.yml",
+        children: createElement(
+          "span",
+          null,
+          "a-long-name.yml",
+          createElement("small", null, "3 KB"),
+        ),
+      }),
+    ),
+  );
+  for (const control of container.querySelectorAll("button, span")) {
+    assert.equal(control.hasAttribute("aria-describedby"), false, control.textContent ?? "");
+  }
+  assert.equal(container.textContent, "Fix the refresh×a-long-name.yml3 KB");
+});
+
+test("words that take no focus own their hint as hidden text, read at their end, while a control in a list it roves in is described", () => {
+  const container = mount(
+    createElement(
+      "ul",
+      null,
+      createElement(Tooltip, {
+        label: "Oct 24, 2026, 3:00 PM",
+        children: createElement(
+          "li",
+          { "aria-describedby": undefined },
+          createElement("time", null, "2h ago"),
+        ),
+      }),
+      createElement(
+        "li",
+        null,
+        createElement(Tooltip, {
+          label: "Bold",
+          children: createElement("span", {
+            role: "radio",
+            tabIndex: -1,
+            "aria-label": "B",
+            "aria-describedby": undefined,
+          }),
+        }),
+      ),
+    ),
+  );
+  const [time, roving] = [...container.querySelectorAll("li")];
+  assert.ok(time && roving);
+  assert.deepEqual(
+    [...(container.querySelector("ul")?.children ?? [])].map((child) => child.tagName),
+    ["LI", "LI"],
+    "the list holds its items alone",
+  );
+  assert.equal(time.textContent, "2h ago", "its own words are as they were");
+  assert.deepEqual(wordsNamedBy(time, "aria-owns"), ["Oct 24, 2026, 3:00 PM"]);
+  const owned = document.getElementById(time.getAttribute("aria-owns") ?? "");
+  assert.equal(owned?.className, "luke-visually-hidden");
+  assert.equal(time.hasAttribute("aria-describedby"), false);
+  const radio = roving.querySelector('[role="radio"]') ?? assert.fail("the roving control");
+  assert.deepEqual(wordsNamedBy(radio), ["Bold"]);
+  assert.equal(radio.hasAttribute("aria-owns"), false);
 });

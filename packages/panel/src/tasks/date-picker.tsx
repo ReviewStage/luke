@@ -12,7 +12,6 @@ import {
 import { encodeMention, MENTION_KIND, type MentionPlace } from "@luke/features/mention-link";
 import {
   ALIGN,
-  AnchoredPopover,
   BUTTON_VARIANT,
   Button,
   Calendar,
@@ -25,9 +24,10 @@ import {
   GAP,
   Inline,
   type MenuRow,
-  POPOVER_ALIGN,
   POPOVER_WIDTH,
   PopoverPanel,
+  RectFloat,
+  SEARCHABLE_MENU_LAYER,
   SETTINGS_ROW_DENSITY,
   SearchableMenu,
   SettingsRow,
@@ -36,16 +36,7 @@ import {
   TextField,
   useMinute,
 } from "@luke/ui";
-import {
-  type ReactNode,
-  type RefObject,
-  useEffect,
-  useId,
-  useLayoutEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import { type ReactNode, type RefObject, useEffect, useId, useMemo, useRef, useState } from "react";
 import type { MentionNode } from "../plan-editor/contract.js";
 import { SwitchRow } from "../settings/switch-row.js";
 
@@ -93,7 +84,9 @@ import { SwitchRow } from "../settings/switch-row.js";
  *
  * The picker stands in the room the `@` list stands in, over the editor
  * rather than inside it, so a box that scrolls its words cuts none of it,
- * and the editor reads none of its keys. Nothing of the date rides on an
+ * and the editor reads none of its keys. It hangs from its chip or its `@`
+ * word as the `@` list does (`@luke/ui`'s `RectFloat`), at the popover's
+ * narrow width, following the chip as its words scroll. Nothing of the date rides on an
  * attribute: the recording masks words and not attributes
  * (`mention-chip.tsx`'s header), so every date is said in a text node or a
  * field's value.
@@ -147,9 +140,6 @@ export interface DatePicker {
   readonly open: (opening: DatePickerOpening) => void;
 }
 
-/** The picker's width: a month's seven days at the window's control height, and the panel's insets. */
-const DATE_PICKER_WIDTH = 264;
-
 /** The time each end takes when Include time is switched on. */
 const DEFAULT_TIME = { START: "09:00", END: "10:00" } as const;
 
@@ -173,14 +163,6 @@ const WORDS = {
   CLEAR: "Clear",
   CLOSE: "Close",
 } as const;
-
-/** Where the picker's anchor stands in its room, in the room's own pixels. */
-interface AnchorBox {
-  readonly left: number;
-  readonly top: number;
-  readonly width: number;
-  readonly height: number;
-}
 
 /** Which end of the date a field writes. */
 const DATE_END = {
@@ -596,8 +578,7 @@ function DatePickerPanel({
         rows={zones}
         value={zone}
         noMatch={WORDS.ZONE_NO_MATCH}
-        align={POPOVER_ALIGN.START}
-        width={POPOVER_WIDTH.NARROW}
+        layer={SEARCHABLE_MENU_LAYER.EMBEDDED}
         onPick={zonePicked}
         onClose={() => turnTo(DATE_PICKER_PAGE.DATE)}
         onLeave={(left) => {
@@ -608,97 +589,88 @@ function DatePickerPanel({
   }
 
   return (
-    <AnchoredPopover open={open} align={POPOVER_ALIGN.START} width={DATE_PICKER_WIDTH}>
-      <PopoverPanel
-        open={open}
-        title={WORDS.TITLE}
-        closeLabel={WORDS.CLOSE}
-        initialFocus={from === DATE_PICKER_PAGE.ZONE ? zoneField : field}
-        onDismiss={() => finish(DATE_PICKER_CLOSE.KEY)}
-        onLeave={leave}
-        onExited={onExited}
-      >
-        <Stack gap={GAP.TIGHT}>
-          {timed ? (
-            <>
-              {endField(DATE_END.START, start)}
-              {end === undefined ? null : endField(DATE_END.END, end)}
-            </>
-          ) : (
-            <Inline gap={GAP.CONTROL} align={ALIGN.START} wrap={false}>
-              {endField(DATE_END.START, start)}
-              {end === undefined ? null : endField(DATE_END.END, end)}
-            </Inline>
-          )}
-        </Stack>
-        <Calendar
-          month={month}
-          today={today}
-          start={start.day}
-          end={end?.day}
-          onPick={(day) => {
-            update(dayPicked(latest.current, day));
-            setMonth(day.slice(0, 7));
-          }}
-          onShowMonth={setMonth}
+    <PopoverPanel
+      open={open}
+      title={WORDS.TITLE}
+      closeLabel={WORDS.CLOSE}
+      initialFocus={from === DATE_PICKER_PAGE.ZONE ? zoneField : field}
+      onDismiss={() => finish(DATE_PICKER_CLOSE.KEY)}
+      onLeave={leave}
+      onExited={onExited}
+    >
+      <Stack gap={GAP.TIGHT}>
+        {timed ? (
+          <>
+            {endField(DATE_END.START, start)}
+            {end === undefined ? null : endField(DATE_END.END, end)}
+          </>
+        ) : (
+          <Inline gap={GAP.CONTROL} align={ALIGN.START} wrap={false}>
+            {endField(DATE_END.START, start)}
+            {end === undefined ? null : endField(DATE_END.END, end)}
+          </Inline>
+        )}
+      </Stack>
+      <Calendar
+        month={month}
+        today={today}
+        start={start.day}
+        end={end?.day}
+        onPick={(day) => {
+          update(dayPicked(latest.current, day));
+          setMonth(day.slice(0, 7));
+        }}
+        onShowMonth={setMonth}
+      />
+      <Stack gap={GAP.TIGHT}>
+        <SwitchRow
+          density={SETTINGS_ROW_DENSITY.COMPACT}
+          label={WORDS.END}
+          checked={end !== undefined}
+          onChange={(on) => update(endSwitched(latest.current, on))}
         />
-        <Stack gap={GAP.TIGHT}>
-          <SwitchRow
-            density={SETTINGS_ROW_DENSITY.COMPACT}
-            label={WORDS.END}
-            checked={end !== undefined}
-            onChange={(on) => update(endSwitched(latest.current, on))}
-          />
-          <SwitchRow
-            density={SETTINGS_ROW_DENSITY.COMPACT}
-            label={WORDS.TIME}
-            checked={timed}
-            onChange={(on) => update(timeSwitched(latest.current, on))}
-          />
-          {timed ? (
-            <SettingsRow density={SETTINGS_ROW_DENSITY.COMPACT} label={WORDS.ZONE}>
-              {(control) => (
-                <Chip
-                  ref={zoneField}
-                  look={CHIP_LOOK.FIELD}
-                  width={CHIP_WIDTH.AUTO}
-                  chevron
-                  aria-label={`${WORDS.ZONE}: ${zoneLabel(zone)}`}
-                  aria-describedby={control["aria-describedby"]}
-                  aria-haspopup="dialog"
-                  onClick={() => turnTo(DATE_PICKER_PAGE.ZONE)}
-                >
-                  <ChipName>{zonePlace(zone)}</ChipName>
-                </Chip>
-              )}
-            </SettingsRow>
-          ) : null}
-        </Stack>
-        <div className="date-picker-foot">
-          <Button variant={BUTTON_VARIANT.ROW} onClick={() => finish(DATE_PICKER_CLOSE.CLEAR)}>
-            {WORDS.CLEAR}
-          </Button>
-        </div>
-      </PopoverPanel>
-    </AnchoredPopover>
+        <SwitchRow
+          density={SETTINGS_ROW_DENSITY.COMPACT}
+          label={WORDS.TIME}
+          checked={timed}
+          onChange={(on) => update(timeSwitched(latest.current, on))}
+        />
+        {timed ? (
+          <SettingsRow density={SETTINGS_ROW_DENSITY.COMPACT} label={WORDS.ZONE}>
+            {(control) => (
+              <Chip
+                ref={zoneField}
+                look={CHIP_LOOK.FIELD}
+                width={CHIP_WIDTH.AUTO}
+                chevron
+                aria-label={`${WORDS.ZONE}: ${zoneLabel(zone)}`}
+                aria-describedby={control["aria-describedby"]}
+                aria-haspopup="dialog"
+                onClick={() => turnTo(DATE_PICKER_PAGE.ZONE)}
+              >
+                <ChipName>{zonePlace(zone)}</ChipName>
+              </Chip>
+            )}
+          </SettingsRow>
+        ) : null}
+      </Stack>
+      <div className="date-picker-foot">
+        <Button variant={BUTTON_VARIANT.ROW} onClick={() => finish(DATE_PICKER_CLOSE.CLEAR)}>
+          {WORDS.CLEAR}
+        </Button>
+      </div>
+    </PopoverPanel>
   );
 }
 
-/** Where `at` stands in `room`, in the room's own pixels. */
-function boxIn(room: DOMRect, at: DatePickerAnchor): AnchorBox {
-  const box =
-    at instanceof Element ? at.getBoundingClientRect() : { ...at, right: at.left, height: 0 };
-  return {
-    left: box.left - room.left,
-    top: box.top - room.top,
-    width: box.right - box.left,
-    height: box.bottom - box.top,
-  };
-}
-
-/** Whether two anchor boxes stand in the same place. */
-function sameBox(a: AnchorBox, b: AnchorBox): boolean {
-  return a.left === b.left && a.top === b.top && a.width === b.width && a.height === b.height;
+/** Where `at` stands in the window, as the layer it hangs from reads it; none once a chip has left the words, so the layer stays where it stood. */
+function boxOf(
+  at: DatePickerAnchor,
+):
+  | { readonly left: number; readonly top: number; readonly right: number; readonly bottom: number }
+  | undefined {
+  if (!(at instanceof Element)) return { ...at, right: at.left };
+  return at.isConnected ? at.getBoundingClientRect() : undefined;
 }
 
 /**
@@ -709,41 +681,19 @@ function sameBox(a: AnchorBox, b: AnchorBox): boolean {
 export function useDatePicker(room: RefObject<HTMLElement | null>): DatePicker {
   // Note that an opening is kept past its close, `standing` false, until its picker has faded out, so the card leaves as the other popovers do.
   const [opened, setOpened] = useState<
-    | {
-        readonly opening: DatePickerOpening;
-        readonly box: AnchorBox;
-        readonly key: number;
-        readonly standing: boolean;
-      }
+    | { readonly opening: DatePickerOpening; readonly key: number; readonly standing: boolean }
     | undefined
   >(undefined);
   const counted = useRef(0);
   const open = (opening: DatePickerOpening) => {
-    const placed = room.current?.getBoundingClientRect();
-    if (placed === undefined) return;
+    if (room.current === null) return;
     counted.current += 1;
-    setOpened({ opening, box: boxIn(placed, opening.at), key: counted.current, standing: true });
+    setOpened({ opening, key: counted.current, standing: true });
   };
-  // A chip's place is read again as anything scrolls or the window resizes, so the picker stays hung from it as a box scrolls its words.
-  const at = opened?.standing === true ? opened.opening.at : undefined;
-  useLayoutEffect(() => {
-    if (!(at instanceof Element)) return;
-    const follow = () => {
-      const placed = room.current?.getBoundingClientRect();
-      if (placed === undefined || !at.isConnected) return;
-      const box = boxIn(placed, at);
-      setOpened((was) => (was === undefined || sameBox(was.box, box) ? was : { ...was, box }));
-    };
-    document.addEventListener("scroll", follow, { capture: true, passive: true });
-    window.addEventListener("resize", follow);
-    return () => {
-      document.removeEventListener("scroll", follow, { capture: true });
-      window.removeEventListener("resize", follow);
-    };
-  }, [at, room]);
   const popover =
     opened === undefined ? null : (
-      <div className="date-picker-anchor" style={opened.box}>
+      // Note that the layer stands while the panel fades, because the panel's own fade is what tells the owner it is gone.
+      <RectFloat open anchor={() => boxOf(opened.opening.at)} width={POPOVER_WIDTH.NARROW}>
         <DatePickerPanel
           key={opened.key}
           open={opened.standing}
@@ -756,7 +706,7 @@ export function useDatePicker(room: RefObject<HTMLElement | null>): DatePicker {
             setOpened((was) => (was?.key === opened.key && !was.standing ? undefined : was))
           }
         />
-      </div>
+      </RectFloat>
     );
   return { popover, open };
 }
