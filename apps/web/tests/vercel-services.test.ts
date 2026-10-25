@@ -53,10 +53,13 @@ function deploys(branch: string): boolean {
   return !refused;
 }
 
-test("a GitHub merge-queue branch is not deployed, and every other branch is", () => {
+test("a GitHub merge-queue branch, a PR media branch, or an evidence branch is not deployed, and every other branch is", () => {
   for (const branch of [
     "gh-readonly-queue/main/pr-3551-d1c107a6f00dbb4b1e5bd2d1b8f3a5c7e9d01234",
     "gh-readonly-queue/release/1.2/pr-7-0123456789abcdef0123456789abcdef01234567",
+    "pr-assets",
+    "pr-assets-card-redesign",
+    "evidence/luke-267",
   ]) {
     assert.equal(deploys(branch), false, branch);
   }
@@ -64,7 +67,7 @@ test("a GitHub merge-queue branch is not deployed, and every other branch is", (
     "main",
     "ci/vercel-no-merge-queue-deploys",
     "feature/some-workspace",
-    "pr-assets",
+    "fix/pr-assets-upload",
     "gh-readonly-queue",
   ]) {
     assert.equal(deploys(branch), true, branch);
