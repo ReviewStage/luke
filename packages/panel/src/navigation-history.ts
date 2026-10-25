@@ -90,7 +90,7 @@ import {
   useRef,
   useSyncExternalStore,
 } from "react";
-import { ADMIN_PAGE, type AdminView } from "./admin/routing.js";
+import { ADMIN_PAGE, type AdminView, adminSection } from "./admin/routing.js";
 import { liveStepTitle, NAMED_STEP, type NamedStep } from "./history-titles.js";
 import { PANEL_TAB, type PanelTab } from "./panel-tabs.js";
 import { settingsPageExperimentStands } from "./settings/settings-rows.js";
@@ -204,12 +204,7 @@ type Place =
       readonly view: SettingsView;
       readonly listed?: boolean | undefined;
     }
-  | {
-      readonly kind: typeof PLACE_KIND.ADMIN;
-      readonly view: AdminView;
-      /** Whether the section list stood rather than the view, in a narrow room alone. */
-      readonly listed?: boolean | undefined;
-    };
+  | { readonly kind: typeof PLACE_KIND.ADMIN; readonly view: AdminView };
 
 /** The tabs a task's strips stood with as the window last stood on it: its column's once its agents were read, and its side panel's. */
 interface KnownStrips {
@@ -315,7 +310,6 @@ function subStepOf(place: Place): boolean | undefined {
     case PLACE_KIND.INBOX:
     case PLACE_KIND.CHAT:
     case PLACE_KIND.SETTINGS:
-    case PLACE_KIND.ADMIN:
       return place.listed;
     default:
       return undefined;
@@ -369,11 +363,6 @@ function samePage(one: Place, other: Place): boolean {
   }
   if ("workspaceId" in one && "workspaceId" in other) return one.workspaceId === other.workspaceId;
   return true;
-}
-
-/** Whether an Admin view is one of the place's sections, rather than an account's or a day's page under one. */
-function adminSection(view: AdminView): boolean {
-  return view.kind !== ADMIN_PAGE.ACCOUNT && view.kind !== ADMIN_PAGE.DAY;
 }
 
 /**
@@ -704,8 +693,6 @@ function listedSteps(
 export interface ListBacks {
   readonly settings: () => void;
   readonly versions: () => void;
-  /** Stands the Admin place's section list from a view standing alone. */
-  readonly admin: () => void;
   readonly chat: () => void;
   /** Stands an automation's setup again from its runs. */
   readonly runs: () => void;
@@ -776,7 +763,6 @@ export function throughHistory(tasks: TasksControl, lists: ListBacks): TasksCont
     },
     history: { ...tasks.history, onList: lists.versions },
     chatView: { ...tasks.chatView, onList: lists.chat },
-    adminView: { ...tasks.adminView, onList: lists.admin },
     inboxView: { ...tasks.inboxView, onListed: lists.inbox },
     automationsView: {
       ...tasks.automationsView,
@@ -1142,7 +1128,6 @@ export function useWindowHistory(input: {
   const boardOpen = tasks.boardView.open;
   const adminOpen = tasks.adminView.open;
   const adminView = tasks.adminView.view;
-  const adminListed = narrow ? tasks.adminView.listed : undefined;
   // A reloaded tab's Admin step is reachable while the account's access is still being read, as the place waits on it.
   const adminOn = useAdminAccess();
   const adminPending = useAdminAccessPending();
@@ -1200,7 +1185,7 @@ export function useWindowHistory(input: {
       };
     }
     if (boardOpen) return { kind: PLACE_KIND.BOARD, workspaceId: listedWorkspace };
-    if (adminOpen) return { kind: PLACE_KIND.ADMIN, view: adminView, listed: adminListed };
+    if (adminOpen) return { kind: PLACE_KIND.ADMIN, view: adminView };
     if (boundFor === undefined) return { kind: PLACE_KIND.HOME };
     return historyOpen
       ? { kind: PLACE_KIND.VERSION_HISTORY, taskId: boundFor, spot, listed: historyListed }
@@ -1242,7 +1227,6 @@ export function useWindowHistory(input: {
     boardOpen,
     adminOpen,
     adminView,
-    adminListed,
   ]);
   const place = useMemo((): Titled | undefined => {
     if (untitled === undefined || titleLabel === undefined) return untitled;
@@ -1345,7 +1329,6 @@ export function useWindowHistory(input: {
     }
     if (to.kind === PLACE_KIND.ADMIN) {
       tasks.adminView.onOpen(to.view);
-      if (to.listed === true) tasks.adminView.onList();
       return;
     }
     // Every other place of the Plans tab is the plan's, which the Inbox, an agent's or a person's page, the Admin place, the Automations page, Chat, and the Board stand over.
@@ -1421,11 +1404,6 @@ export function useWindowHistory(input: {
       up(
         { kind: PLACE_KIND.CHAT, workspaceId: listedWorkspace, listed: true },
         tasks.chatView.onList,
-      ),
-    admin: () =>
-      up(
-        { kind: PLACE_KIND.ADMIN, view: tasks.adminView.view, listed: true },
-        tasks.adminView.onList,
       ),
     runs: () =>
       up(

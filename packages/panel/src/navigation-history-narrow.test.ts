@@ -108,7 +108,7 @@ interface Standing {
   /** Whether a page holds unsaved work whose ask refuses every way out, as Cancel would. */
   readonly unsaved?: boolean | undefined;
   /** Whether the Admin place stands, the view standing, and its section list standing alone. */
-  readonly admin?: { readonly view: AdminView; readonly listed: boolean } | undefined;
+  readonly admin?: { readonly view: AdminView } | undefined;
 }
 
 /** The window on the task, every pane over it shut. */
@@ -245,17 +245,8 @@ function tasksTab(
       ...base.adminView,
       open: at.admin !== undefined,
       view: at.admin?.view ?? { kind: "dashboard" },
-      listed: at.admin?.listed ?? false,
-      // As the real one does, a view named opens alone, and none named opens on the list.
       onOpen: (view) =>
-        patch((held) => ({
-          ...held,
-          admin: { view: view ?? { kind: "dashboard" }, listed: view === undefined },
-        })),
-      onList: () =>
-        patch((held) =>
-          held.admin === undefined ? held : { ...held, admin: { ...held.admin, listed: true } },
-        ),
+        patch((held) => ({ ...held, admin: { view: view ?? { kind: "dashboard" } } })),
       onClose: () => patch((held) => ({ ...held, admin: undefined })),
     },
     history: {
@@ -631,26 +622,6 @@ test("on a narrow stage a Chat place chosen from the rail is a step, and Chat's 
   assert.equal(window.history().canGoForward, true, "the way back was a step back");
 });
 
-test("on a narrow stage an Admin section chosen from its list is a step, and the section's way back steps back to the list rather than recording a new one", async () => {
-  const window = mount(SHELL_ROOM.NARROW, {
-    ...ON_TASK,
-    admin: { view: { kind: "dashboard" }, listed: true },
-  });
-  // Admin is an admin's alone, whose word arrives with the window's state.
-  await settle();
-  window.press(() => window.shown().adminView.onOpen({ kind: "users" }));
-
-  assert.equal(window.addresses().length, 2);
-  const shownView = (at: Standing) => (at.admin?.listed === false ? at.admin.view.kind : undefined);
-  backAndForth(window, shownView, undefined, "users");
-
-  window.press(() => window.shown().adminView.onList());
-  assert.equal(shownView(window.at()), undefined);
-  assert.equal(window.history().canGoForward, true, "the way back was a step back");
-  window.press(() => window.history().onForward());
-  assert.equal(shownView(window.at()), "users");
-});
-
 test("on a narrow stage a Settings page a link opened has no list behind it, so the way back stands the list in the page's step and Back leaves Settings", () => {
   const window = mount(SHELL_ROOM.NARROW, ON_TASK);
   // A link turns to Settings and then to its page in one move, as `followSettingsLink` does.
@@ -760,7 +731,7 @@ test("a window whose history already stands on a step when it opens, as a reload
 test("a reloaded window whose saved step is the Admin place opens it once the account is known for an admin, its access read a moment after it signs in", async () => {
   const before = mount(SHELL_ROOM.NARROW, {
     ...ON_TASK,
-    admin: { view: { kind: "cost" }, listed: false },
+    admin: { view: { kind: "cost" } },
   });
   await settle();
   const { held } = before;
@@ -784,7 +755,7 @@ test("a reloaded window whose saved step is the Admin place opens it once the ac
   await settle();
   assert.deepEqual(
     reloaded.at().admin,
-    { view: { kind: "cost" }, listed: false },
+    { view: { kind: "cost" } },
     "the place stands, waiting on the read, rather than being passed over",
   );
 
@@ -796,7 +767,7 @@ test("a reloaded window whose saved step is the Admin place opens it once the ac
     }),
   );
   await settle();
-  assert.deepEqual(reloaded.at().admin, { view: { kind: "cost" }, listed: false });
+  assert.deepEqual(reloaded.at().admin, { view: { kind: "cost" } });
 });
 
 /** The automation's page, as a link to it or a press opens it, and as a link to one of its runs opens it. */

@@ -148,41 +148,34 @@ body,
 /* A narrow room shows a screen's list or the item chosen in it, one at a
    time, the other hidden (`shell-room.ts`'s `hiddenColumns`): Settings' page
    list or its page and a version history's versions or the version, each the
-   shell's one column. Chat, Settings, a version history, and Admin do the
+   shell's one column. Chat, Settings, and a version history do the
    same by their own width as well as a narrow room's (`column-split.ts`),
    their list or its item the screen's one column. The one shown stands
    alone, so no edge parts it from the other. */
 :where(:root)[data-luke-room="narrow"] .desktop-shell:not([data-sidebar-collapsed]),
-:where(:root)[data-luke-room="narrow"]
-  :is(.desktop-settings, .desktop-version-history, .desktop-admin),
-:is(.chat-view, .desktop-settings, .desktop-version-history, .desktop-admin)[data-single="true"] {
+:where(:root)[data-luke-room="narrow"] :is(.desktop-settings, .desktop-version-history),
+:is(.chat-view, .desktop-settings, .desktop-version-history)[data-single="true"] {
   grid-template-columns: minmax(0, 1fr);
 }
 
 :where(:root)[data-luke-room="narrow"]
   .desktop-shell
-  :is(.desktop-settings, .desktop-version-history, .desktop-admin)
+  :is(.desktop-settings, .desktop-version-history)
   > [hidden],
-:is(.chat-view, .desktop-settings, .desktop-version-history, .desktop-admin)[data-single="true"]
-  > [hidden] {
+:is(.chat-view, .desktop-settings, .desktop-version-history)[data-single="true"] > [hidden] {
   display: none;
 }
 
-:where(:root)[data-luke-room="narrow"]
-  .desktop-shell
-  :is(.settings-pages, .version-log, .admin-sections),
-:is(.desktop-settings, .desktop-version-history, .desktop-admin)[data-single="true"]
-  > :is(.settings-pages, .version-log, .admin-sections),
+:where(:root)[data-luke-room="narrow"] .desktop-shell :is(.settings-pages, .version-log),
+:is(.desktop-settings, .desktop-version-history)[data-single="true"]
+  > :is(.settings-pages, .version-log),
 .chat-view[data-single="true"] > .chat-rail {
   border-right: 0;
 }
 
 /* Settings' list standing alone leads with its one way back, Back to the
    tasks; the history's Back and Forward beside it would be a second. */
-:where(:root)[data-luke-room="narrow"]
-  .desktop-shell
-  :is(.settings-pages, .admin-sections)
-  > .title-bar-controls {
+:where(:root)[data-luke-room="narrow"] .desktop-shell .settings-pages > .title-bar-controls {
   display: none;
 }
 
@@ -1240,8 +1233,8 @@ body,
    row, as the list beside it does, so the traffic lights stand over the
    row rather than over its way back. */
 .desktop-shell
-  > :is(.desktop-settings, .desktop-version-history, .desktop-admin)[data-single="true"]
-  > :is(.settings-page, .version-page, .admin-page) {
+  > :is(.desktop-settings, .desktop-version-history)[data-single="true"]
+  > :is(.settings-page, .version-page) {
   margin-left: var(--sheet-gap);
 }
 

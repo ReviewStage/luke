@@ -141,7 +141,7 @@
 [data-luke-profile="desktop"]
   .desktop-shell:not([data-sidebar-overlay="peek"], [data-sidebar-overlay="open"])
   .desktop-sidebar,
-[data-luke-profile="desktop"] .desktop-shell :is(.settings-pages, .version-log, .admin-sections) {
+[data-luke-profile="desktop"] .desktop-shell :is(.settings-pages, .version-log) {
   background: transparent;
 }
 
@@ -164,8 +164,8 @@
   > .desktop-main:not(:has(.desktop-task))::before,
 :where(:root):not([data-luke-room="narrow"])
   .desktop-shell
-  > :is(.desktop-settings, .desktop-version-history, .desktop-admin)
-  > :is(.settings-page, .version-page, .admin-page),
+  > :is(.desktop-settings, .desktop-version-history)
+  > :is(.settings-page, .version-page),
 :where(:root):not([data-luke-room="narrow"])
   .desktop-shell
   > .desktop-main
@@ -198,8 +198,8 @@
    on the sheet's ground rather than showing the frame through it. */
 .desktop-shell[data-room="narrow"] > .desktop-main,
 .desktop-shell[data-room="narrow"]
-  > :is(.desktop-settings, .desktop-version-history, .desktop-admin)
-  > :is(.settings-page, .version-page, .admin-page) {
+  > :is(.desktop-settings, .desktop-version-history)
+  > :is(.settings-page, .version-page) {
   background: var(--luke-color-ground);
 }
 
@@ -216,8 +216,8 @@
    sheet rather than a row, so their page is the sheet itself, a gap in. */
 :where(:root):not([data-luke-room="narrow"])
   .desktop-shell
-  > :is(.desktop-settings, .desktop-version-history, .desktop-admin)
-  > :is(.settings-page, .version-page, .admin-page) {
+  > :is(.desktop-settings, .desktop-version-history)
+  > :is(.settings-page, .version-page) {
   margin: var(--sheet-gap) var(--sheet-gap) var(--sheet-gap) 0;
 }
 

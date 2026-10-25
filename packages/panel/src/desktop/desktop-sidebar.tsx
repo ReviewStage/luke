@@ -1534,17 +1534,24 @@ function SidebarAutomationsRow({
 /**
  * The Admin row, after Automations' and drawn as it is, for an admin alone:
  * a non-admin is drawn nothing, not a row held back. A press opens the
- * window's Admin place (`desktop-admin.tsx`), which takes the whole window
- * as Settings does, its sections listed where this sidebar stood. Note that
- * the row is a convenience: the service's own gate decides every read the
- * place makes.
+ * window's Admin place (`desktop-admin.tsx`) in the task's place, as
+ * Automations' row does, and the row is the place shown while it stands.
+ * Note that the row is a convenience: the service's own gate decides every
+ * read the place makes.
  */
-function SidebarAdminRow({ onOpen }: { onOpen: () => void }): React.JSX.Element | null {
+function SidebarAdminRow({
+  current,
+  onOpen,
+}: {
+  current: boolean;
+  onOpen: () => void;
+}): React.JSX.Element | null {
   const admin = useAdminAccess();
   if (!admin) return null;
   return (
     <NavItem
       icon={<ShieldUserIcon />}
+      current={current ? NAV_CURRENT.PAGE : undefined}
       // The pointer on the row is the way to the place, so its chunk, charts and all, is read now rather than at the press.
       onPointerEnter={ADMIN_PLACE.prefetch}
       onClick={onOpen}
@@ -1768,11 +1775,12 @@ function SidebarColumn({
   // The column's rows, Luke's, the pins', and every group's tasks and agents, are one Tab stop that ↑↓ walk, a folded group's passed by.
   const roving = useRovingKeys<HTMLDivElement>();
   const bodyRef = useMemo(() => joinRefs(body, roving.ref), [roving.ref]);
-  // The window's Inbox, an agent's page, the Automations page, Chat, and the Board stand in the task's place, so while one does no task is the place shown.
+  // The window's Inbox, an agent's page, the Automations page, Chat, the Board, and Admin stand in the task's place, so while one does no task is the place shown.
   const inInbox = onTasks && tasks.inboxView.open;
   const inAutomations = onTasks && tasks.automationsView.open;
   const inChat = onTasks && tasks.chatView.open;
   const inBoard = onTasks && tasks.boardView.open;
+  const inAdmin = onTasks && tasks.adminView.open;
   // Opening an automation sees its failed run, which the Automations row is marked for until then.
   const { place: automationsPlace } = tasks.automationsView;
   // The workspace's runs, followed while the sidebar stands, as the Runs tab follows them, for the row to count the ones still at work.
@@ -1793,6 +1801,7 @@ function SidebarColumn({
     inAutomations ||
     inChat ||
     inBoard ||
+    inAdmin ||
     (onTasks && tasks.agentView.agentId !== undefined);
   // Chat is an experiment: its row stands only while the account has it on.
   const chatOn = useChatOn();
@@ -2134,7 +2143,7 @@ function SidebarColumn({
           disabled={!tasks.signedIn}
           onOpen={chosen(openAutomations)}
         />
-        <SidebarAdminRow onOpen={chosen(openAdmin)} />
+        <SidebarAdminRow current={inAdmin} onOpen={chosen(openAdmin)} />
       </SidebarPlaces>
       <SidebarRule />
     </>
