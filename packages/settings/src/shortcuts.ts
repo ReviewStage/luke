@@ -334,9 +334,12 @@ function modifierGlyph(name: string): string {
 
 /**
  * A chord: Command, the modifiers named here, and the key. A `bare` chord is
- * the key alone, which only Escape is: the window's Escape steps back one
- * layer at a time in `app.tsx`, so the keymap leaves it there, and the table
- * names it so the menu bar and the shortcuts page can say what it does. A
+ * the key alone. In the command table only Escape is bare: the window's
+ * Escape steps back one layer at a time in `app.tsx`, so the keymap leaves it
+ * there, and the table names it so the menu bar and the shortcuts page can say
+ * what it does. Outside the table a surface draws its own keys as bare chords
+ * to spell them in a hint, the palette's arrows and Return among them, which
+ * it answers itself and the keymap never sees. A
  * `plain` chord is a letter alone too, which the keymap answers itself, but
  * only where the press is not typing into a field, and which no menu item
  * carries, since a menu's bare key would take the letter from every field.

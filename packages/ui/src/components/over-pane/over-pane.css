@@ -16,7 +16,7 @@
     flex-direction: column;
     background: var(--luke-color-overlay);
     box-shadow: var(--luke-menu-shadow);
-    outline: none;
+    outline: none; /* no ring: focused only by script on open; what it holds rings */
     animation: luke-over-pane-in-right var(--luke-duration-pane) var(--luke-motion-pane) backwards;
   }
 

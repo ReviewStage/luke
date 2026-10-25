@@ -840,7 +840,7 @@
   display: flex;
   flex-direction: column;
   gap: var(--luke-block-gap);
-  outline: none;
+  outline: none; /* no ring: focused only by script, to keep the place when Show more is spent */
 }
 
 /* A replay card's foot: the branch and the pull request, over a dashed
@@ -4350,7 +4350,7 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
   color: var(--luke-color-text);
   font-size: var(--luke-type-body-size);
   line-height: var(--luke-type-body-leading);
-  outline: none;
+  outline: none; /* no ring: the caret marks the field */
   user-select: text;
 }
 

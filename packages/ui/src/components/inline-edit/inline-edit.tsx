@@ -36,8 +36,8 @@ import { ShadcnInput } from "../../shadcn/input.js";
 /**
  * How the field is drawn: on a field's own ground inside a hairline, as a
  * list's row renames; in a settings input's box, as a settings row's label
- * renames; or bare in the type around it, where what it stands in is a well
- * that rings it, as a tab's is.
+ * renames; or bare in the type around it, where what it stands in is a well,
+ * as a tab's is, and the caret alone marks the field.
  */
 export const INLINE_EDIT_LOOK = {
   FIELD: "field",
@@ -53,8 +53,8 @@ export type InlineEditLook = (typeof INLINE_EDIT_LOOK)[keyof typeof INLINE_EDIT_
  * settings input's box a label's line and 3px to spare each side tall, in
  * the label's own type, overhanging the label by those 3px and by its own
  * inset and edge at the start, so its words stand where the label's stood
- * and the row keeps its height; in a well, bare in the type around it,
- * ringed by the well rather than by itself. How wide a field or a well
+ * and the row keeps its height; in a well, bare in the type around it, wearing
+ * no ring, as no field does. How wide a field or a well
  * stands is its container's to say. Note that the field look's line and
  * weight are `revert-layer`, which hands them back to the engine's own for an
  * input (no `base` layer rule, `@luke/panel`'s base.css included, sets an

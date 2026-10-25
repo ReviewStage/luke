@@ -239,7 +239,7 @@ without a fill. A chip, which names a value or a thing rather than an act, is
 
 The keyboard's ring is one rule in `base.css`. Every button, link, tab,
 switch, option, and menu item, and anything else in the tab order, draws
-`--luke-color-focus-ring` at `--focus-ring-width`, `--focus-ring-offset` off its edge, and
+`--luke-color-focus-ring` at `--luke-focus-ring-width`, `--luke-focus-ring-offset` off its edge, and
 only once the keyboard has moved focus (`keyboard-modality.ts`), so a press
 never rings a control. A control whose drawn shape is a part of it, a picture
 tile's picture over its caption, marks that part `data-focus-ring`, which
@@ -248,21 +248,21 @@ unavailable button that keeps the keyboard (`aria-disabled`) fades its fill
 and words rather than itself, so its ring stays at full strength. A box that clips
 what it holds keeps the ring whole one of two ways: one that clips only to hold
 in what runs long, a reply or a path, clips past the ring (`overflow: clip`,
-`overflow-clip-margin: var(--focus-ring-room)`, which names its box because
+`overflow-clip-margin: var(--luke-focus-ring-room)`, which names its box because
 Chromium drops a bare `calc()` there), and a card whose clip is its own edge
-sets `--focus-ring-offset` to `--focus-ring-inset` for what it holds, so the
+sets `--luke-focus-ring-offset` to `--luke-focus-ring-inset` for what it holds, so the
 ring is drawn inside, on a header rounded as the card is. Every
-control scrolls in with `--focus-ring-reach` to spare (`scroll-margin`), and a
+control scrolls in with `--luke-focus-ring-reach` to spare (`scroll-margin`), and a
 scroller that fades an edge scroll-pads by the fade, so the keyboard never
 leaves a row sliced at a scroller's edge or under its fade. A
-scroller whose rows run edge to edge pads by `--focus-ring-reach` and gives it
+scroller whose rows run edge to edge pads by `--luke-focus-ring-reach` and gives it
 back as a negative margin, so a row's ring is never cut off at its sides, and a
 row holding the keyboard stands over its neighbours, so the next row's fill
 leaves its ring whole. A row that runs the scroller's width by design, a line of
 code or Pierre's tree, draws the ring inside it instead. A
-field holding the caret wears the same ring centred on its edge however the
-caret arrived, and a field set borderless in a well, a search's or the
-composer's, rings the well (`.field-well`). A rule that takes the ring away
+field holding the caret wears no ring, however the caret arrived: the caret
+and the field's own ground say where typing goes, and so does a well's, a
+search's or the composer's, around a field set borderless in it. A rule that takes the ring away
 marks it `/* no ring: … */` with what shows focus instead; menus mark a row
 with its fill. An unmarked one is a bug, and so is a ring drawn off the tokens.
 
