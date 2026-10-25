@@ -280,7 +280,7 @@ export const steerCodingAgentWritten = /* @__PURE__ */ Effect.fn("web/steerCodin
   HostedRefusal,
   DatabaseServices | HttpClient.HttpClient | GitHubApp
 > {
-  // An agent on its starter's own GitHub token takes words from its starter alone.
+  // An agent on its starter's own GitHub token, or on its starter's Mac, takes words from its starter alone.
   if (!controlsAgent(userId, agent)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_PERMITTED);
   // The line is written in the agent's conversation, which is its starter's whichever member sends it.
   const target = { userId: agent.userId, conversationId: agent.conversationId };

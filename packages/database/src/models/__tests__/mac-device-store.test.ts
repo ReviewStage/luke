@@ -5,7 +5,7 @@ import { Clock, Effect } from "effect";
 import { TestClock } from "effect/testing";
 import { Database } from "../../core/query.js";
 import { user } from "../../schemas/auth.js";
-import { getTestDB } from "../../testing/index.js";
+import { getTestDB, MAC_DEVICE_LAYOUT } from "../../testing/index.js";
 import { beatMacDevice, macDevicesSeenSince, registerMacDevice } from "../mac-device-store.js";
 
 /**
@@ -31,8 +31,16 @@ it.layer(getTestDB())("the Mac device store", (it) => {
       const id = randomUUID();
       const since = new Date(0);
 
-      const registered = yield* registerMacDevice(owner, { id, name: "Studio" });
-      const takenOver = yield* registerMacDevice(other, { id, name: "Not yours" });
+      const registered = yield* registerMacDevice(owner, {
+        id,
+        name: "Studio",
+        ...MAC_DEVICE_LAYOUT,
+      });
+      const takenOver = yield* registerMacDevice(other, {
+        id,
+        name: "Not yours",
+        ...MAC_DEVICE_LAYOUT,
+      });
       const beatenByOther = yield* beatMacDevice(other, id);
 
       assert.equal(registered, true);
@@ -51,7 +59,7 @@ it.layer(getTestDB())("the Mac device store", (it) => {
     Effect.gen(function* () {
       const { owner } = yield* openAccounts;
       const id = randomUUID();
-      yield* registerMacDevice(owner, { id, name: "Laptop" });
+      yield* registerMacDevice(owner, { id, name: "Laptop", ...MAC_DEVICE_LAYOUT });
       // Note that the cutoff is measured from the clock's reading, which the layer's clock carries from test to test.
       const cutoff = new Date((yield* Clock.currentTimeMillis) + 45_000);
       yield* TestClock.adjust("60 seconds");

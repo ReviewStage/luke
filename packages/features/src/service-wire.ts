@@ -166,6 +166,8 @@ export const HOSTED_API_ERROR = {
   SKILL_NAME_TAKEN: "skill-name-taken",
   /** A skill's files were refused: past a skill's bounds, a `SKILL.md` that breaks the convention, or a credential-shaped literal. Nothing was installed. */
   SKILL_FILES_REFUSED: "skill-files-refused",
+  /** A Start on This Mac was refused, for the reason it names (`LOCAL_AGENT_REFUSAL`). Nothing was written. */
+  LOCAL_AGENT_REFUSED: "local-agent-refused",
 } as const;
 
 export type HostedApiError = (typeof HOSTED_API_ERROR)[keyof typeof HOSTED_API_ERROR];

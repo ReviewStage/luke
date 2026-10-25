@@ -1,7 +1,7 @@
 import type { CodingAgent } from "@luke/database/models/coding-agent-store";
 import { CLAUDE_CODE_TOOL, CODEX_TOOL, RETIRED_TOOL } from "@luke/features/agent-tools";
 import { CHAT_BLOCK } from "@luke/features/chat-wire";
-import { CODING_AGENT_KIND } from "@luke/features/coding-agent-wire";
+import { CODING_AGENT_KIND, CODING_AGENT_MACHINE } from "@luke/features/coding-agent-wire";
 import { inboxSandboxPicturePaths } from "@luke/features/inbox-attachment-link";
 import { ACTION_RESULT_STATUS, type WireRecord, WireValueSchema } from "@luke/wire";
 import { verbatimJsonSchema } from "@luke/wire/effect";
@@ -226,6 +226,20 @@ export function kindToolsOf(agent: Pick<CodingAgent, "kind">): ReadonlySet<KindT
   return agent.kind === CODING_AGENT_KIND.OPERATOR
     ? new Set([CODER_TOOL.LIST_OPEN_ASKS])
     : new Set([CODER_TOOL.DELETE_SECTION, CODER_TOOL.DELETE_AUTOMATION]);
+}
+
+/** The tools only an agent in a sandbox of Luke's is offered. */
+export type MachineTool = typeof CODER_TOOL.BROWSER;
+
+/**
+ * The tools an agent is offered by where it runs: the browser of Luke's,
+ * a Chromium in the agent's own sandbox, to an agent in one, and nothing to
+ * a local agent, whose Mac runs no browser of Luke's (it drives its own
+ * from its shell instead), so the tool would only be refused. The
+ * instructions leave out the same words (`instructions.ts`).
+ */
+export function machineToolsOf(agent: Pick<CodingAgent, "machine">): ReadonlySet<MachineTool> {
+  return agent.machine === CODING_AGENT_MACHINE.MAC ? new Set() : new Set([CODER_TOOL.BROWSER]);
 }
 
 /**

@@ -1,6 +1,6 @@
 # Privacy
 
-Last updated: 24 October 2026
+Last updated: 25 October 2026
 
 Luke is a macOS app for planning a feature by voice. This policy explains
 what we collect, who we send it to, and how to turn it off.
@@ -548,6 +548,11 @@ shortly after the deletion. A session an agent's conversation was moved off
 earlier in its life is not tracked, and its snapshot stays until Vercel lets
 it expire. The sandbox of each session a task's own Luke ran, before tasks
 lost him, is deleted the same way, shortly after his conversation is removed.
+
+**A local agent on your Mac.** For the accounts in the early test of local
+agents, a coding agent you start on This Mac runs Claude Code on your Mac
+rather than in a sandbox, and its transcript, its events, and the files its
+tools read still reach our service as any coding agent's do.
 
 **A coding agent that runs on Claude Code.** For the accounts in the early
 test of Claude plans, a coding agent your Claude plan pays for runs on

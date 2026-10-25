@@ -37,7 +37,7 @@
 import type { DatabaseServices } from "@luke/database/core/query";
 import type { CodingAgent } from "@luke/database/models/coding-agent-store";
 import { CHAT_TOOL } from "@luke/features/chat-wire";
-import { CODING_AGENT_KIND } from "@luke/features/coding-agent-wire";
+import { CODING_AGENT_KIND, CODING_AGENT_MACHINE } from "@luke/features/coding-agent-wire";
 import { INBOX_TOOL } from "@luke/features/inbox-wire";
 import { pictureTypeSchema } from "@luke/features/picture-wire";
 import { ACTION_RESULT_STATUS, type UnparsedWireValue, unparsedWire } from "@luke/wire";
@@ -106,7 +106,13 @@ import type { InboxSandboxDoor } from "../coder-host/inbox-image.js";
 import { EDIT_PLAN_TOOL } from "../coder-host/plan-edit.js";
 import { OPEN_PULL_REQUEST_TOOL } from "../coder-host/pull-request.js";
 import { SHOW_IMAGE_TOOL } from "../coder-host/show-image.js";
-import { CODER_TOOL, kindToolsOf, repositoryToolsOf, taskToolsOf } from "../coder-host/tool-set.js";
+import {
+  CODER_TOOL,
+  kindToolsOf,
+  machineToolsOf,
+  repositoryToolsOf,
+  taskToolsOf,
+} from "../coder-host/tool-set.js";
 import {
   CODER_READ_AGENT_TOOL,
   LIST_AGENTS_TOOL,
@@ -395,7 +401,7 @@ export const LUKE_MCP_TOOLS: ReadonlyMap<string, LukeMcpTool> = new Map<string, 
 ]);
 
 /** What of an agent decides which tools it is offered, as eve decides it (`../coder-host/tool-set.ts`). */
-export type LukeMcpOfferedTo = Pick<CodingAgent, "taskId" | "repository" | "kind">;
+export type LukeMcpOfferedTo = Pick<CodingAgent, "taskId" | "repository" | "kind" | "machine">;
 
 /** The tools eve offers some agents and not others: each one some agent's task, repository, or kind withholds. */
 const NARROWED_TOOLS: ReadonlySet<string> = new Set<string>([
@@ -403,6 +409,7 @@ const NARROWED_TOOLS: ReadonlySet<string> = new Set<string>([
   ...repositoryToolsOf({ repository: "any" }),
   ...kindToolsOf({ kind: CODING_AGENT_KIND.OPERATOR }),
   ...kindToolsOf({ kind: CODING_AGENT_KIND.CODER }),
+  ...machineToolsOf({ machine: CODING_AGENT_MACHINE.VERCEL }),
 ]);
 
 /**
@@ -417,6 +424,7 @@ export function offeredLukeMcpTool(agent: LukeMcpOfferedTo): (name: string) => b
     ...taskToolsOf(agent),
     ...repositoryToolsOf(agent),
     ...kindToolsOf(agent),
+    ...machineToolsOf(agent),
   ]);
   return (name) => !NARROWED_TOOLS.has(name) || offered.has(name);
 }

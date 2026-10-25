@@ -4,7 +4,7 @@ import {
   type ProviderKeyKind,
   type ProviderKeyProvider,
 } from "@luke/features/provider-key-wire";
-import { Redacted, Result } from "effect";
+import { Redacted, Result, Schema } from "effect";
 
 /**
  * provider-key-seal.ts -- an account's own provider key, or a member's GitHub token, sealed for the database, and opened again for the one call that needs it.
@@ -30,6 +30,13 @@ import { Redacted, Result } from "effect";
  * same ring, with purposes of its own (`luke/github-token/*`) and the
  * account alone bound beside them, so a provider key's seal never opens as
  * a token's or the reverse.
+ *
+ * A local agent's launch secrets, its runner's bearer and its harness's
+ * credential with the first lines it is handed, are sealed the same way for
+ * the seconds their launch line waits for its Mac (`mac_agent_line`), with
+ * purposes of their own (`luke/mac-launch/*`) and the account and the agent
+ * bound beside them, so the seal opens for no other agent's line. The
+ * rewrap does not visit those rows, which the Mac's claim clears.
  *
  * Rotation is a new version at the head of the environment's list: new
  * saves wrap under it, and `scripts/rewrap-provider-keys.sh` moves every
@@ -59,6 +66,7 @@ const SEAL = {
 const SEAL_PURPOSE = {
   PROVIDER_KEY: { DATA_KEY: "luke/provider-key/data-key", SECRET: "luke/provider-key/key" },
   GITHUB_TOKEN: { DATA_KEY: "luke/github-token/data-key", SECRET: "luke/github-token/token" },
+  MAC_LAUNCH: { DATA_KEY: "luke/mac-launch/data-key", SECRET: "luke/mac-launch/secrets" },
 } as const;
 
 /** One kind of secret's purposes: the data key's wrap, and the secret's own seal. */
@@ -98,6 +106,25 @@ export interface SealedGitHubToken {
   readonly sealedDataKey: string;
   /** base64 of nonce, ciphertext, and tag: the token under the data key. */
   readonly sealedToken: string;
+}
+
+/** What a launch line holds of its secrets, as one text column: the version, the wrapped data key, and the seal. */
+const SealedMacLaunchSchema = Schema.Struct({
+  keyVersion: Schema.Number,
+  sealedDataKey: Schema.String,
+  sealed: Schema.String,
+});
+
+const encodeSealedMacLaunch = Schema.encodeSync(Schema.fromJsonString(SealedMacLaunchSchema));
+
+const decodeSealedMacLaunch = Schema.decodeUnknownResult(
+  Schema.fromJsonString(SealedMacLaunchSchema),
+);
+
+/** Whose a local agent's launch is: its starter and the agent, which its seal binds. */
+export interface MacLaunchOwner {
+  readonly userId: string;
+  readonly agentId: string;
 }
 
 /** Whose key a seal is, and what kind of credential, which both seals bind. */
@@ -336,4 +363,32 @@ export function rewrapGitHubToken(
   return wrapped === undefined
     ? Result.fail(PROVIDER_KEY_UNREADABLE)
     : Result.succeed({ ...wrapped, sealedToken: sealed.sealedToken });
+}
+
+/** A local agent's launch secrets sealed for its launch line under a fresh data key, wrapped under the ring's current version, as the line's one text column holds them. */
+export function sealMacLaunchSecrets(
+  ring: KeyRing,
+  owner: MacLaunchOwner,
+  secrets: Redacted.Redacted<string>,
+): string {
+  const sealed = sealSecret(ring, SEAL_PURPOSE.MAC_LAUNCH, [owner.userId, owner.agentId], secrets);
+  return encodeSealedMacLaunch(sealed);
+}
+
+/** The launch secrets a launch line seals, or unreadable where the column is no seal or any part of it does not open for this owner. */
+export function openMacLaunchSecrets(
+  ring: KeyRing,
+  owner: MacLaunchOwner,
+  column: string,
+): Result.Result<Redacted.Redacted<string>, ProviderKeyUnreadable> {
+  const read = decodeSealedMacLaunch(column);
+  if (Result.isFailure(read)) return Result.fail(PROVIDER_KEY_UNREADABLE);
+  const secrets = openSecret(
+    ring,
+    SEAL_PURPOSE.MAC_LAUNCH,
+    [owner.userId, owner.agentId],
+    read.success,
+    read.success.sealed,
+  );
+  return secrets === undefined ? Result.fail(PROVIDER_KEY_UNREADABLE) : Result.succeed(secrets);
 }

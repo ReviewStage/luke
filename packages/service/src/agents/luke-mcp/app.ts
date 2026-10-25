@@ -38,7 +38,7 @@
 
 import { randomUUID } from "node:crypto";
 import { readCodingAgentOfConversation } from "@luke/database/models/coding-agent-store";
-import { CODING_AGENT_KIND } from "@luke/features/coding-agent-wire";
+import { CODING_AGENT_KIND, CODING_AGENT_MACHINE } from "@luke/features/coding-agent-wire";
 import { integrationConnectionOf } from "@luke/features/integration-wire";
 import { MAC_COMMAND_BOUNDS } from "@luke/features/mac-command-wire";
 import { failureKind } from "@luke/runtime/effect";
@@ -239,6 +239,7 @@ const NO_AGENT_OFFERED: LukeMcpOfferedTo = {
   taskId: null,
   repository: null,
   kind: CODING_AGENT_KIND.CODER,
+  machine: CODING_AGENT_MACHINE.VERCEL,
 };
 
 /** The tool result where the door failed rather than refused. */

@@ -28,7 +28,8 @@ import {
 import { deploymentEveOrigin } from "../brain-host/eve-origin.js";
 import { LUKE_MCP_PATH, lukeIntegrationMcpUrl } from "../luke-mcp/app.js";
 import type { AgentMachine } from "../machine/agent-machine.js";
-import { type SandboxRunner, vercelMachineLayer } from "../machine/vercel-machine.js";
+import { agentMachinesLayer } from "../machine/agent-machines.js";
+import type { SandboxRunner } from "../machine/vercel-machine.js";
 import { memoryOnFor } from "../memory-tools.js";
 import { RUNNER_EVENTS_PATH } from "../native-events/runner-events-app.js";
 import { RUNNER_TOKEN_PATH } from "../native-events/runner-token-app.js";
@@ -55,7 +56,12 @@ export interface NativeAgentSessionsOptions {
  * as its developer, the workspace its links are written under, and whether
  * its starter turned Chat on; each read that fails reads as eve's does.
  */
-const nativeCoderInstructions = (userId: string, agent: CodingAgent, harness: CoderHarness) =>
+const nativeCoderInstructions = (
+  userId: string,
+  agent: CodingAgent,
+  harness: CoderHarness,
+  checkoutPath: string,
+) =>
   Effect.gen(function* () {
     const target = { userId, conversationId: agent.conversationId };
     const ciReadable = hasRepository(agent) ? yield* agentCiReadable(target, agent) : false;
@@ -76,6 +82,7 @@ const nativeCoderInstructions = (userId: string, agent: CodingAgent, harness: Co
       chatOn,
       memoryOn,
       harness,
+      checkoutPath,
     });
   });
 
@@ -91,7 +98,7 @@ const nativeIntegrations = (userId: string, agent: CodingAgent, origin: string) 
     (names) => names.map((name) => ({ name, url: lukeIntegrationMcpUrl(origin, name) })),
   );
 
-/** The native harnesses over the function's services, as above, each agent's runner on Vercel Sandbox (`vercel-machine.ts`). */
+/** The native harnesses over the function's services, as above, each agent's runner on the machine its row names (`agent-machines.ts`): Vercel Sandbox, or its starter's Mac. */
 export function nativeAgentSessionsLayer(
   options: NativeAgentSessionsOptions,
 ): Layer.Layer<
@@ -115,8 +122,10 @@ export function nativeAgentSessionsLayer(
         mcpUrl: new URL(LUKE_MCP_PATH, origin).href,
         integrations: (agent) =>
           nativeIntegrations(account, agent, origin).pipe(Effect.provideContext(context)),
-        instructions: (agent) =>
-          nativeCoderInstructions(account, agent, harness).pipe(Effect.provideContext(context)),
+        instructions: (agent, checkoutPath) =>
+          nativeCoderInstructions(account, agent, harness, checkoutPath).pipe(
+            Effect.provideContext(context),
+          ),
         // One past the last event the store applied, so a relaunch goes on numbering where the last launch stopped.
         nextSequence: (conversationId) =>
           readNativeSequence({ userId: account, conversationId }).pipe(
@@ -144,5 +153,5 @@ export function nativeAgentSessionsLayer(
         },
       };
     }),
-  ).pipe(Layer.provide(vercelMachineLayer({ readToken: deploymentOidcToken, run: options.run })));
+  ).pipe(Layer.provide(agentMachinesLayer({ readToken: deploymentOidcToken, run: options.run })));
 }

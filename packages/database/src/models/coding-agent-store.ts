@@ -4,11 +4,13 @@ import {
   CODING_AGENT_AUTHOR,
   CODING_AGENT_BRIEF,
   CODING_AGENT_KIND,
+  CODING_AGENT_MACHINE,
   CODING_AGENT_PAYER,
   CONTEXT_WINDOW,
   type CodingAgentAuthor,
   type CodingAgentBrief,
   type CodingAgentKind,
+  type CodingAgentMachine,
   type CodingAgentPayer,
   type CodingAgentPullRequest,
   type CodingAgentSubagentTitle,
@@ -205,6 +207,10 @@ export interface CodingAgent {
   /** What the agent is: a coder, or its member's operator. */
   readonly kind: CodingAgentKind;
   readonly createdAt: Date;
+  /** Where its runner runs: a Vercel Sandbox, or its starter's Mac; a Vercel Sandbox where unsaid. */
+  readonly machine?: CodingAgentMachine;
+  /** The Mac a local agent is pinned to; null for one in a sandbox, or once that Mac is gone. */
+  readonly deviceId?: string | null;
 }
 
 /**
@@ -322,6 +328,10 @@ export type NewCodingAgent = CodingAgentPlace & {
   readonly runtime?: ConversationRuntime | undefined;
   /** Who pays for the agent's model calls; none recorded where none is named. */
   readonly payer?: CodingAgentPayer | undefined;
+  /** Where its runner runs; a Vercel Sandbox where none is named. */
+  readonly machine?: CodingAgentMachine | undefined;
+  /** The account's Mac a local agent is pinned to; none for one in a sandbox. */
+  readonly deviceId?: string | undefined;
 };
 
 /**
@@ -365,6 +375,8 @@ const CODING_AGENT_COLUMNS = {
   githubAccess: codingAgent.githubAccess,
   kind: codingAgent.kind,
   createdAt: codingAgent.createdAt,
+  machine: codingAgent.machine,
+  deviceId: codingAgent.deviceId,
 };
 
 /**
@@ -403,6 +415,8 @@ const CODING_AGENT_LINE_COLUMNS = {
   githubAccess: codingAgent.githubAccess,
   kind: codingAgent.kind,
   createdAt: codingAgent.createdAt,
+  machine: codingAgent.machine,
+  deviceId: codingAgent.deviceId,
 } as const;
 
 /** What an agent was handed as its first message, as `CODING_AGENT_LINE_COLUMNS` reads it from the row: its prompt, else the plan, else nothing. */
@@ -507,6 +521,8 @@ const CodingAgentRowSchema = Schema.Struct({
   githubAccess: Schema.Literals(Object.values(GITHUB_ACCESS)),
   kind: Schema.Literals(Object.values(CODING_AGENT_KIND)),
   createdAt: InstantColumnSchema,
+  machine: Schema.Literals(Object.values(CODING_AGENT_MACHINE)),
+  deviceId: Schema.NullOr(Schema.String),
 });
 
 const {
@@ -726,6 +742,8 @@ const insertAgent = SqlSchema.findOneOption({
     githubAccess: Schema.Literals(Object.values(GITHUB_ACCESS)),
     payer: Schema.NullOr(PayerColumnSchema),
     kind: Schema.Literals(Object.values(CODING_AGENT_KIND)),
+    machine: Schema.Literals(Object.values(CODING_AGENT_MACHINE)),
+    deviceId: Schema.NullOr(Schema.String),
     now: Schema.Date,
   }),
   Result: CommittedAgentRowSchema,
@@ -755,6 +773,8 @@ const insertAgent = SqlSchema.findOneOption({
           githubAccess: write.githubAccess,
           payer: write.payer,
           kind: write.kind,
+          machine: write.machine,
+          deviceId: write.deviceId,
           idempotencyKey: write.idempotencyKey,
           createdAt: write.now,
         })
@@ -1874,6 +1894,8 @@ export function createCodingAgent(
           githubAccess: started.githubAccess ?? GITHUB_ACCESS.APP,
           payer: started.payer ?? null,
           kind: started.kind ?? CODING_AGENT_KIND.CODER,
+          machine: started.machine ?? CODING_AGENT_MACHINE.VERCEL,
+          deviceId: started.deviceId ?? null,
           now,
         });
         if (Option.isSome(inserted)) {

@@ -20,6 +20,7 @@ import { inboxContract } from "./inbox.js";
 import { installedSkillsContract } from "./installed-skills.js";
 import { integrationsContract } from "./integrations.js";
 import { liveContract } from "./live.js";
+import { macAgentsContract } from "./mac-agents.js";
 import { macCommandsContract } from "./mac-commands.js";
 import { messagesContract } from "./messages.js";
 import { modelsContract } from "./models.js";
@@ -59,6 +60,7 @@ export const hostedContract = {
   installedSkills: installedSkillsContract,
   integrations: integrationsContract,
   live: liveContract,
+  macAgents: macAgentsContract,
   macCommands: macCommandsContract,
   messages: messagesContract,
   models: modelsContract,

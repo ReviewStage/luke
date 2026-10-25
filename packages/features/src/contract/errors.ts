@@ -15,6 +15,7 @@
 
 import type { ErrorMapItem } from "@orpc/contract";
 import { Schema as EffectSchema } from "effect";
+import { localAgentRefusalSchema } from "../coding-agent-wire.js";
 import { installedSkillRefusedDataSchema } from "../installed-skill-route-wire.js";
 import { modelProviderSchema } from "../models-wire.js";
 import { repositoryUnreachedSchema } from "../repository-reach-wire.js";
@@ -68,6 +69,15 @@ export const credentialMissingDataSchema = EffectSchema.Struct({
   provider: EffectSchema.optionalKey(modelProviderSchema),
 });
 
+/** What a refused local agent carries beside its slug: why, which the refusal's words name. */
+export const localAgentRefusedDataSchema = EffectSchema.Struct({
+  localAgentRefusal: EffectSchema.optionalKey(localAgentRefusalSchema),
+});
+
+const localAgentRefusedData = EffectSchema.toStandardSchemaV1(
+  EffectSchema.flip(localAgentRefusedDataSchema),
+);
+
 const credentialMissingData = EffectSchema.toStandardSchemaV1(
   EffectSchema.flip(credentialMissingDataSchema),
 );
@@ -115,4 +125,5 @@ export const HOSTED_ERRORS = {
   [HOSTED_API_ERROR.LINEAR_UNAVAILABLE]: {},
   [HOSTED_API_ERROR.SKILL_NAME_TAKEN]: { data: installedSkillRefusedData },
   [HOSTED_API_ERROR.SKILL_FILES_REFUSED]: { data: installedSkillRefusedData },
+  [HOSTED_API_ERROR.LOCAL_AGENT_REFUSED]: { data: localAgentRefusedData },
 } as const satisfies Record<HostedApiError, ErrorMapItem>;

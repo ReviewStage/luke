@@ -1,3 +1,4 @@
+import type { LocalAgentRefusal } from "@luke/features/coding-agent-wire";
 import type { InstalledSkillFilesRefusal } from "@luke/features/installed-skill-route-wire";
 import type { ModelProvider } from "@luke/features/models-wire";
 import type { RepositoryUnreached } from "@luke/features/repository-reach-wire";
@@ -63,6 +64,7 @@ export const HOSTED_REFUSAL_STATUS = {
   [HOSTED_API_ERROR.LINEAR_UNAVAILABLE]: HOSTED_HTTP_STATUS.CONFLICT,
   [HOSTED_API_ERROR.SKILL_NAME_TAKEN]: HOSTED_HTTP_STATUS.CONFLICT,
   [HOSTED_API_ERROR.SKILL_FILES_REFUSED]: HOSTED_HTTP_STATUS.CONFLICT,
+  [HOSTED_API_ERROR.LOCAL_AGENT_REFUSED]: HOSTED_HTTP_STATUS.CONFLICT,
 } as const;
 
 type HostedRefusalSlug = keyof typeof HOSTED_REFUSAL_STATUS;
@@ -76,6 +78,7 @@ export type HostedRefusal = {
   readonly provider?: ModelProvider;
   readonly skillName?: string;
   readonly skillRefusal?: InstalledSkillFilesRefusal;
+  readonly localAgentRefusal?: LocalAgentRefusal;
 };
 
 /**
@@ -156,6 +159,8 @@ export const HOSTED_REFUSAL = {
   SKILL_NAME_TAKEN: { error: HOSTED_API_ERROR.SKILL_NAME_TAKEN },
   /** A skill's files were refused; nothing was installed. */
   SKILL_FILES_REFUSED: { error: HOSTED_API_ERROR.SKILL_FILES_REFUSED },
+  /** A Start on This Mac was refused (`localAgentRefused`, which names why); nothing was written. */
+  LOCAL_AGENT_REFUSED: { error: HOSTED_API_ERROR.LOCAL_AGENT_REFUSED },
 } as const satisfies Record<string, HostedRefusal>;
 
 /** A plan's usage limit reached, with when it resets in epoch milliseconds where the provider said, so the words can name it. */
@@ -163,6 +168,11 @@ export function planLimitReached(resetsAt: number | undefined): HostedRefusal {
   return resetsAt === undefined
     ? HOSTED_REFUSAL.AGENT_PLAN_LIMIT_REACHED
     : { ...HOSTED_REFUSAL.AGENT_PLAN_LIMIT_REACHED, resetsAt };
+}
+
+/** A Start on This Mac refused, named so the words can say why. */
+export function localAgentRefused(localAgentRefusal: LocalAgentRefusal): HostedRefusal {
+  return { ...HOSTED_REFUSAL.LOCAL_AGENT_REFUSED, localAgentRefusal };
 }
 
 /** No credential of the account's pays for a coding agent on the provider's models, named so the words can say which to connect. */

@@ -42,9 +42,9 @@ import { type StoreWriter, storeWriter } from "@luke/database/models/writer";
 import { Duration, Effect, Option, Result, type Schema } from "effect";
 import type { HttpClient } from "effect/http";
 import { CODER } from "../agents/coder-host/bounds.js";
-import { retireWarmRunner, taggedRunner } from "../agents/coder-host/runner-sessions.js";
+import { retireWarmRunner } from "../agents/coder-host/runner-sessions.js";
 import { CODER_TOOL_SET } from "../agents/coder-host/tool-set.js";
-import { RUNNER_TAG, SANDBOX_NAME } from "../agents/machine/vercel-machine.js";
+import { RUNNER_TAG, SANDBOX_NAME, taggedRunner } from "../agents/machine/vercel-machine.js";
 import {
   deploymentOidcToken,
   type ListedSandbox,

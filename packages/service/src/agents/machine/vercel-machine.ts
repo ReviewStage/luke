@@ -34,6 +34,14 @@
  * run in the running session and waited on, its environment named by `env`
  * on the command line rather than by the API, as Luke's other commands are
  * run (`../vercel-sandbox-api.ts`).
+ *
+ * A place is found again by the session's tag, and its runner by the tags a
+ * launch writes beside it: the command, the sandbox session it runs in, and
+ * the launch's first event number and fingerprint (`RUNNER_TAG`). The
+ * firewall is the sandbox's network policy, a stop is the session's, and a
+ * resume opens the sandbox's last snapshot, its timeout lowered first, so
+ * the session it opens lives a launch's timeout and not an old sandbox's
+ * day; a snapshot expired is a place gone for good.
  */
 
 import { createHash, randomUUID } from "node:crypto";
@@ -44,8 +52,9 @@ import {
   type WithRepository,
 } from "@luke/database/models/coding-agent-store";
 import type { ConversationTarget } from "@luke/database/models/writer";
+import { CODING_AGENT_MACHINE } from "@luke/features/coding-agent-wire";
 import { GITHUB_ACCESS } from "@luke/features/github-repositories-wire";
-import { Brand, Duration, Effect, Layer, Option } from "effect";
+import { Brand, Duration, Effect, Layer, Option, Result } from "effect";
 import type { HttpClient } from "effect/http";
 import { AfterResponse, afterResponse } from "../../http/after-response.js";
 import {
@@ -76,12 +85,15 @@ import {
   readRepositorySnapshot,
 } from "../repository-snapshot.js";
 import { WITHOUT_CAPABILITIES } from "../sandbox-capabilities.js";
+import { capSandboxTimeout } from "../sandbox-keep-alive.js";
+import { credentialPolicy } from "../terminal/agent-sandbox.js";
 import {
   type ListedSandbox,
   type NetworkPolicy,
   NOT_FOUND_STATUS,
   type OidcTokenRead,
   OPEN_INTERNET_POLICY,
+  SANDBOX_STATUS,
   SandboxUnavailable,
   SESSION_TAG,
   SNAPSHOT_GONE_STATUS,
@@ -92,13 +104,21 @@ import {
 import {
   AgentMachine,
   type AgentMachineService,
+  describeFailure,
+  type FoundPlace,
   LaunchRefused,
+  type MachineKept,
+  type MachineLayout,
+  type MachineLifecycle,
   type MachineName,
   type MachinePlace,
   type MachineRunning,
-  type OpenedPlace,
+  PLACE_RESUME,
   type RepositoryCommand,
+  RUNNER_RECORD,
   type RunnerHandle,
+  type RunnerMark,
+  type RunnerRecord,
 } from "./agent-machine.js";
 
 /**
@@ -114,6 +134,26 @@ export const RUNNER_TAG = {
   /** The launch's first event number, then `LAUNCH_FINGERPRINT_MARK` and what the launch was started with that a warm runner cannot take up later (`launchFingerprint`). */
   LAUNCH: "lukeRunnerLaunch",
 } as const;
+
+/** What parts a launch tag's first event number from its fingerprint. */
+const LAUNCH_FINGERPRINT_MARK = "-";
+
+/**
+ * Where a message's files that the harness takes no block of are written
+ * in its sandbox, one folder per message line: outside the checkout, so no
+ * commit picks them up, and readable by `agent`, since the API writes them
+ * as its default user with the mode the caller names.
+ */
+const ATTACHMENT_DIRECTORY = "/tmp/luke-attachments";
+
+/** Where a sandbox keeps an agent's things: the same for every agent, since each has a sandbox of its own. */
+const SANDBOX_LAYOUT: MachineLayout = {
+  checkoutPath: CODER.CHECKOUT_PATH,
+  installedSkills: NATIVE_SKILLS_PATH.INSTALLED,
+  skillsUpload: NATIVE_SKILLS_PATH.UPLOAD,
+  attachments: ATTACHMENT_DIRECTORY,
+  claudeExecutable: undefined,
+};
 
 /** What a sandbox Luke opens is named as, beside a fresh UUID; the sweep tells a native sandbox from eve's by it. */
 export const SANDBOX_NAME = "luke-agent-";
@@ -207,44 +247,108 @@ const runningOfSession = Brand.nominal<MachineRunning>();
 const nameOfSandbox = Brand.nominal<MachineName>();
 
 /** The place a sandbox's running session stands for, under Luke's session given. */
-export function vercelPlace(session: string, sandboxSessionId: string): MachinePlace {
-  return { session, running: runningOfSession(sandboxSessionId) };
+function vercelPlace(session: string, sandboxSessionId: string): MachinePlace {
+  return {
+    machine: CODING_AGENT_MACHINE.VERCEL,
+    session,
+    running: runningOfSession(sandboxSessionId),
+  };
 }
 
-/** The runner a sandbox's tags name, as the machine's handle to it. */
-export function vercelRunnerHandle(
-  session: string,
-  sandboxSessionId: string,
-  commandId: string,
-): RunnerHandle {
-  return { ...vercelPlace(session, sandboxSessionId), command: commandId };
+/** The runner a sandbox's tags name, where the sandbox runs the session it was started in. */
+export interface TaggedRunner {
+  readonly sandboxSessionId: string;
+  readonly commandId: string;
+  readonly firstSequence: number;
+  /** None for a launch from before fingerprints were tagged. */
+  readonly fingerprint?: string;
 }
 
-/**
- * The sandbox session a place runs in, which `runner-sessions.ts` still asks
- * Vercel by itself for the sandbox's tags, firewall, stop, and resume.
- * TODO(local agents, PR 3): move the firewall, stop, and resume behind the
- * machine (a Mac's firewall does nothing, and its stop is the runner's
- * exit), and the tags behind a findRunner/recordRunner pair, then delete
- * this and `sandboxNameOf`.
- */
-export function sandboxSessionOf(place: MachinePlace): string {
-  return place.running;
+/** The launch tag read: its first event number and its fingerprint where it has one; none where the tag is missing or unreadable. */
+function taggedLaunch(tags: Readonly<Record<string, string>>): RunnerMark | undefined {
+  const [sequence = "", fingerprint] = (tags[RUNNER_TAG.LAUNCH] ?? "").split(
+    LAUNCH_FINGERPRINT_MARK,
+  );
+  const firstSequence = Number(sequence);
+  if (sequence === "" || !Number.isSafeInteger(firstSequence)) return undefined;
+  return { firstSequence, ...(fingerprint === undefined ? {} : { fingerprint }) };
 }
 
-/** The sandbox an opened place is, by name, for the same callers as `sandboxSessionOf`. */
-export function sandboxNameOf(opened: OpenedPlace): string {
-  return opened.name;
+/** The runner a sandbox's tags name, whatever the sandbox runs now; none where a tag is missing. */
+export function taggedRunner(sandbox: ListedSandbox): TaggedRunner | undefined {
+  const tags = sandbox.tags ?? {};
+  const sandboxSessionId = tags[RUNNER_TAG.SANDBOX_SESSION];
+  const commandId = tags[RUNNER_TAG.COMMAND];
+  const launch = taggedLaunch(tags);
+  if (sandboxSessionId === undefined || commandId === undefined || launch === undefined) {
+    return undefined;
+  }
+  return { sandboxSessionId, commandId, ...launch };
 }
 
-/**
- * A failure as the log says it: a sandbox's own words, which name the call
- * that failed, its status, and Vercel's error or the cause's, never what was
- * sent; the kind alone for any other, since a store failure's message may
- * name a statement.
- */
-export function describeFailure(failure: { readonly _tag: string }): string {
-  return failure instanceof SandboxUnavailable ? failure.message : failure._tag;
+/** The launch tag's value for the mark given. */
+function launchTagOf(mark: RunnerMark): string {
+  return mark.fingerprint === undefined
+    ? String(mark.firstSequence)
+    : [mark.firstSequence, mark.fingerprint].join(LAUNCH_FINGERPRINT_MARK);
+}
+
+/** The tags a sandbox carries for the record given, beside its session's and its agent's. */
+function recordTags(session: string, agentId: string, record: RunnerRecord) {
+  const place = { [SESSION_TAG]: session, [RUNNER_TAG.AGENT]: agentId };
+  if (record.kind === RUNNER_RECORD.NONE) return place;
+  if (record.kind === RUNNER_RECORD.LAUNCHED) {
+    return { ...place, [RUNNER_TAG.LAUNCH]: launchTagOf(record.mark) };
+  }
+  return {
+    ...place,
+    [RUNNER_TAG.SANDBOX_SESSION]: record.runner.handle.running,
+    [RUNNER_TAG.COMMAND]: record.runner.handle.command,
+    [RUNNER_TAG.LAUNCH]: launchTagOf(record.runner.mark),
+  };
+}
+
+/** The runner the sandbox's tags name, where the sandbox is up in the session it was started in, whether or not it has exited since. */
+function runnerInSession(session: string, sandbox: ListedSandbox) {
+  const runner = taggedRunner(sandbox);
+  if (
+    runner === undefined ||
+    sandbox.status !== SANDBOX_STATUS.RUNNING ||
+    sandbox.currentSessionId !== runner.sandboxSessionId
+  ) {
+    return undefined;
+  }
+  const { sandboxSessionId, commandId, ...mark } = runner;
+  return {
+    handle: { ...vercelPlace(session, sandboxSessionId), command: commandId },
+    mark,
+  };
+}
+
+/** A listed sandbox as the place a later call finds, under Luke's session given. */
+function foundOf(session: string, sandbox: ListedSandbox): FoundPlace {
+  const tags = sandbox.tags ?? {};
+  const running =
+    sandbox.status === SANDBOX_STATUS.RUNNING && sandbox.currentSessionId !== undefined
+      ? vercelPlace(session, sandbox.currentSessionId)
+      : undefined;
+  return {
+    machine: CODING_AGENT_MACHINE.VERCEL,
+    session,
+    agentId: tags[RUNNER_TAG.AGENT],
+    name: nameOfSandbox(sandbox.name),
+    running,
+    runner: runnerInSession(session, sandbox),
+    launch: taggedLaunch(tags),
+    // SAFETY: the listing is this machine's own to read back in `resume`; no caller reads it.
+    kept: sandbox as unknown as MachineKept,
+  };
+}
+
+/** The listing a found place was read from, which `foundOf` kept. */
+function listedOf(found: FoundPlace): ListedSandbox {
+  // SAFETY: a place this machine found keeps the listing it was read from (`foundOf`).
+  return found.kept as unknown as ListedSandbox;
 }
 
 /**
@@ -327,8 +431,12 @@ function readFileCommand(path: string, maxBytes: number) {
   };
 }
 
-/** The machine over the API given, its checkout run through the edge's runner. */
-function machineOver(api: VercelSandboxApi, run: SandboxRunner): AgentMachineService {
+/**
+ * What the machine does to a place it already opened, over the API given:
+ * everything but opening one and launching a runner in it, so a caller with
+ * no edge's runner to hand the checkout, as a launch's end, still reaches it.
+ */
+export function vercelLifecycle(api: VercelSandboxApi): MachineLifecycle {
   /** The running session of the sandbox tagged with the session; unavailable where none is up. */
   const runningSession = (sessionId: string) =>
     Effect.gen(function* () {
@@ -340,6 +448,70 @@ function machineOver(api: VercelSandboxApi, run: SandboxRunner): AgentMachineSer
       return running;
     });
 
+  return {
+    findPlaces: (session) =>
+      Effect.map(api.listTagged(session), (sandboxes) =>
+        sandboxes.map((sandbox) => foundOf(session, sandbox)),
+      ),
+
+    recordRunner: (place, record) =>
+      api.updateTags(place.name, recordTags(place.session, place.agentId, record)),
+
+    setCredential: (place, credential) =>
+      api.updateNetworkPolicy(
+        place.running,
+        credential === undefined ? OPEN_INTERNET_POLICY : credentialPolicy(credential),
+      ),
+
+    // Lowered first, so the session the resume opens lives the timeout, not an old sandbox's day.
+    resume: (found) =>
+      Effect.gen(function* () {
+        yield* capSandboxTimeout(api, listedOf(found));
+        const resumed = yield* Effect.result(api.resume(found.name));
+        if (Result.isFailure(resumed)) {
+          if (resumed.failure.status === SNAPSHOT_GONE_STATUS) return PLACE_RESUME.GONE;
+          return yield* resumed.failure;
+        }
+        const session = resumed.success.currentSessionId;
+        if (session === undefined) return yield* new SandboxUnavailable({});
+        return vercelPlace(found.session, session);
+      }),
+
+    stop: (place) => api.stopSession(place.running),
+
+    discard: (found) => api.deleteSandbox(found.name),
+
+    writeFiles: (place, files) => api.writeFiles(place.running, files),
+
+    writeLine: (handle, text) => api.writeStdin(handle.running, handle.command, text),
+
+    runnerExit: (handle, within) => api.commandExit(handle.running, handle.command, within),
+
+    kill: (handle) => api.kill(handle.running, handle.command),
+
+    readFile: (session, path, bound) =>
+      Effect.flatMap(runningSession(session), (running) =>
+        Effect.map(api.run(running, readFileCommand(path, bound + 1)), (ran) =>
+          ran.exitCode === 0 ? new Uint8Array(Buffer.from(ran.stdout, "base64")) : undefined,
+        ),
+      ),
+
+    runRepositoryCommand: (session, command: RepositoryCommand) =>
+      Effect.flatMap(runningSession(session), (running) => {
+        const environment = Object.entries(command.env ?? {}).map(
+          ([name, value]) => `${name}=${value}`,
+        );
+        return api.run(running, {
+          command: "env",
+          args: [...environment, "bash", "-c", command.command],
+          ...(command.workingDirectory === undefined ? {} : { cwd: command.workingDirectory }),
+        });
+      }),
+  };
+}
+
+/** The machine over the API given, its checkout run through the edge's runner. */
+export function vercelMachine(api: VercelSandboxApi, run: SandboxRunner): AgentMachineService {
   /** A new sandbox of the agent's, under the session given, opened from the snapshot named at the size its repository asks for. */
   const createdFrom = (agent: CodingAgent, sessionId: string, snapshotId: string) =>
     api.create({
@@ -537,6 +709,10 @@ function machineOver(api: VercelSandboxApi, run: SandboxRunner): AgentMachineSer
     });
 
   return {
+    ...vercelLifecycle(api),
+
+    layout: () => Effect.succeed(SANDBOX_LAYOUT),
+
     // What the deepen reads of GitHub (`agentDeepenPlan`) is read beside the sandbox's opening and
     // the caller's own reads, and kept as it ended, so a read that failed fails the launch only
     // once the sandbox it would delete stands, and never cuts its opening short. Where the caller
@@ -573,7 +749,7 @@ function machineOver(api: VercelSandboxApi, run: SandboxRunner): AgentMachineSer
           {
             place: vercelPlace(ask.session, running),
             name: nameOfSandbox(name),
-            checkoutPath: CODER.CHECKOUT_PATH,
+            checkoutPath: SANDBOX_LAYOUT.checkoutPath,
             finishCheckout,
           },
           beside,
@@ -581,12 +757,13 @@ function machineOver(api: VercelSandboxApi, run: SandboxRunner): AgentMachineSer
       }),
 
     // The bundle's upload and the caller's steps run at once, since none waits on another and the
-    // command waits on them all. A runner started but never configured is ended, and the caller
+    // command waits on them all. The runner is kept in the sandbox's tags before it reads anything,
+    // so a later call finds it. A runner started but never configured is ended, and the caller
     // undoes what it recorded of it, so the next message relaunches whole rather than writing to a
     // runner that waits for its config.
     launchRunner: (place, launch) =>
       Effect.gen(function* () {
-        const running = sandboxSessionOf(place);
+        const running = place.running;
         const [digest, ready] = yield* Effect.all(
           [
             Effect.gen(function* () {
@@ -611,7 +788,14 @@ function machineOver(api: VercelSandboxApi, run: SandboxRunner): AgentMachineSer
         });
         const handle: RunnerHandle = { ...place, command: commandId };
         yield* Effect.gen(function* () {
-          const lines = yield* launch.firstLines(ready, handle);
+          const { lines, mark } = yield* launch.firstLines(ready, handle);
+          yield* api.updateTags(
+            launch.name,
+            recordTags(place.session, launch.agentId, {
+              kind: RUNNER_RECORD.RUNNING,
+              runner: { handle, mark },
+            }),
+          );
           yield* api
             .writeStdin(running, commandId, lines)
             .pipe(
@@ -626,32 +810,6 @@ function machineOver(api: VercelSandboxApi, run: SandboxRunner): AgentMachineSer
         );
         return { handle, ready };
       }),
-
-    writeLine: (handle, text) => api.writeStdin(sandboxSessionOf(handle), handle.command, text),
-
-    runnerExit: (handle, within) =>
-      api.commandExit(sandboxSessionOf(handle), handle.command, within),
-
-    kill: (handle) => api.kill(sandboxSessionOf(handle), handle.command),
-
-    readFile: (session, path, bound) =>
-      Effect.flatMap(runningSession(session), (running) =>
-        Effect.map(api.run(running, readFileCommand(path, bound + 1)), (ran) =>
-          ran.exitCode === 0 ? new Uint8Array(Buffer.from(ran.stdout, "base64")) : undefined,
-        ),
-      ),
-
-    runRepositoryCommand: (session, command: RepositoryCommand) =>
-      Effect.flatMap(runningSession(session), (running) => {
-        const environment = Object.entries(command.env ?? {}).map(
-          ([name, value]) => `${name}=${value}`,
-        );
-        return api.run(running, {
-          command: "env",
-          args: [...environment, "bash", "-c", command.command],
-          ...(command.workingDirectory === undefined ? {} : { cwd: command.workingDirectory }),
-        });
-      }),
   };
 }
 
@@ -661,6 +819,6 @@ export function vercelMachineLayer(
 ): Layer.Layer<AgentMachine, never, HttpClient.HttpClient> {
   return Layer.effect(
     AgentMachine,
-    Effect.map(vercelSandboxApi(options.readToken), (api) => machineOver(api, options.run)),
+    Effect.map(vercelSandboxApi(options.readToken), (api) => vercelMachine(api, options.run)),
   );
 }

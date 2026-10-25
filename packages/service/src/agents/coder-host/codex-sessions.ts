@@ -58,11 +58,9 @@ import { SERVER_AGENT_HARNESS } from "../../events/server-events.js";
 import { providerModelOf } from "../../providers/model-catalog.js";
 import type { BrainHostTurn } from "../brain-host/bounds.js";
 import { KEY_REFUSAL, PLAN_REFUSAL, type PlanRefusal } from "../brain-host/eve-sessions.js";
-import { LaunchRefused } from "../machine/agent-machine.js";
+import { LaunchRefused, type MachineLayout } from "../machine/agent-machine.js";
 import { SKILL_ROOT } from "../repository-skills.js";
-import { CODER } from "./bounds.js";
 import { NATIVE_SESSION_PREFIX } from "./native-runtime.js";
-import { NATIVE_SKILLS_PATH } from "./native-skills.js";
 import {
   type RunnerHarness,
   type RunnerServices,
@@ -192,6 +190,7 @@ function codex(options: CodexSessionsOptions): RunnerHarness<{ readonly _tag: st
 
   const config = (
     agent: CodingAgent,
+    layout: MachineLayout,
     resume: string | undefined,
     firstSequence: number,
     rewindBefore: string | undefined,
@@ -202,12 +201,12 @@ function codex(options: CodexSessionsOptions): RunnerHarness<{ readonly _tag: st
       const effort = effortOf(agent.effort);
       const written: CodexConfig = {
         harness: RUNNER_HARNESS.CODEX,
-        cwd: CODER.CHECKOUT_PATH,
+        cwd: layout.checkoutPath,
         executable: CODEX_PATH.EXECUTABLE,
         model,
         ...(effort === undefined ? undefined : { effort }),
         ...(providerModelOf(agent.model)?.fast === true ? { fast: true } : undefined),
-        developerInstructions: yield* options.instructions(agent),
+        developerInstructions: yield* options.instructions(agent, layout.checkoutPath),
         ...(resume === undefined ? undefined : { threadId: resume }),
         ...(rewindBefore === undefined ? undefined : { rewindBefore }),
         firstSequence,
@@ -215,7 +214,7 @@ function codex(options: CodexSessionsOptions): RunnerHarness<{ readonly _tag: st
         mcpUrl: options.mcpUrl,
         integrations: yield* options.integrations(agent),
         tokenUrl,
-        installedSkills: NATIVE_SKILLS_PATH.INSTALLED,
+        installedSkills: layout.installedSkills,
         // The runner stays warm past the agent's turn, for the sweep to retire (`retireWarmRunner`).
         warm: true,
       };
