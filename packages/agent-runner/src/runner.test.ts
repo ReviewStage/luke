@@ -977,14 +977,31 @@ it.effect(
     }),
 );
 
-/** The sandbox's processes while the agent waits: the sandbox's init, the runner, and the CLI it spawned, nothing of the agent's beside them. */
+/** The sandbox's processes while the agent waits: the sandbox's init, the runner, the CLI it spawned, and the CLI's own command-sandbox bridge (a `socat`), nothing of the agent's beside them. */
 const WAITING_PROCESSES: readonly FakeProcess[] = [
   { pid: 1, parent: 0, emptied: false },
   { pid: RUNNER_PID, parent: 1, emptied: true },
   { pid: RUNNER_PID + 1, parent: RUNNER_PID, emptied: true },
+  {
+    pid: RUNNER_PID + 2,
+    parent: RUNNER_PID + 1,
+    emptied: true,
+    argv: [
+      "socat",
+      "UNIX-LISTEN:/tmp/claude-http-46b2d3fe1057cdcd.sock,fork,reuseaddr",
+      "TCP:localhost:38551,keepalive,keepidle=10,keepintvl=5,keepcnt=3",
+    ],
+  },
 ];
 /** A dev server the agent started, detached from its shell onto the sandbox's init. */
 const DEV_SERVER: FakeProcess = { pid: 4242, parent: 1, emptied: true };
+/** A `socat` of the agent's own beside the CLI's bridge, forwarding a port of its choosing. */
+const AGENT_SOCAT: FakeProcess = {
+  pid: 4343,
+  parent: RUNNER_PID + 1,
+  emptied: true,
+  argv: ["socat", "TCP-LISTEN:5432,fork", "UNIX-CONNECT:/tmp/db.sock"],
+};
 
 /** When the recorded wakeup's one-shot schedule, `17 12 21 10 *`, next comes due from the test clock's start, in local time. */
 const WAKEUP_DUE = new Date(1970, 9, 21, 12, 17).toISOString();
@@ -1013,11 +1030,14 @@ it.effect(
     }),
 );
 
-it.effect(
-  "holds a wait while a process the agent started runs, and releases it once that process ends",
-  () =>
+it.effect.each([
+  ["a dev server", DEV_SERVER],
+  ["a socat of its own", AGENT_SOCAT],
+] as const)(
+  "holds a wait while %s the agent started runs, and releases it once that process ends",
+  ([, process]) =>
     Effect.gen(function* () {
-      const proc = yield* fakeProc([...WAITING_PROCESSES, DEV_SERVER]);
+      const proc = yield* fakeProc([...WAITING_PROCESSES, process]);
       const luke = fakeLuke([], WAKEUP.prompt);
       const { write, run } = yield* launch(WAKEUP_WAIT, luke, ENV, proc);
       yield* write(CONFIG);
@@ -1026,7 +1046,7 @@ it.effect(
 
       yield* TestClock.adjust(RUNNER_RELEASE.SETTLE_MS + 10 * RUNNER_RELEASE.RECHECK_MS);
       assert.equal(run.pollUnsafe(), undefined);
-      rmSync(join(proc, String(DEV_SERVER.pid)), { recursive: true });
+      rmSync(join(proc, String(process.pid)), { recursive: true });
       yield* TestClock.adjust(RUNNER_RELEASE.RECHECK_MS);
       assert.equal(yield* Fiber.join(run), RUNNER_END.RELEASED);
     }),

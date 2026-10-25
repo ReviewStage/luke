@@ -147,7 +147,7 @@ export function AgentModelChip({
   const offered = models === undefined ? undefined : runtimeModels(models, model.runtime);
 
   return (
-    <div className="agent-model-chip" ref={root}>
+    <div className="agent-model-chip relative flex min-w-0" ref={root}>
       <Tooltip label={label}>
         <Chip
           ref={trigger}

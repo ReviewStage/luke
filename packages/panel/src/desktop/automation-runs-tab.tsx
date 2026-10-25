@@ -3,10 +3,20 @@ import {
   automationRunStanding,
 } from "@luke/features/automation-list-model";
 import type { AutomationWorkspaceRun } from "@luke/features/automation-wire";
-import { EmptyState, LIST_DENSITY, LIST_VARIANT, List, ListMotion } from "@luke/ui";
+import {
+  type ChoiceItem,
+  type CountPart,
+  EmptyState,
+  LIST_VARIANT,
+  List,
+  ListMotion,
+  STATUS_TONE,
+  type StatusTone,
+} from "@luke/ui";
 import { ClockIcon } from "@luke/ui/icons";
 import { useRef } from "react";
 import { CREATOR, RunRow } from "./automation-runs-panel.js";
+import type { WorkspaceRunsRead } from "./use-automation-runs.js";
 
 /**
  * automation-runs-tab.tsx -- the Automations page's Runs tab: every run of the listed workspace's automations, newest first, each opening its agent.
@@ -30,12 +40,19 @@ export const RUNS_SHOWN = {
 
 export type RunsShown = (typeof RUNS_SHOWN)[keyof typeof RUNS_SHOWN];
 
-/** The choices that narrow the runs, in the bar's order. */
-export const RUNS_SHOWN_CHOICES: readonly { value: RunsShown; label: string }[] = [
-  { value: RUNS_SHOWN.ALL, label: "All" },
-  { value: RUNS_SHOWN.RUNNING, label: "Running" },
-  { value: RUNS_SHOWN.FAILED, label: "Failed" },
-];
+/** What each choice that narrows the runs is called, in the bar's order. */
+const SHOWN_LABEL = {
+  [RUNS_SHOWN.ALL]: "All",
+  [RUNS_SHOWN.RUNNING]: "Running",
+  [RUNS_SHOWN.FAILED]: "Failed",
+} as const satisfies Record<RunsShown, string>;
+
+/** The tone a choice's count is drawn in; none for All, which counts nothing. */
+const SHOWN_TONE = {
+  [RUNS_SHOWN.ALL]: undefined,
+  [RUNS_SHOWN.RUNNING]: STATUS_TONE.WORKING,
+  [RUNS_SHOWN.FAILED]: STATUS_TONE.DANGER,
+} as const satisfies Record<RunsShown, StatusTone | undefined>;
 
 /** The standing each narrowing keeps; none for All, which keeps every run. */
 const SHOWN_STANDING = {
@@ -51,6 +68,29 @@ const NONE_SHOWN = {
   [RUNS_SHOWN.FAILED]: "No run failed.",
 } as const satisfies Record<RunsShown, string>;
 
+/** A count of runs as a choice draws it, in `tone`; none at nothing, as the sidebar's counts leave theirs out. */
+export function runsCount(count: number, tone: StatusTone): readonly CountPart[] | undefined {
+  return count === 0 ? undefined : [{ text: String(count), tone }];
+}
+
+/**
+ * The choices that narrow the runs, Running and Failed each counting the runs
+ * it keeps in its own tone, so the tab says what is working and what failed
+ * before either is chosen.
+ */
+export function runsShownChoices(
+  runs: readonly AutomationWorkspaceRun[],
+): readonly ChoiceItem<RunsShown>[] {
+  return Object.values(RUNS_SHOWN).map((shown) => {
+    const tone = SHOWN_TONE[shown];
+    return {
+      value: shown,
+      label: SHOWN_LABEL[shown],
+      count: tone === undefined ? undefined : runsCount(shownRuns(runs, shown).length, tone),
+    };
+  });
+}
+
 /** The runs a narrowing keeps, in the order they came. */
 export function shownRuns(
   runs: readonly AutomationWorkspaceRun[],
@@ -59,6 +99,11 @@ export function shownRuns(
   const standing = SHOWN_STANDING[shown];
   if (standing === undefined) return runs;
   return runs.filter((run) => automationRunStanding(run) === standing);
+}
+
+/** How many of the workspace's runs still have an agent at work, which the sidebar's Automations row and the Runs tab count; none while the runs are unread. */
+export function runningRuns(read: WorkspaceRunsRead): number {
+  return read !== undefined && "runs" in read ? shownRuns(read.runs, RUNS_SHOWN.RUNNING).length : 0;
 }
 
 /** The runs the narrowing keeps, in a card, or what the tab says where it keeps none. */
@@ -82,7 +127,7 @@ export function WorkspaceRuns({
   return (
     <div ref={body}>
       <ListMotion root={body}>
-        <List label="Runs" variant={LIST_VARIANT.CARD} density={LIST_DENSITY.COMPACT} moves>
+        <List label="Runs" variant={LIST_VARIANT.CARD} moves>
           {kept.map((run) => (
             <RunRow
               key={run.id}

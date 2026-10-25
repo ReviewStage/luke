@@ -744,6 +744,22 @@ test("a line's count stands every thread on the line under it, the first open", 
   );
 });
 
+test("a line's count stands centred on the first line its words stand on, though they wrap onto the next", () => {
+  // Note that jsdom lays nothing out, so the marked words are given two line boxes 22px apart, the body at the page's top.
+  const lines = Object.getOwnPropertyDescriptor(Element.prototype, "getClientRects");
+  Element.prototype.getClientRects = function (this: Element) {
+    const marked = this.classList.contains("plan-comment-mark");
+    return (marked ? [new DOMRect(40, 100, 300, 20), new DOMRect(0, 122, 200, 20)] : []) as never;
+  };
+  try {
+    const { container } = drawn("page");
+    const count = container.querySelector<HTMLElement>(".comment-count");
+    assert.equal(count?.style.top, "110px", "the middle of the first line's box");
+  } finally {
+    if (lines !== undefined) Object.defineProperty(Element.prototype, "getClientRects", lines);
+  }
+});
+
 test("a link to a resolved thread lists it under Resolved, open, and scrolls the list to it", () => {
   const box = (top: number) => () => ({
     top,

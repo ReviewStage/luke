@@ -75,6 +75,9 @@ const MENU_LABEL = "Branch actions";
 const PUBLISHED_THING = "Pull request";
 const CHECKS_FAILING = "Checks failing";
 
+/** A pull request's state and lines, its mark first, a glyph's gap apart. */
+export const PUBLISHED_META_CLASS = "agent-published-meta inline-flex items-center gap-icon-gap";
+
 /** What a ⋯ and right-click offer: the pull request on GitHub where a press opens its tab instead, and its link to the clipboard, then the branch's name and the command that checks it out, each to the clipboard, where a branch is named. */
 function branchActions(
   branch: string | null,
@@ -135,7 +138,7 @@ export function BranchChip({
   if (pullRequest !== null || branch === null) return null;
   return (
     <>
-      <span className="agent-published-chip">
+      <span className="contents">
         <Tooltip label={`Open ${branch} on GitHub`}>
           <Chip
             look={CHIP_LOOK.PILL}
@@ -174,7 +177,7 @@ export function LinesChanged({
   deletions: number;
 }): React.JSX.Element {
   return (
-    <span className="agent-published-lines">
+    <span className="agent-published-lines whitespace-nowrap">
       <CountParts parts={linesCount(additions, deletions)} />
     </span>
   );
@@ -225,9 +228,9 @@ export function PublishedRow({
             leading={<PullRequestMark pullRequest={pullRequest} />}
             title={pullRequestLabelOf(pullRequest)}
             meta={
-              <span className="agent-published-meta">
+              <span className={PUBLISHED_META_CLASS}>
                 {pullRequest.checks === CHECK_SUMMARY.FAILING ? (
-                  <span className="agent-published-checks">{CHECKS_FAILING}</span>
+                  <span className="agent-published-checks text-danger">{CHECKS_FAILING}</span>
                 ) : null}
                 {state === undefined ? null : <span>{state}</span>}
                 <LinesChanged additions={pullRequest.additions} deletions={pullRequest.deletions} />

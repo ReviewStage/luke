@@ -543,7 +543,7 @@ test("the tree's search narrows the list, said over it while the tree is hidden,
   );
 
   await redraw({ treeOpen: false });
-  const notice = [...document.querySelectorAll(".file-tab-notice")].find((each) =>
+  const notice = [...document.querySelectorAll(".luke-tab-notice")].find((each) =>
     each.textContent?.includes("Only files whose path holds"),
   );
   assert.match(notice?.textContent ?? "", /BILLING/u);

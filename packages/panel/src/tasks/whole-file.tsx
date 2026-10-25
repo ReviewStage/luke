@@ -368,10 +368,10 @@ export function WholeFile({
     );
   }
   return (
-    <Fill className="whole-file">
+    <Fill className="whole-file relative">
       <ScrollArea ref={host}>{null}</ScrollArea>
       {!drawn ? (
-        <div className="whole-file-wait">
+        <div className="absolute inset-0 flex">
           <SpinnerRegion delay label={readingWords("the file")} />
         </div>
       ) : null}

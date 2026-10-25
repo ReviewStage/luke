@@ -69,7 +69,7 @@ export function voiceRuntimeProcedures(
       const about = state.snapshot().voice.view?.call;
       if ((!call && !panel) || about === undefined) return;
       panels.focusExpanded();
-      // An agent with no task opens on its own page, as its notification's click opens it.
+      // An agent with no task opens on its own page.
       panels.broadcast(PUSH.SHOW_AGENT, { taskId: about.taskId ?? null, agentId: about.agentId });
     }),
     // The peer is the voice window and nothing else: a panel offering an SDP,

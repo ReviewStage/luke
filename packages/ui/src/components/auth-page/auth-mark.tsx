@@ -17,7 +17,21 @@ void React;
  * its way, or still offering its choices, wears none. The whole is
  * decoration: an AuthPage hides it from a reader, and its title says on its
  * own how the flow stands.
+ *
+ * It is drawn in Tailwind utilities over the theme, with no shadcn/ui base
+ * (an avatar's disc holds a picture or initials, not a mark with a badge):
+ * the ring, its mark at about two thirds of it on the card's surface inside
+ * a hairline edge, and the badge on the ring's lower right, where its edge
+ * crosses the diagonal, cut out of the card by a ring of the card's own
+ * colour. The sizes of the glyphs inside, which other components draw, are
+ * `auth-page.css`'s.
  */
+
+/** Each tone's badge: a settled flow's complete green, a failed one's danger red. */
+const BADGE_TONE_CLASS = {
+  [LANDING_TONE.COMPLETE]: "bg-complete text-surface",
+  [LANDING_TONE.DANGER]: "bg-auth-badge-danger text-auth-badge-on-danger",
+} as const satisfies Record<LandingTone, string>;
 
 /** The glyph each tone's badge carries. */
 const BADGE_GLYPH = {
@@ -37,14 +51,17 @@ export function AuthMark({
 }): React.JSX.Element {
   const Glyph = tone === undefined ? undefined : BADGE_GLYPH[tone];
   return (
-    <span className="luke-auth-ring">
+    <span className="luke-auth-ring relative inline-grid place-items-center size-auth-ring box-border border border-border rounded-luke-full bg-surface text-foreground">
       {provider === undefined ? (
         <FaceMark />
       ) : (
         <ProviderMark provider={provider} size={PROVIDER_MARK_SIZE.SLOT} />
       )}
       {Glyph === undefined ? null : (
-        <span className="luke-auth-badge" data-tone={tone}>
+        <span
+          className={`luke-auth-badge absolute -right-luke-2 -bottom-luke-2 grid place-items-center size-luke-20 rounded-luke-full shadow-auth-badge ${tone === undefined ? "" : BADGE_TONE_CLASS[tone]}`}
+          data-tone={tone}
+        >
           <Glyph />
         </span>
       )}

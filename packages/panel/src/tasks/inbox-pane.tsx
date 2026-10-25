@@ -69,6 +69,7 @@ import { ActionMenu, type MenuAction } from "../desktop/action-menu.js";
 import { PhoneHead } from "../desktop/phone-head.js";
 import { useMemberDirectory, usePerson } from "../member-directory.js";
 import { APP_SLICE, useAppSlice } from "../use-app-state.js";
+import { LOG_OVER_COMPOSER_CLASS } from "./agent-composer.js";
 import {
   AgentActorRef,
   AgentCard,
@@ -132,7 +133,7 @@ import { TAB_KIND, tabLook } from "./tab-look.js";
 import { TaskMentions, type TaskMentionsValue } from "./task-mentions.js";
 import { markReadItem } from "./task-menu-items.js";
 import { cardTitle } from "./tool-call-model.js";
-import { TranscriptWords } from "./transcript-blocks.js";
+import { INERT_LINK_CLASS, TranscriptWords } from "./transcript-blocks.js";
 import type { CodingAgentsControl } from "./use-coding-agents.js";
 import { WordsWorkspace } from "./use-link-standing.js";
 import { opensAsLink } from "./use-open-link.js";
@@ -222,16 +223,16 @@ const INBOX_PLACE = "inbox";
 export function LinkBlock({ url, label }: { url: string; label: string }): React.JSX.Element {
   if (opensAsLink(url)) {
     return (
-      <div className="inbox-words">
+      <div className="m-0 select-text">
         <TranscriptWords text={markdownLink(label, url)} asDocument />
       </div>
     );
   }
   return (
-    <div className="inbox-words">
+    <div className="m-0 select-text">
       <Tooltip label={url}>
-        <span className="text-link-inert">
-          {label} <span className="inbox-link-address">{url}</span>
+        <span className={INERT_LINK_CLASS}>
+          {label} <span className="select-text text-muted-foreground">{url}</span>
         </span>
       </Tooltip>
     </div>
@@ -389,7 +390,10 @@ function PendingReply({
         <AttachedFileChips files={attachmentChips(reply.attachments)} uploading />
       )}
       {reply.text === "" ? null : (
-        <div className="inbox-words inbox-message-words leading-reading" data-inbox-message-text="">
+        <div
+          className="inbox-message-words m-0 leading-reading select-text"
+          data-inbox-message-text=""
+        >
           <SentWords text={reply.text} asDocument />
         </div>
       )}
@@ -444,7 +448,10 @@ function CommentFiles({
   return (
     <>
       {pictures.length === 0 ? null : (
-        <div className="transcript-pictures" data-inbox-file-pictures="">
+        <div
+          className="transcript-pictures flex items-start gap-block-gap"
+          data-inbox-file-pictures=""
+        >
           {pictures.map((file) => (
             <InboxPicture
               key={file.attachmentId}
@@ -503,7 +510,7 @@ function AnswerValues({
           <span className="inbox-value-label min-w-0 max-w-full flex-none text-muted-foreground wrap-anywhere">
             {label}
           </span>
-          <div className="inbox-words inbox-value-words min-w-0 flex-[1_1_16ch] wrap-anywhere">
+          <div className="inbox-value-words m-0 min-w-0 flex-[1_1_16ch] wrap-anywhere select-text">
             {texts.has(label) && isWireString(value) ? (
               <SentWords text={value} />
             ) : (
@@ -881,7 +888,7 @@ function ThreadMessage({
       />
       {message.text === "" ? null : (
         <div
-          className="inbox-words inbox-message-words leading-reading"
+          className="inbox-message-words m-0 leading-reading select-text"
           data-inbox-message-text=""
           // The agent's words alone may be replied to, as in its tab, never a member's.
           {...(fromAgent ? { [REPLY_SCOPE]: "" } : {})}
@@ -1433,7 +1440,9 @@ export function InboxPane({
       <Fill className="desktop-inbox">
         {/* The thread is a log as an agent's transcript is: each item opens at its newest message, the box at its end, and keeps to it while the reader is there; scrolled up, the way back floats over its foot. */}
         <Conversation subject={item.id} list={board}>
-          <ConversationContent className="inbox-board agent-log-over-composer ph-no-capture">
+          <ConversationContent
+            className={`inbox-board ${LOG_OVER_COMPOSER_CLASS} ph-no-capture flex flex-col pt-section-gap`}
+          >
             <WordsWorkspace value={workspaceId}>
               {/* The item's words are drawn as documents: its own pictures read through the Inbox, and a link alone on its line as its card. */}
               <InboxPictures itemId={item.id} control={control}>

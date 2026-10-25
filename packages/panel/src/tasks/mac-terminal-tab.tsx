@@ -33,6 +33,11 @@ import { usePhoneRoom } from "../stage-room.js";
 import type { TerminalHandle } from "../terminal/contract.js";
 import { onMacTerminalPort } from "./mac-terminal-port.js";
 import { pullRequestAsked } from "./pull-request-number.js";
+import {
+  TERMINAL_BODY_CLASS,
+  TERMINAL_HOST_CLASS,
+  TERMINAL_SCREEN_CLASS,
+} from "./terminal-look.js";
 import { useOpenLink } from "./use-open-link.js";
 
 /**
@@ -322,7 +327,7 @@ export function MacTerminalTab({ tab }: { tab: MacTerminalStripTab }): React.JSX
         <PaneBar
           title={repository}
           detail={
-            <span className="terminal-tab-standing">
+            <span className="terminal-tab-standing flex-none">
               {branch === undefined ? "" : ` · ${branch}`} · this Mac · {standingWords(standing)}
             </span>
           }
@@ -365,14 +370,14 @@ export function MacTerminalTab({ tab }: { tab: MacTerminalStripTab }): React.JSX
           }
         />
       )}
-      <Fill flow={FILL_FLOW.ROW} clip className="terminal-tab-body">
-        <div className="terminal-tab-host">
+      <Fill flow={FILL_FLOW.ROW} clip className={TERMINAL_BODY_CLASS}>
+        <div className={TERMINAL_HOST_CLASS}>
           {AsyncResult.isFailure(loaded) ? (
             <ErrorState placement={ERROR_STATE_PLACEMENT.CENTRED} onRetry={retry}>
               {TERMINAL_LOAD_FAILED}
             </ErrorState>
           ) : (
-            <div ref={setElement} className="terminal-tab-screen" />
+            <div ref={setElement} className={TERMINAL_SCREEN_CLASS} />
           )}
         </div>
       </Fill>

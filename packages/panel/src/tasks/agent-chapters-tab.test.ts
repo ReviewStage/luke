@@ -650,7 +650,7 @@ test("the chapters say which model made them, inside the tab's ph-no-capture roo
 
 test("stale chapters still say which model made them, and a model Settings does not offer is named by its id", async () => {
   const tab = await draw(madeBy("scripted", OLDER));
-  assert.notEqual(tab.querySelector(".chapters-stale"), null);
+  assert.match(tab.querySelector(".luke-tab-notice")?.textContent ?? "", /New commits since/u);
   assert.equal(tab.querySelector(".chapters-made-by")?.textContent, "Made by scripted");
 });
 
@@ -667,7 +667,7 @@ test("chapters made for an older head stand under a line saying new commits came
   );
 
   assert.match(
-    tab.querySelector(".chapters-stale")?.textContent ?? "",
+    tab.querySelector(".luke-tab-notice")?.textContent ?? "",
     /New commits since these chapters/u,
   );
   assert.equal(heading(tab), "1. Read the expiry", "the chapters stand as they were");

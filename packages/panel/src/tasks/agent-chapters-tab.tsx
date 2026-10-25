@@ -49,6 +49,8 @@ import {
   OVER_PANE_WIDTH,
   OverPane,
   PaneBar,
+  SCROLL_FADE,
+  SCROLL_OVERSCROLL,
   SCROLL_SIZE,
   ScrollArea,
   Skeleton,
@@ -57,6 +59,7 @@ import {
   STATUS_TONE,
   Stack,
   type StatusTone,
+  TabNotice,
   TEXT_ELEMENT,
   TEXT_TONE,
   TEXT_VARIANT,
@@ -372,7 +375,7 @@ function Generating({
   const words = ours ? CHAPTERS_WORDS.GENERATING : CHAPTERS_WORDS.ELSEWHERE;
   return (
     <Fill className="chapters-generating">
-      <p className="chapters-generating-line">
+      <p className="chapters-generating-line m-0 flex items-center justify-between gap-control-gap border-b border-border px-column-inset py-row-inset text-caption text-muted-foreground">
         <span>
           {words}
           {live ? (
@@ -400,7 +403,12 @@ function Generating({
 
 /** A chapter's risk as its row's mark, in the risk's colour; none for "Other changes". Decoration: the row's name says it. */
 function RiskMark({ risk }: { risk: Chapter["risk"] }): React.JSX.Element {
-  return <span className="chapter-risk-mark" data-risk={risk ?? undefined} />;
+  return (
+    <span
+      className="block size-luke-8 rounded-luke-full data-[risk=high]:bg-danger data-[risk=low]:bg-complete data-[risk=medium]:bg-attention"
+      data-risk={risk ?? undefined}
+    />
+  );
 }
 
 /** A chapter's risk as a chip in its tone, whose card says why. */
@@ -523,7 +531,7 @@ function ChapterRail({
                 aria-label={CHAPTERS_WORDS.row(index + 1, row.chapter.title, risk, done)}
                 onClick={() => onChoose(index)}
               >
-                <span className="chapter-row-number">{index + 1}</span>
+                <span className="mr-icon-gap text-muted-foreground tabular-nums">{index + 1}</span>
                 {row.chapter.title}
               </NavItem>
             </Tooltip>
@@ -602,11 +610,11 @@ function KeyChangeItem({
       padding={CARD_PADDING.NONE}
       className="chapter-key-change"
     >
-      <div className="chapter-key-change-words">
+      <div className="self-stretch">
         <TranscriptWords text={change.content} />
       </div>
       {first === undefined ? null : onReveal === undefined ? (
-        <span className="chapter-key-change-ref">{lineRefLabel(first)}</span>
+        <span className="text-muted-foreground">{lineRefLabel(first)}</span>
       ) : (
         <TextButton onClick={() => onReveal(first)}>{lineRefLabel(first)}</TextButton>
       )}
@@ -801,16 +809,16 @@ function ChaptersReading({
       onKeyDown={onKeyDown}
     >
       {stale ? (
-        <div className="file-tab-notice chapters-stale">
+        <TabNotice>
           <p>{CHAPTERS_WORDS.STALE}</p>
           {generatable ? (
             <Button icon={<SparklesIcon aria-hidden="true" />} onClick={read.generate}>
               {CHAPTERS_WORDS.REGENERATE}
             </Button>
           ) : null}
-        </div>
+        </TabNotice>
       ) : null}
-      <p className="chapters-made-by">
+      <p className="chapters-made-by m-0 border-b border-border px-list-inset py-tight-gap">
         <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
           {CHAPTERS_WORDS.madeBy(chaptersModelLabel(model))}
         </Text>
@@ -854,7 +862,7 @@ function ChaptersReading({
                   label={done ? CHAPTERS_WORDS.UNMARK_VIEWED : CHAPTERS_WORDS.MARK_VIEWED}
                   chord={CHAPTERS_SHORTCUTS[CHAPTERS_KEY.MARK_CHAPTER_VIEWED].chord}
                 >
-                  <span className="chapter-viewed">
+                  <span className="chapter-viewed flex items-center text-caption-inline text-muted-foreground">
                     <Checkbox checked={done} onChange={markChapter}>
                       {CHAPTERS_WORDS.VIEWED}
                     </Checkbox>
@@ -885,15 +893,20 @@ function ChaptersReading({
               ],
             }}
           />
-          <div className="chapter-brief">
-            <ScrollArea size={SCROLL_SIZE.CONTENT}>
-              <div className="chapter-brief-body">
-                <div className="chapter-summary">
+          <div className="flex max-h-1/2 min-h-0 flex-initial flex-col border-b border-border">
+            {/* Note that a brief cut short by its share fades at the cut, never slicing a line through its letters, and a swipe past its end scrolls the Pull request tab, which a short window scrolls to the foot. */}
+            <ScrollArea
+              size={SCROLL_SIZE.CONTENT}
+              fade={SCROLL_FADE.BOTH}
+              overscroll={SCROLL_OVERSCROLL.CHAIN}
+            >
+              <div className="flex flex-col gap-control-gap px-column-inset pt-row-inset pb-list-inset">
+                <div className="px-row-inset">
                   <TranscriptWords text={chapter.summary} />
                 </div>
                 {chapter.keyChanges.length === 0 ? null : (
                   <section
-                    className="chapter-key-changes"
+                    className="px-row-inset [&>ul]:mt-tight-gap"
                     aria-label={CHAPTERS_WORDS.WHAT_TO_REVIEW}
                   >
                     <Text as={TEXT_ELEMENT.H4} variant={TEXT_VARIANT.CAPTION}>
@@ -948,11 +961,12 @@ function ChaptersReading({
               reads={changes}
               files={chapterFiles}
               fileReveal={reveal}
+              overscroll={SCROLL_OVERSCROLL.CHAIN}
             />
           )}
           <PaneBar
             middle={
-              <span className="chapter-place">
+              <span className="chapter-place flex-none whitespace-nowrap pl-row-inset text-foreground">
                 <span className="chapter-place-noun">{CHAPTERS_WORDS.PLACE_NOUN} </span>
                 {CHAPTERS_WORDS.of(at + 1, chapters.length)}
               </span>

@@ -148,14 +148,14 @@ it("a payload its push's guard refuses is dropped, and the pushes after it still
   const panel = main.page(PANEL);
   await panel.opened;
   const shown = hearing<unknown>();
-  panel.listeners.onShowChat(shown.hear);
+  panel.listeners.onShowAgent(shown.hear);
 
   // SAFETY: a payload main's own types would refuse, standing for one a bug let through.
-  main.pushes.push(WINDOW, PUSH.SHOW_CHAT, { workspace: "acme" } as never);
-  main.pushes.push(WINDOW, PUSH.SHOW_CHAT, { workspaceId: "acme" });
+  main.pushes.push(WINDOW, PUSH.SHOW_AGENT, { agent: "agent-1" } as never);
+  main.pushes.push(WINDOW, PUSH.SHOW_AGENT, { taskId: null, agentId: "agent-1" });
   await shown.until(1);
 
-  assert.deepEqual(shown.heard, [{ workspaceId: "acme" }]);
+  assert.deepEqual(shown.heard, [{ taskId: null, agentId: "agent-1" }]);
 });
 
 it("a listener that unsubscribed hears nothing more, and one that throws keeps no other from hearing", async () => {

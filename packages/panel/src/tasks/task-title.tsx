@@ -11,6 +11,7 @@
  */
 
 import { PageHeader, TEXT_ELEMENT, TEXT_VARIANT, Text } from "@luke/ui";
+import { UNIT_ATTRIBUTED_CLASS } from "./plan-unit-look.js";
 
 /** The title over a plan's text: the page's `h1`, and `actions` (the title's ⋯) at its end. */
 export function TaskTitle({
@@ -22,7 +23,7 @@ export function TaskTitle({
 }): React.JSX.Element {
   // Note that the unit's class lets the ⋯ show as the pointer or the keyboard comes onto its title, as a section's does.
   return (
-    <div className="task-title plan-unit-attributed">
+    <div className={`task-title ${UNIT_ATTRIBUTED_CLASS}`}>
       <PageHeader title={name} actions={actions} />
     </div>
   );

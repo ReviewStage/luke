@@ -286,7 +286,7 @@ function LabelDot({ color }: { color: string }): React.JSX.Element {
   const hex = /^[0-9a-f]{6}$/iu.test(color) ? `#${color}` : undefined;
   return (
     <span
-      className="pull-request-label-dot"
+      className="inline-block size-label-dot rounded-luke-full border border-border bg-label-dot"
       aria-hidden="true"
       style={hex === undefined ? undefined : cssCustomProperties({ "--label-dot": hex })}
     />

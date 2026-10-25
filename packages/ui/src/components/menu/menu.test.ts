@@ -915,3 +915,14 @@ test("with no visual viewport, a menu opened near the window's foot stands where
   rightClickAt(380);
   expect((await hungAt())?.[1]).toBe("380px");
 });
+
+test("a menu with no room below where it opened, a sliver from the window's margin, stands against the margin as it covers what opened it", async () => {
+  vi.stubGlobal("innerHeight", 800);
+  vi.stubGlobal("visualViewport", undefined);
+  vi.spyOn(document.documentElement, "clientHeight", "get").mockReturnValue(800);
+  vi.spyOn(document.documentElement, "clientWidth", "get").mockReturnValue(window.innerWidth);
+  menusMeasure(160, 400);
+  // Opened 40px in, 32px short of the 8px margin, and 400px tall where 92px stand below it.
+  rightClickAt(700);
+  expect((await hungAt())?.[0]).toBe("8px");
+});

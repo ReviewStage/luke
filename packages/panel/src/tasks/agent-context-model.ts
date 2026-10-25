@@ -25,7 +25,7 @@ import { agoText } from "@luke/features/time-format";
  */
 
 /** How the ring reads: room to spare, near eve's compaction, or at or past it. */
-const CONTEXT_LEVEL = {
+export const CONTEXT_LEVEL = {
   ROOM: "room",
   NEAR: "near",
   OVER: "over",
@@ -34,14 +34,14 @@ const CONTEXT_LEVEL = {
 export type ContextLevel = (typeof CONTEXT_LEVEL)[keyof typeof CONTEXT_LEVEL];
 
 /** The parts the popover divides the context into, in the bar's order. */
-const CONTEXT_PART = {
+export const CONTEXT_PART = {
   SYSTEM_PROMPT: "system-prompt",
   TOOL_DEFINITIONS: "tool-definitions",
   BRIEF: "brief",
   CONVERSATION: "conversation",
 } as const;
 
-type ContextPart = (typeof CONTEXT_PART)[keyof typeof CONTEXT_PART];
+export type ContextPart = (typeof CONTEXT_PART)[keyof typeof CONTEXT_PART];
 
 /** How far short of the compaction, as a share of the window, the ring turns amber. */
 const NEAR_SHARE = 0.1;

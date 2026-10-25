@@ -1,0 +1,16 @@
+{
+  "notAComponent": {
+    "AvatarVoice": "Draws one hidden <audio> element, which has nothing to look at.",
+    "DisclosureFind": "A context provider: draws only its children.",
+    "DisclosureScope": "A context provider: draws only its children.",
+    "RevealArea": "A context provider: draws only its children."
+  },
+  "awaitingAnExample": [
+    "MenuRowList",
+    "RowHint",
+    "RowHintOptions",
+    "SettingsControlSkeleton",
+    "SettingsPageSkeleton",
+    "TooltipPill"
+  ]
+}

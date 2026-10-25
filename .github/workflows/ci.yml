@@ -13,10 +13,10 @@ concurrency:
   cancel-in-progress: true
 
 # CI is Linux only: the packaged macOS app is proven by the release workflow
-# before anything ships. Every job below is independent and runs at once, so a
-# run takes as long as its longest job: the tests, which are the bulk of
-# `check.sh`, are spread across runners rather than run behind the lint and
-# typecheck.
+# before anything ships. Every job below bar `CI`, which only reads the
+# others' results, is independent and runs at once, so a run takes as long as
+# its longest job: the tests, which are the bulk of `check.sh`, are spread
+# across runners rather than run behind the lint and typecheck.
 #
 # The TypeScript checks and the tests run through Turborepo (`turbo.json`),
 # which replays a task whose inputs it has already seen pass. Its cache is
@@ -41,49 +41,61 @@ jobs:
           TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
           TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
 
-  # The four jobs keep the names the ruleset requires. @luke/service's and
-  # @luke/panel's suites are the largest, so each is cut into three vitest
-  # shards, one per job, and the fourth job runs every other workspace's
-  # tests, one workspace at a time (`scripts/check.mjs` says why), bar the
-  # ones it leaves out with `--filter=!`, which `database-tests` below runs on
-  # a runner of its own so the fourth job is not the run's longest. Every
-  # workspace with tests runs under exactly one of these jobs or
-  # `scripts/repository-checks.sh` fails, so no test file can fall outside
-  # every job.
+  # One job per slice of the tests, so a run takes about as long as its slowest
+  # slice rather than two large suites back to back. Each of the four largest
+  # suites, and @luke/database's, runs in jobs of its own, the longest of them
+  # cut into vitest shards with `-- --shard=<i>/<n>`, which turbo hashes, so
+  # each shard is cached on its own; a shard count is set here alone and is
+  # sized to keep a slice near two minutes when it misses the cache. The last
+  # job runs every other workspace's tests, one workspace at a time
+  # (`scripts/check.mjs` says why), bar the ones it leaves out with
+  # `--filter=!`. `scripts/repository-checks.sh` fails unless every workspace
+  # with tests runs in exactly one of these jobs, or in every shard of one
+  # set, so no test file can fall outside every job or run twice.
   tests:
-    name: Tests (${{ matrix.shard }}/4)
+    name: Tests (${{ matrix.slice }})
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     strategy:
       fail-fast: false
       matrix:
         include:
-          - shard: 1
-            task: test:vitest:1
-          - shard: 2
-            task: test:vitest:2
-          - shard: 3
-            task: test:vitest:3
-          - shard: 4
-            task: test:vitest --filter=!@luke/database
+          - slice: panel 1/6
+            task: test:vitest --filter=@luke/panel -- --shard=1/6
+          - slice: panel 2/6
+            task: test:vitest --filter=@luke/panel -- --shard=2/6
+          - slice: panel 3/6
+            task: test:vitest --filter=@luke/panel -- --shard=3/6
+          - slice: panel 4/6
+            task: test:vitest --filter=@luke/panel -- --shard=4/6
+          - slice: panel 5/6
+            task: test:vitest --filter=@luke/panel -- --shard=5/6
+          - slice: panel 6/6
+            task: test:vitest --filter=@luke/panel -- --shard=6/6
+          - slice: service 1/4
+            task: test:vitest --filter=@luke/service -- --shard=1/4
+          - slice: service 2/4
+            task: test:vitest --filter=@luke/service -- --shard=2/4
+          - slice: service 3/4
+            task: test:vitest --filter=@luke/service -- --shard=3/4
+          - slice: service 4/4
+            task: test:vitest --filter=@luke/service -- --shard=4/4
+          - slice: web 1/2
+            task: test:vitest --filter=@luke/web -- --shard=1/2
+          - slice: web 2/2
+            task: test:vitest --filter=@luke/web -- --shard=2/2
+          - slice: ui
+            task: test:vitest --filter=@luke/ui
+          - slice: database
+            task: test:vitest --filter=@luke/database
+          - slice: the rest
+            task: test:vitest --filter=!@luke/panel --filter=!@luke/service --filter=!@luke/web --filter=!@luke/ui --filter=!@luke/database
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
       - uses: ./.github/actions/setup
-      - run: node scripts/turbo.mjs run ${{ matrix.task }} --concurrency=1
-        env:
-          TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
-          TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
-
-  # @luke/database's suite, the longest after @luke/web's, on a runner of its
-  # own beside the fourth job rather than after it in that job.
-  database-tests:
-    name: Tests (database)
-    runs-on: ubuntu-24.04
-    timeout-minutes: 15
-    steps:
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
-      - uses: ./.github/actions/setup
-      - run: node scripts/turbo.mjs run test:vitest --filter=@luke/database
+      # Note that the flag comes before the task, because a shard's task ends
+      # in `--`, past which turbo hands every word to vitest.
+      - run: node scripts/turbo.mjs run --concurrency=1 ${{ matrix.task }}
         env:
           TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
           TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
@@ -96,8 +108,7 @@ jobs:
   # (`drizzle-schema.test.ts`), read back through the real `pg` driver from
   # what `db:migrate` built (`@luke/database/testing` clones it as a template). The store tests
   # themselves run on PGlite, the same Postgres 18, in the test jobs above.
-  # The job keeps its old name because the ruleset requires it. The image
-  # comes from whichever of three registries answers first, because each one
+  # The image comes from whichever of three registries answers first, because each one
   # rate-limits anonymous pulls.
   postgres:
     name: Postgres migrations and store
@@ -149,3 +160,19 @@ jobs:
       - run: pnpm --filter @luke/web db:migrate
       - name: The migrations end at the declared schema
         run: pnpm exec vitest run apps/web/tests/storage-schema.test.ts apps/web/tests/drizzle-schema.test.ts
+
+  # The one check the ruleset requires, so a job or slice added above is
+  # required without a ruleset edit. It passes only where every job it needs
+  # succeeded. Note that it runs whatever became of them, because a job skipped
+  # behind a failed `needs` reports skipped, and a skipped required check
+  # counts as passed.
+  ci:
+    name: CI
+    if: ${{ always() }}
+    needs: [portable, tests, postgres]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - run: for result in $RESULTS; do test "$result" = success; done
+        env:
+          RESULTS: ${{ join(needs.*.result, ' ') }}

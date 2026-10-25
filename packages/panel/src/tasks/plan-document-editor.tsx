@@ -30,8 +30,9 @@ import {
 import { rendererRuntime } from "../renderer-runtime.js";
 import { useAnnounceShown } from "../use-announce-shown.js";
 import { useEditorPictures } from "./editor-pictures.js";
-import { MarkdownEditor } from "./markdown-editor.js";
+import { EDITOR_NOTE_CLASS, MarkdownEditor } from "./markdown-editor.js";
 import { type MentionDoors, retargetedMention } from "./mention-chip.js";
+import { UNIT_ATTRIBUTED_CLASS } from "./plan-unit-look.js";
 import { useTaskMentions } from "./task-mentions.js";
 import {
   EDITOR_PLACE,
@@ -574,7 +575,7 @@ export function EditableTitle({
   }, []);
   return (
     // Note that the unit's class lets the ⋯ show as the pointer or the keyboard comes onto the title, as a section's does.
-    <div className="task-title plan-unit-attributed ph-no-capture">
+    <div className={`task-title ${UNIT_ATTRIBUTED_CLASS} ph-no-capture`}>
       <EditableBlock
         ref={block}
         label="Title"
@@ -821,7 +822,7 @@ function DocumentNote({
   );
   if (editing.conflict !== undefined) {
     return (
-      <div className="plan-editor-note">
+      <div className={EDITOR_NOTE_CLASS}>
         <span>{editing.conflict.note}</span>
         <Button onClick={editing.keepMine}>Keep mine</Button>
         <Button onClick={editing.takeTheirs}>{editing.conflict.take}</Button>
@@ -830,7 +831,7 @@ function DocumentNote({
   }
   if (editor.state.kind === DOCUMENT_EDITOR_STATE.FAILED) {
     return (
-      <div className="plan-editor-note">
+      <div className={EDITOR_NOTE_CLASS}>
         <span>{editor.state.note}</span>
         <RetryButton onRetry={editing.retry} />
       </div>

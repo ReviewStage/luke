@@ -233,7 +233,7 @@ function AnsweredText({
     <ComposerFrame look={COMPOSER_LOOK.INPUT} className="inbox-field-composer" data-read-only="">
       {/* biome-ignore lint/a11y/useSemanticElements: the words hold mention chips, which no native field can, and speak as the read-only field they stand for. */}
       <div
-        className="inbox-words inbox-field-words box-border min-h-inbox-field-words px-control-inset py-item-gap wrap-anywhere"
+        className="inbox-field-words m-0 box-border min-h-inbox-field-words px-control-inset py-item-gap wrap-anywhere select-text"
         role="textbox"
         aria-readonly="true"
         aria-multiline="true"

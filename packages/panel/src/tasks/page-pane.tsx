@@ -212,10 +212,10 @@ function PageFrame({ title, src }: { title: string; src: string }): React.JSX.El
   const found = useFrameFind(frame);
   useFrameFocus(frame);
   return (
-    <div className="page-view-frame-room">
+    <div className="relative flex min-h-0 flex-1">
       <iframe
         ref={frame}
-        className="page-view-frame"
+        className="block min-h-0 w-full flex-1 border-0"
         title={title}
         src={src}
         sandbox={PAGE_SANDBOX}
@@ -227,7 +227,7 @@ function PageFrame({ title, src }: { title: string; src: string }): React.JSX.El
         }}
       />
       {framedSrc === src ? null : (
-        <div className="page-view-frame-wait">
+        <div className="pointer-events-none absolute inset-0 flex">
           <SpinnerRegion delay label={readingWords("the page")} />
         </div>
       )}
@@ -333,7 +333,11 @@ function PageSource({
     );
   }
   return (
-    <Fill as={FILL_ELEMENT.SECTION} className="file-tab" aria-label={`${title} source`}>
+    <Fill
+      as={FILL_ELEMENT.SECTION}
+      className="file-tab bg-card-code"
+      aria-label={`${title} source`}
+    >
       <WholeFile
         name={PAGE_SOURCE_NAME}
         text={text}
@@ -478,7 +482,7 @@ export function PagePane({
             actions={
               <>
                 {page.version > 1 ? (
-                  <div className="page-view-versions">
+                  <div className="mr-page-versions-end flex items-center gap-list-gap">
                     <VersionStep
                       label="Earlier version"
                       to={version > 1 ? version - 1 : undefined}
@@ -486,7 +490,7 @@ export function PagePane({
                       onStep={step}
                     />
                     {/* In a narrow panel the count stands alone (tasks.css). */}
-                    <span className="page-view-version">
+                    <span className="whitespace-nowrap text-muted-foreground tabular-nums">
                       <span className="page-view-version-words">
                         Version {version} of {page.version}
                       </span>

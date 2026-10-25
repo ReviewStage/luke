@@ -18,7 +18,7 @@ import { APP_COMMAND } from "@luke/settings/shortcuts";
 import { appSettingsWire, experimentsOn, settingsView } from "@luke/settings/testing";
 import { UPDATE_STATUS } from "@luke/settings/update";
 import { MICROPHONE_STATUS } from "@luke/voice/audio";
-import { NOTIFICATIONS_GRANTOR, NOTIFICATIONS_STATUS } from "@luke/voice/settings-controls";
+import { NOTIFICATIONS_STATUS } from "@luke/voice/settings-controls";
 import { ACTION_RESULT_STATUS } from "@luke/wire";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, useState } from "react";
@@ -90,7 +90,7 @@ const PAGE_GROUPS = [
   },
   {
     heading: "This Mac",
-    rows: ["Voice", "Appearance", "Notifications", "This Mac", "About", "Keyboard shortcuts"],
+    rows: ["Voice", "Appearance", "This Mac", "About", "Keyboard shortcuts"],
   },
 ];
 
@@ -128,7 +128,6 @@ const HOMES = [
   { words: "Sign out", page: "Account" },
   { words: "Delete account", page: "Account" },
   { words: "Quiet Music and Spotify", page: "Voice" },
-  { words: "Notify me when a coding agent finishes or needs me", page: "Notifications" },
   { words: "Let agents run commands on this Mac", page: "This Mac" },
   { words: "Open Luke at login", page: "This Mac" },
   { words: "Check for updates", page: "About", found: "Updates" },
@@ -165,10 +164,8 @@ function settingsProps(
     },
     notifications: {
       status: NOTIFICATIONS_STATUS.UNKNOWN,
-      grantor: NOTIFICATIONS_GRANTOR.MACOS,
       packaged: true,
       onOpenSettings: ignore,
-      onTest: ignore,
     },
     capabilities,
     updates: {
@@ -484,10 +481,9 @@ test("Open Luke at login stands on This Mac under Startup, drawn as the choice a
   assert.equal(appearance.includes("Open Luke at login"), false);
 });
 
-test("a platform without voice, notifications, Mac commands, or updates lists none of their pages, draws About without its Updates row, and its search finds none of them", () => {
+test("a platform without voice, Mac commands, or updates lists none of their pages, draws About without its Updates row, and its search finds none of them", () => {
   const missing: readonly HostCapability[] = [
     HOST_CAPABILITY.VOICE,
-    HOST_CAPABILITY.NOTIFICATIONS,
     HOST_CAPABILITY.MAC_COMMANDS,
     HOST_CAPABILITY.UPDATES,
   ];
@@ -503,7 +499,6 @@ test("a platform without voice, notifications, Mac commands, or updates lists no
   assert.equal(about.includes("Check for updates"), false);
   for (const words of [
     "Quiet Music and Spotify",
-    "Notify me when a coding agent finishes or needs me",
     "Let agents run commands on this Mac",
     "Updates",
   ]) {
@@ -1271,7 +1266,6 @@ const PAGE_KEEPS = [
   { title: "Experimental", keep: ["Follows your account"] },
   { title: "Voice", keep: ["Kept on this Mac"] },
   { title: "Appearance", keep: ["Kept on this Mac"] },
-  { title: "Notifications", keep: ["Kept on this Mac"] },
   { title: "This Mac", keep: ["Kept on this Mac"] },
   { title: "About", keep: [] },
   { title: "Keyboard shortcuts", keep: [] },
