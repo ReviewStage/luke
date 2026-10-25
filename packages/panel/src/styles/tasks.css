@@ -4917,7 +4917,8 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
    bar naming the agent and where the connection stands in words, over the
    terminal's screen on the terminal's own ground. A state with an action
    lays one slim mono bar over the screen; the screen under any state
-   without a shell connected is dimmed, never blanked. */
+   without a shell connected is dimmed, never blanked: in its colours, by the
+   terminal (`terminal-theme.ts`), so the line it prints stays legible. */
 .terminal-tab-title {
   display: inline-flex;
   min-width: 0;
@@ -5036,10 +5037,6 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
   --luke-working-mark-size: var(--luke-control-icon);
 }
 
-.terminal-tab-screen[data-dim="true"] {
-  opacity: 0.42;
-}
-
 /* Where the words and the action do not fit one line, the action drops to
    a line of its own at the right, so the words never give way to nothing. */
 .terminal-bar {
@@ -5075,7 +5072,18 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
   }
 }
 
+/* The glyph and the words that follow it, held together and cut together:
+   the words fade where the bar ends them, the glyph stands before them. */
+.terminal-bar-lead {
+  display: flex;
+  min-width: 0;
+  flex: 0 1 auto;
+  align-items: center;
+  gap: var(--luke-control-gap);
+}
+
 .terminal-bar-busy {
+  flex: none;
   color: var(--luke-color-text-muted);
   letter-spacing: 1px;
 }
