@@ -11,7 +11,7 @@ import { cn } from "../cn.js";
  * switch's is, giving a little under a press held; a `thumbLabel` each
  * thumb is named by and a `thumbValueText` it is read as, which shadcn
  * leaves to its caller's `getAriaLabel` and `getAriaValueText`;
- * the desktop's arrow cursor; and none of shadcn's outline or ring
+ * the one press cursor (`cursor-press`); and none of shadcn's outline or ring
  * utilities, because the window's own focus ring (`@luke/panel`'s
  * base.css) draws the keyboard's ring and a utility would outrank it
  * (`shadcn-focus.test.ts`). `@luke/ui`'s `Slider`
@@ -66,7 +66,7 @@ function Slider({
             key={index}
             getAriaLabel={thumbLabel === undefined ? undefined : () => thumbLabel}
             getAriaValueText={thumbValueText === undefined ? undefined : () => thumbValueText}
-            className="relative block size-4 shrink-0 rounded-luke-full bg-switch-thumb shadow-switch-thumb transition-transform duration-(--luke-duration-fast) ease-spring-fast select-none after:absolute after:-inset-2 cursor-pointer in-data-[luke-profile=desktop]:cursor-default active:scale-[0.85] disabled:pointer-events-none disabled:opacity-disabled"
+            className="relative block size-4 shrink-0 rounded-luke-full bg-switch-thumb shadow-switch-thumb transition-transform duration-(--luke-duration-fast) ease-spring-fast select-none after:absolute after:-inset-2 cursor-press active:scale-[0.85] disabled:pointer-events-none disabled:opacity-disabled"
           />
         ))}
       </SliderPrimitive.Control>

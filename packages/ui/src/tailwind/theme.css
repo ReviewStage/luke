@@ -27,6 +27,11 @@
   --color-switch-thumb: var(--luke-color-switch-thumb);
   --shadow-switch-thumb: var(--luke-shadow-switch-thumb);
   --ease-spring-fast: var(--luke-spring-fast);
+  /* The two cursors a press gives (profiles.css): `cursor-press` on every
+     control, the arrow on the desktop and the hand on the web, and
+     `cursor-link` on a real link, the hand on both. */
+  --cursor-press: var(--luke-cursor-press);
+  --cursor-link: var(--luke-cursor-link);
   /* How far a control fades while it cannot be used (`opacity-disabled`). */
   --opacity-disabled: var(--luke-disabled-opacity);
 

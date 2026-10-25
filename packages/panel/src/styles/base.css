@@ -157,12 +157,14 @@ file-tree-container {
   }
 
   /* No user-agent padding either: a button keeps none it did not ask for, so a
-     glyph centred in a fixed box is never squeezed narrower than its own. */
+     glyph centred in a fixed box is never squeezed narrower than its own. It
+     gives the one press cursor, the Mac's arrow on the desktop and the hand
+     on the web (`--luke-cursor-press`). */
   button {
     padding: 0;
     border: 0;
     color: inherit;
-    cursor: pointer;
+    cursor: var(--luke-cursor-press);
     font: inherit;
   }
 

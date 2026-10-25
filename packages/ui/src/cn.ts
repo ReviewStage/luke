@@ -14,7 +14,9 @@ import { extendTailwindMerge } from "tailwind-merge";
  * know as a colour: `text-body` beside `text-foreground` would be dropped as
  * a second text colour, and `px-control-inset` would outlive a later `p-0`.
  * The disabled fade (`opacity-disabled`) is told as an opacity, which it
- * would otherwise not read as one, so a later fade would not replace it.
+ * would otherwise not read as one, so a later fade would not replace it,
+ * and the two press cursors (`cursor-press`, `cursor-link`) as cursors, so a
+ * later `cursor-default` on a control that takes no press replaces them.
  */
 
 /**
@@ -547,6 +549,7 @@ const merge = extendTailwindMerge({
     },
     classGroups: {
       opacity: [{ opacity: ["disabled"] }],
+      cursor: [{ cursor: ["press", "link"] }],
     },
   },
 });
