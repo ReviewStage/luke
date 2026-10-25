@@ -78,7 +78,7 @@ export function MinimizedChip({
 }): React.JSX.Element {
   return (
     <Fold
-      className="diff-thread-chip-row"
+      className="diff-thread-chip-row flex flex-col gap-tight-gap"
       data-above={above ? "" : undefined}
       open={shown}
       onOpenChange={onShown}
@@ -86,15 +86,17 @@ export function MinimizedChip({
       <Tooltip label={shown ? CHIP_WORDS.HIDE_HINT : CHIP_WORDS.SHOW_HINT}>
         <DisclosureSummary look={DISCLOSURE_SUMMARY.CHIP} aria-label={label}>
           {resolved === undefined ? null : resolved ? (
-            <CircleCheckIcon className="diff-thread-chip-resolved" aria-hidden="true" />
+            <CircleCheckIcon className="text-complete" aria-hidden="true" />
           ) : (
             <CircleIcon aria-hidden="true" />
           )}
-          <span className="diff-thread-chip-faces">{faces}</span>
+          <span className="diff-thread-chip-faces inline-flex">{faces}</span>
           {count}
         </DisclosureSummary>
       </Tooltip>
-      <FoldBody className="diff-thread-chip-threads">{children}</FoldBody>
+      <FoldBody className="diff-thread-chip-threads flex flex-col gap-item-gap">
+        {children}
+      </FoldBody>
     </Fold>
   );
 }

@@ -26,6 +26,7 @@ import { type ReactNode, useId, useRef, useState } from "react";
 import { modEnterSends } from "../enter-sends.js";
 import { CommentEditor, overCommentBound } from "./comment-editor.js";
 import type { PendingReview } from "./line-comment.js";
+import { ACTS_AT_END_CLASS } from "./pull-request-look.js";
 import { PullRequestWriteNote, type PullRequestWrites } from "./pull-request-writes.js";
 
 /**
@@ -198,7 +199,7 @@ function ReviewPanel({
         }}
       />
       <PullRequestWriteNote writes={writes} className="pull-request-review-note" />
-      <div className="pull-request-review-foot">
+      <div className={ACTS_AT_END_CLASS}>
         {pending == null ? null : (
           <Button
             variant={BUTTON_VARIANT.DANGER_OUTLINE}

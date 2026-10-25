@@ -175,7 +175,7 @@ function ReactionPill({
   const inner = (
     <>
       <span aria-hidden="true">{face.emoji}</span>
-      <span className="pull-request-reaction-count" aria-hidden="true">
+      <span className="tabular-nums" aria-hidden="true">
         {formatCount(reaction.count)}
       </span>
     </>
@@ -184,7 +184,7 @@ function ReactionPill({
     <li>
       <Tooltip label={words}>
         {press === undefined ? (
-          <span className="pull-request-reaction" role="img" aria-label={words}>
+          <span className="flex" role="img" aria-label={words}>
             <Badge lit={mine}>{inner}</Badge>
           </span>
         ) : (
@@ -259,7 +259,7 @@ function AddReaction({
       [next]?.focus();
   };
   return (
-    <li className="pull-request-reaction-picker" ref={root}>
+    <li className="relative" ref={root}>
       <Tooltip label={ADD_REACTION}>
         <IconButton
           ref={trigger}
@@ -288,7 +288,7 @@ function AddReaction({
           }}
         >
           <div
-            className="pull-request-reaction-choices"
+            className="pull-request-reaction-choices flex flex-wrap gap-list-gap p-tight-gap"
             role="toolbar"
             aria-label={ADD_REACTION}
             onKeyDown={move}
@@ -298,7 +298,7 @@ function AddReaction({
                 <IconButton
                   ref={index === 0 ? first : undefined}
                   icon={
-                    <span className="pull-request-reaction-emoji" aria-hidden="true">
+                    <span className="text-dialog leading-none" aria-hidden="true">
                       {REACTION_FACES[content].emoji}
                     </span>
                   }

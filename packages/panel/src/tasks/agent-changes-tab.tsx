@@ -471,7 +471,7 @@ function AboveThreads({
       as={LAYOUT_ELEMENT.OL}
       gap={GAP.ITEM}
       inset={INSET.BLOCK}
-      className="diff-outdated-threads"
+      className="flex-none"
       aria-label={CHANGES_WORDS.UNPLACED_THREADS}
     >
       {above.map((each) => (
