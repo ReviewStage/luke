@@ -1,4 +1,4 @@
-import { useId, useRef } from "react";
+import { useRef } from "react";
 import { BUTTON_VARIANT, Button } from "../button/button.js";
 import { DIALOG_ROLE, Dialog } from "../dialog/dialog.js";
 import { FILE_TEXT_EXTENT, FileText } from "../file-text/file-text.js";
@@ -9,7 +9,9 @@ import { FILE_TEXT_EXTENT, FileText } from "../file-text/file-text.js";
  * The window asks the way a permission prompt does: it dims, a card asks
  * its question over the exact command, mono and whole, scrolling past a
  * few lines so a long one never fills the card, and the three answers sit
- * at its foot, the safe one first. The command is the card's description.
+ * at its foot, the safe one first. The command is not the card's
+ * description, since a payload of thousands of characters would be read
+ * out before the answers; it stands as its own named region instead.
  * Focus lands on Deny, so a key already pressed runs nothing; Escape and a
  * press on the dimmed window deny too, since a prompt waved away must not
  * run the command.
@@ -46,13 +48,11 @@ export function CommandAsk({
   onExited?: (() => void) | undefined;
 }): React.JSX.Element {
   const deny = useRef<HTMLButtonElement | null>(null);
-  const commandId = useId();
   return (
     <Dialog
       open={open}
       role={DIALOG_ROLE.ALERT_DIALOG}
       title={TITLE}
-      describedBy={commandId}
       initialFocus={deny}
       onDismiss={onDeny}
       onExited={onExited}
@@ -70,9 +70,7 @@ export function CommandAsk({
         </>
       }
     >
-      <div id={commandId}>
-        <FileText text={command} label={COMMAND_LABEL} extent={FILE_TEXT_EXTENT.BRIEF} />
-      </div>
+      <FileText text={command} label={COMMAND_LABEL} extent={FILE_TEXT_EXTENT.BRIEF} />
     </Dialog>
   );
 }
