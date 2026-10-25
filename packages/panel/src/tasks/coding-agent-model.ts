@@ -965,7 +965,7 @@ export function messageFailureWords(failure: CodingAgentCallFailure): string {
       return "The message could not be sent. Try again.";
     // No answer is not a refusal: the words may have reached the agent, and Retry carries the same key, so they reach it once.
     case CODING_AGENT_CALL_FAILURE.UNANSWERED:
-      return "Luke didn't hear back. Retry sends it again, once.";
+      return "Luke didn't hear back.";
     case CODING_AGENT_CALL_FAILURE.AGENT_RETIRED:
       return MESSAGE_RETIRED;
     case CODING_AGENT_CALL_FAILURE.REPOSITORY_NOT_REACHABLE:
