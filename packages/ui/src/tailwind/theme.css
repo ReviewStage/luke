@@ -242,6 +242,48 @@
   --spacing-row-inset: var(--luke-row-inset);
   --spacing-list-inset: var(--luke-list-inset);
   --spacing-control-gap: var(--luke-control-gap);
+
+  /* The panel's places beside the sidebar (`@luke/panel`: Automations,
+     Chat, Settings, a version history, the Admin place, the sign-in): the
+     profile's spacing roles they read; the Inbox's two columns, which Chat
+     shares, and the list-and-item split Settings, a history, and Admin
+     stand in; an automation row's columns and fields; a message's face
+     column and Chat's reading inset and measure; a glyph at its words'
+     size; the sign-in's foot; the experiment tag's tracking; and the spring
+     a byline's presses fade on. */
+  --spacing-section-gap: var(--luke-section-gap);
+  --spacing-page-section-gap: var(--luke-page-section-gap);
+  --spacing-column-inset: var(--luke-space-12);
+  --grid-template-columns-inbox: auto minmax(0, 1fr);
+  --grid-template-columns-place-split: min(var(--sidebar-width), 35%) minmax(0, 1fr);
+  --grid-template-rows-single: minmax(0, 1fr);
+  --grid-template-columns-chat-message: var(--luke-space-32) minmax(0, 1fr);
+  --grid-template-columns-automation-suggestions: repeat(
+    auto-fill,
+    minmax(240px, 1fr)
+  ); /* off-scale: a suggestion card's least width */
+  --spacing-automation-owner: 112px; /* off-scale: an owner's picture and name, in a column */
+  --spacing-automation-next: 144px; /* off-scale: "Next Nov 17, 10:30 PM" and a failure's mark */
+  --spacing-automation-field: 200px; /* off-scale: a Settings picker's width on the desktop, held on the web too */
+  --spacing-automation-time: calc(
+    10ch +
+    2 *
+    var(--luke-control-inset)
+  ); /* off-scale: "12:00 PM" and its insets */
+  --spacing-automation-webhook: 240px; /* off-scale: a webhook's address, a little wider than a picker */
+  --spacing-automation-runs: max(
+    280px,
+    calc(100% - 480px)
+  ); /* off-scale: the form's reserve, FORM_RESERVE */
+  --spacing-chat-reading: max(var(--luke-space-12), calc((100% - var(--luke-page-measure)) / 2));
+  --spacing-chat-measure: min(var(--luke-page-measure), calc(100% - 2 * var(--luke-space-12)));
+  --spacing-em: 1em;
+  --spacing-onboarding-foot: calc(var(--luke-stage-height) * 0.08);
+  --color-sidebar: var(--luke-color-sidebar);
+  --font-weight-luke-medium: var(--luke-weight-medium);
+  --font-weight-luke-semibold: var(--luke-weight-semibold);
+  --tracking-experiment-tag: 0.01em; /* off-scale: a capsule's caption, a hair open */
+  --ease-spring: var(--luke-spring);
   --spacing-viewport-top: var(--luke-viewport-top);
   --spacing-keyboard-inset: var(--luke-keyboard-inset);
   --spacing-tooltip-card-inline: calc(var(--luke-menu-inset) + var(--luke-space-8));

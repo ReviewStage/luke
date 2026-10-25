@@ -656,7 +656,7 @@ export function SettingsSearchField({
   const untouched = placed && query.length === 0;
   return (
     <search
-      className="settings-search"
+      className="settings-search mb-section-gap flex-none"
       onFocus={(event) => {
         if (event.target !== field.current || placedNow()) return;
         appPlatform().recordSurfaceEvent(PRODUCT_SURFACE_EVENT.SEARCH_OPEN, {
@@ -726,7 +726,7 @@ export function SettingsSearchResults({
     );
   }
   return (
-    <div className="settings-search-results">
+    <div className="settings-search-results flex flex-col gap-section-gap">
       {search.groups.map((group) => (
         <section key={group.page} aria-label={resultPageWord(group.page)}>
           <GroupHeader label={resultPageWord(group.page)}>

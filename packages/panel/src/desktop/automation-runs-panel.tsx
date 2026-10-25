@@ -44,6 +44,7 @@ import { GLYPH_STATE, type GlyphState, StateGlyph, stateEndMark } from "../state
 import { centreWithin, scrollerOf } from "../tasks/code-pane.js";
 import { useOpenLink } from "../tasks/use-open-link.js";
 import { type MenuAction, rowMenu } from "./action-menu.js";
+import { AUTOMATION_ROW_META } from "./automation-list-frame.js";
 import { RUNS_PANEL_WIDTH, type RunsPanel } from "./folded-groups.js";
 import { usePaneSlide } from "./pane-motion.js";
 import { PhoneHead } from "./phone-head.js";
@@ -162,7 +163,7 @@ function RunRow({
         </Tooltip>
       }
       meta={
-        <span className="automation-row-meta">
+        <span className={AUTOMATION_ROW_META}>
           <Tooltip label={momentText(run.firedAt)}>
             <span>{sinceText(run.firedAt, now)}</span>
           </Tooltip>
@@ -240,8 +241,11 @@ function RunsBody({
   const body = useRef<HTMLDivElement | null>(null);
   return (
     <ScrollArea fade={SCROLL_FADE.START}>
-      <div ref={body} className="automation-runs-body">
-        <div className="automation-runs-head">
+      <div
+        ref={body}
+        className="automation-runs-body flex min-h-full flex-col gap-control-gap p-luke-16"
+      >
+        <div className="automation-runs-head px-luke-2">
           <Text variant={TEXT_VARIANT.SECTION} tone={TEXT_TONE.MUTED} as={TEXT_ELEMENT.H2}>
             Runs
           </Text>
@@ -312,13 +316,16 @@ export function AutomationRunsPanel({
       ref={(node) => {
         slide.pane.current = node;
       }}
-      className="automation-runs-pane"
+      className="automation-runs-pane relative flex min-h-0 max-w-automation-runs flex-none data-leaving:absolute data-leaving:inset-y-0 data-leaving:right-0 data-leaving:bg-ground"
       data-leaving={slide.leaving ? "" : undefined}
       inert={slide.leaving}
       style={{ width: panel.width }}
     >
       <ResizeEdge edge={edge} />
-      <aside className="automation-runs" aria-label="Runs">
+      <aside
+        className="automation-runs flex min-w-0 flex-1 flex-col border-l border-border"
+        aria-label="Runs"
+      >
         <RunsBody {...shown} />
       </aside>
     </div>
@@ -350,7 +357,7 @@ export function AutomationRunsScreen({
     <Fill
       as={FILL_ELEMENT.SECTION}
       id={id}
-      className="automation-runs-screen"
+      className="automation-runs-screen [&[hidden]]:hidden"
       aria-label="Runs"
       hidden={hidden}
     >

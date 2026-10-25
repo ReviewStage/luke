@@ -58,6 +58,7 @@ import { backPlaceOf } from "./back-place.js";
 import { HistoryButtons } from "./desktop-sidebar.js";
 import { useNarrowFocus } from "./narrow-focus.js";
 import { PhoneHead } from "./phone-head.js";
+import { PLACE_LIST, PLACE_LIST_TITLE, PLACE_PAGE, PLACE_SPLIT } from "./place-columns.js";
 import type { SidebarCollapse } from "./sidebar-collapse.js";
 
 /** The place's name, at the list's head and on the way back to it in a narrow room. */
@@ -127,8 +128,12 @@ export function DesktopAdmin({
   const screen = useScreenRef(useNarrowFocus(split.columns, listed), split.ref);
   const current = adminSectionOf(view);
   return (
-    <div ref={screen} className="desktop-admin" data-single={String(split.single)}>
-      <nav className="admin-sections" aria-label="Admin sections" hidden={hidden.list}>
+    <div ref={screen} className={`desktop-admin ${PLACE_SPLIT}`} data-single={String(split.single)}>
+      <nav
+        className={`admin-sections ${PLACE_LIST}`}
+        aria-label="Admin sections"
+        hidden={hidden.list}
+      >
         {room === SHELL_ROOM.NARROW ? (
           // A phone's header: the way out alone, the history's buttons left out, and the place's name centred.
           <PhoneHead
@@ -159,7 +164,7 @@ export function DesktopAdmin({
             <Text
               as={TEXT_ELEMENT.DIV}
               variant={TEXT_VARIANT.LABEL}
-              className="admin-sections-title"
+              className={`admin-sections-title ${PLACE_LIST_TITLE}`}
             >
               {ADMIN_TITLE}
             </Text>
@@ -194,7 +199,7 @@ export function DesktopAdmin({
         {/* Last, so the drag strip above the way back does not take the edge's top from it. */}
         {split.single ? null : <ResizeEdge edge={edge} />}
       </nav>
-      <section className="admin-page" aria-label={ADMIN_TITLE} hidden={hidden.item}>
+      <section className={`admin-page ${PLACE_PAGE}`} aria-label={ADMIN_TITLE} hidden={hidden.item}>
         {/* The view's own toolbar stands in the title bar's row, as a page's
             does beside the plans' sidebar, so no drag strip stands over it;
             a narrow room makes it a phone's header, and one column leads it by the way back to the list. */}

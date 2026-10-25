@@ -18,6 +18,31 @@ import { extendTailwindMerge } from "tailwind-merge";
  */
 
 /**
+ * The names the panel places' block of the theme adds (Automations, Chat,
+ * Settings, a version history, Admin, the sign-in), by the group
+ * tailwind-merge reads each in.
+ */
+const PANEL_PLACES = {
+  "font-weight": ["luke-medium", "luke-semibold"],
+  tracking: ["experiment-tag"],
+  spacing: [
+    "automation-field",
+    "automation-next",
+    "automation-owner",
+    "automation-runs",
+    "automation-time",
+    "automation-webhook",
+    "chat-measure",
+    "chat-reading",
+    "column-inset",
+    "em",
+    "onboarding-foot",
+    "page-section-gap",
+    "section-gap",
+  ],
+} as const;
+
+/**
  * The names the feedback and display components' block of the theme adds
  * (badge, chip, avatar, toast, spinner, progress, skeleton, banner, card,
  * pagination, breadcrumbs, data table), by the group tailwind-merge reads
@@ -184,10 +209,11 @@ const merge = extendTailwindMerge({
         "section",
         "emphasis",
         "title",
+        ...PANEL_PLACES["font-weight"],
         ...FEEDBACK_DISPLAY["font-weight"],
         ...CONTENT_TEXT["font-weight"],
       ],
-      tracking: ["title"],
+      tracking: ["title", ...PANEL_PLACES.tracking],
       leading: [
         "body",
         ...FEEDBACK_DISPLAY.leading,
@@ -195,6 +221,7 @@ const merge = extendTailwindMerge({
         ...ROWS_NAVIGATION.leading,
       ],
       spacing: [
+        ...PANEL_PLACES.spacing,
         "luke-2",
         "luke-4",
         "luke-6",

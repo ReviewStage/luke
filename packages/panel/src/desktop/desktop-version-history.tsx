@@ -87,6 +87,7 @@ import { backPlaceOf } from "./back-place.js";
 import { HistoryButtons } from "./desktop-sidebar.js";
 import { useNarrowFocus } from "./narrow-focus.js";
 import { PhoneHead } from "./phone-head.js";
+import { PLACE_LIST, PLACE_LIST_TITLE, PLACE_PAGE, PLACE_SPLIT } from "./place-columns.js";
 import type { SidebarCollapse } from "./sidebar-collapse.js";
 
 /**
@@ -775,8 +776,16 @@ export function DesktopVersionHistory({
   const exitPlaceName = exitPlace ?? backPlaceOf(history, subject.title ?? subject.noun);
 
   return (
-    <div ref={screen} className="desktop-version-history" data-single={String(split.single)}>
-      <nav className="version-log ph-no-capture" aria-label="Versions" hidden={hidden.list}>
+    <div
+      ref={screen}
+      className={`desktop-version-history ${PLACE_SPLIT}`}
+      data-single={String(split.single)}
+    >
+      <nav
+        className={`version-log ph-no-capture ${PLACE_LIST}`}
+        aria-label="Versions"
+        hidden={hidden.list}
+      >
         {narrow ? (
           // A phone's header: the way out, or from a revision's sections back to every version, and the title.
           <PhoneHead
@@ -818,7 +827,11 @@ export function DesktopVersionHistory({
         <div className="version-log-track" data-opened={String(opened !== undefined)}>
           <div className="version-log-pane" inert={opened !== undefined}>
             {narrow ? null : (
-              <Text as={TEXT_ELEMENT.H1} variant={TEXT_VARIANT.TITLE} className="version-log-title">
+              <Text
+                as={TEXT_ELEMENT.H1}
+                variant={TEXT_VARIANT.TITLE}
+                className={`version-log-title ${PLACE_LIST_TITLE}`}
+              >
                 {VERSION_HISTORY}
               </Text>
             )}
@@ -936,7 +949,11 @@ export function DesktopVersionHistory({
         {/* Last, so the drag strip above the way back does not take the edge's top from it. */}
         {split.single ? null : <ResizeEdge edge={edge} />}
       </nav>
-      <section className="version-page ph-no-capture" aria-label="Version" hidden={hidden.item}>
+      <section
+        className={`version-page ph-no-capture ${PLACE_PAGE}`}
+        aria-label="Version"
+        hidden={hidden.item}
+      >
         <PageFind page={FIND_PAGE.VERSION_HISTORY} at={String(versions.selected)} active>
           <VersionPage
             subject={subject}
