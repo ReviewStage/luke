@@ -48,6 +48,36 @@
   --spacing-menu-row: var(--luke-menu-row-height);
   --spacing-menu-glyph: var(--luke-menu-glyph);
   --spacing-list-gap: var(--luke-list-gap);
+
+  /* The panel's work column (`@luke/panel`: a transcript's opening line, the
+     call's video room, a tool's page, the find bar, the version history):
+     the profile's spacing roles it reads beside the ones above, and its own
+     glyphs, measures, and motions. */
+  --spacing-ring-reach: var(--luke-focus-ring-reach);
+  --spacing-column-inset: var(--luke-space-12);
+  --spacing-origin-glyph: 14px; /* off-scale: a document glyph in a 16px mark's place */
+  --spacing-attention-mark: 14px; /* off-scale: the attention disc, a row glyph's size */
+  --spacing-find-field: 240px; /* off-scale: the find bar's field, one width whatever is typed */
+  --spacing-agent-video-frame: min(
+    100%,
+    calc(var(--call-video-height) * var(--call-video-aspect)),
+    calc(var(--luke-stage-height) * 0.4 * var(--call-video-aspect))
+  );
+  --aspect-agent-video: var(--call-video-aspect);
+  --radius-disc: 50%; /* off-scale: a circle, whose corner what it holds inherits */
+  --font-weight-luke-regular: var(--luke-weight-regular);
+  --font-weight-luke-medium: var(--luke-weight-medium);
+  --font-weight-luke-semibold: var(--luke-weight-semibold);
+  --leading-tool-description: 1.5; /* off-scale: a tool's description, a step looser than a caption */
+  --shadow-tool-default: inset 0 0 0 1px var(--luke-color-border-strong);
+  --grid-template-columns-version-track: 100% 100%;
+  --grid-template-rows-version-track: minmax(0, 1fr);
+  --animate-edit-composer-in:
+    luke-menu-arrive var(--luke-duration-quick) var(--luke-motion-exit) both,
+    luke-card-grow var(--luke-duration-fast) var(--luke-spring-fast) both;
+  --animate-edit-composer-out:
+    luke-menu-leave var(--luke-duration-exit) var(--luke-motion-exit) both,
+    luke-card-shrink var(--luke-duration-exit) var(--luke-motion-exit) both;
   --radius-luke-6: var(--luke-radius-6);
   --radius-luke-8: var(--luke-radius-8);
   --radius-luke-10: var(--luke-radius-10);
