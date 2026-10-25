@@ -2439,8 +2439,8 @@ function agentRows(): {
       null,
     name: option.querySelector(".luke-combobox-option-label")?.textContent ?? null,
     detail: option.querySelector(".luke-combobox-option-detail")?.textContent ?? null,
-    ends: [...(option.querySelector(".luke-combobox-option-hint")?.children ?? [])].map(
-      (mark) => mark.getAttribute("aria-label"),
+    ends: [...(option.querySelector(".luke-combobox-option-hint")?.children ?? [])].map((mark) =>
+      mark.getAttribute("aria-label"),
     ),
   }));
 }
