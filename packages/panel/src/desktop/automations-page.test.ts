@@ -2389,7 +2389,7 @@ function agentRows(): {
   glyph: boolean;
   name: string | null;
   detail: string | null;
-  ends: string[];
+  ends: (string | null)[];
 }[] {
   return [...document.querySelectorAll("[role=option]")].map((option) => ({
     glyph:
@@ -2397,8 +2397,8 @@ function agentRows(): {
       null,
     name: option.querySelector(".luke-combobox-option-label")?.textContent ?? null,
     detail: option.querySelector(".luke-combobox-option-detail")?.textContent ?? null,
-    ends: [...(option.querySelector(".luke-combobox-option-hint")?.children ?? [])].map(
-      (mark) => mark.className,
+    ends: [...(option.querySelector(".luke-combobox-option-hint")?.children ?? [])].map((mark) =>
+      mark.getAttribute("aria-label"),
     ),
   }));
 }
@@ -2424,7 +2424,7 @@ test("the Agent picker draws each agent as every agent menu does: its glyph, its
 
   act(() => picker(page, "Agent").click());
   assert.deepEqual(agentRows(), [
-    { glyph: true, name: "Nightly sweep", detail: "No task", ends: ["failed-mark"] },
+    { glyph: true, name: "Nightly sweep", detail: "No task", ends: ["Failed"] },
     { glyph: true, name: "CI digest", detail: "No task", ends: [] },
   ]);
 

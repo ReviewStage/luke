@@ -155,6 +155,26 @@ const ROWS_NAVIGATION = {
   radius: ["inherit"],
 } as const;
 
+/**
+ * The names the panel shell's block of the theme adds (the sidebar, a row's
+ * end mark, a search's match, the call card, the settings rows), by the
+ * group tailwind-merge reads each in.
+ */
+const PANEL_SHELL = {
+  tracking: ["identity"],
+  spacing: [
+    "row-mark",
+    "section-gap",
+    "settings-row-block",
+    "settings-row-inline",
+    "settings-row",
+    "settings-row-pair",
+    "heir-least",
+    "settings-search-clearance",
+  ],
+  radius: ["luke-14"],
+} as const;
+
 const merge = extendTailwindMerge({
   extend: {
     theme: {
@@ -187,7 +207,7 @@ const merge = extendTailwindMerge({
         ...FEEDBACK_DISPLAY["font-weight"],
         ...CONTENT_TEXT["font-weight"],
       ],
-      tracking: ["title"],
+      tracking: ["title", ...PANEL_SHELL.tracking],
       leading: [
         "body",
         ...FEEDBACK_DISPLAY.leading,
@@ -260,6 +280,7 @@ const merge = extendTailwindMerge({
         ...FEEDBACK_DISPLAY.spacing,
         ...CONTENT_TEXT.spacing,
         ...ROWS_NAVIGATION.spacing,
+        ...PANEL_SHELL.spacing,
       ],
       radius: [
         "control",
@@ -279,6 +300,7 @@ const merge = extendTailwindMerge({
         ...FEEDBACK_DISPLAY.radius,
         ...CONTENT_TEXT.radius,
         ...ROWS_NAVIGATION.radius,
+        ...PANEL_SHELL.radius,
       ],
       shadow: [
         "dialog",
