@@ -52,7 +52,19 @@ body {
     [role="menuitem"],
     [role="menuitemcheckbox"],
     [tabindex]:not([tabindex="-1"])
-  ):focus-visible {
+  ):focus-visible:not(:has(> [data-focus-ring])) {
+    outline: var(--luke-focus-ring-width) solid var(--luke-color-focus-ring);
+    outline-offset: var(--luke-focus-ring-offset);
+  }
+
+  /* A control whose drawn shape is a part of it, a card's reach or a
+     picture's face, rings that part alone, which says so with
+     `data-focus-ring`, as in the apps. */
+  :focus-visible:has(> [data-focus-ring]) {
+    outline: none; /* no ring: the part it names rings */
+  }
+
+  :focus-visible > [data-focus-ring] {
     outline: var(--luke-focus-ring-width) solid var(--luke-color-focus-ring);
     outline-offset: var(--luke-focus-ring-offset);
   }
