@@ -455,10 +455,28 @@ body {
   background: var(--luke-color-surface);
 }
 
+/* A picture over the whole window: the bar on the window's ground, the
+   picture centred on the veil under it. */
+.catalog-window {
+  --luke-toolbar-ground: var(--luke-color-ground);
+
+  display: flex;
+  height: 100%;
+  flex-direction: column;
+}
+
+.catalog-window-picture {
+  display: grid;
+  min-height: 0;
+  flex: 1 1 auto;
+  place-items: center;
+}
+
 /* The face gives way to a narrow or short window, so the card that fits it
    never has to clip it: the window less the dimmed margin, the picture's
    inset, the card's edge, and, for its height, the bar above it. */
-.catalog-media-picture > .luke-face {
+.catalog-media-picture > .luke-face,
+.catalog-window-picture > .luke-face {
   width: min(
     480px,
     100vw -

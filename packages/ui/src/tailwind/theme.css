@@ -1004,22 +1004,13 @@
   --color-file-icon-pink: var(--file-icon-pink);
   --color-file-icon-mauve: var(--file-icon-mauve);
   /* A file opened over the window (`attachment-viewer.tsx`): a text file's
-     width, any other file's, and the whole of the dimmed window a picture
-     at its own pixels takes, on the veil a video plays on. */
+     reading width, centred in the window. */
   --spacing-viewer-text: min(
     880px,
     var(--luke-stage-width) -
     2 *
     var(--luke-space-24)
   ); /* off-scale: a text file's reading width */
-  --spacing-viewer-other: min(
-    400px,
-    var(--luke-stage-width) -
-    2 *
-    var(--luke-space-24)
-  ); /* off-scale: a file shown by its icon */
-  --spacing-viewer-stage: calc(var(--luke-stage-width) - 2 * var(--luke-space-24));
-  --spacing-viewer-stage-height: calc(var(--luke-stage-height) - 2 * var(--luke-space-24));
   /* A Terminal tab (`terminal-tab.tsx`): its ground, a busy bar's dots spaced apart, and the shells'
      list beside it. */
   --color-terminal-ground: var(--terminal-ground);

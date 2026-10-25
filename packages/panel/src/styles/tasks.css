@@ -2198,23 +2198,35 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
 }
 
 /* What the place opening the viewer says of the file shown, after its size
-   in the same quiet ink, a plan's picture saying who last edited it: the
-   size gives it the room the size kept before the header's buttons, and it
-   is cut before it reaches them. */
+   in the same quiet ink, a plan's picture saying who last edited it: on a
+   phone's header the size gives it the room the size kept before the
+   buttons, and it is cut before it reaches them. */
 .attachment-viewer-size:has(+ .attachment-viewer-note) {
   margin-right: 0;
 }
 
-/* A video plays on the veil, centred, as large as the card leaves it under
-   its header at its own shape (`@luke/ui`'s VideoPlayer). */
-.attachment-viewer-body > .luke-video-player {
-  max-height: calc(var(--luke-stage-height) - 2 * var(--luke-space-24) - 50px);
+/* A file opened over the window (`attachment-viewer.tsx`) stands under a bar
+   where the window's top bar stands, clear of the traffic lights, on the
+   window's ground (`@luke/ui`'s Toolbar). */
+.attachment-viewer {
+  --luke-toolbar-start-at: var(--title-bar-left);
+  --luke-toolbar-ground: var(--luke-color-ground);
 }
 
-/* The picture, `@luke/ui`'s ZoomImage, stands no taller fitted than the
-   card leaves it under its header. */
-.attachment-viewer-body > .luke-zoom-image {
-  max-height: calc(var(--luke-stage-height) - 2 * var(--luke-space-24) - 50px);
+/* A picture or a video fits the room under the bar at its own shape, the
+   room one track its own size so the file's 100% is the room's; a picture
+   at its own pixels keeps the whole room. */
+.attachment-viewer-body:has(> :is(.luke-zoom-image, .luke-video-player)) {
+  grid-template: minmax(0, 1fr) / minmax(0, 1fr);
+}
+
+.attachment-viewer-body > :is(.luke-zoom-image, .luke-video-player) {
+  max-width: 100%;
+  max-height: 100%;
+}
+
+.attachment-viewer[data-opening="own-pixels"] .attachment-viewer-body {
+  padding: 0;
 }
 
 /* An agent's Terminal tab (`terminal-tab.tsx`): the File tab's frame, its

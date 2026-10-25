@@ -13,6 +13,7 @@ import {
   CloseIcon,
   CopyButton,
   DIALOG_SIZE,
+  DIALOG_VEIL,
   Dialog,
   IconButton,
   IMAGE_OPENING,
@@ -22,6 +23,8 @@ import {
   TEXT_ELEMENT,
   TEXT_VARIANT,
   Text,
+  TOOLBAR_INSET,
+  Toolbar,
   Tooltip,
   useImageZoom,
   usePictureExpand,
@@ -60,7 +63,7 @@ import { WholeFile, type WholeFileNote } from "./whole-file.js";
  * and back, the header's buttons or a bare `=`, `-`, and `0`; zoomed, it is
  * moved by a drag or a two-finger scroll (`@luke/ui`'s ZoomImage). A video,
  * such as one an agent recorded and opened from its Expand,
- * plays at once as large as the card lets it, with the player's own
+ * plays at once as large as the window lets it, with the player's own
  * controls, Full screen among them (`@luke/ui`'s VideoPlayer).
  *
  * The files of one message are walked in place with the header's arrows or
@@ -69,9 +72,13 @@ import { WholeFile, type WholeFileNote } from "./whole-file.js";
  * the file shown (who last edited it, for a plan's picture), beside Copy for a text file or a picture,
  * whatever the place opening it offers for a picture (Add to plan, in an
  * agent's transcript), Download, and the way out. It opens in the window's one modal frame,
- * `@luke/ui`'s dialog fitted to the file shown: the window dims, Tab stays inside the card, and
- * Escape, a press on the dimmed window, and the way out all close it and
- * hand focus back to the chip that opened it. A picture opened from its
+ * `@luke/ui`'s dialog at the whole window's size: the file stands on a dark
+ * veil, as large as the room under the header lets it, and the header is a
+ * bar where the window's top bar stands (`@luke/ui`'s Toolbar), at its
+ * height, clear of the traffic lights, and the window's drag handle on the
+ * desktop. Tab stays inside the card, and Escape, a press on the room
+ * around the file shown, and the way out all close it and hand focus back
+ * to the chip that opened it. A picture opened from its
  * tile grows out of the tile and, closed on that picture, shrinks back into it. The
  * file's bytes are the chip's own, so a file in the message box and one
  * read back with the transcript open the same. A message's files are its
@@ -321,7 +328,8 @@ function AttachmentBody({
       // Two fingers anywhere on the frame pinch the picture (`@luke/ui`'s ZoomImage), never the page.
       <div
         ref={zoom.frameRef}
-        className="attachment-viewer-body min-h-0 flex-auto grid touch-none place-items-center overflow-hidden bg-surface"
+        className="attachment-viewer-body min-h-0 flex-auto grid touch-none place-items-center overflow-hidden p-control-gap"
+        {...DIALOG_VEIL}
       >
         <ZoomImage zoom={zoom} src={file.url} alt={file.name} />
       </div>
@@ -329,15 +337,18 @@ function AttachmentBody({
   }
   if (attachmentView(file) === ATTACHMENT_VIEW.VIDEO) {
     return (
-      // A video plays on the veil, centred, as large as the card leaves it under its header at its own shape.
-      <div className="attachment-viewer-body min-h-0 flex-auto grid place-items-center overflow-hidden bg-veil">
+      // A video plays on the veil, centred, as large as the room under the bar leaves it at its own shape.
+      <div
+        className="attachment-viewer-body min-h-0 flex-auto grid place-items-center overflow-hidden p-control-gap"
+        {...DIALOG_VEIL}
+      >
         <VideoPlayer dataUrl={file.url} label={file.name} place={VIDEO_PLAYER_PLACE.VIEWER} />
       </div>
     );
   }
   if (text !== undefined) {
     return (
-      <div className="attachment-viewer-body min-h-0 flex-auto attachment-viewer-lines flex flex-col bg-card-code">
+      <div className="attachment-viewer-body min-h-0 flex-auto attachment-viewer-lines mx-auto flex w-viewer-text flex-col bg-card-code">
         <WholeFile
           name={file.name}
           text={text.replace(/\r\n/gu, "\n")}
@@ -351,7 +362,10 @@ function AttachmentBody({
     );
   }
   return (
-    <div className="attachment-viewer-body min-h-0 flex-auto flex flex-col items-center gap-item-gap p-card text-center">
+    <div
+      className="attachment-viewer-body min-h-0 flex-auto flex flex-col items-center justify-center gap-item-gap p-card text-center"
+      {...DIALOG_VEIL}
+    >
       <FileTypeIcon name={file.name} className="size-12" />
       <p className="mx-0 mt-item-gap mb-0 max-w-full text-section font-luke-semibold wrap-anywhere">
         {file.name}
@@ -438,16 +452,17 @@ export function AttachmentViewer({
   return (
     <Dialog
       open
-      size={DIALOG_SIZE.MEDIA}
+      size={DIALOG_SIZE.WINDOW}
       labelledBy={titleId}
       onDismiss={close}
       onKeyDown={walkKey}
       expand={expand}
     >
       <div
-        className="attachment-viewer ph-no-capture flex min-h-0 flex-auto flex-col data-[view=other]:w-viewer-other data-[view=text]:h-viewer-stage-height data-[view=text]:w-viewer-text data-[view=image]:data-[opening=own-pixels]:h-viewer-stage-height data-[view=image]:data-[opening=own-pixels]:w-viewer-stage"
+        className="attachment-viewer ph-no-capture flex size-full min-h-0 flex-col data-[view=other]:bg-ground data-[view=text]:bg-ground"
         data-view={attachmentView(file)}
         data-opening={opening}
+        {...DIALOG_VEIL}
       >
         {phone ? (
           <PhoneHead
@@ -501,77 +516,90 @@ export function AttachmentViewer({
             }
           />
         ) : (
-          <header className="flex flex-none items-center gap-tight-gap border-b border-border py-item-gap pr-item-gap pl-list-inset">
-            <FileTypeIcon name={file.name} className="mr-tight-gap size-control-icon flex-none" />
-            <Text
-              as={TEXT_ELEMENT.H2}
-              variant={TEXT_VARIANT.SECTION}
-              id={titleId}
-              className={TITLE_CLASS}
-            >
-              <OneLine>{file.name}</OneLine>
-            </Text>
-            {/* What the place opening the viewer says of the file shown stands after its size in the same quiet ink, the size giving it the room the size kept before the header's buttons (tasks.css), and it is cut before it reaches them. */}
-            <span className={`my-0 mr-auto ml-tight-gap ${SIZE_CLASS}`}>{sizeLabel(base64)}</span>
-            {note === undefined || note === null ? null : (
-              <span className={`my-0 mr-auto ml-block-gap ${NOTE_CLASS}`}>{note}</span>
-            )}
-            {files.length > 1 ? (
-              <div className="flex items-center">
-                <HeaderButton
-                  label={VIEWER_LABEL.PREVIOUS}
-                  chord={VIEWER_CHORD.PREVIOUS}
-                  onClick={() => walk(-1)}
-                  icon={<ChevronLeftIcon aria-hidden="true" />}
-                />
-                <span className="attachment-viewer-place min-w-12 text-center text-caption text-muted-foreground tabular-nums">
-                  {`${String(at + 1)} of ${String(files.length)}`}
-                </span>
-                <HeaderButton
-                  label={VIEWER_LABEL.NEXT}
-                  chord={VIEWER_CHORD.NEXT}
-                  onClick={() => walk(1)}
-                  icon={<ChevronRightIcon aria-hidden="true" />}
-                />
-              </div>
-            ) : null}
-            {text === undefined ? null : <CopyTextButton text={text} />}
-            {image ? (
+          <Toolbar
+            place="attachment-viewer"
+            lead={<FileTypeIcon name={file.name} className="size-control-icon flex-none" />}
+            title={
+              <Text
+                as={TEXT_ELEMENT.H2}
+                variant={TEXT_VARIANT.TOOLBAR_TITLE}
+                id={titleId}
+                className={`luke-toolbar-title ${TITLE_CLASS}`}
+              >
+                <OneLine>{file.name}</OneLine>
+              </Text>
+            }
+            detail={
               <>
-                <CopyImageButton url={file.url} />
+                {sizeLabel(base64)}
+                {note === undefined || note === null ? null : (
+                  <span className="attachment-viewer-note ml-block-gap text-muted-foreground">
+                    {note}
+                  </span>
+                )}
+              </>
+            }
+            end={TOOLBAR_INSET.COLUMN}
+            actions={
+              <>
+                {files.length > 1 ? (
+                  <div className="flex items-center">
+                    <HeaderButton
+                      label={VIEWER_LABEL.PREVIOUS}
+                      chord={VIEWER_CHORD.PREVIOUS}
+                      onClick={() => walk(-1)}
+                      icon={<ChevronLeftIcon aria-hidden="true" />}
+                    />
+                    <span className="attachment-viewer-place min-w-12 text-center text-caption text-muted-foreground tabular-nums">
+                      {`${String(at + 1)} of ${String(files.length)}`}
+                    </span>
+                    <HeaderButton
+                      label={VIEWER_LABEL.NEXT}
+                      chord={VIEWER_CHORD.NEXT}
+                      onClick={() => walk(1)}
+                      icon={<ChevronRightIcon aria-hidden="true" />}
+                    />
+                  </div>
+                ) : null}
+                {text === undefined ? null : <CopyTextButton text={text} />}
+                {image ? (
+                  <>
+                    <CopyImageButton url={file.url} />
+                    <HeaderButton
+                      label={VIEWER_LABEL.ZOOM_OUT}
+                      chord={ZOOM_CHORD.OUT}
+                      onClick={() => zoom.step(-1)}
+                      icon={<ZoomOutIcon aria-hidden="true" />}
+                    />
+                    <HeaderButton
+                      label={VIEWER_LABEL.ZOOM_IN}
+                      chord={ZOOM_CHORD.IN}
+                      onClick={() => zoom.step(1)}
+                      icon={<ZoomInIcon aria-hidden="true" />}
+                    />
+                  </>
+                ) : null}
+                {action === undefined || !(image || video) ? null : action.address === undefined ? (
+                  <Button icon={action.icon} onClick={() => action.onPress(file)}>
+                    {action.label}
+                  </Button>
+                ) : (
+                  <ViewerLink action={action} address={action.address(file)} />
+                )}
                 <HeaderButton
-                  label={VIEWER_LABEL.ZOOM_OUT}
-                  chord={ZOOM_CHORD.OUT}
-                  onClick={() => zoom.step(-1)}
-                  icon={<ZoomOutIcon aria-hidden="true" />}
+                  label={VIEWER_LABEL.DOWNLOAD}
+                  onClick={() => download(file)}
+                  icon={<DownloadIcon aria-hidden="true" />}
                 />
                 <HeaderButton
-                  label={VIEWER_LABEL.ZOOM_IN}
-                  chord={ZOOM_CHORD.IN}
-                  onClick={() => zoom.step(1)}
-                  icon={<ZoomInIcon aria-hidden="true" />}
+                  label={VIEWER_LABEL.CLOSE}
+                  chord={VIEWER_CHORD.CLOSE}
+                  onClick={close}
+                  icon={<CloseIcon />}
                 />
               </>
-            ) : null}
-            {action === undefined || !(image || video) ? null : action.address === undefined ? (
-              <Button icon={action.icon} onClick={() => action.onPress(file)}>
-                {action.label}
-              </Button>
-            ) : (
-              <ViewerLink action={action} address={action.address(file)} />
-            )}
-            <HeaderButton
-              label={VIEWER_LABEL.DOWNLOAD}
-              onClick={() => download(file)}
-              icon={<DownloadIcon aria-hidden="true" />}
-            />
-            <HeaderButton
-              label={VIEWER_LABEL.CLOSE}
-              chord={VIEWER_CHORD.CLOSE}
-              onClick={close}
-              icon={<CloseIcon />}
-            />
-          </header>
+            }
+          />
         )}
         <AttachmentBody key={at} file={file} base64={base64} text={text} zoom={zoom} />
       </div>

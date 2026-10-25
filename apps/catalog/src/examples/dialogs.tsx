@@ -4,6 +4,7 @@ import {
   CloseIcon,
   DIALOG_ROLE,
   DIALOG_SIZE,
+  DIALOG_VEIL,
   Dialog,
   FormField,
   IconButton,
@@ -17,6 +18,7 @@ import {
   Text,
   TextArea,
   TextField,
+  Toolbar,
   WingFace,
 } from "@luke/ui";
 import { useId, useRef, useState } from "react";
@@ -210,6 +212,28 @@ function PictureDialog({ open, onClose }: DialogBody): React.JSX.Element {
   );
 }
 
+/** A picture opened over the whole window, on the dark veil under the window's own bar, put away by a press on the veil. */
+function WindowPictureDialog({ open, onClose }: DialogBody): React.JSX.Element {
+  const titleId = useId();
+  return (
+    <Dialog open={open} size={DIALOG_SIZE.WINDOW} labelledBy={titleId} onDismiss={onClose}>
+      <div className="catalog-window">
+        <Toolbar
+          title={
+            <Text variant={TEXT_VARIANT.TOOLBAR_TITLE} as={TEXT_ELEMENT.H2} id={titleId}>
+              luke-face.svg
+            </Text>
+          }
+          actions={<IconButton icon={<CloseIcon />} label="Close" onClick={onClose} />}
+        />
+        <div className="catalog-window-picture" {...DIALOG_VEIL}>
+          <WingFace />
+        </div>
+      </div>
+    </Dialog>
+  );
+}
+
 /** A button that opens `Body`, which closes itself and fades out as it goes; each opening is drawn afresh. */
 function Opener({
   label,
@@ -243,6 +267,7 @@ function Dialogs(): React.JSX.Element {
         <Opener label="Send feedback…" Body={NoteDialog} />
         <Opener label="New task…" Body={ComposerDialog} />
         <Opener label="Open picture…" Body={PictureDialog} />
+        <Opener label="Open picture full window…" Body={WindowPictureDialog} />
       </Inline>
     </CatalogSection>
   );

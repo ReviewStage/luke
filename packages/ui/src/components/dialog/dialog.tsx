@@ -74,8 +74,9 @@ import { useHeldFocus } from "./held-focus.js";
  * window with the same swell and stays, its draft as it was, and is put away
  * by the next one; a reader is told so through the window's `Announcer`, since a card that stays is otherwise a press gone nowhere. The card is the
  * profile's dialog card, its inset and its corners, at a question's
- * measure, wider for a note being written, or fitted edge to edge to a file
- * shown; what it holds lays itself out inside. A dialog that takes files dropped on the dimmed window rings its
+ * measure, wider for a note being written, fitted edge to edge to a file
+ * shown, or the whole window on a dark veil, a file shown under a bar of its
+ * own where the window's top bar stands; what it holds lays itself out inside. A dialog that takes files dropped on the dimmed window rings its
  * card while a drag it would take is over it.
  *
  * A dialog that asks something draws its parts in the card's own slots: its
@@ -102,14 +103,16 @@ export type DialogRole = (typeof DIALOG_ROLE)[keyof typeof DIALOG_ROLE];
 
 /**
  * How wide the card stands: a question's measure, wider for a note being
- * written, wider still for a composer card with chips at its foot, or fitted
- * to a file shown edge to edge, as a picture opened over the window is.
+ * written, wider still for a composer card with chips at its foot, fitted
+ * to a file shown edge to edge, or the whole window, as Quick Look stands a
+ * picture over a dark veil under a bar of its own.
  */
 export const DIALOG_SIZE = {
   CONFIRM: "confirm",
   WIDE: "wide",
   COMPOSER: "composer",
   MEDIA: "media",
+  WINDOW: "window",
 } as const;
 
 export type DialogSize = (typeof DIALOG_SIZE)[keyof typeof DIALOG_SIZE];
@@ -164,6 +167,7 @@ const CARD_LOOK = [
   "data-[size=composer]:w-dialog-composer data-[size=composer]:gap-3",
   "room-narrow:data-[size=composer]:-ml-dialog-reach room-narrow:data-[size=composer]:-mr-dialog-reach room-narrow:data-[size=composer]:w-dialog-composer-reach room-narrow:data-[size=composer]:pt-card-inset-snug room-narrow:data-[size=composer]:pr-card-inset-snug room-narrow:data-[size=composer]:pb-card-inset-snug room-narrow:data-[size=composer]:pl-card-inset-snug",
   "data-[size=media]:w-auto data-[size=media]:min-w-dialog-media-min data-[size=media]:max-w-dialog-media-max data-[size=media]:gap-0 data-[size=media]:overflow-hidden data-[size=media]:p-0",
+  "data-[size=window]:size-full data-[size=window]:max-h-none data-[size=window]:gap-0 data-[size=window]:overflow-hidden data-[size=window]:rounded-none data-[size=window]:border-0 data-[size=window]:bg-transparent data-[size=window]:p-0 data-[size=window]:shadow-none",
   "data-[expanding=true]:animate-none",
   "data-[dropping=true]:shadow-dialog-drop",
   "data-[nudge=true]:animate-dialog-nudge",
@@ -176,7 +180,7 @@ const CARD_LOOK = [
  * own gap) so what it holds keeps the spacing it had as the card's children.
  * Note that it clips what it holds, so it draws a control's ring inside the
  * control, as a `Card` does, rather than clipped at the edge; that a
- * picture's card (`media`) is fitted edge to edge and draws its own head and
+ * picture's card (`media`, `window`) is fitted edge to edge and draws its own head and
  * scroller, so its middle lays nothing out; and that a composer's card
  * does not scroll its middle, because its chips hang lists (the repository's,
  * the `@` menu) past the card's inner edges, which a scroller would clip and
@@ -185,7 +189,22 @@ const CARD_LOOK = [
  * so its field yields to a short window (`desktop.css`) and its foot stays.
  */
 const MIDDLE =
-  "flex min-h-0 flex-1 flex-col gap-[inherit] overflow-x-hidden overflow-y-auto overscroll-contain [--luke-focus-ring-offset:var(--luke-focus-ring-inset)] data-[size=media]:contents data-[size=composer]:overflow-visible";
+  "flex min-h-0 flex-1 flex-col gap-[inherit] overflow-x-hidden overflow-y-auto overscroll-contain [--luke-focus-ring-offset:var(--luke-focus-ring-inset)] data-[size=media]:contents data-[size=window]:contents data-[size=composer]:overflow-visible";
+
+/** What marks a card's own veil, the room around a file shown in a card that fills the window. */
+const VEIL_ATTRIBUTE = "data-dialog-veil";
+
+/**
+ * What an owner spreads on the part of its card that stands for the dimmed
+ * window, the veil around a file shown in a card that fills the window
+ * (`DIALOG_SIZE.WINDOW`), which leaves no dimmed window to press: a press
+ * that goes down and comes up on it puts the card away as one on the dimmed
+ * window does, and one that lands on what it holds does not.
+ */
+export const DIALOG_VEIL = { [VEIL_ATTRIBUTE]: "" } as const;
+
+/** The dimmed window under a card that fills it: no margin round the card, and the veil a picture is shown on in place of the scrim, dark in either appearance. */
+const WINDOW_ROOM = "luke-dialog-backdrop p-0 bg-veil";
 
 /** What a reader is told when a draft holds the card back. */
 const HELD_NOTICE = "Your draft is kept. Press Escape again to close.";
@@ -458,6 +477,8 @@ export function Dialog({
   children,
 }: DialogProps): React.JSX.Element | null {
   const card = useRef<HTMLDivElement | null>(null);
+  // Where a press on the card went down, so one that ends on its veil is a dismissal only where it began there.
+  const pressedOn = useRef<EventTarget | null>(null);
   // Note that the card stands a render after the dialog mounts, because
   // Base UI's portal makes its node first, so what reaches the card waits
   // for it to stand.
@@ -592,8 +613,16 @@ export function Dialog({
         // close of Base UI's own to hand it back.
         finalFocus={false}
         onKeyDown={keyDown}
+        onPointerDown={(event) => {
+          pressedOn.current = event.target;
+        }}
+        onClick={(event) => {
+          const { target } = event;
+          if (target !== pressedOn.current || !(target instanceof Element)) return;
+          if (target.hasAttribute(VEIL_ATTRIBUTE)) dismiss();
+        }}
         viewport={{
-          className: "luke-dialog-backdrop",
+          className: size === DIALOG_SIZE.WINDOW ? WINDOW_ROOM : "luke-dialog-backdrop",
           // Note that a press goes no further than the dialog, because the
           // surface that opened it is its parent in React's tree and may take
           // presses of its own.
