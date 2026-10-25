@@ -24,7 +24,7 @@ import type { CodingAgentInboxMessagedView } from "@luke/features/coding-agent-v
 import { CODING_AGENT_CALL_FAILURE } from "@luke/features/coding-agent-view";
 import { INBOX_BOUNDS, type InboxItem } from "@luke/features/inbox-wire";
 import { encodeMention, MENTION_KIND } from "@luke/features/mention-link";
-import { pasteCutWords, readFailedWords, readingWords } from "@luke/features/words";
+import { FIELD_WORDS, pasteCutWords, readFailedWords, readingWords } from "@luke/features/words";
 import { ACT_KIND } from "@luke/host/acts";
 import {
   BackButton,
@@ -32,7 +32,6 @@ import {
   Button,
   CHIP_WIDTH,
   ErrorState,
-  FormField,
   IconButton,
   matchingRows,
   POPOVER_ALIGN,
@@ -43,8 +42,9 @@ import {
   Toolbar,
   Tooltip,
   TrashIcon,
+  VisuallyHidden,
 } from "@luke/ui";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { useAct } from "../act.js";
 import { appPlatform } from "../app-platform.js";
 import {
@@ -378,6 +378,7 @@ function ComposeCard({
   latestAgent.current = agent;
   const chosen = agent === undefined ? undefined : agentMenuRow(agent, place);
   const placeholder = agent === undefined ? "Write a message" : `Write to ${agent.name}`;
+  const subjectId = useId();
   const field = useAnswerField({
     draft: draft.text,
     placeholder,
@@ -530,21 +531,32 @@ function ComposeCard({
               }}
             />
           </div>
-          <div className="inbox-compose-row" data-field="">
-            <FormField label={SUBJECT} optional>
-              {(control) => (
-                <TextField
-                  field={control}
-                  size={TEXT_FIELD_SIZE.INLINE}
-                  value={draft.title ?? ""}
-                  maxLength={INBOX_BOUNDS.MAX_TITLE_CHARS}
-                  disabled={sending}
-                  autoFocus
-                  onChange={(title) => write((was) => ({ ...was, title }))}
-                  onEnter={() => field.editor.current?.focus()}
-                />
-              )}
-            </FormField>
+          <div className="inbox-compose-row">
+            {/* Note that the subject may be left empty, which its label says to a reader as a FormField's does, and its placeholder shows where the field stands. */}
+            <label
+              className="inbox-compose-label"
+              id={`${subjectId}label`}
+              htmlFor={`${subjectId}control`}
+            >
+              {SUBJECT}
+              <VisuallyHidden>{FIELD_WORDS.OPTIONAL}</VisuallyHidden>
+            </label>
+            <TextField
+              field={{
+                id: `${subjectId}control`,
+                labelId: `${subjectId}label`,
+                "aria-describedby": undefined,
+                "aria-invalid": undefined,
+              }}
+              size={TEXT_FIELD_SIZE.INLINE}
+              placeholder={FIELD_WORDS.OPTIONAL}
+              value={draft.title ?? ""}
+              maxLength={INBOX_BOUNDS.MAX_TITLE_CHARS}
+              disabled={sending}
+              autoFocus
+              onChange={(title) => write((was) => ({ ...was, title }))}
+              onEnter={() => field.editor.current?.focus()}
+            />
           </div>
         </div>
         <div className={`${COMPOSER_ROOM_CLASS} inbox-compose-box`} {...files.drop.target}>
