@@ -866,3 +866,32 @@ test("words that take no focus own their hint as hidden text, read at their end,
   assert.deepEqual(wordsNamedBy(radio), ["Bold"]);
   assert.equal(radio.hasAttribute("aria-owns"), false);
 });
+
+test("words cut short inside a control hanging a card raise no pill over its card", () => {
+  const page = mount(
+    createElement(Tooltip, {
+      label: "Fix the refresh",
+      card: createElement("p", null, "Opened by Sam"),
+      children: createElement(
+        "button",
+        { type: "button", "data-row": "", "aria-describedby": undefined },
+        createElement(Tooltip, {
+          label: "Fix the refresh of the token",
+          children: createElement(
+            "span",
+            { "data-label": "", "aria-describedby": undefined },
+            "Fix the refresh of the token",
+          ),
+        }),
+      ),
+    }),
+  );
+  restOn(page.querySelector("[data-row]") ?? assert.fail("the row"));
+  assert.equal(card()?.textContent, "Opened by Sam");
+
+  restOn(page.querySelector("[data-label]") ?? assert.fail("the label"));
+
+  assert.equal(cardStands(), true, "the card still stands");
+  assert.equal(card()?.textContent, "Opened by Sam");
+  assert.equal(document.querySelectorAll("[role='tooltip']").length, 1, "no pill beside it");
+});
