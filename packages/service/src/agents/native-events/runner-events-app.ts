@@ -32,7 +32,17 @@ import {
 } from "@luke/features/provider-key-wire";
 import { causeKind } from "@luke/runtime/effect";
 import { HTTP_METHOD, type WireValue, WireValueSchema } from "@luke/wire";
-import { Clock, DateTime, Effect, Layer, Option, Predicate, Result, Schema } from "effect";
+import {
+  Clock,
+  DateTime,
+  Duration,
+  Effect,
+  Layer,
+  Option,
+  Predicate,
+  Result,
+  Schema,
+} from "effect";
 import {
   FetchHttpClient,
   HttpRouter,
@@ -55,8 +65,9 @@ import {
 import { providerModelOf } from "../../providers/model-catalog.js";
 import { ANY_METHOD, type WebRoutes } from "../../route.js";
 import { reopenTaskForWork, settleTaskIfFinished } from "../../tasks/task-finish.js";
+import { CODER } from "../coder-host/bounds.js";
 import { isNativeRuntime } from "../coder-host/native-runtime.js";
-import { runnerEnded } from "../coder-host/runner-sessions.js";
+import { runnerEnded, runnerIdled } from "../coder-host/runner-sessions.js";
 import { NativeAgentSessions } from "../coder-host/runtime-sessions.js";
 import { estimatedTokens } from "../coder-host/token-estimate.js";
 import { CODER_TOOL_SET } from "../coder-host/tool-set.js";
@@ -206,6 +217,12 @@ export interface RunnerEventsOptions<R = never> {
    */
   readonly ended?: (ended: RunnerEnded) => Effect.Effect<void, never, DatabaseServices>;
   /**
+   * Told once a batch that holds a launch's IDLE, and no END after it, has
+   * landed, after its transaction: the warm runner retired at once where
+   * the warm window is zero (`sandboxAtRunnerIdle`). Nothing where left out.
+   */
+  readonly idled?: (idled: RunnerEnded) => Effect.Effect<void, never, DatabaseServices>;
+  /**
    * Told once a batch due a keep-alive has landed, after its transaction:
    * the run's sandbox kept alive (`sandboxKeptAlive`). Nothing where left out.
    */
@@ -255,6 +272,28 @@ export function sandboxAtRunnerEnd(
   );
 }
 
+/**
+ * A launch's IDLE as the sandbox hears it, where the warm window is zero
+ * (`CODER.RUNNER_WARM`): the warm runner retired at once
+ * (`../coder-host/runner-sessions.ts`'s `runnerIdled`), so its END stops the
+ * sandbox. With a window, the sweep retires it past the window instead. A
+ * retire that fails is said in the log and passed over, because the sweep
+ * retires the runner once its grace passes.
+ */
+export function sandboxAtRunnerIdle(
+  idled: RunnerEnded,
+): Effect.Effect<void, never, DatabaseServices> {
+  const { sessionId } = idled;
+  if (sessionId === undefined || !Duration.isZero(CODER.RUNNER_WARM)) return Effect.void;
+  return runnerIdled({ target: idled.target, sessionId, sequence: idled.sequence }).pipe(
+    Effect.provide(FetchHttpClient.layer),
+    Effect.asVoid,
+    Effect.catch((failure) =>
+      Effect.logWarning(`runner-events: the idle runner was not retired: ${failure._tag}`),
+    ),
+  );
+}
+
 /** Which of the batch's writes moved a turn: one started, one ended, or both, as the task follows them. */
 interface TurnsMoved {
   readonly started: boolean;
@@ -272,12 +311,14 @@ function turnsMovedBy(writes: readonly NativeWrite[]): TurnsMoved {
   };
 }
 
-/** The numbers of the events that end a launch, by the runner's own END. */
-function endsOf(batch: RunnerEventBatch, after: number | null): readonly number[] {
+/** The numbers of the batch's unapplied events of one of the runner's own types. */
+function runnerEventsOf(
+  batch: RunnerEventBatch,
+  after: number | null,
+  type: (typeof RUNNER_EVENT)[keyof typeof RUNNER_EVENT],
+): readonly number[] {
   return unapplied(batch, after).flatMap(({ sequence, message }) =>
-    Predicate.isObject(message) && "type" in message && message.type === RUNNER_EVENT.END
-      ? [sequence]
-      : [],
+    Predicate.isObject(message) && "type" in message && message.type === type ? [sequence] : [],
   );
 }
 
@@ -478,7 +519,12 @@ function applyBatch(applying: Applying, batch: RunnerEventBatch, held: NativePro
     for (const said of reports) yield* Effect.logWarning(`runner-events: ${said}`);
     const stops = yield* landWrites(applying, writes, now);
     const last = events.at(-1)?.sequence;
-    const ends = endsOf(batch, held.sequence);
+    const ends = runnerEventsOf(batch, held.sequence, RUNNER_EVENT.END);
+    // Only the batch's last IDLE is told, and none where the launch ended in the same batch.
+    const idle =
+      ends.length === 0
+        ? runnerEventsOf(batch, held.sequence, RUNNER_EVENT.IDLE).at(-1)
+        : undefined;
     // Any post is the runner still running, a heartbeat with no events among them, but a batch that
     // ends the launch keeps nothing alive, since its sandbox is stopped once it lands; and a launch
     // that has applied nothing yet has a sandbox that opened moments ago.
@@ -489,6 +535,7 @@ function applyBatch(applying: Applying, batch: RunnerEventBatch, held: NativePro
     const result = {
       applied: { applied: events.length, sequence: last ?? held.sequence } satisfies Applied,
       ends,
+      idle,
       turns: turnsMovedBy(writes),
       keepsAlive,
       stops,
@@ -539,7 +586,7 @@ const runnerEventsEndpoint = /* @__PURE__ */ Effect.fn("web/runnerEventsEndpoint
   HostedRefusal,
   HttpServerRequest.HttpServerRequest | DatabaseServices | R
 > {
-  const { read, ended, alive, title } = options;
+  const { read, ended, idled, alive, title } = options;
   const incoming = yield* HttpServerRequest.HttpServerRequest;
   if (incoming.method !== HTTP_METHOD.POST) {
     return yield* Effect.fail(HOSTED_REFUSAL.METHOD_NOT_ALLOWED);
@@ -613,6 +660,13 @@ const runnerEventsEndpoint = /* @__PURE__ */ Effect.fn("web/runnerEventsEndpoint
     for (const sequence of applied.value.ends) {
       yield* ended({ target, sessionId: admitted.value.runtimeSessionId, sequence });
     }
+  }
+  if (idled !== undefined && applied.value.idle !== undefined) {
+    yield* idled({
+      target,
+      sessionId: admitted.value.runtimeSessionId,
+      sequence: applied.value.idle,
+    });
   }
   return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, applied.value.applied);
 });
