@@ -2,22 +2,20 @@ import assert from "node:assert/strict";
 import { VOICE_SERVICE_FRAME } from "@luke/features";
 import { LIVE_CLIENT_EVENT, LIVE_SERVER_EVENT } from "@luke/live";
 import { test } from "vitest";
-import { deviceFrameDecision, FRAME_DECISION, SESSIONS_REPORT_FRAMES } from "./frames.js";
+import { deviceFrameDecision, FRAME_DECISION } from "./frames.js";
 
 test("a signed-in device forwards nothing, is read for its hang-up, its idle report, its stop, and a line typed into the call, and is refused on anything else", () => {
-  assert.deepEqual(SESSIONS_REPORT_FRAMES, [
-    VOICE_SERVICE_FRAME.SESSION_ACTIVITY,
-    VOICE_SERVICE_FRAME.SESSION_STOP,
-    VOICE_SERVICE_FRAME.SESSION_TYPED,
-  ]);
   // The close is the service's to send: the Mac's hang-up and an older build's own close are both an ask for it.
   for (const type of [VOICE_SERVICE_FRAME.SESSION_HANG_UP, LIVE_CLIENT_EVENT.CLOSE]) {
     assert.equal(deviceFrameDecision(type), FRAME_DECISION.HANG_UP);
   }
-  for (const type of SESSIONS_REPORT_FRAMES) {
+  for (const type of [
+    VOICE_SERVICE_FRAME.SESSION_ACTIVITY,
+    VOICE_SERVICE_FRAME.SESSION_STOP,
+    VOICE_SERVICE_FRAME.SESSION_TYPED,
+  ]) {
     assert.equal(deviceFrameDecision(type), FRAME_DECISION.REPORT);
   }
-  assert.equal(deviceFrameDecision(VOICE_SERVICE_FRAME.SESSION_ACTIVITY), FRAME_DECISION.REPORT);
   // The avatar asks are the service's to answer, never OpenAI's to hear.
   for (const type of [VOICE_SERVICE_FRAME.AVATAR_START, VOICE_SERVICE_FRAME.AVATAR_STOP]) {
     assert.equal(deviceFrameDecision(type), FRAME_DECISION.AVATAR);

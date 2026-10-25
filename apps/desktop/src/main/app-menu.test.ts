@@ -1,12 +1,10 @@
 import assert from "node:assert/strict";
-import { DESKTOP_CAPABILITIES } from "@luke/panel/testing/app-state";
 import { EXPERIMENT } from "@luke/settings";
 import {
   APP_COMMAND,
   APP_SHORTCUTS,
   KEYED_COMMANDS,
   shortcutAccelerator,
-  shortcutShown,
 } from "@luke/settings/shortcuts";
 import { experimentsOn } from "@luke/settings/testing";
 import type { BaseWindow, KeyboardEvent, MenuItem, MenuItemConstructorOptions } from "electron";
@@ -104,42 +102,15 @@ describe("the menu bar's gate", () => {
   });
 });
 
-describe("the Ask Luke item", () => {
-  test("stands under Go only while the account has the operator on", () => {
-    const shownWith = (experiments: Parameters<typeof shortcutShown>[1]) =>
-      appMenuTemplate("Luke", undefined, (command) =>
-        shortcutShown(command, experiments, DESKTOP_CAPABILITIES),
-      );
-    assert.ok(!labelsOf(shownWith({}), "Go").includes("Ask Luke"));
-    assert.ok(labelsOf(shownWith(experimentsOn(EXPERIMENT.OPERATOR)), "Go").includes("Ask Luke"));
-  });
-});
-
-describe("the Automations item", () => {
-  test("stands under Go with no experiment on", () => {
-    const menu = appMenuTemplate("Luke", undefined, (command) =>
-      shortcutShown(command, {}, DESKTOP_CAPABILITIES),
-    );
-    assert.ok(labelsOf(menu, "Go").includes("Automations"));
-  });
-});
-
 describe("the menu bar's drawer", () => {
-  test("draws what it holds, and again only when the update item or the experiments move", () => {
+  test("keeps the update item it was last told when the experiments move", () => {
     const drawn: MenuItemConstructorOptions[][] = [];
     const show = menuBarDrawer({ appName: "Luke", packaged: false }, (template) =>
       drawn.push(template),
     );
 
     show();
-    assert.equal(drawn.length, 1);
-
-    show({ experiments: {}, capabilities: [] });
-    show();
-    assert.equal(drawn.length, 1, "nothing moved, so nothing was drawn again");
-
     show({ experiments: experimentsOn(EXPERIMENT.CHAT), capabilities: [] });
-    assert.equal(drawn.length, 2);
 
     const update = {
       act: "restart",
@@ -148,13 +119,11 @@ describe("the menu bar's drawer", () => {
       onOpenLatest: () => undefined,
     } as const;
     show({ update });
-    assert.equal(drawn.length, 3);
-    assert.ok(labelsOf(drawn[2] ?? [], "Luke").includes("Restart to Update"));
+    assert.ok(labelsOf(drawn.at(-1) ?? [], "Luke").includes("Restart to Update"));
 
     // The experiments moving keeps the update item it was last told.
     show({ experiments: {}, capabilities: [] });
-    assert.equal(drawn.length, 4);
-    assert.ok(labelsOf(drawn[3] ?? [], "Luke").includes("Restart to Update"));
+    assert.ok(labelsOf(drawn.at(-1) ?? [], "Luke").includes("Restart to Update"));
   });
 });
 

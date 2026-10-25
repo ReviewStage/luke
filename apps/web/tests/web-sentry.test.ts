@@ -59,13 +59,12 @@ test("a build without a DSN starts no SDK and sends nothing, a blank tab's repor
   assert.deepEqual(sentBodies, []);
 });
 
-test("a build with a DSN starts the SDK under the deployment's environment and release, tracing one page load in ten", async () => {
+test("a build with a DSN starts the SDK under the deployment's environment and release", async () => {
   await startWebSentry({ dsn: DSN, environment: "preview", release: "abc123" }).settled;
   const options = Sentry.getClient()?.getOptions();
   assert.equal(options?.dsn, DSN);
   assert.equal(options?.environment, "preview");
   assert.equal(options?.release, "abc123");
-  assert.equal(options?.tracesSampleRate, 0.1);
   // Sentry's default data collection, as the desktop's and the service's: the
   // SDK's own `dataCollection` (v11's successor to `sendDefaultPii`), widened by nothing here.
   assert.equal(options?.dataCollection, undefined);

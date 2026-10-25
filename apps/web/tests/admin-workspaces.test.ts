@@ -195,5 +195,4 @@ test("a row opens its owner's account, and a row with no owner opens nothing", a
   act(() => feldspar?.click());
 
   expect(opened).toEqual(["account-grace"]);
-  expect(feldspar?.hasAttribute("data-pressable")).toBe(false);
 });

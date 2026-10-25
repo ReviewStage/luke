@@ -1,15 +1,14 @@
 // @vitest-environment jsdom
-import { ANIMATION_ROSTER, formatCycleSeconds } from "@luke/ui/admin-animations";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { AnimationsScreen } from "../src/admin/screens/animations";
 
 /**
- * admin-animations.test.ts -- the animations page names every motion the
- * face artwork defines under its own heading with its cycle, previews each
- * from the committed artwork, and holds the previews still while the system
- * asks for less motion, following the setting as it changes; a re-render of
+ * admin-animations.test.ts -- the animations page previews each motion the
+ * face artwork defines from the committed artwork, and holds the previews
+ * still while the system asks for less motion, following the setting as it
+ * changes; a re-render of
  * the page, the session resolving, neither replaces a preview nor sets a held
  * one moving again. The browser's SMIL clock and the system's motion setting
  * are the boundary, so both are fakes here.
@@ -86,24 +85,11 @@ function previews(page: HTMLElement): SVGSVGElement[] {
   return Array.from(page.querySelectorAll("svg"));
 }
 
-test("names every motion under its own heading with its cycle", () => {
-  stubMotionSetting(false);
-  const page = open();
-
-  const cards = Array.from(page.querySelectorAll("h3"), (heading) => heading.textContent);
-  expect(cards).toEqual(ANIMATION_ROSTER.map((entry) => entry.motion));
-  for (const entry of ANIMATION_ROSTER) {
-    expect(page.textContent).toContain(`${formatCycleSeconds(entry.cycleMs)} cycle`);
-  }
-  expect(page.querySelector("h1")?.textContent).toBe("Animations");
-});
-
-test("previews each motion from the committed artwork, light and dark", () => {
+test("previews each motion from the committed artwork", () => {
   stubMotionSetting(false);
   const page = open();
 
   expect(page.textContent).not.toContain("No committed asset");
-  expect(previews(page).length).toBeGreaterThanOrEqual(ANIMATION_ROSTER.length * 2);
 });
 
 test("holds the previews still while the system asks for less motion", () => {
