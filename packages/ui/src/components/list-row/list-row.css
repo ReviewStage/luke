@@ -121,7 +121,11 @@
     contain: layout style;
   }
 
+  /* Note that a swipe row's press stands in its slide, so it is reached through it, or that row stands shorter than the rows around it. */
   :is(.luke-list[data-density="dense"] > .luke-list-row, .luke-list-row[data-density="dense"])
+  > .luke-list-row-main,
+  :is(.luke-list[data-density="dense"] > .luke-list-row, .luke-list-row[data-density="dense"])
+    > .luke-list-row-slide
     > .luke-list-row-main {
     min-height: var(--luke-control-height);
   }
@@ -376,7 +380,7 @@
     margin-block-start: var(--luke-list-row-inset-block);
   }
 
-  .luke-list-row:not([data-actions="hover"]) .luke-list-row-actions:has(+ .luke-list-row-more) {
+  .luke-list-row .luke-list-row-actions:has(+ .luke-list-row-more) {
     padding-inline-end: 0;
   }
 
@@ -529,64 +533,23 @@
   }
 
   /* Where there is a hover, a row whose acts come in on hover keeps no
-     room for them at rest: its words run to its metadata, and its metadata
-     ends the row at its end inset. The acts take their room only while they
-     stand, the row in hand, holding the keyboard, or its menu open, the end
-     stepping aside for them (above) and the title cut anew before them, as
-     a title is cut wherever its row narrows. At rest each keeps its place
-     but takes no room, standing out of the row's flow in its end's place
-     (`position: absolute`, its grid area its containing block), so its
-     buttons stand where they will show. Its ⋯, beside acts, comes in with
-     them, last, in its end's place, and keeps no track of its own. Note that
-     the acts stand clear of the ⋯ by its width (`--luke-list-row-more-size`,
-     its button's), because they are two boxes in one track. A row that
-     offers a menu and no acts keeps its ⋯ in its own track beside its end,
-     which nothing steps in for, and so does every row on a screen with no
-     hover, where the ⋯ is always shown and the acts keep their room (above). */
+     room for them at rest: its words run to its metadata. The acts take
+     their room only while they stand, the row in hand, holding the keyboard,
+     or its menu open, the end stepping aside for them (above) and the title
+     cut anew before them, as a title is cut wherever its row narrows. At
+     rest they keep their place but take no room, standing out of the row's
+     flow in their end's place (`position: absolute`, its grid area its
+     containing block), so their buttons stand where they will show. The ⋯ is
+     not one of them: it keeps its own track last, shown or not, whatever the
+     row's acts are, so every row's metadata ends the same distance from the
+     row's end, and the times of a list stand in one column. */
   @media (hover: hover) {
     .luke-list-row[data-actions="hover"] {
-      --luke-list-row-more-size: var(--luke-control-height);
-      --luke-list-row-acts-clear: 0px;
-
       position: relative;
     }
 
-    :is(
-        .luke-list:is([data-density="compact"], [data-density="dense"]) > .luke-list-row,
-        .luke-list-row:is([data-density="compact"], [data-density="dense"])
-      )[data-actions="hover"] {
-      --luke-list-row-more-size: var(--luke-space-24);
-    }
-
-    .luke-list-row[data-actions="hover"]:has(.luke-list-row-actions + .luke-list-row-more) {
-      --luke-list-row-acts-clear: calc(
-        var(--luke-list-row-inset-inline) +
-        var(--luke-list-row-more-size) +
-        var(--luke-space-4)
-      );
-    }
-
-    .luke-list-row[data-actions="hover"]:has(> .luke-list-row-actions + .luke-list-row-more)
-      > .luke-list-row-main,
-    .luke-list-row[data-actions="hover"]
-      > .luke-list-row-slide:has(> .luke-list-row-actions + .luke-list-row-more)
-      > .luke-list-row-main {
-      padding-inline-end: var(--luke-list-row-inset-inline);
-    }
-
-    .luke-list-row[data-actions="hover"] .luke-list-row-actions + .luke-list-row-more {
-      grid-column: end;
-      justify-self: end;
-      margin-inline: 0 var(--luke-list-row-inset-inline);
-      padding-inline-end: 0;
-    }
-
-    .luke-list-row[data-actions="hover"] .luke-list-row-actions {
-      margin-inline-end: var(--luke-list-row-acts-clear);
-    }
-
     .luke-list-row[data-actions="hover"]:not(:hover, :has(:focus-visible), [data-menu-open="true"])
-      :is(.luke-list-row-actions, .luke-list-row-actions + .luke-list-row-more) {
+      .luke-list-row-actions {
       position: absolute;
     }
   }
