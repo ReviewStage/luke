@@ -519,9 +519,10 @@ type DraftEdit = Extract<
  * that words the id wrote there later win the place (`adoptDrafts`), and the
  * files attached to other words never go with them.
  */
-function filesGoWith(theirs: KeptDraft, standing: KeptDraft | undefined): boolean {
+function filesGoWith(owner: Owner, theirs: KeptDraft, standing: KeptDraft | undefined): boolean {
   if (!stored(theirs)) return standing === undefined;
-  return standing !== undefined && Equal.equals({ ...theirs, attachments: [] }, standing);
+  // Note that the two are compared as storage keeps them, since a box may hold a field unset that storage leaves out.
+  return standing !== undefined && sameStored(owner, theirs, standing);
 }
 
 /** The drafts the window holds with the files of `theirs` laid over them at each place their files go with what storage holds as the owner's (`filesGoWith`), a draft of files alone where none stands there. */
@@ -535,6 +536,7 @@ function withFilesOf(
     .filter((kept) => kept.attachments.length > 0)
     .filter((kept) =>
       filesGoWith(
+        owner,
         kept,
         standing.find((each) => Equal.equals(each.place, kept.place)),
       ),

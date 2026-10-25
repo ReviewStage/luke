@@ -523,6 +523,46 @@ test("the files attached to a draft while only the account's address was known s
   );
 });
 
+test("an inbox answer's picture moves with it as the id lands before its words reach storage, its unset steps and press read as storage leaves them out", async () => {
+  const place = {
+    kind: DRAFT_PLACE.INBOX,
+    planId: INVITES.plan.id,
+    agentId: INVITES.agent.id,
+    itemId: "item-1",
+    revision: 1,
+  } as const;
+  const picture = { name: "diagram.png", mediaType: "image/png", data: "iVBORw0KGgo=" } as const;
+  let held: DraftControl | undefined;
+  function Box({ account }: { account: Identity }): null {
+    useDraftsOwner(account);
+    held = useDraft(place);
+    return null;
+  }
+  const root = createRoot(document.body.appendChild(document.createElement("div")));
+  roots.push(root);
+  const registry = AtomRegistry.make();
+  const show = (account: Identity) =>
+    act(async () => root.render(onRegistry(registry, createElement(Box, { account }))));
+  await show({ email: DEAN.email });
+  const box = () => held ?? assert.fail("the box is drawn");
+  act(() =>
+    box().update((was) => ({
+      ...was,
+      text: "Looks good",
+      attachments: [picture],
+      steps: undefined,
+      press: undefined,
+    })),
+  );
+
+  await show(DEAN);
+  assert.equal(box().draft.text, "Looks good");
+  assert.deepEqual(
+    box().draft.attachments.map((each) => each.name),
+    ["diagram.png"],
+  );
+});
+
 test("where the id's own later words win a place its address held a picture at, the picture stays with the words it was attached to rather than joining them", async () => {
   const place = { kind: DRAFT_PLACE.CHAT, channelId: "channel-1" } as const;
   const picture = { name: "old.png", mediaType: "image/png", data: "iVBORw0KGgo=" } as const;
