@@ -235,6 +235,67 @@ const CHIPS_MEDIA_CALL = {
 } as const;
 
 /**
+ * The names the panel's task surfaces' block of the theme adds (tasks.css,
+ * moving onto utilities), by the group tailwind-merge reads each in.
+ */
+const TASK_SURFACES = {
+  text: ["section-inline", "picture-caption"],
+  tracking: ["busy"],
+  spacing: [
+    "plan-byline-room",
+    "plan-unit-row",
+    "plan-changed-note",
+    "content-inset",
+    "bubble",
+    "transcript-gutter",
+    "tool-chip",
+    "conversation-empty",
+    "conversation-empty-wide",
+    "conversation-older",
+    "file-tree",
+    "crumb-tree",
+    "popover-narrow",
+    "page-versions-end",
+    "image-diff-side",
+    "snippet-pending",
+    "pull-request-page",
+    "chapter-rail",
+    "review-badge",
+    "comment-editor",
+    "branch-chip",
+    "label-dot",
+    "line-comment",
+    "boxed-inset",
+    "check-glyph",
+    "deployment-open",
+    "annotation",
+    "annotation-turn",
+    "annotation-face",
+    "annotation-face-x",
+    "annotation-gap",
+    "annotation-more",
+    "log-over-composer",
+    "todos-dock",
+    "dictation-clock",
+    "viewer-text",
+    "viewer-other",
+    "viewer-stage",
+    "viewer-stage-height",
+    "shells-pane",
+    "servers-list",
+    "issue-chip",
+    "picture-most",
+    "picture-stand-in",
+    "picture-describe",
+    "picture-glyph",
+    "comment-margin",
+    "comment-card",
+    "comment-indent",
+  ],
+  shadow: ["floating-edge"],
+} as const;
+
+/**
  * The names the page patterns' block of the theme adds (layout, settings,
  * the collection, detail, public, and auth pages, the empty and error
  * states, the failure note, and the group header), by the group
@@ -303,6 +364,7 @@ const merge = extendTailwindMerge({
         ...ROWS_NAVIGATION.text,
         ...CHIPS_MEDIA_CALL.text,
         ...PAGE_PATTERNS.text,
+        ...TASK_SURFACES.text,
       ],
       "font-weight": [
         "text",
@@ -318,7 +380,7 @@ const merge = extendTailwindMerge({
         ...CONTENT_TEXT["font-weight"],
         ...PAGE_PATTERNS["font-weight"],
       ],
-      tracking: ["title", ...PANEL_SHELL.tracking],
+      tracking: ["title", ...PANEL_SHELL.tracking, ...TASK_SURFACES.tracking],
       leading: [
         "body",
         ...FEEDBACK_DISPLAY.leading,
@@ -397,6 +459,7 @@ const merge = extendTailwindMerge({
         ...PANEL_SHELL.spacing,
         ...CHIPS_MEDIA_CALL.spacing,
         ...PAGE_PATTERNS.spacing,
+        ...TASK_SURFACES.spacing,
       ],
       radius: [
         "control",
@@ -433,6 +496,7 @@ const merge = extendTailwindMerge({
         ...ROWS_NAVIGATION.shadow,
         ...CHIPS_MEDIA_CALL.shadow,
         ...PAGE_PATTERNS.shadow,
+        ...TASK_SURFACES.shadow,
       ],
       font: ["ui"],
       aspect: [...CHIPS_MEDIA_CALL.aspect],
