@@ -59,9 +59,16 @@ export const CODER = {
    * The repositories whose agents' sandboxes open larger than
    * `SANDBOX_VCPUS`, by `owner/name` lowercased, as `sandboxVcpus` reads
    * them; a repository asks for more by a row here. Luke's own is four,
-   * because oxlint with JS plugins reserves its arena as one mapping of about
-   * 6 GiB, which the kernel's default overcommit refuses where memory is the
-   * two-vCPU 4 GB, so its lint panicked there at any thread count.
+   * because its typecheck needs about 5 GB of real memory. Measured on a
+   * fresh checkout: `pnpm typecheck` takes 83 seconds at four vCPUs and peaks
+   * near 5.2 GB, and at two vCPUs (4 GB) it is killed out of memory at a
+   * workspace concurrency of 4 or 2; at 1 it passes in 194 seconds with 216
+   * MiB free, before the agent's own runner is counted. The service's tests
+   * take 1,527 seconds there against 415. Note that oxlint is not the limit:
+   * with JS plugins it reserves about 6 GiB per thread, which the kernel's
+   * default overcommit refuses at 4 GB, but it uses under one, and
+   * `vm.overcommit_memory=1`, set on every boot, since a resumed sandbox
+   * boots with the default, lets it lint there in 36 seconds.
    */
   SANDBOX_VCPUS_BY_REPOSITORY: new Map([["reviewstage/luke", 4]]) as ReadonlyMap<string, number>,
   /**
