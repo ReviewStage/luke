@@ -169,6 +169,7 @@ function fakeService(options: { replaceRefused?: boolean; txid?: string } = {}) 
             asked.push(["runs-live", automationId, userId]);
             return live.runs ?? { failure: AUTOMATION_CALL_FAILURE.NOT_FOUND };
           }),
+    workspaceRunsLive: () => Effect.never,
   };
   return { client, asked, live };
 }

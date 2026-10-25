@@ -3,6 +3,7 @@ import {
   Badge,
   BUTTON_VARIANT,
   Button,
+  CHIP_CUT,
   CHIP_LOOK,
   CHIP_SIZE,
   CHIP_WIDTH,
@@ -25,8 +26,9 @@ import { CatalogSection } from "../section";
  * menu open, unavailable, and with a long name in a narrow column; a row of
  * filters, one pressed at a time; a row of compact counts, one pressed and
  * one busy; each tone, and each in a compact pill beside a badge of its size; each width; a chip drawn as
- * its mark alone; a name in the code face; and removable filters, each
- * springing in as one is added and scaling out as its × lifts it.
+ * its mark alone; a name in the code face; removable filters, each
+ * springing in as one is added and scaling out as its × lifts it; and a
+ * branch cut in its middle, its start fading where the cut stands.
  */
 
 const FILTERS = ["All", "Tasks", "Agents", "Files"] as const;
@@ -228,6 +230,21 @@ function Chips(): React.JSX.Element {
                 <ChipName>acme/a-repository-whose-name-runs-past-its-column</ChipName>
               </Chip>
             ))}
+          </Stack>
+        </div>
+      </CatalogSection>
+      <CatalogSection id="chips-middle-cut" title="Cut in the middle, keeping the end">
+        <div className="catalog-narrow">
+          <Stack gap={GAP.CONTROL} align={ALIGN.START}>
+            <Chip look={CHIP_LOOK.PILL}>
+              <ProviderMark provider={MARK_PROVIDER.GITHUB} />
+              <ChipName mono cut={CHIP_CUT.MIDDLE}>
+                luke/pull-request-header-menu-and-pill
+              </ChipName>
+            </Chip>
+            <Chip look={CHIP_LOOK.TOOLBAR} chevron>
+              <ChipName cut={CHIP_CUT.MIDDLE}>acme/a-repository-whose-name-runs-past-it</ChipName>
+            </Chip>
           </Stack>
         </div>
       </CatalogSection>

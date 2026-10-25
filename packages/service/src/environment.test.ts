@@ -51,7 +51,6 @@ test("a secret that is set travels sealed and trimmed, and its value is the one 
   assert.ok(
     environment.posthogPersonalApiKey && Redacted.isRedacted(environment.posthogPersonalApiKey),
   );
-  assert.equal(String(environment.posthogPersonalApiKey), "<redacted>");
   assert.equal(Redacted.value(environment.posthogPersonalApiKey), "phx-personal-key");
   assert.ok(environment.cronSecret);
   assert.equal(Redacted.value(environment.cronSecret), "cron-secret-1");

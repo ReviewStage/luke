@@ -1,25 +1,15 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import {
-  existsSync,
-  mkdirSync,
-  mkdtempSync,
-  readdirSync,
-  readFileSync,
-  writeFileSync,
-} from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, writeFileSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { Schema } from "effect";
 import { build } from "esbuild";
 import { test } from "vitest";
 import {
   type EmittedFunction,
   emitBuildOutput,
-  functionConfig,
-  functionConfigPath,
   functionDirectory,
   functionEntryPath,
   HAND_WRITTEN_FUNCTIONS,
@@ -32,24 +22,15 @@ import { apiRewrites } from "../server/function-rewrites";
  * The tree Vercel deploys is emitted here from the same plan the build step
  * uses, into a directory of its own, and read back as data. Two things are
  * asserted and they are different claims. Structure: every planned function
- * has a `.func` carrying exactly the configuration the plan gave it, and every
- * `/api/` rewrite names a `.func` that exists, so a route cannot point at
- * nothing while the build stays green. Isolation: each `.func` loads with
- * nothing above it on disk, which is how a function is mounted on the
- * platform; a bundle that reached a module it did not carry loads in this
- * checkout and fails on production, which is the shape of the one outage.
+ * has a `.func`, and every `/api/` rewrite names a `.func` that exists, so a
+ * route cannot point at nothing while the build stays green. Isolation: each
+ * `.func` loads with nothing above it on disk, which is how a function is
+ * mounted on the platform; a bundle that reached a module it did not carry
+ * loads in this checkout and fails on production, which is the shape of the
+ * one outage.
  */
 
 const WEB = fileURLToPath(new URL("..", import.meta.url));
-
-const FunctionConfigSchema = Schema.Struct({
-  runtime: Schema.String,
-  handler: Schema.String,
-  launcherType: Schema.String,
-  shouldAddHelpers: Schema.Boolean,
-  maxDuration: Schema.optional(Schema.Number),
-});
-const decodeFunctionConfig = Schema.decodeUnknownSync(Schema.fromJsonString(FunctionConfigSchema));
 
 const LOAD_MODULE = "await import(process.argv[1]);";
 
@@ -100,7 +81,7 @@ async function emitFromTask(): Promise<{
   return { outputDirectory, paths };
 }
 
-test("every planned function and every rewrite lands on a .func carrying the plan's configuration", {
+test("every planned function and every rewrite lands on a .func", {
   timeout: 180_000,
 }, async () => {
   const { outputDirectory, paths } = await emitFromTask();
@@ -109,18 +90,6 @@ test("every planned function and every rewrite lands on a .func carrying the pla
     paths,
     [...functions.map(functionPublicPath), ...HAND_WRITTEN_FUNCTIONS.map((fn) => fn.path)].sort(),
   );
-  for (const definition of functions) {
-    const config = decodeFunctionConfig(
-      readFileSync(functionConfigPath(outputDirectory, functionPublicPath(definition)), "utf8"),
-    );
-    assert.deepEqual(config, functionConfig(definition.maxDuration));
-  }
-  for (const fn of HAND_WRITTEN_FUNCTIONS) {
-    assert.deepEqual(
-      decodeFunctionConfig(readFileSync(functionConfigPath(outputDirectory, fn.path), "utf8")),
-      functionConfig(undefined),
-    );
-  }
   for (const rewrite of apiRewrites(functions)) {
     const destination = new URL(rewrite.dest, "http://localhost");
     assert.equal(

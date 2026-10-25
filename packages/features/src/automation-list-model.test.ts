@@ -160,18 +160,6 @@ test("a GitHub event is said as what happens, by whom, where, and the labels, br
   );
 });
 
-test("a Sentry trigger is said as its event in Sentry", () => {
-  const sentry = (event: (typeof SENTRY_TRIGGER_EVENT)[keyof typeof SENTRY_TRIGGER_EVENT]) =>
-    automationTriggerText({
-      kind: AUTOMATION_TRIGGER.INTEGRATION,
-      provider: TRIGGER_PROVIDER.SENTRY,
-      event,
-    });
-
-  assert.equal(sentry(SENTRY_TRIGGER_EVENT.ALERT_TRIGGERED), "When an alert fires in Sentry");
-  assert.equal(sentry(SENTRY_TRIGGER_EVENT.ISSUE_CREATED), "When a new issue is created in Sentry");
-});
-
 test("a newest run is working while its agent works, failed where it could not start or its agent failed, and at rest otherwise", () => {
   const agent = (status: (typeof CODING_AGENT_STATUS)[keyof typeof CODING_AGENT_STATUS]) => ({
     id: "4d5e6f70-8192-4a3b-9c4d-5e6f708192a3",

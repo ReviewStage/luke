@@ -4,6 +4,7 @@ import {
   AUTOMATION_TRIGGER,
   type AutomationRunSummary,
   type AutomationSummary,
+  type AutomationWorkspaceRun,
   automationActionSchema,
   automationFiringSchema,
   automationGuardsSchema,
@@ -45,6 +46,14 @@ export const automationRunsLiveAnswerSchema = EffectSchema.Struct({
 });
 
 export type AutomationRunsLiveAnswer = typeof automationRunsLiveAnswerSchema.Type;
+
+/** A workspace's runs sealed for following: the address, and one statement. The service answers `unavailable` where its deployment's Realtime is misconfigured. */
+export const automationWorkspaceRunsLiveAnswerSchema = EffectSchema.Struct({
+  url: EffectSchema.String,
+  queries: EffectSchema.Struct({ runs: sealedLiveQuerySchema }),
+});
+
+export type AutomationWorkspaceRunsLiveAnswer = typeof automationWorkspaceRunsLiveAnswerSchema.Type;
 
 /** The agent a run started as its row delivers it, and what its status is read from; null throughout where it started none, or it is gone. */
 const runAgentFields = {
@@ -117,6 +126,19 @@ export const automationRunsLiveRowsSchema = EffectSchema.Struct({
 });
 
 export type AutomationRunsLiveRows = typeof automationRunsLiveRowsSchema.Type;
+
+/** A workspace's runs as Realtime delivers them, each with the automation it is a run of, decoded at the boundary before anything reads them. */
+export const automationWorkspaceRunsLiveRowsSchema = EffectSchema.Struct({
+  runs: EffectSchema.Array(
+    EffectSchema.Struct({
+      ...runLiveRowSchema.fields,
+      automationId: EffectSchema.String,
+      automationName: EffectSchema.String,
+    }),
+  ),
+});
+
+export type AutomationWorkspaceRunsLiveRows = typeof automationWorkspaceRunsLiveRowsSchema.Type;
 
 type RunAgentRow = {
   readonly [Key in keyof typeof runAgentFields]: (typeof runAgentFields)[Key]["Type"];
@@ -279,6 +301,23 @@ export function automationRunsOfLiveRows(
   }));
 }
 
+/** A workspace's runs as the Runs tab reads them, newest first, each run's agent read at `now`. */
+export function automationWorkspaceRunsOfLiveRows(
+  rows: AutomationWorkspaceRunsLiveRows,
+  now: number,
+): readonly AutomationWorkspaceRun[] {
+  return rows.runs.toSorted(latestFired).map((row) => ({
+    id: row.id,
+    firing: row.firing,
+    status: row.status,
+    reason: row.reason,
+    agent: runAgentOf(row, now),
+    firedAt: row.firedAt,
+    settledAt: row.settledAt,
+    automation: { id: row.automationId, name: row.automationName },
+  }));
+}
+
 /** The next instant past `now` the clock alone moves the automations' newest runs; none where only a row moves them. */
 export function automationsGraceEdge(rows: AutomationsLiveRows, now: number): number | undefined {
   return earliest(rows.automations.map((row) => clockEdgeOf(row, now)));
@@ -287,6 +326,14 @@ export function automationsGraceEdge(rows: AutomationsLiveRows, now: number): nu
 /** The next instant past `now` the clock alone moves an automation's runs; none where only a row moves them. */
 export function automationRunsGraceEdge(
   rows: AutomationRunsLiveRows,
+  now: number,
+): number | undefined {
+  return earliest(rows.runs.map((row) => clockEdgeOf(row, now)));
+}
+
+/** The next instant past `now` the clock alone moves a workspace's runs; none where only a row moves them. */
+export function automationWorkspaceRunsGraceEdge(
+  rows: AutomationWorkspaceRunsLiveRows,
   now: number,
 ): number | undefined {
   return earliest(rows.runs.map((row) => clockEdgeOf(row, now)));

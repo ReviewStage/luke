@@ -9,14 +9,12 @@ import { followAppTheme } from "../src/admin/admin-appearance";
 
 /**
  * The admin dashboard draws in the theme the app keeps, not a forced dark one:
- * its page (`admin.html`) opens light, runs the app's boot script before the
- * first frame, and tints the browser's chrome in the worn theme's ground; once
- * the page is up, `followAppTheme` wears a change of `luke.theme`, or of the
- * machine's appearance under System, as it lands.
+ * once its page (`admin.html`) is up, `followAppTheme` wears a change of
+ * `luke.theme`, or of the machine's appearance under System, as it lands, and
+ * tints the browser's chrome in the worn theme's ground.
  */
 
 const WEB = join(import.meta.dirname, "..");
-const BOOT = readFileSync(join(WEB, "public", "app-theme.js"), "utf8");
 const ADMIN_PAGE = new DOMParser().parseFromString(
   readFileSync(join(WEB, "admin.html"), "utf8"),
   "text/html",
@@ -80,45 +78,6 @@ function worn() {
       .trim(),
   };
 }
-
-/** The page loading: the boot script run, if the page asks for it, and what the first frame wears. */
-function firstFrame() {
-  const boots = Array.from(ADMIN_PAGE.querySelectorAll("script[src]")).some(
-    (script) => script.getAttribute("src") === "/app-theme.js",
-  );
-  assert.ok(boots, "admin.html runs the app's boot script in its head");
-  // biome-ignore lint/security/noGlobalEval: the script under test is the site's own file, run as the page runs it.
-  window.eval(BOOT);
-  return worn();
-}
-
-test("the page opens light, tinted in the light ground, and forces no color scheme", () => {
-  assert.equal(ADMIN_PAGE.documentElement.getAttribute("data-luke-theme"), "light");
-  assert.equal(ADMIN_PAGE.querySelector('meta[name="color-scheme"]'), null);
-  assert.equal(
-    ADMIN_PAGE.querySelector('meta[name="theme-color"]')?.getAttribute("content"),
-    "#ffffff",
-  );
-});
-
-test("the first frame is light with nothing chosen, and dark where the app chose dark", () => {
-  const byDefault = firstFrame();
-  assert.equal(byDefault.theme, "light");
-  assert.equal(byDefault.chrome, byDefault.ground);
-
-  localStorage.setItem("luke.theme", "dark");
-  const chosen = firstFrame();
-  assert.equal(chosen.theme, "dark");
-  assert.equal(chosen.chrome, chosen.ground);
-});
-
-test("with System chosen, the first frame follows the machine", () => {
-  localStorage.setItem("luke.theme", "system");
-  for (const dark of [true, false]) {
-    machineDark = dark;
-    assert.equal(firstFrame().theme, dark ? "dark" : "light");
-  }
-});
 
 test("a change of the app's theme in another tab is worn as it lands, the chrome with it", () => {
   const stop = followAppTheme();

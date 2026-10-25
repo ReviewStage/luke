@@ -510,7 +510,7 @@ export function IssuePickerChip({
   };
 
   return (
-    <div className="issue-picker-chip" ref={box}>
+    <div className="issue-picker-chip relative min-w-0" ref={box}>
       {trigger !== undefined ? (
         <Chip
           ref={button}

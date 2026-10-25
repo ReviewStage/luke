@@ -55,8 +55,8 @@ import { motionKey as motionKeyAttribute } from "../list-motion/list-motion.js";
  * chevron where `chevron` asks for one. Its words go in a `ChipName`, which
  * cuts them short rather than letting them push past the row around it,
  * fading out at their end while it does, as a browser's tab does, or, where
- * their end is what tells one from another, in their middle at an ellipsis
- * (`cut`, a branch's last words, as GitHub cuts one), in the code face where
+ * their end is what tells one from another, in their middle, the end of
+ * their start fading where the cut stands (`cut`, a branch's last words), in the code face where
  * they name code (`mono`, a branch). A leading mark, a
  * glyph or a picture, stands at the control's glyph size. It takes no class
  * or style: its outer layout is its container's.
@@ -121,8 +121,8 @@ const NAME_JOINS = /[/\-_.:]/u;
 /**
  * The end a name cut in its middle keeps whole: its last few characters,
  * after the first join among them where one stands, so it starts on a word
- * (“and-pill” rather than “u-and-pill”), the ellipsis standing for
- * the join; none for a name too short to cut in two.
+ * (“and-pill” rather than “u-and-pill”), the fade before it standing
+ * for the join; none for a name too short to cut in two.
  */
 function keptEnd(name: string): string {
   if (name.length <= MIDDLE_KEPT + MIDDLE_KEPT / 3) return "";
@@ -441,11 +441,25 @@ type ChipNameProps = {
 const NAME =
   "luke-chip-name overflow-hidden whitespace-nowrap group-data-[look=field]/chip:flex-1 group-data-[look=field]/chip:text-left group-data-[icon-only=true]/chip:absolute group-data-[icon-only=true]/chip:-m-px group-data-[icon-only=true]/chip:size-px group-data-[icon-only=true]/chip:[clip-path:inset(50%)]";
 
+/** A name cut in its middle: the start, which gives way first, fading out where it is measured cut short. */
+function ChipNameStart({ children }: { children: string }): React.JSX.Element {
+  const [measured, clipped] = useClipped(children);
+  return (
+    <span
+      ref={measured}
+      className="luke-chip-name-start min-w-0 overflow-hidden whitespace-pre"
+      data-overflow={String(clipped)}
+    >
+      {children}
+    </span>
+  );
+}
+
 /**
  * A chip's words, cut short rather than pushing past the row it stands in:
- * fading out at their end, or cut in their middle at an ellipsis, which says
- * a cut stands there where a fade with words after it would not; in the code
- * face where they name code.
+ * fading out at their end, or cut in their middle, the start fading out
+ * where the cut stands and the kept end whole after it; in the code face
+ * where they name code.
  */
 export function ChipName(props: ChipNameProps): React.JSX.Element {
   const [measured, clipped] = useClipped();
@@ -468,9 +482,7 @@ export function ChipName(props: ChipNameProps): React.JSX.Element {
         props.children
       ) : (
         <>
-          <span className="luke-chip-name-start min-w-0 overflow-hidden whitespace-pre">
-            {props.children.slice(0, -kept.length)}
-          </span>
+          <ChipNameStart>{props.children.slice(0, -kept.length)}</ChipNameStart>
           <span className="luke-chip-name-end">{kept}</span>
         </>
       )}

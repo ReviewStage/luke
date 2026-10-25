@@ -364,11 +364,14 @@ it.effect(
     }),
 );
 
-it.effect("the floating call window's tile turns video off and on as the panel's does", () =>
+it.effect.each([
+  { case: "the panel's", role: ROLE.PANEL },
+  { case: "the floating call window's", role: ROLE.CALL },
+])("$case tile's Restart video and Video off reach the host's toggle", ({ role }) =>
   Effect.gen(function* () {
     const f = yield* fixture();
-    assert.equal(yield* f.perform(ROLE.CALL, ACT_KIND.VOICE_SET_VIDEO, { on: true }), "done");
-    assert.equal(yield* f.perform(ROLE.CALL, ACT_KIND.VOICE_SET_VIDEO, { on: false }), "done");
+    assert.equal(yield* f.perform(role, ACT_KIND.VOICE_SET_VIDEO, { on: true }), "done");
+    assert.equal(yield* f.perform(role, ACT_KIND.VOICE_SET_VIDEO, { on: false }), "done");
     assert.deepEqual(f.asked, [true, false]);
     assert.deepEqual(f.avatarNow(), {
       status: AVATAR_STATUS.ENDED,
@@ -426,19 +429,6 @@ it.effect(
       }
       assert.deepEqual(f.avatarNow(), { status: AVATAR_STATUS.STARTING });
     }),
-);
-
-it.effect("the tile's Restart video and Video off reach the host's toggle", () =>
-  Effect.gen(function* () {
-    const f = yield* fixture();
-    assert.equal(yield* f.perform(ROLE.PANEL, ACT_KIND.VOICE_SET_VIDEO, { on: true }), "done");
-    assert.equal(yield* f.perform(ROLE.PANEL, ACT_KIND.VOICE_SET_VIDEO, { on: false }), "done");
-    assert.deepEqual(f.asked, [true, false]);
-    assert.deepEqual(f.avatarNow(), {
-      status: AVATAR_STATUS.ENDED,
-      endReason: AVATAR_END_REASON.USER,
-    });
-  }),
 );
 
 it.effect(
