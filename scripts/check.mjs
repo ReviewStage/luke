@@ -1,6 +1,6 @@
 import { spawn, spawnSync } from "node:child_process";
 
-import { ROOT_TASKS, TEST_TASKS, turboInvocation, WORKSPACE_TASKS } from "./lib/turbo.mjs";
+import { ROOT_TASKS, TEST_TASK, turboInvocation, WORKSPACE_TASKS } from "./lib/turbo.mjs";
 
 // The checks run through Turborepo (`turbo.json`), which hashes each task's
 // inputs and replays a task whose hash it has already seen pass, from the
@@ -122,7 +122,7 @@ if (anyWorkspace && workspaceTasks.length > 0) {
   runs.push({ label: workspaceTasks.join(", "), args: [...workspaceTasks, ...scope] });
 }
 if (anyWorkspace && !parsed.without.includes("test")) {
-  runs.push({ label: "test", args: [...TEST_TASKS, "--concurrency=1", ...scope] });
+  runs.push({ label: "test", args: [TEST_TASK, "--concurrency=1", ...scope] });
 }
 
 // Note that we set exitCode rather than call process.exit, because on macOS a

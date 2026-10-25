@@ -119,7 +119,7 @@ import { FILE_VIEW_HISTORY_CLASS } from "./file-view.js";
 
 /** Who has the tab, or why a step was refused, in a quiet line under the bar, Take over or Hand back at its end, so the address keeps the bar. */
 const STANDING_CLASS =
-  "cloud-browser-standing flex min-w-0 flex-none items-center justify-between gap-control-gap border-b border-border px-(--column-inset) py-tight-gap";
+  "cloud-browser-standing flex min-w-0 flex-none items-center justify-between gap-control-gap border-b border-border px-column-inset py-tight-gap";
 
 /** The body, the page drawn on a canvas of the page's own shape, centred on the well. */
 const BODY_CLASS = "browser-view-body cloud-browser-body items-center justify-center bg-well";

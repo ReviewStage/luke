@@ -171,7 +171,7 @@ import {
   useRef,
   useState,
 } from "react";
-import { ActorMark, automationActor } from "../actor-ref.js";
+import { ACTOR_SIZE, ActorMark, actorMarkWidth, automationActor } from "../actor-ref.js";
 import { useAppCommand } from "../app-commands.js";
 import { useScreenRef, useScreenSplit } from "../column-split.js";
 import { copyThroughShell } from "../copy-feedback.js";
@@ -889,7 +889,7 @@ const EDITOR_SECTION = {
   SHARING: "Sharing",
   TRIGGER: "Trigger",
   PROMPT: "Prompt",
-  RUNS: "Runs",
+  WHERE_IT_RUNS: "Where it runs",
 } as const;
 
 /** How many lines the prompt's field stands, written in or read. */
@@ -898,8 +898,8 @@ const PROMPT_ROWS = 5;
 /**
  * The rows a saved automation's groups stand before it is read, as a
  * scheduled one, the kind most are, runs on a new agent each time: Sharing's
- * Owner; Trigger's Type, Repeats, Time, and Time zone; and Runs' Repository,
- * Runs land in, Model on the account's default, MCP servers, and Archive
+ * Owner; Trigger's Type, Repeats, Time, and Time zone; and Where it runs'
+ * Repository, Runs land in, Model on the account's default, MCP servers, and Archive
  * finished runs, each with the words under its name where it says them.
  */
 const SCHEDULED_ROWS = {
@@ -911,7 +911,7 @@ const SCHEDULED_ROWS = {
     { described: false, controls: [SETTINGS_SKELETON_CONTROL.SELECT] },
     { described: false, controls: [SETTINGS_SKELETON_CONTROL.SELECT] },
   ],
-  [EDITOR_SECTION.RUNS]: [
+  [EDITOR_SECTION.WHERE_IT_RUNS]: [
     { described: false, controls: [SETTINGS_SKELETON_CONTROL.SELECT] },
     { described: false, controls: [SETTINGS_SKELETON_CONTROL.SELECT] },
     { described: true, controls: [SETTINGS_SKELETON_CONTROL.SELECT] },
@@ -919,9 +919,6 @@ const SCHEDULED_ROWS = {
     { described: true, controls: [SETTINGS_SKELETON_CONTROL.SWITCH] },
   ],
 } as const satisfies Record<string, readonly SettingsRowSkeletonShape[]>;
-
-/** The automation's tile before its name, at an actor mark's inline size (`avatar.css`). */
-const SKELETON_TITLE_MARK = "16px";
 
 /** How wide a placeholder page's name stands. */
 const SKELETON_NAME = { TITLE: "160px" } as const;
@@ -973,6 +970,7 @@ function EditorTitle({
             ? { kind: ACTOR_KIND.AUTOMATION, name: NEW_AUTOMATION, state: ACTOR_STATE.REST }
             : automationActor(automation)
         }
+        size={ACTOR_SIZE.PAGE}
       />
       <TextField
         ref={nameField}
@@ -2045,7 +2043,7 @@ function RunsGroup({
   // The other repositories as a save would send them: the one shown first left out.
   const also = draft.alsoRepositories.filter((repository) => repository !== draft.repository);
   return (
-    <SettingsSection title={EDITOR_SECTION.RUNS}>
+    <SettingsSection title={EDITOR_SECTION.WHERE_IT_RUNS}>
       <SettingsRow
         label="Repository"
         description={
@@ -2394,8 +2392,8 @@ function EditorSkeleton({ offersOwner }: { offersOwner: boolean }): React.JSX.El
           <SettingsSection title={EDITOR_SECTION.PROMPT} frame={SETTINGS_SECTION_FRAME.NONE}>
             <PromptSkeleton />
           </SettingsSection>
-          <SettingsSection title={EDITOR_SECTION.RUNS}>
-            <SettingsRowsSkeleton rows={SCHEDULED_ROWS[EDITOR_SECTION.RUNS]} />
+          <SettingsSection title={EDITOR_SECTION.WHERE_IT_RUNS}>
+            <SettingsRowsSkeleton rows={SCHEDULED_ROWS[EDITOR_SECTION.WHERE_IT_RUNS]} />
           </SettingsSection>
         </AutomationForm>
       </AutomationSetup>
@@ -2444,7 +2442,7 @@ export function AutomationPageSkeleton({
     <AutomationPageFrame
       title={
         <Inline gap={GAP.CONTROL}>
-          <Skeleton shape={SKELETON_SHAPE.CIRCLE} width={SKELETON_TITLE_MARK} />
+          <Skeleton shape={SKELETON_SHAPE.CIRCLE} width={actorMarkWidth(ACTOR_SIZE.PAGE)} />
           <Skeleton width={SKELETON_NAME.TITLE} />
         </Inline>
       }
