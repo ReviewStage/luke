@@ -354,6 +354,7 @@ const TASK_SURFACES = {
     "review-badge",
     "comment-editor",
     "branch-chip",
+    "branch-base",
     "label-dot",
     "line-comment",
     "boxed-inset",

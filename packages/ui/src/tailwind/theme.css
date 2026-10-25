@@ -1091,6 +1091,7 @@
      (`.annotation-card`). */
   --spacing-comment-editor: calc(3lh + 2 * var(--luke-space-6));
   --spacing-branch-chip: 22rem; /* off-scale: a branch's name before it is cut */
+  --spacing-branch-base: min(22rem, 50%); /* off-scale: the base's, at most half its row */
   --spacing-label-dot: 10px; /* off-scale: a label's swatch */
   --color-label-dot: var(--label-dot, transparent);
   --spacing-line-comment: 720px; /* off-scale: a line comment's reading measure */
