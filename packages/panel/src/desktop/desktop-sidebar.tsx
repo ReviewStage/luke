@@ -1851,6 +1851,11 @@ function SidebarColumn({
   const openChannel = (channelId: string) => {
     channelPlace.onChoose(channelId);
     openInbox();
+    // Note that a phone's Inbox opens on its list of channels, so a channel chosen in the drawer asks for its stream instead, never a thread left open in it.
+    if (room === SHELL_ROOM.NARROW) {
+      channelPlace.onCloseThread();
+      tasks.inboxView.onListed(false);
+    }
   };
   const openBoard = () => {
     if (!onTasks) onTabChange(PANEL_TAB.TASKS);

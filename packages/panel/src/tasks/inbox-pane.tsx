@@ -1404,7 +1404,13 @@ export function InboxPane({
       {phone !== undefined && onBack !== undefined ? (
         <PhoneHead
           place="inbox-item"
-          start={<BackButton label="Inbox" place={INBOX_PLACE} onBack={onBack} />}
+          start={
+            channel === undefined ? (
+              <BackButton label="Inbox" place={INBOX_PLACE} onBack={onBack} />
+            ) : (
+              <BackButton label={`#${channel.name}`} place={`#${channel.name}`} onBack={onBack} />
+            )
+          }
           title={cardTitle(item.title)}
           end={
             <InboxItemMenu

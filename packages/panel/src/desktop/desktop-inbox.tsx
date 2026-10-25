@@ -27,6 +27,7 @@ import { MemberDirectory } from "../member-directory.js";
 import { NOT_FOUND_THING, NotFound } from "../not-found.js";
 import { pressedWithCommand } from "../press-intent.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
+import { ChannelList } from "../tasks/channel-list.js";
 import { ChannelStream } from "../tasks/channel-stream.js";
 import { shownChannel } from "../tasks/channels-model.js";
 import { agentName } from "../tasks/coding-agent-model.js";
@@ -244,7 +245,16 @@ function InboxShown({
   const channel = streaming
     ? shownChannel(channels.channels ?? [], channelPlace.channelId)
     : undefined;
-  const threadShown = channel !== undefined && channelPlace.threadOpen && chosen !== undefined;
+  // Note that a phone shows one thing at a time across the screen: the list of channels its bar opens, a channel's stream, or a thread in place of the stream.
+  const phone = room === SHELL_ROOM.NARROW;
+  // A phone's list of channels stands while the list is asked for, as the bar's Channels asks, so the window's Back returns to it from a stream.
+  const channelsListed = streaming && phone && view.listed;
+  const threadShown =
+    channel !== undefined &&
+    chosen !== undefined &&
+    channelPlace.threadId === chosen.item.id &&
+    !channelsListed;
+  const threadBeside = threadShown && !phone;
   // A missing item's pane stands where its item would, so a narrow Inbox shows the notice rather than the list.
   // Note that the window keeps whether the list was asked for, so its history can go back to it.
   const { listed, onListed, onSingle } = view;
@@ -409,7 +419,13 @@ function InboxShown({
         : choiceOf(listedThread)),
       opened: true,
     });
-    channelPlace.onOpenThread();
+    channelPlace.onOpenThread(thread.id);
+  };
+  // A channel pressed on a phone's list opens on its stream, never on a thread left open in it.
+  const openChannel = (channelId: string) => {
+    channelPlace.onChoose(channelId);
+    channelPlace.onCloseThread();
+    onListed(false);
   };
   // Closing the thread gives the stream the place again, and what counts what waits is read again, an answer given there among it.
   const closeThread = () => {
@@ -486,7 +502,7 @@ function InboxShown({
                 className={streaming ? CHANNELS_VIEW : INBOX_VIEW}
                 ref={columns.ref}
                 data-columns={streaming ? undefined : columns.shown}
-                data-thread={threadShown ? "" : undefined}
+                data-thread={threadBeside ? "" : undefined}
               >
                 {streaming ? (
                   channel === undefined ? (
@@ -502,12 +518,15 @@ function InboxShown({
                         {channels.channels === undefined ? CHANNELS_READING : CHANNELS_NONE}
                       </NoteLine>
                     )
+                  ) : channelsListed ? (
+                    <ChannelList channels={channels.channels ?? []} onOpen={openChannel} />
                   ) : (
                     <ChannelStream
                       key={channel.id}
                       channel={channel}
                       chosenId={chosen?.item.id}
-                      beside={threadShown}
+                      beside={threadBeside}
+                      hidden={threadShown && phone}
                       readerId={tasks.me}
                       now={now}
                       shown={tasks.shown}
@@ -658,7 +677,7 @@ function InboxShown({
                             control={live}
                             agents={named}
                             hidden={!streaming && columns.shown === INBOX_COLUMNS.LIST}
-                            onBack={streaming ? undefined : columns.onBack}
+                            onBack={streaming ? (phone ? closeThread : undefined) : columns.onBack}
                             pager={
                               !streaming && columns.shown === INBOX_COLUMNS.ITEM ? pager : undefined
                             }

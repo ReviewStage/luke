@@ -42,13 +42,18 @@ const held = new Map<string, HeldChannels>();
 /** The window's surfaces drawing any workspace's channels, told of each change. */
 const listeners = new Set<() => void>();
 
-/** The channel the window shows and whether its thread stands open beside it. */
+/**
+ * The channel the window shows and the thread opened in it, by its item's
+ * id. Note that the thread is named rather than flagged open, so it stands
+ * only while the Inbox's choice is that item: the window's history, which
+ * keeps the choice, takes the thread away with it on Back.
+ */
 interface ChannelPlace {
   readonly channelId: string | undefined;
-  readonly threadOpen: boolean;
+  readonly threadId: string | undefined;
 }
 
-let place: ChannelPlace = { channelId: undefined, threadOpen: false };
+let place: ChannelPlace = { channelId: undefined, threadId: undefined };
 
 /** What a refused write says, by why it was refused. */
 const REFUSAL_WORDS = {
@@ -89,7 +94,7 @@ function hold(workspaceId: string, view: ChannelsView | undefined): void {
 
 /** Moves the window's place, telling every surface drawing it. */
 function moveTo(next: ChannelPlace): void {
-  if (next.channelId === place.channelId && next.threadOpen === place.threadOpen) return;
+  if (next.channelId === place.channelId && next.threadId === place.threadId) return;
   place = next;
   told();
 }
@@ -168,14 +173,14 @@ export function useChannels(workspaceId: string | undefined, shown: boolean): Ch
   }, [act, workspaceId, standing, onRefresh]);
 }
 
-/** The channel the window shows, whether its thread stands open, and the doors that move them. */
+/** The channel the window shows, the thread opened in it, and the doors that move them. */
 export interface ChannelPlaceControl extends ChannelPlace {
   readonly onChoose: (channelId: string) => void;
-  readonly onOpenThread: () => void;
+  readonly onOpenThread: (itemId: string) => void;
   readonly onCloseThread: () => void;
 }
 
-/** The channel the window shows and whether its thread stands open, the window's own while it runs. */
+/** The channel the window shows and the thread opened in it, the window's own while it runs. */
 export function useChannelPlace(): ChannelPlaceControl {
   const standing = useSyncExternalStore(subscribe, () => place);
   return useMemo(
@@ -184,10 +189,10 @@ export function useChannelPlace(): ChannelPlaceControl {
       onChoose: (channelId) =>
         moveTo({
           channelId,
-          threadOpen: channelId === place.channelId ? place.threadOpen : false,
+          threadId: channelId === place.channelId ? place.threadId : undefined,
         }),
-      onOpenThread: () => moveTo({ ...place, threadOpen: true }),
-      onCloseThread: () => moveTo({ ...place, threadOpen: false }),
+      onOpenThread: (itemId) => moveTo({ ...place, threadId: itemId }),
+      onCloseThread: () => moveTo({ ...place, threadId: undefined }),
     }),
     [standing],
   );

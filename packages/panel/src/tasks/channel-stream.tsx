@@ -42,6 +42,7 @@ import {
   Conversation,
   ConversationContent,
   ConversationScrollButton,
+  FLOATING_OVER_LOG_CLASS,
 } from "../ai-elements/conversation.js";
 import { ActionMenu, type MenuEntry } from "../desktop/action-menu.js";
 import { usePerson } from "../member-directory.js";
@@ -120,8 +121,8 @@ const POST_BODY = "channel-post-body flex min-w-0 flex-col gap-luke-6";
 /** A line of presses or faces under a post's words, over the post's own press. */
 const POST_LINE = "channel-post-line relative z-1 flex flex-wrap items-center gap-luke-6";
 
-/** The way up to an older post that needs the reader, floating over the stream's head. */
-const JUMP = "channel-jump absolute top-luke-8 left-1/2 z-1 -translate-x-1/2";
+/** The way up to an older post that needs the reader, floating over the stream's head on a ground of its own, so no post's words show through it. */
+const JUMP = `channel-jump ${FLOATING_OVER_LOG_CLASS} top-luke-8 z-1 bg-button-ground [--luke-button-ground:var(--luke-color-well)]`;
 
 /** What the line before the first thread posted since the reader last looked says. */
 const NEW_LINE = "New";
@@ -366,6 +367,7 @@ export function ChannelStream({
   channel,
   chosenId,
   beside,
+  hidden,
   readerId,
   now,
   shown,
@@ -380,6 +382,8 @@ export function ChannelStream({
   chosenId: string | undefined;
   /** Whether a thread stands open beside the stream. */
   beside: boolean;
+  /** Whether a thread stands in the stream's place, as on a phone, which keeps the stream and the New line where they stood. */
+  hidden: boolean;
   readerId: string | undefined;
   now: number;
   /** Whether the window shows the stream, which its menus close with. */
@@ -439,6 +443,7 @@ export function ChannelStream({
       className={STREAM}
       aria-label={`#${channel.name}`}
       data-beside={beside ? "" : undefined}
+      hidden={hidden}
     >
       <Toolbar
         title={channelTitle(channel.name, view)}
