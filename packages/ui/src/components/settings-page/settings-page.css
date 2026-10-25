@@ -2,7 +2,8 @@
    cannot say: rows scrolled up dissolve into the page's top edge, on a scroll
    timeline; an empty state that is the page's content fills the room under
    the title; and the column's inset narrows under 480px of the page, which is
-   a container of its own (`@container/luke-settings-page`). The frame, the
+   a container of its own (`@container/luke-settings-page`), and opens a
+   section's gap under a bar that leads with the way back. The frame, the
    page's scroller, the room under the head, and the sections' gap are
    utilities; the sections' own heading and card are theirs
    (`settings-section.tsx`). */
@@ -79,5 +80,16 @@
     .luke-settings-page-column {
       padding: var(--luke-page-inset-narrow);
     }
+  }
+
+  /* Under a bar that leads with the way back, which stands in the page's
+     own sheet once the page list folds away (a small window, a phone), the
+     title opens a section's gap under the bar. Note that a page's whole
+     inset there would stack under the bar's row into an empty band between
+     the way back and the title; under the empty bar of a wide window, which
+     is only the window's drag strip, the page keeps its inset, its title
+     level with the page list's. */
+  .luke-settings-page-frame:has(> .luke-toolbar > .luke-toolbar-lead) .luke-settings-page-column {
+    padding-top: var(--luke-section-gap);
   }
 }

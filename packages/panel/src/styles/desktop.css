@@ -496,6 +496,20 @@ body,
   height: 100%;
 }
 
+/* An automation's mark at a page's head draws its glyph's ink across the
+   whole share, as GitHub's and Sentry's marks, which fill their drawing,
+   already do. Note that Lucide's glyphs ink 22 of their 24 units and the
+   working mark's grid 13 of its 16 pixels, so at a page's 48px each would
+   otherwise stand a few pixels short inside its box; a row's small mark
+   keeps them as drawn, level with the Lucide glyphs of the rows around it. */
+.actor-mark[data-kind="automation"][data-size="page"] .state-glyph > svg.lucide {
+  scale: calc(24 / 22);
+}
+
+.actor-mark[data-kind="automation"][data-size="page"] .state-glyph > .luke-working-mark {
+  scale: calc(16 / 13);
+}
+
 /* An App's bot on GitHub stands in the same square, its robot until its avatar loads. */
 .actor-mark:is(
   [data-kind="luke"],
