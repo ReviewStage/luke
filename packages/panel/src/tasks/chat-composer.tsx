@@ -290,7 +290,7 @@ function footNote(note: ComposerNote | undefined, onRetry: () => void): FootNote
 function CrowdedNote({ shown }: { shown: boolean }): React.JSX.Element {
   useAnnounce(ANNOUNCE.POLITE, shown ? CROWDED : "");
   return (
-    <div className="chat-composer-crowded">
+    <div className="chat-composer-crowded [&:not(:empty)]:mt-item-gap">
       {shown ? (
         <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
           {CROWDED}

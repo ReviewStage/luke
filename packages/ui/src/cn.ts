@@ -20,6 +20,27 @@ import { extendTailwindMerge } from "tailwind-merge";
  */
 
 /**
+ * The names the panel places' block of the theme adds (Automations, Chat,
+ * Settings, a version history, Admin, the sign-in), by the group
+ * tailwind-merge reads each in.
+ */
+const PANEL_PLACES = {
+  tracking: ["experiment-tag"],
+  spacing: [
+    "automation-field",
+    "automation-next",
+    "automation-owner",
+    "automation-runs",
+    "automation-time",
+    "automation-webhook",
+    "chat-measure",
+    "chat-reading",
+    "em",
+    "onboarding-foot",
+  ],
+} as const;
+
+/**
  * The names the panel work column's block of the theme adds (its layout's
  * spacing roles, a transcript's opening line, the call's video room, a
  * tool's page, the find bar, the version history), by the group
@@ -419,7 +440,12 @@ const merge = extendTailwindMerge({
         ...CONTENT_TEXT["font-weight"],
         ...PAGE_PATTERNS["font-weight"],
       ],
-      tracking: ["title", ...PANEL_SHELL.tracking, ...TASK_SURFACES.tracking],
+      tracking: [
+        "title",
+        ...PANEL_SHELL.tracking,
+        ...PANEL_PLACES.tracking,
+        ...TASK_SURFACES.tracking,
+      ],
       leading: [
         "body",
         ...FEEDBACK_DISPLAY.leading,
@@ -429,6 +455,7 @@ const merge = extendTailwindMerge({
         ...PAGE_PATTERNS.leading,
       ],
       spacing: [
+        ...PANEL_PLACES.spacing,
         "luke-2",
         "luke-4",
         "luke-6",

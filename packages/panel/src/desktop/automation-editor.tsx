@@ -233,6 +233,9 @@ import { type RunChoices, useRunChoices } from "./use-run-choices.js";
  * target it runs on stand as they were.
  */
 
+/** A schedule's cron or time, or a review's rules file, at a picker's width beside them, giving way to a narrow form. */
+const AUTOMATION_FIELD = "automation-field w-automation-field max-w-full";
+
 /**
  * The workspace's Sentry as the editor offers it: the read, nothing while
  * it is out or where it failed, whether it failed with the Retry that asks
@@ -714,7 +717,7 @@ function OwnServersRow({
             on.length === 0 ? (
               <ChipName>None</ChipName>
             ) : (
-              <span className="automation-servers">
+              <span className="automation-servers inline-flex items-center gap-tight-gap">
                 {shown.map((provider) => (
                   <ProviderMark key={provider} provider={provider} size={PROVIDER_MARK_SIZE.ICON} />
                 ))}
@@ -804,7 +807,7 @@ function ScheduleRows({
           field === SCHEDULE_FIELD.CRON ? (
             <SettingsRow label="Cron" error={zoneRefused ? undefined : problem}>
               {(control) => (
-                <span className="automation-field">
+                <span className={AUTOMATION_FIELD}>
                   <TextField
                     ref={cron}
                     label="Cron"
@@ -851,7 +854,9 @@ function ScheduleRows({
                       onPick={(id) => onSchedule({ ...schedule, minute: Number(id) })}
                     />
                   ) : (
-                    <span className="automation-field automation-time-field">
+                    <span
+                      className={`${AUTOMATION_FIELD} automation-time-field [[data-luke-profile=web]_&]:w-automation-time`}
+                    >
                       <ClockField
                         inputRef={time}
                         hour={schedule.hour}
@@ -1055,7 +1060,7 @@ function EditorToolbarFrame({
   children: ReactNode;
 }): React.JSX.Element {
   return (
-    <div className="automation-toolbar">
+    <div className="automation-toolbar flex-none @container/automation-toolbar">
       <Toolbar
         trail={[{ label: AUTOMATIONS_PLACE, icon: <ZapIcon />, onPress: onBack }]}
         pickUp={pickUp}
@@ -1068,7 +1073,7 @@ function EditorToolbarFrame({
 
 /** Where the draft stands, said beside its save, and gone where the toolbar folds its acts. */
 function EditorStatus({ children }: { children: ReactNode }): React.JSX.Element {
-  return <span className="automation-editor-status">{children}</span>;
+  return <span className="automation-editor-status whitespace-nowrap">{children}</span>;
 }
 
 /**
@@ -1380,7 +1385,7 @@ function FilterRow({
   return (
     <SettingsRow label={label} description={detail} error={problem}>
       {(control) => (
-        <span className="automation-field">
+        <span className={AUTOMATION_FIELD}>
           <TextField
             ref={field}
             label={label}
@@ -1511,7 +1516,7 @@ function SentryRows({
         error={problems[DRAFT_FIELD.COOLDOWN]}
       >
         {(control) => (
-          <span className="automation-field">
+          <span className={AUTOMATION_FIELD}>
             <TextField
               ref={hours}
               type={TEXT_FIELD_TYPE.NUMBER}
@@ -1579,7 +1584,7 @@ function CodeReviewGroup({
         description="Read from the base branch, beside AGENTS.md and CLAUDE.md."
       >
         {(control) => (
-          <span className="automation-field">
+          <span className={AUTOMATION_FIELD}>
             <TextField
               ref={rulesFile}
               label="Rules file"
@@ -1631,7 +1636,7 @@ function ShownSecretRow({
       >
         {() => (
           <>
-            <span className="automation-webhook-field">
+            <span className="automation-webhook-field w-automation-webhook max-w-full">
               <TextField
                 label="Secret"
                 font={TEXT_FIELD_FONT.MONO}
@@ -1713,7 +1718,7 @@ function WebhookRows({
       >
         {() => (
           <>
-            <span className="automation-webhook-field">
+            <span className="automation-webhook-field w-automation-webhook max-w-full">
               <TextField
                 label="Webhook address"
                 font={TEXT_FIELD_FONT.MONO}
@@ -1787,7 +1792,7 @@ function ModelPicker({
     trigger.current?.focus();
   };
   return (
-    <div className="automation-model-picker" ref={root}>
+    <div className="automation-model-picker relative flex min-w-0" ref={root}>
       <Chip
         ref={trigger}
         look={CHIP_LOOK.FIELD}
@@ -2322,9 +2327,9 @@ function AutomationPageFrame({
   const [pickUp, setPickUp] = useState<ToolbarPickUp>({ name: "", shown: false });
   return (
     <Fill ref={screenRef} className="automations-view">
-      <Fill className="automation-editor-screen" hidden={hidden}>
+      <Fill className="automation-editor-screen [&[hidden]]:hidden" hidden={hidden}>
         {toolbar(pickUp)}
-        <div ref={layoutRef} className="automation-editor-layout">
+        <div ref={layoutRef} className="automation-editor-layout relative flex min-h-0 flex-1">
           <DetailPage frame={PAGE_FRAME.PAGE} title={title} onPickUp={setPickUp}>
             {setup}
           </DetailPage>
@@ -2338,7 +2343,7 @@ function AutomationPageFrame({
 
 /** The setup's column: the name over the form, a step apart. */
 function AutomationSetup({ children }: { children: ReactNode }): React.JSX.Element {
-  return <div className="automation-editor">{children}</div>;
+  return <div className="automation-editor flex flex-col gap-block-gap">{children}</div>;
 }
 
 /** The form, as Settings draws a page: each group's name over its card, the groups a section apart. */
@@ -2351,7 +2356,11 @@ function AutomationForm({
   children: ReactNode;
 } & Partial<ReturnType<typeof revealArea>>): React.JSX.Element {
   return (
-    <div ref={ref} className="automation-form" {...area}>
+    <div
+      ref={ref}
+      className="automation-form flex flex-col gap-page-section-gap [&_.settings-picker]:max-w-full"
+      {...area}
+    >
       {children}
     </div>
   );

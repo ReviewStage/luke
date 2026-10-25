@@ -24,6 +24,13 @@ import { type ReactNode, useCallback, useRef } from "react";
  * chunk loads draws through the same boxes.
  */
 
+/** A group of automations, one owner's, a page section below the one before it. */
+const AUTOMATION_GROUP = "automation-group [.automation-group+&]:mt-page-section-gap";
+
+/** An automation's or a run's metadata at its row's end, in a line of its own. */
+export const AUTOMATION_ROW_META =
+  "automation-row-meta inline-flex items-center gap-block-gap align-top";
+
 /** How many rows the list's placeholder stands, enough to fill the top of its card. */
 const SKELETON_ROWS = [
   { name: "38%", trigger: "52%" },
@@ -47,8 +54,11 @@ const SKELETON_ACTS = { AGENT: "168px", NEW: "140px" } as const;
 export function AutomationsToolbar({ children }: { children: ReactNode }): React.JSX.Element {
   // The toolbar's own width, which a container query reads, folds Create with an agent to its glyph before it crowds the title.
   return (
-    <div className="automations-toolbar">
-      <Toolbar title="Automations" actions={<div className="automations-acts">{children}</div>} />
+    <div className="automations-toolbar flex-none @container/automations-toolbar">
+      <Toolbar
+        title="Automations"
+        actions={<div className="automations-acts contents">{children}</div>}
+      />
     </div>
   );
 }
@@ -94,11 +104,11 @@ export function AutomationGroupCard({
     </ListMotion>
   );
   return headed ? (
-    <div ref={hold} className="automation-group">
+    <div ref={hold} className={AUTOMATION_GROUP}>
       {card}
     </div>
   ) : (
-    <section ref={hold} className="automation-group" aria-label={name}>
+    <section ref={hold} className={AUTOMATION_GROUP} aria-label={name}>
       {card}
     </section>
   );
@@ -116,10 +126,12 @@ export function AutomationRowMeta({
   next: ReactNode;
 }): React.JSX.Element {
   return (
-    <span className="automation-row-meta">
+    <span className={AUTOMATION_ROW_META}>
       {lead}
       {owner}
-      <span className="automation-row-next">{next}</span>
+      <span className="automation-row-next inline-flex w-automation-next flex-none items-center justify-end gap-item-gap overflow-hidden">
+        {next}
+      </span>
     </span>
   );
 }
@@ -135,7 +147,10 @@ export function AutomationOwnerFrame({
   name: ReactNode;
 }): React.JSX.Element {
   return (
-    <span className="automation-owner" data-owner={owner}>
+    <span
+      className="automation-owner inline-flex w-automation-owner flex-none items-center gap-item-gap overflow-hidden whitespace-nowrap"
+      data-owner={owner}
+    >
       {mark}
       {name}
     </span>
