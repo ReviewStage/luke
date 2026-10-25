@@ -3,12 +3,14 @@ import { INBOX_STATUS, type InboxItem } from "@luke/features/inbox-wire";
 import { countWords, TERM } from "@luke/features/words";
 import { ACT_KIND } from "@luke/host/acts";
 import type { AppInboxTaskHolding } from "@luke/host/app-state";
+import { EXPERIMENT } from "@luke/settings";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import { STATUS_TONE } from "@luke/ui";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef } from "react";
 import type { ActHandle } from "../act.js";
 import { useAppCommand } from "../app-commands.js";
 import { TOAST_HOLD, useToast } from "../toast.js";
+import { useExperiment } from "../use-app-state.js";
 import {
   acknowledgedOnOpen,
   INBOX_HOLDER,
@@ -274,6 +276,7 @@ export function useNodOnOpen({
 }): void {
   const nodded = useRef<{ readonly id: string; readonly revision: number } | undefined>(undefined);
   const { read, failed, draftOf, onAcknowledge } = control;
+  const channels = useExperiment(EXPERIMENT.CHANNELS);
   useEffect(() => {
     if (shown === undefined) {
       nodded.current = undefined;
@@ -285,9 +288,9 @@ export function useNodOnOpen({
     const was = nodded.current;
     if (was !== undefined && was.id === item.id && was.revision === item.revision) return;
     nodded.current = { id: item.id, revision: item.revision };
-    if (!acknowledgedOnOpen(item, readerId)) return;
+    if (!acknowledgedOnOpen(item, readerId, channels)) return;
     const draft = draftOf(item);
     if (draft.note.trim() !== "" || draft.attachments.length > 0) return;
     onAcknowledge(item);
-  }, [shown, readerId, read, failed, draftOf, onAcknowledge]);
+  }, [shown, readerId, read, failed, draftOf, onAcknowledge, channels]);
 }

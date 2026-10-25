@@ -67,7 +67,10 @@ import type { AppInboxSlice, AppInboxWaitingItem } from "./app-state.js";
  * answer is written whole as each task's open items of those, which the
  * sidebar counts, and the Dock's badge is their number, beside what waits in
  * chat (`chat`), an ask someone else posted, or a direct message or a
- * mention of the developer's, while Chat is on; every task holding any
+ * mention of the developer's, while Chat is on. While Channels is on the
+ * badge counts only the open asks among them, which is every channel's
+ * count of what waits on the developer summed, since a notice asks nobody
+ * to act; every task holding any
  * member's item is listed for the Inbox. The same read carries the newest
  * run of each of the account's own automations that failed to start lately,
  * which is written for the window's Automations to mark until that
@@ -165,6 +168,8 @@ export interface AgentNoticesDependencies {
   onInboxChanged: (inbox: AppInboxSlice) => void;
   /** Whether the window offers Chat, without which nothing waiting in chat is counted. */
   chatOn: () => boolean;
+  /** Whether the window offers Channels, under which the Dock counts the open asks that wait on the account, every channel's summed, and no notice. */
+  channelsOn: () => boolean;
   report: (line: string) => void;
 }
 
@@ -230,6 +235,11 @@ function waitingOnAccount(
     items: answer.items.filter(ownOf),
     ...(answer.planless === undefined ? undefined : { planless: answer.planless.filter(ownOf) }),
   };
+}
+
+/** Whether an item holds an ask open rather than being a notice; one a service before it says nothing of is counted as asking, as every item was. */
+function asking(item: { readonly asking?: boolean }): boolean {
+  return item.asking !== false;
 }
 
 /** The items each task holds waiting, the task whose item changed latest first, as the read answered them latest first. */
@@ -406,10 +416,17 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
       return dependencies.chatOn() ? (answer.chat ?? []) : [];
     }
 
+    /** What waits in the inbox that the Dock counts: every item, or under Channels its open asks alone, each channel's count of what waits on the reader summed. */
+    function countedOf(answer: InboxAnswered): number {
+      const waiting = [...answer.items, ...(answer.planless ?? [])];
+      if (!dependencies.channelsOn()) return waiting.length;
+      return waiting.filter(asking).length;
+    }
+
     /** Writes what waits for the window, and its number, a task's items, an agent's with no task, and chat messages alike, the account's own alone, for the Dock. */
     function publishWaiting(answer: InboxAnswered, listed: readonly AccountTasklessEntry[]): void {
       dependencies.onInboxChanged(sliceOf(answer, listed));
-      doors.badge(answer.items.length + (answer.planless?.length ?? 0) + chatOf(answer).length);
+      doors.badge(countedOf(answer) + chatOf(answer).length);
     }
 
     /**

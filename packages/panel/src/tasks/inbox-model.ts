@@ -441,6 +441,15 @@ export function awaitsNod(item: InboxItem): boolean {
   return item.status === INBOX_STATUS.OPEN && openAskOf(item.thread ?? []) === undefined;
 }
 
+/**
+ * Whether the item offers Got it: a notice waiting on a nod (`awaitsNod`),
+ * and, while Channels is on, one its agent addressed to a member
+ * (`addressed`), since a notice addressed to nobody is only read.
+ */
+export function asksNod(item: InboxItem, channels: boolean): boolean {
+  return awaitsNod(item) && (!channels || item.addressed === true);
+}
+
 /** The most characters an option may spell and still stand as one of two small buttons. */
 const BUTTON_OPTION_CHARS = 24;
 
@@ -1487,16 +1496,24 @@ function needsReader(item: InboxItem, readerId: string | undefined): boolean {
 }
 
 /**
- * Whether opening the item acknowledges it, as Got it did: a notice waiting
- * on a nod (`awaitsNod`), the reader's own (`needsReader`) by an id already
+ * Whether opening the item acknowledges it, as Got it did: a notice that
+ * offers Got it (`asksNod`), so under Channels one addressed to the reader,
+ * the reader's own (`needsReader`) by an id already
  * known, since an acknowledgement settles it for every member, and one
  * whose agent does not wait to hear back (`needsReply`), since a notice
  * that asks to be heard back would reach its agent on a mere open. A box
  * holding no words or files for it offers no Got it.
  */
-export function acknowledgedOnOpen(item: InboxItem, readerId: string | undefined): boolean {
+export function acknowledgedOnOpen(
+  item: InboxItem,
+  readerId: string | undefined,
+  channels: boolean,
+): boolean {
   return (
-    readerId !== undefined && needsReader(item, readerId) && awaitsNod(item) && !item.needsReply
+    readerId !== undefined &&
+    needsReader(item, readerId) &&
+    asksNod(item, channels) &&
+    !item.needsReply
   );
 }
 

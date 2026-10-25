@@ -120,6 +120,8 @@ export const linkClientNotices = /* @__PURE__ */ Effect.fn("client/linkClientNot
     onInboxChanged: (inbox) => state.update({ inbox }),
     chatOn: () =>
       experimentOn(state.snapshot().settings?.experiments ?? NO_EXPERIMENTS, EXPERIMENT.CHAT),
+    channelsOn: () =>
+      experimentOn(state.snapshot().settings?.experiments ?? NO_EXPERIMENTS, EXPERIMENT.CHANNELS),
     report,
   });
   // A note that throws is reported rather than left to end the fiber, which would never resume.
