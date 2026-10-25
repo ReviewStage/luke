@@ -262,7 +262,12 @@ function drawnWords(block: CopiedBlock): readonly string[] {
  * answer as drawn.
  */
 export function drawnMessageWords(message: CodingAgentMessage): string {
-  return rowBlocks(agentRows(message, false)).flatMap(agentBlock).flatMap(drawnWords).join("\n");
+  return drawnRowsWords(agentRows(message, false));
+}
+
+/** The words a turn's rows draw, as `drawnMessageWords` reads a whole turn's: a piece of a long turn's (`turn-pieces.ts`). */
+export function drawnRowsWords(rows: readonly TurnRow<AgentPart>[]): string {
+  return rowBlocks(rows).flatMap(agentBlock).flatMap(drawnWords).join("\n");
 }
 
 /**

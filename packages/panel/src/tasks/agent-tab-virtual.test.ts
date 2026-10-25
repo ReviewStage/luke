@@ -257,6 +257,51 @@ test("⌘F finds words in a row the log has not drawn, scrolls the log to it, an
   assert.equal(litRow?.getAttribute("data-row-key"), "m-7");
 });
 
+test("a running turn of a thousand parts draws only the pieces near its view, and ⌘F lights a match in a piece it had not drawn", async () => {
+  // An orchestrator's turn is its whole run: one message, each of its steps a line of words.
+  const turn: CodingAgentMessage = {
+    id: "turn",
+    role: MESSAGE_ROLE.ASSISTANT,
+    parts: Array.from({ length: 500 }, (_, step) => [
+      { type: "step-start" },
+      {
+        type: "text",
+        text: step === 7 ? "The lantern is lit in the seventh step." : `Step ${step} of the run.`,
+      },
+    ]).flat(),
+    startedAt: 1_000,
+  };
+  const { follower } = following({
+    ...page([message(0), turn]),
+    status: CODING_AGENT_STATUS.RUNNING,
+  });
+  const { container, box } = await drawTab(
+    codingAgentsControl({
+      agents: [{ ...AGENT, status: CODING_AGENT_STATUS.RUNNING }],
+      transcripts: follower,
+    }),
+    (tab) => createElement(FindScope, { active: true, subject: { agent: AGENT_ID } }, tab),
+  );
+  const { writes } = layOut(box);
+  const log = () => box.textContent ?? "";
+  assert.match(log(), /Step 499 of the run\./u, "the turn's newest words are drawn");
+  assert.doesNotMatch(log(), /Step 0 of the run\./u, "its first are not");
+  assert.ok(drawnRows(container).length <= 20, `${drawnRows(container).length} rows are drawn`);
+
+  act(() => {
+    runAppCommand(APP_COMMAND.FIND);
+  });
+  typeFind("lantern");
+  await act(settled);
+
+  assert.equal(findTally(), "1 of 1");
+  assert.ok(writes.length > 0, "the log is scrolled");
+  const lit = [...(CSS.highlights.get("find-current") ?? [])] as Range[];
+  assert.equal(lit.length, 1, "one match is lit as the one the find is at");
+  const litRange = lit[0] ?? assert.fail("the lit match");
+  assert.equal(litRange.toString().toLowerCase(), "lantern");
+});
+
 test("⌘F counts a match in a closed call's answer far up the log, steps to it, and opens the fold on it", async () => {
   const held = messages(0, 400);
   held[7] = {

@@ -10,6 +10,7 @@ import {
   type ReactNode,
   type RefObject,
   useCallback,
+  useEffect,
   useImperativeHandle,
   useLayoutEffect,
   useRef,
@@ -22,7 +23,7 @@ import { cssCustomProperties } from "../../css.js";
  *
  * A row is drawn while it stands within the view or `overscan` rows of it,
  * and the rest are the room they would take: a spacer before the first
- * drawn and after the last, so the rows drawn stand in the flow as they
+ * drawn and after the last, the block's own padding, so the rows drawn stand in the flow as they
  * would with every row drawn, and the scroller's own scroll bar spans the
  * whole run. Each row is measured as it is drawn and as it resizes, its
  * height kept by its key, so a row scrolled out and back is placed by what
@@ -125,6 +126,15 @@ function offsetWithin(block: HTMLElement, scroller: HTMLElement): number {
     : block.offsetTop - scroller.offsetTop - scroller.clientTop;
 }
 
+/** The classes the row at `index` wears: the run's own, then the caller's for it. */
+function rowClassOf(
+  rowClassName: string | ((index: number) => string) | undefined,
+  index: number,
+): string {
+  const own = typeof rowClassName === "function" ? rowClassName(index) : rowClassName;
+  return own === undefined ? "luke-virtual-row" : `luke-virtual-row ${own}`;
+}
+
 export function VirtualRows({
   scroller,
   pinned,
@@ -149,7 +159,8 @@ export function VirtualRows({
   gap?: number;
   overscan?: number;
   className?: string | undefined;
-  rowClassName?: string | undefined;
+  /** The class each row wears beside its own, or the class the row at an index wears. */
+  rowClassName?: string | ((index: number) => string) | undefined;
   handle?: RefObject<VirtualRowsHandle | null> | undefined;
   /** Draws the row at an index. */
   children: (index: number) => ReactNode;
@@ -177,14 +188,25 @@ export function VirtualRows({
     scrollEndThreshold: -1,
     useFlushSync: false,
   });
+  // How often the scroller has been sized anew, which can move what stands above the rows.
+  const [sized, setSized] = useState(0);
+  useEffect(() => {
+    const box = scroller.current;
+    if (box === null) return;
+    const heard = new ResizeObserver(() => setSized((count) => count + 1));
+    heard.observe(box);
+    return () => heard.disconnect();
+  }, [scroller]);
   // The rows' block stands below whatever the scroller draws above it, its padding among it.
+  // Note that it is read only as the rows or the scroller's size change, never on a scroll's
+  // draw, because reading where the block stands lays the whole log out again mid-frame.
   useLayoutEffect(() => {
     const element = block.current;
     const box = scroller.current;
     if (element === null || box === null) return;
     const at = Math.round(offsetWithin(element, box));
-    if (at !== margin) setMargin(at);
-  });
+    setMargin((was) => (was === at ? was : at));
+  }, [keys, sized, scroller]);
   // Note that a run held at its end goes back there after the virtualizer's own writes, because
   // as it first takes the scroller it scrolls to its guess (`initialOffset`), which a log
   // already at its end hears as the reader scrolling up.
@@ -242,11 +264,12 @@ export function VirtualRows({
       role="list"
       className={className === undefined ? "luke-virtual-rows" : `luke-virtual-rows ${className}`}
       {...{ [VIRTUAL_ROWS_ATTRIBUTE]: `${keys.length}:${keys.at(-1) ?? ""}:${keys[0] ?? ""}` }}
-      style={cssCustomProperties({
-        "--luke-virtual-before": `${Math.max(0, before)}px`,
-        "--luke-virtual-after": `${Math.max(0, after)}px`,
-        "--luke-virtual-gap": `${gap}px`,
-      })}
+      // Note that the spacers are the block's own padding rather than properties its rows inherit, because a property the rows inherit is read again for every element in them each time the drawn rows move.
+      style={{
+        ...cssCustomProperties({ "--luke-virtual-gap": `${gap}px` }),
+        paddingBlockStart: `${Math.max(0, before)}px`,
+        paddingBlockEnd: `${Math.max(0, after)}px`,
+      }}
     >
       {items.map((item) => (
         // biome-ignore lint/a11y/useSemanticElements: see the block above.
@@ -258,9 +281,7 @@ export function VirtualRows({
           aria-setsize={keys.length}
           aria-posinset={item.index + 1}
           {...{ [VIRTUAL_ROW_KEY_ATTRIBUTE]: String(item.key) }}
-          className={
-            rowClassName === undefined ? "luke-virtual-row" : `luke-virtual-row ${rowClassName}`
-          }
+          className={rowClassOf(rowClassName, item.index)}
         >
           {children(item.index)}
         </div>

@@ -2765,3 +2765,16 @@ svg.lucide {
 .agent-log-row > :not(:last-child) {
   margin-block-end: var(--luke-block-gap);
 }
+
+/* A row of an agent's log after its first stands a step from the one
+   before it, inside the row, where the run measures it (`virtual-rows.tsx`):
+   the log's own step between lines, or, for a piece of a long turn that goes
+   on with the rows the piece before it cut (`turn-pieces.ts`), the step
+   between a message's blocks, so a cut turn reads as one. */
+.agent-log-row-next {
+  padding-block-start: var(--luke-block-gap);
+}
+
+.agent-log-row-continued {
+  padding-block-start: var(--luke-control-gap);
+}

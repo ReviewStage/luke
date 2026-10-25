@@ -530,16 +530,19 @@ export function Dialog({
     stood.current = false;
     onExited?.();
   };
+  // Note that reduced motion and a capture run take the card away in the
+  // render that closes it, rather than a frame later once Base UI finds no
+  // fade to wait on. Only a card that has stood asks, because the ask reads
+  // the window's computed style, and a log holding a closed card in each of
+  // its rows would lay the window out again for every row it draws.
+  const goneAtOnce = !open && stood.current && motionHeld();
   // Note that a card taken away in the render that closes it is heard here,
   // because Base UI never sees it leave.
   useEffect(() => {
-    if (!open && motionHeld()) exited();
+    if (goneAtOnce) exited();
   });
 
-  // Note that reduced motion and a capture run take the card away in the
-  // render that closes it, rather than a frame later once Base UI finds no
-  // fade to wait on.
-  if (!open && motionHeld()) return null;
+  if (goneAtOnce) return null;
 
   const keyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
     // Note that no key pressed in the card goes on to the window. A button's

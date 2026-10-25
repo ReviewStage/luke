@@ -375,7 +375,8 @@ export function ConversationRows({
   estimate: number;
   /** The room between two lines, in pixels. */
   gap: number;
-  rowClassName?: string | undefined;
+  /** The class each line wears, or the class the line at an index wears. */
+  rowClassName?: string | ((index: number) => string) | undefined;
   handle?: RefObject<VirtualRowsHandle | null> | undefined;
   children: (index: number) => ReactNode;
 }): ReactNode {
