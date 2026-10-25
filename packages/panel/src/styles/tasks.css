@@ -5625,119 +5625,20 @@ svg.lucide {
 
 /* Inbox ----------------------------------------------------------------------- */
 
-/* An image block on the Inbox (`inbox-pane.tsx`): a picture in written
-   words, below, whose room around it is the card's gap between blocks. */
-[data-inbox-image] > .picture-block {
-  margin: 0;
-}
-
 /* Pictures standing alone in a paragraph of words drawn as a document
    (transcript-blocks.tsx's `PictureRowElement`, as an Inbox item's are): side
    by side, sharing the column's width, so a before and an after read as a
    pair; each still hugs its own picture, and none grows past its own size. */
-.transcript-pictures {
-  display: flex;
-  align-items: flex-start;
-  gap: var(--luke-block-gap);
-  margin: var(--luke-block-gap) 0;
-}
-
 .transcript-pictures > .picture-block {
   flex: 1 1 0;
   min-width: 0;
   margin: 0;
 }
 
-/* The pictures a comment on an Inbox thread carried, over its words
-   (`inbox-pane.tsx`'s CommentFiles): the row a picture in its words stands
-   in, its room around it the comment's own gap between what it holds. */
-.inbox-comment-body > .transcript-pictures {
-  margin: 0;
-}
-
-/* A link standing alone in a paragraph of a document (lone-link-card.tsx):
-   its card of one row, a pull request's or a page's, or the Code tab's card
-   of the lines it names, standing apart from the words around it. */
-.lone-link-card {
-  margin: var(--luke-block-gap) 0;
-}
-
-/* A picture in written words (`picture-block.tsx`): its own block, at its
-   own width up to the column's and no taller than a screenful's worth, on
-   the section's fill while its bytes are read, a press opening the file
-   viewer. Its caption stands under it in the secondary ink, and may run
-   wider than a skinny picture, whose frame still hugs the picture. */
-.picture-block {
-  display: block;
-  width: fit-content;
-  max-width: 100%;
-  margin: var(--luke-block-gap) 0;
-}
-
-/* The frame is `@luke/ui`'s Card, hugging the picture. */
-.picture-frame {
-  width: fit-content;
-  max-width: 100%;
-}
-
-.picture-image {
-  display: block;
-  max-width: 100%;
-  max-height: 520px;
-  height: auto;
-  object-fit: contain;
-}
-
-.picture-caption {
-  display: block;
-  margin-top: var(--luke-item-gap);
-  color: var(--luke-color-text-muted);
-  font-size: 0.9em;
-  line-height: 1.45;
-}
-
-/* While the bytes are read: a quiet box of a screenshot's shape. */
-.picture-pending {
-  display: grid;
-  width: 480px;
-  max-width: 100%;
-  aspect-ratio: 16 / 10;
-  place-items: center;
-  cursor: default;
-}
-
-/* A picture this reader cannot reach, or whose bytes are gone: its words. */
-.picture-missing {
-  width: 480px;
-  max-width: 100%;
-  padding: var(--luke-card-inset-snug);
-  cursor: default;
-}
-
-/* A picture from outside Luke is a link to it, never fetched. */
-.picture-outside-glyph {
-  width: 0.95em;
-  height: 0.95em;
-  margin-right: 0.25em;
-  vertical-align: -0.12em;
-}
-
 /* A picture in the plan's editor (`editor-pictures.tsx`): the read view's
    block, ringed while selected, its tools hung above it from its left edge.
    The block's top margin is the wrapper's, so the wrapper's top is the
    picture's own and the tools are measured from it. */
-.editor-picture {
-  display: block;
-}
-
-.editor-picture-drawn {
-  position: relative;
-  display: block;
-  width: fit-content;
-  max-width: 100%;
-  margin-top: var(--luke-block-gap);
-}
-
 .editor-picture-drawn > .picture-block {
   margin-top: 0;
 }
@@ -5745,73 +5646,6 @@ svg.lucide {
 .editor-picture-drawn[data-selected="true"] .picture-frame {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
-}
-
-/* The tools on `@luke/ui`'s toolbar, which is as wide as their own names,
-   past a skinny picture's edge where they need to be, and never wraps,
-   because the picture's box is no measure for them. Above it, they cover
-   none of the picture, only the line before it while it is selected. */
-.picture-tools {
-  position: absolute;
-  z-index: 1;
-  top: 0;
-  left: 0;
-  translate: 0 calc(-100% - var(--luke-space-8));
-}
-
-/* With no room above the picture inside the plan's scroller, as at its top,
-   the tools stand inside the picture's top edge rather than be cut off. */
-.picture-tools[data-above="false"] {
-  top: var(--luke-space-8);
-  left: var(--luke-space-8);
-  translate: none;
-}
-
-/* A tool that is its glyph alone, in a column too narrow for its name, folds
-   its words away, named by its pill. */
-.picture-tools[data-worded="false"] {
-  --luke-fold: folded;
-}
-
-/* A field under a picture that describes it anew. */
-.picture-describe {
-  display: grid;
-  width: min(360px, 100%);
-  margin: var(--luke-item-gap) 0 var(--luke-block-gap);
-}
-
-/* A picture waiting on its upload: the Mac's own bytes at half strength,
-   and the wait said where its caption will stand with the window's own
-   spinner; a failed upload says so there, as every failure does. */
-.picture-block[data-upload] .picture-image {
-  opacity: 0.5;
-}
-
-.picture-status {
-  display: flex;
-  align-items: center;
-  gap: var(--luke-item-gap);
-  margin-top: var(--luke-item-gap);
-  color: var(--luke-color-text-muted);
-  font-size: var(--luke-type-caption-size);
-  line-height: var(--luke-type-caption-leading);
-}
-
-.picture-failure {
-  display: block;
-  margin-top: var(--luke-item-gap);
-}
-
-/* Several pictures an agent showed at once (`agent-pictures.tsx`), as
-   `@luke/ui`'s PictureSet draws them, standing apart as a picture does. */
-.transcript-picture-set {
-  margin: var(--luke-block-gap) 0;
-}
-
-/* The pictures an integration's call answered, as PictureSet's thumbnails,
-   set in under the row's words, a picture not kept saying so. */
-.call-pictures {
-  margin: var(--luke-list-gap) 0 var(--luke-item-gap) var(--transcript-gutter);
 }
 
 /* A version's changes (`version-view.tsx`, `markdown-message.tsx`'s change
@@ -5912,29 +5746,10 @@ svg.lucide {
   pointer-events: auto;
 }
 
-.comment-margin {
-  position: absolute;
-  top: 0;
-  left: calc(100% + var(--comment-margin-gap));
-  width: var(--comment-card-width);
-}
-
 .comment-slot {
-  position: absolute;
-  top: 0;
-  right: 0;
-  left: 0;
   animation: luke-menu-arrive var(--luke-duration-quick) var(--luke-motion-exit) backwards;
 }
 
-/* A card already in the margin travels to its next place, as threads above
-   it open, grow, or arrive, on the spring every move rides; one arriving
-   lands where it belongs and fades in. */
-.comment-slot[data-moves="true"] {
-  transition: transform var(--luke-duration-shape) var(--luke-spring);
-}
-
-/* A block's own comment button, under the pointer, just outside the column's end, where a section's ⋯ hangs. */
 /* The button stands in the gutter past the column's end, its start level
    with a folded line's count, which stands in its place on a line holding
    threads. */
@@ -5961,19 +5776,6 @@ svg.lucide {
   .comment-block-button {
     opacity: 1;
   }
-}
-
-/* The bubble that rises over words selected, one button in a menu's surface. */
-.comment-bubble {
-  position: absolute;
-  z-index: 3;
-  transform: translateY(calc(-100% - var(--luke-space-6)));
-}
-
-/* On a touch screen the system's selection menu stands over the words, so
-   the bubble hangs under them, past the knob of the handle that ends them. */
-.comment-bubble[data-below] {
-  transform: translateY(var(--luke-space-16));
 }
 
 /* Where the margin folds: a line's comments counted at its end, in the
@@ -6013,69 +5815,14 @@ svg.lucide {
   max-width: calc(100% + var(--luke-space-6));
 }
 
-/* A thread (`Card`, its frame chosen by where it stands): at rest its words
-   on the column's ground, washed under the pointer; open, or at rest beside
-   the open one under a count, raised over the page as a menu is. */
-.comment-card {
-  --comment-indent: calc(
-    16px +
-    5px
-  ); /* off-scale: under the name, past the actor's 16px mark and its gap */
-  padding: var(--luke-tight-gap) var(--luke-list-inset) var(--luke-row-inset);
-  color: var(--luke-color-text);
-  font-size: var(--luke-type-body-size);
-  line-height: var(--luke-type-body-leading);
-}
-
 /* A thread at rest is one press (`CardPress`) over its words and replies,
    which reaches its whole card and rings it from the keyboard. */
-.comment-card[data-open="false"] {
-  cursor: pointer;
-}
-
-.comment-card[data-open="true"] {
-  padding-top: var(--luke-row-inset);
-}
-
-.comment-entry {
-  position: relative;
-  padding: var(--luke-tight-gap) 0;
-}
-
 .comment-time {
   color: var(--luke-color-text-muted);
   font-size: var(--luke-type-caption-size);
   font-variant-numeric: tabular-nums;
   font-weight: var(--luke-type-caption-weight);
   white-space: nowrap;
-}
-
-/* A comment's words, as Markdown spaces a message's blocks, under the name. */
-.comment-words {
-  display: block;
-  color: var(--luke-color-text-body);
-  overflow-wrap: anywhere;
-}
-
-/* A thread at rest shows its first comment's first lines, chips and all. */
-.comment-clamp {
-  display: -webkit-box;
-  overflow: hidden;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 3;
-}
-
-.comment-replies {
-  display: flex;
-  align-items: center;
-  gap: var(--luke-item-gap);
-  margin: var(--luke-list-gap) 0 0 var(--comment-indent);
-  color: var(--luke-color-text-muted);
-  font-size: var(--luke-type-caption-size);
-}
-
-.comment-faces {
-  display: inline-flex;
 }
 
 /* A comment's tools stand at its corner under the pointer or the keyboard. */
@@ -6109,17 +5856,6 @@ svg.lucide {
 /* What happened to a thread, a line drawn as a comment's head: its writer
    level with every name above it, what they did in the quiet ink, and the
    time at the row's end. */
-.comment-event {
-  padding: var(--luke-tight-gap) 0;
-}
-
-.comment-event-words {
-  flex: none;
-  color: var(--luke-color-text-muted);
-  font-weight: 400;
-  white-space: pre;
-}
-
 .comment-gone {
   display: flex;
   align-items: center;
@@ -6133,26 +5869,6 @@ svg.lucide {
 .comment-gone svg {
   width: 13px;
   height: 13px;
-}
-
-.comment-quote {
-  display: -webkit-box;
-  margin: 0 0 var(--luke-control-gap);
-  padding-left: var(--luke-row-inset);
-  overflow: hidden;
-  border-left: 2px solid var(--comment-mark-edge);
-  color: var(--luke-color-text-muted);
-  font-size: var(--luke-type-label-size);
-  font-weight: var(--luke-type-body-weight);
-  line-height: var(--luke-type-label-leading);
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-}
-
-.comment-quote[data-gone="true"] {
-  border-left-color: var(--luke-color-border-strong);
-  text-decoration: line-through;
-  text-decoration-color: color-mix(in srgb, currentColor 45%, transparent);
 }
 
 /* The field that answers a thread, or starts one, on `@luke/ui`'s
@@ -6217,36 +5933,6 @@ svg.lucide {
 .comment-field[data-variant="first"] .luke-composer-foot {
   padding-right: 0;
   padding-left: 0;
-}
-
-/* The files a sent comment carries, over its words, level with them. */
-.comment-files {
-  margin: var(--luke-tight-gap) 0 var(--luke-item-gap);
-}
-
-/* The side panel's Comments tab: the plan's threads, open or resolved, each under its section. */
-/* The Comments tab: its head over a list that scrolls under it, fading at
-   its ends as every scroller in the window does (`@luke/ui`'s `ScrollArea`,
-   which holds the list's own padded element). */
-.comments-tab {
-  position: relative;
-  height: 100%;
-}
-
-/* A list with nothing in it lays its empty state out as the column it fills (`empty-state.tsx`). */
-.comments-list[data-empty] {
-  display: flex;
-  min-height: 100%;
-  flex-direction: column;
-}
-
-.comments-list {
-  box-sizing: border-box;
-  padding: 0 var(--luke-space-16) var(--luke-space-24);
-}
-
-.comments-row + .comments-row {
-  margin-top: var(--luke-control-gap);
 }
 
 /* A call that sent another agent words (`SentCall`): the words whole in

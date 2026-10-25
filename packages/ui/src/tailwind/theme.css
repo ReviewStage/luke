@@ -577,6 +577,38 @@
      line of what holds it, as a card's aside does. */
   --radius-choice-box: var(--luke-space-4);
   --text-caption-inline: var(--luke-type-caption-size);
+
+  /* The panel's task surfaces (`@luke/panel`'s tasks.css, moving onto
+     utilities): the gap a line's parts stand apart by, where a line's words
+     start past its icon (`--transcript-gutter`, tasks.css), and the weight
+     words are set in where no type role names it. */
+  --spacing-item-gap: var(--luke-item-gap);
+  --spacing-transcript-gutter: var(--transcript-gutter);
+  --font-weight-luke-regular: var(--luke-weight-regular);
+  /* A picture in written words (`picture-block.tsx`): no taller than a
+     screenful's worth, a screenshot's shape at a stand-in's width while its
+     bytes are read, a caption a step under the words around it, a field
+     under it that describes it anew, and the glyph a picture from outside
+     Luke is marked by. */
+  --spacing-picture-most: 520px; /* off-scale: a screenful's worth */
+  --spacing-picture-stand-in: 480px; /* off-scale: a picture's width before its bytes are read */
+  --aspect-screenshot: 16 / 10;
+  --text-picture-caption: 0.9em;
+  --text-picture-caption--line-height: 1.45;
+  --spacing-picture-describe: min(360px, 100%); /* off-scale: a description's field */
+  --spacing-picture-glyph: 0.95em;
+  /* The plan's comments (`plan-comments.tsx`): the margin past the column
+     its cards stand in at their own width, a reply's line set in under the
+     name past the writer's mark, and the quote's edge, struck where its
+     words are gone. */
+  --spacing-comment-margin: calc(100% + var(--comment-margin-gap));
+  --spacing-comment-card: var(--comment-card-width);
+  --spacing-comment-indent: calc(
+    16px +
+    5px
+  ); /* off-scale: past the actor's 16px mark and its gap */
+  --color-comment-mark-edge: var(--comment-mark-edge);
+  --color-quote-strike: color-mix(in srgb, currentColor 45%, transparent);
 }
 
 /* The conditions a control answers beside its states: a finger's pointer,

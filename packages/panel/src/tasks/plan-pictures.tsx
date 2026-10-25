@@ -22,6 +22,7 @@ import type { PictureDrawer } from "../markdown-message.js";
 import { PictureBlock } from "../picture-block.js";
 import { TextLink } from "../text-link.js";
 import { AttachmentViewer } from "./attachment-viewer.js";
+import { OUTSIDE_GLYPH_CLASS } from "./transcript-blocks.js";
 import { useOpenLink } from "./use-open-link.js";
 
 /**
@@ -203,7 +204,7 @@ function OutsidePicture({
   const words = alt === "" ? UNNAMED_PICTURE : alt;
   return (
     <TextLink href={href} words={words} onOpen={openLink}>
-      <ImageIcon className="picture-outside-glyph" aria-hidden="true" />
+      <ImageIcon className={OUTSIDE_GLYPH_CLASS} aria-hidden="true" />
       {words}
     </TextLink>
   );

@@ -191,6 +191,22 @@ import {
  * agent anything.
  */
 
+/**
+ * The words a thread is on, quoted over it in the label's type and the
+ * quiet ink beside a rule in the mark's edge, two lines at most; struck out,
+ * under a stronger rule, where the words are gone.
+ */
+const QUOTE_CLASS =
+  "comment-quote mx-0 mt-0 mb-control-gap line-clamp-2 border-l-2 border-l-comment-mark-edge pl-row-inset text-label font-text text-muted-foreground data-[gone=true]:border-l-border-strong data-[gone=true]:line-through data-[gone=true]:decoration-quote-strike";
+
+/**
+ * A card's place in the margin: a card already there travels to its next
+ * place, as threads above it open, grow, or arrive, on the spring every move
+ * rides; one arriving lands where it belongs and fades in (tasks.css).
+ */
+const SLOT_CLASS =
+  "comment-slot absolute inset-x-0 top-0 data-[moves=true]:transition-transform data-[moves=true]:duration-(--luke-duration-shape)";
+
 /** The column's room a margin needs beside the reading width: the gap and the card, as `planning.css` spends them. */
 const MARGIN_ROOM = 48 + 288;
 
@@ -335,7 +351,7 @@ function WrittenComment({
         ) : (
           <>
             {nameRef}
-            <span className="comment-event-words">{` ${said}`}</span>
+            <span className="flex-none whitespace-pre font-luke-regular text-muted-foreground">{` ${said}`}</span>
           </>
         )
       }
@@ -389,7 +405,7 @@ function EventLine({
   now: number;
 }): React.JSX.Element {
   return (
-    <div className="comment-event" data-kind={entry.kind}>
+    <div className="comment-event py-tight-gap" data-kind={entry.kind}>
       <WrittenComment
         writer={entry.writer}
         agents={agents}
@@ -584,7 +600,7 @@ function CommentEntry({
       .finally(() => setSaving(false));
   };
   return (
-    <div className="comment-entry" data-entry={entry.id}>
+    <div className="comment-entry relative py-tight-gap" data-entry={entry.id}>
       {/* Note that the tools stand at the head's end, shown under the pointer or the keyboard, so a long name gives way to them and nothing stands over it. */}
       <WrittenComment
         writer={entry.writer}
@@ -673,7 +689,12 @@ function CommentWords({ words }: { words: string }): React.JSX.Element {
   const link = useMentionLink();
   const openLink = useOpenLink();
   return (
-    <MarkdownMessage words={words} className="comment-words" link={link} openLink={openLink} />
+    <MarkdownMessage
+      words={words}
+      className="comment-words block text-body-foreground wrap-anywhere"
+      link={link}
+      openLink={openLink}
+    />
   );
 }
 
@@ -1102,13 +1123,13 @@ function ThreadQuote({
 }): React.JSX.Element {
   if (onShowWords === undefined) {
     return (
-      <blockquote className="comment-quote" data-gone={gone}>
+      <blockquote className={QUOTE_CLASS} data-gone={gone}>
         {thread.quote}
       </blockquote>
     );
   }
   return (
-    <blockquote className="comment-quote" data-gone={gone}>
+    <blockquote className={QUOTE_CLASS} data-gone={gone}>
       <Tooltip label={COMMENT_WORDS.SHOW_WORDS}>
         <LineButton look={LINE_BUTTON_LOOK.QUOTE} onClick={onShowWords}>
           {thread.quote}
@@ -1161,7 +1182,7 @@ function CommentCard({
       padding={CARD_PADDING.NONE}
       hover={hover}
       lit={lit}
-      className="comment-card"
+      className="comment-card px-list-inset pt-tight-gap pb-row-inset text-body text-foreground data-[open=false]:cursor-pointer data-[open=true]:pt-row-inset"
       data-open={String(open)}
       {...data}
     >
@@ -1172,7 +1193,7 @@ function CommentCard({
 
 /** One row of the Comments tab's list, a step from the next: a thread's card, or a placeholder's. */
 function CommentsRow({ children }: { children: ReactNode }): React.JSX.Element {
-  return <div className="comments-row">{children}</div>;
+  return <div className="comments-row not-first:mt-control-gap">{children}</div>;
 }
 
 /**
@@ -1241,7 +1262,7 @@ function ThreadCard({
         {/* Note that the words are drawn as they are open, their chips with them, clamped; the card's press opens the thread. */}
         {first === undefined ? null : (
           <WrittenComment writer={first.writer} agents={doors.agents} at={first.at} now={now}>
-            <div className="comment-clamp">
+            <div className="comment-clamp line-clamp-3">
               <CommentWords words={first.words ?? ""} />
             </div>
           </WrittenComment>
@@ -1259,8 +1280,8 @@ function ThreadCard({
           {replies.length === 0 ? (
             <VisuallyHidden>{COMMENT_WORDS.OPEN_THREAD}</VisuallyHidden>
           ) : (
-            <span className="comment-replies">
-              <span className="comment-faces">
+            <span className="mt-list-gap mr-0 mb-0 ml-comment-indent flex items-center gap-item-gap text-caption-inline text-muted-foreground">
+              <span className="inline-flex">
                 {faces.map((writer) => (
                   <WriterMark key={JSON.stringify(writer)} writer={writer} agents={doors.agents} />
                 ))}
@@ -1956,7 +1977,7 @@ export function PlanCommentLayer({
     bubble === undefined ? null : (
       <MenuSurface
         flow={MENU_SURFACE_FLOW.TOOLBAR}
-        className="comment-bubble"
+        className="comment-bubble absolute z-3 -translate-y-[calc(100%+var(--luke-space-6))] data-below:translate-y-luke-16"
         data-below={bubble.below ? "" : undefined}
         style={{ top: bubble.top, left: bubble.left }}
       >
@@ -1972,12 +1993,12 @@ export function PlanCommentLayer({
       <div className="comment-layer">
         {blockButton}
         {bubbleDrawn}
-        <div className="comment-margin">
+        <div className="comment-margin absolute top-0 left-comment-margin w-comment-card">
           {open.map((thread) => (
             <div
               key={thread.id}
               ref={cardRef(thread.id)}
-              className="comment-slot"
+              className={SLOT_CLASS}
               data-moves={settled.current.has(thread.id)}
               style={slotStyle(thread.id)}
             >
@@ -1998,7 +2019,7 @@ export function PlanCommentLayer({
           {pendingCard === null ? null : (
             <div
               ref={cardRef(PENDING_THREAD)}
-              className="comment-slot"
+              className={SLOT_CLASS}
               data-moves={settled.current.has(PENDING_THREAD)}
               style={slotStyle(PENDING_THREAD)}
             >
@@ -2270,7 +2291,7 @@ export function PlanCommentsTab({
   const listed = filter === COMMENTS_FILTER.OPEN ? open : resolved;
   const full = { ...doors, control };
   return (
-    <Fill className="comments-tab">
+    <Fill className="comments-tab relative h-full">
       <WordsDatePickerRoom>
         <PaneBar
           title={COMMENTS_FILTER_WORDS[filter]}
@@ -2288,7 +2309,7 @@ export function PlanCommentsTab({
         />
         <ScrollArea ref={list} fade={SCROLL_FADE.BOTH}>
           <div
-            className="comments-list"
+            className="comments-list box-border px-luke-16 pt-0 pb-luke-24 data-empty:flex data-empty:min-h-full data-empty:flex-col"
             data-empty={!control.failed && listed.length === 0 && control.read ? "" : undefined}
           >
             {control.failed ? (

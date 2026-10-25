@@ -240,6 +240,9 @@ const LONE_LINK_ELEMENT = {
 } as const;
 
 /** The element a paragraph holding pictures alone is drawn as in words drawn as a document, which stands them side by side. */
+/** A picture from outside Luke, a link to it never fetched, marked by a glyph a step under its words' size. */
+export const OUTSIDE_GLYPH_CLASS = "mr-[0.25em] size-picture-glyph align-[-0.12em]";
+
 const PICTURE_ROW_ELEMENT = {
   TAG: "luke-pictures",
   CLASS: "transcript-pictures",
@@ -545,7 +548,7 @@ function PictureElement({ node }: MarkdownNodeProps): ReactNode {
   const words = said === "" ? UNNAMED_PICTURE : said;
   return (
     <TranscriptLink href={address === "" ? undefined : address} words={words}>
-      <ImageIcon className="picture-outside-glyph" aria-hidden="true" />
+      <ImageIcon className={OUTSIDE_GLYPH_CLASS} aria-hidden="true" />
       {words}
     </TranscriptLink>
   );
@@ -625,7 +628,12 @@ function LoneLinkElement({
 
 /** A document's paragraph of pictures alone: the pictures side by side, sharing its width. */
 function PictureRowElement({ children }: MarkdownNodeProps & { children?: ReactNode }): ReactNode {
-  return <div className={PICTURE_ROW_ELEMENT.CLASS}>{children}</div>;
+  // Side by side, sharing the column's width, so a before and an after read as a pair; each still hugs its own picture, and none grows past its own size (tasks.css).
+  return (
+    <div className={`${PICTURE_ROW_ELEMENT.CLASS} my-block-gap flex items-start gap-block-gap`}>
+      {children}
+    </div>
+  );
 }
 
 /** A mention held with the punctuation written against it, in the box no line breaks inside (`link-glue.ts`). */
@@ -692,7 +700,7 @@ export function GitHubPictureLink({ src, alt }: { src: string; alt: string }): R
   const words = alt === "" ? UNNAMED_PICTURE : alt;
   return (
     <TranscriptLink href={src === "" ? undefined : src} words={words}>
-      <ImageIcon className="picture-outside-glyph" aria-hidden="true" />
+      <ImageIcon className={OUTSIDE_GLYPH_CLASS} aria-hidden="true" />
       {words}
     </TranscriptLink>
   );

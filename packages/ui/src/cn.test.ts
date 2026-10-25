@@ -31,3 +31,11 @@ test("a later disabled fade replaces an earlier one, the theme's own included", 
   assert.equal(cn("disabled:opacity-50", "disabled:opacity-disabled"), "disabled:opacity-disabled");
   assert.equal(cn("disabled:opacity-disabled", "disabled:opacity-100"), "disabled:opacity-100");
 });
+
+test("a picture's caption size stands beside its colour, and a comment's later inset replaces an earlier", () => {
+  assert.equal(
+    cn("text-picture-caption text-muted-foreground"),
+    "text-picture-caption text-muted-foreground",
+  );
+  assert.equal(cn("ml-comment-indent", "ml-transcript-gutter"), "ml-transcript-gutter");
+});
