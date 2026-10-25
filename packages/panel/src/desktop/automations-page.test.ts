@@ -41,11 +41,11 @@ import type { PortActResult } from "@luke/host/contract";
 import { EXPERIMENT, type Experiment } from "@luke/settings";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import { experimentsOn } from "@luke/settings/testing";
-import { CARD_PRESS_SELECTOR } from "@luke/ui";
+import { CARD_PRESS_SELECTOR, PROFILE } from "@luke/ui";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeEach, test, vi } from "vitest";
+import { afterEach, beforeEach, onTestFinished, test, vi } from "vitest";
 import { runAppCommand } from "../app-commands.js";
 import { OpenFeedbackProvider } from "../open-feedback.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
@@ -68,6 +68,7 @@ import { deliveryOf, handState, stateWith } from "../testing/app-state.js";
 import { layContainersAt, shown } from "../testing/container-width.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { restOn } from "../testing/hint-rest.js";
+import { pixelsOf, wayBackGap } from "../testing/laid-length.js";
 import { playMotions } from "../testing/pane-motion.js";
 import { relayout } from "../testing/resize-observer.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
@@ -3851,11 +3852,27 @@ test("on a phone the list is headed by New automation and one ⋯ holding Create
   assert.ok(menuItem("Create with an agent"), "the ⋯ holds Create with an agent");
 });
 
-test("on a phone an automation's page is headed by the way back to the list, its name, and one ⋯ holding Save, Run now, its switch, Runs, and the automation's own actions, where the draft stands its heading", async () => {
+test("on a phone an automation's page is headed by the way back to the list, its name a section's gap under it, and one ⋯ holding Save, Run now, its switch, Runs, and the automation's own actions, where the draft stands its heading", async () => {
+  // Note that the window's sheets are laid on a phone's root, whose tokens the gap is read in.
+  const sheets = layContainersAt({});
+  document.documentElement.dataset.lukeProfile = PROFILE.WEB;
+  document.documentElement.dataset.lukeRoom = SHELL_ROOM.NARROW;
+  onTestFinished(() => {
+    sheets.remove();
+    delete document.documentElement.dataset.lukeProfile;
+    delete document.documentElement.dataset.lukeRoom;
+  });
   const page = mountNarrow({ kind: AUTOMATIONS_PAGE.EDIT, automationId: SWEEP.id });
   await settle();
   const head = page.querySelector<HTMLElement>(".automation-head");
   assert.ok(head, "the phone's head stands");
+  const header = page.querySelector<HTMLElement>(".luke-detail-page-header");
+  assert.ok(header, "the page's header stands");
+  assert.equal(
+    wayBackGap(head, header),
+    pixelsOf(header, "var(--luke-section-gap)"),
+    "the name stands a section's gap under the way back",
+  );
   assert.deepEqual(
     [...head.querySelectorAll("button")].map(
       (each) => each.textContent?.trim() || each.getAttribute("aria-label"),

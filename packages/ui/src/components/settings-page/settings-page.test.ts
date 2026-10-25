@@ -16,7 +16,8 @@ import { SettingsPage } from "./settings-page.js";
 /**
  * settings-page.test.ts -- the page's title is its one `h1`, each headed
  * section under it is a region its `h2` names, what acts on the whole
- * page stands in the page's head beside the title, and a section still
+ * page stands in the page's head beside the title, or on a phone the bar
+ * names the page and ends with its acts, and a section still
  * reading leaves the rest of the page drawn, its placeholder alone busy.
  */
 
@@ -100,10 +101,11 @@ test("the page's actions stand in its head beside its title", async () => {
   expect(button).toBeDefined();
 });
 
-test("on a phone the page's actions end its bar, and its head holds its title alone", async () => {
+test("on a phone the bar names the page and ends with its actions, and the page opens on its description", async () => {
   const container = await render(
     createElement(SettingsPage, {
       title: "Voice",
+      description: "Kept on this Mac",
       look: TOOLBAR_LOOK.PHONE,
       lead: createElement(Button, { children: "Settings" }),
       actions: createElement(Button, { children: "Reset" }),
@@ -116,7 +118,8 @@ test("on a phone the page's actions end its bar, and its head holds its title al
     "Reset",
   ]);
   expect(container.querySelectorAll("h1").length).toBe(1);
-  expect(container.querySelector("h1")?.closest('header[data-look="phone"]')).toBeNull();
+  expect(bar?.querySelector("h1")?.textContent).toBe("Voice");
+  expect(container.querySelector(".luke-settings-page-head")?.textContent).toBe("Kept on this Mac");
 });
 
 test("a page with no actions holds only its title in its head", async () => {
