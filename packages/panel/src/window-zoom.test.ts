@@ -4,19 +4,22 @@ import assert from "node:assert/strict";
 import { HOST_CAPABILITY, type HostCapability, type ZoomPercent } from "@luke/settings";
 import { ACTION_RESULT_STATUS } from "@luke/wire";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
-import { act, createElement, type ReactElement } from "react";
+import { act, createElement, Fragment, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
 import { useAppKeymap } from "./app-commands.js";
+import { rendererRegistry } from "./renderer-runtime.js";
 import { fakeAppPlatform } from "./testing/app-platform.js";
 import { DESKTOP_CAPABILITIES, handCapabilities } from "./testing/app-state.js";
 import { onRegistry } from "./testing/copy-feedback.js";
+import { ToastHost } from "./toast.js";
 import { useWindowZoom } from "./window-zoom.js";
 
 /**
  * window-zoom.test.ts -- ⌘+, ⌘−, and ⌘0 are the desktop's: its window zooms,
  * so its keymap claims them, and the web's leaves them to the browser's own
- * zoom, which they would otherwise be taken from for nothing.
+ * zoom, which they would otherwise be taken from for nothing. A size the
+ * settings refuse is said in a toast rather than forgotten in silence.
  */
 
 const roots: Root[] = [];
@@ -99,4 +102,42 @@ test("a held ⌘+ keeps stepping the browser's zoom on the web, its repeats left
   await drawOn(WEB_CAPABILITIES, []);
   assert.equal(pressCommand("+", "Equal").defaultPrevented, false);
   assert.equal(pressCommand("+", "Equal", true).defaultPrevented, false);
+});
+
+/** A desktop window at 100% whose every write is refused, beside the toasts it raises. */
+function RefusedZoomWindow(): ReactElement {
+  function Keys(): null {
+    useAppKeymap(true);
+    useWindowZoom(100, () =>
+      Promise.resolve({ status: ACTION_RESULT_STATUS.REJECTED, reason: "Settings are locked." }),
+    );
+    return null;
+  }
+  return createElement(
+    Fragment,
+    null,
+    onRegistry(AtomRegistry.make(), createElement(Keys)),
+    onRegistry(rendererRegistry, createElement(ToastHost)),
+  );
+}
+
+test("a zoom size the settings refuse is said in a toast", async () => {
+  fakeAppPlatform({});
+  handCapabilities(DESKTOP_CAPABILITIES);
+  const root = createRoot(document.body.appendChild(document.createElement("div")));
+  roots.push(root);
+  await act(async () => {
+    root.render(createElement(RefusedZoomWindow));
+    for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
+  });
+
+  await act(async () => {
+    pressCommand("+", "Equal");
+    for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
+  });
+
+  const said = [...document.querySelectorAll(".luke-toast .luke-toast-words")].map(
+    (words) => words.textContent,
+  );
+  assert.deepEqual(said, ["The window could not be zoomed. Try again."]);
 });
