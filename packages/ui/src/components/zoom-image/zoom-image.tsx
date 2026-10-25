@@ -13,7 +13,8 @@
  * because a glide behind a gesture would trail it. Once the picture has
  * loaded it says its own pixels as `--luke-zoom-natural-width` and
  * `--luke-zoom-natural-height`, plain numbers a frame may fit it by, as
- * large as the frame and no larger than a set multiple of them.
+ * large as the frame and no larger than a set multiple of them; one opened
+ * at its own pixels says none, and stands no larger than they are.
  */
 
 import { useCallback, useRef, useState } from "react";
@@ -306,7 +307,8 @@ export function useImageZoom(
       draggable: false,
       style: {
         transform: `translate(${String(view.x)}px, ${String(view.y)}px) scale(${String(view.scale)})`,
-        ...(loaded?.url === url
+        // Note that a picture opened at its own pixels says none, because a fit grown past them would undo the scale its opening set.
+        ...(loaded?.url === url && opening === IMAGE_OPENING.FITTED
           ? cssCustomProperties({
               "--luke-zoom-natural-width": loaded.width,
               "--luke-zoom-natural-height": loaded.height,

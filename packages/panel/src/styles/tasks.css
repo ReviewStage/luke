@@ -2205,21 +2205,13 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
   margin-right: 0;
 }
 
-/* A picture or a video fits the room under the viewer's header at its own
-   shape, the room one track its own size so the file's 100% is the room's.
-   A picture grows past its own pixels to fill the room, at most twice over
-   (`@luke/ui`'s ZoomImage says them once it has loaded); a video plays no
-   larger than its own (`@luke/ui`'s VideoPlayer). */
+/* A picture or a video fits the room under the viewer's header edge to
+   edge at its own shape, the room a container one track its own size, and
+   grows past its own pixels to fill it at most twice over (`@luke/ui`'s
+   ZoomImage and VideoPlayer say their pixels once they are read). */
 .attachment-viewer-body:has(> :is(.luke-zoom-image, .luke-video-player)) {
-  grid-template: minmax(0, 1fr) / minmax(0, 1fr);
-}
-
-.attachment-viewer-body:has(> .luke-zoom-image) {
   container-type: size;
-}
-
-.attachment-viewer-body > .luke-video-player {
-  max-height: 100%;
+  grid-template: minmax(0, 1fr) / minmax(0, 1fr);
 }
 
 .attachment-viewer-body > .luke-zoom-image {
@@ -2232,6 +2224,17 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
     2px
   );
   max-height: 100%;
+}
+
+.attachment-viewer-body > .luke-video-player {
+  width: min(
+    100cqw,
+    100cqh *
+    var(--luke-video-natural-width) /
+    var(--luke-video-natural-height),
+    var(--luke-video-natural-width) *
+    2px
+  );
 }
 
 /* An agent's Terminal tab (`terminal-tab.tsx`): the File tab's frame, its

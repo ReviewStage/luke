@@ -13,6 +13,7 @@ import {
   CloseIcon,
   CopyButton,
   DIALOG_SIZE,
+  DIALOG_VEIL,
   Dialog,
   IconButton,
   IMAGE_OPENING,
@@ -69,10 +70,10 @@ import { WholeFile, type WholeFileNote } from "./whole-file.js";
  * the file shown (who last edited it, for a plan's picture), beside Copy for a text file or a picture,
  * whatever the place opening it offers for a picture (Add to plan, in an
  * agent's transcript), Download, and the way out. It opens in the window's one modal frame,
- * `@luke/ui`'s dialog as large as the window allows, below its top bar and
- * clear of the traffic lights, the file fitted inside it: a picture up to
- * twice its own pixels, a text file at its reading width. The window dims, Tab stays inside the card, and
- * Escape, a press on the dimmed window, and the way out all close it and
+ * `@luke/ui`'s dialog as large as the window allows, its top clear of the
+ * traffic lights, the file fitted inside it edge to edge: a picture or a
+ * video up to twice its own pixels, a text file at its reading width. The window dims, Tab stays inside the card, and
+ * Escape, a press on the dimmed window or the room around the file, and the way out all close it and
  * hand focus back to the chip that opened it. A picture opened from its
  * tile grows out of the tile and, closed on that picture, shrinks back into it. The
  * file's bytes are the chip's own, so a file in the message box and one
@@ -324,6 +325,7 @@ function AttachmentBody({
       <div
         ref={zoom.frameRef}
         className="attachment-viewer-body min-h-0 flex-auto grid touch-none place-items-center overflow-hidden bg-surface"
+        {...DIALOG_VEIL}
       >
         <ZoomImage zoom={zoom} src={file.url} alt={file.name} />
       </div>
@@ -332,7 +334,10 @@ function AttachmentBody({
   if (attachmentView(file) === ATTACHMENT_VIEW.VIDEO) {
     return (
       // A video plays on the veil, centred, as large as the card leaves it under its header at its own shape.
-      <div className="attachment-viewer-body min-h-0 flex-auto grid place-items-center overflow-hidden bg-veil">
+      <div
+        className="attachment-viewer-body min-h-0 flex-auto grid place-items-center overflow-hidden bg-veil"
+        {...DIALOG_VEIL}
+      >
         <VideoPlayer dataUrl={file.url} label={file.name} place={VIDEO_PLAYER_PLACE.VIEWER} />
       </div>
     );
@@ -353,7 +358,10 @@ function AttachmentBody({
     );
   }
   return (
-    <div className="attachment-viewer-body min-h-0 flex-auto flex flex-col items-center justify-center gap-item-gap p-card text-center">
+    <div
+      className="attachment-viewer-body min-h-0 flex-auto flex flex-col items-center justify-center gap-item-gap p-card text-center"
+      {...DIALOG_VEIL}
+    >
       <FileTypeIcon name={file.name} className="size-12" />
       <p className="mx-0 mt-item-gap mb-0 max-w-full text-section font-luke-semibold wrap-anywhere">
         {file.name}
@@ -450,6 +458,7 @@ export function AttachmentViewer({
         className="attachment-viewer ph-no-capture flex size-full min-h-0 flex-col"
         data-view={attachmentView(file)}
         data-opening={opening}
+        {...DIALOG_VEIL}
       >
         {phone ? (
           <PhoneHead
@@ -503,7 +512,7 @@ export function AttachmentViewer({
             }
           />
         ) : (
-          <header className="flex flex-none items-center gap-tight-gap border-b border-border py-item-gap pr-item-gap pl-list-inset">
+          <header className="flex flex-none items-center gap-tight-gap border-b border-border py-luke-4 pr-item-gap pl-list-inset">
             <FileTypeIcon name={file.name} className="mr-tight-gap size-control-icon flex-none" />
             <Text
               as={TEXT_ELEMENT.H2}

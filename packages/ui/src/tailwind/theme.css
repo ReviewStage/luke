@@ -303,8 +303,9 @@
   --spacing-dialog-action-gap: var(--luke-dialog-action-gap);
   --spacing-dialog-action: var(--luke-dialog-action-width);
   --spacing-dialog-room: var(--luke-dialog-room);
-  /* Where a card the window's size starts: below the window's top bar, clear of the traffic lights. */
-  --spacing-dialog-window-top: var(--luke-toolbar-height);
+  /* Where a card the window's size starts: clear of what the window draws
+     over its top (the traffic lights), as the window says, else a margin. */
+  --spacing-dialog-window-top: var(--luke-dialog-window-top, var(--luke-space-12));
   --spacing-card-inset-snug: var(--luke-card-inset-snug);
   --spacing-dialog-reach: var(--luke-space-12);
   --spacing-menu-inset: var(--luke-menu-inset);
