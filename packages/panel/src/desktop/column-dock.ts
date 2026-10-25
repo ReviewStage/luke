@@ -35,10 +35,16 @@ const FLOATING_CARD_HEIGHT = "--floating-card";
 /** The floating card's video tile (`@luke/ui`'s `CallVideoTile`). */
 const CARD_TILE = ".luke-call-video-tile";
 
+/** The tile's still, where it draws Luke's face and its words in the video's place (`@luke/ui`'s `AvatarStill`). */
+const TILE_STILL = ".luke-call-video-still";
+
+/** The tile's wait once the video's first frame is drawn (`@luke/ui`'s `AvatarWaiting`), which fades out but stays laid out. */
+const TILE_GONE = '.luke-call-video-waiting[data-gone="true"]';
+
 /** The length the card hands its tile's height in (`@luke/ui`'s placement hook). */
 const CARD_TILE_HEIGHT = "--luke-call-video-height";
 
-/** The bars at the head of a pane, a tab's own and its tabs (`@luke/ui`'s `PaneBar`), which a phone's card never covers. */
+/** The bars of a pane, a tab's own and its tabs (`@luke/ui`'s `PaneBar`), which a phone's card never covers where it can clear them. */
 const PANE_BAR = ".luke-pane-bar";
 
 /** The token the card stands clear of what it rises above by. */
@@ -122,51 +128,90 @@ function rootLength(root: HTMLElement, token: string): number {
   return Number.isNaN(length) ? 0 : length;
 }
 
-/** The lowest foot of the bars on screen at the head of `column`, in its upper half, so a bar docked at its foot is none of them; or none where no bar stands. */
-function barsFoot(column: Element): number | undefined {
+/**
+ * The feet of the bars on screen in `column` that end above `rest`, the
+ * card's foot. Note that a bar is kept by where it ends rather than by where
+ * in the column it stands, because a pull request's header grows with its
+ * title and can push its tabs past the column's middle, while a bar docked
+ * at the column's foot ends under the card's own foot and is one no height
+ * of the card's could clear.
+ */
+function barFeet(column: Element, rest: number): number[] {
   const span = column.getBoundingClientRect();
-  const middle = span.top + span.height / 2;
-  let foot: number | undefined;
+  const feet: number[] = [];
   for (const bar of column.querySelectorAll(PANE_BAR)) {
     const box = bar.getBoundingClientRect();
-    if (!seen(bar, box, span) || box.top >= middle) continue;
-    foot = Math.max(foot ?? box.bottom, box.bottom);
+    if (seen(bar, box, span) && box.bottom < rest) feet.push(box.bottom);
   }
-  return foot;
+  return feet;
+}
+
+/**
+ * What the tile's still needs where it draws words in the video's place
+ * (Video ended, why, and Restart video; or the wait while it connects):
+ * from its first line shown to its last, its padding, and the tile's border;
+ * or nothing over a picture. Note that the lines are read where they lay
+ * out, so a tile already shortened still answers what they need whole; and
+ * that a wait gone from over the video's first frame (`TILE_GONE`) needs
+ * nothing, since it stays laid out while it fades and then stands unseen.
+ */
+function stillNeeds(tile: HTMLElement): number {
+  const still = [...tile.querySelectorAll<HTMLElement>(TILE_STILL)].find(
+    (each) => each.closest(TILE_GONE) === null,
+  );
+  if (still === undefined) return 0;
+  const lines = [...still.children].filter(
+    (line): line is HTMLElement => line instanceof HTMLElement && line.offsetHeight > 0,
+  );
+  if (lines.length === 0) return 0;
+  const top = Math.min(...lines.map((line) => line.offsetTop));
+  const bottom = Math.max(...lines.map((line) => line.offsetTop + line.offsetHeight));
+  const padding = getComputedStyle(still);
+  const inset = Number.parseFloat(padding.paddingTop) + Number.parseFloat(padding.paddingBottom);
+  return bottom - top + (Number.isNaN(inset) ? 0 : inset) + tile.offsetHeight - tile.clientHeight;
 }
 
 /**
  * The height a phone's card hands its video tile, or none where the tile
- * stands at its own 16:9: where the card at rest would reach over the
- * lowest bar at the column's head (`barsFoot`), the tile gives up what it
- * must for the card to stand the gap clear of it, and never goes shorter
- * than `floor`, below which the card covers the bar rather than lose the
- * video. Note that the card is read where it is laid out, its `offsetTop`,
- * not where its rise or its lift over a dock (`lift`) has moved it, since
- * neither the end of a rise nor the end of the lift's glide reaches an
- * observer; and that the card stands on its foot, so handing the tile a
- * height moves the card's top and leaves the room it is read from as it was.
+ * stands at its own 16:9: where the card at rest would reach over a bar
+ * above its foot (`barFeet`), the tile gives up what it must for the card
+ * to stand the gap clear of the lowest bar it can clear at its least, which
+ * is `floor`, or what its still's words need (`stillNeeds`) where that is
+ * more. Where it can clear none, it stands at its least and covers them
+ * rather than lose the video or cut Restart video off; and a bar under one
+ * it clears, which it could not clear too (a Chapters view's own head under
+ * the pull request's tabs), costs the tile nothing. It never stands taller
+ * than its own 16:9. Note that the card is read where it is laid out, its
+ * `offsetTop`, not where its rise or its lift over a dock (`lift`) has
+ * moved it, since neither the end of a rise nor the end of the lift's glide
+ * reaches an observer; and that the card stands on its foot, so handing the
+ * tile a height moves the card's top and leaves the room it is read from as
+ * it was.
  */
 function tileHeight(
   card: HTMLElement,
   tile: HTMLElement,
-  ceiling: number,
+  column: Element,
   lift: number,
   gap: number,
   floor: number,
 ): number | undefined {
   const rest = card.offsetTop + card.offsetHeight - lift;
+  const feet = barFeet(column, rest);
+  if (feet.length === 0) return undefined;
   const chrome = card.offsetHeight - tile.offsetHeight;
-  const room = rest - ceiling - gap - chrome;
-  if (room >= tile.offsetWidth * TILE_ASPECT) return undefined;
-  return Math.floor(Math.max(floor, room));
+  const least = Math.max(floor, stillNeeds(tile));
+  const under = (foot: number) => rest - foot - gap - chrome;
+  const cleared = feet.filter((foot) => under(foot) >= least);
+  const height = cleared.length === 0 ? least : under(Math.max(...cleared));
+  return height >= tile.offsetWidth * TILE_ASPECT ? undefined : Math.floor(height);
 }
 
 /**
  * Hands the floating card's video tile the height `tileHeight` answers for
- * the bars at the head of `column`, the column a phone's card stands over,
- * or takes it back where none is given or none answers, so the tile stands
- * at its own 16:9 again.
+ * the bars of `column`, the column a phone's card stands over, or takes it
+ * back where none is given or none answers, so the tile stands at its own
+ * 16:9 again.
  */
 function fitTile(
   card: Element | null,
@@ -176,14 +221,13 @@ function fitTile(
 ): void {
   const tile = card?.querySelector(CARD_TILE);
   if (!(card instanceof HTMLElement) || !(tile instanceof HTMLElement)) return;
-  const ceiling = column === null ? undefined : barsFoot(column);
   const gap = rootLength(root, CARD_GAP);
   // As far as the card's own rule lifts it over the dock (`call.css`).
   const lift = Math.max(0, dock + gap - cornerStep(root));
   const height =
-    ceiling === undefined
+    column === null
       ? undefined
-      : tileHeight(card, tile, ceiling, lift, gap, rootLength(root, TILE_FLOOR));
+      : tileHeight(card, tile, column, lift, gap, rootLength(root, TILE_FLOOR));
   writeLength(card, CARD_TILE_HEIGHT, height === undefined ? undefined : `${height}px`);
 }
 
@@ -339,7 +383,13 @@ export function useColumnDock(
       });
     }
     const arrived = new MutationObserver(measure);
-    arrived.observe(host, { childList: true, subtree: true });
+    // Note that the card's wait goes from over the video's first frame by an attribute alone, which frees the room it held (`stillNeeds`).
+    arrived.observe(host, {
+      childList: true,
+      subtree: true,
+      attributes: true,
+      attributeFilter: ["data-gone"],
+    });
     // Note that a scroll moves a part that flows with what it scrolls, an Inbox reply box, under the toasts, and neither observer sees it.
     host.addEventListener("scroll", measure, { capture: true, passive: true });
     follow();
