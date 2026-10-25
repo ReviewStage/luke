@@ -3518,6 +3518,22 @@ ul.actor-stack {
   margin-top: var(--luke-tight-gap);
 }
 
+/* A root's thread stands in a slot of its own after the message, so its open
+   box outlives the message turning from continued to named (`ThreadRow`): it
+   lines up under the words, in the words' column of a continued message, and
+   under a named one's comment past its face, as it stood inside them. */
+.chat-message > .chat-thread {
+  grid-column: 2;
+  margin-top: calc(var(--luke-tight-gap) + var(--luke-list-gap));
+}
+
+/* Note that a named message's words stand past its comment's face, a list
+   row's disc (`AVATAR_SIZE.ROW`, `--luke-space-20`), and the gap after it. */
+.chat-message > .luke-comment ~ .chat-thread {
+  grid-column: 1 / -1;
+  padding-inline-start: calc(var(--luke-space-20) + var(--luke-icon-gap));
+}
+
 /* A folded thread's press follows its repliers' faces, each hanging its
    card, and says how many replied, as a plan comment's thread at rest is
    summed up. */

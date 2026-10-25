@@ -868,58 +868,53 @@ const ThreadRow = memo(function ThreadRow({
       quoting === undefined ? undefined : { words: quoting, onQuoted: () => setQuoting(undefined) },
     [quoting],
   );
-  const words = (
-    <>
-      <Body message={message} context={context} />
-      {quiet ? null : (
-        <div className="chat-thread" data-open={String(open)}>
-          <div className="chat-thread-toggle">
-            {/* Note that the faces stand beside the press rather than in it, since each hangs its replier's card. */}
-            {replies.length > 0 && !open ? (
-              <ActorStack
-                actors={repliers}
-                drawn={REPLIERS_DRAWN}
-                faces={repliers.map(() => ({}))}
-                label={REPLIERS_LABEL}
-              />
-            ) : null}
-            {toggle}
-          </div>
-          {open && replies.length + pendingReplies.length > 0 ? (
-            <ul className="chat-replies">
-              {replies.map((reply) => (
-                <Reply key={reply.id} message={reply} context={context} />
-              ))}
-              {pendingReplies.map((entry) => (
-                <PendingRow key={entry.id} entry={entry} context={context} reply />
-              ))}
-            </ul>
-          ) : null}
-          {open && canReply ? (
-            <ChatComposer
-              channelId={message.channelId}
-              replyTo={message.seq}
-              label="Reply in thread"
-              mentions={context.mentionsIn(message.channelId, [
-                message.authorId,
-                ...replies.map((reply) => reply.authorId),
-              ])}
-              keywords={context.keywords}
-              compact
-              replyDoor={threadDoor}
-              pendingQuote={pendingQuote}
-              onSend={(text, attachments, takeBack) =>
-                context.send(
-                  { channelId: message.channelId, replyTo: message.seq },
-                  { ...postOf(text, attachments), replyTo: message.seq },
-                  takeBack,
-                )
-              }
-            />
-          ) : null}
-        </div>
-      )}
-    </>
+  const thread = quiet ? null : (
+    <div className="chat-thread" data-open={String(open)}>
+      <div className="chat-thread-toggle">
+        {/* Note that the faces stand beside the press rather than in it, since each hangs its replier's card. */}
+        {replies.length > 0 && !open ? (
+          <ActorStack
+            actors={repliers}
+            drawn={REPLIERS_DRAWN}
+            faces={repliers.map(() => ({}))}
+            label={REPLIERS_LABEL}
+          />
+        ) : null}
+        {toggle}
+      </div>
+      {open && replies.length + pendingReplies.length > 0 ? (
+        <ul className="chat-replies">
+          {replies.map((reply) => (
+            <Reply key={reply.id} message={reply} context={context} />
+          ))}
+          {pendingReplies.map((entry) => (
+            <PendingRow key={entry.id} entry={entry} context={context} reply />
+          ))}
+        </ul>
+      ) : null}
+      {open && canReply ? (
+        <ChatComposer
+          channelId={message.channelId}
+          replyTo={message.seq}
+          label="Reply in thread"
+          mentions={context.mentionsIn(message.channelId, [
+            message.authorId,
+            ...replies.map((reply) => reply.authorId),
+          ])}
+          keywords={context.keywords}
+          compact
+          replyDoor={threadDoor}
+          pendingQuote={pendingQuote}
+          onSend={(text, attachments, takeBack) =>
+            context.send(
+              { channelId: message.channelId, replyTo: message.seq },
+              { ...postOf(text, attachments), replyTo: message.seq },
+              takeBack,
+            )
+          }
+        />
+      ) : null}
+    </div>
   );
   const action = <RowActions message={message} extra={quiet && canReply ? toggle : undefined} />;
   return (
@@ -934,14 +929,20 @@ const ThreadRow = memo(function ThreadRow({
           <ContinuedTime at={message.postedAt} />
           <div className="chat-message-body">
             <ContinuedByline actor={actor} action={action} />
-            {words}
+            <Body message={message} context={context} />
           </div>
         </>
       ) : (
         <MessageComment actor={actor} at={message.postedAt} where={where} action={action}>
-          <div className="chat-message-body">{words}</div>
+          <div className="chat-message-body">
+            <Body message={message} context={context} />
+          </div>
         </MessageComment>
       )}
+      {/* Note that the thread stands in a slot of its own after the message, because a reply landing in the thread above
+          turns a continued message into a named one, and an open box drawn inside either shape would be drawn anew,
+          losing its caret and a dictation under way. */}
+      {thread}
     </li>
   );
 });
