@@ -43,7 +43,8 @@
  * is found beside the script, or in the global npm folder.
  */
 
-import { spawnSync } from "node:child_process";
+import { type ChildProcess, spawnSync } from "node:child_process";
+import { once } from "node:events";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
@@ -121,6 +122,8 @@ const WINDOW_PAGE = { [WINDOW.PANEL]: "/index.html", [WINDOW.CALL]: "/call.html"
 // How long a sized window's page has to lay out at its new size before it is sized once more, and how many times it is.
 const RESIZE_TIMEOUT_MS = 5_000;
 const RESIZE_TRIES = 2;
+// How long an app told to exit has before it is killed.
+const EXIT_TIMEOUT_MS = 10_000;
 // A desktop picture is flattened onto the panel's frame colour, as the app's capture mode paints the frame (`shell.css`), or the page's ground where neither is set.
 const GROUND_SCRIPT = `(() => {
   const probe = document.createElement("div");
@@ -239,7 +242,7 @@ interface ElectronApplication {
   browserWindow(page: PlaywrightPage): Promise<PlaywrightHandle>;
   waitForEvent(event: "window", options: Record<string, unknown>): Promise<PlaywrightPage>;
   evaluate<Arg>(script: (electron: never, arg: Arg) => unknown, arg: Arg): Promise<unknown>;
-  close(): Promise<void>;
+  process(): ChildProcess;
 }
 interface Playwright {
   chromium: { launch(): Promise<PlaywrightBrowser> };
@@ -480,6 +483,23 @@ async function deathsOf(app: ElectronApplication): Promise<readonly string[]> {
   return deaths as string[];
 }
 
+/**
+ * Ends the app at once, past its quit guard: a staged call asks "Quit Luke?"
+ * before a quit, which no one is there to answer, so Playwright's own close,
+ * a quit, would wait on it for ever. One that does not exit in time is killed.
+ */
+async function endApp(app: ElectronApplication): Promise<void> {
+  const child = app.process();
+  if (child.exitCode !== null || child.signalCode !== null) return;
+  const exited = once(child, "exit", { signal: AbortSignal.timeout(EXIT_TIMEOUT_MS) });
+  await app
+    .evaluate(({ app: electronApp }: never) => {
+      (electronApp as { exit(code: number): void }).exit(0);
+    }, undefined)
+    .catch(() => undefined);
+  await exited.catch(() => child.kill("SIGKILL"));
+}
+
 /** Sizes `window` to `frame` and zooms its page, then waits for the page to lay out at it, sizing it once more where it never did; answers what the page stood at where it still did not. */
 async function sizeWindow(
   window: PlaywrightHandle,
@@ -584,7 +604,7 @@ async function shootDesktop(
     writeFileSync(file, flattenPng(Buffer.from(png, "base64"), ground));
   } finally {
     problems.push(...(await deathsOf(app)));
-    await app.close();
+    await endApp(app);
   }
 }
 
