@@ -32,7 +32,7 @@ import {
   withIntegrationFilters,
   withRepository,
 } from "@luke/features/automation-draft-model";
-import { automationTriggerText } from "@luke/features/automation-list-model";
+import { automationTriggerText, parseAutomationClock } from "@luke/features/automation-list-model";
 import { readSchedule, SCHEDULE_REFUSAL } from "@luke/features/automation-schedule";
 import {
   AUTOMATION_CALL_FAILURE,
@@ -70,7 +70,7 @@ import {
 import { LINK_PLACE } from "@luke/features/link-grammar";
 import type { ModelChoice } from "@luke/features/models-wire";
 import type { WorkspaceSentry } from "@luke/features/sentry-install-wire";
-import { dayAndTimeText, timeZoneNames } from "@luke/features/time-format";
+import { clockText, dayAndTimeText, timeZoneNames } from "@luke/features/time-format";
 import {
   SENTRY_LEVEL,
   SENTRY_TRIGGER_EVENT,
@@ -142,6 +142,7 @@ import {
   Switch,
   TEXT_ELEMENT,
   TEXT_FIELD_FONT,
+  TEXT_FIELD_SIZE,
   TEXT_FIELD_TYPE,
   TEXT_TONE,
   TEXT_VARIANT,
@@ -454,18 +455,57 @@ export function AutomationSwitch({
   );
 }
 
-/** A time of day as the time field holds it, the hour and minute in two figures each. */
-function clockValue(hour: number, minute: number): string {
-  return `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
-}
+/** What a time of day that cannot be read is told to be, under the time's row. */
+const UNREADABLE_TIME = "Write the time as 2:00 AM.";
 
-/** The hour and minute a time field holds, or nothing while it holds none. */
-function clockOf(value: string): { hour: number; minute: number } | undefined {
-  const [hour, minute] = value.split(":").map(Number);
-  if (hour === undefined || minute === undefined || Number.isNaN(hour) || Number.isNaN(minute)) {
-    return undefined;
-  }
-  return { hour, minute };
+/**
+ * The schedule's time of day, written as the summary says it ("2:00 AM")
+ * rather than in the engine's own time input, which pads it ("02:00 AM").
+ * What is typed stands as typed while it is unreadable, even after the
+ * caret leaves, marked invalid and said to the editor (`onUnreadable`),
+ * which refuses a save over it; a time that reads changes the schedule at
+ * once and the schedule's own words return once the field is left.
+ */
+function ClockField({
+  hour,
+  minute,
+  inputRef,
+  describedBy,
+  invalid,
+  onClock,
+  onUnreadable,
+}: {
+  hour: number;
+  minute: number;
+  inputRef: RefObject<HTMLInputElement | null>;
+  describedBy: string | undefined;
+  invalid: boolean | undefined;
+  onClock: (clock: { readonly hour: number; readonly minute: number }) => void;
+  onUnreadable: (unreadable: boolean) => void;
+}): React.JSX.Element {
+  const [typed, setTyped] = useState<string | undefined>(undefined);
+  const unreadable = typed !== undefined && parseAutomationClock(typed) === undefined;
+  // Note that the editor is told while the words stand and told otherwise as they go, the field's leaving the schedule included, because a save must never run over words it cannot see.
+  useEffect(() => {
+    onUnreadable(unreadable);
+    return () => onUnreadable(false);
+  }, [unreadable, onUnreadable]);
+  return (
+    <TextField
+      ref={inputRef}
+      label="Time"
+      describedBy={describedBy}
+      invalid={invalid === true || unreadable}
+      value={typed ?? clockText(hour, minute)}
+      onEscape={() => inputRef.current?.blur()}
+      onChange={(text) => {
+        setTyped(text);
+        const clock = parseAutomationClock(text);
+        if (clock !== undefined) onClock(clock);
+      }}
+      onBlur={() => setTyped(unreadable ? typed : undefined)}
+    />
+  );
 }
 
 /** A minute past the hour as the hourly picker names it: "At :15". */
@@ -724,12 +764,15 @@ function ScheduleRows({
   problem,
   onSchedule,
   onTimezone,
+  onUnreadableTime,
 }: {
   draft: AutomationDraft;
   /** What stops a save in the schedule, said under the row it is about. */
   problem: string | undefined;
   onSchedule: (schedule: ScheduleDraft) => void;
   onTimezone: (timezone: string) => void;
+  /** Hears whether the time's field holds words that are no time. */
+  onUnreadableTime: (unreadable: boolean) => void;
 }): React.JSX.Element {
   // The cron's and the time's Escape lets go of the caret and keeps the press, as every field's here does.
   const cron = useRef<HTMLInputElement>(null);
@@ -809,18 +852,14 @@ function ScheduleRows({
                     />
                   ) : (
                     <span className="automation-field automation-time-field">
-                      <TextField
-                        ref={time}
-                        type={TEXT_FIELD_TYPE.TIME}
-                        label="Time"
+                      <ClockField
+                        inputRef={time}
+                        hour={schedule.hour}
+                        minute={schedule.minute}
                         describedBy={control["aria-describedby"]}
                         invalid={control["aria-invalid"]}
-                        value={clockValue(schedule.hour, schedule.minute)}
-                        onEscape={() => time.current?.blur()}
-                        onChange={(text) => {
-                          const clock = clockOf(text);
-                          if (clock !== undefined) onSchedule({ ...schedule, ...clock });
-                        }}
+                        onClock={(clock) => onSchedule({ ...schedule, ...clock })}
+                        onUnreadable={onUnreadableTime}
                       />
                     </span>
                   )}
@@ -902,14 +941,32 @@ const NEW_AUTOMATION = "New automation";
 /** The place above the editor, which its toolbar's first crumb names and goes back to. */
 const AUTOMATIONS_PLACE = "Automations";
 
-/** The page's title: the automation's tile beside its name, the page's one `h1`. */
+/** What the title's field says while it holds no name. */
+const UNTITLED_AUTOMATION = "Untitled automation";
+
+/**
+ * The page's title: the automation's tile beside its name, the page's one
+ * `h1`, the name written where it is drawn (the title-sized field), so the
+ * page names the automation once and the name is edited there. An
+ * automation not yet made stands as New automation until it is named.
+ */
 function EditorTitle({
   automation,
+  name,
+  nameField,
+  invalid,
+  onName,
 }: {
   automation: AutomationSummary | undefined;
+  /** The name as it is written now, saved or not. */
+  name: string;
+  /** The field's input, which its Escape lets go of the caret from. */
+  nameField: RefObject<HTMLInputElement | null>;
+  invalid: boolean;
+  onName: (name: string) => void;
 }): React.JSX.Element {
   return (
-    <Inline gap={GAP.CONTROL}>
+    <Inline gap={GAP.CONTROL} wrap={false}>
       <ActorMark
         actor={
           automation === undefined
@@ -917,7 +974,16 @@ function EditorTitle({
             : automationActor(automation)
         }
       />
-      {automation === undefined ? NEW_AUTOMATION : automation.name}
+      <TextField
+        ref={nameField}
+        size={TEXT_FIELD_SIZE.TITLE}
+        label="Automation name"
+        placeholder={automation === undefined ? NEW_AUTOMATION : UNTITLED_AUTOMATION}
+        invalid={invalid}
+        value={name}
+        onEscape={() => nameField.current?.blur()}
+        onChange={onName}
+      />
     </Inline>
   );
 }
@@ -2071,6 +2137,7 @@ function EditorForm({
   codeReviewOn,
   sentry,
   onDraft,
+  onUnreadableTime,
 }: {
   draft: AutomationDraft;
   automation: AutomationSummary | undefined;
@@ -2089,6 +2156,8 @@ function EditorForm({
   /** The workspace's Sentry, whose trigger is offered only where this deployment holds the integration. */
   sentry: SentryOffer;
   onDraft: (patch: Partial<AutomationDraft>) => void;
+  /** Hears whether the schedule's time field holds words that are no time, which a save is refused over. */
+  onUnreadableTime: (unreadable: boolean) => void;
 }): React.JSX.Element {
   // Note that Sentry stays listed where the deployment holds no integration, unpickable and saying why, so it can be found.
   const triggers =
@@ -2151,6 +2220,7 @@ function EditorForm({
                   problem={problems[DRAFT_FIELD.SCHEDULE]}
                   onSchedule={(schedule) => onDraft({ schedule })}
                   onTimezone={(timezone) => onDraft({ timezone })}
+                  onUnreadableTime={onUnreadableTime}
                 />
               ) : kind === AUTOMATION_TRIGGER.GITHUB ? (
                 <>
@@ -2510,12 +2580,14 @@ export function AutomationEditor({
   const saved = automation === undefined ? undefined : automationDraft(automation, defaults);
   // Note that a draft is unsaved wherever it differs from the automation, even where what differs
   // cannot be written yet, a same agent with none chosen, so Save stands to say what is missing.
-  const dirty = saved === undefined || !sameDraft(draft, saved);
+  // Note that words the time's field holds that are no time are unsaved work too, though no draft holds them.
+  const [unreadableTime, setUnreadableTime] = useState(false);
+  const dirty = saved === undefined || !sameDraft(draft, saved) || unreadableTime;
   // Note that the saved agent is offered back only on the repository it was saved on, because an agent works in its own repository.
   const savedAgentId =
     saved !== undefined && saved.repository === draft.repository ? saved.agentId : null;
   // Note that a new draft nothing was changed in is no work to lose, so Escape may leave it.
-  const written = automation === undefined ? !sameDraft(draft, start) : dirty;
+  const written = automation === undefined ? unreadableTime || !sameDraft(draft, start) : dirty;
   const narrow = room === SHELL_ROOM.NARROW;
   // One column's runs stand as a screen of their own over the setup, and the setup the whole width.
   const split = useScreenSplit(room);
@@ -2541,7 +2613,12 @@ export function AutomationEditor({
   useEffect(() => {
     if (linked?.runId !== undefined) showRuns.current();
   }, [linked]);
-  const problems = draftProblems(draft, repositoryHeld(draft, automation), new Date());
+  const drafted = draftProblems(draft, repositoryHeld(draft, automation), new Date());
+  // Note that a time the field cannot read stops a save as the schedule's own problem does, since the draft holds only what read before it.
+  const problems: DraftProblems =
+    unreadableTime && drafted[DRAFT_FIELD.SCHEDULE] === undefined
+      ? { ...drafted, [DRAFT_FIELD.SCHEDULE]: UNREADABLE_TIME }
+      : drafted;
   const editDraft = (patch: Partial<AutomationDraft>) => {
     setDraft((was) => ({ ...was, ...patch }));
     setRefusal(undefined);
@@ -2638,11 +2715,25 @@ export function AutomationEditor({
       screenRef={screen}
       layoutRef={editorLayout}
       hidden={hidden.list}
-      title={<EditorTitle automation={automation} />}
+      title={
+        <EditorTitle
+          automation={automation}
+          name={draft.name}
+          nameField={nameField}
+          invalid={shownProblems && problems[DRAFT_FIELD.NAME] !== undefined}
+          onName={(name) => editDraft({ name })}
+        />
+      }
       toolbar={(pickUp) => (
         <EditorToolbar
           automation={automation}
-          pickUp={pickUp}
+          // Note that the bar is handed the written name, because the title is a field and a field's value is no words the page can read off its heading.
+          pickUp={{
+            ...pickUp,
+            name:
+              draft.name.trim() ||
+              (automation === undefined ? NEW_AUTOMATION : UNTITLED_AUTOMATION),
+          }}
           codeReview={codeReviewOn && readCodeReviewSettings(draft.prompt) !== undefined}
           dirty={dirty}
           saving={saving}
@@ -2663,14 +2754,6 @@ export function AutomationEditor({
       )}
       setup={
         <AutomationSetup>
-          <TextField
-            ref={nameField}
-            label="Automation name"
-            placeholder="Untitled automation"
-            value={draft.name}
-            onEscape={() => nameField.current?.blur()}
-            onChange={(name) => editDraft({ name })}
-          />
           {shownProblems && problems[DRAFT_FIELD.NAME] !== undefined ? (
             <FailureNote>{problems[DRAFT_FIELD.NAME]}</FailureNote>
           ) : null}
@@ -2690,6 +2773,7 @@ export function AutomationEditor({
             codeReviewOn={codeReviewOn}
             sentry={sentry}
             onDraft={editDraft}
+            onUnreadableTime={setUnreadableTime}
           />
         </AutomationSetup>
       }

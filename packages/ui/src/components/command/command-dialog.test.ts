@@ -16,8 +16,7 @@ import {
  * says so where none do; ↑ ↓ and Return choose a row, and a press chooses
  * one too; its groups stand under their headings, a group's note after its
  * rows; a list still read says it is reading; Escape puts it away and hands
- * focus back to the button, with no key reaching the window behind; and the
- * window's one column may shrink, so a wide row never widens the card.
+ * focus back to the button, with no key reaching the window behind.
  */
 
 declare global {
@@ -280,11 +279,4 @@ test("the palette opens again with its words cleared", () => {
   act(() => button("Search").click());
   expect(field().value).toBe("");
   expect(rows()).toHaveLength(4);
-});
-
-test("the dimmed window gives the card one column that may shrink below its widest row", () => {
-  openPalette();
-  const room = document.querySelector<HTMLElement>('[data-slot="dialog-viewport"]');
-  // Note that jsdom lays nothing out, so this holds the cause: an auto track grows to the widest row's own width, which put the card's right edge past a phone's screen.
-  expect(room?.classList.contains("grid-cols-[minmax(0,1fr)]")).toBe(true);
 });

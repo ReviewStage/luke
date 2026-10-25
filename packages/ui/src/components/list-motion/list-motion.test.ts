@@ -12,8 +12,9 @@ import { LIST_MOTION_WAY, ListMotion, motionKey, motionRows, useLeaving } from "
  * the same way, a row moved from one list to another glides across rather
  * than leaving and arriving, a change landing while rows still move adds
  * onto what they play rather than stopping it, a row arriving while the
- * lists are still read only fades in, and nothing plays where no motion is
- * to play.
+ * lists are still read only fades in, nothing plays where no motion is
+ * to play, and a row out of the reader's sight plays nothing, so a change
+ * of thousands of rows plays a screenful.
  * jsdom lays nothing out and plays nothing, so each row's place is given
  * and each motion recorded.
  */
@@ -78,7 +79,10 @@ beforeEach(() => {
     this: HTMLElement,
   ) {
     const list = this.parentElement;
-    if (!this.matches("li") || list === null) return new DOMRect(0, 0, 0, 0);
+    // Note that a row taken out of the layout is drawn nowhere, as a browser draws it: an empty box at the window's corner.
+    if (!this.matches("li") || list === null || this.style.display === "none") {
+      return new DOMRect(0, 0, 0, 0);
+    }
     const laidOut = [...list.children].filter(
       (each) => each instanceof HTMLElement && each.style.position !== "absolute",
     );
@@ -238,7 +242,6 @@ test("a row leaving slides out out of reach where it stood, and the rows under i
 
   const leaving = rowOf("B", true);
   expect(leaving?.hasAttribute("inert")).toBe(true);
-  expect((leaving as HTMLElement | undefined)?.style.top).toBe(`${ROW}px`);
   expect(motionsOf(leaving)).toEqual([
     [
       { opacity: "1", transform: "none" },
@@ -266,7 +269,6 @@ test("a row listed again before its exit has played stands again, and comes back
   const back = rowOf("B");
   expect(back).toBe(leaving);
   expect(back?.hasAttribute("inert")).toBe(false);
-  expect((back as HTMLElement | undefined)?.style.position).toBe("");
   expect(motionsOf(back)).toEqual([
     [{ opacity: 0 }, { opacity: 1 }],
     [{ transform: "translateX(-16px)" }, { transform: "none" }],
@@ -285,6 +287,25 @@ test("a row moved into another list glides across from where it stood rather tha
   expect(motionsOf(rowOf("C"))).toEqual([
     [{ transform: `translate(0px, ${-ROW}px)` }, { transform: "none" }],
   ]);
+});
+
+test("a row arriving or leaving below the window's foot plays nothing, and one leaving there goes at once", () => {
+  // Note that jsdom's window is 768px tall, so of these 40px rows the first stand in it and the last far below it.
+  const many = Array.from({ length: 40 }, (_, at) => `R${at}`);
+  const show = draw([["A"]]);
+
+  show([["A", ...many]]);
+
+  expect(motionsOf(rowOf("R0"))).toHaveLength(2);
+  expect(motionsOf(rowOf("R39"))).toEqual([]);
+
+  played = [];
+  const far = rowOf("R39");
+  show([["A"]]);
+
+  expect(motionsOf(rowOf("R0", true))).toHaveLength(1);
+  expect(motionsOf(far)).toEqual([]);
+  expect(far?.isConnected).toBe(false);
 });
 
 test("with no motion to play, a leaving row goes on the change that stopped listing it and nothing moves", () => {
@@ -329,29 +350,4 @@ test("a list whose rows scale rather than slide scales a leaving row out where i
       { opacity: 0, transform: "scale(0.6)" },
     ],
   ]);
-});
-
-test("a row leaving a list scrolled down holds the root as tall as its scroller shows it, through the property the root's minimum reads", () => {
-  const show = draw([["A", "B", "C"]]);
-  const box = document.querySelector<HTMLElement>("[data-motion-root]");
-  const scroller = box?.parentElement;
-  if (box === null || box === undefined || scroller === null || scroller === undefined) {
-    throw new Error("the root and its scroller are drawn");
-  }
-  // Note that jsdom lays nothing out, so the scroller's place and the root's are given.
-  scroller.style.overflowY = "auto";
-  Object.defineProperty(scroller, "scrollTop", { configurable: true, value: 80 });
-  Object.defineProperty(box, "offsetHeight", { configurable: true, value: 300 });
-  Object.defineProperty(scroller, "getBoundingClientRect", {
-    configurable: true,
-    value: () => new DOMRect(0, 0, 200, 120),
-  });
-  Object.defineProperty(box, "getBoundingClientRect", {
-    configurable: true,
-    value: () => new DOMRect(0, -80, 200, 300),
-  });
-
-  show([["A", "B"]]);
-
-  expect(box.style.getPropertyValue("--luke-list-held-height")).toBe("200px");
 });

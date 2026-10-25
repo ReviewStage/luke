@@ -11,6 +11,11 @@
  * one's, because a bar that shows only on hover would otherwise leave a
  * gap at the column's edge at rest. A line with nothing to say draws
  * nothing.
+ *
+ * It is drawn in the Tailwind theme's utilities, in the caption's size and
+ * the muted ink, held to the column: who sent it gives way, cut short, so
+ * the time and the buttons keep their whole width, and a line that may wrap
+ * breaks before the time rather than squeeze who sent it.
  */
 
 import type { ReactNode } from "react";
@@ -51,11 +56,19 @@ export function MessageLine({
   if (!named && at === undefined && !drawsSomething(actions)) return null;
   const actionsFirst = align === MESSAGE_LINE_ALIGN.END;
   return (
-    <div className="luke-message-line" data-align={align} data-wrap={wrap ? "true" : undefined}>
+    <div
+      className={`luke-message-line flex max-w-full items-center gap-luke-2 text-caption-inline text-muted-foreground ${align === MESSAGE_LINE_ALIGN.START ? "justify-start" : "justify-end"}${wrap ? " flex-wrap gap-y-luke-2" : ""}`}
+      data-align={align}
+      data-wrap={wrap ? "true" : undefined}
+    >
       {actionsFirst ? actions : null}
-      {named ? <span className="luke-message-line-sender">{sender}</span> : null}
+      {named ? (
+        <span className="luke-message-line-sender flex min-w-0 items-center px-luke-4">
+          {sender}
+        </span>
+      ) : null}
       {at === undefined ? null : (
-        <span className="luke-message-line-time">
+        <span className="luke-message-line-time flex flex-none items-center gap-luke-6 pe-luke-4 whitespace-nowrap tabular-nums">
           {named ? <span aria-hidden="true">·</span> : null}
           <Time at={at} look={TIME_LOOK.DAY} />
         </span>

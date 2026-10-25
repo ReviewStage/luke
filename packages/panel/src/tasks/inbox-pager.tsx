@@ -243,7 +243,7 @@ export function useInboxPager(
 /** The pager at the end of an item's bar: "2 of 8" where the item has a row, then the arrows up and down the list, each naming its key, stepped back where there is nowhere to go. */
 export function InboxPagerControls({ pager }: { pager: InboxPager }): React.JSX.Element {
   return (
-    <div className="luke-toolbar-actions inbox-pager">
+    <div className="inbox-pager">
       {pager.count === undefined ? null : (
         <span className="inbox-pager-count">
           {pager.count.at} of {pager.count.total}

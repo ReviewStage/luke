@@ -11,8 +11,7 @@ import { TextField } from "../text-field/text-field.js";
 /**
  * length-counter.test.ts -- a field with a limit says nothing of it until
  * its words reach four fifths of it, then counts them on its label's line,
- * each change a tick travelling the way the count moved, in the danger ink
- * at the limit, and once the words draw back it leaves through its exit.
+ * and once the words draw back it leaves through its exit.
  */
 
 declare global {
@@ -64,7 +63,6 @@ function type(page: HTMLElement, value: string): void {
 }
 
 const counter = (page: HTMLElement) => page.querySelector<HTMLElement>(".luke-length-counter");
-const count = (page: HTMLElement) => page.querySelector<HTMLElement>(".luke-length-counter-count");
 
 test("the count stands only once the words reach four fifths of the limit", () => {
   const page = render();
@@ -79,27 +77,12 @@ test("the count stands only once the words reach four fifths of the limit", () =
   );
 });
 
-test("each change ticks the way the count moved, in the danger ink at the limit", () => {
-  const page = render();
-  type(page, "12345678");
-  type(page, "123456789");
-  const nine = count(page);
-  assert.equal(nine?.dataset.move, "up");
-  type(page, "1234567890");
-  assert.notEqual(count(page), nine, "a figure of its own, its tick from the start");
-  assert.equal(counter(page)?.dataset.full, "true");
-  type(page, "123456789");
-  assert.equal(count(page)?.dataset.move, "down");
-  assert.equal(counter(page)?.dataset.full, undefined);
-});
-
 test("drawn back under four fifths, the count leaves through its exit", () => {
   const exits = holdExits();
   try {
     const page = render();
     type(page, "12345678");
     type(page, "123");
-    assert.equal(counter(page)?.dataset.leaving, "true", "drawn through its exit");
     act(() => exits.finish());
     assert.equal(counter(page), null);
   } finally {

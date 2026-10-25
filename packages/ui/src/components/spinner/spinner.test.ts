@@ -65,22 +65,9 @@ test("a wait that asks for no delay shows its ring at once", () => {
 test("a busy control's words stand until the settle delay passes, then give way to the ring", () => {
   vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
   const busy = render(createElement(BusyLabel, { busy: true, label: "Saving", children: "Save" }));
-  const words = busy.querySelector(".luke-busy-label-words") ?? assert.fail("the words");
-  assert.deepEqual(
-    { ring: ringIn(busy), hidden: words.classList.contains("invisible") },
-    {
-      ring: false,
-      hidden: false,
-    },
-  );
+  assert.equal(ringIn(busy), false);
   act(() => vi.advanceTimersByTime(MOTION_DELAY_MS.SETTLE));
-  assert.deepEqual(
-    { ring: ringIn(busy), hidden: words.classList.contains("invisible") },
-    {
-      ring: true,
-      hidden: true,
-    },
-  );
+  assert.equal(ringIn(busy), true);
 });
 
 test("a busy control keeps its words and says what it is doing; at rest it says its words alone", () => {

@@ -693,6 +693,7 @@ export function AutomationCard({
   const now = useMinute();
   const actor = automationActor(automation);
   const { lastRun } = automation;
+  const nextWords = automationNextText(automation, now);
   return (
     <HoverCard data-actor-card={actor.kind}>
       <ActorHead
@@ -705,7 +706,7 @@ export function AutomationCard({
         )}
         onOpen={onOpen}
       />
-      <HoverCardNote>{automationNextText(automation, now)}</HoverCardNote>
+      {nextWords === undefined ? null : <HoverCardNote>{nextWords}</HoverCardNote>}
       {lastRun === null ? null : (
         <HoverCardNote>
           {"Last ran "}

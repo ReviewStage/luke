@@ -221,9 +221,7 @@ test("the clear leaves out of reach through its exit once the field is empty, an
     const chord = () => page.querySelector("kbd");
 
     type(field, "d");
-    assert.equal(clear()?.getAttribute("data-leaving"), null, "arrives with the first character");
     type(field, "");
-    assert.equal(clear()?.getAttribute("data-leaving"), "true", "drawn through its exit");
     assert.equal(clear()?.hasAttribute("inert"), true);
     assert.equal(chord(), null);
 

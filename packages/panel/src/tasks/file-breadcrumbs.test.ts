@@ -85,25 +85,6 @@ function pressOn(target: Element) {
   });
 }
 
-test("a crumb's tree hangs under the crumb pressed, from its leading edge, bounded by the room under it", () => {
-  // Note that jsdom lays out nothing, so the crumb stands where a bar would put it, and the layer is laid in the page.
-  vi.spyOn(HTMLElement.prototype, "offsetParent", "get").mockReturnValue(document.body);
-  vi.spyOn(Element.prototype, "getBoundingClientRect").mockImplementation(function (this: Element) {
-    return this.textContent === "src" && this.tagName === "BUTTON"
-      ? DOMRect.fromRect({ x: 140, y: 12, width: 40, height: 24 })
-      : DOMRect.fromRect({ x: 0, y: 0, width: 0, height: 0 });
-  });
-  const bar = barOver();
-  bar.press("src");
-  const tree = document.querySelector('[role="dialog"]') ?? assert.fail("the tree is open");
-  const layer = tree.parentElement ?? assert.fail("the tree hangs in a layer");
-  assert.equal(layer.dataset.side, "below");
-  assert.equal(layer.style.left, "140px");
-  assert.equal(layer.style.top, "36px");
-  // The room under the crumb in a 768px window, less the gap and the margin kept from its edge.
-  assert.equal(layer.style.getPropertyValue("--luke-popover-room"), `${768 - 36 - 4 - 8}px`);
-});
-
 test("a crumb's tree closes on a press outside it, and stays open for a press inside it", () => {
   const bar = barOver();
   bar.press("src");

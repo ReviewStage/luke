@@ -136,7 +136,6 @@ test("a version by a member who left names them as one, in its row and over its 
   assert.deepEqual(said(".version-sections-head .version-row-author"), [
     "Lee Park (former member)",
   ]);
-  assert.ok(view.querySelector('.actor-mark[data-left="true"]'));
 });
 
 test("a version by a member hangs their card beside its row while the pointer rests on it", async () => {

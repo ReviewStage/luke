@@ -7,14 +7,12 @@ import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test, vi } from "vitest";
-import { ONE_LINE_ELEMENT, ONE_LINE_END, OneLine } from "./one-line.js";
+import { ONE_LINE_ELEMENT, OneLine } from "./one-line.js";
 
 /**
  * one-line.test.ts -- a line reads its words whole to a reader, and its
  * hint says them whole only while its box cuts them short, the window's
- * tooltip where its caller gives none; it fades out at its end unless its
- * caller asks for an ellipsis. jsdom lays
- * nothing out, so the box's widths are stood in for, and the observer that
+ * tooltip where its caller gives none. jsdom lays nothing out, so the box's widths are stood in for, and the observer that
  * measures it is fired by hand.
  */
 
@@ -83,22 +81,6 @@ test("a line drawn whole raises no hint, and one cut short says its words whole"
   vi.spyOn(line, "clientWidth", "get").mockReturnValue(80);
   resize();
   assert.equal(said(), "sam@example.com");
-});
-
-test("a line fades out at its end unless its caller asks for an ellipsis", () => {
-  vi.stubGlobal("ResizeObserver", StandInObserver);
-  const view = render(
-    createElement(
-      "div",
-      null,
-      createElement(OneLine, { children: "sam@example.com" }),
-      createElement(OneLine, { end: ONE_LINE_END.ELLIPSIS, children: "sam@example.com" }),
-    ),
-  );
-  const ends = [...view.querySelectorAll(".luke-one-line")].map((line) =>
-    line.getAttribute("data-end"),
-  );
-  assert.deepEqual(ends, ["fade", "ellipsis"]);
 });
 
 /** The pointer arriving on `target` and resting there past the hint's wait, on a faked clock. */

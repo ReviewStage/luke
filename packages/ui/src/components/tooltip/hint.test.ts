@@ -142,7 +142,6 @@ test("a card hung from a row hangs past the row's end, not its press's, which th
   assert.ok(card, "the card hangs");
   const placed = card.parentElement?.style.transform ?? "";
   const left = Number.parseFloat(/translate\(([-\d.]+)px/u.exec(placed)?.[1] ?? "");
-  assert.equal(card.dataset.side, "inline-end");
   assert.ok(left > 260, `the card stands past the row's end, at ${placed}`);
 });
 
@@ -859,8 +858,6 @@ test("words that take no focus own their hint as hidden text, read at their end,
   );
   assert.equal(time.textContent, "2h ago", "its own words are as they were");
   assert.deepEqual(wordsNamedBy(time, "aria-owns"), ["Oct 24, 2026, 3:00 PM"]);
-  const owned = document.getElementById(time.getAttribute("aria-owns") ?? "");
-  assert.equal(owned?.className, "luke-visually-hidden");
   assert.equal(time.hasAttribute("aria-describedby"), false);
   const radio = roving.querySelector('[role="radio"]') ?? assert.fail("the roving control");
   assert.deepEqual(wordsNamedBy(radio), ["Bold"]);

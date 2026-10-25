@@ -34,6 +34,38 @@ export interface StripMark {
 }
 
 /** A strip of marks, one for each row of a hidden rail, a press on which shows it. */
+/** The strip, a column of marks filling the box its place stands it in; bars share its height with no gap between. */
+const STRIP_CLASS = {
+  [MARK_STRIP_LOOK.DOTS]:
+    "luke-mark-strip flex min-w-0 flex-1 flex-col items-center gap-luke-4 py-luke-12",
+  [MARK_STRIP_LOOK.BARS]:
+    "luke-mark-strip flex min-w-0 flex-1 flex-col items-center gap-0 py-luke-12",
+} as const satisfies Record<MarkStripLook, string>;
+
+/** A mark's ink, in its status tone's where it has one (`tokens/status-tone.css`). */
+const MARK_INK =
+  "luke-mark-strip-mark [--luke-mark-strip-ink:var(--luke-color-border-strong)] data-tone:[--luke-mark-strip-ink:var(--luke-tone-ink)]";
+
+/** A dot, or a bar: a share of the strip's height, at most a dot's, its ink filling the top of its share so the gap between bars shrinks with them. */
+const MARK_SHAPE = {
+  [MARK_STRIP_LOOK.DOTS]: "size-luke-6 flex-none rounded-luke-full bg-mark-strip-ink",
+  [MARK_STRIP_LOOK.BARS]:
+    "h-auto min-h-0 max-h-luke-6 flex-[1_1_0] bg-[linear-gradient(var(--luke-mark-strip-ink)_0_66%,transparent_66%)]",
+} as const satisfies Record<MarkStripLook, string>;
+
+/** The classes a mark of `look` is drawn in: the row shown ringed in the text's ink, and a bar of it wider and never thinner than a line; a row already viewed faint. */
+function markClass(look: MarkStripLook, mark: StripMark): string {
+  const bar = look === MARK_STRIP_LOOK.BARS;
+  const width = bar ? (mark.current === true ? "w-luke-12 min-h-luke-2" : "w-luke-6") : "";
+  const standing =
+    mark.current === true
+      ? "opacity-100 ring-1 ring-foreground"
+      : mark.viewed === true
+        ? "opacity-35"
+        : "";
+  return [MARK_INK, MARK_SHAPE[look], width, standing].filter((part) => part !== "").join(" ");
+}
+
 export function MarkStrip({
   marks,
   look = MARK_STRIP_LOOK.DOTS,
@@ -52,7 +84,7 @@ export function MarkStrip({
 }): React.JSX.Element {
   return (
     <div
-      className="luke-mark-strip"
+      className={onPress === undefined ? STRIP_CLASS[look] : `${STRIP_CLASS[look]} cursor-pointer`}
       data-look={look}
       data-pressable={onPress === undefined ? undefined : "true"}
       aria-hidden="true"
@@ -63,7 +95,7 @@ export function MarkStrip({
       {marks.map((mark, index) => (
         <span
           key={index}
-          className="luke-mark-strip-mark"
+          className={markClass(look, mark)}
           data-tone={mark.tone}
           data-viewed={mark.viewed === true ? "" : undefined}
           data-current={mark.current === true ? "" : undefined}

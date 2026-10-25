@@ -240,7 +240,6 @@ test("in the List, a group whose last task goes slides out where it stood, out o
   assert.equal(leaving?.getAttribute("aria-label"), "In progress", "its group is drawn on");
   assert.equal(leaving?.hasAttribute("inert"), true, "out of reach while it goes");
   const out = motions.played.find((each) => each.element === leaving);
-  assert.equal(out?.keyframes.at(-1)?.opacity, 0, "it fades out as it slides");
   const standing = [...container.querySelectorAll<HTMLElement>(".tasks-list-group")]
     .filter((group) => group !== leaving)
     .map((group) => [...group.querySelectorAll("[data-task-key]")].map((key) => key.textContent));

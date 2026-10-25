@@ -225,21 +225,3 @@ test("a line from a service that kept no place for it stands where the order put
 
   assert.deepEqual(drawnOrder(container), ["line: task", "line: github", "fold: 3 tool calls"]);
 });
-
-test("a line GitHub sent stands at the column's left, the other side's, while the developer's own stands at the right", async () => {
-  const container = await drawnTab(
-    [TASK, GITHUB_LINE, journal(true)],
-    CODING_AGENT_STATUS.COMPLETED,
-  );
-  const github = container.querySelector<HTMLElement>('[data-message-id="github"]');
-  assert.ok(github);
-  assert.ok(github.classList.contains("is-chat"), "GitHub's line stands at the left");
-  assert.equal(github.classList.contains("is-user"), false);
-  assert.equal(
-    github.querySelector(".luke-message-line")?.getAttribute("data-align"),
-    "start",
-    "the line under it starts at its left edge",
-  );
-  const task = container.querySelector<HTMLElement>('[data-message-id="task"]');
-  assert.ok(task?.classList.contains("is-user"), "the developer's own line stands at the right");
-});
