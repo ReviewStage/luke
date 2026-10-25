@@ -37,7 +37,7 @@ interface WorkerPluginBuild {
   ): void;
   onLoad(
     options: { filter: RegExp; namespace: string },
-    callback: () => { contents: string; loader: "js" },
+    callback: (args: { path: string }) => { contents: string; loader: "js" },
   ): void;
 }
 

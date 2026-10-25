@@ -20,10 +20,11 @@ import {
  * pressed; a crumb that opens something says what and whether it stands
  * open; a crumb's own name stands over its words and its hint raises its
  * words; a crumb's glyph is hidden from a reader, who hears its words, and
- * its card hangs from the app's hint, a crumb with no press's included; and
- * a toolbar's way back is a button named by its words. A crumb's words fade
- * out at their end only while its bar cuts them short, measured again when
- * it is renamed though its box keeps its width.
+ * its card hangs from the app's hint, a crumb with no press's included; a
+ * toolbar's way back is a button named by its words; and a path that does
+ * not fit its bar folds its first crumbs into one "…" that opens a menu of
+ * them, each leading where its crumb did, the last crumb standing, and one
+ * that fits folds nothing.
  */
 
 declare global {
@@ -34,28 +35,11 @@ globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
 const roots: Root[] = [];
 
-/** The measurement each observed box was handed, fired as a resize; jsdom lays nothing out, so nothing reports one of its own accord. */
-const resizes: (() => void)[] = [];
-
+/** jsdom's stand-in for the browser's ResizeObserver, which it lacks: nothing is laid out here. */
 class StandInResizeObserver {
-  readonly #fire: () => void;
-  constructor(fire: () => void) {
-    this.#fire = fire;
-  }
-  observe(): void {
-    resizes.push(this.#fire);
-  }
+  observe(): void {}
   unobserve(): void {}
   disconnect(): void {}
-}
-
-/** Stands every box's words `wide` pixels in a box 100px wide, and fires every observed box's measurement, as a resize would. */
-function resize(wide: number): void {
-  vi.spyOn(HTMLElement.prototype, "scrollWidth", "get").mockReturnValue(wide);
-  vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockReturnValue(100);
-  act(() => {
-    for (const fire of resizes) fire();
-  });
 }
 
 beforeEach(() => {
@@ -65,7 +49,6 @@ beforeEach(() => {
 afterEach(() => {
   for (const root of roots.splice(0)) act(() => root.unmount());
   document.body.replaceChildren();
-  resizes.splice(0);
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
 });
@@ -201,48 +184,63 @@ test("a toolbar's way back is a button named by its words, answering a press", (
   expect(container.querySelector("[aria-current='page']")?.textContent).toBe("REL-1");
 });
 
-test("a crumb's words fade out at their end only while the bar cuts them short", () => {
-  const container = draw({
-    label: "Path",
-    crumbs: [{ label: "acme/relay", onPress: () => undefined }, { label: "Invite flow" }],
+/**
+ * Lays the path out at a hundred pixels a crumb in a bar `room` wide, which
+ * jsdom does not: a path is as wide as the crumbs it draws.
+ */
+function layOut(room: number): void {
+  vi.spyOn(HTMLOListElement.prototype, "scrollWidth", "get").mockImplementation(function (
+    this: HTMLOListElement,
+  ) {
+    return this.children.length * 100;
   });
-  const overflow = () =>
-    [...container.querySelectorAll(".luke-breadcrumb-label")].map((each) => [
-      each.getAttribute("data-end"),
-      each.getAttribute("data-overflow"),
-    ]);
-  resize(80);
-  expect(overflow()).toEqual([
-    ["fade", "false"],
-    ["fade", "false"],
-  ]);
-  resize(160);
-  expect(overflow()).toEqual([
-    ["fade", "true"],
-    ["fade", "true"],
+  vi.spyOn(HTMLOListElement.prototype, "clientWidth", "get").mockReturnValue(room);
+}
+
+const THREE_CRUMBS: Crumb[] = [
+  { label: "Teammate invitations", onPress: () => undefined },
+  { label: "Build teammate invitations", onPress: () => undefined },
+  { label: "What the expired invite page says", current: true },
+];
+
+test("a path too wide for its bar folds its first crumbs into one … naming them, the last standing", () => {
+  layOut(250);
+  const container = draw({ label: "Path", crumbs: THREE_CRUMBS });
+  const items = [...container.querySelectorAll("ol > li")].map((item) => item.textContent);
+  expect(items).toEqual(["…", "What the expired invite page says"]);
+  expect(container.querySelector("[aria-current='page']")?.textContent).toBe(
+    "What the expired invite page says",
+  );
+});
+
+test("a path that fits its bar folds nothing", () => {
+  layOut(1000);
+  const container = draw({ label: "Path", crumbs: THREE_CRUMBS });
+  const items = [...container.querySelectorAll("ol > li")].map((item) => item.textContent);
+  expect(items).toEqual([
+    "Teammate invitations",
+    "Build teammate invitations",
+    "What the expired invite page says",
   ]);
 });
 
-test("a crumb renamed longer or shorter is measured again, though its box keeps its width", () => {
-  // Note that the box stands 100px wide whatever its words, as a crumb whose width its bar sets does.
-  vi.spyOn(HTMLElement.prototype, "scrollWidth", "get").mockImplementation(function (
-    this: HTMLElement,
-  ) {
-    return (this.textContent ?? "").length * 8;
+test("the … of a folded path opens a menu of the crumbs it stands for, each leading where its crumb did", () => {
+  layOut(250);
+  const opened: string[] = [];
+  const container = draw({
+    label: "Path",
+    crumbs: [
+      { label: "Teammate invitations", onPress: () => opened.push("task") },
+      { label: "Build teammate invitations", onPress: () => opened.push("agent") },
+      { label: "What the expired invite page says", current: true },
+    ],
   });
-  vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockReturnValue(100);
-  const path = (label: string) =>
-    createElement(Breadcrumbs, { label: "Path", crumbs: [{ label }] });
-  const container = draw({ label: "Path", crumbs: [{ label: "src" }] });
-  const root = roots.at(-1);
-  const overflow = () =>
-    container.querySelector(".luke-breadcrumb-label")?.getAttribute("data-overflow");
-  act(() => {
-    for (const fire of resizes) fire();
-  });
-  expect(overflow()).toBe("false");
-  act(() => root?.render(path("an-organisation-with-a-long-name")));
-  expect(overflow()).toBe("true");
-  act(() => root?.render(path("src")));
-  expect(overflow()).toBe("false");
+  act(() => button(container, "Teammate invitations › Build teammate invitations").click());
+  const rows = [...document.body.querySelectorAll("[role='menuitem']")];
+  expect(rows.map((row) => row.textContent)).toEqual([
+    "Teammate invitations",
+    "Build teammate invitations",
+  ]);
+  act(() => (rows[1] as HTMLElement).click());
+  expect(opened).toEqual(["agent"]);
 });

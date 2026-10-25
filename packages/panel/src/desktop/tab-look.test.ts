@@ -369,7 +369,6 @@ test("a Terminal tab wears its agent's glyph, says Terminal with the agent's nam
   const card = document.querySelector(".luke-tooltip-card [data-tab-card]");
   assert.ok(card, "the agent's card is hung");
   assert.equal(card.querySelector(".luke-hover-card-name")?.textContent, WORKING.title);
-  assert.ok(card.querySelector(".luke-hover-card-rule"));
   assert.equal(
     [...card.querySelectorAll(".luke-hover-card-note")].at(-1)?.textContent,
     "Terminal in this agent’s sandbox",

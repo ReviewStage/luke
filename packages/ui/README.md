@@ -200,6 +200,41 @@ viewport and bars, so its scrolling, keys, and the refs callers hold on it
 are what they were. A component's sheet keeps only what a utility cannot
 say: keyframes, `:has()`, container queries, and rules other sheets read.
 
+The rows and navigation are drawn in the theme's utilities with no shadcn
+base: `ListRow` and `List`, `NavItem`, `Disclosure`, `BarItem`, `PaneBar`,
+`Toolbar`, `OverPane`, `ResizeCorner`, `FoldingSearch`, and `SearchableMenu`.
+None has a shadcn component that fits without changing what it does. Base
+UI's collapsible owns the open state, unmounts its panel and hides it, where
+a `Disclosure` is a real `<details>` that keeps a closed body out of the
+layout, holds it through its own fade, and lets a find in the page open it;
+shadcn's item is a flex row, where a list row is the grid of tracks its
+press lays out by subgrid; and the sidebar's menu parts need the sidebar's
+provider. Each part keeps its `luke-*` class, which other sheets and the
+tests find it by. What a row's or a fold's state restyles stays in its
+sheet: a list row's fill and ring, its insets, the hover acts' crossfade
+and the swipe's slide, through `:has()` and the pointer's media; a nav
+item's inks, which a strip's chosen tab is held to; a fold's frame and
+chevron; a toolbar's row, which the window's custom properties and a style
+query restyle; and every keyframe. A fold's summary takes its classes from
+its look in React, trimmed where a `DisclosureFrame` lays it out. The
+combobox's field wears shadcn's input classes (`INPUT_FIELD`,
+`INPUT_CONTROL`), and the last `.luke-text-field` is gone.
+
+The content and text components are drawn the same way: `Text` and
+`TextLink` read one table of the type roles' utilities
+(`components/text/text-role.ts`), and `InlineRef`, `MessageFrame`,
+`MessageActions`, `MessageLine`, `CodeCard`, `CopyButton`, `MarkStrip`,
+`GlyphSlot`, `SelectionBar`, `SavedTick`, `RollingNumber`, `WorkingMark`, and
+`ThinkingDots` are drawn in the theme's utilities with no shadcn base.
+`Shortcut` stands on shadcn's kbd, its chord a `KbdGroup` and each key a
+`Kbd`. Their sheets keep their keyframes and the rules that play them, a cut
+name's fade, and the copy glyph's answer to the chip around it;
+`.luke-visually-hidden` keeps its rule, since other components put the class
+on words of their own. `Prose` and the window's Markdown (`prose.css`) stay a
+sheet, because they style generated HTML element by element, and so does
+`landed.css`, whose wash is played on whatever element a view brings the eye
+to, by its `data-landed` attribute alone.
+
 ## Icons
 
 Every icon is imported through one door, `@luke/ui/icons`, built on Lucide

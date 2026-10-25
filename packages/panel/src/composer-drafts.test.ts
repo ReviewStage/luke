@@ -529,7 +529,6 @@ test("an inbox answer's picture moves with it as the id lands before its words r
     planId: INVITES.plan.id,
     agentId: INVITES.agent.id,
     itemId: "item-1",
-    revision: 1,
   } as const;
   const picture = { name: "diagram.png", mediaType: "image/png", data: "iVBORw0KGgo=" } as const;
   let held: DraftControl | undefined;
@@ -1092,9 +1091,32 @@ test("an agent with no plan carries its own outdated answers' words to the item 
   const reread = await tasklessInbox(INVITES.agent.id, [reposted]);
   assert.equal(reread.draftOf(reposted).note, "Only teammates", "the words outlast the post");
   assert.deepEqual(reread.draftOf(reposted).choices, [], "the outdated ask's pick is let go");
-  assert.equal(reread.draftOf(mine).note, "", "and nothing stands at the outdated revision");
   const kept = await tasklessInbox(BILLING.agent.id, [theirs]);
   assert.equal(kept.draftOf(theirs).note, "Weekly");
+});
+
+test("a pick kept by a build that stored its revision in the place still stands on the item at that revision", async () => {
+  const mine = tasklessItem(INVITES.agent.id, "b1b2c3d4-0000-4000-8000-000000000001", 1);
+  window.localStorage.setItem(
+    "luke.composerDrafts",
+    JSON.stringify([
+      {
+        accountId: null,
+        place: {
+          kind: "inbox",
+          planId: null,
+          agentId: INVITES.agent.id,
+          itemId: mine.id,
+          revision: 1,
+        },
+        text: "Only teammates",
+        choices: ["Approve"],
+      },
+    ]),
+  );
+  const read = await tasklessInbox(INVITES.agent.id, [mine]);
+  assert.deepEqual(read.draftOf(mine).choices, ["Approve"]);
+  assert.equal(read.draftOf(mine).note, "Only teammates");
 });
 
 test("a reader still holding an item's older revision leaves the answer carried to its newer one", async () => {

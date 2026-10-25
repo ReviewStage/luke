@@ -141,22 +141,18 @@ test("a settled item offers no Close", () => {
 
 const PLAN = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
 
-/** Where the item's answer at a revision, or a message on its thread, is drafted. */
-function placeOf(revision: number, thread: boolean): InboxPlace {
-  return {
-    kind: DRAFT_PLACE.INBOX,
-    planId: PLAN,
-    agentId: ITEM.agentId,
-    itemId: ITEM.id,
-    revision,
-    ...(thread ? { thread: true as const } : undefined),
-  };
-}
+/** Where the item's draft is kept. */
+const PLACE: InboxPlace = {
+  kind: DRAFT_PLACE.INBOX,
+  planId: PLAN,
+  agentId: ITEM.agentId,
+  itemId: ITEM.id,
+};
 
-test("a close taken lets go of the answer drafted against the revision it closed, and keeps a message begun on the thread meanwhile and an answer to a later revision", async () => {
+test("a close taken keeps the words of a message begun on the item while it was out", async () => {
   let land: (() => void) | undefined;
   let closer: InboxCloser | undefined;
-  let write: ((place: InboxPlace, text: string) => void) | undefined;
+  let write: ((text: string) => void) | undefined;
   let kept: readonly string[] = [];
   const closeAct = () =>
     new Promise<{ item: InboxItem; taken: boolean }>((resolve) => {
@@ -167,24 +163,18 @@ test("a close taken lets go of the answer drafted against the revision it closed
     // SAFETY: the probe answers the one act the closer sends, the close.
     closer = useInboxCloser({ act: closeAct as never });
     const writer = useDraftWriter();
-    write = (place, text) =>
-      writer.update(place, () => ({ text, attachments: [], choices: [], values: [] }));
-    kept = useInboxDrafts(PLAN).map(
-      ({ place }) => `${place.revision}${place.thread === true ? " thread" : ""}`,
-    );
+    write = (text) =>
+      writer.update(PLACE, () => ({ text, attachments: [], choices: [], values: [] }));
+    kept = useInboxDrafts(PLAN).map(({ text }) => text);
     return null;
   }
   root = createRoot(document.body.appendChild(document.createElement("div")));
   act(() => root?.render(onRegistry(AtomRegistry.make(), createElement(Probe))));
-  act(() => {
-    write?.(placeOf(1, false), "Use 90%");
-    write?.(placeOf(2, false), "Use 85%");
-  });
-  assert.deepEqual([...kept].sort(), ["1", "2"]);
+  act(() => write?.("Use 90%"));
 
   act(() => closer?.(ITEM));
-  act(() => write?.(placeOf(1, true), "One more detail"));
+  act(() => write?.("One more detail"));
   await act(async () => land?.());
 
-  assert.deepEqual([...kept].sort(), ["1 thread", "2"], "the closed revision's answer alone goes");
+  assert.deepEqual(kept, ["One more detail"]);
 });

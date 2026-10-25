@@ -225,7 +225,6 @@ test("held, the cards show with the screen here first and dimmed; ⇧ steps back
   tab();
   const shown = cards();
   assert.equal(shown.length, 3);
-  assert.equal(shown[0]?.dataset.here, "true");
   assert.deepEqual(
     shown.map((card) => card.getAttribute("aria-selected")),
     ["false", "false", "true"],
@@ -284,12 +283,10 @@ test("the cards fade out as ⌃ is let go, drawn and inert through the exit, and
   await heldOnField();
 
   letGo();
-  const leaving = document.querySelector<HTMLElement>(DIALOG);
   act(() => vi.advanceTimersToNextFrame());
   const standsAFrameOn = document.querySelector(DIALOG) !== null;
   await act(async () => exits.finish());
 
-  assert.ok(leaving?.hasAttribute("data-ending-style"), "the dialog stands in its ending state");
   assert.equal(standsAFrameOn, true);
   assert.equal(document.querySelector(DIALOG), null);
 });

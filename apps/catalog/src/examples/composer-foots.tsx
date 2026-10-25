@@ -9,6 +9,7 @@ import {
   CallMute,
   COMPOSER_ELEMENT,
   COMPOSER_LOOK,
+  ComposerBody,
   ComposerFoot,
   ComposerFootSkeleton,
   ComposerFrame,
@@ -25,13 +26,13 @@ import {
   Text,
 } from "@luke/ui";
 import { AtSign, GLYPH, Mic } from "@luke/ui/icons";
-import type { ComponentProps } from "react";
+import type { ComponentProps, ReactNode } from "react";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
 
 /**
  * composer-foots.tsx -- a message box's foot in each state: empty, with its
- * Send unavailable; holding files; near its limit, the counter showing;
+ * Send unavailable; holding files, which stand over its words; near its limit, the counter showing;
  * sending; Stop in the send's place, and stopping; with a cut paste's note,
  * a refused send's Retry, and a closed box's mend under its note; in a call,
  * and dictating in a call; then at a field's and a bare frame's inset, and
@@ -42,6 +43,11 @@ const ignore = () => undefined;
 
 /** How many characters the catalog's boxes take. */
 const LIMIT = 4000;
+
+/** A synthetic picture drawn in place, so the catalog renders offline. */
+const PICTURE = `data:image/svg+xml,${encodeURIComponent(
+  '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 48"><defs><linearGradient id="g" x2="1" y2="1"><stop offset="0" stop-color="#7aa7f4"/><stop offset="1" stop-color="#3d5ac8"/></linearGradient></defs><rect width="64" height="48" fill="url(#g)"/><path d="M0 40l18-14 12 10 14-12 20 16v8H0z" fill="#fff8"/></svg>',
+)}`;
 
 /** The tools at a box's start: attach, mention, skill. */
 function Tools(): React.JSX.Element {
@@ -80,14 +86,16 @@ function CallStatus(): React.JSX.Element {
   );
 }
 
-/** A box's words over its foot, at `look`. */
+/** A box's words, under its `files` where it holds any, over its foot, at `look`. */
 function Box({
   look = COMPOSER_LOOK.CARD,
   words,
+  files,
   ...foot
 }: Partial<ComponentProps<typeof ComposerFoot>> & {
   look?: ComposerLook;
   words: string;
+  files?: ReactNode;
 }): React.JSX.Element {
   return (
     <ComposerFrame
@@ -95,9 +103,11 @@ function Box({
       look={look}
       onSubmit={(event) => event.preventDefault()}
     >
-      <div className="catalog-composer">
-        <Text tone={TEXT_TONE.MUTED}>{words}</Text>
-      </div>
+      <ComposerBody files={files}>
+        <div className="catalog-composer">
+          <Text tone={TEXT_TONE.MUTED}>{words}</Text>
+        </div>
+      </ComposerBody>
       <ComposerFoot
         tools={<Tools />}
         actions={<IconButton label="Dictate" icon={<Mic />} onClick={ignore} />}
@@ -131,7 +141,12 @@ function ComposerFoots(): React.JSX.Element {
               words="Here are the two screens."
               files={
                 <>
-                  <AttachmentChip name="inbox.png" icon={<GLYPH.FILE />} onRemove={ignore} />
+                  <AttachmentChip
+                    name="inbox.png"
+                    image={PICTURE}
+                    icon={<GLYPH.FILE />}
+                    onRemove={ignore}
+                  />
                   <AttachmentChip name="plan.pdf" icon={<GLYPH.FILE />} onRemove={ignore} />
                 </>
               }

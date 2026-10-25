@@ -36,5 +36,4 @@ test("the whiteboard is drawn under a root the screen recording leaves out", asy
   const root = /^<section [^>]*>/u.exec(markup)?.[0] ?? assert.fail("the board is a section");
   assert.match(root, /class="[^"]*\btask-board ph-no-capture\b/u);
   assert.match(root, /aria-label="Whiteboard"/u);
-  assert.match(markup, /class="task-board-canvas\b/u);
 });

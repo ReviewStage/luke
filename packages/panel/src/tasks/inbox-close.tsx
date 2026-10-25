@@ -12,9 +12,10 @@ import {
 } from "@luke/ui";
 import { GLYPH } from "@luke/ui/icons";
 import { ACTION_RESULT_STATUS } from "@luke/wire";
+import { Equal } from "effect";
 import { useCallback, useRef, useState } from "react";
 import type { ActHandle } from "../act.js";
-import { DRAFT_PLACE, useDraftWriter } from "../composer-drafts.js";
+import { DRAFT_PLACE, EMPTY_DRAFT, useDraftWriter, withoutPicks } from "../composer-drafts.js";
 import type { MenuAction } from "../desktop/action-menu.js";
 import { TOAST_HOLD, useToast } from "../toast.js";
 import { messageFailureWords } from "./coding-agent-model.js";
@@ -101,6 +102,10 @@ export function useInboxCloser({
       const key = was?.revision === item.revision ? was.key : crypto.randomUUID();
       attempts.current.set(item.id, { key, revision: item.revision });
       out.current.add(item.id);
+      // Note that what the box held as the close was pressed is read now, so only that goes once it is taken.
+      const pressed = writer.heldAt(
+        (place) => place.kind === DRAFT_PLACE.INBOX && place.itemId === item.id,
+      );
       const sent = settler.close(item);
       const say = (words: string) => {
         if (saying?.quiet !== true) {
@@ -128,14 +133,14 @@ export function useInboxCloser({
               answer.item.status === INBOX_STATUS.OPEN ? NOT_TAKEN.CHANGED : NOT_TAKEN.SETTLED,
             );
           }
-          // Note that only the answer drafted against the revision closed goes, since a message on the thread may have been begun while the close was out.
-          writer.drop(
-            (place) =>
-              place.kind === DRAFT_PLACE.INBOX &&
-              place.itemId === item.id &&
-              place.revision === item.revision &&
-              place.thread !== true,
-          );
+          // Note that only the answer the box held as the close was pressed goes, since a message on the thread may have been begun while the close was out.
+          if (pressed !== undefined) {
+            writer.update(pressed.place, (now) =>
+              now.text === pressed.text && Equal.equals(now.attachments, pressed.attachments)
+                ? EMPTY_DRAFT
+                : withoutPicks(now),
+            );
+          }
           if (item.needsReply) heard.current?.();
           return true;
         });

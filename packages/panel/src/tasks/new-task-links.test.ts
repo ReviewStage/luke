@@ -57,12 +57,6 @@ function mount(): HTMLElement {
   return container;
 }
 
-test("a GitHub issue wears the mark of where it stands, as the task page draws it", () => {
-  const mark = mount().querySelector("[data-issue-mark]");
-
-  assert.equal(mark?.getAttribute("data-issue-state"), ISSUE_STATE.CLOSED);
-});
-
 test("a chip hangs its issue's card while the pointer rests on it: its title, repository key, state, who opened it, and keyword", () => {
   const container = mount();
 

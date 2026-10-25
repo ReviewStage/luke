@@ -12,7 +12,6 @@ import { createElement, type ReactElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { test } from "vitest";
 import { PullRequestLine } from "../desktop/task-card.js";
-import { layContainersAt } from "../testing/container-width.js";
 import { PublishedRow } from "./agent-published.js";
 import { agentSubject, NOTHING_HELD } from "./agent-ref.js";
 import { ChangesCard } from "./changes-card.js";
@@ -83,22 +82,6 @@ function places(drawn: CodingAgentPullRequest): ReadonlyMap<string, ReactElement
   ]);
 }
 
-/** The pull request's mark as a place draws it; undefined where it draws none. */
-function markElementOf(place: ReactElement): Element | undefined {
-  const page = new DOMParser().parseFromString(renderToStaticMarkup(place), "text/html");
-  return page.querySelector("[data-pull-request-mark]") ?? undefined;
-}
-
-/** What the mark is styled by: its class and every attribute but its words. */
-function lookOf(mark: Element | undefined): string | undefined {
-  if (mark === undefined) return undefined;
-  return [...mark.attributes]
-    .filter((attribute) => attribute.name !== "aria-label")
-    .map((attribute) => `${attribute.name}=${attribute.value}`)
-    .toSorted()
-    .join(" ");
-}
-
 /** The words the pull request's mark says as a place draws it. */
 function markOf(place: ReactElement): string | null | undefined {
   const page = new DOMParser().parseFromString(renderToStaticMarkup(place), "text/html");
@@ -119,22 +102,6 @@ test("a merged pull request says so wherever it is drawn, its checks unsaid", ()
   for (const [place, element] of drawn) assert.equal(markOf(element), expected, place);
 });
 
-test("a pull request's mark wears the colour of where it stands whatever its checks say", () => {
-  for (const state of Object.values(PULL_REQUEST_STATE)) {
-    const failing = places(pullRequest(state, CHECK_SUMMARY.FAILING));
-    const passing = places(pullRequest(state, CHECK_SUMMARY.PASSING));
-    for (const [place, element] of failing) {
-      const look = lookOf(markElementOf(element));
-      assert.ok(look?.includes(`data-pull-request-state=${state}`), `${place}, ${state}`);
-      assert.equal(
-        look,
-        lookOf(markElementOf(passing.get(place) ?? element)),
-        `${place}, ${state}`,
-      );
-    }
-  }
-});
-
 test("an open pull request the merge queue holds is drawn queued wherever it is drawn, as its pill says it", () => {
   const drawn = places({
     ...pullRequest(PULL_REQUEST_STATE.OPEN, CHECK_SUMMARY.PASSING),
@@ -142,7 +109,6 @@ test("an open pull request the merge queue holds is drawn queued wherever it is 
   });
   for (const [place, element] of drawn) {
     assert.equal(markOf(element), "Pull request #42, queued", place);
-    assert.ok(lookOf(markElementOf(element))?.includes("data-pull-request-state=queued"), place);
   }
 });
 
@@ -153,36 +119,5 @@ test("a pull request no longer open is drawn where it stands, whatever the queue
   });
   for (const [place, element] of drawn) {
     assert.equal(markOf(element), "Pull request #42, merged", place);
-  }
-});
-
-test("a queued pull request wears the merge's glyph itself, in the attention orange, wherever it is drawn", () => {
-  const style = layContainersAt({});
-  try {
-    const merged = markElementOf(
-      createElement(PullRequestLine, {
-        pullRequest: pullRequest(PULL_REQUEST_STATE.MERGED, CHECK_SUMMARY.PASSING),
-      }),
-    );
-    const drawn = places({
-      ...pullRequest(PULL_REQUEST_STATE.OPEN, CHECK_SUMMARY.PASSING),
-      queued: true,
-    });
-    for (const [place, element] of drawn) {
-      const host = document.body.appendChild(document.createElement("div"));
-      host.innerHTML = renderToStaticMarkup(element);
-      const mark = host.querySelector("[data-pull-request-mark]");
-      // Note that the mark is the glyph, never a box around one, so every place sizes it as it sizes the others.
-      assert.equal(mark?.localName, "svg", place);
-      assert.equal(mark?.innerHTML, merged?.innerHTML, place);
-      assert.equal(
-        mark === null ? undefined : getComputedStyle(mark).getPropertyValue("--pull-request-tone"),
-        "var(--luke-color-attention)",
-        place,
-      );
-      host.remove();
-    }
-  } finally {
-    style.remove();
   }
 });

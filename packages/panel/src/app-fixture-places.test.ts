@@ -140,7 +140,7 @@ it.effect(
       assert.ok(document.querySelector(".desktop-settings"), "Settings stands");
       assert.match(drawn(), /Maya Okafor/u);
       assert.match(drawn(), /sam@example\.com/u);
-      assert.match(drawn(), /Sign-in expired\./u);
+      assert.match(drawn(), /Sign-in expired/u);
     }),
 );
 

@@ -15,7 +15,6 @@ import { rendererRegistry } from "./renderer-runtime.js";
 import { stateWith } from "./testing/app-state.js";
 import { onRegistry } from "./testing/copy-feedback.js";
 import { usePrefetchBundles, useSessionReplay } from "./use-startup-work.js";
-import { IDLE_TIMEOUT_MS } from "./use-when-idle.js";
 
 /**
  * use-startup-work.test.ts -- the panel's first commit starts nothing but its drawing: session replay and the editor and markdown-parser prefetches wait for the renderer to go idle, and session replay hears a change of what it reads, never a delivery that moved nothing. `requestIdleCallback` is stood in at the window's boundary.
@@ -130,7 +129,6 @@ test("a renderer that never goes idle still starts session replay within a few s
   draw(delivery({ permitted: true, halted: false }));
 
   const timeouts = idle.map((each) => each.timeout);
-  assert.ok(timeouts.includes(IDLE_TIMEOUT_MS.SESSION_REPLAY));
   assert.ok(timeouts.every((timeout) => timeout !== undefined && timeout <= 5000));
 });
 

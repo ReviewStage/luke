@@ -224,8 +224,11 @@ export function apiRewritesSource(rewrites: readonly Rewrite[]): string {
  * routing that sends `/eve/coder/v1/*` to eve and everything else to the web
  * service. The `git` key turns off deployment of GitHub's merge-queue
  * branches (`gh-readonly-queue/<base>/pr-<n>-<sha>`): CI gates the queue, and
- * the squash it lands on `main` deploys on its own. The glob is `**` because
- * a `*` does not cross the branch name's `/`.
+ * the squash it lands on `main` deploys on its own. It turns off, too, the
+ * branches that hold pictures alone and share no history with `main`: PR
+ * media (`pr-assets`, and the `pr-assets-<topic>` AGENTS.md warns against)
+ * and screenshot evidence (`evidence/<topic>`). A glob is `**` where a `*`
+ * would not cross the branch name's `/`.
  */
 const WebService = Schema.Struct({
   root: Schema.String,

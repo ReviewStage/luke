@@ -234,14 +234,12 @@ body,
   --title-bar-ground: var(--luke-color-well);
 }
 
-/* A page with tabs stands its rows on the frame (shell.css), so the toggle
-   at the right and, while the sidebar is folded, the buttons at the left
-   rest on the frame as those rows do, with no ground of their own. */
+/* Every page stands its top row on the frame (shell.css), so the toggle at
+   the right and, while the sidebar is folded, the buttons at the left rest
+   on the frame as those rows do, with no ground of their own. */
+:where(:root):not([data-luke-room="narrow"]) .desktop-shell .title-bar-controls[data-edge="end"],
 :where(:root):not([data-luke-room="narrow"])
-  .desktop-shell:has(.desktop-task)
-  .title-bar-controls[data-edge="end"],
-:where(:root):not([data-luke-room="narrow"])
-  .desktop-shell[data-sidebar-collapsed="true"][data-sidebar-overlay="closed"]:has(.desktop-task)
+  .desktop-shell[data-sidebar-collapsed="true"][data-sidebar-overlay="closed"]
   .title-bar-controls:not([data-edge]) {
   --title-bar-ground: transparent;
 }
@@ -417,18 +415,16 @@ body,
   display: inline-flex;
 }
 
-/* The sidebar's View options and the Tasks page's Filter wear a dot while
-   the view leaves tasks out, so a filtered list never passes for the whole
-   of it: drawn by the box around the button, over its corner, in the
-   accent's ink, since the web's accent fill is too light to hold 3:1 as a
-   mark on its light page and its ring is near-black there. */
-.sidebar-view-options,
+/* The Tasks page's Filter wears a dot while the view leaves tasks out, so a
+   filtered list never passes for the whole of it, as the sidebar's head's
+   do (`@luke/ui`'s `GroupAction`): drawn by the box around the button, over
+   its corner, in the accent's ink, since the web's accent fill is too light
+   to hold 3:1 as a mark on its light page and its ring is near-black there. */
 .tasks-page-option {
   position: relative;
   display: inline-flex;
 }
 
-.sidebar-view-options[data-filtered="true"]::after,
 .tasks-page-option[data-filtered="true"]::after {
   position: absolute;
   top: var(--luke-space-4);
@@ -439,12 +435,6 @@ body,
   background: var(--luke-color-accent-text);
   content: "";
   pointer-events: none;
-}
-
-/* The Tasks head's status filter always stands, whether or not the sidebar
-   is hovered or holds focus (`sidebar-task-view.tsx`). */
-.sidebar-status-filter {
-  display: inline-flex;
 }
 
 /* The quiet line under the list saying what the status filter leaves out,
@@ -1172,8 +1162,8 @@ ul.actor-stack {
 /* A sidebar too narrow for the pill's word beside a name that reads folds
    the pill to its glyph alone in a round, so the name keeps the room. The
    button's name and its hint still say what it does. */
-/* off-scale: 220px, where the update pill's word stops fitting beside a name */
-@container sidebar-foot (width < 220px) {
+/* off-scale: 280px, where the update pill's word stops fitting beside a name as long as "Ada Lovelace", which would otherwise end faded short at the default sidebar's 264px; the offline pill folds at the same width */
+@container sidebar-foot (width < 280px) {
   .sidebar-update {
     --luke-fold: folded;
   }

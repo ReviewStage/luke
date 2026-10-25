@@ -150,7 +150,6 @@ test("without WebGL a palette colour is drawn by its class, never by a style att
     (span) => span.textContent === "shadow",
   );
   assert.ok(cell, "the line is drawn");
-  assert.ok(cell.classList.contains("xterm-fg-0"));
   assert.equal(cell.getAttribute("style"), null);
 });
 

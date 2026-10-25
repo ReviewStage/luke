@@ -14,7 +14,7 @@ export const UNIT_ATTRIBUTED_CLASS = "plan-unit-attributed group/unit relative";
 
 /** What a unit's byline and its ⋯ wear to be shown only while their unit is pointed at or focused. */
 const UNIT_REVEAL_CLASS =
-  "opacity-0 transition-opacity duration-(--luke-duration-hover) ease-motion-exit group-focus-within/unit:opacity-100 group-hover/unit:opacity-100 [@media(hover:none)]:opacity-100";
+  "opacity-0 transition-opacity duration-(--luke-duration-hover) ease-motion-exit group-focus-within/unit:opacity-100 group-hover/unit:opacity-100 no-hover:opacity-100";
 
 /**
  * A section's byline: a face and a short date, clipped past the ring an

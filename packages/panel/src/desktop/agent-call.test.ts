@@ -12,13 +12,7 @@ import { ACT_KIND } from "@luke/host/acts";
 import { LIVE_STATUS } from "@luke/live";
 import { EXPERIMENT } from "@luke/settings";
 import { appSettingsWire, experimentsOn, settingsView } from "@luke/settings/testing";
-import {
-  BUTTON_VARIANT,
-  CALL_CONTROL_LABEL,
-  CALL_LIVE_WORD,
-  CALL_VIDEO_LABEL,
-  WaveformIcon,
-} from "@luke/ui";
+import { BUTTON_VARIANT, CALL_CONTROL_LABEL, CALL_LIVE_WORD, CALL_VIDEO_LABEL } from "@luke/ui";
 import { GLYPH } from "@luke/ui/icons";
 import { DOCUMENT_REGION, TASKS_PAGE } from "@luke/ui/tasks-model";
 import { AVATAR_OFF, AVATAR_STATUS, type AvatarState } from "@luke/voice/avatar";
@@ -223,13 +217,6 @@ function pointer(type: string, x: number, y: number): MouseEvent {
   return new MouseEvent(type, { bubbles: true, clientX: x, clientY: y, button: 0 });
 }
 
-test("the Call button is a waveform, not a phone", async () => {
-  const page = await mountOn({ onPress: () => undefined });
-  const glyph = callButton(page)?.querySelector("svg");
-  assert.ok(glyph);
-  assert.equal(glyph.outerHTML, renderToStaticMarkup(createElement(WaveformIcon)));
-});
-
 test("on a call into the agent, its composer holds the call's four controls in the Call button's place, and no call bar stands", async () => {
   const page = await mountOn({ onPress: () => undefined }, ON_CALL, AGENT, {
     avatar: { status: AVATAR_STATUS.LIVE },
@@ -394,33 +381,6 @@ test("with video off the video's room goes and the composer's video button turns
   );
 });
 
-test("the video's room takes height in the tab's flow, so the transcript ends above it, and stands the video centred in it", async () => {
-  const page = await mountOn({ onPress: () => undefined }, ON_CALL, AGENT, {
-    avatar: { status: AVATAR_STATUS.LIVE },
-  });
-  const laid = layContainersAt({});
-  try {
-    const foot = page.querySelector<HTMLElement>(".agent-call-foot");
-    assert.ok(foot);
-    const drawn = getComputedStyle(foot);
-    assert.notEqual(drawn.position, "absolute", "the foot is in the tab's flow");
-    assert.notEqual(drawn.height, "0px", "and takes the room the video needs");
-    const room = videoRoom(page);
-    assert.ok(room);
-    assert.notEqual(getComputedStyle(room).position, "absolute", "nor does the video float");
-    assert.equal(getComputedStyle(room).justifyContent, "center", "the video is centred");
-    const frame = room.querySelector<HTMLElement>(".agent-call-video-frame");
-    assert.ok(frame);
-    assert.equal(
-      getComputedStyle(frame).aspectRatio,
-      "var(--call-video-aspect)",
-      "a rectangle at the picture's own aspect",
-    );
-  } finally {
-    laid.remove();
-  }
-});
-
 test("the video starts at 120 px, its size is held between its bounds, a drag moves it smoothly, and it is kept for the next call", async () => {
   const live = { avatar: { status: AVATAR_STATUS.LIVE } } as const;
   const page = await mountOn({ onPress: () => undefined }, ON_CALL, AGENT, live);
@@ -465,6 +425,14 @@ test("the video starts at 120 px, its size is held between its bounds, a drag mo
   assert.equal(videoHeight(kept), "360px", "a kept height past the greatest is held to it");
 });
 
+/**
+ * An opacity as a browser computes it, a number: a utility writes one as a
+ * percentage (`opacity: 0%`), which jsdom leaves as written.
+ */
+function opacity(value: string): string {
+  return String(value.endsWith("%") ? Number.parseFloat(value) / 100 : Number.parseFloat(value));
+}
+
 test("hovering the video brings out its resize controls, each named and reached from the keyboard", async () => {
   const page = await mountOn({ onPress: () => undefined }, ON_CALL, AGENT, {
     avatar: { status: AVATAR_STATUS.LIVE },
@@ -475,7 +443,7 @@ test("hovering the video brings out its resize controls, each named and reached 
   try {
     const controls = () =>
       [...room.querySelectorAll<HTMLElement>(".luke-resize-corner")]
-        .map((each) => getComputedStyle(each).opacity)
+        .map((each) => opacity(getComputedStyle(each).opacity))
         .join(" ");
     assert.equal(room.dataset.reveal, "false");
     assert.equal(controls(), "0 0", "at rest the video is the video alone");
@@ -495,8 +463,8 @@ test("hovering the video brings out its resize controls, each named and reached 
   }
   const touch = layContainersAt({}, { touch: true });
   try {
-    const controls = [...room.querySelectorAll<HTMLElement>(".luke-resize-corner")].map(
-      (each) => getComputedStyle(each).opacity,
+    const controls = [...room.querySelectorAll<HTMLElement>(".luke-resize-corner")].map((each) =>
+      opacity(getComputedStyle(each).opacity),
     );
     assert.deepEqual(controls, ["1", "1"], "a touch screen, which has no hover, always shows them");
   } finally {

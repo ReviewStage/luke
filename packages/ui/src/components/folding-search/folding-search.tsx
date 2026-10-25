@@ -25,6 +25,21 @@ import { Tooltip } from "../tooltip/hint.js";
  * once it is gone.
  */
 
+/** The box the name and its magnifier share, which the field is laid over while open. */
+const BOX =
+  "luke-folding-search group/fold relative flex min-w-0 flex-1 items-center gap-control-gap";
+
+/**
+ * What the field covers fades back once the field has left, waiting out its
+ * exit, and fades out at once as it arrives.
+ */
+const COVERED =
+  "flex transition-opacity duration-(--luke-duration-quick) ease-pane not-group-data-[open=true]/fold:delay-(--luke-duration-exit) group-data-[open=true]/fold:opacity-0 group-data-[open=true]/fold:duration-(--luke-duration-exit) group-data-[open=true]/fold:ease-plain";
+
+/** The search, laid over the whole box; its unfolding and folding stay in `folding-search.css`. */
+const FIELD =
+  "luke-folding-search-field absolute inset-0 flex items-center [&>.luke-search-field]:w-full";
+
 /** A name the field covers, and the search a press on its magnifier unfolds over it, named `label`. */
 export function FoldingSearch({
   label,
@@ -71,11 +86,14 @@ export function FoldingSearch({
     setAsked(false);
   };
   return (
-    <div className="luke-folding-search" data-open={open ? "true" : undefined}>
-      <div className="luke-folding-search-name" inert={open}>
+    <div className={BOX} data-open={open ? "true" : undefined}>
+      <div
+        className={`luke-folding-search-name min-w-0 flex-1 items-center [&>*]:min-w-0 [&>*]:flex-1 ${COVERED}`}
+        inert={open}
+      >
         {children}
       </div>
-      <span className="luke-folding-search-magnifier" inert={open}>
+      <span className={`luke-folding-search-magnifier ${COVERED}`} inert={open}>
         <Tooltip label={label}>
           <IconButton
             ref={magnifier}
@@ -91,7 +109,7 @@ export function FoldingSearch({
             well.current = element;
             field.ref(element);
           }}
-          className="luke-folding-search-field"
+          className={FIELD}
           data-leaving={field.leaving ? "true" : undefined}
           inert={field.leaving}
           onBlur={(event) => {

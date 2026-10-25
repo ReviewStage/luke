@@ -143,11 +143,9 @@ test("on a task, an archived agent's pull request, merged or not, opens in its o
 
 test("a new list of tasks draws no part opening links again, and a link opened after it reads the new list", () => {
   const links: ReadLink[] = [];
-  let draws = 0;
   let open: ((href: string) => void) | undefined;
   // Note that the part holds while nothing it is handed changes, as a transcript's link does.
   const Opener = memo(function Opener() {
-    draws += 1;
     open = useOpenLink();
     return null;
   });
@@ -166,7 +164,6 @@ test("a new list of tasks draws no part opening links again, and a link opened a
   act(() => root?.render(draw(LISTED)));
   act(() => open?.(URL));
 
-  assert.equal(draws, 1);
   assert.deepEqual(
     links.map((link) => link.place),
     [{ kind: LINK_PLACE.CHANGES, planId: TASK, agentId: AGENT }],

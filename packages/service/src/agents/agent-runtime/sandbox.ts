@@ -126,15 +126,15 @@ function retentionOf(bound: SnapshotBound): Retention {
  * The coding agent's sandbox opens with a short timeout, which its steps
  * keep moving on while a turn runs, so a long run is never cut off mid-turn
  * and one nothing stopped bills an hour rather than a day; and it is stopped
- * the moment a turn ends rather than waiting that out. Its size is enough memory for the repository's own lint,
- * chosen at open, so a stopped sandbox resumes at it. Every stop snapshots
+ * the moment a turn ends rather than waiting that out. Its size is its
+ * repository's, chosen at open (`openSandbox`), so a stopped sandbox resumes
+ * at it. Every stop snapshots
  * the sandbox, so each keeps its newest snapshot alone.
  */
 const SANDBOX_LIFECYCLE = {
   [SANDBOX_POLICY.SHALLOW_THEN_DEEP]: {
     open: {
       timeout: CODER.SANDBOX_TIMEOUT_MS,
-      resources: { vcpus: CODER.SANDBOX_VCPUS },
       keepLastSnapshots: retentionOf(CODER.SANDBOX_SNAPSHOTS),
     },
     renewsCredential: true,
@@ -204,13 +204,17 @@ export const environment = VercelSandbox.environment({
   prepare: prepareImage,
 });
 
-/** The role's own sandbox, opened as its policy says; call it inside the root's `defineSandbox` selector. A worker's role opens none. */
-export function openSandbox(role: AgentRole) {
+/**
+ * The role's own sandbox, opened as its policy says at the size its
+ * repository asks for (`../coder-host/bounds.ts`'s `sandboxVcpus`); call it
+ * inside the root's `defineSandbox` selector. A worker's role opens none.
+ */
+export function openSandbox(role: AgentRole, vcpus: number) {
   const options = lifecycleOf(role).open;
   if (options === undefined) {
     throw new Error(`The ${role} role reads in its parent's sandbox and opens none of its own.`);
   }
-  return environment.open(options);
+  return environment.open({ ...options, resources: { vcpus } });
 }
 
 /** Whether the event ends a turn. */

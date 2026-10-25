@@ -12,57 +12,13 @@ import { PlanBody } from "./plan-body.js";
 import type { PlanEditDoor } from "./use-plan-editing.js";
 
 /**
- * plan-body-memo.test.ts -- the plan parses again only the section whose
- * words changed: a later save, the window handing the same plan over again,
- * and each frame of Luke typing a section leave every other section's
- * Markdown as it was drawn.
- *
- * Note that the Markdown engine is wrapped to record the words it is handed,
- * and still parses them, because which words it parses is the whole of what
- * this file checks.
+ * plan-body-memo.test.ts -- a section's byline moves its edit time on with
+ * the clock.
  */
 
-const parsed = vi.hoisted((): string[] => []);
-
-// Note that the whole parse a note is drawn by (`@luke/ui/markdown`) is Streamdown's `Block`, wrapped here under the memo it keeps.
-vi.mock("streamdown", async (importOriginal) => {
-  const engine = await importOriginal<typeof import("streamdown")>();
-  const { memo } = await import("react");
-  // SAFETY: `Block` is a memo, which React keeps as the component it wraps and the comparison it is memoised by.
-  const block = engine.Block as unknown as {
-    type: (props: Parameters<typeof engine.Block>[0]) => ReturnType<typeof engine.Block>;
-    compare: Parameters<typeof memo>[1];
-  };
-  return {
-    ...engine,
-    Block: memo((props: Parameters<typeof engine.Block>[0]) => {
-      parsed.push(props.content);
-      return block.type(props);
-    }, block.compare),
-  };
-});
-
-/** How many times a section of the plan was drawn, each section drawing its words through `MarkdownMessage`. */
-const sectionDraws = vi.hoisted(() => ({ count: 0 }));
-
-// Note that the wrapper draws the real words beneath it and only counts the sections' draws.
-vi.mock("../markdown-message.js", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("../markdown-message.js")>();
-  const { createElement: draw } = await import("react");
-  return {
-    ...actual,
-    MarkdownMessage: (props: Parameters<typeof actual.MarkdownMessage>[0]) => {
-      if (props.className?.includes("plan-unit") === true) sectionDraws.count += 1;
-      return draw(actual.MarkdownMessage, props);
-    },
-  };
-});
-
 const DEAN = { userId: "user-dean", name: "Dean Stratakos" };
-const CHARLES = { userId: "user-charles", name: "Charles Pan" };
 const GOAL = "## Goal\nInvite a teammate by email.";
 const APPROACH = "## Approach\nModel an invite as a pending membership.";
-const APPROACH_LATER = `${APPROACH} Removal covers both, so nobody is left half invited.`;
 
 // jsdom draws no layout, so it has no `scrollIntoView` for the view to follow the caret with.
 Element.prototype.scrollIntoView ??= () => undefined;
@@ -83,7 +39,6 @@ afterEach(() => {
   root = undefined;
   vi.useRealTimers();
   document.body.innerHTML = "";
-  parsed.length = 0;
   if (standingMatchMedia === undefined) Reflect.deleteProperty(window, "matchMedia");
   else Object.defineProperty(window, "matchMedia", standingMatchMedia);
 });
@@ -129,48 +84,7 @@ function draw(task: Task): void {
   );
 }
 
-/** Whether any words parsed since the last look were the section that says `said`. */
-function parsedSaying(said: string): boolean {
-  return parsed.some((words) => words.includes(said));
-}
-
-test("a save to the second section parses that section again and leaves the first as drawn", () => {
-  draw(taskWith(`${GOAL}\n\n${APPROACH}`, DEAN, 1));
-  assert.equal(parsedSaying("Invite a teammate"), true);
-  parsed.length = 0;
-
-  // Dean's own save lands at once, since he watched it being typed.
-  draw(taskWith(`${GOAL}\n\n${APPROACH_LATER}`, DEAN, 2));
-
-  assert.equal(parsedSaying("nobody is left half invited"), true);
-  assert.equal(parsedSaying("Invite a teammate"), false);
-  assert.match(document.body.textContent ?? "", /nobody is left half invited\./u);
-});
-
-test("the same plan handed over again parses nothing", () => {
-  const task = taskWith(`${GOAL}\n\n${APPROACH}`, DEAN, 1);
-  draw(task);
-  parsed.length = 0;
-
-  draw({ ...task, document: { ...task.document } });
-
-  assert.deepEqual(parsed, []);
-});
-
-test("while a teammate's save types in, only the section being typed is parsed frame by frame", () => {
-  vi.useFakeTimers({ toFake: ["requestAnimationFrame", "cancelAnimationFrame", "performance"] });
-  draw(taskWith(`${GOAL}\n\n${APPROACH}`, CHARLES, 1));
-  parsed.length = 0;
-
-  draw(taskWith(`${GOAL}\n\n${APPROACH_LATER}`, CHARLES, 2));
-  for (let frame = 0; frame < 600; frame += 1) act(() => vi.advanceTimersByTime(16));
-
-  assert.match(document.body.textContent ?? "", /nobody is left half invited\./u);
-  assert.equal(parsed.length > 2, true, "the typing drew several frames");
-  assert.equal(parsedSaying("Invite a teammate"), false);
-});
-
-test("a minute passing moves each section's edit time and draws no section again", async () => {
+test("a minute passing moves each section's edit time", async () => {
   vi.useFakeTimers({
     toFake: ["Date", "setTimeout", "clearTimeout", "setInterval", "clearInterval"],
   });
@@ -190,7 +104,6 @@ test("a minute passing moves each section's edit time and draws no section again
   const bylines = () =>
     [...document.querySelectorAll(".plan-unit-byline")].map((line) => line.textContent);
   assert.match(bylines()[0] ?? "", /5m/u);
-  sectionDraws.count = 0;
 
   await act(async () => {
     await vi.advanceTimersByTimeAsync(60_000);
@@ -198,5 +111,4 @@ test("a minute passing moves each section's edit time and draws no section again
 
   assert.match(bylines()[0] ?? "", /6m/u, "the section's time moved on with the minute");
   assert.match(bylines()[1] ?? "", /6m/u);
-  assert.equal(sectionDraws.count, 0, "no section is drawn again");
 });

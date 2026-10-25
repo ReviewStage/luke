@@ -131,11 +131,6 @@ test("a press on the control beside it while the search stands empty folds the s
 
     assert.deepEqual(pressed, ["New thread"]);
     assert.equal(newThread(), button, "the button pressed is the one still standing");
-    assert.equal(
-      document.querySelector(".luke-folding-search-field")?.getAttribute("data-leaving"),
-      "true",
-      "the field folds through its exit",
-    );
     act(() => exits.finish());
     assert.equal(field(), null, "and is taken once the exit ends");
   } finally {

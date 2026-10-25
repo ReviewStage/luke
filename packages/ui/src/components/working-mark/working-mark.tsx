@@ -9,6 +9,11 @@
  * mid-lap rather than its first, so a still mark still reads as working. The
  * mark itself is decorative; the seat it stands in names it. Its side is 12px
  * unless a container sets `--luke-working-mark-size`.
+ *
+ * It is drawn in the Tailwind theme's utilities: its size is fixed by the
+ * `viewBox` the mark always carries, asked on the mark with that attribute
+ * so a glyph's seat around it never stretches the grid, and its cells and
+ * gaps stay whole pixels; the lap is `working-mark.css`'s.
  */
 
 /** The pixels that move: each chaser and the fainter tail one cell behind it. */
@@ -54,12 +59,15 @@ function cellAt(column: number, row: number): CellCorner {
   return { x: INSET + column * PITCH, y: INSET + row * PITCH };
 }
 
+/** The tails, a step fainter than the chasers they follow. */
+const TAILS: ReadonlySet<string> = new Set([WORKING_DOT.LEAD_TAIL, WORKING_DOT.TRAIL_TAIL]);
+
 /** The mark, hidden from a reader, since the seat it stands in says it. */
 export function WorkingMark(): React.JSX.Element {
   const start = cellAt(0, 0);
   return (
     <svg
-      className="luke-working-mark"
+      className="luke-working-mark [&[viewBox]]:block [&[viewBox]]:size-working-mark [&[viewBox]]:flex-none [&[viewBox]]:fill-current"
       width={SIDE}
       height={SIDE}
       viewBox={`0 0 ${SIDE} ${SIDE}`}
@@ -68,7 +76,7 @@ export function WorkingMark(): React.JSX.Element {
       {TRACK.map(([column, row], index) => (
         <rect
           key={index}
-          className="luke-working-mark-track"
+          className="luke-working-mark-track opacity-16"
           {...cellAt(column, row)}
           width={CELL}
           height={CELL}
@@ -78,7 +86,7 @@ export function WorkingMark(): React.JSX.Element {
       {Object.values(WORKING_DOT).map((dot) => (
         <rect
           key={dot}
-          className="luke-working-mark-dot"
+          className={TAILS.has(dot) ? "luke-working-mark-dot opacity-45" : "luke-working-mark-dot"}
           data-dot={dot}
           {...start}
           width={CELL}

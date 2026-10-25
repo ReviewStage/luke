@@ -1,6 +1,6 @@
-/* composer-foot.css -- a message box's foot: its files' row, its bar of
-   tools and presses with the send at its end, and its one note under them,
-   inset as the frame around it stands. */
+/* composer-foot.css -- a message box's foot: its bar of tools and presses
+   with the send at its end, and its one note under them, inset as the frame
+   around it stands. */
 
 @layer components {
   /* A card's foot stands at the card's inset; the bar's two ends hold apart. */
@@ -19,17 +19,6 @@
   /* A bare frame's foot is flush with the words over it, since the card around it insets both. */
   .luke-composer-frame[data-look="bare"] .luke-composer-foot {
     padding-inline: 0;
-  }
-
-  .luke-composer-foot-files {
-    display: flex;
-    flex-wrap: wrap;
-    gap: var(--luke-tight-gap);
-  }
-
-  /* A row that holds nothing drawn takes no gap, as a box's chips row is hidden while it holds no file. */
-  .luke-composer-foot-files:not(:has(> :not([hidden]))) {
-    display: none;
   }
 
   .luke-composer-foot-bar {

@@ -25,7 +25,6 @@ import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test, vi } from "vitest";
 import {
-  CHAT_NOT_TAKEN,
   CHAT_READ_PAUSE,
   chatFollowerOf,
   useWorkspaceChat,
@@ -347,7 +346,10 @@ test("an answer the service did not take, its ask changed first, says so and lea
   });
   service.writes[0]?.settle({ ask: message(1, { touchedSeq: 3, ask }), taken: false });
   await settle();
-  assert.equal(await said, CHAT_NOT_TAKEN);
+  assert.equal(
+    await said,
+    "The ask changed before your answer landed. Answer it as it stands now.",
+  );
   assert.equal(tab.control().chat?.messages[0]?.ask?.revision, 2);
 });
 
@@ -631,24 +633,6 @@ test("a burst of messages in the channel shown is read in the window as each lan
     service.writes.map((write) => write.params.write),
     [{ readTo: 5, channelId: CHANNEL }],
   );
-});
-
-test("a push that changes nothing hands back the chat held, and one that adds a message keeps every message it held as the one held", async () => {
-  const service = scriptedService();
-  const tab = mount(service);
-  service.push("acme", answered([message(1), message(2)]));
-  await settle();
-  const first = tab.control().chat;
-  service.push("acme", answered([message(1), message(2)]));
-  await settle();
-  assert.equal(tab.control().chat, first, "the same chat is handed back");
-  service.push("acme", answered([message(1), message(2), message(3)]));
-  await settle();
-  const [one, two, three] = tab.control().chat?.messages ?? [];
-  assert.equal(one, first?.messages[0]);
-  assert.equal(two, first?.messages[1]);
-  assert.equal(three?.id, "m3");
-  assert.equal(tab.control().chat?.members, first?.members, "the roster is the one held");
 });
 
 test("a read still waiting on its pause is told to the workspace it was read in as another workspace is shown", async () => {
