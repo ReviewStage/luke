@@ -1248,7 +1248,10 @@ test("in the Comments tab a thread's quote stands under its first comment's writ
   const entry = card?.querySelector(".comment-entry");
 
   assert.ok(entry?.querySelector(".luke-comment-head + .luke-comment-body .comment-quote"));
-  assert.equal(card?.firstElementChild?.classList.contains("comment-entry"), true);
+  assert.equal(
+    card?.querySelector(".comment-entries")?.firstElementChild?.classList.contains("comment-entry"),
+    true,
+  );
 });
 
 test("a thread's resolve reads as its writer's own line, drawn as a comment's head, and an empty tab says how a thread starts", () => {
