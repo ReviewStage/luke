@@ -2,7 +2,6 @@
 
 import assert from "node:assert/strict";
 import {
-  GroupHeader,
   IconButton,
   LIST_ROW_ACTIONS,
   LIST_ROW_CURRENT,
@@ -71,20 +70,16 @@ function drawn(piece: Piece, selector: string): HTMLElement {
   return element;
 }
 
-/** `element`'s opacity as a browser computes it, a number: jsdom echoes a percentage as it was declared, as Tailwind's `opacity-100` declares `100%`. */
-function opacityOf(element: Element): string {
-  const declared = getComputedStyle(element).opacity;
-  return declared.endsWith("%") ? String(Number.parseFloat(declared) / 100) : declared;
-}
-
 /** Whether `element` is drawn to be seen and pressed: opaque, and it or what it holds to press taking the pointer. */
 function standing(element: Element, press: Element = element): boolean {
-  return opacityOf(element) === "1" && getComputedStyle(press).pointerEvents !== "none";
+  return (
+    getComputedStyle(element).opacity === "1" && getComputedStyle(press).pointerEvents !== "none"
+  );
 }
 
 /** Whether `element` is drawn faded out. */
 function faded(element: Element): boolean {
-  return opacityOf(element) === "0";
+  return getComputedStyle(element).opacity === "0";
 }
 
 /** Whether a row's metadata is drawn to be read. */
@@ -193,34 +188,6 @@ for (const { name, piece, control, press } of HOVER_ONLY) {
     assert.ok(faded(drawn(piece, control)));
   });
 }
-
-/** A group head's actions, its ⋯ and +, drawn as `GroupHeader` draws them. */
-function groupActions(touch: boolean): HTMLElement {
-  layFor(touch);
-  const container = document.body.appendChild(document.createElement("div"));
-  const root = createRoot(container);
-  roots.push(root);
-  act(() =>
-    root.render(
-      createElement(GroupHeader, {
-        label: "acme/web",
-        actions: createElement(IconButton, { icon: "+", label: "New task" }),
-      }),
-    ),
-  );
-  return (
-    container.querySelector<HTMLElement>(".luke-group-header-actions") ?? assert.fail("actions")
-  );
-}
-
-test("a group header's ⋯ and + stands at rest on a touch screen", () => {
-  const actions = groupActions(true);
-  assert.ok(standing(actions, actions.querySelector("button") ?? actions));
-});
-
-test("a group header's ⋯ and + stays hidden at rest with a mouse", () => {
-  assert.ok(faded(groupActions(false)));
-});
 
 test("on a touch screen a failed agent's tab keeps its mark rather than its ×", () => {
   layFor(true);

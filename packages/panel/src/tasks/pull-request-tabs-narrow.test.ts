@@ -143,7 +143,10 @@ test("the tabs take the bar's middle rather than hugging options their container
     ),
   );
   const bar = tab.querySelector(".luke-choice-bar") ?? assert.fail("the tabs stand");
-  assert.equal(bar.parentElement?.className, "luke-pane-bar-middle");
+  assert.ok(
+    bar.parentElement?.classList.contains("luke-pane-bar-middle"),
+    "the tabs stand in the middle",
+  );
   const drawn = getComputedStyle(bar);
   assert.equal(drawn.containerType, "inline-size");
   assert.equal(drawn.flexGrow, "1");

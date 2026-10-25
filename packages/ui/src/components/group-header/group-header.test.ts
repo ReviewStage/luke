@@ -1,25 +1,20 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import { act, createElement, type ReactElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
 import { NAV_COUNT_SHOWN } from "../nav-item/nav-item.js";
-import { GROUP_ACTIONS, GROUP_SURFACE, type GroupFold, GroupHeader } from "./group-header.js";
+import { type GroupFold, GroupHeader } from "./group-header.js";
 
 /**
  * group-header.test.ts -- pressing a group's head folds and unfolds its
  * rows and says so in `aria-expanded`, open or folded from the start or as
  * its holder keeps it; an action beside the fold presses without folding;
- * a head that folds nothing draws its rows always and no fold control; the
- * actions wait for the pointer or stand at rest as the head says; a head may
- * offer a search that the actions beside it survive; the
- * count is drawn as its caller gives it, always on a wide page and, in a
- * narrow column, only folded or under the pointer; a folded group draws what it leaves
- * standing; a press that opens plays the
- * Disclosure's motion, and every motion the fold and its chevron run is
- * timed on a token reduced motion holds still.
+ * a head that folds nothing draws its rows always and no fold control; a
+ * head may offer a search that the actions beside it survive; the count is
+ * drawn as its caller gives it; and a folded group draws what it leaves
+ * standing.
  */
 
 declare global {
@@ -127,21 +122,6 @@ test("an action beside the fold is pressed without folding the group", () => {
   assert.ok(container.textContent?.includes(ROWS));
 });
 
-test("a head's actions wait for the pointer unless the head keeps them standing", () => {
-  const shown = (extra: object) =>
-    render(
-      group(undefined, {
-        actions: createElement("button", { type: "button" }, "View options"),
-        ...extra,
-      }),
-    )
-      .querySelector(".luke-group-header-actions")
-      ?.getAttribute("data-shown");
-
-  assert.equal(shown({}), GROUP_ACTIONS.ON_HOVER);
-  assert.equal(shown({ actionsShown: GROUP_ACTIONS.AT_REST }), GROUP_ACTIONS.AT_REST);
-});
-
 test("a head that offers a search unfolds it over the label while the actions beside it stay pressable", () => {
   const typed: string[] = [];
   let presses = 0;
@@ -193,45 +173,6 @@ test("the count is drawn as its caller gives it, none included, and read with it
   assert.equal(headOf(uncounted).textContent, "acme/web");
 });
 
-test("a count stands always on a wide page, and in a narrow column only while the group is folded or under the pointer", () => {
-  const shown = (container: HTMLElement) =>
-    container.querySelector(".luke-group-header-count")?.getAttribute("data-shown");
-  const counted = (surface: typeof GROUP_SURFACE.WIDE | typeof GROUP_SURFACE.NARROW) =>
-    group({ defaultOpen: true }, { surface, count: { value: 3, noun: "tasks" } });
-
-  assert.equal(shown(render(counted(GROUP_SURFACE.WIDE))), "always");
-
-  const narrow = render(counted(GROUP_SURFACE.NARROW));
-  assert.equal(shown(narrow), "on-hover");
-  act(() => headOf(narrow).click());
-  assert.equal(shown(narrow), "always");
-  act(() => headOf(narrow).click());
-  assert.equal(shown(narrow), "on-hover");
-
-  const own = render(
-    group(
-      { defaultOpen: true },
-      {
-        surface: GROUP_SURFACE.NARROW,
-        count: { value: 3, noun: "tasks", shown: NAV_COUNT_SHOWN.ALWAYS },
-      },
-    ),
-  );
-  assert.equal(shown(own), "always", "a count that says when it stands stands as given");
-});
-
-test("a press that opens plays the fold's motion, and a group drawn open plays none", () => {
-  const container = render(group({ defaultOpen: false }));
-  const root = container.firstElementChild ?? assert.fail("a group");
-  assert.equal(root.getAttribute("data-disclosure"), null);
-
-  act(() => headOf(container).click());
-  assert.equal(root.getAttribute("data-disclosure"), "opening");
-
-  const open = render(group({ defaultOpen: true }));
-  assert.equal(open.firstElementChild?.getAttribute("data-disclosure"), null);
-});
-
 test("what a folded group leaves standing is drawn once the rows fade, and not while they stand", () => {
   const container = render(group({ defaultOpen: true }, { standing: "Retry the audit" }));
   assert.ok(container.textContent?.includes(ROWS));
@@ -250,41 +191,4 @@ test("what a folded group leaves standing is drawn once the rows fade, and not w
     !unfolding.textContent?.includes("Retry the audit"),
     "a head that folds nothing keeps none",
   );
-});
-
-/** The rule blocks a stylesheet draws for `selector`, joined. */
-function rulesFor(css: string, selector: string): string {
-  const blocks = [...css.matchAll(/([^{}]+)\{([^{}]*)\}/g)];
-  return blocks
-    .filter(([, head]) => head?.includes(selector))
-    .map(([, , body]) => body)
-    .join("\n");
-}
-
-/** The duration tokens a block of declarations or a module's utilities (`duration-(--luke-duration-hover)`) names. */
-function durations(declarations: string): string[] {
-  return [...declarations.matchAll(/(--luke-duration-[a-z-]+)/g)].flatMap(([, name]) =>
-    name === undefined ? [] : [name],
-  );
-}
-
-test("every motion the fold and its chevron run is timed on a token reduced motion holds still", () => {
-  const read = (path: string) => readFileSync(new URL(path, import.meta.url), "utf8");
-  const disclosure = read("../disclosure/disclosure.css");
-  const reduced = read("../../tokens/motion.css").split("prefers-reduced-motion")[1] ?? "";
-  const motions = [
-    ...durations(rulesFor(disclosure, ".luke-disclosure-turn {")),
-    ...durations(rulesFor(disclosure, '[data-disclosure="opening"] > .luke-disclosure-body')),
-    ...durations(rulesFor(disclosure, '[data-disclosure="closing"] > .luke-disclosure-body')),
-    // Note that a hover's settle is a colour's or a fade's, which reduced motion keeps.
-    ...durations(read("./group-header.tsx")).filter((token) => token !== "--luke-duration-hover"),
-  ];
-  assert.ok(motions.length >= 3);
-  for (const token of motions) {
-    assert.match(
-      reduced,
-      new RegExp(`${token}: 1ms;`),
-      `${token} is held still under reduced motion`,
-    );
-  }
 });

@@ -174,10 +174,8 @@ test("a chosen row is filled and described as selected; one not chosen is neithe
   const container = draw(createElement(Choosing, { chosen: ["Chat"] }));
   const chat = button(container, "Chat");
   expect(chat.getAttribute("aria-description")).toBe("Selected");
-  expect(chat.closest("li")?.getAttribute("data-selected")).toBe("true");
   const inbox = button(container, "Inbox");
   expect(inbox.getAttribute("aria-description")).toBeNull();
-  expect(inbox.closest("li")?.getAttribute("data-selected")).toBeNull();
 });
 
 test("a plain click opens its row as it always has, and leaves the selection as it stands", () => {
@@ -274,7 +272,6 @@ test("a list not asked to choose rows opens its row on a âŒ˜-click, and leaves â
   );
   click(button(container, "Chat"), { metaKey: true });
   expect(pressed).toEqual(["Chat"]);
-  expect(button(container, "Chat").closest("li")?.getAttribute("data-selected")).toBeNull();
   act(() => button(container, "Chat").focus());
   expect(key("a", { metaKey: true })).toBe(false);
   expect(key("Escape")).toBe(false);

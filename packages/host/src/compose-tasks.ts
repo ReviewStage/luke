@@ -2283,12 +2283,13 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         );
         if (!gate()) return carried<TasksStartAnswer>({ failure: TASK_CALL_FAILURE.UNANSWERED });
         const request = read;
-        return yield* writtenThenListed(
+        // Note that a start answers once the task is drawn open rather than once the list carries
+        // it, because nothing draws its row from the answer, so a list from before the write only
+        // lacks a row it has not drawn yet, and the window opens the task's agent at once.
+        return yield* serial(
           Effect.gen(function* () {
             const started = yield* served(client.create(request));
-            if (!started.ok) {
-              return [carried<TasksStartAnswer>({ failure: started.failure }), undefined] as const;
-            }
+            if (!started.ok) return carried<TasksStartAnswer>({ failure: started.failure });
             const { task, agent } = started.answer;
             // A task just started has had no call. A call about another task
             // is left to the start's own Talk press, which moves it here.
@@ -2300,13 +2301,10 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
             publish();
             yield* openBoard(task.id);
             yield* openRecord(task.id);
-            return [
-              carried<TasksStartAnswer>({
-                planId: task.id,
-                ...(agent === undefined ? undefined : { agentStart: agent }),
-              }),
-              started.answer.txid,
-            ] as const;
+            return carried<TasksStartAnswer>({
+              planId: task.id,
+              ...(agent === undefined ? undefined : { agentStart: agent }),
+            });
           }),
         );
       }),

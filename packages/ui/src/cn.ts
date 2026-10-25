@@ -112,6 +112,35 @@ const FEEDBACK_DISPLAY = {
 } as const;
 
 /**
+ * The names the rows and navigation block of the theme adds (list row, nav
+ * item, disclosure, bar item, pane bar, toolbar, over pane, folding search,
+ * searchable menu), by the group tailwind-merge reads each in.
+ */
+const ROWS_NAVIGATION = {
+  text: ["dialog-size", "tag-size"],
+  leading: ["label"],
+  spacing: [
+    "bar-count-reach",
+    "caption-leading",
+    "disclosure-row",
+    "item-gap",
+    "list-row-lead",
+    "luke-32",
+    "luke-48",
+    "menu-label",
+    "nav-identity",
+    "over-pane",
+    "over-pane-column",
+    "pane-bar",
+    "submenu",
+    "submenu-reach",
+    "swipe-label",
+  ],
+  shadow: ["bar-count-ring"],
+  radius: ["inherit"],
+} as const;
+
+/**
  * The names the page patterns' block of the theme adds (layout, settings,
  * the collection, detail, public, and auth pages, the empty and error
  * states, the failure note, and the group header), by the group
@@ -125,9 +154,6 @@ const PAGE_PATTERNS = {
     "failure-note-row",
     "field-least",
     "group-header-mark",
-    "item-gap",
-    "luke-32",
-    "luke-48",
     "luke-64",
     "luke-96",
     "page-inset",
@@ -183,6 +209,7 @@ const merge = extendTailwindMerge({
         "group",
         "tag",
         ...FEEDBACK_DISPLAY.text,
+        ...ROWS_NAVIGATION.text,
         ...PAGE_PATTERNS.text,
       ],
       "font-weight": [
@@ -198,7 +225,12 @@ const merge = extendTailwindMerge({
         ...PAGE_PATTERNS["font-weight"],
       ],
       tracking: ["title"],
-      leading: ["body", ...FEEDBACK_DISPLAY.leading, ...PAGE_PATTERNS.leading],
+      leading: [
+        "body",
+        ...FEEDBACK_DISPLAY.leading,
+        ...ROWS_NAVIGATION.leading,
+        ...PAGE_PATTERNS.leading,
+      ],
       spacing: [
         "luke-2",
         "luke-4",
@@ -263,6 +295,7 @@ const merge = extendTailwindMerge({
         "choice-segment-compact",
         "caption-glyph",
         ...FEEDBACK_DISPLAY.spacing,
+        ...ROWS_NAVIGATION.spacing,
         ...PAGE_PATTERNS.spacing,
       ],
       radius: [
@@ -281,6 +314,7 @@ const merge = extendTailwindMerge({
         "choice-segment",
         "choice-box",
         ...FEEDBACK_DISPLAY.radius,
+        ...ROWS_NAVIGATION.radius,
         ...PAGE_PATTERNS.radius,
       ],
       shadow: [
@@ -290,6 +324,7 @@ const merge = extendTailwindMerge({
         "tooltip",
         "switch-thumb",
         ...FEEDBACK_DISPLAY.shadow,
+        ...ROWS_NAVIGATION.shadow,
         ...PAGE_PATTERNS.shadow,
       ],
       font: ["ui"],

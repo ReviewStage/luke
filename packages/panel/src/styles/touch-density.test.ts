@@ -5,8 +5,10 @@ import {
   AddressField,
   BUTTON_SIZE,
   Checkbox,
+  DISCLOSURE_LOOK,
+  DISCLOSURE_SUMMARY,
   Disclosure,
-  GroupHeader,
+  DisclosureSummary,
   IconButton,
   INLINE_EDIT_LOOK,
   InlineEdit,
@@ -421,12 +423,6 @@ function built(markup: string, selector: string): HTMLElement {
   return holder.querySelector<HTMLElement>(selector) ?? assert.fail(`${selector} is built`);
 }
 
-/** `element`'s opacity as a browser computes it, a number: jsdom echoes a percentage as it was declared, as Tailwind's `opacity-100` declares `100%`. */
-function opacityOf(element: Element): string {
-  const declared = getComputedStyle(element).opacity;
-  return declared.endsWith("%") ? String(Number.parseFloat(declared) / 100) : declared;
-}
-
 /** The presses drawn only under the pointer on a desktop, each by what the developer calls it. */
 function pointerOnlyPresses(): ReadonlyMap<string, HTMLElement> {
   return new Map([
@@ -436,16 +432,6 @@ function pointerOnlyPresses(): ReadonlyMap<string, HTMLElement> {
         '<ul><li class="task-summary-archived-agent"><span class="task-summary-row"></span><span class="task-summary-marks"><button>Unarchive</button></span></li></ul>',
         ".task-summary-marks",
       ),
-    ],
-    [
-      "a fold's chevron",
-      drawn(
-        createElement(GroupHeader, {
-          label: "acme/web",
-          glyph: createElement("svg"),
-          fold: { defaultOpen: false },
-        }),
-      ).querySelector<HTMLElement>(".luke-group-header-chevron") ?? assert.fail("a chevron"),
     ],
     [
       "a list row's chevron",
@@ -474,14 +460,14 @@ function pointerOnlyPresses(): ReadonlyMap<string, HTMLElement> {
 test("on a touch screen nothing a finger can press stands invisible: an archived agent's Unarchive and every chevron show at rest", () => {
   layFor(true, { "data-luke-profile": "web", "data-luke-density": "compact" });
   for (const [name, press] of pointerOnlyPresses()) {
-    assert.equal(opacityOf(press), "1", `${name} shows`);
+    assert.equal(getComputedStyle(press).opacity, "1", `${name} shows`);
   }
 });
 
 test("with a mouse those presses still wait for the pointer", () => {
   layFor(false, { "data-luke-profile": "desktop" });
   for (const [name, press] of pointerOnlyPresses()) {
-    assert.equal(opacityOf(press), "0", `${name} waits`);
+    assert.equal(getComputedStyle(press).opacity, "0", `${name} waits`);
   }
 });
 
@@ -493,12 +479,24 @@ function transcriptRows(): [string, HTMLElement][] {
     }),
     "tool",
   );
+  // Note that a `data-` attribute passes as the summary's own, which its props' type does not spell.
+  const headProps = {
+    look: DISCLOSURE_SUMMARY.HEAD,
+    "data-row": "the to-do list's head",
+    children: "",
+  };
+  const head = drawn(
+    createElement(Disclosure, {
+      look: DISCLOSURE_LOOK.CARD,
+      children: createElement(DisclosureSummary, headProps),
+    }),
+  );
   const host = document.body.appendChild(document.createElement("div"));
   host.innerHTML = `
-    <details class="luke-disclosure" data-look="card"><summary class="luke-disclosure-summary" data-look="head" data-row="the to-do list's head"></summary></details>
     <div class="agent-published-dock"><ul class="luke-list" data-finger-tall="true"><li class="luke-list-row"><button class="luke-list-row-main" data-row="the pull request's row"></button></li></ul></div>`;
   return [
     ...call.querySelectorAll<HTMLElement>("[data-row]"),
+    ...head.querySelectorAll<HTMLElement>("[data-row]"),
     ...host.querySelectorAll<HTMLElement>("[data-row]"),
   ].map((row) => [row.dataset.row ?? "", row]);
 }

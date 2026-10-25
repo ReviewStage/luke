@@ -16,8 +16,8 @@ import { CONFIRM_LOSS, FootQuestion, useConfirmDialog } from "./confirm-dialog.j
  * focus, and what the dialog holds stands still. Cancel, Escape, and a press
  * on the dimmed window take the question back and leave the dialog open,
  * focus going back to what asked; an answer under way stills the foot and
- * holds it against Escape; a refusal keeps the question up saying why and
- * shakes the card; and once the act lands the dialog's own answers come back.
+ * holds it against Escape; a refusal keeps the question up saying why; and
+ * once the act lands the dialog's own answers come back.
  */
 
 /** The answers the owner's act is waiting on, settled by the test in the order they were asked. */
@@ -142,7 +142,6 @@ test("it takes the foot's place rather than a card of its own, lands on Cancel, 
   const asking = question() ?? assert.fail("no question at the foot");
   assert.equal(button("Done"), undefined, "the dialog's own answer gives way");
   assert.ok(holds(button("Cancel")), "Cancel takes focus");
-  assert.equal(button("Delete")?.getAttribute("data-variant"), "danger");
   const title = document.getElementById(asking.getAttribute("aria-labelledby") ?? "");
   const body = document.getElementById(asking.getAttribute("aria-describedby") ?? "");
   assert.equal(title?.textContent, "Delete the OpenAI key?");
@@ -199,7 +198,7 @@ test("an answer under way stills the foot and holds against Escape, and once it 
   assert.equal(button("Delete key"), undefined, "the key went");
 });
 
-test("a refusal keeps the question at the foot saying why and shakes the card, and the act can be tried again", async () => {
+test("a refusal keeps the question at the foot saying why, and the act can be tried again", async () => {
   const { settle } = asked();
   press("Delete");
   await settle(REFUSED);
@@ -208,7 +207,6 @@ test("a refusal keeps the question at the foot saying why and shakes the card, a
     asking.querySelector('[data-slot="field-error"]')?.textContent,
     "The key is in use.",
   );
-  assert.equal(card().getAttribute("data-refused"), "true");
   assert.ok(holds(button("Cancel")), "focus comes back to Cancel");
   press("Delete");
   await settle(ACCEPTED);

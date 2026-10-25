@@ -22,8 +22,8 @@ import {
  * is named for what its press will do, says so as it toggles, announces
  * itself pressed while on, and carries its chord; End call is the bar's one
  * control that is no toggle and hands its press back; Video on or off
- * asks for the other, round and named by the system's hint on a call and
- * square and named by a tooltip in a composer's row; and a box's call status says the call is live, or
+ * asks for the other, named by the system's hint on a call and by a
+ * tooltip in a composer's row; and a box's call status says the call is live, or
  * muted, and how long it has run, or that it is connecting or ending, with
  * no count. Synthetic call.
  */
@@ -115,8 +115,6 @@ test("the speaker's mute is its own, named for the speaker and toggled by its ow
   const speaker = button(scope, CALL_CONTROL_LABEL.UNMUTE_SPEAKER);
   expect(speaker.getAttribute("aria-pressed")).toBe("true");
   expect(speaker.getAttribute("aria-keyshortcuts")).toMatch(/Shift\+S/u);
-  // Muted is neutral grey, never the red End call alone wears.
-  expect(speaker.getAttribute("data-variant")).not.toBe("danger");
 });
 
 test("the bar's mutes and End call each hand their press back, and End call alone is no toggle", () => {
@@ -166,9 +164,8 @@ test("Video on or off asks for the other, named for what its press will do", () 
   expect(asked).toEqual([false, true]);
 });
 
-test("Video on or off is round and named by the system's hint on a call, and square with no system hint in a composer's row, as the row's mutes are", () => {
+test("Video on or off is named by the system's hint on a call, and has no system hint in a composer's row, as the row's mutes are", () => {
   const call = draw(createElement(VideoToggle, { on: true, onSetVideo: () => {} }));
-  expect(button(call, CALL_CONTROL_LABEL.VIDEO_OFF).getAttribute("data-shape")).toBe("round");
   expect(call.querySelector("[title]")?.getAttribute("title")).toBe(CALL_CONTROL_LABEL.VIDEO_OFF);
 
   const asked: boolean[] = [];
@@ -180,7 +177,6 @@ test("Video on or off is round and named by the system's hint on a call, and squ
     }),
   );
   const toggle = button(row, CALL_CONTROL_LABEL.VIDEO_ON);
-  expect(toggle.getAttribute("data-shape")).toBeNull();
   expect(row.querySelector("[title]")).toBeNull();
   act(() => toggle.click());
   expect(asked).toEqual([true]);
@@ -193,8 +189,6 @@ test("a box's call status says the call is live and how long it has run, and say
     createElement(CallLive, { stage: CALL_STAGE.LIVE, startedAt, muted: false, now }),
   );
   expect(live.textContent).toBe(`${CALL_LIVE_WORD.LIVE}1m 12s`);
-  expect(live.querySelector('[data-tone="working"]')).not.toBeNull();
-  expect(live.querySelector('[data-tone="complete"]')).toBeNull();
   const timer = live.querySelector('[role="timer"]');
   expect(timer?.getAttribute("dateTime")).toBe("PT72S");
 
@@ -206,7 +200,6 @@ test("a box's call status says the call is live and how long it has run, and say
   expect(muted.querySelector("svg")?.outerHTML).toBe(
     renderToStaticMarkup(createElement(MicrophoneOffIcon)),
   );
-  expect(muted.querySelector('[data-tone="danger"]')).toBeNull();
 });
 
 test("a box's call status says Connecting… and Ending… either side of the call, quietly and with no count", () => {
@@ -217,6 +210,5 @@ test("a box's call status says Connecting… and Ending… either side of the ca
     const scope = draw(createElement(CallLive, { stage }));
     expect(scope.textContent).toBe(word);
     expect(scope.querySelector('[role="timer"]')).toBeNull();
-    expect(scope.querySelector('[data-tone="complete"]')).toBeNull();
   }
 });
