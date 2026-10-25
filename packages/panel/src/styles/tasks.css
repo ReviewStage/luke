@@ -3832,12 +3832,13 @@ svg.lucide {
   animation: luke-menu-arrive var(--luke-duration-quick) var(--luke-motion-exit) backwards;
 }
 
-/* The button stands in the gutter past the column's end, its start level
-   with a folded line's count, which stands in its place on a line holding
-   threads. */
+/* The button stands in the gutter past the column's end, centred on its
+   block's first line as a folded line's count is on its words' first line,
+   which stands in its place on a line holding threads. */
 .comment-block-button {
   position: absolute;
   left: calc(100% + var(--luke-space-2));
+  translate: 0 -50%;
   opacity: 0;
   transition: opacity var(--luke-duration-hover) var(--luke-motion-exit);
 }
@@ -3868,18 +3869,24 @@ svg.lucide {
    it fills; its press still takes the whole target on a touch screen, inside
    the column. It ends a scrollbar's room short of the scroller's edge, so a
    scrollbar drawn over the page, macOS's, never stands under it, and a count
-   of more figures grows in toward the words rather than out under it. */
+   of more figures grows in toward the words rather than out under it. It
+   stands centred on the first line its words stand on, wherever they go on
+   from there, so every count reads as the line it starts. */
 .comment-count {
   --luke-control-inset: var(--luke-space-6);
   --luke-icon-gap: var(--luke-space-4);
   position: absolute;
   right: calc(var(--luke-space-8) - var(--comment-gutter));
+  display: flex;
+  translate: 0 -50%;
 }
 
+/* The open thread ends a gap short of the column's end, where the counts in
+   the gutter start, so it never stands over a count or against one. */
 .comment-float {
   position: absolute;
   z-index: 3;
-  right: calc(var(--luke-space-6) * -1);
+  right: var(--luke-space-8);
   display: flex;
   width: var(--comment-card-width);
   max-height: var(--comment-card-room);
@@ -3908,7 +3915,7 @@ svg.lucide {
 /* On a phone narrower than a card and the web's gutter, the open thread
    gives way to the column rather than start past its other edge. */
 [data-luke-profile="web"] .comment-float {
-  max-width: calc(100% + var(--luke-space-6));
+  max-width: calc(100% - var(--luke-space-8));
 }
 
 /* A thread at rest is one press (`CardPress`) over its words and replies,

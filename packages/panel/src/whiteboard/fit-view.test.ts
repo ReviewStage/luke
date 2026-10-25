@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
-import { fitView, type Rect, type SceneBounds, type View } from "./fit-view.js";
+import { FOLLOW, fitView, followFit, type Rect, type SceneBounds, type View } from "./fit-view.js";
 
 /**
- * fit-view.test.ts -- a board's first view puts the whole drawing between the toolbars floating over the canvas, a gap clear of each, and gives up room beside a side tool only where the drawing would reach it.
+ * fit-view.test.ts -- a board's first view puts the whole drawing between the toolbars floating over the canvas, a gap clear of each, gives up room beside a side tool only where the drawing would reach it, and follows the canvas's size until someone moves it.
  */
 
 const GAP = 16;
@@ -58,4 +58,14 @@ test("a side tool above the drawing takes no room from it", () => {
   const view = fitView(CANVAS, [sideTools], bounds, GAP);
   assert.equal(view.zoom, 1);
   assertBox(onScreen(view, bounds), { left: 40, top: 50, right: 360, bottom: 250 });
+});
+
+test("a fitted view is fitted again when its canvas changes size, until someone moves it", () => {
+  // A window opened at 1280 wide and then made 760 wide: the view fitted at the first size no longer fits.
+  const view = { zoom: 1, scrollX: 120, scrollY: 80 };
+  const fitted = { view, width: 860, height: 700 };
+  assert.equal(followFit(fitted, { view, width: 368, height: 464 }), FOLLOW.REFIT);
+  assert.equal(followFit(fitted, { view, width: 860, height: 700 }), FOLLOW.HOLD);
+  const scrolled = { ...view, scrollY: 40 };
+  assert.equal(followFit(fitted, { view: scrolled, width: 368, height: 464 }), FOLLOW.RELEASE);
 });

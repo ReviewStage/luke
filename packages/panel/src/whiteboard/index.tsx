@@ -37,7 +37,7 @@ import {
   type WhiteboardModule,
   type WhiteboardProps,
 } from "./contract.js";
-import { fitView, type Rect } from "./fit-view.js";
+import { type Fitted, FOLLOW, fitView, followFit, type Rect } from "./fit-view.js";
 import { openingView } from "./opening-view.js";
 
 /**
@@ -317,10 +317,19 @@ function rectWithin(element: Element, canvas: DOMRect): Rect {
   };
 }
 
-/** Puts the whole drawing in view, as large as the room the toolbars leave will hold it (`fit-view.ts`). */
-function fitToDrawing(api: ExcalidrawImperativeAPI, host: HTMLElement): void {
+/** The view `state` stands at, and the canvas size it stands on. */
+function standing(state: AppState): Fitted {
+  return {
+    view: { zoom: state.zoom.value, scrollX: state.scrollX, scrollY: state.scrollY },
+    width: state.width,
+    height: state.height,
+  };
+}
+
+/** Puts the whole drawing in view, as large as the room the toolbars leave will hold it (`fit-view.ts`), and answers the view so fitted. */
+function fitToDrawing(api: ExcalidrawImperativeAPI, host: HTMLElement): Fitted | undefined {
   const elements = api.getSceneElements();
-  if (elements.length === 0) return;
+  if (elements.length === 0) return undefined;
   const canvas = host.getBoundingClientRect();
   const bars = [...host.querySelectorAll(TOOLBARS)].map((bar) => rectWithin(bar, canvas));
   const view = fitView(canvas, bars, getCommonBounds(elements), FIT_GAP);
@@ -333,6 +342,9 @@ function fitToDrawing(api: ExcalidrawImperativeAPI, host: HTMLElement): void {
     },
     captureUpdate: CaptureUpdateAction.NEVER,
   });
+  // Note that the view is the one asked for, because the canvas's state may not hold it until its next render.
+  const { width, height } = api.getAppState();
+  return { view, width, height };
 }
 
 /** The hand-drawn font Excalidraw measures and draws text in, as the document loads it. */
@@ -372,7 +384,10 @@ function Canvas({ viewOnly, onApi, onChange, initialData }: CanvasProps): React.
  * drawing of Luke's goes in only after that, and after the hand-drawn font
  * has loaded, because the converter measures every label as it makes it and
  * would clip one measured in the fallback font. A view-only board is
- * Excalidraw's view mode, and reports no scene even so.
+ * Excalidraw's view mode, and reports no scene even so. The view it fitted
+ * follows the canvas's size until the developer moves it (`fit-view.ts`),
+ * read off the change the canvas reports once it has laid out at that size,
+ * so the toolbars are measured where they then stand.
  */
 function mountBoard(host: HTMLElement, props: WhiteboardProps): WhiteboardHandle {
   const root = createRoot(host);
@@ -381,6 +396,7 @@ function mountBoard(host: HTMLElement, props: WhiteboardProps): WhiteboardHandle
   let held = "";
   let applied = props.board.appliedDrawing;
   let latest = props.board;
+  let fitted: Fitted | undefined;
 
   function show(board: Board): void {
     latest = board;
@@ -389,7 +405,15 @@ function mountBoard(host: HTMLElement, props: WhiteboardProps): WhiteboardHandle
     applied = drawing.number;
     const elements = withDrawing(api.getSceneElementsIncludingDeleted(), drawing.elements);
     api.updateScene({ elements, captureUpdate: CaptureUpdateAction.NEVER });
-    fitToDrawing(api, host);
+    fitted = fitToDrawing(api, host);
+  }
+
+  /** Fits the view again where the canvas changed size under a view no one moved, and lets it go where someone did. */
+  function follow(appState: AppState): void {
+    if (api === undefined || fitted === undefined) return;
+    const next = followFit(fitted, standing(appState));
+    if (next === FOLLOW.RELEASE) fitted = undefined;
+    if (next === FOLLOW.REFIT) fitted = fitToDrawing(api, host);
   }
 
   function changed(elements: readonly OrderedExcalidrawElement[], appState: AppState): void {
@@ -398,13 +422,14 @@ function mountBoard(host: HTMLElement, props: WhiteboardProps): WhiteboardHandle
     if (!loaded) {
       loaded = true;
       held = signature;
-      if (api !== undefined) fitToDrawing(api, host);
+      if (api !== undefined) fitted = fitToDrawing(api, host);
       document.fonts.load(DRAWING_FONT).then(
         () => show(latest),
         () => show(latest),
       );
       return;
     }
+    follow(appState);
     if (signature === held || props.viewOnly) return;
     held = signature;
     props.onScene(elements, applied);
