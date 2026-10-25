@@ -50,6 +50,7 @@ import {
   OverPane,
   PaneBar,
   SCROLL_FADE,
+  SCROLL_OVERSCROLL,
   SCROLL_SIZE,
   ScrollArea,
   Skeleton,
@@ -887,8 +888,12 @@ function ChaptersReading({
             }}
           />
           <div className="chapter-brief">
-            {/* Note that a brief cut short by its share fades at the cut, never slicing a line through its letters. */}
-            <ScrollArea size={SCROLL_SIZE.CONTENT} fade={SCROLL_FADE.BOTH}>
+            {/* Note that a brief cut short by its share fades at the cut, never slicing a line through its letters, and a swipe past its end scrolls the Pull request tab, which a short window scrolls to the foot. */}
+            <ScrollArea
+              size={SCROLL_SIZE.CONTENT}
+              fade={SCROLL_FADE.BOTH}
+              overscroll={SCROLL_OVERSCROLL.CHAIN}
+            >
               <div className="chapter-brief-body">
                 <div className="chapter-summary">
                   <TranscriptWords text={chapter.summary} />
@@ -950,6 +955,7 @@ function ChaptersReading({
               reads={changes}
               files={chapterFiles}
               fileReveal={reveal}
+              overscroll={SCROLL_OVERSCROLL.CHAIN}
             />
           )}
           <PaneBar
