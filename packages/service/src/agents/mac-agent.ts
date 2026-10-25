@@ -21,6 +21,7 @@ import { readCodingAgent } from "@luke/database/models/coding-agent-store";
 import {
   claimMacAgentLine,
   latestMacAgentLaunch,
+  macAgentLineStanding,
   macAgentLinesWaiting,
   macAgentRequestsWaiting,
   settleMacAgentLine,
@@ -158,6 +159,12 @@ export function claimedMacAgentLine(userId: string, deviceId: string, id: string
  * rather than running until `TURN_ABANDON`. A turn the runner ended itself
  * is already settled, and is left as it stands. An older launch a newer one
  * replaced settles nothing of the newer one's turn.
+ *
+ * Note that a line this Mac already settled is answered as settled again,
+ * and its runner's turn settled again, which settles nothing a second time,
+ * because the line's own write and the turn's are two writes: a settle whose
+ * turn write failed after its line's landed is asked again by the Mac, and
+ * must still reach the turn.
  */
 export function settledMacAgentLine(
   userId: string,
@@ -166,7 +173,13 @@ export function settledMacAgentLine(
   exitCode?: number,
 ) {
   return Effect.gen(function* () {
-    const settled = yield* settleMacAgentLine(userId, deviceId, id, exitCode);
+    const fresh = yield* settleMacAgentLine(userId, deviceId, id, exitCode);
+    const settled = Option.isSome(fresh)
+      ? fresh
+      : Option.filter(
+          yield* macAgentLineStanding(userId, id),
+          (standing) => standing.settled && standing.deviceId === deviceId,
+        );
     if (Option.isNone(settled)) return false;
     const { agentId, kind } = settled.value;
     if (kind !== MAC_AGENT_LINE_KIND.LAUNCH) return true;

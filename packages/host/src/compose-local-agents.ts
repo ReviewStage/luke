@@ -25,6 +25,7 @@ import {
   Schedule,
   Schema,
   Scope,
+  Semaphore,
   Stream,
 } from "effect";
 import * as FileSystem from "effect/FileSystem";
@@ -85,6 +86,8 @@ const IDLE = Duration.seconds(5);
 const BEAT_EVERY = Duration.seconds(15);
 /** How a held read the service did not answer is asked again. */
 const REREAD = Duration.seconds(2);
+/** How many times a runner's exit is settled again where the service did not take it, `REREAD` apart. */
+const SETTLE_RETRIES = 30;
 /** How a claim the service did not answer is asked again, well inside its own claim window. */
 const CLAIM_RETRY = { every: Duration.seconds(1), times: 5 } as const;
 /** How long a runner's group has to end after SIGTERM before it is sent SIGKILL. */
@@ -96,7 +99,17 @@ const TEMP_FOLDER = "tmp";
 /** The exit code a launch is settled with where its worktree could not be made or its runner started. */
 const NOT_STARTED = 1;
 
-const VARIABLE = { HOME: "HOME", SHELL: "SHELL" } as const;
+const VARIABLE = {
+  HOME: "HOME",
+  SHELL: "SHELL",
+  USER: "USER",
+  LOGNAME: "LOGNAME",
+  LANG: "LANG",
+  PATH: "PATH",
+} as const;
+
+/** The variables of the developer's own a runner and a command are started with, read from the app's environment; nothing else of Luke's is handed on. */
+const HANDED_ON = [VARIABLE.HOME, VARIABLE.SHELL, VARIABLE.USER, VARIABLE.LOGNAME, VARIABLE.LANG];
 
 /** What the host keeps of local agents between runs: the device id each account registered under, and the launches whose runners this Mac started and no exit has settled yet. */
 const LocalAgentStateSchema = Schema.Struct({
@@ -175,6 +188,11 @@ export function composeLocalAgents(
     const shell = yield* Effect.orDie(
       Config.withDefault(Config.String(VARIABLE.SHELL), "/bin/zsh").parse(environment),
     );
+    const handedOn: Record<string, string> = {};
+    for (const name of [...HANDED_ON, VARIABLE.PATH]) {
+      const value = yield* Effect.orDie(Config.option(Config.String(name)).parse(environment));
+      if (Option.isSome(value)) handedOn[name] = value.value;
+    }
     const { kernel, account, switchedOn, client } = dependencies;
     const statePath = path.join(kernel.stateRoot, STATE_FILE);
 
@@ -185,19 +203,27 @@ export function composeLocalAgents(
       Effect.orElseSucceed(() => NO_STATE),
     );
     const state = yield* Ref.make(yield* readState);
+    const writing = yield* Semaphore.make(1);
 
-    /** The state changed and written whole; a write that cannot land is reported, and the next one tries again. */
+    /**
+     * The state changed and written whole, one change at a time, so a write
+     * never lands over a newer one; written beside the file and moved over
+     * it, so a write cut off leaves the last whole one. A write that cannot
+     * land is reported, and the next one tries again.
+     */
     const updateState = (change: (current: LocalAgentState) => LocalAgentState) =>
-      Effect.gen(function* () {
-        const next = yield* Ref.updateAndGet(state, change);
-        yield* fileSystem
-          .writeFileString(statePath, `${encodeState(next)}\n`)
-          .pipe(
-            Effect.catch(() =>
-              Effect.sync(() => report("the local agents' state could not be saved")),
-            ),
-          );
-      });
+      writing.withPermit(
+        Effect.gen(function* () {
+          const next = yield* Ref.updateAndGet(state, change);
+          const written = `${statePath}.writing`;
+          yield* fileSystem.writeFileString(written, `${encodeState(next)}\n`);
+          yield* fileSystem.rename(written, statePath);
+        }).pipe(
+          Effect.catch(() =>
+            Effect.sync(() => report("the local agents' state could not be saved")),
+          ),
+        ),
+      );
 
     /** The device id this account registers under on this Mac, minted the first time. */
     const deviceOf = (userId: string) =>
@@ -262,6 +288,22 @@ export function composeLocalAgents(
           Effect.orElseSucceed(() => Option.none<string>()),
         );
 
+        /**
+         * What a runner and a command are started with of the Mac's own: the
+         * developer's identity and shell, and their login shell's PATH, read
+         * once a follow; never the rest of the app's environment, which is
+         * Luke's and none of the agent's.
+         */
+        const shellEnvironment = yield* Effect.cached(
+          Effect.map(loginPath, (loginShellPath) => ({
+            ...handedOn,
+            ...Option.match(loginShellPath, {
+              onNone: () => ({}),
+              onSome: (value) => ({ [VARIABLE.PATH]: value }),
+            }),
+          })),
+        );
+
         /** The agent's worktree made where it has none: a folder for an agent with no repository, and Luke's shared clone's worktree otherwise. */
         const madeWorktree = (
           layout: MacAgentLayout,
@@ -320,7 +362,7 @@ export function composeLocalAgents(
             if (!made) return yield* settle(line.id, NOT_STARTED);
             const temp = path.join(layout.folder, TEMP_FOLDER);
             yield* Effect.ignore(fileSystem.makeDirectory(temp, { recursive: true, mode: 0o700 }));
-            const pathVariable = yield* loginPath;
+            const shellVariables = yield* shellEnvironment;
             const runnerScope = yield* Scope.fork(agentScope);
             const stdin = yield* Queue.unbounded<string>();
             const encoder = new TextEncoder();
@@ -330,15 +372,12 @@ export function composeLocalAgents(
               {
                 cwd: layout.checkoutPath,
                 env: {
-                  ...platform.runner.env,
-                  ...Option.match(pathVariable, {
-                    onNone: () => ({}),
-                    onSome: (value) => ({ PATH: value }),
-                  }),
+                  ...shellVariables,
                   TMPDIR: temp,
+                  ...platform.runner.env,
                   ...secrets.env,
                 },
-                extendEnv: true,
+                extendEnv: false,
                 // Note that stdin stays open past the first lines, since every later line of the agent's is written to it.
                 stdin: {
                   stream: Stream.fromQueue(stdin).pipe(Stream.map((text) => encoder.encode(text))),
@@ -357,15 +396,23 @@ export function composeLocalAgents(
             const handle = started.value;
             yield* keepLaunch(userId, line.id);
             yield* Queue.offer(stdin, secrets.stdin);
+            // Note that the launch is forgotten only once the service took its settle, asked again
+            // a while where it did not, so one an outage left unsettled is settled as the gate next opens.
             const exited = yield* Effect.gen(function* () {
               const code = yield* Effect.option(handle.exitCode);
               runners.delete(agentId);
-              yield* Option.match(code, {
+              yield* Scope.close(runnerScope, Exit.void);
+              const settled = yield* Option.match(code, {
                 onNone: () => settle(line.id),
                 onSome: (exitCode) => settle(line.id, Number(exitCode)),
-              });
-              yield* forgetLaunch(line.id);
-              yield* Scope.close(runnerScope, Exit.void);
+              }).pipe(
+                Effect.repeat({
+                  schedule: Schedule.spaced(REREAD),
+                  times: SETTLE_RETRIES,
+                  until: (taken) => taken,
+                }),
+              );
+              if (settled) yield* forgetLaunch(line.id);
             }).pipe(Effect.forkIn(agentScope));
             runners.set(agentId, { lineId: line.id, stdin, handle, exited });
           });
@@ -394,7 +441,10 @@ export function composeLocalAgents(
               const root = yield* fileSystem.realPath(layout.folder);
               if (real !== root && !real.startsWith(`${root}/`)) continue;
               const written = path.join(real, path.basename(target));
-              yield* fileSystem.writeFile(written, file.contents, { mode: file.mode });
+              // Note that whatever stands at the path is taken away first and the file made anew,
+              // never written through, since a symlink the agent left there could point anywhere.
+              yield* fileSystem.remove(written, { force: true });
+              yield* fileSystem.writeFile(written, file.contents, { flag: "wx", mode: file.mode });
               yield* fileSystem.chmod(written, file.mode);
             }
           }).pipe(
@@ -495,10 +545,20 @@ export function composeLocalAgents(
         /** One request claimed and answered on a fiber of its own. */
         const answered = (request: MacAgentRequest) =>
           Effect.gen(function* () {
-            const claimed = yield* asked(client.claimRequest(deviceId, request.id));
+            const claimed = yield* asked(client.claimRequest(deviceId, request.id)).pipe(
+              Effect.repeat({
+                schedule: Schedule.spaced(CLAIM_RETRY.every),
+                times: CLAIM_RETRY.times,
+                until: (answer) => answer !== undefined,
+              }),
+            );
             if (claimed === undefined || !("agentId" in claimed)) return;
             const layout = macAgentLayout(folder, claimed.agentId);
-            const answer = yield* answeredLocalAgentRequest(layout, claimed).pipe(
+            const env = {
+              ...(yield* shellEnvironment),
+              TMPDIR: path.join(layout.folder, TEMP_FOLDER),
+            };
+            const answer = yield* answeredLocalAgentRequest(layout, claimed, env).pipe(
               Effect.provideContext(services),
             );
             yield* asked(client.answerRequest(deviceId, claimed.id, answer));

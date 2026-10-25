@@ -138,6 +138,16 @@ const MacAgentSettledLineSchema = Schema.Struct({
 
 export type MacAgentSettledLine = typeof MacAgentSettledLineSchema.Type;
 
+/** A line as it stands: whether its Mac settled it and with what exit, and the agent, the Mac, and the kind it is. */
+const MacAgentLineStandingSchema = Schema.Struct({
+  ...MacAgentSettledLineSchema.fields,
+  settled: Schema.Boolean,
+  exitCode: Schema.NullOr(Schema.Number),
+  deviceId: Schema.String,
+});
+
+export type MacAgentLineStanding = typeof MacAgentLineStandingSchema.Type;
+
 /** The columns a pin reads off an agent. */
 const PIN_COLUMNS = {
   userId: codingAgent.userId,
@@ -216,13 +226,16 @@ const findLatestLaunch = SqlSchema.findOneOption({
 
 const findLineStanding = SqlSchema.findOneOption({
   Request: Schema.Struct({ userId: Schema.String, id: Schema.String }),
-  Result: Schema.Struct({ settled: Schema.Boolean, exitCode: Schema.NullOr(Schema.Number) }),
+  Result: MacAgentLineStandingSchema,
   execute: ({ userId, id }) =>
     Database.use((db) =>
       db
         .select({
           settled: sql<boolean>`${macAgentLine.settledAt} is not null`,
           exitCode: macAgentLine.exitCode,
+          agentId: macAgentLine.agentId,
+          deviceId: macAgentLine.deviceId,
+          kind: macAgentLine.kind,
         })
         .from(macAgentLine)
         .where(and(eq(macAgentLine.id, id), eq(macAgentLine.userId, userId))),
@@ -595,11 +608,11 @@ export function latestMacAgentLaunch(
   return findLatestLaunch({ userId, agentId });
 }
 
-/** Whether the account's line was settled, and with what exit; nothing where no such line stands. */
+/** Whether the account's line was settled and with what exit, and whose it is; nothing where no such line stands. */
 export function macAgentLineStanding(
   userId: string,
   id: string,
-): MacAgentEffect<Option.Option<{ readonly settled: boolean; readonly exitCode: number | null }>> {
+): MacAgentEffect<Option.Option<MacAgentLineStanding>> {
   return findLineStanding({ userId, id });
 }
 

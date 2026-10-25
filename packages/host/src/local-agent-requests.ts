@@ -28,8 +28,9 @@ import { ChildProcess, type ChildProcessSpawner } from "effect/process";
  * A read answers at most the bytes asked for, and never more than one past
  * `MAC_AGENT_BOUNDS.MAX_ANSWER_BYTES`, so the caller still sees a file
  * larger than its bound. A command runs in bash in the worktree, as the
- * leader of a process group of its own, under the app's environment and
- * the one the request names, with nothing on its stdin, and is ended with
+ * leader of a process group of its own, under the developer's own variables
+ * the caller hands on and the ones the request names, never the rest of the
+ * app's environment, with nothing on its stdin, and is ended with
  * its group at `LOCAL_AGENT_COMMAND.TIMEOUT`, inside the service's own wait
  * for the answer; each of its outputs keeps its first bytes up to the bound.
  */
@@ -136,7 +137,7 @@ const ranCommand = (checkout: string, command: string, env: Readonly<Record<stri
       const handle = yield* ChildProcess.make("/bin/bash", ["-l", "-c", command], {
         cwd: checkout,
         env: { ...env, PAGER: "cat", GIT_PAGER: "cat", GIT_TERMINAL_PROMPT: "0" },
-        extendEnv: true,
+        extendEnv: false,
         stdin: "ignore",
         forceKillAfter: LOCAL_AGENT_COMMAND.KILL_GRACE,
       });
@@ -167,7 +168,11 @@ const ranCommand = (checkout: string, command: string, env: Readonly<Record<stri
   );
 
 /** A command asked: run in the agent's worktree where it stands inside the agent's folder; refused otherwise. */
-const answeredCommand = (layout: MacAgentLayout, args: unknown) =>
+const answeredCommand = (
+  layout: MacAgentLayout,
+  args: unknown,
+  base: Readonly<Record<string, string>>,
+) =>
   Effect.gen(function* () {
     const refused = (why: string): MacAgentAnswer => ({
       kind: MAC_AGENT_REQUEST_KIND.RUN_COMMAND,
@@ -179,15 +184,17 @@ const answeredCommand = (layout: MacAgentLayout, args: unknown) =>
     if (Option.isNone(asked)) return refused("Not run: the request named no command.");
     const checkout = yield* confinedPath(layout, layout.checkoutPath);
     if (Option.isNone(checkout)) return refused(OUTSIDE);
-    return yield* ranCommand(checkout.value, asked.value.command, asked.value.env ?? {}).pipe(
+    const env = { ...base, ...asked.value.env };
+    return yield* ranCommand(checkout.value, asked.value.command, env).pipe(
       Effect.catch(() => Effect.succeed(refused("Not run: the command could not be started."))),
     );
   });
 
-/** What one request of a local agent's tools answers, inside the agent's folder given. */
+/** What one request of a local agent's tools answers, inside the agent's folder given, a command under the variables `env` hands on. */
 export const answeredLocalAgentRequest = (
   layout: MacAgentLayout,
   request: Pick<MacAgentRequest, "kind" | "args">,
+  env: Readonly<Record<string, string>>,
 ): Effect.Effect<
   MacAgentAnswer,
   never,
@@ -195,4 +202,4 @@ export const answeredLocalAgentRequest = (
 > =>
   request.kind === MAC_AGENT_REQUEST_KIND.READ_FILE
     ? answeredRead(layout, request.args)
-    : answeredCommand(layout, request.args);
+    : answeredCommand(layout, request.args, env);

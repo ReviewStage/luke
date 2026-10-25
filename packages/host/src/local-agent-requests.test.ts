@@ -8,6 +8,9 @@ import { answeredLocalAgentRequest } from "./local-agent-requests.js";
 
 const AGENT = "6f1c2b9e-1d3a-4c55-9a0e-2f6b8c1d0e11";
 
+/** The variables a command is handed on: a PATH its shell and `touch` are on. */
+const SHELL = { PATH: "/usr/bin:/bin" };
+
 const NODE = NodeChildProcessSpawner.layer.pipe(
   Layer.provideMerge(Layer.mergeAll(NodeFileSystem.layer, NodePath.layer)),
 );
@@ -25,10 +28,14 @@ const staged = Effect.gen(function* () {
 });
 
 const read = (layout: ReturnType<typeof macAgentLayout>, path: string) =>
-  answeredLocalAgentRequest(layout, {
-    kind: MAC_AGENT_REQUEST_KIND.READ_FILE,
-    args: { path, maxBytes: 1_024 },
-  });
+  answeredLocalAgentRequest(
+    layout,
+    {
+      kind: MAC_AGENT_REQUEST_KIND.READ_FILE,
+      args: { path, maxBytes: 1_024 },
+    },
+    SHELL,
+  );
 
 describe("answeredLocalAgentRequest", () => {
   it.effect("reads a file inside the agent's folder", () =>
@@ -68,10 +75,14 @@ describe("answeredLocalAgentRequest", () => {
       yield* fileSystem.remove(layout.checkoutPath, { recursive: true });
       yield* fileSystem.makeDirectory(`${root}/elsewhere`);
       yield* fileSystem.symlink(`${root}/elsewhere`, layout.checkoutPath);
-      const answer = yield* answeredLocalAgentRequest(layout, {
-        kind: MAC_AGENT_REQUEST_KIND.RUN_COMMAND,
-        args: { command: "touch ran" },
-      });
+      const answer = yield* answeredLocalAgentRequest(
+        layout,
+        {
+          kind: MAC_AGENT_REQUEST_KIND.RUN_COMMAND,
+          args: { command: "touch ran" },
+        },
+        SHELL,
+      );
       assert.strictEqual(answer.kind, MAC_AGENT_REQUEST_KIND.RUN_COMMAND);
       assert.isFalse(yield* fileSystem.exists(`${root}/elsewhere/ran`));
     }).pipe(Effect.scoped, Effect.provide(NODE)),

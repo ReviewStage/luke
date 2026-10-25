@@ -191,7 +191,9 @@ it.layer(Layer.merge(getTestDB(), Layer.succeed(HostedEnvironment, ENVIRONMENT))
           yield* settledMacAgentLine(userId, deviceId, older.handle.command);
           const afterOlder = yield* statusNow;
           yield* settledMacAgentLine(userId, deviceId, newer.handle.command);
+          const askedAgain = yield* settledMacAgentLine(userId, deviceId, newer.handle.command);
 
+          assert.equal(askedAgain, true, "a settle the Mac asks again is answered as settled");
           assert.equal(
             afterOlder,
             TURN_STATUS.QUEUED,
