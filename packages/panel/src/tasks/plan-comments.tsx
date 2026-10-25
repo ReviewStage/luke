@@ -199,6 +199,22 @@ import {
  * agent anything.
  */
 
+/**
+ * The words a thread is on, quoted over it in the label's type and the
+ * quiet ink beside a rule in the mark's edge, two lines at most; struck out,
+ * under a stronger rule, where the words are gone.
+ */
+const QUOTE_CLASS =
+  "comment-quote mx-0 mt-0 mb-control-gap line-clamp-2 border-l-2 border-l-comment-mark-edge pl-row-inset text-label font-text text-muted-foreground data-[gone=true]:border-l-border-strong data-[gone=true]:line-through data-[gone=true]:decoration-quote-strike";
+
+/**
+ * A card's place in the margin: a card already there travels to its next
+ * place, as threads above it open, grow, or arrive, on the spring every move
+ * rides; one arriving lands where it belongs and fades in (tasks.css).
+ */
+const SLOT_CLASS =
+  "comment-slot absolute inset-x-0 top-0 data-[moves=true]:transition-transform data-[moves=true]:duration-(--luke-duration-shape)";
+
 /** The column's room a margin needs beside the reading width: the gap and the card, as `planning.css` spends them. */
 const MARGIN_ROOM = 48 + 288;
 
@@ -349,7 +365,7 @@ function WrittenComment({
         ) : (
           <>
             {nameRef}
-            <span className="comment-event-words">{` ${said}`}</span>
+            <span className="flex-none whitespace-pre font-luke-regular text-muted-foreground">{` ${said}`}</span>
           </>
         )
       }
@@ -403,7 +419,7 @@ function EventLine({
   now: number;
 }): React.JSX.Element {
   return (
-    <div className="comment-event" data-kind={entry.kind}>
+    <div className="comment-event py-tight-gap" data-kind={entry.kind}>
       <WrittenComment
         writer={entry.writer}
         agents={agents}
@@ -598,7 +614,7 @@ function CommentEntry({
       .finally(() => setSaving(false));
   };
   return (
-    <div className="comment-entry" data-entry={entry.id}>
+    <div className="comment-entry relative py-tight-gap" data-entry={entry.id}>
       {/* Note that the tools stand at the head's end, shown under the pointer or the keyboard, so a long name gives way to them and nothing stands over it. */}
       <WrittenComment
         writer={entry.writer}
@@ -687,7 +703,12 @@ function CommentWords({ words }: { words: string }): React.JSX.Element {
   const link = useMentionLink();
   const openLink = useOpenLink();
   return (
-    <MarkdownMessage words={words} className="comment-words" link={link} openLink={openLink} />
+    <MarkdownMessage
+      words={words}
+      className="comment-words block text-body-foreground wrap-anywhere"
+      link={link}
+      openLink={openLink}
+    />
   );
 }
 
@@ -1119,13 +1140,13 @@ function ThreadQuote({
 }): React.JSX.Element {
   if (onShowWords === undefined) {
     return (
-      <blockquote className="comment-quote" data-gone={gone}>
+      <blockquote className={QUOTE_CLASS} data-gone={gone}>
         {thread.quote}
       </blockquote>
     );
   }
   return (
-    <blockquote className="comment-quote" data-gone={gone}>
+    <blockquote className={QUOTE_CLASS} data-gone={gone}>
       <Tooltip label={COMMENT_WORDS.SHOW_WORDS}>
         <LineButton look={LINE_BUTTON_LOOK.QUOTE} onClick={onShowWords}>
           {thread.quote}
@@ -1178,7 +1199,7 @@ function CommentCard({
       padding={CARD_PADDING.NONE}
       hover={hover}
       lit={lit}
-      className="comment-card"
+      className="comment-card px-list-inset pt-tight-gap pb-row-inset text-body text-foreground data-[open=false]:cursor-press data-[open=true]:pt-row-inset"
       data-open={String(open)}
       {...data}
     >
@@ -1189,7 +1210,7 @@ function CommentCard({
 
 /** One row of the Comments tab's list, a step from the next: a thread's card, or a placeholder's. */
 function CommentsRow({ children }: { children: ReactNode }): React.JSX.Element {
-  return <div className="comments-row">{children}</div>;
+  return <div className="comments-row [.comments-row+&]:mt-control-gap">{children}</div>;
 }
 
 /**
@@ -1258,7 +1279,7 @@ function ThreadCard({
         {/* Note that the words are drawn as they are open, their chips with them, clamped; the card's press opens the thread. */}
         {first === undefined ? null : (
           <WrittenComment writer={first.writer} agents={doors.agents} at={first.at} now={now}>
-            <div className="comment-clamp">
+            <div className="comment-clamp line-clamp-3">
               <CommentWords words={first.words ?? ""} />
             </div>
           </WrittenComment>
@@ -1276,8 +1297,8 @@ function ThreadCard({
           {replies.length === 0 ? (
             <VisuallyHidden>{COMMENT_WORDS.OPEN_THREAD}</VisuallyHidden>
           ) : (
-            <span className="comment-replies">
-              <span className="comment-faces">
+            <span className="mt-list-gap mr-0 mb-0 ml-comment-indent flex items-center gap-item-gap text-caption-inline text-muted-foreground">
+              <span className="inline-flex">
                 {faces.map((writer) => (
                   <WriterMark key={JSON.stringify(writer)} writer={writer} agents={doors.agents} />
                 ))}
@@ -1495,6 +1516,26 @@ function topIn(body: HTMLElement, element: Element): number {
   return element.getBoundingClientRect().top - body.getBoundingClientRect().top;
 }
 
+/**
+ * Where the middle of the first line `element`'s words stand on, in the plan
+ * body's own box: a count or a block's button stands centred on it, so it
+ * reads as that line's whether the words go on past it or not. Note that the
+ * element holding the first words is measured: an inline one by the first
+ * of its line boxes, and a block by its top and half its line, because a
+ * box wrapping onto more lines spans them all.
+ */
+function lineMiddleIn(body: HTMLElement, element: Element): number {
+  const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT, (node) =>
+    (node.textContent ?? "").trim() === "" ? NodeFilter.FILTER_SKIP : NodeFilter.FILTER_ACCEPT,
+  );
+  const holder = walker.nextNode()?.parentElement ?? element;
+  const style = getComputedStyle(holder);
+  const line = style.display === "inline" ? holder.getClientRects()[0] : undefined;
+  if (line !== undefined) return (line.top + line.bottom) / 2 - body.getBoundingClientRect().top;
+  const height = Number.parseFloat(style.lineHeight);
+  return topIn(body, holder) + (Number.isFinite(height) ? height / 2 : 0);
+}
+
 /** The part of the scroller in view, inside its edges, in the plan body's own box; none before either is drawn. */
 function viewIn(scroller: HTMLElement | null, body: HTMLElement | null): MarginView | undefined {
   if (scroller === null || body === null) return undefined;
@@ -1595,7 +1636,11 @@ export function PlanCommentLayer({
   const [cardRoom, setCardRoom] = useState<number | undefined>(undefined);
   // Where each thread's words stand, which a fold's counts stand level with.
   const [anchors, setAnchors] = useState<ReadonlyMap<string, number>>(new Map());
-  const [hovered, setHovered] = useState<{ top: number; start: () => void } | undefined>(undefined);
+  // The middle of the first line each thread's words stand on, which its count is centred on.
+  const [lines, setLines] = useState<ReadonlyMap<string, number>>(new Map());
+  const [hovered, setHovered] = useState<
+    { top: number; middle: number; start: () => void } | undefined
+  >(undefined);
   // The thread whose words the pointer is on, whose card answers it before a press.
   const [pointed, setPointed] = useState<string | undefined>(undefined);
   // Whether the open thread was opened by the editor's caret standing in its words, which closes it as the caret leaves them.
@@ -1636,19 +1681,30 @@ export function PlanCommentLayer({
   });
 
   // Each card's words are measured after the body draws them, and the cards stood beside them.
-  const anchorTop = useCallback(
-    (thread: string, section: string): number | undefined => {
+  const anchorOf = useCallback(
+    (thread: string, section: string): Element | undefined => {
       const element = body.current;
       if (element === null) return undefined;
       const mark = element.querySelector(`.${COMMENT_MARK_CLASS}[data-threads~="${thread}"]`);
-      if (mark !== null) return topIn(element, mark);
+      if (mark !== null) return mark;
       // Note that a thread's id is the service's UUID, which a selector takes as it is.
       // A thread whose words were deleted stands where its section starts, or at the top.
       const at = sections.findIndex((each) => each.heading === section);
-      const unit = at < 0 ? undefined : element.querySelectorAll(`.${unitClass}`)[at];
-      return unit === undefined ? 0 : topIn(element, unit);
+      return (at < 0 ? undefined : element.querySelectorAll(`.${unitClass}`)[at]) ?? element;
     },
     [body, sections, unitClass],
+  );
+  const anchorAt = useCallback(
+    (thread: string, section: string): { top: number; middle: number } | undefined => {
+      const element = body.current;
+      const anchor = anchorOf(thread, section);
+      if (element === null || anchor === undefined) return undefined;
+      return {
+        top: anchor === element ? 0 : topIn(element, anchor),
+        middle: lineMiddleIn(element, anchor),
+      };
+    },
+    [body, anchorOf],
   );
   // Note that the margin is measured again only when what it stands on
   // changes, or the plan's words or a card are resized, never on every draw,
@@ -1686,10 +1742,10 @@ export function PlanCommentLayer({
       ...threads.filter(openThread).map((thread) => ({ id: thread.id, section: thread.section })),
       ...(pending === undefined ? [] : [{ id: PENDING_THREAD, section: "" }]),
     ].flatMap(({ id, section }) => {
-      const top = anchorTop(id, section);
-      return top === undefined
+      const at = anchorAt(id, section);
+      return at === undefined
         ? []
-        : [{ id, top, height: cards.current.get(id)?.offsetHeight ?? 0 }];
+        : [{ id, ...at, height: cards.current.get(id)?.offsetHeight ?? 0 }];
     });
     const view = viewIn(scroller.current, body.current);
     const next = marginTops(
@@ -1710,7 +1766,9 @@ export function PlanCommentLayer({
     setHung((held) => (sameTops(held, nextHung) ? held : nextHung));
     const nextAnchors = new Map(placed.map((card) => [card.id, card.top]));
     setAnchors((held) => (sameTops(held, nextAnchors) ? held : nextAnchors));
-  }, [threads, pending, active, anchorTop, text, wide, resized]);
+    const nextLines = new Map(placed.map((card) => [card.id, card.middle]));
+    setLines((held) => (sameTops(held, nextLines) ? held : nextLines));
+  }, [threads, pending, active, anchorAt, text, wide, resized]);
 
   // An ask to show a thread scrolls the document's own scroller to its words, once per ask.
   const scrolled = useRef<number | undefined>(undefined);
@@ -1722,11 +1780,11 @@ export function PlanCommentLayer({
     // Note that the ask waits for the read to name the thread, since a link may open the plan before its comments land.
     const asked = doors.control.threads.find((each) => each.id === revealed.thread);
     if (!doors.control.read || asked === undefined) return;
-    const top = anchorTop(asked.id, asked.section);
-    if (top === undefined) return;
+    const at = anchorAt(asked.id, asked.section);
+    if (at === undefined) return;
     scrolled.current = revealed.ask;
     element.scrollTop +=
-      room.getBoundingClientRect().top + top - element.getBoundingClientRect().top - REVEAL_ROOM;
+      room.getBoundingClientRect().top + at.top - element.getBoundingClientRect().top - REVEAL_ROOM;
     // Note that the open card was kept in the view before it scrolled, so it is kept in the one it scrolled to.
     setResized((count) => count + 1);
   });
@@ -1751,6 +1809,7 @@ export function PlanCommentLayer({
       if (editor !== undefined) {
         setHovered({
           top: topIn(element, found.block),
+          middle: lineMiddleIn(element, found.block),
           start: () => {
             const span = editor.current?.blockSpan(found.block);
             if (span !== undefined) setPending(editorPending(span, PLAN_COMMENT_SCOPE.BLOCK));
@@ -1764,6 +1823,7 @@ export function PlanCommentLayer({
       const { quote, from, to } = ownWords(found.unit, found.block);
       setHovered({
         top: topIn(element, found.block),
+        middle: lineMiddleIn(element, found.block),
         start: () => {
           const begun = pendingOf(
             found.unit,
@@ -1995,7 +2055,7 @@ export function PlanCommentLayer({
     // Note that folded, a line holding a count opens its threads there, a thread whose words were deleted counted at its section's top too, so its block shows no button over it.
     hovered === undefined ||
     (!wide && [...anchors.values()].some((top) => Math.abs(top - hovered.top) < 4)) ? null : (
-      <div className="comment-block-button" style={{ top: hovered.top }}>
+      <div className="comment-block-button" style={{ top: hovered.middle }}>
         <Tooltip label={COMMENT_WORDS.COMMENT}>
           {/* Note that the press takes no focus, so an open editor stays to measure the block through. */}
           <IconButton
@@ -2011,7 +2071,7 @@ export function PlanCommentLayer({
     bubble === undefined ? null : (
       <MenuSurface
         flow={MENU_SURFACE_FLOW.TOOLBAR}
-        className="comment-bubble"
+        className="comment-bubble absolute z-3 -translate-y-[calc(100%+var(--luke-space-6))] data-below:translate-y-luke-16"
         data-below={bubble.below ? "" : undefined}
         style={{ top: bubble.top, left: bubble.left }}
       >
@@ -2032,12 +2092,12 @@ export function PlanCommentLayer({
       <div className="comment-layer" style={layerStyle}>
         {blockButton}
         {bubbleDrawn}
-        <div className="comment-margin">
+        <div className="comment-margin absolute top-0 left-comment-margin w-comment-card">
           {open.map((thread) => (
             <div
               key={thread.id}
               ref={cardRef(thread.id)}
-              className="comment-slot"
+              className={SLOT_CLASS}
               data-moves={settled.current.has(thread.id)}
               style={slotStyle(thread.id)}
             >
@@ -2058,7 +2118,7 @@ export function PlanCommentLayer({
           {pendingCard === null ? null : (
             <div
               ref={cardRef(PENDING_THREAD)}
-              className="comment-slot"
+              className={SLOT_CLASS}
               data-moves={settled.current.has(PENDING_THREAD)}
               style={slotStyle(PENDING_THREAD)}
             >
@@ -2090,8 +2150,9 @@ export function PlanCommentLayer({
           0,
         );
         const first = threads[0];
+        const middle = first === undefined ? undefined : lines.get(first.id);
         return (
-          <span key={top} className="comment-count" style={{ top }}>
+          <span key={top} className="comment-count" style={{ top: middle ?? top }}>
             <Button
               icon={<MessageSquareIcon />}
               label={`${comments} ${comments === 1 ? "comment" : "comments"}`}
@@ -2341,7 +2402,7 @@ export function PlanCommentsTab({
   const listed = filter === COMMENTS_FILTER.OPEN ? open : resolved;
   const full = { ...doors, control };
   return (
-    <Fill className="comments-tab">
+    <Fill className="comments-tab relative h-full">
       <WordsDatePickerRoom>
         <PaneBar
           title={COMMENTS_FILTER_WORDS[filter]}
@@ -2359,7 +2420,7 @@ export function PlanCommentsTab({
         />
         <ScrollArea ref={list} fade={SCROLL_FADE.BOTH}>
           <div
-            className="comments-list"
+            className="comments-list box-border px-luke-16 pt-luke-16 pb-luke-24 data-empty:flex data-empty:min-h-full data-empty:flex-col"
             data-empty={!control.failed && listed.length === 0 && control.read ? "" : undefined}
           >
             {control.failed ? (

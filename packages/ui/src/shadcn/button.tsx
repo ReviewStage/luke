@@ -14,7 +14,7 @@ import { cn } from "../cn.js";
  * fill and ink are drawn there and only the edge is read here; none of
  * shadcn's outline or ring utilities, because the window's own focus ring
  * (`@luke/panel`'s base.css) draws the keyboard's ring and a utility would
- * outrank it (`shadcn-focus.test.ts`); none of its press translate, which
+ * outrank it (`anti-slop/no-shadcn-focus-ring`); none of its press translate, which
  * Luke's button answers by its face (`button.css`); and the desktop's arrow
  * cursor. `@luke/ui`'s `Button` and `IconButton`
  * (`components/button/button.tsx`) are what an app draws; this is their

@@ -113,11 +113,6 @@ export const windowSurfaceActsContract = {
   )
     .input(exactInput(EffectSchema.Undefined))
     .output(EffectSchema.Void),
-  [WINDOW_SURFACE_ACT_KIND.NOTIFICATIONS_TEST]: actProcedure(
-    "Could not post a notification on this system.",
-  )
-    .input(exactInput(EffectSchema.Undefined))
-    .output(EffectSchema.Void),
   [WINDOW_SURFACE_ACT_KIND.CONTACT_EMAIL]: actProcedure(
     "Could not open a new email on this system.",
   )

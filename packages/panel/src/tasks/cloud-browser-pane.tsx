@@ -80,6 +80,7 @@ import {
   type CloudBrowserDraft,
   noteOpenedCloudTab,
 } from "./cloud-browser-tabs.js";
+import { FILE_VIEW_HISTORY_CLASS } from "./file-view.js";
 
 /**
  * cloud-browser-pane.tsx -- one Browser tab in an agent's cloud browser, in the side panel: a bar with back, forward, reload, and the address, then Take over and Hand back, and the page drawn live on a canvas; or a draft of one, which opens nothing until its bar opens an address.
@@ -115,6 +116,17 @@ import {
  * pointer is drawn over the canvas, never in its frame, while the agent has
  * the tab (`cloud-browser-cursor.tsx`).
  */
+
+/** Who has the tab, or why a step was refused, in a quiet line under the bar, Take over or Hand back at its end, so the address keeps the bar. */
+const STANDING_CLASS =
+  "cloud-browser-standing flex min-w-0 flex-none items-center justify-between gap-control-gap border-b border-border px-column-inset py-tight-gap";
+
+/** The body, the page drawn on a canvas of the page's own shape, centred on the well. */
+const BODY_CLASS = "browser-view-body cloud-browser-body items-center justify-center bg-well";
+
+/** A quiet line over the body while no page stands to drive, or while a draft waits on an address; only its words and presses take the pointer. */
+const NOTICE_CLASS =
+  "cloud-browser-notice pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-control-gap *:pointer-events-auto";
 
 /** The most characters one text message carries; a longer paste goes in pieces. */
 const TEXT_PIECE_CHARS = 4_096;
@@ -295,7 +307,7 @@ function CloudBrowserBar({
       middle={
         <>
           {phone ? null : (
-            <div className="file-view-history">
+            <div className={FILE_VIEW_HISTORY_CLASS}>
               <Tooltip label={hintOf("Back")}>
                 <IconButton
                   icon={<ArrowLeftIcon aria-hidden="true" />}
@@ -661,7 +673,7 @@ export function CloudBrowserPane({
         onOpen={live.navigate}
         disabled={!isLive}
       />
-      <div className="cloud-browser-standing">
+      <div className={STANDING_CLASS}>
         <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED} truncate>
           {said ?? ""}
         </Text>
@@ -686,8 +698,8 @@ export function CloudBrowserPane({
           </Button>
         )}
       </div>
-      <Fill clip ref={body} className="browser-view-body cloud-browser-body">
-        <div className="cloud-browser-stage" style={{ width: size.width, height: size.height }}>
+      <Fill clip ref={body} className={BODY_CLASS}>
+        <div className="relative flex-none" style={{ width: size.width, height: size.height }}>
           <RemoteSurface
             ref={canvas}
             label="The page"
@@ -708,11 +720,11 @@ export function CloudBrowserPane({
           />
         </div>
         {notice === undefined ? null : notice.waiting ? (
-          <div className="cloud-browser-notice">
+          <div className={NOTICE_CLASS}>
             <Spinner delay label={notice.label} size={SPINNER_SIZE.REGION} />
           </div>
         ) : (
-          <div className="cloud-browser-notice">
+          <div className={NOTICE_CLASS}>
             <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
               {notice.words}
             </Text>
@@ -793,20 +805,20 @@ export function CloudBrowserDraftPane({
         disabled={opening}
       />
       {refused === undefined ? null : (
-        <div className="cloud-browser-standing">
+        <div className={STANDING_CLASS}>
           <FailureNote>{refused}</FailureNote>
         </div>
       )}
-      <Fill clip className="browser-view-body cloud-browser-body">
+      <Fill clip className={BODY_CLASS}>
         {opening ? (
-          <div className="cloud-browser-notice">
+          <div className={NOTICE_CLASS}>
             <Spinner label={`Opening in ${browserOf(owner.name)}`} size={SPINNER_SIZE.REGION} />
             <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
               A sandbox that stopped can take a minute to wake.
             </Text>
           </div>
         ) : (
-          <div className="cloud-browser-notice">
+          <div className={NOTICE_CLASS}>
             <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
               Type an address to open it in {browserOf(owner.name)}. You drive it until you hand it
               back.

@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { once } from "node:events";
 import { type AddressInfo, createServer, type Server, type Socket } from "node:net";
 import { it } from "@effect/vitest";
 import { ConfigProvider, Effect, Redacted } from "effect";
@@ -71,6 +72,62 @@ test("one instance runs several queries at once on the pool Better Auth queries"
   } finally {
     await pool.end();
     server.close();
+  }
+});
+
+/** A server that answers every query at once and keeps each socket, so a test can end a connection the pool holds idle. */
+function answeringServer(): Promise<{ server: Server; port: number; sockets: Socket[] }> {
+  const sockets: Socket[] = [];
+  const server = createServer((socket) => {
+    sockets.push(socket);
+    let started = false;
+    socket.on("error", () => {});
+    socket.on("data", (chunk) => {
+      if (!started) {
+        started = true;
+        socket.write(Buffer.from([0x52, 0, 0, 0, 8, 0, 0, 0, 0, 0x5a, 0, 0, 0, 5, 0x49]));
+        return;
+      }
+      if (chunk[0] === 0x51) {
+        socket.write(
+          Buffer.concat([
+            Buffer.from([0x43, 0, 0, 0, 13]),
+            Buffer.from("SELECT 1\0"),
+            Buffer.from([0x5a, 0, 0, 0, 5, 0x49]),
+          ]),
+        );
+      }
+    });
+  });
+
+  return new Promise((resolve) => {
+    server.listen(0, "127.0.0.1", () => {
+      // SAFETY: a server listening on a port answers an `AddressInfo`; only a pipe answers a string.
+      resolve({ server, port: (server.address() as AddressInfo).port, sockets });
+    });
+  });
+}
+
+test("an idle client whose connection ends is dropped, and the next query opens a fresh one", async () => {
+  const { server, port, sockets } = await answeringServer();
+  vi.stubEnv("DATABASE_URL", `postgres://user:pass@127.0.0.1:${port}/luke?sslmode=disable`);
+  vi.spyOn(console, "warn").mockImplementation(() => {});
+  // Note that the module is loaded afresh, because the pool is the module's own and the test above ended it.
+  vi.resetModules();
+  const { getPool: getFreshPool } = await import("./index.js");
+
+  const pool = getFreshPool();
+  try {
+    await pool.query("select 1");
+    const removed = once(pool, "remove");
+    for (const socket of sockets) socket.destroy();
+    await removed;
+    await pool.query("select 1");
+    assert.equal(sockets.length, 2);
+  } finally {
+    await pool.end();
+    server.close();
+    vi.restoreAllMocks();
   }
 });
 

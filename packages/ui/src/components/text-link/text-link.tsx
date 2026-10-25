@@ -102,7 +102,7 @@ function linkClass(
   return [
     LINK_BASE,
     rest,
-    linked ? `cursor-pointer in-[[contenteditable]]:cursor-text ${lit}` : undefined,
+    linked ? `cursor-link in-[[contenteditable]]:cursor-text ${lit}` : undefined,
     font === undefined ? undefined : FONT_CLASS[font],
     height === TEXT_LINK_HEIGHT.CONTROL ? CONTROL_HEIGHT : undefined,
     variant === undefined || variant === TEXT_VARIANT.INHERIT

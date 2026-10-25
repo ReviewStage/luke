@@ -1,15 +1,15 @@
 /**
  * inbox-arrivals.ts -- says what lands in the Inbox on screen, politely, once: one item by its title, several that landed together by their count.
  *
- * Main tells the window nothing of an item that opens in the task whose
- * Inbox is on screen (`@luke/host/agent-notices`), since a sighted reader
- * sees it land in the list; elsewhere its toast says it (`inbox-toast.ts`).
- * So a screen reader hears the Inbox on screen from here: the items a push
+ * Main tells the window nothing of an item that opens while it is focused
+ * (`@luke/host/agent-notices`), since a sighted reader sees it land in the
+ * list, and elsewhere the Inbox's count says it. So a screen reader hears
+ * the Inbox on screen from here: the items a push
  * of it holds that the one before did not, said together. The first push
  * of a task's Inbox is where it stands, and none of it is news, nor is an
  * item that lands read, as a thread the reader opened with New thread is
  * read for them; and what lands while the Inbox is not on screen is let
- * by unsaid, its toast having said it. Every Inbox the window reads one
+ * by unsaid, the Inbox's count having said it. Every Inbox the window reads one
  * task through hears the same push, so an item is said once at each
  * revision whichever of them said it first.
  */

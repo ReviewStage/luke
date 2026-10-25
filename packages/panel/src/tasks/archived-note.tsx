@@ -8,6 +8,7 @@ import {
   Text,
 } from "@luke/ui";
 import { useState } from "react";
+import { COMPOSER_ROOM_CLASS } from "./agent-composer.js";
 import type { ArchivedByReading } from "./coding-agent-model.js";
 
 /**
@@ -65,7 +66,7 @@ export function ArchivedComposerNote({
     settles.finally(() => setOut(undefined));
   };
   return (
-    <div className="agent-composer">
+    <div className={COMPOSER_ROOM_CLASS}>
       <Banner
         look={BANNER_LOOK.ROW}
         glyph={<ArchiveIcon />}

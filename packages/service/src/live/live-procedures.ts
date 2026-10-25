@@ -108,6 +108,7 @@ import { chatAccount, workspaceOf } from "../agents/workspace-chat.js";
 import {
   automationRunsLiveStatements,
   automationsLiveStatements,
+  automationWorkspaceRunsLiveStatements,
 } from "../automations/automation-live.js";
 import { unparsedWire } from "../core.js";
 import { heldUntil } from "../http/held-read.js";
@@ -295,6 +296,16 @@ export function liveProcedures(seams: LiveProcedureSeams) {
       yield* sameUser(input, context.userId);
       if (input.workspaceId === "") return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
       const statements = automationsLiveStatements(context.userId, input.workspaceId);
+      if (Option.isNone(statements)) return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
+      return yield* sealedParts(statements.value, input);
+    }),
+    automationWorkspaceRuns: signedIn.automationWorkspaceRuns.effect(function* ({
+      input,
+      context,
+    }) {
+      yield* sameUser(input, context.userId);
+      if (input.workspaceId === "") return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
+      const statements = automationWorkspaceRunsLiveStatements(context.userId, input.workspaceId);
       if (Option.isNone(statements)) return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
       return yield* sealedParts(statements.value, input);
     }),

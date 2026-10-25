@@ -34,6 +34,7 @@ import { PullRequestMark } from "../tasks/pull-request-mark.js";
 import { AgentGlyph, agentEndMark } from "../tasks/tab-look.js";
 import {
   NO_ASSIGNEE_WORDS,
+  TASK_CARD_STANDING,
   TASK_PRIORITY_WORDS,
   TASK_STATUS_WORDS,
   TaskKey,
@@ -380,7 +381,7 @@ function TaskStanding({
   const bare = task.status === undefined && task.priority === undefined;
   if (!keyed && bare && task.assignee === undefined) return null;
   return (
-    <div className="task-card-standing">
+    <div className={TASK_CARD_STANDING}>
       <TaskKey workspaceName={workspaceName} number={task.number} />
       {task.status === undefined ? null : (
         <Badge icon={<TaskStatusGlyph status={task.status} />}>

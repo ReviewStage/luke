@@ -1,3 +1,4 @@
+import { attachDatabasePool } from "@vercel/functions";
 import { Config, ConfigProvider, Effect, Redacted } from "effect";
 import { Pool } from "pg";
 
@@ -80,9 +81,24 @@ export const POOL_LIMITS = {
 /**
  * Builds a pool for an explicit connection string. Opens nothing: `pg.Pool`
  * connects lazily on first query, which makes this testable offline.
+ *
+ * An idle client whose connection the database or the network ends is
+ * reported through the pool's `error` event, and Node throws an `error` event
+ * nobody listens to: the instance, and every request it was serving under
+ * Fluid compute, went down with it (Sentry LUKE-WEB-T). The listener logs it
+ * instead, and the pool has already dropped that client, so the next query
+ * opens a fresh connection. `attachDatabasePool` is Vercel's guard against the
+ * usual cause, a client left idle while the instance is suspended: it keeps
+ * the instance up after each release until the idle timeout has closed the
+ * pool's idle clients.
  */
 function createPool(connectionString: string): Pool {
-  return new Pool({ connectionString, ...POOL_LIMITS });
+  const created = new Pool({ connectionString, ...POOL_LIMITS });
+  created.on("error", (error) => {
+    console.warn(`An idle database client was dropped: ${error.message}`);
+  });
+  attachDatabasePool(created);
+  return created;
 }
 
 let pool: Pool | undefined;

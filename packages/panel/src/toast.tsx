@@ -3,15 +3,17 @@
  *
  * A toast answers an act whose control is gone by the time it lands: a copy
  * made from a menu that closed with the press, a note sent from a dialog
- * that closed with the send, a task archived from a menu, a change refused
- * where nothing beside it is left to say so, a coding agent's turn that
- * ended while the developer was looking elsewhere in the window, or an
- * inbox item an agent posted while they were. Each is a
+ * that closed with the send, a task archived from a menu, or a change
+ * refused where nothing beside it is left to say so. Beside those it says
+ * only what is rare enough to be worth the interruption, as Luke updated to
+ * a new version (`update-toast.ts`), or what the voice says still stands;
+ * what happened elsewhere, an agent's turn ended, an Inbox item posted, a
+ * chat message waiting, or an automation's run that failed, is said by the
+ * window's own marks and counts instead. Each is a
  * card of its words, an optional second line under them, each cut at two
  * lines, and at most one action, such as Undo, at its end. Up to three stand at once, newest at the
  * bottom, or two in a window too short for three to leave the rest of it in
- * sight; one more pushes the oldest out, unless it waits, as news that
- * arrives in runs does, for one of them to leave. A toast saying what
+ * sight; one more pushes the oldest out. A toast saying what
  * one standing already says takes that one's place rather than stacking a
  * twin above it. The stack always stands in the window's bottom-right
  * corner, over whatever docks at its foot, a plan's call bar or an agent's
@@ -19,9 +21,7 @@
  * dismissed to reach End call or Send under it.
  *
  * Each stands for its own hold, paused while the pointer is over it or focus
- * is in it, and leaves by itself once it runs out, the news an agent or an
- * automation sends among them, since what it reports stands elsewhere too:
- * an agent's unseen dot, a plan's Inbox, the Automations mark. Only one
+ * is in it, and leaves by itself once it runs out. Only one
  * whose action is the one way back to something the developer would
  * otherwise lose, such as words a save left unsaved, persists until it is
  * dismissed, and one with no action persists only while what it says still
@@ -98,9 +98,7 @@ interface ToastAction {
  * it `persists`, none at all, standing until it is dismissed: kept for an
  * action that is the one way back to something the developer would
  * otherwise lose, or, with no action, for what stands only as long as
- * whoever showed it says so, which withdraws it by its `subject`. One that `waits` stands only once fewer than three do,
- * rather than pushing the oldest out, for news that arrives in runs and
- * each piece of which is the developer's to act on. Its `subject` is what it
+ * whoever showed it says so, which withdraws it by its `subject`. Its `subject` is what it
  * is about, by which whoever showed it may withdraw it once it is stale.
  * One of `STATUS_TONE.WORKING` has no hold and no action: it stands until the
  * work it says is under way settles it (`useWorkingToast`).
@@ -111,7 +109,6 @@ export type ToastNotice = {
   readonly glyph?: () => React.JSX.Element;
   readonly detail?: string;
   readonly tone: ToastTone;
-  readonly waits?: boolean;
   readonly subject?: string;
 } & (
   | { readonly hold: Duration.Duration; readonly action?: never; readonly persists?: never }
@@ -289,14 +286,10 @@ function crowd(stack: ToastLine, now: number): ToastLine {
 }
 
 /**
- * A notice arriving at `now`: it joins the line where it waits and there is
- * no room, takes the place of a toast already saying it, or stands at the
- * bottom, pushing the oldest out where the stack is full.
+ * A notice arriving at `now`: it takes the place of a toast already saying
+ * it, or stands at the bottom, pushing the oldest out where the stack is full.
  */
 function arrive(stack: ToastLine, notice: ToastNotice, now: number): ToastLine {
-  if (notice.waits === true && staying(stack).length >= stack.room) {
-    return { ...stack, waiting: [...stack.waiting, notice] };
-  }
   const twin = stack.shown.find((toast) => !toast.leaving && sameSaying(toast.notice, notice));
   const unmatched = { ...stack, shown: stack.shown.filter((toast) => toast !== twin) };
   return crowd(stand(unmatched, notice, now), now);

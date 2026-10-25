@@ -38,8 +38,8 @@ import type { RunMode } from "./run-mode.js";
  * compose-automations.ts -- the account's automations, asked of the service on the window's behalf: listed, made, changed, deleted, run now, and their runs read.
  *
  * Nothing is held here but the follows. Every ask is one call of the
- * service answered whole. What a window draws, a workspace's automations or
- * an automation's runs, it follows while drawn (`automation-follow.ts`) on
+ * service answered whole. What a window draws, a workspace's automations, an
+ * automation's runs, or a workspace's runs, it follows while drawn (`automation-follow.ts`) on
  * the service's live read for the account signed in as it started, each
  * change emitted as `AUTOMATIONS_CHANGED`; following again starts it
  * over, and letting it go, or a sign-out, ends it. Behind a closed account gate, or on a run
@@ -62,6 +62,7 @@ export type AutomationsClient = Pick<
   | "replaceWebhookSecret"
   | "listLive"
   | "runsLive"
+  | "workspaceRunsLive"
 >;
 
 export interface AutomationsDependencies {
@@ -118,6 +119,7 @@ export function composeAutomations(
     const follows: Follows = yield* Effect.all({
       workspace: FiberMap.make<string>(),
       runs: FiberMap.make<string>(),
+      workspaceRuns: FiberMap.make<string>(),
     });
     return composed(dependencies, http, follows);
   });
@@ -135,6 +137,7 @@ function composed(
   const waits = {
     [AUTOMATION_FOLLOW.WORKSPACE]: new Map<string, TxWait>(),
     [AUTOMATION_FOLLOW.RUNS]: new Map<string, TxWait>(),
+    [AUTOMATION_FOLLOW.WORKSPACE_RUNS]: new Map<string, TxWait>(),
   };
 
   /**
@@ -307,6 +310,10 @@ function composed(
               userId === undefined
                 ? Effect.succeed(LIVE_SIGNED_OUT)
                 : asked(client.runsLive(automationId, userId, poll, after)),
+            liveWorkspaceRuns: (workspaceId, poll, after) =>
+              userId === undefined
+                ? Effect.succeed(LIVE_SIGNED_OUT)
+                : asked(client.workspaceRunsLive(workspaceId, userId, poll, after)),
             openLive: dependencies.openLive ?? openRealtimeClient,
             now: kernel.now,
             serviceBaseUrl: kernel.hostedServiceBaseUrl,
@@ -355,7 +362,11 @@ function composed(
   };
 
   const reset = Effect.andThen(
-    Effect.andThen(FiberMap.clear(follows.workspace), FiberMap.clear(follows.runs)),
+    Effect.all([
+      FiberMap.clear(follows.workspace),
+      FiberMap.clear(follows.runs),
+      FiberMap.clear(follows.workspaceRuns),
+    ]),
     Effect.sync(() => listedIn.clear()),
   );
 

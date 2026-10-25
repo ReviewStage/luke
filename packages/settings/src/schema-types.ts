@@ -28,8 +28,6 @@ export const SETTINGS_PAGE = {
   SKILLS: "skills",
   /** A workspace the account is in: its name and the account's role, its members, and its GitHub repositories, each the service's rather than a stored setting. */
   WORKSPACE: "workspace",
-  /** The stored switch that notifies as a coding agent ends or needs the developer. */
-  NOTIFICATIONS: "notifications",
   /** What this Mac lets agents do on it, the stored switch for running commands here, and whether Luke opens as it starts. */
   THIS_MAC: "this-mac",
   /** The features the account can turn on before they are finished, each the account's on the service rather than a stored setting. */

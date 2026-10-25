@@ -30,6 +30,8 @@ import {
   BUTTON_VARIANT,
   Button,
   CardPress,
+  CHOICE_BAR_LOOK,
+  ChoiceBar,
   COLLECTION_STATE,
   CollectionPage,
   type CollectionState,
@@ -40,7 +42,9 @@ import {
   ErrorState,
   FoldingButton,
   type FoldingButtonHint,
+  GAP,
   IconButton,
+  Inline,
   ListRow,
   NOT_FOUND_THING,
   NotFound,
@@ -48,6 +52,7 @@ import {
   PAGE_FRAME,
   RowHint,
   RowHintOptions,
+  STATUS_TONE,
   TEXT_ELEMENT,
   TEXT_TONE,
   TEXT_VARIANT,
@@ -89,7 +94,15 @@ import {
   AutomationsToolbar,
 } from "./automation-list-frame.js";
 import { OWNER_MARK_SIZE, OwnerMark } from "./automation-owner.js";
-import { STANDING_GLYPH } from "./automation-runs-panel.js";
+import { RunsSkeleton, STANDING_GLYPH } from "./automation-runs-panel.js";
+import {
+  RUNS_SHOWN,
+  type RunsShown,
+  runningRuns,
+  runsCount,
+  runsShownChoices,
+  WorkspaceRuns,
+} from "./automation-runs-tab.js";
 import {
   automationDeleteQuestion,
   automationNarrowLine,
@@ -98,6 +111,7 @@ import {
   READING_AUTOMATIONS,
 } from "./automation-words.js";
 import { PhoneHead, PlaceMore, phoneBar } from "./phone-head.js";
+import { useWorkspaceRuns, type WorkspaceRunsRead } from "./use-automation-runs.js";
 import { useAutomations } from "./use-automations.js";
 
 /**
@@ -149,6 +163,10 @@ const CREATE_WITH_AGENT = "Create with an agent";
 
 /** What the list says where it could not be read. */
 const UNREAD_LINE = "The automations could not be read.";
+
+/** What the Runs tab says where its runs could not be read, and while they are first read. */
+const RUNS_UNREAD_LINE = "The runs could not be read.";
+const READING_RUNS = "Reading the runs…";
 
 /** What the pages say where no workspace is listed because the workspaces could not be read. */
 const WORKSPACES_UNREAD_LINE = "The workspaces could not be read.";
@@ -499,6 +517,75 @@ function useRowDeletion(
   return { asked, confirm, ask };
 }
 
+/** The Automations page's head on both its tabs: its title and its acts, New automation and Create with an agent; on a phone, the place's own head. */
+function AutomationsHead({
+  tasks,
+  room,
+}: {
+  tasks: TasksControl;
+  room: ShellRoom;
+}): React.JSX.Element {
+  const view = tasks.automationsView;
+  const workspace = tasks.workspace;
+  const openNew = () => view.onOpen({ kind: AUTOMATIONS_PAGE.NEW });
+  return room === SHELL_ROOM.NARROW ? (
+    // A phone heads the list as it heads every place (`phone-head.tsx`): New automation, the title centred, and a ⋯.
+    <PhoneHead
+      place="automations"
+      start={
+        <Tooltip label={NEW_AUTOMATION}>
+          <IconButton
+            icon={<PlusIcon />}
+            label={NEW_AUTOMATION}
+            disabled={workspace === undefined}
+            onClick={openNew}
+          />
+        </Tooltip>
+      }
+      title={AUTOMATIONS}
+      end={
+        <PlaceMore
+          thing="Automation list"
+          shown={tasks.shown}
+          groups={() => [
+            [
+              {
+                label: CREATE_WITH_AGENT,
+                icon: <BotIcon />,
+                disabled: workspace === undefined,
+                onSelect: tasks.onNewAutomationAgent,
+              },
+            ],
+          ]}
+        />
+      }
+    />
+  ) : (
+    <AutomationsToolbar>
+      <FoldingButton
+        label="Create with an agent"
+        icon={<BotIcon />}
+        variant={BUTTON_VARIANT.OUTLINE}
+        disabled={workspace === undefined}
+        focusableWhenDisabled
+        hint={workspace === undefined ? NoWorkspaceHint : undefined}
+        onClick={tasks.onNewAutomationAgent}
+      />
+      <Tooltip label={workspace === undefined ? NO_WORKSPACE_HINT : undefined}>
+        <Button
+          variant={BUTTON_VARIANT.OUTLINE}
+          icon={<PlusIcon />}
+          disabled={workspace === undefined}
+          focusableWhenDisabled
+          onClick={openNew}
+        >
+          New automation
+        </Button>
+      </Tooltip>
+    </AutomationsToolbar>
+  );
+}
+
 /** The list's page: the listed workspace's automations, a new one a press away. */
 function ListPage({
   tasks,
@@ -514,7 +601,6 @@ function ListPage({
   const now = useMinute();
   const workspace = tasks.workspace;
   const { read, refreshFailed, reload, toggle, remove } = automations;
-  const openNew = () => view.onOpen({ kind: AUTOMATIONS_PAGE.NEW });
   const openSuggested = (preset: AutomationPresetName) =>
     view.onOpen({ kind: AUTOMATIONS_PAGE.NEW, preset });
   const groups =
@@ -527,64 +613,8 @@ function ListPage({
     <CollectionPage
       frame={PAGE_FRAME.TOOLBAR}
       label="Automations"
-      toolbar={
-        room === SHELL_ROOM.NARROW ? (
-          // A phone heads the list as it heads every place (`phone-head.tsx`): New automation, the title centred, and a ⋯.
-          <PhoneHead
-            place="automations"
-            start={
-              <Tooltip label={NEW_AUTOMATION}>
-                <IconButton
-                  icon={<PlusIcon />}
-                  label={NEW_AUTOMATION}
-                  disabled={workspace === undefined}
-                  onClick={openNew}
-                />
-              </Tooltip>
-            }
-            title={AUTOMATIONS}
-            end={
-              <PlaceMore
-                thing="Automation list"
-                shown={tasks.shown}
-                groups={() => [
-                  [
-                    {
-                      label: CREATE_WITH_AGENT,
-                      icon: <BotIcon />,
-                      disabled: workspace === undefined,
-                      onSelect: tasks.onNewAutomationAgent,
-                    },
-                  ],
-                ]}
-              />
-            }
-          />
-        ) : (
-          <AutomationsToolbar>
-            <FoldingButton
-              label="Create with an agent"
-              icon={<BotIcon />}
-              variant={BUTTON_VARIANT.OUTLINE}
-              disabled={workspace === undefined}
-              focusableWhenDisabled
-              hint={workspace === undefined ? NoWorkspaceHint : undefined}
-              onClick={tasks.onNewAutomationAgent}
-            />
-            <Tooltip label={workspace === undefined ? NO_WORKSPACE_HINT : undefined}>
-              <Button
-                variant={BUTTON_VARIANT.OUTLINE}
-                icon={<PlusIcon />}
-                disabled={workspace === undefined}
-                focusableWhenDisabled
-                onClick={openNew}
-              >
-                New automation
-              </Button>
-            </Tooltip>
-          </AutomationsToolbar>
-        )
-      }
+      toolbar={<AutomationsHead tasks={tasks} room={room} />}
+      filters={<AutomationsTabs tasks={tasks} />}
       state={listState(workspacesUnread, read)}
       loadingLabel={READING_AUTOMATIONS}
       skeleton={<AutomationListSkeleton narrow={room === SHELL_ROOM.NARROW} />}
@@ -629,6 +659,125 @@ function ListPage({
         confirm={deletion.confirm}
         question={automationDeleteQuestion(deletion.asked?.name)}
       />
+    </CollectionPage>
+  );
+}
+
+type AutomationsTabKind = typeof AUTOMATIONS_PAGE.LIST | typeof AUTOMATIONS_PAGE.RUNS;
+
+/**
+ * The bar over both tabs that moves between them, Runs counting the runs
+ * still working on either tab, and what narrows the tab standing beside it.
+ */
+function AutomationsTabs({
+  tasks,
+  children,
+}: {
+  tasks: TasksControl;
+  children?: React.ReactNode;
+}): React.JSX.Element {
+  const view = tasks.automationsView;
+  const { read } = useWorkspaceRuns(tasks.workspace?.id);
+  const tab =
+    view.place.kind === AUTOMATIONS_PAGE.RUNS ? AUTOMATIONS_PAGE.RUNS : AUTOMATIONS_PAGE.LIST;
+  const tabs = [
+    { value: AUTOMATIONS_PAGE.LIST, label: AUTOMATIONS },
+    {
+      value: AUTOMATIONS_PAGE.RUNS,
+      label: "Runs",
+      count: runsCount(runningRuns(read), STATUS_TONE.WORKING),
+    },
+  ] as const;
+  return (
+    <Inline gap={GAP.CONTROL}>
+      <ChoiceBar<AutomationsTabKind>
+        label="Show"
+        items={tabs}
+        value={tab}
+        look={CHOICE_BAR_LOOK.SEGMENTED}
+        onChange={(kind) => view.onOpen({ kind })}
+      />
+      {children}
+    </Inline>
+  );
+}
+
+/** What the Runs tab shows: the workspaces or the runs unread, the runs still being read, or the runs. */
+function runsState(workspacesUnread: boolean, read: WorkspaceRunsRead): CollectionState {
+  if (workspacesUnread) return COLLECTION_STATE.ERROR;
+  if (read === undefined) return COLLECTION_STATE.LOADING;
+  return "failed" in read ? COLLECTION_STATE.ERROR : COLLECTION_STATE.READY;
+}
+
+/**
+ * The Runs tab: every run of the listed workspace's automations, newest
+ * first, narrowed by the bar beside the tabs, each opening its agent. A run
+ * of the reader's own automation ran on their keys; any other's names its
+ * creator's, as the automation's own runs say it.
+ */
+function RunsPage({
+  tasks,
+  automations,
+  room,
+}: {
+  tasks: TasksControl;
+  automations: ReturnType<typeof useAutomations>;
+  room: ShellRoom;
+}): React.JSX.Element {
+  const view = tasks.automationsView;
+  useAppCommand(APP_COMMAND.EXIT_AUTOMATIONS, view.onClose);
+  const now = useMinute();
+  const workspace = tasks.workspace;
+  const { read, reload } = useWorkspaceRuns(workspace?.id);
+  const [shown, setShown] = useState<RunsShown>(RUNS_SHOWN.ALL);
+  const listed =
+    automations.read !== undefined && "automations" in automations.read
+      ? automations.read.automations
+      : [];
+  // Note that an automation the list does not hold yet is taken for the reader's own, so no run names a creator it may not have.
+  const mine = (automationId: string) =>
+    listed.find((automation) => automation.id === automationId)?.mine !== false;
+  const workspacesUnread = workspace === undefined && tasks.workspacesFailed;
+  return (
+    <CollectionPage
+      frame={PAGE_FRAME.TOOLBAR}
+      label={AUTOMATIONS}
+      toolbar={<AutomationsHead tasks={tasks} room={room} />}
+      filters={
+        <AutomationsTabs tasks={tasks}>
+          <ChoiceBar<RunsShown>
+            label="Runs shown"
+            items={runsShownChoices(read !== undefined && "runs" in read ? read.runs : [])}
+            value={shown}
+            look={CHOICE_BAR_LOOK.SEGMENTED}
+            onChange={setShown}
+          />
+        </AutomationsTabs>
+      }
+      state={runsState(workspacesUnread, read)}
+      loadingLabel={READING_RUNS}
+      skeleton={<RunsSkeleton card />}
+      error={
+        workspacesUnread ? (
+          <ErrorState onRetry={tasks.onRetryWorkspaces} placement={ERROR_STATE_PLACEMENT.CENTRED}>
+            {WORKSPACES_UNREAD_LINE}
+          </ErrorState>
+        ) : (
+          <ErrorState onRetry={reload} placement={ERROR_STATE_PLACEMENT.CENTRED}>
+            {RUNS_UNREAD_LINE}
+          </ErrorState>
+        )
+      }
+    >
+      {read !== undefined && "runs" in read ? (
+        <WorkspaceRuns
+          runs={read.runs}
+          shown={shown}
+          mine={mine}
+          now={now}
+          onOpenAgent={(agentId) => tasks.agentView.onOpen(agentId)}
+        />
+      ) : null}
     </CollectionPage>
   );
 }
@@ -816,6 +965,9 @@ function AutomationsPages({
   }, [fromPreset, codeReviewOn]);
   if (place.kind === AUTOMATIONS_PAGE.LIST) {
     return <ListPage tasks={tasks} automations={automations} room={room} />;
+  }
+  if (place.kind === AUTOMATIONS_PAGE.RUNS) {
+    return <RunsPage tasks={tasks} automations={automations} room={room} />;
   }
   const { read, reload } = automations;
   if (workspace === undefined && tasks.workspacesFailed) {

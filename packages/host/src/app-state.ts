@@ -236,8 +236,7 @@ interface AppInboxAutomationHolding {
  * What waits on the developer across the account's tasks, as main's own
  * read of it last answered (`@luke/host/agent-notices`): each task with an
  * open inbox item, the task whose item changed latest first. What the
- * sidebar's Inbox counts, and what an item's toast is withdrawn by once it
- * no longer waits. Main's, because main holds that read whichever task is
+ * sidebar's Inbox counts. Main's, because main holds that read whichever task is
  * open, and empty while nobody is signed in.
  */
 export interface AppInboxSlice {
@@ -250,8 +249,6 @@ export interface AppInboxSlice {
   automations: readonly AppInboxAutomationHolding[];
   /** The newest run of each of the account's own automations that failed to start lately, the latest first, which marks the window's Automations until that automation is opened. */
   failedRuns: readonly AccountFailedRun[];
-  /** The chat messages that wait on the developer across the account's workspaces, by id, while the window offers Chat: what a chat toast is withdrawn by once its message no longer waits. */
-  chat: readonly string[];
 }
 
 /**

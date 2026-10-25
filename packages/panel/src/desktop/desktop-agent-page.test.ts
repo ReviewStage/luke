@@ -1527,7 +1527,8 @@ test("an automation's agent the model has not named yet is titled by its automat
   const page = mount();
   await settle();
 
-  assert.equal(page.querySelector("h1")?.textContent, "Flaky-test sweep");
+  // Note that its bar leads with its automation's path, so its title is the trail's last crumb, the page it stands on.
+  assert.equal(page.querySelector('[aria-current="page"]')?.textContent, "Flaky-test sweep");
 });
 
 test("the page's ⋯ copies the agent's link, under its workspace, and says Link copied", async () => {
@@ -2288,7 +2289,6 @@ test("Permanently delete on the page's ⋯ asks first, naming the agent, and onc
   await settle();
 
   assert.deepEqual(deletes, [AGENT_ID]);
-  assert.equal(newestToastSays(), "Agent deleted");
   assert.equal(closed, 1, "the page is left");
   assert.equal(document.querySelector('[role="alertdialog"]'), null);
 });

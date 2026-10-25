@@ -108,7 +108,7 @@ export function PullRequestStack({
           {...menu.trigger(dropBelowStart)}
         >
           Stack{" "}
-          <span className="pull-request-stack-count">
+          <span className="text-muted-foreground tabular-nums">
             {at + 1}/{stack.length}
           </span>
         </Button>

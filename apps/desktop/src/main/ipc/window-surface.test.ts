@@ -75,7 +75,6 @@ function fixture() {
       openExternal: async (url) => {
         heard.push(`open:${url}`);
       },
-      testNotification: () => heard.push("test notification"),
       copyText: (words) => heard.push(`copy:${words}`),
       copyImage: (png) => {
         heard.push(`copy image:${png}`);
@@ -176,7 +175,7 @@ it("a panel's unsaved work is kept as it tells it, and refused from any other wi
   assert.deepEqual(heard, ["unsaved:panel:true", "unsaved:panel:false"]);
 });
 
-it("words are copied, a mail and the settings opened, a notification posted, and feedback carried", async () => {
+it("words are copied, a mail and the settings opened, and feedback carried", async () => {
   const { port, panel, heard } = fixture();
 
   assert.deepEqual(await port.call(panel, KIND.WINDOW_COPY_TEXT, { words: "" }), {
@@ -184,7 +183,6 @@ it("words are copied, a mail and the settings opened, a notification posted, and
   });
   await port.call(panel, KIND.CONTACT_EMAIL);
   await port.call(panel, KIND.NOTIFICATIONS_OPEN_SETTINGS);
-  await port.call(panel, KIND.NOTIFICATIONS_TEST);
   assert.deepEqual(await port.call(panel, KIND.FEEDBACK_SEND, { submission: SUBMISSION }), {
     answer: { delivered: true },
   });
@@ -192,7 +190,6 @@ it("words are copied, a mail and the settings opened, a notification posted, and
     "copy:",
     "open:mailto:founders@stagereview.app",
     "open:x-apple.systempreferences:com.apple.Notifications-Settings.extension",
-    "test notification",
     "feedback:The panel is lovely.",
   ]);
 });
@@ -236,9 +233,6 @@ it("a key a payload does not name, a payload a kind takes none of, and a malform
     await port.call(panel, KIND.FEEDBACK_SEND, { submission: SUBMISSION, sender: "panel" }),
     { refused: "Could not send that on this system." },
   );
-  assert.deepEqual(await port.call(panel, KIND.NOTIFICATIONS_TEST, { now: true }), {
-    refused: "Could not post a notification on this system.",
-  });
   assert.deepEqual(
     await port.call(panel, KIND.FEEDBACK_SEND, { submission: { ...SUBMISSION, message: " " } }),
     { refused: "Could not send that on this system." },

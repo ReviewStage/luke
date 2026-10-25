@@ -129,7 +129,13 @@ import remarkBreaks from "remark-breaks";
 import { ACTOR_SIZE, ActorLine, ActorMark, ActorRef } from "../actor-ref.js";
 import { FoldBody } from "../ai-elements/fold.js";
 import { MessageResponse, PANEL_MARKDOWN_COMPONENTS } from "../ai-elements/message.js";
-import { Reasoning, ReasoningContent, ReasoningTrigger } from "../ai-elements/reasoning.js";
+import {
+  REASONING_BODY_CLASS,
+  REASONING_WORDS_CLASS,
+  Reasoning,
+  ReasoningContent,
+  ReasoningTrigger,
+} from "../ai-elements/reasoning.js";
 import {
   blockSays,
   TOOL_BLOCK,
@@ -146,6 +152,7 @@ import {
   ToolStateMark,
   ToolSummary,
 } from "../ai-elements/tool.js";
+import { OUTSIDE_GLYPH_CLASS } from "../picture-block.js";
 import { GLYPH_STATE, StateGlyph } from "../state-glyph.js";
 import { TextLink } from "../text-link.js";
 import { useInboxPictureDrawer } from "./inbox-pictures.js";
@@ -185,6 +192,13 @@ import { WorkingTime } from "./working-time.js";
  */
 
 /**
+ * An address the window opens nothing for, a file's say: a link's line,
+ * dotted, with the address as its hint.
+ */
+export const INERT_LINK_CLASS =
+  "text-link-inert underline decoration-dotted decoration-inert-link decoration-1 underline-offset-[0.24em]";
+
+/**
  * A link in a transcript's words. A web page, such as the pull request an
  * agent opened or the docs it read, is a plain link (`../text-link.tsx`)
  * that opens in the browser over the act channel (`use-open-link.ts`); any
@@ -207,7 +221,7 @@ function TranscriptLink({
   if (href === undefined || !opensAsLink(href)) {
     return (
       <Tooltip label={href}>
-        <span className="text-link-inert">{children}</span>
+        <span className={INERT_LINK_CLASS}>{children}</span>
       </Tooltip>
     );
   }
@@ -545,7 +559,7 @@ function PictureElement({ node }: MarkdownNodeProps): ReactNode {
   const words = said === "" ? UNNAMED_PICTURE : said;
   return (
     <TranscriptLink href={address === "" ? undefined : address} words={words}>
-      <ImageIcon className="picture-outside-glyph" aria-hidden="true" />
+      <ImageIcon className={OUTSIDE_GLYPH_CLASS} aria-hidden="true" />
       {words}
     </TranscriptLink>
   );
@@ -625,7 +639,12 @@ function LoneLinkElement({
 
 /** A document's paragraph of pictures alone: the pictures side by side, sharing its width. */
 function PictureRowElement({ children }: MarkdownNodeProps & { children?: ReactNode }): ReactNode {
-  return <div className={PICTURE_ROW_ELEMENT.CLASS}>{children}</div>;
+  // Side by side, sharing the column's width, so a before and an after read as a pair; each still hugs its own picture, and none grows past its own size (tasks.css).
+  return (
+    <div className={`${PICTURE_ROW_ELEMENT.CLASS} my-block-gap flex items-start gap-block-gap`}>
+      {children}
+    </div>
+  );
 }
 
 /** A mention held with the punctuation written against it, in the box no line breaks inside (`link-glue.ts`). */
@@ -692,7 +711,7 @@ export function GitHubPictureLink({ src, alt }: { src: string; alt: string }): R
   const words = alt === "" ? UNNAMED_PICTURE : alt;
   return (
     <TranscriptLink href={src === "" ? undefined : src} words={words}>
-      <ImageIcon className="picture-outside-glyph" aria-hidden="true" />
+      <ImageIcon className={OUTSIDE_GLYPH_CLASS} aria-hidden="true" />
       {words}
     </TranscriptLink>
   );
@@ -877,9 +896,9 @@ export function TranscriptReasoning({
       {cut === undefined ? (
         <ReasoningContent text={text.replace(LEADING_BLANK_LINES, "").trimEnd()} />
       ) : (
-        <FoldBody className="reasoning-body">
+        <FoldBody className={REASONING_BODY_CLASS}>
           <CutWords cut={cut} waiting={CUT_WORDS.THOUGHT}>
-            <p className="reasoning-words">{cutText(cut)}</p>
+            <p className={REASONING_WORDS_CLASS}>{cutText(cut)}</p>
           </CutWords>
         </FoldBody>
       )}
@@ -1308,13 +1327,13 @@ function SentCall({
       />
       <ToolContent name="tool-sent-words">
         {sent.words === undefined ? null : (
-          <div className="tool-sent-block">
+          <div className="px-list-inset py-row-inset">
             <TranscriptWords text={sent.words} />
           </div>
         )}
         {sent.note === undefined ? null : (
-          <div className="tool-sent-block">
-            <div className="tool-sent-note">{SENT_WORDS.NOTE}</div>
+          <div className="px-list-inset py-row-inset">
+            <div className="text-caption-inline text-muted-foreground">{SENT_WORDS.NOTE}</div>
             <TranscriptWords text={sent.note} />
           </div>
         )}
@@ -1363,12 +1382,19 @@ export type TranscriptTodosProps = Omit<ComponentProps<typeof Tool>, "children">
 function TodoItems({
   todos,
   live,
+  docked = false,
 }: {
   todos: CodingAgentTodos["todos"];
   live: boolean;
+  /** Whether it stands in the dock over the composer, where it keeps to under a third of what is seen and scrolls past it, so a long list leaves the transcript its room in a short window. */
+  docked?: boolean;
 }): ReactNode {
   return (
-    <Stack as={LAYOUT_ELEMENT.UL} gap={GAP.TIGHT} className="todo-items">
+    <Stack
+      as={LAYOUT_ELEMENT.UL}
+      gap={GAP.TIGHT}
+      className={`todo-items leading-body${docked ? " max-h-todos-dock overflow-y-auto" : ""}`}
+    >
       {todos.map((todo, index) => (
         // Note that an item's place is its identity, so a write that moves
         // an item on is drawn as that item changing where it stands.
@@ -1398,7 +1424,7 @@ function TodoItem({
   const arrived = todo.status !== first;
   const done = todo.status === CODING_AGENT_TODO_STATUS.DONE;
   return (
-    <li className="todo-item" data-todo-status={todo.status}>
+    <li className="todo-item flex items-start gap-icon-gap" data-todo-status={todo.status}>
       {/* Keyed by where it stands, so each change mounts the glyph anew and its arrival runs. */}
       <GlyphSlot
         key={todo.status}
@@ -1415,7 +1441,11 @@ function TodoItem({
           <StateGlyph state={GLYPH_STATE.REST} glyph={<look.Icon aria-hidden="true" />} />
         )}
       </GlyphSlot>
-      <span className="todo-words">{todo.content}</span>
+      <span
+        className={`min-w-0 wrap-anywhere transition-[color] duration-(--luke-duration-quick) ease-motion-exit${done ? " text-muted-foreground" : ""}`}
+      >
+        {todo.content}
+      </span>
     </li>
   );
 }
@@ -1447,7 +1477,7 @@ export function TranscriptTodos({
         subject={subject}
         subjectIsCode={words.code}
       />
-      <FoldBody className="todos-body">
+      <FoldBody className="mt-list-gap mr-0 mb-tight-gap ml-transcript-gutter select-text">
         <TodoItems todos={todos} live={live} />
         {errorText === undefined ? null : <FailureNote>{errorText}</FailureNote>}
       </FoldBody>
@@ -1484,13 +1514,13 @@ export function TranscriptTodosDock({
         <GlyphSlot>
           <GLYPH.TODOS />
         </GlyphSlot>
-        <span className="todos-dock-summary">
+        <span className="shrink-0 text-muted-foreground">
           <RollingNumber value={done} /> of <RollingNumber value={total} /> done
         </span>
         <TodosDockFocus focus={focus} />
       </DisclosureSummary>
       <DisclosureBody inset={DISCLOSURE_BODY.CARD}>
-        <TodoItems todos={todos} live />
+        <TodoItems todos={todos} live docked />
       </DisclosureBody>
     </Disclosure>
   );
@@ -1505,12 +1535,7 @@ function TodosDockFocus({ focus }: { focus: string | undefined }): ReactNode {
   const previewed = useDisclosurePreviewShown(focus !== undefined);
   if (focus === undefined || !previewed) return null;
   return (
-    <Text
-      as={TEXT_ELEMENT.SPAN}
-      variant={TEXT_VARIANT.INHERIT}
-      truncate
-      className="todos-dock-focus"
-    >
+    <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.INHERIT} truncate className="flex-1">
       {focus}
     </Text>
   );
@@ -1583,14 +1608,14 @@ export function TranscriptSubagent({
       <GlyphSlot>
         <SubagentMark model={pair?.choice.model} />
       </GlyphSlot>
-      <OneLine className="subagent-job">{job}</OneLine>
+      <OneLine className="subagent-job flex-1 text-foreground">{job}</OneLine>
       {pair === undefined ? null : (
-        <span className="subagent-pair" data-subagent-pair="">
+        <span className="subagent-pair shrink-0" data-subagent-pair="">
           <ModelLabel choice={pair.choice} models={pair.models} />
         </span>
       )}
       {running && startedAt !== undefined ? (
-        <WorkingTime startedAt={startedAt} className="subagent-time" />
+        <WorkingTime startedAt={startedAt} className="shrink-0" />
       ) : null}
       <ToolStateMark state={state} />
     </>
@@ -1607,7 +1632,12 @@ export function TranscriptSubagent({
         </ToolContent>
       </Tool>
     ) : onOpen === undefined ? (
-      <div className="subagent-line" data-subagent-row="" data-call-id={callId}>
+      // The same line as the one that opens a subagent's tab, pressed by nothing.
+      <div
+        className="subagent-line flex h-7 w-full min-w-0 items-center gap-icon-gap rounded-luke-6 px-tight-gap text-caption text-muted-foreground"
+        data-subagent-row=""
+        data-call-id={callId}
+      >
         {line}
       </div>
     ) : (
@@ -1618,7 +1648,7 @@ export function TranscriptSubagent({
       </Tooltip>
     );
   return (
-    <div className="subagent-row">
+    <div className="subagent-row @container/subagent-row text-caption-inline">
       {row}
       {errorText === undefined ? null : <FailureNote>{errorText}</FailureNote>}
     </div>

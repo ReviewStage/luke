@@ -165,12 +165,41 @@ describe("a stylesheet", () => {
     ]);
   });
 
+  it("refuses a crumb drawn wider than its words, and passes a floor that is its basis under a cap", () => {
+    const floored = `.luke-breadcrumbs[data-variant="caption"] li { min-width: 11em; flex: 0 9 auto; }
+      .luke-breadcrumbs li:has(> .luke-breadcrumb-separator) { min-width: calc(var(--floor) + 12px); }
+      .luke-breadcrumbs li:last-child { flex-grow: 9; }
+      .luke-breadcrumbs li > button { min-width: 11em; }
+      .luke-breadcrumbs, .list li { min-width: 11em; }`;
+    expect(sheetRules(floored)).toEqual([
+      STYLE_RULE.CRUMB_WIDTH,
+      STYLE_RULE.CRUMB_WIDTH,
+      STYLE_RULE.CRUMB_WIDTH,
+    ]);
+    const capped = `.luke-breadcrumbs[data-variant="caption"] li {
+        flex: 1 0 var(--floor); min-width: 0; max-width: max-content; }
+      .luke-breadcrumbs li:last-child { flex-grow: 9; }
+      .luke-breadcrumbs li[data-fixed="true"] { flex: none; }`;
+    expect(sheetRules(capped)).toEqual([]);
+  });
+
   it("reads the spacing rule in the panel's sheets alone", () => {
     const css = ".a { padding: 8px; }";
     expect(sheetRules(css, "packages/panel/src/styles/desktop.css")).toEqual([STYLE_RULE.SPACING]);
     expect(sheetRules(css, "packages/panel/src/tasks/thing.css")).toEqual([]);
     expect(sheetRules(css, "packages/ui/src/components/thing/thing.css")).toEqual([]);
     expect(sheetRules(css, "apps/catalog/src/catalog.css")).toEqual([]);
+  });
+
+  it("refuses the hand spelled out or a cursor chosen per profile, and passes the press and link roles and the other cursors", () => {
+    const css = `.a { cursor: pointer; }
+      [data-luke-profile="desktop"] .b { cursor: default; }
+      .c { cursor: var(--luke-cursor-press); }
+      .d { cursor: var(--luke-cursor-link); }
+      .e { cursor: col-resize; }
+      .f:disabled { cursor: default; }
+      .g { --luke-cursor-press: pointer; }`;
+    expect(sheetRules(css)).toEqual([STYLE_RULE.CURSOR, STYLE_RULE.CURSOR]);
   });
 
   it("reads declarations through nesting, layers, strings, and comments", () => {
@@ -238,6 +267,11 @@ describe("a module's class strings", () => {
     expect(violations.map((violation) => [violation.rule, violation.line])).toEqual([
       [STYLE_RULE.ELLIPSIS, 4],
     ]);
+  });
+
+  it("refuses cursor-pointer and a cursor chosen per profile, and passes cursor-press, cursor-link and the other cursors", () => {
+    const source = `const a = cn("cursor-pointer in-data-[luke-profile=desktop]:cursor-default", "cursor-press disabled:cursor-default cursor-link cursor-progress cursor-text");`;
+    expect(classRules(source)).toEqual([STYLE_RULE.CURSOR, STYLE_RULE.CURSOR]);
   });
 
   it("reads a class list whose arbitrary value holds a character no class name has", () => {

@@ -38,7 +38,6 @@ import {
   type SettingsSectionSkeletonShape,
   SettingsSectionsSkeleton,
   SpinnerRegion,
-  STATUS_TONE,
   Stack,
   Switch,
   TEXT_ELEMENT,
@@ -59,7 +58,6 @@ import { MarkdownMessage } from "../markdown-message.js";
 import { SkillCard, SkillMark } from "../tasks/skill-ref.js";
 import { SkillSourceBadge } from "../tasks/skill-source-badge.js";
 import { useWorkspaceMembersRead } from "../tasks/use-workspace-members.js";
-import { TOAST_HOLD, useToast } from "../toast.js";
 import { useDrawnThroughExit } from "../use-held-through-exit.js";
 import { AddSkillDialog } from "./add-skill-dialog.js";
 import { MenuRow } from "./menu-row.js";
@@ -67,7 +65,6 @@ import { shownWorkspace } from "./settings-rows.js";
 import {
   failureLine,
   fencedSkillFile,
-  installedNotice,
   removeQuestion,
   SKILL_ACTION,
   SKILLS_LINE,
@@ -102,8 +99,7 @@ import type { WorkspaceSettingsControl } from "./workspace-page.js";
  * come from and that a change reaches only agents started afterwards, which
  * nothing else on the page can say. Add skill opens the dialog
  * (`add-skill-dialog.tsx`), whose install lands in the list at once, its
- * rows lit once and a toast naming them and how to call the first one a
- * member can call (`installedNotice`). The list is read when the page is
+ * rows lit once. The list is read when the page is
  * drawn; each GitHub skill the account may change is then checked for an
  * update, once.
  */
@@ -447,7 +443,6 @@ function ShownSkills({
   const added = useDrawnThroughExit(adding);
   const [updates, setUpdates] = useState<ReadonlyMap<string, boolean>>(new Map());
   const [landed, setLanded] = useState<ReadonlySet<string>>(new Set());
-  const toast = useToast();
   const members = useWorkspaceMembersRead(workspace).members;
 
   useEffect(() => {
@@ -505,20 +500,13 @@ function ShownSkills({
         : held,
     );
   }, []);
-  // Note that an install lights only its own rows, each once, and says how
-  // to call what it made, since the dialog that made them has closed.
-  const installed = useCallback(
-    (made: readonly InstalledSkillSummary[]) => {
-      setList((held) =>
-        held.kind === LIST.READ ? { kind: LIST.READ, skills: [...held.skills, ...made] } : held,
-      );
-      setLanded(new Set(made.map((each) => each.id)));
-      const notice = installedNotice(made, workspace);
-      if (notice !== undefined)
-        toast({ ...notice, tone: STATUS_TONE.COMPLETE, hold: TOAST_HOLD.DONE });
-    },
-    [toast, workspace],
-  );
+  // Note that an install lights only its own rows, each once, which say what it made.
+  const installed = useCallback((made: readonly InstalledSkillSummary[]) => {
+    setList((held) =>
+      held.kind === LIST.READ ? { kind: LIST.READ, skills: [...held.skills, ...made] } : held,
+    );
+    setLanded(new Set(made.map((each) => each.id)));
+  }, []);
 
   const groups = skills === undefined ? undefined : skillGroups(skills, readerId, members);
   // A group still being read stands its placeholder row in the card the rows will.

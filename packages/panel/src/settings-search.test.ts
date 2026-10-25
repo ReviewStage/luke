@@ -304,10 +304,9 @@ function labelsFound(query: string, input: SettingsSearchInput = FULL_INPUT): re
   );
 }
 
-test("repositories, skills, test notification and rename each find the row the page draws", () => {
+test("repositories, skills and rename each find the row the page draws", () => {
   assert.ok(labelsFound("repositories").includes("Repositories on this Mac"));
   assert.ok(labelsFound("skills").includes("Add a skill"));
-  assert.deepEqual(labelsFound("test notification"), ["Test notification"]);
   assert.deepEqual(labelsFound("rename"), ["Rename workspace"]);
 });
 

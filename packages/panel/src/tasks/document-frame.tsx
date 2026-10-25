@@ -36,8 +36,15 @@ export function DocumentScroll({
   children: ReactNode;
 }): React.JSX.Element {
   return (
+    // Note that the block sets its own accent, because `--accent` is only ever
+    // set by a `data-state` ancestor and nothing above the plan carries one:
+    // unset, the caret, the writing ring, and the fresh tint all drew nothing.
     <ScrollArea ref={ref} fade={SCROLL_FADE.BOTH} gutter={SCROLL_GUTTER.STABLE}>
-      <div className={DOCUMENT_BODY_CLASS}>{children}</div>
+      <div
+        className={`${DOCUMENT_BODY_CLASS} py-list-inset px-luke-2 select-text [--accent:var(--voice-luke)]`}
+      >
+        {children}
+      </div>
     </ScrollArea>
   );
 }
@@ -69,7 +76,7 @@ export function DocumentByline({
   saved?: ReactNode;
 }): React.JSX.Element {
   return (
-    <p className="plan-byline">
+    <p className="plan-byline mx-0 mt-0 mb-block-gap flex flex-wrap gap-x-field-gap gap-y-tight-gap text-caption text-muted-foreground pointer-coarse:gap-y-block-gap">
       <span className="actor-line">
         {creator === undefined && maker === undefined ? "Created" : "Created by "}
         {maker === undefined ? null : (

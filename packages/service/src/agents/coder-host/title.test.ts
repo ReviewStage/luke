@@ -141,7 +141,7 @@ it.layer(getTestDB())("an untitled task's name", (it) => {
       const first = yield* startOnTask(owner, task.id, "Expire teammate invitations after a week.");
       const second = yield* startOnTask(owner, task.id, "Send a reminder the day before.");
 
-      yield* titledAs(owner, first, "untitled.");
+      yield* titledAs(owner, first, "<Untitled>.");
       yield* titledAs(owner, second, "Send invitation reminders");
 
       assert.equal(Option.getOrThrow(yield* readCodingAgent(owner, first.id)).title, null);

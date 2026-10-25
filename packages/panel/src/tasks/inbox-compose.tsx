@@ -24,7 +24,7 @@ import type { CodingAgentInboxMessagedView } from "@luke/features/coding-agent-v
 import { CODING_AGENT_CALL_FAILURE } from "@luke/features/coding-agent-view";
 import { INBOX_BOUNDS, type InboxItem } from "@luke/features/inbox-wire";
 import { encodeMention, MENTION_KIND } from "@luke/features/mention-link";
-import { pasteCutWords, readFailedWords, readingWords } from "@luke/features/words";
+import { FIELD_WORDS, pasteCutWords, readFailedWords, readingWords } from "@luke/features/words";
 import { ACT_KIND } from "@luke/host/acts";
 import {
   BackButton,
@@ -32,7 +32,6 @@ import {
   Button,
   CHIP_WIDTH,
   ErrorState,
-  FormField,
   IconButton,
   matchingRows,
   POPOVER_ALIGN,
@@ -43,8 +42,9 @@ import {
   Toolbar,
   Tooltip,
   TrashIcon,
+  VisuallyHidden,
 } from "@luke/ui";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { useAct } from "../act.js";
 import { appPlatform } from "../app-platform.js";
 import {
@@ -60,11 +60,13 @@ import { useIntegrationStatuses } from "../integration-statuses.js";
 import { Picker } from "../settings/picker-row.js";
 import { undoToast, useToast } from "../toast.js";
 import { useAttachedFiles } from "../use-attached-files.js";
+import { COMPOSER_ROOM_CLASS } from "./agent-composer.js";
 import { type AgentRowPlace, agentMenuRow, useAgentRowPlace } from "./agent-menu-row.js";
 import { AttachFilesButton } from "./attach-files-button.js";
 import { AttachedFileChips, attachmentChips } from "./attached-file-chips.js";
 import { messageFailureWords } from "./coding-agent-model.js";
 import { AnswerForm, EDITOR_LOAD_FAILED, useAnswerField } from "./inbox-answer-box.js";
+import { INBOX_VIEW_ITEMS } from "./inbox-columns.js";
 import type { MentionDoors } from "./mention-chip.js";
 import type { MentionAgentsReader, MentionableAgent } from "./mention-picker.js";
 import { keptSkills } from "./repository-skills.js";
@@ -377,6 +379,7 @@ function ComposeCard({
   latestAgent.current = agent;
   const chosen = agent === undefined ? undefined : agentMenuRow(agent, place);
   const placeholder = agent === undefined ? "Write a message" : `Write to ${agent.name}`;
+  const subjectId = useId();
   const field = useAnswerField({
     draft: draft.text,
     placeholder,
@@ -454,7 +457,7 @@ function ComposeCard({
     (cut ? pasteCutWords(INBOX_BOUNDS.MAX_MESSAGE_CHARS) : undefined) ??
     (field.failed ? EDITOR_LOAD_FAILED : undefined);
   return (
-    <section className="inbox-view-items" aria-label={NEW_THREAD} hidden={hidden}>
+    <section className={INBOX_VIEW_ITEMS} aria-label={NEW_THREAD} hidden={hidden}>
       {phone ? (
         <PhoneHead
           place="new-thread"
@@ -477,7 +480,8 @@ function ComposeCard({
         />
       ) : (
         <Toolbar
-          start={TOOLBAR_INSET.COLUMN}
+          // Note that a title with no way back before it starts where the other bars' titles do, not at the column's edge, which is for a control's fill.
+          start={onBack === undefined ? undefined : TOOLBAR_INSET.COLUMN}
           lead={
             onBack === undefined ? null : (
               <BackButton label={INBOX} place={INBOX_PLACE} onBack={onBack} />
@@ -528,24 +532,35 @@ function ComposeCard({
               }}
             />
           </div>
-          <div className="inbox-compose-row" data-field="">
-            <FormField label={SUBJECT} optional>
-              {(control) => (
-                <TextField
-                  field={control}
-                  size={TEXT_FIELD_SIZE.INLINE}
-                  value={draft.title ?? ""}
-                  maxLength={INBOX_BOUNDS.MAX_TITLE_CHARS}
-                  disabled={sending}
-                  autoFocus
-                  onChange={(title) => write((was) => ({ ...was, title }))}
-                  onEnter={() => field.editor.current?.focus()}
-                />
-              )}
-            </FormField>
+          <div className="inbox-compose-row">
+            {/* Note that the subject may be left empty, which its label says to a reader as a FormField's does, and its placeholder shows where the field stands. */}
+            <label
+              className="inbox-compose-label"
+              id={`${subjectId}label`}
+              htmlFor={`${subjectId}control`}
+            >
+              {SUBJECT}
+              <VisuallyHidden>{FIELD_WORDS.OPTIONAL}</VisuallyHidden>
+            </label>
+            <TextField
+              field={{
+                id: `${subjectId}control`,
+                labelId: `${subjectId}label`,
+                "aria-describedby": undefined,
+                "aria-invalid": undefined,
+              }}
+              size={TEXT_FIELD_SIZE.INLINE}
+              placeholder={FIELD_WORDS.OPTIONAL}
+              value={draft.title ?? ""}
+              maxLength={INBOX_BOUNDS.MAX_TITLE_CHARS}
+              disabled={sending}
+              autoFocus
+              onChange={(title) => write((was) => ({ ...was, title }))}
+              onEnter={() => field.editor.current?.focus()}
+            />
           </div>
         </div>
-        <div className="agent-composer inbox-compose-box" {...files.drop.target}>
+        <div className={`${COMPOSER_ROOM_CLASS} inbox-compose-box`} {...files.drop.target}>
           <AnswerForm
             dropping={files.drop.dropping}
             field={field}

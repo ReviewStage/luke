@@ -417,11 +417,14 @@ function PathParts({ path }: { path: string }): React.JSX.Element {
   return (
     <>
       {cut === 0 ? null : (
-        <OneLine className="diff-list-folder" words={path.slice(0, cut)}>
+        <OneLine className="diff-list-folder text-muted-foreground" words={path.slice(0, cut)}>
           <bdi>{path.slice(0, cut)}</bdi>
         </OneLine>
       )}
-      <OneLine className="diff-list-name" words={path.slice(cut)}>
+      <OneLine
+        className="diff-list-name max-w-full flex-none font-luke-medium group-data-moved/part:text-muted-foreground group-data-moved/part:[font-weight:inherit]"
+        words={path.slice(cut)}
+      >
         <bdi>{path.slice(cut)}</bdi>
       </OneLine>
     </>
@@ -513,7 +516,12 @@ export function FileHead({
   const fold = (
     <IconButton
       ref={partAt(0)}
-      icon={<ChevronRightIcon className="diff-list-fold" aria-hidden="true" />}
+      icon={
+        <ChevronRightIcon
+          className="rotate-90 transition-transform duration-(--luke-duration-fast) ease-spring-fast group-data-collapsed/head:rotate-0"
+          aria-hidden="true"
+        />
+      }
       label={label}
       size={BUTTON_SIZE.COMPACT}
       aria-expanded={!collapsed}
@@ -522,16 +530,24 @@ export function FileHead({
     />
   );
   const letter = (
-    <span ref={partAt(1)} className="file-view-status" data-status={file.status}>
+    <span
+      ref={partAt(1)}
+      className="file-view-status inline-flex h-luke-16 flex-none items-center justify-center rounded-luke-6 bg-status-letter font-mono text-caption-inline font-luke-semibold text-attention data-[status=added]:text-complete data-[status=deleted]:text-danger data-[status=renamed]:text-working"
+      data-status={file.status}
+    >
       {STATUS_LETTER[file.status]}
     </span>
   );
   const pathCopy = (path: string, at: number, words: string, hint: string, moved: boolean) => (
-    <span ref={partAt(at)} className="diff-list-path-part" data-moved={moved ? "" : undefined}>
+    <span
+      ref={partAt(at)}
+      className="diff-list-path-part group/part flex min-w-0 data-moved:flex-initial data-moved:text-muted-foreground"
+      data-moved={moved ? "" : undefined}
+    >
       {hinted(
         hint,
         <TextButton aria-label={`${hint}: ${path}`} onClick={() => copy(path, words)}>
-          <span className="diff-list-path-words">
+          <span className="diff-list-path-words flex min-w-0">
             <PathParts path={path} />
           </span>
         </TextButton>,
@@ -540,7 +556,7 @@ export function FileHead({
   );
   return (
     <div
-      className="diff-list-head"
+      className="diff-list-head group/head cursor-default bg-surface font-sans text-foreground"
       data-standing={standing ? "" : undefined}
       data-collapsed={collapsed ? "" : undefined}
       onPointerEnter={(event) => {
@@ -559,7 +575,7 @@ export function FileHead({
         lead={hinted(`${label} \u00b7 ${HEAD_WORDS.ALL_HINT}`, fold, FOLD_CHORD.ONE)}
         actions={
           <>
-            <span className="diff-list-path">
+            <span className="flex min-w-0 flex-initial font-mono">
               {file.previousPath === null ? (
                 pathCopy(
                   file.path,
@@ -581,7 +597,7 @@ export function FileHead({
                     as={TEXT_ELEMENT.SPAN}
                     variant={TEXT_VARIANT.INHERIT}
                     truncate
-                    className="diff-list-folder"
+                    className="diff-list-folder text-muted-foreground"
                     aria-hidden="true"
                   >
                     {"\u00a0\u2192\u00a0"}
