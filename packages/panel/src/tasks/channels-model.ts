@@ -243,3 +243,11 @@ export function shownChannel(
 export function olderAsksWords(count: number): string {
   return count === 1 ? "1 older ask needs you" : `${count} older asks need you`;
 }
+
+/** A channel's name as it is typed, written as a channel's is: lowercase, a dash for each run of anything but letters and digits, none at its ends. */
+export function channelSlug(typed: string): string {
+  return typed
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/gu, "-")
+    .replace(/^-+|-+$/gu, "");
+}

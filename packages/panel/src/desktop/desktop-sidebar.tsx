@@ -151,6 +151,8 @@ import { useHeldOrder } from "../tasks/use-held-order.js";
 import type { InboxListing } from "../tasks/use-inbox-listing.js";
 import { inColumn, type PinnedTab } from "../tasks/use-side-panel.js";
 import { useUnreadTasks } from "../tasks/use-task-looks.js";
+import { shownChannel } from "../tasks/channels-model.js";
+import { useChannelPlace, useChannels } from "../tasks/use-channels.js";
 import { AUTOMATIONS_PAGE, type InboxChoice, type TasksControl } from "../tasks/use-tasks-tab.js";
 import { useAdminAccess, useExperiment } from "../use-app-state.js";
 import { ActionMenu, type MenuAction, type MenuEntry } from "./action-menu.js";
@@ -165,6 +167,7 @@ import { NewTaskInButton } from "./new-task-button.js";
 import { ADMIN_PLACE } from "./pages-on-demand.js";
 import { needsYouNoun, usePlacesWaiting } from "./places-waiting.js";
 import { RowPlaced, useRowMoveKeys } from "./row-moves.js";
+import { SidebarChannels } from "./sidebar-channels.js";
 import { SidebarAgent } from "./sidebar-agent.js";
 import { SIDEBAR_WIDTH, type SidebarCollapse, sidebarInSight } from "./sidebar-collapse.js";
 import { type CountNoun, foldedCount, sidebarFold, TASK_NOUN } from "./sidebar-fold.js";
@@ -1806,6 +1809,17 @@ function SidebarColumn({
   // Chat is an experiment: its row stands only while the account has it on.
   const chatOn = useChatOn();
   const inboxFirst = useExperiment(EXPERIMENT.INBOX_FIRST);
+  // With Channels on, the channels stand where the Inbox's row, the pins, and the task list stood, and a channel shows in the Inbox's place.
+  const channelsOn = useExperiment(EXPERIMENT.CHANNELS);
+  const channels = useChannels(
+    channelsOn && tasks.signedIn ? tasks.workspace?.id : undefined,
+    tasks.shown,
+  );
+  const channelPlace = useChannelPlace();
+  const shownChannelId =
+    channelsOn && inInbox
+      ? shownChannel(channels.channels ?? [], channelPlace.channelId)?.id
+      : undefined;
   // With the inbox-first sidebar on, the Inbox's items stand where the task list stood, under the pins, and the tasks are a page of their own.
   const listsInbox = inboxFirst && tasks.signedIn && inboxListing !== undefined;
   const waiting = usePlacesWaiting(tasks);
@@ -1833,6 +1847,10 @@ function SidebarColumn({
   const openInbox = () => {
     if (!onTasks) onTabChange(PANEL_TAB.TASKS);
     tasks.inboxView.onOpen();
+  };
+  const openChannel = (channelId: string) => {
+    channelPlace.onChoose(channelId);
+    openInbox();
   };
   const openBoard = () => {
     if (!onTasks) onTabChange(PANEL_TAB.TASKS);
@@ -2123,7 +2141,7 @@ function SidebarColumn({
         >
           Search
         </NavItem>
-        {listsInbox ? null : (
+        {listsInbox || channelsOn ? null : (
           <SidebarInboxRow
             waiting={waiting.inbox}
             current={inInbox}
@@ -2201,7 +2219,9 @@ function SidebarColumn({
               {/* Pinned stands once something is pinned, or, while the account keeps sections, as the place a carried row drops in, and leaves after its exit once neither holds. */}
               <LeavingGroups
                 groups={
-                  tasks.signedIn && (pinnedSection.length > 0 || (sectionsShown && carrying))
+                  tasks.signedIn &&
+                  !channelsOn &&
+                  (pinnedSection.length > 0 || (sectionsShown && carrying))
                     ? PINNED_LISTED
                     : NOTHING_LISTED
                 }
@@ -2219,7 +2239,17 @@ function SidebarColumn({
                   />
                 )}
               />
-              {listsInbox && inboxListing !== undefined ? (
+              {channelsOn ? (
+                tasks.signedIn ? (
+                  <SidebarChannels
+                    workspaceId={tasks.workspace?.id}
+                    channels={channels}
+                    currentId={shownChannelId}
+                    shown={tasks.shown && overlay.inSight}
+                    onOpen={chosen(openChannel)}
+                  />
+                ) : null
+              ) : listsInbox && inboxListing !== undefined ? (
                 <SidebarInbox
                   tasks={tasks}
                   listing={inboxListing}

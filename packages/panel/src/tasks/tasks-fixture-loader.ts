@@ -14,6 +14,7 @@ import { useEffect, useState } from "react";
 
 type TasksModule = typeof import("./tasks-fixture.js");
 type InboxModule = typeof import("./inbox-fixture.js");
+type ChannelsModule = typeof import("./channels-fixture.js");
 
 /** The fixture a run draws: the tasks fixture's doors, the Inbox's laid over the three it stages, and the reader it signs in as. */
 type TasksFixture = {
@@ -32,29 +33,37 @@ type TasksFixture = {
 let landed: TasksFixture | undefined;
 let loading: Promise<void> | undefined;
 
-/** The tasks fixture with the Inbox's tasks, answers, and document laid over its own, which come second. */
-function laidOver(tasks: TasksModule, inbox: InboxModule): TasksFixture {
+/** The tasks fixture with the Inbox's and the channels' tasks, answers, and document laid over its own, which come last. */
+function laidOver(tasks: TasksModule, inbox: InboxModule, channels: ChannelsModule): TasksFixture {
   return {
     fixtureSidePanel: tasks.fixtureSidePanel,
     fixtureRepositories: tasks.fixtureRepositories,
     fixturePlace: tasks.fixturePlace,
     fixtureTasksView: (run) => {
       const view = tasks.fixtureTasksView(run);
-      return view === undefined ? undefined : inbox.inboxTasksView(run.profile, view);
+      return view === undefined
+        ? undefined
+        : channels.channelsTasksView(run.profile, inbox.inboxTasksView(run.profile, view));
     },
     fixtureActAnswer: (run, kind, payload) =>
+      channels.channelsActAnswer(run.profile, kind, payload) ??
       inbox.inboxActAnswer(run.profile, kind, payload) ??
       tasks.fixtureActAnswer(run, kind, payload),
-    fixtureAppState: (state) => inbox.inboxAppState(tasks.fixtureAppState(state)),
-    fixtureReader: (run) => inbox.inboxReader(run.profile),
+    fixtureAppState: (state) =>
+      channels.channelsAppState(inbox.inboxAppState(tasks.fixtureAppState(state))),
+    fixtureReader: (run) => channels.channelsReader(run.profile) ?? inbox.inboxReader(run.profile),
   };
 }
 
 /** Imports the fixture once; a chunk that fails to load settles the same, leaving the run to draw no fixture. */
 export function loadTasksFixture(): Promise<void> {
-  loading ??= Promise.all([import("./tasks-fixture.js"), import("./inbox-fixture.js")]).then(
-    ([tasks, inbox]) => {
-      landed = laidOver(tasks, inbox);
+  loading ??= Promise.all([
+    import("./tasks-fixture.js"),
+    import("./inbox-fixture.js"),
+    import("./channels-fixture.js"),
+  ]).then(
+    ([tasks, inbox, channels]) => {
+      landed = laidOver(tasks, inbox, channels);
     },
     () => undefined,
   );

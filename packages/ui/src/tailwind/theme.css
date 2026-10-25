@@ -127,6 +127,8 @@
      and the attention mark's glyph a size under a row's. */
   --grid-template-columns-inbox: auto minmax(0, 1fr);
   --grid-template-columns-single: minmax(0, 1fr);
+  /* A channel's stream and the thread opened beside it, the thread the narrower. */
+  --grid-template-columns-channel-thread: minmax(0, 1fr) minmax(0, 44%);
   --spacing-list-held-least: var(--luke-list-held-height, 0);
   --spacing-inbox-face-half: calc(var(--luke-space-20) / 2);
   --spacing-inbox-line: calc(var(--luke-space-20) / 2 - 1px);
@@ -580,6 +582,8 @@
 
   /* Banner, ScrollArea, and Pagination. */
   --color-attention: var(--luke-color-attention);
+  /* A post that needs the reader, in a channel's stream: the attention ink's tint and nothing else. */
+  --color-attention-tint: var(--luke-color-attention-tint);
   --color-body-foreground: var(--luke-color-text-body);
   /* A strip's tint and hairline, mixed from the ink of the tone the banner
      wears (`tokens/status-tone.css`). */

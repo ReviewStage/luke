@@ -16,7 +16,8 @@ import { CHANNEL_ACT_KIND } from "./kinds.js";
  * channels.ts -- the Channels view's asks of the host about a workspace's channels, as procedures.
  *
  * Each output is its view schema flipped, so oRPC's output check encodes the
- * answer into what crosses the port.
+ * answer into what crosses the port, but a thread read's, which carries its
+ * items as the Inbox's own acts do, as the type they were read as.
  */
 export const channelActsContract = {
   [CHANNEL_ACT_KIND.CHANNELS_LIST]: actProcedure("Could not read the channels on this system.")
@@ -42,5 +43,5 @@ export const channelActsContract = {
     "Could not read the channel's threads on this system.",
   )
     .input(exactInput(channelThreadsParamsSchema))
-    .output(EffectSchema.flip(channelThreadsViewSchema)),
+    .output(EffectSchema.toType(channelThreadsViewSchema)),
 };

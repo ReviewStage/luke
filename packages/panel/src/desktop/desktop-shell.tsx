@@ -735,7 +735,9 @@ export function DesktopShell({
     tab === PANEL_TAB.TASKS && !standingIn && region.kind === DOCUMENT_REGION.READY
       ? region.task
       : undefined;
-  const inboxFirst = useExperiment(EXPERIMENT.INBOX_FIRST);
+  // Note that Channels stands in the inbox-first sidebar's place, its sidebar listing channels and its page a channel's stream.
+  const channelsOn = useExperiment(EXPERIMENT.CHANNELS);
+  const inboxFirst = useExperiment(EXPERIMENT.INBOX_FIRST) && !channelsOn;
   // With the inbox-first sidebar on, the Inbox is read once here, the sidebar listing it and the Inbox's page showing its chosen item; off, it reads nothing.
   // Note that a narrow room's drawer is too skinny for the list, so there the Inbox's page lists its items itself, the list and then the item each across the screen.
   const sidebarListsInbox = inboxFirst && tasks.signedIn && room !== SHELL_ROOM.NARROW;
