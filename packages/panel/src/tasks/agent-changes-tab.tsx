@@ -29,8 +29,10 @@ import {
   INSET,
   LAYOUT_ELEMENT,
   type PaneBarMenu,
+  type ScrollOverscroll,
   SpinnerRegion,
   Stack,
+  TabNotice,
   TEXT_ELEMENT,
   TEXT_VARIANT,
   Text,
@@ -285,7 +287,11 @@ function ViewedCount({
   const { words, complete } = viewedOf(files, viewed, truncated);
   useAnnounce(ANNOUNCE.POLITE, words);
   return (
-    <p className="files-viewed" data-complete={complete ? "" : undefined}>
+    // A check and the palette's green once every file is viewed; quiet, cut short at its end where the bar is narrow.
+    <p
+      className="files-viewed m-0 flex min-w-0 flex-initial items-center gap-tight-gap whitespace-nowrap text-muted-foreground data-complete:text-complete [&>svg]:size-control-icon [&>svg]:flex-none"
+      data-complete={complete ? "" : undefined}
+    >
       {complete ? <CheckIcon aria-hidden="true" /> : null}
       <Text
         as={TEXT_ELEMENT.SPAN}
@@ -470,7 +476,7 @@ function AboveThreads({
       as={LAYOUT_ELEMENT.OL}
       gap={GAP.ITEM}
       inset={INSET.BLOCK}
-      className="diff-outdated-threads"
+      className="flex-none"
       aria-label={CHANGES_WORDS.UNPLACED_THREADS}
     >
       {above.map((each) => (
@@ -701,7 +707,7 @@ function entryOf(
     pictured !== undefined ? (
       <ImageDiff file={file} sides={pictured} />
     ) : notice === undefined ? undefined : (
-      <p className="diff-list-notice">
+      <p className="diff-list-notice m-0 py-list-inset pr-list-inset pl-luke-40 text-caption-inline text-muted-foreground">
         {notice}
         {shown}
       </p>
@@ -734,7 +740,11 @@ function entryOf(
       key: REFUSED_KEY,
       side: DIFF_SELECTION_SIDE.ADDITIONS,
       line: FILE_NOTE_LINE,
-      content: <p className="diff-list-refused">{EXPANSION_REFUSED_WORDS[gaps.refused]}</p>,
+      content: (
+        <p className="m-0 py-tight-gap pr-list-inset pl-luke-40 text-caption-inline text-muted-foreground">
+          {EXPANSION_REFUSED_WORDS[gaps.refused]}
+        </p>
+      ),
     });
   }
   notes.push(...comments);
@@ -1351,7 +1361,7 @@ function ViewedBox({
       label={viewed ? LIST_WORDS.UNMARK_VIEWED : LIST_WORDS.MARK_VIEWED}
       chord={VIEWED_CHORD}
     >
-      <span className="diff-list-viewed">
+      <span className="diff-list-viewed ml-auto flex flex-none items-center text-caption-inline text-muted-foreground">
         <Checkbox checked={viewed} onChange={onToggle}>
           {LIST_WORDS.VIEWED}
         </Checkbox>
@@ -1598,6 +1608,7 @@ function FilesList({
   boxRef,
   reveal,
   flash,
+  overscroll,
 }: {
   list: ChangesList;
   threads: ChangesThreads | undefined;
@@ -1615,6 +1626,8 @@ function FilesList({
   reveal: ListReveal | undefined;
   /** The lines to bring into view and light a moment, once; none lights none. */
   flash: DiffListFlash | undefined;
+  /** Whether a swipe past the list's end is handed on to the box the tab stands in. */
+  overscroll: ScrollOverscroll | undefined;
 }): React.JSX.Element {
   const look = useDiffLook(roomy);
   const box = useRef<HTMLDivElement | null>(null);
@@ -1644,14 +1657,18 @@ function FilesList({
   const landing = useListLanding(reveal, list, entries, minimizedOf, wholeOf, opened.openedOf, box);
   const query = list.query.trim();
   return (
-    <Fill as={FILL_ELEMENT.SECTION} className="file-tab" aria-label="Diffs of the changed files">
+    <Fill
+      as={FILL_ELEMENT.SECTION}
+      className="file-tab bg-card-code"
+      aria-label="Diffs of the changed files"
+    >
       {query === "" || filterShown ? null : (
-        <div className="file-tab-notice">
-          <p className="m-0">
+        <TabNotice>
+          <p>
             {LIST_WORDS.FILTERED} “<bdi>{query}</bdi>”
           </p>
           <Button onClick={() => list.onQuery("")}>{LIST_WORDS.CLEAR_FILTER}</Button>
-        </div>
+        </TabNotice>
       )}
       {list.kept.length === 0 ? (
         <EmptyState>{LIST_WORDS.NONE_KEPT}</EmptyState>
@@ -1670,6 +1687,7 @@ function FilesList({
             reveal={landing.reveal}
             onDrawn={opened.onDrawn}
             flash={flash}
+            overscroll={overscroll}
           />
         </ThreadLandingProvider>
       )}
@@ -1777,6 +1795,7 @@ export function AgentChangesTab({
   reads,
   files,
   fileReveal,
+  overscroll,
 }: {
   agentId: string;
   control: CodingAgentsControl;
@@ -1798,6 +1817,8 @@ export function AgentChangesTab({
   files?: readonly CodingAgentChangedFile[] | undefined;
   /** A file to bring into view, once, among those drawn. */
   fileReveal?: FileReveal | undefined;
+  /** Whether a swipe past the list's end is handed on to the box the tab stands in, as a chapter's is to the Pull request tab; it stops at the end where none is named. */
+  overscroll?: ScrollOverscroll | undefined;
 }): React.JSX.Element {
   const { answer, refreshFailed, out, ask, pullRequest, viewedFiles } = reads;
   const room = usePaneRoom(tree);
@@ -1970,11 +1991,11 @@ export function AgentChangesTab({
         <ErrorState onRetry={refresh}>{REFRESH_FAILED_WORDS}</ErrorState>
       ) : null}
       {pullRequest.truncated ? (
-        <div className="file-tab-notice">
+        <TabNotice>
           <p>{CHANGES_WORDS.TRUNCATED}</p>
-        </div>
+        </TabNotice>
       ) : null}
-      <Fill flow={FILL_FLOW.ROW} clip className="file-view-body" {...room.body}>
+      <Fill flow={FILL_FLOW.ROW} clip className="file-view-body relative" {...room.body}>
         <FilesList
           list={list}
           threads={threads}
@@ -1990,6 +2011,7 @@ export function AgentChangesTab({
               : { ...reveal, file: revealFile }
           }
           flash={flash}
+          overscroll={overscroll}
         />
         <FileTreePane
           file={shownFile.path}

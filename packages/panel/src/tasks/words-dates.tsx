@@ -71,7 +71,7 @@ export function WordsDatePickerRoom({ children }: { children: ReactNode }): Reac
   return (
     <WordsDatePickerContext.Provider value={picker.open}>
       {children}
-      <div ref={room} className="words-date-room">
+      <div ref={room} className="pointer-events-none absolute inset-0 m-0 *:pointer-events-auto">
         {picker.popover}
       </div>
     </WordsDatePickerContext.Provider>

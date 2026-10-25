@@ -52,6 +52,7 @@ import {
   PAGE_FRAME,
   RowHint,
   RowHintOptions,
+  STATUS_TONE,
   TEXT_ELEMENT,
   TEXT_TONE,
   TEXT_VARIANT,
@@ -96,8 +97,10 @@ import { OWNER_MARK_SIZE, OwnerMark } from "./automation-owner.js";
 import { RunsSkeleton, STANDING_GLYPH } from "./automation-runs-panel.js";
 import {
   RUNS_SHOWN,
-  RUNS_SHOWN_CHOICES,
   type RunsShown,
+  runningRuns,
+  runsCount,
+  runsShownChoices,
   WorkspaceRuns,
 } from "./automation-runs-tab.js";
 import {
@@ -277,7 +280,10 @@ function AutomationRow({
         ref={hold}
         leading={<ActorMark actor={automationActor(automation)} size={ACTOR_SIZE.ROW} />}
         title={
-          <span className="automation-row-name" data-enabled={String(automation.enabled)}>
+          <span
+            className="automation-row-name data-[enabled=false]:text-muted-foreground"
+            data-enabled={String(automation.enabled)}
+          >
             {automation.name}
           </span>
         }
@@ -428,31 +434,44 @@ function SuggestedAutomations({
 }): React.JSX.Element | null {
   if (!useExperiment(EXPERIMENT.CODE_REVIEW)) return null;
   return (
-    <section className="automation-suggestions" aria-label="Suggested">
-      <div className="automation-suggestions-head">
+    <section
+      className="automation-suggestions flex w-full flex-col gap-control-gap [.automation-group+&]:mt-page-section-gap [.automations-empty>&]:mt-section-gap"
+      aria-label="Suggested"
+    >
+      <div className="automation-suggestions-head px-luke-2">
         <Text variant={TEXT_VARIANT.SECTION} tone={TEXT_TONE.MUTED} as={TEXT_ELEMENT.H2}>
           Suggested
         </Text>
       </div>
-      <div className="automation-suggestion-cards">
+      <div className="automation-suggestion-cards grid grid-cols-automation-suggestions gap-block-gap">
         {SUGGESTIONS.map(({ name, glyph }) => {
           const preset = automationPreset(name);
           return (
             <div
               key={name}
-              className="automation-suggestion"
+              className="automation-suggestion group/suggestion relative flex min-w-0 flex-col rounded-control border border-border bg-surface p-card-compact transition-[background-color] duration-(--luke-duration-hover) ease-motion-exit data-[disabled=true]:opacity-disabled [&:hover:not([data-disabled=true])]:bg-muted"
               data-disabled={disabled ? "true" : undefined}
             >
               <CardPress disabled={disabled} onPress={() => onStart(name)}>
-                <span className="automation-suggestion-face">
-                  <span className="automation-suggestion-head">
-                    <span className="automation-suggestion-glyph" aria-hidden="true">
+                <span className="automation-suggestion-face flex flex-col gap-item-gap">
+                  <span className="automation-suggestion-head mb-item-gap flex items-start justify-between">
+                    <span
+                      className="automation-suggestion-glyph grid size-luke-32 place-items-center rounded-control border border-border bg-muted text-muted-foreground [&_svg]:size-luke-16"
+                      aria-hidden="true"
+                    >
                       {glyph}
                     </span>
-                    <PlusIcon className="automation-suggestion-add" aria-hidden="true" />
+                    <PlusIcon
+                      className="automation-suggestion-add size-luke-16 flex-none text-muted-foreground transition-colors duration-(--luke-duration-hover) ease-motion-exit [.automation-suggestion:hover:not([data-disabled=true])_&]:text-foreground"
+                      aria-hidden="true"
+                    />
                   </span>
-                  <span className="automation-suggestion-name">{preset.name}</span>
-                  <span className="automation-suggestion-detail">{preset.description}</span>
+                  <span className="automation-suggestion-name text-label font-luke-medium text-foreground">
+                    {preset.name}
+                  </span>
+                  <span className="automation-suggestion-detail text-caption text-muted-foreground">
+                    {preset.description}
+                  </span>
                 </span>
               </CardPress>
             </div>
@@ -631,7 +650,7 @@ function ListPage({
       {refreshFailed ? <ErrorState onRetry={reload}>{REFRESH_FAILED_WORDS}</ErrorState> : null}
       {/* Note that a list with none is ready rather than empty, because the suggestions under its empty state are content. */}
       {groups.length === 0 ? (
-        <div className="automations-empty">
+        <div className="automations-empty flex min-h-0 flex-1 flex-col before:flex-2 before:content-[''] after:flex-3 after:content-[''] [&>.luke-empty-state]:flex-none">
           <EmptyState icon={<ZapIcon />}>No automations yet.</EmptyState>
           <SuggestedAutomations disabled={workspace === undefined} onStart={openSuggested} />
         </div>
@@ -660,15 +679,12 @@ function ListPage({
   );
 }
 
-/** The Automations page's two tabs, its automations and every run of them, in the bar's order. */
-const AUTOMATIONS_TABS = [
-  { value: AUTOMATIONS_PAGE.LIST, label: AUTOMATIONS },
-  { value: AUTOMATIONS_PAGE.RUNS, label: "Runs" },
-] as const;
+type AutomationsTabKind = typeof AUTOMATIONS_PAGE.LIST | typeof AUTOMATIONS_PAGE.RUNS;
 
-type AutomationsTabKind = (typeof AUTOMATIONS_TABS)[number]["value"];
-
-/** The bar over both tabs that moves between them, and what narrows the tab standing beside it. */
+/**
+ * The bar over both tabs that moves between them, Runs counting the runs
+ * still working on either tab, and what narrows the tab standing beside it.
+ */
 function AutomationsTabs({
   tasks,
   children,
@@ -677,13 +693,22 @@ function AutomationsTabs({
   children?: React.ReactNode;
 }): React.JSX.Element {
   const view = tasks.automationsView;
+  const { read } = useWorkspaceRuns(tasks.workspace?.id);
   const tab =
     view.place.kind === AUTOMATIONS_PAGE.RUNS ? AUTOMATIONS_PAGE.RUNS : AUTOMATIONS_PAGE.LIST;
+  const tabs = [
+    { value: AUTOMATIONS_PAGE.LIST, label: AUTOMATIONS },
+    {
+      value: AUTOMATIONS_PAGE.RUNS,
+      label: "Runs",
+      count: runsCount(runningRuns(read), STATUS_TONE.WORKING),
+    },
+  ] as const;
   return (
     <Inline gap={GAP.CONTROL}>
       <ChoiceBar<AutomationsTabKind>
         label="Show"
-        items={AUTOMATIONS_TABS}
+        items={tabs}
         value={tab}
         look={CHOICE_BAR_LOOK.SEGMENTED}
         onChange={(kind) => view.onOpen({ kind })}
@@ -738,7 +763,7 @@ function RunsPage({
         <AutomationsTabs tasks={tasks}>
           <ChoiceBar<RunsShown>
             label="Runs shown"
-            items={RUNS_SHOWN_CHOICES}
+            items={runsShownChoices(read !== undefined && "runs" in read ? read.runs : [])}
             value={shown}
             look={CHOICE_BAR_LOOK.SEGMENTED}
             onChange={setShown}

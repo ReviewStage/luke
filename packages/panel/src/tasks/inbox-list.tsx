@@ -517,7 +517,10 @@ export function InboxItemRow({
           title={title}
           description={
             line ? (
-              <span className="inbox-row-line" data-line={lineKind}>
+              <span
+                className="inbox-row-line [&>svg]:me-tight-gap [&>svg]:size-caption-glyph [&>svg]:align-[-0.125em] [&>svg]:text-attention data-[line=settled]:[&>svg]:text-complete"
+                data-line={lineKind}
+              >
                 {lineGlyph(lineKind)}
                 {preview}
               </span>
@@ -967,7 +970,10 @@ function WhoseChipLine({
   // Note that the box around the row stands hidden while the list holds everyone's, so the row's padding takes no room, and the chip arriving arrives into a row that stands.
   return (
     <div ref={line} hidden={drawn.length === 0}>
-      <div className="inbox-tasks-chips" {...motionRows()}>
+      <div
+        className="inbox-tasks-chips flex flex-wrap gap-tight-gap px-column-inset pt-row-inset"
+        {...motionRows()}
+      >
         {drawn.map(({ key, value, leaving }) => (
           <Chip
             key={key}
@@ -1065,12 +1071,18 @@ export function ShowEmpty({
  * An item row's leading: the gutter the unread dot stands in, on every row so
  * the words line up whether a row wears the dot or not. The list's rows and
  * its placeholder rows both lead with it, so a title lands where its block
- * stood.
+ * stood, and Chat's rows lead with it too. The gutter sets its line in the
+ * title's type, so its baseline is the title's, and the dot stands centred
+ * on the title's capitals rather than on its line's box. The dot is the
+ * accent's ink rather than its fill, because the web's cyan fill reads at
+ * 1.7:1 on its light page, under a mark's 3:1.
  */
-function InboxRowLeading({ unread }: { unread: boolean }): React.JSX.Element {
+export function InboxRowLeading({ unread }: { unread: boolean }): React.JSX.Element {
   return (
-    <span className="inbox-row-gutter">
-      {unread ? <span className="inbox-row-unread" /> : null}
+    <span className="inbox-row-gutter block w-status-dot flex-none text-center text-label">
+      {unread ? (
+        <span className="inbox-row-unread inline-block size-status-dot rounded-disc bg-accent-ink align-[calc(0.5cap-var(--spacing-status-dot)/2)]" />
+      ) : null}
     </span>
   );
 }
@@ -1125,7 +1137,7 @@ const SEARCH_INBOX = "Search inbox";
  */
 function ListSearch({ search }: { search: InboxSearchHead }): React.JSX.Element {
   return (
-    <search className="inbox-search">
+    <search className="inbox-search block px-column-inset pb-row-inset">
       <SearchField
         label={SEARCH_INBOX}
         placeholder={SEARCH_INBOX}
@@ -1653,7 +1665,11 @@ export function InboxList({
     <div
       {...(sidebar ? {} : roving)}
       ref={sidebar ? bodyRef : rovingBody}
-      className="inbox-tasks-body"
+      className={
+        sidebar
+          ? "inbox-tasks-body min-h-list-held-least p-0"
+          : "inbox-tasks-body min-h-list-held-least px-column-inset pt-row-inset pb-column-inset data-[empty=true]:flex data-[empty=true]:min-h-full data-[empty=true]:flex-col"
+      }
       data-empty={String(listedItems(view).length === 0)}
       {...motionRows()}
     >
@@ -1703,7 +1719,7 @@ export function InboxList({
   return (
     <nav
       ref={rowFocus.ref}
-      className="inbox-tasks"
+      className="inbox-tasks relative flex min-h-0 min-w-0 flex-col border-r border-border data-[placement=sidebar]:block data-[placement=sidebar]:border-r-0 data-[placement=sidebar]:[&_.inbox-tasks-chips]:px-0"
       data-placement={placement}
       aria-label="Inbox items"
       hidden={!sidebar && columns === INBOX_COLUMNS.ITEM}

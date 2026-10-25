@@ -1,4 +1,4 @@
-import { Comment, type CommentAuthor } from "@luke/ui";
+import { Comment, type CommentAuthor, cn } from "@luke/ui";
 
 /**
  * inbox-comment.tsx -- one message of an Inbox thread as a comment, headed by who wrote it and when: the Inbox's thread draws every message so, and Chat draws an ask's answer so.
@@ -15,6 +15,22 @@ export const COMMENT = {
 } as const;
 
 type CommentKind = (typeof COMMENT)[keyof typeof COMMENT];
+
+/**
+ * An Inbox thread's comments, each its writer's chip, their face on the
+ * gutter's line, and its words under it; the thread stands flush on what the
+ * log says under it, rather than a log line's step apart.
+ */
+export const INBOX_THREAD = "inbox-thread mb-0";
+
+/**
+ * A comment of the thread, its words a step under its head and a step over
+ * the next comment, and the line that runs from its face down to the next
+ * one's, under it, since each face's head stands over the line in a ring of
+ * the ground that cuts the line short of the face.
+ */
+const INBOX_COMMENT =
+  "inbox-comment relative isolate flex min-w-0 flex-col gap-tight-gap pb-luke-20 last:pb-0 not-last:before:absolute not-last:before:top-inbox-face-half not-last:before:-bottom-inbox-face-half not-last:before:left-inbox-line not-last:before:-z-1 not-last:before:w-luke-2 not-last:before:bg-border not-last:before:content-['']";
 
 /**
  * One message of the thread as a comment (`Comment`): its writer's face on
@@ -48,9 +64,21 @@ export function InboxComment({
   children?: React.ReactNode;
 }): React.JSX.Element {
   return (
-    <li className="inbox-comment" data-inbox-comment={kind} data-message-id={messageId}>
+    <li className={INBOX_COMMENT} data-inbox-comment={kind} data-message-id={messageId}>
       <Comment author={author} nameRef={nameRef} at={at} now={now} trailing={trailing}>
-        {children === undefined ? undefined : <div className="inbox-comment-body">{children}</div>}
+        {children === undefined ? undefined : (
+          // Note that the reader's draft reply lets what stands over its box's field, its @ and / lists, run past the comment.
+          <div
+            className={cn(
+              "inbox-comment-body flex min-w-0 flex-col gap-control-gap text-body-size leading-reading text-foreground",
+              kind === COMMENT.DRAFT
+                ? "overflow-visible"
+                : "overflow-clip [overflow-clip-margin:var(--luke-focus-ring-room)]",
+            )}
+          >
+            {children}
+          </div>
+        )}
       </Comment>
     </li>
   );

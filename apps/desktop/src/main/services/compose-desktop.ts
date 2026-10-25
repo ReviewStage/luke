@@ -73,10 +73,8 @@ export interface DesktopServices {
   readonly updates: UpdateServiceHost;
   readonly operator: OperatorClient;
   readonly windows: WindowService;
-  /** Where every coding-agent answer is noted, and the notification an agent's end is announced in. */
+  /** Where every coding-agent answer is noted, for the unseen dots and the counts. */
   readonly notices: AgentNotices;
-  /** Posts Settings' test notification now, whose click brings Luke's window forward. */
-  readonly testNotification: () => void;
   /** Luke's avatar as the host holds it, which the panel's acts reach. */
   readonly avatar: AvatarLink;
   /**
@@ -295,14 +293,8 @@ export function composeDesktop(
           again: () => config.quit(),
         }),
       );
-      // A click brings the window forward and asks the panel to open the task
-      // on the agent's tab or its Inbox, and what the focused window should
-      // hear is handed to the panels' toast.
+      // A command ask's notification clicked brings the window forward, where its prompt stands.
       const noticeDoors = electronNoticeDoors({
-        toPanels: windows.toastAgentEnd,
-        inboxToPanels: windows.toastInboxItem,
-        failedRunToPanels: windows.toastFailedRun,
-        chatToPanels: windows.toastChatMessage,
         onAnswered: (status) => {
           if (state.snapshot().notifications.status !== status) {
             state.update({ notifications: { status } });
@@ -313,29 +305,7 @@ export function composeDesktop(
       const notices = yield* linkClientNotices({
         state,
         host: operator.host,
-        presenter: {
-          open: (place) => {
-            windows.panels.focusExpanded();
-            windows.showAgent(place);
-          },
-          openInbox: (taskId) => {
-            windows.panels.focusExpanded();
-            windows.showInbox(taskId);
-          },
-          openTasklessItem: (item) => {
-            windows.panels.focusExpanded();
-            windows.showInboxItem(item);
-          },
-          openFailedRun: (place) => {
-            windows.panels.focusExpanded();
-            windows.showFailedRun(place);
-          },
-          openChat: (workspaceId) => {
-            windows.panels.focusExpanded();
-            windows.showChat(workspaceId);
-          },
-          openMacCommandAsk: () => windows.panels.focusExpanded(),
-        },
+        presenter: { openMacCommandAsk: () => windows.panels.focusExpanded() },
         onPanelFocusChanged: windows.onPanelFocusChanged,
         report: config.report,
       }).pipe(Effect.provideService(AgentNoticeDoors, noticeDoors));
@@ -378,7 +348,6 @@ export function composeDesktop(
         operator,
         windows,
         notices,
-        testNotification: () => noticeDoors.postTest(() => windows.panels.focusExpanded()),
         avatar,
         colourCode,
         run,

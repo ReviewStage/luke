@@ -14,6 +14,7 @@ import { webSqlClient } from "./db/sql-client.js";
 import { hostedEnvironment } from "./environment.js";
 import { productAnalyticsFromEnvironment } from "./events/server-events.js";
 import { githubAppFromEnvironment } from "./github/github-app.js";
+import { githubRateGate } from "./github/github-rate-gate.js";
 import { pullRequestLinksLayer } from "./github/pull-request-links.js";
 import {
   integrationConnectFromEnvironment,
@@ -75,6 +76,11 @@ const webLogger = Logger.layer([Logger.consoleJson, Logger.tracerLogger, sentryL
  * `PullRequestLinks` is here on the same terms: one instance reads a pull
  * request a link draws once a minute, however many links ask for it.
  *
+ * The client every route and agent reaches GitHub through is wrapped in
+ * `githubRateGate` (`github/github-rate-gate.ts`), so one instance sends
+ * GitHub's API a few requests at a time and none while GitHub says it is
+ * rate limited.
+ *
  * `BearerCallers` keeps the caller each bearer resolved to for a minute
  * (`auth/bearer-callers.ts`), so a held read and the polls inside it ask the
  * auth service once a minute per bearer rather than on every request.
@@ -87,7 +93,7 @@ const webLogger = Logger.layer([Logger.consoleJson, Logger.tracerLogger, sentryL
  * that re-export a bundle stand, rather than out of the bundle itself.
  */
 export const webServices = Layer.mergeAll(
-  FetchHttpClient.layer,
+  githubRateGate.pipe(Layer.provide(FetchHttpClient.layer)),
   webSqlClient,
   hostedEnvironment,
   githubAppFromEnvironment.pipe(Layer.provide(hostedEnvironment)),

@@ -9,7 +9,10 @@
  * the refusal a route answers.
  */
 
-import type { CodingAgent } from "@luke/database/models/coding-agent-store";
+import {
+  type CodingAgent,
+  forgetCodingAgentPublishedRead,
+} from "@luke/database/models/coding-agent-store";
 import { CODING_AGENT_STATUS, type CodingAgentPullRequest } from "@luke/features/coding-agent-wire";
 import { githubPullRequestNumberSchema } from "@luke/features/github-repositories-wire";
 import { readEither } from "@luke/wire/effect";
@@ -22,6 +25,7 @@ import {
   type HostedRefusal,
   hostedStoreOrUnavailable,
 } from "../http/http-effect.js";
+import { logStoreFailure } from "../http/store-failure.js";
 import {
   agentPullRequestOfNumber,
   type PublishedCache,
@@ -118,15 +122,21 @@ export const askedPullRequest = (
 
 /**
  * The instance's kept answers for the agent let go, every member's and on
- * either side of its end, so the next ask on this instance reads GitHub
- * afresh whoever asks. Note that another instance keeps its own for at most
- * `CODER.PUBLISHED_TTL`, as it keeps one past a change made on GitHub itself.
+ * either side of its end, and the read its row keeps with them, so the next
+ * ask reads GitHub afresh whoever asks. Note that another instance keeps its
+ * own for at most `CODER.PUBLISHED_TTL`, as it keeps one past a change made
+ * on GitHub itself; and that a row the store would not let go of is logged
+ * and answers for at most `CODER.PUBLISHED_ROW_FRESH`, as the change stands.
  */
-export const forgetPublished = (published: PublishedCache, agentId: string) =>
+export const forgetPublished = (published: PublishedCache, userId: string, agentId: string) =>
   Effect.flatMap(Cache.keys(published), (keys) =>
     Effect.forEach(
       [...keys].filter((key) => key.agentId === agentId),
       (key) => Cache.invalidate(published, key),
       { discard: true },
+    ),
+  ).pipe(
+    Effect.andThen(
+      forgetCodingAgentPublishedRead(userId, agentId).pipe(Effect.catch(logStoreFailure)),
     ),
   );

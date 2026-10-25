@@ -4,14 +4,6 @@ import { pathToFileURL } from "node:url";
 import { APP_LINK_CLAIM, APP_LINK_SCHEME, appLinkClaim } from "@luke/features/app-links";
 import type { ReadLink } from "@luke/features/link-grammar";
 import { PAGE_SCHEME } from "@luke/features/page-frame";
-import type {
-  AgentEndToast,
-  AgentPlace,
-  ChatMessageToast,
-  FailedRunPlace,
-  FailedRunToast,
-  InboxItemsToast,
-} from "@luke/host/agent-notices";
 import type { AppStateSnapshot, AppWindowFacts } from "@luke/host/app-state";
 import { applyThemePreference, NativeTheme } from "@luke/host/appearance";
 import type { OperatorClient } from "@luke/host/client";
@@ -102,32 +94,10 @@ export interface WindowService extends DesktopService {
   appStateFor: (sender: WebContents) => AppStateSnapshot;
   /** Hands a payload to the voice window alone, the one peer of the host's live session. */
   sendToVoice: <Name extends EventPushName>(push: Name, payload: PushPayload<Name>) => void;
-  /** Asks the panels to open a task on one agent's tab: a notification's click. */
-  showAgent: (place: AgentPlace) => void;
   /** A panel has painted and hears the links it is handed: every Luke link held opens now, and each later one as it comes. */
   panelReady: () => void;
-  /** Asks the panels to say an agent's turn ended in their toast: its end while the window is focused. */
-  toastAgentEnd: (end: AgentEndToast) => void;
-  /** Asks the panels to open a task on its Inbox tab: an inbox notification's click. */
-  showInbox: (taskId: string) => void;
-  /** Asks the panels to open the window's Inbox on an item of an agent with no task. */
-  showInboxItem: (item: {
-    readonly agentId: string;
-    readonly itemId: string;
-    readonly workspaceId?: string;
-  }) => void;
   /** Asks the panels to open Settings: the menu bar's Check for Updates, whose answer is drawn there. */
   showSettings: () => void;
-  /** Asks the panels to say an inbox item opened in their toast: one that opened while the window is focused. */
-  toastInboxItem: (opened: InboxItemsToast) => void;
-  /** Asks the panels to open a failed run in its automation's workspace: its notification's click. */
-  showFailedRun: (place: FailedRunPlace) => void;
-  /** Asks the panels to say a run failed to start in their toast: one that failed while the window is focused. */
-  toastFailedRun: (run: FailedRunToast) => void;
-  /** Asks the panels to open the Chat of the workspace a message waits in: a chat notification's click. */
-  showChat: (workspaceId: string) => void;
-  /** Asks the panels to say a chat message waits in their toast: one that came to wait while the window is focused. */
-  toastChatMessage: (message: ChatMessageToast) => void;
   /**
    * The panel window coming forward or going behind, for as long as the
    * subscription stands. The hidden voice window is never the key window, so
@@ -300,52 +270,8 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
     if (voice) sendTo(voice.webContents, push, payload);
   }
 
-  function showAgent(place: AgentPlace): void {
-    panels.broadcast(PUSH.SHOW_AGENT, place);
-  }
-
-  function toastAgentEnd({ place, words, detail, failed }: AgentEndToast): void {
-    panels.broadcast(PUSH.AGENT_ENDED, { ...place, words, detail, failed });
-  }
-
-  function showInbox(taskId: string): void {
-    panels.broadcast(PUSH.SHOW_INBOX, { taskId });
-  }
-
-  function showInboxItem(item: {
-    readonly agentId: string;
-    readonly itemId: string;
-    readonly workspaceId?: string;
-  }): void {
-    panels.broadcast(PUSH.SHOW_INBOX_ITEM, {
-      agentId: item.agentId,
-      itemId: item.itemId,
-      ...(item.workspaceId === undefined ? undefined : { workspaceId: item.workspaceId }),
-    });
-  }
-
   function showSettings(): void {
     panels.broadcast(PUSH.MENU_COMMAND, APP_COMMAND.SETTINGS);
-  }
-
-  function toastInboxItem(opened: InboxItemsToast): void {
-    panels.broadcast(PUSH.INBOX_ITEM_OPENED, opened);
-  }
-
-  function showFailedRun(place: FailedRunPlace): void {
-    panels.broadcast(PUSH.SHOW_FAILED_RUN, place);
-  }
-
-  function toastFailedRun({ place, words, detail }: FailedRunToast): void {
-    panels.broadcast(PUSH.RUN_FAILED, { ...place, words, detail });
-  }
-
-  function showChat(workspaceId: string): void {
-    panels.broadcast(PUSH.SHOW_CHAT, { workspaceId });
-  }
-
-  function toastChatMessage(message: ChatMessageToast): void {
-    panels.broadcast(PUSH.CHAT_MESSAGE_WAITING, message);
   }
 
   function onPanelFocusChanged(listener: (focused: boolean) => void): () => void {
@@ -452,17 +378,8 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
     applyAppearance,
     appStateFor,
     sendToVoice,
-    showAgent,
     panelReady: () => config.appLinks.ready(openAppLink),
-    showInbox,
-    showInboxItem,
     showSettings,
-    toastInboxItem,
-    showFailedRun,
-    toastFailedRun,
-    showChat,
-    toastChatMessage,
-    toastAgentEnd,
     onPanelFocusChanged,
     reporterOf,
     trustedSender: (event) => {

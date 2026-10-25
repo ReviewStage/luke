@@ -287,12 +287,37 @@ function useFootWidth(card: RefObject<HTMLDivElement | null>): number | undefine
  * where the box does. The card is a drop target alone; the keys it hears
  * come from its own field and buttons.
  */
+/**
+ * The room the composer's card stands in, a note under it, on the
+ * transcript's own inset so the card and the column line up, with none above
+ * it, since the log meets the card itself. A chat's, a new task's, and an
+ * Inbox draft's box take the room in as their own sheets say.
+ */
+export const COMPOSER_ROOM_CLASS =
+  "agent-composer relative flex flex-col gap-control-gap px-luke-16 pt-0 pb-list-inset";
+
+/**
+ * What docks over the composer, the to-do list, the pull request's row, and
+ * a forked draft's chip, on the composer's own inset, so each card and the
+ * composer's line up; a column or a panel that pads the composer in pads
+ * these in alike.
+ */
+export const COMPOSER_DOCK_CLASS = "px-luke-16 pt-0 pb-row-inset";
+
+/**
+ * A log that runs right up to the card's top edge, its words dissolving
+ * over `--luke-scroll-fade` just above it rather than being sliced short of
+ * the card: its foot pads past the fade, so the newest line stands whole
+ * above it.
+ */
+export const LOG_OVER_COMPOSER_CLASS = "agent-log-over-composer";
+
 export function ComposerCard({
   children,
   ...props
 }: Omit<ComponentProps<"div">, "className">): React.JSX.Element {
   return (
-    <div className="agent-composer" {...props}>
+    <div className={COMPOSER_ROOM_CLASS} {...props}>
       {children}
     </div>
   );
@@ -300,12 +325,17 @@ export function ComposerCard({
 
 /** The attach press's own box at the foot's left, which the narrowest card hides as the ⋯ takes the press in. */
 export function ComposerAttach({ children }: { children: ReactNode }): React.JSX.Element {
-  return <span className="agent-composer-attach">{children}</span>;
+  return <span className="agent-composer-attach flex">{children}</span>;
 }
 
 /** The owner's presses at the foot's right, before a call and Send: the model chip, the servers, the context ring, the microphone, and the ⋯. */
 export function ComposerActions({ children }: { children: ReactNode }): React.JSX.Element {
-  return <div className="agent-composer-actions">{children}</div>;
+  // It may narrow, so a long model name is cut short before the presses are.
+  return (
+    <div className="agent-composer-actions relative flex min-w-0 flex-initial items-center gap-tight-gap">
+      {children}
+    </div>
+  );
 }
 
 /**
@@ -340,7 +370,7 @@ function ComposerMore({
   const actions = offers.filter((offer) => taken.includes(offer.press)).map((each) => each.action);
   return (
     <>
-      <span className="agent-composer-more">
+      <span className="agent-composer-more hidden">
         <MoreButton
           thing={BUTTON.MORE_THING}
           {...trigger}
@@ -536,7 +566,7 @@ export function AgentComposer({
               reason: FAILURE_REASON.RECONNECT_INTEGRATION,
               text:
                 reconnectFailed === lapsed.connection
-                  ? `${lapsed.name}'s sign-in expired, and Luke could not start reconnecting it. Try again in a moment.`
+                  ? `${lapsed.name}'s sign-in expired, and Luke could not start reconnecting it.`
                   : `${lapsed.name}'s sign-in expired.`,
               provider: lapsed.provider,
               ...(lapsed.connection === lapsed.provider
@@ -704,7 +734,9 @@ export function AgentComposer({
       data-closed={closed ? "" : undefined}
       {...files.drop.target}
     >
+      {/* A box closed for good wears the held look a box sending does, faded, so the note and Continue under it read as the way on. */}
       <PromptInput
+        className={closed ? "opacity-60" : undefined}
         dropping={files.drop.dropping}
         onSubmit={() => {
           setRefusal(undefined);

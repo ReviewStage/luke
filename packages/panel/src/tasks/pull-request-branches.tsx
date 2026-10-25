@@ -26,7 +26,7 @@ function headName(head: string, owner: string | undefined): string {
 /** One branch as a chip that copies its name. */
 function BranchChip({ name }: { name: string }): React.JSX.Element {
   return (
-    <span className="pull-request-branch">
+    <span className="inline-flex min-w-0 max-w-branch-chip flex-[0_4_auto] first:shrink">
       <CopyButton
         look={COPY_LOOK.CHIP}
         lead={GLYPH.BRANCH}
@@ -50,9 +50,9 @@ export function PullRequestBranches({
   headOwner?: string | undefined;
 }): React.JSX.Element {
   return (
-    <span className="pull-request-branches">
+    <span className="pull-request-branches inline-flex min-w-0 max-w-full items-center gap-tight-gap whitespace-nowrap">
       <BranchChip name={base} />
-      <span className="pull-request-branches-arrow" aria-hidden="true">
+      <span className="flex-none text-muted-foreground" aria-hidden="true">
         {" ← "}
       </span>
       <BranchChip name={headName(head, headOwner)} />

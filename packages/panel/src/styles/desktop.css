@@ -496,6 +496,20 @@ body,
   height: 100%;
 }
 
+/* An automation's mark at a page's head draws its glyph's ink across the
+   whole share, as GitHub's and Sentry's marks, which fill their drawing,
+   already do. Note that Lucide's glyphs ink 22 of their 24 units and the
+   working mark's grid 13 of its 16 pixels, so at a page's 48px each would
+   otherwise stand a few pixels short inside its box; a row's small mark
+   keeps them as drawn, level with the Lucide glyphs of the rows around it. */
+.actor-mark[data-kind="automation"][data-size="page"] .state-glyph > svg.lucide {
+  scale: calc(24 / 22);
+}
+
+.actor-mark[data-kind="automation"][data-size="page"] .state-glyph > .luke-working-mark {
+  scale: calc(16 / 13);
+}
+
 /* An App's bot on GitHub stands in the same square, its robot until its avatar loads. */
 .actor-mark:is(
   [data-kind="luke"],
@@ -1377,16 +1391,6 @@ ul.actor-stack {
 
 /* Empty and waiting states ---------------------------------------------- */
 
-/* A pane that scrolls a list lays its empty state out as a column the state
-   fills, while it holds no item. The Inbox's list is the body inside its
-   `ScrollArea`, so it stands at least the area's height to give the state
-   the room. */
-.inbox-tasks-body[data-empty="true"] {
-  display: flex;
-  min-height: 100%;
-  flex-direction: column;
-}
-
 /* A notice about the whole plan (`task-banner.tsx`), `@luke/ui`'s strip:
    the workspace it names reads at the line's own weight. */
 .task-banner-words .workspace-ref {
@@ -1432,11 +1436,6 @@ ul.actor-stack {
   padding-inline: max(var(--content-inset), var(--reading-room));
 }
 
-/* To and Subject stand at the box's own width, inside its inset. */
-.inbox-compose-head {
-  padding-inline: var(--luke-space-16);
-}
-
 .inbox-compose-row {
   display: grid;
   min-height: var(--luke-space-48);
@@ -1446,20 +1445,17 @@ ul.actor-stack {
   grid-template-columns: var(--luke-space-48) minmax(0, 1fr);
 }
 
-/* A row that is a FormField stands its label over its control rather than before it. */
-.inbox-compose-row[data-field] {
-  display: block;
-  padding-block: var(--luke-row-inset);
-}
-
 .inbox-compose-label {
   color: var(--luke-color-text-muted);
   font-size: var(--luke-type-caption-size);
   line-height: var(--luke-type-caption-leading);
 }
 
-.inbox-compose-box {
+/* The box stands at the rows' own width, its edges on their hairlines: the
+   form's inset is already the room's, so the box takes none of its own. */
+.inbox-compose > .inbox-compose-box {
   margin-top: var(--luke-section-gap);
+  padding-inline: 0;
 }
 
 /* A line written again where it stands (`edit-composer.tsx`) is already in the
@@ -1543,6 +1539,10 @@ ul.actor-stack {
    hair either side of it short of the column, whether or not a thread stands
    yet, as the desktop's inset does, so the words never move when the first
    comment lands, and a plan and its versions keep one width. */
+.desktop-document {
+  --comment-gutter: var(--luke-page-inset);
+}
+
 [data-luke-profile="web"] .desktop-document {
   --comment-gutter: calc(var(--luke-touch-target) + 2 * var(--luke-space-2));
 }
@@ -1687,65 +1687,6 @@ ul.actor-stack {
 
 /* Inbox ---------------------------------------------------------------------- */
 
-/* The window's Inbox, in the plan's place beside the sidebar, and a plan's
-   own Inbox tab: the items in a column on the Inbox's own ground, so the
-   list and the item read as one surface parted by a hairline, under a bar
-   the work column's height (a tab's bar's in a task's tab), and the chosen
-   item beside it, at the Inbox's own measure (`.desktop-inbox`). The column
-   is as wide as it was last dragged (`inbox-list.tsx`), held to what the
-   Inbox's own width leaves the pane, which is why the Inbox is the
-   container it measures; its edge is drawn as the sidebar's is. */
-.inbox-view {
-  container-type: inline-size;
-  display: grid;
-  min-height: 0;
-  flex: 1;
-  grid-template-columns: auto minmax(0, 1fr);
-}
-
-/* Too narrow for both, the Inbox shows its list or the item a press opened,
-   the whole Inbox wide (`inbox-columns.ts`); the list then needs no edge to
-   part it from the item. */
-.inbox-view:is([data-columns="list"], [data-columns="item"]) {
-  grid-template-columns: minmax(0, 1fr);
-}
-
-.inbox-view[data-columns="list"] .inbox-tasks {
-  border-right: 0;
-}
-
-.inbox-view > [hidden] {
-  display: none;
-}
-
-/* The chip saying whose items the list holds, under its head and over its
-   rows, on the rows' inset. */
-.inbox-tasks-chips {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--luke-tight-gap);
-  padding: var(--luke-row-inset) var(--column-inset) 0;
-}
-
-.inbox-tasks {
-  position: relative;
-  display: flex;
-  min-width: 0;
-  min-height: 0;
-  flex-direction: column;
-  border-right: 1px solid var(--luke-color-border);
-}
-
-/* The list's search stands under a page's head (`inbox-list.tsx`'s
-   `ListSearch`), always, as Settings' does, on the column's inset so its
-   magnifier stands over the rows' glyphs; nothing in the head moves as it is
-   used, so it has no motion of its own. The sidebar's unfolds from its
-   magnifier instead (`@luke/ui`'s `FoldingSearch`). */
-.inbox-search {
-  display: block;
-  padding: 0 var(--column-inset) var(--luke-row-inset);
-}
-
 /* Split beside the item, the list's bar ends at the item's edge rather than
    the window's, so it keeps its own inset though the side panel's toggle
    stands at the window's top right. */
@@ -1792,14 +1733,6 @@ ul.actor-stack {
   --luke-toolbar-ground: var(--luke-color-fill-hover);
 }
 
-/* The list's body, inside the `ScrollArea` tab panel that scrolls it. */
-.inbox-tasks-body {
-  /* Held as tall as the scroller shows it while a row leaves, so the rows in
-     sight stand still (`ListMotion`). */
-  min-height: var(--luke-list-held-height, 0);
-  padding: var(--luke-row-inset) var(--column-inset) var(--column-inset);
-}
-
 /* A group's room above it counts only the groups still in the layout, so a
    group stands as it will once the one leaving before it is gone, and its
    glide ends there rather than a margin short. */
@@ -1813,128 +1746,6 @@ ul.actor-stack {
   margin-top: var(--luke-control-gap);
 }
 
-/* The inbox-first sidebar's list (`sidebar-inbox.tsx`): the sidebar's own
-   section under its places and pins, scrolled by the sidebar's scroller and
-   inset as the sidebar's rows are, with no edge of its own. */
-.inbox-tasks[data-placement="sidebar"] {
-  display: block;
-  border-right: 0;
-}
-
-.inbox-tasks[data-placement="sidebar"] .inbox-tasks-body {
-  padding: 0;
-}
-
-.inbox-tasks[data-placement="sidebar"] .inbox-tasks-chips {
-  padding-inline: 0;
-}
-
-.inbox-row-mark {
-  display: flex;
-  flex: none;
-}
-
-/* An unread Inbox item wears a mail app's blue dot in a gutter before its
-   words (`inbox-list.tsx`); the gutter stands on every row, so the words
-   line up whether a row wears the dot or not, and the row's leading gap
-   alone stands between it and the title. The gutter sets its line in the
-   title's type, so its baseline is the title's, and the dot stands centred
-   on the title's capitals rather than on its line's box, which the
-   system's face sets its letters low in. */
-.inbox-row-gutter {
-  display: block;
-  width: var(--inbox-unread-dot);
-  flex: none;
-  font-size: var(--luke-type-label-size);
-  line-height: var(--luke-type-label-leading);
-  text-align: center;
-
-  --inbox-unread-dot: 7px;
-}
-
-/* Note that the dot is the accent's ink rather than its fill, because the
-   web's cyan fill reads at 1.7:1 on its light page, under a mark's 3:1. */
-.inbox-row-unread {
-  display: inline-block;
-  width: var(--inbox-unread-dot);
-  height: var(--inbox-unread-dot);
-  border-radius: 50%;
-  background: var(--luke-color-accent-text);
-  vertical-align: calc(0.5cap - var(--inbox-unread-dot) / 2);
-}
-
-/* An Inbox item that needs the developer wears the attention mark before
-   its time where its end says where it stands (`InboxItemEnd`: ⌘K's row,
-   the Next row), a size under a row glyph's, as a sidebar plan wears it, so
-   the disc's edge reads at the time's height. */
-.inbox-row-attention {
-  display: inline-flex;
-}
-
-/* An Inbox item's task's status, its mark alone at the time's size before
-   it (`inbox-list.tsx`'s `TaskStatusChip`). */
-.inbox-row-task-status {
-  display: inline-flex;
-}
-
-/* A task's card leads with where it stands (`task-card.tsx`): its key, its
-   status, its priority, and who is on it, each `@luke/ui`'s Badge of its
-   mark and its words, as the task page's head chips say them. */
-.task-card-standing {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--luke-tight-gap);
-}
-
-/* An Inbox row's card leads with what holds the item on one line, its key
-   and then its task's chip (`InlineRef`'s pill), the chip shrinking to what
-   is left of the card, its name cut at its end, rather than dropping under
-   the key. */
-.task-card-standing[data-line="one"] {
-  flex-wrap: nowrap;
-  align-items: center;
-  font-size: var(--luke-type-caption-size);
-}
-
-/* A task's key (`TaskKey`, `task-standing.tsx`), drawn alike wherever it
-   stands: its words are `Text`'s caption, muted and monospace, with even
-   figures. It is short and read whole, so it never shrinks, and what stands
-   beside it gives way instead; it sits centred on the row it leads. */
-.task-key {
-  display: inline-flex;
-  flex-shrink: 0;
-  align-items: center;
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
-}
-
-/* An item's second line (`inbox-list.tsx`): what it asks, led by its ask's
-   glyph in the attention ink, or how it ended, led by a tick in the done
-   ink; words alone lead with nothing. The glyph sits on the words' line at
-   the caption's size, so a row with one and a row without line up. */
-.inbox-row-line > svg {
-  width: var(--luke-type-caption-size);
-  height: var(--luke-type-caption-size);
-  margin-inline-end: var(--luke-tight-gap);
-  vertical-align: -0.125em;
-  color: var(--luke-color-attention);
-}
-
-.inbox-row-line[data-line="settled"] > svg {
-  color: var(--luke-color-complete);
-}
-
-.inbox-row-attention .attention-mark {
-  width: 12px;
-  height: 12px;
-}
-
-.inbox-row-attention .attention-mark svg {
-  width: 10px;
-  height: 10px;
-}
-
 /* An item whose box holds a draft wears its pencil at the attention mark's
    size, as a sidebar task's row wears it at its glyph's (`draft-mark.tsx`). */
 .home-row-meta .draft-mark {
@@ -1942,143 +1753,11 @@ ul.actor-stack {
   height: 12px;
 }
 
-/* The item's thread leads with its subject (`inbox-pane.tsx`'s `Subject`),
-   as a plan leads with its title: the title alone at a document heading's
-   size, over a hairline that parts it from the comments. */
-.inbox-subject {
-  display: flex;
-  flex-direction: column;
-  gap: var(--luke-tight-gap);
-  padding-bottom: var(--luke-block-gap);
-  border-bottom: 1px solid var(--luke-color-border);
-}
-
-/* Each message of the thread is a comment (`inbox-pane.tsx`'s `Comment`):
-   its writer's chip, their face and name as one target, and when on one
-   line, and its words under it, indented past a gutter a list row's 20px
-   wide. The chip stands out into the gutter, its 16px face centred on the
-   line that runs down through every comment's face, as an issue's
-   timeline joins them, so the face is the gutter's and is drawn once. */
-.inbox-thread {
-  --inbox-face: 20px;
-  /* The chip's face, an actor's in a line (`ACTOR_SIZE.INLINE`). */
-  --inbox-mark: 16px;
-  /* Note that the thread stands flush on what the log says under it, rather than a log line's step apart. */
-  margin-block-end: 0;
-}
-
-.inbox-comment {
-  position: relative;
-  isolation: isolate;
-  display: flex;
-  min-width: 0;
-  flex-direction: column;
-  gap: var(--luke-tight-gap);
-  padding-bottom: var(--luke-space-20);
-}
-
-.inbox-comment:last-child {
-  padding-bottom: 0;
-}
-
-/* The line runs from the comment's face down to the next one's, under it,
-   since each face's head stands over the line in a ring of the ground that
-   cuts the line short of the face. */
-.inbox-comment:not(:last-child)::before {
-  position: absolute;
-  top: calc(var(--inbox-face) / 2);
-  bottom: calc(var(--inbox-face) / -2);
-  left: calc(var(--inbox-face) / 2 - 1px);
-  width: 2px;
-  z-index: -1;
-  background: var(--luke-color-border);
-  content: "";
-}
-
-/* Where a thread read is cut to its latest messages, a muted line in the
-   comments' column says the earlier ones stand in the agent's tab, the line
-   down through the faces running on past it. */
-.inbox-thread-earlier {
-  position: relative;
-  padding: 0 0 var(--luke-space-20) calc(var(--inbox-face) + var(--luke-list-inset));
-  color: var(--luke-color-text-muted);
-  font-size: var(--luke-type-caption-size);
-}
-
-.inbox-thread-earlier::before {
-  position: absolute;
-  top: 0;
-  bottom: calc(var(--inbox-face) / -2);
-  left: calc(var(--inbox-face) / 2 - 1px);
-  width: 2px;
-  background: var(--luke-color-border);
-  content: "";
-}
-
-/* A comment's words are set as a message's are, indented past the gutter
-   under the chip's name, and clip what runs past them as a message does,
-   though not the keyboard's ring on an option laid edge to edge in them. */
-.inbox-comment-body {
-  display: flex;
-  min-width: 0;
-  flex-direction: column;
-  gap: var(--luke-control-gap);
-  overflow: clip;
-  overflow-clip-margin: var(--luke-focus-ring-room);
-  color: var(--luke-color-text);
-  font-size: var(--luke-type-body-size);
-  line-height: var(--luke-type-reading-leading);
-}
-
-/* What the developer picked leads their comment as a chip, a check and the
-   option's label, so the pick is said once. A label too long for the
-   comment, a path or an identifier, wraps anywhere inside the chip, as an
-   option's does, rather than running past the comment's clip; the check
-   stays on its first line. */
-.inbox-pick {
-  display: inline-flex;
-  max-width: 100%;
-  align-self: flex-start;
-  align-items: flex-start;
-  gap: var(--luke-tight-gap);
-  padding: 1px var(--luke-item-gap); /* off-scale */
-  border-radius: var(--luke-radius-6);
-  background: var(--luke-color-fill-strong);
-  color: var(--luke-color-text);
-  font-size: var(--luke-type-caption-size);
-  font-weight: var(--luke-weight-medium);
-}
-
-.inbox-pick > span {
-  min-width: 0;
-  overflow-wrap: anywhere;
-}
-
-.inbox-pick svg {
-  margin-top: calc((1lh - 12px) / 2); /* off-scale: centres the glyph on the first line */
-  width: 12px;
-  height: 12px;
-  flex: none;
-}
-
 /* A comment holding a form's composer field lets what stands over the
    field, its @ and / lists, run past its top and foot, clipping only what
    runs long across, as every comment does. */
 .inbox-comment-body:has(.inbox-field-composer) {
   overflow-y: visible;
-}
-
-/* A form's fields stacked, each its name over its control at one left edge
-   (`inbox-pane.tsx`'s FormFields), and a number in a short field. */
-.inbox-field {
-  display: flex;
-  min-width: 0;
-  flex-direction: column;
-  gap: var(--luke-item-gap);
-}
-
-.inbox-field-short {
-  max-width: calc(10 * var(--luke-space-16));
 }
 
 /* A form's text field is the composer's own field (`inbox-form-text.tsx`) in
@@ -2092,233 +1771,10 @@ ul.actor-stack {
   padding: var(--luke-item-gap) var(--luke-control-inset);
 }
 
-/* An answered text field holds its words as a sent message draws them, at
-   the field's insets, a line tall where it was left empty, in the field's
-   own frame rather than a faded one. */
-.inbox-field-words {
-  min-height: calc(var(--luke-type-body-leading) + 2 * var(--luke-item-gap));
-  box-sizing: border-box;
-  padding: var(--luke-item-gap) var(--luke-control-inset);
-  overflow-wrap: anywhere;
-}
-
-/* A value too long to stand beside its name in a narrow column drops to a
-   line under it, rather than squeezing the name to a letter a line. */
-.inbox-value {
-  display: flex;
-  min-width: 0;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: var(--luke-list-gap) var(--luke-control-gap);
-}
-
-/* A name too long for the line, one unbroken word, wraps anywhere rather
-   than pushing the value past the comment's clip. */
-.inbox-value-label {
-  flex: none;
-  max-width: 100%;
-  min-width: 0;
-  overflow-wrap: anywhere;
-  color: var(--luke-color-text-muted);
-}
-
-.inbox-value-words {
-  flex: 1 1 16ch;
-  min-width: 0;
-  overflow-wrap: anywhere;
-}
-
-/* A teammate's open ask names who it waits on in the line's own muted ink,
-   as the list's Waiting on others does. */
-.inbox-waiting-on {
-  color: var(--luke-color-text-muted);
-}
-
-/* A message is a Markdown document, set at the reading leading. */
-.inbox-message-words {
-  line-height: var(--luke-type-reading-leading);
-}
-
-/* An answer as a stamp (`inbox-stamp.tsx`), at the head of the reply that
-   sent it or over the box it is attached to: a `Badge`, or a removable
-   `Chip` once attached, standing at the start of the reply's column. */
-.inbox-stamp {
-  display: inline-flex;
-  max-width: 100%;
-  align-self: flex-start;
-}
-
-.inbox-ask-standing > svg {
-  width: 12px;
-  height: 12px;
-  flex: none;
-}
-
-/* The ask closing the message that asks it, once it no longer waits: a
-   bordered card, its head the ask's kind and where it stands. Once
-   answered, its controls alone head the reply that answered it, as the
-   answer left them, with no card around them. */
-.inbox-ask {
-  min-width: 0;
-}
-
-.inbox-ask-kind {
-  color: var(--luke-color-text);
-  font-weight: var(--luke-weight-medium);
-}
-
-.inbox-ask-standing {
-  display: inline-flex;
-  min-width: 0;
-  align-items: center;
-  gap: var(--luke-tight-gap);
-}
-
-/* An answered ask's controls stand in the reply itself, at its words' left
-   edge, a step further from the words under them than the reply's own gap
-   so the two do not run together. */
-.inbox-ask-answered {
-  display: flex;
-  min-width: 0;
-  flex-direction: column;
-  gap: var(--luke-block-gap);
-  margin-bottom: var(--luke-tight-gap);
-}
-
-/* A replaced or withdrawn ask keeps its controls in the agent's message as
-   it offered them, nothing picked and taking nothing, stepped back to the
-   muted ink (`SteppedBack`) so they read as what it used to ask rather than
-   something to answer or something answered, over the pill saying what
-   replaced it, or that it was withdrawn and why. */
-.inbox-ask-replaced {
-  display: flex;
-  min-width: 0;
-  flex-direction: column;
-  gap: var(--luke-control-gap);
-}
-
-.inbox-ask-replaced-controls {
-  display: flex;
-  min-width: 0;
-  flex-direction: column;
-  gap: var(--luke-block-gap);
-}
-
-/* A withdrawn ask's pill holds one word, and its why stands under it as a
-   muted sentence rather than wrapping inside the pill. */
-.inbox-ask-withdrawn {
-  display: flex;
-  min-width: 0;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: var(--luke-tight-gap);
-}
-
-.inbox-ask-why {
-  margin: 0;
-  color: var(--luke-color-text-muted);
-  overflow-wrap: anywhere;
-}
-
-/* The press an answer gave wears its glyph in the status tone of what it
-   did, green going ahead and grey holding back, as the answer's stamp does. */
-.inbox-ask-pressed {
-  display: inline-flex;
-  color: var(--luke-tone-ink);
-}
-
-.inbox-ask-presses {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--luke-control-gap);
-}
-
 /* The reader's draft reply, the thread's last comment: the box stands in
-   its body edge to edge, and what stands over the box's field, its @ and
-   / lists, runs past the comment rather than being clipped by it. */
-.inbox-comment[data-inbox-comment="draft"] .inbox-comment-body {
-  overflow: visible;
-}
-
+   its body edge to edge. */
 .inbox-comment[data-inbox-comment="draft"] .agent-composer {
   padding: 0;
-}
-
-/* An ask's controls as words a Reply may quote, which draw no box, so what
-   holds them lays them out (`inbox-ask-controls.tsx`'s `AskWords`). */
-.inbox-ask-words {
-  display: contents;
-}
-
-/* The open question's controls as the draft's card's body, over its foot,
-   with no card, border, or head of their own, since the agent's message
-   says what it asks. */
-.inbox-draft-ask {
-  display: flex;
-  min-width: 0;
-  flex-direction: column;
-  gap: var(--luke-block-gap);
-  padding: var(--luke-list-inset) var(--luke-list-inset) var(--luke-tight-gap);
-}
-
-/* The pane's path (`@luke/ui`'s Breadcrumbs) takes what the bar's way back
-   and pager leave it, its crumbs giving way by their share. */
-.inbox-crumbs {
-  display: flex;
-  min-width: 0;
-  flex: 0 1 auto;
-}
-
-/* A settled item's foot, over its box: the next item that needs the
-   developer as a card of one row (`inbox-pager.tsx`), led by its agent's
-   tile, then Next in the meta voice, an arrow up where it lies above, and
-   its title in the unread weight, cut short at the row's end, and K or J
-   where that key reaches it. */
-.inbox-next-dock {
-  padding-bottom: var(--luke-block-gap);
-}
-
-.inbox-next-words {
-  display: inline-flex;
-  max-width: 100%;
-  align-items: baseline;
-  gap: var(--luke-control-gap);
-}
-
-.inbox-next-title {
-  min-width: 0;
-  overflow: hidden;
-}
-
-.inbox-next-lead {
-  flex: none;
-  color: var(--luke-color-text-muted);
-  font-size: var(--luke-type-caption-size);
-  font-weight: var(--luke-weight-regular);
-}
-
-/* The pager (`inbox-pager.tsx`): where the item stands in the list, in the
-   meta voice's figures, and the arrows up and down it. An arrow with
-   nowhere to go steps back. */
-.inbox-pager {
-  display: flex;
-  align-items: center;
-}
-
-.inbox-pager-count {
-  margin-right: var(--luke-item-gap);
-  color: var(--luke-color-text-muted);
-  font-size: var(--luke-type-caption-size);
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
-}
-
-.inbox-view-items {
-  display: flex;
-  min-width: 0;
-  min-height: 0;
-  flex-direction: column;
-  container: inbox-item / inline-size;
 }
 
 /* Only the column's bar meets the folded sidebar's toggle, so the items' bar
@@ -2338,144 +1794,7 @@ ul.actor-stack {
   --luke-toolbar-start-at: calc(var(--sidebar-toggle-clearance) - var(--sheet-gap));
 }
 
-/* Experiments ---------------------------------------------------------------- */
-
-/* An experiment's toolbar (`experiment-marks.tsx`): the tag after its
-   title, which the toolbar stands on the title's baseline (`Toolbar`'s
-   `tag`), as a devtool's Beta label sits; Send feedback is a toolbar button
-   like any other. The tag is a hairlined capsule in the muted voice,
-   unfilled, so it names the page's state without asking for a look. */
-.experiment-tag {
-  flex: none;
-  padding: 0 var(--luke-item-gap);
-  border: 1px solid var(--luke-color-border-strong);
-  border-radius: var(--luke-radius-full);
-  color: var(--luke-color-text-muted);
-  font-size: var(--luke-type-caption-size);
-  font-weight: var(--luke-weight-medium);
-  line-height: var(--luke-type-caption-leading);
-  letter-spacing: 0.01em;
-}
-
-/* A phone's tag is the experiment's glyph alone, in the same muted voice,
-   centred on the title, since a glyph has no baseline to sit on. */
-.experiment-tag[data-glyph] {
-  display: inline-flex;
-  align-self: center;
-  padding: 0;
-  border: 0;
-}
-
-.experiment-tag[data-glyph] > svg {
-  width: var(--luke-control-icon);
-  height: var(--luke-control-icon);
-}
-
 /* Automations ---------------------------------------------------------------- */
-
-/* A window-wide place beside the sidebar, as the Inbox is: its toolbar over
-   its page. The list is a `CollectionPage` of each owner's automations in a
-   Settings card, and an automation's page its toolbar over its setup (a
-   `DetailPage`) and its Runs panel beside it. */
-.automation-group + .automation-group {
-  margin-top: var(--luke-page-section-gap);
-}
-
-/* The suggested automations, a group's gap below the list, their heading a
-   short step above the cards and inset a hair, as a settings section's is. */
-.automation-suggestions {
-  display: flex;
-  width: 100%;
-  flex-direction: column;
-  gap: var(--luke-control-gap);
-}
-
-.automation-suggestions-head,
-.automation-runs-head {
-  padding: 0 var(--luke-space-2);
-}
-
-.automation-group + .automation-suggestions {
-  margin-top: var(--luke-page-section-gap);
-}
-
-/* An empty list stands its empty state with the suggestions under it, the
-   two together a little above the room's middle, shared two to three as an
-   empty state alone stands. */
-.automations-empty {
-  display: flex;
-  min-height: 0;
-  flex: 1 1 0;
-  flex-direction: column;
-}
-
-.automations-empty::before,
-.automations-empty::after {
-  content: "";
-}
-
-.automations-empty::before {
-  flex: 2 1 0;
-}
-
-.automations-empty::after {
-  flex: 3 1 0;
-}
-
-.automations-empty > .luke-empty-state {
-  flex: none;
-}
-
-.automations-empty > .automation-suggestions {
-  margin-top: var(--luke-section-gap);
-}
-
-/* An automation's or a run's metadata at its row's end (`ListRow`'s meta):
-   its owner, when it runs next or when it fired, and a failure's mark, in a
-   line of their own. */
-.automation-row-meta {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--luke-block-gap);
-  vertical-align: top;
-}
-
-/* An automation turned off reads as set aside: its name in the muted ink. */
-.automation-row-name[data-enabled="false"] {
-  color: var(--luke-color-text-muted);
-}
-
-/* Who owns it, never in doubt: the workspace's photo or the maker's
-   picture beside its name, in the metadata's own type, in a column of its
-   own so the owners line up down the card. */
-.automation-owner {
-  display: inline-flex;
-  width: 112px; /* off-scale */
-  flex: none;
-  align-items: center;
-  gap: var(--luke-item-gap);
-  overflow: hidden;
-  white-space: nowrap;
-}
-
-.automation-owner-name {
-  min-width: 0;
-  overflow: hidden;
-}
-
-/* When it runs next, in a column of its own set against the switch, wide
-   enough for a date and a time, so a short "Off" beside a long date never
-   moves the owners out of line; a failure's mark stands inside it, before
-   the words. */
-.automation-row-next {
-  display: inline-flex;
-  width: 144px; /* off-scale: "Next Nov 17, 10:30 PM" and a failure's mark */
-  flex: none;
-  align-items: center;
-  justify-content: flex-end;
-  gap: var(--luke-item-gap);
-  overflow: hidden;
-}
 
 /* A narrow room's row says when it runs next in the line under its name,
    a failure's mark leading the line as it leads an agent's end line. */
@@ -2484,111 +1803,13 @@ ul.actor-stack {
   vertical-align: -3px; /* off-scale: centres a 14px mark on 12px words */
 }
 
-/* The suggested automations, each a card of its own in a grid that wraps
-   as more are suggested: the glyph of what fires it on a tile, a plus at
-   its corner, its name, and what it does, read whole. The whole card is one
-   press (`CardPress`), lifting to the raised fill under the pointer. */
-.automation-suggestion-cards {
-  display: grid;
-  gap: var(--luke-block-gap);
-  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); /* off-scale */
-}
-
-.automation-suggestion {
-  position: relative;
-  display: flex;
-  min-width: 0;
-  flex-direction: column;
-  padding: var(--luke-card-inset-compact);
-  border: 1px solid var(--luke-color-border);
-  border-radius: var(--luke-control-radius);
-  background: var(--luke-color-surface);
-  transition: background-color var(--luke-duration-hover) var(--luke-motion-exit);
-}
-
-.automation-suggestion:hover:not([data-disabled="true"]) {
-  background: var(--luke-color-fill-hover);
-}
-
-.automation-suggestion[data-disabled="true"] {
-  opacity: 0.5;
-}
-
-.automation-suggestion-face {
-  display: flex;
-  flex-direction: column;
-  gap: var(--luke-item-gap);
-}
-
-.automation-suggestion-head {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  margin-bottom: var(--luke-item-gap);
-}
-
-/* What fires a suggestion, on a tile. */
-.automation-suggestion-glyph {
-  display: grid;
-  width: 32px; /* off-scale */
-  height: 32px; /* off-scale */
-  place-items: center;
-  border: 1px solid var(--luke-color-border);
-  border-radius: var(--luke-control-radius);
-  background: var(--luke-color-fill-hover);
-  color: var(--luke-color-text-muted);
-}
-
-.automation-suggestion-glyph svg,
-.automation-suggestion-add {
-  width: 16px;
-  height: 16px;
-}
-
-.automation-suggestion-add {
-  flex: none;
-  color: var(--luke-color-text-muted);
-  transition: color var(--luke-duration-hover) var(--luke-motion-exit);
-}
-
-.automation-suggestion:hover:not([data-disabled="true"]) .automation-suggestion-add {
-  color: var(--luke-color-text);
-}
-
-.automation-suggestion-name {
-  color: var(--luke-color-text);
-  font-size: var(--luke-type-label-size);
-  font-weight: var(--luke-weight-medium);
-  line-height: var(--luke-type-label-leading);
-}
-
-.automation-suggestion-detail {
-  color: var(--luke-color-text-muted);
-  font-size: var(--luke-type-caption-size);
-  line-height: var(--luke-type-caption-leading);
-}
-
-/* An automation's page: its toolbar, then its header and its form at a
-   Settings measure. */
-
-/* Where the draft stands, in the caption role (`Text`), kept on one line. */
-.automation-editor-status {
-  white-space: nowrap;
-}
-
-/* The editor's toolbar stands in a box of its own, whose width a container
-   query reads: the toolbar's own padding leaves the traffic lights their room
-   or not as the sidebar folds, so the window's width says nothing of the room
-   the crumbs have. Too narrow for every act's words beside a readable name,
-   the acts fold to their glyphs, each named by its pill (`@luke/ui`'s
-   `FoldingButton`, folded by `--luke-fold`), and the draft's state goes,
-   since Save, pressable or not, says it already; the crumb back folds to
-   its glyph alike, so the name it leads to keeps the room. */
-.automation-toolbar {
-  flex: none;
-  container: automation-toolbar / inline-size;
-}
-
+/* An automation's page's toolbar stands in a box of its own whose width the
+   query reads (`automation-editor.tsx`), since the toolbar's own padding
+   leaves the traffic lights their room or not as the sidebar folds. Too
+   narrow for every act's words beside a readable name, the acts fold to
+   their glyphs, each named by its pill, and the draft's state goes, since
+   Save says it already; the crumb back folds to its glyph alike. */
+/* off-scale: 880px, where the editor's acts stop fitting beside its name */
 @container automation-toolbar (width < 880px) {
   .automation-toolbar > * {
     --luke-fold: folded;
@@ -2600,37 +1821,13 @@ ul.actor-stack {
 }
 
 /* The Automations list's toolbar: where its two acts' words would crowd the
-   title, Create with an agent folds to its glyph, named by its pill
-   (`folding-button.tsx`), and New automation keeps its words. The bar's own
-   width, its insets included, is what the query reads. */
-.automations-toolbar {
-  flex: none;
-  container: automations-toolbar / inline-size;
-}
-
-.automations-acts {
-  display: contents;
-}
-
+   title, Create with an agent folds to its glyph and New automation keeps
+   its words (`automation-list-frame.tsx`). */
 /* off-scale: 600px, where the Automations toolbar's acts stop fitting */
 @container automations-toolbar (width < 600px) {
   .automations-acts {
     --luke-fold: folded;
   }
-}
-
-.automation-editor {
-  display: flex;
-  flex-direction: column;
-  gap: var(--luke-block-gap);
-}
-
-/* The form, drawn as a Settings page: each group's name over a card of
-   Settings rows, the groups a page section apart. */
-.automation-form {
-  display: flex;
-  flex-direction: column;
-  gap: var(--luke-page-section-gap);
 }
 
 /* The prompt's placeholder, the height of its field at the rows it stands
@@ -2644,107 +1841,6 @@ ul.actor-stack {
     var(--luke-space-6) +
     2px
   );
-}
-
-/* The servers left on, by their marks, inside the servers row's field chip. */
-.automation-servers {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--luke-tight-gap);
-}
-
-/* A picker here grows from a Settings picker's width to name its whole
-   value, an event's or a zone's, rather than cut it short (its chip's
-   `CHIP_WIDTH.MIN_FIELD`); the time stands at that same width beside them.
-   Where the window leaves the form narrow, beside the sidebar and the runs,
-   a picker gives way to the room rather than run past its card. */
-.automation-form .settings-picker {
-  max-width: 100%;
-}
-
-/* A schedule's cron or time, or a review's rules file, at a picker's width beside them. */
-.automation-field {
-  width: 200px;
-  max-width: 100%;
-}
-
-/* The site's pickers stand at their words' width rather than in a column,
-   so a schedule's time stands at a time's width beside them, not a cron's. */
-[data-luke-profile="web"] .automation-time-field {
-  width: calc(10ch + 2 * var(--luke-control-inset)); /* off-scale: "12:00 PM" and its insets */
-}
-
-/* A webhook's address or its shown secret, a little wider to show more of it. */
-.automation-webhook-field {
-  width: 240px;
-  max-width: 100%;
-}
-
-/* Choose a model hangs its menu from itself, as the agent box's model chip does. */
-.automation-model-picker {
-  position: relative;
-  display: flex;
-  min-width: 0;
-}
-
-/* An automation's page: its setup, a `DetailPage` in the room between the
-   sidebar and its runs, then its runs in a panel of their own on the right,
-   each scrolling by itself. */
-.automation-editor-layout {
-  position: relative;
-  display: flex;
-  min-height: 0;
-  flex: 1;
-}
-
-/* The Runs panel's pane, its width the developer's (`useRunsPanel`), its left
-   edge the side panel's own resize edge. Note that a window narrower than the
-   kept width leaves the form its reserve, as the side panel leaves the
-   document its own, and the kept width comes back as the window grows. */
-.automation-runs-pane {
-  position: relative;
-  display: flex;
-  min-height: 0;
-  max-width: max(280px, calc(100% - 480px)); /* off-scale: the form's reserve, FORM_RESERVE */
-  flex: none;
-}
-
-/* The Runs panel on its way out has left the layout, the form already
-   standing in its room, and slides out over the form's edge on its own
-   ground (`usePaneSlide`). */
-.automation-runs-pane[data-leaving] {
-  position: absolute;
-  inset-block: 0;
-  right: 0;
-  background: var(--luke-color-ground);
-}
-
-.automation-runs {
-  display: flex;
-  min-width: 0;
-  flex: 1;
-  flex-direction: column;
-  border-left: 1px solid var(--luke-color-border);
-}
-
-/* The panel's head and runs, inside the `ScrollArea` that scrolls them, at
-   least its height so an empty state or a failure fills the room. */
-.automation-runs-body {
-  display: flex;
-  min-height: 100%;
-  flex-direction: column;
-  gap: var(--luke-control-gap);
-  padding: var(--luke-space-16);
-}
-
-/* An automation's page's two screens: its setup, toolbar and all, and in
-   one column, a narrow room's or a page under the split's line, its runs,
-   which stand one at a time the whole width, the other hidden
-   (`hiddenColumns`). A page split hides neither and draws no runs screen,
-   its runs standing in their panel beside the setup. */
-.automation-editor-screen[hidden],
-.automation-runs-screen[hidden] {
-  display: none;
 }
 
 /* The runs standing alone beside a folded sidebar stand under the title
@@ -2762,73 +1858,7 @@ ul.actor-stack {
   -webkit-app-region: drag;
 }
 
-/* The runs screen's way back, named for the automation, cut short where the
-   name is long rather than pushing past the bar. */
-.automation-runs-back {
-  display: flex;
-  min-width: 0;
-}
-
 /* Chat ----------------------------------------------------------------------- */
-
-/* The window's Chat, in the plan's place beside the sidebar as the Inbox
-   stands, and drawn as the Inbox's list and item are (`.inbox-view`): the
-   rail a list column on the page's ground, as wide as it was dragged, its
-   bar the work column's height, and the place chosen beside it. */
-.chat-view {
-  container-type: inline-size;
-  display: grid;
-  min-height: 0;
-  flex: 1;
-  grid-template-columns: auto minmax(0, 1fr);
-}
-
-.chat-rail {
-  position: relative;
-  display: flex;
-  min-width: 0;
-  min-height: 0;
-  flex-direction: column;
-  border-right: 1px solid var(--luke-color-border);
-}
-
-/* A place's glyph (#, @, a document) stands at the size an actor's row
-   mark does beside it, as a menu's glyph does, in the muted ink. A task's
-   status mark keeps the colour its status gives it. */
-.chat-rail .inbox-row-mark > svg {
-  width: var(--luke-menu-glyph);
-  height: var(--luke-menu-glyph);
-}
-
-.chat-rail .inbox-row-mark > svg:not(.luke-task-status-mark) {
-  color: var(--luke-color-text-muted);
-}
-
-/* The rail's places, inside the `ScrollArea` that scrolls them, on the Inbox list's insets. */
-.chat-rail-body {
-  padding: var(--luke-row-inset) var(--column-inset) var(--column-inset);
-}
-
-.chat-stream {
-  --reading-room: calc((100% - var(--luke-page-measure)) / 2);
-
-  display: flex;
-  min-width: 0;
-  min-height: 0;
-  flex-direction: column;
-}
-
-.task-chat {
-  flex: 1;
-}
-
-/* The place's head is a `PaneBar`, whose detail keeps its width; here it is
-   the purpose, which gives way before the name does. */
-.chat-stream > .luke-pane-bar .luke-pane-bar-detail {
-  display: flex;
-  min-width: 0;
-  flex: 0 1000 auto;
-}
 
 /* Only the rail's bar meets the folded sidebar's toggle, so the place's bar
    (`chat-pane.tsx`'s `PlaceHead`) keeps its own inset beside it. A place
@@ -2844,210 +1874,6 @@ ul.actor-stack {
   > .chat-view[data-single="true"]
   .chat-stream {
   --luke-toolbar-start-at: calc(var(--sidebar-toggle-clearance) - var(--sheet-gap));
-}
-
-/* A task's channel is named by its task's glyph before its name, wherever
-   Chat names it (`chat-channel-name.tsx`): set inline on the words'
-   baseline, at the size a menu's glyph stands. */
-.chat-channel-glyph {
-  display: inline-flex;
-  margin-right: var(--luke-icon-gap);
-  vertical-align: -0.125em;
-}
-
-.chat-channel-glyph > svg {
-  width: 1em;
-  height: 1em;
-}
-
-/* The stream's body, the block a log's lines stand in (`ConversationContent`),
-   keeping to the reading measure in the middle of the pane as an agent's
-   transcript does (`.desktop-agent`), and to the column's inset where the
-   pane is narrower than that. */
-.chat-stream-body {
-  padding: var(--luke-space-16) max(var(--column-inset), var(--reading-room));
-}
-
-/* The messages fill the body's measure, left-aligned, as Slack's do. */
-.chat-messages,
-.chat-replies {
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-/* A message is laid out as Slack's is: its author's face in a column of its
-   own at a card's 32px, a rounded square for everyone, then their name in
-   bold and how long ago in the caption's muted ink on one line, and the
-   words under it. Rows sit tight and light up while hovered. */
-.chat-message,
-.chat-reply {
-  --chat-face: 32px;
-
-  position: relative;
-  display: grid;
-  grid-template-columns: var(--chat-face) minmax(0, 1fr);
-  column-gap: var(--luke-control-gap);
-  padding: var(--luke-item-gap) var(--luke-row-inset);
-  margin: 0 calc(-1 * var(--luke-row-inset));
-  border-radius: var(--luke-menu-row-radius);
-  transition: background-color var(--luke-duration-hover) var(--luke-motion-exit);
-}
-
-/* A post of the reader's on its way reads quieter until the chat holds it,
-   and one refused stays as quiet over its red mark. */
-:is(.chat-message, .chat-reply)[data-pending] .chat-message-body > .chat-words,
-:is(.chat-message, .chat-reply)[data-unsent] .chat-message-body > .chat-words {
-  opacity: 0.6;
-}
-
-/* A message that names its author is a comment, its face in the comment's
-   own column, so it spans the row rather than standing in the face's column. */
-:is(.chat-message, .chat-reply) > .luke-comment {
-  grid-column: 1 / -1;
-}
-
-/* A message continuing its author's run sits right under the one before. */
-.chat-message[data-continued="true"] {
-  padding-top: var(--luke-space-2);
-  padding-bottom: var(--luke-space-2);
-}
-
-@media (hover: hover) {
-  .chat-message:hover,
-  .chat-reply:hover {
-    background: var(--luke-color-fill-hover);
-  }
-}
-
-.chat-face {
-  display: flex;
-  padding-top: var(--luke-space-2);
-}
-
-/* A continued message's time stands in its face's column, shown only while
-   the row is hovered. */
-.chat-face[data-continued="true"] {
-  justify-content: flex-end;
-  padding-top: 0;
-  color: var(--luke-color-text-muted);
-  font-size: var(--luke-type-caption-size);
-  line-height: var(--luke-type-body-leading);
-  white-space: nowrap;
-  opacity: 0;
-}
-
-.chat-message:focus-within .chat-face[data-continued="true"] {
-  opacity: 1;
-}
-
-@media (hover: hover) {
-  .chat-message:hover .chat-face[data-continued="true"] {
-    opacity: 1;
-  }
-}
-
-.chat-message-body {
-  display: flex;
-  min-width: 0;
-  flex-direction: column;
-  gap: var(--luke-list-gap);
-}
-
-.chat-byline {
-  display: flex;
-  min-width: 0;
-  align-items: baseline;
-  column-gap: var(--luke-control-gap);
-  color: var(--luke-color-text-muted);
-  font-size: var(--luke-type-caption-size);
-}
-
-/* A continued message's line holds its press alone, at the row's top end,
-   over the row while a pointer hovers it; on a touch screen, where the press
-   always shows, it takes a line of its own so it never covers the words. */
-.chat-byline[data-continued="true"] {
-  position: absolute;
-  top: var(--luke-space-2);
-  right: var(--luke-space-8);
-}
-
-@media (hover: none) {
-  .chat-byline[data-continued="true"] {
-    position: static;
-    justify-content: flex-end;
-  }
-}
-
-.chat-byline-where {
-  min-width: 0;
-  overflow: hidden;
-  white-space: nowrap;
-}
-
-.chat-byline-action {
-  display: flex;
-  align-items: center;
-  gap: var(--luke-tight-gap);
-  margin-left: auto;
-  opacity: 0;
-  transition: opacity var(--luke-duration-quick) var(--luke-spring);
-}
-
-/* The presses show as their row does, so a message's Copy stands with its
-   Reply rather than waiting on a transcript's hover of its own. */
-.chat-byline-action > .luke-message-actions {
-  opacity: 1;
-  pointer-events: auto;
-}
-
-.chat-byline-action:focus-within {
-  opacity: 1;
-}
-
-/* Note that a root's own byline is reached by children alone, so hovering a
-   reply in its open thread shows that reply's presses and not the root's. */
-@media (hover: hover) {
-  :is(.chat-message, .chat-reply):hover > .chat-message-body > .chat-byline > .chat-byline-action,
-  :is(.chat-message, .chat-reply):hover
-    > .luke-comment
-    > .luke-comment-head
-    > .luke-comment-trailing
-    > .chat-byline-action {
-    opacity: 1;
-  }
-}
-
-@media (hover: none) {
-  .chat-byline-action {
-    opacity: 1;
-  }
-}
-
-.chat-words {
-  color: var(--luke-color-text);
-  font-size: var(--luke-type-body-size);
-  line-height: var(--luke-type-reading-leading);
-}
-
-/* The line before the first message posted since the reader last read the
-   channel, as Slack's "New" line is: a rule in the unread dot's accent with
-   its word at its end, kept a step below the log's top when it opens there. */
-.chat-unread-line {
-  display: flex;
-  align-items: center;
-  gap: var(--luke-control-gap);
-  margin-block: var(--luke-control-gap);
-  color: var(--luke-color-accent-text);
-  font-size: var(--luke-type-caption-size);
-  font-weight: var(--luke-weight-semibold);
-  scroll-margin-top: var(--luke-space-16);
-}
-
-.chat-unread-line::before {
-  flex: 1;
-  border-top: 1px solid var(--luke-color-accent);
-  content: "";
 }
 
 /* An ask draws as the Inbox's ask in its row (`chat-ask.tsx`), a step
@@ -3077,10 +1903,6 @@ ul.actor-stack {
   gap: var(--luke-control-gap);
 }
 
-.chat-thread {
-  margin-top: var(--luke-tight-gap);
-}
-
 /* A root's thread stands in a slot of its own after the message, so its open
    box outlives the message turning from continued to named (`ThreadRow`): it
    lines up under the words, in the words' column of a continued message, and
@@ -3095,20 +1917,6 @@ ul.actor-stack {
 .chat-message > .luke-comment ~ .chat-thread {
   grid-column: 1 / -1;
   padding-inline-start: calc(var(--luke-space-20) + var(--luke-icon-gap));
-}
-
-/* A folded thread's press follows its repliers' faces, each hanging its
-   card, and says how many replied, as a plan comment's thread at rest is
-   summed up. */
-.chat-thread-toggle {
-  margin: 0;
-  font-size: var(--luke-type-label-size);
-  line-height: var(--luke-type-label-leading);
-}
-
-.chat-thread-toggle .actor-stack {
-  margin-inline-end: var(--luke-item-gap);
-  vertical-align: middle;
 }
 
 /* Under a finger a thread's press, Reply or how many replied, takes a press
@@ -3146,14 +1954,6 @@ ul.actor-stack {
   width: min(var(--luke-page-measure), calc(100% - 2 * var(--column-inset)));
   margin: var(--luke-block-gap) auto var(--luke-space-16);
   padding: 0;
-}
-
-/* Where no box is offered (an archived channel, or a direct message
-   between two others), its foot says why, where the box would stand. */
-.chat-closed-foot {
-  width: min(var(--luke-page-measure), calc(100% - 2 * var(--column-inset)));
-  margin: var(--luke-block-gap) auto var(--luke-space-16);
-  text-align: center;
 }
 
 .chat-thread .chat-composer {
@@ -3200,28 +2000,7 @@ ul.actor-stack {
   max-height: 320px;
 }
 
-/* The line under the box where its words name more members than a post
-   tells: a live region that stands empty, and so takes no room, until then. */
-.chat-composer-crowded:not(:empty) {
-  margin: var(--luke-item-gap) 0 0;
-}
-
 /* Settings ------------------------------------------------------------------- */
-
-/* Settings, a version history, and the Admin place each take the whole
-   shell and lay their list and the item chosen in it in columns of their
-   own: the list as wide as the plans' sidebar, but never wider than the
-   share of the stage the split's line leaves its least list (300 of 860,
-   `column-split.ts`), so a sidebar dragged wide leaves the item its room. */
-.desktop-settings,
-.desktop-version-history,
-.desktop-admin {
-  display: grid;
-  min-height: 0;
-  grid-column: 1 / -1;
-  grid-template-columns: min(var(--sidebar-width), 35%) minmax(0, 1fr);
-  grid-template-rows: minmax(0, 1fr);
-}
 
 /* An item standing alone at the window's edge stands under the title bar's
    row, as the list beside it does, so the traffic lights stand over the
@@ -3240,34 +2019,6 @@ ul.actor-stack {
   flex: 0 0 auto;
   height: calc(var(--desktop-bar-height) - var(--sheet-gap));
   -webkit-app-region: drag;
-}
-
-/* Settings' page list, a plan's version history, and the Admin place's
-   sections alike: the column where the plans' sidebar stands, the way back
-   at its head. */
-.settings-pages,
-.version-log,
-.admin-sections {
-  position: relative;
-  display: flex;
-  min-height: 0;
-  flex-direction: column;
-  padding: 0 var(--column-inset) var(--column-inset);
-  background: var(--luke-color-sidebar);
-}
-
-/* The title stands a step under the way back above it. */
-.settings-pages-title,
-.version-log-title,
-.admin-sections-title {
-  margin: var(--luke-block-gap) var(--row-inset);
-}
-
-/* The search field at the sidebar's head (`SearchField`), apart from the
-   list beneath it. */
-.settings-search {
-  flex: 0 0 auto;
-  margin-bottom: var(--luke-section-gap);
 }
 
 /* Find in a tab --------------------------------------------------------- */
@@ -3328,32 +2079,6 @@ ul.actor-stack {
   color: var(--luke-color-on-find-current);
 }
 
-/* What a query found, in the list's place: each page's heading, then its
-   rows. A row's label ellipsizes rather than wrapping, so a long setting name
-   keeps the row the height of every other. */
-.settings-search-results {
-  display: flex;
-  flex-direction: column;
-  gap: var(--luke-section-gap);
-}
-
-/* The page list's three groups, a section's gap apart, each under its
-   heading; the first is headed by the listed workspace's tile and name, in
-   the primary ink, as the plans' sidebar heads its list
-   (`desktop-settings.tsx`). */
-.settings-nav-group + .settings-nav-group {
-  margin-top: var(--luke-section-gap);
-}
-
-.settings-page,
-.version-page,
-.admin-page {
-  display: flex;
-  min-width: 0;
-  min-height: 0;
-  flex-direction: column;
-}
-
 /* The plan template laid out as every Settings page is (`PlanBody`'s
    `page`): at their measure, its name at a page title's place and size, the
    Edited line and the note under it. */
@@ -3363,10 +2088,6 @@ ul.actor-stack {
 
 .template-document :is(.plan-body, .plan-edit-note) {
   max-width: var(--luke-settings-measure);
-}
-
-.task-page-head {
-  padding-top: var(--luke-space-32);
 }
 
 .task-page-head .plan-edit-note {
@@ -3398,19 +2119,6 @@ ul.actor-stack {
   padding-bottom: var(--luke-page-inset);
 }
 
-/* Onboarding ----------------------------------------------------------------- */
-
-/* The sign-in's whole window: the plain ground under a drag strip, the column
-   sitting a little above the middle. It stands at least the height of the
-   `ScrollArea` it scrolls in, so a short window scrolls it rather than
-   cutting it. */
-.desktop-onboarding {
-  display: flex;
-  min-height: 100%;
-  flex-direction: column;
-  padding-bottom: calc(var(--luke-stage-height) * 0.08);
-}
-
 /* The side panel ----------------------------------------------------------- */
 
 /* What the open plan's document keeps beside the side panel: the panel is
@@ -3439,6 +2147,22 @@ ul.actor-stack {
 .desktop-task > .page-find[hidden] {
   visibility: hidden;
   transition: visibility 0s linear var(--luke-duration-pane);
+}
+
+/* The line under an automation's agent's bar (`automation-agent-run.tsx`):
+   what fired its run, when, and where it stands, its words where the bar's
+   title starts, over a hairline. */
+.automation-agent-run {
+  flex: none;
+  padding: 0 calc(var(--column-inset) + var(--luke-row-inset) + var(--luke-list-inset))
+    var(--luke-item-gap);
+  border-bottom: 1px solid var(--luke-color-border);
+}
+
+/* Where the run stands among the arrows, in figures that hold their width as they step. */
+.automation-agent-run-count {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 
 /* The plan's summary (`task-summary.tsx`) ----------------------------------- */
@@ -4785,4 +3509,10 @@ ul.actor-stack {
   flex: none;
   align-items: center;
   justify-content: center;
+}
+
+/* New thread's bar, should it stand its title on a row of its own, stands
+   it where the form's labels start, rather than where a crumb's words do. */
+.inbox-view-items:has(> .inbox-compose) {
+  --luke-toolbar-wrap-heading-at: var(--content-inset);
 }

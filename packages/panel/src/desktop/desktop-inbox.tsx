@@ -18,7 +18,12 @@ import { NOT_FOUND_THING, NotFound } from "../not-found.js";
 import { pressedWithCommand } from "../press-intent.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import { agentName } from "../tasks/coding-agent-model.js";
-import { INBOX_COLUMNS, useInboxColumns } from "../tasks/inbox-columns.js";
+import {
+  INBOX_COLUMNS,
+  INBOX_VIEW,
+  INBOX_VIEW_ITEMS,
+  useInboxColumns,
+} from "../tasks/inbox-columns.js";
 import { InboxCompose } from "../tasks/inbox-compose.js";
 import { INBOX_NOT_READ, InboxList, InboxListNote, newTaskAction } from "../tasks/inbox-list.js";
 import {
@@ -409,7 +414,7 @@ function InboxShown({
               active={tasks.shown && !sideFocused}
               hidden={sidePanel.fullScreen}
             >
-              <div className="inbox-view" ref={columns.ref} data-columns={columns.shown}>
+              <div className={INBOX_VIEW} ref={columns.ref} data-columns={columns.shown}>
                 {paneOnly ? null : (
                   <InboxList
                     view={list}
@@ -491,7 +496,7 @@ function InboxShown({
                   />
                 ) : chosen === undefined ? (
                   <section
-                    className="inbox-view-items"
+                    className={INBOX_VIEW_ITEMS}
                     aria-label="Inbox"
                     // Note that with the list in the sidebar this is the whole place, so its empty state and its missing item's notice always stand.
                     hidden={

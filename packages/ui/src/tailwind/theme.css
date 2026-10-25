@@ -27,6 +27,11 @@
   --color-switch-thumb: var(--luke-color-switch-thumb);
   --shadow-switch-thumb: var(--luke-shadow-switch-thumb);
   --ease-spring-fast: var(--luke-spring-fast);
+  /* The two cursors a press gives (profiles.css): `cursor-press` on every
+     control, the arrow on the desktop and the hand on the web, and
+     `cursor-link` on a real link, the hand on both. */
+  --cursor-press: var(--luke-cursor-press);
+  --cursor-link: var(--luke-cursor-link);
   /* How far a control fades while it cannot be used (`opacity-disabled`). */
   --opacity-disabled: var(--luke-disabled-opacity);
 
@@ -112,6 +117,24 @@
   --color-border-selected: var(--luke-color-border-selected);
   --color-accent-ink: var(--luke-color-accent-text);
   --spacing-touch: var(--luke-touch-target);
+
+  /* The panel's Inbox (`@luke/panel`'s `tasks/inbox-*.tsx`): its two columns
+     and the one standing alone; the list's held height while a row leaves;
+     the thread's gutter, a list row's 20px, the line through its faces, and
+     the earlier messages' line inset past it; a pick's check centred on its
+     first line; a short field's measure and an answered field's least
+     height; and the column's inset
+     and the attention mark's glyph a size under a row's. */
+  --grid-template-columns-inbox: auto minmax(0, 1fr);
+  --grid-template-columns-single: minmax(0, 1fr);
+  --spacing-list-held-least: var(--luke-list-held-height, 0);
+  --spacing-inbox-face-half: calc(var(--luke-space-20) / 2);
+  --spacing-inbox-line: calc(var(--luke-space-20) / 2 - 1px);
+  --spacing-inbox-earlier: calc(var(--luke-space-20) + var(--luke-list-inset));
+  --spacing-pick-glyph-lift: calc((1lh - var(--luke-icon-12)) / 2);
+  --spacing-inbox-field-short: calc(10 * var(--luke-space-16));
+  --spacing-inbox-field-words: calc(var(--luke-type-body-leading) + 2 * var(--luke-item-gap));
+  --spacing-attention-glyph-small: 10px; /* off-scale: the attention mark's glyph at a row's time */
   /* A box or a range a choice is drawn in: a field's ground inside a
      chosen row's edge, filled in the accent where it is on. */
   --color-field: var(--luke-color-input);
@@ -301,6 +324,23 @@
   --z-index-dialog: var(--luke-z-dialog);
   --z-index-tooltip: var(--luke-z-tooltip);
   --spacing-dialog-inset: var(--luke-dialog-inset);
+  /* The panel's Home and its tasks (`@luke/panel`: Home's sections and its
+     welcome, a person's page, New task and Move, a card's server line): the
+     welcome's tile and the face on it, its composer at the page's measure, a
+     row's context's bound, the room New task's title leaves its chips, a
+     card's line drawn out past its inset; and the Tasks page's Board and
+     List, a column's width, a row's height, a maker's name's measure, and the
+     List's columns as the view draws them. */
+  --spacing-welcome-tile: 56px; /* off-scale: the welcome's tile, a masthead's size */
+  --spacing-welcome-face: 34px; /* off-scale: Luke's face on the welcome's tile */
+  --spacing-welcome-composer: min(var(--luke-page-measure), 100%);
+  --spacing-row-context: 20ch; /* off-scale: a row's context, bounded in letters */
+  --spacing-new-task-title: calc(100% - 2 * var(--luke-control-height) - var(--luke-item-gap));
+  --spacing-card-line: calc(100% + 2 * var(--luke-row-inset));
+  --spacing-tasks-board-column: 320px; /* off-scale: a card's width, as Linear's board stands it */
+  --spacing-tasks-list-row: calc(var(--luke-control-height) + var(--luke-space-6));
+  --spacing-tasks-list-maker: 16ch; /* off-scale: a maker's name, cut short at a short name's measure */
+  --grid-template-columns-tasks-list: var(--tasks-list-columns);
   --spacing-dialog-action-gap: var(--luke-dialog-action-gap);
   --spacing-dialog-action: var(--luke-dialog-action-width);
   --spacing-dialog-room: var(--luke-dialog-room);
@@ -312,6 +352,43 @@
   --spacing-row-inset: var(--luke-row-inset);
   --spacing-list-inset: var(--luke-list-inset);
   --spacing-control-gap: var(--luke-control-gap);
+
+  /* The panel's places beside the sidebar (`@luke/panel`: Automations,
+     Chat, Settings, a version history, the Admin place, the sign-in): the
+     profile's spacing roles they read; the Inbox's two columns, which Chat
+     shares, and the list-and-item split Settings, a history, and Admin
+     stand in; an automation row's columns and fields; a message's face
+     column and Chat's reading inset and measure; a glyph at its words'
+     size; the sign-in's foot; the experiment tag's tracking; and the spring
+     a byline's presses fade on. */
+  --grid-template-columns-inbox: auto minmax(0, 1fr);
+  --grid-template-columns-place-split: min(var(--sidebar-width), 35%) minmax(0, 1fr);
+  --grid-template-rows-single: minmax(0, 1fr);
+  --grid-template-columns-chat-message: var(--luke-space-32) minmax(0, 1fr);
+  --grid-template-columns-automation-suggestions: repeat(
+    auto-fill,
+    minmax(240px, 1fr)
+  ); /* off-scale: a suggestion card's least width */
+  --spacing-automation-owner: 112px; /* off-scale: an owner's picture and name, in a column */
+  --spacing-automation-next: 144px; /* off-scale: "Next Nov 17, 10:30 PM" and a failure's mark */
+  --spacing-automation-field: 200px; /* off-scale: a Settings picker's width on the desktop, held on the web too */
+  --spacing-automation-time: calc(
+    10ch +
+    2 *
+    var(--luke-control-inset)
+  ); /* off-scale: "12:00 PM" and its insets */
+  --spacing-automation-webhook: 240px; /* off-scale: a webhook's address, a little wider than a picker */
+  --spacing-automation-runs: max(
+    280px,
+    calc(100% - 480px)
+  ); /* off-scale: the form's reserve, FORM_RESERVE */
+  --spacing-chat-reading: max(var(--luke-space-12), calc((100% - var(--luke-page-measure)) / 2));
+  --spacing-chat-measure: min(var(--luke-page-measure), calc(100% - 2 * var(--luke-space-12)));
+  --spacing-em: 1em;
+  --spacing-onboarding-foot: calc(var(--luke-stage-height) * 0.08);
+  --color-sidebar: var(--luke-color-sidebar);
+  --tracking-experiment-tag: 0.01em; /* off-scale: a capsule's caption, a hair open */
+  --ease-spring: var(--luke-spring);
   --spacing-viewport-top: var(--luke-viewport-top);
   --spacing-keyboard-inset: var(--luke-keyboard-inset);
   --spacing-tooltip-card-inline: calc(var(--luke-menu-inset) + var(--luke-space-8));
@@ -451,9 +528,15 @@
   --spacing-menu-least: 196px;
   --spacing-menu-most: 280px;
   --spacing-menu-chevron: 14px;
-  /* A menu as tall as can be seen, a margin short of either edge, so a long
-     one scrolls above a phone's keyboard (`tokens/viewport.css`). */
-  --spacing-menu-max: calc(var(--luke-stage-height) - 2 * var(--luke-space-8));
+  /* A menu no taller than the room Base UI's positioner finds for it
+     (`--available-height`, set on the positioner it stands in), and never
+     taller than can be seen, a margin short of either edge, so a long one
+     scrolls inside the window and above a phone's keyboard
+     (`tokens/viewport.css`). */
+  --spacing-menu-max: min(
+    var(--available-height, var(--luke-stage-height)),
+    calc(var(--luke-stage-height) - 2 * var(--luke-space-8))
+  );
   /* A list's cap, an app's placement hook (README's "Placement hooks"). */
   --spacing-combobox-list: var(--luke-combobox-list-max, 280px);
   /* off-scale: the column a list's leads stand in, wide enough for a task's long key */
@@ -797,6 +880,270 @@
   --spacing-call-tile: var(--luke-call-video-height, auto);
   --spacing-call-tile-face-share: 40%; /* off-scale: a share of a frame's width */
   --spacing-call-tile-face-max: 56px; /* off-scale: a masthead's disc */
+
+  /* The page patterns (`components/layout/`, `settings-*`,
+     `collection-page`, `detail-page`, `public-page`, `auth-page`,
+     `empty-state`, `error-state`, `failure-note`, `group-header`): the
+     roles a Stack's and an Inline's gaps and insets read, and each
+     pattern's own lengths, which name the scale's steps, as above. */
+  --spacing-field-gap: var(--luke-field-gap);
+  --spacing-page-section-gap: var(--luke-page-section-gap);
+  /* The least width a field gives way to before its line wraps. */
+  --spacing-field-least: var(--luke-select-field-width);
+  --spacing-page-inset: var(--luke-page-inset);
+  --spacing-luke-64: var(--luke-space-64);
+  --spacing-luke-96: var(--luke-space-96);
+
+  /* Settings (`settings-row`, `settings-section`, `settings-page`). */
+  /* A row's least height and padding at a bare compact row's density and a
+     reference list's, a card's standing with the panel shell's above
+     (`--luke-settings-row-*` in `profiles.css`); an indented row's step in to its parent's words and
+     what a row grows below its line, past the mark the row's sheet sizes
+     (`settings-row.css`); the mark's box, which a mark outside a row draws
+     at 20px; and a connected row's dot. */
+  --spacing-settings-row-compact: var(--luke-settings-row-compact-min-height);
+  --spacing-settings-row-compact-block: var(--luke-settings-row-compact-block);
+  --spacing-settings-row-compact-inline: var(--luke-settings-row-compact-inline);
+  --spacing-settings-row-list: var(--luke-settings-row-list-min-height);
+  --spacing-settings-row-list-block: var(--luke-settings-row-list-block);
+  --spacing-settings-row-indent: calc(
+    var(--luke-settings-row-inline) +
+    var(--luke-settings-row-words-inset)
+  );
+  --spacing-settings-row-words-inset: var(--luke-settings-row-words-inset);
+  --spacing-settings-row-mark: var(--luke-settings-row-mark-size, 20px); /* off-scale: a mark */
+  --spacing-settings-row-state-dot: 6px; /* off-scale: a connected row's dot */
+
+  /* Pages (`collection-page`, `detail-page`, `public-page`, `auth-page`).
+     A page's measure and inset are its own sheet's custom properties, which
+     its profile and its own width (a container query) set, so the roles
+     here read them where the element stands. */
+  --spacing-collection-page-inset: var(--luke-collection-page-inset);
+  --container-collection-page: calc(
+    var(--luke-collection-page-width) +
+    2 *
+    var(--luke-collection-page-inset)
+  );
+  --spacing-detail-page-inset: var(--luke-detail-page-inset);
+  /* A detail column's end, clear of what a phone's call card takes of the
+     window's foot (`--luke-card-room`, which the shell says). A toast is an
+     overlay and takes nothing. */
+  --spacing-detail-page-end: max(var(--luke-detail-page-inset), var(--luke-card-room, 0px));
+  --spacing-public-page-start: var(--luke-public-page-start);
+  --spacing-public-page-end: var(--luke-public-page-end);
+  --container-public-page: 700px; /* off-scale: the site's reading column */
+  --container-public-page-wide: 860px; /* off-scale: the column with a rail beside it */
+  --container-public-page-lead: 34rem; /* off-scale: the landing's lead */
+  --text-public-page-lead: 1.125rem; /* off-scale: the landing's lead */
+  --text-public-page-lead--line-height: 1.75rem;
+  /* The hero's display style, the page title's where the profile has none. */
+  --leading-public-page-hero: var(--luke-display-hero-leading, var(--luke-type-title-leading));
+  --font-weight-public-page-hero: var(--luke-display-hero-weight, var(--luke-type-title-weight));
+  --tracking-public-page-hero: var(--luke-display-hero-tracking, normal);
+  --z-index-public-page-banner: 40; /* off-scale: the banner over the document's scroll */
+  --color-public-page-banner: color-mix(in srgb, var(--luke-color-ground) 85%, transparent);
+  --blur-public-page-banner: 12px; /* off-scale: the banner's blur */
+  /* A picture bleeding past the column, up to 960px and never nearer an edge than the page's inset. */
+  --spacing-public-media-reach: calc(
+    50% -
+    min(960px / 2, 50cqw - var(--luke-page-inset))
+  ); /* off-scale: 960px, the bleed */
+  --radius-public-media: var(--luke-radius-14);
+  --shadow-public-media:
+    0 20px 25px -5px var(--luke-color-shadow-soft), 0 8px 10px -6px var(--luke-color-shadow-soft);
+  --container-auth-card: 430px; /* off-scale: the OAuth pages' card */
+  --shadow-auth-card: 0 24px 80px var(--luke-color-shadow-soft);
+  --spacing-auth-ring: 56px; /* off-scale: the artwork's ring */
+  --shadow-auth-badge: 0 0 0 3px var(--luke-color-surface);
+  --color-auth-badge-danger: var(--luke-color-danger-fill);
+  --color-auth-badge-on-danger: var(--luke-color-on-danger);
+
+  /* States (`group-header`, `empty-state`, `error-state`, `failure-note`). */
+  /* off-scale: the measure an empty place's glyph, words, and way on wrap
+     at, never wider than the room. */
+  --container-empty-state: min(280px, 100%);
+  /* A caption's line centred in a control-tall row, as the glyph and Retry
+     beside it are: an error state's words, a failure note's beside Retry. */
+  --spacing-state-row-inset: calc(
+    (var(--luke-control-height) - var(--luke-type-caption-leading)) /
+    2
+  );
+  /* A failure note's first row with no press in it: one caption's line. */
+  --spacing-failure-note-row: var(--luke-type-caption-leading);
+  /* A group head's mark, a small note a step under its glyph. */
+  --spacing-group-header-mark: var(--luke-icon-12);
+
+  /* The panel's task surfaces (`@luke/panel`'s tasks.css, moving onto
+     utilities): the gaps a byline's phrases, a line's parts, a pane's groups,
+     and a page's sections stand apart by, and the weights words are set in
+     where no type role names them; then each surface's own. */
+  --spacing-log-over-composer: calc(var(--luke-scroll-fade) + var(--luke-space-4));
+  --spacing-todos-dock: calc(var(--luke-stage-height) * 0.3);
+  --spacing-dictation-clock: 34px; /* off-scale: a clock's widest reading */
+  --text-section-inline: var(--luke-type-section-size);
+  /* The plan's document (`plan-body.tsx`): a section's byline, at most a
+     face and a short date, and the row it shares with the ⋯, which hangs a
+     step past the column (both measured on `.plan-body`, tasks.css, where the
+     heading's room reads them too); the line under "Edited by" that Dismiss
+     overhangs; and the still wash of Luke's accent on a section changed since
+     the last look. */
+  --spacing-plan-byline-room: var(--plan-byline-room);
+  --spacing-plan-unit-row: calc(var(--plan-unit-row-room) + var(--luke-space-6));
+  --spacing-plan-changed-note: 22px; /* off-scale: the line's room, which its button overhangs */
+  --color-plan-changed: color-mix(in srgb, var(--accent) 9%, transparent);
+  /* A transcript (`ai-elements/`): its column's inset; a reply's reading
+     leading; the developer's bubble, at most nearly the column, at a large
+     corner; where a line's words start past its icon (`--transcript-gutter`,
+     tasks.css), which what opens under a line is set in to; a call's chip at a pill's widest
+     in its line; the measure of the line said in place of lines, and of a
+     failure with Continue beside it; what floats over the log on a ground of
+     its own, ringed and lifted, kept inside the log's edges, and the ground a
+     button floats on there; and the line of an address that opens nothing. */
+  --spacing-content-inset: var(--content-inset);
+  --spacing-bubble: 95%; /* off-scale: a share of the column */
+  --spacing-transcript-gutter: var(--transcript-gutter);
+  --spacing-tool-chip: var(--luke-inline-ref-pill-width);
+  --spacing-conversation-empty: 280px; /* off-scale: a short line's measure */
+  --spacing-conversation-empty-wide: 560px; /* off-scale: a one-line failure's measure, Continue beside it */
+  --spacing-conversation-older: calc(100% - var(--luke-space-32));
+  --shadow-floating-edge: inset 0 0 0 1px var(--luke-color-border), var(--luke-menu-shadow);
+  --color-button-ground: var(--luke-button-ground);
+  --color-inert-link: color-mix(in srgb, currentColor 40%, transparent);
+  /* The code and diff views (File, Changes, page, and Browser tabs): a
+     column's inset; the tree beside a tab, as wide as it was last dragged
+     (`--file-tree-width`) and never over its share of the box, so the code
+     or diff beside it keeps the larger column; a crumb's tree, at a narrow popover's width
+     and never taller than its side of the crumb leaves it; the room after a
+     page's version steps, a control's gap less its own edge; a changed
+     image's side, two to a row where they fit; a snippet's height before it
+     is drawn, from its rows; a file's status letter's tint of its own ink;
+     and Luke's own colour, which his name is said in. */
+  --spacing-file-tree: min(
+    var(--file-tree-width, 264px),
+    40%
+  ); /* off-scale: a tree's first width, and at most its share of the box (`TREE_SHARE`) */
+  --spacing-crumb-tree: min(
+    calc(var(--luke-stage-height) - var(--luke-space-16)),
+    var(--luke-popover-room, 100vh)
+  );
+  --spacing-popover-narrow: var(--luke-popover-width-narrow);
+  --spacing-page-versions-end: calc(var(--luke-control-gap) - var(--luke-space-2));
+  --spacing-image-diff-side: 200px; /* off-scale: a side's least before two stop fitting to a row */
+  --spacing-snippet-pending: calc(var(--snippet-rows) * var(--snippet-row));
+  --color-status-letter: color-mix(in srgb, currentcolor 14%, transparent);
+  --color-voice-luke: var(--voice-luke);
+  /* A pull request's tab (`agent-pull-request-tab.tsx`): its Conversation's
+     sides, as far in as the measure leaves them (`--pull-request-page-measure`,
+     tasks.css), never under a column's inset; the Chapters view's rail, as
+     wide as Files changed's tree stands by default and never over two
+     fifths of the view; and a reviewer's disc at a face's corner. */
+  --spacing-pull-request-page: max(
+    var(--luke-space-12),
+    (100cqi - var(--pull-request-page-measure)) /
+    2
+  );
+  --spacing-chapter-rail: min(calc(var(--luke-space-64) * 4), 40%);
+  --spacing-review-badge: 10px; /* off-scale: a standing's disc at a face's corner */
+  /* A pull request's conversation (`agent-pull-request-tab.tsx`): the
+     words' field growing from a few lines' height; a branch's chip at its
+     widest; a label's dot in its GitHub colour (`--label-dot`); a line
+     comment's measure; a boxed entry's inset, its hairline counted
+     (`--boxed-inset`); a check's glyph and a deployment's door; and the
+     annotation card's measure and columns, which its sheet sets
+     (`.annotation-card`). */
+  --spacing-comment-editor: calc(3lh + 2 * var(--luke-space-6));
+  --spacing-branch-chip: 22rem; /* off-scale: a branch's name before it is cut */
+  --spacing-label-dot: 10px; /* off-scale: a label's swatch */
+  --color-label-dot: var(--label-dot, transparent);
+  --spacing-line-comment: 720px; /* off-scale: a line comment's reading measure */
+  --spacing-boxed-inset: var(--boxed-inset);
+  --spacing-check-glyph: 14px; /* off-scale: a check's glyph */
+  --spacing-deployment-open: 13px; /* off-scale: a deployment's door */
+  --spacing-annotation: min(48rem, 100%);
+  --spacing-annotation-turn: var(--annotation-turn);
+  --spacing-annotation-face: var(--annotation-face);
+  --spacing-annotation-face-x: var(--annotation-face-x);
+  --spacing-annotation-gap: var(--annotation-gap);
+  --spacing-annotation-more: calc(var(--annotation-face) + var(--annotation-gap));
+  --grid-template-columns-annotation-comment: var(--annotation-face) minmax(0, 1fr);
+  /* A file's type icon in Pierre's colour for its type, in the palette the
+     panel's base.css repeats from it (`file-type-icon.tsx`). */
+  --color-file-icon-gray: var(--file-icon-gray);
+  --color-file-icon-red: var(--file-icon-red);
+  --color-file-icon-vermilion: var(--file-icon-vermilion);
+  --color-file-icon-orange: var(--file-icon-orange);
+  --color-file-icon-yellow: var(--file-icon-yellow);
+  --color-file-icon-green: var(--file-icon-green);
+  --color-file-icon-teal: var(--file-icon-teal);
+  --color-file-icon-cyan: var(--file-icon-cyan);
+  --color-file-icon-blue: var(--file-icon-blue);
+  --color-file-icon-indigo: var(--file-icon-indigo);
+  --color-file-icon-purple: var(--file-icon-purple);
+  --color-file-icon-pink: var(--file-icon-pink);
+  --color-file-icon-mauve: var(--file-icon-mauve);
+  /* A file opened over the window (`attachment-viewer.tsx`): a text file's
+     width, any other file's, and the whole of the dimmed window a picture
+     at its own pixels takes, on the veil a video plays on. */
+  --spacing-viewer-text: min(
+    880px,
+    var(--luke-stage-width) -
+    2 *
+    var(--luke-space-24)
+  ); /* off-scale: a text file's reading width */
+  --spacing-viewer-other: min(
+    400px,
+    var(--luke-stage-width) -
+    2 *
+    var(--luke-space-24)
+  ); /* off-scale: a file shown by its icon */
+  --spacing-viewer-stage: calc(var(--luke-stage-width) - 2 * var(--luke-space-24));
+  --spacing-viewer-stage-height: calc(var(--luke-stage-height) - 2 * var(--luke-space-24));
+  /* A Terminal tab (`terminal-tab.tsx`): its ground, a busy bar's dots spaced apart, and the shells'
+     list beside it. */
+  --color-terminal-ground: var(--terminal-ground);
+  --tracking-busy: 1px; /* off-scale: a busy bar's dots */
+  --spacing-shells-pane: min(208px, 40%); /* off-scale: the shells' list's width */
+  /* The composer's popovers: the servers' list at most as tall as the window
+     leaves above the composer, a page's head at a pane bar's height, a
+     task's issue chip at a title's readable start, a 12px glyph, and the
+     context's parts in the chart's colours. */
+  --spacing-servers-list: clamp(
+    160px,
+    var(--luke-stage-height) -
+    320px,
+    400px
+  ); /* off-scale: a list a server's page tall */
+  --spacing-issue-chip: min(
+    100%,
+    360px
+  ); /* off-scale: a title's readable start, past which it is cut */
+  --color-chart-1: var(--luke-color-chart-1);
+  --color-chart-2: var(--luke-color-chart-2);
+  --color-chart-3: var(--luke-color-chart-3);
+  /* A picture in written words (`picture-block.tsx`): no taller than a
+     screenful's worth, a screenshot's shape at a stand-in's width while its
+     bytes are read, a caption a step under the words around it, a field
+     under it that describes it anew, and the glyph a picture from outside
+     Luke is marked by. */
+  --spacing-picture-most: 520px; /* off-scale: a screenful's worth */
+  --spacing-picture-stand-in: 480px; /* off-scale: a picture's width before its bytes are read */
+  --aspect-screenshot: 16 / 10;
+  --text-picture-caption: 0.9em;
+  --text-picture-caption--line-height: 1.45;
+  --spacing-picture-describe: min(360px, 100%); /* off-scale: a description's field */
+  --spacing-picture-glyph: 0.95em;
+  /* The plan's comments (`plan-comments.tsx`): the margin past the column
+     its cards stand in at their own width, a reply's line set in under the
+     name past the writer's mark, and the quote's edge, struck where its
+     words are gone. */
+  --spacing-comment-margin: calc(100% + var(--comment-margin-gap));
+  --spacing-comment-card: var(--comment-card-width);
+  --spacing-comment-indent: calc(
+    16px +
+    5px
+  ); /* off-scale: past the actor's 16px mark and its gap */
+  --color-comment-mark-edge: var(--comment-mark-edge);
+  --color-quote-strike: color-mix(in srgb, currentColor 45%, transparent);
 }
 
 /* The conditions a control answers beside its states: a finger's pointer,
@@ -840,3 +1187,7 @@
    keeps its hints. */
 @custom-variant no-hover (@media (hover: none));
 @custom-variant finger (@media (hover: none) and (pointer: coarse));
+
+/* The shell standing as one pane, a phone's, as its root says
+   (`data-luke-room`, the panel's `shell-room.ts`). */
+@custom-variant shell-narrow (:where(:root)[data-luke-room="narrow"] .desktop-shell &);

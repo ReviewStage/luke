@@ -400,13 +400,6 @@ function fixedEntries(input: SettingsSearchInput): readonly SettingsSearchEntry[
           ],
         }
       : undefined,
-    // The Notifications page's test, drawn wherever the page is.
-    {
-      id: SETTINGS_SEARCH_ROW.TEST_NOTIFICATION,
-      label: "Test notification",
-      page: SETTINGS_VIEW.NOTIFICATIONS,
-      haystack: ["Test notification", "notifications send alert banner permission allow"],
-    },
     // The window's own chords, fixed rather than chosen, listed below them; a gated feature's only while its experiment is on.
     ...shownShortcutGroups(input.settings.experiments, input.capabilities).flatMap((group) => [
       ...group.commands.map((command) => ({
@@ -656,7 +649,7 @@ export function SettingsSearchField({
   const untouched = placed && query.length === 0;
   return (
     <search
-      className="settings-search"
+      className="settings-search mb-section-gap flex-none"
       onFocus={(event) => {
         if (event.target !== field.current || placedNow()) return;
         appPlatform().recordSurfaceEvent(PRODUCT_SURFACE_EVENT.SEARCH_OPEN, {
@@ -726,7 +719,7 @@ export function SettingsSearchResults({
     );
   }
   return (
-    <div className="settings-search-results">
+    <div className="settings-search-results flex flex-col gap-section-gap">
       {search.groups.map((group) => (
         <section key={group.page} aria-label={resultPageWord(group.page)}>
           <GroupHeader label={resultPageWord(group.page)}>

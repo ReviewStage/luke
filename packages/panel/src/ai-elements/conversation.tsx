@@ -58,6 +58,12 @@ const FOLLOW_SLACK_PX = 1;
 /** How near its top, in screens of the box, a log asks for the lines older than its first (`onNearTop`): one, so they land before the reader reaches them. */
 const NEAR_TOP_SCREENS = 1;
 
+/** How long after the reader's own wheel, touch, press, or key a scroll is still read as theirs, in milliseconds: long enough for a keyed scroll's glide. */
+const READER_SCROLL_MS = 500;
+
+/** The events by which a reader scrolls, or asks something to scroll for them, as find's keys or a row's press do. */
+const READER_EVENTS = ["wheel", "touchmove", "pointerdown", "keydown"] as const;
+
 /** Whether a list scrolled this far is at its newest line, so a new line should keep it there. */
 function followsNewest(list: {
   scrollTop: number;
@@ -116,9 +122,31 @@ export function Conversation({
   const opened = useRef(subject);
   // Where the log last stood, its own writes among it, so a scroll is read as the reader's up or down from there.
   const lastTop = useRef(0);
-  const toEnd = useCallback((element: HTMLDivElement) => {
-    element.scrollTop = element.scrollHeight;
-    lastTop.current = element.scrollTop;
+  // How tall the log's lines and its box stood as last seen, so a scroll is known to have come with a change of either.
+  const seen = useRef({ height: 0, room: 0 });
+  // When the reader last scrolled or asked for a scroll, as an event's time.
+  const readerAt = useRef(Number.NEGATIVE_INFINITY);
+  const see = useCallback((element: HTMLDivElement) => {
+    seen.current = { height: element.scrollHeight, room: element.clientHeight };
+  }, []);
+  const toEnd = useCallback(
+    (element: HTMLDivElement) => {
+      element.scrollTop = element.scrollHeight;
+      lastTop.current = element.scrollTop;
+      see(element);
+    },
+    [see],
+  );
+  useEffect(() => {
+    const heard = (event: Event) => {
+      readerAt.current = event.timeStamp;
+    };
+    for (const name of READER_EVENTS) {
+      window.addEventListener(name, heard, { capture: true, passive: true });
+    }
+    return () => {
+      for (const name of READER_EVENTS) window.removeEventListener(name, heard, { capture: true });
+    };
   }, []);
   // What the last render left observed: the scroll box, and how many lines
   // stood in it ending in which, so a render that changed none of them
@@ -148,7 +176,9 @@ export function Conversation({
   // line at its bottom, and puts one back there once nothing is left below
   // to scroll to. Note that it watches no line of its own, because the block
   // is as tall as its lines, so any line resizing resizes it, and a line
-  // replaced or removed is then never held by the observer.
+  // replaced or removed is then never held by the observer; and that it
+  // watches the block's border box, so its end growing to clear the floating
+  // call card (`call.css`) keeps a following log at its newest line too.
   const [resized] = useState(
     () =>
       new ResizeObserver(() => {
@@ -158,6 +188,7 @@ export function Conversation({
           toEnd(element);
           return;
         }
+        see(element);
         if (!followsNewest(element)) {
           setAtBottom(false);
           return;
@@ -217,7 +248,7 @@ export function Conversation({
     }
     if (first !== null) firstFromTop.current = first.offsetTop - element.scrollTop;
     resized.observe(element);
-    if (lines !== null) resized.observe(lines);
+    if (lines !== null) resized.observe(lines, { box: "border-box" });
     askOlder(element);
   });
   const scrollToBottom = useCallback(() => {
@@ -231,11 +262,27 @@ export function Conversation({
   // takes it off its newest line: the browser shifts a log down of its own accord to hold its place
   // as lines above grow (scroll anchoring), a message's words drawn late
   // among them, and the observer then takes it the rest of the way down.
+  // Note too that a scroll up the layout made is not the reader's: a box
+  // that grows pulls its scroll back to its new end, and lines landing in
+  // the same frame leave it short of the end it then has, as a window
+  // sized after its log first drew does. A scroll up that came with a
+  // change of the log's height or room, and with no wheel, touch, press,
+  // or key of the reader's just before it, leaves the log following, taken
+  // back to its end; a script's scroll up, which changes neither, as find's
+  // or an unread line's, still takes it off its newest line.
   const onScroll = useCallback(
     (event: UIEvent<HTMLDivElement>) => {
       const element = event.currentTarget;
       const down = element.scrollTop >= lastTop.current;
+      const resized =
+        element.scrollHeight !== seen.current.height || element.clientHeight !== seen.current.room;
+      const reader = event.timeStamp - readerAt.current < READER_SCROLL_MS;
+      if (following.current && !down && resized && !reader && !followsNewest(element)) {
+        toEnd(element);
+        return;
+      }
       lastTop.current = element.scrollTop;
+      see(element);
       following.current = followsNewest(element) || (following.current && down);
       setAtBottom(following.current);
       const first = observed.current?.first;
@@ -244,7 +291,7 @@ export function Conversation({
       }
       if (!down) askOlder(element);
     },
-    [askOlder],
+    [askOlder, see, toEnd],
   );
   // Note that a fold the reader opens or closes takes the log off its newest line, because what they opened grows under them, and following would scroll it, and every line above it, out from under the press.
   const onFold = useCallback((event: MouseEvent<HTMLDivElement>) => {
@@ -258,7 +305,7 @@ export function Conversation({
   );
   return (
     <ConversationContext.Provider value={scroll}>
-      <Fill className={cn("conversation", className)} {...props}>
+      <Fill className={cn("conversation relative", className)} {...props}>
         {children}
       </Fill>
     </ConversationContext.Provider>
@@ -300,7 +347,9 @@ export function ConversationContent({
       onScroll={onScroll}
       onClickCapture={onFold}
     >
-      <div className={cn("conversation-log", className)}>{children}</div>
+      <div className={cn("conversation-log px-content-inset pt-section-gap pb-luke-20", className)}>
+        {children}
+      </div>
     </ScrollArea>
   );
 }
@@ -355,9 +404,25 @@ export function ConversationEmptyState({
   children: ReactNode;
 }): ReactNode {
   return (
-    <div className={cn("conversation-empty", wide && "conversation-empty-wide")}>{children}</div>
+    <div
+      className={cn(
+        "conversation-empty m-auto flex max-w-conversation-empty flex-col items-center justify-center gap-block-gap p-card text-center text-body text-muted-foreground",
+        wide && "max-w-conversation-empty-wide",
+      )}
+    >
+      {children}
+    </div>
   );
 }
+
+/**
+ * What floats over a log in a slot of its own, centred across it, on a
+ * ground of its own ringed and lifted off the lines: the way back to the
+ * newest line over its foot, and the line saying earlier lines could not be
+ * read over its top, so neither moves a row of the log as it comes and goes.
+ */
+export const FLOATING_OVER_LOG_CLASS =
+  "absolute left-1/2 -translate-x-1/2 rounded-control shadow-floating-edge";
 
 /** What the way back to the newest line is called, as its hint and its name. */
 const SCROLL_LABEL = "Scroll to the newest line";
@@ -371,7 +436,10 @@ export function ConversationScrollButton(): ReactNode {
   const { isAtBottom, scrollToBottom } = useConversation();
   if (isAtBottom) return null;
   return (
-    <div className="conversation-scroll">
+    // Its ground is the button's own (`--luke-button-ground`), which the button's lit fill is laid over as a title bar's is.
+    <div
+      className={`conversation-scroll ${FLOATING_OVER_LOG_CLASS} bottom-luke-16 flex bg-button-ground [--luke-button-ground:var(--luke-color-well)]`}
+    >
       <Tooltip label={SCROLL_LABEL}>
         <IconButton
           label={SCROLL_LABEL}

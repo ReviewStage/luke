@@ -613,6 +613,11 @@ const ANSWERS: { readonly [Kind in PortActKind]?: StagedAnswer<Kind> } = {
   },
   [ACT_KIND.AUTOMATIONS_FOLLOW]: (follow) =>
     pushedOnce(follow.kind === AUTOMATION_FOLLOW.WORKSPACE ? NO_AUTOMATIONS : { runs: [] }),
+  // Note that a mark is taken as the service takes one, the item's state echoed, though nothing here moves: the window's own mark stands over every read (`inbox-settling.ts`).
+  [ACT_KIND.CODING_AGENTS_INBOX_READ_STATE]: ({ itemId, unread }) => ({ id: itemId, unread }),
+  [ACT_KIND.CODING_AGENTS_INBOX_READ_ALL]: () => ({
+    marked: [...INBOXES.values()].flat().filter(({ unread }) => unread === true).length,
+  }),
 };
 
 /**

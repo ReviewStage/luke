@@ -148,13 +148,12 @@ interface Harness {
   readonly keyName: string;
   readonly keyUrl: string;
   readonly anchor: string;
-  readonly detail: string | undefined;
 }
 
 /**
  * Each harness by the provider whose models it runs: its name, its plan's
- * kind, the provider's name on its key, where a key is made, the row a search
- * or a remedy lands on, and the line under its name, where one says more.
+ * kind, the provider's name on its key, where a key is made, and the row a
+ * search or a remedy lands on.
  */
 const HARNESS = {
   [PROVIDER_KEY_PROVIDER.ANTHROPIC]: {
@@ -163,7 +162,6 @@ const HARNESS = {
     keyName: "Anthropic",
     keyUrl: "https://console.anthropic.com/settings/keys",
     anchor: SETTINGS_SECTION.CLAUDE,
-    detail: undefined,
   },
   [PROVIDER_KEY_PROVIDER.OPENAI]: {
     name: "Codex",
@@ -171,19 +169,15 @@ const HARNESS = {
     keyName: "OpenAI",
     keyUrl: "https://platform.openai.com/api-keys",
     anchor: SETTINGS_SECTION.CODEX,
-    // Note that the Voice page sends here for the key a call runs on, so the row says it holds it.
-    detail: "Its OpenAI key also runs calls and dictation.",
   },
 } as const satisfies Record<ProviderKeyProvider, Harness>;
 
-/** A harness's row while the keys are read: its mark, its name and any line under it, and the press that connects it. */
-function keyRowSkeleton(provider: ProviderKeyProvider): SettingsRowSkeletonShape {
-  return {
-    described: HARNESS[provider].detail !== undefined,
-    mark: SETTINGS_ROW_MARK_WIDTH,
-    controls: [SETTINGS_SKELETON_CONTROL.BUTTON],
-  };
-}
+/** A harness's row while the keys are read: its mark, its name, and the press that connects it. */
+const KEY_ROW_SKELETON: SettingsRowSkeletonShape = {
+  described: false,
+  mark: SETTINGS_ROW_MARK_WIDTH,
+  controls: [SETTINGS_SKELETON_CONTROL.BUTTON],
+};
 
 const HARNESSES: readonly ProviderKeyProvider[] = [
   PROVIDER_KEY_PROVIDER.ANTHROPIC,
@@ -222,8 +216,11 @@ const WORDS = {
   TOKEN_INVALID: "Anthropic rejected this token. Paste a new one.",
   TOKEN_QUOTA: "Out of usage on your Claude subscription.",
   TOKEN_UNREADABLE: "This token can no longer be read. Paste a new one.",
-  CHATGPT_SIGNED_OUT: `${INTEGRATION_STATUS_WORDS[INTEGRATION_STATUS.EXPIRED]}. Sign in with ChatGPT to reconnect.`,
-  CHATGPT_UNREADABLE: "This sign-in can no longer be read. Sign in with ChatGPT to connect again.",
+  CHATGPT_SIGNED_OUT: `${INTEGRATION_STATUS_WORDS[INTEGRATION_STATUS.EXPIRED]}.`,
+  CHATGPT_UNREADABLE: "This sign-in can no longer be read.",
+  CHATGPT_SIGNED_OUT_ALONE: `${INTEGRATION_STATUS_WORDS[INTEGRATION_STATUS.EXPIRED]}. Sign in with ChatGPT to reconnect.`,
+  CHATGPT_UNREADABLE_ALONE:
+    "This sign-in can no longer be read. Sign in with ChatGPT to connect again.",
   CHATGPT_INELIGIBLE:
     "OpenAI says this ChatGPT account isn't eligible for Codex. Sign in with ChatGPT to use another.",
   REVOCATION_UNCONFIRMED:
@@ -338,8 +335,8 @@ function tokenWords(plan: SubscriptionKeySummary): string {
   }
 }
 
-/** What a ChatGPT sign-in's status says. */
-function signInWords(plan: SubscriptionKeySummary): string {
+/** What a ChatGPT sign-in's status says, naming Sign in with ChatGPT only where its button does not stand beside it (`offered`). */
+function signInWords(plan: SubscriptionKeySummary, offered: boolean): string {
   switch (plan.status) {
     case PROVIDER_KEY_STATUS.UNVERIFIED:
     case PROVIDER_KEY_STATUS.VERIFIED:
@@ -347,11 +344,11 @@ function signInWords(plan: SubscriptionKeySummary): string {
     case PROVIDER_KEY_STATUS.LIMIT_REACHED:
       return limitWords(plan);
     case PROVIDER_KEY_STATUS.UNREADABLE:
-      return WORDS.CHATGPT_UNREADABLE;
+      return offered ? WORDS.CHATGPT_UNREADABLE : WORDS.CHATGPT_UNREADABLE_ALONE;
     case PROVIDER_KEY_STATUS.INELIGIBLE:
       return WORDS.CHATGPT_INELIGIBLE;
     default:
-      return WORDS.CHATGPT_SIGNED_OUT;
+      return offered ? WORDS.CHATGPT_SIGNED_OUT : WORDS.CHATGPT_SIGNED_OUT_ALONE;
   }
 }
 
@@ -746,7 +743,7 @@ function ChatGptPanel({
         <SettingsFacts>
           {plan === undefined ? null : (
             <State ok={connected && plan.status !== PROVIDER_KEY_STATUS.LIMIT_REACHED}>
-              {signInWords(plan)}
+              {signInWords(plan, offered)}
             </State>
           )}
         </SettingsFacts>
@@ -1174,18 +1171,10 @@ export function AgentAuthSection({
                   }
                   label={harness.name}
                   description={
-                    connection === undefined ? (
-                      harness.detail
-                    ) : (
-                      <>
-                        {harness.detail}
-                        <SettingsRowStateLine
-                          state={connection.state}
-                          block={harness.detail !== undefined}
-                        >
-                          {connection.words}
-                        </SettingsRowStateLine>
-                      </>
+                    connection === undefined ? undefined : (
+                      <SettingsRowStateLine state={connection.state}>
+                        {connection.words}
+                      </SettingsRowStateLine>
                     )
                   }
                 >
@@ -1214,7 +1203,7 @@ export function AgentAuthSection({
         ) : (
           <SettingsRowsSkeleton
             label={readingWords("your keys")}
-            rows={HARNESSES.map(keyRowSkeleton)}
+            rows={HARNESSES.map(() => KEY_ROW_SKELETON)}
           />
         )}
       </SettingsSection>

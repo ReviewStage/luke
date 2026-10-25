@@ -26,7 +26,8 @@ import {
  * agents' pull requests as its reads land: an answer naming the pull
  * request it already keeps leaves what it keeps as it stood, so nothing
  * drawn from it is drawn again, and an agent of another task, read through
- * it as a card naming that agent may, is answered but never kept.
+ * it as a card naming that agent may, is answered but never kept. Opening
+ * a task reads at most four of its agents at once, the archived ones last.
  * Synthetic ids.
  */
 
@@ -174,4 +175,40 @@ test("an agent of another task read through a task is answered but never kept", 
   await settled();
   assert.ok(!("failure" in answered), "the read is answered");
   assert.equal(newest(held).pullRequests.has(ELSEWHERE), false);
+});
+
+/** Synthetic agent ids, one per place in a task's list. */
+const agentIds = (count: number): string[] =>
+  Array.from(
+    { length: count },
+    (_, at) => `5d1e2f3a-4b5c-4d6e-8f70-${String(at).padStart(12, "0")}`,
+  );
+
+test("a task with many agents reads four at once, starting the next as one settles, the archived last", async () => {
+  const [archived = "", ...live] = agentIds(6);
+  const agents = [
+    { id: archived, status: CODING_AGENT_STATUS.COMPLETED, archivedAt: 1_000 },
+    ...live.map((id) => ({ id, status: CODING_AGENT_STATUS.COMPLETED })),
+  ];
+  const answers = new Map<string, (value: CodingAgentPullRequestAnswerView) => void>();
+  const read = (agentId: string) =>
+    new Promise<CodingAgentPullRequestAnswerView>((resolve) => {
+      answers.set(agentId, resolve);
+    });
+  function Task(): null {
+    useTaskPullRequests(TASK, agents, read);
+    return null;
+  }
+  root = createRoot(document.body.appendChild(document.createElement("div")));
+  act(() => root?.render(createElement(Task)));
+  await settled();
+  assert.deepEqual([...answers.keys()], live.slice(0, 4), "four are asked, the rest wait");
+
+  await act(async () => answers.get(live[1] ?? "")?.(structuredClone(PUBLISHED)));
+  await settled();
+  assert.deepEqual([...answers.keys()], live, "one settling starts the next");
+
+  await act(async () => answers.get(live[0] ?? "")?.(structuredClone(PUBLISHED)));
+  await settled();
+  assert.deepEqual([...answers.keys()], [...live, archived], "the archived agent is read last");
 });

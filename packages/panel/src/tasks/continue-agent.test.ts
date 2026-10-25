@@ -408,11 +408,11 @@ test("a failed turn's end line ends on Continue in new agent, which continues th
   assert.equal(tab.continued.length, 1, "held while the press is out");
 
   await act(async () =>
-    refuse({ reason: FAILURE_REASON.OTHER, text: "The agent could not be started. Try again." }),
+    refuse({ reason: FAILURE_REASON.OTHER, text: "The agent could not be started." }),
   );
   await settle();
   assert.equal(button.getAttribute("aria-busy"), null);
-  assert.match(line.textContent ?? "", /The agent could not be started\. Try again\./);
+  assert.match(line.textContent ?? "", /The agent could not be started\./);
 });
 
 test("no Continue stands on a turn failed on a refused API key, on an archived agent, or on a turn that did not fail", async () => {

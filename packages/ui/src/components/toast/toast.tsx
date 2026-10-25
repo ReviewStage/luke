@@ -58,10 +58,8 @@ export type ToastTone =
  * How long a toast stands, by what it reports, and the only holds a toast
  * names: a change carried, which is short; one carried that its Undo takes
  * back, long enough to reach for Undo, and what any toast with an action
- * stands for where it names no hold; one refused, which takes longer to read
- * and to act on; or news an agent or an automation sent while the developer
- * was looking elsewhere in the window, which has the longest, since it
- * arrives unbidden and carries a View to reach for. A confirmation drawn on
+ * stands for where it names no hold; or one refused, which takes the longest
+ * to read and to act on. A confirmation drawn on
  * its own control, a `CopyButton`'s check, stands for `DONE` too, so a copy
  * answered on its button and one answered by a toast last the same.
  */
@@ -69,7 +67,6 @@ export const TOAST_HOLD = {
   DONE: Duration.seconds(3),
   UNDO: Duration.seconds(5),
   FAILED: Duration.seconds(6),
-  NEWS: Duration.seconds(8),
 } as const;
 
 /** How a toast is drawn: the window's card, or a compact strip in a window too small for the card (the floating call window). */

@@ -21,6 +21,7 @@ import {
 } from "./automation-wire.js";
 import { agentFailureWords } from "./coding-agent-failure-words.js";
 import { CODING_AGENT_STATUS, type CodingAgentStatus } from "./coding-agent-wire.js";
+import { titlesNothing } from "./task-wire.js";
 import { clockText } from "./time-format.js";
 import { SENTRY_LEVEL, TRIGGER_CATALOG } from "./trigger-catalog.js";
 import { andList, orList } from "./words.js";
@@ -335,21 +336,62 @@ export function automationNext(automation: AutomationSummary): AutomationNext {
   return { kind: AUTOMATION_NEXT.AT, at: automation.nextRunAt };
 }
 
-/** A run's title: its agent's own, where it has one, else what fired it. */
-export function automationRunTitle(run: AutomationRunSummary): string {
-  if (run.agent !== null && run.agent.title !== null) return run.agent.title;
+/** What fired a run, in words: what an event is about where it names it, else the kind of firing. */
+export function automationFiringTitle(firing: AutomationRunSummary["firing"]): string {
   // An integration's run is titled by what it is about, as a GitHub event's agent is by its issue.
-  if (run.firing.kind === AUTOMATION_FIRING.INTEGRATION) {
-    return run.firing.subject.title ?? `${TRIGGER_CATALOG[run.firing.provider].name} event`;
+  if (firing.kind === AUTOMATION_FIRING.INTEGRATION) {
+    return firing.subject.title ?? `${TRIGGER_CATALOG[firing.provider].name} event`;
   }
-  return FIRING_WORDS[run.firing.kind];
+  if (firing.kind === AUTOMATION_FIRING.GITHUB && firing.title !== undefined) return firing.title;
+  return FIRING_WORDS[firing.kind];
 }
 
-/** What its owner is told of a run that failed to start: that it could not, and why, in its row's own words. */
-export function failedRunText(reason: AutomationRunReason | null): string {
-  return reason === null
-    ? "A run could not start."
-    : `A run could not start. ${RUN_REASON_WORDS[reason]}`;
+/** A run's title: its agent's own, where it has one, else what fired it. */
+export function automationRunTitle(run: AutomationRunSummary): string {
+  // Note that a placeholder title ("<untitled>") names nothing, so the run is titled as one whose agent has no title.
+  const title = run.agent?.title ?? null;
+  if (title !== null && !titlesNothing(title)) return title;
+  return automationFiringTitle(run.firing);
+}
+
+/** Where one agent's run stands among its automation's runs that started an agent: that run, its place counted from the oldest, and the agents of the runs either side. */
+export interface AutomationRunPlace {
+  readonly run: AutomationRunSummary;
+  /** Its place, the oldest being 1. */
+  readonly at: number;
+  readonly count: number;
+  /** The agent of the next newer run, none for the newest. */
+  readonly newer: string | undefined;
+  /** The agent of the next older run, none for the oldest. */
+  readonly older: string | undefined;
+}
+
+/**
+ * Where an agent's run stands among its automation's runs, newest first as
+ * they are read, counting only the runs that started an agent, and each
+ * agent once, at its newest run, since an automation that hands every run to
+ * one agent opens that same agent from each; none where no run read started it.
+ */
+export function automationRunPlace(
+  runs: readonly AutomationRunSummary[],
+  agentId: string,
+): AutomationRunPlace | undefined {
+  const seen = new Set<string>();
+  const steps = runs.filter((run) => {
+    if (run.agent === null || seen.has(run.agent.id)) return false;
+    seen.add(run.agent.id);
+    return true;
+  });
+  const index = steps.findIndex((run) => run.agent?.id === agentId);
+  const run = steps[index];
+  if (run === undefined) return undefined;
+  return {
+    run,
+    at: steps.length - index,
+    count: steps.length,
+    newer: steps[index - 1]?.agent?.id,
+    older: steps[index + 1]?.agent?.id,
+  };
 }
 
 /** A run's line: why it did not start, where it did not, else where its agent stands, or that it waits to start. */

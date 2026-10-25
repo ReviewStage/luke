@@ -47,7 +47,12 @@ import { useChatOn } from "../tasks/chat-gate.js";
 import { agentActor, agentName, type SentLine } from "../tasks/coding-agent-model.js";
 import { useInboxCloser } from "../tasks/inbox-close.js";
 import type { InboxCodeDoors } from "../tasks/inbox-code-card.js";
-import { INBOX_COLUMNS, useInboxColumns } from "../tasks/inbox-columns.js";
+import {
+  INBOX_COLUMNS,
+  INBOX_VIEW,
+  INBOX_VIEW_ITEMS,
+  useInboxColumns,
+} from "../tasks/inbox-columns.js";
 import { InboxList, InboxListSkeleton, SearchEmpty, ShowEmpty } from "../tasks/inbox-list.js";
 import {
   firstChoice,
@@ -510,7 +515,7 @@ function TaskInboxTab({
   return (
     <section
       ref={columns.ref}
-      className="inbox-view"
+      className={INBOX_VIEW}
       role="tabpanel"
       aria-label="Inbox"
       data-columns={columns.shown}
@@ -553,7 +558,7 @@ function TaskInboxTab({
       />
       {chosen === undefined ? (
         <section
-          className="inbox-view-items"
+          className={INBOX_VIEW_ITEMS}
           aria-label="Inbox"
           hidden={columns.shown !== INBOX_COLUMNS.BOTH}
         >

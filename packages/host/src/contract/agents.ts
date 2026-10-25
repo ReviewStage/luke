@@ -70,23 +70,9 @@ const exactId = EffectSchema.String.check(
   EffectSchema.isMaxLength(512),
 );
 
-/**
- * The Chat the panel has on screen: a workspace's whole Chat, where the
- * plan is none, or one task's Chat tab, which shows only its plan's channel.
- */
-const chatShownSchema = EffectSchema.Struct({
-  workspaceId: exactId,
-  taskId: EffectSchema.NullOr(exactId),
-});
-
-export type ChatShown = typeof chatShownSchema.Type;
-
-/** Which agent's tab, which task's Inbox, and which Chat the panel shows. */
+/** Which agent's tab the panel shows. */
 const shownParamsSchema = EffectSchema.Struct({
   agentId: EffectSchema.NullOr(exactId),
-  inboxTaskId: EffectSchema.NullOr(exactId),
-  /** The Chat on screen: a workspace's whole Chat, the plan none, or a task's Chat tab on its plan's channel; none where no Chat is. */
-  chatShown: EffectSchema.optionalKey(EffectSchema.NullOr(chatShownSchema)),
 });
 
 export const agentActsContract = {
