@@ -436,6 +436,8 @@ interface BoardViewControl {
 /** Which Automations page stands: the list, a new automation's editor, or one automation's. */
 export const AUTOMATIONS_PAGE = {
   LIST: "list",
+  /** Every run of the listed workspace's automations, beside the list as its other tab. */
+  RUNS: "runs",
   NEW: "new",
   EDIT: "edit",
 } as const;
@@ -446,6 +448,7 @@ export type AutomationsPlace =
       /** The automation whose page was left for the list by deleting it, which the window's history passes over from then on. */
       readonly deleted?: string;
     }
+  | { readonly kind: typeof AUTOMATIONS_PAGE.RUNS }
   | {
       readonly kind: typeof AUTOMATIONS_PAGE.NEW;
       /** The suggestion on the list it was opened from, whose preset fills its draft in; none for a blank one. */
@@ -460,6 +463,11 @@ export type AutomationsPlace =
       readonly created?: true;
     };
 
+/** Whether a place is one of the Automations page's two tabs, the list or the runs, rather than one automation's page. */
+export function automationsTab(place: AutomationsPlace): boolean {
+  return place.kind === AUTOMATIONS_PAGE.LIST || place.kind === AUTOMATIONS_PAGE.RUNS;
+}
+
 /** The list, where the Automations pages open with none asked for. */
 const AUTOMATIONS_LIST: AutomationsPlace = { kind: AUTOMATIONS_PAGE.LIST };
 
@@ -473,7 +481,7 @@ function launchedStandIn(place: FixturePlace | undefined): StandIn | undefined {
 
 /** Whether an Automations page stands its runs alone in a narrow room: as it was last told, else where it was opened on a run's link, which names a run its runs list. */
 function runsStanding(place: AutomationsPlace, runs: boolean | undefined): boolean {
-  if (place.kind === AUTOMATIONS_PAGE.LIST) return false;
+  if (automationsTab(place)) return false;
   return runs ?? (place.kind === AUTOMATIONS_PAGE.EDIT && place.runId !== undefined);
 }
 
@@ -3750,7 +3758,7 @@ export function useTasksTab(input: {
       }),
       onRuns: (shown) =>
         setStandIn((held) =>
-          held?.kind === STAND_IN.AUTOMATIONS && held.place.kind !== AUTOMATIONS_PAGE.LIST
+          held?.kind === STAND_IN.AUTOMATIONS && !automationsTab(held.place)
             ? { ...held, runs: shown }
             : held,
         ),

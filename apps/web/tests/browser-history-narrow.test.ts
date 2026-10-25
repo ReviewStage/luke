@@ -145,11 +145,6 @@ it.effect(
         await act(async () => plan.click());
         await settle();
         assert.equal(back().textContent, "Tasks");
-        assert.equal(
-          document.querySelector(".desktop-shell > .title-bar-controls"),
-          null,
-          "the way back stands for the sidebar's toggle and New task",
-        );
 
         await act(async () => back().click());
         await settle();

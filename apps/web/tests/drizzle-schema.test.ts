@@ -11,8 +11,7 @@ import { afterAll, test } from "vitest";
 /**
  * The drift check between the schema modules and the database the
  * migrations actually build. `drizzle-kit` generates each migration from the
- * modules (`packages/database/src/schemas/__tests__/migrations.test.ts` holds
- * that it was), but a migration edited by hand afterwards — a backfill, a
+ * modules (`check.sh` runs `drizzle-kit check` over the folder), but a migration edited by hand afterwards — a backfill, a
  * rename drizzle-kit asked about — can still rename a column, drop one, widen
  * one, or make one nullable, and leave a module that type-checks and lies, so
  * every query built on it is wrong in a way the compiler approves of. The store suites catch that only where a query covers the

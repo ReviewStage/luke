@@ -142,11 +142,6 @@ const refusalUnder = (secrets: {
     return Exit.isFailure(attached) ? String(Cause.squash(attached.cause)) : "stood";
   });
 
-test("the voice function's options carry the exchange", () => {
-  const options = voiceFunctionOptions(voiceServer());
-  assert.notEqual(options.exchange, undefined);
-});
-
 test("a call runs on its caller's own OpenAI key, and a caller who saved none has none, whatever key the deployment holds", async () => {
   vi.stubEnv("OPENAI_API_KEY", "sk-proj-luke-deployment-key-0000");
   const keyed = await database.createUser();

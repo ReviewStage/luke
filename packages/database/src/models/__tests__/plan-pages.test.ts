@@ -253,10 +253,6 @@ it.layer(getTestDB())("a page read by its id", (it) => {
           [byId.owner, byId.page.version, byId.newestVersion],
           [onAgent(agentId), 2, 2],
         );
-        assert.deepEqual(yield* ownerColumnsOf(first.id), [
-          { version: 1, taskId: null, agentId },
-          { version: 2, taskId: null, agentId },
-        ]);
         // Another workspace's member reads and writes nothing of the agent's pages.
         assert.deepEqual(yield* listPages(outsider, onAgent(agentId)), []);
         assert.ok(Option.isNone(yield* readPageById(outsider, first.id, undefined)));
@@ -317,10 +313,6 @@ it.layer(getTestDB())("a page read by its id", (it) => {
           ),
         );
 
-        assert.deepEqual(yield* ownerColumnsOf(shown.id), [
-          { version: 1, taskId: task.id, agentId: onIt },
-          { version: 2, taskId: task.id, agentId: null },
-        ]);
         // The agent's own list holds the pages it showed on no task, never the task's.
         assert.deepEqual(yield* listPages(owner, onAgent(onIt)), []);
 

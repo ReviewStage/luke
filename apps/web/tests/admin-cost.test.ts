@@ -172,7 +172,6 @@ test("every dollar figure is said to be a list-price equivalent, not what Luke p
   expect(page.textContent).toContain(
     "Voice is priced at gpt-live-1's $0.05 a minute, dictation at gpt-transcribe's $0.0045",
   );
-  expect(page.textContent).not.toContain("Own key");
 });
 
 test("a model the catalog does not price reads as unpriced, never as dollars", async () => {

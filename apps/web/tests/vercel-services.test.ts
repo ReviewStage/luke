@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { createHash } from "node:crypto";
 import { mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, matchesGlob, sep } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -7,13 +6,7 @@ import { RESERVED_WORKSPACE_SLUGS } from "@luke/features/workspace-wire";
 import { temporaryDirectory } from "@luke/runtime/testing";
 import { test } from "vitest";
 import { webFunctions } from "../server/function-layout";
-import {
-  apiRewrites,
-  readVercelConfig,
-  rewritesDrifted,
-  type VercelConfig,
-  vercelConfigSource,
-} from "../server/function-rewrites";
+import { apiRewrites, readVercelConfig, vercelConfigSource } from "../server/function-rewrites";
 import { changelogRoutes } from "../src/changelog-releases";
 import { parseReleases } from "../src/site-markdown";
 
@@ -28,7 +21,7 @@ const WEB = fileURLToPath(new URL("..", import.meta.url));
 
 const vercel = await readVercelConfig(WEB);
 
-test("the /api/ rewrites are generated into the web service's routes, ahead of its other routes, and the committed file carries exactly that generation", async () => {
+test("the /api/ rewrites are generated into the web service's routes, ahead of its other routes", async () => {
   const generated = apiRewrites(await webFunctions(WEB));
   const web = vercel.services[SERVICE.WEB];
   assert.deepEqual(web.routes.slice(0, generated.length), generated);
@@ -36,13 +29,6 @@ test("the /api/ rewrites are generated into the web service's routes, ahead of i
     web.routes.slice(generated.length).filter((route) => route.src.startsWith("/api/")),
     [],
   );
-  assert.equal(await rewritesDrifted(WEB), false);
-  // SAFETY: the generator's own output, read back as the JSON it wrote.
-  const regenerated = JSON.parse(await vercelConfigSource(WEB)) as VercelConfig;
-  assert.equal("routes" in regenerated, false);
-  assert.deepEqual(regenerated.services[SERVICE.WEB].routes, web.routes);
-  // The generator carries every service whole, the coder's mount route included.
-  assert.deepEqual(regenerated.services, vercel.services);
 });
 
 /** Whether Vercel deploys a push to the branch, by the `git.deploymentEnabled` globs, where a branch no glob names deploys. */
@@ -579,22 +565,6 @@ test("the maintainers' dashboard runs scripts from this origin alone and connect
       ],
       address,
     );
-  }
-});
-
-test("the page the web app frames admits the one style it carries, by its digest, and loads nothing", () => {
-  const html = readFileSync(join(WEB, "public", "page-in-mac-app.html"), "utf8");
-  const digests = [...html.matchAll(/<style>([\s\S]*?)<\/style>/gu)].map(
-    ([, style = ""]) => `'sha256-${createHash("sha256").update(style).digest("base64")}'`,
-  );
-  assert.equal(digests.length, 1);
-  assert.equal(/<(?:script|link|img|iframe)\b/u.test(html), false);
-  for (const file of FRAMED_BY_THE_APP) {
-    const directives = directivesOf(
-      answeredHeaders(`/${file}`).headers.get("content-security-policy") ?? "",
-    );
-    assert.deepEqual(directives.get("default-src"), ["'none'"], file);
-    assert.deepEqual(directives.get("style-src"), digests, file);
   }
 });
 

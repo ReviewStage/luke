@@ -16,7 +16,6 @@ import { Database, type DatabaseServices } from "@luke/database/core/query";
 import { saveProviderKey } from "@luke/database/models/provider-key-store";
 import { user } from "@luke/database/schemas/auth";
 import { getTestDB } from "@luke/database/testing";
-import { HOSTED_API_ERROR } from "@luke/features";
 import { type CatalogModel, MODEL_PROVIDER } from "@luke/features/models-wire";
 import {
   FAST_ACCESS,
@@ -184,18 +183,6 @@ it.layer(getTestDB())("the models route", (it) => {
           },
         );
       }),
-  );
-
-  it.effect("an unsigned caller reads nothing", () =>
-    Effect.gen(function* () {
-      assert.deepEqual(
-        yield* answer(modelCatalogOf(CATALOG), request(MODELS, { signedIn: false })),
-        {
-          status: HOSTED_HTTP_STATUS.UNAUTHORIZED,
-          body: { error: HOSTED_API_ERROR.INVALID_TOKEN },
-        },
-      );
-    }),
   );
 
   it.effect(

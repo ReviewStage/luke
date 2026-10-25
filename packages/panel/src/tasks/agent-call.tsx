@@ -288,7 +288,7 @@ export function AgentCallFoot({ agentId }: { agentId: string }): React.JSX.Eleme
   const onCall = useAgentOnCall(agentId);
   if (!onCall) return null;
   return (
-    <div className="agent-call-foot">
+    <div className="agent-call-foot relative">
       <AgentCallVideo agentId={agentId} />
     </div>
   );

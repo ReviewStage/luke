@@ -18,6 +18,28 @@ import { extendTailwindMerge } from "tailwind-merge";
  */
 
 /**
+ * The names the panel work column's block of the theme adds (its layout's
+ * spacing roles, a transcript's opening line, the call's video room, a
+ * tool's page, the find bar, the version history), by the group
+ * tailwind-merge reads each in.
+ */
+const PANEL_WORK_COLUMN = {
+  "font-weight": ["luke-medium", "luke-regular", "luke-semibold"],
+  leading: ["tool-description"],
+  spacing: [
+    "attention-mark",
+    "agent-video-frame",
+    "column-inset",
+    "find-field",
+    "origin-glyph",
+    "ring-reach",
+  ],
+  radius: ["disc"],
+  shadow: ["tool-default"],
+  animate: ["edit-composer-in", "edit-composer-out"],
+} as const;
+
+/**
  * The names the feedback and display components' block of the theme adds
  * (badge, chip, avatar, toast, spinner, progress, skeleton, banner, card,
  * pagination, breadcrumbs, data table), by the group tailwind-merge reads
@@ -197,6 +219,43 @@ const PANEL_SHELL = {
   radius: ["luke-14"],
 } as const;
 
+/**
+ * The names the chips, media, and call block of the theme adds (attachment
+ * chip, picture set and tile, page thumb, video player, provider button,
+ * composer frame, call bar and video tile), by the group tailwind-merge reads
+ * each in.
+ */
+const CHIPS_MEDIA_CALL = {
+  text: ["label-inline"],
+  spacing: [
+    "attachment-chip",
+    "attachment-chip-check",
+    "attachment-chip-lead",
+    "attachment-chip-max",
+    "attachment-chip-meter",
+    "attachment-chip-remove",
+    "attachment-chip-remove-out",
+    "attachment-chip-thumb",
+    "call-row",
+    "call-row-max",
+    "call-tile",
+    "call-tile-face-max",
+    "call-tile-face-share",
+    "icon-12",
+    "icon-16",
+    "page-thumb-row",
+    "picture-row",
+    "picture-thumb",
+    "provider-gate",
+    "provider-gate-touch",
+    "stage",
+    "video-player",
+  ],
+  radius: ["attachment-chip-face", "call-tile"],
+  shadow: ["attachment-chip-disc", "composer", "provider-gate"],
+  aspect: ["picture"],
+} as const;
+
 const merge = extendTailwindMerge({
   extend: {
     theme: {
@@ -217,6 +276,7 @@ const merge = extendTailwindMerge({
         ...CONTENT_TEXT.text,
         ...ROWS_NAVIGATION.text,
         ...TASK_SURFACES.text,
+        ...CHIPS_MEDIA_CALL.text,
       ],
       "font-weight": [
         "text",
@@ -227,6 +287,7 @@ const merge = extendTailwindMerge({
         "section",
         "emphasis",
         "title",
+        ...PANEL_WORK_COLUMN["font-weight"],
         ...FEEDBACK_DISPLAY["font-weight"],
         ...CONTENT_TEXT["font-weight"],
         ...TASK_SURFACES["font-weight"],
@@ -237,6 +298,7 @@ const merge = extendTailwindMerge({
         ...FEEDBACK_DISPLAY.leading,
         ...CONTENT_TEXT.leading,
         ...ROWS_NAVIGATION.leading,
+        ...PANEL_WORK_COLUMN.leading,
       ],
       spacing: [
         "luke-2",
@@ -301,11 +363,13 @@ const merge = extendTailwindMerge({
         "choice-segment",
         "choice-segment-compact",
         "caption-glyph",
+        ...PANEL_WORK_COLUMN.spacing,
         ...FEEDBACK_DISPLAY.spacing,
         ...CONTENT_TEXT.spacing,
         ...ROWS_NAVIGATION.spacing,
         ...TASK_SURFACES.spacing,
         ...PANEL_SHELL.spacing,
+        ...CHIPS_MEDIA_CALL.spacing,
       ],
       radius: [
         "control",
@@ -322,10 +386,12 @@ const merge = extendTailwindMerge({
         "luke-full",
         "choice-segment",
         "choice-box",
+        ...PANEL_WORK_COLUMN.radius,
         ...FEEDBACK_DISPLAY.radius,
         ...CONTENT_TEXT.radius,
         ...ROWS_NAVIGATION.radius,
         ...PANEL_SHELL.radius,
+        ...CHIPS_MEDIA_CALL.radius,
       ],
       shadow: [
         "dialog",
@@ -333,11 +399,14 @@ const merge = extendTailwindMerge({
         "menu",
         "tooltip",
         "switch-thumb",
+        ...PANEL_WORK_COLUMN.shadow,
         ...FEEDBACK_DISPLAY.shadow,
         ...CONTENT_TEXT.shadow,
         ...ROWS_NAVIGATION.shadow,
+        ...CHIPS_MEDIA_CALL.shadow,
       ],
       font: ["ui"],
+      aspect: [...CHIPS_MEDIA_CALL.aspect],
       container: [
         "dialog-confirm",
         "dialog-wide",
@@ -359,6 +428,7 @@ const merge = extendTailwindMerge({
         "menu-in",
         "tooltip-in",
         "tooltip-leave",
+        ...PANEL_WORK_COLUMN.animate,
       ],
     },
     classGroups: {
