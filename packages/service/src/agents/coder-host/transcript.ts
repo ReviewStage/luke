@@ -223,17 +223,23 @@ const heldContextOf = (target: ConversationTarget, own: OwnAgent | undefined) =>
 
 type HeldContext = Option.Option.Value<Effect.Success<ReturnType<typeof readCodingAgentContext>>>;
 
+/** Whether the catalog lists a window for the model, one or two. */
+const windowListed = (offered: readonly OfferedModel[], modelId: string) => {
+  const model = offered.find((each) => each.id === modelId);
+  return model?.contextWindow !== undefined || model?.contextWindows !== undefined;
+};
+
 /**
  * The agent's context as its row holds it, against the window the catalog
  * lists for the model and window the same read says it runs on now;
- * nothing before its first step, or where the catalog lists no such model,
- * since a fallback window would tell a share of a window the model may not
- * have. Note that the choice is read with the page rather than taken from
+ * nothing before its first step, or where the catalog lists no window for
+ * the model, since a fallback window would tell a share of a window the
+ * model may not have. Note that the choice is read with the page rather than taken from
  * the agent the request read, because a change of model or window during
  * the hold is what the step this page carries ran on.
  */
 const contextOf = (held: Option.Option<HeldContext>, offered: readonly OfferedModel[]) =>
-  Option.isNone(held) || !offered.some((model) => model.id === held.value.model)
+  Option.isNone(held) || !windowListed(offered, held.value.model)
     ? undefined
     : codingAgentContextOf(
         held.value,
