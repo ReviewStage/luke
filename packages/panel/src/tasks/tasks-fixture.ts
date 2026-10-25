@@ -1,5 +1,15 @@
 import { BOARD_ELEMENT_TYPE, DRAWING_ZONE } from "@luke/features/board-vocabulary";
 import type { Board, DrawingElement } from "@luke/features/board-wire";
+import {
+  PLAN_COMMENT_ACTOR,
+  PLAN_COMMENT_ENTRY,
+  PLAN_COMMENT_SCOPE,
+  PLAN_COMMENT_STATUS,
+  PLAN_COMMENTS_CURSOR_START,
+  type PlanCommentEntry,
+  type PlanCommentThread,
+  type PlanCommentWriter,
+} from "@luke/features/plan-comment-wire";
 import { TASK_PRIORITY, TASK_STATUS, type Task, type TaskSummary } from "@luke/features/task-wire";
 import {
   TASKS_READ,
@@ -14,7 +24,12 @@ import { type AppStateSnapshot, RUN_PROFILE } from "@luke/host/app-state";
 import type { PortActKind, PortActPayload, PortActResult } from "@luke/host/contract";
 import { FIXTURE_IDS, FIXTURE_TASK_NAME } from "@luke/host/fixture-stage";
 import type { SettingsLink } from "@luke/settings/settings-views";
-import { agentActAnswer, agentSidePanel, agentTasksView } from "./agent-fixture.js";
+import {
+  agentActAnswer,
+  agentSidePanel,
+  agentTasksView,
+  FIXTURE_AGENT_ID,
+} from "./agent-fixture.js";
 import { automationsActAnswer, automationsLaunchPlace } from "./automations-fixture.js";
 import {
   FIXTURE_PERSON,
@@ -42,8 +57,10 @@ import type { AutomationsPlace } from "./use-tasks-tab.js";
  * the panel opens on Tasks, and under the tasks profile it also opens the
  * reference journey's task from `docs/TASKS.md`, a draft of the default
  * template partway through with Luke working on the call about it, which is
- * what the tasks capture shows. Every name and repository here is
- * invented; nothing is read from an account.
+ * what the tasks capture shows; under the tasks-comments profile its plan
+ * holds comment threads, answered as the service answers a read of them.
+ * Every name and repository here is invented; nothing is read from an
+ * account.
  */
 
 /**
@@ -391,6 +408,176 @@ const FIXTURE_BOARD: Board = {
   drawing: { number: 1, elements: FIXTURE_DRAWING },
 };
 
+/** One thread's comment, written by `writer` at `at`. */
+function comment(
+  id: string,
+  writer: PlanCommentWriter,
+  at: number,
+  words: string,
+): PlanCommentEntry {
+  return { id, kind: PLAN_COMMENT_ENTRY.COMMENT, writer, words, at };
+}
+
+/** A member of the fixture's first workspace as an entry's writer. */
+function memberWrote(by: (typeof FIXTURE_PERSON)[keyof typeof FIXTURE_PERSON]): PlanCommentWriter {
+  return { actor: PLAN_COMMENT_ACTOR.MEMBER, by };
+}
+
+/**
+ * A thread on `quote`, words of the fixture's plan under `section`, its
+ * anchor where those words stand in the plan's text as the service keeps it,
+ * and its times from its entries.
+ */
+function thread(input: {
+  readonly id: string;
+  readonly scope: PlanCommentThread["scope"];
+  readonly quote: string;
+  readonly section: string;
+  readonly status: PlanCommentThread["status"];
+  readonly entries: readonly PlanCommentEntry[];
+}): PlanCommentThread {
+  const from = FIXTURE_TASK.document.body.indexOf(input.quote);
+  if (from < 0) throw new Error(`The fixture's plan holds no "${input.quote}"`);
+  const times = input.entries.map((entry) => entry.at);
+  return {
+    ...input,
+    anchor: { from, to: from + input.quote.length },
+    createdAt: Math.min(...times),
+    updatedAt: Math.max(...times),
+    revision: input.entries.length,
+  };
+}
+
+/**
+ * The comment threads on the fixture's plan, oldest first, as the service
+ * answers a read of them: one on a whole block, one its coding agent
+ * started, one answered by a member and by Luke, and one resolved, which
+ * only the Comments tab lists. The open ones stand in the plan's first
+ * sections, so the window's first screen of it shows their marks.
+ */
+const FIXTURE_THREADS: readonly PlanCommentThread[] = [
+  thread({
+    id: "8c1d3e5f-7a9b-4c2d-8e4f-6a8b0c2d4e61",
+    scope: PLAN_COMMENT_SCOPE.WORDS,
+    quote: "so removal covers invites and members alike",
+    section: "Approach",
+    status: PLAN_COMMENT_STATUS.OPEN,
+    entries: [
+      comment(
+        "8c1d3e5f-7a9b-4c2d-8e4f-6a8b0c2d4e62",
+        memberWrote(FIXTURE_PERSON.THEO),
+        CALL_AT - 5 * HOUR,
+        "Does removing a pending invite also kill its link? Otherwise a withdrawn invite could still be opened.",
+      ),
+      comment(
+        "8c1d3e5f-7a9b-4c2d-8e4f-6a8b0c2d4e63",
+        memberWrote(FIXTURE_PERSON.ADA),
+        CALL_AT - 4 * HOUR,
+        "Yes: the link finds its invite through the membership row, so deleting the row is enough.",
+      ),
+      comment(
+        "8c1d3e5f-7a9b-4c2d-8e4f-6a8b0c2d4e64",
+        { actor: PLAN_COMMENT_ACTOR.LUKE },
+        CALL_AT - 4 * HOUR + 2 * 60_000,
+        'Added under Hard parts: a withdrawn link reads "This invite is no longer valid" and grants nothing.',
+      ),
+    ],
+  }),
+  thread({
+    id: "9d2e4f6a-8b0c-4d3e-9f5a-7b9c1d3e5f71",
+    scope: PLAN_COMMENT_SCOPE.WORDS,
+    quote: "The teammate joins the workspace by opening the link.",
+    section: "Goal",
+    status: PLAN_COMMENT_STATUS.OPEN,
+    entries: [
+      comment(
+        "9d2e4f6a-8b0c-4d3e-9f5a-7b9c1d3e5f72",
+        { actor: PLAN_COMMENT_ACTOR.AGENT, agentId: FIXTURE_AGENT_ID },
+        CALL_AT - 20 * 60_000,
+        "A teammate with no account yet has nothing to join with. Should opening the link start sign-up first, then join?",
+      ),
+    ],
+  }),
+  thread({
+    id: "ae3f5a7b-9c1d-4e4f-8a6b-8c0d2e4f6a81",
+    scope: PLAN_COMMENT_SCOPE.BLOCK,
+    quote:
+      "Only an admin can add someone to a workspace, by creating their account by hand, so " +
+      "members wait on an admin to bring a teammate in.",
+    section: "Context",
+    status: PLAN_COMMENT_STATUS.OPEN,
+    entries: [
+      comment(
+        "ae3f5a7b-9c1d-4e4f-8a6b-8c0d2e4f6a82",
+        memberWrote(FIXTURE_PERSON.PRIYA),
+        CALL_AT - 2 * HOUR,
+        "Support hears this about twice a week, so it's worth saying here who asked for it.",
+      ),
+    ],
+  }),
+  thread({
+    id: "bf4a6b8c-0d2e-4f5a-9b7c-9d1e3f5a7b91",
+    scope: PLAN_COMMENT_SCOPE.WORDS,
+    quote: "lost because removing a member would then have to clear two tables",
+    section: "Alternatives",
+    status: PLAN_COMMENT_STATUS.RESOLVED,
+    entries: [
+      comment(
+        "bf4a6b8c-0d2e-4f5a-9b7c-9d1e3f5a7b92",
+        memberWrote(FIXTURE_PERSON.PRIYA),
+        CALL_AT - DAY,
+        "A separate table would make invite counts easier to chart.",
+      ),
+      comment(
+        "bf4a6b8c-0d2e-4f5a-9b7c-9d1e3f5a7b93",
+        memberWrote(FIXTURE_PERSON.ADA),
+        CALL_AT - DAY + HOUR,
+        "The chart can count memberships by state. Keeping one table.",
+      ),
+      {
+        id: "bf4a6b8c-0d2e-4f5a-9b7c-9d1e3f5a7b94",
+        kind: PLAN_COMMENT_ENTRY.RESOLVED,
+        writer: memberWrote(FIXTURE_PERSON.ADA),
+        at: CALL_AT - DAY + HOUR + 60_000,
+      },
+    ],
+  }),
+].sort((older, newer) => older.createdAt - newer.createdAt);
+
+/** Where a reader of the fixture's comments stands once it has read them, which nothing moves past. */
+const FIXTURE_COMMENTS_CURSOR = "1";
+
+/**
+ * The tasks-comments profile's answer to a read of a plan's comments: the
+ * fixture task's threads to a reader starting out, none on any other plan,
+ * and to a reader already caught up a read held, as the service holds one
+ * until something moves, which here nothing does. Note that the held read is
+ * a promise that never settles (`Promise.race([])`), because one answered at
+ * once would have the window read again at once, for good.
+ */
+function commentsAnswer(
+  payload: PortActPayload<typeof ACT_KIND.TASKS_COMMENTS>,
+): PortActResult<typeof ACT_KIND.TASKS_COMMENTS> | Promise<never> {
+  if (payload.after !== PLAN_COMMENTS_CURSOR_START) return Promise.race([]);
+  return {
+    threads: payload.planId === FIXTURE_TASK_ID ? FIXTURE_THREADS : [],
+    cursor: FIXTURE_COMMENTS_CURSOR,
+  };
+}
+
+/** The tasks-comments profile's answers: its plan's comments, and nothing else, which the agent's answers and main's take. */
+function commentsActAnswer(
+  profile: string,
+  kind: PortActKind,
+  payload: PortActPayload<PortActKind>,
+): { readonly answer: PortActResult<PortActKind> } | undefined {
+  if (profile !== RUN_PROFILE.TASKS_COMMENTS || kind !== ACT_KIND.TASKS_COMMENTS) return undefined;
+  // SAFETY: the kind is the comments read, so its payload is that read's; a held read is a promise
+  // the port's caller awaits as it awaits every answer.
+  const read = payload as PortActPayload<typeof ACT_KIND.TASKS_COMMENTS>;
+  return { answer: commentsAnswer(read) as PortActResult<PortActKind> };
+}
+
 /** The open task on its whiteboard, as the tasks-board profile captures it. */
 const FIXTURE_OPEN_BOARD: TasksView = { ...FIXTURE_OPEN_TASK, board: FIXTURE_BOARD };
 
@@ -467,7 +654,8 @@ function emptyTaskAnswer(
 
 /**
  * What a fixture run answers an act with in place of main (`act.ts`), boxed
- * so an act that answers nothing is told from one left to main: its agent
+ * so an act that answers nothing is told from one left to main: the
+ * tasks-comments profile's plan comments, its agent
  * profiles' tabs' reads, its signed-in profiles' pages' reads, every
  * profile's workspace members, every other profile's task as one with no
  * agents and no linked issues, and nothing else, which goes to main as it
@@ -479,6 +667,7 @@ export function fixtureActAnswer(
   payload: PortActPayload<PortActKind>,
 ): { readonly answer: PortActResult<PortActKind> } | undefined {
   return (
+    commentsActAnswer(run.profile, kind, payload) ??
     agentActAnswer(run.profile, kind, payload) ??
     automationsActAnswer(run.profile, kind, payload) ??
     settingsActAnswer(run.profile, kind, payload) ??

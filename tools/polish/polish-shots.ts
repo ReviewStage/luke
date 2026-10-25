@@ -53,6 +53,7 @@ import {
   type Step,
   WINDOW,
 } from "./scenes.ts";
+import { scrollScript } from "./scroll.ts";
 
 const REPOSITORY_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 const DESKTOP_ROOT = path.join(REPOSITORY_ROOT, "apps", "desktop");
@@ -332,6 +333,11 @@ async function runStep(
         break;
       case STEP.WAIT_FOR_TEXT:
         await page.getByText(step.text).first().waitFor(options);
+        break;
+      case STEP.SCROLL:
+        if (!(await page.evaluate<boolean>(scrollScript(step.role, step.by)))) {
+          throw new Error(`No ${step.role} to scroll`);
+        }
         break;
     }
     await page.waitForTimeout(STEP_SETTLE_MS);

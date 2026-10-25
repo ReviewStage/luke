@@ -46,6 +46,8 @@ export const RUN_PROFILE = {
   TASKS_TRANSCRIPT: "tasks-transcript",
   /** The same task mid-call, opened at launch on the work its agent did on its calls. */
   TASKS_WORK: "tasks-work",
+  /** The same task beside its coding agent, opened at launch on its plan, whose words hold comment threads: one answered, one its agent started, one on a whole block, and one resolved. */
+  TASKS_COMMENTS: "tasks-comments",
   /** The tasks' list, opened at launch on the window's Chat over a synthetic chat. */
   CHAT: "chat",
   /** A synthetic account signed in, its tasks holding Inbox items: an ask of each kind, a form, a notice with code, a long thread, an answered item, and a closed one. */
@@ -54,6 +56,8 @@ export const RUN_PROFILE = {
   PERSON: "person",
   /** The same task on its coding agent, its Pull request tab beside it: checks, reviews, and a merge queued. */
   AGENT_PULL_REQUEST: "agent-pull-request",
+  /** The same agent and Pull request tab, the agent's turn long enough that its transcript scrolls. */
+  AGENT_TRANSCRIPT: "agent-transcript",
   /** The same agent, its Pull request tab on the checks. */
   AGENT_CHECKS: "agent-checks",
   /** The same agent, its Pull request tab on Files changed. */
