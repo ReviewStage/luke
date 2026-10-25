@@ -485,6 +485,28 @@ function heard(node: Node): string {
   return [...node.childNodes].map(heard).join("");
 }
 
+test("a sidebar task's press says its status after its name, as a List row's does, and none where its service gives it none", () => {
+  /** What the row's press says, read as Dean, who is on the task, so no face is said. */
+  const said = (task: TaskSummary) => {
+    const { tasks, asked } = openTab();
+    const container = mount(
+      createElement(MemberDirectory, {
+        workspace: undefined,
+        readerId: DEAN.userId,
+        children: sidebarTask(tasks, { ...task, assignee: DEAN }, asked),
+      }),
+    );
+    const press = container.querySelector(".luke-list-row-title");
+    const words = press === null ? "" : heard(press);
+    unmountAll();
+    return words;
+  };
+
+  assert.equal(said({ ...OTHER, status: TASK_STATUS.IN_PROGRESS }), "Billing export, In progress");
+  assert.equal(said({ ...OTHER, status: TASK_STATUS.BACKLOG }), "Billing export, Backlog");
+  assert.equal(said(OTHER), "Billing export");
+});
+
 test("a sidebar plan whose repository belongs to another of the account's workspaces wears the attention mark before its time, its card naming that workspace, until it is moved there", () => {
   const { asked } = openTab();
   const tasks = tasksControl({ me: DEAN.userId, workspaces: [PERSONAL, STAGE] });
