@@ -19,7 +19,7 @@ import { onRegistry } from "../testing/copy-feedback.js";
 import { codingAgentsControl } from "../testing/tasks-control.js";
 
 /**
- * files-changed-narrow.test.ts -- a phone's Files changed view: the side panel stands full screen at a phone's width, wide enough on the desktop for the tree beside the diff, but a narrow room gives the diff the whole width and floats the tree over it only once its toggle opens it, a file chosen there putting it away; the desktop's panel at that width keeps the tree beside the diff, as before.
+ * files-changed-narrow.test.ts -- Files changed at a phone's width: a narrow room gives the diff the whole width and floats the tree over it only once its toggle opens it, a file chosen there putting it away; the desktop's side panel at that width, under its default, floats the tree too, since the tree beside the diff would leave the diff too little.
  *
  * jsdom lays nothing out, so the window's stylesheets are laid once for a
  * panel that wide (`testing/container-width.ts`), the tab drawn in the
@@ -174,13 +174,16 @@ test("on a phone the diff has the whole width, the tree held open standing nowhe
   assert.ok(!treeDrawn(), "a press on the diff takes the tree down");
 });
 
-test("the desktop's side panel at the same width keeps the tree beside the diff, as the panel holds it", async () => {
+test("the desktop's side panel at the same width, under its default, gives the diff the whole width too, the tree held open floating over it once asked", async () => {
   const tab = await drawChangesTab(SHELL_ROOM.WIDE);
   const { toggles, treeDrawn, floats } = parts(tab);
-  assert.ok(treeDrawn(), "the tree stands");
-  assert.ok(!floats(), "beside the diff");
+  assert.ok(!treeDrawn(), "the tree the panel holds open stands nowhere beside the diff");
   assert.deepEqual(
     toggles().map((button) => button.getAttribute("aria-label")),
-    ["Hide files"],
+    ["Show files"],
   );
+
+  await act(async () => toggles()[0]?.click());
+  assert.ok(treeDrawn(), "the toggle opens the tree");
+  assert.ok(floats(), "over the diff");
 });
