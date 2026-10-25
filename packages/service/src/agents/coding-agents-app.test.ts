@@ -4345,6 +4345,7 @@ it.layer(getTestDB())("an agent's kept pull request", (it) => {
   interface Standing {
     mergedAt: string | null;
     limited?: boolean;
+    closed?: boolean;
   }
 
   const MERGED_AT = "2026-10-17T09:00:00Z";
@@ -4362,7 +4363,7 @@ it.layer(getTestDB())("an agent's kept pull request", (it) => {
       const merged = standing.mergedAt !== null;
       return Response.json({
         ...(await answered.json()),
-        ...(merged ? { state: "closed" } : undefined),
+        ...(merged || standing.closed === true ? { state: "closed" } : undefined),
         merged,
         merged_at: standing.mergedAt,
         additions: 4,
@@ -4447,6 +4448,30 @@ it.layer(getTestDB())("an agent's kept pull request", (it) => {
         standing.mergedAt = MERGED_AT;
 
         assert.deepEqual(yield* read, open);
+      }),
+  );
+
+  it.effect(
+    "an ended agent's closed pull request reopened on GitHub reads open once the row's closed read is old, as no sweep reads a closed one again",
+    () =>
+      Effect.gen(function* () {
+        const standing: Standing = { mergedAt: null, closed: true };
+        const { readAfter } = yield* publishedAs(standing);
+        // Long enough after its Start that the agent, which never ran a turn, has ended.
+        const stateAfter = (wait: Duration.Duration) =>
+          Effect.map(
+            readAfter(wait),
+            (body) =>
+              readAnswer(codingAgentPullRequestAnswerSchema, HOSTED_HTTP_STATUS.OK, {
+                status: HOSTED_HTTP_STATUS.OK,
+                body,
+              }).pullRequest?.state,
+          );
+        assert.equal(yield* stateAfter(Duration.hours(1)), PULL_REQUEST_STATE.CLOSED);
+
+        standing.closed = false;
+
+        assert.equal(yield* stateAfter(Duration.hours(1)), PULL_REQUEST_STATE.OPEN);
       }),
   );
 

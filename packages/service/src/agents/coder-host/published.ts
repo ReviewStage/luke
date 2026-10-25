@@ -77,8 +77,10 @@ import { CODER } from "./bounds.js";
  * The row also keeps when that read was and of which branch, so the kept
  * answers answer from the row rather than GitHub where it will not have
  * moved or was just read: an archived agent's, an ended agent's whose pull
- * request merged or closed, and any read within `CODER.PUBLISHED_ROW_FRESH`
- * of the last, on whichever instance; and where GitHub refuses for its rate
+ * request merged, or closed within `CODER.PUBLISHED_CLOSED_FRESH` of the
+ * read, since a closed one may reopen and no sweep reads a closed one again,
+ * and any read within `CODER.PUBLISHED_ROW_FRESH` of the last, on whichever
+ * instance; and where GitHub refuses for its rate
  * limit, the row answers rather than a failure. The row answers only while
  * it stands on the branch read, and a change to the pull request lets the
  * read go (`forgetPublished`). Opening a task of a hundred agents once asked
@@ -332,14 +334,16 @@ function keptAnswer(agent: CodingAgent, kept: KeptPublished): CodingAgentPullReq
   return { repository: agent.repository, branch: kept.read.branch, pullRequest };
 }
 
-/** Whether the row answers in GitHub's place: the agent archived, or ended on a pull request that ended, or the row read a moment ago. */
+/** Whether the row answers in GitHub's place: the agent archived, or ended on a pull request that merged or closed a while ago at most, or the row read a moment ago. */
 function keptStands(agent: CodingAgent, ended: boolean, kept: KeptPublished, now: number): boolean {
   if (agent.archivedAt !== null) return true;
   const state = kept.published?.state;
-  if (ended && (state === PULL_REQUEST_STATE.MERGED || state === PULL_REQUEST_STATE.CLOSED)) {
-    return true;
+  const age = now - kept.read.at;
+  if (ended && state === PULL_REQUEST_STATE.MERGED) return true;
+  if (ended && state === PULL_REQUEST_STATE.CLOSED) {
+    return age < Duration.toMillis(CODER.PUBLISHED_CLOSED_FRESH);
   }
-  return now - kept.read.at < Duration.toMillis(CODER.PUBLISHED_ROW_FRESH);
+  return age < Duration.toMillis(CODER.PUBLISHED_ROW_FRESH);
 }
 
 /** Whether GitHub refused the read for its rate limit: a 429, the instance's own held answer among them, or a 403 it may answer one with. */
