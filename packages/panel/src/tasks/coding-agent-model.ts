@@ -1593,10 +1593,28 @@ export function agentParts(message: CodingAgentMessage): readonly AgentPart[] {
   const cuts = new Map((message.cutParts ?? []).map((cut) => [cut.index, cut]));
   const parts = message.parts.map((part, index) => {
     const cut = cuts.get(index);
-    return cut === undefined ? agentPart(part) : cutAgentPart(part, cut, message.id);
+    return cut === undefined ? storedPartRead(part) : cutAgentPart(part, cut, message.id);
   });
   partsRead.set(message, parts);
   return parts;
+}
+
+/**
+ * Each stored part as read, by the part: a page that rewrites a message
+ * keeps every part it did not touch (`keepIdentity`), so a running turn's
+ * thousand parts are read once and each read stays the same value, which
+ * lets the rows drawn from them stand as they were drawn.
+ */
+const partRead = new WeakMap<object, AgentPart>();
+
+/** A stored part read for drawing, once per part. */
+function storedPartRead(part: WireValue): AgentPart {
+  if (typeof part !== "object" || part === null) return agentPart(part);
+  const read = partRead.get(part);
+  if (read !== undefined) return read;
+  const fresh = agentPart(part);
+  partRead.set(part, fresh);
+  return fresh;
 }
 
 /**

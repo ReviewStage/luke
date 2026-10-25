@@ -62,6 +62,8 @@ export const RUN_PROFILE = {
   AGENT_PULL_REQUEST: "agent-pull-request",
   /** The same agent and Pull request tab, the agent's turn long enough that its transcript scrolls. */
   AGENT_TRANSCRIPT: "agent-transcript",
+  /** The same agent as an orchestrator days into its run, its transcript thousands of entries long and written to while it is open. */
+  AGENT_LONG_RUN: "agent-long-run",
   /** The same agent, its Pull request tab on the checks. */
   AGENT_CHECKS: "agent-checks",
   /** The same agent, its Pull request tab on Files changed. */

@@ -19,6 +19,8 @@ import {
   callPlace,
   isAgentCallKind,
   isCommandKind,
+  sameFieldsBy,
+  sameTurnRow,
   TURN_ROW,
   type TurnRow,
 } from "@luke/features/turn-rows";
@@ -119,6 +121,7 @@ import {
   createContext,
   Fragment,
   type MouseEvent,
+  memo,
   type ReactNode,
   useContext,
   useEffect,
@@ -1734,6 +1737,15 @@ function TurnRowView<B>({
 }
 
 /**
+ * A turn's row, drawn again only where it reads otherwise than it did, or
+ * the tab draws its blocks another way: a running turn's page touches its
+ * newest row alone, so every row before it is kept as it was drawn.
+ */
+const SteadyTurnRow = memo(TurnRowView, (a, b) =>
+  sameFieldsBy(a, b, { row: sameTurnRow }),
+) as typeof TurnRowView;
+
+/**
  * A turn's rows (`turn-rows.ts`): each block drawn by its tab, a run of
  * calls and a folded lead drawn here. What trails the turn, as a spoken
  * turn's "Worked for" line does, is drawn inside its last row where that
@@ -1753,13 +1765,13 @@ export function TranscriptRows<B>({
 }): ReactNode {
   // Note that a group is keyed by whether it opens, because the fold reads `defaultOpen` once, and a group that stops being the turn's latest work has to fold.
   return rows.map((row, index) => (
-    <TurnRowView
+    <SteadyTurnRow
       key={row.kind === TURN_ROW.GROUP ? `${row.key}-${String(row.open)}` : row.key}
       row={row}
       trailer={index === rows.length - 1 ? trailer : null}
     >
       {children}
-    </TurnRowView>
+    </SteadyTurnRow>
   ));
 }
 

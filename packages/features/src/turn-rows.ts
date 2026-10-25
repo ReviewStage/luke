@@ -439,6 +439,69 @@ export type TurnRow<B> =
       readonly failed: boolean;
     };
 
+/** Whether a value is a record of its own keys, rather than an array or a primitive. */
+function isRecordValue(value: unknown): value is Readonly<Record<string, unknown>> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+/**
+ * Whether two values read alike, `depth` records deep: the same value;
+ * arrays alike item by item; or records with the same keys, each value
+ * alike one record less deep, where a record past the depth is alike only
+ * as the same value. Note that it names no field, so a field added to a
+ * shape it compares is compared with the rest, never missed, and that
+ * arrays cost no depth, so a fold's rows inside a row are read as the row
+ * is.
+ */
+export function sameShape(a: unknown, b: unknown, depth: number): boolean {
+  if (Object.is(a, b)) return true;
+  if (Array.isArray(a) || Array.isArray(b)) {
+    return (
+      Array.isArray(a) &&
+      Array.isArray(b) &&
+      a.length === b.length &&
+      a.every((item, at) => sameShape(item, b[at], depth))
+    );
+  }
+  if (depth <= 0 || !isRecordValue(a) || !isRecordValue(b)) return false;
+  const keys = Object.keys(a);
+  return (
+    keys.length === Object.keys(b).length &&
+    keys.every((key) => Object.hasOwn(b, key) && sameShape(a[key], b[key], depth - 1))
+  );
+}
+
+/**
+ * Whether two records hold the same values under the same keys, each the
+ * same value unless `by` names how that key is read: a memoised component's
+ * props, every one compared, so a prop added later is never missed.
+ */
+export function sameFieldsBy<T extends object>(
+  a: T,
+  b: T,
+  by: { readonly [K in keyof T]?: (ours: T[K], theirs: T[K]) => boolean },
+): boolean {
+  const keys = Object.keys(a) as (keyof T)[];
+  return (
+    keys.length === Object.keys(b).length &&
+    keys.every((key) => {
+      const read = by[key];
+      return (
+        Object.hasOwn(b, key) &&
+        (read === undefined ? Object.is(a[key], b[key]) : read(a[key], b[key]))
+      );
+    })
+  );
+}
+
+/** How deep a turn's row is read: the row, a fold's rows inside it, then each block's own fields, a part read again from the same stored part reading alike. */
+export const TURN_ROW_DEPTH = 3;
+
+/** Whether two of a turn's rows draw alike: every field of the row, its fold's rows, and its blocks' own fields (`sameShape`). */
+export function sameTurnRow<B>(a: TurnRow<B>, b: TurnRow<B>): boolean {
+  return sameShape(a, b, TURN_ROW_DEPTH);
+}
+
 /** What a lead's blocks hold, as its fold's line counts them. */
 interface Held {
   readonly calls: number;
