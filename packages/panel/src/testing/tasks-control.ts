@@ -412,7 +412,7 @@ export function tasksControl(overrides: Partial<TasksControl> = {}): TasksContro
     onRetryDocument: ignore,
     onNewTask: ignore,
     onNewTaskIn: ignore,
-    onNewTaskAt: ignore,
+    onQuickAdd: () => Promise.resolve(undefined),
     onNewAutomationAgent: ignore,
     newTask: {
       open: false,

@@ -110,7 +110,13 @@ import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import { useAnnounceShown } from "../use-announce-shown.js";
 import { useRefocusAfterEdit } from "../use-refocus-after-edit.js";
 import { rowMenu } from "./action-menu.js";
-import { GroupNewTaskButton, groupStanding } from "./new-task-button.js";
+import {
+  groupNewTaskWords,
+  groupStanding,
+  NewTaskInButton,
+  quickAddInto,
+} from "./new-task-button.js";
+import { type QuickAddLine, QuickAddLines, useQuickAdd } from "./quick-add.js";
 import { groupCount } from "./sidebar-fold.js";
 import { useTaskMenuItems } from "./task-actions.js";
 import {
@@ -154,9 +160,9 @@ import { useRowDrag } from "./use-row-drag.js";
  * its parts hang their own instead (`task-part-cards.tsx`). A card dragged onto another column
  * is sent that column's status or priority, or assigned to its person, No
  * assignee's assigning it to no one, as the task page's chips send them,
- * and moves there at once; the + at a column's head opens New task with
- * that same status, priority, or assignee chosen, so the task it starts
- * lands in the column (`new-task-button.tsx`); a change the service did not keep goes back
+ * and moves there at once; the + at a column's head opens a bare title at
+ * the column's top, and Return adds a task there with that same status,
+ * priority, or assignee and no agent, opening nothing (`quick-add.tsx`); a change the service did not keep goes back
  * where it stood and says so, whether dragged or picked. Which columns stand, what each holds, its order, and what a card
  * draws are the Tasks page's filter and the Board's own display
  * (`tasks-page-model.ts`): Backlog, Todo, In progress, and Done at first,
@@ -418,6 +424,41 @@ function TaskBoardCard({
   );
 }
 
+/**
+ * A column's quick add line (`quick-add.tsx`): the draft as the card it is
+ * about to be, raised off the well as every card is, its status's chip before
+ * its bare title and its priority's and assignee's in its foot, each changing
+ * the draft; an add still out as its card, its name muted, until it draws;
+ * and why one was refused, under the draft.
+ */
+const boardQuickAddLine: QuickAddLine = ({ draft, pending, refused }) =>
+  refused === undefined ? (
+    <Card
+      as={CARD_ELEMENT.LI}
+      corner={CARD_CORNER.CONTROL}
+      padding={CARD_PADDING.NONE}
+      shadow={CARD_SHADOW.SOFT}
+      className="tasks-board-card tasks-board-draft"
+      data-quick-add={draft === undefined ? undefined : ""}
+      data-pending={pending === undefined ? undefined : "true"}
+    >
+      <span className="tasks-board-card-title">
+        {draft?.status}
+        <span className="tasks-board-name">{draft?.title ?? pending}</span>
+      </span>
+      {draft === undefined ? null : (
+        <div className="tasks-board-card-foot">
+          <div className="tasks-board-card-pills">
+            {draft.priority}
+            {draft.assignee}
+          </div>
+        </div>
+      )}
+    </Card>
+  ) : (
+    <li className="tasks-board-draft-note tasks-board-card-note">{refused}</li>
+  );
+
 /** What heads a column: its value's mark and its name. */
 interface ColumnHead {
   readonly mark: React.JSX.Element | null;
@@ -533,6 +574,10 @@ function TaskBoardColumnView({
       ? properties.filter((property) => property !== TASK_PROPERTY.ASSIGNEE)
       : properties;
   const cards = useLeaving(column.tasks, taskIdOf);
+  const into = quickAddInto(column.head);
+  const quick = useQuickAdd(tasks, into ?? {});
+  // Note that the quick add's lines stand where the cards do, so a column with none draws them in their list rather than its empty line.
+  const adding = quick.shown;
   // A column's cards are one Tab stop that ↑↓ walk; ←→ cross to the next column's (`useRovingColumns`).
   const roving = useRovingKeys<HTMLDivElement>();
   return (
@@ -553,10 +598,14 @@ function TaskBoardColumnView({
         glyph={mark}
         count={column.tasks.length === 0 ? undefined : groupCount(column.tasks.length)}
         surface={GROUP_SURFACE.WIDE}
-        actions={<GroupNewTaskButton tasks={tasks} head={column.head} words={words} />}
+        actions={
+          into === undefined || !tasks.signedIn ? undefined : (
+            <NewTaskInButton label={groupNewTaskWords(column.head, words)} onPress={quick.open} />
+          )
+        }
         actionsShown={GROUP_ACTIONS.AT_REST}
       />
-      {cards.length === 0 ? (
+      {cards.length === 0 && !adding ? (
         column.older === undefined ? (
           <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED} className="tasks-board-empty">
             {NO_TASKS}
@@ -580,6 +629,7 @@ function TaskBoardColumnView({
               moves
               onPointerDown={narrow ? undefined : drag}
             >
+              <QuickAddLines quick={quick} line={boardQuickAddLine} />
               {cards.map(({ value: task }) => (
                 <TaskBoardCard
                   key={task.id}

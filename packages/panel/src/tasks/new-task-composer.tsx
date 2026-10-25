@@ -13,24 +13,11 @@ import {
   TASK_ISSUE_RELATION,
   type TaskIssueChoice,
 } from "@luke/features/task-issue-wire";
-import { TASK_BOUNDS, TASK_STATUS, type TaskStanding } from "@luke/features/task-wire";
+import { TASK_BOUNDS } from "@luke/features/task-wire";
 import { TERM } from "@luke/features/words";
 import { ACT_KIND } from "@luke/host/acts";
 import { SHORTCUT_KEY, type ShortcutChord, shortcutMatches } from "@luke/settings/shortcuts";
-import {
-  CHIP_LOOK,
-  CHIP_WIDTH,
-  Chip,
-  ChipName,
-  POPOVER_ALIGN,
-  TaskPriorityMark,
-  TaskStatusMark,
-  TEXT_ELEMENT,
-  TEXT_TONE,
-  TEXT_VARIANT,
-  Text,
-} from "@luke/ui";
-import { GLYPH } from "@luke/ui/icons";
+import { CHIP_WIDTH, POPOVER_ALIGN, TEXT_ELEMENT, TEXT_TONE, TEXT_VARIANT, Text } from "@luke/ui";
 import { agentPromptOf, taskNameOfIssue, workspaceReaches } from "@luke/ui/tasks-model";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useAct } from "../act.js";
@@ -61,7 +48,7 @@ import { SkillFiles } from "./skill-chip.js";
 import type { SkillWithFile } from "./skill-ref.js";
 import { TaskMentions, tasklessMentions, useMentionAgentsReader } from "./task-mentions.js";
 import type { AgentComposerControl } from "./use-agent-composer.js";
-import type { NewTaskAgent, NewTaskStanding, NewTaskStart, TasksControl } from "./use-tasks-tab.js";
+import type { NewTaskAgent, NewTaskStart, TasksControl } from "./use-tasks-tab.js";
 
 /**
  * new-task-composer.tsx -- New task's composer card: the words a coding agent starts on, and the chips that say where and how the task starts.
@@ -78,14 +65,7 @@ import type { NewTaskAgent, NewTaskStanding, NewTaskStart, TasksControl } from "
  * chip, where the workspace has GitHub or Linear connected
  * (`issue-picker-chip.tsx`, ⌘L from the card). The repository chip starts on the one the press chose
  * (a repository group's +), else the one the newest task in the workspace
- * was about, either only where the workspace's GitHub reaches it. Opened
- * from a Tasks page group's +, a pill after it names where the task will
- * stand, its group's status, priority, or assignee, and its × lets that go,
- * so the task starts where any task starts. Note that an agent's start moves
- * its task to In progress and assigns its starter where no one is
- * (`coder-host/start.ts`), so a bare task alone keeps another status or No
- * assignee, and the card says so under the box while Return would start an
- * agent over them.
+ * was about, either only where the workspace's GitHub reaches it.
  *
  * The words are a coding agent's prompt. Start stands once there are
  * words, files, or an issue, and a repository, without which it is held and
@@ -189,29 +169,16 @@ const BARE_WORDS: ComposerWords = {
 /** Why an automation's agent did not start where the brief and the words pass an agent's first message's bound. */
 const TOO_LONG = "That request is too long.";
 
-/** Why Start is held without a repository, and what an agent's start does to where its task was to stand. */
+/** Why Start is held without a repository. */
 const COMPOSER_WORDS = {
   NEEDS_REPOSITORY: "Choose a repository",
-  MOVES: "Starting an agent moves the task to In progress",
-  ASSIGNS: "Starting an agent assigns the task to you",
-  MOVES_AND_ASSIGNS: "Starting an agent moves the task to In progress and assigns it to you",
 } as const;
 
-/** What the card says of where its task was to stand, where an agent's start would move it elsewhere: to In progress, to its starter, or both; nothing where it would stand. */
-function overriddenWords(standing: TaskStanding | undefined): string | undefined {
-  const moves = standing?.status !== undefined && standing.status !== TASK_STATUS.IN_PROGRESS;
-  const assigns = standing?.assigneeId === null;
-  if (moves && assigns) return COMPOSER_WORDS.MOVES_AND_ASSIGNS;
-  if (moves) return COMPOSER_WORDS.MOVES;
-  return assigns ? COMPOSER_WORDS.ASSIGNS : undefined;
-}
-
-/** What one Agent-mode press asked beside its key: the task's name, repository, workspace, where it stands, and issues, and the agent's words, files, and model. */
+/** What one Agent-mode press asked beside its key: the task's name, repository, workspace, and issues, and the agent's words, files, and model. */
 interface AgentAsk {
   readonly name: string;
   readonly repository: string | null;
   readonly workspaceId: string | undefined;
-  readonly standing?: TaskStanding;
   readonly issues: readonly TaskIssueChoice[];
   readonly agent: Omit<NewTaskAgent, "idempotencyKey">;
 }
@@ -235,18 +202,12 @@ function sameChoice(a: TaskIssueChoice, b: TaskIssueChoice | undefined): boolean
   return a.repository === b.repository && a.number === b.number;
 }
 
-/** Whether two presses start their task standing in the same place. */
-function sameStanding(a: TaskStanding | undefined, b: TaskStanding | undefined): boolean {
-  return a?.status === b?.status && a?.priority === b?.priority && a?.assigneeId === b?.assigneeId;
-}
-
 /** Whether two presses ask the same: the same task, words, files in the same order, and model. */
 function sameAsk(a: AgentAsk, b: AgentAsk): boolean {
   return (
     a.name === b.name &&
     a.repository === b.repository &&
     a.workspaceId === b.workspaceId &&
-    sameStanding(a.standing, b.standing) &&
     sameIssues(a.issues, b.issues) &&
     a.agent.prompt === b.agent.prompt &&
     a.agent.attachments.length === b.agent.attachments.length &&
@@ -254,34 +215,6 @@ function sameAsk(a: AgentAsk, b: AgentAsk): boolean {
     a.agent.choice?.model === b.agent.choice?.model &&
     a.agent.choice?.effort === b.agent.choice?.effort &&
     a.agent.choice?.contextWindow === b.agent.choice?.contextWindow
-  );
-}
-
-/**
- * Where the task will stand, as a Tasks page group's + chose it: its
- * group's mark and words, and the × that lets it go.
- */
-function StandingPill({
-  standing,
-  onRemove,
-}: {
-  standing: NewTaskStanding;
-  onRemove: () => void;
-}): React.JSX.Element {
-  const { status, priority } = standing.asked;
-  const mark =
-    status !== undefined ? (
-      <TaskStatusMark status={status} />
-    ) : priority !== undefined ? (
-      <TaskPriorityMark priority={priority} />
-    ) : (
-      <GLYPH.PERSON />
-    );
-  return (
-    <Chip look={CHIP_LOOK.PILL} onRemove={onRemove} removeLabel={`Remove ${standing.words}`}>
-      {mark}
-      <ChipName>{standing.words}</ChipName>
-    </Chip>
   );
 }
 
@@ -367,9 +300,6 @@ export function NewTaskComposer({
   const [picks, setLinks] = useState<readonly NewTaskLink[]>(refused?.card.links ?? []);
   const [chosen, setChosen] = useState<string | null | undefined>(
     refused === undefined ? newTask.preset?.repository : refused.card.repository,
-  );
-  const [standing, setStanding] = useState<NewTaskStanding | undefined>(
-    refused === undefined ? newTask.preset?.standing : refused.card.standing,
   );
   const [choice, choose] = useDefaultChoice(newTask, refused?.card.choice);
   const [starting, setStarting] = useState(false);
@@ -477,7 +407,6 @@ export function NewTaskComposer({
     newTask
       .start(name, repository, workspaceId, {
         ...(issues.length === 0 ? undefined : { issues }),
-        ...(standing === undefined ? undefined : { standing: standing.asked }),
         ...handing,
       })
       .then((refused) => {
@@ -505,7 +434,6 @@ export function NewTaskComposer({
       name,
       repository,
       workspaceId,
-      ...(standing === undefined ? undefined : { standing: standing.asked }),
       issues,
       agent: { prompt, attachments, choice },
     };
@@ -515,21 +443,13 @@ export function NewTaskComposer({
     pressed.current = press;
     begin(name, {
       handed: { idempotencyKey: key, ...ask.agent },
-      card: {
-        ...(forAutomation ? { purpose } : undefined),
-        repository,
-        ...(standing === undefined ? undefined : { standing }),
-        links,
-        choice,
-        press,
-      },
+      card: { ...(forAutomation ? { purpose } : undefined), repository, links, choice, press },
     });
   };
   // ⌘Return on a box with nothing in it starts a bare task: no call and no agent.
   const bare = () => begin(issueName ?? "");
   // Note that a linked issue keeps the round button its own name, because its press then starts an agent on the issue.
   const startsBare = !forAutomation && !filled && !onIssue;
-  const overridden = startsBare || blocked ? undefined : overriddenWords(standing?.asked);
 
   const onKey = (event: KeyboardEvent): boolean => {
     if (!shortcutMatches(BARE_CHORD, event)) return false;
@@ -626,9 +546,6 @@ export function NewTaskComposer({
             {PURPOSE_HEADING[purpose]}
           </Text>
           {repositoryChip}
-          {standing === undefined ? null : (
-            <StandingPill standing={standing} onRemove={() => setStanding(undefined)} />
-          )}
         </div>
         {forAutomation ? null : issueChip}
       </div>
@@ -664,11 +581,6 @@ export function NewTaskComposer({
           {COMPOSER_WORDS.NEEDS_REPOSITORY}
         </Text>
       ) : null}
-      {overridden === undefined ? null : (
-        <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
-          {overridden}
-        </Text>
-      )}
     </div>
   );
   // Note that the card stands under the providers with or without a repository, so one chosen or let go keeps the card mounted.

@@ -5270,6 +5270,32 @@ ul.actor-stack {
   margin-left: calc(-1 * var(--luke-space-4));
 }
 
+/* A column's quick add (`quick-add.tsx`): its draft is the card it is
+   about to be, its title bare in the name's place; an add still out stands
+   muted until its card draws, and a refusal stands under the draft. */
+.tasks-board-draft[data-pending="true"] .tasks-board-name {
+  color: var(--luke-color-text-muted);
+}
+
+.tasks-board-draft-note {
+  padding: 0 var(--luke-list-inset);
+}
+
+/* The draft's title fills the name's room, so the caret's line reaches the
+   column's edge as a plan's line reaches its page's. */
+.tasks-board-draft .tasks-board-name,
+.tasks-list-draft .tasks-list-press {
+  display: flex;
+  overflow: visible;
+  gap: var(--luke-item-gap);
+}
+
+.tasks-board-draft .tasks-board-name > [data-slot="input"],
+.tasks-list-draft .tasks-list-press > [data-slot="input"] {
+  min-inline-size: 0;
+  flex: 1 1 auto;
+}
+
 .tasks-board-card-title > :last-child {
   min-width: 0;
   flex: 1 1 auto;
@@ -5615,6 +5641,18 @@ ul.actor-stack {
 
 .tasks-list-row[data-editing="true"] .tasks-list-press {
   font-weight: var(--luke-weight-regular);
+}
+
+/* A group's quick add line (`quick-add.tsx`): a row of the list's cells
+   raised as a card, its title bare where a row's name stands; an add still
+   out stands muted until its row draws. */
+.tasks-list-draft {
+  /* Note that the card's hairline is taken out of its inset, so its cells stand on the rows' lines. */
+  padding-inline: calc(var(--row-inset) - 1px);
+}
+
+.tasks-list-draft[data-pending="true"] .tasks-list-press {
+  color: var(--luke-color-text-muted);
 }
 
 .tasks-list-note {

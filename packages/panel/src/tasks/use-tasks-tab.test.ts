@@ -3332,6 +3332,33 @@ async function startAgentTask(tab: ReturnType<typeof mount>) {
   return { choice, prompt, note, starts };
 }
 
+test("a group's quick add sends one quiet start with the group's standing and no agent, asking no one assigned as nothing", async () => {
+  const tab = mount(
+    { shown: true, tasks: OPEN },
+    { [ACT_KIND.TASKS_START]: () => Promise.resolve({ planId: OTHER_TASK_ID }) },
+  );
+  let refused: Failure | undefined = { reason: FAILURE_REASON.OTHER, text: "unanswered" };
+  await act(async () => {
+    refused = await tab.control().onQuickAdd("Export invoices as CSV", {
+      standing: { status: TASK_STATUS.BACKLOG, priority: TASK_PRIORITY.HIGH, assigneeId: null },
+    });
+  });
+
+  assert.equal(refused, undefined);
+  assert.deepEqual(
+    tab.payloads.filter(({ kind }) => kind === ACT_KIND.TASKS_START).map(({ payload }) => payload),
+    [
+      {
+        name: "Export invoices as CSV",
+        status: TASK_STATUS.BACKLOG,
+        priority: TASK_PRIORITY.HIGH,
+        planning: false,
+        quiet: true,
+      },
+    ],
+  );
+});
+
 test("New task's Agent mode sends one start carrying the agent, its words and model, and opens the task on the agent it started", async () => {
   const started = { ...RUNNING_AGENT, planId: OTHER_TASK_ID };
   const tab = mount(

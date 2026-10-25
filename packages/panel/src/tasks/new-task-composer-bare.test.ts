@@ -1,19 +1,13 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { TASK_STATUS, type TaskStanding } from "@luke/features/task-wire";
 import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
 import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
-import {
-  editorBundleLanded,
-  installEditorLayout,
-  pressInComposer,
-  typeInComposer,
-} from "../testing/composer.js";
+import { editorBundleLanded, installEditorLayout, typeInComposer } from "../testing/composer.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { restOn } from "../testing/hint-rest.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
@@ -27,8 +21,7 @@ import { NEW_TASK_PURPOSE, type NewTaskPurpose } from "./new-task-purpose.js";
  * task with no agent, and the button's hint is the one place that says so,
  * with the chord. A box with words keeps the button's own hint, and the
  * automation's card, whose ⌘Return starts no bare task, never names one.
- * A card opened from a Tasks page group's + starts its task where the group
- * stands until its pill's × lets that go. Synthetic throughout.
+ * Synthetic throughout.
  */
 
 const roots: Root[] = [];
@@ -55,12 +48,8 @@ async function settle(): Promise<void> {
   });
 }
 
-/** The card for `purpose` on a repository, its box empty, opened on `standing` where given, each start's standing written down. */
-async function mount(
-  purpose: NewTaskPurpose = NEW_TASK_PURPOSE.TASK,
-  standing?: TaskStanding,
-  starts: (TaskStanding | undefined)[] = [],
-): Promise<HTMLElement> {
+/** The card for `purpose` on a repository, its box empty. */
+async function mount(purpose: NewTaskPurpose = NEW_TASK_PURPOSE.TASK): Promise<HTMLElement> {
   const control = tasksControl();
   const container = document.body.appendChild(document.createElement("div"));
   const root = createRoot(container);
@@ -74,13 +63,6 @@ async function mount(
             ...control.newTask,
             workspaceId: "workspace-acme",
             repositoriesIn: () => ({ ...control.repositories, recent: ["acme/web"] }),
-            ...(standing === undefined
-              ? undefined
-              : { preset: { standing: { asked: standing, words: "In progress" } } }),
-            start: (_name, _repository, _workspaceId, from) => {
-              starts.push(from?.standing);
-              return Promise.resolve(undefined);
-            },
           },
           workspaceId: "workspace-acme",
           onLeave: () => undefined,
@@ -127,21 +109,4 @@ test("the automation's empty card names no bare task", async () => {
 
   assert.equal(hint.words, "Start agent");
   assert.equal(hint.chord, undefined);
-});
-
-test("a card opened from a group's + starts its task in the group, and its pill's × lets that go", async () => {
-  const starts: (TaskStanding | undefined)[] = [];
-  const container = await mount(NEW_TASK_PURPOSE.TASK, { status: TASK_STATUS.IN_PROGRESS }, starts);
-  act(() => pressInComposer(container, "Enter", { metaKey: true }));
-  await settle();
-  act(() =>
-    (
-      container.querySelector<HTMLButtonElement>('button[aria-label="Remove In progress"]') ??
-      assert.fail("the card draws the group's pill")
-    ).click(),
-  );
-  act(() => pressInComposer(container, "Enter", { metaKey: true }));
-  await settle();
-
-  assert.deepEqual(starts, [{ status: TASK_STATUS.IN_PROGRESS }, undefined]);
 });

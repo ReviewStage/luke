@@ -79,12 +79,16 @@ function InlineEditField({
   label,
   maxLength,
   look,
+  placeholder,
+  endsOnBlur,
   onEnd,
 }: {
   value: string;
   label: string;
   maxLength: number | undefined;
   look: InlineEditLook;
+  placeholder: string | undefined;
+  endsOnBlur: boolean;
   onEnd: (end: InlineEditEnd) => void;
 }): React.JSX.Element {
   const field = useRef<HTMLInputElement | null>(null);
@@ -109,9 +113,10 @@ function InlineEditField({
       data-look={look}
       aria-label={label}
       defaultValue={value}
+      placeholder={placeholder}
       maxLength={maxLength}
       spellCheck={false}
-      onBlur={() => end(true, false)}
+      onBlur={endsOnBlur ? () => end(true, false) : undefined}
       onKeyDown={(event) => {
         if (event.key === "Escape") {
           event.preventDefault();
@@ -134,6 +139,8 @@ export function InlineEdit({
   editing,
   maxLength,
   look = INLINE_EDIT_LOOK.FIELD,
+  placeholder,
+  endsOnBlur = true,
   onEnd,
   children,
 }: {
@@ -143,6 +150,10 @@ export function InlineEdit({
   editing: boolean;
   maxLength?: number | undefined;
   look?: InlineEditLook | undefined;
+  /** What the empty field says, muted, as an empty line on a plan says what to write: a new thing's field, which opens empty. */
+  placeholder?: string | undefined;
+  /** Whether the focus leaving ends the edit; a field beside controls of its own, a new thing's whose chips it leaves for, is ended by its keys and its caller alone. */
+  endsOnBlur?: boolean | undefined;
   /** How the edit ended; the caller stops editing here. */
   onEnd: (end: InlineEditEnd) => void;
   /** What stands in the field's place while not editing; `value` in plain text where none is given. */
@@ -150,6 +161,14 @@ export function InlineEdit({
 }): React.JSX.Element {
   if (!editing) return <>{children ?? value}</>;
   return (
-    <InlineEditField value={value} label={label} maxLength={maxLength} look={look} onEnd={onEnd} />
+    <InlineEditField
+      value={value}
+      label={label}
+      maxLength={maxLength}
+      look={look}
+      placeholder={placeholder}
+      endsOnBlur={endsOnBlur}
+      onEnd={onEnd}
+    />
   );
 }
