@@ -56,14 +56,12 @@
      toolbar's own edges, where its title's words start and its actions end
      (`toolbar.css`'s page inset, a column's inset and a row's), in any
      room, so the bar lines up with what it heads rather than with a
-     measure centred under it. */
+     measure centred under it. Note that it says so in the page's own
+     properties, the measure as wide as the room, so whatever reads them
+     answers it. */
   .luke-collection-page[data-frame="toolbar"] > * {
+    --luke-collection-page-width: 100%;
     --luke-collection-page-inset: calc(var(--luke-space-12) + var(--luke-row-inset));
-  }
-
-  .luke-collection-page[data-frame="toolbar"]
-    :is(.luke-collection-page-filters, .luke-collection-page-content) {
-    max-width: none;
   }
 
   /* The header (`PageHeader`) opens at the page's inset. */
