@@ -8,6 +8,7 @@ import {
 import { MENTION_KIND, type Mention } from "./mention-link.js";
 import { OPERATOR_NAME } from "./model-label.js";
 import type { KnownNames } from "./place-chip-model.js";
+import { TERM } from "./words.js";
 
 /**
  * thing-kind.ts -- every kind of thing the app names, and what the window calls each by now.
@@ -223,6 +224,63 @@ export const THING_NAME: ThingNames = {
   [THING_KIND.WORKSPACE]: NO_LIVE_NAME,
   [THING_KIND.DATE]: NO_LIVE_NAME,
 };
+
+/**
+ * What each kind is called in words, which a screen reader hears before a
+ * thing's name, since the glyph that says it to the eye is hidden from one:
+ * "pull request #42 Fix the refresh". Its nouns are the glossary's
+ * (`words.ts`'s `TERM`) where it has one. Read it through `thingWordHeard`,
+ * which leaves it out where the name already says it.
+ */
+export const THING_WORD: { readonly [K in ThingKind]: string } = {
+  [THING_KIND.PLAN]: TERM.TASK.one,
+  [THING_KIND.SECTION]: TERM.SECTION.one,
+  [THING_KIND.VERSION]: "version",
+  [THING_KIND.COMMENT]: "comment",
+  [THING_KIND.TURN]: "turn",
+  [THING_KIND.PAGE]: TERM.PAGE.one,
+  [THING_KIND.AGENT]: TERM.AGENT.one,
+  [THING_KIND.WORKER]: TERM.WORKER.one,
+  [THING_KIND.LUKE]: "Luke",
+  [THING_KIND.CHANGES]: "changes",
+  [THING_KIND.PULL_REQUEST]: TERM.PULL_REQUEST.one,
+  [THING_KIND.PULL_REQUEST_THREAD]: "review thread",
+  [THING_KIND.ISSUE]: "issue",
+  [THING_KIND.LINK]: "link",
+  [THING_KIND.MESSAGE]: "message",
+  [THING_KIND.INBOX]: "Inbox",
+  [THING_KIND.INBOX_ITEM]: `Inbox ${TERM.INBOX_ITEM.one}`,
+  [THING_KIND.AUTOMATIONS]: "automations",
+  [THING_KIND.AUTOMATION]: "automation",
+  [THING_KIND.AUTOMATION_RUN]: "automation run",
+  [THING_KIND.SETTINGS]: "settings",
+  [THING_KIND.PERSON]: TERM.MEMBER.one,
+  [THING_KIND.CHAT]: "channel",
+  [THING_KIND.ADMIN]: "admin",
+  [THING_KIND.FILE]: TERM.FILE.one,
+  [THING_KIND.FOLDER]: "folder",
+  [THING_KIND.SERVER]: TERM.INTEGRATION.one,
+  [THING_KIND.TOOL]: "tool",
+  [THING_KIND.SKILL]: TERM.SKILL.one,
+  [THING_KIND.REPOSITORY]: TERM.REPOSITORY.one,
+  [THING_KIND.WORKSPACE]: "workspace",
+  [THING_KIND.DATE]: "date",
+};
+
+/**
+ * The word a screen reader hears before a thing's name: its kind's
+ * (`THING_WORD`), or nothing where the name already starts with it, as
+ * "Inbox", "Luke", and "Changes by Ada" do. Note that a link labelled with
+ * words of its own, `[my queue](…/inbox)`, still says its kind.
+ */
+export function thingWordHeard(kind: ThingKind, name: string): string | undefined {
+  const word = THING_WORD[kind];
+  const lead = name.slice(0, word.length);
+  const said = lead.localeCompare(word, undefined, { sensitivity: "base" }) === 0;
+  // Note that the word must end where a word does, so "Taskbar" still says it is a task.
+  const whole = !/^[\p{L}\p{N}]/u.test(name.slice(word.length));
+  return said && whole ? undefined : word;
+}
 
 /** A place the thing it names already is. */
 function asThing<P extends Thing>(place: P): Thing {

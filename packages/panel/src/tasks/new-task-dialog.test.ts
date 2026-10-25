@@ -484,7 +484,7 @@ test("once a repository is chosen, an @ offers its files, read through the works
     [{ workspaceId: "workspace-acme", repository: "acme/web", path: "", recursive: true }],
   );
   assert.deepEqual(
-    chips.map((chip) => chip.textContent),
+    chips.map((chip) => chip.querySelector(".luke-inline-ref-label")?.textContent),
     ["rollout-store.ts"],
   );
   const file = { kind: MENTION_KIND.FILE, path: "apps/web/rollout-store.ts" } as const;

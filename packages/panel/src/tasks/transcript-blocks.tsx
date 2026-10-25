@@ -1036,7 +1036,7 @@ function AgentCallChip({
       />
     );
   }
-  const press = (event: MouseEvent<HTMLButtonElement>) => {
+  const press = (event: MouseEvent<HTMLElement>) => {
     // The press is the chip's alone: the summary it stands in would fold.
     event.preventDefault();
     event.stopPropagation();

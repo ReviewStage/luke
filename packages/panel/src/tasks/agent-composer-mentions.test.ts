@@ -404,6 +404,11 @@ async function box(page: TaskMentionsValue | undefined, skills: SkillSource = no
 }
 
 /** The attribute that carries an address, other than those session replay masks (`../session-replay.ts`), if any element drawn holds one. */
+/** The name a chip is drawn by, without the words only a screen reader hears. */
+function chipName(chip: Element): string | null | undefined {
+  return chip.querySelector(".luke-inline-ref-label")?.textContent;
+}
+
 function carryingTarget(container: HTMLElement): string | undefined {
   // Note that an SVG glyph's own namespace is no address of a page.
   const masked = new Set([
@@ -451,10 +456,7 @@ test("an @ typed in the box on a plan's page offers the plan's sections, and the
   await settle();
 
   assert.deepEqual(offered, ["rollout-store.ts", "Rollout"]);
-  assert.deepEqual(
-    chips.map((chip) => chip.textContent),
-    ["Rollout"],
-  );
+  assert.deepEqual(chips.map(chipName), ["Rollout"]);
   assert.deepEqual(sent, [`Follow ${mentionMarkdown(ROLLOUT, "Rollout", PLACE)}`]);
 });
 
@@ -579,7 +581,7 @@ test("a sent message's mention is drawn on a plan's page as the chip that opens 
   assert.ok(chip, "the mention is a chip");
   act(() => chip.click());
 
-  assert.equal(chip.textContent, "Rollout");
+  assert.equal(chipName(chip), "Rollout");
   assert.deepEqual(opened, [ROLLOUT]);
   assert.equal(carryingTarget(container), undefined);
 });
@@ -601,7 +603,7 @@ test("off a plan's page a sent message's mention is still its chip, which opens 
   assert.ok(chip !== null, "the mention is a chip");
   act(() => chip.click());
 
-  assert.equal(container.textContent, "Follow Rollout.");
+  assert.equal(container.textContent, "Follow section Rollout.");
   assert.deepEqual(opened, [
     { workspace: "", place: { kind: LINK_PLACE.SECTION, planId: TASK_ID, anchor: "rollout" } },
   ]);
@@ -637,7 +639,7 @@ test("a sent message's mention of an MCP server is drawn on a plan's page as a c
   const chip = container.querySelector("[data-mention-ref]");
 
   assert.equal(chip?.tagName, "SPAN");
-  assert.equal(chip?.textContent, "Linear");
+  assert.equal(chip?.querySelector(".luke-inline-ref-label")?.textContent, "Linear");
   assert.equal(carryingTarget(container), undefined);
 });
 
@@ -688,10 +690,7 @@ test("an @ in the box offers the repository's skills, a pick written as the /nam
   await settle();
 
   assert.deepEqual(offered, ["Skills"]);
-  assert.deepEqual(
-    chips.map((chip) => chip.textContent),
-    ["/release"],
-  );
+  assert.deepEqual(chips.map(chipName), ["/release"]);
   assert.deepEqual(sent, ["Run /release"]);
 });
 
@@ -797,14 +796,11 @@ test("a page of an integration's pasted into the box on a plan's page is drawn a
   pressInComposer(container, "Enter");
   await settle();
 
-  assert.deepEqual(
-    chips.map((chip) => chip.textContent),
-    ["LUKE-142/fix-the-thing"],
-  );
+  assert.deepEqual(chips.map(chipName), ["LUKE-142/fix-the-thing"]);
   assert.deepEqual(sent, [`Fix [@LUKE-142/fix-the-thing](${ISSUE_URL})`]);
 });
 
-test("a sent message's page of an integration's is a chip that opens the page in the browser", () => {
+test("a sent message's page of an integration's is a chip linking to the page, which opens it in the browser", () => {
   const container = drawn(
     createElement(TranscriptWords, {
       text: `Fix ${mentionMarkdown({ kind: MENTION_KIND.LINK, provider: INTEGRATION_PROVIDER.LINEAR, url: ISSUE_URL }, "LUKE-142/fix-the-thing", PLACE)}.`,
@@ -812,8 +808,9 @@ test("a sent message's page of an integration's is a chip that opens the page in
     planPage([]),
   );
 
-  const chip = container.querySelector<HTMLButtonElement>("button[data-mention-ref]");
-  assert.ok(chip, "the page is a chip");
+  const chip = container.querySelector<HTMLAnchorElement>("a[data-mention-ref]");
+  assert.ok(chip, "the page is a chip, a link to it");
+  assert.equal(chip.getAttribute("href"), ISSUE_URL);
   act(() => chip.click());
 
   assert.deepEqual(told.at(-1), { kind: ACT_KIND.WEB_OPEN, payload: { url: ISSUE_URL } });
@@ -828,8 +825,8 @@ test("off a plan's page a sent message's page of an integration's is still its c
     undefined,
   );
 
-  const chip = container.querySelector<HTMLButtonElement>("button[data-mention-ref]");
-  assert.ok(chip !== null, "the page is a chip");
+  const chip = container.querySelector<HTMLAnchorElement>("a[data-mention-ref]");
+  assert.ok(chip !== null, "the page is a chip, a link to it");
   act(() => chip.click());
 
   assert.deepEqual(told.at(-1), { kind: ACT_KIND.WEB_OPEN, payload: { url: ISSUE_URL } });
@@ -867,10 +864,7 @@ test("a page picked from the @ list is drawn as its chip and sent as its link, w
   await settle();
 
   const pageMention: Mention = { kind: MENTION_KIND.PAGE, taskId: TASK_ID, pageId: PAGE.id };
-  assert.deepEqual(
-    chips.map((chip) => chip.textContent),
-    ["Invites by week"],
-  );
+  assert.deepEqual(chips.map(chipName), ["Invites by week"]);
   assert.deepEqual(sent, [`Build ${mentionMarkdown(pageMention, "Invites by week", PLACE)}`]);
   assert.equal(sent[0], "Build [@Invites by week](https://tryluke.dev/acme/plan/pl_1/page/page-1)");
 });
@@ -914,10 +908,7 @@ test("a sent message's mention of a page or an agent is drawn as the chip that o
   const chips = [...container.querySelectorAll<HTMLButtonElement>("button[data-mention-ref]")];
   for (const chip of chips) act(() => chip.click());
 
-  assert.deepEqual(
-    chips.map((chip) => chip.textContent),
-    [PAGE.title, STORE_AGENT.name],
-  );
+  assert.deepEqual(chips.map(chipName), [PAGE.title, STORE_AGENT.name]);
   assert.deepEqual(opened, [
     { workspace: "acme", place: { kind: LINK_PLACE.PAGE, planId: TASK_ID, pageId: PAGE.id } },
     {
@@ -1415,10 +1406,7 @@ test("a section's address pasted whole into the box on a plan's page is drawn as
   pressInComposer(container, "Enter");
   await settle();
 
-  assert.deepEqual(
-    chips.map((chip) => chip.textContent),
-    ["Rollout"],
-  );
+  assert.deepEqual(chips.map(chipName), ["Rollout"]);
   assert.deepEqual(sent, [`Follow [@Rollout](${address})`]);
   assert.equal(carryingTarget(container), undefined);
 });
@@ -1460,10 +1448,7 @@ test("a page's address pasted in the app's own scheme is called by the name the 
   pressInComposer(container, "Enter");
   await settle();
 
-  assert.deepEqual(
-    chips.map((chip) => chip.textContent),
-    [PAGE.title, "Agent"],
-  );
+  assert.deepEqual(chips.map(chipName), [PAGE.title, "Agent"]);
   assert.deepEqual(sent, [`Build [@${PAGE.title}](${page}) on [@Agent](${agent}) in ${file}`]);
 });
 
@@ -1800,10 +1785,7 @@ test("a pull request picked from the @ list is drawn as its link's chip and sent
   pressInComposer(container, "Enter");
   await settle();
 
-  assert.deepEqual(
-    chips.map((chip) => chip.textContent),
-    ["#3059 feat(billing): bill by seat"],
-  );
+  assert.deepEqual(chips.map(chipName), ["#3059 feat(billing): bill by seat"]);
   assert.deepEqual(sent, [
     `Review ${mentionMarkdown({ kind: MENTION_KIND.LINK, provider: INTEGRATION_PROVIDER.GITHUB, url: SEATS.url }, "#3059 feat(billing): bill by seat", PLACE)}`,
   ]);
@@ -1999,10 +1981,7 @@ test("words after an @ that read as a date offer it first, said from today, and 
     await settle();
 
     assert.deepEqual(offered, ["Dates", ["Tomorrow"]]);
-    assert.deepEqual(
-      chips.map((chip) => chip.textContent),
-      ["Tomorrow"],
-    );
+    assert.deepEqual(chips.map(chipName), ["Tomorrow"]);
     assert.deepEqual(sent, ["Ship it [@Oct 20, 2026](luke://date/2026-10-20)"]);
   } finally {
     vi.useRealTimers();
@@ -2075,7 +2054,7 @@ test("a sent message's date is drawn as a chip saying it from today that opens n
     const chips = [...container.querySelectorAll("[data-mention-ref]")];
 
     assert.deepEqual(
-      chips.map((chip) => [chip.tagName, chip.textContent]),
+      chips.map((chip) => [chip.tagName, chipName(chip)]),
       [["SPAN", "Friday"]],
     );
   } finally {

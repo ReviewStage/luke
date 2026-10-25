@@ -104,7 +104,10 @@ test("an agent's written mentions of a page, an agent, a section, and a file are
   act(() => page.click());
 
   assert.deepEqual(
-    chips.map((chip) => [chip.dataset.kind, chip.textContent]),
+    chips.map((chip) => [
+      chip.dataset.kind,
+      chip.querySelector(".luke-inline-ref-label")?.textContent,
+    ]),
     [
       ["page", "Invite funnel"],
       ["agent", "Wire the desktop"],

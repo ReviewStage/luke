@@ -4104,7 +4104,7 @@ test("in the window's Inbox an @ in an item's box offers its plan's repository's
   pressInComposer(pane, "Enter");
   await settle();
   const chips = [...composerEditor(pane).querySelectorAll("[data-mention-ref]")].map(
-    (chip) => chip.textContent,
+    (chip) => chip.querySelector(".luke-inline-ref-label")?.textContent,
   );
   pressInComposer(pane, "Enter");
   await settle();
@@ -4230,7 +4230,7 @@ async function pressNoteSkill(page: HTMLElement, name: string): Promise<void> {
     ...itemPane(page).querySelectorAll('[data-inbox-comment="message"] [data-inbox-message-text]'),
   ].at(-1);
   const chip = [...(note?.querySelectorAll<HTMLButtonElement>("button") ?? [])].find(
-    (button) => button.textContent === name,
+    (button) => button.querySelector(".luke-inline-ref-label")?.textContent === name,
   );
   assert.ok(chip, "the skill is its chip");
   act(() => chip.click());
@@ -5170,10 +5170,13 @@ test("a thread draws its messages after the question in the order they were writ
     ["message", "person", "Charles Pan", "Should it page at night too?"],
     ["message", "person", "You", "And page on-call if all three fail."],
     ["message", "agent", "Alerts", "Only in business hours."],
-    ["message", "person", "You", "See rollout-store.ts"],
+    ["message", "person", "You", "See file rollout-store.ts"],
   ]);
   const mine = itemPane(page).querySelectorAll('[data-inbox-comment="message"]')[4];
-  assert.equal(mine?.querySelector("[data-mention-ref]")?.textContent, "rollout-store.ts");
+  assert.equal(
+    mine?.querySelector("[data-mention-ref] .luke-inline-ref-label")?.textContent,
+    "rollout-store.ts",
+  );
 });
 
 /** Selects the words drawn in the item's pane as `words`, from `from` through `to`, as a drag lets them go. */
@@ -8234,11 +8237,14 @@ test("an answered form heads its reply with its fields, each holding what it was
 
   assert.deepEqual(answeredFields(box), [
     ["select", "Effort", "xhigh"],
-    ["text", "Reason", "See rollout-store.ts"],
+    ["text", "Reason", "See file rollout-store.ts"],
     ["number", "Retries", ""],
     ["boolean", "Page on-call", "checked"],
   ]);
-  assert.equal(box.querySelector("[data-mention-ref]")?.textContent, "rollout-store.ts");
+  assert.equal(
+    box.querySelector("[data-mention-ref] .luke-inline-ref-label")?.textContent,
+    "rollout-store.ts",
+  );
   assert.equal(box.querySelector(".inbox-ask-presses"), null, "no Submit stands");
   assert.equal(pane.querySelector("[data-inbox-values]"), null, "the reply lists no values");
   assert.deepEqual(askBoxes(pane), []);

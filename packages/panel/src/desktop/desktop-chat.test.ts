@@ -715,7 +715,7 @@ test("a channel's composer offers the members a mention there tells under the ap
   pressInComposer(box, "Enter");
   await settle();
   assert.equal(boxWords(box), "");
-  assert.equal(words(page).at(-1), "Invite emails hold the template until #214 lands");
+  assert.equal(words(page).at(-1), "agent Invite emails hold the template until #214 lands");
   // The post continues the reader's own run, so it draws under the name the run began with.
   assert.equal(stream(page).at(-1), "");
   assert.equal(stream(page).filter(Boolean).at(-1), "Dean Stratakos");
@@ -1787,7 +1787,9 @@ test("words after an @ that read as a date offer it first, said as its chip says
     typeInComposer(box, "out @oct 20 to 24");
     const listed = offered(page);
     pressInComposer(box, "Enter");
-    const chips = [...box.querySelectorAll("[data-mention-ref]")].map((chip) => chip.textContent);
+    const chips = [...box.querySelectorAll("[data-mention-ref]")].map(
+      (chip) => chip.querySelector(".luke-inline-ref-label")?.textContent,
+    );
     typeInComposer(box, "for the offsite");
     pressInComposer(box, "Enter");
     await settle();
@@ -1797,7 +1799,7 @@ test("words after an @ that read as a date offer it first, said as its chip says
     const last = [...page.querySelectorAll(".chat-message")].at(-1);
     const sent = last?.querySelector<HTMLElement>(".chat-words [data-mention-ref]");
     assert.equal(sent?.dataset.kind, "date");
-    assert.equal(sent?.textContent, "Tomorrow → Saturday");
+    assert.equal(sent?.querySelector(".luke-inline-ref-label")?.textContent, "Tomorrow → Saturday");
     assert.match(last?.querySelector(".chat-words")?.textContent ?? "", /for the offsite/u);
   } finally {
     vi.useRealTimers();
@@ -1834,7 +1836,9 @@ test("a date chip in the chat box opens its picker, and a day picked there names
     assert.equal(start, "Oct 20, 2026");
     assert.equal(box.querySelector('[role="dialog"]'), null);
     assert.deepEqual(
-      [...box.querySelectorAll("[data-mention-ref]")].map((chip) => chip.textContent),
+      [...box.querySelectorAll("[data-mention-ref]")].map(
+        (chip) => chip.querySelector(".luke-inline-ref-label")?.textContent,
+      ),
       ["Friday"],
     );
   } finally {
