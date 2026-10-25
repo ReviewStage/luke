@@ -24,7 +24,7 @@ import type { CodingAgentInboxMessagedView } from "@luke/features/coding-agent-v
 import { CODING_AGENT_CALL_FAILURE } from "@luke/features/coding-agent-view";
 import { INBOX_BOUNDS, type InboxItem } from "@luke/features/inbox-wire";
 import { encodeMention, MENTION_KIND } from "@luke/features/mention-link";
-import { pasteCutWords, readFailedWords, readingWords } from "@luke/features/words";
+import { FIELD_WORDS, pasteCutWords, readFailedWords, readingWords } from "@luke/features/words";
 import { ACT_KIND } from "@luke/host/acts";
 import {
   BackButton,
@@ -32,7 +32,6 @@ import {
   Button,
   CHIP_WIDTH,
   ErrorState,
-  FormField,
   IconButton,
   matchingRows,
   POPOVER_ALIGN,
@@ -530,21 +529,20 @@ function ComposeCard({
               }}
             />
           </div>
-          <div className="inbox-compose-row" data-field="">
-            <FormField label={SUBJECT} optional>
-              {(control) => (
-                <TextField
-                  field={control}
-                  size={TEXT_FIELD_SIZE.INLINE}
-                  value={draft.title ?? ""}
-                  maxLength={INBOX_BOUNDS.MAX_TITLE_CHARS}
-                  disabled={sending}
-                  autoFocus
-                  onChange={(title) => write((was) => ({ ...was, title }))}
-                  onEnter={() => field.editor.current?.focus()}
-                />
-              )}
-            </FormField>
+          <div className="inbox-compose-row">
+            <span className="inbox-compose-label">{SUBJECT}</span>
+            {/* Note that the subject may be left empty, which its name says as a FormField's label would and its placeholder shows where the field stands. */}
+            <TextField
+              label={`${SUBJECT} ${FIELD_WORDS.OPTIONAL}`}
+              size={TEXT_FIELD_SIZE.INLINE}
+              placeholder={FIELD_WORDS.OPTIONAL}
+              value={draft.title ?? ""}
+              maxLength={INBOX_BOUNDS.MAX_TITLE_CHARS}
+              disabled={sending}
+              autoFocus
+              onChange={(title) => write((was) => ({ ...was, title }))}
+              onEnter={() => field.editor.current?.focus()}
+            />
           </div>
         </div>
         <div className={`${COMPOSER_ROOM_CLASS} inbox-compose-box`} {...files.drop.target}>

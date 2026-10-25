@@ -1432,11 +1432,6 @@ ul.actor-stack {
   padding-inline: max(var(--content-inset), var(--reading-room));
 }
 
-/* To and Subject stand at the box's own width, inside its inset. */
-.inbox-compose-head {
-  padding-inline: var(--luke-space-16);
-}
-
 .inbox-compose-row {
   display: grid;
   min-height: var(--luke-space-48);
@@ -1446,20 +1441,17 @@ ul.actor-stack {
   grid-template-columns: var(--luke-space-48) minmax(0, 1fr);
 }
 
-/* A row that is a FormField stands its label over its control rather than before it. */
-.inbox-compose-row[data-field] {
-  display: block;
-  padding-block: var(--luke-row-inset);
-}
-
 .inbox-compose-label {
   color: var(--luke-color-text-muted);
   font-size: var(--luke-type-caption-size);
   line-height: var(--luke-type-caption-leading);
 }
 
-.inbox-compose-box {
+/* The box stands at the rows' own width, its edges on their hairlines: the
+   form's inset is already the room's, so the box takes none of its own. */
+.inbox-compose > .inbox-compose-box {
   margin-top: var(--luke-section-gap);
+  padding-inline: 0;
 }
 
 /* A line written again where it stands (`edit-composer.tsx`) is already in the

@@ -8776,9 +8776,9 @@ test("New thread in the Inbox's head opens a draft in the pane, To naming the ag
 
   const subject = subjectField(pane);
   assert.equal(
-    subjectLabel(pane).textContent,
-    "SubjectOptional",
-    "the Subject says it may be left empty, in its label",
+    subject.getAttribute("aria-label"),
+    "Subject Optional",
+    "the Subject says it may be left empty, in its name",
   );
   const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
   act(() => {
@@ -8875,18 +8875,10 @@ async function openNewThread(page: HTMLElement): Promise<HTMLElement> {
   return pane;
 }
 
-/** The label of a New thread's Subject. */
-function subjectLabel(pane: HTMLElement): HTMLLabelElement {
-  return (
-    [...pane.querySelectorAll("label")].find((label) => label.textContent?.startsWith("Subject")) ??
-    assert.fail("the draft has a Subject")
-  );
-}
-
-/** The field a New thread's Subject label names. */
+/** The field a New thread's Subject names. */
 function subjectField(pane: HTMLElement): HTMLInputElement {
-  const field = pane.querySelector<HTMLInputElement>(`input[id="${subjectLabel(pane).htmlFor}"]`);
-  return field ?? assert.fail("the Subject label names a field");
+  const field = pane.querySelector<HTMLInputElement>('input[aria-label^="Subject"]');
+  return field ?? assert.fail("the draft has a Subject");
 }
 
 /** Types `words` into a New thread's Subject. */
