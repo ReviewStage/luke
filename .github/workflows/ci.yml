@@ -13,9 +13,9 @@ concurrency:
   cancel-in-progress: true
 
 # CI is Linux only: the packaged macOS app is proven by the release workflow
-# before anything ships. Every job below bar `Tests`, which only reads the
-# test jobs' results, is independent and runs at once, so a run takes as long
-# as its longest job: the tests, which are the bulk of `check.sh`, are spread
+# before anything ships. Every job below bar `CI`, which only reads the
+# others' results, is independent and runs at once, so a run takes as long as
+# its longest job: the tests, which are the bulk of `check.sh`, are spread
 # across runners rather than run behind the lint and typecheck.
 #
 # The TypeScript checks and the tests run through Turborepo (`turbo.json`),
@@ -100,21 +100,6 @@ jobs:
           TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
           TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
 
-  # The one check the ruleset requires of the tests, so a slice added above is
-  # required without a ruleset edit. Note that it runs whatever became of the
-  # slices, because a job skipped behind a failed `needs` reports skipped, and
-  # a skipped required check counts as passed.
-  tests-passed:
-    name: Tests
-    if: ${{ always() }}
-    needs: tests
-    runs-on: ubuntu-24.04
-    timeout-minutes: 5
-    steps:
-      - run: test "$RESULT" = success
-        env:
-          RESULT: ${{ needs.tests.result }}
-
   # What only a real Postgres can prove, and nothing more: the generated
   # migrations apply on the major production runs (Neon, 18.x), so a statement
   # PGlite accepts and Postgres refuses is caught before a deployment's
@@ -123,8 +108,7 @@ jobs:
   # (`drizzle-schema.test.ts`), read back through the real `pg` driver from
   # what `db:migrate` built (`@luke/database/testing` clones it as a template). The store tests
   # themselves run on PGlite, the same Postgres 18, in the test jobs above.
-  # The job keeps its old name because the ruleset requires it. The image
-  # comes from whichever of three registries answers first, because each one
+  # The image comes from whichever of three registries answers first, because each one
   # rate-limits anonymous pulls.
   postgres:
     name: Postgres migrations and store
@@ -176,3 +160,19 @@ jobs:
       - run: pnpm --filter @luke/web db:migrate
       - name: The migrations end at the declared schema
         run: pnpm exec vitest run apps/web/tests/storage-schema.test.ts apps/web/tests/drizzle-schema.test.ts
+
+  # The one check the ruleset requires, so a job or slice added above is
+  # required without a ruleset edit. It passes only where every job it needs
+  # succeeded. Note that it runs whatever became of them, because a job skipped
+  # behind a failed `needs` reports skipped, and a skipped required check
+  # counts as passed.
+  ci:
+    name: CI
+    if: ${{ always() }}
+    needs: [portable, tests, postgres]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - run: for result in $RESULTS; do test "$result" = success; done
+        env:
+          RESULTS: ${{ join(needs.*.result, ' ') }}
