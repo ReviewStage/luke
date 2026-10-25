@@ -19,6 +19,7 @@ import {
   type AutomationProceduresDependencies,
   automationProcedures,
 } from "./automation-procedures.js";
+import { type ChannelProceduresDependencies, channelProcedures } from "./channel-procedures.js";
 import { type ActPortContext, actPortFor, isRefusal, refusedBy } from "./base.js";
 import { type ChaptersProceduresDependencies, chaptersProcedures } from "./chapters-procedures.js";
 import {
@@ -57,6 +58,7 @@ export { accountAskProcedures } from "./account-ask-procedures.js";
 export type { AccountProceduresDependencies } from "./account-procedures.js";
 export type { AgentProceduresDependencies } from "./agents-procedures.js";
 export type { AutomationProceduresDependencies } from "./automation-procedures.js";
+export type { ChannelProceduresDependencies } from "./channel-procedures.js";
 export { type ActPortContext, type ActSender, actPortFor } from "./base.js";
 export { browserLiveProcedures } from "./browser-live-procedures.js";
 export type { IntegrationProceduresDependencies } from "./integration-procedures.js";
@@ -110,6 +112,7 @@ export interface ActPortDependencies {
   readonly agentInbox: AgentInboxProceduresDependencies;
   readonly agents: AgentProceduresDependencies;
   readonly automations: AutomationProceduresDependencies;
+  readonly channels: ChannelProceduresDependencies;
   readonly chapters: ChaptersProceduresDependencies;
   readonly installedSkills: InstalledSkillProceduresDependencies;
   readonly integrations: IntegrationProceduresDependencies;
@@ -143,6 +146,7 @@ export function createActPortHandler<Sender>(
     ...agentInboxProcedures(dependencies.agentInbox),
     ...agentProcedures(dependencies.agents),
     ...automationProcedures(dependencies.automations),
+    ...channelProcedures(dependencies.channels),
     ...chaptersProcedures(dependencies.chapters),
     ...installedSkillProcedures(dependencies.installedSkills),
     ...integrationProcedures(dependencies.integrations),

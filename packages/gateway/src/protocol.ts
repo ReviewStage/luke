@@ -234,6 +234,18 @@ export const GATEWAY_METHOD = {
   CODING_AGENTS_PAGE: "codingAgents.page",
   /** The calls into one agent, oldest first, each with its lines and its record, which its tab draws a call's span from. */
   CODING_AGENTS_CALLS: "codingAgents.calls",
+  /** A workspace's open channels, each with what waits on the reader there and when they last looked; or why there are none. */
+  CHANNELS_LIST: "channels.list",
+  /** A channel made; the workspace's channels as they then stand. */
+  CHANNELS_CREATE: "channels.create",
+  /** A channel renamed; the workspace's channels as they then stand. */
+  CHANNELS_RENAME: "channels.rename",
+  /** A channel archived; the workspace's channels as they then stand. */
+  CHANNELS_ARCHIVE: "channels.archive",
+  /** The reader's look at a channel stamped; the workspace's channels as they then stand. */
+  CHANNELS_LOOK: "channels.look",
+  /** A channel's latest threads the reader may read, oldest first; or why there are none. */
+  CHANNELS_THREADS: "channels.threads",
   AUTOMATIONS_LIST: "automations.list",
   AUTOMATIONS_CREATE: "automations.create",
   AUTOMATIONS_CHANGE: "automations.change",

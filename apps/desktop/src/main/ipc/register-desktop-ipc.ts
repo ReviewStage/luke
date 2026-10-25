@@ -254,6 +254,7 @@ export function registerDesktopIpc(services: DesktopServices): void {
         agentInbox: { host: operator.host },
         agents: { host: operator.host, notices },
         automations: { host: operator.host },
+        channels: { host: operator.host },
         chapters: { host: operator.host },
         installedSkills: { host: operator.host },
         integrations: { host: operator.host },

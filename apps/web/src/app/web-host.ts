@@ -293,6 +293,7 @@ function portDependencies(
     agentInbox: { host },
     agents: { host, notices },
     automations: { host },
+    channels: { host },
     chapters: { host },
     installedSkills: { host },
     integrations: { host },
