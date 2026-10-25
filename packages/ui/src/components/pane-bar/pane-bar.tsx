@@ -1,9 +1,9 @@
 import { type ReactNode, useRef } from "react";
+import { type TitleSeat, useWrapWhenCut } from "../../use-wrap-when-cut.js";
 import { Menu, type MenuEntry, useMenu } from "../menu/menu.js";
 import { MoreButton, moreLabel } from "../more-button/more-button.js";
 import { OneLine } from "../one-line/one-line.js";
 import { wholeWordsHint } from "../tooltip/hint.js";
-import { type TitleSeat, useWrapWhenCut } from "../../use-wrap-when-cut.js";
 
 /**
  * pane-bar.tsx -- the bar across the top of a tab or a dock: what leads it (a mark and a title, fading where cut), its middle (tabs or crumbs), its actions, and its ⋯ at the end.

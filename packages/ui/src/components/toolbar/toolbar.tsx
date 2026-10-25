@@ -73,12 +73,12 @@
 
 import { type ReactNode, useRef } from "react";
 import { NotFoundIcon } from "../../icons/lucide-glyphs.js";
+import { type TitleSeat, useWrapWhenCut } from "../../use-wrap-when-cut.js";
 import { BREADCRUMBS_VARIANT, Breadcrumbs, type Crumb } from "../breadcrumbs/breadcrumbs.js";
 import { EmptyState, type EmptyStateAction } from "../empty-state/empty-state.js";
 import { FILL_ELEMENT, Fill } from "../layout/layout.js";
 import { ONE_LINE_ELEMENT, OneLine } from "../one-line/one-line.js";
 import { wholeWordsHint } from "../tooltip/hint.js";
-import { type TitleSeat, useWrapWhenCut } from "../../use-wrap-when-cut.js";
 import {
   TOOLBAR_INSET,
   TOOLBAR_LOOK,
