@@ -11,6 +11,11 @@ import {
   settleAutomationRun,
 } from "@luke/database/models/automation-store";
 import {
+  archiveChannel,
+  createChannel,
+  ensureGeneralChannel,
+} from "@luke/database/models/channel-store";
+import {
   ensureMember,
   ensureTaskChannel,
   findOrMakeDm,
@@ -74,10 +79,13 @@ import {
   accountWaitingStamps,
   acknowledgeInboxItem,
   answerInboxAsk,
+  channelThreads,
+  channelWaitingCounts,
   closeInboxItem,
   closeInboxItemAsMember,
   INBOX_ASK_ANSWER,
   INBOX_MESSAGE_OUTCOME,
+  INBOX_POST_REFUSAL,
   type InboxAgent,
   type InboxFile,
   type InboxItemWritten,
@@ -1928,6 +1936,119 @@ it.layer(getTestDB())("who an inbox item waits on", (it) => {
 
       const [item] = yield* memberAgentInboxItems(teammate, agent.agentId);
       assert.equal(item?.waitsOn?.userId, agent.userId);
+    }),
+  );
+});
+
+it.layer(getTestDB())("a thread's channel", (it) => {
+  /** A channel the member makes in the workspace, its id. */
+  const channelIn = (userId: string, workspaceId: string, name: string) =>
+    Effect.map(
+      createChannel(
+        userId,
+        workspaceId,
+        { name, purpose: `All about ${name}.`, project: false },
+        new Date(1),
+      ),
+      (made) => Result.getOrThrow(made).id,
+    );
+
+  it.effect(
+    "a thread addressed to a member waits on them over the task's assignee, in its read, the account's stamps, and its channel's count, and on the assignee again once a post names nobody",
+    () =>
+      Effect.gen(function* () {
+        const { agent, workspaceId } = yield* openAgentIn;
+        const owner = agent.userId;
+        const teammate = yield* openUser;
+        yield* joinWorkspace(workspaceId, teammate);
+        yield* updateTask(owner, agent.taskId ?? "", { assigneeId: owner });
+        const app = yield* channelIn(owner, workspaceId, "app");
+        const standing = Effect.gen(function* () {
+          const [item] = yield* channelThreads(teammate, app);
+          const stamps = yield* accountWaitingStamps(teammate);
+          return {
+            waitsOn: item?.waitsOn?.userId,
+            teammateStamp: stamps.find((stamp) => stamp.id === item?.id)?.waitsOn,
+            counts: {
+              owner: (yield* channelWaitingCounts(owner, workspaceId)).get(app) ?? 0,
+              teammate: (yield* channelWaitingCounts(teammate, workspaceId)).get(app) ?? 0,
+            },
+          };
+        });
+
+        yield* post(agent, { ...SETTINGS, channelId: app, addresseeId: teammate });
+        const addressed = yield* standing;
+        yield* post(agent, SETTINGS);
+        const unaddressed = yield* standing;
+
+        assert.deepEqual(addressed, {
+          waitsOn: teammate,
+          teammateStamp: teammate,
+          counts: { owner: 0, teammate: 1 },
+        });
+        assert.deepEqual(unaddressed, {
+          waitsOn: owner,
+          teammateStamp: owner,
+          counts: { owner: 1, teammate: 0 },
+        });
+      }),
+  );
+
+  it.effect(
+    "a thread goes to #general where it names no channel, moves only to a channel it names, and is refused one archived or of another workspace, or an addressee outside its workspace",
+    () =>
+      Effect.gen(function* () {
+        const { agent, workspaceId } = yield* openAgentIn;
+        const elsewhere = yield* openAgentIn;
+        const outsider = elsewhere.agent.userId;
+        const general = yield* ensureGeneralChannel(workspaceId, new Date(1));
+        const app = yield* channelIn(agent.userId, workspaceId, "app");
+        const retired = yield* channelIn(agent.userId, workspaceId, "retired");
+        assert.ok(
+          Result.isSuccess(yield* archiveChannel(agent.userId, workspaceId, retired, new Date(2))),
+        );
+        const theirs = yield* channelIn(outsider, elsewhere.workspaceId, "app");
+        const channelOf = (readerId: string, channelId: string) =>
+          Effect.map(channelThreads(readerId, channelId), (threads) =>
+            threads.map((thread) => thread.key),
+          );
+
+        yield* post(agent, NOTICE);
+        const unnamed = yield* channelOf(agent.userId, general);
+        yield* post(agent, { ...NOTICE, channelId: app });
+        yield* post(agent, NOTICE);
+        const moved = yield* channelOf(agent.userId, app);
+        const refused = yield* Effect.all([
+          postInboxThread(agent, { ...SETTINGS, channelId: retired }),
+          postInboxThread(agent, { ...SETTINGS, channelId: theirs }),
+          postInboxThread(agent, { ...SETTINGS, addresseeId: outsider }),
+        ]);
+
+        assert.deepEqual(unnamed, [NOTICE.key]);
+        assert.deepEqual(moved, [NOTICE.key]);
+        assert.deepEqual(refused, [
+          Result.fail(INBOX_POST_REFUSAL.NO_CHANNEL),
+          Result.fail(INBOX_POST_REFUSAL.NO_CHANNEL),
+          Result.fail(INBOX_POST_REFUSAL.NO_ADDRESSEE),
+        ]);
+        assert.deepEqual(yield* channelOf(agent.userId, general), []);
+      }),
+  );
+
+  it.effect("an account outside the workspace reads none of a channel's threads or counts", () =>
+    Effect.gen(function* () {
+      const { agent, workspaceId } = yield* openAgentIn;
+      const outsider = yield* openUser;
+      yield* openWorkspace(outsider);
+      const app = yield* channelIn(agent.userId, workspaceId, "app");
+      const item = yield* post(agent, { ...SETTINGS, channelId: app, addresseeId: agent.userId });
+
+      assert.deepEqual(
+        (yield* channelThreads(agent.userId, app)).map((thread) => [thread.id, thread.channelId]),
+        [[item.id, app]],
+      );
+      assert.deepEqual(yield* channelThreads(outsider, app), []);
+      assert.deepEqual([...(yield* channelWaitingCounts(outsider, workspaceId))], []);
     }),
   );
 });

@@ -51,6 +51,7 @@
     "./chapters-model-choice": "./src/chapters-model-choice.js",
     "./chat-mentions": "./src/chat-mentions.js",
     "./coding-agent-status": "./src/coding-agent-status.js",
+    "./channel-wire": "./src/channel-wire.js",
     "./chat-wire": "./src/chat-wire.js",
     "./coding-agent-view": "./src/coding-agent-view.js",
     "./coding-agent-wire": "./src/coding-agent-wire.js",

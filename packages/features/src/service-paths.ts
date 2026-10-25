@@ -189,6 +189,20 @@ export const HOSTED_SERVICE_PATH = {
    */
   TASK_SECTIONS: "/api/task-sections",
   /**
+   * A workspace's open channels, each with how many asks wait on the reader
+   * there and when they last looked (GET), or one made (POST), answered with
+   * them all as they then stand. `channel-wire.ts` declares both.
+   */
+  CHANNELS: "/api/channels",
+  /** A channel renamed (POST), answered with the workspace's channels as they then stand. */
+  CHANNELS_RENAME: "/api/channels/rename",
+  /** A channel archived (POST), answered with the workspace's channels as they then stand. */
+  CHANNELS_ARCHIVE: "/api/channels/archive",
+  /** The reader's look at a channel stamped (POST), answered with the workspace's channels as they then stand. */
+  CHANNELS_LOOK: "/api/channels/look",
+  /** A channel's latest threads the reader may read (GET), each with its channel. */
+  CHANNELS_THREADS: "/api/channels/threads",
+  /**
    * The repositories the signed-in account reaches through the Luke GitHub
    * App, most recently updated first (GET), with whether the App is
    * installed anywhere for them and where to install it.
