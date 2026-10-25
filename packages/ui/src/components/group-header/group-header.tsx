@@ -57,12 +57,15 @@ import { Tooltip } from "../tooltip/hint.js";
  * the Tasks list's, hands them on through its fold's body (`rows`).
  *
  * A group's actions (a repository's ⋯ and +) stand at the head's end beside
- * the fold, so pressing one folds nothing, shown while the head is hovered
- * or holds the focus, and at rest where there is no hover; a head whose
- * buttons are the list's own, Tasks' View options, keeps them standing at
- * rest (`actionsShown`). A right-click on the head is the ⋯'s second door
- * (`contextMenu`), and the head stays ringed while the menu it opened stands
- * (`menuOpen`).
+ * the fold, so pressing one folds nothing, shown while the head is hovered,
+ * holds the focus, or a menu one of them dropped stands open, and at rest
+ * where there is no hover; a head whose buttons are the list's own keeps
+ * them standing at rest (`actionsShown`). One action may be on, a filter
+ * leaving rows out (`GroupAction`): it stands at rest while the rest wait,
+ * wearing a dot in the accent's ink over its corner, so a list cut down
+ * never passes for the whole of it. A right-click on the head is the ⋯'s
+ * second door (`contextMenu`), and the head stays ringed while the menu it
+ * opened stands (`menuOpen`).
  *
  * A head that is too tight for a search of its own may offer one (`search`):
  * a magnifier after the label unfolds a field laid over the label and the
@@ -97,6 +100,13 @@ export const GROUP_ACTIONS = {
 } as const;
 export type GroupActions = (typeof GROUP_ACTIONS)[keyof typeof GROUP_ACTIONS];
 
+/** Whether one of a head's actions waits with the rest, or is on and stands at rest, wearing its dot. */
+export const GROUP_ACTION_STATE = {
+  IDLE: "idle",
+  ACTIVE: "active",
+} as const;
+export type GroupActionState = (typeof GROUP_ACTION_STATE)[keyof typeof GROUP_ACTION_STATE];
+
 /** How wide the surface a group stands on is, which says where its count stands: always on a wide page, only folded or under the pointer in a narrow column. */
 export const GROUP_SURFACE = {
   WIDE: "wide",
@@ -128,14 +138,6 @@ export type GroupFold = { readonly defaultOpen: boolean } | DisclosureControl;
 const BROUGHT =
   "opacity-0 group-hover/head:opacity-100 group-focus-visible/lead:opacity-100 [@media(hover:none)]:opacity-100";
 
-/**
- * A group's actions, shown while the head is hovered or holds the focus or
- * while the menu it opened stands, and at rest on a screen with no hover, in
- * the room they keep.
- */
-const REVEALED =
-  "opacity-0 group-hover/head:opacity-100 group-focus-within/head:opacity-100 group-data-[menu-open=true]/head:opacity-100 [@media(hover:none)]:opacity-100";
-
 /** A glyph that gives way to the chevron when the pointer or the keyboard brings it. */
 const GIVES_WAY =
   "group-hover/head:opacity-0 group-focus-visible/lead:opacity-0 [@media(hover:none)]:opacity-0";
@@ -158,7 +160,8 @@ const PART = {
   CHEVRON: `luke-group-header-chevron grid place-items-center ${FADE}`,
   MARK: "luke-group-header-mark inline-flex flex-none text-muted-foreground [&>svg]:size-group-header-mark",
   COUNT: `luke-group-header-count flex-none text-caption-inline tabular-nums ${FADE}`,
-  ACTIONS: `luke-group-header-actions flex flex-none items-center ${FADE}`,
+  /* Each action waits for the pointer or the keyboard on its own (`group-header.css`). */
+  ACTIONS: "luke-group-header-actions flex flex-none items-center",
 } as const;
 
 /** The heading's share of the head, which a search's name hands it instead where the head offers one (`folding-search.css`). */
@@ -254,6 +257,27 @@ function Lead({
       {said(mark) ? <span className={PART.MARK}>{mark}</span> : null}
       {count === undefined ? null : <Count count={count} />}
     </>
+  );
+}
+
+/**
+ * One of a head's actions, the button and the menu it drops, which stands at
+ * rest while it is on, a filter leaving rows out, wearing the accent's dot,
+ * though the head's other actions wait for the pointer or the keyboard.
+ */
+export function GroupAction({
+  state = GROUP_ACTION_STATE.IDLE,
+  children,
+}: {
+  /** Whether it is on, which keeps it standing and dotted. */
+  state?: GroupActionState;
+  /** The action's button, and the menu it drops. */
+  children: ReactNode;
+}): React.JSX.Element {
+  return (
+    <span className="luke-group-header-action relative inline-flex" data-state={state}>
+      {children}
+    </span>
   );
 }
 
@@ -384,10 +408,7 @@ export function GroupHeader({
         >
           {search === undefined ? named : <FoldingSearch {...search}>{named}</FoldingSearch>}
           {said(actions) ? (
-            <span
-              className={`${PART.ACTIONS} ${actionsShown === GROUP_ACTIONS.ON_HOVER ? REVEALED : ""}`}
-              data-shown={actionsShown}
-            >
+            <span className={PART.ACTIONS} data-shown={actionsShown}>
               {actions}
             </span>
           ) : null}

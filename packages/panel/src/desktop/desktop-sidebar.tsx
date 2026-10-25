@@ -25,7 +25,6 @@ import {
   ErrorState,
   Fill,
   GAP,
-  GROUP_ACTIONS,
   GROUP_HEADING,
   GroupHeader,
   HoldPress,
@@ -92,6 +91,7 @@ import {
   repositoryGroups,
   repositoryLabel,
   shownStatuses,
+  statusesFiltered,
   TASK_GROUPING,
   TASK_ROW,
   type TaskOrder,
@@ -2263,7 +2263,6 @@ function SidebarColumn({
                       <GroupHeader
                         heading={GROUP_HEADING.NONE}
                         label="Tasks"
-                        actionsShown={GROUP_ACTIONS.AT_REST}
                         actions={
                           <>
                             {sectionsShown && tasks.workspace !== undefined ? (
@@ -2277,6 +2276,7 @@ function SidebarColumn({
                             <TaskStatusFilter
                               menu={statusMenu}
                               statuses={statuses}
+                              filtered={statusesFiltered(taskView.view)}
                               onStatuses={taskView.onStatuses}
                             />
                             <TaskViewOptions

@@ -1,0 +1,54 @@
+/* group-header.css -- what of a GroupHeader's actions a utility cannot say:
+   each action waits for the pointer or the keyboard on its own, since one
+   that is on stands at rest wearing its dot while the rest wait, and a menu
+   one of them dropped keeps them shown. These rules reach into the actions
+   the caller hands the head, whose own sheets they must not outrank, and
+   read `:has()` and a pseudo-element, so they stay here in the components
+   layer. The head itself is utilities over the theme (`group-header.tsx`). */
+
+@layer components {
+  /* An action that is on wears a dot over its corner, in the accent's ink,
+     since the web's accent fill is too light to hold 3:1 as a mark on its
+     light page. */
+  .luke-group-header-action[data-state="active"]::after {
+    position: absolute;
+    top: var(--luke-space-4);
+    right: var(--luke-space-4);
+    width: 5px; /* off-scale: a status dot */
+    height: 5px; /* off-scale: a status dot */
+    border-radius: var(--luke-radius-full);
+    background: var(--luke-color-accent-text);
+    content: "";
+    pointer-events: none;
+  }
+
+  /* Note that each action waits on its own rather than the row of them,
+     because one that is on stands while the rest wait, and the row's
+     opacity would hide it with them. */
+  .luke-group-header-actions[data-shown="on-hover"] > * {
+    opacity: 0;
+    transition: opacity var(--luke-duration-hover) var(--luke-motion-exit);
+  }
+
+  /* They come in while the head holds the focus, its own menu stands, or a
+     menu one of them dropped stands open, which has taken the focus and
+     often the pointer away; and one that is on stands at rest. */
+  .luke-group-header-head:is(:focus-within, [data-menu-open="true"]) .luke-group-header-actions > *,
+  .luke-group-header-head .luke-group-header-actions:has([aria-expanded="true"]) > *,
+  .luke-group-header-actions > .luke-group-header-action[data-state="active"] {
+    opacity: 1;
+  }
+
+  @media (hover: hover) {
+    .luke-group-header-head:hover .luke-group-header-actions > * {
+      opacity: 1;
+    }
+  }
+
+  /* A screen with no hover shows them at rest, in the room they keep. */
+  @media (hover: none) {
+    .luke-group-header-head .luke-group-header-actions[data-shown] > * {
+      opacity: 1;
+    }
+  }
+}
