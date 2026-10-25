@@ -234,7 +234,7 @@ export function useColumnDock(
     }
     let frame: number | undefined;
     function measure(): void {
-      if (frame !== undefined) return;
+      if (host === null || frame !== undefined) return;
       frame = requestAnimationFrame(() => {
         frame = undefined;
         column = shownColumn(host, columnSelector);
