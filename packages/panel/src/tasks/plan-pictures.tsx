@@ -19,10 +19,9 @@ import {
 } from "react";
 import { useAct } from "../act.js";
 import type { PictureDrawer } from "../markdown-message.js";
-import { PictureBlock } from "../picture-block.js";
+import { OUTSIDE_GLYPH_CLASS, PictureBlock } from "../picture-block.js";
 import { TextLink } from "../text-link.js";
 import { AttachmentViewer } from "./attachment-viewer.js";
-import { OUTSIDE_GLYPH_CLASS } from "./transcript-blocks.js";
 import { useOpenLink } from "./use-open-link.js";
 
 /**

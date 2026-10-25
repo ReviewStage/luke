@@ -1210,7 +1210,7 @@ function CommentCard({
 
 /** One row of the Comments tab's list, a step from the next: a thread's card, or a placeholder's. */
 function CommentsRow({ children }: { children: ReactNode }): React.JSX.Element {
-  return <div className="comments-row not-first:mt-control-gap">{children}</div>;
+  return <div className="comments-row [.comments-row+&]:mt-control-gap">{children}</div>;
 }
 
 /**

@@ -146,6 +146,7 @@ import {
   ToolStateMark,
   ToolSummary,
 } from "../ai-elements/tool.js";
+import { OUTSIDE_GLYPH_CLASS } from "../picture-block.js";
 import { GLYPH_STATE, StateGlyph } from "../state-glyph.js";
 import { TextLink } from "../text-link.js";
 import { useInboxPictureDrawer } from "./inbox-pictures.js";
@@ -240,9 +241,6 @@ const LONE_LINK_ELEMENT = {
 } as const;
 
 /** The element a paragraph holding pictures alone is drawn as in words drawn as a document, which stands them side by side. */
-/** A picture from outside Luke, a link to it never fetched, marked by a glyph a step under its words' size. */
-export const OUTSIDE_GLYPH_CLASS = "mr-[0.25em] size-picture-glyph align-[-0.12em]";
-
 const PICTURE_ROW_ELEMENT = {
   TAG: "luke-pictures",
   CLASS: "transcript-pictures",
