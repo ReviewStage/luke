@@ -1676,27 +1676,34 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork, modelCatalogOf(CATALOG)))(
             input: unparsedWire({}),
           });
 
-          assert.deepEqual(read, {
-            status: ACTION_RESULT_STATUS.ACCEPTED,
-            inbox: [
-              {
-                key: "region",
-                title: "Which region?",
-                status: INBOX_STATUS.CLOSED,
-                thread: [
-                  {
-                    from: "you",
-                    text: "Both cost the same.",
-                    ask: {
-                      type: INBOX_ASK.DECIDE,
-                      status: INBOX_ASK_STATUS.WITHDRAWN,
-                      withdrawnReason: "Picked iad1.",
+          assert.equal(read.status, ACTION_RESULT_STATUS.ACCEPTED);
+          // The thread's mention is spelled out in `coder-inbox.test.ts`; here it is only carried.
+          const [{ mention, ...line } = { mention: undefined }] = read.inbox ?? [];
+          assert.match(mention ?? "", /^\[@Which region\?\]\(https:\/\/tryluke\.dev\//u);
+          assert.deepEqual(
+            { ...read, inbox: [line] },
+            {
+              status: ACTION_RESULT_STATUS.ACCEPTED,
+              inbox: [
+                {
+                  key: "region",
+                  title: "Which region?",
+                  status: INBOX_STATUS.CLOSED,
+                  thread: [
+                    {
+                      from: "you",
+                      text: "Both cost the same.",
+                      ask: {
+                        type: INBOX_ASK.DECIDE,
+                        status: INBOX_ASK_STATUS.WITHDRAWN,
+                        withdrawnReason: "Picked iad1.",
+                      },
                     },
-                  },
-                ],
-              },
-            ],
-          });
+                  ],
+                },
+              ],
+            },
+          );
         }),
     );
 

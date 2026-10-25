@@ -149,6 +149,15 @@ const onlyItem = (agent: Pick<InboxAgent, "userId"> & { readonly taskId: string 
     return item;
   });
 
+/** The mention an agent writes a thread of its task's as, its link spelled out as the window reads one. */
+function mentionOf(
+  agent: { readonly workspaceId: string; readonly taskId: string },
+  title: string,
+  itemId: string,
+): string {
+  return `[@${title}](https://tryluke.dev/workspace-${agent.workspaceId}/plan/${agent.taskId}/inbox/${itemId})`;
+}
+
 /** The message whose ask the thread holds open. */
 function openAsk(item: InboxItem) {
   const asking = item.thread?.find((message) => message.ask?.status === INBOX_ASK_STATUS.OPEN);
@@ -169,12 +178,14 @@ it.layer(getTestDB())("the coding agent's inbox", (it) => {
       Effect.gen(function* () {
         const agent = yield* openAgent;
         const posted = yield* post(agent, QUEUE);
+        const first = yield* onlyItem(agent);
         assert.deepEqual(posted, {
           status: ACTION_RESULT_STATUS.ACCEPTED,
           inbox: [
             {
               key: QUEUE.key,
               title: QUEUE.title,
+              mention: mentionOf(agent, QUEUE.title, first.id),
               status: INBOX_STATUS.OPEN,
               waits: true,
               thread: [
@@ -187,7 +198,6 @@ it.layer(getTestDB())("the coding agent's inbox", (it) => {
             },
           ],
         });
-        const first = yield* onlyItem(agent);
         assert.deepEqual(openAsk(first).ask, { ...QUEUE.ask, status: INBOX_ASK_STATUS.OPEN });
 
         yield* TestClock.adjust(Duration.seconds(1));
@@ -236,18 +246,19 @@ it.layer(getTestDB())("the coding agent's inbox", (it) => {
         assert.deepEqual(yield* taskInboxItems(agent.userId, agent.taskId), []);
 
         const noted = yield* post(agent, { key: "pr-ready", title: "PR ready", body: "Opened." });
+        const notice = yield* onlyItem(agent);
         assert.deepEqual(noted, {
           status: ACTION_RESULT_STATUS.ACCEPTED,
           inbox: [
             {
               key: "pr-ready",
               title: "PR ready",
+              mention: mentionOf(agent, "PR ready", notice.id),
               status: INBOX_STATUS.OPEN,
               thread: [{ from: "you", text: "Opened." }],
             },
           ],
         });
-        const notice = yield* onlyItem(agent);
         assert.deepEqual([notice.status, notice.needsReply], [INBOX_STATUS.OPEN, false]);
         assert.equal(
           refusalOf(yield* withdrawAsk(agent, input({ key: "pr-ready", reason: "Merged." }))),
@@ -567,12 +578,14 @@ it.layer(getTestDB())("the coding agent's inbox", (it) => {
           agent,
           input({ key: SETTINGS.key, reason: "Did it myself." }),
         );
+        const settings = yield* onlyItem(agent);
         assert.deepEqual(withdrawn, {
           status: ACTION_RESULT_STATUS.ACCEPTED,
           inbox: [
             {
               key: SETTINGS.key,
               title: SETTINGS.title,
+              mention: mentionOf(agent, SETTINGS.title, settings.id),
               status: INBOX_STATUS.CLOSED,
               thread: [
                 {
@@ -684,6 +697,7 @@ it.layer(getTestDB())("the coding agent's inbox", (it) => {
           {
             key: QUEUE.key,
             title: QUEUE.title,
+            mention: mentionOf(agent, QUEUE.title, asked.id),
             status: INBOX_STATUS.ANSWERED,
             earlier: 2,
             thread: [
@@ -813,6 +827,7 @@ it.layer(getTestDB())("the coding agent's inbox", (it) => {
             {
               key: "pr-merged",
               title: "PR merged",
+              mention: mentionOf(agent, "PR merged", merged.id),
               status: INBOX_STATUS.CLOSED,
               thread: [{ from: "you", text: "Merged." }],
               closedReason: "Merged by hand.",
@@ -820,6 +835,7 @@ it.layer(getTestDB())("the coding agent's inbox", (it) => {
             {
               key: "pr-ready",
               title: "PR ready",
+              mention: mentionOf(agent, "PR ready", ready.id),
               status: INBOX_STATUS.ANSWERED,
               thread: [{ from: "you", text: "Opened." }],
             },
