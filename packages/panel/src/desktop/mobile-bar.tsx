@@ -19,6 +19,11 @@ import { SIDEBAR_OVERLAY, type SidebarCollapse } from "./sidebar-collapse.js";
  * place's list, not on the item or channel last read, since on a phone the
  * list is the place (`use-tasks-tab.ts`'s `onOpen`).
  *
+ * Settings, which stands over the places rather than among them, keeps the
+ * bar on a phone too, its list and its pages alike: no place is the current
+ * one there, and a press leaves Settings for the place pressed, More for the
+ * drawer over the places (`leave`).
+ *
  * The Inbox and Chat each count what waits on the developer there, the
  * count the drawer's rows show, read from the one reading they draw from
  * (`places-waiting.ts`), so the two never disagree, and said in the
@@ -48,6 +53,7 @@ export function MobileBar({
   chatOn,
   sidebar,
   onPressMore,
+  leave,
 }: {
   tasks: TasksControl;
   chatOn: boolean;
@@ -55,13 +61,21 @@ export function MobileBar({
   sidebar: SidebarCollapse;
   /** Marks the press on More as the drawer's own, so the press that opens it does not also put it away. */
   onPressMore: () => void;
+  /** Leaves what stands over the places (Settings) before a press opens one; none where the bar stands among them. */
+  leave?: (() => void) | undefined;
 }): React.JSX.Element {
   const { inboxView, chatView, boardView } = tasks;
-  const inChat = chatView.open && chatOn;
-  const inInbox = !inChat && inboxView.open;
-  const inTasks = !inChat && !inInbox && boardView.open;
+  const among = leave === undefined;
+  const inChat = among && chatView.open && chatOn;
+  const inInbox = among && !inChat && inboxView.open;
+  const inTasks = among && !inChat && !inInbox && boardView.open;
   const drawerOpen = sidebar.overlay !== SIDEBAR_OVERLAY.CLOSED;
   const waiting = usePlacesWaiting(tasks);
+  // Note that a press leaves what stands over the places first, so the place it opens is the one on screen.
+  const go = (open: () => void) => () => {
+    leave?.();
+    open();
+  };
   return (
     <nav
       className="mobile-bar flex border-t border-border bg-ground px-luke-4 py-luke-2"
@@ -73,7 +87,7 @@ export function MobileBar({
         current={inInbox}
         count={{ value: waiting.inbox, noun: needsYouNoun(waiting.inbox) }}
         inert={drawerOpen}
-        onPress={inboxView.onOpen}
+        onPress={go(inboxView.onOpen)}
       >
         Inbox
       </BarItem>
@@ -81,7 +95,7 @@ export function MobileBar({
         icon={<ListTodoIcon />}
         current={inTasks}
         inert={drawerOpen}
-        onPress={boardView.onOpen}
+        onPress={go(boardView.onOpen)}
       >
         Tasks
       </BarItem>
@@ -91,7 +105,7 @@ export function MobileBar({
           current={inChat}
           count={{ value: waiting.chat, noun: needsYouNoun(waiting.chat) }}
           inert={drawerOpen}
-          onPress={chatView.onOpen}
+          onPress={go(chatView.onOpen)}
         >
           Chat
         </BarItem>
@@ -101,7 +115,7 @@ export function MobileBar({
         current={false}
         expanded={sidebar.overlay === SIDEBAR_OVERLAY.OPEN}
         onPointerDown={onPressMore}
-        onPress={sidebar.onToggle}
+        onPress={go(sidebar.onToggle)}
       >
         More
       </BarItem>

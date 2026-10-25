@@ -7,6 +7,7 @@ import {
   SettingsSectionsSkeleton,
 } from "../settings-section/settings-section.js";
 import { Skeleton } from "../skeleton/skeleton.js";
+import { TEXT_TONE, Text } from "../text/text.js";
 import { TOOLBAR_INSET, TOOLBAR_LOOK, Toolbar, type ToolbarLook } from "../toolbar/toolbar.js";
 
 /**
@@ -46,10 +47,14 @@ import { TOOLBAR_INSET, TOOLBAR_LOOK, Toolbar, type ToolbarLook } from "../toolb
  * as a whole page of placeholders (`SettingsPageSkeleton`): the page itself,
  * a block for its title, and its sections' blocks.
  *
- * On a phone (`TOOLBAR_LOOK.PHONE`) the bar is a phone's header: its way back
- * in one corner, what acts on the whole page in the other (a ⋯ the caller
- * hands as `actions`), and the name it picks up centred between them; the
- * header in the page keeps the title alone.
+ * On a phone (`TOOLBAR_LOOK.PHONE`), the look a page standing alone in a
+ * small window takes too, the bar is a phone's header: its way back in one
+ * corner, what acts on the whole page in the other (a ⋯ the caller hands as
+ * `actions`), and the page's title, its `h1`, centred between them, as a
+ * phone heads every page. The page then draws no header of its own: it
+ * opens on the quiet line saying what holds for all of it, a section's gap
+ * under the bar's way back (`title-under-bar`), so no lone row of the way
+ * back stands over an empty band before the title.
  *
  * It is drawn in Tailwind utilities over the theme with no shadcn/ui base,
  * since a page's frame, scroller, and column are a layout shadcn has no
@@ -63,6 +68,11 @@ import { TOOLBAR_INSET, TOOLBAR_LOOK, Toolbar, type ToolbarLook } from "../toolb
  * title's line is only as wide as what it holds.
  */
 const SKELETON_TITLE_WIDTH = "calc(5 * var(--luke-control-height))";
+
+/** Whether a slot says anything: nothing, `null`, `false`, and an empty string say nothing. */
+function said(words: ReactNode): boolean {
+  return words !== undefined && words !== null && words !== false && words !== "";
+}
 
 /** A column of `children`, one section each, under `title` and its `description`, beside them `actions`, or on a phone under a bar ending with them. */
 export function SettingsPage({
@@ -95,30 +105,44 @@ export function SettingsPage({
     <div className="luke-settings-page-frame flex h-full min-h-0 min-w-0 grow basis-0 flex-col">
       <Toolbar
         lead={lead}
-        pickUp={{ name: named.name, shown: named.away }}
         {...(phone
           ? {
               look,
               place: "settings-page",
               start: TOOLBAR_INSET.COLUMN,
               end: TOOLBAR_INSET.COLUMN,
+              title,
               actions,
             }
-          : {})}
+          : { pickUp: { name: named.name, shown: named.away } })}
       />
       <div
         ref={page}
         className="luke-settings-page @container/luke-settings-page box-border min-h-0 min-w-0 grow basis-0 overflow-x-clip overflow-y-auto overscroll-contain scroll-py-page-inset [scrollbar-gutter:stable]"
       >
-        <div className="luke-settings-page-column mx-auto">
-          <div ref={head} className="luke-settings-page-head mb-luke-24">
-            <PageHeader
-              title={title}
-              description={description}
-              actions={phone ? undefined : actions}
-              end={PAGE_HEADER_END.WORDS}
-            />
-          </div>
+        <div
+          className={
+            phone
+              ? "luke-settings-page-column mx-auto pt-title-under-bar"
+              : "luke-settings-page-column mx-auto"
+          }
+        >
+          {phone ? (
+            said(description) ? (
+              <div className="luke-settings-page-head mb-luke-24">
+                <Text tone={TEXT_TONE.MUTED}>{description}</Text>
+              </div>
+            ) : null
+          ) : (
+            <div ref={head} className="luke-settings-page-head mb-luke-24">
+              <PageHeader
+                title={title}
+                description={description}
+                actions={actions}
+                end={PAGE_HEADER_END.WORDS}
+              />
+            </div>
+          )}
           <RevealArea root={sections}>
             <div
               ref={sections}

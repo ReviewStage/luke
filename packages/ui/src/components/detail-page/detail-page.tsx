@@ -37,9 +37,10 @@ import { Toolbar, type ToolbarPickUp } from "../toolbar/toolbar.js";
  * The page heads itself with a document's header (`PageHeader`), its title
  * the page's one `h1`, a page's inset under the window's bar. In a narrow
  * room, where the bar is a phone's head on the page's own ground rather
- * than the window's row above its sheet, the header opens a section's gap
- * under it instead, so the bar's row and the inset never stack into an
- * empty band between the way back and the title. Where the window's bar stands above the page and what
+ * than the window's row above its sheet, the title stands a section's gap
+ * under the bar's way back instead (`title-under-bar`), so neither the inset
+ * nor the bar's row under its controls stacks into an empty band between
+ * the way back and the title. Where the window's bar stands above the page and what
  * stands beside it (an editor with a panel beside it) rather than inside
  * its column, the page draws no bar of its own and hands the caller the name
  * its header reads (`onPickUp`), for the caller's bar to pick up. The
@@ -132,7 +133,7 @@ export function DetailPage({
           {underToolbar ? null : (
             <div
               ref={header}
-              className="luke-detail-page-header pt-detail-page-inset pb-section-gap room-narrow:pt-section-gap"
+              className="luke-detail-page-header pt-detail-page-inset pb-section-gap room-narrow:pt-title-under-bar"
             >
               <PageHeader
                 title={heading.title}

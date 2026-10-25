@@ -817,8 +817,10 @@ export function DesktopShell({
   // Settings takes the whole window, its pages listed where the tasks were.
   if (tab === PANEL_TAB.SETTINGS) {
     const exitSettings = history.canGoBack ? history.onBack : () => onTabChange(PANEL_TAB.TASKS);
+    // A phone keeps its places bar under Settings, each press leaving Settings for the place pressed (`mobile-bar.tsx`).
+    const settingsBar = room === SHELL_ROOM.NARROW && tasks.signedIn;
     return (
-      <div className="desktop-shell" data-room={room}>
+      <div className="desktop-shell" data-room={room} data-mobile-bar={String(settingsBar)}>
         <Suspense
           fallback={
             <SettingsLoading
@@ -838,6 +840,15 @@ export function DesktopShell({
             onExit={exitSettings}
           />
         </Suspense>
+        {settingsBar ? (
+          <MobileBar
+            tasks={tasks}
+            chatOn={chatOn}
+            sidebar={sidebar}
+            onPressMore={keepOverlay}
+            leave={() => onTabChange(PANEL_TAB.TASKS)}
+          />
+        ) : null}
       </div>
     );
   }
