@@ -5759,8 +5759,3 @@ ul.actor-stack {
 .channels-composer {
   padding: 0 var(--column-inset) var(--column-inset);
 }
-
-/* A post whose ask waits on the reader stands out by an attention rule at its start. */
-.channels-post[data-yours="true"] {
-  box-shadow: inset 2px 0 0 var(--luke-color-attention);
-}
