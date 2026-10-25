@@ -6272,9 +6272,11 @@ svg.lucide {
   flex-direction: column;
 }
 
+/* The first card stands as far under the bar as in from the list's sides,
+   rather than on the bar's hairline. */
 .comments-list {
   box-sizing: border-box;
-  padding: 0 var(--luke-space-16) var(--luke-space-24);
+  padding: var(--luke-space-16) var(--luke-space-16) var(--luke-space-24);
 }
 
 .comments-row + .comments-row {
