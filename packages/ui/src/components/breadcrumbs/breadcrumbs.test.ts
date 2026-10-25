@@ -22,8 +22,9 @@ import {
  * words; a crumb's glyph is hidden from a reader, who hears its words, and
  * its card hangs from the app's hint, a crumb with no press's included; a
  * toolbar's way back is a button named by its words; and a path that does
- * not fit its bar folds its first crumbs into one "…" naming them, the
- * last crumb standing, and one that fits folds nothing.
+ * not fit its bar folds its first crumbs into one "…" that opens a menu of
+ * them, each leading where its crumb did, the last crumb standing, and one
+ * that fits folds nothing.
  */
 
 declare global {
@@ -221,4 +222,25 @@ test("a path that fits its bar folds nothing", () => {
     "Build teammate invitations",
     "What the expired invite page says",
   ]);
+});
+
+test("the … of a folded path opens a menu of the crumbs it stands for, each leading where its crumb did", () => {
+  layOut(250);
+  const opened: string[] = [];
+  const container = draw({
+    label: "Path",
+    crumbs: [
+      { label: "Teammate invitations", onPress: () => opened.push("task") },
+      { label: "Build teammate invitations", onPress: () => opened.push("agent") },
+      { label: "What the expired invite page says", current: true },
+    ],
+  });
+  act(() => button(container, "Teammate invitations › Build teammate invitations").click());
+  const rows = [...document.body.querySelectorAll("[role='menuitem']")];
+  expect(rows.map((row) => row.textContent)).toEqual([
+    "Teammate invitations",
+    "Build teammate invitations",
+  ]);
+  act(() => (rows[1] as HTMLElement).click());
+  expect(opened).toEqual(["agent"]);
 });

@@ -28,6 +28,8 @@ interface DrawnCrumb {
   readonly crumb: Crumb;
   /** Whether it keeps its words legible in a narrow bar, so the fold comes before it shrinks to its first letters. */
   readonly legible: boolean;
+  /** Whether it is the "…" standing for the crumbs folded away. */
+  readonly folded: boolean;
 }
 
 /** Whether a crumb may be left out of a narrow path: words or a plain press, always drawn. */
@@ -56,14 +58,14 @@ function legible(crumb: Crumb): boolean {
 /** The path as drawn with its first `count` crumbs folded into one "…" that names them. */
 function folded(crumbs: readonly Crumb[], count: number): readonly DrawnCrumb[] {
   const kept = crumbs
-    .map((crumb, at) => ({ key: String(at), crumb, legible: legible(crumb) }))
+    .map((crumb, at) => ({ key: String(at), crumb, legible: legible(crumb), folded: false }))
     .slice(count);
   if (count === 0) return kept;
   const names = crumbs.slice(0, count).map((crumb) => crumb.label);
   const hint = names.join(FOLDED_SEPARATOR);
   // Note that the "…" is no legible crumb, because its floor is its own width.
   const crumb: Crumb = { label: FOLDED_WORDS, hint, name: hint };
-  return [{ key: "folded", crumb, legible: false }, ...kept];
+  return [{ key: "folded", crumb, legible: false, folded: true }, ...kept];
 }
 
 /** What identifies a path for the fold: its words and which are drawn, so a renamed or arriving crumb is measured afresh. */
@@ -72,13 +74,17 @@ function signature(crumbs: readonly Crumb[]): string {
 }
 
 /**
- * The crumbs to draw and the ref of the bar holding them: `nav` is the path's
- * landmark, whose list is measured. A host with no resize observer lays
- * nothing out, so its path never folds.
+ * The crumbs to draw, the ones folded away, and the ref of the bar holding
+ * them: `nav` is the path's landmark, whose list is measured. A host with no
+ * resize observer lays nothing out, so its path never folds.
  */
 export function useCrumbFold(
   crumbs: readonly Crumb[],
-): [(nav: HTMLElement | null) => (() => void) | undefined, readonly DrawnCrumb[]] {
+): [
+  (nav: HTMLElement | null) => (() => void) | undefined,
+  readonly DrawnCrumb[],
+  readonly Crumb[],
+] {
   const key = signature(crumbs);
   const [state, setState] = useState({ key, count: 0 });
   const count = state.key === key ? state.count : 0;
@@ -86,19 +92,22 @@ export function useCrumbFold(
   const bar = useRef<HTMLElement | null>(null);
   const latest = useRef(key);
   latest.current = key;
-  // Note that the room the path stands in is what is watched, not the path, whose own width changes as it folds.
+  // Note that every box the path stands in is watched, up to the page, because
+  // the one around it is as wide as the folded path and so never grows to say
+  // that the window did; the first with room of its own does.
   const attach = useCallback((nav: HTMLElement | null): (() => void) | undefined => {
     if (nav === null || typeof ResizeObserver === "undefined") return undefined;
     bar.current = nav;
-    const room = nav.parentElement;
-    if (room === null) return undefined;
-    let width = room.clientWidth;
+    const rooms: HTMLElement[] = [];
+    for (let room = nav.parentElement; room !== null; room = room.parentElement) rooms.push(room);
+    let widths = rooms.map((room) => room.clientWidth);
     const resized = new ResizeObserver(() => {
-      if (room.clientWidth === width) return;
-      width = room.clientWidth;
+      const now = rooms.map((room) => room.clientWidth);
+      if (now.every((width, at) => width === widths[at])) return;
+      widths = now;
       setState({ key: latest.current, count: 0 });
     });
-    resized.observe(room);
+    for (const room of rooms) resized.observe(room);
     return () => {
       bar.current = null;
       resized.disconnect();
@@ -109,5 +118,5 @@ export function useCrumbFold(
     if (list === null || list === undefined || count >= most) return;
     if (list.scrollWidth > list.clientWidth) setState({ key, count: count + 1 });
   });
-  return [attach, folded(crumbs, count)];
+  return [attach, folded(crumbs, count), crumbs.slice(0, count)];
 }

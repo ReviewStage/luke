@@ -1,4 +1,10 @@
-import { type ComponentProps, type ComponentType, type ReactNode, useState } from "react";
+import {
+  type ComponentProps,
+  type ComponentType,
+  isValidElement,
+  type ReactNode,
+  useState,
+} from "react";
 import { pulseOnPress } from "../../press-pulse.js";
 import {
   Breadcrumb,
@@ -11,6 +17,7 @@ import {
 import { useDisclosure } from "../../use-disclosure.js";
 import { BUTTON_VARIANT } from "../button/button.js";
 import { FoldingButton, type FoldingButtonHint } from "../folding-button/folding-button.js";
+import { dropBelowStart, Menu, type MenuAction, useMenu } from "../menu/menu.js";
 import {
   ClippedLine,
   ONE_LINE_ELEMENT,
@@ -86,6 +93,7 @@ export type BreadcrumbShown = (typeof BREADCRUMB_SHOWN)[keyof typeof BREADCRUMB_
 /** What a crumb's press opens. */
 export const BREADCRUMB_POPUP = {
   DIALOG: "dialog",
+  MENU: "menu",
 } as const;
 
 export type BreadcrumbPopup = (typeof BREADCRUMB_POPUP)[keyof typeof BREADCRUMB_POPUP];
@@ -408,8 +416,37 @@ export function Breadcrumbs({
   /** The hint raising a crumb's `hint` or hanging its `card`, and a folded way back's words: the window's tooltip, unless the caller hangs one of its own. */
   hint?: BreadcrumbHint | undefined;
 }): React.JSX.Element {
-  const [measured, drawn] = useCrumbFold(crumbs);
-  const path = drawn.map((each) => each.crumb);
+  const [measured, drawn, hidden] = useCrumbFold(crumbs);
+  const menu = useMenu(hidden.length > 0);
+  // Note that the "…" opens a menu of the crumbs it stands for, each pressing as its own crumb did, since folding a crumb must not take away where it leads.
+  const shown = drawn.map((each) =>
+    each.folded
+      ? {
+          ...each,
+          crumb: {
+            label: each.crumb.label,
+            name: each.crumb.name,
+            hint: each.crumb.hint,
+            popup: BREADCRUMB_POPUP.MENU,
+            expanded: menu.open !== undefined,
+            onPress: (opener: HTMLElement) =>
+              menu.open === undefined
+                ? menu.show(dropBelowStart(opener), opener)
+                : menu.close(true),
+          } satisfies Crumb,
+        }
+      : each,
+  );
+  const path = shown.map((each) => each.crumb);
+  const opener = menu.open?.opener;
+  const hiddenRows: MenuAction[] = hidden.map((crumb) => ({
+    label: crumb.label,
+    ...(isValidElement(crumb.glyph) ? { icon: crumb.glyph as React.JSX.Element } : {}),
+    disabled: crumb.onPress === undefined,
+    onSelect: () => {
+      if (opener !== undefined) crumb.onPress?.(opener);
+    },
+  }));
   return (
     <Breadcrumb
       ref={variant === BREADCRUMBS_VARIANT.CAPTION ? measured : undefined}
@@ -418,7 +455,7 @@ export function Breadcrumbs({
       aria-label={label}
     >
       <BreadcrumbList className={LOOK[variant].list}>
-        {drawn.map((each, at) => (
+        {shown.map((each, at) => (
           <CrumbItem
             key={each.key}
             crumb={each.crumb}
@@ -429,6 +466,14 @@ export function Breadcrumbs({
           />
         ))}
       </BreadcrumbList>
+      {menu.drawn === undefined ? null : (
+        <Menu
+          label="Earlier in the path"
+          menu={menu.drawn}
+          groups={[hiddenRows]}
+          onClose={menu.close}
+        />
+      )}
     </Breadcrumb>
   );
 }
