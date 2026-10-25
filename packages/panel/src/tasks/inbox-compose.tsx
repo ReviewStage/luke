@@ -42,8 +42,9 @@ import {
   Toolbar,
   Tooltip,
   TrashIcon,
+  VisuallyHidden,
 } from "@luke/ui";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { useAct } from "../act.js";
 import { appPlatform } from "../app-platform.js";
 import {
@@ -377,6 +378,7 @@ function ComposeCard({
   latestAgent.current = agent;
   const chosen = agent === undefined ? undefined : agentMenuRow(agent, place);
   const placeholder = agent === undefined ? "Write a message" : `Write to ${agent.name}`;
+  const subjectId = useId();
   const field = useAnswerField({
     draft: draft.text,
     placeholder,
@@ -530,10 +532,22 @@ function ComposeCard({
             />
           </div>
           <div className="inbox-compose-row">
-            <span className="inbox-compose-label">{SUBJECT}</span>
-            {/* Note that the subject may be left empty, which its name says as a FormField's label would and its placeholder shows where the field stands. */}
+            {/* Note that the subject may be left empty, which its label says to a reader as a FormField's does, and its placeholder shows where the field stands. */}
+            <label
+              className="inbox-compose-label"
+              id={`${subjectId}label`}
+              htmlFor={`${subjectId}control`}
+            >
+              {SUBJECT}
+              <VisuallyHidden>{FIELD_WORDS.OPTIONAL}</VisuallyHidden>
+            </label>
             <TextField
-              label={`${SUBJECT} ${FIELD_WORDS.OPTIONAL}`}
+              field={{
+                id: `${subjectId}control`,
+                labelId: `${subjectId}label`,
+                "aria-describedby": undefined,
+                "aria-invalid": undefined,
+              }}
               size={TEXT_FIELD_SIZE.INLINE}
               placeholder={FIELD_WORDS.OPTIONAL}
               value={draft.title ?? ""}
