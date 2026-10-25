@@ -1587,6 +1587,13 @@
   transform: translate(-50%, var(--luke-space-4));
 }
 
+/* The scroller ends clear of a phone's call card standing over it
+   (`--luke-card-room`, `call.css`), past Pierre's container, which Pierre
+   sizes itself. */
+[data-diff-list-scroller] {
+  padding-block-end: var(--luke-card-room, 0px);
+}
+
 /* Pierre's own container, which it draws the files into inside the scroller. */
 [data-diff-list-scroller] > :first-child {
   padding-inline: var(--luke-list-inset);
@@ -2453,12 +2460,13 @@
    `ConversationView`): its words at the measure, as far in from the sides
    as a `DetailPage` at a column's inset stands them, so the Conversation
    and the Checks read alike, opening a section's gap under the tabs and
-   ending a page's inset short of the foot. */
+   ending a page's inset short of the foot, or, on a phone, clear of the
+   call card standing over it (`--luke-card-room`, `call.css`). */
 .pull-request-page {
   --pull-request-page-measure: var(--luke-page-measure);
   padding: var(--luke-section-gap)
     max(var(--luke-space-12), (100cqi - var(--pull-request-page-measure)) / 2)
-    var(--luke-page-inset);
+    max(var(--luke-page-inset), var(--luke-card-room, 0px));
   color: var(--luke-color-text);
   font-size: var(--luke-type-body-size);
   line-height: var(--luke-type-body-leading);

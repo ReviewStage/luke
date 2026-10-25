@@ -131,10 +131,16 @@
   }
 
   /* Its end leaves free what the standing toasts take of the window's foot
-     (`--luke-toast-room`, which the shell measures), so its last row can be
-     scrolled clear of them rather than read through a toast. */
+     (`--luke-toast-room`, which the shell measures), and what a phone's call
+     card takes of it (`--luke-card-room`, which the shell says), so its last
+     row can be scrolled clear of them rather than read through a toast or
+     left under the card. */
   .luke-detail-page-content {
-    padding-bottom: max(var(--luke-detail-page-inset), var(--luke-toast-room, 0px));
+    padding-bottom: max(
+      var(--luke-detail-page-inset),
+      var(--luke-toast-room, 0px),
+      var(--luke-card-room, 0px)
+    );
     overflow-wrap: anywhere;
   }
 

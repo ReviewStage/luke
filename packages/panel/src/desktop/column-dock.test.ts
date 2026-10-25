@@ -293,3 +293,62 @@ test("a draft reply scrolled up under the toasts raises them at the frame after 
 
   assert.equal(dock(), "120px", "the reply scrolled up under the corner docks");
 });
+
+/** Where the window lays out a phone's call card and its video tile, which a rise or a lift moves only on screen, by `data-staged` name. */
+const LAID_OUT: ReadonlyMap<string, { top: number; height: number; width: number }> = new Map([
+  ["card", { top: 175, height: 225, width: 248 }],
+  ["tile", { top: 0, height: 125, width: 222 }],
+]);
+
+/** A phone's side panel filling the window, a pull request's tab bar at its head, and the call card floating over it with its video up. */
+function PhoneCardShell(): React.JSX.Element {
+  const shell = useRef<HTMLDivElement>(null);
+  useColumnDock(shell, true, true, "panel");
+  return createElement(
+    "div",
+    { ref: shell, className: "desktop-shell" },
+    createElement(
+      "aside",
+      { className: "side-panel", "data-staged": "panel" },
+      createElement("header", { className: "luke-pane-bar", "data-staged": "tabs" }),
+    ),
+    createElement(
+      "section",
+      { className: "call-card", "data-surface": "floating", "data-staged": "card" },
+      createElement("div", { className: "luke-call-video-tile", "data-staged": "tile" }),
+    ),
+  );
+}
+
+test.each([
+  { room: "a tab bar the full card would reach over", tabsFoot: 222, height: "70px" },
+  { room: "no room under the tab bar at all", tabsFoot: 380, height: "30px" },
+])(
+  "on a phone, with $room, the card's video gives up what it must, down to a control's height",
+  ({ tabsFoot, height }) => {
+    stage(
+      new Map([
+        ["panel", { left: 0, right: 608, top: 49, bottom: 416 }],
+        ["tabs", { left: 0, right: 608, top: 181, bottom: tabsFoot }],
+        ["card", { left: 16, right: 264, top: 175, bottom: 400 }],
+      ]),
+    );
+    for (const [side, read] of [
+      ["offsetTop", "top"],
+      ["offsetHeight", "height"],
+      ["offsetWidth", "width"],
+    ] as const)
+      vi.spyOn(HTMLElement.prototype, side, "get").mockImplementation(function (this: HTMLElement) {
+        return LAID_OUT.get(this.dataset.staged ?? "")?.[read] ?? 0;
+      });
+    const tokens = document.documentElement.style;
+    tokens.setProperty("--luke-space-8", "8px");
+    tokens.setProperty("--luke-space-16", "16px");
+    tokens.setProperty("--luke-control-height", "30px");
+    const container = document.body.appendChild(document.createElement("div"));
+    root = createRoot(container);
+    act(() => root?.render(createElement(PhoneCardShell)));
+    const card = document.querySelector<HTMLElement>(".call-card");
+    assert.equal(card?.style.getPropertyValue("--luke-call-video-height"), height);
+  },
+);
