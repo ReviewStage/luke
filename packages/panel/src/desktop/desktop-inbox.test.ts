@@ -641,7 +641,6 @@ function mount(
         open: inboxOpen,
         chosen,
         onOpen: () => undefined,
-        onOpenList: () => undefined,
         onClose: () => {
           asked.closed += 1;
         },

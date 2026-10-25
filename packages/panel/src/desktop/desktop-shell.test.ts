@@ -192,7 +192,6 @@ function mount(
         open: inboxOpen,
         chosen: undefined,
         onOpen: ignore,
-        onOpenList: () => undefined,
         onClose: ignore,
         onChoose: ignore,
         onOpenItem: () => undefined,
@@ -819,14 +818,13 @@ function barItem(page: HTMLElement, name: string): HTMLButtonElement {
   return item;
 }
 
-test("on a phone the Tasks page stands over a bar of the window's places, its own marked, and the bar's Inbox opens the Inbox on its list", async () => {
+test("on a phone the Tasks page stands over a bar of the window's places, its own marked, and the bar's Inbox opens the Inbox", async () => {
   const asked: string[] = [];
   const page = await mountNarrow({
     boardView: { ...tasksControl().boardView, open: true },
     inboxView: {
       ...tasksControl().inboxView,
       onOpen: () => asked.push("open"),
-      onOpenList: () => asked.push("open on its list"),
     },
   });
   assert.deepEqual(
@@ -836,7 +834,7 @@ test("on a phone the Tasks page stands over a bar of the window's places, its ow
   assert.equal(barItem(page, "Tasks").getAttribute("aria-current"), "page");
   assert.equal(barItem(page, "Inbox").getAttribute("aria-current"), null);
   act(() => barItem(page, "Inbox").click());
-  assert.deepEqual(asked, ["open on its list"]);
+  assert.deepEqual(asked, ["open"]);
 });
 
 test("on a phone the bar's More opens the sidebar's drawer, which holds every other place", async () => {

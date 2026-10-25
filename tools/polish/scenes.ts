@@ -124,12 +124,12 @@ const PHONE_PLACES = { role: "navigation", name: "Places" } as const;
 
 // The Inbox, by the sidebar's row or a phone's places bar, and back from the item it opens on to its
 // list, which a window too narrow for both shows alone; at full width Esc leaves the list as it stands.
+// A phone's places bar opens it on its list already.
 const OPEN_INBOX: Step = { kind: STEP.CLICK, role: "button", name: "Inbox" };
 const TO_INBOX_LIST: Step = { kind: STEP.PRESS, keys: "Escape" };
 const PHONE_TO_INBOX: readonly Step[] = [
   TO_INBOX_LIST,
   { kind: STEP.CLICK, role: "button", name: "Inbox", within: PHONE_PLACES },
-  TO_INBOX_LIST,
 ];
 const LONG_THREAD: Step = {
   kind: STEP.CLICK,
