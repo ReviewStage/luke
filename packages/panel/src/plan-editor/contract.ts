@@ -357,6 +357,22 @@ export interface PlanEditorHandle extends EditorFormatting {
   readonly insertBlock: (block: SlashChoice) => void;
   /** The text as the editor holds it now, ahead of the draft it hands over once typing pauses. */
   readonly markdown: () => string;
+  /**
+   * The open comment threads as they stand now, so the marks follow threads
+   * opened and closed while the editor stands: `open` names every open
+   * thread, its words found or not, and `anchors` the words of those that
+   * have them, in offsets of `text`, the plan as saved. A thread newly among
+   * the anchors is marked on its words as they stand in the editor, and a
+   * thread no longer open, or every one where none is, loses its mark. A
+   * thread it carries that is still open keeps the mark that has followed
+   * its words, even once the service holds no anchor for it, its words
+   * deleted here, which undo may bring back.
+   */
+  readonly replaceAnchors: (
+    text: string,
+    anchors: readonly EditorAnchor[] | undefined,
+    open: readonly string[],
+  ) => void;
   /** The attributes that tie the text to the `@` list or the `/` menu over it (`listAria`), which name it a combobox while the list stands (`rootAria`). */
   readonly setAria: (aria: EditorAria) => void;
   /** The caret put where the placement says and the editor focused, as a press on the text's room does while it is open. */

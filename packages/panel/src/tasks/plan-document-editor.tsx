@@ -19,6 +19,7 @@ import { AsyncResult } from "effect/reactivity";
 import { type ReactNode, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { usePrefetchEditorBundle, useSideBundles } from "../bundle-loader.js";
 import {
+  type EditorAnchor,
   type EditorAnchors,
   PLACEMENT_END,
   PLAN_PLACEHOLDER,
@@ -757,6 +758,54 @@ function useTakenText(
   });
 }
 
+/** Whether two lists name the same threads, in whatever order. */
+function sameThreads(a: readonly string[], b: readonly string[]): boolean {
+  const named = new Set(a);
+  return a.length === b.length && b.every((thread) => named.has(thread));
+}
+
+/** The open threads as last handed to an editor: every one, and those with words. */
+interface HandedThreads {
+  readonly editor: PlanEditorHandle;
+  readonly open: readonly string[];
+  readonly anchored: readonly string[];
+}
+
+/**
+ * The open threads handed to the open editor whenever they change, a thread
+ * opened or closed while it stands, or its words found or lost: `open`
+ * names every one, and `anchors` the words of those that have them, in
+ * offsets of `text`, the plan as saved. Note that nothing is handed while
+ * the same threads stay open on the same words, since the editor's marks
+ * already follow them, so a render while typing costs a comparison of the
+ * threads alone; and that an editor mounted anew is handed them once, since
+ * what it opened with may have left some out.
+ */
+function useAnchorsFollowed(
+  handle: React.RefObject<PlanEditorHandle | undefined>,
+  text: string,
+  anchors: readonly EditorAnchor[],
+  open: readonly string[],
+): void {
+  const handed = useRef<HandedThreads | undefined>(undefined);
+  useLayoutEffect(() => {
+    const editor = handle.current;
+    if (editor === undefined) return;
+    const anchored = anchors.map((anchor) => anchor.thread);
+    const was = handed.current;
+    if (
+      was !== undefined &&
+      was.editor === editor &&
+      sameThreads(was.open, open) &&
+      sameThreads(was.anchored, anchored)
+    ) {
+      return;
+    }
+    handed.current = { editor, open, anchored };
+    editor.replaceAnchors(text, anchors, open);
+  });
+}
+
 /** What stands under the editor: someone else's change, named, and the choice it asks, or a failed save and its retry; a save under way says nothing. */
 function DocumentNote({
   editor,
@@ -836,19 +885,22 @@ export function PlanDocumentEditor({
     },
     [],
   );
-  // The open threads' words, carried by the editor from the text it opens on, which is the plan's as saved.
+  // The open threads' words, in offsets of the plan as saved, which the editor opens with where it opens on that text, and is handed again as threads open and close.
   // Note that none is handed over while no open thread has words, since an empty list would still map every marked word on each keystroke for nothing.
   const comments = usePlanCommentsControl();
-  const openAnchors =
-    comments === undefined || editor.draft !== task.document.body
-      ? []
-      : comments.threads.flatMap((thread) =>
-          thread.anchor === undefined || !openThread(thread)
-            ? []
-            : [{ thread: thread.id, ...thread.anchor }],
-        );
-  const commentAnchors = openAnchors.length === 0 ? undefined : openAnchors;
+  const openThreads = comments === undefined ? [] : comments.threads.filter(openThread);
+  const openAnchors = openThreads.flatMap((thread) =>
+    thread.anchor === undefined ? [] : [{ thread: thread.id, ...thread.anchor }],
+  );
+  const commentAnchors =
+    openAnchors.length === 0 || editor.draft !== task.document.body ? undefined : openAnchors;
   useTakenText(editor, editing, task, handle, handed);
+  useAnchorsFollowed(
+    handle,
+    task.document.body,
+    openAnchors,
+    openThreads.map((thread) => thread.id),
+  );
   // Whether the editor's bundle has landed, which mounts the editor in the room.
   const ready = AsyncResult.isSuccess(useAtomValue(useSideBundles().planEditor));
   const room = useRef<HTMLElement>(null);
