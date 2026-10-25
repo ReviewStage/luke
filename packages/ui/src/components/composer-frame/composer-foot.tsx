@@ -14,11 +14,11 @@ import { SKELETON_SHAPE, Skeleton } from "../skeleton/skeleton.js";
 import { Tooltip } from "../tooltip/hint.js";
 
 /**
- * composer-foot.tsx -- the foot of every message box: the files it holds, its tools, how near its limit its words stand, a call's status, the round send, and one note under them.
+ * composer-foot.tsx -- the foot of every message box: its tools, how near its limit its words stand, a call's status, the round send, and one note under them.
  *
  * Every box a message is written in ends the same way, under its field and
- * inside its `ComposerFrame`. First the chips of the files handed to it, in
- * a row that wraps, where it holds any. Then one bar: at its start the
+ * inside its `ComposerFrame`; the files handed to it stand over the field,
+ * as the sent message draws them (`ComposerBody`). The foot is one bar: at its start the
  * tools the owner hands it (attach, mention, skill), and at its end the
  * length counter, which says nothing until the words reach four fifths of
  * the limit (`LengthCounter`), the owner's own presses (the microphone, a
@@ -107,15 +107,11 @@ const FOOT =
   "group-data-[look=input]/composer:px-luke-6 group-data-[look=input]/composer:pt-luke-2 group-data-[look=input]/composer:pb-luke-6 " +
   "group-data-[look=bare]/composer:px-0";
 
-/** The files' row, which takes no gap while it holds nothing drawn, as a box's chips row is hidden while it holds no file. */
-const FILES =
-  "luke-composer-foot-files flex flex-wrap gap-tight-gap [&:not(:has(>:not([hidden])))]:hidden";
-
 /** A call stands a step off the send, so End call and Send never read as a pair, and beside a dictation's strip at the bar's end. */
 const CALL =
   "luke-composer-foot-call me-tight-gap flex flex-none items-center gap-tight-gap [.luke-composer-foot-strip+&]:me-0";
 
-/** The foot's own box: its files' row, its bar, and its note, stacked. */
+/** The foot's own box: its bar and its note, stacked. */
 function FootBox({ children }: { children: ReactNode }): React.JSX.Element {
   return <div className={FOOT}>{children}</div>;
 }
@@ -202,11 +198,10 @@ function StopButton({ stop }: { stop: ComposerStop }): React.JSX.Element {
   );
 }
 
-/** A message box's foot: `files` over a bar of `tools`, the counter, `actions`, `call` and the send or `stop`, or `strip` in the bar's place, and `note` under it. */
+/** A message box's foot: a bar of `tools`, the counter, `actions`, `call` and the send or `stop`, or `strip` in the bar's place, and `note` under it. */
 export function ComposerFoot({
   send,
   stop,
-  files,
   tools,
   actions,
   call,
@@ -217,8 +212,6 @@ export function ComposerFoot({
   send: ComposerSend;
   /** Stop, which stands in the send's place while it is handed. */
   stop?: ComposerStop | undefined;
-  /** The chips of the files handed to the box, where it holds any. */
-  files?: ReactNode;
   /** The presses at the bar's start: attach, mention, skill. */
   tools?: ReactNode;
   /** The owner's own presses at the bar's end, before the call and the send: the microphone, a model. */
@@ -235,7 +228,6 @@ export function ComposerFoot({
   const callPart = call === undefined || call === null ? null : <FootCall>{call}</FootCall>;
   return (
     <FootBox>
-      {files === undefined || files === null ? null : <div className={FILES}>{files}</div>}
       <FootBar>
         {strip === undefined || strip === null ? (
           <>
