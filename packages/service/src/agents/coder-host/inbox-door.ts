@@ -17,8 +17,10 @@ import { logStoreFailure } from "../../http/store-failure.js";
 import type { AdmittedConversation } from "../brain-host/conversation.js";
 import {
   INBOX_REFUSAL,
+  INBOX_TOOLS,
   type InboxToolResult,
   inboxRejected,
+  postThreadWordsFor,
   postToInbox,
   readOwnInbox,
   withdrawAsk,
@@ -37,7 +39,7 @@ export type InboxCall =
       readonly input: UnparsedWireValue;
     };
 
-/** Runs one of the agent's inbox tools as the admitted conversation's agent: a post, a withdrawal, or a read of its own items; a store failure is the tool's own refusal. */
+/** Runs one of the agent's thread tools as the admitted conversation's agent: a post, a withdrawal, or a read of its own items; a store failure is the tool's own refusal. */
 export function runAgentInbox(
   admitted: AdmittedConversation,
   call: InboxCall,
@@ -48,8 +50,8 @@ export function runAgentInbox(
       admitted.target.conversationId,
     );
     if (Option.isNone(found)) return inboxRejected(INBOX_REFUSAL.NO_AGENT);
-    const { id: agentId, taskId } = found.value;
-    const agent = { userId: admitted.target.userId, taskId, agentId };
+    const { id: agentId, taskId, organizationId } = found.value;
+    const agent = { userId: admitted.target.userId, taskId, agentId, organizationId };
     switch (call.tool) {
       case INBOX_TOOL.POST:
         return yield* postToInbox(agent, call.input, call.sandbox);
@@ -61,5 +63,27 @@ export function runAgentInbox(
   }).pipe(
     Effect.tapError(logStoreFailure),
     Effect.catch(() => Effect.succeed(inboxRejected(INBOX_REFUSAL.UNAVAILABLE))),
+  );
+}
+
+/**
+ * The words the admitted conversation's agent is shown `post_thread` with,
+ * its workspace's open channels among them; the words with none where the
+ * conversation is no agent's or the store could not be read.
+ */
+export function postThreadWords(
+  admitted: AdmittedConversation,
+): Effect.Effect<string, never, DatabaseServices> {
+  return Effect.gen(function* () {
+    const found = yield* readCodingAgentHeaderOfConversation(
+      admitted.target.userId,
+      admitted.target.conversationId,
+    );
+    if (Option.isNone(found)) return INBOX_TOOLS.POST.description;
+    const { organizationId } = found.value;
+    return yield* postThreadWordsFor({ userId: admitted.target.userId, organizationId });
+  }).pipe(
+    Effect.tapError(logStoreFailure),
+    Effect.catch(() => Effect.succeed(INBOX_TOOLS.POST.description)),
   );
 }

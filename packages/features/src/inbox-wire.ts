@@ -153,22 +153,27 @@ export const INBOX_BOUNDS = {
   MAX_STEPS: 8,
   /** The most characters one step of a `do` ask may spell, in Markdown. */
   MAX_STEP_CHARS: 600,
+  /** The most characters a post's channel may spell: a channel's name at its bound (`channel-wire.ts`), and the `#` an agent may write before it. */
+  MAX_CHANNEL_CHARS: 81,
+  /** The most characters a post's addressee may spell: a member's mention link written whole. */
+  MAX_ADDRESSEE_CHARS: 512,
 } as const;
 
 /**
  * The tools an agent keeps its threads with, by the names their tool parts
  * carry in its transcript. Note that `close_inbox_item` and `reply_inbox`,
- * which a transcript before version 5 names, are retired
- * (`agent-tools.ts`'s `RETIRED_TOOL`): a post that asks nothing is a reply,
- * and a withdrawn ask is a close.
+ * which a transcript before version 5 names, are retired, and so are
+ * `post_to_inbox` and `read_inbox`, since named for the channels a thread
+ * is posted to (`agent-tools.ts`'s `RETIRED_TOOL`): a post that asks
+ * nothing is a reply, and a withdrawn ask is a close.
  */
 export const INBOX_TOOL = {
-  /** Adds the agent's message to the thread under its key, opening one under a new key, its ask replacing the open one. */
-  POST: "post_to_inbox",
+  /** Adds the agent's message to the thread under its key, opening one under a new key in the channel it names, its ask replacing the open one. */
+  POST: "post_thread",
   /** Withdraws the thread's open ask, with why. */
   WITHDRAW: "withdraw_ask",
   /** Reads the agent's threads as they stand, answers and all. */
-  READ: "read_inbox",
+  READ: "read_threads",
 } as const;
 
 /** The blocks an item's context is made of. */
@@ -468,7 +473,7 @@ export function recommendedLabels(choice: Recommending): readonly string[] {
 }
 
 /** A posted recommendation as a choice keeps it: nothing, its one label, or its first label and every label. */
-export function keptRecommendation(choice: Recommending): {
+function keptRecommendation(choice: Recommending): {
   recommended?: string;
   recommendations?: readonly string[];
 } {
@@ -670,13 +675,19 @@ export function keptInboxAsk(ask: InboxAskInput): InboxAsk {
  * thread's key, its title, which a first post under the key names, the
  * agent's message as one Markdown body, its pictures by their paths in the
  * agent's sandbox, the ask it may end with, and whether the agent waits to
- * hear a `do` done; an answer to any other ask is always heard. The model
- * is shown this schema and eve holds the call to it.
+ * hear a `do` done; an answer to any other ask is always heard. From
+ * Channels, the channel it goes to by name, `#` or not, and the member its
+ * ask is addressed to by their mention link, each read by the service
+ * rather than held to a grammar here, so a name or a link that names
+ * nothing is refused in words the model can act on. The model is shown
+ * this schema and eve holds the call to it.
  */
 export const inboxThreadPostInputSchema = EffectSchema.Struct({
   key: inboxKeySchema,
   title: EffectSchema.optionalKey(filledText(INBOX_BOUNDS.MAX_TITLE_CHARS)),
   body: filledText(INBOX_BOUNDS.MAX_MESSAGE_CHARS),
+  channel: EffectSchema.optionalKey(filledText(INBOX_BOUNDS.MAX_CHANNEL_CHARS)),
+  to: EffectSchema.optionalKey(filledText(INBOX_BOUNDS.MAX_ADDRESSEE_CHARS)),
   ask: EffectSchema.optionalKey(inboxAskInputSchema),
   waits: EffectSchema.optionalKey(EffectSchema.Boolean),
 });

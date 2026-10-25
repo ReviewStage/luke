@@ -17,15 +17,13 @@ import {
   readCodingAgentHeaderOfConversation,
   readCodingAgentOfConversation,
 } from "@luke/database/models/coding-agent-store";
-import { CHAT_TOOL, MEMBER_KIND } from "@luke/features/chat-wire";
 import { PAGE_OWNER, PAGE_SHOWER } from "@luke/features/page-wire";
 import { PLAN_COMMENT_ACTOR } from "@luke/features/plan-comment-wire";
-import { Effect, Option, Result, Stream } from "effect";
+import { Effect, Option, Result } from "effect";
 import type { HttpClient } from "effect/http";
 import type { UnparsedWireValue, WireRecord } from "../../core.js";
 import { ACTION_RESULT_STATUS } from "../../core.js";
 import type { GitHubApp } from "../../github/github-app.js";
-import { HOSTED_HTTP_STATUS } from "../../http/http.js";
 import { logStoreFailure } from "../../http/store-failure.js";
 import type { WorkspaceLinearConnect } from "../../integrations/integration-connect.js";
 import type { ModelCatalog } from "../../providers/model-catalog.js";
@@ -54,14 +52,7 @@ import {
   runUpdateAutomation,
 } from "../automation-tools.js";
 import type { AdmittedConversation } from "../brain-host/conversation.js";
-import {
-  type AgentSessions,
-  EVE_CANCEL_OUTCOME,
-  EVE_MOUNT,
-  EVE_RESET_OUTCOME,
-  EVE_SEND_OUTCOME,
-  eveSessionsComposer,
-} from "../brain-host/eve-sessions.js";
+import { EVE_MOUNT, eveSessionsComposer } from "../brain-host/eve-sessions.js";
 import {
   AGENT_CALLER,
   agentToolRejected,
@@ -86,18 +77,8 @@ import {
 import { isOperator, STEWARD_DELETE_REFUSAL } from "../steward.js";
 import { runCreateSection, runDeleteSection } from "../task-section-tools.js";
 import { runCreateTask, runReadTask } from "../task-tools.js";
+import { runMessageAgent } from "./agent-message.js";
 import { CODER, CODER_REFUSAL } from "./bounds.js";
-import {
-  agentAway,
-  CHAT_TOOL_REFUSAL,
-  type ChatToolResult,
-  chatRejected,
-  editAsAgent,
-  postAsAgent,
-  readAsAgent,
-  resolveAsAgent,
-} from "./chat.js";
-import { CHAT_DOORS } from "./chat-notify.js";
 import type { InboxSandboxDoor } from "./inbox-image.js";
 import {
   PLAN_EDIT_REFUSAL,
@@ -128,6 +109,7 @@ export interface AgentToolCall {
     | typeof CODER_TOOL.LIST_AGENTS
     | typeof CODER_TOOL.LIST_OPEN_ASKS
     | typeof CODER_TOOL.READ_AGENT
+    | typeof CODER_TOOL.MESSAGE_AGENT
     | typeof CODER_TOOL.START_AGENT
     | typeof CODER_TOOL.STOP_AGENT
     | typeof CODER_TOOL.UPDATE_AGENT
@@ -154,6 +136,7 @@ export interface AgentToolCall {
 const AGENT_TOOL_RUN = {
   [CODER_TOOL.LIST_AGENTS]: runListAgents,
   [CODER_TOOL.READ_AGENT]: runReadAgent,
+  [CODER_TOOL.MESSAGE_AGENT]: runMessageAgent,
   [CODER_TOOL.START_AGENT]: runStartAgent,
   [CODER_TOOL.STOP_AGENT]: runStopAgent,
   [CODER_TOOL.UPDATE_AGENT]: runUpdateAgent,
@@ -174,49 +157,6 @@ const AGENT_TOOL_RUN = {
   [CODER_TOOL.REMEMBER]: runAgentRemember,
   [CODER_TOOL.RECALL]: runAgentRecall,
 } as const;
-
-/** One call of the agent's chat tools, by the tool's name and the input its runtime held to its schema; a post carries its call's id, its key, how many posts its turn has made, and the door to the session's sandbox, where its pictures are read. */
-export type ChatCall =
-  | {
-      readonly tool: typeof CHAT_TOOL.POST;
-      readonly input: UnparsedWireValue;
-      readonly clientKey: string;
-      readonly postsInTurn: number;
-      readonly sandbox: InboxSandboxDoor;
-    }
-  | { readonly tool: typeof CHAT_TOOL.READ; readonly input: UnparsedWireValue }
-  | { readonly tool: typeof CHAT_TOOL.RESOLVE; readonly input: UnparsedWireValue }
-  | { readonly tool: typeof CHAT_TOOL.EDIT_CHANNEL; readonly input: UnparsedWireValue };
-
-/**
- * eve as a deployment that names no secret or no origin for it reaches it:
- * every call answered as failed, so a chat post still lands and a member it
- * addresses, whose notice could not be handed over, reads it when it next
- * reads, as one whose steer eve refused does (`chat-notify.ts`).
- */
-const EVE_UNREACHED: AgentSessions = {
-  open: () =>
-    Effect.succeed({
-      outcome: EVE_SEND_OUTCOME.FAILED,
-      status: HOSTED_HTTP_STATUS.SERVICE_UNAVAILABLE,
-    }),
-  send: () =>
-    Effect.succeed({
-      outcome: EVE_SEND_OUTCOME.FAILED,
-      status: HOSTED_HTTP_STATUS.SERVICE_UNAVAILABLE,
-    }),
-  cancel: () =>
-    Effect.succeed({
-      outcome: EVE_CANCEL_OUTCOME.FAILED,
-      status: HOSTED_HTTP_STATUS.SERVICE_UNAVAILABLE,
-    }),
-  reset: () =>
-    Effect.succeed({
-      outcome: EVE_RESET_OUTCOME.FAILED,
-      status: HOSTED_HTTP_STATUS.SERVICE_UNAVAILABLE,
-    }),
-  stream: () => Stream.empty,
-};
 
 /** The whiteboard's tools, by the name a call of one is made under. */
 export type BoardTool = typeof CODER_TOOL.DRAW_ON_BOARD | typeof CODER_TOOL.LOOK_AT_BOARD;
@@ -375,60 +315,6 @@ export function runAgentShowImage(
   sandbox: InboxSandboxDoor,
 ): Effect.Effect<WireRecord, never, DatabaseServices> {
   return runShowImage({ target: admitted.target, sandbox, checkout: CODER.CHECKOUT_PATH }, input);
-}
-
-/**
- * Runs one of the agent's chat tools (`chat.ts`): a post, told to each
- * agent it addresses through eve as the deployment acting for that agent's
- * starter, and held for its next read where the deployment names no secret
- * or no origin for eve; a read; or a resolve. Refused where Chat is off for
- * the agent's starter.
- */
-export function runAgentChat(
-  seams: AgentDoorSeams,
-  admitted: AdmittedConversation,
-  call: ChatCall,
-): Effect.Effect<ChatToolResult, never, DatabaseServices | HttpClient.HttpClient | GitHubApp> {
-  return Effect.gen(function* () {
-    const found = yield* agentHeaderOfConversation(admitted);
-    if (Result.isFailure(found)) return chatRejected(CHAT_TOOL_REFUSAL.NO_AGENT);
-    const { id: agentId, taskId, repository } = found.success;
-    const self = { kind: MEMBER_KIND.AGENT, agentId };
-    const reader = { userId: admitted.target.userId, taskId, self };
-    if (call.tool === CHAT_TOOL.READ) return yield* readAsAgent(reader, call.input);
-    if (call.tool === CHAT_TOOL.RESOLVE) return yield* resolveAsAgent(reader, call.input);
-    // An archived agent, or one on an archived task, posts nothing until it is brought back.
-    if (yield* agentAway(admitted.target.userId, found.success)) {
-      return chatRejected(CHAT_TOOL_REFUSAL.LEFT);
-    }
-    if (call.tool === CHAT_TOOL.EDIT_CHANNEL) return yield* editAsAgent(reader, call.input);
-    // A notice reaches the receiving agent's session as the deployment acting for that agent's
-    // starter, whose principal its turn runs under, as the planning model's message to an
-    // agent does: no bearer stands here.
-    const secret = seams.deploymentSecret();
-    const origin = seams.eveOrigin();
-    const compose = yield* eveSessionsComposer;
-    // Each agent's session is answered by the runtime its conversation runs on (`runtime-sessions.ts`).
-    const route = yield* sessionsRouter;
-    const eveFor = (starter: string) =>
-      secret === undefined || origin === undefined
-        ? EVE_UNREACHED
-        : route(
-            compose({ origin, caller: { secret, account: starter }, mount: EVE_MOUNT.CODER }),
-            starter,
-          );
-    const telling = { eveFor, writer: seams.writer(), doors: CHAT_DOORS };
-    const { clientKey, postsInTurn, sandbox } = call;
-    const { conversationId } = admitted.target;
-    return yield* postAsAgent({ ...reader, conversationId, repository, telling }, call.input, {
-      clientKey,
-      postsInTurn,
-      sandbox,
-    });
-  }).pipe(
-    Effect.tapError(logStoreFailure),
-    Effect.catch(() => Effect.succeed(chatRejected(CHAT_TOOL_REFUSAL.UNAVAILABLE))),
-  );
 }
 
 /**

@@ -1747,6 +1747,7 @@ const deleteAgentPin = SqlSchema.findOneOption({
 const CODING_AGENT_HEADER_COLUMNS = {
   id: codingAgent.id,
   userId: codingAgent.userId,
+  organizationId: codingAgent.organizationId,
   taskId: codingAgent.taskId,
   repository: codingAgent.repository,
   title: codingAgent.title,
@@ -1756,6 +1757,7 @@ const CODING_AGENT_HEADER_COLUMNS = {
 const CodingAgentHeaderRowSchema = Schema.Struct({
   id: Schema.String,
   userId: Schema.String,
+  organizationId: Schema.String,
   taskId: Schema.NullOr(Schema.String),
   repository: Schema.NullOr(Schema.String),
   title: Schema.NullOr(Schema.String),
@@ -3055,12 +3057,12 @@ export function readCodingAgentOfConversation(
 /** An agent as far as its header reads it (`CODING_AGENT_HEADER_COLUMNS`). */
 export type CodingAgentHeader = Pick<
   CodingAgent,
-  "id" | "userId" | "taskId" | "repository" | "title" | "archivedAt"
+  "id" | "userId" | "organizationId" | "taskId" | "repository" | "title" | "archivedAt"
 >;
 
 /**
  * The header of the agent whose conversation this is, for a caller that needs
- * no more of it than who it is, its task, repository, title, and archive;
+ * no more of it than who it is, its workspace, task, repository, title, and archive;
  * nothing where `readCodingAgentOfConversation` answers nothing.
  */
 export function readCodingAgentHeaderOfConversation(

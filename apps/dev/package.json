@@ -21,7 +21,6 @@
     "@luke/database": "workspace:*",
     "@luke/features": "workspace:*",
     "@luke/service": "workspace:*",
-    "@luke/settings": "workspace:*",
     "@luke/wire": "workspace:*",
     "@sentry/effect": "11.7.0",
     "@sentry/node": "11.7.0",

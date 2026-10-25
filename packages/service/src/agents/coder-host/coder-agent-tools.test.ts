@@ -15,7 +15,6 @@ import {
   ensureTaskChannel,
   findOrMakeDm,
   postMessage,
-  unreadFor,
 } from "@luke/database/models/chat-store";
 import {
   archiveCodingAgent,
@@ -58,8 +57,10 @@ import {
 } from "@luke/database/testing";
 import { START_NOTE_HEADING } from "@luke/features/agent-replay";
 import { AUTOMATION_FIRING } from "@luke/features/automation-wire";
-import { CHANNEL_KIND, CHAT_BLOCK, CHAT_TOOL, MEMBER_KIND } from "@luke/features/chat-wire";
+import { CHAT_BLOCK, MEMBER_KIND } from "@luke/features/chat-wire";
 import {
+  AGENT_MESSAGE_LEAD,
+  agentMessageReplyLine,
   CHECK_SUMMARY,
   CODING_AGENT_ARCHIVER,
   CODING_AGENT_BOUNDS,
@@ -148,6 +149,7 @@ import { TASK_ISSUE_REFUSAL } from "../task-issue-tools.js";
 import { TASK_SECTION_TOOL_REFUSAL } from "../task-section-tools.js";
 import { CREATE_TASK_REFUSAL, READ_TASK_REFUSAL } from "../task-tools.js";
 import { AGENT_LIST_FILTER_REFUSAL } from "../workspace-agents.js";
+import { MESSAGE_AGENT_REFUSAL, MESSAGE_AGENT_TOOL } from "./agent-message.js";
 import { CODER_REFUSAL } from "./bounds.js";
 import {
   CODER_DEPLOYMENT_PRESENCE,
@@ -155,7 +157,6 @@ import {
   CODER_DEPLOYMENT_TURNS,
   coderChannelInput,
 } from "./channel.js";
-import { CHAT_TOOL_REFUSAL } from "./chat.js";
 import { type AgentToolCall, type CoderHost, coderHost } from "./host.js";
 import { NATIVE_SESSION_PREFIX } from "./native-runtime.js";
 import type { CoderHostSeams } from "./production.js";
@@ -498,9 +499,9 @@ function sentWords(body: string | undefined): string {
 }
 
 /**
- * The agent's own `post_chat` as a direct message to another agent, run
- * through the host's chat door as eve's tool file runs it, which is how one
- * agent messages another; answers the post's receipt.
+ * The agent's own `message_agent` to another agent, run through the host's
+ * agent tools door as eve's tool file runs it, which is how one agent
+ * messages another; answers what the tool answers.
  */
 async function directMessage(
   host: CoderHost,
@@ -513,14 +514,22 @@ async function directMessage(
   if (Result.isFailure(admitted)) return assert.fail(admitted.failure);
   return database.run(
     host
-      .chat(admitted.success, {
-        tool: CHAT_TOOL.POST,
-        input: unparsedWire({ text: NOTE, to: `[@Agent](https://tryluke.dev/w/agent/${to.id})` }),
-        clientKey: callId,
-        postsInTurn: 0,
-        sandbox: () => Promise.reject(new Error("a post with words alone opens no sandbox")),
+      .agentTools(admitted.success, {
+        tool: CODER_TOOL.MESSAGE_AGENT,
+        input: unparsedWire({ agentId: to.id, text: NOTE }),
+        callId,
       })
-      .pipe(Effect.provide(Layer.mergeAll(services, ANALYTICS.layer))),
+      .pipe(
+        Effect.provide(
+          Layer.mergeAll(
+            services,
+            modelCatalogOf(CATALOG),
+            ANALYTICS.layer,
+            NO_WORKSPACE_LINEAR,
+            SENTRY_CONFIGURED,
+          ),
+        ),
+      ),
   );
 }
 
@@ -790,7 +799,7 @@ test("read_agent reads a teammate's agent on another task of the caller's worksp
   assert.equal(eve.sent.length, 0, "a read sends nothing");
 });
 
-test("start_agent starts an agent on the caller's own task as the deployment acting for its starter, answering the mention it is named by, telling it which agent started it, how to report back, and that the developer's inbox is that agent's, leaves the starter's default as it stood, and starts once under the call's key", async () => {
+test("start_agent starts an agent on the caller's own task as the deployment acting for its starter, answering the mention it is named by, telling it which agent started it, that it reports back with message_agent, and that threads to the developer are that agent's, leaves the starter's default as it stood, and starts once under the call's key", async () => {
   const { workspaceId, plans: tasks, agents } = await openWorkspaces();
   const { caller } = agents;
   const eve = await fakeCoderEve(workspaceId);
@@ -822,8 +831,12 @@ test("start_agent starts an agent on the caller's own task as the deployment act
   assert.ok(message.startsWith(prompt), message);
   assert.ok(message.includes(START_NOTE_HEADING.AGENT), message);
   assert.ok(message.includes(`"${caller.name}"`) && message.includes(caller.id), message);
-  // The developer's inbox is the starter's: what the agent would post there goes to it instead.
-  assert.ok(message.includes("The developer's inbox is that agent's to keep"), message);
+  // It reports back by message, and threads to the developer are the starter's: what it would post goes to it instead.
+  assert.ok(
+    message.includes(`call ${CODER_TOOL.MESSAGE_AGENT} with its agentId, ${caller.id}.`),
+    message,
+  );
+  assert.ok(message.includes("Threads to the developer are that agent's to post"), message);
   // An agent's own pick of a model is no member's new default.
   assert.equal((await database.run(readAccountPreferences(caller.userId)))?.codingAgent, undefined);
 
@@ -831,39 +844,6 @@ test("start_agent starts an agent on the caller's own task as the deployment act
   assert.ok(isRecord(again.agent));
   assert.equal(again.agent.id, startedId);
   assert.equal(eve.sent.length, 1, "the same call run again starts no second agent");
-});
-
-test("an agent started on its starter's own task reports back in the task's chat to the starter's mention link, whatever the starter's Chat setting, and one started elsewhere in a direct message to that link", async () => {
-  const { workspaceId, plans: tasks, agents } = await openWorkspaces();
-  const { caller } = agents;
-  const eve = await fakeCoderEve(workspaceId);
-  const call = await peerCaller(hostOf(true), caller, eve.services);
-  const prompt = "Write the migration that adds the invitation's expiry.";
-  const byMessage = "To report back to it, send it a direct message";
-  const opened = (): string => JSON.stringify(JSON.parse(eve.sent.at(-1)?.body ?? "").message);
-
-  await call(CODER_TOOL.START_AGENT, { prompt }, "call-on");
-  const inChat = opened();
-  assert.match(
-    inChat,
-    new RegExp(
-      `It is \\[@[^\\]]+\\]\\(https://tryluke\\.dev/[^)]+/agent/${caller.id}\\) in your task's chat: report back to it there`,
-      "u",
-    ),
-    inChat,
-  );
-  assert.ok(!inChat.includes(byMessage), inChat);
-
-  await call(CODER_TOOL.START_AGENT, { prompt, taskId: tasks.billing }, "call-elsewhere");
-  const elsewhere = opened();
-  assert.match(
-    elsewhere,
-    new RegExp(
-      `${byMessage}: call post_chat with to set to \\[@[^\\]]+\\]\\(https://tryluke\\.dev/[^)]+/agent/${caller.id}\\)`,
-      "u",
-    ),
-    "an agent on another task shares no chat with its starter, so it reports in a direct message",
-  );
 });
 
 test("start_agent hands over a prompt and a note each as long as a start allows, whole in the agent's first message, and refuses either past it, starting nothing", async () => {
@@ -1023,6 +1003,10 @@ const GOLDEN_ROOT = path.join(fileURLToPath(import.meta.url), "../../../../fixtu
 
 test("start_agent shows the model the recorded input, images among it", async () => {
   await settleJsonSchemaGolden(GOLDEN_ROOT, "start-agent-input", START_AGENT_TOOL.inputSchema);
+});
+
+test("message_agent shows the model the recorded input", async () => {
+  await settleJsonSchemaGolden(GOLDEN_ROOT, "message-agent-input", MESSAGE_AGENT_TOOL.inputSchema);
 });
 
 test("start_agent refuses, in words that say why and starting nothing, a picture of another agent's conversation, one of a DM the caller is not in, a video the caller recorded, one past an image's bound, pictures past a message's bound together, and more ids than a start takes", async () => {
@@ -2416,6 +2400,33 @@ function openingsOf(
     );
 }
 
+test("message_agent hands another agent of the workspace the words under the sender's mention link, closing on how to answer it by its id, and refuses the sender's own id", async () => {
+  const { workspaceId, agents } = await openWorkspaces();
+  const eve = await fakeCoderEve(workspaceId);
+  const host = hostOf(true);
+
+  const sent = await directMessage(host, agents.caller, agents.teammates, eve.services);
+
+  assert.equal(sent.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(sent));
+  const words = sentWords(eve.sent.at(-1)?.body);
+  assert.match(
+    words,
+    new RegExp(
+      `^${AGENT_MESSAGE_LEAD} · \\[@[^\\]]+\\]\\(https://tryluke\\.dev/[^)]+/agent/${agents.caller.id}\\) to you:\\n\\n`,
+      "u",
+    ),
+    words,
+  );
+  assert.ok(words.endsWith(`${NOTE}\n\n${agentMessageReplyLine(agents.caller.id)}`), words);
+  assert.deepEqual(
+    await directMessage(host, agents.caller, agents.caller, eve.services, "call-2"),
+    {
+      status: ACTION_RESULT_STATUS.REJECTED,
+      reason: MESSAGE_AGENT_REFUSAL.SELF,
+    },
+  );
+});
+
 test("a message to an agent whose session eve no longer runs opens a fresh session over its conversation rather than being refused, and settles the turn the ended session was running as failed for its session's end, once", async () => {
   const { workspaceId, agents } = await openWorkspaces();
   const eve = await fakeCoderEve(workspaceId, [], undefined, "no_active_turn", true);
@@ -2435,16 +2446,6 @@ test("a message to an agent whose session eve no longer runs opens a fresh sessi
   const settled = [turnId, TURN_STATUS.FAILED, BRAIN_REQUEST_FAILURE.SESSION_ENDED];
   assert.deepEqual(await newestTurnOf(agents.teammates), settled);
 
-  // The first message read, so the second is told rather than held behind it.
-  await database.run(
-    Effect.flatMap(
-      ensureMember(agents.teammates.userId, workspaceId, {
-        kind: MEMBER_KIND.AGENT,
-        agentId: agents.teammates.id,
-      }),
-      (member) => unreadFor(agents.teammates.userId, workspaceId, Option.getOrThrow(member).id),
-    ),
-  );
   const again = await directMessage(host, agents.caller, agents.teammates, eve.services, "call-2");
   assert.equal(again.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(again));
   const followUps = eve.sent
@@ -2696,7 +2697,7 @@ test("a direct message and stop_agent reach a teammate's Claude Code agent throu
     native,
     Layer.merge(eve.services, relay.layer),
   );
-  assert.ok(Array.isArray(sent.told) && sent.told.length === 1, JSON.stringify(sent));
+  assert.equal(sent.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(sent));
   await turnOn(native, false);
   const stopped = await call(CODER_TOOL.STOP_AGENT, { agentId: native.id }, "call-2");
   assert.equal(stopped.stopped, true, JSON.stringify(stopped));
@@ -3861,54 +3862,6 @@ test("a teammate's agent lists, reads, messages, stops, updates, continues, and 
   }
   const sent = await directMessage(host, own, operator, eve.services);
   assert.equal(sent.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(sent));
-});
-
-test("an operator's post_chat with no place lands in its DM with its member once that member has Chat on, which its read lists as its home with the two of them alone, and #general takes nothing of it", async () => {
-  const { workspaceId, agents } = await openWorkspaces();
-  const operator = await operatorOn(agents.teammates.userId, workspaceId);
-  const eve = await fakeCoderEve(workspaceId);
-  const host = hostOf(true);
-  const admitted = await database.run(host.admit(seat(operator), operator.sessionId));
-  if (Result.isFailure(admitted)) return assert.fail(admitted.failure);
-  const chat = (tool: (typeof CHAT_TOOL)[keyof typeof CHAT_TOOL], input: WireBoundaryInput) =>
-    database.run(
-      host
-        .chat(admitted.success, {
-          tool,
-          input: unparsedWire(input),
-          clientKey: `call-${randomUUID()}`,
-          postsInTurn: 0,
-          sandbox: () => Promise.reject(new Error("a post with words alone opens no sandbox")),
-        })
-        .pipe(Effect.provide(Layer.mergeAll(eve.services, ANALYTICS.layer))),
-    );
-
-  // A member with Chat off would never read the DM, so the post is refused rather than lost.
-  assert.deepEqual(await chat(CHAT_TOOL.POST, { text: "Two PRs wait on you." }), {
-    status: ACTION_RESULT_STATUS.REJECTED,
-    reason: CHAT_TOOL_REFUSAL.PERSON_CHAT_OFF,
-  });
-  await database.run(
-    writeAccountPreferences(agents.teammates.userId, { experiments: { [EXPERIMENT.CHAT]: true } }),
-  );
-  const posted = await chat(CHAT_TOOL.POST, { text: "Two PRs wait on you." });
-  assert.equal(posted.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(posted));
-  assert.equal(
-    (await chat(CHAT_TOOL.POST, { text: "Hi all.", to: "#general" })).status,
-    ACTION_RESULT_STATUS.REJECTED,
-  );
-  const read = await chat(CHAT_TOOL.READ, {});
-  assert.ok("channels" in read, JSON.stringify(read));
-  assert.deepEqual(
-    read.channels.map((channel) => channel.kind),
-    [CHANNEL_KIND.DM],
-    "its DM with its member is its one channel, listed first as its home",
-  );
-  assert.deepEqual(
-    read.members.map((member) => member.kind).toSorted(),
-    [MEMBER_KIND.AGENT, MEMBER_KIND.HUMAN].toSorted(),
-    "its read names the DM's two members alone, not the workspace's other people",
-  );
 });
 
 test("list_agents and read_agent name the member's operator Luke, in its name and the mention it is named by, never a first name or the title it was given", async () => {

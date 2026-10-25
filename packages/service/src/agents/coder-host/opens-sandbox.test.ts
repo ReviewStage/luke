@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { CHAT_BLOCK } from "@luke/features/chat-wire";
 import type { WireRecord } from "@luke/wire";
 import { test } from "vitest";
 import { stampedEveEvent } from "../../testing/eve-events.js";
@@ -21,40 +20,13 @@ function requested(toolName: string, input: WireRecord): Parameters<typeof opens
   );
 }
 
-test("a chat post opens the sandbox only where it carries a picture by its path, which is read from a file there, and not for one handed on by its attachment's id", () => {
-  const picture = { type: CHAT_BLOCK.IMAGE, path: "shot.png", alt: "The form." };
-  assert.equal(
-    opensSandbox(requested(CODER_TOOL.POST_CHAT, { text: "See.", blocks: [picture] })),
-    true,
-  );
-  assert.equal(opensSandbox(requested(CODER_TOOL.POST_CHAT, { text: "Words alone." })), false);
-  const handedOn = {
-    type: CHAT_BLOCK.IMAGE,
-    attachmentId: "5f3c2a1e-9b8d-4c7a-8e6f-1a2b3c4d5e6f",
-    alt: "The form.",
-  };
-  assert.equal(
-    opensSandbox(requested(CODER_TOOL.POST_CHAT, { text: "See.", blocks: [handedOn] })),
-    false,
-  );
-  assert.equal(
-    opensSandbox(
-      requested(CODER_TOOL.POST_CHAT, {
-        text: "A link.",
-        blocks: [{ type: CHAT_BLOCK.LINK, url: "https://github.com", label: "GitHub" }],
-      }),
-    ),
-    false,
-  );
-});
-
-test("an inbox post opens the sandbox only where its body draws a picture from a file there, by a path naming no scheme", () => {
+test("a thread post opens the sandbox only where its body draws a picture from a file there, by a path naming no scheme", () => {
   const post = (body: string) => ({
     key: "landing",
     title: "Does the landing page read right?",
     body,
   });
-  const opens = (body: string) => opensSandbox(requested(CODER_TOOL.POST_TO_INBOX, post(body)));
+  const opens = (body: string) => opensSandbox(requested(CODER_TOOL.POST_THREAD, post(body)));
   assert.equal(opens('The hero:\n\n![The landing page](shots/landing.png "Hero")'), true);
   assert.equal(opens("![The form](</workspace/repository/shot one.png>)"), true);
   assert.equal(opens("The hero reads **Plan by voice**."), false);

@@ -1,5 +1,6 @@
 import { Schema as EffectSchema } from "effect";
 import {
+  agentMessageWords,
   type CodingAgentAttachment,
   codingAgentMessageRequestSchema,
 } from "./coding-agent-wire.js";
@@ -20,7 +21,6 @@ import {
   inboxOptionSchema,
   inboxReplyRefusal,
   inboxWordBlockSchema,
-  keptRecommendation,
   RECOMMENDED_FIELDS,
   recommendedInputSchema,
 } from "./inbox-wire.js";
@@ -278,9 +278,12 @@ const CHAT_NOTICE_CLOSINGS = [
  * the closing lines at its end telling the agent how to answer, which are the
  * model's alone. Only lines of the closings' whole shape, after the message,
  * are taken away, so a message that itself opens "Reply with" keeps every
- * word. A text of no notice's shape is answered as it is.
+ * word. A message another agent sent is read as `agentMessageWords` reads
+ * it. A text of no notice's shape is answered as it is.
  */
 export function chatNoticeWords(text: string): string {
+  const message = agentMessageWords(text);
+  if (message !== undefined) return message;
   const [head, ...rest] = text.split("\n\n");
   if (head === undefined || !CHAT_NOTICE_HEAD.test(head)) return text;
   const words = [...rest];
@@ -470,20 +473,10 @@ export const chatAskSchema = EffectSchema.Struct({
 export type ChatAsk = typeof chatAskSchema.Type;
 
 /** An ask as its poster states it: one it is kept as, but a choice's recommendation one label or a list of them. */
-export const chatAskInputSchema = EffectSchema.Struct({
+const chatAskInputSchema = EffectSchema.Struct({
   ...chatAskSchema.fields,
   response: chatResponseInputSchema,
 });
-
-type ChatAskInput = typeof chatAskInputSchema.Type;
-
-/** A posted ask as its message keeps it: a choice's recommendation its first label and, where several, every one. */
-export function keptChatAsk(ask: ChatAskInput): ChatAsk {
-  const response = ask.response;
-  if (response.type !== CHAT_ASK.CHOICE) return { ...ask, response };
-  const { recommended: _recommended, ...rest } = response;
-  return { ...ask, response: { ...rest, ...keptRecommendation(response) } };
-}
 
 const postFields = {
   text: filledText(CHAT_BOUNDS.MAX_TEXT_CHARS),
@@ -534,10 +527,8 @@ const chatPostBlockSchema = EffectSchema.Union([
   }).check(EffectSchema.makeFilter(onePicture)),
 ]);
 
-export type ChatPostBlock = typeof chatPostBlockSchema.Type;
-
 /** A post's blocks under its words, in order, few. */
-export const chatPostBlocksSchema = EffectSchema.Array(chatPostBlockSchema).check(
+const chatPostBlocksSchema = EffectSchema.Array(chatPostBlockSchema).check(
   EffectSchema.isMaxLength(CHAT_BOUNDS.MAX_BLOCKS),
 );
 
@@ -555,36 +546,6 @@ export const postChatAskInputSchema = EffectSchema.Struct({
   ask: EffectSchema.optionalKey(chatAskInputSchema),
   blocks: EffectSchema.optionalKey(chatPostBlocksSchema),
 }).check(EffectSchema.makeFilter(askKeyed), EffectSchema.makeFilter(oneDestination));
-
-/**
- * What a read's tool part carries as its input: a channel by `#name` or a
- * member's DM by its mention link, a thread by its root's sequence number, and a
- * place to read back from, by sequence number; with none, what the reader
- * has not read yet.
- */
-export const readChatInputSchema = EffectSchema.Struct({
-  channel: EffectSchema.optionalKey(chatTargetSchema),
-  thread: EffectSchema.optionalKey(countedNumber),
-  before: EffectSchema.optionalKey(countedNumber),
-});
-
-/** What a resolve's tool part carries as its input: the ask's key, and why its poster takes it back. */
-export const resolveAskInputSchema = EffectSchema.Struct({
-  key: inboxKeySchema,
-  reason: filledText(CHAT_BOUNDS.MAX_REASON_CHARS),
-});
-
-/** What an edit of a topic channel's tool part carries: the topic by `#name`, and what changes of it, each left out standing. */
-export const editChannelInputSchema = EffectSchema.Struct({
-  channel: EffectSchema.String.check(
-    EffectSchema.isPattern(
-      new RegExp(`^#[a-z0-9][a-z0-9._-]{0,${CHAT_BOUNDS.MAX_KEY_CHARS - 1}}$`, "u"),
-    ),
-  ),
-  name: EffectSchema.optionalKey(chatChannelNameSchema),
-  purpose: EffectSchema.optionalKey(EffectSchema.NullOr(chatPurposeSchema)),
-  archived: EffectSchema.optionalKey(EffectSchema.Boolean),
-});
 
 /**
  * A member as a reader sees one: its kind, what it is called, and what it

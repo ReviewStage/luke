@@ -47,7 +47,7 @@ import {
   runtimeChoiceRefusalWords,
   runtimeModels,
 } from "@luke/features/agent-runtime-models";
-import { CHAT_TOOL, MEMBER_KIND } from "@luke/features/chat-wire";
+import { MEMBER_KIND } from "@luke/features/chat-wire";
 import {
   CODING_AGENT_ARCHIVER,
   CODING_AGENT_BOUNDS,
@@ -1309,46 +1309,20 @@ function agentIntroduction(agent: CodingAgent): string {
 
 /**
  * The note an agent a coding agent starts is handed: which agent started it,
- * how to report back, and that the developer's inbox is its starter's, so
- * what it would post there goes to its starter, who relays what the
- * developer must see, then the note it was given. Where the two share a
- * task, the report goes in its chat, to the starter's mention link, as
- * every word between a task's agents does (`coder-host/instructions.ts`);
- * otherwise it goes to the starter in a direct message.
+ * that it reports back with `message_agent` by that agent's id, as every
+ * word between two agents goes (`coder-host/agent-message.ts`), and that
+ * the threads the developer reads are its starter's to post, so what it
+ * would post in one goes to its starter, who relays what the developer must
+ * see, then the note it was given.
  */
-function startedByNote(
-  starter: CodingAgent,
-  note: string | undefined,
-  starterLink: { readonly mention: string; readonly sameTask: boolean },
-): string {
-  const report = starterLink.sameTask
-    ? `It is ${starterLink.mention} in your task's chat: report back to it there, with that mention link in your words. `
-    : `To report back to it, send it a direct message: call ${CHAT_TOOL.POST} with to set to ${starterLink.mention}. `;
+function startedByNote(starter: CodingAgent, note: string | undefined): string {
   const lead =
     `You were started by another coding agent of your workspace, ${agentIntroduction(starter)}, ` +
-    `not by the developer. ${report}` +
-    "The developer's inbox is that agent's to keep: post nothing to it, and send that agent what " +
-    "you would have posted there instead, a pull request ready for review, a decision, a question, " +
+    `not by the developer. To report back to it, call ${AGENT_TOOL.MESSAGE_AGENT} with its agentId, ${starter.id}. ` +
+    "Threads to the developer are that agent's to post: post none yourself, and send that agent what " +
+    "you would have posted in one instead, a pull request ready for review, a decision, a question, " +
     "or something only the developer can do by hand.";
   return note === undefined ? lead : `${lead}\n\n${note}`;
-}
-
-/** The starter's mention link, as the chat names it, and whether an agent it starts on the task given shares its task's chat. */
-function starterLinkOf(
-  starter: CodingAgent,
-  taskId: string | null,
-): Effect.Effect<
-  { readonly mention: string; readonly sameTask: boolean },
-  StoreFailure,
-  DatabaseServices
-> {
-  return Effect.gen(function* () {
-    const mention = agentMention(
-      starter,
-      yield* workspaceStepOf(starter.userId, starter.organizationId),
-    );
-    return { mention, sameTask: taskId !== null && starter.taskId === taskId };
-  });
 }
 
 /** The agent as a start answers it: its id, what it runs on, where it stands now, and whether it is on the caller's own task, which a window that opens the caller's task alone reads to link it or not. */
@@ -1739,15 +1713,10 @@ export function runStartAgent(
       if (Result.isFailure(images)) {
         return agentToolRejected(`Not started: ${forwardedImageRefusalWords(images.failure)}`);
       }
-      // An agent a coding agent starts hears who started it, and where to report back: in the
-      // chat of the task they share, or in a direct message to it otherwise.
+      // An agent a coding agent starts hears who started it, and that it reports back to it by message.
       const note =
         caller.kind === AGENT_CALLER.AGENT
-          ? startedByNote(
-              caller.agent,
-              asked.success.note,
-              yield* starterLinkOf(caller.agent, place.taskId),
-            )
+          ? startedByNote(caller.agent, asked.success.note)
           : asked.success.note;
       const started = yield* startCodingAgent(Effect.succeed(eve), userId, {
         ...place,

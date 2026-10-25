@@ -1,6 +1,5 @@
 import type { DatabaseServices, QueryError } from "@luke/database/core/query";
 import { settleEndedSession } from "@luke/database/models/abandoned-turns";
-import { chatEnabledFor } from "@luke/database/models/account-store";
 import { askRecord } from "@luke/database/models/asks";
 import { readBoard } from "@luke/database/models/board-store";
 import {
@@ -26,7 +25,6 @@ import { sandboxHeld } from "@luke/database/models/sandbox-terminal-lease";
 import { readTask } from "@luke/database/models/task-store";
 import type { ConversationTarget, StoreWriter } from "@luke/database/models/writer";
 import { EMPTY_BOARD } from "@luke/features/board-wire";
-import { MEMBER_KIND } from "@luke/features/chat-wire";
 import { CONTEXT_WINDOW } from "@luke/features/coding-agent-wire";
 import type { ModelChoice } from "@luke/features/models-wire";
 import { causeKind } from "@luke/runtime/effect";
@@ -50,7 +48,7 @@ import type { SentryApp } from "../../triggers/sentry/sentry-app-config.js";
 import { delegatedChildOf, type HostAdmission, hostAdmission } from "../agent-runtime/host-core.js";
 import { endsTurn } from "../agent-runtime/sandbox.js";
 import type { AgentSkill } from "../agent-runtime/skills.js";
-import { type ChatSince, standingContext } from "../agent-runtime/standing-context.js";
+import { standingContext } from "../agent-runtime/standing-context.js";
 import { turnKindOf } from "../brain-host/auth.js";
 import {
   BRAIN_HOST,
@@ -90,9 +88,7 @@ import { workspaceStepOf } from "../written-mentions.js";
 import {
   type AgentToolCall,
   type BoardTool,
-  type ChatCall,
   runAgentBoard,
-  runAgentChat,
   runAgentComment,
   runAgentEditPlan,
   runAgentLookAtPicture,
@@ -104,7 +100,6 @@ import {
 } from "./agent-doors.js";
 import { accountFastOffer } from "./agent-runtime-choice.js";
 import { CODER, CODER_MODEL_FIXTURE, CODER_REFUSAL, type CoderRefusal } from "./bounds.js";
-import { type ChatToolResult, chatDigest } from "./chat.js";
 import {
   agentCiReadable,
   agentCoAuthor,
@@ -192,8 +187,6 @@ interface CoderSessionPrompt {
   readonly coAuthor: string | undefined;
   /** The step the agent's workspace was written under in the prompt's links (`../written-mentions.ts`). */
   readonly workspace: string;
-  /** Whether the prompt told of the task's chat as the team's channel, which only an agent whose starter turned Chat on is, though every agent has the chat's tools. */
-  readonly chatOn: boolean;
   /** Whether the prompt told of the workspace's memory, which only an agent whose starter turned Memory on is offered. */
   readonly memoryOn: boolean;
 }
@@ -205,9 +198,8 @@ interface CoderSessionPrompt {
  * name the prompt the model actually reads: its content address, absent
  * until the session has composed one; whether the prompt said the
  * repository's CI is readable, the co-author trailer it handed where it
- * handed one, the step its links wrote the workspace under, and whether it
- * told of the chat, which are what compose the same text again for a step's
- * estimate of it. A record kept before the step was keeps none, and its
+ * handed one, and the step its links wrote the workspace under, which are
+ * what compose the same text again for a step's estimate of it. A record kept before the step was keeps none, and its
  * links are composed under the workspace's id.
  */
 export interface CoderSessionPromptRecord {
@@ -215,7 +207,6 @@ export interface CoderSessionPromptRecord {
   readonly ciReadable?: boolean;
   readonly coAuthor?: string;
   readonly workspace?: string;
-  readonly chatOn?: boolean;
   readonly memoryOn?: boolean;
 }
 
@@ -393,17 +384,6 @@ export interface CoderHost extends HostAdmission {
     admitted: AdmittedConversation,
     call: InboxCall,
   ): Effect.Effect<InboxToolResult, never, DatabaseServices>;
-  /**
-   * Runs one of the agent's chat tools (`chat.ts`): a post, told to each
-   * agent it addresses through eve as the deployment acting for that agent's
-   * starter, and held for its next read where the deployment names no secret
-   * or no origin for eve; a read; or a resolve. Refused where Chat is off for
-   * the agent's starter, as the tools are then not offered.
-   */
-  chat(
-    admitted: AdmittedConversation,
-    call: ChatCall,
-  ): Effect.Effect<ChatToolResult, never, DatabaseServices | HttpClient.HttpClient | GitHubApp>;
   /** The kind of turn the current request opened, as its header named it; nothing for one that named none. */
   turnKind(auth: SessionAuth): BrainHostTurn | undefined;
   /**
@@ -415,9 +395,7 @@ export interface CoderHost extends HostAdmission {
    * a line naming the turn's kind where it changed; the developer's time on
    * every turn; the task as it stands where someone other than the agent saved
    * the plan since its previous turn started, or the rest of it is not what
-   * the session last handed (`handed`); and what the agent has not read in
-   * its workspace's chat (`chat.ts`), where its starter turned Chat on and
-   * the digest is not the one last handed; and an operator's desk, its
+   * the session last handed (`handed`); and an operator's desk, its
    * member's open work (`../operator-desk.ts`), where its standing work is
    * not what was last handed or it carries notices of what its member's
    * agents did since, which are marked read once handed; and, once an
@@ -527,14 +505,11 @@ export interface CoderHost extends HostAdmission {
   ): Effect.Effect<void, QueryError | Schema.SchemaError, DatabaseServices | HttpClient.HttpClient>;
 }
 
-export type { AgentToolCall, BoardTool, ChatCall } from "./agent-doors.js";
+export type { AgentToolCall, BoardTool } from "./agent-doors.js";
 export type { InboxCall } from "./inbox-door.js";
 
 /** The newest turns read to find the agent's previous one: the turn opening, where the relay queued it already, and the one before. */
 const PREVIOUS_TURN_READ = 2;
-
-/** No chat in the task as it stands: the agent's own digest of the chat follows it (`chatDigest`). */
-const NO_CHAT: ChatSince = { messages: [], more: false };
 
 /** A failure as a log line carries it: the checkout's reason, or a store failure's kind alone, since its message may name a statement. */
 export function describeFailure(failure: CheckoutFailure): string {
@@ -618,18 +593,16 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
     ciReadable: boolean,
     coAuthor: string | undefined,
     workspace: string,
-    chatOn: boolean,
     memoryOn: boolean,
   ): CoderSessionPrompt => {
     const text = agentCoderInstructions(agent, {
       ciReadable,
       coAuthor,
       workspace,
-      chatOn,
       memoryOn,
       harness: CODER_HARNESS.EVE,
     });
-    return { text, hash: promptHashOf(text), ciReadable, coAuthor, workspace, chatOn, memoryOn };
+    return { text, hash: promptHashOf(text), ciReadable, coAuthor, workspace, memoryOn };
   };
 
   /**
@@ -656,7 +629,6 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
                 prompt.ciReadable ?? false,
                 prompt.coAuthor,
                 prompt.workspace ?? agent.organizationId,
-                prompt.chatOn ?? false,
                 prompt.memoryOn ?? false,
               ).text,
               brief: agent.prompt ?? agent.planSnapshot ?? "",
@@ -673,24 +645,6 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
     });
     return written.pipe(Effect.catch(logStoreFailure));
   };
-
-  /** What the agent has not read in its workspace's chat, as a turn opens with it (`chat.ts`); nothing where its starter has not turned Chat on, or the read failed. */
-  const digestOf = (admitted: AdmittedConversation, agent: CodingAgent) =>
-    Effect.gen(function* () {
-      // A turn opens with the chat only where the agent's starter turned Chat on.
-      if (!(yield* chatEnabledFor(admitted.target.userId))) return undefined;
-      return yield* chatDigest(
-        {
-          userId: admitted.target.userId,
-          taskId: agent.taskId,
-          self: { kind: MEMBER_KIND.AGENT, agentId: agent.id },
-        },
-        admitted.target.conversationId,
-      );
-    }).pipe(
-      Effect.tapError(logStoreFailure),
-      Effect.catch(() => Effect.succeed(undefined)),
-    );
 
   /**
    * The operator's desk as its turn opens (`../operator-desk.ts`), its
@@ -761,9 +715,8 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
    * so a save made while that turn ran, which none of its steps may have
    * read, is handed too; or where the rest of it is not what the session
    * last handed; never on a typed first turn, whose first message the plan,
-   * or the prompt beside it, already is. The chat is left out, since the
-   * agent's own digest of it follows (`digestOf`). A read that fails is
-   * logged and hands nothing.
+   * or the prompt beside it, already is. A read that fails is logged and
+   * hands nothing.
    */
   const taskOf = (
     admitted: AdmittedConversation,
@@ -797,7 +750,7 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
         );
       if (!saved && (opening || key === handed.task)) return { key: handed.task, text: undefined };
       const clock = { now: seams.now(), timeZone: admitted.timeZone };
-      const text = taskWithLead(standingContext(stored.value, drawn, NO_CHAT, clock, threads));
+      const text = taskWithLead(standingContext(stored.value, drawn, clock, threads));
       return { key, text };
     }).pipe(
       Effect.tapError(logStoreFailure),
@@ -943,16 +896,11 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
             Effect.tapError(logStoreFailure),
             Effect.orElseSucceed(() => agent.organizationId),
           ),
-          // Chat is told of only where the agent's starter turned it on; where that cannot be read, it is off.
-          chatEnabledFor(admitted.target.userId).pipe(
-            Effect.tapError(logStoreFailure),
-            Effect.orElseSucceed(() => false),
-          ),
           // Memory likewise, off where it cannot be read, as its tools then are (`../memory-tools.ts`).
           memoryOnFor(admitted.target.userId),
         ]),
-        ([ciReadable, coAuthor, workspace, chatOn, memoryOn]) =>
-          promptOf(agent, ciReadable, coAuthor, workspace, chatOn, memoryOn),
+        ([ciReadable, coAuthor, workspace, memoryOn]) =>
+          promptOf(agent, ciReadable, coAuthor, workspace, memoryOn),
       ),
 
     skills: (admitted, agent) => agentSkills(admitted.target, agent),
@@ -1079,7 +1027,6 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
     openPullRequest: (admitted, input) => runAgentOpenPullRequest(admitted, input),
 
     comment: (admitted, name, input) => runAgentComment(admitted, name, input),
-    chat: (admitted, call) => runAgentChat(seams, admitted, call),
 
     turnKind: (auth) => turnKindOf(auth.current),
 
@@ -1091,21 +1038,12 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
         );
         if (Result.isFailure(found)) return { text: undefined, handed };
         const agent = found.success;
-        const [task, digest, desk, flush] = yield* Effect.all(
-          [
-            taskOf(admitted, agent, turn, handed),
-            digestOf(admitted, agent),
-            deskOf(agent),
-            flushOf(agent, handed),
-          ],
+        const [task, desk, flush] = yield* Effect.all(
+          [taskOf(admitted, agent, turn, handed), deskOf(agent), flushOf(agent, handed)],
           { concurrency: "unbounded" },
         );
         const clock = { now: seams.now(), timeZone: admitted.timeZone };
-        const standing =
-          task?.text ?? timeWithLead(standingContext(undefined, EMPTY_BOARD, NO_CHAT, clock));
-        // The digest is handed again only where it holds what the last one did not.
-        const chatKey = digest === undefined ? handed.chat : contentKey(digest);
-        const chat = digest !== undefined && chatKey !== handed.chat ? [digest] : [];
+        const standing = task?.text ?? timeWithLead(standingContext(undefined, EMPTY_BOARD, clock));
         // An operator's desk is handed again only where its standing work changed since the session
         // last handed it, or where it carries notices, which are marked read once handed.
         const deskKey = desk === undefined ? handed.desk : contentKey(desk.standing);
@@ -1122,20 +1060,13 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
         const taskHanded = task === undefined ? handed.task : task.key;
         const next: TurnHanded = {
           ...(taskHanded === undefined ? undefined : { task: taskHanded }),
-          ...(chatKey === undefined ? undefined : { chat: chatKey }),
           ...(deskKey === undefined ? undefined : { desk: deskKey }),
           ...(spoken ? { spoken: true, callWords: true } : undefined),
           opened: true,
           ...(flush || handed.flushTold === true ? { flushTold: true } : undefined),
         };
         const flushed = flush ? [FLUSH_LINE] : [];
-        const parts = [
-          ...(kind === undefined ? [] : [kind]),
-          ...flushed,
-          standing,
-          ...desked,
-          ...chat,
-        ];
+        const parts = [...(kind === undefined ? [] : [kind]), ...flushed, standing, ...desked];
         return { text: parts.join("\n\n"), handed: next };
       }),
 
