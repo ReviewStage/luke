@@ -16,8 +16,6 @@ import {
   ErrorState,
   FILL_ELEMENT,
   Fill,
-  FiringGlyph,
-  LIST_DENSITY,
   LIST_ROW_CURRENT,
   LIST_ROW_LEAD,
   LIST_VARIANT,
@@ -42,9 +40,9 @@ import {
 import { GLYPH } from "@luke/ui/icons";
 import { ClockIcon, ExternalLinkIcon } from "lucide-react";
 import { useEffect, useRef } from "react";
-import { ACTOR_SIZE, ActorMark, automationRunActor } from "../actor-ref.js";
+import { ACTOR_SIZE, ActorMark, actorMarkWidth, automationRunActor } from "../actor-ref.js";
 import { useCopyLinkItem } from "../copy-link-item.js";
-import { GLYPH_STATE, type GlyphState, StateGlyph, stateEndMark } from "../state-glyph.js";
+import { GLYPH_STATE, type GlyphState, stateEndMark } from "../state-glyph.js";
 import { centreWithin, scrollerOf } from "../tasks/code-pane.js";
 import { useOpenLink } from "../tasks/use-open-link.js";
 import { type MenuAction, rowMenu } from "./action-menu.js";
@@ -93,7 +91,7 @@ const SKELETON_RUNS = [
 ] as const;
 
 /** How wide a placeholder run's glyph stands: the row's own glyph size. */
-const SKELETON_GLYPH = "var(--luke-control-icon)";
+const SKELETON_GLYPH = actorMarkWidth(ACTOR_SIZE.ROW);
 
 /** How wide a placeholder run's time stands, as wide as a short "2h ago". */
 const SKELETON_TIME = "36px";
@@ -163,11 +161,10 @@ export function RunRow({
         row.current = node;
       }}
       leading={
-        automationName === undefined ? (
-          <StateGlyph glyph={<FiringGlyph of={run.firing} />} state={state} />
-        ) : (
-          <ActorMark actor={automationRunActor(run, automationName)} size={ACTOR_SIZE.ROW} />
-        )
+        <ActorMark
+          actor={automationRunActor(run, automationName ?? automationRunTitle(run))}
+          size={ACTOR_SIZE.ROW}
+        />
       }
       title={automationRunTitle(run)}
       lead={
@@ -212,11 +209,7 @@ export function RunRow({
 export function RunsSkeleton({ card = false }: { card?: boolean }): React.JSX.Element {
   return (
     <SkeletonRegion label={READING_RUNS}>
-      <List
-        label="Runs"
-        density={LIST_DENSITY.COMPACT}
-        variant={card ? LIST_VARIANT.CARD : LIST_VARIANT.PLAIN}
-      >
+      <List label="Runs" variant={card ? LIST_VARIANT.CARD : LIST_VARIANT.PLAIN}>
         {SKELETON_RUNS.map(({ title, line }) => (
           <ListRow
             key={title}
@@ -287,7 +280,7 @@ function RunsBody({
           <EmptyState icon={<ClockIcon />}>{NO_RUNS_LINE}</EmptyState>
         ) : (
           <ListMotion root={body}>
-            <List label="Runs" density={LIST_DENSITY.COMPACT} moves>
+            <List label="Runs" moves>
               {runs.runs.map((run) => (
                 <RunRow
                   key={run.id}

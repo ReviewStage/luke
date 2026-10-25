@@ -1,5 +1,14 @@
 import type { BaseUIEvent } from "@base-ui/react/types";
-import { Fragment, useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
+import {
+  Fragment,
+  useCallback,
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { cn } from "../../cn.js";
 import { CheckIcon, ChevronRightIcon } from "../../face/glyphs.js";
 import { PRESS_PULSE, pulseOnPress } from "../../press-pulse.js";
@@ -21,6 +30,7 @@ import { ROVING_STOP, rovingItem, useRovingKeys } from "../roving-keys/roving-ke
 import { SCROLL_FADE, SCROLL_SIZE, ScrollArea } from "../scroll-area/scroll-area.js";
 import { SwitchMark } from "../switch/switch.js";
 import { hintedControlOf, Tooltip } from "../tooltip/hint.js";
+import { type MenuLine, menuCut } from "./menu-cut.js";
 import { MenuGlyph } from "./menu-surface.js";
 import { useTouchHold } from "./touch-hold.js";
 
@@ -85,6 +95,8 @@ type MenuGrow = (typeof MENU_GROW)[keyof typeof MENU_GROW];
 
 /** The gap a menu keeps from the window's edges, in CSS pixels. */
 const MENU_MARGIN = 8;
+/** How short of the window's margin a menu standing over its opener may end before it stands against the margin instead: about a control and its gap, so none is left peeking past it. */
+const MENU_SLIVER = 40;
 /** The menu's own padding around its items, `--luke-menu-inset`, which a submenu rises by so its first item is level with its opener. */
 const MENU_INSET = 4;
 /** How a setting in a menu says whether it is on: a check at its end while it is, or a switch. */
@@ -403,6 +415,31 @@ function pointAt(x: number, y: number): { getBoundingClientRect: () => DOMRect }
   return { getBoundingClientRect: () => ({ ...box, toJSON: () => box }) };
 }
 
+/**
+ * How far across a menu `height` tall hangs from `placement` in `seen`. A
+ * menu with no room for it on its side of its opener is moved along until
+ * it fits (`HELD_INSIDE`), over its opener and whatever stands beside it;
+ * there, an end a sliver short of the window's margin would leave a control
+ * beside the opener peeking past it, as a bar's ⋯ past a row's menu, so it
+ * stands against the margin instead and covers it. Anywhere else it hangs
+ * where it was placed.
+ */
+function flushAcross(
+  placement: MenuPlacement,
+  height: number,
+  seen: ReturnType<typeof seenRect>,
+): number {
+  const room =
+    placement.grow === MENU_GROW.UP
+      ? placement.y - seen.y - MENU_MARGIN
+      : seen.y + seen.height - MENU_MARGIN - placement.y;
+  if (height <= room) return placement.x;
+  const edge =
+    placement.align === MENU_ALIGN.END ? seen.x + seen.width - MENU_MARGIN : seen.x + MENU_MARGIN;
+  const short = Math.abs(edge - placement.x);
+  return short > 0 && short < MENU_SLIVER ? edge : placement.x;
+}
+
 /** What can be seen of the window, as the rectangle a menu is held inside. */
 function seenRect() {
   const seen = visibleViewport();
@@ -681,15 +718,79 @@ function SteeredItem({
   );
 }
 
+/** Whether a line of a menu's column is a rule between its groups, which holds no words. */
+function isRule(line: Element): boolean {
+  return line.tagName === "HR" || line.getAttribute("role") === "separator";
+}
+
+/** The lines of a menu's column, from its top; a line of no height, as a submenu's unseen focus guard, is none. */
+function linesOf(column: Element): MenuLine[] {
+  const top = column.getBoundingClientRect().top;
+  return [...column.children].flatMap((line) => {
+    const box = line.getBoundingClientRect();
+    if (box.height === 0) return [];
+    return [{ top: box.top - top, bottom: box.bottom - top, words: !isRule(line) }];
+  });
+}
+
+/** The sum of the lengths a style names, each as a number of CSS pixels. */
+function lengthsOf(style: CSSStyleDeclaration, names: readonly string[]): number {
+  return names.reduce(
+    (sum, name) => sum + (Number.parseFloat(style.getPropertyValue(name)) || 0),
+    0,
+  );
+}
+
+/**
+ * Cuts the rows of the menu scrolling in `area` where its fade lies over
+ * words that go on past it (`menuCut`): the menu's surface is held shorter
+ * than the room Base UI found for it where that room ends over no words.
+ * Note that the hold is let go before the room is read, so the room is
+ * Base UI's and never the hold's own.
+ */
+function cutRows(area: HTMLElement): void {
+  const popup = area.parentElement;
+  const column = area.firstElementChild;
+  if (popup === null || column === null) return;
+  popup.style.maxHeight = "";
+  const shape = getComputedStyle(popup);
+  const chrome = lengthsOf(shape, [
+    "padding-top",
+    "padding-bottom",
+    "border-top-width",
+    "border-bottom-width",
+  ]);
+  const room = Number.parseFloat(shape.maxHeight) - chrome;
+  const fade = Number.parseFloat(getComputedStyle(area).getPropertyValue("--luke-scroll-fade"));
+  if (!Number.isFinite(room) || !Number.isFinite(fade)) return;
+  const cut = menuCut(linesOf(column), column.getBoundingClientRect().height, room, fade);
+  if (cut !== undefined) popup.style.maxHeight = `${cut + chrome}px`;
+}
+
 /**
  * A menu's rows, its heading and footer among them, scrolling inside its
  * surface where the room Base UI found for it cannot hold them all, the cut
  * edge fading as every scroller's does, so the surface keeps its edge,
- * corner, and shadow whole rather than being sliced by the window.
+ * corner, and shadow whole rather than being sliced by the window. The cut
+ * lies through a line of words (`cutRows`), so its fade says the list goes
+ * on, as a phone's taller rows already do; it is cut again as the room Base
+ * UI finds, or the rows, change size.
  */
 function MenuRows({ children }: { children: React.ReactNode }): React.JSX.Element {
+  const area = useRef<HTMLDivElement | null>(null);
+  useLayoutEffect(() => {
+    const scroller = area.current;
+    const column = scroller?.firstElementChild;
+    if (scroller === null || column === null || column === undefined) return undefined;
+    cutRows(scroller);
+    if (!("ResizeObserver" in globalThis)) return undefined;
+    const resized = new ResizeObserver(() => cutRows(scroller));
+    if (scroller.parentElement !== null) resized.observe(scroller.parentElement);
+    resized.observe(column);
+    return () => resized.disconnect();
+  }, []);
   return (
-    <ScrollArea size={SCROLL_SIZE.CONTENT} fade={SCROLL_FADE.BOTH}>
+    <ScrollArea ref={area} size={SCROLL_SIZE.CONTENT} fade={SCROLL_FADE.BOTH}>
       <div className="flex flex-col">{children}</div>
     </ScrollArea>
   );
@@ -903,11 +1004,21 @@ export function Menu({
     setWasLeaving(leaving);
     if (!leaving) setSubmenu(undefined);
   }
-  const anchor = useMemo(() => pointAt(placement.x, placement.y), [placement]);
   // Note that what can be seen is read once as the menu is hung, because a
   // rectangle new on every render would have Base UI place the menu again
   // on every render, and every placing renders it again.
   const seen = useMemo(() => seenRect(), [placement]);
+  // Where the menu hangs across, once it is drawn and measured: against the window's margin where it must stand over its opener a sliver short of it (`flushAcross`).
+  const [across, setAcross] = useState<{ placement: MenuPlacement; x: number } | undefined>();
+  const x = across?.placement === placement ? across.x : placement.x;
+  const anchor = useMemo(() => pointAt(x, placement.y), [x, placement]);
+  useLayoutEffect(() => {
+    if (popup === null || across?.placement === placement) return;
+    setAcross({
+      placement,
+      x: flushAcross(placement, popup.getBoundingClientRect().height, seen),
+    });
+  }, [popup, placement, across, seen]);
   const layer = layerOf(opener);
 
   // Focus lands on the first item, or the checked one where it opens on
