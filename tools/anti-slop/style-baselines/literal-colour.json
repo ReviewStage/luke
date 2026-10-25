@@ -1,6 +1,3 @@
 {
-  "packages/panel/src/styles/tasks.css": 1,
-  "packages/ui/src/components/button/button.css": 3,
-  "packages/ui/src/components/tabs/tabs.css": 1,
-  "packages/ui/src/components/video-player/video-player.css": 4
+  "packages/ui/src/components/tabs/tabs.css": 1
 }
