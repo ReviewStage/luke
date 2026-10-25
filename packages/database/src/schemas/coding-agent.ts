@@ -60,6 +60,9 @@ import { task } from "./task.js";
  * `published` is the pull request from the agent's branch as GitHub last
  * answered a read of it (`coder-host/published.ts`), null before a read
  * found one; the task list reads it so the sidebar asks GitHub nothing.
+ * `published_read` is when that read was (`StoredPublishedRead`), which lets
+ * a tab's read answer from the row rather than GitHub; null before one, for
+ * a write that names none, and once a change to the pull request lets it go.
  * `archived_at` is when the developer put the agent away, which leaves it
  * out of every list but the one that asks for archived agents, and null
  * while it stands; its conversation and pull request are kept either way.
@@ -201,6 +204,19 @@ export interface StoredPullRequest extends CodingAgentPullRequest {
   readonly mergedAt?: number;
 }
 
+/**
+ * The read of GitHub that wrote an agent's `published`: when it was, in
+ * epoch millis, the branch the row stood on as it read, and whether GitHub
+ * held that branch, a pull request from it or the branch pushed alone. What
+ * the read answered is the row's again from these, so long as the row still
+ * stands on that branch.
+ */
+export interface StoredPublishedRead {
+  readonly at: number;
+  readonly branch: string | null;
+  readonly pushed: boolean;
+}
+
 export const codingAgent = pgTable(
   "coding_agent",
   {
@@ -253,6 +269,8 @@ export const codingAgent = pgTable(
     compactedAt: timestamptz("compacted_at"),
     /** The pull request from the agent's branch as GitHub last answered; null before a read found one. */
     published: jsonb("published").$type<StoredPullRequest>(),
+    /** When the read that wrote `published` was, and of which branch; null before one, and once a change lets it go. */
+    publishedRead: jsonb("published_read").$type<StoredPublishedRead>(),
     /** When the developer archived the agent; null while it is not. */
     archivedAt: timestamptz("archived_at"),
     /** Who archived the agent, and why; null while it is not, and for an archive no one was recorded for. */
