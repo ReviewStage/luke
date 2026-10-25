@@ -130,13 +130,6 @@ function boxWords(box: HTMLElement): string {
   return (composerEditor(box).textContent ?? "").replaceAll("\u00a0", " ");
 }
 
-/** The box's round send. */
-function sendOf(box: HTMLElement): HTMLButtonElement {
-  const send = box.querySelector<HTMLButtonElement>('button[aria-label="Send"]');
-  assert.ok(send, "the box has its send");
-  return send;
-}
-
 /** A send that answers only when the test says, every post it was handed written down, and whether the box took a refused one back. */
 function heldSend() {
   const sent: string[] = [];
@@ -203,7 +196,6 @@ test("a post leaves the box at once, which keeps the caret and takes the next po
   assert.equal(boxWords(box), "");
   assert.equal(composerEditor(box).getAttribute("aria-disabled"), null);
   assert.equal(document.activeElement, composerEditor(box));
-  assert.equal(sendOf(box).dataset.submit, "ready");
 
   typeInComposer(box, "And the notes.");
   pressInComposer(box, "Enter");

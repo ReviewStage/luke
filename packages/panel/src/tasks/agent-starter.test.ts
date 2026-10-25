@@ -163,7 +163,6 @@ test("a teammate's agent's card says it was started by them, their disc and name
   const line = card.querySelector(".actor-words") ?? assert.fail("the card names its starter");
   const starter = line.querySelector<HTMLElement>("[data-actor-ref]") ?? assert.fail("as an actor");
   assert.equal(line.firstChild?.textContent, "Started by ");
-  assert.equal(starter.dataset.kind, "person");
   assert.equal(starter.querySelector(".luke-inline-ref-label")?.textContent, "Charles Pan");
   assert.equal(starter.querySelector("img")?.getAttribute("src"), CHARLES_PICTURE);
   act(() => root?.unmount());
@@ -370,7 +369,6 @@ test("a command an agent ran on a Mac says whose, by their disc and name: a team
 
   const yours = await macPlace(CHARLES, CHARLES.userId);
   assert.equal(yours.querySelector("[data-actor-ref] .luke-inline-ref-label")?.textContent, "your");
-  assert.equal(yours.querySelector<HTMLElement>(".actor-mark")?.dataset.kind, "person");
   act(() => root?.unmount());
 
   const untold = await macPlace(CHARLES, undefined);

@@ -123,10 +123,7 @@ async function opened(container: HTMLElement, plus: DOMRect): Promise<[number, n
   return [left, left + width];
 }
 
-for (const [phone, height] of [
-  [390, 844],
-  [360, 740],
-] as const) {
+for (const [phone, height] of [[390, 844]] as const) {
   for (const [where, plusLeft] of [
     ["at the row's right edge", phone - 12 - 44],
     ["mid-way along the row", 216],

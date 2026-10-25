@@ -160,7 +160,7 @@ import {
   type VercelSandboxApi,
   vercelSandboxApi,
 } from "../vercel-sandbox-api.js";
-import { CODER } from "./bounds.js";
+import { CODER, sandboxVcpus } from "./bounds.js";
 import {
   type AgentRepositoryRead,
   agentDeepenPlan,
@@ -954,14 +954,14 @@ export const runnerSessions = <
         },
       );
 
-    /** A new sandbox of the agent's, under the session given, opened from the snapshot named. */
+    /** A new sandbox of the agent's, under the session given, opened from the snapshot named at the size its repository asks for. */
     const createdFrom = (agent: CodingAgent, sessionId: string, snapshotId: string) =>
       api.create({
         name: `${SANDBOX_NAME}${randomUUID()}`,
         snapshotId,
         tags: { [SESSION_TAG]: sessionId, [RUNNER_TAG.AGENT]: agent.id },
         timeoutMs: CODER.SANDBOX_TIMEOUT_MS,
-        vcpus: CODER.SANDBOX_VCPUS,
+        vcpus: sandboxVcpus(agent.repository),
         keepLastSnapshots: {
           count: CODER.SANDBOX_SNAPSHOTS.count,
           expiration: Duration.toMillis(CODER.SANDBOX_SNAPSHOTS.expiration),

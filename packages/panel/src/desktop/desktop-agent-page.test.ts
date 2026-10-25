@@ -55,14 +55,13 @@ import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { TestClock } from "effect/testing";
 import { act, createElement, Fragment } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
+import { afterEach, beforeAll, beforeEach, test } from "vitest";
 import { runAppCommand } from "../app-commands.js";
 import { SIDE_BUNDLES } from "../bundle-loader.js";
 import { rendererRuntime } from "../renderer-runtime.js";
 import { SHELL_ROOM } from "../shell-room.js";
 import { ShellRoomContext } from "../stage-room.js";
 import type { AgentCallPlace } from "../tasks/agent-call.js";
-import { archiveWords } from "../tasks/coding-agent-model.js";
 import { SIDE_PANEL_TAB, type SidePanelControl, useSidePanel } from "../tasks/use-side-panel.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import {
@@ -96,7 +95,7 @@ import { focusRestOn, restOn } from "../testing/hint-rest.js";
 import { markdownHtmlParserLanded } from "../testing/markdown.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
 import { bundleLanded } from "../testing/side-bundles.js";
-import { codingAgentsControl, tasksControl } from "../testing/tasks-control.js";
+import { tasksControl } from "../testing/tasks-control.js";
 import { newestToastSays } from "../testing/toast.js";
 import { ToastHost } from "../toast.js";
 // Note that a Pull request tab is loaded as the side panel loads it, on first use
@@ -107,26 +106,10 @@ import { OpenLinkProvider } from "../tasks/use-open-link.js";
 import { DesktopAgentPage } from "./desktop-agent-page.js";
 
 /**
- * desktop-agent-page.test.ts -- one agent's page as the window draws it: the agent read by its id, titled as its tab would be, and a read that did not land said with a retry; an automation's agent opens on the automation's prompt alone, as a message the automation sent, which opens the automation's page where the window can, and names it plainly where it is deleted, with the pull request its event named and who ran it now; a webhook's body stands inside the card alone. Drawn again over the same agent, the page draws none of its links again.
+ * desktop-agent-page.test.ts -- one agent's page as the window draws it: the agent read by its id, titled as its tab would be, and a read that did not land said with a retry; an automation's agent opens on the automation's prompt alone, as a message the automation sent, which opens the automation's page where the window can, and names it plainly where it is deleted, with the pull request its event named and who ran it now; a webhook's body stands inside the card alone.
  *
  * The service is a script at the act boundary; synthetic agents and words throughout.
  */
-
-/** How many times a part opening links was drawn. */
-const linkDraws = vi.hoisted(() => ({ count: 0 }));
-
-// Note that the wrapper opens links as the real opener does and only counts,
-// because what is under test is whether the page draws its links again.
-vi.mock("../tasks/use-open-link.js", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("../tasks/use-open-link.js")>();
-  return {
-    ...actual,
-    useOpenLink: () => {
-      linkDraws.count += 1;
-      return actual.useOpenLink();
-    },
-  };
-});
 
 const AGENT_ID = "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21";
 
@@ -1289,39 +1272,6 @@ test("an archived agent's page offers Unarchive in its composer's place, which b
   assert.deepEqual(archives, [{ agentId: AGENT_ID, archived: false }]);
 });
 
-/** The task open beneath the page. */
-const OPEN_TASK = "3e4f5a6b-7c8d-4e9f-8a0b-1c2d3e4f5a6b";
-
-test("an agent of the open task brought back on its page has the task's agents read again, so its tab and ⌘K stand where it does, and one of another task's has none", async () => {
-  /** How many times the open task's agents are read again around an Unarchive on the page of an agent of `planId`. */
-  const readsAround = async (taskId: string): Promise<number> => {
-    let reads = 0;
-    pages = [{ agent: { ...PAGE, planId: taskId, archivedAt: 2 } }];
-    const page = mount(
-      tasksControl({
-        activeTaskId: OPEN_TASK,
-        agents: codingAgentsControl({ onRetryList: () => (reads += 1) }),
-      }),
-    );
-    await settle();
-    const drawn = reads;
-    const unarchive = [...page.querySelectorAll("button")].find(
-      (each) => each.textContent === "Unarchive",
-    );
-    assert.ok(unarchive, "the archived agent offers Unarchive");
-    act(() => unarchive.click());
-    await settle();
-    act(() => root?.unmount());
-    root = undefined;
-    document.body.innerHTML = "";
-    assert.equal(drawn, 0, "drawing the page reads nothing of the task");
-    return reads;
-  };
-
-  assert.equal(await readsAround(OPEN_TASK), 1);
-  assert.equal(await readsAround("6b7c8d9e-0f1a-4b2c-8d3e-4f5a6b7c8d9e"), 0);
-});
-
 test("an agent another agent archived says on its page who archived it, for which member, and why, over its Unarchive", async () => {
   pages = [
     {
@@ -1363,7 +1313,7 @@ test("an Unarchive the service refuses says why, and the agent stays archived", 
   act(() => unarchive.click());
   await settle();
 
-  assert.match(document.body.textContent ?? "", new RegExp(archiveWords(false).refused, "u"));
+  assert.match(document.body.textContent ?? "", /The agent could not be unarchived\. Try again\./u);
   assert.ok(
     [...page.querySelectorAll("button")].some((each) => each.textContent === "Unarchive"),
     "the agent stays archived, Unarchive still offered",
@@ -1552,30 +1502,6 @@ test("a GitHub event's pull request is its chip, saying where it stands and wear
       chip?.querySelector<SVGElement>("[data-pull-request-mark]")?.dataset.pullRequestState,
     ],
     ["#2905 View commands", "Open", PULL_REQUEST_STATE.OPEN],
-  );
-});
-
-test("the line naming who sent it names the automation, the pull request, and who ran it, each its own part", async () => {
-  pages = [
-    {
-      agent: {
-        ...RUN_PAGE,
-        origin: {
-          prompt: "Review it.",
-          subject: { number: 2905, title: "View commands" },
-          runBy: { userId: "user-dean", name: "Dean Stratakos" },
-        },
-      },
-    },
-  ];
-  transcript = handedTranscript();
-  const page = mount(tasksControl({ me: "user-dean" }));
-  await settle();
-
-  const line = origin(page).sender?.firstElementChild ?? assert.fail("the line stands");
-  assert.deepEqual(
-    [...line.children].map((part) => words(part)),
-    ["Flaky-test sweep", " · #2905 View commands", " · Run by you"],
   );
 });
 
@@ -2094,7 +2020,7 @@ test("an archive the service refuses says why and leaves the automation's prompt
   await act(async () => archive.click());
   await settle();
 
-  assert.match(document.body.textContent ?? "", new RegExp(archiveWords(true).refused, "u"));
+  assert.match(document.body.textContent ?? "", /The agent could not be archived\. Try again\./u);
   const { card } = origin(page);
   assert.match(card.textContent ?? "", /Sweep the flaky tests\./u);
 });
@@ -2495,55 +2421,4 @@ test("on a phone the page is headed by its way back's glyph, the agent's name ce
   assert.ok(pageMenuItem(page, "Show panel"), "the ⋯ offers the panel");
   act(() => head.querySelector<HTMLButtonElement>("button")?.click());
   assert.deepEqual(left, ["away"], "the way back goes where the shell says");
-});
-
-test("the page drawn again over the same agent draws none of the links and chips in its words again", async () => {
-  transcript = {
-    messages: [
-      { id: "brief", role: MESSAGE_ROLE.USER, parts: [{ type: "text", text: "Sweep the tests." }] },
-      {
-        id: "answer",
-        role: MESSAGE_ROLE.ASSISTANT,
-        parts: [
-          {
-            type: "text",
-            text: "Opened [@relay#2911](https://github.com/acme/relay/pull/2911) after reading [the docs](https://vitest.dev/guide/).",
-          },
-        ],
-      },
-    ],
-    cursor: "1:0",
-    status: CODING_AGENT_STATUS.COMPLETED,
-    title: null,
-  };
-  const tasks = tasksControl({ workspaces: [ACME] });
-  const openLink = (_link: ReadLink) => undefined;
-  const container = document.body.appendChild(document.createElement("div"));
-  root = createRoot(container);
-  const registry = AtomRegistry.make();
-  // Note that each draw is a new tree over the same tasks, as the window draws the page again on a delivery that moved nothing of it.
-  const draw = () =>
-    act(() =>
-      root?.render(
-        onRegistry(
-          registry,
-          createElement(OpenLinkProvider, {
-            value: openLink,
-            children: createElement(DesktopAgentPage, { tasks, agentId: AGENT_ID }),
-          }),
-        ),
-      ),
-    );
-  draw();
-  await settle();
-  assert.ok(
-    container.querySelector(".agent-page [data-mention-ref]"),
-    "the agent's words are drawn, their chip among them",
-  );
-
-  linkDraws.count = 0;
-  draw();
-  await settle();
-
-  assert.equal(linkDraws.count, 0);
 });

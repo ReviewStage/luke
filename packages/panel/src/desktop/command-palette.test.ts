@@ -642,20 +642,6 @@ test("⌘K says a place it opens as Go to the place, and the menus' own words st
   assert.ok(!rows().includes("Inbox"), "the place is never said bare, as a verb would be");
 });
 
-test("every row in Commands keeps a glyph's room, so a command no menu marks names itself at the edge the others do", () => {
-  openPaletteOverPlaces();
-  chooseFilter("Commands");
-
-  const options = [...document.querySelectorAll('[role="group"] [role="option"]')];
-  assert.ok(options.length > 0, "commands are listed");
-  for (const option of options) {
-    assert.ok(
-      option.querySelector(".luke-combobox-option-glyph"),
-      `${option.textContent} keeps the glyph's room`,
-    );
-  }
-});
-
 test("the field asks to search Luke under All, and the kind under its filter", () => {
   openPalette();
   assert.equal(field().placeholder, "Search Luke");

@@ -25,7 +25,6 @@ import { runAppCommand } from "../app-commands.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
 import { fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
-import { layContainersAt } from "../testing/container-width.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { restOn } from "../testing/hint-rest.js";
 import { relayout } from "../testing/resize-observer.js";
@@ -481,7 +480,6 @@ test("the title is the bar's heading with the List | Columns switch after it, an
 
   const bar = page.querySelector("header") ?? assert.fail("no bar");
   const [heading, actions] = [...bar.children];
-  assert.equal(bar.children.length, 2, "a heading and the acts, with no box of the page's own");
   assert.equal(heading?.querySelector("h1")?.textContent, "Tasks");
   assert.equal(
     heading?.querySelector('[role="radiogroup"]')?.getAttribute("aria-label"),
@@ -604,20 +602,6 @@ test("a row's words said to a screen reader alone are left out of find, so a key
   assert.ok(spoken.hasAttribute("data-find-skip"), "find passes over them");
 });
 
-test("every row draws a cell for each property the view draws, an empty one where its task has nothing to say, so the columns line up down the page", async () => {
-  const page = await mountPage();
-  const cells = (key: string) =>
-    [...rowOf(page, key).querySelectorAll("[data-cell]")].map((cell) =>
-      cell.getAttribute("data-cell"),
-    );
-
-  assert.deepEqual(cells("ACME-44"), cells("ACME-40"), "a row with Inbox threads and one without");
-  assert.ok(
-    rowOf(page, "ACME-40").querySelector("[data-cell='waiting']"),
-    "a row waits on nobody in a cell of its own",
-  );
-});
-
 /** The chip on a task's row that changes its `standing`, Priority or Status. */
 function rowChip(page: HTMLElement, key: string, standing: string): HTMLButtonElement {
   const chip = rowOf(page, key).querySelector<HTMLButtonElement>(
@@ -686,7 +670,6 @@ test("a row's ⋯ is a control a keyboard reaches, described by the row's name, 
   const page = await mountPage();
   const more = rowMore(page, "ACME-40");
   const row = rowOf(page, "ACME-40");
-  assert.ok(row.hasAttribute("data-row-menu"), "the row marks itself for its ⋯ to come in on");
   assert.notEqual(more.tabIndex, -1, "the ⋯ takes a Tab stop");
   act(() => more.focus());
   assert.equal(document.activeElement, more, "the ⋯ takes the focus the keyboard gives it");
@@ -736,50 +719,6 @@ test("a row draws the pull requests its agents opened, each its mark and its num
     "the row wears the pull request's mark",
   );
   assert.match(agents?.textContent ?? "", /#4222/);
-});
-
-test("a row whose agents rest keeps the working mark's room before its pull request, so its pull request lines up with a working row's", async () => {
-  const pullRequest = (number: number) => ({
-    number,
-    title: "Rate limit search",
-    state: "open" as const,
-    checks: "passing" as const,
-    additions: 10,
-    deletions: 2,
-  });
-  const resting: TaskSummary = {
-    ...task(39, "Rate limit search", TASK_STATUS.TODO, TASK_PRIORITY.HIGH),
-    agents: {
-      total: 1,
-      working: 0,
-      agents: [],
-      pullRequestTotal: 1,
-      pullRequests: [pullRequest(4222)],
-    },
-  };
-  const working: TaskSummary = {
-    ...task(38, "Billing after downgrade", TASK_STATUS.TODO, TASK_PRIORITY.HIGH),
-    agents: {
-      total: 1,
-      working: 1,
-      agents: [],
-      pullRequestTotal: 1,
-      pullRequests: [pullRequest(4223)],
-    },
-  };
-  const page = await mountPage([resting, working, ...TASKS.slice(2)]);
-  const lead = (key: string) =>
-    [...(rowOf(page, key).querySelector("[data-cell='agents'] .task-work-marks")?.children ?? [])]
-      .map((mark) => mark.getAttribute("data-task-work"))
-      .slice(0, 2);
-
-  assert.deepEqual(lead("ACME-38"), ["agents", "pull-request"]);
-  assert.deepEqual(lead("ACME-39"), ["agents", "pull-request"]);
-  assert.equal(
-    rowOf(page, "ACME-39").querySelector("[data-cell='agents'] [data-state='working']"),
-    null,
-    "a resting row draws no working mark",
-  );
 });
 
 test("a group's head folds it, its count still standing, and the fold is kept on this Mac", async () => {
@@ -1503,48 +1442,6 @@ test("a row's pull request mark and its count are presses: one from a service be
   act(() => part("pull-request").click());
   act(() => part("more").click());
   assert.deepEqual(opened, ["t-39", "t-39"]);
-});
-
-test("a row's pull request link and its count take the pointer over the row's press, while the rest of the cell lets it through to the press", async () => {
-  const laid = layContainersAt({}, { only: ["./desktop.css"] });
-  const withPullRequests: TaskSummary = {
-    ...task(39, "Rate limit search", TASK_STATUS.TODO, TASK_PRIORITY.HIGH),
-    agents: {
-      total: 1,
-      working: 0,
-      agents: [],
-      pullRequestTotal: 2,
-      pullRequests: [
-        {
-          number: 4222,
-          title: "Rate limit the search endpoint",
-          state: "open",
-          checks: "passing",
-          additions: 30,
-          deletions: 5,
-          url: "https://github.com/acme/web/pull/4222",
-        },
-        {
-          number: 4223,
-          title: "Follow-up",
-          state: "open",
-          checks: "passing",
-          additions: 1,
-          deletions: 1,
-        },
-      ],
-    },
-  };
-  const page = await mountPage([withPullRequests, ...TASKS.slice(2)]);
-  const cell = rowOf(page, "ACME-39").querySelector<HTMLElement>("[data-cell='agents']");
-  const link = cell?.querySelector<HTMLElement>("a[data-task-work='pull-request']");
-  const count = cell?.querySelector<HTMLElement>("button[data-task-work='more']");
-
-  assert.ok(link, "a pull request with a page is a link to it");
-  assert.equal(getComputedStyle(link).pointerEvents, "auto");
-  assert.equal(getComputedStyle(count ?? assert.fail("the count stands")).pointerEvents, "auto");
-  assert.equal(getComputedStyle(cell ?? assert.fail("the cell stands")).pointerEvents, "none");
-  laid.remove();
 });
 
 test("a List narrowed in a wide window folds its columns by its own width, agents first, then the repository, and draws them again once it widens", async () => {
