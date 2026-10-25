@@ -9,7 +9,7 @@ import type {
 import type { TaskPullRequestLine } from "@luke/features/task-wire";
 import { keepIdentity } from "@luke/wire";
 import * as Atom from "effect/reactivity/Atom";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { APP_SLICE, useAppSlice } from "../use-app-state.js";
 import { agentStillWriting, PUBLISHED_REREAD_MS } from "./coding-agent-model.js";
 
@@ -145,49 +145,19 @@ interface Visit {
   readonly asked: Map<string, boolean>;
   /** Each agent's latest ask, numbered, whose answer alone is kept. */
   readonly latest: Map<string, number>;
-  /** The agents the sweep has yet to read, in the order they were asked for. */
+  /** The agents not archived the sweep has yet to read, in the order they were asked for. */
   readonly queued: Set<string>;
+  /** The archived agents the sweep has yet to read, once every other is read. */
+  readonly archived: Set<string>;
 }
-
-/** A pull request as the task list pushed it, for an archived agent no read has answered; its files unknown, which its card leaves unsaid. */
-function pushedPullRequest(line: TaskPullRequestLine & { url: string }): CodingAgentPullRequest {
-  const { number, title, url, state, checks, additions, deletions, queued } = line;
-  const known = { number, title, url, state, checks, additions, deletions, changedFiles: 0 };
-  return queued === true ? { ...known, queued } : known;
-}
-
-/**
- * The task's pull requests as read, and beside them each archived agent's
- * that no read has answered, as the task list pushed it (`pushed`), by the
- * agent the line names; the map read where none is added.
- */
-function withPushed(
-  read: ReadonlyMap<string, CodingAgentPullRequest>,
-  owned: readonly Pick<CodingAgentSummary, "id" | "archivedAt">[] | undefined,
-  pushed: readonly TaskPullRequestLine[],
-): ReadonlyMap<string, CodingAgentPullRequest> {
-  let next: Map<string, CodingAgentPullRequest> | undefined;
-  for (const agent of owned ?? []) {
-    if (agent.archivedAt === undefined || read.has(agent.id)) continue;
-    const line = pushed.find((each) => each.agentId === agent.id);
-    if (line?.url === undefined) continue;
-    next ??= new Map(read);
-    next.set(agent.id, pushedPullRequest({ ...line, url: line.url }));
-  }
-  return next ?? read;
-}
-
-/** No pull request line is pushed for the task, one array so a render that has none hands down the same one. */
-const NO_LINES: readonly TaskPullRequestLine[] = [];
 
 /**
  * Which of the task's agents have a pull request, as the side panel's "+",
  * the task's summary, and ⌘K offer its Changes tab by: every answer `read`
- * lands is kept, an agent's own tab's reads included, and each agent not
- * archived is read once as the list first holds it and once more as it
- * ends, since that is when what it published settles. Nothing reads on a
- * clock. An answer the service could not give leaves what was kept
- * standing. Note that what is kept is the visit's: opening the task again
+ * lands is kept, an agent's own tab's reads included, and each agent is
+ * read once as the list first holds it and once more as it ends, since
+ * that is when what it published settles. Nothing reads on a clock. An
+ * answer the service could not give leaves what was kept standing. Note that what is kept is the visit's: opening the task again
  * reads every agent afresh, an answer to an ask made on an earlier visit is
  * let go, and of two asks of one agent out at once only the later one's
  * answer is kept, so an earlier read landing late never takes back a pull
@@ -197,21 +167,19 @@ const NO_LINES: readonly TaskPullRequestLine[] = [];
  * neither redraws the task.
  *
  * Note that the sweep has at most `SWEEP_READS_AT_ONCE` reads out, the rest
- * waiting their turn in the order asked and each starting as one settles,
- * and that it reads no archived agent, because a task may hold a hundred
- * agents and each read costs the service several calls to GitHub, which
- * all at once trip its rate limit. An archived agent's pull request stands
- * as the task list pushed it (`pushed`) until a read of it, as its own tab
- * or a card asks through `read`, answers.
+ * waiting their turn and each starting as one settles, because a task may
+ * hold a hundred agents and each read costs the service several calls to
+ * GitHub, which all at once trip its rate limit. The agents not archived
+ * are read first, in the order asked, and the archived ones only once none
+ * of those waits, since an archived agent's pull request is what the
+ * summary offers last and the task list pushes none of it to stand in.
  */
 export function useTaskPullRequests(
   taskId: string | undefined,
   agents: readonly Pick<CodingAgentSummary, "id" | "status" | "archivedAt">[] | undefined,
   readOnce: PullRequestReader,
   /** Every agent of the task, an archived one among them, which alone its pull requests are kept for; `agents` where left out. */
-  owned: readonly Pick<CodingAgentSummary, "id" | "archivedAt">[] | undefined = agents,
-  /** The task's pull requests as the task list pushed them, each naming the newest agent that opened it. */
-  pushed: readonly TaskPullRequestLine[] = NO_LINES,
+  owned: readonly Pick<CodingAgentSummary, "id">[] | undefined = agents,
 ): TaskPullRequests {
   const [held, setHeld] = useState({ taskId, pullRequests: NO_PULL_REQUESTS });
   if (held.taskId !== taskId) setHeld({ taskId, pullRequests: NO_PULL_REQUESTS });
@@ -220,9 +188,21 @@ export function useTaskPullRequests(
   // The task's own agents, by id, which alone its pull requests are kept for.
   const own = useRef<ReadonlySet<string>>(new Set());
   own.current = new Set((owned ?? []).map((agent) => agent.id));
-  const visit = useRef<Visit>({ taskId, asked: new Map(), latest: new Map(), queued: new Set() });
+  const visit = useRef<Visit>({
+    taskId,
+    asked: new Map(),
+    latest: new Map(),
+    queued: new Set(),
+    archived: new Set(),
+  });
   if (visit.current.taskId !== taskId)
-    visit.current = { taskId, asked: new Map(), latest: new Map(), queued: new Set() };
+    visit.current = {
+      taskId,
+      asked: new Map(),
+      latest: new Map(),
+      queued: new Set(),
+      archived: new Set(),
+    };
   const asks = useRef(0);
   // The sweep's reads out now, whichever visit asked them, so a task opened
   // while another's are out waits on those too.
@@ -259,12 +239,13 @@ export function useTaskPullRequests(
     });
   }, []);
 
-  // Starts the visit's queued reads while fewer than the most are out.
+  // Starts the visit's queued reads, the archived agents' last, while fewer than the most are out.
   const pump = useCallback(() => {
-    const { queued } = visit.current;
-    for (const agentId of queued) {
+    const { queued, archived } = visit.current;
+    for (const agentId of [...queued, ...archived]) {
       if (sweeping.current >= SWEEP_READS_AT_ONCE) return;
       queued.delete(agentId);
+      archived.delete(agentId);
       sweeping.current += 1;
       read(agentId)
         .catch(() => undefined)
@@ -276,22 +257,20 @@ export function useTaskPullRequests(
   }, [read]);
 
   useEffect(() => {
-    const { asked, queued } = visit.current;
+    const { asked, queued, archived } = visit.current;
     for (const agent of agents ?? []) {
-      if (agent.archivedAt !== undefined) continue;
       const ended = !agentStillWriting(agent.status);
       const before = asked.get(agent.id);
       if (before === true || before === ended) continue;
       asked.set(agent.id, ended);
       // Note that an agent still queued is not queued again, since its read has yet to ask.
-      queued.add(agent.id);
+      if (agent.archivedAt === undefined) queued.add(agent.id);
+      else archived.add(agent.id);
     }
     pump();
   }, [agents, pump]);
 
-  const kept = held.taskId === taskId ? held.pullRequests : NO_PULL_REQUESTS;
-  const pullRequests = useMemo(() => withPushed(kept, owned, pushed), [kept, owned, pushed]);
-  return { pullRequests, read };
+  return { pullRequests: held.taskId === taskId ? held.pullRequests : NO_PULL_REQUESTS, read };
 }
 
 /**

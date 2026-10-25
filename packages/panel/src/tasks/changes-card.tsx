@@ -36,10 +36,9 @@ export function peopleOf(
  * right, the coding agent whose pull request it is under the title, by its
  * tile and name as every place naming an agent draws it (`ActorRef`),
  * which hang the agent's card and open its tab, and under them how many
- * files it changes, where that is known, and the lines it adds and
- * removes, as GitHub counts them, then, once its Changes tab has read them,
- * who opened it and its reviewers, each face wearing where they stand
- * (`pull-request-people.tsx`).
+ * files it changes and the lines it adds and removes, as GitHub counts
+ * them, then, once its Changes tab has read them, who opened it and its
+ * reviewers, each face wearing where they stand (`pull-request-people.tsx`).
  */
 export function ChangesCard({
   subject,
@@ -75,8 +74,7 @@ export function ChangesCard({
         }
       />
       <HoverCardNote>
-        {/* Note that no files is a count unknown, as a pull request the task list pushed for an archived agent says none (`useTaskPullRequests`). */}
-        {count === 0 ? null : `${count} ${count === 1 ? "file" : "files"} changed `}
+        {count} {count === 1 ? "file" : "files"} changed{" "}
         <LinesChanged additions={pullRequest.additions} deletions={pullRequest.deletions} />
       </HoverCardNote>
       {people?.author === undefined ? null : (

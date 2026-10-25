@@ -67,27 +67,3 @@ export function useTaskWork(task: Pick<TaskSummary, "id" | "agents">): TaskWork 
     pullRequests: held.pullRequests ?? task.agents?.pullRequests ?? [],
   };
 }
-
-/** No task is open, or the window holds no pull request of it, one array every render. */
-const NO_LINES: readonly TaskPullRequestLine[] = [];
-
-/** Every pull request of one task as the window holds it, else its row's few; none where it holds neither. */
-const taskPullRequestLinesAtom = Atom.family((taskId: string) =>
-  Atom.map(
-    planningAtom,
-    (planning): readonly TaskPullRequestLine[] =>
-      planning?.taskPullRequests?.find((each) => each.taskId === taskId)?.pullRequests ??
-      planning?.tasks.find((task) => task.id === taskId)?.agents?.pullRequests ??
-      NO_LINES,
-  ),
-);
-
-/** No task is open, whose lines no task holds. */
-const NO_TASK = "";
-
-/** The pull requests the task list pushed of the task at `taskId`, every one where the window holds them, as `useTaskWork` reads them. */
-export function useTaskPullRequestLines(
-  taskId: string | undefined,
-): readonly TaskPullRequestLine[] {
-  return useAtomValue(taskPullRequestLinesAtom(taskId ?? NO_TASK));
-}
