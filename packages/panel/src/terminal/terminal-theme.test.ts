@@ -2,7 +2,7 @@
 
 import assert from "node:assert/strict";
 import { afterEach, beforeEach, test, vi } from "vitest";
-import { terminalTheme } from "./terminal-theme.js";
+import { terminalNoteInk, terminalTheme } from "./terminal-theme.js";
 
 /**
  * A terminal's colours as the stylesheet's tokens resolve them. jsdom
@@ -30,7 +30,7 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-test("a dimmed screen takes its output's colours 42% of the way back to the ground and leaves the note's colour whole", () => {
+test("a dimmed screen takes its output's colours 42% of the way back to the ground", () => {
   const host = document.createElement("div");
   const bright = terminalTheme(host, false);
   const dimmed = terminalTheme(host, true);
@@ -38,5 +38,8 @@ test("a dimmed screen takes its output's colours 42% of the way back to the grou
   assert.equal(dimmed.foreground, "rgb(84, 42, 21)");
   assert.equal(dimmed.red, "rgb(42, 0, 84)");
   assert.equal(dimmed.background, "rgb(0, 0, 0)");
-  assert.deepEqual(dimmed.extendedAnsi, ["rgb(150, 160, 170)"]);
+});
+
+test("a note is printed in 24-bit colour, so no palette slot of a shell's is given up for it", () => {
+  assert.equal(terminalNoteInk(document.createElement("div")), "\x1b[38;2;150;160;170m");
 });

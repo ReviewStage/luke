@@ -39,14 +39,11 @@ const THEME_TOKENS = {
   brightWhite: "--terminal-bright-white",
 } as const satisfies Record<string, `--terminal-${string}`>;
 
-/**
- * The terminal's own notes are printed in palette slot 16 (`38;5;16`, which
- * `use-terminal-session.ts` writes), the first past the sixteen a theme
- * names, read off `--terminal-note`. It is the cube's pure black, a colour a
- * shell has little use for, and the one slot a dimmed screen leaves alone, so
- * a note stays legible over output that is not.
- */
+/** The token the terminal's own notes are printed in, which a dimmed screen leaves as it is. */
 const NOTE_TOKEN = "--terminal-note";
+
+/** What a note is printed in where the stylesheet gives none: the palette's bright black. */
+const NOTE_FALLBACK_INK = "\x1b[90m";
 
 /** The colours a dimmed screen gives back to the ground: the text and the sixteen the shell's own output is drawn in. */
 const DIMMED_COLOURS: ReadonlySet<string> = new Set([
@@ -140,12 +137,12 @@ function dimmed(colour: string, ground: string | undefined, keep: number): strin
  * stylesheet does not reach, as in a document without the panel's styles,
  * is left out, and the terminal keeps its own default for it. While the
  * screen is dimmed its output's colours stand a part of the way back to the
- * ground, and the terminal's own notes, in their slot, stay as they are.
+ * ground.
  */
 export function terminalTheme(host: Element, dim: boolean): ITheme {
-  const colours = resolvedColours(host, [...Object.values(THEME_TOKENS), NOTE_TOKEN]);
+  const colours = resolvedColours(host, Object.values(THEME_TOKENS));
   const ground = colours.get(THEME_TOKENS.background);
-  const theme = Object.fromEntries(
+  return Object.fromEntries(
     Object.entries(THEME_TOKENS).flatMap(([colour, token]) => {
       const value = colours.get(token);
       if (value === undefined) return [];
@@ -154,7 +151,15 @@ export function terminalTheme(host: Element, dim: boolean): ITheme {
       ];
     }),
   );
-  const note = colours.get(NOTE_TOKEN);
-  if (note === undefined) return theme;
-  return { ...theme, extendedAnsi: [note] };
+}
+
+/**
+ * The escape sequence a note is printed in: the note's colour as `host` draws
+ * it now, as 24-bit colour, which no palette slot of a shell's is given up
+ * for and no dimming reaches. A note already printed keeps the colour it
+ * had when it was.
+ */
+export function terminalNoteInk(host: Element): string {
+  const note = OPAQUE_RGB.exec(resolvedColours(host, [NOTE_TOKEN]).get(NOTE_TOKEN) ?? "");
+  return note === null ? NOTE_FALLBACK_INK : `\x1b[38;2;${note[1]};${note[2]};${note[3]}m`;
 }
