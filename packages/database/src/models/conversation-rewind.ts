@@ -4,7 +4,12 @@ import { Effect, Option, Result, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/sql";
 import { Database, type DatabaseServices, type StoreFailure } from "../core/query.js";
 import { conversations, messages, turns } from "../schemas/storage.js";
-import { holdConversationDispatch } from "./dispatch-lock.js";
+import {
+  DISPATCH_CLAIM,
+  DispatchClaimHeld,
+  dispatchClaimStands,
+  waitingOutDispatchClaim,
+} from "./dispatch-claim.js";
 import type { ConversationTarget } from "./writer.js";
 
 /**
@@ -33,6 +38,8 @@ export const REWIND_REFUSAL = {
   NOT_FOUND: "not_found",
   /** The line was taken into a turn already under way, or shares its turn with an earlier line. */
   INSIDE_TURN: "inside_turn",
+  /** A hand-over to the agent stayed under way for as long as the cut waits for it to end; nothing was cut. */
+  BUSY: "busy",
 } as const;
 
 export type RewindRefusal = (typeof REWIND_REFUSAL)[keyof typeof REWIND_REFUSAL];
@@ -308,14 +315,15 @@ const cutPoint = (conversationId: string, messageId: string) =>
     return Result.succeed({ seq, clientId, heard: turnId !== null, from });
   });
 
-/** The cut, under the conversation's dispatch and row locks, answering what it cut or why it could not. */
-const cut = (target: ConversationTarget, messageId: string) =>
+/** The cut, under the conversation's row lock and with no hand-over under way, answering what it cut or why it could not. */
+const cut = (target: ConversationTarget, messageId: string, place: number) =>
   Effect.gen(function* () {
     const { conversationId } = target;
-    // A hand-over under way finishes first, so a line it is writing is cut with the rest or not at all.
-    yield* holdConversationDispatch(conversationId);
     const held = yield* lockConversation(target);
     if (Option.isNone(held)) return Result.fail(REWIND_REFUSAL.NOT_FOUND);
+    // A hand-over under way ends first, so the line it hands is cut with the rest after the runtime heard it,
+    // and the stop that follows the cut stops whatever it started (`coder-host/rewind.ts`).
+    if (yield* dispatchClaimStands(conversationId, place)) return yield* new DispatchClaimHeld();
     const point = yield* cutPoint(conversationId, messageId);
     if (Result.isFailure(point)) return Result.fail(point.failure);
     const { seq, clientId, heard, from } = point.success;
@@ -337,8 +345,11 @@ const cut = (target: ConversationTarget, messageId: string) =>
 
 /**
  * Cuts the conversation back to just before the developer's line named, as
- * above, in one transaction; refused where the account holds no such line,
- * or the line sits inside a turn.
+ * above, in one transaction, once no hand-over to the agent is under way
+ * (`dispatch-claim.ts`), waiting for one as long as a claim can stand, since
+ * its caller has already stopped the agent for the cut; refused where the
+ * account holds no such line, where the line sits inside a turn, or where
+ * hand-overs kept the conversation claimed past that wait.
  */
 export function rewindConversation(
   target: ConversationTarget,
@@ -349,7 +360,15 @@ export function rewindConversation(
   DatabaseServices
 > {
   return Effect.flatMap(SqlClient.SqlClient, (client) =>
-    client.withTransaction(cut(target, messageId)),
+    waitingOutDispatchClaim(
+      target.conversationId,
+      (place) => client.withTransaction(cut(target, messageId, place)),
+      DISPATCH_CLAIM.EXPIRY,
+    ),
+  ).pipe(
+    Effect.catchTag("DispatchClaimHeld", () =>
+      Effect.succeed(Result.fail<RewindRefusal>(REWIND_REFUSAL.BUSY)),
+    ),
   );
 }
 
