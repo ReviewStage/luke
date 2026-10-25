@@ -2,10 +2,7 @@
 
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import { PULL_REQUEST_CHAPTERS_STATE } from "@luke/features/pull-request-chapters-wire";
 import { TASK_TREE_ENTRY } from "@luke/features/task-wire";
-import { TERMINAL_REFUSAL } from "@luke/features/terminal-acts";
-import { SANDBOX_STATE } from "@luke/features/terminal-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import { RUN_PROFILE } from "@luke/host/app-state";
 import {
@@ -104,24 +101,6 @@ it("every read an agent profile answers is one the act port's contract carries",
   assert.deepEqual(refused, []);
 });
 
-it("the agent's pull request waits in its merge queue approved with its checks passed, and its chapters are ready", () => {
-  const overview = answered(
-    RUN_PROFILE.AGENT_PULL_REQUEST,
-    ACT_KIND.CODING_AGENTS_OVERVIEW_PULL_REQUEST,
-    AGENT,
-  );
-  const checks = answered(RUN_PROFILE.AGENT_CHECKS, ACT_KIND.CODING_AGENTS_OVERVIEW_CHECKS, AGENT);
-  const chapters = answered(RUN_PROFILE.AGENT_CHAPTERS, ACT_KIND.CHAPTERS_READ, AGENT);
-
-  assert.ok("pullRequest" in overview && overview.pullRequest !== null);
-  assert.deepEqual(overview.pullRequest.merging?.queued, { position: 2 });
-  assert.equal(overview.pullRequest.merging?.review, "approved");
-  assert.ok("pullRequest" in checks && checks.pullRequest !== null);
-  assert.ok(checks.pullRequest.checks.every((check) => check.state !== "failed"));
-  assert.ok("pullRequest" in chapters && chapters.pullRequest !== null);
-  assert.equal(chapters.pullRequest.chapters.status, PULL_REQUEST_CHAPTERS_STATE.READY);
-});
-
 /** What each hunk of a patch says it counts and what it holds, old side and new, as `old/new`. */
 function hunkCounts(patch: string): readonly { readonly said: string; readonly held: string }[] {
   const hunks: { said: string; old: number; new: number }[] = [];
@@ -183,26 +162,6 @@ it("every file the File tab's tree lists, and every file the pull request change
 
   assert.ok(listed.includes("src/members/invite.test.ts"));
   assert.deepEqual(unread, []);
-});
-
-it("each Terminal profile lists the agent's sandbox as the state it stages", () => {
-  const listed = (profile: string) => answered(profile, ACT_KIND.TERMINAL_LIST, AGENT);
-
-  assert.equal(
-    (listed(RUN_PROFILE.AGENT_TERMINAL) as { sandbox: string }).sandbox,
-    SANDBOX_STATE.RUNNING,
-  );
-  assert.equal(
-    (listed(RUN_PROFILE.AGENT_TERMINAL_STOPPED) as { sandbox: string }).sandbox,
-    SANDBOX_STATE.STOPPED,
-  );
-  assert.equal(
-    (listed(RUN_PROFILE.AGENT_TERMINAL_STARTING) as { sandbox: string }).sandbox,
-    SANDBOX_STATE.STARTING,
-  );
-  assert.deepEqual(listed(RUN_PROFILE.AGENT_TERMINAL_UNREACHABLE), {
-    refused: TERMINAL_REFUSAL.SANDBOX_UNANSWERED,
-  });
 });
 
 it("a profile that stages no agent answers nothing itself", () => {

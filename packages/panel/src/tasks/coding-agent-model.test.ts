@@ -35,7 +35,6 @@ import {
   choiceOn,
   delegates,
   effortFor,
-  LUKE_PAID_REFUSAL,
   messageFailureNote,
   messageFailureWords,
   messageWords,
@@ -731,7 +730,10 @@ test("a Start refused for a missing credential says in one sentence which harnes
         text: "Connect Codex in Settings to message this agent.",
         provider: MODEL_PROVIDER.OPENAI,
       },
-      { reason: FAILURE_REASON.OTHER, text: LUKE_PAID_REFUSAL },
+      {
+        reason: FAILURE_REASON.OTHER,
+        text: "Luke's key no longer runs agents. Continue in a new one.",
+      },
     ],
   );
 });
