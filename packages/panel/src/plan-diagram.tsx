@@ -152,6 +152,10 @@ const DIAGRAM_FILE = "Diagram.svg";
 /** What the head's press that opens the diagram over the window says. */
 const FULL_SCREEN_LABEL = "Full screen";
 
+/** A figure's head: what it is, in the caption's size and the muted ink, and its presses at the row's end. */
+const HEAD_CLASS =
+  "plan-diagram-head mb-control-gap flex items-center justify-between text-caption-inline font-luke-semibold text-muted-foreground";
+
 /** The shell standing as one pane, a phone's, which the stylesheet reads off its `data-room` (`shell-room.ts`). */
 const NARROW_ROOM = '[data-room="narrow"]';
 
@@ -196,7 +200,14 @@ function diagramAlt(code: string): string {
 
 /** A diagram's picture, at its own size up to the column's. */
 function DiagramPicture({ url, alt }: { url: string; alt: string }): React.JSX.Element {
-  return <img className="plan-diagram-picture" src={url} alt={alt} decoding="async" />;
+  return (
+    <img
+      className="plan-diagram-picture mx-auto block h-auto max-w-full"
+      src={url}
+      alt={alt}
+      decoding="async"
+    />
+  );
 }
 
 /** The line a refused fence stands under. */
@@ -249,18 +260,18 @@ export function PlanDiagram({
       as={CARD_ELEMENT.FIGURE}
       corner={CARD_CORNER.CONTROL}
       padding={CARD_PADDING.NONE}
-      className="plan-diagram ph-no-capture"
+      className="plan-diagram ph-no-capture my-block-gap px-card-compact py-list-inset"
       aria-busy={drawingNow === undefined}
     >
-      <div className="plan-diagram-head">
+      <div className={HEAD_CLASS}>
         <span>Diagram</span>
         {picture === undefined ? null : (
-          <span className="plan-diagram-actions">
+          <span className="flex items-center gap-tight-gap">
             <Button onClick={() => setShowingCode((was) => !was)}>
               {showingCode ? "Show diagram" : "Show code"}
             </Button>
             {pictureShown ? (
-              <span className="plan-diagram-full-screen">
+              <span className="hidden pointer-coarse:flex shell-narrow:flex">
                 <Button onClick={() => setFullScreen(true)}>{FULL_SCREEN_LABEL}</Button>
               </span>
             ) : null}
@@ -269,7 +280,7 @@ export function PlanDiagram({
       </div>
       {drawingNow?.kind === DIAGRAM_DRAWING.REFUSED ? <RefusedLine onRetry={retry} /> : null}
       {pictureShown ? (
-        <div className="plan-diagram-stage">
+        <div className="flex min-w-0 justify-center">
           <PictureTile
             name={alt}
             pointerOpens={pointerOpens}
@@ -315,7 +326,7 @@ export function DiagramPreview({
     drawingNow ?? (previous === undefined ? undefined : heldDrawing(appearance, previous));
   return (
     <>
-      <div className="plan-diagram-head">
+      <div className={HEAD_CLASS}>
         <span>Preview</span>
       </div>
       {shown?.kind === DIAGRAM_DRAWING.DRAWN ? (

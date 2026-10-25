@@ -577,6 +577,24 @@
      line of what holds it, as a card's aside does. */
   --radius-choice-box: var(--luke-space-4);
   --text-caption-inline: var(--luke-type-caption-size);
+
+  /* The panel's task surfaces (`@luke/panel`'s tasks.css, moving onto
+     utilities): the gaps a byline's phrases and a line's parts stand apart
+     by, and the weights words are set in where no type role names them. */
+  --spacing-field-gap: var(--luke-field-gap);
+  --spacing-item-gap: var(--luke-item-gap);
+  --font-weight-luke-medium: var(--luke-weight-medium);
+  --font-weight-luke-semibold: var(--luke-weight-semibold);
+  /* The plan's document (`plan-body.tsx`): a section's byline, at most a
+     face and a short date, and the row it shares with the ⋯, which hangs a
+     step past the column (both measured on `.plan-body`, tasks.css, where the
+     heading's room reads them too); the line under "Edited by" that Dismiss
+     overhangs; and the still wash of Luke's accent on a section changed since
+     the last look. */
+  --spacing-plan-byline-room: var(--plan-byline-room);
+  --spacing-plan-unit-row: calc(var(--plan-unit-row-room) + var(--luke-space-6));
+  --spacing-plan-changed-note: 22px; /* off-scale: the line's room, which its button overhangs */
+  --color-plan-changed: color-mix(in srgb, var(--accent) 9%, transparent);
 }
 
 /* The conditions a control answers beside its states: a finger's pointer,
@@ -585,6 +603,9 @@
    `--luke-fold` (`fold-folded:`, `fold-bare:`; README's "Folding in a
    narrow container"). */
 @custom-variant pointer-coarse (@media (pointer: coarse));
+/* The shell standing as one pane, a phone's, as its root says
+   (`data-luke-room`, the panel's `shell-room.ts`). */
+@custom-variant shell-narrow (:where(:root)[data-luke-room="narrow"] .desktop-shell &);
 @custom-variant fold-folded (@container style(--luke-fold: folded));
 @custom-variant fold-bare (@container style(--luke-fold: bare));
 

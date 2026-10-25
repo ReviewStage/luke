@@ -14,6 +14,11 @@ import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test, vi } from "vitest";
 import { Message, MessageAction, MessageContent } from "../ai-elements/message.js";
+import {
+  UNIT_ATTRIBUTED_CLASS,
+  UNIT_BYLINE_CLASS,
+  UNIT_MORE_CLASS,
+} from "../tasks/plan-unit-look.js";
 import { layContainersAt } from "../testing/container-width.js";
 
 /**
@@ -70,16 +75,20 @@ function drawn(piece: Piece, selector: string): HTMLElement {
   return element;
 }
 
+/** How opaque `element` is drawn, from 0 to 1. Note that a utility's opacity is a percentage (`opacity-0` is `0%`), which jsdom answers as written rather than as the number a browser computes. */
+function opacityOf(element: Element): number {
+  const value = getComputedStyle(element).opacity;
+  return value.endsWith("%") ? Number.parseFloat(value) / 100 : Number.parseFloat(value);
+}
+
 /** Whether `element` is drawn to be seen and pressed: opaque, and it or what it holds to press taking the pointer. */
 function standing(element: Element, press: Element = element): boolean {
-  return (
-    getComputedStyle(element).opacity === "1" && getComputedStyle(press).pointerEvents !== "none"
-  );
+  return opacityOf(element) === 1 && getComputedStyle(press).pointerEvents !== "none";
 }
 
 /** Whether `element` is drawn faded out. */
 function faded(element: Element): boolean {
-  return getComputedStyle(element).opacity === "0";
+  return opacityOf(element) === 0;
 }
 
 /** Whether a row's metadata is drawn to be read. */
@@ -124,8 +133,8 @@ const HOVER_ONLY: readonly {
   {
     name: "a plan section's byline",
     piece: {
-      className: "plan-unit-attributed",
-      children: [{ tag: "span", className: "plan-unit-byline", children: [{ tag: "button" }] }],
+      className: UNIT_ATTRIBUTED_CLASS,
+      children: [{ tag: "span", className: UNIT_BYLINE_CLASS, children: [{ tag: "button" }] }],
     },
     control: ".plan-unit-byline",
     press: ".plan-unit-byline > button",
@@ -133,8 +142,8 @@ const HOVER_ONLY: readonly {
   {
     name: "a plan section's ⋯",
     piece: {
-      className: "plan-unit-attributed",
-      children: [{ tag: "span", className: "plan-unit-more" }],
+      className: UNIT_ATTRIBUTED_CLASS,
+      children: [{ tag: "span", className: UNIT_MORE_CLASS }],
     },
     control: ".plan-unit-more",
   },

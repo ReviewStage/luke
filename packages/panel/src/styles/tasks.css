@@ -1,22 +1,3 @@
-/* The whiteboard fills the tab edge to edge, between the header and the
-   microphone row: the panel is its frame. Excalidraw draws to the size of
-   the box it is given, so the canvas's box is the tab's own. Note that the
-   board isolates its own stacking, because Excalidraw raises its toolbar,
-   hints, and menus by z-index: unisolated they rose through the side panel's
-   tab strip and over the "+" menu dropped from it, while isolated they still
-   layer among themselves as Excalidraw says. */
-.task-board {
-  position: relative;
-  isolation: isolate;
-  overflow: hidden;
-  color: var(--luke-color-text-muted);
-}
-
-.task-board-canvas {
-  position: absolute;
-  inset: 0;
-}
-
 /* A board narrower than Excalidraw's phone breakpoint draws its phone
    toolbar, a row of tools wider than the side panel at its narrowest,
    centred and cut off at both edges. There the row wraps within the board
@@ -83,19 +64,6 @@
   }
 }
 
-/* The document is the record: it reads as text and is selectable, so Cmd-C
-   on a selection copies it. Note that it sets its own accent, because
-   `--accent` is only ever set by a `data-state` ancestor and nothing above
-   the plan carries one: unset, the caret, the writing ring, and the fresh tint
-   all drew nothing. Luke is the one writing, so the accent is his. It is
-   the block inside the `ScrollArea` the document scrolls in. */
-.plan-document-body {
-  --accent: var(--voice-luke);
-  padding: var(--luke-list-inset) var(--luke-space-2) var(--luke-list-inset);
-  -webkit-user-select: text;
-  user-select: text;
-}
-
 /* The caret a save is typed behind: solid, as a caret is while someone types.
    Note that it and the selection are inline, so they take none of the gap
    a note (`@luke/ui`'s prose.css) opens between a list item's blocks, which as an inline-block
@@ -153,30 +121,12 @@
   }
 }
 
-/* The line under a document's title, a plan's and an issue's alike
-   (`DocumentByline`): who created it and when, then its last edit. Each
-   phrase wraps whole onto the next line rather than leaving a name cut
-   from its time. */
-.plan-byline {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--luke-tight-gap) var(--luke-field-gap);
-  margin: 0 0 var(--luke-block-gap);
-  color: var(--luke-color-text-muted);
-  font-size: var(--luke-type-caption-size);
-  line-height: var(--luke-type-caption-leading);
-}
-
-/* The byline's presses, its people and the time that opens the version
-   history, each take a press a finger's height on a coarse pointer, and at
-   least as wide, centred on what they draw; the lines between them part a
-   little further, so one line's press does not cover the next's words. The
-   time is drawn whole (`TEXT_BUTTON_LINES.WHOLE`), which takes its own. */
+/* The byline's people (`DocumentByline`) each take a press a finger's
+   height on a coarse pointer, and at least as wide, centred on what they
+   draw; its lines part a little further there (`pointer-coarse:`), so one
+   line's press does not cover the next's words. The time is drawn whole
+   (`TEXT_BUTTON_LINES.WHOLE`), which takes its own. */
 @media (pointer: coarse) {
-  .plan-byline {
-    row-gap: var(--luke-block-gap);
-  }
-
   .plan-byline [data-actor-ref] {
     position: relative;
     overflow: visible;
@@ -193,20 +143,13 @@
   }
 }
 
-/* Who last edited the plan template, under its title in the muted meta weight. */
-.plan-edit-note {
-  margin: 0 0 var(--luke-block-gap);
-  color: var(--luke-color-text-muted);
-  font-size: var(--luke-type-caption-size);
-  line-height: var(--luke-type-caption-leading);
-}
-
 /* Who last changed a section, and when: the writer's face and a few
-   letters at the end of its heading's row, shown while the pointer or the
-   keyboard is on the section. It fades on opacity alone, so nothing moves.
+   letters at the end of its heading's row (`plan-body.tsx`'s `bylineOf`).
    `--plan-byline-room` holds a face and the widest of those letters, a date
    such as "Sep 30"; `--plan-unit-row-room` is what the row takes of the
-   column with its ⋯, which hangs `--luke-space-6` past the column's edge. */
+   column with its ⋯, which hangs `--luke-space-6` past the column's edge.
+   The theme reads both (`plan-byline-room`, `plan-unit-row`), and so does
+   the heading's room below. */
 .plan-body {
   --plan-byline-room: 64px;
   --plan-unit-row-room: calc(
@@ -215,10 +158,6 @@
     var(--luke-control-height) -
     var(--luke-space-6)
   );
-}
-
-.plan-unit-attributed {
-  position: relative;
 }
 
 /* A plan's task item the developer can tick from the drawn plan says so. */
@@ -235,84 +174,16 @@
   padding-right: var(--plan-unit-row-room);
 }
 
-/* The byline and the section's ⋯ stand in one row at the heading's line, a
-   control tall, each centred on it, so the line reads level with the button.
-   The row hangs past the column's edge by `--luke-space-6`, as the ⋯ always has,
-   and holds the room its heading keeps; where a section has no ⋯, the row
-   keeps its room, so every byline ends at one edge. It takes no pointer
-   itself, only its byline and its ⋯ do. */
-.plan-unit-row {
-  position: absolute;
-  top: 0;
-  right: calc(var(--luke-space-6) * -1);
-  width: calc(var(--plan-unit-row-room) + var(--luke-space-6));
-  display: flex;
-  height: var(--luke-control-height);
-  align-items: center;
-  justify-content: flex-end;
-  gap: var(--luke-tight-gap);
-  pointer-events: none;
-}
-
+/* Where a section has no ⋯, its byline's row (`plan-body.tsx`'s
+   `attributed`) keeps the ⋯'s room, so every byline ends at one edge. */
 .plan-unit-row:not(:has(.plan-unit-more)) {
   padding-right: calc(var(--luke-control-height) + var(--luke-space-4));
 }
 
-.plan-unit-byline {
-  min-width: 0;
-  max-width: var(--plan-byline-room);
-  /* Past the ring an actor's hover fill bleeds by, so the ring is drawn whole. */
-  overflow: clip;
-  overflow-clip-margin: var(--luke-focus-ring-room);
-  color: var(--luke-color-text-muted);
-  font-size: var(--luke-type-caption-size);
-  line-height: var(--luke-type-caption-leading);
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity var(--luke-duration-hover) var(--luke-motion-exit);
-}
-
-.plan-unit-attributed:focus-within .plan-unit-byline {
-  opacity: 1;
-}
-
-/* Note that the pointer's own reveal stands only where there is a hover,
-   because iOS plays a first tap as a hover, and a reveal spends the tap. */
-@media (hover: hover) {
-  .plan-unit-attributed:hover .plan-unit-byline {
-    opacity: 1;
-  }
-}
-
-/* A section's ⋯, which copies its link (`plan-body.tsx`): the row's end,
-   shown as the byline is. Note that it stays drawn while its menu stands, as
-   every ⋯ does. */
-.plan-unit-more {
-  display: flex;
-  flex: none;
-  opacity: 0;
-  pointer-events: auto;
-  transition: opacity var(--luke-duration-hover) var(--luke-motion-exit);
-}
-
-.plan-unit-attributed:focus-within .plan-unit-more,
+/* A section's ⋯ (`plan-body.tsx`'s `UnitMenu`) stays drawn while its menu
+   stands, as every ⋯ does. */
 .plan-unit-more:has([aria-expanded="true"]) {
   opacity: 1;
-}
-
-@media (hover: hover) {
-  .plan-unit-attributed:hover .plan-unit-more {
-    opacity: 1;
-  }
-}
-
-/* A screen with no hover shows a section's byline and its ⋯ at rest, in
-   the room they keep. */
-@media (hover: none) {
-  .plan-unit-attributed .plan-unit-byline,
-  .plan-unit-attributed .plan-unit-more {
-    opacity: 1;
-  }
 }
 
 /* A chip held with its punctuation (`.link-glued`, `@luke/ui`'s prose.css) is capped
@@ -331,90 +202,11 @@
   max-width: var(--luke-inline-ref-pill-stated-width);
 }
 
-/* The room a date picker opened from words at rest hangs in
-   (`words-dates.tsx`): laid over the words whole, so the picker is placed
-   from the room's own box wherever it stands, and only the picker takes
-   the pointer. */
-.words-date-room {
-  position: absolute;
-  inset: 0;
-  margin: 0;
-  pointer-events: none;
-}
-
-.words-date-room > * {
-  pointer-events: auto;
-}
-
-/* Its foot, ruled off from the switches across the card's whole width,
-   holds Clear as a menu's row (`@luke/ui`'s row Button): the row stands
-   out in the card's inset by its own, so its word lines up with the fields
-   and the rows' names above it, and its fill keeps a row's inset from the
-   card's edges, as a menu's pinned foot does. */
-.date-picker-foot {
-  margin: 0 calc(-1 * var(--luke-space-16)) calc(-1 * var(--luke-space-8));
-  padding: var(--luke-tight-gap) var(--luke-row-inset) 0;
-  border-top: 1px solid var(--luke-color-border);
-}
-
 /* A narrowed list stands under its kind's crumb, as an MCP server's page
    stands under its own; a kind typed with its colon has no back arrow, so
    its glyph keeps the rows' inset. */
 .mention-menu-crumb:not(:has(button)) {
   padding-left: calc(var(--row-inset) + var(--luke-menu-inset));
-}
-
-/* Its way back draws its glyph alone, named still by its hint. */
-.mention-menu-crumb {
-  --luke-fold: folded;
-}
-
-/* A Markdown document's editor (`markdown-editor.tsx`) is the room its
-   toolbar, its / menu, and its @ list hang in. */
-.markdown-editor {
-  position: relative;
-}
-
-/* The byline's writer hangs their card, and its time, where the window
-   offers the version history, opens it on the section's last change, a
-   press drawn as the line over the document's is. Note that both take the
-   pointer although the line fades out, because a pointer on them is on
-   their section, which shows it. */
-.plan-unit-byline > :is([data-actor-ref], button) {
-  pointer-events: auto;
-}
-
-/* A section changed since the developer last looked: a still wash of Luke's
-   accent behind it, the hover wash's shape, standing until they dismiss it.
-   Nothing about it moves, so reduced motion has nothing to hold. */
-.plan-changed {
-  position: relative;
-  isolation: isolate;
-}
-
-.plan-changed::after {
-  position: absolute;
-  z-index: -1;
-  inset: calc(var(--luke-space-2) * -1) calc(var(--luke-space-6) * -1);
-  border-radius: var(--luke-radius-6);
-  background: color-mix(in srgb, var(--accent) 9%, transparent);
-  content: "";
-  pointer-events: none;
-}
-
-/* How many sections changed since the last look, under the "Edited by"
-   line in the caption role, with its dismissal. The line keeps the room it
-   always had and the Dismiss button overhangs it, so the button does not
-   push the document down. */
-.plan-changed-note {
-  display: flex;
-  height: 22px; /* off-scale: the line's room under "Edited by", which the button overhangs */
-  align-items: center;
-  gap: var(--luke-item-gap);
-  margin: calc(-1 * var(--luke-space-6)) 0 var(--luke-space-12);
-  color: var(--luke-color-text-muted);
-  font-size: var(--luke-type-caption-size);
-  line-height: var(--luke-type-caption-leading);
 }
 
 /* The text open in its editor, in the document's own type, so the words do
@@ -547,85 +339,12 @@
   white-space: pre-wrap;
 }
 
-/* A Mermaid fence drawn as its diagram (`plan-diagram.tsx`): a picture the
-   diagram bundle drew, on the section's fill, its code a press away. The
-   picture is an `<img>`, so its own size holds it and the column bounds it.
-   Its frame is `@luke/ui`'s Card. */
-.plan-diagram {
-  margin: var(--luke-block-gap) 0;
-  padding: var(--luke-list-inset) var(--luke-card-inset-compact);
-}
-
-.plan-diagram-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: var(--luke-control-gap);
-  color: var(--luke-color-text-muted);
-  font-size: var(--luke-type-caption-size);
-  font-weight: var(--luke-weight-semibold);
-}
-
-.plan-diagram-picture {
-  display: block;
-  max-width: 100%;
-  height: auto;
-  margin: 0 auto;
-}
-
-.plan-diagram-actions {
-  display: flex;
-  align-items: center;
-  gap: var(--luke-tight-gap);
-}
-
-/* A diagram opens over the window where its column is too narrow to read it
-   (`plan-diagram.tsx`): its head offers Full screen and a tap on the picture
-   does the same, in a narrow room or on a coarse pointer. A wide room with a
-   mouse offers neither, as before. */
-.plan-diagram-full-screen {
-  display: none;
-}
-
-:where(:root)[data-luke-room="narrow"] .desktop-shell .plan-diagram-full-screen {
-  display: flex;
-}
-
-/* The picture's press stands centred where the picture did. With a mouse in a
-   wide room a pointer's press opens nothing and falls through to the
-   section (`pointerOpens`); a key's press still opens it. */
-.plan-diagram-stage {
-  display: flex;
-  min-width: 0;
-  justify-content: center;
-}
-
-@media (pointer: coarse) {
-  .plan-diagram-full-screen {
-    display: flex;
-  }
-}
-
-/* A fence Mermaid refused says so over its code, in the failure's red. */
-/* In the editor the fence stays code, and its diagram stands under it,
-   out of the text: nothing in it takes the caret or a selection. */
-.plan-diagram-preview {
-  margin-top: var(--luke-tight-gap);
-  user-select: none;
-}
-
-/* What stands under the editor: a failed save, or Luke's change and the
-   choice it asks, in the caption role. Note that it outranks the editor's
-   own gap between its children by coming later. */
+/* What stands under the editor (`markdown-editor.tsx`'s
+   `EDITOR_NOTE_CLASS`) opens its own gap over it. Note that it is a rule
+   here rather than a utility, because it has to outrank the editor's own gap
+   between its children above, which a utility's layer never would. */
 .plan-editor-note {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--luke-control-gap);
   margin: var(--luke-item-gap) 0 0;
-  color: var(--luke-color-text-muted);
-  font-size: var(--luke-type-caption-size);
-  line-height: var(--luke-type-caption-leading);
 }
 
 /* The transcript's frame (../ai-elements/conversation.tsx): a log that
