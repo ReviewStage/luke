@@ -4,13 +4,19 @@
  * A transcript of hundreds of turns would be a column of buttons if every
  * turn's actions stood at rest, so a `MessageActions` bar inside a
  * `MessageFrame` stays hidden, and takes no pointer, until the pointer rests
- * on the turn or the keyboard is on one of its actions (message.css). A
+ * on the turn or the keyboard is on one of its actions. A
  * screen with no hover has none to show them by, so a frame that
  * `revealActionsOnTap` shows them at a tap on the turn, anywhere but a
  * control of its own, and hides them at another. The screen is asked at the
  * tap, never kept, so a mouse changes nothing, and a press that ends a
  * selection of the turn's words leaves them be. The turn's own look, who
  * said it and where it stands in the column, is its caller's.
+ *
+ * The reveal is drawn in the Tailwind theme's utilities: the frame is the
+ * group its bar answers (`group/message`), the pointer's rest counting only
+ * where there is a hover, a tap's only where there is none, and a bar whose
+ * action holds a hover card standing (`Tooltip` marks it described) while
+ * the pointer crosses onto the card, off the turn.
  */
 
 import { type HTMLAttributes, type ReactNode, useState } from "react";
@@ -26,6 +32,13 @@ const NO_HOVER = "(hover: none)";
  * One turn, holding its words and its actions. `className` is the caller's
  * skin for the turn; the frame draws nothing of its own but the reveal.
  */
+/** The turn, the group its actions answer. */
+const FRAME = "luke-message group/message";
+
+/** The bar, hidden and taking no pointer until the turn, its keyboard, or its hover card asks it up. */
+const ACTIONS =
+  "luke-message-actions pointer-events-none flex flex-none items-center gap-luke-2 opacity-0 transition-opacity duration-(--luke-duration-hover) ease-motion-exit focus-within:pointer-events-auto focus-within:opacity-100 has-[[aria-describedby]]:pointer-events-auto has-[[aria-describedby]]:opacity-100 group-hover/message:pointer-events-auto group-hover/message:opacity-100 no-hover:group-data-[actions-shown=true]/message:pointer-events-auto no-hover:group-data-[actions-shown=true]/message:opacity-100";
+
 export function MessageFrame({
   revealActionsOnTap = false,
   className,
@@ -49,7 +62,7 @@ export function MessageFrame({
     // biome-ignore lint/a11y/useKeyWithClickEvents: as above, the keyboard needs no key here, since focusing an action shows the bar.
     <div
       {...props}
-      className={className === undefined ? "luke-message" : `luke-message ${className}`}
+      className={className === undefined ? FRAME : `${FRAME} ${className}`}
       data-actions-shown={actionsShown ? "true" : undefined}
       onClick={revealActionsOnTap ? tap : undefined}
     />
@@ -62,5 +75,5 @@ export function MessageFrame({
  * stay selectable.
  */
 export function MessageActions({ children }: { children?: ReactNode }): React.JSX.Element {
-  return <div className="luke-message-actions">{children}</div>;
+  return <div className={ACTIONS}>{children}</div>;
 }

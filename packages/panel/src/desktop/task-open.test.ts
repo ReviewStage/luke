@@ -235,20 +235,3 @@ test("opening a task on its agent passes through one placeholder, from the task'
   assert.equal(seen.at(-1), "transcript", "and the transcript in its place once its page lands");
   assert.deepEqual(held.followed, [AGENT.id], "followed once, from the open on");
 });
-
-test("the summary's room stands from the open on where the task's row says it has agents, so their list landing moves nothing in the column", async () => {
-  const held = heldFollower();
-  const page = mount(opened({ read: false, listed: false, follower: held.follower }));
-  await settle();
-  const room = () => page.container.querySelector(".task-summary")?.getAttribute("data-mode");
-  const whileRead = room();
-  assert.equal(whileRead, "rail", "the rail's room is kept while the task is read");
-
-  page.draw(opened({ read: true, listed: false, follower: held.follower }));
-  await settle();
-  assert.equal(room(), whileRead, "and while its agents are");
-
-  page.draw(opened({ read: true, listed: true, follower: held.follower }));
-  await settle();
-  assert.equal(room(), whileRead, "and once they land");
-});

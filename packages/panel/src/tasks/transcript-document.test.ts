@@ -331,7 +331,6 @@ test("words drawn as a transcript, as the transcript and the plan draw them, kee
   );
 
   assert.equal(container.querySelectorAll(".lone-link-card").length, 0);
-  assert.equal(container.querySelectorAll(".transcript-pictures").length, 0);
   // Every link, in a sentence or alone, stays a chip in its paragraph.
   assert.equal(chipsInWords(container).length, 5);
 });

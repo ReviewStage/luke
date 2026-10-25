@@ -1,5 +1,9 @@
 /* visually-hidden.css -- words read by assistive tech and drawn nowhere, as
-   a shared control says its state to a reader beside a glyph or a ring. */
+   a shared control says its state to a reader beside a glyph or a ring.
+   The one rule stands here rather than in a component's utilities because
+   other components put the class on words of their own (a nav item's count,
+   a table's sort, a skeleton's status); words given a step (`data-under`)
+   are hidden by `visually-hidden.tsx`'s container query instead. */
 
 @layer components {
   .luke-visually-hidden:not([data-under]) {
@@ -12,37 +16,5 @@
     border: 0;
     clip-path: inset(50%);
     white-space: nowrap;
-  }
-
-  /* Words given a step are drawn until their room (a container named
-     `luke-room`) is narrower than it. */
-  /* off-scale: 520px, the same line as badge.css's snug step */
-  @container luke-room (width < 520px) {
-    .luke-visually-hidden[data-under="snug"] {
-      position: absolute;
-      overflow: hidden;
-      width: 1px;
-      height: 1px;
-      margin: -1px;
-      padding: 0;
-      border: 0;
-      clip-path: inset(50%);
-      white-space: nowrap;
-    }
-  }
-
-  /* off-scale: 440px, the same line as badge.css's tight step */
-  @container luke-room (width < 440px) {
-    .luke-visually-hidden[data-under="tight"] {
-      position: absolute;
-      overflow: hidden;
-      width: 1px;
-      height: 1px;
-      margin: -1px;
-      padding: 0;
-      border: 0;
-      clip-path: inset(50%);
-      white-space: nowrap;
-    }
   }
 }

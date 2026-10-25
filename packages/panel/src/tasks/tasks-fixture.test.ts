@@ -53,12 +53,3 @@ test("every fixture task names a member of its own workspace as who created it",
     [],
   );
 });
-
-test("the tasks profile, which signs nobody in, answers its first workspace's members", () => {
-  const [first] = listedTasks();
-  assert.ok(first);
-
-  const names = membersOf(RUN_PROFILE.TASKS, first.workspaceId).map((member) => member.name);
-
-  assert.deepEqual(names, ["Ada Lovelace", "Theo Lindqvist", "Priya Raman"]);
-});

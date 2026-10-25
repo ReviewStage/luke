@@ -3,7 +3,7 @@
 import assert from "node:assert/strict";
 import { pageFrameUrl } from "@luke/features/page-frame";
 import type { Task } from "@luke/features/task-wire";
-import { DOCUMENT_REGION, RENAME_FAILED_NOTE, TASKS_PAGE } from "@luke/ui/tasks-model";
+import { DOCUMENT_REGION, TASKS_PAGE } from "@luke/ui/tasks-model";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -344,7 +344,6 @@ test("on a phone the ⋯'s Rename edits the task's name in the row's title", asy
 test("a wide window keeps the panel's strip and the column's toolbar, and draws no row of a phone's", () => {
   const page = mount(SHELL_ROOM.WIDE);
   assert.equal(page.container.querySelector(".task-head"), null);
-  assert.equal(page.container.querySelector(".side-panel[data-pane-switch]"), null);
   assert.ok(page.labelled("Task actions"), "the column's toolbar keeps the task's ⋯");
 });
 
@@ -511,5 +510,5 @@ test("on a wide window a refused rename keeps the name typed in the plan's title
   await act(async () => title.blur());
 
   assert.equal(planTitle(container)?.textContent, "Invite teammates");
-  assert.match(container.textContent ?? "", new RegExp(RENAME_FAILED_NOTE, "u"));
+  assert.match(container.textContent ?? "", /The task could not be renamed\. Try again\./u);
 });

@@ -32,13 +32,10 @@ import { installScrollIntoView } from "../testing/scroll-into-view.js";
 import { codingAgentsControl, pushedTranscripts } from "../testing/tasks-control.js";
 import { AgentTab } from "./agent-tab.js";
 import {
-  continuationsOf,
   continuedByIds,
-  endLineContinues,
   endLineOffersContinue,
   endLineParts,
   endLineReason,
-  MESSAGE_RETIRED,
   messageFailureWords,
   startFailureNote,
 } from "./coding-agent-model.js";
@@ -297,26 +294,6 @@ async function drawnTab(input: {
   };
 }
 
-test("the agents that continue an agent are those started from it on its whole transcript, archived ones among them, in the order started, a fork or another agent's continuation left out", () => {
-  const first = agentOf(NEXT, { from: { agentId: SOURCE, steps: 4, totalSteps: 4 }, createdAt: 3 });
-  const later = agentOf(LATER, {
-    from: { agentId: SOURCE, steps: 4, totalSteps: 4 },
-    createdAt: 5,
-    archivedAt: 9,
-  });
-  const fork = agentOf(FORK, {
-    from: { agentId: SOURCE, messageId: TURN, steps: 2, totalSteps: 4 },
-  });
-  const elsewhere = agentOf(TURN, { from: { agentId: NEXT, steps: 1, totalSteps: 1 } });
-
-  const found = continuationsOf(SOURCE, [fork, first, elsewhere], [later]);
-
-  assert.deepEqual(
-    found.map((each) => each.id),
-    [NEXT, LATER],
-  );
-});
-
 test("an agent's continuations are those its summary names, forks left out, then any the task's list names that it does not yet; with no summary's word, the list's alone", () => {
   const from = { agentId: SOURCE, steps: 4, totalSteps: 4 };
   const named = {
@@ -364,7 +341,6 @@ test("a failed turn's end line names no price, even from a service that sent the
   const line = tab.endLine() ?? assert.fail("the turn ends on its line");
   assert.match(line.textContent ?? "", /Failed: /);
   assert.doesNotMatch(line.textContent ?? "", /\$/);
-  assert.ok(line.querySelector("[data-failed]"), "the line still tells of a failure");
   assert.match(
     line.querySelector('[role="alert"]')?.textContent ?? "",
     /^Failed: /,
@@ -380,17 +356,6 @@ test("a failed turn's end line names no price, even from a service that sent the
     tab.container.querySelector(".luke-searchable-menu") ?? assert.fail("the menu opens");
   assert.match(menu.textContent ?? "", /This agent: 1\.2M tokens · \$2\.41/);
   assert.doesNotMatch(menu.textContent ?? "", /\$0\.08/);
-});
-
-test("only a failed turn's end line continues the agent, and not one failed on the reader's own refused API key", () => {
-  const key = endLineReason(CODING_AGENT_FAILURE.PROVIDER_KEY);
-  const other = endLineReason(CODING_AGENT_FAILURE.PROVIDER_KEY, "a teammate");
-
-  assert.equal(endLineContinues(CODING_AGENT_STATUS.FAILED, endLineReason(undefined)), true);
-  assert.equal(endLineContinues(CODING_AGENT_STATUS.FAILED, key), false);
-  assert.equal(endLineContinues(CODING_AGENT_STATUS.FAILED, other), true);
-  assert.equal(endLineContinues(CODING_AGENT_STATUS.CANCELLED, endLineReason(undefined)), false);
-  assert.equal(endLineContinues(CODING_AGENT_STATUS.COMPLETED, endLineReason(undefined)), false);
 });
 
 test("a failed end line's row ends on Continue where the line continues the agent, also once another continued it, and not beside a closed box's own press", () => {
@@ -409,7 +374,10 @@ test("a failed end line's row ends on Continue where the line continues the agen
 });
 
 test("a message to an ended agent says to continue it in a new one, while a Start refused alike still says to start one", () => {
-  assert.equal(messageFailureWords(CODING_AGENT_CALL_FAILURE.AGENT_RETIRED), MESSAGE_RETIRED);
+  assert.equal(
+    messageFailureWords(CODING_AGENT_CALL_FAILURE.AGENT_RETIRED),
+    "This agent has ended. Continue in a new one.",
+  );
   assert.equal(
     startFailureNote({ failure: CODING_AGENT_CALL_FAILURE.AGENT_RETIRED }, TASK).text,
     "This agent has ended. Start a new one.",

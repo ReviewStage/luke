@@ -1,36 +1,15 @@
-/* saved-tick.css -- an autosave's Saved: a caption's words in the muted ink
-   after the check in the complete ink, fading and springing in, standing for
-   the confirm delay, then fading out over the exit. Its region takes no room
-   until the tick arrives. */
+/* saved-tick.css -- an autosave's Saved tick, fading and springing in,
+   standing for the confirm delay, then fading out over the exit. The tick
+   is drawn in utilities (`saved-tick.tsx`); only its keyframes and the rule
+   that plays them stand here. */
 
 @layer components {
-  .luke-saved-tick-region {
-    display: inline-flex;
-    min-width: 0;
-  }
-
   .luke-saved-tick {
-    display: inline-flex;
-    align-items: center;
-    gap: var(--luke-space-4);
-    color: var(--luke-color-text-muted);
-    font-family: var(--luke-font-sans);
-    font-size: var(--luke-type-caption-size);
-    line-height: var(--luke-type-caption-leading);
-    font-weight: var(--luke-type-caption-weight);
-    white-space: nowrap;
     animation:
       luke-saved-tick-fade var(--luke-duration-quick) var(--luke-motion-exit) backwards,
       luke-saved-tick-pop var(--luke-duration-fast) var(--luke-spring-fast) backwards,
       luke-saved-tick-out var(--luke-duration-exit) var(--luke-motion-exit)
       calc(var(--luke-duration-fast) + var(--luke-confirm-delay)) forwards;
-  }
-
-  .luke-saved-tick > svg {
-    flex: none;
-    width: var(--luke-type-caption-leading);
-    height: var(--luke-type-caption-leading);
-    color: var(--luke-color-complete);
   }
 
   @keyframes luke-saved-tick-fade {
