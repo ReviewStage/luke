@@ -36,6 +36,7 @@ afterEach(() => {
 /** The log's box as the window would lay it out: its height, the room it shows, and every scroll written to it. */
 interface StandInBox {
   height: number;
+  room: number;
   readonly writes: number[];
 }
 
@@ -43,7 +44,7 @@ interface StandInBox {
 function layOut(box: HTMLElement, layout: StandInBox): void {
   let top = 0;
   Object.defineProperty(box, "scrollHeight", { configurable: true, get: () => layout.height });
-  Object.defineProperty(box, "clientHeight", { configurable: true, get: () => 100 });
+  Object.defineProperty(box, "clientHeight", { configurable: true, get: () => layout.room });
   Object.defineProperty(box, "scrollTop", {
     configurable: true,
     get: () => top,
@@ -86,7 +87,7 @@ function mount(lines: readonly string[], onNearTop?: () => void) {
   roots.push(root);
   draw(root, lines, onNearTop);
   const box = container.querySelector<HTMLElement>("[role=log]") ?? assert.fail("the log");
-  const layout: StandInBox = { height: 300, writes: [] };
+  const layout: StandInBox = { height: 300, room: 100, writes: [] };
   layOut(box, layout);
   return { root, box, layout };
 }
@@ -130,6 +131,44 @@ test("a log the browser shifts down to hold its place, as lines above it grow, s
   layout.writes.splice(0);
   act(() => relayout());
   assert.deepEqual(layout.writes, [500], "the log is taken the rest of the way to its end");
+});
+
+/** Grows the log's box to `room` as lines land to `height` in the same frame, and hears the scroll the browser sends a frame later, its position pulled back to the box's end before the lines landed. */
+function grownAsLinesLand(
+  box: HTMLElement,
+  layout: StandInBox,
+  room: number,
+  height: number,
+): void {
+  const pulledTo = layout.height - room;
+  layout.room = room;
+  layout.height = height;
+  scroll(box, pulledTo);
+}
+
+test("a log on its newest line stays on it when the window grows its box as lines land, the browser pulling its scroll up", () => {
+  const { box, layout } = mount(["one", "two"]);
+  scroll(box, 200);
+  layout.writes.splice(0);
+  grownAsLinesLand(box, layout, 160, 420);
+  assert.deepEqual(layout.writes, [140, 420], "the log is taken back to its new end");
+  layout.writes.splice(0);
+  layout.height = 480;
+  act(() => relayout());
+  assert.deepEqual(layout.writes, [480], "and goes on following its newest line");
+});
+
+test("a reader's wheel just before a scroll up takes the log off its newest line, though its box grew", () => {
+  const { box, layout } = mount(["one", "two"]);
+  scroll(box, 200);
+  act(() => {
+    box.dispatchEvent(new WheelEvent("wheel", { bubbles: true, deltaY: -60 }));
+  });
+  grownAsLinesLand(box, layout, 160, 420);
+  layout.writes.splice(0);
+  layout.height = 480;
+  act(() => relayout());
+  assert.deepEqual(layout.writes, [], "the reader's place stands");
 });
 
 /** Stands in for each line's place in the log: 50px a line, one under another. */
