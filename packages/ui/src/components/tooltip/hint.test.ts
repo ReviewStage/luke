@@ -877,7 +877,11 @@ test("words cut short inside a control hanging a card raise no pill over its car
         { type: "button", "data-row": "", "aria-describedby": undefined },
         createElement(Tooltip, {
           label: "Fix the refresh of the token",
-          children: createElement("span", { "data-label": "" }, "Fix the refresh of the token"),
+          children: createElement(
+            "span",
+            { "data-label": "", "aria-describedby": undefined },
+            "Fix the refresh of the token",
+          ),
         }),
       ),
     }),
