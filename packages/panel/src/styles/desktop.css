@@ -234,14 +234,12 @@ body,
   --title-bar-ground: var(--luke-color-well);
 }
 
-/* A page with tabs stands its rows on the frame (shell.css), so the toggle
-   at the right and, while the sidebar is folded, the buttons at the left
-   rest on the frame as those rows do, with no ground of their own. */
+/* Every page stands its top row on the frame (shell.css), so the toggle at
+   the right and, while the sidebar is folded, the buttons at the left rest
+   on the frame as those rows do, with no ground of their own. */
+:where(:root):not([data-luke-room="narrow"]) .desktop-shell .title-bar-controls[data-edge="end"],
 :where(:root):not([data-luke-room="narrow"])
-  .desktop-shell:has(.desktop-task)
-  .title-bar-controls[data-edge="end"],
-:where(:root):not([data-luke-room="narrow"])
-  .desktop-shell[data-sidebar-collapsed="true"][data-sidebar-overlay="closed"]:has(.desktop-task)
+  .desktop-shell[data-sidebar-collapsed="true"][data-sidebar-overlay="closed"]
   .title-bar-controls:not([data-edge]) {
   --title-bar-ground: transparent;
 }

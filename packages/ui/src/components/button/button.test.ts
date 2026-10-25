@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 
+import { readFileSync } from "node:fs";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, expect, test } from "vitest";
@@ -35,7 +36,8 @@ import {
  * one that failed wears none. A button that turns turns its glyph once at a
  * press it takes. A submit sends its form while it takes a press, sends nothing
  * while it is unavailable, and made a Stop does its own act without
- * sending the form.
+ * sending the form. A quiet button lights while the popup it opens stands
+ * open, and one that shows a pane rests unlit while the pane is out.
  */
 
 const roots: Root[] = [];
@@ -628,4 +630,43 @@ test("a ButtonLink given a label is named by it, and an IconButtonLink's press i
   ]);
   act(() => github?.click());
   expect(presses).toEqual(["Open on GitHub"]);
+});
+
+/** The style rules of `rules` and of every block nested in them, a layer's among them. */
+function styleRules(rules: CSSRuleList): CSSStyleRule[] {
+  return [...rules].flatMap((rule) =>
+    rule instanceof CSSStyleRule
+      ? [rule]
+      : "cssRules" in rule && rule.cssRules instanceof CSSRuleList
+        ? styleRules(rule.cssRules)
+        : [],
+  );
+}
+
+test("a quiet button lights while the popup it opens stands open, and one showing a pane rests unlit while the pane is out", () => {
+  const sheet = document.head.appendChild(document.createElement("style"));
+  sheet.textContent = readFileSync(`${__dirname}/button.css`, "utf8");
+  // jsdom draws no layered rule, so this reads which of the sheet's rules that light a button reach it.
+  const lighting = styleRules(sheet.sheet?.cssRules ?? new CSSRuleList()).filter(
+    (rule) =>
+      rule.style.getPropertyValue("--luke-button-fill").trim() ===
+      "var(--luke-color-fill-selected)",
+  );
+  const lit = (props: { "aria-haspopup"?: "menu" }) => {
+    const container = mount(
+      createElement(IconButton, {
+        icon: createElement("svg"),
+        label: "Toggle",
+        "aria-expanded": true,
+        ...props,
+      }),
+    );
+    const button = container.querySelector("button");
+    return button !== null && lighting.some((rule) => button.matches(rule.selectorText));
+  };
+
+  expect(lighting).not.toHaveLength(0);
+  expect(lit({ "aria-haspopup": "menu" })).toBe(true);
+  expect(lit({})).toBe(false);
+  sheet.remove();
 });
