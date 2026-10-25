@@ -89,7 +89,7 @@ function drawn(links: Partial<SectionLinks> = {}) {
 
 function chipNamed(container: HTMLElement, name: string): HTMLButtonElement {
   const chip = [...container.querySelectorAll<HTMLButtonElement>("[data-mention-ref]")].find(
-    (each) => each.textContent === name,
+    (each) => each.querySelector(".luke-inline-ref-label")?.textContent === name,
   );
   assert.ok(chip, `a chip named ${name}`);
   return chip;
@@ -423,7 +423,7 @@ test("a folder's chip, and a file's where no file opens from here, hang their ca
   const chips = [...container.querySelectorAll<HTMLElement>("[data-mention-ref]")];
 
   assert.deepEqual(
-    chips.map((chip) => [chip.textContent, chip.tagName]),
+    chips.map((chip) => [chip.querySelector(".luke-inline-ref-label")?.textContent, chip.tagName]),
     [
       ["session-store.ts", "SPAN"],
       ["auth/", "SPAN"],
@@ -452,7 +452,7 @@ test("a click on a folder's chip in a plan that can be edited opens no editor", 
     ),
   );
   const folder = [...container.querySelectorAll<HTMLElement>("[data-mention-ref]")].find(
-    (chip) => chip.textContent === "auth/",
+    (chip) => chip.querySelector(".luke-inline-ref-label")?.textContent === "auth/",
   );
   assert.ok(folder);
 

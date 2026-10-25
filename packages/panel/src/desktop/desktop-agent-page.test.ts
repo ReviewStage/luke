@@ -1515,7 +1515,7 @@ test("a GitHub event's run names its pull request beside the automation, which o
   await settle();
 
   const { sender } = origin(page);
-  assert.equal(words(sender), "Flaky-test sweep · #2905 View commands · Run by you");
+  assert.equal(words(sender), "Flaky-test sweep · pull request #2905 View commands · Run by you");
   act(() => sender?.querySelector<HTMLElement>("[data-mention-ref]")?.click());
   await settle();
   assert.deepEqual(openedOnGitHub, [], "nothing opened on GitHub");

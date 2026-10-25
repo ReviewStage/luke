@@ -8,6 +8,7 @@ import {
 import { MENTION_KIND, type Mention } from "./mention-link.js";
 import { OPERATOR_NAME } from "./model-label.js";
 import type { KnownNames } from "./place-chip-model.js";
+import { TERM } from "./words.js";
 
 /**
  * thing-kind.ts -- every kind of thing the app names, and what the window calls each by now.
@@ -222,6 +223,50 @@ export const THING_NAME: ThingNames = {
   [THING_KIND.REPOSITORY]: NO_LIVE_NAME,
   [THING_KIND.WORKSPACE]: NO_LIVE_NAME,
   [THING_KIND.DATE]: NO_LIVE_NAME,
+};
+
+/** A kind whose name already says what kind it is, "Luke", "Inbox", or "Changes by Ada", so nothing is said before it. */
+export const NAME_SAYS_KIND = undefined;
+
+/**
+ * What each kind is called in words, which a screen reader hears before a
+ * thing's name, since the glyph that says it to the eye is hidden from one:
+ * "pull request #42 Fix the refresh". Its nouns are the glossary's
+ * (`words.ts`'s `TERM`) where it has one.
+ */
+export const THING_WORD: { readonly [K in ThingKind]: string | typeof NAME_SAYS_KIND } = {
+  [THING_KIND.PLAN]: TERM.TASK.one,
+  [THING_KIND.SECTION]: TERM.SECTION.one,
+  [THING_KIND.VERSION]: "version",
+  [THING_KIND.COMMENT]: "comment",
+  [THING_KIND.TURN]: "turn",
+  [THING_KIND.PAGE]: TERM.PAGE.one,
+  [THING_KIND.AGENT]: TERM.AGENT.one,
+  [THING_KIND.WORKER]: TERM.WORKER.one,
+  [THING_KIND.LUKE]: NAME_SAYS_KIND,
+  [THING_KIND.CHANGES]: NAME_SAYS_KIND,
+  [THING_KIND.PULL_REQUEST]: TERM.PULL_REQUEST.one,
+  [THING_KIND.PULL_REQUEST_THREAD]: "review thread",
+  [THING_KIND.ISSUE]: "issue",
+  [THING_KIND.LINK]: "link",
+  [THING_KIND.MESSAGE]: NAME_SAYS_KIND,
+  [THING_KIND.INBOX]: NAME_SAYS_KIND,
+  [THING_KIND.INBOX_ITEM]: `Inbox ${TERM.INBOX_ITEM.one}`,
+  [THING_KIND.AUTOMATIONS]: NAME_SAYS_KIND,
+  [THING_KIND.AUTOMATION]: "automation",
+  [THING_KIND.AUTOMATION_RUN]: "automation run",
+  [THING_KIND.SETTINGS]: "settings",
+  [THING_KIND.PERSON]: TERM.MEMBER.one,
+  [THING_KIND.CHAT]: "channel",
+  [THING_KIND.ADMIN]: NAME_SAYS_KIND,
+  [THING_KIND.FILE]: TERM.FILE.one,
+  [THING_KIND.FOLDER]: "folder",
+  [THING_KIND.SERVER]: TERM.INTEGRATION.one,
+  [THING_KIND.TOOL]: "tool",
+  [THING_KIND.SKILL]: TERM.SKILL.one,
+  [THING_KIND.REPOSITORY]: TERM.REPOSITORY.one,
+  [THING_KIND.WORKSPACE]: "workspace",
+  [THING_KIND.DATE]: "date",
 };
 
 /** A place the thing it names already is. */

@@ -1074,7 +1074,7 @@ test("a line a chat notice wrote draws as its sender's bubble at the left, the l
   );
   assert.match(
     bubble.querySelector(".chat-notice-words")?.textContent ?? "",
-    /^Add teammate invitations are you changing memberships columns\?/u,
+    /^agent Add teammate invitations are you changing memberships columns\?/u,
   );
   const open = bubble.querySelector<HTMLElement>('button[aria-label="Open in chat"]');
   act(() => open?.click());

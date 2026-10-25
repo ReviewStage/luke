@@ -334,7 +334,7 @@ test("a link to an agent's pull request in the plan hangs the card its Pull requ
     (each) => each.querySelector(".luke-tab-label")?.textContent === "#42 Expire invitations",
   );
   const [chip, files] = container.querySelectorAll<HTMLElement>(
-    'button[data-mention-ref][data-kind="link"]',
+    'a[data-mention-ref][data-kind="link"]',
   );
   const cardOf = (control: HTMLElement | undefined) => {
     assert.ok(control, "the pull request is named");

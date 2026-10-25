@@ -30,8 +30,14 @@ import {
 import { type KnownNames, placeChipLook } from "@luke/features/place-chip-model";
 import { planSections } from "@luke/features/plan-document";
 import { UNTITLED_TASK_NAME } from "@luke/features/task-wire";
-import { THING_KIND, thingName, thingOfMention, thingOfPlace } from "@luke/features/thing-kind";
-import { isGitHubAddress } from "@luke/host/acts";
+import {
+  THING_KIND,
+  THING_WORD,
+  thingName,
+  thingOfMention,
+  thingOfPlace,
+} from "@luke/features/thing-kind";
+import { isGitHubAddress, isWebAddress } from "@luke/host/acts";
 import {
   HoverCard,
   HoverCardHead,
@@ -63,7 +69,7 @@ import { useOpenLink } from "./use-open-link.js";
 import { useWordsDates } from "./words-dates.js";
 
 /**
- * mention-chip.tsx -- a mention drawn in words as its chip: its kind's glyph and its name, a button that opens what it names, hanging a card that says what that is, struck through where what it names is gone.
+ * mention-chip.tsx -- a mention drawn in words as its chip: its kind's glyph and its name, a button that opens what it names, or a link where that leaves the app, hanging a card that says what that is, struck through where what it names is gone.
  *
  * A mention is written into markdown as a link whose target names it
  * (`@luke/features/mention-link`'s `linkMention`), a developer's with a
@@ -144,11 +150,19 @@ import { useWordsDates } from "./words-dates.js";
  * A section of another task is drawn as found, since what that task holds
  * is not at hand.
  *
- * Nothing the mention names rides on the chip's element: no attribute
- * carries its target, its task, its heading, or its path, because only the
- * attributes that carry words are masked when the panel is recorded
- * (`../session-replay.ts`), and a `data-` attribute is not one of them.
- * The chip's words are a text node, which the recording masks.
+ * A chip whose press leaves the app for a page on the web, a provider's
+ * page or a file's GitHub page where no File tab opens it, is a link to
+ * that address (`leavesFor`); every other press opens in the window and
+ * stays a button, as an underline is kept for what leaves the app. A
+ * screen reader hears the chip's kind before its name (`THING_WORD`), since
+ * its glyph is hidden from one, and that a gone section is gone after it.
+ *
+ * Nothing the mention names rides on the chip's element but a link's
+ * `href`: no other attribute carries its target, its task, its heading, or
+ * its path, because only the attributes that carry words, and `href`, are
+ * masked when the panel is recorded (`../session-replay.ts`), and a `data-`
+ * attribute is not one of them. The chip's words are a text node, which
+ * the recording masks.
  */
 
 /** Where a mention's chip stands: what it names is there, or the plan no longer holds it. */
@@ -273,6 +287,19 @@ function pressOf(
     case MENTION_KIND.LUKE:
       return () => doors.onOpenTask({ kind: MENTION_KIND.TASK, taskId: mention.taskId });
   }
+}
+
+/**
+ * Whether a press on the chip leaves the app for its address, so it is drawn
+ * as a link to it: a page on the web its link names, or a file's or a
+ * folder's GitHub page where no File tab opens it. Note that a Luke link,
+ * and anything else the window opens in place, is a press, never a link.
+ */
+function leavesFor(mention: Mention, target: string, doors: MentionDoors): boolean {
+  if (!isWebAddress(target) || readLink(target) !== undefined) return false;
+  if (mention.kind === MENTION_KIND.LINK) return true;
+  const paged = mention.kind === MENTION_KIND.FILE || mention.kind === MENTION_KIND.FOLDER;
+  return paged && doors.onOpenFile === undefined;
 }
 
 /** The tile an agent of the plan drawn wears, as its tab wears it; none where the place knows the plan's agents not. */
@@ -500,7 +527,7 @@ export function githubName(
   return pullRequestLabelOf({ number: address.number, title: standing.title });
 }
 
-/** A mention in words: its chip, a button that opens what it names where it can, hanging its card. */
+/** A mention in words: its chip, a button that opens what it names where it can, or a link where that leaves the app, hanging its card. */
 function MentionChip({
   mention,
   target,
@@ -564,6 +591,7 @@ function MentionChip({
           standing={standing}
         />
       }
+      kind={THING_WORD[thingOfMention(mention).kind]}
       label={name}
       state={standing?.state}
       gone={state === MENTION_STATE.GONE}
@@ -578,6 +606,7 @@ function MentionChip({
       }
       card={card}
       linkHref={press === undefined ? undefined : target}
+      leaves={leavesFor(mention, target, doors)}
       data-mention-ref=""
       data-kind={mention.kind}
       data-state={state}
@@ -615,6 +644,7 @@ function DateChip({
     <InlineRef
       look={INLINE_REF_LOOK.PILL}
       glyph={<CalendarIcon aria-hidden="true" />}
+      kind={THING_WORD[THING_KIND.DATE]}
       label={dateChipText(date, now, readerZone())}
       card={<DateCard date={date} />}
       onPress={
@@ -733,6 +763,7 @@ function PlaceChip({
     <InlineRef
       look={INLINE_REF_LOOK.PILL}
       glyph={glyph}
+      kind={THING_WORD[thingOfPlace(place).kind]}
       label={name}
       onPress={(event) => {
         // Note that the press stops here, as a mention's does, because a click into a section opens its editor.

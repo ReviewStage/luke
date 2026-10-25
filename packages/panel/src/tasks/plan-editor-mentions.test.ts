@@ -200,7 +200,7 @@ test("Enter writes the highlighted row as its mention, drawn in the editor as it
 
   const chips = [...task.container.querySelectorAll(".plan-document-text [data-mention-ref]")];
   assert.deepEqual(
-    chips.map((chip) => chip.textContent),
+    chips.map((chip) => chip.querySelector(".luke-inline-ref-label")?.textContent),
     ["Rollout"],
   );
   assert.equal(task.container.querySelector(".mention-menu"), null);
@@ -219,7 +219,7 @@ test("words after an @ that read as a time on a day, up to six of them, offer it
     const chips = [...task.container.querySelectorAll(".plan-document-text [data-mention-ref]")];
     assert.deepEqual(offered, ["Dates", ["Oct 30 3:00 PM → 5:00 PM"]]);
     assert.deepEqual(
-      chips.map((chip) => chip.textContent),
+      chips.map((chip) => chip.querySelector(".luke-inline-ref-label")?.textContent),
       ["Oct 30 3:00 PM → 5:00 PM"],
     );
   } finally {
@@ -360,7 +360,7 @@ test("a section's address pasted whole into the plan is laid in as its chip, cal
 
   const chips = [...plan.container.querySelectorAll(".plan-document-text [data-mention-ref]")];
   assert.deepEqual(
-    chips.map((chip) => chip.textContent),
+    chips.map((chip) => chip.querySelector(".luke-inline-ref-label")?.textContent),
     ["Goal"],
   );
 });
@@ -406,7 +406,7 @@ test("a bare @ in the plan narrows by its kind's row to the repository's paths, 
   assert.deepEqual(climbed, ["apps", [["apps", ["apps/", "web/"]]]]);
   assert.deepEqual(
     [...plan.container.querySelectorAll(".plan-document-text [data-mention-ref]")].map(
-      (chip) => chip.textContent,
+      (chip) => chip.querySelector(".luke-inline-ref-label")?.textContent,
     ),
     ["web/"],
   );
@@ -459,7 +459,7 @@ test("on the plan's page an @ typed in the plan offers the pull requests its age
   assert.deepEqual(offered, [["Pull requests", ["#3059 feat(billing): bill by seat"]]]);
   assert.deepEqual(
     [...plan.container.querySelectorAll(".plan-document-text [data-mention-ref]")].map(
-      (chip) => chip.textContent,
+      (chip) => chip.querySelector(".luke-inline-ref-label")?.textContent,
     ),
     ["#3059 feat(billing): bill by seat"],
   );
