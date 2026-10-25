@@ -101,6 +101,38 @@ it.effect("an answer sent before the refusal and landing after it lifts no hold"
   }),
 );
 
+it.effect("a refusal whose message lands late keeps the longer hold another set meanwhile", () =>
+  Effect.gen(function* () {
+    const message = Promise.withResolvers<void>();
+    const arrived = Promise.withResolvers<void>();
+    // A secondary limit naming no wait, whose message GitHub is slow to send.
+    const slowSecondary = () => {
+      arrived.resolve();
+      const body = new ReadableStream<Uint8Array>({
+        start: async (controller) => {
+          await message.promise;
+          controller.enqueue(new TextEncoder().encode('{"message":"secondary rate limit"}'));
+          controller.close();
+        },
+      });
+      return new Response(body, { status: 403 });
+    };
+    const anHour = () =>
+      Response.json({ message: "slow down" }, { status: 429, headers: { "retry-after": "3600" } });
+    const statuses = yield* Effect.gen(function* () {
+      const slow = yield* Effect.forkChild(asked);
+      yield* Effect.promise(() => arrived.promise);
+      const held = yield* asked;
+      message.resolve();
+      const slowStatus = yield* Fiber.join(slow);
+      yield* TestClock.adjust("2 minutes");
+      const after = yield* asked;
+      return [slowStatus, held, after];
+    }).pipe(Effect.provide(scriptedGitHub([slowSecondary, anHour])));
+    assert.deepEqual(statuses, [403, 429, 429]);
+  }),
+);
+
 it.effect("a 403 that names no rate limit holds nothing, and its message is the caller's", () =>
   Effect.gen(function* () {
     const forbidden = () =>

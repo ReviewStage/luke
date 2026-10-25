@@ -172,17 +172,22 @@ export const githubRateGate: Layer.Layer<HttpClient.HttpClient, never, HttpClien
         identity: string,
         response: HttpClientResponse.HttpClientResponse,
       ) {
-        const now = yield* Clock.currentTimeMillis;
-        const standing = holds.get(identity);
-        const holding = standing !== undefined && now < standing.until;
         // Note that an answer sent before the refusal and landing after it
         // lifts nothing, because the hold GitHub asked for still stands.
         if (response.status < FIRST_REFUSAL_STATUS) {
-          if (!holding) holds.delete(identity);
+          const now = yield* Clock.currentTimeMillis;
+          const standing = holds.get(identity);
+          if (standing === undefined || now >= standing.until) holds.delete(identity);
           return;
         }
-        const refusal = yield* refusalOf(response, now);
+        // Note that the hold standing is read only once the refusal is, because
+        // reading its message waits on GitHub, and a longer hold another
+        // refusal set meanwhile must not be written over.
+        const refusal = yield* refusalOf(response, yield* Clock.currentTimeMillis);
         if (!refusal.limited) return;
+        const now = yield* Clock.currentTimeMillis;
+        const standing = holds.get(identity);
+        const holding = standing !== undefined && now < standing.until;
         // Note that refusals of requests already out as the hold began are
         // one strike, not one each, so a burst does not jump the backoff.
         const strikes = (standing?.strikes ?? 0) + (holding ? 0 : 1);
