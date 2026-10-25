@@ -1,37 +1,13 @@
-/* over-pane.css -- OverPane: a pane over the nearest positioned box at its
-   full height, at that box's right edge or its left, on the window's
-   floating surface with a hairline on the side facing the work, as wide as
-   the box less a strip to press it away by, or a column's width; slid in
-   from its edge as it opens and back out past it as it leaves, on the
-   pane's motion tokens, which reduced motion zeroes. */
+/* over-pane.css -- OverPane's slide, which its utilities (`over-pane.tsx`)
+   cannot say: in from its edge as it opens and back out past it as it
+   leaves, on the pane's motion tokens, which reduced motion zeroes. */
 
 @layer components {
   .luke-over-pane {
-    position: absolute;
-    z-index: 1;
-    inset-block: 0;
-    display: flex;
-    width: calc(100% - var(--luke-space-48));
-    min-width: 0;
-    flex-direction: column;
-    background: var(--luke-color-overlay);
-    box-shadow: var(--luke-menu-shadow);
-    outline: none; /* no ring: focused only by script on open; what it holds rings */
     animation: luke-over-pane-in-right var(--luke-duration-pane) var(--luke-motion-pane) backwards;
   }
 
-  .luke-over-pane[data-width="column"] {
-    width: min(calc(var(--luke-space-64) * 4), calc(100% - var(--luke-space-48)));
-  }
-
-  .luke-over-pane[data-edge="right"] {
-    right: 0;
-    border-left: 1px solid var(--luke-color-border-strong);
-  }
-
   .luke-over-pane[data-edge="left"] {
-    left: 0;
-    border-right: 1px solid var(--luke-color-border-strong);
     animation-name: luke-over-pane-in-left;
   }
 

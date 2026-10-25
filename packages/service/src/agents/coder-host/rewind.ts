@@ -41,6 +41,7 @@ import { cancelledTurn, type EveReach, eveFor } from "./stop.js";
 const REFUSAL_OF_REWIND = {
   [REWIND_REFUSAL.NOT_FOUND]: HOSTED_REFUSAL.NOT_FOUND,
   [REWIND_REFUSAL.INSIDE_TURN]: HOSTED_REFUSAL.INVALID_REQUEST,
+  [REWIND_REFUSAL.BUSY]: HOSTED_REFUSAL.UNAVAILABLE,
 } as const;
 
 /** What the agent is doing stopped, as above; refused as unavailable where it could not be. */

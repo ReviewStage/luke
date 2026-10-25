@@ -112,6 +112,35 @@ const FEEDBACK_DISPLAY = {
 } as const;
 
 /**
+ * The names the rows and navigation block of the theme adds (list row, nav
+ * item, disclosure, bar item, pane bar, toolbar, over pane, folding search,
+ * searchable menu), by the group tailwind-merge reads each in.
+ */
+const ROWS_NAVIGATION = {
+  text: ["dialog-size", "tag-size"],
+  leading: ["label"],
+  spacing: [
+    "bar-count-reach",
+    "caption-leading",
+    "disclosure-row",
+    "item-gap",
+    "list-row-lead",
+    "luke-32",
+    "luke-48",
+    "menu-label",
+    "nav-identity",
+    "over-pane",
+    "over-pane-column",
+    "pane-bar",
+    "submenu",
+    "submenu-reach",
+    "swipe-label",
+  ],
+  shadow: ["bar-count-ring"],
+  radius: ["inherit"],
+} as const;
+
+/**
  * The names the chips, media, and call block of the theme adds (attachment
  * chip, picture set and tile, page thumb, video player, provider button,
  * composer frame, call bar and video tile), by the group tailwind-merge reads
@@ -135,7 +164,6 @@ const CHIPS_MEDIA_CALL = {
     "call-tile-face-share",
     "icon-12",
     "icon-16",
-    "item-gap",
     "page-thumb-row",
     "picture-row",
     "picture-thumb",
@@ -166,6 +194,7 @@ const merge = extendTailwindMerge({
         "group",
         "tag",
         ...FEEDBACK_DISPLAY.text,
+        ...ROWS_NAVIGATION.text,
         ...CHIPS_MEDIA_CALL.text,
       ],
       "font-weight": [
@@ -180,7 +209,7 @@ const merge = extendTailwindMerge({
         ...FEEDBACK_DISPLAY["font-weight"],
       ],
       tracking: ["title"],
-      leading: ["body", ...FEEDBACK_DISPLAY.leading],
+      leading: ["body", ...FEEDBACK_DISPLAY.leading, ...ROWS_NAVIGATION.leading],
       spacing: [
         "luke-2",
         "luke-4",
@@ -245,6 +274,7 @@ const merge = extendTailwindMerge({
         "choice-segment-compact",
         "caption-glyph",
         ...FEEDBACK_DISPLAY.spacing,
+        ...ROWS_NAVIGATION.spacing,
         ...CHIPS_MEDIA_CALL.spacing,
       ],
       radius: [
@@ -263,6 +293,7 @@ const merge = extendTailwindMerge({
         "choice-segment",
         "choice-box",
         ...FEEDBACK_DISPLAY.radius,
+        ...ROWS_NAVIGATION.radius,
         ...CHIPS_MEDIA_CALL.radius,
       ],
       shadow: [
@@ -272,6 +303,7 @@ const merge = extendTailwindMerge({
         "tooltip",
         "switch-thumb",
         ...FEEDBACK_DISPLAY.shadow,
+        ...ROWS_NAVIGATION.shadow,
         ...CHIPS_MEDIA_CALL.shadow,
       ],
       font: ["ui"],

@@ -342,3 +342,29 @@ test("a press gives a quiet row whole, and a card's head inside its fill until w
   act(() => head?.firstElementChild?.dispatchEvent(new Event("animationend", { bubbles: true })));
   assert.equal(head?.hasAttribute("data-pulse"), false);
 });
+
+test("a framed summary gives its inset at a side holding controls to that side's cell, and a fold in its body keeps its own", () => {
+  const nested = createElement(Disclosure, {
+    defaultOpen: true,
+    children: createElement(DisclosureSummary, { children: "Inner" }),
+  });
+  const host = render(
+    createElement(Disclosure, {
+      defaultOpen: true,
+      actions: createElement("span", null, "End"),
+      children: [
+        createElement(DisclosureSummary, { key: "summary", children: "Outer" }),
+        createElement(DisclosureBody, { key: "body", children: nested }),
+      ],
+    }),
+  );
+  const [outer, inner] = [...host.querySelectorAll("summary")];
+  assert.ok(outer !== undefined && inner !== undefined);
+  assert.ok(
+    outer.classList.contains("pe-0"),
+    "the outer summary gives its end inset to the actions",
+  );
+  assert.ok(!outer.classList.contains("ps-0"), "the outer summary keeps its start inset");
+  assert.ok(!inner.classList.contains("pe-0"), "a fold in the body is no frame's");
+  assert.ok(inner.classList.contains("pe-luke-4"), "a fold in the body keeps its end inset");
+});

@@ -39,7 +39,8 @@ import { AgentTab } from "./agent-tab.js";
  * words, and the row the service writes for it lands in the line's place,
  * drawn once, whichever of the row and the send's answer comes first; a
  * message refused while the developer had written on stays where it went,
- * marked Not sent, with a Retry of its own. Synthetic throughout.
+ * marked Not sent, with a Retry of its own; the working line stands from the
+ * press, before the service takes the line. Synthetic throughout.
  */
 
 const TASK = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
@@ -210,6 +211,16 @@ test("a message sent stands in the transcript at once, the box empty and taking 
 
   await tab.answer(0, TAKEN);
   assert.equal(tab.lines("Now the dark variant.").length, 1);
+});
+
+test("a message sent to an agent at rest draws the working line at once, before the service takes it", async () => {
+  const tab = await drawnTab([]);
+  assert.equal(tab.container.querySelector("[data-working]"), null, "an agent at rest");
+
+  await tab.send("Now the dark variant.");
+
+  assert.ok(tab.container.querySelector("[data-working]"), "working from the press");
+  assert.equal(tab.sent.length, 1, "with the send still unanswered");
 });
 
 test("a Codex or Claude Code agent's box says nothing under it of the plan that pays", async () => {

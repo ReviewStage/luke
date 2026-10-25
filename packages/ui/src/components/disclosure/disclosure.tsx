@@ -11,6 +11,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { cn } from "../../cn.js";
 import { FoldChevronIcon } from "../../face/glyphs.js";
 import { PRESS_PULSE, type PressPulse, pulsePress } from "../../press-pulse.js";
 import { type DisclosureMotion, disclosureMotion, useDisclosure } from "../../use-disclosure.js";
@@ -105,6 +106,21 @@ export interface DisclosureFold {
 }
 
 const FindContext = createContext(false);
+
+/** The cells a frame stands beside the fold it holds: which of its ends hold controls. */
+interface FrameCells {
+  readonly lead: boolean;
+  readonly actions: boolean;
+}
+
+/**
+ * The frame around the fold a scope opens, read by that fold's own summary.
+ * Note that a scope hands it on to its own parts alone and none to the folds
+ * nested in its body, as the sheet's `frame > details > summary` reached only
+ * the summary of the fold the frame lays out.
+ */
+const FrameContext = createContext<FrameCells | undefined>(undefined);
+const ScopeFrameContext = createContext<FrameCells | undefined>(undefined);
 
 /** What a controlled fold whose holder hears nothing does with a press. */
 const NO_CHANGE = (): void => undefined;
@@ -217,7 +233,14 @@ export function DisclosureScope({
   state: DisclosureState;
   children: ReactNode;
 }): React.JSX.Element {
-  return <StateContext.Provider value={state}>{children}</StateContext.Provider>;
+  const frame = useContext(FrameContext);
+  return (
+    <StateContext.Provider value={state}>
+      <ScopeFrameContext.Provider value={frame}>
+        <FrameContext.Provider value={undefined}>{children}</FrameContext.Provider>
+      </ScopeFrameContext.Provider>
+    </StateContext.Provider>
+  );
 }
 
 /**
@@ -306,7 +329,7 @@ export function Disclosure({
       <details
         {...props}
         {...details}
-        className="luke-disclosure"
+        className="luke-disclosure min-w-0"
         data-look={framed ? undefined : skin}
         onToggle={(event) => {
           details.onToggle(event);
@@ -345,6 +368,66 @@ export const DISCLOSURE_SUMMARY = {
 } as const;
 export type DisclosureSummaryLook = (typeof DISCLOSURE_SUMMARY)[keyof typeof DISCLOSURE_SUMMARY];
 
+/**
+ * The quiet row every summary but a transcript's is drawn from: a control
+ * tall, its chevron, glyph, and words a glyph's gap apart in the caption's
+ * type, muted until the pointer is over it, its words wrapping rather than
+ * running past a narrow pane, an unbroken name among them, pressed as a
+ * Mac's list is on the desktop, without the web's pointing hand. Note that
+ * the fill answers `:hover` itself, as the row did, rather than Tailwind's
+ * `hover:`, which only a fine pointer reaches.
+ */
+const SUMMARY_ROW =
+  "flex min-h-control cursor-pointer list-none items-center gap-icon-gap rounded-control ps-luke-4 pe-luke-4 font-sans text-caption text-muted-foreground transition-[background-color,color] duration-(--luke-duration-hover) ease-plain select-none in-data-[luke-profile=desktop]:cursor-default [&::-webkit-details-marker]:hidden [&:hover]:bg-fill-strong [&:hover]:text-foreground [&>:not(svg,.luke-disclosure-turn)]:min-w-0 [&>:not(svg,.luke-disclosure-turn)]:[overflow-wrap:anywhere] [&>svg]:size-control-icon [&>svg]:flex-none";
+
+/** Each look's classes over the quiet row's, a transcript's in place of them. */
+const SUMMARY_LOOK = {
+  [DISCLOSURE_SUMMARY.QUIET]: SUMMARY_ROW,
+  // The file row: the text's own ink, a fixed height, and a rule under it while its fold is open.
+  [DISCLOSURE_SUMMARY.ROW]: cn(
+    SUMMARY_ROW,
+    "box-border h-disclosure-row min-h-disclosure-row gap-luke-8 rounded-none pe-luke-12 whitespace-nowrap text-foreground",
+  ),
+  // A chip at the end of its row, as wide as what it says, on the surface inside a hairline.
+  [DISCLOSURE_SUMMARY.CHIP]: cn(
+    SUMMARY_ROW,
+    "ms-auto w-fit min-h-0 border border-border bg-surface py-luke-2 ps-luke-6 pe-luke-6 [&:hover]:bg-surface [&>svg]:size-luke-12",
+  ),
+  // A card's head: a 32px line in the card's own ink, inset as its body is, its corners the card's clip; a finger's press is 44px tall.
+  [DISCLOSURE_SUMMARY.HEAD]: cn(
+    SUMMARY_ROW,
+    "h-luke-32 min-h-0 rounded-none ps-luke-12 pe-luke-12 text-inherit pointer-coarse:h-auto pointer-coarse:min-h-touch",
+  ),
+  // A transcript's line: only what makes it a summary pressed as a row is, no marker, no list's bullet, no selection, the platform's arrow; the rest is its fold's skin.
+  [DISCLOSURE_SUMMARY.TRANSCRIPT]:
+    "cursor-default list-none select-none [&::-webkit-details-marker]:hidden [&>svg]:size-control-icon [&>svg]:flex-none",
+} as const satisfies Record<DisclosureSummaryLook, string>;
+
+/**
+ * A summary's classes, trimmed where a frame lays it out: the row's inset at
+ * an end goes to the cell standing there, the frame wears the row's fill
+ * under the pointer (`disclosure.css`), and the rule under an open file row
+ * is the frame's too.
+ */
+function summaryClass(
+  look: DisclosureSummaryLook,
+  frame: FrameCells | undefined,
+  open: boolean,
+): string {
+  const own = SUMMARY_LOOK[look];
+  const ruled = look === DISCLOSURE_SUMMARY.ROW && open && frame === undefined;
+  if (frame === undefined || look === DISCLOSURE_SUMMARY.TRANSCRIPT) {
+    return cn("luke-disclosure-summary", own, ruled && "border-b border-border");
+  }
+  return cn(
+    "luke-disclosure-summary",
+    own,
+    "[&:hover]:bg-transparent",
+    frame.lead && "ps-0",
+    frame.actions && "pe-0",
+  );
+}
+
 type DisclosureSummaryProps = {
   /** `ROW` draws no chevron of its own, since the row holds its fold control; it also stays out of the tab order, since that control is the keyboard's. `CHIP` draws none either, its glyphs saying what it folds, and `HEAD` and `TRANSCRIPT` leave their `DisclosureChevron` to the caller, wherever its line holds it. */
   look?: DisclosureSummaryLook;
@@ -359,6 +442,7 @@ export function DisclosureSummary({
   ...props
 }: DisclosureSummaryProps): React.JSX.Element {
   const { open } = useDisclosureState();
+  const frame = useContext(ScopeFrameContext);
   // Note that a card's head and a file row meet the frame around them, so
   // their press moves what they hold and leaves their fill standing.
   const toggle = useDisclosureSummaryClick(
@@ -375,7 +459,7 @@ export function DisclosureSummary({
     // biome-ignore lint/a11y/useAriaPropsSupportedByRole: a summary is exposed as its details' disclosure button, which takes aria-expanded; the rule's table gives the element no role.
     <summary
       {...props}
-      className="luke-disclosure-summary"
+      className={summaryClass(look, frame, open)}
       data-look={look === DISCLOSURE_SUMMARY.QUIET ? undefined : look}
       tabIndex={look === DISCLOSURE_SUMMARY.ROW ? -1 : props.tabIndex}
       aria-expanded={open}
@@ -434,6 +518,7 @@ function Frame({
   onPointerDown?: ((event: PointerEvent<HTMLElement>) => void) | undefined;
   children: ReactNode;
 }): React.JSX.Element {
+  const cells = { lead: lead !== undefined, actions: actions !== undefined };
   return (
     <div
       className="luke-disclosure-frame"
@@ -448,7 +533,7 @@ function Frame({
           {lead}
         </div>
       )}
-      {children}
+      <FrameContext.Provider value={cells}>{children}</FrameContext.Provider>
       {actions === undefined ? null : (
         // biome-ignore lint/a11y/noStaticElementInteractions: the cell's bare ground folds as the summary beside it does, for the pointer alone; the summary is the keyboard's.
         // biome-ignore lint/a11y/useKeyWithClickEvents: a key on a control inside reaches it as a click, which the cell leaves to the control.
@@ -507,6 +592,20 @@ export function DisclosureChevron(): React.JSX.Element {
   );
 }
 
+/**
+ * Where each inset stands an open body: past the chevron, at the
+ * transcript's own indent, a row's own glyph and inset carrying its words the
+ * rest of the way under the summary's; flush with the row; or under a card's
+ * head, past the hairline under it, at the head's inset. Its landing and
+ * leaving stay in `disclosure.css`, keyframes being what a utility cannot say.
+ */
+const BODY_INSET = {
+  [DISCLOSURE_BODY.INDENTED]: "flex flex-col gap-luke-4 pt-luke-4 ml-luke-24",
+  [DISCLOSURE_BODY.FLUSH]: "flex flex-col gap-luke-4 p-luke-4",
+  [DISCLOSURE_BODY.CARD]: "border-t border-border px-list-inset py-row-inset",
+  [DISCLOSURE_BODY.NONE]: undefined,
+} as const satisfies Record<DisclosureBodyInset, string | undefined>;
+
 /** What the fold holds, drawn only while it is open, on its way out, or a find is looking through it. */
 export function DisclosureBody({
   inset = DISCLOSURE_BODY.INDENTED,
@@ -519,7 +618,12 @@ export function DisclosureBody({
   const drawn = useDisclosureBodyDrawn();
   if (!drawn) return null;
   return (
-    <div ref={body} className="luke-disclosure-body" data-inset={inset} inert={leaving}>
+    <div
+      ref={body}
+      className={cn("luke-disclosure-body", BODY_INSET[inset])}
+      data-inset={inset}
+      inert={leaving}
+    >
       {children}
     </div>
   );
