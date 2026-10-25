@@ -26,17 +26,24 @@
      because one that is on stands while the rest wait, and the row's
      opacity would hide it with them. */
   .luke-group-header-actions[data-shown="on-hover"] > * {
-    opacity: 0;
+    opacity: var(--luke-group-header-shown, 0);
     transition: opacity var(--luke-duration-hover) var(--luke-motion-exit);
   }
 
   /* They come in while the head holds the focus, its own menu stands, or a
      menu one of them dropped stands open, which has taken the focus and
-     often the pointer away; and one that is on stands at rest. */
+     often the pointer away; and one that is on stands at rest. Note that a
+     menu standing open says so on the row of actions, which its actions
+     read, rather than on each action under a `:has()`, because a `:has()`
+     whose subject is any child makes the browser restyle the whole window
+     for every element added under it. */
   .luke-group-header-head:is(:focus-within, [data-menu-open="true"]) .luke-group-header-actions > *,
-  .luke-group-header-head .luke-group-header-actions:has([aria-expanded="true"]) > *,
   .luke-group-header-actions > .luke-group-header-action[data-state="active"] {
     opacity: 1;
+  }
+
+  .luke-group-header-head .luke-group-header-actions:has([aria-expanded="true"]) {
+    --luke-group-header-shown: 1;
   }
 
   @media (hover: hover) {
