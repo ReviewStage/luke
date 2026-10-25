@@ -72,19 +72,43 @@ export function useNamer(): (person: GitHubPerson) => Actor {
   return (person) => githubActor(person, { members, readerId, former });
 }
 
-/** A reviewer's standing at their face's corner, in its colour. */
+/**
+ * A reviewer's standing in GitHub's colours, its glyph's ink and its disc's
+ * ground: approved green, changes asked for red, a review asked for amber, a
+ * comment or a dismissal quiet.
+ */
+const REVIEW_TONE = {
+  [REVIEW_STATE.APPROVED]: { ink: "text-complete", disc: "bg-complete" },
+  [REVIEW_STATE.CHANGES_REQUESTED]: { ink: "text-destructive", disc: "bg-destructive" },
+  [REVIEW_STATE.REQUESTED]: { ink: "text-attention", disc: "bg-attention" },
+  [REVIEW_STATE.COMMENTED]: { ink: "text-muted-foreground", disc: "bg-muted-foreground" },
+  [REVIEW_STATE.DISMISSED]: { ink: "text-muted-foreground", disc: "bg-muted-foreground" },
+} as const satisfies Record<ReviewState, { ink: string; disc: string }>;
+
+/** A reviewer's standing beside the words for it, its glyph in its colour. */
 function ReviewBadge({ state }: { state: ReviewState }): React.JSX.Element {
   return (
-    <span className="review-state" data-review-state={state}>
+    <span
+      className={`review-state inline-grid place-items-center [&>svg]:size-luke-12 ${REVIEW_TONE[state].ink}`}
+      data-review-state={state}
+    >
       {REVIEW_GLYPHS[state]}
     </span>
   );
 }
 
-/** A reviewer's standing at their face's corner: a disc of its colour, its glyph cut from it. */
+/**
+ * A reviewer's standing at their face's corner: a disc of its colour, its
+ * glyph cut from it in the ground's colour, so a check reads apart from a
+ * cross at a face's size; a review asked for is the disc alone, smaller, as
+ * GitHub's waiting dot. The badge's own ground rings it off the face.
+ */
 function FaceBadge({ state }: { state: ReviewState }): React.JSX.Element {
   return (
-    <span className="review-state review-face-badge" data-review-state={state}>
+    <span
+      className={`review-state review-face-badge inline-grid size-review-badge place-items-center rounded-luke-full text-ground data-[review-state=requested]:size-status-dot ${REVIEW_TONE[state].disc}`}
+      data-review-state={state}
+    >
       {FACE_GLYPHS[state]}
     </span>
   );
@@ -98,7 +122,10 @@ function PersonRef({ person }: { person: GitHubPerson }): React.JSX.Element {
 /** Where a review left its reviewer, its glyph in its colour beside the words for it. */
 export function ReviewStanding({ state }: { state: ReviewState }): React.JSX.Element {
   return (
-    <span className="changes-comment-state" data-review-state={state}>
+    <span
+      className="changes-comment-state inline-flex items-center gap-tight-gap text-muted-foreground"
+      data-review-state={state}
+    >
       <ReviewBadge state={state} />
       {REVIEW_WORDS[state]}
     </span>
@@ -172,9 +199,9 @@ export function OpenedLine({
 }): React.JSX.Element {
   const verb = person === undefined ? "Opened" : "opened";
   return (
-    <span className="pull-request-opened">
+    <span className="pull-request-opened inline-flex min-w-0 items-center gap-tight-gap whitespace-nowrap">
       {person === undefined ? null : <PersonRef person={person} />}
-      <span className="pull-request-quiet">
+      <span className="pull-request-quiet text-muted-foreground">
         {merged === undefined ? (
           <>
             {`${verb} `}

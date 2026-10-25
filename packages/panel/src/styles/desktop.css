@@ -1543,6 +1543,10 @@ ul.actor-stack {
    hair either side of it short of the column, whether or not a thread stands
    yet, as the desktop's inset does, so the words never move when the first
    comment lands, and a plan and its versions keep one width. */
+.desktop-document {
+  --comment-gutter: var(--luke-page-inset);
+}
+
 [data-luke-profile="web"] .desktop-document {
   --comment-gutter: calc(var(--luke-touch-target) + 2 * var(--luke-space-2));
 }
@@ -1813,10 +1817,6 @@ ul.actor-stack {
      sight stand still (`ListMotion`). */
   min-height: var(--luke-list-held-height, 0);
   padding: var(--luke-row-inset) var(--column-inset) var(--column-inset);
-  /* Its end leaves free what the standing toasts take of the window's foot
-     (`--luke-toast-room`), so its last row can be scrolled a step clear of
-     them, above a phone's places bar too. */
-  padding-bottom: max(var(--column-inset), calc(var(--luke-toast-room, 0px) + var(--luke-space-8)));
 }
 
 /* A group's room above it counts only the groups still in the layout, so a
@@ -2823,11 +2823,9 @@ ul.actor-stack {
   color: var(--luke-color-text-muted);
 }
 
-/* The rail's places, inside the `ScrollArea` that scrolls them, on the Inbox
-   list's insets, its end leaving the toasts' room as the list's does. */
+/* The rail's places, inside the `ScrollArea` that scrolls them, on the Inbox list's insets. */
 .chat-rail-body {
   padding: var(--luke-row-inset) var(--column-inset) var(--column-inset);
-  padding-bottom: max(var(--column-inset), calc(var(--luke-toast-room, 0px) + var(--luke-space-8)));
 }
 
 .chat-stream {
@@ -3469,6 +3467,22 @@ ul.actor-stack {
 .desktop-task > .page-find[hidden] {
   visibility: hidden;
   transition: visibility 0s linear var(--luke-duration-pane);
+}
+
+/* The line under an automation's agent's bar (`automation-agent-run.tsx`):
+   what fired its run, when, and where it stands, its words where the bar's
+   title starts, over a hairline. */
+.automation-agent-run {
+  flex: none;
+  padding: 0 calc(var(--column-inset) + var(--luke-row-inset) + var(--luke-list-inset))
+    var(--luke-item-gap);
+  border-bottom: 1px solid var(--luke-color-border);
+}
+
+/* Where the run stands among the arrows, in figures that hold their width as they step. */
+.automation-agent-run-count {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 
 /* The plan's summary (`task-summary.tsx`) ----------------------------------- */

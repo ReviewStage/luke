@@ -87,6 +87,16 @@ import { WholeFile, type WholeFileNote } from "./whole-file.js";
  * window's policy refuses the frames and objects Chromium draws one in.
  */
 
+/** The file's name in the viewer's head, cut to its line. */
+const TITLE_CLASS = "attachment-viewer-title m-0 overflow-hidden whitespace-nowrap";
+
+/** How large the file is, quiet, in the caption role. */
+const SIZE_CLASS = "attachment-viewer-size flex-none text-caption text-muted-foreground";
+
+/** What the place opening the viewer says of the file, a plan's picture saying who last edited it, in the size's quiet ink, cut past the ring a press in it draws. */
+const NOTE_CLASS =
+  "attachment-viewer-note flex min-w-0 overflow-clip [overflow-clip-margin:var(--luke-focus-ring-room)] text-caption text-muted-foreground";
+
 /** What the header's buttons are named. */
 const VIEWER_LABEL = {
   PREVIOUS: "Previous file",
@@ -308,21 +318,26 @@ function AttachmentBody({
 }): React.JSX.Element {
   if (attachmentView(file) === ATTACHMENT_VIEW.IMAGE) {
     return (
-      <div ref={zoom.frameRef} className="attachment-viewer-body">
+      // Two fingers anywhere on the frame pinch the picture (`@luke/ui`'s ZoomImage), never the page.
+      <div
+        ref={zoom.frameRef}
+        className="attachment-viewer-body min-h-0 flex-auto grid touch-none place-items-center overflow-hidden bg-surface"
+      >
         <ZoomImage zoom={zoom} src={file.url} alt={file.name} />
       </div>
     );
   }
   if (attachmentView(file) === ATTACHMENT_VIEW.VIDEO) {
     return (
-      <div className="attachment-viewer-body">
+      // A video plays on the veil, centred, as large as the card leaves it under its header at its own shape.
+      <div className="attachment-viewer-body min-h-0 flex-auto grid place-items-center overflow-hidden bg-veil">
         <VideoPlayer dataUrl={file.url} label={file.name} place={VIDEO_PLAYER_PLACE.VIEWER} />
       </div>
     );
   }
   if (text !== undefined) {
     return (
-      <div className="attachment-viewer-body attachment-viewer-lines">
+      <div className="attachment-viewer-body min-h-0 flex-auto attachment-viewer-lines flex flex-col bg-card-code">
         <WholeFile
           name={file.name}
           text={text.replace(/\r\n/gu, "\n")}
@@ -336,10 +351,14 @@ function AttachmentBody({
     );
   }
   return (
-    <div className="attachment-viewer-body attachment-viewer-other">
-      <FileTypeIcon name={file.name} />
-      <p className="attachment-viewer-other-name">{file.name}</p>
-      <p className="attachment-viewer-other-size">{sizeLabel(base64)}</p>
+    <div className="attachment-viewer-body min-h-0 flex-auto flex flex-col items-center gap-item-gap p-card text-center">
+      <FileTypeIcon name={file.name} className="size-12" />
+      <p className="mx-0 mt-item-gap mb-0 max-w-full text-section font-luke-semibold wrap-anywhere">
+        {file.name}
+      </p>
+      <p className="mx-0 mt-0 mb-block-gap text-caption text-muted-foreground">
+        {sizeLabel(base64)}
+      </p>
       <Button icon={<DownloadIcon aria-hidden="true" />} onClick={() => download(file)}>
         {VIEWER_LABEL.DOWNLOAD}
       </Button>
@@ -426,7 +445,7 @@ export function AttachmentViewer({
       expand={expand}
     >
       <div
-        className="attachment-viewer ph-no-capture"
+        className="attachment-viewer ph-no-capture flex min-h-0 flex-auto flex-col data-[view=other]:w-viewer-other data-[view=text]:h-viewer-stage-height data-[view=text]:w-viewer-text data-[view=image]:data-[opening=own-pixels]:h-viewer-stage-height data-[view=image]:data-[opening=own-pixels]:w-viewer-stage"
         data-view={attachmentView(file)}
         data-opening={opening}
       >
@@ -442,19 +461,19 @@ export function AttachmentViewer({
               />
             }
             title={
-              <span className="attachment-viewer-heading">
+              <span className="flex min-w-0 flex-col items-center">
                 <Text
                   as={TEXT_ELEMENT.H2}
                   variant={TEXT_VARIANT.TOOLBAR_TITLE}
                   id={titleId}
-                  className="luke-toolbar-title attachment-viewer-title"
+                  className={`luke-toolbar-title max-w-full ${TITLE_CLASS}`}
                 >
                   <OneLine>{file.name}</OneLine>
                 </Text>
-                <span className="attachment-viewer-about">
-                  <span className="attachment-viewer-size">{sizeLabel(base64)}</span>
+                <span className="flex min-w-0 max-w-full">
+                  <span className={`m-0 ${SIZE_CLASS}`}>{sizeLabel(base64)}</span>
                   {note === undefined || note === null ? null : (
-                    <span className="attachment-viewer-note">{note}</span>
+                    <span className={`my-0 mr-0 ml-luke-8 ${NOTE_CLASS}`}>{note}</span>
                   )}
                 </span>
               </span>
@@ -482,29 +501,30 @@ export function AttachmentViewer({
             }
           />
         ) : (
-          <header className="attachment-viewer-header">
-            <FileTypeIcon name={file.name} />
+          <header className="flex flex-none items-center gap-tight-gap border-b border-border py-item-gap pr-item-gap pl-list-inset">
+            <FileTypeIcon name={file.name} className="mr-tight-gap size-control-icon flex-none" />
             <Text
               as={TEXT_ELEMENT.H2}
               variant={TEXT_VARIANT.SECTION}
               id={titleId}
-              className="attachment-viewer-title"
+              className={TITLE_CLASS}
             >
               <OneLine>{file.name}</OneLine>
             </Text>
-            <span className="attachment-viewer-size">{sizeLabel(base64)}</span>
+            {/* What the place opening the viewer says of the file shown stands after its size in the same quiet ink, the size giving it the room the size kept before the header's buttons (tasks.css), and it is cut before it reaches them. */}
+            <span className={`my-0 mr-auto ml-tight-gap ${SIZE_CLASS}`}>{sizeLabel(base64)}</span>
             {note === undefined || note === null ? null : (
-              <span className="attachment-viewer-note">{note}</span>
+              <span className={`my-0 mr-auto ml-block-gap ${NOTE_CLASS}`}>{note}</span>
             )}
             {files.length > 1 ? (
-              <div className="attachment-viewer-walk">
+              <div className="flex items-center">
                 <HeaderButton
                   label={VIEWER_LABEL.PREVIOUS}
                   chord={VIEWER_CHORD.PREVIOUS}
                   onClick={() => walk(-1)}
                   icon={<ChevronLeftIcon aria-hidden="true" />}
                 />
-                <span className="attachment-viewer-place">
+                <span className="attachment-viewer-place min-w-12 text-center text-caption text-muted-foreground tabular-nums">
                   {`${String(at + 1)} of ${String(files.length)}`}
                 </span>
                 <HeaderButton

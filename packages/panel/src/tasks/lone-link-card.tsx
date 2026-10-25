@@ -14,7 +14,7 @@ import { placeChipLook } from "@luke/features/place-chip-model";
 import { LIST_VARIANT, List, ListRow, ProviderMark, RowHint, RowHintOptions } from "@luke/ui";
 import { AppWindowIcon } from "lucide-react";
 import { createContext, type ReactNode, useContext } from "react";
-import { LinesChanged } from "./agent-published.js";
+import { LinesChanged, PUBLISHED_META_CLASS } from "./agent-published.js";
 import { pullRequestStateWord } from "./coding-agent-model.js";
 import { InboxCodeCard, type InboxCodeDoors } from "./inbox-code-card.js";
 import { githubName, MentionChipCard } from "./mention-chip.js";
@@ -87,7 +87,7 @@ function OneRowCard({
   children: ReactNode;
 }): React.JSX.Element {
   return (
-    <div className="lone-link-card" data-lone-link={kind}>
+    <div className="lone-link-card my-block-gap" data-lone-link={kind}>
       <List label={label} variant={LIST_VARIANT.CARD}>
         {children}
       </List>
@@ -142,7 +142,7 @@ function PullRequestRowCard({
           title={named}
           meta={
             state === undefined && known?.lines === undefined ? undefined : (
-              <span className="agent-published-meta">
+              <span className={PUBLISHED_META_CLASS}>
                 {state === undefined ? null : <span>{state}</span>}
                 {known?.lines === undefined ? null : (
                   <LinesChanged
@@ -251,7 +251,7 @@ export function LoneLinkCard({
       const { repo, path, sha, startLine, endLine } = lone;
       const block = { type: INBOX_BLOCK.CODE, repo, path, sha, startLine, endLine };
       return (
-        <div className="lone-link-card" data-lone-link={LONE_LINK.CODE}>
+        <div className="lone-link-card my-block-gap" data-lone-link={LONE_LINK.CODE}>
           <InboxCodeCard block={block} code={doors.code} />
         </div>
       );

@@ -15,11 +15,9 @@ import { isGitHubAddress, isWebAddress } from "@luke/host/acts";
 import type { AppPlatform } from "@luke/panel/app-platform";
 import type { ShellBundles } from "@luke/panel/shell-bundles";
 import { COMMAND_KEY, type CommandKey } from "@luke/settings/shortcuts";
-import { NOTIFICATIONS_GRANTOR } from "@luke/voice/settings-controls";
 import { browserLinkPlatform } from "../link-platform";
 import { PANEL_ASSET_BASE } from "./web-address";
 import { openBrowserLiveOverWebSocket } from "./web-browser-live";
-import { askNotificationsPermission } from "./web-notices";
 
 /** What every agent's page frame shows until pages have a sandboxed origin of their own (`public/page-in-mac-app.html`). */
 const PAGE_IN_MAC_APP = "/page-in-mac-app.html";
@@ -134,8 +132,7 @@ export function browserCommandKey(browser: SystemNaming = navigator): CommandKey
 /**
  * The tab's platform. A browser has no menu bar, so that answers nothing; focus is the tab's own, so bringing the panel forward is
  * asking the window for it; a surface event is counted by the host in the
- * tab, as every other event is; notifications are the browser's to grant,
- * for the site, asked for on Settings' press itself; unsaved work is held
+ * tab, as every other event is; unsaved work is held
  * by the tab's ways out (`page-leave.ts`); session replay is the desktop's
  * own masked recording (`web-session-replay.ts`); a cloud Browser tab's
  * live view is a socket the page opens itself (`web-browser-live.ts`); and the way to the Mac
@@ -164,10 +161,6 @@ export function webPlatform(
     applySessionReplay: lazySessionReplay(),
     openBrowserLive: openBrowserLiveOverWebSocket,
     ...(linkPlatform === LINK_PLATFORM.MAC ? { macAppLink } : undefined),
-    notificationsGrantor: () => NOTIFICATIONS_GRANTOR.BROWSER,
-    askNotificationsPermission: () => {
-      void askNotificationsPermission();
-    },
   };
   // A tab with no page leave to tell (a test's) holds nothing back.
   if (shell.unsavedWork !== undefined) platform.unsavedWork = shell.unsavedWork;

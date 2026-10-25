@@ -52,7 +52,7 @@ function snapshotWith(experiments: ExperimentChoices): AppStateSnapshot {
     voice: { avatar: AVATAR_OFF },
     tasks: IDLE_TASKS_VIEW,
     codingAgents: { unseen: [] },
-    inbox: { waiting: [], tasks: [], taskless: [], automations: [], failedRuns: [], chat: [] },
+    inbox: { waiting: [], tasks: [], taskless: [], automations: [], failedRuns: [] },
     macCommands: { asks: [] },
     notifications: { status: NOTIFICATIONS_STATUS.UNKNOWN },
     sessionReplay: { permitted: false, halted: false },

@@ -13,23 +13,10 @@ import type { PushMethod } from "../contract/pushes.js";
 import { type AppStateStore, publishAppStateChanges } from "./app-state-store.js";
 
 /**
- * The one-shot events a shell or its notice presenter feeds the page: a
- * notification's click, or a notice the focused window says in its toast.
- * Each is said once and never bootstrapped from.
+ * The one-shot events a shell feeds the page: the call card's way back to
+ * its agent, or a Luke link. Each is said once and never bootstrapped from.
  */
-type InProcessEventMethod = Extract<
-  PushMethod,
-  | "onShowAgent"
-  | "onShowInbox"
-  | "onShowInboxItem"
-  | "onShowFailedRun"
-  | "onShowChat"
-  | "onAgentEnded"
-  | "onInboxItemOpened"
-  | "onRunFailed"
-  | "onChatMessageWaiting"
-  | "onShowLink"
->;
+type InProcessEventMethod = Extract<PushMethod, "onShowAgent" | "onShowLink">;
 
 /** Where the shell says each one-shot event, to every subscription standing in the page. */
 type InProcessEvents = {
@@ -141,14 +128,6 @@ export function createInProcessBridge(
     );
     const said: EventListeners = {
       onShowAgent: listeners(report),
-      onShowInbox: listeners(report),
-      onShowInboxItem: listeners(report),
-      onShowFailedRun: listeners(report),
-      onShowChat: listeners(report),
-      onAgentEnded: listeners(report),
-      onInboxItemOpened: listeners(report),
-      onRunFailed: listeners(report),
-      onChatMessageWaiting: listeners(report),
       onShowLink: listeners(report),
     };
     // A page whose bridge is closed hears nothing more, whoever still holds `events`.
@@ -164,14 +143,6 @@ export function createInProcessBridge(
       notifyReady: reports.notifyReady,
       recordSurfaceEvent: reports.recordSurfaceEvent,
       onShowAgent: said.onShowAgent.subscribe,
-      onShowInbox: said.onShowInbox.subscribe,
-      onShowInboxItem: said.onShowInboxItem.subscribe,
-      onShowFailedRun: said.onShowFailedRun.subscribe,
-      onShowChat: said.onShowChat.subscribe,
-      onAgentEnded: said.onAgentEnded.subscribe,
-      onInboxItemOpened: said.onInboxItemOpened.subscribe,
-      onRunFailed: said.onRunFailed.subscribe,
-      onChatMessageWaiting: said.onChatMessageWaiting.subscribe,
       onShowLink: said.onShowLink.subscribe,
       reportVoiceView: dropped,
       recordAgentTrace: dropped,
@@ -188,14 +159,6 @@ export function createInProcessBridge(
     };
     const events: InProcessEvents = {
       onShowAgent: said.onShowAgent.emit,
-      onShowInbox: said.onShowInbox.emit,
-      onShowInboxItem: said.onShowInboxItem.emit,
-      onShowFailedRun: said.onShowFailedRun.emit,
-      onShowChat: said.onShowChat.emit,
-      onAgentEnded: said.onAgentEnded.emit,
-      onInboxItemOpened: said.onInboxItemOpened.emit,
-      onRunFailed: said.onRunFailed.emit,
-      onChatMessageWaiting: said.onChatMessageWaiting.emit,
       onShowLink: said.onShowLink.emit,
     };
     return { bridge, events };

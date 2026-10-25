@@ -4,6 +4,7 @@ import { BUTTON_VARIANT, Button } from "@luke/ui";
 import { CircleCheckIcon, RotateCcwIcon } from "lucide-react";
 import { createContext, type ReactNode, useContext, useRef, useState } from "react";
 import { type HeldBodies, heldBodies } from "./comment-drafts.js";
+import { ACTS_AT_END_CLASS } from "./pull-request-look.js";
 import { PullRequestWriteNote, usePullRequestWrites } from "./pull-request-writes.js";
 import { ReplyForm, type ReplyFormWords } from "./reply-form.js";
 
@@ -119,7 +120,7 @@ export function ThreadActions({ thread }: { thread: ReviewThread }): React.JSX.E
     ? PULL_REQUEST_ACTION.UNRESOLVE_THREAD
     : PULL_REQUEST_ACTION.RESOLVE_THREAD;
   return (
-    <div className="pull-request-thread-actions">
+    <div className="pull-request-thread-actions flex flex-col gap-control-gap border-t border-border px-list-inset py-row-inset">
       {replying ? (
         <ReplyForm
           words={REPLY_WORDS}
@@ -143,7 +144,7 @@ export function ThreadActions({ thread }: { thread: ReviewThread }): React.JSX.E
           }}
         />
       ) : null}
-      <div className="pull-request-thread-actions-row">
+      <div className={`pull-request-thread-actions-row items-center ${ACTS_AT_END_CLASS}`}>
         {replying ? null : (
           <Button variant={BUTTON_VARIANT.OUTLINE} onClick={() => setReplying(true)}>
             {THREAD_WORDS.REPLY_OPEN}

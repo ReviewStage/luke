@@ -1,12 +1,12 @@
 import assert from "node:assert/strict";
+import { type AgentNotice, NOTICE_KIND } from "@luke/host/agent-notices";
 import { NOTIFICATIONS_STATUS, type NotificationsStatus } from "@luke/voice/settings-controls";
 import { afterEach, test, vi } from "vitest";
 import { electronNoticeDoors } from "./notice-doors";
 
 /**
- * Settings' test notification as macOS meets it: posted through the same
- * door as an agent's, whose answer from macOS says whether notifications
- * are on for Luke, and whose click brings Luke forward.
+ * A command ask's notification as macOS meets it: its answer from macOS says
+ * whether notifications are on for Luke, and its click brings Luke forward.
  *
  * Note that Electron's module is replaced whole, because it is the operating
  * system's door and answers nothing outside an Electron process.
@@ -37,14 +37,20 @@ vi.mock("electron", () => ({
 
 const ignore = () => undefined;
 
+/** A command waiting on this Mac, announced as `client-notices.ts` announces it, its click handed in. */
+function askNotice(askId: string, onClick: () => void = ignore): AgentNotice {
+  return {
+    subject: { kind: NOTICE_KIND.MAC_COMMAND_ASK, askId },
+    title: "Run a command on your Mac?",
+    body: "An agent is waiting for you to allow or deny a command.",
+    onClick,
+  };
+}
+
 /** The doors, with every answer from macOS they hand on gathered. */
 function doors() {
   const answers: NotificationsStatus[] = [];
   const surface = electronNoticeDoors({
-    toPanels: ignore,
-    inboxToPanels: ignore,
-    failedRunToPanels: ignore,
-    chatToPanels: ignore,
     onAnswered: (status) => answers.push(status),
     report: ignore,
   });
@@ -55,34 +61,26 @@ afterEach(() => {
   posted.splice(0);
 });
 
-test("the test notification is shown by macOS at once, saying Luke's notifications are on", () => {
-  const { surface } = doors();
-
-  surface.postTest(ignore);
-
-  assert.equal(posted.length, 1);
-  assert.equal(posted[0]?.options.title, "Luke notifications are on");
-  assert.equal(posted[0]?.shown, true);
-});
-
-test("macOS refusing the test notification says notifications are off, and showing it says on", () => {
+test("macOS refusing a notification says notifications are off, and showing one says on", () => {
   const { surface, answers } = doors();
 
-  surface.postTest(ignore);
+  surface.post(askNotice("first"));
   posted[0]?.emit("failed", {}, "Notifications are not allowed for this application");
-  surface.postTest(ignore);
+  surface.post(askNotice("second"));
   posted[1]?.emit("show");
 
   assert.deepEqual(answers, [NOTIFICATIONS_STATUS.OFF, NOTIFICATIONS_STATUS.ON]);
 });
 
-test("a click on the test notification brings Luke forward", () => {
+test("a click on a notification brings Luke forward", () => {
   const { surface } = doors();
   let focused = false;
 
-  surface.postTest(() => {
-    focused = true;
-  });
+  surface.post(
+    askNotice("first", () => {
+      focused = true;
+    }),
+  );
   posted[0]?.emit("click");
 
   assert.equal(focused, true);

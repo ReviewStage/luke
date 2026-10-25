@@ -42,6 +42,7 @@ import {
 import { GLYPH } from "@luke/ui/icons";
 import { ClockIcon, ExternalLinkIcon } from "lucide-react";
 import { useEffect, useRef } from "react";
+import { ACTOR_SIZE, ActorMark, automationRunActor } from "../actor-ref.js";
 import { useCopyLinkItem } from "../copy-link-item.js";
 import { GLYPH_STATE, type GlyphState, StateGlyph, stateEndMark } from "../state-glyph.js";
 import { centreWithin, scrollerOf } from "../tasks/code-pane.js";
@@ -138,7 +139,7 @@ export function RunRow({
   const linkItem = useCopyLinkItem();
   const openLink = useOpenLink();
   const { agent } = run;
-  // Note that every run offers its link, one that started no agent too, because a failed run's notification links to it, and a run with no menu has no ⋯ track, so its time would stand out of line with the others'.
+  // Note that every run offers its link, one that started no agent too, because a run's own link opens it, and a run with no menu has no ⋯ track, so its time would stand out of line with the others'.
   const copyLink =
     automationId === undefined
       ? undefined
@@ -161,14 +162,20 @@ export function RunRow({
       ref={(node) => {
         row.current = node;
       }}
-      leading={<StateGlyph glyph={<FiringGlyph of={run.firing} />} state={state} />}
+      leading={
+        automationName === undefined ? (
+          <StateGlyph glyph={<FiringGlyph of={run.firing} />} state={state} />
+        ) : (
+          <ActorMark actor={automationRunActor(run, automationName)} size={ACTOR_SIZE.ROW} />
+        )
+      }
       title={automationRunTitle(run)}
       lead={
         automationName === undefined
           ? undefined
           : { icon: <GLYPH.AUTOMATION />, label: automationName }
       }
-      leadAt={LIST_ROW_LEAD.LINE}
+      leadAt={LIST_ROW_LEAD.INLINE}
       description={
         <Tooltip label={line}>
           <span>{line}</span>

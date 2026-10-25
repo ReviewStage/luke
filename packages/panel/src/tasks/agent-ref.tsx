@@ -332,7 +332,7 @@ export function AgentMarkRef({
 }): React.JSX.Element {
   return (
     <Tooltip label={subject.name} card={<AgentCard subject={subject} models={models} />}>
-      <span className="agent-mark-ref" data-agent-ref="">
+      <span className="flex" data-agent-ref="">
         <ActorMark actor={subject.tile} />
       </span>
     </Tooltip>

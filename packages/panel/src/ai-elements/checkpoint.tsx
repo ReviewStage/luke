@@ -28,9 +28,12 @@ export interface CheckpointProps {
 
 export function Checkpoint({ children, trailing }: CheckpointProps): ReactNode {
   return (
-    <div className="checkpoint" data-checkpoint="">
+    <div
+      className="checkpoint flex items-center gap-icon-gap px-0 pt-list-inset pb-row-inset text-caption-inline font-luke-semibold text-muted-foreground"
+      data-checkpoint=""
+    >
       {children}
-      <span className="checkpoint-rule" aria-hidden="true" />
+      <span className="h-px min-w-0 flex-1 bg-border" aria-hidden="true" />
       {trailing}
     </div>
   );

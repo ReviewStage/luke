@@ -19,7 +19,7 @@ import {
 import { createContext, type ReactNode, useContext } from "react";
 import { useIntegrationStatuses } from "../integration-statuses.js";
 import { IntegrationToolList } from "../integration-tool-list.js";
-import { ServerRowWords, useServerRows } from "./agent-servers.js";
+import { SERVER_END_CLASS, ServerRowWords, useServerRows } from "./agent-servers.js";
 
 /**
  * server-card.tsx -- the card a mention of an MCP server or of one of its tools hangs: the server's row as the MCP popover draws it, what the mention does for the agent the words go to, and the server's tools.
@@ -147,7 +147,7 @@ export function ServerCard({
         </span>
         <ServerRowWords row={row} />
         {place !== undefined && row.kind === SERVER_ROW.SWITCH ? (
-          <span className="agent-servers-end">
+          <span className={SERVER_END_CLASS}>
             <SwitchMark checked={row.on} />
           </span>
         ) : null}

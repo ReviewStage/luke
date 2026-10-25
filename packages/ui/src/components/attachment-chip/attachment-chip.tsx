@@ -80,7 +80,7 @@ const FACE =
   "luke-attachment-chip-face m-0 flex min-w-0 flex-[1_1_auto] items-center gap-luke-8 rounded-attachment-chip-face border-0 bg-transparent py-0 pr-luke-12 pl-attachment-chip-lead text-left text-muted-foreground [font-family:inherit] [font-style:inherit] [font-weight:inherit] leading-[inherit] text-caption-inline transition-[background-color] duration-(--luke-duration-hover) ease-motion-exit [&>svg]:size-icon-16 [&>svg]:flex-none group-data-[image=true]/attachment-chip:justify-center group-data-[image=true]/attachment-chip:p-0";
 
 /** The face as a press: the pointer's hand, and the strong fill under it, a picture brightening with it. */
-const FACE_PRESS = "group/attachment-face cursor-pointer [&:hover]:bg-fill-strong";
+const FACE_PRESS = "group/attachment-face cursor-press [&:hover]:bg-fill-strong";
 
 /**
  * The way off. Note that the disc is 18px but the button is 24px, because a
