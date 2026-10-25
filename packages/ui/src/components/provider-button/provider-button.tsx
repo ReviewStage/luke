@@ -48,7 +48,7 @@ export type ProviderButtonSize = (typeof PROVIDER_BUTTON_SIZE)[keyof typeof PROV
  * desktop's window is dragged, so a press on its bar stays a press.
  */
 const GATE =
-  "luke-provider-button m-0 flex h-provider-gate items-center justify-center gap-icon-gap rounded-control border-0 bg-muted px-luke-16 font-ui text-label-inline font-label text-foreground shadow-provider-gate transition-[background-color,opacity] duration-(--luke-duration-hover) ease-motion-exit pointer-coarse:h-provider-gate-touch in-data-[luke-profile=desktop]:[-webkit-app-region:no-drag] [&:hover:not(:disabled)]:bg-fill-strong [&:disabled:not([aria-busy=true])]:opacity-disabled " +
+  "luke-provider-button m-0 flex h-provider-gate items-center justify-center gap-icon-gap rounded-control border-0 bg-muted px-luke-16 py-0 font-ui text-label-inline font-label text-foreground shadow-provider-gate transition-[background-color,opacity] duration-(--luke-duration-hover) ease-motion-exit pointer-coarse:h-provider-gate-touch in-data-[luke-profile=desktop]:[-webkit-app-region:no-drag] [&:hover:not(:disabled)]:bg-fill-strong [&:disabled:not([aria-busy=true])]:opacity-disabled " +
   "data-[primary=true]:bg-primary data-[primary=true]:text-primary-foreground data-[primary=true]:shadow-none data-[primary=true]:[&:hover:not(:disabled)]:bg-ink";
 
 /**

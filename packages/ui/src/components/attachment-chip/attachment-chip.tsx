@@ -90,7 +90,7 @@ const FACE_PRESS = "group/attachment-face cursor-pointer [&:hover]:bg-fill-stron
  * ring; it stands inside the target, close round the disc.
  */
 const REMOVE =
-  "luke-attachment-chip-remove absolute -top-attachment-chip-remove-out -right-attachment-chip-remove-out m-0 flex size-attachment-chip-remove items-center justify-center rounded-luke-full border-3 border-transparent bg-background bg-clip-padding p-0 text-muted-foreground shadow-attachment-chip-disc transition-[color] duration-(--luke-duration-hover) ease-motion-exit outline-offset-[calc(-1*var(--luke-focus-ring-width))] [&:hover:not(:disabled)]:text-foreground disabled:opacity-disabled [&_svg]:size-luke-8";
+  "luke-attachment-chip-remove absolute -top-attachment-chip-remove-out -right-attachment-chip-remove-out m-0 flex size-attachment-chip-remove items-center justify-center rounded-luke-full border-3 border-transparent bg-background bg-clip-padding p-0 text-muted-foreground shadow-attachment-chip-disc transition-[color] duration-(--luke-duration-hover) ease-motion-exit focus-visible:outline-offset-[calc(-1*var(--luke-focus-ring-width))] [&:hover:not(:disabled)]:text-foreground disabled:opacity-disabled [&_svg]:size-luke-8";
 
 /**
  * An upload's meter, a hairline along the chip's foot inside its edge in the

@@ -48,7 +48,7 @@ const LOOK_CLASS: Record<ComposerLook, string> = {
   [COMPOSER_LOOK.FIELD]: "rounded-control border border-border bg-ground",
   [COMPOSER_LOOK.INPUT]:
     "rounded-control border border-border-strong bg-field transition-[background-color] duration-(--luke-duration-hover) ease-motion-exit focus-within:bg-field-focus",
-  [COMPOSER_LOOK.BARE]: "border-0 bg-transparent",
+  [COMPOSER_LOOK.BARE]: "rounded-dialog border-0 bg-transparent",
 };
 
 /** The edge while files are dragged over it, brightened, so the drop target is the frame itself. */
