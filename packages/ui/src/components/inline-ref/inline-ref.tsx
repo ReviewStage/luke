@@ -141,17 +141,20 @@ function rootClass({
   look,
   gone,
   pressable,
+  leaving,
   stated,
 }: {
   look: InlineRefLook;
   gone: boolean;
   pressable: boolean;
+  /** Whether it is a link to another site, which keeps the pointing hand a control gives up on the desktop. */
+  leaving: boolean;
   stated: boolean;
 }): string {
   const pill = look === INLINE_REF_LOOK.PILL;
   const parts: string[] = [ROOT, LOOK_ROOT[look]];
   if (!pill) parts.push(gone ? "text-muted-foreground" : "text-inherit");
-  if (pressable) parts.push("cursor-pointer");
+  if (pressable) parts.push(leaving ? "cursor-link" : "cursor-press");
   if (pill) {
     // Note that a pill saying its standing is let wider, so its name is read rather than cut at its first word.
     parts.push(stated ? "max-w-inline-ref-pill-stated" : "max-w-inline-ref-pill");
@@ -254,6 +257,7 @@ function InlineRefRoot({
   const linkAddress = useLinkAddress(linkHref);
   const [measured, clipped] = useClipped(label);
   const pressable = onPress !== undefined;
+  const leaving = pressable && leaves && linkHref !== undefined;
   const stated = !(state === undefined || state === null || labelHidden);
   const face = (
     <>
@@ -281,7 +285,7 @@ function InlineRefRoot({
   );
   const own = {
     ...rest,
-    className: `${rootClass({ look, gone, pressable, stated })}${pressable ? " group/inline-ref" : ""}`,
+    className: `${rootClass({ look, gone, pressable, leaving, stated })}${pressable ? " group/inline-ref" : ""}`,
     "data-look": look,
   };
   const goneProps = gone ? { "data-gone": "true" } : {};
@@ -292,7 +296,7 @@ function InlineRefRoot({
       </span>
     );
   }
-  if (leaves && linkHref !== undefined) {
+  if (leaving) {
     // Note that the press, not the browser, opens the address, because the
     // window's opener decides where an address opens, a pull request's in
     // its tab say; the link is what a reader and a right-click are told.

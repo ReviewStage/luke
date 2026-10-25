@@ -186,6 +186,15 @@ Words the window draws are selectable, so any of them can be copied; a
 control's words are not, since a control is pressed rather than read
 (`base.css`). A rule that takes selection away from words says why.
 
+A control gives the Mac's arrow in the desktop's window, as Finder, Mail and
+Notes do, and the pointing hand on the web; a real link, one that opens a
+page, gives the hand on both. Every pressable component reads the one rule
+(`--luke-cursor-press` and `--luke-cursor-link` in `profiles.css`, the
+`cursor-press` and `cursor-link` utilities); a control that takes no press
+shows the plain arrow, a busy one `progress`, words the I-beam, and a resize,
+drag, or zoom its own. The style guard's `pointer-cursor` refuses the hand
+spelled anywhere else.
+
 Every pointer action has a keyboard path and an accessible name. Tab lists use
 one tab stop and Left/Right/Home/End navigation. A control that floats over a
 thumbnail keeps at least a 24px target even when its glyph is smaller; on a

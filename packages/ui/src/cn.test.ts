@@ -32,15 +32,6 @@ test("a later disabled fade replaces an earlier one, the theme's own included", 
   assert.equal(cn("disabled:opacity-disabled", "disabled:opacity-100"), "disabled:opacity-100");
 });
 
-test("a task surface's weight stands beside a font, and its later length replaces an earlier", () => {
-  assert.equal(cn("font-ui font-luke-semibold"), "font-ui font-luke-semibold");
-  assert.equal(cn("font-luke-medium", "font-luke-semibold"), "font-luke-semibold");
-  assert.equal(
-    cn("gap-item-gap text-muted-foreground", "gap-control-gap"),
-    "text-muted-foreground gap-control-gap",
-  );
-});
-
 test("a later row or navigation length replaces an earlier, and a size-only type stands beside a colour", () => {
   assert.equal(
     cn("min-h-control ps-luke-4", "min-h-disclosure-row ps-0"),
@@ -49,4 +40,17 @@ test("a later row or navigation length replaces an earlier, and a size-only type
   assert.equal(cn("h-control", "h-luke-32"), "h-luke-32");
   assert.equal(cn("text-dialog-size text-foreground"), "text-dialog-size text-foreground");
   assert.equal(cn("text-tag-size text-on-accent"), "text-tag-size text-on-accent");
+});
+
+test("a task surface's caption size stands beside a colour, and its later lengths and edges replace earlier ones", () => {
+  assert.equal(
+    cn("text-picture-caption text-muted-foreground"),
+    "text-picture-caption text-muted-foreground",
+  );
+  assert.equal(
+    cn("max-w-conversation-empty text-muted-foreground", "max-w-conversation-empty-wide"),
+    "text-muted-foreground max-w-conversation-empty-wide",
+  );
+  assert.equal(cn("pl-transcript-gutter", "pl-0"), "pl-0");
+  assert.equal(cn("shadow-floating-edge", "shadow-none"), "shadow-none");
 });

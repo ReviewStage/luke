@@ -1,34 +1,15 @@
-/* settings-section.css -- a settings group: its heading a short step above
-   the card, and the card's edge, corner, and ground, with a hairline between
-   each row and the next. The rows' own padding is theirs
-   (`settings-row.css`); the room between sections is the page's. A line
-   in the rows' place stands at a row's height and inset, in a
-   description's muted words. */
+/* settings-section.css -- what a settings group's utilities
+   (`settings-section.tsx`) cannot say: the hairline between each row of its
+   card and the next, the rows a setting reveals ruled as the card's own, and
+   the placeholders' own boxes. The heading, the card's edge, corner, and
+   ground, and a line in the rows' place are utilities; the rows' own padding
+   is theirs (`settings-row.tsx`), and the room between sections the page's. */
 
 @layer components {
-  .luke-settings-section {
-    display: flex;
-    flex-direction: column;
-    gap: var(--luke-space-8);
-    min-width: 0;
-  }
-
-  /* The heading insets a hair, so its words sit just inside the card's
-     edge rather than flush with its border. */
-  .luke-settings-section-head {
-    padding: 0 var(--luke-space-2);
-  }
-
-  /* The card's corner is a control's, so a page draws one corner throughout. */
-  .luke-settings-section-card {
-    display: flex;
-    flex-direction: column;
-    min-width: 0;
-    border: 1px solid var(--luke-color-border);
-    border-radius: var(--luke-control-radius);
-    background: var(--luke-color-surface);
-  }
-
+  /* Note that the rules between rows stay here rather than in a utility on
+     the card, because they fall on what the card holds, rows, lines, and
+     other components' boxes, whose own sheets a parent's child selector in
+     the utilities layer would beat. */
   .luke-settings-section-card > * + * {
     border-top: 1px solid var(--luke-color-border);
   }
@@ -43,23 +24,11 @@
     display: none;
   }
 
-  .luke-settings-line {
-    display: flex;
-    box-sizing: border-box;
-    min-width: 0;
-    min-height: var(--luke-settings-row-min-height);
-    align-items: center;
-    gap: var(--luke-control-gap);
-    margin: 0;
-    padding: var(--luke-settings-row-block) var(--luke-settings-row-inline);
-    color: var(--luke-color-text-muted);
-    font-family: var(--luke-font-sans);
-    font-size: var(--luke-type-caption-size);
-    line-height: var(--luke-type-caption-leading);
-    font-weight: var(--luke-type-caption-weight);
-    overflow-wrap: anywhere;
-  }
-
+  /* Note that the placeholders' boxes are drawn here rather than in
+     utilities, because a skeleton's intrinsic element wears only a class
+     naming itself a skeleton's (`anti-slop/skeleton-through-components`).
+     Their rows are ruled one from the next as a card's rows are, and their
+     sections stand a page's section gap apart. */
   .luke-settings-skeleton-rows {
     display: flex;
     flex-direction: column;
