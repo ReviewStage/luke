@@ -19,6 +19,7 @@ import {
   callPlace,
   isAgentCallKind,
   isCommandKind,
+  sameFieldsBy,
   sameTurnRow,
   TURN_ROW,
   type TurnRow,
@@ -1740,9 +1741,8 @@ function TurnRowView<B>({
  * the tab draws its blocks another way: a running turn's page touches its
  * newest row alone, so every row before it is kept as it was drawn.
  */
-const SteadyTurnRow = memo(
-  TurnRowView,
-  (a, b) => a.trailer === b.trailer && a.children === b.children && sameTurnRow(a.row, b.row),
+const SteadyTurnRow = memo(TurnRowView, (a, b) =>
+  sameFieldsBy(a, b, { row: sameTurnRow }),
 ) as typeof TurnRowView;
 
 /**

@@ -1,6 +1,13 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
-import { ROW_PART, type RowReading, TURN_ROW, type TurnRow, turnRows } from "./turn-rows.js";
+import {
+  ROW_PART,
+  type RowReading,
+  sameTurnRow,
+  TURN_ROW,
+  type TurnRow,
+  turnRows,
+} from "./turn-rows.js";
 
 /** A block as a tab hands it to the fold: what it is to the fold, its name, and whether it still moves. */
 interface Block {
@@ -153,5 +160,45 @@ test("a finished spoken turn a message reached while it ran folds the work on ei
   assert.deepEqual(
     rowsOf([call("ls"), arrived("Also the queue."), words("Seven days.")], false, true),
     ["ls", "Also the queue.", ["1 message", ["Seven days."]]],
+  );
+});
+
+/** A value read otherwise: words with more, a flag flipped, a list one item shorter, a record with a key more. */
+function changed(value: unknown): unknown {
+  if (typeof value === "string") return `${value} again`;
+  if (typeof value === "boolean") return !value;
+  if (Array.isArray(value)) return value.slice(1);
+  return { ...(value as object), more: true };
+}
+
+test("a row of each kind reads alike copied whole, and otherwise once any of its fields or its blocks' fields changes", () => {
+  const moving = turnRows([call("read"), call("grep"), words("Reading.")], READING, {
+    key: "turn",
+    moving: true,
+  });
+  const finished = turnRows([call("read"), thought("why"), call("grep"), words("Done.")], READING, {
+    key: "turn",
+    moving: false,
+    done: true,
+  });
+  const rows = [...moving, ...finished];
+  for (const kind of Object.values(TURN_ROW)) {
+    assert.ok(
+      rows.some((row) => row.kind === kind),
+      `the turns hold a ${kind} row`,
+    );
+  }
+  for (const row of rows) {
+    assert.ok(sameTurnRow(row, structuredClone(row)), `a ${row.kind} row copied whole`);
+    for (const key of Object.keys(row)) {
+      const other = { ...row, [key]: changed(row[key as keyof typeof row]) } as TurnRow<Block>;
+      assert.ok(!sameTurnRow(row, other), `a ${row.kind} row whose ${key} changed`);
+    }
+  }
+  const block = finished.find((row) => row.kind === TURN_ROW.BLOCK);
+  assert.ok(block?.kind === TURN_ROW.BLOCK, "a block row");
+  assert.ok(
+    !sameTurnRow(block, { ...block, block: { ...block.block, name: "Done again." } }),
+    "a block row whose block's words changed",
   );
 });

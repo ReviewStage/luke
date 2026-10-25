@@ -18,7 +18,7 @@ import type { CatalogModel, ModelChoice, ModelProvider } from "@luke/features/mo
 import type { KnownNames } from "@luke/features/place-chip-model";
 import type { TaskStatus } from "@luke/features/task-wire";
 import { TRANSCRIPT_PART_TYPE } from "@luke/features/transcript-wire";
-import { CALL_KIND, CALL_WORDS } from "@luke/features/turn-rows";
+import { CALL_KIND, CALL_WORDS, sameFieldsBy, sameShape } from "@luke/features/turn-rows";
 import { replyFromWords } from "@luke/features/words";
 import { ACT_KIND } from "@luke/host/acts";
 import {
@@ -924,13 +924,8 @@ function AgentPartView({
 }
 
 /** A part of a turn, drawn again only where it reads otherwise, as a part read again from the same stored part does not (`agentParts`). */
-const SteadyAgentPart = memo(
-  AgentPartView,
-  (a, b) =>
-    a.delegation === b.delegation &&
-    a.todos === b.todos &&
-    a.moving === b.moving &&
-    sameFields(a.part, b.part),
+const SteadyAgentPart = memo(AgentPartView, (a, b) =>
+  sameFieldsBy(a, b, { part: (ours, theirs) => sameShape(ours, theirs, 1) }),
 );
 
 /** A webhook call's body inside the card of the prompt it rode in with, folded again under its own line, as the caller sent it. */
@@ -1735,23 +1730,15 @@ function sameArrived(
  * message is kept as it was drawn rather than read through again.
  */
 function sameMessageDraw(a: AgentMessageProps, b: AgentMessageProps): boolean {
-  return (
-    (a.message === b.message || sameHeldPiece(a, b)) &&
-    a.piece === b.piece &&
-    a.plan === b.plan &&
-    a.taskId === b.taskId &&
-    a.moving === b.moving &&
-    a.said === b.said &&
-    a.briefTitle === b.briefTitle &&
-    a.forkable === b.forkable &&
-    a.lead === b.lead &&
-    a.origin === b.origin &&
-    sameFields(a.todos, b.todos) &&
-    sameFields(a.forkCut, b.forkCut) &&
-    sameFields(a.sender, b.sender) &&
-    sameArrived(a.arrived, b.arrived) &&
-    sameDoors(a.delegation, b.delegation)
-  );
+  // Note that every prop is compared, each the same value unless named here, so a prop added later is never missed.
+  return sameFieldsBy(a, b, {
+    message: (ours, theirs) => ours === theirs || sameHeldPiece(a, b),
+    todos: sameFields,
+    forkCut: sameFields,
+    sender: sameFields,
+    arrived: sameArrived,
+    delegation: sameDoors,
+  });
 }
 
 /**
@@ -1835,21 +1822,28 @@ function heldElsewhere(row: PlacedRow, messageId: string): boolean {
   return row.arrived.some((line) => line.id === messageId);
 }
 
-/** Each piece's words as a find counts them, kept by the piece. */
+/** Each piece's own words as a find counts them, kept by the piece. */
 const pieceWords = new WeakMap<TurnPiece, string>();
 
-/** A row as a find reads it before it is drawn: its messages' words, or a piece's own. */
+/**
+ * A row as a find reads it before it is drawn: its messages' words, or a
+ * piece's own, after the lines said ahead of the turn on its first. Note
+ * that those lines are read afresh, never kept with the piece, because a
+ * line said on a call can join a turn whose pieces stand as they were.
+ */
 function findEntryOf(entry: LogEntry): FindRow {
   const { piece, row } = entry;
   if (piece === undefined) return findRowOf(row);
-  let words = pieceWords.get(piece);
-  if (words === undefined) {
-    const own = piece.stretches.map((stretch) =>
-      stretch.line !== undefined ? findWordsOf(stretch.line) : drawnRowsWords(stretch.rows),
-    );
-    words = [...(piece.first ? row.said.map(findWordsOf) : []), ...own].join("\n");
-    pieceWords.set(piece, words);
+  let own = pieceWords.get(piece);
+  if (own === undefined) {
+    own = piece.stretches
+      .map((stretch) =>
+        stretch.line !== undefined ? findWordsOf(stretch.line) : drawnRowsWords(stretch.rows),
+      )
+      .join("\n");
+    pieceWords.set(piece, own);
   }
+  const words = piece.first ? [...row.said.map(findWordsOf), own].join("\n") : own;
   return { key: entry.key, words };
 }
 

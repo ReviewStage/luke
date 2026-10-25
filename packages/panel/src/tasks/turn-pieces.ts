@@ -14,7 +14,7 @@
  * row's step from the last rather than a message's.
  */
 
-import { sameTurnRow, type TurnRow } from "@luke/features/turn-rows";
+import { sameShape, TURN_ROW_DEPTH, type TurnRow } from "@luke/features/turn-rows";
 import type { AgentPart, TurnStretch } from "./coding-agent-model.js";
 
 /** How many of a turn's rows, and lines that reached it, one piece of it holds. */
@@ -117,27 +117,10 @@ export function pieceKey(turnKey: string, at: number): string {
   return at === 0 ? turnKey : `${turnKey}/${String(at)}`;
 }
 
-/** Whether two pieces draw alike: the same place in the turn, the same lines, and rows that read alike. */
+/** Whether two pieces draw alike: every field of the piece, its lines, and its rows as the rows are read (`sameTurnRow`). */
 function samePiece(a: TurnPiece, b: TurnPiece): boolean {
-  return (
-    a.first === b.first &&
-    a.last === b.last &&
-    a.continues === b.continues &&
-    a.stretches.length === b.stretches.length &&
-    a.stretches.every((stretch, at) => {
-      const theirs = b.stretches[at];
-      if (theirs === undefined) return false;
-      if (stretch.line !== undefined || theirs.line !== undefined)
-        return stretch.line === theirs.line;
-      return (
-        stretch.rows.length === theirs.rows.length &&
-        stretch.rows.every((row, index) => {
-          const other = theirs.rows[index];
-          return other !== undefined && sameTurnRow(row, other);
-        })
-      );
-    })
-  );
+  // Note that a row stands two records under a piece: the piece, then its stretch.
+  return sameShape(a, b, TURN_ROW_DEPTH + 2);
 }
 
 /** The pieces handed, each the one held before at its place where it draws alike, so a page that touched only a turn's end leaves its earlier pieces the same values. */
