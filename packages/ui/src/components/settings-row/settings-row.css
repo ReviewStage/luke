@@ -1,165 +1,43 @@
-/* settings-row.css -- a setting's words and its controls on one line, the
-   words taking what room the controls leave and wrapping in it, and the
-   controls staying on the name's line once the row is narrower than 380px,
-   the name fading where it is cut, and dropping below the words only where
-   the words would be left too little room, a leading mark staying beside
-   the words. A compact
-   row stands bare, at a menu row's height, and keeps its controls beside
-   its words at any width. A list row stands in the card as a card's row
-   does, shorter and with its label at body weight, a line of a reference
-   list rather than a setting. What the row grows under its words, a
-   control as wide as the row, stands a step further from them than the
-   description, inset to its words past a leading mark, and an indented row
-   starts at its parent's words, past the parent's mark. */
+/* settings-row.css -- what a settings row's utilities (`settings-row.tsx`,
+   `../../shadcn/item.tsx`) cannot say: how it gives way where it is narrow,
+   and a finger's press across a switch's row. Each row is a container of its
+   own (`@container/luke-settings-row`), so under 380px its controls stay on
+   the name's line, the name fading where it is cut, and drop below the words
+   only where the words would be left too little room, a leading mark staying
+   beside the words. A compact row keeps its controls beside its words at any
+   width, and a row that labels its switch keeps the switch beside them. */
 
 @layer components {
-  /* Note that the row is its own container, and its padding is its body's,
-     because the contract's 380px is the row's whole width wherever it
-     stands, and a container query reads its container's content box. */
+  /* The mark a provider's or a service's row leads with, which an indented
+     row and what a row grows under its line stand past, read inside the row
+     by a placeholder's mark (`SETTINGS_ROW_MARK_WIDTH`) as by the theme's
+     `settings-row-mark`, `settings-row-words-inset`, and
+     `settings-row-indent`. */
   .luke-settings-row {
-    /* The mark a provider's or a service's row leads with, which an indented
-       row and what a row grows under its line stand past. */
     --luke-settings-row-mark-size: 20px;
     --luke-settings-row-words-inset: calc(
       var(--luke-settings-row-mark-size) +
       var(--luke-space-12)
     );
-    container: luke-settings-row / inline-size;
-    min-width: 0;
   }
 
-  /* Note that the margin moves the row's rule with it, so the hairline
-     above an indented row starts at its parent's words too. */
-  .luke-settings-row[data-indent="mark"] {
-    margin-inline-start: calc(
-      var(--luke-settings-row-inline) +
-      var(--luke-settings-row-words-inset)
-    );
-  }
-
-  .luke-settings-row[data-indent="mark"] > .luke-settings-row-body {
-    padding-inline-start: 0;
-  }
-
-  .luke-settings-row-body {
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-    gap: var(--luke-space-4);
-    box-sizing: border-box;
-    min-width: 0;
-    min-height: var(--luke-settings-row-min-height);
-    padding: var(--luke-settings-row-block) var(--luke-settings-row-inline);
-  }
-
-  .luke-settings-row[data-density="compact"] > .luke-settings-row-body {
-    min-height: var(--luke-settings-row-compact-min-height);
-    padding: var(--luke-settings-row-compact-block) var(--luke-settings-row-compact-inline);
-  }
-
-  .luke-settings-row[data-density="list"] > .luke-settings-row-body {
-    min-height: var(--luke-settings-row-list-min-height);
-    padding-block: var(--luke-settings-row-list-block);
-  }
-
-  .luke-settings-row[data-density="list"] .luke-settings-row-label {
-    font-weight: var(--luke-type-body-weight);
-  }
-
-  /* A compact row keeps its controls beside its words at any width, since
-     the popover it stands in is narrower than the 380px a card's row stacks
-     under; they wrap below only where they cannot fit at all. */
-  .luke-settings-row[data-density="compact"] .luke-settings-row-line {
-    flex-wrap: wrap;
-  }
-
+  /* Note that the line's gap, the subject's share of it, and the title's
+     wrap stay here rather than in utilities, because the narrow rules below
+     undo them, and a rule in this layer cannot undo a utility. */
   .luke-settings-row-line {
-    display: flex;
-    align-items: center;
     gap: var(--luke-space-12);
   }
 
   /* The words and the mark leading them, which stay on one line together
      wherever the controls stand. */
   .luke-settings-row-subject {
-    display: flex;
     flex: 1 1 0;
-    align-items: center;
-    gap: var(--luke-space-12);
-    min-width: 0;
-  }
-
-  .luke-settings-row-leading {
-    display: flex;
-    flex: none;
-    align-items: center;
-  }
-
-  /* A face's width, which a mark in the card beside it stands centred in. */
-  .luke-settings-row[data-lead="face"] .luke-settings-row-leading {
-    width: var(--spacing-avatar-card);
-    justify-content: center;
-  }
-
-  .luke-settings-row-copy {
-    display: flex;
-    flex: 1 1 0;
-    flex-direction: column;
-    gap: var(--luke-space-2);
-    min-width: 0;
-    /* A word longer than the room, a commit or an address, breaks rather
-       than running under the controls beside it. */
-    overflow-wrap: anywhere;
   }
 
   /* The label and what rides its line, kept whole and wrapping between. */
   .luke-settings-row-title {
-    display: flex;
     flex-wrap: wrap;
-    align-items: center;
     gap: var(--luke-space-2) var(--luke-space-6);
-    min-width: 0;
-  }
-
-  .luke-settings-row-label {
-    color: var(--luke-color-text);
-    font-family: var(--luke-font-sans);
-    font-size: var(--luke-type-label-size);
-    line-height: var(--luke-type-label-leading);
-    font-weight: var(--luke-type-label-weight);
-  }
-
-  .luke-settings-row-description {
-    margin: 0;
-    color: var(--luke-color-text-muted);
-    font-family: var(--luke-font-sans);
-    font-size: var(--luke-type-caption-size);
-    line-height: var(--luke-type-caption-leading);
-    font-weight: var(--luke-type-caption-weight);
-    overflow-wrap: anywhere;
-  }
-
-  .luke-settings-row-controls {
-    display: flex;
-    flex: 0 1 auto;
-    flex-wrap: wrap;
-    align-items: center;
-    justify-content: flex-end;
-    gap: var(--luke-control-gap);
-    min-width: 0;
-  }
-
-  .luke-settings-row-below[data-led="true"] {
-    padding-inline-start: var(--luke-settings-row-words-inset);
-  }
-
-  .luke-settings-row-controls:empty {
-    display: none;
-  }
-
-  .luke-settings-row-below {
-    min-width: 0;
-    margin-top: var(--luke-space-8);
   }
 
   /* A container query cannot read a custom property, so the contract's
@@ -242,99 +120,17 @@
     }
   }
 
-  .luke-settings-row-mark {
-    display: grid;
-    flex: none;
-    place-items: center;
-    width: var(--luke-settings-row-mark-size, 20px);
-    height: var(--luke-settings-row-mark-size, 20px);
-  }
-
+  /* Note that the glyph a mark holds is sized here rather than by a utility
+     on the mark, because the glyph is another component's, whose own
+     utilities a parent's child selector in the utilities layer would beat. */
   .luke-settings-row-mark > :is(svg, img) {
     width: 100%;
     height: 100%;
   }
 
-  .luke-settings-row-state {
-    display: inline-flex;
-    align-items: center;
-    gap: var(--luke-space-6);
-  }
-
-  .luke-settings-row-state[data-block] {
-    display: flex;
-    width: fit-content;
-  }
-
-  /* Note that the parts of a wrapping line are spaced by the spaces written
-     between them, kept by `pre`, since a flex gap would stand beside the
-     space a part ends in, once the line's own space has been trimmed from
-     the end of that part, and leave a wider gap after a separator than
-     before it. The state's dot keeps its own gap. */
-  .luke-settings-row-state[data-wrap] {
-    column-gap: 0;
-    flex-wrap: wrap;
-    white-space: pre;
-  }
-
-  .luke-settings-row-state[data-wrap]::before {
-    margin-inline-end: var(--luke-space-6);
-  }
-
-  .luke-settings-row-state[data-state="connected"]::before {
-    width: 6px;
-    height: 6px;
-    flex: none;
-    border-radius: 50%;
-    background: var(--luke-color-complete);
-    content: "";
-  }
-
-  .luke-settings-row-state[data-state="attention"] {
-    color: var(--luke-color-attention);
-  }
-
-  .luke-settings-row-value {
-    min-width: 64px;
-    flex: none;
-    color: var(--luke-color-text-muted);
-    font-size: var(--luke-type-body-size);
-    line-height: var(--luke-type-body-leading);
-    text-align: right;
-  }
-
-  .luke-settings-row-act-slot {
-    width: var(--luke-control-height);
-    flex: none;
-  }
-
-  .luke-settings-saved-mark {
-    display: inline-flex;
-    color: var(--luke-color-complete);
-  }
-
   .luke-settings-saved-mark > svg {
     width: 12px;
     height: 12px;
-  }
-
-  /* Note that the check follows a button's words, which sit in an inline
-     span with no gap of their own. */
-  .luke-button .luke-settings-saved-mark {
-    margin-left: var(--luke-space-4);
-  }
-
-  .luke-settings-changed-mark {
-    color: var(--luke-color-text-muted);
-    font-size: var(--luke-type-caption-size);
-    line-height: var(--luke-type-tag-leading);
-    font-weight: var(--luke-type-tag-weight);
-  }
-
-  .luke-settings-attention-mark {
-    display: inline-flex;
-    flex: 0 0 auto;
-    color: var(--luke-color-attention);
   }
 
   .luke-settings-attention-mark > svg {
