@@ -774,6 +774,181 @@
   --spacing-call-tile: var(--luke-call-video-height, auto);
   --spacing-call-tile-face-share: 40%; /* off-scale: a share of a frame's width */
   --spacing-call-tile-face-max: 56px; /* off-scale: a masthead's disc */
+
+  /* The panel's task surfaces (`@luke/panel`'s tasks.css, moving onto
+     utilities): the gaps a byline's phrases, a line's parts, a pane's groups,
+     and a page's sections stand apart by, and the weights words are set in
+     where no type role names them; then each surface's own. */
+  --spacing-field-gap: var(--luke-field-gap);
+  --spacing-page-section-gap: var(--luke-page-section-gap);
+  --spacing-page-inset: var(--luke-page-inset);
+  --spacing-log-over-composer: calc(var(--luke-scroll-fade) + var(--luke-space-4));
+  --spacing-todos-dock: calc(var(--luke-stage-height) * 0.3);
+  --spacing-dictation-clock: 34px; /* off-scale: a clock's widest reading */
+  --text-section-inline: var(--luke-type-section-size);
+  /* The plan's document (`plan-body.tsx`): a section's byline, at most a
+     face and a short date, and the row it shares with the ⋯, which hangs a
+     step past the column (both measured on `.plan-body`, tasks.css, where the
+     heading's room reads them too); the line under "Edited by" that Dismiss
+     overhangs; and the still wash of Luke's accent on a section changed since
+     the last look. */
+  --spacing-plan-byline-room: var(--plan-byline-room);
+  --spacing-plan-unit-row: calc(var(--plan-unit-row-room) + var(--luke-space-6));
+  --spacing-plan-changed-note: 22px; /* off-scale: the line's room, which its button overhangs */
+  --color-plan-changed: color-mix(in srgb, var(--accent) 9%, transparent);
+  /* A transcript (`ai-elements/`): its column's inset; a reply's reading
+     leading; the developer's bubble, at most nearly the column, at a large
+     corner; where a line's words start past its icon (`--transcript-gutter`,
+     tasks.css), which what opens under a line is set in to; a call's chip at a pill's widest
+     in its line; the measure of the line said in place of lines, and of a
+     failure with Continue beside it; what floats over the log on a ground of
+     its own, ringed and lifted, kept inside the log's edges, and the ground a
+     button floats on there; and the line of an address that opens nothing. */
+  --spacing-content-inset: var(--content-inset);
+  --spacing-bubble: 95%; /* off-scale: a share of the column */
+  --spacing-transcript-gutter: var(--transcript-gutter);
+  --spacing-tool-chip: var(--luke-inline-ref-pill-width);
+  --spacing-conversation-empty: 280px; /* off-scale: a short line's measure */
+  --spacing-conversation-empty-wide: 560px; /* off-scale: a one-line failure's measure, Continue beside it */
+  --spacing-conversation-older: calc(100% - var(--luke-space-32));
+  --shadow-floating-edge: inset 0 0 0 1px var(--luke-color-border), var(--luke-menu-shadow);
+  --color-button-ground: var(--luke-button-ground);
+  --color-inert-link: color-mix(in srgb, currentColor 40%, transparent);
+  /* The code and diff views (File, Changes, page, and Browser tabs): a
+     column's inset; the tree beside a tab, as wide as it was last dragged
+     (`--file-tree-width`) and never over its share of the box, so the code
+     or diff beside it keeps the larger column; a crumb's tree, at a narrow popover's width
+     and never taller than its side of the crumb leaves it; the room after a
+     page's version steps, a control's gap less its own edge; a changed
+     image's side, two to a row where they fit; a snippet's height before it
+     is drawn, from its rows; a file's status letter's tint of its own ink;
+     and Luke's own colour, which his name is said in. */
+  --spacing-file-tree: min(
+    var(--file-tree-width, 264px),
+    40%
+  ); /* off-scale: a tree's first width, and at most its share of the box (`TREE_SHARE`) */
+  --spacing-crumb-tree: min(
+    calc(var(--luke-stage-height) - var(--luke-space-16)),
+    var(--luke-popover-room, 100vh)
+  );
+  --spacing-popover-narrow: var(--luke-popover-width-narrow);
+  --spacing-page-versions-end: calc(var(--luke-control-gap) - var(--luke-space-2));
+  --spacing-image-diff-side: 200px; /* off-scale: a side's least before two stop fitting to a row */
+  --spacing-snippet-pending: calc(var(--snippet-rows) * var(--snippet-row));
+  --color-status-letter: color-mix(in srgb, currentcolor 14%, transparent);
+  --color-voice-luke: var(--voice-luke);
+  /* A pull request's tab (`agent-pull-request-tab.tsx`): its Conversation's
+     sides, as far in as the measure leaves them (`--pull-request-page-measure`,
+     tasks.css), never under a column's inset; the Chapters view's rail, as
+     wide as Files changed's tree stands by default and never over two
+     fifths of the view; and a reviewer's disc at a face's corner. */
+  --spacing-pull-request-page: max(
+    var(--luke-space-12),
+    (100cqi - var(--pull-request-page-measure)) /
+    2
+  );
+  --spacing-chapter-rail: min(calc(var(--luke-space-64) * 4), 40%);
+  --spacing-review-badge: 10px; /* off-scale: a standing's disc at a face's corner */
+  /* A pull request's conversation (`agent-pull-request-tab.tsx`): the
+     words' field growing from a few lines' height; a branch's chip at its
+     widest; a label's dot in its GitHub colour (`--label-dot`); a line
+     comment's measure; a boxed entry's inset, its hairline counted
+     (`--boxed-inset`); a check's glyph and a deployment's door; and the
+     annotation card's measure and columns, which its sheet sets
+     (`.annotation-card`). */
+  --spacing-comment-editor: calc(3lh + 2 * var(--luke-space-6));
+  --spacing-branch-chip: 22rem; /* off-scale: a branch's name before it is cut */
+  --spacing-label-dot: 10px; /* off-scale: a label's swatch */
+  --color-label-dot: var(--label-dot, transparent);
+  --spacing-line-comment: 720px; /* off-scale: a line comment's reading measure */
+  --spacing-boxed-inset: var(--boxed-inset);
+  --spacing-check-glyph: 14px; /* off-scale: a check's glyph */
+  --spacing-deployment-open: 13px; /* off-scale: a deployment's door */
+  --spacing-annotation: min(48rem, 100%);
+  --spacing-annotation-turn: var(--annotation-turn);
+  --spacing-annotation-face: var(--annotation-face);
+  --spacing-annotation-face-x: var(--annotation-face-x);
+  --spacing-annotation-gap: var(--annotation-gap);
+  --spacing-annotation-more: calc(var(--annotation-face) + var(--annotation-gap));
+  --grid-template-columns-annotation-comment: var(--annotation-face) minmax(0, 1fr);
+  /* A file's type icon in Pierre's colour for its type, in the palette the
+     panel's base.css repeats from it (`file-type-icon.tsx`). */
+  --color-file-icon-gray: var(--file-icon-gray);
+  --color-file-icon-red: var(--file-icon-red);
+  --color-file-icon-vermilion: var(--file-icon-vermilion);
+  --color-file-icon-orange: var(--file-icon-orange);
+  --color-file-icon-yellow: var(--file-icon-yellow);
+  --color-file-icon-green: var(--file-icon-green);
+  --color-file-icon-teal: var(--file-icon-teal);
+  --color-file-icon-cyan: var(--file-icon-cyan);
+  --color-file-icon-blue: var(--file-icon-blue);
+  --color-file-icon-indigo: var(--file-icon-indigo);
+  --color-file-icon-purple: var(--file-icon-purple);
+  --color-file-icon-pink: var(--file-icon-pink);
+  --color-file-icon-mauve: var(--file-icon-mauve);
+  /* A file opened over the window (`attachment-viewer.tsx`): a text file's
+     width, any other file's, and the whole of the dimmed window a picture
+     at its own pixels takes, on the veil a video plays on. */
+  --spacing-viewer-text: min(
+    880px,
+    var(--luke-stage-width) -
+    2 *
+    var(--luke-space-24)
+  ); /* off-scale: a text file's reading width */
+  --spacing-viewer-other: min(
+    400px,
+    var(--luke-stage-width) -
+    2 *
+    var(--luke-space-24)
+  ); /* off-scale: a file shown by its icon */
+  --spacing-viewer-stage: calc(var(--luke-stage-width) - 2 * var(--luke-space-24));
+  --spacing-viewer-stage-height: calc(var(--luke-stage-height) - 2 * var(--luke-space-24));
+  /* A Terminal tab (`terminal-tab.tsx`): its ground, a busy bar's dots spaced apart, and the shells'
+     list beside it. */
+  --color-terminal-ground: var(--terminal-ground);
+  --tracking-busy: 1px; /* off-scale: a busy bar's dots */
+  --spacing-shells-pane: min(208px, 40%); /* off-scale: the shells' list's width */
+  /* The composer's popovers: the servers' list at most as tall as the window
+     leaves above the composer, a page's head at a pane bar's height, a
+     task's issue chip at a title's readable start, a 12px glyph, and the
+     context's parts in the chart's colours. */
+  --spacing-servers-list: clamp(
+    160px,
+    var(--luke-stage-height) -
+    320px,
+    400px
+  ); /* off-scale: a list a server's page tall */
+  --spacing-issue-chip: min(
+    100%,
+    360px
+  ); /* off-scale: a title's readable start, past which it is cut */
+  --color-chart-1: var(--luke-color-chart-1);
+  --color-chart-2: var(--luke-color-chart-2);
+  --color-chart-3: var(--luke-color-chart-3);
+  /* A picture in written words (`picture-block.tsx`): no taller than a
+     screenful's worth, a screenshot's shape at a stand-in's width while its
+     bytes are read, a caption a step under the words around it, a field
+     under it that describes it anew, and the glyph a picture from outside
+     Luke is marked by. */
+  --spacing-picture-most: 520px; /* off-scale: a screenful's worth */
+  --spacing-picture-stand-in: 480px; /* off-scale: a picture's width before its bytes are read */
+  --aspect-screenshot: 16 / 10;
+  --text-picture-caption: 0.9em;
+  --text-picture-caption--line-height: 1.45;
+  --spacing-picture-describe: min(360px, 100%); /* off-scale: a description's field */
+  --spacing-picture-glyph: 0.95em;
+  /* The plan's comments (`plan-comments.tsx`): the margin past the column
+     its cards stand in at their own width, a reply's line set in under the
+     name past the writer's mark, and the quote's edge, struck where its
+     words are gone. */
+  --spacing-comment-margin: calc(100% + var(--comment-margin-gap));
+  --spacing-comment-card: var(--comment-card-width);
+  --spacing-comment-indent: calc(
+    16px +
+    5px
+  ); /* off-scale: past the actor's 16px mark and its gap */
+  --color-comment-mark-edge: var(--comment-mark-edge);
+  --color-quote-strike: color-mix(in srgb, currentColor 45%, transparent);
 }
 
 /* The conditions a control answers beside its states: a finger's pointer,
@@ -817,3 +992,7 @@
    keeps its hints. */
 @custom-variant no-hover (@media (hover: none));
 @custom-variant finger (@media (hover: none) and (pointer: coarse));
+
+/* The shell standing as one pane, a phone's, as its root says
+   (`data-luke-room`, the panel's `shell-room.ts`). */
+@custom-variant shell-narrow (:where(:root)[data-luke-room="narrow"] .desktop-shell &);
