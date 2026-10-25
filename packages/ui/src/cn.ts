@@ -35,7 +35,6 @@ const PANEL_PLACES = {
     "chat-reading",
     "em",
     "onboarding-foot",
-    "page-section-gap",
   ],
 } as const;
 

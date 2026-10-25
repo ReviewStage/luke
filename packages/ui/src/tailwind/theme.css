@@ -298,7 +298,6 @@
      column and Chat's reading inset and measure; a glyph at its words'
      size; the sign-in's foot; the experiment tag's tracking; and the spring
      a byline's presses fade on. */
-  --spacing-page-section-gap: var(--luke-page-section-gap);
   --grid-template-columns-inbox: auto minmax(0, 1fr);
   --grid-template-columns-place-split: min(var(--sidebar-width), 35%) minmax(0, 1fr);
   --grid-template-rows-single: minmax(0, 1fr);
