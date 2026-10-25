@@ -70,6 +70,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeAll, beforeEach, onTestFinished, test, vi } from "vitest";
 import { appBridge } from "../app-bridge.js";
 import { runAppCommand, useAppKeymap } from "../app-commands.js";
+import { useDraftsOwner } from "../composer-drafts.js";
 import { DRAFT_WORD } from "../draft-mark.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import { useInboxListing } from "../tasks/use-inbox-listing.js";
@@ -596,6 +597,8 @@ function mount(
     newTasks: 0,
   };
   function Page({ sidePanel }: { sidePanel?: SidePanelControl | undefined }) {
+    // The drafts are handed to the account signed in, none here, as the panel's root hands them.
+    useDraftsOwner(undefined);
     const [chosen, setChosen] = useState<InboxChoice | undefined>(undefined);
     // Whether the list was asked for, which the window keeps as the Tasks tab does.
     const [listAsked, setListAsked] = useState(false);
@@ -7517,14 +7520,16 @@ test("words another window writes in the open ask's box while this window's repl
   typeInComposer(pane, "One more detail");
   await settle();
   // The other window, where the item still waits, writes in its open box, as storage hands it on.
-  const kept: { place: { thread?: true } }[] = JSON.parse(
-    window.localStorage.getItem("luke.composerDrafts") ?? "[]",
-  );
-  const written = kept.find((entry) => entry.place.thread === true) ?? assert.fail("the draft");
-  const { thread: _, ...open } = written.place;
+  const open = {
+    kind: "inbox",
+    planId: TASK_ID,
+    agentId: shown.agentId,
+    itemId: shown.id,
+    revision: shown.revision,
+  };
   window.localStorage.setItem(
     "luke.composerDrafts",
-    JSON.stringify([...kept, { ...written, place: open, text: "Please wait" }]),
+    JSON.stringify([{ accountId: null, place: open, text: "Please wait" }]),
   );
   act(() => {
     window.dispatchEvent(new StorageEvent("storage", { key: "luke.composerDrafts" }));
