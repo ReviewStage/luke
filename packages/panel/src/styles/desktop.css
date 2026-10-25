@@ -3250,6 +3250,8 @@ ul.actor-stack {
 }
 
 .chat-stream {
+  --reading-room: calc((100% - var(--luke-page-measure)) / 2);
+
   display: flex;
   min-width: 0;
   min-height: 0;
@@ -3293,12 +3295,15 @@ ul.actor-stack {
   height: 1em;
 }
 
-/* The stream's body, the block a log's lines stand in (`ConversationContent`). */
+/* The stream's body, the block a log's lines stand in (`ConversationContent`),
+   keeping to the reading measure in the middle of the pane as an agent's
+   transcript does (`.desktop-agent`), and to the column's inset where the
+   pane is narrower than that. */
 .chat-stream-body {
-  padding: var(--luke-space-16) var(--column-inset);
+  padding: var(--luke-space-16) max(var(--column-inset), var(--reading-room));
 }
 
-/* The stream runs the pane's whole width, left-aligned, as Slack's does. */
+/* The messages fill the body's measure, left-aligned, as Slack's do. */
 .chat-messages,
 .chat-replies {
   margin: 0;
@@ -3421,6 +3426,7 @@ ul.actor-stack {
   gap: var(--luke-tight-gap);
   margin-left: auto;
   opacity: 0;
+  transition: opacity var(--luke-duration-quick) var(--luke-spring);
 }
 
 /* The presses show as their row does, so a message's Copy stands with its
@@ -3551,11 +3557,12 @@ ul.actor-stack {
   }
 }
 
-/* The composer at a place's foot, at the stream's reading measure: the
-   shared composer card (`PromptInput`) around the box, its foot saying what
-   the box takes with the round send at its end. */
+/* The composer at a place's foot, at the stream's reading measure, or the
+   pane's width inside its insets where that is narrower: the shared composer
+   card (`PromptInput`) around the box, its foot saying what the box takes
+   with the round send at its end. */
 .chat-composer {
-  width: calc(100% - 2 * var(--column-inset));
+  width: min(var(--luke-page-measure), calc(100% - 2 * var(--column-inset)));
   margin: var(--luke-block-gap) auto var(--luke-space-16);
   padding: 0;
 }
@@ -3563,7 +3570,7 @@ ul.actor-stack {
 /* Where no box is offered (an archived channel, or a direct message
    between two others), its foot says why, where the box would stand. */
 .chat-closed-foot {
-  width: calc(100% - 2 * var(--column-inset));
+  width: min(var(--luke-page-measure), calc(100% - 2 * var(--column-inset)));
   margin: var(--luke-block-gap) auto var(--luke-space-16);
   text-align: center;
 }
