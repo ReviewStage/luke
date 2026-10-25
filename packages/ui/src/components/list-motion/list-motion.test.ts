@@ -79,7 +79,10 @@ beforeEach(() => {
     this: HTMLElement,
   ) {
     const list = this.parentElement;
-    if (!this.matches("li") || list === null) return new DOMRect(0, 0, 0, 0);
+    // Note that a row taken out of the layout is drawn nowhere, as a browser draws it: an empty box at the window's corner.
+    if (!this.matches("li") || list === null || this.style.display === "none") {
+      return new DOMRect(0, 0, 0, 0);
+    }
     const laidOut = [...list.children].filter(
       (each) => each instanceof HTMLElement && each.style.position !== "absolute",
     );
@@ -297,10 +300,12 @@ test("a row arriving or leaving below the window's foot plays nothing, and one l
   expect(motionsOf(rowOf("R39"))).toEqual([]);
 
   played = [];
+  const far = rowOf("R39");
   show([["A"]]);
 
   expect(motionsOf(rowOf("R0", true))).toHaveLength(1);
-  expect(rowOf("R39", true)).toBeUndefined();
+  expect(motionsOf(far)).toEqual([]);
+  expect(far?.isConnected).toBe(false);
 });
 
 test("with no motion to play, a leaving row goes on the change that stopped listing it and nothing moves", () => {

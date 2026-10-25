@@ -524,7 +524,10 @@ function arrive(mover: Element, step: number, away: Keyframe, timing: MoveTiming
  * of thousands of rows plays a screenful of them.
  */
 function playMoves(root: HTMLElement, before: Snapshot, timing: MoveTiming): void {
-  const movers = moversOf(root).filter((mover) => !exits.has(mover));
+  // Note that a row leaving with no exit to play, out of sight or moved to another list, is hidden until its entry goes, and glides nowhere.
+  const movers = moversOf(root).filter(
+    (mover) => !exits.has(mover) && !mover.hasAttribute("data-leaving"),
+  );
   const now = placesOf(root, movers);
   const wasOf = (mover: Element): Place | undefined => {
     const own = before.places.get(mover);
