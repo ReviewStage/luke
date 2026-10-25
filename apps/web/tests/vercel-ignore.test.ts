@@ -8,6 +8,7 @@ import { type TestContext, test } from "vitest";
 
 const ROOT = fileURLToPath(new URL("../../../", import.meta.url));
 const SCRIPT = "scripts/vercel-ignore.sh";
+const SCRIPTS = [SCRIPT, "scripts/vercel-deployed-paths.mjs"];
 
 /**
  * The Vercel project's Ignored Build Step, as set in its Git settings: the
@@ -23,6 +24,36 @@ type Verdict = (typeof VERDICT)[keyof typeof VERDICT];
 
 /** A commit no remote holds, so the step cannot fetch it. */
 const UNKNOWN_COMMIT = "0123456789abcdef0123456789abcdef01234567";
+
+/** What Vercel names a build of `main` itself, the production deployment. */
+const PRODUCTION = { VERCEL_ENV: "production", VERCEL_GIT_COMMIT_REF: "main" } as const;
+/** What Vercel names a build of any other branch. */
+const PREVIEW = { VERCEL_ENV: "preview", VERCEL_GIT_COMMIT_REF: "feat/branch" } as const;
+
+/**
+ * A workspace shaped like the repository's: the two services `vercel.json`
+ * names, the web one reaching `service` and, through its devDependencies,
+ * `wire`; and a desktop app reaching `host`, which no service does.
+ */
+const WORKSPACE: Readonly<Record<string, unknown>> = {
+  "pnpm-workspace.yaml": 'packages:\n  - "apps/*"\n  - "packages/*"\n\ncatalog:\n  effect: 4.0.4\n',
+  "vercel.json": { services: { web: { root: "apps/web" }, dev: { root: "apps/dev" } } },
+  "apps/web/package.json": { name: "@luke/web", dependencies: { "@luke/service": "workspace:*" } },
+  "apps/dev/package.json": { name: "@luke/coder", dependencies: { effect: "catalog:" } },
+  "apps/desktop/package.json": {
+    name: "@luke/desktop",
+    dependencies: { "@luke/host": "workspace:*" },
+  },
+  "packages/service/package.json": {
+    name: "@luke/service",
+    devDependencies: { "@luke/wire": "workspace:^" },
+  },
+  "packages/wire/package.json": { name: "@luke/wire" },
+  "packages/host/package.json": {
+    name: "@luke/host",
+    dependencies: { "@luke/wire": "workspace:*" },
+  },
+};
 
 function git(root: string, ...args: string[]): string {
   const ran = spawnSync(
@@ -46,14 +77,43 @@ function git(root: string, ...args: string[]): string {
   return ran.stdout.trim();
 }
 
-/** A repository holding the ignore step, so its first commit has the step to run. */
+/** A repository holding the ignore step and the workspace, so its first commit has the step to run. */
 async function repository(t: TestContext, withScript = true): Promise<string> {
   const root = await temporaryDirectory(t, "luke-vercel-ignore-");
   if (withScript) {
     mkdirSync(join(root, "scripts"));
-    copyFileSync(join(ROOT, SCRIPT), join(root, SCRIPT));
+    for (const script of SCRIPTS) copyFileSync(join(ROOT, script), join(root, script));
+  }
+  for (const [path, content] of Object.entries(WORKSPACE)) {
+    mkdirSync(dirname(join(root, path)), { recursive: true });
+    writeFileSync(
+      join(root, path),
+      typeof content === "string" ? content : `${JSON.stringify(content)}\n`,
+    );
   }
   git(root, "init", "-q", "-b", "main");
+  git(root, "add", "--all");
+  git(root, "commit", "-q", "-m", "workspace");
+  return root;
+}
+
+/** A clone of `origin`, at the branch given where one is, shallow where a depth is given, as Vercel's is. */
+async function cloneOf(
+  t: TestContext,
+  origin: string,
+  branch?: string,
+  depth?: number,
+): Promise<string> {
+  const root = await temporaryDirectory(t, "luke-vercel-ignore-clone-");
+  git(
+    root,
+    "clone",
+    "-q",
+    ...(branch ? ["--branch", branch, "--single-branch"] : []),
+    ...(depth ? [`--depth=${depth}`] : []),
+    `file://${origin}`,
+    ".",
+  );
   return root;
 }
 
@@ -94,7 +154,7 @@ function decide(
 
 test("a push that changes only the desktop app or the docs since the last deployment is skipped", async (t) => {
   const root = await repository(t);
-  const deployed = commit(root, "apps/web/package.json");
+  const deployed = commit(root, "apps/web/src/main.tsx");
   commit(root, "apps/desktop/src/main/main.ts");
   assert.equal(decide(root, deployed), VERDICT.SKIP);
   commit(root, "docs/DESIGN.md");
@@ -113,17 +173,58 @@ test("a push that changes anything a service installs or builds from is built", 
     "apps/web/server/routes/github/webhook.ts",
     "apps/dev/sandbox.ts",
     "packages/service/src/index.ts",
+    "packages/service/src/testing/coder-scripted-model.ts",
+    "packages/wire/src/index.ts",
     "patches/drizzle-orm.patch",
     "pnpm-lock.yaml",
     "CHANGELOG.md",
+    "PRIVACY.md",
     "vercel.json",
     "scripts/eve-source-maps.sh",
+    "scripts/vercel-deployed-paths.mjs",
   ]) {
     const root = await repository(t);
     const deployed = commit(root, "README.md");
     commit(root, path);
     assert.equal(decide(root, deployed), VERDICT.BUILD, path);
   }
+});
+
+test("a push that changes only a package no service reaches, or what no build reads in one that does, is skipped", async (t) => {
+  for (const path of [
+    "packages/host/src/index.ts",
+    "apps/web/server/README.md",
+    "packages/service/AGENTS.md",
+    "packages/service/src/agents/runner.test.ts",
+    "packages/wire/src/models/__tests__/message.test.ts",
+    "packages/service/src/triggers/__fixtures__/issue.json",
+    "packages/wire/fixtures/ui-messages/compaction.json",
+    "apps/web/tests/support/builders.ts",
+  ]) {
+    const root = await repository(t);
+    const deployed = commit(root, "README.md");
+    commit(root, path);
+    assert.equal(decide(root, deployed), VERDICT.SKIP, path);
+  }
+});
+
+test("a service that comes to reach a package is built when that package changes", async (t) => {
+  const root = await repository(t);
+  commit(
+    root,
+    "apps/dev/package.json",
+    `${JSON.stringify({ name: "@luke/coder", dependencies: { "@luke/host": "workspace:*" } })}\n`,
+  );
+  const deployed = git(root, "rev-parse", "HEAD");
+  commit(root, "packages/host/src/index.ts");
+  assert.equal(decide(root, deployed), VERDICT.BUILD);
+});
+
+test("a deployed tree that cannot be read is built rather than skipped", async (t) => {
+  const root = await repository(t);
+  const deployed = commit(root, "vercel.json", "{ not json\n");
+  commit(root, "docs/DESIGN.md");
+  assert.equal(decide(root, deployed), VERDICT.BUILD);
 });
 
 test("every commit since the branch's last successful deployment counts, not the head's alone", async (t) => {
@@ -135,18 +236,64 @@ test("every commit since the branch's last successful deployment counts, not the
   assert.equal(decide(root, service), VERDICT.SKIP);
 });
 
-test("a branch with no successful deployment yet is built, whatever its last commit changed", async (t) => {
-  const root = await repository(t);
-  commit(root, "apps/web/src/main.tsx");
-  commit(root, "apps/desktop/src/main/main.ts");
-  assert.equal(decide(root), VERDICT.BUILD);
+/** An origin whose `main` moved on, past the branch's fork, with a web change of its own, as `main` does. */
+async function forkedOrigin(t: TestContext, branchPaths: readonly string[]): Promise<string> {
+  const origin = await repository(t);
+  commit(origin, "README.md");
+  git(origin, "checkout", "-q", "-b", PREVIEW.VERCEL_GIT_COMMIT_REF);
+  for (const path of branchPaths) commit(origin, path);
+  git(origin, "checkout", "-q", "main");
+  commit(origin, "apps/web/src/main.tsx");
+  commit(origin, "packages/service/src/index.ts");
+  return origin;
+}
+
+test("a branch's first push is skipped where it changes nothing deployed since its merge-base with main", async (t) => {
+  const origin = await forkedOrigin(t, ["apps/desktop/src/main/main.ts", "docs/DESIGN.md"]);
+  const root = await cloneOf(t, origin, PREVIEW.VERCEL_GIT_COMMIT_REF);
+  assert.equal(decide(root, undefined, process.env.PATH, PREVIEW), VERDICT.SKIP);
 });
 
-test("a last deployment that cannot be fetched is built against", async (t) => {
-  const root = await repository(t);
-  commit(root, "README.md");
-  commit(root, "apps/desktop/src/main/main.ts");
-  assert.equal(decide(root, UNKNOWN_COMMIT), VERDICT.BUILD);
+test("a branch's first push is built where it changes something deployed since its merge-base with main", async (t) => {
+  const origin = await forkedOrigin(t, ["apps/desktop/src/main/main.ts", "apps/dev/sandbox.ts"]);
+  const root = await cloneOf(t, origin, PREVIEW.VERCEL_GIT_COMMIT_REF);
+  assert.equal(decide(root, undefined, process.env.PATH, PREVIEW), VERDICT.BUILD);
+});
+
+test("a shallow clone is deepened until the branch meets main, as Vercel's clone is", async (t) => {
+  const skipped = await forkedOrigin(t, ["apps/desktop/src/main/main.ts", "docs/DESIGN.md"]);
+  const root = await cloneOf(t, skipped, PREVIEW.VERCEL_GIT_COMMIT_REF, 1);
+  assert.equal(git(root, "rev-parse", "--is-shallow-repository"), "true");
+  assert.equal(decide(root, undefined, process.env.PATH, PREVIEW), VERDICT.SKIP);
+  const built = await forkedOrigin(t, ["apps/web/src/main.tsx", "docs/DESIGN.md"]);
+  const builtRoot = await cloneOf(t, built, PREVIEW.VERCEL_GIT_COMMIT_REF, 1);
+  assert.equal(decide(builtRoot, undefined, process.env.PATH, PREVIEW), VERDICT.BUILD);
+});
+
+test("a last deployment that cannot be fetched is compared with the merge-base with main instead", async (t) => {
+  const skipped = await forkedOrigin(t, ["apps/desktop/src/main/main.ts"]);
+  const root = await cloneOf(t, skipped, PREVIEW.VERCEL_GIT_COMMIT_REF);
+  assert.equal(decide(root, UNKNOWN_COMMIT, process.env.PATH, PREVIEW), VERDICT.SKIP);
+  const built = await forkedOrigin(t, ["packages/service/src/agents/runner.ts"]);
+  const builtRoot = await cloneOf(t, built, PREVIEW.VERCEL_GIT_COMMIT_REF);
+  assert.equal(decide(builtRoot, UNKNOWN_COMMIT, process.env.PATH, PREVIEW), VERDICT.BUILD);
+});
+
+test("a branch that shares no history with main is built", async (t) => {
+  const origin = await repository(t);
+  git(origin, "checkout", "-q", "--orphan", PREVIEW.VERCEL_GIT_COMMIT_REF);
+  commit(origin, "screenshot.png");
+  git(origin, "checkout", "-q", "main");
+  const root = await cloneOf(t, origin, PREVIEW.VERCEL_GIT_COMMIT_REF);
+  assert.equal(decide(root, undefined, process.env.PATH, PREVIEW), VERDICT.BUILD);
+});
+
+test("production with no last deployment to compare with is built, whatever it changed", async (t) => {
+  const origin = await repository(t);
+  commit(origin, "apps/desktop/src/main/main.ts");
+  const root = await cloneOf(t, origin);
+  assert.equal(decide(root, undefined, process.env.PATH, PRODUCTION), VERDICT.BUILD);
+  assert.equal(decide(root, UNKNOWN_COMMIT, process.env.PATH, PRODUCTION), VERDICT.BUILD);
 });
 
 test("a rebased branch whose deployed tree is the one already deployed is skipped, its last deployment fetched by sha", async (t) => {

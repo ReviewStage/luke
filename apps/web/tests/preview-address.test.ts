@@ -7,7 +7,17 @@ import { temporaryDirectory } from "@luke/runtime/testing";
 import { type TestContext, test } from "vitest";
 
 const ROOT = fileURLToPath(new URL("../../../", import.meta.url));
-const SCRIPTS = ["scripts/preview-address.sh", "scripts/vercel-ignore.sh"];
+const SCRIPTS = [
+  "scripts/preview-address.sh",
+  "scripts/vercel-ignore.sh",
+  "scripts/vercel-deployed-paths.mjs",
+];
+/** The least workspace the ignore step reads its deployed tree from: one service, the web app. */
+const WORKSPACE = {
+  "pnpm-workspace.yaml": 'packages:\n  - "apps/*"\n',
+  "vercel.json": `${JSON.stringify({ services: { web: { root: "apps/web" } } })}\n`,
+  "apps/web/package.json": `${JSON.stringify({ name: "@luke/web" })}\n`,
+} as const;
 const REPOSITORY = "ReviewStage/luke";
 const BRANCH = "luke/rebased";
 
@@ -159,6 +169,10 @@ async function rebasedBranch(t: TestContext, webBeforeRebase: string): Promise<F
   for (const script of SCRIPTS) {
     mkdirSync(join(origin, "scripts"), { recursive: true });
     copyFileSync(join(ROOT, script), join(origin, script));
+  }
+  for (const [path, content] of Object.entries(WORKSPACE)) {
+    mkdirSync(dirname(join(origin, path)), { recursive: true });
+    writeFileSync(join(origin, path), content);
   }
   commit(origin, "README.md", "base\n");
   git(origin, "checkout", "-q", "-b", BRANCH);
