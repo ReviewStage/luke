@@ -1,27 +1,12 @@
-/* working-mark.css -- the mark an agent at work wears: two pixels and their
-   fainter tails lapping a track, in the ink around it.
-
-   Its size is fixed by the `viewBox` the mark always carries, 16px (the icon
-   seat) unless a container sets `--luke-working-mark-size`, so a slot never
-   stretches the grid. Each pixel steps a cell, 5px, on one 200ms beat,
-   lapping the eight cells in 1.6s. An endless motion held by
-   `--luke-loop-motion`; every delay is the pixel's lag behind the lead,
-   less a lap, less 0.3s, so a held mark lands mid-lap, the chasers a
-   cell past their tails, rather than on the first frame. */
+/* working-mark.css -- the lap an agent at work's mark runs: each pixel
+   steps a cell, 5px, on one 200ms beat, lapping the eight cells in 1.6s. An
+   endless motion held by `--luke-loop-motion`; every delay is the pixel's
+   lag behind the lead, less a lap, less 0.3s, so a held mark lands mid-lap,
+   the chasers a cell past their tails, rather than on the first frame. The
+   mark is drawn in utilities (`working-mark.tsx`); only the lap stands
+   here. */
 
 @layer components {
-  svg.luke-working-mark[viewBox] {
-    display: block;
-    width: var(--luke-working-mark-size, 16px);
-    height: var(--luke-working-mark-size, 16px);
-    flex: none;
-    fill: currentColor;
-  }
-
-  .luke-working-mark-track {
-    opacity: 0.3;
-  }
-
   .luke-working-mark-dot {
     animation: luke-working-lap 1.6s step-end infinite;
     animation-play-state: var(--luke-loop-motion);
@@ -32,7 +17,6 @@
   }
 
   .luke-working-mark-dot[data-dot="lead-tail"] {
-    opacity: 0.6;
     animation-delay: -1.7s;
   }
 
@@ -41,7 +25,6 @@
   }
 
   .luke-working-mark-dot[data-dot="trail-tail"] {
-    opacity: 0.6;
     animation-delay: -0.9s;
   }
 

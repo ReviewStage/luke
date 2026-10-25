@@ -1,5 +1,5 @@
 /**
- * working-mark.tsx -- the one mark an agent at work wears: two pixels chasing each other round the edge of a small grid, in the ink around it.
+ * working-mark.tsx -- the one mark an agent at work wears: two pixels chasing each other round the edge of a small grid, in the gray ink around it.
  *
  * Every place that says an agent is working draws this mark. It stands inside
  * the 16px icon seat: eight 3px cells lapped round a 3×3 grid, 2px apart.
@@ -11,6 +11,11 @@
  * a still mark always lights four cells and reads as working. The mark itself
  * is decorative; the seat it stands in names it. Its side is 16px unless a
  * container sets `--luke-working-mark-size`.
+ *
+ * It is drawn in the Tailwind theme's utilities: its size is fixed by the
+ * `viewBox` the mark always carries, asked on the mark with that attribute
+ * so a glyph's seat around it never stretches the grid; the lap is
+ * `working-mark.css`'s.
  */
 
 /**
@@ -19,10 +24,10 @@
  * one to hold the same cell.
  */
 const WORKING_DOTS = [
-  { dot: "lead", restsOn: 1 },
-  { dot: "lead-tail", restsOn: 0 },
-  { dot: "trail", restsOn: 5 },
-  { dot: "trail-tail", restsOn: 4 },
+  { dot: "lead", restsOn: 1, tail: false },
+  { dot: "lead-tail", restsOn: 0, tail: true },
+  { dot: "trail", restsOn: 5, tail: false },
+  { dot: "trail-tail", restsOn: 4, tail: true },
 ] as const;
 
 /** One cell's side, in CSS pixels. */
@@ -71,7 +76,7 @@ export function WorkingMark(): React.JSX.Element {
   const start = cellAt(0, 0);
   return (
     <svg
-      className="luke-working-mark"
+      className="luke-working-mark [&[viewBox]]:block [&[viewBox]]:size-working-mark [&[viewBox]]:flex-none [&[viewBox]]:fill-current"
       width={SIDE}
       height={SIDE}
       viewBox={`0 0 ${SIDE} ${SIDE}`}
@@ -80,17 +85,17 @@ export function WorkingMark(): React.JSX.Element {
       {TRACK.map(([column, row], index) => (
         <rect
           key={index}
-          className="luke-working-mark-track"
+          className="luke-working-mark-track opacity-30"
           {...cellAt(column, row)}
           width={CELL}
           height={CELL}
           rx={CELL / 4}
         />
       ))}
-      {WORKING_DOTS.map(({ dot, restsOn }) => (
+      {WORKING_DOTS.map(({ dot, restsOn, tail }) => (
         <rect
           key={dot}
-          className="luke-working-mark-dot"
+          className={tail ? "luke-working-mark-dot opacity-60" : "luke-working-mark-dot"}
           data-dot={dot}
           style={{ transform: restingTransform(restsOn) }}
           {...start}

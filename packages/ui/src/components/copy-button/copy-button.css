@@ -1,36 +1,15 @@
-/* copy-button.css -- a copy button's glyph (`copy-button.tsx`): the copy at
-   rest, the check in the complete ink once a copy lands, and the alert in
-   the danger ink once one is refused, each fading and springing in where
-   the last stood, so the button never moves. The first draw stands still.
-   A chip's lead (`COPY_LOOK.CHIP`) holds its own glyph and the copy's in one
-   square, the copy's own showing under the pointer or the keyboard and for
-   as long as an answer stands. */
+/* copy-button.css -- a copy button's glyph turning (`copy-button.tsx`):
+   each fading and springing in where the last stood, so the button never
+   moves; the first draw stands still. And a chip's lead (`COPY_LOOK.CHIP`),
+   the copy's own glyph showing over the lead's under the chip's pointer or
+   keyboard and for as long as an answer stands. The glyphs themselves are
+   drawn in utilities; these rules read the chip around them. */
 
 @layer components {
-  .luke-copy-glyph {
-    display: inline-grid;
-    flex: none;
-    place-items: center;
-  }
-
   .luke-copy-glyph[data-turned] {
     animation:
       luke-copy-glyph-fade var(--luke-duration-quick) var(--luke-motion-exit) backwards,
       luke-copy-glyph-pop var(--luke-duration-fast) var(--luke-spring-fast) backwards;
-  }
-
-  .luke-copy-glyph[data-state="copied"] {
-    color: var(--luke-color-complete);
-  }
-
-  .luke-copy-glyph[data-state="failed"] {
-    color: var(--luke-color-danger-text);
-  }
-
-  .luke-copy-lead > * {
-    grid-area: 1 / 1;
-    place-self: center;
-    transition: opacity var(--luke-duration-quick) var(--luke-motion-exit);
   }
 
   .luke-copy-lead > .luke-copy-glyph {

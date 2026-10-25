@@ -1,8 +1,11 @@
 import { JSDOM } from "jsdom";
+import { PNG } from "pngjs";
 import { describe, expect, it } from "vitest";
+import { flattenPng } from "./png.ts";
 import { READY_SCRIPT } from "./ready.ts";
 import { CLIENT, type Client, drawsOn, pressedOn, SCENES, STEP } from "./scenes.ts";
-import { scrollScript } from "./scroll.ts";
+import { PIN_SCROLL_FADES_SCRIPT, scrollScript } from "./scroll.ts";
+import { sizedScript } from "./viewport.ts";
 
 // jsdom lays nothing out, so a box is given the rectangle it would stand in.
 const ON_SCREEN = { width: 20, height: 20, top: 10, left: 10, bottom: 30, right: 30 };
@@ -58,17 +61,75 @@ describe("the scroll script", () => {
   });
 });
 
+describe("the scroll fade pin", () => {
+  it("holds the depths a faded box rests at as important lengths, and leaves a box with no fade be", () => {
+    const dom = new JSDOM('<body><div id="faded"></div><div id="plain"></div></body>', {
+      runScripts: "outside-only",
+    });
+    const { document } = dom.window;
+    // jsdom runs no scroll timeline, so the box is given the depths one would have eased it to.
+    const depths: Record<string, string> = {
+      "--luke-scroll-area-fade-start": "0px",
+      "--luke-scroll-area-fade-end": "24px",
+    };
+    dom.window.getComputedStyle = ((box: Element) => ({
+      animationName:
+        box.id === "faded" ? "luke-scroll-area-fade-start, luke-scroll-area-fade-end" : "none",
+      getPropertyValue: (name: string) => depths[name] ?? "",
+    })) as unknown as typeof dom.window.getComputedStyle;
+
+    dom.window.eval(PIN_SCROLL_FADES_SCRIPT);
+
+    const faded = document.getElementById("faded")?.style;
+    expect(faded?.getPropertyValue("--luke-scroll-area-fade-end")).toBe("24px");
+    expect(faded?.getPropertyPriority("--luke-scroll-area-fade-end")).toBe("important");
+    expect(document.getElementById("plain")?.style.length).toBe(0);
+  });
+});
+
+describe("the sized script", () => {
+  /** Whether the script for the least window at 125% calls a page laid out at `width` by `height` CSS px sized. */
+  function sizedAt(width: number, height: number): boolean {
+    const dom = new JSDOM("<body></body>", { runScripts: "outside-only" });
+    Object.assign(dom.window, { innerWidth: width, innerHeight: height });
+    return dom.window.eval(
+      sizedScript({ width: 760, height: 520, zoom: 1.25, phone: false }),
+    ) as boolean;
+  }
+
+  it("waits while the zoomed window's page still lays out at the window's earlier size, and at its pixels unzoomed", () => {
+    expect(sizedAt(1280, 840)).toBe(false);
+    expect(sizedAt(760, 520)).toBe(false);
+  });
+
+  it("is sized once the page lays out at 608×416 CSS px", () => {
+    expect(sizedAt(608, 416)).toBe(true);
+  });
+});
+
+describe("flattening a picture", () => {
+  it("writes every pixel opaque, mixed with the ground by its alpha", () => {
+    const picture = new PNG({ width: 3, height: 1 });
+    // Clear, half-clear white, and opaque red.
+    picture.data.set([10, 20, 30, 0, 255, 255, 255, 128, 200, 0, 0, 255]);
+    const flat = PNG.sync.read(
+      flattenPng(PNG.sync.write(picture), { red: 32, green: 32, blue: 32 }),
+    );
+
+    // (255·128 + 32·127) / 255 = 143.9 for the half-clear white.
+    expect([...flat.data]).toEqual([32, 32, 32, 255, 144, 144, 144, 255, 200, 0, 0, 255]);
+  });
+});
+
 describe("the scene list", () => {
   it("leaves the desktop-only scenes out of the web client's", () => {
     const web = SCENES.filter((scene) => drawsOn(scene, CLIENT.WEB)).map((scene) => scene.id);
     const desktopOnly = SCENES.filter((scene) => !drawsOn(scene, CLIENT.WEB)).map(
       (scene) => scene.id,
     );
-    expect(desktopOnly).toEqual(
-      expect.arrayContaining(["voice-speaking", "voice-muted", "voice-duplex", "call-panel"]),
-    );
+    expect(desktopOnly).toEqual(expect.arrayContaining(["voice-muted", "call-panel"]));
     expect(web).toContain("palette");
-    expect(web).not.toContain("voice-speaking");
+    expect(web).not.toContain("voice-muted");
   });
 
   it("opens ⌘K with the chord each client answers: Meta on the desktop, a Mac's alone, and Ctrl or Meta on the web as its system has it", () => {

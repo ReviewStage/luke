@@ -368,6 +368,64 @@
   padding-top: var(--luke-row-inset);
 }
 
+/* What paints the top of the side panel's sheet, the bar heading its tab
+   (`PaneBar`, or the Inbox item's `Toolbar` on the panel's ground), rounds
+   the sheet's top corners it stands in, since the sheet clips nothing. Split
+   beside an Inbox item, the list's bar stands in the left corner alone and
+   the item's in the right. */
+:where(:root):not([data-luke-room="narrow"])
+  .desktop-shell
+  > .desktop-main
+  .desktop-task
+  > .side-panel
+  .side-panel-keeps
+  > *
+  > :is(.luke-pane-bar, .luke-toolbar):first-child,
+:where(:root):not([data-luke-room="narrow"])
+  .desktop-shell
+  > .desktop-main
+  .desktop-task
+  > .side-panel
+  .side-panel-keeps
+  > *
+  > :first-child
+  > :is(.luke-pane-bar, .luke-toolbar):first-child,
+:where(:root):not([data-luke-room="narrow"])
+  .desktop-shell
+  > .desktop-main
+  .desktop-task
+  > .side-panel
+  .side-panel-keeps
+  > .inbox-view
+  > .inbox-view-items
+  > .luke-toolbar:first-child {
+  border-radius: var(--sheet-radius) var(--sheet-radius) 0 0;
+}
+
+:where(:root):not([data-luke-room="narrow"])
+  .desktop-shell
+  > .desktop-main
+  .desktop-task
+  > .side-panel
+  .side-panel-keeps
+  > .inbox-view[data-columns="both"]
+  > .inbox-tasks
+  > .luke-pane-bar {
+  border-top-right-radius: 0;
+}
+
+:where(:root):not([data-luke-room="narrow"])
+  .desktop-shell
+  > .desktop-main
+  .desktop-task
+  > .side-panel
+  .side-panel-keeps
+  > .inbox-view[data-columns="both"]
+  > .inbox-view-items
+  > .luke-toolbar:first-child {
+  border-top-left-radius: 0;
+}
+
 /* What paints the page's ground at its sheet's edge, the plan's summary,
    rounds the sheet's corners it stands in. */
 :where(:root):not([data-luke-room="narrow"])

@@ -18,11 +18,15 @@
    sizes the face, not whichever value happens to be chosen, so the rows
    read as one aligned column and a change of value cannot re-shape its row.
    The width fits the longest faces a build ships, and a longer model name
-   ellipsizes rather than growing. */
+   ellipsizes rather than growing. Note that the picker may shrink below its
+   words where a line holds less than they ask for, as the chip inside it
+   already may, so a row of chips under a title in a narrow column cuts the
+   one that cannot fit rather than standing past the column's edge. */
 .settings-picker {
   position: relative;
   display: inline-flex;
-  flex: 0 0 auto;
+  flex: 0 1 auto;
+  min-width: 0;
   align-items: center;
 }
 

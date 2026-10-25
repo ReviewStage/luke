@@ -13,9 +13,10 @@ import { TEXT_ELEMENT, TEXT_TONE, TEXT_VARIANT, Text } from "../text/text.js";
  *
  * The acts are centred on the title's first line, whatever a control's
  * height is beside the title's leading. They share the title's line while
- * the title fits beside them unbroken, however narrow the page; a title too
- * long for that takes the line and they wrap under it, and wrap among
- * themselves past the line's width, so no act stands outside the page. A
+ * the title keeps a least width beside them, a long title wrapping inside
+ * its column rather than sending them to a row of their own; where not even
+ * that fits they wrap under it, and wrap among themselves past the line's
+ * width, so no act stands outside the page. A
  * quiet act (Settings' Reset) ends with its words on the content's edge
  * rather than its hover's pill (`PAGE_HEADER_END.WORDS`).
  *

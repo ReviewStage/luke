@@ -21,25 +21,40 @@
  * least window (760×520); and narrow, which is the phone layout on the web
  * (390 wide) and the least window at 125% zoom on the desktop (608 CSS px).
  *
+ * A desktop picture is the whole window as Electron's `capturePage` takes
+ * it, since Playwright's own screenshot clips to the page's CSS-px viewport
+ * and so cuts a zoomed window's right side off. It is taken only once the
+ * page lays out at the window's new size (`viewport.ts`), and flattened onto
+ * the theme's sidebar colour (`png.ts`), as the app's own capture mode paints
+ * its frame, because the Mac's sidebar material frosts through a frame the
+ * page draws part clear and no page capture holds the material. A launch that
+ * fails outright is launched once more, and a renderer or helper that dies
+ * is written beside the picture.
+ *
  * Note that it drives the app as `pnpm start` runs it, not the signed bundle
  * `pnpm package:dir` makes, because that bundle's Node inspector fuse is
  * burnt off (`electron-builder-config.mjs`) and Playwright attaches through
- * the inspector. Each worker runs as a named instance (`LUKE_INSTANCE`), so
- * it holds a lock and a state folder of its own and never replaces the Luke
- * a developer has open. The motion tokens are zeroed as a capture run
+ * the inspector. Each launch runs as a named instance of its own
+ * (`LUKE_INSTANCE`), so it holds a lock and a state folder no other launch
+ * shares and never replaces the Luke a developer has open; the folder is
+ * deleted once that launch has exited, which it is made to do past its quit
+ * guard and so leaves its state unclosed. The motion tokens are zeroed as a capture run
  * zeroes them, so a picture lands on the steady state. It is not a test:
  * nothing is compared, no golden is kept, no CI job runs it, and nothing it
  * writes is committed. Playwright is not a dependency of the workspace: it
  * is found beside the script, or in the global npm folder.
  */
 
-import { spawnSync } from "node:child_process";
+import { type ChildProcess, spawnSync } from "node:child_process";
+import { randomUUID } from "node:crypto";
+import { once } from "node:events";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
-import { tmpdir } from "node:os";
+import { homedir, tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
+import { flattenPng, type Rgb } from "./png.ts";
 import { READY_SCRIPT } from "./ready.ts";
 import {
   CLIENT,
@@ -53,7 +68,8 @@ import {
   type Step,
   WINDOW,
 } from "./scenes.ts";
-import { scrollScript } from "./scroll.ts";
+import { PIN_SCROLL_FADES_SCRIPT, scrollScript } from "./scroll.ts";
+import { type Frame, sizedScript } from "./viewport.ts";
 
 const REPOSITORY_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 const DESKTOP_ROOT = path.join(REPOSITORY_ROOT, "apps", "desktop");
@@ -74,14 +90,6 @@ const THEMES: readonly Theme[] = Object.values(THEME);
 const SIZE = { WIDE: "wide", LEAST: "least", NARROW: "narrow" } as const;
 type Size = (typeof SIZE)[keyof typeof SIZE];
 const SIZES: readonly Size[] = Object.values(SIZE);
-
-/** A window or viewport, the zoom it is drawn at, and whether a finger works it. */
-interface Frame {
-  readonly width: number;
-  readonly height: number;
-  readonly zoom: number;
-  readonly phone: boolean;
-}
 
 // DESKTOP_WINDOW's opening and least sizes, which the desktop and the catalog share.
 const WIDE_FRAME: Frame = { width: 1280, height: 840, zoom: 1, phone: false };
@@ -112,8 +120,32 @@ const STAGE_SELECTOR = ".app-stage";
 const RECORDED_SCRIPT = `!document.querySelector(".catalog-example").textContent.includes("Recording a stand-in video")`;
 // How long a scene waits for its skeletons and spinners to give way before it is shot anyway, with a note.
 const READING_TIMEOUT_MS = 10_000;
-// The desktop's renderer pages, by what their address ends with.
+// The desktop's renderer pages, by what their address's path ends with.
 const WINDOW_PAGE = { [WINDOW.PANEL]: "/index.html", [WINDOW.CALL]: "/call.html" } as const;
+// How long a sized window's page has to lay out at its new size before it is sized once more, and how many times it is.
+const RESIZE_TIMEOUT_MS = 5_000;
+const RESIZE_TRIES = 2;
+// How long an app told to exit has before it is killed.
+const EXIT_TIMEOUT_MS = 10_000;
+// A desktop picture is flattened onto the panel's frame colour, as the app's capture mode paints the frame (`shell.css`), or the page's ground where neither is set.
+const GROUND_SCRIPT = `(() => {
+  const probe = document.createElement("div");
+  probe.style.cssText = "position:fixed;width:1px;height:1px;background-color:var(--luke-color-sidebar, var(--luke-color-ground, #fff))";
+  document.body.append(probe);
+  const colour = getComputedStyle(probe).backgroundColor;
+  probe.remove();
+  const canvas = document.createElement("canvas");
+  canvas.width = canvas.height = 1;
+  const paint = canvas.getContext("2d");
+  paint.fillStyle = "#fff";
+  paint.fillRect(0, 0, 1, 1);
+  paint.fillStyle = colour;
+  paint.fillRect(0, 0, 1, 1);
+  const [red, green, blue] = paint.getImageData(0, 0, 1, 1).data;
+  return { red, green, blue };
+})()`;
+// The caret hidden, as Playwright's screenshot hides it, since `capturePage` takes the page as it stands.
+const HIDE_CARET_SCRIPT = `document.head.append(Object.assign(document.createElement("style"), { textContent: "*, *::before, *::after { caret-color: transparent !important; }" }))`;
 
 /** The capture run's zeroing of motion, laid on the root and the body, over whatever the token sheets say. */
 const STILL_MOTION_CSS = `
@@ -186,6 +218,7 @@ interface PlaywrightPage {
   emulateMedia(options: Record<string, unknown>): Promise<void>;
   screenshot(options: Record<string, unknown>): Promise<unknown>;
   on(event: "pageerror", listener: (error: Error) => void): void;
+  on(event: "crash", listener: () => void): void;
   getByRole(role: string, options: Record<string, unknown>): PlaywrightLocator;
   getByText(text: string): PlaywrightLocator;
   locator(selector: string): PlaywrightLocator;
@@ -200,11 +233,19 @@ interface PlaywrightBrowser {
   newContext(options: Record<string, unknown>): Promise<PlaywrightContext>;
   close(): Promise<void>;
 }
+/** A handle on a value of the main process, a `BrowserWindow`, run on there. */
+interface PlaywrightHandle {
+  evaluate<Arg, Result>(
+    script: (value: never, arg: Arg) => Result,
+    arg: Arg,
+  ): Promise<Awaited<Result>>;
+}
 interface ElectronApplication {
   windows(): PlaywrightPage[];
+  browserWindow(page: PlaywrightPage): Promise<PlaywrightHandle>;
   waitForEvent(event: "window", options: Record<string, unknown>): Promise<PlaywrightPage>;
   evaluate<Arg>(script: (electron: never, arg: Arg) => unknown, arg: Arg): Promise<unknown>;
-  close(): Promise<void>;
+  process(): ChildProcess;
 }
 interface Playwright {
   chromium: { launch(): Promise<PlaywrightBrowser> };
@@ -220,6 +261,11 @@ interface Served {
 /** One line to the terminal. */
 function say(line: string): void {
   process.stdout.write(`${line}\n`);
+}
+
+/** The first line of what was thrown. */
+function firstLineOf(error: unknown): string {
+  return error instanceof Error ? (error.message.split("\n")[0] ?? "") : String(error);
 }
 
 /** Playwright, from beside this script or from the global npm folder. */
@@ -391,7 +437,7 @@ async function desktopPage(app: ElectronApplication, scene: Scene): Promise<Play
   const suffix = WINDOW_PAGE[scene.window ?? WINDOW.PANEL];
   const deadline = Date.now() + READY_TIMEOUT_MS;
   for (;;) {
-    const open = app.windows().find((page) => page.url().endsWith(suffix));
+    const open = app.windows().find((page) => URL.parse(page.url())?.pathname.endsWith(suffix));
     if (open !== undefined) return open;
     const left = deadline - Date.now();
     if (left <= 0) throw new Error(`No ${suffix} window opened`);
@@ -405,7 +451,117 @@ interface DesktopLaunch {
   readonly worker: number;
 }
 
-/** One desktop picture: a launch on the scene's profile, sized, themed and staged, then shot. */
+/** Starts writing down, in the main process, each renderer or helper process of the app that dies, for `deathsOf` to read. */
+async function watchDeaths(app: ElectronApplication): Promise<void> {
+  await app.evaluate(({ app: electronApp }: never) => {
+    const watched = electronApp as {
+      on(event: string, listener: (...args: never[]) => void): void;
+    };
+    const deaths: string[] = [];
+    (globalThis as { polishDeaths?: string[] }).polishDeaths = deaths;
+    watched.on(
+      "render-process-gone",
+      (
+        _event: unknown,
+        contents: { getURL(): string },
+        details: { reason: string; exitCode: number },
+      ) =>
+        deaths.push(
+          `${contents.getURL().split("/").pop()} renderer went: ${details.reason} (exit ${details.exitCode})`,
+        ),
+    );
+    watched.on(
+      "child-process-gone",
+      (_event: unknown, details: { type: string; reason: string; exitCode: number }) =>
+        deaths.push(`${details.type} process went: ${details.reason} (exit ${details.exitCode})`),
+    );
+  }, undefined);
+}
+
+/** The deaths `watchDeaths` wrote down, or none where the app no longer answers. */
+async function deathsOf(app: ElectronApplication): Promise<readonly string[]> {
+  const deaths = await app
+    .evaluate(() => (globalThis as { polishDeaths?: string[] }).polishDeaths ?? [], undefined)
+    .catch(() => []);
+  return deaths as string[];
+}
+
+/** Whether `child` has exited, or does within the exit timeout. */
+async function exitsInTime(child: ChildProcess): Promise<boolean> {
+  if (child.exitCode !== null || child.signalCode !== null) return true;
+  return once(child, "exit", { signal: AbortSignal.timeout(EXIT_TIMEOUT_MS) }).then(
+    () => true,
+    () => child.exitCode !== null || child.signalCode !== null,
+  );
+}
+
+/**
+ * Ends the app at once, past its quit guard: a staged call asks "Quit Luke?"
+ * before a quit, which no one is there to answer, so Playwright's own close,
+ * a quit, would wait on it for ever. One that does not exit in time is
+ * killed. Answers whether the process is gone.
+ */
+async function endApp(app: ElectronApplication): Promise<boolean> {
+  const child = app.process();
+  const exited = exitsInTime(child);
+  await app
+    .evaluate(({ app: electronApp }: never) => {
+      (electronApp as { exit(code: number): void }).exit(0);
+    }, undefined)
+    .catch(() => undefined);
+  if (await exited) return true;
+  const killed = exitsInTime(child);
+  child.kill("SIGKILL");
+  return killed;
+}
+
+/**
+ * Where a development instance keeps its state: Electron's appData folder,
+ * under the name `resolveAppName` gives it (`packages/host/src/app-identity.ts`),
+ * spelled here because this plain script imports no workspace package.
+ */
+function stateRootOf(instance: string): string {
+  const appData =
+    process.platform === "darwin"
+      ? path.join(homedir(), "Library", "Application Support")
+      : process.env.XDG_CONFIG_HOME || path.join(homedir(), ".config");
+  return path.join(appData, `Luke Dev ${instance}`);
+}
+
+/** Sizes `window` to `frame` and zooms its page, then waits for the page to lay out at it, sizing it once more where it never did; answers what the page stood at where it still did not. */
+async function sizeWindow(
+  window: PlaywrightHandle,
+  page: PlaywrightPage,
+  frame: Frame,
+): Promise<string | undefined> {
+  for (let tries = 0; tries < RESIZE_TRIES; tries++) {
+    await window.evaluate((open: never, arg: Frame) => {
+      const sized = open as {
+        setContentSize(width: number, height: number): void;
+        webContents: { setZoomFactor(zoom: number): void };
+      };
+      sized.setContentSize(arg.width, arg.height);
+      sized.webContents.setZoomFactor(arg.zoom);
+    }, frame);
+    const laid = await page
+      .waitForFunction(sizedScript(frame), undefined, { timeout: RESIZE_TIMEOUT_MS })
+      .then(
+        () => true,
+        () => false,
+      );
+    if (laid) return undefined;
+  }
+  return unsizedNote(page, frame);
+}
+
+/** What the page lays out at, where that is not `frame`'s size. */
+async function unsizedNote(page: PlaywrightPage, frame: Frame): Promise<string | undefined> {
+  if (await page.evaluate<boolean>(sizedScript(frame))) return undefined;
+  const stood = await page.evaluate<string>('innerWidth + "×" + innerHeight');
+  return `the page laid out at ${stood} CSS px, not ${frame.width}×${frame.height} at ${frame.zoom * 100}%`;
+}
+
+/** One desktop picture: a launch on the scene's profile, sized, themed and staged, then the whole window taken and flattened. */
 async function shootDesktop(
   playwright: Playwright,
   launch: DesktopLaunch,
@@ -414,62 +570,100 @@ async function shootDesktop(
   problems: string[],
 ): Promise<void> {
   const frame = FRAMES[shot.target][shot.size];
+  const callWindow = shot.scene.window === WINDOW.CALL;
   const linux = process.platform === "linux";
-  const app = await playwright._electron.launch({
-    executablePath: launch.electron,
-    args: [
-      DESKTOP_ROOT,
-      // Note that Linux runs as an unprivileged user under xvfb, with no GPU and no setuid sandbox helper.
-      ...(linux ? ["--no-sandbox", "--disable-gpu"] : []),
-      "--fixture",
-      "smoke",
-      "--profile",
-      shot.scene.profile,
-    ],
-    env: { ...process.env, LUKE_INSTANCE: `polish-${launch.worker}` },
-    timeout: READY_TIMEOUT_MS,
-  });
+  // A fresh instance each launch, since the last one's state folder was left as an exit leaves it.
+  const instance = `polish-${launch.worker}-${randomUUID().slice(0, 8)}`;
+  const stateRoot = stateRootOf(instance);
+  const forget = () => rmSync(stateRoot, { recursive: true, force: true });
+  const app = await playwright._electron
+    .launch({
+      executablePath: launch.electron,
+      args: [
+        DESKTOP_ROOT,
+        // Note that Linux runs as an unprivileged user under xvfb, with no GPU and no setuid sandbox helper.
+        ...(linux ? ["--no-sandbox", "--disable-gpu"] : []),
+        "--fixture",
+        "smoke",
+        "--profile",
+        shot.scene.profile,
+      ],
+      env: { ...process.env, LUKE_INSTANCE: instance },
+      timeout: READY_TIMEOUT_MS,
+    })
+    // Note that Playwright kills a launch it gave up on, so the folder that launch may have made goes with it.
+    .catch((error: unknown) => {
+      forget();
+      throw error;
+    });
   try {
+    await watchDeaths(app);
     const page = await desktopPage(app, shot.scene);
     page.on("pageerror", (error) => problems.push(error.message));
-    // The panel's window takes the size and the machine's appearance, the call window the appearance alone,
-    // since it is fitted to its card; the page holds the theme on its root.
-    await app.evaluate(
-      (
-        { BrowserWindow, nativeTheme }: never,
-        arg: { theme: Theme; frame: Frame | undefined; suffix: string },
-      ) => {
-        const electron = { BrowserWindow, nativeTheme } as {
-          BrowserWindow: {
-            getAllWindows(): {
-              webContents: { getURL(): string; setZoomFactor(zoom: number): void };
-              setSize(width: number, height: number): void;
-            }[];
-          };
-          nativeTheme: { themeSource: string };
-        };
-        electron.nativeTheme.themeSource = arg.theme;
-        const window = electron.BrowserWindow.getAllWindows().find((open) =>
-          open.webContents.getURL().endsWith(arg.suffix),
-        );
-        if (window === undefined || arg.frame === undefined) return;
-        window.setSize(arg.frame.width, arg.frame.height);
-        window.webContents.setZoomFactor(arg.frame.zoom);
-      },
-      {
-        theme: shot.theme,
-        frame: shot.scene.window === WINDOW.CALL ? undefined : frame,
-        suffix: WINDOW_PAGE[shot.scene.window ?? WINDOW.PANEL],
-      },
-    );
+    page.on("crash", () => problems.push("the page crashed"));
+    // The window itself, as the page is drawn in it, rather than one looked up by its address.
+    const window = await app.browserWindow(page);
+    await app.evaluate(({ nativeTheme }: never, theme: Theme) => {
+      (nativeTheme as { themeSource: string }).themeSource = theme;
+    }, shot.theme);
     await page.emulateMedia({ colorScheme: shot.theme, reducedMotion: "reduce" });
     await page.evaluate(stillPageScript(shot.theme));
-    if (shot.scene.window === WINDOW.CALL) await page.waitForTimeout(LOAD_SETTLE_MS);
+    // The panel's window takes the frame once its stage has drawn, since the app applies its stored zoom
+    // as it first pushes its state (`zoom.ts`), and so would undo one laid sooner; the call window keeps
+    // the size it is fitted to its card at.
+    if (!callWindow) await page.waitForSelector(STAGE_SELECTOR, { timeout: READY_TIMEOUT_MS });
+    const unsized = callWindow ? undefined : await sizeWindow(window, page, frame);
+    if (unsized !== undefined) problems.push(unsized);
+    if (callWindow) await page.waitForTimeout(LOAD_SETTLE_MS);
     // Note that the zoomed size's 608 CSS px is under the panel's narrow line (`shell-room.ts`), so it draws the phone's layout.
     else await stageScene(page, CLIENT.DESKTOP, shot.scene, shot.size === SIZE.NARROW, problems);
-    await page.screenshot({ path: file, animations: "disabled", caret: "hide" });
+    // A scene's steps can stand long enough for something to size the window again, so it is looked at once more.
+    const resized =
+      callWindow || unsized !== undefined ? undefined : await unsizedNote(page, frame);
+    if (resized !== undefined) problems.push(`when shot, ${resized}`);
+    await page.evaluate(HIDE_CARET_SCRIPT);
+    const ground = await page.evaluate<Rgb>(GROUND_SCRIPT);
+    const png = await window.evaluate(async (open: never) => {
+      const captured = open as {
+        webContents: {
+          capturePage(
+            rect: undefined,
+            options: { stayHidden: boolean; stayAwake: boolean },
+          ): Promise<{ toPNG(): { toString(encoding: string): string } }>;
+        };
+      };
+      // As the app's own capture mode takes it (`register-desktop-ipc.ts`): the whole page, at the display's scale.
+      const image = await captured.webContents.capturePage(undefined, {
+        stayHidden: true,
+        stayAwake: true,
+      });
+      return image.toPNG().toString("base64");
+    }, undefined);
+    writeFileSync(file, flattenPng(Buffer.from(png, "base64"), ground));
   } finally {
-    await app.close();
+    problems.push(...(await deathsOf(app)));
+    // The folder is deleted only once the process that held it is gone.
+    if (await endApp(app)) forget();
+    else problems.push(`the app would not exit, so ${stateRoot} is left behind`);
+  }
+}
+
+/** One desktop picture, launched once more where the first launch fails outright, as a launch can time out on a loaded machine; the first failure is written beside the picture. */
+async function shootDesktopOnceMore(
+  playwright: Playwright,
+  launch: DesktopLaunch,
+  shot: Shot,
+  file: string,
+  problems: string[],
+): Promise<void> {
+  const first: string[] = [];
+  try {
+    await shootDesktop(playwright, launch, shot, file, first);
+    problems.push(...first);
+  } catch (error) {
+    const notes = first.length === 0 ? "" : ` (${first.join("; ")})`;
+    problems.push(`first launch failed: ${firstLineOf(error)}${notes}`);
+    await shootDesktop(playwright, launch, shot, file, problems);
   }
 }
 
@@ -528,6 +722,7 @@ async function shootBrowser(
         problems.push("still recording its stand-in when shot");
       }
       await page.waitForTimeout(STEP_SETTLE_MS);
+      await page.evaluate(PIN_SCROLL_FADES_SCRIPT);
       await page
         .locator(".catalog-example")
         .screenshot({ path: file, animations: "disabled", caret: "hide" });
@@ -537,6 +732,7 @@ async function shootBrowser(
       timeout: firstLoad ? FIRST_LOAD_TIMEOUT_MS : READY_TIMEOUT_MS,
     });
     await stageScene(page, CLIENT.WEB, shot.scene, phone, problems);
+    await page.evaluate(PIN_SCROLL_FADES_SCRIPT);
     await page.screenshot({ path: file, animations: "disabled", caret: "hide" });
   } finally {
     await context.close();
@@ -572,7 +768,8 @@ async function work(
     try {
       if (shot.target === TARGET.DESKTOP) {
         const electron = drivers.electron ?? "";
-        await shootDesktop(drivers.playwright, { electron, worker }, shot, absolute, problems);
+        const launch = { electron, worker };
+        await shootDesktopOnceMore(drivers.playwright, launch, shot, absolute, problems);
       } else {
         const firstLoad = results.length < 1;
         const base = drivers.bases[shot.target] ?? "";
@@ -580,9 +777,7 @@ async function work(
         await shootBrowser(drivers.browser, base, shot, absolute, problems, firstLoad);
       }
     } catch (error) {
-      problems.push(
-        `not shot: ${error instanceof Error ? error.message.split("\n")[0] : String(error)}`,
-      );
+      problems.push(`not shot: ${firstLineOf(error)}`);
     }
     if (problems.length > 0)
       say(`${shot.target}/${shot.scene.id} ${shot.theme} ${shot.size}: ${problems.join("; ")}`);
@@ -626,7 +821,9 @@ function contactSheet(results: readonly ShotResult[], skipped: readonly Scene[])
             );
             if (pair.every((result) => result === undefined)) return "";
             const frame = FRAMES[target][size];
-            const label = `${target} · ${size} · ${frame.width}×${frame.height}${frame.zoom === 1 ? "" : ` at ${frame.zoom * 100}%`}`;
+            const label = fittedToCard(scene, target)
+              ? `${target} · the call window, at the size it fits its card to`
+              : `${target} · ${size} · ${frame.width}×${frame.height}${frame.zoom === 1 ? "" : ` at ${frame.zoom * 100}%`}`;
             const cells = pair
               .map((result, index) => figure(result, THEMES[index] ?? THEME.LIGHT))
               .join("");
@@ -645,6 +842,9 @@ function contactSheet(results: readonly ShotResult[], skipped: readonly Scene[])
     skipped.length === 0
       ? ""
       : `<p class="note">Mac-only, not shot here: ${skipped.map((scene) => escapeHtml(scene.title)).join(", ")}.</p>`;
+  const flattenedNote = results.some((result) => result.shot.target === TARGET.DESKTOP)
+    ? `<p class="note">Desktop pictures are the whole window, flattened onto the theme's sidebar colour (<code>--luke-color-sidebar</code>) as the app's own capture mode paints its frame: the Mac's frosted sidebar material is not in them.</p>`
+    : "";
   const flagged = results.filter((result) => result.problems.length > 0).length;
   return `<!doctype html><meta charset="utf-8"><title>Polish capture</title>
 <style>
@@ -659,7 +859,7 @@ figure{margin:0}img{width:100%;border:1px solid #ccc;display:block}figcaption{co
 figcaption ul{color:#a33;margin:2px 0;padding-left:16px}.missing{padding:24px;border:1px dashed #a33;color:#a33}
 .note{color:#555}
 </style>
-<h1>Polish capture</h1><p class="note">${results.length} pictures of ${scenes.length} scenes; ${flagged} with a note.</p>${skippedNote}<nav>${toc}</nav>${sections.join("")}`;
+<h1>Polish capture</h1><p class="note">${results.length} pictures of ${scenes.length} scenes; ${flagged} with a note.</p>${flattenedNote}${skippedNote}<nav>${toc}</nav>${sections.join("")}`;
 }
 
 /** The targets the flags ask for, every one where none is named. */
@@ -671,6 +871,11 @@ function wantedTargets(named: readonly string[] | undefined): readonly Target[] 
   return TARGETS.filter((target) => named.includes(target));
 }
 
+/** Whether `scene` on `target` is the call window, which is fitted to its card rather than sized, so it is shot once, in the wide row. */
+function fittedToCard(scene: Scene, target: Target): boolean {
+  return target === TARGET.DESKTOP && scene.window === WINDOW.CALL;
+}
+
 /** A scene's shots on each of `targets`, in sheet order. */
 function shotsOf(
   scene: Scene,
@@ -679,7 +884,9 @@ function shotsOf(
   sizes: readonly Size[],
 ): Shot[] {
   return targets.flatMap((target) =>
-    sizes.flatMap((size) => themes.map((theme) => ({ target, scene, theme, size }))),
+    sizes
+      .filter((size) => !fittedToCard(scene, target) || size === SIZE.WIDE)
+      .flatMap((size) => themes.map((theme) => ({ target, scene, theme, size }))),
   );
 }
 

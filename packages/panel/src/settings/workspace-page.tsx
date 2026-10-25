@@ -1,4 +1,5 @@
-import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
+import { INTEGRATION_STATUS_WORDS } from "@luke/features/integration-status-words";
+import { INTEGRATION_PROVIDER, INTEGRATION_STATUS } from "@luke/features/integration-wire";
 import { LINK_PLACE, linkOf } from "@luke/features/link-grammar";
 import type {
   WorkspaceSentry,
@@ -316,8 +317,8 @@ type ShownConnection = Pick<WorkspaceGithubInstallation, "login" | "active"> &
 /** What the Linear row's line says, by where the workspace's Linear stands and who is reading it. */
 const LINEAR_LINE = {
   CONNECTED: "Connected for everyone in this workspace",
-  EXPIRED: "Sign-in expired.",
-  EXPIRED_MEMBER: "Sign-in expired. Ask an owner or admin.",
+  EXPIRED: INTEGRATION_STATUS_WORDS[INTEGRATION_STATUS.EXPIRED],
+  EXPIRED_MEMBER: `${INTEGRATION_STATUS_WORDS[INTEGRATION_STATUS.EXPIRED]}. Ask an owner or admin.`,
   MANAGES: "Not connected.",
   MEMBER: "Not connected. Ask an owner or admin.",
 } as const;
