@@ -223,7 +223,7 @@
 
 /* A plan's task item the developer can tick from the drawn plan says so. */
 .plan-unit li.task-list-item input[type="checkbox"]:enabled {
-  cursor: pointer;
+  cursor: var(--luke-cursor-press);
 }
 
 /* A section's heading wraps short of the row at its end, so the byline and
@@ -5881,7 +5881,7 @@ svg.lucide {
   border-radius: 2px;
   background: var(--comment-mark);
   color: inherit;
-  cursor: pointer;
+  cursor: var(--luke-cursor-press);
   transition: background var(--luke-duration-hover) var(--luke-motion-exit);
 }
 
@@ -6058,7 +6058,7 @@ svg.lucide {
 /* A thread at rest is one press (`CardPress`) over its words and replies,
    which reaches its whole card and rings it from the keyboard. */
 .comment-card[data-open="false"] {
-  cursor: pointer;
+  cursor: var(--luke-cursor-press);
 }
 
 .comment-card[data-open="true"] {

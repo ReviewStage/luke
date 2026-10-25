@@ -31,6 +31,13 @@
   /* How far every control fades while it cannot be used: one look, so a
      switched-off button, field, switch and menu row read as the same state. */
   --luke-disabled-opacity: 0.5;
+  /* The one cursor rule: a control gives the Mac's arrow,
+     as Finder, Mail and Notes do, and only a real link the pointing hand.
+     A control reads `--luke-cursor-press` (`cursor-press`), a link
+     `--luke-cursor-link` (`cursor-link`); the style guard refuses the hand
+     spelled anywhere else (`pointer-cursor`). */
+  --luke-cursor-press: default;
+  --luke-cursor-link: pointer;
   --luke-icon-gap: var(--luke-space-8);
   /* A settings row's pop-up stands in one column whatever value it names. */
   --luke-select-field-width: 200px;
@@ -284,6 +291,10 @@
   /* How far every control fades while it cannot be used: one look, so a
      switched-off button, field, switch and menu row read as the same state. */
   --luke-disabled-opacity: 0.5;
+  /* The one cursor rule: on the web every control gives the pointing hand,
+     as a link does. */
+  --luke-cursor-press: pointer;
+  --luke-cursor-link: pointer;
   --luke-icon-gap: var(--luke-space-8);
   --luke-select-field-width: auto;
   --luke-field-gap: var(--luke-space-16);

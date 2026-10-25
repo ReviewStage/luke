@@ -151,7 +151,7 @@ function rootClass({
   const pill = look === INLINE_REF_LOOK.PILL;
   const parts: string[] = [ROOT, LOOK_ROOT[look]];
   if (!pill) parts.push(gone ? "text-muted-foreground" : "text-inherit");
-  if (pressable) parts.push("cursor-pointer");
+  if (pressable) parts.push("cursor-press");
   if (pill) {
     // Note that a pill saying its standing is let wider, so its name is read rather than cut at its first word.
     parts.push(stated ? "max-w-inline-ref-pill-stated" : "max-w-inline-ref-pill");

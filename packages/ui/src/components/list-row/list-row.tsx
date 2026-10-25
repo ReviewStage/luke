@@ -273,7 +273,7 @@ const MAIN_CLASS =
   "luke-list-row-main col-[leading-start/end-end] row-1 m-0 grid min-w-0 grid-cols-subgrid items-center rounded-inherit border-0 bg-transparent text-start text-inherit [font:inherit]";
 
 /** A press that is a button, pressed as a Mac's list is on the desktop, without the web's pointing hand. */
-const MAIN_BUTTON_CLASS = `${MAIN_CLASS} cursor-pointer in-data-[luke-profile=desktop]:cursor-default disabled:cursor-default`;
+const MAIN_BUTTON_CLASS = `${MAIN_CLASS} cursor-press disabled:cursor-default`;
 
 /**
  * The leading mark, muted, a glyph at a control's glyph size and an avatar

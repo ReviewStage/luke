@@ -35,11 +35,7 @@
     max-height: 520px; /* off-scale: a picture's drawn height */
     width: auto;
     height: auto;
-    cursor: pointer;
-  }
-
-  [data-luke-profile="desktop"] .luke-video-player-video {
-    cursor: default;
+    cursor: var(--luke-cursor-press);
   }
 
   .luke-video-player[data-place="viewer"] .luke-video-player-video {

@@ -297,11 +297,7 @@ function chipClasses(
     !compact ? "font-label" : look === CHIP_LOOK.PILL ? "font-tag" : "font-caption",
     // Note that a compact mark alone is a square of its own height spelled as a width, because Safari 26 sizes an `aspect-ratio` box's track through its `max-w-full` to nothing.
     compact && iconOnly ? "flex-none w-chip-compact" : "flex-initial",
-    busy
-      ? "cursor-progress"
-      : removable
-        ? "cursor-default"
-        : "cursor-pointer in-data-[luke-profile=desktop]:cursor-default",
+    busy ? "cursor-progress" : removable ? "cursor-default" : "cursor-press",
   ]
     .filter((part) => part !== "")
     .join(" ");

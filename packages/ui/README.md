@@ -96,6 +96,14 @@ Every token is a `--luke-*` custom property under `src/tokens/`.
   `--luke-block-gap` apart. A card's inset is one of the three
   `--luke-card-inset*` roles.
 
+  **One cursor rule.** A control gives `--luke-cursor-press`, the Mac's
+  arrow on the desktop, as Finder and Mail do, and the pointing hand on the
+  web; a real link gives `--luke-cursor-link`, the hand on both. Every
+  pressable component reads them (`cursor-press`, `cursor-link`); a control
+  that takes no press is the plain arrow, a busy button keeps
+  `cursor-progress`, text takes the I-beam, and a resize, drag, or zoom keeps
+  its own. The style guard's `pointer-cursor` holds it.
+
   The settings-row, card, dialog, and menu roles beside them (`--luke-settings-row-*`,
   `--luke-card-*`, `--luke-dialog-*`, `--luke-menu-*`) are set the same way. `tokens.test.ts`
   holds both profiles to one set of names.
@@ -384,6 +392,7 @@ is refused where it reaches Tailwind's own scale (`text-sm`, `font-medium`,
 | `literal-duration` | A literal duration or delay, or `duration-150` | Read a motion token (`--luke-duration-*`, `--luke-*-delay`). An endless loop whose `animation-play-state` answers `--luke-loop-motion` or `--luke-face-motion` may keep its literal |
 | `literal-easing` | `ease`, `linear`, `cubic-bezier()`, `steps()` in a transition or animation, or `ease-in-out` | Read `--luke-spring`, `--luke-spring-fast`, `--luke-motion-exit`, or `--luke-motion-pane`; a hover's `ease` is the default, so drop it |
 | `literal-picker-width` | A literal `width`, `min-width` or `max-width` on a picker's, popover's or menu's class, outside `@luke/ui` | Hang the layer at one of `POPOVER_WIDTH`'s three widths (`AnchoredPopover`'s or `RectFloat`'s `width`), and let what it holds fill it |
+| `pointer-cursor` | `cursor: pointer` or `cursor-pointer`, and any cursor set under a `data-luke-profile` selector or variant | A control reads `cursor-press` (`--luke-cursor-press`: the Mac's arrow on the desktop, the hand on the web), a real link `cursor-link` (`--luke-cursor-link`: the hand on both); a control that takes no press is `cursor-default`, a busy one `cursor-progress` |
 | `literal-spacing` | A `px` or `rem` literal on `padding`, `margin`, `gap`, `row-gap` or `column-gap` in `packages/panel/src/styles/*.css`; `0`, `auto` and `1px` pass | Read the spacing role (`--luke-list-gap`, `--luke-tight-gap`, `--luke-control-gap`, `--luke-row-inset`, `--luke-section-gap`, `--luke-page-section-gap`) or, where no role fits, a `--luke-space-*` step |
 
 No comment silences it, and it refuses one that asks to
@@ -394,7 +403,7 @@ counts each file's places, and the guard fails on a file holding more than its
 count and on a count above what the file still holds. So the change that fixes a
 place lowers its count; `node tools/anti-slop/style-guard.ts --shrink` lowers
 every count to what the files hold and never raises one. A rule that started
-clean (`literal-duration`, `literal-picker-width`) takes no baseline at all, and a baseline is deleted
+clean (`literal-duration`, `literal-picker-width`, `pointer-cursor`) takes no baseline at all, and a baseline is deleted
 from nothing: once every count is gone, its file is `{}`.
 
 ### Folding in a narrow container

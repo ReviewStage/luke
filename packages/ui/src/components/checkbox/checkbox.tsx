@@ -39,7 +39,7 @@ type Named =
  * region quiets from the components layer, where a utility would outrank it.
  */
 const CHECKBOX =
-  "luke-checkbox inline-flex items-start gap-icon-gap min-w-0 font-ui text-body cursor-pointer in-data-[luke-profile=desktop]:cursor-default";
+  "luke-checkbox inline-flex items-start gap-icon-gap min-w-0 font-ui text-body cursor-press";
 
 /**
  * A box without words stands on no line of its own, and on a coarse

@@ -53,7 +53,7 @@ import { rovingItem } from "../roving-keys/roving-keys.js";
  * and chord trade places under the pointer and the keyboard.
  */
 const ROW =
-  "luke-nav-item group/nav m-0 flex h-control w-full min-w-0 cursor-pointer items-center gap-icon-gap rounded-control border-0 px-row-inset text-left font-sans text-body-size leading-label font-text no-underline transition-[background-color,color] duration-(--luke-duration-hover) ease-plain in-data-[luke-profile=desktop]:cursor-default disabled:cursor-default disabled:opacity-disabled data-[variant=identity]:h-auto data-[variant=identity]:min-h-nav-identity data-[variant=identity]:py-luke-6";
+  "luke-nav-item group/nav m-0 flex h-control w-full min-w-0 cursor-press items-center gap-icon-gap rounded-control border-0 px-row-inset text-left font-sans text-body-size leading-label font-text no-underline transition-[background-color,color] duration-(--luke-duration-hover) ease-plain disabled:cursor-default disabled:opacity-disabled data-[variant=identity]:h-auto data-[variant=identity]:min-h-nav-identity data-[variant=identity]:py-luke-6";
 
 /** A name cut short fades out over its last few pixels, as a browser's tab ends a long title; unread, or naming who or where, it reads in the heavier weight. */
 const NAME =

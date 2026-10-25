@@ -87,14 +87,10 @@
     text-align: left;
   }
 
-  button.luke-group-header-lead {
-    cursor: pointer;
-  }
-
   /* A desktop row answers a press the way a Mac's list does, without the
-     web's pointing hand. */
-  [data-luke-profile="desktop"] button.luke-group-header-lead {
-    cursor: default;
+     web's pointing hand (`--luke-cursor-press`). */
+  button.luke-group-header-lead {
+    cursor: var(--luke-cursor-press);
   }
 
   /* The glyph and the chevron share one cell, only one of them drawn, so the

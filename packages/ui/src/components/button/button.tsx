@@ -268,9 +268,8 @@ function boxSize(
   return compact ? "compact" : "control";
 }
 
-/** How a button of `variant` gives under the pointer: the hand on the web, the Mac's arrow on the desktop, the arrow once it takes no press. */
-const PRESSABLE_CURSOR =
-  "cursor-pointer in-data-[luke-profile=desktop]:cursor-default disabled:cursor-default";
+/** How a button gives under the pointer: the one press cursor (`cursor-press`, the hand on the web and the Mac's arrow on the desktop), the arrow once it takes no press. */
+const PRESSABLE_CURSOR = "cursor-press disabled:cursor-default";
 
 /** What a button is drawn with: the shadcn button's box and shape, and the classes its look and state add. */
 interface ButtonLook {

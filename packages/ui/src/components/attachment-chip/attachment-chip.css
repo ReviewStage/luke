@@ -60,7 +60,7 @@
   }
 
   button.luke-attachment-chip-face {
-    cursor: pointer;
+    cursor: var(--luke-cursor-press);
   }
 
   button.luke-attachment-chip-face:hover {
