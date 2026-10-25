@@ -57,7 +57,7 @@ import { undoToast, useToast } from "../toast.js";
 import { ActionMenu, type MenuAction, type MenuEntry } from "./action-menu.js";
 import { type RowPlace, RowPlaced, useRowMoveKeys, withRowMoves } from "./row-moves.js";
 import { SectionIconPicker, sectionGlyph } from "./section-icon-picker.js";
-import { foldedCount, sidebarFold, TASK_NOUN } from "./sidebar-fold.js";
+import { foldedCount, SIDEBAR_SECTION_SLOT, sidebarFold, TASK_NOUN } from "./sidebar-fold.js";
 import { useFormDialog } from "./use-form-dialog.js";
 import { useRowDrag } from "./use-row-drag.js";
 
@@ -568,7 +568,7 @@ function SidebarSection({
         }
       >
         {drawn.rows.length === 0 ? (
-          <div className="sidebar-section-slot">
+          <div className={SIDEBAR_SECTION_SLOT}>
             <NoteLine look={NOTE_LINE_LOOK.INSET}>Drag tasks here</NoteLine>
           </div>
         ) : (

@@ -165,9 +165,9 @@ export function DesktopAdmin({
             </Text>
           </>
         )}
-        <Fill className="sidebar-section">
+        <Fill className="sidebar-section -m-ring-reach">
           <ScrollArea fade={SCROLL_FADE.BOTH}>
-            <div className="sidebar-section-body">
+            <div className="sidebar-section-body flex min-h-list-held flex-col p-ring-reach">
               <Stack as={LAYOUT_ELEMENT.UL} gap={GAP.ROW}>
                 {APP_SECTIONS.map((place) => (
                   <li key={place.tab}>

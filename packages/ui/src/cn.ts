@@ -111,6 +111,43 @@ const FEEDBACK_DISPLAY = {
   container: ["progress"],
 } as const;
 
+/**
+ * The names the panel window's block of the theme adds (its layout's
+ * spacing roles, the sidebar's parts, an actor's mark, a press's corner
+ * dot), by the group tailwind-merge reads each in.
+ */
+const PANEL_WINDOW = {
+  text: ["section-size"],
+  "font-weight": ["luke-medium", "luke-semibold"],
+  tracking: ["workspace-head"],
+  spacing: [
+    "actor-badge",
+    "actor-badge-glyph",
+    "actor-face-share",
+    "actor-for-near",
+    "actor-for-x",
+    "actor-for-y",
+    "actor-overlap",
+    "attention-glyph-small",
+    "corner-dot",
+    "item-gap",
+    "list-held",
+    "offline-glyph",
+    "offline-mark",
+    "ring-reach",
+    "section-gap",
+    "section-icon-scroll",
+    "sidebar-row-repository",
+    "sidebar-row-time",
+    "sidebar-slot-start",
+    "workspace-ref-lift",
+    "workspace-shared-glyph",
+  ],
+  radius: ["disc"],
+  shadow: ["actor-for-ring", "actor-outline", "actor-outline-ring", "actor-ring"],
+  animate: ["offline-arrive"],
+} as const;
+
 const merge = extendTailwindMerge({
   extend: {
     theme: {
@@ -128,6 +165,7 @@ const merge = extendTailwindMerge({
         "group",
         "tag",
         ...FEEDBACK_DISPLAY.text,
+        ...PANEL_WINDOW.text,
       ],
       "font-weight": [
         "text",
@@ -139,8 +177,9 @@ const merge = extendTailwindMerge({
         "emphasis",
         "title",
         ...FEEDBACK_DISPLAY["font-weight"],
+        ...PANEL_WINDOW["font-weight"],
       ],
-      tracking: ["title"],
+      tracking: ["title", ...PANEL_WINDOW.tracking],
       leading: ["body", ...FEEDBACK_DISPLAY.leading],
       spacing: [
         "luke-2",
@@ -206,6 +245,7 @@ const merge = extendTailwindMerge({
         "choice-segment-compact",
         "caption-glyph",
         ...FEEDBACK_DISPLAY.spacing,
+        ...PANEL_WINDOW.spacing,
       ],
       radius: [
         "control",
@@ -223,6 +263,7 @@ const merge = extendTailwindMerge({
         "choice-segment",
         "choice-box",
         ...FEEDBACK_DISPLAY.radius,
+        ...PANEL_WINDOW.radius,
       ],
       shadow: [
         "dialog",
@@ -231,6 +272,7 @@ const merge = extendTailwindMerge({
         "tooltip",
         "switch-thumb",
         ...FEEDBACK_DISPLAY.shadow,
+        ...PANEL_WINDOW.shadow,
       ],
       font: ["ui"],
       container: [
@@ -253,6 +295,7 @@ const merge = extendTailwindMerge({
         "menu-in",
         "tooltip-in",
         "tooltip-leave",
+        ...PANEL_WINDOW.animate,
       ],
     },
     classGroups: {

@@ -33,6 +33,7 @@ import { rowDoors, useAgentActions } from "./agent-actions.js";
 import { useAgentReadMarks } from "./agent-read-marks.js";
 import { useRowPlace, withRowMoves } from "./row-moves.js";
 import { type RowMark, RowMarks } from "./task-actions.js";
+import { SIDEBAR_ROW_REPOSITORY, SIDEBAR_ROW_TIME } from "./task-card.js";
 
 /**
  * sidebar-agent.tsx -- an agent an automation started with no task, as a row among the sidebar's tasks.
@@ -229,7 +230,7 @@ export function SidebarAgent({
           density={LIST_DENSITY.DENSE}
           ink={LIST_ROW_INK.SIDEBAR}
           leading={
-            <span className="sidebar-agent-glyph">
+            <span className="sidebar-agent-glyph inline-flex [--state-glyph-size:var(--spacing-luke-16)]">
               {/* The live mark while a call into the agent stands, as its tab's glyph wears it on a task. */}
               {tabLook({ kind: TAB_KIND.AGENT, name, agent, calling: calling === agent.id }).icon}
             </span>
@@ -256,9 +257,9 @@ export function SidebarAgent({
           description={rename?.refused === true ? <span>{RENAME_FAILED}</span> : undefined}
           meta={
             editing ? null : (
-              <span className="sidebar-task-time">
+              <span className={SIDEBAR_ROW_TIME}>
                 {repository === undefined ? null : (
-                  <OneLine className="sidebar-task-repository" words={repository}>
+                  <OneLine className={SIDEBAR_ROW_REPOSITORY} words={repository}>
                     {repository}
                   </OneLine>
                 )}

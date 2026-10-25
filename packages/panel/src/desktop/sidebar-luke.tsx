@@ -136,7 +136,7 @@ export function SidebarLuke({
       density={LIST_DENSITY.DENSE}
       ink={LIST_ROW_INK.SIDEBAR}
       leading={
-        <span className="sidebar-agent-glyph">
+        <span className="sidebar-agent-glyph inline-flex [--state-glyph-size:var(--spacing-luke-16)]">
           <LukeGlyph agent={agent} calling={agentId !== undefined && calling === agentId} />
         </span>
       }

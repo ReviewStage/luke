@@ -14,6 +14,7 @@ import {
   Avatar,
   type AvatarSize,
   type CommentAuthor,
+  cn,
   FiringGlyph,
   GAP,
   HoverCard,
@@ -117,6 +118,64 @@ const ACTOR_PIXELS = {
 /** How wide an actor of `size` stands, as a length, for a placeholder that stands in its place. */
 export function actorMarkWidth(size: ActorSize): string {
   return `${ACTOR_PIXELS[size]}px`;
+}
+
+/**
+ * Where a mark stands in a facepile: none, a face straight in the pile, or
+ * the face inside a face that hangs its card (`CardedFace`), each ringed by
+ * the ground behind it, which cuts it from the face it overlaps.
+ */
+const ACTOR_PILE = {
+  NONE: "none",
+  IN_PILE: "in-pile",
+  IN_FACE: "in-face",
+} as const;
+
+type ActorPile = (typeof ACTOR_PILE)[keyof typeof ACTOR_PILE];
+
+/**
+ * The member an actor acted for, on its square's corner: their face at a
+ * share of the mark's edge, drawn at the smallest size and scaled, so a
+ * letter keeps its weight at every size the mark is; at a card's and a
+ * page's size it stands nearer the corner, at its own size.
+ */
+const FOR_OF_SIZE = {
+  [ACTOR_SIZE.MARK]: "-right-actor-for-x -bottom-actor-for-y scale-60",
+  [ACTOR_SIZE.INLINE]: "-right-actor-for-x -bottom-actor-for-y scale-68",
+  [ACTOR_SIZE.STACK]: "-right-actor-for-x -bottom-actor-for-y scale-60",
+  [ACTOR_SIZE.ROW]: "-right-actor-for-x -bottom-actor-for-y scale-80",
+  [ACTOR_SIZE.ACCOUNT]: "-right-actor-for-x -bottom-actor-for-y scale-80",
+  [ACTOR_SIZE.CARD]: "-right-actor-for-near -bottom-actor-for-near scale-100",
+  [ACTOR_SIZE.PAGE]: "-right-actor-for-near -bottom-actor-for-near scale-100",
+} as const satisfies Record<ActorSize, string>;
+
+/** Whether an actor stands in a rounded square rather than on a circle: Luke, an agent, an automation, and an App's bot on GitHub. */
+function squared(actor: Actor): boolean {
+  return (
+    actor.kind === ACTOR_KIND.LUKE ||
+    actor.kind === ACTOR_KIND.AGENT ||
+    actor.kind === ACTOR_KIND.AUTOMATION ||
+    (actor.kind === ACTOR_KIND.GITHUB && actor.bot)
+  );
+}
+
+/**
+ * The ring a mark wears: in a pile, the ground behind it, around someone
+ * unnamed's outline where the face stands straight in the pile; a square
+ * no face overlaps stands bare in the pile as in a line, without the ring
+ * too, because a ring of a ground it does not stand on would frame it. Out
+ * of a pile, someone unnamed keeps their outline, bar a member who left, who
+ * keeps their own face on the tile instead, and nobody else wears one.
+ */
+function ringOf(actor: Actor, pile: ActorPile, tiled: boolean): string {
+  if (pile === ACTOR_PILE.NONE) {
+    return actor.kind === ACTOR_KIND.SOMEONE && !leftWithFace(actor) ? "shadow-actor-outline" : "";
+  }
+  if (squared(actor) && !tiled) return "";
+  if (pile === ACTOR_PILE.IN_PILE && actor.kind === ACTOR_KIND.SOMEONE) {
+    return "shadow-actor-outline-ring";
+  }
+  return "shadow-actor-ring";
 }
 
 /** How many device pixels a picture is asked for per CSS pixel it is drawn at: a Retina screen's. */
@@ -375,6 +434,8 @@ export function ActorMark({
   size = ACTOR_SIZE.INLINE,
   tiled = false,
   forWhom,
+  pile = ACTOR_PILE.NONE,
+  overlapping = false,
 }: {
   actor: Actor;
   size?: ActorSize;
@@ -386,10 +447,27 @@ export function ActorMark({
    * corner, as GitHub draws an App acting for someone. None for anyone else.
    */
   forWhom?: Actor | undefined;
+  /** Where it stands in a facepile, which rings it; none out of one. */
+  pile?: ActorPile;
+  /** Whether it overlaps the face before it in a pile, which every face but the first does. */
+  overlapping?: boolean;
 }): React.JSX.Element {
+  // Note that a glyph fills the share of the face a glyph does, the working mark included, which the window otherwise draws at a fixed size.
   return (
     <span
-      className="actor-mark"
+      className={cn(
+        "actor-mark relative inline-grid flex-none align-middle text-foreground",
+        "[--state-glyph-size:var(--spacing-avatar-glyph-share)] [&_.state-glyph>:is(svg,img)]:size-full",
+        squared(actor) ? "rounded-avatar-square" : "rounded-disc",
+        // Luke wears his blue on his face, the colour his voice already answers in, his face filling more of his square than a glyph does.
+        actor.kind === ACTOR_KIND.LUKE &&
+          "text-working [&_.luke-face]:size-actor-face-share [&_.luke-face]:text-inherit",
+        actor.kind === ACTOR_KIND.SOMEONE && "text-muted-foreground",
+        // A member who left keeps their own face, grayed and muted on the tile, their name saying they left.
+        leftWithFace(actor) && "bg-actor-tile [&>*]:opacity-80 [&>*]:grayscale",
+        ringOf(actor, pile, tiled),
+        overlapping && "-ml-actor-overlap",
+      )}
       data-kind={actor.kind}
       data-bot={actor.kind === ACTOR_KIND.GITHUB && actor.bot ? "true" : undefined}
       data-left={leftWithFace(actor) ? "true" : undefined}
@@ -399,7 +477,13 @@ export function ActorMark({
     >
       <Face actor={actor} size={size} tiled={tiled} />
       {forWhom === undefined ? null : (
-        <span className="actor-mark-for" data-kind={forWhom.kind}>
+        <span
+          className={cn(
+            "actor-mark-for absolute inline-grid size-avatar-mark origin-bottom-right rounded-disc shadow-actor-for-ring",
+            FOR_OF_SIZE[size],
+          )}
+          data-kind={forWhom.kind}
+        >
           <Face actor={forWhom} size={ACTOR_SIZE.MARK} tiled={false} />
         </span>
       )}
@@ -428,7 +512,7 @@ export function UnassignedMark({
 }): React.JSX.Element {
   const mark = (
     <span
-      className="actor-mark"
+      className="actor-mark relative inline-grid flex-none rounded-disc align-middle text-foreground [--state-glyph-size:var(--spacing-avatar-glyph-share)]"
       data-kind="unassigned"
       data-size={size}
       aria-hidden={decorative ? "true" : undefined}
@@ -488,9 +572,17 @@ export function AssigneeFaceHeard({ face }: { face: AssigneeFace }): React.JSX.E
   );
 }
 
+/**
+ * The reader's own badge, and an App's bot's after its name, as GitHub's own
+ * pages mark one: quiet and neutral, never cut, so a long name gives way
+ * before the badge does.
+ */
+const QUIET_BADGE =
+  "shrink-0 rounded-luke-6 bg-fill-strong px-tight-gap text-caption font-luke-medium text-muted-foreground";
+
 /** The quiet badge the reader's own account wears beside its name. */
 export function YouBadge(): React.JSX.Element {
-  return <span className="actor-you">You</span>;
+  return <span className={`actor-you ${QUIET_BADGE}`}>You</span>;
 }
 
 /** Whether the actor is an App's bot on GitHub, whose name wears its badge. */
@@ -500,7 +592,7 @@ function githubBot(actor: Actor): boolean {
 
 /** The quiet badge an App's bot on GitHub wears after its name, as GitHub's own pages mark one; nothing for anyone else. */
 export function BotBadge({ actor }: { actor: Actor }): React.JSX.Element | null {
-  return githubBot(actor) ? <span className="actor-bot">bot</span> : null;
+  return githubBot(actor) ? <span className={`actor-bot ${QUIET_BADGE}`}>bot</span> : null;
 }
 
 /** An actor's card head: its mark at a card's size, its name, which `onOpen` makes the press that opens its page, the line under it, and its corner. */
@@ -519,27 +611,25 @@ function ActorHead({
   // Note that the card names the reader by their name, beside its badge, since the card is about who they are.
   const name = actor.kind === ACTOR_KIND.PERSON ? actor.name : actorName(actor);
   return (
-    <div className="actor-card-head">
-      <ActorMark actor={actor} size={ACTOR_SIZE.CARD} />
-      <HoverCardHead
-        name={
-          you ? (
-            <span className="actor-card-name">
-              {name}
-              <YouBadge />
-            </span>
-          ) : onOpen === undefined ? (
-            name
-          ) : (
-            <TextButton lines={TEXT_BUTTON_LINES.TWO} onClick={onOpen}>
-              {name}
-            </TextButton>
-          )
-        }
-        sub={sub}
-        corner={corner}
-      />
-    </div>
+    <HoverCardHead
+      mark={<ActorMark actor={actor} size={ACTOR_SIZE.CARD} />}
+      name={
+        you ? (
+          <span className="actor-card-name inline-flex items-center gap-item-gap">
+            {name}
+            <YouBadge />
+          </span>
+        ) : onOpen === undefined ? (
+          name
+        ) : (
+          <TextButton lines={TEXT_BUTTON_LINES.TWO} onClick={onOpen}>
+            {name}
+          </TextButton>
+        )
+      }
+      sub={sub}
+      corner={corner}
+    />
   );
 }
 
@@ -632,23 +722,21 @@ const GITHUB_WORDS = {
 function GitHubCard({ actor }: { actor: GitHubActor }): React.JSX.Element {
   return (
     <HoverCard data-actor-card={actor.kind}>
-      <div className="actor-card-head">
-        <ActorMark actor={actor} size={ACTOR_SIZE.CARD} />
-        <HoverCardHead
-          name={
-            actor.bot ? (
-              <span className="actor-card-name">
-                {actorName(actor)}
-                <BotBadge actor={actor} />
-              </span>
-            ) : (
-              `@${actor.login}`
-            )
-          }
-          sub={actor.bot ? GITHUB_WORDS.APP : GITHUB_WORDS.USER}
-          corner={actor.bot ? undefined : GITHUB_WORDS.OUTSIDE}
-        />
-      </div>
+      <HoverCardHead
+        mark={<ActorMark actor={actor} size={ACTOR_SIZE.CARD} />}
+        name={
+          actor.bot ? (
+            <span className="actor-card-name inline-flex items-center gap-item-gap">
+              {actorName(actor)}
+              <BotBadge actor={actor} />
+            </span>
+          ) : (
+            `@${actor.login}`
+          )
+        }
+        sub={actor.bot ? GITHUB_WORDS.APP : GITHUB_WORDS.USER}
+        corner={actor.bot ? undefined : GITHUB_WORDS.OUTSIDE}
+      />
     </HoverCard>
   );
 }
@@ -818,7 +906,11 @@ export function ActorRef({
  * row drops a run of spaces standing alone.
  */
 export function ActorLine({ children }: { children: ReactNode }): React.JSX.Element {
-  return <span className="actor-words">{children}</span>;
+  return (
+    <span className="actor-words inline-flex max-w-full min-w-0 items-center align-middle whitespace-pre">
+      {children}
+    </span>
+  );
 }
 
 /** One face of a facepile that hangs cards: what it says of the actor beyond their name, and its badge. */
@@ -840,18 +932,25 @@ function CardedFace({
   actor,
   face,
   tiled,
+  spacing,
 }: {
   actor: Actor;
   face: StackFace;
   tiled: boolean;
+  /** How far it stands from the face before it (`pileSpacing`). */
+  spacing: string;
 }): React.JSX.Element {
   const name = faceName(actor, face);
   return (
     <Tooltip label={name} card={actorCard(actor)}>
-      <li className="actor-stack-face" aria-label={name}>
-        <ActorMark actor={actor} size={ACTOR_SIZE.STACK} tiled={tiled} />
+      <li className={cn("actor-stack-face relative inline-flex", spacing)} aria-label={name}>
+        <ActorMark actor={actor} size={ACTOR_SIZE.STACK} tiled={tiled} pile={ACTOR_PILE.IN_FACE} />
         {face.badge === undefined ? null : (
-          <span className="actor-stack-badge" aria-hidden="true">
+          // Note that the badge stands over the next face, which overlaps this one's corner.
+          <span
+            className="actor-stack-badge absolute -right-luke-4 -bottom-luke-4 z-1 grid size-actor-badge place-items-center rounded-disc bg-actor-stack-ground [&_svg]:size-actor-badge-glyph [&_svg]:stroke-3"
+            aria-hidden="true"
+          >
             {face.badge}
           </span>
         )}
@@ -863,7 +962,7 @@ function CardedFace({
 /** What a row of the count's card says of an actor: their name, a bot's badge after it, then what their face would say, wrapping within the card. */
 function MoreFaceWords({ actor, face }: { actor: Actor; face: StackFace }): React.JSX.Element {
   return (
-    <span className="actor-more-words">
+    <span className="actor-more-words min-w-0 wrap-anywhere [&_.actor-bot]:inline [&_.actor-bot]:whitespace-nowrap">
       {faceName(actor, {})}
       {/* Note that a no-break space holds the badge to its name's line however the row wraps. */}
       {githubBot(actor) ? "\u00a0" : null}
@@ -882,10 +981,13 @@ function MoreFaces({
   actors,
   faces,
   more,
+  spacing,
 }: {
   actors: readonly Actor[];
   faces: readonly StackFace[];
   more: string;
+  /** How far it stands from the face before it (`pileSpacing`). */
+  spacing: string;
 }): React.JSX.Element {
   const names = actors.map((actor, index) => faceName(actor, faces[index] ?? {}));
   const card = (
@@ -894,7 +996,7 @@ function MoreFaces({
         <Stack as={LAYOUT_ELEMENT.UL} gap={GAP.ITEM} className="actor-more-list">
           {actors.map((actor, index) => (
             // Note that the rest stand in the pile's own order, so each is keyed by where it stands.
-            <li key={index} className="actor-more-row">
+            <li key={index} className="actor-more-row flex items-center gap-control-gap">
               <ActorMark actor={actor} size={ACTOR_SIZE.STACK} />
               <MoreFaceWords actor={actor} face={faces[index] ?? {}} />
             </li>
@@ -905,11 +1007,29 @@ function MoreFaces({
   );
   return (
     <Tooltip label={names.join(", ")} card={card}>
-      <li className="actor-stack-more" aria-label={names.join(", ")}>
+      <li className={cn(PILE_COUNT, spacing)} aria-label={names.join(", ")}>
         {more}
       </li>
     </Tooltip>
   );
+}
+
+/**
+ * How many more a pile holds, in a pill of a face's height on the tile,
+ * ringed by the ground as the faces are.
+ */
+const PILE_COUNT =
+  "actor-stack-more inline-grid h-avatar-stack min-w-avatar-stack place-items-center rounded-luke-full bg-actor-tile px-tight-gap text-caption-inline font-luke-semibold text-muted-foreground tabular-nums shadow-actor-ring";
+
+/**
+ * How far a pile's face or count stands from the one before it: each
+ * overlapping the one before, or, in a pile whose faces wear badges, apart
+ * so each badge reads clear of what comes next; the first stands where the
+ * pile starts.
+ */
+function pileSpacing(index: number, apart: boolean): string {
+  if (index === 0) return "";
+  return apart ? "ml-item-gap" : "-ml-actor-overlap";
 }
 
 /**
@@ -948,28 +1068,48 @@ export function ActorStack({
   label?: string;
 }): React.JSX.Element {
   const rest = counted ? actors.length - drawn : 0;
-  const more = rest > 0 ? <span className="actor-stack-more">{`+${rest}`}</span> : null;
   const shown = actors.slice(0, drawn);
   const tiled = overlaps(shown.length, faces);
   if (faces === undefined) {
     return (
-      <span className="actor-stack" aria-hidden="true">
+      <span className="actor-stack inline-flex items-center" aria-hidden="true">
         {shown.map((actor, index) => (
           // Note that a pile's order is its place's own and never moves under it, so a disc is keyed by where it stands.
-          <ActorMark key={index} actor={actor} size={ACTOR_SIZE.STACK} tiled={tiled} />
+          <ActorMark
+            key={index}
+            actor={actor}
+            size={ACTOR_SIZE.STACK}
+            tiled={tiled}
+            pile={ACTOR_PILE.IN_PILE}
+            overlapping={index > 0}
+          />
         ))}
-        {more}
+        {rest > 0 ? (
+          <span className={cn(PILE_COUNT, pileSpacing(shown.length, false))}>{`+${rest}`}</span>
+        ) : null}
       </span>
     );
   }
+  const apart = shown.some((_, index) => faces[index]?.badge !== undefined);
   return (
-    <ul className="actor-stack" aria-label={label}>
+    <ul className="actor-stack m-0 inline-flex list-none items-center p-0" aria-label={label}>
       {shown.map((actor, index) => (
         // Note that a pile's order is its place's own and never moves under it, so a face is keyed by where it stands.
-        <CardedFace key={index} actor={actor} face={faces[index] ?? {}} tiled={tiled} />
+        <CardedFace
+          key={index}
+          actor={actor}
+          face={faces[index] ?? {}}
+          tiled={tiled}
+          spacing={pileSpacing(index, apart)}
+        />
       ))}
       {rest > 0 ? (
-        <MoreFaces actors={actors.slice(drawn)} faces={faces.slice(drawn)} more={`+${rest}`} />
+        <MoreFaces
+          actors={actors.slice(drawn)}
+          faces={faces.slice(drawn)}
+          more={`+${rest}`}
+          spacing={pileSpacing(shown.length, apart)}
+        />
       ) : null}
     </ul>
   );

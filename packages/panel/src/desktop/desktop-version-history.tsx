@@ -822,11 +822,11 @@ export function DesktopVersionHistory({
                 {VERSION_HISTORY}
               </Text>
             )}
-            <Fill className="sidebar-section">
+            <Fill className="sidebar-section -m-ring-reach">
               <ScrollArea ref={log} fade={SCROLL_FADE.BOTH}>
                 {/* biome-ignore lint/a11y/noStaticElementInteractions: the keys and the focus are the rows' own, which the box only hears bubble. */}
                 <div
-                  className="sidebar-section-body"
+                  className="sidebar-section-body flex min-h-list-held flex-col p-ring-reach"
                   onFocus={chooseSteppedRow(rows, versions.onSelect)}
                   onKeyDown={versionKeys}
                 >
@@ -881,14 +881,14 @@ export function DesktopVersionHistory({
           </div>
           <Fill
             as={FILL_ELEMENT.SECTION}
-            className="sidebar-section version-log-pane"
+            className="sidebar-section version-log-pane -m-ring-reach"
             aria-label={LIST_LABEL.SECTIONS}
             inert={opened === undefined}
           >
             <ScrollArea fade={SCROLL_FADE.BOTH}>
               {/* biome-ignore lint/a11y/noStaticElementInteractions: the keys and the focus are the rows' own, which the box only hears bubble. */}
               <div
-                className="sidebar-section-body"
+                className="sidebar-section-body flex min-h-list-held flex-col p-ring-reach"
                 onFocus={chooseSteppedRow(sectionRows, chooseUnit)}
                 onKeyDown={sectionKeys}
               >

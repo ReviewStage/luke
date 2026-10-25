@@ -1,7 +1,9 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { PROFILE, type SurfaceAttributes, surfaceAttributes, THEME } from "@luke/ui";
+import { CornerDot, PROFILE, type SurfaceAttributes, surfaceAttributes, THEME } from "@luke/ui";
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, test } from "vitest";
 import { layContainersAt } from "../testing/container-width.js";
 
@@ -11,10 +13,10 @@ import { layContainersAt } from "../testing/container-width.js";
  * accent's hue, never a grey, and holds a mark's 3:1 against the ground it
  * stands on, at either profile in either theme: on the web the keyboard's
  * ring is the text's near-black or white, which said nothing a filter is
- * on. jsdom resolves no `var()`, no `light-dark()`, and no pseudo-element's
- * style, so the sheets are laid (`testing/container-width.ts`) and the
- * dot's fill is read off the `::after` rule its button matches, followed
- * through its tokens as a browser reads them.
+ * on. Both wear `@luke/ui`'s `CornerDot`. jsdom resolves no `var()` and no
+ * `light-dark()`, so the sheets and the utilities are laid
+ * (`testing/container-width.ts`) and the dot's fill is read off its mark,
+ * followed through its tokens as a browser reads them.
  */
 
 let laid: HTMLStyleElement | undefined;
@@ -44,10 +46,10 @@ const SURFACES = [
   { name: "the site in dark", dark: true, surface: surfaceAttributes(PROFILE.WEB, THEME.DARK) },
 ] as const;
 
-/** Each button that wears the dot, by its class, and the ground it stands on. */
+/** Each button that wears the dot and the ground it stands on. */
 const DOTTED = [
-  { owner: "sidebar-view-options", ground: "var(--luke-color-sidebar)" },
-  { owner: "tasks-page-option", ground: "var(--luke-color-ground)" },
+  { owner: "the sidebar's View options", ground: "var(--luke-color-sidebar)" },
+  { owner: "the Tasks page's Filter", ground: "var(--luke-color-ground)" },
 ] as const;
 
 /** Lays the sheets under a root wearing `surface`. */
@@ -83,34 +85,6 @@ function resolved(element: Element, value: string, dark: boolean): string {
   return once === value ? once : resolved(element, once, dark);
 }
 
-/** A selector list's selectors, split at the commas outside any parenthesis. */
-function selectorsOf(list: string): string[] {
-  const parts = [""];
-  let depth = 0;
-  for (const character of list) {
-    depth += character === "(" ? 1 : character === ")" ? -1 : 0;
-    if (character === "," && depth === 0) parts.push("");
-    else parts[parts.length - 1] += character;
-  }
-  return parts.map((part) => part.trim());
-}
-
-/** The background the last `::after` rule `element` matches declares. */
-function afterBackground(element: Element): string {
-  let background = "";
-  for (const sheet of document.styleSheets) {
-    for (const rule of sheet.cssRules) {
-      if (!(rule instanceof CSSStyleRule)) continue;
-      const matching = selectorsOf(rule.selectorText).some(
-        (part) => part.endsWith("::after") && element.matches(part.slice(0, -7)),
-      );
-      const declared = rule.style.getPropertyValue("background");
-      if (matching && declared !== "") background = declared;
-    }
-  }
-  return background;
-}
-
 /** An opaque `#rrggbb` or `#rgb` colour's channels, each from 0 to 1. */
 function channelsOf(colour: string): number[] {
   const hex = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.exec(colour)?.[1];
@@ -131,11 +105,17 @@ for (const { name, dark, surface } of SURFACES) {
   for (const { owner, ground } of DOTTED) {
     test(`on ${name} the ${owner} dot is drawn in the accent's hue and holds a mark's 3:1`, () => {
       layUnder(surface);
-      const button = document.body.appendChild(document.createElement("span"));
-      button.className = owner;
-      button.dataset.filtered = "true";
-      const fill = resolved(button, afterBackground(button), dark);
-      const behind = resolved(button, ground, dark);
+      document.body.innerHTML = renderToStaticMarkup(
+        createElement(CornerDot, { shown: true }, "Filter"),
+      );
+      const mark = document.querySelector(".luke-corner-dot-mark");
+      assert.ok(mark, "the dot is drawn");
+      const fill = resolved(
+        mark,
+        getComputedStyle(mark).getPropertyValue("background-color"),
+        dark,
+      );
+      const behind = resolved(mark, ground, dark);
       assert.ok(
         /^#[0-9a-f]{3,6}$/i.test(fill),
         `the dot is ${fill || "undrawn"}, a grey, not the accent`,

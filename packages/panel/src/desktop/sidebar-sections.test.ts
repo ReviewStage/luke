@@ -944,7 +944,7 @@ test("a section's glyph beyond the suggested ones is drawn in its color, and one
     )?.firstElementChild;
   assert.equal(glyphOf("Stars")?.tagName.toLowerCase(), "svg");
   assert.equal(glyphOf("Stars")?.getAttribute("data-icon-color"), TASK_SECTION_ICON_COLOR.TEAL);
-  assert.equal(glyphOf("Lost")?.getAttribute("class"), "section-glyph-blank");
+  assert.equal(glyphOf("Lost")?.classList.contains("section-glyph-blank"), true);
   assert.equal(glyphOf("Lost")?.childElementCount, 0);
   openMoveToSection(sidebar, "Invite expiry");
   assert.equal(

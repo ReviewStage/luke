@@ -55,6 +55,8 @@ import { SCROLL_FADE, SCROLL_SIZE, ScrollArea } from "../scroll-area/scroll-area
  */
 const CARD = "luke-hover-card flex flex-col gap-1";
 const HEAD = "luke-hover-card-head flex items-baseline gap-icon-gap";
+const LEAD = "luke-hover-card-lead flex items-center gap-control-gap";
+const LED_HEAD = "min-w-0 flex-1";
 const GLYPH =
   "luke-hover-card-glyph inline-flex h-lh w-menu-glyph flex-none items-center justify-center self-start [&>:not(.luke-avatar,:has(.luke-avatar))]:size-hover-card-glyph";
 const TITLE = "luke-hover-card-title flex min-w-0 flex-1 flex-col gap-0.5";
@@ -102,14 +104,22 @@ export function HoverCard({
   );
 }
 
-/** A card's head: its glyph where it wears one, its name and the line under it, and its corner. */
+/**
+ * A card's head: its glyph where it wears one, its name and the line under
+ * it, and its corner. A card about someone or somewhere leads instead with
+ * their `mark` at a card's size, a face or a workspace's tile, the head
+ * beside it and centred on it, as a profile card leads with its picture.
+ */
 export function HoverCardHead({
+  mark,
   glyph,
   name,
   oneLine = false,
   sub,
   corner,
 }: {
+  /** What leads the head at a card's size, a face or a tile, beside the rest rather than on the name's first line. */
+  mark?: ReactNode;
   glyph?: ReactNode;
   name: ReactNode;
   /** Whether the name stands on one line, faded where it is cut short, rather than wrapping to two: a task standing in for a title. */
@@ -119,8 +129,8 @@ export function HoverCardHead({
   /** What stands muted at the head's right. */
   corner?: ReactNode;
 }): React.JSX.Element {
-  return (
-    <div className={HEAD}>
+  const head = (
+    <div className={mark === undefined ? HEAD : `${HEAD} ${LED_HEAD}`}>
       {glyph === undefined ? null : <span className={GLYPH}>{glyph}</span>}
       <div className={TITLE}>
         {oneLine ? (
@@ -137,6 +147,13 @@ export function HoverCardHead({
         {sub === undefined ? null : <span className={SUB}>{sub}</span>}
       </div>
       {corner === undefined ? null : <span className={CORNER}>{corner}</span>}
+    </div>
+  );
+  if (mark === undefined) return head;
+  return (
+    <div className={LEAD}>
+      {mark}
+      {head}
     </div>
   );
 }

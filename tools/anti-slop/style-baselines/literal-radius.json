@@ -4,7 +4,7 @@
   "packages/panel/src/admin/charts/chart-frame.tsx": 1,
   "packages/panel/src/admin/charts/cost-chart.tsx": 1,
   "packages/panel/src/admin/charts/retention-grid.tsx": 3,
-  "packages/panel/src/styles/desktop.css": 8,
+  "packages/panel/src/styles/desktop.css": 3,
   "packages/panel/src/styles/tasks.css": 7,
   "packages/ui/src/components/attachment-chip/attachment-chip.css": 4,
   "packages/ui/src/components/choice-list/choice-list.tsx": 4,

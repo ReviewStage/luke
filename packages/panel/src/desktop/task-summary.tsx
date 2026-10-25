@@ -597,7 +597,10 @@ function SummaryList({
     <>
       {sections.map(({ heading, entries }) => (
         <div key={heading} className="task-summary-section">
-          <Text variant={TEXT_VARIANT.GROUP} className="section-heading">
+          <Text
+            variant={TEXT_VARIANT.GROUP}
+            className="section-heading m-0 mb-tight-gap px-row-inset"
+          >
             {heading}
           </Text>
           <List label={heading} density={LIST_DENSITY.DENSE}>

@@ -79,6 +79,26 @@ import { WorkspaceRef } from "./workspace-ref.js";
  * which its card names (`strandedHome`); else an agent at work, else its
  * pull request, else nothing.
  */
+/**
+ * A sidebar row's end: its repository where its group does not say it, its
+ * face, its draft's pencil, its one mark, and its time, in the caption's
+ * muted figures, ending on the time's last letter so times of any length
+ * line up; each mark at the glyph's size a step before the next, so they
+ * step out with the time while the row is hovered. A long repository is cut
+ * short, so the row's own name keeps its room at the sidebar's least width;
+ * the row's card names it whole.
+ */
+export const SIDEBAR_ROW_TIME =
+  "sidebar-task-time flex flex-none items-center justify-end min-w-sidebar-row-time text-right text-caption-inline text-muted-foreground tabular-nums [&_.state-glyph]:mr-tight-gap [&_.state-glyph]:[--state-glyph-size:var(--spacing-luke-12)] [&>.actor-mark]:mr-tight-gap [&_.task-mark-glyph]:mr-tight-gap [&_.draft-mark]:mr-tight-gap [&_.draft-mark]:size-luke-12";
+
+/** The repository a sidebar row names before its marks (`SIDEBAR_ROW_TIME`). */
+export const SIDEBAR_ROW_REPOSITORY =
+  "sidebar-task-repository mr-item-gap inline-block max-w-sidebar-row-repository overflow-hidden whitespace-nowrap text-muted-foreground";
+
+/** A pull request's mark standing as a task's, at the glyph's size in the row's muted ink, its state's colour where it has one (`pull-request-mark.tsx`). */
+export const TASK_MARK_GLYPH =
+  "task-mark-glyph inline-block size-luke-12 flex-none text-muted-foreground";
+
 export function TaskRowMark({
   task,
   stranded,
@@ -89,7 +109,7 @@ export function TaskRowMark({
 }): React.JSX.Element | null {
   if (stranded !== undefined) {
     return (
-      <span className="task-mark-attention">
+      <span className="task-mark-attention mr-tight-gap [&_.attention-mark]:size-luke-12 [&_.attention-mark_svg]:size-attention-glyph-small">
         <AttentionMark />
         <VisuallyHidden>{`(repository belongs to ${stranded.name})`}</VisuallyHidden>
       </span>
@@ -100,7 +120,7 @@ export function TaskRowMark({
     case TASK_ROW_MARK.WORKING:
       return <StateGlyph state={GLYPH_STATE.WORKING} />;
     case TASK_ROW_MARK.PULL_REQUEST:
-      return <PullRequestMark pullRequest={mark.pullRequest} className="task-mark-glyph" />;
+      return <PullRequestMark pullRequest={mark.pullRequest} className={TASK_MARK_GLYPH} />;
     case TASK_ROW_MARK.NONE:
       return null;
   }
@@ -215,7 +235,7 @@ export function PullRequestLine({
   return (
     <li data-task-card-pull-request="">
       <HoverCardRow
-        glyph={<PullRequestMark pullRequest={pullRequest} className="task-mark-glyph" />}
+        glyph={<PullRequestMark pullRequest={pullRequest} className={TASK_MARK_GLYPH} />}
         label={
           <>
             <span className="task-card-number">{pullRequestNumberLabel(pullRequest)}</span>{" "}

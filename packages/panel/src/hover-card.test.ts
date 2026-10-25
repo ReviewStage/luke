@@ -149,7 +149,7 @@ test("a working agent's card says only how long its run has gone at its corner, 
     assert.equal(card.querySelector(".luke-hover-card-corner")?.textContent, "1m 5s"),
   );
   assert.ok(
-    card.querySelector('.actor-card-head .state-glyph[data-state="working"]'),
+    card.querySelector('.luke-hover-card-lead .state-glyph[data-state="working"]'),
     "the tile wears the working mark",
   );
   assert.equal(

@@ -388,9 +388,12 @@ export function DesktopSettings({
           }}
         />
         <LinkWorkspaceProvider value={listed?.slug ?? listed?.id}>
-          <Fill className="sidebar-section">
+          <Fill className="sidebar-section -m-ring-reach">
             <ScrollArea fade={SCROLL_FADE.BOTH}>
-              <div className="sidebar-section-body" {...roving}>
+              <div
+                className="sidebar-section-body flex min-h-list-held flex-col p-ring-reach"
+                {...roving}
+              >
                 {search ? (
                   <SettingsSearchResults search={search} opened={marked} onOpen={openResult} />
                 ) : (
