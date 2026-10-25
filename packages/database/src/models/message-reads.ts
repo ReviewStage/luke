@@ -36,7 +36,7 @@ import {
   sql,
 } from "drizzle-orm";
 import { type AnyPgColumn, alias } from "drizzle-orm/pg-core";
-import { Effect, Option, Schema } from "effect";
+import { DateTime, Effect, Option, Schema } from "effect";
 import { SqlSchema } from "effect/sql";
 import { Database, type DatabaseServices, queryBuilder, type StoreFailure } from "../core/query.js";
 import {
@@ -53,6 +53,7 @@ import {
   optionalField,
   TurnUsageColumnSchema,
 } from "./columns.js";
+import { claimExpiredBefore } from "./dispatch-claim.js";
 
 /**
  * The conversation reads the brain and the voice make: a turn's journal by
@@ -1053,31 +1054,53 @@ const findSentLine = SqlSchema.findOneOption({
     userId: Schema.String,
     conversationId: Schema.String,
     clientId: Schema.String,
+    claimExpiredBefore: Schema.Date,
   }),
   Result: Schema.Struct({ id: Schema.String }),
-  execute: ({ userId, conversationId, clientId }) =>
+  execute: (key) =>
     Database.use((db) =>
       db
         .select({ id: messages.id })
         .from(messages)
+        .innerJoin(conversations, eq(conversations.id, messages.conversationId))
         .where(
           and(
-            eq(messages.conversationId, conversationId),
-            eq(messages.userId, userId),
-            eq(messages.clientId, clientId),
+            eq(messages.conversationId, key.conversationId),
+            eq(messages.userId, key.userId),
+            eq(messages.clientId, key.clientId),
+            // A line its dispatch claim still hands over is not sent yet: the hand-over may withdraw it.
+            sql`not (${conversations.dispatchLine} is not distinct from ${messages.id} and ${conversations.dispatchClaimedAt} > ${key.claimExpiredBefore})`,
           ),
         )
         .limit(1),
     ),
 });
 
-/** Whether a row of the account's conversation stands under the client id: the line a send repeated after a lost answer already wrote, read before anything is sent again. */
+/**
+ * Whether a row of the account's conversation stands under the client id:
+ * the line a send repeated after a lost answer already wrote, read before
+ * anything is sent again. A line whose hand-over is still under way is not
+ * one yet (`dispatch-claim.ts`), so a send repeated meanwhile goes on to the
+ * writer, which waits the hand-over out and reads the key again; one whose
+ * claim expired with its holder is, since what it handed over is never
+ * handed over again.
+ */
 export function sentLineStands(
   userId: string,
   conversationId: string,
   clientId: string,
 ): Effect.Effect<boolean, StoreFailure, DatabaseServices> {
-  return Effect.map(findSentLine({ userId, conversationId, clientId }), Option.isSome);
+  return Effect.flatMap(DateTime.nowAsDate, (now) =>
+    Effect.map(
+      findSentLine({
+        userId,
+        conversationId,
+        clientId,
+        claimExpiredBefore: claimExpiredBefore(now),
+      }),
+      Option.isSome,
+    ),
+  );
 }
 
 function awaitingLinesRead(

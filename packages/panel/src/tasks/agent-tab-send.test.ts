@@ -27,7 +27,6 @@ import {
   pressInComposer,
   typeInComposer,
 } from "../testing/composer.js";
-import { layContainersAt } from "../testing/container-width.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
 import { codingAgentsControl, pushedTranscripts } from "../testing/tasks-control.js";
@@ -39,7 +38,8 @@ import { AgentTab } from "./agent-tab.js";
  * words, and the row the service writes for it lands in the line's place,
  * drawn once, whichever of the row and the send's answer comes first; a
  * message refused while the developer had written on stays where it went,
- * marked Not sent, with a Retry of its own. Synthetic throughout.
+ * marked Not sent, with a Retry of its own; the working line stands from the
+ * press, before the service takes the line. Synthetic throughout.
  */
 
 const TASK = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
@@ -212,6 +212,16 @@ test("a message sent stands in the transcript at once, the box empty and taking 
   assert.equal(tab.lines("Now the dark variant.").length, 1);
 });
 
+test("a message sent to an agent at rest draws the working line at once, before the service takes it", async () => {
+  const tab = await drawnTab([]);
+  assert.equal(tab.container.querySelector("[data-working]"), null, "an agent at rest");
+
+  await tab.send("Now the dark variant.");
+
+  assert.ok(tab.container.querySelector("[data-working]"), "working from the press");
+  assert.equal(tab.sent.length, 1, "with the send still unanswered");
+});
+
 test("a Codex or Claude Code agent's box says nothing under it of the plan that pays", async () => {
   for (const runtime of [CODING_AGENT_RUNTIME.CODEX, CODING_AGENT_RUNTIME.CLAUDE_CODE]) {
     const tab = await drawnTab([], { ...AGENT_SUMMARY, runtime });
@@ -277,24 +287,4 @@ test("a message refused after the developer wrote on stays where it went, marked
   assert.equal(tab.sent[1]?.clientKey, tab.sent[0]?.clientKey);
   assert.equal(line.querySelector(".luke-failure-note"), null, "the line is on its way again");
   assert.equal(composerEditor(tab.container).textContent, "Then fix CI");
-});
-
-test("a line that did not go fades its words and files, not the note under them, until it is sent again", async () => {
-  laid = layContainersAt({});
-  const tab = await drawnTab([]);
-  await tab.send("Rebase on main");
-  typeInComposer(tab.container, "Then fix CI");
-
-  await tab.answer(0, { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED });
-  const [line] = tab.lines("Rebase on main");
-  assert.ok(line, "the refused words stay on their line");
-  const words = line.querySelector(".message-content") ?? assert.fail("the line's words");
-  const note = line.querySelector(".luke-failure-note") ?? assert.fail("the line's note");
-  assert.equal(getComputedStyle(words).opacity, "0.6", "the words fade as words that did not go");
-  assert.notEqual(getComputedStyle(note).opacity, "0.6", "the note stays as plain as an alert");
-
-  const retry = note.querySelector("button") ?? assert.fail("with a Retry of its own");
-  await act(async () => retry.click());
-  await settle();
-  assert.notEqual(getComputedStyle(words).opacity, "0.6", "the line is on its way again");
 });

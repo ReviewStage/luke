@@ -6,12 +6,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
 import { MOTION_TOKEN } from "../../motion-timing.js";
 import { holdExits } from "../../testing/held-exits.js";
-import {
-  POPOVER_SIDE,
-  POPOVER_WIDTH,
-  type PopoverSide,
-  type PopoverWidth,
-} from "../anchored-popover/popover-place.js";
+import { POPOVER_SIDE, type PopoverSide } from "../anchored-popover/popover-place.js";
 import { RectFloat } from "./rect-float.js";
 
 /**
@@ -69,17 +64,13 @@ function boxAt(left: number, top: number) {
 }
 
 /** A layer by the box `anchor` answers, laid in an owner's box 100 in and 50 down the window. */
-function mount(
-  anchor: () => ReturnType<typeof boxAt>,
-  side?: PopoverSide,
-  width?: PopoverWidth,
-): HTMLElement {
+function mount(anchor: () => ReturnType<typeof boxAt>, side?: PopoverSide): HTMLElement {
   const owner = document.body.appendChild(document.createElement("div"));
   owner.getBoundingClientRect = () => new DOMRect(100, 50, 600, 700);
   const root = createRoot(owner);
   roots.push(root);
   act(() =>
-    root.render(createElement(RectFloat, { open: true, anchor, side, width, children: "Toolbar" })),
+    root.render(createElement(RectFloat, { open: true, anchor, side, children: "Toolbar" })),
   );
   const layer = owner.querySelector<HTMLElement>(".luke-rect-float");
   assert.ok(layer, "the layer is drawn");
@@ -140,16 +131,6 @@ test("a margin its owner's rule gives the layer, as one spacing a box's children
   }
 });
 
-test("a layer asked for a width stands at that width's token, and none asked is as wide as what it holds", () => {
-  const narrow = mount(() => boxAt(200, 300), undefined, POPOVER_WIDTH.NARROW);
-  const wide = mount(() => boxAt(200, 300), undefined, POPOVER_WIDTH.WIDE);
-  const held = mount(() => boxAt(200, 300));
-
-  assert.equal(narrow.style.width, "var(--luke-popover-width-narrow)");
-  assert.equal(wide.style.width, "var(--luke-popover-width-wide)");
-  assert.equal(held.style.width, "");
-});
-
 /** What a closing layer's owner draws: the layer while `shown` answers what it holds, and nothing in it once that is let go. */
 function closing(told: { exited: number }) {
   const owner = document.body.appendChild(document.createElement("div"));
@@ -181,7 +162,6 @@ test("a layer closed through open stays where it stood, inert and leaving, drawi
   draw(undefined);
   const leaving = layer();
   const fading = {
-    marked: leaving?.dataset.leaving,
     inert: leaving?.hasAttribute("inert"),
     words: leaving?.textContent,
     top: leaving?.style.top,
@@ -190,7 +170,6 @@ test("a layer closed through open stays where it stood, inert and leaving, drawi
   act(() => exits.finish());
 
   assert.ok(leaving, "the layer stands while it fades");
-  assert.equal(fading.marked, "true", "the layer is marked leaving, which its stylesheet fades");
   assert.equal(fading.inert, true, "the layer takes nothing while it fades");
   assert.equal(fading.words, "Rows", "the layer draws what it held as it closed");
   assert.equal(fading.top, opened, "the layer fades where it stood");
@@ -207,7 +186,6 @@ test("a layer opened again while it fades stands, and draws what it holds now", 
   draw("Other rows");
 
   assert.equal(layer()?.hasAttribute("inert"), false);
-  assert.equal(layer()?.dataset.leaving, undefined);
   assert.equal(layer()?.textContent, "Other rows");
 });
 

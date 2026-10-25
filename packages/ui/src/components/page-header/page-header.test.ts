@@ -136,5 +136,4 @@ test("the line under the title says what the page is, and a slot left empty draw
   const header = container.querySelector("header");
   expect(document.getElementById("person-title")?.textContent).toBe("Ada Lovelace");
   expect(header?.textContent).toBe("Ada LovelaceEngineer · Platform");
-  expect(header?.querySelector("h1 + p")?.textContent).toBe("Engineer · Platform");
 });

@@ -16,6 +16,7 @@ import {
   COMBOBOX_LIST,
   COMBOBOX_WELL,
 } from "../../shadcn/combobox.js";
+import { INPUT_CONTROL, INPUT_FIELD } from "../../shadcn/input.js";
 import { ANNOUNCE, useAnnounce } from "../announcer/announcer.js";
 import { OneLine } from "../one-line/one-line.js";
 import { TEXT_ELEMENT, TEXT_VARIANT, Text } from "../text/text.js";
@@ -487,7 +488,7 @@ export function Combobox({
         ref={ref}
         type="text"
         // Note that the field's foot is square while the list stands, so the two read as one well.
-        className={cn("luke-text-field", shown && "rounded-b-none")}
+        className={cn(INPUT_FIELD, INPUT_CONTROL, shown && "rounded-b-none")}
         {...keys.field}
         aria-label={label}
         aria-keyshortcuts={keyShortcuts}

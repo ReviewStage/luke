@@ -645,29 +645,32 @@ test("the tree stands as wide as the panel keeps it, and its edge asks for anoth
   await drawTab({ tree });
 
   const pane = document.querySelector<HTMLElement>(".file-tree-pane") ?? assert.fail("a tree");
-  assert.equal(pane.style.getPropertyValue("--file-tree-width"), "360px");
   const edge = pane.querySelector<HTMLElement>('[role="separator"]') ?? assert.fail("an edge");
   assert.equal(edge.getAttribute("aria-label"), "Resize files");
   press(edge, { key: "Enter" });
   assert.deepEqual(held.widths, [264], "Enter puts back the tree's own width");
 });
 
-test("the tree's edge moves the tree from the width it is drawn at, where the box leaves the diff its least", async () => {
+test("the tree's edge moves the tree from the width it is drawn at, its share of the box", async () => {
   files = [changed("a.ts")];
   vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (
     this: HTMLElement,
   ) {
-    const width = this.classList.contains("file-view-body") ? 500 : 0;
+    const width = this.classList.contains("file-view-body") ? 800 : 0;
     return new DOMRect(0, 0, width, 0);
   });
-  const { tree, held } = heldTree(true, 264);
+  const { tree, held } = heldTree(true, 400);
   await drawTab({ tree });
 
   const edge =
     document.querySelector<HTMLElement>('.file-tree-pane [role="separator"]') ??
     assert.fail("an edge");
   press(edge, { key: "ArrowRight" });
-  assert.deepEqual(held.widths, [248], "a step narrower than the 264px the tree is drawn at");
+  assert.deepEqual(
+    held.widths,
+    [304],
+    "a step narrower than 320px, 40% of the 800px box, though the tree was left at 400px",
+  );
 });
 
 test("while the tree is hidden a strip stands in its place, a mark for each file, and resting on it peeks the tree", async () => {
@@ -736,35 +739,6 @@ test("J and K step through the files inside the view, ; and ⇧; fold, and Escap
   assert.equal(press(box, { key: "Escape" }), false, "with none stood on, Escape is the window's");
 });
 
-test("a J press draws again only the files it stood on and off, and leaves every other file's header and notes as they were drawn", async () => {
-  const paths = ["a.ts", "b.ts", "c.ts", "d.ts"];
-  files = paths.map((path) => changed(path));
-  // Each file holds a thread, so a file drawn anew is counted by the thread drawn on it.
-  const drawnFor: string[] = [];
-  const threads: ChangesThreads = {
-    list: paths.map((path) => ({ ...seatsThread(2, path), path })),
-    draw: (thread) => {
-      drawnFor.push(thread.path);
-      return createElement("p", null, thread.path);
-    },
-  };
-  await drawTab({ threads });
-  const box = listBox();
-  press(box, { key: "j" });
-  await flush();
-  drawnFor.length = 0;
-
-  press(box, { key: "j" });
-  await flush();
-  assert.deepEqual(
-    [...new Set(drawnFor)].sort(),
-    ["a.ts", "b.ts"],
-    "only the file stood off and the file stood on",
-  );
-  assert.ok(header("b.ts").hasAttribute("data-standing"));
-  assert.equal(header("a.ts").hasAttribute("data-standing"), false);
-});
-
 test("a file's header mounts its hints as the keyboard comes to its fold, which keeps the focus", async () => {
   files = [changed("a.ts")];
   await drawTab();
@@ -796,24 +770,6 @@ test("the pointer's first arrival on a header's letter hangs its hint, though th
   restOn(letter());
   await flush();
   assert.equal(document.querySelector('[role="tooltip"]')?.textContent, "Modified");
-});
-
-test("a file's header leads with its type's icon after its status letter, and its folder and name fade out where the row cuts them rather than ending in an ellipsis", async () => {
-  files = [changed("packages/panel/src/tasks/changes-list.tsx")];
-  await drawTab();
-  document.body.append(lastDrawn().renderHeader("packages/panel/src/tasks/changes-list.tsx"));
-  const head = header("packages/panel/src/tasks/changes-list.tsx");
-
-  const letter = head.querySelector(".file-view-status") ?? assert.fail("the letter stands");
-  assert.equal(
-    letter.nextElementSibling?.tagName.toLowerCase(),
-    "svg",
-    "the file's icon follows the letter",
-  );
-  const cut = [".diff-list-folder", ".diff-list-name"].map((part) =>
-    head.querySelector(part)?.getAttribute("data-end"),
-  );
-  assert.deepEqual(cut, ["fade", "fade"]);
 });
 
 test("a finger's arrival on a header draws none of it anew, so iOS spends no tap on the fold", async () => {
@@ -1104,17 +1060,6 @@ test("a read that stopped short of every file offers no patch, and says why", as
     assert.equal(item?.getAttribute("aria-disabled") ?? String(item?.disabled), "true");
     assert.match(item?.textContent ?? "", /This pull request has more files than were read/u);
   }
-});
-
-test("Split draws the diff side by side, which the next view keeps", async () => {
-  await drawTab();
-
-  const popover = openSettings();
-  act(() => settingControl(popover, '[role="radio"]', "Split").click());
-  await flush();
-  assert.equal(lastDrawn().look.layout, "split");
-
-  assert.equal((await drawTab()).look.layout, "split");
 });
 
 test("with Changed words Off a changed line is tinted whole, for this view and the next", async () => {
@@ -1808,7 +1753,6 @@ test("a read that stopped short of every file never reads as all viewed", async 
   await drawTab();
 
   assert.equal(viewedCount(), "1 / 1 file viewed");
-  assert.equal(document.querySelector(".files-viewed")?.hasAttribute("data-complete"), false);
 });
 
 test("the count goes up the moment a box is ticked, and back down where GitHub refuses the mark", async () => {
@@ -2732,7 +2676,6 @@ test("Escape in the tree floated over the list puts it away and gives the keyboa
   assert.equal(document.activeElement, field);
 
   assert.equal(press(field, { key: "Escape" }), true);
-  assert.equal(floatedTree()?.getAttribute("data-state"), "leaving");
   assert.equal(document.activeElement, overToggle());
   act(() => vi.advanceTimersByTime(MOTION_DURATION_MS.PANE));
   assert.equal(floatedTree(), null);

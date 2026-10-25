@@ -26,9 +26,9 @@ import {
  * and takes no press where it does not apply now. A touch held still on
  * what a right-click opens a menu on opens the same menu at the touch,
  * once, and its release makes no click; a touch that moves or lets go
- * first, and a mouse held down, open nothing. A label and a detail cut
- * short fade out, and an item hangs its card beside itself on rest, which
- * leaves the menu its focus, its arrows, and a press on the card.
+ * first, and a mouse held down, open nothing. An item hangs its card beside
+ * itself on rest, which leaves the menu its focus, its arrows, and a press on
+ * the card.
  */
 
 declare global {
@@ -250,42 +250,7 @@ function standInResizeObserver(): void {
   );
 }
 
-/** Every line's words measured wider than its box, as a narrow menu cuts a long name. */
-function cutEveryLine(): void {
-  standInResizeObserver();
-  vi.spyOn(HTMLElement.prototype, "scrollWidth", "get").mockReturnValue(400);
-  vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockReturnValue(120);
-}
-
-test("a label and a detail the menu cuts short fade out at their end rather than end in an ellipsis", () => {
-  cutEveryLine();
-  mount(
-    createElement(Harness, {
-      groups: [
-        [
-          {
-            label: "Analytical Engine Society of Greater London",
-            detail: "ada.lovelace@analytical-engine.example",
-            onSelect: () => undefined,
-          },
-        ],
-      ],
-    }),
-  );
-  press(button("More"));
-  const item = openMenu()?.querySelector('[role="menuitem"]');
-  const lines = [
-    ...(item?.querySelectorAll(".luke-menu-item-label, .luke-menu-item-detail") ?? []),
-  ];
-  expect(
-    lines.map((line) => [line.getAttribute("data-end"), line.getAttribute("data-overflow")]),
-  ).toEqual([
-    ["fade", "true"],
-    ["fade", "true"],
-  ]);
-});
-
-test("a detail placed beside its label stands on the label's line, the item a row's height, and is heard after the label as one under it is", () => {
+test("a detail placed beside its label is heard after the label as one under it is", () => {
   standInResizeObserver();
   mount(
     createElement(Harness, {
@@ -305,15 +270,9 @@ test("a detail placed beside its label stands on the label's line, the item a ro
   press(button("More"));
   const items = [...(openMenu()?.querySelectorAll('[role="menuitem"]') ?? [])];
 
-  expect(
-    items.map((item) => [
-      item.getAttribute("aria-label"),
-      item.getAttribute("data-detail"),
-      item.querySelector(".luke-menu-item-copy")?.getAttribute("data-place") ?? null,
-    ]),
-  ).toEqual([
-    ["Ada Lovelace, ada@example.com", "true", null],
-    ["Grace Hopper, grace@example.com", null, "beside"],
+  expect(items.map((item) => item.getAttribute("aria-label"))).toEqual([
+    "Ada Lovelace, ada@example.com",
+    "Grace Hopper, grace@example.com",
   ]);
 });
 

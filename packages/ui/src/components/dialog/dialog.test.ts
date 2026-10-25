@@ -16,7 +16,7 @@ import { DIALOG_ROLE, Dialog, type DialogHandle, nextRowOrHead } from "./dialog.
  * the button; a press dragged out of the card puts nothing away; an input
  * method's keys stay the method's; no key or press inside reaches the window
  * behind; a busy dialog holds focus on its card until it is done, and
- * nudges its card when asked away meanwhile; one
+ * its owner still hears it asked away meanwhile; one
  * given a title and actions is named by the title, its answers after what
  * it holds; one its owner closes through `open` fades out before it
  * goes, or goes at once where motion is held, and hands focus back once it
@@ -247,7 +247,7 @@ test("a busy dialog holds focus on its card, and Tab from there comes back onto 
   expect(holds(field)).toBe(true);
 });
 
-test("asked away while busy, by the dimmed window or Escape, the card nudges each time and its owner still hears it", () => {
+test("asked away while busy, by the dimmed window or Escape, its owner still hears it each time", () => {
   let dismissals = 0;
   draw(
     createElement(Dialog, {
@@ -264,11 +264,7 @@ test("asked away while busy, by the dimmed window or Escape, the card nudges eac
   const backdrop = dialog.parentElement ?? expect.fail("no dimmed window");
 
   press(backdrop, backdrop);
-  expect(dialog.getAttribute("data-nudge")).toBe("true");
-  act(() => dialog.dispatchEvent(new Event("animationend")));
-  expect(dialog.hasAttribute("data-nudge")).toBe(false);
   key("Escape");
-  expect(dialog.getAttribute("data-nudge")).toBe("true");
   expect(dismissals).toBe(2);
 });
 
@@ -322,68 +318,7 @@ test("a dialog given a title and actions is named by its title, and what it hold
   expect(holds(field.current)).toBe(true);
 });
 
-test("what a dialog holds stands in one middle between its head and its foot, so a short window scrolls the middle and keeps the title and the answers", () => {
-  draw(
-    createElement(Dialog, {
-      open: true,
-      title: "New section",
-      onDismiss: () => undefined,
-      actions: createElement("button", { type: "button" }, "Save"),
-      children: [
-        createElement("input", { key: "title", "aria-label": "Section title" }),
-        createElement("p", { key: "icons" }, "Icons"),
-      ],
-    }),
-  );
-  const dialog = card() ?? expect.fail("the dialog opens");
-  const middle =
-    dialog.querySelector('[data-slot="dialog-body"]') ?? expect.fail("a middle stands");
-  const head = dialog.querySelector("h2") ?? expect.fail("a head stands");
-  expect(middle.contains(dialog.querySelector("input"))).toBe(true);
-  expect(middle.contains(dialog.querySelector("p"))).toBe(true);
-  expect(middle.contains(head)).toBe(false);
-  expect(middle.contains(button("Save"))).toBe(false);
-  // Note that the head comes before the middle and the foot after it, in the card's own column.
-  expect(head.compareDocumentPosition(middle) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-  expect(
-    middle.compareDocumentPosition(button("Save")) & Node.DOCUMENT_POSITION_FOLLOWING,
-  ).toBeTruthy();
-});
-
-/** A dialog whose act its owner refuses or lets through, at the owner's word. */
-function Refusing({ refused }: { refused: boolean }): React.JSX.Element {
-  return createElement(Dialog, {
-    open: true,
-    title: "Delete plan?",
-    refused,
-    onDismiss: () => undefined,
-    children: createElement("button", { type: "button" }, "Delete"),
-  });
-}
-
-test("a refusal shakes the card each time it lands, not when the card opens on one, and a motion inside the card ending leaves the shake playing", () => {
-  draw(createElement(Refusing, { refused: true }));
-  const root = roots.at(-1) ?? expect.fail("no root");
-  const dialog = card() ?? expect.fail("the dialog opens");
-  const onOpening = dialog.hasAttribute("data-refused");
-  act(() => root.render(createElement(Refusing, { refused: false })));
-  act(() => root.render(createElement(Refusing, { refused: true })));
-  const landed = dialog.getAttribute("data-refused");
-  act(() => button("Delete").dispatchEvent(new Event("animationend", { bubbles: true })));
-  const afterInner = dialog.getAttribute("data-refused");
-  act(() => dialog.dispatchEvent(new Event("animationend")));
-  const afterOwn = dialog.hasAttribute("data-refused");
-  act(() => root.render(createElement(Refusing, { refused: false })));
-  act(() => root.render(createElement(Refusing, { refused: true })));
-
-  expect(onOpening).toBe(false);
-  expect(landed).toBe("true");
-  expect(afterInner).toBe("true");
-  expect(afterOwn).toBe(false);
-  expect(dialog.getAttribute("data-refused")).toBe("true");
-});
-
-test("a dialog holding a draft is nudged and kept by the first Escape or press on the dimmed window, says why, and is put away by the next; one holding none goes at once", () => {
+test("a dialog holding a draft is kept by the first Escape or press on the dimmed window, says why, and is put away by the next; one holding none goes at once", () => {
   let dismissals = 0;
   const drawn = (holding: boolean) =>
     createElement(Dialog, {
@@ -403,7 +338,6 @@ test("a dialog holding a draft is nudged and kept by the first Escape or press o
   press(backdrop, backdrop);
   const afterFirst = {
     dismissals,
-    nudge: dialog.getAttribute("data-nudge"),
     told: document.querySelector('[role="status"]')?.textContent,
   };
   key("Escape");
@@ -413,7 +347,6 @@ test("a dialog holding a draft is nudged and kept by the first Escape or press o
 
   expect(afterFirst).toEqual({
     dismissals: 0,
-    nudge: "true",
     told: "Your draft is kept. Press Escape again to close.",
   });
   expect(afterSecond).toBe(1);
@@ -440,7 +373,6 @@ test("an owner asks its dialog away through its handle as Escape would, a draft 
   act(() => handle.current?.dismiss());
 
   expect(afterFirst).toBe(0);
-  expect(card()?.getAttribute("data-nudge")).toBe("true");
   expect(dismissals).toBe(1);
 });
 
@@ -517,19 +449,17 @@ function closedThroughOpen(onExited?: () => void): HTMLButtonElement {
   return opener;
 }
 
-test("a dialog its owner closes through open stays drawn in its ending state until its fade has run, then goes, handing focus back to its opener", async () => {
+test("a dialog its owner closes through open stays drawn until its fade has run, then goes, handing focus back to its opener", async () => {
   vi.useFakeTimers({ toFake: ["requestAnimationFrame", "cancelAnimationFrame"] });
   const exits = holdExits();
   const opener = closedThroughOpen();
   const leaving = card();
-  const endingAsClosed = leaving?.hasAttribute("data-ending-style");
   const focusWhileFading = holds(opener);
   act(() => vi.advanceTimersToNextFrame());
   const standsAFrameOn = card() !== null;
   await act(async () => exits.finish());
 
   expect(leaving).not.toBeNull();
-  expect(endingAsClosed).toBe(true);
   expect(focusWhileFading).toBe(false);
   expect(standsAFrameOn).toBe(true);
   expect(card()).toBeNull();

@@ -198,3 +198,20 @@ test("Chat narrower than the Inbox's line by its own width shows its rail, then 
   assert.equal(rail()?.hidden, false, "Escape steps back to the rail");
   assert.equal(pane()?.hidden, true);
 });
+
+test("For you is the place shown only while its pane is drawn: a rail standing alone marks none, though the place still waits on For you", () => {
+  const page = mount();
+  layOut(page, 1000);
+  assert.equal(shown(page), "For you", "beside its pane, For you is the place shown");
+
+  layOut(page, 760);
+  assert.equal(page.querySelector<HTMLElement>(".chat-rail")?.hidden, false);
+  assert.equal(shown(page), undefined, "the rail alone has chosen nothing, so nothing is marked");
+
+  act(() => railRow(page, "For you").click());
+  assert.equal(page.querySelector<HTMLElement>(".chat-rail")?.hidden, true);
+  act(() => {
+    runAppCommand(APP_COMMAND.CHAT_LIST);
+  });
+  assert.equal(shown(page), undefined, "back on the rail from For you, nothing is marked either");
+});

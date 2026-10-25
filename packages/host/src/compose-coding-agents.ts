@@ -118,7 +118,6 @@ import {
   scopeInboxes,
 } from "./scope-inbox-follow.js";
 import {
-  confirmTranscriptWrite,
   followTranscript,
   type TranscriptFollows,
   TranscriptKey,
@@ -607,7 +606,9 @@ function composed(
         const answer = yield* asked(
           taskId === undefined ? client.startFrom(request) : client.start(taskId, request),
         );
-        if ("txid" in answer) yield* listed(answer.txid);
+        // Note that a Start answers without waiting for the task list to carry its agent, because
+        // the window joins the agent it answers to the task's agents itself, and a list from
+        // before the write only lacks a row it has not drawn yet.
         return carried<CodingAgentAgentAnswer>(answer);
       }),
     [GATEWAY_METHOD.CODING_AGENTS_MESSAGES]: (params) =>
@@ -681,11 +682,9 @@ function composed(
         }
         const answer = yield* asked(client.message(agentId, request));
         if (!("agent" in answer)) return carried<CodingAgentAgentAnswer>(answer);
-        // The send is confirmed once its row reached the transcript a window follows now, and at once where none does.
-        const key = new TranscriptKey({ agentId, callId: undefined });
-        if (yield* FiberMap.has(followed, key)) {
-          yield* confirmTranscriptWrite(transcripts, key, answer.txid);
-        }
+        // Note that a send answers at once rather than once its row reaches the followed transcript,
+        // because the window draws the line under the row's id until that row lands, so no page from
+        // before the write can take it away, and the next send waits on this answer.
         return carried<CodingAgentAgentAnswer>({ agent: answer.agent });
       }),
     [GATEWAY_METHOD.CODING_AGENTS_CHOOSE]: (params) =>

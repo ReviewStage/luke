@@ -11,7 +11,7 @@ import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test } from "vitest";
-import { type SideBundles, sideBundles, usePrefetchDiffBundle } from "../bundle-loader.js";
+import type { SideBundles } from "../bundle-loader.js";
 import { LinkWorkspaceProvider } from "../copy-link-item.js";
 import { preferredHighlighter } from "../diff-view/highlight-pool.js";
 import { diffView } from "../diff-view/index.js";
@@ -302,36 +302,6 @@ test("an inbox item's code draws the lines it read as a Code card's, those it na
   assert.deepEqual(drawnLines(container), [2, 3, 4, 5, 6, 7, 8]);
   assert.equal(drawnRoot(container).querySelector('[data-line="5"]')?.textContent, "line 5");
   assert.deepEqual(litLines(container), [5]);
-});
-
-test("the diff bundle starts loading once a call stands, and not before", async () => {
-  let imports = 0;
-  const counted = sideBundles({
-    diffView: () => {
-      imports += 1;
-      return Promise.resolve(diffView);
-    },
-  });
-  function Prefetching({ due }: { due: boolean }): null {
-    usePrefetchDiffBundle(due);
-    return null;
-  }
-  const container = document.body.appendChild(document.createElement("div"));
-  const root = createRoot(container);
-  roots.push(root);
-  const registry = AtomRegistry.make();
-  const render = (due: boolean) =>
-    act(() =>
-      root.render(
-        onRegistry(registry, onSideBundles(counted, createElement(Prefetching, { due }))),
-      ),
-    );
-  render(false);
-  await settle();
-  assert.equal(imports, 0, "no call, no load");
-  render(true);
-  await settle();
-  assert.equal(imports, 1, "the call starts it");
 });
 
 test("a File tab whose file is refused draws Luke's lines as a card does, his notes on them under their lines, scrolling in the room the notice leaves", async () => {

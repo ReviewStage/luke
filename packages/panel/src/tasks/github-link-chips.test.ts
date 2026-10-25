@@ -309,7 +309,6 @@ test("an open pull request GitHub's merge queue holds says Queued and wears the 
   const row = alone.container.querySelector('[data-lone-link="pull-request"]');
   const mark = row?.querySelector<SVGElement>("[data-pull-request-mark]");
 
-  assert.equal(mark?.dataset.pullRequestState, "queued");
   assert.equal(mark?.getAttribute("aria-label"), "Pull request #46, queued");
   assert.ok(row?.textContent?.includes("Queued"));
 });

@@ -9,22 +9,11 @@
    delay, so a paused loop holds every dot at rest, the pose the face itself
    holds paused. An endless loop, so its period is a literal and it answers
    --luke-loop-motion, which reduced motion and a capture run pause with the
-   face's own token. */
+   face's own token. The dots are drawn in utilities (`thinking-dots.tsx`);
+   only their rise stands here. */
 
 @layer components {
-  .luke-thinking-dots {
-    display: inline-flex;
-    height: 12px;
-    align-items: center;
-    gap: var(--luke-space-4);
-  }
-
   .luke-thinking-dots i {
-    width: 5px;
-    height: 5px;
-    border-radius: 50%;
-    background: var(--luke-color-text-muted);
-    opacity: 0.35;
     animation-duration: 2s;
     animation-timing-function: var(--luke-motion-exit);
     animation-iteration-count: infinite;

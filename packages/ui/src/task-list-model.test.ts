@@ -19,6 +19,7 @@ import {
   repositoryGroups,
   repositoryLabel,
   shownStatuses,
+  statusesFiltered,
   TASK_GROUPING,
   TASK_ORDER,
   TASK_ROW,
@@ -358,6 +359,17 @@ test("a status turned on joins the others in the order work moves through them, 
     TASK_STATUS.BACKLOG,
     TASK_STATUS.IN_PROGRESS,
   ]);
+});
+
+test("a status filter is on once the statuses shown differ from to do and under way, and off again once they are those two", () => {
+  const view = { grouping: TASK_GROUPING.NONE, order: TASK_ORDER.UPDATED };
+  expect(statusesFiltered(view)).toBe(false);
+  const withBacklog = toggledStatus(shownStatuses(view), TASK_STATUS.BACKLOG);
+  expect(statusesFiltered({ ...view, statuses: withBacklog })).toBe(true);
+  expect(statusesFiltered({ ...view, statuses: [TASK_STATUS.TODO] })).toBe(true);
+  expect(
+    statusesFiltered({ ...view, statuses: toggledStatus(withBacklog, TASK_STATUS.BACKLOG) }),
+  ).toBe(false);
 });
 
 test("the rows assigned to one member are the tasks they are on and the one-off agents they started, and every row where nobody is named", () => {

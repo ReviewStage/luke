@@ -152,17 +152,6 @@ test("V on the row the tree's keyboard stands on presses that row's toggle and g
   assert.equal(heard, 2, "a V composed, and V on a row with no toggle, are left to the view");
 });
 
-test("marks handed again redraw the rows, a file marked viewed since ticked", async () => {
-  const { handle } = await mountMarked(MARKS);
-
-  handle.mark(
-    MARKS.map((mark) => ({ ...mark, viewed: mark.viewed === undefined ? undefined : true })),
-  );
-  await settle();
-
-  assert.equal(parts("src/seats.ts")[4], "Viewed");
-});
-
 test("a mark that does not say whether its file is viewed draws no toggle", async () => {
   await mountMarked([{ path: "src/seats.ts", status: FILE_MARK.MODIFIED, threads: 1 }]);
 

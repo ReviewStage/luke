@@ -7,6 +7,9 @@
   "scripts": {
     "test:vitest": "vitest run"
   },
+  "dependencies": {
+    "pngjs": "^7.0.0"
+  },
   "devDependencies": {
     "jsdom": "^30.0.1",
     "vitest": "catalog:"

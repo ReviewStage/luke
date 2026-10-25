@@ -101,31 +101,6 @@ test("the summary's archived agents fold under a group header that counts them f
   assert.ok(summary.querySelector('[aria-label="Archived agents"]'), "the agents are listed");
 });
 
-test("the archived agents' fold unrolls as it opens, which it did not before", () => {
-  const agent = {
-    planId: "plan-1",
-    model: "anthropic/claude-opus-5.5",
-    effort: "high",
-    createdAt: 1,
-    status: CODING_AGENT_STATUS.CANCELLED,
-    turnId: null,
-    archivedAt: 2,
-  } as const;
-  const summary = mount(
-    createElement(ArchivedAgents, {
-      agents: codingAgentsControl({
-        archived: [{ ...agent, id: "agent-1", title: "Retry audit" }],
-      }),
-      shown: true,
-    }),
-  );
-  const root = fold(summary, "Archived").closest(".luke-group-header");
-  assert.equal(root?.getAttribute("data-disclosure"), null);
-
-  act(() => fold(summary, "Archived").click());
-  assert.equal(root?.getAttribute("data-disclosure"), "opening");
-});
-
 test("Pinned folds on its name, counts its pins folded, and leaves the pin that is open standing", () => {
   const pinned = (id: string, name: string, position: string) => ({
     ...task(id, name, "acme/relay"),

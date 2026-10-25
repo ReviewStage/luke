@@ -1,5 +1,6 @@
 import {
   CODING_AGENT_BOUNDS,
+  CODING_AGENT_STATUS,
   type CodingAgentAttachment,
   type CodingAgentStatus,
   type CodingAgentSummary,
@@ -26,7 +27,7 @@ import { useCopyLinkItem } from "../copy-link-item.js";
 import { DraftMark } from "../draft-mark.js";
 import type { AgentCallDoors } from "../tasks/agent-call.js";
 import { agentCardReading } from "../tasks/agent-ref.js";
-import { AgentTab } from "../tasks/agent-tab.js";
+import { AgentTab, StartingAgentTab } from "../tasks/agent-tab.js";
 import { AgentTabCard } from "../tasks/agent-tab-card.js";
 import { AgentTabSkeleton } from "../tasks/agent-tab-skeleton.js";
 import type { ChatNoticeDoors } from "../tasks/chat-notice.js";
@@ -203,8 +204,8 @@ function AgentMenuTab({
 interface DrawnTab {
   tab: MainTab;
   look: TabLook;
-  /** Closes the tab, as its × does. */
-  close: () => void;
+  /** Closes the tab, as its × does; none for a Start's still making its agent, which only its answer closes. */
+  close: (() => void) | undefined;
   agent?: CodingAgentSummary | undefined;
 }
 
@@ -252,6 +253,26 @@ function agentTabs(input: {
       close: () => main.onClose(tab),
     };
   });
+  // A Start still making its agent stands as that agent's tab under the press's key, which nothing closes but its answer.
+  const pending = agents.start.pending;
+  const startingTab = pending === undefined ? undefined : { agent: pending.key };
+  const starting =
+    startingTab === undefined || main.openAgents?.includes(startingTab.agent) !== true
+      ? []
+      : [
+          {
+            tab: startingTab,
+            look: look(
+              startingTab,
+              tabLook({
+                kind: TAB_KIND.AGENT,
+                name: undefined,
+                agent: { model: pending?.model ?? "", status: CODING_AGENT_STATUS.STARTING },
+              }),
+            ),
+            close: undefined,
+          },
+        ];
   const draft = agents.draft?.id;
   const draftHolds =
     agents.draft !== undefined &&
@@ -275,7 +296,7 @@ function agentTabs(input: {
             },
           },
         ];
-  return [...own, ...drafts];
+  return [...own, ...starting, ...drafts];
 }
 
 /**
@@ -470,7 +491,9 @@ export function MainTabStrip({
       entry.agent === undefined
         ? undefined
         : { kind: LINK_PLACE.AGENT, planId: task.id, agentId: entry.agent.id };
-    const others = strip.flatMap((other) => (other === entry ? [] : [other.close]));
+    const others = strip.flatMap((other) =>
+      other === entry || other.close === undefined ? [] : [other.close],
+    );
     const { agent } = entry;
     const pinTab: ColumnPinnableTab | undefined =
       agent === undefined ? undefined : { agent: agent.id };
@@ -614,6 +637,8 @@ export function MainTabContent({
     );
   }
   const agentId = tab.agent;
+  // A Start still making its agent draws the agent's tab as it will land, saying it is starting.
+  if (agents.start.pending?.key === agentId) return <StartingAgentTab key={agentId} />;
   // The tab follows its agent's transcript by the id alone, so a task opened
   // on an agent reads it beside the task's list of agents rather than after
   // it; what needs the agent itself waits for the list in the tab's shape.
