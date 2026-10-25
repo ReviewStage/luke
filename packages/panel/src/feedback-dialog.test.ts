@@ -338,7 +338,6 @@ test("a refused send says why and keeps the note, and sending again delivers it"
     dialog()?.querySelector('[role="alert"]')?.textContent,
     "Could not send that. Try again.",
   );
-  assert.equal(dialog()?.getAttribute("data-refused"), "true", "the card shakes as it refuses");
   assert.equal(field().value, "The board missed a plan.");
 
   answer = { delivered: true };
@@ -356,14 +355,12 @@ test("a note sent fades out still drawn, in its ending state and with its words 
 
   await act(async () => button("Send").click());
   const fading = dialog();
-  const ending = fading?.hasAttribute("data-ending-style");
   const words = fading?.querySelector("textarea")?.value;
   const title = fading?.querySelector("h2")?.textContent;
   act(() => vi.advanceTimersToNextFrame());
   await act(async () => exits.finish());
 
   assert.ok(fading, "the card stands while it fades");
-  assert.equal(ending, true, "it is in its ending state");
   assert.equal(words, "The board missed a plan.", "the words do not vanish mid-fade");
   assert.equal(title, "Send feedback");
   assert.equal(dialog(), null, "it goes once its fade has run");

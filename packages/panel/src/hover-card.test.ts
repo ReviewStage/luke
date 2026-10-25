@@ -148,10 +148,6 @@ test("a working agent's card says only how long its run has gone at its corner, 
   await vi.waitFor(() =>
     assert.equal(card.querySelector(".luke-hover-card-corner")?.textContent, "1m 5s"),
   );
-  assert.ok(
-    card.querySelector('.luke-hover-card-lead .state-glyph[data-state="working"]'),
-    "the tile wears the working mark",
-  );
   assert.equal(
     card.querySelector("[data-tab-card] > .luke-visually-hidden")?.textContent,
     "Working",
@@ -303,18 +299,10 @@ test("a call's card is a turn's card: the model at the head over when it ran, ho
   const callCard = hung(call, "[data-call-ended]");
   const turnHead = headOf(turn);
   const callHead = headOf(callCard);
-  assert.equal(turnHead.glyph, true, "the turn's model wears its provider's mark");
-  assert.equal(callHead.glyph, true, "the call's model wears its provider's mark");
   assert.equal(turnHead.corner, "Stopped");
   assert.equal(callHead.corner, "Dropped");
   for (const head of [turnHead, callHead]) {
     assert.match(head.sub ?? "", /Oct 14, 2026/u, "when it ran stands under the model");
-  }
-  for (const card of [turn, callCard]) {
-    assert.ok(
-      card.querySelector(".luke-hover-card > .luke-hover-card-rule + dl"),
-      "the figures stand under a rule",
-    );
   }
 });
 

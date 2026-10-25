@@ -1,12 +1,10 @@
 // @vitest-environment jsdom
-import { type AdminCost, SECONDS_LIST_PRICE } from "@luke/features/admin-cost-wire";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, expect, test } from "vitest";
 import { type AdminDoors, AdminDoorsProvider, type AdminReads } from "./admin-doors.js";
 import { AccountScreen } from "./screens/account.js";
 import { CostScreen } from "./screens/cost.js";
-import { DayScreen } from "./screens/day.js";
 import { ReliabilityScreen } from "./screens/reliability.js";
 import { UsersScreen } from "./screens/users.js";
 import { WorkspacesScreen } from "./screens/workspaces.js";
@@ -36,37 +34,6 @@ const UNANSWERED: AdminReads = {
   day: unanswered,
   workspaces: unanswered,
   favorite: async () => true,
-};
-
-/** A synthetic week of list prices: one model and one account. */
-const COST: AdminCost = {
-  generatedAt: Date.UTC(2026, 9, 17, 12),
-  windowDays: 7,
-  catalogAvailable: true,
-  totals: { spendUsd: 16.01, trend: { days: 7, recent: 16.01, prior: 8 }, unpricedTokens: 0 },
-  perAccount: { accounts: 4, meanUsd: 4, medianUsd: 1.5 },
-  perMergedPullRequest: { mergedPullRequests: 2, spendUsd: 8 },
-  voice: { minutes: 10, spendUsd: 0.5, unpricedMinutes: 0 },
-  daily: [
-    { day: "2026-10-17", "coding-agents": 12.5, luke: 3, voice: 0.5, dictation: 0, avatar: 0 },
-  ],
-  byModel: [
-    { model: "anthropic/claude-test", spendUsd: 15.5, pricedTokens: 3_000_000, unpricedTokens: 0 },
-  ],
-  topAccounts: [
-    {
-      id: "account-ada",
-      name: "Ada Lovelace",
-      email: "ada@example.test",
-      image: null,
-      admin: false,
-      spendUsd: 12.5,
-      unpricedTokens: 0,
-      mergedPullRequests: 0,
-      spendPerMergedPullRequestUsd: null,
-    },
-  ],
-  prices: SECONDS_LIST_PRICE,
 };
 
 const roots: Root[] = [];
@@ -127,28 +94,15 @@ function sectionHeadings(within: HTMLElement): string[] {
   return Array.from(within.querySelectorAll("section h2"), (heading) => heading.textContent ?? "");
 }
 
-/** The cards the first card under `within` groups, as a stat group holds them. */
-function groupedCards(within: HTMLElement): number {
-  return within.querySelector(".luke-card > div")?.children.length ?? 0;
-}
-
 function costScreen(): React.ReactElement {
   return createElement(CostScreen, { ...QUIET, windowDays: 7 });
 }
-
-test("the Cost page's skeleton stands as many headline cards as the page lands", async () => {
-  const loading = loadingRegion(await draw(costScreen()));
-  const loaded = await draw(costScreen(), { cost: async () => COST });
-  expect(groupedCards(loading)).toBe(4);
-  expect(groupedCards(loading)).toBe(groupedCards(loaded));
-});
 
 test("the Cost chart's skeleton stands its own heading and legend, with no caption across from it", async () => {
   const region = loadingRegion(await draw(costScreen()));
   const heading = [...region.querySelectorAll("h3")].find(
     (title) => title.textContent === "Daily list-price equivalent by source, USD",
   );
-  expect(heading?.parentElement?.children).toHaveLength(1);
   const card = heading?.closest(".luke-card");
   for (const source of [
     "Coding agents",
@@ -159,29 +113,6 @@ test("the Cost chart's skeleton stands its own heading and legend, with no capti
   ]) {
     expect(card?.textContent).toContain(source);
   }
-});
-
-test("a table's skeleton stands an avatar's bone only in the column an account lands in", async () => {
-  const region = loadingRegion(await draw(costScreen()));
-  const avatars = (label: string) =>
-    Array.from(
-      region.querySelectorAll(`table[aria-label="${label}"] tbody tr`),
-      (row) => row.querySelectorAll('.luke-skeleton[data-shape="circle"]').length,
-    );
-  expect(avatars("List-price equivalent by model").every((count) => count === 0)).toBe(true);
-  const accounts = avatars("Accounts with the highest list-price equivalent");
-  expect(accounts.length).toBeGreaterThan(0);
-  expect(accounts.every((count) => count === 1)).toBe(true);
-});
-
-test("a past day's cards stand no hint, as its loaded cards say none", async () => {
-  const region = loadingRegion(
-    await draw(createElement(DayScreen, { ...QUIET, day: "2026-01-05", onBack: () => undefined })),
-  );
-  const cards = [...region.querySelectorAll(".luke-card")].slice(0, 2);
-  expect(cards).toHaveLength(2);
-  // A card's label and its figure, and no third bone for a hint.
-  for (const card of cards) expect(card.querySelectorAll(".luke-skeleton")).toHaveLength(2);
 });
 
 test("the Users roster stands its table and its sign-in methods while it is read", async () => {

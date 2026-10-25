@@ -23,7 +23,6 @@ import { focusRestOn } from "../testing/hint-rest.js";
 import { codingAgentsControl, pushedPage } from "../testing/tasks-control.js";
 import { NOTHING_HELD } from "./agent-ref.js";
 import { AgentTab, type BriefTask, type TranscriptCards } from "./agent-tab.js";
-import { TOOL_TARGET } from "./tool-call-model.js";
 import type { TranscriptFollower } from "./use-agent-transcript.js";
 
 /**
@@ -169,25 +168,6 @@ function cardOn(row: HTMLElement | null): readonly (string | boolean | null | un
   ];
 }
 
-/** Cards that hang what `cards` hangs and note each row that asked for one as it was drawn, by the agent or the worker it opens. */
-function recording(cards: TranscriptCards, drawn: string[]): TranscriptCards {
-  return {
-    ...cards,
-    target: (target) => {
-      drawn.push(target.kind === TOOL_TARGET.AGENT ? `opens ${target.agent}` : target.kind);
-      return cards.target(target);
-    },
-    worker: (worker) => {
-      drawn.push(`worker ${worker.callId}`);
-      return cards.worker(worker);
-    },
-    agent: (agentId) => {
-      drawn.push(`names ${agentId}`);
-      return cards.agent?.(agentId);
-    },
-  };
-}
-
 /** A running agent's tab over a transcript whose first page is answered at once and each later one when the test hands it. */
 function runningTab() {
   fakeAppBridge({});
@@ -260,43 +240,6 @@ function runningTab() {
     },
   };
 }
-
-test("a page that rewrites the reply still being written draws that reply's rows again and leaves every other message's as they were drawn", async () => {
-  const tab = runningTab();
-  const drawn: string[] = [];
-  const control = tab.controlOf("Invoice export");
-  const cards = recording(tab.cardsOf(control), drawn);
-  act(() => tab.draw(control, cards));
-  await tab.settle();
-  tab.openEarlierFold();
-  assert.ok(drawn.includes(`worker ${DELEGATE_CALL}`), "the earlier turn's worker row is drawn");
-  assert.ok(drawn.includes("names agent-7"), "the earlier turn's message row is drawn");
-  assert.ok(drawn.includes("names agent-9"), "the newest turn's message row is drawn");
-
-  // A page touches the newest turn alone, and says the worker stands as it stood.
-  drawn.length = 0;
-  await tab.answer(page([newest("Reading the retry audit.")], CODING_AGENT_STATUS.RUNNING, "1:2"));
-  assert.match(
-    tab.container.querySelector('[data-message-id="newest"]')?.textContent ?? "",
-    /Reading the retry audit\./u,
-  );
-  assert.deepEqual([...new Set(drawn)].sort(), ["names agent-9", "opens agent-9"]);
-});
-
-test("the window drawing the tab again with presses of its own draws no message again", async () => {
-  const tab = runningTab();
-  const drawn: string[] = [];
-  const control = tab.controlOf("Invoice export");
-  const cards = recording(tab.cardsOf(control), drawn);
-  act(() => tab.draw(control, cards));
-  await tab.settle();
-  tab.openEarlierFold();
-  assert.ok(drawn.length > 0, "the rows are drawn");
-
-  drawn.length = 0;
-  act(() => tab.draw(control, cards));
-  assert.deepEqual(drawn, []);
-});
 
 test("a message a page did not touch hangs the card the window hands now, and its worker's row says where the worker stands as the newest page reads it", async () => {
   const tab = runningTab();

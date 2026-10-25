@@ -12,7 +12,9 @@ import { useToastSwipe } from "./toast-swipe.js";
  *
  * A toast is a card of its words, each cut at two lines, led by the glyph its
  * tone picks: a check for what was done, an alert for what was refused, the
- * Inbox's tray for an ask, and the spinner's ring for work still under way.
+ * Inbox's tray for an ask, and the spinner's ring for work still under way;
+ * or by a `glyph` of its own, in its tone's ink, where what it says has a
+ * glyph that names it better, as the speaker names the Mac's sound.
  * A working toast turns into what came of the work in place, its tone,
  * words, and actions changed on the same card: the glyph it led with fades
  * out under the one it now leads with, which grows in on the spring, and its
@@ -177,6 +179,7 @@ function useToneTurn(tone: ToastTone): { now: ToastTone; was: ToastTone | undefi
 /** One toast: its tone, words and detail, and the actions at its end, if it has any, in the look its window has room for. */
 export function Toast({
   tone,
+  glyph,
   words,
   detail,
   look = TOAST_LOOK.CARD,
@@ -187,6 +190,8 @@ export function Toast({
   onEscape,
 }: {
   tone: ToastTone;
+  /** The glyph it leads with in place of its tone's, where what it says has one of its own. */
+  glyph?: (() => React.JSX.Element) | undefined;
   words: string;
   /** A second line under the words, which the compact look leaves to the announcer. */
   detail?: string | undefined;
@@ -216,6 +221,7 @@ export function Toast({
     onHold?.(now);
   };
   const glyphs = turn.was === undefined ? [turn.now] : [turn.was, turn.now];
+  const Lead = glyph;
   return (
     <li
       ref={swipe.ref}
@@ -253,7 +259,7 @@ export function Toast({
             data-tone={shown}
             data-turn={shown === turn.now ? GLYPH_TURN.NOW : GLYPH_TURN.WAS}
           >
-            <ToneGlyph tone={shown} />
+            {Lead !== undefined && shown === turn.now ? <Lead /> : <ToneGlyph tone={shown} />}
           </span>
         ))}
       </span>

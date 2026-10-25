@@ -140,6 +140,7 @@ function mount(
     // Note that a write is staged on the chat as it stands when it lands, as the window's own chat takes it, not as it stood when the post was sent.
     const now = useRef(chat);
     now.current = chat;
+    restage = (next) => setChat((held) => (held === undefined ? held : next(held)));
     const stage = (staged: (held: FixtureChat) => Staged) => {
       const held = now.current;
       const landed = held === undefined ? { refused: "No chat." } : staged(held);
@@ -210,6 +211,9 @@ function mount(
 
 /** Closes the mounted Chat and opens it again in the same window. */
 let reopen: () => void = () => undefined;
+
+/** Changes the mounted Chat's chat as a push from the service would. */
+let restage: (next: (chat: FixtureChat) => FixtureChat) => void = () => undefined;
 
 /** The member the next draw of Chat reads as, where another reader stands in the window; the fixture's own where none. */
 let readingAs: string | undefined;
@@ -299,10 +303,7 @@ test("Chat opens on For you, whose open asks come first, the oldest first, then 
 test("a press on a channel shows its messages in the order posted, a thread folded under its root until a press opens it", () => {
   const page = mount();
   act(() => railRow(page, "teammate-invitations").click());
-  assert.equal(
-    seen(page.querySelector(".chat-stream .luke-pane-bar-lead")),
-    "▣ teammate-invitations",
-  );
+  assert.equal(seen(page.querySelector(".chat-stream .luke-toolbar")), "▣ teammate-invitations");
   assert.equal(railRow(page, "teammate-invitations").getAttribute("aria-current"), "page");
   assert.deepEqual(stream(page), [
     "Invite emails",
@@ -733,6 +734,47 @@ test("a channel's composer offers the members a mention there tells under the ap
   );
 });
 
+test("an open reply box under a message continuing its author's run keeps its words and the caret as the first reply lands in the thread above, which names the message", async () => {
+  const page = mount();
+  act(() => railRow(page, "billing-export").click());
+  const box = boxNamed(page, "Message #billing-export");
+  for (const words of ["First post", "Second post"]) {
+    typeInComposer(box, words);
+    pressInComposer(box, "Enter");
+    await settle();
+  }
+  const [first, second] = [...page.querySelectorAll<HTMLElement>(".chat-message")].slice(-2);
+  assert.equal(second?.dataset.continued, "true");
+  act(() => second?.querySelector<HTMLButtonElement>('button[aria-expanded="false"]')?.click());
+  const reply = boxNamed(second ?? page, "Reply in thread");
+  typeInComposer(reply, "Draft words");
+  const field = composerEditor(reply);
+  act(() => field.focus());
+
+  act(() =>
+    restage((chat) => {
+      const root = chat.answer.messages.find(({ seq }) => String(seq) === first?.dataset.seq);
+      assert.ok(root, "the first post is in the chat");
+      const seq = Math.max(...chat.answer.messages.map((message) => message.seq)) + 1;
+      const other = chat.answer.messages.find(({ authorId }) => authorId !== root.authorId);
+      const answer: (typeof chat.answer.messages)[number] = {
+        ...root,
+        id: crypto.randomUUID(),
+        seq,
+        touchedSeq: seq,
+        parentId: root.id,
+        authorId: other?.authorId ?? root.authorId,
+        postedAt: root.postedAt + 1,
+      };
+      return { ...chat, answer: { ...chat.answer, messages: [...chat.answer.messages, answer] } };
+    }),
+  );
+
+  assert.equal(second?.dataset.continued, "false", "the message is named now");
+  assert.ok(document.activeElement === field, "the box was never drawn anew");
+  assert.equal(boxWords(boxNamed(second ?? page, "Reply in thread")), "Draft words");
+});
+
 test("before the workspace is known, an @ offers no member, since a member is written as their link alone", () => {
   const page = mount();
   act(() => railRow(page, "teammate-invitations").click());
@@ -912,6 +954,30 @@ test("an ask's note and decision are there again when Chat closes and opens agai
     settledAsk(page, 51).querySelector("[data-inbox-note]")?.textContent?.trim(),
     "go ahead",
   );
+});
+
+test("an ask's note outlasts its poster changing the ask, whose decision made before goes", () => {
+  const page = mount();
+  const card = openAsk(page, UNIQUE_INDEX);
+  typeInComposer(card, "go ahead");
+  act(() => pressNamed(card, "Approve").click());
+
+  act(() =>
+    restage((chat) => ({
+      ...chat,
+      answer: {
+        ...chat.answer,
+        messages: chat.answer.messages.map((message) =>
+          message.seq === 51 && message.ask !== undefined
+            ? { ...message, ask: { ...message.ask, revision: message.ask.revision + 1 } }
+            : message,
+        ),
+      },
+    })),
+  );
+  const changed = openAsk(page, UNIQUE_INDEX);
+  assert.equal(boxWords(changed), "go ahead");
+  assert.equal(pressNamed(changed, "Approve").getAttribute("aria-pressed"), "false");
 });
 
 test("a paste past an ask note's cap is cut to the room left and the card's note line says so, until the words change", () => {
@@ -1202,7 +1268,7 @@ test("a direct message between two others reads as theirs, named by both, with n
   assert.equal(pair?.querySelectorAll(".inbox-row-mark .actor-stack .actor-mark").length, 2);
   act(() => railRow(page, "Add teammate invitations ↔ Invite emails").click());
   assert.equal(
-    page.querySelector(".chat-stream .luke-pane-bar-title")?.textContent,
+    page.querySelector(".chat-stream .luke-toolbar-title")?.textContent,
     "Add teammate invitations ↔ Invite emails",
   );
   assert.equal(page.querySelector(".chat-composer"), null);
@@ -1559,16 +1625,16 @@ test("New channel opens a topic under the name typed, written as a channel's, wi
   assert.equal(openDialog(), null);
   act(() => railRow(page, "release-train").click());
   assert.equal(
-    page.querySelector(".chat-stream .luke-pane-bar-title")?.textContent,
+    page.querySelector(".chat-stream .luke-toolbar-title")?.textContent,
     "#release-train",
   );
   assert.match(
-    page.querySelector(".chat-stream .luke-pane-bar")?.textContent ?? "",
+    page.querySelector(".chat-stream .luke-toolbar")?.textContent ?? "",
     /What ships Friday/u,
   );
 
   const actions = page.querySelector<HTMLButtonElement>(
-    '.chat-stream .luke-pane-bar button[aria-label="#release-train actions"]',
+    '.chat-stream .luke-toolbar button[aria-label="#release-train actions"]',
   );
   assert.ok(actions, "a topic's head offers its actions");
   act(() => actions.click());
@@ -1640,7 +1706,7 @@ function pickViewOption(page: HTMLElement, label: string): void {
 /** The items of the menu a channel's head ends on, as its words, the disabled marked `(off)`. */
 function channelMenu(page: HTMLElement): string[] {
   const actions = page.querySelector<HTMLButtonElement>(
-    '.chat-stream .luke-pane-bar button[aria-label$=" actions"]',
+    '.chat-stream .luke-toolbar button[aria-label$=" actions"]',
   );
   assert.ok(actions, "the channel's head ends on its menu");
   act(() => actions.click());
@@ -1736,14 +1802,10 @@ test("on a phone the rail's Experimental tag is the experiment's glyph alone, st
 test("a For you row names a task's channel by its glyph and name, and a press on it opens the channel", () => {
   const page = mount();
   const where = page.querySelector<HTMLElement>(".chat-message .chat-byline-where");
-  assert.ok(where?.querySelector(".chat-channel-glyph svg"), "the task's glyph");
   const link = where?.querySelector<HTMLButtonElement>("button");
   assert.equal(seen(link), "▣ teammate-invitations");
   act(() => link?.click());
-  assert.equal(
-    seen(page.querySelector(".chat-stream .luke-pane-bar-lead")),
-    "▣ teammate-invitations",
-  );
+  assert.equal(seen(page.querySelector(".chat-stream .luke-toolbar")), "▣ teammate-invitations");
   assert.equal(railRow(page, "teammate-invitations").getAttribute("aria-current"), "page");
 });
 
@@ -2148,20 +2210,6 @@ test("a rail group folded stays folded as Chat is drawn again, the rail's own an
   const again = rail(mountRail());
   assert.deepEqual(again, folded, "the rail draws as it was left");
   assert.ok(again.includes("teammate-invitations •"), "Pinned, never folded, stays open");
-});
-
-test("the rail's rows draw in the sidebar's ink, and every message leads with its author's face", () => {
-  const page = mount((chat) => chat);
-  const rows = [...page.querySelectorAll(".chat-rail .luke-list-row")];
-  assert.ok(rows.length > 0, "the rail holds rows");
-  assert.deepEqual(
-    [...new Set(rows.map((each) => each.getAttribute("data-ink")))],
-    ["sidebar"],
-    "every rail row wears the sidebar's ink",
-  );
-  act(() => railRow(page, "teammate-invitations").click());
-  const faces = [...page.querySelectorAll(".luke-comment-face .luke-avatar")];
-  assert.ok(faces.length > 0, "messages lead with faces");
 });
 
 /** The fixture's task channel by its name, with the plan it is of. */

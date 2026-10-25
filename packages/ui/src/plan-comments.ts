@@ -461,19 +461,62 @@ export interface MarginCard {
   readonly height: number;
 }
 
+/** The part of the page in view, in the cards' own coordinates: its top and its foot. */
+export interface MarginView {
+  readonly top: number;
+  readonly bottom: number;
+}
+
+/**
+ * Where a card wanting to stand at `top` stands so its foot is in `view`:
+ * there, or lifted until it is, but never lifted past the view's top. A
+ * card whose words are scrolled out of the view, above or below, stays by
+ * them.
+ */
+export function keptInView(top: number, height: number, view: MarginView): number {
+  if (top + height <= view.bottom || top >= view.bottom) return top;
+  return Math.max(Math.min(top, view.top), view.bottom - height);
+}
+
+/**
+ * Where a card hung under a line's words stands: `drop` below the line's
+ * top while its foot is then in `view`, else flipped to end `gap` over the
+ * line where it all fits there, else lifted until its foot is in view, never
+ * past the view's top. A line scrolled out of the view keeps its card under it.
+ */
+export function hungTop(
+  line: number,
+  drop: number,
+  height: number,
+  gap: number,
+  view: MarginView,
+): number {
+  const below = line + drop;
+  if (below + height <= view.bottom || line < view.top || line >= view.bottom) return below;
+  const above = line - gap - height;
+  return above >= view.top ? above : Math.max(view.top, view.bottom - height);
+}
+
 /**
  * Where each card of the margin stands: level with its words, the open one
  * exactly so, and the others stepped aside by `gap` so no two overlap, as a
- * document's margin comments do. Answers each card's top by its thread.
+ * document's margin comments do. Given the `view`, the open one is lifted
+ * until its foot is in it (`keptInView`), and the others step aside from
+ * where it then stands. Answers each card's top by its thread.
  */
 export function marginTops(
   cards: readonly MarginCard[],
   active: string | undefined,
   gap: number,
+  view?: MarginView,
 ): ReadonlyMap<string, number> {
   const sorted = [...cards].sort((a, b) => a.top - b.top);
   const tops = sorted.map((card) => card.top);
   const at = sorted.findIndex((card) => card.id === active);
+  const open = sorted[at];
+  if (open !== undefined && view !== undefined) {
+    tops[at] = keptInView(open.top, open.height, view);
+  }
   if (at >= 0) {
     for (let index = at + 1; index < sorted.length; index += 1) {
       const above = sorted[index - 1];

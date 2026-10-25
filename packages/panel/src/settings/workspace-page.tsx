@@ -1,4 +1,5 @@
-import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
+import { INTEGRATION_STATUS_WORDS } from "@luke/features/integration-status-words";
+import { INTEGRATION_PROVIDER, INTEGRATION_STATUS } from "@luke/features/integration-wire";
 import { LINK_PLACE, linkOf } from "@luke/features/link-grammar";
 import type {
   WorkspaceSentry,
@@ -316,8 +317,8 @@ type ShownConnection = Pick<WorkspaceGithubInstallation, "login" | "active"> &
 /** What the Linear row's line says, by where the workspace's Linear stands and who is reading it. */
 const LINEAR_LINE = {
   CONNECTED: "Connected for everyone in this workspace",
-  EXPIRED: "Sign-in expired.",
-  EXPIRED_MEMBER: "Sign-in expired. Ask an owner or admin.",
+  EXPIRED: INTEGRATION_STATUS_WORDS[INTEGRATION_STATUS.EXPIRED],
+  EXPIRED_MEMBER: `${INTEGRATION_STATUS_WORDS[INTEGRATION_STATUS.EXPIRED]}. Ask an owner or admin.`,
   MANAGES: "Not connected.",
   MEMBER: "Not connected. Ask an owner or admin.",
 } as const;
@@ -696,7 +697,7 @@ function MemberLeave({
           loss: CONFIRM_LOSS.IRREVERSIBLE,
         }}
       >
-        <ul className="leave-consequences">
+        <ul className="leave-consequences m-0 pl-luke-16 text-body text-muted-foreground [&>li+li]:mt-luke-4">
           <li>{LEAVE_WORDS.TASKS(workspace.name)}</li>
           <li>{LEAVE_WORDS.AGENTS}</li>
           {automationsLine === undefined ? null : <li>{automationsLine}</li>}
@@ -731,7 +732,7 @@ function HeirChip({
   // Note that a container holds the chip wide enough for a name, because width is its place's.
   return (
     <>
-      <div className="workspace-heir">
+      <div className="grid min-w-heir-least max-w-full self-start">
         <Chip
           look={CHIP_LOOK.FIELD}
           chevron
@@ -1144,7 +1145,7 @@ function Invitations({
   return (
     <>
       <Stack gap={GAP.NONE}>
-        <div className="workspace-invite">
+        <div className="workspace-invite flex min-h-settings-row items-center px-settings-row-inline py-settings-row-block">
           <Inline
             as={LAYOUT_ELEMENT.FORM}
             align={ALIGN.END}

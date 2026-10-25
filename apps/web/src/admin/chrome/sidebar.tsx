@@ -33,7 +33,10 @@ import {
   NavItem,
   NavItemLink,
   riseAbove,
+  SidebarAccountRow,
+  SidebarFoot,
   SidebarIcon,
+  SidebarPlaces,
   TEXT_TONE,
   Text,
   useMenu,
@@ -143,7 +146,7 @@ function AdminSidebar({
     <aside ref={ref} className="desktop-sidebar" inert={!inSight}>
       <div className="desktop-drag-strip" />
       <LukeIdentity qualifier="Admin" />
-      <nav aria-label="Admin sections" className="sidebar-places">
+      <SidebarPlaces label="Admin sections">
         {ADMIN_PLACES.map(({ tab, label, icon }) => (
           <NavItemLink
             key={tab}
@@ -155,16 +158,16 @@ function AdminSidebar({
             {label}
           </NavItemLink>
         ))}
-      </nav>
+      </SidebarPlaces>
       <div className="min-h-0 flex-1" />
-      <div className="sidebar-foot">
+      <SidebarFoot>
         {refused ? <FailureNote>{SIGN_OUT_REFUSED}</FailureNote> : null}
-        <div className="sidebar-account-row">
+        <SidebarAccountRow>
           {account === undefined ? null : (
             <AccountFoot account={account} shown={inSight} onSignOut={signOut} />
           )}
-        </div>
-      </div>
+        </SidebarAccountRow>
+      </SidebarFoot>
     </aside>
   );
 }

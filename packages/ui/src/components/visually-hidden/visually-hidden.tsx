@@ -12,6 +12,11 @@
  * read, but not drawn, once the nearest `luke-room` container (a card, a
  * header) is narrower than the step. The container names itself
  * `luke-room` beside its own name (`container: card luke-room / inline-size`).
+ *
+ * Words hidden outright wear `luke-visually-hidden`, whose rule
+ * (`visually-hidden.css`) other components put on words of their own; words
+ * given a step are hidden by Tailwind's `sr-only` under that container
+ * width.
  */
 
 import type { HTMLAttributes, ReactNode } from "react";
@@ -35,6 +40,12 @@ export const VISUALLY_HIDDEN_UNDER = {
 export type VisuallyHiddenUnder =
   (typeof VISUALLY_HIDDEN_UNDER)[keyof typeof VISUALLY_HIDDEN_UNDER];
 
+/** The container query each step hides its words under: a snug room, 520px, and a tight one, 440px, the lines `Badge` gives its words up at. */
+const UNDER_CLASS = {
+  [VISUALLY_HIDDEN_UNDER.SNUG]: "@max-[520px]/luke-room:sr-only",
+  [VISUALLY_HIDDEN_UNDER.TIGHT]: "@max-[440px]/luke-room:sr-only",
+} as const satisfies Record<VisuallyHiddenUnder, string>;
+
 /** `children` spoken and not drawn, in `as`, a span unless asked. */
 export function VisuallyHidden({
   as: Element = VISUALLY_HIDDEN_ELEMENT.SPAN,
@@ -48,7 +59,13 @@ export function VisuallyHidden({
   children: ReactNode;
 } & Omit<HTMLAttributes<HTMLElement>, "children" | "className">): React.JSX.Element {
   return (
-    <Element {...attributes} className="luke-visually-hidden" data-under={under}>
+    <Element
+      {...attributes}
+      className={
+        under === undefined ? "luke-visually-hidden" : `luke-visually-hidden ${UNDER_CLASS[under]}`
+      }
+      data-under={under}
+    >
       {children}
     </Element>
   );

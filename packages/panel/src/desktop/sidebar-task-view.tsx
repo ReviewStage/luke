@@ -4,8 +4,9 @@ import {
   CHIP_LOOK,
   Chip,
   ChipName,
-  CornerDot,
   dropBelowStart,
+  GROUP_ACTION_STATE,
+  GroupAction,
   IconButton,
   LIST_MOTION_WAY,
   ListMotion,
@@ -44,7 +45,7 @@ import { memberReadNotice, PEOPLE_FILTER, peopleFilterActions } from "../member-
 import { TASK_STATUS_WORDS } from "../tasks/task-standing.js";
 import { ActionMenu, type MenuAction, type MenuEntry } from "./action-menu.js";
 import type { TaskListViewControl } from "./task-list-view.js";
-import { FILTER } from "./tasks-page-options.js";
+import { FILTER, FILTERED } from "./tasks-page-options.js";
 
 /**
  * sidebar-task-view.tsx -- the heads of the sidebar's two sections, Pinned and Tasks, and the Tasks head's View options: how the list groups and orders its tasks.
@@ -53,19 +54,21 @@ import { FILTER } from "./tasks-page-options.js";
  * groups under it, so Pinned reads as a section of its own rather than as a
  * group among the repositories. A press on a head that folds folds its
  * section, and folded it counts what it holds. View options is the Inbox's
- * own sliders at the Tasks head's end, always in sight, dropping the
- * window's menu: Group by and Order by, each a submenu with its choice
+ * own sliders at the Tasks head's end, dropping the window's menu: Group by and Order by, each a submenu with its choice
  * checked, Group by offering Assignee and Creator in a shared workspace
  * alone, and in a shared workspace Assigned to and Created by: Anyone, Me,
  * or each member by face. While the view lists one member's tasks, a chip under the head
  * says so, its × lifts it, and the button wears a dot, so a filtered list
  * never passes for the whole of it.
  *
- * Beside it, revealed while the head is hovered or reached, stands the
- * status filter: which statuses' tasks the list holds, each checked, to do
- * and in progress until the reader chooses. Under the list a quiet line
- * says how many tasks the filter leaves out and in which statuses, and
- * opens the same menu under itself.
+ * Beside it stands the status filter: which statuses' tasks the list holds,
+ * each checked, to do and in progress until the reader chooses. Under the
+ * list a quiet line says how many tasks the filter leaves out and in which
+ * statuses, and opens the same menu under itself. Both, like the head's New
+ * section, wait for the pointer or the keyboard, as a repository's head's
+ * actions do, but one that is on, the status filter once the reader chose
+ * other statuses, View options while it lists one member's tasks, stands at
+ * rest wearing its dot (`GroupAction`).
  */
 
 /** What View options is called, on its button and its menu alike. */
@@ -199,23 +202,21 @@ export function TaskViewOptions({
   control: TaskListViewControl;
   /** Whether the workspace is shared, which alone groups and filters by person. */
   shared: boolean;
-  /** Whether the view leaves any task out, which the button's dot says. */
+  /** Whether the view lists one member's tasks, which keeps the button standing and dotted. */
   filtered: boolean;
 }): React.JSX.Element {
   const menu = useMenu(shown);
   const reader = useMemberDirectory();
   return (
-    <>
-      <CornerDot shown={filtered}>
-        <Tooltip label={VIEW_OPTIONS}>
-          <IconButton
-            icon={<SlidersHorizontalIcon />}
-            label={VIEW_OPTIONS}
-            aria-description={filtered ? "Filtered" : undefined}
-            {...menu.trigger()}
-          />
-        </Tooltip>
-      </CornerDot>
+    <GroupAction state={filtered ? GROUP_ACTION_STATE.ACTIVE : GROUP_ACTION_STATE.IDLE}>
+      <Tooltip label={VIEW_OPTIONS}>
+        <IconButton
+          icon={<SlidersHorizontalIcon />}
+          label={VIEW_OPTIONS}
+          aria-description={filtered ? FILTERED : undefined}
+          {...menu.trigger()}
+        />
+      </Tooltip>
       {menu.drawn === undefined ? null : (
         <ActionMenu
           label={VIEW_OPTIONS}
@@ -224,7 +225,7 @@ export function TaskViewOptions({
           onClose={menu.close}
         />
       )}
-    </>
+    </GroupAction>
   );
 }
 
@@ -256,28 +257,34 @@ function StatusFilterMenuDrawn({
 }
 
 /**
- * The Tasks head's status filter: its button, which always stands, and the
- * menu it drops.
+ * The Tasks head's status filter: its button, which stands at rest wearing
+ * its dot once the reader chose other statuses, and the menu it drops.
  */
 export function TaskStatusFilter({
   menu,
   statuses,
+  filtered,
   onStatuses,
 }: {
   /** The menu it opens, which the hidden tasks' line opens too. */
   menu: StatusFilterMenu;
   statuses: readonly TaskStatus[];
+  /** Whether the reader chose other statuses than to do and in progress. */
+  filtered: boolean;
   onStatuses: (statuses: readonly TaskStatus[]) => void;
 }): React.JSX.Element {
   return (
-    <>
-      <span className="sidebar-status-filter inline-flex">
-        <Tooltip label={FILTER}>
-          <IconButton icon={<ListFilterIcon />} label={FILTER} {...menu.trigger()} />
-        </Tooltip>
-      </span>
+    <GroupAction state={filtered ? GROUP_ACTION_STATE.ACTIVE : GROUP_ACTION_STATE.IDLE}>
+      <Tooltip label={FILTER}>
+        <IconButton
+          icon={<ListFilterIcon />}
+          label={FILTER}
+          aria-description={filtered ? FILTERED : undefined}
+          {...menu.trigger()}
+        />
+      </Tooltip>
       <StatusFilterMenuDrawn menu={menu} statuses={statuses} onStatuses={onStatuses} />
-    </>
+    </GroupAction>
   );
 }
 
@@ -298,7 +305,7 @@ export function HiddenStatusesLine({
   if (hidden.length === 0) return null;
   const opener = menu.trigger(dropBelowStart);
   return (
-    <p className="sidebar-hidden-statuses mx-row-inset my-tight-gap text-muted-foreground text-caption">
+    <p className="sidebar-hidden-statuses">
       <TextButton aria-expanded={opener["aria-expanded"]} onClick={opener.onClick}>
         {hiddenStatusesLine(hidden)}
       </TextButton>
@@ -385,10 +392,7 @@ function ViewChipLine({
   // Note that the box around the row stands hidden while nothing is filtered, so the row's padding takes no room, and a chip arriving arrives into a row that stands.
   return (
     <div ref={line} hidden={drawn.length === 0}>
-      <div
-        className="sidebar-view-chips flex flex-wrap gap-tight-gap px-item-gap pb-item-gap"
-        {...motionRows()}
-      >
+      <div className="sidebar-view-chips" {...motionRows()}>
         {drawn.map(({ key, value, leaving }) => (
           <Chip
             key={key}

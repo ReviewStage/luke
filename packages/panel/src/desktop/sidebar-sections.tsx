@@ -370,6 +370,8 @@ interface SectionContext {
   readonly row: (row: TaskRow) => React.JSX.Element;
   /** Hears a row let go over another zone: a section by its id, Tasks, or Pinned. */
   readonly onDropRow: (row: TaskRow, zone: string, at: number) => void;
+  /** Hears a row lifted into a drag and that drag ended, while which an empty Pinned stands to take it. */
+  readonly onCarried: (carried: boolean) => void;
 }
 
 /** What a section's actions on all its tasks run through beyond the section's writes: each asks or reaches past the sections. */
@@ -482,6 +484,7 @@ function SectionRows({
       const row = rows[from];
       if (row !== undefined) context.onDropRow(row, zone, at);
     },
+    onCarried: context.onCarried,
   });
   const keys = useRowMoveKeys(move);
   // Note that a row on its way out has no place among the rows a drag or a menu moves.

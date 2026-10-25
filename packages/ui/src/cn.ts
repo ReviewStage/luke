@@ -112,6 +112,21 @@ const FEEDBACK_DISPLAY = {
 } as const;
 
 /**
+ * The names the content and text components' block of the theme adds (text,
+ * text link, inline ref, code card, shortcut, glyph slot, saved tick,
+ * working mark, thinking dots), by the group tailwind-merge reads each in.
+ */
+const CONTENT_TEXT = {
+  text: ["toolbar-title", "shortcut"],
+  "font-weight": ["toolbar-title"],
+  leading: ["reading"],
+  spacing: ["glyph", "working-mark", "thinking-dot", "inline-ref-mark"],
+  radius: ["text-link"],
+  shadow: ["inline-ref-wash"],
+  container: ["inline-ref-pill", "inline-ref-pill-stated"],
+} as const;
+
+/**
  * The names the panel window's block of the theme adds (its layout's
  * spacing roles, the sidebar's parts, an actor's mark, a press's corner
  * dot), by the group tailwind-merge reads each in.
@@ -134,7 +149,6 @@ const PANEL_WINDOW = {
     "offline-glyph",
     "offline-mark",
     "ring-reach",
-    "section-gap",
     "section-icon-scroll",
     "sidebar-row-repository",
     "sidebar-row-time",
@@ -176,6 +190,26 @@ const ROWS_NAVIGATION = {
   radius: ["inherit"],
 } as const;
 
+/**
+ * The names the panel shell's block of the theme adds (the sidebar, a row's
+ * end mark, a search's match, the call card, the settings rows), by the
+ * group tailwind-merge reads each in.
+ */
+const PANEL_SHELL = {
+  tracking: ["identity"],
+  spacing: [
+    "row-mark",
+    "section-gap",
+    "settings-row-block",
+    "settings-row-inline",
+    "settings-row",
+    "settings-row-pair",
+    "heir-least",
+    "settings-search-clearance",
+  ],
+  radius: ["luke-14"],
+} as const;
+
 const merge = extendTailwindMerge({
   extend: {
     theme: {
@@ -193,6 +227,7 @@ const merge = extendTailwindMerge({
         "group",
         "tag",
         ...FEEDBACK_DISPLAY.text,
+        ...CONTENT_TEXT.text,
         ...PANEL_WINDOW.text,
         ...ROWS_NAVIGATION.text,
       ],
@@ -206,10 +241,16 @@ const merge = extendTailwindMerge({
         "emphasis",
         "title",
         ...FEEDBACK_DISPLAY["font-weight"],
+        ...CONTENT_TEXT["font-weight"],
         ...PANEL_WINDOW["font-weight"],
       ],
-      tracking: ["title", ...PANEL_WINDOW.tracking],
-      leading: ["body", ...FEEDBACK_DISPLAY.leading, ...ROWS_NAVIGATION.leading],
+      tracking: ["title", ...PANEL_SHELL.tracking, ...PANEL_WINDOW.tracking],
+      leading: [
+        "body",
+        ...FEEDBACK_DISPLAY.leading,
+        ...CONTENT_TEXT.leading,
+        ...ROWS_NAVIGATION.leading,
+      ],
       spacing: [
         "luke-2",
         "luke-4",
@@ -274,8 +315,10 @@ const merge = extendTailwindMerge({
         "choice-segment-compact",
         "caption-glyph",
         ...FEEDBACK_DISPLAY.spacing,
+        ...CONTENT_TEXT.spacing,
         ...PANEL_WINDOW.spacing,
         ...ROWS_NAVIGATION.spacing,
+        ...PANEL_SHELL.spacing,
       ],
       radius: [
         "control",
@@ -293,8 +336,10 @@ const merge = extendTailwindMerge({
         "choice-segment",
         "choice-box",
         ...FEEDBACK_DISPLAY.radius,
+        ...CONTENT_TEXT.radius,
         ...PANEL_WINDOW.radius,
         ...ROWS_NAVIGATION.radius,
+        ...PANEL_SHELL.radius,
       ],
       shadow: [
         "dialog",
@@ -303,6 +348,7 @@ const merge = extendTailwindMerge({
         "tooltip",
         "switch-thumb",
         ...FEEDBACK_DISPLAY.shadow,
+        ...CONTENT_TEXT.shadow,
         ...PANEL_WINDOW.shadow,
         ...ROWS_NAVIGATION.shadow,
       ],
@@ -318,6 +364,7 @@ const merge = extendTailwindMerge({
         "tooltip",
         "tooltip-card",
         ...FEEDBACK_DISPLAY.container,
+        ...CONTENT_TEXT.container,
       ],
       animate: [
         "dialog-scrim",

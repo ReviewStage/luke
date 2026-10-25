@@ -21,6 +21,7 @@ import {
   NavItem,
   ProviderMark,
   riseAbove,
+  SidebarAccountRow,
   TEXT_ELEMENT,
   TEXT_VARIANT,
   Text,
@@ -335,7 +336,7 @@ export function SidebarFoot({
   onSignOut: () => Promise<void>;
 }): React.JSX.Element {
   return (
-    <div className="sidebar-account-row">
+    <SidebarAccountRow>
       <AccountMenu account={account} shown={shown} onSettings={onSettings} onSignOut={onSignOut} />
       <OfflineMark />
       <SidebarUpdate updates={updates} />
@@ -347,6 +348,6 @@ export function SidebarFoot({
           onClick={onSettings}
         />
       </Tooltip>
-    </div>
+    </SidebarAccountRow>
   );
 }

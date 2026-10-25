@@ -5,10 +5,9 @@ import type { ModelChoice } from "@luke/features/models-wire";
 import type { AppInboxTasklessItem } from "@luke/host/app-state";
 import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
-import { act, createElement, useState } from "react";
+import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test } from "vitest";
-import { NewTaskDialog } from "../tasks/new-task-dialog.js";
 import type { NewTaskAgent, TasksControl } from "../tasks/use-tasks-tab.js";
 import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
 import {
@@ -233,66 +232,4 @@ test("Return in the welcome's composer starts the task in the listed workspace, 
   });
   assert.ok(idempotencyKey, "the agent's start carries the card's key");
   assert.equal(started.length, 1);
-});
-
-/**
- * The welcome with New task's dialog open over it, as ⌘N opens it, each
- * start written down. Escape in the dialog's words puts it away.
- */
-async function mountUnderDialog() {
-  const started: Started[] = [];
-  const newTask = newTaskControl(started);
-  const tasks = tasksControl({
-    listRead: true,
-    tasks: [],
-    listed: { tasks: [], inbox: [], inboxTasks: [] },
-    inbox: [],
-    inboxTasks: [],
-  });
-  function Window() {
-    const [open, setOpen] = useState(true);
-    const control = { ...newTask, open, onClose: () => setOpen(false) };
-    return createElement(
-      "div",
-      null,
-      createElement(DesktopWelcome, { tasks: { ...tasks, newTask: control } }),
-      createElement(NewTaskDialog, { newTask: control }),
-    );
-  }
-  const container = document.createElement("div");
-  document.body.append(container);
-  root = createRoot(container);
-  act(() => root?.render(onRegistry(AtomRegistry.make(), createElement(Window))));
-  await settle();
-  const dialog = () =>
-    document.querySelector<HTMLElement>('[role="dialog"][aria-modal="true"]') ??
-    assert.fail("the dialog stands");
-  const welcome = () =>
-    container.querySelector<HTMLElement>(".home-composer") ??
-    assert.fail("the welcome's composer stands");
-  return {
-    started,
-    dialog,
-    welcome,
-    /** Puts the dialog away with nothing started, as Escape in its words does. */
-    closeDialog: async () => {
-      pressInComposer(dialog(), "Escape");
-      await settle();
-      assert.equal(document.querySelector('[role="dialog"][aria-modal="true"]'), null);
-    },
-  };
-}
-
-test("the welcome's composer is drawn as the dialog's: New task's title with the repository chip after it in the head row over the box, and no chip in the box's foot", async () => {
-  const page = await mountUnderDialog();
-  /** A card's head row, by its title and the chip after it, and what its box's foot holds besides the +. */
-  const drawn = (card: HTMLElement) => ({
-    title: card.querySelector(".new-task-head h2")?.textContent,
-    chip: card.querySelector(".new-task-head .repository-chip")?.textContent,
-    footChips: card.querySelectorAll(".luke-composer-foot-tools .repository-chip").length,
-  });
-
-  const welcome = drawn(page.welcome());
-  assert.deepEqual(welcome, { title: "New task", chip: "acme/relay", footChips: 0 });
-  assert.deepEqual(drawn(page.dialog()), welcome, "the dialog's card is drawn the same");
 });

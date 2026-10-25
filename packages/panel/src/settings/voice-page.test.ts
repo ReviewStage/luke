@@ -13,7 +13,6 @@ import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsLink } from "@luke/settin
 import { settingsView } from "@luke/settings/testing";
 import { UPDATE_STATUS } from "@luke/settings/update";
 import { MICROPHONE_STATUS, type MicrophoneStatus } from "@luke/voice/audio";
-import { VOICE_KEYLESS_NOTE } from "@luke/voice/microphone-access";
 import {
   type MicrophoneControl,
   NOTIFICATIONS_GRANTOR,
@@ -132,7 +131,7 @@ afterEach(() => {
 test("while voice cannot run, the page says how to turn it on and offers nothing else", () => {
   const { container } = draw(microphoneAt(MICROPHONE_STATUS.GRANTED, { voiceAvailable: false }));
 
-  assert.match(container.textContent ?? "", new RegExp(VOICE_KEYLESS_NOTE));
+  assert.match(container.textContent ?? "", /Voice is off: sign in to turn it on\./u);
   assert.ok(!headings(container).includes("Permissions"));
   assert.ok(!headings(container).includes("Conversation"));
   assert.equal(button(container, "Allow"), undefined);

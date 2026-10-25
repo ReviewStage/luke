@@ -72,6 +72,8 @@
   --terminal-cyan: light-dark(#1b7c83, #39c5cf);
   --terminal-white: light-dark(#6e7781, #b1bac4);
   --terminal-bright-black: light-dark(#57606a, #6e7681);
+  /* The terminal's own notes, held to 4.5:1 on the ground in either appearance. */
+  --terminal-note: light-dark(#57606a, #9198a1);
   --terminal-bright-red: light-dark(#a40e26, #ffa198);
   --terminal-bright-green: light-dark(#1a7f37, #56d364);
   --terminal-bright-yellow: light-dark(#633c01, #e3b341);
@@ -334,41 +336,6 @@ body,
 
 .state-glyph > svg:not(.luke-working-mark),
 .state-glyph > img {
-  width: 100%;
-  height: 100%;
-}
-
-/* A failure's mark at a row's or a tab's end: the alert in the danger
-   colour, a size under the glyph it follows, so it reads as a note on the
-   row rather than a second glyph. */
-.failed-mark {
-  display: inline-flex;
-  width: 14px;
-  height: 14px;
-  flex: 0 0 auto;
-  align-items: center;
-  justify-content: center;
-  color: var(--luke-color-danger);
-}
-
-.failed-mark > svg {
-  width: 100%;
-  height: 100%;
-}
-
-/* A draft waiting in a box (`draft-mark.tsx`): a pencil in the muted ink, at
-   the failed mark's size. */
-.draft-mark {
-  display: inline-flex;
-  width: 14px;
-  height: 14px;
-  flex: 0 0 auto;
-  align-items: center;
-  justify-content: center;
-  color: var(--luke-color-text-muted);
-}
-
-.draft-mark > svg {
   width: 100%;
   height: 100%;
 }
