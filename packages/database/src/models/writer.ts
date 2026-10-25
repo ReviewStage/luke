@@ -80,6 +80,7 @@ import {
 import {
   DispatchClaimHeld,
   dispatchClaimStands,
+  recordedWithinExpiry,
   releaseDispatchClaim,
   takeDispatchClaim,
   waitingOutDispatchClaim,
@@ -2422,8 +2423,9 @@ type LineClaimed = Result.Result<
 const claimLine = /* @__PURE__ */ Effect.fnUntraced(function* (
   context: WriterContext,
   line: AwaitingLineWrite,
+  place: number | undefined,
 ): Effect.fn.Return<LineClaimed, StoreFailure | DispatchClaimHeld, DatabaseServices> {
-  if (yield* dispatchClaimStands(context.target.conversationId)) {
+  if (yield* dispatchClaimStands(context.target.conversationId, place)) {
     return yield* new DispatchClaimHeld();
   }
   const clientId = sentLineId(line.clientKey);
@@ -2446,7 +2448,7 @@ const claimLine = /* @__PURE__ */ Effect.fnUntraced(function* (
     finishedAt: context.now,
     sender: line.sender,
   });
-  const claim = yield* takeDispatchClaim(context.target.conversationId, id);
+  const claim = yield* takeDispatchClaim(context.target.conversationId, id, place);
   return Result.succeed({ id, txid, claim });
 });
 
@@ -2491,7 +2493,8 @@ const markLineWithdrawn = SqlSchema.void({
 /**
  * What the hand-over answered, written in a short transaction of its own
  * after it: the claim released, and a line the runtime did not take
- * withdrawn. Note that the claim goes first, because its update takes the
+ * withdrawn, tried again while the claim stands (`recordedWithinExpiry`).
+ * Note that the claim goes first, because its update takes the
  * conversation's row lock, which every writer takes before a message's.
  */
 function recordedLine(
@@ -2500,16 +2503,19 @@ function recordedLine(
   taken: boolean,
 ): Effect.Effect<void, StoreFailure, DatabaseServices> {
   return Effect.flatMap(SqlClient.SqlClient, (client) =>
-    client.withTransaction(
-      Effect.gen(function* () {
-        yield* releaseDispatchClaim(target.conversationId, claimed.claim);
-        if (taken) return;
-        const removed = yield* deleteUntakenLine({
-          conversationId: target.conversationId,
-          id: claimed.id,
-        });
-        if (removed.length > 0) yield* markLineWithdrawn({ conversationId: target.conversationId });
-      }),
+    recordedWithinExpiry(
+      client.withTransaction(
+        Effect.gen(function* () {
+          yield* releaseDispatchClaim(target.conversationId, claimed.claim);
+          if (taken) return;
+          const removed = yield* deleteUntakenLine({
+            conversationId: target.conversationId,
+            id: claimed.id,
+          });
+          if (removed.length > 0)
+            yield* markLineWithdrawn({ conversationId: target.conversationId });
+        }),
+      ),
     ),
   );
 }
@@ -2816,11 +2822,10 @@ export function storeWriter({ tools }: StoreWriterOptions): Effect.Effect<StoreW
     dispatch: Effect.Effect<boolean>,
   ): Write<AwaitingLineWritten> {
     return Effect.gen(function* () {
-      const claimed = yield* waitingOutDispatchClaim(
-        target.conversationId,
+      const claimed = yield* waitingOutDispatchClaim(target.conversationId, (place) =>
         locked<LineClaimed, DispatchClaimHeld>(
           target,
-          (context) => claimLine(context, line),
+          (context) => claimLine(context, line, place),
           () => Result.fail(NO_CONVERSATION),
         ),
       ).pipe(

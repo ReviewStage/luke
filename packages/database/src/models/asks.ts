@@ -1,7 +1,7 @@
 import { ASK_ORIGIN, type AskOrigin } from "@luke/features";
 import { MESSAGE_CHANNEL } from "@luke/wire";
 import { and, asc, desc, eq, gt, gte, inArray, isNotNull, isNull, or, sql } from "drizzle-orm";
-import { DateTime, Duration, Effect, Exit, Option, Schema } from "effect";
+import { DateTime, Effect, Exit, Option, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/sql";
 import { Database, type DatabaseServices, type StoreFailure } from "../core/query.js";
 import { asks, conversations, messages } from "../schemas/storage.js";
@@ -12,6 +12,7 @@ import {
   DISPATCH_CLAIM,
   DispatchClaimHeld,
   dispatchClaimStands,
+  recordedWithinExpiry,
   releaseDispatchClaim,
   takeDispatchClaim,
   waitingOutDispatchClaim,
@@ -654,14 +655,6 @@ const findAskHandOver = SqlSchema.findAll({
     ),
 });
 
-/**
- * The longest an ask's dispatch waits for another hand-over's claim to clear:
- * as long as the dispatch may take at all (`brain-ask.ts`'s
- * `ASK_DISPATCH_DEADLINE`), since an ask asked while another is handed over
- * waited that long for the lock before the claim replaced it.
- */
-const ASK_CLAIM_WAIT = Duration.seconds(30);
-
 /** What the dispatch came to: the row as it then stands, or the refusal, and what eve answered, where it was handed anything. */
 interface AskDispatched {
   readonly row: AskRow | AskDispatchRefusal;
@@ -684,12 +677,15 @@ type AskClaimed =
 const claimAsk = /* @__PURE__ */ Effect.fnUntraced(function* (
   target: ConversationTarget,
   id: string,
+  place: number | undefined,
 ): Effect.fn.Return<AskClaimed, StoreFailure | DispatchClaimHeld, DatabaseServices> {
   const standingConversation = yield* readConversation(target);
   if (Option.isNone(standingConversation)) {
     return { answered: ASK_DISPATCH_REFUSAL.NO_CONVERSATION };
   }
-  if (yield* dispatchClaimStands(target.conversationId)) return yield* new DispatchClaimHeld();
+  if (yield* dispatchClaimStands(target.conversationId, place)) {
+    return yield* new DispatchClaimHeld();
+  }
   const read = yield* readAsk(id);
   if (Option.isNone(read)) throw new Error("the ask to dispatch is not standing");
   const standing = askRow(read.value);
@@ -704,7 +700,7 @@ const claimAsk = /* @__PURE__ */ Effect.fnUntraced(function* (
     yield* recordedRuntimeSession(target),
     yield* latestSessionOf(target),
   );
-  const claim = yield* takeDispatchClaim(target.conversationId);
+  const claim = yield* takeDispatchClaim(target.conversationId, undefined, place);
   yield* markAskClaimed({ id, claim });
   return { standing, session, claim };
 });
@@ -713,7 +709,8 @@ const claimAsk = /* @__PURE__ */ Effect.fnUntraced(function* (
  * What eve answered, written in a second short transaction once the
  * hand-over ended however it ended: the claim released, then the session
  * and delivery written, or, for a hand-over that answered nothing or was
- * interrupted, the ask's claim cleared for a retry.
+ * interrupted, the ask's claim cleared for a retry; tried again while the
+ * claim stands (`recordedWithinExpiry`).
  */
 function recordedAsk(
   target: ConversationTarget,
@@ -722,17 +719,19 @@ function recordedAsk(
   answered: AskDispatch | undefined,
 ): Effect.Effect<void, StoreFailure, DatabaseServices> {
   return Effect.flatMap(SqlClient.SqlClient, (client) =>
-    client.withTransaction(
-      Effect.gen(function* () {
-        yield* releaseDispatchClaim(target.conversationId, claim);
-        if (answered === undefined) return yield* clearAskClaim({ id, claim });
-        yield* markDispatched({
-          id,
-          sessionId: answered.sessionId,
-          deliveryId: answered.deliveryId ?? null,
-          turnId: answered.turnId ?? null,
-        });
-      }),
+    recordedWithinExpiry(
+      client.withTransaction(
+        Effect.gen(function* () {
+          yield* releaseDispatchClaim(target.conversationId, claim);
+          if (answered === undefined) return yield* clearAskClaim({ id, claim });
+          yield* markDispatched({
+            id,
+            sessionId: answered.sessionId,
+            deliveryId: answered.deliveryId ?? null,
+            turnId: answered.turnId ?? null,
+          });
+        }),
+      ),
     ),
   );
 }
@@ -762,10 +761,8 @@ function dispatchAskOnce(
   dispatch: (sessionId: string | undefined) => Effect.Effect<AskDispatch | undefined>,
 ): Effect.Effect<AskRow | AskDispatchRefusal, StoreFailure, DatabaseServices> {
   const claimed = Effect.flatMap(SqlClient.SqlClient, (client) =>
-    waitingOutDispatchClaim(
-      target.conversationId,
-      client.withTransaction(claimAsk(target, id)),
-      ASK_CLAIM_WAIT,
+    waitingOutDispatchClaim(target.conversationId, (place) =>
+      client.withTransaction(claimAsk(target, id, place)),
     ).pipe(
       Effect.catchTag("DispatchClaimHeld", () =>
         Effect.succeed<AskClaimed>({ answered: ASK_DISPATCH_REFUSAL.BUSY }),

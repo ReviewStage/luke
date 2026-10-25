@@ -316,14 +316,14 @@ const cutPoint = (conversationId: string, messageId: string) =>
   });
 
 /** The cut, under the conversation's row lock and with no hand-over under way, answering what it cut or why it could not. */
-const cut = (target: ConversationTarget, messageId: string) =>
+const cut = (target: ConversationTarget, messageId: string, place: number | undefined) =>
   Effect.gen(function* () {
     const { conversationId } = target;
     const held = yield* lockConversation(target);
     if (Option.isNone(held)) return Result.fail(REWIND_REFUSAL.NOT_FOUND);
     // A hand-over under way ends first, so the line it hands is cut with the rest after the runtime heard it,
     // and the stop that follows the cut stops whatever it started (`coder-host/rewind.ts`).
-    if (yield* dispatchClaimStands(conversationId)) return yield* new DispatchClaimHeld();
+    if (yield* dispatchClaimStands(conversationId, place)) return yield* new DispatchClaimHeld();
     const point = yield* cutPoint(conversationId, messageId);
     if (Result.isFailure(point)) return Result.fail(point.failure);
     const { seq, clientId, heard, from } = point.success;
@@ -362,7 +362,7 @@ export function rewindConversation(
   return Effect.flatMap(SqlClient.SqlClient, (client) =>
     waitingOutDispatchClaim(
       target.conversationId,
-      client.withTransaction(cut(target, messageId)),
+      (place) => client.withTransaction(cut(target, messageId, place)),
       DISPATCH_CLAIM.EXPIRY,
     ),
   ).pipe(

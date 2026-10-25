@@ -1,7 +1,7 @@
 {
   "version": "8",
   "dialect": "postgres",
-  "id": "da370902-f201-447c-ac92-19cd1f3c4ca7",
+  "id": "8ab9ad30-c1b0-43f6-b8c9-aba5e73e53cf",
   "prevIds": [
     "36726b58-f012-43ff-90c1-561393d9c1ff"
   ],
@@ -381,6 +381,12 @@
     {
       "isRlsEnabled": false,
       "name": "conversations",
+      "entityType": "tables",
+      "schema": "public"
+    },
+    {
+      "isRlsEnabled": false,
+      "name": "dispatch_waiters",
       "entityType": "tables",
       "schema": "public"
     },
@@ -8592,6 +8598,54 @@
       "table": "conversations"
     },
     {
+      "type": "bigint",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": {
+        "type": "always",
+        "name": "dispatch_waiters_place_seq",
+        "increment": "1",
+        "startWith": "1",
+        "minValue": "1",
+        "maxValue": "9223372036854775807",
+        "cache": 1,
+        "cycle": false
+      },
+      "name": "place",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "dispatch_waiters"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "conversation_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "dispatch_waiters"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "now()",
+      "generated": null,
+      "identity": null,
+      "name": "seen_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "dispatch_waiters"
+    },
+    {
       "type": "uuid",
       "typeSchema": null,
       "notNull": true,
@@ -13483,6 +13537,34 @@
           "opclass": null
         },
         {
+          "value": "place",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "dispatch_waiters_conversation_place",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "dispatch_waiters"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "conversation_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        },
+        {
           "value": "revision",
           "isExpression": false,
           "asc": true,
@@ -16323,6 +16405,23 @@
     {
       "nameExplicit": false,
       "columns": [
+        "conversation_id"
+      ],
+      "schemaTo": "public",
+      "tableTo": "conversations",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "name": "dispatch_waiters_conversation_id_conversations_id_fkey",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "dispatch_waiters"
+    },
+    {
+      "nameExplicit": false,
+      "columns": [
         "user_id"
       ],
       "schemaTo": "public",
@@ -17636,6 +17735,16 @@
       "name": "conversations_pkey",
       "schema": "public",
       "table": "conversations",
+      "entityType": "pks"
+    },
+    {
+      "columns": [
+        "place"
+      ],
+      "nameExplicit": false,
+      "name": "dispatch_waiters_pkey",
+      "schema": "public",
+      "table": "dispatch_waiters",
       "entityType": "pks"
     },
     {

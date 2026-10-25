@@ -105,6 +105,42 @@ const joinedAsTimePasses = <A, E>(fiber: Fiber.Fiber<A, E>) =>
     return yield* Fiber.join(fiber);
   });
 
+/** The test clock moved on by the time given, a step at a time, a round trip to the database apart, so what waits on it keeps pace. */
+const timePasses = (millis: number) =>
+  Effect.gen(function* () {
+    const sql = yield* SqlClient.SqlClient;
+    for (let passed = 0; passed < millis; passed += 50) {
+      yield* TestClock.adjust(Duration.millis(50));
+      yield* sql`select 1`;
+    }
+  });
+
+/**
+ * The conversation's next clearing of its dispatch claim fails, once, as a
+ * passing store failure would: a trigger counts on a sequence, which a
+ * rolled-back transaction does not take back.
+ */
+const releaseFailsOnce = (target: ConversationTarget) =>
+  Effect.gen(function* () {
+    const sql = yield* SqlClient.SqlClient;
+    const name = `release_fails_${target.conversationId.replaceAll("-", "_")}`;
+    yield* sql.unsafe(`create sequence ${name}`);
+    yield* sql.unsafe(
+      `create function ${name}() returns trigger language plpgsql as $$ begin if nextval('${name}') = 1 then raise exception 'the release failed'; end if; return new; end $$`,
+    );
+    yield* sql.unsafe(
+      `create trigger ${name} before update on conversations for each row when (old.id = '${target.conversationId}' and old.dispatch_claim is not null and new.dispatch_claim is null) execute function ${name}()`,
+    );
+  });
+
+/** A waiter queued for the conversation's claim, as one the database last heard from the given seconds ago. */
+const waiterSeen = (target: ConversationTarget, secondsAgo: number) =>
+  Effect.flatMap(SqlClient.SqlClient, (sql) =>
+    Effect.asVoid(
+      sql`insert into dispatch_waiters (conversation_id, seen_at) values (${target.conversationId}, now() - (${secondsAgo} * interval '1 second'))`,
+    ),
+  );
+
 it.layer(getTestDB())("the conversation's dispatch claim", (it) => {
   it.effect(
     "a send meeting another hand-over's claim waits for it, is refused as busy once the wait runs out with the runtime told nothing and nothing written, and lands once the claim is cleared",
@@ -205,7 +241,7 @@ it.layer(getTestDB())("the conversation's dispatch claim", (it) => {
   );
 
   it.effect(
-    "an ask meeting another hand-over's claim for as long as its dispatch waits is answered busy, the runtime told nothing",
+    "an ask meeting another hand-over's claim waits no longer than a send does, leaving its own deadline to the hand-over, and is answered busy, the runtime told nothing",
     () =>
       Effect.gen(function* () {
         const target = yield* openAgentConversation;
@@ -218,6 +254,7 @@ it.layer(getTestDB())("the conversation's dispatch claim", (it) => {
           createdAt: new Date(0),
         });
         yield* claimLeftBy(target, randomUUID());
+        const askedAt = yield* Clock.currentTimeMillis;
 
         const waiting = yield* Effect.forkChild(
           record.dispatchOnce(target, ask.id, () =>
@@ -227,9 +264,152 @@ it.layer(getTestDB())("the conversation's dispatch claim", (it) => {
             ),
           ),
         );
+        const answered = yield* joinedAsTimePasses(waiting);
+        const waitedMs = (yield* Clock.currentTimeMillis) - askedAt;
 
-        assert.equal(yield* joinedAsTimePasses(waiting), ASK_DISPATCH_REFUSAL.BUSY);
+        assert.equal(answered, ASK_DISPATCH_REFUSAL.BUSY);
+        assert.ok(
+          waitedMs < Duration.toMillis(Duration.sum(DISPATCH_CLAIM.WAIT, Duration.seconds(2))),
+          `the ask waited ${waitedMs} ms`,
+        );
         assert.equal(yield* Ref.get(handed), 0);
+      }),
+  );
+
+  it.effect(
+    "sends waiting on a hand-over reach the runtime in the order they arrived, whichever of them asks again first once it ends",
+    () =>
+      Effect.gen(function* () {
+        const target = yield* openAgentConversation;
+        const writer = yield* storeWriter({ tools: {} });
+        const heard = yield* Ref.make<readonly string[]>([]);
+        const began = yield* Deferred.make<void>();
+        const release = yield* Deferred.make<void>();
+        const send = (clientKey: string, dispatch: Effect.Effect<boolean>) =>
+          writer.writeAwaitingLine(
+            target,
+            { text: clientKey, clientKey, sender: SENDER },
+            Effect.tap(dispatch, () => Ref.update(heard, (keys) => [...keys, clientKey])),
+          );
+
+        const first = yield* Effect.forkChild(
+          send(
+            "first",
+            Effect.andThen(
+              Deferred.succeed(began, undefined),
+              Effect.as(Deferred.await(release), true),
+            ),
+          ),
+        );
+        yield* Deferred.await(began);
+        const second = yield* Effect.forkChild(send("second", Effect.succeed(true)));
+        yield* timePasses(300);
+        const third = yield* Effect.forkChild(send("third", Effect.succeed(true)));
+        // The first hand-over ends just before the third's next try and well before the second's.
+        yield* timePasses(700);
+        yield* Deferred.succeed(release, undefined);
+        yield* Fiber.join(first);
+        yield* joinedAsTimePasses(second);
+        yield* joinedAsTimePasses(third);
+        const seqs = yield* Effect.forEach(["first", "second", "third"], (key) =>
+          Effect.map(
+            readMessageByClientId(target.userId, target.conversationId, {}, sentLineId(key)),
+            (read) => (read.ok ? (read.value[0]?.seq ?? -1) : -1),
+          ),
+        );
+
+        assert.deepEqual(yield* Ref.get(heard), ["first", "second", "third"]);
+        assert.deepEqual(
+          seqs,
+          seqs.toSorted((one, other) => one - other),
+        );
+      }),
+  );
+
+  it.effect(
+    "a waiter that stopped asking holds no one up once the database last heard from it a couple of seconds ago, where one still asking does",
+    () =>
+      Effect.gen(function* () {
+        const stale = yield* openAgentConversation;
+        const live = yield* openAgentConversation;
+        const writer = yield* storeWriter({ tools: {} });
+        const line = { text: "Use seven days.", clientKey: "send", sender: SENDER };
+        yield* waiterSeen(stale, 3);
+        yield* waiterSeen(live, 0);
+
+        const pastStale = yield* writer.writeAwaitingLine(stale, line, Effect.succeed(true));
+        const behindLive = yield* Effect.forkChild(
+          writer.writeAwaitingLine(live, line, Effect.succeed(true)),
+        );
+
+        assert.ok(Result.isSuccess(pastStale) && Option.isSome(pastStale.success));
+        assert.deepEqual(
+          yield* joinedAsTimePasses(behindLive),
+          Result.fail({ refusal: STORE_WRITE_REFUSAL.BUSY }),
+        );
+      }),
+  );
+
+  it.effect(
+    "a refused send whose record fails once is recorded on a second try, so its line is withdrawn and a retry under its key is handed over",
+    () =>
+      Effect.gen(function* () {
+        const target = yield* openAgentConversation;
+        const writer = yield* storeWriter({ tools: {} });
+        const { handed, dispatch } = yield* countedDispatch;
+        const line = { text: "Fix the tile.", clientKey: "fix", sender: SENDER };
+        yield* releaseFailsOnce(target);
+
+        const refusing = yield* Effect.forkChild(
+          writer.writeAwaitingLine(target, line, dispatch(false)),
+        );
+        const refused = yield* joinedAsTimePasses(refusing);
+        const sentAfter = yield* sentLineStands(
+          target.userId,
+          target.conversationId,
+          sentLineId("fix"),
+        );
+        const retried = yield* writer.writeAwaitingLine(target, line, dispatch(true));
+
+        assert.deepEqual(refused, Result.succeed(Option.none()));
+        assert.equal(sentAfter, false);
+        assert.ok(Result.isSuccess(retried) && Option.isSome(retried.success));
+        assert.equal(retried.success.value.effect, STORE_WRITE_EFFECT.WRITTEN);
+        assert.equal(yield* Ref.get(handed), 2);
+      }),
+  );
+
+  it.effect(
+    "a refused ask whose record fails once is recorded on a second try, so a retry hands it over again",
+    () =>
+      Effect.gen(function* () {
+        const target = yield* openAgentConversation;
+        const record = askRecord();
+        const answers = yield* Ref.make<readonly ("refused" | "taken")[]>(["refused", "taken"]);
+        const handed = yield* Ref.make(0);
+        const dispatch = () =>
+          Effect.gen(function* () {
+            yield* Ref.update(handed, (n) => n + 1);
+            const [answer, ...rest] = yield* Ref.get(answers);
+            yield* Ref.set(answers, rest);
+            return answer === "taken" ? { sessionId: "session-1", deliveryId: "dl_1" } : undefined;
+          });
+        const ask = yield* record.record({
+          ...target,
+          clientId: "ask",
+          origin: ASK_ORIGIN.TYPED,
+          createdAt: new Date(0),
+        });
+        yield* releaseFailsOnce(target);
+
+        yield* joinedAsTimePasses(
+          yield* Effect.forkChild(record.dispatchOnce(target, ask.id, dispatch)),
+        );
+        const retried = yield* record.dispatchOnce(target, ask.id, dispatch);
+
+        assert.ok(typeof retried !== "string");
+        assert.equal(retried.sessionId, "session-1");
+        assert.equal(yield* Ref.get(handed), 2);
       }),
   );
 

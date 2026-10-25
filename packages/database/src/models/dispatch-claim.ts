@@ -1,9 +1,9 @@
 import { randomUUID } from "node:crypto";
-import { and, eq } from "drizzle-orm";
-import { Data, DateTime, Duration, Effect, Option, Schedule, Schema } from "effect";
+import { and, eq, lt, sql } from "drizzle-orm";
+import { Data, DateTime, Duration, Effect, Option, Ref, Schedule, Schema } from "effect";
 import { SqlSchema } from "effect/sql";
 import { Database, type DatabaseServices, type StoreFailure } from "../core/query.js";
-import { conversations } from "../schemas/storage.js";
+import { conversations, dispatchWaiters } from "../schemas/storage.js";
 import { InstantColumnSchema } from "./columns.js";
 
 /**
@@ -28,6 +28,14 @@ import { InstantColumnSchema } from "./columns.js";
  * its line stands as written, and its ask stays marked as handed
  * (`asks.ts`). The expiry is twice the longest a hand-over may take, so a
  * live holder always records before it.
+ *
+ * Note that the claim goes to waiters in the order they queued, as the
+ * advisory lock's waiters were served, so sends reach the runtime in the
+ * order they arrived: a claimant that finds the claim taken queues
+ * (`dispatch_waiters`, numbered by the database), and a claim is taken only
+ * while no live waiter queued before the claimant. A waiter is live while
+ * it keeps asking, judged by the database's own clock, so one that died
+ * holds the queue a couple of seconds at most.
  */
 
 /**
@@ -42,9 +50,14 @@ import { InstantColumnSchema } from "./columns.js";
 export const DISPATCH_CLAIM = {
   EXPIRY: Duration.minutes(1),
   WAIT: Duration.seconds(5),
+  /** How long the write of what a hand-over answered is tried again: what the expiry leaves past a hand-over's thirty seconds, less a margin. */
+  RECORD_RETRY: Duration.seconds(25),
   FIRST_RETRY: Duration.millis(50),
   LONGEST_RETRY: Duration.millis(400),
 } as const;
+
+/** How long after a waiter last asked for the claim it stops holding the queue: several of its tries at the longest spacing. */
+const WAITER_STALE = Duration.seconds(2);
 
 /** A wait for a claim as long as this is logged, so a slow send names what it waited on. */
 const CLAIM_WAIT_LOGGED = Duration.seconds(1);
@@ -110,21 +123,88 @@ const clearClaim = SqlSchema.void({
     ),
 });
 
+/** The instant, by the database's clock, before which a waiter's last ask leaves it holding the queue no longer. */
+const waiterStaleBefore = sql`now() - (${Duration.toMillis(WAITER_STALE)} * interval '1 millisecond')`;
+
+/** Queues a waiter for the conversation's claim, answering its place. */
+const queueWaiter = SqlSchema.findAll({
+  Request: ConversationIdSchema,
+  Result: Schema.Struct({ place: Schema.Number }),
+  execute: ({ conversationId }) =>
+    Database.use((db) =>
+      db
+        .insert(dispatchWaiters)
+        .values({ conversationId })
+        .returning({ place: dispatchWaiters.place }),
+    ),
+});
+
+const PlaceSchema = Schema.Struct({ place: Schema.Number });
+
+/** The waiter asking again, which keeps it holding its place. */
+const refreshWaiter = SqlSchema.void({
+  Request: PlaceSchema,
+  execute: ({ place }) =>
+    Database.use((db) =>
+      db
+        .update(dispatchWaiters)
+        .set({ seenAt: sql`now()` })
+        .where(eq(dispatchWaiters.place, place)),
+    ),
+});
+
+const removeWaiter = SqlSchema.void({
+  Request: PlaceSchema,
+  execute: ({ place }) =>
+    Database.use((db) => db.delete(dispatchWaiters).where(eq(dispatchWaiters.place, place))),
+});
+
+/** The conversation's waiters that died, cleared as a claim is taken. */
+const removeStaleWaiters = SqlSchema.void({
+  Request: ConversationIdSchema,
+  execute: ({ conversationId }) =>
+    Database.use((db) =>
+      db
+        .delete(dispatchWaiters)
+        .where(
+          and(
+            eq(dispatchWaiters.conversationId, conversationId),
+            sql`${dispatchWaiters.seenAt} <= ${waiterStaleBefore}`,
+          ),
+        ),
+    ),
+});
+
+/** A live waiter of the conversation that queued before the place given, or any live waiter where none is given. */
+const findWaiterAhead = SqlSchema.findAll({
+  Request: Schema.Struct({ conversationId: Schema.String, place: Schema.NullOr(Schema.Number) }),
+  Result: PlaceSchema,
+  execute: ({ conversationId, place }) =>
+    Database.use((db) =>
+      db
+        .select({ place: dispatchWaiters.place })
+        .from(dispatchWaiters)
+        .where(
+          and(
+            eq(dispatchWaiters.conversationId, conversationId),
+            sql`${dispatchWaiters.seenAt} > ${waiterStaleBefore}`,
+            place === null ? undefined : lt(dispatchWaiters.place, place),
+          ),
+        )
+        .limit(1),
+    ),
+});
+
 /** Whether a claim taken at the instant given still stands at `now`. */
 function claimLive(claimedAt: Date, now: Date): boolean {
   return now.getTime() - claimedAt.getTime() < Duration.toMillis(DISPATCH_CLAIM.EXPIRY);
 }
 
-/**
- * Whether another hand-over's claim stands on the conversation, read under
- * its row lock, which this takes and the caller's transaction keeps; one
- * past its expiry stands no longer, and is logged as taken over by the
- * conversation's id alone.
- */
-export const dispatchClaimStands = /* @__PURE__ */ Effect.fnUntraced(function* (
+/** Whether the claim read stands: one past its expiry stands no longer, and is logged as taken over by the conversation's id alone. */
+const claimStanding = /* @__PURE__ */ Effect.fnUntraced(function* (
   conversationId: string,
-): Effect.fn.Return<boolean, StoreFailure, DatabaseServices> {
-  const row = yield* lockClaim({ conversationId });
+  row: Option.Option<{ readonly claim: string | null; readonly claimedAt: Date | null }>,
+) {
   if (Option.isNone(row) || row.value.claim === null || row.value.claimedAt === null) return false;
   if (claimLive(row.value.claimedAt, yield* DateTime.nowAsDate)) return true;
   yield* Effect.logWarning("a dispatch claim past its expiry was taken over", {
@@ -132,6 +212,24 @@ export const dispatchClaimStands = /* @__PURE__ */ Effect.fnUntraced(function* (
     claimedAt: row.value.claimedAt.toISOString(),
   });
   return false;
+});
+
+/**
+ * Whether the conversation is not this claimant's to claim yet, read under
+ * its row lock, which this takes and the caller's transaction keeps: another
+ * hand-over's claim stands, or a live waiter queued before the claimant, at
+ * the place it holds (`waitingOutDispatchClaim`), or at all where it holds
+ * none. A claimant holding a place asks again here, which keeps it live.
+ */
+export const dispatchClaimStands = /* @__PURE__ */ Effect.fnUntraced(function* (
+  conversationId: string,
+  place?: number,
+): Effect.fn.Return<boolean, StoreFailure, DatabaseServices> {
+  const row = yield* lockClaim({ conversationId });
+  if (place !== undefined) yield* refreshWaiter({ place });
+  if (yield* claimStanding(conversationId, row)) return true;
+  const ahead = yield* findWaiterAhead({ conversationId, place: place ?? null });
+  return ahead.length > 0;
 });
 
 /**
@@ -143,15 +241,36 @@ export const dispatchClaimStands = /* @__PURE__ */ Effect.fnUntraced(function* (
 export const takeDispatchClaim = /* @__PURE__ */ Effect.fnUntraced(function* (
   conversationId: string,
   line?: string,
+  place?: number,
 ): Effect.fn.Return<string, StoreFailure, DatabaseServices> {
   const claim = randomUUID();
   yield* writeClaim({ conversationId, claim, at: yield* DateTime.nowAsDate, line: line ?? null });
+  if (place !== undefined) yield* removeWaiter({ place });
+  yield* removeStaleWaiters({ conversationId });
   return claim;
 });
 
 /** The instant a claim taken before is past its expiry at `now`. */
 export function claimExpiredBefore(now: Date): Date {
   return new Date(now.getTime() - Duration.toMillis(DISPATCH_CLAIM.EXPIRY));
+}
+
+/**
+ * The write of what a hand-over answered, tried again a short while apart
+ * for as long as the claim stands: given up, the claim would expire with the
+ * holder's line or ask read as handed over (`dispatchClaimStands`), though
+ * the runtime may have refused it, so a passing store failure must not end
+ * it.
+ */
+export function recordedWithinExpiry<A, E, R>(
+  record: Effect.Effect<A, E, R>,
+): Effect.Effect<A, E, R> {
+  return Effect.retry(
+    record.pipe(
+      Effect.tapError(() => Effect.logWarning("a hand-over's record failed, trying it again")),
+    ),
+    { schedule: claimRetry(DISPATCH_CLAIM.RECORD_RETRY) },
+  );
 }
 
 /** Clears the claim, where it is still the claimant's: one taken over past its expiry is the new holder's. */
@@ -166,23 +285,42 @@ export function releaseDispatchClaim(
  * Runs the attempt again while it fails because another claim stands, a
  * short while apart and no longer than the bound, `DISPATCH_CLAIM.WAIT`
  * unless the caller names another, holding nothing between tries; past the
- * wait it fails as `DispatchClaimHeld`. How long the wait took is logged
- * where it was long, by the conversation's id alone.
+ * wait it fails as `DispatchClaimHeld`. The first refusal queues the
+ * claimant, and every later try is handed the place it holds, which the
+ * attempt passes to `dispatchClaimStands` and `takeDispatchClaim`; the place
+ * is given up however the wait ends. How long the wait took is logged where
+ * it was long, by the conversation's id alone.
  */
 export function waitingOutDispatchClaim<A, E, R>(
   conversationId: string,
-  attempt: Effect.Effect<A, E | DispatchClaimHeld, R>,
+  attempt: (place: number | undefined) => Effect.Effect<A, E | DispatchClaimHeld, R>,
   bound: Duration.Duration = DISPATCH_CLAIM.WAIT,
-): Effect.Effect<A, E | DispatchClaimHeld, R> {
+): Effect.Effect<A, E | DispatchClaimHeld | StoreFailure, R | DatabaseServices> {
   return Effect.gen(function* () {
+    const queued = yield* Ref.make<number | undefined>(undefined);
+    const once = Effect.flatMap(Ref.get(queued), (place) =>
+      attempt(place).pipe(
+        Effect.tapError((failure) =>
+          failure instanceof DispatchClaimHeld && place === undefined
+            ? Effect.flatMap(queueWaiter({ conversationId }), ([waiter]) =>
+                waiter === undefined
+                  ? Effect.die(new Error("the waiter's insert answered no place"))
+                  : Ref.set(queued, waiter.place),
+              )
+            : Effect.void,
+        ),
+      ),
+    );
     const [waited, exit] = yield* Effect.timed(
       Effect.exit(
-        Effect.retry(attempt, {
+        Effect.retry(once, {
           schedule: claimRetry(bound),
           while: (failure) => failure instanceof DispatchClaimHeld,
         }),
       ),
     );
+    const place = yield* Ref.get(queued);
+    if (place !== undefined) yield* removeWaiter({ place });
     if (Duration.isGreaterThanOrEqualTo(waited, CLAIM_WAIT_LOGGED)) {
       yield* Effect.logInfo("a write waited for its conversation's dispatch claim", {
         conversationId,

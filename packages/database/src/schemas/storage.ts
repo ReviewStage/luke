@@ -329,6 +329,27 @@ export const turns = pgTable(
 );
 
 /**
+ * The hand-overs waiting for their conversation's dispatch claim
+ * (`dispatch-claim.ts`), one row a waiter, numbered by the database as they
+ * queue, so a claim goes to the waiter that queued first, as the advisory
+ * lock the claim replaced queued them, whichever instance each runs on. A
+ * waiter stamps `seen_at` with the database's own clock each time it asks
+ * for the claim, and its row goes once it claims or gives up; one whose
+ * waiter died stops holding the queue a couple of seconds after its last ask.
+ */
+export const dispatchWaiters = pgTable(
+  "dispatch_waiters",
+  {
+    place: bigint("place", { mode: "number" }).primaryKey().generatedAlwaysAsIdentity(),
+    conversationId: uuid("conversation_id")
+      .notNull()
+      .references(() => conversations.id, { onDelete: "cascade" }),
+    seenAt: timestamptz("seen_at").notNull().defaultNow(),
+  },
+  (table) => [index("dispatch_waiters_conversation_place").on(table.conversationId, table.place)],
+);
+
+/**
  * A developer's ask between its accept and its turn. eve folds asks that
  * arrive while a turn runs into the next turn and names no turn at accept
  * time, so the ask stands on its own row from the accept, keyed by the
