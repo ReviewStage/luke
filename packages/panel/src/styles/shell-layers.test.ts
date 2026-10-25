@@ -99,10 +99,10 @@ function shell(room: string, overlay: string): HTMLElement {
             children: [
               {
                 tag: "header",
-                className: "desktop-toolbar",
+                className: "luke-toolbar",
                 children: [
                   {
-                    className: "desktop-toolbar-heading main-tabs",
+                    className: "luke-toolbar-heading main-tabs",
                     children: [
                       {
                         className: "luke-tabs",
@@ -116,7 +116,7 @@ function shell(room: string, overlay: string): HTMLElement {
                         children: [
                           {
                             className: "luke-anchored-popover",
-                            children: [{ className: "searchable-menu tab-add-menu" }],
+                            children: [{ className: "luke-searchable-menu" }],
                           },
                         ],
                       },
@@ -142,10 +142,10 @@ for (const [where, room, overlay, touch] of [
     const root = shell(room, overlay);
     const sidebar = the(".desktop-sidebar");
     for (const selector of [
-      ".desktop-toolbar",
+      ".luke-toolbar",
       ".luke-tabs",
       '.luke-tab[data-selected="true"]',
-      ".tab-add-menu",
+      ".luke-searchable-menu",
     ]) {
       assert.ok(over(sidebar, the(selector), root), `the sidebar draws over ${selector}`);
     }

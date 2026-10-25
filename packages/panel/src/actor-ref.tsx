@@ -13,16 +13,17 @@ import {
   AVATAR_SIZE,
   Avatar,
   type AvatarSize,
+  type CommentAuthor,
+  FiringGlyph,
   GAP,
   HoverCard,
   HoverCardHead,
   HoverCardNote,
   HoverCardRule,
+  HoverCardScroll,
   INLINE_REF_LOOK,
   InlineRef,
   LAYOUT_ELEMENT,
-  SCROLL_SIZE,
-  ScrollArea,
   Stack,
   TEXT_BUTTON_LINES,
   TextButton,
@@ -48,12 +49,15 @@ import {
   ROLE_WORDS,
   SOMEONE_REASON,
 } from "@luke/ui/actor-model";
-import { BotIcon, ClockIcon, HistoryIcon, UserRoundIcon, UserRoundXIcon } from "lucide-react";
+import { GLYPH } from "@luke/ui/icons";
+import { BotIcon, HistoryIcon, UserRoundIcon, UserRoundXIcon } from "lucide-react";
 import { type ReactNode, useEffect } from "react";
+import { useAutomation } from "./automation-directory.js";
 import { automationNextText, automationOwnerName } from "./desktop/automation-words.js";
 import { PERSON_PAGE } from "./desktop/pages-on-demand.js";
 import { useActorDoor } from "./person-door.js";
 import { GLYPH_STATE, type GlyphState, StateGlyph } from "./state-glyph.js";
+import { AgentHoverCard } from "./tasks/agent-ref.js";
 import { AgentMark } from "./tasks/tab-look.js";
 
 /**
@@ -72,7 +76,7 @@ import { AgentMark } from "./tasks/tab-look.js";
  * is drawn, so a Retina screen draws it sharp and nothing larger is
  * fetched. Luke's square holds
  * his face in his own blue, an agent's its harness, swapped for the working
- * mark while it writes as its tab's glyph is, and an automation's its clock,
+ * mark while it writes as its tab's glyph is, and an automation's its Zap,
  * each its glyph alone on the ground beneath it, as a tab's is. In a
  * facepile (`ActorStack`) whose faces overlap each stands on one solid
  * neutral tile instead, so the face it overlaps never shows through it. A disc is one size per place
@@ -199,6 +203,13 @@ function SomeoneDisc({ glyph, size }: { glyph: ReactNode; size: ActorSize }): Re
   return <Avatar name="" glyph={glyph} size={AVATAR_OF_SIZE[size]} decorative />;
 }
 
+/** An automation's glyph on its square: what fires it, GitHub's or Sentry's mark among them, or the automation's own glyph where only its name is known, wearing where its newest run stands. */
+function automationGlyph(actor: ActorOf<typeof ACTOR_KIND.AUTOMATION>): React.JSX.Element {
+  const glyph =
+    actor.trigger === undefined ? <GLYPH.AUTOMATION /> : <FiringGlyph of={actor.trigger} />;
+  return <StateGlyph glyph={glyph} state={GLYPH_OF_STATE[actor.state]} />;
+}
+
 /** What stands on an actor's circle or square, at its size. */
 function Face({
   actor,
@@ -234,7 +245,7 @@ function Face({
       return (
         <GlyphSquare
           name={actorName(actor)}
-          glyph={<StateGlyph glyph={<ClockIcon />} state={GLYPH_OF_STATE[actor.state]} />}
+          glyph={automationGlyph(actor)}
           size={size}
           tiled={tiled}
         />
@@ -277,6 +288,67 @@ function Face({
           size={size}
         />
       );
+  }
+}
+
+/**
+ * An actor as `Comment` draws its writer's face: a person on a circle by
+ * their picture or letter, Luke, an agent, an automation and an App's bot
+ * by their glyph on a square, and someone unnamed by the glyph for why.
+ * The name `Comment` says is the caller's, as `ActorRef` says it.
+ */
+export function commentAuthor(actor: Actor): CommentAuthor {
+  const picture = (url: string | undefined) => pictureAt(url, ACTOR_SIZE.ROW);
+  switch (actor.kind) {
+    case ACTOR_KIND.PERSON:
+      return { name: actor.name, id: actor.userId, picture: picture(actor.pictureUrl) };
+    case ACTOR_KIND.LUKE:
+      return { name: actorName(actor), shape: AVATAR_SHAPE.SQUARE, glyph: <WingFace /> };
+    case ACTOR_KIND.AGENT:
+      return {
+        name: actorName(actor),
+        shape: AVATAR_SHAPE.SQUARE,
+        glyph: (
+          <StateGlyph
+            glyph={<AgentMark provider={actor.provider} />}
+            state={GLYPH_OF_STATE[actor.state]}
+          />
+        ),
+      };
+    case ACTOR_KIND.AUTOMATION:
+      return {
+        name: actorName(actor),
+        shape: AVATAR_SHAPE.SQUARE,
+        glyph: automationGlyph(actor),
+      };
+    case ACTOR_KIND.GITHUB:
+      return actor.bot
+        ? {
+            name: actor.login,
+            shape: AVATAR_SHAPE.SQUARE,
+            glyph: <BotIcon />,
+            picture: picture(actor.avatarUrl),
+          }
+        : { name: actor.login, picture: picture(actor.avatarUrl) };
+    case ACTOR_KIND.SOMEONE:
+      if (leftWithFace(actor)) {
+        return {
+          name: actorName(actor),
+          id: actor.userId ?? actorName(actor),
+          picture: picture(actor.pictureUrl),
+        };
+      }
+      return {
+        name: actorName(actor),
+        glyph:
+          actor.reason === SOMEONE_REASON.FORMER ? (
+            <UserRoundXIcon />
+          ) : actor.reason === SOMEONE_REASON.EARLIER ? (
+            <HistoryIcon />
+          ) : (
+            <UserRoundIcon />
+          ),
+      };
   }
 }
 
@@ -427,7 +499,7 @@ function githubBot(actor: Actor): boolean {
 }
 
 /** The quiet badge an App's bot on GitHub wears after its name, as GitHub's own pages mark one; nothing for anyone else. */
-function BotBadge({ actor }: { actor: Actor }): React.JSX.Element | null {
+export function BotBadge({ actor }: { actor: Actor }): React.JSX.Element | null {
   return githubBot(actor) ? <span className="actor-bot">bot</span> : null;
 }
 
@@ -552,7 +624,7 @@ function SomeoneCard({
 /** What a GitHub account's card says it is, a person's or an App's bot's, and where a person stands. */
 const GITHUB_WORDS = {
   USER: "GitHub user",
-  APP: "GitHub app",
+  APP: "GitHub App",
   OUTSIDE: "Not in this workspace",
 } as const;
 
@@ -588,17 +660,19 @@ const ACTOR_STATE_OF_RUN = {
   [AUTOMATION_RUN_STANDING.REST]: ACTOR_STATE.REST,
 } as const satisfies Record<AutomationRunStanding, ActorState>;
 
-/** An automation as its tile draws it: its clock, wearing where its newest run stands, under its name. */
+/** An automation as its tile draws it: the glyph of what fires it, wearing where its newest run stands, under its name. */
 export function automationActor(automation: AutomationSummary): Actor {
   return {
     kind: ACTOR_KIND.AUTOMATION,
+    automationId: automation.id,
     name: automation.name,
     state: ACTOR_STATE_OF_RUN[automationRunStanding(automation.lastRun)],
+    trigger: automation.trigger,
   };
 }
 
 /**
- * An automation's card: its clock, its name over what fires it, whose it
+ * An automation's card: the glyph of what fires it, its name over those words, whose it
  * is at the corner, when it runs next, and how its last run went. Note
  * that it offers no way to the automation's page under a rule, because
  * the name it hangs from opens that page on a press; hung from a control
@@ -624,7 +698,11 @@ export function AutomationCard({
       <ActorHead
         actor={actor}
         sub={automationTriggerText(automation.trigger, automation.repositories ?? [])}
-        corner={automationOwnerName(automationOwner(automation), workspaceName)}
+        corner={automationOwnerName(
+          automationOwner(automation),
+          workspaceName,
+          automation.mine === true,
+        )}
         onOpen={onOpen}
       />
       <HoverCardNote>{automationNextText(automation, now)}</HoverCardNote>
@@ -639,18 +717,48 @@ export function AutomationCard({
   );
 }
 
-/** The card an actor hangs where the place naming it adds nothing: a person's, someone's, or a GitHub account's; none for the rest, whose name stands as a pill. */
+/** An actor of the kind given. */
+type ActorOf<K extends Actor["kind"]> = Extract<Actor, { readonly kind: K }>;
+
+/** An automation's card, as the directory around the place naming it knows it; none where it knows no such automation. */
+function KnownAutomationActorCard({ automationId }: { automationId: string }): ReactNode {
+  const known = useAutomation(automationId);
+  return known === undefined ? undefined : (
+    <AutomationCard automation={known.automation} workspaceName={known.workspaceName} />
+  );
+}
+
+/**
+ * The card each kind of actor hangs where the place naming it adds
+ * nothing, one entry per kind, so a kind added fails to compile until it
+ * says: Luke his own, an agent its tab's (`AgentHoverCard`), read as it is
+ * hung, and an automation its own, as the directory around it knows it.
+ * An agent or an automation named by its name alone hangs none, its name
+ * standing as a pill.
+ */
+const ACTOR_CARD: { readonly [K in Actor["kind"]]: (actor: ActorOf<K>) => ReactNode } = {
+  [ACTOR_KIND.PERSON]: (actor) => <PersonCard actor={actor} />,
+  [ACTOR_KIND.SOMEONE]: (actor) => <SomeoneCard actor={actor} />,
+  [ACTOR_KIND.GITHUB]: (actor) => <GitHubCard actor={actor} />,
+  [ACTOR_KIND.LUKE]: () => <LukeCard />,
+  [ACTOR_KIND.AGENT]: (actor) =>
+    actor.agentId === undefined ? undefined : (
+      <AgentHoverCard actor={actor} agentId={actor.agentId} />
+    ),
+  [ACTOR_KIND.AUTOMATION]: (actor) =>
+    actor.automationId === undefined ? undefined : (
+      <KnownAutomationActorCard automationId={actor.automationId} />
+    ),
+};
+
+/** An actor's card drawn through its kind's own entry. */
+function actorCardOf<K extends Actor["kind"]>(kind: K, actor: ActorOf<K>): ReactNode {
+  return ACTOR_CARD[kind](actor);
+}
+
+/** The card an actor hangs where the place naming it adds nothing, by its kind's entry. */
 export function actorCard(actor: Actor): ReactNode {
-  switch (actor.kind) {
-    case ACTOR_KIND.PERSON:
-      return <PersonCard actor={actor} />;
-    case ACTOR_KIND.SOMEONE:
-      return <SomeoneCard actor={actor} />;
-    case ACTOR_KIND.GITHUB:
-      return <GitHubCard actor={actor} />;
-    default:
-      return undefined;
-  }
+  return actorCardOf(actor.kind, actor);
 }
 
 /**
@@ -782,19 +890,17 @@ function MoreFaces({
   const names = actors.map((actor, index) => faceName(actor, faces[index] ?? {}));
   const card = (
     <HoverCard data-actor-card="more">
-      <div className="actor-more">
-        <ScrollArea size={SCROLL_SIZE.CONTENT}>
-          <Stack as={LAYOUT_ELEMENT.UL} gap={GAP.ITEM} className="actor-more-list">
-            {actors.map((actor, index) => (
-              // Note that the rest stand in the pile's own order, so each is keyed by where it stands.
-              <li key={index} className="actor-more-row">
-                <ActorMark actor={actor} size={ACTOR_SIZE.STACK} />
-                <MoreFaceWords actor={actor} face={faces[index] ?? {}} />
-              </li>
-            ))}
-          </Stack>
-        </ScrollArea>
-      </div>
+      <HoverCardScroll>
+        <Stack as={LAYOUT_ELEMENT.UL} gap={GAP.ITEM} className="actor-more-list">
+          {actors.map((actor, index) => (
+            // Note that the rest stand in the pile's own order, so each is keyed by where it stands.
+            <li key={index} className="actor-more-row">
+              <ActorMark actor={actor} size={ACTOR_SIZE.STACK} />
+              <MoreFaceWords actor={actor} face={faces[index] ?? {}} />
+            </li>
+          ))}
+        </Stack>
+      </HoverCardScroll>
     </HoverCard>
   );
   return (

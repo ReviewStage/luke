@@ -152,6 +152,23 @@ test("K and J step through the rail as drawn and stop at its ends, ⇧J goes to 
   );
 });
 
+test("the rail's rows, For you's and every group's, are one Tab stop that ↓ walks from list to list", () => {
+  const page = mount();
+  const stops = () =>
+    [...page.querySelectorAll<HTMLButtonElement>(".chat-rail li .luke-list-row-main")].filter(
+      (row) => row.tabIndex === 0,
+    );
+  assert.deepEqual(stops(), [railRow(page, "For you")], "Tab lands on the rail once");
+  act(() => railRow(page, "For you").focus());
+  act(() => {
+    railRow(page, "For you").dispatchEvent(
+      new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true, cancelable: true }),
+    );
+  });
+  assert.equal(document.activeElement, railRow(page, "general"), "↓ crosses into the next group");
+  assert.deepEqual(stops(), [railRow(page, "general")]);
+});
+
 test("Chat narrower than the Inbox's line by its own width shows its rail, then the place chosen alone under a way back naming Back's chord, which Escape takes too", () => {
   const page = mount();
   const rail = () => page.querySelector<HTMLElement>(".chat-rail");

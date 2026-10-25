@@ -1,0 +1,97 @@
+/* searchable-menu.css -- what of a searchable menu's look its Tailwind
+   classes cannot say (`searchable-menu.tsx`): the pinned foot under the
+   list, its muted notes, and a submenu standing beside the row that opened
+   it, turned, pushed back, and stood up as the menu measured it. */
+
+@layer components {
+  /* Hung from its button, a menu is no taller than the room its side of the
+     button leaves (`--luke-popover-room`, measured against what is seen of
+     the window), so a phone's keyboard or a short window never hides its
+     last rows: its list gives way and scrolls, under the search row that
+     stays. Embedded in a layer floated by a box in the words, it keeps to
+     the room that layer's side leaves it the same way. */
+  .luke-anchored-popover > .luke-searchable-menu,
+  .luke-rect-float > .luke-searchable-menu {
+    max-height: var(--luke-popover-room, none);
+  }
+
+  /* Where the query's words landed in a row's name, so the row says why it
+     matched: a wash, as the settings search marks its own, with no padding,
+     which would push a cut name's fade around as the query changed. */
+  .luke-searchable-menu-match {
+    border-radius: var(--luke-radius-6);
+    background: var(--luke-color-match);
+    color: inherit;
+  }
+
+  /* The rows pinned under the list, behind a hairline, where the scrolling
+     cannot take them. */
+  .luke-searchable-menu-foot {
+    display: block;
+    flex: 0 0 auto;
+    padding: var(--luke-menu-inset);
+    border-top: 1px solid var(--luke-color-border);
+  }
+
+  /* One muted line under the pinned rows or a submenu's, inset as a row's
+     words are: what the agent has cost. */
+  .luke-searchable-menu-note {
+    padding: var(--luke-space-4) var(--luke-row-inset) 0;
+  }
+
+  .luke-searchable-menu-submenu > .luke-searchable-menu-note {
+    padding-bottom: var(--luke-menu-inset);
+  }
+
+  /* A note that starts where a row's label does, past the row's glyph slot. */
+  .luke-searchable-menu-note[data-aligned="true"] {
+    padding-left: calc(var(--luke-row-inset) + var(--luke-menu-glyph) + var(--luke-icon-gap));
+  }
+
+  /* A submenu stands beside the row that opened it, its top level with that
+     row's and its near edge a gap off the menu's own; it turns to the
+     menu's other side where its room ends before it does, is pushed back
+     over the menu (`--luke-submenu-shift`) where neither side holds it, and
+     stands up from the row's foot where the window's bottom would cut it.
+     The gap is `SUBMENU_GAP` in `searchable-menu.tsx`. */
+  .luke-searchable-menu-branch {
+    position: relative;
+  }
+
+  .luke-searchable-menu-submenu {
+    position: absolute;
+    z-index: 1;
+    top: 0;
+    left: calc(100% + 9px - var(--luke-submenu-shift, 0px));
+    width: 200px;
+  }
+
+  .luke-searchable-menu-submenu[data-side="left"] {
+    right: calc(100% + 9px - var(--luke-submenu-shift, 0px));
+    left: auto;
+  }
+
+  .luke-searchable-menu-submenu[data-stand="up"] {
+    top: auto;
+    bottom: 0;
+  }
+
+  /* A listed row's submenu stands beside the row as the list scrolled it
+     (the menu places the branch over the row), taking no pointer itself,
+     so the rows under it stay the pointer's. */
+  .luke-searchable-menu-row-branch {
+    position: absolute;
+    right: 0;
+    left: 0;
+    pointer-events: none;
+  }
+
+  .luke-searchable-menu-row-branch > * {
+    pointer-events: auto;
+  }
+
+  /* A section's heading over rows drawn in place, inset as a row's words are. */
+  .luke-searchable-menu-heading {
+    padding: var(--luke-space-8) var(--luke-row-inset) var(--luke-space-4);
+  }
+}

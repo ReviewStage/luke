@@ -17,9 +17,8 @@ import { MenuTab, TabStrip } from "./tab-strip.js";
 /**
  * tab-strip.test.ts -- the window's strip, `@luke/ui`'s Tabs with the
  * window's hints and menus: a tab other than the chosen one names itself in
- * its hint; under a finger, which drags nothing, its long press's menu moves
- * it a place either way, which a mouse's menu leaves to its drag; and ⇧⌘→
- * moves the focused tab a place along. The plan's column and the side panel
+ * its hint; its menu moves it a place either way, under a finger's long press
+ * and a mouse's right-click alike; and ⇧⌘→ moves the focused tab a place along. The plan's column and the side panel
  * draw this one strip, so this holds for both. The strip's own keys, drag,
  * and scroll are `@luke/ui`'s (`components/tabs/tabs.test.ts`). Synthetic
  * throughout.
@@ -37,6 +36,15 @@ afterEach(() => {
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
 });
+
+/** The browser's `matchMedia` on a device worked by a finger or by a mouse. */
+function pointerMedia(finger: boolean) {
+  return (query: string) => ({
+    matches: finger && query === "(pointer: coarse)",
+    addEventListener: ignore,
+    removeEventListener: ignore,
+  });
+}
 
 /** Every move the strip asked for, as its place before and after. */
 let moves: [number, number][] = [];
@@ -103,7 +111,7 @@ const touch = (type: string) =>
   });
 
 test("under a finger, a tab held offers Move left and Move right, and Move right moves it a place along", async () => {
-  vi.stubGlobal("matchMedia", (query: string) => ({ matches: query === "(pointer: coarse)" }));
+  vi.stubGlobal("matchMedia", pointerMedia(true));
   const tab = await menuStripTab("Changes");
   vi.useFakeTimers();
   try {
@@ -125,14 +133,17 @@ test("under a finger, a tab held offers Move left and Move right, and Move right
   assert.deepEqual(moves, [[1, 2]]);
 });
 
-test("with a mouse, a tab's menu offers no move, which its drag makes", async () => {
+test("with a mouse, a tab's menu offers Move left and Move right too, each with its chord", async () => {
   const tab = await menuStripTab("Changes");
 
   act(() => {
     tab.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, clientX: 10, clientY: 10 }));
   });
 
-  assert.deepEqual(menuWords(), ["Close"]);
+  assert.deepEqual(menuWords(), ["Move left", "Move right", "Close"]);
+  assert.equal(menuItem("Move left").querySelector(".luke-menu-item-hint")?.textContent, "⇧⌘←");
+  act(() => menuItem("Move right").click());
+  assert.deepEqual(moves, [[1, 2]]);
 });
 
 test("a tab other than the chosen one names itself in its hint, though its label may stand as its glyph alone", async () => {
@@ -152,8 +163,9 @@ test("Move Tab Right moves the focused tab a place along, and is offered only wh
   assert.equal(document.activeElement, tab);
 });
 
-test("in a narrow room the strip's tabs keep their labels, and turn to glyphs in a wide one", async () => {
-  const fold = async (room: ShellRoom) => {
+test("a finger's strip keeps its tabs' labels and a mouse's turns them to glyphs, in a narrow room and a wide one alike", async () => {
+  const fold = async (room: ShellRoom, finger: boolean) => {
+    vi.stubGlobal("matchMedia", pointerMedia(finger));
     const container = document.body.appendChild(document.createElement("div"));
     const root = createRoot(container);
     roots.push(root);
@@ -167,6 +179,8 @@ test("in a narrow room the strip's tabs keep their labels, and turn to glyphs in
     );
     return container.querySelector<HTMLElement>('[role="tablist"]')?.dataset.fold;
   };
-  assert.equal(await fold(SHELL_ROOM.NARROW), TABS_FOLD.LABEL);
-  assert.equal(await fold(SHELL_ROOM.WIDE), TABS_FOLD.GLYPH);
+  assert.equal(await fold(SHELL_ROOM.NARROW, true), TABS_FOLD.LABEL);
+  assert.equal(await fold(SHELL_ROOM.WIDE, true), TABS_FOLD.LABEL);
+  assert.equal(await fold(SHELL_ROOM.NARROW, false), TABS_FOLD.GLYPH);
+  assert.equal(await fold(SHELL_ROOM.WIDE, false), TABS_FOLD.GLYPH);
 });

@@ -1,0 +1,106 @@
+/* picture-set.css -- PictureSet: a few pictures in one row at their own
+   shapes, stretched to the column so they share a height, or many as
+   thumbnails of one height that wrap, the last drawn veiled with how many
+   more there are; and what stands in a picture's place while it is not
+   drawn. A tile's shape is its picture's (`--luke-picture-ratio`, set
+   where it is drawn). */
+
+@layer components {
+  .luke-picture-set {
+    max-width: 100%;
+    margin: 0;
+  }
+
+  .luke-picture-set-tiles {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--luke-item-gap);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  /* A tile's room in the row: a few grow by their shape from a common
+     height, so the row stretched to the column keeps them one height. */
+  .luke-picture-set-tile {
+    display: flex;
+    min-width: 0;
+    max-width: 100%;
+    flex: var(--luke-picture-ratio) 1 calc(var(--luke-picture-ratio) * var(--luke-picture-row));
+    flex-direction: column;
+  }
+
+  /* Many keep one height and wrap rather than stretching to the column. */
+  .luke-picture-set[data-many="true"] .luke-picture-set-tile {
+    width: calc(var(--luke-picture-ratio) * var(--luke-picture-thumb));
+    flex: 0 0 auto;
+  }
+
+  /* A tile that opens nothing: the picture and its caption, as a press would stand them. */
+  .luke-picture-set-still {
+    display: flex;
+    width: 100%;
+    min-width: 0;
+    flex-direction: column;
+    gap: var(--luke-space-4);
+  }
+
+  /* A tile's frame, `Card`, filling the tile's room at the picture's shape,
+     what stands in for the picture centred in it. */
+  .luke-picture-set-frame {
+    aspect-ratio: var(--luke-picture-ratio);
+    color: var(--luke-color-text-muted);
+  }
+
+  .luke-picture-set-image {
+    display: block;
+    width: 100%;
+    height: 100%;
+  }
+
+  .luke-picture-set-more {
+    position: absolute;
+    inset: 0;
+    display: grid;
+    place-items: center;
+    background: var(--luke-color-veil);
+    color: var(--luke-color-on-veil);
+    font-size: var(--luke-type-dialog-size);
+    font-weight: var(--luke-type-dialog-weight);
+  }
+
+  .luke-picture-set figcaption {
+    display: block;
+    margin-top: var(--luke-item-gap);
+  }
+
+  /* A gone picture's glyph and words, in the caption's type, the words
+     wrapping and clipped by the frame where a thumbnail is small. */
+  .luke-picture-stand-in {
+    display: flex;
+    min-width: 0;
+    align-items: center;
+    gap: var(--luke-control-gap);
+    color: var(--luke-color-text-muted);
+    font-size: var(--luke-type-caption-size);
+    line-height: var(--luke-type-caption-leading);
+    overflow-wrap: anywhere;
+  }
+
+  .luke-picture-set-frame > .luke-picture-stand-in {
+    padding: var(--luke-space-8);
+  }
+
+  /* A failed picture's sentence and Retry, inset as a gone one's words are,
+     a file's long name wrapping rather than running out of the frame. */
+  .luke-picture-set-frame > .luke-error-state {
+    padding: var(--luke-space-8);
+    overflow-wrap: anywhere;
+  }
+
+  .luke-picture-stand-in > svg {
+    width: var(--luke-icon-16);
+    height: var(--luke-icon-16);
+    flex: none;
+  }
+}

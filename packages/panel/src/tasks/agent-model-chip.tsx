@@ -6,7 +6,6 @@ import {
 } from "@luke/features/coding-agent-wire";
 import type { CatalogModel } from "@luke/features/models-wire";
 import {
-  AnchoredPopover,
   CHIP_LOOK,
   Chip,
   type ChipLook,
@@ -38,7 +37,7 @@ import { useOpenLink } from "./use-open-link.js";
  * 272K"), and a chevron saying it opens a menu. A press
  * opens the shared model menu (`model-menu.tsx`) right above the chip,
  * from its trailing edge, since the chip stands at the foot's right
- * (`@luke/ui`'s `AnchoredPopover`), the
+ * (`@luke/ui`'s `SearchableMenu`), the
  * agent's choice checked; what the menu chooses is the agent's model,
  * effort, and context window for its next step, drawn on the chip at once (`use-agent-model.ts`). The chip reads the
  * same whatever the agent is doing, since a change mid-turn applies from
@@ -64,7 +63,7 @@ import { useOpenLink } from "./use-open-link.js";
 const CHATGPT_USAGE_URL = "https://chatgpt.com/settings/usage";
 
 const CHATGPT_PLAN_WORDS = {
-  USING: "Using ChatGPT plan",
+  USING: "Using ChatGPT subscription",
   MANAGE: "Manage usage",
 } as const;
 
@@ -93,17 +92,21 @@ function ChatGptPlanNote(): React.JSX.Element {
 export function AgentModelChip({
   model,
   models,
+  modelsFailed,
   readModels,
   usage,
   payer,
   look = CHIP_LOOK.TOOLBAR,
   width,
   narrow = false,
+  startsNew = false,
 }: {
   model: AgentModelControl;
   /** The catalog as last read; nothing before the first read lands. */
   models: readonly CatalogModel[] | undefined;
-  /** Reads the catalog now, for the chip's name and for a menu opening. */
+  /** Whether the last read of the catalog did not land. */
+  modelsFailed: boolean;
+  /** Reads the catalog now, for the chip's name, for a menu opening, and for the menu's Retry. */
   readModels: () => void;
   /** What the agent has cost, as its transcript's last page said; nothing before a turn settled. */
   usage: CodingAgentUsage | undefined;
@@ -115,6 +118,8 @@ export function AgentModelChip({
   width?: ChipWidth | undefined;
   /** Whether its place is too narrow for the words, so a chip whose harness has a mark draws that alone. */
   narrow?: boolean;
+  /** Whether the choice is what a new agent would start on, on the reader's own credentials, as an automation's is, so one nothing of theirs pays for says it cannot run; never a running agent's, whose starter pays. */
+  startsNew?: boolean;
 }): React.JSX.Element {
   const [open, setOpen] = useState(false);
   const drawn = useDisclosure(open);
@@ -163,29 +168,30 @@ export function AgentModelChip({
         </Chip>
       </Tooltip>
       {drawn.mounted ? (
-        <AnchoredPopover align={POPOVER_ALIGN.END}>
-          <ModelMenu
-            leaving={drawn.leaving}
-            ref={drawn.ref}
-            id={menuId}
-            className="agent-model-menu"
-            models={offered}
-            chosen={settledChoice(offered, model.choice)}
-            offersFast={runtimeModelRule(model.runtime).fast}
-            onChoose={model.choose}
-            footNote={agentUsageLine(usage)}
-            planNote={
-              planPayerOf(model.runtime) === CODING_AGENT_PAYER.CHATGPT_SUBSCRIPTION &&
-              (payer ?? usage?.payer) !== CODING_AGENT_PAYER.API_KEY ? (
-                <ChatGptPlanNote />
-              ) : undefined
-            }
-            onClose={close}
-            onLeave={(left) => {
-              if (!(left instanceof Node && root.current?.contains(left))) setOpen(false);
-            }}
-          />
-        </AnchoredPopover>
+        <ModelMenu
+          leaving={drawn.leaving}
+          ref={drawn.ref}
+          id={menuId}
+          align={POPOVER_ALIGN.END}
+          models={offered}
+          failed={modelsFailed}
+          onRetry={readModels}
+          chosen={settledChoice(offered, model.choice)}
+          startsNew={startsNew}
+          offersFast={runtimeModelRule(model.runtime).fast}
+          onChoose={model.choose}
+          footNote={agentUsageLine(usage)}
+          planNote={
+            planPayerOf(model.runtime) === CODING_AGENT_PAYER.CHATGPT_SUBSCRIPTION &&
+            (payer ?? usage?.payer) !== CODING_AGENT_PAYER.API_KEY ? (
+              <ChatGptPlanNote />
+            ) : undefined
+          }
+          onClose={close}
+          onLeave={(left) => {
+            if (!(left instanceof Node && root.current?.contains(left))) setOpen(false);
+          }}
+        />
       ) : null}
     </div>
   );

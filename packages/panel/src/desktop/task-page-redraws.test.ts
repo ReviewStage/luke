@@ -5,7 +5,8 @@
  *
  * The page is drawn through `DesktopTasks` on a task control that stands
  * across draws, as the window's does while its tasks do not move, and drawn
- * again with another notice line, which the page alone reads. What is drawn
+ * again with its summary handed anew, as the shell hands it on each draw, so
+ * the page's own memo does not hold the draw off. What is drawn
  * again is read through a wrapper around the plan's key line, which draws
  * the real one. Synthetic task.
  */
@@ -79,15 +80,14 @@ afterEach(() => {
   draws.clear();
 });
 
-/** Draws the page over `tasks` with the notice line saying `notice`, as the shell hands it. */
-function drawPage(tasks: TasksControl, notice: string): void {
+/** Draws the page over `tasks`, its summary handed anew as the shell hands it. */
+function drawPage(tasks: TasksControl): void {
   act(() =>
     root?.render(
       createElement(DesktopTasks, {
-        summary: UNPINNED_SUMMARY,
+        summary: { ...UNPINNED_SUMMARY },
         looks: NO_LOOKS,
         tasks,
-        notice: createElement("p", null, notice),
       }),
     ),
   );
@@ -98,10 +98,10 @@ test("the task's page drawn again over the same task does not draw its plan agai
   handState({});
   root = createRoot(document.body.appendChild(document.createElement("div")));
   const tasks = openTask();
-  drawPage(tasks, "Luke is listening.");
+  drawPage(tasks);
   assert.ok((draws.get("plan") ?? 0) > 0, "the side panel draws the plan");
   draws.clear();
 
-  drawPage(tasks, "Luke is speaking.");
+  drawPage(tasks);
   assert.equal(draws.get("plan") ?? 0, 0, "the plan is not drawn again");
 });

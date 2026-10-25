@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import { COMMAND_KEY, installCommandKey } from "@luke/settings/shortcuts";
 import { afterEach, beforeEach, test } from "vitest";
 import type { TerminalHandle } from "./contract.js";
 import { terminal } from "./index.js";
@@ -98,6 +99,18 @@ test("⌃Tab and ⌃⇧Tab pass to the window's tab switcher, and the shell hear
   terminal.done();
   assert.deepEqual(terminal.heard.slice(0, 2), [on, back]);
   assert.deepEqual(terminal.sent, ["\t"]);
+});
+
+test("off a Mac, where the window's chords are Ctrl ones, every Ctrl chord is the shell's, Ctrl+K and ⌃Tab included, and the window hears none of them", () => {
+  const restore = installCommandKey(COMMAND_KEY.CONTROL);
+  const terminal = mountTerminal();
+  terminal.press({ key: "k", keyCode: 75, ctrlKey: true });
+  terminal.press({ key: "Tab", keyCode: 9, ctrlKey: true });
+  terminal.done();
+  restore();
+  assert.equal(terminal.sent[0], "\x0b");
+  assert.equal(terminal.sent.length, 2);
+  assert.deepEqual(terminal.heard, []);
 });
 
 test("Shift+Return sends a line feed where Return sends a carriage return", () => {

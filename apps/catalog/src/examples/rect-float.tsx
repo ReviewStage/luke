@@ -22,10 +22,10 @@ function FloatsByWords(): React.JSX.Element {
         An admin invites a teammate by email, and the invite lands as a{" "}
         <mark ref={words}>single-use link</mark> that expires after a week.
       </p>
-      <RectFloat anchor={box}>
+      <RectFloat open anchor={box}>
         <FormatToolbar marks={[WRITING_MARK.BOLD]} onMark={ignore} />
       </RectFloat>
-      <RectFloat anchor={box} side={POPOVER_SIDE.BELOW}>
+      <RectFloat open anchor={box} side={POPOVER_SIDE.BELOW}>
         <LinkField onApply={ignore} onCancel={ignore} />
       </RectFloat>
     </div>

@@ -118,11 +118,10 @@ resting page, which leaves the task, and the resting page closes nothing. Escape
   the task the panel has open (`compose-live.ts` reads the agent and checks
   its task), and the service checks again.
 - A task stays open while the developer turns to Settings or closes the
-  window, so a call into one of its agents goes on. While the call's agent's
-  tab is on screen, the voice's notice line (a failure, a notice, or that
-  the Mac's output is off) floats just over the call's video; anywhere else
-  it floats at the window's foot, and the call card stands while the window
-  has the keyboard. There are no captions: what is said streams into the
+  window, so a call into one of its agents goes on. The voice's notices (a
+  failure, a notice, or that the Mac's output is off) stand as toasts in the
+  window's one stack (`voice-notice-toast.ts`), and the call card stands
+  while the window has the keyboard. There are no captions: what is said streams into the
   agent's transcript as it is heard.
 - A task is left by Back (`‹`) or Escape on its document page, by opening
   another task, or by a sign-out. Leaving a task, or opening another, leaves
@@ -263,7 +262,7 @@ the account's default, Dictate, and Start.
 - The task's repository is the sidebar's to name: by the group it stands in,
   or on its row where the list's view groups by creator or not at all.
   A task with none yet, the 13 tasks from before repositories among them,
-  shows a compact `Choose repository` chip in the toolbar's actions row, left
+  shows a compact `Choose a repository` chip in the toolbar's actions row, left
   of Start, with the composer's menu: a pick is saved through
   `PATCH /api/plans/{id}`, and a refusal is said beside it. A task can be
   used without a repository.
@@ -521,8 +520,7 @@ subagent's tab stays in the side panel.
   task's name and nothing of the transcript, unless the window is focused on
   that agent's tab. The agent's tab reads in semibold until it is shown.
 - **Privacy.** Every word is the agent's, the developer's, or the plan's, so
-  the tab carries `ph-no-capture`; the call's video and notice line draw
-  inside it.
+  the tab carries `ph-no-capture`; the call's video draws inside it.
 - **The web.** A browser has no voice, so its agent tabs draw their
   transcripts, calls among them, and their composer, with no Call button,
   and its "+" offers no New voice chat.
@@ -1043,7 +1041,7 @@ the exact shape.
 | Document body | `MarkdownMessage` (`packages/panel/src/markdown-message.tsx`) over `@luke/ui/markdown`'s note look (Streamdown, GitHub's dialect), raw HTML not rendered, only `http`/`https` links kept; `@luke/ui`'s `prose.css` | A document-scale style for it. |
 | Copy | `ACT_KIND.WINDOW_COPY_TEXT` and the clipboard row in `register-desktop-ipc.ts` | The document formatter: the task's name as a title over its text (`packages/features/src/plan-markdown.ts`). |
 | Voice state | `VoiceView` and `VOICE_COMMAND` (`packages/voice/src/voice-view.ts`), which main already forwards unchanged to every panel; `useVoiceView` (`use-voice-view.ts`); `LIVE_STATUS` (`@luke/live`) | The status word beside the microphone, for the open task's call alone. |
-| Levels, errors | The notice line (`useVoiceNotice`, `voice-notice-strip.tsx`) and the sidebar's waveform (`desktop/luke-identity.tsx`) | The line floats just over the call's video. |
+| Levels, errors | The voice's notices (`useVoiceNotice`, `voice-notice-toast.ts`), as toasts, and the sidebar's waveform (`desktop/luke-identity.tsx`) | None. |
 | Microphone and notices | `microphoneAccessRow`, `voiceAttentionNote`, `MICROPHONE_UNGRANTED_NOTE`, `hostedVoiceUnavailableNote` (`@luke/voice/microphone-access`) | None. |
 | The call | The hidden `VoiceWindow` and `VoiceHost` / `useVoiceSession` / `LiveCall` (`renderer/voice/`); `LiveVoiceOrchestrator` (`@luke/voice`); the sessions route `/api/voice/sessions` with client delegation | The call is associated with an agent of the open task, and the orchestrator gains the Tasks tab's toggle beside the held talk key (LUKE-340); the talk key names the open task while one is open (LUKE-347). |
 | Start, agent tabs, Settings › Coding agents | The toolbar and the task's column's tabs (`desktop/main-tabs.tsx`, `tasks/use-main-tabs.ts`), on the side panel's strip (`desktop/strip-tabs.tsx`, `@luke/ui/tab-strip-model`); the Transcript tab's AI Elements components; the account preferences route | The split button (`desktop/start-agent-button.tsx`), the agent tab (`tasks/agent-tab.tsx`), their control (`tasks/use-coding-agents.ts`) and the held transcript read (`tasks/use-agent-transcript.ts`), and the Settings page (`settings/coding-agents-page.tsx`). |

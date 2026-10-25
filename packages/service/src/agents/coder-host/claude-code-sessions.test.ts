@@ -50,6 +50,7 @@ import {
   Deferred,
   Duration,
   Effect,
+  Exit,
   Fiber,
   Layer,
   Logger,
@@ -61,6 +62,7 @@ import { TestClock } from "effect/testing";
 import { afterEach, vi } from "vitest";
 import { TURN_ORIGIN, TURN_STATUS } from "../../core.js";
 import { HostedEnvironment, type HostedEnvironmentValues } from "../../environment.js";
+import { recordingProductAnalytics, SERVER_EVENT } from "../../events/server-events.js";
 import { keptAfterResponse } from "../../http/after-response.js";
 import {
   connectWorkspaceGitHub,
@@ -80,6 +82,7 @@ import {
   EVE_CANCEL_OUTCOME,
   EVE_RESET_OUTCOME,
   EVE_SEND_OUTCOME,
+  KEY_REFUSAL,
   PLAN_REFUSAL,
 } from "../brain-host/eve-sessions.js";
 import { runnerTokenDigest } from "../luke-mcp/bearer.js";
@@ -347,6 +350,7 @@ const repositoryAgent = (
           method: sent.method,
           headers: sent.headers,
           body: sent.body,
+          ...(sent.signal === undefined ? {} : { signal: sent.signal }),
         });
       }
       seams.onGitHub?.(sent);
@@ -761,8 +765,67 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         const without = yield* sessionsFor(userId, { next: 0 }).pipe(
           Effect.provide(services(gone)),
         );
-        assert.equal((yield* without.open(message(agent, "Go."))).outcome, EVE_SEND_OUTCOME.FAILED);
+        assert.deepEqual(yield* without.open(message(agent, "Go.")), {
+          outcome: EVE_SEND_OUTCOME.FAILED,
+          status: 422,
+          keyRefusal: KEY_REFUSAL.MISSING,
+        });
         assert.deepEqual(gone.commands, []);
+      }),
+  );
+
+  it.effect(
+    "an agent its starter's API key pays for, whose saved key does not open under this deployment's ring, is refused as unreadable and starts nothing",
+    () =>
+      Effect.gen(function* () {
+        vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
+        const userId = `user-${randomUUID()}`;
+        yield* Effect.flatMap(Database, (db) =>
+          db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@luke.test` }),
+        );
+        const task = yield* startTask(userId, { name: "Teammate invitations" });
+        const started = yield* createCodingAgent(userId, {
+          taskId: task.id,
+          idempotencyKey: "start-key",
+          model: "anthropic/claude-opus-5.5",
+          effort: "high",
+          planSnapshot: "# Teammate invitations\n",
+          prompt: null,
+          repository: null,
+          runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
+          payer: CODING_AGENT_PAYER.API_KEY,
+        });
+        assert.ok(Option.isSome(started));
+        // The key was sealed under another deployment's ring, as a Preview's database holds production's.
+        const elsewhere = parseKeyRing(
+          Redacted.make(`1:${Buffer.alloc(32, 9).toString("base64")}`),
+        );
+        assert.ok(Result.isSuccess(elsewhere));
+        const owner = {
+          userId,
+          provider: PROVIDER_KEY_PROVIDER.ANTHROPIC,
+          kind: PROVIDER_KEY_KIND.API_KEY,
+        };
+        yield* saveProviderKey(
+          userId,
+          owner.provider,
+          owner.kind,
+          sealProviderKey(elsewhere.success, owner, Redacted.make(API_KEY)),
+          "sk-ant-api…-key",
+          null,
+          new Date(0),
+        );
+
+        const api = runnerSandboxApi();
+        const sessions = yield* sessionsFor(userId, { next: 0 }).pipe(
+          Effect.provide(services(api)),
+        );
+        assert.deepEqual(yield* sessions.open(message(started.value.agent, "Go.")), {
+          outcome: EVE_SEND_OUTCOME.FAILED,
+          status: 422,
+          keyRefusal: KEY_REFUSAL.UNREADABLE,
+        });
+        assert.deepEqual(api.commands, []);
       }),
   );
 
@@ -1560,7 +1623,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
   );
 
   it.effect(
-    "a runner Vercel would not read is neither relaunched beside itself nor stopped in silence",
+    "a message reaches a running runner with no read of its exit, and a Stop or a retune Vercel would not read is neither relaunched beside the runner nor taken in silence",
     () =>
       Effect.gen(function* () {
         vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
@@ -1572,18 +1635,52 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         const opened = yield* sessions.open(message(agent, "Fix the invitations."));
         assert.ok(opened.outcome === EVE_SEND_OUTCOME.ACCEPTED);
         const turnId = yield* turnUnderWay(userId, agent);
-        const before = linesOf(api.commands[0]).length;
         api.failCommandReads.remaining = 3;
 
         const sent = yield* sessions.send(opened.sessionId, message(agent, "Again."));
+        const before = linesOf(api.commands[0]).length;
         const cancelled = yield* sessions.cancel(opened.sessionId, turnId);
         const retuned = yield* sessions.retune(opened.sessionId, agent.conversationId);
 
-        assert.equal(sent.outcome, EVE_SEND_OUTCOME.FAILED);
+        assert.equal(sent.outcome, EVE_SEND_OUTCOME.ACCEPTED);
+        assert.ok(api.commands[0]?.stdin.includes("Again."));
         assert.deepEqual(cancelled, { outcome: "failed", status: 503 });
         assert.equal(retuned, RUNNER_CHOICE.FAILED);
         assert.equal(api.commands.length, 1);
         assert.equal(linesOf(api.commands[0]).length, before);
+      }),
+  );
+
+  it.effect(
+    "a message to a running runner is written at once, never waiting out a read of its exit",
+    () =>
+      Effect.gen(function* () {
+        vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
+        const api = runnerSandboxApi();
+        const { userId, agent } = yield* openAgent;
+        const sessions = yield* sessionsFor(userId, { next: 0 }).pipe(
+          Effect.provide(services(api)),
+        );
+        const opened = yield* sessions.open(message(agent, "Fix the invitations."));
+        assert.ok(opened.outcome === EVE_SEND_OUTCOME.ACCEPTED);
+        // A read that waits for the running command's exit is held until its reader gives up.
+        api.waits.hold = true;
+
+        const sending = yield* Effect.forkChild(
+          sessions.send(opened.sessionId, message(agent, "Now the emails.")),
+        );
+        yield* Effect.promise(async () => {
+          for (let turn = 0; turn < 200; turn += 1) {
+            await new Promise<void>((settle) => setImmediate(settle));
+          }
+        });
+
+        // The clock never moved, so a send that read the exit first would still be waiting on it.
+        const sent = sending.pollUnsafe();
+        assert.ok(sent !== undefined && Exit.isSuccess(sent));
+        assert.equal(sent.value.outcome, EVE_SEND_OUTCOME.ACCEPTED);
+        assert.ok(api.commands[0]?.stdin.includes("Now the emails."));
+        assert.equal(api.commands.length, 1);
       }),
   );
 
@@ -2196,6 +2293,101 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         assert.equal(api.commands.length, 1);
         const writeHeader = `Basic ${Buffer.from(`x-access-token:${GITHUB_FIXTURE_INSTALLATION_TOKEN}`).toString("base64")}`;
         assert.ok(JSON.stringify(api.policies.at(-1)?.policy).includes(writeHeader));
+      }),
+  );
+  it.effect(
+    "a message to a running runner is written ahead of its credential's renewal, and a renewal Vercel refused leaves the message standing",
+    () =>
+      Effect.gen(function* () {
+        vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
+        const api = runnerSandboxApi();
+        const { agent, sessions } = yield* repositoryAgent(api, ownInstallation());
+        const opened = yield* sessions.open(message(agent, "Fix the invitations."));
+        assert.ok(opened.outcome === EVE_SEND_OUTCOME.ACCEPTED);
+        const policiesBefore = api.policies.length;
+        api.failPolicy.remaining = 1;
+
+        const sent = yield* sessions.send(opened.sessionId, message(agent, "Now the emails."));
+        const later = yield* sessions.send(opened.sessionId, message(agent, "And the docs."));
+
+        assert.deepEqual(
+          [sent.outcome, later.outcome],
+          [EVE_SEND_OUTCOME.ACCEPTED, EVE_SEND_OUTCOME.ACCEPTED],
+        );
+        assert.ok(api.commands[0]?.stdin.includes("Now the emails."));
+        assert.equal(api.commands.length, 1);
+        // The refused renewal set nothing; the next message's renewal set the credential afresh.
+        assert.equal(api.policies.length, policiesBefore + 1);
+      }),
+  );
+  it.effect(
+    "a renewal Vercel never answers is given up at its bound, well inside the store's dispatch deadline, and the message written ahead of it stands",
+    () =>
+      Effect.gen(function* () {
+        vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
+        const api = runnerSandboxApi();
+        const { agent, sessions } = yield* repositoryAgent(api, ownInstallation());
+        const opened = yield* sessions.open(message(agent, "Fix the invitations."));
+        assert.ok(opened.outcome === EVE_SEND_OUTCOME.ACCEPTED);
+        api.holdPolicy.remaining = 1;
+
+        const sending = yield* Effect.forkChild(
+          sessions.send(opened.sessionId, message(agent, "Now the emails.")),
+        );
+        yield* Effect.promise(async () => {
+          for (let turn = 0; turn < 200; turn += 1) {
+            await new Promise<void>((settle) => setImmediate(settle));
+          }
+        });
+        assert.ok(api.commands[0]?.stdin.includes("Now the emails."));
+        assert.equal(sending.pollUnsafe(), undefined, "the renewal is still held");
+        yield* TestClock.adjust(CODER.CREDENTIAL_RENEWAL);
+
+        const sent = yield* Fiber.join(sending);
+        assert.equal(sent.outcome, EVE_SEND_OUTCOME.ACCEPTED);
+      }),
+  );
+  it.effect(
+    "each message counts how it reached the runner: written to the runner up, relaunched in a sandbox still up, or resumed from its snapshot",
+    () =>
+      Effect.gen(function* () {
+        vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
+        const api = runnerSandboxApi();
+        const analytics = recordingProductAnalytics();
+        const { userId, agent } = yield* openAgent;
+        const sequence = { next: 0 };
+        const sessions = yield* sessionsFor(userId, sequence).pipe(
+          Effect.provide(Layer.merge(services(api), analytics.layer)),
+        );
+        const opened = yield* sessions.open(message(agent, "Fix the invitations."));
+        assert.ok(opened.outcome === EVE_SEND_OUTCOME.ACCEPTED);
+
+        yield* sessions.send(opened.sessionId, message(agent, "Also the emails."));
+        // The runner exited, its sandbox still up.
+        const first = api.commands[0];
+        assert.ok(first !== undefined);
+        first.exitCode = 0;
+        sequence.next = 10;
+        yield* sessions.send(opened.sessionId, message(agent, "And the docs."));
+        // The launch ended, and its END stopped the sandbox.
+        sequence.next = 20;
+        yield* runnerEnded({
+          target: { userId, conversationId: agent.conversationId },
+          sessionId: opened.sessionId,
+          sequence: 19,
+        }).pipe(Effect.provide(api.layer));
+        yield* sessions.send(opened.sessionId, message(agent, "And the changelog."));
+
+        assert.deepEqual(
+          analytics.recorded
+            .filter((event) => event.name === SERVER_EVENT.AGENT_HANDOFF)
+            .map((event) => ({ userId: event.userId, ...event.properties })),
+          [
+            { userId, harness: "claude_code", path: "warm", turn_running: false },
+            { userId, harness: "claude_code", path: "relaunched", turn_running: false },
+            { userId, harness: "claude_code", path: "resumed", turn_running: false },
+          ],
+        );
       }),
   );
 });

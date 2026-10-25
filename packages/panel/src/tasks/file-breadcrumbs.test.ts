@@ -39,13 +39,14 @@ function barOver(path = PATH) {
       onRegistry(
         AtomRegistry.make(),
         createElement(FileViewBar, {
+          history: { canGoBack: false, canGoForward: false, onStep: () => undefined },
           lead: createElement(FileBreadcrumbs, {
             repository: REPOSITORY,
             path,
             listFolder: () => new Promise<FolderListing>(() => undefined),
             onOpen: () => undefined,
           }),
-          onGitHub: undefined,
+          github: undefined,
           menu: null,
         }),
       ),
@@ -75,6 +76,47 @@ test("the “…” standing for the repository and every folder opens the tree 
   const bar = barOver();
   bar.press("Folders: acme/relay/packages/db/src/members/invites");
   assert.ok(document.querySelector('[role="dialog"][aria-label="packages/db/src/members"]'));
+});
+
+/** A press landing on `target`, as the pointer's goes down. */
+function pressOn(target: Element) {
+  act(() => {
+    target.dispatchEvent(new Event("pointerdown", { bubbles: true }));
+  });
+}
+
+test("a crumb's tree hangs under the crumb pressed, from its leading edge, bounded by the room under it", () => {
+  // Note that jsdom lays out nothing, so the crumb stands where a bar would put it, and the layer is laid in the page.
+  vi.spyOn(HTMLElement.prototype, "offsetParent", "get").mockReturnValue(document.body);
+  vi.spyOn(Element.prototype, "getBoundingClientRect").mockImplementation(function (this: Element) {
+    return this.textContent === "src" && this.tagName === "BUTTON"
+      ? DOMRect.fromRect({ x: 140, y: 12, width: 40, height: 24 })
+      : DOMRect.fromRect({ x: 0, y: 0, width: 0, height: 0 });
+  });
+  const bar = barOver();
+  bar.press("src");
+  const tree = document.querySelector('[role="dialog"]') ?? assert.fail("the tree is open");
+  const layer = tree.parentElement ?? assert.fail("the tree hangs in a layer");
+  assert.equal(layer.dataset.side, "below");
+  assert.equal(layer.style.left, "140px");
+  assert.equal(layer.style.top, "36px");
+  // The room under the crumb in a 768px window, less the gap and the margin kept from its edge.
+  assert.equal(layer.style.getPropertyValue("--luke-popover-room"), `${768 - 36 - 4 - 8}px`);
+});
+
+test("a crumb's tree closes on a press outside it, and stays open for a press inside it", () => {
+  const bar = barOver();
+  bar.press("src");
+  const tree = document.querySelector('[role="dialog"]') ?? assert.fail("the tree is open");
+  pressOn(tree);
+  const keptOpen = document.querySelector('[role="dialog"]') !== null;
+  pressOn(document.body);
+  assert.equal(keptOpen, true, "a press in the tree leaves it open");
+  assert.equal(
+    document.querySelector('[role="dialog"]') !== null,
+    false,
+    "a press outside closes it",
+  );
 });
 
 test("a crumb's tree goes once the bar is resized, its crumb perhaps folded out of sight", () => {

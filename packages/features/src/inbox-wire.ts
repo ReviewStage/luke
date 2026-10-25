@@ -985,7 +985,7 @@ export type InboxStartRequest = typeof inboxStartRequestSchema.Type;
 const STARTED_TITLE_CHARS = 60;
 
 /** The title of a thread started with no subject where its message holds neither words nor a file. */
-const STARTED_TITLE_FALLBACK = "New thread";
+const STARTED_TITLE_FALLBACK = "Untitled item";
 
 /** A code fence's line, which opens or closes a block and says nothing itself, its language among it. */
 const CODE_FENCE = /^\s*(?:```|~~~)/u;

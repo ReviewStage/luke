@@ -1,5 +1,5 @@
 /**
- * automation-words.ts -- an automation's owner and next run in the few words every place naming it says them, the Automations list's row and an automation's card, and what the list says while it is read.
+ * automation-words.ts -- an automation's owner and next run in the few words every place naming it says them, the Automations list's row and an automation's card, what the list says while it is read, and what deleting one asks.
  */
 
 import { AUTOMATION_NEXT, automationNext } from "@luke/features/automation-list-model";
@@ -8,19 +8,25 @@ import {
   type AutomationScope,
   type AutomationSummary,
 } from "@luke/features/automation-wire";
-import { dayAndTimeText, momentText } from "@luke/ui/time-format";
+import { dayAndTimeText, momentText, weekdayAndTimeText } from "@luke/features/time-format";
+import { CONFIRM_LOSS, type DialogQuestion } from "@luke/ui";
 
 /** What the Automations list says to a reader while it is first read, on its page and in the frame standing while the page's code loads. */
 export const READING_AUTOMATIONS = "Reading your automations…";
 
+/** What deleting an automation asks, from its editor's ⋯ and its row's menu alike: what goes, and what stays. */
+export function automationDeleteQuestion(name: string | undefined): DialogQuestion {
+  return {
+    title: `Delete ${name ?? "this automation"}?`,
+    body: "Its schedule stops and its run history goes. Agents its runs started stay.",
+    verb: "Delete",
+    running: "Deleting",
+    loss: CONFIRM_LOSS.IRREVERSIBLE,
+  };
+}
+
 /** How near a next run is still named by its weekday alone: under a week, so no weekday stands for two days. */
 const WEEKDAY_REACH_MS = 6 * 24 * 60 * 60 * 1000;
-
-const WEEKDAY_AND_TIME = new Intl.DateTimeFormat(undefined, {
-  weekday: "short",
-  hour: "numeric",
-  minute: "2-digit",
-});
 
 /** When an automation runs next, in a few words: within the week by its weekday, further off by its date. */
 export function automationNextText(automation: AutomationSummary, now: number): string {
@@ -32,17 +38,19 @@ export function automationNextText(automation: AutomationSummary, now: number): 
       return "Not scheduled";
     case AUTOMATION_NEXT.AT:
       return next.at - now < WEEKDAY_REACH_MS
-        ? `Next ${WEEKDAY_AND_TIME.format(next.at)}`
+        ? `Next ${weekdayAndTimeText(next.at)}`
         : `Next ${dayAndTimeText(next.at)}`;
   }
 }
 
-/** An owner as a place names it: the workspace by its name, or Personal. */
+/** An owner as a place names it: the workspace by its name, a personal one the reader made as Only you, and one a teammate made, an admin's to see, as Personal. */
 export function automationOwnerName(
   owner: AutomationScope,
   workspaceName: string | undefined,
+  mine: boolean,
 ): string {
-  return owner === AUTOMATION_SCOPE.WORKSPACE ? (workspaceName ?? "Workspace") : "Personal";
+  if (owner === AUTOMATION_SCOPE.WORKSPACE) return workspaceName ?? "Workspace";
+  return mine ? "Only you" : "Personal";
 }
 
 /**

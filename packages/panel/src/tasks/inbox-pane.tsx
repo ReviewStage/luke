@@ -13,12 +13,11 @@ import {
   type InboxMessage,
   type InboxReadAsk,
 } from "@luke/features/inbox-wire";
-import { LINK_PLACE } from "@luke/features/luke-link";
+import { LINK_PLACE, markdownLink } from "@luke/features/link-grammar";
 import type { CatalogModel } from "@luke/features/models-wire";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
-  BADGE_TONE,
-  BackIcon,
+  BackButton,
   Badge,
   Breadcrumbs,
   CARD_LOOK,
@@ -26,21 +25,23 @@ import {
   Card,
   CardHead,
   type Crumb,
-  EllipsisIcon,
   ErrorState,
   Fill,
-  FoldingButton,
-  type FoldingButtonHint,
   GAP,
-  IconButton,
   LAYOUT_ELEMENT,
+  MoreButton,
+  moreLabel,
   ONE_LINE_END,
   PageToolbar,
+  SidePanelIcon,
+  STATUS_TONE,
   Stack,
   SteppedBack,
+  TEXT_ELEMENT,
   TEXT_TONE,
+  TEXT_VARIANT,
   Text,
-  Time,
+  TOOLBAR_INSET,
   Tooltip,
   useMenu,
   useMinute,
@@ -54,9 +55,9 @@ import {
   SOMEONE_REASON,
 } from "@luke/ui/actor-model";
 import { isWireString } from "@luke/wire";
-import { CheckIcon } from "lucide-react";
+import { BotIcon, CheckIcon, ChevronDownIcon, ChevronUpIcon, ZapIcon } from "lucide-react";
 import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { ActorLine, ActorRef, AutomationCard } from "../actor-ref.js";
+import { ActorLine, ActorRef, AutomationCard, commentAuthor } from "../actor-ref.js";
 import {
   Conversation,
   ConversationContent,
@@ -65,6 +66,7 @@ import {
 import { useAutomation } from "../automation-directory.js";
 import { useCopyLinkItem } from "../copy-link-item.js";
 import { ActionMenu, type MenuAction } from "../desktop/action-menu.js";
+import { PhoneHead } from "../desktop/phone-head.js";
 import { useMemberDirectory, usePerson } from "../member-directory.js";
 import { APP_SLICE, useAppSlice } from "../use-app-state.js";
 import {
@@ -74,7 +76,7 @@ import {
   agentSubject,
   NOTHING_HELD,
 } from "./agent-ref.js";
-import { AttachedFileChips } from "./attached-file-chips.js";
+import { AttachedFileChips, attachmentChips } from "./attached-file-chips.js";
 import { InboxAnswerBox } from "./inbox-answer-box.js";
 import {
   ANSWERED,
@@ -95,7 +97,7 @@ import {
 import { askHeadWords } from "./inbox-ask-words.js";
 import { type InboxCloser, useInboxClose } from "./inbox-close.js";
 import type { InboxCodeDoors } from "./inbox-code-card.js";
-import { COMMENT, Comment, CommentName, THREAD_TIME_CLASS } from "./inbox-comment.js";
+import { COMMENT, InboxComment } from "./inbox-comment.js";
 import type { FormTextDoors } from "./inbox-form-text.js";
 import { HolderGlyph } from "./inbox-item-parts.js";
 import {
@@ -130,7 +132,7 @@ import { TranscriptWords } from "./transcript-blocks.js";
 import type { CodingAgentsControl } from "./use-coding-agents.js";
 import { WordsWorkspace } from "./use-link-standing.js";
 import { opensAsLink } from "./use-open-link.js";
-import type { TaskInboxControl } from "./use-task-inbox.js";
+import { type PendingInboxReply, pendingReplyOn, type TaskInboxControl } from "./use-task-inbox.js";
 
 /**
  * inbox-pane.tsx -- one inbox item at reading size: a comment thread under the item's title, the agent's messages and what they ask, and the answers given in place or as they were given.
@@ -207,29 +209,8 @@ const INBOX_FAILED_LINE = "The inbox could not be read.";
 /** What an answer says of the files whose read did not answer. */
 const FILES_FAILED_LINE = "Some files could not be read.";
 
-/** What the way back from an item standing alone to the list says it does. */
-const BACK_TO_INBOX = "Back to inbox";
-
-/**
- * The way back's pill, which says where it goes and names Back's chord
- * whether its word is folded away or not. Note that it drops the folded
- * label it is handed, because the pill says more than the word does.
- */
-const BackHint: FoldingButtonHint = ({ children }) => (
-  <Tooltip label={BACK_TO_INBOX} command={APP_COMMAND.BACK}>
-    {children}
-  </Tooltip>
-);
-
-/** A link's label as the text of a markdown link: its brackets and backslashes escaped, its line breaks folded to spaces. */
-function linkText(label: string): string {
-  return label.replace(/\s+/gu, " ").replace(/[\\[\]]/gu, "\\$&");
-}
-
-/** An address as a markdown link's destination, in angle brackets so a parenthesis or a space in it breaks nothing. */
-function linkDestination(url: string): string {
-  return `<${url.replace(/[<>\s]/gu, encodeURIComponent)}>`;
-}
+/** Where the way back from an item standing alone leads, as its hint names it. */
+const INBOX_PLACE = "inbox";
 
 /**
  * A link block, drawn as a link alone in its paragraph of the item's own words is: the card of what it names where it earns one (`lone-link-card.tsx`), else its chip. Note that it is handed to the words as a markdown link, because that one path is what gives a link its mark, its live label, its card, and the door it opens; an address that opens nowhere keeps its label with the address beside it to copy.
@@ -238,7 +219,7 @@ export function LinkBlock({ url, label }: { url: string; label: string }): React
   if (opensAsLink(url)) {
     return (
       <div className="inbox-words">
-        <TranscriptWords text={`[${linkText(label)}](${linkDestination(url)})`} asDocument />
+        <TranscriptWords text={markdownLink(label, url)} asDocument />
       </div>
     );
   }
@@ -318,9 +299,9 @@ interface ItemAgent {
   readonly onOpen: () => void;
 }
 
-/** The agent in a line of the thread: its tile and name, which hang its card and open its tab. */
+/** The agent named in a line of the thread, whose tile its comment's face draws: its name, which hangs its card and opens its tab. */
 function AgentName({ by }: { by: ItemAgent }): React.JSX.Element {
-  return <AgentActorRef subject={by.subject} models={by.models} onOpen={by.onOpen} />;
+  return <AgentActorRef subject={by.subject} models={by.models} onOpen={by.onOpen} nameOnly />;
 }
 
 /** What the draft reply's head names the reader by, where nothing else names them. */
@@ -358,16 +339,57 @@ function DraftReply({
 }): React.JSX.Element {
   const reader = useReader(readerId);
   return (
-    <Comment
+    <InboxComment
       kind={COMMENT.DRAFT}
-      head={
-        <CommentName>
-          <ActorRef actor={reader} />
-        </CommentName>
-      }
+      author={commentAuthor(reader)}
+      nameRef={<ActorRef actor={reader} nameOnly />}
     >
       {children}
-    </Comment>
+    </InboxComment>
+  );
+}
+
+/** What a reply on its way says at its head's end. */
+const SENDING = "Sending";
+
+/**
+ * The reader's plain reply on its way, as the thread's last message before
+ * the draft reply: drawn as the reader's own message is, its files going
+ * up, and "Sending" at its head's end, until the item holds it, when the
+ * message it became stands in its place.
+ */
+function PendingReply({
+  readerId,
+  reply,
+  now,
+}: {
+  readerId: string | undefined;
+  reply: PendingInboxReply;
+  now: number;
+}): React.JSX.Element {
+  const reader = useReader(readerId);
+  return (
+    <InboxComment
+      kind={COMMENT.MESSAGE}
+      author={commentAuthor(reader)}
+      nameRef={<ActorRef actor={reader} nameOnly />}
+      at={reply.at}
+      now={now}
+      trailing={
+        <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
+          {SENDING}
+        </Text>
+      }
+    >
+      {reply.attachments.length === 0 ? null : (
+        <AttachedFileChips files={attachmentChips(reply.attachments)} uploading />
+      )}
+      {reply.text === "" ? null : (
+        <div className="inbox-words inbox-message-words" data-inbox-message-text="">
+          <SentWords text={reply.text} asDocument />
+        </div>
+      )}
+    </InboxComment>
   );
 }
 
@@ -587,7 +609,7 @@ const REPLACED = {
 function AnsweredMarker(): React.JSX.Element {
   return (
     <span data-inbox-settled="answered">
-      <Badge tone={BADGE_TONE.COMPLETE} icon={<CheckIcon aria-hidden="true" />}>
+      <Badge tone={STATUS_TONE.COMPLETE} icon={<CheckIcon aria-hidden="true" />}>
         {ANSWERED}
       </Badge>
     </span>
@@ -811,19 +833,13 @@ function ThreadMessage({
   const answers = message.answers;
   const answered = answers === undefined ? undefined : answeredAsk(thread, answers);
   return (
-    <Comment
+    <InboxComment
       kind={COMMENT.MESSAGE}
       messageId={message.id}
-      head={
-        <>
-          <CommentName>
-            {fromAgent ? <AgentName by={by} /> : <ActorRef actor={member} />}
-          </CommentName>
-          <span className="inbox-comment-when">
-            <Time className={THREAD_TIME_CLASS} at={message.createdAt} now={now} />
-          </span>
-        </>
-      }
+      author={commentAuthor(fromAgent ? by.subject.tile : member)}
+      nameRef={fromAgent ? <AgentName by={by} /> : <ActorRef actor={member} nameOnly />}
+      at={message.createdAt}
+      now={now}
     >
       {answers === undefined ? null : answered !== undefined && knownAsk(answered) ? (
         <AnsweredCard ask={answered} title={cardTitle(item.title)} answers={answers} />
@@ -865,12 +881,95 @@ function ThreadMessage({
           waitingOn={waitingOn}
         />
       )}
-    </Comment>
+    </InboxComment>
   );
 }
 
+/** No groups over the item's own. */
+const NO_LEAD: readonly MenuAction[][] = [];
+
+/** What a phone's item offers in its ⋯ over the item's own actions, past the bar's buttons it stands for. */
+export interface InboxPanePhone {
+  /** Opens the side panel beside the item, which the title bar's toggle opens elsewhere; none while it is open or where there is none. */
+  readonly onShowPanel: (() => void) | undefined;
+}
+
+/**
+ * What a phone's ⋯ leads with, in place of what the wide bar draws as
+ * buttons and crumbs: the pager's steps, then what the crumbs open, the
+ * item's task or automation and its agent, then the side panel.
+ */
+function phoneItemGroups(
+  holder: InboxHolder,
+  by: ItemAgent,
+  doors: InboxPaneDoors,
+  pager: InboxPager | undefined,
+  phone: InboxPanePhone,
+): MenuAction[][] {
+  const steps: MenuAction[] =
+    pager === undefined || (pager.onPrevious === undefined && pager.onNext === undefined)
+      ? []
+      : [
+          {
+            label: "Previous item",
+            icon: <ChevronUpIcon />,
+            disabled: pager.onPrevious === undefined,
+            onSelect: () => pager.onPrevious?.(),
+            command: APP_COMMAND.PREVIOUS_INBOX_ITEM,
+          },
+          {
+            label: "Next item",
+            icon: <ChevronDownIcon />,
+            disabled: pager.onNext === undefined,
+            onSelect: () => pager.onNext?.(),
+            command: APP_COMMAND.NEXT_INBOX_ITEM,
+          },
+        ];
+  const { onOpenHolder } = doors;
+  const holderItem: MenuAction[] =
+    onOpenHolder === undefined
+      ? []
+      : holder.kind === INBOX_HOLDER.TASK
+        ? [
+            {
+              label: OPEN_TASK,
+              detail: holder.task.name,
+              icon: tabLook({
+                kind: TAB_KIND.PLAN,
+                name: holder.task.name,
+                status: holder.task.status,
+              }).icon,
+              onSelect: onOpenHolder,
+            },
+          ]
+        : [
+            {
+              label: OPEN_AUTOMATION,
+              detail: holder.name,
+              icon: <ZapIcon />,
+              onSelect: onOpenHolder,
+            },
+          ];
+  const agentItem: MenuAction = {
+    label: OPEN_AGENT,
+    detail: by.subject.name,
+    icon: <BotIcon />,
+    onSelect: by.onOpen,
+  };
+  const panel: MenuAction[] =
+    phone.onShowPanel === undefined
+      ? []
+      : [{ label: "Show panel", icon: <SidePanelIcon />, onSelect: phone.onShowPanel }];
+  return [steps, [...holderItem, agentItem], panel].filter((group) => group.length > 0);
+}
+
+/** What a phone's ⋯ calls the crumbs' presses. */
+const OPEN_TASK = "Open task";
+const OPEN_AUTOMATION = "Open automation";
+const OPEN_AGENT = "Open agent";
+
 /** What the pane's ⋯ menu is called, which is its tooltip too. */
-const ITEM_MENU_LABEL = "Item actions";
+const ITEM_THING = "Item";
 
 /**
  * The item's ⋯ menu at the end of the pane's bar, as an issue's page and an
@@ -886,12 +985,18 @@ function InboxItemMenu({
   shown,
   onMark,
   onClose,
+  lead = NO_LEAD,
+  heading,
 }: {
   holder: InboxHolder;
   item: InboxItem;
   shown: boolean;
   onMark: InboxPaneDoors["onMark"];
   onClose: InboxCloser | undefined;
+  /** Groups over the item's own, as a phone's head leads its ⋯ with what its bar drew as buttons (`phoneItemGroups`); none elsewhere. */
+  lead?: readonly MenuAction[][];
+  /** Muted over the items, pressed by nothing: where the item stands in the list, on a phone. */
+  heading?: React.ReactNode;
 }): React.JSX.Element | null {
   const menu = useMenu(shown);
   const read: MenuAction | undefined =
@@ -908,6 +1013,7 @@ function InboxItemMenu({
   );
   const close = useInboxClose(item, onClose, shown);
   const groups = [
+    ...lead,
     read === undefined ? [] : [read],
     copyLink === undefined ? [] : [copyLink],
     close.action === undefined ? [] : [close.action],
@@ -915,13 +1021,12 @@ function InboxItemMenu({
   if (groups.length === 0) return null;
   return (
     <>
-      <Tooltip label={ITEM_MENU_LABEL}>
-        <IconButton icon={<EllipsisIcon />} label={ITEM_MENU_LABEL} {...menu.trigger()} />
-      </Tooltip>
+      <MoreButton thing={ITEM_THING} {...menu.trigger()} />
       {menu.drawn === undefined ? null : (
         <ActionMenu
-          label={ITEM_MENU_LABEL}
+          label={moreLabel(ITEM_THING)}
           menu={menu.drawn}
+          heading={heading}
           groups={groups}
           onClose={menu.close}
         />
@@ -945,9 +1050,15 @@ function Subject({
 }): React.JSX.Element {
   return (
     <header className="inbox-subject">
-      <h2 ref={heading} className="inbox-subject-title" data-inbox-title="">
+      <Text
+        as={TEXT_ELEMENT.H2}
+        variant={TEXT_VARIANT.DIALOG}
+        ref={heading}
+        className="inbox-subject-title"
+        data-inbox-title=""
+      >
         {cardTitle(item.title)}
-      </h2>
+      </Text>
     </header>
   );
 }
@@ -1120,7 +1231,8 @@ function Crumbs({
 /**
  * One item at reading size, as a comment thread: under the pane's crumbs,
  * the item's title alone as the thread's subject, then every message of
- * its thread, oldest first, and the reader's draft reply at its end, the
+ * its thread, oldest first, a plain reply of the reader's on its way after
+ * them (`PendingReply`), and the reader's draft reply at its end, the
  * open ask's controls standing in it. Once the item is settled, the next
  * item that needs the developer is offered under the board
  * (`inbox-pager.tsx`).
@@ -1140,6 +1252,7 @@ export function InboxPane({
   pager,
   next,
   mentions,
+  phone,
 }: {
   /** What holds the item: its task, or the automation that started its agent with no task. */
   holder: InboxHolder;
@@ -1158,6 +1271,13 @@ export function InboxPane({
   next: InboxNext | undefined;
   /** What the box's `@` offers where the page around the pane hands nothing, as the window's Inbox does; the page's own otherwise. */
   mentions?: TaskMentionsValue | undefined;
+  /**
+   * A phone's head (`phone-head.tsx`), where the item stands alone on a
+   * phone: the way back's glyph, the item's title centred, and one ⋯
+   * holding the pager, what the crumbs open, the panel, and the item's own
+   * actions; none elsewhere, where the bar draws its crumbs and buttons.
+   */
+  phone?: InboxPanePhone | undefined;
 }): React.JSX.Element {
   const now = useMinute();
   const board = useRef<HTMLDivElement>(null);
@@ -1177,6 +1297,7 @@ export function InboxPane({
   const open = item.status === INBOX_STATUS.OPEN;
   const draft = control.draftOf(item);
   const thread = item.thread ?? NO_MESSAGES;
+  const pending = pendingReplyOn(control.pendingReplies, item);
   useOptionNumbers(pane, item, draft, control, open ? numberedPickOf(thread) : undefined);
   const formText: FormTextDoors = {
     self: item.agentId,
@@ -1196,7 +1317,7 @@ export function InboxPane({
   const wordsAlone = openAsk?.type === INBOX_ASK.ANSWER && openAsk.fields === undefined;
   const question =
     openAsk === undefined || wordsAlone ? undefined : (
-      <DraftQuestion pane={pane}>
+      <DraftQuestion pane={pane} ask={openAsk}>
         <AskControls
           ask={openAsk}
           title={cardTitle(item.title)}
@@ -1230,37 +1351,60 @@ export function InboxPane({
       aria-label={cardTitle(item.title)}
       hidden={hidden}
     >
-      <PageToolbar
-        lead={
-          <>
-            {onBack === undefined ? null : (
-              <FoldingButton label="Inbox" icon={<BackIcon />} onClick={onBack} hint={BackHint} />
-            )}
-            <Crumbs
+      {phone !== undefined && onBack !== undefined ? (
+        <PhoneHead
+          place="inbox-item"
+          start={<BackButton label="Inbox" place={INBOX_PLACE} onBack={onBack} />}
+          title={cardTitle(item.title)}
+          end={
+            <InboxItemMenu
+              key={item.id}
               holder={holder}
-              by={by}
-              doors={doors}
-              title={cardTitle(item.title)}
-              titleShown={headingAway}
+              item={item}
+              shown={!hidden}
+              onMark={doors.onMark}
+              onClose={doors.onClose}
+              lead={phoneItemGroups(holder, by, doors, pager, phone)}
+              heading={
+                pager?.count === undefined ? undefined : `${pager.count.at} of ${pager.count.total}`
+              }
             />
-            {/* The bar ends in the pager, where the item stands alone, and the item's ⋯ menu. */}
-            <div className="desktop-toolbar-actions inbox-item-actions">
-              {pager === undefined ||
-              (pager.onPrevious === undefined && pager.onNext === undefined) ? null : (
-                <InboxPagerControls pager={pager} />
+          }
+        />
+      ) : (
+        <PageToolbar
+          start={TOOLBAR_INSET.COLUMN}
+          lead={
+            <div className="inbox-item-bar">
+              {onBack === undefined ? null : (
+                <BackButton label="Inbox" place={INBOX_PLACE} onBack={onBack} />
               )}
-              <InboxItemMenu
-                key={item.id}
+              <Crumbs
                 holder={holder}
-                item={item}
-                shown={!hidden}
-                onMark={doors.onMark}
-                onClose={doors.onClose}
+                by={by}
+                doors={doors}
+                title={cardTitle(item.title)}
+                titleShown={headingAway}
               />
+              {/* The bar ends in the pager, where the item stands alone, and the item's ⋯ menu. */}
+              <div className="luke-toolbar-actions inbox-item-actions">
+                {pager === undefined ||
+                (pager.onPrevious === undefined && pager.onNext === undefined) ? null : (
+                  <InboxPagerControls pager={pager} />
+                )}
+                <InboxItemMenu
+                  key={item.id}
+                  holder={holder}
+                  item={item}
+                  shown={!hidden}
+                  onMark={doors.onMark}
+                  onClose={doors.onClose}
+                />
+              </div>
             </div>
-          </>
-        }
-      />
+          }
+        />
+      )}
       <Fill className="desktop-inbox">
         {/* The thread is a log as an agent's transcript is: each item opens at its newest message, the box at its end, and keeps to it while the reader is there; scrolled up, the way back floats over its foot. */}
         <Conversation subject={item.id} list={board}>
@@ -1274,7 +1418,7 @@ export function InboxPane({
                     as={LAYOUT_ELEMENT.OL}
                     gap={GAP.NONE}
                     className="inbox-thread"
-                    aria-label="Thread"
+                    aria-label="Messages"
                   >
                     {thread.map((message, at) => (
                       <Fragment key={message.id}>
@@ -1293,6 +1437,9 @@ export function InboxPane({
                         ) : null}
                       </Fragment>
                     ))}
+                    {pending === undefined ? null : (
+                      <PendingReply readerId={readerId} reply={pending} now={now} />
+                    )}
                     {draftReply}
                   </Stack>
                 </LoneLinkCards>

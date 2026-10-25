@@ -22,7 +22,7 @@ import { task } from "./task.js";
  * closes. The agent is named by its own conversation, the one its sandbox
  * is kept for (`coding_agent.conversation_id`), and a worker's tabs are its
  * parent's, whose sandbox it works in. So a tab goes with its agent's
- * conversation, however that conversation is removed, the thirty-day purge
+ * conversation, however that conversation is removed, the seven-day purge
  * of a deleted one among them, and with its task.
  *
  * The CDP target id is the browser's own name for the tab, unique within

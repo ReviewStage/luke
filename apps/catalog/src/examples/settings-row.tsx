@@ -1,3 +1,4 @@
+import { APP_COMMAND, APP_SHORTCUTS } from "@luke/settings/shortcuts";
 import {
   AVATAR_SIZE,
   Avatar,
@@ -23,6 +24,7 @@ import {
   SettingsRowValue,
   SettingsSavedMark,
   SettingsSection,
+  Shortcut,
   Switch,
   TEXT_ELEMENT,
   TEXT_FIELD_TYPE,
@@ -131,7 +133,7 @@ function SlottedRows(): React.JSX.Element {
       <SettingsRow
         label="Show captions"
         adornment={
-          <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.SUBTLE} as={TEXT_ELEMENT.SPAN}>
+          <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED} as={TEXT_ELEMENT.SPAN}>
             Modified
           </Text>
         }
@@ -276,19 +278,15 @@ function CompactRows(): React.JSX.Element {
 /** List rows, a reference read down rather than set, as the window's keyboard shortcuts stand. */
 function ListRows(): React.JSX.Element {
   const commands = [
-    { label: "Command palette", chord: "⌘K" },
-    { label: "Find previous", chord: "⇧⌘G" },
-    { label: "Permanently delete task", chord: "⌥⌘⌫" },
+    APP_SHORTCUTS[APP_COMMAND.COMMAND_PALETTE],
+    APP_SHORTCUTS[APP_COMMAND.FIND_PREVIOUS],
+    APP_SHORTCUTS[APP_COMMAND.DELETE_TASK],
   ];
   return (
     <SettingsSection title="General">
       {commands.map((command) => (
         <SettingsRow key={command.label} density={SETTINGS_ROW_DENSITY.LIST} label={command.label}>
-          {() => (
-            <Text variant={TEXT_VARIANT.LABEL} tone={TEXT_TONE.MUTED}>
-              {command.chord}
-            </Text>
-          )}
+          {() => <Shortcut chord={command.chord} value spoken />}
         </SettingsRow>
       ))}
     </SettingsSection>

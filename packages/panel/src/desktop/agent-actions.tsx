@@ -29,10 +29,10 @@ import { type TabDoors, type TranscriptRead, useTranscriptCopier } from "./strip
  * automation's run starts, is acted on as a task's is: its tab, its page,
  * and its sidebar row, which leaves out only what `NOT_ON_A_ROW` names.
  * Rename, which opens its name's field where the surface draws its name,
- * while neither it nor what it stands under is archived; Open terminal, where the platform runs one,
+ * while neither it nor what it stands under is archived; Show terminal, where the platform runs one,
  * and none for an archived agent, whose sandbox takes no shell; Copy link; its transcript's
- * two copies, read whole from the service; Archive agent, asked first
- * while it works (`agent-archive.tsx`), or Unarchive once it is archived;
+ * two copies, read whole from the service; Archive, asked first
+ * while a teammate's agent works (`agent-archive.tsx`), or Unarchive once it is archived;
  * and last and alone, Permanently delete, always asked first
  * (`agent-delete.tsx`), which closes the surface once it landed.
  * Run, which runs the agent's pushed branch on this Mac, stands on its
@@ -203,6 +203,7 @@ export function useAgentActions(
     | "archivedAt"
     | "brief"
     | "kind"
+    | "startedBy"
   >,
   agents: CodingAgentsControl,
   input: {

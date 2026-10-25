@@ -4,9 +4,9 @@ import {
   type ReviewCommentMode,
 } from "@luke/features/pull-request-write-wire";
 import { BUTTON_VARIANT, Button, CARD_CORNER, CARD_PADDING, Card } from "@luke/ui";
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 import { type CommentLines, commentLinesLabel } from "./changes-model.js";
-import { MarkdownField } from "./markdown-field.js";
+import { CommentEditor, overCommentBound } from "./comment-editor.js";
 import { PullRequestWriteNote, usePullRequestWrites, WRITE_NOTE } from "./pull-request-writes.js";
 
 /**
@@ -28,14 +28,15 @@ import { PullRequestWriteNote, usePullRequestWrites, WRITE_NOTE } from "./pull-r
  * pushed since is the likeliest why. The words are the view's, kept by its
  * file and lines, so a comment scrolled out of the list and back loses
  * nothing, and several stand open at once across lines and files
- * (`comment-drafts.ts`). On lines of the head alone, the new side's, its toolbar offers a suggestion,
- * GitHub's ```suggestion block holding those lines as they read now.
+ * (`comment-drafts.ts`). On lines of the head alone, the new side's, its `/` menu and a press over
+ * its words offer a suggestion, GitHub's ```suggestion block holding those
+ * lines as they read now (`comment-editor.tsx`).
  */
 
 /** The comment's own words. */
 const LINE_WORDS = {
   FIELD: "Comment",
-  PLACEHOLDER: "Leave a comment in Markdown…",
+  PLACEHOLDER: "Add a comment",
   CANCEL: "Cancel",
   SINGLE: "Add single comment",
   START: "Start a review",
@@ -52,7 +53,7 @@ export type PendingReview = { readonly comments: number } | null | undefined;
 
 /**
  * The comment under the lines it is on: its head naming them, the words
- * with their preview, GitHub's answer where it did not take it, and Cancel
+ * written as they are drawn, GitHub's answer where it did not take it, and Cancel
  * with what GitHub offers. ⌘↩ sends it the way the first offer does, and
  * Escape lets it go unless it is on its way.
  */
@@ -91,9 +92,8 @@ export function LineComment({
   const writes = usePullRequestWrites(agentId, onWritten);
   // Which offer sent the comment out, which alone wears the wait.
   const [sentAs, setSentAs] = useState<ReviewCommentMode | undefined>(undefined);
-  const field = useRef<HTMLTextAreaElement>(null);
   const sending = writes.pending !== undefined;
-  const blank = body.trim() === "";
+  const blank = body.trim() === "" || overCommentBound(body);
   const holding = pending != null;
   const send = (mode: ReviewCommentMode) => {
     if (blank || sending || headSha === undefined) return;
@@ -107,25 +107,6 @@ export function LineComment({
     );
   };
   const first = holding ? REVIEW_COMMENT_MODE.REVIEW : REVIEW_COMMENT_MODE.SINGLE;
-
-  // Note that the list stands a new comment's note in the file only once it
-  // draws again, after this comment is drawn, so the words take the keyboard
-  // once they stand in the window.
-  useEffect(() => {
-    const area = field.current;
-    if (area === null) return undefined;
-    if (area.isConnected) {
-      area.focus();
-      return undefined;
-    }
-    const standing = new MutationObserver(() => {
-      if (!area.isConnected) return;
-      standing.disconnect();
-      area.focus();
-    });
-    standing.observe(document.body, { childList: true, subtree: true });
-    return () => standing.disconnect();
-  }, []);
 
   return (
     // Note that Escape anywhere in the comment lets it go, as it does in GitHub's own.
@@ -142,14 +123,17 @@ export function LineComment({
       }}
     >
       <p className="line-comment-head">{LINE_WORDS.on(commentLinesLabel(lines))}</p>
-      <MarkdownField
+      <CommentEditor
         label={LINE_WORDS.FIELD}
         placeholder={LINE_WORDS.PLACEHOLDER}
         value={body}
         onChange={onBody}
         busy={sending}
-        fieldRef={field}
+        focus
         onSubmit={() => send(first)}
+        onCancel={() => {
+          if (!sending) onClose();
+        }}
         suggestion={suggestion}
       />
       {headSha === undefined ? <p className="line-comment-note">{LINE_WORDS.NO_HEAD}</p> : null}

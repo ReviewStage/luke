@@ -7,7 +7,10 @@
  * body with it. This hook hands it on: as the item comes to stand, to the
  * first control in its column, the way back to the list each screen leads
  * it with, or its heading; and as the list comes back, to the row chosen in
- * it, which the list marks `aria-current`. Only a focus the swap took away
+ * it, which the list marks `aria-current`, the item shown now though a
+ * key stepped to it from another; or, where the list marks none and the
+ * item was opened from a menu, as a phone's ⋯ opens an automation's runs, to the control the
+ * focus left in the list as it hid. Only a focus the swap took away
  * is handed on, never one standing somewhere still shown, such as a field
  * the step to the list was taken for. The same holds as a wide room turns
  * narrow and hides one of the two columns it stood side by side, and as a
@@ -103,6 +106,8 @@ export function useNarrowFocus(
   const screen = useRef<HTMLDivElement>(null);
   const was = useRef<Shown>(undefined);
   const handed = useRef<HTMLElement>(undefined);
+  // The control the focus left in the list as the item came to stand, which takes it back where no opener names the item.
+  const left = useRef<HTMLElement>(undefined);
   // Note that this runs before paint, so the focus moves before the browser
   // settles a focus left in a hidden column on the body, and before a screen
   // reader is told of the body. It runs after every render, because the
@@ -131,10 +136,19 @@ export function useNarrowFocus(
     if (list === null || list === undefined || item === null || item === undefined) return;
     was.current = now;
     handed.current = undefined;
+    const active = document.activeElement;
+    if (!listed && active instanceof HTMLElement && list.contains(active)) left.current = active;
     if (!focusLost(listed ? item : list)) return;
+    const back =
+      left.current !== undefined &&
+      list.contains(left.current) &&
+      left.current.closest("[inert]") === null
+        ? left.current
+        : undefined;
     const target = listed
-      ? (openerIn(list, item) ?? firstIn(list, CHOSEN) ?? firstIn(list, FOCUSABLE))
+      ? (openerIn(list, item) ?? firstIn(list, CHOSEN) ?? back ?? firstIn(list, FOCUSABLE))
       : (firstIn(item, FOCUSABLE) ?? headingOf(item));
+    if (listed) left.current = undefined;
     target?.focus();
     handed.current = target;
   });

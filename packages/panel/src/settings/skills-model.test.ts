@@ -16,6 +16,7 @@ import {
 } from "@luke/features/installed-skill-wire";
 import { parseSkillPaste, SKILL_PASTE_KIND } from "@luke/features/skill-paste";
 import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
+import { STATUS_TONE } from "@luke/ui";
 import { test } from "vitest";
 import {
   ADD_SKILL_SCREEN,
@@ -26,7 +27,6 @@ import {
   candidateMarks,
   candidateNote,
   confirmView,
-  DETECTED_TONE,
   everyTicked,
   failureLine,
   fencedSkillFile,
@@ -207,23 +207,23 @@ test("a workspace skill whose installer is gone or unknown names nobody", () => 
 test("Everyone in the workspace is offered to every member, and never in a personal workspace", () => {
   const labels = (shown: Workspace) => installScopes(shown).map((each) => each.label);
 
-  assert.deepEqual(labels(workspace()), ["Just me", "Everyone in Stage"]);
+  assert.deepEqual(labels(workspace()), ["Only you", "Everyone in Stage"]);
   assert.deepEqual(labels(workspace({ role: WORKSPACE_ROLE.ADMIN })), [
-    "Just me",
+    "Only you",
     "Everyone in Stage",
   ]);
   assert.deepEqual(labels(workspace({ role: WORKSPACE_ROLE.OWNER })), [
-    "Just me",
+    "Only you",
     "Everyone in Stage",
   ]);
-  assert.deepEqual(labels(workspace({ role: WORKSPACE_ROLE.OWNER, personal: true })), ["Just me"]);
+  assert.deepEqual(labels(workspace({ role: WORKSPACE_ROLE.OWNER, personal: true })), ["Only you"]);
 });
 
 test("the box says at once what it was read as, and a source on another host says only GitHub for now", () => {
   assert.equal(pastedLine(parseSkillPaste("   ")), undefined);
   assert.deepEqual(pastedLine(parseSkillPaste("npx skills add vercel-labs/agent-skills")), {
     text: "Reading vercel-labs/agent-skills…",
-    tone: DETECTED_TONE.WAITING,
+    tone: STATUS_TONE.NEUTRAL,
   });
   assert.equal(
     pastedLine(parseSkillPaste("---\nname: pr-style\ndescription: How PRs read.\n---\n# PR style"))
@@ -232,7 +232,7 @@ test("the box says at once what it was read as, and a source on another host say
   );
   assert.deepEqual(pastedLine(parseSkillPaste("npx skills add https://gitlab.com/acme/skills")), {
     text: "Only GitHub sources for now.",
-    tone: DETECTED_TONE.PROBLEM,
+    tone: STATUS_TONE.ATTENTION,
   });
 });
 
@@ -240,7 +240,7 @@ test("a preview with skills says nothing under the box, and a repository with no
   assert.equal(previewLine(SOURCE), undefined);
   assert.deepEqual(previewLine({ ...SOURCE, skills: [] }), {
     text: "No skills found in vercel-labs/agent-skills @ 3f9c2e1.",
-    tone: DETECTED_TONE.PROBLEM,
+    tone: STATUS_TONE.ATTENTION,
   });
 });
 
@@ -302,7 +302,7 @@ test("the title names the one skill confirmed or the repository browsed, and the
       bytes: 1229,
       problems: [],
     }),
-    "Pasted text · 1.2 KB",
+    "Pasted text · 1.2 kB",
   );
   assert.equal(
     missingLine({ ...MATT, missing: ["grill-mee"] }),
@@ -492,6 +492,12 @@ test("the browse list sorts by name, groups only where the repository's plugins 
     [["productivity", ["grill-me"]]],
   );
   assert.deepEqual(skillList(grouped, "nothing like it"), []);
+  // Each word may land in a different line: the name holds one, the description the other.
+  assert.deepEqual(
+    skillList(grouped, "grill plan").map((group) => group.skills.map((each) => each.name)),
+    [["grill-me"]],
+  );
+  assert.deepEqual(skillList(grouped, "grill nothing"), []);
 });
 
 test("a source installs what the plan installs, and nothing while it installs nothing", () => {
@@ -670,8 +676,8 @@ test("Share asks in plain words who gets the skill and that it leaves the accoun
   assert.deepEqual(shareQuestion("grill-me", workspace()), {
     title: "Share grill-me with Stage?",
     body: "Everyone in Stage will get grill-me. It leaves your personal skills.",
-    verb: "Share",
-    running: "Sharing…",
+    verb: "Share with workspace",
+    running: "Sharing",
   });
   assert.equal(
     shareFailureLine({ failure: INSTALLED_SKILL_CALL_FAILURE.NAME_TAKEN }, "grill-me", workspace()),
@@ -679,7 +685,7 @@ test("Share asks in plain words who gets the skill and that it leaves the accoun
   );
   assert.equal(
     shareFailureLine({ failure: INSTALLED_SKILL_CALL_FAILURE.UNANSWERED }, "grill-me", workspace()),
-    "Luke couldn't reach the service. Try again.",
+    "The service could not be reached. Try again.",
   );
 });
 

@@ -1,0 +1,14 @@
+{
+  "name": "@luke/polish",
+  "version": "0.20.0",
+  "private": true,
+  "type": "module",
+  "description": "The polish capture: one runner over every scene of the app, both themes, three widths, run by hand or by an agent",
+  "scripts": {
+    "test:vitest": "vitest run"
+  },
+  "devDependencies": {
+    "jsdom": "^30.0.1",
+    "vitest": "catalog:"
+  }
+}

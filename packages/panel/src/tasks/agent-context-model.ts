@@ -3,8 +3,8 @@ import {
   type CodingAgentBrief,
   type CodingAgentContext,
 } from "@luke/features/coding-agent-wire";
-import { agoText } from "@luke/ui/time-format";
-import { compactCount } from "./coding-agent-model.js";
+import { formatCompact } from "@luke/features/number-format";
+import { agoText } from "@luke/features/time-format";
 
 /**
  * agent-context-model.ts -- what the agent box's context ring and its popover say of the agent's model's context.
@@ -71,11 +71,6 @@ export interface ContextStat {
   readonly value: string;
 }
 
-/** A count rounded where it is whole, as a window reads: 200k, 1M, 1.5M. */
-function roundCount(count: number): string {
-  return compactCount(count).replace(/\.0(?=[kM]$)/u, "");
-}
-
 /** The share of the window the last step read, past one where it read more than the window holds. */
 export function contextShare(context: CodingAgentContext): number {
   return context.inputTokens / context.windowTokens;
@@ -96,9 +91,10 @@ export function contextLevel(context: CodingAgentContext): ContextLevel {
   return CONTEXT_LEVEL.ROOM;
 }
 
-/** The ring's hover: "62% of context used". */
+/** The ring's hover: "62% of context used", and ", near the limit" once the ring has turned amber or red, so the warning is not colour alone. */
 export function contextHint(context: CodingAgentContext): string {
-  return `${contextPercent(context)}% of context used`;
+  const used = `${contextPercent(context)}% of context used`;
+  return contextLevel(context) === CONTEXT_LEVEL.ROOM ? used : `${used}, near the limit`;
 }
 
 /** The popover's headline: "62% full". */
@@ -106,9 +102,9 @@ export function contextFullLine(context: CodingAgentContext): string {
   return `${contextPercent(context)}% full`;
 }
 
-/** The popover's total: "~620.0k / 1M tokens". */
+/** The popover's total: "~620K / 1M tokens". */
 export function contextTotalLine(context: CodingAgentContext): string {
-  return `${ESTIMATE_MARK}${compactCount(context.inputTokens)} / ${roundCount(context.windowTokens)} tokens`;
+  return `${ESTIMATE_MARK}${formatCompact(context.inputTokens)} / ${formatCompact(context.windowTokens)} tokens`;
 }
 
 /**
@@ -158,9 +154,9 @@ export function contextRows(
   return fitted;
 }
 
-/** A legend row's count: "~1.2k" for an estimate, "1.2k" for a count. */
+/** A legend row's count: "~1.2K" for an estimate, "1.2K" for a count. */
 export function rowCount(row: ContextRow): string {
-  return row.estimated ? `${ESTIMATE_MARK}${compactCount(row.tokens)}` : compactCount(row.tokens);
+  return row.estimated ? `${ESTIMATE_MARK}${formatCompact(row.tokens)}` : formatCompact(row.tokens);
 }
 
 /** How wide a part's stretch of the bar is, as a percentage of the bar: of the window, or of the read where it overran the window. */
@@ -172,18 +168,18 @@ export function rowWidth(row: ContextRow, context: CodingAgentContext): number {
 export function contextStats(context: CodingAgentContext, now: number): ContextStat[] {
   const stats: ContextStat[] = [];
   if (context.cachedInputTokens !== undefined) {
-    stats.push({ label: "Read from cache", value: compactCount(context.cachedInputTokens) });
+    stats.push({ label: "Read from cache", value: formatCompact(context.cachedInputTokens) });
   }
   if (context.cacheWriteTokens !== undefined && context.cacheWriteTokens > 0) {
-    stats.push({ label: "Written to cache", value: compactCount(context.cacheWriteTokens) });
+    stats.push({ label: "Written to cache", value: formatCompact(context.cacheWriteTokens) });
   }
-  stats.push({ label: "Last step's output", value: compactCount(context.outputTokens) });
+  stats.push({ label: "Last step's output", value: formatCompact(context.outputTokens) });
   const thresholdPercent = Math.round(
     (context.compactionThresholdTokens / context.windowTokens) * 100,
   );
   stats.push({
     label: "Compacts at",
-    value: `${roundCount(context.compactionThresholdTokens)} (${thresholdPercent}%)`,
+    value: `${formatCompact(context.compactionThresholdTokens)} (${thresholdPercent}%)`,
   });
   if (context.compactedAt !== undefined) {
     stats.push({ label: "Last compacted", value: agoText(context.compactedAt, now) });

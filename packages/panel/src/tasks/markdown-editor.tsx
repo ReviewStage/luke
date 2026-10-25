@@ -1,6 +1,7 @@
 import { useAtomValue } from "@effect/atom-react";
 import { decodeMention } from "@luke/features/mention-link";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
+import { ANNOUNCE } from "@luke/ui";
 import { AsyncResult } from "effect/reactivity";
 import {
   type ReactNode,
@@ -18,6 +19,7 @@ import {
   type EditorAnchor,
   type EditorAnchors,
   type EditorDiagram,
+  type Finish,
   type HeadingsChange,
   type MentionNode,
   type MentionNodeDoors,
@@ -28,6 +30,7 @@ import {
   SLASH_INSERT,
   type SlashBlock,
 } from "../plan-editor/contract.js";
+import { useAnnounceShown } from "../use-announce-shown.js";
 import { type OwnBlock, useBlockPicker } from "./block-picker.js";
 import type { EditorPictures } from "./editor-pictures.js";
 import { type MentionDoors, MentionNodeChip, pastedMentionNode } from "./mention-chip.js";
@@ -76,8 +79,10 @@ interface MarkdownEditorMentions {
   readonly doors: MentionDoors;
   /** What the `@` list offers but the document's own words, which the editor reads as they stand. */
   readonly source: Omit<MentionSource, "text">;
-  /** A mention's target named again where an edit moved the section it names; none where the document's sections are named by no mention. */
-  readonly retarget?: ((target: string, change: HeadingsChange) => string | undefined) | undefined;
+  /** A mention named again, its target and its name, where an edit renamed or moved the section it names; none where the document's sections are named by no mention. */
+  readonly retarget?:
+    | ((target: string, change: HeadingsChange) => MentionNode | undefined)
+    | undefined;
 }
 
 /** What a document hands its editor: its text, the doors it hears it through, and what it opts into. */
@@ -98,8 +103,8 @@ export interface MarkdownEditorProps {
   readonly focus?: boolean | undefined;
   /** The text as it would be saved now, after each change, and where the comment threads' words stand in it, where the document carries any. */
   readonly onDraft: (markdown: string, anchors?: EditorAnchors) => void;
-  /** Esc or ⌘↩, with the section the caret stood in, which a document with no sections need not read. */
-  readonly onFinish: (section: number) => void;
+  /** Esc or ⌘↩, with the section the caret stood in, which a document with no sections need not read, and which of the two it was. */
+  readonly onFinish: (section: number, how: Finish) => void;
   /** Focus leaving the room for anywhere but its own toolbar and menus; none where the document stays open. */
   readonly onLeave?: (() => void) | undefined;
   /** Where the mounted editor's handle is kept, for a document that asks it more than its drafts. */
@@ -149,7 +154,7 @@ function MountedEditor({
     const mounted = module.mount(host.current, {
       ...latest.current,
       onDraft: (markdown, anchors) => latest.current.onDraft(markdown, anchors),
-      onFinish: (section) => latest.current.onFinish(section),
+      onFinish: (section, how) => latest.current.onFinish(section, how),
       onLeaveUp:
         latest.current.onLeaveUp === undefined ? undefined : () => latest.current.onLeaveUp?.(),
       // Note that the mentions' doors are read as they are used, as the rest are.
@@ -262,6 +267,8 @@ export function MarkdownEditor({
       if (block === SLASH_INSERT.PICTURE) pictures?.choose?.();
     },
   });
+  // The text names itself a combobox for whichever list stands over it, the `@` list or the block menu, and a textbox while neither does.
+  useLayoutEffect(() => handle.current?.setAria(mentioning ? picker.aria : blocks.aria));
   // The words selected raise the format toolbar over them, which stands aside while the `@` list or the block menu stands.
   const toolbar = useSelectionToolbar({
     editor: handle,
@@ -276,14 +283,13 @@ export function MarkdownEditor({
     roomClassName === undefined
       ? `${ROOM_CLASS} ph-no-capture`
       : `${ROOM_CLASS} ${roomClassName} ph-no-capture`;
+  useAnnounceShown(ANNOUNCE.ALERT, AsyncResult.isFailure(module) ? EDITOR_LOAD_FAILED : "");
   if (!AsyncResult.isSuccess(module)) {
     return (
       <section ref={room} className={roomClass} aria-busy="true">
         {loading}
         {AsyncResult.isFailure(module) ? (
-          <p className="plan-editor-note" role="alert">
-            {EDITOR_LOAD_FAILED}
-          </p>
+          <p className="plan-editor-note">{EDITOR_LOAD_FAILED}</p>
         ) : null}
       </section>
     );
@@ -297,7 +303,7 @@ export function MarkdownEditor({
     placeholder,
     className,
     onDraft,
-    onFinish: (section) => once(() => onFinish(section)),
+    onFinish: (section, how) => once(() => onFinish(section, how)),
     onLeaveUp,
     mentions:
       mentions === undefined

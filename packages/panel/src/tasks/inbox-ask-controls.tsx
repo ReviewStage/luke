@@ -10,6 +10,8 @@ import {
   type InboxForm,
   recommendedLabels,
 } from "@luke/features/inbox-wire";
+import { FIELD_WORDS } from "@luke/features/words";
+import { SHORTCUT_KEY, type ShortcutChord } from "@luke/settings/shortcuts";
 import {
   Badge,
   BUTTON_SIZE,
@@ -28,12 +30,18 @@ import {
   LAYOUT_ELEMENT,
   ReadableControls,
   Stack,
+  TEXT_AREA_SUBMIT,
+  TEXT_ELEMENT,
   TEXT_FIELD_TYPE,
+  TEXT_TONE,
+  TEXT_VARIANT,
+  Text,
   TextField,
 } from "@luke/ui";
 import type { Actor } from "@luke/ui/actor-model";
-import { CheckIcon, CircleSlashIcon, Undo2Icon } from "lucide-react";
+import { CheckIcon, GLYPH, Undo2Icon } from "@luke/ui/icons";
 import { ActorLine, ActorRef } from "../actor-ref.js";
+import { modEnterSends } from "../enter-sends.js";
 import { type FormTextDoors, type FormTextProps, InboxFormText } from "./inbox-form-text.js";
 import {
   ANSWER_TONE,
@@ -46,11 +54,13 @@ import {
   INBOX_MISSING,
   type InboxDraft,
   type InboxMissing,
+  severalFields,
   shownTicks,
   withDoPress,
   withStep,
   withValue,
 } from "./inbox-model.js";
+import { ANSWER_STATUS_TONE } from "./inbox-stamp.js";
 import { REPLY_SCOPE } from "./reply-to-selection.js";
 import { SentWords } from "./skill-chip.js";
 
@@ -63,8 +73,9 @@ import { SentWords } from "./skill-chip.js";
  * are pressed, picked, ticked, or filled, the box's Send sending it; an
  * answered ask's stand as the answer left them, read-only and at full
  * strength. Enter on an option or in a field sends the box the controls
- * stand in (`DraftQuestion`), and a send lacking something takes the
- * keyboard to it (`focusMissing`). An ask's words, its options and its
+ * stand in (`DraftQuestion`), save in a form of several fields, where Enter
+ * only picks and ⌘ or Ctrl with Enter sends, and a send lacking something
+ * takes the keyboard to it (`focusMissing`). An ask's words, its options and its
  * steps, select and copy whether it is open or not (`ReadableControls`), a
  * drag over them picking and ticking nothing, and stand Reply over them as
  * the words around them do (`reply-to-selection.tsx`), a field's own
@@ -149,15 +160,24 @@ function ChoiceOptions({
   );
 }
 
-/** What marks a field that may be left empty, since most must be filled. */
-const OPTIONAL = "Optional";
+/** Whether a field may be left empty, since most must be filled. */
+function optionalField(field: InboxField): boolean {
+  return field.required !== true;
+}
 
-/** A field's name, and "Optional" after it where it may be left empty. */
-function FieldLabel({ field }: { field: InboxField }): React.JSX.Element {
+/** A yes or no's name, and "Optional" after it where it may be left empty, in the muted caption `FormField` sets it in. */
+function CheckboxWords({ field }: { field: InboxField }): React.JSX.Element {
   return (
     <>
       {field.label}
-      {field.required === true ? null : <span className="inbox-field-optional">{OPTIONAL}</span>}
+      {optionalField(field) ? (
+        <>
+          {" "}
+          <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
+            {FIELD_WORDS.OPTIONAL}
+          </Text>
+        </>
+      ) : null}
     </>
   );
 }
@@ -244,7 +264,8 @@ function InboxFormField({
       return (
         <div {...fieldFrame(field, readOnly)}>
           <FormField
-            label={<FieldLabel field={field} />}
+            label={field.label}
+            optional={optionalField(field)}
             count={
               readOnly
                 ? undefined
@@ -277,7 +298,7 @@ function InboxFormField({
     case INBOX_FIELD.NUMBER:
       return (
         <div {...fieldFrame(field, readOnly)}>
-          <FormField label={<FieldLabel field={field} />}>
+          <FormField label={field.label} optional={optionalField(field)}>
             {(control) => (
               <div className="inbox-field-short">
                 <TextField
@@ -297,30 +318,32 @@ function InboxFormField({
     case INBOX_FIELD.SELECT:
       return (
         <div {...fieldFrame(field, readOnly)}>
-          <span className="inbox-field-name" aria-hidden="true">
-            <FieldLabel field={field} />
-          </span>
-          <ChoiceList
-            legend={field.label}
-            options={(field.options ?? []).map((option) => ({
-              value: option,
-              label: option,
-              badge: field.recommended === option ? RECOMMENDED : undefined,
-            }))}
-            value={(field.options ?? []).filter((option) => option === value)}
-            look={CHOICE_LOOK.PILL}
-            clearable
-            disabled={disabled}
-            readOnly={readOnly}
-            onChange={(picked) => set(picked[0])}
-          />
+          <FormField label={field.label} optional={optionalField(field)}>
+            {(control) => (
+              <ChoiceList
+                legend={field.label}
+                describedBy={control["aria-describedby"]}
+                options={(field.options ?? []).map((option) => ({
+                  value: option,
+                  label: option,
+                  badge: field.recommended === option ? RECOMMENDED : undefined,
+                }))}
+                value={(field.options ?? []).filter((option) => option === value)}
+                look={CHOICE_LOOK.PILL}
+                clearable
+                disabled={disabled}
+                readOnly={readOnly}
+                onChange={(picked) => set(picked[0])}
+              />
+            )}
+          </FormField>
         </div>
       );
     case INBOX_FIELD.BOOLEAN:
       return (
         <div {...fieldFrame(field, readOnly)}>
           <Checkbox checked={value === true} disabled={disabled} readOnly={readOnly} onChange={set}>
-            <FieldLabel field={field} />
+            <CheckboxWords field={field} />
           </Checkbox>
         </div>
       );
@@ -383,6 +406,14 @@ export function bareKey(event: { metaKey: boolean; ctrlKey: boolean; altKey: boo
   return !event.metaKey && !event.ctrlKey && !event.altKey;
 }
 
+/** ⌘ or Ctrl with Enter, which sends a form of several fields. */
+const MOD_ENTER_CHORD: ShortcutChord = { key: SHORTCUT_KEY.ENTER };
+
+/** The key Send's hint names for an ask: ⌘↩ where Enter only picks, nothing where Enter sends. */
+export function askSendChord(ask: InboxAsk | undefined): ShortcutChord | undefined {
+  return ask !== undefined && severalFields(ask) ? MOD_ENTER_CHORD : undefined;
+}
+
 /**
  * Sends the open item's answer from wherever in its pane the developer
  * pressed Enter, through its box's own send, so the box's checks stand: an
@@ -395,18 +426,28 @@ export function sendFromPane(pane: HTMLElement | null): void {
 
 /**
  * Enter in an open item's question, on an option or in a form's field,
- * sends the answer, and never presses the option it stands on; Shift+Enter
- * is no send, and an editor's Enter is the editor's own to hand on.
+ * sends the answer, and never presses the option it stands on; ⌘ or Ctrl
+ * with Enter sends from anywhere in it. Where the question is a form of
+ * several fields (`several`), a bare Enter sends nothing: it presses the
+ * option it stands on, and goes no further than a field, which would
+ * otherwise submit the box. Shift+Enter is no send, and an editor's Enter is
+ * the editor's own to hand on.
  */
 function onResponseKey(
   pane: React.RefObject<HTMLElement | null>,
+  several: boolean,
   event: React.KeyboardEvent,
 ): void {
-  // Note that the key is held back here, as it bubbles, which keeps a focused option's button from pressing it.
-  if (event.key !== "Enter" || event.shiftKey || !bareKey(event) || event.nativeEvent.isComposing) {
+  if (event.key !== "Enter" || event.shiftKey || event.altKey || event.nativeEvent.isComposing) {
     return;
   }
   if (writesLines(event.target)) return;
+  if (several && !modEnterSends(event)) {
+    // Note that an input's Enter would submit the box, which is the send this holds back; an option's is left to press it.
+    if (event.target instanceof HTMLInputElement) event.preventDefault();
+    return;
+  }
+  // Note that the key is held back here, as it bubbles, which keeps a focused option's button from pressing it.
   event.preventDefault();
   sendFromPane(pane.current);
 }
@@ -602,7 +643,13 @@ function OpenControls({
             form={{ fields: ask.fields }}
             draft={draft}
             disabled={disabled}
-            text={(props) => <InboxFormText {...props} doors={doors.text} />}
+            text={(props) => (
+              <InboxFormText
+                {...props}
+                doors={doors.text}
+                submitKey={severalFields(ask) ? TEXT_AREA_SUBMIT.MOD_ENTER : TEXT_AREA_SUBMIT.ENTER}
+              />
+            )}
             onDraft={onDraft}
           />
         </div>
@@ -610,10 +657,10 @@ function OpenControls({
   }
 }
 
-/** The glyph a press given wears: a check in green going ahead, a turn back in red holding back. */
+/** The glyph a press given wears in its answer's tone (`ANSWER_STATUS_TONE`): a check in green going ahead, a turn back in grey holding back. */
 function ToneGlyph({ tone }: { tone: AnswerTone }): React.JSX.Element {
   return (
-    <span className="inbox-ask-pressed" data-tone={tone}>
+    <span className="inbox-ask-pressed" data-tone={ANSWER_STATUS_TONE[tone]}>
       {tone === ANSWER_TONE.AHEAD ? (
         <CheckIcon aria-hidden="true" />
       ) : (
@@ -754,13 +801,16 @@ export function hasControls(ask: InboxAsk): boolean {
  * The open question's controls as the draft reply's card's body, over its
  * foot, with no card, border, or head of their own, since the agent's
  * message says what it asks: an Enter on an option or in a field sends the
- * card.
+ * card, and ⌘ or Ctrl with Enter sends it from anywhere in it, the only
+ * send of a form of several fields.
  */
 export function DraftQuestion({
   pane,
+  ask,
   children,
 }: {
   pane: React.RefObject<HTMLElement | null>;
+  ask: InboxAsk;
   children: React.ReactNode;
 }): React.JSX.Element {
   return (
@@ -768,7 +818,7 @@ export function DraftQuestion({
     <div
       className="inbox-draft-ask"
       data-inbox-draft-ask=""
-      onKeyDown={(event) => onResponseKey(pane, event)}
+      onKeyDown={(event) => onResponseKey(pane, severalFields(ask), event)}
     >
       {children}
     </div>
@@ -831,14 +881,14 @@ export function WithdrawnWords({
   if (reason !== undefined) {
     return (
       <span className="inbox-ask-standing">
-        <CircleSlashIcon aria-hidden="true" />
+        <GLYPH.DISMISSED />
         {WITHDRAWN}
       </span>
     );
   }
   return (
     <span className="inbox-ask-standing">
-      <CircleSlashIcon aria-hidden="true" />
+      <GLYPH.DISMISSED />
       {closer === undefined ? (
         CLOSED_WORDS
       ) : (

@@ -1,7 +1,7 @@
 import { useAtomValue } from "@effect/atom-react";
 import { CODING_AGENT_STATUS, type CodingAgentSummary } from "@luke/features/coding-agent-wire";
 import { INBOX_BOUNDS, type InboxField } from "@luke/features/inbox-wire";
-import { COMPOSER_LOOK, ComposerFrame, type FieldControl } from "@luke/ui";
+import { COMPOSER_LOOK, ComposerFrame, type FieldControl, type TextAreaSubmit } from "@luke/ui";
 import { SERVER_HANDED } from "@luke/ui/agent-servers-model";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import { useEffect, useRef } from "react";
@@ -23,7 +23,8 @@ import type { SkillSource } from "./skill-picker.js";
  * value, links and all, so a mention reaches the agent as a note's does.
  * Enter sends the item's answer, or takes the keyboard to what it lacks,
  * as Enter anywhere in the item does, Shift+Enter is a new line, and
- * Escape leaves the field. A press on the field's name takes the caret
+ * Escape leaves the field. In a form of several fields Enter is a new line
+ * too, and ⌘ or Ctrl with Enter sends, since the rest may not be filled in. A press on the field's name takes the caret
  * into it, as a label's press does for an input. Like the box, it never takes the caret as the
  * item opens, because K and J step the list.
  */
@@ -60,7 +61,12 @@ export function InboxFormText({
   disabled,
   onChange,
   doors,
-}: FormTextProps & { doors: FormTextDoors }): React.JSX.Element {
+  submitKey,
+}: FormTextProps & {
+  doors: FormTextDoors;
+  /** The key that sends the item's answer from the field. */
+  submitKey: TextAreaSubmit;
+}): React.JSX.Element {
   const editor = useRef<ComposerEditorHandle | undefined>(undefined);
   const room = useRef<HTMLDivElement>(null);
   const statuses = useIntegrationStatuses();
@@ -122,6 +128,7 @@ export function InboxFormText({
           "aria-describedby": control["aria-describedby"],
         }}
         onEnter={doors.onEnter}
+        submitKey={submitKey}
         onPasteFiles={() => false}
       />
     </ComposerFrame>

@@ -38,11 +38,13 @@ import { APP_COMMAND, type AppCommand } from "@luke/settings/shortcuts";
 import { experimentsOn, settingsView } from "@luke/settings/testing";
 import { DOCUMENT_REGION, TASK_MARK, TASKS_PAGE } from "@luke/ui/tasks-model";
 import { shownFiles } from "@luke/voice/code-pane-model";
+import { ACTION_RESULT_STATUS } from "@luke/wire";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment, useState } from "react";
+import { flushSync } from "react-dom";
 import { createRoot, type Root } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
-import { afterEach, beforeEach, test } from "vitest";
+import { afterEach, beforeEach, test, vi } from "vitest";
 import {
   appCommandOffered,
   runAppCommand,
@@ -50,9 +52,12 @@ import {
   useMenuCommands,
 } from "../app-commands.js";
 import { PageWorkspaceProvider, useCopyLink, usePageWorkspace } from "../links-at-hand.js";
+import { installPanelSpanRecorder, PANEL_SPAN, type PanelSpan } from "../panel-spans.js";
 import { PANEL_TAB, type PanelTab } from "../panel-tabs.js";
-import type { SidePanelControl } from "../tasks/use-side-panel.js";
-import { useTaskLooks } from "../tasks/use-task-looks.js";
+import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
+import { ShellRoomContext } from "../stage-room.js";
+import { SIDE_PANEL_TAB, type SidePanelControl } from "../tasks/use-side-panel.js";
+import { NO_LOOKS, useTaskLooks } from "../tasks/use-task-looks.js";
 import { AUTOMATIONS_PAGE, type InboxChoice, type TasksControl } from "../tasks/use-tasks-tab.js";
 import {
   fakeActPort,
@@ -63,18 +68,20 @@ import {
   type SentPortAct,
 } from "../testing/app-bridge.js";
 import { copyingInto, fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
-import { DESKTOP_CAPABILITIES, handState } from "../testing/app-state.js";
+import { DESKTOP_CAPABILITIES, handCapabilities, handState } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { sidebarProps } from "../testing/desktop-sidebar.js";
 import { DOCUMENT_TASK } from "../testing/document-task.js";
+import { keyPressed, reportEventTiming } from "../testing/event-timing.js";
 import { followedInboxes } from "../testing/followed-inboxes.js";
 import { restOn } from "../testing/hint-rest.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
-import { codingAgentsControl, tasksControl } from "../testing/tasks-control.js";
+import { codingAgentsControl, tasksControl, UNPINNED_SUMMARY } from "../testing/tasks-control.js";
 import { newestToastSays } from "../testing/toast.js";
 import { ToastHost } from "../toast.js";
 import { CommandPalette } from "./command-palette.js";
 import { DesktopSidebar } from "./desktop-sidebar.js";
+import { DesktopTasks } from "./desktop-tasks.js";
 import { ListedAutomations } from "./listed-automations.js";
 import { panelEntries } from "./side-panel.js";
 
@@ -233,7 +240,7 @@ test("⌘K marks the task on screen unread and then read, and offers no mark for
 });
 
 function field(): HTMLInputElement {
-  const input = document.querySelector<HTMLInputElement>(".command-palette-search input");
+  const input = document.querySelector<HTMLInputElement>('[role="dialog"] input[role="combobox"]');
   assert.ok(input, "the search field is drawn");
   return input;
 }
@@ -291,9 +298,9 @@ function press(listed: string): void {
   act(() => row.click());
 }
 
-/** The Settings pages by their names, in the order the palette lists them: Account's own page is Profile, and the Workspace page, whose head names the listed workspace, is Workspace here. */
+/** The Settings pages by their names, in the order the palette lists them: Account's own page is Account, and the Workspace page, whose head names the listed workspace, is Workspace here. */
 const SETTINGS_PAGES = [
-  "Profile",
+  "Account",
   "Workspace",
   "Agents",
   "Integrations",
@@ -320,7 +327,7 @@ test("the Settings filter lists Memory after Workspace only while the account ha
   await paletteUnderState(tasksControl());
   chooseFilter("Settings");
 
-  assert.deepEqual(rows().slice(0, 3), ["Profile", "Workspace", "Memory"]);
+  assert.deepEqual(rows().slice(0, 3), ["Account", "Workspace", "Memory"]);
   for (const root of roots.splice(0)) act(() => root.unmount());
   document.body.innerHTML = "";
 
@@ -367,6 +374,94 @@ test("a page is found by its name, above every setting the query finds", () => {
   assert.equal(rows()[0], "Agents");
 });
 
+test('"the" finds Theme, marking the words it begins, while "thm" finds no Theme, since only a file or a command is found by letters in order', () => {
+  openPalette();
+
+  type("the");
+  const theme = [...document.querySelectorAll('[role="option"]')].find(
+    (row) => row.querySelector(".luke-combobox-option-label")?.textContent === "Theme",
+  );
+  assert.ok(theme, '"the" finds Theme');
+  assert.deepEqual(
+    [...theme.querySelectorAll(".luke-combobox-option-label mark")].map((mark) => mark.textContent),
+    ["The"],
+  );
+  type("thm");
+  assert.equal(
+    rows().some((row) => row.startsWith("Theme")),
+    false,
+  );
+});
+
+test("a key typed in ⌘K stands in its field at once, and the rows are ranked for it in a render of their own after", async () => {
+  openPalette();
+  chooseFilter("Settings");
+  const before = rows();
+
+  // Note that the key goes in outside `act`, which would draw the ranking's own render with it, so the paint the key gets is the one read.
+  const input = field();
+  const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+  flushSync(() => {
+    setValue?.call(input, "agents");
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  const painted = { typed: field().value, rows: rows() };
+  await act(() => Promise.resolve());
+
+  assert.deepEqual(painted, { typed: "agents", rows: before });
+  assert.equal(rows()[0], "Agents");
+});
+
+test("a Return pressed before the rows are ranked for the words typed chooses the row they rank first, never one the earlier words ranked or highlighted", async () => {
+  const sent = openPalette();
+  chooseFilter("Settings");
+  key({ key: "ArrowDown" });
+  key({ key: "ArrowDown" });
+
+  // Note that the key and the Return go in outside `act`, which would draw the ranking's own render between them.
+  const input = field();
+  const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+  flushSync(() => {
+    setValue?.call(input, "integrations");
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  flushSync(() => {
+    input.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }),
+    );
+  });
+  const before = { tabs: [...sent.tabs], views: [...sent.views] };
+  await act(() => Promise.resolve());
+
+  assert.deepEqual(before, { tabs: [], views: [] }, "nothing chosen from the earlier rows");
+  assert.deepEqual(sent, { tabs: [PANEL_TAB.SETTINGS], views: [SETTINGS_VIEW.INTEGRATIONS] });
+});
+
+test("a Return held for its words is let go once other words are typed before they are ranked, choosing nothing", async () => {
+  const sent = openPalette();
+  chooseFilter("Settings");
+
+  // Note that the keys and the Return go in outside `act`, which would draw the ranking's own render between them.
+  const input = field();
+  const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+  const typeNow = (words: string) =>
+    flushSync(() => {
+      setValue?.call(input, words);
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+  typeNow("integrations");
+  flushSync(() => {
+    input.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }),
+    );
+  });
+  typeNow("agents");
+  await act(() => Promise.resolve());
+
+  assert.deepEqual(sent, { tabs: [], views: [] });
+  assert.equal(rows()[0], "Agents", "the palette stands, ranked for the words now typed");
+});
+
 test("choosing a page opens Settings on that page", () => {
   const sent = openPalette();
   chooseFilter("Settings");
@@ -396,9 +491,9 @@ const RIGHT = { key: "ArrowRight", code: "ArrowRight" } as const;
 const BACK = { key: "[", code: "BracketLeft", metaKey: true } as const;
 const FORWARD = { key: "]", code: "BracketRight", metaKey: true } as const;
 
-/** The footer's hints, each its keys and then its words. */
+/** The footer's hints, each its keys and then its words: the hints along the foot, the last thing the palette draws. */
 function footer(): (string | null)[] {
-  return [...document.querySelectorAll(".command-palette-footer-hint")].map(
+  return [...(document.querySelector("[cmdk-root]")?.lastElementChild?.children ?? [])].map(
     (hint) => hint.textContent,
   );
 }
@@ -409,7 +504,7 @@ test("with the field empty, ← and → step through the filters, wrapping at th
   assert.equal(key(RIGHT), false, "the step is the palette's, not the caret's");
   assert.equal(chosenFilter(), "Tasks");
   key(RIGHT);
-  assert.equal(chosenFilter(), "Agents");
+  assert.equal(chosenFilter(), "This task");
   key(LEFT);
   key(LEFT);
   assert.equal(chosenFilter(), "All");
@@ -440,7 +535,7 @@ test("⌘[ and ⌘] step through the filters, wrapping at the ends, whether or n
   assert.equal(chosenFilter(), "Tasks");
   type("invite");
   key(FORWARD);
-  assert.equal(chosenFilter(), "Agents");
+  assert.equal(chosenFilter(), "This task");
   assert.equal(key(BACK), false, "the window's Back is held off");
   key(BACK);
   key(BACK);
@@ -459,7 +554,7 @@ test("a press on a filter chooses it and leaves the caret in the field, no filte
     [],
     "no filter is a tab stop",
   );
-  const agents = filterOptions().find((each) => each.textContent === "Agents");
+  const agents = filterOptions().find((each) => each.textContent === "This task");
   assert.ok(agents);
   const down = new MouseEvent("mousedown", { bubbles: true, cancelable: true });
   act(() => {
@@ -467,7 +562,7 @@ test("a press on a filter chooses it and leaves the caret in the field, no filte
   });
   assert.equal(down.defaultPrevented, true, "the press does not move the keyboard");
   act(() => agents.click());
-  assert.equal(chosenFilter(), "Agents");
+  assert.equal(chosenFilter(), "This task");
   assert.equal(document.activeElement, field(), "the caret stays in the field");
   assert.equal(field().value, "invite");
 });
@@ -485,7 +580,7 @@ test("in a row too narrow for every filter, the filter a key chooses is scrolled
   key(FORWARD);
   assert.equal(bar.scrollLeft, 0, "Tasks already stands in view");
   key(FORWARD);
-  assert.equal(chosenFilter(), "Agents");
+  assert.equal(chosenFilter(), "This task");
   assert.equal(bar.scrollLeft, 50);
   key(BACK);
   key(BACK);
@@ -500,13 +595,75 @@ test("in a row too narrow for every filter, the filter a key chooses is scrolled
 
 test("the footer names the keys that step the filters now: ← → while the field is empty, ⌘[ ⌘] once typed", () => {
   openPalette();
-  assert.deepEqual(footer(), ["↑↓Select", "⏎Open", "←→Filter"]);
+  assert.deepEqual(footer(), ["↑↓ Select", "⏎ Open", "←→ Filter"]);
 
   type("invite");
-  assert.deepEqual(footer(), ["↑↓Select", "⏎Open", "⌘[⌘]Filter"]);
+  assert.deepEqual(footer(), ["↑↓ Select", "⏎ Open", "⌘[⌘] Filter"]);
 
   type("");
-  assert.deepEqual(footer(), ["↑↓Select", "⏎Open", "←→Filter"]);
+  assert.deepEqual(footer(), ["↑↓ Select", "⏎ Open", "←→ Filter"]);
+});
+
+/** Offers the Inbox and Tasks, which open places, and Show my tasks, which no menu offers and so wears no glyph of its own. */
+function OffersPlaces(): null {
+  useAppCommand(APP_COMMAND.INBOX, () => undefined);
+  useAppCommand(APP_COMMAND.TASKS, () => undefined);
+  useAppCommand(APP_COMMAND.SHOW_MY_TASKS, () => undefined);
+  return null;
+}
+
+/** The palette over a window offering `OffersPlaces`'s commands. */
+function openPaletteOverPlaces(): void {
+  const root = createRoot(document.body.appendChild(document.createElement("div")));
+  roots.push(root);
+  act(() => root.render(createElement(OffersPlaces)));
+  openPalette();
+}
+
+test("the footer says Return runs a command chosen and opens anything else", () => {
+  openPaletteOverPlaces();
+
+  type("go to inbox");
+  assert.equal(rows()[0], "Go to inbox");
+  assert.deepEqual(footer(), ["↑↓ Select", "⏎ Run", "⌘[⌘] Filter"]);
+
+  type("theme");
+  assert.equal(rows()[0], "Theme · Appearance");
+  assert.deepEqual(footer(), ["↑↓ Select", "⏎ Open", "⌘[⌘] Filter"]);
+});
+
+test("⌘K says a place it opens as Go to the place, and the menus' own words stand for the rest", () => {
+  openPaletteOverPlaces();
+  chooseFilter("Commands");
+
+  assert.ok(rows().includes("Go to inbox"));
+  assert.ok(rows().includes("Go to tasks"));
+  assert.ok(rows().includes("Show my tasks"));
+  assert.ok(!rows().includes("Inbox"), "the place is never said bare, as a verb would be");
+});
+
+test("every row in Commands keeps a glyph's room, so a command no menu marks names itself at the edge the others do", () => {
+  openPaletteOverPlaces();
+  chooseFilter("Commands");
+
+  const options = [...document.querySelectorAll('[role="group"] [role="option"]')];
+  assert.ok(options.length > 0, "commands are listed");
+  for (const option of options) {
+    assert.ok(
+      option.querySelector(".luke-combobox-option-glyph"),
+      `${option.textContent} keeps the glyph's room`,
+    );
+  }
+});
+
+test("the field asks to search Luke under All, and the kind under its filter", () => {
+  openPalette();
+  assert.equal(field().placeholder, "Search Luke");
+
+  chooseFilter("This task");
+  assert.equal(field().placeholder, "Search this task");
+  chooseFilter("Commands");
+  assert.equal(field().placeholder, "Search commands");
 });
 
 /** The window behind the palette, running the menu bar's commands, its Back and Forward recorded. */
@@ -571,7 +728,7 @@ test("an agent's row hangs its tab's card beside it while the pointer rests on i
       onShowAgent: (taskId, agentId) => shown.push([taskId, agentId]),
     }),
   );
-  chooseFilter("Agents");
+  chooseFilter("This task");
   assert.deepEqual(rows(), [
     "Inbox · Billing usage alerts",
     "Invoice export · Billing usage alerts",
@@ -665,7 +822,7 @@ test("an archived agent of the open task is still found, after the standing ones
       agentView: { ...base.agentView, onOpen: (agentId) => shown.push(agentId) },
     }),
   );
-  chooseFilter("Agents");
+  chooseFilter("This task");
   assert.deepEqual(rows(), [
     "Inbox · Billing usage alerts",
     "Invoice export · Billing usage alerts",
@@ -767,7 +924,7 @@ test("an agent's card in ⌘K names the automation that started it, the listed w
     act(() => {
       assert.ok(runAppCommand(APP_COMMAND.COMMAND_PALETTE), "⌘K is offered");
     });
-    chooseFilter("Agents");
+    chooseFilter("This task");
     const row = [...document.querySelectorAll<HTMLElement>('[role="option"]')].find((each) =>
       each.textContent?.includes("Invoice export"),
     );
@@ -1376,15 +1533,11 @@ test("a task wears who is on it at its row's end, a teammate by face, no one on 
   ]);
   type("priya");
   assert.deepEqual(rows(), ["Cache keys · relay · Priya Raman"]);
-  // A query the name answers only loosely still shows the name it was found by,
-  // and one the task's other words answer, however loosely, leaves the name unsaid.
+  // A query the task's own words answer leaves the name unsaid, and letters in order find no task.
+  type("retry");
+  assert.deepEqual(rows(), ["Retry budget · relay"]);
   type("chrls");
-  assert.equal(rows()[0], "Retry budget · relay · Charles Pan");
-  type("rtry");
-  assert.equal(rows()[0], "Retry budget · relay");
-  // A query running from the task's name into its assignee's names them too.
-  type("budgetch");
-  assert.deepEqual(rows(), ["Retry budget · relay · Charles Pan"]);
+  assert.deepEqual(rows(), []);
 });
 
 test("a task whose assignee and creator share a first name says the one the whole query names", () => {
@@ -1478,6 +1631,124 @@ test("a command ⌘K alone offers, the sidebar's Show my tasks, is listed by its
   assert.equal(row?.querySelector(".luke-combobox-option-hint"), null, "no chord is printed");
   press("Show my tasks");
   assert.deepEqual(ran, ["show my tasks"]);
+});
+
+/** Offers two commands whose only key is Esc, as Settings and the Inbox's item do while they stand, and records each run. */
+function OffersEscapes({ ran }: { ran: string[] }): null {
+  useAppCommand(APP_COMMAND.EXIT_SETTINGS, () => ran.push("exit settings"));
+  useAppCommand(APP_COMMAND.INBOX_LIST, () => ran.push("back to inbox list"));
+  return null;
+}
+
+test("a command whose only key is Esc is no row in ⌘K, though it is still offered", () => {
+  const ran: string[] = [];
+  const root = createRoot(document.body.appendChild(document.createElement("div")));
+  roots.push(root);
+  act(() => root.render(createElement(OffersEscapes, { ran })));
+  openPalette();
+  chooseFilter("Commands");
+  type("exit settings");
+  assert.equal(rows().includes("Exit settings"), false);
+  type("back to inbox list");
+  assert.equal(rows().includes("Back to inbox list"), false);
+  assert.ok(appCommandOffered(APP_COMMAND.EXIT_SETTINGS), "Exit settings is still offered");
+});
+
+/** The chord's glyphs at the end of the palette's row listed as exactly these words, or nothing where it prints none. */
+function rowChord(listed: string): string | null {
+  const row = document.querySelectorAll('[role="option"]')[rows().indexOf(listed)];
+  assert.ok(row, `${listed} is listed`);
+  return row.querySelector(".luke-shortcut")?.textContent ?? null;
+}
+
+/** The chord's glyphs at the end of the open menu's item that says exactly these words, or nothing where it prints none. */
+function itemChord(label: string): string | null {
+  const item = [...document.querySelectorAll('[role="menu"] [role="menuitem"]')].find(
+    (each) => each.querySelector(".luke-menu-item-label")?.textContent === label,
+  );
+  assert.ok(item, `the menu offers ${label}`);
+  return item.querySelector(".luke-shortcut")?.textContent ?? null;
+}
+
+test("a task's command wears the same chord in ⌘K as in the open task's ⋯, ⌘K naming the task where the ⋯ says the verb alone", () => {
+  const tasks = tasksControl({
+    page: TASKS_PAGE.DOCUMENT,
+    activeTaskId: DOCUMENT_TASK.id,
+    region: { kind: DOCUMENT_REGION.READY, task: DOCUMENT_TASK },
+  });
+  const host = document.body.appendChild(document.createElement("div"));
+  const root = createRoot(host);
+  roots.push(root);
+  act(() =>
+    root.render(createElement(DesktopTasks, { summary: UNPINNED_SUMMARY, looks: NO_LOOKS, tasks })),
+  );
+  openPalette(tasks);
+  type("permanently delete");
+  const deleteKeys = rowChord("Permanently delete task");
+  type("mark done");
+  const doneKeys = rowChord("Mark done");
+  type("copy plan");
+  const copyKeys = rowChord("Copy plan");
+  act(() => {
+    assert.ok(runAppCommand(APP_COMMAND.COMMAND_PALETTE), "⌘K closes");
+  });
+
+  const more = host.querySelector<HTMLButtonElement>('[aria-label="Task actions"]');
+  assert.ok(more, "the task's ⋯ is drawn");
+  act(() => more.click());
+  assert.equal(deleteKeys, "⌘⌫");
+  assert.equal(itemChord("Permanently delete"), deleteKeys);
+  assert.equal(doneKeys, "⇧⌘A");
+  assert.equal(itemChord("Mark done"), doneKeys);
+  assert.equal(copyKeys, "⇧⌘C");
+  assert.equal(itemChord("Copy plan"), copyKeys);
+});
+
+test("an agent tab's right-click words and keys Close and Show terminal as ⌘K does, ⌘K naming the tab where the menu says the verb alone", async () => {
+  fakeAppBridge({});
+  fakeActPort({});
+  handCapabilities(DESKTOP_CAPABILITIES);
+  const tasks = tasksControl({
+    ...ON_AGENT_TAB,
+    mainTabs: {
+      ...ON_AGENT_TAB.mainTabs,
+      tabs: [{ agent: LINKED_AGENT }],
+      openAgents: [LINKED_AGENT],
+    },
+  });
+  const host = document.body.appendChild(document.createElement("div"));
+  const root = createRoot(host);
+  roots.push(root);
+  act(() =>
+    root.render(
+      onRegistry(
+        AtomRegistry.make(),
+        createElement(DesktopTasks, { summary: UNPINNED_SUMMARY, looks: NO_LOOKS, tasks }),
+      ),
+    ),
+  );
+  // The document arrives a few microtasks after the window first draws.
+  await settle();
+  openPalette(tasks);
+  type("close tab");
+  const closeKeys = rowChord("Close tab");
+  type("show terminal");
+  const terminalKeys = rowChord("Show terminal");
+  act(() => {
+    assert.ok(runAppCommand(APP_COMMAND.COMMAND_PALETTE), "⌘K closes");
+  });
+
+  const tab = host.querySelector<HTMLElement>('[role="tab"][aria-selected="true"]');
+  assert.ok(tab, "the agent's tab is chosen");
+  act(() => {
+    tab.dispatchEvent(
+      new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: 40, clientY: 20 }),
+    );
+  });
+  assert.equal(closeKeys, "⌘W");
+  assert.equal(itemChord("Close"), closeKeys);
+  assert.equal(terminalKeys, "⌘J");
+  assert.equal(itemChord("Show terminal"), terminalKeys);
 });
 
 /** Main's clipboard, keeping each copy the window asks of it. */
@@ -1796,11 +2067,10 @@ test("People lists the listed workspace's members as every people menu does, the
   assert.deepEqual(sent.tabs, []);
 });
 
-/** What the list says where no row stands: its notice, or "Nothing matches.". */
+/** What the list says where no row stands: its notice, or "No results match". */
 function emptyLine(): string | undefined {
   return (
-    document.querySelector(".luke-note-line, .command-palette-notice-slot")?.textContent ??
-    undefined
+    document.querySelector(".luke-note-line, [cmdk-list] [role=alert]")?.textContent ?? undefined
   );
 }
 
@@ -1848,7 +2118,7 @@ test("under All, a query nothing else matches says the repository's files are st
   type("zqx");
 
   assert.deepEqual(rows(), []);
-  assert.equal(emptyLine(), "Reading the repository's files…");
+  assert.equal(emptyLine(), "Reading the repository's files");
   assert.equal(document.querySelector(".luke-note-line")?.getAttribute("role"), "status");
 
   await act(async () =>
@@ -1865,7 +2135,7 @@ test("under All, a query nothing else matches says the repository's files are st
   assert.deepEqual(rows(), ["zqx.ts · src"]);
 
   type("nothing-at-all");
-  assert.equal(emptyLine(), "Nothing matches.", "once every source answered, it says so");
+  assert.equal(emptyLine(), "No results match", "once every source answered, it says so");
 });
 
 test("People says the members are being read until they answer, and a refused read says so with a Retry that reads them again", async () => {
@@ -1886,13 +2156,13 @@ test("People says the members are being read until they answer, and a refused re
   openPalette(tasksControl({ me: "user-dean", workspace: ACME }));
   chooseFilter("People");
   await settle();
-  assert.equal(emptyLine(), "Reading the workspace's members…");
+  assert.equal(emptyLine(), "Reading the workspace's members");
 
   await act(async () => answers.shift()?.refuse());
   await settle();
-  const alert = document.querySelector(".command-palette-notice-slot [role=alert]");
+  const alert = document.querySelector("[cmdk-list] [role=alert]");
   assert.match(alert?.textContent ?? "", /The workspace's members could not be read\./u);
-  assert.doesNotMatch(document.body.textContent ?? "", /Nothing matches/u);
+  assert.doesNotMatch(document.body.textContent ?? "", /No results match/u);
 
   answers = [];
   const retry = [...document.querySelectorAll<HTMLButtonElement>("button")].find(
@@ -1901,7 +2171,7 @@ test("People says the members are being read until they answer, and a refused re
   assert.ok(retry, "Retry is offered");
   act(() => retry.click());
   await settle();
-  assert.equal(emptyLine(), "Reading the workspace's members…");
+  assert.equal(emptyLine(), "Reading the workspace's members");
   await act(async () => answers.shift()?.resolve([member]));
   await settle();
   assert.deepEqual(rows(), ["Charles Pan · charles@example.com"]);
@@ -1911,8 +2181,8 @@ test("Tasks says the account's tasks are being read before the list first answer
   membersAnswer(() => Promise.resolve([]));
   openPalette(tasksControl({ workspace: ACME, listRead: false }));
   chooseFilter("Tasks");
-  assert.equal(emptyLine(), "Reading your tasks…");
-  assert.doesNotMatch(document.body.textContent ?? "", /Nothing matches/u);
+  assert.equal(emptyLine(), "Reading your tasks");
+  assert.doesNotMatch(document.body.textContent ?? "", /No results match/u);
 });
 
 test("Tasks says a refused list with a Retry that reads it again", () => {
@@ -1927,7 +2197,7 @@ test("Tasks says a refused list with a Retry that reads it again", () => {
     }),
   );
   chooseFilter("Tasks");
-  const alert = document.querySelector(".command-palette-notice-slot [role=alert]");
+  const alert = document.querySelector("[cmdk-list] [role=alert]");
   assert.match(alert?.textContent ?? "", /Your tasks could not be read\./u);
   const retry = [...document.querySelectorAll<HTMLButtonElement>("button")].find(
     (each) => each.textContent === "Retry",
@@ -2205,15 +2475,349 @@ test("⌘K offers the open task's Chat tab only while the account has Chat on", 
   });
   handState(experimentsOn(EXPERIMENT.CHAT));
   await paletteUnderState(tasks);
-  chooseFilter("Agents");
+  chooseFilter("This task");
   assert.ok(rows().includes("Chat · Billing usage alerts"), "Chat on offers the task's Chat");
   for (const root of roots.splice(0)) act(() => root.unmount());
   document.body.innerHTML = "";
 
   handState({});
   await paletteUnderState(tasks);
-  chooseFilter("Agents");
+  chooseFilter("This task");
   assert.ok(!rows().some((row) => row.startsWith("Chat")), "Chat off offers no Chat");
+});
+
+test("⌘K's Show chat is offered only while the account has Chat on, as the side panel's \"+\" offers the tab, since a Chat tab with no Chat drawn opens blank", async () => {
+  const tasks = tasksControl({
+    activeTaskId: DOCUMENT_TASK.id,
+    tasks: [
+      {
+        id: DOCUMENT_TASK.id,
+        workspaceId: DOCUMENT_TASK.workspaceId,
+        name: DOCUMENT_TASK.name,
+        createdAt: 1,
+        updatedAt: 2,
+        repository: null,
+      },
+    ],
+    region: { kind: DOCUMENT_REGION.READY, task: DOCUMENT_TASK },
+    chatView: { ...tasksControl().chatView, available: true },
+  });
+  handState(experimentsOn(EXPERIMENT.CHAT));
+  await paletteUnderState(tasks);
+  chooseFilter("Commands");
+  assert.ok(rows().includes("Show chat"), "Chat on offers Show chat");
+  assert.ok(rows().includes("Show board"));
+  for (const root of roots.splice(0)) act(() => root.unmount());
+  document.body.innerHTML = "";
+
+  handState({});
+  await paletteUnderState(tasks);
+  chooseFilter("Commands");
+  assert.ok(!rows().includes("Show chat"), "Chat off offers no Show chat");
+  assert.ok(rows().includes("Show board"), "the tabs that exist are still offered");
+});
+
+test('with a task open, ⌘K\'s "This task" lists its pages and a terminal for each agent, as the side panel\'s "+" offers them, and each opens as the "+" opens it', async () => {
+  const agent = {
+    id: "agent-7",
+    planId: DOCUMENT_TASK.id,
+    model: "anthropic/claude-opus-5.5",
+    effort: "high",
+    title: "Invoice export",
+    createdAt: 1,
+    status: CODING_AGENT_STATUS.COMPLETED,
+    turnId: null,
+  };
+  const chosen: unknown[] = [];
+  const base = tasksControl();
+  const tasks = tasksControl({
+    activeTaskId: DOCUMENT_TASK.id,
+    tasks: [
+      {
+        id: DOCUMENT_TASK.id,
+        workspaceId: DOCUMENT_TASK.workspaceId,
+        name: DOCUMENT_TASK.name,
+        createdAt: 1,
+        updatedAt: 2,
+        repository: null,
+      },
+    ],
+    region: { kind: DOCUMENT_REGION.READY, task: DOCUMENT_TASK },
+    pages: [{ id: "page-1", title: "Invite funnel", version: 1, at: 1 }],
+    sidePanel: { ...base.sidePanel, onChoose: (tab) => chosen.push(tab) },
+    agents: codingAgentsControl({ agents: [agent], agentIds: [agent.id] }),
+  });
+  handCapabilities(DESKTOP_CAPABILITIES);
+  await paletteUnderState(tasks);
+  chooseFilter("This task");
+  const listed = rows();
+  assert.ok(listed.includes(`Invite funnel · ${DOCUMENT_TASK.name}`), "the page is listed");
+  assert.ok(
+    listed.includes(`Invoice export · Terminal · ${DOCUMENT_TASK.name}`),
+    "the agent's terminal is listed",
+  );
+
+  press(`Invite funnel · ${DOCUMENT_TASK.name}`);
+  act(() => {
+    assert.ok(runAppCommand(APP_COMMAND.COMMAND_PALETTE), "⌘K opens again");
+  });
+  chooseFilter("This task");
+  press(`Invoice export · Terminal · ${DOCUMENT_TASK.name}`);
+  assert.deepEqual(chosen, [{ page: "page-1" }, { terminal: agent.id }]);
+});
+
+test('over an Inbox item of the open task, ⌘K\'s "This task" lists the pages the Inbox\'s panel read, as that panel\'s "+" offers them, and no file shown on the task, which that panel draws none of', async () => {
+  const showing: TaskCodeShowing = {
+    callId: "c",
+    turnId: "t",
+    shownAt: 1_000,
+    code: {
+      ref: { path: "src/invites/accept.ts", startLine: 3, endLine: 5 },
+      repository: "acme/relay",
+      firstLine: 1,
+      lineCount: 9,
+      lines: [],
+      note: "A used invite is refused here.",
+    },
+  };
+  const base = tasksControl();
+  const tasks = tasksControl({
+    activeTaskId: DOCUMENT_TASK.id,
+    tasks: [
+      {
+        id: DOCUMENT_TASK.id,
+        workspaceId: DOCUMENT_TASK.workspaceId,
+        name: DOCUMENT_TASK.name,
+        createdAt: 1,
+        updatedAt: 2,
+        repository: null,
+      },
+    ],
+    region: { kind: DOCUMENT_REGION.READY, task: DOCUMENT_TASK },
+    shownCode: [showing],
+    pages: [],
+    inboxView: {
+      ...base.inboxView,
+      open: true,
+      chosen: { taskId: DOCUMENT_TASK.id, itemId: "item-1" },
+      pages: [{ id: "page-2", title: "Review notes", version: 1, at: 1 }],
+    },
+  });
+  await paletteUnderState(tasks);
+  chooseFilter("This task");
+  const listed = rows();
+  assert.ok(listed.includes(`Review notes · ${DOCUMENT_TASK.name}`), "the Inbox's page is listed");
+  assert.ok(!listed.some((row) => row.startsWith("accept.ts")), "no shown file is listed");
+});
+
+test("with a task on screen, ⌘K offers its Version history, Cancel task, Change repository, and Open on GitHub, each running on it what its ⋯ item runs", () => {
+  const task = { ...DOCUMENT_TASK, repository: "acme/relay" };
+  const ran: string[] = [];
+  const base = tasksControl();
+  const tasks = tasksControl({
+    tasks: [task],
+    region: { kind: DOCUMENT_REGION.READY, task },
+    activeTaskId: task.id,
+    history: { ...base.history, onOpen: (taskId) => ran.push(`history:${taskId}`) },
+    onSettleTasks: (taskIds, status) => ran.push(`settle:${taskIds.join()}:${status}`),
+    onChangeRepository: (taskId) => ran.push(`repository:${taskId}`),
+    onOpenOnGitHub: (taskId) => ran.push(`github:${taskId}`),
+  });
+  const root = createRoot(document.body.appendChild(document.createElement("div")));
+  roots.push(root);
+  act(() =>
+    root.render(
+      onRegistry(
+        AtomRegistry.make(),
+        createElement(
+          Fragment,
+          null,
+          createElement(Looker, { looked: task }),
+          createElement(WindowPalette, {
+            available: true,
+            tab: PANEL_TAB.TASKS,
+            onTabChange: () => undefined,
+            tasks,
+            settings: {
+              rows: {
+                settings: settingsView(),
+                voiceControlsDrawn: true,
+                accountDrawn: true,
+                capabilities: DESKTOP_CAPABILITIES,
+              },
+              capabilities: DESKTOP_CAPABILITIES,
+              onViewChange: () => undefined,
+            },
+            readFiles: () => Promise.reject(new Error("no repository is open")),
+          }),
+        ),
+      ),
+    ),
+  );
+  for (const command of ["Version history", "Cancel task", "Change repository", "Open on GitHub"]) {
+    act(() => {
+      assert.ok(runAppCommand(APP_COMMAND.COMMAND_PALETTE), "⌘K opens");
+    });
+    chooseFilter("Commands");
+    press(command);
+  }
+  assert.deepEqual(ran, [
+    `history:${task.id}`,
+    `settle:${task.id}:canceled`,
+    `repository:${task.id}`,
+    `github:${task.id}`,
+  ]);
+});
+
+/** The open task's page in `room`, its panel on the plan, beside the palette, the plan looked at as the window's shell looks at it. */
+function paletteBesideTask(room: ShellRoom): HTMLElement {
+  const base = tasksControl();
+  const tasks = tasksControl({
+    page: TASKS_PAGE.DOCUMENT,
+    activeTaskId: DOCUMENT_TASK.id,
+    region: { kind: DOCUMENT_REGION.READY, task: DOCUMENT_TASK },
+    sidePanel: {
+      ...base.sidePanel,
+      open: true,
+      fullScreen: room === SHELL_ROOM.NARROW,
+      fullScreenOnly: room === SHELL_ROOM.NARROW,
+      tabs: [SIDE_PANEL_TAB.PLAN],
+      strip: [SIDE_PANEL_TAB.PLAN],
+      tab: SIDE_PANEL_TAB.PLAN,
+    },
+  });
+  const host = document.body.appendChild(document.createElement("div"));
+  const root = createRoot(host);
+  roots.push(root);
+  act(() =>
+    root.render(
+      onRegistry(
+        AtomRegistry.make(),
+        createElement(
+          ShellRoomContext.Provider,
+          { value: room },
+          createElement(Looker, { looked: DOCUMENT_TASK }),
+          createElement(DesktopTasks, {
+            summary: UNPINNED_SUMMARY,
+            looks: NO_LOOKS,
+            room,
+            away: { label: "Tasks", onPress: () => undefined },
+            tasks,
+          }),
+          createElement(WindowPalette, {
+            available: true,
+            tab: PANEL_TAB.TASKS,
+            onTabChange: () => undefined,
+            tasks,
+            settings: {
+              rows: {
+                settings: settingsView(),
+                voiceControlsDrawn: true,
+                accountDrawn: true,
+                capabilities: DESKTOP_CAPABILITIES,
+              },
+              capabilities: DESKTOP_CAPABILITIES,
+              onViewChange: () => undefined,
+            },
+            readFiles: () => Promise.reject(new Error("no repository is open")),
+          }),
+        ),
+      ),
+    ),
+  );
+  act(() => {
+    assert.ok(runAppCommand(APP_COMMAND.COMMAND_PALETTE), "⌘K opens");
+  });
+  chooseFilter("Commands");
+  press("Rename task");
+  return host;
+}
+
+test("on a wide window ⌘K's Rename task puts the caret in the plan's own title", () => {
+  const host = paletteBesideTask(SHELL_ROOM.WIDE);
+
+  const title = host.querySelector('[role="textbox"][aria-label="Task name"]');
+  assert.ok(title, "the plan's title is drawn");
+  assert.ok(document.activeElement === title, "the caret is in the plan's title");
+});
+
+test("on a phone ⌘K's Rename task opens the task's name in the head's field", () => {
+  const host = paletteBesideTask(SHELL_ROOM.NARROW);
+
+  const field = host.querySelector('.task-head input[aria-label="Task name"]');
+  assert.ok(field, "the head's title is the name's field");
+  assert.ok(document.activeElement === field, "the caret is in the head's field");
+});
+
+test("on a one-off agent's page, ⌘K's Archive agent archives it, and an archived agent's page offers Unarchive agent, which brings it back", async () => {
+  const agent = {
+    id: "agent-6",
+    planId: null,
+    model: "anthropic/claude-opus-5.5",
+    effort: "high",
+    title: "Triage overnight issues",
+    createdAt: 1,
+    status: CODING_AGENT_STATUS.COMPLETED,
+    turnId: null,
+    automationId: null,
+    workspaceId: "workspace-1",
+    repository: "acme/relay",
+    activityAt: 2,
+  };
+  const asked: string[] = [];
+  const draw = (listedAgents: TasksControl["listedAgents"]) => {
+    act(() => {
+      for (const root of roots.splice(0)) root.unmount();
+    });
+    document.body.innerHTML = "";
+    openPalette(
+      tasksControl({
+        agentView: { agentId: agent.id, onOpen: () => undefined, onClose: () => undefined },
+        listedAgents,
+        agents: codingAgentsControl({
+          onArchive: (agentId, archived) => {
+            asked.push(`${agentId}:${String(archived)}`);
+            return Promise.resolve({ status: ACTION_RESULT_STATUS.ACCEPTED });
+          },
+        }),
+      }),
+    );
+    type("archive");
+    return rows().filter((row) => /^(Archive|Unarchive) agent$/u.test(row));
+  };
+
+  assert.deepEqual(draw({ standing: [agent], archived: [] }), ["Archive agent"]);
+  press("Archive agent");
+  await act(async () => undefined);
+  assert.deepEqual(draw({ standing: [], archived: [{ ...agent, archivedAt: 3 }] }), [
+    "Unarchive agent",
+  ]);
+  press("Unarchive agent");
+  await act(async () => undefined);
+  assert.deepEqual(asked, [`${agent.id}:true`, `${agent.id}:false`]);
+});
+
+test("⌘K still offers Show inbox for a task an item waits on while its agents are unread and its Inbox tab is closed", async () => {
+  const base = tasksControl();
+  const tasks = tasksControl({
+    activeTaskId: DOCUMENT_TASK.id,
+    tasks: [
+      {
+        id: DOCUMENT_TASK.id,
+        workspaceId: DOCUMENT_TASK.workspaceId,
+        name: DOCUMENT_TASK.name,
+        createdAt: 1,
+        updatedAt: 2,
+        repository: null,
+      },
+    ],
+    region: { kind: DOCUMENT_REGION.READY, task: DOCUMENT_TASK },
+    sidePanel: { ...base.sidePanel, tabs: [] },
+    inbox: [{ taskId: DOCUMENT_TASK.id, items: [] }],
+  });
+  await paletteUnderState(tasks);
+  chooseFilter("Commands");
+  assert.ok(rows().includes("Show inbox"), "a waiting item holds the Inbox");
 });
 
 /** Answers Luke's ensure with his id, every other act with nothing, and keeps every act sent. */
@@ -2280,6 +2884,15 @@ test("⌘K's first entry is Ask Luke while the account has the operator on, whic
   await settle();
 
   assert.equal(rows()[0], "Ask Luke");
+  assert.deepEqual(
+    footer(),
+    ["↑↓ Select", "⏎ Run", "←→ Filter"],
+    "Ask Luke is a command, which runs",
+  );
+  chooseFilter("Commands");
+  assert.equal(rows()[0], "Ask Luke");
+  assert.deepEqual(footer(), ["↑↓ Select", "⏎ Run", "←→ Filter"]);
+  chooseFilter("All");
   assert.ok(
     !rows().some((row) => row.startsWith("Orla")),
     "Luke is not listed again by his agent's name",
@@ -2312,7 +2925,7 @@ test("⌘K draws no Issues filter, with every experiment on, since Luke keeps no
 
   assert.deepEqual(
     filterOptions().map((option) => option.textContent),
-    ["All", "Tasks", "Agents", "Inbox", "People", "Files", "Actions", "Settings"],
+    ["All", "Tasks", "This task", "Inbox", "People", "Files", "Commands", "Settings"],
   );
 });
 
@@ -2530,7 +3143,7 @@ test("while main says a task's inbox changed later than its push, a query it doe
 
   type("webhook");
   await settle();
-  assert.equal(emptyLine(), "Reading your inbox…");
+  assert.equal(emptyLine(), "Reading your inbox");
 
   const fresh = { ...ROTATE, updatedAt: 12_000 };
   act(() =>
@@ -2538,4 +3151,150 @@ test("while main says a task's inbox changed later than its push, a query it doe
   );
   await settle();
   assert.deepEqual(rows(), ["Which webhook secret should rotate? · Billing usage alerts"]);
+});
+
+test("an Inbox that could not be read says so in the Inbox's own group, beside the rows other groups matched, and its Retry reads it again", async () => {
+  paletteOverInbox(() => ({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }));
+
+  type("billing");
+  await settle();
+
+  assert.ok(
+    rows().includes("Billing usage alerts · relay"),
+    "the task the Tasks group matched is listed",
+  );
+  const notice = document.querySelector("[cmdk-list] [role=alert]");
+  assert.equal(notice?.textContent?.startsWith("Your inbox could not be read."), true);
+  const group = notice?.closest("[cmdk-group]");
+  assert.equal(group?.querySelector("[cmdk-group-heading]")?.textContent, "Inbox");
+  assert.ok(
+    [...document.querySelectorAll("[cmdk-group-heading]")].some(
+      (each) => each.textContent === "Tasks",
+    ),
+    "the other matches keep their own group",
+  );
+  assert.ok(
+    [...(notice?.querySelectorAll("button") ?? [])].some((each) => each.textContent === "Retry"),
+    "the failed source offers Retry",
+  );
+});
+
+test("a key pressed in the search field is timed under ⌘K's own keystroke span, how long it waited and nothing of the key", () => {
+  const spans: PanelSpan[] = [];
+  const uninstall = installPanelSpanRecorder((span) => spans.push(span));
+  reportEventTiming();
+  openPalette();
+
+  keyPressed(field(), { startTime: 800, processingStart: 804, processingEnd: 950, duration: 184 });
+  uninstall();
+  vi.unstubAllGlobals();
+
+  assert.deepEqual(
+    spans.map((span) => ({
+      name: span.name,
+      waited: span.endedAt - span.startedAt,
+      measured: span.attributes(),
+    })),
+    [
+      {
+        name: PANEL_SPAN.KEYSTROKE_COMMAND_PALETTE,
+        waited: 184,
+        measured: { "keystroke.input_delay_ms": 4, "keystroke.processing_ms": 146 },
+      },
+    ],
+  );
+});
+
+test("with a task open and nothing typed, ⌘K lists the task's commands first, then Go to, then the window's own", () => {
+  const places = createRoot(document.body.appendChild(document.createElement("div")));
+  roots.push(places);
+  act(() => places.render(createElement(OffersPlaces)));
+  paletteOverTask()(DOCUMENT_TASK);
+  act(() => {
+    assert.ok(runAppCommand(APP_COMMAND.COMMAND_PALETTE), "⌘K is offered");
+  });
+  chooseFilter("Commands");
+
+  const listed = rows();
+  const task = [
+    `Copy link to task · ${DOCUMENT_TASK.name}`,
+    "Mark as unread",
+    "Pin task",
+    "Version history",
+  ];
+  assert.deepEqual(listed.slice(0, task.length), task);
+  const goTo = listed.findIndex((row) => row.startsWith("Go to "));
+  const showBoard = listed.indexOf("Show board");
+  const window = listed.indexOf("Show my tasks");
+  assert.ok(showBoard >= task.length && showBoard < goTo, "the task's Show rows come before Go to");
+  assert.ok(goTo < window, "Go to comes before the window's own commands");
+  assert.ok(
+    listed.slice(goTo, window).every((row) => row.startsWith("Go to ")),
+    "the places stand together",
+  );
+});
+
+test("with files open or shown and nothing typed, Files lists them first, the open ones in the strip's order, a tab moved there included, the rest of the repository after", async () => {
+  const shown = "src/invites/accept.ts";
+  const opened = "src/members/invite.ts";
+  const moved = "src/members/remove.ts";
+  const showing: TaskCodeShowing = {
+    callId: "c",
+    turnId: "t",
+    shownAt: 1_000,
+    code: {
+      ref: { path: shown, startLine: 3, endLine: 5 },
+      repository: "acme/relay",
+      firstLine: 1,
+      lineCount: 9,
+      lines: [],
+    },
+  };
+  const base = tasksControl();
+  const tasks = tasksControl({
+    activeTaskId: "plan-1",
+    tasks: [
+      {
+        id: "plan-1",
+        workspaceId: "workspace-personal",
+        name: "Teammate invitations",
+        createdAt: 1,
+        updatedAt: 2,
+        repository: "acme/relay",
+      },
+    ],
+    sidePanel: {
+      ...base.sidePanel,
+      files: [
+        { path: opened, range: undefined, opened: 1, browsedOn: "plan-1" },
+        { path: moved, range: undefined, opened: 2, browsedOn: "plan-1" },
+      ],
+      // The later tab was moved before the earlier one in the strip, which leaves the files held as they were.
+      order: [{ file: moved }, { file: opened }],
+    },
+    shownCode: [showing],
+  });
+  const tree = ["README.md", "package.json", "src/index.ts", shown, opened, moved];
+  openPalette(tasks, () =>
+    Promise.resolve({
+      folder: {
+        path: "",
+        repository: "acme/relay",
+        branch: "main",
+        entries: tree.map((name) => ({ name, kind: TASK_TREE_ENTRY.FILE })),
+        truncated: false,
+      },
+    }),
+  );
+  chooseFilter("Files");
+  await act(async () => undefined);
+
+  assert.deepEqual(rows(), [
+    "remove.ts · src/members",
+    "invite.ts · src/members",
+    "accept.ts · src/invites",
+    "README.md",
+    "package.json",
+    "index.ts · src",
+  ]);
 });

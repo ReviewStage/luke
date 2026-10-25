@@ -24,6 +24,7 @@
  */
 
 import { APP_COMMAND } from "@luke/settings/shortcuts";
+import { TOOLBAR_LOOK } from "@luke/ui";
 import { useCallback, useLayoutEffect, useRef, useState } from "react";
 import { useAppCommand } from "../app-commands.js";
 import { useColumnSplit } from "../column-split.js";
@@ -95,6 +96,8 @@ export interface InboxColumns {
   readonly shown: InboxColumnsShown;
   /** Says a row was pressed, which opens its item while the Inbox shows one column. */
   readonly onOpen: (itemId: string) => void;
+  /** Says K or J stepped to another item, which hands the keyboard to its row while the list stands, as Chat's keys hand it to theirs. */
+  readonly onStep: () => void;
   /** Goes back from the item to the list, while the item stands alone and the list holds more. */
   readonly onBack: (() => void) | undefined;
   /** Asks for the list, as Show all does turning off a filter that listed nothing, so the item then chosen does not stand in the rows' place. */
@@ -106,9 +109,24 @@ export interface InboxColumns {
 /** What the list head's menu button is called, by which the list finds it. */
 export const VIEW_OPTIONS = "View options";
 
-/** The list head's View options button, the list's one steady control, which chooses what it lists. */
+/** The ⋯ of a phone's page header (`phone-head.tsx`, `Toolbar`'s phone look), the one standing on screen. */
+const PHONE_HEAD_MORE = `.luke-toolbar[data-look="${TOOLBAR_LOOK.PHONE}"] > .luke-toolbar-actions button`;
+
+/**
+ * The list head's View options button, the list's one steady control,
+ * which chooses what it lists; or, on a phone, whose header holds View
+ * options in its ⋯ (the window's Inbox's own head, or a task's header over
+ * its Inbox tab), that ⋯, never the search's field, whose focus would
+ * raise a phone's keyboard.
+ */
 export function listHeadControl(list: ParentNode | null): HTMLElement | null {
-  return list?.querySelector<HTMLElement>(`button[aria-label="${VIEW_OPTIONS}"]`) ?? null;
+  return (
+    list?.querySelector<HTMLElement>(`button[aria-label="${VIEW_OPTIONS}"]`) ??
+    [...document.querySelectorAll<HTMLElement>(PHONE_HEAD_MORE)].find(
+      (more) => more.closest("[hidden]") === null,
+    ) ??
+    null
+  );
 }
 
 /** Whether the list was asked for, kept by the Inbox's holder rather than the Inbox, and the way to ask for it or give it up. */
@@ -145,7 +163,9 @@ function shownColumns(
  * once an item opens and to its row once the list is back, or split, to the
  * row of the item a press opened from outside the list; a resize does so
  * only where it hid the column holding the keyboard, so the keyboard is
- * never left in what cannot be seen. Note that the keyboard is moved before
+ * never left in what cannot be seen. K and J hand it to the row of the item
+ * they step to while the list stands, so ↑↓ go on from there, and leave it
+ * where it is while the item stands alone. Note that the keyboard is moved before
  * the window paints, while the hidden control still holds it. `kept` is
  * whether the list was asked for where the holder keeps it.
  */
@@ -162,6 +182,7 @@ export function useInboxColumns(
   const [showAlls, setShowAlls] = useState(0);
   const view = useRef<HTMLElement | null>(null);
   const pressed = useRef(false);
+  const stepped = useRef(false);
   const rows = useInboxRowPresses();
   const ref = useCallback(
     (element: HTMLElement | null) => {
@@ -184,23 +205,32 @@ export function useInboxColumns(
 
   useLayoutEffect(() => {
     const held = view.current;
+    const step = stepped.current;
+    stepped.current = false;
     if (held === null) return;
     const focused = document.activeElement;
     const stranded =
       focused instanceof HTMLElement &&
       held.contains(focused) &&
       focused.closest("[hidden]") !== null;
-    if (!pressed.current && !stranded && showAlls === 0) return;
+    const handed = pressed.current || stranded || showAlls > 0;
+    if (!handed && !step) return;
     pressed.current = false;
-    // The item's bar leads with its way back, or with its crumbs where it has none.
+    // The item's bar leads with its way back, or with its crumbs where it has none; K and J, stepping from the item, leave the keyboard there.
     if (shown === INBOX_COLUMNS.ITEM) {
-      held.querySelector<HTMLElement>(".inbox-view-items:not([hidden]) header button")?.focus();
+      if (handed) {
+        held.querySelector<HTMLElement>(".inbox-view-items:not([hidden]) header button")?.focus();
+      }
+      return;
     }
-    // Split, a press that opens an item from outside the list, as Next does, hands the keyboard to its row.
-    if (shown === INBOX_COLUMNS.ITEM) return;
+    // Split, a press that opens an item from outside the list, as Next does, hands the keyboard to its row, and so do K and J.
+    const row = chosen === undefined ? undefined : rows.find(chosen);
+    if (!handed) {
+      row?.focus();
+      return;
+    }
     // An item chosen that the list holds no row for, as a link's missing item or one its scope leaves out, hands the keyboard to the first row instead, or to View options, the list's one steady control, where no row stands.
-    const row = (chosen === undefined ? undefined : rows.find(chosen)) ?? rows.first();
-    (row ?? listHeadControl(held.querySelector(".inbox-tasks")))?.focus();
+    (row ?? rows.first() ?? listHeadControl(held.querySelector(".inbox-tasks")))?.focus();
     setShowAlls(0);
   }, [shown, chosen, showAlls, rows]);
 
@@ -220,6 +250,9 @@ export function useInboxColumns(
       // Note that only a press that changes what stands is kept, since one that changes nothing draws nothing to hand the keyboard to, and a later resize would take it.
       pressed.current = itemId !== chosen || shown === INBOX_COLUMNS.LIST;
       setListAsked(false);
+    },
+    onStep: () => {
+      stepped.current = true;
     },
     onBack: back,
     onList: () => {

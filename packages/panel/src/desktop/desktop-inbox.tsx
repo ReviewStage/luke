@@ -1,7 +1,9 @@
-import { encodeMention, MENTION_KIND } from "@luke/features/mention-link";
+import { encodeMention, MENTION_KIND, type MentionLines } from "@luke/features/mention-link";
+import type { CodeRef } from "@luke/features/task-wire";
 import { TASK_CALL_FAILURE, type TasksFileAnswer } from "@luke/features/tasks-view";
+import { backToWords } from "@luke/features/words";
 import { ACT_KIND } from "@luke/host/acts";
-import { EmptyState, PageToolbar, useMinute } from "@luke/ui";
+import { EmptyState, ERROR_STATE_PLACEMENT, ErrorState, Toolbar, useMinute } from "@luke/ui";
 import { INBOX_PANEL_TARGET, inboxPanelTarget } from "@luke/ui/inbox-panel-link";
 import { isAgentTab, isTranscriptTab, type StripTab, sameTab } from "@luke/ui/tab-strip-model";
 import { InboxIcon } from "lucide-react";
@@ -15,10 +17,10 @@ import { MemberDirectory } from "../member-directory.js";
 import { NOT_FOUND_THING, NotFound } from "../not-found.js";
 import { pressedWithCommand } from "../press-intent.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
-import { agentTabLabel } from "../tasks/coding-agent-model.js";
+import { agentName } from "../tasks/coding-agent-model.js";
 import { INBOX_COLUMNS, useInboxColumns } from "../tasks/inbox-columns.js";
 import { InboxCompose } from "../tasks/inbox-compose.js";
-import { InboxList, InboxListNote, newTaskAction } from "../tasks/inbox-list.js";
+import { INBOX_NOT_READ, InboxList, InboxListNote, newTaskAction } from "../tasks/inbox-list.js";
 import {
   anyUnread,
   INBOX_HOLDER,
@@ -38,7 +40,7 @@ import {
   tasklessMentions,
   useMentionAgentsReader,
 } from "../tasks/task-mentions.js";
-import { TOOL_TARGET, type ToolTarget } from "../tasks/tool-call-model.js";
+import { cardTitle, TOOL_TARGET, type ToolTarget } from "../tasks/tool-call-model.js";
 import type { CodingAgentsControl } from "../tasks/use-coding-agents.js";
 import { type InboxListing, useInboxListing } from "../tasks/use-inbox-listing.js";
 import { useNodOnOpen, useReadOnOpen } from "../tasks/use-inbox-read-marks.js";
@@ -72,7 +74,7 @@ import { taskCardOf } from "./task-card.js";
  * what waits in the others), needing the developer or settled, each task read whole
  * as main says it changed (`use-inbox-items.ts`), under its task, its
  * person, its status, or in one run, the latest first or the oldest
- * first, To do, what needs them and what of theirs is unread, or All,
+ * first, For you, what needs them and what of theirs is unread, or All,
  * everything, of everyone's, theirs, or one teammate's, as the developer
  * last chose; Needs
  * you is the Inbox's one name for an item not yet answered
@@ -116,7 +118,7 @@ import { taskCardOf } from "./task-card.js";
  */
 
 /** What leads back to the list from a missing item's notice, where the Inbox shows one column. */
-const BACK_TO_INBOX = "Back to Inbox";
+const BACK_TO_INBOX = backToWords("inbox");
 
 /** A taskless item's code reads no file, there being no task whose repository it reads through. */
 const UNREAD_FILE = (): Promise<TasksFileAnswer> =>
@@ -180,8 +182,7 @@ function InboxShown({
     choices,
     folds,
     openAutomation,
-    read,
-    taskless,
+    failed,
     asked,
     chosenTask,
     taskId,
@@ -232,7 +233,12 @@ function InboxShown({
     columns.onOpen(listed.item.id);
   };
   const { onMark: markItem } = marks;
-  const { pager, direction } = useInboxPager(steps, list, chosen?.item.id, choose, {
+  // K and J choose the item above or below, the keyboard following it to its row.
+  const step = (listed: InboxListed) => {
+    choose(listed);
+    columns.onStep();
+  };
+  const { pager, direction } = useInboxPager(steps, list, chosen?.item.id, step, {
     shown: tasks.shown,
     folded: folds.folded,
   });
@@ -282,12 +288,24 @@ function InboxShown({
         columns.onOpen(COMPOSE_COLUMN);
       }
     : undefined;
+  const listedWorkspace = tasks.workspace;
+  const { sidePanel } = tasks;
+  // A file the item names opens beside the Inbox as the panel's preview; pressed with ⌘, it goes to the item's task, opened there.
+  const openFile = (ref: CodeRef, commit: string | undefined) => {
+    const going = taskId !== undefined && pressedWithCommand() ? taskId : undefined;
+    if (going === undefined) return sidePanel.onPreviewFile(ref, commit);
+    if (commit !== undefined) return tasks.onShowFile(going, ref, commit);
+    // A file read at no commit is drawn on the task it is browsed on, so it is opened here first, on the item's task, and then shown there.
+    sidePanel.onOpenFile(ref);
+    tasks.onShowPanelTab(going, { file: ref.path });
+  };
   const mentions =
     place === undefined
       ? undefined
-      : tasklessMentions(place, tasks.onShowMention, readMentionAgents);
-  const listedWorkspace = tasks.workspace;
-  const { sidePanel } = tasks;
+      : itemMentions(
+          tasklessMentions(place, tasks.onShowMention, readMentionAgents),
+          taskId === undefined ? undefined : openFile,
+        );
   const drawing = useSidePanelDrawing(sidePanel);
   const views = useTabViews();
   const { onArea, focus } = useColumnFocus();
@@ -338,22 +356,9 @@ function InboxShown({
     // standing on its task but the one last read.
     const going = taskId !== undefined && pressedWithCommand() ? taskId : undefined;
     switch (target.kind) {
-      case INBOX_PANEL_TARGET.FILE: {
-        const { path, lines } = target;
-        const ref =
-          lines === undefined
-            ? { path }
-            : { path, startLine: lines.startLine, endLine: lines.endLine };
-        if (going !== undefined) {
-          if (lines?.commit !== undefined) tasks.onShowFile(going, ref, lines.commit);
-          else {
-            // A file read at no commit is drawn on the task it is browsed on, so it is opened here first, on the item's task, and then shown there.
-            sidePanel.onOpenFile(ref);
-            tasks.onShowPanelTab(going, { file: path });
-          }
-        } else sidePanel.onPreviewFile(ref, lines?.commit);
+      case INBOX_PANEL_TARGET.FILE:
+        openFile(fileRef(target.path, target.lines), target.lines?.commit);
         return true;
-      }
       case INBOX_PANEL_TARGET.PAGE:
         // A page an agent showed since the pages were read stands as its change lands, since they are followed as they move.
         if (going !== undefined) tasks.onShowPanelTab(going, { page: target.pageId });
@@ -427,7 +432,7 @@ function InboxShown({
                     reading={reading}
                     note={
                       <InboxListNote
-                        failed={read.failed || taskless.failed}
+                        failed={failed}
                         reading={reading}
                         empty={listedItems(list).length === 0}
                         alone={columns.shown === INBOX_COLUMNS.LIST}
@@ -440,13 +445,27 @@ function InboxShown({
                       />
                     }
                     onChoose={open}
-                    onMark={(listed, unread) => markItem(listed.item, unread)}
+                    onMark={(listed, unread, saying) => markItem(listed.item, unread, saying)}
                     onClose={closeItem}
                   />
                 )}
                 {compose.on ? (
                   <InboxCompose
+                    // Note that the pane is the listed workspace's, so another listed starts it afresh, its To and its agents read there.
+                    key={listedWorkspace?.id}
                     hidden={columns.shown === INBOX_COLUMNS.LIST}
+                    workspace={
+                      listedWorkspace === undefined
+                        ? undefined
+                        : {
+                            workspace: listedWorkspace.slug ?? listedWorkspace.id,
+                            workspaceId: listedWorkspace.id,
+                          }
+                    }
+                    repositoryOf={(id) =>
+                      tasks.tasks.find((each) => each.id === id)?.repository ?? null
+                    }
+                    onShowMention={tasks.onShowMention}
                     onBack={columns.onBack}
                     readAgents={readWorkspaceAgents}
                     to={chosen?.item.agentId}
@@ -463,6 +482,8 @@ function InboxShown({
                       });
                     }}
                     onDiscard={compose.onEnd}
+                    phone={room === SHELL_ROOM.NARROW}
+                    onRestore={() => onCompose?.()}
                   />
                 ) : chosen === undefined ? (
                   <section
@@ -477,7 +498,7 @@ function InboxShown({
                           : columns.shown !== INBOX_COLUMNS.BOTH
                     }
                   >
-                    <PageToolbar />
+                    <Toolbar />
                     {missing ? (
                       <NotFound
                         thing={NOT_FOUND_THING.INBOX_ITEM}
@@ -487,6 +508,13 @@ function InboxShown({
                             : { label: BACK_TO_INBOX, onClick: columns.onBack }
                         }
                       />
+                    ) : failed ? (
+                      // Note that the list beside says the read failed, so only a pane standing alone draws it, never the empty state.
+                      paneOnly ? (
+                        <ErrorState placement={ERROR_STATE_PLACEMENT.CENTRED} onRetry={onRetry}>
+                          {INBOX_NOT_READ}
+                        </ErrorState>
+                      ) : null
                     ) : reading || filteredOut || searched !== undefined ? null : (
                       // Note that the list says what the filter or its search left out, so the pane beside it stands bare.
                       <EmptyState icon={<InboxIcon />} action={newTaskAction(newTask)}>
@@ -510,27 +538,37 @@ function InboxShown({
                     >
                       {/* The item's links are written under its own workspace, which a link may open outside the one listed. */}
                       <LinkWorkspaceProvider value={chosenLinkWorkspace}>
-                        <InboxPane
-                          holder={chosen.holder}
-                          item={chosen.item}
-                          control={live}
-                          agents={named}
-                          hidden={columns.shown === INBOX_COLUMNS.LIST}
-                          onBack={columns.onBack}
-                          pager={columns.shown === INBOX_COLUMNS.ITEM ? pager : undefined}
-                          next={next}
-                          mentions={mentions}
-                          doors={{
-                            ...paneDoors(tasks, chosen.holder, {
-                              act,
-                              now,
-                              panelFor,
-                              besideAgents: named.agentIds,
-                            }),
-                            onMark: markItem,
-                            onClose: closeItem,
-                          }}
-                        />
+                        {/* Its thread's words read their mentions where its box does, so a file it names opens as its code does. */}
+                        <TaskMentions value={mentions}>
+                          <InboxPane
+                            holder={chosen.holder}
+                            item={chosen.item}
+                            control={live}
+                            agents={named}
+                            hidden={columns.shown === INBOX_COLUMNS.LIST}
+                            onBack={columns.onBack}
+                            pager={columns.shown === INBOX_COLUMNS.ITEM ? pager : undefined}
+                            next={next}
+                            mentions={mentions}
+                            phone={
+                              room === SHELL_ROOM.NARROW
+                                ? {
+                                    onShowPanel: sidePanel.open ? undefined : sidePanel.onToggle,
+                                  }
+                                : undefined
+                            }
+                            doors={{
+                              ...paneDoors(tasks, chosen.holder, {
+                                act,
+                                now,
+                                panelFor,
+                                besideAgents: named.agentIds,
+                              }),
+                              onMark: markItem,
+                              onClose: closeItem,
+                            }}
+                          />
+                        </TaskMentions>
                       </LinkWorkspaceProvider>
                     </SkillFiles>
                   </OpenHereProvider>
@@ -549,6 +587,11 @@ function InboxShown({
                 agents={named}
                 views={views}
                 mentions={mentions}
+                phone={
+                  room === SHELL_ROOM.NARROW && chosen !== undefined
+                    ? { back: cardTitle(chosen.item.title), onBack: sidePanel.onToggle }
+                    : undefined
+                }
               />
             ) : null}
           </div>
@@ -556,6 +599,29 @@ function InboxShown({
       </MemberDirectory>
     </LinkWorkspaceProvider>
   );
+}
+
+/** A file the item names as its code names it: its path, and its lines where it names them. */
+function fileRef(path: string, lines: MentionLines | undefined): CodeRef {
+  return lines === undefined
+    ? { path }
+    : { path, startLine: lines.startLine, endLine: lines.endLine };
+}
+
+/**
+ * The mentions of the chosen item's words and box, read where `answerPlace`
+ * says: a file or its lines an item of a task names opens through
+ * `openFile`, as its code and its links do; an item of an agent with no
+ * task has no File tab to open it in, so its file stays GitHub's.
+ */
+function itemMentions(
+  taskless: TaskMentionsValue,
+  openFile: ((ref: CodeRef, commit: string | undefined) => void) | undefined,
+): TaskMentionsValue {
+  if (openFile === undefined) return taskless;
+  const onOpenFile = (path: string, lines: MentionLines | undefined) =>
+    openFile(fileRef(path, lines), lines?.commit);
+  return { ...taskless, doors: { ...taskless.doors, onOpenFile } };
 }
 
 /**
@@ -606,6 +672,7 @@ function InboxSidePanel({
   agents,
   views,
   mentions,
+  phone,
 }: {
   tasks: TasksControl;
   drawing: SidePanelDrawing & { panel: SidePanelControl };
@@ -619,6 +686,8 @@ function InboxSidePanel({
   views: TabViews;
   /** What the item's box offers an `@`, which the composer of an agent's transcript beside it offers too. */
   mentions: TaskMentionsValue | undefined;
+  /** Where the panel heads itself on a phone, its way back shutting it to the item (`SidePanel`'s `phone`). */
+  phone: { readonly back: string; readonly onBack: () => void } | undefined;
 }): React.JSX.Element {
   const { panel } = drawing;
   const openTarget = (target: ToolTarget) => {
@@ -653,7 +722,7 @@ function InboxSidePanel({
       <TaskMentions value={mentions}>
         <AgentPane
           call={calls}
-          label={agent === undefined ? undefined : agentTabLabel(agent, agents.models)}
+          label={agent === undefined ? undefined : agentName(agent, agents.models)}
           tabbed={false}
           tab={{ agent: agentId }}
           agents={agents}
@@ -692,6 +761,7 @@ function InboxSidePanel({
       focused={focused}
       onOpenTarget={openTarget}
       transcript={taskId === undefined ? undefined : transcript}
+      phone={phone}
     />
   );
 }

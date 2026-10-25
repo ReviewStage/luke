@@ -51,8 +51,8 @@ function Choices({
             size={size}
             primary={size === PROVIDER_BUTTON_SIZE.GATE && provider === MARK_PROVIDER.GITHUB}
             lastUsed={provider === MARK_PROVIDER.GITHUB}
-            pending={pending === provider}
-            pendingLabel={PENDING_LABEL[size](name)}
+            busy={pending === provider}
+            busyLabel={PENDING_LABEL[size](name)}
             disabled={pending !== undefined && pending !== provider}
             onPress={() => setPending(provider)}
           />

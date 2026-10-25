@@ -65,7 +65,7 @@ async function view(name: string): Promise<HTMLElement> {
 
 /** The way back leading the phone's task's header. */
 function back(): HTMLButtonElement {
-  const found = document.querySelector<HTMLButtonElement>(".task-head .phone-head-start button");
+  const found = document.querySelector<HTMLButtonElement>(".task-head .luke-toolbar-lead button");
   assert.ok(found, "the task's header leads with its way back");
   return found;
 }
@@ -144,7 +144,7 @@ it.effect(
         const plan = await view("Plan");
         await act(async () => plan.click());
         await settle();
-        assert.equal(back().getAttribute("aria-label"), "Back to Tasks");
+        assert.equal(back().textContent, "Tasks");
         assert.equal(
           document.querySelector(".desktop-shell > .title-bar-controls"),
           null,

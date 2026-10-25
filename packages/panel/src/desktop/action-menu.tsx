@@ -1,6 +1,7 @@
 import { APP_SHORTCUTS, type KeyedCommand } from "@luke/settings/shortcuts";
 import {
   type DrawnMenu,
+  type ListRowMenu,
   Menu,
   type MenuAction as SharedMenuAction,
   type MenuEntry as SharedMenuEntry,
@@ -46,6 +47,15 @@ function sharedEntry(entry: MenuEntry): SharedMenuEntry {
   return "items" in entry
     ? { ...entry, items: entry.items.map(sharedAction) }
     : sharedAction(entry);
+}
+
+/** A row's menu (`ListRow`'s `menu`) of the window's items, each item's chord at its end; `thing` is what the row is, which names its ⋯ and the menu, and `shown` whether the surface the row stands on is, which the menu does not outlive. */
+export function rowMenu(
+  thing: string,
+  groups: readonly (readonly MenuEntry[])[],
+  shown?: boolean,
+): ListRowMenu {
+  return { thing, groups: groups.map((group) => group.map(sharedEntry)), shown };
 }
 
 /** The window's menu, drawn by the shared one with each item's chord at its end. */

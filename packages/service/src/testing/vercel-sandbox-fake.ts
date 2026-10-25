@@ -1,5 +1,5 @@
 /**
- * vercel-sandbox-fake.ts -- what Vercel Sandbox's REST API refuses of a list or a stop before it answers one, for the suites that stand a fake of it.
+ * vercel-sandbox-fake.ts -- what Vercel Sandbox's REST API refuses of a list, a stop, or a sandbox's tags before it answers one, for the suites that stand a fake of it.
  *
  * A fake that answers any query would have answered the `limit=100` every
  * real list was refused for, and a fake that answers any POST would have
@@ -13,7 +13,10 @@
 /** `GET /v2/sandboxes`'s bounds on `limit`, as Vercel's REST reference states them. */
 const LIST_LIMIT = { MIN: 1, MAX: 50 } as const;
 
-/** Vercel's answer to a query value it does not take. */
+/** How many tags Vercel takes on a sandbox, as its create and its update answer past it. */
+const TAG_LIMIT = 5;
+
+/** Vercel's answer to a query value or a body it does not take. */
 const INVALID_QUERY_STATUS = 400;
 
 /** Vercel's answer to a POST that is not JSON. */
@@ -48,5 +51,21 @@ export function sandboxStopRefusal(init: RequestInit): Response | undefined {
   return Response.json(
     { error: { code: "unsupported_media_type", message: "Unsupported Media Type" } },
     { status: UNSUPPORTED_MEDIA_TYPE_STATUS },
+  );
+}
+
+/** The 400 Vercel answers a create or an update asking more tags than a sandbox takes, or nothing where it would take them. */
+export function sandboxTagsRefusal(
+  tags: Readonly<Record<string, string>> | undefined,
+): Response | undefined {
+  if (tags === undefined || Object.keys(tags).length <= TAG_LIMIT) return undefined;
+  return Response.json(
+    {
+      error: {
+        code: "bad_request",
+        message: `Invalid request: \`tags\` should NOT have more than ${TAG_LIMIT} properties.`,
+      },
+    },
+    { status: INVALID_QUERY_STATUS },
   );
 }

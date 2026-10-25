@@ -1,3 +1,4 @@
+import { useAtom } from "@effect/atom-react";
 import type { CodingAgentPullRequest, CodingAgentSummary } from "@luke/features/coding-agent-wire";
 import {
   type DateSpan,
@@ -20,24 +21,36 @@ import type { PageLine } from "@luke/features/page-wire";
 import { planSections } from "@luke/features/plan-document";
 import { TASK_TREE_ENTRY, type TaskSummary } from "@luke/features/task-wire";
 import type { TaskCodeShowing } from "@luke/features/tasks-view";
-import { countWords, TERM } from "@luke/features/words";
+import {
+  countWords,
+  INTEGRATION_LABEL,
+  noMatchWords,
+  readFailedWords,
+  TERM,
+} from "@luke/features/words";
 import { namesTaskKey, taskKey } from "@luke/features/workspace-key";
 import type { Workspace, WorkspaceMember } from "@luke/features/workspace-wire";
 import { ACT_KIND } from "@luke/host/acts";
+import { SHORTCUT_KEY } from "@luke/settings/shortcuts";
 import {
-  ArrowLeftIcon,
+  BackButton,
   type ComboboxGroup,
   ComboboxList,
   comboboxOptionId,
   DocumentIcon,
-  IconButton,
+  ErrorState,
   KeepFocus,
   MENU_SURFACE_INSET,
   MenuGlyph,
   type MenuKey,
   MenuKeys,
+  type MenuRow,
   MenuSurface,
+  menuKey,
+  NO_BACK_KEY,
+  POPOVER_WIDTH,
   ProviderMark,
+  RectFloat,
   Spinner,
   TEXT_ELEMENT,
   TEXT_VARIANT,
@@ -49,10 +62,13 @@ import {
 } from "@luke/ui";
 import { type Actor, LUKE_ACTOR } from "@luke/ui/actor-model";
 import type { NamedServer } from "@luke/ui/agent-servers-model";
+import { hitRangesIn, LOOSE_FROM, type SearchSubject, searchHit } from "@luke/ui/search-score";
+import { searchTokens } from "@luke/ui/search-tokens";
 import type { SkillOption } from "@luke/ui/skill-mention";
 import { pullRequestLabelOf } from "@luke/ui/tab-strip-model";
 import { fileFolder, fileName } from "@luke/voice/code-pane-model";
-import { defaultFilter } from "cmdk";
+import { Duration, Effect } from "effect";
+import * as AsyncResult from "effect/reactivity/AsyncResult";
 import * as Atom from "effect/reactivity/Atom";
 import {
   AppWindowIcon,
@@ -63,14 +79,20 @@ import {
   HashIcon,
   UsersIcon,
 } from "lucide-react";
-import { type RefObject, useEffect, useId, useState } from "react";
+import { type RefObject, useEffect, useId, useMemo, useState } from "react";
 import { useAct } from "../act.js";
 import { ACTOR_SIZE, ActorMark, actorCard } from "../actor-ref.js";
 import { type IntegrationToolsReads, useIntegrationTools } from "../integration-tools.js";
 import { useMemberDirectory } from "../member-directory.js";
 import { memberRows, YOU_WORD } from "../member-rows.js";
-import type { ComposerTrigger, MentionNode } from "../plan-editor/contract.js";
-import type { MenuRow } from "../searchable-menu.js";
+import {
+  type ComposerTrigger,
+  type EditorAria,
+  listAria,
+  type MentionNode,
+} from "../plan-editor/contract.js";
+import { rendererRuntime } from "../renderer-runtime.js";
+import { Highlighted } from "../search-field.js";
 import { appStateDerivedAtom, useAppSlice } from "../use-app-state.js";
 import { type AgentRowPlace, agentMenuRow, useAgentRowPlace } from "./agent-menu-row.js";
 import {
@@ -99,7 +121,8 @@ import { useTaskStatus } from "./use-known-names.js";
  * highlighted row as its mention, and Escape closes the list until the caret
  * leaves the word. Keys an input method is composing with stay its own. Nothing typed after the `@`, it offers the task and its
  * sections; typed, it finds each kind's best few by the words typed, scored
- * as ⌘K scores them (cmdk's own filter), files and folders first, each
+ * as ⌘K scores them (`@luke/ui/search-score`), each row marking what found
+ * it, letters typed in order finding only a path, files and folders first, each
  * group in a fixed place so a later read never moves the rows above it.
  * Once the words run past a space and nothing matches them, the list
  * stands aside, since they are the developer's own words rather than a
@@ -129,7 +152,7 @@ import { useTaskStatus } from "./use-known-names.js";
  * face and the failed mark at its end, and its card on rest; the plan's own agents first, then the workspace's others,
  * on another task or on none, as the place reads them the first time the
  * list opens (`MentionSource.readAgents`), the agent whose box it is left
- * out. Once a word is typed, the service finds the agents it names by
+ * out. Once a word is typed and the typing rests (`SEARCH_PAUSE`), the service finds the agents it names by
  * their title or their task's name, however many the workspace holds. An
  * archived agent takes no message, so it is offered only once a word is
  * typed, and marked archived. A mention of a page or an
@@ -194,7 +217,7 @@ const MENTION_GROUP = {
   PEOPLE: "People",
   PULL_REQUESTS: "Pull requests",
   SKILLS: "Skills",
-  SERVERS: "MCP servers",
+  SERVERS: INTEGRATION_LABEL.many,
   CHANNELS: "Channels",
   FROM: "Mention from",
 } as const;
@@ -279,7 +302,7 @@ const PICK_DATE_KEY = "pick-date";
 const SKILL_DETAIL = "Skill";
 
 /** What a server's row says beside its name. */
-const SERVER_DETAIL = "MCP server";
+const SERVER_DETAIL = INTEGRATION_LABEL.one;
 
 /** What a tool's row says beside its name, which already names its server. */
 const TOOL_DETAIL = "Tool";
@@ -290,6 +313,8 @@ const TOOL_JOIN = " · ";
 /** The repository's skills as an `@` list offers them: as read, the ask to read them, and the pick that writes one as its `/name` chip. */
 export interface MentionSkills {
   readonly known: readonly SkillOption[] | undefined;
+  /** Whether the read came back unread, which the list says could not be read, with Retry, rather than that it is reading. */
+  readonly unread: boolean;
   readonly ask: () => void;
   readonly onChoose: (name: string) => void;
 }
@@ -303,8 +328,8 @@ const PER_GROUP = 4;
 /** The most rows a list narrowed to one kind lists. */
 const PER_KIND = 50;
 
-/** The score a task takes whose key the words are whole: cmdk's best, which no fuzzy match beats. */
-const KEY_SCORE = 1;
+/** How long the typing rests before the service is searched for the agents the words name. */
+const SEARCH_PAUSE = Duration.millis(250);
 
 /** The window's tasks and workspaces, which tell their readers only when either is a new list, so a patch to the open plan draws no list again. */
 const listedTasksAtom: Atom.Atom<{
@@ -322,16 +347,16 @@ const listedTasksAtom: Atom.Atom<{
 const MENU_LABEL = "Mention";
 
 /** What the list says where it has no row. */
-const NO_MATCH = "No results match";
+const NO_MATCH = noMatchWords(TERM.RESULT);
 
 /** The keys the list hears, said at its foot as far as it hears them now. */
 const MENU_KEY = {
-  MOVE: { keys: "↑↓", does: "Move" },
-  MENTION: { keys: "↵", does: "Mention" },
-  OPEN: { keys: "→", does: "Open" },
-  WIDEN: { keys: "⌫", does: "All kinds" },
-  UP: { keys: "⌫", does: "Up" },
-  CLOSE: { keys: "esc", does: "Close" },
+  MOVE: menuKey("Move", SHORTCUT_KEY.UP, SHORTCUT_KEY.DOWN),
+  MENTION: menuKey("Mention", SHORTCUT_KEY.ENTER, SHORTCUT_KEY.TAB),
+  OPEN: menuKey("Open", SHORTCUT_KEY.RIGHT),
+  WIDEN: menuKey("All kinds", SHORTCUT_KEY.BACKSPACE),
+  UP: menuKey("Up", SHORTCUT_KEY.BACKSPACE),
+  CLOSE: menuKey("Close", SHORTCUT_KEY.ESCAPE),
 } as const satisfies Record<string, MenuKey>;
 
 /** What a narrowed list's back arrow is read by: back to every kind, or up out of a folder. */
@@ -340,16 +365,11 @@ const BACK_LABEL = {
   UP: "Up",
 } as const;
 
-/** The gap between the word's line and the list under it. */
-const MENU_GAP = 4;
-
-/** The list's width, as the stylesheet sets it (`.mention-menu`). */
-const MENU_WIDTH = 360;
-
-/** Where the list stands in its room: its left edge, and its top, or its foot over the word with its top left to it. */
-type MenuPlace =
-  | { readonly left: number; readonly top: number }
-  | { readonly left: number; readonly top: "auto"; readonly bottom: number };
+/** Where the crumb's way back leads, as its hint says it. */
+const BACK_PLACE = {
+  WIDEN: "all kinds",
+  UP: "the folder above",
+} as const;
 
 /** One row the list offers: what it mentions, or the skill it names, the name it is written with, and a muted detail. */
 type MentionRow = {
@@ -773,19 +793,110 @@ function keyed(row: MentionRow, query: string): boolean {
   return row.key !== undefined && namesTaskKey(query, row.key);
 }
 
+/** Whether a row is a path's, whose letters typed in order find it. */
+function isPath(row: MentionRow): boolean {
+  return (
+    "mention" in row &&
+    (row.mention.kind === MENTION_KIND.FILE || row.mention.kind === MENTION_KIND.FOLDER)
+  );
+}
+
+/** What a row is searched by: its name, the words it is found by, its task's key, and, for a path, its letters in order. */
+function rowSubject(row: MentionRow): SearchSubject {
+  return {
+    label: row.name,
+    lines: row.terms === row.name ? [] : [row.terms],
+    key: row.key,
+    loose: isPath(row),
+  };
+}
+
+/** How well a row answers the query, by the tier it meets; 0 where it meets none. */
+function rowScore(row: MentionRow, query: string): number {
+  return searchHit(rowSubject(row), query)?.score ?? 0;
+}
+
 /**
  * The rows matching the query, best first, as many as `most`; the first
  * rows in order for no query. A task whose key the words are whole ranks
- * first, since cmdk's fuzzy score could put a longer key it begins above it.
+ * first, in the scorer's first tier.
  */
 function best(rows: readonly MentionRow[], query: string, most: number): readonly MentionRow[] {
   if (query.trim() === "") return rows.slice(0, most);
   return rows
-    .map((row) => ({ row, score: keyed(row, query) ? KEY_SCORE : defaultFilter(row.terms, query) }))
+    .map((row) => ({ row, score: rowScore(row, query) }))
     .filter((each) => each.score > 0)
     .sort((first, second) => second.score - first.score)
     .slice(0, most)
     .map((each) => each.row);
+}
+
+/** A path's row, and how well it answers the words it was found by. */
+interface FoundPath {
+  readonly entry: RepositoryPath;
+  readonly row: MentionRow;
+  readonly score: number;
+}
+
+/** The paths some words found: in the listing's order, and best first. */
+interface PathsFound {
+  readonly matched: readonly FoundPath[];
+  readonly ranked: readonly FoundPath[];
+}
+
+/** The repository's paths as read, and what each word typed found among them. */
+interface PathSearch {
+  readonly paths: readonly RepositoryPath[];
+  /** The paths the words found, best first, ties in the listing's order; the words are never blank. */
+  readonly found: (term: string) => readonly FoundPath[];
+}
+
+/**
+ * A search over the paths one read listed, which a repository may hold tens
+ * of thousands of. Each word's finds are kept while the word is typed on or
+ * back, so a word met again is answered from what it found; and a word typed
+ * on from one kept searches only what that one found. Note that the
+ * narrowing is sound only from a word of at least `LOOSE_FROM` letters:
+ * a letter more never begins, starts, or holds a word the shorter one did
+ * not, and its letters in order are the shorter one's in order, but a
+ * shorter word finds nothing by letters in order, which a longer one may.
+ */
+function pathSearch(paths: readonly RepositoryPath[]): PathSearch {
+  const all = paths.map((entry) => ({ entry, row: pathRow(entry) }));
+  const kept = new Map<string, PathsFound>();
+  const found = (term: string): readonly FoundPath[] => {
+    const known = kept.get(term);
+    if (known !== undefined) return known.ranked;
+    // Only the words this one types on or back from stay kept.
+    for (const word of kept.keys()) {
+      if (!term.startsWith(word) && !word.startsWith(term)) kept.delete(word);
+    }
+    const shorter = [...kept.keys()]
+      .filter((word) => term.startsWith(word) && searchTokens(word).join("").length >= LOOSE_FROM)
+      .sort((first, second) => second.length - first.length)
+      .at(0);
+    const among = shorter === undefined ? all : (kept.get(shorter)?.matched ?? all);
+    const matched = among
+      .map((each) => ({ ...each, score: rowScore(each.row, term) }))
+      .filter((each) => each.score > 0);
+    const ranked = [...matched].sort((first, second) => second.score - first.score);
+    kept.set(term, { matched, ranked });
+    return ranked;
+  };
+  return { paths, found };
+}
+
+/** The best of the paths the words found, as many as `most`, under the folder where one was walked into. */
+function foundRows(
+  search: PathSearch,
+  folder: string | undefined,
+  term: string,
+  most: number,
+): readonly MentionRow[] {
+  const found = search.found(term);
+  const under =
+    folder === undefined ? found : found.filter((each) => each.entry.path.startsWith(`${folder}/`));
+  return under.slice(0, most).map((each) => each.row);
 }
 
 /**
@@ -795,13 +906,14 @@ function best(rows: readonly MentionRow[], query: string, most: number): readonl
  * under the folder by the words.
  */
 function fileRows(
-  paths: readonly RepositoryPath[],
+  search: PathSearch,
   folder: string | undefined,
   term: string,
 ): readonly MentionRow[] {
+  if (term.trim() !== "") return foundRows(search, folder, term, PER_KIND);
+  const { paths } = search;
   const under =
     folder === undefined ? paths : paths.filter((entry) => entry.path.startsWith(`${folder}/`));
-  if (term.trim() !== "") return best(under.map(pathRow), term, PER_KIND);
   // Note that a folder's own entries are said without the folder, which the crumb already names.
   const entries = under
     .filter((entry) => (fileFolder(entry.path) ?? "") === (folder ?? ""))
@@ -832,7 +944,7 @@ function narrowedRows(
   kind: MentionKind,
   folder: string | undefined,
   term: string,
-  paths: readonly RepositoryPath[] | undefined,
+  paths: PathSearch | undefined,
   rows: KindRows,
 ): readonly MentionRow[] {
   switch (kind.narrow.from) {
@@ -875,7 +987,7 @@ function kindRow(kind: MentionKind): MentionRow {
  */
 function groupsFor(
   scope: Scope,
-  paths: readonly RepositoryPath[] | undefined,
+  paths: PathSearch | undefined,
   rows: KindRows,
   kinds: readonly MentionKind[],
   membersFirst: boolean,
@@ -887,7 +999,7 @@ function groupsFor(
     return narrowed.length === 0 ? [] : [{ label: folder ?? kind.name, rows: narrowed }];
   }
   const bare = term.trim() === "";
-  const files = bare || paths === undefined ? [] : best(paths.map(pathRow), term, PER_GROUP);
+  const files = bare || paths === undefined ? [] : foundRows(paths, undefined, term, PER_GROUP);
   const plan = { label: MENTION_GROUP.PLAN, rows: best(rows.plan, term, PER_GROUP) };
   // The workspace's tasks are offered only once a word is typed.
   const tasks = {
@@ -1004,15 +1116,38 @@ function rowKey(row: MentionRow): string {
 /** The card a file's row hangs, drawn for the path as the list draws it; none for a row that is no file. */
 type FileCardOf = (row: MentionRow) => React.ReactNode;
 
-/** The groups as the list draws them: each row its glyph, its name, its detail, an agent's end, its card, and a chevron where it opens. */
-function comboboxGroups(groups: readonly MentionGroup[], fileCard: FileCardOf): ComboboxGroup[] {
+/** A row's name and detail, each marked where the words found it, as ⌘K marks its rows. */
+function markedWords(
+  row: MentionRow,
+  query: string,
+): { readonly label: React.ReactNode; readonly detail: React.ReactNode } {
+  const subject = rowSubject(row);
+  const hit = searchHit(subject, query);
+  if (hit === undefined) return { label: row.name, detail: row.detail };
+  return {
+    label: <Highlighted text={row.name} ranges={hit.label} />,
+    detail:
+      typeof row.detail === "string" ? (
+        <Highlighted text={row.detail} ranges={hitRangesIn(row.detail, subject, hit)} />
+      ) : (
+        row.detail
+      ),
+  };
+}
+
+/** The groups as the list draws them: each row its glyph, its name and detail marked where `query` found them, an agent's end, its card, and a chevron where it opens. */
+function comboboxGroups(
+  groups: readonly MentionGroup[],
+  query: string,
+  fileCard: FileCardOf,
+): ComboboxGroup[] {
   return groups.map((group) => ({
     label: group.label,
     options: group.rows.map((row) => ({
       id: rowKey(row),
-      label: row.name,
+      ...markedWords(row, query),
+      words: row.name,
       icon: row.look?.icon ?? <RowGlyph row={row} />,
-      detail: row.detail,
       hint: row.look?.end,
       card: row.look?.card ?? row.card ?? fileCard(row),
       opens: "from" in row,
@@ -1034,11 +1169,12 @@ function MentionCrumb({ crumb }: { crumb: Crumb }): React.JSX.Element {
     // Note that a press on the crumb keeps the caret in the editor, where the keys are read.
     <KeepFocus className="agent-servers-page-head mention-menu-crumb">
       {back === undefined ? null : (
-        <IconButton
-          icon={<ArrowLeftIcon />}
+        <BackButton
           label={folder === undefined ? BACK_LABEL.WIDEN : BACK_LABEL.UP}
+          place={folder === undefined ? BACK_PLACE.WIDEN : BACK_PLACE.UP}
+          command={NO_BACK_KEY}
           tabbable={false}
-          onClick={back}
+          onBack={back}
         />
       )}
       <MenuGlyph>
@@ -1056,15 +1192,32 @@ function MentionCrumb({ crumb }: { crumb: Crumb }): React.JSX.Element {
   );
 }
 
+/** The reads the list draws rows from that can fail, each named as its failure says it. */
+const MENTION_READ = {
+  MEMBERS: "members",
+  AGENTS: "agents",
+  FILES: "the repository's files",
+  SKILLS: "skills",
+} as const;
+
+type MentionRead = (typeof MENTION_READ)[keyof typeof MENTION_READ];
+
+/** A read of the list that failed, and the press that reads it again. */
+interface MentionReadFailure {
+  readonly read: MentionRead;
+  readonly retry: () => void;
+}
+
 /** The list itself: a narrowed list's crumb, each group's heading and rows, the highlighted one washed, and the keys it hears at its foot. */
 function MentionMenu({
   id,
   crumb,
   groups,
+  query,
   at,
   keys,
-  place,
   reading,
+  failures,
   fileCard,
   onHover,
   onChoose,
@@ -1072,27 +1225,27 @@ function MentionMenu({
   id: string;
   crumb: Crumb | undefined;
   groups: readonly MentionGroup[];
+  /** The words the groups were found by, which mark each row. */
+  query: string;
   at: number;
   keys: readonly MenuKey[];
-  place: MenuPlace;
   /** Whether a read the list offers rows from is still out, which the list says in place of "no match". */
   reading: boolean;
+  /** The reads that failed, which the list says could not be read, with Retry, in place of "no match". */
+  failures: readonly MentionReadFailure[];
   fileCard: FileCardOf;
   onHover: (index: number) => void;
   onChoose: (row: MentionRow) => void;
 }): React.JSX.Element {
   const rows = groups.flatMap((group) => group.rows);
+  const noted = reading || failures.length > 0;
   return (
-    <MenuSurface
-      className="searchable-menu mention-menu"
-      inset={MENU_SURFACE_INSET.NONE}
-      style={place}
-    >
+    <MenuSurface className="mention-menu" inset={MENU_SURFACE_INSET.NONE}>
       {crumb === undefined ? null : <MentionCrumb crumb={crumb} />}
       <ComboboxList
         id={id}
         label={MENU_LABEL}
-        groups={comboboxGroups(groups, fileCard)}
+        groups={comboboxGroups(groups, query, fileCard)}
         active={at}
         onActiveChange={onHover}
         onChoose={(index) => {
@@ -1101,8 +1254,19 @@ function MentionMenu({
         }}
         // A narrowed list's one group is named by its crumb.
         headed={crumb === undefined}
-        empty={reading ? undefined : NO_MATCH}
-        note={reading ? <Spinner delay label="Reading" /> : undefined}
+        empty={noted ? undefined : NO_MATCH}
+        note={
+          noted ? (
+            <>
+              {reading ? <Spinner delay label="Reading" /> : null}
+              {failures.map((failure) => (
+                <ErrorState key={failure.read} onRetry={failure.retry}>
+                  {readFailedWords(failure.read)}
+                </ErrorState>
+              ))}
+            </>
+          ) : undefined
+        }
       />
       <MenuKeys keys={keys} />
     </MenuSurface>
@@ -1112,7 +1276,8 @@ function MentionMenu({
 /** What an editor drawing an `@` list wires: the list and the date picker while they stand, the field's ties to the list for assistive technology, the reports and keys the editor hands it, and what opens the date picker over a chip. */
 export interface MentionPicker {
   readonly menu: React.ReactNode;
-  readonly aria: Readonly<Record<string, string | undefined>>;
+  /** What ties the editor to the list (`listAria`), which names it a combobox while the list stands. */
+  readonly aria: EditorAria;
   readonly onTrigger: (trigger: ComposerTrigger | undefined) => void;
   /** The `#` word's report, where the list names channels (`channels`). */
   readonly onChannelTrigger: (trigger: ComposerTrigger | undefined) => void;
@@ -1127,6 +1292,17 @@ export const MENTION_MENU_SIDE = {
 } as const;
 
 export type MentionMenuSide = (typeof MENTION_MENU_SIDE)[keyof typeof MENTION_MENU_SIDE];
+
+/** The box a word's list hangs by, in window coordinates: the line its first letter stands on, as the editor reported it. */
+export function wordBox(word: ComposerTrigger): {
+  left: number;
+  top: number;
+  right: number;
+  bottom: number;
+} {
+  const { left, top, bottom } = word.rect;
+  return { left, top, right: left, bottom };
+}
 
 /** A page an agent showed on the plan, as the list offers it: as the plan lists it, its id, its newest version's title and number, and when that version was written, which its row and its card say. */
 export type MentionablePage = PageLine;
@@ -1184,8 +1360,8 @@ export interface MentionablePullRequest
 /**
  * Reads the workspace's coding agents: the newest where no words are given,
  * or, found by the service, those whose title or task's name holds the
- * words, the archived ones among them; settles with none where the read
- * failed.
+ * words, the archived ones among them; rejects where the read failed, so
+ * the list says it could not read them rather than that none match.
  */
 export type MentionAgentsReader = (
   words: string | undefined,
@@ -1363,11 +1539,45 @@ function kindsOf(
   return [...ordered, ...connected];
 }
 
+/** Words typed in the `@` word that starts at `wordAt`. */
+interface WordsTyped {
+  readonly wordAt: number;
+  readonly words: string;
+}
+
+/**
+ * Words once they have stood the pause, as an atom whose work is the wait:
+ * setting it again starts the wait over, so only the newest words rest.
+ */
+const restAtom = () =>
+  rendererRuntime.fn((typed: WordsTyped) => Effect.as(Effect.sleep(SEARCH_PAUSE), typed));
+
+/**
+ * Whether the typing has rested on the words of the `@` word at `wordAt`,
+ * which no words always have. Note that the rest is forgotten once the
+ * words go, so words typed again, in this word or another, wait afresh.
+ */
+function useRested(wordAt: number | undefined, words: string | undefined): boolean {
+  const [atom] = useState(restAtom);
+  const [rested, rest] = useAtom(atom);
+  useEffect(() => {
+    rest(wordAt === undefined || words === undefined ? Atom.Reset : { wordAt, words });
+  }, [wordAt, words, rest]);
+  return (
+    words === undefined ||
+    (AsyncResult.isSuccess(rested) &&
+      !rested.waiting &&
+      rested.value.wordAt === wordAt &&
+      rested.value.words === words)
+  );
+}
+
 /**
  * The `@` list for an editor on a task's page: its rows read from the
- * plan's words as they stand and the repository's paths, placed by the word
- * in `room`, and a pick handed to `onChoose` as the mention's node; a list
- * that never opens where there is no task to offer. Where channels are
+ * plan's words as they stand and the repository's paths, hung by the word
+ * (`@luke/ui`'s `RectFloat`) and closed by a press outside it and `room`,
+ * and a pick handed to `onChoose` as the mention's node; a list that never
+ * opens where there is no task to offer. Where channels are
  * handed, a `#` word opens the same list on them.
  */
 export function useMentionPicker({
@@ -1392,7 +1602,7 @@ export function useMentionPicker({
   members?: MentionMembers | undefined;
   /** The channels a `#` word names, where the words are a chat message's; none elsewhere, where a `#` opens nothing. */
   channels?: MentionChannels | undefined;
-  /** The element the list is placed in, by the word. */
+  /** The box the editor stands in: a press in it is the editor's, and the date picker hangs in it. */
   room: RefObject<HTMLElement | null>;
   side: MentionMenuSide;
   onChoose: (mention: MentionNode) => void;
@@ -1410,7 +1620,8 @@ export function useMentionPicker({
     planId: string;
     workspaceId: string | undefined;
     repository: string | null;
-    paths: readonly RepositoryPath[];
+    /** The paths read; none where the read failed, which Retry clears to read again. */
+    paths: readonly RepositoryPath[] | undefined;
   }>();
 
   const taskId = source?.taskId ?? NO_TASK;
@@ -1443,36 +1654,46 @@ export function useMentionPicker({
     setNarrowing(undefined);
   }, [inWord]);
 
-  // The repository's paths are read the first time the list opens on the task, and again once its repository changes.
-  const read =
+  // The repository's paths are read the first time the list opens on the task, and again once its repository changes or Retry asks.
+  const readOf =
     paths?.planId === taskId && paths.workspaceId === workspaceId && paths.repository === repository
-      ? paths.paths
+      ? paths
       : undefined;
+  const read = readOf?.paths;
+  // Note that the paths are searched through one search per read, which keeps what each word found, rather than ranking every path on each render.
+  const pathsSearched = useMemo(() => (read === undefined ? undefined : pathSearch(read)), [read]);
+  const pathsFailed = readOf !== undefined && readOf.paths === undefined;
   useEffect(() => {
-    if (!open || read !== undefined) return;
+    if (!open || readOf !== undefined) return;
     const key = treeKey(taskId, workspaceId, repository);
     if (key === undefined) return;
     let live = true;
-    act(ACT_KIND.TASKS_TREE, { ...key, path: "", recursive: true }).then(
-      (answer) => {
-        if (!live) return;
-        const entries = "folder" in answer ? answer.folder.entries : [];
-        setPaths({
-          planId: taskId,
-          workspaceId,
-          repository,
-          paths: entries.map((entry) => ({
-            path: entry.name,
-            folder: entry.kind === TASK_TREE_ENTRY.FOLDER,
-          })),
-        });
-      },
-      () => undefined,
-    );
+    // Note that a refusal and a rejection both leave the paths unread and the read failed, never an empty repository.
+    const failed = () => {
+      if (live) setPaths({ planId: taskId, workspaceId, repository, paths: undefined });
+    };
+    act(ACT_KIND.TASKS_TREE, { ...key, path: "", recursive: true }).then((answer) => {
+      if (!live) return;
+      if (!("folder" in answer)) return failed();
+      setPaths({
+        planId: taskId,
+        workspaceId,
+        repository,
+        paths: answer.folder.entries.map((entry) => ({
+          path: entry.name,
+          folder: entry.kind === TASK_TREE_ENTRY.FOLDER,
+        })),
+      });
+    }, failed);
     return () => {
       live = false;
     };
-  }, [open, read, act, taskId, workspaceId, repository]);
+  }, [open, readOf, act, taskId, workspaceId, repository]);
+
+  // A failed read of the paths is read again by the next word that opens the list.
+  useEffect(() => {
+    if (!open && pathsFailed) setPaths(undefined);
+  }, [open, pathsFailed]);
 
   // The skills are asked for as each `@` word opens the list, as the `/` list asks for them; a read
   // that answered is kept, and one that failed is asked again by the next word.
@@ -1509,7 +1730,7 @@ export function useMentionPicker({
   const term = scope?.term ?? "";
 
   // The workspace's newest agents are read as each `@` word opens the list, and once a word is
-  // typed the service finds those it names, archived ones among them, however many the workspace
+  // typed and the typing rests the service finds those it names, archived ones among them, however many the workspace
   // holds; each read is kept while its word stands, and the last one shown until the next lands.
   // Note that where the members a mention tells are handed, the workspace's agents are not read, since naming one tells nobody.
   const readAgents = members === undefined ? source?.readAgents : undefined;
@@ -1519,23 +1740,33 @@ export function useMentionPicker({
     readonly reader: MentionAgentsReader;
     readonly wordAt: number;
     readonly words: string | undefined;
-    readonly agents: readonly MentionableAgent[];
+    /** The agents read; none where the read failed, which Retry clears to read again. */
+    readonly agents: readonly MentionableAgent[] | undefined;
   }>();
   const agentsRead =
     workspaceAgents?.reader === readAgents && workspaceAgents?.wordAt === wordAt
       ? workspaceAgents
       : undefined;
   const wantsAgents = agentsRead === undefined || agentsRead.words !== words;
+  const agentsFailed =
+    agentsRead !== undefined && agentsRead.words === words && agentsRead.agents === undefined;
+  // Note that words are asked of the service once the typing rests on them, as the issue pickers' are, rather than letter by letter.
+  const rested = useRested(wordAt, words);
   useEffect(() => {
-    if (!wantsAgents || readAgents === undefined || wordAt === undefined) return;
+    if (!wantsAgents || readAgents === undefined || wordAt === undefined || !rested) return;
     let live = true;
-    readAgents(words).then((agents) => {
-      if (live) setWorkspaceAgents({ reader: readAgents, wordAt, words, agents });
-    });
+    readAgents(words).then(
+      (agents) => {
+        if (live) setWorkspaceAgents({ reader: readAgents, wordAt, words, agents });
+      },
+      () => {
+        if (live) setWorkspaceAgents({ reader: readAgents, wordAt, words, agents: undefined });
+      },
+    );
     return () => {
       live = false;
     };
-  }, [wantsAgents, words, readAgents, wordAt]);
+  }, [wantsAgents, words, readAgents, wordAt, rested]);
 
   // Each server's tools are read while the list stands open, and forgotten once it closes.
   const tools = useIntegrationTools(
@@ -1548,7 +1779,7 @@ export function useMentionPicker({
       ? []
       : groupsFor(
           scope,
-          read,
+          pathsSearched,
           {
             plan: taskRows(taskId, source.taskName, planKey, source.text()),
             tasks: taskRowsOffered,
@@ -1588,8 +1819,23 @@ export function useMentionPicker({
     open &&
     ((members === undefined && directory.membersReading) ||
       (readAgents !== undefined && wantsAgents) ||
-      (read === undefined && treeKey(taskId, workspaceId, repository) !== undefined) ||
-      (skills !== undefined && skills.known === undefined));
+      (read === undefined &&
+        !pathsFailed &&
+        treeKey(taskId, workspaceId, repository) !== undefined) ||
+      (skills !== undefined && skills.known === undefined && !skills.unread));
+  // The list says a read could not be read, never that nothing matches, and Retry reads it again.
+  const failures: readonly MentionReadFailure[] = open
+    ? [
+        ...(members === undefined && directory.membersRefused
+          ? [{ read: MENTION_READ.MEMBERS, retry: directory.retry }]
+          : []),
+        ...(readAgents !== undefined && agentsFailed
+          ? [{ read: MENTION_READ.AGENTS, retry: () => setWorkspaceAgents(undefined) }]
+          : []),
+        ...(pathsFailed ? [{ read: MENTION_READ.FILES, retry: () => setPaths(undefined) }] : []),
+        ...(skills?.unread === true ? [{ read: MENTION_READ.SKILLS, retry: skills.ask }] : []),
+      ]
+    : [];
   // Words typed past a space that match nothing are prose, not a mention: the list stands aside, and comes back only if they match again.
   const shown = naming || (open && (rows.length > 0 || !/\s/u.test(term.trim())));
   const held =
@@ -1657,6 +1903,11 @@ export function useMentionPicker({
     } else onChoose({ name: row.written ?? row.name, target: encodeMention(row.mention, place) });
   };
 
+  // The list closed by Escape or a press away stays closed until the caret leaves its word.
+  const closeList = () => {
+    if (said !== undefined) setClosed({ word: said.word, start: said.trigger.start });
+  };
+
   // ↑, ↓, Home, End, Enter and Escape steer the list as any combobox's do;
   // ⌘Enter writes the highlighted row as a bare Enter does.
   const activeId = rows.length === 0 ? undefined : comboboxOptionId(listId, at);
@@ -1678,9 +1929,7 @@ export function useMentionPicker({
       const row = rows[at];
       if (row !== undefined) choose(row);
     },
-    onEscape: () => {
-      if (said !== undefined) setClosed({ word: said.word, start: said.trigger.start });
-    },
+    onEscape: () => closeList(),
   });
 
   // The list's own keys come first: ⌫ widens, → opens, Tab writes, and a
@@ -1719,16 +1968,6 @@ export function useMentionPicker({
     MENU_KEY.CLOSE,
   ];
 
-  // The list stands by the word's line, on the side asked, inside the room's width.
-  // Note that the room is measured only while the list is shown, since a measure in a draw lays out the whole window.
-  const box = room.current;
-  const placed = shown ? box?.getBoundingClientRect() : undefined;
-  const placeOf = (word: ComposerTrigger, at: DOMRect, width: number): MenuPlace => {
-    const left = Math.max(0, Math.min(word.rect.left - at.left, width - MENU_WIDTH));
-    return side === MENTION_MENU_SIDE.BELOW
-      ? { left, top: word.rect.bottom - at.top + MENU_GAP }
-      : { left, top: "auto", bottom: at.bottom - word.rect.top + MENU_GAP };
-  };
   // Note that a file's card is made as its row is drawn, because the repository's paths are thousands and only the few listed hang one.
   const shownCode = source?.shownCode ?? NO_SHOWN_CODE;
   const openFiles = source?.openFiles ?? NO_OPEN_FILES;
@@ -1739,25 +1978,38 @@ export function useMentionPicker({
     const commit = openFiles.find((file) => file.path === path)?.commit;
     return <FileCard path={path} note={newestFileNote(shownCode, path, { repository, commit })} />;
   };
-  const list =
-    !shown || box === null || placed === undefined ? null : (
-      <MentionMenu
-        id={listId}
-        crumb={
-          scope?.kind === undefined
-            ? undefined
-            : { kind: scope.kind, folder: scope.walked.at(-1)?.path, back }
-        }
-        groups={groups}
-        at={at}
-        keys={keys}
-        place={placeOf(trigger, placed, box.clientWidth)}
-        reading={reading}
-        fileCard={fileCard}
-        onHover={(index) => setHighlight({ start: trigger.start, query: trigger.query, at: index })}
-        onChoose={choose}
-      />
-    );
+  // The list hangs by the word's line, on the side asked; a press outside it and the room closes it as Escape does, and it fades as it closes.
+  const rowsShown = !shown ? null : (
+    <MentionMenu
+      id={listId}
+      crumb={
+        scope?.kind === undefined
+          ? undefined
+          : { kind: scope.kind, folder: scope.walked.at(-1)?.path, back }
+      }
+      groups={groups}
+      query={naming ? trigger.query : term}
+      at={at}
+      keys={keys}
+      reading={reading}
+      failures={failures}
+      fileCard={fileCard}
+      onHover={(index) => setHighlight({ start: trigger.start, query: trigger.query, at: index })}
+      onChoose={choose}
+    />
+  );
+  const list = (
+    <RectFloat
+      open={shown}
+      anchor={() => (trigger === undefined ? undefined : wordBox(trigger))}
+      side={side}
+      width={POPOVER_WIDTH.REGULAR}
+      onPressAway={closeList}
+      holds={(target) => room.current?.contains(target) === true}
+    >
+      {rowsShown}
+    </RectFloat>
+  );
 
   const menu = (
     <>
@@ -1766,17 +2018,10 @@ export function useMentionPicker({
     </>
   );
 
-  // The field names the list it opened and the row highlighted in it, as any combobox's does.
-  const aria = {
-    "aria-autocomplete": "list",
-    "aria-expanded": String(list !== null),
-    "aria-controls": list === null ? undefined : listId,
-    "aria-activedescendant": list === null ? undefined : activeId,
-  };
-
   return {
     menu,
-    aria,
+    // The field names the list it opened and the row highlighted in it, as any combobox's does.
+    aria: listAria(field.field),
     onTrigger: reportFor(MENTION_WORD.MENTION),
     onChannelTrigger: reportFor(MENTION_WORD.CHANNEL),
     onKey,

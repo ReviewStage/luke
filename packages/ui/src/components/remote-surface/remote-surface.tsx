@@ -181,7 +181,10 @@ export function RemoteSurface({
       keyCode: event.keyCode,
       modifiers: modifiersOf(event),
     });
-    if (taken) event.preventDefault();
+    // Note that a key the page took is the page's alone, so the window's keymap never hears it too.
+    if (!taken) return;
+    event.preventDefault();
+    event.stopPropagation();
   };
   return (
     <canvas

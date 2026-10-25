@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import { it } from "@effect/vitest";
 import {
   AUTOMATION_ACTION,
   AUTOMATION_DEFAULT_GUARDS,
@@ -28,7 +29,12 @@ import {
   PULL_REQUEST_STATE,
   type PullRequestState,
 } from "@luke/features/coding-agent-wire";
-import { LINK_PLACE, type ReadLink } from "@luke/features/luke-link";
+import { LINK_PLACE, type ReadLink } from "@luke/features/link-grammar";
+import {
+  MAC_TERMINAL_PORT_CHANNEL,
+  MAC_TERMINAL_PORT_MESSAGE,
+  type MacTerminalPortOutbound,
+} from "@luke/features/mac-terminal-wire";
 import { pageFrameUrl } from "@luke/features/page-frame";
 import { PAGE_SHOWER, type PageLine } from "@luke/features/page-wire";
 import type { Task } from "@luke/features/task-wire";
@@ -43,13 +49,18 @@ import { appSettingsWire, experimentsOn, settingsView } from "@luke/settings/tes
 import { isMacTerminalTab, TAB_WORDS } from "@luke/ui/tab-strip-model";
 import { CALL_LABEL } from "@luke/ui/tasks-model";
 import { MESSAGE_ROLE } from "@luke/wire";
-import { Effect } from "effect";
+import { Clock, Context, Effect } from "effect";
+import * as AsyncResult from "effect/reactivity/AsyncResult";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
+import { TestClock } from "effect/testing";
 import { act, createElement, Fragment } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
 import { runAppCommand } from "../app-commands.js";
 import { SIDE_BUNDLES } from "../bundle-loader.js";
+import { rendererRuntime } from "../renderer-runtime.js";
+import { SHELL_ROOM } from "../shell-room.js";
+import { ShellRoomContext } from "../stage-room.js";
 import type { AgentCallPlace } from "../tasks/agent-call.js";
 import { archiveWords } from "../tasks/coding-agent-model.js";
 import { SIDE_PANEL_TAB, type SidePanelControl, useSidePanel } from "../tasks/use-side-panel.js";
@@ -367,6 +378,13 @@ beforeEach(() => {
       if (request.kind === ACT_KIND.CODING_AGENTS_PULL_REQUEST && published !== undefined) {
         return Promise.resolve({ status: FAKE_ANSWER.DONE, value: published });
       }
+      // Note that main starts and ends a run of this Mac's without a word back.
+      if (
+        request.kind === ACT_KIND.MAC_TERMINAL_OPEN ||
+        request.kind === ACT_KIND.MAC_TERMINAL_CLOSE
+      ) {
+        return Promise.resolve({ status: FAKE_ANSWER.DONE, value: undefined });
+      }
       if (request.kind === ACT_KIND.GITHUB_OPEN) {
         openedOnGitHub.push(request.payload.url);
         return Promise.resolve({ status: FAKE_ANSWER.DONE, value: undefined });
@@ -422,19 +440,21 @@ afterEach(() => {
   takeDownTerminal = undefined;
 });
 
-/** The page of the agent, standing in the task's place, as the window's tasks control holds it. */
+/** The page of the agent, standing in the task's place, as the window's tasks control holds it, its atoms held by `registry`. */
 function mount(
   tasks: TasksControl = tasksControl({}),
   openLink?: (link: ReadLink) => void,
+  away?: { label: string; onPress: () => void },
+  registry = AtomRegistry.make(),
 ): HTMLElement {
   const container = document.createElement("div");
   document.body.append(container);
   root = createRoot(container);
-  const page = createElement(DesktopAgentPage, { tasks, agentId: AGENT_ID });
+  const page = createElement(DesktopAgentPage, { tasks, agentId: AGENT_ID, away });
   act(() =>
     root?.render(
       onRegistry(
-        AtomRegistry.make(),
+        registry,
         createElement(
           Fragment,
           null,
@@ -635,6 +655,31 @@ function PanelPage(): React.JSX.Element {
     tasks: { ...tasksControl({}), sidePanel },
     agentId: AGENT_ID,
   });
+}
+
+/** The agent's page in a phone's room, over the window's own side panel, which stands only full screen. */
+function PhonePanelPage(): React.JSX.Element {
+  const agents = [AGENT_ID];
+  const sidePanel = useSidePanel(
+    undefined,
+    { id: AGENT_ID, holds: {} },
+    agents,
+    [],
+    [],
+    [],
+    agents,
+    SHELL_ROOM.NARROW,
+  );
+  drawnPanel = sidePanel;
+  return createElement(
+    ShellRoomContext.Provider,
+    { value: SHELL_ROOM.NARROW },
+    createElement(DesktopAgentPage, {
+      tasks: { ...tasksControl({}), sidePanel },
+      agentId: AGENT_ID,
+      away: { label: "Inbox", onPress: () => undefined },
+    }),
+  );
 }
 
 test("a delegation's row opens its worker in the side panel beside the agent's page, whose + offers none of a task's Board, Code, or Call", async () => {
@@ -909,11 +954,11 @@ test("its last tab closed shuts the panel, and shown again it offers in place ev
   assert.ok(add, "the panel offers its +");
   act(() => add.click());
   await settle();
-  const offered = [...document.querySelectorAll(".tab-add-menu [role='option']")].map(
+  const offered = [...document.querySelectorAll(".luke-searchable-menu [role='option']")].map(
     (each) => each.textContent,
   );
-  const headings = [...document.querySelectorAll(".tab-add-menu [role='group']")].map((each) =>
-    each.getAttribute("aria-label"),
+  const headings = [...document.querySelectorAll(".luke-searchable-menu [role='group']")].map(
+    (each) => each.getAttribute("aria-label"),
   );
   act(() => add.click());
   await settle();
@@ -1060,8 +1105,8 @@ test("a chip in the agent's words naming the pull request it opened opens its Pu
   assert.deepEqual(openedOnGitHub, [other]);
 
   // A link in the pull request's own tab, to what its read left on GitHub, still leaves for GitHub.
-  const more = container.querySelector<HTMLButtonElement>(
-    "aside.side-panel .pull-request-earlier button",
+  const more = container.querySelector<HTMLAnchorElement>(
+    "aside.side-panel .pull-request-earlier a",
   );
   assert.ok(more, "the tab counts the earlier comments");
   act(() => more.click());
@@ -1155,18 +1200,22 @@ test("a skill a message names is its chip, which opens the skill's SKILL.md on G
   );
 });
 
-test("until the agent is read, its wait stands centred in the page's room rather than as a ring in its corner, and gives way to the agent once read", async () => {
+test("until the agent is read, the page stands in an agent tab's own shape saying Reading, and gives way to the agent once read", async () => {
   holdPage = true;
   const page = mount();
   await settle();
 
   const wait = page.querySelector('.agent-page [role="status"]');
-  assert.ok(wait, "the page says it is waiting");
-  assert.ok(wait.closest(".luke-spinner-region"), "the wait stands in a region filling the page");
+  assert.equal(wait?.textContent, "Reading the agent");
+  assert.ok(wait.closest(".agent-tab"), "the wait stands in the tab's own frame");
+  assert.ok(
+    page.querySelector(".agent-page .agent-tab-foot .luke-skeleton"),
+    "the composer's card stands under the log",
+  );
+  assert.equal(page.querySelector(".agent-page .luke-spinner-region"), null);
   assert.equal(page.querySelector("h1"), null);
   answerHeld();
   await settle();
-
   assert.equal(page.querySelector("h1")?.textContent, "Sweep the flaky tests");
 });
 
@@ -1197,10 +1246,32 @@ test("an agent the service will not hand the reader, as a link to another worksp
     /Not foundThis agent doesn't exist, or you don't have access to it\./u,
   );
   assert.equal(page.querySelector("h1"), null);
+  // The window's bar stands over the words saying so, as it stands over every page.
+  assert.equal(
+    page.querySelector("section[aria-label='Not found']")?.firstElementChild?.tagName,
+    "HEADER",
+  );
   assert.equal(
     [...page.querySelectorAll("button")].some((each) => /Retry/u.test(each.textContent ?? "")),
     false,
   );
+});
+
+test("on a phone an agent that is not found still leads with its way back", async () => {
+  pages = [{ failure: CODING_AGENT_CALL_FAILURE.NOT_FOUND }];
+  const left: string[] = [];
+  const page = mount(tasksControl({}), undefined, {
+    label: "Inbox",
+    onPress: () => left.push("away"),
+  });
+  await settle();
+
+  assert.match(page.textContent ?? "", /Not found/u);
+  const head = page.querySelector<HTMLElement>(".agent-head") ?? assert.fail("the phone's bar");
+  const back = head.querySelector<HTMLButtonElement>("button") ?? assert.fail("its way back");
+  assert.equal(back.textContent?.trim(), "Inbox");
+  act(() => back.click());
+  assert.deepEqual(left, ["away"]);
 });
 
 test("an archived agent's page offers Unarchive in its composer's place, which brings the agent back", async () => {
@@ -1342,7 +1413,9 @@ test("a teammate's message to an agent on its own page carries their sign-in pic
   );
   await settle();
 
-  const sender = page.querySelector(".is-user:not(.agent-origin) .message-sender [data-actor-ref]");
+  const sender = page.querySelector(
+    ".is-user:not(.agent-origin) .luke-message-line-sender [data-actor-ref]",
+  );
   assert.equal(sender?.querySelector(".luke-inline-ref-label")?.textContent, "Charles Pan");
   assert.equal(sender?.querySelector("img")?.getAttribute("src"), picture);
 });
@@ -1383,7 +1456,7 @@ function origin(page: HTMLElement): OpenedOrigin {
     page.querySelector<HTMLElement>(".agent-origin") ?? assert.fail("the page opens on its card");
   const head = card.querySelector<HTMLElement>("[data-task-card] > summary");
   act(() => head?.click());
-  return { card, sender: card.querySelector<HTMLElement>(".message-sender") };
+  return { card, sender: card.querySelector<HTMLElement>(".luke-message-line-sender") };
 }
 
 test("an automation's agent opens on the automation's prompt alone, sent by the automation, whose name opens its page", async () => {
@@ -1442,7 +1515,7 @@ test("a GitHub event's run names its pull request beside the automation, which o
   await settle();
 
   const { sender } = origin(page);
-  assert.equal(words(sender), "Flaky-test sweep · #2905 View commands · Run by you");
+  assert.equal(words(sender), "Flaky-test sweep · pull request #2905 View commands · Run by you");
   act(() => sender?.querySelector<HTMLElement>("[data-mention-ref]")?.click());
   await settle();
   assert.deepEqual(openedOnGitHub, [], "nothing opened on GitHub");
@@ -1572,7 +1645,7 @@ function pageMenuItem(page: HTMLElement, label: string): HTMLButtonElement {
   );
 }
 
-test("the page's ⋯ offers what a task's agent's tab ⋯ does: Rename, Open terminal, Copy link, the transcript's two copies, Archive agent, and Permanently delete last, and no Run, which its Pull request tab offers", async () => {
+test("the page's ⋯ offers what a task's agent's tab ⋯ does: Rename, Show terminal, Copy link, the transcript's two copies, Archive, and Permanently delete last, and no Run, which its Pull request tab offers", async () => {
   const page = mount();
   await settle();
   const more = page.querySelector<HTMLButtonElement>('[aria-label="Agent actions"]');
@@ -1584,11 +1657,11 @@ test("the page's ⋯ offers what a task's agent's tab ⋯ does: Rename, Open ter
   );
   assert.deepEqual(offered, [
     "Rename",
-    "Open terminal⌘J",
+    "Show terminal⌘J",
     "Copy link",
     "Copy concise transcript",
     "Copy full transcript",
-    "Archive agent",
+    "Archive",
     "Permanently delete",
   ]);
 });
@@ -1606,7 +1679,7 @@ test("Luke's page is titled Luke, and its ⋯ offers neither Rename, Archive, no
   assert.equal(page.querySelector("h1")?.textContent, "Luke");
   assert.deepEqual(
     [...document.querySelectorAll('[role="menuitem"]')].map((each) => each.textContent),
-    ["Open terminal⌘J", "Copy link", "Copy concise transcript", "Copy full transcript"],
+    ["Show terminal⌘J", "Copy link", "Copy concise transcript", "Copy full transcript"],
   );
 });
 
@@ -1645,10 +1718,10 @@ function mountHearingPanel() {
   return { page, chosen };
 }
 
-test("Open terminal on the page's ⋯, and ⌘J, show the agent's own Terminal tab in the side panel beside its page, as on a task", async () => {
+test("Show terminal on the page's ⋯, and ⌘J, show the agent's own Terminal tab in the side panel beside its page, as on a task", async () => {
   const { page, chosen } = mountHearingPanel();
   await settle();
-  const open = pageMenuItem(page, "Open terminal⌘J");
+  const open = pageMenuItem(page, "Show terminal⌘J");
   act(() => open.click());
   await settle();
   let offered = false;
@@ -1678,7 +1751,7 @@ test("an archived agent's page offers no terminal, from its ⋯ or ⌘J, its san
   });
   await settle();
 
-  assert.ok(!offered.includes("Open terminal⌘J"), `no Open terminal: ${offered.join(", ")}`);
+  assert.ok(!offered.includes("Show terminal⌘J"), `no Show terminal: ${offered.join(", ")}`);
   assert.equal(ran, false, "⌘J is not offered");
   assert.deepEqual(chosen, []);
 });
@@ -1790,6 +1863,152 @@ test("Run in the header of a Pull request tab opened by its number runs that pul
   assert.equal(tab.number, 2905);
 });
 
+/** Runs the agent's pushed branch on this Mac from the Pull request tab's header, which shows the run's Mac terminal tab. */
+/** The agent has pushed a branch, which its pull request tab reads. */
+function pushBranch(): void {
+  published = {
+    repository: "acme/relay",
+    branch: "luke/flaky-sweep",
+    pullRequest: {
+      number: 2911,
+      title: "Await the payment mock",
+      url: "https://github.com/acme/relay/pull/2911",
+      state: PULL_REQUEST_STATE.OPEN,
+      checks: CHECK_SUMMARY.PASSING,
+      additions: 3,
+      deletions: 1,
+      changedFiles: 1,
+    },
+  };
+}
+
+async function runOnThisMac(): Promise<void> {
+  takeDownTerminal = standTerminalDocument();
+  pages = [{ agent: { ...PAGE, status: CODING_AGENT_STATUS.RUNNING } }];
+  pushBranch();
+  const container = await mountPanelPage();
+  await settle();
+  const row =
+    container.querySelector<HTMLButtonElement>(
+      '.agent-tab-foot [aria-label="Pull request"] li > button',
+    ) ?? assert.fail("the pull request's row stands over the box");
+  act(() => row.click());
+  await settle();
+  const run =
+    container.querySelector<HTMLButtonElement>(
+      'aside.side-panel .pull-request-title-actions button[aria-label="Run on this Mac"]',
+    ) ?? assert.fail("the Pull request tab's header offers Run");
+  act(() => run.click());
+  await settle();
+}
+
+/** Hands the run's tab a port, as main does after an open, and answers what it can say on it. */
+async function postRunPort(): Promise<(message: MacTerminalPortOutbound) => void> {
+  const { port1: port } = new MessageChannel();
+  act(() => {
+    window.dispatchEvent(
+      new MessageEvent("message", {
+        data: { channel: MAC_TERMINAL_PORT_CHANNEL, ticket: { agentId: AGENT_ID } },
+        source: window,
+        ports: [port],
+      }),
+    );
+  });
+  await settle();
+  return (message) => act(() => port.onmessage?.(new MessageEvent("message", { data: message })));
+}
+
+/** The × on the Mac terminal's tab in the strip. */
+function macTerminalClose(): HTMLButtonElement {
+  return (
+    document.querySelector<HTMLButtonElement>(
+      `aside.side-panel button[aria-label="Close ${TAB_WORDS.MAC_TERMINAL}"]`,
+    ) ?? assert.fail("the Mac terminal's tab has a ×")
+  );
+}
+
+/** The question standing over the window, as its words and its answer buttons. */
+function questionStanding() {
+  const dialog = document.querySelector('[role="alertdialog"]');
+  return {
+    words: dialog?.textContent ?? "",
+    press: async (verb: string) => {
+      const button = [...(dialog?.querySelectorAll<HTMLButtonElement>("button") ?? [])].find(
+        (each) => each.textContent === verb,
+      );
+      assert.ok(button, `the question offers ${verb}`);
+      await act(async () => button.click());
+      await settle();
+    },
+  };
+}
+
+test("closing a Mac terminal's tab while its run is going asks first, and Cancel leaves it open", async () => {
+  await runOnThisMac();
+  await postRunPort();
+  assert.ok(isMacTerminalTab(drawnPanel?.tab ?? SIDE_PANEL_TAB.PLAN), "Run shows a Mac terminal");
+
+  act(() => macTerminalClose().click());
+  await settle();
+
+  const question = questionStanding();
+  assert.match(question.words, /Close this terminal\?.*What's running in it ends\./u);
+  assert.ok(
+    isMacTerminalTab(drawnPanel?.tab ?? SIDE_PANEL_TAB.PLAN),
+    "nothing is closed before the answer",
+  );
+  await question.press("Cancel");
+  assert.equal(document.querySelector('[role="alertdialog"]'), null);
+  assert.ok(isMacTerminalTab(drawnPanel?.tab ?? SIDE_PANEL_TAB.PLAN), "Cancel leaves it open");
+
+  act(() => macTerminalClose().click());
+  await settle();
+  await questionStanding().press("Close");
+  assert.ok(!isMacTerminalTab(drawnPanel?.tab ?? SIDE_PANEL_TAB.PLAN), "the answer closes the tab");
+});
+
+test("on a phone, Close in the panel header asks first while the run is going, as the strip's × does", async () => {
+  takeDownTerminal = standTerminalDocument();
+  pushBranch();
+  localStorage.clear();
+  installScrollIntoView();
+  const container = document.createElement("div");
+  document.body.append(container);
+  root = createRoot(container);
+  act(() => root?.render(onRegistry(AtomRegistry.make(), createElement(PhonePanelPage))));
+  await settle();
+  act(() => drawnPanel?.onChoose({ macTerminal: AGENT_ID, repository: "acme/relay", asked: 1 }));
+  await settle();
+  await postRunPort();
+  assert.ok(isMacTerminalTab(drawnPanel?.tab ?? SIDE_PANEL_TAB.PLAN), "the Mac terminal is shown");
+
+  const more =
+    container.querySelector<HTMLButtonElement>('[aria-label="Panel actions"]') ??
+    assert.fail("the panel's header has a ⋯");
+  act(() => more.click());
+  const close = [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find((each) =>
+    each.textContent?.startsWith("Close"),
+  );
+  assert.ok(close, "the ⋯ offers Close");
+  act(() => close.click());
+  await settle();
+
+  assert.match(questionStanding().words, /Close this terminal\?/u);
+  assert.ok(isMacTerminalTab(drawnPanel?.tab ?? SIDE_PANEL_TAB.PLAN), "nothing is closed unasked");
+});
+
+test("closing a Mac terminal's tab once its run has ended asks nothing", async () => {
+  await runOnThisMac();
+  const say = await postRunPort();
+  say({ type: MAC_TERMINAL_PORT_MESSAGE.EXIT, code: 0 });
+
+  act(() => macTerminalClose().click());
+  await settle();
+
+  assert.equal(document.querySelector('[role="alertdialog"]'), null, "no question stands");
+  assert.ok(!isMacTerminalTab(drawnPanel?.tab ?? SIDE_PANEL_TAB.PLAN), "the tab closed at once");
+});
+
 test("a fork's Pull request tab offers no Run, since its head's branch name would be read from the base repository", async () => {
   pages = [{ agent: { ...PAGE, status: CODING_AGENT_STATUS.RUNNING } }];
   published = {
@@ -1822,10 +2041,10 @@ test("a fork's Pull request tab offers no Run, since its head's branch name woul
   );
 });
 
-test("Archive agent on the page's ⋯ reads an agent at rest again and archives it unasked, its composer giving way to Unarchive", async () => {
+test("Archive on the page's ⋯ reads an agent at rest again and archives it unasked, its composer giving way to Unarchive", async () => {
   const page = mount();
   await settle();
-  const archive = pageMenuItem(page, "Archive agent");
+  const archive = pageMenuItem(page, "Archive");
   await act(async () => archive.click());
   await settle();
 
@@ -1837,16 +2056,16 @@ test("Archive agent on the page's ⋯ reads an agent at rest again and archives 
   );
 });
 
-test("Archive agent on the page's ⋯ asks first while the agent works, and archives nothing until asked", async () => {
+test("Archive on the page's ⋯ archives the reader's own agent at once while it works, asking nothing", async () => {
   pages = [{ agent: { ...PAGE, status: CODING_AGENT_STATUS.RUNNING } }];
   const page = mount();
   await settle();
-  const archive = pageMenuItem(page, "Archive agent");
+  const archive = pageMenuItem(page, "Archive");
   await act(async () => archive.click());
   await settle();
 
-  assert.match(document.body.textContent ?? "", /Stop and archive Sweep the flaky tests\?/u);
-  assert.deepEqual(archives, []);
+  assert.equal(document.querySelector('[role="alertdialog"]'), null, "nothing was asked");
+  assert.deepEqual(archives, [{ agentId: AGENT_ID, archived: true }]);
 });
 
 test("an archived agent's ⋯ offers Unarchive in Archive's place, and no Rename", async () => {
@@ -1871,7 +2090,7 @@ test("an archive the service refuses says why and leaves the automation's prompt
   archiveRefused = true;
   const page = mount(tasksControl({ workspaces: [ACME] }));
   await settle();
-  const archive = pageMenuItem(page, "Archive agent");
+  const archive = pageMenuItem(page, "Archive");
   await act(async () => archive.click());
   await settle();
 
@@ -1901,75 +2120,110 @@ test("Rename on the page's ⋯ turns the title into its name's field, and the na
   assert.equal(page.querySelector("h1")?.textContent, "Sweep the slow tests");
 });
 
-test("an @ in the agent's box names an archived agent by its task's name, read from the window's tasks", async () => {
-  installEditorLayout();
-  installScrollIntoView();
-  const billing: Task = {
-    id: "2b2b2b2b-0000-4000-8000-000000000000",
-    workspaceId: PAGE.workspaceId,
-    name: "Billing",
-    createdAt: 1,
-    updatedAt: 2,
-    repository: "acme/relay",
-    document: { body: "", assumptions: [] },
-  };
-  workspace = [
-    {
-      id: "3c3c3c3c-0000-4000-8000-000000000000",
-      planId: billing.id,
-      model: PAGE.model,
-      effort: PAGE.effort,
-      title: "Bill by seat",
-      createdAt: 1,
-      status: CODING_AGENT_STATUS.COMPLETED,
-      turnId: null,
-      archivedAt: 3,
-    },
-  ];
-  const page = mount(tasksControl({ tasks: [billing] }));
-  await settle();
+/** A registry whose atoms wait on this clock, as the window's wait on its own. */
+function registryOn(clock: Clock.Clock): AtomRegistry.AtomRegistry {
+  return AtomRegistry.make({
+    initialValues: [[rendererRuntime, AsyncResult.success(Context.make(Clock.Clock, clock))]],
+  });
+}
 
-  typeInComposer(page, "Ask @billing");
-  await settle();
-
-  const rows = [...page.querySelectorAll('.mention-menu [aria-label="Agents"] [role="option"]')];
-  assert.deepEqual(
-    rows.map((row) => [
-      row.querySelector(".luke-combobox-option-label")?.textContent,
-      row.querySelector(".luke-combobox-option-detail")?.textContent,
-    ]),
-    [["Bill by seat", "Billing · Archived"]],
-  );
+/** The clock moved past the pause the typing rests before agents are searched for, and what the search answered drawn. */
+const pastSearchPause = Effect.gen(function* () {
+  yield* TestClock.adjust("300 millis");
+  yield* Effect.promise(settle);
 });
 
-test("an agent working in no repository, as Luke does, still takes an @ in its box, which offers the workspace's agents", async () => {
-  installEditorLayout();
-  installScrollIntoView();
-  pages = [{ agent: { ...PAGE, repository: null } }];
-  workspace = [
-    {
-      id: "3c3c3c3c-0000-4000-8000-000000000000",
-      planId: null,
-      model: PAGE.model,
-      effort: PAGE.effort,
-      title: "Bill by seat",
-      createdAt: 1,
-      status: CODING_AGENT_STATUS.COMPLETED,
-      turnId: null,
-    },
-  ];
-  const page = mount(tasksControl({ workspace: ACME, workspaces: [ACME] }));
-  await settle();
+it.effect(
+  "an @ in the agent's box names an archived agent by its task's name, read from the window's tasks",
+  () =>
+    Effect.gen(function* () {
+      installEditorLayout();
+      installScrollIntoView();
+      const billing: Task = {
+        id: "2b2b2b2b-0000-4000-8000-000000000000",
+        workspaceId: PAGE.workspaceId,
+        name: "Billing",
+        createdAt: 1,
+        updatedAt: 2,
+        repository: "acme/relay",
+        document: { body: "", assumptions: [] },
+      };
+      workspace = [
+        {
+          id: "3c3c3c3c-0000-4000-8000-000000000000",
+          planId: billing.id,
+          model: PAGE.model,
+          effort: PAGE.effort,
+          title: "Bill by seat",
+          createdAt: 1,
+          status: CODING_AGENT_STATUS.COMPLETED,
+          turnId: null,
+          archivedAt: 3,
+        },
+      ];
+      const page = mount(
+        tasksControl({ tasks: [billing] }),
+        undefined,
+        undefined,
+        registryOn(yield* Clock.Clock),
+      );
+      yield* Effect.promise(settle);
 
-  typeInComposer(page, "Ask @bill");
-  await settle();
+      typeInComposer(page, "Ask @billing");
+      yield* pastSearchPause;
 
-  const rows = [...page.querySelectorAll('.mention-menu [aria-label="Agents"] [role="option"]')];
-  assert.deepEqual(
-    rows.map((row) => row.querySelector(".luke-combobox-option-label")?.textContent),
-    ["Bill by seat"],
-  );
-});
+      const rows = [
+        ...page.querySelectorAll('.mention-menu [aria-label="Agents"] [role="option"]'),
+      ];
+      assert.deepEqual(
+        rows.map((row) => [
+          row.querySelector(".luke-combobox-option-label")?.textContent,
+          row.querySelector(".luke-combobox-option-detail")?.textContent,
+        ]),
+        [["Bill by seat", "Billing · Archived"]],
+      );
+    }),
+);
+
+it.effect(
+  "an agent working in no repository, as Luke does, still takes an @ in its box, which offers the workspace's agents",
+  () =>
+    Effect.gen(function* () {
+      installEditorLayout();
+      installScrollIntoView();
+      pages = [{ agent: { ...PAGE, repository: null } }];
+      workspace = [
+        {
+          id: "3c3c3c3c-0000-4000-8000-000000000000",
+          planId: null,
+          model: PAGE.model,
+          effort: PAGE.effort,
+          title: "Bill by seat",
+          createdAt: 1,
+          status: CODING_AGENT_STATUS.COMPLETED,
+          turnId: null,
+        },
+      ];
+      const page = mount(
+        tasksControl({ workspace: ACME, workspaces: [ACME] }),
+        undefined,
+        undefined,
+        registryOn(yield* Clock.Clock),
+      );
+      yield* Effect.promise(settle);
+
+      typeInComposer(page, "Ask @bill");
+      yield* pastSearchPause;
+
+      const rows = [
+        ...page.querySelectorAll('.mention-menu [aria-label="Agents"] [role="option"]'),
+      ];
+      assert.deepEqual(
+        rows.map((row) => row.querySelector(".luke-combobox-option-label")?.textContent),
+        ["Bill by seat"],
+      );
+    }),
+);
 
 test("on the page of an agent working in no repository, a GitHub page of a file or a folder in its words is that file's or folder's chip, of the repository its address names, and opens on GitHub", async () => {
   pages = [{ agent: { ...PAGE, repository: null } }];
@@ -2095,7 +2349,7 @@ test("Permanently delete on the page's ⋯ asks first, naming the agent, and onc
   assert.equal(title?.textContent, "Permanently delete agent?");
   assert.match(
     body?.textContent ?? "",
-    /and its transcript will be deleted\. This can’t be undone\. To keep it out of the way instead, archive it\.$/u,
+    /and its transcript will be deleted\. This cannot be undone\. To keep it out of the way instead, archive it\.$/u,
   );
   assert.equal(
     document.activeElement,
@@ -2126,7 +2380,9 @@ test("a delete the service refused for an agent still starting says why in the d
   await settle();
 
   assert.deepEqual(deletes, [AGENT_ID]);
-  const reason = document.querySelector('[role="alertdialog"] [role="alert"]');
+  const reason = document.querySelector(
+    '[role="alertdialog"] [data-slot="field-error"]:not(:empty)',
+  );
   assert.equal(reason?.textContent, "The agent is still starting its turn. Try again in a moment.");
   assert.equal(closed, 0);
 });
@@ -2215,8 +2471,30 @@ test("code Luke showed on a call into the agent with no task stands in its page'
   assert.ok(panel, "the panel stands beside the page");
   assert.match(panel.textContent ?? "", /src\/relay\.ts/u);
   // No File tab reads a repository no task names, so the card offers no way into one.
-  assert.ok(panel.querySelector(".code-card"), "the code's card stands");
-  assert.equal(panel.querySelector(".code-card [aria-label^='Open ']"), null);
+  assert.ok(panel.querySelector(".luke-code-card"), "the code's card stands");
+  assert.equal(panel.querySelector(".luke-code-card [aria-label^='Open ']"), null);
+});
+
+test("on a phone the page is headed by its way back's glyph, the agent's name centred, and its one ⋯, which offers the panel the title bar's toggle offered", async () => {
+  const left: string[] = [];
+  const page = mount(tasksControl({}), undefined, {
+    label: "Inbox",
+    onPress: () => left.push("away"),
+  });
+  await settle();
+  const head = page.querySelector<HTMLElement>(".agent-head");
+  assert.ok(head, "the phone's head stands");
+  assert.deepEqual(
+    [...head.querySelectorAll("button")].map(
+      (each) => each.textContent?.trim() || each.getAttribute("aria-label"),
+    ),
+    ["Inbox", "Agent actions"],
+    "one control a corner",
+  );
+  assert.ok(head.querySelector("h1")?.textContent, "the agent's name is the title");
+  assert.ok(pageMenuItem(page, "Show panel"), "the ⋯ offers the panel");
+  act(() => head.querySelector<HTMLButtonElement>("button")?.click());
+  assert.deepEqual(left, ["away"], "the way back goes where the shell says");
 });
 
 test("the page drawn again over the same agent draws none of the links and chips in its words again", async () => {

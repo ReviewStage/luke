@@ -1,11 +1,14 @@
 import { CODING_AGENT_CALL_FAILURE } from "@luke/features/coding-agent-view";
 import { INBOX_STATUS, type InboxItem } from "@luke/features/inbox-wire";
+import { countWords, TERM } from "@luke/features/words";
 import { ACT_KIND } from "@luke/host/acts";
 import type { AppInboxTaskHolding } from "@luke/host/app-state";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
+import { STATUS_TONE } from "@luke/ui";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef } from "react";
 import type { ActHandle } from "../act.js";
 import { useAppCommand } from "../app-commands.js";
+import { TOAST_HOLD, useToast } from "../toast.js";
 import {
   acknowledgedOnOpen,
   INBOX_HOLDER,
@@ -30,7 +33,9 @@ import type { TaskInboxControl } from "./use-task-inbox.js";
  * account, and the mark stands over it for as long as that read stands. The acts go one at a time, in the order the marks
  * were made, so a quick read, unread, read reaches the service as the last,
  * Mark all as read in its turn among them. A mark the service did not take
- * is let go, and the dot stands as the reads hold it. Marking every item
+ * is let go, the dot stands as the reads hold it, and a toast says so, unless
+ * the caller asks for quiet because it says the refusal itself, as the
+ * selection bar does for the items it marked together. Marking every item
  * read marks the items the Inbox lists in the one workspace it lists, as
  * the service marks them, and asks the reads again once it is taken, since
  * the write moves nothing main hears of; an item waiting on the developer
@@ -44,10 +49,15 @@ import type { TaskInboxControl } from "./use-task-inbox.js";
  * once each time it is shown, so an update counts as seen once it is opened.
  */
 
+/** How a mark is told: `quiet` where the caller says a refusal itself, so it is never toasted twice. */
+export interface MarkSaying {
+  readonly quiet?: boolean | undefined;
+}
+
 /** What the Inbox's read marks offer: the presses that mark. */
 export interface InboxReadMarks {
-  /** Marks one item read or unread. */
-  readonly onMark: (item: InboxItem, unread: boolean) => void;
+  /** Marks one item read or unread; answers, once the mark went, whether the service took it, as a batch of marks counts what it refused. A refusal is toasted unless `saying` is quiet. */
+  readonly onMark: (item: InboxItem, unread: boolean, saying?: MarkSaying) => Promise<boolean>;
   /** Marks every item given that is unread as read, as the service marks the listed workspace's. */
   readonly onMarkAll: (items: readonly InboxItem[]) => void;
 }
@@ -94,6 +104,14 @@ function markOf(
   return { unread, updatedAt: item.updatedAt, ...(toDo === undefined ? undefined : { toDo }) };
 }
 
+/** What one toast says of read marks given to several items: how many the service took, and how many not. */
+export function markedNote(unread: boolean, landed: number, refused: number): string {
+  const state = unread ? "unread" : "read";
+  if (landed === 0) return `Could not mark ${countWords(refused, TERM.INBOX_ITEM)} ${state}`;
+  const kept = `${countWords(landed, TERM.INBOX_ITEM)} marked ${state}`;
+  return refused === 0 ? kept : `${kept}, ${refused} could not be`;
+}
+
 /** What a mark the act channel refused hears, as the service not answering. */
 const UNANSWERED = { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED } as const;
 
@@ -127,6 +145,11 @@ export function useInboxReadMarks({
   toDo?: InboxToDoBasis | undefined;
 }): InboxReadMarks {
   const settler = useInboxSettler();
+  const toast = useToast();
+  const refused = useCallback(
+    (words: string) => toast({ words, tone: STATUS_TONE.DANGER, hold: TOAST_HOLD.FAILED }),
+    [toast],
+  );
   // Note that the basis is read as a mark is made, so the presses stay the same while what is listed moves.
   const basis = useRef(toDo);
   useLayoutEffect(() => {
@@ -138,13 +161,14 @@ export function useInboxReadMarks({
   const send = useCallback((write: () => Promise<void>) => {
     queue.current = queue.current.then(write);
   }, []);
+  // Note that a mark a later one stood for before it went answers as taken, since the write that sent the later one answers its own press.
   const onMark = useCallback(
-    (item: InboxItem, unread: boolean) => {
+    (item: InboxItem, unread: boolean, saying?: MarkSaying): Promise<boolean> => {
       const made = settler.mark(new Map([[item.id, markOf(basis.current, item, unread)]]));
       wanted.current.set(item.id, { made, unread });
-      send(() => {
+      const sent = queue.current.then(() => {
         const latest = wanted.current.get(item.id);
-        if (latest === undefined) return Promise.resolve();
+        if (latest === undefined) return true;
         wanted.current.delete(item.id);
         return act(ACT_KIND.CODING_AGENTS_INBOX_READ_STATE, {
           itemId: item.id,
@@ -153,12 +177,19 @@ export function useInboxReadMarks({
           .catch(() => UNANSWERED)
           .then((answer) => {
             // Note that a mark is let go only where it still stands as it was made, so a later mark on the same item outlives an earlier one's refusal.
-            if ("failure" in answer) settler.unmark(latest.made);
-            else settler.marked(latest.made);
+            if (!("failure" in answer)) {
+              settler.marked(latest.made);
+              return true;
+            }
+            settler.unmark(latest.made);
+            if (saying?.quiet !== true) refused(markedNote(latest.unread, 0, 1));
+            return false;
           });
       });
+      queue.current = sent.then(() => undefined);
+      return sent;
     },
-    [act, send, settler],
+    [act, settler, refused],
   );
   const onMarkAll = useCallback(
     (items: readonly InboxItem[]) => {
@@ -175,13 +206,14 @@ export function useInboxReadMarks({
           .then((answer) => {
             if ("failure" in answer) {
               settler.unmark(made);
+              refused(markedNote(false, 0, marks.size));
               return;
             }
             settler.marked(made);
           }),
       );
     },
-    [act, workspaceId, send, settler],
+    [act, workspaceId, send, settler, refused],
   );
   return useMemo(() => ({ onMark, onMarkAll }), [onMark, onMarkAll]);
 }

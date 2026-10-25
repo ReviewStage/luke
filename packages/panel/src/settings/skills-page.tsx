@@ -6,17 +6,21 @@ import {
   INSTALLED_SKILL_CALL_FAILURE,
   type InstalledSkillFailedView,
 } from "@luke/features/installed-skill-view";
-import { INSTALLED_SKILL_SOURCE } from "@luke/features/installed-skill-wire";
+import { INSTALLED_SKILL_SCOPE, INSTALLED_SKILL_SOURCE } from "@luke/features/installed-skill-wire";
+import { formatBytes } from "@luke/features/number-format";
+import { readingWords } from "@luke/features/words";
 import type { Workspace } from "@luke/features/workspace-wire";
 import { ACT_KIND } from "@luke/host/acts";
+import { SETTING_KEEP, settingKeepWords } from "@luke/settings";
+import { SETTINGS_SEARCH_ROW } from "@luke/settings/settings-anchors";
 import {
   BUTTON_VARIANT,
   Button,
+  CONFIRM_LOSS,
   ConfirmDialog,
   DIALOG_SIZE,
-  DIALOG_TONE,
   Dialog,
-  DocumentIcon,
+  DialogActions,
   ErrorState,
   Fact,
   Facts,
@@ -33,9 +37,11 @@ import {
   type SettingsSectionSkeletonShape,
   SettingsSectionsSkeleton,
   SpinnerRegion,
+  STATUS_TONE,
   Stack,
   Switch,
   TEXT_ELEMENT,
+  TEXT_FONT,
   TEXT_VARIANT,
   Text,
   Tooltip,
@@ -43,16 +49,17 @@ import {
   UpdateIcon,
   useConfirmDialog,
 } from "@luke/ui";
+import { GLYPH } from "@luke/ui/icons";
 import type { SkillOption } from "@luke/ui/skill-mention";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
-import { FolderInputIcon } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useAct } from "../act.js";
 import { MarkdownMessage } from "../markdown-message.js";
 import { SkillCard, SkillMark } from "../tasks/skill-ref.js";
 import { SkillSourceBadge } from "../tasks/skill-source-badge.js";
 import { useWorkspaceMembersRead } from "../tasks/use-workspace-members.js";
-import { TOAST_HOLD, TOAST_TONE, useToast } from "../toast.js";
+import { TOAST_HOLD, useToast } from "../toast.js";
+import { useDrawnThroughExit } from "../use-held-through-exit.js";
 import { AddSkillDialog } from "./add-skill-dialog.js";
 import { MenuRow } from "./menu-row.js";
 import { shownWorkspace } from "./settings-rows.js";
@@ -60,13 +67,13 @@ import {
   failureLine,
   fencedSkillFile,
   installedNotice,
+  removeQuestion,
   SKILL_ACTION,
   SKILLS_LINE,
   type SkillAction,
   type SkillRow,
   shareFailureLine,
   shareQuestion,
-  sizeText,
   skillActions,
   skillGroups,
   withSkill,
@@ -99,6 +106,14 @@ import type { WorkspaceSettingsControl } from "./workspace-page.js";
  * drawn; each GitHub skill the account may change is then checked for an
  * update, once.
  */
+
+/**
+ * The sentence the workspace group's rows end in: the page's head says the
+ * account keeps what the page holds, and the workspace's skills are the
+ * exception, shared with every member. A workspace is no device, so no
+ * capability changes its words.
+ */
+const WORKSPACE_KEEP_LINE = `${settingKeepWords(SETTING_KEEP.WORKSPACE, [])}.`;
 
 /** An installed skill's row while the skills are read: its book, its words over its source, its switch, and its ⋯. */
 const SKILL_ROW_SKELETON: SettingsRowSkeletonShape = {
@@ -150,8 +165,8 @@ const UNANSWERED_LINE = failureLine({ failure: INSTALLED_SKILL_CALL_FAILURE.UNAN
 
 /** The glyph each of a row's acts leads with. */
 const ACTION_ICON = {
-  [SKILL_ACTION.VIEW]: <DocumentIcon />,
-  [SKILL_ACTION.SHARE]: <FolderInputIcon />,
+  [SKILL_ACTION.VIEW]: <GLYPH.PLAN />,
+  [SKILL_ACTION.SHARE]: <GLYPH.MOVE />,
   [SKILL_ACTION.UPDATE]: <UpdateIcon />,
   [SKILL_ACTION.REMOVE]: <TrashIcon />,
 } as const satisfies Record<SkillAction, React.JSX.Element>;
@@ -172,11 +187,16 @@ type ContentRead =
 
 /** View: a skill's `SKILL.md` drawn as written, and every file it carries with its size. */
 function SkillFileDialog({
+  open,
   skill,
   onClose,
+  onExited,
 }: {
+  /** Whether the card stands; falling, it fades out, then tells its owner it is gone. */
+  open: boolean;
   skill: InstalledSkillSummary;
   onClose: () => void;
+  onExited: () => void;
 }): React.JSX.Element {
   const { act } = useAct();
   const [read, setRead] = useState<ContentRead>(READING);
@@ -201,14 +221,12 @@ function SkillFileDialog({
 
   return (
     <Dialog
+      open={open}
       title={skill.name}
       size={DIALOG_SIZE.WIDE}
       onDismiss={onClose}
-      actions={
-        <Button variant={BUTTON_VARIANT.QUIET} onClick={onClose}>
-          Close
-        </Button>
-      }
+      onExited={onExited}
+      actions={<DialogActions onDone={onClose} />}
     >
       {read.kind === LIST.READING ? (
         <SpinnerRegion label={`Reading ${skill.name}`} delay />
@@ -218,13 +236,24 @@ function SkillFileDialog({
         <Stack gap={GAP.FIELD}>
           <MarkdownMessage words={fencedSkillFile(read.content.skillFile)} />
           <Stack gap={GAP.ITEM}>
-            <Text variant={TEXT_VARIANT.LABEL} as={TEXT_ELEMENT.H3}>
+            <Text variant={TEXT_VARIANT.SECTION} as={TEXT_ELEMENT.H3}>
               {SKILLS_LINE.FILES}
             </Text>
             <Facts>
               {read.content.files.map((file) => (
-                <Fact key={file.path} label={file.path}>
-                  {sizeText(file.bytes)}
+                <Fact
+                  key={file.path}
+                  label={
+                    <Text
+                      as={TEXT_ELEMENT.SPAN}
+                      variant={TEXT_VARIANT.INHERIT}
+                      font={TEXT_FONT.MONO}
+                    >
+                      {file.path}
+                    </Text>
+                  }
+                >
+                  {formatBytes(file.bytes)}
                 </Fact>
               ))}
             </Facts>
@@ -262,6 +291,8 @@ function SkillRowView({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | undefined>(undefined);
   const [viewing, setViewing] = useState(false);
+  // Note that the card reads the skill while it is drawn, from its opening until its fade has run, so each View reads afresh.
+  const viewed = useDrawnThroughExit(viewing);
 
   /** A toggle or an update sent, its answer put in the list, or why it is unchanged under the row. */
   const write = (
@@ -335,7 +366,7 @@ function SkillRowView({
       >
         <div>
           <MenuRow
-            label={`${skill.name} actions`}
+            thing={skill.name}
             actions={actions}
             row={{
               leading: (
@@ -344,7 +375,10 @@ function SkillRowView({
                 </SettingsRowMark>
               ),
               label: skill.name,
-              description: `${skill.description} · ${row.line}`,
+              description:
+                skill.scope === INSTALLED_SKILL_SCOPE.WORKSPACE
+                  ? `${skill.description} · ${row.line}. ${WORKSPACE_KEEP_LINE}`
+                  : `${skill.description} · ${row.line}`,
               error,
               landed,
               control: <SkillSourceBadge source={row.source} />,
@@ -366,20 +400,23 @@ function SkillRowView({
           />
         </div>
       </Tooltip>
+      <ConfirmDialog open confirm={removal} question={removeQuestion(skill, workspace)} />
       <ConfirmDialog
-        confirm={removal}
+        open
+        confirm={sharing}
         question={{
-          title: `Remove ${skill.name}?`,
-          body: "Agents started afterwards no longer load it. Installing it again takes the paste again.",
-          verb: "Remove",
-          running: "Removing…",
+          ...shareQuestion(skill.name, workspace),
+          loss: CONFIRM_LOSS.AFFECTS_OTHERS,
         }}
       />
-      <ConfirmDialog
-        confirm={sharing}
-        question={{ ...shareQuestion(skill.name, workspace), tone: DIALOG_TONE.PRIMARY }}
-      />
-      {viewing ? <SkillFileDialog skill={skill} onClose={() => setViewing(false)} /> : null}
+      {viewed.drawn ? (
+        <SkillFileDialog
+          open={viewing}
+          skill={skill}
+          onClose={() => setViewing(false)}
+          onExited={viewed.onExited}
+        />
+      ) : null}
     </>
   );
 }
@@ -398,6 +435,8 @@ function ShownSkills({
   const [list, setList] = useState<ListRead>(READING);
   const [attempt, setAttempt] = useState(0);
   const [adding, setAdding] = useState(false);
+  // Note that the card keeps what is typed and previewed while it is drawn, from its opening until its fade has run, so each opening starts afresh.
+  const added = useDrawnThroughExit(adding);
   const [updates, setUpdates] = useState<ReadonlyMap<string, boolean>>(new Map());
   const [landed, setLanded] = useState<ReadonlySet<string>>(new Set());
   const toast = useToast();
@@ -467,18 +506,19 @@ function ShownSkills({
       );
       setLanded(new Set(made.map((each) => each.id)));
       const notice = installedNotice(made, workspace);
-      if (notice !== undefined) toast({ ...notice, tone: TOAST_TONE.DONE, hold: TOAST_HOLD.DONE });
+      if (notice !== undefined)
+        toast({ ...notice, tone: STATUS_TONE.COMPLETE, hold: TOAST_HOLD.DONE });
     },
     [toast, workspace],
   );
 
   const groups = skills === undefined ? undefined : skillGroups(skills, readerId, members);
   // A group still being read stands its placeholder row in the card the rows will.
-  const rows = (shown: readonly SkillRow[] | undefined) =>
+  const rows = (shown: readonly SkillRow[] | undefined, none: string = SKILLS_LINE.NONE) =>
     shown === undefined ? (
-      <SettingsRowsSkeleton label="Loading your skills" rows={SKILL_GROUP_SKELETON.rows} />
+      <SettingsRowsSkeleton label={readingWords("your skills")} rows={SKILL_GROUP_SKELETON.rows} />
     ) : shown.length === 0 ? (
-      <SettingsLine>{SKILLS_LINE.NONE}</SettingsLine>
+      <SettingsLine>{none}</SettingsLine>
     ) : (
       shown.map((row) => (
         <SkillRowView
@@ -495,7 +535,7 @@ function ShownSkills({
 
   return (
     <>
-      <SettingsSection>
+      <SettingsSection anchor={SETTINGS_SEARCH_ROW.ADD_SKILL}>
         <SettingsRow label="Add a skill" description={SKILLS_LINE.ABOUT}>
           {() => (
             <Button
@@ -518,17 +558,19 @@ function ShownSkills({
         <>
           {workspace.personal === true ? null : (
             <SettingsSection title={workspaceGroupTitle(workspace)}>
-              {rows(groups?.workspace)}
+              {rows(groups?.workspace, `${SKILLS_LINE.NONE} ${WORKSPACE_KEEP_LINE}`)}
             </SettingsSection>
           )}
           <SettingsSection title={SKILLS_LINE.PERSONAL}>{rows(groups?.personal)}</SettingsSection>
         </>
       )}
-      {adding ? (
+      {added.drawn ? (
         <AddSkillDialog
+          open={adding}
           workspace={workspace}
           onInstalled={installed}
           onClose={() => setAdding(false)}
+          onExited={added.onExited}
           {...(pause === undefined ? undefined : { pause })}
         />
       ) : null}
@@ -559,7 +601,7 @@ export function SkillsPage({
         </SettingsLine>
       </SettingsSection>
     ) : (
-      <SettingsSectionsSkeleton label="Loading your skills" sections={SKILLS_SKELETON} />
+      <SettingsSectionsSkeleton label={readingWords("your skills")} sections={SKILLS_SKELETON} />
     );
   }
   // Keyed to the workspace, so another one listed reads its own skills and asks nothing left over.

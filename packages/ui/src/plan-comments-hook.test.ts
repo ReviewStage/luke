@@ -8,10 +8,11 @@ import {
   PLAN_COMMENT_STATUS,
   type PlanCommentThread,
 } from "@luke/features/plan-comment-wire";
+import { PLAN_COMMENT_CALL_FAILURE } from "@luke/features/tasks-view";
 import { act, createElement } from "react";
 import { createRoot } from "react-dom/client";
 import { test } from "vitest";
-import { type PlanCommentsControl, usePlanComments } from "./plan-comments.js";
+import { type CommentsReader, type PlanCommentsControl, usePlanComments } from "./plan-comments.js";
 
 /**
  * A comment whose mention could not hand the thread over: the reply posts,
@@ -95,5 +96,89 @@ test("a write's answer that lands after a later revision of its thread leaves th
   }
 
   assert.equal(control?.threads.find((thread) => thread.id === THREAD.id)?.revision, 3);
+  act(() => root.unmount());
+});
+
+test("a shown plan's comments land, a read that did not answer says so, and Retry reads again at once", async () => {
+  let control: PlanCommentsControl | undefined;
+  const answers = [
+    { threads: [THREAD], cursor: "c1" },
+    { failure: PLAN_COMMENT_CALL_FAILURE.UNANSWERED },
+    { threads: [], cursor: "c2" },
+  ] as const;
+  let reads = 0;
+  function Probe() {
+    control = usePlanComments({
+      planId: PLAN,
+      shown: true,
+      readComments: () => {
+        const answer = answers[reads];
+        reads += 1;
+        return answer === undefined
+          ? Promise.withResolvers<never>().promise
+          : Promise.resolve(answer);
+      },
+      startComment: async () => ({ thread: THREAD }),
+      actOnComment: async () => ({ thread: THREAD }),
+    });
+    return null;
+  }
+  const root = createRoot(document.body.appendChild(document.createElement("div")));
+  await act(async () => root.render(createElement(Probe)));
+
+  assert.deepEqual(control?.threads, [THREAD]);
+  assert.equal(control?.failed, true);
+  assert.equal(reads, 2);
+
+  await act(async () => control?.onRetry());
+  assert.equal(control?.failed, false);
+  assert.deepEqual(control?.threads, []);
+  act(() => root.unmount());
+});
+
+test("a read that brings the same threads, or a second read that does not answer, hands on the control it held, and a new revision does not", async () => {
+  type Answer = Awaited<ReturnType<CommentsReader>>;
+  let control: PlanCommentsControl | undefined;
+  const answers = Array.from({ length: 5 }, () => Promise.withResolvers<Answer>());
+  let reads = 0;
+  function Probe() {
+    control = usePlanComments({
+      planId: PLAN,
+      shown: true,
+      readComments: () => {
+        const answer = answers[reads];
+        reads += 1;
+        return answer === undefined ? Promise.withResolvers<never>().promise : answer.promise;
+      },
+      startComment: async () => ({ thread: THREAD }),
+      actOnComment: async () => ({ thread: THREAD }),
+    });
+    return null;
+  }
+  const answer = async (read: number, given: Answer) => {
+    await act(async () => answers[read]?.resolve(given));
+  };
+  const root = createRoot(document.body.appendChild(document.createElement("div")));
+  await act(async () => root.render(createElement(Probe)));
+  await answer(0, { threads: [THREAD], cursor: "c1" });
+  const first = control;
+  assert.deepEqual(first?.threads, [THREAD]);
+
+  await answer(1, { threads: [{ ...THREAD }], cursor: "c2" });
+  assert.equal(control, first, "the same threads hand on the same control");
+
+  await answer(2, { failure: PLAN_COMMENT_CALL_FAILURE.UNANSWERED });
+  const missed = control;
+  assert.equal(missed?.failed, true);
+  // Retry reads again at once, rather than after the poll's wait.
+  await act(async () => control?.onRetry());
+  await answer(3, { failure: PLAN_COMMENT_CALL_FAILURE.UNANSWERED });
+  assert.equal(control, missed, "a second miss hands on the same control");
+
+  await act(async () => control?.onRetry());
+  await answer(4, { threads: [{ ...THREAD, revision: 2 }], cursor: "c3" });
+  assert.notEqual(control, missed);
+  assert.equal(control?.threads[0]?.revision, 2);
+  assert.equal(control?.failed, false);
   act(() => root.unmount());
 });

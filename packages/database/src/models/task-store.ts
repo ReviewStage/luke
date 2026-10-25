@@ -1,7 +1,8 @@
 import { AUTOMATION_SCOPE } from "@luke/features/automation-wire";
-import { PULL_REQUEST_STATE } from "@luke/features/coding-agent-wire";
+import { CODING_AGENT_KIND, PULL_REQUEST_STATE } from "@luke/features/coding-agent-wire";
 import { GITHUB_ACCESS, type GitHubAccess } from "@luke/features/github-repositories-wire";
 import { INBOX_STATUS } from "@luke/features/inbox-wire";
+import { agentName } from "@luke/features/model-label";
 import { planAttachmentIdsIn } from "@luke/features/plan-attachment-link";
 import type { PlanSectionWriter } from "@luke/features/plan-document";
 import { DEFAULT_PLAN_TEMPLATE } from "@luke/features/plan-document-template";
@@ -54,6 +55,7 @@ import { taskPin } from "../schemas/task-pin.js";
 import { taskSectionEntry } from "../schemas/task-section.js";
 import { voiceSessions } from "../schemas/voice.js";
 import { readPlanTemplate } from "./account-store.js";
+import { agentAutomationNameSql } from "./agent-name.js";
 import { moveTaskChat } from "./chat-store.js";
 import { InstantColumnSchema } from "./columns.js";
 import { waitOutConversationDispatch } from "./dispatch-lock.js";
@@ -93,7 +95,7 @@ import {
  * stands and never an insert, so a task deleted before a save lands stays
  * deleted, and a save that fails leaves the document as it was. A task's
  * coding agents' conversations go with the task: deleting the task stamps
- * them `deleted_at`, so the purge takes their words thirty days on. Every function is an effect over the ambient `SqlClient` and names
+ * them `deleted_at`, so the purge takes their words seven days on. Every function is an effect over the ambient `SqlClient` and names
  * no database of its own.
  */
 
@@ -393,16 +395,20 @@ const findAgentLabels = SqlSchema.findAll({
   Request: Schema.Struct({ taskId: Schema.String, agentIds: Schema.Array(Schema.String) }),
   Result: Schema.Struct({
     id: Schema.String,
+    kind: Schema.Literals(Object.values(CODING_AGENT_KIND)),
     model: Schema.String,
     title: Schema.NullOr(Schema.String),
+    automationName: Schema.NullOr(Schema.String),
   }),
   execute: ({ taskId, agentIds }) =>
     Database.use((db) =>
       db
         .select({
           id: codingAgent.id,
+          kind: codingAgent.kind,
           model: codingAgent.model,
           title: codingAgent.title,
+          automationName: agentAutomationNameSql(codingAgent),
         })
         .from(codingAgent)
         .where(and(eq(codingAgent.taskId, taskId), inArray(codingAgent.id, agentIds))),
@@ -412,8 +418,8 @@ const findAgentLabels = SqlSchema.findAll({
 /**
  * The agents the journal and the sections' writers name, by id, as their rows
  * name them now, so a renamed agent reads renamed everywhere: the label is
- * the row's title, or its model while it has none. The row's own account is
- * the one they are read under.
+ * the name its tab shows (`agentName`), Luke for an operator. The row's own
+ * account is the one they are read under.
  */
 function agentLabelsOf(
   row: TaskRow,
@@ -427,7 +433,7 @@ function agentLabelsOf(
   if (agentIds.length === 0) return Effect.succeed(new Map());
   return Effect.map(
     findAgentLabels({ taskId: row.id, agentIds }),
-    (agents) => new Map(agents.map((agent) => [agent.id, agent.title ?? agent.model])),
+    (agents) => new Map(agents.map((agent) => [agent.id, agentName(agent)])),
   );
 }
 

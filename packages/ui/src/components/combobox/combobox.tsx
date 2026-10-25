@@ -5,6 +5,7 @@ import { CheckIcon, ChevronRightIcon } from "../../face/glyphs.js";
 import { PRESS_PULSE, pulseOnPress } from "../../press-pulse.js";
 import {
   COMBOBOX_EMPTY,
+  COMBOBOX_HEADING,
   COMBOBOX_ITEM,
   COMBOBOX_ITEM_DETAIL,
   COMBOBOX_ITEM_END,
@@ -12,11 +13,12 @@ import {
   COMBOBOX_ITEM_HINT,
   COMBOBOX_ITEM_LABEL,
   COMBOBOX_ITEM_LEAD,
-  COMBOBOX_LABEL,
   COMBOBOX_LIST,
   COMBOBOX_WELL,
 } from "../../shadcn/combobox.js";
+import { ANNOUNCE, useAnnounce } from "../announcer/announcer.js";
 import { OneLine } from "../one-line/one-line.js";
+import { TEXT_ELEMENT, TEXT_VARIANT, Text } from "../text/text.js";
 import { Tooltip } from "../tooltip/hint.js";
 import { type ComboboxField, useComboboxField } from "./use-combobox-field.js";
 
@@ -87,8 +89,15 @@ export interface ComboboxOption {
   /** The caller's own key for the option, stable while it stands. */
   readonly id: string;
   readonly label: ReactNode;
+  /** Its name in plain words, where `label` draws them marked, which names its card to a reader. */
+  readonly words?: string | undefined;
   /** Before its glyph, in a column the options leading with one line up in, as a task's key leads its row in the Tasks list. */
   readonly lead?: ReactNode;
+  /**
+   * Its glyph; null keeps the glyph's room, empty, so an option with no
+   * glyph of its own names itself at the edge the glyphed options beside it
+   * do, and none draws no room, for a list whose options wear none.
+   */
   readonly icon?: ReactNode;
   /** Words after the name, quieter, which give way to it in a narrow list. */
   readonly detail?: ReactNode;
@@ -152,6 +161,7 @@ export function ComboboxOptionItem({
       {option.lead === undefined ? null : (
         <span className={cn("luke-combobox-option-lead", COMBOBOX_ITEM_LEAD)}>{option.lead}</span>
       )}
+      {/* Note that a null glyph still stands, empty, so the names of a group whose options mix glyphs and none start at one edge. */}
       {option.icon === undefined ? null : (
         <span className={cn("luke-combobox-option-glyph", COMBOBOX_ITEM_GLYPH)}>{option.icon}</span>
       )}
@@ -217,7 +227,7 @@ function OptionRow({
   if (option.card === undefined) return row;
   return (
     <Tooltip
-      label={typeof option.label === "string" ? option.label : undefined}
+      label={option.words ?? (typeof option.label === "string" ? option.label : undefined)}
       card={option.card}
       cardBeside
     >
@@ -307,6 +317,8 @@ export function ComboboxList({
   const list = useRef<HTMLDivElement>(null);
   useImperativeHandle<HTMLDivElement | null, HTMLDivElement | null>(ref, () => list.current, []);
   const options = groups.flatMap((group) => group.options);
+  // Note that the empty line is said as it appears, because a line drawn into a list is not itself a live region.
+  useAnnounce(ANNOUNCE.POLITE, options.length === 0 ? (empty ?? "") : "");
   // Note that an active index outside the options washes none, because a
   // caller's highlight may stand past them, on a row of its own.
   const at = active >= 0 && active < options.length ? active : -1;
@@ -375,9 +387,14 @@ export function ComboboxList({
           // biome-ignore lint/a11y/useSemanticElements: a listbox's section is a group of options, which a <fieldset> of form controls is not.
           <div key={start} role="group" aria-label={group.label}>
             {headed ? (
-              <div className={cn("luke-combobox-heading", COMBOBOX_LABEL)} aria-hidden="true">
+              <Text
+                as={TEXT_ELEMENT.DIV}
+                variant={TEXT_VARIANT.GROUP}
+                className={cn("luke-combobox-heading", COMBOBOX_HEADING)}
+                aria-hidden="true"
+              >
                 {group.label}
-              </div>
+              </Text>
             ) : null}
             {rows}
           </div>

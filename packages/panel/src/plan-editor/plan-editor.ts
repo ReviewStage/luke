@@ -12,9 +12,12 @@ import { Markdown } from "@tiptap/markdown";
 import type { Node as PmNode } from "@tiptap/pm/model";
 import { Selection, TextSelection } from "@tiptap/pm/state";
 import StarterKit from "@tiptap/starter-kit";
+import { modEnterSends } from "../enter-sends.js";
 import { anchorsLaidIn, anchorsOf, commentAnchorMark, spanIn } from "./comment-anchors.js";
 import {
+  type EditorAria,
   type EditorSpan,
+  FINISH,
   type MentionDrawer,
   PLAN_PLACEHOLDER,
   type PlacedWords,
@@ -22,6 +25,8 @@ import {
   type PlanEditorPictures,
   type PlanEditorPlacement,
   type PlanEditorProps,
+  rootAria,
+  sameAria,
 } from "./contract.js";
 import { diagramPreview } from "./diagram-preview.js";
 import {
@@ -30,8 +35,11 @@ import {
   documentOpened,
   documentTook,
   type HeldSources,
+  lineEndingOf,
   RawBlock,
   sourcesOf,
+  withLf,
+  withLineEnding,
 } from "./document-source.js";
 import { mentionNode, pastedMention } from "./mention-node.js";
 import {
@@ -372,6 +380,22 @@ function placed(editor: Editor, placement: PlanEditorPlacement | undefined): Sel
 }
 
 /**
+ * What the editor holds of its sources after a change that only laid or took
+ * off marks, which writes nothing to the Markdown: each block that changed
+ * keeps the source it held, found by its place, since such a change moves no
+ * block.
+ */
+function heldAcrossMarks(before: PmNode, after: PmNode, held: HeldSources): HeldSources {
+  if (before === after) return held;
+  const sources = new Map<PmNode, string>();
+  after.forEach((node, _offset, index) => {
+    const source = held.sources.get(before.child(index));
+    if (source !== undefined) sources.set(node, source);
+  });
+  return { ...held, sources };
+}
+
+/**
  * The text's editor mounted into `host`, in place of its drawn sections, its
  * caret where the placement says, and focused if it is asked to be.
  */
@@ -405,11 +429,17 @@ export function mountPlanEditor(host: HTMLElement, props: PlanEditorProps): Plan
     blocks === undefined
       ? undefined
       : planSlash(blocks, (markdown) => manager.parse(markdown).content ?? []);
-  const opened = documentOpened(manager, markdown);
+  // Note that the text is read with LF line endings and written back with its own, so a body saved with CRLF comes back as it was.
+  const ending = lineEndingOf(markdown);
+  const source = withLf(markdown);
+  const written = () => withLineEnding(documentMarkdown(manager, editor.state.doc, held), ending);
+  const opened = documentOpened(manager, source);
   held = { sources: new Map(), lead: opened.lead, ending: opened.ending };
   // The threads the editor carries marks for, and whether they are being laid on, which hands over no draft.
   let carried: readonly string[] = [];
   let laying = false;
+  // What ties the text to the `@` list or the `/` menu over it, which the panel hands over as either opens and closes.
+  let aria: EditorAria = {};
   const editor: Editor = new Editor({
     element: host,
     // Note that TipTap's own base rules would go in as an inline `<style>`, which the panel's policy (`style-src 'self'`: the desktop's `renderer/index.html` and the web's `vercel.json`) refuses; `planning.css` styles the text instead.
@@ -424,12 +454,12 @@ export function mountPlanEditor(host: HTMLElement, props: PlanEditorProps): Plan
     content: opened.content,
     contentType: "json",
     editorProps: {
-      attributes: {
+      // Note that the attributes are read again on every update, so the text names itself a combobox while a list over it stands.
+      attributes: () => ({
         class: `${className} ${EDITOR_CLASS}`,
-        role: "textbox",
-        "aria-multiline": "true",
+        ...rootAria(aria),
         "aria-label": label,
-      },
+      }),
       // Note that image files pasted are laid in as pictures, and an address of Luke's own or a page of an integration's pasted whole as its mention, as the box lays it in.
       handlePaste: (view, event) => {
         if (pictures !== undefined && pastedPictures(view, event, pictures)) return true;
@@ -447,8 +477,12 @@ export function mountPlanEditor(host: HTMLElement, props: PlanEditorProps): Plan
         // The keys a mention's list or the block menu takes are its own first, Escape among them, which closes it.
         if (mentions?.onKey(event) === true) return true;
         if (blocks?.onKey(event) === true) return true;
-        if (event.key === "Escape" || (event.key === "Enter" && event.metaKey)) {
-          onFinish(caretSection(editor));
+        if (event.key === "Escape") {
+          onFinish(caretSection(editor), FINISH.ESCAPE);
+          return true;
+        }
+        if (modEnterSends(event)) {
+          onFinish(caretSection(editor), FINISH.SUBMIT);
           return true;
         }
         const { selection } = view.state;
@@ -461,16 +495,21 @@ export function mountPlanEditor(host: HTMLElement, props: PlanEditorProps): Plan
     },
     onUpdate: ({ editor: updated }) => {
       if (laying) return;
-      const markdown = documentMarkdown(manager, updated.state.doc, held);
+      // Note that the threads' words are counted in the text as it is handed over, its own line endings and all, as their anchors were counted in the text it opened on.
+      // Note that a draft reports no anchors while the editor carries no thread, since mapping every marked word on each keystroke would be for nothing.
+      const markdown = written();
       onDraft(
         markdown,
-        anchors === undefined ? undefined : anchorsOf(updated.state.doc, markdown, carried),
+        carried.length === 0 ? undefined : anchorsOf(updated.state.doc, markdown, carried),
       );
     },
   });
   // Note that the threads' marks are laid on before each block's source is known by its node, so a block marked as it opens still writes its source.
   laying = true;
-  carried = anchors === undefined ? [] : anchorsLaidIn(editor, markdown, anchors);
+  carried =
+    anchors === undefined
+      ? []
+      : anchorsLaidIn(editor, markdown, anchors, new Set(anchors.map(({ thread }) => thread)), []);
   laying = false;
   if (picking !== undefined) editor.registerPlugin(picking.plugin);
   if (slash !== undefined) editor.registerPlugin(slash.plugin);
@@ -485,13 +524,27 @@ export function mountPlanEditor(host: HTMLElement, props: PlanEditorProps): Plan
   return {
     ...editorFormatting(editor),
     take: (sent, merged) => {
-      const answer = documentTook(editor, manager, held, sent, merged);
+      const answer = documentTook(editor, manager, held, withLf(sent), withLf(merged));
       held = answer.held;
-      return { base: answer.base, text: documentMarkdown(manager, editor.state.doc, held) };
+      return { base: withLineEnding(answer.base, ending), text: written() };
     },
     chooseMention: (mention) => picking?.choose(editor, mention),
     insertBlock: (block) => slash?.insert(editor, block),
-    markdown: () => documentMarkdown(manager, editor.state.doc, held),
+    markdown: written,
+    replaceAnchors: (text, next, open) => {
+      if (editor.isDestroyed) return;
+      const before = editor.state.doc;
+      laying = true;
+      carried = anchorsLaidIn(editor, text, next ?? [], new Set(open), carried);
+      laying = false;
+      held = heldAcrossMarks(before, editor.state.doc, held);
+    },
+    setAria: (next) => {
+      if (sameAria(aria, next) || editor.isDestroyed) return;
+      aria = next;
+      // Note that an input method's words are never redrawn under it: the next change it makes names the list.
+      if (!editor.view.composing) editor.view.updateState(editor.state);
+    },
     focusAt: (placement) => {
       onWordsAs = undefined;
       const selection = placedOnWords(editor, placement) ?? placed(editor, placement);
@@ -518,7 +571,7 @@ export function mountPlanEditor(host: HTMLElement, props: PlanEditorProps): Plan
     removePicture: (upload) => removedPicture(editor.view, upload),
     selectionSpan: () => {
       const { from, to, empty } = editor.state.selection;
-      return empty ? undefined : editorSpan(editor, manager, held, from, to);
+      return empty ? undefined : editorSpan(editor, written(), from, to);
     },
     blockSpan: (element) => {
       const { doc } = editor.state;
@@ -531,10 +584,10 @@ export function mountPlanEditor(host: HTMLElement, props: PlanEditorProps): Plan
         if (LIST_ITEMS.has(node.type.name)) {
           const start = resolved.start(depth);
           const own = node.firstChild?.nodeSize ?? node.content.size;
-          return editorSpan(editor, manager, held, start, start + own);
+          return editorSpan(editor, written(), start, start + own);
         }
       }
-      return editorSpan(editor, manager, held, resolved.before(1), resolved.after(1));
+      return editorSpan(editor, written(), resolved.before(1), resolved.after(1));
     },
     destroy: () => editor.destroy(),
   };
@@ -543,16 +596,14 @@ export function mountPlanEditor(host: HTMLElement, props: PlanEditorProps): Plan
 /** The nodes a list's bullets are, each commented on alone. */
 const LIST_ITEMS: ReadonlySet<string> = new Set(["listItem", "taskItem"]);
 
-/** The document's stretch from `from` to `to` as a thread started on it anchors it, in the Markdown the editor would hand over now; nothing where it holds no word the text keeps. */
+/** The document's stretch from `from` to `to` as a thread started on it anchors it, in `text`, the Markdown the editor would hand over now; nothing where it holds no word the text keeps. */
 function editorSpan(
   editor: Editor,
-  manager: Parameters<typeof documentMarkdown>[0],
-  held: HeldSources,
+  text: string,
   from: number,
   to: number,
 ): EditorSpan | undefined {
   const { doc } = editor.state;
-  const text = documentMarkdown(manager, doc, held);
   const span = spanIn(doc, text, from, to);
   const quote = doc.textBetween(from, to, "\n", "\uFFFC").trim();
   return span === undefined || quote === "" ? undefined : { ...span, quote, text };

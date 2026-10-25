@@ -92,7 +92,10 @@ test("every other ending sends the developer back to try again", async () => {
     INTEGRATION_PROVIDER.NOTION,
     INTEGRATION_LANDING_STATUS.NOT_COMPLETED,
   );
-  expect(said(notCompleted)).toEqual(["Notion was not connected", "Connect Notion again from Luke."]);
+  expect(said(notCompleted)).toEqual([
+    "Notion was not connected",
+    "Connect Notion again from Luke.",
+  ]);
 
   const unavailable = await landing(
     INTEGRATION_PROVIDER.NOTION,

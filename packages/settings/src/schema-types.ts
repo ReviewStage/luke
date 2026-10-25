@@ -8,7 +8,7 @@ import type { RuntimeStatus } from "./status.js";
 export const SETTINGS_PAGE = {
   /** Who is signed in and the ways out, the page Settings opens on. */
   ACCOUNT: "account",
-  /** The voice, its controls, and the two system-wide keys that reach Luke. */
+  /** The voice and its controls, under a pointer to Codex's row in Agents, where the OpenAI key a call runs on is kept. */
   VOICE: "voice",
   APPEARANCE: "appearance",
   /** The window's own shortcuts, listed to be found rather than changed. */
@@ -30,7 +30,7 @@ export const SETTINGS_PAGE = {
   WORKSPACE: "workspace",
   /** The stored switch that notifies as a coding agent ends or needs the developer. */
   NOTIFICATIONS: "notifications",
-  /** What this Mac lets agents do on it: the stored switch for running commands here. */
+  /** What this Mac lets agents do on it, the stored switch for running commands here, and whether Luke opens as it starts. */
   THIS_MAC: "this-mac",
   /** The features the account can turn on before they are finished, each the account's on the service rather than a stored setting. */
   EXPERIMENTAL: "experimental",
@@ -53,12 +53,18 @@ export const SETTING_SECTION = {
   CONTROLS: "controls",
   /** The Video calls experiment's own rows, drawn beneath its switch on the Experimental page. */
   VIDEO_CALLS: "video-calls",
-  /** How code and diffs are drawn, a group of its own under Appearance's own rows. */
-  DIFFS: "diffs",
-  /** Where the account's Luke links open, a group of its own on Profile, under who is signed in. */
+  /** What a diff marks, the first group of how code and diffs are drawn under Appearance's own rows: its layout, changed words, indicators, and backgrounds. */
+  DIFF: "diff",
+  /** How lines run, the second: wrap, numbers, and minimized comments. */
+  LINES: "lines",
+  /** How code looks, the third: the syntax themes, the type, its size and line height, and ligatures. */
+  TEXT: "text",
+  /** Where the account's Luke links open, a group of its own on Account, under who is signed in. */
   LINKS: "links",
-  /** Whether this Luke counts how its features are used, a group of its own on Profile, under Links. */
+  /** Whether this Luke counts how its features are used, a group of its own on Account, under Links. */
   PRIVACY: "privacy",
+  /** Whether Luke opens as this Mac starts, a group of its own on This Mac, under its own rows. */
+  STARTUP: "startup",
 } as const;
 
 export type SettingSection = (typeof SETTING_SECTION)[keyof typeof SETTING_SECTION];

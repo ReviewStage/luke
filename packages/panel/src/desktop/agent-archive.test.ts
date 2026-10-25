@@ -1,18 +1,21 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import { MOTION_DELAY_MS } from "@luke/brand";
 import {
   CODING_AGENT_ARCHIVER,
   CODING_AGENT_STATUS,
   type CodingAgentArchivedBy,
 } from "@luke/features/coding-agent-wire";
+import { ACTION_RESULT_STATUS } from "@luke/wire";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, test } from "vitest";
+import { afterEach, test, vi } from "vitest";
 import { layContainersAt } from "../testing/container-width.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { restOn } from "../testing/hint-rest.js";
+import { ARCHIVE_DRAWN } from "../tasks/use-coding-agents.js";
 import { codingAgentsControl } from "../testing/tasks-control.js";
 import { ArchivedAgents } from "./agent-archive.js";
 
@@ -38,9 +41,12 @@ afterEach(() => {
   laid?.remove();
   laid = undefined;
   document.body.innerHTML = "";
+  // Note that the fold is kept in the window's storage, so each test starts with it folded.
+  window.localStorage.clear();
 });
 
-test("an archived agent's row hangs its tab's card beside it, its name and when it was archived", () => {
+/** A summary's Archived fold, its one archived agent drawn over a registry of its own. */
+function drawArchived(): HTMLElement {
   const agents = codingAgentsControl({
     archived: [
       {
@@ -65,6 +71,30 @@ test("an archived agent's row hangs its tab's card beside it, its name and when 
       onRegistry(AtomRegistry.make(), createElement(ArchivedAgents, { agents, shown: true })),
     ),
   );
+  return container;
+}
+
+test("an unfolded Archived stands open as the summary is drawn again, and one never unfolded stays folded", () => {
+  const fold = (container: HTMLElement) =>
+    container.querySelector<HTMLButtonElement>("button[aria-expanded]");
+  const first = drawArchived();
+  assert.equal(fold(first)?.getAttribute("aria-expanded"), "false");
+  act(() => fold(first)?.click());
+  assert.equal(fold(first)?.getAttribute("aria-expanded"), "true");
+
+  for (const root of roots.splice(0)) act(() => root.unmount());
+  document.body.innerHTML = "";
+  const again = drawArchived();
+  assert.equal(fold(again)?.getAttribute("aria-expanded"), "true", "it stands as it was left");
+  act(() => fold(again)?.click());
+
+  for (const root of roots.splice(0)) act(() => root.unmount());
+  document.body.innerHTML = "";
+  assert.equal(fold(drawArchived())?.getAttribute("aria-expanded"), "false", "and folded again");
+});
+
+test("an archived agent's row hangs its tab's card beside it, its name and when it was archived", () => {
+  const container = drawArchived();
   const fold = container.querySelector<HTMLButtonElement>("button[aria-expanded]");
   act(() => fold?.click());
   const row = container.querySelector<HTMLElement>(
@@ -79,6 +109,8 @@ test("an archived agent's row hangs its tab's card beside it, its name and when 
 
 /** The notes the card hung over the archived agent's row says, with the reader and who archived it given. */
 function archivedCardNotes(me: string | undefined, archivedBy: CodingAgentArchivedBy): string[] {
+  // Note that each draw unfolds Archived afresh, so the fold the last one kept is let go.
+  window.localStorage.clear();
   const agents = {
     ...codingAgentsControl({
       archived: [
@@ -238,4 +270,67 @@ test("on a touch screen an archived agent's row shows its Unarchive at rest, in 
   assert.ok(roomKept(row));
   assert.ok(offered(unarchive));
   assert.equal(getComputedStyle(mark).display, "none");
+});
+
+test("an archived agent's Unarchive is named Unarchiving while the service answers, shows its ring once the settle delay has passed, and clears when it answers", async () => {
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+  try {
+    let answer: () => void = () => undefined;
+    let unarchives = 0;
+    let drawn: string | undefined;
+    const agents = codingAgentsControl({
+      archived: [
+        {
+          id: "agent-8",
+          planId: "plan-1",
+          model: "anthropic/claude-opus-5.5",
+          effort: "high",
+          title: "Retry audit",
+          createdAt: 1,
+          status: CODING_AGENT_STATUS.COMPLETED,
+          turnId: null,
+          archivedAt: 2,
+        },
+      ],
+      onArchive: (_id, _archived, when) => {
+        unarchives += 1;
+        drawn = when;
+        return new Promise((resolve) => {
+          answer = () => resolve({ status: ACTION_RESULT_STATUS.ACCEPTED });
+        });
+      },
+    });
+    const container = document.createElement("div");
+    document.body.append(container);
+    const root = createRoot(container);
+    roots.push(root);
+    act(() =>
+      root.render(
+        onRegistry(AtomRegistry.make(), createElement(ArchivedAgents, { agents, shown: true })),
+      ),
+    );
+    act(() => container.querySelector<HTMLButtonElement>("button[aria-expanded]")?.click());
+    const unarchive =
+      container.querySelector<HTMLButtonElement>(".task-summary-marks button") ??
+      assert.fail("the Unarchive");
+    const ring = () => unarchive.querySelector(".luke-spinner-ring") !== null;
+
+    act(() => unarchive.click());
+    assert.equal(unarchive.getAttribute("aria-label"), "Unarchiving");
+    assert.equal(ring(), false);
+    act(() => vi.advanceTimersByTime(MOTION_DELAY_MS.SETTLE));
+    assert.equal(ring(), true);
+    act(() => unarchive.click());
+    assert.equal(unarchives, 1, "a second press waits for the first");
+    assert.equal(
+      drawn,
+      ARCHIVE_DRAWN.ON_ANSWER,
+      "the row stays to show it, rather than leave at once",
+    );
+    await act(async () => answer());
+    assert.equal(unarchive.getAttribute("aria-label"), "Unarchive");
+    assert.equal(ring(), false);
+  } finally {
+    vi.useRealTimers();
+  }
 });

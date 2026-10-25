@@ -1,4 +1,4 @@
-import { type PointerEvent, type ReactNode, useRef } from "react";
+import { type PointerEvent, type ReactNode, useCallback, useEffect, useRef, useState } from "react";
 import { HoverCard, HoverCardContent } from "../../shadcn/hover-card.js";
 import { Tooltip, TooltipContent } from "../../shadcn/tooltip.js";
 
@@ -32,10 +32,45 @@ import { Tooltip, TooltipContent } from "../../shadcn/tooltip.js";
  * by the recorder's fixed `ph-no-capture` class. A finger has no hover, so
  * its touch arriving on a card, or lifting off it, tells the app nothing of
  * a pointer resting there; its press still does.
+ *
+ * A card the keyboard entered (`entered`, ⌥↓ on its control) is no longer a
+ * description but a popover the keyboard is in: a non-modal dialog named as
+ * its control is, which takes focus to its first button or link, or to
+ * itself where it holds none, so Tab walks what it holds. Its keys go no
+ * further up the tree it was drawn from than its presses do, since a list
+ * that walks its rows by the arrows would otherwise take them, bar a Command
+ * chord, which is still the window's.
  */
 
-/** What a card holds that a press chooses. */
+/** What a card holds that a press chooses, and that the keyboard walks once it is entered. */
 const CARD_CHOICE = "button, a[href]";
+
+/** An entered card's look: no ring of its own when focus lands on it, as a popover panel wears none, its standing open saying where the keyboard is. */
+const ENTERED = "focus-visible:outline-none";
+
+/** How many frames focus is tried into a card the keyboard entered before it is given up. */
+const FOCUS_FRAMES = 10;
+
+/**
+ * Moves focus into a card the keyboard entered: to its first choice, or to
+ * the card itself where it holds none. Note that it tries again each frame
+ * for a few, because the card fades in from `visibility: hidden`
+ * (`luke-tooltip-fade`), which refuses focus until its first frame is drawn.
+ * Answers the way to stop trying.
+ */
+function focusInto(card: HTMLElement): () => void {
+  let frame = 0;
+  let tries = 0;
+  const attempt = () => {
+    (card.querySelector<HTMLElement>(CARD_CHOICE) ?? card).focus({ preventScroll: true });
+    tries += 1;
+    if (!card.contains(document.activeElement) && tries < FOCUS_FRAMES) {
+      frame = requestAnimationFrame(attempt);
+    }
+  };
+  attempt();
+  return () => cancelAnimationFrame(frame);
+}
 
 /** How a hint keeps inside the window: turning to the other side where its own ends, and pushed along it where it runs past an edge. */
 const HINT_COLLISION = { side: "flip", align: "shift", fallbackAxisSide: "none" } as const;
@@ -46,7 +81,7 @@ export const TOOLTIP_CHORD =
 
 /** What every hint is handed: the control it stands for, and how it shows and goes. */
 interface TooltipBase {
-  /** The hint's id, which the control's `aria-describedby` names while it describes it. */
+  /** The hint's own id, apart from its words' (`hint.tsx`'s `HintWords`), which describe its control. */
   id: string;
   /** The control it hangs from. */
   anchor: HTMLElement;
@@ -94,6 +129,7 @@ export function TooltipPill({
 /** A card saying more about its control than a pill holds, as a surface the pointer may cross onto. */
 export function TooltipCard({
   beside = false,
+  entered,
   onHover,
   onPress,
   onChoice,
@@ -102,6 +138,8 @@ export function TooltipCard({
 }: TooltipBase & {
   /** Whether it hangs beside its control rather than under it. */
   beside?: boolean;
+  /** The words naming it once the keyboard has entered it, as a dialog; until then it is its control's description. */
+  entered?: string | undefined;
   /** The pointer arriving on the card, or leaving it; never a finger's touch. */
   onHover?: (over: boolean) => void;
   /** A press begun on the card. */
@@ -119,14 +157,36 @@ export function TooltipCard({
     told.current = event.nativeEvent;
     onHover?.(over);
   };
+  // Note that the card's element is state, because Base UI's portal draws it
+  // a render after the card mounts, and focus goes in once both stand.
+  const [element, setElement] = useState<HTMLElement | null>(null);
+  const hold = base.ref;
+  const ref = useCallback(
+    (node: HTMLElement | null) => {
+      setElement(node);
+      hold?.(node);
+    },
+    [hold],
+  );
+  const keyed = entered !== undefined;
+  useEffect(() => {
+    if (!keyed || element === null) return;
+    return focusInto(element);
+  }, [keyed, element]);
   return (
     <HoverCard open>
       <HoverCardContent
         anchor={base.anchor}
         side={beside ? "inline-end" : "bottom"}
         collisionAvoidance={HINT_COLLISION}
-        role="tooltip"
         {...hintMarks(base)}
+        ref={ref}
+        {...(keyed
+          ? { role: "dialog", "aria-label": entered, tabIndex: -1, className: ENTERED }
+          : { role: "tooltip" })}
+        onKeyDown={(event) => {
+          if (keyed && !event.metaKey && !event.ctrlKey) event.stopPropagation();
+        }}
         onPointerEnter={(event) => hover(true, event)}
         onPointerLeave={(event) => hover(false, event)}
         onPointerDown={(event) => {

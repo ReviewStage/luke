@@ -46,6 +46,15 @@ export interface ExperimentEntry {
  */
 export const EXPERIMENTS = [
   {
+    key: EXPERIMENT.MEMORY,
+    name: "Memory",
+    detail:
+      "Your coding agents keep settled facts about how your team works and recall them in later work, " +
+      "shared across your workspace and reviewed in Settings › Memory.",
+    owner: "Dean",
+    since: "2026-10-23",
+  },
+  {
     key: EXPERIMENT.OPERATOR,
     name: "Luke, your operator",
     detail:
@@ -58,8 +67,8 @@ export const EXPERIMENTS = [
     key: EXPERIMENT.INBOX_FIRST,
     name: "Inbox-first sidebar",
     detail:
-      "The sidebar lists your Inbox's threads under their tasks in place of your task list, " +
-      "which you find on the Tasks page.",
+      "The sidebar lists your inbox's items under their tasks in place of your task list, " +
+      "which you find on the tasks page.",
     owner: "Dean",
     since: "2026-10-20",
   },
@@ -67,7 +76,7 @@ export const EXPERIMENTS = [
     key: EXPERIMENT.CODE_REVIEW,
     name: "Code review",
     detail:
-      "Suggest a Code review automation on the Automations page, which reviews each pull " +
+      "Suggest a Code review automation on the automations page, which reviews each pull " +
       "request as Luke and posts one GitHub review.",
     owner: "Dean",
     since: "2026-10-19",
@@ -97,15 +106,6 @@ export const EXPERIMENTS = [
       "Keyframe. Your own voice never does.",
     owner: "Charles",
     since: "2026-10-15",
-  },
-  {
-    key: EXPERIMENT.MEMORY,
-    name: "Memory",
-    detail:
-      "Your coding agents keep settled facts about how your team works and recall them in later work, " +
-      "shared across your workspace and reviewed in Settings › Memory.",
-    owner: "Dean",
-    since: "2026-10-23",
   },
 ] as const satisfies readonly ExperimentEntry[];
 

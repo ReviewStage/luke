@@ -37,28 +37,66 @@
  * compact is a step smaller, in the caption's type. What finds the bar for an app (the
  * desktop's settings search) is the app's: it hands the bar the `data-`
  * attributes its search lands on.
+ *
+ * It is drawn by Base UI's toggle group (`@base-ui/react/toggle-group`),
+ * single, each option one of its toggles: the bar is one element, one
+ * roving tab stop over its options, a disabled option a native disabled
+ * button, and a press on the pressed option let go, which `clearable`
+ * takes as the choice taken back. Note that it is the toggle group rather
+ * than Base UI's tabs or radio group, because tabs wrap their list in a
+ * root element of their own and keep a disabled tab focusable, and a radio
+ * stands a hidden input beside each option, each of which would change
+ * what the bar is; the bar says it is a tablist or a radio group, and each
+ * option a tab or a radio, over the group's own words. Its keys are Luke's
+ * (`useRovingKeys`), Base UI's own composite keys refused, because a
+ * tablist steps by ← and → alone where a radio group takes ↑ and ↓ too, and
+ * an arrow chooses as it moves. The bar is one Tab stop, on the chosen
+ * option or the first while none is, and each option is drawn out of the
+ * tab order (-1), which quiets the toggle group's own roving tab stop, so
+ * the stop the keys keep is the only one. It is drawn in Tailwind over the
+ * theme (`tailwind/theme.css`), each look's and size's utilities chosen here so
+ * no two stand for one property; `choice-bar.css` keeps the thumb's
+ * measured box and the fold's container and sibling rules. It keeps the
+ * `luke-choice-bar*` classes, which the apps' sheets and tests select it by.
  */
 
+import { Toggle as TogglePrimitive } from "@base-ui/react/toggle";
+import { ToggleGroup as ToggleGroupPrimitive } from "@base-ui/react/toggle-group";
 import { keepIdentity } from "@luke/wire";
 import {
   type ButtonHTMLAttributes,
   type ComponentType,
   type FocusEventHandler,
-  type HTMLAttributes,
   type PointerEventHandler,
   type ReactElement,
   type MouseEvent as ReactMouseEvent,
   type ReactNode,
   useCallback,
   useLayoutEffect,
+  useMemo,
   useRef,
   useState,
 } from "react";
+import { cn } from "../../cn.js";
+import { joinRefs } from "../../join-refs.js";
 import { pulseOnPress } from "../../press-pulse.js";
-import { CHOICE_ROLE, type ChoiceRole } from "../choice/choice-keys.js";
 import { type CountPart, CountParts } from "../choice/count-part.js";
-import { type ChoiceKeys, useChoiceKeys } from "../choice/use-choice-keys.js";
+import {
+  ROVING_ORIENTATION,
+  ROVING_STOP,
+  type RovingBox,
+  rovingItem,
+  useRovingKeys,
+} from "../roving-keys/roving-keys.js";
 import { Tooltip } from "../tooltip/hint.js";
+
+/** The role a bar's options carry, which decides the keys it steps by: a tab's, or a radio's. */
+const CHOICE_ROLE = {
+  TAB: "tab",
+  RADIO: "radio",
+} as const;
+
+type ChoiceRole = (typeof CHOICE_ROLE)[keyof typeof CHOICE_ROLE];
 
 /** How the bar draws its chosen option: a fill under it, or a thumb raised in a trough. */
 export const CHOICE_BAR_LOOK = {
@@ -123,6 +161,118 @@ const THUMB_ELEMENT = ":scope > .luke-choice-bar-thumb";
 
 /** The option a bar's thumb stands under, of the bar's own options. */
 const CHOSEN = ':scope > [aria-selected="true"], :scope > [aria-checked="true"]';
+
+/**
+ * The bar's box: a row of its options, never wider than its container. A
+ * fill bar takes its container's width, scrolling sideways with no bar
+ * drawn, and is the container its narrow fold measures (`choice-bar.css`);
+ * a segmented one hugs its options in a trough, wrapping them inside it, or,
+ * stretched, fills its row on one line. Note that a fill bar in a
+ * PaneBar's middle grows to the middle's room, because the container it is
+ * sizes itself as if it held nothing, so as a flex item that only hugs its
+ * options it would stand 0px wide.
+ */
+const BAR = "luke-choice-bar relative items-center min-w-0 max-w-full";
+
+const BAR_LOOK = {
+  fill: "flex flex-none [.luke-pane-bar-middle>&]:flex-1 self-stretch overflow-x-auto [scrollbar-width:none] @container/luke-choice-bar",
+  segmented: "inline-flex gap-0.5 p-0.5 rounded-control bg-muted",
+} as const satisfies Record<ChoiceBarLook, string>;
+
+/** A fill bar's room between its options: compact takes it in. */
+const FILL_GAP = {
+  regular: "gap-0.5",
+  compact: "gap-0",
+} as const satisfies Record<ChoiceBarSize, string>;
+
+/** A segmented bar's width: hugging its options and wrapping them, or filling its row on one line. */
+const SEGMENTED_WIDTH = {
+  hug: "flex-initial flex-wrap w-fit",
+  stretch: "flex-auto flex-nowrap w-auto",
+} as const;
+
+/**
+ * A fill bar folding together, or named in words alone, takes its options'
+ * room in where its toolbar says `--luke-fold: tight`. Note that each is
+ * keyed on the bar's `data-fold`, which outweighs the room it takes in.
+ */
+const FILL_TIGHT_BAR = "fold-tight:data-[fold]:gap-0";
+const FILL_TIGHT_OPTION = "fold-tight:[[data-fold]_&]:gap-1 fold-tight:[[data-fold]_&]:px-1.5";
+
+/**
+ * An option: its glyph, name, and count in a row over the thumb, which is
+ * drawn before it, in the muted ink, brightening to the text's own under
+ * the pointer and while chosen, faded while disabled. Note that it draws
+ * the keyboard's ring inside itself, because a scrolling row or a trough
+ * leaves it no room outside; that its states are selectors of their own
+ * rather than Tailwind's `hover:`, which a touch screen never answers; and
+ * that the desktop's arrow cursor is keyed on its profile, which outweighs
+ * the pointer.
+ */
+const OPTION = cn(
+  "luke-choice-bar-option relative inline-flex items-center justify-center m-0 [border:0] [background:none]",
+  "outline-offset-[var(--luke-focus-ring-inset)] text-muted-foreground font-ui font-label whitespace-nowrap",
+  "[transition:background-color_var(--luke-duration-hover)_ease,color_var(--luke-duration-hover)_ease]",
+  "cursor-pointer [[data-luke-profile=desktop]_&]:cursor-default disabled:cursor-default disabled:opacity-disabled",
+  "[&:hover:not(:disabled)]:text-foreground aria-selected:text-foreground aria-checked:text-foreground",
+);
+
+/**
+ * Each look's option at each size. A fill option is the control's height,
+ * lit under the pointer while not chosen; compact a step smaller, in the
+ * caption's type. A segment sits inside its trough's inset, its corner the
+ * trough's less that inset; on the site, whose muted ink holds AA on its
+ * page's ground and not on the trough, it is drawn in the text's own ink.
+ */
+const OPTION_LOOK = {
+  fill: {
+    regular: "h-control py-0 px-2 gap-1.5 text-label",
+    compact: "h-choice-fill-compact py-0 px-1.5 gap-1 text-caption",
+  },
+  segmented: {
+    regular: "h-choice-segment py-0 px-3 gap-1.5 text-label",
+    compact: "h-choice-segment-compact py-0 px-2 gap-1 text-caption",
+  },
+} as const satisfies Record<ChoiceBarLook, Record<ChoiceBarSize, string>>;
+
+const OPTION_LOOK_STATE = {
+  fill: "rounded-control [&:hover:not(:disabled):not([aria-selected=true],[aria-checked=true])]:bg-muted",
+  segmented: "rounded-choice-segment [[data-luke-profile=web]_&]:text-foreground",
+} as const satisfies Record<ChoiceBarLook, string>;
+
+/** A stretched segment shares its row alike with the others; any other option keeps its own width. */
+const OPTION_FLEX = {
+  own: "flex-none",
+  shared: "flex-[1_1_0]",
+} as const;
+
+/**
+ * The thumb: hidden until the row has measured its chosen option, then
+ * standing there (`choice-bar.css` reads the box), sliding on its transform
+ * alone where motion is let run. A fill's is the strong fill; a segment's a
+ * thumb raised on a hairline and a soft shadow.
+ */
+const THUMB_BOX =
+  "luke-choice-bar-thumb absolute top-0 left-0 hidden [[data-thumb]_&]:block origin-top-left pointer-events-none motion-safe:[[data-thumb=sliding]_&]:[transition:transform_var(--luke-duration-fast)_var(--luke-spring-fast)]";
+
+const THUMB_LOOK = {
+  fill: "rounded-control bg-fill-strong",
+  segmented:
+    "rounded-choice-segment bg-choice-thumb [box-shadow:0_0_0_0.5px_var(--luke-color-border-strong),0_1px_2px_var(--luke-color-shadow-soft)]",
+} as const satisfies Record<ChoiceBarLook, string>;
+
+/** The glyph slot says its size (`--luke-glyph-size`), which a glyph the app seats in it, a `GlyphSlot`, reads. */
+const ICON =
+  "luke-choice-bar-icon inline-flex [--luke-glyph-size:var(--luke-control-icon)] [&>svg]:size-control-icon";
+
+/**
+ * The count lays its parts out as a row centred on the option rather than
+ * as words on a line, because a part is an inline box whose baseline is its
+ * glyph's bottom edge, which set it a pixel or two above the option's name;
+ * the gap stands for the space between parts, which a row drops.
+ */
+const COUNT =
+  "luke-choice-bar-count inline-flex items-center gap-1 text-muted-foreground text-caption tabular-nums font-caption";
 
 /** A box in a bar, in pixels from its padding edge. */
 interface ThumbBox {
@@ -310,31 +460,47 @@ function useFoldTogether(
 
 /**
  * What the bar's own element says it is, and the keys it takes: a tablist,
- * or a radio group. Note that the role, its name, and its handler are
- * handed over together, because the bar is one element whichever role it
- * takes, and Biome's a11y rules read a role only where it is a literal.
+ * or a radio group, over the toggle group's own `group`. Note that the
+ * role, its name, and its handler are handed over together, because the bar
+ * is one element whichever role it takes, and Biome's a11y rules read a
+ * role only where it is a literal; and that the handler always refuses the
+ * group's own composite keys, so a key the bar does not move by (↑ in a
+ * tablist, a key held with a modifier, any in a disabled bar) moves nothing.
  */
 function groupAttributes(
   role: ChoiceRole,
   label: string,
-  onKeyDown: ChoiceKeys<string>["onKeyDown"],
-): HTMLAttributes<HTMLDivElement> {
+  onKeyDown: RovingBox<HTMLDivElement>["onKeyDown"] | undefined,
+): Pick<ToggleGroupPrimitive.Props<string>, "role" | "aria-label" | "onKeyDown"> {
   return {
     role: role === CHOICE_ROLE.TAB ? "tablist" : "radiogroup",
     "aria-label": label,
-    onKeyDown,
+    onKeyDown: (event) => {
+      event.preventBaseUIHandler();
+      onKeyDown?.(event);
+    },
   };
 }
 
-/** What an option says it is: a tab selected while chosen and controlling its panel, or a radio checked while chosen. */
+/**
+ * What an option says it is: a tab selected while chosen and controlling
+ * its panel, or a radio checked while chosen, never the toggle's own
+ * pressed state, which would say it a second way.
+ */
 function optionAttributes(
   role: ChoiceRole,
   chosen: boolean,
   ids: ChoicePanelIds | undefined,
 ): ButtonHTMLAttributes<HTMLButtonElement> {
   return role === CHOICE_ROLE.TAB
-    ? { role, id: ids?.tab, "aria-selected": chosen, "aria-controls": ids?.panel }
-    : { role, "aria-checked": chosen };
+    ? {
+        role,
+        id: ids?.tab,
+        "aria-selected": chosen,
+        "aria-controls": ids?.panel,
+        "aria-pressed": undefined,
+      }
+    : { role, "aria-checked": chosen, "aria-pressed": undefined };
 }
 
 /** Keeps the keyboard where it was when an option that takes no focus is pressed. */
@@ -498,53 +664,79 @@ export function ChoiceBar<Value extends string>(props: ChoiceBarProps<Value>): R
   const roving = focus === CHOICE_BAR_FOCUS.ROVING;
   const choose = (chosen: Value) => props.onChange(chosen);
   // An arrow chooses the next option along and takes the keyboard there; Home and End go to either end.
-  const keys = useChoiceKeys({
-    options: items,
-    value,
-    role,
-    disabled: disabled || !roving,
-    onChoose: choose,
+  const keys = useRovingKeys<HTMLDivElement>({
+    orientation: role === CHOICE_ROLE.TAB ? ROVING_ORIENTATION.HORIZONTAL : ROVING_ORIENTATION.BOTH,
+    stop: roving ? ROVING_STOP.CHOSEN : ROVING_STOP.NONE,
+    moveTo: (option) => {
+      option.focus();
+      const landed = items.find((item) => item.value === option.dataset.value);
+      if (landed !== undefined && landed.value !== value) choose(landed.value);
+    },
   });
-  const press = (pressed: Value) => {
-    if (pressed !== value) choose(pressed);
+  const barRef = useMemo(() => joinRefs(thumb.barRef, keys.ref), [thumb.barRef, keys.ref]);
+  // A press on another option chooses it; one on the chosen option lets it go, which a clearable bar takes as the choice taken back.
+  const press = (pressed: readonly Value[]) => {
+    const next = pressed[0];
+    if (next !== undefined) choose(next);
     else if (props.clearable === true) props.onChange(undefined);
   };
+  const segmented = look === CHOICE_BAR_LOOK.SEGMENTED;
+  const tight = !segmented && fold !== CHOICE_BAR_FOLD.OWN;
+  const optionClass = cn(
+    OPTION,
+    OPTION_LOOK[look][size],
+    OPTION_LOOK_STATE[look],
+    segmented && stretch ? OPTION_FLEX.shared : OPTION_FLEX.own,
+    tight && FILL_TIGHT_OPTION,
+  );
   return (
-    <div
-      ref={thumb.barRef}
-      {...groupAttributes(role, label, keys.onKeyDown)}
+    <ToggleGroupPrimitive<Value>
+      ref={barRef}
+      value={value === undefined ? [] : [value]}
+      onValueChange={press}
+      data-roving={keys["data-roving"]}
+      onFocus={keys.onFocus}
+      {...groupAttributes(role, label, disabled || !roving ? undefined : keys.onKeyDown)}
       {...appAttributes}
-      className="luke-choice-bar"
+      className={cn(
+        BAR,
+        BAR_LOOK[look],
+        segmented
+          ? SEGMENTED_WIDTH[stretch ? "stretch" : "hug"]
+          : [FILL_GAP[size], tight && FILL_TIGHT_BAR],
+      )}
       data-look={look}
       data-size={size}
       data-fold={fold}
       data-folded={folded ? "true" : undefined}
       data-stretch={stretch ? "true" : undefined}
     >
-      <span className="luke-choice-bar-thumb" aria-hidden="true" />
+      <span className={cn(THUMB_BOX, THUMB_LOOK[look])} aria-hidden="true" />
       {items.map((item) => {
         const chosen = item.value === value;
         const count = countOf(item.count);
         const option = (
-          <button
+          <TogglePrimitive<Value>
             key={item.value}
             ref={thumb.optionRef}
-            type="button"
             {...optionAttributes(role, chosen, panels?.(item.value))}
-            tabIndex={roving ? keys.tabIndexOf(item.value) : -1}
-            className="luke-choice-bar-option"
+            value={item.value}
+            data-value={item.value}
+            {...rovingItem()}
+            tabIndex={-1}
+            className={optionClass}
             disabled={disabled || item.disabled === true}
             onMouseDown={roving ? undefined : keepFocus}
-            onClick={pulseOnPress(() => press(item.value))}
+            onClick={pulseOnPress()}
           >
             {item.icon === undefined || fold === CHOICE_BAR_FOLD.WORDS ? null : (
-              <span className="luke-choice-bar-icon" aria-hidden="true">
+              <span className={ICON} aria-hidden="true">
                 {item.icon}
               </span>
             )}
             <span className="luke-choice-bar-label">{item.label}</span>
-            {count === undefined ? null : <span className="luke-choice-bar-count">{count}</span>}
-          </button>
+            {count === undefined ? null : <span className={COUNT}>{count}</span>}
+          </TogglePrimitive>
         );
         return item.hint === undefined ? (
           option
@@ -554,6 +746,6 @@ export function ChoiceBar<Value extends string>(props: ChoiceBarProps<Value>): R
           </Hint>
         );
       })}
-    </div>
+    </ToggleGroupPrimitive>
   );
 }

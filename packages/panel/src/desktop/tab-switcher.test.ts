@@ -1,14 +1,19 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { CODING_AGENT_STATUS, type TasklessAgent } from "@luke/features/coding-agent-wire";
+import {
+  CODING_AGENT_STATUS,
+  type CodingAgentSummary,
+  type TasklessAgent,
+} from "@luke/features/coding-agent-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import { HOST_CAPABILITY } from "@luke/settings";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
+import { holdExits } from "@luke/ui/testing/held-exits";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeAll, test } from "vitest";
+import { afterEach, beforeAll, test, vi } from "vitest";
 import { runAppCommand } from "../app-commands.js";
 import { PANEL_TAB } from "../panel-tabs.js";
 import type { MainTab } from "../tasks/use-main-tabs.js";
@@ -18,7 +23,8 @@ import { fakeActPort } from "../testing/app-bridge.js";
 import { DESKTOP_CAPABILITIES, handCapabilities } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { DOCUMENT_TASK } from "../testing/document-task.js";
-import { tasksControl } from "../testing/tasks-control.js";
+import { holdMotion, releaseMotion } from "../testing/motion-held.js";
+import { codingAgentsControl, tasksControl } from "../testing/tasks-control.js";
 import { TabSwitcher } from "./tab-switcher.js";
 
 /**
@@ -29,8 +35,11 @@ import { TabSwitcher } from "./tab-switcher.js";
  * nothing; a hold draws the cards, the screen here first and dimmed, each
  * named as Back's list names it; ⇧ steps back, Escape goes nowhere, a card
  * pressed is gone to, and a still of the work area left is kept for its
- * card, out of the session recording. A browser keeps ⌃Tab for its own
- * tabs, so a window that is no desktop app leaves it.
+ * card, out of the session recording. The cards stand in a modal dialog
+ * that holds focus while they show and hands it back to where it was as
+ * they go, fading out on the exit token, or at once where motion is held.
+ * A browser keeps ⌃Tab for its own tabs, so a window that is no desktop app
+ * leaves it.
  */
 
 declare global {
@@ -53,7 +62,13 @@ afterEach(() => {
     for (const root of roots.splice(0)) root.unmount();
   });
   document.body.innerHTML = "";
+  releaseMotion();
+  Reflect.deleteProperty(Element.prototype, "getAnimations");
+  vi.useRealTimers();
 });
+
+/** The cards' dialog, which the switcher draws in `@luke/ui`'s Dialog. */
+const DIALOG = '[role="dialog"]';
 
 /** What the switcher asked the window to show, in order. */
 interface Asked {
@@ -167,7 +182,7 @@ test("a tab chosen by hand is a screen of its own, and a quick tap goes back to 
   letGo();
 
   assert.deepEqual(told.shown, ["panel the task: plan"]);
-  assert.equal(document.querySelector(".tab-switcher"), null);
+  assert.equal(document.querySelector(DIALOG), null);
 });
 
 test("arriving on a task is one screen, the tabs that arrive with it taking it in place, so ⌃Tab goes back where you came from", async () => {
@@ -227,8 +242,66 @@ test("held, the cards show with the screen here first and dimmed; ⇧ steps back
   key("keydown", { key: "Escape", code: "Escape", ctrlKey: true });
   letGo();
 
-  assert.equal(document.querySelector(".tab-switcher"), null);
+  assert.equal(document.querySelector(DIALOG), null);
   assert.deepEqual(told, asked());
+});
+
+/** A field that holds focus before ⌃Tab, and the window moved from one task tab to another so the cards have two screens. */
+async function heldOnField() {
+  handCapabilities(DESKTOP_CAPABILITIES);
+  const field = document.createElement("input");
+  document.body.append(field);
+  field.focus();
+  const told = asked();
+  const window = await mounted();
+  await window.draw(onTask(SIDE_PANEL_TAB.PLAN, told));
+  press();
+  await window.draw(onTask(SIDE_PANEL_TAB.CODE, told));
+  tab();
+  tab();
+  return field;
+}
+
+test("the cards stand in a dialog announced as modal that holds focus, and letting go hands focus back to where it was", async () => {
+  const field = await heldOnField();
+
+  const dialog = document.querySelector<HTMLElement>(DIALOG);
+  assert.ok(dialog, "the cards are drawn in a dialog");
+  assert.equal(dialog.getAttribute("aria-modal"), "true");
+  assert.equal(
+    document.getElementById(dialog.getAttribute("aria-labelledby") ?? "")?.textContent,
+    "Recent tabs",
+  );
+  assert.ok(dialog.contains(document.activeElement), "focus is held inside the dialog");
+
+  key("keydown", { key: "Escape", code: "Escape", ctrlKey: true });
+  assert.equal(document.activeElement, field);
+});
+
+test("the cards fade out as ⌃ is let go, drawn and inert through the exit, and are gone after it", async () => {
+  vi.useFakeTimers({ toFake: ["requestAnimationFrame", "cancelAnimationFrame"] });
+  const exits = holdExits();
+  await heldOnField();
+
+  letGo();
+  const leaving = document.querySelector<HTMLElement>(DIALOG);
+  act(() => vi.advanceTimersToNextFrame());
+  const standsAFrameOn = document.querySelector(DIALOG) !== null;
+  await act(async () => exits.finish());
+
+  assert.ok(leaving?.hasAttribute("data-ending-style"), "the dialog stands in its ending state");
+  assert.equal(standsAFrameOn, true);
+  assert.equal(document.querySelector(DIALOG), null);
+});
+
+test("the cards go at once while motion is held", async () => {
+  holdMotion();
+  holdExits();
+  await heldOnField();
+
+  letGo();
+
+  assert.equal(document.querySelector(DIALOG), null);
 });
 
 test("a task's card is named as Back's list names the screen: the task, then its panes' tabs", async () => {
@@ -249,6 +322,46 @@ test("a task's card is named as Back's list names the screen: the task, then its
     [DOCUMENT_TASK.name, "Code"],
     [DOCUMENT_TASK.name, "Plan"],
   ]);
+});
+
+test("a task's card says the task and its agent's tab by the names they go by now, and the agent as Back's list called it where nothing names it now", async () => {
+  handCapabilities(DESKTOP_CAPABILITIES);
+  const told = asked();
+  const window = await mounted();
+  const column = { agent: "agent-token" };
+  const agent = (title: string): CodingAgentSummary => ({
+    id: column.agent,
+    planId: TASK,
+    model: "anthropic/claude-opus-5.5",
+    effort: "high",
+    title,
+    createdAt: 1,
+    status: CODING_AGENT_STATUS.COMPLETED,
+    turnId: null,
+  });
+  const named = (title: string | undefined, name = DOCUMENT_TASK.name) => ({
+    tasks: [{ ...DOCUMENT_TASK, name }],
+    agents: codingAgentsControl({ agents: title === undefined ? [] : [agent(title)] }),
+  });
+  await window.draw(onTask(SIDE_PANEL_TAB.PLAN, told, named("Token refresh"), column));
+  press();
+  await window.draw(
+    onTask(SIDE_PANEL_TAB.CODE, told, named("Token renewal", "Auth rewrite"), column),
+  );
+
+  tab();
+  tab();
+  const left = () => {
+    const card = cards()[1];
+    return [
+      card?.querySelector(".luke-tab-card-name")?.textContent,
+      card?.querySelector(".luke-tab-card-detail")?.textContent,
+    ];
+  };
+  assert.deepEqual(left(), ["Auth rewrite", "Token renewal · Plan"]);
+
+  await window.draw(onTask(SIDE_PANEL_TAB.CODE, told, named(undefined, "Auth rewrite"), column));
+  assert.deepEqual(left(), ["Auth rewrite", "Token refresh · Plan"]);
 });
 
 test("a person's page card wears their face and name, not a generic icon", async () => {
@@ -290,7 +403,7 @@ test("a card pressed while the cards show is gone to, a place through its own do
   });
 
   assert.deepEqual(told.places, ["inbox"]);
-  assert.equal(document.querySelector(".tab-switcher"), null);
+  assert.equal(document.querySelector(DIALOG), null);
 });
 
 test("the screen left is taken as a still of the work area for its card, drawn as it lands while the cards show, and the session recording leaves it out", async () => {

@@ -1,4 +1,5 @@
 import { MAC_REPOSITORY_BOUNDS, type MacRepository } from "@luke/features/mac-terminal-wire";
+import { readingWords } from "@luke/features/words";
 import { ACT_KIND } from "@luke/host/acts";
 import { SETTINGS_SECTION } from "@luke/settings/settings-views";
 import {
@@ -16,11 +17,12 @@ import {
   TEXT_FIELD_FONT,
   TextField,
 } from "@luke/ui";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useAct } from "../act.js";
+import { MAC_REPOSITORIES } from "./pages.js";
 
 /**
- * mac-repository-settings.tsx -- the Workspace page's Repositories group: the command Run, in an agent tab's ⋯, runs for each repository on this Mac.
+ * mac-repository-settings.tsx -- the Workspace page's Repositories on this Mac group: the command Run, in an agent tab's ⋯, runs for each repository on this Mac.
  *
  * A row stands for each repository the workspace reaches on GitHub, and for
  * any with a command on this Mac that it no longer lists. The command is
@@ -103,6 +105,7 @@ function MacRepositoryRow({
   const { act } = useAct();
   const savedCommand = saved?.command ?? "";
   const [command, setCommand] = useState(savedCommand);
+  const field = useRef<HTMLInputElement>(null);
   useEffect(() => setCommand(savedCommand), [savedCommand]);
   const [busy, setBusy] = useState(false);
   const [landed, setLanded] = useState(false);
@@ -139,6 +142,7 @@ function MacRepositoryRow({
         {(control) => (
           <>
             <TextField
+              ref={field}
               label={`${repository} run command`}
               describedBy={control["aria-describedby"]}
               invalid={control["aria-invalid"]}
@@ -149,6 +153,8 @@ function MacRepositoryRow({
               maxLength={MAC_REPOSITORY_BOUNDS.MAX_COMMAND_CHARS}
               value={command}
               disabled={busy}
+              // Note that Escape lets go of the field and keeps the words, rather than leaving Settings.
+              onEscape={() => field.current?.blur()}
               onChange={setCommand}
             />
             <Button
@@ -171,7 +177,7 @@ function MacRepositoryRow({
 export function MacRepositoriesGroup({ workspaceId }: { workspaceId: string }): React.JSX.Element {
   const read = useMacRepositoriesRead(workspaceId);
   return (
-    <SettingsSection title="Repositories" anchor={SETTINGS_SECTION.MAC_REPOSITORIES}>
+    <SettingsSection title={MAC_REPOSITORIES} anchor={SETTINGS_SECTION.MAC_REPOSITORIES}>
       <SettingsLine>
         Run checks an agent&apos;s pushed branch out on this Mac with your own git login, then runs
         the repository&apos;s command. Commands are kept on this Mac only.
@@ -181,7 +187,10 @@ export function MacRepositoriesGroup({ workspaceId }: { workspaceId: string }): 
           <ErrorState onRetry={read.reread}>{NOT_READ}</ErrorState>
         </SettingsLine>
       ) : read.names === undefined ? (
-        <SettingsRowsSkeleton label="Loading the repositories" rows={REPOSITORIES_SKELETON} />
+        <SettingsRowsSkeleton
+          label={readingWords("the repositories")}
+          rows={REPOSITORIES_SKELETON}
+        />
       ) : read.names.length === 0 ? (
         <SettingsLine>This workspace reaches no repositories on GitHub yet.</SettingsLine>
       ) : (

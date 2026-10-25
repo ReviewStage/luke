@@ -16,7 +16,8 @@
 
   /* Words given a step are drawn until their room (a container named
      `luke-room`) is narrower than it. */
-  @container luke-room (max-width: 520px) {
+  /* off-scale: 520px, the same line as badge.css's snug step */
+  @container luke-room (width < 520px) {
     .luke-visually-hidden[data-under="snug"] {
       position: absolute;
       overflow: hidden;
@@ -30,7 +31,8 @@
     }
   }
 
-  @container luke-room (max-width: 439px) {
+  /* off-scale: 440px, the same line as badge.css's tight step */
+  @container luke-room (width < 440px) {
     .luke-visually-hidden[data-under="tight"] {
       position: absolute;
       overflow: hidden;

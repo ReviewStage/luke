@@ -180,7 +180,7 @@ it.layer(getTestDB())("an untitled task's name", (it) => {
 
 it.layer(getTestDB())("an agent's title", (it) => {
   it.effect(
-    "an account that saved no API key is titled with no model, from the first words of its opening's first line, its Markdown marks and links' addresses left out, and its task named with it",
+    "an account that saved no API key is titled with no model, from the first words of its opening's first line, its Markdown marks and links' addresses left out, opening on a capital and the rest as written, and its task named with it",
     () =>
       Effect.gen(function* () {
         const owner = yield* openGithubUser();
@@ -196,8 +196,13 @@ it.layer(getTestDB())("an agent's title", (it) => {
           task.id,
           "\n# Teammate [invitations](https://example.test/plan) by **email**\n\n## Goal\n\nInvite a teammate.",
         );
+        const lowered = yield* startOnTask(
+          owner,
+          task.id,
+          "fix the `invite` link in **README** and the docs",
+        );
 
-        for (const agent of [prompted, planned]) {
+        for (const agent of [prompted, planned, lowered]) {
           yield* titleCodingAgent(
             undefined,
             { userId: owner, conversationId: agent.conversationId },
@@ -209,6 +214,7 @@ it.layer(getTestDB())("an agent's title", (it) => {
           Effect.map(readCodingAgent(owner, agent.id), (read) => Option.getOrThrow(read).title);
         assert.equal(yield* titleOf(prompted), "Expire teammate invitations after one week");
         assert.equal(yield* titleOf(planned), "Teammate invitations by email");
+        assert.equal(yield* titleOf(lowered), "Fix the invite link in README");
         assert.equal(yield* taskName(owner, task.id), "Expire teammate invitations after one week");
       }),
   );

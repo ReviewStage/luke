@@ -1,27 +1,31 @@
 import { WORKSPACE_BOUNDS } from "@luke/features/workspace-wire";
 import {
-  ConfirmDialog,
   DIALOG_TONE,
+  Dialog,
+  DialogActions,
   type DialogConfirm,
+  FormField,
   TextField,
   useConfirmDialog,
 } from "@luke/ui";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { useRef, useState } from "react";
+import { useFormDialog } from "./use-form-dialog.js";
 
 /**
- * new-workspace-dialog.tsx -- the small prompt the switcher's New workspace opens: a name, Cancel, and Create workspace.
+ * new-workspace-dialog.tsx -- the small prompt the switcher's New workspace opens: a labelled name, Cancel, and Create workspace.
  *
- * It is the confirm dialog with a field in it, so it dims the window, keeps
- * Tab inside, hands focus back to whatever opened it, and says a refusal on
- * the card with the name left as typed for another try. The name is held
- * to the service's bound in the shared text field; Enter creates,
- * and Escape or a press on the dimmed window cancels. Each opening starts
- * from an empty name, so a cancelled one is never offered again, and the
- * question goes with the sidebar folding away or the account signing out.
+ * It is a dialog with a form in it, so it dims the window, keeps Tab inside,
+ * hands focus back to whatever opened it, and says a refusal on the name
+ * field, marked invalid, with the name left as typed for another try. The name is held to the service's
+ * bound in the shared text field; Create workspace stands unavailable until
+ * a name is typed, Enter creates, and Escape or a press on the dimmed window
+ * cancels. Each opening starts from an empty name, so a cancelled one is
+ * never offered again, and the question goes with the sidebar folding away
+ * or the account signing out.
  */
 
-/** Why a blank name was not sent. */
+/** Why a blank name was not sent, which the field says when Enter asks it. */
 const NAME_ASKED = "Name the workspace.";
 
 /** New workspace's ask: the press that opens the card, and the card. */
@@ -47,39 +51,57 @@ export function useNewWorkspaceDialog(
       return onCreate(trimmed).then((refused) => {
         if (refused !== undefined)
           return { status: ACTION_RESULT_STATUS.REJECTED, reason: refused };
-        setName("");
         return { status: ACTION_RESULT_STATUS.ACCEPTED };
       });
     },
   );
+  const blank = name.trim() === "";
+  const form = useFormDialog(confirm, !blank);
   const dialog = (
-    <ConfirmDialog
-      confirm={confirm}
-      field={field}
-      question={{
-        title: "New workspace",
-        verb: "Create workspace",
-        running: "Creating workspace",
-        tone: DIALOG_TONE.PRIMARY,
-      }}
+    <Dialog
+      open={form.open}
+      title="New workspace"
+      busy={form.settling}
+      refused={form.refusal !== undefined}
+      initialFocus={field}
+      onDismiss={form.dismiss}
+      // Note that the name is let go once the card has faded, so the words stay while it goes.
+      onExited={() => setName("")}
+      actions={
+        <DialogActions
+          onCancel={form.dismiss}
+          act={{
+            verb: "Create workspace",
+            tone: DIALOG_TONE.PRIMARY,
+            running: "Creating workspace",
+            ...form.act,
+          }}
+        />
+      }
     >
-      <TextField
-        ref={field}
-        label="Workspace name"
-        spellCheck={false}
-        placeholder="Workspace name"
-        maxLength={WORKSPACE_BOUNDS.MAX_NAME_CHARS}
-        value={name}
-        disabled={confirm.busy}
-        onChange={(value) => {
-          setName(value);
-          // Note that a refused answer has settled, so the refusal alone holds
-          // the card up: the question is asked again rather than cleared, or
-          // the first key typed after it would close the card.
-          if (confirm.rejection !== undefined) confirm.ask();
-        }}
-      />
-    </ConfirmDialog>
+      <FormField label="Workspace name" error={form.refusal}>
+        {(control) => (
+          <TextField
+            ref={field}
+            field={control}
+            spellCheck={false}
+            placeholder="Northwind"
+            maxLength={WORKSPACE_BOUNDS.MAX_NAME_CHARS}
+            value={name}
+            disabled={form.settling}
+            // Note that Enter on a blank name is asked anyway, so the field says why it was not sent.
+            onEnter={blank ? confirm.run : form.submit}
+            onChange={(value) => {
+              setName(value);
+              // Note that a refused answer has settled, so the refusal alone holds
+              // the card up: the question is asked again rather than cleared, or
+              // the first key typed after it would close the card.
+              if (confirm.rejection !== undefined) confirm.ask();
+            }}
+          />
+        )}
+      </FormField>
+    </Dialog>
   );
   return {
     ask: () => {

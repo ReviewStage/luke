@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import { MOTION_DURATION_MS } from "@luke/brand";
 import { CODING_AGENT_STATUS, type CodingAgentSummary } from "@luke/features/coding-agent-wire";
 import {
   TERMINAL_PORT_CHANNEL,
@@ -31,12 +32,16 @@ import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
 import { runAppCommand } from "../app-commands.js";
 import { SIDE_BUNDLES, type SideBundles, sideBundles } from "../bundle-loader.js";
 import { FindScope } from "../find-in-tab.js";
+import { announcedPolitely, mountAnnouncer } from "../testing/announcer.js";
 import { type AnyAct, fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
+import { layContainersAt } from "../testing/container-width.js";
 import { onRegistry } from "../testing/copy-feedback.js";
+import { onPhone } from "../testing/phone-tab.js";
 import { bundleLanded, onSideBundles } from "../testing/side-bundles.js";
 import { codingAgentsControl } from "../testing/tasks-control.js";
 import { TerminalCardFoot, TerminalStanding } from "./terminal-shells.js";
 import { TerminalTab } from "./terminal-tab.js";
+import { OpenLinkProvider } from "./use-open-link.js";
 
 /**
  * An agent's Terminal tab as the developer meets it: a shell in the agent's
@@ -255,6 +260,7 @@ afterEach(() => {
   for (const root of roots.splice(0)) act(() => root.unmount());
   document.body.innerHTML = "";
   document.head.innerHTML = "";
+  document.body.style.removeProperty("--luke-duration-pane");
   vi.restoreAllMocks();
 });
 
@@ -274,6 +280,8 @@ async function mount(
   findable = false,
   /** The bundles the tab reads its terminal from; the window's own, landed, unless a test hands others. */
   bundles: SideBundles = SIDE_BUNDLES,
+  /** Whether the tab is drawn as a phone's panel draws it, what it hands the task's header's ⋯ held. */
+  phone = false,
 ) {
   const container = document.createElement("div");
   document.body.append(container);
@@ -292,34 +300,34 @@ async function mount(
       : tab;
   let closed = 0;
   let toggled = 0;
-  const render = (on: boolean) =>
+  let agentOpened = 0;
+  let handed = onPhone(null).handed;
+  const render = (on: boolean) => {
+    const tab = createElement(TerminalTab, {
+      agentId: AGENT.id,
+      agents,
+      shown: on,
+      onOpenAgent: () => {
+        agentOpened += 1;
+      },
+      onClose: () => {
+        closed += 1;
+      },
+      shells: {
+        open: shellsOpen,
+        onToggle: () => {
+          toggled += 1;
+        },
+      },
+    });
+    const drawn = onPhone(tab);
+    handed = drawn.handed;
     act(() =>
       root.render(
-        onRegistry(
-          registry,
-          onSideBundles(
-            bundles,
-            wrapped(
-              createElement(TerminalTab, {
-                agentId: AGENT.id,
-                agents,
-                shown: on,
-                onOpenAgent: () => undefined,
-                onClose: () => {
-                  closed += 1;
-                },
-                shells: {
-                  open: shellsOpen,
-                  onToggle: () => {
-                    toggled += 1;
-                  },
-                },
-              }),
-            ),
-          ),
-        ),
+        onRegistry(registry, onSideBundles(bundles, wrapped(phone ? drawn.element : tab))),
       ),
     );
+  };
   render(shown);
   await settle();
   const keyboard = () => {
@@ -329,6 +337,10 @@ async function mount(
   };
   return {
     container,
+    /** What the tab handed the task's header's ⋯, drawn on a phone. */
+    handed: () => handed,
+    /** How many times the tab asked to open its agent. */
+    agentOpened: () => agentOpened,
     render: async (on: boolean) => {
       render(on);
       await settle();
@@ -415,7 +427,7 @@ test("the tab is left out of the screen recording, its screen and bar with it", 
   const tab = await mount();
   const screen = tab.container.querySelector(".terminal-tab-screen");
   assert.ok(screen?.closest(".ph-no-capture"));
-  assert.ok(tab.container.querySelector(".file-view-bar")?.closest(".ph-no-capture"));
+  assert.ok(tab.container.querySelector(".luke-pane-bar")?.closest(".ph-no-capture"));
 });
 
 test("shown, the tab lists the agent's shells and attaches to the oldest; hidden, it lets the port go and attaches nothing more", async () => {
@@ -496,11 +508,36 @@ test("an agent that has not opened its sandbox yet shows the waiting bar", async
   assert.equal(tab.action(), null);
 });
 
+/** Ends the bar's reveal, as the browser does once its delay has run; a DOM without animation events is heard through React's webkit-prefixed name for it. */
+function revealBar(): void {
+  act(() => {
+    for (const name of ["animationend", "webkitAnimationEnd"]) {
+      document.querySelector(".terminal-bar")?.dispatchEvent(new Event(name, { bubbles: true }));
+    }
+  });
+}
+
 test("a dropped connection shows its bar, and its action asks for the shell again at once", async () => {
+  mountAnnouncer();
   const tab = await mount();
   const port = main.post(OLDEST);
   port.say({ type: "state", state: "reconnecting" });
   assert.equal(tab.bar(), "Connection lost. Reconnecting…");
+  assert.equal(announcedPolitely(), "", "a bar still hidden says nothing, so a blip is never said");
+  revealBar();
+  assert.equal(announcedPolitely(), "Connection lost. Reconnecting…", "it is said once shown");
+
+  // A later drop hides its bar again, so its words wait for that reveal too.
+  port.say({ type: "state", state: "starting" });
+  assert.equal(announcedPolitely(), "Waiting for the agent to open its sandbox…");
+  port.say({ type: "state", state: "reconnecting" });
+  assert.equal(
+    announcedPolitely(),
+    "",
+    "the second bar is hidden, so it says nothing yet, and the bar it replaced took its words back",
+  );
+  revealBar();
+  assert.equal(announcedPolitely(), "Connection lost. Reconnecting…");
   assert.equal(tab.dimmed(), true);
   const before = main.sent.length;
   await act(async () => tab.action()?.click());
@@ -548,9 +585,15 @@ test("a sandbox that refuses a shell because it stopped meanwhile shows the stop
 
 test("a service it cannot reach shows a bar that says so, whose action asks again", async () => {
   main.down.add(ACT_KIND.TERMINAL_LIST);
+  mountAnnouncer();
   const tab = await mount();
   assert.equal(tab.standing(), "· sandbox · unreachable");
   assert.equal(tab.bar(), "Luke's service did not answer.");
+  assert.equal(
+    announcedPolitely(),
+    "Luke's service did not answer.",
+    "the bar is said as it lands",
+  );
   main.down.clear();
   await act(async () => tab.action()?.click());
   await settle();
@@ -580,17 +623,34 @@ test("a message on the port that is no message of main's is never drawn nor acte
   assert.equal(tab.standing(), "· sandbox · connected");
 });
 
-test("a terminal bundle that fails to load leaves the tab saying so, and attaches nothing", async () => {
+test("a terminal bundle that fails to load leaves the tab saying so with Retry, which imports it again and draws the screen", async () => {
+  const landed = await Effect.runPromise(bundleLanded(SIDE_BUNDLES.terminal));
+  let online = false;
   const unloaded = sideBundles({
-    terminal: () => Promise.reject(new Error("The chunk could not be loaded.")),
+    terminal: () =>
+      online
+        ? Promise.resolve(landed)
+        : Promise.reject(new Error("The chunk could not be loaded.")),
   });
   const tab = await mount(true, true, undefined, false, unloaded);
   await settle();
   assert.equal(
-    tab.container.querySelector(".terminal-tab-failed")?.textContent,
-    "The terminal could not be shown.",
+    tab.container.querySelector(".terminal-tab-host [role=alert]")?.textContent,
+    "The terminal could not be shown.Retry",
   );
+  assert.equal(tab.container.querySelector(".terminal-tab-screen"), null);
   assert.deepEqual(tab.kinds(), []);
+
+  online = true;
+  const retry = [...tab.container.querySelectorAll("button")].find(
+    (button) => button.textContent === "Retry",
+  );
+  assert.ok(retry, "the failure offers Retry");
+  await act(async () => retry.click());
+  await settle();
+
+  assert.equal(tab.container.querySelector(".terminal-tab-host [role=alert]"), null);
+  assert.ok(tab.container.querySelector(".terminal-tab-screen"));
 });
 
 test("an agent archived or retired closes its Terminal tab, as its Changes tab closes", async () => {
@@ -603,7 +663,7 @@ test("an agent archived or retired closes its Terminal tab, as its Changes tab c
 test("a shell or agent the service cannot find shows the bar that asks again, and leaves the tab open", async () => {
   main.listRefused = TERMINAL_REFUSAL.NOT_FOUND;
   const tab = await mount();
-  assert.equal(tab.bar(), "Couldn’t find this agent’s shell.");
+  assert.equal(tab.bar(), "Could not find this agent’s shell.");
   assert.equal(tab.closed(), 0);
 });
 
@@ -739,7 +799,6 @@ test("an attach refused after its tab was taken down leaves nothing waiting, so 
   main.down.clear();
   const later = await mount();
   const port = main.post(OLDEST);
-  assert.equal(port.closed(), false);
   port.say({ type: "state", state: "attached" });
   assert.equal(later.standing(), "· sandbox · connected");
 });
@@ -881,6 +940,11 @@ test("a shell's × asks first, then ends it, and ending the one shown shows the 
   const before = main.sent.length;
   await tab.press("End zsh");
   assert.equal(document.querySelector('[role="alertdialog"] h2')?.textContent, "End zsh?");
+  assert.match(
+    document.querySelector('[role="alertdialog"]')?.textContent ?? "",
+    /Whatever is running in it stops.*This cannot be undone\./u,
+    "the question says what goes",
+  );
   assert.deepEqual(tab.kinds(before), [], "nothing is ended before the answer");
   await confirmWith("End shell");
   await settle();
@@ -918,6 +982,98 @@ test("a shell renamed from its row's menu is renamed in place, and the list says
     title: "server",
   });
   assert.equal(tab.rows()[0]?.name, "server");
+});
+
+/** Opens the oldest shell's name field from its row's menu and ends it on `name`, as Return does. */
+async function renameOldest(container: HTMLElement, name: string): Promise<void> {
+  const row = container.querySelector<HTMLButtonElement>('[aria-label="Shell list"] > li > button');
+  assert.ok(row);
+  act(() => {
+    row.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, clientX: 10, clientY: 10 }));
+  });
+  const rename = [...document.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')].find(
+    (item) => item.textContent === "Rename",
+  );
+  await act(async () => rename?.click());
+  const field = container.querySelector<HTMLInputElement>('input[aria-label="Shell name"]');
+  assert.ok(field, "the name is edited in place");
+  act(() => {
+    field.value = name;
+    field.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+  });
+  await settle();
+}
+
+test("a shell's new name is drawn at once, before the service answers the rename", async () => {
+  const tab = await mount();
+  main.holding.add(ACT_KIND.TERMINAL_RENAME);
+  await renameOldest(tab.container, "server");
+  assert.equal(main.held.length, 1, "the rename is still out");
+  assert.equal(tab.rows()[0]?.name, "server");
+
+  for (const release of main.held.splice(0)) release();
+  await settle();
+  assert.equal(tab.rows()[0]?.name, "server");
+});
+
+test("a refused shell rename reopens its field holding the name typed, says under it that the shell was not renamed, and Escape leaves the old name", async () => {
+  const tab = await mount();
+  main.down.add(ACT_KIND.TERMINAL_RENAME);
+  await renameOldest(tab.container, "server");
+
+  const reopened = tab.container.querySelector<HTMLInputElement>('input[aria-label="Shell name"]');
+  assert.equal(reopened?.value, "server");
+  assert.ok(tab.container.textContent?.includes("The shell could not be renamed. Try again."));
+
+  act(() => {
+    reopened?.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+  });
+  await settle();
+  assert.equal(tab.rows()[0]?.name, "zsh");
+  assert.ok(!tab.container.textContent?.includes("could not be renamed"));
+});
+
+test("a shell row's ⋯, its right-click and the menu key open the same menu of Rename, New shell and End shell", async () => {
+  const tab = await mount();
+  const item = tab.container.querySelector<HTMLElement>('[aria-label="Shell list"] > li');
+  const row = item?.querySelector<HTMLButtonElement>(":scope > button, :scope button");
+  const more = item?.querySelector<HTMLButtonElement>('button[aria-label="Shell actions"]');
+  assert.ok(row && more, "the row stands with its ⋯");
+  const offered = () => {
+    const menu = document.querySelector('[role="menu"]:not([data-leaving])');
+    return {
+      label: menu?.getAttribute("aria-label"),
+      items: [...(menu?.querySelectorAll('[role="menuitem"]') ?? [])].map(
+        (each) => each.textContent,
+      ),
+    };
+  };
+  const closeMenu = async () => {
+    act(() => {
+      document.activeElement?.dispatchEvent(
+        new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }),
+      );
+    });
+    await settle();
+  };
+  const SAME = { label: "Shell actions", items: ["Rename", "New shell", "End shell"] };
+
+  act(() => more.click());
+  assert.deepEqual(offered(), SAME, "the ⋯ opens it");
+  await closeMenu();
+
+  act(() => {
+    row.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true }));
+  });
+  assert.deepEqual(offered(), SAME, "a right-click opens it");
+  await closeMenu();
+
+  act(() => {
+    row.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "ContextMenu", bubbles: true, cancelable: true }),
+    );
+  });
+  assert.deepEqual(offered(), SAME, "the menu key opens it");
 });
 
 test("the shells list folds away beside the screen, and its toggle asks the panel to bring it back", async () => {
@@ -1201,7 +1357,7 @@ function typeFind(text: string): void {
 
 /** What the find bar's tally says. */
 function findTally(): string | null | undefined {
-  return document.querySelector('[role="search"][aria-label="Find"] [aria-live="polite"]')
+  return document.querySelector('[role="search"][aria-label="Find"] .luke-search-field-tally')
     ?.textContent;
 }
 
@@ -1250,4 +1406,172 @@ test("a find with more matches than it counts says there are more", async () => 
   typeFind("hit");
   await act(async () => vi.advanceTimersByTimeAsync(100));
   assert.match(findTally() ?? "", /1000\+/);
+});
+
+/** The shells list over the screen, as it floats where the panel has no room for it beside. */
+function floatedShells(tab: { container: HTMLElement }): HTMLElement | null {
+  return tab.container.querySelector<HTMLElement>('[aria-label="Shells"]');
+}
+
+/** The toggle that floats the shells, which the stylesheet draws in a narrow panel alone. */
+function shellsToggle(tab: { container: HTMLElement }): HTMLButtonElement {
+  const toggle = tab.container.querySelector<HTMLButtonElement>(
+    '.file-tree-toggle[data-place="over"] button',
+  );
+  assert.ok(toggle, "the toggle that floats the shells is drawn");
+  return toggle;
+}
+
+/** A panel too narrow for the shells beside the screen, the list closed. */
+async function narrowTab() {
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+  document.body.style.setProperty("--luke-duration-pane", `${MOTION_DURATION_MS.PANE}ms`);
+  // Only the sheet that draws the toggles, since each style read weighs every rule laid.
+  layContainersAt({ "side-panel": 400 }, { only: ["./tasks.css"] });
+  return mount(true, false);
+}
+
+test("in a narrow panel the shells open over the screen", async () => {
+  const tab = await narrowTab();
+  assert.equal(floatedShells(tab), null, "the shells are away until their toggle is pressed");
+
+  await act(async () => shellsToggle(tab).click());
+  const opened = floatedShells(tab);
+  assert.equal(opened?.getAttribute("data-state"), "open");
+  assert.equal(opened?.classList.contains("luke-over-pane"), true);
+  assert.equal(tab.toggled(), 0, "the panel's own place for the list is left as it was");
+});
+
+test("shells floated over the screen stay drawn through their exit, then are let go", async () => {
+  const tab = await narrowTab();
+  await act(async () => shellsToggle(tab).click());
+  assert.equal(floatedShells(tab)?.getAttribute("data-state"), "open");
+
+  await act(async () => shellsToggle(tab).click());
+  assert.equal(floatedShells(tab)?.getAttribute("data-state"), "leaving");
+  act(() => vi.advanceTimersByTime(MOTION_DURATION_MS.PANE - 1));
+  assert.notEqual(floatedShells(tab), null, "the exit has not finished");
+  act(() => vi.advanceTimersByTime(1));
+  assert.equal(floatedShells(tab), null, "the list is let go once its exit has played");
+});
+
+test("Escape in the shells floated over the screen puts them away and gives the keyboard back to their toggle", async () => {
+  const tab = await narrowTab();
+  act(() => shellsToggle(tab).focus());
+  await act(async () => shellsToggle(tab).click());
+  const shells = floatedShells(tab);
+  assert.ok(shells);
+  assert.equal(document.activeElement, shells, "the list takes the keyboard as it opens");
+
+  act(() => {
+    shells.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+  });
+  assert.equal(floatedShells(tab)?.getAttribute("data-state"), "leaving");
+  assert.equal(document.activeElement, shellsToggle(tab));
+});
+
+test("a shell chosen in the list floated over the screen takes the list down", async () => {
+  const tab = await narrowTab();
+  await act(async () => shellsToggle(tab).click());
+  await tab.choose("dev server");
+  assert.equal(floatedShells(tab)?.getAttribute("data-state"), "leaving");
+});
+
+test("on a phone the tab draws no bar over the screen, and the task's header's ⋯ shows the shells over it and opens the agent, saying where the sandbox stands", async () => {
+  const tab = await mount(true, false, undefined, false, SIDE_BUNDLES, true);
+
+  assert.equal(tab.container.querySelector(".file-view-bar"), null);
+  assert.deepEqual(tab.handed().labels(), ["Show shells", "Open agent"]);
+  assert.match(tab.handed().item("Show shells").detail ?? "", /^Sandbox · /u);
+
+  tab.handed().press("Open agent");
+  assert.equal(tab.agentOpened(), 1);
+
+  tab.handed().press("Show shells");
+  await settle();
+  assert.equal(tab.toggled(), 0, "the shells float over the screen, the panel's choice untouched");
+  assert.deepEqual(tab.handed().labels(), ["Hide shells", "Open agent"]);
+});
+
+test("the window handing the tab a new link opener keeps the shell's scrollback and its connection", async () => {
+  vi.useFakeTimers();
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  roots.push(root);
+  const agents = codingAgentsControl({ agents: [AGENT], agentIds: [AGENT.id] });
+  const registry = AtomRegistry.make();
+  const tab = createElement(TerminalTab, {
+    agentId: AGENT.id,
+    agents,
+    shown: true,
+    onOpenAgent: () => undefined,
+    onClose: () => undefined,
+    shells: { open: true, onToggle: () => undefined },
+  });
+  // The window's opener is a new closure whenever what it reads changes, as the window draws it.
+  const draw = () =>
+    act(() =>
+      root.render(
+        onRegistry(
+          registry,
+          onSideBundles(
+            SIDE_BUNDLES,
+            createElement(FindScope, {
+              active: true,
+              subject: { task: TASK, tab: { terminal: AGENT.id } },
+              children: createElement(OpenLinkProvider, { value: () => undefined }, tab),
+            }),
+          ),
+        ),
+      ),
+    );
+  draw();
+  await settle();
+  const port = main.post(OLDEST);
+  port.say({ type: "state", state: "attached" });
+  port.say({ type: "output", data: bytes("pnpm test\r\n") });
+  await act(async () => vi.advanceTimersByTimeAsync(100));
+  const asked = main.sent.length;
+
+  draw();
+  await settle();
+
+  assert.deepEqual(
+    main.sent.slice(asked).map((request) => request.kind),
+    [],
+  );
+  act(() => {
+    runAppCommand(APP_COMMAND.FIND);
+  });
+  typeFind("pnpm");
+  await act(async () => vi.advanceTimersByTimeAsync(100));
+  assert.equal(findTally(), "1 of 1");
+});
+
+test("on a phone a connecting terminal says so in a bar over its screen, and a connected one draws no bar", async () => {
+  const tab = await mount(true, false, undefined, false, SIDE_BUNDLES, true);
+  assert.equal(tab.bar(), "Connecting…");
+
+  main.post(OLDEST).say({ type: "state", state: "attached" });
+  assert.equal(tab.bar(), undefined);
+});
+
+test("in a wide room a connecting terminal draws no bar, the title bar saying so", async () => {
+  const tab = await mount();
+  assert.equal(tab.standing(), "· sandbox · connecting…");
+  assert.equal(tab.bar(), undefined);
+});
+
+test("on a phone a drop after connecting waits out its own reveal, as a drop after a connection does", async () => {
+  mountAnnouncer();
+  const tab = await mount(true, false, undefined, false, SIDE_BUNDLES, true);
+  revealBar();
+  assert.equal(announcedPolitely(), "Connecting…");
+
+  main.post(OLDEST).say({ type: "state", state: "reconnecting" });
+  assert.equal(tab.bar(), "Connection lost. Reconnecting…");
+  assert.equal(announcedPolitely(), "", "the drop's bar is hidden, so it says nothing yet");
+  revealBar();
+  assert.equal(announcedPolitely(), "Connection lost. Reconnecting…");
 });

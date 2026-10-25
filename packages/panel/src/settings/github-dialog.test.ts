@@ -11,12 +11,16 @@ import {
 } from "@luke/features/github-token-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import type { PortActKind } from "@luke/host/contract";
+import { SETTINGS_VIEW, type SettingsLink } from "@luke/settings/settings-views";
+import { holdExits } from "@luke/ui/testing/held-exits";
 import { ACTION_RESULT_STATUS } from "@luke/wire";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeEach, test } from "vitest";
+import { afterEach, beforeEach, test, vi } from "vitest";
+import { OpenSettingsProvider } from "../open-settings.js";
 import { fakeActPort } from "../testing/app-bridge.js";
 import { fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
+import { holdMotion, releaseMotion } from "../testing/motion-held.js";
 import { AccountSection } from "./account-section.js";
 
 /**
@@ -46,6 +50,8 @@ let sent: { kind: PortActKind; payload: unknown }[] = [];
 let refuseSave: GitHubTokenRejection | undefined;
 /** How many of the next reads go unanswered. */
 let unansweredReads = 0;
+/** Every place in Settings the window was asked to open, in order. */
+let opened: SettingsLink[] = [];
 
 const roots: Root[] = [];
 
@@ -55,6 +61,7 @@ beforeEach(() => {
   sent = [];
   refuseSave = undefined;
   unansweredReads = 0;
+  opened = [];
   fakeActPort({
     [ACT_KIND.GITHUB_TOKEN_READ]: (payload) => {
       sent.push({ kind: ACT_KIND.GITHUB_TOKEN_READ, payload });
@@ -81,6 +88,9 @@ beforeEach(() => {
 afterEach(() => {
   for (const root of roots.splice(0)) act(() => root.unmount());
   document.body.innerHTML = "";
+  releaseMotion();
+  vi.useRealTimers();
+  Reflect.deleteProperty(Element.prototype, "getAnimations");
 });
 
 async function settle(): Promise<void> {
@@ -97,17 +107,21 @@ async function mountAndOpen(open = true): Promise<void> {
   roots.push(root);
   act(() =>
     root.render(
-      createElement(AccountSection, {
-        account: {
-          status: ACCOUNT_STATUS.SIGNED_IN,
-          id: "user-ada",
-          email: "ada@example.com",
-          name: "Ada",
-          provider: ACCOUNT_PROVIDER.GOOGLE,
-        },
-        onSignOut: () => Promise.resolve(),
-        onDeleteAccount: () => Promise.resolve({ status: ACTION_RESULT_STATUS.ACCEPTED }),
-      }),
+      createElement(
+        OpenSettingsProvider,
+        { value: (link: SettingsLink) => opened.push(link) },
+        createElement(AccountSection, {
+          account: {
+            status: ACCOUNT_STATUS.SIGNED_IN,
+            id: "user-ada",
+            email: "ada@example.com",
+            name: "Ada",
+            provider: ACCOUNT_PROVIDER.GOOGLE,
+          },
+          onSignOut: () => Promise.resolve(),
+          onDeleteAccount: () => Promise.resolve({ status: ACTION_RESULT_STATUS.ACCEPTED }),
+        }),
+      ),
     ),
   );
   await settle();
@@ -118,8 +132,13 @@ async function mountAndOpen(open = true): Promise<void> {
 
 const dialog = () => document.querySelector('[role="dialog"]') ?? assert.fail("no dialog");
 
-const tokenField = () =>
-  document.querySelector<HTMLInputElement>('input[aria-label="Personal access token"]');
+/** The field its visible label names, as a reader finds it. */
+const tokenField = () => {
+  const label = [...document.querySelectorAll("label")].find(
+    (each) => each.textContent === "Personal access token",
+  );
+  return label?.control instanceof HTMLInputElement ? label.control : null;
+};
 
 const button = (words: string, within: ParentNode = document) =>
   [...within.querySelectorAll<HTMLButtonElement>("button")].find(
@@ -155,46 +174,164 @@ test("with no token the row offers Add, and a token pasted into the unrecorded f
   act(() => button("Done").click());
   assert.match(
     document.body.textContent ?? "",
-    /GitHub personal access tokenghp_…wxyz · octo-member · Expires /u,
+    /GitHub personal access tokenghp_…wxyz\u00a0·\u00a0octo-member Expires\u00a0/u,
   );
   button("Manage");
   assert.ok(!document.body.innerHTML.includes(PASTED), "the page holds the token nowhere");
 });
 
-test("a saved token's Manage opens it with Remove, which asks first, then takes it away", async () => {
+test("a token's expiry is one unbreakable unit and no fact on the row's line carries a dot at its edge", async () => {
+  stored = KEPT;
+  await mountAndOpen(false);
+  const facts = [
+    ...(document.querySelector(".luke-settings-row-description .luke-inline")?.children ?? []),
+  ].map((each) => each.textContent ?? "");
+  const expiry = facts.find((each) => each.startsWith("Expires"));
+  assert.match(expiry ?? "", /^Expires\u00a0[A-Z][a-z]{2}\u00a0\d{1,2},\u00a0\d{4} $/u);
+  assert.deepEqual(
+    facts.filter((each) => /^·|·$/u.test(each)),
+    [],
+  );
+});
+
+test("with no token the row says what the token is for, and with one it says the token's facts instead", async () => {
+  await mountAndOpen(false);
+  const purpose = /Lets agents work in repositories Luke's GitHub App does not reach/u;
+  assert.match(document.body.textContent ?? "", purpose);
+
+  stored = KEPT;
+  document.body.innerHTML = "";
+  await mountAndOpen(false);
+  assert.doesNotMatch(document.body.textContent ?? "", purpose);
+});
+
+test("the dialog opens with the token field focused, and Remove's question going back to a form leaves it there", async () => {
+  await mountAndOpen();
+  assert.ok(document.activeElement === tokenField(), "the field takes focus as the card opens");
+  await paste(PASTED);
+  act(() => button("Done").click());
+  await settle();
+
+  act(() => button("Manage").click());
+  await settle();
+  assert.equal(tokenField(), null);
+  act(() => {
+    button("Remove", dialog()).focus();
+    button("Remove", dialog()).click();
+  });
+  await settle();
+  act(() =>
+    button("Remove", dialog().querySelector<HTMLElement>('[role="group"]') ?? dialog()).click(),
+  );
+  await settle();
+  assert.ok(document.activeElement === tokenField(), "the form drawn again has focus");
+});
+
+test("a saved token's Manage opens it with Remove, which asks at the dialog's foot, then takes it away", async () => {
   stored = KEPT;
   await mountAndOpen();
   assert.equal(tokenField(), null);
+  const asked = () => dialog().querySelector<HTMLElement>('[role="group"]');
+
+  // Note that the press is made from Remove holding focus, as a pointer's or a key's press is.
+  act(() => {
+    button("Remove", dialog()).focus();
+    button("Remove", dialog()).click();
+  });
+  await settle();
+  assert.equal(sent.filter((each) => each.kind === ACT_KIND.GITHUB_TOKEN_REMOVE).length, 0);
+  assert.equal(document.querySelector('[role="alertdialog"]'), null, "no card opens over it");
+  const question = asked() ?? assert.fail("no question at the foot");
+  assert.match(question.textContent ?? "", /Remove your GitHub token\?/u);
+  // The question has a one-line body saying what goes.
+  assert.match(question.textContent ?? "", /Luke deletes the token he holds/u);
+  assert.doesNotMatch(dialog().textContent ?? "", /Create token|Done/u, "the foot is the question");
+  assert.ok(document.activeElement === button("Cancel", question), "Cancel takes focus");
+
+  act(() => button("Cancel", question).click());
+  await settle();
+  assert.equal(asked(), null, "Cancel takes the question back");
+  assert.match(dialog().textContent ?? "", /Create token/u, "and the dialog stays");
+  assert.ok(document.activeElement === button("Remove", dialog()), "focus goes back to Remove");
 
   act(() => button("Remove", dialog()).click());
   await settle();
-  assert.equal(sent.filter((each) => each.kind === ACT_KIND.GITHUB_TOKEN_REMOVE).length, 0);
-  const question =
-    document.querySelector('[role="alertdialog"]') ?? assert.fail("no confirm dialog");
-  act(() => button("Remove", question).click());
+  assert.equal(button("Remove", asked() ?? assert.fail()).dataset.variant, "danger");
+  act(() => button("Remove", asked() ?? assert.fail()).click());
   await settle();
   assert.equal(sent.filter((each) => each.kind === ACT_KIND.GITHUB_TOKEN_REMOVE).length, 1);
   assert.ok(tokenField(), "the field stands again");
 });
 
-test("a refused save says why in a short label and keeps the field", async () => {
-  refuseSave = GITHUB_TOKEN_REJECTION.FINE_GRAINED;
+test("each refused save says why and what to do next, and keeps the field", async () => {
   await mountAndOpen();
-  await paste(PASTED);
+  const said = new Map<string, string | undefined>();
+  for (const rejection of Object.values(GITHUB_TOKEN_REJECTION)) {
+    refuseSave = rejection;
+    await paste(PASTED);
+    said.set(
+      rejection,
+      document.getElementById(tokenField()?.getAttribute("aria-describedby") ?? "")?.textContent ??
+        undefined,
+    );
+    assert.ok(tokenField(), "the field stands as pasted");
+  }
 
-  assert.equal(document.querySelector('[role="alert"]')?.textContent, "Not a classic token");
-  assert.ok(tokenField(), "the field stands as pasted");
+  assert.deepEqual(Object.fromEntries(said), {
+    fine_grained: "This isn't a classic token. Create a classic token and paste that.",
+    invalid: "GitHub rejected this token. Check that you copied all of it, or create a new one.",
+    no_repo_scope: "This token is missing the repo scope. Create a new token with repo ticked.",
+    no_github_account:
+      "No GitHub account is connected to your Luke account. Connect GitHub in Integrations settings, then save the token again.",
+    other_user:
+      "This token belongs to a different GitHub account than the one connected to Luke. Create it while signed in to the connected account.",
+    unreachable: "GitHub could not be reached. Try again.",
+    too_many_tries: "Too many tokens tried in the last hour. Try again later.",
+  });
 });
 
-test("a read that went unanswered offers Try again in place of Add, which reads the token again", async () => {
+test("a save refused for want of a GitHub account names Integrations by a link that opens it", async () => {
+  await mountAndOpen();
+  refuseSave = GITHUB_TOKEN_REJECTION.NO_GITHUB_ACCOUNT;
+  await paste(PASTED);
+  const line =
+    document.getElementById(tokenField()?.getAttribute("aria-describedby") ?? "") ??
+    assert.fail("no line says why");
+  assert.doesNotMatch(line.textContent ?? "", /›/u, "no path to the page is spelled");
+  act(() => button("Integrations", line).click());
+  assert.deepEqual(opened, [{ page: SETTINGS_VIEW.INTEGRATIONS }]);
+});
+
+test("a saved token GitHub rejected says to remove it and add a new one", async () => {
+  stored = { ...KEPT, status: GITHUB_TOKEN_STATUS.INVALID };
+  await mountAndOpen();
+
+  assert.match(
+    dialog().textContent ?? "",
+    /GitHub rejected this token\. Remove it and add a new one\./u,
+  );
+});
+
+test("a saved token Luke can no longer read says to remove it and add it again", async () => {
+  stored = { ...KEPT, status: GITHUB_TOKEN_STATUS.UNREADABLE };
+  await mountAndOpen();
+
+  assert.match(dialog().textContent ?? "", /Can no longer be read\. Remove it and add it again\./u);
+});
+
+test("a read that went unanswered says so as an alert with Retry in place of Add, which reads the token again", async () => {
   unansweredReads = 1;
   await mountAndOpen(false);
   assert.equal(
     [...document.querySelectorAll("button")].some((each) => each.textContent === "Add"),
     false,
   );
+  assert.equal(
+    document.querySelector('[role="alert"]')?.textContent,
+    "The token could not be read.Retry",
+  );
 
-  act(() => button("Try again").click());
+  act(() => button("Retry").click());
   await settle();
   button("Add");
 });
@@ -230,4 +367,41 @@ test("the row reads the token again when Profile is drawn for another account", 
   await settle();
   button("Add");
   assert.ok(!(container.textContent ?? "").includes("octo-member"), "Ada's token is gone");
+});
+
+/** The token dialog opened from the row's Add, which held focus as it was pressed, and then put away by its Done. */
+async function openedThenDone(): Promise<HTMLButtonElement> {
+  await mountAndOpen(false);
+  const opener = button("Add");
+  opener.focus();
+  act(() => opener.click());
+  await settle();
+  act(() => button("Done").click());
+  return opener;
+}
+
+test("Done fades the token dialog out, still drawn and in its ending state, then takes it away with focus back on its button", async () => {
+  vi.useFakeTimers({ toFake: ["requestAnimationFrame", "cancelAnimationFrame"] });
+  const exits = holdExits();
+  const opener = await openedThenDone();
+  const fading = document.querySelector('[role="dialog"]');
+  const ending = fading?.hasAttribute("data-ending-style");
+  act(() => vi.advanceTimersToNextFrame());
+  const stillDrawn = document.querySelector('[role="dialog"]') !== null;
+  await act(async () => exits.finish());
+
+  assert.ok(fading, "the dialog stands while it fades");
+  assert.equal(ending, true, "it is in its ending state");
+  assert.equal(stillDrawn, true, "it stays until its fade has run");
+  assert.equal(document.querySelector('[role="dialog"]'), null);
+  assert.equal(document.activeElement, opener, "focus is back on the button that opened it");
+});
+
+test("Done takes the token dialog away at once where motion is held", async () => {
+  holdExits();
+  holdMotion();
+  const opener = await openedThenDone();
+
+  assert.equal(document.querySelector('[role="dialog"]'), null);
+  assert.equal(document.activeElement, opener);
 });

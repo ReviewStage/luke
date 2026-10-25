@@ -1,23 +1,16 @@
 // @vitest-environment jsdom
 
-import { act, createElement, useState } from "react";
+import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
+import { STATUS_TONE } from "../../status-tone.js";
 import { useMenu } from "../menu/menu.js";
-import {
-  NAV_COUNT_SHOWN,
-  NAV_COUNT_TONE,
-  NAV_CURRENT,
-  NAV_ITEM_VARIANT,
-  NavItem,
-  NavItemLink,
-} from "./nav-item.js";
+import { NAV_CURRENT, NAV_ITEM_VARIANT, NavItem, NavItemLink } from "./nav-item.js";
 
 /**
  * nav-item.test.ts -- a nav item is a button named by its words, its count
  * read with its noun and left out at none; the place shown is announced as
- * the page, a search's find as the location; a fold's head says whether
- * its group stands open and folds it on a press; a menu's trigger says the
+ * the page, a search's find as the location; a menu's trigger says the
  * menu it drops and whether it stands; an unavailable item refuses its
  * press; a hint's words describe the item they hang from; and one that
  * keeps focus leaves it on the field that held it. A nav item link is a
@@ -109,7 +102,7 @@ test("a count is muted unless it is drawn in the accent's blue", () => {
       null,
       createElement(NavItem, { count: { value: 2, noun: "tasks" }, children: "acme/web" }),
       createElement(NavItem, {
-        count: { value: 3, noun: "waiting on you", tone: NAV_COUNT_TONE.ACCENT },
+        count: { value: 3, noun: "waiting on you", tone: STATUS_TONE.ATTENTION },
         children: "Inbox",
       }),
     ),
@@ -118,7 +111,7 @@ test("a count is muted unless it is drawn in the accent's blue", () => {
   const tones = [...container.querySelectorAll<HTMLElement>(".luke-nav-item-count")].map(
     (each) => each.dataset.tone,
   );
-  expect(tones).toEqual([NAV_COUNT_TONE.MUTED, NAV_COUNT_TONE.ACCENT]);
+  expect(tones).toEqual([STATUS_TONE.NEUTRAL, STATUS_TONE.ATTENTION]);
 });
 
 test("the place shown is announced as the page, a search's find as the location", () => {
@@ -140,29 +133,6 @@ test("the place shown is announced as the page, a search's find as the location"
     ["Home", "page"],
     ["Theme", "location"],
     ["Inbox", null],
-  ]);
-});
-
-test("a fold's head says whether its group is open, and a press folds it", () => {
-  function Group(): React.JSX.Element {
-    const [folded, setFolded] = useState(false);
-    return createElement(NavItem, {
-      variant: NAV_ITEM_VARIANT.HEAD,
-      icon: createElement("svg"),
-      expanded: !folded,
-      count: folded ? { value: 4, noun: "tasks", shown: NAV_COUNT_SHOWN.ON_HOVER } : undefined,
-      onClick: () => setFolded((was) => !was),
-      children: "acme/web",
-    });
-  }
-  const container = mount(createElement(Group));
-  const head = button(container);
-
-  expect([head.getAttribute("aria-expanded"), head.textContent]).toEqual(["true", "acme/web"]);
-  act(() => head.click());
-  expect([head.getAttribute("aria-expanded"), head.textContent]).toEqual([
-    "false",
-    "acme/web4 tasks",
   ]);
 });
 
@@ -224,7 +194,6 @@ test("a hint's words describe the item they hang from", () => {
       null,
       createElement("span", { id: "hint" }, "acme/web, 4 open tasks"),
       createElement(NavItem, {
-        variant: NAV_ITEM_VARIANT.HEAD,
         "aria-describedby": "hint",
         children: "acme/web",
       }),

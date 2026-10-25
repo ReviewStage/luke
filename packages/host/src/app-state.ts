@@ -27,7 +27,10 @@ export type { MacCommandAsk } from "./mac-command-ask.js";
  * The launch profiles a window answers to. A capture run stages a
  * conversation it has no voice window for: Luke speaking, that with the
  * Mac's output off, and both speakers heard at once; or, in any fixture run,
- * the panel's Tasks tab over a synthetic task. Any other word — the default
+ * the panel's Tasks tab over a synthetic task, or over its synthetic coding
+ * agent and that agent's tabs; or a synthetic account signed in, on a page
+ * of Settings, on Admin, on Automations, or with its Inbox and its own page
+ * filled. Any other word — the default
  * included — stages nothing.
  */
 export const RUN_PROFILE = {
@@ -43,8 +46,61 @@ export const RUN_PROFILE = {
   TASKS_TRANSCRIPT: "tasks-transcript",
   /** The same task mid-call, opened at launch on the work its agent did on its calls. */
   TASKS_WORK: "tasks-work",
+  /** The same task beside its coding agent, opened at launch on its plan, whose words hold comment threads: one answered, one its agent started, one on a whole block, and one resolved. */
+  TASKS_COMMENTS: "tasks-comments",
   /** The tasks' list, opened at launch on the window's Chat over a synthetic chat. */
   CHAT: "chat",
+  /** A synthetic account signed in, its tasks holding Inbox items: an ask of each kind, a form, a notice with code, a long thread, an answered item, and a closed one. */
+  INBOX: "inbox",
+  /** The same account and items, its tasks assigned to it and its agents at work, which its own page lists. */
+  PERSON: "person",
+  /** The same task on its coding agent, its Pull request tab beside it: checks, reviews, and a merge queued. */
+  AGENT_PULL_REQUEST: "agent-pull-request",
+  /** The same agent and Pull request tab, the agent's turn long enough that its transcript scrolls. */
+  AGENT_TRANSCRIPT: "agent-transcript",
+  /** The same agent, its Pull request tab on the checks. */
+  AGENT_CHECKS: "agent-checks",
+  /** The same agent, its Pull request tab on Files changed. */
+  AGENT_FILES: "agent-files",
+  /** The same agent, its Pull request tab on Chapters. */
+  AGENT_CHAPTERS: "agent-chapters",
+  /** The same agent beside a file of its repository opened in a tab of its own. */
+  AGENT_FILE: "agent-file",
+  /** The same agent beside its Terminal, attached to a shell: one profile per state the tab draws. */
+  AGENT_TERMINAL: "agent-terminal",
+  AGENT_TERMINAL_CONNECTING: "agent-terminal-connecting",
+  AGENT_TERMINAL_RECONNECTING: "agent-terminal-reconnecting",
+  AGENT_TERMINAL_IDLE: "agent-terminal-idle",
+  AGENT_TERMINAL_EXITED: "agent-terminal-exited",
+  AGENT_TERMINAL_STOPPED: "agent-terminal-stopped",
+  AGENT_TERMINAL_STARTING: "agent-terminal-starting",
+  AGENT_TERMINAL_UNREACHABLE: "agent-terminal-unreachable",
+  /** The same agent beside a page it showed, open in a tab of its own. */
+  AGENT_PAGE: "agent-page",
+  /** The same agent mid-call, its video off, the floating call window standing over the panel. */
+  AGENT_CALL: "agent-call",
+  /** The same call with Luke's video on, its tile up in the floating call window and the agent's tab. */
+  AGENT_CALL_VIDEO: "agent-call-video",
+  /** A synthetic account signed in, Settings opened at launch on its Account page. */
+  SETTINGS_ACCOUNT: "settings-account",
+  /** The same account, Settings on its team's workspace: its members, an invitation waiting, and its Linear's sign-in expired. */
+  SETTINGS_WORKSPACE: "settings-workspace",
+  /** The same account, Settings on Agents: its Claude plan connected and its ChatGPT sign-in expired. */
+  SETTINGS_AGENTS: "settings-agents",
+  /** The same account, Settings on Integrations: some connected, some with their sign-in expired. */
+  SETTINGS_INTEGRATIONS: "settings-integrations",
+  /** The same account, Settings on Skills: its team's and its own. */
+  SETTINGS_SKILLS: "settings-skills",
+  /** The same account, Settings on its team's memory. */
+  SETTINGS_MEMORY: "settings-memory",
+  /** The same account, an admin, opened at launch on Admin's Overview. */
+  ADMIN: "admin",
+  /** The same account, opened at launch on its Automations: three, the last run of one failed. */
+  AUTOMATIONS: "automations",
+  /** The same account on one automation's editor, its runs beside it. */
+  AUTOMATIONS_EDITOR: "automations-editor",
+  /** The same account on the automation whose run failed, that run marked among its runs. */
+  AUTOMATIONS_RUNS: "automations-runs",
 } as const;
 
 export type RunProfile = (typeof RUN_PROFILE)[keyof typeof RUN_PROFILE];
@@ -80,8 +136,9 @@ interface AppVoiceSlice {
   /**
    * The live conversation as the voice window last reported it, so a panel
    * that opens mid-exchange draws the exchange rather than an idle voice.
-   * Absent until that window has reported once, and always in a fixture or
-   * capture run, which raises no voice window.
+   * Absent until that window has reported once, and in a fixture or capture
+   * run, which raises no voice window, but where a call profile stages one
+   * (`fixture-stage.ts`).
    *
    * The loudness beside it is deliberately not here. It is a reading taken
    * twenty times a second that expires in fifty milliseconds, so nothing
@@ -95,6 +152,14 @@ interface AppVoiceSlice {
    * the voice window's, so a replaced voice window leaves it standing.
    */
   avatar: AvatarState;
+  /**
+   * Set once the voice window has been given up on for this run, after it
+   * failed to load again and again: no call can run until Luke is reopened,
+   * so where voice is offered says so rather than offering a press that
+   * reaches nothing. Main's own fact, never the window's, and absent
+   * otherwise.
+   */
+  unavailable?: true;
 }
 
 /**

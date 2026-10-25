@@ -1,5 +1,8 @@
 import assert from "node:assert/strict";
-import { CODING_AGENT_CALL_FAILURE } from "@luke/features/coding-agent-view";
+import {
+  CODING_AGENT_CALL_FAILURE,
+  type CodingAgentCallFailure,
+} from "@luke/features/coding-agent-view";
 import {
   CHECK_SUMMARY,
   CODING_AGENT_PAYER,
@@ -12,10 +15,10 @@ import {
   OPERATOR_QUIET_REPLY,
   PULL_REQUEST_STATE,
 } from "@luke/features/coding-agent-wire";
-import { FAILURE_REASON } from "@luke/features/failure-remedy";
+import { FAILURE_REASON, remedyLabel } from "@luke/features/failure-remedy";
 import { MODEL_PROVIDER } from "@luke/features/models-wire";
 import { REPOSITORY_UNREACHED } from "@luke/features/repository-reach-wire";
-import { dayAndTimeText } from "@luke/ui/time-format";
+import { dayAndTimeText } from "@luke/features/time-format";
 import { MESSAGE_ROLE, type WireRecord } from "@luke/wire";
 import { sentLineId } from "@luke/wire/host-ids";
 import { test } from "vitest";
@@ -623,7 +626,7 @@ test("a message refused for a repository out of reach names the plan's remedy on
     reason: FAILURE_REASON.OTHER,
     text: messageFailureWords(CODING_AGENT_CALL_FAILURE.REPOSITORY_NOT_REACHABLE),
   });
-  // Giving the repository to Luke on GitHub is pressed on GitHub, not the task, so it stands for an agent with no task.
+  // Giving the repository to Luke's GitHub App is pressed on GitHub, not the task, so it stands for an agent with no task.
   const notSelected = messageFailureNote(
     {
       failure: CODING_AGENT_CALL_FAILURE.REPOSITORY_NOT_REACHABLE,
@@ -637,10 +640,39 @@ test("a message refused for a repository out of reach names the plan's remedy on
   );
   assert.deepEqual(notSelected, {
     reason: FAILURE_REASON.ADD_REPOSITORY,
-    text: "Luke on GitHub doesn't have access to acme/relay.",
+    text: "Luke's GitHub App doesn't have access to acme/relay.",
     repository: "acme/relay",
     settingsUrl: "https://github.com/settings/installations/7",
   });
+});
+
+test("a refusal for the member's own GitHub token reads with its remedy, Update GitHub token, with or without a task", () => {
+  const refused = (reason: "no-token" | "token-no-access" | "token-cannot-push") =>
+    ({
+      failure: CODING_AGENT_CALL_FAILURE.REPOSITORY_NOT_REACHABLE,
+      unreached: { reason, repository: "acme/relay" },
+    }) as const;
+
+  const noToken = messageFailureNote(refused(REPOSITORY_UNREACHED.NO_TOKEN), null);
+  const noAccess = startFailureNote(refused(REPOSITORY_UNREACHED.TOKEN_NO_ACCESS), null);
+  const cannotPush = startFailureNote(
+    refused(REPOSITORY_UNREACHED.TOKEN_CANNOT_PUSH),
+    "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10",
+  );
+
+  assert.deepEqual(noToken, {
+    reason: FAILURE_REASON.GITHUB_TOKEN,
+    text: "Your saved GitHub token could not be opened.",
+  });
+  assert.deepEqual(noAccess, {
+    reason: FAILURE_REASON.GITHUB_TOKEN,
+    text: "Your GitHub token cannot access acme/relay. Check the repository still exists under that name, or ask its owner to give your GitHub account access.",
+  });
+  assert.deepEqual(cannotPush, {
+    reason: FAILURE_REASON.GITHUB_TOKEN,
+    text: "Your GitHub token cannot push to acme/relay. Ask its owner to give your GitHub account write access.",
+  });
+  assert.equal(remedyLabel(cannotPush), "Update GitHub token");
 });
 
 test("a message a Claude plan refused says to reconnect it, a limit says when it resets, and a plan's refusal says nothing of turning to another payer", () => {
@@ -661,10 +693,10 @@ test("a message a Claude plan refused says to reconnect it, a limit says when it
       messageFailureNote({ failure: CODING_AGENT_CALL_FAILURE.AGENT_PLAN_SIGNED_OUT }, null).text,
     ],
     [
-      "Your Claude plan needs reconnecting in Settings.",
-      `Your Claude plan has reached its usage limit. It resets ${dayAndTimeText(resetsAt)}.`,
-      "Your Claude plan has reached its usage limit. It waits until the limit resets.",
-      `The plan paying for this agent has reached its usage limit. It resets ${dayAndTimeText(resetsAt)}.`,
+      "Your Claude subscription needs reconnecting in Settings.",
+      `Your Claude subscription has reached its usage limit. It resets ${dayAndTimeText(resetsAt)}.`,
+      "Your Claude subscription has reached its usage limit. It waits until the limit resets.",
+      `The subscription paying for this agent has reached its usage limit. It resets ${dayAndTimeText(resetsAt)}.`,
       messageFailureWords(CODING_AGENT_CALL_FAILURE.AGENT_PLAN_SIGNED_OUT),
     ],
   );
@@ -687,16 +719,92 @@ test("a Start refused for a missing credential says in one sentence which harnes
       {
         reason: FAILURE_REASON.CONNECT_AGENTS,
         text: "Connect Claude in Settings to start an agent.",
+        provider: MODEL_PROVIDER.ANTHROPIC,
       },
       {
         reason: FAILURE_REASON.CONNECT_AGENTS,
         text: "Connect Codex in Settings to start an agent.",
+        provider: MODEL_PROVIDER.OPENAI,
       },
       {
         reason: FAILURE_REASON.CONNECT_AGENTS,
         text: "Connect Codex in Settings to message this agent.",
+        provider: MODEL_PROVIDER.OPENAI,
       },
       { reason: FAILURE_REASON.OTHER, text: LUKE_PAID_REFUSAL },
+    ],
+  );
+});
+
+test("a missing credential's press names the harness to connect, and Settings where the service named none", () => {
+  const missing = (provider?: (typeof MODEL_PROVIDER)[keyof typeof MODEL_PROVIDER]) =>
+    remedyLabel(
+      startFailureNote(
+        {
+          failure: CODING_AGENT_CALL_FAILURE.AGENT_CREDENTIAL_MISSING,
+          ...(provider === undefined ? undefined : { provider }),
+        },
+        null,
+      ),
+    );
+
+  assert.deepEqual(
+    [missing(MODEL_PROVIDER.ANTHROPIC), missing(MODEL_PROVIDER.OPENAI), missing()],
+    ["Connect Claude", "Connect Codex", "Open Settings"],
+  );
+});
+
+test("a Start or a message refused for an API key saved but unreadable says so and offers Settings, where saving it again mends it; a Start its plan refused for good offers Settings too, a message the plan refused does not", () => {
+  const unreadable = { failure: CODING_AGENT_CALL_FAILURE.AGENT_API_KEY_UNREADABLE } as const;
+
+  assert.deepEqual(
+    [
+      startFailureNote(unreadable, "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10"),
+      messageFailureNote(unreadable, null, CODING_AGENT_PAYER.API_KEY),
+      startFailureNote({ failure: CODING_AGENT_CALL_FAILURE.AGENT_PLAN_SIGNED_OUT }, null),
+      startFailureNote({ failure: CODING_AGENT_CALL_FAILURE.AGENT_PLAN_INELIGIBLE }, null),
+      messageFailureNote({ failure: CODING_AGENT_CALL_FAILURE.AGENT_PLAN_INELIGIBLE }, null).reason,
+    ],
+    [
+      {
+        reason: FAILURE_REASON.CONNECT_AGENTS,
+        text: "Your saved API key can't be read. Save it again in Settings to start an agent.",
+      },
+      {
+        reason: FAILURE_REASON.CONNECT_AGENTS,
+        text: "Your saved API key can't be read. Save it again in Settings to message this agent.",
+      },
+      {
+        reason: FAILURE_REASON.CONNECT_AGENTS,
+        text: "Your subscription is signed out. Sign in again in Settings to start an agent.",
+      },
+      {
+        reason: FAILURE_REASON.CONNECT_AGENTS,
+        text: "Your subscription isn't eligible to run this agent. Choose your API key in Settings to start one.",
+      },
+      FAILURE_REASON.OTHER,
+    ],
+  );
+});
+
+test("a message to a teammate's agent its starter's own key refused names the starter and offers the reader no Settings of their own", () => {
+  const note = (failure: CodingAgentCallFailure) =>
+    messageFailureNote({ failure }, null, CODING_AGENT_PAYER.API_KEY, "Ada");
+
+  assert.deepEqual(
+    [
+      note(CODING_AGENT_CALL_FAILURE.AGENT_API_KEY_UNREADABLE),
+      note(CODING_AGENT_CALL_FAILURE.AGENT_CREDENTIAL_MISSING),
+    ],
+    [
+      {
+        reason: FAILURE_REASON.OTHER,
+        text: "Ada's saved API key can't be read. They save it again in Settings to unblock this agent.",
+      },
+      {
+        reason: FAILURE_REASON.OTHER,
+        text: "Ada has no API key or subscription connected for this agent. They connect one in Settings to unblock it.",
+      },
     ],
   );
 });

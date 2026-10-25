@@ -1,42 +1,39 @@
 import { ACCOUNT_STATUS, type AccountProvider } from "@luke/credentials/snapshot";
 import type { Task } from "@luke/features/task-wire";
+import { readingWords } from "@luke/features/words";
 import { EXPERIMENT, HOST_CAPABILITY } from "@luke/settings";
 import { SETTINGS_VIEW } from "@luke/settings/settings-views";
-import { APP_COMMAND, APP_SHORTCUTS } from "@luke/settings/shortcuts";
+import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
-  BackIcon,
+  BACK_BUTTON_LOOK,
+  BackButton,
   COLLECTION_STATE,
   CollectionPage,
-  commandKeyshortcuts,
   DrawerScrim,
   IconButton,
-  NavItem,
-  ONE_LINE_ELEMENT,
-  ONE_LINE_END,
-  OneLine,
   PAGE_FRAME,
   PANE_PIN_ELEMENT,
-  PageToolbar,
   PanePin,
   ScrollArea,
   SETTINGS_ROW_MARK_WIDTH,
   SETTINGS_SKELETON_CONTROL,
   SettingsPageSkeleton,
   type SettingsSectionSkeletonShape,
-  Shortcut,
   SidebarIcon,
+  TOOLBAR_LOOK,
+  Toolbar,
   Tooltip,
   useDrawerSwipe,
 } from "@luke/ui";
-import { isAgentTab } from "@luke/ui/tab-strip-model";
 import { DOCUMENT_REGION, TASKS_PAGE } from "@luke/ui/tasks-model";
-import { lazy, Suspense, useEffect, useMemo, useRef } from "react";
+import { Suspense, useEffect, useLayoutEffect, useMemo, useRef } from "react";
 import { ACTOR_SIZE, actorMarkWidth } from "../actor-ref.js";
 import { useAppCommand } from "../app-commands.js";
 import { appPlatform } from "../app-platform.js";
 import { CALL_CARD_SURFACE, StandingCallCardDock } from "../call/call-card.js";
 import { useCoarsePointer } from "../coarse-pointer.js";
 import { FIND_PAGE, PageFind } from "../find-in-tab.js";
+import { lazyRoute } from "../lazy-route.js";
 import type { NavigationHistory, WindowHistory } from "../navigation-history.js";
 import { PANEL_TAB, type PanelTab } from "../panel-tabs.js";
 import type { SettingsPanelProps } from "../settings/settings-panel.js";
@@ -59,14 +56,13 @@ import {
   useCapability,
   useExperiment,
 } from "../use-app-state.js";
-import { useCallingAgent } from "../use-voice-view.js";
-import { WindowVoiceNotice } from "../window-voice.js";
 import {
   AutomationListSkeleton,
   AutomationsActsSkeleton,
   AutomationsToolbar,
 } from "./automation-list-frame.js";
 import { READING_AUTOMATIONS } from "./automation-words.js";
+import { backPlaceOf } from "./back-place.js";
 import { useColumnDock } from "./column-dock.js";
 import { DesktopAgentPage } from "./desktop-agent-page.js";
 import { DesktopChat, useChatSurface } from "./desktop-chat.js";
@@ -82,7 +78,8 @@ import { OfflineMark, useOffline } from "./offline-mark.js";
 import { ADMIN_PLACE, PERSON_PAGE, VERSION_HISTORY } from "./pages-on-demand.js";
 import { PaneGlide } from "./pane-motion.js";
 import { PersonPageSkeleton } from "./person-frame.js";
-import { SidePanelToggle } from "./side-panel.js";
+import { PhoneHead } from "./phone-head.js";
+import { SidePanelChord, SidePanelToggle } from "./side-panel.js";
 import { SIDEBAR_OVERLAY, type SidebarCollapse, sidebarInSight } from "./sidebar-collapse.js";
 import { homeTaskCardOf } from "./task-card.js";
 import { awayBack } from "./task-pane-switcher.js";
@@ -95,8 +92,8 @@ import { useWindowTitle } from "./window-title.js";
  * open, the voice window's included, and Settings is opened seldom. The chunk is a local file, so it stands a frame
  * later, over its frame of placeholders in the meantime (`SettingsLoading`).
  */
-const DesktopSettings = lazy(() =>
-  import("./desktop-settings.js").then((loaded) => ({ default: loaded.DesktopSettings })),
+const SETTINGS_ROUTE = lazyRoute(() =>
+  import("./desktop-settings.js").then((loaded) => loaded.DesktopSettings),
 );
 
 /**
@@ -106,16 +103,12 @@ const DesktopSettings = lazy(() =>
  * among them, are opened seldom. What stands while
  * the chunk loads is the pages' own empty frame, for a frame.
  */
-const AutomationsPage = lazy(() =>
-  import("./automations-page.js").then((loaded) => ({
-    default: loaded.AutomationsPage,
-  })),
+const AUTOMATIONS_ROUTE = lazyRoute(() =>
+  import("./automations-page.js").then((loaded) => loaded.AutomationsPage),
 );
 
 /** The Tasks page, its List and its Board, its own chunk, loaded the first time it is opened. */
-const TasksPage = lazy(() =>
-  import("./tasks-page.js").then((loaded) => ({ default: loaded.TasksPage })),
-);
+const TASKS_ROUTE = lazyRoute(() => import("./tasks-page.js").then((loaded) => loaded.TasksPage));
 
 /** What stands while the Tasks page's chunk loads: its frame and title over quiet blocks, and its own way out, so Escape closes the page rather than reaching the plan behind it. */
 function TasksLoading({ onExit }: { onExit: () => void }): React.JSX.Element {
@@ -124,56 +117,70 @@ function TasksLoading({ onExit }: { onExit: () => void }): React.JSX.Element {
     <CollectionPage
       frame={PAGE_FRAME.TOOLBAR}
       label="Tasks"
-      toolbar={
-        <PageToolbar
-          heading={
-            <OneLine
-              as={ONE_LINE_ELEMENT.H1}
-              end={ONE_LINE_END.ELLIPSIS}
-              className="desktop-toolbar-title"
-            >
-              Tasks
-            </OneLine>
-          }
-        />
-      }
+      toolbar={<Toolbar title="Tasks" />}
       state={COLLECTION_STATE.LOADING}
       loadingLabel="Reading tasks"
     />
   );
 }
 
-/** What stands while the Admin place's chunk loads (`pages-on-demand.ts`): its list's column and the view's frame over quiet blocks, and its own way out. */
+/**
+ * What stands while the Admin place's chunk loads (`pages-on-demand.ts`): its
+ * list's column and the view's frame over quiet blocks, and its own way out.
+ * A narrow room heads the column it shows as the place will, a phone's
+ * header (`phone-head.tsx`) led by the way out of the list or back to it.
+ */
 function AdminLoading({
   onExit,
+  place,
+  onList,
   hidden,
 }: {
   onExit: () => void;
+  /** Where the way out leads, as its hint names it. */
+  place: string;
+  onList: () => void;
   hidden: HiddenColumns;
 }): React.JSX.Element {
   useAppCommand(APP_COMMAND.EXIT_ADMIN, onExit);
+  const narrow = hidden.list || hidden.item;
   return (
     <div className="desktop-admin">
       <nav className="admin-sections" aria-label="Admin sections" hidden={hidden.list}>
-        <div className="desktop-drag-strip" />
+        {narrow ? (
+          <PhoneHead
+            place="admin-sections"
+            start={
+              <BackButton
+                label="Back"
+                place={place}
+                command={APP_COMMAND.EXIT_ADMIN}
+                onBack={onExit}
+              />
+            }
+            title="Admin"
+            end={null}
+          />
+        ) : (
+          <div className="desktop-drag-strip" />
+        )}
       </nav>
       <section className="admin-page" aria-label="Admin" hidden={hidden.item}>
-        <div className="desktop-drag-strip" />
+        {narrow ? null : <div className="desktop-drag-strip" />}
         <CollectionPage
           frame={PAGE_FRAME.TOOLBAR}
           label="Admin"
           toolbar={
-            <PageToolbar
-              heading={
-                <OneLine
-                  as={ONE_LINE_ELEMENT.H1}
-                  end={ONE_LINE_END.ELLIPSIS}
-                  className="desktop-toolbar-title"
-                >
-                  Overview
-                </OneLine>
-              }
-            />
+            narrow ? (
+              <PhoneHead
+                place="admin"
+                start={<BackButton label="Admin" place="admin" onBack={onList} />}
+                title="Overview"
+                end={null}
+              />
+            ) : (
+              <Toolbar title="Overview" />
+            )
           }
           state={COLLECTION_STATE.LOADING}
           loadingLabel="Reading the dashboard…"
@@ -195,34 +202,65 @@ function PersonLoading({
   return <PersonPageSkeleton name={name} />;
 }
 
+/** Where Settings' and Admin's ways out lead where no step stands behind them, as a hint names it. */
+const TASKS_EXIT_PLACE = "tasks";
+
+/** Where a version history's way out leads where no step stands behind it, as a hint names it. */
+const HISTORY_EXIT_PLACE = "plan";
+
 /**
  * What stands while a version history's chunk loads: its frame, the list's
  * column where the sidebar stood, and its own way out, its Back row and
- * Escape, so the history is left as it would be once drawn.
+ * Escape, so the history is left as it would be once drawn. A narrow room
+ * heads the column it shows as the history will, a phone's header
+ * (`phone-head.tsx`) led by the way out of the list or back to it.
  */
 function VersionHistoryLoading({
   onExit,
+  place,
+  onList,
   hidden,
 }: {
   onExit: () => void;
+  /** Where the way out leads, as its hint names it. */
+  place: string;
+  onList: () => void;
   hidden: HiddenColumns;
 }): React.JSX.Element {
   useAppCommand(APP_COMMAND.EXIT_VERSION_HISTORY, onExit);
+  const narrow = hidden.list || hidden.item;
+  const exit = (
+    <BackButton
+      look={narrow ? BACK_BUTTON_LOOK.HEADER : BACK_BUTTON_LOOK.COLUMN}
+      label="Back"
+      place={place}
+      command={APP_COMMAND.EXIT_VERSION_HISTORY}
+      onBack={onExit}
+    />
+  );
   return (
     <div className="desktop-version-history">
       <nav className="version-log" aria-label="Versions" hidden={hidden.list}>
-        <div className="desktop-drag-strip" />
-        <NavItem
-          icon={<BackIcon />}
-          aria-keyshortcuts={commandKeyshortcuts(APP_COMMAND.EXIT_VERSION_HISTORY)}
-          shortcut={<Shortcut chord={APP_SHORTCUTS[APP_COMMAND.EXIT_VERSION_HISTORY].chord} />}
-          onClick={onExit}
-        >
-          Back
-        </NavItem>
+        {narrow ? (
+          <PhoneHead place="version-log" start={exit} title="Version history" end={null} />
+        ) : (
+          <>
+            <div className="desktop-drag-strip" />
+            {exit}
+          </>
+        )}
       </nav>
       <section className="version-page" aria-label="Version" hidden={hidden.item}>
-        <div className="desktop-drag-strip" />
+        {narrow ? (
+          <PhoneHead
+            place="version"
+            start={<BackButton label="Versions" place="versions" onBack={onList} />}
+            title={null}
+            end={null}
+          />
+        ) : (
+          <div className="desktop-drag-strip" />
+        )}
       </section>
     </div>
   );
@@ -290,24 +328,57 @@ const SETTINGS_SKELETON: readonly SettingsSectionSkeletonShape[] = [
  * lands where the blocks stood; and Settings' own way out, so Escape pressed
  * in that frame leaves Settings as it would once drawn, rather than falling
  * through to the task behind it. It is gone as Settings stands and offers the
- * same command itself. A narrow room hides the column Settings will hide.
+ * same command itself. A narrow room hides the column Settings will hide,
+ * and heads the one it shows as Settings will, a phone's header
+ * (`phone-head.tsx`) led by the way out of the list or back to it.
  */
 function SettingsLoading({
   onExit,
+  place,
+  onList,
   hidden,
 }: {
   onExit: () => void;
+  /** Where the way out leads, as its hint names it. */
+  place: string;
+  onList: () => void;
   hidden: HiddenColumns;
 }): React.JSX.Element {
   useAppCommand(APP_COMMAND.EXIT_SETTINGS, onExit);
+  const narrow = hidden.list || hidden.item;
   return (
     <div className="desktop-settings">
       <nav className="settings-pages" aria-label="Settings pages" hidden={hidden.list}>
-        <div className="desktop-drag-strip" />
+        {narrow ? (
+          <PhoneHead
+            place="settings-pages"
+            start={
+              <BackButton
+                label="Back"
+                place={place}
+                command={APP_COMMAND.EXIT_SETTINGS}
+                onBack={onExit}
+              />
+            }
+            title="Settings"
+            end={null}
+          />
+        ) : (
+          <div className="desktop-drag-strip" />
+        )}
       </nav>
       <section className="settings-page" aria-label="Settings" hidden={hidden.item}>
-        <div className="desktop-drag-strip" />
-        <SettingsPageSkeleton label="Loading Settings" sections={SETTINGS_SKELETON} />
+        {/* Note that the page draws its own bar, the window's drag handle, as Settings' page does once drawn. */}
+        <SettingsPageSkeleton
+          label={readingWords("Settings")}
+          sections={SETTINGS_SKELETON}
+          {...(narrow
+            ? {
+                lead: <BackButton label="Settings" place="settings" onBack={onList} />,
+                look: TOOLBAR_LOOK.PHONE,
+              }
+            : {})}
+        />
       </section>
     </div>
   );
@@ -350,6 +421,79 @@ function SidebarToggle({ sidebar }: { sidebar: SidebarCollapse }): React.JSX.Ele
 function SidebarChord({ sidebar }: { sidebar: SidebarCollapse }): null {
   useAppCommand(APP_COMMAND.TOGGLE_SIDEBAR, sidebar.onToggle);
   return null;
+}
+
+/** What held the keyboard as Settings opened, named by what a control is called, since the shell it stood in is drawn anew as Settings goes. */
+interface Holder {
+  element: HTMLElement;
+  tag: string;
+  label: string;
+  /** Whether it was the only control so called, as it was named, which is what lets another so called stand for it. */
+  alone: boolean;
+}
+
+/** What a control is called: its label, its placeholder, or its words. */
+function labelOf(element: HTMLElement): string {
+  return (
+    element.getAttribute("aria-label") ??
+    element.getAttribute("placeholder") ??
+    element.textContent?.trim() ??
+    ""
+  );
+}
+
+/** Every control of `tag` called `label`, in the order the window draws them. */
+function calledSo(tag: string, label: string): HTMLElement[] {
+  return [...document.querySelectorAll<HTMLElement>(tag)].filter((each) => labelOf(each) === label);
+}
+
+/** The control holding the keyboard now, named; none where it stands nowhere or on a control with no name. */
+function holder(): Holder | undefined {
+  const element = document.activeElement;
+  if (!(element instanceof HTMLElement) || element === document.body) return undefined;
+  const tag = element.localName;
+  const label = labelOf(element);
+  if (label === "") return undefined;
+  return { element, tag, label, alone: calledSo(tag, label).length === 1 };
+}
+
+/**
+ * The control that held the keyboard, as it stands now: itself where it never left, else the one drawn in its place.
+ * Note that a name shared by several controls, as a row's Pin is, finds none, whether it was shared as Settings opened
+ * or is now, and so does one no longer borne by any, as a row's time moves on, because the keyboard is better left
+ * with the window than handed to a neighbour of the same name.
+ */
+function found({ element, tag, label, alone }: Holder): HTMLElement | undefined {
+  if (element.isConnected) return element;
+  const called = calledSo(tag, label);
+  return alone && called.length === 1 ? called[0] : undefined;
+}
+
+/**
+ * Hands the keyboard back as Settings is left to the control that held it as
+ * Settings opened, where that is still to be found.
+ * Note that the control is named as Settings opens, in the render that turns
+ * the window over, because by the commit its shell is gone and the keyboard
+ * with it; and that it is handed back only from nowhere, since a press that
+ * left Settings on a control of its own has put the keyboard where it was
+ * meant to go.
+ */
+function useSettingsFocusReturn(inSettings: boolean): void {
+  const before = useRef<Holder | undefined>(undefined);
+  const was = useRef(false);
+  if (inSettings && !was.current) before.current = holder();
+  useLayoutEffect(() => {
+    if (inSettings) {
+      was.current = true;
+      return;
+    }
+    if (!was.current) return;
+    was.current = false;
+    const back = before.current === undefined ? undefined : found(before.current);
+    before.current = undefined;
+    const now = document.activeElement;
+    if (now === null || now === document.body) back?.focus({ preventScroll: true });
+  }, [inSettings]);
 }
 
 /**
@@ -474,27 +618,6 @@ function usePlaceCommands(
   );
 }
 
-/** The voice's notice line, one element for every draw, which reads the line where it is drawn (`WindowVoiceNotice`). */
-const NOTICE_STRIP = <WindowVoiceNotice />;
-
-/**
- * Whether the tab of the agent the call speaks into is on screen, where its
- * transcript streams the call's words as they are said and its foot draws
- * the call bar. A tab standing behind another chosen tab, or under a side
- * panel filling the window, is not on screen.
- */
-function callingTabShown(tasks: TasksControl, calling: string | undefined): boolean {
-  const { mainTabs, sidePanel } = tasks;
-  const tab = mainTabs.tab;
-  return (
-    calling !== undefined &&
-    !sidePanel.fullScreen &&
-    tab !== undefined &&
-    isAgentTab(tab) &&
-    tab.agent === calling
-  );
-}
-
 /**
  * What the window's title names: Settings alone, whose pages are not one
  * workspace's; the Inbox in the listed workspace, whatever task its item is
@@ -559,9 +682,7 @@ function automationsPlaceKey(place: AutomationsPlace): string {
  * the tasks' sidebar or Settings' page list alike, and leaving Settings is
  * going back to wherever it was opened from, or to the tasks when nothing
  * stands behind it. New task's dialog stands over the tasks or a version
- * history, whichever is drawn (`new-task-dialog.tsx`). The voice's notice line rides the foot of the call's
- * agent's tab while it is drawn, and floats at the window's foot wherever
- * else a call can still be heard.
+ * history, whichever is drawn (`new-task-dialog.tsx`).
  */
 export function DesktopShell({
   gates,
@@ -588,6 +709,7 @@ export function DesktopShell({
 }): React.JSX.Element {
   const { account } = settings;
   const shell = useRef<HTMLDivElement>(null);
+  useSettingsFocusReturn(tab === PANEL_TAB.SETTINGS);
   const keepOverlay = useFloatDismiss({ state: sidebar.overlay, onState: sidebar.onOverlay });
   // A phone's drawer follows a finger swiping in from the screen's left edge, or back out, as a phone's own drawers do.
   const coarse = useCoarsePointer();
@@ -688,11 +810,8 @@ export function DesktopShell({
   // no panel to toggle; an agent's page draws the agent's own, and the Inbox
   // the chosen item's task's.
   const planToggle = tasks.page === TASKS_PAGE.DOCUMENT && !standingIn;
-  const taskDrawn = planToggle && tasks.region.kind === DOCUMENT_REGION.READY;
-  const calling = useCallingAgent();
   // Chat is handed only what it reads of the tasks, so a delivery that moves the rest draws none of it.
   const chatSurface = useChatSurface(tasks);
-  const callShown = taskDrawn && callingTabShown(tasks, calling);
   // A phone's task leads its own row with the way back to the page it was opened from, named for it (`task-pane-switcher.tsx`).
   const awayLabel = awayBack(history.away, history.onLeave).label;
   const { onLeave } = history;
@@ -729,11 +848,13 @@ export function DesktopShell({
           fallback={
             <SettingsLoading
               onExit={exitSettings}
+              place={backPlaceOf(history, TASKS_EXIT_PLACE)}
+              onList={settingsStep.onList}
               hidden={hiddenColumns(room, settingsStep.listed)}
             />
           }
         >
-          <DesktopSettings
+          <SETTINGS_ROUTE.Route
             sidebar={sidebar}
             room={room}
             step={settingsStep}
@@ -742,7 +863,6 @@ export function DesktopShell({
             onExit={exitSettings}
           />
         </Suspense>
-        {NOTICE_STRIP}
       </div>
     );
   }
@@ -759,6 +879,8 @@ export function DesktopShell({
               fallback={
                 <VersionHistoryLoading
                   onExit={exitHistory}
+                  place={backPlaceOf(history, HISTORY_EXIT_PLACE)}
+                  onList={tasks.history.onList}
                   hidden={hiddenColumns(room, tasks.history.listed)}
                 />
               }
@@ -775,7 +897,6 @@ export function DesktopShell({
             </Suspense>
           </ChipCards>
         </MentionedAgents>
-        {NOTICE_STRIP}
         {newTaskDialog}
       </div>
     );
@@ -784,14 +905,18 @@ export function DesktopShell({
   if (tasks.adminView.open && (adminAccess || adminPending)) {
     const exitAdmin = history.canGoBack ? history.onBack : tasks.adminView.onClose;
     const loading = (
-      <AdminLoading onExit={exitAdmin} hidden={hiddenColumns(room, tasks.adminView.listed)} />
+      <AdminLoading
+        onExit={exitAdmin}
+        place={backPlaceOf(history, TASKS_EXIT_PLACE)}
+        onList={tasks.adminView.onList}
+        hidden={hiddenColumns(room, tasks.adminView.listed)}
+      />
     );
     // While the account's access is read, the place stands as it does while its chunk loads.
     if (!adminAccess) {
       return (
         <div className="desktop-shell" data-room={room}>
           {loading}
-          {NOTICE_STRIP}
         </div>
       );
     }
@@ -809,7 +934,6 @@ export function DesktopShell({
             onExit={exitAdmin}
           />
         </Suspense>
-        {NOTICE_STRIP}
       </div>
     );
   }
@@ -824,16 +948,6 @@ export function DesktopShell({
     (planToggle && room !== SHELL_ROOM.NARROW) ||
     pageAgent !== undefined ||
     (inboxOpen && tasks.inboxView.chosen !== undefined);
-  // Note that the notice line rides the foot of the call's agent's
-  // tab, or its own page, while that is on screen, and floats at the
-  // window's foot otherwise.
-  const pageCallShown =
-    !inboxOpen &&
-    !chatOpen &&
-    pageAgent !== undefined &&
-    pageAgent === calling &&
-    !tasks.sidePanel.fullScreen;
-  const noticeInColumn = callShown || pageCallShown;
   // A phone's drawer is modal, as a phone's own drawers are: while it stands
   // over the work, the work is inert, so neither a screen reader nor a
   // keyboard reaches what the drawer covers, and a press there only puts it
@@ -841,8 +955,6 @@ export function DesktopShell({
   const drawerOver = room === SHELL_ROOM.NARROW && sidebar.overlay !== SIDEBAR_OVERLAY.CLOSED;
   // A phone goes between its places by a bar at the screen's foot, standing on their lists alone (`mobile-bar.tsx`).
   const barShown = mobileBarShown(room, tasks, chatOn);
-  // A phone's Inbox, Tasks page, and Chat, each on its list, head themselves with one row of their own (`phone-head.tsx`).
-  const placeHeaded = barShown && (inboxOpen || boardOpen || chatOpen);
   return (
     <div
       ref={shell}
@@ -850,7 +962,7 @@ export function DesktopShell({
       data-room={room}
       data-sidebar-collapsed={String(sidebar.collapsed)}
       data-sidebar-overlay={sidebar.overlay}
-      data-panel-toggle={String(panelToggle)}
+      data-panel-toggle={String(panelToggle && room !== SHELL_ROOM.NARROW)}
       data-offline={String(offline)}
       data-mobile-bar={String(barShown)}
     >
@@ -890,7 +1002,7 @@ export function DesktopShell({
                 key={pageAgent}
                 tasks={tasks}
                 agentId={pageAgent}
-                notice={pageCallShown ? NOTICE_STRIP : undefined}
+                away={room === SHELL_ROOM.NARROW ? away : undefined}
               />
             ) : pagePerson !== undefined ? (
               // Keyed by the person, so another person's page holds nothing of the last, its find among it.
@@ -910,13 +1022,14 @@ export function DesktopShell({
                     userId={pagePerson}
                     name={tasks.personView.name}
                     staged={sidebar.staged}
+                    away={room === SHELL_ROOM.NARROW ? away : undefined}
                   />
                 </Suspense>
               </PageFind>
             ) : boardOpen ? (
               // The Tasks page holds its own find, its subject the view it shows, so a search in the List does not follow into the Board.
               <Suspense fallback={<TasksLoading onExit={tasks.boardView.onClose} />}>
-                <TasksPage tasks={tasks} room={room} />
+                <TASKS_ROUTE.Route tasks={tasks} room={room} />
               </Suspense>
             ) : automationsOpen ? (
               <PageFind
@@ -929,18 +1042,11 @@ export function DesktopShell({
                     <AutomationsLoading onExit={tasks.automationsView.onClose} room={room} />
                   }
                 >
-                  <AutomationsPage tasks={tasks} room={room} />
+                  <AUTOMATIONS_ROUTE.Route tasks={tasks} room={room} />
                 </Suspense>
               </PageFind>
             ) : (
-              <DesktopTasks
-                tasks={tasks}
-                looks={looks}
-                notice={noticeInColumn ? NOTICE_STRIP : undefined}
-                summary={summary}
-                room={room}
-                away={away}
-              />
+              <DesktopTasks tasks={tasks} looks={looks} summary={summary} room={room} away={away} />
             )}
           </ChipCards>
         </MentionedAgents>
@@ -948,7 +1054,6 @@ export function DesktopShell({
       {barShown ? (
         <MobileBar tasks={tasks} chatOn={chatOn} sidebar={sidebar} onPressMore={keepOverlay} />
       ) : null}
-      {noticeInColumn ? null : NOTICE_STRIP}
       {/* Folded, the sidebar's card floats in the corner it would have stood over. */}
       <StandingCallCardDock docked={sidebar.collapsed} surface={CALL_CARD_SURFACE.FLOATING} />
       {/* The folded sidebar peeks out while the pointer rests at the window's left edge, as Linear's does;
@@ -964,9 +1069,9 @@ export function DesktopShell({
       ) : null}
       {/* Note that they follow the drag strips they cover, because a later drag region wins.
           Folded, the sidebar's offline pill stands here, as its New task does. */}
-      {/* A phone's task and its places head themselves with one row of their own (`phone-head.tsx`), the task's way back
-          or the place's one control where these stood; the places bar's More opens the drawer the toggle did. */}
-      {room === SHELL_ROOM.NARROW && (taskDrawn || placeHeaded) ? (
+      {/* A phone's every page heads itself with one row of its own (`phone-head.tsx`), its way back or its one control
+          where these stood; the drawer opens from the places bar's More, or a swipe in from the screen's edge. */}
+      {room === SHELL_ROOM.NARROW ? (
         <SidebarChord sidebar={sidebar} />
       ) : (
         <PanePin as={PANE_PIN_ELEMENT.DIV} className="title-bar-controls" onPin={keepOverlay}>
@@ -975,7 +1080,13 @@ export function DesktopShell({
           {sidebar.collapsed ? <OfflineMark /> : null}
         </PanePin>
       )}
-      {panelToggle ? (
+      {/* A phone's page offers the panel from its ⋯, and the panel, open, heads itself with its way out. */}
+      {panelToggle && room === SHELL_ROOM.NARROW ? (
+        <SidePanelChord
+          panel={tasks.sidePanel}
+          disabled={planToggle && tasks.region.kind !== DOCUMENT_REGION.READY}
+        />
+      ) : panelToggle ? (
         <div className="title-bar-controls" data-edge="end" inert={drawerOver}>
           <SidePanelToggle
             panel={tasks.sidePanel}

@@ -1,0 +1,54 @@
+/* failure-note.css -- a failure's one line: the failed mark and the words in
+   the danger tone's ink at a caption's size, and Retry at the line's end.
+   The line's first row is a caption's leading tall, or a control's where
+   Retry stands in it, and the mark and the words' first line are centred in
+   that row, so a failure of several lines keeps its mark by its first. */
+
+@layer components {
+  .luke-failure-note {
+    --luke-failure-note-row: var(--luke-type-caption-leading);
+    display: flex;
+    min-width: 0;
+    align-items: flex-start;
+    gap: var(--luke-icon-gap);
+    margin: 0;
+    color: var(--luke-tone-ink);
+    font-family: var(--luke-font-sans);
+    font-size: var(--luke-type-caption-size);
+    line-height: var(--luke-type-caption-leading);
+  }
+
+  .luke-failure-note[data-retry] {
+    --luke-failure-note-row: var(--luke-control-height);
+  }
+
+  .luke-failure-note-mark {
+    display: flex;
+    height: var(--luke-failure-note-row);
+    flex: none;
+    align-items: center;
+  }
+
+  .luke-failure-note-mark svg {
+    width: var(--luke-control-icon);
+    height: var(--luke-control-icon);
+  }
+
+  /* A tool's error keeps its own line breaks, wraps where it must, and can be
+     selected to copy. */
+  .luke-failure-note-words {
+    min-width: 0;
+    flex: 1 1 0;
+    padding-block: calc((var(--luke-failure-note-row) - var(--luke-type-caption-leading)) / 2);
+    overflow-wrap: anywhere;
+    user-select: text;
+    white-space: pre-wrap;
+  }
+
+  .luke-failure-note-retry {
+    display: flex;
+    flex: none;
+    align-items: center;
+    gap: var(--luke-icon-gap);
+  }
+}

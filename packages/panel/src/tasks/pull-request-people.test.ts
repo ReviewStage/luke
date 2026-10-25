@@ -177,7 +177,7 @@ test("a Changes card says who opened the pull request and its reviewers by where
   );
   hover(opener);
   const opened = document.querySelector('.luke-tooltip-card [data-actor-card="github"]');
-  assert.match(opened?.textContent ?? "", /luke-agent.*GitHub app/u);
+  assert.match(opened?.textContent ?? "", /luke-agent.*GitHub App/u);
 
   const reviewers =
     strip.querySelector('[aria-label="Reviewers"]') ?? assert.fail("the reviewers stand");

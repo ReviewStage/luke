@@ -81,7 +81,7 @@ import {
   useRef,
   useState,
 } from "react";
-import { milliseconds, tokenTiming } from "../../motion-timing.js";
+import { MOTION_TOKEN, milliseconds, tokenTiming } from "../../motion-timing.js";
 
 /** What a list whose children move wears. */
 const ROWS_ATTRIBUTE = "data-motion-rows";
@@ -638,14 +638,18 @@ class ListMotionPlayer extends Component<
     const { before } = batch;
     const leaving = this.leavingOf(root, batch.leavers, before);
     if (leaving.length > 0) this.holdHeight(root);
+    // Note that a root holding no mover and losing none has nothing to play, as a message box's row of files does while it holds none, so its tokens are never read on every keystroke.
+    if (leaving.length === 0 && moversOf(root).length === 0) return;
     // Note that a DOM with no animation engine, a test's, marks what leaves and lets it go at once.
     const engine = animates(root);
     const exit = engine
-      ? tokenTiming(root, "--luke-duration-exit", "--luke-motion-exit")
+      ? tokenTiming(root, MOTION_TOKEN.DURATION_EXIT, MOTION_TOKEN.EASE_EXIT)
       : undefined;
     const { way } = this.props;
     playExits(root, leaving, before, exit, way);
-    const shape = engine ? tokenTiming(root, "--luke-duration-shape", "--luke-spring") : undefined;
+    const shape = engine
+      ? tokenTiming(root, MOTION_TOKEN.DURATION_SHAPE, MOTION_TOKEN.SPRING)
+      : undefined;
     if (shape === undefined) return;
     const left = leaving.length > 0 && exit !== undefined;
     const closes = left && way === LIST_MOTION_WAY.UNROLL;
@@ -654,10 +658,10 @@ class ListMotionPlayer extends Component<
       wait: left && !closes ? Number(exit.duration) : 0,
       travel: shape,
       close: closes ? exit : undefined,
-      arrive: tokenTiming(root, "--luke-duration-quick", "--luke-motion-exit"),
+      arrive: tokenTiming(root, MOTION_TOKEN.DURATION_QUICK, MOTION_TOKEN.EASE_EXIT),
       stagger: reading
         ? 0
-        : milliseconds(getComputedStyle(root).getPropertyValue("--luke-row-stagger")),
+        : milliseconds(getComputedStyle(root).getPropertyValue(MOTION_TOKEN.ROW_STAGGER)),
       way,
       travels: !reading,
     });

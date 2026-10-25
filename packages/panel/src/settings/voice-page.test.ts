@@ -1,8 +1,15 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import { MOTION_DELAY_MS } from "@luke/brand";
 import { ACCOUNT_STATUS } from "@luke/credentials/snapshot";
-import { SETTINGS_VIEW } from "@luke/settings/settings-views";
+import {
+  PROVIDER_KEY_PROVIDER,
+  PROVIDER_KEY_STATUS,
+  type ProviderKeysAnswer,
+} from "@luke/features/provider-key-wire";
+import { ACT_KIND } from "@luke/host/acts";
+import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsLink } from "@luke/settings/settings-views";
 import { settingsView } from "@luke/settings/testing";
 import { UPDATE_STATUS } from "@luke/settings/update";
 import { MICROPHONE_STATUS, type MicrophoneStatus } from "@luke/voice/audio";
@@ -16,10 +23,13 @@ import { ACTION_RESULT_STATUS } from "@luke/wire";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeEach, test } from "vitest";
-import { FAKE_ANSWER } from "../testing/app-bridge.js";
+import { afterEach, beforeEach, test, vi } from "vitest";
+import { OpenSettingsProvider } from "../open-settings.js";
+import { OpenAiKeyProvider } from "../openai-key.js";
+import { FAKE_ANSWER, fakeActPort } from "../testing/app-bridge.js";
 import { DESKTOP_CAPABILITIES } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
+import { restOn } from "../testing/hint-rest.js";
 import { SettingsPanel, type SettingsPanelProps } from "./settings-panel.js";
 
 /**
@@ -116,6 +126,7 @@ beforeEach(() => {
 afterEach(() => {
   for (const each of roots.splice(0)) act(() => each.unmount());
   document.body.innerHTML = "";
+  vi.useRealTimers();
 });
 
 test("while voice cannot run, the page says how to turn it on and offers nothing else", () => {
@@ -161,6 +172,18 @@ test("once macOS refused, the row says where to allow it and opens System Settin
   assert.ok(!headings(container).includes("Conversation"));
 });
 
+test("resting on the System Settings glyph says its name, the words of what it opens", () => {
+  const { container } = draw(microphoneAt(MICROPHONE_STATUS.DENIED));
+  const glyph = button(container, "Open Privacy & Security in System Settings");
+
+  restOn(glyph ?? assert.fail("no System Settings glyph"));
+
+  assert.equal(
+    document.querySelector('[role="tooltip"]')?.textContent,
+    "Open Privacy & Security in System Settings",
+  );
+});
+
 test("once the microphone is allowed, the conversation's controls stand under it", () => {
   const { container } = draw(microphoneAt(MICROPHONE_STATUS.GRANTED));
 
@@ -169,4 +192,95 @@ test("once the microphone is allowed, the conversation's controls stand under it
     ["Permissions", "Conversation"],
   );
   assert.equal(button(container, "Allow"), undefined);
+});
+
+test("Allow shows its ring once the request has been out the settle delay, and stops when it settles", async () => {
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+  let answer: () => void = ignore;
+  const { container } = draw(
+    microphoneAt(MICROPHONE_STATUS.NOT_DETERMINED, {
+      onRequest: () => new Promise<void>((settle) => (answer = settle)),
+    }),
+  );
+  const ringIn = (each: HTMLElement) => each.querySelector(".luke-spinner-ring") !== null;
+
+  act(() => button(container, "Allow")?.click());
+  const busy = button(container, "Asking for access");
+  assert.ok(busy);
+  assert.equal(busy.getAttribute("aria-busy"), "true");
+  act(() => vi.advanceTimersByTime(MOTION_DELAY_MS.SETTLE - 1));
+  assert.equal(ringIn(busy), false);
+  act(() => vi.advanceTimersByTime(1));
+  assert.equal(ringIn(busy), true);
+
+  await act(async () => answer());
+
+  const allow = button(container, "Allow");
+  assert.ok(allow);
+  assert.equal(allow.getAttribute("aria-busy"), null);
+  assert.equal(ringIn(allow), false);
+});
+
+/** Settings on the Voice page under the window's key reader, the account's keys read as `keys`, recording what Settings opened. */
+async function drawWithKeys(keys: ProviderKeysAnswer["keys"]) {
+  fakeActPort({ [ACT_KIND.PROVIDER_KEYS_READ]: () => Promise.resolve({ keys }) });
+  const opened: SettingsLink[] = [];
+  const container = document.body.appendChild(document.createElement("div"));
+  const root = createRoot(container);
+  roots.push(root);
+  act(() =>
+    root.render(
+      onRegistry(
+        AtomRegistry.make(),
+        createElement(
+          OpenSettingsProvider,
+          { value: (link: SettingsLink) => opened.push(link) },
+          createElement(OpenAiKeyProvider, {
+            account: "dev@example.com",
+            children: createElement(
+              SettingsPanel,
+              settingsOn(microphoneAt(MICROPHONE_STATUS.GRANTED)),
+            ),
+          }),
+        ),
+      ),
+    ),
+  );
+  await act(async () => {
+    for (let tick = 0; tick < 8; tick += 1) await Promise.resolve();
+  });
+  return { container, opened };
+}
+
+test("with no OpenAI key saved, the page leads with where to add one, and its press opens Codex's row in Agents", async () => {
+  const { container, opened } = await drawWithKeys([]);
+  const words = container.textContent ?? "";
+  assert.ok(words.indexOf("OpenAI key") < words.indexOf("Microphone"), "the key's row comes first");
+
+  const add = button(container, "Add an OpenAI key") ?? assert.fail("the row offers to add one");
+  act(() => add.click());
+  assert.deepEqual(opened, [
+    { page: SETTINGS_VIEW.CODING_AGENTS, section: SETTINGS_SECTION.CODEX },
+  ]);
+});
+
+test("with an OpenAI key saved, the row points to it without showing any of it", async () => {
+  const hint = "sk-…a1b2";
+  const { container, opened } = await drawWithKeys([
+    {
+      provider: PROVIDER_KEY_PROVIDER.OPENAI,
+      hint,
+      status: PROVIDER_KEY_STATUS.VERIFIED,
+      addedAt: 1,
+      statusAt: 1,
+    },
+  ]);
+  assert.equal(button(container, "Add an OpenAI key"), undefined);
+  assert.ok(!(container.textContent ?? "").includes(hint), "no part of the key is drawn");
+
+  const open = button(container, "Open in Agents") ?? assert.fail("the row opens where it is kept");
+  act(() => open.click());
+  assert.deepEqual(opened, [
+    { page: SETTINGS_VIEW.CODING_AGENTS, section: SETTINGS_SECTION.CODEX },
+  ]);
 });

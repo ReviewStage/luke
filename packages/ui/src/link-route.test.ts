@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { LINK_PLACE } from "@luke/features/luke-link";
+import { LINK_PLACE } from "@luke/features/link-grammar";
 import { WORKSPACE_ROLE } from "@luke/features/workspace-wire";
 import { SETTINGS_VIEW } from "@luke/settings/settings-views";
 import { test } from "vitest";
@@ -62,13 +62,14 @@ test("an automation, no experiment now, opens on the Plans tab", () => {
   });
 });
 
-test("a link to Chat or one of its channels opens nowhere while the account has Chat off, and on the Plans tab once it is on", () => {
+test("a link to Chat or one of its channels opens nowhere while the account has Chat off, naming Experimental as where it is turned on, and on the Plans tab once it is on", () => {
   for (const place of [
     { kind: LINK_PLACE.CHAT },
     { kind: LINK_PLACE.CHAT, channelId: "c1" },
   ] as const) {
     assert.deepEqual(linkRoute({ workspace: "acme", place }, WINDOW), {
       kind: LINK_ROUTE.EXPERIMENT_OFF,
+      settings: { page: SETTINGS_VIEW.EXPERIMENTAL },
     });
     assert.deepEqual(linkRoute({ workspace: "acme", place }, { ...WINDOW, chatOn: true }), {
       kind: LINK_ROUTE.TASKS,

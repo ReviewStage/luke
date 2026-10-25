@@ -239,7 +239,7 @@ test("an Edit's patch marks the lines it changed, the newline ending its words o
   const line = container.querySelector("summary") ?? assert.fail("the call is a fold's line");
   act(() => line.click());
   const marked = (kind: string) =>
-    [...container.querySelectorAll(`[data-line="${kind}"]`)].map((each) => each.textContent);
+    [...container.querySelectorAll(`[data-row="${kind}"]`)].map((each) => each.textContent);
   assert.deepEqual(marked("removed"), ["-a;"]);
   assert.deepEqual(marked("added"), ["+b;", "+", "+c;"]);
 });
@@ -330,10 +330,10 @@ test("an agent paid for by a plan says the plan where an agent on a key says dol
   );
   assert.equal(
     agentUsageLine({ ...usage, payer: CODING_AGENT_PAYER.CLAUDE_SUBSCRIPTION }),
-    "This agent: 1.2M tokens · Claude plan",
+    "This agent: 1.2M tokens · Claude subscription",
   );
   assert.equal(
     agentUsageLine({ ...usage, payer: CODING_AGENT_PAYER.CHATGPT_SUBSCRIPTION }),
-    "This agent: 1.2M tokens · ChatGPT plan",
+    "This agent: 1.2M tokens · ChatGPT subscription",
   );
 });

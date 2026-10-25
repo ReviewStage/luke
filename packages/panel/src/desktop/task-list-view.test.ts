@@ -9,13 +9,14 @@ import { APP_COMMAND } from "@luke/settings/shortcuts";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeEach, test } from "vitest";
+import { afterEach, beforeEach, onTestFinished, test } from "vitest";
 import { appCommandOffered, runAppCommand } from "../app-commands.js";
 import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
 import { copyingInto, fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { sidebarProps } from "../testing/desktop-sidebar.js";
 import { restOn } from "../testing/hint-rest.js";
+import { playListMotions } from "../testing/pane-motion.js";
 import { tasksControl } from "../testing/tasks-control.js";
 import { newestToastSays } from "../testing/toast.js";
 import { ToastHost } from "../toast.js";
@@ -235,9 +236,7 @@ function groupNames(sidebar: HTMLElement): string[] {
   const tasks = sidebar.querySelector(TASK_LIST);
   assert.ok(tasks, "the Tasks section stands");
   return [
-    ...tasks.querySelectorAll(
-      ".sidebar-repository-header button[aria-expanded]:not([aria-haspopup])",
-    ),
+    ...tasks.querySelectorAll(".luke-group-header-head button[aria-expanded]:not([aria-haspopup])"),
   ].map(heardName);
 }
 
@@ -405,12 +404,59 @@ test("Created by a teammate lists only theirs, named in the chip, and the choice
   assert.equal(chipWords(sidebar), "Created by Charles Pan");
 });
 
+test("a filter's chip scales in as it is chosen and out as it is lifted, drawn on out of reach until its exit has played, the line standing hidden between", async () => {
+  const motions = playListMotions();
+  // Note that a row arriving rides the quick beat and the stagger, which the list's tokens leave out.
+  const tokens = { "--luke-duration-quick": "140ms", "--luke-row-stagger": "32ms" };
+  for (const [name, value] of Object.entries(tokens)) {
+    document.documentElement.style.setProperty(name, value);
+  }
+  onTestFinished(() => {
+    motions.remove();
+    for (const name of Object.keys(tokens)) document.documentElement.style.removeProperty(name);
+  });
+  const sidebar = await mountRead(ACME);
+  const line = () => sidebar.querySelector<HTMLElement>(".sidebar-view-chips")?.parentElement;
+  assert.equal(line()?.hidden, true, "the line stands ready, hidden");
+
+  choose(sidebar, "Created by", "Charles Pan");
+  const chosen = sidebar.querySelector("[data-motion-key='createdBy']");
+  assert.equal(line()?.hidden, false);
+  assert.ok(scaled(motions.played, chosen), "the chip scales in");
+
+  const lift = chosen?.querySelector("button");
+  act(() => (lift ?? assert.fail("a way to lift it")).click());
+  const leaving = sidebar.querySelector("[data-motion-key='createdBy']");
+  assert.equal(leaving?.hasAttribute("data-leaving"), true, "drawn on while it goes");
+  assert.equal(leaving?.hasAttribute("inert"), true, "out of reach");
+  assert.equal(leaving?.querySelector(".luke-chip-name")?.textContent, "Created by Charles Pan");
+  assert.ok(scaled(motions.played, leaving), "it scales out");
+
+  act(() => {
+    for (const each of motions.played.splice(0)) each.finish();
+  });
+  assert.equal(sidebar.querySelector("[data-motion-key='createdBy']"), null);
+  assert.equal(line()?.hidden, true);
+});
+
+/** Whether a motion played on `element` scaled it. */
+function scaled(
+  played: readonly { element: Element; keyframes: Keyframe[] }[],
+  element: Element | null | undefined,
+): boolean {
+  return played.some(
+    (motion) =>
+      motion.element === element &&
+      motion.keyframes.some((frame) => String(frame.transform).includes("scale")),
+  );
+}
+
 test("a filter that leaves nothing says so, and Show all lists everyone's again", async () => {
   const theirs = TASKS.filter((each) => each.createdBy?.userId === CHARLES);
   const sidebar = await mountRead(ACME, theirs);
   choose(sidebar, "Created by", "Me");
   assert.equal(taskRows(sidebar).length, 0);
-  const note = [...sidebar.querySelectorAll(".sidebar-note")].find((each) =>
+  const note = [...sidebar.querySelectorAll(".luke-note-line")].find((each) =>
     each.textContent?.startsWith("No tasks match this view."),
   );
   const showAll = note?.querySelector("button");
@@ -432,7 +478,7 @@ test("with every task pinned, a filter still says it leaves nothing under Tasks,
   const pinnedAll = TASKS.map((each, at) => ({ ...each, pinnedAt: 900 + at }));
   const sidebar = await mountRead(ACME, pinnedAll);
   choose(sidebar, "Created by", "Charles Pan");
-  const notes = [...sidebar.querySelectorAll(".sidebar-note")].map((note) => note.textContent);
+  const notes = [...sidebar.querySelectorAll(".luke-note-line")].map((note) => note.textContent);
   assert.ok(
     notes.some((note) => note?.startsWith("No tasks match this view.")),
     "the empty filter says so",
@@ -460,7 +506,10 @@ test("in one run, a task with no repository says so on its row", async () => {
 test("an empty workspace under a filter says only that it holds no tasks", async () => {
   const sidebar = await mountRead(ACME, []);
   choose(sidebar, "Created by", "Me");
-  const notes = [...sidebar.querySelectorAll(".sidebar-note")].map((note) => note.textContent);
+  // Note that the pinned section's own "Drag tasks here to pin them" is a line of the sidebar too.
+  const notes = [...sidebar.querySelectorAll(".luke-note-line")]
+    .map((note) => note.textContent)
+    .filter((note) => !note?.startsWith("Drag tasks here"));
   assert.deepEqual(notes, ["No tasks yet."]);
 });
 
@@ -475,6 +524,13 @@ test("⌘K offers each view choice only while it would change the list, and runn
   assert.deepEqual(groupNames(sidebar), ["You", "Charles Pan"]);
   assert.equal(appCommandOffered(APP_COMMAND.GROUP_TASKS_BY_CREATOR), false);
   assert.equal(appCommandOffered(APP_COMMAND.GROUP_TASKS_BY_REPOSITORY), true);
+  assert.equal(appCommandOffered(APP_COMMAND.GROUP_TASKS_BY_ASSIGNEE), true);
+
+  act(() => {
+    runAppCommand(APP_COMMAND.GROUP_TASKS_BY_ASSIGNEE);
+  });
+  assert.equal(appCommandOffered(APP_COMMAND.GROUP_TASKS_BY_ASSIGNEE), false);
+  assert.equal(appCommandOffered(APP_COMMAND.GROUP_TASKS_BY_CREATOR), true);
 
   act(() => {
     runAppCommand(APP_COMMAND.SHOW_MY_TASKS);
@@ -485,6 +541,7 @@ test("⌘K offers each view choice only while it would change the list, and runn
 
 test("a workspace nobody shares offers ⌘K no grouping or filtering by creator", async () => {
   await mountRead(PERSONAL);
+  assert.equal(appCommandOffered(APP_COMMAND.GROUP_TASKS_BY_ASSIGNEE), false);
   assert.equal(appCommandOffered(APP_COMMAND.GROUP_TASKS_BY_CREATOR), false);
   assert.equal(appCommandOffered(APP_COMMAND.SHOW_MY_TASKS), false);
   assert.equal(appCommandOffered(APP_COMMAND.LIST_TASKS_UNGROUPED), true);
@@ -631,7 +688,7 @@ test("a one-off agent's menu goes with a floating sidebar as it is put away", as
 
   float(SIDEBAR_OVERLAY.CLOSED);
 
-  assert.equal(opened, 7);
+  assert.equal(opened, 8);
   assert.equal(document.querySelectorAll('[role="menuitem"]').length, 0);
 });
 
@@ -667,7 +724,7 @@ test("a pinned one-off agent stands under Pinned beside the pinned tasks, newest
   assert.ok(taskRows(sidebar).some((row) => row.name === "Sweep flaky tests"));
 });
 
-test("a one-off agent's row offers Mark as unread after Copy link, Pin, Rename, Unpin once pinned, Archive agent, Move to section, and Permanently delete last", async () => {
+test("a one-off agent's row offers Mark as unread after Copy link, Pin, Rename, Unpin once pinned, Archive, Move to section, and Permanently delete last", async () => {
   const sidebar = await mountRead({ ...ACME, slug: "acme" }, TASKS, [
     TRIAGE,
     { ...SWEEP, pinnedAt: 950 },
@@ -678,18 +735,22 @@ test("a one-off agent's row offers Mark as unread after Copy link, Pin, Rename, 
     "Mark as unread",
     "Rename",
     "Pin",
-    "Archive agent",
+    "Archive",
     "Move to section",
+    "Show details",
     "Permanently delete",
   ]);
   await act(async () => menuItem("Pin").click());
+  // Note that Sweep stands under Pinned, in a list that reorders, whose rows offer to move.
   assert.deepEqual(agentMenu(sidebar, "Sweep flaky tests"), [
+    "Move down",
     "Copy link",
     "Mark as unread",
     "Rename",
     "Unpin",
-    "Archive agent",
+    "Archive",
     "Move to section",
+    "Show details",
     "Permanently delete",
   ]);
   await act(async () => menuItem("Unpin").click());
@@ -778,9 +839,13 @@ test("the hidden tasks' line opens the status filter, whose choice lists the bac
 
 test("the status filter is on the Tasks head, and listing everyone's tasks again keeps the statuses chosen", async () => {
   const sidebar = await mountRead(ACME, BY_STATUS);
-  const filter = sidebar.querySelector<HTMLButtonElement>('button[aria-label="Show statuses"]');
-  assert.ok(filter, "the Tasks head offers the status filter");
+  const filter = sidebar.querySelector<HTMLButtonElement>('button[aria-label="Filter"]');
+  assert.ok(filter, "the Tasks head offers the status filter, named Filter as the Tasks page's is");
   act(() => filter.click());
+  assert.ok(
+    document.querySelector('[role="menu"][aria-label="Filter by status"]'),
+    "its menu is labelled Filter by status",
+  );
   act(() => menuItem("Done").click());
   choose(sidebar, "Created by", "Me");
   const lift = chip(sidebar)?.querySelector<HTMLButtonElement>("button");
@@ -845,7 +910,7 @@ test("Assigned to a teammate, with nothing of theirs, says so, and Show all list
 
   assert.equal(chipWords(sidebar), "Assigned to Charles Pan");
   assert.equal(taskRows(sidebar).length, 0);
-  const note = [...sidebar.querySelectorAll(".sidebar-note")].find((each) =>
+  const note = [...sidebar.querySelectorAll(".luke-note-line")].find((each) =>
     each.textContent?.startsWith("No tasks match this view."),
   );
   const showAll = note?.querySelector("button");
@@ -915,7 +980,9 @@ test("grouped by assignee, your tasks come first, then each teammate's by name, 
       ["Audit logs", false],
     ],
   );
-  const headers = sidebar.querySelectorAll(`${TASK_LIST} .sidebar-repository-header`);
+  const headers = sidebar.querySelectorAll(
+    `${TASK_LIST} .luke-group-header-head:has(> .luke-group-header-heading button[aria-expanded])`,
+  );
   assert.equal(
     headers[3]?.querySelector('.actor-mark[data-kind="unassigned"]') === null,
     false,
@@ -959,12 +1026,44 @@ test("Assigned to and Created by each offer Anyone, then you as Me, then each te
   assert.deepEqual(offered, [people, people]);
 });
 
+test("Assigned to says the members could not be read, with Retry, after Anyone, and Retry reads them again and leaves the menu standing", async () => {
+  let reads = 0;
+  fakeActPort({
+    [ACT_KIND.WORKSPACE_MEMBERS_READ]: () => {
+      reads += 1;
+      return reads === 1 ? Promise.reject(new Error("offline")) : Promise.resolve(MEMBERS);
+    },
+  });
+  const sidebar = await mountRead(ACME, ASSIGNED);
+  const button = sidebar.querySelector<HTMLButtonElement>('button[aria-label="View options"]');
+  assert.ok(button, "the Tasks head offers View options");
+  act(() => button.click());
+  act(() => menuItem("Assigned to").click());
+  const offered = () => {
+    const menu = [...document.querySelectorAll<HTMLElement>('[role="menu"]')].at(-1);
+    return [
+      ...(menu?.querySelectorAll<HTMLElement>('[role="menuitem"], [role="menuitemcheckbox"]') ??
+        []),
+    ].map((item) => [
+      itemLabel(item),
+      item.querySelector(".luke-menu-item-detail")?.textContent ?? null,
+    ]);
+  };
+
+  const failed = offered();
+  await act(async () => menuItem("Members could not be read.").click());
+
+  assert.deepEqual(failed.at(-1), ["Members could not be read.", "Retry"]);
+  assert.ok(offered().some(([label]) => label === "Charles Pan"));
+  assert.ok(offered().every(([label]) => label !== "Members could not be read."));
+});
+
 test("a person's group header, by assignee or by creator, hangs their card", async () => {
   const sidebar = await mountRead(ACME, ASSIGNED);
   const header = (name: string) =>
     [
       ...sidebar.querySelectorAll<HTMLButtonElement>(
-        `${TASK_LIST} .sidebar-repository-header button[aria-expanded]:not([aria-haspopup])`,
+        `${TASK_LIST} .luke-group-header-head button[aria-expanded]:not([aria-haspopup])`,
       ),
     ].find((button) => heardName(button) === name) ?? assert.fail(`${name} heads a group`);
   const hung: (string | undefined)[] = [];
@@ -982,7 +1081,7 @@ test("an assignee's group folds, and stays folded across launches", async () => 
   choose(sidebar, "Group by", "Assignee");
   const fold = [
     ...sidebar.querySelectorAll<HTMLButtonElement>(
-      `${TASK_LIST} .sidebar-repository-header button[aria-expanded]:not([aria-haspopup])`,
+      `${TASK_LIST} .luke-group-header-head button[aria-expanded]:not([aria-haspopup])`,
     ),
   ].find((button) => heardName(button) === "Unassigned");
   assert.ok(fold, "Unassigned has a fold");

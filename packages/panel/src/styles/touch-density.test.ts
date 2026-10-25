@@ -4,14 +4,19 @@ import assert from "node:assert/strict";
 import {
   AddressField,
   BUTTON_SIZE,
+  Checkbox,
+  Disclosure,
   IconButton,
   INLINE_EDIT_LOOK,
   InlineEdit,
+  LineSummary,
   MARK_PROVIDER,
   PROVIDER_BUTTON_SIZE,
   ProviderButton,
   TEXT_AREA_LOOK,
+  TEXT_BUTTON_LINES,
   TextArea,
+  TextButton,
 } from "@luke/ui";
 import { act, createElement, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -180,10 +185,25 @@ function smallTargets(): ReadonlyMap<string, Element> {
     ],
     [
       "a plan's task box",
-      markup(
-        '<ul class="luke-markdown"><li class="task-list-item"><span class="luke-markdown-task"><label class="luke-checkbox" data-words="false"><input class="luke-checkbox-box" type="checkbox"></label></span></li></ul>',
-        ".luke-markdown-task > label",
-      ),
+      drawn(
+        createElement(
+          "ul",
+          { className: "luke-markdown" },
+          createElement(
+            "li",
+            { className: "task-list-item" },
+            createElement(
+              "span",
+              { className: "luke-markdown-task" },
+              createElement(Checkbox, {
+                label: "Ship it",
+                checked: false,
+                onChange: () => undefined,
+              }),
+            ),
+          ),
+        ),
+      ).querySelector(".luke-markdown-task > label") ?? assert.fail("a task box is drawn"),
     ],
     [
       "a task box in the plan's editor",
@@ -201,18 +221,29 @@ function smallTargets(): ReadonlyMap<string, Element> {
     ],
     [
       "the plan byline's time",
-      markup(
-        '<p class="plan-byline"><span class="actor-line">Last edited · <button class="luke-text-button" data-lines="whole">2h ago</button></span></p>',
-        ".luke-text-button",
+      buttonIn(
+        drawn(
+          createElement(
+            "p",
+            { className: "plan-byline" },
+            createElement(
+              "span",
+              { className: "actor-line" },
+              "Last edited · ",
+              createElement(TextButton, {
+                lines: TEXT_BUTTON_LINES.WHOLE,
+                onClick: () => undefined,
+                children: "2h ago",
+              }),
+            ),
+          ),
+        ),
       ),
     ],
     [
       "a toolbar's glyph button",
       buttonIn(
-        drawn(
-          createElement(IconButton, { icon: "+", label: "New tab" }),
-          "desktop-toolbar-actions",
-        ),
+        drawn(createElement(IconButton, { icon: "+", label: "New tab" }), "luke-toolbar-actions"),
       ),
     ],
   ]);
@@ -402,8 +433,8 @@ function pointerOnlyPresses(): ReadonlyMap<string, HTMLElement> {
     [
       "a fold's chevron",
       built(
-        '<button class="luke-nav-item" aria-expanded="false"><span class="luke-nav-item-glyph"><span class="luke-nav-item-icon"></span><span class="luke-nav-item-chevron"></span></span></button>',
-        ".luke-nav-item-chevron",
+        '<button class="luke-group-header-lead" aria-expanded="false"><span class="luke-group-header-glyph"><span class="luke-group-header-icon"></span><span class="luke-group-header-chevron"></span></span></button>',
+        ".luke-group-header-chevron",
       ),
     ],
     [
@@ -446,15 +477,20 @@ test("with a mouse those presses still wait for the pointer", () => {
 
 /** A transcript's rows that open something, each in the markup its component draws: a call's line, the docked to-do list's head, and the agent's pull request's row. */
 function transcriptRows(): [string, HTMLElement][] {
+  const call = drawn(
+    createElement(Disclosure, {
+      children: createElement(LineSummary, { "data-row": "a call's line", children: "" }),
+    }),
+    "tool",
+  );
   const host = document.body.appendChild(document.createElement("div"));
   host.innerHTML = `
-    <div class="tool"><details><summary class="luke-line-button" data-look="row" data-row="a call's line"></summary></details></div>
     <details class="luke-disclosure" data-look="card"><summary class="luke-disclosure-summary" data-look="head" data-row="the to-do list's head"></summary></details>
     <div class="agent-published-dock"><ul class="luke-list" data-finger-tall="true"><li class="luke-list-row"><button class="luke-list-row-main" data-row="the pull request's row"></button></li></ul></div>`;
-  return [...host.querySelectorAll<HTMLElement>("[data-row]")].map((row) => [
-    row.dataset.row ?? "",
-    row,
-  ]);
+  return [
+    ...call.querySelectorAll<HTMLElement>("[data-row]"),
+    ...host.querySelectorAll<HTMLElement>("[data-row]"),
+  ].map((row) => [row.dataset.row ?? "", row]);
 }
 
 test("on a touch screen a transcript's rows that open something stand a finger's height tall", () => {
@@ -510,7 +546,6 @@ function providerButton(): HTMLButtonElement {
         provider: MARK_PROVIDER.GITHUB,
         name: "GitHub",
         size: PROVIDER_BUTTON_SIZE.GATE,
-        pendingLabel: "Opening GitHub",
         onPress: () => undefined,
       }),
     ),
@@ -523,7 +558,7 @@ function threadPresses(): ReadonlyMap<string, HTMLElement> {
     [
       "a quiet message's Reply",
       built(
-        '<div class="chat-byline"><span class="chat-byline-action"><button class="luke-text-button">Reply</button></span></div>',
+        '<div class="luke-comment-head"><span class="luke-comment-trailing"><span class="chat-byline-action"><button class="luke-text-button">Reply</button></span></span></div>',
         "button",
       ),
     ],

@@ -18,7 +18,15 @@
    - past holding every tab the strip scrolls along with no bar drawn, the
      chosen tab pinned at whichever edge it would pass, and a fade where tabs
      go on. The tab the strip brings into view glides there unless motion is
-     held still (`--luke-scroll-glide`). */
+     held still (`--luke-scroll-glide`).
+
+   Each box's plain look, its layout, type, and the inks no state changes,
+   is Tailwind utilities (`tabs.tsx`). What stays here is what a state, a
+   fold, a pinned tab, or the pointer changes, since a rule here restyles it
+   from this layer, where a utility would outrank it: the pills' sizes,
+   inks, insets, and masks; and what Tailwind has no words for: the scroll
+   fades, the pinned tab's scroll-state queries, and the fold's container
+   query. */
 
 @layer components {
   .luke-tabs {
@@ -26,9 +34,6 @@
     /* What the strip's fades and the pinned tab paint over the tabs passing
        beneath them: a side panel's well, or a column's ground. */
     --luke-tabs-ground: var(--luke-color-well);
-    position: relative;
-    display: flex;
-    min-width: 0;
     flex: 0 1
       calc(
         var(--luke-tab-count, 1) *
@@ -36,12 +41,8 @@
         2 *
         var(--luke-focus-ring-reach)
       );
-    align-items: center;
-    gap: var(--luke-list-gap);
     overflow-x: auto;
-    overscroll-behavior-x: contain;
     scroll-behavior: var(--luke-scroll-glide);
-    scrollbar-width: none;
     /* Room above and below the tabs, given back to the row, for the shadow
        under a tab being dragged, which the strip's scrolling would clip, and
        at either end for the keyboard's ring on the first tab and the last. */
@@ -51,6 +52,10 @@
 
   .luke-tabs[data-ground="ground"] {
     --luke-tabs-ground: var(--luke-color-ground);
+  }
+
+  .luke-tabs[data-ground="frame"] {
+    --luke-tabs-ground: var(--luke-color-sidebar);
   }
 
   /* A fade at either end where tabs go on past it, drawn over them in the
@@ -141,16 +146,10 @@
       #000 calc(var(--luke-tab-close) + var(--luke-tab-close-inset) + 10px)
     );
     position: relative;
-    display: flex;
     min-width: calc(2 * var(--luke-space-8) + var(--luke-control-icon));
     max-width: var(--luke-tab-widest);
     flex: 0 1 var(--luke-tab-widest);
-    align-items: center;
-    border-radius: var(--luke-control-radius);
     color: var(--luke-color-text-muted);
-    font-size: var(--luke-type-label-size);
-    font-weight: var(--luke-weight-medium);
-    line-height: var(--luke-type-label-leading);
     /* Every tab asks for an equal share and narrows by it, down to a
        glyph's width; each is a container of its own width, so it can stand
        as its glyph alone once it is narrow (below). */
@@ -158,9 +157,9 @@
     /* Its transform is a drag's (use-tab-drag.ts): sliding aside for a tab
        dragged past it, and home again, on the bounce small elements ride. */
     transition:
-      background-color var(--luke-duration-hover) ease,
-      color var(--luke-duration-hover) ease,
-      opacity var(--luke-duration-hover) ease,
+      background-color var(--luke-duration-hover) var(--luke-motion-exit),
+      color var(--luke-duration-hover) var(--luke-motion-exit),
+      opacity var(--luke-duration-hover) var(--luke-motion-exit),
       transform var(--luke-duration-fast) var(--luke-spring-fast);
   }
 
@@ -191,8 +190,8 @@
     box-shadow: 0 4px 12px var(--luke-color-shadow);
     color: var(--luke-color-text);
     transition:
-      background-color var(--luke-duration-hover) ease,
-      color var(--luke-duration-hover) ease;
+      background-color var(--luke-duration-hover) var(--luke-motion-exit),
+      color var(--luke-duration-hover) var(--luke-motion-exit);
   }
 
   /* The chosen tab keeps a share of its own, its glyph, its label, and its
@@ -215,27 +214,21 @@
     container: pinned / scroll-state;
   }
 
+  /* On the frame the chosen tab is lifted in the sheet's ground beneath it,
+     by a hairline and a soft shadow, as the sidebar draws the place standing
+     open (nav-item.css), so the strip and the sidebar choose alike. */
+  .luke-tabs[data-ground="frame"] .luke-tab[data-selected="true"] {
+    background: var(--luke-color-ground);
+    box-shadow:
+      0 0 0 1px var(--luke-color-border),
+      0 1px 2px var(--luke-color-shadow-soft);
+  }
+
   /* A chosen tab alone in its strip keeps no share for others: it takes a
      tab's own width, as any tab does. */
   .luke-tab[data-selected="true"]:only-child {
     flex-shrink: 1;
     flex-basis: var(--luke-tab-widest);
-  }
-
-  /* A quiet tab, a column's lone one, wears no fill at rest even chosen,
-     and the hover fill under the pointer, as a title does; chosen, it still
-     stands on the strip's ground, so no tab shows through it where it is
-     pinned. */
-  .luke-tab[data-quiet="true"]:not(:hover) {
-    background: none;
-  }
-
-  .luke-tab[data-selected="true"][data-quiet="true"]:not(:hover) {
-    background: var(--luke-tabs-ground);
-  }
-
-  .luke-tab[data-quiet="true"]:hover {
-    background: var(--luke-color-fill-hover);
   }
 
   /* Pinned, it fades the tabs passing beneath its inner edge as the strip's
@@ -274,20 +267,7 @@
   }
 
   .luke-tab-button {
-    position: relative;
-    display: flex;
-    min-width: 0;
-    flex: 1 1 auto;
-    align-items: center;
-    gap: var(--luke-icon-gap);
-    height: var(--luke-control-height);
-    margin: 0;
     padding: 0 var(--luke-tab-end) 0 var(--luke-tab-start);
-    border: 0;
-    border-radius: inherit;
-    background: none;
-    color: inherit;
-    font: inherit;
   }
 
   .luke-tab[data-closable="true"][data-selected="false"]:hover .luke-tab-button {
@@ -300,26 +280,6 @@
     .luke-tab[data-closable="true"][data-selected="false"][data-marked="false"] .luke-tab-button {
       mask-image: var(--luke-tab-close-fade);
     }
-  }
-
-  /* Each glyph slot says its glyph's size (`--luke-glyph-size`), which a
-     glyph the app draws in it, a mark wearing where its work stands, reads. */
-  .luke-tab-icon {
-    --luke-glyph-size: var(--luke-control-icon);
-    position: relative;
-    display: flex;
-    flex: 0 0 auto;
-    color: var(--luke-color-text-muted);
-  }
-
-  .luke-tab-icon svg {
-    width: var(--luke-control-icon);
-    height: var(--luke-control-icon);
-  }
-
-  .luke-tab-label {
-    overflow: hidden;
-    white-space: nowrap;
   }
 
   /* A label cut short fades out over its last 20px rather than ending in an
@@ -336,7 +296,7 @@
      ink until it is chosen, as a chat app's channels do. */
   .luke-tab[data-unread="true"] .luke-tab-label {
     color: var(--luke-color-text);
-    font-weight: var(--luke-weight-bold);
+    font-weight: var(--luke-type-emphasis-weight);
   }
 
   /* A preview tab, which the next one opened takes the place of, wears its
@@ -345,36 +305,17 @@
     font-style: italic;
   }
 
-  /* What follows a tab's label, a count, is muted as a model's effort is
-     after its name. */
-  .luke-tab-detail {
-    color: var(--luke-color-text-muted);
-  }
-
   /* Renamed in place, the label gives way to a field in the same type,
      ringed rather than bordered so nothing moves. */
   .luke-tab-button[data-editing="true"] {
     box-shadow: inset 0 0 0 1px var(--luke-color-border-selected);
   }
 
-  /* The field stands at a name's width whatever the label was, its own
-     width the place's to say (InlineEdit). */
-  .luke-tab-rename {
-    display: grid;
-    width: 24ch;
-    min-width: 0;
-  }
-
   /* The ×, a row's compact mark, stands at the pill's end, out of the
      label's way. */
   .luke-tab-close {
-    position: absolute;
-    top: 50%;
-    right: var(--luke-tab-close-inset);
     display: flex;
     opacity: 0;
-    transform: translateY(-50%);
-    transition: opacity var(--luke-duration-hover) ease;
   }
 
   .luke-tab[data-selected="true"] .luke-tab-close {
@@ -415,16 +356,7 @@
   }
 
   .luke-tab-end-mark {
-    position: absolute;
-    top: 50%;
-    right: var(--luke-tab-close-inset);
     display: flex;
-    width: var(--luke-tab-close);
-    height: var(--luke-tab-close);
-    align-items: center;
-    justify-content: center;
-    transform: translateY(-50%);
-    transition: opacity var(--luke-duration-hover) ease;
   }
 
   @media (hover: hover) {
@@ -445,19 +377,13 @@
     }
   }
 
-  /* A quiet tab, a column's lone one, takes the room its row has rather
-     than a tab's widest, giving way to the buttons beside it as any tab
-     gives way. */
-  .luke-tab[data-quiet="true"] {
-    max-width: 100%;
-  }
-
   /* Folded to glyphs, a tab other than the chosen one narrower than 72px is
      its glyph alone, centred: its label, its detail, its end mark, and its
      × give way, and its hint says its name. Note that under the pointer,
      folded or not, a tab that narrow wears no fade at its end, because the
      fade makes room for a × it no longer has, or is wider than the glyph's
      whole side of the pill. */
+  /* off-scale: 72px, a tab that is only its glyph and a pill's padding */
   @container luke-tab (width < 72px) {
     .luke-tabs[data-fold="glyph"]
       .luke-tab:not([data-selected="true"])
@@ -505,106 +431,14 @@
     }
   }
 
-  /* A switcher's cards stand in a row that scrolls along where they
-     outrun it; the card chosen is lit as a menu's row is, its edge drawn
-     in the selected border, and the card of the screen here is dimmed. A
-     preview is a still of the screen, or its glyph large until it has
-     one. */
-  .luke-tab-cards {
-    display: flex;
-    gap: var(--luke-space-8);
-    padding: var(--luke-space-12);
-    overflow-x: auto;
-  }
-
-  .luke-tab-card {
-    display: flex;
-    width: 176px;
-    min-width: 0;
-    flex: 0 0 auto;
-    flex-direction: column;
-    gap: var(--luke-space-4);
-    padding: var(--luke-space-6);
-    border: 1px solid transparent;
-    border-radius: var(--luke-radius-10);
-    cursor: default;
-  }
-
-  .luke-tab-card[aria-selected="true"] {
-    border-color: var(--luke-color-border-selected);
-    background: var(--luke-color-fill-strong);
-  }
-
-  .luke-tab-card-preview {
-    display: flex;
-    height: 110px;
-    align-items: center;
-    justify-content: center;
-    margin-bottom: var(--luke-space-2);
-    border: 1px solid var(--luke-color-border);
-    border-radius: var(--luke-radius-6);
-    background: var(--luke-color-surface);
-    overflow: hidden;
-  }
-
-  .luke-tab-card[data-here="true"] .luke-tab-card-preview {
-    opacity: 0.55;
-  }
-
-  /* A still fills the preview from its top left, as the screen it was taken of stands. */
-  .luke-tab-card-still {
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
-    object-position: top left;
-  }
-
-  /* A card with no still yet wears its glyph, large and quiet, in the preview's middle. */
-  .luke-tab-card-glyph {
-    --luke-glyph-size: 28px;
-    display: inline-flex;
-    color: var(--luke-color-text-subtle);
-  }
-
-  .luke-tab-card-glyph :is(svg, img) {
-    width: 28px;
-    height: 28px;
-  }
-
-  .luke-tab-card-name {
-    --luke-glyph-size: var(--luke-menu-glyph);
-    display: flex;
-    min-width: 0;
-    align-items: center;
-    gap: var(--luke-icon-gap);
-    padding: 0 var(--luke-space-2);
-    white-space: nowrap;
-  }
-
-  /* The glyph keeps its own ink, as a tab's does. */
-  .luke-tab-card-name > :is(svg, img) {
-    width: var(--luke-menu-glyph);
-    height: var(--luke-menu-glyph);
-    flex: 0 0 auto;
-  }
-
-  .luke-tab-card-name > .luke-text {
-    min-width: 0;
-    flex: 1 1 auto;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-
-  /* Where it stands, under the name, inset to the name's words; the line
-     stands empty where a card has none, so every card is one height. */
+  /* A switcher's cards (their boxes are `tabs.tsx`'s utilities): a card
+     with no still yet wears its glyph, large and quiet; where it stands,
+     under the name, is inset to the name's words, and the line stands empty
+     where a card has none, so every card is one height. */
   .luke-tab-card-detail {
     --luke-glyph-size: var(--luke-type-caption-size);
-    display: flex;
-    align-items: center;
-    gap: var(--luke-space-4);
     min-height: calc(var(--luke-type-caption-size) * 1.4);
     padding-left: calc(var(--luke-space-2) + var(--luke-menu-glyph) + var(--luke-icon-gap));
-    white-space: nowrap;
   }
 
   /* The detail's glyph, a step smaller than the name's. */
@@ -612,11 +446,5 @@
     width: var(--luke-type-caption-size);
     height: var(--luke-type-caption-size);
     flex: 0 0 auto;
-  }
-
-  .luke-tab-card-detail > .luke-text {
-    min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
   }
 }

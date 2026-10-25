@@ -104,9 +104,7 @@ function kept(held: Held, next: Held): Held {
  */
 export function keepIdentity<Value>(held: Value, next: Value): Value {
   // SAFETY: both are one shape of the data this module is bounded to, which the walk reads as the JSON it is.
-  // oxlint-disable-next-line anti-slop/no-chained-type-assertions -- The walk reads JSON data; the caller's type is set aside at this one door.
   const answer = kept(held as unknown as Held, next as unknown as Held);
   // SAFETY: what the walk answers is `held`, `next`, or a value equal to `next` built of their parts, so it is the caller's shape again.
-  // oxlint-disable-next-line anti-slop/no-chained-type-assertions -- The caller's type is restored at the same door it was set aside at.
   return answer as unknown as Value;
 }

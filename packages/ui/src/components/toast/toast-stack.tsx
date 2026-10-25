@@ -1,8 +1,10 @@
 import { type ReactNode, type RefObject, useLayoutEffect, useRef } from "react";
-import { VISUALLY_HIDDEN_ELEMENT, VisuallyHidden } from "../visually-hidden/visually-hidden.js";
+import { MOTION_TOKEN, tokenTiming } from "../../motion-timing.js";
+import { ANNOUNCE, Announcer, useAnnounce } from "../announcer/announcer.js";
+import { TOAST_LOOK, type ToastLook } from "./toast.js";
 
 /**
- * toast-stack.tsx -- the toasts standing, in the window's bottom-right corner, and the two live regions that say them.
+ * toast-stack.tsx -- the toasts standing, in the window's bottom-right corner, and the window's `Announcer` that says them.
  *
  * The stack is a landmark over whatever docks at the window's foot, taking no
  * pointer itself, so only a toast with something to press stands in the way
@@ -10,12 +12,16 @@ import { VISUALLY_HIDDEN_ELEMENT, VisuallyHidden } from "../visually-hidden/visu
  * drawn to where it now stands, on the spring small elements ride, read from
  * the tokens at the stack so reduced motion and a capture run play nothing.
  *
- * What each toast says reaches assistive tech through two regions drawn
- * beside the stack, which the host mounts with the window rather than with
- * any toast, because a live region drawn already holding its words is one a
- * screen reader may never read: a polite one for what was done or is asked,
- * and an alert for what was refused. The host hands each the words to say.
- * Where the stack mounts (a portal to the body, say) is the host's.
+ * What each toast says reaches assistive tech through the window's one pair
+ * of live regions, the `Announcer` the stack mounts beside it, since the
+ * host mounts the stack with the window rather than with any toast: what was
+ * done or is asked politely, and what was refused as an alert, each said
+ * once the words the host hands it change. Where the stack mounts (a portal
+ * to the body, say) is the host's.
+ *
+ * In the compact look, for a window too small for the card (the floating call
+ * window), the stack spans the window's foot a step in from each side
+ * rather than standing in its corner, and its toasts are drawn compact.
  */
 
 /** Less than this, in CSS pixels, is not a move worth playing. */
@@ -33,31 +39,26 @@ function useStackGlide(): RefObject<HTMLOListElement | null> {
       if (drawn.current.size > 0) drawn.current = new Map();
       return;
     }
-    const style = getComputedStyle(root);
-    const duration = Number.parseFloat(style.getPropertyValue("--luke-duration-fast")) || 0;
-    const easing = style.getPropertyValue("--luke-spring-fast").trim();
+    const timing = tokenTiming(root, MOTION_TOKEN.DURATION_FAST, MOTION_TOKEN.SPRING_FAST);
     const next = new Map<Element, number>();
     for (const toast of root.children) {
       const top = toast.getBoundingClientRect().top;
       const was = drawn.current.get(toast);
       next.set(toast, top);
-      // Note that reduced motion leaves 1ms rather than none, which is no motion either.
-      if (was === undefined || Math.abs(was - top) < STILL || duration <= 1) continue;
-      toast.animate([{ transform: `translateY(${was - top}px)` }, { transform: "none" }], {
-        duration,
-        easing,
-      });
+      if (was === undefined || Math.abs(was - top) < STILL || timing === undefined) continue;
+      toast.animate([{ transform: `translateY(${was - top}px)` }, { transform: "none" }], timing);
     }
     drawn.current = next;
   });
   return list;
 }
 
-/** The stack, named as a landmark, its toasts oldest first, and what its polite and alert regions say now. */
+/** The stack, named as a landmark, its toasts oldest first, and the window's `Announcer`, told what the newest toasts say. */
 export function ToastStack({
   label,
   polite,
   alert,
+  look = TOAST_LOOK.CARD,
   children,
 }: {
   /** What the stack is called, as a landmark among the window's regions. */
@@ -66,21 +67,26 @@ export function ToastStack({
   polite: string;
   /** What the alert region says: what was refused, or nothing. */
   alert: string;
+  /** Where it stands: the window's corner for cards, or across its foot for lines, its toasts drawn in the same look. */
+  look?: ToastLook;
   /** The toasts, each a `Toast`, oldest first. */
   children: ReactNode;
 }): React.JSX.Element {
   const list = useStackGlide();
+  useAnnounce(ANNOUNCE.POLITE, polite);
+  useAnnounce(ANNOUNCE.ALERT, alert);
   return (
     <>
-      <section className="luke-toast-stack" aria-label={label}>
-        <ol ref={list}>{children}</ol>
+      <section
+        className="luke-toast-stack pointer-events-none fixed z-toast"
+        data-look={look}
+        aria-label={label}
+      >
+        <ol ref={list} className="m-0 flex list-none flex-col gap-toast-gap p-0">
+          {children}
+        </ol>
       </section>
-      <VisuallyHidden as={VISUALLY_HIDDEN_ELEMENT.P} role="status">
-        {polite}
-      </VisuallyHidden>
-      <VisuallyHidden as={VISUALLY_HIDDEN_ELEMENT.P} role="alert">
-        {alert}
-      </VisuallyHidden>
+      <Announcer />
     </>
   );
 }

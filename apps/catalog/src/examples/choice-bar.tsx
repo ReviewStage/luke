@@ -20,11 +20,11 @@ import {
   type ChoiceBarSize,
   type ChoiceItem,
   CloseIcon,
-  COUNT_TONE,
   CodeIcon,
   DocumentIcon,
   GAP,
   linesCount,
+  STATUS_TONE,
   Stack,
   TEXT_TONE,
   Text,
@@ -48,7 +48,7 @@ const VIEWS: readonly ChoiceItem<View>[] = [
     value: VIEW.CHECKS,
     icon: <CheckIcon />,
     label: "Checks",
-    count: [{ text: "2", tone: COUNT_TONE.DANGER, glyph: <CloseIcon />, glyphLabel: "failing" }],
+    count: [{ text: "2", tone: STATUS_TONE.DANGER, glyph: <CloseIcon />, glyphLabel: "failing" }],
   },
   { value: VIEW.FILES, icon: <CodeIcon />, label: "Files changed", count: linesCount(128, 42) },
 ];
@@ -59,7 +59,7 @@ const VIEWS_PASSING: readonly ChoiceItem<View>[] = VIEWS.map((item) =>
     ? {
         ...item,
         count: [
-          { text: "9", tone: COUNT_TONE.COMPLETE, glyph: <CheckIcon />, glyphLabel: "passing" },
+          { text: "9", tone: STATUS_TONE.COMPLETE, glyph: <CheckIcon />, glyphLabel: "passing" },
         ],
       }
     : item,
@@ -84,7 +84,9 @@ const SHOWS: readonly ChoiceItem<Show>[] = [
   {
     value: SHOW.NEEDS_YOU,
     label: "Needs you",
-    count: [{ text: "3", tone: COUNT_TONE.ATTENTION, glyph: <AlertIcon />, glyphLabel: "waiting" }],
+    count: [
+      { text: "3", tone: STATUS_TONE.ATTENTION, glyph: <AlertIcon />, glyphLabel: "waiting" },
+    ],
   },
   { value: SHOW.UNREAD, label: "Unread", count: "7" },
   { value: SHOW.ALL, label: "All open", count: "24" },

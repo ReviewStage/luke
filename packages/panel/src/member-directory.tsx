@@ -33,6 +33,8 @@ export interface Directory {
   readonly reading: boolean;
   /** Whether the members alone are still being read and not refused, which a menu of them says whatever became of the read of who left. */
   readonly membersReading: boolean;
+  /** Whether the members read alone was refused, which a menu of them says whatever became of the read of who left. */
+  readonly membersRefused: boolean;
   /** Whether the members read or the read of who left was refused, until Retry asks again. */
   readonly refused: boolean;
   /** Reads again whichever of the members and who left was refused. */
@@ -45,6 +47,7 @@ const DirectoryContext = createContext<Directory>({
   former: undefined,
   reading: false,
   membersReading: false,
+  membersRefused: false,
   refused: false,
   retry: () => undefined,
 });
@@ -78,8 +81,28 @@ export function MemberDirectory({
   // face and name inside it is drawn again for a new one.
   const workspaceId = workspace?.id;
   const directory = useMemo(
-    () => ({ members, readerId, former, workspaceId, reading, membersReading, refused, retry }),
-    [members, readerId, former, workspaceId, reading, membersReading, refused, retry],
+    () => ({
+      members,
+      readerId,
+      former,
+      workspaceId,
+      reading,
+      membersReading,
+      membersRefused,
+      refused,
+      retry,
+    }),
+    [
+      members,
+      readerId,
+      former,
+      workspaceId,
+      reading,
+      membersReading,
+      membersRefused,
+      refused,
+      retry,
+    ],
   );
   return <DirectoryContext.Provider value={directory}>{children}</DirectoryContext.Provider>;
 }

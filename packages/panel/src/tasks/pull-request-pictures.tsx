@@ -157,11 +157,9 @@ function EntryViewer({
   const action: ViewerAction = {
     label: PICTURE_WORDS.OPEN_ON_GITHUB,
     icon: <ProviderMark provider={INTEGRATION_PROVIDER.GITHUB} />,
-    onPress: (file) => {
-      // Note that the file is matched as the viewer was handed it, because two pictures may hold the same bytes.
-      const shown = files.find((each) => each.file === file);
-      if (shown !== undefined) openLink(shown.original);
-    },
+    // Note that the file is matched as the viewer was handed it, because two pictures may hold the same bytes.
+    address: (file) => files.find((each) => each.file === file)?.original,
+    onOpen: openLink,
   };
   return at < 0 ? null : (
     <AttachmentViewer
@@ -233,7 +231,10 @@ function GitHubPicture({
   const door = useContext(EntryViewerContext);
   // Note that a picture landing tells the entry, so a viewer already open walks it too.
   useEffect(() => door?.landed(), [door, state.kind]);
-  if (state.kind === PICTURE_STATE.MISSING) return <GitHubPictureLink src={src} alt={alt} />;
+  // Note that a linked picture whose read did not land is its link too, because it stands inside a link, where no Retry may stand.
+  if (state.kind === PICTURE_STATE.MISSING || (linked && state.kind === PICTURE_STATE.FAILED)) {
+    return <GitHubPictureLink src={src} alt={alt} />;
+  }
   if (!linked) {
     const open = door === undefined ? undefined : () => door.open(agentId, src);
     return <PictureBlock state={state} alt={alt} caption={undefined} onOpen={open} />;

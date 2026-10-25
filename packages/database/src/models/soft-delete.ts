@@ -13,7 +13,7 @@ import { queueSessionSandboxes, sessionsOf } from "./session-sandbox-cleanup.js"
  * (`task-store.ts`), so the reads — which skip a stamped row — show nothing
  * of them from the call after, while the rows stand until the purge. There is no archive, no
  * registry, and no cutoff: the stamp is the whole record, and the cron's
- * purge removes the stamped conversations thirty days on, their messages,
+ * purge removes the stamped conversations seven days on, their messages,
  * turns, and events going with them by the schema's own cascade. Deleting
  * the account cascades everything at once, stamped or not. The eve session
  * a purged conversation ran in is queued in the same transaction for the
@@ -30,7 +30,7 @@ import { queueSessionSandboxes, sessionsOf } from "./session-sandbox-cleanup.js"
  */
 
 /** How long a cleared conversation's rows stand before the purge takes them. */
-export const CLEARED_CONVERSATION_RETENTION_MS = Duration.toMillis(Duration.days(30));
+export const CLEARED_CONVERSATION_RETENTION_MS = Duration.toMillis(Duration.days(7));
 
 /** The most calls one sweep removes, so a backlog is worked through a sweep at a time rather than in one statement. */
 const DELETED_TASK_CALLS_PER_SWEEP = 200;
@@ -99,7 +99,7 @@ const findChildren = SqlSchema.findAll({
 /**
  * Stamps the conversations deleted now, and every conversation delegated
  * from them, a worker's under its agent's, so the reads skip them from the
- * call after and the purge takes them thirty days on; one already stamped
+ * call after and the purge takes them seven days on; one already stamped
  * keeps its stamp. Note that each child is stamped itself rather than left
  * to its parent's cascade, because the purge queues the sandbox of each row
  * it deletes by name (`purgeClearedConversations`) and a row the cascade

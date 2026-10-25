@@ -12,7 +12,9 @@ import { fileTree } from "./index.js";
  * file is viewed; a folder's row says nothing more. A press on the toggle
  * is the toggle's alone, the row neither opening its file nor taking the
  * keyboard, while a press anywhere else on the row opens the file, and V
- * on the row the tree's keyboard stands on presses its toggle. The
+ * on the row the tree's keyboard stands on presses its toggle. A reader
+ * finds the toggle as a checkbox named Viewed. A ⌘-press opens its file
+ * in a tab of its own and leaves the tab's own file the one row marked. The
  * tree is the bundle's own, Pierre drawing it in jsdom; synthetic paths.
  */
 
@@ -38,6 +40,7 @@ async function mountMarked(marks: readonly FileMark[]) {
   const host = document.body.appendChild(document.createElement("div"));
   const handle = fileTree.mount(host, {
     readFolder: () => Promise.resolve({ entries: [], truncated: false }),
+    onStanding: () => undefined,
     onOpen: (path) => opened.push(path),
     onViewed: (path) => viewed.push(path),
   });
@@ -58,6 +61,16 @@ function row(path: string): HTMLElement {
     }
   }
   return assert.fail(`the tree draws ${path}`);
+}
+
+/** The rows the tree draws as chosen, by path. */
+function chosen(): string[] {
+  const rows = [...(mounted?.host.querySelectorAll("file-tree-container") ?? [])]
+    .filter((container) => container.closest("[hidden]") === null)
+    .flatMap((container) => [
+      ...(container.shadowRoot?.querySelectorAll<HTMLElement>('[data-item-selected="true"]') ?? []),
+    ]);
+  return rows.map((each) => each.dataset.itemPath ?? "");
 }
 
 /** The words at the end of a row, part by part. */
@@ -154,4 +167,39 @@ test("a mark that does not say whether its file is viewed draws no toggle", asyn
   await mountMarked([{ path: "src/seats.ts", status: FILE_MARK.MODIFIED, threads: 1 }]);
 
   assert.deepEqual(parts("src/seats.ts"), ["", "1", "", ""]);
+});
+
+test("a row's Viewed toggle is a checkbox named Viewed, checked once its file is viewed, as marks handed again redraw it", async () => {
+  const { handle } = await mountMarked(MARKS);
+
+  const named = (path: string) => {
+    const each = toggle(path);
+    return [each.getAttribute("role"), each.getAttribute("aria-label"), each.ariaChecked];
+  };
+  assert.deepEqual(named("src/seats.ts"), ["checkbox", "Viewed", "false"]);
+  assert.deepEqual(named("src/plan.md"), ["checkbox", "Viewed", "true"]);
+
+  handle.mark(
+    MARKS.map((mark) => (mark.path === "src/seats.ts" ? { ...mark, viewed: true } : mark)),
+  );
+  await settle();
+
+  assert.deepEqual(named("src/seats.ts"), ["checkbox", "Viewed", "true"]);
+});
+
+test("a ⌘-press opens its file in a tab of its own and leaves the tab's own file the one row marked", async () => {
+  const { handle, opened } = await mountMarked(MARKS);
+  handle.reveal("src/seats.ts", { focus: false });
+  await settle();
+  assert.deepEqual(chosen(), ["src/seats.ts"]);
+
+  for (const path of ["README.md", "src/seats.ts"]) {
+    row(path).dispatchEvent(
+      new MouseEvent("click", { metaKey: true, bubbles: true, composed: true }),
+    );
+    await settle();
+  }
+
+  assert.deepEqual(opened, ["README.md", "src/seats.ts"]);
+  assert.deepEqual(chosen(), ["src/seats.ts"]);
 });

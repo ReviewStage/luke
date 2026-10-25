@@ -1,4 +1,5 @@
 import { AVATAR_SHAPE, AVATAR_SIZE, Avatar, type AvatarSize } from "@luke/ui";
+import { GLYPH } from "@luke/ui/icons";
 import { repositoryOwnerPictureUrl } from "@luke/ui/tasks-model";
 import { useState } from "react";
 
@@ -23,15 +24,15 @@ import { useState } from "react";
 export function RepositoryPicture({
   repository,
   pictures,
-  fallback,
+  fallback = <GLYPH.REPOSITORY />,
   size = AVATAR_SIZE.INLINE,
 }: {
   /** The repository, `owner/name`. */
   repository: string;
   /** Whether owners' pictures are drawn at all: not in a fixture run. */
   pictures: boolean;
-  /** What stands in the picture's place where there is none to draw. */
-  fallback: React.ReactNode;
+  /** What stands in the picture's place where there is none to draw: the repository's own glyph unless named. */
+  fallback?: React.ReactNode;
   /** The tile's size, the glyph slot's it stands in. */
   size?: AvatarSize;
 }): React.ReactNode {

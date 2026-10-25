@@ -114,7 +114,7 @@ function AdminDashboardPage(): React.JSX.Element {
   // its read with it: an answer that left carrying the old cookie cannot then
   // put the page back up behind the sign-out.
   const [loggedOut, setLoggedOut] = useState(false);
-  const logOut = useCallback(async () => {
+  const signOutAndLeave = useCallback(async () => {
     await signOut();
     setLoggedOut(true);
   }, [signOut]);
@@ -135,7 +135,7 @@ function AdminDashboardPage(): React.JSX.Element {
       account={viewer}
       onToggleHidden={toggleSidebar}
       onNavigate={navigate}
-      onLogOut={logOut}
+      onSignOut={signOutAndLeave}
     >
       {content}
     </AdminShell>

@@ -3,15 +3,24 @@ import { type GitHubIssuePick, isOutsideAuthor } from "@luke/features/github-rep
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
 import type { LinearIssueSummary } from "@luke/features/linear-wire";
 import { TASK_BOUNDS } from "@luke/features/task-wire";
+import { sinceText } from "@luke/features/time-format";
+import { readFailedWords, readingWords } from "@luke/features/words";
 import { SHORTCUT_KEY, type ShortcutChord, shortcutAria } from "@luke/settings/shortcuts";
 import {
-  BADGE_TONE,
   Badge,
   CHIP_LOOK,
   CHIP_WIDTH,
   Chip,
   ChipName,
+  ErrorState,
+  type MenuRow,
+  POPOVER_ALIGN,
+  POPOVER_WIDTH,
+  type PopoverAlign,
   ProviderMark,
+  SearchableMenu,
+  Spinner,
+  STATUS_TONE,
   TEXT_ELEMENT,
   TEXT_VARIANT,
   Text,
@@ -19,7 +28,6 @@ import {
   useMinute,
 } from "@luke/ui";
 import { type LinearIssuesAsk, linearIssuesAskOf, offeredIssues } from "@luke/ui/tasks-model";
-import { sinceText } from "@luke/ui/time-format";
 import { useDisclosure } from "@luke/ui/use-disclosure";
 import { Duration, Effect } from "effect";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
@@ -27,8 +35,6 @@ import { CircleDotIcon, ExternalLinkIcon, ListTodoIcon, PlusIcon } from "lucide-
 import { useEffect, useId, useRef, useState } from "react";
 import { appPlatform } from "../app-platform.js";
 import { rendererRuntime } from "../renderer-runtime.js";
-import { type MenuRow, SearchableMenu } from "../searchable-menu.js";
-import { PICKER_ALIGN, type PickerAlign, usePickerPlacement } from "../settings/picker-row.js";
 import {
   GITHUB_ISSUES_STANDING,
   type GitHubIssuesStanding,
@@ -100,6 +106,12 @@ const ISSUE_WORDS = {
   FULL: `At most ${TASK_BOUNDS.MAX_ISSUES} issues`,
 } as const;
 
+/** What each source's failure says it could not read. */
+const ISSUE_READ = {
+  GITHUB: "GitHub's issues",
+  LINEAR: "Linear's issues",
+} as const;
+
 /** The GitHub section's heading, for the repository it lists. */
 function githubSection(repository: string): string {
   return `${ISSUE_WORDS.GITHUB} · ${repository}`;
@@ -107,7 +119,7 @@ function githubSection(repository: string): string {
 
 /** The grant row's words, for the repository whose issues cannot be read. */
 function grantLabel(repository: string): string {
-  return `Luke can't read ${repository}'s issues yet`;
+  return `Luke cannot read ${repository}'s issues yet`;
 }
 
 /** The ids of the GitHub section's rows that are no issue. */
@@ -119,15 +131,29 @@ const GITHUB_ROW = {
 /** How long the typing rests before Linear is searched for the words as typed. */
 const SEARCH_PAUSE = Duration.millis(250);
 
+/** What the Linear read of the workspace's issues stands as: the issues, none while they are read or where the workspace offers none, whether the read is still out, and whether it was refused. */
+interface LinearIssuesRead<Issue> {
+  readonly issues: readonly Issue[];
+  readonly reading: boolean;
+  readonly failed: boolean;
+  /** Reads them again. */
+  readonly retry: () => void;
+}
+
 /**
- * The Linear issues of the workspace the task starts in, read as the card opens and again for another workspace; none while they
- * are read, where the workspace offers none, or where the read was refused.
+ * The Linear issues of the workspace the task starts in, read as the card
+ * opens and again for another workspace or when `retry` asks; none while
+ * they are read or where the workspace offers none, `reading` until the read
+ * answers, and `failed` where it was refused, which is not an empty workspace.
  */
 function useIssuesRead<Issue>(
   readIn: (workspaceId: string | undefined) => (() => Promise<readonly Issue[]>) | undefined,
   workspaceId: string | undefined,
-): readonly Issue[] {
+): LinearIssuesRead<Issue> {
   const [issues, setIssues] = useState<readonly Issue[]>([]);
+  const [failed, setFailed] = useState(false);
+  const [answered, setAnswered] = useState(false);
+  const [attempts, setAttempts] = useState(0);
   // Note that the reader is held through a ref, because the tab hands a new
   // one on every render and a read is owed to a workspace, not a render.
   const latest = useRef(readIn);
@@ -135,20 +161,34 @@ function useIssuesRead<Issue>(
   const connected = readIn(workspaceId) !== undefined;
   useEffect(() => {
     setIssues([]);
+    setFailed(false);
+    setAnswered(false);
     const reading = connected ? latest.current(workspaceId) : undefined;
     if (reading === undefined) return;
     let current = true;
     reading().then(
       (listed) => {
-        if (current) setIssues(listed);
+        if (!current) return;
+        setIssues(listed);
+        setAnswered(true);
       },
-      () => undefined,
+      () => {
+        if (!current) return;
+        setFailed(true);
+        setAnswered(true);
+      },
     );
     return () => {
       current = false;
     };
-  }, [connected, workspaceId]);
-  return issues;
+    // Note that `attempts` is no value the read uses, only each Retry's ask to read again.
+  }, [connected, workspaceId, attempts]);
+  return {
+    issues,
+    reading: connected && !answered,
+    failed,
+    retry: () => setAttempts((count) => count + 1),
+  };
 }
 
 /** One search of a workspace's Linear for the words as typed, and the read that asks it. */
@@ -159,27 +199,34 @@ interface IssueSearch {
   readonly read: (ask: LinearIssuesAsk) => Promise<readonly LinearIssueSummary[]>;
 }
 
-/** What one search found, and the workspace and the words it was for. */
+/** What one search found or that it failed, and the workspace and the words it was for. */
 interface IssueSearchAnswer {
   readonly workspaceId: string | undefined;
   readonly typed: string;
   readonly issues: readonly LinearIssueSummary[];
+  /** Whether the search was refused, which is not a search that found nothing. */
+  readonly failed: boolean;
 }
 
 /**
  * A search once the typing has rested, as an atom whose work is the wait and
  * then the read: setting it again starts the wait over and lets go of the
  * read still out, so only the newest words are answered. A refused read
- * finds nothing.
+ * answers `failed`, with no issues.
  */
 const issueSearchAtom = () =>
   rendererRuntime.fn((search: IssueSearch) =>
     Effect.gen(function* () {
       yield* Effect.sleep(SEARCH_PAUSE);
-      const issues = yield* Effect.tryPromise(() => search.read(search.ask)).pipe(
-        Effect.orElseSucceed((): readonly LinearIssueSummary[] => []),
+      const found = yield* Effect.tryPromise(() => search.read(search.ask)).pipe(
+        Effect.orElseSucceed(() => undefined),
       );
-      return { workspaceId: search.workspaceId, typed: search.typed, issues };
+      return {
+        workspaceId: search.workspaceId,
+        typed: search.typed,
+        issues: found ?? [],
+        failed: found === undefined,
+      };
     }),
   );
 
@@ -267,7 +314,7 @@ function githubRow(
       <span className="issue-picker-github-detail">
         <Tooltip label={ISSUE_WORDS.OUTSIDE_HINT}>
           <span>
-            <Badge tone={BADGE_TONE.ATTENTION}>{ISSUE_WORDS.OUTSIDE}</Badge>
+            <Badge tone={STATUS_TONE.ATTENTION}>{ISSUE_WORDS.OUTSIDE}</Badge>
           </span>
         </Tooltip>
         <Text
@@ -293,7 +340,13 @@ function githubRows(
   now: number,
   pickable: (issue: GitHubIssuePick) => string | undefined,
 ): readonly MenuRow[] {
-  if (standing.kind === GITHUB_ISSUES_STANDING.NONE) return [];
+  if (
+    standing.kind === GITHUB_ISSUES_STANDING.NONE ||
+    standing.kind === GITHUB_ISSUES_STANDING.READING ||
+    standing.kind === GITHUB_ISSUES_STANDING.FAILED
+  ) {
+    return [];
+  }
   const section = githubSection(standing.repository);
   if (standing.kind === GITHUB_ISSUES_STANDING.UNGRANTED) {
     return [
@@ -326,7 +379,7 @@ export function IssuePickerChip({
   full,
   disabled,
   openRequest,
-  align = PICKER_ALIGN.START,
+  align = POPOVER_ALIGN.START,
   trigger,
   onChoose,
   onChooseGitHub,
@@ -347,7 +400,7 @@ export function IssuePickerChip({
   /** Counts the asks from elsewhere to open the menu, such as the field's ⌘L, each opening it. */
   openRequest?: number | undefined;
   /** Which of the chip's edges its menu hangs from: the leading one, or the trailing one where the chip ends its row. */
-  align?: PickerAlign | undefined;
+  align?: PopoverAlign | undefined;
   /** The words of a quiet chip drawn in the issue chip's place, as a task page's "Link issue"; the issue chip where none are given. */
   trigger?: string | undefined;
   onChoose: (issue: LinearIssueSummary) => void;
@@ -357,7 +410,7 @@ export function IssuePickerChip({
   const github = githubIn(workspaceId) !== undefined;
   const connected = linear || github;
   const now = useMinute();
-  const issues = useIssuesRead(linearIn, workspaceId);
+  const linearRead = useIssuesRead(linearIn, workspaceId);
   const [searched, searchLinear] = useLinearSearch(linearIn);
   const [typed, setTyped] = useState("");
   // How many times the menu has opened, each of which reads the repository's issues afresh.
@@ -374,7 +427,6 @@ export function IssuePickerChip({
   const menuId = useId();
   const box = useRef<HTMLDivElement>(null);
   const button = useRef<HTMLButtonElement>(null);
-  const placement = usePickerPlacement(open, button, align, menuId);
   /** What held focus as the menu opened, which closing hands it back to. */
   const opener = useRef<HTMLElement | null>(null);
   // A switch of workspace closes the menu, in the render that brings it,
@@ -408,11 +460,31 @@ export function IssuePickerChip({
 
   if (!connected) return null;
 
-  const listed = linear ? listedIssues(issues, searched, workspaceId, typed) : [];
+  const listed = linear ? listedIssues(linearRead.issues, searched, workspaceId, typed) : [];
+  // Note that a search answered for the words as they stand says whether Linear could be read for them, and else the read of the list does.
+  const searchedNow =
+    searched !== undefined &&
+    typed.trim() !== "" &&
+    searched.workspaceId === workspaceId &&
+    searched.typed === typed.trim();
+  const linearFailed = linear && (searchedNow ? searched.failed : linearRead.failed);
+  const retryLinear = () => {
+    linearRead.retry();
+    searchLinear(typed, workspaceId);
+  };
+  const retryGitHub = () => {
+    setOpenings(openings + 1);
+    searchGitHub(typed);
+  };
   const githubListed =
     githubStanding.kind === GITHUB_ISSUES_STANDING.LISTED ? githubStanding.issues : [];
   // Note that GitHub's section always stands under its heading, and Linear's only where GitHub's stands beside it.
-  const headed = linear && githubStanding.kind !== GITHUB_ISSUES_STANDING.NONE;
+  const headed =
+    linear &&
+    githubStanding.kind !== GITHUB_ISSUES_STANDING.NONE &&
+    githubStanding.kind !== GITHUB_ISSUES_STANDING.READING &&
+    githubStanding.kind !== GITHUB_ISSUES_STANDING.FAILED;
+  const reading = githubStanding.kind === GITHUB_ISSUES_STANDING.READING || linearRead.reading;
   const rows = [
     ...githubRows(githubStanding, now, (issue) => unpickable(linked.has(issue.nodeId), full)),
     ...listed.map((issue) =>
@@ -438,7 +510,7 @@ export function IssuePickerChip({
   };
 
   return (
-    <div className="issue-picker-chip" {...placement} ref={box}>
+    <div className="issue-picker-chip" ref={box}>
       {trigger !== undefined ? (
         <Chip
           ref={button}
@@ -481,7 +553,26 @@ export function IssuePickerChip({
           placeholder={ISSUE_WORDS.SEARCH}
           rows={rows}
           value={undefined}
+          note={
+            reading || githubStanding.kind === GITHUB_ISSUES_STANDING.FAILED || linearFailed ? (
+              <>
+                {reading ? <Spinner delay label={readingWords("issues")} /> : null}
+                {githubStanding.kind === GITHUB_ISSUES_STANDING.FAILED ? (
+                  <ErrorState onRetry={retryGitHub}>
+                    {readFailedWords(ISSUE_READ.GITHUB)}
+                  </ErrorState>
+                ) : null}
+                {linearFailed ? (
+                  <ErrorState onRetry={retryLinear}>
+                    {readFailedWords(ISSUE_READ.LINEAR)}
+                  </ErrorState>
+                ) : null}
+              </>
+            ) : undefined
+          }
           noMatch={ISSUE_WORDS.NONE}
+          align={align}
+          width={POPOVER_WIDTH.WIDE}
           onSearch={(words) => {
             setTyped(words);
             searchLinear(words, workspaceId);

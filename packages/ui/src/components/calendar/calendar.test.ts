@@ -1,8 +1,10 @@
 // @vitest-environment jsdom
 
+import { MOTION_DELAY_MS } from "@luke/brand";
 import { act, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, expect, test } from "vitest";
+import { afterEach, expect, test, vi } from "vitest";
+import { Announcer } from "../announcer/announcer.js";
 import { Calendar } from "./calendar.js";
 
 /**
@@ -255,6 +257,19 @@ test("the steps above the grid ask for the month either side", () => {
   expect(heard.months).toEqual(["2025-12", "2026-01", "2026-02"]);
 });
 
+test("each month paged to is said politely, and the month first shown is not", () => {
+  const announcer = document.body.appendChild(document.createElement("div"));
+  const root = createRoot(announcer);
+  roots.push(root);
+  act(() => root.render(createElement(Announcer)));
+  const { container } = draw("2026-01");
+  const said = () => document.querySelector('[role="status"]')?.textContent;
+  expect(said()).toBe("");
+
+  act(() => container.querySelector<HTMLButtonElement>('button[aria-label="Next month"]')?.click());
+  expect(said()).toBe("February 2026");
+});
+
 test("a step into a month the caller shows later takes the keyboard there once it does", () => {
   const { container, heard } = draw("2026-10", { start: "2026-10-20", slow: true });
   enterGrid(container);
@@ -294,4 +309,29 @@ test("a step still waiting on its month is dropped once the keyboard leaves the 
   act(() => elsewhere.focus());
   act(() => heard.show?.("2026-11"));
   expect(document.activeElement).toBe(elsewhere);
+});
+
+/** The words of the hint the pointer resting on `target` raises, past the hint's wait, on a faked clock. */
+function hintOn(target: Element): string | undefined {
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+  try {
+    act(() => {
+      target.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
+    });
+    act(() => {
+      vi.advanceTimersByTime(MOTION_DELAY_MS.HINT);
+    });
+    return document.querySelector('[role="tooltip"]')?.textContent ?? undefined;
+  } finally {
+    vi.useRealTimers();
+  }
+}
+
+test("each month step says its name in a hint on hover", () => {
+  const { container } = draw("2026-10");
+  const step = (name: string) =>
+    container.querySelector(`button[aria-label="${name}"]`) ?? expect.fail(`no ${name} step`);
+  expect(hintOn(step("Previous month"))).toBe("Previous month");
+  act(() => step("Previous month").dispatchEvent(new MouseEvent("pointerout", { bubbles: true })));
+  expect(hintOn(step("Next month"))).toBe("Next month");
 });

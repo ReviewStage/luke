@@ -60,8 +60,9 @@ export type UpdateMenuAct = (typeof UPDATE_MENU_ACT)[keyof typeof UPDATE_MENU_AC
 
 /**
  * The item's name for each act, in the title case a Mac menu writes. Note
- * that an act to choose carries no ellipsis, as no item in the bar does,
- * while the two that stand disabled say the work under way as a status does.
+ * that an act to choose carries no ellipsis, since it opens nothing and asks
+ * nothing, while the two that stand disabled say the work under way as a
+ * status does.
  */
 const UPDATE_MENU_LABELS = {
   [UPDATE_MENU_ACT.CHECK]: "Check for Updates",
@@ -97,6 +98,11 @@ export interface DeveloperToolsMenu {
 export interface PanelMenu {
   isPanel: (window: BaseWindow) => boolean;
   onReopen: (command: AppCommand) => void;
+}
+
+/** What the menu's Reload hands main: the window chosen over, to reload once nothing its page holds would be lost. */
+export interface ReloadMenu {
+  onReload: (window: BaseWindow) => void;
 }
 
 /** The short words a title leaves lower case after its first. */
@@ -195,12 +201,41 @@ function newTaskItem(panel: PanelMenu | undefined): MenuItemConstructorOptions {
   };
 }
 
+/**
+ * Reload, which main runs itself rather than handing the window, on its key
+ * as on a click, since no window's keymap claims ⌘R. It reloads the window
+ * chosen over, the panel or the call card, once `reload` has asked about
+ * edits the page would lose; the system's own reload stands until it is
+ * told, while no page has loaded to hold any.
+ */
+function reloadItem(reload: ReloadMenu | undefined): MenuItemConstructorOptions {
+  if (reload === undefined) return roleItem("reload", APP_COMMAND.RELOAD);
+  const shortcut = APP_SHORTCUTS[APP_COMMAND.RELOAD];
+  return {
+    label: menuTitle(shortcut.label),
+    accelerator: shortcutAccelerator(shortcut.chord),
+    click: (_item, window: BaseWindow | undefined) => {
+      if (window !== undefined) reload.onReload(window);
+    },
+  };
+}
+
 /** One of the system's own items, answering the chord the shortcut table gives it. */
 function roleItem(
   role: NonNullable<MenuItemConstructorOptions["role"]>,
   command: KeyedCommand,
 ): MenuItemConstructorOptions {
   return { role, accelerator: shortcutAccelerator(APP_SHORTCUTS[command].chord) };
+}
+
+/**
+ * An item that opens a window or asks before it acts, named with the "…" a
+ * Mac menu gives such an item. Note that the ellipsis belongs to the menu
+ * bar alone: ⌘K and the shortcuts page name the same commands bare, so it is
+ * added here and not to their shared labels.
+ */
+function opening(item: MenuItemConstructorOptions): MenuItemConstructorOptions {
+  return { ...item, label: `${item.label}…` };
 }
 
 /** A command with no key, named as the window names it. */
@@ -278,15 +313,18 @@ function developerItem(tools: DeveloperToolsMenu): MenuItemConstructorOptions {
  * Close Tab, and Close Window as Chrome's File keeps them, and Reopen Closed
  * Tab beside New Tab; Edit is the
  * system's own, spelt out so its Find submenu can hold the window's find as
- * every Mac app's Edit does; the window's
- * columns, the system's full screen, and its zoom are View's, the zoom in
+ * every Mac app's Edit does; the system's reload, the window's
+ * columns, the system's full screen, and its zoom are View's, reload first
+ * as Safari's View keeps it, the zoom in
  * the order Chrome's View keeps it, the call's microphone and speaker are
- * Call's, back and forward are Go's as Finder and Safari keep them, the
+ * Call's, the command palette, the places, back and forward (as Finder and
+ * Safari keep them) and the tab moves are Go's, the
  * window's own are macOS's Window menu, and the shortcuts and the notes to
  * the people who make Luke are Help's. A gated feature's item stands only
  * while `shown` says its command does (`shortcutShown`), and View's
  * Developer submenu only where `developerTools` is given. New Task brings a
- * closed window back only where `panel` is given.
+ * closed window back only where `panel` is given, and Reload asks before it
+ * loses unsaved edits only where `reload` is.
  */
 export function appMenuTemplate(
   appName: string,
@@ -294,8 +332,9 @@ export function appMenuTemplate(
   shown: (command: KeyedCommand) => boolean = () => true,
   developerTools?: DeveloperToolsMenu,
   panel?: PanelMenu,
+  reload?: ReloadMenu,
 ): MenuItemConstructorOptions[] {
-  return gated(fullMenuTemplate(appName, update, developerTools, panel), shown);
+  return gated(fullMenuTemplate(appName, update, developerTools, panel, reload), shown);
 }
 
 /** Whether a menu item is a command item the gate keeps out: one whose command does not stand now. */
@@ -333,16 +372,17 @@ function gated(
   return kept.filter((_item, at) => !strandedSeparator(kept, at));
 }
 
-/** What the menu bar is drawn from: the update item, the experiments the account has on, what the platform offers, the developer tools, and the panel window. */
+/** What the menu bar is drawn from: the update item, the experiments the account has on, what the platform offers, the developer tools, the panel window, and the reload. */
 interface MenuBarState {
   readonly update: UpdateMenu | undefined;
   readonly experiments: ExperimentChoices;
   readonly capabilities: readonly HostCapability[];
   readonly developerTools: DeveloperToolsMenu | undefined;
   readonly panel: PanelMenu | undefined;
+  readonly reload: ReloadMenu | undefined;
 }
 
-/** One change to what the menu bar is drawn from: a new update item (or none), the account's experiments and the platform's capabilities as the document carries them, the windows' developer tools, or the panel window. */
+/** One change to what the menu bar is drawn from: a new update item (or none), the account's experiments and the platform's capabilities as the document carries them, the windows' developer tools, the panel window, or the reload. */
 export type MenuBarChange =
   | { readonly update: UpdateMenu | undefined }
   | {
@@ -350,7 +390,8 @@ export type MenuBarChange =
       readonly capabilities: readonly HostCapability[];
     }
   | { readonly developerTools: DeveloperToolsMenu }
-  | { readonly panel: PanelMenu };
+  | { readonly panel: PanelMenu }
+  | { readonly reload: ReloadMenu };
 
 /**
  * The menu bar's one drawer: it draws the menus from what it was last told,
@@ -373,6 +414,7 @@ export function menuBarDrawer(
     capabilities: [],
     developerTools: undefined,
     panel: undefined,
+    reload: undefined,
   };
   let drawn = false;
   return (change) => {
@@ -381,6 +423,7 @@ export function menuBarDrawer(
       next.update !== state.update ||
       next.developerTools !== state.developerTools ||
       next.panel !== state.panel ||
+      next.reload !== state.reload ||
       JSON.stringify(next.experiments) !== JSON.stringify(state.experiments) ||
       JSON.stringify(next.capabilities) !== JSON.stringify(state.capabilities);
     if (drawn && !moved) return;
@@ -393,6 +436,7 @@ export function menuBarDrawer(
         (command) => shortcutShown(command, state.experiments, state.capabilities),
         build.packaged ? undefined : state.developerTools,
         state.panel,
+        state.reload,
       ),
     );
   };
@@ -404,6 +448,7 @@ function fullMenuTemplate(
   update?: UpdateMenu,
   developerTools?: DeveloperToolsMenu,
   panel?: PanelMenu,
+  reload?: ReloadMenu,
 ): MenuItemConstructorOptions[] {
   return [
     {
@@ -412,7 +457,7 @@ function fullMenuTemplate(
         { role: "about" },
         ...(update ? [updateItem(update)] : []),
         SEPARATOR,
-        commandItem(APP_COMMAND.SETTINGS),
+        opening(commandItem(APP_COMMAND.SETTINGS)),
         SEPARATOR,
         { role: "services" },
         SEPARATOR,
@@ -438,7 +483,7 @@ function fullMenuTemplate(
         commandItem(APP_COMMAND.COPY_LINK),
         SEPARATOR,
         commandItem(APP_COMMAND.MARK_TASK_DONE),
-        commandItem(APP_COMMAND.DELETE_TASK),
+        opening(commandItem(APP_COMMAND.DELETE_TASK)),
       ],
     },
     {
@@ -476,6 +521,11 @@ function fullMenuTemplate(
     {
       label: "View",
       submenu: [
+        // Note that the window chosen over is never the hidden voice window,
+        // which takes no focus, so a reload leaves a standing call up
+        // (`voice-window.ts`).
+        reloadItem(reload),
+        SEPARATOR,
         commandItem(APP_COMMAND.TOGGLE_SIDEBAR),
         commandItem(APP_COMMAND.TOGGLE_SIDE_PANEL),
         commandItem(APP_COMMAND.SHOW_TERMINAL),
@@ -505,6 +555,8 @@ function fullMenuTemplate(
     {
       label: "Go",
       submenu: [
+        commandItem(APP_COMMAND.COMMAND_PALETTE),
+        SEPARATOR,
         commandItem(APP_COMMAND.ASK_LUKE),
         commandItem(APP_COMMAND.INBOX),
         commandItem(APP_COMMAND.TASKS),
@@ -515,6 +567,9 @@ function fullMenuTemplate(
         SEPARATOR,
         commandItem(APP_COMMAND.NEXT_RECENT_TAB),
         commandItem(APP_COMMAND.PREVIOUS_RECENT_TAB),
+        SEPARATOR,
+        commandItem(APP_COMMAND.MOVE_TAB_LEFT),
+        commandItem(APP_COMMAND.MOVE_TAB_RIGHT),
       ],
     },
     {
@@ -533,8 +588,8 @@ function fullMenuTemplate(
       submenu: [
         commandItem(APP_COMMAND.KEYBOARD_SHORTCUTS),
         SEPARATOR,
-        menuItem(APP_COMMAND.SEND_FEEDBACK),
-        menuItem(APP_COMMAND.SUGGEST_FEATURE),
+        opening(menuItem(APP_COMMAND.SEND_FEEDBACK)),
+        opening(menuItem(APP_COMMAND.SUGGEST_FEATURE)),
       ],
     },
   ];

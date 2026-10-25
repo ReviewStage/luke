@@ -1,12 +1,11 @@
 import type { ReviewThread } from "@luke/features/coding-agent-wire";
-import {
-  PULL_REQUEST_ACTION,
-  PULL_REQUEST_WRITE_BOUNDS,
-} from "@luke/features/pull-request-write-wire";
-import { BUTTON_VARIANT, Button, TextArea } from "@luke/ui";
+import { PULL_REQUEST_ACTION } from "@luke/features/pull-request-write-wire";
+import { BUTTON_VARIANT, Button } from "@luke/ui";
 import { CircleCheckIcon, RotateCcwIcon } from "lucide-react";
-import { createContext, useContext, useEffect, useRef, useState } from "react";
+import { createContext, type ReactNode, useContext, useRef, useState } from "react";
+import { type HeldBodies, heldBodies } from "./comment-drafts.js";
 import { PullRequestWriteNote, usePullRequestWrites } from "./pull-request-writes.js";
+import { ReplyForm, type ReplyFormWords } from "./reply-form.js";
 
 /**
  * pull-request-thread-actions.tsx -- what a member does on a review thread of an agent's pull request, wherever the thread is drawn: reply to it in Markdown, and resolve it or open it again, as stage-cli's review cards offer.
@@ -31,16 +30,20 @@ import { PullRequestWriteNote, usePullRequestWrites } from "./pull-request-write
 /** The controls' own words. */
 const THREAD_WORDS = {
   REPLY_OPEN: "Reply…",
-  REPLY: "Reply",
-  REPLYING: "Replying",
-  REPLY_FIELD: "Reply",
-  REPLY_PLACEHOLDER: "Reply in Markdown…",
-  CANCEL: "Cancel",
   RESOLVE: "Resolve conversation",
   RESOLVING: "Resolving conversation",
   UNRESOLVE: "Unresolve conversation",
   UNRESOLVING: "Unresolving conversation",
 } as const;
+
+/** What a reply's form is named, asks for, and says. */
+const REPLY_WORDS: ReplyFormWords = {
+  field: "Reply",
+  placeholder: "Reply",
+  cancel: "Cancel",
+  send: "Reply",
+  sending: "Replying",
+};
 
 /** Which agent's pull request a tab's threads are on, and what to read again once one changes. */
 interface ThreadWrites {
@@ -48,80 +51,50 @@ interface ThreadWrites {
   readonly onWritten: () => void;
 }
 
-const ThreadWritesContext = createContext<ThreadWrites | undefined>(undefined);
+/** What a tab's threads write on, and the words held in its replies and its pending-comment edits, which outlast the box they were written in. */
+interface ThreadWritesHeld extends ThreadWrites {
+  readonly replies: HeldBodies;
+  readonly edits: HeldBodies;
+}
 
-/** Gives every review thread drawn under it its controls, on the agent named. */
-export const ThreadWritesProvider = ThreadWritesContext.Provider;
+const ThreadWritesContext = createContext<ThreadWritesHeld | undefined>(undefined);
+
+/**
+ * Gives every review thread drawn under it its controls, on the agent named,
+ * and keeps the words of a reply or an edit closed unsent for as long as it
+ * stands, by the thread's id and the comment's, so one closed by Esc, or
+ * scrolled out of the list and back, loses nothing.
+ */
+export function ThreadWritesProvider({
+  value,
+  children,
+}: {
+  value: ThreadWrites;
+  children: ReactNode;
+}): React.JSX.Element {
+  const replies = useRef(heldBodies());
+  const edits = useRef(heldBodies());
+  return (
+    <ThreadWritesContext.Provider
+      value={{
+        agentId: value.agentId,
+        onWritten: value.onWritten,
+        replies: replies.current,
+        edits: edits.current,
+      }}
+    >
+      {children}
+    </ThreadWritesContext.Provider>
+  );
+}
 
 /** Which agent's pull request the tab around the caller writes to, and what it reads again after; none outside a tab. A reaction's controls take it too (`pull-request-reactions.tsx`). */
-export function useThreadWriting(): ThreadWrites | undefined {
+export function useThreadWriting(): ThreadWritesHeld | undefined {
   return useContext(ThreadWritesContext);
 }
 
 /** What a thread drawn outside a tab reads again once changed: nothing, since it offers no change. */
 export function noop(): void {}
-
-/**
- * The reply being written: a field, Cancel, and Reply; ⌘↩ sends it and
- * Escape lets it go. While any change to its thread is out, the reply
- * stands still, neither sent nor let go, so nothing is posted twice and
- * nothing written is lost to a refusal.
- */
-function ReplyForm({
-  busy,
-  sending,
-  onSend,
-  onCancel,
-}: {
-  /** Whether a change to the thread is out, this reply or another. */
-  busy: boolean;
-  /** Whether the change out is this reply. */
-  sending: boolean;
-  onSend: (body: string) => void;
-  onCancel: () => void;
-}): React.JSX.Element {
-  const [body, setBody] = useState("");
-  const field = useRef<HTMLTextAreaElement>(null);
-  const blank = body.trim() === "";
-  const send = () => {
-    if (!blank && !busy) onSend(body);
-  };
-
-  useEffect(() => {
-    field.current?.focus();
-  }, []);
-
-  return (
-    <div className="pull-request-thread-reply">
-      <TextArea
-        ref={field}
-        label={THREAD_WORDS.REPLY_FIELD}
-        placeholder={THREAD_WORDS.REPLY_PLACEHOLDER}
-        value={body}
-        maxLength={PULL_REQUEST_WRITE_BOUNDS.MAX_BODY_CHARS}
-        rows={3}
-        busy={busy}
-        onChange={setBody}
-        onEscape={onCancel}
-        onSubmit={send}
-      />
-      <div className="pull-request-thread-reply-foot">
-        <Button disabled={busy} onClick={onCancel}>
-          {THREAD_WORDS.CANCEL}
-        </Button>
-        <Button
-          variant={BUTTON_VARIANT.PRIMARY}
-          disabled={blank || (busy && !sending)}
-          busy={sending}
-          busyLabel={THREAD_WORDS.REPLYING}
-          onClick={send}
-        >
-          {THREAD_WORDS.REPLY}
-        </Button>
-      </div>
-    </div>
-  );
-}
 
 /** What the resolve press says, by where the thread stands and whether its change is out. */
 function resolveWords(resolved: boolean, out: boolean): string {
@@ -149,14 +122,25 @@ export function ThreadActions({ thread }: { thread: ReviewThread }): React.JSX.E
     <div className="pull-request-thread-actions">
       {replying ? (
         <ReplyForm
+          words={REPLY_WORDS}
+          start={writing.replies.of(id) ?? ""}
           busy={out !== undefined}
           sending={out === PULL_REQUEST_ACTION.REPLY_TO_THREAD}
+          onWrite={(body) => writing.replies.keep(id, body === "" ? undefined : body)}
           onSend={(body) =>
-            writes.write({ action: PULL_REQUEST_ACTION.REPLY_TO_THREAD, threadId: id, body }, () =>
-              setReplying(false),
+            writes.write(
+              { action: PULL_REQUEST_ACTION.REPLY_TO_THREAD, threadId: id, body },
+              () => {
+                writing.replies.keep(id, undefined);
+                setReplying(false);
+              },
             )
           }
-          onCancel={() => setReplying(false)}
+          onLeave={() => setReplying(false)}
+          onDiscard={() => {
+            writing.replies.keep(id, undefined);
+            setReplying(false);
+          }}
         />
       ) : null}
       <div className="pull-request-thread-actions-row">

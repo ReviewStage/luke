@@ -6,15 +6,18 @@ import {
   COLLECTION_STATE,
   CollectionPage,
   type CollectionState,
-  EllipsisIcon,
-  IconButton,
+  FailureNote,
   LIST_ROW_CURRENT,
   List,
   ListRow,
+  MoreButton,
   PAGE_FRAME,
   PAGE_WIDTH,
   PlusIcon,
   Skeleton,
+  TEXT_ELEMENT,
+  TEXT_VARIANT,
+  Text,
   TextField,
 } from "@luke/ui";
 import { useState } from "react";
@@ -85,6 +88,7 @@ function Tasks({
   const [open, setOpen] = useState<string>("billing");
   return (
     <CollectionPage
+      frame={PAGE_FRAME.PAGE}
       title="Tasks"
       description="Everything planned in this workspace."
       actions={
@@ -108,7 +112,7 @@ function Tasks({
       loadingLabel="Reading tasks"
       skeleton={skeleton}
       empty={<p>No tasks yet. Start one by talking it through.</p>}
-      error={<p role="alert">Tasks could not be read. Try again in a moment.</p>}
+      error={<FailureNote>Tasks could not be read. Try again in a moment.</FailureNote>}
     >
       <List label="Tasks">
         {TASKS.map((task) => (
@@ -119,7 +123,7 @@ function Tasks({
             meta={task.when}
             current={open === task.id ? LIST_ROW_CURRENT.ITEM : undefined}
             onPress={() => setOpen(task.id)}
-            actions={<IconButton icon={<EllipsisIcon />} label={`More for ${task.name}`} />}
+            actions={<MoreButton thing={task.name} />}
           />
         ))}
       </List>
@@ -131,7 +135,13 @@ function Tasks({
 function Toolbar(): React.JSX.Element {
   return (
     <header className="catalog-window-toolbar">
-      <h1 className="catalog-window-toolbar-title">Tasks</h1>
+      <Text
+        as={TEXT_ELEMENT.H1}
+        variant={TEXT_VARIANT.TOOLBAR_TITLE}
+        className="catalog-window-toolbar-title"
+      >
+        Tasks
+      </Text>
       <Button variant={BUTTON_VARIANT.OUTLINE} icon={<PlusIcon />}>
         New task
       </Button>
@@ -152,7 +162,7 @@ function TasksUnderToolbar({ state }: { state: CollectionState }): React.JSX.Ele
       state={state}
       loadingLabel="Reading tasks"
       empty={<p>No tasks yet. Start one by talking it through.</p>}
-      error={<p role="alert">Tasks could not be read. Try again in a moment.</p>}
+      error={<FailureNote>Tasks could not be read. Try again in a moment.</FailureNote>}
     >
       <List label="Tasks">
         {TASKS.map((task) => (

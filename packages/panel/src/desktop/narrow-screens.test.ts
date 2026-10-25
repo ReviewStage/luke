@@ -104,6 +104,12 @@ const WIDE = 1280;
 /** A phone's width. */
 const PHONE = 390;
 
+/** A stage wide enough for the window's panes side by side, though under the split's line for a screen that fills it, as a narrow Mac window or browser tab is. */
+const UNDER_SPLIT = 800;
+
+/** The screens that take the whole window, and so are as wide as the stage they fill. */
+const WHOLE_WINDOW_SCREENS = ["app-stage", "desktop-settings", "desktop-version-history"];
+
 /** A revision of the plan by the notetaker. */
 function line(seq: number) {
   return {
@@ -280,7 +286,8 @@ async function mount(width: number, window: React.JSX.Element): Promise<HTMLElem
   vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (
     this: HTMLElement,
   ) {
-    return DOMRect.fromRect({ width: this.classList.contains("app-stage") ? stageWidth : 0 });
+    const fills = WHOLE_WINDOW_SCREENS.some((name) => this.classList.contains(name));
+    return DOMRect.fromRect({ width: fills ? stageWidth : 0 });
   });
   const container = document.createElement("div");
   document.body.append(container);
@@ -315,10 +322,19 @@ function onScreen(page: HTMLElement, columns: Readonly<Record<string, string>>):
     .map(([name]) => name);
 }
 
-/** The button in `within` that says `words`, or none. */
+/** What a phone's way back from a Chat place to its rail is named, its glyph alone. */
+const BACK_TO_CHAT = "Chat";
+
+/** What a control is named: its words, folded or not, or its label where it has no words. */
+function controlName(control: Element | null | undefined): string | null {
+  return control?.textContent?.trim() || control?.getAttribute("aria-label") || null;
+}
+
+/** The button in `within` that says `words`, by its words or its name, or none. */
 function buttonSaying(within: HTMLElement, words: string): HTMLButtonElement | undefined {
+  // Note that a phone's way back is its glyph alone, so it says its words by its name.
   return [...within.querySelectorAll("button")].find(
-    (button) => button.textContent?.trim() === words,
+    (button) => button.textContent?.trim() === words || button.getAttribute("aria-label") === words,
   );
 }
 
@@ -357,6 +373,46 @@ test("Settings on a narrow stage opens on its page list, a page chosen stands al
     "the desktop's width stands the list beside the page again",
   );
   assert.equal(buttonSaying(the(page, SETTINGS_COLUMNS.page), "Settings"), undefined);
+});
+
+test("Settings on a stage wide enough for panes, but under the split's line by its own width, shows its list, then a page chosen alone under a way back, and splits again once wide", async () => {
+  const page = await mount(UNDER_SPLIT, createElement(SettingsWindow, { link: undefined }));
+  assert.equal(the(page, ".desktop-shell").dataset["room"], "wide", "the stage is no phone's");
+  assert.deepEqual(onScreen(page, SETTINGS_COLUMNS), ["list"]);
+
+  press(the(page, SETTINGS_COLUMNS.list), "Appearance");
+  assert.deepEqual(onScreen(page, SETTINGS_COLUMNS), ["page"]);
+
+  press(the(page, SETTINGS_COLUMNS.page), "Settings");
+  assert.deepEqual(onScreen(page, SETTINGS_COLUMNS), ["list"]);
+
+  press(the(page, SETTINGS_COLUMNS.list), "Appearance");
+  resizeStage(WIDE);
+  assert.deepEqual(onScreen(page, SETTINGS_COLUMNS), ["list", "page"]);
+  assert.equal(buttonSaying(the(page, SETTINGS_COLUMNS.page), "Settings"), undefined);
+});
+
+test("Settings' page list is as wide as the sidebar kept, but never more than its share of the stage", async () => {
+  const page = await mount(WIDE, createElement(SettingsWindow, { link: undefined }));
+  assert.equal(
+    getComputedStyle(the(page, ".desktop-settings")).gridTemplateColumns,
+    "min(var(--sidebar-width), 35%) minmax(0, 1fr)",
+    "the list's column is held to the share the split's line leaves its least list",
+  );
+});
+
+test("Settings' page list kept wider than its share moves from the width it is drawn at, at the first press of its edge", async () => {
+  window.localStorage.setItem("luke.sidebar-width", "400");
+  const page = await mount(900, createElement(SettingsWindow, { link: undefined }));
+  const edge = the(page, '[role="separator"][aria-label="Resize sidebar"]');
+  act(() => {
+    edge.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowLeft", bubbles: true }));
+  });
+  assert.equal(
+    edge.getAttribute("aria-valuenow"),
+    String(Math.round(900 * 0.35) - 16),
+    "one step narrower than the 35% of the stage it is drawn at, not than the 400 kept",
+  );
 });
 
 test("a link to a Settings page on a narrow stage opens on that page, with the way back to the list", async () => {
@@ -435,6 +491,21 @@ test("a version history on a narrow stage opens on its versions, a version chose
   assert.equal(buttonSaying(the(page, HISTORY_COLUMNS.version), "Versions"), undefined);
 });
 
+test("a version history under the split's line by its own width, on a stage wide enough for panes, opens on its versions and stands a version chosen alone under a way back", async () => {
+  const page = await mount(UNDER_SPLIT, createElement(HistoryWindow, { returnTo: undefined }));
+  assert.deepEqual(onScreen(page, HISTORY_COLUMNS), ["list"]);
+
+  act(() => versionRow(page, 1).click());
+  await settle();
+  assert.deepEqual(onScreen(page, HISTORY_COLUMNS), ["version"]);
+
+  press(the(page, HISTORY_COLUMNS.version), "Versions");
+  assert.deepEqual(onScreen(page, HISTORY_COLUMNS), ["list"]);
+
+  resizeStage(WIDE);
+  assert.deepEqual(onScreen(page, HISTORY_COLUMNS), ["list", "version"]);
+});
+
 test("a link to a version on a narrow stage opens on that version, with the way back to the list", async () => {
   const page = await mount(
     PHONE,
@@ -485,13 +556,17 @@ test("Chat on a narrow stage opens on its rail, a place chosen stands alone unde
   act(() => forYou?.click());
   assert.deepEqual(onScreen(page, CHAT_COLUMNS), ["place"]);
   assert.equal(the(page, CHAT_COLUMNS.place).getAttribute("aria-label"), "For you");
+  // A phone heads the place as it heads every page: the way back's glyph alone, the name centred, nothing else.
+  const head = the(page, ".chat-place-head");
+  assert.deepEqual([...head.querySelectorAll("button")].map(controlName), [BACK_TO_CHAT]);
+  assert.equal(head.querySelector("h1")?.textContent, "For you");
 
-  press(the(page, CHAT_COLUMNS.place), "Chat");
+  press(the(page, CHAT_COLUMNS.place), BACK_TO_CHAT);
   assert.deepEqual(onScreen(page, CHAT_COLUMNS), ["rail"]);
 
   resizeStage(WIDE);
   assert.deepEqual(onScreen(page, CHAT_COLUMNS), ["rail", "place"]);
-  assert.equal(buttonSaying(the(page, CHAT_COLUMNS.place), "Chat"), undefined);
+  assert.equal(buttonSaying(the(page, CHAT_COLUMNS.place), BACK_TO_CHAT), undefined);
 });
 
 test("a link to a chat place on a narrow stage opens on that place, with the way back to the rail", async () => {
@@ -504,7 +579,7 @@ test("a link to a chat place on a narrow stage opens on that place, with the way
   );
   assert.deepEqual(onScreen(page, CHAT_COLUMNS), ["place"]);
 
-  press(the(page, CHAT_COLUMNS.place), "Chat");
+  press(the(page, CHAT_COLUMNS.place), BACK_TO_CHAT);
   assert.deepEqual(onScreen(page, CHAT_COLUMNS), ["rail"]);
 });
 
@@ -569,10 +644,30 @@ test("a place chosen in a narrow Chat takes the focus to its way back, and Back 
     forYou.click();
   });
   assert.equal(focusIn(page, CHAT_COLUMNS), "place");
-  assert.equal(document.activeElement?.textContent?.trim(), "Chat", "the way back to the rail");
+  assert.equal(controlName(document.activeElement), BACK_TO_CHAT, "the way back to the rail");
 
-  pressFocused(the(page, CHAT_COLUMNS.place), "Chat");
+  pressFocused(the(page, CHAT_COLUMNS.place), BACK_TO_CHAT);
   assert.equal(document.activeElement, forYou, "the row chosen");
+});
+
+test("a narrow Chat stepped to another place by its key hands the focus back to that place's row, not the row it was opened from", async () => {
+  handState(experimentsOn(EXPERIMENT.CHAT));
+  const page = await mount(PHONE, createElement(ChatWindow, { opensOn: undefined }));
+  const forYou =
+    [...the(page, CHAT_COLUMNS.rail).querySelectorAll("button")].find((button) =>
+      button.textContent?.startsWith("For you"),
+    ) ?? assert.fail("For you's row stands");
+  act(() => {
+    forYou.focus();
+    forYou.click();
+  });
+  act(() => runAppCommand(APP_COMMAND.NEXT_CHAT_CHANNEL));
+  const shown = the(page, CHAT_COLUMNS.place).getAttribute("aria-label");
+  assert.notEqual(shown, "For you", "the key stepped to another place");
+
+  pressFocused(the(page, CHAT_COLUMNS.place), BACK_TO_CHAT);
+  assert.notEqual(document.activeElement, forYou);
+  assert.ok(document.activeElement?.closest("[aria-current]"), "the row of the place shown");
 });
 
 test("a wide Settings turned narrow hands the focus from the hidden page list to the page's way back", async () => {
@@ -592,7 +687,7 @@ test("a link to a version on a narrow stage opens with the focus on its way back
   assert.equal(document.activeElement?.textContent?.trim(), "Versions", "the way back to the list");
 });
 
-test("a link to a chat place on a narrow stage opened while the read is out hands the focus to its way back once the read lands", async () => {
+test("a link to a chat channel on a narrow stage opened while the read is out hands the caret to its box once the read lands", async () => {
   const chat = fixtureChat({ fixtureMode: true }, 1_000_000);
   const channel = chat?.answer.channels[0] ?? assert.fail("the fixture has a channel");
   handState(experimentsOn(EXPERIMENT.CHAT));
@@ -605,5 +700,5 @@ test("a link to a chat place on a narrow stage opened while the read is out hand
   );
   act(() => landChatRead?.());
   assert.equal(focusIn(page, CHAT_COLUMNS), "place");
-  assert.equal(document.activeElement?.textContent?.trim(), "Chat", "the way back to the rail");
+  assert.ok(document.activeElement?.closest(".chat-composer"), "the channel's box");
 });

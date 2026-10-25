@@ -6,13 +6,20 @@ import {
   type CodingAgentAgentAnswer,
 } from "@luke/features/coding-agent-view";
 import { CODING_AGENT_STATUS, type CodingAgentMessage } from "@luke/features/coding-agent-wire";
+import { GLYPH, type Glyph } from "@luke/ui/icons";
 import { MESSAGE_ROLE } from "@luke/wire";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
+import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, test } from "vitest";
 import { onRegistry } from "../testing/copy-feedback.js";
-import { rewindPoints } from "./rewind-action.js";
+import {
+  EditMessageAction,
+  RevertMessageAction,
+  RewindProvider,
+  rewindPoints,
+} from "./rewind-action.js";
 import { type HeldComposer, useAgentComposer } from "./use-agent-composer.js";
 
 /**
@@ -66,7 +73,7 @@ test("Edit writes again a person's lines, a teammate's among them, and never an 
     { ...message("agent", MESSAGE_ROLE.USER), sentBy: { name: "Jack", agent: true } },
   ];
 
-  const { editable, revertsAt } = rewindPoints(lines);
+  const { editable, revertsAt } = rewindPoints(lines, false, "user-1");
 
   assert.deepEqual([...editable].toSorted(), ["plan", "teammate"]);
   assert.equal(revertsAt.get("teammate-reply"), "automation");
@@ -74,7 +81,7 @@ test("Edit writes again a person's lines, a teammate's among them, and never an 
 });
 
 test("Edit writes again every line that opened a turn, the first included, and a reply reverts to the next of them", () => {
-  const { editable, revertsAt } = rewindPoints(TRANSCRIPT);
+  const { editable, revertsAt } = rewindPoints(TRANSCRIPT, false, "user-1");
 
   assert.deepEqual([...editable].toSorted(), ["plan", "second-line", "third-line"]);
   assert.deepEqual(
@@ -200,4 +207,146 @@ test("a revert hides the line and everything after it until the transcript drops
 
   assert.deepEqual(calls, ["rewind:third-line"]);
   assert.deepEqual([...(composer().cut ?? [])], ["third-line", "third-reply"]);
+});
+
+test("Revert to here wears the go-back glyph and Edit the rename glyph", async () => {
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  roots.push(root);
+  const nothing = () => undefined;
+  const doors = {
+    editing: undefined,
+    onEdit: nothing,
+    onCancelEdit: nothing,
+    onSendEdit: nothing,
+    editor: () => assert.fail("no line is open for writing"),
+    onRevert: nothing,
+    revertsAt: new Map([["first-reply", "second-line"]]),
+    editable: new Set(["plan"]),
+    followed: new Set<string>(),
+    revertTakes: new Map<string, string>(),
+    editTakes: new Map<string, string>(),
+  };
+  await act(async () =>
+    root.render(
+      onRegistry(
+        AtomRegistry.make(),
+        createElement(
+          RewindProvider,
+          { value: doors },
+          createElement(EditMessageAction, { messageId: "plan" }),
+          createElement(RevertMessageAction, { messageId: "first-reply" }),
+        ),
+      ),
+    ),
+  );
+
+  const glyphOf = (label: string): string | undefined =>
+    container.querySelector(`[aria-label="${label}"] svg`)?.outerHTML;
+  const markup = (glyph: Glyph): string => renderToStaticMarkup(createElement(glyph));
+  assert.equal(glyphOf("Edit"), markup(GLYPH.RENAME));
+  assert.equal(glyphOf("Revert to here"), markup(GLYPH.GO_BACK));
+});
+
+/** A line a member sent: the reader's own, or a teammate's by name. */
+function lineFrom(id: string, name: string, userId: string | undefined): CodingAgentMessage {
+  return {
+    ...message(id, MESSAGE_ROLE.USER),
+    sentBy: { name, ...(userId === undefined ? undefined : { userId }), kind: "member" },
+  };
+}
+
+/** The transcript a teammate joined: the reader's line, then Sam's two, a reply between, and Priya's. */
+const SHARED: readonly CodingAgentMessage[] = [
+  lineFrom("mine", "Dean", "user-1"),
+  message("reply-1", MESSAGE_ROLE.ASSISTANT),
+  lineFrom("sam-1", "Sam", "user-2"),
+  message("reply-2", MESSAGE_ROLE.ASSISTANT),
+  lineFrom("sam-2", "Sam", "user-2"),
+  message("reply-3", MESSAGE_ROLE.ASSISTANT),
+  lineFrom("priya", "Priya", "user-3"),
+];
+
+test("a rewind names the teammates whose messages it drops and how many, and none where only the reader's follow", () => {
+  const { revertTakes, editTakes } = rewindPoints(SHARED, false, "user-1");
+
+  assert.equal(revertTakes.get("reply-1"), "2 messages from Sam and 1 message from Priya");
+  assert.equal(revertTakes.get("reply-2"), "1 message from Sam and 1 message from Priya");
+  assert.equal(revertTakes.get("reply-3"), "1 message from Priya");
+  assert.equal(editTakes.get("mine"), "2 messages from Sam and 1 message from Priya");
+  assert.equal(editTakes.get("sam-1"), "1 message from Sam and 1 message from Priya");
+  assert.equal(editTakes.has("priya"), false);
+
+  const own = rewindPoints(
+    [
+      lineFrom("a", "Dean", "user-1"),
+      message("r", MESSAGE_ROLE.ASSISTANT),
+      lineFrom("b", "Dean", "user-1"),
+    ],
+    false,
+    "user-1",
+  );
+  assert.equal(own.revertTakes.size, 0);
+  assert.equal(own.editTakes.size, 0);
+});
+
+/** The body of the question a press on Revert to here raises, over `shared` as the reader `readerId` sees it. */
+async function revertBody(
+  readerId: string,
+  shared: readonly CodingAgentMessage[] = SHARED,
+): Promise<string | undefined> {
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  roots.push(root);
+  const nothing = () => undefined;
+  const points = rewindPoints(shared, false, readerId);
+  await act(async () =>
+    root.render(
+      onRegistry(
+        AtomRegistry.make(),
+        createElement(
+          RewindProvider,
+          {
+            value: {
+              editing: undefined,
+              onEdit: nothing,
+              onCancelEdit: nothing,
+              onSendEdit: nothing,
+              editor: () => assert.fail("no line is open for writing"),
+              onRevert: nothing,
+              ...points,
+            },
+          },
+          createElement(RevertMessageAction, { messageId: "reply-1" }),
+        ),
+      ),
+    ),
+  );
+  const revert = container.querySelector<HTMLButtonElement>('[aria-label="Revert to here"]');
+  await act(async () => revert?.click());
+  return document.querySelector('[role="alertdialog"]')?.textContent ?? undefined;
+}
+
+test("Revert to here says whose messages it drops where a teammate's follow, and the plain words where only the reader's do", async () => {
+  const shared = await revertBody("user-1");
+  assert.ok(
+    shared?.includes(
+      "Everything after it, including 2 messages from Sam and 1 message from Priya, will be removed from the transcript",
+    ),
+    String(shared),
+  );
+  for (const root of roots.splice(0)) act(() => root.unmount());
+  document.body.innerHTML = "";
+  const alone = await revertBody("user-1", [
+    lineFrom("a", "Dean", "user-1"),
+    message("reply-1", MESSAGE_ROLE.ASSISTANT),
+    lineFrom("b", "Dean", "user-1"),
+  ]);
+  assert.ok(
+    alone?.includes("Everything after it will be removed from the transcript"),
+    String(alone),
+  );
+  assert.ok(!alone?.includes("including"), String(alone));
 });

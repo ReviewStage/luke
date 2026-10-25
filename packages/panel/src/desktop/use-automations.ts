@@ -22,7 +22,8 @@ import { useFollowedAutomations } from "./use-followed-automations.js";
  * its place in the list at once, a new one first, where it is the newest
  * write of that automation, and a deletion takes its row away, until the
  * list pushed next stands in for it. A push that fails keeps the list it
- * would have replaced, so nothing drawn from it is taken down. A failure is kept to be said rather
+ * would have replaced, so nothing drawn from it is taken down, and is told as
+ * `refreshFailed` until a push lands. A failure is kept to be said rather
  * than thrown, since every caller does the same with one: says it, and
  * offers to try again.
  */
@@ -52,10 +53,11 @@ function without(read: AutomationsRead, automationId: string): AutomationsRead {
   return { automations: read.automations.filter((each) => each.id !== automationId) };
 }
 
-/** A read held with the workspace it is of, so another workspace's list is never drawn as this one's. */
+/** A read held with the workspace it is of, so another workspace's list is never drawn as this one's, and whether the push after it failed. */
 interface HeldRead {
   readonly workspaceId: string;
   readonly read: AutomationsRead;
+  readonly refreshFailed: boolean;
 }
 
 /** One workspace's automations, none asked for while no workspace is listed, with the writes that make, change, and delete one. */
@@ -67,8 +69,9 @@ export function useAutomations(workspaceId: string | undefined) {
   const writes = useRef(0);
   const newestWrite = useRef(new Map<string, number>()).current;
   // Note that a push that fails keeps the list it would have replaced, so a
-  // page drawn from it, an editor's draft among them, stands; only a failure
-  // with nothing held yet is said as one.
+  // page drawn from it, an editor's draft among them, stands; the failure is
+  // kept beside it as `refreshFailed`, which the list says, and only a failure
+  // with nothing held yet is said as a read that failed.
   // Note that every list pushed is counted, so a write's answer that lands after a push it was
   // sent before draws nothing over it: that push may hold a newer write of another window's, and
   // the write's own commit is pushed after it in any case.
@@ -87,8 +90,10 @@ export function useAutomations(workspaceId: string | undefined) {
       was?.workspaceId === workspaceId &&
       was.read !== undefined &&
       "automations" in was.read
-        ? was
-        : { workspaceId, read },
+        ? was.refreshFailed
+          ? was
+          : { ...was, refreshFailed: true }
+        : { workspaceId, read, refreshFailed: false },
     );
   });
   /**
@@ -197,6 +202,8 @@ export function useAutomations(workspaceId: string | undefined) {
       ),
     [act, written, landAutomation],
   );
-  const read = held?.workspaceId === workspaceId ? held?.read : undefined;
-  return { read, reload, create, change, toggle, remove, newWebhookSecret };
+  const current = held?.workspaceId === workspaceId ? held : undefined;
+  const read = current?.read;
+  const refreshFailed = current?.refreshFailed === true;
+  return { read, refreshFailed, reload, create, change, toggle, remove, newWebhookSecret };
 }

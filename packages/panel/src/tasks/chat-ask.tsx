@@ -8,26 +8,27 @@ import {
   knownResponse,
 } from "@luke/features/chat-wire";
 import { type InboxAsk, inboxResponseAsk } from "@luke/features/inbox-wire";
-import { andList } from "@luke/features/words";
+import { andList, pasteCutWords } from "@luke/features/words";
 import {
   CARD_LOOK,
   CARD_PADDING,
   Card,
   CardHead,
-  ErrorState,
   GAP,
   LAYOUT_ELEMENT,
   Stack,
+  TEXT_ELEMENT,
   TEXT_TONE,
   TEXT_VARIANT,
   Text,
-  Time,
 } from "@luke/ui";
 import { type Actor, actorName } from "@luke/ui/actor-model";
 import type { ChatAskAnswer } from "@luke/ui/chat-model";
 import { CheckIcon } from "lucide-react";
 import { type RefObject, useRef, useState } from "react";
-import { ActorLine, ActorRef } from "../actor-ref.js";
+import { actFailureWords } from "../act.js";
+import { ActorLine, ActorRef, commentAuthor } from "../actor-ref.js";
+import { DRAFT_PLACE, type Draft, EMPTY_DRAFT, useDraft } from "../composer-drafts.js";
 import { useIntegrationStatuses } from "../integration-statuses.js";
 import {
   chatAnsweredAt,
@@ -38,6 +39,7 @@ import {
   chatAskWaitsOn,
   chatNumberedPick,
 } from "./chat-ask-model.js";
+import type { ChatComposerMentions } from "./chat-composer.js";
 import { useChatReplyDoor } from "./chat-reply-doors.js";
 import {
   AnswerForm,
@@ -49,6 +51,7 @@ import {
   ANSWERED,
   AnsweredCard,
   AskControls,
+  askSendChord,
   bareKey,
   DraftQuestion,
   focusMissing,
@@ -62,7 +65,7 @@ import {
   WithdrawnWords,
 } from "./inbox-ask-controls.js";
 import { askHeadWords } from "./inbox-ask-words.js";
-import { COMMENT, Comment, CommentName, THREAD_TIME_CLASS } from "./inbox-comment.js";
+import { COMMENT, InboxComment } from "./inbox-comment.js";
 import type { FormTextDoors } from "./inbox-form-text.js";
 import {
   answerDid,
@@ -99,8 +102,15 @@ import { SentWords } from "./skill-chip.js";
  * again taking it off, and the box's Send sends it, lit once the card holds
  * anything; a send that lacks something sends nothing and takes the keyboard
  * there, and Enter on an option or in a field sends as Send does. An
- * acknowledgement's Send reads Got it until a word is written. The note line
- * takes mentions where the page hands them, and a dictation, but no files,
+ * acknowledgement's Send reads Got it until a word is written. What the
+ * card holds unsent, its picks and its note, is a draft kept by message at
+ * the ask's revision (`composer-drafts.ts`), so the chat closing, a switch
+ * away, or the card scrolling out finds it as it was; an answer taken lets
+ * it go. The note line
+ * takes the channel's mentions, as the chat's own box does
+ * (`chat-mention-source.ts`): an `@` lists the members a mention there
+ * tells, then the channel's task, and a `#` names the channels. It takes a
+ * dictation too, but no files,
  * which a chat answer does not carry. Words selected in the card, its
  * title, its blocks, and its options, steps, and fields' names, and
  * replied to are quoted into its note line while it may be answered
@@ -136,6 +146,8 @@ interface AskCardProps {
   readonly blocks: React.ReactNode;
   /** The actor a member is drawn as, by the member's id (`chat-actors.ts`). */
   readonly actorOf: (memberId: string) => Actor;
+  /** What the note line's `@` and `#` offer: the channel's, as the chat's own box offers there. */
+  readonly mentions: ChatComposerMentions;
   /** The words a dictation into the note line is likely to say. */
   readonly keywords: readonly string[];
   readonly now: number;
@@ -156,6 +168,31 @@ function focusLacking(box: HTMLElement | null, missing: InboxMissing): void {
   focusMissing(box, missing);
 }
 
+/** A card's draft as the drafts keep it, its note as their words. */
+function keptAskDraft(draft: InboxDraft): Draft {
+  return {
+    text: draft.note,
+    attachments: draft.attachments,
+    choices: draft.choices,
+    values: draft.values,
+    steps: draft.steps,
+    press: draft.press,
+  };
+}
+
+/** A kept draft as the card holds it. */
+function askDraftOf(kept: Draft): InboxDraft {
+  return {
+    ...EMPTY_INBOX_DRAFT,
+    note: kept.text,
+    attachments: kept.attachments,
+    choices: kept.choices,
+    values: kept.values,
+    ...(kept.steps === undefined ? undefined : { steps: kept.steps }),
+    ...(kept.press === undefined ? undefined : { press: kept.press }),
+  };
+}
+
 /**
  * An open card's answer: the ask's controls as the box's body, the note
  * line, and the foot's microphone and Send, as an Inbox item's box draws
@@ -168,6 +205,7 @@ function Answer({
   response,
   asked,
   self,
+  mentions,
   keywords,
   onAnswer,
 }: {
@@ -179,13 +217,23 @@ function Answer({
   asked: InboxAsk | undefined;
   /** The poster's agent, which the note line's `@` list does not offer; none where a person or Luke posted it. */
   self: string | undefined;
+  mentions: ChatComposerMentions;
   keywords: readonly string[];
   onAnswer: AskCardProps["onAnswer"];
 }): React.JSX.Element {
   const box = useRef<HTMLDivElement>(null);
-  const [draft, setDraft] = useState<InboxDraft>(EMPTY_INBOX_DRAFT);
+  const kept = useDraft({
+    kind: DRAFT_PLACE.CHAT_ASK,
+    messageId: message.id,
+    revision: ask.revision,
+  });
+  const draft = askDraftOf(kept.draft);
+  const setDraft = (next: InboxDraft | ((was: InboxDraft) => InboxDraft)) =>
+    kept.update((was) => keptAskDraft(typeof next === "function" ? next(askDraftOf(was)) : next));
   const [sending, setSending] = useState(false);
   const [refusal, setRefusal] = useState<string | undefined>(undefined);
+  // Whether the last paste was cut to the room the box has left, until the words change again.
+  const [cut, setCut] = useState(false);
   const statuses = useIntegrationStatuses();
   const asks = asked !== undefined && hasControls(asked);
   const placeholder = answerPlaceholder(
@@ -200,6 +248,7 @@ function Answer({
     skills: undefined,
     keywords,
     statuses,
+    chat: mentions,
     onNote: setRefusal,
   });
   // A Reply over the card's words lays its quote into the note line, never while an answer is out.
@@ -216,14 +265,17 @@ function Answer({
     }
     setSending(true);
     setRefusal(undefined);
+    setCut(false);
     onAnswer({ seq: message.seq, revision: ask.revision, reply }).then(
       (refused) => {
         setSending(false);
         setRefusal(refused);
+        // Note that an answer taken lets the draft go, and one refused keeps it to send again.
+        if (refused === undefined) kept.update(() => EMPTY_DRAFT);
       },
-      (failed: Error) => {
+      (failed: unknown) => {
         setSending(false);
-        setRefusal(failed.message);
+        setRefusal(actFailureWords(failed));
       },
     );
   };
@@ -236,7 +288,7 @@ function Answer({
   };
   const controls =
     asked === undefined || !asks ? undefined : (
-      <DraftQuestion pane={box}>
+      <DraftQuestion pane={box} ask={asked}>
         <AskControls
           ask={asked}
           title={undefined}
@@ -262,7 +314,10 @@ function Answer({
         : [...box.current.querySelectorAll<HTMLButtonElement>(".inbox-ask-presses button")];
     options[number - 1]?.focus();
   };
-  const note = refusal ?? (field.failed ? EDITOR_LOAD_FAILED : undefined);
+  const note =
+    refusal ??
+    (cut ? pasteCutWords(CHAT_BOUNDS.MAX_NOTE_CHARS) : undefined) ??
+    (field.failed ? EDITOR_LOAD_FAILED : undefined);
   return (
     // biome-ignore lint/a11y/noStaticElementInteractions: the keys it hears come from the options and fields inside it, whose numbers pick.
     <div ref={box} className="chat-ask-box" onKeyDown={onNumber}>
@@ -272,23 +327,24 @@ function Answer({
         messages={false}
         controls={controls}
         note={draft.note}
-        onNote={(words) => setDraft((was) => ({ ...was, note: words }))}
+        onNote={(words) => {
+          setCut(false);
+          setDraft((was) => ({ ...was, note: words }));
+        }}
+        onPasteCut={() => setCut(true)}
         placeholder={placeholder}
         maxLength={CHAT_BOUNDS.MAX_NOTE_CHARS}
         onEnter={() => field.room.current?.closest("form")?.requestSubmit()}
         quote={(quote) => <ComposerQuoteView quote={quote} held={sending} />}
+        says={note === undefined ? undefined : { words: note }}
         nod={nod}
+        sendChord={asks ? askSendChord(asked) : undefined}
         sending={sending}
         held={sending}
         // Note that a form of fields none of which must be filled is answered empty, so it holds an answer before anything is in it.
         sendable={nod || chatAskHolds(draft) || chatAskReply(response, draft) !== undefined}
         onSubmit={send}
       />
-      {note === undefined ? null : (
-        <div className="agent-composer-note">
-          <ErrorState>{note}</ErrorState>
-        </div>
-      )}
     </div>
   );
 }
@@ -333,22 +389,16 @@ function AnsweredComment({
   const answerer = actorOf(answeredBy ?? "");
   return (
     <Stack as={LAYOUT_ELEMENT.OL} gap={GAP.NONE} className="inbox-thread" aria-label="Answer">
-      <Comment
+      <InboxComment
         kind={COMMENT.ANSWERED}
-        head={
-          <>
-            <CommentName>
-              <ActorRef actor={answerer} />
-            </CommentName>
-            <span className="inbox-comment-when">
-              {at === undefined ? null : (
-                <>
-                  <Time className={THREAD_TIME_CLASS} at={at} now={now} /> ·{" "}
-                </>
-              )}
-              <Delivered heard={ask.needsReply} poster={actorOf(message.authorId)} />
-            </span>
-          </>
+        author={commentAuthor(answerer)}
+        nameRef={<ActorRef actor={answerer} nameOnly />}
+        at={at}
+        now={now}
+        trailing={
+          <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED} as={TEXT_ELEMENT.SPAN}>
+            <Delivered heard={ask.needsReply} poster={actorOf(message.authorId)} />
+          </Text>
         }
       >
         {drawn ? <AnsweredCard ask={asked} title={undefined} answers={answers} /> : null}
@@ -364,7 +414,7 @@ function AnsweredComment({
             <SentWords text={answer.note} asDocument />
           </div>
         )}
-      </Comment>
+      </InboxComment>
     </Stack>
   );
 }
@@ -389,6 +439,7 @@ export function AskCard({
   answers,
   blocks,
   actorOf,
+  mentions,
   keywords,
   now,
   onAnswer,
@@ -467,6 +518,7 @@ export function AskCard({
                 response={response}
                 asked={asked}
                 self={self}
+                mentions={mentions}
                 keywords={keywords}
                 onAnswer={onAnswer}
               />

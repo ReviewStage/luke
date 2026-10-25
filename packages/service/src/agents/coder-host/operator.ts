@@ -15,7 +15,12 @@
  * first, refusing where it cannot, archives it as its member, its transcript
  * kept, and ensures a fresh one. The member's choice is checked against the
  * catalog before anything is archived, so a Reset the catalog would refuse
- * leaves the standing operator standing. An operator the ensure made runs
+ * leaves the standing operator standing. A Restore, Reset's Undo, stops the
+ * standing operator's turn and archives it in favour of the member's own
+ * archived operator it names, which it brings back in the same
+ * transaction (`restoreOperatorAgent`), and re-aims the heartbeat back at
+ * it; it names nothing for an operator that is not the member's own and
+ * archived, so no member reaches another's. An operator the ensure made runs
  * one opening turn as it is made (`openedOnItsOpening`), in which it reads
  * its member's open work and says what stands; one the ensure found runs
  * none, so a repeat ensure opens nothing.
@@ -42,7 +47,9 @@ import { aimOperatorHeartbeat } from "@luke/database/models/automation-store";
 import {
   archiveOperatorAgent,
   type CodingAgent,
+  readArchivedOperator,
   readStandingOperator,
+  restoreOperatorAgent,
 } from "@luke/database/models/coding-agent-store";
 import { nextScheduledRun } from "@luke/features/automation-schedule";
 import {
@@ -78,9 +85,11 @@ import {
   startCredentialStands,
 } from "./start.js";
 
-/** What an ensure asks beyond the member and the workspace: whether the standing operator is archived first, and how its turn is stopped before it is. */
+/** What an ensure asks beyond the member and the workspace: whether the standing operator is archived first, or which archived one comes back in its place, and how its turn is stopped before it is. */
 export interface OperatorEnsure<R> {
   readonly reset: boolean;
+  /** The id of the member's own archived operator a Reset retired, brought back in place of the one standing, as Reset's Undo asks. */
+  readonly restore: string | undefined;
   /** The IANA zone the member's client runs in, which the heartbeat an ensure makes is read in; UTC where it names none or one that does not read. */
   readonly timeZone: string | undefined;
   /** Stops the turn the standing operator runs, refusing where it cannot, as an archive by hand stops one first (`coder-host/stop.ts`'s `stoppedForGood`). */
@@ -200,6 +209,39 @@ const openedOnItsOpening = (
   );
 
 /**
+ * The member's archived operator named brought back in place of the one
+ * standing, as above: refused as naming nothing where it is not theirs,
+ * not archived, or another operator than the one read stands by the time
+ * it is written. The standing one's turn is stopped first, as a Reset stops
+ * it, and nothing is archived where that stop is refused.
+ */
+const restoredOperator = Effect.fnUntraced(function* <R>(
+  userId: string,
+  workspaceId: string,
+  agentId: string,
+  ensure: OperatorEnsure<R>,
+) {
+  const named = yield* hostedStoreOrUnavailable(readArchivedOperator(userId, workspaceId, agentId));
+  if (Option.isNone(named)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+  const standing = yield* hostedStoreOrUnavailable(readStandingOperator(userId, workspaceId));
+  if (Option.isSome(standing)) yield* ensure.stopStanding(standing.value);
+  const restored = yield* hostedStoreOrUnavailable(
+    restoreOperatorAgent(
+      userId,
+      workspaceId,
+      agentId,
+      Option.isSome(standing) ? standing.value.id : undefined,
+    ),
+  );
+  if (Option.isNone(restored)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+  const { agent, txid, retiredId } = restored.value;
+  const retired = Option.isSome(standing) && retiredId !== undefined ? standing.value : undefined;
+  yield* aimedItsHeartbeat(userId, workspaceId, agent, retired, ensure.timeZone);
+  const answer: OperatorEnsured = { agent, created: false, retired };
+  return txid === undefined ? answer : { ...answer, txid };
+});
+
+/**
  * The member's operator in the workspace, as above: the one standing, or
  * one made now, after the standing one is archived where the ensure is a
  * Reset. Refused as naming nothing for an account that is no member of the
@@ -218,6 +260,9 @@ export const ensureOperator = /* @__PURE__ */ Effect.fn("web/ensureOperator")(fu
 ): Effect.fn.Return<OperatorEnsured, HostedRefusal, StartServices | R> {
   const on = yield* hostedStoreOrUnavailable(accountExperimentOn(userId, EXPERIMENT.OPERATOR));
   if (!on) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+  if (ensure.restore !== undefined) {
+    return yield* restoredOperator(userId, workspaceId, ensure.restore, ensure);
+  }
   // The choice is checked before a Reset archives anything, so a refusal leaves the operator standing.
   const choice = yield* acceptedAgentChoice(userId, undefined).pipe(
     Effect.catchTag("ModelChoiceRefused", () => Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST)),

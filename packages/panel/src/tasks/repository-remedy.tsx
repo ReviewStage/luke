@@ -1,5 +1,5 @@
 import { FAILURE_REASON, type Failure } from "@luke/features/failure-remedy";
-import { SETTINGS_VIEW } from "@luke/settings/settings-views";
+import { agentKeyLink, SETTINGS_VIEW } from "@luke/settings/settings-views";
 import { createContext, useContext } from "react";
 import { useOpenSettings } from "../open-settings.js";
 
@@ -14,9 +14,10 @@ import { useOpenSettings } from "../open-settings.js";
  * the task moved to the workspace whose GitHub reaches it, after which the
  * same send goes again by itself. A member's own GitHub token is replaced
  * in Settings › Profile, through the window's Settings opener, and a
- * missing subscription or API key connected in Settings › Agents, or
- * authorized for an organization's SAML SSO on GitHub. Outside the window, as in a test of one
- * surface, every door does nothing.
+ * missing subscription or API key connected at its harness's row in
+ * Settings › Agents, or authorized for an organization's SAML SSO on
+ * GitHub. Outside the window, as in a test of one surface, every door does
+ * nothing.
  */
 
 /** The window's doors a repository's remedy opens. */
@@ -66,7 +67,7 @@ export function useRepositoryRemedy(): (
       case FAILURE_REASON.AUTHORIZE_TOKEN:
         return () => doors.openGitHub(failure.authorizeUrl);
       case FAILURE_REASON.CONNECT_AGENTS:
-        return () => openSettings({ page: SETTINGS_VIEW.CODING_AGENTS });
+        return () => openSettings(agentKeyLink(failure.provider));
       case FAILURE_REASON.CHOOSE_REPOSITORY:
         return () => doors.chooseRepository(failure.taskId);
       case FAILURE_REASON.MOVE_TASK:

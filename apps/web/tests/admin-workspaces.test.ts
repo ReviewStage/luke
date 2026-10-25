@@ -154,7 +154,7 @@ test("a row names its workspace, owner, installation, and integrations", async (
   expect(northwind).toContain("Grace Hopper");
   expect(northwind).toContain("northwindActive");
   expect(northwind).toContain("Linear");
-  expect(northwind).toContain("Notion · expired");
+  expect(northwind).toContain("Notion · Sign-in expired");
   expect(feldspar).toContain("feldspar-ioSuspended");
   expect(feldspar).toContain("None");
 });
@@ -168,7 +168,7 @@ test("typing narrows the loaded workspaces at once, and a miss says so", async (
 
   type(page, "nobody");
   expect(page.querySelector("table")).toBeNull();
-  expect(page.textContent).toContain("No workspace matches.");
+  expect(page.textContent).toContain("No workspaces match");
   // The headline counts stand whatever the search narrows.
   expect(page.textContent).toContain("Shared workspaces20");
 });

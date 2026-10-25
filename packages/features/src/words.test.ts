@@ -6,6 +6,7 @@ import {
   noMatchWords,
   noneYetWords,
   orList,
+  pasteCutWords,
   readFailedWords,
   readingWords,
   TERM,
@@ -49,4 +50,9 @@ test("a read is said reading, matching nothing, empty, or failed, by its thing a
     ],
     ["Reading tasks", "No agents match", "No tasks yet", "Your tasks could not be read."],
   );
+});
+
+test("a cut paste names the limit it was cut to, grouped by thousands", () => {
+  assert.equal(pasteCutWords(16_000), "Your paste was cut to fit the 16,000-character limit.");
+  assert.equal(pasteCutWords(800), "Your paste was cut to fit the 800-character limit.");
 });

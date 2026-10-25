@@ -1,12 +1,18 @@
-import { useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { cssCustomProperties } from "../../css.js";
+import { motionHeld } from "../../motion-timing.js";
+import { useDisclosure } from "../../use-disclosure.js";
 import { visibleViewport } from "../../visible-viewport.js";
+import { askedStyleWidth } from "../anchored-popover/anchored-popover.js";
 import {
   type Box,
   POPOVER_ALIGN,
   POPOVER_SIDE,
   type PopoverSide,
+  type PopoverWidth,
   popoverPlace,
 } from "../anchored-popover/popover-place.js";
+import { type PressAway, usePressAway } from "../anchored-popover/press-away.js";
 
 /**
  * rect-float.tsx -- the layer that stands by a box in the window rather than by a button: words selected, or a caret, with a toolbar, a list, or a field floated over or under it.
@@ -22,16 +28,33 @@ import {
  * stands by and a field in it is still inside the owner's box when it takes
  * the focus. It is measured as it is drawn, before it is painted, each time
  * it is drawn again, whenever it resizes or the window does, and whenever
- * anything scrolls, since a scroll may leave its side no room. What it
- * holds draws its own surface (`MenuSurface`).
+ * anything scrolls, since a scroll may leave its side no room. The height
+ * its side leaves it is handed to what it holds as `--luke-popover-room`,
+ * as the anchored popover's is, which a tall list bounds itself by. A press
+ * outside it is handed to its owner, who closes it unless the press lands
+ * on what it `holds`, the field whose caret it stands by say
+ * (`../anchored-popover/press-away.ts`). It stands at one of the popover's
+ * three widths where its owner names one (`POPOVER_WIDTH`), never at a
+ * width of the owner's own. What it holds draws its own surface (`MenuSurface`).
+ *
+ * Whether it stands is its owner's (`open`), as a popover's is. As `open`
+ * falls it fades out on the exit token where it last stood, inert, hearing
+ * no press away and measuring nothing, and still drawing what it last held
+ * open, so an owner that let go of what it showed in the render that closed
+ * it need keep nothing for the fade; it goes once the fade has run
+ * (`useDisclosure`), and reduced motion and a capture run, which zero the
+ * tokens, take it away at once. An owner that mounts it to open it and
+ * unmounts it to close it passes `true`, and it goes at once. An owner whose
+ * own body holds state while it is drawn hears `onExited` once it is gone.
  */
 
-/** Where the layer stands in its owner's box: its corner, and the widest the room it keeps inside leaves it. */
+/** Where the layer stands in its owner's box: its corner, the widest the room it keeps inside leaves it, and the height its side leaves it. */
 interface FloatPlace {
   readonly side: PopoverSide;
   readonly left: number;
   readonly top: number;
   readonly width: number;
+  readonly room: number;
 }
 
 /** Whether two places draw the layer alike, so a scroll that moves nothing renders nothing. */
@@ -41,7 +64,8 @@ function samePlace(a: FloatPlace | undefined, b: FloatPlace): boolean {
     a.side === b.side &&
     a.left === b.left &&
     a.top === b.top &&
-    a.width === b.width
+    a.width === b.width &&
+    a.room === b.room
   );
 }
 
@@ -102,6 +126,7 @@ function placeIn(
       frame.scrollTop -
       (Number.parseFloat(margin.marginTop) || 0),
     width: place.width,
+    room: place.room,
   };
 }
 
@@ -112,34 +137,59 @@ function placeIn(
  * takes as it mounts; where `anchor` answers none, it stays where it stood.
  */
 export function RectFloat({
+  open,
   anchor,
   side = POPOVER_SIDE.ABOVE,
+  width,
+  onPressAway,
+  holds,
+  onExited,
   children,
-}: {
+}: PressAway & {
+  /** Whether it stands; falling, it fades out where it stood before it goes. */
+  open: boolean;
   /** The box to stand by, in window coordinates, as it stands now; none where it cannot be measured. */
   anchor: () => Box | undefined;
   side?: PopoverSide | undefined;
+  /** One of the three widths a popover asks for, drawn from its token; as wide as what it holds where none is named. */
+  width?: PopoverWidth | undefined;
+  /** Its fade has run and it is gone, which an owner whose body holds state lets go of it on. */
+  onExited?: (() => void) | undefined;
   children: React.ReactNode;
-}): React.JSX.Element {
-  const layer = useRef<HTMLDivElement>(null);
+}): React.JSX.Element | null {
+  const layer = useRef<HTMLDivElement | null>(null);
   const [place, setPlace] = useState<FloatPlace | undefined>(undefined);
   const measure = useRef<() => void>(() => undefined);
+  const { mounted, leaving, ref: held } = useDisclosure(open);
+  const drawn = useCallback(
+    (node: HTMLDivElement | null) => {
+      layer.current = node;
+      held(node);
+    },
+    [held],
+  );
+  // Note that what it held open is what it draws as it fades, because its owner may have let go of it in the render that closed it.
+  const last = useRef(children);
+  if (open) last.current = children;
+  usePressAway(layer, () => undefined, { onPressAway: open ? onPressAway : undefined, holds });
   measure.current = () => {
-    const drawn = layer.current;
-    const frame = drawn?.offsetParent;
+    const element = layer.current;
+    const frame = element?.offsetParent;
     const box = anchor();
-    if (drawn === null || !(frame instanceof HTMLElement) || box === undefined) return;
-    const next = placeIn(drawn, frame, box, roomOf(clipOf(drawn)), side);
-    setPlace((last) => (samePlace(last, next) ? last : next));
+    if (element === null || !(frame instanceof HTMLElement) || box === undefined) return;
+    const next = placeIn(element, frame, box, roomOf(clipOf(element)), side);
+    setPlace((was) => (samePlace(was, next) ? was : next));
   };
-  // Note that it is measured on every draw, because what it stands by moves with its owner's state, words selected anew say, and nothing else tells it.
-  useLayoutEffect(() => measure.current());
+  // Note that it is measured on every draw while it stands, because what it stands by moves with its owner's state, words selected anew say, and nothing else tells it.
   useLayoutEffect(() => {
-    const drawn = layer.current;
-    if (drawn === null) return;
+    if (open) measure.current();
+  });
+  useLayoutEffect(() => {
+    const element = layer.current;
+    if (!open || element === null) return;
     const again = () => measure.current();
     const observer = new ResizeObserver(again);
-    observer.observe(drawn);
+    observer.observe(element);
     window.addEventListener("resize", again);
     const viewport = window.visualViewport;
     viewport?.addEventListener("resize", again);
@@ -153,19 +203,42 @@ export function RectFloat({
       viewport?.removeEventListener("scroll", again);
       document.removeEventListener("scroll", again, { capture: true });
     };
-  }, []);
+  }, [open]);
+
+  // Note that the owner hears it gone only once it has stood, because one that never opened has left nothing to let go of.
+  const stood = useRef(false);
+  useEffect(() => {
+    if (mounted) {
+      stood.current = true;
+    } else if (stood.current) {
+      stood.current = false;
+      onExited?.();
+    }
+  }, [mounted, onExited]);
+
+  // Note that reduced motion and a capture run take it away in the render
+  // that closes it, rather than once its fade is found to run none.
+  if (!mounted || (leaving && motionHeld())) return null;
   return (
     <div
-      ref={layer}
+      ref={drawn}
       className="luke-rect-float"
       data-side={place?.side ?? side}
-      style={
-        place === undefined
+      data-leaving={leaving ? "true" : undefined}
+      inert={leaving}
+      style={{
+        ...(width === undefined ? undefined : { width: askedStyleWidth(width) }),
+        ...(place === undefined
           ? undefined
-          : { left: place.left, top: place.top, maxWidth: place.width }
-      }
+          : {
+              left: place.left,
+              top: place.top,
+              maxWidth: place.width,
+              ...cssCustomProperties({ "--luke-popover-room": `${place.room}px` }),
+            }),
+      }}
     >
-      {children}
+      {open ? children : last.current}
     </div>
   );
 }

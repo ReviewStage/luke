@@ -1,0 +1,14 @@
+{
+  "instead": "Draw the bar inside a tab or dock with PaneBar from @luke/ui.",
+  "classes": [
+    { "class": "file-view-bar", "allow": ["packages/ui/src/components/pane-bar/"] },
+    { "class": "pull-request-tab-bar", "allow": ["packages/ui/src/components/pane-bar/"] },
+    { "class": "chapter-head*", "allow": ["packages/ui/src/components/pane-bar/"] },
+    { "class": "chapter-foot*", "allow": ["packages/ui/src/components/pane-bar/"] },
+    { "class": "terminal-shells-head", "allow": ["packages/ui/src/components/pane-bar/"] },
+    { "class": "terminal-shells-title", "allow": ["packages/ui/src/components/pane-bar/"] },
+    { "class": "comments-head*", "allow": ["packages/ui/src/components/pane-bar/"] },
+    { "class": "chat-head", "allow": ["packages/ui/src/components/pane-bar/"] },
+    { "class": "chat-head-meta", "allow": ["packages/ui/src/components/pane-bar/"] }
+  ]
+}

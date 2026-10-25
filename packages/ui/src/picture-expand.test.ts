@@ -85,6 +85,7 @@ function Viewer({
   const titleId = useId();
   const expand = usePictureExpand(onOpened);
   return createElement(Dialog, {
+    open: true,
     size: DIALOG_SIZE.MEDIA,
     labelledBy: titleId,
     onDismiss: () => expand.close(onClosed),

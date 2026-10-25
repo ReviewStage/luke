@@ -10,24 +10,3 @@
   background: var(--luke-color-match);
   color: inherit;
 }
-
-/* The row a search result just landed on, ringed once so the eye finds it
-   after the view moved. An outline rather than a fill, so it draws over
-   whatever the row already wears and takes no room; it fades out on its own
-   and leaves nothing behind. Held long enough to read, on the shared
-   vocabulary so a capture and reduced motion settle it at once. */
-[data-search-landed] {
-  outline-offset: 3px;
-  animation: search-landed calc(var(--luke-duration-shape) * 3) var(--luke-motion-exit);
-}
-
-@keyframes search-landed {
-  from,
-  40% {
-    outline: 2px solid var(--luke-color-border-selected);
-  }
-
-  to {
-    outline: 2px solid transparent;
-  }
-}

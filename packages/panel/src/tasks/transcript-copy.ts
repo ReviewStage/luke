@@ -14,12 +14,14 @@ import {
   CALL_KIND,
   CALL_WORDS,
   type CallKind,
+  callLine,
   callPlace,
+  isCommandKind,
   TURN_ROW,
   type TurnRow,
 } from "@luke/features/turn-rows";
 import { MESSAGE_ROLE } from "@luke/wire";
-import { TOOL_BLOCK, type ToolBlock } from "../ai-elements/tool.js";
+import { blockSays, TOOL_BLOCK, type ToolBlock } from "../ai-elements/tool.js";
 import {
   AGENT_PART,
   type AgentPart,
@@ -142,6 +144,8 @@ type CopiedBlock =
       readonly subject: string;
       /** For a command, the plain words the model said it is for, which the line leads with in place of the verb. */
       readonly description: string | undefined;
+      /** For a call of an MCP server's tool, the server it ran on. */
+      readonly server?: string | undefined;
       readonly input: ToolBlock | undefined;
       /** Nothing while the call has not answered. */
       readonly output: ToolBlock | undefined;
@@ -213,8 +217,52 @@ function agentBlock(part: AgentPart): CopiedBlock[] {
     ];
   }
   const view = toolCallView(part);
-  const { input, output, subject, description } = view;
-  return [{ kind: COPIED_BLOCK.CALL, call: view.kind, subject, description, input, output, error }];
+  const { input, output, subject, description, server } = view;
+  return [
+    {
+      kind: COPIED_BLOCK.CALL,
+      call: view.kind,
+      subject,
+      description,
+      server,
+      input,
+      output,
+      error,
+    },
+  ];
+}
+
+/**
+ * A block's words as its row draws them, open: words and a thought as they
+ * are; a call's line as one phrase, its verb or a described command's
+ * purpose, its subject where the body does not say it whole (`blockSays`),
+ * and where it ran; then its input, and its error or else its answer.
+ */
+function drawnWords(block: CopiedBlock): readonly string[] {
+  if (block.kind !== COPIED_BLOCK.CALL) return [block.text];
+  const { call, subject, description, server, input, output, error } = block;
+  const line = callLine(call, subject, description);
+  const said =
+    input !== undefined &&
+    ((isCommandKind(call) && input.kind === TOOL_BLOCK.COMMAND) || blockSays(input, subject));
+  const lead = [line.verb, said ? undefined : line.subject, callPlace(call, server)];
+  return [
+    lead.filter((words) => words !== undefined).join(" "),
+    ...(input === undefined ? [] : [input.text]),
+    ...(error !== undefined ? [error] : output === undefined ? [] : [output.text]),
+  ];
+}
+
+/**
+ * The words a message's rows draw, each line and body, as a find counts them
+ * before the rows are drawn: the parts the rows are drawn from (`agentRows`),
+ * each read as both copies read it (`agentBlock`). Note that a part its page
+ * carried cut counts none of the words left out, because its fold draws
+ * them only once read whole, and its ends are the stored JSON's, not the
+ * answer as drawn.
+ */
+export function drawnMessageWords(message: CodingAgentMessage): string {
+  return rowBlocks(agentRows(message, false)).flatMap(agentBlock).flatMap(drawnWords).join("\n");
 }
 
 /**
@@ -333,10 +381,11 @@ function oneLine(text: string): string {
 function callParts(call: CopiedCall) {
   const worker = call.call === CALL_KIND.WORKER;
   const said = call.description ?? CALL_WORDS[call.call].verb;
-  const place = callPlace(call.call);
+  const place = callPlace(call.call, call.server);
+  // Note that a server's name keeps its own capitals ("PostHog"), where the other places read as words in a sentence.
+  const named = call.server === undefined ? place?.replace(/^./u, (c) => c.toLowerCase()) : place;
   return {
-    verb:
-      place === undefined ? said : `${said} (${place.charAt(0).toLowerCase()}${place.slice(1)})`,
+    verb: named === undefined ? said : `${said} (${named})`,
     subject: oneLine(call.subject),
     joiner: worker || call.description !== undefined ? ": " : " ",
     code: !worker && CALL_WORDS[call.call].code,

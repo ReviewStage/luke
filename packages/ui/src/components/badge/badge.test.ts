@@ -4,8 +4,9 @@ import assert from "node:assert/strict";
 import { act, createElement, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
+import { STATUS_TONE } from "../../status-tone.js";
 import { VISUALLY_HIDDEN_UNDER } from "../visually-hidden/visually-hidden.js";
-import { BADGE_TONE, Badge } from "./badge.js";
+import { Badge } from "./badge.js";
 
 /**
  * badge.test.ts -- a badge is read by its words, and a provider's colour
@@ -42,7 +43,7 @@ test("a label's colour is a dot hidden from a reader, who hears its name", () =>
 });
 
 test("a badge with no colour of a provider's wears no dot", () => {
-  const view = render(createElement(Badge, { tone: BADGE_TONE.WORKING, children: "Working" }));
+  const view = render(createElement(Badge, { tone: STATUS_TONE.WORKING, children: "Working" }));
   assert.equal(view.textContent, "Working");
   assert.equal(view.querySelectorAll('[aria-hidden="true"]').length, 0);
 });
@@ -64,7 +65,7 @@ test("a badge with no glyph or swatch keeps its words drawn however narrow the r
 test("a badge in a tone gives its words up to a reader in a narrow room, its dot saying the state", () => {
   const view = render(
     createElement(Badge, {
-      tone: BADGE_TONE.ATTENTION,
+      tone: STATUS_TONE.ATTENTION,
       hideWordsUnder: VISUALLY_HIDDEN_UNDER.TIGHT,
       children: "Pending",
     }),

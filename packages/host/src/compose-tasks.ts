@@ -30,6 +30,7 @@ import { type PagePlace, pagePlaceId } from "@luke/features/page-wire";
 import { issueTagOf, type TaskIssueTag } from "@luke/features/task-issue-wire";
 import type { Task } from "@luke/features/task-wire";
 import {
+  HOST_LIVE,
   IDLE_TASKS_VIEW,
   TASK_CALL_FAILURE,
   TASKS_READ,
@@ -162,6 +163,7 @@ import * as HttpClient from "effect/http/HttpClient";
 import { boardMoves } from "./board-follow.js";
 import type { AccountComposer } from "./compose-account.js";
 import type { Composer } from "./composer.js";
+import { fixturePage } from "./fixture-stage.js";
 import type { HostKernel } from "./host-kernel.js";
 import {
   confirmWrite,
@@ -176,7 +178,7 @@ import { pushLive } from "./live-push.js";
 import type { RunMode } from "./run-mode.js";
 import { codeExcerpt } from "./task-code-excerpt.js";
 import { followTaskList } from "./task-list-follow.js";
-import { TASK_RECORD_PART, type TaskRecordPart, taskRecordMoves } from "./task-record-follow.js";
+import { TASK_RECORD_PART, type TaskRecordMove, taskRecordMoves } from "./task-record-follow.js";
 import {
   invitationsMoves,
   type LiveReadDependencies,
@@ -449,6 +451,12 @@ const BOARD_BACKOFF = Schedule.exponential(BOARD_RESEAL.FIRST).pipe(
   ),
 );
 
+/**
+ * How long after a resync another is let pass, so a wake that lands as
+ * several events at once (resume, then unlock) seals the list again once.
+ */
+const RESYNC_SETTLE = Duration.seconds(10);
+
 /** Why a live follow is not sealed again: the task is no longer the open one, or the gate closed. */
 const BOARD_FOLLOW_ENDED = "ended";
 
@@ -573,6 +581,12 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
 
   /** The tasks whose pages' mark moved, read one at a time by the loop below. */
   const pageReads = yield* Queue.sliding<string>(1);
+
+  /** The tasks whose plan was saved past the copy held, read one at a time by the loop below. */
+  const planReads = yield* Queue.sliding<string>(1);
+
+  /** When the open task's plan was last saved, as its record's follow last delivered it. */
+  let planSaved: { readonly taskId: string; readonly at: number } | undefined;
 
   /** The tasks whose agents' answered `show_code` calls moved, whose code is read once by the loop below. */
   const codeReads = yield* Queue.sliding<string>(1);
@@ -759,6 +773,9 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
   /** The list's wait for a write's transaction, while every part of it is followed over Realtime. */
   let listWait: TxWait | undefined;
 
+  /** When the list was last sealed again for a resync, by the host's clock; none before the first. */
+  let resyncedAt: number | undefined;
+
   const listed = (txid: string | undefined): Effect.Effect<void> =>
     Effect.suspend(() => confirmWrite(listWait, txid));
 
@@ -791,18 +808,22 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
             ),
       openLive: dependencies.openLive ?? openRealtimeClient,
       now: kernel.now,
-      publish: ({ list, taskAgents }) => {
+      publish: ({ list, taskAgents, taskPullRequests }) => {
         write({
           tasks: list.plans,
           tasklessAgents: list.planlessAgents ?? [],
           taskAgents,
+          taskPullRequests,
           listStatus: TASKS_READ.READY,
+          live: HOST_LIVE.LIVE,
         });
-        // A name the service gave the open task reaches its document as the list carries it.
-        if (view.activeTaskId !== undefined) nameHeldAsListed(view.activeTaskId);
+        // What the service holds of the open task, its name, status, assignee, and repository, reaches its document as the list carries it.
+        if (view.activeTaskId !== undefined) heldAsListed(view.activeTaskId);
       },
       // A list that could not be read says so beside the tasks it already drew rather than emptying them.
-      failed: () => write({ listStatus: TASKS_READ.FAILED }),
+      failed: () => write({ listStatus: TASKS_READ.FAILED, live: HOST_LIVE.OFFLINE }),
+      // A list that may be behind keeps drawing what it had, and says it is catching up until the next lands.
+      behind: () => write({ live: HOST_LIVE.CATCHING_UP }),
       onTxWait: (wait) => {
         listWait = wait;
       },
@@ -1237,6 +1258,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
       documentLanded = true;
       view = read;
       publish();
+      readPlanWhereSaved();
     });
   }
 
@@ -1249,6 +1271,55 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
       if (board === undefined || view.activeTaskId !== taskId) return;
       if (laidNow(OPENED_PART.BOARD, read)) write({ board });
     });
+  }
+
+  /** Whether the open task's plan was saved past the copy held, as its follow last delivered it. */
+  function savedPastHeld(taskId: string): boolean {
+    const held = heldTaskOf(taskId);
+    return (
+      view.activeTaskId === taskId &&
+      planSaved?.taskId === taskId &&
+      held !== undefined &&
+      planSaved.at > held.updatedAt
+    );
+  }
+
+  /**
+   * Reads the open task's plan again where its follow delivered a save newer
+   * than the copy held, so a teammate's or an agent's edit reaches the
+   * window without anything else asking. Note that it waits for a copy to
+   * stand, since an open still reading asks again once it lands, and that
+   * only a newer save asks, so a read that answered ahead of the follow does
+   * not ask again until the follow catches up.
+   */
+  function readPlanWhereSaved(): void {
+    const taskId = view.activeTaskId;
+    if (taskId !== undefined && savedPastHeld(taskId)) Queue.offerUnsafe(planReads, taskId);
+  }
+
+  /**
+   * Reads the open task's document again, as an open does, for a save
+   * someone else made. A read that left before a write of the document, or
+   * a newer read, lands nothing. Note that a failed read is asked again on
+   * `BOARD_BACKOFF` for as long as the save stands newer than the copy held,
+   * because the follow delivers no other move for a mark that stood still.
+   */
+  function readPlan(taskId: string) {
+    const wanted = () => gate() && savedPastHeld(taskId);
+    const once = Effect.gen(function* () {
+      if (!wanted()) return;
+      const documentRead = partReadStarted(OPENED_PART.DOCUMENT);
+      const marksRead = partReadStarted(OPENED_PART.MARKS);
+      const opened = yield* served(client.open(taskId));
+      if (view.activeTaskId !== taskId) return;
+      if (!opened.ok) {
+        if (opened.failure === TASK_CALL_FAILURE.NOT_FOUND) return;
+        return yield* Effect.fail(opened.failure);
+      }
+      if (!laidNow(OPENED_PART.DOCUMENT, documentRead)) return;
+      write({ document: openedDocument(taskId, opened, marksRead) });
+    });
+    return Effect.ignore(Effect.retry(once, { schedule: BOARD_BACKOFF, while: wanted }));
   }
 
   /** A code shown as the Code tab's card draws it: the lines around those pointed at, which the window colours. */
@@ -1429,23 +1500,27 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
   }
 
   /**
-   * Follows `taskId`'s pages and agents' code live while it is the open
-   * task: the pages read again once theirs move, and the code once the
-   * `show_code` calls its agents answered do, each on each seal's first
-   * delivery.
+   * Follows `taskId`'s plan, pages, and agents' code live while it is the
+   * open task: the plan read again once a save newer than the copy held
+   * lands, the pages once theirs move, and the code once the `show_code`
+   * calls its agents answered do, each on each seal's first delivery.
    */
   function followRecord(taskId: string) {
     return followLive(taskId, {
       seal: (userId, poll, after) => client.recordLive(taskId, userId, poll, after),
       moves: taskRecordMoves,
-      moved: (parts: readonly TaskRecordPart[]) => {
+      moved: ({ parts, planSavedAt }: TaskRecordMove) => {
+        if (parts.includes(TASK_RECORD_PART.PLAN) && planSavedAt !== undefined) {
+          planSaved = { taskId, at: planSavedAt };
+          readPlanWhereSaved();
+        }
         if (parts.includes(TASK_RECORD_PART.PAGES)) Queue.offerUnsafe(pageReads, taskId);
         if (parts.includes(TASK_RECORD_PART.CODE)) Queue.offerUnsafe(codeReads, taskId);
       },
     });
   }
 
-  /** Follows `taskId`'s pages and calls live, in place of any follow standing; with `standing`, only where none stands. */
+  /** Follows `taskId`'s plan, pages, and calls live, in place of any follow standing; with `standing`, only where none stands. */
   function openRecord(taskId: string, standing?: { readonly onlyIfMissing: true }) {
     return Effect.asVoid(FiberHandle.run(recordFollow, followRecord(taskId), standing));
   }
@@ -1504,12 +1579,29 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
     publish();
   }
 
-  /** The open document of `taskId` given the name its row of the list now reads, where the two differ. */
-  function nameHeldAsListed(taskId: string): void {
+  /**
+   * The open document of `taskId` given everything its row of the list now
+   * reads, its name, status, assignee, and repository among them, so a
+   * change a teammate or an agent made reaches the open task as it reaches
+   * the list. Note that the row is the whole of what the task carries but
+   * its document, so a field the row leaves out is one the task no longer
+   * has, and that the last save is the document's own, kept with its body.
+   */
+  function heldAsListed(taskId: string): void {
     const held = heldTaskOf(taskId);
     const listed = view.tasks.find((row) => row.id === taskId);
-    if (held === undefined || listed === undefined || listed.name === held.name) return;
-    write({ document: { status: TASKS_READ.READY, task: { ...held, name: listed.name } } });
+    if (held === undefined || listed === undefined) return;
+    const { agents: _agents, issues: _issues, ...row } = listed;
+    const { updatedAt, document, agentEdits, lastEdit, sectionEdits } = held;
+    const task: Task = {
+      ...row,
+      updatedAt,
+      document,
+      ...(agentEdits === undefined ? undefined : { agentEdits }),
+      ...(lastEdit === undefined ? undefined : { lastEdit }),
+      ...(sectionEdits === undefined ? undefined : { sectionEdits }),
+    };
+    write({ document: { ...view.document, task } });
   }
 
   /**
@@ -1681,6 +1773,21 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         yield* followWorkspaces;
         yield* followSidebar;
         yield* Effect.all([tasks, readGithubWhenStale], { concurrency: "unbounded" });
+        return {};
+      }),
+    // A follow may have died in a sleep or a lost network without a word,
+    // and one waiting out a pause need not wait on: a list already followed
+    // is sealed again now, once for a wake's several events.
+    [GATEWAY_METHOD.TASKS_RESYNC]: () =>
+      Effect.gen(function* () {
+        if (!gate() || Option.isNone(yield* FiberHandle.get(listFollow))) return {};
+        const at = yield* Clock.currentTimeMillis;
+        if (resyncedAt !== undefined && at - resyncedAt < Duration.toMillis(RESYNC_SETTLE)) {
+          return {};
+        }
+        resyncedAt = at;
+        write({ live: HOST_LIVE.CATCHING_UP });
+        yield* FiberHandle.run(listFollow, followList);
         return {};
       }),
     // The panel coming forward, which may follow GitHub connected in the
@@ -1960,6 +2067,8 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
           params,
           "reading a page names a task or an agent, the page, and its version",
         );
+        // A run that sends nothing reads the page its fixture stages, frame and source alike.
+        if (!kernel.runMode.sendsNetwork) return carried<TasksPageAnswer>(fixturePage(read));
         if (!gate()) return carried<TasksPageAnswer>({ failure: TASK_CALL_FAILURE.UNANSWERED });
         const { pageId, version } = read;
         const place = "taskId" in read ? { taskId: read.taskId } : { agentId: read.agentId };
@@ -2994,6 +3103,13 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         Effect.forever(
           Effect.flatMap(Queue.take(boardReads), (taskId) =>
             gate() ? readBoard(taskId) : Effect.void,
+          ),
+        ),
+      );
+      yield* Effect.forkScoped(
+        Effect.forever(
+          Effect.flatMap(Queue.take(planReads), (taskId) =>
+            gate() ? readPlan(taskId) : Effect.void,
           ),
         ),
       );

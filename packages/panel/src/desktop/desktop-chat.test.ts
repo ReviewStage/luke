@@ -19,7 +19,7 @@ import {
   PULL_REQUEST_STATE,
 } from "@luke/features/coding-agent-wire";
 import { CONVERSATION_MEDIA_TYPE } from "@luke/features/conversation-picture-wire";
-import { LINK_PLACE, type ReadLink } from "@luke/features/luke-link";
+import { LINK_PLACE, type ReadLink } from "@luke/features/link-grammar";
 import { TASK_SECTION_ICON_KIND } from "@luke/features/task-section-wire";
 import {
   type CodeRef,
@@ -28,6 +28,7 @@ import {
   type TaskAgentLine,
   type TaskSummary,
 } from "@luke/features/task-wire";
+import { pasteCutWords } from "@luke/features/words";
 import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import { type ChatPlace, type ChatPost, FOR_YOU } from "@luke/ui/chat-model";
@@ -36,7 +37,7 @@ import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, type RefObject, useRef, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
+import { afterEach, beforeAll, beforeEach, onTestFinished, test, vi } from "vitest";
 import { sideBundles } from "../bundle-loader.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import { ChatComposer, type ChatComposerMentions } from "../tasks/chat-composer.js";
@@ -59,12 +60,14 @@ import {
   composerEditor,
   editorBundleLanded,
   installEditorLayout,
+  pasteInComposer,
   pressInComposer,
   typeInComposer,
 } from "../testing/composer.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { restOn } from "../testing/hint-rest.js";
 import { markdownHtmlParserLanded } from "../testing/markdown.js";
+import { playListMotions } from "../testing/pane-motion.js";
 import { onSideBundles } from "../testing/side-bundles.js";
 import { tasksControl } from "../testing/tasks-control.js";
 import { DesktopChat, TaskChatTab } from "./desktop-chat.js";
@@ -217,10 +220,10 @@ function rail(page: HTMLElement): string[] {
   assert.ok(nav, "the rail is drawn");
   return [
     ...nav.querySelectorAll(
-      ".sidebar-repository-header button:not(.sidebar-repository-actions *), li .luke-list-row-main",
+      ".luke-group-header-head button:not(.luke-group-header-actions *), li .luke-list-row-main",
     ),
   ].map((node) => {
-    if (node.closest(".sidebar-repository-header") !== null) return `# ${headName(node)}`;
+    if (node.closest(".luke-group-header-head") !== null) return `# ${headName(node)}`;
     const shown = node.getAttribute("aria-current") === "page" ? "▸ " : "";
     // For you says under its name how many need the reader, in the Inbox's words, which it is read by.
     const waiting = /^(\d+) needs? you$/u.exec(
@@ -243,8 +246,8 @@ function seen(node: Element | null | undefined): string | undefined {
 /** The pane's messages as a reader hears them: each author and where it was posted, then its replies where the thread is open. */
 function stream(page: HTMLElement): string[] {
   return [...page.querySelectorAll(".chat-message, .chat-reply")].map((node) => {
-    const byline = node.querySelector(":scope > .chat-message-body > .chat-byline");
-    const author = byline?.querySelector(".chat-byline-name")?.textContent ?? "";
+    const byline = node.querySelector(":scope > .luke-comment > .luke-comment-head");
+    const author = byline?.querySelector(".luke-comment-name")?.textContent ?? "";
     const where = seen(byline?.querySelector(".chat-byline-where"));
     const indent = node.classList.contains("chat-reply") ? "  ↳ " : "";
     return `${indent}${author}${where === undefined ? "" : ` ${where}`}`;
@@ -296,7 +299,10 @@ test("Chat opens on For you, whose open asks come first, the oldest first, then 
 test("a press on a channel shows its messages in the order posted, a thread folded under its root until a press opens it", () => {
   const page = mount();
   act(() => railRow(page, "teammate-invitations").click());
-  assert.equal(seen(page.querySelector(".chat-head h1")), "▣ teammate-invitations");
+  assert.equal(
+    seen(page.querySelector(".chat-stream .luke-pane-bar-lead")),
+    "▣ teammate-invitations",
+  );
   assert.equal(railRow(page, "teammate-invitations").getAttribute("aria-current"), "page");
   assert.deepEqual(stream(page), [
     "Invite emails",
@@ -433,7 +439,10 @@ test("a message says how long ago it was posted, as every row and thread in the 
   const page = mount();
   act(() => railRow(page, "teammate-invitations").click());
   const time = (seq: number) =>
-    page.querySelector(`.chat-message[data-seq="${seq}"] time.chat-time`)?.textContent;
+    (
+      page.querySelector(`.chat-message[data-seq="${seq}"] .luke-comment-time time`) ??
+      page.querySelector(`.chat-message[data-seq="${seq}"] time.chat-time`)
+    )?.textContent;
   assert.equal(time(47), "16m");
   assert.equal(time(51), "3m");
 });
@@ -448,14 +457,23 @@ test("a message's Copy takes its words as Markdown, beside the Reply its byline 
     [...(actions?.querySelectorAll("button") ?? [])].map(
       (button) => button.getAttribute("aria-label") ?? button.textContent,
     ),
-    ["Copy", "Reply"],
+    ["Copy message", "Reply"],
   );
-  act(() => actions?.querySelector<HTMLButtonElement>('button[aria-label="Copy"]')?.click());
+  act(() =>
+    actions?.querySelector<HTMLButtonElement>('button[aria-label="Copy message"]')?.click(),
+  );
   await settle();
   assert.deepEqual(copied, [
     "Two invites to one address in one workspace would otherwise both go pending. It's one " +
       "migration, online, and nothing writes the pair twice today.",
   ]);
+  assert.equal(
+    actions
+      ?.querySelector('button[aria-label="Copy message"] .luke-copy-glyph')
+      ?.getAttribute("data-state"),
+    "copied",
+    "the press shows it was copied",
+  );
 });
 
 /** The id of the developer's DM with Invite emails, the fixture's second agent. */
@@ -530,7 +548,10 @@ function boxWords(box: HTMLElement): string {
 function words(page: HTMLElement): string[] {
   return [...page.querySelectorAll(".chat-message, .chat-reply")].map((node) => {
     const indent = node.classList.contains("chat-reply") ? "  ↳ " : "";
-    const body = node.querySelector(":scope > .chat-message-body > .chat-words");
+    const body =
+      node.querySelector(
+        ":scope > .luke-comment > .luke-comment-body > .chat-message-body > .chat-words",
+      ) ?? node.querySelector(":scope > .chat-message-body > .chat-words");
     return `${indent}${body?.textContent?.trim() ?? ""}`;
   });
 }
@@ -661,16 +682,15 @@ test("a channel's composer offers the members a mention there tells under the ap
   act(() => railRow(page, "teammate-invitations").click());
   const box = boxNamed(page, "Message #teammate-invitations");
   typeInComposer(box, "@in");
+  // Note that Maria Chen is not offered, since "in" is no word of her name and a person is not found by letters in order.
   assert.deepEqual(menuRows(page), [
     "# Agents",
     "Invite emails · This task",
     "Add teammate invitations · This task",
-    "# People",
-    "Maria Chen",
     "# Plan",
     "Teammate invitations · The whole plan",
   ]);
-  assert.deepEqual(menuKeys(page), ["↑↓ Move", "↵ Mention", "esc Close"]);
+  assert.deepEqual(menuKeys(page), ["↑↓Move", "⏎⇥Mention", "EscClose"]);
   const faces = [...page.querySelectorAll('.mention-menu [role="option"]')].map(
     (row) => row.querySelector(".luke-combobox-option-glyph")?.childElementCount ?? 0,
   );
@@ -695,7 +715,7 @@ test("a channel's composer offers the members a mention there tells under the ap
   pressInComposer(box, "Enter");
   await settle();
   assert.equal(boxWords(box), "");
-  assert.equal(words(page).at(-1), "Invite emails hold the template until #214 lands");
+  assert.equal(words(page).at(-1), "agent Invite emails hold the template until #214 lands");
   // The post continues the reader's own run, so it draws under the name the run began with.
   assert.equal(stream(page).at(-1), "");
   assert.equal(stream(page).filter(Boolean).at(-1), "Dean Stratakos");
@@ -763,6 +783,26 @@ function sendOf(card: HTMLElement): HTMLButtonElement {
 const EXPIRY = "Invite links expire after 7 days or 14?";
 const UNIQUE_INDEX = "Add a unique index on (organization_id, email) to memberships?";
 
+test("an ask's note offers the chat's @ list, the members its channel tells but the asking agent, then the channel's task, and its # names the channels, as the channel's box does", () => {
+  const page = mount((chat) => chat, ACME, undefined, undefined, { tasks: [INVITATIONS] });
+  const card = openAsk(page, UNIQUE_INDEX);
+  typeInComposer(card, "@in");
+  // Note that Invite emails asked, so it is not offered, as the Inbox's box never offers the item's agent.
+  assert.deepEqual(menuRows(page), [
+    "# Agents",
+    "Add teammate invitations · This task",
+    "# Plan",
+    "Teammate invitations · The whole plan",
+  ]);
+  pressInComposer(card, "Enter");
+  assert.ok(card.querySelector("[data-mention-ref]"), "the agent stands in the note as its chip");
+  typeInComposer(card, " see #teammate");
+  assert.ok(
+    menuRows(page).some((row) => row.startsWith("teammate-invitations")),
+    "the # word lists the channels",
+  );
+});
+
 test("an open choice is headed as the Inbox heads one, picked by its option's number key and sent by the box's Send, and once answered its pick stands checked under the answerer's comment", async () => {
   const page = mount();
   const card = openAsk(page, EXPIRY);
@@ -795,7 +835,7 @@ test("an open choice is headed as the Inbox heads one, picked by its option's nu
   assert.equal(settled.querySelector(".inbox-ask-standing")?.textContent, "Answered");
   const answer = settled.querySelector('.inbox-comment[data-inbox-comment="answered"]');
   assert.ok(answer, "the answer stands as its answerer's comment");
-  assert.match(answer.querySelector(".inbox-comment-when")?.textContent ?? "", /Sent to/u);
+  assert.match(answer.querySelector(".luke-comment-trailing")?.textContent ?? "", /Sent to/u);
   const picked = [...answer.querySelectorAll('[role="radio"][aria-checked="true"]')];
   assert.deepEqual(
     picked.map((option) => option.textContent?.startsWith("14 days")),
@@ -829,7 +869,10 @@ test("an approval's Approve is held until Send sends it, a note with no decision
   const settled = settledAsk(page, 51);
   const approve = pressNamed(settled, "Approve");
   assert.equal(approve.getAttribute("aria-pressed"), "true");
-  assert.ok(approve.querySelector('.inbox-ask-pressed[data-tone="ahead"]'), "Approve wears green");
+  assert.ok(
+    approve.querySelector('.inbox-ask-pressed[data-tone="complete"]'),
+    "Approve wears green",
+  );
   assert.equal(pressNamed(settled, "Decline").getAttribute("aria-pressed"), "false");
   assert.equal(settled.querySelector("[data-inbox-note]")?.textContent?.trim(), "go ahead");
 
@@ -849,6 +892,44 @@ test("an approval's Approve is held until Send sends it, a note with no decision
       "  ↳ Thanks, both.",
     ],
   );
+});
+
+test("an ask's note and decision are there again when Chat closes and opens again", async () => {
+  const page = mount();
+  const card = openAsk(page, UNIQUE_INDEX);
+  typeInComposer(card, "go ahead");
+  act(() => pressNamed(card, "Approve").click());
+  reopen();
+
+  const again = openAsk(page, UNIQUE_INDEX);
+  assert.equal(boxWords(again), "go ahead");
+  assert.equal(pressNamed(again, "Approve").getAttribute("aria-pressed"), "true");
+  act(() => sendOf(again).click());
+  await settle();
+  assert.equal(rail(page)[0], "▸ For you (3)");
+  act(() => railRow(page, "teammate-invitations").click());
+  assert.equal(
+    settledAsk(page, 51).querySelector("[data-inbox-note]")?.textContent?.trim(),
+    "go ahead",
+  );
+});
+
+test("a paste past an ask note's cap is cut to the room left and the card's note line says so, until the words change", () => {
+  const page = mount();
+  const card = openAsk(page, UNIQUE_INDEX);
+  const cap = CHAT_BOUNDS.MAX_NOTE_CHARS;
+  const note = () => card.querySelector(".luke-composer-foot-note")?.textContent;
+
+  pasteInComposer(card, "x".repeat(cap + 100));
+  assert.equal(boxWords(card).length, cap);
+  assert.equal(note(), pasteCutWords(cap));
+
+  const editor = composerEditor(card).editor;
+  assert.ok(editor, "the editor is running");
+  act(() => {
+    editor.view.dispatch(editor.state.tr.delete(1, 2));
+  });
+  assert.equal(note(), undefined, "the note goes once the words change again");
 });
 
 test("a form's text field is the composer's own field, its answer stands in its fields read-only, and the reply in its thread says the same", async () => {
@@ -1048,14 +1129,14 @@ function mountTaskTabReading(): HTMLElement {
 
 test("until the chat is read, the window's Chat keeps its titled bar with New channel over placeholder rows saying it is read, and the plan's Chat tab's wait stands centred, rather than as a ring in the corner", () => {
   const chat = mount(() => undefined);
-  const bar = chat.querySelector(".chat-rail .desktop-toolbar");
-  assert.equal(bar?.querySelector("h1.desktop-toolbar-title")?.textContent, "Chat");
+  const bar = chat.querySelector(".chat-rail .luke-toolbar");
+  assert.equal(bar?.querySelector("h1.luke-toolbar-title")?.textContent, "Chat");
   const create = bar?.querySelector<HTMLButtonElement>('button[aria-label="New channel"]');
   assert.ok(create, "New channel stands while it is read");
   assert.equal(create.disabled, true, "but opens no channel against no chat");
   const windowWait = chat.querySelector('.chat-rail [role="status"]');
   assert.ok(windowWait, "the window's Chat says it is waiting");
-  assert.equal(windowWait.querySelector(".luke-visually-hidden")?.textContent, "Reading chat…");
+  assert.equal(windowWait.querySelector(".luke-visually-hidden")?.textContent, "Reading chat");
   assert.ok(windowWait.querySelector(".luke-list-row"), "the wait stands as the rail's rows");
   assert.equal(chat.querySelector(".luke-spinner-region"), null);
   act(() => root?.unmount());
@@ -1121,7 +1202,7 @@ test("a direct message between two others reads as theirs, named by both, with n
   assert.equal(pair?.querySelectorAll(".inbox-row-mark .actor-stack .actor-mark").length, 2);
   act(() => railRow(page, "Add teammate invitations ↔ Invite emails").click());
   assert.equal(
-    page.querySelector(".chat-head h1")?.textContent,
+    page.querySelector(".chat-stream .luke-pane-bar-title")?.textContent,
     "Add teammate invitations ↔ Invite emails",
   );
   assert.equal(page.querySelector(".chat-composer"), null);
@@ -1163,7 +1244,7 @@ test("a # at the start of a word offers the channels in the same list as an @, a
     "members-schema",
   ]);
   assert.deepEqual(menuRows(page), ["# Channels", "billing-export"]);
-  assert.deepEqual(menuKeys(page), ["↑↓ Move", "↵ Mention", "esc Close"]);
+  assert.deepEqual(menuKeys(page), ["↑↓Move", "⏎⇥Mention", "EscClose"]);
   pressInComposer(box, "Enter");
   assert.equal(boxWords(box), "see #billing-export ");
   assert.ok(box.querySelector('button[aria-label="Dictate"]'), "the box takes a dictation");
@@ -1477,18 +1558,26 @@ test("New channel opens a topic under the name typed, written as a channel's, wi
   await settle();
   assert.equal(openDialog(), null);
   act(() => railRow(page, "release-train").click());
-  assert.equal(page.querySelector(".chat-head h1")?.textContent, "#release-train");
-  assert.match(page.querySelector(".chat-head")?.textContent ?? "", /What ships Friday/u);
+  assert.equal(
+    page.querySelector(".chat-stream .luke-pane-bar-title")?.textContent,
+    "#release-train",
+  );
+  assert.match(
+    page.querySelector(".chat-stream .luke-pane-bar")?.textContent ?? "",
+    /What ships Friday/u,
+  );
 
   const actions = page.querySelector<HTMLButtonElement>(
-    '.chat-head button[aria-label="#release-train actions"]',
+    '.chat-stream .luke-pane-bar button[aria-label="#release-train actions"]',
   );
   assert.ok(actions, "a topic's head offers its actions");
   act(() => actions.click());
   const archive = [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find(
-    (item) => item.textContent === "Archive channel",
+    (item) => item.textContent === "Archive",
   );
   act(() => archive?.click());
+  // Archiving reaches everyone in the channel but can be undone, so it asks in the accent, not red.
+  assert.equal(dialogButton("Archive channel").getAttribute("data-variant"), "primary");
   act(() => dialogButton("Archive channel").click());
   await settle();
   // The topic archived while it is read keeps its row in sight, under Archived, still the one shown.
@@ -1508,12 +1597,21 @@ test("New channel opens a topic under the name typed, written as a channel's, wi
   pickViewOption(page, "Show archived channels");
   assert.deepEqual(archivedRows(), ["release-train"]);
   act(() => railRow(page, "release-train").click());
+  assert.deepEqual(
+    rightClick(railRow(page, "release-train")).map((each) => each.textContent),
+    ["Unarchive"],
+    "an archived topic's menu unarchives it",
+  );
+  act(() => {
+    document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+  });
   const bring = [
     ...page.querySelectorAll<HTMLButtonElement>(".chat-stream .agent-composer button"),
-  ].find((each) => each.textContent === "Bring back channel");
+  ].find((each) => each.textContent === "Unarchive channel");
   assert.ok(bring, "the archived topic's foot offers to bring it back");
   act(() => bring.click());
-  act(() => dialogButton("Bring back").click());
+  assert.equal(dialogButton("Unarchive channel").getAttribute("data-variant"), "primary");
+  act(() => dialogButton("Unarchive channel").click());
   await settle();
   assert.ok(
     rail(page).includes("▸ release-train"),
@@ -1527,7 +1625,9 @@ test("New channel opens a topic under the name typed, written as a channel's, wi
 function pickViewOption(page: HTMLElement, label: string): void {
   act(() =>
     page
-      .querySelector<HTMLButtonElement>('.chat-rail-bar button[aria-label="View options"]')
+      .querySelector<HTMLButtonElement>(
+        '.chat-rail > .luke-toolbar button[aria-label="View options"]',
+      )
       ?.click(),
   );
   const item = [
@@ -1540,7 +1640,7 @@ function pickViewOption(page: HTMLElement, label: string): void {
 /** The items of the menu a channel's head ends on, as its words, the disabled marked `(off)`. */
 function channelMenu(page: HTMLElement): string[] {
   const actions = page.querySelector<HTMLButtonElement>(
-    '.chat-head button[aria-label$=" actions"]',
+    '.chat-stream .luke-pane-bar button[aria-label$=" actions"]',
   );
   assert.ok(actions, "the channel's head ends on its menu");
   act(() => actions.click());
@@ -1573,21 +1673,19 @@ test("every channel's head ends on its menu: Mark as read and Copy link for each
   act(() => railRow(page, "Maria Chen").click());
   assert.deepEqual(channelMenu(page), ["Mark as read (off)", "Copy link"]);
   act(() => railRow(page, "members-schema").click());
-  assert.deepEqual(channelMenu(page), [
-    "Mark as read (off)",
-    "Copy link",
-    "Edit channel",
-    "Archive channel",
-  ]);
+  assert.deepEqual(channelMenu(page), ["Mark as read (off)", "Copy link", "Edit", "Archive"]);
 });
 
 test("the rail's bar is a page's toolbar: Chat's title and its Experimental tag, View options, New channel, and Send feedback; Mark all as read takes every unread dot off", () => {
   const page = mount();
-  const bar = page.querySelector(".chat-rail-bar");
-  assert.equal(bar?.querySelector("h1.desktop-toolbar-title")?.textContent, "Chat");
-  assert.equal(bar?.querySelector(".experiment-tag")?.textContent, "Experimental");
+  const bar = page.querySelector(".chat-rail > .luke-toolbar");
+  assert.equal(bar?.querySelector("h1.luke-toolbar-title")?.textContent, "Chat");
+  assert.equal(
+    bar?.querySelector(".luke-toolbar-heading > .luke-toolbar-tag .experiment-tag")?.textContent,
+    "Experimental",
+  );
   assert.deepEqual(
-    [...(bar?.querySelectorAll(".desktop-toolbar-actions button") ?? [])].map(
+    [...(bar?.querySelectorAll(".luke-toolbar-actions button") ?? [])].map(
       (each) => each.getAttribute("aria-label") ?? each.textContent,
     ),
     ["View options", "New channel", "Send feedback"],
@@ -1616,9 +1714,11 @@ test("on a phone the rail's Experimental tag is the experiment's glyph alone, st
     [...page.querySelectorAll(".chat-rail-head button")].map((each) =>
       each.getAttribute("aria-label"),
     ),
-    ["New channel", "More"],
+    ["New channel", "Chat actions"],
   );
-  act(() => page.querySelector<HTMLButtonElement>('.chat-rail-head [aria-label="More"]')?.click());
+  act(() =>
+    page.querySelector<HTMLButtonElement>('.chat-rail-head [aria-label="Chat actions"]')?.click(),
+  );
   assert.deepEqual(
     [...document.querySelectorAll('[role="menu"] .luke-menu-item-label')].map(
       (each) => each.textContent,
@@ -1640,7 +1740,10 @@ test("a For you row names a task's channel by its glyph and name, and a press on
   const link = where?.querySelector<HTMLButtonElement>("button");
   assert.equal(seen(link), "▣ teammate-invitations");
   act(() => link?.click());
-  assert.equal(seen(page.querySelector(".chat-head h1")), "▣ teammate-invitations");
+  assert.equal(
+    seen(page.querySelector(".chat-stream .luke-pane-bar-lead")),
+    "▣ teammate-invitations",
+  );
   assert.equal(railRow(page, "teammate-invitations").getAttribute("aria-current"), "page");
 });
 
@@ -1684,7 +1787,9 @@ test("words after an @ that read as a date offer it first, said as its chip says
     typeInComposer(box, "out @oct 20 to 24");
     const listed = offered(page);
     pressInComposer(box, "Enter");
-    const chips = [...box.querySelectorAll("[data-mention-ref]")].map((chip) => chip.textContent);
+    const chips = [...box.querySelectorAll("[data-mention-ref]")].map(
+      (chip) => chip.querySelector(".luke-inline-ref-label")?.textContent,
+    );
     typeInComposer(box, "for the offsite");
     pressInComposer(box, "Enter");
     await settle();
@@ -1694,7 +1799,7 @@ test("words after an @ that read as a date offer it first, said as its chip says
     const last = [...page.querySelectorAll(".chat-message")].at(-1);
     const sent = last?.querySelector<HTMLElement>(".chat-words [data-mention-ref]");
     assert.equal(sent?.dataset.kind, "date");
-    assert.equal(sent?.textContent, "Tomorrow → Saturday");
+    assert.equal(sent?.querySelector(".luke-inline-ref-label")?.textContent, "Tomorrow → Saturday");
     assert.match(last?.querySelector(".chat-words")?.textContent ?? "", /for the offsite/u);
   } finally {
     vi.useRealTimers();
@@ -1713,7 +1818,11 @@ test("a date chip in the chat box opens its picker, and a day picked there names
     await act(async () => undefined);
     const dialog = box.querySelector<HTMLElement>('[role="dialog"]');
     assert.ok(dialog, "the picker is open");
-    const start = dialog.querySelector<HTMLInputElement>('input[aria-label="Start"]')?.value;
+    // Note that the date field is named by the words shown over it, its label.
+    const startFor = [...dialog.querySelectorAll("label")].find(
+      (label) => label.textContent === "Start",
+    )?.htmlFor;
+    const start = dialog.querySelector<HTMLInputElement>(`input[id="${startFor}"]`)?.value;
     act(() =>
       dialog.querySelector<HTMLElement>('button[aria-label="Friday, October 23, 2026"]')?.click(),
     );
@@ -1727,7 +1836,9 @@ test("a date chip in the chat box opens its picker, and a day picked there names
     assert.equal(start, "Oct 20, 2026");
     assert.equal(box.querySelector('[role="dialog"]'), null);
     assert.deepEqual(
-      [...box.querySelectorAll("[data-mention-ref]")].map((chip) => chip.textContent),
+      [...box.querySelectorAll("[data-mention-ref]")].map(
+        (chip) => chip.querySelector(".luke-inline-ref-label")?.textContent,
+      ),
       ["Friday"],
     );
   } finally {
@@ -1932,10 +2043,10 @@ test("in a listed workspace, a person is drawn with their photo from the members
     "her row wears her photo",
   );
   act(() => railRow(page, "general").click());
-  const named = [...page.querySelectorAll(".chat-byline-name")].map((each) => each.textContent);
+  const named = [...page.querySelectorAll(".luke-comment-name")].map((each) => each.textContent);
   assert.ok(named.includes("Maria Chen"), "her messages name her as the members read does");
   assert.ok(
-    page.querySelector(".chat-face img[src^='https://example.com/maria.png']"),
+    page.querySelector(".luke-comment-face img[src^='https://example.com/maria.png']"),
     "and lead with her photo",
   );
 });
@@ -1944,12 +2055,12 @@ test("an agent's line names it by its title alone, as every place of the window 
   const opened: ReadLink[] = [];
   const page = mount((chat) => chat, undefined, undefined, opened);
   act(() => railRow(page, "teammate-invitations").click());
-  const byline = [...page.querySelectorAll(".chat-message .chat-byline")].find(
-    (each) => each.querySelector(".chat-byline-name")?.textContent === "Add teammate invitations",
+  const byline = [...page.querySelectorAll(".chat-message .luke-comment-head")].find(
+    (each) => each.querySelector(".luke-comment-name")?.textContent === "Add teammate invitations",
   );
   assert.ok(byline);
   assert.doesNotMatch(byline.textContent ?? "", /@/u, "no handle beside it");
-  const name = byline.querySelector<HTMLButtonElement>(".chat-byline-name button");
+  const name = byline.querySelector<HTMLButtonElement>(".luke-comment-name button");
   assert.ok(name, "the agent's name is a press");
   act(() => name.click());
   assert.equal(opened.length, 1);
@@ -1979,12 +2090,12 @@ test("an agent the plans' summaries do not name opens its tab under the plan the
   );
   act(() => railRow(page, "teammate-invitations").click());
   // An agent no summary names is named as the chat read names it.
-  const agentLine = [...page.querySelectorAll(".chat-message .chat-byline")].find(
+  const agentLine = [...page.querySelectorAll(".chat-message .luke-comment-head")].find(
     (byline) =>
-      byline.querySelector(".chat-byline-name")?.textContent === "Add teammate invitations",
+      byline.querySelector(".luke-comment-name")?.textContent === "Add teammate invitations",
   );
   assert.ok(agentLine, "the agent is named by the name the read carries");
-  act(() => agentLine?.querySelector<HTMLButtonElement>(".chat-byline-name button")?.click());
+  act(() => agentLine?.querySelector<HTMLButtonElement>(".luke-comment-name button")?.click());
   const [link] = opened;
   assert.ok(link !== undefined && "place" in link);
   assert.deepEqual(link.place, { kind: LINK_PLACE.AGENT, planId: ELSEWHERE, agentId: ELSEWHERE });
@@ -2004,9 +2115,9 @@ test("each place's row says who spoke last and what, as an Inbox row previews it
     "each place is one item of its group's list, never an item inside another",
   );
   act(() => general.click());
-  const head = [
-    ...page.querySelectorAll<HTMLButtonElement>(".sidebar-repository-header button"),
-  ].find((each) => headName(each) === "Channels");
+  const head = [...page.querySelectorAll<HTMLButtonElement>(".luke-group-header-head button")].find(
+    (each) => headName(each) === "Channels",
+  );
   assert.ok(head, "Channels heads its group");
   act(() => head.click());
   const channels = rail(page);
@@ -2014,16 +2125,32 @@ test("each place's row says who spoke last and what, as an Inbox row previews it
   assert.deepEqual(channels.slice(after, after + 3), ["# Channels", "▸ general", "# Tasks"]);
   // Folded, a group whose places wait unread says how many at rest, as the Inbox's folder counts do, so the dot it hid is not lost.
   const tasks = [
-    ...page.querySelectorAll<HTMLButtonElement>(".sidebar-repository-header button"),
+    ...page.querySelectorAll<HTMLButtonElement>(".luke-group-header-head button"),
   ].find((each) => headName(each) === "Tasks");
   assert.ok(tasks, "Tasks heads its group");
+  const count = () => tasks.querySelector<HTMLElement>(".luke-group-header-count");
+  assert.equal(count()?.dataset.shown, "on-hover", "an open group's count waits for the pointer");
   act(() => tasks.click());
-  const count = tasks.querySelector<HTMLElement>(".luke-nav-item-count");
-  assert.equal(count?.dataset.shown, "always", "the folded group's count stands at rest");
-  assert.match(count?.textContent ?? "", /^1 unread/u);
+  assert.equal(count()?.dataset.shown, "always", "the folded group's count stands at rest");
+  assert.match(count()?.textContent ?? "", /^1 unread/u);
 });
 
-test("the rail's rows draw in the sidebar's ink, and a message's face is the app's own mark, never tiled", () => {
+test("a rail group folded stays folded as Chat is drawn again, the rail's own and a task's section alike, and a group never folded stays open", () => {
+  const page = mountRail();
+  act(() => railHead(page, "Channels").querySelector("button")?.click());
+  act(() => railHead(page, "Launch").querySelector("button")?.click());
+  const folded = rail(page);
+  assert.ok(!folded.includes("general"), "Channels is folded");
+  assert.ok(!folded.includes("billing-export"), "Launch is folded");
+
+  act(() => root?.unmount());
+  document.body.innerHTML = "";
+  const again = rail(mountRail());
+  assert.deepEqual(again, folded, "the rail draws as it was left");
+  assert.ok(again.includes("teammate-invitations •"), "Pinned, never folded, stays open");
+});
+
+test("the rail's rows draw in the sidebar's ink, and every message leads with its author's face", () => {
   const page = mount((chat) => chat);
   const rows = [...page.querySelectorAll(".chat-rail .luke-list-row")];
   assert.ok(rows.length > 0, "the rail holds rows");
@@ -2033,13 +2160,8 @@ test("the rail's rows draw in the sidebar's ink, and a message's face is the app
     "every rail row wears the sidebar's ink",
   );
   act(() => railRow(page, "teammate-invitations").click());
-  const faces = [...page.querySelectorAll(".chat-face .actor-mark")];
+  const faces = [...page.querySelectorAll(".luke-comment-face .luke-avatar")];
   assert.ok(faces.length > 0, "messages lead with faces");
-  assert.deepEqual(
-    faces.filter((each) => each.getAttribute("data-tiled") === "true"),
-    [],
-    "no face stands on a tile outside a pile",
-  );
 });
 
 /** The fixture's task channel by its name, with the plan it is of. */
@@ -2114,12 +2236,12 @@ function mountRail(): HTMLElement {
 
 /** A group's header in the rail, by its name. */
 function railHead(page: HTMLElement, name: string): HTMLElement {
-  const head = [
-    ...page.querySelectorAll<HTMLElement>(".chat-rail .sidebar-repository-header"),
-  ].find((each) => {
-    const fold = each.querySelector("button:not(.sidebar-repository-actions *)");
-    return fold !== null && headName(fold) === name;
-  });
+  const head = [...page.querySelectorAll<HTMLElement>(".chat-rail .luke-group-header-head")].find(
+    (each) => {
+      const fold = each.querySelector("button:not(.luke-group-header-actions *)");
+      return fold !== null && headName(fold) === name;
+    },
+  );
   assert.ok(head, `the rail heads ${name}`);
   return head;
 }
@@ -2154,9 +2276,9 @@ test("the rail heads the tasks' channels as the sidebar heads their tasks, Pinne
     rail(page).filter((line) => line.startsWith("# ")),
     ["# Channels", "# Pinned", "# Launch", "# Direct messages"],
   );
-  assert.equal(railHead(page, "Pinned").querySelector(".luke-nav-item-icon"), null);
+  assert.equal(railHead(page, "Pinned").querySelector(".luke-group-header-icon"), null);
   assert.equal(
-    railHead(page, "Launch").querySelector(".luke-nav-item-icon")?.textContent,
+    railHead(page, "Launch").querySelector(".luke-group-header-icon")?.textContent,
     "🚀",
     "a section wears its own emoji",
   );
@@ -2184,11 +2306,11 @@ test("rested on, a task's row hangs its task's card, an agent's direct message i
 test("a row's right-click offers Mark as read while something waits unread in it, and Copy link; a topic's edits and archives it too; Mark as read takes its dot away", () => {
   const page = mountRail();
   const topic = rightClick(railRow(page, "members-schema")).map((each) => each.textContent);
-  assert.deepEqual(topic, ["Copy link", "Edit channel", "Archive channel"]);
+  assert.deepEqual(topic, ["Copy link", "Edit", "Archive"]);
   const offered = rightClick(railRow(page, "teammate-invitations"));
   assert.deepEqual(
     offered.map((each) => each.textContent),
-    ["Mark as read", "Copy link"],
+    ["Mark as read", "Show details⌥↓", "Copy link"],
   );
   act(() => menuItem(offered, "Mark as read").click());
   assert.ok(rail(page).includes("teammate-invitations"), "the row is read, its dot gone");
@@ -2212,7 +2334,7 @@ test("a group's ⋯ and a right-click on its header offer Mark all as read, whic
   const launch = rightClick(railHead(page, "Launch"));
   assert.equal(menuItem(launch, "Mark all as read").disabled, true);
   const ellipsis = railHead(page, "Pinned").querySelector<HTMLButtonElement>(
-    'button[aria-label="Actions for Pinned"]',
+    'button[aria-label="Pinned actions"]',
   );
   assert.ok(ellipsis, "the group's header offers its actions");
   act(() => ellipsis.click());
@@ -2578,9 +2700,9 @@ test("a task whose repository is let go reads its installed skills alone, and ch
 /** Where an agent's face in the channel shown stands, by the name its first message is bylined with: working, failed, or at rest. */
 function faceState(page: HTMLElement, name: string): string | null | undefined {
   const message = [...page.querySelectorAll(".chat-message")].find(
-    (each) => each.querySelector(".chat-byline-name")?.textContent === name,
+    (each) => each.querySelector(".luke-comment-name")?.textContent === name,
   );
-  return message?.querySelector(".chat-face .state-glyph")?.getAttribute("data-state");
+  return message?.querySelector(".luke-comment-face .state-glyph")?.getAttribute("data-state");
 }
 
 test("an agent wears where it stands, as its tile does everywhere else: its face working or failed, and a failed one's row the failed mark at its end", () => {
@@ -2693,9 +2815,12 @@ test("a member whose account is gone is named and drawn as one former member, in
   );
   act(() => railRow(page, "general").click());
   const gone = [...page.querySelectorAll(".chat-message")].find(
-    (each) => each.querySelector(".chat-face .actor-mark[data-kind='someone']") !== null,
+    (each) => each.querySelector(".luke-comment-name")?.textContent === "Former member",
   );
-  assert.equal(gone?.querySelector(".chat-byline-name")?.textContent, "Former member");
+  assert.ok(
+    gone?.querySelector(".luke-comment-face .luke-avatar[data-glyph]"),
+    "on the glyph for someone",
+  );
 });
 
 /** Chat over the fixture's chat on its plan's channel, each post held until the test lands it or refuses it, in the order posted. */
@@ -2823,6 +2948,11 @@ test("a post refused while the box holds nothing newer comes back into it with w
     chat.page.querySelector<HTMLElement>(".chat-message[data-unsent]") ??
     assert.fail("the refused post stays where it went");
   assert.match(unsent.textContent ?? "", /Back to the box\. Again\./u);
+  assert.match(
+    unsent.querySelector('[role="alert"]')?.textContent ?? "",
+    /^Chat could not be reached\.RetryDiscard$/u,
+    "the refusal is an alert with Retry and Discard",
+  );
   const retry =
     [...unsent.querySelectorAll("button")].find((each) => each.textContent === "Retry") ??
     assert.fail("with Retry");
@@ -2950,4 +3080,49 @@ test("the rail's places stand in named lists, For you alone in its own and every
     lists.some(([name, places]) => name === "Channels" && (places as string[]).includes("general")),
     "the channels stand in a list of their own",
   );
+});
+
+/** How tall a row is drawn, in the layout given. */
+const RAIL_ROW = 40;
+
+/** Each row of the rail standing under the rows before it, as a layout would; jsdom lays nothing out. */
+function layRailInOrder(): void {
+  vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (
+    this: HTMLElement,
+  ) {
+    const rows = [...(this.closest(".chat-rail-body")?.querySelectorAll("li") ?? [])];
+    const top = this.matches("li") ? rows.indexOf(this) * RAIL_ROW : 0;
+    return {
+      top,
+      bottom: top + RAIL_ROW,
+      left: 0,
+      right: 0,
+      width: 0,
+      height: RAIL_ROW,
+    } as DOMRect;
+  });
+}
+
+test("a direct message that gets a message glides up to the top of its group", async () => {
+  const motions = playListMotions();
+  onTestFinished(motions.remove);
+  const page = mount();
+  layRailInOrder();
+  const direct = () => rail(page).slice(rail(page).indexOf("# Direct messages") + 1);
+  assert.deepEqual(direct(), ["Add teammate invitations", "Invite emails", "Maria Chen"]);
+
+  act(() => railRow(page, "Maria Chen").click());
+  const box = boxNamed(page, "Message Maria Chen");
+  typeInComposer(box, "Hello Maria");
+  pressInComposer(box, "Enter");
+  await settle();
+
+  // The message made it her most recent, so her row stands first.
+  assert.deepEqual(
+    direct().map((name) => name.replace("▸ ", "")),
+    ["Maria Chen", "Add teammate invitations", "Invite emails"],
+  );
+  const row = railRow(page, "Maria Chen").closest("li");
+  const glide = motions.played.find((each) => each.element === row);
+  assert.deepEqual(glide?.keyframes[0], { transform: `translate(0px, ${RAIL_ROW * 2}px)` });
 });

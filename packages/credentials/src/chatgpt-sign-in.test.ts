@@ -91,7 +91,7 @@ it.effect(
     }),
 );
 
-it.effect("a grant without ChatGPT plan use keeps nothing and says so", () =>
+it.effect("a grant without ChatGPT subscription use keeps nothing and says so", () =>
   Effect.gen(function* () {
     const setup = harness({ scope: "openid profile email offline_access" });
     const { outcome } = yield* consentWith(setup, grantedCallback);

@@ -108,7 +108,10 @@ async function opened(container: HTMLElement, plus: DOMRect): Promise<[number, n
     container.querySelector<HTMLButtonElement>('button[aria-label="Open a tab"]') ??
     assert.fail("the + stands");
   await act(async () => button.click());
-  assert.ok(container.querySelector(".tab-add-menu [role='option']"), "the menu offers its tabs");
+  assert.ok(
+    container.querySelector(".luke-searchable-menu [role='option']"),
+    "the menu offers its tabs",
+  );
   const layer =
     container.querySelector<HTMLElement>(".luke-anchored-popover") ??
     assert.fail("the menu hangs from the +");
@@ -176,7 +179,7 @@ test('on a phone whose keyboard leaves the screen short of the "+" menu\'s heigh
   const container = await drawn(true);
   await opened(container, plus);
   const layer = container.querySelector<HTMLElement>(".luke-anchored-popover") ?? assert.fail();
-  const menu = container.querySelector<HTMLElement>(".tab-add-menu") ?? assert.fail();
+  const menu = container.querySelector<HTMLElement>(".luke-searchable-menu") ?? assert.fail();
   assert.equal(layer.dataset.side, "below", "the menu drops into the larger room, under the +");
   const tallest = Number.parseFloat(resolved(menu, getComputedStyle(menu).maxHeight));
   assert.ok(

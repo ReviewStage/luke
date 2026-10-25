@@ -266,7 +266,7 @@ test("a plan's, a skill's, an agent tab's, and a Changes tab's cards each name t
     glyph: true,
     name: "/release",
     sub: undefined,
-    corner: "Repo",
+    corner: "Repository",
   });
   assert.equal(
     skill.querySelector(".luke-hover-card > .luke-hover-card-note")?.textContent,

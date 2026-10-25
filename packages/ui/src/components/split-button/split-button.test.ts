@@ -51,7 +51,8 @@ function Harness({
     createElement(SplitButton, {
       label: "Save the plan",
       disabled,
-      busy,
+      busy: busy !== undefined,
+      busyLabel: busy ?? "",
       onClick: () => done.push("Save"),
       menu: { label: "More ways to save", ...menu.trigger() },
       children: "Save",
@@ -197,7 +198,8 @@ test("every press but the chevron's is heard as it lands, one the busy main part
   mount(
     createElement(SplitButton, {
       label: "Save the plan",
-      busy: "Saving",
+      busy: true,
+      busyLabel: "Saving",
       onClick: () => done.push("Save"),
       onMainPress: () => done.push("heard"),
       menu: {
@@ -226,7 +228,8 @@ test("a split button's main part whose press succeeded wears a check as its ring
   });
   const draw = (busy: string | undefined, succeeded: boolean) =>
     createElement(SplitButton, {
-      busy,
+      busy: busy !== undefined,
+      busyLabel: busy ?? "",
       succeeded,
       menu: {
         label: "Choose a model",

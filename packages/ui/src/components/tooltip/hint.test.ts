@@ -3,10 +3,12 @@
 import assert from "node:assert/strict";
 import { RegistryContext } from "@effect/atom-react/RegistryContext";
 import { MOTION_DELAY_MS } from "@luke/brand";
+import { COMMAND_KEY, installCommandKey } from "@luke/settings/shortcuts";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment, type ReactElement, useRef } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
+import { Button } from "../button/button.js";
 import { Tooltip } from "./hint.js";
 
 /**
@@ -25,6 +27,22 @@ import { Tooltip } from "./hint.js";
  * only crossing a control mounts nothing for it, a card's row moved on from
  * lets the next row wait its own wait, so a pointer sweeping down a list
  * hangs no card, and a pill seen still lets the next control's show at once.
+ *
+ * The keyboard enters a card: ⌥↓ on its control, on a Mac or where Command
+ * is Ctrl, opens it with focus on its first button, Tab walks its buttons
+ * with the card still standing, and Escape takes it down and hands focus
+ * back to the control, the window's layered Escape left alone; a card
+ * already showing on the control's focus is entered the same way. A card
+ * entered from a control on another card steps back one card per Escape,
+ * as does one the pointer hung over an entered card, the window's own
+ * Escape left alone either way.
+ *
+ * A reader hears a hint without the pointer or the keyboard: from its first
+ * render, a control is described by its hint's words, beside a description
+ * of its own, whether the control is the page's own element or a component;
+ * words that take no focus, which a reader's cursor only walks over, own
+ * them as hidden text read at their end, their own words as they were; and a
+ * control whose own name says them is told them by no other way.
  */
 
 const roots: Root[] = [];
@@ -562,4 +580,318 @@ test("a pill seen warms the window, so the next control's shows at once", () => 
   assert.equal(pill(), "Back");
   move(back, forward);
   assert.equal(pill(), "Forward", "the next shows at once");
+});
+
+/**
+ * A control hanging a card that holds two buttons, as an agent's chip's card
+ * holds its acts. Note that the control is `@luke/ui`'s own Button, which
+ * takes only the handlers a hint hands it, so ⌥↓ must reach it without one.
+ */
+const CARDED_CONTROL = createElement(Tooltip, {
+  label: "Agent",
+  card: createElement(
+    Fragment,
+    null,
+    createElement("p", { key: "name" }, "Fix the refresh"),
+    createElement("button", { key: "open", type: "button" }, "Open transcript"),
+    createElement("button", { key: "stop", type: "button" }, "Stop"),
+  ),
+  children: createElement(Button, { onClick: () => undefined, children: "Agent" }),
+});
+
+/** A key going down on `target`, as the browser sends it; answers the event, to read whether it was refused. */
+function keyDown(target: Element, init: KeyboardEventInit): KeyboardEvent {
+  const event = new KeyboardEvent("keydown", { bubbles: true, cancelable: true, ...init });
+  act(() => {
+    target.dispatchEvent(event);
+  });
+  return event;
+}
+
+/** ⌥↓, as either command key presses it: Option or Alt, and the down arrow. */
+const SHOW_DETAILS = { key: "ArrowDown", code: "ArrowDown", altKey: true } as const;
+
+/** The element holding focus now. */
+const focused = () => document.activeElement;
+
+test.each([
+  ["on a Mac", COMMAND_KEY.META],
+  ["where Command is Ctrl", COMMAND_KEY.CONTROL],
+])(
+  "%s, ⌥↓ on a focused control opens its card with focus inside, Tab walks its buttons, and Escape hands focus back",
+  (_where, commandKey) => {
+    const putBack = installCommandKey(commandKey);
+    try {
+      const control = mount(CARDED_CONTROL).querySelector("button") ?? assert.fail("drawn");
+      act(() => control.focus());
+      assert.equal(card(), null, "focus alone, not moved by the keyboard, hangs nothing");
+
+      const opened = keyDown(control, SHOW_DETAILS);
+      assert.ok(opened.defaultPrevented, "the control takes ⌥↓");
+      assert.ok(cardStands());
+      assert.equal(
+        card()?.getAttribute("role"),
+        "dialog",
+        "an entered card is a popover, no tooltip",
+      );
+      assert.equal(card()?.getAttribute("aria-label"), "Agent");
+      assert.equal(card()?.getAttribute("aria-modal"), null, "and no modal one");
+      const [open, stop] = card()?.querySelectorAll("button") ?? [];
+      assert.ok(open && stop);
+      assert.ok(focused() === open, "focus is on the card's first button");
+
+      // Tab, then the browser moving focus on to the next button.
+      keyDown(open, { key: "Tab", code: "Tab" });
+      act(() => stop.focus());
+      assert.ok(cardStands(), "Tab walks the card rather than taking it down");
+      assert.ok(focused() === stop, "focus is on its next button");
+
+      const closed = keyDown(stop, { key: "Escape", code: "Escape" });
+      assert.ok(closed.defaultPrevented, "the window's layered Escape is left alone");
+      assert.ok(!cardStands());
+      assert.ok(focused() === control, "focus is back on the control");
+    } finally {
+      putBack();
+    }
+  },
+);
+
+test("a card already showing on a control's keyboard focus is entered by ⌥↓, and focus leaving it takes it down", () => {
+  document.documentElement.dataset.keyboard = "true";
+  try {
+    const container = mount(
+      createElement(
+        Fragment,
+        null,
+        CARDED_CONTROL,
+        createElement("button", { type: "button", "data-elsewhere": "" }, "Elsewhere"),
+      ),
+    );
+    const control = container.querySelector("button") ?? assert.fail("drawn");
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    act(() => control.focus());
+    act(() => {
+      vi.advanceTimersByTime(MOTION_DELAY_MS.HINT);
+    });
+    vi.useRealTimers();
+    assert.ok(cardStands(), "the keyboard's focus shows the card");
+    assert.equal(card()?.getAttribute("role"), "tooltip");
+    assert.match(control.getAttribute("aria-keyshortcuts") ?? "", /Alt\+ArrowDown/);
+
+    keyDown(control, SHOW_DETAILS);
+    assert.ok(cardStands(), "the card standing is the one entered");
+    assert.ok(focused() === card()?.querySelector("button"), "focus is in the card");
+
+    const elsewhere = container.querySelector("[data-elsewhere]") ?? assert.fail("drawn");
+    act(() => (elsewhere as HTMLElement).focus());
+    assert.ok(!cardStands(), "focus leaving the card takes it down");
+  } finally {
+    delete document.documentElement.dataset.keyboard;
+  }
+});
+
+test("a card entered from a control on another entered card goes alone on Escape, focus back on that control, and the next Escape takes the outer card", () => {
+  const inner = createElement(Tooltip, {
+    label: "Sweep",
+    card: createElement("button", { type: "button" }, "Open automation"),
+    children: createElement(Button, { onClick: () => undefined, children: "Sweep" }),
+  });
+  const outer = createElement(Tooltip, {
+    label: "Agent",
+    card: createElement(Fragment, null, createElement("p", { key: "by" }, "Started by"), inner),
+    children: createElement(Button, { onClick: () => undefined, children: "Agent" }),
+  });
+  const control = mount(outer).querySelector("button") ?? assert.fail("drawn");
+  act(() => control.focus());
+
+  keyDown(control, SHOW_DETAILS);
+  const sweep = focused() ?? assert.fail("focus is somewhere");
+  assert.equal(sweep.textContent, "Sweep", "focus is on the outer card's control");
+  keyDown(sweep, SHOW_DETAILS);
+  const cardsStanding = () =>
+    [...document.querySelectorAll(".luke-tooltip-card:not([data-leaving])")].length;
+  assert.equal(cardsStanding(), 2, "the inner card hangs over the outer");
+  assert.equal(focused()?.textContent, "Open automation");
+
+  keyDown(focused() ?? assert.fail("focus is somewhere"), { key: "Escape", code: "Escape" });
+  assert.equal(cardsStanding(), 1, "only the inner card goes");
+  assert.ok(focused() === sweep, "focus is back on the control the inner card hangs from");
+
+  keyDown(sweep, { key: "Escape", code: "Escape" });
+  assert.equal(cardsStanding(), 0);
+  assert.ok(focused() === control, "focus is back on the outer card's control");
+});
+
+test("a card the pointer hangs over an entered card goes alone on Escape, and the window's own Escape is left alone", () => {
+  const inner = createElement(Tooltip, {
+    label: "Sweep",
+    card: createElement("p", null, "Every night at 2"),
+    children: createElement(Button, { onClick: () => undefined, children: "Sweep" }),
+  });
+  const outer = createElement(Tooltip, {
+    label: "Agent",
+    card: createElement(Fragment, null, createElement("p", { key: "by" }, "Started by"), inner),
+    children: createElement(Button, { onClick: () => undefined, children: "Agent" }),
+  });
+  const control = mount(outer).querySelector("button") ?? assert.fail("drawn");
+  act(() => control.focus());
+  keyDown(control, SHOW_DETAILS);
+  const sweep = focused() ?? assert.fail("focus is somewhere");
+  const cardsStanding = () =>
+    [...document.querySelectorAll(".luke-tooltip-card:not([data-leaving])")].length;
+  restOn(sweep);
+  assert.equal(cardsStanding(), 2, "the pointer hangs the inner card over the entered one");
+
+  const pressed = keyDown(sweep, { key: "Escape", code: "Escape" });
+  assert.equal(cardsStanding(), 1, "only the inner card goes");
+  assert.ok(pressed.defaultPrevented, "the window's layered Escape is left alone");
+  assert.ok(focused() === sweep, "focus stays in the entered card");
+});
+
+/** The words of each element `control` names in its `attribute`, in turn, as a reader hears them. */
+function wordsNamedBy(control: Element, attribute = "aria-describedby"): string[] {
+  return (control.getAttribute(attribute) ?? "")
+    .split(" ")
+    .filter((id) => id !== "")
+    .map((id) => document.getElementById(id)?.textContent ?? "");
+}
+
+test("a control is described by its hint from its first render, before any pointer or focus, beside a description of its own", () => {
+  const container = mount(
+    createElement(
+      Fragment,
+      null,
+      createElement("p", { id: "own" }, "Copies the address"),
+      createElement(Tooltip, {
+        label: "Copy link",
+        children: createElement(
+          "button",
+          { type: "button", "aria-label": "Copy", "aria-describedby": "own" },
+          "⧉",
+        ),
+      }),
+      createElement(Tooltip, {
+        label: "Stop the agent",
+        children: createElement(Button, { onClick: () => undefined, children: "Stop" }),
+      }),
+    ),
+  );
+  const [copy, stop] = [...container.querySelectorAll("button")];
+  assert.ok(copy && stop);
+  assert.equal(document.querySelector('[role="tooltip"]'), null, "no hint is drawn");
+  assert.deepEqual(wordsNamedBy(copy), ["Copies the address", "Copy link"]);
+  assert.deepEqual(wordsNamedBy(stop), ["Stop the agent"]);
+});
+
+test("a control whose own name already says its hint is told it by its name alone", () => {
+  const container = mount(
+    createElement(
+      Fragment,
+      null,
+      createElement(Tooltip, {
+        label: "Fix the refresh",
+        card: createElement("p", null, "Fix the refresh, opened by Ada"),
+        children: createElement(
+          "button",
+          { type: "button", "aria-describedby": undefined },
+          "Fix the refresh",
+        ),
+      }),
+      createElement(Tooltip, {
+        label: "Archive",
+        children: createElement(
+          "button",
+          { type: "button", "aria-label": "Archive task", "aria-describedby": undefined },
+          "×",
+        ),
+      }),
+      createElement(Tooltip, {
+        label: "a-long-name.yml",
+        children: createElement(
+          "span",
+          null,
+          "a-long-name.yml",
+          createElement("small", null, "3 KB"),
+        ),
+      }),
+    ),
+  );
+  for (const control of container.querySelectorAll("button, span")) {
+    assert.equal(control.hasAttribute("aria-describedby"), false, control.textContent ?? "");
+  }
+  assert.equal(container.textContent, "Fix the refresh×a-long-name.yml3 KB");
+});
+
+test("words that take no focus own their hint as hidden text, read at their end, while a control in a list it roves in is described", () => {
+  const container = mount(
+    createElement(
+      "ul",
+      null,
+      createElement(Tooltip, {
+        label: "Oct 24, 2026, 3:00 PM",
+        children: createElement(
+          "li",
+          { "aria-describedby": undefined },
+          createElement("time", null, "2h ago"),
+        ),
+      }),
+      createElement(
+        "li",
+        null,
+        createElement(Tooltip, {
+          label: "Bold",
+          children: createElement("span", {
+            role: "radio",
+            tabIndex: -1,
+            "aria-label": "B",
+            "aria-describedby": undefined,
+          }),
+        }),
+      ),
+    ),
+  );
+  const [time, roving] = [...container.querySelectorAll("li")];
+  assert.ok(time && roving);
+  assert.deepEqual(
+    [...(container.querySelector("ul")?.children ?? [])].map((child) => child.tagName),
+    ["LI", "LI"],
+    "the list holds its items alone",
+  );
+  assert.equal(time.textContent, "2h ago", "its own words are as they were");
+  assert.deepEqual(wordsNamedBy(time, "aria-owns"), ["Oct 24, 2026, 3:00 PM"]);
+  const owned = document.getElementById(time.getAttribute("aria-owns") ?? "");
+  assert.equal(owned?.className, "luke-visually-hidden");
+  assert.equal(time.hasAttribute("aria-describedby"), false);
+  const radio = roving.querySelector('[role="radio"]') ?? assert.fail("the roving control");
+  assert.deepEqual(wordsNamedBy(radio), ["Bold"]);
+  assert.equal(radio.hasAttribute("aria-owns"), false);
+});
+
+test("words cut short inside a control hanging a card raise no pill over its card", () => {
+  const page = mount(
+    createElement(Tooltip, {
+      label: "Fix the refresh",
+      card: createElement("p", null, "Opened by Sam"),
+      children: createElement(
+        "button",
+        { type: "button", "data-row": "", "aria-describedby": undefined },
+        createElement(Tooltip, {
+          label: "Fix the refresh of the token",
+          children: createElement(
+            "span",
+            { "data-label": "", "aria-describedby": undefined },
+            "Fix the refresh of the token",
+          ),
+        }),
+      ),
+    }),
+  );
+  restOn(page.querySelector("[data-row]") ?? assert.fail("the row"));
+  assert.equal(card()?.textContent, "Opened by Sam");
+
+  restOn(page.querySelector("[data-label]") ?? assert.fail("the label"));
+
+  assert.equal(cardStands(), true, "the card still stands");
+  assert.equal(card()?.textContent, "Opened by Sam");
+  assert.equal(document.querySelectorAll("[role='tooltip']").length, 1, "no pill beside it");
 });

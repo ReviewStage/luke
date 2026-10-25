@@ -1,8 +1,11 @@
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
+import { LINK_PLACE, linkOf } from "@luke/features/link-grammar";
 import type {
   WorkspaceSentry,
   WorkspaceSentryInstallation,
 } from "@luke/features/sentry-install-wire";
+import { dayAndTimeText } from "@luke/features/time-format";
+import { readingWords } from "@luke/features/words";
 import {
   INVITATION_ROLE,
   type WorkspaceInvitation,
@@ -20,8 +23,10 @@ import {
 } from "@luke/features/workspace-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import { HOST_CAPABILITY } from "@luke/settings";
+import { SETTINGS_SEARCH_ROW, searchAnchorProps } from "@luke/settings/settings-anchors";
 import { SETTINGS_SECTION } from "@luke/settings/settings-views";
 import {
+  ALIGN,
   BUTTON_TYPE,
   BUTTON_VARIANT,
   Button,
@@ -29,6 +34,7 @@ import {
   CHIP_WIDTH,
   Chip,
   ChipName,
+  CONFIRM_LOSS,
   ConfirmDialog,
   ErrorState,
   FormField,
@@ -57,6 +63,7 @@ import {
   SettingsSection,
   type SettingsSectionSkeletonShape,
   SettingsSectionsSkeleton,
+  STATUS_TONE,
   Stack,
   TEXT_FIELD_AUTO_COMPLETE,
   TEXT_FIELD_TYPE,
@@ -68,25 +75,25 @@ import {
   wholeWordsHint,
 } from "@luke/ui";
 import { ACTOR_KIND, memberActor, ROLE_WORDS, SOMEONE_REASON } from "@luke/ui/actor-model";
-import { githubAccountPictureUrl } from "@luke/ui/tasks-model";
-import { dayAndTimeText } from "@luke/ui/time-format";
-import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import {
   CrownIcon,
   ExternalLinkIcon,
+  GLYPH,
   ImageUpIcon,
   ShieldIcon,
   UserIcon,
   UserMinusIcon,
   UserRoundIcon,
   XIcon,
-} from "lucide-react";
+} from "@luke/ui/icons";
+import { githubAccountPictureUrl } from "@luke/ui/tasks-model";
+import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { useEffect, useRef, useState } from "react";
 import { useAct } from "../act.js";
 import { streamFrom } from "../act-stream.js";
 import { ACTOR_SIZE, ActorMark, actorMarkWidth, YouBadge } from "../actor-ref.js";
 import { actPort } from "../app-bridge.js";
-import { useCopyToast } from "../copy-feedback.js";
+import { LINK_COPY, useCopyToast } from "../copy-feedback.js";
 import { ActionMenu } from "../desktop/action-menu.js";
 import { sharedWords } from "../desktop/workspace-ref.js";
 import { TILE_SIZE, WorkspaceTile } from "../desktop/workspace-tile.js";
@@ -94,11 +101,12 @@ import { encodeImage } from "../feedback-images.js";
 import { memberRows } from "../member-rows.js";
 import { useOpenPerson } from "../person-door.js";
 import { useWorkspaceMembersRead } from "../tasks/use-workspace-members.js";
-import { TOAST_HOLD, TOAST_TONE, useToast } from "../toast.js";
+import { TOAST_HOLD, useToast } from "../toast.js";
 import { useCapability } from "../use-app-state.js";
 import { useRefocusAfterEdit } from "../use-refocus-after-edit.js";
 import { MacRepositoriesGroup } from "./mac-repository-settings.js";
 import { MenuRow } from "./menu-row.js";
+import { WORKSPACE_CONNECTIONS } from "./pages.js";
 import { shownWorkspace } from "./settings-rows.js";
 import { useSentryRead } from "./use-sentry-read.js";
 import {
@@ -114,7 +122,7 @@ import {
  * there is one choice of workspace in the window: a Settings link that names
  * another lists it in the sidebar first. It is drawn in the shape of the
  * other Settings pages, one kind of thing to a group. Its first row is the
- * workspace as Profile's first row is the account: its tile, its name, who
+ * workspace as Account's first row is the account: its tile, its name, who
  * shares it and the reader's role, and for an owner or an admin Rename and
  * the photo's acts; an account's first workspace is named by its owner's
  * account name, so it offers no Rename. The members follow as the service
@@ -123,8 +131,9 @@ import {
  * removes anyone else, and an admin removes members. An owner or an admin
  * then invites people by address and role, an admin as a member alone,
  * sees the invitations still pending with each one's accept link to copy and
- * send, and cancels one. Integrations holds what the workspace connects for
- * everyone, each drawn as Settings › Integrations draws its rows. GitHub,
+ * send, and cancels one. Workspace connections holds what the workspace
+ * connects for everyone, named apart from the account's own Integrations
+ * page, each drawn as Settings › Integrations draws its rows. GitHub,
  * the one place a workspace's repositories are set: every GitHub
  * account whose installation of the Luke GitHub App is connected, each
  * inset under GitHub's row with its picture on GitHub, Connected or suspended;
@@ -157,7 +166,7 @@ const PHOTO_ACCEPT = [...PHOTO_TYPES].join(",");
 /** Why a picked file did not become the workspace's photo, in the words said under its row. */
 const PHOTO_REFUSAL = {
   KIND: (name: string) => `${name} isn't a PNG, JPEG, or WebP image.`,
-  UNREADABLE: (name: string) => `${name} couldn't be read.`,
+  UNREADABLE: (name: string) => `${name} could not be read.`,
   TOO_LARGE: (name: string) => `${name} is too large for a workspace photo.`,
 } as const;
 
@@ -166,12 +175,22 @@ const PHOTO_WORDS = {
   UPLOAD: "Upload photo",
   REPLACE: "Replace photo",
   REMOVE: "Remove photo",
+  /** What goes with a removed photo, which the confirm says in one line. */
+  REMOVE_BODY: "The photo is deleted, and the workspace is marked by its first letter instead.",
 } as const;
+
+/** The member's removal, which the menu item and its confirm both say. */
+const REMOVE_MEMBER = "Remove from workspace";
 
 const ACCEPTED: ActionResult = { status: ACTION_RESULT_STATUS.ACCEPTED };
 
 /** The roles an invitation offers, in the order the role's menu lists them, the default first. */
 const INVITATION_ROLES = [INVITATION_ROLE.MEMBER, INVITATION_ROLE.ADMIN] as const;
+
+/** The writes the invitations list takes, one out at a time. */
+const INVITATION_WRITE = { INVITE: "invite", CANCEL: "cancel" } as const;
+
+type InvitationWrite = (typeof INVITATION_WRITE)[keyof typeof INVITATION_WRITE];
 
 /** What each role may do, as the role menu's second lines say it. */
 const ROLE_DETAIL = {
@@ -182,6 +201,9 @@ const ROLE_DETAIL = {
 /** What an admin's role menu says under Admin, which only the owner invites. */
 const OWNER_INVITES_ADMINS = "Only the owner invites admins";
 
+/** What the toast says once an invitation's accept link is on the clipboard. */
+const INVITE_LINK_COPIED = "Invite link copied";
+
 /** What the invitations say where none is pending, with the one fact a reader cannot guess: Luke mails no one. */
 const INVITATIONS_EMPTY =
   "No invitations. Luke sends no email, so copy each invitation's link and send it yourself.";
@@ -190,6 +212,7 @@ const INVITATIONS_EMPTY =
 const READ_FAILED = {
   MEMBERS: "The members could not be read.",
   INVITATIONS: "The invitations could not be read.",
+  SENTRY: "The workspace's Sentry could not be read.",
 } as const;
 
 /**
@@ -201,7 +224,8 @@ const READ_FAILED = {
  * fails as `creator-left`.
  */
 const LEAVE_WORDS = {
-  LINE: "You lose its tasks, agents, and Inbox until someone invites you again.",
+  RUNNING: "Leaving",
+  LINE: "You lose its tasks, agents, and inbox until someone invites you again.",
   TASKS: (name: string) => `Tasks you wrote stay in ${name}.`,
   AGENTS: "Agents you started that are still working stop.",
   AUTOMATIONS: "Automations you created stop running.",
@@ -217,7 +241,7 @@ const LEAVE_WORDS = {
     name === undefined
       ? "Your own workspace isn't affected."
       : `Your own workspace, ${name}, isn't affected.`,
-  LEFT: (name: string) => `You left ${name}.`,
+  LEFT: (name: string) => `You left ${name}`,
 } as const;
 
 /** The role changes in a member's ⋯, the owner's alone. */
@@ -292,8 +316,8 @@ type ShownConnection = Pick<WorkspaceGithubInstallation, "login" | "active"> &
 /** What the Linear row's line says, by where the workspace's Linear stands and who is reading it. */
 const LINEAR_LINE = {
   CONNECTED: "Connected for everyone in this workspace",
-  EXPIRED: "Linear stopped honoring this connection. Connect again.",
-  EXPIRED_MEMBER: "Linear stopped honoring this connection. Ask an owner or admin.",
+  EXPIRED: "Sign-in expired.",
+  EXPIRED_MEMBER: "Sign-in expired. Ask an owner or admin.",
   MANAGES: "Not connected.",
   MEMBER: "Not connected. Ask an owner or admin.",
 } as const;
@@ -324,7 +348,7 @@ const INVITATION_ROW_SKELETON: SettingsRowSkeletonShape = {
   controls: [SETTINGS_SKELETON_CONTROL.BUTTON, SETTINGS_SKELETON_CONTROL.MORE],
 };
 
-/** The services the Integrations group draws a row for, in order, each by its own row. */
+/** The services the Workspace connections group draws a row for, in order, each by its own row. */
 const WORKSPACE_INTEGRATIONS = [
   { service: INTEGRATION_PROVIDER.GITHUB, Row: WorkspaceGitHub },
   { service: INTEGRATION_PROVIDER.LINEAR, Row: WorkspaceLinear },
@@ -427,13 +451,13 @@ function useMembersRead(workspace: Workspace) {
 /**
  * One member's row: their face, their name with You on the reader's own,
  * their email under it, and their role as the row's value in one column,
- * then in its ⋯ their profile, where the window offers one, and what the
- * reader may do to them (`memberActs`). Make admin
- * and Make member take hold at once, since either is undone by the other;
- * Make owner and Remove from workspace ask first. A role change refused is
- * said under the row. A row with no ⋯ in a list where others have one
- * keeps the ⋯'s room, so every role ends in the same place. The row is
- * `@luke/ui`'s `SettingsRow` led by the face, through `MenuRow`.
+ * then in its ⋯ their profile, where the window offers one, Copy link to
+ * their person page, and what the reader may do to them (`memberActs`).
+ * Make admin and Make member take hold at once, since either is undone by
+ * the other; Make owner and Remove from workspace ask first. A role change
+ * refused is said under the row. A row with no ⋯ in a list where others
+ * have one keeps the ⋯'s room, so every role ends in the same place. The
+ * row is `@luke/ui`'s `SettingsRow` led by the face, through `MenuRow`.
  */
 function MemberRow({
   workspace,
@@ -473,8 +497,9 @@ function MemberRow({
     );
   };
   const openPerson = useOpenPerson();
-  const profileActs =
-    openPerson === undefined
+  const copy = useCopyToast();
+  const profileActs = [
+    ...(openPerson === undefined
       ? []
       : [
           {
@@ -482,7 +507,17 @@ function MemberRow({
             icon: <UserRoundIcon />,
             onSelect: () => openPerson(userId, member.name, workspaceId),
           },
-        ];
+        ]),
+    {
+      label: LINK_COPY.LABEL,
+      icon: <GLYPH.LINK />,
+      onSelect: () =>
+        copy(
+          linkOf({ kind: LINK_PLACE.PERSON, userId }, workspace.slug ?? workspaceId),
+          LINK_COPY.COPIED,
+        ),
+    },
+  ];
   const roleActs = [
     ...(may.promote
       ? [
@@ -509,7 +544,7 @@ function MemberRow({
   const removeActs = may.remove
     ? [
         {
-          label: "Remove from workspace",
+          label: REMOVE_MEMBER,
           icon: <UserMinusIcon />,
           danger: true,
           onSelect: remove.ask,
@@ -520,7 +555,7 @@ function MemberRow({
   return (
     <Stack gap={GAP.NONE}>
       <MenuRow
-        label={`${member.name} actions`}
+        thing={member.name}
         actions={[profileActs, roleActs, removeActs]}
         row={{
           leading: <ActorMark actor={memberActor(member, readerId)} size={ACTOR_SIZE.CARD} />,
@@ -542,21 +577,25 @@ function MemberRow({
         }}
       />
       <ConfirmDialog
+        open
         confirm={remove}
         question={{
           title: `Remove ${member.name} from this workspace?`,
-          body: "They lose its tasks, agents, and Inbox until they are invited again.",
-          verb: "Remove",
+          body: "They lose its tasks, agents, and inbox until they are invited again.",
+          verb: REMOVE_MEMBER,
           running: "Removing",
+          loss: CONFIRM_LOSS.AFFECTS_OTHERS,
         }}
       />
       <ConfirmDialog
+        open
         confirm={makeOwner}
         question={{
           title: `Make ${member.name} the owner of ${workspace.name}?`,
           body: TRANSFER_WORDS.ONE_BODY(member.name),
           verb: ROLE_ACT.MAKE_OWNER,
           running: TRANSFER_WORDS.RUNNING,
+          loss: CONFIRM_LOSS.AFFECTS_OTHERS,
         }}
       />
     </Stack>
@@ -591,7 +630,7 @@ function useOwnAutomations(workspaceId: string) {
 }
 
 /**
- * The leave for a member or an admin: drawn as Profile's Delete account is,
+ * The leave for a member or an admin: drawn as Account's Delete account is,
  * its name, a line saying what goes, and the red button, which asks first,
  * naming what stays and what stops, the automations the reader made among
  * them by name where the service says whose they are. A leave the service
@@ -616,7 +655,7 @@ function MemberLeave({
     act(ACT_KIND.WORKSPACE_LEAVE, { workspaceId }).then(() => {
       show({
         words: LEAVE_WORDS.LEFT(workspace.name),
-        tone: TOAST_TONE.DONE,
+        tone: STATUS_TONE.COMPLETE,
         hold: TOAST_HOLD.DONE,
       });
       onLeft();
@@ -635,7 +674,8 @@ function MemberLeave({
         {() => (
           <Button
             variant={BUTTON_VARIANT.DANGER_OUTLINE}
-            disabled={leave.busy}
+            busy={leave.busy}
+            busyLabel={LEAVE_WORDS.RUNNING}
             onClick={() => {
               automations.read();
               leave.ask();
@@ -646,12 +686,14 @@ function MemberLeave({
         )}
       </SettingsRow>
       <ConfirmDialog
+        open
         confirm={leave}
         question={{
           title: `Leave ${workspace.name}?`,
           body: LEAVE_WORDS.LINE,
           verb: `Leave ${workspace.name}`,
-          running: "Leaving",
+          running: LEAVE_WORDS.RUNNING,
+          loss: CONFIRM_LOSS.IRREVERSIBLE,
         }}
       >
         <ul className="leave-consequences">
@@ -774,7 +816,8 @@ function OwnerLeave({
           heir === undefined ? null : (
             <Button
               variant={BUTTON_VARIANT.OUTLINE}
-              disabled={transfer.busy}
+              busy={transfer.busy}
+              busyLabel={TRANSFER_WORDS.RUNNING}
               onClick={() => transfer.ask()}
             >
               {TRANSFER_WORDS.VERB}
@@ -784,13 +827,15 @@ function OwnerLeave({
       </SettingsRow>
       {heir === undefined ? null : (
         <ConfirmDialog
+          open
           confirm={transfer}
           gate={workspace.name}
           question={{
-            title: `Transfer ownership of ${workspace.name}`,
+            title: `Transfer ownership of ${workspace.name}?`,
             body: TRANSFER_WORDS.BODY,
             verb: TRANSFER_WORDS.VERB,
             running: TRANSFER_WORDS.RUNNING,
+            loss: CONFIRM_LOSS.AFFECTS_OTHERS,
           }}
         >
           <FormField label="New owner">
@@ -860,7 +905,7 @@ function TeamMembers({
   if (members === undefined) {
     return (
       <SettingsRowsSkeleton
-        label="Loading the members"
+        label={readingWords("the members")}
         rows={Array.from(
           { length: Math.min(workspace.memberCount ?? 1, MEMBERS_SKELETON_MOST) },
           () => MEMBER_ROW_SKELETON,
@@ -947,7 +992,8 @@ function RoleChip({
  * invites an address as a member or an admin, then those still pending,
  * each under the outline face a person not yet in wears, saying as what and
  * until when, with its link to copy and Cancel invitation in its ⋯, which asks
- * nothing first since inviting the address again undoes it. A refusal is
+ * first in the accent rather than red: inviting the address again undoes it,
+ * but the link already sent to the invitee stops working. A refusal is
  * said under the form. The form is `@luke/ui`'s `TextField`, the role's
  * chip, and Invite its outline `Button`; each pending one is a `SettingsRow`
  * led by the face, through `MenuRow`, Copy link its outline `Button`.
@@ -973,9 +1019,11 @@ function Invitations({
     setPendingState(next);
   };
   const [email, setEmail] = useState("");
+  const emailField = useRef<HTMLInputElement>(null);
   const [role, setRole] = useState<WorkspaceInvitation["role"]>(INVITATION_ROLE.MEMBER);
   const [note, setNote] = useState<string>();
-  const [busy, setBusy] = useState(false);
+  const [writing, setWriting] = useState<InvitationWrite>();
+  const busy = writing !== undefined;
   // Note that the press reads a ref rather than `busy`, because a second
   // press can land before the render that would disable the button.
   const sending = useRef(false);
@@ -1002,10 +1050,14 @@ function Invitations({
   };
   // Note that one write runs at a time, invite or cancel, so no list read
   // after one can see the service before another has settled.
-  const write = <A,>(made: () => Promise<A>, done: (answer: A, fresh: boolean) => void) => {
+  const write = <A,>(
+    which: InvitationWrite,
+    made: () => Promise<A>,
+    done: (answer: A, fresh: boolean) => void,
+  ) => {
     if (sending.current) return;
     sending.current = true;
-    setBusy(true);
+    setWriting(which);
     setNote(undefined);
     const before = streamed.current;
     made()
@@ -1015,7 +1067,7 @@ function Invitations({
       )
       .finally(() => {
         sending.current = false;
-        setBusy(false);
+        setWriting(undefined);
       });
   };
 
@@ -1053,6 +1105,7 @@ function Invitations({
   const invite = (event: React.FormEvent) => {
     event.preventDefault();
     write(
+      INVITATION_WRITE.INVITE,
       () => act(ACT_KIND.WORKSPACE_INVITE, { workspaceId, email, role }),
       (made, fresh) => {
         setEmail("");
@@ -1065,6 +1118,7 @@ function Invitations({
 
   const cancel = (invitationId: string) =>
     write(
+      INVITATION_WRITE.CANCEL,
       () => act(ACT_KIND.WORKSPACE_INVITATION_CANCEL, { workspaceId, invitationId }),
       // The cancel's own answer is the list after it, so a read out before it is passed over.
       (left, fresh) => {
@@ -1074,24 +1128,57 @@ function Invitations({
       },
     );
 
+  // Note that the question goes with its invitation, canceled or accepted meanwhile.
+  const [cancelling, setCancelling] = useState<WorkspaceInvitation>();
+  const cancellation = useConfirmDialog(
+    {
+      subject: cancelling !== undefined && (pending ?? []).some((one) => one.id === cancelling.id),
+      surfaceOpen: true,
+    },
+    () => {
+      if (cancelling !== undefined) cancel(cancelling.id);
+      return Promise.resolve(ACCEPTED);
+    },
+  );
+
   return (
     <>
       <Stack gap={GAP.NONE}>
         <div className="workspace-invite">
-          <Inline as={LAYOUT_ELEMENT.FORM} justify={JUSTIFY.END} grow growFirst onSubmit={invite}>
-            <TextField
-              type={TEXT_FIELD_TYPE.EMAIL}
-              required
-              label="Email address"
-              placeholder="name@example.com"
-              autoComplete={TEXT_FIELD_AUTO_COMPLETE.OFF}
-              spellCheck={false}
-              value={email}
-              disabled={busy}
-              onChange={setEmail}
-            />
+          <Inline
+            as={LAYOUT_ELEMENT.FORM}
+            align={ALIGN.END}
+            justify={JUSTIFY.END}
+            grow
+            growFirst
+            onSubmit={invite}
+          >
+            <FormField label="Email address">
+              {(field) => (
+                <TextField
+                  ref={emailField}
+                  field={field}
+                  type={TEXT_FIELD_TYPE.EMAIL}
+                  required
+                  placeholder="name@example.com"
+                  autoComplete={TEXT_FIELD_AUTO_COMPLETE.OFF}
+                  spellCheck={false}
+                  value={email}
+                  disabled={busy}
+                  // Note that Escape lets go of the field and keeps the words, rather than leaving Settings.
+                  onEscape={() => emailField.current?.blur()}
+                  onChange={setEmail}
+                />
+              )}
+            </FormField>
             <RoleChip value={role} disabled={busy} adminAllowed={owner} onChange={setRole} />
-            <Button type={BUTTON_TYPE.SUBMIT} variant={BUTTON_VARIANT.OUTLINE} disabled={busy}>
+            <Button
+              type={BUTTON_TYPE.SUBMIT}
+              variant={BUTTON_VARIANT.PRIMARY}
+              busy={writing === INVITATION_WRITE.INVITE}
+              busyLabel="Inviting"
+              disabled={writing === INVITATION_WRITE.CANCEL}
+            >
               Invite
             </Button>
           </Inline>
@@ -1105,21 +1192,27 @@ function Invitations({
       {firstReadFailed !== undefined ? (
         <ReadFailed line={firstReadFailed} onRetry={read} />
       ) : pending === undefined ? (
-        <SettingsRowsSkeleton label="Loading the invitations" rows={[INVITATION_ROW_SKELETON]} />
+        <SettingsRowsSkeleton
+          label={readingWords("the invitations")}
+          rows={[INVITATION_ROW_SKELETON]}
+        />
       ) : pending.length === 0 ? (
         <SettingsLine>{INVITATIONS_EMPTY}</SettingsLine>
       ) : null}
       {(pending ?? []).map((one) => (
         <MenuRow
           key={one.id}
-          label={`${one.email} actions`}
+          thing={one.email}
           actions={[
             {
               label: "Cancel invitation",
               icon: <XIcon />,
               danger: true,
               disabled: busy,
-              onSelect: () => cancel(one.id),
+              onSelect: () => {
+                setCancelling(one);
+                cancellation.ask();
+              },
             },
           ]}
           row={{
@@ -1130,14 +1223,25 @@ function Invitations({
             control: (
               <Button
                 variant={BUTTON_VARIANT.OUTLINE}
-                onClick={() => copy(one.acceptUrl, "Link copied")}
+                onClick={() => copy(one.acceptUrl, INVITE_LINK_COPIED)}
               >
-                Copy link
+                Copy invite link
               </Button>
             ),
           }}
         />
       ))}
+      <ConfirmDialog
+        open
+        confirm={cancellation}
+        question={{
+          title: "Cancel invitation?",
+          body: `The link sent to ${cancelling?.email ?? ""} stops working. Inviting the address again sends a new one.`,
+          verb: "Cancel invitation",
+          running: "Canceling",
+          loss: CONFIRM_LOSS.AFFECTS_OTHERS,
+        }}
+      />
     </>
   );
 }
@@ -1222,11 +1326,20 @@ function ManagedGitHub({
   const { act } = useAct();
   const workspaceId = workspace.id;
   const [refusal, setRefusal] = useState<string>();
+  // Note that a second press while the browser is being sent is taken as none, as Linear's is.
+  const [opening, setOpening] = useState(false);
+  const underWay = useRef(false);
   const open = () => {
+    if (underWay.current) return;
+    underWay.current = true;
+    setOpening(true);
     setRefusal(undefined);
-    act(ACT_KIND.WORKSPACE_GITHUB_CONNECT, { workspaceId }).catch((refused: Error) =>
-      setRefusal(refused.message),
-    );
+    act(ACT_KIND.WORKSPACE_GITHUB_CONNECT, { workspaceId })
+      .catch((refused: Error) => setRefusal(refused.message))
+      .finally(() => {
+        underWay.current = false;
+        setOpening(false);
+      });
   };
   const connected = connections.length > 0;
   return (
@@ -1244,12 +1357,19 @@ function ManagedGitHub({
               <Button
                 variant={BUTTON_VARIANT.OUTLINE}
                 icon={<ExternalLinkIcon aria-hidden="true" />}
+                busy={opening}
+                busyLabel="Opening GitHub"
                 onClick={open}
               >
                 Manage on GitHub
               </Button>
             ) : (
-              <Button variant={BUTTON_VARIANT.OUTLINE} onClick={open}>
+              <Button
+                variant={BUTTON_VARIANT.OUTLINE}
+                busy={opening}
+                busyLabel="Connecting"
+                onClick={open}
+              >
                 Connect
               </Button>
             )}
@@ -1326,7 +1446,7 @@ function linearLine(linear: Workspace["linear"], manages: boolean): React.ReactN
 
 /**
  * The workspace's Linear, for an owner or an admin: Connect while none is,
- * or Connect again once Linear stopped honoring it, which opens Linear's
+ * or Reconnect once its sign-in expired, which opens Linear's
  * sign-in in the browser, a sign-in that could not be begun saying why
  * under the row; and a ⋯ once one stands, as Settings › Integrations keeps
  * a connected row quiet, whose menu holds Disconnect, which asks first. A
@@ -1361,11 +1481,20 @@ function ManagedLinear({ workspace }: { workspace: Workspace }): React.JSX.Eleme
   const actions =
     linear === undefined
       ? []
-      : [[{ label: "Disconnect", icon: <TrashIcon />, danger: true, onSelect: disconnect.ask }]];
+      : [
+          [
+            {
+              label: "Disconnect",
+              icon: <GLYPH.DISCONNECT />,
+              danger: true,
+              onSelect: disconnect.ask,
+            },
+          ],
+        ];
   return (
     <Stack gap={GAP.NONE}>
       <MenuRow
-        label="Linear actions"
+        thing="Linear"
         actions={actions}
         row={{
           leading: LINEAR_MARK,
@@ -1380,22 +1509,22 @@ function ManagedLinear({ workspace }: { workspace: Workspace }): React.JSX.Eleme
                 busyLabel="Connecting"
                 onClick={connect}
               >
-                {linear === undefined ? "Connect" : "Connect again"}
+                {linear === undefined ? "Connect" : "Reconnect"}
               </Button>
             ),
         }}
       />
-      {linear === undefined ? null : (
-        <ConfirmDialog
-          confirm={disconnect}
-          question={{
-            title: `Disconnect Linear from ${workspace.name}?`,
-            body: "Nobody in the workspace can start a task from an issue until Linear is connected again.",
-            verb: "Disconnect",
-            running: "Disconnecting",
-          }}
-        />
-      )}
+      <ConfirmDialog
+        open
+        confirm={disconnect}
+        question={{
+          title: `Disconnect Linear from ${workspace.name}?`,
+          body: "Nobody in the workspace can start a task from an issue until Linear is connected again.",
+          verb: "Disconnect",
+          running: "Disconnecting",
+          loss: CONFIRM_LOSS.AFFECTS_OTHERS,
+        }}
+      />
     </Stack>
   );
 }
@@ -1497,7 +1626,7 @@ function ManagedSentry({
   return (
     <Stack gap={GAP.NONE}>
       <MenuRow
-        label="Sentry actions"
+        thing="Sentry"
         actions={actions}
         row={{
           leading: SENTRY_MARK,
@@ -1518,12 +1647,14 @@ function ManagedSentry({
         }}
       />
       <ConfirmDialog
+        open
         confirm={disconnect}
         question={{
           title: `Disconnect Sentry from ${workspace.name}?`,
           body: "Its alerts and new issues stop triggering this workspace's automations. Uninstall Luke in Sentry's settings to remove it there too.",
           verb: "Disconnect",
           running: "Disconnecting",
+          loss: CONFIRM_LOSS.AFFECTS_OTHERS,
         }}
       />
     </Stack>
@@ -1533,16 +1664,20 @@ function ManagedSentry({
 /**
  * The workspace's Sentry: drawn only where the deployment holds Luke's
  * Sentry integration, an owner's or an admin's to install for everyone,
- * and for a member, read only, where it is installed or the ask to have it.
+ * and for a member, read only, where it is installed or the ask to have it;
+ * a read that did not land says so in the row's place, with Retry.
  */
 function WorkspaceSentryRow({ workspace }: { workspace: Workspace }): React.JSX.Element | null {
-  const { read, changed } = useSentryRead(workspace.id);
-  if (read === undefined || !read.configured) return null;
+  const { read, retry, changed } = useSentryRead(workspace.id);
+  if (read === undefined) return null;
+  if ("failed" in read) return <ReadFailed line={READ_FAILED.SENTRY} onRetry={retry} />;
+  const { sentry } = read;
+  if (!sentry.configured) return null;
   if (managesWorkspace(workspace)) {
-    return <ManagedSentry workspace={workspace} sentry={read} onChanged={changed} />;
+    return <ManagedSentry workspace={workspace} sentry={sentry} onChanged={changed} />;
   }
   return (
-    <SettingsRow leading={SENTRY_MARK} label="Sentry" description={sentryLine(read, false)}>
+    <SettingsRow leading={SENTRY_MARK} label="Sentry" description={sentryLine(sentry, false)}>
       {() => null}
     </SettingsRow>
   );
@@ -1602,7 +1737,7 @@ function identityLine(workspace: Workspace): string {
 }
 
 /**
- * The page's first row, drawn as Profile's account row is: the workspace's
+ * The page's first row, drawn as Account's account row is: the workspace's
  * tile, its name, who shares it and the reader's role in one line, then for
  * an owner or an admin Rename, and the photo's acts in its ⋯. Rename opens
  * the name in place on its own line, as the sidebar renames a task, and
@@ -1711,9 +1846,9 @@ function WorkspaceIdentity({ workspace }: { workspace: Workspace }): React.JSX.E
     ) : null;
   const photoPicker = manages ? picker.input : null;
   return (
-    <Stack gap={GAP.NONE}>
+    <Stack gap={GAP.NONE} {...searchAnchorProps(SETTINGS_SEARCH_ROW.WORKSPACE_RENAME)}>
       <MenuRow
-        label="Workspace actions"
+        thing="Workspace"
         actions={actions}
         row={{
           leading: <WorkspaceTile workspace={workspace} size={TILE_SIZE.HEAD} />,
@@ -1738,11 +1873,14 @@ function WorkspaceIdentity({ workspace }: { workspace: Workspace }): React.JSX.E
         }}
       />
       <ConfirmDialog
+        open
         confirm={remove}
         question={{
           title: `Remove ${workspace.name}'s photo?`,
-          verb: "Remove",
+          body: PHOTO_WORDS.REMOVE_BODY,
+          verb: PHOTO_WORDS.REMOVE,
           running: "Removing",
+          loss: CONFIRM_LOSS.AFFECTS_OTHERS,
         }}
       />
     </Stack>
@@ -1772,7 +1910,10 @@ export function WorkspacePage({
         <ReadFailed line="Your workspaces could not be read." onRetry={control.onRetryList} />
       </SettingsSection>
     ) : (
-      <SettingsSectionsSkeleton label="Loading your workspaces" sections={WORKSPACE_SKELETON} />
+      <SettingsSectionsSkeleton
+        label={readingWords("your workspaces")}
+        sections={WORKSPACE_SKELETON}
+      />
     );
   }
   // Keyed to the workspace, so another one listed reads its own members and asks nothing left over.
@@ -1818,7 +1959,7 @@ function ShownWorkspace({
           <Invitations workspaceId={workspace.id} owner={workspace.role === WORKSPACE_ROLE.OWNER} />
         </SettingsSection>
       ) : null}
-      <SettingsSection title="Integrations" anchor={SETTINGS_SECTION.GITHUB_REPOSITORIES}>
+      <SettingsSection title={WORKSPACE_CONNECTIONS} anchor={SETTINGS_SECTION.GITHUB_REPOSITORIES}>
         {WORKSPACE_INTEGRATIONS.map(({ service, Row }) => (
           <Row key={service} workspace={workspace} />
         ))}

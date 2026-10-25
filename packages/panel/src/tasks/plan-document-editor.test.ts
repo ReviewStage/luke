@@ -3,17 +3,27 @@
 import assert from "node:assert/strict";
 import { CONVERSATION_MEDIA_TYPE } from "@luke/features/conversation-picture-wire";
 import { planAttachmentAddress } from "@luke/features/plan-attachment-link";
+import {
+  PLAN_COMMENT_ACTOR,
+  PLAN_COMMENT_ENTRY,
+  PLAN_COMMENT_SCOPE,
+  PLAN_COMMENT_STATUS,
+  type PlanCommentThread,
+} from "@luke/features/plan-comment-wire";
 import type { PlanEditRequest } from "@luke/features/plan-edit";
 import { PLAN_ACTOR, type Task } from "@luke/features/task-wire";
-import type { TasksEditAnswer } from "@luke/features/tasks-view";
+import { TASK_CALL_FAILURE, type TasksEditAnswer } from "@luke/features/tasks-view";
 import { ACT_KIND } from "@luke/host/acts";
 import { DIAGRAM_DRAWING, type DiagramModule } from "@luke/ui/diagram-contract";
+import { type PlanCommentsControl, PlanCommentsProvider } from "@luke/ui/plan-comments";
 import { Effect } from "effect";
-import { act, createElement } from "react";
+import * as AtomRegistry from "effect/reactivity/AtomRegistry";
+import { act, createElement, Fragment, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
 import { type SideBundles, sideBundles } from "../bundle-loader.js";
 import {
+  FINISH,
   PLACEMENT_END,
   type PlacedWords,
   type PlanEditorModule,
@@ -21,11 +31,16 @@ import {
   type PlanEditorProps,
 } from "../plan-editor/contract.js";
 import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
+import { onRegistry } from "../testing/copy-feedback.js";
 import { DOCUMENT_NAME, DOCUMENT_TASK } from "../testing/document-task.js";
+import { holdMotion, releaseMotion } from "../testing/motion-held.js";
 import { relayout } from "../testing/resize-observer.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
 import { landedBundles, onSideBundles } from "../testing/side-bundles.js";
+import { newestToastAction, newestToastSays } from "../testing/toast.js";
+import { ToastHost } from "../toast.js";
 import { PlanBody } from "./plan-body.js";
+import { usePlanEditDoor, usePlanWordsUnsaved } from "./use-plan-editing.js";
 
 /**
  * The editor itself is TipTap in a bundle of its own (`../plan-editor/`),
@@ -67,6 +82,8 @@ const STAND_IN: PlanEditorModule = {
       chooseMention: () => undefined,
       insertBlock: () => undefined,
       markdown: () => props.markdown,
+      replaceAnchors: () => undefined,
+      setAria: () => undefined,
       focusAt: (placement) => {
         placed.push(placement);
       },
@@ -111,10 +128,12 @@ beforeAll(async () => {
 });
 
 const roots: Root[] = [];
+const registries: AtomRegistry.AtomRegistry[] = [];
 
 beforeEach(() => {
   installScrollIntoView();
-  // A document arriving is drawn at once under reduced motion, which jsdom has no answer to.
+  // A document arriving is drawn at once where motion is held still.
+  holdMotion();
   const ignore = () => undefined;
   Object.defineProperty(window, "matchMedia", {
     configurable: true,
@@ -122,11 +141,15 @@ beforeEach(() => {
   });
 });
 
-afterEach(() => {
+afterEach(async () => {
+  releaseMotion();
   wordsLine = undefined;
   caretOn = undefined;
   vi.restoreAllMocks();
   for (const root of roots.splice(0)) act(() => root.unmount());
+  // Note that the saves a plan left as it went answer before its atoms go.
+  for (let tick = 0; tick < 6; tick += 1) await Promise.resolve();
+  for (const registry of registries.splice(0)) registry.dispose();
   document.body.innerHTML = "";
   mounted.length = 0;
 });
@@ -139,16 +162,72 @@ async function settle(): Promise<void> {
 
 /**
  * The document with an edit door that records each edit and answers from the
- * script, and the names it renamed to; `render` draws another plan, through
- * its own door where given.
+ * script, and the names it renamed to, beside the window's toasts and over
+ * atoms of its own, as the window holds them; `render` draws another plan,
+ * through its own door where given.
  */
-function mount(answers: readonly TasksEditAnswer[] = [], first: Task = DOCUMENT_TASK) {
+/** A plan comment thread on the plan's first words, open or not. */
+function threadOn(id: string, status: PlanCommentThread["status"]): PlanCommentThread {
+  return {
+    id,
+    scope: PLAN_COMMENT_SCOPE.WORDS,
+    quote: "Let people join",
+    anchor: { from: 3, to: 18 },
+    section: "Goal",
+    status,
+    entries: [
+      {
+        id: `${id}-entry`,
+        kind: PLAN_COMMENT_ENTRY.COMMENT,
+        writer: { actor: PLAN_COMMENT_ACTOR.MEMBER, by: CHARLES },
+        words: "Should this be a setting?",
+        at: 1,
+      },
+    ],
+    createdAt: 1,
+    updatedAt: 1,
+    revision: 1,
+  };
+}
+
+function commentsOver(threads: readonly PlanCommentThread[]): PlanCommentsControl {
+  return {
+    planId: "plan-1",
+    threads,
+    read: true,
+    failed: false,
+    onRetry: () => undefined,
+    notes: new Map(),
+    start: async () => ({ note: "not in this test" }),
+    act: async () => true,
+  };
+}
+
+/** What the window tells its shell of the plans' words, drawn beside the plan as a shell would read it. */
+function UnsavedWords(): ReactElement {
+  return createElement("output", { "data-unsaved-words": String(usePlanWordsUnsaved()) });
+}
+
+/** Whether the window says a plan holds words not saved. */
+function unsavedWords(container: HTMLElement): boolean {
+  return (
+    container.querySelector("[data-unsaved-words]")?.getAttribute("data-unsaved-words") === "true"
+  );
+}
+
+function mount(
+  answers: readonly TasksEditAnswer[] = [],
+  first: Task = DOCUMENT_TASK,
+  threads?: readonly PlanCommentThread[],
+) {
   const sent: PlanEditRequest[] = [];
   const renamed: string[] = [];
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
   roots.push(root);
+  const registry = AtomRegistry.make();
+  registries.push(registry);
   const saved: TasksEditAnswer = { saved: true };
   const onEdit = (request: PlanEditRequest) => {
     sent.push(request);
@@ -158,21 +237,57 @@ function mount(answers: readonly TasksEditAnswer[] = [], first: Task = DOCUMENT_
     renamed.push(name);
     return Promise.resolve(true);
   };
-  const render = (task: Task, door: typeof onEdit = onEdit) =>
+  // Note that a plan with no comments control draws none, as a template does.
+  const commented = (page: ReactElement) =>
+    threads === undefined
+      ? page
+      : createElement(PlanCommentsProvider, { value: commentsOver(threads) }, page);
+  const draw = (page: ReactElement) =>
     act(() =>
       root.render(
-        onSideBundles(
-          bundles,
-          createElement(PlanBody, { task, live: false, onEdit: door, onRename }),
+        onRegistry(
+          registry,
+          onSideBundles(
+            bundles,
+            createElement(
+              Fragment,
+              null,
+              commented(page),
+              createElement(ToastHost),
+              createElement(UnsavedWords),
+            ),
+          ),
         ),
       ),
     );
+  const render = (task: Task, door: typeof onEdit = onEdit) =>
+    draw(createElement(PlanBody, { task, live: false, onEdit: door, onRename }));
+  /** The plan as a task's page draws it, saving through `edit` by the task's id. */
+  const renderPage = (task: Task, edit: TaskEdit) =>
+    draw(createElement(TaskPage, { task, edit, onRename }));
   render(first);
   const unmount = () => {
     act(() => root.unmount());
     roots.splice(roots.indexOf(root), 1);
   };
-  return { container, sent, renamed, render, unmount };
+  return { container, sent, renamed, render, renderPage, unmount };
+}
+
+/** How a task's page saves a plan's edit: by the task's id. */
+type TaskEdit = (taskId: string, request: PlanEditRequest) => Promise<TasksEditAnswer>;
+
+/** The plan as a task's page draws it, its edits saved through `edit` with the open task's id. */
+function TaskPage({
+  task,
+  edit,
+  onRename,
+}: {
+  task: Task;
+  edit: TaskEdit;
+  onRename: (name: string) => Promise<boolean>;
+}): ReactElement {
+  const onEdit = usePlanEditDoor(task.id, edit);
+  return createElement(PlanBody, { task, live: false, onEdit, onRename });
 }
 
 function block(container: HTMLElement, label: string): HTMLElement {
@@ -226,8 +341,7 @@ test("the open text wears every class its drawn sections wear, so a list keeps i
     document: { body: "- reproduce\n  - twice\n- fix\n", assumptions: [] },
   });
   const drawn = container.querySelector<HTMLElement>(".luke-editable-block .plan-unit");
-  // Note that a section's arrival light is left out, since it comes and goes with the reveal's frames and moves nothing.
-  const worn = [...(drawn?.classList ?? [])].filter((name) => name !== "plan-fresh");
+  const worn = [...(drawn?.classList ?? [])];
   assert.ok(worn.includes("plan-unit"), "the plan's words are drawn");
 
   act(() => {
@@ -385,7 +499,7 @@ test("a press on a video in a section, on its frame, its scrubber, Play, Full sc
   }
 });
 
-test("a press on a task's checkbox ticks or clears that one item in the saved text, goes back where the save is refused, and opens no editor", async () => {
+test("a press on a task's checkbox ticks or clears that one item in the saved text, goes back where the save is refused and says so, and opens no editor", async () => {
   const body = [
     "## Goal",
     "Invite a *teammate*.",
@@ -405,11 +519,13 @@ test("a press on a task's checkbox ticks or clears that one item in the saved te
   ]);
   render({ ...DOCUMENT_TASK, document: { body, assumptions: [] } });
   await settle();
-  const boxes = [
-    ...block(container, "Steps").querySelectorAll<HTMLInputElement>("input[type=checkbox]"),
-  ];
+  const boxes = [...block(container, "Steps").querySelectorAll<HTMLElement>('[role="checkbox"]')];
   assert.deepEqual(
-    boxes.map((box) => [box.getAttribute("aria-label"), box.disabled, box.checked]),
+    boxes.map((box) => [
+      box.getAttribute("aria-label"),
+      box.getAttribute("aria-disabled") === "true",
+      box.getAttribute("aria-checked") === "true",
+    ]),
     [
       ["Send the invite", false, false],
       ["Write the email", false, false],
@@ -425,16 +541,19 @@ test("a press on a task's checkbox ticks or clears that one item in the saved te
     await settle();
   }
 
+  // Note that the plan is not drawn again here, so each tick is written over the text the one before it saved.
+  const written = body.replace("  - [ ] Write", "  - [x] Write");
   assert.deepEqual(
     sent.map((request) => request.document),
     [
-      { base: body, value: body.replace("  - [ ] Write", "  - [x] Write") },
-      { base: body, value: body.replace("* [X] Pick", "* [ ] Pick") },
-      { base: body, value: body.replace("> 1. [ ] Quoted", "> 1. [x] Quoted") },
+      { base: body, value: written },
+      { base: written, value: written.replace("* [X] Pick", "* [ ] Pick") },
+      { base: written, value: written.replace("> 1. [ ] Quoted", "> 1. [x] Quoted") },
     ],
   );
-  assert.equal(nested.checked, true, "a saved tick stands");
-  assert.equal(ticked.checked, true, "a tick the save refused goes back");
+  assert.equal(nested.getAttribute("aria-checked"), "true", "a saved tick stands");
+  assert.equal(ticked.getAttribute("aria-checked"), "true", "a tick the save refused goes back");
+  assert.equal(newestToastSays(), "The plan could not be saved.");
   // Note that the check is a boolean, because a failing comparison would print the whole editor's DOM.
   assert.ok(container.querySelector(".plan-document-editor") === null, "no editor opened");
 });
@@ -460,8 +579,124 @@ test("a press on the label around a task's checkbox, which takes a finger's pres
   assert.ok(container.querySelector(".plan-document-editor") === null, "no editor opened");
 });
 
-test("a press while a tick is out sends nothing and goes back, and a box is named by its item's words or its picture's", async () => {
+test("a press while a tick is out waits its turn, and both land, the second over the text the first saved", async () => {
   const body = "## Steps\n- [ ] One\n- [ ] ![Upload screenshot](shot.png)\n";
+  const answers = [
+    Promise.withResolvers<TasksEditAnswer>(),
+    Promise.withResolvers<TasksEditAnswer>(),
+  ];
+  const sent: PlanEditRequest[] = [];
+  const door = (request: PlanEditRequest): Promise<TasksEditAnswer> => {
+    sent.push(request);
+    return answers[sent.length - 1]?.promise ?? Promise.resolve({ saved: true });
+  };
+  const { container, render } = mount();
+  render({ ...DOCUMENT_TASK, document: { body, assumptions: [] } }, door);
+  await settle();
+  const boxes = [...container.querySelectorAll<HTMLElement>('[role="checkbox"]')];
+  assert.deepEqual(
+    boxes.map((box) => box.getAttribute("aria-label")),
+    ["One", "Upload screenshot"],
+  );
+
+  act(() => {
+    for (const box of boxes) box.click();
+  });
+  await settle();
+  assert.equal(sent.length, 1, "the second waits for the first");
+  answers[0]?.resolve({ saved: true });
+  await settle();
+  answers[1]?.resolve({ saved: true });
+  await settle();
+
+  const first = body.replace("[ ] One", "[x] One");
+  assert.deepEqual(
+    sent.map((request) => request.document),
+    [
+      { base: body, value: first },
+      { base: first, value: first.replace("[ ] ![Upload", "[x] ![Upload") },
+    ],
+  );
+  assert.deepEqual(
+    boxes.map((box) => box.getAttribute("aria-checked") === "true"),
+    [true, true],
+  );
+  assert.equal(newestToastSays(), undefined, "nothing is said of ticks that saved");
+});
+
+test("a tick saved on one task is not carried into another whose plan reads the same", async () => {
+  const body = "## Steps\n- [ ] One\n- [ ] Two\n";
+  const { container, sent, render } = mount();
+  render({ ...DOCUMENT_TASK, document: { body, assumptions: [] } });
+  await settle();
+  const one = container.querySelector<HTMLElement>('[role="checkbox"][aria-label="One"]');
+  assert.ok(one, "One is drawn");
+  act(() => one.click());
+  await settle();
+
+  const other = { ...DOCUMENT_TASK, id: "0c4f2e9a-7d1b-4a3e-8f6c-2b9d5e1a7c40" };
+  render({ ...other, document: { body, assumptions: [] } });
+  await settle();
+  const two = container.querySelector<HTMLElement>('[role="checkbox"][aria-label="Two"]');
+  assert.ok(two, "Two is drawn");
+  act(() => two.click());
+  await settle();
+
+  assert.deepEqual(sent.at(-1)?.document, {
+    base: body,
+    value: body.replace("[ ] Two", "[x] Two"),
+  });
+});
+
+test("a plan drawn anew while a tick is out is what the next tick is written over", async () => {
+  const body = "## Steps\n- [ ] One\n- [ ] Two\n";
+  const lukes = `${body}\nLuke's line.\n`;
+  const first = Promise.withResolvers<TasksEditAnswer>();
+  const sent: PlanEditRequest[] = [];
+  const door = (request: PlanEditRequest): Promise<TasksEditAnswer> => {
+    sent.push(request);
+    return sent.length === 1 ? first.promise : Promise.resolve({ saved: true });
+  };
+  const { container, render } = mount();
+  render({ ...DOCUMENT_TASK, document: { body, assumptions: [] } }, door);
+  await settle();
+  const one = container.querySelector<HTMLElement>('[role="checkbox"][aria-label="One"]');
+  assert.ok(one, "One is drawn");
+  act(() => one.click());
+  await settle();
+
+  render({ ...DOCUMENT_TASK, document: { body: lukes, assumptions: [] } }, door);
+  first.resolve({ saved: true });
+  await settle();
+  const two = container.querySelector<HTMLElement>('[role="checkbox"][aria-label="Two"]');
+  assert.ok(two, "Two is drawn");
+  act(() => two.click());
+  await settle();
+
+  assert.deepEqual(sent.at(-1)?.document, {
+    base: lukes,
+    value: lukes.replace("[ ] Two", "[x] Two"),
+  });
+});
+
+test("a tick the service did not answer goes back and says the plan could not be saved", async () => {
+  const body = "## Steps\n- [ ] One\n";
+  const { container, sent, render } = mount([{ failure: TASK_CALL_FAILURE.UNANSWERED }]);
+  render({ ...DOCUMENT_TASK, document: { body, assumptions: [] } });
+  await settle();
+  const box = container.querySelector<HTMLElement>('[role="checkbox"]');
+  assert.ok(box, "the box is drawn");
+
+  act(() => box.click());
+  await settle();
+
+  assert.equal(sent.length, 1);
+  assert.equal(box.getAttribute("aria-checked"), "false", "the box goes back");
+  assert.equal(newestToastSays(), "The plan could not be saved.");
+});
+
+test("a box pressed twice while its first tick is out, whose first is refused, stands as last pressed", async () => {
+  const body = "## Steps\n- [ ] One\n";
   const first = Promise.withResolvers<TasksEditAnswer>();
   const sent: PlanEditRequest[] = [];
   const door = (request: PlanEditRequest): Promise<TasksEditAnswer> => {
@@ -471,26 +706,17 @@ test("a press while a tick is out sends nothing and goes back, and a box is name
   const { container, render } = mount();
   render({ ...DOCUMENT_TASK, document: { body, assumptions: [] } }, door);
   await settle();
-  const boxes = [...container.querySelectorAll<HTMLInputElement>("input[type=checkbox]")];
-  assert.deepEqual(
-    boxes.map((box) => box.getAttribute("aria-label")),
-    ["One", "Upload screenshot"],
-  );
+  const box = container.querySelector<HTMLElement>('[role="checkbox"]');
+  assert.ok(box, "the box is drawn");
 
-  act(() => {
-    for (const box of boxes) box.click();
-  });
-  first.resolve({ saved: true });
+  act(() => box.click());
+  act(() => box.click());
+  first.resolve({ failure: TASK_CALL_FAILURE.UNANSWERED });
   await settle();
 
-  assert.deepEqual(
-    sent.map((request) => request.document),
-    [{ base: body, value: body.replace("[ ] One", "[x] One") }],
-  );
-  assert.deepEqual(
-    boxes.map((box) => box.checked),
-    [true, false],
-  );
+  assert.equal(sent.length, 1, "the second asks for what the plan already holds, so sends nothing");
+  assert.equal(box.getAttribute("aria-checked"), "false");
+  assert.equal(newestToastSays(), "The plan could not be saved.");
 });
 
 test("a press on the name in a section's byline opens no editor, while a press on the section's words still does", () => {
@@ -554,6 +780,28 @@ test("a press anywhere on an empty plan's room opens its text with the caret in 
   assert.deepEqual(open().placement, PLACEMENT_END);
   assert.equal(title(container).textContent, DOCUMENT_NAME, "the title stays over the text");
   assert.ok(body.contains(container.querySelector(".plan-document-editor")));
+});
+
+test("an empty plan at rest says to write it, a button whose press opens its text with the caret in it", () => {
+  const { container, render } = mount();
+  render({ ...DOCUMENT_TASK, document: { body: "", assumptions: [] } });
+  const line = [...container.querySelectorAll("button")].find(
+    (each) => each.textContent === "Write the plan",
+  );
+  assert.ok(line, "the empty plan's line");
+
+  act(() => line.focus());
+  assert.equal(document.activeElement, line, "the keyboard reaches it");
+  act(() => line.click());
+
+  assert.equal(open().markdown, "");
+  assert.deepEqual(open().placement, PLACEMENT_END);
+  assert.ok(
+    ![...container.querySelectorAll("button")].some(
+      (each) => each.textContent === "Write the plan",
+    ),
+    "the line goes once the editor stands in its place",
+  );
 });
 
 test("a press on a plan's room under its text opens it at the end, beside it on the nearest line, and above it nowhere", () => {
@@ -652,6 +900,248 @@ test("words typed in one plan are saved to that plan when another opens", async 
 
   assert.deepEqual(doors, [DOCUMENT_TASK.id]);
   assert.equal(container.querySelector(".plan-document-editor"), null);
+});
+
+test("words whose save is refused as the developer leaves the plan are kept, said in a toast that stands, and open again when they come back", async () => {
+  const { container, sent, render } = mount([{ failure: TASK_CALL_FAILURE.UNANSWERED }]);
+  const other = { ...DOCUMENT_TASK, id: "0c4f2e9a-7d1b-4a3e-8f6c-2b9d5e1a7c40" };
+  act(() => block(container, "Goal").click());
+  act(() => open().onDraft(`${BODY}Mine.\n`));
+
+  render(other);
+  await settle();
+
+  assert.equal(sent.length, 1, "the save went as the plan was left");
+  assert.equal(newestToastSays(), "Your plan edits could not be saved.Retry");
+
+  render(DOCUMENT_TASK);
+  await settle();
+
+  assert.equal(open().markdown, `${BODY}Mine.\n`, "the editor opens on the kept words");
+  assert.ok(container.textContent?.includes("Not saved: the service did not answer."));
+  assert.equal(newestToastSays(), undefined, "the toast goes once the words are back");
+  assert.equal(sent.length, 1, "nothing saves them on its own");
+});
+
+test("words typed and not yet saved are unsaved work, and once they save they are not", async () => {
+  const { container } = mount();
+  act(() => block(container, "Goal").click());
+  assert.equal(unsavedWords(container), false, "an editor open on the plan's own words holds none");
+
+  act(() => open().onDraft(`${BODY}Mine.\n`));
+  assert.equal(unsavedWords(container), true);
+
+  act(() => open().onFinish(1, FINISH.ESCAPE));
+  await settle();
+  assert.equal(unsavedWords(container), false);
+});
+
+test("words a plan was left with that its save refused stay unsaved work, there and back", async () => {
+  const { container, render } = mount([{ failure: TASK_CALL_FAILURE.UNANSWERED }]);
+  const other = { ...DOCUMENT_TASK, id: "0c4f2e9a-7d1b-4a3e-8f6c-2b9d5e1a7c40" };
+  act(() => block(container, "Goal").click());
+  act(() => open().onDraft(`${BODY}Mine.\n`));
+
+  render(other);
+  await settle();
+  assert.equal(unsavedWords(container), true, "kept while another plan is open");
+
+  render(DOCUMENT_TASK);
+  await settle();
+  assert.equal(unsavedWords(container), true, "and in the editor they open in again");
+});
+
+test("words a plan was left with stay unsaved work while their save is out, and not once it lands", async () => {
+  let answer: (saved: TasksEditAnswer) => void = () => assert.fail("no save went");
+  const { container, render } = mount();
+  const other = { ...DOCUMENT_TASK, id: "0c4f2e9a-7d1b-4a3e-8f6c-2b9d5e1a7c40" };
+  const held = () =>
+    new Promise<TasksEditAnswer>((resolve) => {
+      answer = resolve;
+    });
+  render(DOCUMENT_TASK, held);
+  act(() => block(container, "Goal").click());
+  act(() => open().onDraft(`${BODY}Mine.\n`));
+
+  render(other, held);
+  await settle();
+  assert.equal(unsavedWords(container), true, "the save is still out");
+
+  answer({ saved: true });
+  await settle();
+  assert.equal(unsavedWords(container), false);
+});
+
+test("a plan left twice while its first save is out stays unsaved work until both saves answer", async () => {
+  const answers: ((saved: TasksEditAnswer) => void)[] = [];
+  const { container, render } = mount();
+  const other = { ...DOCUMENT_TASK, id: "0c4f2e9a-7d1b-4a3e-8f6c-2b9d5e1a7c40" };
+  const held = () =>
+    new Promise<TasksEditAnswer>((resolve) => {
+      answers.push(resolve);
+    });
+  const editAndLeave = async (words: string) => {
+    render(DOCUMENT_TASK, held);
+    await settle();
+    act(() => block(container, "Goal").click());
+    act(() => open().onDraft(words));
+    render(other, held);
+    await settle();
+  };
+  await editAndLeave(`${BODY}Mine.\n`);
+  await editAndLeave(`${BODY}Mine again.\n`);
+  assert.equal(answers.length, 2, "both saves are out");
+
+  answers[0]?.({ saved: true });
+  await settle();
+  assert.equal(unsavedWords(container), true, "the newer save is still out");
+
+  answers[1]?.({ saved: true });
+  await settle();
+  assert.equal(unsavedWords(container), false);
+});
+
+test("a title typed in is unsaved work until its rename answers", async () => {
+  const { container, renamed } = mount();
+  const words = title(container);
+
+  act(() => {
+    words.focus();
+    words.textContent = "Beta";
+    words.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  assert.equal(unsavedWords(container), true);
+
+  act(() => words.blur());
+  await settle();
+  assert.deepEqual(renamed, ["Beta"]);
+  assert.equal(unsavedWords(container), false);
+});
+
+test("the plan's title is the page's one h1, and editing it in place still renames the plan", async () => {
+  const { container, renamed } = mount();
+
+  const headings = container.querySelectorAll("h1");
+  assert.equal(headings.length, 1, "the plan page names itself once");
+  assert.equal(headings[0]?.textContent, DOCUMENT_NAME);
+  assert.ok(headings[0]?.contains(title(container)), "the title edited is the h1's own words");
+
+  act(() => {
+    title(container).focus();
+    title(container).textContent = "Beta";
+    title(container).dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  act(() => title(container).blur());
+  await settle();
+
+  assert.deepEqual(renamed, ["Beta"]);
+  assert.equal(container.querySelector("h1")?.textContent, "Beta");
+});
+
+test("a conflict over a teammate's words names them on its note and its button, which takes their words and closes the editor", async () => {
+  const theirs = `${BODY}Charles's.\n`;
+  const by = { actor: PLAN_ACTOR.DEVELOPER, by: CHARLES, at: Date.now(), duringCall: false };
+  const { container, sent } = mount([{ conflict: { current: theirs, by } }]);
+  act(() => block(container, "Goal").click());
+  act(() => open().onDraft(`${BODY}Mine.\n`));
+  act(() => open().onFinish(1, FINISH.ESCAPE));
+  await settle();
+
+  const note = container.querySelector(".plan-editor-note");
+  assert.equal(
+    note?.querySelector("span")?.textContent,
+    "Charles Pan changed this section while you were editing.",
+  );
+  const take = [...(note?.querySelectorAll("button") ?? [])].at(-1);
+  assert.equal(take?.textContent, "Use Charles Pan’s");
+
+  act(() => take?.click());
+  await settle();
+
+  assert.equal(sent.length, 1, "taking their words saves nothing");
+  assert.ok(container.querySelector(".plan-document-editor") === null, "the editor closed");
+});
+
+test("Keep mine in the open editor over a teammate's change to another section lays the merged words into it and saves both changes", async () => {
+  const theirs = BODY.replace("Only an admin", "Only an owner");
+  const mine = BODY.replace("Invites land by email.", "Invites land by email or link.");
+  const merged = theirs.replace("Invites land by email.", "Invites land by email or link.");
+  const by = { actor: PLAN_ACTOR.DEVELOPER, by: CHARLES, at: Date.now(), duringCall: false };
+  const { container, sent } = mount([{ conflict: { current: theirs, by } }]);
+  act(() => block(container, "Goal").click());
+  const [editor] = mounted;
+  act(() => open().onDraft(mine));
+  act(() => open().onFinish(1, FINISH.ESCAPE));
+  await settle();
+
+  const keep = container.querySelector(".plan-editor-note")?.querySelector("button");
+  assert.equal(keep?.textContent, "Keep mine");
+  act(() => keep?.click());
+  await settle();
+
+  assert.deepEqual(editor?.took, [[mine, merged]]);
+  assert.deepEqual(sent, [
+    { document: { base: BODY, value: mine } },
+    { document: { base: theirs, value: merged } },
+  ]);
+});
+
+test("words left waiting on a conflict are kept and said, and the toast's Keep mine saves them beside Luke's", async () => {
+  const lukes = `${BODY}Luke's.\n`;
+  const by = { actor: PLAN_ACTOR.NOTETAKER, at: Date.now(), duringCall: true };
+  const lukesNote = "Luke changed this section while you were editing.";
+  const { container, sent, render } = mount([{ conflict: { current: lukes, by } }]);
+  const other = { ...DOCUMENT_TASK, id: "0c4f2e9a-7d1b-4a3e-8f6c-2b9d5e1a7c40" };
+  act(() => block(container, "Goal").click());
+  act(() => open().onDraft(`${BODY}Mine.\n`));
+  act(() => open().onFinish(1, FINISH.ESCAPE));
+  await settle();
+  assert.ok(container.textContent?.includes(lukesNote), "the conflict holds the editor open");
+
+  render(other);
+  await settle();
+
+  assert.equal(sent.length, 1, "a conflict sends nothing more as the plan is left");
+  assert.equal(newestToastSays(), `Your plan edits could not be saved.${lukesNote}Keep mine`);
+
+  act(() => newestToastAction()?.click());
+  await settle();
+
+  assert.deepEqual(sent.at(-1), { document: { base: lukes, value: `${lukes}Mine.\n` } });
+  assert.equal(newestToastSays(), undefined);
+  render(DOCUMENT_TASK);
+  await settle();
+  assert.equal(
+    container.querySelector(".plan-document-editor"),
+    null,
+    "nothing is left to open on once they saved",
+  );
+});
+
+test("the toast's Retry over words a refused save left saves them to the plan they were typed in, though the page has opened another since", async () => {
+  const { container, renderPage } = mount();
+  const doors: [string, PlanEditRequest][] = [];
+  const answers: TasksEditAnswer[] = [{ failure: TASK_CALL_FAILURE.UNANSWERED }, { saved: true }];
+  const edit: TaskEdit = (taskId, request) => {
+    doors.push([taskId, request]);
+    return Promise.resolve<TasksEditAnswer>(answers[doors.length - 1] ?? { saved: true });
+  };
+  const other = { ...DOCUMENT_TASK, id: "0c4f2e9a-7d1b-4a3e-8f6c-2b9d5e1a7c40" };
+  renderPage(DOCUMENT_TASK, edit);
+  act(() => block(container, "Goal").click());
+  act(() => open().onDraft(`${BODY}Mine.\n`));
+  renderPage(other, edit);
+  await settle();
+
+  act(() => newestToastAction()?.click());
+  await settle();
+
+  const mine = { document: { base: BODY, value: `${BODY}Mine.\n` } };
+  assert.deepEqual(doors, [
+    [DOCUMENT_TASK.id, mine],
+    [DOCUMENT_TASK.id, mine],
+  ]);
+  assert.equal(newestToastSays(), undefined);
 });
 
 /** A browser's answer to where a point stands in the page's words: `offset` into `words`, its line `top` down the window. */
@@ -799,7 +1289,7 @@ test("the words the caret stood on stay where they stood as the editor closes, t
     DOMRect.fromRect({ x: 0, y: 57, width: 300, height: 20 }),
   );
 
-  act(() => open().onFinish(1));
+  act(() => open().onFinish(1, FINISH.ESCAPE));
   await settle();
 
   assert.ok(container.querySelector(".plan-document-editor") === null, "the editor closed");
@@ -812,7 +1302,7 @@ test("an editor closing with its caret on no words scrolls nothing", async () =>
   const scroller = scrollerOf(container);
   scroller.scrollTop = 500;
 
-  act(() => open().onFinish(1));
+  act(() => open().onFinish(1, FINISH.ESCAPE));
   await settle();
 
   assert.equal(scroller.scrollTop, 500);
@@ -841,4 +1331,89 @@ test("words left by an editor closed as another plan opens move nothing in it", 
 
   assert.ok(container.querySelector(".plan-document-editor") === null, "the editor closed");
   assert.equal(scroller.scrollTop, 500);
+});
+
+/** The plan as a teammate's save left it: their text, saved after the one the page opened on, by them. */
+function savedBy(body: string, updatedAt: number, by = CHARLES): Task {
+  return {
+    ...DOCUMENT_TASK,
+    updatedAt,
+    document: { ...DOCUMENT_TASK.document, body },
+    lastEdit: { actor: PLAN_ACTOR.DEVELOPER, by, at: updatedAt, duringCall: false },
+  };
+}
+
+test("a teammate's save reaching an open editor holding nothing unsaved is laid into it, and the editor's next save is a change from their text", async () => {
+  const theirs = `${BODY}Charles's.\n`;
+  const { container, sent, render } = mount();
+  act(() => block(container, "Goal").click());
+  const [editor] = mounted;
+
+  render(savedBy(theirs, 3));
+  await settle();
+
+  assert.deepEqual(editor?.took, [[BODY, theirs]]);
+  act(() => open().onDraft(`${theirs}Mine.\n`));
+  act(() => open().onFinish(1, FINISH.ESCAPE));
+  await settle();
+  assert.deepEqual(sent, [{ document: { base: theirs, value: `${theirs}Mine.\n` } }]);
+});
+
+test("an open editor holding unsaved words keeps them as a teammate saves, saves them as a change from what it opened on, and takes the merged answer", async () => {
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+  try {
+    const mine = `${BODY}Mine.\n`;
+    const merged = `${BODY}Charles's.\n\nMine.\n`;
+    const sent: PlanEditRequest[] = [];
+    let answer: (answered: TasksEditAnswer) => void = () => undefined;
+    const door = (request: PlanEditRequest) => {
+      sent.push(request);
+      return new Promise<TasksEditAnswer>((resolve) => {
+        answer = resolve;
+      });
+    };
+    const { container, render } = mount();
+    render(DOCUMENT_TASK, door);
+    act(() => block(container, "Goal").click());
+    const [editor] = mounted;
+    act(() => open().onDraft(mine));
+    // The editor hands its words over once the typing pauses.
+    act(() => vi.advanceTimersByTime(200));
+
+    render(savedBy(`${BODY}Charles's.\n`, 3), door);
+    await settle();
+    assert.deepEqual(editor?.took, [], "nothing is laid over words not yet saved");
+
+    // The words save a beat later, as a change from the text they were typed over, which the service lays over Charles's.
+    act(() => vi.advanceTimersByTime(1_000));
+    await settle();
+    assert.deepEqual(sent, [{ document: { base: BODY, value: mine } }]);
+
+    // The host draws the plan the save answered, the developer's last, before the save's answer arrives.
+    render(savedBy(merged, 4, { userId: "user-me", name: "Me" }), door);
+    answer({ saved: true });
+    await settle();
+    assert.deepEqual(editor?.took, [[mine, merged]]);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+test("the editor is handed the open threads' words, and none while no open thread stands on any, so its drafts map no anchors for nothing", () => {
+  const open1 = threadOn("0f9b5f6e-6a8e-4c51-9a0e-2c1f2f0b7a11", PLAN_COMMENT_STATUS.OPEN);
+  const resolved = threadOn("0f9b5f6e-6a8e-4c51-9a0e-2c1f2f0b7a22", PLAN_COMMENT_STATUS.RESOLVED);
+
+  const withOpen = mount([], DOCUMENT_TASK, [resolved, open1]);
+  act(() => block(withOpen.container, "Goal").click());
+  assert.deepEqual(open().anchors, [{ thread: open1.id, from: 3, to: 18 }]);
+  withOpen.unmount();
+
+  const withResolved = mount([], DOCUMENT_TASK, [resolved]);
+  act(() => block(withResolved.container, "Goal").click());
+  assert.equal(open().anchors, undefined);
+  withResolved.unmount();
+
+  const withNone = mount([], DOCUMENT_TASK, []);
+  act(() => block(withNone.container, "Goal").click());
+  assert.equal(open().anchors, undefined);
 });

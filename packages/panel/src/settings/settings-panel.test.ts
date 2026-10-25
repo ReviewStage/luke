@@ -115,7 +115,7 @@ test("a signed-out Workspace page says to sign in rather than drawing nothing", 
     ),
   );
 
-  assert.equal(container.textContent, "Sign in to see your workspaces.");
+  assert.equal(container.textContent, "Sign in to use this page.");
 });
 
 test("no Settings page draws a button whose words end with an ellipsis", () => {

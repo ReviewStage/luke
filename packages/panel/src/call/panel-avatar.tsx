@@ -16,6 +16,9 @@ import { useAtomMount, useAtomSet, useAtomValue } from "@effect/atom-react/Hooks
 import { ACT_KIND } from "@luke/host/acts";
 import { EXPERIMENT } from "@luke/settings";
 import {
+  AvatarVoice,
+  CALL_VIDEO_FIT,
+  CallVideoTile,
   cssCustomProperties,
   RESIZE_CORNER,
   ResizeCorner,
@@ -24,7 +27,7 @@ import {
   type ResizeTravel,
 } from "@luke/ui";
 import { agentCallVideoStatus } from "@luke/ui/call-card-model";
-import { AVATAR_STATUS, type AvatarStatus } from "@luke/voice/avatar";
+import { AVATAR_STATUS, type AvatarEndReason, type AvatarStatus } from "@luke/voice/avatar";
 import { Option } from "effect";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import { useMemo, useState } from "react";
@@ -40,7 +43,6 @@ import {
   NO_AVATAR_TRACKS,
 } from "./call-avatar.js";
 import { type CallCardVideo, cardVideo, useCardVideoStatus } from "./call-card.js";
-import { AvatarVoice, CallVideoTile } from "./call-video-tile.js";
 import { CALL_VIDEO_HEIGHT, useCallVideoHeight } from "./use-call-video-size.js";
 
 /** The avatar's tracks as published so far, none before a session stands. */
@@ -72,6 +74,8 @@ export interface AgentCallVideoState {
   /** The avatar's status on a call into the agent, `OFF` once video is down, and none where no video is offered. */
   status: AvatarStatus | undefined;
   video: MediaStreamTrack | undefined;
+  /** Why the avatar ended, once it has. */
+  endReason: AvatarEndReason | undefined;
   /** Asks main to put the avatar up again, a fresh session, or take it down. */
   onSetVideo: (on: boolean) => void;
 }
@@ -83,14 +87,15 @@ export interface AgentCallVideoState {
  * avatar down or put it up again on the call standing.
  */
 export function useAgentCallVideo(agentId: string): AgentCallVideoState {
-  const { tell } = useAct();
+  const { press } = useAct();
   const view = useStandingVoiceView();
   const avatar = useVoiceAvatar();
   const videoCalls = useExperiment(EXPERIMENT.VIDEO_CALLS);
   return {
     status: agentCallVideoStatus({ view, avatar, agentId, videoCalls }),
     video: useAvatarTracks().video,
-    onSetVideo: (on) => tell(ACT_KIND.VOICE_SET_VIDEO, { on }),
+    endReason: avatar.endReason,
+    onSetVideo: (on) => press(ACT_KIND.VOICE_SET_VIDEO, { on }),
   };
 }
 
@@ -131,7 +136,7 @@ function cornerGrowth(corner: ResizeCornerSide, aspect: number, travel: ResizeTr
  * offers neither.
  */
 export function AgentCallVideo({ agentId }: { agentId: string }): React.JSX.Element | null {
-  const { status, video, onSetVideo } = useAgentCallVideo(agentId);
+  const { status, video, endReason, onSetVideo } = useAgentCallVideo(agentId);
   const { height, onResize } = useCallVideoHeight();
   const [aspect, setAspect] = useState(SQUARE);
   const [hovered, setHovered] = useState(false);
@@ -153,6 +158,8 @@ export function AgentCallVideo({ agentId }: { agentId: string }): React.JSX.Elem
           <CallVideoTile
             video={video}
             status={status}
+            endReason={endReason}
+            fit={CALL_VIDEO_FIT.PICTURE}
             onSetVideo={onSetVideo}
             toggles={false}
             onAspect={setAspect}
@@ -183,8 +190,8 @@ export function AgentCallVideo({ agentId }: { agentId: string }): React.JSX.Elem
  * offer.
  */
 export function useCallCardVideo(): CallCardVideo | undefined {
-  const { tell } = useAct();
+  const { press } = useAct();
   const status = useCardVideoStatus();
   const track = useAvatarTracks().video;
-  return useMemo(() => cardVideo(status, track, tell), [status, track, tell]);
+  return useMemo(() => cardVideo(status, track, press), [status, track, press]);
 }

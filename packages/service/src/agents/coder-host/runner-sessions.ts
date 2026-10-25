@@ -111,6 +111,12 @@ import type { UserContent } from "ai";
 import { Clock, Context, Data, DateTime, Duration, Effect, Option, Result, Stream } from "effect";
 import { TURN_ORIGIN } from "../../core.js";
 import type { HostedEnvironment } from "../../environment.js";
+import {
+  recordServerEvent,
+  type SERVER_AGENT_HARNESS,
+  SERVER_EVENT,
+  SERVER_HANDOFF_PATH,
+} from "../../events/server-events.js";
 import { AfterResponse, afterResponse } from "../../http/after-response.js";
 import {
   AgentSandboxImage,
@@ -124,6 +130,7 @@ import {
   EVE_RESET_OUTCOME,
   EVE_SEND_OUTCOME,
   type EveMessage,
+  type KeyRefusal,
   PLAN_REFUSAL,
   type PlanRefusal,
 } from "../brain-host/eve-sessions.js";
@@ -202,11 +209,13 @@ export interface RunnerSessionsOptions {
   readonly run: SandboxRunner;
 }
 
-/** A launch could not start: no agent, no credential, no snapshot, a model the harness cannot name, or the account's plan refused. */
+/** A launch could not start: no agent, no credential, no snapshot, a model the harness cannot name, or the account's plan or API key refused. */
 export class LaunchRefused extends Data.TaggedError("LaunchRefused")<{
   readonly reason: string;
   /** How the account's plan failed, where it is why. */
   readonly planRefusal?: PlanRefusal | undefined;
+  /** How the account's API key failed, for an agent it pays for, where it is why. */
+  readonly keyRefusal?: KeyRefusal | undefined;
   /** When a reached limit resets, in epoch milliseconds, where the provider said. */
   readonly planResetsAt?: number | undefined;
 }> {}
@@ -230,6 +239,8 @@ interface HarnessAhead {
 export interface RunnerHarness<E extends { readonly _tag: string }> {
   /** How the log and a message's unsupported attachment name it. */
   readonly name: string;
+  /** Which harness it is, as a counted hand-off names it (`SERVER_EVENT.AGENT_HANDOFF`). */
+  readonly runtime: (typeof SERVER_AGENT_HARNESS)[keyof typeof SERVER_AGENT_HARNESS];
   /** What a session id it mints begins with, before a fresh UUID. */
   readonly sessionPrefix: string;
   /** The credential a launch starts with, read afresh for every launch. */
@@ -251,16 +262,22 @@ export interface RunnerHarness<E extends { readonly _tag: string }> {
   ) => Effect.Effect<HarnessAhead, E | LaunchRefused, RunnerServices>;
 }
 
-/** The tags a sandbox Luke opens carries beside its session's: its agent, and the runner it runs, so a later call finds both. */
+/**
+ * The tags a sandbox Luke opens carries beside its session's: its agent, and
+ * the runner it runs, so a later call finds both. Note that Vercel refuses a
+ * sandbox more than five tags, the session's among them, so a launch's
+ * fingerprint rides in its launch tag rather than a tag of its own.
+ */
 export const RUNNER_TAG = {
   AGENT: "lukeAgent",
   SANDBOX_SESSION: "lukeRunnerSession",
   COMMAND: "lukeRunnerCommand",
-  /** The launch's first event number. */
+  /** The launch's first event number, then `LAUNCH_FINGERPRINT_MARK` and what the launch was started with that a warm runner cannot take up later (`launchFingerprint`). */
   LAUNCH: "lukeRunnerLaunch",
-  /** What the launch was started with that a warm runner cannot take up later (`launchFingerprint`). */
-  FINGERPRINT: "lukeRunnerFingerprint",
 } as const;
+
+/** What parts a launch tag's first event number from its fingerprint. */
+const LAUNCH_FINGERPRINT_MARK = "-";
 
 /** How many hex characters of a launch's fingerprint its tag keeps. */
 const FINGERPRINT_CHARS = 32;
@@ -543,14 +560,16 @@ export interface TaggedRunner {
   readonly fingerprint?: string;
 }
 
-/** The launch tag read: its first event number; none where the tag is missing or unreadable. */
+/** The launch tag read: its first event number and its fingerprint where it has one; none where the tag is missing or unreadable. */
 function taggedLaunch(
   tags: Readonly<Record<string, string>>,
-): { readonly firstSequence: number } | undefined {
-  const launch = tags[RUNNER_TAG.LAUNCH] ?? "";
-  const firstSequence = Number(launch);
-  if (launch === "" || !Number.isSafeInteger(firstSequence)) return undefined;
-  return { firstSequence };
+): { readonly firstSequence: number; readonly fingerprint?: string } | undefined {
+  const [sequence = "", fingerprint] = (tags[RUNNER_TAG.LAUNCH] ?? "").split(
+    LAUNCH_FINGERPRINT_MARK,
+  );
+  const firstSequence = Number(sequence);
+  if (sequence === "" || !Number.isSafeInteger(firstSequence)) return undefined;
+  return { firstSequence, ...(fingerprint === undefined ? {} : { fingerprint }) };
 }
 
 export function taggedRunner(sandbox: ListedSandbox): TaggedRunner | undefined {
@@ -561,13 +580,7 @@ export function taggedRunner(sandbox: ListedSandbox): TaggedRunner | undefined {
   if (sandboxSessionId === undefined || commandId === undefined || launch === undefined) {
     return undefined;
   }
-  const fingerprint = tags[RUNNER_TAG.FINGERPRINT];
-  return {
-    sandboxSessionId,
-    commandId,
-    ...launch,
-    ...(fingerprint === undefined ? {} : { fingerprint }),
-  };
+  return { sandboxSessionId, commandId, ...launch };
 }
 
 /** The tags of a sandbox whose runner is no longer told of: its session, its agent, and its launch, so a late END still reads as that launch's. */
@@ -606,9 +619,24 @@ function runnerTags(sessionId: string, agentId: string, runner: TaggedRunner) {
     [RUNNER_TAG.AGENT]: agentId,
     [RUNNER_TAG.SANDBOX_SESSION]: runner.sandboxSessionId,
     [RUNNER_TAG.COMMAND]: runner.commandId,
-    [RUNNER_TAG.LAUNCH]: String(runner.firstSequence),
-    ...(runner.fingerprint === undefined ? {} : { [RUNNER_TAG.FINGERPRINT]: runner.fingerprint }),
+    [RUNNER_TAG.LAUNCH]:
+      runner.fingerprint === undefined
+        ? String(runner.firstSequence)
+        : [runner.firstSequence, runner.fingerprint].join(LAUNCH_FINGERPRINT_MARK),
   };
+}
+
+/** The runner the sandbox's tags name, where the sandbox is up in the session it was started in, whether or not it has exited since. */
+function runnerInSession(sandbox: ListedSandbox): TaggedRunner | undefined {
+  const runner = taggedRunner(sandbox);
+  if (
+    runner === undefined ||
+    sandbox.status !== SANDBOX_STATUS.RUNNING ||
+    sandbox.currentSessionId !== runner.sandboxSessionId
+  ) {
+    return undefined;
+  }
+  return runner;
 }
 
 /**
@@ -622,14 +650,8 @@ function liveRunner(
   api: VercelSandboxApi,
   sandbox: ListedSandbox,
 ): Effect.Effect<TaggedRunner | undefined, SandboxUnavailable> {
-  const runner = taggedRunner(sandbox);
-  if (
-    runner === undefined ||
-    sandbox.status !== SANDBOX_STATUS.RUNNING ||
-    sandbox.currentSessionId !== runner.sandboxSessionId
-  ) {
-    return Effect.succeed(undefined);
-  }
+  const runner = runnerInSession(sandbox);
+  if (runner === undefined) return Effect.succeed(undefined);
   return api
     .commandExit(runner.sandboxSessionId, runner.commandId)
     .pipe(Effect.map((exit) => (exit === null ? runner : undefined)));
@@ -913,6 +935,9 @@ export const runnerSessions = <
             : undefined),
           ...(failure instanceof LaunchRefused && failure.planResetsAt !== undefined
             ? { planResetsAt: failure.planResetsAt }
+            : undefined),
+          ...(failure instanceof LaunchRefused && failure.keyRefusal !== undefined
+            ? { keyRefusal: failure.keyRefusal }
             : undefined),
         } as const,
       );
@@ -1215,12 +1240,9 @@ export const runnerSessions = <
      * what it has, and one from before fingerprints were tagged is never
      * read as stale.
      */
-    const staleWarm = (agent: CodingAgent, runner: TaggedRunner) =>
+    const staleWarm = (agent: CodingAgent, runner: TaggedRunner, turnRunning: boolean) =>
       Effect.gen(function* () {
-        if (runner.fingerprint === undefined) return false;
-        const { conversationId } = agent;
-        const turn = (yield* latestTurnsOfReached([conversationId])).get(conversationId);
-        if (turn !== undefined && RUNNING_TURN_STATUSES.has(turn.status)) return false;
+        if (runner.fingerprint === undefined || turnRunning) return false;
         const credential = yield* harness.launch(agent);
         const now = launchFingerprint(credential, yield* options.integrations(agent));
         return now !== runner.fingerprint;
@@ -1246,41 +1268,88 @@ export const runnerSessions = <
           sessionId,
           deliveryId: sent.line.uuid,
         } as const;
-        const running = yield* liveRunner(api, found.value);
-        // A warm runner launched with what has changed since is ended, and the message relaunches it.
-        const stale = running !== undefined && (yield* staleWarm(agent, running));
-        if (running !== undefined && stale) {
-          yield* api.kill(running.sandboxSessionId, running.commandId);
-        }
-        const live = stale ? undefined : running;
-        if (live !== undefined) {
-          // The installation token lives an hour, so each message sets a fresh one; and the
-          // harness's lines (the agent's model and effort as they stand) go ahead of the message,
+        // Where the agent's turns stand as the message arrives, counted with how it reached the runner.
+        const { conversationId } = agent;
+        const turn = (yield* latestTurnsOfReached([conversationId])).get(conversationId);
+        const turnRunning = turn !== undefined && RUNNING_TURN_STATUSES.has(turn.status);
+        const handedAt = yield* Clock.currentTimeMillis;
+        const handed = (path: (typeof SERVER_HANDOFF_PATH)[keyof typeof SERVER_HANDOFF_PATH]) =>
+          recordServerEvent(SERVER_EVENT.AGENT_HANDOFF, userId, {
+            harness: harness.runtime,
+            path,
+            turn_running: turnRunning,
+            ...(turnRunning || turn?.settledAt == null
+              ? {}
+              : {
+                  idle_seconds: Math.max(
+                    0,
+                    Math.round((handedAt - turn.settledAt.getTime()) / 1_000),
+                  ),
+                }),
+          });
+        const running = runnerInSession(found.value);
+        if (running !== undefined) {
+          // A warm runner launched with what has changed since is ended, and the message relaunches it.
+          if (yield* staleWarm(agent, running, turnRunning)) {
+            yield* api.kill(running.sandboxSessionId, running.commandId);
+            yield* relaunched(sessionId, agent, found.value.name, running.sandboxSessionId, sent);
+            yield* handed(SERVER_HANDOFF_PATH.RELAUNCHED);
+            return accepted;
+          }
+          // The harness's lines (the agent's model and effort as they stand) go ahead of the message,
           // which a change since the launch takes effect from. The choice read here stands until
           // the write: a change of it is handed to the runner by `retune`, which holds the same
           // lease, so it is written after this line, never undone by it.
-          const [, ahead] = yield* Effect.all(
-            [
-              renewCredential(target, agent, live.sandboxSessionId),
-              harness.ahead(agent),
-              filesWritten(live.sandboxSessionId, sent),
-            ],
+          const [ahead] = yield* Effect.all(
+            [harness.ahead(agent), filesWritten(running.sandboxSessionId, sent)],
             { concurrency: "unbounded" },
           );
-          yield* api.writeStdin(
-            live.sandboxSessionId,
-            live.commandId,
-            [...ahead.lines, sent.line].map(line).join(""),
-          );
-          return accepted;
-        }
-        // A warm runner ended above leaves its sandbox up, in which the runner is launched again.
-        if (running !== undefined) {
-          yield* relaunched(sessionId, agent, found.value.name, running.sandboxSessionId, sent);
-          return accepted;
+          // Note that the write is the runner's liveness check: Vercel refuses stdin to a command
+          // that exited (`command_not_found_or_exited`, a 404), which relaunches below, because
+          // reading the exit first waits out `EXIT_WAIT` on a runner that runs, two seconds a message.
+          const wrote = yield* api
+            .writeStdin(
+              running.sandboxSessionId,
+              running.commandId,
+              [...ahead.lines, sent.line].map(line).join(""),
+            )
+            .pipe(
+              Effect.as(true),
+              Effect.catchIf(
+                (failure) => failure.status === NOT_FOUND_STATUS,
+                () => Effect.succeed(false),
+              ),
+            );
+          if (wrote) {
+            // The installation token lives an hour, so each message sets a fresh one, after the
+            // write rather than ahead of it: the model takes seconds to reach its first command, and
+            // the agent hears the message a GitHub mint and a policy update sooner. Note that a
+            // renewal that fails, or outlasts `CODER.CREDENTIAL_RENEWAL`, is logged and the message
+            // stands, since the runner already took it, and a send answered failed, or past the
+            // store's dispatch deadline, would record no line for it; the next message renews it.
+            const renewed = yield* renewCredential(target, agent, running.sandboxSessionId).pipe(
+              Effect.timeoutOption(CODER.CREDENTIAL_RENEWAL),
+              Effect.catch((failure) =>
+                Effect.as(
+                  Effect.logWarning(
+                    `A ${harness.name} runner's credential was not renewed: ${describeFailure(failure)}`,
+                  ),
+                  Option.some(undefined),
+                ),
+              ),
+            );
+            if (Option.isNone(renewed)) {
+              yield* Effect.logWarning(
+                `A ${harness.name} runner's credential renewal outlasted its bound and was given up`,
+              );
+            }
+            yield* handed(SERVER_HANDOFF_PATH.WARM);
+            return accepted;
+          }
         }
         // The sandbox stopped or the runner ended: resumed, its credential set again, and the runner relaunched on the harness's session.
         // Lowered first, so the session the resume opens lives the timeout, not an old sandbox's day.
+        const wasUp = found.value.status === SANDBOX_STATUS.RUNNING;
         yield* capSandboxTimeout(api, found.value);
         const resumed = yield* Effect.result(api.resume(found.value.name));
         if (Result.isFailure(resumed)) {
@@ -1303,11 +1372,13 @@ export const runnerSessions = <
                 ),
               ),
             );
+          yield* handed(SERVER_HANDOFF_PATH.FRESH);
           return accepted;
         }
         const resumedSession = resumed.success.currentSessionId;
         if (resumedSession === undefined) return yield* new SandboxUnavailable({});
         yield* relaunched(sessionId, agent, found.value.name, resumedSession, sent);
+        yield* handed(wasUp ? SERVER_HANDOFF_PATH.RELAUNCHED : SERVER_HANDOFF_PATH.RESUMED);
         return accepted;
       });
 

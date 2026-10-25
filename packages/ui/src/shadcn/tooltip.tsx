@@ -25,7 +25,7 @@ export const TOOLTIP_MARGIN = 6;
 
 /** The pill, and what a card hung in its place shares with it: its layer of type and motion, and fading as it leaves. */
 export const TOOLTIP_SURFACE =
-  "luke-tooltip font-sans text-caption font-medium origin-(--transform-origin) animate-tooltip-in data-leaving:pointer-events-none data-leaving:animate-tooltip-leave in-data-[luke-profile=desktop]:[-webkit-app-region:no-drag]";
+  "luke-tooltip font-sans text-tag font-tag origin-(--transform-origin) animate-tooltip-in data-leaving:pointer-events-none data-leaving:animate-tooltip-leave in-data-[luke-profile=desktop]:[-webkit-app-region:no-drag]";
 
 function Tooltip({ ...props }: TooltipPrimitive.Root.Props) {
   return <TooltipPrimitive.Root data-slot="tooltip" {...props} />;

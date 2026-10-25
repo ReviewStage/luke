@@ -123,13 +123,15 @@ export interface PlanHistoryControl {
   /** Stands the history open where `spot` says, as the window's history goes back or forward within it. */
   onStand: (spot: HistorySpot) => void;
   onRetry: () => void;
+  /** Reads the version chosen again after its read failed, leaving its sections open. */
+  onRetryVersion: () => void;
   /** Reads the page of revisions older than the oldest read; answers whether it landed. */
   onLoadEarlier: () => Promise<boolean>;
-  /** Restores the version chosen as the plan's content; the caller hears it landed through `onRestored`. */
-  onRestore: () => Promise<ActionResult>;
+  /** Restores the version `seq`, or the one chosen, as the plan's content; the caller hears it landed through `onRestored`. */
+  onRestore: (seq?: number) => Promise<ActionResult>;
 }
 
-/** What a restore the service did not carry answers, so the dialog stays and says why. */
+/** What a restore the service did not carry answers, so its press says why. */
 const RESTORE_REFUSED: ActionResult = {
   status: ACTION_RESULT_STATUS.REJECTED,
   reason: "The version could not be restored. Try again.",
@@ -402,6 +404,19 @@ export function usePlanHistory(input: {
     [taskId, newest],
   );
   const onRetry = useCallback(() => setRetries((was) => was + 1), []);
+  // Note that the sections stay open, since they are drawn from the very version this reads again.
+  const onRetryVersion = useCallback(
+    () =>
+      setVersion(
+        (held) =>
+          held && {
+            ...held,
+            read: { kind: HISTORY_READ.READING },
+            asked: held.asked + 1,
+          },
+      ),
+    [],
+  );
   // Note that a revision's sections are listed where the versions are, so opening them keeps to the list.
   const onOpenSections = (sectionsOf: number) => {
     onSelect(sectionsOf);
@@ -456,14 +471,14 @@ export function usePlanHistory(input: {
     });
   }, [readBefore]);
 
-  const onRestore = async (): Promise<ActionResult> => {
-    if (taskId === undefined || seq === undefined) return RESTORE_REFUSED;
+  const onRestore = async (at = seq): Promise<ActionResult> => {
+    if (taskId === undefined || at === undefined) return RESTORE_REFUSED;
     // The version standing before the restore is the newest the list read.
     const before = newest;
-    const restored = await source.restore(taskId, seq).catch(() => false);
+    const restored = await source.restore(taskId, at).catch(() => false);
     if (!restored) return RESTORE_REFUSED;
     onRestored(
-      before === undefined || before === seq
+      before === undefined || before === at
         ? undefined
         : () => latest.current.restore(taskId, before).catch(() => false),
     );
@@ -506,6 +521,7 @@ export function usePlanHistory(input: {
     onList,
     onStand,
     onRetry,
+    onRetryVersion,
     onLoadEarlier,
     onRestore,
   };

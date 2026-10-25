@@ -44,7 +44,7 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-/** The toasts, wired as the app wires them: View hands on where the agent stands. */
+/** The toasts, wired as the app wires them: Open hands on where the agent stands. */
 function Harness(): React.JSX.Element {
   useAgentEndToasts((place) => viewed.push(place), []);
   return createElement(Fragment, null, createElement(ToastHost));
@@ -59,7 +59,7 @@ function mount(): void {
   act(() => root?.render(onRegistry(held, createElement(Harness))));
 }
 
-test("an automation's agent with no plan is toasted under the automation's name, and View opens the agent where it stands, on no plan", () => {
+test("an automation's agent with no plan is toasted under the automation's name, and Open opens the agent where it stands, on no plan", () => {
   mount();
 
   act(() =>
@@ -79,10 +79,10 @@ test("an automation's agent with no plan is toasted under the automation's name,
       toast.querySelector(".luke-toast-detail")?.textContent,
       toast.dataset.tone,
     ],
-    ["Triage overnight issues failed", "Morning Sentry triage", "failed"],
+    ["Triage overnight issues failed", "Morning Sentry triage", "danger"],
   );
   const view = [...toast.querySelectorAll("button")].find(
-    (button) => button.textContent === "View",
+    (button) => button.textContent === "Open",
   );
   assert.ok(view);
   act(() => view?.click());

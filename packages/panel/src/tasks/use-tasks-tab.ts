@@ -9,15 +9,16 @@ import {
 } from "@luke/features/coding-agent-view";
 import type { CodingAgentAttachment, TasklessAgent } from "@luke/features/coding-agent-wire";
 import { dictationKeywords } from "@luke/features/dictation-keywords";
+import { FAILURE_REASON, type Failure } from "@luke/features/failure-remedy";
 import type { GitHubConnection } from "@luke/features/github-connection-wire";
 import type {
   GitHubRepositoryIssuesAnswer,
   RepositoryIssuesAsk,
 } from "@luke/features/github-repositories-wire";
 import type { LinearIssueSummary } from "@luke/features/linear-wire";
-import { LINK_PLACE, type ReadLink } from "@luke/features/luke-link";
+import { LINK_PLACE, type ReadLink } from "@luke/features/link-grammar";
 import { MENTION_KIND, type PlanMention } from "@luke/features/mention-link";
-import type { CatalogModel, ModelChoice } from "@luke/features/models-wire";
+import { type CatalogModel, MODEL_PROVIDER, type ModelChoice } from "@luke/features/models-wire";
 import type { PageLine } from "@luke/features/page-wire";
 import type { PlanEditRequest } from "@luke/features/plan-edit";
 import { planMarkdown } from "@luke/features/plan-markdown";
@@ -27,6 +28,7 @@ import {
   type CodeRef,
   type Task,
   type TaskStanding,
+  type TaskStatus,
   type TaskSummary,
   UNTITLED_TASK_NAME,
 } from "@luke/features/task-wire";
@@ -34,7 +36,6 @@ import {
   TASK_CALL_FAILURE,
   TASKS_READ,
   type TasksEditAnswer,
-  type TasksRevisionsAnswer,
   type TasksView,
 } from "@luke/features/tasks-view";
 import { managesWorkspace } from "@luke/features/workspace-role";
@@ -49,7 +50,7 @@ import {
 import type { ChatShown } from "@luke/host/contract";
 import { EXPERIMENT, HOST_CAPABILITY } from "@luke/settings";
 import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsLink } from "@luke/settings/settings-views";
-import { DIALOG_TONE, type DialogConfirm, type DialogQuestion, useConfirmDialog } from "@luke/ui";
+import { STATUS_TONE } from "@luke/ui";
 import { callTaskName } from "@luke/ui/call-card-model";
 import {
   CHAT_PLACE,
@@ -60,6 +61,7 @@ import {
   FOR_YOU,
   placeChannel,
 } from "@luke/ui/chat-model";
+import { pendingShown, pendingWithout } from "@luke/ui/pending-values";
 import type { PictureAnswer } from "@luke/ui/picture-cache";
 import {
   isAgentTab,
@@ -90,55 +92,62 @@ import {
   type LinearIssuesAsk,
   MARK_FAILED_NOTES,
   MICROPHONE_PRESS,
+  markAsked,
   markedView,
   microphoneButton,
+  NO_PENDING_STANDINGS,
   type PendingAgentPins,
   type PendingMarks,
   type PendingPinPositions,
   type PendingRenames,
   type PendingRepositoryPin,
   type PendingRepositoryPins,
-  type PendingStatuses,
+  type PendingStandings,
   PIN_MOVE_FAILED_NOTE,
   type PinMove,
-  pendingMark,
   pinnedRepositories,
   positionedView,
   REPOSITORY_PIN_FAILED_NOTES,
   recentRepositories,
+  renameAsked,
   renamedView,
   repositoryFailureNote,
   repositoryPageUrl,
-  type SettledStatus,
   STATUS_RESTORE_FAILED_NOTE,
   type StatusChange,
   settleChanges,
+  settledMarks,
   settledNote,
+  settledRenames,
+  settledStandings,
   settleFailedNote,
   sidebarTasks,
+  standingAsked,
+  standingTasks,
+  standingView,
+  standingWithout,
   startFailureNote,
-  statusedView,
   TASK_MARK,
   TASKS_PAGE,
   type TaskMark,
+  type TaskNames,
   type TasksPage,
   tasksPage,
   undoStillDue,
   unsettledAgentPins,
-  unsettledMarks,
   unsettledPinPositions,
-  unsettledRenames,
   unsettledRepositoryPins,
-  unsettledStatuses,
+  withStanding,
   workspaceReaches,
 } from "@luke/ui/tasks-model";
 import { useStateWithRef } from "@luke/ui/use-state-with-ref";
 import type { MicrophoneStatus } from "@luke/voice/audio";
 import { shownFiles } from "@luke/voice/code-pane-model";
-import { VOICE_COMMAND } from "@luke/voice/voice-view";
+import { VOICE_COMMAND, type VoiceCallAbout } from "@luke/voice/voice-view";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { ActHandle } from "../act.js";
+import { type ActHandle, toastActFailure } from "../act.js";
+import { streamFrom } from "../act-stream.js";
 import { ADMIN_TAB, type AdminView, adminViewOfLink } from "../admin/routing.js";
 import { appPlatform } from "../app-platform.js";
 import { usePrefetchDiffBundle } from "../bundle-loader.js";
@@ -146,12 +155,13 @@ import { useCopyToast } from "../copy-feedback.js";
 import { useChosenWorkspace } from "../desktop/chosen-workspace.js";
 import { useOpenAiKeyMissing } from "../openai-key.js";
 import { PANEL_SPAN, PANEL_SPAN_ATTRIBUTE, recordPanelSpan } from "../panel-spans.js";
+import { usePendingNow } from "../pending-clock.js";
 import { pressedWithCommand } from "../press-intent.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import { useSteadyDoor, useSteadyDoors } from "../steady-door.js";
-import { TOAST_HOLD, TOAST_TONE, UNDO_LABEL, useToast } from "../toast.js";
+import { TOAST_HOLD, undoToast, useToast } from "../toast.js";
 import { useCapability, useExperiment } from "../use-app-state.js";
-import { useStandingCall, voiceViewNow } from "../use-voice-view.js";
+import { useStandingCall, voiceLostNow, voiceViewNow } from "../use-voice-view.js";
 import type { AgentCallPlace, AgentCallPress } from "./agent-call.js";
 import type { FixtureChat, Staged } from "./chat-fixture.js";
 import { useChatOn } from "./chat-gate.js";
@@ -164,9 +174,9 @@ import {
 } from "./closed-tabs.js";
 import { useCloudBrowserDrafts, useCloudBrowserTabs } from "./cloud-browser-tabs.js";
 import {
+  agentName,
   startFailureNote as agentStartFailureNote,
   agentStillWriting,
-  agentTabLabel,
   choiceRequest,
   openingLineOf,
   type SentLine,
@@ -179,9 +189,14 @@ import type { SectionReveal } from "./plan-body.js";
 import type { RevisionSource } from "./plan-history-model.js";
 import type { RepositoryChooser } from "./repository-chip.js";
 import { freshAccount, newestWaiting, RESTING_PAGE, restingPage } from "./resting-page.js";
+import type { FixturePlace } from "./tasks-fixture.js";
 import { loadedTasksFixture } from "./tasks-fixture-loader.js";
 import type { ThreadReveal } from "./thread-reveal.js";
-import { type CodingAgentsControl, useCodingAgents } from "./use-coding-agents.js";
+import {
+  type CodingAgentsControl,
+  useCodingAgents,
+  withPendingAgents,
+} from "./use-coding-agents.js";
 import { useIdleTabs } from "./use-idle-tabs.js";
 import { useInboxPages } from "./use-inbox-pages.js";
 import { useInboxTaskAgents } from "./use-inbox-task-agents.js";
@@ -448,6 +463,14 @@ export type AutomationsPlace =
 /** The list, where the Automations pages open with none asked for. */
 const AUTOMATIONS_LIST: AutomationsPlace = { kind: AUTOMATIONS_PAGE.LIST };
 
+/** What a fixture run's profile stands in the task's place at launch: Admin's Overview, or an Automations page; none for a place that is no stand-in. */
+function launchedStandIn(place: FixturePlace | undefined): StandIn | undefined {
+  if (place === undefined) return undefined;
+  if ("admin" in place) return { kind: STAND_IN.ADMIN, view: ADMIN_OVERVIEW, listed: false };
+  if ("automations" in place) return { kind: STAND_IN.AUTOMATIONS, place: place.automations };
+  return undefined;
+}
+
 /** Whether an Automations page stands its runs alone in a narrow room: as it was last told, else where it was opened on a run's link, which names a run its runs list. */
 function runsStanding(place: AutomationsPlace, runs: boolean | undefined): boolean {
   if (place.kind === AUTOMATIONS_PAGE.LIST) return false;
@@ -561,7 +584,7 @@ export interface NewTaskPreset {
   /** What the card starts; a task's agent where none is named. */
   readonly purpose?: NewTaskPurpose;
   /** The card as it pressed Start, and why the start was refused, where the card is opened again on a refusal. */
-  readonly refused?: { readonly card: NewTaskCardKept; readonly note: string };
+  readonly refused?: { readonly card: NewTaskCardKept; readonly note: Failure };
 }
 
 /**
@@ -623,6 +646,8 @@ export interface TasksControl {
     inbox: readonly AppInboxTask[];
     inboxTasks: readonly AppInboxTaskHolding[];
   };
+  /** The tasks a name, status, priority, or assignee given here stands over until the view carries it (`@luke/ui/pending-values`), which a list held still moves at once; none where nothing waits. */
+  pendingTasks?: ReadonlySet<string>;
   /** The chosen workspace's agents an automation started with no plan, newest started first, which the sidebar lists among the plans, and those archived, which its Archived view lists among the archived plans. */
   listedAgents: {
     readonly standing: readonly TasklessAgent[];
@@ -703,8 +728,6 @@ export interface TasksControl {
   onShowPanelTab: (taskId: string, tab: SidePanelTab) => void;
   /** Leaves the version history for the place that wrote a version: its agent's tab. */
   onShowSource: (taskId: string, source: RevisionSource) => void;
-  /** The question an agent's Call press asks before it ends the call standing into another agent. */
-  secondCall: { confirm: DialogConfirm; question: DialogQuestion };
   /** Opens a task on its own document tab, out from under its version history and a side panel filling the window: the call card's way back. */
   onShowTask: (taskId: string) => void;
   /** Opens a task the same way, scrolled to the section a mention or a Luke link names, or at its top for the task's own. */
@@ -780,8 +803,12 @@ export interface TasksControl {
   onChangeRepository: (taskId: string) => void;
   /** Gives a task its repository, or takes it away with null; answers why the service refused, or nothing once it is kept. */
   onSetRepository: (taskId: string, repository: string | null) => Promise<string | undefined>;
-  /** Sets where a task stands, how much it matters, or both; answers whether the service kept it. */
-  onSetTaskStanding: (taskId: string, standing: TaskStanding) => Promise<boolean>;
+  /** Sets where a task stands, how much it matters, or who it is assigned to, drawn at once by the assignee's name where the caller knows it; answers whether the service kept it. */
+  onSetTaskStanding: (
+    taskId: string,
+    standing: TaskStanding,
+    assigneeName?: string,
+  ) => Promise<boolean>;
   /** Opens a task's repository on GitHub in the browser. */
   onOpenOnGitHub: (taskId: string) => void;
   /** Opens Settings › Workspace at its GitHub, for the workspace the task belongs to. */
@@ -822,17 +849,20 @@ export interface TasksControl {
      * which closes the dialog and opens the task; with an agent handed over it opens the
      * task on a draft agent's tab holding the agent's prompt, files, and
      * model, which starts the agent at once; answers why the task did not
-     * start, or nothing once it has.
+     * start, with the press that mends it where there is one, or nothing
+     * once it has.
      */
     start: (
       name: string,
       repository: string | null,
       workspaceId: string | undefined,
       from?: NewTaskStart,
-    ) => Promise<string | undefined>;
+    ) => Promise<Failure | undefined>;
     /** The models the composer's chip offers, as last read; nothing before the first read lands. */
     models: readonly CatalogModel[] | undefined;
-    /** Reads the models now, for the chip's name and its menu opening. */
+    /** Whether the last read of the models did not land. */
+    modelsFailed: boolean;
+    /** Reads the models now, for the chip's name, its menu opening, and its Retry. */
     readModels: () => void;
     /** Reads the account's default model, which the composer's chip starts on. */
     readDefault: () => Promise<CodingAgentDefaultAnswer>;
@@ -884,12 +914,13 @@ export interface TasksControl {
    */
   onMarkTask: (taskId: string, mark: TaskMark) => void;
   /**
-   * Sets one task or several at Done or Canceled, as Mark done, Cancel task,
-   * and a group's Mark tasks done ask: each drawn there at once, and one
-   * toast for them all once the service answered, whose Undo puts back the
-   * status each stood at. A task already there is left as it stands.
+   * Sets one task or several at a status, as Mark done, Cancel task, a
+   * group's Mark tasks done, and the Tasks page's selection ask: each drawn
+   * there at once, and one toast for them all once the service answered,
+   * naming how many it refused, whose Undo puts back the status each stood
+   * at. A task already there is left as it stands.
    */
-  onSettleTasks: (taskIds: readonly string[], status: SettledStatus) => void;
+  onSettleTasks: (taskIds: readonly string[], status: TaskStatus) => void;
   /** The repositories the account pinned in the sidebar, newest pinned first, whose groups stand above the rest. */
   pinnedRepositories: readonly string[];
   /** Pins a repository in the sidebar or unpins it, on the account: drawn at once, and put back with a toast if the service refuses. */
@@ -1040,6 +1071,12 @@ interface TaskAsk {
   over: string | undefined;
 }
 
+/** No name given here and still waiting on main's view. */
+const NO_PENDING_RENAMES: PendingRenames = new Map();
+
+/** No task pin given here and still waiting on main's view. */
+const NO_PENDING_MARKS: PendingMarks = new Map();
+
 /** No repository pin given here and still waiting on main's view. */
 const NO_PENDING_PINS: PendingRepositoryPins = new Map();
 
@@ -1160,15 +1197,9 @@ function talkOf(agentId: string, place: AgentCallPlace): { agentId: string; task
   return place.taskId === undefined ? { agentId } : { agentId, taskId: place.taskId };
 }
 
-/** What the second call's question says: the call it ends, and what the act does. */
-function secondCallQuestion(taskName: string): DialogQuestion {
-  return {
-    title: `End your call on ${taskName} and start one here?`,
-    body: "What was said on that call stays in its agent's transcript.",
-    verb: "Start new call",
-    running: "Starting",
-    tone: DIALOG_TONE.PRIMARY,
-  };
+/** What the toast says once a Call press has ended the call standing on another place. */
+function secondCallNote(placeName: string): string {
+  return `Call on ${placeName} ended`;
 }
 
 /**
@@ -1196,7 +1227,7 @@ function taskHolds(
 }
 
 export function useTasksTab(input: {
-  acts: Pick<ActHandle, "act" | "tell">;
+  acts: Pick<ActHandle, "act" | "press" | "tell">;
   /** The tasks main holds, the account's; a fixture run's own stand in for them. */
   tasks: TasksView;
   run: { readonly fixtureMode: boolean; readonly profile: string };
@@ -1221,8 +1252,8 @@ export function useTasksTab(input: {
   failedRuns: readonly AccountFailedRun[];
   /** Opens Settings on its Integrations page, where an agent's MCP server is connected. */
   onOpenIntegrations: () => void;
-  /** Opens Settings on its Agents page, where the developer's API keys are. */
-  onOpenApiKeys: () => void;
+  /** Opens Settings on its Agents page at the provider's harness row, where the developer's key for it is. */
+  onOpenApiKeys: CodingAgentsControl["onOpenApiKeys"];
   /** Opens Settings at the place the link names. */
   onOpenSettings: (link: SettingsLink) => void;
   /** The window's ask before leaving unsaved work, which guards every door here that moves the place. */
@@ -1232,7 +1263,7 @@ export function useTasksTab(input: {
 }): TasksControl {
   const { shown, leaveGuard } = input;
   const { guard } = leaveGuard;
-  const { act, tell } = input.acts;
+  const { act, press, tell } = input.acts;
   const copyWithToast = useCopyToast();
   const toast = useToast();
   // The New task dialog's ask, standing while the dialog does: the preset it was opened with, if any.
@@ -1253,11 +1284,11 @@ export function useTasksTab(input: {
    */
   const [historyFor, setHistoryFor] = useState<HistoryOpening | undefined>(undefined);
   /** What stands in the task's place while one does: the window's Inbox and the item chosen in it, or one agent's page. */
-  // The chat profile opens Chat at launch over its fixture.
+  // The chat profile opens Chat at launch over its fixture, and the Admin and Automations profiles their place.
   const [standIn, setStandIn] = useState<StandIn | undefined>(() =>
     input.run.fixtureMode && input.run.profile === RUN_PROFILE.CHAT
       ? { kind: STAND_IN.CHAT, place: FOR_YOU, listed: true }
-      : undefined,
+      : launchedStandIn(loadedTasksFixture()?.fixturePlace(input.run)),
   );
   const inboxView = standIn?.kind === STAND_IN.INBOX ? standIn : undefined;
   // Whether the window's Inbox shows one column, as it measures itself.
@@ -1321,13 +1352,33 @@ export function useTasksTab(input: {
   // signed out as every fixture run is.
   const fixture = tasksFixture?.fixtureTasksView(input.run);
   const viewed = fixture ?? input.tasks;
-  // A name given here stands until main's view carries it, so a rename that
-  // landed never flickers back while main's copy of the view catches up.
-  const [renames, setRenames] = useState<PendingRenames>(new Map());
-  useEffect(() => setRenames((held) => unsettledRenames(held, viewed)), [viewed]);
+  const accountSignedIn = input.signedIn;
+  // A name, pin, status, priority, or assignee given here stands until main's view answers it
+  // (`@luke/ui/pending-values`), so a press that landed never flickers back
+  // while main's copy of the view catches up, and one the service or a
+  // teammate answered otherwise, or that waited past its time, gives way to
+  // the view. Note that a sign-out lets every one go, because each names a
+  // task of the account it was given under. The clock is read only while
+  // one waits, so a window with nothing pending draws nothing on its ticks.
+  const [renames, setRenames] = useState<PendingRenames>(NO_PENDING_RENAMES);
+  const [marks, setMarks] = useState<PendingMarks>(NO_PENDING_MARKS);
+  const [standings, setStandings] = useState<PendingStandings>(NO_PENDING_STANDINGS);
+  const waiting = renames.size > 0 || marks.size > 0 || standingTasks(standings).length > 0;
+  const pendingNow = usePendingNow(waiting);
+  useEffect(() => {
+    setRenames((held) =>
+      accountSignedIn ? settledRenames(held, viewed, pendingNow) : NO_PENDING_RENAMES,
+    );
+    setMarks((held) =>
+      accountSignedIn ? settledMarks(held, viewed, pendingNow) : NO_PENDING_MARKS,
+    );
+    setStandings((held) =>
+      accountSignedIn ? settledStandings(held, viewed, pendingNow) : NO_PENDING_STANDINGS,
+    );
+  }, [viewed, accountSignedIn, pendingNow]);
   // A name being typed is drawn over both, held here rather than read back
   // from main, so every surface naming the task follows the typing at once.
-  const [drafts, setDrafts] = useState<PendingRenames>(new Map());
+  const [drafts, setDrafts] = useState<TaskNames>(new Map());
   const draftName = useCallback((taskId: string, name: string | undefined) => {
     setDrafts((held) => {
       if (held.get(taskId) === name) return held;
@@ -1337,18 +1388,11 @@ export function useTasksTab(input: {
       return next;
     });
   }, []);
-  // A pin or an archive given here stands until main's view carries it, as a name does.
-  const [marks, setMarks] = useState<PendingMarks>(new Map());
-  useEffect(() => setMarks((held) => unsettledMarks(held, viewed)), [viewed]);
-  // A status given here stands until main's view carries it, apart from the pins and archives.
-  const [statuses, setStatuses] = useState<PendingStatuses>(new Map());
-  useEffect(() => setStatuses((held) => unsettledStatuses(held, viewed)), [viewed]);
   // A repository's pin given here stands until main's view carries it, as a
   // task's does. Note that a sign-out lets every one go, because a pin names
   // a repository rather than a row of this account's own, so one left
   // standing would be drawn on the next account to sign in.
   const [repositoryPins, setRepositoryPins] = useState<PendingRepositoryPins>(new Map());
-  const accountSignedIn = input.signedIn;
   useEffect(
     () =>
       setRepositoryPins((held) =>
@@ -1399,11 +1443,15 @@ export function useTasksTab(input: {
   useEffect(() => {
     if (!accountSignedIn) setClosedTabs(NO_CLOSED_TABS);
   }, [accountSignedIn, setClosedTabs]);
-  const renamed = useMemo(() => renamedView(viewed, renames), [viewed, renames]);
+  const renamed = useMemo(() => renamedView(viewed, pendingShown(renames)), [viewed, renames]);
+  const pendingTasks = useMemo(
+    () => new Set([...renames.keys(), ...standingTasks(standings)]),
+    [renames, standings],
+  );
   const drafted = useMemo(() => renamedView(renamed, drafts), [renamed, drafts]);
   const marked = useMemo(
-    () => statusedView(markedView(drafted, marks), statuses),
-    [drafted, marks, statuses],
+    () => standingView(markedView(drafted, marks), standings),
+    [drafted, marks, standings],
   );
   const tasks = useMemo(() => positionedView(marked, pinPositions), [marked, pinPositions]);
   // The sidebar lists the chosen workspace's tasks alone, and everything
@@ -1437,18 +1485,7 @@ export function useTasksTab(input: {
       ),
     [tasks.tasks, listedWorkspaceId],
   );
-  // The agents with no plan are listed by the same workspace as the plans, standing and archived apart as the plans are,
-  // each pinned as given here until main's view carries it.
   const { tasklessAgents } = tasks;
-  const listedAgents = useMemo(() => {
-    const listed = agentsPinned(tasklessAgents ?? NO_TASKLESS_AGENTS, agentPins).filter(
-      (agent) => listedWorkspaceId === undefined || agent.workspaceId === listedWorkspaceId,
-    );
-    return {
-      standing: listed.filter((agent) => agent.archivedAt === undefined),
-      archived: listed.filter((agent) => agent.archivedAt !== undefined),
-    };
-  }, [tasklessAgents, agentPins, listedWorkspaceId]);
   const { inboxWaiting, inboxTasks } = input;
   const listedInbox = useMemo(
     () => ({
@@ -1564,10 +1601,10 @@ export function useTasksTab(input: {
           }),
     [openDocument, viewed.activeTaskId],
   );
-  // A fixture's tasks have no agents, as they are read from nowhere.
+  // A fixture's task lists its agents at the act door: none, but where an agent profile stages one (`tasks-fixture.ts`).
   const agents = useCodingAgents({
     acts: input.acts,
-    taskId: fixture === undefined ? viewed.activeTaskId : undefined,
+    taskId: viewed.activeTaskId,
     repository:
       openDocument?.id === viewed.activeTaskId ? (openDocument?.repository ?? null) : null,
     listedAgents: tasks.tasks.some((task) => task.id === viewed.activeTaskId)
@@ -1577,8 +1614,23 @@ export function useTasksTab(input: {
     onOpenApiKeys: input.onOpenApiKeys,
     me: input.accountId,
     onStarted: (agentId) => mainRef.current?.onChoose({ agent: agentId }),
+    onDraftRestored: (on, draftId) => mainRef.current?.onShow(on, { draft: draftId }),
     keywords: dictationWords,
+    viewedAgents: tasklessAgents,
   });
+  // The agents with no plan are listed by the same workspace as the plans, standing and archived apart as the plans are,
+  // each pinned, named, and archived as given here until main's view carries it.
+  const agentsGiven = agents.pending;
+  const listedAgents = useMemo(() => {
+    const listed = withPendingAgents(
+      agentsPinned(tasklessAgents ?? NO_TASKLESS_AGENTS, agentPins),
+      agentsGiven,
+    ).filter((agent) => listedWorkspaceId === undefined || agent.workspaceId === listedWorkspaceId);
+    return {
+      standing: listed.filter((agent) => agent.archivedAt === undefined),
+      archived: listed.filter((agent) => agent.archivedAt !== undefined),
+    };
+  }, [tasklessAgents, agentPins, agentsGiven, listedWorkspaceId]);
   // An Untitled task takes its first agent's title on the service, and the
   // window hears no push for a task's row, so the tasks are read again as an
   // agent of the open task first holds a title while it stands Untitled.
@@ -1636,8 +1688,12 @@ export function useTasksTab(input: {
   // that nothing reaches the service until the draft is sent or called.
   const openDraftNow = useRef(agents.onNewDraft);
   openDraftNow.current = agents.onNewDraft;
+  // Note that an archive still out wants none, since the agent it took comes back if refused.
   const draftWanted =
-    mainTabs.tab === undefined && agents.agentIds !== undefined && agents.onUnarchive === undefined;
+    mainTabs.tab === undefined &&
+    agents.agentIds !== undefined &&
+    agents.onUnarchive === undefined &&
+    agents.pending.archives.size === 0;
   const draftTask = viewed.activeTaskId;
   useEffect(() => {
     if (draftWanted && draftTask !== undefined) openDraftNow.current();
@@ -1750,7 +1806,7 @@ export function useTasksTab(input: {
   const pinLabels = useMemo(
     () => ({
       agents: new Map(
-        (agents.agents ?? []).map((agent) => [agent.id, agentTabLabel(agent, agents.models)]),
+        (agents.agents ?? []).map((agent) => [agent.id, agentName(agent, agents.models)]),
       ),
       pullRequests: new Map(
         [...agents.pullRequests].map(([agentId, pullRequest]) => [
@@ -2058,7 +2114,7 @@ export function useTasksTab(input: {
         };
         toast({
           words: switchedNote(target.name),
-          tone: TOAST_TONE.DONE,
+          tone: STATUS_TONE.COMPLETE,
           action: { label: backNote(from.name), onPress: back },
         });
       });
@@ -2076,11 +2132,11 @@ export function useTasksTab(input: {
     if (fixture !== undefined) return DELETE_REFUSED;
     const deleted = await act(ACT_KIND.TASKS_DELETE, { taskId }).catch(() => false);
     if (deleted) {
-      toast({ words: TASK_DELETED_NOTE, tone: TOAST_TONE.DONE, hold: TOAST_HOLD.DONE });
+      toast({ words: TASK_DELETED_NOTE, tone: STATUS_TONE.COMPLETE, hold: TOAST_HOLD.DONE });
       return { status: ACTION_RESULT_STATUS.ACCEPTED };
     }
     if (!shownNow.current) {
-      toast({ words: DELETE_REFUSED_NOTE, tone: TOAST_TONE.FAILED, hold: TOAST_HOLD.FAILED });
+      toast({ words: DELETE_REFUSED_NOTE, tone: STATUS_TONE.DANGER, hold: TOAST_HOLD.FAILED });
     }
     return DELETE_REFUSED;
   };
@@ -2088,15 +2144,10 @@ export function useTasksTab(input: {
   // A fixture's tasks are renamed nowhere, as they are read from nowhere.
   const renameTask = async (taskId: string, name: string): Promise<boolean> => {
     if (fixture !== undefined) return false;
-    setRenames((held) => new Map(held).set(taskId, name));
+    const pending = renameAsked(renames, viewed, taskId, name);
+    setRenames((held) => new Map(held).set(taskId, pending));
     const renamed = await act(ACT_KIND.TASKS_RENAME, { taskId, name }).catch(() => false);
-    if (!renamed) {
-      setRenames((held) =>
-        held.get(taskId) === name
-          ? new Map([...held].filter(([pending]) => pending !== taskId))
-          : held,
-      );
-    }
+    if (!renamed) setRenames((held) => pendingWithout(held, taskId, pending));
     return renamed;
   };
 
@@ -2111,20 +2162,16 @@ export function useTasksTab(input: {
   // it, and says so in a toast, since the menu that asked has closed.
   const markTask = (taskId: string, mark: TaskMark) => {
     if (fixture !== undefined) return;
-    const next = { ...marks.get(taskId), ...pendingMark(mark, Date.now()) };
+    const next = markAsked(marks, viewed, taskId, mark, Date.now());
     setMarks((held) => new Map(held).set(taskId, next));
     act(ACT_KIND.TASKS_PIN, { taskId, pinned: mark === TASK_MARK.PIN })
       .catch(() => false)
       .then((changed) => {
         if (!changed) {
-          setMarks((held) =>
-            held.get(taskId) === next
-              ? new Map([...held].filter(([pending]) => pending !== taskId))
-              : held,
-          );
+          setMarks((held) => pendingWithout(held, taskId, next));
           toast({
             words: MARK_FAILED_NOTES[mark],
-            tone: TOAST_TONE.FAILED,
+            tone: STATUS_TONE.DANGER,
             hold: TOAST_HOLD.FAILED,
           });
         }
@@ -2149,7 +2196,7 @@ export function useTasksTab(input: {
         );
         toast({
           words: pinned ? REPOSITORY_PIN_FAILED_NOTES.PIN : REPOSITORY_PIN_FAILED_NOTES.UNPIN,
-          tone: TOAST_TONE.FAILED,
+          tone: STATUS_TONE.DANGER,
           hold: TOAST_HOLD.FAILED,
         });
       });
@@ -2196,7 +2243,7 @@ export function useTasksTab(input: {
       );
       toast({
         words: pinned ? AGENT_PIN_FAILED_NOTES.PIN : AGENT_PIN_FAILED_NOTES.UNPIN,
-        tone: TOAST_TONE.FAILED,
+        tone: STATUS_TONE.DANGER,
         hold: TOAST_HOLD.FAILED,
       });
     });
@@ -2252,7 +2299,7 @@ export function useTasksTab(input: {
     Promise.all(asked).then((answers) => {
       if (!answers.includes(false)) return;
       putBack?.();
-      toast({ words: PIN_MOVE_FAILED_NOTE, tone: TOAST_TONE.FAILED, hold: TOAST_HOLD.FAILED });
+      toast({ words: PIN_MOVE_FAILED_NOTE, tone: STATUS_TONE.DANGER, hold: TOAST_HOLD.FAILED });
     });
   };
 
@@ -2279,7 +2326,7 @@ export function useTasksTab(input: {
         if (changed === false) {
           toast({
             words: SECTION_WRITE_FAILED_NOTE,
-            tone: TOAST_TONE.FAILED,
+            tone: STATUS_TONE.DANGER,
             hold: TOAST_HOLD.FAILED,
           });
         }
@@ -2301,38 +2348,39 @@ export function useTasksTab(input: {
       return held?.id === taskId ? [held] : [];
     });
   };
-  // Each status change is drawn at once and sent, and a refused one goes
-  // back where it was only while no later press replaced it. Answers which
-  // tasks the service kept and how many it refused.
+  // A change of where a task stands, its status, priority, or assignee, is
+  // drawn at once and sent, and a refused one goes back where it was only
+  // while no later press replaced it. Answers whether the service kept it.
+  const sendStanding = (
+    taskId: string,
+    standing: TaskStanding,
+    assigneeName?: string,
+  ): Promise<boolean> => {
+    if (standing.status !== undefined) chooseStatus(taskId);
+    const asked = standingAsked(standings, viewed, taskId, standing, assigneeName);
+    setStandings((held) => withStanding(held, taskId, asked));
+    return act(ACT_KIND.TASKS_SET_STANDING, { taskId, ...standing })
+      .catch(() => false)
+      .then((kept) => {
+        if (!kept) setStandings((held) => standingWithout(held, taskId, asked));
+        return kept;
+      });
+  };
+  // Each status change is sent as one standing. Answers which tasks the
+  // service kept and how many it refused.
   const sendStatuses = (changes: readonly StatusChange[]) => {
-    for (const { taskId } of changes) chooseStatus(taskId);
-    const asked = changes.map(({ taskId, status }) => ({ taskId, next: { status } }));
-    setStatuses(
-      (held) => new Map([...held, ...asked.map(({ taskId, next }) => [taskId, next] as const)]),
-    );
-    const answers = asked.map(({ taskId, next }) =>
-      act(ACT_KIND.TASKS_SET_STANDING, { taskId, status: next.status }).catch(() => false),
-    );
+    const answers = changes.map(({ taskId, status }) => sendStanding(taskId, { status }));
     return Promise.all(answers).then((changed) => {
-      const refused = asked.filter((_, index) => !changed[index]);
-      setStatuses(
-        (held) =>
-          new Map(
-            [...held].filter(([pending, status]) =>
-              refused.every((each) => each.taskId !== pending || each.next !== status),
-            ),
-          ),
-      );
-      const landed = asked.filter((_, index) => changed[index]).map(({ taskId }) => taskId);
-      return { landed, refused: refused.length };
+      const landed = changes.filter((_, index) => changed[index]).map(({ taskId }) => taskId);
+      return { landed, refused: changes.length - landed.length };
     });
   };
 
-  // Tasks settled by one press answer with one toast rather than one each,
-  // so its Undo puts back the status of every task the service kept, and
-  // says so only where the service refuses that too. The open task stays
-  // open, since a task done or canceled is still read and worked on.
-  const settleTasks = (taskIds: readonly string[], status: SettledStatus) => {
+  // Tasks set at a status by one press answer with one toast rather than
+  // one each, so its Undo puts back the status of every task the service
+  // kept, and says so only where the service refuses that too. The open
+  // task stays open, since a task done or canceled is still read and worked on.
+  const settleTasks = (taskIds: readonly string[], status: TaskStatus) => {
     if (fixture !== undefined) return;
     const { asked, undo } = settleChanges(standingTasksOf(taskIds), status);
     if (asked.length === 0) return;
@@ -2343,34 +2391,30 @@ export function useTasksTab(input: {
       if (landed.length === 0) {
         toast({
           words: settleFailedNote(status, refused),
-          tone: TOAST_TONE.FAILED,
+          tone: STATUS_TONE.DANGER,
           hold: TOAST_HOLD.FAILED,
         });
         return;
       }
-      toast({
-        words: settledNote(status, landed.length, refused),
-        tone: TOAST_TONE.DONE,
-        action: {
-          label: UNDO_LABEL,
-          onPress: () =>
-            restoreNow.current(
-              undo.filter(
-                ({ taskId }) =>
-                  landed.includes(taskId) &&
-                  statusChoices.current.get(taskId) === choices.get(taskId),
-              ),
-              status,
+      toast(
+        undoToast(settledNote(status, landed.length, refused), () =>
+          restoreNow.current(
+            undo.filter(
+              ({ taskId }) =>
+                landed.includes(taskId) &&
+                statusChoices.current.get(taskId) === choices.get(taskId),
             ),
-        },
-      });
+            status,
+          ),
+        ),
+      );
     });
   };
   // Note that an Undo puts back only the tasks given no status since its
   // press, here or still in flight, and still at the status it undoes, so a
   // status chosen since, on the Board, the task's chip, or another Mac,
   // stands.
-  const restoreStatuses = (changes: readonly StatusChange[], settled: SettledStatus) => {
+  const restoreStatuses = (changes: readonly StatusChange[], settled: TaskStatus) => {
     const due = undoStillDue(
       changes,
       settled,
@@ -2381,7 +2425,7 @@ export function useTasksTab(input: {
       if (refused === 0) return;
       toast({
         words: STATUS_RESTORE_FAILED_NOTE,
-        tone: TOAST_TONE.FAILED,
+        tone: STATUS_TONE.DANGER,
         hold: TOAST_HOLD.FAILED,
       });
     });
@@ -2492,38 +2536,21 @@ export function useTasksTab(input: {
   // Note that a call into an agent with no task is no task's, though no task is open either.
   const live = standingCall?.taskId !== undefined && standingCall.taskId === tasks.activeTaskId;
   // A Call press that would open a call into one agent while another's call
-  // stands ends that call, so it asks first; the answer is the same press,
-  // and Cancel leaves the call standing as it was. The question is the
-  // agent's it was asked for on the page it was asked on, the task open or
-  // an agent's own page, so it goes the moment another opens, and its
-  // surface is that page, which a version history covers.
+  // stands ends that call: it acts at once, since nothing is lost (what was
+  // said stays in that agent's transcript), and its toast's Undo calls the
+  // earlier place again, which ends the new call in turn.
   const callSurface = pageAgent ?? tasks.activeTaskId;
   const openAiKeyMissing = useOpenAiKeyMissing();
-  const [askedFor, setAskedFor] = useState<{
-    surface: string;
-    agentId: string;
-    place: AgentCallPlace;
-  }>();
   const otherCall = (agentId: string) =>
-    standingCall !== undefined && standingCall.agentId !== agentId;
-  const secondCallFor =
-    askedFor !== undefined && otherCall(askedFor.agentId) ? askedFor : undefined;
-  const secondCall = useConfirmDialog(
-    {
-      subject: secondCallFor !== undefined && secondCallFor.surface === callSurface,
-      surfaceOpen: shown && !historyOpen,
-    },
-    () =>
-      secondCallFor === undefined
-        ? Promise.resolve<ActionResult>({ status: ACTION_RESULT_STATUS.ACCEPTED })
-        : act(ACT_KIND.TASKS_TALK, talkOf(secondCallFor.agentId, secondCallFor.place)).then(
-            (): ActionResult => ({ status: ACTION_RESULT_STATUS.ACCEPTED }),
-            (refused: Error): ActionResult => ({
-              status: ACTION_RESULT_STATUS.REJECTED,
-              reason: refused.message,
-            }),
-          ),
-  );
+    standingCall !== undefined && standingCall.agentId !== agentId ? standingCall : undefined;
+  const callOver = (agentId: string, place: AgentCallPlace, earlier: VoiceCallAbout) => {
+    const ended = secondCallNote(callTaskName(tasks, earlier));
+    const again = talkOf(earlier.agentId, { taskId: earlier.taskId });
+    act(ACT_KIND.TASKS_TALK, talkOf(agentId, place)).then(
+      () => toast(undoToast(ended, () => press(ACT_KIND.TASKS_TALK, again))),
+      toastActFailure,
+    );
+  };
   // The press names its agent and where it stands, the task it is on or
   // none, whatever task is open, and the voice window, which owns the call,
   // opens it into the agent or toggles it. It is read off the document as
@@ -2540,18 +2567,19 @@ export function useTasksTab(input: {
       call: now.call,
       voiceStatus: now.voiceStatus,
       openAiKeyMissing,
+      voiceLost: voiceLostNow(),
     });
-    if (button.press === MICROPHONE_PRESS.ADD_OPENAI_KEY) input.onOpenApiKeys();
+    // Note that a call runs on the OpenAI key, which Codex's row holds.
+    if (button.press === MICROPHONE_PRESS.ADD_OPENAI_KEY)
+      input.onOpenApiKeys(MODEL_PROVIDER.OPENAI);
     if (button.press === MICROPHONE_PRESS.ASK_ACCESS) {
-      tell(ACT_KIND.VOICE_COMMAND, { command: VOICE_COMMAND.REQUEST_MICROPHONE_ACCESS });
+      press(ACT_KIND.VOICE_COMMAND, { command: VOICE_COMMAND.REQUEST_MICROPHONE_ACCESS });
     }
-    if (button.press === MICROPHONE_PRESS.OPEN_SETTINGS) tell(ACT_KIND.MICROPHONE_OPEN_SETTINGS);
+    if (button.press === MICROPHONE_PRESS.OPEN_SETTINGS) press(ACT_KIND.MICROPHONE_OPEN_SETTINGS);
     if (button.press !== MICROPHONE_PRESS.TALK || callSurface === undefined) return;
-    if (!otherCall(agentId)) tell(ACT_KIND.TASKS_TALK, talkOf(agentId, place));
-    else {
-      setAskedFor({ surface: callSurface, agentId, place });
-      secondCall.ask();
-    }
+    const earlier = otherCall(agentId);
+    if (earlier === undefined) press(ACT_KIND.TASKS_TALK, talkOf(agentId, place));
+    else callOver(agentId, place, earlier);
   };
   const pressCallNow = useRef(pressCall);
   pressCallNow.current = pressCall;
@@ -2666,7 +2694,7 @@ export function useTasksTab(input: {
     return act(kind).then(
       () => true,
       (refused: Error) => {
-        toast({ words: refused.message, tone: TOAST_TONE.FAILED, hold: TOAST_HOLD.FAILED });
+        toast({ words: refused.message, tone: STATUS_TONE.DANGER, hold: TOAST_HOLD.FAILED });
         return false;
       },
     );
@@ -2699,17 +2727,13 @@ export function useTasksTab(input: {
   };
 
   // A fixture's tasks are read from nowhere, so nothing keeps where they stand.
-  // A status chosen here supersedes one a press drew and main's view has
-  // yet to carry, which is let go so the view's answer is drawn.
-  const setTaskStanding = (taskId: string, standing: TaskStanding): Promise<boolean> => {
+  const setTaskStanding = (
+    taskId: string,
+    standing: TaskStanding,
+    assigneeName?: string,
+  ): Promise<boolean> => {
     if (fixture !== undefined) return Promise.resolve(false);
-    if (standing.status !== undefined) {
-      chooseStatus(taskId);
-      setStatuses((held) =>
-        held.has(taskId) ? new Map([...held].filter(([pending]) => pending !== taskId)) : held,
-      );
-    }
-    return act(ACT_KIND.TASKS_SET_STANDING, { taskId, ...standing }).catch(() => false);
+    return sendStanding(taskId, standing, assigneeName);
   };
 
   // A fixture's tasks move nowhere, as they are read from nowhere. Note that
@@ -2735,7 +2759,7 @@ export function useTasksTab(input: {
           return true;
         }
         if (told?.quiet !== true) {
-          toast({ words: MOVE_REFUSED_NOTE, tone: TOAST_TONE.FAILED, hold: TOAST_HOLD.FAILED });
+          toast({ words: MOVE_REFUSED_NOTE, tone: STATUS_TONE.DANGER, hold: TOAST_HOLD.FAILED });
         }
         return false;
       });
@@ -2773,24 +2797,9 @@ export function useTasksTab(input: {
           taskId,
           ...(before === undefined ? undefined : { before }),
         }),
-      followNewest: (taskId, take) => {
-        let live = true;
-        let stream: AsyncIteratorObject<TasksRevisionsAnswer> | undefined;
-        act(ACT_KIND.TASKS_HISTORY_FOLLOW, { taskId })
-          .then(async (opened) => {
-            stream = opened;
-            if (!live) {
-              await opened.return?.(undefined);
-              return;
-            }
-            for await (const answer of opened) if (live) take(answer);
-          })
-          .catch(() => undefined);
-        return () => {
-          live = false;
-          void stream?.return?.(undefined);
-        };
-      },
+      // A follow that broke is opened again, so the newest page never stops moving for good.
+      followNewest: (taskId, take) =>
+        streamFrom(() => act(ACT_KIND.TASKS_HISTORY_FOLLOW, { taskId }), take),
       readRevision: (taskId, seq) => act(ACT_KIND.TASKS_REVISION, { taskId, seq }),
       restore: (taskId, seq) => act(ACT_KIND.TASKS_RESTORE, { taskId, seq }),
     }),
@@ -2827,7 +2836,7 @@ export function useTasksTab(input: {
     repository: string | null,
     workspaceId: string | undefined,
     from: NewTaskStart = {},
-  ): Promise<string | undefined> => {
+  ): Promise<Failure | undefined> => {
     // An agent's start opens on its task's page at once, its words drawn as
     // the agent's first line, rather than holding the card until the
     // service answers; a refusal opens the card again where it was left.
@@ -2847,7 +2856,7 @@ export function useTasksTab(input: {
       setStandIn(undefined);
       setHistoryFor(undefined);
     }
-    const refusedWith = (note: string): string => {
+    const refusedWith = (note: Failure): Failure => {
       if (handed !== undefined) {
         setStartingTask(undefined);
         setStandIn((now) => now ?? standingBefore);
@@ -2875,7 +2884,12 @@ export function useTasksTab(input: {
       ...(from.handed === undefined ? undefined : { agent: agentRequest(from.handed) }),
     }).then(
       (answer) => {
-        if ("failure" in answer) return refusedWith(startFailureNote(answer.failure));
+        if ("failure" in answer) {
+          return refusedWith({
+            reason: FAILURE_REASON.OTHER,
+            text: startFailureNote(answer.failure),
+          });
+        }
         setNewTaskAsk(undefined);
         setStartingTask(undefined);
         setStandIn(undefined);
@@ -2883,7 +2897,7 @@ export function useTasksTab(input: {
         if (handed !== undefined) openAgent(answer.planId, handed, answer.agentStart);
         return undefined;
       },
-      (refused: Error) => refusedWith(refused.message),
+      (refused: Error) => refusedWith({ reason: FAILURE_REASON.OTHER, text: refused.message }),
     );
   };
 
@@ -3471,7 +3485,8 @@ export function useTasksTab(input: {
     resting,
     shown,
     signedIn,
-    me: fixture === undefined ? input.accountId : undefined,
+    // Note that a fixture's invented tasks are nobody's, but those of a profile that signs in its own reader.
+    me: fixture === undefined ? input.accountId : tasksFixture?.fixtureReader(input.run),
     tasks: sidebar,
     listed: {
       tasks: listedSidebar,
@@ -3479,10 +3494,11 @@ export function useTasksTab(input: {
       inboxTasks: listedInbox.inboxTasks,
     },
     listedAgents,
+    pendingTasks,
     workspaces: viewed.workspaces,
     workspacesFailed: viewed.workspacesStatus === TASKS_READ.FAILED,
     // A failed read is taken as stale, so the refresh reads the workspaces again at once.
-    onRetryWorkspaces: () => tell(ACT_KIND.TASKS_REFRESH),
+    onRetryWorkspaces: () => press(ACT_KIND.TASKS_REFRESH),
     workspace: listedWorkspace,
     onChooseWorkspace: guard(switchWorkspace),
     onCreateWorkspace: createWorkspace,
@@ -3524,7 +3540,7 @@ export function useTasksTab(input: {
     shownCode: tasks.shownCode,
     agentCallCode: tasks.agentCallCode,
     codeFailed: tasks.codeStatus === TASKS_READ.FAILED,
-    onRetryCode: () => tell(ACT_KIND.TASKS_REFRESH),
+    onRetryCode: () => press(ACT_KIND.TASKS_REFRESH),
     pages: tasks.pages,
     agents,
     history: {
@@ -3754,10 +3770,6 @@ export function useTasksTab(input: {
     // notification opens it.
     onShowSource: guard(showSource),
     // The call card's way back lands where the task's call bar is in sight.
-    secondCall: {
-      confirm: secondCall,
-      question: secondCallQuestion(callTaskName(tasks, standingCall)),
-    },
     onShowTask: guard((taskId: string) => showPanelTab(taskId, SIDE_PANEL_TAB.PLAN)),
     // Each ask is its own, so the same section asked twice scrolls twice.
     onShowMention: guard(showMention),
@@ -3814,7 +3826,7 @@ export function useTasksTab(input: {
       const repository = repositoryOf(taskId);
       if (repository !== null) openGitHub(repositoryPageUrl(repository));
     },
-    onRetryList: () => tell(ACT_KIND.TASKS_REFRESH),
+    onRetryList: () => press(ACT_KIND.TASKS_REFRESH),
     onRetryDocument: () => {
       if (tasks.activeTaskId !== undefined) select(tasks.activeTaskId);
     },
@@ -3829,6 +3841,7 @@ export function useTasksTab(input: {
       repositoriesIn,
       start: steadyStartTask,
       models: agents.models,
+      modelsFailed: agents.modelsFailed,
       readModels: agents.readModels,
       readDefault: agents.readDefault,
       onClose: () => setNewTaskAsk(undefined),

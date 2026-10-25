@@ -14,13 +14,20 @@
 import { ACT_KIND } from "@luke/host/acts";
 import { EXPERIMENT } from "@luke/settings";
 import {
+  CALL_VIDEO_FIT,
+  CallBar,
+  CallVideoTile,
   IconButton,
   KEEP_FOCUS,
   KEEP_FOCUS_ELEMENT,
   KeepFocus,
   OneLine,
   ReturnIcon,
+  TEXT_TONE,
+  TEXT_VARIANT,
+  Text,
   Tooltip,
+  VideoToggle,
 } from "@luke/ui";
 import { type CallCardModel, callCardVideoStatus } from "@luke/ui/call-card-model";
 import { AVATAR_STATUS, type AvatarStatus } from "@luke/voice/avatar";
@@ -34,10 +41,8 @@ import {
   useState,
 } from "react";
 import type { ActHandle } from "../act.js";
-import { CALL_CONTROL_LABEL, CallBar } from "../tasks/tasks-parts.js";
 import { useExperiment } from "../use-app-state.js";
-import { useStandingVoiceView, useVoiceAvatar } from "../use-voice-view.js";
-import { CallVideoTile, VideoToggle } from "./call-video-tile.js";
+import { useMicrophoneGranted, useStandingVoiceView, useVoiceAvatar } from "../use-voice-view.js";
 
 /** The way back's name, for a reader and its hover: the task it opens. */
 function returnLabel(taskName: string): string {
@@ -102,10 +107,10 @@ export function useCardVideoStatus(): AvatarStatus | undefined {
 export function cardVideo(
   status: AvatarStatus | undefined,
   track: MediaStreamTrack | undefined,
-  tell: ActHandle["tell"],
+  press: ActHandle["press"],
 ): CallCardVideo | undefined {
   if (status === undefined) return undefined;
-  return { status, track, onSetVideo: (on) => tell(ACT_KIND.VOICE_SET_VIDEO, { on }) };
+  return { status, track, onSetVideo: (on) => press(ACT_KIND.VOICE_SET_VIDEO, { on }) };
 }
 
 /**
@@ -113,10 +118,10 @@ export function cardVideo(
  * own task, and the three call controls are the voice window's, about the
  * call standing, so none of them names a task.
  */
-export function callControls(tell: ActHandle["tell"], speakerMuted: boolean): CallControls {
-  const command = (sent: VoiceCommand) => tell(ACT_KIND.VOICE_COMMAND, { command: sent });
+export function callControls(press: ActHandle["press"], speakerMuted: boolean): CallControls {
+  const command = (sent: VoiceCommand) => press(ACT_KIND.VOICE_COMMAND, { command: sent });
   return {
-    onReturn: () => tell(ACT_KIND.CALL_SHOW_AGENT),
+    onReturn: () => press(ACT_KIND.CALL_SHOW_AGENT),
     onToggleMicrophone: () => command(VOICE_COMMAND.TOGGLE_MICROPHONE),
     onToggleSpeaker: () =>
       command(speakerMuted ? VOICE_COMMAND.UNMUTE_SPEAKER : VOICE_COMMAND.MUTE_SPEAKER),
@@ -152,6 +157,7 @@ export function CallCard({
   onLeft?: () => void;
 }): React.JSX.Element {
   const inWindow = surface === CALL_CARD_SURFACE.WINDOW;
+  const microphoneGranted = useMicrophoneGranted();
   const returnButton = (
     <IconButton
       icon={<ReturnIcon />}
@@ -176,12 +182,17 @@ export function CallCard({
       onAnimationEnd={left}
     >
       {tiled ? (
-        <CallVideoTile video={video.track} status={video.status} onSetVideo={video.onSetVideo} />
+        <CallVideoTile
+          video={video.track}
+          status={video.status}
+          fit={CALL_VIDEO_FIT.CARD}
+          onSetVideo={video.onSetVideo}
+        />
       ) : null}
       <div className="call-card-head">
-        <p className="call-card-title">
+        <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED} className="call-card-title">
           <OneLine>{card.taskName}</OneLine>
-        </p>
+        </Text>
         {video?.status === AVATAR_STATUS.OFF ? (
           <VideoToggle on={false} onSetVideo={video.onSetVideo} />
         ) : null}
@@ -200,13 +211,12 @@ export function CallCard({
         <CallBar
           status={card.status}
           microphone={{
-            label: CALL_CONTROL_LABEL.MUTE_MICROPHONE,
-            enabled: true,
             muted: card.microphoneMuted,
+            offered: microphoneGranted,
             onPress: controls.onToggleMicrophone,
           }}
           speaker={{ muted: speakerMuted, onPress: controls.onToggleSpeaker }}
-          stop={{ shown: true, onPress: controls.onEnd }}
+          onEnd={controls.onEnd}
           titled={inWindow}
         />
       </div>

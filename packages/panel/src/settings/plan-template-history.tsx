@@ -34,7 +34,7 @@ import { TEMPLATE_DOCUMENT_ID, TEMPLATE_TITLE } from "./plan-template-page.js";
 
 /** What a revision that is the built-in default did, by its writer. */
 const DEFAULT_SUMMARY = {
-  RESET: "Reset to the default",
+  RESET: "Reset to defaults",
   EARLIER: "The default template",
 } as const;
 
@@ -133,7 +133,6 @@ export function TemplateVersionHistory({
     versions,
     noun: "template",
     title: TEMPLATE_TITLE,
-    shown: true,
     agents: [],
     summary: templateRevisionSummary,
     onShowSource: undefined,
@@ -149,6 +148,7 @@ export function TemplateVersionHistory({
       account={account}
       onExit={onExit}
       onRestored={onExit}
+      exitPlace={TEMPLATE_TITLE}
     />
   );
 }

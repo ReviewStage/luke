@@ -54,7 +54,8 @@ const UNANSWERED = { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED } as const;
 
 /** Why the service kept nothing, in a sentence for the row. */
 const REJECTION_WORDS = {
-  [PROVIDER_KEY_REJECTION.INVALID]: "OpenAI didn't grant Luke use of your ChatGPT plan. Try again.",
+  [PROVIDER_KEY_REJECTION.INVALID]:
+    "OpenAI didn't grant Luke use of your ChatGPT subscription. Try again.",
   [PROVIDER_KEY_REJECTION.WRONG_PROVIDER]: "Luke couldn't save the ChatGPT sign-in. Try again.",
   [PROVIDER_KEY_REJECTION.UNREACHABLE]: "Luke couldn't save the ChatGPT sign-in. Try again.",
   [PROVIDER_KEY_REJECTION.TOO_MANY_TRIES]: "Too many sign-ins in the last hour. Try again later.",

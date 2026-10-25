@@ -123,14 +123,18 @@ test("a press on a skill's chip in the composer opens the skill's file, and a pr
     createElement(Composer, { words: "Cut it with /release now" }),
   );
   const chip = container.querySelector(".agent-composer-input [data-skill-ref]");
-  assert.equal(chip?.textContent, "/release", "the chosen skill is drawn as a chip");
+  assert.equal(
+    chip?.querySelector(".luke-inline-ref-label")?.textContent,
+    "/release",
+    "the chosen skill is drawn as a chip",
+  );
   const words = container.querySelector(".agent-composer-input p");
   assert.ok(chip && words, "the box is drawn");
   pressOn(words);
   assert.deepEqual(opened, [], "a press beside the chip opens nothing");
   pressOn(chip);
   assert.deepEqual(opened, [RELEASE.path]);
-  assert.equal(words.textContent, "Cut it with /release now", "the words are left as they were");
+  assert.equal(drawnWords(words), "Cut it with /release now", "the words are left as they were");
 });
 
 test("a skill's chip in the composer hangs the skill's card, what it is for under its name, as a sent chip's does", async () => {
@@ -160,7 +164,7 @@ test("a skill's chip is the one pill in the composer and in a sent message, each
 
   for (const chip of [boxed, said]) {
     assert.equal(chip.getAttribute("data-look"), "pill");
-    assert.equal(chip.textContent, "/release");
+    assert.equal(chip.querySelector(".luke-inline-ref-label")?.textContent, "/release");
     assert.ok(chip.querySelector(".luke-inline-ref-glyph svg"), "the chip leads with the book");
   }
   assert.equal(boxed.innerHTML, said.innerHTML, "the two chips are drawn alike");
@@ -211,16 +215,22 @@ test("a sent chip's hover card is the plan card: the skill's mark and name, what
   assert.deepEqual(opened, [RELEASE.path]);
 });
 
-test("an installed skill's chip hangs a card saying where it comes from and naming no file, and a press on it opens nothing, as a repository's card says Repo", async () => {
+test("an installed skill's chip is no button, yet takes the focus for its card, which says where it comes from and names no file, as a repository's card says Repo", async () => {
   const both: SkillSource = () => Promise.resolve({ skills: [RELEASE, TRIAGE] });
   const { container, opened } = await mounted(
     createElement(SentWords, { text: "Run /triage then /release now." }),
     both,
   );
-  const [triage, release] = container.querySelectorAll<HTMLButtonElement>("button[data-skill-ref]");
+  const [triage, release] = container.querySelectorAll<HTMLElement>("[data-skill-ref]");
   assert.ok(triage && release, "both skills are chips");
+  assert.deepEqual(
+    [triage.tagName, release.tagName],
+    ["SPAN", "BUTTON"],
+    "only the skill with a file to open is a button",
+  );
   document.documentElement.dataset.keyboard = "true";
   focusRestOn(triage);
+  assert.equal(document.activeElement, triage, "the installed skill's chip takes the focus");
   const card = document.querySelector<HTMLElement>(".luke-tooltip-card > [data-skill-card]");
   assert.equal(card?.querySelector(".luke-hover-card-corner")?.textContent, "Workspace");
   assert.equal(card?.querySelector('.luke-hover-card-row[data-look="detail"]'), null);
@@ -231,8 +241,16 @@ test("an installed skill's chip hangs a card saying where it comes from and nami
   const repository = [...document.querySelectorAll(".luke-tooltip-card > [data-skill-card]")].at(
     -1,
   );
-  assert.equal(repository?.querySelector(".luke-hover-card-corner")?.textContent, "Repo");
+  assert.equal(repository?.querySelector(".luke-hover-card-corner")?.textContent, "Repository");
 });
+
+/** A node's words as drawn, without those only a screen reader hears. */
+function drawnWords(node: Node): string {
+  if (!(node instanceof Element)) return node.textContent ?? "";
+  const drawn = node.cloneNode(true) as Element;
+  for (const heard of drawn.querySelectorAll(".luke-visually-hidden")) heard.remove();
+  return drawn.textContent ?? "";
+}
 
 /** The lines a message's first paragraph is drawn on, each line's words as they read. */
 function drawnLines(container: HTMLElement): readonly string[] {
@@ -241,7 +259,7 @@ function drawnLines(container: HTMLElement): readonly string[] {
   const lines = [""];
   for (const node of paragraph.childNodes) {
     if (node.nodeName === "BR") lines.push("");
-    else lines[lines.length - 1] += node.textContent?.replace(/\n/gu, "") ?? "";
+    else lines[lines.length - 1] += drawnWords(node).replace(/\n/gu, "");
   }
   return lines;
 }

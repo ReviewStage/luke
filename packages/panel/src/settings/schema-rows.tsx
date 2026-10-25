@@ -2,76 +2,25 @@ import {
   isAppSettingId,
   type SETTINGS_PAGE as SCHEMA_SETTINGS_PAGE,
   SETTING_SECTION,
+  type SettingKeep,
   type SettingSection,
   type SettingsRowsInput,
   settingFromOption,
+  settingKeepWords,
   settingRowsForPage,
 } from "@luke/settings";
-import { searchAnchorProps } from "@luke/settings/settings-anchors";
-import { SettingsRow, Switch } from "@luke/ui";
-import { useSettingWrite } from "@luke/ui/use-setting-write";
 import type { ActionResult } from "@luke/wire";
 import { APP_SETTING_KIND, APP_TOGGLE_VALUE } from "@luke/wire/app-settings";
-import { SettingMarks } from "./marks.js";
 import { PictureChoiceRow } from "./picture-choice-row.js";
 import { SampledChoiceRow } from "./sampled-choice-row.js";
 import { SelectRow } from "./select-row.js";
+import { SwitchRow } from "./switch-row.js";
 import type { SettingsWrites } from "./writes.js";
 
 /** One value a choice's control offers, as the schema hands it. */
 type SettingOption = NonNullable<
   ReturnType<typeof settingRowsForPage>[number]["control"]
 >["options"][number];
-
-/** Where a pressed search result lands: the row's one control, for a row the schema names. */
-function anchorOf(id: string) {
-  return isAppSettingId(id) ? searchAnchorProps(id) : undefined;
-}
-
-/**
- * A toggle's row: the shared row and switch. The write and its refusal live
- * here, so two switches can be in flight at once and a refusal stands under
- * the row that asked, in the row's own error line.
- */
-function SchemaSwitchRow({
-  id,
-  label,
-  detail,
-  changed,
-  checked,
-  onChange,
-}: {
-  id: string;
-  label: string;
-  detail: string | undefined;
-  changed: boolean;
-  checked: boolean;
-  onChange: (enabled: boolean) => Promise<ActionResult>;
-}): React.JSX.Element {
-  const { busy, rejection, saves, run } = useSettingWrite(onChange);
-  return (
-    <SettingsRow
-      label={label}
-      adornment={<SettingMarks changed={changed} saves={saves} />}
-      description={detail}
-      error={rejection}
-      labelsControl
-    >
-      {(control) => (
-        <Switch
-          id={control.controlId}
-          {...anchorOf(id)}
-          checked={checked}
-          label={label}
-          describedBy={control["aria-describedby"]}
-          aria-invalid={control["aria-invalid"]}
-          disabled={busy}
-          onChange={(next) => run(next)}
-        />
-      )}
-    </SettingsRow>
-  );
-}
 
 /**
  * A choice's row: the shared pop-up (`select-row.tsx`), whose menu searches
@@ -118,10 +67,25 @@ function SchemaChoiceRow({
 }
 
 /**
+ * The line under a row's label: its own detail, then where it is kept where
+ * that is not where its page's head says, as a sentence of its own.
+ */
+function keptDetail(
+  detail: string | undefined,
+  kept: SettingKeep | undefined,
+  view: SettingsRowsInput,
+): string | undefined {
+  if (kept === undefined) return detail;
+  const where = `${settingKeepWords(kept, view.capabilities)}.`;
+  return detail === undefined ? where : `${detail} ${where}`;
+}
+
+/**
  * Every ordinary row one section of a settings page draws, from the schema and
  * nothing else: which page and section a setting stands in, where in that
  * section, whether it is drawn right now, what its control offers, and the
- * line drawn under its label are the entry's own answers. A page component that decided any of it for itself would
+ * line drawn under its label are the entry's own answers, the line ending
+ * in where the setting is kept where that differs from its page's. A page component that decided any of it for itself would
  * be a second record of the same fact, and the two would drift.
  */
 export function SchemaSettingRows({
@@ -137,13 +101,14 @@ export function SchemaSettingRows({
 }): React.JSX.Element {
   const rows = settingRowsForPage(page, section, view).flatMap((row) => {
     const { field, entry, changed, control } = row;
+    const detail = keptDetail(entry.detail, row.keptElsewhere, view);
     if (entry.kind === APP_SETTING_KIND.TOGGLE) {
       return [
-        <SchemaSwitchRow
+        <SwitchRow
           key={entry.id}
-          id={entry.id}
+          {...(isAppSettingId(entry.id) ? { anchor: entry.id } : undefined)}
           label={entry.label}
-          detail={entry.detail}
+          detail={detail}
           changed={changed}
           checked={entry.value === APP_TOGGLE_VALUE.ON}
           onChange={(enabled) => writes.setting(field, enabled)}
@@ -161,7 +126,7 @@ export function SchemaSettingRows({
           key={entry.id}
           label={entry.label}
           {...(isAppSettingId(entry.id) ? { anchor: entry.id } : undefined)}
-          detail={entry.detail}
+          detail={detail}
           changed={changed}
           value={control.value}
           options={pictured}
@@ -179,7 +144,7 @@ export function SchemaSettingRows({
           key={entry.id}
           label={entry.label}
           {...(isAppSettingId(entry.id) ? { anchor: entry.id } : undefined)}
-          detail={entry.detail}
+          detail={detail}
           changed={changed}
           value={control.value}
           options={sampled}
@@ -192,7 +157,7 @@ export function SchemaSettingRows({
         key={entry.id}
         id={entry.id}
         label={entry.label}
-        detail={entry.detail}
+        detail={detail}
         changed={changed}
         value={control.value}
         options={control.options}

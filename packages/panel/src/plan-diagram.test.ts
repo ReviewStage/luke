@@ -2,7 +2,6 @@
 
 import assert from "node:assert/strict";
 import { PLAN_ACTOR, type Task } from "@luke/features/task-wire";
-import { useConfirmDialog } from "@luke/ui";
 import {
   DIAGRAM_APPEARANCE,
   DIAGRAM_DRAWING,
@@ -10,14 +9,14 @@ import {
   type DiagramDrawing,
   type DiagramModule,
 } from "@luke/ui/diagram-contract";
-import { ACTION_RESULT_STATUS } from "@luke/wire";
 import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, type ReactElement, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test } from "vitest";
-import type { SideBundles } from "./bundle-loader.js";
+import { type SideBundles, sideBundles } from "./bundle-loader.js";
 import { MarkdownMessage } from "./markdown-message.js";
+import { DiagramPreview } from "./plan-diagram.js";
 import { SHELL_ROOM } from "./shell-room.js";
 import { ShellRoomContext } from "./stage-room.js";
 import { PlanBody } from "./tasks/plan-body.js";
@@ -128,6 +127,15 @@ function pictures(container: HTMLElement): (string | null)[] {
   return [...container.querySelectorAll(".plan-diagram img")].map((img) => img.getAttribute("src"));
 }
 
+/** The failure note's Retry, where the fence has one. */
+function retry(container: HTMLElement): HTMLButtonElement | undefined {
+  return (
+    [...container.querySelectorAll<HTMLButtonElement>(".plan-diagram [role=alert] button")].find(
+      (button) => button.textContent === "Retry",
+    ) ?? undefined
+  );
+}
+
 /** The diagram's Show code, or Show diagram, toggle. */
 function toggle(container: HTMLElement): HTMLButtonElement {
   return (
@@ -138,10 +146,9 @@ function toggle(container: HTMLElement): HTMLButtonElement {
 
 /** A version of the plan drawn against the one before it, as the version history draws it. */
 function Version({ previous, now }: { previous: string; now: string }): ReactNode {
-  const restore = useConfirmDialog({ subject: true, surfaceOpen: true }, () =>
-    Promise.resolve({ status: ACTION_RESULT_STATUS.ACCEPTED }),
-  );
+  const restore = { busy: false, onRestore: () => undefined };
   return createElement(VersionView, {
+    onRetry: () => undefined,
     viewing: {
       line: {
         seq: 2,
@@ -172,6 +179,58 @@ test("a Mermaid fence on a plan's page draws as the picture the diagram bundle a
   assert.ok(page.querySelector(".plan-diagram")?.classList.contains("ph-no-capture"));
 });
 
+test("a diagram's picture is named for its title, or its first line where it has none", async () => {
+  const titled = "---\ntitle: Invite flow\n---\nflowchart LR\n  Invite --> Join";
+  const plain = "%% a note\n\nsequenceDiagram\n  Admin->>Service: Invite";
+  const configured = "---\nconfig:\n  layout: elk\n---\nflowchart LR\n  A --> B";
+  const pie = 'pie title "Votes so far"\n  "Yes" : 3';
+  const page = await drawn(
+    createElement(PlanBody, {
+      task: taskWith(
+        [titled, plain, configured, pie].map((code) => mermaidFence(code)).join("\n\n"),
+      ),
+      live: false,
+    }),
+  );
+
+  const alts = [...page.querySelectorAll(".plan-diagram img")].map((img) =>
+    img.getAttribute("alt"),
+  );
+
+  assert.deepEqual(alts, [
+    "Diagram: Invite flow",
+    "Diagram: sequenceDiagram",
+    "Diagram: flowchart LR",
+    "Diagram: Votes so far",
+  ]);
+});
+
+test("while an edited diagram is drawn again, the picture kept is still named for the code it shows", async () => {
+  const before = "---\ntitle: Before\n---\nflowchart LR\n  A --> B";
+  const after = "---\ntitle: After\n---\nflowchart LR\n  A --> B";
+  const container = document.body.appendChild(document.createElement("div"));
+  const root = createRoot(container);
+  roots.push(root);
+  const show = (code: string, previous: string | undefined) =>
+    act(() =>
+      root.render(
+        onRegistry(
+          AtomRegistry.make(),
+          onSideBundles(bundles, createElement(DiagramPreview, { code, previous })),
+        ),
+      ),
+    );
+  const alt = () => container.querySelector("img")?.getAttribute("alt");
+  show(before, undefined);
+  await settle();
+
+  show(after, before);
+
+  assert.equal(alt(), "Diagram: Before");
+  await settle();
+  assert.equal(alt(), "Diagram: After");
+});
+
 test("Show code puts the fence's code in the picture's place, and Show diagram brings the picture back", async () => {
   const code = "flowchart LR\n  Invite --> Join";
   const page = await drawn(
@@ -197,10 +256,47 @@ test("a fence the diagram bundle refuses says it could not be drawn, over its co
 
   assert.deepEqual(pictures(page), []);
   assert.equal(
-    page.querySelector(".plan-diagram-failed")?.textContent,
+    page.querySelector(".plan-diagram [role=alert]")?.textContent,
     "This diagram could not be drawn.",
   );
+  assert.equal(retry(page), undefined);
   assert.equal(page.querySelector(".plan-diagram pre")?.textContent, `${UNPARSED}\n`);
+});
+
+test("a diagram bundle that failed to load says so with Retry, which imports it again and draws the fence", async () => {
+  const code = "flowchart TD\n  Offline --> Online";
+  let online = false;
+  const unloaded = sideBundles({
+    diagram: () => (online ? Promise.resolve(STAND_IN) : Promise.reject(new Error("offline"))),
+  });
+  const container = document.body.appendChild(document.createElement("div"));
+  const root = createRoot(container);
+  roots.push(root);
+  act(() =>
+    root.render(
+      onRegistry(
+        AtomRegistry.make(),
+        onSideBundles(
+          unloaded,
+          createElement(PlanBody, { task: taskWith(mermaidFence(code)), live: false }),
+        ),
+      ),
+    ),
+  );
+  await settle();
+
+  assert.equal(
+    container.querySelector(".plan-diagram [role=alert]")?.textContent,
+    "This diagram could not be drawn.Retry",
+  );
+  assert.deepEqual(pictures(container), []);
+
+  online = true;
+  await act(async () => retry(container)?.click());
+  await settle();
+
+  assert.deepEqual(pictures(container), [pictureOf(code, DIAGRAM_APPEARANCE.LIGHT)]);
+  assert.equal(container.querySelector(".plan-diagram [role=alert]"), null);
 });
 
 test("the diagram is drawn again in the window's new appearance when it flips", async () => {
@@ -349,7 +445,7 @@ test("in a wide room the keyboard's press on a diagram, named for what it does, 
     createElement(PlanBody, { task: taskWith(mermaidFence(code)), live: false }),
   );
   const enlarge = press(page);
-  assert.equal(enlarge.getAttribute("aria-label"), "Enlarge Diagram");
+  assert.equal(enlarge.getAttribute("aria-label"), "Enlarge Diagram: flowchart LR");
 
   act(() => enlarge.click());
 

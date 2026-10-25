@@ -1,17 +1,35 @@
-import { useAtomValue } from "@effect/atom-react";
+import { useAtomRefresh, useAtomValue } from "@effect/atom-react";
 import {
   MAC_TERMINAL_PORT_MESSAGE,
   macTerminalPortOutboundSchema,
 } from "@luke/features/mac-terminal-wire";
+import { IRREVERSIBLE_WORDS } from "@luke/features/words";
 import { ACT_KIND } from "@luke/host/acts";
-import { BUTTON_SIZE, BUTTON_VARIANT, Button, FILL_FLOW, Fill, OneLine } from "@luke/ui";
+import {
+  BUTTON_SIZE,
+  BUTTON_VARIANT,
+  Button,
+  CONFIRM_LOSS,
+  ConfirmDialog,
+  type DialogQuestion,
+  ERROR_STATE_PLACEMENT,
+  ErrorState,
+  FILL_FLOW,
+  Fill,
+  PaneBar,
+  useConfirmDialog,
+} from "@luke/ui";
+import { GLYPH, PlayIcon } from "@luke/ui/icons";
 import type { MacTerminalStripTab } from "@luke/ui/tab-strip-model";
+import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { Option, Schema } from "effect";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
-import { PlayIcon, SquareIcon, TerminalIcon } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import { useAct } from "../act.js";
+import { askActResult, useAct } from "../act.js";
 import { TERMINAL_LOAD_FAILED, useSideBundles } from "../bundle-loader.js";
+import { useTabActions } from "../desktop/strip-tabs.js";
+import { useBusyPress } from "../settings/busy-press.js";
+import { usePhoneRoom } from "../stage-room.js";
 import type { TerminalHandle } from "../terminal/contract.js";
 import { onMacTerminalPort } from "./mac-terminal-port.js";
 import { pullRequestAsked } from "./pull-request-number.js";
@@ -25,16 +43,18 @@ import { useOpenLink } from "./use-open-link.js";
  * agent to push where it has none, and asks main to run it at the screen's
  * size (`mac-terminal-acts.ts`): main brings the branch into a worktree of
  * Luke's own clone and runs the repository's command there. The screen
- * shows what the run prints and takes nothing typed. Stop ends the run, the
+ * shows what the run prints and takes nothing typed. Stop asks first, then ends the run, the
  * tab hearing it end; Run starts it anew; Open in Terminal opens the Mac's
  * own Terminal in the worktree for what the developer wants to do by hand.
  * Out of sight, the tab lets go of its port and the run goes on; drawn
  * again, it is shown the run's output so far, or as it ended, and only a
  * Run press starts another. Closing the tab ends the run
- * (`use-side-panel.ts`). A refusal from main is written on the screen. What
+ * (`use-side-panel.ts`), asking first while it is going (`side-panel.tsx`). A refusal from main is written on the screen. What
  * the run prints reaches this screen and nowhere else, so the tab is left
  * out of the screen recording.
  */
+
+const ACCEPTED: ActionResult = { status: ACTION_RESULT_STATUS.ACCEPTED };
 
 const readOutbound = Schema.decodeUnknownOption(macTerminalPortOutboundSchema);
 
@@ -84,6 +104,37 @@ const lastRuns = new Map<
   ReadBranch & { readonly asked: number; readonly presses: number; stopped: boolean }
 >();
 
+/**
+ * Whether each agent's run is going, as its tab last drew it: kept past the
+ * tab, which lets go of its port out of sight, so a close asks for a run it
+ * last saw going. A run never drawn is not here, and is not going.
+ */
+const goingRuns = new Map<string, boolean>();
+
+/** Whether the agent's run is going, or was when its tab was last drawn: what a close of its tab ends. */
+export function macTerminalGoing(agentId: string): boolean {
+  return goingRuns.get(agentId) === true;
+}
+
+/** What each end of a run asks first: what is running in it cannot be got back. */
+const ENDS_WHAT_RUNS = `What's running in it ends. ${IRREVERSIBLE_WORDS}`;
+
+export const MAC_TERMINAL_STOP_QUESTION: DialogQuestion = {
+  title: "Stop the run?",
+  body: ENDS_WHAT_RUNS,
+  verb: "Stop",
+  running: "Stopping",
+  loss: CONFIRM_LOSS.IRREVERSIBLE,
+};
+
+export const MAC_TERMINAL_CLOSE_QUESTION: DialogQuestion = {
+  title: "Close this terminal?",
+  body: ENDS_WHAT_RUNS,
+  verb: "Close",
+  running: "Closing",
+  loss: CONFIRM_LOSS.IRREVERSIBLE,
+};
+
 export function MacTerminalTab({ tab }: { tab: MacTerminalStripTab }): React.JSX.Element {
   const { macTerminal: agentId, repository, asked, number } = tab;
   const known = lastRuns.get(agentId);
@@ -96,7 +147,9 @@ export function MacTerminalTab({ tab }: { tab: MacTerminalStripTab }): React.JSX
   // Note that the link opener is read through a ref rather than hung on the run's effect, because it is made anew whenever the listed tasks change, and the effect would tear the terminal down and draw it again each time.
   const opensLink = useRef(openLink);
   opensLink.current = openLink;
-  const loaded = useAtomValue(useSideBundles().terminal);
+  const { terminal } = useSideBundles();
+  const loaded = useAtomValue(terminal);
+  const retry = useAtomRefresh(terminal);
   const module = Option.getOrUndefined(AsyncResult.value(loaded));
   const [element, setElement] = useState<HTMLDivElement | null>(null);
   const port = useRef<MessagePort | undefined>(undefined);
@@ -196,71 +249,134 @@ export function MacTerminalTab({ tab }: { tab: MacTerminalStripTab }): React.JSX
   }, [module, element, act, agentId, repository, asked, number, presses]);
 
   const running = standing.kind === "running" || standing.kind === "stopping";
-  const stop = () => {
+  const going = running || standing.kind === "starting";
+  useEffect(() => {
+    goingRuns.set(agentId, going);
+  }, [agentId, going]);
+  const stopRun = (): Promise<ActionResult> => {
     stopAsked.current = true;
     const ran = lastRuns.get(agentId);
     if (ran !== undefined) ran.stopped = true;
     setStanding({ kind: "stopping" });
-    act(ACT_KIND.MAC_TERMINAL_STOP, { agentId }).catch(() => undefined);
-  };
-  const openInTerminal = () => {
-    // Note that a refusal is written on the screen, so a press that opened nothing says why.
-    act(ACT_KIND.MAC_TERMINAL_REVEAL, { agentId }).catch((refused: Error) =>
-      tellOnScreen.current(refused.message),
+    return askActResult(act(ACT_KIND.MAC_TERMINAL_STOP, { agentId }).then(() => ACCEPTED)).then(
+      (answer) => {
+        if (answer.status === ACTION_RESULT_STATUS.ACCEPTED) return answer;
+        // Note that a refused stop leaves the run going, so the tab says it is still running, unless the run has ended meanwhile.
+        stopAsked.current = false;
+        if (ran !== undefined) ran.stopped = false;
+        setStanding((now) => (now.kind === "stopping" ? { kind: "running" } : now));
+        return answer;
+      },
     );
   };
+  // Stopping ends what runs, which nothing brings back, so it asks first; a refusal is said in the question.
+  const stopping = useConfirmDialog({ subject: running, surfaceOpen: true }, stopRun);
+  const stop = stopping.ask;
+  // Note that a refusal is written on the screen, so a press that opened nothing says why.
+  const opening = useBusyPress(() =>
+    act(ACT_KIND.MAC_TERMINAL_REVEAL, { agentId }).catch((refused: Error) =>
+      tellOnScreen.current(refused.message),
+    ),
+  );
+
+  const run = () => setPresses((count) => count + 1);
+  // A phone draws no bar over the screen: its header's ⋯ runs, stops, and opens the run in
+  // Terminal, saying where it stands and what it runs.
+  const phone = usePhoneRoom();
+  const where = `${repository}${branch === undefined ? "" : ` · ${branch}`} · this Mac`;
+  useTabActions(
+    phone
+      ? [
+          [
+            running
+              ? {
+                  label: "Stop",
+                  icon: <GLYPH.STOP />,
+                  detail: standingWords(standing),
+                  danger: true,
+                  disabled: standing.kind === "stopping",
+                  onSelect: stop,
+                }
+              : {
+                  label: "Run",
+                  icon: <PlayIcon aria-hidden />,
+                  detail: standingWords(standing),
+                  disabled: standing.kind === "starting",
+                  onSelect: run,
+                },
+            {
+              label: "Open in Terminal",
+              icon: <GLYPH.TERMINAL />,
+              detail: where,
+              disabled: branch === undefined || standing.kind === "starting",
+              onSelect: opening.onPress,
+            },
+          ],
+        ]
+      : undefined,
+  );
 
   return (
     <Fill className="terminal-tab file-view ph-no-capture">
-      <header className="file-view-bar">
-        <span className="terminal-tab-title">
-          <OneLine className="terminal-tab-agent">{repository}</OneLine>
-          <span className="terminal-tab-standing">
-            {branch === undefined ? "" : ` · ${branch}`} · this Mac · {standingWords(standing)}
-          </span>
-        </span>
-        <div className="file-view-actions">
-          <Button
-            icon={<TerminalIcon aria-hidden />}
-            label="Open in Terminal"
-            size={BUTTON_SIZE.COMPACT}
-            disabled={branch === undefined || standing.kind === "starting"}
-            onClick={openInTerminal}
-          >
-            Open in Terminal
-          </Button>
-          {running ? (
-            <Button
-              icon={<SquareIcon aria-hidden />}
-              variant={BUTTON_VARIANT.DANGER_OUTLINE}
-              size={BUTTON_SIZE.COMPACT}
-              disabled={standing.kind === "stopping"}
-              onClick={stop}
-            >
-              Stop
-            </Button>
-          ) : (
-            <Button
-              icon={<PlayIcon aria-hidden />}
-              variant={BUTTON_VARIANT.PRIMARY}
-              size={BUTTON_SIZE.COMPACT}
-              disabled={standing.kind === "starting"}
-              onClick={() => setPresses((count) => count + 1)}
-            >
-              Run
-            </Button>
-          )}
-        </div>
-      </header>
+      {phone ? null : (
+        <PaneBar
+          title={repository}
+          detail={
+            <span className="terminal-tab-standing">
+              {branch === undefined ? "" : ` · ${branch}`} · this Mac · {standingWords(standing)}
+            </span>
+          }
+          actions={
+            <>
+              <Button
+                icon={<GLYPH.TERMINAL />}
+                label="Open in Terminal"
+                size={BUTTON_SIZE.COMPACT}
+                busy={opening.busy}
+                busyLabel="Opening Terminal"
+                disabled={branch === undefined || standing.kind === "starting"}
+                onClick={opening.onPress}
+              >
+                Open in Terminal
+              </Button>
+              {running ? (
+                <Button
+                  icon={<GLYPH.STOP />}
+                  variant={BUTTON_VARIANT.DANGER_OUTLINE}
+                  size={BUTTON_SIZE.COMPACT}
+                  busy={standing.kind === "stopping"}
+                  busyLabel="Stopping"
+                  onClick={stop}
+                >
+                  Stop
+                </Button>
+              ) : (
+                <Button
+                  icon={<PlayIcon aria-hidden />}
+                  variant={BUTTON_VARIANT.PRIMARY}
+                  size={BUTTON_SIZE.COMPACT}
+                  disabled={standing.kind === "starting"}
+                  onClick={run}
+                >
+                  Run
+                </Button>
+              )}
+            </>
+          }
+        />
+      )}
       <Fill flow={FILL_FLOW.ROW} clip className="terminal-tab-body">
         <div className="terminal-tab-host">
           {AsyncResult.isFailure(loaded) ? (
-            <p className="terminal-tab-failed">{TERMINAL_LOAD_FAILED}</p>
+            <ErrorState placement={ERROR_STATE_PLACEMENT.CENTRED} onRetry={retry}>
+              {TERMINAL_LOAD_FAILED}
+            </ErrorState>
           ) : (
             <div ref={setElement} className="terminal-tab-screen" />
           )}
         </div>
       </Fill>
+      <ConfirmDialog open confirm={stopping} question={MAC_TERMINAL_STOP_QUESTION} />
     </Fill>
   );
 }

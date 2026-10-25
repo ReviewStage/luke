@@ -468,6 +468,19 @@ const sidePanelStateSchema = Schema.Struct({
 export type SidePanelState = typeof sidePanelStateSchema.Type;
 
 /**
+ * The panel a fixture run opens with: a kept state, and beside it the tabs
+ * no kept state holds, already open, one of them shown where it names one:
+ * file tabs, page tabs, Terminal tabs, and what each Pull request tab shows.
+ */
+export interface StagedSidePanel extends Omit<SidePanelState, "tab"> {
+  readonly tab?: SidePanelState["tab"] | FileStripTab | PageStripTab | TerminalStripTab;
+  readonly files?: readonly OpenFile[];
+  readonly pages?: readonly PageStripTab[];
+  readonly terminals?: readonly TerminalStripTab[];
+  readonly pullRequestViews?: ByPullRequestTab<PullRequestView>;
+}
+
+/**
  * The state the hook holds: the kept one, every fixed kind in `tabs`, the
  * subagent tabs open, by the call that started each, in the order opened,
  * and the file tabs open, in the strip's order. Those are this view's
@@ -656,9 +669,10 @@ export interface SidePanelControl {
   /**
    * Shows the file browsed to from the File tab of `from`: its own tab
    * where one stands, else in `from`'s tab, in its place, or in a tab of
-   * its own at the strip's end where `newTab` asks.
+   * its own at the strip's end where `newTab` asks or no `from` is named,
+   * as from the Changes tree, which is no File tab's.
    */
-  onBrowseFile: (from: string, path: string, newTab: boolean) => void;
+  onBrowseFile: (from: string | undefined, path: string, newTab: boolean) => void;
   /**
    * Walks the history of the File tab of `from` a step back or forward,
    * showing the file it showed there in its place; a file with a tab of its
@@ -1647,6 +1661,21 @@ function settled(state: SidePanelState): HeldState {
   };
 }
 
+/** A staged state made whole as a kept one is, with the file, page, and Terminal tabs and the Pull request views it stages open, and its file, page, or Terminal tab shown where it names one. */
+function stagedHeld(staged: StagedSidePanel): HeldState {
+  const {
+    tab,
+    files = [],
+    pages = [],
+    terminals = [],
+    pullRequestViews = new Map(),
+    ...kept
+  } = staged;
+  const opened = tab !== undefined && (isFileTab(tab) || isPageTab(tab) || isTerminalTab(tab));
+  const held = settled(opened ? kept : { ...kept, tab });
+  return { ...held, ...(opened ? { tab } : undefined), files, pages, terminals, pullRequestViews };
+}
+
 /** Whether a chosen or viewed tab is kept across a launch: a fixed tab or a Changes tab, the kinds that stand again after it. */
 function keptChoice(tab: SidePanelTab): tab is FixedSidePanelTab | ChangesStripTab {
   return isFixedTab(tab) || isChangesTab(tab);
@@ -1803,7 +1832,7 @@ function firstHeld(was: TaskHolds, now: TaskHolds): readonly FixedSidePanelTab[]
  * was asked for.
  */
 export function useSidePanel(
-  staged: SidePanelState | undefined,
+  staged: StagedSidePanel | undefined,
   task: OpenTask,
   agents?: readonly string[] | undefined,
   subagents: readonly string[] = [],
@@ -1826,20 +1855,20 @@ export function useSidePanel(
   const [seen, setSeen] = useState<OpenTask>(task);
   // The tab a pin or a notification asked for, while it is still the one chosen.
   const [asked, setAsked] = useState<{ task: string; tab: SidePanelTab } | undefined>(undefined);
-  const stage = useMemo(() => (staged === undefined ? undefined : settled(staged)), [staged]);
+  const stage = useMemo(() => (staged === undefined ? undefined : stagedHeld(staged)), [staged]);
   const taskId = task.id;
   const state = stage === undefined ? kept : (moved ?? stage);
   // A terminal of this Mac whose tab closes, whichever way it closes, is closed with it (`mac-terminal-acts.ts`).
-  const { tell } = useAct();
+  const { press } = useAct();
   const heldMacTerminals = useRef(kept.macTerminals);
   useEffect(() => {
     for (const tab of heldMacTerminals.current) {
       if (!kept.macTerminals.some((each) => sameTab(each, tab))) {
-        tell(ACT_KIND.MAC_TERMINAL_CLOSE, { agentId: tab.macTerminal });
+        press(ACT_KIND.MAC_TERMINAL_CLOSE, { agentId: tab.macTerminal });
       }
     }
     heldMacTerminals.current = kept.macTerminals;
-  }, [kept.macTerminals, tell]);
+  }, [kept.macTerminals, press]);
   // The files the task draws tabs of: those Luke showed on it, and those browsed to on it.
   const taskFiles = useMemo(() => {
     const browsed = state.files.flatMap((each) =>
@@ -2075,9 +2104,10 @@ export function useSidePanel(
   // Note that a file with a tab of its own is chosen there, because a file
   // stands in one tab at most (`withFileShown`).
   const onBrowseFile = useCallback(
-    (from: string, path: string, newTab: boolean) =>
+    (from: string | undefined, path: string, newTab: boolean) =>
       update((held) => {
-        const standing = newTab ? undefined : held.files.find((each) => each.path === from);
+        const standing =
+          newTab || from === undefined ? undefined : held.files.find((each) => each.path === from);
         if (standing === undefined || held.files.some((each) => each.path === path)) {
           return withFileShown(held, path, drawn, taskId);
         }
@@ -2085,7 +2115,7 @@ export function useSidePanel(
         return withPreviewMoved(
           withFileBrowsed(viewed, taskId, standing, path),
           taskId,
-          from,
+          standing.path,
           path,
         );
       }),

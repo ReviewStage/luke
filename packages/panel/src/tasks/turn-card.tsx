@@ -5,8 +5,9 @@ import {
   type TurnTokens,
 } from "@luke/features/coding-agent-wire";
 import type { CatalogModel } from "@luke/features/models-wire";
+import { formatCount } from "@luke/features/number-format";
+import { spanText } from "@luke/features/time-format";
 import { HoverCard, HoverCardHead, HoverCardNote, HoverCardRule } from "@luke/ui";
-import { spanText } from "@luke/ui/time-format";
 import { HarnessMark } from "../harness-marks.js";
 import { providerOf } from "./coding-agent-model.js";
 import { ModelLabel } from "./model-label.js";
@@ -49,8 +50,15 @@ type RunCardKind = (typeof RUN_CARD)[keyof typeof RUN_CARD];
 const ENDING_WORD = {
   [TURN_ENDING.STOPPED]: "Stopped",
   [TURN_ENDING.FAILED]: "Failed",
-  [TURN_ENDING.ABANDONED]: "Abandoned",
+  [TURN_ENDING.ABANDONED]: "Failed",
 } as const satisfies Record<TurnEnding, string>;
+
+/** The line under the corner's word where the word alone leaves the reader asking why; a swept turn failed by running out of time. */
+const ENDING_NOTE = {
+  [TURN_ENDING.STOPPED]: undefined,
+  [TURN_ENDING.FAILED]: undefined,
+  [TURN_ENDING.ABANDONED]: "it ran out of time",
+} as const satisfies Record<TurnEnding, string | undefined>;
 
 /** The line a turn says where a fast step of it ran at standard speed instead. */
 const FAST_REFUSED_NOTE = "Fast wasn't available, so this ran at standard speed";
@@ -66,8 +74,6 @@ const TOKEN_ROW = {
 /** What the card's figures are, for a reader. */
 const TOKENS_LABEL = "Tokens";
 
-const COUNT = new Intl.NumberFormat("en-US");
-
 /** The effort a turn whose row recorded none says, which the label leaves unsaid. */
 const UNRECORDED_EFFORT = "";
 
@@ -78,6 +84,8 @@ export type RunFigure = readonly [label: string, said: string];
 export interface RunEnding {
   readonly reason: string;
   readonly word: string;
+  /** Why, in a line under the head, where the word alone does not say. */
+  readonly note?: string;
 }
 
 /**
@@ -90,14 +98,24 @@ function tokenRows(tokens: TurnTokens): readonly RunFigure[] {
   const read = Math.min(tokens.cachedInputTokens, tokens.inputTokens);
   const written = Math.min(tokens.cacheWriteTokens ?? 0, tokens.inputTokens - read);
   const rows: RunFigure[] = [
-    [TOKEN_ROW.INPUT, COUNT.format(tokens.inputTokens - read - written)],
-    [TOKEN_ROW.OUTPUT, COUNT.format(tokens.outputTokens)],
-    [TOKEN_ROW.CACHE_READ, COUNT.format(read)],
+    [TOKEN_ROW.INPUT, formatCount(tokens.inputTokens - read - written)],
+    [TOKEN_ROW.OUTPUT, formatCount(tokens.outputTokens)],
+    [TOKEN_ROW.CACHE_READ, formatCount(read)],
   ];
   if (tokens.cacheWriteTokens !== undefined) {
-    rows.push([TOKEN_ROW.CACHE_WRITE, COUNT.format(written)]);
+    rows.push([TOKEN_ROW.CACHE_WRITE, formatCount(written)]);
   }
   return rows;
+}
+
+/** A turn's ending as the card says it: the corner's word, and its reason where it has one. */
+function turnEnding(ending: TurnEnding): RunEnding {
+  const note = ENDING_NOTE[ending];
+  return {
+    reason: ending,
+    word: ENDING_WORD[ending],
+    ...(note === undefined ? undefined : { note }),
+  };
 }
 
 /**
@@ -149,6 +167,7 @@ export function RunCard({
           ending === undefined ? undefined : <span data-ending={ending.reason}>{ending.word}</span>
         }
       />
+      {ending?.note === undefined ? null : <HoverCardNote>{ending.note}</HoverCardNote>}
       {note === undefined ? null : <HoverCardNote>{note}</HoverCardNote>}
       {figures === undefined ? null : (
         <>
@@ -189,7 +208,7 @@ export function TurnCard({
       }
       startedAt={startedAt}
       endedAt={endedAt}
-      ending={ending === undefined ? undefined : { reason: ending, word: ENDING_WORD[ending] }}
+      ending={ending === undefined ? undefined : turnEnding(ending)}
       note={fastRefused === true ? FAST_REFUSED_NOTE : undefined}
       figures={tokens === undefined ? undefined : { label: TOKENS_LABEL, rows: tokenRows(tokens) }}
     />

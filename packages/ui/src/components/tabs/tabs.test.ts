@@ -1,9 +1,11 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import { MOTION_DELAY_MS } from "@luke/brand";
 import { act, createElement, type ReactNode, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
+import { Announcer } from "../announcer/announcer.js";
 import { Tab, TabCard, Tabs, type TabsControls } from "./tabs.js";
 
 /**
@@ -13,7 +15,8 @@ import { Tab, TabCard, Tabs, type TabsControls } from "./tabs.js";
  * into its own place, the strip's scroll alone; a dragged tab lands where
  * its place in the row says; the arrow keys, Home, and End move the focus
  * along, Delete closes the focused tab and hands focus to the one in its
- * place, and an owner's step moves the focused tab and says so; a preview
+ * place, a tab's × names its close in a hint, with ⌘W on the chosen tab alone,
+ * and an owner's step moves the focused tab and says so; a preview
  * tab is kept by a double-click; and a switcher's card is picked on the
  * press, or on the click or Return from a Tab stop of its own, as asked. jsdom lays nothing out, so a test that
  * scrolls lays the strip's boxes out itself. Synthetic throughout.
@@ -266,6 +269,7 @@ test("Delete closes the focused tab and hands focus to the tab standing in its p
 test("an owner's step moves the focused tab a place along, keeps focus on it, and says where it now stands", async () => {
   const controls: { current: TabsControls | null } = { current: null };
   const container = await render(createElement(Strip, { count: 3, controls }));
+  await render(createElement(Announcer));
   act(() => controls.current?.step(1));
   assert.deepEqual(moves, [], "no tab has the focus to move");
   act(() => tabOf(container, "Tab 2").focus());
@@ -273,7 +277,7 @@ test("an owner's step moves the focused tab a place along, keeps focus on it, an
   assert.deepEqual(moves, [[1, 2]]);
   assert.equal(document.activeElement, tabOf(container, "Tab 2"));
   assert.equal(
-    container.querySelector('[role="status"]')?.textContent,
+    document.querySelector('[role="status"]')?.textContent,
     "Tab 2 moved to position 3 of 3",
   );
   assert.deepEqual(controls.current?.placeOf(tabOf(container, "Tab 3")), {
@@ -342,4 +346,38 @@ test("a card picked on the press is picked as the press lands, and one picked on
     clicked?.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
   });
   assert.deepEqual(picked, ["Held", "Clicked", "Clicked"]);
+});
+
+/** The pointer resting on `target` past the hint's wait, on a faked clock. */
+function restOn(target: Element): void {
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+  try {
+    act(() => {
+      target.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
+    });
+    act(() => {
+      vi.advanceTimersByTime(MOTION_DELAY_MS.HINT);
+    });
+  } finally {
+    vi.useRealTimers();
+  }
+}
+
+/** The × of the tab labelled `label`. */
+function closeOf(container: HTMLElement, label: string): HTMLElement {
+  return (
+    pill(container, label).querySelector<HTMLElement>(`button[aria-label="Close ${label}"]`) ??
+    assert.fail(`${label}'s × stands`)
+  );
+}
+
+test("a tab's × says which tab it closes in a hint, with ⌘W on the chosen tab's alone", async () => {
+  const container = await render(createElement(Strip, { count: 3, opensOn: 1 }));
+  restOn(closeOf(container, "Tab 3"));
+  assert.equal(document.querySelector('[role="tooltip"]')?.textContent, "Close Tab 3");
+  act(() =>
+    closeOf(container, "Tab 3").dispatchEvent(new MouseEvent("pointerout", { bubbles: true })),
+  );
+  restOn(closeOf(container, "Tab 2"));
+  assert.match(document.querySelector('[role="tooltip"]')?.textContent ?? "", /^Close Tab 2.*W$/);
 });

@@ -289,6 +289,6 @@ test("an item whose workspace the service did not name reads nothing, and its li
     },
   });
 
-  assert.deepEqual(chips(container), [["relay/pull/42", null]]);
+  assert.deepEqual(chips(container), [["relay#42", null]]);
   assert.deepEqual(readThrough(asked), []);
 });

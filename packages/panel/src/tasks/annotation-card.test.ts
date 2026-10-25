@@ -1,7 +1,6 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { DisclosureAction } from "@luke/ui";
 import { act, createElement, type ReactNode, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
@@ -19,7 +18,7 @@ import {
  * alike; folded, it is its head alone, counting its comments rather than
  * previewing any; and a narrow card says the age to a reader alone, draws
  * each state as its badge's dot that still says its word, and counts
- * without the word.
+ * without the word; its ⋯ stands beside its head, never in it.
  *
  * jsdom lays nothing out, so the window's stylesheets are laid for a card
  * of each width (`testing/container-width.ts`) and the columns are read
@@ -37,7 +36,7 @@ const FIRST = "Can we use the constant in the resend copy too?";
 const REPLY = "Yes, in the copy PR.";
 
 const roots: Root[] = [];
-/** The presses the head's name took. */
+/** The presses the card's ⋯ took. */
 const pressed: string[] = [];
 let laid: HTMLStyleElement | undefined;
 
@@ -57,13 +56,12 @@ function Card({ startsOpen }: { startsOpen: boolean }): ReactNode {
     open,
     onOpenChange: setOpen,
     face: createElement("span", { className: "face" }, "C"),
-    name: createElement(DisclosureAction, {
-      children: createElement(
-        "button",
-        { type: "button", onClick: () => pressed.push("name") },
-        "charlespan",
-      ),
-    }),
+    name: "charlespan",
+    menu: createElement(
+      "button",
+      { type: "button", className: "menu", onClick: () => pressed.push("menu") },
+      "More actions",
+    ),
     time: createElement("span", { className: "annotation-card-time" }, "2h"),
     states: [{ word: "Outdated", tone: ANNOTATION_TONE.NEUTRAL }],
     count: 2,
@@ -72,7 +70,7 @@ function Card({ startsOpen }: { startsOpen: boolean }): ReactNode {
         createElement(AnnotationComment, { key: "first", children: FIRST }),
         createElement(AnnotationComment, {
           key: "reply",
-          reply: { face: "D", meta: "danak" },
+          reply: { author: { name: "danak" }, nameRef: "danak", at: 0, now: 7_200_000 },
           children: REPLY,
         }),
       ],
@@ -141,9 +139,14 @@ test("the head's face stands over every reply's face, and its name over every co
   const { headFace, headName, bodyFace, bodyWords } = columns(card);
   assert.equal(bodyFace, headFace, "one column of faces");
   assert.equal(bodyWords, headName, "one column of words");
-  const [first, reply] = card.querySelectorAll(".annotation-comment");
-  assert.equal(first?.querySelector(".annotation-comment-face"), null, "the head names the first");
-  assert.ok(reply?.querySelector(".annotation-comment-face"), "a reply wears its own face");
+  const [first, reply] = card.querySelectorAll(".annotation-comments > li");
+  assert.equal(first?.querySelector(".luke-comment-face"), null, "the head names the first");
+  assert.ok(reply?.querySelector(".luke-comment-face"), "a reply wears its own face");
+  assert.match(
+    reply?.querySelector(".luke-comment-head")?.textContent ?? "",
+    /^danak2h/u,
+    "a reply says who and how long ago",
+  );
   for (const words of card.querySelectorAll(".annotation-comment-words")) {
     assert.equal(
       getComputedStyle(words).getPropertyValue("grid-column"),
@@ -184,16 +187,21 @@ test("a narrow card says the age to a reader alone, draws a state as its dot tha
   assert.equal(getComputedStyle(countWord()).position, "absolute", "the count drops its word");
 });
 
-test("a press on the writer's name opens what the name opens, and leaves the card as it stood", () => {
+test("the head's ⋯ stands beside its summary, its words no part of the head's, and acts without folding the card", () => {
   const container = draw(true);
-  const name = container.querySelector<HTMLElement>(".annotation-card-name button");
-  act(() => name?.click());
-  assert.deepEqual(pressed, ["name"]);
-  assert.equal(container.querySelector("summary")?.getAttribute("aria-expanded"), "true");
-  act(() => container.querySelector<HTMLElement>(".annotation-card-time")?.click());
-  assert.equal(
-    container.querySelector("summary")?.getAttribute("aria-expanded"),
-    "false",
-    "anywhere else on the head folds it",
+  const summary = container.querySelector<HTMLElement>("summary") ?? assert.fail("a head");
+  const menu = container.querySelector<HTMLElement>(".menu") ?? assert.fail("a ⋯");
+  assert.equal(summary.contains(menu), false, "the ⋯ is no part of the summary");
+  assert.equal(summary.querySelector("button, a[href], input"), null, "nor is any control");
+  assert.doesNotMatch(
+    summary.textContent ?? "",
+    /More actions/u,
+    "the head is named by its own words",
   );
+  assert.match(summary.textContent ?? "", /charlespan/u);
+  act(() => menu.click());
+  assert.deepEqual(pressed, ["menu"]);
+  assert.equal(summary.getAttribute("aria-expanded"), "true", "the card stands as it stood");
+  act(() => container.querySelector<HTMLElement>(".annotation-card-time")?.click());
+  assert.equal(summary.getAttribute("aria-expanded"), "false", "a press on the head folds it");
 });

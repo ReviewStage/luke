@@ -2,6 +2,7 @@
 
 import assert from "node:assert/strict";
 import { CODING_AGENT_TODO_STATUS, type CodingAgentTodos } from "@luke/features/coding-agent-wire";
+import { GLYPH, type Glyph } from "@luke/ui/icons";
 import { createElement, type ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { test } from "vitest";
@@ -44,6 +45,16 @@ function transcriptList(errorText?: string, live = false): HTMLElement {
       live,
     }),
   );
+}
+
+/** The markup `glyph` draws, as any place seating it draws it. */
+function glyphMarkup(glyph: Glyph): string {
+  return renderToStaticMarkup(createElement(glyph));
+}
+
+/** Every glyph drawn inside `within`, by its markup. */
+function glyphsIn(within: ParentNode): string[] {
+  return [...within.querySelectorAll("svg")].map((svg) => svg.outerHTML);
 }
 
 /** Each item's glyph seat and words, in the list's order. */
@@ -96,4 +107,15 @@ test("only the list the agent is at wears the working mark on its item in progre
     CODING_AGENT_TODO_STATUS.IN_PROGRESS,
   ]);
   assert.deepEqual(working(transcriptList()), []);
+});
+
+test("the list's row wears the to-do list's glyph, never the Tasks one, and an item in progress never the issue's", () => {
+  const surface = transcriptList();
+  const [, inProgress] = items(surface);
+
+  assert.ok(glyphsIn(surface).includes(glyphMarkup(GLYPH.TODOS)));
+  assert.ok(!glyphsIn(surface).includes(glyphMarkup(GLYPH.TASK)));
+  assert.ok(inProgress !== undefined);
+  assert.ok(!glyphsIn(inProgress.seat).includes(glyphMarkup(GLYPH.ISSUE)));
+  assert.equal(glyphsIn(inProgress.seat).length, 1, "an item in progress still draws a glyph");
 });

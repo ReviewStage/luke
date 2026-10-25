@@ -10,6 +10,7 @@
  */
 
 import type { AdminTrend } from "@luke/features/admin-answer-wire";
+import { formatCount } from "@luke/features/number-format";
 import {
   ALIGN,
   Card,
@@ -25,14 +26,13 @@ import {
   Text,
 } from "@luke/ui";
 import { formatTrendMove, TREND_DIRECTION, trendDirection } from "@luke/ui/admin-format";
-import { formatCount } from "@luke/ui/time-format";
 import { CARD_GAP } from "./stat-card.js";
 
 /** The ink a trend's move is drawn in: a rise complete, a fall attention, no move muted. */
 const TREND_TONE = {
-  [TREND_DIRECTION.UP]: "text-(--luke-color-complete)",
-  [TREND_DIRECTION.DOWN]: "text-(--luke-color-attention)",
-  [TREND_DIRECTION.FLAT]: "text-(--luke-color-text-muted)",
+  [TREND_DIRECTION.UP]: "text-complete",
+  [TREND_DIRECTION.DOWN]: "text-attention",
+  [TREND_DIRECTION.FLAT]: "text-muted-foreground",
 } as const;
 
 /** The room an empty window's line stands in, about a short plot's height. */
@@ -50,10 +50,10 @@ const SKELETON_TITLE_WIDTH = "144px";
 const SKELETON_ASIDE_WIDTH = "224px";
 
 /** Two chart cards of equal width side by side, as the Reliability breakdowns stand. */
-export const CHART_PAIR_EVEN = `grid ${CARD_GAP} min-[720px]:grid-cols-2`;
+export const CHART_PAIR_EVEN = `grid ${CARD_GAP} @min-[720px]/admin-section:grid-cols-2`;
 
 /** A wide chart card beside a narrow one, as the Overview's funnel and reach stand. */
-export const CHART_PAIR_WIDE = `grid ${CARD_GAP} min-[720px]:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]`;
+export const CHART_PAIR_WIDE = `grid ${CARD_GAP} @min-[720px]/admin-section:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]`;
 
 /** A trend's move alone, in the ink of its direction: a rise complete, a fall attention. */
 export function TrendMove({ trend }: { trend: AdminTrend }): React.JSX.Element {

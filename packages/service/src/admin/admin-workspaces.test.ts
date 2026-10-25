@@ -484,6 +484,19 @@ inSeededWorld(
 );
 
 inSeededWorld(
+  "a search keeps the workspaces whose name holds every word",
+  Effect.gen(function* () {
+    const names = (search: string) =>
+      Effect.map(read(ADMIN_METRICS_SCOPE.NON_ADMINS, ADMIN_WORKSPACES_KIND.ALL, search), (list) =>
+        list.rows.map((row) => row.name),
+      );
+    assert.deepEqual(yield* names("north wind"), ["Northwind"]);
+    assert.deepEqual(yield* names("wind  NORTH"), ["Northwind"]);
+    assert.deepEqual(yield* names("north hopper"), []);
+  }),
+);
+
+inSeededWorld(
   "a search narrows the rows and the total by the name members read",
   Effect.gen(function* () {
     const shared = yield* read(

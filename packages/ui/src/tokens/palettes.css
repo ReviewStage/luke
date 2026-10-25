@@ -46,15 +46,14 @@
 [data-luke-profile="desktop"] {
   --luke-color-text: light-dark(rgba(0, 0, 0, 0.88), rgba(255, 255, 255, 0.95));
   --luke-color-text-muted: light-dark(rgba(0, 0, 0, 0.6), rgba(255, 255, 255, 0.56));
-  --luke-color-text-subtle: light-dark(rgba(0, 0, 0, 0.56), rgba(255, 255, 255, 0.5));
   /* A document's running text, a step under the text so a page of it does not glare. */
   --luke-color-text-body: light-dark(rgba(0, 0, 0, 0.8), rgba(255, 255, 255, 0.86));
   /* The text at full strength, for the one control drawn in it. */
   --luke-color-ink: light-dark(#000, #fff);
   /* Words on a fill of the text's own ink, which read in the ground's colour. */
   --luke-color-ink-inverse: var(--luke-color-ground);
-  /* Links' and text buttons' ink: in the light a step darker than the working
-     teal-blue, at its hue, so it reads at AA on the sidebar's current row
+  /* Links' and text buttons' ink, and the working tone's: one teal-blue, in
+     the light deep enough to read at AA on the sidebar's current row
      (`tokens.test.ts`). */
   --luke-color-accent-text: light-dark(#00689b, #5cd5ff);
 
@@ -74,6 +73,8 @@
   --luke-color-well: light-dark(#f7f7f8, #121214);
   /* The code on screen, in the ground of GitHub's own themes. */
   --luke-color-code-ground: light-dark(#fff, #0d1117);
+  /* The code's own words, where its highlighter left a run uncoloured: GitHub's too. */
+  --luke-color-code-text: light-dark(#1f2328, #e6edf3);
   --luke-color-fill-hover: light-dark(rgba(0, 0, 0, 0.035), rgba(255, 255, 255, 0.05));
   --luke-color-fill-strong: light-dark(rgba(0, 0, 0, 0.06), rgba(255, 255, 255, 0.09));
   --luke-color-fill-selected: light-dark(rgba(0, 0, 0, 0.07), rgba(255, 255, 255, 0.2));
@@ -98,8 +99,10 @@
      ring draw in: the system's own default blue, in either appearance. */
   --luke-color-accent: #0071e3;
   --luke-color-on-accent: #fff;
-  --luke-color-on-accent-muted: rgba(255, 255, 255, 0.65);
-  --luke-color-focus-ring: #0071e3;
+  /* Note that the accent leaves white no room to step down and still read at
+     AA (4.7:1 at full strength), so the quieter words on it are the same white. */
+  --luke-color-on-accent-muted: var(--luke-color-on-accent);
+  --luke-color-focus-ring: var(--luke-color-accent);
 
   /* The one destructive colour: a ground it can sit on, the words that read
      on that ground, and a destructive button's fill deep enough for white. */
@@ -107,19 +110,28 @@
   --luke-color-danger-text: light-dark(#b8232a, #ff9b9b);
   --luke-color-danger-fill: #d4373a;
   --luke-color-on-danger: #fff;
-  --luke-color-attention: light-dark(#a65400, #ffa049);
+  /* The attention ink, in the light deep enough that its words read at AA
+     on its own tint over the sidebar, as the Offline mark's do (`tokens.test.ts`). */
+  --luke-color-attention: light-dark(#974c00, #ffa049);
   /* The attention ink deepened into a fill white words hold on, in the dark
      as in the light, where the ink is deep already. */
-  --luke-color-attention-fill: light-dark(#a65400, #c4620c);
+  --luke-color-attention-fill: light-dark(#974c00, #c4620c);
   --luke-color-on-attention: #fff;
   --luke-color-complete: light-dark(#18794e, #6fdca4);
-  /* A state's ink as the ground of a pill that carries it. */
-  --luke-color-attention-tint: color-mix(in srgb, var(--luke-color-attention) 14%, transparent);
-  --luke-color-working: light-dark(#0a72a8, #5cd5ff);
+  /* Work under way is drawn in the links' blue: one blue, not two that differ by a step. */
+  --luke-color-working: var(--luke-color-accent-text);
   --luke-color-merged: light-dark(#8250df, #c3a0ff);
+  /* A tone's ink as the ground of a pill or a glyph that carries it, one
+     strength for every tone (`status-tone.css`). */
+  --luke-color-neutral-tint: color-mix(in srgb, var(--luke-color-text-muted) 14%, transparent);
+  --luke-color-working-tint: color-mix(in srgb, var(--luke-color-working) 14%, transparent);
+  --luke-color-attention-tint: color-mix(in srgb, var(--luke-color-attention) 14%, transparent);
+  --luke-color-complete-tint: color-mix(in srgb, var(--luke-color-complete) 14%, transparent);
+  --luke-color-merged-tint: color-mix(in srgb, var(--luke-color-merged) 14%, transparent);
+  --luke-color-danger-tint: color-mix(in srgb, var(--luke-color-danger-text) 14%, transparent);
 
   --luke-color-switch-track: light-dark(rgba(0, 0, 0, 0.14), rgba(255, 255, 255, 0.09));
-  --luke-color-switch-on: #0071e3;
+  --luke-color-switch-on: var(--luke-color-accent);
   --luke-color-switch-thumb: light-dark(#fff, rgba(255, 255, 255, 0.95));
   /* A segmented control's chosen option, raised on its trough: white in the
      light, a lighter step of the trough in the dark. */
@@ -177,8 +189,7 @@
   /* The quieter words, one ink: a step under shadcn's stock muted gray, so a
      caption reads at AA on the sidebar's current row (`tokens.test.ts`). */
   --luke-color-text-muted: oklch(0.5 0 0);
-  --luke-color-text-subtle: oklch(0.5 0 0);
-  --luke-color-text-body: oklch(0.145 0 0);
+  --luke-color-text-body: var(--luke-color-text);
   --luke-color-ink: #000;
   --luke-color-ink-inverse: var(--luke-color-ground);
   --luke-color-accent-text: #0d6e80;
@@ -190,6 +201,7 @@
   --luke-color-sidebar-ink: rgba(0, 0, 0, 0.68);
   --luke-color-well: oklch(0.97 0 0);
   --luke-color-code-ground: #fff;
+  --luke-color-code-text: #1f2328;
   /* The site had one fill, its muted ground; a control's states need a
      step each past it, the desktop's light steps, so a chosen segment or a
      pressed button reads apart from one merely hovered. */
@@ -198,7 +210,9 @@
   --luke-color-fill-selected: rgba(0, 0, 0, 0.07);
   --luke-color-fill-pressed: rgba(0, 0, 0, 0.11);
   --luke-color-border: oklch(0.922 0 0);
-  --luke-color-border-strong: oklch(0.922 0 0);
+  /* The edge a field, a menu, and a raised or hovered card stand on: a step
+     past the border, as the desktop's is, so a card's hover reads. */
+  --luke-color-border-strong: oklch(0.89 0 0);
   --luke-color-border-selected: oklch(0.145 0 0);
   --luke-color-chip: #ffffff;
   --luke-color-chip-hover: #f5f5f5;
@@ -221,16 +235,21 @@
   --luke-color-danger-text: #b8232a;
   --luke-color-danger-fill: #d4373a;
   --luke-color-on-danger: #fff;
-  --luke-color-attention: #9a5300;
-  --luke-color-attention-fill: #9a5300;
+  --luke-color-attention: #974c00;
+  --luke-color-attention-fill: #974c00;
   --luke-color-on-attention: #fff;
   --luke-color-complete: #0f7a4e;
-  --luke-color-attention-tint: #fdf0e2;
-  --luke-color-working: #0d6e80;
+  --luke-color-working: var(--luke-color-accent-text);
   --luke-color-merged: #8250df;
+  --luke-color-neutral-tint: color-mix(in srgb, var(--luke-color-text-muted) 14%, transparent);
+  --luke-color-working-tint: color-mix(in srgb, var(--luke-color-working) 14%, transparent);
+  --luke-color-attention-tint: color-mix(in srgb, var(--luke-color-attention) 14%, transparent);
+  --luke-color-complete-tint: color-mix(in srgb, var(--luke-color-complete) 14%, transparent);
+  --luke-color-merged-tint: color-mix(in srgb, var(--luke-color-merged) 14%, transparent);
+  --luke-color-danger-tint: color-mix(in srgb, var(--luke-color-danger-text) 14%, transparent);
 
   --luke-color-switch-track: rgba(0, 0, 0, 0.14);
-  --luke-color-switch-on: #0d6e80;
+  --luke-color-switch-on: var(--luke-color-accent-text);
   --luke-color-switch-thumb: #fff;
   --luke-color-thumb: oklch(1 0 0);
   --luke-color-tooltip: #0b0b0c;
@@ -275,8 +294,7 @@
 [data-luke-profile="web"][data-luke-theme="dark"] {
   --luke-color-text: rgba(255, 255, 255, 0.92);
   --luke-color-text-muted: rgba(255, 255, 255, 0.56);
-  --luke-color-text-subtle: rgba(255, 255, 255, 0.56);
-  --luke-color-text-body: rgba(255, 255, 255, 0.92);
+  --luke-color-text-body: var(--luke-color-text);
   --luke-color-ink: #fff;
   --luke-color-ink-inverse: var(--luke-color-ground);
   /* Luke's teal lifted to read on the dark grounds, AA against each (`tokens.test.ts`). */
@@ -290,12 +308,13 @@
   --luke-color-sidebar-ink: rgba(255, 255, 255, 0.7);
   --luke-color-well: #0e0f12;
   --luke-color-code-ground: #0d1117;
+  --luke-color-code-text: #e6edf3;
   --luke-color-fill-hover: rgba(255, 255, 255, 0.05);
   --luke-color-fill-strong: rgba(255, 255, 255, 0.09);
   --luke-color-fill-selected: rgba(255, 255, 255, 0.2);
   --luke-color-fill-pressed: rgba(255, 255, 255, 0.26);
   --luke-color-border: rgba(255, 255, 255, 0.08);
-  --luke-color-border-strong: rgba(255, 255, 255, 0.08);
+  --luke-color-border-strong: rgba(255, 255, 255, 0.12);
   --luke-color-border-selected: rgba(255, 255, 255, 0.92);
   --luke-color-chip: #1d1e23;
   --luke-color-chip-hover: #24252b;
@@ -320,9 +339,14 @@
   --luke-color-attention-fill: #c4620c;
   --luke-color-on-attention: #fff;
   --luke-color-complete: #6fdca4;
-  --luke-color-attention-tint: rgba(255, 160, 73, 0.14);
-  --luke-color-working: #5cd5ff;
+  --luke-color-working: var(--luke-color-accent-text);
   --luke-color-merged: #c3a0ff;
+  --luke-color-neutral-tint: color-mix(in srgb, var(--luke-color-text-muted) 14%, transparent);
+  --luke-color-working-tint: color-mix(in srgb, var(--luke-color-working) 14%, transparent);
+  --luke-color-attention-tint: color-mix(in srgb, var(--luke-color-attention) 14%, transparent);
+  --luke-color-complete-tint: color-mix(in srgb, var(--luke-color-complete) 14%, transparent);
+  --luke-color-merged-tint: color-mix(in srgb, var(--luke-color-merged) 14%, transparent);
+  --luke-color-danger-tint: color-mix(in srgb, var(--luke-color-danger-text) 14%, transparent);
 
   --luke-color-switch-track: rgba(255, 255, 255, 0.09);
   --luke-color-switch-on: #2f9bd8;
@@ -355,10 +379,9 @@
   --luke-color-identity-6: #477a3a;
   --luke-color-on-identity: #fff;
 
-  /* The chart series on the dark ground. The accent cyan sits too light for a
-     mark on the dark card, so the slot is a darker step of the same hue
-     family, validated against the card at #101114 (6.1:1, ≥ 3:1); the series
-     after it hold the same bound there (4.7:1 to 5.7:1). */
+  /* The chart series on the dark ground: the light's own five, which hold
+     3:1 on the dark card as well (#18191d, 4.4:1 to 5.7:1), so none needs a
+     step of its own here. */
   --luke-color-chart-1: #2f9bd8;
   --luke-color-chart-2: #8b6cd9;
   --luke-color-chart-3: #2e9e6a;

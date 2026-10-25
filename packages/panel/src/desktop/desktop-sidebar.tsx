@@ -20,23 +20,28 @@ import {
   ComposeIcon,
   commandKeyshortcuts,
   dropBelowStart,
-  EllipsisIcon,
+  ERROR_STATE_PLACEMENT,
   ErrorState,
   Fill,
-  FolderIcon,
   GAP,
+  GROUP_ACTIONS,
+  GROUP_HEADING,
+  GroupHeader,
   HoldPress,
   IconButton,
+  joinRefs,
   LAYOUT_ELEMENT,
   ListMotion,
   MarkDoneIcon,
+  MoreButton,
   motionKey,
   motionRows,
-  NAV_COUNT_TONE,
+  NAV_COUNT_SHOWN,
   NAV_CURRENT,
   NavItem,
   NOTE_LINE_LOOK,
   NoteLine,
+  opensMenu,
   PanePin,
   PinIcon,
   PlusIcon,
@@ -50,6 +55,7 @@ import {
   Shortcut,
   Skeleton,
   SkeletonRegion,
+  STATUS_TONE,
   Stack,
   Tooltip,
   UNASSIGNED_WORDS,
@@ -58,9 +64,19 @@ import {
   useMenu,
   useMinute,
   useResizeEdge,
+  useRovingKeys,
   VisuallyHidden,
 } from "@luke/ui";
 import { actorName, creatorActor, personActor } from "@luke/ui/actor-model";
+import {
+  FolderPlusIcon,
+  FolderXIcon,
+  InboxIcon,
+  ListTodoIcon,
+  MessagesSquareIcon,
+  ShieldUserIcon,
+  ZapIcon,
+} from "@luke/ui/icons";
 import { isAgentTab, sameTab } from "@luke/ui/tab-strip-model";
 import {
   type AssigneeGroup,
@@ -104,15 +120,7 @@ import {
   TASKS_PAGE,
 } from "@luke/ui/tasks-model";
 import type { UpdateControl } from "@luke/voice/settings-controls";
-import {
-  FolderPlusIcon,
-  InboxIcon,
-  ListTodoIcon,
-  MessagesSquareIcon,
-  ShieldUserIcon,
-  ZapIcon,
-} from "lucide-react";
-import { memo, useRef } from "react";
+import { memo, useEffect, useMemo, useRef } from "react";
 import { ACTOR_SIZE, ActorMark, actorCard, UnassignedMark } from "../actor-ref.js";
 import { runAppCommand, useAppCommand } from "../app-commands.js";
 import { ColumnFoot } from "../call/call-card.js";
@@ -127,11 +135,18 @@ import {
   type NavigationHistory,
   sameHistoryPage,
 } from "../navigation-history.js";
+import {
+  endWindowSpan,
+  leaveWindowSpan,
+  PANEL_SPAN,
+  PANEL_SPAN_ATTRIBUTE,
+} from "../panel-spans.js";
 import { PANEL_TAB, type PanelTab } from "../panel-tabs.js";
 import { RepositoryPicture } from "../repository-picture.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import { GLYPH_STATE, stateEndMark } from "../state-glyph.js";
 import { useChatOn } from "../tasks/chat-gate.js";
+import { useHeldOrder } from "../tasks/use-held-order.js";
 import type { InboxListing } from "../tasks/use-inbox-listing.js";
 import { inColumn, type PinnedTab } from "../tasks/use-side-panel.js";
 import { useUnreadTasks } from "../tasks/use-task-looks.js";
@@ -146,11 +161,11 @@ import { LukeIdentity } from "./luke-identity.js";
 import { isLuke, useLukeOperator, withoutLuke } from "./luke-operator.js";
 import { ADMIN_PLACE } from "./pages-on-demand.js";
 import { needsYouNoun, usePlacesWaiting } from "./places-waiting.js";
-import { RowPlaced } from "./row-moves.js";
+import { RowPlaced, useRowMoveKeys } from "./row-moves.js";
 import { SidebarAgent } from "./sidebar-agent.js";
 import { SIDEBAR_WIDTH, type SidebarCollapse, sidebarInSight } from "./sidebar-collapse.js";
+import { type CountNoun, foldedCount, sidebarFold, TASK_NOUN } from "./sidebar-fold.js";
 import { SidebarFoot } from "./sidebar-foot.js";
-import { type CountNoun, SidebarGroupHeader } from "./sidebar-group-header.js";
 import { SidebarInbox } from "./sidebar-inbox.js";
 import { SidebarLuke } from "./sidebar-luke.js";
 import { SidebarPinnedTab } from "./sidebar-pinned-tab.js";
@@ -165,7 +180,6 @@ import {
 } from "./sidebar-sections.js";
 import {
   HiddenStatusesLine,
-  SidebarSectionHead,
   TaskStatusFilter,
   TaskViewOptions,
   useTaskViewCommands,
@@ -285,8 +299,8 @@ function historyGroups(
 
 /**
  * Back or Forward: a press takes one step, and a press held (`HoldPress`),
- * or a right-click, lists the steps along that way, any of which it goes straight
- * to, as a browser's Back and Forward do.
+ * a right-click, or the menu key (⇧F10 too) lists the steps along that way, any
+ * of which it goes straight to, as a browser's Back and Forward do.
  */
 function HistoryButton({
   label,
@@ -318,6 +332,12 @@ function HistoryButton({
       mouse
       disabled={!able}
       onHold={openList}
+      onKeyDown={(event) => {
+        // Note that the list hangs from the button, not from the wrapper this key bubbles to, because the wrapper lays nothing out.
+        if (!able || !opensMenu(event)) return;
+        event.preventDefault();
+        openList();
+      }}
       onContextMenu={() => {
         if (menu.open === undefined) openList();
       }}
@@ -385,6 +405,11 @@ function repositoryGroupKey(group: RepositoryGroup): string {
 /** A creator's group's key, by which it leaves the list. */
 function creatorGroupKey(group: CreatorGroup): string {
   return group.creatorId ?? NO_REPOSITORY;
+}
+
+/** An assignee's group's key, by which it leaves the list. */
+function assigneeGroupKey(group: AssigneeGroup): string {
+  return group.assigneeId ?? UNASSIGNED_WORDS;
 }
 
 /** The view's groups, each drawn on after its last row took it out of the list until its exit has played (`ListMotion`). */
@@ -641,6 +666,7 @@ function PinnedRows({
             if (row !== undefined) onDropOut(row, zone, at);
           },
   });
+  const keys = useRowMoveKeys(move);
   // Note that a row on its way out has no place among the rows a drag or a menu moves.
   const listedAt = new Map(rows.map((row, at) => [pinnedRowKey(row), at]));
   const placeOf = (key: string) => {
@@ -659,6 +685,7 @@ function PinnedRows({
       data-row-drop-rows={onDropOut !== undefined && movable ? "" : undefined}
       moves
       onPointerDown={drag}
+      {...keys}
     >
       {drawn.map(({ key, value: row }) => {
         if (row.kind === TASK_ROW.AGENT) {
@@ -741,35 +768,44 @@ function PinnedSection({
   onDropOut: ((row: PinnedRow, zone: string, at: number) => void) | undefined;
 }): React.JSX.Element {
   const folded = folds.pinnedFolded;
-  const drawn = folded ? rows.filter(shown) : rows;
+  const standing = rows.filter(shown);
   return (
     <nav
       className="sidebar-group"
       aria-label="Pinned"
       data-row-drop={onDropOut === undefined ? undefined : PINNED_DROP_ZONE}
     >
-      <SidebarSectionHead
-        name="Pinned"
-        folded={folded}
-        count={rows.length}
-        noun={PIN_NOUN}
-        onToggle={folds.togglePinned}
-      />
-      {drawn.length === 0 ? (
-        folded ? null : (
+      <GroupHeader
+        heading={GROUP_HEADING.NONE}
+        label="Pinned"
+        fold={sidebarFold(folded, folds.togglePinned)}
+        count={foldedCount(folded, rows.length, PIN_NOUN, NAV_COUNT_SHOWN.ALWAYS)}
+        standing={
+          standing.length === 0 ? undefined : (
+            <PinnedRows
+              rows={standing}
+              context={context}
+              onOpenTab={onOpenTab}
+              movable={false}
+              onDropOut={onDropOut}
+            />
+          )
+        }
+      >
+        {rows.length === 0 ? (
           <div className="sidebar-section-slot">
             <NoteLine look={NOTE_LINE_LOOK.INSET}>Drag tasks here to pin them</NoteLine>
           </div>
-        )
-      ) : (
-        <PinnedRows
-          rows={drawn}
-          context={context}
-          onOpenTab={onOpenTab}
-          movable={!folded}
-          onDropOut={onDropOut}
-        />
-      )}
+        ) : (
+          <PinnedRows
+            rows={rows}
+            context={context}
+            onOpenTab={onOpenTab}
+            movable
+            onDropOut={onDropOut}
+          />
+        )}
+      </GroupHeader>
     </nav>
   );
 }
@@ -777,13 +813,13 @@ function PinnedSection({
 /**
  * A repository's actions, offered alike from its header's ⋯ and from a
  * right-click on the header: Pin holds the group above the rest on the
- * account, Mark tasks done sets every task under the header Done, which the
+ * account, Mark all done sets every task under the header Done, which the
  * sidebar's status filter then leaves out, and Open on GitHub opens the
  * repository's page, under GitHub's mark rather than the owner's picture,
- * since it is about GitHub. Mark tasks done asks nothing first, since it
+ * since it is about GitHub. Mark all done asks nothing first, since it
  * stops no agent. The tasks with no repository have no pin, since they
  * always stand last, and no page to open. A group of tasks all done
- * already offers no Mark tasks done, so the plans with no repository offer
+ * already offers no Mark all done, so the plans with no repository offer
  * nothing there.
  */
 function repositoryActionGroups(group: RepositoryGroup, tasks: TasksControl): MenuAction[][] {
@@ -793,7 +829,7 @@ function repositoryActionGroups(group: RepositoryGroup, tasks: TasksControl): Me
     ? []
     : [
         {
-          label: "Mark tasks done",
+          label: "Mark all done",
           icon: <MarkDoneIcon />,
           onSelect: () =>
             tasks.onSettleTasks(
@@ -859,7 +895,7 @@ function RepositorySection({
   const { repository } = group;
   const folded = folds.folded(repository);
   const named = repository === null ? NO_REPOSITORY : label;
-  const rows = folded ? group.rows.filter(context.currentRow) : group.rows;
+  const standing = group.rows.filter(context.currentRow);
   // The menu is drawn over the window rather than inside the sidebar, so it
   // closes with the sidebar folding away as well as with the tab hiding.
   const menu = useMenu(context.tasks.shown && context.inSight);
@@ -867,23 +903,23 @@ function RepositorySection({
   const actionGroups = repositoryActionGroups(group, context.tasks);
   return (
     <div className="sidebar-repository" {...motionKey(repositoryGroupKey(group))}>
-      <SidebarGroupHeader
+      <GroupHeader
+        heading={GROUP_HEADING.NONE}
         glyph={
           repository === null ? (
-            <FolderIcon />
+            <FolderXIcon />
           ) : (
             <RepositoryPicture
               repository={repository}
               pictures={context.tasks.repositories.pictures}
-              fallback={<FolderIcon />}
               size={AVATAR_SIZE.GLYPH}
             />
           )
         }
-        name={named}
-        folded={folded}
-        count={group.rows.length}
-        trailing={
+        label={named}
+        fold={sidebarFold(folded, () => folds.toggle(repository))}
+        count={foldedCount(folded, group.rows.length, TASK_NOUN)}
+        mark={
           repository !== null && context.tasks.pinnedRepositories.includes(repository) ? (
             <span className="sidebar-repository-pinned">
               <PinIcon />
@@ -894,19 +930,18 @@ function RepositorySection({
         tooltip={repository === null || label === repository ? undefined : repository}
         menuOpen={menu.open !== undefined}
         contextMenu={actionGroups.length === 0 ? undefined : menu.contextMenu(ellipsis)}
-        onToggle={() => folds.toggle(repository)}
+        standing={
+          standing.length === 0 ? undefined : <TaskRows rows={standing} context={context} />
+        }
         actions={
           <>
             {actionGroups.length === 0 ? null : (
-              <Tooltip label="Repository actions">
-                <IconButton
-                  ref={ellipsis}
-                  icon={<EllipsisIcon />}
-                  label={`Actions for ${named}`}
-                  size={BUTTON_SIZE.COMPACT}
-                  {...menu.trigger()}
-                />
-              </Tooltip>
+              <MoreButton
+                ref={ellipsis}
+                thing={named}
+                size={BUTTON_SIZE.COMPACT}
+                {...menu.trigger()}
+              />
             )}
             {repository === null ? null : (
               <Tooltip label={`New task in ${label}`}>
@@ -920,7 +955,9 @@ function RepositorySection({
             )}
           </>
         }
-      />
+      >
+        {group.rows.length === 0 ? null : <TaskRows rows={group.rows} context={context} />}
+      </GroupHeader>
       {menu.drawn === undefined ? null : (
         <ActionMenu
           label={`${named} actions`}
@@ -929,7 +966,6 @@ function RepositorySection({
           onClose={menu.close}
         />
       )}
-      {rows.length === 0 ? null : <TaskRows rows={rows} context={context} />}
     </div>
   );
 }
@@ -954,20 +990,27 @@ function CreatorSection({
   const first = group.rows[0];
   const actor = creatorActor(first === undefined ? {} : creatorOf(first), reader, undefined);
   const folded = folds.creatorFolded(group.creatorId);
-  const rows = folded ? group.rows.filter(context.currentRow) : group.rows;
+  const standing = group.rows.filter(context.currentRow);
+  const faces = { ...context.faces, creator: false };
   return (
     <div className="sidebar-repository" {...motionKey(creatorGroupKey(group))}>
-      <SidebarGroupHeader
+      <GroupHeader
+        heading={GROUP_HEADING.NONE}
         glyph={<ActorMark actor={actor} size={ACTOR_SIZE.INLINE} />}
-        name={actorName(actor)}
+        label={actorName(actor)}
         card={actorCard(actor)}
-        folded={folded}
-        count={group.rows.length}
-        onToggle={() => folds.toggleCreator(group.creatorId)}
-      />
-      {rows.length === 0 ? null : (
-        <TaskRows rows={rows} context={context} faces={{ ...context.faces, creator: false }} />
-      )}
+        fold={sidebarFold(folded, () => folds.toggleCreator(group.creatorId))}
+        count={foldedCount(folded, group.rows.length, TASK_NOUN)}
+        standing={
+          standing.length === 0 ? undefined : (
+            <TaskRows rows={standing} context={context} faces={faces} />
+          )
+        }
+      >
+        {group.rows.length === 0 ? null : (
+          <TaskRows rows={group.rows} context={context} faces={faces} />
+        )}
+      </GroupHeader>
     </div>
   );
 }
@@ -1001,10 +1044,12 @@ function AssigneeSection({
       ? undefined
       : personActor(assignee, reader.members, reader.readerId, reader.former);
   const folded = folds.assigneeFolded(group.assigneeId);
-  const rows = folded ? group.rows.filter(context.currentRow) : group.rows;
+  const standing = group.rows.filter(context.currentRow);
+  const faces = { ...context.faces, assignee: false };
   return (
-    <div className="sidebar-repository">
-      <SidebarGroupHeader
+    <div className="sidebar-repository" {...motionKey(assigneeGroupKey(group))}>
+      <GroupHeader
+        heading={GROUP_HEADING.NONE}
         glyph={
           actor === undefined ? (
             <UnassignedMark size={ACTOR_SIZE.INLINE} decorative />
@@ -1012,15 +1057,20 @@ function AssigneeSection({
             <ActorMark actor={actor} size={ACTOR_SIZE.INLINE} />
           )
         }
-        name={actor === undefined ? UNASSIGNED_WORDS : actorName(actor)}
+        label={actor === undefined ? UNASSIGNED_WORDS : actorName(actor)}
         card={actor === undefined ? undefined : actorCard(actor)}
-        folded={folded}
-        count={group.rows.length}
-        onToggle={() => folds.toggleAssignee(group.assigneeId)}
-      />
-      {rows.length === 0 ? null : (
-        <TaskRows rows={rows} context={context} faces={{ ...context.faces, assignee: false }} />
-      )}
+        fold={sidebarFold(folded, () => folds.toggleAssignee(group.assigneeId))}
+        count={foldedCount(folded, group.rows.length, TASK_NOUN)}
+        standing={
+          standing.length === 0 ? undefined : (
+            <TaskRows rows={standing} context={context} faces={faces} />
+          )
+        }
+      >
+        {group.rows.length === 0 ? null : (
+          <TaskRows rows={group.rows} context={context} faces={faces} />
+        )}
+      </GroupHeader>
     </div>
   );
 }
@@ -1101,6 +1151,95 @@ function drawnTasks(
   }
 }
 
+/** What decides where the Tasks section stands its rows: the workspace listed, the grouping, the order, and the filters. */
+interface TaskOrderView {
+  readonly workspaceId: string | undefined;
+  readonly grouping: TaskSections["grouping"];
+  readonly order: TaskOrder;
+  readonly statuses: readonly TaskStatus[];
+  readonly createdBy: string | undefined;
+  readonly assignedTo: string | undefined;
+}
+
+/** Whether the Tasks section drawn under one view stands its rows as it would under another. */
+function sameTaskOrder(was: TaskOrderView, now: TaskOrderView): boolean {
+  return (
+    was.workspaceId === now.workspaceId &&
+    was.grouping === now.grouping &&
+    was.order === now.order &&
+    was.createdBy === now.createdBy &&
+    was.assignedTo === now.assignedTo &&
+    was.statuses.length === now.statuses.length &&
+    was.statuses.every((status, at) => status === now.statuses[at])
+  );
+}
+
+/** The sections with each row drawn as it is now, wherever its held place stood it. */
+function liveSections(sections: TaskSections, live: ReadonlyMap<string, TaskRow>): TaskSections {
+  const now = (rows: readonly TaskRow[]) => rows.map((row) => live.get(taskRowKey(row)) ?? row);
+  switch (sections.grouping) {
+    case TASK_GROUPING.REPOSITORY:
+      return {
+        ...sections,
+        groups: sections.groups.map((group) => ({ ...group, rows: now(group.rows) })),
+      };
+    case TASK_GROUPING.ASSIGNEE:
+      return {
+        ...sections,
+        groups: sections.groups.map((group) => ({ ...group, rows: now(group.rows) })),
+      };
+    case TASK_GROUPING.CREATOR:
+      return {
+        ...sections,
+        groups: sections.groups.map((group) => ({ ...group, rows: now(group.rows) })),
+      };
+    case TASK_GROUPING.NONE:
+      return { ...sections, rows: now(sections.rows) };
+  }
+}
+
+/** The group a row stands in under a grouping, by what keys it: its repository, its assignee's or creator's id, or the one run's. */
+function groupOf(row: TaskRow, grouping: TaskSections["grouping"]): string | null | undefined {
+  switch (grouping) {
+    case TASK_GROUPING.REPOSITORY:
+      return taskRowRepository(row);
+    case TASK_GROUPING.ASSIGNEE:
+      return assigneeOf(row)?.userId;
+    case TASK_GROUPING.CREATOR: {
+      const { createdBy, ownerId } = creatorOf(row);
+      return createdBy?.userId ?? ownerId;
+    }
+    case TASK_GROUPING.NONE:
+      return null;
+  }
+}
+
+/**
+ * Where each row stands, as the sections order and group it: the row as it
+ * was first drawn while the sidebar is in sight (`use-held-order.ts`), or as
+ * it is now where it is new to the list, it belongs in another group now, or
+ * a press here gave it a name or a status the view has yet to carry. Note
+ * that a row held under a group it left would stand under a header that no
+ * longer names it, so it moves to its own at once, as the reader's own act
+ * does.
+ */
+function taskPlaces(
+  rows: readonly TaskRow[],
+  held: ReadonlyMap<string, TaskRow>,
+  view: Pick<TaskOrderView, "grouping"> & { readonly pending: ReadonlySet<string> | undefined },
+): ReadonlyMap<string, TaskRow> {
+  const placeOf = (row: TaskRow) => {
+    const was = held.get(taskRowKey(row));
+    const pending = row.kind === TASK_ROW.TASK && view.pending?.has(row.task.id) === true;
+    return was === undefined ||
+      pending ||
+      groupOf(was, view.grouping) !== groupOf(row, view.grouping)
+      ? row
+      : was;
+  };
+  return new Map(rows.map((row) => [taskRowKey(row), placeOf(row)] as const));
+}
+
 /**
  * The Tasks section's groups as the view draws them. A row says what its
  * group does not: under a repository's header a teammate's face; in one run
@@ -1145,16 +1284,19 @@ function TaskGroups({
       );
     case TASK_GROUPING.ASSIGNEE:
       return (
-        <>
-          {sections.groups.map((group) => (
+        <LeavingGroups
+          key={sections.grouping}
+          groups={sections.groups}
+          keyOf={assigneeGroupKey}
+          group={(group) => (
             <AssigneeSection
-              key={group.assigneeId ?? UNASSIGNED_WORDS}
+              key={assigneeGroupKey(group)}
               group={group}
               folds={folds}
               context={context}
             />
-          ))}
-        </>
+          )}
+        />
       );
     case TASK_GROUPING.CREATOR:
       return (
@@ -1203,11 +1345,11 @@ function ListSkeleton(): React.JSX.Element {
  * The Inbox's row, last of the rows heading the list and drawn as they are:
  * the tray, its name, and how many items wait on the developer across every
  * task at its end, the sum of the counts the Inbox's rows show, in even
- * figures and the accent's blue, since they wait on the developer, and
- * nothing at none. Its chord takes the count's place while the row is hovered or
- * reached from the keyboard, as New task's and Search's show theirs. A press
- * opens the window's Inbox (`desktop-inbox.tsx`), and the row is the place
- * shown while it stands.
+ * figures and the needs-you tone the rows it counts wear, since they wait on
+ * the developer, and nothing at none. Its chord takes the count's place
+ * while the row is hovered or reached from the keyboard, as New task's and
+ * Search's show theirs. A press opens the window's Inbox
+ * (`desktop-inbox.tsx`), and the row is the place shown while it stands.
  */
 function SidebarInboxRow({
   waiting,
@@ -1227,7 +1369,7 @@ function SidebarInboxRow({
       count={{
         value: waiting,
         noun: needsYouNoun(waiting),
-        tone: NAV_COUNT_TONE.ACCENT,
+        tone: STATUS_TONE.ATTENTION,
       }}
       aria-keyshortcuts={commandKeyshortcuts(APP_COMMAND.INBOX)}
       shortcut={<Shortcut chord={APP_SHORTCUTS[APP_COMMAND.INBOX].chord} />}
@@ -1242,8 +1384,8 @@ function SidebarInboxRow({
 /**
  * Chat's row, under the Inbox's and drawn as it is: the glyph, its name, and
  * how many messages wait on the developer in For you at its end, in the
- * Inbox's even figures and its accent, since both count what waits on the
- * reader, nothing at none. A press opens the window's Chat
+ * Inbox's even figures and its needs-you tone, since both count what waits on
+ * the reader, nothing at none. A press opens the window's Chat
  * (`desktop-chat.tsx`), and the row is the place shown while it stands.
  */
 function SidebarChatRow({
@@ -1262,7 +1404,7 @@ function SidebarChatRow({
       count={{
         value: waiting,
         noun: needsYouNoun(waiting),
-        tone: NAV_COUNT_TONE.ACCENT,
+        tone: STATUS_TONE.ATTENTION,
       }}
       onClick={onOpen}
     >
@@ -1473,7 +1615,7 @@ interface DesktopSidebarProps {
   onTabChange: (tab: PanelTab) => void;
   account: AccountSnapshot;
   updates: UpdateControl;
-  /** Signs the account out, once the account menu's Log out is answered. */
+  /** Signs the account out, when the account menu's Sign out is pressed. */
   onSignOut: () => Promise<void>;
   /** Hears every press in the sidebar, which a press outside it would put away while it floats. */
   onPressWithin: () => void;
@@ -1516,6 +1658,26 @@ function NewTaskButton({
       New task
     </NavItem>
   );
+}
+
+/**
+ * Times the window's first usable screen: its start to the sidebar's first
+ * task list read answered, saying how many tasks the read answered, every
+ * workspace's, since the workspace chosen may not stand yet. A window whose
+ * first read fails is left untimed rather than timed through the
+ * developer's Retry. Note that a window opening signed out is not left,
+ * because every window opens so until the account's session is restored.
+ */
+function useFirstUsableSpan(tasks: TasksControl): void {
+  const { listRead, listFailed } = tasks;
+  const listed = tasks.tasks.length;
+  useEffect(() => {
+    if (listFailed) leaveWindowSpan(PANEL_SPAN.WINDOW_FIRST_USABLE);
+    else if (listRead)
+      endWindowSpan(PANEL_SPAN.WINDOW_FIRST_USABLE, () => ({
+        [PANEL_SPAN_ATTRIBUTE.TASK_COUNT]: listed,
+      }));
+  }, [listRead, listFailed, listed]);
 }
 
 /**
@@ -1573,7 +1735,11 @@ function SidebarColumn({
   const narrow = room === SHELL_ROOM.NARROW;
   const coarse = useCoarsePointer();
   const overlay = useFloatingSidebar(sidebar);
+  useFirstUsableSpan(tasks);
   const body = useRef<HTMLDivElement>(null);
+  // The column's rows, Luke's, the pins', and every group's tasks and agents, are one Tab stop that ↑↓ walk, a folded group's passed by.
+  const roving = useRovingKeys<HTMLDivElement>();
+  const bodyRef = useMemo(() => joinRefs(body, roving.ref), [roving.ref]);
   // The window's Inbox, an agent's page, the Automations page, Chat, and the Board stand in the task's place, so while one does no task is the place shown.
   const inInbox = onTasks && tasks.inboxView.open;
   const inAutomations = onTasks && tasks.automationsView.open;
@@ -1830,20 +1996,38 @@ function SidebarColumn({
   const hidden = hiddenStatuses([...sectionRows, ...rows], statuses);
   const statusRows = taskRowsInStatuses(rows, statuses);
   const { grouping, order } = taskView.view;
-  const sections = taskSections(
-    statusRows,
-    drawnGrouping(grouping, shared),
+  const orderView: TaskOrderView = {
+    workspaceId: tasks.workspace?.id,
+    grouping: drawnGrouping(grouping, shared),
     order,
-    tasks,
-    // A creator's or an assignee's group is ordered by the name its header says.
-    (row) => actorName(creatorActor(creatorOf(row), reader, undefined)),
-    (row) => {
-      const assignee = assigneeOf(row);
-      return assignee === undefined
-        ? UNASSIGNED_WORDS
-        : actorName(personActor(assignee, reader.members, reader.readerId, reader.former));
+    statuses,
+    createdBy,
+    assignedTo,
+  };
+  const placing = { grouping: orderView.grouping, pending: tasks.pendingTasks };
+  // While the sidebar is in sight each task keeps the place it was first drawn in, so one an update would sort elsewhere stays under the reader's eye.
+  const sections = useHeldOrder(orderView, tasks.shown && overlay.inSight, {
+    sameOrder: sameTaskOrder,
+    draw: (places: ReadonlyMap<string, TaskRow>) => {
+      const placed = taskPlaces(statusRows, places, placing);
+      const held = taskSections(
+        [...placed.values()],
+        orderView.grouping,
+        order,
+        tasks,
+        // A creator's or an assignee's group is ordered by the name its header says.
+        (row) => actorName(creatorActor(creatorOf(row), reader, undefined)),
+        (row) => {
+          const assignee = assigneeOf(row);
+          return assignee === undefined
+            ? UNASSIGNED_WORDS
+            : actorName(personActor(assignee, reader.members, reader.readerId, reader.former));
+        },
+      );
+      return liveSections(held, new Map(statusRows.map((row) => [taskRowKey(row), row])));
     },
-  );
+    placesOf: (_drawn, held) => taskPlaces(statusRows, held, placing),
+  });
   // A row names its repository as its group's header would, owner and all where two share a name.
   const named = repositoryGroups(unpinned);
   const repositoryOf = (row: TaskRow) => {
@@ -1955,7 +2139,7 @@ function SidebarColumn({
       <Fill className="sidebar-section">
         <ScrollArea fade={SCROLL_FADE.BOTH}>
           <ListMotion root={body}>
-            <div ref={body} className="sidebar-section-body" {...motionRows()}>
+            <div {...roving} ref={bodyRef} className="sidebar-section-body" {...motionRows()}>
               {narrow ? places : null}
               {operator === undefined ? null : (
                 <nav className="sidebar-group" aria-label="Luke">
@@ -1994,51 +2178,49 @@ function SidebarColumn({
                 />
               ) : (
                 <>
-                  {shownSections.length > 0 ? (
-                    <SidebarSections
-                      sections={shownSections}
-                      context={{
-                        tasks,
-                        dialogs: sectionDialogs,
-                        current: currentRow,
-                        unread,
-                        inSight: overlay.inSight,
-                        folded: folds.sectionFolded,
-                        onToggle: folds.toggleSection,
-                        row: (row) =>
-                          row.kind === TASK_ROW.TASK ? (
-                            <SidebarTask
-                              key={row.task.id}
-                              tasks={tasks}
-                              task={row.task}
-                              current={context.marked(row.task.id, undefined)}
-                              open={current(row.task.id)}
-                              unread={unread(row.task)}
-                              now={now}
-                              faces={context.faces}
-                              onOpen={() => context.onOpen(row.task.id)}
-                            />
-                          ) : (
-                            <SidebarAgent
-                              key={row.agent.id}
-                              agent={row.agent}
-                              agents={tasks.agents}
-                              current={currentRow(row)}
-                              unread={context.unseenAgent(row.agent.id)}
-                              now={now}
-                              at={taskRowTime(row, context.order)}
-                              face={context.faces.creator && context.faces.assignee}
-                              shown={tasks.shown && overlay.inSight}
-                              onOpen={() => context.onOpenAgent(row.agent.id)}
-                              onPin={pinOf(tasks, row.agent)}
-                              section={context.sectionEntry(row.agent)}
-                              onDeleted={context.onDeletedAgent(row.agent.id)}
-                            />
-                          ),
-                        onDropRow: dropRow,
-                      }}
-                    />
-                  ) : null}
+                  <SidebarSections
+                    sections={shownSections}
+                    context={{
+                      tasks,
+                      dialogs: sectionDialogs,
+                      current: currentRow,
+                      unread,
+                      inSight: overlay.inSight,
+                      folded: folds.sectionFolded,
+                      onToggle: folds.toggleSection,
+                      row: (row) =>
+                        row.kind === TASK_ROW.TASK ? (
+                          <SidebarTask
+                            key={row.task.id}
+                            tasks={tasks}
+                            task={row.task}
+                            current={context.marked(row.task.id, undefined)}
+                            open={current(row.task.id)}
+                            unread={unread(row.task)}
+                            now={now}
+                            faces={context.faces}
+                            onOpen={() => context.onOpen(row.task.id)}
+                          />
+                        ) : (
+                          <SidebarAgent
+                            key={row.agent.id}
+                            agent={row.agent}
+                            agents={tasks.agents}
+                            current={currentRow(row)}
+                            unread={context.unseenAgent(row.agent.id)}
+                            now={now}
+                            at={taskRowTime(row, context.order)}
+                            face={context.faces.creator && context.faces.assignee}
+                            shown={tasks.shown && overlay.inSight}
+                            onOpen={() => context.onOpenAgent(row.agent.id)}
+                            onPin={pinOf(tasks, row.agent)}
+                            section={context.sectionEntry(row.agent)}
+                            onDeleted={context.onDeletedAgent(row.agent.id)}
+                          />
+                        ),
+                      onDropRow: dropRow,
+                    }}
+                  />
                   <nav
                     className="sidebar-group"
                     aria-label="Tasks"
@@ -2046,27 +2228,34 @@ function SidebarColumn({
                     {...motionRows()}
                   >
                     {tasks.signedIn ? (
-                      <SidebarSectionHead name="Tasks">
-                        {sectionsShown && tasks.workspace !== undefined ? (
-                          <NewSectionButton
-                            onNew={chosen(() => {
-                              const { workspace } = tasks;
-                              if (workspace !== undefined) sectionDialogs.askNew(workspace.id);
-                            })}
-                          />
-                        ) : null}
-                        <TaskStatusFilter
-                          menu={statusMenu}
-                          statuses={statuses}
-                          onStatuses={taskView.onStatuses}
-                        />
-                        <TaskViewOptions
-                          shown={tasks.shown && overlay.inSight}
-                          control={taskView}
-                          shared={shared}
-                          filtered={createdBy !== undefined || assignedTo !== undefined}
-                        />
-                      </SidebarSectionHead>
+                      <GroupHeader
+                        heading={GROUP_HEADING.NONE}
+                        label="Tasks"
+                        actionsShown={GROUP_ACTIONS.AT_REST}
+                        actions={
+                          <>
+                            {sectionsShown && tasks.workspace !== undefined ? (
+                              <NewSectionButton
+                                onNew={chosen(() => {
+                                  const { workspace } = tasks;
+                                  if (workspace !== undefined) sectionDialogs.askNew(workspace.id);
+                                })}
+                              />
+                            ) : null}
+                            <TaskStatusFilter
+                              menu={statusMenu}
+                              statuses={statuses}
+                              onStatuses={taskView.onStatuses}
+                            />
+                            <TaskViewOptions
+                              shown={tasks.shown && overlay.inSight}
+                              control={taskView}
+                              shared={shared}
+                              filtered={createdBy !== undefined || assignedTo !== undefined}
+                            />
+                          </>
+                        }
+                      />
                     ) : null}
                     {tasks.signedIn ? (
                       <ViewChips
@@ -2082,16 +2271,17 @@ function SidebarColumn({
                     !unlisted &&
                     tasks.listRead &&
                     !tasks.listFailed ? (
-                      <p className="sidebar-note">
+                      <NoteLine look={NOTE_LINE_LOOK.ROWS}>
                         {NONE_MATCH} <Button onClick={taskView.onEveryone}>Show all</Button>
-                      </p>
+                      </NoteLine>
                     ) : null}
                     {tasks.listFailed ? (
-                      <div className="sidebar-note sidebar-failure">
-                        <ErrorState onRetry={tasks.onRetryList}>
-                          Your tasks could not be read.
-                        </ErrorState>
-                      </div>
+                      <ErrorState
+                        onRetry={tasks.onRetryList}
+                        placement={ERROR_STATE_PLACEMENT.ROWS}
+                      >
+                        Your tasks could not be read.
+                      </ErrorState>
                     ) : null}
                     {/* The list is empty before its first read lands, so that it
               holds none says nothing until the service has answered. */}
@@ -2099,10 +2289,10 @@ function SidebarColumn({
                       <ListSkeleton />
                     ) : null}
                     {tasks.signedIn && unlisted && tasks.listRead && !tasks.listFailed ? (
-                      <p className="sidebar-note">No tasks yet.</p>
+                      <NoteLine look={NOTE_LINE_LOOK.ROWS}>No tasks yet.</NoteLine>
                     ) : null}
                     {tasks.signedIn ? null : (
-                      <p className="sidebar-note">Sign in to start a task.</p>
+                      <NoteLine look={NOTE_LINE_LOOK.ROWS}>Sign in to start a task.</NoteLine>
                     )}
                     <TaskGroups
                       sections={sections}

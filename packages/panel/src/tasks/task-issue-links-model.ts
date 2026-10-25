@@ -1,5 +1,5 @@
 /**
- * task-issue-links-model.ts -- what a task page's Linked issues box says: each link's state in words, and why a change of its links did not land; and what a Board card's tag calls a link.
+ * task-issue-links-model.ts -- what a task page's Linked issues box says: each link's state in words, and why a change of its links did not land; and the one key every chip of an issue says.
  *
  * DOM-free, so the box and its tests read the same words. A GitHub issue's
  * state is GitHub's own three, a Linear issue's the name of the workflow
@@ -43,9 +43,9 @@ const REFUSAL_WORDS = {
 
 /** Why a change of a task's links found no answer, by what the host said. */
 const FAILURE_WORDS = {
-  [TASK_CALL_FAILURE.UNANSWERED]: "Luke didn't answer. Try again.",
-  [TASK_CALL_FAILURE.NOT_FOUND]: "That issue couldn't be read, or the task is gone.",
-  [TASK_CALL_FAILURE.LINEAR_UNAVAILABLE]: "The workspace's Linear couldn't read that issue.",
+  [TASK_CALL_FAILURE.UNANSWERED]: "Luke did not answer. Try again.",
+  [TASK_CALL_FAILURE.NOT_FOUND]: "That issue could not be read, or the task is gone.",
+  [TASK_CALL_FAILURE.LINEAR_UNAVAILABLE]: "The workspace's Linear could not read that issue.",
 } as const satisfies Record<TaskIssueCallFailure, string>;
 
 /** What the box says of a change that did not land: a link refused, or a call that found no answer. */
@@ -67,15 +67,19 @@ export const RELATION_DETAIL = {
 } as const satisfies Record<TaskIssueRelation, string>;
 
 /**
- * What a Board card's tag says of a linked issue: a Linear issue's key, and
- * a GitHub issue's `#N` where it is filed in the task's own repository, or
- * its whole `owner/name#N` in another, the repository's name compared
+ * What a chip calls a linked issue, wherever the window draws one: a Linear
+ * issue's key, and a GitHub issue's `#N` where it is filed in the task's own
+ * repository, or `name#N` in another, the repository's name compared
  * whatever its case, as GitHub reads it.
  */
-export function issueTagWords(tag: TaskIssueTag, repository: string | null): string {
-  if (tag.provider !== TASK_ISSUE_PROVIDER.GITHUB || repository === null) return tag.key;
-  const filed = tag.key.slice(0, repository.length);
-  const own =
-    filed.toLowerCase() === repository.toLowerCase() && tag.key.charAt(repository.length) === "#";
-  return own ? tag.key.slice(repository.length) : tag.key;
+export function issueKeyWords(
+  issue: Pick<TaskIssueTag, "provider" | "key">,
+  repository: string | null,
+): string {
+  const at = issue.key.lastIndexOf("#");
+  if (issue.provider !== TASK_ISSUE_PROVIDER.GITHUB || at < 0) return issue.key;
+  const filed = issue.key.slice(0, at);
+  const number = issue.key.slice(at);
+  if (repository !== null && filed.toLowerCase() === repository.toLowerCase()) return number;
+  return `${filed.slice(filed.indexOf("/") + 1)}${number}`;
 }

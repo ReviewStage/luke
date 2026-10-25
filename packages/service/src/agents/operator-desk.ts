@@ -52,8 +52,9 @@ import {
 import { OPERATOR_NOTICE_KIND, type OperatorNoticeKind } from "@luke/database/storage-vocabulary";
 import { AGENT_TOOL } from "@luke/features/agent-tools";
 import { CODING_AGENT_STATUS, PULL_REQUEST_STATE } from "@luke/features/coding-agent-wire";
+import { mentionMarkdownLink } from "@luke/features/link-grammar";
 import { MENTION_KIND } from "@luke/features/mention-link";
-import { agentGivenName } from "@luke/features/model-label";
+import { agentName } from "@luke/features/model-label";
 import { ACTION_RESULT_STATUS, type UnparsedWireValue, type WireRecord } from "@luke/wire";
 import { Clock, DateTime, Effect, Schema } from "effect";
 import type { StoreFailure } from "../http/store-failure.js";
@@ -130,11 +131,6 @@ const NOTICE_WORDS = {
   [OPERATOR_NOTICE_KIND.INBOX_ASK]: "it asked them in their inbox",
 } as const satisfies Record<OperatorNoticeKind, string>;
 
-/** The agent as a row names it: Luke for an operator, else its title, or its model. */
-function agentName(agent: Pick<CodingAgent, "kind" | "title" | "model">): string {
-  return agentGivenName(agent) ?? agent.title ?? agent.model;
-}
-
 /** An agent's mention under the workspace's step, under its task where it has one. */
 function agentMention(
   agent: { readonly id: string; readonly taskId: string | null },
@@ -147,7 +143,12 @@ function agentMention(
 
 /** An ask's agent as its rows name it. */
 function askAgent(ask: MemberOpenAsk, step: string) {
-  const name = ask.agentName ?? ask.agentModel;
+  const name = agentName({
+    kind: ask.agentKind,
+    title: ask.agentTitle,
+    model: ask.agentModel,
+    automationName: ask.agentAutomationName,
+  });
   return {
     id: ask.agentId,
     name,
@@ -257,7 +258,7 @@ const readDeskSections = (
         heading: DESK_HEADING.PULL_REQUESTS,
         rows: awaiting.map(
           ({ agent, pull }) =>
-            `- [@#${pull.number} ${pull.title}](${pull.url}) by ${named(agent)}, checks ${pull.checks}`,
+            `- ${mentionMarkdownLink(`#${pull.number} ${pull.title}`, pull.url)} by ${named(agent)}, checks ${pull.checks}`,
         ),
         more: `${AGENT_TOOL.READ_AGENT} reads each agent's.`,
       },
@@ -287,7 +288,12 @@ function noticesSection(notices: readonly UnreadOperatorNotice[], step: string):
     else held.kinds.push(notice.kind);
   }
   const rows = [...byAgent.values()].map(({ newest, kinds }) => {
-    const name = newest.agentTitle ?? newest.agentModel;
+    const name = agentName({
+      kind: newest.agentKind,
+      title: newest.agentTitle,
+      model: newest.agentModel,
+      automationName: newest.agentAutomationName,
+    });
     const mention = agentMention({ id: newest.agentId, taskId: newest.taskId }, name, step);
     return `- ${mention}: ${kinds.map((kind) => NOTICE_WORDS[kind]).join(", ")}`;
   });

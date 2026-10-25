@@ -1,47 +1,22 @@
-import { VisuallyHidden } from "@luke/ui";
 /**
- * copy-feedback.tsx -- the window's one answer to a copy: a button's glyph turning to a check for a moment, or a toast for a copy made from a menu.
+ * copy-feedback.tsx -- the window's copy acts: the shell's clipboard for a `CopyButton`, and a toast for a copy made from a menu.
  *
  * Every copy goes to the shell's clipboard (`appPlatform().copyText`, or
- * `copyImage` for a picture, drawn as a PNG where it is not one) and is
- * answered the way Linear, GitHub, and Vercel answer one. A copy button's
- * glyph crossfades to a check in the success colour for `BUTTON_HOLD`, then
- * back; its label and accessible name stay as they were, so nothing beside
- * it shifts, and only its hint says "Copied" while the check stands. A
- * clipboard that refused turns the glyph to an alert instead, for the same
- * moment, its hint saying so. A second press restarts the moment, and only
- * the last press's answer is shown, however the clipboard orders them. A copy
- * made from a menu has no button left to answer on once the menu closes, so
- * it is answered with the window's toast (`toast.tsx`) instead.
+ * `copyImage` for a picture, drawn as a PNG where it is not one). A copy
+ * button answers on itself (`CopyButton` in `@luke/ui`), handed the act
+ * here; a copy made from a menu has no button left to answer on once the
+ * menu closes, so it is answered with the window's toast (`toast.tsx`)
+ * instead.
  */
 
-import { useAtom } from "@effect/atom-react";
-import { Duration, Effect } from "effect";
-import { CheckIcon, CircleAlertIcon, CopyIcon } from "lucide-react";
-import { useRef, useState } from "react";
+import { STATUS_TONE } from "@luke/ui";
 import { appPlatform } from "./app-platform.js";
-import { rendererRuntime } from "./renderer-runtime.js";
-import { TOAST_TONE, useToast } from "./toast.js";
+import { TOAST_HOLD, useToast } from "./toast.js";
 
-/** What a copy button shows: its resting glyph, the check, or the alert. */
+/** How a copy ended: the clipboard took it, or refused it. */
 const COPY_STATE = {
-  IDLE: "idle",
   COPIED: "copied",
   FAILED: "failed",
-} as const;
-
-export type CopyState = (typeof COPY_STATE)[keyof typeof COPY_STATE];
-
-/** How long a button's check, or its alert, stands: long enough to see, gone before anyone waits on it. */
-const BUTTON_HOLD = Duration.millis(1_200);
-
-/** How long a copy's toast stands before it leaves. */
-const TOAST_HOLD = Duration.millis(1_500);
-
-/** What a copy button's hint says while its check or its alert stands. */
-const COPY_HINT = {
-  [COPY_STATE.COPIED]: "Copied",
-  [COPY_STATE.FAILED]: "Could not copy",
 } as const;
 
 /** What every item that copies a Luke link is called, wherever it stands, and what its toast says once the clipboard took it. */
@@ -82,7 +57,7 @@ async function pngBase64Of(url: string): Promise<string> {
   return canvas.toDataURL("image/png").replace(/^data:image\/png;base64,/u, "");
 }
 
-/** What the clipboard's answer to a copy comes to: the check, or the alert. */
+/** What the clipboard's answer to a copy comes to: taken, or refused. */
 function copyAnswer(
   copying: Promise<void>,
 ): Promise<typeof COPY_STATE.COPIED | typeof COPY_STATE.FAILED> {
@@ -92,72 +67,14 @@ function copyAnswer(
   );
 }
 
-/** A button's own hold, as an atom whose work is the wait: waiting exactly as long as the glyph stands. */
-const buttonHoldAtom = () => rendererRuntime.fn(() => Effect.sleep(BUTTON_HOLD));
-
-/** A copy button's state, the picture at whose address it was answered for where a picture's copy answered it, and its press: of words, or of a picture. */
-interface CopyFeedback {
-  readonly state: CopyState;
-  readonly answeredImage: string | undefined;
-  readonly copy: (words: string) => void;
-  readonly copyImage: (url: string) => void;
+/** The copy act a `@luke/ui` copy button is handed: the words on the shell's clipboard, a refusal rejecting. */
+export function copyThroughShell(words: string): Promise<void> {
+  return appPlatform().copyText(words);
 }
 
-/**
- * One copy button's state and its press. The press hands the words, or the
- * picture, to the shell's clipboard and, once it answers, shows the check or
- * the alert for the hold; a press while one stands starts the hold again
- * from its own answer.
- */
-export function useCopyFeedback(): CopyFeedback {
-  const [hold] = useState(buttonHoldAtom);
-  const [held, restart] = useAtom(hold);
-  const [landed, setLanded] = useState<{
-    readonly state: CopyState;
-    readonly image: string | undefined;
-  }>({ state: COPY_STATE.IDLE, image: undefined });
-  // Note that this is a ref, because an answer reads it as it lands, which
-  // no render stands between.
-  const latest = useRef(0);
-  const answer = (copying: () => Promise<void>, image: string | undefined) => {
-    latest.current += 1;
-    const press = latest.current;
-    copyAnswer(copying()).then((answered) => {
-      if (press !== latest.current) return;
-      setLanded({ state: answered, image });
-      restart();
-    });
-  };
-  return {
-    state: held.waiting ? landed.state : COPY_STATE.IDLE,
-    answeredImage: landed.image,
-    copy: (words) => answer(() => appPlatform().copyText(words), undefined),
-    copyImage: (url) => answer(() => appPlatform().copyImage(pngBase64Of(url)), url),
-  };
-}
-
-/** What a copy button's hint says in this state: its own label at rest. */
-export function copyHint(state: CopyState, label: string): string {
-  return state === COPY_STATE.IDLE ? label : COPY_HINT[state];
-}
-
-/**
- * A copy button's glyph: the copy, the check, and the alert stacked in one
- * square, only the one for the state shown, so the change is a crossfade
- * that never moves the button. Its state is announced by a line only a
- * reader hears, since the button's own name does not change.
- */
-export function CopyGlyph({ state }: { state: CopyState }): React.JSX.Element {
-  return (
-    <span className="copy-glyph" data-state={state}>
-      <CopyIcon aria-hidden="true" data-glyph={COPY_STATE.IDLE} />
-      <CheckIcon aria-hidden="true" data-glyph={COPY_STATE.COPIED} />
-      <CircleAlertIcon aria-hidden="true" data-glyph={COPY_STATE.FAILED} />
-      <VisuallyHidden role="status">
-        {state === COPY_STATE.IDLE ? "" : COPY_HINT[state]}
-      </VisuallyHidden>
-    </span>
-  );
+/** The copy act a `@luke/ui` copy button is handed for a picture: the one at `url` on the shell's clipboard, a refusal rejecting. */
+export function copyImageThroughShell(url: string): Promise<void> {
+  return appPlatform().copyImage(pngBase64Of(url));
 }
 
 /**
@@ -165,16 +82,28 @@ export function CopyGlyph({ state }: { state: CopyState }): React.JSX.Element {
  * of it in a toast reading `label` ("Plan copied"), or the failure.
  */
 export function useCopyToast(): (words: string, label: string) => void {
+  const copied = useMenuCopy();
+  return (words, label) => copied(() => copyThroughShell(words), label);
+}
+
+/** Copies a picture from a menu, as `useCopyToast` copies words: put on the clipboard as a copy button puts one, and said in a toast. */
+export function useImageCopyToast(): (url: string, label: string) => void {
+  const copied = useMenuCopy();
+  return (url, label) => copied(() => copyImageThroughShell(url), label);
+}
+
+/** A menu's copy, said in a toast reading `label` once the clipboard answers, or its failure; only the latest press's answer is said. */
+function useMenuCopy(): (copying: () => Promise<void>, label: string) => void {
   const show = useToast();
-  return (words, label) => {
+  return (copying, label) => {
     latestMenuCopy += 1;
     const press = latestMenuCopy;
-    copyAnswer(appPlatform().copyText(words)).then((answer) => {
+    copyAnswer(copying()).then((answer) => {
       if (press !== latestMenuCopy) return;
       show(
         answer === COPY_STATE.COPIED
-          ? { words: label, tone: TOAST_TONE.DONE, hold: TOAST_HOLD }
-          : { words: COPY_FAILED_NOTE, tone: TOAST_TONE.FAILED, hold: TOAST_HOLD },
+          ? { words: label, tone: STATUS_TONE.COMPLETE, hold: TOAST_HOLD.DONE }
+          : { words: COPY_FAILED_NOTE, tone: STATUS_TONE.DANGER, hold: TOAST_HOLD.FAILED },
       );
     });
   };

@@ -5,6 +5,7 @@ import {
   type TaskStatus,
 } from "@luke/features/task-wire";
 import React from "react";
+import { STATUS_TONE, type StatusTone } from "../status-tone.js";
 
 // `tsx` executes imported workspace-package JSX with the classic runtime.
 void React;
@@ -17,7 +18,9 @@ void React;
  * filled disc once settled, with a check for done and a cross for
  * canceled. A priority is three bars, as many lit as it matters, an
  * attention square for urgent, and three dashes for one no one weighed.
- * Each mark draws in its own ink (`task-marks.css`) at the glyph cell of
+ * A status draws in its status tone's ink, under way in the working blue
+ * and done in the green every other done wears, and a priority in its own
+ * (`task-marks.css`), each at the glyph cell of
  * whatever leads with it, which sizes it, and says nothing of its own: the
  * words beside it, or the caller's label, are what a reader hears.
  */
@@ -31,12 +34,32 @@ const LIT_BARS = {
   [TASK_PRIORITY.LOW]: 1,
 } as const satisfies Record<TaskPriority, number>;
 
-/** The three bars, each its left edge, its top, and its height, rising left to right. */
+/**
+ * The square a priority's mark spans within its 14 units: about the area of
+ * a status's disc (0.75 to 13.25), centred on it, rather than its width,
+ * because a square as wide as a circle reads larger beside it. So a
+ * priority stands inside the same room around it a status does.
+ */
+const MARK_EDGE = { start: 1.5, end: 12.5 } as const;
+
+/** How wide each of a priority's bars is drawn. */
+const BAR_WIDTH = 2.6;
+
+/** The three bars, each its left edge, its top, and its height, rising left to right across the mark's square to its foot. */
 const BARS = [
-  { x: 2, y: 8, height: 4 },
-  { x: 6, y: 5, height: 7 },
-  { x: 10, y: 2, height: 10 },
+  { x: MARK_EDGE.start, y: 8.5, height: 4 },
+  { x: 7 - BAR_WIDTH / 2, y: 5, height: 7.5 },
+  { x: MARK_EDGE.end - BAR_WIDTH, y: MARK_EDGE.start, height: 11 },
 ] as const;
+
+/** The tone each status is drawn in: at rest, under way, or finished well. */
+const STATUS_MARK_TONE = {
+  [TASK_STATUS.BACKLOG]: STATUS_TONE.NEUTRAL,
+  [TASK_STATUS.TODO]: STATUS_TONE.NEUTRAL,
+  [TASK_STATUS.IN_PROGRESS]: STATUS_TONE.WORKING,
+  [TASK_STATUS.DONE]: STATUS_TONE.COMPLETE,
+  [TASK_STATUS.CANCELED]: STATUS_TONE.NEUTRAL,
+} as const satisfies Record<TaskStatus, StatusTone>;
 
 /** The ring every status but the settled ones draws, dashed for the backlog. */
 function Ring({ dashed }: { dashed: boolean }): React.JSX.Element {
@@ -82,12 +105,13 @@ function statusBody(status: TaskStatus): React.JSX.Element {
   }
 }
 
-/** A task's status as its mark, coloured by the status it stands for. */
+/** A task's status as its mark, in the tone of the status it stands for. */
 export function TaskStatusMark({ status }: { status: TaskStatus }): React.JSX.Element {
   return (
     <svg
       className="luke-task-mark luke-task-status-mark"
       data-status={status}
+      data-tone={STATUS_MARK_TONE[status]}
       viewBox="0 0 14 14"
       aria-hidden="true"
     >
@@ -101,7 +125,14 @@ function priorityBody(priority: TaskPriority): React.JSX.Element {
   if (priority === TASK_PRIORITY.URGENT) {
     return (
       <>
-        <rect className="luke-task-mark-fill" x="1" y="1" width="12" height="12" rx="3" />
+        <rect
+          className="luke-task-mark-fill"
+          x={MARK_EDGE.start}
+          y={MARK_EDGE.start}
+          width={MARK_EDGE.end - MARK_EDGE.start}
+          height={MARK_EDGE.end - MARK_EDGE.start}
+          rx="2.5"
+        />
         <path className="luke-task-mark-cut" d="M7 4v3.6M7 9.6v.2" />
       </>
     );
@@ -114,10 +145,10 @@ function priorityBody(priority: TaskPriority): React.JSX.Element {
             key={x}
             className="luke-task-mark-fill"
             x={x}
-            y="6.3"
-            width="2"
-            height="1.4"
-            rx=".5"
+            y="6.25"
+            width={BAR_WIDTH}
+            height="1.5"
+            rx=".6"
           />
         ))}
       </>
@@ -133,9 +164,9 @@ function priorityBody(priority: TaskPriority): React.JSX.Element {
           data-lit={index < lit}
           x={x}
           y={y}
-          width="2.4"
+          width={BAR_WIDTH}
           height={height}
-          rx=".6"
+          rx=".75"
         />
       ))}
     </>

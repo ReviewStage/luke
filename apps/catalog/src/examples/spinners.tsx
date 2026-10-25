@@ -1,3 +1,4 @@
+import { readingWords } from "@luke/features/words";
 import {
   ALIGN,
   BUTTON_VARIANT,
@@ -29,10 +30,10 @@ function Spinners(): React.JSX.Element {
       <CatalogSection id="spinner-sizes" title="Waits">
         <Inline gap={GAP.FIELD}>
           <Inline gap={GAP.ICON}>
-            <Spinner label="Loading members" />
-            <Text tone={TEXT_TONE.MUTED}>Reading members</Text>
+            <Spinner label={readingWords("members")} />
+            <Text tone={TEXT_TONE.MUTED}>{readingWords("members")}</Text>
           </Inline>
-          <Spinner label="Loading transcript" size={SPINNER_SIZE.REGION} />
+          <Spinner label={readingWords("the transcript")} size={SPINNER_SIZE.REGION} />
           <span className="catalog-ring">
             <SpinnerRing />
           </span>
@@ -46,7 +47,7 @@ function Spinners(): React.JSX.Element {
       </CatalogSection>
       <CatalogSection id="spinner-region" title="A region still being read">
         <div className="catalog-frame catalog-region">
-          <SpinnerRegion label="Loading tasks" />
+          <SpinnerRegion label={readingWords("tasks")} />
         </div>
       </CatalogSection>
       <CatalogSection id="spinner-busy" title="A control's words giving way">

@@ -12,6 +12,7 @@ import { createElement, type ReactElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { test } from "vitest";
 import { PullRequestLine } from "../desktop/task-card.js";
+import { layContainersAt } from "../testing/container-width.js";
 import { PublishedRow } from "./agent-published.js";
 import { agentSubject, NOTHING_HELD } from "./agent-ref.js";
 import { ChangesCard } from "./changes-card.js";
@@ -152,5 +153,36 @@ test("a pull request no longer open is drawn where it stands, whatever the queue
   });
   for (const [place, element] of drawn) {
     assert.equal(markOf(element), "Pull request #42, merged", place);
+  }
+});
+
+test("a queued pull request wears the merge's glyph itself, in the attention orange, wherever it is drawn", () => {
+  const style = layContainersAt({});
+  try {
+    const merged = markElementOf(
+      createElement(PullRequestLine, {
+        pullRequest: pullRequest(PULL_REQUEST_STATE.MERGED, CHECK_SUMMARY.PASSING),
+      }),
+    );
+    const drawn = places({
+      ...pullRequest(PULL_REQUEST_STATE.OPEN, CHECK_SUMMARY.PASSING),
+      queued: true,
+    });
+    for (const [place, element] of drawn) {
+      const host = document.body.appendChild(document.createElement("div"));
+      host.innerHTML = renderToStaticMarkup(element);
+      const mark = host.querySelector("[data-pull-request-mark]");
+      // Note that the mark is the glyph, never a box around one, so every place sizes it as it sizes the others.
+      assert.equal(mark?.localName, "svg", place);
+      assert.equal(mark?.innerHTML, merged?.innerHTML, place);
+      assert.equal(
+        mark === null ? undefined : getComputedStyle(mark).getPropertyValue("--pull-request-tone"),
+        "var(--luke-color-attention)",
+        place,
+      );
+      host.remove();
+    }
+  } finally {
+    style.remove();
   }
 });

@@ -1,15 +1,16 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { act, createElement, useState } from "react";
+import { act, createElement, Fragment, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
 import { holdExits } from "../../testing/held-exits.js";
+import { Announcer } from "../announcer/announcer.js";
 import { SavedTick } from "./saved-tick.js";
 
 /**
  * saved-tick.test.ts -- a tick says nothing for the writes that landed
- * before it watched, says Saved in its live region once one lands, stands
+ * before it watched, says Saved through the announcer once one lands, stands
  * through its motion and is taken once the motion ends, and starts over for a
  * write landing while it stands.
  */
@@ -50,11 +51,18 @@ function render(start: number): HTMLElement {
   const page = document.body.appendChild(document.createElement("div"));
   const root = createRoot(page);
   roots.push(root);
-  act(() => root.render(createElement(Autosave, { start })));
+  act(() =>
+    root.render(
+      createElement(Fragment, null, createElement(Announcer), createElement(Autosave, { start })),
+    ),
+  );
   return page;
 }
 
-const status = (page: HTMLElement) => page.querySelector('[role="status"]');
+/** What the window's announcer says politely now. */
+const said = () => document.querySelector('[role="status"]')?.textContent;
+/** The tick's words while it stands, or nothing once it is taken. */
+const shown = (page: HTMLElement) => page.querySelector(".luke-saved-tick")?.textContent ?? "";
 const land = (page: HTMLElement) => act(() => page.querySelector("button")?.click());
 
 /** The tick's motion ending, its exit last. */
@@ -62,15 +70,17 @@ const end = () => act(() => motion.finish());
 
 test("a tick says nothing for writes that landed before it watched", () => {
   const page = render(3);
-  assert.equal(status(page)?.textContent, "");
+  assert.equal(shown(page), "");
+  assert.equal(said(), "");
 });
 
-test("a write landing says Saved in the live region until its motion ends", () => {
+test("a write landing shows Saved until its motion ends, and says it politely", () => {
   const page = render(0);
   land(page);
-  assert.equal(status(page)?.textContent, "Saved");
+  assert.equal(shown(page), "Saved");
+  assert.equal(said(), "Saved");
   end();
-  assert.equal(status(page)?.textContent, "");
+  assert.equal(shown(page), "");
 });
 
 test("a write landing while the tick stands starts it over", () => {
@@ -82,7 +92,7 @@ test("a write landing while the tick stands starts it over", () => {
   assert.ok(second);
   assert.notEqual(second, first, "a tick of its own, its motion from the start");
   end();
-  assert.equal(status(page)?.textContent, "");
+  assert.equal(shown(page), "");
   land(page);
-  assert.equal(status(page)?.textContent, "Saved");
+  assert.equal(shown(page), "Saved");
 });

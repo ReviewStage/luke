@@ -1,0 +1,8 @@
+{
+  "apps/catalog/src/catalog.css": 1,
+  "packages/panel/src/admin/charts/chart-frame.tsx": 1,
+  "packages/panel/src/styles/desktop.css": 1,
+  "packages/panel/src/styles/tasks.css": 3,
+  "packages/ui/src/components/prose/prose.css": 6,
+  "packages/ui/src/components/public-page/public-page.css": 1
+}

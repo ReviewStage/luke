@@ -5,13 +5,13 @@ import type {
   AdminWorkspaceRow,
 } from "@luke/features/admin-answer-wire";
 import { ADMIN_READ, ADMIN_USERS_SEARCH_MAX_LENGTH } from "@luke/features/admin-wire";
-import { GITHUB_INSTALLATION_STATUS } from "@luke/features/github-installation-wire";
 import { INTEGRATION_ROW_STATUS } from "@luke/features/integration-row-wire";
 import { INTEGRATION_NAME } from "@luke/features/integration-wire";
+import { formatCount, formatPercent } from "@luke/features/number-format";
+import { formatDate } from "@luke/features/time-format";
+import { type Noun, noMatchWords, noneYetWords, readingWords } from "@luke/features/words";
 import {
-  BADGE_TONE,
   Badge,
-  type BadgeTone,
   COLLECTION_STATE,
   DATA_TABLE_COLUMN_KIND,
   DATA_TABLE_MIN_WIDTH,
@@ -20,13 +20,14 @@ import {
   GAP,
   Inline,
   SearchField,
+  STATUS_TONE,
   Stack,
   TEXT_ELEMENT,
   TEXT_TONE,
   TEXT_VARIANT,
   Text,
 } from "@luke/ui";
-import { formatCount, formatDate } from "@luke/ui/time-format";
+import { matchesTokens, searchTokens } from "@luke/ui/search-tokens";
 import { useEffect, useState } from "react";
 import { AccountCell, AccountCellSkeleton } from "../accounts-table/accounts-table.js";
 import { useAdminDoors } from "../admin-doors.js";
@@ -41,6 +42,12 @@ import {
 import { DataTableSkeleton } from "../chrome/table-skeleton.js";
 import { WORKSPACES_SHARED_ONLY } from "../prefs.js";
 import { SEARCH_DEBOUNCE_MS, searchTerm, workspacesReadQuery } from "../routing.js";
+import {
+  connectionTone,
+  connectionWord,
+  INSTALLATION_LABEL,
+  INSTALLATION_TONE,
+} from "../status-words.js";
 import { useAdminRead } from "../use-admin-read.js";
 
 /**
@@ -55,7 +62,12 @@ import { useAdminRead } from "../use-admin-read.js";
 
 const WORKSPACES_ERROR = "The workspaces endpoint did not answer.";
 
-const WORKSPACES_EMPTY = "No workspace matches.";
+const WORKSPACE: Noun = { one: "workspace", many: "workspaces" };
+
+/** What the table says when no workspace answers the search, and when it holds none. */
+function workspacesEmpty(searched: boolean): string {
+  return searched ? noMatchWords(WORKSPACE) : noneYetWords(WORKSPACE);
+}
 
 /** The table's columns by key; a fixed set, so a heading never carries a free string. */
 const WORKSPACE_COLUMN = {
@@ -71,24 +83,6 @@ const WORKSPACE_COLUMN = {
 } as const;
 
 type WorkspaceColumnKey = (typeof WORKSPACE_COLUMN)[keyof typeof WORKSPACE_COLUMN];
-
-/** The tone each installation status is drawn in: working, held, or gone. */
-const INSTALLATION_TONE = {
-  [GITHUB_INSTALLATION_STATUS.ACTIVE]: BADGE_TONE.COMPLETE,
-  [GITHUB_INSTALLATION_STATUS.SUSPENDED]: BADGE_TONE.ATTENTION,
-  [GITHUB_INSTALLATION_STATUS.DELETED]: BADGE_TONE.NEUTRAL,
-} as const satisfies Record<AdminWorkspaceInstallation["status"], BadgeTone>;
-
-const INSTALLATION_LABEL = {
-  [GITHUB_INSTALLATION_STATUS.ACTIVE]: "Active",
-  [GITHUB_INSTALLATION_STATUS.SUSPENDED]: "Suspended",
-  [GITHUB_INSTALLATION_STATUS.DELETED]: "Uninstalled",
-} as const satisfies Record<AdminWorkspaceInstallation["status"], string>;
-
-/** A share drawn as a whole percent, or a dash where there was nothing to share out. */
-function formatShare(share: number | null): string {
-  return share === null ? "—" : `${Math.round(share * 100)}%`;
-}
 
 function InstallationsCell({
   installations,
@@ -133,17 +127,10 @@ function IntegrationsCell({
   return (
     <Inline gap={GAP.ICON}>
       {integrations.map((integration) => (
-        <Badge
-          key={integration.provider}
-          tone={
-            integration.status === INTEGRATION_ROW_STATUS.EXPIRED
-              ? BADGE_TONE.ATTENTION
-              : BADGE_TONE.NEUTRAL
-          }
-        >
-          {integration.status === INTEGRATION_ROW_STATUS.EXPIRED
-            ? `${INTEGRATION_NAME[integration.provider]} · expired`
-            : INTEGRATION_NAME[integration.provider]}
+        <Badge key={integration.provider} tone={connectionTone(integration.status)}>
+          {integration.status === INTEGRATION_ROW_STATUS.CONNECTED
+            ? INTEGRATION_NAME[integration.provider]
+            : `${INTEGRATION_NAME[integration.provider]} · ${connectionWord(integration.status)}`}
         </Badge>
       ))}
     </Inline>
@@ -172,7 +159,7 @@ function workspaceColumns(
           <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.LABEL}>
             {row.name}
           </Text>
-          {row.personal ? <Badge tone={BADGE_TONE.NEUTRAL}>Personal</Badge> : null}
+          {row.personal ? <Badge tone={STATUS_TONE.NEUTRAL}>Personal</Badge> : null}
         </Inline>
       ),
     },
@@ -218,13 +205,13 @@ const WORKSPACE_STATS: readonly StatSpec<AdminWorkspaceList>[] = [
     label: () => "Active this week",
     value: ({ summary }) => formatCount(summary.sharedActiveWeek),
     hint: ({ summary }) =>
-      `${formatShare(summary.shared === 0 ? null : summary.sharedActiveWeek / summary.shared)} of shared`,
+      `${formatPercent(summary.shared === 0 ? null : summary.sharedActiveWeek / summary.shared)} of shared`,
     title: () => "A task or coding agent started, or a plan revised, in the last 7 UTC days",
   },
   {
     key: "invites",
     label: () => "Invites accepted",
-    value: ({ summary }) => formatShare(summary.invitations.acceptanceRate),
+    value: ({ summary }) => formatPercent(summary.invitations.acceptanceRate),
     hint: ({ summary }) =>
       `${formatCount(summary.invitations.pending)} pending · ${formatCount(summary.invitations.expired)} expired`,
     title: ({ summary }) =>
@@ -233,7 +220,7 @@ const WORKSPACE_STATS: readonly StatSpec<AdminWorkspaceList>[] = [
   {
     key: "github",
     label: () => "With GitHub installed",
-    value: ({ summary }) => formatShare(summary.github.activeShare),
+    value: ({ summary }) => formatPercent(summary.github.activeShare),
     hint: ({ summary }) => `${formatCount(summary.github.sharedWithSuspended)} suspended`,
     title: ({ summary }) =>
       `${formatCount(summary.github.sharedWithActive)} shared workspaces with an active installation`,
@@ -266,10 +253,13 @@ function WorkspacesNote({ list }: { list: AdminWorkspaceList }): React.JSX.Eleme
 function WorkspacesSections({
   list,
   rows,
+  searched,
   onOpenAccount,
 }: {
   list: AdminWorkspaceList | undefined;
   rows: readonly AdminWorkspaceRow[];
+  /** Whether the box holds a search, which is what an empty table is worded by. */
+  searched: boolean;
   onOpenAccount: (id: string) => void;
 }): React.JSX.Element {
   return (
@@ -291,7 +281,7 @@ function WorkspacesSections({
               columns={workspaceColumns(onOpenAccount)}
               rows={rows}
               rowKey={(row) => row.id}
-              empty={WORKSPACES_EMPTY}
+              empty={workspacesEmpty(searched)}
               minWidth={DATA_TABLE_MIN_WIDTH.WIDE}
               rowPressable={(row) => row.owner !== null}
               onRowPress={(row) => {
@@ -365,7 +355,7 @@ export function WorkspacesScreen({
             onSharedOnlyChange={changeSharedOnly}
           />
         }
-        loadingLabel="Loading…"
+        loadingLabel={readingWords("workspaces")}
         {...content}
       />,
     );
@@ -396,16 +386,22 @@ export function WorkspacesScreen({
         state: COLLECTION_STATE.LOADING,
         skeleton: (
           <PageSections>
-            <WorkspacesSections list={undefined} rows={[]} onOpenAccount={onOpenAccount} />
+            <WorkspacesSections
+              list={undefined}
+              rows={[]}
+              searched={false}
+              onOpenAccount={onOpenAccount}
+            />
           </PageSections>
         ),
       }),
     failed: (error) => page({ filters: search, state: COLLECTION_STATE.ERROR, error }),
     ready: (list, refreshed) => {
-      const needle = query.trim().toLowerCase();
-      const rows = needle
-        ? list.rows.filter((row) => row.name.toLowerCase().includes(needle))
-        : list.rows;
+      const tokens = searchTokens(query);
+      const rows =
+        tokens.length > 0
+          ? list.rows.filter((row) => matchesTokens([row.name], tokens))
+          : list.rows;
       return page({
         filters: (
           <>
@@ -420,7 +416,12 @@ export function WorkspacesScreen({
         // under the tiles, as the Users roster's does.
         state: COLLECTION_STATE.READY,
         children: refreshed(
-          <WorkspacesSections list={list} rows={rows} onOpenAccount={onOpenAccount} />,
+          <WorkspacesSections
+            list={list}
+            rows={rows}
+            searched={tokens.length > 0 || list.search !== undefined}
+            onOpenAccount={onOpenAccount}
+          />,
         ),
       });
     },

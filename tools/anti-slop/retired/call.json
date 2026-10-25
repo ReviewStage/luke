@@ -1,0 +1,15 @@
+{
+  "instead": "Draw a call's controls with CallBar, CallMute, VideoToggle, CallVideoTile and CallLive from @luke/ui, and the voice's notices as toasts (voice-notice-toast.ts).",
+  "classes": [
+    { "class": "call-bar", "allow": ["packages/ui/src/components/call/"] },
+    { "class": "call-controls", "allow": ["packages/ui/src/components/call/"] },
+    { "class": "call-mutes", "allow": ["packages/ui/src/components/call/"] },
+    { "class": "call-status*", "allow": ["packages/ui/src/components/call/"] },
+    { "class": "call-backend*", "allow": ["packages/ui/src/components/call/"] },
+    { "class": "call-video-*", "allow": ["packages/ui/src/components/call/"] },
+    { "class": "voice-notice", "allow": [] },
+    { "class": "voice-notice-row", "allow": [] },
+    { "class": "voice-notice-text", "allow": [] },
+    { "class": "agent-call-notice", "allow": ["packages/ui/src/components/call/"] }
+  ]
+}

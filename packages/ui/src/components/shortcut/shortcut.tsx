@@ -1,8 +1,14 @@
-import { type ShortcutChord, shortcutAccelerator, shortcutGlyphs } from "@luke/settings/shortcuts";
+import {
+  COMMAND_KEY,
+  commandKeyNow,
+  type ShortcutChord,
+  shortcutAccelerator,
+  shortcutGlyphs,
+} from "@luke/settings/shortcuts";
 import { cn } from "../../cn.js";
 
 /**
- * shortcut.tsx -- a chord as the window draws it everywhere: its glyphs set tight and muted, ⇧⌘I, the way a Mac menu prints a key equivalent.
+ * shortcut.tsx -- a chord as the window draws it everywhere: its glyphs set tight and muted, ⇧⌘I, the way a Mac menu prints a key equivalent, or its words spaced, Ctrl Shift I, where Command is Ctrl.
  *
  * One look in every place a chord is shown — a hover, a menu, a sidebar
  * row, ⌘K and its foot, a button, and the Keyboard shortcuts page — so a
@@ -10,7 +16,10 @@ import { cn } from "../../cn.js";
  * loud (`--luke-shortcut-text`, `--luke-shortcut-ink`), never draws it some
  * other way. Each key is a glyph of its own (`luke-shortcut-glyph`), so the
  * stylesheet can set a modifier and a letter on one line and centre the
- * chord on the words beside it.
+ * chord on the words beside it. Where the window's command key is Ctrl, in a
+ * browser on Windows or Linux (`COMMAND_KEY`), the modifiers are words, and
+ * words set tight would run together, so the chord says so (`data-words`)
+ * and the stylesheet spaces them.
  *
  * Its words are text like any other, so the session recording masks them with
  * the rest.
@@ -45,6 +54,7 @@ export function Shortcut(
     <kbd
       className={cn("luke-shortcut", props.className)}
       data-value={props.value === true ? "" : undefined}
+      data-words={commandKeyNow() === COMMAND_KEY.CONTROL ? "" : undefined}
       aria-hidden={props.spoken === true ? undefined : "true"}
     >
       {shortcutGlyphs(accelerator).map((glyph) => (

@@ -33,6 +33,7 @@ import {
   type PullRequestMoment,
 } from "./automation-wire.js";
 import type { ModelChoice } from "./models-wire.js";
+import { formatCount } from "./number-format.js";
 import {
   SENTRY_TRIGGER_EVENT,
   type SentryTriggerEvent,
@@ -304,14 +305,17 @@ function guardsOf(draft: AutomationDraft): AutomationGuards | null {
   };
 }
 
-/** Whether an integration trigger's filters are each within the wire's bounds: so many values, each so long. */
-function filtersAdmitted(filters: IntegrationTriggerFilters | undefined): boolean {
-  const fields = [filters?.project, filters?.environment, filters?.level];
-  return fields.every(
-    (values = []) =>
-      values.length <= AUTOMATION_BOUNDS.MAX_FILTER_VALUES &&
-      values.every((value) => value.length <= AUTOMATION_BOUNDS.MAX_FILTER_VALUE_CHARS),
+/** Whether one integration filter's values are within the wire's bounds: so many values, each so long. */
+export function filterAdmitted(values: readonly string[] = []): boolean {
+  return (
+    values.length <= AUTOMATION_BOUNDS.MAX_FILTER_VALUES &&
+    values.every((value) => value.length <= AUTOMATION_BOUNDS.MAX_FILTER_VALUE_CHARS)
   );
+}
+
+/** Whether an integration trigger's filters are each within the wire's bounds. */
+function filtersAdmitted(filters: IntegrationTriggerFilters | undefined): boolean {
+  return [filters?.project, filters?.environment, filters?.level].every(filterAdmitted);
 }
 
 /** The trigger a draft writes: its schedule's cron and zone, its GitHub event with the filters it kept, its webhook, or its integration's event. */
@@ -487,14 +491,14 @@ export function draftProblems(draft: AutomationDraft, held: boolean, now: Date):
   const name = textProblem(
     draft.name,
     AUTOMATION_BOUNDS.MAX_NAME_CHARS,
-    "Name it.",
+    "Name the automation.",
     `Keep the name under ${AUTOMATION_BOUNDS.MAX_NAME_CHARS} characters.`,
   );
   const prompt = textProblem(
     draft.prompt,
     AUTOMATION_BOUNDS.MAX_PROMPT_CHARS,
     "Tell the agent what to do.",
-    `Keep the prompt under ${AUTOMATION_BOUNDS.MAX_PROMPT_CHARS.toLocaleString("en-US")} characters.`,
+    `Keep the prompt under ${formatCount(AUTOMATION_BOUNDS.MAX_PROMPT_CHARS)} characters.`,
   );
   const read = readSchedule({ cron: cronOf(draft.schedule), timezone: draft.timezone }, now);
   const schedule =

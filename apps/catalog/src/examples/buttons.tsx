@@ -7,13 +7,13 @@ import {
   Button,
   ButtonLink,
   CloseIcon,
-  EllipsisIcon,
   GAP,
   IconButton,
   IconButtonLink,
   Inline,
   MicrophoneIcon,
   MicrophoneOffIcon,
+  MoreButton,
   PinIcon,
   PlusIcon,
   RetryIcon,
@@ -133,11 +133,11 @@ function Buttons(): React.JSX.Element {
       </CatalogSection>
       <CatalogSection id="buttons-icon" title="Glyph alone">
         <Inline>
-          <IconButton icon={<EllipsisIcon />} label="More" />
+          <MoreButton thing="Task" />
           <IconButton icon={<SidebarIcon />} label="Sidebar" pressed />
           <IconButton icon={<PlusIcon />} label="New task" variant={BUTTON_VARIANT.OUTLINE} />
           <IconButton icon={<TrashIcon />} label="Delete" disabled />
-          <IconButton icon={<EllipsisIcon />} label="Loading" busy busyLabel="Loading" />
+          <IconButton icon={<PinIcon />} label="Pin" busy busyLabel="Pinning" />
         </Inline>
       </CatalogSection>
       <CatalogSection id="buttons-link" title="As a link">
@@ -185,7 +185,7 @@ function Buttons(): React.JSX.Element {
         <Inline gap={GAP.TIGHT}>
           <IconButton icon={<PinIcon />} label="Pin" size={BUTTON_SIZE.COMPACT} />
           <IconButton icon={<ArchiveIcon />} label="Archive" size={BUTTON_SIZE.COMPACT} />
-          <IconButton icon={<EllipsisIcon />} label="Actions" size={BUTTON_SIZE.COMPACT} />
+          <MoreButton thing="Task" size={BUTTON_SIZE.COMPACT} />
           <IconButton icon={<PinIcon />} label="Pin" size={BUTTON_SIZE.COMPACT} disabled />
         </Inline>
       </CatalogSection>

@@ -6,7 +6,6 @@ import {
   CHOICE_FLOW,
   CHOICE_LOOK,
   CHOICE_SELECT,
-  CHOICE_TONE,
   Checkbox,
   CheckIcon,
   type ChoiceFlow,
@@ -16,6 +15,7 @@ import {
   type ChoiceSelect,
   GAP,
   Inline,
+  STATUS_TONE,
   Stack,
   SteppedBack,
   Text,
@@ -57,8 +57,8 @@ const CHANNELS: readonly ChoiceOption<string>[] = [
 ];
 
 const DECISIONS: readonly ChoiceOption<string>[] = [
-  { value: "approve", label: "Approve", tone: CHOICE_TONE.COMPLETE },
-  { value: "decline", label: "Decline", tone: CHOICE_TONE.DANGER },
+  { value: "approve", label: "Approve", tone: STATUS_TONE.COMPLETE },
+  { value: "decline", label: "Decline", tone: STATUS_TONE.DANGER },
 ];
 
 const WORKSPACES: readonly ChoiceOption<string>[] = [
@@ -72,7 +72,7 @@ const WORKSPACES: readonly ChoiceOption<string>[] = [
   {
     value: "globex",
     label: "Globex",
-    detail: "No GitHub connected · can’t reach acme/api",
+    detail: "No GitHub connected · cannot reach acme/api",
     mark: <Avatar name="Globex" decorative />,
     disabled: true,
   },

@@ -11,16 +11,16 @@ import { Label } from "./label.js";
  * `FieldLabel`, `FieldDescription`, `FieldError`); a field is one
  * orientation, its parts one under another, so `Field` takes no
  * `orientation` and draws no `role="group"`, which an unnamed field would
- * only add to a reader's tree; and `FieldError`
- * always stands, as a polite live region in place of `role="alert"`, empty
- * until it says something, because a reader announces a region filling more
- * surely than one arriving, and its words are what the caller says rather
- * than a list of validation errors. The classes are Luke's: the parts six
+ * only add to a reader's tree; and `FieldError` always stands, with no
+ * `role="alert"`, empty until it says something, its words what the caller
+ * says rather than a list of validation errors, which `ErrorLine` says
+ * through the window's `Announcer` rather than a live region of its own. The classes are Luke's: the parts six
  * apart, the description in the muted caption, and the error in the danger
- * ink, dropping into its line as it arrives and giving back its gap while
- * empty. None of shadcn's ring utilities (`shadcn-focus.test.ts`).
- * `@luke/ui`'s `FormField` (`components/form-field`) is what an app draws;
- * this is its inside.
+ * ink, dropping into its line as it arrives and, while empty, standing out
+ * of the flow, so it gives back the gap before it in whatever stack holds it.
+ * None of shadcn's ring utilities (`shadcn-focus.test.ts`). `@luke/ui`'s
+ * `FormField` (`components/form-field`) is what an app draws, and its
+ * `ErrorLine` (`components/error-line`) the error alone; this is their inside.
  */
 
 export function Field({ className, ...props }: React.ComponentProps<"div">) {
@@ -42,7 +42,7 @@ export function FieldDescription({ className, ...props }: React.ComponentProps<"
     <p
       data-slot="field-description"
       className={cn(
-        "m-0 font-body text-caption font-normal text-muted-foreground wrap-anywhere",
+        "m-0 font-body text-caption font-text text-muted-foreground wrap-anywhere",
         className,
       )}
       {...props}
@@ -53,10 +53,9 @@ export function FieldDescription({ className, ...props }: React.ComponentProps<"
 export function FieldError({ className, ...props }: React.ComponentProps<"p">) {
   return (
     <p
-      aria-live="polite"
       data-slot="field-error"
       className={cn(
-        "m-0 font-body text-caption font-normal text-danger wrap-anywhere not-empty:animate-drop-in empty:-mt-luke-6",
+        "m-0 font-body text-caption font-text text-danger wrap-anywhere not-empty:animate-drop-in empty:absolute",
         className,
       )}
       {...props}

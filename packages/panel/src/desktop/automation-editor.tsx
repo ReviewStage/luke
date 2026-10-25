@@ -18,6 +18,7 @@ import {
   draftProblems,
   draftRepositories,
   draftTrigger,
+  filterAdmitted,
   filterValuesOf,
   type GitHubTriggerSettings,
   presetDraft,
@@ -58,6 +59,7 @@ import {
   PULL_REQUEST_MOMENT,
   type PullRequestMoment,
 } from "@luke/features/automation-wire";
+import { readerZone } from "@luke/features/date-mention";
 import {
   INTEGRATION_NAME,
   INTEGRATION_PROVIDER_LIST,
@@ -65,22 +67,31 @@ import {
   type IntegrationProvider,
   integrationConnectionOf,
 } from "@luke/features/integration-wire";
-import { LINK_PLACE } from "@luke/features/luke-link";
+import { LINK_PLACE } from "@luke/features/link-grammar";
 import type { ModelChoice } from "@luke/features/models-wire";
 import type { WorkspaceSentry } from "@luke/features/sentry-install-wire";
+import { dayAndTimeText, timeZoneNames } from "@luke/features/time-format";
 import {
   SENTRY_LEVEL,
   SENTRY_TRIGGER_EVENT,
   type SentryLevel,
   type SentryTriggerEvent,
 } from "@luke/features/trigger-catalog";
-import { andList, noMatchWords, TERM } from "@luke/features/words";
+import {
+  andList,
+  INTEGRATION_LABEL,
+  IRREVERSIBLE_WORDS,
+  noMatchWords,
+  readFailedWords,
+  readingWords,
+  TERM,
+} from "@luke/features/words";
 import type { Workspace } from "@luke/features/workspace-wire";
 import { EXPERIMENT } from "@luke/settings";
 import { SETTINGS_VIEW } from "@luke/settings/settings-views";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
-  AnchoredPopover,
+  BackButton,
   BUTTON_VARIANT,
   Button,
   CHIP_LOOK,
@@ -90,17 +101,24 @@ import {
   Chip,
   ChipName,
   ChoiceList,
+  CONFIRM_LOSS,
   ConfirmDialog,
+  CopyButton,
   cssCustomProperties,
   DetailPage,
-  EllipsisIcon,
   ErrorState,
+  FailureNote,
   Fill,
   FoldingButton,
+  GAP,
   IconButton,
-  OneLine,
+  Inline,
+  MENU_ITEM_MARK,
+  MoreButton,
+  matchingRows,
+  moreLabel,
+  NO_CONTEXT_MENU,
   PAGE_FRAME,
-  PageToolbar,
   POPOVER_ALIGN,
   PROVIDER_MARK_SIZE,
   ProviderMark,
@@ -120,27 +138,29 @@ import {
   Skeleton,
   SkeletonRegion,
   Spinner,
+  STATUS_TONE,
   Switch,
   TEXT_ELEMENT,
   TEXT_FIELD_FONT,
-  TEXT_FIELD_SIZE,
   TEXT_FIELD_TYPE,
   TEXT_TONE,
   TEXT_VARIANT,
   Text,
   TextArea,
   TextField,
+  Toolbar,
+  type ToolbarPickUp,
   Tooltip,
   useConfirmDialog,
   useMenu,
-  wholeWordsHint,
 } from "@luke/ui";
 import { ACTOR_KIND, ACTOR_STATE } from "@luke/ui/actor-model";
-import { dayAndTimeText, localTimeZone, timeZoneNames } from "@luke/ui/time-format";
+import { GLYPH } from "@luke/ui/icons";
 import { useDisclosure } from "@luke/ui/use-disclosure";
+import { useOptimisticSettingWrite } from "@luke/ui/use-setting-write";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { Result } from "effect";
-import { ChevronRightIcon, HistoryIcon, PlayIcon, Trash2Icon, ZapIcon } from "lucide-react";
+import { HistoryIcon, PlayIcon, SaveIcon, ZapIcon } from "lucide-react";
 import {
   type ReactNode,
   type Ref,
@@ -152,12 +172,12 @@ import {
 } from "react";
 import { ActorMark, automationActor } from "../actor-ref.js";
 import { useAppCommand } from "../app-commands.js";
-import { CopyGlyph, copyHint, useCopyFeedback } from "../copy-feedback.js";
+import { useScreenRef, useScreenSplit } from "../column-split.js";
+import { copyThroughShell } from "../copy-feedback.js";
 import { useCopyLinkItem } from "../copy-link-item.js";
-import { ExperimentTag, SendFeedbackButton } from "../experiment-marks.js";
+import { ExperimentTag, SendFeedbackButton, useSendFeedbackItem } from "../experiment-marks.js";
 import { useIntegrationStatuses } from "../integration-statuses.js";
 import { useOpenSettings } from "../open-settings.js";
-import { matchingRows } from "../searchable-menu.js";
 import { Picker, PickerRow } from "../settings/picker-row.js";
 import { SelectRow } from "../settings/select-row.js";
 import { SwitchRow } from "../settings/switch-row.js";
@@ -171,13 +191,16 @@ import { CHIP_PLACE, RepositoryChip, type RepositoryChooser } from "../tasks/rep
 import { mentionableAgent } from "../tasks/task-mentions.js";
 import { useKnownNames } from "../tasks/use-known-names.js";
 import type { LeaveAsk, LeaveGuard } from "../tasks/use-tasks-tab.js";
+import { TOAST_HOLD, useToast } from "../toast.js";
 import { useExperiment } from "../use-app-state.js";
 import { ActionMenu, type MenuAction } from "./action-menu.js";
 import { OWNER_MARK_SIZE, OwnerMark } from "./automation-owner.js";
 import { AutomationRunsPanel, AutomationRunsScreen } from "./automation-runs-panel.js";
+import { automationDeleteQuestion, automationOwnerName } from "./automation-words.js";
 import { useRunsPanel } from "./folded-groups.js";
 import { type NarrowColumns, useNarrowFocus } from "./narrow-focus.js";
 import { PaneGlide } from "./pane-motion.js";
+import { PhoneHead } from "./phone-head.js";
 import { useAutomationRuns } from "./use-automation-runs.js";
 import { type RunChoices, useRunChoices } from "./use-run-choices.js";
 
@@ -190,7 +213,7 @@ import { type RunChoices, useRunChoices } from "./use-run-choices.js";
  * setting and why on the left and its control on the right, every pick a
  * Settings picker on the window's menu and every yes or no a switch. Who
  * owns it is the form's first row, wherever a team workspace offers the
- * choice: Personal under the account's own picture, or the workspace under
+ * choice: Only you under the account's own picture, or the workspace under
  * its photo (`automation-owner.tsx`). Where its runs land is picked: a new agent each
  * run, on the agent box's model chip and archived once it succeeds where
  * asked, or the same agent, chosen from the workspace's agents on its
@@ -211,11 +234,14 @@ import { type RunChoices, useRunChoices } from "./use-run-choices.js";
 
 /**
  * The workspace's Sentry as the editor offers it: the read, nothing while
- * it is out or where it failed, and the install, with whether one is under
- * way and why the last was refused.
+ * it is out or where it failed, whether it failed with the Retry that asks
+ * again, and the install, with whether one is under way and why the last
+ * was refused.
  */
 export interface SentryOffer {
   readonly read: WorkspaceSentry | undefined;
+  readonly failed: boolean;
+  readonly onRetry: () => void;
   readonly installing: boolean;
   readonly refusal: string | undefined;
   readonly onInstall: () => void;
@@ -243,7 +269,10 @@ function sentryWithheld(
 const SENTRY_NOT_SET_UP = "Not set up on this deployment yet";
 
 /** What the page says where a Sentry trigger is held back from saving. */
-const SENTRY_WITHHELD = "Luke can't receive Sentry events here. Choose another trigger.";
+const SENTRY_WITHHELD = "Luke cannot receive Sentry events here. Choose another trigger.";
+
+/** What the Trigger card says where the read of the workspace's Sentry did not land. */
+const SENTRY_UNREAD = readFailedWords("the workspace's Sentry");
 
 /** The writes the editor makes, as the list's hook answers them (`use-automations.ts`). */
 export interface AutomationWrites {
@@ -333,13 +362,13 @@ const NO_MATCH = {
 
 /** Why a save the service refused did not land, as the line under the name says it. */
 const SAVE_REFUSAL_WORDS = {
-  [AUTOMATION_CALL_FAILURE.UNANSWERED]: "Couldn't save it. Try again.",
+  [AUTOMATION_CALL_FAILURE.UNANSWERED]: "The automation could not be saved. Try again.",
   [AUTOMATION_CALL_FAILURE.NOT_FOUND]: "This automation, or its workspace, is gone.",
   [AUTOMATION_CALL_FAILURE.NO_REPOSITORY]: "Choose the repository it works in.",
   [AUTOMATION_CALL_FAILURE.REPOSITORY_NOT_REACHABLE]:
-    "Luke can't reach that repository from this workspace on GitHub.",
+    "Luke cannot reach that repository from this workspace on GitHub.",
   [AUTOMATION_CALL_FAILURE.INVALID]:
-    "Luke couldn't save it as written. Check its schedule and prompt.",
+    "The automation could not be saved as written. Check its schedule and prompt.",
   [AUTOMATION_CALL_FAILURE.NOT_PERMITTED]:
     "Only its creator, or the workspace's owners and admins, can change it.",
 } as const satisfies Record<AutomationCallFailure, string>;
@@ -347,12 +376,83 @@ const SAVE_REFUSAL_WORDS = {
 /** Why a Run now did not start a run, as the line under the name says it. */
 const RUN_REFUSAL_WORDS = {
   ...SAVE_REFUSAL_WORDS,
-  [AUTOMATION_CALL_FAILURE.UNANSWERED]: "Couldn't run it now. Try again.",
+  [AUTOMATION_CALL_FAILURE.UNANSWERED]: "Could not run it now. Try again.",
   [AUTOMATION_CALL_FAILURE.NOT_PERMITTED]:
     "Only its creator, or the workspace's owners and admins, can run it.",
 } as const satisfies Record<AutomationCallFailure, string>;
 
+/** Why a switch did not move, as its toast says it. */
+function toggleRefusal(answer: AutomationView, enabled: boolean): string | undefined {
+  if (!("failure" in answer)) return undefined;
+  if (answer.failure === AUTOMATION_CALL_FAILURE.NOT_PERMITTED) {
+    return SAVE_REFUSAL_WORDS[AUTOMATION_CALL_FAILURE.NOT_PERMITTED];
+  }
+  return enabled ? "Could not turn it on. Try again." : "Could not turn it off. Try again.";
+}
+
 const ACCEPTED: ActionResult = { status: ACTION_RESULT_STATUS.ACCEPTED };
+
+/**
+ * An automation's on/off switch, the list row's and the editor's alike. It
+ * flips at once, from a local value, and a write the service refuses puts it
+ * back and says why in a FAILED toast, as a settings switch does; it never
+ * rests for a write.
+ *
+ * Note that its writes go one at a time, because the service reads and writes
+ * each request on its own, so two in flight could commit in either order and
+ * leave the opposite of the last press. A press made while one is out waits for
+ * it, only the newest waiting press is sent, and one that would only repeat
+ * what the burst just sent is not.
+ */
+export function AutomationSwitch({
+  automation,
+  write,
+}: {
+  automation: AutomationSummary;
+  write: (enabled: boolean) => Promise<AutomationView>;
+}): React.JSX.Element {
+  const toast = useToast();
+  const tail = useRef<Promise<unknown>>(Promise.resolve());
+  const newest = useRef(0);
+  const sent = useRef<boolean | undefined>(undefined);
+  const send = (enabled: boolean, press: number): Promise<ActionResult> => {
+    if (press !== newest.current || sent.current === enabled) return Promise.resolve(ACCEPTED);
+    sent.current = enabled;
+    const settle = () => {
+      if (press === newest.current) sent.current = undefined;
+    };
+    return write(enabled).then(
+      (answer): ActionResult => {
+        const reason = toggleRefusal(answer, enabled);
+        if (reason !== undefined) sent.current = undefined;
+        settle();
+        return reason === undefined ? ACCEPTED : { status: ACTION_RESULT_STATUS.REJECTED, reason };
+      },
+      (error: unknown) => {
+        sent.current = undefined;
+        throw error;
+      },
+    );
+  };
+  const { value, run } = useOptimisticSettingWrite(
+    automation.enabled,
+    (enabled) => {
+      const press = ++newest.current;
+      const answered = tail.current.then(() => send(enabled, press));
+      tail.current = answered.catch(() => undefined);
+      return answered;
+    },
+    (words) => toast({ words, tone: STATUS_TONE.DANGER, hold: TOAST_HOLD.FAILED }),
+  );
+  return (
+    <Switch
+      checked={value}
+      label={value ? `Turn off ${automation.name}` : `Turn on ${automation.name}`}
+      onChange={run}
+      {...NO_CONTEXT_MENU}
+    />
+  );
+}
 
 /** A time of day as the time field holds it, the hour and minute in two figures each. */
 function clockValue(hour: number, minute: number): string {
@@ -378,18 +478,8 @@ function zoneLabel(zone: string): string {
   return zone.replaceAll("_", " ");
 }
 
-/** The zone this Mac is in, which a new automation runs in until another is chosen. */
-function windowZone(): string {
-  return localTimeZone();
-}
-
-/** An owner as the crumbs and the Owner row name it. */
-function ownerName(owner: AutomationScope, workspace: Workspace | undefined): string {
-  return owner === AUTOMATION_SCOPE.WORKSPACE ? (workspace?.name ?? "Workspace") : "Personal";
-}
-
 /**
- * Who owns it, the form's first row: Personal under the account's own
+ * Who owns it, the form's first row: Only you under the account's own
  * picture, or the workspace under its photo, on the chip and in its menu
  * alike.
  */
@@ -402,7 +492,7 @@ function OwnerRow({
 }: {
   owner: AutomationScope;
   owners: readonly { value: AutomationScope; label: string }[];
-  /** Whether the reading account made it, so Personal is drawn as its own; a new one is. */
+  /** Whether the reading account made it, so Only you is drawn as its own; a new one is. */
   mine: boolean;
   workspace: Workspace | undefined;
   onOwner: (owner: AutomationScope) => void;
@@ -418,7 +508,7 @@ function OwnerRow({
           : "Only you see and change it. Owners and admins can see it and turn it off."
       }
       value={owner}
-      valueLabel={ownerName(owner, workspace)}
+      valueLabel={automationOwnerName(owner, workspace?.name, mine)}
       valueIcon={
         <OwnerMark owner={owner} workspace={workspace} mine={mine} size={OWNER_MARK_SIZE.INLINE} />
       }
@@ -474,11 +564,11 @@ function ServersRow({
   if (!mine) {
     return (
       <SettingsRow
-        label="MCP servers"
+        label={INTEGRATION_LABEL.many}
         description={
           disabled.length === 0
-            ? "All of its creator's connected servers."
-            : `Its creator's connected servers, but ${andList(disabled.map(switchedOffName))} switched off.`
+            ? "All of its creator's connected integrations."
+            : `Its creator's connected integrations, but ${andList(disabled.map(switchedOffName))} switched off.`
         }
       >
         {() => null}
@@ -514,9 +604,9 @@ function UnreadServersRow({
   if (failed) {
     return (
       <SettingsRow
-        label="MCP servers"
+        label={INTEGRATION_LABEL.many}
         below={() => (
-          <ErrorState onRetry={onRetry}>Your connected servers could not be read.</ErrorState>
+          <ErrorState onRetry={onRetry}>Your connected integrations could not be read.</ErrorState>
         )}
       />
     );
@@ -527,9 +617,12 @@ function UnreadServersRow({
 /** The servers row while the connections are read: its name, and blocks where its words and its field chip will stand, claiming nothing. */
 function ServersRowSkeleton(): React.JSX.Element {
   return (
-    <SettingsRow label="MCP servers" description={<Skeleton width={SERVERS_DETAIL_SKELETON} />}>
+    <SettingsRow
+      label={INTEGRATION_LABEL.many}
+      description={<Skeleton width={SERVERS_DETAIL_SKELETON} />}
+    >
       {() => (
-        <SkeletonRegion label="Reading your connected servers…">
+        <SkeletonRegion label="Reading your connected integrations…">
           <SettingsControlSkeleton control={SETTINGS_SKELETON_CONTROL.SELECT} />
         </SkeletonRegion>
       )}
@@ -560,12 +653,12 @@ function OwnServersRow({
   const shown = on.slice(0, SERVERS_CHIP_MARKS);
   return (
     <SettingsRow
-      label="MCP servers"
+      label={INTEGRATION_LABEL.many}
       description={
         connected.length === 0
           ? "None connected yet."
           : off.length === 0
-            ? "Every connected server is on."
+            ? "Every connected integration is on."
             : `${namesSaid(off)} off.`
       }
     >
@@ -768,7 +861,7 @@ const PROMPT_ROWS = 5;
  * scheduled one, the kind most are, runs on a new agent each time: Sharing's
  * Owner; Trigger's Type, Repeats, Time, and Time zone; and Runs' Repository,
  * Runs land in, Model on the account's default, MCP servers, and Archive
- * successful runs, each with the words under its name where it says them.
+ * finished runs, each with the words under its name where it says them.
  */
 const SCHEDULED_ROWS = {
   [EDITOR_SECTION.SHARING]: [{ described: true, controls: [SETTINGS_SKELETON_CONTROL.SELECT] }],
@@ -788,11 +881,11 @@ const SCHEDULED_ROWS = {
   ],
 } as const satisfies Record<string, readonly SettingsRowSkeletonShape[]>;
 
-/** The automation's tile before its crumb, at an actor mark's inline size (`avatar.css`). */
-const SKELETON_CRUMB_MARK = "16px";
+/** The automation's tile before its name, at an actor mark's inline size (`avatar.css`). */
+const SKELETON_TITLE_MARK = "16px";
 
-/** How wide a placeholder page's name, and the crumb naming it, stand. */
-const SKELETON_NAME = { TITLE: "40%", CRUMB: "120px" } as const;
+/** How wide a placeholder page's name stands. */
+const SKELETON_NAME = { TITLE: "160px" } as const;
 
 /** How wide the placeholder toolbar's worded acts stand: where the draft stands, Run now, and Save. */
 const SKELETON_ACTS = { STATUS: "34px", RUN_NOW: "100px", SAVE: "56px" } as const;
@@ -806,35 +899,72 @@ const READING_AUTOMATION = "Reading the automation…";
 /** What a new automation's page is called until it is made. */
 const NEW_AUTOMATION = "New automation";
 
+/** The place above the editor, which its toolbar's first crumb names and goes back to. */
+const AUTOMATIONS_PLACE = "Automations";
+
+/** The page's title: the automation's tile beside its name, the page's one `h1`. */
+function EditorTitle({
+  automation,
+}: {
+  automation: AutomationSummary | undefined;
+}): React.JSX.Element {
+  return (
+    <Inline gap={GAP.CONTROL}>
+      <ActorMark
+        actor={
+          automation === undefined
+            ? { kind: ACTOR_KIND.AUTOMATION, name: NEW_AUTOMATION, state: ACTOR_STATE.REST }
+            : automationActor(automation)
+        }
+      />
+      {automation === undefined ? NEW_AUTOMATION : automation.name}
+    </Inline>
+  );
+}
+
 /** What the editor's ⋯ is called. */
-const ACTIONS_LABEL = "Automation actions";
+const ACTIONS_THING = "Automation";
 
 /** The editor's ⋯: Copy link, the automation's, where the page hands down a workspace, and Delete, red, which asks first. */
 function AutomationActions({
   automation,
   onDelete,
+  lead = [],
+  heading,
 }: {
-  automation: AutomationSummary;
+  /** The automation, whose link and Delete the menu offers; none on a new automation's page, a phone's alone. */
+  automation: AutomationSummary | undefined;
   onDelete: () => void;
+  /** Groups over the automation's own, as a phone's ⋯ leads with the toolbar's acts (`EditorToolbar`); none elsewhere. */
+  lead?: readonly MenuAction[][];
+  /** Muted over the items: where the draft stands, on a phone. */
+  heading?: ReactNode;
 }): React.JSX.Element {
   const menu = useMenu(true);
-  const copyLink = useCopyLinkItem()({ kind: LINK_PLACE.AUTOMATION, automationId: automation.id });
+  const linkItem = useCopyLinkItem();
+  const copyLink =
+    automation === undefined
+      ? undefined
+      : linkItem({ kind: LINK_PLACE.AUTOMATION, automationId: automation.id });
   const remove: MenuAction = {
     label: "Delete",
-    icon: <Trash2Icon />,
+    icon: <GLYPH.DELETE />,
     onSelect: onDelete,
     danger: true,
   };
   return (
     <>
-      <Tooltip label={ACTIONS_LABEL}>
-        <IconButton icon={<EllipsisIcon />} label={ACTIONS_LABEL} {...menu.trigger()} />
-      </Tooltip>
+      <MoreButton thing={ACTIONS_THING} {...menu.trigger()} />
       {menu.drawn === undefined ? null : (
         <ActionMenu
-          label={ACTIONS_LABEL}
+          label={moreLabel(ACTIONS_THING)}
           menu={menu.drawn}
-          groups={copyLink === undefined ? [[remove]] : [[copyLink], [remove]]}
+          heading={heading}
+          groups={[
+            ...lead,
+            ...(copyLink === undefined ? [] : [[copyLink]]),
+            ...(automation === undefined ? [] : [[remove]]),
+          ].filter((group) => group.length > 0)}
           onClose={menu.close}
         />
       )}
@@ -842,58 +972,33 @@ function AutomationActions({
   );
 }
 
-/** The crumb naming the automation, fading out at its end where the toolbar is narrow, the pointer reading `hint` whole. */
-function Crumb({
-  hint,
-  children,
-}: {
-  hint?: ReturnType<typeof wholeWordsHint> | undefined;
-  children: ReactNode;
-}): React.JSX.Element {
-  return (
-    <OneLine className="automation-crumb" hint={hint}>
-      {children}
-    </OneLine>
-  );
-}
-
-/** The crumb naming the automation by its name. */
-function CurrentCrumb({ name }: { name: string }): React.JSX.Element {
-  return <Crumb hint={wholeWordsHint(name)}>{name}</Crumb>;
-}
-
 /**
- * The editor's toolbar: the crumbs back to the list, ending in `crumb`, and
- * `tag` after them, with the page's acts at its end. Its own width, which a
- * container query reads, folds its acts' words before they crowd its crumbs.
+ * The editor's toolbar: the crumb back to the list leading it, the
+ * automation's name after it once the page's header has scrolled away
+ * (`pickUp`), and `tag` after that, with the page's acts at its end. Its own
+ * width, which a container query reads, folds its acts' words before they
+ * crowd its crumbs.
  */
 function EditorToolbarFrame({
-  crumb,
+  pickUp,
   tag,
   onBack,
   children,
 }: {
-  crumb: ReactNode;
+  pickUp: ToolbarPickUp;
   tag?: ReactNode;
   onBack: () => void;
   children: ReactNode;
 }): React.JSX.Element {
   return (
-    <PageToolbar
-      lead={
-        <div className="automation-toolbar">
-          <div className="desktop-toolbar-heading">
-            <nav className="automation-crumbs" aria-label="Path">
-              <FoldingButton label="Automations" icon={<ZapIcon />} onClick={onBack} />
-              <ChevronRightIcon aria-hidden="true" />
-              {crumb}
-            </nav>
-            {tag}
-          </div>
-          <div className="desktop-toolbar-actions">{children}</div>
-        </div>
-      }
-    />
+    <div className="automation-toolbar">
+      <Toolbar
+        trail={[{ label: AUTOMATIONS_PLACE, icon: <ZapIcon />, onPress: onBack }]}
+        pickUp={pickUp}
+        tag={tag}
+        actions={children}
+      />
+    </div>
   );
 }
 
@@ -914,12 +1019,28 @@ interface RunsControl {
   readonly onPress: () => void;
 }
 
+/** Where a phone's way back from an automation's page leads, as its hint names it. */
+const AUTOMATIONS_PLACE_NAME = "automations";
+
+/** A phone's way back from an automation's page to the list, the glyph alone in its corner, with the key that leaves Automations. */
+function AutomationsBack({ onBack }: { onBack: () => void }): React.JSX.Element {
+  return (
+    <BackButton
+      label={AUTOMATIONS_PLACE}
+      place={AUTOMATIONS_PLACE_NAME}
+      command={APP_COMMAND.EXIT_AUTOMATIONS}
+      onBack={onBack}
+    />
+  );
+}
+
 /** What the toolbar's way to a narrow room's runs says. */
 const RUNS_LABEL = "Runs";
 
 /** The editor's toolbar: the crumbs back to the list, then where the draft stands, its save, its switch, and its ⋯ holding Copy link and Delete. */
 function EditorToolbar({
   automation,
+  pickUp,
   codeReview,
   dirty,
   saving,
@@ -934,6 +1055,8 @@ function EditorToolbar({
   narrow,
 }: {
   automation: AutomationSummary | undefined;
+  /** The page's name as the bar picks it up from the header. */
+  pickUp: ToolbarPickUp;
   /** Whether it is a code review, an experiment still, whose page says so with the tag and Send feedback. */
   codeReview: boolean;
   dirty: boolean;
@@ -942,7 +1065,7 @@ function EditorToolbar({
   saveRefused: boolean;
   onBack: () => void;
   onSave: () => void;
-  onToggle: (enabled: boolean) => void;
+  onToggle: (enabled: boolean) => Promise<AutomationView>;
   onDelete: () => void;
   /** Whether a Run now is out. */
   running: boolean;
@@ -952,6 +1075,7 @@ function EditorToolbar({
   narrow: boolean;
 }): React.JSX.Element {
   const runsLabel = runs.shown ? "Hide runs" : "Show runs";
+  const feedback = useSendFeedbackItem(EXPERIMENT.CODE_REVIEW);
   const status =
     automation === undefined
       ? "Not created yet"
@@ -960,30 +1084,61 @@ function EditorToolbar({
         : dirty
           ? "Unsaved changes"
           : "Saved";
+  if (narrow) {
+    // A phone heads the page as it heads every page (`phone-head.tsx`): the way back to the list, the automation's
+    // name picked up from the page's header, and one ⋯ holding the toolbar's acts over the automation's own, where the draft stands its heading.
+    const lead: MenuAction[][] = [
+      [
+        {
+          label: automation === undefined ? "Create" : "Save",
+          icon: <SaveIcon />,
+          disabled: saving || !(automation === undefined || dirty),
+          onSelect: onSave,
+        },
+        ...(automation === undefined
+          ? []
+          : [{ label: "Run now", icon: <PlayIcon />, disabled: running, onSelect: onRunNow }]),
+      ],
+      automation === undefined
+        ? []
+        : [
+            {
+              label: automation.enabled ? "On" : "Off",
+              detail: automation.name,
+              checked: automation.enabled,
+              mark: MENU_ITEM_MARK.SWITCH,
+              onSelect: () => onToggle(!automation.enabled),
+            },
+          ],
+      [{ label: RUNS_LABEL, icon: <HistoryIcon />, onSelect: runs.onPress }],
+      codeReview ? [feedback] : [],
+    ];
+    return (
+      <PhoneHead
+        place="automation"
+        start={<AutomationsBack onBack={onBack} />}
+        pickUp={pickUp}
+        tag={codeReview ? <ExperimentTag narrow /> : null}
+        end={
+          <AutomationActions
+            automation={automation}
+            onDelete={onDelete}
+            lead={lead.filter((group) => group.length > 0)}
+            heading={status}
+          />
+        }
+      />
+    );
+  }
   return (
     <EditorToolbarFrame
-      crumb={
-        <>
-          <ActorMark
-            actor={
-              automation === undefined
-                ? { kind: ACTOR_KIND.AUTOMATION, name: NEW_AUTOMATION, state: ACTOR_STATE.REST }
-                : automationActor(automation)
-            }
-          />
-          <CurrentCrumb name={automation === undefined ? NEW_AUTOMATION : automation.name} />
-        </>
-      }
+      pickUp={pickUp}
       tag={codeReview ? <ExperimentTag narrow={narrow} /> : null}
       onBack={onBack}
     >
       {codeReview ? <SendFeedbackButton experiment={EXPERIMENT.CODE_REVIEW} /> : null}
       <EditorStatus>
-        <Text
-          variant={TEXT_VARIANT.CAPTION}
-          tone={dirty ? TEXT_TONE.MUTED : TEXT_TONE.SUBTLE}
-          as={TEXT_ELEMENT.SPAN}
-        >
+        <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED} as={TEXT_ELEMENT.SPAN}>
           {status}
         </Text>
       </EditorStatus>
@@ -992,7 +1147,8 @@ function EditorToolbar({
           label="Run now"
           icon={<PlayIcon />}
           variant={BUTTON_VARIANT.OUTLINE}
-          busy={running ? "Running" : undefined}
+          busy={running}
+          busyLabel="Starting"
           onClick={onRunNow}
         />
       )}
@@ -1004,17 +1160,11 @@ function EditorToolbar({
         disabled={!(automation === undefined || dirty)}
         onClick={onSave}
       >
-        {automation === undefined ? "Create" : "Save"}
+        {automation === undefined ? "Create automation" : "Save"}
       </Button>
       {automation === undefined ? null : (
         <>
-          <Switch
-            checked={automation.enabled}
-            label={
-              automation.enabled ? `Turn off ${automation.name}` : `Turn on ${automation.name}`
-            }
-            onChange={(enabled) => onToggle(enabled)}
-          />
+          <AutomationSwitch automation={automation} write={onToggle} />
           <AutomationActions automation={automation} onDelete={onDelete} />
         </>
       )}
@@ -1150,24 +1300,28 @@ function FilterRow({
   label,
   detail,
   values,
+  problem,
   onValues,
 }: {
   label: string;
   detail: string;
   values: readonly string[];
+  /** What stops a save in this filter, said under its row. */
+  problem: string | undefined;
   onValues: (values: readonly string[]) => void;
 }): React.JSX.Element {
   // The field's Escape lets go of the caret and keeps the press, as every field's here does.
   const field = useRef<HTMLInputElement>(null);
   const [text, setText] = useState(() => values.join(", "));
   return (
-    <SettingsRow label={label} description={detail}>
+    <SettingsRow label={label} description={detail} error={problem}>
       {(control) => (
         <span className="automation-field">
           <TextField
             ref={field}
             label={label}
             describedBy={control["aria-describedby"]}
+            invalid={control["aria-invalid"]}
             spellCheck={false}
             placeholder="All"
             value={text}
@@ -1197,7 +1351,7 @@ function SentryRows({
   draft,
   sentry,
   withheld,
-  problem,
+  problems,
   onDraft,
 }: {
   draft: AutomationDraft;
@@ -1205,8 +1359,8 @@ function SentryRows({
   sentry: SentryOffer;
   /** Whether the deployment holds no Sentry integration for this new choice of it (`sentryWithheld`). */
   withheld: boolean;
-  /** What stops a save in the cooldown, said under its row. */
-  problem: string | undefined;
+  /** What stops a save, each said under the row of the field it is about. */
+  problems: DraftProblems;
   onDraft: (patch: Partial<AutomationDraft>) => void;
 }): React.JSX.Element {
   // The cooldown's Escape lets go of the caret and keeps the press, as every field's here does.
@@ -1218,7 +1372,7 @@ function SentryRows({
       </SettingsRow>
     );
   }
-  // Note that a read still out, or one that failed, installs nothing, so an existing trigger stays editable.
+  // Note that a read still out, or one that failed, installs nothing, so an existing trigger stays editable, a failed one saying so above its rows.
   if (sentry.read !== undefined && sentry.read.installations.length === 0) {
     return (
       <SettingsRow label="Sentry isn't installed" error={sentry.refusal}>
@@ -1240,6 +1394,12 @@ function SentryRows({
     onDraft(withIntegrationFilters(draft, filters));
   return (
     <>
+      {sentry.failed ? (
+        <SettingsRow
+          label="Sentry"
+          below={() => <ErrorState onRetry={sentry.onRetry}>{SENTRY_UNREAD}</ErrorState>}
+        />
+      ) : null}
       <SelectRow
         width={CHIP_WIDTH.MIN_FIELD}
         label="Event"
@@ -1253,12 +1413,18 @@ function SentryRows({
         label="Projects"
         detail="Project slugs, comma-separated. Empty for every project."
         values={trigger.filters?.project ?? []}
+        problem={
+          filterAdmitted(trigger.filters?.project) ? undefined : problems[DRAFT_FIELD.FILTERS]
+        }
         onValues={(project) => filter({ project })}
       />
       <FilterRow
         label="Environments"
         detail="Comma-separated. Empty for every environment."
         values={trigger.filters?.environment ?? []}
+        problem={
+          filterAdmitted(trigger.filters?.environment) ? undefined : problems[DRAFT_FIELD.FILTERS]
+        }
         onValues={(environment) => filter({ environment })}
       />
       <SettingsRow
@@ -1278,7 +1444,7 @@ function SentryRows({
       <SettingsRow
         label="Same issue again after"
         description={`Hours before one Sentry issue can start another run, from 1 to ${AUTOMATION_BOUNDS.MAX_SUBJECT_COOLDOWN_HOURS}.`}
-        error={problem}
+        error={problems[DRAFT_FIELD.COOLDOWN]}
       >
         {(control) => (
           <span className="automation-field">
@@ -1376,7 +1542,7 @@ function CodeReviewGroup({
 /** Why a new secret could not be made, as its dialog says it. */
 const NEW_SECRET_REFUSAL_WORDS = {
   ...SAVE_REFUSAL_WORDS,
-  [AUTOMATION_CALL_FAILURE.UNANSWERED]: "Couldn't make a new secret. Try again.",
+  [AUTOMATION_CALL_FAILURE.UNANSWERED]: "The secret could not be made. Try again.",
 } as const satisfies Record<AutomationCallFailure, string>;
 
 /**
@@ -1393,7 +1559,6 @@ function ShownSecretRow({
   secret: string;
   onDone: () => void;
 }): React.JSX.Element {
-  const copy = useCopyFeedback();
   return (
     <div className="ph-no-capture">
       <SettingsRow
@@ -1412,11 +1577,7 @@ function ShownSecretRow({
                 onChange={() => undefined}
               />
             </span>
-            <IconButton
-              icon={<CopyGlyph state={copy.state} />}
-              label={copyHint(copy.state, "Copy secret")}
-              onClick={() => copy.copy(secret)}
-            />
+            <CopyButton text={secret} what="secret" copy={copyThroughShell} />
             <Button onClick={onDone}>Done</Button>
           </>
         )}
@@ -1445,7 +1606,6 @@ function WebhookRows({
   secret: string | undefined;
   onSecret: (secret: string | undefined) => void;
 }): React.JSX.Element {
-  const address = useCopyFeedback();
   const rotation = useConfirmDialog(
     { subject: automation !== undefined, surfaceOpen: true },
     () => {
@@ -1499,11 +1659,7 @@ function WebhookRows({
                 onChange={() => undefined}
               />
             </span>
-            <IconButton
-              icon={<CopyGlyph state={address.state} />}
-              label={copyHint(address.state, "Copy address")}
-              onClick={() => address.copy(url)}
-            />
+            <CopyButton text={url} what="address" copy={copyThroughShell} />
           </>
         )}
       </SettingsRow>
@@ -1519,12 +1675,14 @@ function WebhookRows({
         <ShownSecretRow key={secret} secret={secret} onDone={() => onSecret(undefined)} />
       )}
       <ConfirmDialog
+        open
         confirm={rotation}
         question={{
           title: "Make a new secret?",
-          body: "The secret your sender uses now stops working until you give it the new one, which Luke shows you once.",
-          verb: "New secret",
+          body: `The secret your sender uses now stops working until you give it the new one, which Luke shows you once. ${IRREVERSIBLE_WORDS}`,
+          verb: "Make secret",
           running: "Making",
+          loss: CONFIRM_LOSS.IRREVERSIBLE,
         }}
       />
     </>
@@ -1544,10 +1702,13 @@ const TARGETS: readonly { value: AutomationTargetKind; label: string }[] = [
  */
 function ModelPicker({
   models,
+  modelsFailed,
   readModels,
   onChoose,
 }: {
   models: RunChoices["models"];
+  /** Whether the catalog could not be read, which the menu says with Retry. */
+  modelsFailed: boolean;
   /** Reads the catalog now, as the menu opens, so a catalog that failed to read is asked for again. */
   readModels: () => void;
   onChoose: (choice: ModelChoice) => void;
@@ -1579,24 +1740,24 @@ function ModelPicker({
         <ChipName>Choose a model</ChipName>
       </Chip>
       {drawn.mounted ? (
-        <AnchoredPopover align={POPOVER_ALIGN.END}>
-          <ModelMenu
-            leaving={drawn.leaving}
-            ref={drawn.ref}
-            id={menuId}
-            className="agent-model-menu"
-            models={models}
-            chosen={undefined}
-            onChoose={(choice) => {
-              onChoose(choice);
-              setOpen(false);
-            }}
-            onClose={close}
-            onLeave={(left) => {
-              if (!(left instanceof Node && root.current?.contains(left))) setOpen(false);
-            }}
-          />
-        </AnchoredPopover>
+        <ModelMenu
+          leaving={drawn.leaving}
+          ref={drawn.ref}
+          id={menuId}
+          align={POPOVER_ALIGN.END}
+          models={models}
+          failed={modelsFailed}
+          onRetry={readModels}
+          chosen={undefined}
+          onChoose={(choice) => {
+            onChoose(choice);
+            setOpen(false);
+          }}
+          onClose={close}
+          onLeave={(left) => {
+            if (!(left instanceof Node && root.current?.contains(left))) setOpen(false);
+          }}
+        />
       ) : null}
     </div>
   );
@@ -1605,10 +1766,13 @@ function ModelPicker({
 /** A new agent's model: the agent box's chip and menu at a form's look, on the account's default until one is chosen. */
 function ModelRow({
   draft,
+  mine,
   choices,
   onDraft,
 }: {
   draft: AutomationDraft;
+  /** Whether the reading account made it, so the catalog's marks of what its credentials lack are its runs' own. */
+  mine: boolean;
   choices: RunChoices;
   onDraft: (patch: Partial<AutomationDraft>) => void;
 }): React.JSX.Element {
@@ -1630,14 +1794,17 @@ function ModelRow({
           <AgentModelChip
             model={{ choice: shown, note: undefined, choose: (choice) => onDraft({ choice }) }}
             models={choices.models}
+            modelsFailed={choices.modelsFailed}
             readModels={choices.readModels}
             usage={undefined}
             look={CHIP_LOOK.FIELD}
             width={CHIP_WIDTH.MIN_FIELD}
+            startsNew={mine}
           />
         ) : choices.defaultFailed ? (
           <ModelPicker
             models={choices.models}
+            modelsFailed={choices.modelsFailed}
             readModels={choices.readModels}
             onChoose={(choice) => onDraft({ choice })}
           />
@@ -1650,8 +1817,9 @@ function ModelRow({
 /** What the agent picker names the saved agent the workspace's list no longer holds. */
 const KEPT_AGENT_LABEL = "The agent it goes to now";
 
-/** What the agent row says where the workspace's agents could not be read. */
-const AGENTS_UNREAD = "The workspace's agents could not be read.";
+/** What the agent row says where the workspace's agents could not be read, and where the search among them did not answer. */
+const AGENTS_UNREAD = readFailedWords("the workspace's agents");
+const AGENT_SEARCH_FAILED = readFailedWords("the search for agents");
 
 /** What the agent row says under its name. */
 const AGENT_DETAIL =
@@ -1681,7 +1849,15 @@ function AgentRow({
   problem: string | undefined;
   onDraft: (patch: Partial<AutomationDraft>) => void;
 }): React.JSX.Element {
-  const { agents, found, models, searched: words, searchAgents } = choices;
+  const {
+    agents,
+    found,
+    models,
+    searched: words,
+    searchAgents,
+    searchFailed,
+    retryAgents,
+  } = choices;
   const [picked, setPicked] = useState<MentionableAgent | undefined>(undefined);
   const known = useKnownNames();
   const place = useAgentRowPlace();
@@ -1692,10 +1868,9 @@ function AgentRow({
       <SettingsRow
         label="Agent"
         description={AGENT_DETAIL}
-        error={problem === undefined ? AGENTS_UNREAD : `${AGENTS_UNREAD} ${problem}`}
-      >
-        {() => null}
-      </SettingsRow>
+        error={problem}
+        below={() => <ErrorState onRetry={retryAgents}>{AGENTS_UNREAD}</ErrorState>}
+      />
     );
   }
   const offered = (agents?.agents ?? []).map((agent) =>
@@ -1748,8 +1923,12 @@ function AgentRow({
       rows={rows}
       placeholder="Search agents"
       note={
-        words !== "" ? undefined : agents === undefined ? (
-          <Spinner delay label="Loading agents" />
+        words !== "" ? (
+          searchFailed ? (
+            <ErrorState onRetry={retryAgents}>{AGENT_SEARCH_FAILED}</ErrorState>
+          ) : undefined
+        ) : agents === undefined ? (
+          <Spinner delay label={readingWords("agents")} />
         ) : rows.length === 0 ? (
           "No agents of this workspace work in it yet."
         ) : undefined
@@ -1847,14 +2026,14 @@ function RunsGroup({
             />
           ) : (
             <>
-              <ModelRow draft={draft} choices={choices} onDraft={onDraft} />
+              <ModelRow draft={draft} mine={mine} choices={choices} onDraft={onDraft} />
               <ServersRow
                 mine={mine}
                 disabled={draft.disabledServers}
                 onSwitch={(disabledServers) => onDraft({ disabledServers })}
               />
               <SwitchRow
-                label="Archive successful runs"
+                label="Archive finished runs"
                 detail="Its transcript and pull request are kept."
                 checked={draft.archiveSuccessful}
                 onChange={(archiveSuccessful) => onDraft({ archiveSuccessful })}
@@ -1927,8 +2106,12 @@ function EditorForm({
   // The form is the area its reveals move, so the groups under a trigger's rows glide as they unroll.
   const form = useRef<HTMLDivElement>(null);
   const workspaceName = workspace?.name ?? "Workspace";
+  const mine = automation === undefined || automation.mine === true;
   const owners = [
-    { value: AUTOMATION_SCOPE.PERSONAL, label: "Personal" },
+    {
+      value: AUTOMATION_SCOPE.PERSONAL,
+      label: automationOwnerName(AUTOMATION_SCOPE.PERSONAL, undefined, mine),
+    },
     { value: AUTOMATION_SCOPE.WORKSPACE, label: workspaceName },
   ] as const;
   return (
@@ -1939,7 +2122,7 @@ function EditorForm({
             <OwnerRow
               owner={draft.owner}
               owners={owners}
-              mine={automation === undefined || automation.mine === true}
+              mine={mine}
               workspace={workspace}
               onOwner={(owner) => onDraft({ owner })}
             />
@@ -1956,7 +2139,7 @@ function EditorForm({
             error={
               draft.triggerKind === AUTOMATION_TRIGGER.SCHEDULE
                 ? undefined
-                : (problems[DRAFT_FIELD.SCHEDULE] ?? problems[DRAFT_FIELD.FILTERS])
+                : problems[DRAFT_FIELD.SCHEDULE]
             }
             onChange={(triggerKind) => onDraft({ triggerKind })}
           />
@@ -1974,7 +2157,6 @@ function EditorForm({
                   <SelectRow
                     width={CHIP_WIDTH.MIN_FIELD}
                     label="Event"
-                    detail="Heard through the workspace's GitHub App."
                     value={draft.githubEvent}
                     options={GITHUB_EVENTS}
                     parse={githubEventOf}
@@ -1991,7 +2173,7 @@ function EditorForm({
                   draft={draft}
                   sentry={sentry}
                   withheld={sentryWithheld(sentry, automation, draft)}
-                  problem={problems[DRAFT_FIELD.COOLDOWN]}
+                  problems={problems}
                   onDraft={onDraft}
                 />
               ) : (
@@ -2051,26 +2233,31 @@ function AutomationPageFrame({
   screenRef,
   layoutRef,
   hidden,
+  title,
   toolbar,
   setup,
   beside,
   children,
 }: {
-  screenRef?: RefObject<HTMLDivElement | null> | undefined;
+  screenRef?: Ref<HTMLDivElement> | undefined;
   layoutRef?: RefObject<HTMLDivElement | null> | undefined;
   /** Whether the setup's screen is hidden, as a narrow room hides it while its runs stand. */
   hidden?: boolean | undefined;
-  toolbar: ReactNode;
+  /** The setup's header: the page's one `h1`. */
+  title: ReactNode;
+  /** The window's bar over the setup and what stands beside it, handed the name it picks up from the header once that has scrolled away. */
+  toolbar: (pickUp: ToolbarPickUp) => ReactNode;
   setup: ReactNode;
   beside: ReactNode;
   children?: ReactNode;
 }): React.JSX.Element {
+  const [pickUp, setPickUp] = useState<ToolbarPickUp>({ name: "", shown: false });
   return (
     <Fill ref={screenRef} className="automations-view">
       <Fill className="automation-editor-screen" hidden={hidden}>
-        {toolbar}
+        {toolbar(pickUp)}
         <div ref={layoutRef} className="automation-editor-layout">
-          <DetailPage frame={PAGE_FRAME.TOOLBAR} label="Automation">
+          <DetailPage frame={PAGE_FRAME.PAGE} title={title} onPickUp={setPickUp}>
             {setup}
           </DetailPage>
           {beside}
@@ -2116,7 +2303,7 @@ function PromptSkeleton(): React.JSX.Element {
 
 /**
  * The setup while the automation is read, as a scheduled one on a new agent
- * stands: its name in the title's type, then each group under its heading,
+ * stands: its name's field, then each group under its heading,
  * Sharing where the workspace is shared, its rows' words and controls as
  * blocks, and the prompt's field, so the editor lands where they stood.
  */
@@ -2124,9 +2311,7 @@ function EditorSkeleton({ offersOwner }: { offersOwner: boolean }): React.JSX.El
   return (
     <SkeletonRegion label={READING_AUTOMATION}>
       <AutomationSetup>
-        <Text variant={TEXT_VARIANT.TITLE} as={TEXT_ELEMENT.DIV}>
-          <Skeleton width={SKELETON_NAME.TITLE} />
-        </Text>
+        <Skeleton shape={SKELETON_SHAPE.CONTROL} />
         <AutomationForm>
           {offersOwner ? (
             <SettingsSection title={EDITOR_SECTION.SHARING}>
@@ -2187,20 +2372,26 @@ export function AutomationPageSkeleton({
   const runsPanel = useRunsPanel();
   return (
     <AutomationPageFrame
-      toolbar={
-        <EditorToolbarFrame
-          crumb={
-            <>
-              <Skeleton shape={SKELETON_SHAPE.CIRCLE} width={SKELETON_CRUMB_MARK} />
-              <Crumb>
-                <Skeleton width={SKELETON_NAME.CRUMB} />
-              </Crumb>
-            </>
-          }
-          onBack={onBack}
-        >
-          <EditorActsSkeleton />
-        </EditorToolbarFrame>
+      title={
+        <Inline gap={GAP.CONTROL}>
+          <Skeleton shape={SKELETON_SHAPE.CIRCLE} width={SKELETON_TITLE_MARK} />
+          <Skeleton width={SKELETON_NAME.TITLE} />
+        </Inline>
+      }
+      toolbar={(pickUp) =>
+        room === SHELL_ROOM.NARROW ? (
+          // A phone's page while it is read stands as it will be drawn: the way back alone, the name read in the page's header.
+          <PhoneHead
+            place="automation"
+            start={<AutomationsBack onBack={onBack} />}
+            pickUp={pickUp}
+            end={null}
+          />
+        ) : (
+          <EditorToolbarFrame pickUp={pickUp} onBack={onBack}>
+            <EditorActsSkeleton />
+          </EditorToolbarFrame>
+        )
       }
       setup={<EditorSkeleton offersOwner={offersOwner} />}
       beside={
@@ -2233,12 +2424,13 @@ const EDITOR_SCREENS: NarrowColumns = {
  * this one stood. A deleted one is handed to `onDeleted`, which goes back
  * to the list.
  *
- * A narrow room, a phone's, has no room for the runs beside the setup, so
- * it stands the setup the whole width and the runs as a screen of their
+ * A narrow room, a phone's, or a page narrower than the split's line by its
+ * own width (`column-split.ts`), has no room for the runs beside the setup,
+ * so it stands the setup the whole width and the runs as a screen of their
  * own (`hiddenColumns`), reached by the toolbar's Runs and left by the way
- * back at their head, each a step of the window's history; the focus goes
- * with each swap (`useNarrowFocus`). The Runs panel's width and fold are
- * the wide room's alone.
+ * back at their head, each a step of the window's history in a narrow room;
+ * the focus goes with each swap (`useNarrowFocus`). The Runs panel's width
+ * and fold are the split page's alone.
  */
 export function AutomationEditor({
   automation,
@@ -2282,7 +2474,7 @@ export function AutomationEditor({
   leaveGuard: LeaveGuard;
   /** The room the panel's stage gives, narrow where the runs are a screen of their own. */
   room: ShellRoom;
-  /** Whether a narrow room stands the runs rather than the setup. */
+  /** Whether one column stands the runs rather than the setup. */
   runsShown: boolean;
   /** Stands the runs' screen, or the setup again, through the window's history. */
   onRuns: (shown: boolean) => void;
@@ -2294,7 +2486,7 @@ export function AutomationEditor({
   const linkedRun = linked?.runId;
   const [running, setRunning] = useState(false);
   const [defaults] = useState<DraftDefaults>(() => ({
-    timezone: windowZone(),
+    timezone: readerZone(),
     owner: AUTOMATION_SCOPE.PERSONAL,
   }));
   // A new automation starts in the repository the workspace's plans were about lately, as a new plan does,
@@ -2325,16 +2517,18 @@ export function AutomationEditor({
   // Note that a new draft nothing was changed in is no work to lose, so Escape may leave it.
   const written = automation === undefined ? !sameDraft(draft, start) : dirty;
   const narrow = room === SHELL_ROOM.NARROW;
-  // A narrow room's runs stand as a screen of their own over the setup, and the setup the whole width.
-  const runsAlone = narrow && runsShown;
-  const hidden = hiddenColumns(room, !runsAlone);
-  const screen = useNarrowFocus(room, !runsAlone, EDITOR_SCREENS);
+  // One column's runs stand as a screen of their own over the setup, and the setup the whole width.
+  const split = useScreenSplit(room);
+  const { single } = split;
+  const runsAlone = single && runsShown;
+  const hidden = hiddenColumns(split.columns, !runsAlone);
+  const screen = useScreenRef(useNarrowFocus(split.columns, !runsAlone, EDITOR_SCREENS), split.ref);
   const runsScreen = useId();
   // Escape goes back to the list, asking first, as every way out does, where something written would be lost;
-  // from a narrow room's runs, it goes back to the setup first.
+  // from the runs standing alone, it goes back to the setup first.
   useAppCommand(APP_COMMAND.EXIT_AUTOMATIONS, runsAlone ? () => onRuns(false) : onBack);
   const runsPanel = useRunsPanel();
-  const toggleRuns = narrow ? () => onRuns(!runsShown) : runsPanel.onToggle;
+  const toggleRuns = single ? () => onRuns(!runsShown) : runsPanel.onToggle;
   // The form glides to its new middle as the Runs panel comes and goes (pane-motion.tsx).
   const editorLayout = useRef<HTMLDivElement>(null);
   // The name's Escape lets go of the caret and keeps the press, as every field's here does.
@@ -2410,12 +2604,10 @@ export function AutomationEditor({
     () => (written ? leaveGuard.stand((leave) => askLeave.current(leave)) : undefined),
     [written, leaveGuard],
   );
-  const toggle = (enabled: boolean) => {
-    if (automation === undefined) return;
-    writes.toggle(automation.id, enabled).then((answer) => {
-      if ("failure" in answer) setRefusal(SAVE_REFUSAL_WORDS[answer.failure]);
-    });
-  };
+  const toggle = (enabled: boolean) =>
+    automation === undefined
+      ? Promise.resolve<AutomationView>({ failure: AUTOMATION_CALL_FAILURE.NOT_FOUND })
+      : writes.toggle(automation.id, enabled);
   const deletion = useConfirmDialog(
     { subject: automation !== undefined, surfaceOpen: true },
     () => {
@@ -2446,9 +2638,11 @@ export function AutomationEditor({
       screenRef={screen}
       layoutRef={editorLayout}
       hidden={hidden.list}
-      toolbar={
+      title={<EditorTitle automation={automation} />}
+      toolbar={(pickUp) => (
         <EditorToolbar
           automation={automation}
+          pickUp={pickUp}
           codeReview={codeReviewOn && readCodeReviewSettings(draft.prompt) !== undefined}
           dirty={dirty}
           saving={saving}
@@ -2461,33 +2655,26 @@ export function AutomationEditor({
           onRunNow={runNow}
           runs={{
             shown: runsPanel.open,
-            screen: narrow ? runsScreen : undefined,
+            screen: single ? runsScreen : undefined,
             onPress: toggleRuns,
           }}
           narrow={narrow}
         />
-      }
+      )}
       setup={
         <AutomationSetup>
           <TextField
             ref={nameField}
             label="Automation name"
-            size={TEXT_FIELD_SIZE.TITLE}
             placeholder="Untitled automation"
             value={draft.name}
             onEscape={() => nameField.current?.blur()}
             onChange={(name) => editDraft({ name })}
           />
           {shownProblems && problems[DRAFT_FIELD.NAME] !== undefined ? (
-            <p className="error-message automation-form-problem" role="alert">
-              {problems[DRAFT_FIELD.NAME]}
-            </p>
+            <FailureNote>{problems[DRAFT_FIELD.NAME]}</FailureNote>
           ) : null}
-          {refusal === undefined ? null : (
-            <p className="error-message automation-save-refusal" role="alert">
-              {refusal}
-            </p>
-          )}
+          {refusal === undefined ? null : <FailureNote>{refusal}</FailureNote>}
           <EditorForm
             draft={draft}
             automation={automation}
@@ -2508,12 +2695,12 @@ export function AutomationEditor({
       }
       beside={
         <>
-          {narrow ? null : <AutomationRunsPanel panel={runsPanel} {...runsRead} />}
-          <PaneGlide root={editorLayout} layout={{ runsOpen: !narrow && runsPanel.open }} />
+          {single ? null : <AutomationRunsPanel panel={runsPanel} {...runsRead} />}
+          <PaneGlide root={editorLayout} layout={{ runsOpen: !single && runsPanel.open }} />
         </>
       }
     >
-      {narrow ? (
+      {single ? (
         <AutomationRunsScreen
           id={runsScreen}
           name={automation === undefined ? NEW_AUTOMATION : automation.name}
@@ -2523,21 +2710,20 @@ export function AutomationEditor({
         />
       ) : null}
       <ConfirmDialog
+        open
         confirm={leaving}
         question={{
           title: "Leave with unsaved changes?",
+          body: `Your changes to this automation are lost. ${IRREVERSIBLE_WORDS}`,
           verb: "Leave",
           running: "Leaving",
+          loss: CONFIRM_LOSS.IRREVERSIBLE,
         }}
       />
       <ConfirmDialog
+        open
         confirm={deletion}
-        question={{
-          title: `Delete ${automation?.name ?? "this automation"}?`,
-          body: "Its schedule stops and its run history goes. Agents its runs started stay.",
-          verb: "Delete",
-          running: "Deleting",
-        }}
+        question={automationDeleteQuestion(automation?.name)}
       />
     </AutomationPageFrame>
   );

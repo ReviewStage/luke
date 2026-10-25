@@ -18,17 +18,36 @@
 
   --luke-control-height: 30px;
   --luke-control-radius: var(--luke-radius-10);
-  --luke-control-icon: 15px;
+  --luke-control-icon: var(--luke-icon-16);
   /* The least a press is taken across on a coarse pointer, a finger's: a
      control drawn smaller keeps its size and takes the press around it. */
   --luke-touch-target: 44px;
+  /* The bar across the top of a tab or a dock (`PaneBar`): a control's
+     height with a tight gap over and under it, and the hairline it stands
+     on, so a bar holding words alone stands as tall as one holding buttons. */
+  --luke-pane-bar-height: calc(var(--luke-control-height) + 2 * var(--luke-tight-gap) + 1px);
   --luke-control-inset: var(--luke-space-12);
   --luke-control-gap: var(--luke-space-8);
+  /* How far every control fades while it cannot be used: one look, so a
+     switched-off button, field, switch and menu row read as the same state. */
+  --luke-disabled-opacity: 0.5;
   --luke-icon-gap: var(--luke-space-8);
   /* A settings row's pop-up stands in one column whatever value it names. */
   --luke-select-field-width: 200px;
   --luke-field-gap: var(--luke-space-16);
+  /* The room between two groups inside a pane or a form. */
   --luke-section-gap: var(--luke-space-16);
+  /* The room between a page's sections, Settings' and every other page's. */
+  --luke-page-section-gap: var(--luke-space-32);
+  /* The room between the parts of one item, by how close they read: a
+     label's own parts, the boxes of a list, and the blocks of a thread. */
+  --luke-tight-gap: var(--luke-space-4);
+  --luke-item-gap: var(--luke-space-6);
+  --luke-block-gap: var(--luke-space-12);
+  /* How far a row holds its glyph and its words from its own edge, and how
+     far a list holds its rows from its. */
+  --luke-row-inset: var(--luke-space-8);
+  --luke-list-inset: var(--luke-space-12);
   --luke-page-inset: var(--luke-space-48);
   --luke-page-inset-narrow: var(--luke-space-24);
   /* Between two items of a list, close enough that they read as one. */
@@ -57,6 +76,37 @@
   --luke-type-reading-size: 15px;
   --luke-type-reading-leading: 1.6;
 
+  /* A group's heading over its rows (a sidebar's, a menu's, a picker's), and a
+     badge's, a chip's, a tooltip's, and a compact button's words: the caption's
+     size, a weight heavier. */
+  --luke-type-group-size: var(--luke-type-caption-size);
+  --luke-type-group-leading: var(--luke-type-caption-leading);
+  --luke-type-tag-size: var(--luke-type-caption-size);
+  --luke-type-tag-leading: var(--luke-type-caption-leading);
+  /* The window's top bar names its workspace in a size of its own, the
+     dialog's, so it stands out beside a page's own title. */
+  --luke-type-toolbar-title-size: 15px;
+  --luke-type-toolbar-title-leading: 20px;
+
+  /* One weight to a role, whatever its app or its component: a component reads
+     its role's, never one of its own, so the same job is the same weight
+     everywhere. The three headings are semibold, a label and a tag medium,
+     and words read as a run regular. Emphasis is the weight a word takes to
+     stand out of its role's own: an unread row, the current page, a count. */
+  --luke-type-body-weight: var(--luke-weight-regular);
+  --luke-type-label-weight: var(--luke-weight-medium);
+  --luke-type-caption-weight: var(--luke-weight-regular);
+  --luke-type-group-weight: var(--luke-weight-medium);
+  --luke-type-tag-weight: var(--luke-weight-medium);
+  --luke-type-section-weight: var(--luke-weight-semibold);
+  --luke-type-dialog-weight: var(--luke-weight-semibold);
+  --luke-type-toolbar-title-weight: var(--luke-weight-semibold);
+  --luke-type-title-weight: var(--luke-weight-semibold);
+  --luke-type-reading-weight: var(--luke-weight-regular);
+  --luke-type-emphasis-weight: var(--luke-weight-semibold);
+  /* Only a title carries tracking, and the top bar's and the page's share it. */
+  --luke-type-title-tracking: -0.01em;
+
   --luke-settings-row-block: var(--luke-space-12);
   --luke-settings-row-inline: var(--luke-space-16);
   /* Every row stands as tall as a label and its description need, with or
@@ -70,8 +120,6 @@
      than a setting's, because it is read down rather than set. */
   --luke-settings-row-list-block: var(--luke-space-8);
   --luke-settings-row-list-min-height: 40px;
-  /* The window's settings groups stand further apart than its fields. */
-  --luke-settings-section-gap: var(--luke-space-40);
 
   --luke-text-area-grow-max: 320px;
 
@@ -83,6 +131,10 @@
   --luke-card-inset: var(--luke-space-24);
   --luke-card-inset-compact: var(--luke-space-16);
   --luke-card-inset-snug: var(--luke-space-12);
+  /* How tall a set of pictures stands (`PictureSet`): a row of a few, aimed
+     at before it is stretched to the column, and each of many's thumbnails. */
+  --luke-picture-row: 120px;
+  --luke-picture-thumb: 112px;
 
   /* How wide a pill naming something in prose stands, and one saying its standing too. */
   --luke-inline-ref-pill-width: 240px;
@@ -105,25 +157,60 @@
     0 24px 64px var(--luke-color-shadow-deep);
   /* The room a dialog's card may stand in: the window seen, less its margins. */
   --luke-dialog-room: calc(var(--luke-stage-height) - 2 * var(--luke-space-24));
+  /* ⌘K's card: the chrome around its list is a field, a filter band and a
+     foot, the list's own padding, a group's heading and the three hairlines
+     between them; the list keeps three rows beside that however short the
+     window is, so the card stands two thirds of the window tall (four fifths
+     as a sheet) or what that takes, never past the window less a margin,
+     and its top yields to make room. Where the window cannot hold all of
+     it, the card takes the window and the list scrolls. */
+  --luke-command-chrome: calc(
+    var(--luke-touch-target) +
+    var(--luke-control-height) +
+    4 *
+    var(--luke-space-16) +
+    var(--luke-row-inset) +
+    var(--luke-type-group-leading) +
+    2 *
+    var(--luke-menu-inset)
+  );
+  --luke-command-least: calc(var(--luke-command-chrome) + 3 * var(--luke-menu-row-height));
+  --luke-command-room: min(
+    calc(var(--luke-stage-height) - 2 * var(--luke-space-8)),
+    max(calc(var(--luke-stage-height) * 0.64), var(--luke-command-least))
+  );
+  --luke-command-sheet: min(
+    var(--luke-stage-height),
+    max(calc(var(--luke-stage-height) * 0.8), var(--luke-command-least))
+  );
+  --luke-command-top: max(
+    var(--luke-space-8),
+    min(
+      calc(var(--luke-stage-height) * 0.18),
+      var(--luke-stage-height) -
+      var(--luke-command-room) -
+      var(--luke-space-8)
+    )
+  );
 
   /* A hover hint: the pill's own corner and lift, as it was drawn before it
      was shared, the widest it stands (the window, less twice tooltip.tsx's
      TOOLTIP_MARGIN), and the width of a card hung in its place. */
   --luke-tooltip-radius: 7px;
   --luke-tooltip-shadow: 0 4px 14px var(--luke-color-shadow);
-  --luke-tooltip-max-width: calc(100vw - 12px);
+  --luke-tooltip-max-width: calc(var(--luke-stage-width) - 12px);
   --luke-tooltip-card-width: 280px;
 
-  /* A hover card's words, off the type scale as they were drawn before they
-     were shared: its name, the line under it and its corner, code in its
-     note, its own glyph, a count's line under its rows, and the least size
-     any of them stands at under a finger. */
-  --luke-hover-card-name-size: 12.5px;
-  --luke-hover-card-sub-size: 11.5px;
+  /* A hover card's name is a label and the line under it a caption; what it
+     keeps off the type scale is the code in its note, its own glyph, and the
+     most a list under a rule stands before it scrolls within the card (some
+     seven rows, less in a short window). */
   --luke-hover-card-code-size: 11px;
   --luke-hover-card-glyph: 14px;
-  --luke-hover-card-more-height: 22px;
-  --luke-hover-card-coarse-size: 12px;
+  --luke-hover-card-list-height: min(
+    calc(7.5 * var(--luke-menu-row-height)),
+    calc(var(--luke-stage-height) * 0.4)
+  );
 
   --luke-menu-row-height: 32px;
   --luke-menu-row-radius: var(--luke-radius-8);
@@ -133,6 +220,12 @@
   /* The glyph slot every menu row keeps, at its end as at its start. */
   --luke-menu-glyph: 16px;
   --luke-menu-shadow: 0 8px 32px var(--luke-color-shadow-soft);
+  /* The three widths a menu hung from its button asks for (`POPOVER_WIDTH`):
+     a Settings picker's, the composer's, and one that holds an issue's title
+     with its key and state after it. */
+  --luke-popover-width-narrow: 280px;
+  --luke-popover-width-regular: 340px;
+  --luke-popover-width-wide: 420px;
 
   /* How deep a scroller's edge dissolves where content runs past it
      (`ScrollArea`'s fade); the window's has stood a step off the scale. */
@@ -161,12 +254,12 @@
   --luke-focus-ring-room: padding-box var(--luke-focus-ring-reach);
 
   /* The layers that float over the whole page, each drawn at the root of the
-     document: a menu, then a dialog and a hint on one layer, whichever was
-     drawn later on top, then the passing notice over everything. */
+     document: a menu, then a dialog, then the passing notice, then a hint
+     over everything, since a toast's own × hangs one over the toast. */
   --luke-z-menu: 20;
   --luke-z-dialog: 30;
-  --luke-z-tooltip: 30;
   --luke-z-toast: 31;
+  --luke-z-tooltip: 32;
 }
 
 [data-luke-profile="web"] {
@@ -178,16 +271,35 @@
 
   --luke-control-height: 44px;
   --luke-control-radius: var(--luke-radius-10);
-  --luke-control-icon: 16px;
+  --luke-control-icon: var(--luke-icon-16);
   /* The least a press is taken across on a coarse pointer, a finger's: a
      control drawn smaller keeps its size and takes the press around it. */
   --luke-touch-target: 44px;
+  /* The bar across the top of a tab or a dock (`PaneBar`): a control's
+     height with a tight gap over and under it, and the hairline it stands
+     on, so a bar holding words alone stands as tall as one holding buttons. */
+  --luke-pane-bar-height: calc(var(--luke-control-height) + 2 * var(--luke-tight-gap) + 1px);
   --luke-control-inset: var(--luke-space-16);
   --luke-control-gap: var(--luke-space-8);
+  /* How far every control fades while it cannot be used: one look, so a
+     switched-off button, field, switch and menu row read as the same state. */
+  --luke-disabled-opacity: 0.5;
   --luke-icon-gap: var(--luke-space-8);
   --luke-select-field-width: auto;
   --luke-field-gap: var(--luke-space-16);
+  /* The room between two groups inside a pane or a form. */
   --luke-section-gap: var(--luke-space-16);
+  /* The room between a page's sections, Settings' and every other page's. */
+  --luke-page-section-gap: var(--luke-space-32);
+  /* The room between the parts of one item, by how close they read: a
+     label's own parts, the boxes of a list, and the blocks of a thread. */
+  --luke-tight-gap: var(--luke-space-4);
+  --luke-item-gap: var(--luke-space-6);
+  --luke-block-gap: var(--luke-space-12);
+  /* How far a row holds its glyph and its words from its own edge, and how
+     far a list holds its rows from its. */
+  --luke-row-inset: var(--luke-space-8);
+  --luke-list-inset: var(--luke-space-12);
   --luke-page-inset: var(--luke-space-24);
   --luke-page-inset-narrow: var(--luke-space-24);
   /* Between two items of a list, close enough that they read as one. */
@@ -216,6 +328,37 @@
   --luke-type-reading-size: var(--luke-type-body-size);
   --luke-type-reading-leading: 1.6;
 
+  /* A group's heading over its rows (a sidebar's, a menu's, a picker's), and a
+     badge's, a chip's, a tooltip's, and a compact button's words: the caption's
+     size, a weight heavier. */
+  --luke-type-group-size: var(--luke-type-caption-size);
+  --luke-type-group-leading: var(--luke-type-caption-leading);
+  --luke-type-tag-size: var(--luke-type-caption-size);
+  --luke-type-tag-leading: var(--luke-type-caption-leading);
+  /* The window's top bar names its workspace in a size of its own, the
+     dialog's; the site draws no top bar, so it holds the desktop's. */
+  --luke-type-toolbar-title-size: 15px;
+  --luke-type-toolbar-title-leading: 20px;
+
+  /* One weight to a role, whatever its app or its component: a component reads
+     its role's, never one of its own, so the same job is the same weight
+     everywhere. The three headings are semibold, a label and a tag medium,
+     and words read as a run regular. Emphasis is the weight a word takes to
+     stand out of its role's own: an unread row, the current page, a count. */
+  --luke-type-body-weight: var(--luke-weight-regular);
+  --luke-type-label-weight: var(--luke-weight-medium);
+  --luke-type-caption-weight: var(--luke-weight-regular);
+  --luke-type-group-weight: var(--luke-weight-medium);
+  --luke-type-tag-weight: var(--luke-weight-medium);
+  --luke-type-section-weight: var(--luke-weight-semibold);
+  --luke-type-dialog-weight: var(--luke-weight-semibold);
+  --luke-type-toolbar-title-weight: var(--luke-weight-semibold);
+  --luke-type-title-weight: var(--luke-weight-semibold);
+  --luke-type-reading-weight: var(--luke-weight-regular);
+  --luke-type-emphasis-weight: var(--luke-weight-semibold);
+  /* Only a title carries tracking, and the top bar's and the page's share it. */
+  --luke-type-title-tracking: -0.01em;
+
   --luke-settings-row-block: var(--luke-space-12);
   --luke-settings-row-inline: var(--luke-space-16);
   --luke-settings-row-min-height: auto;
@@ -224,7 +367,6 @@
   --luke-settings-row-compact-min-height: auto;
   --luke-settings-row-list-block: var(--luke-settings-row-block);
   --luke-settings-row-list-min-height: auto;
-  --luke-settings-section-gap: var(--luke-section-gap);
 
   --luke-text-area-grow-max: 320px;
 
@@ -232,6 +374,10 @@
   --luke-card-inset: var(--luke-space-24);
   --luke-card-inset-compact: var(--luke-space-16);
   --luke-card-inset-snug: var(--luke-space-12);
+  /* How tall a set of pictures stands (`PictureSet`): a row of a few, aimed
+     at before it is stretched to the column, and each of many's thumbnails. */
+  --luke-picture-row: 120px;
+  --luke-picture-thumb: 112px;
 
   /* How wide a pill naming something in prose stands, and one saying its standing too. */
   --luke-inline-ref-pill-width: 240px;
@@ -254,25 +400,60 @@
     0 24px 64px var(--luke-color-shadow-deep);
   /* The room a dialog's card may stand in: the window seen, less its margins. */
   --luke-dialog-room: calc(var(--luke-stage-height) - 2 * var(--luke-space-24));
+  /* ⌘K's card: the chrome around its list is a field, a filter band and a
+     foot, the list's own padding, a group's heading and the three hairlines
+     between them; the list keeps three rows beside that however short the
+     window is, so the card stands two thirds of the window tall (four fifths
+     as a sheet) or what that takes, never past the window less a margin,
+     and its top yields to make room. Where the window cannot hold all of
+     it, the card takes the window and the list scrolls. */
+  --luke-command-chrome: calc(
+    var(--luke-touch-target) +
+    var(--luke-control-height) +
+    4 *
+    var(--luke-space-16) +
+    var(--luke-row-inset) +
+    var(--luke-type-group-leading) +
+    2 *
+    var(--luke-menu-inset)
+  );
+  --luke-command-least: calc(var(--luke-command-chrome) + 3 * var(--luke-menu-row-height));
+  --luke-command-room: min(
+    calc(var(--luke-stage-height) - 2 * var(--luke-space-8)),
+    max(calc(var(--luke-stage-height) * 0.64), var(--luke-command-least))
+  );
+  --luke-command-sheet: min(
+    var(--luke-stage-height),
+    max(calc(var(--luke-stage-height) * 0.8), var(--luke-command-least))
+  );
+  --luke-command-top: max(
+    var(--luke-space-8),
+    min(
+      calc(var(--luke-stage-height) * 0.18),
+      var(--luke-stage-height) -
+      var(--luke-command-room) -
+      var(--luke-space-8)
+    )
+  );
 
   /* A hover hint: the pill's own corner and lift, as it was drawn before it
      was shared, the widest it stands (the window, less twice tooltip.tsx's
      TOOLTIP_MARGIN), and the width of a card hung in its place. */
   --luke-tooltip-radius: 7px;
   --luke-tooltip-shadow: 0 4px 14px var(--luke-color-shadow);
-  --luke-tooltip-max-width: calc(100vw - 12px);
+  --luke-tooltip-max-width: calc(var(--luke-stage-width) - 12px);
   --luke-tooltip-card-width: 280px;
 
-  /* A hover card's words, off the type scale as they were drawn before they
-     were shared: its name, the line under it and its corner, code in its
-     note, its own glyph, a count's line under its rows, and the least size
-     any of them stands at under a finger. */
-  --luke-hover-card-name-size: 12.5px;
-  --luke-hover-card-sub-size: 11.5px;
+  /* A hover card's name is a label and the line under it a caption; what it
+     keeps off the type scale is the code in its note, its own glyph, and the
+     most a list under a rule stands before it scrolls within the card (some
+     seven rows, less in a short window). */
   --luke-hover-card-code-size: 11px;
   --luke-hover-card-glyph: 14px;
-  --luke-hover-card-more-height: 22px;
-  --luke-hover-card-coarse-size: 12px;
+  --luke-hover-card-list-height: min(
+    calc(7.5 * var(--luke-menu-row-height)),
+    calc(var(--luke-stage-height) * 0.4)
+  );
 
   /* A web menu's rows are its controls' height, a finger's target. */
   --luke-menu-row-height: 44px;
@@ -283,6 +464,12 @@
   /* The glyph slot every menu row keeps, at its end as at its start. */
   --luke-menu-glyph: 16px;
   --luke-menu-shadow: 0 8px 32px var(--luke-color-shadow-soft);
+  /* The three widths a menu hung from its button asks for (`POPOVER_WIDTH`):
+     a Settings picker's, the composer's, and one that holds an issue's title
+     with its key and state after it. */
+  --luke-popover-width-narrow: 280px;
+  --luke-popover-width-regular: 340px;
+  --luke-popover-width-wide: 420px;
 
   /* How deep a scroller's edge dissolves where content runs past it (`ScrollArea`'s fade). */
   --luke-scroll-fade: var(--luke-space-24);
@@ -309,12 +496,12 @@
   --luke-focus-ring-room: padding-box var(--luke-focus-ring-reach);
 
   /* The layers that float over the whole page, each drawn at the root of the
-     document: a menu, then a dialog and a hint on one layer, whichever was
-     drawn later on top, then the passing notice over everything. */
+     document: a menu, then a dialog, then the passing notice, then a hint
+     over everything, since a toast's own × hangs one over the toast. */
   --luke-z-menu: 20;
   --luke-z-dialog: 30;
-  --luke-z-tooltip: 30;
   --luke-z-toast: 31;
+  --luke-z-tooltip: 32;
 }
 
 /* A compact site surface, a dashboard's (`DENSITY.COMPACT` in `surface.ts`):

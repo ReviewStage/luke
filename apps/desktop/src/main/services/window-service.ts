@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { APP_LINK_CLAIM, APP_LINK_SCHEME, appLinkClaim } from "@luke/features/app-links";
-import type { ReadLink } from "@luke/features/luke-link";
+import type { ReadLink } from "@luke/features/link-grammar";
 import { PAGE_SCHEME } from "@luke/features/page-frame";
 import type {
   AgentEndToast,
@@ -10,14 +10,20 @@ import type {
   ChatMessageToast,
   FailedRunPlace,
   FailedRunToast,
-  InboxItemToast,
+  InboxItemsToast,
 } from "@luke/host/agent-notices";
 import type { AppStateSnapshot, AppWindowFacts } from "@luke/host/app-state";
 import { applyThemePreference, NativeTheme } from "@luke/host/appearance";
 import type { OperatorClient } from "@luke/host/client";
-import { type AppStateStore, voiceWindowGone, windowAppState } from "@luke/host/client";
+import {
+  type AppStateStore,
+  voiceWindowGaveUp,
+  voiceWindowGone,
+  windowAppState,
+} from "@luke/host/client";
 import { type EventPushName, PUSH, type PushPayload } from "@luke/host/contract";
 import type { DesktopService } from "@luke/host/desktop-service";
+import { callStaged } from "@luke/host/fixture-stage";
 import { APP_SETTING_SCHEMA } from "@luke/settings";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import { Effect } from "effect";
@@ -113,7 +119,7 @@ export interface WindowService extends DesktopService {
   /** Asks the panels to open Settings: the menu bar's Check for Updates, whose answer is drawn there. */
   showSettings: () => void;
   /** Asks the panels to say an inbox item opened in their toast: one that opened while the window is focused. */
-  toastInboxItem: (item: InboxItemToast) => void;
+  toastInboxItem: (opened: InboxItemsToast) => void;
   /** Asks the panels to open a failed run in its automation's workspace: its notification's click. */
   showFailedRun: (place: FailedRunPlace) => void;
   /** Asks the panels to say a run failed to start in their toast: one that failed while the window is focused. */
@@ -193,6 +199,7 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
     followResponsiveness: (window) => {
       void run(followResponsiveness(window, reportUnresponsivePanel));
     },
+    onRendererGone: (reason) => config.report(`Panel renderer gone: ${reason}`),
   });
   /** The hidden window that holds the live conversation. */
   const voiceWindow = new VoiceWindow({
@@ -210,9 +217,16 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
     },
     onGaveUp: (reason) => {
       config.report(`Voice window abandoned: ${reason}`);
+      // Nothing stands the window back up this run, so every panel says voice
+      // is unavailable where it offers a call, rather than a press reaching
+      // a window that is not there.
+      state.update({ voice: voiceWindowGaveUp(state.snapshot().voice), callTranscript: undefined });
+      panels.setVoiceExchange(false);
     },
   });
-  const voiceWindowWanted = runMode.takesFocus || runMode.sendsNetwork;
+  // A call profile's fixture run stands on its staged call, which a voice window would report over.
+  const stagedCall = callStaged(config.launch);
+  const voiceWindowWanted = (runMode.takesFocus || runMode.sendsNetwork) && !stagedCall;
   const callWindow = new CallWindow({
     runMode,
     preloadPath,
@@ -314,8 +328,8 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
     panels.broadcast(PUSH.MENU_COMMAND, APP_COMMAND.SETTINGS);
   }
 
-  function toastInboxItem(item: InboxItemToast): void {
-    panels.broadcast(PUSH.INBOX_ITEM_OPENED, item);
+  function toastInboxItem(opened: InboxItemsToast): void {
+    panels.broadcast(PUSH.INBOX_ITEM_OPENED, opened);
   }
 
   function showFailedRun(place: FailedRunPlace): void {
@@ -350,12 +364,18 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
   }
 
   // Which panel has the keyboard, for the call window: while one does, that
-  // panel draws the call itself, as its call bar or its own call card.
+  // panel draws the call itself, as its call bar or its own call card. Note
+  // that a staged call is told of no panel, because its profile shoots the
+  // floating window beside the panel that has the keyboard.
   const panelFocused = (_event: Electron.Event, window: BrowserWindow) => {
-    if (panels.owns(window.webContents)) callPresence.panelFocused(window.webContents);
+    if (panels.owns(window.webContents) && !stagedCall) {
+      callPresence.panelFocused(window.webContents);
+    }
   };
   const panelBlurred = (_event: Electron.Event, window: BrowserWindow) => {
-    if (panels.owns(window.webContents)) callPresence.panelBlurred(window.webContents);
+    if (panels.owns(window.webContents) && !stagedCall) {
+      callPresence.panelBlurred(window.webContents);
+    }
   };
 
   /**
@@ -414,6 +434,8 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
     handleDisplayChange();
     // A terminal's socket may have died in the sleep without a word, and one waiting out a backoff need not wait on.
     if (eventName === "resume") void run(operator.host.terminalWake());
+    // So may the task list's follow; a resume and an unlock landing together seal it again once.
+    if (eventName !== "user-did-become-active") void run(operator.host.tasksResync());
   };
   const wakeHandlers = {
     resume: wake("resume"),

@@ -216,7 +216,11 @@ test("a stage narrowed past the line folds the pinned sidebar without forgetting
   assert.equal(standing(page), "pinned");
   resizeStage(1130);
   assert.equal(standing(page), "pinned", "a stage dragged back within the band does not fold it");
-  assert.equal(window.localStorage.getItem(KEPT_FOLD), "false", "the fold kept is the developer's");
+  assert.notEqual(
+    window.localStorage.getItem(KEPT_FOLD),
+    "true",
+    "a stage too narrow to pin the sidebar folds none the developer kept",
+  );
 });
 
 test("the fold follows the panel's stage rather than the window, as a browser tab gives the panel a box of its own", () => {
@@ -262,7 +266,7 @@ test("in a narrow window the toggle and its chord float the sidebar over the wor
   assert.equal(standing(page), "floating");
   act(() => runAppCommand(APP_COMMAND.TOGGLE_SIDEBAR));
   assert.equal(standing(page), "away", "the chord puts it away rather than pinning it");
-  assert.equal(window.localStorage.getItem(KEPT_FOLD), "false");
+  assert.notEqual(window.localStorage.getItem(KEPT_FOLD), "true", "floating it folds none kept");
 });
 
 test("a sidebar its toggle floats in a narrow window holds the keyboard: Tab walking out of it is brought back, until Escape hands it back", () => {

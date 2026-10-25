@@ -15,7 +15,7 @@ import {
   type InboxMessage,
   type InboxResponse,
 } from "@luke/features/inbox-wire";
-import { LINK_PLACE, linkOf } from "@luke/features/luke-link";
+import { LINK_PLACE, linkOf } from "@luke/features/link-grammar";
 import { TASK_STATUS, type TaskSummary } from "@luke/features/task-wire";
 import { TASK_CALL_FAILURE } from "@luke/features/tasks-view";
 import type { AppInboxTasklessItem } from "@luke/host/app-state";
@@ -131,13 +131,16 @@ function decided(reply: string): InboxDraft {
 }
 
 test("the board holds every item the plan's inbox holds, an agent the window has not listed yet's too: what waits the oldest posted first, what is settled the latest changed first", () => {
-  const board = inboxBoard([
-    item({ id: "late", postedAt: 30, updatedAt: 30 }),
-    item({ id: "early", postedAt: 10, updatedAt: 40 }),
-    item({ id: "answered", status: INBOX_STATUS.ANSWERED, updatedAt: 20 }),
-    item({ id: "closed", status: INBOX_STATUS.CLOSED, updatedAt: 50 }),
-    item({ id: "unlisted", agentId: UNLISTED, postedAt: 20, updatedAt: 20 }),
-  ]);
+  const board = inboxBoard(
+    [
+      item({ id: "late", postedAt: 30, updatedAt: 30 }),
+      item({ id: "early", postedAt: 10, updatedAt: 40 }),
+      item({ id: "answered", status: INBOX_STATUS.ANSWERED, updatedAt: 20 }),
+      item({ id: "closed", status: INBOX_STATUS.CLOSED, updatedAt: 50 }),
+      item({ id: "unlisted", agentId: UNLISTED, postedAt: 20, updatedAt: 20 }),
+    ],
+    undefined,
+  );
   assert.deepEqual(
     board.open.map((each) => each.id),
     ["early", "unlisted", "late"],
@@ -145,6 +148,28 @@ test("the board holds every item the plan's inbox holds, an agent the window has
   assert.deepEqual(
     board.settled.map((each) => each.id),
     ["closed", "answered"],
+  );
+});
+
+test("a task's Inbox counts what waits on the reader: a teammate's open item stands on the board but is left out of what waits, as is one settled", () => {
+  const board = inboxBoard(
+    [
+      item({ id: "mine", startedBy: ME, postedAt: 10 }),
+      item({ id: "assigned-to-me", startedBy: DANA, waitsOn: ME, postedAt: 20 }),
+      item({ id: "danas", startedBy: DANA, postedAt: 30 }),
+      item({ id: "assigned-to-dana", startedBy: ME, waitsOn: DANA, postedAt: 40 }),
+      item({ id: "unowned", postedAt: 50 }),
+      item({ id: "answered", startedBy: ME, status: INBOX_STATUS.ANSWERED, postedAt: 60 }),
+    ],
+    ME.userId,
+  );
+  assert.deepEqual(
+    board.open.map((each) => each.id),
+    ["mine", "assigned-to-me", "danas", "assigned-to-dana", "unowned"],
+  );
+  assert.deepEqual(
+    board.waiting.map((each) => each.id),
+    ["mine", "assigned-to-me", "unowned"],
   );
 });
 
@@ -497,7 +522,8 @@ test("an item whose place is held stands where the list drew it, under the statu
     ),
     [
       [INBOX_STATUS_GROUP.NEEDS_YOU, ["expiry", "threshold"]],
-      [INBOX_STATUS_GROUP.ANSWERED, ["retry", "channel"]],
+      [INBOX_STATUS_GROUP.ANSWERED, ["retry"]],
+      [INBOX_STATUS_GROUP.CLOSED, ["channel"]],
     ],
   );
 });
@@ -1459,7 +1485,7 @@ test("an answer's stamp names a pair of buttons' pick in the past where it can a
   });
   assert.deepEqual(sentStamp(chose("Request changes"), pair), {
     tone: ANSWER_TONE.BACK,
-    words: "Requested changes",
+    words: "Changes requested",
   });
   assert.equal(sentStamp(chose("7 days"), undefined).words, "Chose 7 days");
 

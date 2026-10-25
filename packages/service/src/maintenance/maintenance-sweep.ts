@@ -23,7 +23,7 @@ import type { TerminalLeaseSweepOutcome } from "./terminal-lease-sweep.js";
 
 /**
  * The scheduled sweep: once a minute, Vercel's cron ends what no request
- * will. A task deleted thirty days ago has its conversation purged, a
+ * will. A task deleted seven days ago has its conversation purged, a
  * deleted task's call that was still open when the task went is removed
  * once it has ended, a turn whose end eve never told the relay is settled as
  * abandoned, a voice session whose device detached and never came back is

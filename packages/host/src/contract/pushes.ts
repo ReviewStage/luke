@@ -11,7 +11,7 @@
  */
 
 import { type AvatarGrant, avatarGrantFromWire } from "@luke/features/avatar-grant";
-import { isLinkPlace, type ReadLink } from "@luke/features/luke-link";
+import { isLinkPlace, type ReadLink } from "@luke/features/link-grammar";
 import { type VoiceLiveSessionChanged, voiceLiveSessionChangedSchema } from "@luke/gateway";
 import { type AppCommand, isAppCommand } from "@luke/settings/shortcuts";
 import { type AvatarFeed, avatarFeedFromWire } from "@luke/voice/avatar";
@@ -201,23 +201,26 @@ export const PUSH_GUARD = {
       isWireBoolean(value.failed),
   ),
   /**
-   * An inbox item opened while the window was focused away from its task's
-   * Inbox tab: the panel says so in its toast, whose View opens that tab.
-   * An event, as an agent's end is, because it is said once and never
-   * bootstrapped from.
+   * The inbox items one read found opened while the window was focused away
+   * from their task's Inbox tab: the panel says them in one toast, whose
+   * View opens a task's tab. An event, as an agent's end is, because it is
+   * said once and never bootstrapped from.
    */
   [PUSH.INBOX_ITEM_OPENED]: result<{
-    taskId: string;
-    itemId: string;
-    words: string;
-    detail: string;
+    items: readonly { taskId: string; itemId: string; words: string; detail: string }[];
   }>(
     (value) =>
       isRecord(value) &&
-      isWireString(value.taskId) &&
-      isWireString(value.itemId) &&
-      isWireString(value.words) &&
-      isWireString(value.detail),
+      Array.isArray(value.items) &&
+      value.items.length > 0 &&
+      value.items.every(
+        (item) =>
+          isRecord(item) &&
+          isWireString(item.taskId) &&
+          isWireString(item.itemId) &&
+          isWireString(item.words) &&
+          isWireString(item.detail),
+      ),
   ),
   /**
    * A run of one of the account's automations failed to start while the

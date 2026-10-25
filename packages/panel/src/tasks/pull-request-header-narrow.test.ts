@@ -19,6 +19,7 @@ afterEach(() => {
   laid?.remove();
   laid = undefined;
   document.body.innerHTML = "";
+  delete document.documentElement.dataset.lukeRoom;
 });
 
 /** How the header's title row lays its title out, in a header as wide as given, on the device given. */
@@ -84,8 +85,9 @@ test("the pill and the controls stand level with the title's first line, not cen
 function foldedAt(room: "narrow" | "wide") {
   laid?.remove();
   laid = layContainersAt({ "pull-request-header": 342 }, { touch: true });
+  document.documentElement.dataset.lukeRoom = room;
   document.body.innerHTML = [
-    `<div class="desktop-shell" data-room="${room}"><div class="file-view pull-request-tab">`,
+    '<div class="desktop-shell"><div class="file-view pull-request-tab">',
     '<header class="pull-request-header" data-folded=""><div class="pull-request-title-row">',
     '<h2 class="pull-request-title pull-request-title-editable">A long title <span class="pull-request-number">#1</span></h2>',
     '<div class="pull-request-state"><button class="luke-chip">Open</button></div>',
@@ -149,10 +151,10 @@ test("in a side panel of any width the header and its row of tabs span the panel
     laid = layContainersAt({ "pull-request-header": width, "pull-request-tab": width });
     document.body.innerHTML = [
       '<div class="side-panel-content"><div class="file-view pull-request-tab">',
-      '<header class="pull-request-header"></header><div class="pull-request-tabs"></div>',
+      '<header class="pull-request-header"></header><div class="luke-pane-bar"></div>',
       "</div></div>",
     ].join("");
-    for (const selector of [".pull-request-header", ".pull-request-tabs"]) {
+    for (const selector of [".pull-request-header", ".luke-pane-bar"]) {
       const style = getComputedStyle(document.querySelector(selector) ?? assert.fail(selector));
       for (const side of [style.paddingLeft, style.paddingRight, style.paddingInline]) {
         assert.doesNotMatch(side, /reading-room/u, `${selector} at ${width}px`);

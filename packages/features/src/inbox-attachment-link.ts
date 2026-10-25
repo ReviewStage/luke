@@ -1,5 +1,5 @@
+import { type LINK_PLACE, type LinkPlace, linkOf } from "./link-grammar.js";
 import { isLinkHome, LINK_HOME } from "./link-home.js";
-import { type LINK_PLACE, type LinkPlace, linkOf } from "./luke-link.js";
 import { insideCode } from "./mention-link.js";
 import { parsedUrl } from "./parsed-url.js";
 
@@ -8,7 +8,7 @@ import { parsedUrl } from "./parsed-url.js";
  *
  * A message on an item's thread, its agent's or a member's, draws a picture
  * as a plan does, `![alt](<address> "caption")`, its address the item's own
- * link (`luke-link.ts`) with `/files/<attachment>` after it, as a plan's
+ * link (`link-grammar.ts`) with `/files/<attachment>` after it, as a plan's
  * picture stands under its plan's (`plan-attachment-link.ts`):
  * `https://tryluke.dev/<workspace>/plan/<task>/inbox/<item>/files/<attachment>`,
  * or `/agent/<agent>/inbox/<item>/files/<attachment>` for an item of an

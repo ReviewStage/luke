@@ -13,14 +13,18 @@ import {
 } from "@luke/features/browser-live-wire";
 import { BROWSER_TAB_OPEN_FAILURE, type BrowserTabOpenFailure } from "@luke/features/tasks-view";
 import { ACT_KIND } from "@luke/host/acts";
+import { surfaceKeepsPress } from "@luke/settings/shortcuts";
 import {
   AddressField,
+  ANNOUNCE,
   BUTTON_SIZE,
   BUTTON_VARIANT,
   Button,
+  FailureNote,
   FILL_ELEMENT,
   Fill,
   IconButton,
+  PaneBar,
   REMOTE_KEY_ACTION,
   REMOTE_POINTER_ACTION,
   type RemoteKey,
@@ -34,8 +38,9 @@ import {
   TEXT_VARIANT,
   Text,
   Tooltip,
+  useAnnounce,
 } from "@luke/ui";
-import { Duration } from "effect";
+import { Clock, Duration, Effect, Stream } from "effect";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import * as Atom from "effect/reactivity/Atom";
 import {
@@ -48,7 +53,10 @@ import {
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useAct } from "../act.js";
 import { appPlatform } from "../app-platform.js";
+import { useTabActions } from "../desktop/strip-tabs.js";
 import { rendererRuntime } from "../renderer-runtime.js";
+import { usePhoneRoom } from "../stage-room.js";
+import { useAnnounceShown } from "../use-announce-shown.js";
 import { CloudBrowserCursor, cursorPlacement } from "./cloud-browser-cursor.js";
 import {
   CLOUD_BROWSER_PHASE,
@@ -88,7 +96,8 @@ import {
  * offers Watch again. While the member drives the tab, the mouse, the
  * wheel, and the keys pressed on the canvas go to the page, and a paste goes
  * as text; a Command chord the window answers (`chordIsWindows`) stays the
- * window's, and one the page edits text with
+ * window's, though off a Mac every Ctrl chord is the page's
+ * (`surfaceKeepsPress`), and one the page edits text with
  * is sent as Control, since the page runs on Linux. What the page shows is
  * the agent's and its members', so the pane is left out of the screen
  * recording (`ph-no-capture`), whose canvas recording is off in any case,
@@ -168,23 +177,25 @@ function openFailureWords(failure: BrowserTabOpenFailure, agent: string): string
     case BROWSER_TAB_OPEN_FAILURE.RETIRED:
       return `${agent} is archived, so its browser is gone.`;
     case BROWSER_TAB_OPEN_FAILURE.UNREACHABLE:
-      return `${browserOf(agent)} couldn't be reached. Try again in a moment.`;
+      return `${browserOf(agent)} could not be reached. Try again in a moment.`;
     case BROWSER_TAB_OPEN_FAILURE.UNANSWERED:
-      return "The tab couldn't be opened. Try again.";
+      return "The tab could not be opened. Try again.";
   }
 }
 
 /**
  * A cloud Browser tab's bar: back, forward, and reload where `onStep` takes
- * them, and the address,
+ * them, else off with `whyOff` said by their hints, which the keyboard
+ * reaches too, and the address,
  * which opens what is typed as a browser's address bar reads it, then
  * whatever the caller hands it. What is typed is put back on a blur, unless
- * `holdTyped`; Escape answers `onEscape` where given, and leaves the bar
- * otherwise.
+ * `holdTyped`; Escape answers `onEscape` where given, once what is typed has
+ * been cleared, and leaves the bar otherwise.
  */
 function CloudBrowserBar({
   address,
   onStep,
+  whyOff,
   onOpen,
   onEscape,
   holdTyped = false,
@@ -194,6 +205,8 @@ function CloudBrowserBar({
 }: {
   address: string;
   onStep: ((step: BrowserLiveHistory) => void) | undefined;
+  /** Why the steps are off, which their hints say. */
+  whyOff: string;
   onOpen: (address: string) => void;
   onEscape?: (() => void) | undefined;
   holdTyped?: boolean;
@@ -213,53 +226,122 @@ function CloudBrowserBar({
     }
     onOpen(opened);
   };
+  // Note that an `onEscape` ends the whole tab, so the first Escape clears the words and only one on an empty field answers it.
+  const leave = () => {
+    if (onEscape === undefined) {
+      setTyped(undefined);
+      field.current?.blur();
+      return;
+    }
+    if ((typed ?? address) === "") onEscape();
+    else setTyped("");
+  };
+  // Note that a step's hint is its name while it works, and the name with the reason while it is off.
+  const hintOf = (name: string) => (onStep === undefined ? `${name}: ${whyOff}` : name);
+  // A phone keeps the address as the page's own field, its steps items of the task's header's ⋯.
+  const phone = usePhoneRoom();
+  useTabActions(
+    phone
+      ? [
+          [
+            {
+              label: "Back",
+              icon: <ArrowLeftIcon aria-hidden="true" />,
+              detail: onStep === undefined ? whyOff : undefined,
+              disabled: onStep === undefined,
+              onSelect: () => onStep?.(BROWSER_LIVE_HISTORY.BACK),
+            },
+            {
+              label: "Forward",
+              icon: <ArrowRightIcon aria-hidden="true" />,
+              detail: onStep === undefined ? whyOff : undefined,
+              disabled: onStep === undefined,
+              onSelect: () => onStep?.(BROWSER_LIVE_HISTORY.FORWARD),
+            },
+            {
+              label: "Reload",
+              icon: <RotateCwIcon aria-hidden="true" />,
+              detail: onStep === undefined ? whyOff : undefined,
+              disabled: onStep === undefined,
+              onSelect: () => onStep?.(BROWSER_LIVE_HISTORY.RELOAD),
+            },
+          ],
+        ]
+      : undefined,
+  );
   return (
-    <header className="file-view-bar browser-view-bar cloud-browser-bar">
-      <div className="file-view-history">
-        <Tooltip label="Back">
-          <IconButton
-            icon={<ArrowLeftIcon aria-hidden="true" />}
-            label="Back"
-            disabled={onStep === undefined}
-            onClick={() => onStep?.(BROWSER_LIVE_HISTORY.BACK)}
+    <PaneBar
+      middle={
+        <>
+          {phone ? null : (
+            <div className="file-view-history">
+              <Tooltip label={hintOf("Back")}>
+                <IconButton
+                  icon={<ArrowLeftIcon aria-hidden="true" />}
+                  label="Back"
+                  disabled={onStep === undefined}
+                  focusableWhenDisabled
+                  onClick={() => onStep?.(BROWSER_LIVE_HISTORY.BACK)}
+                />
+              </Tooltip>
+              <Tooltip label={hintOf("Forward")}>
+                <IconButton
+                  icon={<ArrowRightIcon aria-hidden="true" />}
+                  label="Forward"
+                  disabled={onStep === undefined}
+                  focusableWhenDisabled
+                  onClick={() => onStep?.(BROWSER_LIVE_HISTORY.FORWARD)}
+                />
+              </Tooltip>
+              <Tooltip label={hintOf("Reload")}>
+                <IconButton
+                  icon={<RotateCwIcon aria-hidden="true" />}
+                  label="Reload"
+                  turns
+                  disabled={onStep === undefined}
+                  focusableWhenDisabled
+                  onClick={() => onStep?.(BROWSER_LIVE_HISTORY.RELOAD)}
+                />
+              </Tooltip>
+            </div>
+          )}
+          <AddressField
+            ref={field}
+            value={typed ?? address}
+            autoFocus={autoFocus}
+            disabled={disabled}
+            onChange={setTyped}
+            onOpen={go}
+            onBlur={holdTyped ? undefined : () => setTyped(undefined)}
+            onEscape={leave}
           />
-        </Tooltip>
-        <Tooltip label="Forward">
-          <IconButton
-            icon={<ArrowRightIcon aria-hidden="true" />}
-            label="Forward"
-            disabled={onStep === undefined}
-            onClick={() => onStep?.(BROWSER_LIVE_HISTORY.FORWARD)}
-          />
-        </Tooltip>
-        <Tooltip label="Reload">
-          <IconButton
-            icon={<RotateCwIcon aria-hidden="true" />}
-            label="Reload"
-            turns
-            disabled={onStep === undefined}
-            onClick={() => onStep?.(BROWSER_LIVE_HISTORY.RELOAD)}
-          />
-        </Tooltip>
-      </div>
-      <AddressField
-        ref={field}
-        value={typed ?? address}
-        autoFocus={autoFocus}
-        disabled={disabled}
-        onChange={setTyped}
-        onOpen={go}
-        onBlur={holdTyped ? undefined : () => setTyped(undefined)}
-        onEscape={
-          onEscape ??
-          (() => {
-            setTyped(undefined);
-            field.current?.blur();
-          })
-        }
-      />
-      {children}
-    </header>
+        </>
+      }
+      actions={children}
+    />
+  );
+}
+
+/** Whether the agent acted at `lastActedAt` within `CLOUD_BROWSER_AGENT_RECENT` of now, and false again once that span has passed. */
+function agentLately(lastActedAt: number): Stream.Stream<boolean> {
+  const span = Duration.toMillis(CLOUD_BROWSER_AGENT_RECENT);
+  return Stream.fromEffect(Clock.currentTimeMillis).pipe(
+    Stream.flatMap((now) => {
+      const left = lastActedAt + span - now;
+      if (left <= 0) return Stream.make(false);
+      return Stream.make(true).pipe(
+        Stream.concat(Stream.fromEffect(Effect.as(Effect.sleep(Duration.millis(left)), false))),
+      );
+    }),
+  );
+}
+
+/** `agentLately` for a component: the words it draws go on the clock's own edge, so nothing else need redraw the bar. */
+function useAgentLately(lastActedAt: number): boolean {
+  const atom = useMemo(() => rendererRuntime.atom(agentLately(lastActedAt)), [lastActedAt]);
+  return AsyncResult.getOrElse(
+    useAtomValue(atom),
+    () => Date.now() - lastActedAt < Duration.toMillis(CLOUD_BROWSER_AGENT_RECENT),
   );
 }
 
@@ -269,12 +351,13 @@ function standingOf(input: {
   tab: AgentBrowserTab;
   owner: CloudBrowserOwner;
   memberName: (userId: string) => string | undefined;
+  /** Whether the agent acted within `CLOUD_BROWSER_AGENT_RECENT`, as `useAgentLately` reads it. */
+  lately: boolean;
 }): string | undefined {
-  const { view, tab, owner, memberName } = input;
+  const { view, tab, owner, memberName, lately } = input;
   const driver = view.driver?.driver ?? tab.driver;
   if (view.driver?.yours === true) return "You're driving";
   if (driver !== null) return `${memberName(driver.userId) ?? "A teammate"} is driving`;
-  const lately = Date.now() - tab.lastActedAt < Duration.toMillis(CLOUD_BROWSER_AGENT_RECENT);
   return lately ? `${owner.name} is using this tab` : undefined;
 }
 
@@ -296,6 +379,17 @@ function noticeOf(view: CloudBrowserView): Notice | undefined {
     return { waiting: true, label: "Reconnecting" };
   }
   return view.painted ? undefined : { waiting: true, label: "Waiting for the page" };
+}
+
+/** Why the bar's steps are off while the view is not live, the wait or the act that brings them back. */
+function stepsOffOf(view: CloudBrowserView): string {
+  if (view.phase === CLOUD_BROWSER_PHASE.ENDED) {
+    return view.ended === BROWSER_LIVE_CLOSE_REASON.GONE
+      ? "this tab has closed"
+      : "watch again to use it";
+  }
+  if (view.phase === CLOUD_BROWSER_PHASE.RECONNECTING) return "reconnecting";
+  return "the browser is not live yet";
 }
 
 /** Paints a decoded frame over the canvas, scaled to it whole. */
@@ -482,8 +576,9 @@ export function CloudBrowserPane({
   const keyInput = (input: RemoteKey): boolean => {
     const { key, modifiers: held } = input;
     const chord = { key, meta: held.meta, shift: held.shift, alt: held.alt, control: held.control };
-    // A chord the window answers is left to it; ⌘V, or Control-V off a Mac, arrives as the paste it is.
-    if (chordIsWindows(chord)) return false;
+    // A chord the window answers is left to it, but off a Mac a Ctrl chord, which is the page's; ⌘V, or Control-V off a Mac, arrives as the paste it is.
+    const keptHere = surfaceKeepsPress({ ctrlKey: held.control, metaKey: held.meta });
+    if (!keptHere && chordIsWindows(chord)) return false;
     if ((held.meta || held.control) && !held.alt && key.toLowerCase() === "v") return false;
     const edit = held.meta && PAGE_EDIT_KEYS.has(key.toLowerCase());
     const modifiers = edit
@@ -513,16 +608,22 @@ export function CloudBrowserPane({
   const resumable =
     view.phase === CLOUD_BROWSER_PHASE.ENDED && view.ended === BROWSER_LIVE_CLOSE_REASON.IDLE;
   const notice = noticeOf(view);
-  const standing = standingOf({ view, tab, owner, memberName });
+  const lately = useAgentLately(tab.lastActedAt);
+  const standing = standingOf({ view, tab, owner, memberName, lately });
   const address = view.page?.address ?? tab.address;
   const driver = view.driver?.driver ?? tab.driver;
   const driven = driver !== null;
   // A refusal says why first, then who has the tab.
-  const said = view.takeoverRefused
+  const refusal = view.takeoverRefused
     ? "Only whoever started this agent can drive its tab."
     : view.stepRefused
       ? `${(driver === null ? undefined : memberName(driver.userId)) ?? "A teammate"} is driving this tab. Wait until they hand it back.`
-      : standing;
+      : undefined;
+  const said = refusal ?? standing;
+  // Note that who has the tab is said politely as it changes, and a refusal as an alert, since it answers a press.
+  useAnnounce(ANNOUNCE.POLITE, refusal === undefined ? (standing ?? "") : "");
+  useAnnounceShown(ANNOUNCE.ALERT, refusal ?? "");
+  useAnnounceShown(ANNOUNCE.POLITE, notice?.waiting === false ? notice.words : "");
   const isLive = view.phase === CLOUD_BROWSER_PHASE.LIVE;
   return (
     <Fill
@@ -533,11 +634,12 @@ export function CloudBrowserPane({
       <CloudBrowserBar
         address={address}
         onStep={isLive ? live.step : undefined}
+        whyOff={stepsOffOf(view)}
         onOpen={live.navigate}
         disabled={!isLive}
       />
       <div className="cloud-browser-standing">
-        <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED} role="status" truncate>
+        <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED} truncate>
           {said ?? ""}
         </Text>
         {yours ? (
@@ -587,7 +689,7 @@ export function CloudBrowserPane({
             <Spinner delay label={notice.label} size={SPINNER_SIZE.REGION} />
           </div>
         ) : (
-          <div className="cloud-browser-notice" role="status">
+          <div className="cloud-browser-notice">
             <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
               {notice.words}
             </Text>
@@ -612,7 +714,8 @@ export function CloudBrowserPane({
  * focused and its steps idle, over a line saying where the tab will open.
  * Enter opens it through the service, which may first wake the agent's
  * sandbox, and hands the tab, taken over by the member, to `onOpened`; a
- * refusal stays, said under the bar. Escape discards the draft.
+ * refusal stays, said under the bar as a failure, the address kept so Enter
+ * tries again. Escape clears the address, then discards the draft.
  */
 export function CloudBrowserDraftPane({
   taskId,
@@ -659,6 +762,7 @@ export function CloudBrowserDraftPane({
       <CloudBrowserBar
         address=""
         onStep={undefined}
+        whyOff="no page is open yet"
         onOpen={open}
         onEscape={onDiscard}
         holdTyped
@@ -666,10 +770,8 @@ export function CloudBrowserDraftPane({
         disabled={opening}
       />
       {refused === undefined ? null : (
-        <div className="cloud-browser-standing" role="alert">
-          <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
-            {refused}
-          </Text>
+        <div className="cloud-browser-standing">
+          <FailureNote>{refused}</FailureNote>
         </div>
       )}
       <Fill clip className="browser-view-body cloud-browser-body">
