@@ -120,6 +120,21 @@ export const CHANNELS: readonly ChannelInfo[] = [
 export interface ChannelItemMeta {
   readonly channel: ChannelInfo["id"];
   readonly kind: ThreadKind;
+  /** Whether a notice is addressed to its reader, who alone is asked for Got it; a notice addressed to nobody is only read. */
+  readonly addressed?: boolean;
+}
+
+/** The kinds a row's badge names: those an ask's glyph cannot say. */
+const BADGED_KINDS: ReadonlySet<ThreadKind> = new Set<ThreadKind>([
+  THREAD_KIND.REVIEW,
+  THREAD_KIND.HEADS_UP,
+  THREAD_KIND.SHIPPED,
+  THREAD_KIND.ANNOUNCEMENT,
+]);
+
+/** Whether a row names its thread's kind in a badge, in place of its line's glyph. */
+export function badgedKind(kind: ThreadKind): boolean {
+  return BADGED_KINDS.has(kind);
 }
 
 interface ChannelsMockState {
@@ -187,4 +202,10 @@ export function channelItemIds(channel: MockChannel): ReadonlySet<string> {
 /** A channel's sidebar count. */
 export function channelCount(channel: MockChannel): ChannelCount {
   return counts.get(channel) ?? { needsYou: 0, unread: false };
+}
+
+/** Whether an item is a channel's thread addressed to nobody, whose notice is read rather than nodded to. */
+export function channelUnaddressed(itemId: string): boolean {
+  const meta = items.get(itemId);
+  return meta !== undefined && meta.addressed !== true;
 }

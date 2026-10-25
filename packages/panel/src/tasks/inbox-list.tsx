@@ -180,6 +180,7 @@ import {
   channelInfo,
   channelItem,
   MOCK_CHANNEL,
+  badgedKind,
   kindTone,
   THREAD_KIND_WORDS,
   useChannelsMock,
@@ -533,14 +534,13 @@ export function InboxItemRow({
           description={
             line ? (
               <span className="inbox-row-line" data-line={lineKind}>
-                {meta === undefined ? null : (
+                {meta !== undefined && badgedKind(meta.kind) ? (
                   <Badge tone={kindTone(meta.kind, item.status === INBOX_STATUS.OPEN)}>
                     {THREAD_KIND_WORDS[meta.kind]}
                   </Badge>
+                ) : (
+                  lineGlyph(lineKind)
                 )}
-                {meta === undefined || item.status === INBOX_STATUS.OPEN
-                  ? lineGlyph(lineKind)
-                  : null}
                 {preview}
               </span>
             ) : undefined

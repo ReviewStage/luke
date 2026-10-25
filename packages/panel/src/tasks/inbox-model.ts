@@ -1,4 +1,5 @@
 import { ATTACHMENT_VIEW, attachmentView, type FileChip } from "@luke/features/attachment-model";
+import { channelUnaddressed } from "./channels-mock.js";
 import {
   CODING_AGENT_CALL_FAILURE,
   type CodingAgentCallFailure,
@@ -447,7 +448,12 @@ export function openAskOf(thread: readonly InboxMessage[]): InboxAsking | undefi
  * a reply settles it as it reaches the agent.
  */
 export function awaitsNod(item: InboxItem): boolean {
-  return item.status === INBOX_STATUS.OPEN && openAskOf(item.thread ?? []) === undefined;
+  // PROTOTYPE ONLY (STAG-547): a channel's notice addressed to nobody asks no one for Got it.
+  return (
+    item.status === INBOX_STATUS.OPEN &&
+    openAskOf(item.thread ?? []) === undefined &&
+    !channelUnaddressed(item.id)
+  );
 }
 
 /** The most characters an option may spell and still stand as one of two small buttons. */
@@ -1492,7 +1498,9 @@ export function waitsOnReader(
 
 /** Whether an item needs the reader: open, and theirs (`readersItem`); a teammate's open item waits on the teammate. */
 function needsReader(item: InboxItem, readerId: string | undefined): boolean {
-  return item.status === INBOX_STATUS.OPEN && readersItem(item, readerId);
+  // PROTOTYPE ONLY (STAG-547): a channel's notice addressed to nobody waits on no one.
+  const quiet = channelUnaddressed(item.id) && openAskOf(item.thread ?? []) === undefined;
+  return item.status === INBOX_STATUS.OPEN && readersItem(item, readerId) && !quiet;
 }
 
 /**
