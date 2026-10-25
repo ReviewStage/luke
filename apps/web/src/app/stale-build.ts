@@ -14,19 +14,22 @@
  * build has moved on and the tab reloads onto it. The address holds the
  * developer's place, and a composer's words are written as the page goes
  * (`composer-drafts.ts`), so a reload loses nothing typed in a box; but a
- * page or a plan holding unsaved work, or a field being typed in, is asked
- * about first, in a toast whose Reload leaves through the tab's own way out
+ * page or a plan holding unsaved work, a field being typed in, files
+ * attached to a draft, or a line held unsent with its Retry, none of which
+ * storage keeps, is asked about first, in a toast whose Reload leaves through the tab's own way out
  * (`page-leave.ts`), so the panel's own question stands before it.
  *
- * Note that a tab reloads away from a build at most once a session, kept in
- * the tab's session storage, so a reload that lands on the same build, as a
- * cached page might, never loops: the surface's own failure, with its
+ * Note that a tab reloads away from a build unasked at most once a session,
+ * kept in the tab's session storage, so a reload that lands on the same
+ * build, as a cached page might, never loops: the surface's own failure, with its
  * Retry, stands instead, as it does where the build has not moved (a
  * connection dropped for a moment), where the live page could not be read,
  * and where session storage keeps nothing. The desktop loads its chunks from
  * the app's own files, so only the web's root listens.
  */
 
+import { holdsUnkept } from "@luke/panel/composer-drafts";
+import { rendererRegistry } from "@luke/panel/renderer-runtime";
 import { showToast } from "@luke/panel/toast";
 import { STATUS_TONE } from "@luke/ui";
 import { Effect, Option } from "effect";
@@ -61,8 +64,8 @@ export interface StaleBuildTab {
   readonly session: SessionKeep | undefined;
   /** The tab's way out, and whether it holds work a reload would lose. */
   readonly leave: Pick<PageLeave, "leave" | "holdsWork">;
-  /** Whether a field is being typed in, whose words no draft keeps. */
-  readonly typing: () => boolean;
+  /** Whether the tab holds what no page's leave covers and a reload would lose: a field being typed in, a draft's files, a line held unsent. */
+  readonly unkept: () => boolean;
   /** The tab's reload. */
   readonly reload: () => void;
   /** Asks before reloading, with what Reload does. */
@@ -107,7 +110,7 @@ function liveBuild(
   );
 }
 
-/** Reloads the tab away from its build, once a session: where that cannot be kept, it never reloads, so it cannot loop. */
+/** Reloads the tab away from its build unasked, once a session: where that cannot be kept, it never reloads, so it cannot loop. */
 function reloadOnce(tab: StaleBuildTab, build: string): void {
   if (keepReloadedFrom(tab.session, build)) tab.reload();
 }
@@ -127,11 +130,13 @@ export function answerFailedChunk(
   if (build === undefined || reloadedFrom(tab.session) === build) return Effect.void;
   return Effect.map(liveBuild(tab.livePage), (live) => {
     if (Option.isNone(live) || live.value === build) return;
-    if (!tab.leave.holdsWork() && !tab.typing()) {
+    if (!tab.leave.holdsWork() && !tab.unkept()) {
       reloadOnce(tab, build);
       return;
     }
-    tab.askReload(() => tab.leave.leave(() => reloadOnce(tab, build)));
+    // Note that a Reload asked about is the developer's own press each time, so it is kept as no
+    // reload: one they stayed from at the browser's question leaves the next failure asked again.
+    tab.askReload(() => tab.leave.leave(tab.reload));
   });
 }
 
@@ -158,7 +163,7 @@ export function staleBuildTab(leave: StaleBuildTab["leave"]): StaleBuildTab {
     livePage: new URL(PANEL_PATH, location.origin).href,
     session: tabSession(),
     leave,
-    typing: typingInField,
+    unkept: () => typingInField() || holdsUnkept(rendererRegistry),
     reload: () => location.reload(),
     askReload: (reload) =>
       showToast({

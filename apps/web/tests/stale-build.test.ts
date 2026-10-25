@@ -31,8 +31,8 @@ function originServing(build: string): Layer.Layer<HttpClient.HttpClient> {
   );
 }
 
-/** A tab loaded with the build given in the session given, its reloads and asks counted. */
-function tabOn(build: string, session: Map<string, string>) {
+/** A tab loaded with the build given in the session given, holding what no page's leave covers or not, its reloads and asks counted. */
+function tabOn(build: string, session: Map<string, string>, unkept = false) {
   const leave = pageLeave(new EventTarget());
   const seen = { reloads: 0, asks: [] as (() => void)[] };
   const tab: StaleBuildTab = {
@@ -45,7 +45,7 @@ function tabOn(build: string, session: Map<string, string>) {
       },
     },
     leave,
-    typing: () => false,
+    unkept: () => unkept,
     reload: () => {
       seen.reloads += 1;
     },
@@ -113,5 +113,35 @@ it.effect(
       expect(tab.seen.reloads).toBe(0);
       leaveAsked[0]?.();
       expect(tab.seen.reloads).toBe(1);
+    }).pipe(Effect.provide(originServing(NEW_BUILD))),
+);
+
+it.effect(
+  "a tab holding files attached to a draft, which storage keeps none of, asks rather than reloading",
+  () =>
+    Effect.gen(function* () {
+      const tab = tabOn(OLD_BUILD, new Map(), true);
+
+      yield* answerFailedChunk(tab.tab);
+
+      expect(tab.seen.reloads).toBe(0);
+      expect(tab.seen.asks).toHaveLength(1);
+    }).pipe(Effect.provide(originServing(NEW_BUILD))),
+);
+
+it.effect(
+  "a Reload the developer stayed from at the browser's question leaves the next failure asked about again",
+  () =>
+    Effect.gen(function* () {
+      const tab = tabOn(OLD_BUILD, new Map());
+      tab.leave.unsavedPlanWords(true);
+
+      yield* answerFailedChunk(tab.tab);
+      tab.seen.asks[0]?.();
+      // The browser asked about the plan's words before reloading, and the developer stayed.
+      expect(tab.seen.reloads).toBe(1);
+
+      yield* answerFailedChunk(tab.tab);
+      expect(tab.seen.asks).toHaveLength(2);
     }).pipe(Effect.provide(originServing(NEW_BUILD))),
 );
