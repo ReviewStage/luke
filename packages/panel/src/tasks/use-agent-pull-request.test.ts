@@ -9,6 +9,7 @@ import {
   type CodingAgentPullRequestAnswer,
   PULL_REQUEST_STATE,
 } from "@luke/features/coding-agent-wire";
+import type { TaskPullRequestLine } from "@luke/features/task-wire";
 import { MESSAGE_ROLE } from "@luke/wire";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -26,8 +27,9 @@ import {
  * agents' pull requests as its reads land: an answer naming the pull
  * request it already keeps leaves what it keeps as it stood, so nothing
  * drawn from it is drawn again, and an agent of another task, read through
- * it as a card naming that agent may, is answered but never kept.
- * Synthetic ids.
+ * it as a card naming that agent may, is answered but never kept. Opening
+ * a task reads at most four of its agents at once, and none archived, whose
+ * pull requests stand as the task list pushed them. Synthetic ids.
  */
 
 const AGENT = "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21";
@@ -174,4 +176,68 @@ test("an agent of another task read through a task is answered but never kept", 
   await settled();
   assert.ok(!("failure" in answered), "the read is answered");
   assert.equal(newest(held).pullRequests.has(ELSEWHERE), false);
+});
+
+/** Synthetic agent ids, one per place in a task's list. */
+const agentIds = (count: number): string[] =>
+  Array.from(
+    { length: count },
+    (_, at) => `5d1e2f3a-4b5c-4d6e-8f70-${String(at).padStart(12, "0")}`,
+  );
+
+test("a task with many agents reads four at once, starting the next as one settles", async () => {
+  const ids = agentIds(6);
+  const agents = ids.map((id) => ({ id, status: CODING_AGENT_STATUS.COMPLETED }));
+  const answers = new Map<string, (value: CodingAgentPullRequestAnswerView) => void>();
+  const read = (agentId: string) =>
+    new Promise<CodingAgentPullRequestAnswerView>((resolve) => {
+      answers.set(agentId, resolve);
+    });
+  function Task(): null {
+    useTaskPullRequests(TASK, agents, read);
+    return null;
+  }
+  root = createRoot(document.body.appendChild(document.createElement("div")));
+  act(() => root?.render(createElement(Task)));
+  await settled();
+  assert.deepEqual([...answers.keys()], ids.slice(0, 4), "the first four are asked, the rest wait");
+
+  await act(async () => answers.get(ids[1] ?? "")?.(structuredClone(PUBLISHED)));
+  await settled();
+  assert.deepEqual([...answers.keys()], ids.slice(0, 5), "one settling starts the next");
+});
+
+test("an archived agent is not read on a visit, its pull request standing as the task list pushed it", async () => {
+  const [live = "", archived = ""] = agentIds(2);
+  const agents = [
+    { id: live, status: CODING_AGENT_STATUS.COMPLETED },
+    { id: archived, status: CODING_AGENT_STATUS.COMPLETED, archivedAt: 1_000 },
+  ];
+  const pushed: readonly TaskPullRequestLine[] = [
+    {
+      number: 7,
+      title: "Retry webhooks",
+      state: PULL_REQUEST_STATE.MERGED,
+      checks: CHECK_SUMMARY.PASSING,
+      additions: 12,
+      deletions: 3,
+      url: "https://github.com/acme/relay/pull/7",
+      agentId: archived,
+    },
+  ];
+  const asked: string[] = [];
+  const read = (agentId: string) => {
+    asked.push(agentId);
+    return publishedAgain();
+  };
+  let held: TaskPullRequests | undefined;
+  function Task(): null {
+    held = useTaskPullRequests(TASK, agents, read, agents, pushed);
+    return null;
+  }
+  root = createRoot(document.body.appendChild(document.createElement("div")));
+  act(() => root?.render(createElement(Task)));
+  await settled();
+  assert.deepEqual(asked, [live]);
+  assert.equal(held?.pullRequests.get(archived)?.number, 7);
 });
