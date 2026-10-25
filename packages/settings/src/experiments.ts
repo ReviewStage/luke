@@ -22,6 +22,8 @@ export const EXPERIMENT = {
   INBOX_FIRST: "inbox-first",
   /** Luke as the member's operator: one standing agent per workspace that manages their other agents. */
   OPERATOR: "operator",
+  /** Coding agents that run on the developer's own Mac, in a worktree, with their own tools, rather than in a cloud sandbox. */
+  LOCAL_AGENTS: "local-agents",
 } as const;
 
 export type Experiment = (typeof EXPERIMENT)[keyof typeof EXPERIMENT];

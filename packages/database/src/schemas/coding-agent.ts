@@ -1,10 +1,12 @@
 import type { AutomationFiring } from "@luke/features/automation-wire";
 import {
   CODING_AGENT_KIND,
+  CODING_AGENT_MACHINE,
   CONTEXT_WINDOW,
   type CodingAgentArchiver,
   type CodingAgentAuthor,
   type CodingAgentKind,
+  type CodingAgentMachine,
   type CodingAgentPayer,
   type CodingAgentPullRequest,
   type ContextWindow,
@@ -24,6 +26,7 @@ import {
 import { createdAt, timestamptz } from "./_helpers.js";
 import { organization, user } from "./auth.js";
 import { automation } from "./automation.js";
+import { macDevice } from "./mac-device.js";
 import { conversations } from "./storage.js";
 import { task } from "./task.js";
 
@@ -109,6 +112,13 @@ import { task } from "./task.js";
  * member's operator, started blank with no task and no repository, of which
  * a member holds at most one standing per workspace; a Reset archives it,
  * transcript kept, and ensures a fresh one.
+ *
+ * `machine` is where the agent's runner and checkout live
+ * (`CODING_AGENT_MACHINE`): a Vercel Sandbox, as every row from before the
+ * column reads, or the starter's own Mac, named by `device_id`, which a
+ * local agent is pinned to and every line and request for it goes to
+ * (`./mac-agent.ts`); null for an agent in a sandbox, and once its Mac's row
+ * is gone, which leaves the agent with no Mac to run on.
  *
  * `idempotency_key` is the Start request's own key, unique per account, so a
  * network retry of one Start finds the agent it already made rather than
@@ -294,6 +304,13 @@ export const codingAgent = pgTable(
     runnerTokenHash: text("runner_token_hash"),
     /** What the agent is: a coder, or its member's operator; a coder for every row from before the column. */
     kind: text("kind").$type<CodingAgentKind>().notNull().default(CODING_AGENT_KIND.CODER),
+    /** Where the agent's runner and checkout live; a Vercel Sandbox for every row from before the column. */
+    machine: text("machine")
+      .$type<CodingAgentMachine>()
+      .notNull()
+      .default(CODING_AGENT_MACHINE.VERCEL),
+    /** The Mac a local agent is pinned to; null for one in a sandbox. */
+    deviceId: uuid("device_id").references(() => macDevice.id, { onDelete: "set null" }),
     idempotencyKey: text("idempotency_key").notNull(),
     createdAt: createdAt(),
   },

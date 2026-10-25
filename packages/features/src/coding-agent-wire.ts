@@ -203,6 +203,18 @@ export const CODING_AGENT_KIND = {
 export type CodingAgentKind = (typeof CODING_AGENT_KIND)[keyof typeof CODING_AGENT_KIND];
 
 /**
+ * Where an agent's runner and checkout live: a Vercel Sandbox, as every
+ * agent from before the column does, or the starter's own Mac, which takes
+ * its work as rows it follows (`@luke/features/mac-agent-wire`).
+ */
+export const CODING_AGENT_MACHINE = {
+  VERCEL: "vercel",
+  MAC: "mac",
+} as const;
+
+export type CodingAgentMachine = (typeof CODING_AGENT_MACHINE)[keyof typeof CODING_AGENT_MACHINE];
+
+/**
  * The whole of what an operator answers a heartbeat that found nothing for
  * its member: a turn whose reply is exactly this, and nothing more, is a
  * quiet turn, which leaves its member no unseen dot and no notice, and whose
