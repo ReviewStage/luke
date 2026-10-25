@@ -374,6 +374,45 @@ test("a sidebar task wears its assignee's face where someone else is on it, the 
   assert.deepEqual(faces(OTHER), [[["unassigned", ""]], "(unassigned)"]);
 });
 
+test("a sidebar task no one is on wears no face in a workspace of the reader alone, by its count or else by its members read, and the dashed mark where others share it or nobody counted them", async () => {
+  const { memberCount: _uncounted, ...uncounted } = PERSONAL;
+  /** Each mark the row wears, by its kind, and what the row says of who is on it, read as Dean sees them. */
+  const faces = async (
+    workspace: Workspace,
+    members: readonly { userId: string; name: string }[] | undefined,
+  ) => {
+    installMembers(members);
+    const { tasks, asked } = openTab();
+    const task = { ...OTHER, workspaceId: workspace.id };
+    const container = mount(
+      createElement(MemberDirectory, {
+        workspace,
+        readerId: DEAN.userId,
+        children: sidebarTask(tasks, task, asked),
+      }),
+    );
+    await act(async () => {
+      for (let tick = 0; tick < 8; tick += 1) await Promise.resolve();
+    });
+    const marks = container.querySelectorAll(".sidebar-task-time > .actor-mark");
+    const line = container.querySelector(".luke-list-row-title");
+    const said = [...(line?.childNodes ?? [])]
+      .map(heard)
+      .join("")
+      .match(/\((?:assigned to|unassigned)[^)]*\)/u)?.[0];
+    unmountAll();
+    return [[...marks].map((mark) => mark.getAttribute("data-kind")), said];
+  };
+
+  assert.deepEqual(await faces(PERSONAL, [DEAN]), [[], undefined]);
+  assert.deepEqual(await faces(PERSONAL, undefined), [[], undefined]);
+  assert.deepEqual(await faces(STAGE, [DEAN, CHARLES]), [["unassigned"], "(unassigned)"]);
+  // A service that counts no members leaves it to the members read, and keeps the mark while nobody counted them.
+  assert.deepEqual(await faces(uncounted, [DEAN]), [[], undefined]);
+  assert.deepEqual(await faces(uncounted, [DEAN, CHARLES]), [["unassigned"], "(unassigned)"]);
+  assert.deepEqual(await faces(uncounted, undefined), [["unassigned"], "(unassigned)"]);
+});
+
 test("a sidebar task Luke or a coding agent made wears who is on it rather than their square, and its ⋯ says who made it for whom", () => {
   /** Each mark the row wears, by its kind. */
   const marks = (task: TaskSummary) => {

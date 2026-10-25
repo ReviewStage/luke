@@ -705,7 +705,11 @@ function taskRows(
   // Note that only the listed workspace's members are read, so another workspace's assignee stands by the wire's name, never as having left.
   const listedMembers = (task: TaskSummary) =>
     task.workspaceId === listedId ? members : undefined;
-  const readerOf = (task: TaskSummary) => ({ members: listedMembers(task), readerId: tasks.me });
+  const readerOf = (task: TaskSummary) => ({
+    members: listedMembers(task),
+    readerId: tasks.me,
+    memberCount: tasks.workspaces.find((each) => each.id === task.workspaceId)?.memberCount,
+  });
   const elsewhereOf = (task: TaskSummary): Workspace | undefined =>
     listedId === undefined || task.workspaceId === listedId
       ? undefined
