@@ -10,6 +10,14 @@
    380px, and a desktop page insets `--luke-page-inset-narrow` under 480px of
    content. The pattern that draws each says so where it queries. */
 
+/* A bar's title floor is read in pixels by the bar that answers it, so it is
+   registered as a length, which a computed style resolves. */
+@property --luke-title-floor {
+  syntax: "<length>";
+  inherits: true;
+  initial-value: 0px;
+}
+
 [data-luke-profile="desktop"] {
   --luke-font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", sans-serif;
   --luke-font-mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, monospace;
@@ -26,6 +34,9 @@
      height with a tight gap over and under it, and the hairline it stands
      on, so a bar holding words alone stands as tall as one holding buttons. */
   --luke-pane-bar-height: calc(var(--luke-control-height) + 2 * var(--luke-tight-gap) + 1px);
+  /* The least of a bar's title that reads: a bar that would cut it shorter
+     on one row stands it on a row of its own (`use-wrap-when-cut.ts`). */
+  --luke-title-floor: calc(10 * var(--luke-space-12));
   --luke-control-inset: var(--luke-space-12);
   --luke-control-gap: var(--luke-space-8);
   /* How far every control fades while it cannot be used: one look, so a
@@ -279,6 +290,9 @@
      height with a tight gap over and under it, and the hairline it stands
      on, so a bar holding words alone stands as tall as one holding buttons. */
   --luke-pane-bar-height: calc(var(--luke-control-height) + 2 * var(--luke-tight-gap) + 1px);
+  /* The least of a bar's title that reads: a bar that would cut it shorter
+     on one row stands it on a row of its own (`use-wrap-when-cut.ts`). */
+  --luke-title-floor: calc(10 * var(--luke-space-12));
   --luke-control-inset: var(--luke-space-16);
   --luke-control-gap: var(--luke-space-8);
   /* How far every control fades while it cannot be used: one look, so a

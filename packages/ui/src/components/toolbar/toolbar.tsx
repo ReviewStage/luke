@@ -29,12 +29,14 @@
  *   page's state (an experiment), or a switch of its view.
  * - `actions` end the bar, at the control gap.
  *
- * A bar whose heading is crumbs beside a way back and several actions
- * (`wrapHeading`, an Inbox item's) answers its own width: narrower than all
- * of them need, the heading takes a row of its own under the lead and the
- * actions, the whole bar wide, rather than squeezing each crumb to a glyph
- * and a letter; narrower still, the lead's labelled controls draw their
- * glyphs alone, named still.
+ * A bar whose heading is crumbs or a title beside a way back and its
+ * actions (`wrapHeading`: an Inbox item's, New thread's) answers its own
+ * width: under 360px the lead's labelled controls draw their glyphs alone,
+ * named still, and once one row would show less of the page's own name than
+ * reads (`--luke-title-floor`, `use-wrap-when-cut.ts`), the heading takes a
+ * row of its own under the lead and the actions, one pane bar high, rather
+ * than cutting the name to a few letters; above the floor the name fades
+ * where it is cut, on the one row.
  *
  * A document's page draws the bar with no title of its own, since its header
  * names it in the page (`PageHeader`), and hands it `pickUp`: the header's
@@ -69,13 +71,14 @@
  * where every page has them, and says so in the room under it.
  */
 
-import type { ReactNode } from "react";
+import { type ReactNode, useRef } from "react";
 import { NotFoundIcon } from "../../icons/lucide-glyphs.js";
 import { BREADCRUMBS_VARIANT, Breadcrumbs, type Crumb } from "../breadcrumbs/breadcrumbs.js";
 import { EmptyState, type EmptyStateAction } from "../empty-state/empty-state.js";
 import { FILL_ELEMENT, Fill } from "../layout/layout.js";
 import { ONE_LINE_ELEMENT, OneLine } from "../one-line/one-line.js";
 import { wholeWordsHint } from "../tooltip/hint.js";
+import { type TitleSeat, useWrapWhenCut } from "../../use-wrap-when-cut.js";
 import {
   TOOLBAR_INSET,
   TOOLBAR_LOOK,
@@ -122,6 +125,12 @@ const DETAIL = "luke-toolbar-detail min-w-0 flex-[0_1000_auto] text-body text-mu
 const TITLE =
   "luke-toolbar-title m-0 -ml-luke-6 pl-luke-6 text-dialog-size font-dialog tracking-title";
 
+/** Where a bar's heading stands its title on one row: the page's own name, its last words. */
+const HEADING_SEAT: TitleSeat = {
+  room: ":scope > .luke-toolbar-heading",
+  words: ":is(.luke-breadcrumb-label, .luke-toolbar-title)",
+};
+
 /** A place above the page in its trail: its name, the glyph it wears where it wears one, and the press back to it. */
 export interface ToolbarPlace {
   readonly label: string;
@@ -166,7 +175,7 @@ export interface ToolbarProps {
   readonly measure?: boolean | undefined;
   /** Whether every labelled control of the bar draws its glyph alone, named still. */
   readonly folded?: boolean | undefined;
-  /** Whether a bar too narrow for its lead, its heading, and its actions in one row stands its heading on a row of its own under them, and narrower still folds its lead to glyphs. */
+  /** Whether a bar that would cut the page's own name under the readable floor stands its heading on a row of its own under the lead and actions, and under 360px folds its lead to glyphs. */
   readonly wrapHeading?: boolean | undefined;
 }
 
@@ -251,8 +260,12 @@ export function Toolbar({
   folded,
   wrapHeading,
 }: ToolbarProps): React.JSX.Element {
+  const frame = useRef<HTMLElement>(null);
+  const wrapped = useWrapWhenCut(frame, HEADING_SEAT, wrapHeading === true);
   return (
     <ToolbarFrame
+      frameRef={frame}
+      wrapped={wrapped}
       start={start}
       end={end}
       look={look}

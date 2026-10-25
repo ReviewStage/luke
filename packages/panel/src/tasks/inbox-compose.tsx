@@ -478,6 +478,7 @@ function ComposeCard({
       ) : (
         <Toolbar
           start={TOOLBAR_INSET.COLUMN}
+          wrapHeading
           lead={
             onBack === undefined ? null : (
               <BackButton label={INBOX} place={INBOX_PLACE} onBack={onBack} />

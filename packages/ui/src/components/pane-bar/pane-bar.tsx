@@ -1,8 +1,9 @@
-import type { ReactNode } from "react";
+import { type ReactNode, useRef } from "react";
 import { Menu, type MenuEntry, useMenu } from "../menu/menu.js";
 import { MoreButton, moreLabel } from "../more-button/more-button.js";
 import { OneLine } from "../one-line/one-line.js";
 import { wholeWordsHint } from "../tooltip/hint.js";
+import { type TitleSeat, useWrapWhenCut } from "../../use-wrap-when-cut.js";
 
 /**
  * pane-bar.tsx -- the bar across the top of a tab or a dock: what leads it (a mark and a title, fading where cut), its middle (tabs or crumbs), its actions, and its ⋯ at the end.
@@ -22,6 +23,9 @@ import { wholeWordsHint } from "../tooltip/hint.js";
  * where nothing leads it, starts at the bar's own edge, since it holds
  * controls (Back and Forward before a path's crumbs, an address, tabs). The
  * actions stand at the bar's end, the glyphs in them close, and the ⋯ last.
+ * A bar that would cut its title under the readable floor on one row
+ * (`use-wrap-when-cut.ts`) stands it on a row of its own under the rest,
+ * at the lead's inset, rather than cutting it to a few letters.
  *
  * The ⋯ is a `MoreButton`, drawn from a menu's definition (`menu`), its
  * thing naming both the button and the menu it drops ("File" makes "File
@@ -45,6 +49,13 @@ const MARK = "luke-pane-bar-mark flex flex-none items-center [&>svg]:size-contro
 const MIDDLE = "luke-pane-bar-middle flex min-w-0 flex-auto items-center gap-control-gap";
 /** The actions at the end, their glyphs close. */
 const ACTIONS = "luke-pane-bar-actions ml-auto flex flex-none items-center gap-luke-2";
+/** A bar whose title has a row of its own lays its parts on two rows, the title's last. */
+const WRAPPED = "flex-wrap gap-y-0";
+/** The title's own row: the bar wide, a control high, its words where the lead's start. */
+const TITLE_ROW =
+  "luke-pane-bar-title-row order-last flex min-h-control min-w-0 basis-full items-center pl-row-inset";
+/** Where the bar's title stands on one row: in its lead. */
+const TITLE_SEAT: TitleSeat = { room: ".luke-pane-bar-lead", words: ".luke-pane-bar-title" };
 
 /** The bar's ⋯: what it and the menu it drops are called, and the menu's groups of items. */
 export interface PaneBarMenu {
@@ -98,24 +109,33 @@ export function PaneBar({
   /** The bar's ⋯, drawn last; none draws no ⋯. */
   menu?: PaneBarMenu | undefined;
 }): React.JSX.Element {
-  const leads = said(mark) || said(title) || said(detail);
+  const frame = useRef<HTMLElement>(null);
+  const titled = title !== undefined && title !== "";
+  const wrapped = useWrapWhenCut(frame, TITLE_SEAT, titled);
+  const leads = said(mark) || (titled && !wrapped) || said(detail);
   const acts = said(actions) || menu !== undefined;
+  const words = titled ? (
+    <OneLine
+      className="luke-pane-bar-title flex-initial text-foreground"
+      hint={wholeWordsHint(title)}
+    >
+      {title}
+    </OneLine>
+  ) : null;
   return (
-    <header className={BAR}>
+    <header
+      ref={frame}
+      className={wrapped ? `${BAR} ${WRAPPED}` : BAR}
+      data-wrapped={wrapped ? "true" : undefined}
+    >
       {leads ? (
         <div className={LEAD}>
           {said(mark) ? <span className={MARK}>{mark}</span> : null}
-          {title === undefined || title === "" ? null : (
-            <OneLine
-              className="luke-pane-bar-title flex-initial text-foreground"
-              hint={wholeWordsHint(title)}
-            >
-              {title}
-            </OneLine>
-          )}
+          {wrapped ? null : words}
           {said(detail) ? <span className="luke-pane-bar-detail flex-none">{detail}</span> : null}
         </div>
       ) : null}
+      {wrapped ? <div className={TITLE_ROW}>{words}</div> : null}
       {said(middle) ? <div className={MIDDLE}>{middle}</div> : null}
       {acts ? (
         <div className={ACTIONS}>

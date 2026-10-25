@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test, vi } from "vitest";
+import { layTitle } from "../../testing/laid-title.js";
 import { NOT_FOUND_THING, NotFound, Toolbar, type ToolbarProps } from "./toolbar.js";
 
 /**
@@ -12,8 +13,10 @@ import { NOT_FOUND_THING, NotFound, Toolbar, type ToolbarProps } from "./toolbar
  * only the slots that say something, and its actions end it even with no
  * title; a page with a parent leads its heading with its trail, each
  * place a press back to it and the page's own name last, words that are no
- * press, said to be the current page; and a place that is not found keeps
- * its bar above the words saying so.
+ * press, said to be the current page; a bar that would cut the page's name
+ * under the readable floor stands it on a row of its own, and above the
+ * floor keeps one row; and a place that is not found keeps its bar above
+ * the words saying so.
  */
 
 declare global {
@@ -195,5 +198,30 @@ test("a document's trail stands alone while its name is not yet read", () => {
   assert.deepEqual(
     [...banner.querySelectorAll("nav li")].map((crumb) => crumb.textContent),
     ["Automations"],
+  );
+});
+
+test("a bar that would cut the page's name under the readable floor stands it on a row of its own, and keeps one row above it", () => {
+  const wrappedAt = (roomWidth: number, whole: number): string | undefined => {
+    const laid = layTitle({
+      room: ".luke-toolbar-heading",
+      words: ".luke-toolbar-title",
+      roomWidth,
+      whole,
+      floor: 120,
+    });
+    try {
+      return bar({ title: "New thread", wrapHeading: true }).dataset.wrapped;
+    } finally {
+      laid.restore();
+      document.body.replaceChildren();
+    }
+  };
+
+  assert.equal(wrappedAt(96, 116), "true", "96px of a 116px name is under the floor");
+  assert.equal(
+    wrappedAt(135, 188),
+    undefined,
+    "135px of a 188px name reads, so it fades on one row",
   );
 });
