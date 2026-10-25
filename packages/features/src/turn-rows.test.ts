@@ -175,6 +175,7 @@ test("a row of each kind reads alike copied whole, and otherwise once any of its
   const moving = turnRows([call("read"), call("grep"), words("Reading.")], READING, {
     key: "turn",
     moving: true,
+    done: false,
   });
   const finished = turnRows([call("read"), thought("why"), call("grep"), words("Done.")], READING, {
     key: "turn",
