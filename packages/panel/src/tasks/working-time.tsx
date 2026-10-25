@@ -27,8 +27,8 @@ const WORKING_LINE = "Working…";
 /** What a finished turn's last line says before how long it worked. */
 const WORKED_WORDS = "Worked for ";
 
-/** How a working line and the line a finished turn ends on are both set: the transcript's quiet status type, in the muted colour (`.status-line`, tasks.css). */
-const STATUS_LINE_CLASS = "status-line";
+/** How a working line and the line a finished turn ends on are both set: the transcript's quiet status type, in the muted colour, its words selectable. */
+const STATUS_LINE_CLASS = "status-line select-text text-caption text-muted-foreground";
 
 /** What a finished turn's last line says: how long it worked, and the day and time it ended, as a call's header says it from `now`. */
 function workedForText(startedAt: number, endedAt: number, now: number): string {
@@ -42,14 +42,18 @@ function workedForText(startedAt: number, endedAt: number, now: number): string 
  */
 export function WorkingTime({
   startedAt,
-  className = "working-time-after",
+  className = "ml-item-gap",
 }: {
   startedAt: number;
-  /** Where it stands off the word before it: a word's breadth after a working word (`.working-time-after`), unless said otherwise. */
+  /** Where it stands off the word before it: a word's breadth after a working word, unless said otherwise. */
   className?: string;
 }): ReactNode {
   return (
-    <Time at={startedAt} look={TIME_LOOK.DURATION} className={cn("working-time", className)} />
+    <Time
+      at={startedAt}
+      look={TIME_LOOK.DURATION}
+      className={cn("working-time text-muted-foreground tabular-nums", className)}
+    />
   );
 }
 
@@ -84,7 +88,7 @@ export function WorkedFor({
       label={text}
       card={<TurnCard startedAt={startedAt} endedAt={endedAt} record={record} models={models} />}
     >
-      <p className={STATUS_LINE_CLASS} data-worked="">
+      <p className={`${STATUS_LINE_CLASS} mt-control-gap mb-0 w-fit tabular-nums`} data-worked="">
         <span data-worked-length="">
           {WORKED_WORDS}
           {workingTime(endedAt - startedAt)}
@@ -108,7 +112,7 @@ export function WorkingLine({
   useAnnounce(ANNOUNCE.POLITE, words);
   // Note that only its top margin is cleared, because the conversation's gap below it is a bottom margin a cleared one would override, leaving what is said next touching it.
   return (
-    <p className={STATUS_LINE_CLASS} data-working="">
+    <p className={`${STATUS_LINE_CLASS} mt-0 last:mb-0`} data-working="">
       <Shimmer>{words}</Shimmer>
       {startedAt === undefined ? null : <WorkingTime startedAt={startedAt} />}
     </p>

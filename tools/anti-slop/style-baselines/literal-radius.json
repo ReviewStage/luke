@@ -5,7 +5,7 @@
   "packages/panel/src/admin/charts/cost-chart.tsx": 1,
   "packages/panel/src/admin/charts/retention-grid.tsx": 3,
   "packages/panel/src/styles/desktop.css": 7,
-  "packages/panel/src/styles/tasks.css": 7,
+  "packages/panel/src/styles/tasks.css": 6,
   "packages/ui/src/components/choice-list/choice-list.tsx": 4,
   "packages/ui/src/components/prose/prose.css": 2,
   "packages/ui/src/components/swatch/swatch.css": 1,

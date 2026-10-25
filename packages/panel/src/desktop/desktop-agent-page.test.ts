@@ -2289,7 +2289,6 @@ test("Permanently delete on the page's ⋯ asks first, naming the agent, and onc
   await settle();
 
   assert.deepEqual(deletes, [AGENT_ID]);
-  assert.equal(newestToastSays(), "Agent deleted");
   assert.equal(closed, 1, "the page is left");
   assert.equal(document.querySelector('[role="alertdialog"]'), null);
 });

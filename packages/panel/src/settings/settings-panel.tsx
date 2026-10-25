@@ -20,7 +20,6 @@ import { type IntegrationsFilter, IntegrationsSection } from "./integrations-pag
 import { LinksSection } from "./links-section.js";
 import { MacCommandsSection } from "./mac-commands-section.js";
 import { MemorySection } from "./memory-page.js";
-import { NotificationsSection } from "./notifications-section.js";
 import { PrivacySection } from "./privacy-section.js";
 import { settingsRowsInput, shownWorkspace } from "./settings-rows.js";
 import { WindowShortcutSections } from "./shortcuts-page.js";
@@ -164,12 +163,8 @@ export function SettingsPanel({
         <AppearanceSection view={panelView} writes={writes} />
       ) : null}
 
-      {view === SETTINGS_VIEW.NOTIFICATIONS && panelView ? (
-        <NotificationsSection view={panelView} writes={writes} control={notifications} />
-      ) : null}
-
       {view === SETTINGS_VIEW.THIS_MAC && panelView ? (
-        <MacCommandsSection view={panelView} writes={writes} />
+        <MacCommandsSection view={panelView} writes={writes} notifications={notifications} />
       ) : null}
 
       {view === SETTINGS_VIEW.EXPERIMENTAL ? (

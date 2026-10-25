@@ -254,7 +254,7 @@ export function initialAppState(
     voice: staged?.voice ?? { avatar: AVATAR_OFF },
     tasks: staged?.tasks ?? IDLE_TASKS_VIEW,
     codingAgents: { unseen: [] },
-    inbox: { waiting: [], tasks: [], taskless: [], automations: [], failedRuns: [], chat: [] },
+    inbox: { waiting: [], tasks: [], taskless: [], automations: [], failedRuns: [] },
     macCommands: { asks: [] },
     notifications: { status: NOTIFICATIONS_STATUS.UNKNOWN },
     network: { online: true },

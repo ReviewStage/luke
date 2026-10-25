@@ -42,7 +42,6 @@ export {
   type MacCommandAnswer,
   type MacCommandDecision,
 } from "../mac-command-ask.js";
-export type { ChatShown } from "./agents.js";
 export { ACT_ERROR } from "./base.js";
 export {
   ACCOUNT_ACT_KIND,

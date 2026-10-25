@@ -87,9 +87,11 @@ export const CODER = {
    * as a snapshot is kept and an agent left idle longer is rarely picked up
    * again. The cost: an agent resumed after 7 idle days finds no snapshot and
    * starts from a fresh clone of its repository, so its uncommitted and
-   * unpushed work is gone. An eve agent's sandbox opens anew where its
-   * snapshot is gone, and a native agent's resume does the same
-   * (`runner-sessions.ts`).
+   * unpushed work is gone. An eve agent's sandbox opens anew through its
+   * root's selector, checkout and all, where its sandbox or its snapshot is
+   * gone (`patches/eve@0.74.0.patch`, held by
+   * `agent-runtime/sandbox-resume.test.ts`), and a native agent's resume does
+   * the same (`runner-sessions.ts`).
    */
   SANDBOX_SNAPSHOTS: { count: 1, expiration: Duration.days(7), deleteEvicted: true },
   /** An installation token is good for an hour from its mint; the one at the firewall is renewed this long after, inside that hour. */
