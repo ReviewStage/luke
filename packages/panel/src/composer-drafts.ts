@@ -512,13 +512,33 @@ type DraftEdit = Extract<
   { readonly place: DraftPlace } | { readonly drop: (place: DraftPlace) => boolean }
 >;
 
-/** The drafts the window holds with the files of `theirs` laid over them at each place, a draft of files alone where none stands there. */
+/**
+ * Whether the files an address held at a place go with what storage now
+ * holds there as its id's: where its words stood and won the place, or
+ * where they were files alone and no words of the id's stand there. Note
+ * that words the id wrote there later win the place (`adoptDrafts`), and the
+ * files attached to other words never go with them.
+ */
+function filesGoWith(theirs: KeptDraft, standing: KeptDraft | undefined): boolean {
+  if (!stored(theirs)) return standing === undefined;
+  return standing !== undefined && Equal.equals({ ...theirs, attachments: [] }, standing);
+}
+
+/** The drafts the window holds with the files of `theirs` laid over them at each place their files go with what storage holds as the owner's (`filesGoWith`), a draft of files alone where none stands there. */
 function withFilesOf(
+  owner: Owner,
   held: readonly KeptDraft[],
   theirs: readonly KeptDraft[],
 ): readonly KeptDraft[] {
+  const standing = readDrafts(owner);
   return theirs
     .filter((kept) => kept.attachments.length > 0)
+    .filter((kept) =>
+      filesGoWith(
+        kept,
+        standing.find((each) => Equal.equals(each.place, kept.place)),
+      ),
+    )
     .reduce<readonly KeptDraft[]>((drafts, { place, attachments }) => {
       const was = drafts.find((kept) => Equal.equals(kept.place, place)) ?? EMPTY_DRAFT;
       return withDraft(drafts, place, { ...was, attachments });
@@ -601,7 +621,7 @@ const draftsOf = Atom.family((owner: Owner) => {
         }
         // Note that the files an address held are this window's alone, so they are carried here rather than read from storage, and the address keeps none.
         if ("adopt" in change) {
-          ctx.setSelf(withFilesOf(held, ctx.get(draftsOf(change.adopt))));
+          ctx.setSelf(withFilesOf(owner, held, ctx.get(draftsOf(change.adopt))));
           ctx.set(draftsOf(change.adopt), FORGET);
           return;
         }
