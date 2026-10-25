@@ -1,5 +1,5 @@
 /**
- * column-dock.ts -- how tall the dock at the foot of a column stands, said where what floats over that foot reads it: the folded sidebar's call card, the toasts, and the voice's notice line; how tall a phone's card may stand under the column's bars; and how much of the window's foot the toasts take, which a page's scroll leaves room for.
+ * column-dock.ts -- how tall the dock at the foot of a column stands, said where what floats over that foot reads it: the folded sidebar's call card, the toasts, and the voice's notice line; and how tall a phone's card may stand under the column's bars.
  */
 
 import { type RefObject, useLayoutEffect } from "react";
@@ -64,9 +64,6 @@ const TOAST_STACK = ".luke-toast-stack";
 
 /** The length the dock under the toasts is written in, beside the work, where they stand in the window's corner rather than across a column. */
 const TOAST_DOCK = "--luke-toast-dock";
-
-/** The length the toasts standing take of the window's foot over the dock under them is written in, which a page's or a log's scroll leaves free at its end. */
-const TOAST_ROOM = "--luke-toast-room";
 
 /** The token the toasts' corner stands in from the window's by. */
 const CORNER_STEP = "--luke-space-16";
@@ -241,12 +238,10 @@ function cornerStep(root: HTMLElement): number {
  * From the window's foot to the top of the highest docked part on screen
  * under the toasts' corner, or nothing where none stands there. A part
  * counts only once one under the corner reaches into where the toasts rest
- * (their height and the corner's step up from the window's foot). Note
- * that a draft reply flowing at a thread's end therefore lifts them only
- * while the reader has it partly scrolled under them, and then by as much
- * of it as shows: at the end, the log leaves their room under it
- * (`--luke-toast-room`), so it stands above where they rest, and they stay
- * in their corner rather than over the newest message above it.
+ * (their height and the corner's step up from the window's foot): a draft
+ * reply that flows at a short thread's end, well above the foot, leaves
+ * them in their corner, over the empty room below it, and one at a long
+ * thread's end lifts them by as much of it as shows.
  */
 function toastDockHeight(shell: Element, docked: string, stack: DOMRect, step: number): number {
   const foot = shell.getBoundingClientRect().bottom;
@@ -281,11 +276,9 @@ function toastDockHeight(shell: Element, docked: string, stack: DOMRect, step: n
  * The toasts stand in the window's corner, over whichever column reaches
  * it, so they read a dock of their own too (`--luke-toast-dock`): the
  * docked parts on screen under their corner, whatever column holds them, a
- * phone's places bar among them. In any room, how much the standing toasts
- * take of the window's foot over that dock (`--luke-toast-room`) is written
- * too, which a page's scroll or a log's leaves free at its end, so its last
- * row, or the newest message and the draft reply under it, can always be
- * scrolled clear of them.
+ * phone's places bar among them. Note that nothing else is written for
+ * the toasts: they are an overlay, so a page or a log under them keeps its
+ * end and its scroll whether one stands or not.
  *
  * One ResizeObserver follows the column, the docked parts, the card, and
  * the toasts; a scroll anywhere under the shell re-reads, since it moves a
@@ -343,15 +336,6 @@ export function useColumnDock(
           ? undefined
           : toastDockHeight(host, toastDocked, stack.getBoundingClientRect(), cornerStep(root));
       writeLength(root, TOAST_DOCK, toastDock === undefined ? undefined : `${toastDock}px`);
-      // Note that the room is read once the dock above is written, since the dock moves the stack.
-      const standing = stack?.getBoundingClientRect();
-      writeLength(
-        root,
-        TOAST_ROOM,
-        standing === undefined || standing.height === 0
-          ? undefined
-          : `${Math.max(0, host.getBoundingClientRect().bottom - (toastDock ?? 0) - standing.top)}px`,
-      );
     }
     function follow(): void {
       if (host === null) return;
@@ -401,7 +385,6 @@ export function useColumnDock(
       host.removeEventListener("scroll", measure, { capture: true });
       root.style.removeProperty(COLUMN_DOCK);
       root.style.removeProperty(TOAST_DOCK);
-      root.style.removeProperty(TOAST_ROOM);
       host.style.removeProperty(FLOATING_CARD_HEIGHT);
       host.querySelector<HTMLElement>(FLOATING_CARD)?.style.removeProperty(CARD_TILE_HEIGHT);
     };

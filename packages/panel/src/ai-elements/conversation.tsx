@@ -149,8 +149,8 @@ export function Conversation({
   // to scroll to. Note that it watches no line of its own, because the block
   // is as tall as its lines, so any line resizing resizes it, and a line
   // replaced or removed is then never held by the observer; and that it
-  // watches the block's border box, so its end growing to leave the toasts'
-  // room (`--luke-toast-room`) keeps a following log at its newest line too.
+  // watches the block's border box, so its end growing to clear the floating
+  // call card (`call.css`) keeps a following log at its newest line too.
   const [resized] = useState(
     () =>
       new ResizeObserver(() => {
