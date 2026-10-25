@@ -1,31 +1,10 @@
-/* layout.css -- Stack and Inline: a flex box whose gap is a role and whose
-   alignment is a word. A list keeps none of the user agent's markers or
-   indent, since an arrangement that is a list says so to a reader by its
-   element and its role, not by its bullets. */
+/* layout.css -- what a Stack and an Inline ask of the items they hold. The
+   arrangement itself, a flex box whose gap is a role and whose alignment is
+   a word, is utilities over the theme (`layout.tsx`); these rules stay in
+   the components layer, below the utilities, because each reaches into an
+   item, whose own sheet may say the last word about its width. */
 
 @layer components {
-  :is(.luke-stack, .luke-inline) {
-    display: flex;
-    min-width: 0;
-    margin: 0;
-    padding: 0;
-    list-style: none;
-  }
-
-  .luke-stack {
-    flex-direction: column;
-  }
-
-  /* A hidden arrangement stands out of the layout, as the user agent's own
-     rule would have it were the box not laid out by this sheet. */
-  :is(.luke-stack, .luke-inline)[hidden] {
-    display: none;
-  }
-
-  .luke-inline[data-wrap="true"] {
-    flex-wrap: wrap;
-  }
-
   /* An item may give way below its content's width, so a long label
      shrinks or wraps before the row overflows, breaking inside an unbroken
      word where it has to rather than painting past its box. */
@@ -34,114 +13,7 @@
     overflow-wrap: anywhere;
   }
 
-  .luke-inline[data-grow] {
-    flex: 1 1 var(--luke-select-field-width);
-  }
-
   .luke-inline[data-grow-first] > :first-child {
     flex: 1 1 var(--luke-select-field-width);
-  }
-
-  [data-gap="none"]:is(.luke-stack, .luke-inline) {
-    gap: 0;
-  }
-
-  [data-gap="row"]:is(.luke-stack, .luke-inline) {
-    gap: var(--luke-list-gap);
-  }
-
-  [data-gap="tight"]:is(.luke-stack, .luke-inline) {
-    gap: var(--luke-tight-gap);
-  }
-
-  [data-gap="item"]:is(.luke-stack, .luke-inline) {
-    gap: var(--luke-item-gap);
-  }
-
-  [data-gap="icon"]:is(.luke-stack, .luke-inline) {
-    gap: var(--luke-icon-gap);
-  }
-
-  [data-gap="control"]:is(.luke-stack, .luke-inline) {
-    gap: var(--luke-control-gap);
-  }
-
-  [data-gap="field"]:is(.luke-stack, .luke-inline) {
-    gap: var(--luke-field-gap);
-  }
-
-  [data-gap="block"]:is(.luke-stack, .luke-inline) {
-    gap: var(--luke-block-gap);
-  }
-
-  [data-gap="section"]:is(.luke-stack, .luke-inline) {
-    gap: var(--luke-section-gap);
-  }
-
-  [data-gap="page"]:is(.luke-stack, .luke-inline) {
-    gap: var(--luke-page-section-gap);
-  }
-
-  [data-align="start"]:is(.luke-stack, .luke-inline) {
-    align-items: flex-start;
-  }
-
-  [data-align="center"]:is(.luke-stack, .luke-inline) {
-    align-items: center;
-  }
-
-  [data-align="end"]:is(.luke-stack, .luke-inline) {
-    align-items: flex-end;
-  }
-
-  [data-align="baseline"]:is(.luke-stack, .luke-inline) {
-    align-items: baseline;
-  }
-
-  [data-align="stretch"]:is(.luke-stack, .luke-inline) {
-    align-items: stretch;
-  }
-
-  [data-justify="start"]:is(.luke-stack, .luke-inline) {
-    justify-content: flex-start;
-  }
-
-  [data-justify="end"]:is(.luke-stack, .luke-inline) {
-    justify-content: flex-end;
-  }
-
-  [data-justify="between"]:is(.luke-stack, .luke-inline) {
-    justify-content: space-between;
-  }
-
-  [data-inset="ring"]:is(.luke-stack, .luke-inline) {
-    padding: var(--luke-focus-ring-reach);
-  }
-
-  [data-inset="column"]:is(.luke-stack, .luke-inline) {
-    padding: var(--luke-list-inset);
-  }
-
-  [data-inset="block"]:is(.luke-stack, .luke-inline) {
-    padding: var(--luke-row-inset) var(--luke-list-inset);
-  }
-
-  /* A Fill takes the room its column leaves and may give way to nothing in
-     either direction, so what it holds scrolls or clips inside it rather than
-     stretching the column past the window. */
-  .luke-fill {
-    display: flex;
-    min-width: 0;
-    min-height: 0;
-    flex: 1;
-    flex-direction: column;
-  }
-
-  .luke-fill[data-flow="row"] {
-    flex-direction: row;
-  }
-
-  .luke-fill[data-clip="true"] {
-    overflow: clip;
   }
 }

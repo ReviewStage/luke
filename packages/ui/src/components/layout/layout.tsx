@@ -6,6 +6,7 @@ import {
   type Ref,
   type SyntheticEvent,
 } from "react";
+import { cn } from "../../cn.js";
 import { motionRows } from "../list-motion/list-motion.js";
 
 /**
@@ -30,6 +31,13 @@ import { motionRows } from "../list-motion/list-motion.js";
  * It may clip what stands past its edges, with `clip` rather than `hidden`,
  * so a pane sliding through it never scrolls it. Its owner places it and
  * names it by its own class, never restyling the fill itself.
+ *
+ * Each is a flex box drawn in Tailwind utilities over the theme, every gap
+ * and inset a role's (`gap-control-gap`, `p-list-inset`), with no shadcn/ui
+ * base, since shadcn has no arrangement of its own to stand on. What it
+ * asks of the items it holds stays in `layout.css`, in the components layer,
+ * because a utility on the arrangement would outrank the held component's
+ * own sheet, which says the last word about its own width.
  */
 
 /** The room between items, by what they are: from none, through a list's rows and a glyph and its words, to two sections of a pane and two of a page. */
@@ -99,6 +107,49 @@ export const LAYOUT_ELEMENT = {
 
 export type LayoutElement = (typeof LAYOUT_ELEMENT)[keyof typeof LAYOUT_ELEMENT];
 
+/** Each gap's role. */
+const GAP_CLASS: Record<Gap, string> = {
+  [GAP.NONE]: "gap-0",
+  [GAP.ROW]: "gap-list-gap",
+  [GAP.TIGHT]: "gap-tight-gap",
+  [GAP.ITEM]: "gap-item-gap",
+  [GAP.ICON]: "gap-icon-gap",
+  [GAP.CONTROL]: "gap-control-gap",
+  [GAP.FIELD]: "gap-field-gap",
+  [GAP.BLOCK]: "gap-block-gap",
+  [GAP.SECTION]: "gap-section-gap",
+  [GAP.PAGE]: "gap-page-section-gap",
+};
+
+const ALIGN_CLASS: Record<Align, string> = {
+  [ALIGN.START]: "items-start",
+  [ALIGN.CENTER]: "items-center",
+  [ALIGN.END]: "items-end",
+  [ALIGN.BASELINE]: "items-baseline",
+  [ALIGN.STRETCH]: "items-stretch",
+};
+
+const JUSTIFY_CLASS: Record<Justify, string> = {
+  [JUSTIFY.START]: "justify-start",
+  [JUSTIFY.END]: "justify-end",
+  [JUSTIFY.BETWEEN]: "justify-between",
+};
+
+/** Each inset's room inside the edge. */
+const INSET_CLASS: Record<Inset, string> = {
+  [INSET.NONE]: "p-0",
+  [INSET.RING]: "p-ring-reach",
+  [INSET.COLUMN]: "p-list-inset",
+  [INSET.BLOCK]: "px-list-inset py-row-inset",
+};
+
+/**
+ * What both arrangements are: a flex box with no margin and none of a
+ * list's markers, standing out of the layout while hidden, as the user
+ * agent's own rule would have it were the box not laid out here.
+ */
+const ARRANGEMENT_CLASS = "flex min-w-0 m-0 list-none [&[hidden]]:hidden";
+
 /**
  * The role a list keeps once its markers are gone: Safari's VoiceOver stops
  * reading a list styled without them as a list unless it says so.
@@ -133,9 +184,24 @@ interface LayoutProps {
   children: ReactNode;
 }
 
-/** The class an arrangement wears, its owner's after its own. */
-function layoutClass(own: string, owner: string | undefined): string {
-  return owner === undefined ? own : `${own} ${owner}`;
+/** The class an arrangement wears for the choices made, its owner's after its own. */
+function layoutClass(
+  own: string,
+  gap: Gap,
+  align: Align,
+  justify: Justify,
+  inset: Inset,
+  owner: string | undefined,
+): string {
+  return cn(
+    own,
+    ARRANGEMENT_CLASS,
+    GAP_CLASS[gap],
+    ALIGN_CLASS[align],
+    JUSTIFY_CLASS[justify],
+    INSET_CLASS[inset],
+    owner,
+  );
 }
 
 /** What it holds, one under another, `gap` apart, each as wide as the Stack unless aligned otherwise. */
@@ -156,7 +222,7 @@ export function Stack({
     Element,
     {
       ...named,
-      className: layoutClass("luke-stack", className),
+      className: layoutClass("luke-stack flex-col", gap, align, justify, inset, className),
       role: listRole(Element),
       ...(moves ? motionRows() : {}),
       "data-gap": gap,
@@ -194,7 +260,14 @@ export function Inline({
     Element,
     {
       ...named,
-      className: layoutClass("luke-inline", className),
+      className: layoutClass(
+        cn("luke-inline", wrap && "flex-wrap", grow && "grow shrink basis-field-least"),
+        gap,
+        align,
+        justify,
+        inset,
+        className,
+      ),
       role: listRole(Element),
       ...(moves ? motionRows() : {}),
       "data-gap": gap,
@@ -252,7 +325,12 @@ export function Fill({
     {
       ...rest,
       ref,
-      className: className === undefined ? "luke-fill" : `luke-fill ${className}`,
+      className: cn(
+        "luke-fill flex min-h-0 min-w-0 flex-1",
+        flow === FILL_FLOW.ROW ? "flex-row" : "flex-col",
+        clip && "overflow-clip",
+        className,
+      ),
       "data-flow": flow,
       "data-clip": clip ? "true" : undefined,
     },

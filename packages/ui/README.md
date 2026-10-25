@@ -256,6 +256,21 @@ variant (`@max-[280px]/luke-call-bar:`) beside the rule it changes. Their
 sheets keep only keyframes and the rules that play them, and the foot's one
 `:has()` container.
 
+The page patterns follow: `SettingsRow` stands on shadcn's item and
+`EmptyState` on its empty, and `Stack`, `Inline`, `Fill`,
+`SettingsSection`, `SettingsPage`, `CollectionPage`, `DetailPage`,
+`PublicPage`, and `AuthPage` are drawn in the theme's utilities with no
+shadcn base, since shadcn has no arrangement or page frame of its own, as
+are `ErrorState`, `FailureNote`, and `GroupHeader`: a failure's line is no
+banner, so shadcn's alert, which `Banner` stands on, is not its base, and a
+group's fold is `Disclosure`'s. Each keeps its `luke-*` hooks, which the panel's
+sheets and tests read. What stays in their sheets is what a utility would
+get wrong: what a `Stack` asks of the items it holds, which the held
+component's own sheet must still outrank; the narrow-room container
+queries, and the properties those queries undo, since a sheet's rule cannot
+undo a utility; the `:has()` rules; the settings page's scroll fade; and a
+skeleton's boxes, whose classes name themselves a skeleton's.
+
 ## Icons
 
 Every icon is imported through one door, `@luke/ui/icons`, built on Lucide

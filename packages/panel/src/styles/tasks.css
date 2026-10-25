@@ -4168,9 +4168,15 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
    fade), rather than being sliced short of the card. Its foot pads past the
    fade, so the newest line, scrolled to or followed, stands whole above it;
    the area's own scroll padding brings a control focused from below in
-   past the fade as well. */
+   past the fade as well. While toasts stand, it pads past what they take
+   of the window's foot over the dock (`--luke-toast-room`, which the shell
+   measures) instead where that is more, so the newest line, and an Inbox
+   thread's draft reply flowing under it, stand a step clear of them. */
 .agent-log-over-composer {
-  padding-bottom: calc(var(--luke-scroll-fade) + var(--luke-space-4));
+  padding-bottom: max(
+    calc(var(--luke-scroll-fade) + var(--luke-space-4)),
+    calc(var(--luke-toast-room, 0px) + var(--luke-space-8))
+  );
 }
 
 /* The to-do list the agent is working through, docked over the composer
