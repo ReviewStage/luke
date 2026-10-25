@@ -7,7 +7,7 @@ import {
   type ModelProvider,
 } from "@luke/features/models-wire";
 import { FAST_ACCESS, type FastAccess } from "@luke/features/provider-key-wire";
-import { Context, Data, Duration, Effect, Exit, Layer, Option, Result, Schema } from "effect";
+import { Context, Data, Duration, Effect, Exit, Layer, Option, Ref, Result, Schema } from "effect";
 import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import * as HttpClientResponse from "effect/http/HttpClientResponse";
@@ -27,7 +27,8 @@ import * as HttpClientResponse from "effect/http/HttpClientResponse";
  * the other. A model priced the same across its whole window has that one
  * window, since a smaller one would buy nothing the provider names. The read is cached per instance for
  * `MODEL_CATALOG_TTL`, a failed read for no time at all, so an outage at the
- * catalog is retried on the next request rather than remembered.
+ * catalog is retried on the next request rather than remembered; while it
+ * lasts, a read answers the last catalog this instance read, if any.
  *
  * Model calls themselves go straight to each provider on the account's own
  * keys, never through AI Gateway, so `providerModelOf` is the one translation
@@ -364,15 +365,27 @@ const fetchOfferedModels = /* @__PURE__ */ Effect.fnUntraced(function* (
 /**
  * The catalog as this instance's one cached read over the ambient client. A
  * success stands for the TTL; a failure stands for no time, so the next
- * request asks again rather than answering the outage for an hour.
+ * request asks again rather than answering the outage for an hour, and
+ * answers the last success meanwhile where there was one.
  */
 export const modelCatalogLayer: Layer.Layer<ModelCatalog, never, HttpClient.HttpClient> =
   Layer.effect(
     ModelCatalog,
     Effect.gen(function* () {
       const client = yield* HttpClient.HttpClient;
-      const read = yield* Effect.cachedWithTTL(fetchOfferedModels(client), (exit) =>
+      const lastRead = yield* Ref.make<readonly OfferedModel[] | undefined>(undefined);
+      const cached = yield* Effect.cachedWithTTL(fetchOfferedModels(client), (exit) =>
         Exit.isSuccess(exit) ? MODEL_CATALOG_TTL : Duration.zero,
+      );
+      // Note that a failed refetch answers the last read, because a caller told no models
+      // guesses instead: a 200K window for every agent, and no prices.
+      const read = cached.pipe(
+        Effect.tap((offered) => Ref.set(lastRead, offered)),
+        Effect.catch((unavailable) =>
+          Effect.flatMap(Ref.get(lastRead), (held) =>
+            held === undefined ? Effect.fail(unavailable) : Effect.succeed(held),
+          ),
+        ),
       );
       return { read };
     }),

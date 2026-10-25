@@ -226,12 +226,14 @@ type HeldContext = Option.Option.Value<Effect.Success<ReturnType<typeof readCodi
 /**
  * The agent's context as its row holds it, against the window the catalog
  * lists for the model and window the same read says it runs on now;
- * nothing before its first step. Note that the choice is read with the page
- * rather than taken from the agent the request read, because a change of
- * model or window during the hold is what the step this page carries ran on.
+ * nothing before its first step, or where the catalog lists no such model,
+ * since a fallback window would tell a share of a window the model may not
+ * have. Note that the choice is read with the page rather than taken from
+ * the agent the request read, because a change of model or window during
+ * the hold is what the step this page carries ran on.
  */
 const contextOf = (held: Option.Option<HeldContext>, offered: readonly OfferedModel[]) =>
-  Option.isNone(held)
+  Option.isNone(held) || !offered.some((model) => model.id === held.value.model)
     ? undefined
     : codingAgentContextOf(
         held.value,
