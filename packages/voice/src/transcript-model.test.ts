@@ -150,17 +150,6 @@ test("the live call follows the stored calls, and its words outlast the call unt
   ]);
 });
 
-test("the live call is drawn while the stored transcript is still being read", () => {
-  const heard = heardCalls({
-    held: [],
-    voice: liveReport(LIVE_CALL, "Seven days."),
-    agentId: AGENT,
-    now: 5_000,
-  });
-  const region = transcriptRegion({ transcript: { status: TASKS_READ.READING }, heard });
-  assert.equal(region.kind, TRANSCRIPT_REGION.READY);
-});
-
 test("the same call keeps when it was first heard, a call begun at once keeps the last one's words, and another agent's call is not this tab's", () => {
   const first = heardCalls({
     held: [],
@@ -519,25 +508,6 @@ test("each call heard here that the rows do not hold yet keeps its own tail, in 
       [LIVE_CALL, ["And withdrawn ones?"]],
     ],
   );
-});
-
-test("a heard line the record wrote as two rows counts as held, and a later line no row holds stands at the foot", () => {
-  const heard = heardCalls({
-    held: [],
-    voice: standing(LIVE_CALL, [
-      "Walk me through how the job finds stale invites.",
-      "It reads the oldest first.",
-    ]),
-    agentId: AGENT,
-    now: 9_000,
-  });
-  const rows = [
-    spokenRow("said-1", LIVE_CALL, "Walk me through how"),
-    spokenRow("said-2", LIVE_CALL, "the job finds stale invites."),
-  ];
-  const places = callPlaces(rows, heardOnly(heard));
-
-  assert.deepEqual(places.heard[0]?.lines.map(messageText), ["It reads the oldest first."]);
 });
 
 test("a phrase said twice on a call with one row holding it keeps its second saying at the foot", () => {

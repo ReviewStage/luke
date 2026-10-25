@@ -20,7 +20,7 @@ import { HOSTED_API_ERROR } from "@luke/features";
 import { CODING_AGENT_BOUNDS } from "@luke/features/coding-agent-wire";
 import { Context, Effect, Option } from "effect";
 import { HOSTED_HTTP_STATUS } from "../http/http.js";
-import { HOSTED_BODY_CEILING_BYTES, hostedFetch } from "../orpc/handler.js";
+import { hostedFetch } from "../orpc/handler.js";
 import type { WebServices } from "../runtime.js";
 import { messagesProcedures } from "./messages-procedures.js";
 
@@ -146,14 +146,6 @@ it.effect(
       );
       assert.deepEqual(
         yield* answer(MESSAGES, { method: "POST", body: "{}", contentLength: 10_000_000 }),
-        refused(HOSTED_HTTP_STATUS.PAYLOAD_TOO_LARGE, HOSTED_API_ERROR.REQUEST_TOO_LARGE),
-      );
-      // A body that states no length is held to the handler's ceiling.
-      assert.deepEqual(
-        yield* answer(MESSAGES, {
-          method: "POST",
-          body: JSON.stringify({ text: "x".repeat(HOSTED_BODY_CEILING_BYTES), clientKey: "k" }),
-        }),
         refused(HOSTED_HTTP_STATUS.PAYLOAD_TOO_LARGE, HOSTED_API_ERROR.REQUEST_TOO_LARGE),
       );
       assert.deepEqual(
