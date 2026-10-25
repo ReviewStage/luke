@@ -2,7 +2,9 @@ import type { DatabaseServices } from "@luke/database/core/query";
 import {
   type CodingAgent,
   hasRepository,
+  type KeptPublished,
   readCodingAgent,
+  readCodingAgentKeptPublished,
   readCodingAgentPublished,
   recordCodingAgentPublished,
   type WithRepository,
@@ -14,9 +16,10 @@ import {
   type CodingAgentPullRequestAnswer,
   PULL_REQUEST_STATE,
 } from "@luke/features/coding-agent-wire";
-import { Cache, Data, Duration, Effect, Exit, Option, type Redacted } from "effect";
+import { Cache, Clock, Data, Duration, Effect, Exit, Option, type Redacted } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import {
+  GITHUB_HTTP_STATUS,
   GitHubApp,
   type GitHubRepositoryToken,
   type GitHubWorkspaceReadFailure,
@@ -70,6 +73,17 @@ import { CODER } from "./bounds.js";
  * (`tasks/task-finish.ts`); and a read that first finds it merged or
  * closed is told the agent's member's operator as a notice
  * (`../operator-notice.ts`), the webhook's read and the token sweep's alike.
+ *
+ * The row also keeps when that read was and of which branch, so the kept
+ * answers answer from the row rather than GitHub where it will not have
+ * moved or was just read: an archived agent's, an ended agent's whose pull
+ * request merged or closed, and any read within `CODER.PUBLISHED_ROW_FRESH`
+ * of the last, on whichever instance; and where GitHub refuses for its rate
+ * limit, the row answers rather than a failure. The row answers only while
+ * it stands on the branch read, and a change to the pull request lets the
+ * read go (`forgetPublished`). Opening a task of a hundred agents once asked
+ * GitHub some four hundred times at once and was refused for twenty minutes;
+ * the webhook, the token sweep, the brain, and an opening still read GitHub.
  */
 
 /** The installation of the task's workspace no longer reaches the agent's repository, so nothing of it is read. */
@@ -248,7 +262,9 @@ export const agentPublished = /* @__PURE__ */ Effect.fn("web/agentPublished")(fu
   agent: CodingAgent,
 ): Effect.fn.Return<CodingAgentPullRequestAnswer, PublishedReadFailure, PublishedServices> {
   const { answer, stored, ended } = yield* publishedOnGitHub(userId, agent);
-  yield* recordCodingAgentPublished(userId, agent.id, stored);
+  const at = yield* Clock.currentTimeMillis;
+  const read = { at, branch: agent.branch, pushed: answer.branch !== null };
+  yield* recordCodingAgentPublished(userId, agent.id, stored, read);
   // A merge first seen may have finished the task's work; the task is asked once the row says merged.
   const merged = ended === PULL_REQUEST_STATE.MERGED;
   if (merged && agent.taskId !== null) yield* settleTaskIfFinished(userId, agent.taskId);
@@ -306,7 +322,41 @@ class NoSuchAgent extends Data.TaggedError("NoSuchAgent")<{ readonly agentId: st
 /** The most agents one instance keeps answers for at once. */
 const KEPT_AGENTS = 1_024;
 
-/** One agent's answer looked up afresh: the row, then what it published. */
+/** The answer the row keeps, as the read that wrote it answered: its pull request as the wire carries it, else the branch where GitHub held it. */
+function keptAnswer(agent: CodingAgent, kept: KeptPublished): CodingAgentPullRequestAnswer {
+  if (kept.published === null) {
+    const branch = kept.read.pushed ? kept.read.branch : null;
+    return { repository: agent.repository, branch, pullRequest: null };
+  }
+  const { headSha: _headSha, mergedAt: _mergedAt, ...pullRequest } = kept.published;
+  return { repository: agent.repository, branch: kept.read.branch, pullRequest };
+}
+
+/** Whether the row answers in GitHub's place: the agent archived, or ended on a pull request that ended, or the row read a moment ago. */
+function keptStands(agent: CodingAgent, ended: boolean, kept: KeptPublished, now: number): boolean {
+  if (agent.archivedAt !== null) return true;
+  const state = kept.published?.state;
+  if (ended && (state === PULL_REQUEST_STATE.MERGED || state === PULL_REQUEST_STATE.CLOSED)) {
+    return true;
+  }
+  return now - kept.read.at < Duration.toMillis(CODER.PUBLISHED_ROW_FRESH);
+}
+
+/** Whether GitHub refused the read for its rate limit: a 429, the instance's own held answer among them, or a 403 it may answer one with. */
+function rateLimited(failure: PublishedReadFailure): boolean {
+  if (failure._tag !== "GitHubUnavailable") return false;
+  return (
+    failure.status === GITHUB_HTTP_STATUS.TOO_MANY_REQUESTS ||
+    failure.status === GITHUB_HTTP_STATUS.FORBIDDEN
+  );
+}
+
+/**
+ * One agent's answer looked up afresh: the row, then what it keeps where
+ * that answers in GitHub's place, else what GitHub holds now, the row again
+ * where GitHub refused for its rate limit. A row that stands on another
+ * branch than the one read keeps nothing of it.
+ */
 const lookupPublished = (
   key: PublishedKey,
 ): Effect.Effect<
@@ -315,9 +365,20 @@ const lookupPublished = (
   PublishedServices
 > =>
   Effect.gen(function* () {
-    const agent = yield* readCodingAgent(key.userId, key.agentId);
-    if (Option.isNone(agent)) return yield* new NoSuchAgent({ agentId: key.agentId });
-    return yield* agentPublished(key.userId, agent.value);
+    const found = yield* readCodingAgent(key.userId, key.agentId);
+    if (Option.isNone(found)) return yield* new NoSuchAgent({ agentId: key.agentId });
+    const agent = found.value;
+    const row = yield* readCodingAgentKeptPublished(key.userId, agent.id);
+    const kept = row !== null && row.read.branch === agent.branch ? row : null;
+    const now = yield* Clock.currentTimeMillis;
+    if (kept !== null && keptStands(agent, key.ended, kept, now)) return keptAnswer(agent, kept);
+    return yield* agentPublished(key.userId, agent).pipe(
+      Effect.catch((failure) =>
+        kept !== null && rateLimited(failure)
+          ? Effect.succeed(keptAnswer(agent, kept))
+          : Effect.fail(failure),
+      ),
+    );
   });
 
 /** The cache, made once per instance by `instancePublishedCache`. */

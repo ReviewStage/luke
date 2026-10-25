@@ -438,7 +438,11 @@ export function agentPullRequestProcedures(seams: AgentPullRequestProcedureSeams
         agent,
         pullRequest.number,
         actionWrite(input.body),
-      ).pipe(Effect.ensuring(Effect.flatMap(published, (kept) => forgetPublished(kept, agent.id))));
+      ).pipe(
+        Effect.ensuring(
+          Effect.flatMap(published, (kept) => forgetPublished(kept, context.userId, agent.id)),
+        ),
+      );
       return writeAnswerOf(written);
     }),
     /**

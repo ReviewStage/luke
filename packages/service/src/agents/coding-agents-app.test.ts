@@ -4341,9 +4341,10 @@ function userTexts(page: {
 }
 
 it.layer(getTestDB())("an agent's kept pull request", (it) => {
-  /** Where the published pull request stands on GitHub as a test moves it: when it merged, none while open. */
+  /** Where the published pull request stands on GitHub as a test moves it: when it merged, none while open, and whether GitHub refuses every read for its rate limit. */
   interface Standing {
     mergedAt: string | null;
+    limited?: boolean;
   }
 
   const MERGED_AT = "2026-10-17T09:00:00Z";
@@ -4353,6 +4354,9 @@ it.layer(getTestDB())("an agent's kept pull request", (it) => {
     (standing: Standing): RepositoryScript =>
     async (sent) => {
       const pull = `/repos/${RELAY.owner}/${RELAY.name}/pulls/${PUBLISHED.number}`;
+      if (standing.limited === true) {
+        return Response.json({ message: "API rate limit exceeded" }, { status: 429 });
+      }
       const answered = await publishedPullRequest(sent);
       if (answered === undefined || new URL(sent.url).pathname !== pull) return answered;
       const merged = standing.mergedAt !== null;
@@ -4366,20 +4370,22 @@ it.layer(getTestDB())("an agent's kept pull request", (it) => {
       });
     };
 
-  /** The owner's agent on the published branch, its pull request answered as `standing` holds it, and a read of it a kept answer's TTL after the last. */
+  /** The owner's agent on the published branch, its pull request answered as `standing` holds it, and a read of it the time given after the last, by default once its row no longer answers for being fresh. */
   const publishedAs = (standing: Standing) =>
     Effect.gen(function* () {
       const { owner, task, ask } = yield* openTask({ github: standingPullRequest(standing) });
       const { agent } = yield* startedAgent(owner, task.id, ask);
       yield* updateCodingAgentBranch(owner, agent.id, PUBLISHED.branch);
-      const read = Effect.gen(function* () {
-        yield* TestClock.adjust(CODER.PUBLISHED_TTL);
-        const answered = yield* ask(request(AGENT_PULL_REQUEST, owner, { id: agent.id }));
-        assert.equal(answered.status, HOSTED_HTTP_STATUS.OK, JSON.stringify(answered.body));
-        return answered.body;
-      });
+      const readAfter = (wait: Duration.Duration) =>
+        Effect.gen(function* () {
+          yield* TestClock.adjust(wait);
+          const answered = yield* ask(request(AGENT_PULL_REQUEST, owner, { id: agent.id }));
+          assert.equal(answered.status, HOSTED_HTTP_STATUS.OK, JSON.stringify(answered.body));
+          return answered.body;
+        });
+      const read = readAfter(CODER.PUBLISHED_ROW_FRESH);
       const kept = readCodingAgentPublished(owner, agent.id);
-      return { owner, task, read, kept };
+      return { owner, agentId: agent.id, task, read, readAfter, kept };
     });
 
   it.effect(
@@ -4415,14 +4421,46 @@ it.layer(getTestDB())("an agent's kept pull request", (it) => {
     () =>
       Effect.gen(function* () {
         const standing: Standing = { mergedAt: null };
-        const { read, kept } = yield* publishedAs(standing);
+        const { read, readAfter, kept } = yield* publishedAs(standing);
 
-        yield* read;
+        const open = yield* read;
         assert.equal((yield* kept)?.mergedAt, undefined);
 
         standing.mergedAt = MERGED_AT;
+        // A read within a minute of the last answers from the row, the instance's kept answer gone or not.
+        assert.deepEqual(yield* readAfter(CODER.PUBLISHED_TTL), open);
+        assert.equal((yield* kept)?.mergedAt, undefined);
         yield* read;
         assert.equal((yield* kept)?.mergedAt, Date.parse(MERGED_AT));
+      }),
+  );
+
+  it.effect(
+    "an archived agent's read answers the pull request its row keeps, without asking GitHub, which has since moved on",
+    () =>
+      Effect.gen(function* () {
+        const standing: Standing = { mergedAt: null };
+        const { owner, agentId, read } = yield* publishedAs(standing);
+        const open = yield* read;
+
+        yield* archiveCodingAgent(owner, agentId, true);
+        standing.mergedAt = MERGED_AT;
+
+        assert.deepEqual(yield* read, open);
+      }),
+  );
+
+  it.effect(
+    "a read GitHub refuses for its rate limit answers the pull request the row keeps rather than failing",
+    () =>
+      Effect.gen(function* () {
+        const standing: Standing = { mergedAt: null };
+        const { read } = yield* publishedAs(standing);
+        const open = yield* read;
+
+        standing.limited = true;
+
+        assert.deepEqual(yield* read, open);
       }),
   );
 

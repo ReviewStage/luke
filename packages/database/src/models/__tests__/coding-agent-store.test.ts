@@ -55,6 +55,7 @@ import {
   delegationsOf,
   deleteCodingAgent,
   dispatchMentioningServers,
+  forgetCodingAgentPublishedRead,
   IDLE_ARCHIVE,
   linePlacesOf,
   lineSendersOf,
@@ -72,6 +73,7 @@ import {
   readArchivedOperator,
   readCodingAgent,
   readCodingAgentHeaderOfConversation,
+  readCodingAgentKeptPublished,
   readCodingAgentOfConversation,
   readCodingAgentPublished,
   readCodingAgentRouting,
@@ -1078,15 +1080,42 @@ it.layer(getTestDB())("the coding-agent store's kept pull request", (it) => {
           mergedAt: Date.parse("2026-10-17T09:00:00Z"),
         };
 
-        yield* recordCodingAgentPublished(starter, agentId, kept);
+        const read = { at: Date.parse("2026-10-17T09:01:00Z"), branch: "relay", pushed: true };
+
+        yield* recordCodingAgentPublished(starter, agentId, kept, read);
 
         assert.deepEqual(yield* readCodingAgentPublished(teammate, agentId), kept);
+        assert.deepEqual(yield* readCodingAgentKeptPublished(teammate, agentId), {
+          published: kept,
+          read,
+        });
         const listed = yield* listPublishedCodingAgentsById(teammate, [agentId]);
         assert.deepEqual(
           listed.map(({ published }) => published),
           [onTheWire],
         );
         assert.equal(yield* readCodingAgentPublished(outsider, agentId), null);
+        assert.equal(yield* readCodingAgentKeptPublished(outsider, agentId), null);
+      }),
+  );
+
+  it.effect(
+    "a kept read let go, or written over by a write that names none, is no longer kept, while the pull request stays",
+    () =>
+      Effect.gen(function* () {
+        const starter = yield* openAccount;
+        const workspace = yield* openWorkspace(starter);
+        const { agentId } = yield* tasklessAgent(starter, workspace);
+        const read = { at: Date.parse("2026-10-17T09:01:00Z"), branch: "relay", pushed: true };
+
+        yield* recordCodingAgentPublished(starter, agentId, onTheWire, read);
+        yield* forgetCodingAgentPublishedRead(starter, agentId);
+        assert.equal(yield* readCodingAgentKeptPublished(starter, agentId), null);
+        assert.deepEqual(yield* readCodingAgentPublished(starter, agentId), onTheWire);
+
+        yield* recordCodingAgentPublished(starter, agentId, onTheWire, read);
+        yield* recordCodingAgentPublished(starter, agentId, onTheWire);
+        assert.equal(yield* readCodingAgentKeptPublished(starter, agentId), null);
       }),
   );
 
