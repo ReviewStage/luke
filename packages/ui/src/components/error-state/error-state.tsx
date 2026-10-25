@@ -49,6 +49,20 @@
  * A line is a paragraph of its own, but one standing inside words, as a
  * picture that failed to read stands inside the paragraph that names it, is
  * a span (`ERROR_STATE_ELEMENT.SPAN`), since a paragraph holds no other.
+ *
+ * A line is drawn in Tailwind utilities over the theme with no shadcn base,
+ * each placement's classes picked here (`LINE`): shadcn's alert is a block
+ * of its own, Luke's `Banner`, where a failure among rows is laid out as a
+ * row, and alone in its region it is `EmptyState`, which stands on shadcn's
+ * empty. Every part stands on the row's first line, a control tall, so the
+ * glyph, the words, and Retry share one middle; a sentence too long for its
+ * room wraps in its own column under its first line, and the words keep at
+ * least half the row, so presses that would take more go, whole, onto the
+ * line under them. Among rows, the row is the container its narrow look
+ * asks about, which `error-state.css` answers, since that look reaches into
+ * Retry's button; on a toolbar it is no container, so the toolbar can size
+ * it, and its sentence gives way to its presses, cut short with an ellipsis
+ * the sheet draws.
  */
 
 import type { ReactNode } from "react";
@@ -123,6 +137,36 @@ type Placed =
       as?: undefined;
     };
 
+/**
+ * Each placement's line, words, and presses. Note that at a list's rows'
+ * inset the line takes the room its margins leave, as a note line does
+ * among a sidebar's rows, and ends a little short of the row's end, so
+ * Retry's glyph stands under the head's buttons'; and that the presses
+ * stand together at the row's end, on its first line or, wrapped, under the
+ * words, never wider than the row, but on a toolbar keep to its one line
+ * whole.
+ */
+const LINE = {
+  [ERROR_STATE_PLACEMENT.INLINE]: {
+    line: "w-full m-0 flex-wrap items-start @container/luke-error-state",
+    words: "min-w-1/2 flex-[1_1_0]",
+    actions: "max-w-full flex-[0_1_auto] flex-wrap justify-end ms-auto",
+  },
+  [ERROR_STATE_PLACEMENT.ROWS]: {
+    line: "w-auto mt-luke-4 mr-luke-4 mb-luke-4 ml-row-inset flex-wrap items-start @container/luke-error-state",
+    words: "min-w-1/2 flex-[1_1_0]",
+    actions: "max-w-full flex-[0_1_auto] flex-wrap justify-end ms-auto",
+  },
+  [ERROR_STATE_PLACEMENT.TOOLBAR]: {
+    line: "w-auto m-0 flex-nowrap items-center",
+    words: "min-w-0 flex-[0_1_auto] overflow-hidden whitespace-nowrap",
+    actions: "max-w-full flex-none flex-nowrap justify-end ms-0",
+  },
+} as const satisfies Record<
+  Exclude<ErrorStatePlacement, typeof ERROR_STATE_PLACEMENT.CENTRED>,
+  { line: string; words: string; actions: string }
+>;
+
 const WORDS = {
   RETRY: "Retry",
   RELOAD: "Reload",
@@ -164,13 +208,18 @@ export function ErrorState(
       </EmptyState>
     );
   }
+  const look = LINE[placement];
   return (
-    <Line className="luke-error-state" data-placement={placement} role="alert">
-      <span className="luke-error-state-glyph">
+    <Line
+      className={`luke-error-state box-border flex min-w-0 gap-icon-gap text-caption text-muted-foreground ${look.line}`}
+      data-placement={placement}
+      role="alert"
+    >
+      <span className="luke-error-state-glyph flex h-control flex-none items-center text-danger [&_svg]:size-control-icon">
         <AlertIcon />
       </span>
       <span
-        className="luke-error-state-words"
+        className={`luke-error-state-words py-state-row-inset ${look.words}`}
         title={props.placement === ERROR_STATE_PLACEMENT.TOOLBAR ? props.children : undefined}
       >
         {children}
@@ -179,14 +228,14 @@ export function ErrorState(
       onRetry === undefined &&
       onRemove === undefined &&
       onDismiss === undefined ? null : (
-        <span className="luke-error-state-actions">
+        <span className={`luke-error-state-actions flex min-w-0 gap-control-gap ${look.actions}`}>
           {remedy === undefined ? null : (
             <Button variant={BUTTON_VARIANT.OUTLINE} onClick={remedy.onClick}>
               {remedy.label}
             </Button>
           )}
           {onRetry === undefined ? null : (
-            <span className="luke-error-state-retry">
+            <span className="luke-error-state-retry contents">
               <Button variant={BUTTON_VARIANT.QUIET} icon={<RetryIcon />} turns onClick={onRetry}>
                 {WORDS.RETRY}
               </Button>
@@ -217,7 +266,7 @@ export function RetryRowLabel({ failure }: { failure: string }): React.JSX.Eleme
   return (
     <>
       <span role="alert">{failure}</span>{" "}
-      <span className="luke-retry-row-label">
+      <span className="luke-retry-row-label ml-luke-4 inline-flex items-baseline gap-luke-4 font-emphasis">
         <RetryIcon />
         {WORDS.RETRY}
       </span>

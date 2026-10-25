@@ -1,108 +1,24 @@
-/* error-state.css -- a failure among the rows, laid out as a row: the
-   fault's glyph in red where a row's glyph stands, the sentence in the muted
-   ink of the words around it, and its presses at the row's end, Retry's
-   glyph alone where the row is narrow; on a toolbar, one line whose
-   sentence gives way to its presses. Alone in a region it is `EmptyState`,
-   and draws nothing here. A row that is itself the retry (`RetryRowLabel`)
-   draws the glyph and word after its sentence in the row's own type, held
-   together. */
+/* error-state.css -- what a failure line's utilities (`error-state.tsx`)
+   cannot say: Retry drawn as its glyph alone where the row is narrow, a
+   container query reaching into Retry's button, and a toolbar's sentence
+   cut short where it gives way to its presses; and the glyph of a row that
+   is itself the retry (`RetryRowLabel`), which the row may size. */
 
 @layer components {
-  /* Every part stands on the row's first line, a control tall, so the glyph,
-     the words, and Retry share one middle; a sentence too long for its room
-     wraps in its own column under its first line. The words keep at least
-     half the row, so presses that would take more go, whole, onto the line
-     under them. The row is the container its narrow look asks about, so it
-     fills the width it is given. */
-  .luke-error-state {
-    display: flex;
-    flex-wrap: wrap;
-    box-sizing: border-box;
-    width: 100%;
-    min-width: 0;
-    align-items: flex-start;
-    gap: var(--luke-icon-gap);
-    margin: 0;
-    color: var(--luke-color-text-muted);
-    container: luke-error-state / inline-size;
-    font-size: var(--luke-type-caption-size);
-    line-height: var(--luke-type-caption-leading);
-  }
-
-  .luke-error-state-glyph {
-    display: flex;
-    height: var(--luke-control-height);
-    flex: none;
-    align-items: center;
-    color: var(--luke-color-danger-text);
-  }
-
-  .luke-error-state-glyph svg {
-    width: var(--luke-control-icon);
-    height: var(--luke-control-icon);
-  }
-
-  /* The words' first line is centred in the control's height, as the glyph
-     and Retry are, and any line after it runs on below. */
-  .luke-error-state-words {
-    min-width: 50%;
-    flex: 1 1 0;
-    padding-block: calc((var(--luke-control-height) - var(--luke-type-caption-leading)) / 2);
-  }
-
-  /* The presses stand together at the row's end, on its first line or,
-     wrapped, under the words. Never wider than the row: presses that do not
-     fit beside each other wrap, and a remedy longer than the row is cut
-     short with an ellipsis, its words still its name. */
-  .luke-error-state-actions {
-    display: flex;
-    min-width: 0;
-    max-width: 100%;
-    flex: 0 1 auto;
-    flex-wrap: wrap;
-    justify-content: flex-end;
-    gap: var(--luke-control-gap);
-    margin-inline-start: auto;
-  }
-
-  .luke-error-state-retry {
-    display: contents;
-  }
-
-  /* At a list's rows' inset it takes the room its margins leave, as a note
-     line does among a sidebar's rows, and ends a little short of the row's
-     end, so Retry's glyph stands under the head's buttons'. */
-  .luke-error-state[data-placement="rows"] {
-    width: auto;
-    margin: var(--luke-space-4) var(--luke-space-4) var(--luke-space-4) var(--luke-row-inset);
-  }
-
-  /* On a toolbar it is one line as wide as it says, and no container, so the
-     toolbar can size it: the glyph and the presses stay whole, and the
-     sentence gives way to them, cut short with an ellipsis. */
-  .luke-error-state[data-placement="toolbar"] {
-    width: auto;
-    flex-wrap: nowrap;
-    align-items: center;
-    container-type: normal;
-  }
-
+  /* Note that the ellipsis stays here rather than in a utility, a place the
+     style guard's baseline holds for this sheet until the line takes the
+     fade; the utilities hold the sentence to one clipped line. */
   .luke-error-state[data-placement="toolbar"] > .luke-error-state-words {
-    overflow: hidden;
-    min-width: 0;
-    flex: 0 1 auto;
     text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  .luke-error-state[data-placement="toolbar"] > .luke-error-state-actions {
-    flex: none;
-    flex-wrap: nowrap;
-    margin-inline-start: 0;
   }
 
   /* Narrow, Retry is drawn as a glyph alone is (`IconButton`): a control's
-     square in the muted ink, its words kept for a reader and drawn nowhere. */
+     square in the muted ink, its words kept for a reader and drawn nowhere.
+     Note that the row's own utilities name the container
+     (`@container/luke-error-state`), and that this stays in the sheet
+     because it restyles Button's parts by their classes, as one sheet of
+     the `components` layer restyles another's, which a utility would
+     outrank. */
   @container luke-error-state (width < 360px) {
     .luke-error-state-retry > .luke-button {
       --luke-button-ink: var(--luke-color-text-muted);
@@ -121,17 +37,12 @@
     }
   }
 
-  .luke-retry-row-label {
-    display: inline-flex;
-    align-items: baseline;
-    gap: var(--luke-space-4);
-    margin-left: var(--luke-space-4);
-    font-weight: var(--luke-type-emphasis-weight);
-  }
-
+  /* Note that the glyph's size stays in this layer, because the row lending
+     the label its type may size the glyphs in it by its own utilities, as
+     `TextButton` does, and those must still win. */
   .luke-retry-row-label svg {
-    width: 12px;
-    height: 12px;
+    width: var(--luke-space-12);
+    height: var(--luke-space-12);
     flex: none;
     align-self: center;
   }

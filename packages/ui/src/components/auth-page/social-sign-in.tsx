@@ -15,6 +15,10 @@ import { AuthPage } from "./auth-page.js";
  * is opening, whether the last attempt could not start, and the press that
  * begins one; one opens at a time, so every other choice stands unavailable
  * while one does.
+ *
+ * It draws nothing of its own: each choice is a `ProviderButton` (shadcn/ui's
+ * button beneath), and the card is the AuthPage's, whose body stretches each
+ * to the card's inner width.
  */
 
 /** What the card says when a sign-in could not start: the sign-in gate's own sentence for one that did not finish. */
