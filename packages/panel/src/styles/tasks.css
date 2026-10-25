@@ -4607,197 +4607,6 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
   justify-content: flex-end;
 }
 
-/* A file's type icon in its type's colour, as the file tree draws it:
-   Pierre's own colour for each type of the complete set (`@pierre/trees`'
-   stylesheet), in the palette `base.css` repeats from it. A type Pierre
-   colours nowhere takes the muted ink the tree gives it. */
-.file-type-icon {
-  color: var(--luke-color-text-muted);
-  fill: currentColor;
-}
-
-.file-type-icon:is([data-file-type="default"], [data-file-type="text"]) {
-  color: var(--file-icon-gray);
-}
-
-.file-type-icon:is(
-  [data-file-type="npm"],
-  [data-file-type="postcss"],
-  [data-file-type="ruby"],
-  [data-file-type="svelte"],
-  [data-file-type="yml"]
-) {
-  color: var(--file-icon-red);
-}
-
-.file-type-icon[data-file-type="git"] {
-  color: var(--file-icon-vermilion);
-}
-
-.file-type-icon:is(
-  [data-file-type="claude"],
-  [data-file-type="html"],
-  [data-file-type="json"],
-  [data-file-type="rust"],
-  [data-file-type="svg"],
-  [data-file-type="swift"],
-  [data-file-type="zig"],
-  [data-file-type="zip"]
-) {
-  color: var(--file-icon-orange);
-}
-
-.file-type-icon:is(
-  [data-file-type="babel"],
-  [data-file-type="browserslist"],
-  [data-file-type="javascript"]
-) {
-  color: var(--file-icon-yellow);
-}
-
-.file-type-icon:is(
-  [data-file-type="bash"],
-  [data-file-type="markdown"],
-  [data-file-type="svgo"],
-  [data-file-type="vue"]
-) {
-  color: var(--file-icon-green);
-}
-
-.file-type-icon:is([data-file-type="mcp"], [data-file-type="prettier"], [data-file-type="table"]) {
-  color: var(--file-icon-teal);
-}
-
-.file-type-icon:is(
-  [data-file-type="go"],
-  [data-file-type="oxc"],
-  [data-file-type="react"],
-  [data-file-type="tailwind"]
-) {
-  color: var(--file-icon-cyan);
-}
-
-.file-type-icon:is(
-  [data-file-type="biome"],
-  [data-file-type="c"],
-  [data-file-type="cpp"],
-  [data-file-type="docker"],
-  [data-file-type="python"],
-  [data-file-type="typescript"],
-  [data-file-type="vscode"],
-  [data-file-type="webpack"]
-) {
-  color: var(--file-icon-blue);
-}
-
-.file-type-icon:is(
-  [data-file-type="bootstrap"],
-  [data-file-type="css"],
-  [data-file-type="eslint"],
-  [data-file-type="terraform"],
-  [data-file-type="wasm"]
-) {
-  color: var(--file-icon-indigo);
-}
-
-.file-type-icon:is([data-file-type="astro"], [data-file-type="database"], [data-file-type="vite"]) {
-  color: var(--file-icon-purple);
-}
-
-.file-type-icon:is([data-file-type="graphql"], [data-file-type="image"], [data-file-type="sass"]) {
-  color: var(--file-icon-pink);
-}
-
-.file-type-icon[data-file-type="bun"] {
-  color: var(--file-icon-mauve);
-}
-
-/* A file opened over the window (attachment-viewer.tsx): the dialog's
-   media card, fitted to what it holds, with the file's name and its buttons
-   along the top and the file under them, an image fitted to the window, a
-   text file's lines scrolling inside the card, any other file its icon over
-   Download. */
-.attachment-viewer {
-  display: flex;
-  min-height: 0;
-  flex: 1 1 auto;
-  flex-direction: column;
-}
-
-.attachment-viewer[data-view="text"] {
-  width: min(880px, var(--luke-stage-width) - 2 * var(--luke-space-24));
-  height: calc(var(--luke-stage-height) - 2 * var(--luke-space-24));
-}
-
-/* A picture opened at its own pixels, a diagram on a phone, is shown in
-   the whole of the dimmed window, so as much of it as fits is in sight. */
-.attachment-viewer[data-view="image"][data-opening="own-pixels"] {
-  width: calc(var(--luke-stage-width) - 2 * var(--luke-space-24));
-  height: calc(var(--luke-stage-height) - 2 * var(--luke-space-24));
-}
-
-.attachment-viewer[data-view="other"] {
-  width: min(400px, var(--luke-stage-width) - 2 * var(--luke-space-24));
-}
-
-.attachment-viewer-header {
-  display: flex;
-  flex: none;
-  align-items: center;
-  gap: var(--luke-tight-gap);
-  padding: var(--luke-item-gap) var(--luke-item-gap) var(--luke-item-gap) var(--luke-list-inset);
-  border-bottom: 1px solid var(--luke-color-border);
-}
-
-.attachment-viewer-header > .file-type-icon,
-.attachment-viewer-header > .icon-button-glyph {
-  width: var(--luke-control-icon);
-  height: var(--luke-control-icon);
-  flex: none;
-  margin-right: var(--luke-tight-gap);
-}
-
-/* A phone's header over the file (`attachment-viewer.tsx`, `phone-head.tsx`):
-   the file's name centred over its size and note, between Close and the ⋯. */
-.attachment-viewer-heading {
-  display: flex;
-  min-width: 0;
-  flex-direction: column;
-  align-items: center;
-}
-
-.attachment-viewer-heading > .attachment-viewer-title {
-  max-width: 100%;
-}
-
-.attachment-viewer-about {
-  display: flex;
-  max-width: 100%;
-  min-width: 0;
-}
-
-.attachment-viewer-about > .attachment-viewer-size {
-  margin: 0;
-}
-
-.attachment-viewer-about > .attachment-viewer-note {
-  margin: 0 0 0 var(--luke-space-8);
-}
-
-.attachment-viewer-title {
-  overflow: hidden;
-  margin: 0;
-  white-space: nowrap;
-}
-
-.attachment-viewer-size {
-  flex: none;
-  margin: 0 auto 0 var(--luke-tight-gap);
-  color: var(--luke-color-text-muted);
-  font-size: var(--luke-type-caption-size);
-  line-height: var(--luke-type-caption-leading);
-}
-
 /* What the place opening the viewer says of the file shown, after its size
    in the same quiet ink, a plan's picture saying who last edited it: the
    size gives it the room the size kept before the header's buttons, and it
@@ -4806,54 +4615,8 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
   margin-right: 0;
 }
 
-.attachment-viewer-note {
-  display: flex;
-  min-width: 0;
-  margin: 0 auto 0 var(--luke-block-gap);
-  overflow: clip;
-  overflow-clip-margin: var(--luke-focus-ring-room);
-  color: var(--luke-color-text-muted);
-  font-size: var(--luke-type-caption-size);
-  line-height: var(--luke-type-caption-leading);
-}
-
-.attachment-viewer-walk {
-  display: flex;
-  align-items: center;
-}
-
-.attachment-viewer-place {
-  min-width: 48px;
-  color: var(--luke-color-text-muted);
-  font-size: var(--luke-type-caption-size);
-  line-height: var(--luke-type-caption-leading);
-  font-variant-numeric: tabular-nums;
-  text-align: center;
-}
-
-.attachment-viewer-body {
-  min-height: 0;
-  flex: 1 1 auto;
-}
-
-.attachment-viewer[data-view="image"] .attachment-viewer-body {
-  display: grid;
-  overflow: hidden;
-  place-items: center;
-  background: var(--luke-color-surface);
-  /* Two fingers anywhere on the frame pinch the picture (`@luke/ui`'s ZoomImage), never the page. */
-  touch-action: none;
-}
-
 /* A video plays on the veil, centred, as large as the card leaves it under
    its header at its own shape (`@luke/ui`'s VideoPlayer). */
-.attachment-viewer[data-view="video"] .attachment-viewer-body {
-  display: grid;
-  overflow: hidden;
-  place-items: center;
-  background: var(--luke-color-veil);
-}
-
 .attachment-viewer-body > .luke-video-player {
   max-height: calc(var(--luke-stage-height) - 2 * var(--luke-space-24) - 50px);
 }
@@ -4864,82 +4627,15 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
   max-height: calc(var(--luke-stage-height) - 2 * var(--luke-space-24) - 50px);
 }
 
-/* A text file fills the card under its header and scrolls there, drawn
-   as every code is (whole-file.tsx), on the code's ground. */
-.attachment-viewer-lines {
-  display: flex;
-  flex-direction: column;
-  background: var(--luke-color-code-ground);
-}
-
-.attachment-viewer-other {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: var(--luke-item-gap);
-  padding: var(--luke-card-inset);
-  text-align: center;
-}
-
-.attachment-viewer-other > .file-type-icon,
-.attachment-viewer-other > .icon-button-glyph {
-  width: 48px;
-  height: 48px;
-}
-
-.attachment-viewer-other-name {
-  max-width: 100%;
-  margin: var(--luke-item-gap) 0 0;
-  font-size: var(--luke-type-section-size);
-  line-height: var(--luke-type-section-leading);
-  font-weight: var(--luke-weight-semibold);
-  overflow-wrap: anywhere;
-}
-
-.attachment-viewer-other-size {
-  margin: 0 0 var(--luke-block-gap);
-  color: var(--luke-color-text-muted);
-  font-size: var(--luke-type-caption-size);
-  line-height: var(--luke-type-caption-leading);
-}
-
-/* An archived agent takes no message, so its composer's place says
-   why on one quiet row (`archived-note.tsx`, `@luke/ui`'s Banner), with
-   Unarchive as the press that opens it again. The note a continued agent's
-   box gives way to (`continue-agent.tsx`) is framed as the box was, on its
-   `ComposerFrame`, so it stands where the box stood rather than across the
-   column. */
-.continued-composer {
-  padding: var(--luke-row-inset) var(--luke-row-inset) var(--luke-row-inset) var(--luke-list-inset);
-}
-
 /* An agent's Terminal tab (`terminal-tab.tsx`): the File tab's frame, its
    bar naming the agent and where the connection stands in words, over the
    terminal's screen on the terminal's own ground. A state with an action
    lays one slim mono bar over the screen; the screen under any state
    without a shell connected is dimmed, never blanked. */
-.terminal-tab-title {
-  display: inline-flex;
-  min-width: 0;
-  align-items: center;
-  gap: var(--luke-item-gap);
-  overflow: hidden;
-  color: var(--luke-color-text-muted);
-  white-space: nowrap;
-}
-
 .terminal-tab-title [data-agent-ref] {
   flex: 0 1 auto;
   color: var(--luke-color-text);
   font-weight: var(--luke-weight-semibold);
-}
-
-.terminal-tab-agent {
-  overflow: hidden;
-}
-
-.terminal-tab-standing {
-  flex: 0 0 auto;
 }
 
 /* A narrow panel leaves out the word "sandbox" the tab's name already
@@ -4950,83 +4646,7 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
   }
 }
 
-/* The screen and the shells beside it; the list slides in past the body's
-   right edge and out over the screen, so the body clips what stands past
-   it, with `clip` rather than `hidden`, as a File tab's body does. */
-.terminal-tab-body {
-  position: relative;
-  background: var(--terminal-ground);
-}
-
-.terminal-tab-host {
-  display: flex;
-  min-width: 0;
-  flex: 1;
-  flex-direction: column;
-}
-
-.terminal-tab-screen {
-  min-height: 0;
-  flex: 1;
-}
-
-/* The shells beside the screen (`terminal-shells.tsx`), on the panel's well,
-   as a File tab's tree stands beside its file. */
-.terminal-shells {
-  display: flex;
-  width: min(208px, 40%);
-  min-width: 0;
-  flex: 0 0 auto;
-  flex-direction: column;
-  border-left: 1px solid var(--luke-color-border);
-  background: var(--luke-color-well);
-}
-
-/* A list on its way out has left the layout, the screen already standing in
-   its room, and slides out over the screen's edge on its own ground. Note
-   that the body is the box it stands against. */
-.terminal-shells[data-leaving] {
-  position: absolute;
-  inset-block: 0;
-  right: 0;
-}
-
-/* The shells' rows, inside the `ScrollArea` that scrolls them. */
-.terminal-shells-rows {
-  padding: var(--luke-tight-gap);
-}
-
-/* The list's room while no read has listed the shells: the blocks standing
-   for them, or the failure, with the foot kept at the list's end. */
-.terminal-shells-wait[data-failed] {
-  padding: var(--luke-row-inset) var(--luke-list-inset);
-}
-
-/* What runs in a shell, or where it stands, in the code face. */
-.terminal-shell-detail {
-  font-family: var(--luke-font-mono);
-}
-
 /* A dot while a command runs in the shell, centred where the × steps in. */
-.terminal-shell-running {
-  display: block;
-  width: 6px;
-  height: 6px;
-  margin-inline-end: var(--luke-block-gap);
-  border-radius: 50%;
-  background: var(--luke-color-working);
-}
-
-.terminal-shells-foot {
-  display: flex;
-  padding: var(--luke-row-inset) var(--luke-list-inset);
-  border-top: 1px solid var(--luke-color-border);
-  color: var(--luke-color-text);
-  font-size: var(--luke-type-caption-size);
-  line-height: var(--luke-type-caption-leading);
-  font-weight: var(--luke-weight-semibold);
-}
-
 .terminal-shells-foot [data-agent-ref] .luke-harness-mark {
   width: var(--luke-control-icon);
   height: var(--luke-control-icon);
@@ -5034,29 +4654,6 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
 
 .terminal-shells-foot [data-agent-ref] {
   --luke-working-mark-size: var(--luke-control-icon);
-}
-
-.terminal-tab-screen[data-dim="true"] {
-  opacity: 0.42;
-}
-
-/* Where the words and the action do not fit one line, the action drops to
-   a line of its own at the right, so the words never give way to nothing. */
-.terminal-bar {
-  display: flex;
-  flex: 0 0 auto;
-  flex-wrap: wrap;
-  min-height: 28px;
-  align-items: center;
-  gap: var(--luke-list-gap) var(--luke-control-gap);
-  padding: var(--luke-tight-gap) var(--luke-list-inset) var(--luke-tight-gap) var(--luke-space-16);
-  border-bottom: 1px solid var(--luke-color-border);
-  background: var(--luke-color-fill-hover);
-  color: var(--luke-color-text-muted);
-  font-family: var(--luke-font-mono);
-  font-size: var(--luke-type-caption-size);
-  line-height: var(--luke-type-caption-leading);
-  white-space: nowrap;
 }
 
 /* A bar for a state that often heals at once, a dropped connection the host
@@ -5075,184 +4672,11 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
   }
 }
 
-.terminal-bar-busy {
-  color: var(--luke-color-text-muted);
-  letter-spacing: 1px;
-}
-
-.terminal-bar-end {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--luke-control-gap);
-  margin-left: auto;
-}
-
-.terminal-bar-note {
-  color: var(--luke-color-text-muted);
-}
-
-/* The action's key, after its words, in the action's own ink. */
-.terminal-bar-key {
-  --luke-shortcut-ink: currentColor;
-  margin-inline-start: var(--luke-tight-gap);
-}
-
-/* An agent's mark heading a row (`agent-ref.tsx`'s `AgentMarkRef`), which
-   hangs its tab's card: the mark alone, centred in the room it stands in. */
-.agent-mark-ref {
-  display: flex;
-}
-
-/* The chips along the box's foot: the model chip, the MCP button, and the
-   context ring, each the box its popover hangs from (`@luke/ui`'s
-   `AnchoredPopover`), above itself since the box stands at the panel's foot,
-   and before them what the agent published, in the composer's pill
-   (`chip.tsx`), the pull request's wearing its state's colour, the branch's
-   its name in the code face. */
-.agent-model-chip,
-.agent-servers,
-.agent-context {
-  position: relative;
-  display: flex;
-  min-width: 0;
-}
-
-/* A model and the effort it runs at, wherever the pair stands
-   (`model-label.tsx`): the name in the colour of its line, the effort after
-   it in the muted secondary colour. */
-.model-label {
-  white-space: nowrap;
-}
-
-.model-label-detail {
-  color: var(--luke-color-text-muted);
-}
-
-/* The MCP servers popover: the searchable menu's surface, its search field
-   first (`@luke/ui`'s SearchField), then one row per server under Connected
-   and Not connected (its List rows), and Manage in Settings pinned at its
-   foot. A row is its mark, its name, how many tools it offers in the muted
-   detail type, and beside it its switch, or Connect as Settings ›
-   Integrations draws it (`@luke/ui`'s Button); a row that opens onto its
-   tools wears the row's chevron. The list is taller than the searchable
-   menu's, as tall as a server's page, so going in and back keeps the
-   popover's size, and never taller than the window leaves above the
-   composer once the field and the foot are drawn, so the field stays on
-   screen in the shortest window. */
-.agent-servers-scroll {
-  display: flex;
-  max-height: clamp(160px, var(--luke-stage-height) - 320px, 400px);
-  flex-direction: column;
-}
-
-/* The rows, inside the list's `ScrollArea` (`@luke/ui`), at the menu's inset. */
-.agent-servers-list {
-  padding: var(--luke-menu-inset);
-}
-
-/* A section's heading over its rows, inset as a row's words are, and what
-   the list says in its rows' place, centred at a row or two's height. */
-.agent-servers-heading {
-  padding: var(--luke-row-inset) var(--row-inset) var(--luke-tight-gap);
-}
-
-.agent-servers-heading:first-child {
-  padding-top: var(--luke-space-2);
-}
-
-.agent-servers-note {
-  display: flex;
-  min-height: 40px;
-  align-items: center;
-  justify-content: center;
-  padding: var(--luke-tight-gap) var(--luke-list-inset);
-  text-align: center;
-}
-
-/* The searchable menu's class rides a box drawn as its contents
-   (`agent-servers.tsx`), so its rows lie in `@luke/ui`'s panel. */
-.searchable-menu.agent-servers-menu {
-  display: contents;
-}
-
-/* A server's words, one line beside its mark: its name, its count, and
-   why it lists no tools, each giving way so the reason stays in sight. */
-.agent-servers-words {
-  display: flex;
-  min-width: 0;
-  flex: 1 1 auto;
-  align-items: center;
-  gap: var(--luke-icon-gap);
-}
-
-.agent-servers-name {
-  min-width: 0;
-  flex: 0 1 auto;
-  overflow: hidden;
-  white-space: nowrap;
-}
-
-.agent-servers-count {
-  flex: none;
-  color: var(--luke-color-text-muted);
-  font-size: var(--luke-type-caption-size);
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
-}
-
-.agent-servers-end {
-  display: flex;
-  flex: none;
-  align-items: center;
-  gap: var(--luke-tight-gap);
-  margin-left: auto;
-}
-
 /* Why a connected server lists no tools, after its name in the attention
    tint at the count's size, cut where the row's buttons begin; a long name
    gives way first past most of the line, so the reason stays in sight. */
 .agent-servers-name:has(~ .agent-servers-problem) {
   max-width: 60%;
-}
-
-.agent-servers-problem {
-  flex: 1 1 auto;
-  color: var(--luke-color-attention);
-  font-size: var(--luke-type-caption-size);
-}
-
-/* A sign-in's line in the same place is no problem: never finished, in the
-   muted detail colour. One still waiting on the browser is the shared ring
-   alone after the name, its words in its title, with Reopen and Cancel at
-   the row's end, as Settings › Integrations draws them. */
-.agent-servers-problem-quiet {
-  color: var(--luke-color-text-muted);
-}
-
-.agent-servers-waiting {
-  display: flex;
-}
-
-/* A server's page, in the popover's place: back (`@luke/ui`'s BackButton,
-   folded to its glyph), its mark and name, its count, and its switch at the
-   end, over a hairline, at the search field's height. */
-.agent-servers-page-head {
-  --luke-fold: folded;
-  display: flex;
-  flex: 0 0 auto;
-  align-items: center;
-  gap: var(--luke-icon-gap);
-  height: var(--luke-pane-bar-height);
-  padding: 0 var(--luke-list-inset) 0 var(--luke-item-gap);
-  border-bottom: 1px solid var(--luke-color-border);
-}
-
-.agent-servers-page-title {
-  overflow: hidden;
-  color: var(--luke-color-text);
-  font-size: var(--luke-type-section-size);
-  font-weight: var(--luke-weight-semibold);
-  white-space: nowrap;
 }
 
 /* A tool's page, in the server page's place: its body as tall as the list
@@ -5265,124 +4689,6 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
   flex: none;
   grid-template-columns: minmax(0, 1fr);
   grid-template-rows: auto clamp(200px, var(--luke-stage-height) - 280px, 440px);
-}
-
-/* The context ring beside the MCP button: the window's one icon button
-   holding a ring a glyph's size, its track faint and its fill muted with
-   room to spare, amber within a tenth of the window of eve's compaction,
-   and red at or past it. */
-.agent-context-button {
-  --context-fill: var(--luke-color-text-muted);
-}
-
-.agent-context-button[data-level="near"] {
-  --context-fill: var(--luke-color-attention);
-}
-
-.agent-context-button[data-level="over"] {
-  --context-fill: var(--luke-color-danger);
-}
-
-.agent-context-ring {
-  transform: rotate(-90deg);
-  fill: none;
-}
-
-.agent-context-track {
-  stroke: var(--luke-color-border-strong);
-}
-
-.agent-context-fill {
-  stroke: var(--context-fill);
-  stroke-linecap: round;
-  transition: stroke-dasharray var(--luke-duration-quick) var(--luke-spring);
-}
-
-/* The popover hangs above the ring as the model menu does above its chip,
-   at its width, on the menu's own surface; each part of the context wears
-   one colour on the bar and on its legend row's square. */
-.agent-context-summary {
-  display: flex;
-  justify-content: space-between;
-  gap: var(--luke-control-gap);
-  margin: 0;
-  font-variant-numeric: tabular-nums;
-}
-
-.agent-context-full {
-  font-weight: var(--luke-weight-semibold);
-}
-
-.agent-context-total {
-  color: var(--luke-color-text-muted);
-}
-
-.agent-context-bar {
-  display: flex;
-  height: 6px;
-  overflow: hidden;
-  gap: var(--luke-list-gap);
-  border-radius: var(--luke-radius-full);
-  background: var(--luke-color-fill-strong);
-}
-
-.agent-context-segment {
-  flex: none;
-  background: var(--context-part);
-}
-
-.agent-context-row {
-  display: flex;
-  align-items: center;
-  gap: var(--luke-icon-gap);
-}
-
-.agent-context-swatch {
-  width: 8px;
-  height: 8px;
-  flex: none;
-  border-radius: var(--luke-radius-6);
-  background: var(--context-part);
-}
-
-.agent-context-label {
-  flex: 1;
-  min-width: 0;
-  margin: 0;
-  color: var(--luke-color-text-muted);
-}
-
-.agent-context-count {
-  margin: 0;
-  font-variant-numeric: tabular-nums;
-}
-
-.agent-context-note {
-  margin: 0;
-  color: var(--luke-color-text-muted);
-  font-size: var(--luke-type-caption-size);
-}
-
-.agent-context [data-part="system-prompt"] {
-  --context-part: var(--luke-color-chart-2);
-}
-
-.agent-context [data-part="tool-definitions"] {
-  --context-part: var(--luke-color-chart-1);
-}
-
-.agent-context [data-part="brief"] {
-  --context-part: var(--luke-color-chart-3);
-}
-
-.agent-context [data-part="conversation"] {
-  --context-part: var(--luke-color-text-muted);
-}
-
-/* The branch's chip's box (agent-published.tsx) draws no box of its
-   own, so the chip stands in the composer's row as the row's own. */
-.agent-published-chip {
-  display: contents;
 }
 
 /* A pull request's colour for where it stands, in GitHub's colours: open in
@@ -5450,61 +4756,15 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
    wrapping where the page is narrow, each its issue's mark, its key in the
    code face, and its title cut short at a chip's widest, and Link issue,
    quiet, at the row's end. What did not land is said under the row. */
-.task-issue-link,
-.task-issue-links-add {
-  display: flex;
-  min-width: 0;
-  max-width: 100%;
-}
-
-.task-issue-link {
-  max-width: min(100%, 360px); /* off-scale: a title's readable start, past which it is cut */
-}
-
-.task-issue-link .issue-mark,
-.task-issue-link-unread {
+.task-issue-link .issue-mark {
   width: var(--luke-icon-12);
   height: var(--luke-icon-12);
-}
-
-.task-issue-link-unread {
-  flex: none;
-  color: var(--luke-color-text-muted);
 }
 
 .task-issue-link-unread > svg {
   display: block;
   width: 100%;
   height: 100%;
-}
-
-.task-issue-link-key {
-  flex: none;
-  color: var(--luke-color-text-muted);
-  font-family: var(--luke-font-mono);
-  font-size: var(--luke-type-caption-size);
-  font-weight: var(--luke-weight-regular);
-}
-
-/* A chip's menu is headed by its issue's whole title over where it
-   stands, since the chip cuts the title short. */
-.task-issue-link-heading {
-  display: flex;
-  max-width: 280px; /* off-scale: the menu's width at most */
-  flex-direction: column;
-  gap: var(--luke-list-gap);
-}
-
-.task-issue-link-heading-title {
-  color: var(--luke-color-text);
-  font-weight: var(--luke-weight-medium);
-  overflow-wrap: anywhere;
-}
-
-.task-issue-link-heading-state {
-  color: var(--luke-color-text-muted);
-  font-size: var(--luke-type-caption-size);
-  line-height: var(--luke-type-caption-leading);
 }
 
 /* The pull request's row pinned over the composer, a card of one row
@@ -5514,12 +4774,6 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
    in the main column and the side panel alike. */
 .agent-published {
   container: published-row / inline-size;
-}
-
-.agent-published-meta {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--luke-icon-gap);
 }
 
 /* Too narrow for the checks' word: it goes, and the mark's words for a
@@ -5539,59 +4793,11 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
   }
 }
 
-/* The one word the checks still get: said, in the danger red, only once
-   they have failed, since that is the one result that asks for a look. */
-.agent-published-checks {
-  color: var(--luke-color-danger-text);
-}
-
-.agent-published-lines {
-  white-space: nowrap;
-}
-
 /* Lucide's glyphs, which the AI Elements components draw with, at the
    stroke every glyph of our own is drawn at in its 24 box (glyphs.tsx), so
    the transcripts read at the weight of the rest of the window. */
 svg.lucide {
   stroke-width: 1.9;
-}
-
-/* A subagent's row, on the Work tab and an agent's tab alike
-   (transcript-blocks.tsx): a call's row, the whole of it the line button
-   that opens the subagent's tab, the summary that folds its task and
-   answer open, or, where it opens nothing, the same line pressed by
-   nothing. The row answers its own width, so the job, the one thing naming
-   the subagent, keeps the room in a narrow column. */
-.subagent-row {
-  container: subagent-row / inline-size;
-  font-size: var(--luke-type-caption-size);
-}
-
-.subagent-line {
-  display: flex;
-  width: 100%;
-  min-width: 0;
-  height: 28px; /* off-scale: a call's line */
-  align-items: center;
-  gap: var(--luke-icon-gap);
-  padding: 0 var(--luke-tight-gap);
-  border-radius: var(--luke-radius-6);
-  color: var(--luke-color-text-muted);
-  font-size: var(--luke-type-caption-size);
-  line-height: var(--luke-type-caption-leading);
-}
-
-.subagent-job {
-  min-width: 0;
-  flex: 1;
-  overflow: hidden;
-  color: var(--luke-color-text);
-  white-space: nowrap;
-}
-
-.subagent-pair,
-.subagent-time {
-  flex-shrink: 0;
 }
 
 /* Too narrow for the job beside the model and effort: they go first, as

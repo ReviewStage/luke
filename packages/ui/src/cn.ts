@@ -111,6 +111,28 @@ const FEEDBACK_DISPLAY = {
   container: ["progress"],
 } as const;
 
+/**
+ * The names the panel's task surfaces' block of the theme adds (tasks.css,
+ * moving onto utilities), by the group tailwind-merge reads each in.
+ */
+const TASK_SURFACES = {
+  text: ["section-inline"],
+  "font-weight": ["luke-regular", "luke-medium", "luke-semibold"],
+  tracking: ["busy"],
+  spacing: [
+    "item-gap",
+    "viewer-text",
+    "viewer-other",
+    "viewer-stage",
+    "viewer-stage-height",
+    "shells-pane",
+    "servers-list",
+    "pane-bar",
+    "issue-chip",
+    "icon-12",
+  ],
+} as const;
+
 const merge = extendTailwindMerge({
   extend: {
     theme: {
@@ -128,6 +150,7 @@ const merge = extendTailwindMerge({
         "group",
         "tag",
         ...FEEDBACK_DISPLAY.text,
+        ...TASK_SURFACES.text,
       ],
       "font-weight": [
         "text",
@@ -139,8 +162,9 @@ const merge = extendTailwindMerge({
         "emphasis",
         "title",
         ...FEEDBACK_DISPLAY["font-weight"],
+        ...TASK_SURFACES["font-weight"],
       ],
-      tracking: ["title"],
+      tracking: ["title", ...TASK_SURFACES.tracking],
       leading: ["body", ...FEEDBACK_DISPLAY.leading],
       spacing: [
         "luke-2",
@@ -206,6 +230,7 @@ const merge = extendTailwindMerge({
         "choice-segment-compact",
         "caption-glyph",
         ...FEEDBACK_DISPLAY.spacing,
+        ...TASK_SURFACES.spacing,
       ],
       radius: [
         "control",
@@ -256,7 +281,7 @@ const merge = extendTailwindMerge({
       ],
     },
     classGroups: {
-      opacity: [{ opacity: ["disabled"] }],
+      opacity: [{ opacity: ["disabled", "terminal-dim"] }],
     },
   },
 });

@@ -107,7 +107,7 @@ function shellDetail(shell: TerminalSummary): string {
 function ShellList({ children }: { children: ReactNode }): React.JSX.Element {
   return (
     <ScrollArea>
-      <div className="terminal-shells-rows">
+      <div className="p-tight-gap">
         <List label="Shell list" density={LIST_DENSITY.COMPACT}>
           {children}
         </List>
@@ -157,7 +157,7 @@ function UnlistedShells({ state }: { state: TerminalState }): React.JSX.Element 
     );
   if (state.kind !== TERMINAL_STATE.UNREACHABLE) return <ShellsSkeleton />;
   return (
-    <Fill className="terminal-shells-wait" data-failed="">
+    <Fill className="terminal-shells-wait px-list-inset py-row-inset" data-failed="">
       <ErrorState>{SHELLS_UNREAD}</ErrorState>
     </Fill>
   );
@@ -233,12 +233,16 @@ function ShellRow({
           rename.refused ? (
             <span>{RENAME_REFUSED}</span>
           ) : (
-            <span className="terminal-shell-detail">{shellDetail(shell)}</span>
+            <span className="terminal-shell-detail font-mono">{shellDetail(shell)}</span>
           )
         }
         meta={
           shell.running ? (
-            <span className="terminal-shell-running" role="img" aria-label="Running" />
+            <span
+              className="terminal-shell-running me-block-gap block size-1.5 rounded-luke-full bg-working"
+              role="img"
+              aria-label="Running"
+            />
           ) : null
         }
         current={shown ? LIST_ROW_CURRENT.ITEM : undefined}
@@ -341,7 +345,7 @@ export function TerminalShells({
           surfaceOpen={surfaceOpen && (over === undefined ? !leaving : over.open)}
         />
       )}
-      <div className="terminal-shells-foot">
+      <div className="terminal-shells-foot flex border-t border-border px-list-inset py-row-inset text-caption font-luke-semibold text-foreground">
         <AgentRef
           subject={subject}
           models={models}
@@ -370,7 +374,7 @@ export function TerminalShells({
   return (
     <PanePin
       ref={pane}
-      className="terminal-shells"
+      className="terminal-shells flex w-shells-pane min-w-0 flex-none flex-col border-l border-border bg-well data-leaving:absolute data-leaving:inset-y-0 data-leaving:right-0"
       aria-label="Shells"
       data-leaving={leaving ? "" : undefined}
       inert={leaving}

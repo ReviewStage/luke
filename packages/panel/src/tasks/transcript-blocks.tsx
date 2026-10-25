@@ -1583,14 +1583,14 @@ export function TranscriptSubagent({
       <GlyphSlot>
         <SubagentMark model={pair?.choice.model} />
       </GlyphSlot>
-      <OneLine className="subagent-job">{job}</OneLine>
+      <OneLine className="subagent-job flex-1 text-foreground">{job}</OneLine>
       {pair === undefined ? null : (
-        <span className="subagent-pair" data-subagent-pair="">
+        <span className="subagent-pair shrink-0" data-subagent-pair="">
           <ModelLabel choice={pair.choice} models={pair.models} />
         </span>
       )}
       {running && startedAt !== undefined ? (
-        <WorkingTime startedAt={startedAt} className="subagent-time" />
+        <WorkingTime startedAt={startedAt} className="shrink-0" />
       ) : null}
       <ToolStateMark state={state} />
     </>
@@ -1607,7 +1607,12 @@ export function TranscriptSubagent({
         </ToolContent>
       </Tool>
     ) : onOpen === undefined ? (
-      <div className="subagent-line" data-subagent-row="" data-call-id={callId}>
+      // The same line as the one that opens a subagent's tab, pressed by nothing.
+      <div
+        className="subagent-line flex h-7 w-full min-w-0 items-center gap-icon-gap rounded-luke-6 px-tight-gap text-caption text-muted-foreground"
+        data-subagent-row=""
+        data-call-id={callId}
+      >
         {line}
       </div>
     ) : (
@@ -1618,7 +1623,7 @@ export function TranscriptSubagent({
       </Tooltip>
     );
   return (
-    <div className="subagent-row">
+    <div className="subagent-row @container/subagent-row text-caption-inline">
       {row}
       {errorText === undefined ? null : <FailureNote>{errorText}</FailureNote>}
     </div>

@@ -95,6 +95,7 @@ import { rendererRuntime } from "../renderer-runtime.js";
 import { Highlighted } from "../search-field.js";
 import { appStateDerivedAtom, useAppSlice } from "../use-app-state.js";
 import { type AgentRowPlace, agentMenuRow, useAgentRowPlace } from "./agent-menu-row.js";
+import { SERVER_PAGE_HEAD_CLASS } from "./agent-servers.js";
 import {
   DATE_PICKER_CLOSE,
   type DatePicked,
@@ -1167,7 +1168,7 @@ function MentionCrumb({ crumb }: { crumb: Crumb }): React.JSX.Element {
   const { kind, folder, back } = crumb;
   return (
     // Note that a press on the crumb keeps the caret in the editor, where the keys are read.
-    <KeepFocus className="agent-servers-page-head mention-menu-crumb">
+    <KeepFocus className={`${SERVER_PAGE_HEAD_CLASS} mention-menu-crumb`}>
       {back === undefined ? null : (
         <BackButton
           label={folder === undefined ? BACK_LABEL.WIDEN : BACK_LABEL.UP}
