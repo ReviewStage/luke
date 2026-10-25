@@ -2751,7 +2751,7 @@ export function useTasksTab(input: {
       ? region.task.repository
       : null);
 
-  // A fixture's task has no history, as it is read from nowhere.
+  // A fixture's task reads its staged history through the same acts (`tasks-fixture.ts`).
   const historySource = useMemo(
     (): PlanHistorySource => ({
       readPage: (taskId, before) =>
@@ -2769,8 +2769,7 @@ export function useTasksTab(input: {
   );
   const history = usePlanHistory({
     source: historySource,
-    taskId:
-      fixture === undefined && region.kind === DOCUMENT_REGION.READY ? region.task.id : undefined,
+    taskId: region.kind === DOCUMENT_REGION.READY ? region.task.id : undefined,
     editedAt: region.kind === DOCUMENT_REGION.READY ? region.task.lastEdit?.at : undefined,
     name: region.kind === DOCUMENT_REGION.READY ? region.task.name : undefined,
     shown: shown && historyOpen,
