@@ -40,6 +40,7 @@ import {
   isWireString,
   type UnparsedWireValue,
   type WireRecord,
+  WireRecordShapeSchema,
   type WireValue,
   WireValueSchema,
 } from "@luke/wire";
@@ -131,6 +132,8 @@ export class McpToolsFailure extends Data.TaggedError("McpToolsFailure")<{
   readonly code?: number;
   /** The first line of the server's error message, where one was safe to keep. */
   readonly serverMessage?: string;
+  /** The tools the session listed before a call of one failed, where it got that far. */
+  readonly listed?: readonly McpToolSchema[];
 }> {}
 
 /** The JSON-RPC error code an MCP server answers an unauthorized request with. */
@@ -189,18 +192,25 @@ interface RpcParams {
 }
 
 /** One tool as the server listed it, for a model to call: its name, its title and words, its hints, and the schemas it declared, as the server wrote them. */
-export interface McpToolSchema {
-  readonly name: string;
-  readonly title?: string;
-  readonly description?: string;
-  readonly annotations?: WireRecord;
-  readonly inputSchema?: WireValue;
-  readonly outputSchema?: WireValue;
-}
+export const McpToolSchemaSchema = Schema.Struct({
+  name: Schema.String,
+  title: Schema.optionalKey(Schema.String),
+  description: Schema.optionalKey(Schema.String),
+  annotations: Schema.optionalKey(WireRecordShapeSchema),
+  inputSchema: Schema.optionalKey(WireValueSchema),
+  outputSchema: Schema.optionalKey(WireValueSchema),
+});
 
-/** What a call of one tool answered: the server's own result, or, for a name the server lists no tool under, every tool it does list. */
+export type McpToolSchema = typeof McpToolSchemaSchema.Type;
+
+/** What a call of one tool answered: every tool the server listed in the call's session, and the server's own result where it lists one under the name. */
 export type McpToolCall =
-  | { readonly called: true; readonly tool: McpToolSchema; readonly result: WireValue }
+  | {
+      readonly called: true;
+      readonly tools: readonly McpToolSchema[];
+      readonly tool: McpToolSchema;
+      readonly result: WireValue;
+    }
   | { readonly called: false; readonly tools: readonly McpToolSchema[] };
 
 type ListedTool = (typeof ToolsPage.Type)["tools"][number];
@@ -471,8 +481,9 @@ export const listMcpToolSchemas = /* @__PURE__ */ Effect.fn("web/listMcpToolSche
 /**
  * One call of the tool the server at `url` lists under `name`, with
  * `input`, under the bearer `token`, in one session: the server's own
- * result, which may be its tool's error, or every tool it lists where it
- * lists none under the name; why no call was made as `inMcpSession` says.
+ * result, which may be its tool's error, beside every tool it lists, which
+ * the session reads first to find the tool; why no call was made as
+ * `inMcpSession` says, with the tools listed where the call itself failed.
  */
 export const callMcpTool = /* @__PURE__ */ Effect.fn("web/callMcpTool")(function* (
   url: string,
@@ -485,10 +496,25 @@ export const callMcpTool = /* @__PURE__ */ Effect.fn("web/callMcpTool")(function
       const tools = (yield* listedTools(send)).map(toolSchema);
       const tool = tools.find((each) => each.name === name);
       if (tool === undefined) return { called: false, tools } as const;
-      const result = yield* send(MCP_METHOD.TOOLS_CALL, { name, arguments: input });
-      const answered = Option.getOrUndefined(decodeWireValue(result));
-      if (answered === undefined) return yield* unreadable;
-      return { called: true, tool, result: answered } as const;
+      const called = Effect.gen(function* () {
+        const result = yield* send(MCP_METHOD.TOOLS_CALL, { name, arguments: input });
+        const answered = Option.getOrUndefined(decodeWireValue(result));
+        if (answered === undefined) return yield* unreadable;
+        return { called: true, tools, tool, result: answered } as const;
+      });
+      // A call the server refused still read the server's list, which the caller may keep.
+      return yield* Effect.mapError(
+        called,
+        (failure) =>
+          new McpToolsFailure({
+            reason: failure.reason,
+            ...(failure.code !== undefined ? { code: failure.code } : undefined),
+            ...(failure.serverMessage !== undefined
+              ? { serverMessage: failure.serverMessage }
+              : undefined),
+            listed: tools,
+          }),
+      );
     }),
   );
 });

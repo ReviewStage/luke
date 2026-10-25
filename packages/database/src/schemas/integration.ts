@@ -1,5 +1,5 @@
 import type { IntegrationProvider } from "@luke/features/integration-wire";
-import { index, pgTable, text, uniqueIndex } from "drizzle-orm/pg-core";
+import { index, jsonb, pgTable, text, uniqueIndex } from "drizzle-orm/pg-core";
 import { timestamptz } from "./_helpers.js";
 import { user } from "./auth.js";
 
@@ -25,6 +25,13 @@ import { user } from "./auth.js";
  * The account first connected at a provider is named after the provider and
  * asks under the Luke account's own user id, as every row did before a second
  * one was possible.
+ *
+ * `tools` is the list the provider's MCP server last gave this account
+ * (`packages/service/src/integrations/integration-tool-store.ts`), which a
+ * native agent's server answers its listing from, so a launch asks Connect
+ * for no token. It holds tool names, words, and schemas, never a credential,
+ * and goes with the row on a Disconnect and is cleared when a sign-in
+ * completes again.
  */
 export const integrationConnection = pgTable(
   "integration_connection",
@@ -51,6 +58,10 @@ export const integrationConnection = pgTable(
     connectVerifier: text("connect_verifier"),
     /** When a sign-in last completed; null until one has. */
     connectedAt: timestamptz("connected_at"),
+    /** The tools the provider's MCP server last listed for this account, as a model is shown them; null until listed, and after a sign-in completes again. */
+    tools: jsonb("tools").$type<unknown>(),
+    /** When the read that listed `tools` began; null whenever they are. */
+    toolsListedAt: timestamptz("tools_listed_at"),
     updatedAt: timestamptz("updated_at").notNull().defaultNow(),
   },
   (table) => [
