@@ -172,8 +172,8 @@ black, or text gray. The desktop's palette writes each colour once as a
 `light-dark()` pair, and the root's `system` theme follows the Mac's
 appearance, which Luke's Theme setting drives through Electron's
 `nativeTheme.themeSource`. Every colour of the window's own that differs in
-the light is restated in its file's `@media (prefers-color-scheme: light)`
-`:root` block. Either way a change of appearance is the stylesheet's alone:
+the light is written the same way, as a `light-dark()` pair in its own file,
+so a change of appearance is the stylesheet's alone:
 nothing re-renders, and the whiteboard takes it as a new theme for the canvas
 already mounted. No colour literal belongs anywhere but a token block, a
 `:root` or a palette's profile; a mask's black is an alpha rather than a
