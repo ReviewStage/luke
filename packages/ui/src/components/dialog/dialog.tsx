@@ -620,7 +620,12 @@ export function Dialog({
             <div className={DIALOG_ANSWERS}>{actions}</div>
           </div>
         )}
-        <div ref={setSlot} className={DIALOG_FOOT} hidden={claimed === undefined} />
+        {/* Note that the slot takes its foot's layout only while a question holds it, because `flex` outranks `hidden` and an empty foot would draw its margin, and the card's gap before it, as room under the last row. */}
+        <div
+          ref={setSlot}
+          className={claimed === undefined ? undefined : DIALOG_FOOT}
+          hidden={claimed === undefined}
+        />
       </DialogContent>
     </ShadcnDialog>
   );
