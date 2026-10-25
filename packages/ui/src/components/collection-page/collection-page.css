@@ -1,6 +1,7 @@
 /* collection-page.css -- what a collection page's utilities
    (`collection-page.tsx`) cannot say: the page's measure and inset, which
-   its profile and its own width set; the filter line's `:has()`; the
+   its profile and its own width set, or under the window's toolbar the
+   room's whole width at the toolbar's edges; the filter line's `:has()`; the
    notice's room; the rows of blocks a read stands, whose classes name only
    themselves; and the reach of what the caller lays in. The page queries
    its own width rather than the viewport's, so a page in a narrow pane
@@ -26,6 +27,19 @@
     .luke-collection-page > * {
       --luke-collection-page-inset: var(--luke-page-inset-narrow);
     }
+  }
+
+  /* Under the window's toolbar the page is a workspace's rather than a
+     document's: its filters and its content stand across the room on the
+     toolbar's own edges, where its title's words start and its actions end
+     (`toolbar.css`'s page inset, a column's inset and a row's), in any
+     room, so the bar lines up with what it heads rather than with a
+     measure centred under it. Note that it says so in the page's own
+     properties, the measure as wide as the room, so whatever reads them
+     answers it. */
+  .luke-collection-page[data-frame="toolbar"] > * {
+    --luke-collection-page-width: 100%;
+    --luke-collection-page-inset: calc(var(--luke-space-12) + var(--luke-row-inset));
   }
 
   /* Note that the filter line's display stays here rather than in a

@@ -196,6 +196,7 @@ const PAGE_PATTERNS = {
     "ring-reach",
     "auth-ring",
     "collection-page-inset",
+    "detail-page-end",
     "detail-page-inset",
     "public-media-reach",
     "public-page-end",
