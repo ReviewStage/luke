@@ -38,3 +38,13 @@ test("a log over the composer pads past its fade in place of the log's own foot"
     "px-content-inset pb-log-over-composer",
   );
 });
+
+test("a later row or navigation length replaces an earlier, and a size-only type stands beside a colour", () => {
+  assert.equal(
+    cn("min-h-control ps-luke-4", "min-h-disclosure-row ps-0"),
+    "min-h-disclosure-row ps-0",
+  );
+  assert.equal(cn("h-control", "h-luke-32"), "h-luke-32");
+  assert.equal(cn("text-dialog-size text-foreground"), "text-dialog-size text-foreground");
+  assert.equal(cn("text-tag-size text-on-accent"), "text-tag-size text-on-accent");
+});

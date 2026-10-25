@@ -20,6 +20,7 @@ import type { CatalogModel } from "@luke/features/models-wire";
 import { INTEGRATION_LABEL, pasteCutWords } from "@luke/features/words";
 import type { ShortcutChord } from "@luke/settings/shortcuts";
 import {
+  ComposerBody,
   ComposerFoot,
   McpIcon,
   MicrophoneIcon,
@@ -70,8 +71,8 @@ import { DICTATION_PHASE } from "./use-dictation.js";
  * agent-composer.tsx -- the message box pinned under an agent's transcript: one card, two chips at its foot, one button, and a note under it when a message or a change did not go or a server's sign-in expired.
  *
  * The box is the shared composer card (../ai-elements/prompt-input.tsx),
- * at its default type, and its foot is every message box's
- * (`@luke/ui`'s `ComposerFoot`). Its foot is laid
+ * at its default type, its files over its words and its foot as every message
+ * box's (`@luke/ui`'s `ComposerBody` and `ComposerFoot`). Its foot is laid
  * out as ChatGPT's and Codex's are: at the left the "+" that attaches
  * files and, once the agent has pushed a branch with no pull request yet,
  * the branch's chip, which opens it on GitHub (`agent-published.tsx`); a
@@ -746,47 +747,50 @@ export function AgentComposer({
         }}
       >
         {above}
-        <ComposerField
-          module={module}
-          editor={editor}
-          room={room}
-          draft={composer.draft}
-          // Note that the words changing again takes the cut note down, so it never outlives the paste it was said of.
-          setDraft={(text) => {
-            setCut(false);
-            composer.setDraft(text);
-          }}
-          onPasteCut={() => setCut(true)}
-          placeholder={placeholder}
-          label={wording?.label ?? "Message to the agent"}
-          input={
-            held
-              ? COMPOSER_INPUT.DISABLED
-              : dictating
-                ? COMPOSER_INPUT.READ_ONLY
-                : COMPOSER_INPUT.EDITABLE
-          }
-          maxLength={maxLength}
-          takesFocus={!(focusedByOwner && mountedFirst)}
-          {...pickers.field}
-          onKey={(event) =>
-            pickers.field.onKey(event) ||
-            // A file still being read holds the owner's keys too, as it holds Send.
-            (!files.reading && onKey?.(event) === true)
-          }
-          onEnter={() => {
-            if (room.current !== null) submitPromptInput(room.current);
-          }}
-          onPasteFiles={files.paste}
-          quote={(quote) => <ComposerQuoteView quote={quote} held={held} />}
-        />
-        <ComposerFoot
+        <ComposerBody
           files={
             <AttachedFileChips
               files={attachmentChips(composer.attachments)}
               onRemove={held ? undefined : files.remove}
             />
           }
+        >
+          <ComposerField
+            module={module}
+            editor={editor}
+            room={room}
+            draft={composer.draft}
+            // Note that the words changing again takes the cut note down, so it never outlives the paste it was said of.
+            setDraft={(text) => {
+              setCut(false);
+              composer.setDraft(text);
+            }}
+            onPasteCut={() => setCut(true)}
+            placeholder={placeholder}
+            label={wording?.label ?? "Message to the agent"}
+            input={
+              held
+                ? COMPOSER_INPUT.DISABLED
+                : dictating
+                  ? COMPOSER_INPUT.READ_ONLY
+                  : COMPOSER_INPUT.EDITABLE
+            }
+            maxLength={maxLength}
+            takesFocus={!(focusedByOwner && mountedFirst)}
+            {...pickers.field}
+            onKey={(event) =>
+              pickers.field.onKey(event) ||
+              // A file still being read holds the owner's keys too, as it holds Send.
+              (!files.reading && onKey?.(event) === true)
+            }
+            onEnter={() => {
+              if (room.current !== null) submitPromptInput(room.current);
+            }}
+            onPasteFiles={files.paste}
+            quote={(quote) => <ComposerQuoteView quote={quote} held={held} />}
+          />
+        </ComposerBody>
+        <ComposerFoot
           tools={
             <>
               <ComposerAttach>

@@ -58,7 +58,6 @@ import { readPlanTemplate } from "./account-store.js";
 import { agentAutomationNameSql } from "./agent-name.js";
 import { moveTaskChat } from "./chat-store.js";
 import { InstantColumnSchema } from "./columns.js";
-import { waitOutConversationDispatch } from "./dispatch-lock.js";
 import { stampSavedAttachments } from "./plan-attachments.js";
 import { readLastEdit, readSectionWriters } from "./plan-revisions.js";
 import { readTemplateAt } from "./plan-template-revisions.js";
@@ -111,13 +110,9 @@ export class TaskAssigneeNotMember extends Data.TaggedError("TaskAssigneeNotMemb
 export class TaskAgentUnstopped extends Data.TaggedError("TaskAgentUnstopped") {}
 
 /** What a delete that stopped the task's agents first tells it. */
-export interface TaskDeleteGuard<R> {
+export interface TaskDeleteGuard {
   /** The agents the caller stopped; any other standing refuses the delete. */
   readonly stoppedAgentIds: ReadonlySet<string>;
-  /** Run under the task's lock before anything is deleted, given each agent's conversation. */
-  readonly beforeDelete: (
-    conversationIds: readonly string[],
-  ) => Effect.Effect<void, QueryError | Schema.SchemaError, R>;
 }
 
 /**
@@ -1286,24 +1281,12 @@ const followingAgentsAndInbox = Effect.fnUntraced(function* (
   );
 });
 
-/** The conversations of the task's agents still standing unarchived, in the order `lockStandingAgents` locks them. */
-const findStandingConversations = SqlSchema.findAll({
-  Request: Schema.Struct({ taskId: Schema.String }),
-  Result: Schema.Struct({ conversationId: Schema.String }),
-  execute: ({ taskId }) =>
-    Database.use((db) =>
-      db
-        .select({ conversationId: codingAgent.conversationId })
-        .from(codingAgent)
-        .where(and(eq(codingAgent.taskId, taskId), isNull(codingAgent.archivedAt)))
-        .orderBy(codingAgent.conversationId),
-    ),
-});
-
 /**
  * The task's agents still standing unarchived, each with its conversation
  * locked, the lock every write of its lines and turns takes, in the
  * conversations' order, so two finishes of one task never wait on each other.
+ * A line handed to an agent stands awaiting from before its runtime hears it
+ * (`dispatch-claim.ts`), so the caller's guard reads such an agent at work.
  */
 const lockStandingAgents = SqlSchema.findAll({
   Request: Schema.Struct({ taskId: Schema.String }),
@@ -1328,22 +1311,6 @@ const lockStandingAgents = SqlSchema.findAll({
         .orderBy(conversations.id)
         .for("update", { of: conversations }),
     ),
-});
-
-/**
- * The task's standing agents with their conversations locked, once any
- * hand-over to eve under way in them has been waited out, in the
- * conversations' order (`dispatch-lock.ts`): a line eve took then stands
- * awaiting when the caller's guard reads each agent idle or not, as it did
- * when a hand-over held the row lock. An agent started meanwhile has none
- * under way.
- */
-const lockStandingAgentsAfterHandOvers = Effect.fnUntraced(function* (taskId: string) {
-  const standing = yield* findStandingConversations({ taskId });
-  yield* Effect.forEach(standing, ({ conversationId }) =>
-    waitOutConversationDispatch(conversationId),
-  );
-  return yield* lockStandingAgents({ taskId });
 });
 
 /**
@@ -1643,7 +1610,7 @@ export function finishTaskWork<R = never>(
           return false;
         if (!pullRequests.some(({ state }) => state === PULL_REQUEST_STATE.MERGED)) return false;
         if (Option.isSome(yield* findOpenQuestion({ taskId }))) return false;
-        const agents = yield* lockStandingAgentsAfterHandOvers(taskId);
+        const agents = yield* lockStandingAgents({ taskId });
         if (!(yield* idle(agents))) return false;
         const now = yield* DateTime.nowAsDate;
         const finished = yield* finishTask({ taskId, now });
@@ -1663,28 +1630,29 @@ export function finishTaskWork<R = never>(
  * and the delete fails with `TaskAgentUnstopped` where any other stands. The
  * task's row is locked before the agents are read, so a Start racing the
  * delete either landed its agent before the read, which then refuses, or
- * waits on the lock and finds no task to start on. What the caller hands
- * `beforeDelete` runs under that lock once no other agent stands and before
- * anything goes, given each agent's conversation, so what it
- * does to them happens only to a task that is deleted.
+ * waits on the lock and finds no task to start on. Nothing here reaches
+ * past the database, so the lock is held only for these statements: what a
+ * caller does to the agents it stopped, such as retiring their sessions,
+ * it does before, and the stopped set re-checked here is what keeps an
+ * agent started meanwhile, whose session it never touched, standing.
  */
-export function deleteTask<R = never>(
+export function deleteTask(
   userId: string,
   taskId: string,
-  guard?: TaskDeleteGuard<R>,
-): Effect.Effect<boolean, TaskStoreFailure | TaskAgentUnstopped, DatabaseServices | R> {
+  guard?: TaskDeleteGuard,
+): Effect.Effect<boolean, TaskStoreFailure | TaskAgentUnstopped, DatabaseServices> {
   return Effect.map(deleteTaskCommitted(userId, taskId, guard), Option.isSome);
 }
 
 /** A task deleted, as `deleteTask` deletes one, and the transaction its row went in; none where the account reached no such task. */
-export function deleteTaskCommitted<R = never>(
+export function deleteTaskCommitted(
   userId: string,
   taskId: string,
-  guard?: TaskDeleteGuard<R>,
+  guard?: TaskDeleteGuard,
 ): Effect.Effect<
   Option.Option<{ readonly txid: string }>,
   TaskStoreFailure | TaskAgentUnstopped,
-  DatabaseServices | R
+  DatabaseServices
 > {
   return Effect.flatMap(SqlClient.SqlClient, (client) =>
     client.withTransaction(
@@ -1696,7 +1664,6 @@ export function deleteTaskCommitted<R = never>(
           return yield* new TaskAgentUnstopped();
         }
         const conversationIds = agents.map((agent) => agent.conversationId);
-        if (guard !== undefined) yield* guard.beforeDelete(conversationIds);
         const removed = yield* removeTask({ userId, taskId });
         if (Option.isNone(removed)) return Option.none();
         yield* removeEndedCalls({ userId, taskId });

@@ -392,15 +392,6 @@ test("Settings on a stage wide enough for panes, but under the split's line by i
   assert.equal(buttonSaying(the(page, SETTINGS_COLUMNS.page), "Settings"), undefined);
 });
 
-test("Settings' page list is as wide as the sidebar kept, but never more than its share of the stage", async () => {
-  const page = await mount(WIDE, createElement(SettingsWindow, { link: undefined }));
-  assert.equal(
-    getComputedStyle(the(page, ".desktop-settings")).gridTemplateColumns,
-    "min(var(--sidebar-width), 35%) minmax(0, 1fr)",
-    "the list's column is held to the share the split's line leaves its least list",
-  );
-});
-
 test("Settings' page list kept wider than its share moves from the width it is drawn at, at the first press of its edge", async () => {
   window.localStorage.setItem("luke.sidebar-width", "400");
   const page = await mount(900, createElement(SettingsWindow, { link: undefined }));

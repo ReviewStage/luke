@@ -1,8 +1,10 @@
 import {
   FolderIcon,
+  GROUP_ACTION_STATE,
   GROUP_ACTIONS,
   GROUP_HEADING,
   GROUP_SURFACE,
+  GroupAction,
   GroupHeader,
   IconButton,
   MoreButton,
@@ -12,6 +14,7 @@ import {
   STATUS_TONE,
   Text,
 } from "@luke/ui";
+import { ListFilterIcon, SlidersHorizontalIcon } from "@luke/ui/icons";
 import { useState } from "react";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
@@ -21,8 +24,9 @@ import { CatalogSection } from "../section";
  * with its glyph, a pin, a count shown at rest or under the pointer, and
  * its actions beside the fold; a group its holder keeps; a head with no
  * glyph, whose chevron stands at rest; heads that fold nothing; a list's head
- * with a search and its buttons standing; and the count on a wide page and in a
- * narrow column.
+ * with a search and its buttons standing; a list's head whose buttons wait,
+ * a filter that is on standing with its dot; and the count on a wide page and
+ * in a narrow column.
  */
 
 const ignore = (): void => undefined;
@@ -144,6 +148,32 @@ function Searched(): React.JSX.Element {
   );
 }
 
+/** A list's head whose buttons wait for the pointer, as the sidebar's Tasks head's do: one with nothing filtered, and one whose Filter is on, standing at rest with its dot. */
+function Filtered(): React.JSX.Element {
+  const head = (label: string, filtered: boolean) => (
+    <GroupHeader
+      label={label}
+      heading={GROUP_HEADING.NONE}
+      actions={
+        <>
+          <GroupAction state={filtered ? GROUP_ACTION_STATE.ACTIVE : GROUP_ACTION_STATE.IDLE}>
+            <IconButton icon={<ListFilterIcon />} label="Filter" onClick={ignore} />
+          </GroupAction>
+          <GroupAction>
+            <IconButton icon={<SlidersHorizontalIcon />} label="View options" onClick={ignore} />
+          </GroupAction>
+        </>
+      }
+    />
+  );
+  return (
+    <div className="catalog-narrow">
+      {head("Tasks", false)}
+      {head("Tasks, filtered", true)}
+    </div>
+  );
+}
+
 function GroupHeaders(): React.JSX.Element {
   return (
     <>
@@ -161,6 +191,12 @@ function GroupHeaders(): React.JSX.Element {
         title="A list's head, with a search and standing buttons"
       >
         <Searched />
+      </CatalogSection>
+      <CatalogSection
+        id="group-header-filtered"
+        title="A list's head whose buttons wait, a filter that is on standing"
+      >
+        <Filtered />
       </CatalogSection>
       <CatalogSection
         id="group-header-surfaces"

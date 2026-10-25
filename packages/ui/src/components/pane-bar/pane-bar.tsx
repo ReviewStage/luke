@@ -30,6 +30,22 @@ import { wholeWordsHint } from "../tooltip/hint.js";
  * never an item of the ⋯.
  */
 
+/**
+ * The bar: one height whatever it holds, its words in the caption's type, its
+ * groups a control's gap apart, on the hover's wash over a hairline. Each
+ * part keeps its `luke-pane-bar-*` class, which the panel's sheets and tests
+ * find it by.
+ */
+const BAR =
+  "luke-pane-bar box-border flex min-h-pane-bar min-w-0 flex-none items-center gap-control-gap border-b border-border bg-muted px-list-inset py-tight-gap font-sans text-caption text-muted-foreground";
+/** Words leading the bar start where a tab's glyph does, a row's inset in. */
+const LEAD =
+  "luke-pane-bar-lead flex min-w-0 flex-initial items-center gap-item-gap pl-row-inset whitespace-nowrap";
+const MARK = "luke-pane-bar-mark flex flex-none items-center [&>svg]:size-control-icon";
+const MIDDLE = "luke-pane-bar-middle flex min-w-0 flex-auto items-center gap-control-gap";
+/** The actions at the end, their glyphs close. */
+const ACTIONS = "luke-pane-bar-actions ml-auto flex flex-none items-center gap-luke-2";
+
 /** The bar's ⋯: what it and the menu it drops are called, and the menu's groups of items. */
 export interface PaneBarMenu {
   /** What the tab shows, as a sentence opens with it: "File" names the ⋯ and its menu "File actions". */
@@ -85,21 +101,24 @@ export function PaneBar({
   const leads = said(mark) || said(title) || said(detail);
   const acts = said(actions) || menu !== undefined;
   return (
-    <header className="luke-pane-bar">
+    <header className={BAR}>
       {leads ? (
-        <div className="luke-pane-bar-lead">
-          {said(mark) ? <span className="luke-pane-bar-mark">{mark}</span> : null}
+        <div className={LEAD}>
+          {said(mark) ? <span className={MARK}>{mark}</span> : null}
           {title === undefined || title === "" ? null : (
-            <OneLine className="luke-pane-bar-title" hint={wholeWordsHint(title)}>
+            <OneLine
+              className="luke-pane-bar-title flex-initial text-foreground"
+              hint={wholeWordsHint(title)}
+            >
               {title}
             </OneLine>
           )}
-          {said(detail) ? <span className="luke-pane-bar-detail">{detail}</span> : null}
+          {said(detail) ? <span className="luke-pane-bar-detail flex-none">{detail}</span> : null}
         </div>
       ) : null}
-      {said(middle) ? <div className="luke-pane-bar-middle">{middle}</div> : null}
+      {said(middle) ? <div className={MIDDLE}>{middle}</div> : null}
       {acts ? (
-        <div className="luke-pane-bar-actions">
+        <div className={ACTIONS}>
           {actions}
           {menu === undefined ? null : <BarMenu menu={menu} />}
         </div>

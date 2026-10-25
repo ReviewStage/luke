@@ -47,10 +47,13 @@
  * watched the socket holds the sandbox through the lease every terminal of
  * it shares (`sandbox-terminal-lease.ts`), on the terminal's terms: the
  * connection holds it, and each message the panel sends moves it on,
- * written at most once a minute. The socket closes as idle once the panel
- * has sent nothing for the idle bound, and the sweep stops the sandbox
- * once the lease lapses. While the browser is reached, the connection also
- * keeps the sandbox alive past its short timeout every keep-alive interval
+ * written at most once a minute: the panel says it is watching while it is
+ * shown, and a viewport moves it on only where it resizes the view, since
+ * an older panel sends the same size again whether shown or not. The
+ * socket closes as idle once the panel has sent nothing that counts for the
+ * idle bound, and the sweep stops the sandbox once the lease lapses. While
+ * the browser is reached, the connection also keeps the sandbox alive past
+ * its short timeout every keep-alive interval
  * (`CODER.SANDBOX_KEEP_ALIVE_EVERY`, `agents/sandbox-keep-alive.ts`), so a
  * member watching after the agent's turn ended is never cut off by it.
  */
@@ -261,7 +264,8 @@ type InputMessage = Exclude<
       | typeof BROWSER_LIVE_CLIENT.HAND_BACK
       | typeof BROWSER_LIVE_CLIENT.VIEWPORT
       | typeof BROWSER_LIVE_CLIENT.NAVIGATE
-      | typeof BROWSER_LIVE_CLIENT.HISTORY;
+      | typeof BROWSER_LIVE_CLIENT.HISTORY
+      | typeof BROWSER_LIVE_CLIENT.WATCHING;
   }
 >;
 
@@ -339,7 +343,7 @@ function commandOf(
   return { command: { method: CDP_METHOD.MOUSE, params }, move };
 }
 
-/** Ends once the panel has sent nothing for the idle bound. */
+/** Ends once the panel has sent nothing that counts as watching for the idle bound. */
 function idleWatch(lastActive: Ref.Ref<number>): Effect.Effect<LiveEnd> {
   const activeLately = Effect.gen(function* () {
     const since = (yield* Clock.currentTimeMillis) - (yield* Ref.get(lastActive));
@@ -642,10 +646,26 @@ function steer(view: LiveView, message: SteerMessage, at: Date): Effect.Effect<v
   });
 }
 
+/** Whether a viewport the panel sent is a size it was not already drawing at: a resize, rather than the same size sent again. */
+function resizes(view: LiveView, size: PixelSize): Effect.Effect<boolean> {
+  return Effect.map(
+    Ref.get(view.viewport),
+    (last) => last?.width !== size.width || last?.height !== size.height,
+  );
+}
+
+/**
+ * Note that a viewport counts as someone watching only where it resizes the
+ * view, because an older panel sends the same size again every minute to keep
+ * the socket open, shown or not, and a pane nobody looks at would hold its
+ * sandbox for good; a panel that is shown says so with its own message.
+ */
 function onMessage(view: LiveView, message: BrowserLiveClientMessage): Effect.Effect<void> {
   return Effect.gen(function* () {
     const at = yield* DateTime.nowAsDate;
-    yield* noteActive(view, at);
+    const watching =
+      message.type !== BROWSER_LIVE_CLIENT.VIEWPORT || (yield* resizes(view, message));
+    if (watching) yield* noteActive(view, at);
     switch (message.type) {
       case BROWSER_LIVE_CLIENT.TAKE_OVER:
         return yield* takeOver(view, at);
@@ -656,6 +676,8 @@ function onMessage(view: LiveView, message: BrowserLiveClientMessage): Effect.Ef
       case BROWSER_LIVE_CLIENT.NAVIGATE:
       case BROWSER_LIVE_CLIENT.HISTORY:
         return yield* steer(view, message, at);
+      case BROWSER_LIVE_CLIENT.WATCHING:
+        return;
       default:
         return yield* drive(view, message, at);
     }

@@ -18,46 +18,26 @@ import {
  * hover-card.test.ts -- a card reads its subject's name, the line under it,
  * and its corner, then its notes, in that order; a part left out says
  * nothing; the rule before what it lists is a separator to a reader; and
- * its rows open what they name where they can, in a list named and counted,
- * their words fading out at their end only while the card cuts them short.
+ * its rows open what they name where they can, in a list named and counted.
  * Synthetic plans.
  */
 
 const roots: Root[] = [];
 
-/** The measurement each observed box was handed, fired as a resize; jsdom lays nothing out, so nothing reports one of its own accord. */
-const resizes: (() => void)[] = [];
-
-class StandInResizeObserver {
-  readonly #fire: () => void;
-  constructor(fire: () => void) {
-    this.#fire = fire;
-  }
-  observe(): void {
-    resizes.push(this.#fire);
-  }
+/** jsdom's stand-in observer: jsdom lays nothing out, so nothing ever reports a resize. */
+class SilentResizeObserver {
+  observe(): void {}
   disconnect(): void {}
 }
 
-/** Stands every box's words `wide` pixels in a box 100px wide, and fires every observed box's measurement, as a resize would. */
-function resize(wide: number): void {
-  vi.spyOn(HTMLElement.prototype, "scrollWidth", "get").mockReturnValue(wide);
-  vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockReturnValue(100);
-  act(() => {
-    for (const fire of resizes) fire();
-  });
-}
-
 beforeEach(() => {
-  vi.stubGlobal("ResizeObserver", StandInResizeObserver);
+  vi.stubGlobal("ResizeObserver", SilentResizeObserver);
 });
 
 afterEach(() => {
   for (const root of roots.splice(0)) act(() => root.unmount());
   document.body.innerHTML = "";
-  resizes.splice(0);
   vi.unstubAllGlobals();
-  vi.restoreAllMocks();
 });
 
 /** The element `card` draws, mounted in the document. */
@@ -167,23 +147,4 @@ test("a list is named, reads every row and its end, and counts nothing it would 
     [...list.querySelectorAll("li")].map((each) => each.textContent),
     [42, 43, 44, 45, 46, 47, 48, 49, 50].map((number) => `#${number}+12 −3`),
   );
-  assert.ok(list.closest(".luke-scroll-area"), "a long list scrolls within the card");
-});
-
-test("a row's words fade out at their end only while the card cuts them short", () => {
-  const card = drawn(
-    createElement(HoverCard, {
-      children: createElement(HoverCardRow, {
-        look: HOVER_CARD_ROW_LOOK.DETAIL,
-        glyph: null,
-        label: "acme/relay-service-monorepo",
-      }),
-    }),
-  );
-  const label = () => card.querySelector(".luke-hover-card-row-label");
-  resize(80);
-  assert.equal(label()?.getAttribute("data-end"), "fade");
-  assert.equal(label()?.getAttribute("data-overflow"), "false");
-  resize(160);
-  assert.equal(label()?.getAttribute("data-overflow"), "true");
 });

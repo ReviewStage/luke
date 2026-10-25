@@ -32,7 +32,7 @@ import type { SidePanelTab } from "../tasks/use-side-panel.js";
 const STOPS_KEPT = 40;
 
 /** How many cards the switcher shows, the stop the window stands on among them, as ⌘Tab counts the app in front. */
-export const SWITCHER_CARDS = 5;
+const SWITCHER_CARDS = 5;
 
 /** The places the window shows in a task's place, each opened by its own door. */
 export const SWITCHER_PLACE = {

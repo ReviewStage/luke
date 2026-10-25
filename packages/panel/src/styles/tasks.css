@@ -1128,15 +1128,13 @@
 
 /* The tree beside a File tab, its search level with the tab's heading, as
    wide as it was last dragged (`useTreeEdge`), and dragged by the edge on
-   its left, which straddles its border as the side panel's does. It gives
-   way only where the tab beside it would fall below the least a diff reads
-   at, so a panel at its default width keeps the tree near the width it was
-   left at rather than at a share of the panel. */
-/* off-scale: 200px, the least a diff reads at, its file heads keeping their Viewed box; a drag leaves it the same (`TAB_RESERVE`) */
+   its left, which straddles its border as the side panel's does. It takes
+   at most its share of the box, 40%, so the code or diff beside it always
+   keeps the larger column; a drag is held to the same share (`TREE_SHARE`). */
 .file-tree-pane {
   position: relative;
   display: flex;
-  width: min(var(--file-tree-width, 264px), 100% - 200px);
+  width: min(var(--file-tree-width, 264px), 40%);
   min-width: 0;
   flex: 0 0 auto;
   flex-direction: column;
@@ -1194,19 +1192,22 @@
 /* A panel too narrow for a tab and its pane side by side floats the pane
    over the tab's right edge instead (`usePaneRoom`, `OverPane`): its toggle
    moves to the place that opens it, and the strip gives way. Each pane folds
-   at its own width: a tree below a 360px panel, under the panel's default
-   width (`SIDE_PANEL_WIDTH.DEFAULT`), so a File or Changes tab left as it
-   opens keeps its tree beside it, and only a panel dragged narrower folds. */
-@container side-panel (width < 360px) {
+   at its own width: a tree below a 550px panel, where its share of the panel
+   would fall under its least width (`FILE_TREE_WIDTH.MIN`), so at the
+   panel's default width (`SIDE_PANEL_WIDTH.DEFAULT`) the code or diff has
+   the whole tab and the tree is a hover away. A Terminal tab's shells fold
+   at their own width (below). */
+/* off-scale: 550px, where 40% of the panel is the tree's least width, 220px */
+@container side-panel (width < 550px) {
   .file-view[data-pane-beside="false"] > .file-view-body > .file-tree-strip {
     display: none;
   }
 
-  .file-tree-toggle[data-place="beside"] {
+  .file-view:not(.terminal-tab) .file-tree-toggle[data-place="beside"] {
     display: none;
   }
 
-  .file-tree-toggle[data-place="over"] {
+  .file-view:not(.terminal-tab) .file-tree-toggle[data-place="over"] {
     display: flex;
   }
 }
@@ -1230,16 +1231,6 @@
   .file-view
   .file-tree-toggle[data-place="over"] {
   display: flex;
-}
-
-/* A panel with no room for the tree's least width beside the tab's own
-   keeps the tree at its share of the panel, with no edge to drag, since
-   any width a drag asked for would be drawn no wider (`useTreeEdge`). */
-/* off-scale: 420px, where a tree at its least width leaves the tab too little */
-@container side-panel (width < 420px) {
-  .file-view .file-tree-pane > .luke-resize-edge {
-    display: none;
-  }
 }
 
 /* A Terminal tab's shells float the same way below a 480px panel (`OverPane`),
@@ -2124,6 +2115,15 @@
   flex: 0 1 auto;
   flex-direction: column;
   border-bottom: 1px solid var(--luke-color-border);
+}
+
+/* The chapter's files under the brief keep at least their own bar and a
+   bar's height of the diff, so in a short window the brief gives way to
+   them rather than squeezing their bar out over the foot, and whatever
+   they still cannot fit is cut at their own edge, never drawn over it. */
+.chapter-reading > .file-view {
+  min-height: calc(2 * var(--luke-pane-bar-height));
+  overflow: clip;
 }
 
 .chapter-brief-body {
@@ -4531,7 +4531,8 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
    bar naming the agent and where the connection stands in words, over the
    terminal's screen on the terminal's own ground. A state with an action
    lays one slim mono bar over the screen; the screen under any state
-   without a shell connected is dimmed, never blanked. */
+   without a shell connected is dimmed, never blanked: in its colours, by the
+   terminal (`terminal-theme.ts`), so the line it prints stays legible. */
 .terminal-tab-title {
   display: inline-flex;
   min-width: 0;
@@ -4650,10 +4651,6 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
   --luke-working-mark-size: var(--luke-control-icon);
 }
 
-.terminal-tab-screen[data-dim="true"] {
-  opacity: 0.42;
-}
-
 /* Where the words and the action do not fit one line, the action drops to
    a line of its own at the right, so the words never give way to nothing. */
 .terminal-bar {
@@ -4689,7 +4686,18 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
   }
 }
 
+/* The glyph and the words that follow it, held together and cut together:
+   the words fade where the bar ends them, the glyph stands before them. */
+.terminal-bar-lead {
+  display: flex;
+  min-width: 0;
+  flex: 0 1 auto;
+  align-items: center;
+  gap: var(--luke-control-gap);
+}
+
 .terminal-bar-busy {
+  flex: none;
   color: var(--luke-color-text-muted);
   letter-spacing: 1px;
 }
@@ -5617,8 +5625,27 @@ svg.lucide {
   right: calc(var(--luke-space-6) * -1);
   display: flex;
   width: var(--comment-card-width);
+  max-height: var(--comment-card-room);
+  flex-direction: column;
+}
+
+/* The threads on a folded line, the open one among those at rest, which
+   scroll together where the float has no room for them all. */
+.comment-float-cards {
+  display: flex;
   flex-direction: column;
   gap: var(--luke-tight-gap);
+}
+
+/* An open card over the plan stands no taller than the scroller it opens
+   in (`--comment-card-room`, which the layer measures), so its entries
+   scroll inside it and the field that answers them stays in view under
+   them. */
+.comment-layer .comment-card[data-open="true"] {
+  display: flex;
+  min-height: 0;
+  max-height: var(--comment-card-room);
+  flex-direction: column;
 }
 
 /* On a phone narrower than a card and the web's gutter, the open thread
@@ -5812,6 +5839,11 @@ svg.lucide {
   padding: var(--luke-space-2) var(--luke-item-gap) var(--luke-item-gap);
 }
 
+/* The files over a reply's words (`ComposerBody`) stand at its foot's inset. */
+.comment-field .luke-composer-files {
+  padding: var(--luke-item-gap) var(--luke-item-gap) 0;
+}
+
 .comment-field-foot {
   display: flex;
   min-height: 26px; /* off-scale: as its tools */
@@ -5828,7 +5860,7 @@ svg.lucide {
   margin-top: 0;
 }
 
-.comment-field[data-variant="first"] .luke-composer-foot {
+.comment-field[data-variant="first"] :is(.luke-composer-files, .luke-composer-foot) {
   padding-right: 0;
   padding-left: 0;
 }
@@ -5854,9 +5886,11 @@ svg.lucide {
   flex-direction: column;
 }
 
+/* The first card stands as far under the bar as in from the list's sides,
+   rather than on the bar's hairline. */
 .comments-list {
   box-sizing: border-box;
-  padding: 0 var(--luke-space-16) var(--luke-space-24);
+  padding: var(--luke-space-16) var(--luke-space-16) var(--luke-space-24);
 }
 
 .comments-row + .comments-row {

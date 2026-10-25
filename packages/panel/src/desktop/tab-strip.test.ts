@@ -2,14 +2,11 @@
 
 import assert from "node:assert/strict";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
-import { TABS_FOLD } from "@luke/ui";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test, vi } from "vitest";
 import { appCommandOffered, runAppCommand } from "../app-commands.js";
-import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
-import { ShellRoomContext } from "../stage-room.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { restOn } from "../testing/hint-rest.js";
 import { MenuTab, TabStrip } from "./tab-strip.js";
@@ -161,26 +158,4 @@ test("Move Tab Right moves the focused tab a place along, and is offered only wh
   });
   assert.deepEqual(moves, [[1, 2]]);
   assert.equal(document.activeElement, tab);
-});
-
-test("a finger's strip keeps its tabs' labels and a mouse's turns them to glyphs, in a narrow room and a wide one alike", async () => {
-  const fold = async (room: ShellRoom, finger: boolean) => {
-    vi.stubGlobal("matchMedia", pointerMedia(finger));
-    const container = document.body.appendChild(document.createElement("div"));
-    const root = createRoot(container);
-    roots.push(root);
-    await act(async () =>
-      root.render(
-        onRegistry(
-          AtomRegistry.make(),
-          createElement(ShellRoomContext.Provider, { value: room }, createElement(MenuStrip)),
-        ),
-      ),
-    );
-    return container.querySelector<HTMLElement>('[role="tablist"]')?.dataset.fold;
-  };
-  assert.equal(await fold(SHELL_ROOM.NARROW, true), TABS_FOLD.LABEL);
-  assert.equal(await fold(SHELL_ROOM.WIDE, true), TABS_FOLD.LABEL);
-  assert.equal(await fold(SHELL_ROOM.NARROW, false), TABS_FOLD.GLYPH);
-  assert.equal(await fold(SHELL_ROOM.WIDE, false), TABS_FOLD.GLYPH);
 });

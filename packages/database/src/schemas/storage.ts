@@ -98,6 +98,17 @@ export const conversations = pgTable(
     rewoundRevision: bigint("rewound_revision", { mode: "number" }),
     /** The client id of the first line a rewind dropped from a Claude Code or Codex conversation, which the next launch's harness cuts its own session before; null once a launch has handed it over, and on one never rewound. */
     nativeRewind: text("native_rewind"),
+    /**
+     * The conversation's dispatch claim (`dispatch-claim.ts`): the id of the
+     * one hand-over to its runtime under way, fresh for each, written with
+     * what it hands over and cleared once what the runtime answered is
+     * written; null where none is under way.
+     */
+    dispatchClaim: uuid("dispatch_claim"),
+    /** When the standing dispatch claim was taken, from which it expires for a holder that died before clearing it; null with the claim. */
+    dispatchClaimedAt: timestamptz("dispatch_claimed_at"),
+    /** The message row of the line the standing claim hands over, which is not yet a line sent; null with the claim, and for an ask's. */
+    dispatchLine: uuid("dispatch_line"),
   },
   (table) => [
     // One main stands per account at a time: Clear stamps the old one and opens the next in one
@@ -318,6 +329,27 @@ export const turns = pgTable(
 );
 
 /**
+ * The hand-overs waiting for their conversation's dispatch claim
+ * (`dispatch-claim.ts`), one row a waiter, numbered by the database as they
+ * queue, so a claim goes to the waiter that queued first, as the advisory
+ * lock the claim replaced queued them, whichever instance each runs on. A
+ * waiter stamps `seen_at` with the database's own clock each time it asks
+ * for the claim, and its row goes once it claims or gives up; one whose
+ * waiter died stops holding the queue a couple of seconds after its last ask.
+ */
+export const dispatchWaiters = pgTable(
+  "dispatch_waiters",
+  {
+    place: bigint("place", { mode: "number" }).primaryKey().generatedAlwaysAsIdentity(),
+    conversationId: uuid("conversation_id")
+      .notNull()
+      .references(() => conversations.id, { onDelete: "cascade" }),
+    seenAt: timestamptz("seen_at").notNull().defaultNow(),
+  },
+  (table) => [index("dispatch_waiters_conversation_place").on(table.conversationId, table.place)],
+);
+
+/**
  * A developer's ask between its accept and its turn. eve folds asks that
  * arrive while a turn runs into the next turn and names no turn at accept
  * time, so the ask stands on its own row from the accept, keyed by the
@@ -372,6 +404,14 @@ export const asks = pgTable(
      * turn or joined one of its own kind, and is the whole turn's.
      */
     joinedAfterStep: integer("joined_after_step"),
+    /**
+     * The dispatch claim the ask was handed over under (`dispatch-claim.ts`),
+     * written before the runtime hears it and cleared where it answered
+     * nothing: one standing beside no session is a hand-over whose holder
+     * died before writing what the runtime answered, which is never handed
+     * over again. Null on an ask never handed over and on one eve took.
+     */
+    dispatchClaim: uuid("dispatch_claim"),
   },
   (table) => [
     uniqueIndex("asks_conversation_client").on(table.conversationId, table.clientId),

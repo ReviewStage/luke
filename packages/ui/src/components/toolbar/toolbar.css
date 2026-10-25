@@ -1,8 +1,10 @@
 /* toolbar.css -- Toolbar: one row at the window's bar height, its parts at
    the control gap; each edge inset by name, at its column's words or at the
    column's own edge; the heading taking the room left so the actions end
-   the bar, its title in the dialog's type with a title's tracking, and a tag
-   after it on its last baseline.
+   the bar, and a tag after its title on its last baseline. The lead, the
+   title, the tag, and the actions are utilities (`toolbar.tsx`); the row,
+   the heading, and the picked-up name stay here, where the window's
+   custom properties, a style query, and a narrow room restyle them.
 
    The window the bar stands in answers for what the bar cannot know, by
    custom properties it sets on the room around a bar, which the bar reads
@@ -73,16 +75,6 @@
     --luke-toolbar-end: var(--luke-toolbar-column-inset);
   }
 
-  /* What leads gives way before the actions do, its controls shrinking to
-     their own floors rather than pushing the actions off the bar. */
-  .luke-toolbar-lead {
-    display: flex;
-    min-width: 0;
-    flex: 0 1 auto;
-    align-items: center;
-    gap: var(--luke-control-gap);
-  }
-
   .luke-toolbar-heading {
     min-width: 0;
     flex: 1;
@@ -94,28 +86,6 @@
     display: flex;
     align-items: last baseline;
     gap: var(--luke-space-8);
-  }
-
-  .luke-toolbar-tag {
-    flex: none;
-  }
-
-  /* Its room reaches 6px left of the words, so the title's own hover fill and
-     field ring, which start there, are not clipped. */
-  .luke-toolbar-title {
-    margin: 0 0 0 calc(-1 * var(--luke-space-6));
-    padding-left: var(--luke-space-6);
-    font-size: var(--luke-type-dialog-size);
-    font-weight: var(--luke-type-dialog-weight);
-    letter-spacing: var(--luke-type-title-tracking);
-  }
-
-  .luke-toolbar-actions {
-    position: relative;
-    display: flex;
-    flex: 0 0 auto;
-    align-items: center;
-    gap: var(--luke-control-gap);
   }
 
   /* A phone's look: one control in each corner, one control wide, and the

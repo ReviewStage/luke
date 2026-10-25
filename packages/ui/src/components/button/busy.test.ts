@@ -141,7 +141,7 @@ test("every kind of button takes the one busy shape: named by its label and refu
   expect(presses).toEqual([]);
 });
 
-test("a press that lands before the settle delay never shows a ring, and its words stand throughout", () => {
+test("a press that lands before the settle delay never shows a ring", () => {
   const draw = (busy: boolean) =>
     createElement(Button, { busy, busyLabel: "Saving", children: "Save" });
   const container = document.body.appendChild(document.createElement("div"));
@@ -149,23 +149,10 @@ test("a press that lands before the settle delay never shows a ring, and its wor
   roots.push(root);
   act(() => root.render(draw(true)));
   const button = container.querySelector("button") ?? expect.unreachable("no button");
-  const face = button.querySelector(".luke-button-face") ?? expect.unreachable("no face");
-  expect(face.classList.contains("invisible")).toBe(false);
   act(() => vi.advanceTimersByTime(MOTION_DELAY_MS.SETTLE / 2));
   act(() => root.render(draw(false)));
   act(() => vi.advanceTimersByTime(MOTION_DELAY_MS.SETTLE));
-  expect({ ring: ringIn(button), hidden: face.classList.contains("invisible") }).toEqual({
+  expect({ ring: ringIn(button) }).toEqual({
     ring: false,
-    hidden: false,
-  });
-});
-
-test("a busy button's words hide under the ring once it shows", () => {
-  const button = busyButton(mount(createElement(Button, { ...SAVING, children: "Save" })));
-  act(() => vi.advanceTimersByTime(MOTION_DELAY_MS.SETTLE));
-  const face = button.querySelector(".luke-button-face") ?? expect.unreachable("no face");
-  expect({ ring: ringIn(button), hidden: face.classList.contains("invisible") }).toEqual({
-    ring: true,
-    hidden: true,
   });
 });

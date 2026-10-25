@@ -28,13 +28,7 @@ import {
   Stream,
   SubscriptionRef,
 } from "effect";
-import {
-  confirmWrite,
-  decodedLiveRows,
-  LIVE_STATE,
-  type LiveClient,
-  type TxWait,
-} from "./live-follow.js";
+import { decodedLiveRows, LIVE_STATE, type LiveClient } from "./live-follow.js";
 
 /**
  * transcript-follow.ts -- a coding agent's transcript, or one of its workers', followed here on a Neon Realtime subscription for the windows that draw it, each page told as it is read.
@@ -90,6 +84,8 @@ interface Drawn {
   readonly messages: readonly CodingAgentMessage[];
   readonly lowest: number;
   readonly highest: number;
+  /** The conversation's journal revision as delivered beside them, which every change to a message past it counts up; none before the conversation's row lands. */
+  readonly revision: number | undefined;
 }
 
 /** What the statements last delivered: what a page beside the messages is read by, as one digest any change to it moves, and the newest messages drawn. */
@@ -104,8 +100,6 @@ type Standing =
   | {
       readonly kind: typeof LIVE_STATE.LIVE;
       readonly state: SubscriptionRef.SubscriptionRef<LiveState>;
-      /** The wait for a write's transaction on the subscription standing now; none while it is polled or not yet live. */
-      readonly txWait: () => TxWait | undefined;
     }
   | { readonly kind: typeof LIVE_STATE.REFUSED };
 
@@ -166,10 +160,12 @@ function canonical(value: unknown): string {
 /** The window's messages as the rows draw them, with the sequences they span. */
 function drawnOf(rows: typeof agentTranscriptLiveRowsSchema.Type): Drawn {
   const seqs = rows.window.map((row) => row.seq);
+  const revisions = rows.conversation.map((row) => row.revision);
   return {
     messages: windowMessagesOf(rows.window, rows.windowParts),
     lowest: seqs.length === 0 ? 0 : Math.min(...seqs),
     highest: seqs.length === 0 ? 0 : Math.max(...seqs),
+    revision: revisions.length === 0 ? undefined : Math.max(...revisions),
   };
 }
 
@@ -230,7 +226,6 @@ export function transcriptFollows<Key = TranscriptKey>(
         const first = yield* sealedOf(seal);
         if (Option.isNone(first)) return { kind: LIVE_STATE.REFUSED } as const;
         const state = yield* SubscriptionRef.make<LiveState>({ kind: LIVE_STATE.WAITING });
-        let txWait: TxWait | undefined;
         /** One seal followed until its subscription stops, which marks the state broken. */
         const follow = (sealed: AgentTranscriptLiveAnswer) =>
           Stream.runForEach(
@@ -240,9 +235,6 @@ export function transcriptFollows<Key = TranscriptKey>(
                 reseal: () => Effect.map(seal(false), followedAnswer),
                 poll: (after) => Effect.map(seal(true, after), followedAnswer),
                 now: dependencies.now,
-                onTxWait: (wait) => {
-                  txWait = wait;
-                },
               },
               followedRead(sealed),
               agentTranscriptLiveRowsSchema,
@@ -270,7 +262,7 @@ export function transcriptFollows<Key = TranscriptKey>(
             }
           }),
         );
-        return { kind: LIVE_STATE.LIVE, state, txWait: () => txWait } as const;
+        return { kind: LIVE_STATE.LIVE, state } as const;
       }),
   });
 }
@@ -415,21 +407,51 @@ export function followTranscript<Key>(
       let window = opened.value;
       // Whether the next read is the first past a held cursor, which falls back to the newest page where it is refused.
       let fromHeld = Option.isSome(held);
-      /** Each message told, as it was told, so a row drawn again alike is not told again. */
-      const told = new Map<string, string>();
-      const heard = (messages: readonly CodingAgentMessage[]) =>
-        messages.filter((message) => {
-          const said = canonical(message);
-          if (told.get(message.id) === said) return false;
-          told.set(message.id, said);
+      /**
+       * Each message told: as it was told, the journal revision that copy is
+       * known to stand at or past, none where unknown, and whether a page or
+       * the rows told it. Note that the journal revision is what orders a
+       * page against the rows, because a page and the rows beside it may
+       * each have read a message the other has not, and every change to a
+       * message past a revision counts the revision up: a page is at least as
+       * new as its cursor's revision, and the rows as the revision delivered
+       * beside them.
+       */
+      const told = new Map<
+        string,
+        { readonly said: string; readonly at: number | undefined; readonly paged: boolean }
+      >();
+      /** A page's messages to tell, read at its cursor's revision: every one but those the rows drew at a later revision. */
+      const heardPaged = (messages: readonly CodingAgentMessage[], cursor: string) => {
+        const at = Number(cursorParts(cursor).revision);
+        return messages.filter((message) => {
+          const was = told.get(message.id);
+          if (was !== undefined && !was.paged && was.at !== undefined && was.at > at) return false;
+          told.set(message.id, { said: canonical(message), at, paged: true });
           return true;
         });
-      heard(window.messages);
+      };
+      /** The rows' messages to tell: every one drawn otherwise than it was told, but those a page told at the rows' revision or later. */
+      const heardDrawn = ({ messages, revision }: Drawn) =>
+        messages.filter((message) => {
+          const said = canonical(message);
+          const was = told.get(message.id);
+          if (was?.said === said) return false;
+          const pagedLater =
+            was?.paged === true &&
+            was.at !== undefined &&
+            revision !== undefined &&
+            was.at >= revision;
+          if (pagedLater) return false;
+          told.set(message.id, { said, at: revision, paged: false });
+          return true;
+        });
+      heardPaged(window.messages, window.cursor);
       /** The rows' messages not yet told, beside what the last page said of the agent; the cursor moves past them where they follow on from it. */
       const tellDrawn = (page: CodingAgentTranscriptPage, state: LiveState) =>
         Effect.gen(function* () {
           if (state.kind !== LIVE_STATE.STANDING || "failure" in page) return;
-          const fresh = heard(state.drawn.messages);
+          const fresh = heardDrawn(state.drawn);
           if (fresh.length === 0) return;
           const { seq, revision } = cursorParts(window.cursor);
           // Note that the cursor moves only where the window holds every message past it, so a read past it misses none.
@@ -446,6 +468,8 @@ export function followTranscript<Key>(
         Stream.filter(movedFrom({ kind: LIVE_STATE.WAITING })),
         Stream.runHead,
       );
+      /** The last page told, whose word on the agent the rows drawn beside the next read are told with; none before the first. */
+      let last: CodingAgentTranscriptPage | undefined;
       while (true) {
         yield* wake;
         const was = yield* SubscriptionRef.get(state);
@@ -453,7 +477,19 @@ export function followTranscript<Key>(
           yield* RcMap.invalidate(follows, key);
           return yield* tell(UNANSWERED_PAGE);
         }
-        const answer = yield* reads.after(window.cursor);
+        // Note that the rows drawn while the page is read go on being told beside it, because a
+        // turn that starts moves the turns and the reply's first words land with it; the page
+        // then tells only what it read at least as new as they drew (`heardPaged`).
+        const lastTold = last;
+        const besideRead =
+          lastTold === undefined
+            ? Effect.void
+            : SubscriptionRef.changes(state).pipe(
+                Stream.runForEach((now) => tellDrawn(lastTold, now)),
+              );
+        const answer = yield* Effect.scoped(
+          Effect.andThen(Effect.forkScoped(besideRead), reads.after(window.cursor)),
+        );
         // Note that a held cursor the service refuses, gone or stale, is let go untold, and the follow opens on the newest page as one holding nothing does; the window joins it or takes it in place of what it drew.
         if (fromHeld && unanswered(answer)) {
           yield* memory.forget;
@@ -466,7 +502,7 @@ export function followTranscript<Key>(
           }
           fromHeld = false;
           window = newest;
-          heard(newest.messages);
+          heardPaged(newest.messages, newest.cursor);
           wake = Effect.void;
           continue;
         }
@@ -481,20 +517,24 @@ export function followTranscript<Key>(
           }
           window = newest;
           told.clear();
-          heard(newest.messages);
+          heardPaged(newest.messages, newest.cursor);
           wake = Effect.void;
           continue;
         }
         fromHeld = false;
-        const page = toldPage(answer);
-        if (!("failure" in page)) heard(page.messages);
+        // Note that whether the page is caught up is the whole page's word, before what it read older than the rows is left out.
+        const whole = toldPage(answer);
+        const fresh = "failure" in answer ? [] : heardPaged(answer.messages, answer.cursor);
+        const shown = "failure" in answer ? answer : { ...answer, messages: fresh };
+        const page = "failure" in whole ? whole : { ...whole, messages: fresh };
         yield* tell(page);
+        last = page;
         if ("failure" in answer) {
           if (answer.failure === CODING_AGENT_CALL_FAILURE.NOT_FOUND) return yield* memory.forget;
           wake = Effect.sleep(RESEAL);
           continue;
         }
-        window = joinedWindow(window, answer);
+        window = joinedWindow(window, shown);
         yield* memory.keep(window);
         // Note that a full page is followed by the next at once, and a short one is caught up, with no empty page read to say so.
         if (answer.messages.length >= CODING_AGENT_BOUNDS.MESSAGES_PAGE) {
@@ -511,28 +551,4 @@ export function followTranscript<Key>(
       }
     }),
   );
-}
-
-/**
- * Confirms a write to a transcript once its transaction has reached the
- * transcript's live subscription, so the page it moved is told first; at
- * once where the transcript is not followed, is polled, or the write
- * answered no transaction.
- */
-export function confirmTranscriptWrite<Key>(
-  follows: TranscriptFollows<Key>,
-  key: Key,
-  txid: string | undefined,
-): Effect.Effect<void> {
-  return Effect.gen(function* () {
-    if (txid === undefined || !(yield* RcMap.has(follows, key))) return;
-    yield* Effect.scoped(
-      Effect.flatMap(RcMap.get(follows, key), (standing) =>
-        standing.kind === LIVE_STATE.LIVE ? confirmWrite(standing.txWait(), txid) : Effect.void,
-      ),
-    ).pipe(
-      // A follow the service never sealed shows nothing to wait for.
-      Effect.catchTag("SealUnanswered", () => Effect.void),
-    );
-  });
 }

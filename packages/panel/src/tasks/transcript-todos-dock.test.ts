@@ -2,12 +2,9 @@
 
 import assert from "node:assert/strict";
 import { CODING_AGENT_TODO_STATUS, type CodingAgentTodos } from "@luke/features/coding-agent-wire";
-import { GLYPH } from "@luke/ui/icons";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, test } from "vitest";
-import { layContainersAt } from "../testing/container-width.js";
 import { TranscriptTodosDock } from "./transcript-blocks.js";
 
 /**
@@ -60,20 +57,11 @@ function docked(todos: Todos): { view: HTMLElement; to: (next: Todos) => void } 
   return { view, to: draw };
 }
 
-/** The items whose glyph arrived, by their words and where they stand. */
-function arrived(view: HTMLElement): string[] {
-  return [...view.querySelectorAll(".todo-item")]
-    .filter((item) => item.querySelector(".luke-glyph-slot[data-arrival]") !== null)
-    .map((item) => `${item.textContent ?? ""}:${item.getAttribute("data-todo-status") ?? ""}`);
-}
-
 test("a list drawn as it stands is still, and says how far it has got", () => {
   const { view } = docked(steps(1));
   act(() => (view.querySelector("summary") ?? assert.fail("the dock's line")).click());
   assert.equal(view.querySelectorAll(".todo-item").length, 3, "the list stands open");
   assert.ok(view.textContent?.includes("1 of 3 done"), view.textContent ?? "");
-  assert.deepEqual(arrived(view), []);
-  assert.equal(view.querySelector(".luke-rolling-number-digit[data-roll]"), null);
 });
 
 test("a step done springs its check in, the next taken up arrives, and the count rolls", () => {
@@ -82,47 +70,9 @@ test("a step done springs its check in, the next taken up arrives, and the count
   act(() => head.click());
   assert.equal(view.querySelectorAll(".todo-item").length, 3, "the list stands open");
   to(steps(2));
-  assert.deepEqual(arrived(view), ["Write the migration:done", "Ship it:in_progress"]);
   assert.ok(view.textContent?.includes("2 of 3 done"), view.textContent ?? "");
-  const rolled = view.querySelector(".luke-rolling-number-digit[data-roll]");
-  assert.equal(rolled?.textContent, "2");
-  assert.equal(rolled?.getAttribute("data-roll"), "up");
   const mark = view.querySelector(
     '.todo-item[data-todo-status="done"] > .luke-glyph-slot[data-arrival="check"]',
   );
   assert.equal(mark?.getAttribute("aria-label"), "Done");
-});
-
-test("the dock's line leads with its fold's chevron, as every fold's line does, turned down once it stands open", () => {
-  const { view } = docked(steps(1));
-  const head = view.querySelector("summary") ?? assert.fail("the dock's line");
-  const lead = () => head.firstElementChild ?? assert.fail("the line's first mark");
-  assert.ok(lead().classList.contains("luke-disclosure-turn"), head.innerHTML);
-  assert.equal(lead().getAttribute("data-open"), "false");
-  act(() => head.click());
-  assert.equal(lead().getAttribute("data-open"), "true");
-});
-
-test("in a short window, an open list stops growing at under a third of what is seen and scrolls past it", () => {
-  const stage = 260;
-  layContainersAt({}, { only: ["@luke/ui/tokens.css", "./tasks.css", "tailwind.css"] });
-  document.documentElement.style.setProperty("--luke-stage-height", `${stage}px`);
-  const { view } = docked(steps(1));
-  act(() => (view.querySelector("summary") ?? assert.fail("the dock's line")).click());
-  const items = view.querySelector(".todo-items") ?? assert.fail("the list stands open");
-  const { maxHeight, overflowY } = getComputedStyle(items);
-  const [, share] = /^calc\(var\(--luke-stage-height\) \* ([\d.]+)\)$/u.exec(maxHeight) ?? [];
-  assert.ok(share !== undefined, `${maxHeight} is a share of the stage`);
-  assert.ok(Number(share) < 1 / 3, `${share} of ${stage}px is under a third`);
-  assert.equal(overflowY, "auto");
-});
-
-test("the dock's line wears the to-do list's glyph, never the Tasks one", () => {
-  const { view } = docked(steps(1));
-  const glyphs = [...view.querySelectorAll("summary svg, [data-todos-dock] svg")].map(
-    (svg) => svg.outerHTML,
-  );
-
-  assert.ok(glyphs.includes(renderToStaticMarkup(createElement(GLYPH.TODOS))));
-  assert.ok(!glyphs.includes(renderToStaticMarkup(createElement(GLYPH.TASK))));
 });

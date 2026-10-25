@@ -4,6 +4,7 @@ import type { CodingAgentAttachment } from "@luke/features/coding-agent-wire";
 import { pasteCutWords } from "@luke/features/words";
 import {
   ANNOUNCE,
+  ComposerBody,
   ComposerFoot,
   type ComposerNote as FootNote,
   TEXT_AREA_GROW_LIMIT,
@@ -54,9 +55,9 @@ import { useKnownNames } from "./use-known-names.js";
  *
  * The box is the shared composer card (`prompt-input.tsx`) around the agent
  * box's own editor (`composer-field.tsx`), as the agent tab's, the Inbox's,
- * and a plan comment's are, and under it the shared foot (`ComposerFoot`) holding
- * the files, what the box takes, the counter, the microphone, the round send,
- * and the one note under them. Enter sends, Shift-Enter
+ * and a plan comment's are, the files it holds over its words (`ComposerBody`),
+ * and under it the shared foot (`ComposerFoot`) holding what the box takes, the
+ * counter, the microphone, the round send, and the one note under them. Enter sends, Shift-Enter
  * starts a new line, and the box is empty at once, keeping the caret, so
  * the next post can be written while this one goes, drawn in the stream as
  * on its way (`chat-pane.tsx`). A post refused comes back into the box with
@@ -450,57 +451,60 @@ function EditorChatComposer({
           send();
         }}
       >
-        <ComposerField
-          module={module}
-          editor={editor}
-          room={room}
-          draft={draft}
-          setDraft={setDraft}
-          placeholder={label}
-          label={label}
-          input={dictating ? COMPOSER_INPUT.READ_ONLY : COMPOSER_INPUT.EDITABLE}
-          maxLength={CHAT_BOUNDS.MAX_TEXT_CHARS}
-          skills={NO_SKILLS}
-          aria={{ ...picker.aria, "aria-placeholder": label }}
-          onKey={(event) => {
-            if (dictation.onFieldKey(event) || picker.onKey(event)) return true;
-            // Escape, where no list or dictation takes it, leaves the box, as the agent box's does.
-            if (event.key !== "Escape") return false;
-            event.stopPropagation();
-            editor.current?.blur();
-            return true;
-          }}
-          onEnter={() => {
-            if (room.current !== null) submitPromptInput(room.current);
-          }}
-          onPasteFiles={files.paste}
-          onPasteCut={cutPaste}
-          onTrigger={() => undefined}
-          chip={() => null}
-          quote={(quote) => <ComposerQuoteView quote={quote} held={dictating} />}
-          mentions={{
-            onTrigger: picker.onTrigger,
-            onChannelTrigger: picker.onChannelTrigger,
-            chip: (mention, node) => (
-              <MentionNodeChip
-                mention={mention}
-                doors={doors}
-                edit={{ node, pickDate: picker.pickDate }}
-              />
-            ),
-            pasted,
-          }}
-          // Note that a place's foot leaves the caret where K and J stepped to it, since they step
-          // the chat's places only while the caret is out of the box.
-          takesFocus={takes}
-          focus={compact === true ? true : undefined}
-        >
-          {picker.menu}
-        </ComposerField>
-        <ComposerFoot
+        <ComposerBody
           files={
             <AttachedFileChips files={attachmentChips(files.attachments)} onRemove={files.remove} />
           }
+        >
+          <ComposerField
+            module={module}
+            editor={editor}
+            room={room}
+            draft={draft}
+            setDraft={setDraft}
+            placeholder={label}
+            label={label}
+            input={dictating ? COMPOSER_INPUT.READ_ONLY : COMPOSER_INPUT.EDITABLE}
+            maxLength={CHAT_BOUNDS.MAX_TEXT_CHARS}
+            skills={NO_SKILLS}
+            aria={{ ...picker.aria, "aria-placeholder": label }}
+            onKey={(event) => {
+              if (dictation.onFieldKey(event) || picker.onKey(event)) return true;
+              // Escape, where no list or dictation takes it, leaves the box, as the agent box's does.
+              if (event.key !== "Escape") return false;
+              event.stopPropagation();
+              editor.current?.blur();
+              return true;
+            }}
+            onEnter={() => {
+              if (room.current !== null) submitPromptInput(room.current);
+            }}
+            onPasteFiles={files.paste}
+            onPasteCut={cutPaste}
+            onTrigger={() => undefined}
+            chip={() => null}
+            quote={(quote) => <ComposerQuoteView quote={quote} held={dictating} />}
+            mentions={{
+              onTrigger: picker.onTrigger,
+              onChannelTrigger: picker.onChannelTrigger,
+              chip: (mention, node) => (
+                <MentionNodeChip
+                  mention={mention}
+                  doors={doors}
+                  edit={{ node, pickDate: picker.pickDate }}
+                />
+              ),
+              pasted,
+            }}
+            // Note that a place's foot leaves the caret where K and J stepped to it, since they step
+            // the chat's places only while the caret is out of the box.
+            takesFocus={takes}
+            focus={compact === true ? true : undefined}
+          >
+            {picker.menu}
+          </ComposerField>
+        </ComposerBody>
+        <ComposerFoot
           tools={<AttachFilesButton label={ATTACH} accept={PICKS_IMAGES} onFiles={files.attach} />}
           counter={{ length: draft.length, limit: CHAT_BOUNDS.MAX_TEXT_CHARS }}
           actions={<DictateButton dictation={dictation} disabled={module === undefined} />}
