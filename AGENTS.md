@@ -424,8 +424,8 @@ The model is Redis. Full rules with sources and examples in `docs/STYLE.md`.
   patterns and `--luke-*` tokens; no raw controls where a component exists,
   no literal colours or sizes, no `className` on its controls. A missing
   variant is added to `@luke/ui` as an `as const` option. Third-party engines
-  are the exception. `@luke/ui` is built on shadcn/ui over Base UI (approved
-  by Charles on 2026-10-23): its controls vendor shadcn's source
+  are the exception. `@luke/ui` is built on shadcn/ui over Base UI: its
+  controls vendor shadcn's source
   (`packages/ui/src/shadcn/`) and are written in Tailwind utilities over the
   one theme in `@luke/ui/tailwind/theme.css`, which no app restates.
 
