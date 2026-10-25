@@ -376,6 +376,15 @@ test("the zoom buttons name the bare keys that do the same", () => {
   assert.equal(named("Zoom out"), "-");
 });
 
+test("Previous, Next and Close name the arrows and Esc that do the same", () => {
+  opened();
+  const named = (label: string) =>
+    document.querySelector(`button[aria-label="${label}"]`)?.getAttribute("aria-keyshortcuts");
+  assert.equal(named("Previous file"), "ArrowLeft");
+  assert.equal(named("Next file"), "ArrowRight");
+  assert.equal(named("Close"), "Escape");
+});
+
 test("a text file opened over the window is drawn as every code is, numbered from its first line, a Windows line break opening no line of its own", async () => {
   const notes: FileChip = {
     name: "notes.ts",

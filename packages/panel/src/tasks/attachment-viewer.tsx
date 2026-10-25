@@ -109,6 +109,13 @@ const ZOOM_CHORD = {
   OUT: { key: SHORTCUT_KEY.MINUS, plain: true },
 } as const satisfies Record<string, ShortcutChord>;
 
+/** The bare keys the walk's and Close's buttons name in their hints, which the card's `walkKey` and its dialog's dismissal answer. */
+const VIEWER_CHORD = {
+  PREVIOUS: { key: SHORTCUT_KEY.LEFT, plain: true },
+  NEXT: { key: SHORTCUT_KEY.RIGHT, plain: true },
+  CLOSE: { key: SHORTCUT_KEY.ESCAPE, bare: true },
+} as const satisfies Record<string, ShortcutChord>;
+
 /** No notes on a file of a message. */
 const NO_NOTES: readonly WholeFileNote[] = [];
 
@@ -426,7 +433,14 @@ export function AttachmentViewer({
         {phone ? (
           <PhoneHead
             place="attachment-viewer"
-            start={<HeaderButton label={VIEWER_LABEL.CLOSE} onClick={close} icon={<CloseIcon />} />}
+            start={
+              <HeaderButton
+                label={VIEWER_LABEL.CLOSE}
+                chord={VIEWER_CHORD.CLOSE}
+                onClick={close}
+                icon={<CloseIcon />}
+              />
+            }
             title={
               <span className="attachment-viewer-heading">
                 <Text
@@ -486,6 +500,7 @@ export function AttachmentViewer({
               <div className="attachment-viewer-walk">
                 <HeaderButton
                   label={VIEWER_LABEL.PREVIOUS}
+                  chord={VIEWER_CHORD.PREVIOUS}
                   onClick={() => walk(-1)}
                   icon={<ChevronLeftIcon aria-hidden="true" />}
                 />
@@ -494,6 +509,7 @@ export function AttachmentViewer({
                 </span>
                 <HeaderButton
                   label={VIEWER_LABEL.NEXT}
+                  chord={VIEWER_CHORD.NEXT}
                   onClick={() => walk(1)}
                   icon={<ChevronRightIcon aria-hidden="true" />}
                 />
@@ -529,7 +545,12 @@ export function AttachmentViewer({
               onClick={() => download(file)}
               icon={<DownloadIcon aria-hidden="true" />}
             />
-            <HeaderButton label={VIEWER_LABEL.CLOSE} onClick={close} icon={<CloseIcon />} />
+            <HeaderButton
+              label={VIEWER_LABEL.CLOSE}
+              chord={VIEWER_CHORD.CLOSE}
+              onClick={close}
+              icon={<CloseIcon />}
+            />
           </header>
         )}
         <AttachmentBody key={at} file={file} base64={base64} text={text} zoom={zoom} />
