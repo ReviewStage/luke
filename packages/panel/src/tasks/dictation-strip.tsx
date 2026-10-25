@@ -159,10 +159,11 @@ export function DictationStrip({ dictation }: { dictation: DictationControl }): 
     <div className="dictation-strip" data-phase={dictation.phase}>
       {transcribing ? (
         <span className="dictation-transcribing">
-          <Spinner delay label={LABEL.TRANSCRIBING} />
+          {/* Note that the ring stands at once, because the press that sent the clip has just landed and "Transcribing" is already drawn beside it. */}
+          <Spinner delay={false} label={LABEL.TRANSCRIBING} />
           <span aria-hidden="true">
             <Text variant={TEXT_VARIANT.CAPTION} as={TEXT_ELEMENT.SPAN} tone={TEXT_TONE.MUTED}>
-              Transcribing…
+              {LABEL.TRANSCRIBING}
             </Text>
           </span>
         </span>
