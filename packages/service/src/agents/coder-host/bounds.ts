@@ -18,9 +18,16 @@ export const CODER = {
   /**
    * How long a Vercel Sandbox session lives past its last sign of use: the
    * timeout it opens with, and how far ahead of now each keep-alive puts its
-   * end (`sandbox-lifetime.ts`). A turn's end stops the sandbox at once, so
-   * this is only the backstop for one nothing stopped, which bills its
-   * memory until then: at the default size, 4 GB for an hour, where the
+   * end (`sandbox-lifetime.ts`). An idle sandbox is stopped by what knows it
+   * idle rather than by this: an eve turn's end stops it at once, and so
+   * does a pause from `SLEEP_STOPS_AT` on; a native runner keeps its sandbox
+   * alive by its heartbeat for as long as it runs, and its end stops it,
+   * which comes `RUNNER_WARM` after the agent's turn is over, or two minutes
+   * into a wait on wakeups alone (`@luke/agent-runner`'s `RUNNER_RELEASE`,
+   * whose process table tells the harness's own processes from the
+   * agent's). A shorter timeout would stop none of those sooner, so this is
+   * only the backstop for one nothing stopped, which bills its memory until
+   * then: at the default size, 4 GB for an hour, where the
    * platform's 24-hour maximum billed 96 GB-hours. An hour, because a live
    * turn shows use far more often than that: an eve step starts at least
    * every few minutes
