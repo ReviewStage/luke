@@ -315,7 +315,7 @@ function FileTreeBody({
         field.current?.select();
       }}
     >
-      <search className="file-tree-search">
+      <search className="file-tree-search flex items-center gap-control-gap border-b border-border px-item-gap py-tight-gap">
         <Fill>
           <TreeSearch
             field={field}
@@ -395,7 +395,7 @@ export function FileTreePane({
   return (
     <PanePin
       ref={pane}
-      className="file-tree-pane"
+      className="file-tree-pane relative flex w-file-tree min-w-0 flex-none flex-col border-l border-border data-leaving:absolute data-leaving:inset-y-0 data-leaving:right-0 data-leaving:bg-well"
       aria-label={label}
       data-leaving={leaving ? "" : undefined}
       inert={leaving}

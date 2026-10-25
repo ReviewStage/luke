@@ -59,6 +59,7 @@ import {
   STATUS_TONE,
   Stack,
   type StatusTone,
+  TabNotice,
   TEXT_ELEMENT,
   TEXT_TONE,
   TEXT_VARIANT,
@@ -808,14 +809,14 @@ function ChaptersReading({
       onKeyDown={onKeyDown}
     >
       {stale ? (
-        <div className="file-tab-notice chapters-stale">
+        <TabNotice>
           <p>{CHAPTERS_WORDS.STALE}</p>
           {generatable ? (
             <Button icon={<SparklesIcon aria-hidden="true" />} onClick={read.generate}>
               {CHAPTERS_WORDS.REGENERATE}
             </Button>
           ) : null}
-        </div>
+        </TabNotice>
       ) : null}
       <p className="chapters-made-by m-0 border-b border-border px-list-inset py-tight-gap">
         <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>

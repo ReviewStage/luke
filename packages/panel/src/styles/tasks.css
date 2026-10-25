@@ -371,11 +371,6 @@
   height: var(--luke-control-icon);
 }
 
-/* A code card's failure stands at its foot, so it draws no rule under it. */
-.luke-code-card > .file-tab-notice {
-  border-bottom: 0;
-}
-
 /* The Code tab's log (`code-pane.tsx`), whose calls each open at a
    checkpoint stuck to the log's top (../ai-elements/checkpoint.tsx): the
    log's fade starts beneath the checkpoint's band
@@ -412,114 +407,20 @@
   background: var(--luke-color-well);
 }
 
-/* A File tab: its file, or the lines Luke showed of it under why the file
-   is not shown, filling the tab. */
-.file-tab {
-  background: var(--luke-color-code-ground);
-}
-
-/* The tree slides in past the view's right edge and out over the file, so
-   the body clips what stands past it, with `clip` rather than `hidden`,
-   which would make a scroller a focus could scroll sideways. */
-.file-view-body {
-  position: relative;
-}
-
-/* How many of Files changed's files are viewed, leading its bar in the
-   window's own type, quiet, cut short at its end where the bar is narrow;
-   a check and the palette's green once every one is (agent-changes-tab.tsx). */
-.files-viewed {
-  display: flex;
-  min-width: 0;
-  flex: 0 1 auto;
-  align-items: center;
-  gap: var(--luke-tight-gap);
-  margin: 0;
-  color: var(--luke-color-text-muted);
-  white-space: nowrap;
-}
-
-.files-viewed[data-complete] {
-  color: var(--luke-color-complete);
-}
-
-.files-viewed > svg {
-  width: var(--luke-control-icon);
-  height: var(--luke-control-icon);
-  flex: none;
-}
-
-.file-view-history,
-.file-view-actions {
-  display: flex;
-  flex: 0 0 auto;
-  align-items: center;
-  gap: var(--luke-list-gap);
-}
-
-.file-view-actions {
-  margin-left: auto;
-}
-
-/* The commit a pinned read is at, quiet beside the path. */
-.file-view-commit {
-  flex: 0 0 auto;
-  color: var(--luke-color-text-muted);
-  font-family: var(--luke-font-mono);
-  white-space: nowrap;
-}
-
-/* A crumb's tree, hung under the crumb on a menu's surface
-   (file-breadcrumbs.tsx), at a narrow popover's width, and never taller
-   than the room its side of the crumb leaves it (`--luke-popover-room`),
-   its rows scrolling within. */
-.file-crumb-tree {
-  width: var(--luke-popover-width-narrow);
-  max-height: min(calc(var(--luke-stage-height) - 16px), var(--luke-popover-room, 100vh));
-}
-
+/* A crumb's tree (file-breadcrumbs.tsx), hung under the crumb on a menu's
+   surface, is a place the desktop's window is not dragged by; it holds the
+   keyboard itself only until the tree takes it, or where the tree has no row
+   to, which shows no ring, and its tree floats on the menu's ground. */
 [data-luke-profile="desktop"] .file-crumb-tree {
   -webkit-app-region: no-drag;
 }
 
-/* The box holds the keyboard itself only until the tree takes it, or where the tree has no row to, which shows no ring. */
 .file-crumb-tree:focus {
   outline: none; /* no ring: the tree's own row carries it */
 }
 
 .file-crumb-tree .file-tree-host {
   --trees-bg-override: var(--luke-color-overlay);
-}
-
-/* The box a pane's toggle stands in, which names the place it opens the
-   pane (file-view.tsx): one place is shown at a time, by the panel's width. */
-.file-tree-toggle {
-  display: flex;
-}
-
-/* The tree beside a File tab, its search level with the tab's heading, as
-   wide as it was last dragged (`useTreeEdge`), and dragged by the edge on
-   its left, which straddles its border as the side panel's does. It takes
-   at most its share of the box, 40%, so the code or diff beside it always
-   keeps the larger column; a drag is held to the same share (`TREE_SHARE`). */
-.file-tree-pane {
-  position: relative;
-  display: flex;
-  width: min(var(--file-tree-width, 264px), 40%);
-  min-width: 0;
-  flex: 0 0 auto;
-  flex-direction: column;
-  border-left: 1px solid var(--luke-color-border);
-}
-
-/* A tree on its way out has left the layout, the file already standing in
-   its room, and slides out over the file's edge on its own ground
-   (file-view.tsx). */
-.file-tree-pane[data-leaving] {
-  position: absolute;
-  inset-block: 0;
-  right: 0;
-  background: var(--luke-color-well);
 }
 
 /* A pane beside a tab, a File or Changes tab's tree or a Terminal tab's
@@ -538,11 +439,7 @@
 /* While Files changed's tree is hidden, a strip stands in its place
    (changes-strip.tsx, `@luke/ui`'s MarkStrip); the pointer resting on it
    peeks the tree out over the list, as a pane floats where the panel is too
-   narrow for it (below). This box says when it is drawn and its edge. */
-.file-tree-strip {
-  display: none;
-}
-
+   narrow for it (below). This says when it is drawn and its edge. */
 .file-view[data-pane-beside="false"] > .file-view-body > .file-tree-strip {
   display: flex;
   width: var(--luke-space-12);
@@ -554,10 +451,6 @@
    window's floating surface (`OverPane`): its host takes that ground. */
 .file-view:is([data-pane-over="peek"], [data-pane-over="open"]) .file-tree-host {
   --trees-bg-override: var(--luke-color-overlay);
-}
-
-.file-tree-toggle[data-place="over"] {
-  display: none;
 }
 
 /* A panel too narrow for a tab and its pane side by side floats the pane
@@ -617,35 +510,8 @@
   }
 }
 
-/* A page's tab (page-pane.tsx): a File tab's bar over the page's frame,
-   which takes the rest of the pane. The frame sets no background of its
-   own: a page that names no colour scheme is a light document, and
-   Chromium grounds a frame whose scheme differs from the window's dark one
-   in the page's own white, as a browser draws it. */
-.page-view-title {
-  min-width: 0;
-  overflow: hidden;
-  color: var(--luke-color-text);
-  white-space: nowrap;
-}
-
-.page-view-version {
-  color: var(--luke-color-text-muted);
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
-}
-
-/* The version's steps and count are a group of their own, a control's gap
-   before the page's actions, as the File tab's history stands from its path. */
-.page-view-versions {
-  display: flex;
-  align-items: center;
-  gap: var(--luke-list-gap);
-  margin-right: calc(var(--luke-control-gap) - var(--luke-space-2));
-}
-
-/* A narrow panel counts the versions without words between the steps,
-   leaving the page's title its room. */
+/* A narrow panel counts a page's versions without words between the steps
+   (page-pane.tsx), leaving the page's title its room. */
 .page-view-version-count {
   display: none;
 }
@@ -660,14 +526,8 @@
   }
 }
 
-/* The frame in the room it fills, with its wait laid over it until it loads. */
-.page-view-frame-room {
-  position: relative;
-  display: flex;
-  min-height: 0;
-  flex: 1;
-}
-
+/* A cloud Browser tab's quiet line over its page (cloud-browser-pane.tsx)
+   keeps to a readable measure. */
 /* The sheet rounds its corners without clipping what it holds (shell.css), so
    a page's white would stand to a square corner at the rounded sheet's. The
    room clips its own bottom corners to the sheet's radius, which a narrow
@@ -677,67 +537,9 @@
   border-radius: 0 0 var(--sheet-radius, 0) var(--sheet-radius, 0);
 }
 
-.page-view-frame {
-  display: block;
-  width: 100%;
-  min-height: 0;
-  flex: 1;
-  border: 0;
-}
-
-.page-view-frame-wait {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  pointer-events: none;
-}
-
-/* A cloud Browser tab (cloud-browser-pane.tsx): the steps and the address
-   as a browser's bar has them; who has it under the bar; then the page
-   drawn on a canvas of the page's own shape, centred in the body, with a
-   quiet line over it while no page stands to drive, or while a draft waits
-   on an address. */
-.cloud-browser-bar {
-  gap: var(--luke-control-gap);
-}
-
-/* Who has the tab, or why a step was refused, in a quiet line under the
-   bar, Take over or Hand back at its end, so the address keeps the bar. */
-.cloud-browser-standing {
-  display: flex;
-  min-width: 0;
-  flex: none;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--luke-control-gap);
-  padding: var(--luke-tight-gap) var(--column-inset);
-  border-bottom: 1px solid var(--luke-color-border);
-}
-
 .cloud-browser-body > .cloud-browser-notice > .luke-text {
   max-width: 32em;
   text-align: center;
-}
-
-.cloud-browser-body {
-  align-items: center;
-  justify-content: center;
-  background: var(--luke-color-well);
-}
-
-.cloud-browser-notice {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: var(--luke-control-gap);
-  pointer-events: none;
-}
-
-.cloud-browser-notice > * {
-  pointer-events: auto;
 }
 
 /* The agent's pointer over a cloud Browser tab (cloud-browser-cursor.tsx):
@@ -751,11 +553,6 @@
    lighter over a dark page, so it reads on any page, an accent button
    included. The rock and the bob are endless loops held by
    --luke-loop-motion, so their periods may be literals (docs/DESIGN.md). */
-.cloud-browser-stage {
-  position: relative;
-  flex: none;
-}
-
 .cloud-browser-cursor {
   position: absolute;
   top: 0;
@@ -903,57 +700,9 @@
   }
 }
 
-/* The find a page's tab keeps over its source fills the tab as the panel's
-   own would. */
-/* What became of a changed file, lettered quietly beside its path in a
-   Changes tab's bar (agent-changes-tab.tsx), coloured as its row in the
-   tree is. */
-.file-view-status {
-  flex: 0 0 auto;
-  color: var(--luke-color-attention);
-  font-family: var(--luke-font-mono);
-  font-weight: var(--luke-weight-semibold);
-}
-
-.file-view-status[data-status="added"] {
-  color: var(--luke-color-complete);
-}
-
-.file-view-status[data-status="deleted"] {
-  color: var(--luke-color-danger-text);
-}
-
-.file-view-status[data-status="renamed"] {
-  color: var(--luke-color-working);
-}
-
-/* The Files changed bar's View settings (view-settings.tsx): the button,
-   and under it `@luke/ui`'s popover panel, its rows the settings page's
-   own, in the settings' groups under their names. */
-.view-settings {
-  position: relative;
-  display: flex;
-}
-
-/* A Files changed list of diffs (diff-list.tsx), or a review thread's lines
-   (file-diff.tsx): Pierre draws each file in a shadow root of its own, in
-   the panel's look (diff-view/index.ts). */
-.diff-view {
-  -webkit-user-select: text;
-  user-select: text;
-}
-
-/* The list fills the File tab's place, its scroll area the whole of it, its
-   files cards on the panel's ground, inset from its edges by the room between
-   two of them (diff-view/index.ts's LIST_FILE_GAP). */
-.diff-list {
-  position: relative;
-  background: var(--luke-color-ground);
-}
-
 /* The Comment press floating over code selected as text (diff-list.tsx),
    on `@luke/ui`'s toolbar: above the words' middle, or under them where the
-   list's top leaves no room. */
+   list's top leaves no room, at the point the list measured. */
 .diff-list-offer {
   position: absolute;
   z-index: 3;
@@ -978,24 +727,11 @@
   padding-inline: var(--luke-list-inset);
 }
 
-/* The sheet of Files changed's keys (files-changed-keys.tsx): its groups
-   stacked as the Keyboard shortcuts page stacks them, in the part of the
-   card that scrolls where the window is short. */
-.files-changed-keys {
-  display: flex;
-  flex-direction: column;
-  gap: var(--luke-page-section-gap);
-}
-
-/* Files changed's list of diffs (diff-list.tsx): every file under a header
-   of its own, which Pierre keeps at the top while the file's lines scroll
-   under it, so it is drawn opaque, on the code's ground, at the height the
-   bundle reserves for it (diff-view/index.ts's LIST_HEADER_HEIGHT). */
-.diff-list-head {
-  background: var(--luke-color-surface);
-  color: var(--luke-color-text);
-  font-family: var(--luke-font-sans);
-  cursor: default;
+/* A file's letter in its header stands at least a step wide. Note that this
+   stays a rule, because the summary it stands in gives each of its children
+   `min-w-0` through a child selector, which outranks a utility here. */
+.diff-list-head .file-view-status {
+  min-width: var(--luke-space-16);
 }
 
 /* The file stage-cli's keys stand on is marked as a selected card is: the
@@ -1008,150 +744,8 @@
   border-color: var(--luke-color-border-selected);
 }
 
-.diff-list-fold {
-  transform: rotate(90deg);
-  transition: transform var(--luke-duration-fast) var(--luke-spring-fast);
-}
-
-.diff-list-head[data-collapsed] .diff-list-fold {
-  transform: none;
-}
-
-/* A file's path: its folder quiet and cut first where the row runs short, so
-   its name, in the full ink, stands whole as long as it can. */
-.diff-list-path {
-  display: flex;
-  min-width: 0;
-  flex: 0 1 auto;
-  font-family: var(--luke-font-mono);
-}
-
-/* Each path in a header copies itself on a press (changes-list.tsx), laid
-   out as the path it names; the path a file moved from is quiet whole. */
-.diff-list-path-part {
-  display: flex;
-  min-width: 0;
-}
-
-/* The path's folder and name in a row inside its press, the folder cut short first. */
-.diff-list-path-words {
-  display: flex;
-  min-width: 0;
-}
-
-.diff-list-path-part[data-moved] {
-  flex: 0 1 auto;
-  color: var(--luke-color-text-muted);
-}
-
-.diff-list-path-part[data-moved] .diff-list-name {
-  color: var(--luke-color-text-muted);
-  font-weight: inherit;
-}
-
-.diff-list-folder {
-  color: var(--luke-color-text-muted);
-}
-
-.diff-list-name {
-  flex: none;
-  max-width: 100%;
-  font-weight: var(--luke-weight-medium);
-}
-
-/* A file's letter in its header stands on a tint of its own colour, the
-   letter itself what says what became of it. */
-.diff-list-head .file-view-status {
-  display: inline-flex;
-  min-width: var(--luke-space-16);
-  height: var(--luke-space-16);
-  align-items: center;
-  justify-content: center;
-  border-radius: var(--luke-radius-6);
-  background: color-mix(in srgb, currentcolor 14%, transparent);
-  font-size: var(--luke-type-caption-size);
-}
-
-/* A file's Viewed box, GitHub's own (viewed-files.ts), at the end of its
-   header's row. */
-.diff-list-viewed {
-  display: flex;
-  flex: none;
-  align-items: center;
-  margin-left: auto;
-  color: var(--luke-color-text-muted);
-  font-size: var(--luke-type-caption-size);
-}
-
-/* Why a file has no hunks to draw, in their place under its header in the
-   list (diff-view/index.ts draws it across the file's width). */
-.diff-list-notice {
-  margin: 0;
-  padding: var(--luke-list-inset) var(--luke-list-inset) var(--luke-list-inset) var(--luke-space-40);
-  color: var(--luke-color-text-muted);
-  font-size: var(--luke-type-caption-size);
-}
-
-/* Why a file's unchanged lines could not be opened, one quiet line above
-   its first hunk, in the list's own small type (agent-changes-tab.tsx). */
-.diff-list-refused {
-  margin: 0;
-  padding: var(--luke-tight-gap) var(--luke-list-inset) var(--luke-tight-gap) var(--luke-space-40);
-  color: var(--luke-color-text-muted);
-  font-size: var(--luke-type-caption-size);
-}
-
-/* A changed image in Files changed's list (image-diff.tsx), under its
-   header in place of lines, as its lead (diff-view/index.ts): its two sides beside each other, each on a
-   checkerboard that shows what is transparent, or the after laid over the
-   before, swiped or faded with the slider under them. */
-.image-diff {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: var(--luke-control-gap);
-  padding: var(--luke-card-inset-snug);
-  font-family: var(--luke-font-sans);
-}
-
-.image-diff-modes {
-  display: flex;
-  justify-content: center;
-}
-
-/* The panel the comparison chosen shows, the sides centred in it as they
-   were in the image's own column. */
-.image-diff-panel {
-  display: flex;
-  width: 100%;
-  min-width: 0;
-  flex-direction: column;
-  align-items: center;
-}
-
-.image-diff-sides {
-  display: flex;
-  width: 100%;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: var(--luke-block-gap);
-}
-
-.image-diff-side {
-  display: flex;
-  min-width: 0;
-  flex: 1 1 200px;
-  flex-direction: column;
-  align-items: center;
-  gap: var(--luke-item-gap);
-  margin: 0;
-}
-
-.image-diff-side > figcaption {
-  color: var(--luke-color-text-muted);
-  font-size: var(--luke-type-caption-size);
-}
-
+/* A changed image's pictures (image-diff.tsx), each on a checkerboard that
+   shows what is transparent, held to the list's column. */
 .image-diff-picture,
 .image-diff-stack {
   max-width: 100%;
@@ -1163,14 +757,6 @@
 
 .image-diff-picture {
   object-fit: contain;
-}
-
-.image-diff-stacked {
-  display: flex;
-  max-width: 100%;
-  flex-direction: column;
-  align-items: center;
-  gap: var(--luke-control-gap);
 }
 
 /* The two sides stand in one cell of a grid, as large as the larger, the
@@ -1187,15 +773,6 @@
   grid-area: 1 / 1;
   border: 0;
   background-color: var(--luke-color-code-ground);
-}
-
-/* The tree's search field and its filter, in one row over the tree. */
-.file-tree-search {
-  display: flex;
-  align-items: center;
-  gap: var(--luke-control-gap);
-  padding: var(--luke-tight-gap) var(--luke-item-gap);
-  border-bottom: 1px solid var(--luke-color-border);
 }
 
 /* Beside Files changed's cards, the search stands where the first card does,
@@ -1261,23 +838,6 @@
 .file-tree-view[hidden],
 .file-tree-host[hidden] {
   display: none;
-}
-
-/* Why the file is not drawn, standing over the lines Luke showed of it. */
-.file-tab-notice {
-  display: flex;
-  align-items: center;
-  gap: var(--luke-control-gap);
-  padding: var(--luke-row-inset) var(--luke-list-inset);
-  border-bottom: 1px solid var(--luke-color-border);
-  color: var(--luke-color-text-muted);
-  font-size: var(--luke-type-caption-size);
-  line-height: var(--luke-type-caption-leading);
-}
-
-.file-tab-notice > p {
-  flex: 1;
-  margin: 0;
 }
 
 /* A reviewer's standing at a face's corner in a facepile
@@ -2097,37 +1657,11 @@
 }
 
 /* What a read left on GitHub, counted as a press in the caption's type. */
-.file-tab-snippet-label {
-  margin: 0;
-  padding: var(--luke-row-inset) var(--luke-list-inset) var(--luke-tight-gap);
-  color: var(--luke-color-text-muted);
-  font-size: var(--luke-type-caption-size);
-}
-
-/* A whole file drawn by Pierre (whole-file.tsx), a File tab's or a page's
-   source: its scroll area fills the place, Pierre drawing into it as the
-   scroller it virtualizes over, with the ring standing over it while the
-   diff bundle loads. */
-.whole-file {
-  position: relative;
-}
-
-/* The wait for the file's bundle stands over the whole of it. */
-.whole-file-wait {
-  position: absolute;
-  inset: 0;
-  display: flex;
-}
-
-/* A note under a line of a whole file, its card or its chip: Pierre stands
-   it at the code's column, sticky in view while unwrapped lines scroll
-   sideways, so it keeps only the room between it and the lines, and none
-   while it is a chip alone, which floats over the end of its line. */
-.whole-file-note {
-  padding: var(--luke-item-gap) var(--luke-list-inset) var(--luke-item-gap) 0;
-  white-space: normal;
-}
-
+/* A note under a line of a whole file (file-tab.tsx), its card or its
+   chip: Pierre stands it at the code's column, sticky in view while
+   unwrapped lines scroll sideways, so it keeps only the room between it and
+   the lines, and none while it is a chip alone, which floats over the end of
+   its line. */
 .whole-file-note:has(> .diff-thread-chip-row:only-child:not([open])) {
   padding-block: 0;
 }
@@ -2144,27 +1678,9 @@
   container: annotation luke-room / inline-size;
 }
 
-/* Luke is told by his wing mark, at the card's face size (`--luke-glyph-size`), and his name in his own colour, on the card a review thread wears. */
+/* Luke is told by his wing mark, at the card's face size (`--luke-glyph-size`), on the card a review thread wears. */
 .file-note .annotation-card {
   --luke-glyph-size: var(--annotation-face);
-}
-
-.file-note-author {
-  color: var(--voice-luke);
-}
-
-.file-note-menu {
-  display: flex;
-}
-
-.file-note-words {
-  overflow-wrap: anywhere;
-}
-
-/* A snippet not yet near the view stands at about the height its lines
-   will take (code-snippet.tsx), so the feed does not jump as cards mount. */
-.code-snippet-pending {
-  height: calc(var(--snippet-rows) * var(--snippet-row));
 }
 
 /* A transcript's markdown (../ai-elements/message.tsx's MessageResponse):

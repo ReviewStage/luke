@@ -1195,7 +1195,7 @@ function ThreadCard({
               look={look}
               selected={preview.selected}
               excerpt
-              className="diff-view pull-request-thread-lines mb-control-gap flex-none overflow-y-visible border-y border-border bg-card-code"
+              className="diff-view pull-request-thread-lines mb-control-gap flex-none overflow-y-visible border-y border-border bg-card-code select-text"
             />
           )
         }
