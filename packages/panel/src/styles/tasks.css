@@ -6011,8 +6011,27 @@ svg.lucide {
   right: calc(var(--luke-space-6) * -1);
   display: flex;
   width: var(--comment-card-width);
+  max-height: var(--comment-card-room);
+  flex-direction: column;
+}
+
+/* The threads on a folded line, the open one among those at rest, which
+   scroll together where the float has no room for them all. */
+.comment-float-cards {
+  display: flex;
   flex-direction: column;
   gap: var(--luke-tight-gap);
+}
+
+/* An open card over the plan stands no taller than the scroller it opens
+   in (`--comment-card-room`, which the layer measures), so its entries
+   scroll inside it and the field that answers them stays in view under
+   them. */
+.comment-layer .comment-card[data-open="true"] {
+  display: flex;
+  min-height: 0;
+  max-height: var(--comment-card-room);
+  flex-direction: column;
 }
 
 /* On a phone narrower than a card and the web's gutter, the open thread
