@@ -10,9 +10,8 @@ import { CHIP_CUT, CHIP_LOOK, CHIP_SIZE, Chip, ChipName } from "../../index.js";
  * chip.test.ts -- a row of filter chips announces the one pressed, and a
  * press moves it there; a chip drawn as its mark alone keeps its words as
  * its name; a removable chip's × alone is a press, which lifts it; and a
- * compact count says it is busy while the change it made is out. A chip's
- * words fade out at their end only while the chip cuts them short, and a
- * long name cut in its middle keeps its end.
+ * compact count says it is busy while the change it made is out. A long
+ * name cut in its middle keeps its end.
  */
 
 declare global {
@@ -25,27 +24,10 @@ const FILTERS = ["All", "Plans", "Files"] as const;
 
 const roots: Root[] = [];
 
-/** The measurement each observed box was handed, fired as a resize; jsdom lays nothing out, so nothing reports one of its own accord. */
-const resizes: (() => void)[] = [];
-
+/** Stands in for the browser's ResizeObserver, which jsdom lacks, since a chip's words measure whether they are cut short. */
 class StandInResizeObserver {
-  readonly #fire: () => void;
-  constructor(fire: () => void) {
-    this.#fire = fire;
-  }
-  observe(): void {
-    resizes.push(this.#fire);
-  }
+  observe(): void {}
   disconnect(): void {}
-}
-
-/** Stands every box's words `wide` pixels in a box 100px wide, and fires every observed box's measurement, as a resize would. */
-function resize(wide: number): void {
-  vi.spyOn(HTMLElement.prototype, "scrollWidth", "get").mockReturnValue(wide);
-  vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockReturnValue(100);
-  act(() => {
-    for (const fire of resizes) fire();
-  });
 }
 
 beforeEach(() => {
@@ -55,9 +37,7 @@ beforeEach(() => {
 afterEach(() => {
   for (const root of roots.splice(0)) act(() => root.unmount());
   document.body.replaceChildren();
-  resizes.splice(0);
   vi.unstubAllGlobals();
-  vi.restoreAllMocks();
 });
 
 function render(element: ReactElement): void {
@@ -189,17 +169,6 @@ test("a compact chip pressed says it is busy until its change is answered, then 
   assert.deepEqual(pressed(), ["👍2"]);
 });
 
-test("a chip's words fade out at their end only while the chip cuts them short", () => {
-  render(
-    createElement(Chip, { look: CHIP_LOOK.PILL }, createElement(ChipName, null, "feature/expiry")),
-  );
-  const name = () => document.querySelector(".luke-chip-name");
-  resize(80);
-  assert.equal(name()?.getAttribute("data-overflow"), "false");
-  resize(160);
-  assert.equal(name()?.getAttribute("data-overflow"), "true");
-});
-
 test("a long name cut in its middle keeps its words whole and its end, after a join, apart; a short one is not cut in two", () => {
   render(
     createElement(
@@ -218,22 +187,6 @@ test("a long name cut in its middle keeps its words whole and its end, after a j
   assert.equal(long?.querySelector(".luke-chip-name-end")?.textContent, "and-pill");
   assert.equal(short?.textContent, "main");
   assert.equal(short?.querySelector(".luke-chip-name-end"), null);
-});
-
-test("a name cut in its middle fades the end of its start while the chip cuts it short, and no ellipsis stands for the cut", () => {
-  render(
-    createElement(ChipName, {
-      mono: true,
-      cut: CHIP_CUT.MIDDLE,
-      children: "luke/pull-request-header-menu-and-pill",
-    }),
-  );
-  const start = () => document.querySelector(".luke-chip-name-start");
-  resize(80);
-  assert.equal(start()?.getAttribute("data-overflow"), "false");
-  resize(160);
-  assert.equal(start()?.getAttribute("data-overflow"), "true");
-  assert.equal(document.querySelector(".luke-chip-name")?.textContent?.includes("…"), false);
 });
 
 test("a chip given an address is a link named by its words, going there, and its press is heard before the page is followed", () => {

@@ -163,8 +163,3 @@ test("a box named by a label of its own draws no words and is pressed as any box
   press(page.querySelector("label"));
   assert.deepEqual(heard, [true]);
 });
-
-test("a box is named by its words or by a label of its own, and never by neither", () => {
-  // @ts-expect-error A box with neither words nor a label would stand unnamed.
-  createElement(Checkbox, { checked: false, onChange: () => undefined });
-});

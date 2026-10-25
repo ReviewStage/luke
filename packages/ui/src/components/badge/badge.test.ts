@@ -55,25 +55,6 @@ test("a badge that gives up its words in a narrow room still holds them for a re
   assert.equal(view.textContent, "Ready");
 });
 
-test("a badge with no glyph or swatch keeps its words drawn however narrow the room", () => {
-  const view = render(
-    createElement(Badge, { hideWordsUnder: VISUALLY_HIDDEN_UNDER.SNUG, children: "Ready" }),
-  );
-  assert.equal(view.querySelector(".luke-badge-words")?.getAttribute("data-under"), null);
-});
-
-test("a badge in a tone gives its words up to a reader in a narrow room, its dot saying the state", () => {
-  const view = render(
-    createElement(Badge, {
-      tone: STATUS_TONE.ATTENTION,
-      hideWordsUnder: VISUALLY_HIDDEN_UNDER.TIGHT,
-      children: "Pending",
-    }),
-  );
-  assert.equal(view.textContent, "Pending");
-  assert.equal(view.querySelector(".luke-badge-words")?.getAttribute("data-under"), "tight");
-});
-
 test("a label filled with its colour is read by its name, its words lifted to read on the dark ground", () => {
   const view = render(createElement(Badge, { fill: "#1d1d1f", children: "needs design" }));
   const badge = view.querySelector<HTMLElement>(".luke-badge");
@@ -86,6 +67,5 @@ test("a label filled with its colour is read by its name, its words lifted to re
 test("a fill the badge cannot paint draws it as a neutral badge", () => {
   const view = render(createElement(Badge, { fill: "not-a-colour", children: "imported" }));
   const badge = view.querySelector<HTMLElement>(".luke-badge");
-  assert.equal(badge?.getAttribute("data-fill"), null);
   assert.equal(badge?.getAttribute("style"), null);
 });

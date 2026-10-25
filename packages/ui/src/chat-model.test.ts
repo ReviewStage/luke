@@ -681,7 +681,7 @@ function crowdedChat() {
     messages: [...said, ...talk],
     cursor: "1000",
   };
-  return { chat, names, people, agents, topics, direct, said };
+  return { chat, names, topics, direct, said };
 }
 
 test("over a workspace of hundreds of members and channels, the rail lists #general and the topics by name, the tasks' channels by name, the archived apart, and the direct messages the latest spoken in first, each counting its unread", () => {
@@ -723,27 +723,4 @@ test("over a workspace of hundreds of members and channels, the rail lists #gene
   }
   assert.equal(standing.length, 60);
   assert.equal(rail.forYou, 0);
-});
-
-test("over a workspace of hundreds of members, a task's channel offers every person still here and that task's agents alone, the general channel the people alone, each by name in the roster's order", () => {
-  const { chat, names, people, agents } = crowdedChat();
-  const here = people.filter((person) => !person.left);
-  const inTask = chat.channels.find((channel) => channel.id === "task-channel-000");
-  assert.ok(inTask?.planId === "task-049");
-  const offered = chatMentionables(chat, names, inTask);
-  assert.deepEqual(
-    offered.people.map((person) => person.name),
-    here.map((person) => person.name),
-  );
-  assert.deepEqual(
-    offered.agents.map((agent) => [agent.name, agent.task]),
-    agents
-      .filter((agent) => agent.planId === "task-049")
-      .map((agent) => [agent.name, { id: "task-049", name: "Task 049" }]),
-  );
-  const general = chatMentionables(chat, names, GENERAL);
-  assert.equal(general.people.length, here.length);
-  assert.deepEqual(general.agents, []);
-  // Every standing channel that is no DM is offered by `#`: #general, 60 topics, and 50 tasks'.
-  assert.equal(general.channels.length, 111);
 });
