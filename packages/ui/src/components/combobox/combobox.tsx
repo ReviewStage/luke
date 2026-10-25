@@ -19,6 +19,7 @@ import {
 import { INPUT_CONTROL, INPUT_FIELD } from "../../shadcn/input.js";
 import { ANNOUNCE, useAnnounce } from "../announcer/announcer.js";
 import { OneLine } from "../one-line/one-line.js";
+import { SCROLL_FADE, type ScrollFade, scrollFadeMarks } from "../scroll-area/scroll-area.js";
 import { TEXT_ELEMENT, TEXT_VARIANT, Text } from "../text/text.js";
 import { Tooltip } from "../tooltip/hint.js";
 import { type ComboboxField, useComboboxField } from "./use-combobox-field.js";
@@ -258,12 +259,14 @@ export function ComboboxListBox({
   height?: ComboboxListHeight | undefined;
   children?: ReactNode;
 } & ComboboxOptionEngineProps): React.JSX.Element {
+  const fade = scrollFadeMarks(SCROLL_FADE.BOTH);
   return (
     <div
       role="listbox"
       tabIndex={-1}
       {...engine}
-      className={cn("luke-combobox-list", COMBOBOX_LIST)}
+      {...fade}
+      className={cn("luke-combobox-list", fade.className, COMBOBOX_LIST)}
       style={undefined}
       data-slot="combobox-list"
       data-height={height}
@@ -290,6 +293,7 @@ export function ComboboxList({
   empty,
   note,
   steer,
+  fade = SCROLL_FADE.BOTH,
   ref,
 }: {
   /** The listbox's id, which a field names in `aria-controls`; one is minted where none is given. */
@@ -310,6 +314,8 @@ export function ComboboxList({
   note?: ReactNode;
   /** The keys and names of a list with no field, which then holds the focus and names the active option itself. */
   steer?: ComboboxField | undefined;
+  /** Which of its edges fade where its rows run past them, as a scroller's do; both where none is named, none in a field's well, whose edge would fade with them. */
+  fade?: ScrollFade | undefined;
   /** The list itself, for a caller that hands it the focus. */
   ref?: Ref<HTMLDivElement> | undefined;
 }): React.JSX.Element {
@@ -343,11 +349,19 @@ export function ComboboxList({
     const box = list.current;
     const row = at < 0 ? null : document.getElementById(comboboxOptionId(listId, at));
     if (box === null || row === null) return;
-    if (row.offsetTop < box.scrollTop) box.scrollTop = row.offsetTop;
-    const bottom = row.offsetTop + row.offsetHeight - box.clientHeight;
+    // Note that the row is brought clear of a faded edge too, which the list's scroll padding is as deep as.
+    const clear = getComputedStyle(box);
+    const top = row.offsetTop - (Number.parseFloat(clear.scrollPaddingTop) || 0);
+    if (top < box.scrollTop) box.scrollTop = top;
+    const bottom =
+      row.offsetTop +
+      row.offsetHeight +
+      (Number.parseFloat(clear.scrollPaddingBottom) || 0) -
+      box.clientHeight;
     if (bottom > box.scrollTop) box.scrollTop = bottom;
   });
 
+  const marks = scrollFadeMarks(fade);
   let offset = 0;
   const runs = groups.map((group) => {
     const start = offset;
@@ -360,7 +374,8 @@ export function ComboboxList({
     <div
       ref={list}
       id={listId}
-      className={cn("luke-combobox-list", COMBOBOX_LIST)}
+      {...marks}
+      className={cn("luke-combobox-list", marks.className, COMBOBOX_LIST)}
       data-slot="combobox-list"
       role="listbox"
       aria-label={label}
@@ -508,6 +523,7 @@ export function Combobox({
           active={at}
           onActiveChange={onActiveChange}
           onChoose={onChoose}
+          fade={SCROLL_FADE.NONE}
         />
       ) : null}
     </div>

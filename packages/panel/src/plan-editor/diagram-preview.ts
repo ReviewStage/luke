@@ -24,7 +24,8 @@ const DIAGRAM_LANGUAGE = "mermaid";
 const CODE_BLOCK = "codeBlock";
 
 /** The classes the preview's element wears: the read view's figure, the preview's own place, and out of the screen recording, since a picture of words cannot be masked. */
-const PREVIEW_CLASS = "plan-diagram plan-diagram-preview ph-no-capture";
+const PREVIEW_CLASS =
+  "plan-diagram plan-diagram-preview ph-no-capture mt-tight-gap mb-block-gap px-card-compact py-list-inset select-none";
 
 /** How the panel draws a block's diagram into an element, answering what takes it down. */
 type DiagramDrawer = (element: HTMLElement, diagram: EditorDiagram) => () => void;

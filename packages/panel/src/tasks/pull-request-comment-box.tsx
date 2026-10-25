@@ -62,14 +62,14 @@ export function PullRequestCommentBox({
   };
   return (
     <section
-      className="pull-request-section pull-request-comment-box"
+      className="pull-request-section pull-request-comment-box flex flex-col gap-control-gap"
       aria-label={COMMENT_WORDS.TITLE}
     >
       <Text
         as={TEXT_ELEMENT.H3}
         variant={TEXT_VARIANT.GROUP}
         truncate
-        className="pull-request-heading"
+        className="pull-request-heading mx-0 mt-0 mb-item-gap flex items-baseline gap-item-gap px-row-inset"
       >
         {COMMENT_WORDS.TITLE}
       </Text>
@@ -85,7 +85,7 @@ export function PullRequestCommentBox({
         fieldRef={field}
       />
       <PullRequestWriteNote writes={writes} className="pull-request-comment-note" />
-      <div className="pull-request-comment-foot">
+      <div className="pull-request-comment-foot flex justify-end">
         <Button
           variant={BUTTON_VARIANT.PRIMARY}
           disabled={blank}

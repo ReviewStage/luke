@@ -199,9 +199,9 @@ export function OpenedLine({
 }): React.JSX.Element {
   const verb = person === undefined ? "Opened" : "opened";
   return (
-    <span className="pull-request-opened">
+    <span className="pull-request-opened inline-flex min-w-0 items-center gap-tight-gap whitespace-nowrap">
       {person === undefined ? null : <PersonRef person={person} />}
-      <span className="pull-request-quiet">
+      <span className="pull-request-quiet text-muted-foreground">
         {merged === undefined ? (
           <>
             {`${verb} `}

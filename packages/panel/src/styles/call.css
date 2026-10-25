@@ -82,6 +82,20 @@ html.call-window #root {
   );
 }
 
+/* On a phone the card stands over a page's foot, so what it takes of the
+   window's foot (`--luke-card-room`) is said to the pages under it, whose
+   scroll leaves that much free at its end (`.pull-request-page`, `@luke/ui`'s
+   `DetailPage`), so their last line can be scrolled clear of the card
+   rather than sit under it, out of reach. */
+:where(:root)[data-luke-room="narrow"] .desktop-shell:has(> .call-card[data-surface="floating"]) {
+  --luke-card-room: calc(
+    var(--luke-space-16) +
+    max(var(--luke-keyboard-inset), env(safe-area-inset-bottom, 0px)) +
+    var(--floating-card, 0px) +
+    var(--luke-space-8)
+  );
+}
+
 /* The transcript under the card keeps its last line in sight above it: the
    plan column's, or the side panel's while the panel fills the window. */
 .desktop-shell:has(> .call-card[data-surface="floating"])

@@ -136,7 +136,11 @@ export function InboxPicture({
   }
   if ("failed" in image) {
     return (
-      <span ref={anchor} className="picture-block" data-inbox-image-failed="">
+      <span
+        ref={anchor}
+        className="picture-block my-block-gap block w-fit max-w-full"
+        data-inbox-image-failed=""
+      >
         <ErrorState onRetry={() => door.onRetryImage(attachmentId)}>{IMAGE_FAILED_LINE}</ErrorState>
       </span>
     );
