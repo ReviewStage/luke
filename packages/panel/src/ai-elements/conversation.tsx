@@ -66,6 +66,9 @@ const READER_SCROLL_MS = 500;
 /** The events by which a reader scrolls, or asks something to scroll for them, as find's keys or a row's press do. */
 const READER_EVENTS = ["wheel", "touchmove", "pointerdown", "keydown"] as const;
 
+/** The events that end a reader's press, so a scroll bar dragged long after its press is still theirs while it is held. */
+const RELEASE_EVENTS = ["pointerup", "pointercancel"] as const;
+
 /** Whether a list scrolled this far is at its newest line, so a new line should keep it there. */
 function followsNewest(list: {
   scrollTop: number;
@@ -126,6 +129,8 @@ export function Conversation({
   const lastTop = useRef(0);
   // When the reader last scrolled or asked for a scroll, as an event's time.
   const readerAt = useRef(Number.NEGATIVE_INFINITY);
+  // Whether the reader holds a press now, a scroll bar's thumb among them.
+  const pressing = useRef(false);
   const toEnd = useCallback((element: HTMLDivElement) => {
     element.scrollTop = element.scrollHeight;
     lastTop.current = element.scrollTop;
@@ -133,12 +138,22 @@ export function Conversation({
   useEffect(() => {
     const heard = (event: Event) => {
       readerAt.current = event.timeStamp;
+      if (event.type === "pointerdown") pressing.current = true;
+    };
+    const released = () => {
+      pressing.current = false;
     };
     for (const name of READER_EVENTS) {
       window.addEventListener(name, heard, { capture: true, passive: true });
     }
+    for (const name of RELEASE_EVENTS) {
+      window.addEventListener(name, released, { capture: true, passive: true });
+    }
     return () => {
       for (const name of READER_EVENTS) window.removeEventListener(name, heard, { capture: true });
+      for (const name of RELEASE_EVENTS) {
+        window.removeEventListener(name, released, { capture: true });
+      }
     };
   }, []);
   // What the last render left observed: the scroll box, and how many lines
@@ -255,7 +270,8 @@ export function Conversation({
   // as lines above grow (scroll anchoring), a message's words drawn late
   // among them, and the observer then takes it the rest of the way down.
   // Note too that a scroll up is the reader's only where their wheel,
-  // touch, press, or key came just before it, or a script said it was about
+  // touch, press, or key came just before it, a press of theirs is still
+  // held, as a scroll bar's drag is, or a script said it was about
   // to scroll the log for them (`askScroll`), as find, a reveal, or an
   // unread line does. Any other is the layout's, and leaves the log
   // following, taken back to its end: a box that grows pulls its scroll back
@@ -267,7 +283,10 @@ export function Conversation({
     (event: UIEvent<HTMLDivElement>) => {
       const element = event.currentTarget;
       const down = element.scrollTop >= lastTop.current;
-      const asked = event.timeStamp - readerAt.current < READER_SCROLL_MS || scrollAsked(element);
+      const asked =
+        pressing.current ||
+        event.timeStamp - readerAt.current < READER_SCROLL_MS ||
+        scrollAsked(element);
       if (following.current && !down && !asked && !followsNewest(element)) {
         toEnd(element);
         return;

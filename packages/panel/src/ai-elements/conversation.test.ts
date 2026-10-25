@@ -180,6 +180,40 @@ test("a reader's wheel just before a scroll up takes the log off its newest line
   assert.deepEqual(layout.writes, [], "the reader's place stands");
 });
 
+/** A scroll heard `after` milliseconds past the moment it is sent, as one heard long after the reader's last input is. */
+function lateScroll(box: HTMLElement, top: number, after: number): void {
+  box.scrollTop = top;
+  const event = new Event("scroll", { bubbles: true });
+  Object.defineProperty(event, "timeStamp", { value: event.timeStamp + after });
+  act(() => {
+    box.dispatchEvent(event);
+  });
+}
+
+test.each([
+  {
+    how: "a key, Page Up or Home",
+    input: () => new KeyboardEvent("keydown", { bubbles: true, key: "PageUp" }),
+    after: 0,
+  },
+  {
+    how: "a scroll bar's thumb held a while before it is dragged",
+    input: () => new Event("pointerdown", { bubbles: true }),
+    after: 2000,
+  },
+])("a reader's scroll up by $how takes the log off its newest line", ({ input, after }) => {
+  const { root, box, layout } = mount(["one", "two"]);
+  scroll(box, 200);
+  act(() => {
+    box.dispatchEvent(input());
+  });
+  lateScroll(box, 50, after);
+  layout.writes.splice(0);
+  layout.height = 400;
+  draw(root, ["one", "two", "three"]);
+  assert.deepEqual(layout.writes, [], "the reader's place stands");
+});
+
 test("a log on its newest line stays on it when rows hidden and shown again in one frame leave its scroll at its first line", () => {
   const { box, layout } = mount(["one", "two"]);
   scroll(box, 200);
