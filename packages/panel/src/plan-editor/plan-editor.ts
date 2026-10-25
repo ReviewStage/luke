@@ -380,6 +380,22 @@ function placed(editor: Editor, placement: PlanEditorPlacement | undefined): Sel
 }
 
 /**
+ * What the editor holds of its sources after a change that only laid or took
+ * off marks, which writes nothing to the Markdown: each block that changed
+ * keeps the source it held, found by its place, since such a change moves no
+ * block.
+ */
+function heldAcrossMarks(before: PmNode, after: PmNode, held: HeldSources): HeldSources {
+  if (before === after) return held;
+  const sources = new Map<PmNode, string>();
+  after.forEach((node, _offset, index) => {
+    const source = held.sources.get(before.child(index));
+    if (source !== undefined) sources.set(node, source);
+  });
+  return { ...held, sources };
+}
+
+/**
  * The text's editor mounted into `host`, in place of its drawn sections, its
  * caret where the placement says, and focused if it is asked to be.
  */
@@ -480,16 +496,20 @@ export function mountPlanEditor(host: HTMLElement, props: PlanEditorProps): Plan
     onUpdate: ({ editor: updated }) => {
       if (laying) return;
       // Note that the threads' words are counted in the text as it is handed over, its own line endings and all, as their anchors were counted in the text it opened on.
+      // Note that a draft reports no anchors while the editor carries no thread, since mapping every marked word on each keystroke would be for nothing.
       const markdown = written();
       onDraft(
         markdown,
-        anchors === undefined ? undefined : anchorsOf(updated.state.doc, markdown, carried),
+        carried.length === 0 ? undefined : anchorsOf(updated.state.doc, markdown, carried),
       );
     },
   });
   // Note that the threads' marks are laid on before each block's source is known by its node, so a block marked as it opens still writes its source.
   laying = true;
-  carried = anchors === undefined ? [] : anchorsLaidIn(editor, markdown, anchors);
+  carried =
+    anchors === undefined
+      ? []
+      : anchorsLaidIn(editor, markdown, anchors, new Set(anchors.map(({ thread }) => thread)), []);
   laying = false;
   if (picking !== undefined) editor.registerPlugin(picking.plugin);
   if (slash !== undefined) editor.registerPlugin(slash.plugin);
@@ -511,6 +531,14 @@ export function mountPlanEditor(host: HTMLElement, props: PlanEditorProps): Plan
     chooseMention: (mention) => picking?.choose(editor, mention),
     insertBlock: (block) => slash?.insert(editor, block),
     markdown: written,
+    replaceAnchors: (text, next, open) => {
+      if (editor.isDestroyed) return;
+      const before = editor.state.doc;
+      laying = true;
+      carried = anchorsLaidIn(editor, text, next ?? [], new Set(open), carried);
+      laying = false;
+      held = heldAcrossMarks(before, editor.state.doc, held);
+    },
     setAria: (next) => {
       if (sameAria(aria, next) || editor.isDestroyed) return;
       aria = next;
