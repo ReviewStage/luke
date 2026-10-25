@@ -2176,20 +2176,18 @@ ul.actor-stack {
   --luke-toolbar-centre: off;
 }
 
-/* A task's own Inbox stands under its column's tab strip, clear of the title
-   bar's buttons at either end, so its item's bar keeps the column's own inset
-   whether the sidebar is folded or the panel's toggle is drawn. Under the
-   strip, the item's bar is the tab's own bar, as tall as every other tab's
-   (`PaneBar`) and on its ground, rather than a top row. */
-.desktop-task-main .inbox-view {
+/* A task's own Inbox draws in the side panel (`inboxBody` reaches `SidePanel`
+   alone), under its tab strip and clear of the title bar's buttons at either
+   end, so its item's bar keeps the column's own inset whether the sidebar is
+   folded or the panel's toggle is drawn. Under the strip, the item's bar is
+   the tab's own bar, as tall as every other tab's (`PaneBar`) and on its
+   ground, rather than a top row. */
+.side-panel-content .inbox-view {
   --luke-toolbar-start-at: var(--column-inset);
   --luke-toolbar-end-at: var(--column-inset);
   --luke-toolbar-height: var(--secondary-bar-height);
+  --luke-toolbar-block-inset: var(--luke-tight-gap);
   --luke-toolbar-ground: var(--luke-color-fill-hover);
-}
-
-:where(:root)[data-luke-room="narrow"] .desktop-shell .desktop-task-main .inbox-view {
-  --luke-toolbar-block-inset: var(--luke-space-4);
 }
 
 /* The list's body, inside the `ScrollArea` tab panel that scrolls it. */
@@ -3068,11 +3066,11 @@ ul.actor-stack {
 }
 
 /* The form, drawn as a Settings page: each group's name over a card of
-   Settings rows, the groups a section apart. */
+   Settings rows, the groups a page section apart. */
 .automation-form {
   display: flex;
   flex-direction: column;
-  gap: var(--luke-section-gap);
+  gap: var(--luke-page-section-gap);
 }
 
 /* The prompt's placeholder, the height of its field at the rows it stands
