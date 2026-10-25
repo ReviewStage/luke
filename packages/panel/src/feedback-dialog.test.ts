@@ -2,7 +2,12 @@
 
 import assert from "node:assert/strict";
 import { ACCOUNT_PROVIDER, ACCOUNT_STATUS, type AccountSnapshot } from "@luke/credentials/snapshot";
-import { FEEDBACK_KIND, type FeedbackKind, type FeedbackResult } from "@luke/features/feedback";
+import {
+  FEEDBACK_KIND,
+  FEEDBACK_LIMITS,
+  type FeedbackKind,
+  type FeedbackResult,
+} from "@luke/features/feedback";
 import { ACT_KIND } from "@luke/host/acts";
 import type { PortActPayload } from "@luke/host/contract";
 import { EXPERIMENT } from "@luke/settings";
@@ -247,6 +252,56 @@ test("a note being written is nudged rather than closed by the first Escape, clo
   assert.equal(nudged, "true", "the first Escape nudges the card and keeps it");
   assert.equal(closed, true, "the second closes it");
   assert.equal(field().value, "The board missed a plan.");
+});
+
+/** The counter the field's label line draws once the words near the cap, or nothing before. */
+function counter(): string | null {
+  return dialog()?.querySelector(".luke-length-counter")?.textContent ?? null;
+}
+
+/** Pastes `text` into the field, as the clipboard does. */
+function paste(text: string): void {
+  const event = new Event("paste", { bubbles: true, cancelable: true });
+  Object.defineProperty(event, "clipboardData", { value: { files: [], getData: () => text } });
+  act(() => {
+    field().dispatchEvent(event);
+  });
+}
+
+test("the field counts its words from four fifths of its cap, and says nothing before", () => {
+  mount();
+  openFromHelp(APP_COMMAND.SEND_FEEDBACK);
+  const limit = FEEDBACK_LIMITS.MESSAGE_MAX_LENGTH;
+
+  write("x".repeat(limit * 0.8 - 1));
+  assert.equal(counter(), null);
+
+  write("x".repeat(limit * 0.8));
+  assert.equal(counter(), `${String(limit * 0.8)}/${String(limit)}`);
+});
+
+test("a paste past the cap says it was cut until the words change", () => {
+  mount();
+  openFromHelp(APP_COMMAND.SEND_FEEDBACK);
+  const limit = FEEDBACK_LIMITS.MESSAGE_MAX_LENGTH;
+  const note = `Your paste was cut to fit the ${limit.toLocaleString("en-US")}-character limit.`;
+
+  write("x".repeat(limit - 3));
+  paste("a short one");
+  assert.equal(dialog()?.textContent?.includes(note), false);
+  paste("yyyy");
+  assert.equal(
+    dialog()?.textContent?.includes(note),
+    false,
+    "the note waits for the words the paste leaves",
+  );
+
+  // The browser keeps the room that was left, which is what the note is about.
+  write(`${"x".repeat(limit - 3)}yyy`);
+  assert.equal(dialog()?.textContent?.includes(note), true);
+
+  write("x".repeat(limit - 4));
+  assert.equal(dialog()?.textContent?.includes(note), false);
 });
 
 test("Cancel closes the card and keeps the note for the next opening", () => {
