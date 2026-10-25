@@ -10,12 +10,22 @@ import {
   type PlanCommentThread,
   type PlanCommentWriter,
 } from "@luke/features/plan-comment-wire";
-import { TASK_PRIORITY, TASK_STATUS, type Task, type TaskSummary } from "@luke/features/task-wire";
 import {
+  PLAN_ACTOR,
+  type PlanDocument,
+  type PlanRevisionLine,
+  TASK_PRIORITY,
+  TASK_STATUS,
+  type Task,
+  type TaskSummary,
+} from "@luke/features/task-wire";
+import {
+  TASK_CALL_FAILURE,
   TASKS_READ,
   type TaskCode,
   type TaskCodeShowing,
   type TasksRepositoriesAnswer,
+  type TasksRevisionsAnswer,
   type TasksView,
 } from "@luke/features/tasks-view";
 import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
@@ -95,7 +105,7 @@ const FIXTURE_WORKSPACES: readonly Workspace[] = [FIXTURE_FIRST, FIXTURE_TEAM];
  * and its assumptions, with every other section still holding the default
  * template's guidance, as a draft shows it.
  */
-const FIXTURE_TEXT = [
+const FIXTURE_SECTIONS = [
   "## Context",
   "Only an admin can add someone to a workspace, by creating their account by hand, so " +
     "members wait on an admin to bring a teammate in.",
@@ -129,7 +139,9 @@ const FIXTURE_TEXT = [
   "- Invites reuse memberships with a pending state.\n" +
     "- Members and admins can both invite.\n" +
     "- An invite expires after 7 days.",
-].join("\n\n");
+];
+
+const FIXTURE_TEXT = FIXTURE_SECTIONS.join("\n\n");
 
 /**
  * When the fixture's call stands, from which every task's times are counted:
@@ -158,6 +170,146 @@ const FIXTURE_TASK: Task = {
   number: 42,
   document: { body: `${FIXTURE_TEXT}\n`, assumptions: [] },
 };
+
+/**
+ * The fixture task's plan as it stood after its first `sections` sections,
+ * each a heading and its words, as a revision partway through drafting saved it.
+ */
+function draftOf(sections: number): PlanDocument {
+  return { body: `${FIXTURE_SECTIONS.slice(0, sections * 2).join("\n\n")}\n`, assumptions: [] };
+}
+
+/**
+ * The fixture task's version history, newest first, each revision beside the
+ * plan it saved: its member and a teammate by hand, Luke on its call, and its
+ * coding agent, over the two days before the call, so the version history
+ * shows real versions by more than one writer rather than waiting on a read
+ * main answers with nothing.
+ */
+const FIXTURE_HISTORY: readonly {
+  readonly line: PlanRevisionLine;
+  readonly document: PlanDocument;
+}[] = [
+  {
+    line: {
+      seq: 5,
+      lastEdit: {
+        actor: PLAN_ACTOR.DEVELOPER,
+        by: FIXTURE_PERSON.ADA,
+        at: CALL_AT,
+        duringCall: false,
+      },
+      startedAt: CALL_AT - 20 * 60_000,
+      changes: 3,
+    },
+    document: FIXTURE_TASK.document,
+  },
+  {
+    line: {
+      seq: 4,
+      lastEdit: {
+        actor: PLAN_ACTOR.AGENT,
+        label: "Invite emails",
+        agentId: FIXTURE_IDS.AGENT,
+        at: CALL_AT - 2 * HOUR,
+        duringCall: false,
+      },
+      agentId: FIXTURE_IDS.AGENT,
+      startedAt: CALL_AT - 2 * HOUR - 10 * 60_000,
+      changes: 2,
+    },
+    document: draftOf(10),
+  },
+  {
+    line: {
+      seq: 3,
+      lastEdit: {
+        actor: PLAN_ACTOR.NOTETAKER,
+        by: FIXTURE_PERSON.ADA,
+        at: CALL_AT - 5 * HOUR,
+        duringCall: true,
+      },
+      startedAt: CALL_AT - 5 * HOUR - 25 * 60_000,
+      changes: 9,
+    },
+    document: draftOf(7),
+  },
+  {
+    line: {
+      seq: 2,
+      lastEdit: {
+        actor: PLAN_ACTOR.DEVELOPER,
+        by: FIXTURE_PERSON.MAYA,
+        at: CALL_AT - DAY,
+        duringCall: false,
+      },
+      startedAt: CALL_AT - DAY - 30 * 60_000,
+      changes: 4,
+    },
+    document: draftOf(4),
+  },
+  {
+    line: {
+      seq: 1,
+      lastEdit: {
+        actor: PLAN_ACTOR.DEVELOPER,
+        by: FIXTURE_PERSON.ADA,
+        at: FIXTURE_TASK.createdAt,
+        duringCall: false,
+      },
+      startedAt: FIXTURE_TASK.createdAt,
+      changes: 1,
+    },
+    document: draftOf(2),
+  },
+];
+
+/** A page of the fixture task's history, newest first, before the revision `before` names where it names one. */
+function historyPage(before: number | undefined): TasksRevisionsAnswer {
+  return {
+    revisions: FIXTURE_HISTORY.filter(({ line }) => before === undefined || line.seq < before).map(
+      ({ line }) => line,
+    ),
+  };
+}
+
+/** A follow of the fixture task's history, which pushes its newest page once, as the host's does on opening, and nothing after. */
+async function* historyPushedOnce(): AsyncGenerator<TasksRevisionsAnswer> {
+  yield historyPage(undefined);
+}
+
+/**
+ * What the fixture task's version history reads, answered here in place of
+ * main under every profile: a page of its history, its newest page followed,
+ * and one revision beside the one before it. Any other task's reads go to
+ * main, as do a restore and every other act.
+ */
+function historyActAnswer(
+  kind: PortActKind,
+  payload: PortActPayload<PortActKind>,
+): { readonly answer: PortActResult<PortActKind> } | undefined {
+  // SAFETY: each history act's payload names the task it reads, which is all that is read here before its kind is known.
+  const { taskId } = payload as { readonly taskId?: string };
+  if (taskId !== FIXTURE_TASK_ID) return undefined;
+  if (kind === ACT_KIND.TASKS_REVISIONS) {
+    const page = payload as PortActPayload<typeof ACT_KIND.TASKS_REVISIONS>;
+    return { answer: historyPage(page.before) as PortActResult<PortActKind> };
+  }
+  if (kind === ACT_KIND.TASKS_HISTORY_FOLLOW) {
+    return { answer: historyPushedOnce() as PortActResult<PortActKind> };
+  }
+  if (kind !== ACT_KIND.TASKS_REVISION) return undefined;
+  const { seq } = payload as PortActPayload<typeof ACT_KIND.TASKS_REVISION>;
+  const at = FIXTURE_HISTORY.findIndex(({ line }) => line.seq === seq);
+  if (at === -1)
+    return { answer: { failure: TASK_CALL_FAILURE.UNANSWERED } as PortActResult<PortActKind> };
+  const revision = {
+    seq,
+    document: FIXTURE_HISTORY[at]?.document ?? draftOf(0),
+    previous: FIXTURE_HISTORY[at + 1]?.document ?? null,
+  };
+  return { answer: { revision } as PortActResult<PortActKind> };
+}
 
 const FIXTURE_OTHER_TASKS: readonly TaskSummary[] = [
   {
@@ -655,7 +807,8 @@ function emptyTaskAnswer(
 /**
  * What a fixture run answers an act with in place of main (`act.ts`), boxed
  * so an act that answers nothing is told from one left to main: the
- * tasks-comments profile's plan comments, its agent
+ * tasks-comments profile's plan comments, the fixture task's version
+ * history under every profile, its agent
  * profiles' tabs' reads, its signed-in profiles' pages' reads, every
  * profile's workspace members, every other profile's task as one with no
  * agents and no linked issues, and nothing else, which goes to main as it
@@ -668,6 +821,7 @@ export function fixtureActAnswer(
 ): { readonly answer: PortActResult<PortActKind> } | undefined {
   return (
     commentsActAnswer(run.profile, kind, payload) ??
+    historyActAnswer(kind, payload) ??
     agentActAnswer(run.profile, kind, payload) ??
     automationsActAnswer(run.profile, kind, payload) ??
     settingsActAnswer(run.profile, kind, payload) ??
