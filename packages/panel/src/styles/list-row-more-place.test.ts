@@ -15,14 +15,13 @@ import { afterEach, beforeAll, test } from "vitest";
 import { layContainersAt } from "../testing/container-width.js";
 
 /**
- * list-row-more-place.test.ts -- where there is a hover, a row whose acts
- * come in on hover, as an Inbox item's or a sidebar task's, keeps no track
- * of its own for its ⋯: the ⋯ comes in with the acts in its end's place, so
- * at rest nothing stands empty past the row's metadata. A row that offers a
- * menu and no acts keeps the ⋯ in its own track beside its end, which
- * nothing steps in for, a row whose acts always stand keeps it beside them,
- * and so does every row on a screen with no hover, where the ⋯ is always
- * shown. jsdom lays
+ * list-row-more-place.test.ts -- every row that offers a menu keeps its ⋯ in
+ * a track of its own, last, whatever its acts are: a row whose acts come in
+ * on hover, as an Inbox item's or a sidebar task's, stands the acts in its
+ * end's place and the ⋯ beside it, as a row with a menu and no acts, a row
+ * whose acts always stand, and every row on a screen with no hover do, so
+ * the metadata of every row in a list ends the same distance from the row's
+ * end. jsdom lays
  * nothing out, so the sheets are laid for a mouse or a touch screen
  * (`testing/container-width.ts`) and the track each part is given is read.
  */
@@ -80,11 +79,11 @@ function tracks(actionsAt: ListRowActions, touch: boolean, acted = true) {
   };
 }
 
-test("with a mouse, a row whose acts come in on hover stands its ⋯ with them in its end's place, keeping no track for it", () => {
+test("with a mouse, a row whose acts come in on hover keeps its ⋯ in its own track, beside the end its acts stand in", () => {
   const { end, acts, more } = tracks(LIST_ROW_ACTIONS.HOVER, false);
 
   assert.equal(acts, end, "the acts stand in the end's place");
-  assert.equal(more, end, "the ⋯ stands there with them");
+  assert.equal(more, "more", "the ⋯ keeps its track, as a row with no acts does");
 });
 
 test("with a mouse, a row that offers a menu and no acts keeps its ⋯ in its own track, beside the end nothing steps in for", () => {

@@ -10,9 +10,9 @@ import { layContainersAt } from "../testing/container-width.js";
 /**
  * list-row-hover-room.test.ts -- where there is a hover, a row whose acts
  * come in on hover, as an Inbox item's or a sidebar task's, keeps no room
- * for them at rest, so its title runs to its metadata: its acts and its ⋯
- * stand out of the row's flow until the row is in hand, and take their room
- * once it is, its title cut anew before them. On a screen with no hover,
+ * for them at rest, so its title runs to its metadata: its acts stand out
+ * of the row's flow until the row is in hand, and take their room once it
+ * is, its title cut anew before them. Its ⋯ keeps its own track throughout. On a screen with no hover,
  * where no row is ever in hand, the acts keep their room as before. jsdom
  * lays nothing out and matches no `:hover`, so the sheets are laid for a
  * mouse or a touch screen (`testing/container-width.ts`), a hover is read
@@ -72,19 +72,18 @@ function hoverRow(touch: boolean) {
   };
 }
 
-test("with a mouse, a row's acts on hover and its ⋯ stand out of its flow at rest, so its title runs to its metadata", () => {
+test("with a mouse, a row's acts on hover stand out of its flow at rest, so its title runs to its metadata, while its ⋯ keeps its room", () => {
   const { acts, more } = hoverRow(false);
 
   assert.equal(getComputedStyle(acts).position, "absolute");
-  assert.equal(getComputedStyle(more).position, "absolute");
+  assert.notEqual(getComputedStyle(more).position, "absolute");
 });
 
-test("with a mouse, the row in hand takes its acts' and its ⋯'s room, its title cut anew before them", () => {
-  const { item, acts, more } = hoverRow(false);
+test("with a mouse, the row in hand takes its acts' room, its title cut anew before them", () => {
+  const { item, acts } = hoverRow(false);
   item.setAttribute("data-hovered", "");
 
   assert.notEqual(getComputedStyle(acts).position, "absolute");
-  assert.notEqual(getComputedStyle(more).position, "absolute");
 });
 
 test("on a touch screen, where no row is in hand, a row's acts on hover keep their room", () => {
