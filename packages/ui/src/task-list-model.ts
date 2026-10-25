@@ -284,6 +284,15 @@ export function shownStatuses(view: TaskListView): readonly TaskStatus[] {
   return view.statuses ?? DEFAULT_SHOWN_STATUSES;
 }
 
+/** Whether the view shows other statuses than a list shows until its reader chooses, which is a status filter on. */
+export function statusesFiltered(view: TaskListView): boolean {
+  const shown = shownStatuses(view);
+  return (
+    shown.length !== DEFAULT_SHOWN_STATUSES.length ||
+    !DEFAULT_SHOWN_STATUSES.every((status) => shown.includes(status))
+  );
+}
+
 /** The statuses shown with one turned on or off, kept in `TASK_STATUS_ORDER`. */
 export function toggledStatus(
   statuses: readonly TaskStatus[],

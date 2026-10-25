@@ -1,7 +1,8 @@
 /* group-header.css -- GroupHeader: the head over a group of rows, in the
    group role's type, its glyph giving way to the fold's chevron while it is
    hovered or has the keyboard, its count after its label, and its actions
-   at its end while it is hovered or holds the focus; it may stick to the top
+   at its end while it is hovered or holds the focus, one that is on
+   standing at rest with its dot; it may stick to the top
    of its scroller, and hand its rows on as a subgrid of the grid it stands
    in. The fold's motion and the chevron's turn are the Disclosure's
    (disclosure.css). */
@@ -212,28 +213,54 @@
     display: flex;
     flex: none;
     align-items: center;
+  }
+
+  .luke-group-header-action {
+    position: relative;
+    display: inline-flex;
+  }
+
+  /* An action that is on wears a dot over its corner, in the accent's ink,
+     since the web's accent fill is too light to hold 3:1 as a mark on its
+     light page. */
+  .luke-group-header-action[data-state="active"]::after {
+    position: absolute;
+    top: var(--luke-space-4);
+    right: var(--luke-space-4);
+    width: 5px; /* off-scale: a status dot */
+    height: 5px; /* off-scale: a status dot */
+    border-radius: var(--luke-radius-full);
+    background: var(--luke-color-accent-text);
+    content: "";
+    pointer-events: none;
+  }
+
+  /* Note that each action waits on its own rather than the row of them,
+     because one that is on stands while the rest wait, and the row's
+     opacity would hide it with them. */
+  .luke-group-header-actions[data-shown="on-hover"] > * {
     opacity: 0;
     transition: opacity var(--luke-duration-hover) var(--luke-motion-exit);
   }
 
-  .luke-group-header-head:is(:focus-within, [data-menu-open="true"]) .luke-group-header-actions {
+  /* They come in while the head holds the focus, its own menu stands, or a
+     menu one of them dropped stands open, which has taken the focus and
+     often the pointer away; and one that is on stands at rest. */
+  .luke-group-header-head:is(:focus-within, [data-menu-open="true"]) .luke-group-header-actions > *,
+  .luke-group-header-head .luke-group-header-actions:has([aria-expanded="true"]) > *,
+  .luke-group-header-actions > .luke-group-header-action[data-state="active"] {
     opacity: 1;
   }
 
   @media (hover: hover) {
-    .luke-group-header-head:hover .luke-group-header-actions {
+    .luke-group-header-head:hover .luke-group-header-actions > * {
       opacity: 1;
     }
   }
 
-  /* A head whose buttons are the list's own keeps them standing. */
-  .luke-group-header-actions[data-shown="at-rest"] {
-    opacity: 1;
-  }
-
   /* A screen with no hover shows them at rest, in the room they keep. */
   @media (hover: none) {
-    .luke-group-header-actions {
+    .luke-group-header-head .luke-group-header-actions[data-shown] > * {
       opacity: 1;
     }
   }
