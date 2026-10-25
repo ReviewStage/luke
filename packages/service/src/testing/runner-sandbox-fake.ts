@@ -155,6 +155,8 @@ export function runnerSandboxApi() {
   } = {};
   /** The snapshots taken, in order. */
   const snapshots: string[] = [];
+  /** The expiration each snapshot was asked with, by its id, as the API's body carried it. */
+  const snapshotExpirations = new Map<string, unknown>();
   let next = 0;
   const id = (prefix: string) => {
     next += 1;
@@ -279,6 +281,7 @@ export function runnerSandboxApi() {
       if (taking === undefined) return new Response(null, { status: 422 });
       const snapshot = id("snap");
       snapshots.push(snapshot);
+      snapshotExpirations.set(snapshot, (await body()).expiration);
       taking.status = "stopped";
       taking.currentSnapshotId = snapshot;
       return Response.json({ snapshot: { id: snapshot }, session: { id: sessionId } });
@@ -383,6 +386,7 @@ export function runnerSandboxApi() {
     commands,
     goneSnapshots,
     snapshots,
+    snapshotExpirations,
     uploads,
     policies,
     runs,
