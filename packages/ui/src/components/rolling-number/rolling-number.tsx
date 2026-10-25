@@ -11,9 +11,14 @@ import { Fragment, useState } from "react";
  * that keeps its length keeps its width. A count drawn first stands still:
  * only a change rolls.
  *
- * The digit leaving is drawn from its `data-digit` by the stylesheet rather
- * than as words, so what the count says, copied or read aloud, is only its
- * value, and it is taken out once its exit has run.
+ * The digit leaving is drawn from its `data-digit` by its `::before`
+ * rather than as words, so what the count says, copied or read aloud, is
+ * only its value, and it is taken out once its exit has run.
+ *
+ * It is drawn in the Tailwind theme's utilities, each digit in a slot
+ * clipped to its line by a clip-path rather than an overflow, because an
+ * inline block that clips its overflow sits on its bottom edge rather than
+ * on the words' baseline; the rolls are `rolling-number.css`'s.
  */
 
 /** Which way a change rolls, read by the stylesheet from `data-roll`. */
@@ -61,14 +66,17 @@ function DigitSlot({
   const changed = roll !== undefined && was !== digit;
   const leaving = changed && !left ? was : undefined;
   return (
-    <span className="luke-rolling-number-slot">
+    <span className="luke-rolling-number-slot relative inline-block [clip-path:inset(0)]">
       <Fragment key={changed ? turn : "standing"}>
-        <span className="luke-rolling-number-digit" data-roll={changed ? roll : undefined}>
+        <span
+          className="luke-rolling-number-digit inline-block"
+          data-roll={changed ? roll : undefined}
+        >
           {digit}
         </span>
         {leaving === undefined ? null : (
           <span
-            className="luke-rolling-number-leaving"
+            className="luke-rolling-number-leaving pointer-events-none absolute inset-0 before:content-[attr(data-digit)]"
             data-roll={roll}
             data-digit={leaving}
             aria-hidden="true"
@@ -111,7 +119,7 @@ export function RollingNumber({
   const left = () => setShown((current) => ({ ...current, left: true }));
   // A digit is matched with the one in its place counted from the units.
   return (
-    <span className="luke-rolling-number">
+    <span className="luke-rolling-number inline-flex tabular-nums">
       {digits.map((digit, index) => {
         const place = digits.length - index;
         return (

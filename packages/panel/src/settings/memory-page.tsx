@@ -24,6 +24,7 @@ import {
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useAct } from "../act.js";
+import { MarkdownMessage } from "../markdown-message.js";
 import { MenuRow } from "./menu-row.js";
 
 /**
@@ -119,7 +120,8 @@ function MemoryRow({
         thing="Memory"
         actions={actions}
         row={{
-          label: <span className="memory-text">{memory.text}</span>,
+          // Note that a memory is written in Markdown (`pnpm db:generate` in backticks), so it is drawn as the notes are.
+          label: <MarkdownMessage words={memory.text} className="memory-text" />,
           adornment: memory.private ? (
             <Badge tone={STATUS_TONE.NEUTRAL}>{PAGE_LINE.PRIVATE}</Badge>
           ) : undefined,

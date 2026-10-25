@@ -124,6 +124,7 @@ import {
 import { DOCUMENT_REGION, SETTLED_STATUS, settleOffered, TASK_MARK } from "@luke/ui/tasks-model";
 import { fileName, shownFiles } from "@luke/voice/code-pane-model";
 import {
+  Fragment,
   isValidElement,
   type ReactNode,
   useDeferredValue,
@@ -1542,11 +1543,21 @@ function paletteItem(
         )}
       </>
     );
+  // Note that a task's key stands first at the row's end, as the Tasks list's row sets it, and never leads: a lead on the keyed rows alone pushes their glyph and name right of every row without one.
   // Spoken, since a palette row is an option, which carries no
   // `aria-keyshortcuts` to say the chord for it.
   const end =
-    row.command === undefined && row.endMark === undefined ? undefined : (
+    row.command === undefined &&
+    row.endMark === undefined &&
+    row.taskKey === undefined ? undefined : (
       <>
+        {row.taskKey === undefined ? null : (
+          <TaskKey
+            workspaceName={row.taskKey.workspaceName}
+            number={row.taskKey.number}
+            tokens={tokens}
+          />
+        )}
         {row.command === undefined ? null : (
           <Shortcut chord={APP_SHORTCUTS[row.command].chord} spoken />
         )}
@@ -1555,14 +1566,6 @@ function paletteItem(
     );
   return {
     id,
-    lead:
-      row.taskKey === undefined ? undefined : (
-        <TaskKey
-          workspaceName={row.taskKey.workspaceName}
-          number={row.taskKey.number}
-          tokens={tokens}
-        />
-      ),
     label: <Highlighted text={row.label} ranges={hit?.label ?? []} />,
     icon: row.icon,
     detail: words,
@@ -1626,7 +1629,7 @@ function PaletteFilters({
 
 /** The keys' hints along the foot, each its chords and then its word, which a reader is not read: Return runs a command chosen, and opens anything else. */
 function PaletteFooter({ typed, runs }: { typed: boolean; runs: boolean }): React.JSX.Element {
-  const hints = [
+  const hints: FooterHint[] = [
     ...listHints(runs ? RETURN_WORD.RUN : RETURN_WORD.OPEN),
     typed ? FILTER_HINT.TYPED : FILTER_HINT.EMPTY,
   ];
@@ -1634,8 +1637,12 @@ function PaletteFooter({ typed, runs }: { typed: boolean; runs: boolean }): Reac
     <>
       {hints.map((hint) => (
         <span key={hint.label} aria-hidden="true">
-          {hint.chords.map((chord) => (
-            <Shortcut key={chord.key.accelerator} chord={chord} />
+          {hint.chords.map((chord, index) => (
+            <Fragment key={chord.key.accelerator}>
+              {/* Note that bare keys read as one glyph pair, ←→, while chords with a modifier, ⌘[ / ⌘] or Ctrl [ / Ctrl ], need a slash between them, or they run into each other. */}
+              {index > 0 && chord.bare !== true ? " / " : null}
+              <Shortcut chord={chord} />
+            </Fragment>
           ))}{" "}
           {hint.label}
         </span>

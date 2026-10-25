@@ -12,7 +12,5 @@
   "packages/ui/src/components/swatch/swatch.css": 1,
   "packages/ui/src/components/tabs/tabs.tsx": 1,
   "packages/ui/src/components/text-button/text-button.tsx": 1,
-  "packages/ui/src/components/text-link/text-link.css": 1,
-  "packages/ui/src/components/thinking-dots/thinking-dots.css": 1,
   "packages/ui/src/shadcn/checkbox.tsx": 1
 }

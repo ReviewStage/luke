@@ -6198,6 +6198,11 @@ svg.lucide {
   padding: var(--luke-space-2) var(--luke-item-gap) var(--luke-item-gap);
 }
 
+/* The files over a reply's words (`ComposerBody`) stand at its foot's inset. */
+.comment-field .luke-composer-files {
+  padding: var(--luke-item-gap) var(--luke-item-gap) 0;
+}
+
 .comment-field-foot {
   display: flex;
   min-height: 26px; /* off-scale: as its tools */
@@ -6214,7 +6219,7 @@ svg.lucide {
   margin-top: 0;
 }
 
-.comment-field[data-variant="first"] .luke-composer-foot {
+.comment-field[data-variant="first"] :is(.luke-composer-files, .luke-composer-foot) {
   padding-right: 0;
   padding-left: 0;
 }
