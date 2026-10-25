@@ -43,6 +43,26 @@ import { rovingItem } from "../roving-keys/roving-keys.js";
  * class or style; its outer spacing is its column's.
  */
 
+/**
+ * The row's box: a control tall (a face's height for who or where), its
+ * glyph, name, and end a glyph's gap apart, its words in the body's size on
+ * a label's line, pressed as a Mac's list is on the desktop, without the
+ * web's pointing hand. Note that its inks, at rest, hovered, open, and
+ * unread, stay in `nav-item.css`, which a strip's chosen tab is held to
+ * (`tabs-frame.test.ts`), and so does what stands at its end, whose count
+ * and chord trade places under the pointer and the keyboard.
+ */
+const ROW =
+  "luke-nav-item group/nav m-0 flex h-control w-full min-w-0 cursor-pointer items-center gap-icon-gap rounded-control border-0 px-row-inset text-left font-sans text-body-size leading-label font-text no-underline transition-[background-color,color] duration-(--luke-duration-hover) ease-plain in-data-[luke-profile=desktop]:cursor-default disabled:cursor-default disabled:opacity-disabled data-[variant=identity]:h-auto data-[variant=identity]:min-h-nav-identity data-[variant=identity]:py-luke-6";
+
+/** A name cut short fades out over its last few pixels, as a browser's tab ends a long title; unread, or naming who or where, it reads in the heavier weight. */
+const NAME =
+  "luke-nav-item-name min-w-0 flex-initial overflow-hidden whitespace-nowrap group-data-[unread=true]/nav:font-emphasis group-data-[variant=identity]/nav:font-emphasis";
+
+/** A menu's chevron at the end is the small, muted one a chip's is. */
+const MARK =
+  "luke-nav-item-mark inline-flex [&>svg.settings-chevron]:size-luke-12 [&>svg.settings-chevron]:text-muted-foreground";
+
 /** What a nav item is: a place, or who or where. A fold's head is `GroupHeader`. */
 export const NAV_ITEM_VARIANT = {
   ROW: "row",
@@ -140,8 +160,11 @@ function said(node: ReactNode): boolean {
 /** The glyph's cell. */
 function Glyph({ icon }: { icon: ReactNode }): React.JSX.Element {
   return (
-    <span className="luke-nav-item-glyph" aria-hidden="true">
-      <span className="luke-nav-item-icon">{icon}</span>
+    <span
+      className="luke-nav-item-glyph grid min-h-control-icon min-w-control-icon flex-none place-items-center [&>*]:grid [&>*]:place-items-center"
+      aria-hidden="true"
+    >
+      <span className="luke-nav-item-icon [&>svg]:size-control-icon">{icon}</span>
     </span>
   );
 }
@@ -149,7 +172,7 @@ function Glyph({ icon }: { icon: ReactNode }): React.JSX.Element {
 /** Its name on one line, fading out at its end while the row cuts it short, as a browser's tab does. */
 function Name({ children }: { children: ReactNode }): React.JSX.Element {
   return (
-    <ClippedLine className="luke-nav-item-name" as={ONE_LINE_ELEMENT.SPAN} end={ONE_LINE_END.FADE}>
+    <ClippedLine className={NAME} as={ONE_LINE_ELEMENT.SPAN} end={ONE_LINE_END.FADE}>
       {children}
     </ClippedLine>
   );
@@ -160,8 +183,8 @@ function AtRest({ mark, count }: { mark: ReactNode; count: NavCount | undefined 
   const counted = count !== undefined && count.value > 0;
   if (!said(mark) && !counted) return null;
   return (
-    <span className="luke-nav-item-rest">
-      {said(mark) ? <span className="luke-nav-item-mark">{mark}</span> : null}
+    <span className="luke-nav-item-rest ml-auto">
+      {said(mark) ? <span className={MARK}>{mark}</span> : null}
       {counted ? (
         <span
           className="luke-nav-item-count"
@@ -207,7 +230,7 @@ export function NavItemLink({
 }): React.JSX.Element {
   return (
     <a
-      className="luke-nav-item"
+      className={ROW}
       data-variant={NAV_ITEM_VARIANT.ROW}
       href={href}
       target={newTab === true ? "_blank" : undefined}
@@ -243,7 +266,7 @@ export function NavItem({
   return (
     <button
       type="button"
-      className="luke-nav-item"
+      className={ROW}
       data-variant={variant}
       data-unread={unread === true ? "true" : undefined}
       id={props.id}
@@ -270,7 +293,7 @@ export function NavItem({
       <Name>{children}</Name>
       {said(detail) ? <span className="luke-nav-item-detail">{detail}</span> : null}
       <AtRest mark={mark} count={count} />
-      {said(shortcut) ? <span className="luke-nav-item-shortcut">{shortcut}</span> : null}
+      {said(shortcut) ? <span className="luke-nav-item-shortcut ml-auto">{shortcut}</span> : null}
     </button>
   );
 }
