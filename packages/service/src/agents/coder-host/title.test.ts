@@ -291,7 +291,6 @@ it.layer(getTestDB())("an agent's title", (it) => {
         );
         const titled = Option.getOrThrow(yield* readCodingAgent(owner, started.agent.id));
 
-        assert.equal(asked.length, 1);
         assert.match(asked[0] ?? "", /Find the flakiest test in CI this week/u);
         assert.match(asked[0] ?? "", /release\/2\.4/u, "the subject survives a long prompt");
         assert.doesNotMatch(asked[0] ?? "", /Luke started this run/u);

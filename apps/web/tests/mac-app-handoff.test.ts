@@ -54,21 +54,12 @@ it.effect("an account that chose the Mac app hands a plan's link to the app, on 
   }),
 );
 
-it.effect("an account that chose the browser stays on the web", () =>
+it.effect.each([
+  { account: "chose the browser", service: choosing(LINK_OPEN.BROWSER) },
+  { account: "never chose", service: fakeService({ signedIn: true }) },
+])("an account that $account stays on the web", ({ service }) =>
   Effect.gen(function* () {
-    assert.deepEqual(
-      yield* loaded(choosing(LINK_OPEN.BROWSER), TASK_ADDRESS, LINK_PLATFORM.MAC),
-      [],
-    );
-  }),
-);
-
-it.effect("an account that never chose stays on the web", () =>
-  Effect.gen(function* () {
-    assert.deepEqual(
-      yield* loaded(fakeService({ signedIn: true }), TASK_ADDRESS, LINK_PLATFORM.MAC),
-      [],
-    );
+    assert.deepEqual(yield* loaded(service, TASK_ADDRESS, LINK_PLATFORM.MAC), []);
   }),
 );
 

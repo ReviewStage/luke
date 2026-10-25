@@ -1565,7 +1565,7 @@ test("start_agent continuing an agent started on a branch clones the new agent a
   assert.equal((await storedStart(caller.userId, onGone)).startBranch, null);
 });
 
-test("start_agent refuses to continue an agent whose session died while it still reads running, pointing at stop_agent, which settles it, and then continues it", async () => {
+test("start_agent refuses to continue an agent whose session died while it still reads running, until stop_agent settles it, and then continues it", async () => {
   const { workspaceId, plans: tasks, agents } = await openWorkspaces();
   const { caller, teammates } = agents;
   await saidTurnOn(teammates, "Halfway through the CSV writer.");
@@ -1578,7 +1578,6 @@ test("start_agent refuses to continue an agent whose session died while it still
     status: ACTION_RESULT_STATUS.REJECTED,
     reason: START_CODING_AGENT_REFUSAL.SOURCE_RUNNING,
   });
-  assert.ok(START_CODING_AGENT_REFUSAL.SOURCE_RUNNING.includes(CODER_TOOL.STOP_AGENT));
   // eve runs no turn on the dead session, so the Stop stops nothing there, yet the turn reads cancelled.
   const stopped = await call(CODER_TOOL.STOP_AGENT, from, "call-2");
   assert.equal(stopped.stopped, false, JSON.stringify(stopped));

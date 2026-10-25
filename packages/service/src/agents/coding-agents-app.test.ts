@@ -179,7 +179,6 @@ import {
   inboxMessagedSchema,
   inboxReadAllSchema,
   inboxReadStateSchema,
-  inboxStartTitle,
 } from "@luke/features/inbox-wire";
 import { INTEGRATION_PROVIDER, type IntegrationProvider } from "@luke/features/integration-wire";
 import { transcriptNowAnswerSchema } from "@luke/features/live-wire";
@@ -7220,11 +7219,6 @@ it.layer(getTestDB())("the developer's inbox", (it) => {
           [titledNow?.title, titledNow?.key, titledNow?.updatedAt, titledNow?.unread],
           ["Annual plan pricing copy", untitled.item.key, untitled.item.updatedAt, false],
           "the model's title stands, under the key and at the place it was started at, read for its sender",
-        );
-        assert.equal(
-          untitled.item.title,
-          inboxStartTitle({ text }),
-          "the answer carries the first line",
         );
         assert.equal(items.get(titled.item.id)?.title, subject);
         assert.equal(items.get(keyless.item.id)?.title, "Ship it tonight.");

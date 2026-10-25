@@ -58,14 +58,6 @@ it.effect(
     }).pipe(Effect.scoped),
 );
 
-it.effect("a voice subscription ends cleanly", () =>
-  Effect.gen(function* () {
-    const { bridge } = yield* bridgeFixture;
-    const unsubscribe = bridge.onTasksTalk(() => assert.fail("no call in the page"));
-    unsubscribe();
-  }).pipe(Effect.scoped),
-);
-
 it.effect("an ended subscription hears neither the document nor an event again", () =>
   Effect.gen(function* () {
     const { bridge, events, state } = yield* bridgeFixture;

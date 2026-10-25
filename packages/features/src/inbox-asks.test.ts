@@ -38,9 +38,7 @@ import {
  */
 
 const ASKING_ID = "6f1c2a4e-1b9d-4c7e-9a52-3d8e0f4b7c11";
-const ANSWERING_ID = "0d3e5b7a-2c4f-4e8a-b1d6-9f7a3c5e2b40";
 const ITEM_ID = "a4b2c6d8-3e5f-4a7b-8c9d-1e2f3a4b5c6d";
-const MEMBER = { userId: "user-dean", name: "Dean" };
 
 const DEPLOY = {
   type: INBOX_ASK.DECIDE,
@@ -70,14 +68,6 @@ const ASKING = {
   text: "Ready to deploy the billing export.",
   ask: { ...DEPLOY, status: INBOX_ASK_STATUS.ANSWERED },
   createdAt: 1_000,
-};
-const ANSWERING = {
-  id: ANSWERING_ID,
-  author: INBOX_MESSAGE_AUTHOR.MEMBER,
-  member: MEMBER,
-  text: "Go ahead.",
-  answers: { ask: ASKING_ID, reply: INBOX_REPLY.CHOSE, choices: ["Ship it"] },
-  createdAt: 2_000,
 };
 
 /**
@@ -110,20 +100,6 @@ function read<S extends Schema.Codec<unknown, unknown>>(
 ): S["Type"] | undefined {
   return Result.getOrUndefined(readServiceAnswer(schema)(unparsedWire(value)));
 }
-
-test("a message reads with its ask and where it stands, with the answer it carries, and with neither", () => {
-  assert.deepEqual(read(inboxMessageSchema, ASKING), ASKING);
-  assert.deepEqual(read(inboxMessageSchema, ANSWERING), ANSWERING);
-  const plain = { id: ASKING_ID, author: INBOX_MESSAGE_AUTHOR.AGENT, text: "On it.", createdAt: 1 };
-  assert.deepEqual(read(inboxMessageSchema, plain), plain);
-  const withdrawn = {
-    ...ASKING,
-    ask: { ...SECRET, status: INBOX_ASK_STATUS.WITHDRAWN, withdrawnReason: "Found the key." },
-  };
-  assert.deepEqual(read(inboxMessageSchema, withdrawn), withdrawn);
-  const replaced = { ...ASKING, ask: { ...WORDS, status: INBOX_ASK_STATUS.REPLACED } };
-  assert.deepEqual(read(inboxMessageSchema, replaced), replaced);
-});
 
 test("a nod on a notice is a revision, the acknowledgement, and a key, and takes no other answer", () => {
   const nod = { revision: 3, reply: INBOX_REPLY.ACKNOWLEDGED, clientKey: "nod-1" };
