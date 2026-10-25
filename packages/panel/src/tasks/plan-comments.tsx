@@ -41,6 +41,7 @@ import {
   Comment,
   type CommentAuthor,
   CommentsIcon,
+  ComposerBody,
   ComposerFoot,
   ComposerFrame,
   ConfirmDialog,
@@ -975,29 +976,32 @@ function ReplyField({
           <ConfirmDialog open confirm={discard} question={DISCARD_QUESTION} />
         </div>
       )}
-      <CommentText
-        value={words}
-        label={label}
-        onChange={setWords}
-        onSubmit={send}
-        onCancel={onCancel}
-        autoFocus={autoFocus}
-        editor={editor}
-        dictation={dictation}
-        onPasteFiles={files.paste}
-        onPasteCut={() => {
-          // Note that a paste cut says so over a dictation's note, which was said of what came before it.
-          setHeard(undefined);
-          setCut(true);
-        }}
-      />
-      <ComposerFoot
+      <ComposerBody
         files={
           <AttachedFileChips
             files={attachmentChips(files.attachments)}
             onRemove={sending ? undefined : files.remove}
           />
         }
+      >
+        <CommentText
+          value={words}
+          label={label}
+          onChange={setWords}
+          onSubmit={send}
+          onCancel={onCancel}
+          autoFocus={autoFocus}
+          editor={editor}
+          dictation={dictation}
+          onPasteFiles={files.paste}
+          onPasteCut={() => {
+            // Note that a paste cut says so over a dictation's note, which was said of what came before it.
+            setHeard(undefined);
+            setCut(true);
+          }}
+        />
+      </ComposerBody>
+      <ComposerFoot
         tools={<AttachFilesButton disabled={sending} onFiles={files.attach} />}
         counter={
           dictates
