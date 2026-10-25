@@ -29,7 +29,7 @@ import {
   type ChatMessageToast,
   createAgentNotices,
   type FailedRunToast,
-  type InboxItemToast,
+  type InboxItemsToast,
 } from "./agent-notices.js";
 import type { AppInboxSlice, AppInboxTask, AppInboxTaskHolding } from "./app-state.js";
 
@@ -80,7 +80,7 @@ function fixture() {
   const published = new Map<string, CodingAgentPullRequestAnswerView>();
   const posted: AgentNotice[] = [];
   const toasted: AgentEndToast[] = [];
-  const inboxToasted: InboxItemToast[] = [];
+  const inboxToasted: InboxItemsToast[] = [];
   const runsToasted: FailedRunToast[] = [];
   const chatToasted: ChatMessageToast[] = [];
   const chatOpened: string[] = [];
@@ -94,7 +94,7 @@ function fixture() {
       posted.push(notice);
     },
     toast: (end) => toasted.push(end),
-    toastInbox: (item) => inboxToasted.push(item),
+    toastInbox: (opened) => inboxToasted.push(opened),
     toastFailedRun: (run) => runsToasted.push(run),
     toastChat: (message) => chatToasted.push(message),
     badge: (count) => badges.push(count),
@@ -423,6 +423,60 @@ it.effect(
       assert.deepEqual(f.waiting.at(-1), []);
       assert.equal(f.badges.at(-1), 0);
       assert.equal(f.inboxFollows(), 2);
+    }),
+);
+it.effect(
+  "items one read finds opened while the window is focused are handed over in one toast, and those on the Inbox on screen are left out of it",
+  () =>
+    Effect.gen(function* () {
+      const f = fixture();
+      const notices = yield* f.notices;
+      f.focus(true);
+      f.answerInbox({ items: [], cursor: "1", readAt: READ_AT });
+      yield* settled;
+
+      f.answerInbox({
+        items: [
+          waitingItem(ITEM_A, { updatedAt: READ_AT + 1 }),
+          waitingItem(ITEM_B, { title: "Rotate the staging key?", updatedAt: READ_AT + 1 }),
+        ],
+        cursor: "2",
+        readAt: READ_AT + 2,
+      });
+      yield* settled;
+      assert.deepEqual(f.inboxToasted, [
+        {
+          items: [
+            {
+              taskId: TASK_ID,
+              itemId: ITEM_A,
+              words: "Fix invitations: Push to the release branch?",
+              detail: TASK_NAME,
+            },
+            {
+              taskId: TASK_ID,
+              itemId: ITEM_B,
+              words: "Fix invitations: Rotate the staging key?",
+              detail: TASK_NAME,
+            },
+          ],
+        },
+      ]);
+
+      // The task's Inbox on screen says what lands in it itself, so main hands the window nothing.
+      notices.shownInbox(TASK_ID);
+      f.answerInbox({
+        items: [
+          waitingItem(ITEM_A, { updatedAt: READ_AT + 1 }),
+          waitingItem(ITEM_B, { updatedAt: READ_AT + 1 }),
+          waitingItem(ITEM_C, { updatedAt: READ_AT + 3 }),
+        ],
+        cursor: "3",
+        readAt: READ_AT + 4,
+      });
+      yield* settled;
+      assert.equal(f.inboxToasted.length, 1);
+      assert.deepEqual(f.posted, []);
     }),
 );
 it.effect(
@@ -1089,7 +1143,7 @@ it.effect(
       assert.deepEqual(f.said(), [
         {
           title: "Flaky test sweep",
-          body: "A run couldn't start. Luke can no longer reach its repository on GitHub.",
+          body: "A run could not start. Luke can no longer reach its repository on GitHub.",
         },
       ]);
       f.posted[0]?.onClick();
@@ -1121,7 +1175,7 @@ it.effect(
       assert.deepEqual(f.runsToasted, [
         {
           place: { automationId: AUTOMATION_ID, runId: RUN_ID, workspaceId: "workspace-acme" },
-          words: "A run couldn't start. Luke can no longer reach its repository on GitHub.",
+          words: "A run could not start. Luke can no longer reach its repository on GitHub.",
           detail: "Flaky test sweep",
         },
       ]);

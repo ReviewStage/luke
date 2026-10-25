@@ -6,7 +6,10 @@ import {
   type Density,
   PROFILE,
   type Profile,
+  TEXT_ELEMENT,
   TEXT_FIELD_TYPE,
+  TEXT_VARIANT,
+  Text,
   TextField,
   THEME,
   type Theme,
@@ -156,7 +159,9 @@ function ExampleFrame({
 }): React.JSX.Element {
   return (
     <main className="catalog-example">
-      <h1 className="catalog-example-title">{example.title}</h1>
+      <Text as={TEXT_ELEMENT.H1} variant={TEXT_VARIANT.TITLE} className="catalog-example-title">
+        {example.title}
+      </Text>
       {width === undefined ? (
         <example.Render />
       ) : (

@@ -8,8 +8,15 @@ import type {
   Ref,
 } from "react";
 import { useCallback, useRef } from "react";
+import { cn } from "../../cn.js";
 import { ChevronDownIcon } from "../../face/glyphs.js";
-import { BUTTON_VARIANT, Button, type ButtonVariant, IconButton } from "../button/button.js";
+import {
+  BUTTON_VARIANT,
+  type BusyProps,
+  Button,
+  type ButtonVariant,
+  IconButton,
+} from "../button/button.js";
 import { Tooltip } from "../tooltip/hint.js";
 
 /**
@@ -22,8 +29,9 @@ import { Tooltip } from "../tooltip/hint.js";
  * look draws around and between them, and each keeps its own hover.
  *
  * Unavailable, both halves say so and refuse their press, kept in the tab
- * order so a hint over the main part can say why. Busy, the main part
- * stands under its ring as a busy Button does while the chevron still
+ * order so a hint over the main part can say why. Busy (`busy` and the
+ * `busyLabel` it is named by, a Button's own two), the main part refuses its
+ * press and stands under its ring as a busy Button does while the chevron still
  * opens the options, and one whose press `succeeded` lands on a check as a
  * busy Button's does. A toolbar short of room folds the main part's words
  * away with `--luke-fold: folded`, as it folds a FoldingButton's, leaving
@@ -69,6 +77,41 @@ export interface SplitButtonMenu {
   ref?: Ref<HTMLButtonElement> | undefined;
 }
 
+/**
+ * The halves joined into one control, drawn from the box: no edge or corner
+ * between them, and the main part's fold, under a `--luke-fold` of `folded`
+ * a square around its glyph, its words drawn nowhere though a reader still
+ * has them, and of `bare` that square alone at the control's own corner,
+ * the chevron not drawn. Note that each is a child selector of the box's,
+ * which outweighs the halves' own utilities, so neither takes a class. The
+ * edge's ink is `split-button.css`'s, set as a button's inks are.
+ */
+const SPLIT_BOX = cn(
+  "luke-split-button inline-flex flex-none items-center min-w-0 max-w-full",
+  "[&>.luke-button:first-child]:border-e-0 [&>.luke-button:first-child]:rounded-e-none",
+  "[&>.luke-button:last-child]:rounded-s-none",
+  "fold-folded:[&>.luke-button:first-child]:w-control",
+  "fold-folded:[&>.luke-button:first-child]:p-0",
+  "fold-folded:[&>.luke-button:first-child_.luke-button-words]:sr-only",
+  "fold-bare:[&>.luke-button:first-child]:w-control",
+  "fold-bare:[&>.luke-button:first-child]:p-0",
+  "fold-bare:[&>.luke-button:first-child_.luke-button-words]:sr-only",
+  "fold-bare:[&>.luke-button:first-child]:border-e",
+  "fold-bare:[&>.luke-button:first-child]:rounded-control",
+  "fold-bare:[&>.luke-button:last-child]:hidden",
+);
+
+/** A filled look's halves, parted by a rule in its own ink. */
+const SPLIT_FILLED_RULE =
+  "[&>.luke-button:last-child]:border-s-[color-mix(in_srgb,var(--luke-button-ink)_30%,transparent)]";
+
+/** The looks drawn on a fill, whose halves a rule in their ink parts rather than a hairline. */
+const FILLED: ReadonlySet<ButtonVariant> = new Set([
+  BUTTON_VARIANT.PRIMARY,
+  BUTTON_VARIANT.DANGER,
+  BUTTON_VARIANT.INK,
+]);
+
 /** An act and, joined to it, the chevron that drops its options. */
 export function SplitButton({
   variant = BUTTON_VARIANT.QUIET,
@@ -78,12 +121,13 @@ export function SplitButton({
   onClick,
   disabled,
   busy,
+  busyLabel,
   succeeded,
   hint: Hint = Tooltip,
   hintLabel,
   menu,
   onMainPress,
-}: {
+}: BusyProps & {
   variant?: ButtonVariant | undefined;
   /** The glyph before the main part's words, which stands alone where they are folded. */
   icon?: ReactNode;
@@ -94,8 +138,6 @@ export function SplitButton({
   onClick?: ((event: MouseEvent<HTMLButtonElement>) => void) | undefined;
   /** Whether both halves are unavailable: they refuse their press, and stay reachable so a hint can say why. */
   disabled?: boolean | undefined;
-  /** While the main part's press is out, what it is doing ("Starting"): a ring stands over it under that name. */
-  busy?: string | undefined;
   /** Whether the main part's press landed, read as its ring leaves: a check stands a moment before its words come back (Button's `succeeded`). */
   succeeded?: boolean | undefined;
   /** The hint over the main part: the window's tooltip, unless the caller hangs one of its own. */
@@ -119,7 +161,7 @@ export function SplitButton({
     [triggerRef],
   );
   // Note that the main part is told how its press landed while it is not busy too, since the ring's leaving is what it reads it at.
-  const busyProps = { busy: busy !== undefined, busyLabel: busy ?? "", succeeded };
+  const busyProps = { busy: busy === true, busyLabel: busyLabel ?? "", succeeded };
   const main = (
     <Button
       variant={variant}
@@ -135,7 +177,7 @@ export function SplitButton({
   );
   return (
     <span
-      className="luke-split-button"
+      className={cn(SPLIT_BOX, FILLED.has(variant) && SPLIT_FILLED_RULE)}
       data-variant={variant}
       onClickCapture={
         onMainPress === undefined

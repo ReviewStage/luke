@@ -28,7 +28,7 @@ export type PaneFloat = (typeof PANE_FLOAT)[keyof typeof PANE_FLOAT];
 const alwaysFloats = () => true;
 
 /** The layers that answer their own Escape before a floating pane is put away. */
-const KEY_LAYERS = '[role="menu"], [role="dialog"], [role="alertdialog"]';
+export const KEY_LAYERS = '[role="menu"], [role="dialog"], [role="alertdialog"]';
 
 /** A pane's float as its owner holds it. */
 export interface FloatState {
@@ -48,16 +48,6 @@ export interface HoverPane {
   /** Opens the pane from its toggle, from away or from a peek, which takes the keyboard into it. */
   readonly open: () => void;
   readonly onPointerLeave: (event: { readonly relatedTarget: EventTarget | null }) => void;
-  readonly onKeyDown: (event: React.KeyboardEvent<HTMLElement>) => void;
-}
-
-/** What a floating pane's own box answers, for a box drawn by a component that takes them whole. */
-export interface FloatingBox {
-  /** Whether the pane floats over the work now, peeked or open. */
-  readonly floating: boolean;
-  /** A press anywhere in the pane, which is no press outside it (`useFloatDismiss`). */
-  readonly onPressWithin: () => void;
-  readonly onPointerLeave: (event: React.PointerEvent<HTMLElement>) => void;
   readonly onKeyDown: (event: React.KeyboardEvent<HTMLElement>) => void;
 }
 

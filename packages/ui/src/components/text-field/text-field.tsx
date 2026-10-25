@@ -121,10 +121,10 @@ const TEXT_FIELD_SIZE_CLASS = {
   [TEXT_FIELD_SIZE.CONTROL]: undefined,
   /** A page's title written in place: the title's words alone, the caret in them showing focus. */
   [TEXT_FIELD_SIZE.TITLE]:
-    "h-auto p-0 border-0 bg-transparent focus:bg-transparent text-title font-bold outline-none",
+    "h-auto p-0 border-0 bg-transparent focus:bg-transparent text-title font-title tracking-title outline-none",
   /** A step under a control, on the well's ground, its edge lighting while it holds the caret; 16px words under a finger. */
   [TEXT_FIELD_SIZE.COMPACT]:
-    "h-control-compact rounded-control-compact border-border bg-well px-luke-6 text-caption leading-body text-ellipsis focus:border-subtle-foreground focus:bg-well focus:outline-none pointer-coarse:text-caption-touch",
+    "h-control-compact rounded-control-compact border-border bg-well px-luke-6 text-caption leading-body text-ellipsis focus:border-muted-foreground focus:bg-well focus:outline-none pointer-coarse:text-caption-touch",
   /** Words written in place in the body's type: no well, no edge, and no ring. */
   [TEXT_FIELD_SIZE.INLINE]: "h-auto p-0 border-0 bg-transparent focus:bg-transparent outline-none",
 } as const satisfies Record<TextFieldSize, string | undefined>;
@@ -244,8 +244,8 @@ function noop(): void {}
 /**
  * Marks an Escape taken where `onEscape` is given, and answers it unless an
  * input method is composing. Note that the press still reaches the window,
- * because the app's own Escape, stopping a live call, comes before any
- * field's; the page's Escape passes a taken press by. A composing press is
+ * marked as taken, because the app's own Escape passes a taken press by
+ * and so leaves a live call and every page alone. A composing press is
  * the input method's already when the page hears it, so marking it takes
  * nothing from the input method.
  */

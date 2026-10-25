@@ -7,35 +7,51 @@ import {
   JUSTIFY,
   POPOVER_ALIGN,
   type PopoverAlign,
+  PopoverPanel,
   ScrollArea,
   TEXT_TONE,
   Text,
 } from "@luke/ui";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
 
 /**
  * anchored-popover.tsx -- a popover hung from its button by either edge, and
  * one inside a short room that scrolls, which turns below its button as the
- * room scrolls it toward the top.
+ * room scrolls it toward the top. Each holds a panel, which fades out in
+ * its place as the popover closes, and leaves the layer where it stood.
  */
 
 /** A button and the popover it opens, hung from the edge `align` names. */
 function Hung({ align, label }: { align: PopoverAlign; label: string }): React.JSX.Element {
   const [open, setOpen] = useState(false);
+  const root = useRef<HTMLDivElement>(null);
   return (
-    <div className="catalog-anchor">
-      <Button variant={BUTTON_VARIANT.OUTLINE} aria-expanded={open} onClick={() => setOpen(!open)}>
+    <div className="catalog-anchor" ref={root}>
+      <Button
+        variant={BUTTON_VARIANT.OUTLINE}
+        aria-haspopup="dialog"
+        aria-expanded={open}
+        onClick={() => setOpen(!open)}
+      >
         {label}
       </Button>
-      {open && (
-        <AnchoredPopover align={align}>
+      <AnchoredPopover open={open} align={align}>
+        <PopoverPanel
+          open={open}
+          title={label}
+          closeLabel="Close"
+          onDismiss={() => setOpen(false)}
+          onLeave={(left) => {
+            if (!(left instanceof Node && root.current?.contains(left))) setOpen(false);
+          }}
+        >
           <div className="catalog-popover">
             <Text tone={TEXT_TONE.MUTED}>Hung from the button's {align} edge.</Text>
           </div>
-        </AnchoredPopover>
-      )}
+        </PopoverPanel>
+      </AnchoredPopover>
     </div>
   );
 }

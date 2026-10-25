@@ -1,8 +1,20 @@
 import assert from "node:assert/strict";
+import { TRANSCRIPT_SPEAKER } from "@luke/live";
 import { HOST_CAPABILITY } from "@luke/settings";
+import { appSettingsWire, settingsView } from "@luke/settings/testing";
 import type { WireValue } from "@luke/wire";
+import { RPCSerializer } from "@orpc/client";
 import { describe, test } from "vitest";
-import { isAppStateSnapshot } from "./app-state.js";
+import {
+  type AppStateDelivery,
+  type AppStateSnapshot,
+  appStateDelivery,
+  isAppStateSnapshot,
+  withAppStateDelivery,
+} from "./app-state.js";
+import { initialAppState } from "./client/app-state-store.js";
+import { PUSH, PUSH_GUARD } from "./contract/index.js";
+import { runModeFor } from "./run-mode.js";
 
 /**
  * The boundary parse a window's bridge holds every delivered snapshot to: a
@@ -56,5 +68,61 @@ describe("a delivered snapshot's version and window facts", () => {
     assert.equal(isAppStateSnapshot({ ...delivered([]), window: {} }), false);
     assert.equal(isAppStateSnapshot({ ...delivered([]), window: { fullScreen: "yes" } }), false);
     assert.equal(isAppStateSnapshot("a snapshot"), false);
+  });
+});
+
+/**
+ * A delivery as a window's push stream carries it: encoded by oRPC's RPC
+ * serializer as the act port encodes every push, sent as text, decoded, and
+ * read by the guard the window holds a push to.
+ */
+function acrossTheWire(delivery: AppStateDelivery | undefined): AppStateDelivery {
+  if (delivery === undefined) throw new Error("nothing was delivered");
+  const serializer = new RPCSerializer();
+  const decoded: unknown = serializer.deserialize(
+    JSON.parse(JSON.stringify(serializer.serialize(delivery))),
+  );
+  if (!PUSH_GUARD[PUSH.APP_STATE](decoded)) throw new Error("the window refused the delivery");
+  // SAFETY: the window's own guard for the push admitted it above.
+  return decoded as AppStateDelivery;
+}
+
+describe("a delivery that crosses the wire", () => {
+  const document: AppStateSnapshot = {
+    ...initialAppState(
+      {
+        launch: { profile: "idle", captureMode: false, fixtureMode: false },
+        runMode: runModeFor({ capture: false, fixture: false }),
+        appVersion: "1.2.3",
+        packaged: true,
+        platform: "darwin",
+      },
+      true,
+      [],
+    ),
+    version: 1,
+    window: { fullScreen: false },
+  };
+
+  test("still says a slice went, which a key holding undefined would not", () => {
+    const held: AppStateSnapshot = { ...document, settings: appSettingsWire(settingsView()) };
+    const { settings: _settings, ...signedOut } = held;
+    const delivered = acrossTheWire(appStateDelivery(held, { ...signedOut, version: 2 }));
+    assert.equal("settings" in withAppStateDelivery(held, delivered), false);
+  });
+
+  test("still ends a call whose session was never named", () => {
+    const held: AppStateSnapshot = {
+      ...document,
+      callTranscript: {
+        voiceSessionId: undefined,
+        lines: [
+          { rowId: "row-1", speaker: TRANSCRIPT_SPEAKER.USER, words: "Hi", startMs: 0, endMs: 1 },
+        ],
+      },
+    };
+    const { callTranscript: _ended, ...ended } = held;
+    const delivered = acrossTheWire(appStateDelivery(held, { ...ended, version: 2 }));
+    assert.equal(withAppStateDelivery(held, delivered).callTranscript, undefined);
   });
 });

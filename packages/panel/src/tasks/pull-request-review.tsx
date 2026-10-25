@@ -3,12 +3,14 @@ import {
   REVIEW_EVENT,
   type ReviewEvent,
 } from "@luke/features/pull-request-write-wire";
+import { IRREVERSIBLE_WORDS } from "@luke/features/words";
 import {
   AnchoredPopover,
   BUTTON_VARIANT,
   Button,
   ChoiceList,
   type ChoiceOption,
+  CONFIRM_LOSS,
   ConfirmDialog,
   CornerCount,
   type DialogQuestion,
@@ -18,11 +20,12 @@ import {
   useConfirmDialog,
 } from "@luke/ui";
 import { CONFIRM_STAGE } from "@luke/ui/confirm-state";
+import { GLYPH, MessageSquarePlusIcon } from "@luke/ui/icons";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
-import { MessageSquarePlusIcon, Trash2Icon } from "lucide-react";
-import { type ReactNode, useEffect, useId, useRef, useState } from "react";
+import { type ReactNode, useId, useRef, useState } from "react";
+import { modEnterSends } from "../enter-sends.js";
+import { CommentEditor, overCommentBound } from "./comment-editor.js";
 import type { PendingReview } from "./line-comment.js";
-import { MarkdownField } from "./markdown-field.js";
 import { PullRequestWriteNote, type PullRequestWrites } from "./pull-request-writes.js";
 
 /**
@@ -30,7 +33,7 @@ import { PullRequestWriteNote, type PullRequestWrites } from "./pull-request-wri
  *
  * The panel asks what the review says of the pull request, Comment,
  * Approve, or Request changes, and its optional words, written as
- * Markdown with a preview (`markdown-field.tsx`), and sends both as one change
+ * Markdown on the plan's editor (`comment-editor.tsx`), and sends both as one change
  * (`PULL_REQUEST_ACTION.SUBMIT_REVIEW`), which the service submits on
  * GitHub as the member pressing it: their own pending review where they
  * hold one, else a new one (`pull-request-writes.ts`). Nothing is refused
@@ -67,9 +70,10 @@ const REVIEW_WORDS = {
 /** What Discard asks before it throws the member's pending review away. */
 const DISCARD_QUESTION: DialogQuestion = {
   title: "Discard your pending review?",
-  body: "This deletes every pending comment you added to it. This can't be undone.",
+  body: `This deletes every pending comment you added to it. ${IRREVERSIBLE_WORDS}`,
   verb: "Discard review",
   running: "Discarding",
+  loss: CONFIRM_LOSS.IRREVERSIBLE,
 };
 
 /** What the review may say, in the order GitHub's own review box offers it, and what the two that need it mean. */
@@ -90,8 +94,8 @@ const EVENT_OPTIONS = [
 /** The field's prompt, by what the review says: changes asked for want their summary. */
 function placeholderOf(event: ReviewEvent): string {
   return event === REVIEW_EVENT.REQUEST_CHANGES
-    ? "Summarize the requested changes…"
-    : "Leave a summary comment (optional)…";
+    ? "Summarize the requested changes"
+    : "Leave a summary comment (optional)";
 }
 
 /**
@@ -122,6 +126,7 @@ interface ReviewDraft {
  * leaving it closes it, its words kept, unless a review is on its way.
  */
 function ReviewPanel({
+  open,
   id,
   draft,
   writes,
@@ -131,6 +136,8 @@ function ReviewPanel({
   onClose,
   onLeave,
 }: {
+  /** Whether it stands; closed, it fades out. */
+  open: boolean;
   id: string;
   draft: ReviewDraft;
   writes: PullRequestWrites;
@@ -142,17 +149,18 @@ function ReviewPanel({
   onClose: () => void;
   onLeave: (left: EventTarget | null) => void;
 }): React.JSX.Element {
-  const field = useRef<HTMLTextAreaElement>(null);
+  const field = useRef<HTMLElement>(null);
   const sending = writes.pending !== undefined;
 
   const onKey = (event: React.KeyboardEvent) => {
-    if (event.key !== "Enter" || !(event.metaKey || event.ctrlKey)) return;
+    if (!modEnterSends(event)) return;
     event.preventDefault();
     if (!sending) draft.submit();
   };
 
   return (
     <PopoverPanel
+      open={open}
       id={id}
       title={REVIEW_WORDS.TITLE}
       closeLabel={REVIEW_WORDS.CLOSE}
@@ -168,13 +176,17 @@ function ReviewPanel({
           : ` ${REVIEW_WORDS.pending(pending.comments)}`}
       </p>
       {pendingList}
-      <MarkdownField
+      <CommentEditor
         label={REVIEW_WORDS.BODY}
         placeholder={placeholderOf(draft.event)}
         value={draft.body}
         onChange={draft.setBody}
         busy={sending}
+        focus
         fieldRef={field}
+        onSubmit={() => {
+          if (!sending) draft.submit();
+        }}
       />
       <ChoiceList<ReviewEvent>
         legend={REVIEW_WORDS.EVENTS}
@@ -190,7 +202,7 @@ function ReviewPanel({
         {pending == null ? null : (
           <Button
             variant={BUTTON_VARIANT.DANGER_OUTLINE}
-            icon={<Trash2Icon aria-hidden="true" />}
+            icon={<GLYPH.DELETE />}
             disabled={sending}
             onClick={onDiscard}
           >
@@ -200,6 +212,7 @@ function ReviewPanel({
         <Button onClick={onClose}>{REVIEW_WORDS.CANCEL}</Button>
         <Button
           variant={BUTTON_VARIANT.PRIMARY}
+          disabled={overCommentBound(draft.body)}
           busy={sending}
           busyLabel={REVIEW_WORDS.SUBMITTING}
           onClick={draft.submit}
@@ -234,9 +247,6 @@ export function PullRequestReview({
   const root = useRef<HTMLDivElement>(null);
   const trigger = useRef<HTMLButtonElement>(null);
 
-  // Note that a press outside closes it too, as a menu's does, because the
-  // field keeps the focus through a press on words nothing can focus, so no
-  // blur says it was left; a review on its way holds it open all the same.
   // Note that the question stands, busy, until GitHub answers the discard, says its refusal in GitHub's words, and holds the panel open meanwhile as a review on its way does.
   const discarding = useConfirmDialog({ subject: pending != null, surfaceOpen: open }, () =>
     writes
@@ -249,15 +259,6 @@ export function PullRequestReview({
       ),
   );
   const sending = writes.pending !== undefined || discarding.stage !== CONFIRM_STAGE.RESTING;
-  useEffect(() => {
-    if (!open || sending) return undefined;
-    const pressed = (event: PointerEvent) => {
-      if (inQuestion(event.target)) return;
-      if (!(event.target instanceof Node && root.current?.contains(event.target))) setOpen(false);
-    };
-    document.addEventListener("pointerdown", pressed, true);
-    return () => document.removeEventListener("pointerdown", pressed, true);
-  }, [open, sending]);
 
   // Note that we hand focus back to the press, as a menu returns it to its
   // trigger, because closing takes the focused field away with it.
@@ -265,12 +266,14 @@ export function PullRequestReview({
     setOpen(false);
     trigger.current?.focus();
   };
-  const submit = () =>
+  const submit = () => {
+    if (overCommentBound(body)) return;
     writes.write({ action: PULL_REQUEST_ACTION.SUBMIT_REVIEW, event, body }, () => {
       setBody("");
       setEvent(REVIEW_EVENT.COMMENT);
       close();
     });
+  };
 
   return (
     <div className="pull-request-review" ref={root}>
@@ -293,28 +296,37 @@ export function PullRequestReview({
         aria-controls={open ? panelId : undefined}
         onClick={() => setOpen(!open)}
       />
-      {open ? (
-        <AnchoredPopover align={POPOVER_ALIGN.END} width={PANEL_WIDTH}>
-          <ReviewPanel
-            id={panelId}
-            draft={{ event, body, setEvent, setBody, submit }}
-            writes={writes}
-            pending={pending}
-            pendingList={pendingList}
-            onDiscard={discarding.ask}
-            onClose={close}
-            onLeave={(left) => {
-              // Note that a review on its way holds the panel open, because the
-              // press it was sent from is disabled as it goes, which drops the
-              // focus the way a click outside would, and GitHub's answer is
-              // drawn in the panel.
-              if (sending || inQuestion(left)) return;
-              if (!(left instanceof Node && root.current?.contains(left))) setOpen(false);
-            }}
-          />
-        </AnchoredPopover>
-      ) : null}
-      <ConfirmDialog confirm={discarding} question={DISCARD_QUESTION} />
+      {/* Note that a press outside closes it too, as a menu's does, because
+          the field keeps the focus through a press on words nothing can
+          focus, so no blur says it was left; a review on its way, or the
+          question it asked, holds it open all the same. */}
+      <AnchoredPopover
+        open={open}
+        align={POPOVER_ALIGN.END}
+        width={PANEL_WIDTH}
+        onPressAway={sending ? undefined : () => setOpen(false)}
+        holds={inQuestion}
+      >
+        <ReviewPanel
+          open={open}
+          id={panelId}
+          draft={{ event, body, setEvent, setBody, submit }}
+          writes={writes}
+          pending={pending}
+          pendingList={pendingList}
+          onDiscard={discarding.ask}
+          onClose={close}
+          onLeave={(left) => {
+            // Note that a review on its way holds the panel open, because the
+            // press it was sent from is disabled as it goes, which drops the
+            // focus the way a click outside would, and GitHub's answer is
+            // drawn in the panel.
+            if (sending || inQuestion(left)) return;
+            if (!(left instanceof Node && root.current?.contains(left))) setOpen(false);
+          }}
+        />
+      </AnchoredPopover>
+      <ConfirmDialog open confirm={discarding} question={DISCARD_QUESTION} />
     </div>
   );
 }

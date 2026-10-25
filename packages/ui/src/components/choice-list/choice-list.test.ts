@@ -4,12 +4,11 @@ import assert from "node:assert/strict";
 import { act, createElement, type ReactElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
-import { BADGE_TONE } from "../badge/badge.js";
+import { STATUS_TONE } from "../../status-tone.js";
 import {
   CHOICE_FLOW,
   CHOICE_LOOK,
   CHOICE_SELECT,
-  CHOICE_TONE,
   ChoiceList,
   type ChoiceLook,
   type ChoiceOption,
@@ -23,7 +22,9 @@ import {
  * arrows moving along it; a marked and numbered list
  * leads each row with its control and wears its key; a read-only list
  * keeps the open look, its pick checked, and takes no press, key, or Tab;
- * and a settled list names what was picked and takes no press.
+ * a settled list names what was picked and takes no press; and Enter
+ * presses a row and a card's own field keeps its caret, where Base UI's
+ * radio and group would not.
  */
 
 declare global {
@@ -167,6 +168,22 @@ test("the arrows choose the next open row, past an unavailable one, wrapping at 
   assert.equal(row(page, "Retry once").disabled, true);
 });
 
+test("Home and End choose the first and the last open row of a pick-one list and take the keyboard there, and only move it along a pick-several one", () => {
+  const one = render(createElement(Held, { start: ["three"] }));
+  const three = row(one, "Retry 3 times");
+  act(() => three.focus());
+  key(three, "End");
+  assert.equal(document.activeElement, row(one, "Never retry"));
+  key(row(one, "Never retry"), "Home");
+  assert.equal(document.activeElement, three);
+  assert.equal(heard(one), "never,three");
+  const many = render(createElement(Held, { select: CHOICE_SELECT.MANY }));
+  act(() => row(many, "Retry 3 times").focus());
+  key(row(many, "Retry 3 times"), "End");
+  assert.equal(document.activeElement, row(many, "Never retry"));
+  assert.equal(heard(many), "");
+});
+
 test("a press chooses a row; a press on the checked row keeps it, unless the list is clearable", () => {
   const kept = render(createElement(Held));
   act(() => row(kept, "Never retry").click());
@@ -186,7 +203,7 @@ test("an open row's badge stands in the attention tone unless the option names i
       legend: "Retries",
       options: [
         { value: "three", label: "Retry 3 times", badge: "Recommended" },
-        { value: "never", label: "Never retry", badge: "Quiet", badgeTone: BADGE_TONE.NEUTRAL },
+        { value: "never", label: "Never retry", badge: "Quiet", badgeTone: STATUS_TONE.NEUTRAL },
       ],
       value: [],
       onChange: () => undefined,
@@ -197,8 +214,8 @@ test("an open row's badge stands in the attention tone unless the option names i
     badge.getAttribute("data-tone"),
   ]);
   assert.deepEqual(tones, [
-    ["Recommended", BADGE_TONE.ATTENTION],
-    ["Quiet", BADGE_TONE.NEUTRAL],
+    ["Recommended", STATUS_TONE.ATTENTION],
+    ["Quiet", STATUS_TONE.NEUTRAL],
   ]);
 });
 
@@ -293,8 +310,8 @@ test("a list across stands its rows side by side, each toned row filling its che
     return createElement(ChoiceList<string>, {
       legend: "Decision",
       options: [
-        { value: "yes", label: "Approve", tone: CHOICE_TONE.COMPLETE },
-        { value: "no", label: "Decline", tone: CHOICE_TONE.DANGER },
+        { value: "yes", label: "Approve", tone: STATUS_TONE.COMPLETE },
+        { value: "no", label: "Decline", tone: STATUS_TONE.DANGER },
       ],
       value,
       look: CHOICE_LOOK.MARKED,
@@ -426,7 +443,7 @@ test("a card list holds each option's controls under its radio, and a key presse
   const cards = [...container.querySelectorAll(".luke-choice-card")];
   assert.equal(cards.length, 2);
   assert.ok(cards[0]?.querySelector(".luke-choice-aside a"));
-  const input = cards[0]?.querySelector("input");
+  const input = cards[0]?.querySelector('input[aria-label="Token"]');
   assert.ok(input);
   assert.equal(input.closest('[role="radio"]'), null);
   act(() => {
@@ -435,4 +452,41 @@ test("a card list holds each option's controls under its radio, and a key presse
   const radios = [...container.querySelectorAll('[role="radio"]')];
   assert.equal(radios[0]?.getAttribute("aria-checked"), "true");
   assert.equal(radios[1]?.getAttribute("aria-checked"), "false");
+});
+
+test("Enter on a row is left to the row's button, which presses it as a button's Enter does", () => {
+  for (const select of [CHOICE_SELECT.ONE, CHOICE_SELECT.MANY]) {
+    const page = render(createElement(Held, { select }));
+    const never = row(page, "Never retry");
+    act(() => never.focus());
+    let pressed = true;
+    act(() => {
+      pressed = never.dispatchEvent(
+        new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }),
+      );
+    });
+    assert.equal(pressed, true, `a ${select} list's row keeps Enter's press`);
+  }
+});
+
+test("a card's own field keeps its caret as focus lands in it", () => {
+  const container = render(
+    createElement(Held, {
+      look: CHOICE_LOOK.CARD,
+      start: ["three"],
+      options: [
+        {
+          value: "three",
+          label: "Subscription",
+          below: createElement("input", { "aria-label": "Token", defaultValue: "sk-test" }),
+        },
+        { value: "never", label: "API key" },
+      ],
+    }),
+  );
+  const input =
+    container.querySelector<HTMLInputElement>('input[aria-label="Token"]') ??
+    assert.fail("no field");
+  act(() => input.focus());
+  assert.deepEqual([input.selectionStart, input.selectionEnd], [7, 7]);
 });

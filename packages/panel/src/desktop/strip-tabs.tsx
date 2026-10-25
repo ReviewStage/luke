@@ -1,28 +1,34 @@
 import type { CodingAgentStatus, CodingAgentSummary } from "@luke/features/coding-agent-wire";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
-  AnchoredPopover,
-  CloseIcon,
-  CopyIcon,
-  EllipsisIcon,
   IconButton,
-  PencilIcon,
-  PinIcon,
+  type MenuRow,
+  MoreButton,
+  moreLabel,
   PlusIcon,
   POPOVER_ALIGN,
   POPOVER_BOUNDS,
+  SearchableMenu,
   SKELETON_SHAPE,
   Skeleton,
+  STATUS_TONE,
   Tooltip,
-  UnpinIcon,
   useMenu,
 } from "@luke/ui";
 import { useDisclosure } from "@luke/ui/use-disclosure";
-import { ListXIcon, ScrollTextIcon, TerminalIcon } from "lucide-react";
-import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { createPortal } from "react-dom";
+import { commandAction, PANEL_COMMAND } from "../command-items.js";
 import { useCopyToast } from "../copy-feedback.js";
-import { type MenuRow, SearchableMenu } from "../searchable-menu.js";
 import type { HeldTranscript } from "../tasks/agent-tab-card.js";
 import {
   type CopiedTranscript,
@@ -30,7 +36,7 @@ import {
   type TranscriptCopy,
   transcriptMarkdown,
 } from "../tasks/transcript-copy.js";
-import { TOAST_HOLD, TOAST_TONE, useToast } from "../toast.js";
+import { TOAST_HOLD, useToast } from "../toast.js";
 import { ActionMenu, type MenuAction } from "./action-menu.js";
 import { MenuTab } from "./tab-strip.js";
 
@@ -39,13 +45,15 @@ import { MenuTab } from "./tab-strip.js";
  *
  * Both strips are the one `TabStrip` (tab-strip.tsx), each of its tabs a
  * `MenuTab` whose right-click offers the actions `tabActionGroups` lists:
- * Close and Close others; Pin tab or Unpin tab, and an agent's Rename,
- * beside it; an agent's Open terminal; a transcript's two copies; and an
+ * Close and Close others; Pin or Unpin, and an agent's Rename,
+ * beside it; an agent's Show terminal; a transcript's two copies; and an
  * agent's Archive. Those that act on what the chosen tab shows, an agent's
- * Rename, Open terminal, copies, and Archive, and a subagent's copies, its
+ * Rename, Show terminal, copies, and Archive, and a subagent's copies, its
  * strip's toolbar also offers from a ⋯ (`ToolbarTabActions`), with what the
  * tab's own body hands up while it is drawn, a Pull request tab's Refresh
- * and Open on GitHub (`useHandedTabActions`). Each strip
+ * and Open on GitHub (`useHandedTabActions`). On a phone a tab's body draws
+ * no bar of its own and hands every control of it up the same way, so the
+ * task's header's ⋯ offers them (`task-pane-switcher.tsx`). Each strip
  * ends in a "+" that drops the shared searchable menu over what the strip
  * may open. The columns' own modules say which tabs and rows those are
  * (`main-tabs.tsx`, `side-panel.tsx`).
@@ -93,11 +101,45 @@ export interface TabDoors {
   /** Copies the link of what the tab shows, for a tab whose thing has one (`copy-link-item.tsx`). */
   copyLink?: MenuAction | undefined;
   /** What the tab's body offers on what it shows while it is drawn (`useHandedTabActions`), which its toolbar's ⋯ alone offers, first. */
-  handed?: MenuAction[] | undefined;
+  handed?: TabActionGroups | undefined;
 }
 
+/**
+ * One action a tab's body hands its ⋯: a menu item, or one that opens a
+ * menu or a field of the body's own where the ⋯ stood (`onAsk`), as a
+ * phone's View options opens from its header's ⋯ (`phone-head.tsx`).
+ */
+export type TabAction =
+  | MenuAction
+  | (Omit<MenuAction, "onSelect"> & { readonly onAsk: (opener: HTMLElement) => void });
+
+/** What a tab's body offers, in the groups a rule divides. */
+export type TabActionGroups = readonly (readonly TabAction[])[];
+
 /** Hears the actions a tab's body offers on what it shows, none once it is no longer drawn. */
-export type HandTabActions = (actions: MenuAction[] | undefined) => void;
+export type HandTabActions = (actions: TabActionGroups | undefined) => void;
+
+/**
+ * Where a tab's body hands what it offers, as the side panel draws it
+ * (`side-panel.tsx`), so a body drawn at any depth of the tab, a task's
+ * Inbox's list or a terminal's, hands it without a prop through every
+ * layer; none outside a panel's tab.
+ */
+export const HandTabActionsContext = createContext<HandTabActions | undefined>(undefined);
+
+/** The menu items a ⋯ drops for `groups`, an item opening a menu of the body's own opening it under `opener`. */
+export function tabActionItems(
+  groups: readonly (readonly TabAction[])[],
+  opener: HTMLElement,
+): MenuAction[][] {
+  return groups.map((group) =>
+    group.map((action) => {
+      if (!("onAsk" in action)) return action;
+      const { onAsk, ...item } = action;
+      return { ...item, onSelect: () => onAsk(opener) };
+    }),
+  );
+}
 
 /** What a tab's menu offers on what the tab shows, each empty where the tab has none. */
 interface ContentActions {
@@ -110,42 +152,34 @@ interface ContentActions {
 
 /**
  * What a tab's menu offers on what the tab shows, rather than on the tab
- * itself: an agent's Rename, its Open terminal, Copy link and a transcript's two copies,
+ * itself: an agent's Rename, its Show terminal, Copy link and a transcript's two copies,
  * an agent's Archive, which takes the tab with it, and its Permanently
  * delete, alone after it.
  */
 function contentActions(doors: TabDoors): ContentActions {
   const { onCopy, onRename, onOpenTerminal, archive, deletion, copyLink } = doors;
   return {
-    rename:
-      onRename === undefined ? [] : [{ label: "Rename", icon: <PencilIcon />, onSelect: onRename }],
+    rename: onRename === undefined ? [] : [commandAction(PANEL_COMMAND.RENAME, onRename, false)],
     terminal:
       onOpenTerminal === undefined
         ? []
-        : [
-            {
-              label: "Open terminal",
-              icon: <TerminalIcon />,
-              onSelect: onOpenTerminal,
-              // ⌘J opens the chosen agent tab's terminal, so only the chosen tab's item says it.
-              ...(doors.chosen ? { command: APP_COMMAND.SHOW_TERMINAL } : undefined),
-            },
-          ],
+        : // ⌘J opens the chosen agent tab's terminal, so only the chosen tab's item says it.
+          [commandAction(PANEL_COMMAND.SHOW_TERMINAL, onOpenTerminal, doors.chosen)],
     copies: [
       ...(copyLink === undefined ? [] : [copyLink]),
       ...(onCopy === undefined
         ? []
         : [
-            {
-              label: "Copy concise transcript",
-              icon: <CopyIcon />,
-              onSelect: () => onCopy(TRANSCRIPT_COPY.CONCISE),
-            },
-            {
-              label: "Copy full transcript",
-              icon: <ScrollTextIcon />,
-              onSelect: () => onCopy(TRANSCRIPT_COPY.FULL),
-            },
+            commandAction(
+              PANEL_COMMAND.COPY_CONCISE_TRANSCRIPT,
+              () => onCopy(TRANSCRIPT_COPY.CONCISE),
+              false,
+            ),
+            commandAction(
+              PANEL_COMMAND.COPY_FULL_TRANSCRIPT,
+              () => onCopy(TRANSCRIPT_COPY.FULL),
+              false,
+            ),
           ]),
     ],
     archive: archive === undefined ? [] : [archive],
@@ -156,8 +190,8 @@ function contentActions(doors: TabDoors): ContentActions {
 /**
  * A tab's actions in the groups a rule divides, as an editor's tab offers
  * them on a right-click: Close and Close others, the plan's tab offering
- * only the second; Pin tab or Unpin tab, which puts it in the sidebar or
- * takes it out, and a Rename beside it; for an agent's, its Open terminal;
+ * only the second; Pin or Unpin, which puts it in the sidebar or
+ * takes it out, and a Rename beside it; for an agent's, its Show terminal;
  * Copy link, for a tab whose thing has a link, and a transcript's two
  * copies after it; then, for an agent's, its Archive, and last and alone its
  * Permanently delete. Close others stands dimmed where nothing else would close.
@@ -168,30 +202,25 @@ function tabActionGroups(doors: TabDoors): MenuAction[][] {
     onClose === undefined
       ? []
       : [
-          {
-            label: "Close",
-            icon: <CloseIcon />,
-            onSelect: onClose,
-            // ⌘W closes the tab chosen, so only the chosen tab's Close says it.
-            ...(doors.chosen ? { command: APP_COMMAND.CLOSE_TAB } : undefined),
-          },
+          // ⌘W closes the tab chosen, so only the chosen tab's Close says it.
+          commandAction(PANEL_COMMAND.CLOSE_TAB, onClose, doors.chosen),
         ];
   const pin: MenuAction[] =
     doors.pin === undefined
       ? []
       : [
-          doors.pin.pinned
-            ? { label: "Unpin tab", icon: <UnpinIcon />, onSelect: doors.pin.onToggle }
-            : { label: "Pin tab", icon: <PinIcon />, onSelect: doors.pin.onToggle },
+          commandAction(
+            doors.pin.pinned ? PANEL_COMMAND.UNPIN_TAB : PANEL_COMMAND.PIN_TAB,
+            doors.pin.onToggle,
+            false,
+          ),
         ];
   const { rename, terminal, copies, archive, deletion } = contentActions(doors);
   return [
     [
       ...close,
       {
-        label: "Close others",
-        icon: <ListXIcon />,
-        onSelect: () => doors.onCloseOthers?.(),
+        ...commandAction(PANEL_COMMAND.CLOSE_OTHER_TABS, () => doors.onCloseOthers?.(), false),
         disabled: doors.onCloseOthers === undefined,
       },
     ],
@@ -204,36 +233,110 @@ function tabActionGroups(doors: TabDoors): MenuAction[][] {
 /**
  * The chosen tab's actions as its toolbar's ⋯ offers them: those of its
  * right-click that act on what it shows (`contentActions`), in the same
- * groups, after what its body hands up while it is drawn (`handed`), and
- * none of the tab's own keeping, Close, Close others, and Pin tab, which
- * stay on the right-click alone. An agent's own page offers the same in
- * its toolbar's ⋯ (`desktop-agent-page.tsx`), so a taskless agent is acted
- * on as a task's is.
+ * groups, and none of the tab's own keeping, Close, Close others, and Pin,
+ * which stay on the right-click alone. An agent's own page offers the same
+ * in its toolbar's ⋯ (`desktop-agent-page.tsx`), so a taskless agent is
+ * acted on as a task's is.
  */
-export function contentActionGroups(doors: TabDoors): MenuAction[][] {
+export function contentActionGroups(doors: Omit<TabDoors, "handed">): MenuAction[][] {
   const { rename, terminal, copies, archive, deletion } = contentActions(doors);
-  return [doors.handed ?? [], rename, terminal, copies, archive, deletion].filter(
+  return [rename, terminal, copies, archive, deletion].filter((group) => group.length > 0);
+}
+
+/** The chosen tab's actions as a strip's ⋯ offers them: what its body hands up while it is drawn (`handed`), first, then `contentActionGroups`. */
+export function tabContentGroups(doors: TabDoors): TabActionGroups {
+  return [...(doors.handed ?? []), ...contentActionGroups(doors)].filter(
     (group) => group.length > 0,
+  );
+}
+
+/** Whether two items draw alike: named, said, and standing the same. */
+function sameAction(one: TabAction, other: TabAction | undefined): boolean {
+  return (
+    other !== undefined &&
+    one.label === other.label &&
+    one.detail === other.detail &&
+    one.disabled === other.disabled &&
+    one.checked === other.checked &&
+    one.danger === other.danger &&
+    one.opens === other.opens &&
+    one.command === other.command &&
+    "onAsk" in one === "onAsk" in other
+  );
+}
+
+/** Whether two hands of actions draw alike: the same items in the same groups, in the same order. */
+function sameActions(a: TabActionGroups | undefined, b: TabActionGroups | undefined): boolean {
+  if (a === undefined || b === undefined) return a === b;
+  return (
+    a.length === b.length &&
+    a.every((group, at) => {
+      const other = b[at];
+      return (
+        other !== undefined &&
+        group.length === other.length &&
+        group.every((one, place) => sameAction(one, other[place]))
+      );
+    })
+  );
+}
+
+/** `actions` as handed on: each item's press reaching the body's latest, so a hand made anew on every draw is handed again only as it draws otherwise. */
+function throughLatest(
+  actions: TabActionGroups,
+  latest: React.RefObject<TabActionGroups | undefined>,
+): TabActionGroups {
+  return actions.map((group, at) =>
+    group.map((action, place) => {
+      const now = () => latest.current?.[at]?.[place];
+      if ("onAsk" in action) {
+        return {
+          ...action,
+          onAsk: (opener: HTMLElement) => {
+            const held = now();
+            if (held !== undefined && "onAsk" in held) held.onAsk(opener);
+          },
+        };
+      }
+      return {
+        ...action,
+        onSelect: () => {
+          const held = now();
+          if (held !== undefined && !("onAsk" in held)) held.onSelect();
+        },
+      };
+    }),
   );
 }
 
 /**
  * Hands the chosen tab's toolbar ⋯ the actions its body offers on what it
- * shows (`TabDoors.handed`), again each time they change, and none once
- * the body is no longer drawn. Note that `hand` is read through a ref, so
- * a door made anew on each render hands nothing more; `actions` is what a
- * change is heard by, so a caller keeps it the same while it means the same.
+ * shows (`TabDoors.handed`), again each time they draw otherwise, and none
+ * once the body is no longer drawn. Note that `hand` and each item's press
+ * are read through refs, so a body making its actions anew on every draw,
+ * as a phone's bar handed up does, hands them again only when an item's
+ * words or standing change, and a press always reaches the latest.
  */
 export function useHandedTabActions(
   hand: HandTabActions | undefined,
-  actions: MenuAction[] | undefined,
+  actions: TabActionGroups | undefined,
 ): void {
   const told = useRef(hand);
   told.current = hand;
+  const latest = useRef<TabActionGroups | undefined>(actions);
+  latest.current = actions;
+  const handed = useRef<TabActionGroups | undefined>(undefined);
   useEffect(() => {
-    told.current?.(actions);
-  }, [actions]);
+    if (sameActions(handed.current, actions)) return;
+    handed.current = actions;
+    told.current?.(actions === undefined ? undefined : throughLatest(actions, latest));
+  });
   useEffect(() => () => told.current?.(undefined), []);
+}
+
+/** Hands the actions to the panel tab the body is drawn in (`HandTabActionsContext`); nothing outside one. */
+export function useTabActions(actions: TabActionGroups | undefined): void {
+  useHandedTabActions(useContext(HandTabActionsContext), actions);
 }
 
 /**
@@ -250,18 +353,21 @@ function ToolbarTabActions({
   slot,
 }: {
   label: string;
-  groups: MenuAction[][];
+  groups: TabActionGroups;
   slot: HTMLElement;
 }): React.JSX.Element {
   const menu = useMenu(true);
-  const named = `${label} actions`;
+  const named = moreLabel(label);
   return createPortal(
     <>
-      <Tooltip label={named}>
-        <IconButton icon={<EllipsisIcon />} label={named} {...menu.trigger()} />
-      </Tooltip>
+      <MoreButton thing={label} {...menu.trigger()} />
       {menu.drawn === undefined ? null : (
-        <ActionMenu label={named} menu={menu.drawn} groups={groups} onClose={menu.close} />
+        <ActionMenu
+          label={named}
+          menu={menu.drawn}
+          groups={tabActionItems(groups, menu.drawn.opener)}
+          onClose={menu.close}
+        />
       )}
     </>,
     slot,
@@ -270,6 +376,10 @@ function ToolbarTabActions({
 
 /** What a tab of either strip draws, beyond its menu. */
 export interface TabLook {
+  /** The id the tab stands under, which the panel it shows is labelled by (`Tab`'s). */
+  id?: string | undefined;
+  /** The id of the panel the tab shows (`Tab`'s). */
+  controls?: string | undefined;
   icon: React.JSX.Element;
   label: string;
   /** Words after the label, dimmed (`Tab`'s). */
@@ -278,9 +388,7 @@ export interface TabLook {
   endMark?: React.JSX.Element | undefined;
   selected: boolean;
   unread?: boolean;
-  tooltip?: string | undefined;
   card?: React.ReactNode;
-  keyshortcuts?: string | undefined;
   /** Draws no fill at rest: the plan's tab while it is its column's only one. */
   quiet?: boolean;
   /** Stands first in its strip, never dragged nor dropped before. */
@@ -311,7 +419,7 @@ export function DoorsTab({
   tabRef?: React.RefObject<HTMLButtonElement | null> | undefined;
   slot?: HTMLElement | null | undefined;
 }): React.JSX.Element {
-  const content = contentActionGroups(doors);
+  const content = tabContentGroups(doors);
   return (
     <>
       <MenuTab
@@ -442,24 +550,23 @@ export function AddTabButton({
         />
       </Tooltip>
       {drawn.mounted ? (
-        <AnchoredPopover align={POPOVER_ALIGN.START} bounds={POPOVER_BOUNDS.WINDOW}>
-          <SearchableMenu
-            leaving={drawn.leaving}
-            ref={drawn.ref}
-            id={menuId}
-            className="tab-add-menu"
-            label={label}
-            placeholder={placeholder}
-            rows={entries.map(entryRow)}
-            value={undefined}
-            noMatch={noMatch}
-            onPick={pick}
-            onClose={close}
-            onLeave={(left) => {
-              if (!(left instanceof Node && root.current?.contains(left))) setOpen(false);
-            }}
-          />
-        </AnchoredPopover>
+        <SearchableMenu
+          leaving={drawn.leaving}
+          ref={drawn.ref}
+          id={menuId}
+          label={label}
+          placeholder={placeholder}
+          rows={entries.map(entryRow)}
+          value={undefined}
+          noMatch={noMatch}
+          align={POPOVER_ALIGN.START}
+          bounds={POPOVER_BOUNDS.WINDOW}
+          onPick={pick}
+          onClose={close}
+          onLeave={(left) => {
+            if (!(left instanceof Node && root.current?.contains(left))) setOpen(false);
+          }}
+        />
       ) : null}
     </div>
   );
@@ -476,7 +583,7 @@ export function useTranscriptCopier(): TranscriptCopier {
   const copyWithToast = useCopyToast();
   const toast = useToast();
   const unread = () =>
-    toast({ words: TRANSCRIPT_UNREAD_NOTE, tone: TOAST_TONE.FAILED, hold: TOAST_HOLD.FAILED });
+    toast({ words: TRANSCRIPT_UNREAD_NOTE, tone: STATUS_TONE.DANGER, hold: TOAST_HOLD.FAILED });
   return (read) => (copy) => {
     read().then(
       (transcript) =>

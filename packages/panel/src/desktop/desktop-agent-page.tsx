@@ -4,24 +4,26 @@ import {
   type CodingAgentSummary,
 } from "@luke/features/coding-agent-wire";
 import { dictationKeywords } from "@luke/features/dictation-keywords";
-import { LINK_PLACE, type ReadLink } from "@luke/features/luke-link";
+import { LINK_PLACE, type ReadLink } from "@luke/features/link-grammar";
 import { encodeMention, MENTION_KIND } from "@luke/features/mention-link";
+import { readingWords } from "@luke/features/words";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
-  ConfirmDialog,
-  EllipsisIcon,
   ERROR_STATE_PLACEMENT,
   ErrorState,
   FILL_ELEMENT,
   Fill,
-  IconButton,
   InlineEdit,
+  MoreButton,
+  moreLabel,
+  NOT_FOUND_THING,
+  NotFound,
   ONE_LINE_ELEMENT,
   ONE_LINE_END,
   OneLine,
-  PageToolbar,
-  SpinnerRegion,
-  Tooltip,
+  SidePanelIcon,
+  STATUS_TONE,
+  Toolbar,
   useMenu,
 } from "@luke/ui";
 import { pullRequestAgentOf, repositoryPullRequestOf } from "@luke/ui/pull-request-link";
@@ -36,12 +38,11 @@ import { LinkWorkspaceProvider } from "../copy-link-item.js";
 import { FindScope } from "../find-in-tab.js";
 import { usePageWorkspace } from "../links-at-hand.js";
 import { MemberDirectory } from "../member-directory.js";
-import { NOT_FOUND_THING, NotFound } from "../not-found.js";
 import { useSteadyDoor, useSteadyDoors } from "../steady-door.js";
-import { CallNotice } from "../tasks/agent-call.js";
 import { agentSubject } from "../tasks/agent-ref.js";
+import { AgentTabSkeleton } from "../tasks/agent-tab-skeleton.js";
 import { peopleOf } from "../tasks/changes-card.js";
-import { agentTabLabel } from "../tasks/coding-agent-model.js";
+import { agentName } from "../tasks/coding-agent-model.js";
 import { SkillFiles } from "../tasks/skill-chip.js";
 import { TAB_KIND } from "../tasks/tab-look.js";
 import {
@@ -62,7 +63,7 @@ import {
 } from "../tasks/use-open-link.js";
 import { PULL_REQUEST_VIEW, SIDE_PANEL_TAB } from "../tasks/use-side-panel.js";
 import { AUTOMATIONS_PAGE, type TasksControl } from "../tasks/use-tasks-tab.js";
-import { TOAST_HOLD, TOAST_TONE, useToast } from "../toast.js";
+import { TOAST_HOLD, useToast } from "../toast.js";
 import { ActionMenu } from "./action-menu.js";
 import {
   type AgentTerminalDoors,
@@ -73,6 +74,7 @@ import {
 } from "./agent-actions.js";
 import { isLuke, LUKE_NAME, useLukeOperator } from "./luke-operator.js";
 import { AgentPane } from "./main-tabs.js";
+import { PhoneBack, PhoneHead, phoneBar } from "./phone-head.js";
 import {
   COLUMN,
   SIDE_PANEL_HOLDER,
@@ -84,6 +86,7 @@ import {
 } from "./side-panel.js";
 import { contentActionGroups, useTabViews } from "./strip-tabs.js";
 import { tabCard } from "./tab-card.js";
+import type { TaskHeadBack } from "./task-pane-switcher.js";
 
 /**
  * desktop-agent-page.tsx -- one agent's page: an agent an automation started with no plan, drawn in the plan's place as the task column draws an agent's tab.
@@ -111,8 +114,8 @@ import { tabCard } from "./tab-card.js";
  * one, since the agent's own column opens no tab. Its title names the agent as
  * its tab would, and its ⋯ offers the agent's own actions, the very ones its
  * tab's ⋯ offers on a task (`agent-actions.tsx`): Rename, which turns the
- * title into its name's field, Open terminal, Copy link, the
- * transcript's two copies, and Archive agent, so an agent with no task is
+ * title into its name's field, Show terminal, Copy link, the
+ * transcript's two copies, and Archive, so an agent with no task is
  * acted on as a task's is; ⌘J and New terminal open its terminal as on a
  * task (`terminal-commands.tsx`). An archived agent takes no message, so
  * its composer gives way to its own Unarchive, which its ⋯ offers in
@@ -141,24 +144,25 @@ const nothing = (): void => undefined;
 const NO_UNREAD: readonly StripTab[] = [];
 
 /** What the page's ⋯ is called. */
-const ACTIONS_LABEL = "Agent actions";
+const ACTIONS_THING = "Agent";
 
 /** What the title's field is called for a reader, as an agent's tab calls its own. */
 const NAME_LABEL = "Agent name";
 
 /**
- * The page's title and its ⋯, which offer the agent's own actions as its
+ * The page's bar: its title and its ⋯, which offer the agent's own actions as its
  * tab in a task's column does (`agent-actions.tsx`): its title turned into
  * its name's field by Rename, and every action of the tab's ⋯, in the same
  * groups (`strip-tabs.tsx`'s `contentActionGroups`).
  */
-function AgentPageHeading({
+function AgentPageBar({
   agent,
   agents,
   shown,
   terminals,
   onClose,
   luke,
+  phone,
 }: {
   agent: CodingAgentSummary;
   agents: CodingAgentsControl;
@@ -168,8 +172,10 @@ function AgentPageHeading({
   onClose: () => void;
   /** Whether the agent is Luke, the account's operator, who is named Luke and is neither renamed, archived, nor deleted from here. */
   luke: boolean;
+  /** A phone's head (`phone-head.tsx`): its way back, and the panel its ⋯ opens; none elsewhere. */
+  phone?: AgentPagePhone | undefined;
 }): React.JSX.Element {
-  const label = luke ? LUKE_NAME : agentTabLabel(agent, agents.models);
+  const label = luke ? LUKE_NAME : agentName(agent, agents.models);
   const actions = useAgentActions(agent, agents, { label, shown, terminals, onDeleted: onClose });
   const menu = useMenu(shown);
   const doors = luke
@@ -183,47 +189,61 @@ function AgentPageHeading({
     ...doors,
   });
   const rename = luke ? undefined : actions.rename;
-  return (
+  const title =
+    rename?.editing === true ? (
+      <OneLine as={ONE_LINE_ELEMENT.H1} end={ONE_LINE_END.ELLIPSIS} className="luke-toolbar-title">
+        <InlineEdit
+          value={rename.asked ?? label}
+          label={NAME_LABEL}
+          maxLength={CODING_AGENT_BOUNDS.MAX_TITLE_CHARS}
+          editing
+          onEnd={(edit) => {
+            rename.end(edit.value);
+          }}
+        />
+      </OneLine>
+    ) : (
+      label
+    );
+  const more = (
     <>
-      <div className="desktop-toolbar-heading">
-        {rename?.editing === true ? (
-          <OneLine
-            as={ONE_LINE_ELEMENT.H1}
-            end={ONE_LINE_END.ELLIPSIS}
-            className="desktop-toolbar-title"
-          >
-            <InlineEdit
-              value={label}
-              label={NAME_LABEL}
-              maxLength={CODING_AGENT_BOUNDS.MAX_TITLE_CHARS}
-              editing
-              onEnd={(edit) => {
-                rename.end(edit.value);
-              }}
-            />
-          </OneLine>
-        ) : (
-          <OneLine as={ONE_LINE_ELEMENT.H1} className="desktop-toolbar-title">
-            {label}
-          </OneLine>
-        )}
-      </div>
-      <div className="desktop-toolbar-actions">
-        <Tooltip label={ACTIONS_LABEL}>
-          <IconButton icon={<EllipsisIcon />} label={ACTIONS_LABEL} {...menu.trigger()} />
-        </Tooltip>
-        {menu.drawn === undefined ? null : (
-          <ActionMenu
-            label={ACTIONS_LABEL}
-            menu={menu.drawn}
-            groups={groups}
-            onClose={menu.close}
-          />
-        )}
-        {actions.dialog}
-      </div>
+      <MoreButton thing={ACTIONS_THING} {...menu.trigger()} />
+      {menu.drawn === undefined ? null : (
+        <ActionMenu
+          label={moreLabel(ACTIONS_THING)}
+          menu={menu.drawn}
+          groups={
+            phone?.onShowPanel === undefined
+              ? groups
+              : [
+                  ...groups,
+                  [{ label: SHOW_PANEL, icon: <SidePanelIcon />, onSelect: phone.onShowPanel }],
+                ]
+          }
+          onClose={menu.close}
+        />
+      )}
+      {actions.dialog}
     </>
   );
+  if (phone !== undefined) {
+    return (
+      <PhoneHead place="agent" start={<PhoneBack back={phone.back} />} title={title} end={more} />
+    );
+  }
+  return <Toolbar title={title} actions={more} />;
+}
+
+/** What a phone's way back out of a draft calls the agent, before the agent is read. */
+const AGENT = "Agent";
+
+/** What Show panel is called in a phone's ⋯, where the title bar's toggle is not drawn. */
+const SHOW_PANEL = "Show panel";
+
+/** What a phone's agent page heads itself with (`phone-head.tsx`): its way back, and the panel its ⋯ shows, while it is shut. */
+export interface AgentPagePhone {
+  readonly back: TaskHeadBack;
+  readonly onShowPanel: (() => void) | undefined;
 }
 
 /** The page's mentions, once there are any to hand; until then the box takes an `@` as the letter it is. */
@@ -268,12 +288,12 @@ function useTaskAgentsFollow(
 export function DesktopAgentPage({
   tasks,
   agentId,
-  notice,
+  away,
 }: {
   tasks: TasksControl;
   agentId: string;
-  /** The voice's notice line, while it rides the foot of the page's agent's call. */
-  notice?: React.ReactNode;
+  /** A phone's way back out of the page, to the page it was opened from (`WindowHistory`'s `onLeave`), which heads it as a phone's page (`phone-head.tsx`); none elsewhere. */
+  away?: TaskHeadBack | undefined;
 }): React.JSX.Element {
   // The draft a Fork or a Continue opened on the page, by its key, which the pane shows in the agent's place.
   const [drafting, setDrafting] = useState<{ agentId: string; draftId: string } | undefined>(
@@ -332,17 +352,17 @@ export function DesktopAgentPage({
   const toast = useToast();
   const openLink = useReadLinkOpener();
   // An Unarchive refused says why, as any other refusal of the agent's does.
-  const unarchive = () => {
+  // Note that it settles once the answer is said, so the note's Unarchive shows busy till then.
+  const unarchive = () =>
     onArchive(agentId, false).then((result) => {
       if (result.status !== ACTION_RESULT_STATUS.ACCEPTED) {
-        toast({ words: result.reason, tone: TOAST_TONE.FAILED, hold: TOAST_HOLD.FAILED });
+        toast({ words: result.reason, tone: STATUS_TONE.DANGER, hold: TOAST_HOLD.FAILED });
       }
     }, nothing);
-  };
   // The agent's workspace as the account lists it, whose count reads its members again; by its id alone where the list does not hold it yet.
   const { workspaceId, agentRepository } = agents;
   usePageWorkspace(agentId, workspaceId);
-  // Open terminal, ⌘J, and New terminal open the agent's terminals in the side panel, as its tab's do on a task.
+  // Show terminal, ⌘J, and New terminal open the agent's terminals in the side panel, as its tab's do on a task.
   const terminalDoors = useAgentTerminalDoors(sidePanel, agentRepository, () =>
     setFocus(COLUMN.SIDE),
   );
@@ -499,37 +519,79 @@ export function DesktopAgentPage({
       pullRequestCard,
     ],
   );
+  // A phone's way back leaves a draft for the agent it was opened from first, as Escape does, and the page then.
+  const phoneHead: AgentPagePhone | undefined =
+    away === undefined
+      ? undefined
+      : {
+          back:
+            draftShown === undefined
+              ? away
+              : {
+                  label:
+                    agent === undefined
+                      ? AGENT
+                      : luke
+                        ? LUKE_NAME
+                        : agentName(agent, control.models),
+                  onPress: () => setDrafting(undefined),
+                },
+          onShowPanel: sidePanel.open ? undefined : sidePanel.onToggle,
+        };
   const toolbar =
     agent === undefined ? (
-      <PageToolbar heading={null} />
+      phoneHead === undefined ? (
+        <Toolbar />
+      ) : (
+        <PhoneHead
+          place="agent"
+          start={<PhoneBack back={phoneHead.back} />}
+          title={null}
+          end={null}
+        />
+      )
     ) : (
-      <PageToolbar
-        lead={
-          <AgentPageHeading
-            agent={agent}
-            agents={control}
-            shown={tasks.shown}
-            terminals={terminalDoors}
-            onClose={tasks.agentView.onClose}
-            luke={luke}
-          />
-        }
+      <AgentPageBar
+        agent={agent}
+        agents={control}
+        shown={tasks.shown}
+        terminals={terminalDoors}
+        onClose={tasks.agentView.onClose}
+        luke={luke}
+        phone={phoneHead}
       />
     );
   if (agent === undefined) {
+    // A page the service would not hand the reader keeps its bar over the words saying so.
+    // On a phone the bar keeps the page's way back, the drawer and the places bar out of reach.
+    if (agents.listMissing) {
+      return (
+        <NotFound
+          thing={NOT_FOUND_THING.AGENT}
+          bar={
+            phoneHead === undefined
+              ? {}
+              : phoneBar({ place: "agent", start: <PhoneBack back={phoneHead.back} />, end: null })
+          }
+        />
+      );
+    }
+    // In the page's own frame, so its row and sheet stand where the read page's will.
     return (
-      <Fill as={FILL_ELEMENT.SECTION} className="agent-page" aria-label="Agent">
-        {toolbar}
-        {agents.listMissing ? (
-          <NotFound thing={NOT_FOUND_THING.AGENT} />
-        ) : agents.listFailed ? (
-          <ErrorState onRetry={agents.onRetryList} placement={ERROR_STATE_PLACEMENT.CENTRED}>
-            {NOT_READ}
-          </ErrorState>
-        ) : (
-          <SpinnerRegion delay label="Loading agent" />
-        )}
-      </Fill>
+      <div className="desktop-task" data-panel-open="false">
+        <Fill as={FILL_ELEMENT.SECTION} className="agent-page" aria-label="Agent">
+          {toolbar}
+          {agents.listFailed ? (
+            <ErrorState onRetry={agents.onRetryList} placement={ERROR_STATE_PLACEMENT.CENTRED}>
+              {NOT_READ}
+            </ErrorState>
+          ) : (
+            <Fill className="desktop-task-column">
+              <AgentTabSkeleton label={readingWords("the agent")} />
+            </Fill>
+          )}
+        </Fill>
+      </div>
     );
   }
   return (
@@ -573,23 +635,21 @@ export function DesktopAgentPage({
                           active={tasks.shown && !sideFocused}
                           subject={tab}
                         >
-                          <CallNotice.Provider value={notice}>
-                            <AgentPane
-                              call={calls}
-                              label={luke ? LUKE_NAME : agentTabLabel(agent, control.models)}
-                              tabbed={false}
-                              tab={paneTab}
-                              agents={control}
-                              shown={shown}
-                              views={views}
-                              onOpenDelegation={openDelegation}
-                              onOpenPullRequest={openPullRequest}
-                              onOpenTarget={openTarget}
-                              cards={cards}
-                              onFork={draftDoors.onFork}
-                              onContinue={draftDoors.onContinue}
-                            />
-                          </CallNotice.Provider>
+                          <AgentPane
+                            call={calls}
+                            label={luke ? LUKE_NAME : agentName(agent, control.models)}
+                            tabbed={false}
+                            tab={paneTab}
+                            agents={control}
+                            shown={shown}
+                            views={views}
+                            onOpenDelegation={openDelegation}
+                            onOpenPullRequest={openPullRequest}
+                            onOpenTarget={openTarget}
+                            cards={cards}
+                            onFork={draftDoors.onFork}
+                            onContinue={draftDoors.onContinue}
+                          />
                         </FindScope>
                       </Fill>
                       {drawing.panel ? (
@@ -611,14 +671,17 @@ export function DesktopAgentPage({
                           shown={tasks.shown}
                           focused={sideFocused}
                           onOpenTarget={openTarget}
+                          phone={
+                            away === undefined || agent === undefined
+                              ? undefined
+                              : {
+                                  back: luke ? LUKE_NAME : agentName(agent, control.models),
+                                  onBack: sidePanel.onToggle,
+                                }
+                          }
                         />
                       ) : null}
                     </div>
-                    {/* The second call's question, which a Call press here asks over another agent's call. */}
-                    <ConfirmDialog
-                      confirm={tasks.secondCall.confirm}
-                      question={tasks.secondCall.question}
-                    />
                   </OpenHereProvider>
                 </OpenLinkProvider>
               </AgentMentions>

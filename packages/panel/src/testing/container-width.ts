@@ -25,7 +25,8 @@ import tokens from "@luke/ui/tokens.css?inline";
  *
  * A control shown only under the pointer answers the device through an
  * input-type media query, `(hover: …)`, `(pointer: …)`, or both joined by
- * `and`, which jsdom drops too: each is resolved for a touch screen (no
+ * `and`, spaced or not as a Tailwind arbitrary variant writes them
+ * (`[@media(hover:none)_and_(pointer:coarse)]:`), which jsdom drops too: each is resolved for a touch screen (no
  * hover, a coarse pointer) where the layout says `touch`, and for a mouse
  * (hover, a fine pointer) where it does not. Every other media query is left for jsdom to
  * drop.
@@ -45,6 +46,9 @@ import tokens from "@luke/ui/tokens.css?inline";
  * app imports them, in the layers the panel's sheets opened under them.
  */
 
+/** What the app's compiled utilities are named, beside the sheets the panel's `index.css` imports. */
+const UTILITIES = "tailwind.css";
+
 /** Each stylesheet the panel's `index.css` imports, by the specifier it imports it by. */
 const SHEET_BY_IMPORT = {
   "@luke/ui/tokens.css": tokens,
@@ -59,14 +63,14 @@ const SHEET_BY_IMPORT = {
   "./call.css": call,
 } as const;
 
-/** The stylesheets in the order the panel's `index.css` imports them, which is the order every app lays them in, and the app's utilities after them. */
+/** The stylesheets in the order the panel's `index.css` imports them, which is the order every app lays them in, each by the specifier it is imported by, and the app's utilities after them. */
 const SHEETS = [
-  ...[...entry.matchAll(/^@import "([^"]+)";$/gm)].map(([, specifier]) => {
+  ...[...entry.matchAll(/^@import "([^"]+)";$/gm)].map(([, specifier = ""]) => {
     const sheet = Object.entries(SHEET_BY_IMPORT).find(([named]) => named === specifier)?.[1];
     if (sheet === undefined) throw new Error(`container-width.ts lays no sheet for ${specifier}`);
-    return sheet;
+    return { specifier, css: sheet };
   }),
-  utilities,
+  { specifier: UTILITIES, css: utilities },
 ];
 
 /**
@@ -75,7 +79,7 @@ const SHEETS = [
  * an input-type media query, or a named layer.
  */
 const AT_RULE =
-  /@container (?:([a-z-]+) )?\((?:(max-width|min-width): (\d+)px|width (<|<=|>|>=) (\d+)px)\) \{|@media ((?:not all and )?\((?:hover|pointer): [a-z]+\)(?: and \((?:hover|pointer): [a-z]+\))*) \{|@layer ([a-z-]+) \{/g;
+  /@container (?:([a-z-]+) )?\((?:(max-width|min-width): (\d+)px|width (<|<=|>|>=) (\d+)px)\) \{|@media ((?:not all and )?\((?:hover|pointer): ?[a-z]+\)(?: and \((?:hover|pointer): ?[a-z]+\))*) \{|@layer ([a-z-]+) \{/g;
 
 /** What each device answers the input-type features: on a touch screen nothing hovers and the pointer is a finger; a mouse hovers, finely. */
 const DEVICE = {
@@ -89,6 +93,13 @@ export interface ContainerLayout {
   readonly unnamed?: number;
   /** Whether the device is a touch screen, which `(hover: none)` and `(pointer: coarse)` rules answer; a mouse's where left out. */
   readonly touch?: boolean;
+  /**
+   * The sheets to lay, by the specifier `index.css` imports each by
+   * (`./tasks.css`), where a test reads one rule of them: every
+   * `getComputedStyle` weighs each rule laid, so the whole panel's is slow
+   * to ask over, and every sheet is laid where this is left out.
+   */
+  readonly only?: readonly string[];
 }
 
 /** What the sheets are resolved for: the named containers' widths and the rest of the layout. */
@@ -124,7 +135,7 @@ function mediaHolds(media: string, layout: ContainerLayout): boolean {
   const negated = media.startsWith("not all and ");
   const device: Readonly<Record<string, string>> =
     layout.touch === true ? DEVICE.TOUCH : DEVICE.MOUSE;
-  const features = [...media.matchAll(/\((hover|pointer): ([a-z]+)\)/g)];
+  const features = [...media.matchAll(/\((hover|pointer): ?([a-z]+)\)/g)];
   const answered = features.every(
     ([, feature, value]) => feature !== undefined && device[feature] === value,
   );
@@ -175,7 +186,10 @@ export function layContainersAt(
   layout: ContainerLayout = {},
 ): HTMLStyleElement {
   const resolution: Resolution = { widths, layout, layers: new Map() };
-  const unlayered = SHEETS.map((css) => resolvedAt(css, resolution));
+  const laid = SHEETS.filter(
+    ({ specifier }) => layout.only === undefined || layout.only.includes(specifier),
+  );
+  const unlayered = laid.map(({ css }) => resolvedAt(css, resolution));
   const style = document.head.appendChild(document.createElement("style"));
   style.textContent = [...[...resolution.layers.values()].flat(), ...unlayered, STILL_MOTION].join(
     "\n",

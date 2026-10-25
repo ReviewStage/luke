@@ -2,7 +2,7 @@
 
 import assert from "node:assert/strict";
 import type { InboxCodeBlock } from "@luke/features/inbox-wire";
-import { LINK_PLACE, type ReadLink } from "@luke/features/luke-link";
+import { LINK_PLACE, type ReadLink } from "@luke/features/link-grammar";
 import { TASK_FILE_REFUSAL } from "@luke/features/task-wire";
 import type { TaskCodeShowing, TasksFileAnswer } from "@luke/features/tasks-view";
 import { getSharedHighlighter } from "@pierre/diffs";
@@ -154,6 +154,23 @@ test("a card's lines are drawn numbered from where they sit in the file, the lin
   assert.deepEqual(drawnLines(container), [12, 13, 14, 15]);
   assert.equal(drawnRoot(container).querySelector('[data-line="13"]')?.textContent, "const b = 2;");
   assert.deepEqual(litLines(container), [13, 14]);
+});
+
+test("a card is a code card: its header names the file and the lines, its one Copy copies the lines pointed at, and the file's opening stands beside it", async () => {
+  const copied: string[] = [];
+  fakeAppPlatform(copyingInto(copied));
+  const container = await draw(codeTab());
+  const head = container.querySelector(".luke-code-card figcaption") ?? assert.fail("no header");
+  assert.match(head.textContent ?? "", /accept\.ts/u);
+  assert.match(head.textContent ?? "", /13–14/u);
+  assert.ok(head.querySelector('button[aria-label="Open file"]'), "the file opens from the header");
+  const copies = [...head.querySelectorAll<HTMLButtonElement>('button[aria-label^="Copy"]')];
+  assert.deepEqual(
+    copies.map((button) => button.getAttribute("aria-label")),
+    ["Copy code"],
+  );
+  await act(async () => copies[0]?.click());
+  assert.deepEqual(copied, ["const b = 2;\nconst c = 3;"]);
 });
 
 test("an agent's note stands under the last line it pointed at, headed by the agent's name, and the card no longer says it above the lines", async () => {

@@ -2,9 +2,9 @@
 
    Recharts is the engine and draws the plot; what it paints in its stock
    greys (an axis tick, the grid, the hover cursor) is redrawn here in the
-   shared palette, and its focus outlines are dropped, because a chart is
-   read rather than tabbed through. Every value is a `--luke-*` token, so the
-   chart reads the same in whichever app mounts it. */
+   shared palette, and the outlines of its inner parts are dropped. Every
+   value is a `--luke-*` token, so the chart reads the same in whichever app
+   mounts it. */
 
 @layer components {
   .luke-chart {
@@ -50,10 +50,12 @@
     fill: var(--luke-color-fill-hover);
   }
 
-  .luke-chart .recharts-layer,
-  .luke-chart .recharts-sector,
-  .luke-chart .recharts-surface {
-    outline: none;
+  /* Note that what recharts puts in the tab order, the plot (its
+     accessibility layer, whose arrows walk the tooltip) and a pie's root,
+     keeps the window's ring, because a keyboard reader has to see it holds
+     focus; only the parts no Tab reaches drop theirs. */
+  .luke-chart :is(.recharts-layer, .recharts-sector, .recharts-surface):not([tabindex="0"]) {
+    outline: none; /* no ring: no Tab stops here */
   }
 
   /* Note that forced colours keep an outline on what holds the keyboard's
@@ -87,7 +89,7 @@
   }
 
   .luke-chart-tooltip-label {
-    font-weight: var(--luke-weight-medium);
+    font-weight: var(--luke-type-label-weight);
   }
 
   .luke-chart-tooltip-rows {
@@ -133,7 +135,7 @@
   .luke-chart-tooltip-value {
     color: var(--luke-color-text);
     font-family: var(--luke-font-mono);
-    font-weight: var(--luke-weight-medium);
+    font-weight: var(--luke-type-label-weight);
     font-variant-numeric: tabular-nums;
   }
 }

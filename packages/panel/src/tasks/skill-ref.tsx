@@ -1,3 +1,4 @@
+import { THING_KIND, THING_WORD } from "@luke/features/thing-kind";
 import {
   type ComboboxOption,
   HOVER_CARD_ROW_LOOK,
@@ -135,6 +136,7 @@ export function SkillRef({
     <InlineRef
       look={INLINE_REF_LOOK.PILL}
       glyph={<SkillMark />}
+      kind={THING_WORD[THING_KIND.SKILL]}
       label={skillWord(name)}
       onPress={onOpen === undefined ? undefined : () => onOpen()}
       hintLabel={skill?.path}

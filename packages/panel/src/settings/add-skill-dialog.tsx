@@ -13,13 +13,14 @@ import {
   type InstalledSkillScope,
 } from "@luke/features/installed-skill-wire";
 import { parseSkillPaste, SKILL_PASTE_KIND } from "@luke/features/skill-paste";
+import { TASK_SKILL_BOUNDS } from "@luke/features/task-wire";
+import { countWords, TERM } from "@luke/features/words";
 import type { Workspace } from "@luke/features/workspace-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import {
   ALIGN,
-  BADGE_TONE,
+  ANNOUNCE,
   Badge,
-  type BadgeTone,
   BUTTON_VARIANT,
   Button,
   CARD_LOOK,
@@ -30,6 +31,7 @@ import {
   ChoiceBar,
   DIALOG_SIZE,
   Dialog,
+  ErrorState,
   FILE_TEXT_EXTENT,
   FileText,
   FormField,
@@ -43,6 +45,7 @@ import {
   ScrollArea,
   SearchField,
   Spinner,
+  STATUS_TONE,
   Stack,
   TEXT_BUTTON_TONE,
   TEXT_ELEMENT,
@@ -59,6 +62,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useAct } from "../act.js";
 import { rendererPause } from "../renderer-runtime.js";
 import { SkillMark } from "../tasks/skill-ref.js";
+import { useAnnounceShown } from "../use-announce-shown.js";
 import {
   ADD_SKILL_SCREEN,
   addSkillScreen,
@@ -68,7 +72,6 @@ import {
   candidateMarks,
   candidateNote,
   confirmView,
-  DETECTED_TONE,
   type DetectedLine,
   type DetectedTone,
   everyTicked,
@@ -84,14 +87,14 @@ import {
   type PulledSkill,
   pastedAtOnce,
   pastedLine,
+  previewFailureLine,
   previewLine,
+  previewRetries,
   previewSourceLine,
   problemsLine,
   pulledLine,
-  SKILL_MARK_TONE,
   SKILLS_LINE,
   type SkillListGroup,
-  type SkillMarkTone,
   type SkillTicks,
   skillList,
   type TextDeclares,
@@ -130,18 +133,10 @@ const PREVIEW_PAUSE_MS = 400;
 
 /** How the line under the box is drawn: understood with its dot, a problem in the attention tint, or plain while it waits. */
 const LINE_STATE = {
-  [DETECTED_TONE.DETECTED]: "connected",
-  [DETECTED_TONE.PROBLEM]: "attention",
-  [DETECTED_TONE.WAITING]: "plain",
+  [STATUS_TONE.COMPLETE]: "connected",
+  [STATUS_TONE.ATTENTION]: "attention",
+  [STATUS_TONE.NEUTRAL]: "plain",
 } as const satisfies Record<DetectedTone, string>;
-
-/** The badge each mark wears. */
-const MARK_BADGE = {
-  [SKILL_MARK_TONE.NEUTRAL]: BADGE_TONE.NEUTRAL,
-  [SKILL_MARK_TONE.COMPLETE]: BADGE_TONE.COMPLETE,
-  [SKILL_MARK_TONE.WORKING]: BADGE_TONE.WORKING,
-  [SKILL_MARK_TONE.ATTENTION]: BADGE_TONE.ATTENTION,
-} as const satisfies Record<SkillMarkTone, BadgeTone>;
 
 /** The service's preview as the dialog holds it: of which text, and what it answered. */
 interface Previewed {
@@ -170,10 +165,14 @@ interface SkillContext {
   readonly disabled: boolean;
 }
 
-/** A line in its tone's tint, announced as it changes. */
+/** A line in its tone's tint, announced as it lands and as it changes: an alert where it needs a hand. */
 function DetectedText({ line }: { line: DetectedLine }): React.JSX.Element {
+  useAnnounceShown(
+    line.tone === STATUS_TONE.ATTENTION ? ANNOUNCE.ALERT : ANNOUNCE.POLITE,
+    line.text,
+  );
   return (
-    <span className="settings-state" data-state={LINE_STATE[line.tone]} role="status">
+    <span className="settings-state" data-state={LINE_STATE[line.tone]}>
       {line.text}
     </span>
   );
@@ -202,12 +201,12 @@ function SkillName({
         {title}
       </Text>
       {marks.map((mark) => (
-        <Badge key={mark.text} tone={MARK_BADGE[mark.tone]}>
+        <Badge key={mark.text} tone={mark.tone}>
           {mark.text}
         </Badge>
       ))}
       {warnings.map((part) => (
-        <Badge key={part.text} tone={BADGE_TONE.ATTENTION}>
+        <Badge key={part.text} tone={STATUS_TONE.ATTENTION}>
           {part.text}
         </Badge>
       ))}
@@ -228,12 +227,12 @@ function AuditLine({
       {parts.map((part, index) => (
         <Inline key={part.text} gap={GAP.ICON}>
           {index === 0 ? null : (
-            <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.SUBTLE} as={TEXT_ELEMENT.SPAN}>
+            <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED} as={TEXT_ELEMENT.SPAN}>
               ·
             </Text>
           )}
           {part.warn ? (
-            <Badge tone={BADGE_TONE.ATTENTION}>{part.text}</Badge>
+            <Badge tone={STATUS_TONE.ATTENTION}>{part.text}</Badge>
           ) : (
             <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED} as={TEXT_ELEMENT.SPAN}>
               {part.text}
@@ -267,7 +266,7 @@ function SkillFile({
   if (!files.opened.has(candidate.name) || read === undefined) return null;
   if ("reading" in read) return <Spinner label={`Reading ${candidate.name}'s SKILL.md`} />;
   if ("failed" in read) {
-    return <DetectedText line={{ text: read.failed, tone: DETECTED_TONE.PROBLEM }} />;
+    return <DetectedText line={{ text: read.failed, tone: STATUS_TONE.ATTENTION }} />;
   }
   return <FileText text={read.markdown} label={`${candidate.name}'s SKILL.md`} />;
 }
@@ -457,7 +456,7 @@ function SkillRow({
             )}
           </Stack>
         </Checkbox>
-        <TextButton tone={TEXT_BUTTON_TONE.LINK} onClick={() => context.files.onView(candidate)}>
+        <TextButton onClick={() => context.files.onView(candidate)}>
           {viewWords(candidate, context.files)}
         </TextButton>
       </Inline>
@@ -489,7 +488,7 @@ function BrowseHead({
     <Stack gap={GAP.CONTROL}>
       <SearchField
         label={SKILLS_LINE.SEARCH}
-        placeholder={`Search ${count} skills`}
+        placeholder={`Search ${countWords(count, TERM.SKILL)}`}
         value={query}
         onChange={onQuery}
         onClear={() => onQuery("")}
@@ -528,7 +527,7 @@ function BrowseSkills({
   return (
     <Stack gap={GAP.CONTROL}>
       {missing === undefined ? null : (
-        <DetectedText line={{ text: missing, tone: DETECTED_TONE.PROBLEM }} />
+        <DetectedText line={{ text: missing, tone: STATUS_TONE.ATTENTION }} />
       )}
       {groups.length === 0 ? (
         <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
@@ -538,7 +537,7 @@ function BrowseSkills({
       {groups.map((group) => (
         <Stack key={group.title ?? ""} gap={GAP.ITEM} aria-label={group.title ?? "Skills found"}>
           {group.title === undefined ? null : (
-            <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.SUBTLE}>
+            <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
               {`${group.title} · ${group.skills.length}`}
             </Text>
           )}
@@ -582,11 +581,18 @@ function TextSkill({
       problem !== INSTALLED_SKILL_PROBLEM.NAME_MISSING &&
       problem !== INSTALLED_SKILL_PROBLEM.DESCRIPTION_MISSING,
   );
+  // Note that a problem of the name or the description is said on that field, so what is left is the text's own.
+  const nameProblem = shown.find((problem) => problem === INSTALLED_SKILL_PROBLEM.NAME_INVALID);
+  const descriptionProblem = shown.find(
+    (problem) => problem === INSTALLED_SKILL_PROBLEM.DESCRIPTION_TOO_LONG,
+  );
+  const rest = shown.filter((problem) => problem !== nameProblem && problem !== descriptionProblem);
   return (
     <Card look={CARD_LOOK.OUTLINE} padding={CARD_PADDING.COMPACT}>
       <Stack gap={GAP.FIELD}>
         <FormField
           label={SKILLS_LINE.NAME}
+          error={nameProblem === undefined ? undefined : problemsLine([nameProblem])}
           description={
             declares.name
               ? SKILLS_LINE.DECLARED
@@ -606,12 +612,19 @@ function TextSkill({
         </FormField>
         <FormField
           label={SKILLS_LINE.WHEN}
+          error={descriptionProblem === undefined ? undefined : problemsLine([descriptionProblem])}
           description={declares.description ? SKILLS_LINE.DECLARED : undefined}
+          count={
+            declares.description
+              ? undefined
+              : { length: fill.description.length, limit: TASK_SKILL_BOUNDS.MAX_DESCRIPTION_CHARS }
+          }
         >
           {(field) => (
             <TextArea
               field={field}
               value={fill.description}
+              maxLength={TASK_SKILL_BOUNDS.MAX_DESCRIPTION_CHARS}
               rows={2}
               grow
               readOnly={declares.description}
@@ -620,8 +633,8 @@ function TextSkill({
             />
           )}
         </FormField>
-        {shown.length === 0 ? null : (
-          <DetectedText line={{ text: problemsLine(shown), tone: DETECTED_TONE.PROBLEM }} />
+        {rest.length === 0 ? null : (
+          <DetectedText line={{ text: problemsLine(rest), tone: STATUS_TONE.ATTENTION }} />
         )}
         <FileText text={markdown} label="Pasted text" extent={FILE_TEXT_EXTENT.PEEK} />
       </Stack>
@@ -659,15 +672,21 @@ function SourceRow({
 
 /** The dialog Settings › Skills' Add skill opens, over the workspace the page shows. */
 export function AddSkillDialog({
+  open = true,
   workspace,
   onInstalled,
   onClose,
+  onExited,
   pause = rendererPause,
 }: {
+  /** Whether the card stands; falling, it fades out, then tells its owner it is gone. Standing while mounted where it is left out. */
+  open?: boolean | undefined;
   workspace: Workspace;
   /** The skills an install made, in the order asked: the ones named, then those they pull in. */
   onInstalled: (skills: readonly InstalledSkillSummary[]) => void;
   onClose: () => void;
+  /** Its fade has run and it is gone, which its owner takes it out on. */
+  onExited?: (() => void) | undefined;
   /** The wait before a preview, the renderer's own where none is handed in. */
   pause?: (ms: number) => Promise<void>;
 }): React.JSX.Element {
@@ -683,9 +702,12 @@ export function AddSkillDialog({
   const [opened, setOpened] = useState<ReadonlySet<string>>(new Set());
   const [read, setRead] = useState<ReadonlyMap<string, FileRead>>(new Map());
   const [installing, setInstalling] = useState(false);
+  // Note that Retry asks again by changing this, which the preview's effect reads.
+  const [attempt, setAttempt] = useState(0);
   const [refusal, setRefusal] = useState<string | undefined>(undefined);
   // Note that only a change that came at once folds the box, so a skill typed by hand keeps its box while the writer pauses.
   const pasted = useRef(false);
+  const box = useRef<HTMLTextAreaElement | null>(null);
   const paste = useMemo(() => parseSkillPaste(text), [text]);
   const declares = useMemo(() => textDeclares(paste), [paste]);
   const scopes = installScopes(workspace);
@@ -702,8 +724,10 @@ export function AddSkillDialog({
           : undefined,
       )
       .catch(() => undefined)
-      .then((view) => {
-        if (!current || view === undefined) return;
+      .then((answer) => {
+        if (!current) return;
+        // Note that a call with no answer is a failed preview, so the line under the box stops reading.
+        const view = answer ?? { failure: INSTALLED_SKILL_CALL_FAILURE.UNANSWERED };
         setPreviewed({ text, view });
         if ("failure" in view) return;
         setTicks(initialTicks(view));
@@ -720,7 +744,7 @@ export function AddSkillDialog({
     return () => {
       current = false;
     };
-  }, [act, asks, pause, text, workspace.id]);
+  }, [act, asks, attempt, pause, text, workspace.id]);
 
   const view = asks && previewed?.text === text ? previewed.view : undefined;
   const preview = view === undefined || "failure" in view ? undefined : view;
@@ -732,12 +756,17 @@ export function AddSkillDialog({
     .flatMap((group) => group.skills)
     .filter((each) => installable(each, scope))
     .map((each) => each.name);
+  const failed = view !== undefined && "failure" in view ? view : undefined;
   const line =
     view === undefined
       ? pastedLine(paste)
       : "failure" in view
-        ? { text: failureLine(view), tone: DETECTED_TONE.PROBLEM }
+        ? { text: previewFailureLine(view), tone: STATUS_TONE.ATTENTION }
         : previewLine(view);
+  const retry = () => {
+    setPreviewed(undefined);
+    setAttempt((was) => was + 1);
+  };
   const request = installRequest({
     workspaceId: workspace.id,
     text,
@@ -817,10 +846,14 @@ export function AddSkillDialog({
 
   return (
     <Dialog
+      open={open}
       title={addSkillTitle(screen, preview)}
       size={DIALOG_SIZE.WIDE}
       busy={installing}
+      holding={text.trim() !== ""}
+      initialFocus={box}
       onDismiss={onClose}
+      onExited={onExited}
       actionsStart={
         scopes.length > 1 ? (
           <ChoiceBar
@@ -873,6 +906,8 @@ export function AddSkillDialog({
                 grow
                 font={TEXT_FIELD_FONT.MONO}
                 spellCheck={false}
+                ref={box}
+                // Note that the card's own focus lands after this field's, so the dialog is told of it too; autoFocus is what takes it where Change or Edit draws it again.
                 autoFocus
                 busy={installing}
                 placeholder="npx skills add mattpocock/skills --skill grill-me"
@@ -886,7 +921,11 @@ export function AddSkillDialog({
             )}
           </FormField>
         )}
-        {folded || line === undefined ? null : <DetectedText line={line} />}
+        {folded || line === undefined ? null : failed !== undefined && previewRetries(failed) ? (
+          <ErrorState onRetry={retry}>{line.text}</ErrorState>
+        ) : (
+          <DetectedText line={line} />
+        )}
         {screen === ADD_SKILL_SCREEN.BROWSE ? (
           <BrowseHead
             count={skills.length}
@@ -899,13 +938,7 @@ export function AddSkillDialog({
           />
         ) : null}
         {folded && refusal !== undefined ? (
-          <span
-            className="settings-state"
-            data-state={LINE_STATE[DETECTED_TONE.PROBLEM]}
-            role="alert"
-          >
-            {refusal}
-          </span>
+          <DetectedText line={{ text: refusal, tone: STATUS_TONE.ATTENTION }} />
         ) : null}
       </Stack>
       {screen === ADD_SKILL_SCREEN.PASTE ? null : (

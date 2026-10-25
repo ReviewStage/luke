@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import { MOTION_DELAY_MS, MOTION_DURATION_MS } from "@luke/brand";
 import { CODING_AGENT_CALL_FAILURE } from "@luke/features/coding-agent-view";
 import {
   CHANGED_FILE_STATUS,
@@ -49,6 +50,7 @@ import { GitHubConnectProvider } from "../github-connect.js";
 import { MemberDirectory } from "../member-directory.js";
 import { fakeActPort } from "../testing/app-bridge.js";
 import { DESKTOP_LINKS, fakeAppPlatform } from "../testing/app-platform.js";
+import { layContainersAt } from "../testing/container-width.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { markdownHtmlParserLanded } from "../testing/markdown.js";
 import { landedBundles, onSideBundles } from "../testing/side-bundles.js";
@@ -265,6 +267,7 @@ const TREE_STAND_IN: FileTreeModule = {
       search: nothing,
       only: nothing,
       within: nothing,
+      relist: nothing,
       mark: nothing,
       unmount: nothing,
     };
@@ -315,6 +318,9 @@ afterEach(() => {
   act(() => root?.unmount());
   root = undefined;
   document.body.innerHTML = "";
+  for (const style of document.head.querySelectorAll("style")) style.remove();
+  document.body.style.removeProperty("--luke-duration-pane");
+  vi.useRealTimers();
   vi.restoreAllMocks();
 });
 
@@ -443,9 +449,9 @@ function railRows(tab: HTMLElement): string[] {
     .map((each) => each.getAttribute("aria-label") ?? "");
 }
 
-/** The chapter shown, by its heading. */
+/** The chapter shown, by the title its bar leads with. */
 function heading(tab: HTMLElement): string {
-  return tab.querySelector(".chapter-head h3")?.textContent ?? "";
+  return tab.querySelector(".chapter-reading .luke-pane-bar-title")?.textContent ?? "";
 }
 
 /** The paths and patches the chapter's list was last handed, the Files changed view's own left out. */
@@ -742,7 +748,7 @@ test("a generation that failed says why with Retry, chapters someone else is mak
   );
   assert.match(
     unavailable.textContent ?? "",
-    /Save an API key in Settings › Agents to generate chapters\./u,
+    /Save an API key in Agents settings to generate chapters\./u,
   );
   assert.equal(
     [...unavailable.querySelectorAll("button")].some(
@@ -750,4 +756,160 @@ test("a generation that failed says why with Retry, chapters someone else is mak
     ),
     false,
   );
+});
+
+test("Refresh on chapters someone else is making shows busy once the read has waited the settle delay, and stops when the read answers", async () => {
+  const making = answering({
+    status: PULL_REQUEST_CHAPTERS_STATE.GENERATING,
+    headSha: HEAD,
+    baseSha: BASE,
+    startedAt: 1_000,
+  });
+  const held: Array<(answer: PullRequestChaptersAnswerView) => void> = [];
+  let reads = 0;
+  const elsewhere = await draw(
+    controlAnswering({
+      readChapters: () => {
+        reads += 1;
+        if (reads === 1) return Promise.resolve(making);
+        return new Promise((answered) => held.push(answered));
+      },
+    }),
+  );
+  const refresh = () => button(elsewhere, "Refresh");
+  const busy = () =>
+    [...elsewhere.querySelectorAll<HTMLButtonElement>('button[aria-busy="true"]')].find(
+      (each) => each.closest(".chapters-generating-line") !== null,
+    );
+  const ring = () => busy()?.querySelector(".luke-spinner-ring") != null;
+  assert.equal(busy(), undefined);
+
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+  try {
+    act(() => refresh().click());
+    assert.equal(busy()?.getAttribute("aria-label") ?? busy()?.textContent, "Refreshing");
+    assert.equal(ring(), false);
+    act(() => vi.advanceTimersByTime(MOTION_DELAY_MS.SETTLE - 1));
+    assert.equal(ring(), false);
+    act(() => vi.advanceTimersByTime(1));
+    assert.equal(ring(), true);
+
+    // A press while it is out asks nothing more.
+    act(() => busy()?.click());
+    assert.equal(reads, 2);
+
+    for (const answered of held) answered(making);
+    await settle();
+    assert.equal(busy(), undefined);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+/** The rail floated over the chapter, as it stands where the panel has no room for it beside. */
+function floatedRail(tab: HTMLElement): HTMLElement | null {
+  return tab.querySelector<HTMLElement>('aside[aria-label="Chapters"]');
+}
+
+/** The toggle that floats the rail, which the stylesheet draws in a narrow panel alone. */
+function railToggle(tab: HTMLElement): HTMLButtonElement {
+  return (
+    tab.querySelector<HTMLButtonElement>('.chapter-rail-toggle[data-place="over"] button') ??
+    assert.fail("the toggle that floats the rail is drawn")
+  );
+}
+
+/** The chapter's foot in a chapter `width` pixels wide: the place it says, whether its buttons fold to their glyphs, and whether the place's noun is left to a reader. */
+async function footAt(width: number) {
+  layContainersAt({ "chapter-reading": width });
+  const tab = await draw(
+    controlAnswering({ readChapters: () => Promise.resolve(answering(ready())) }),
+  );
+  const foot =
+    tab.querySelector<HTMLElement>(".chapter-reading > .luke-pane-bar:last-child") ??
+    assert.fail("the chapter's foot stands");
+  const noun = foot.querySelector(".chapter-place-noun") ?? assert.fail("the place's noun stands");
+  return {
+    place: foot.querySelector(".chapter-place")?.textContent,
+    buttonsFolded: getComputedStyle(foot).getPropertyValue("--luke-fold").trim() === "folded",
+    nounLeftToAReader: getComputedStyle(noun).position === "absolute",
+  };
+}
+
+test("the foot says Chapter 1 of 3 whole beside both buttons' words where it has the room", async () => {
+  assert.deepEqual(await footAt(600), {
+    place: "Chapter 1 of 3",
+    buttonsFolded: false,
+    nounLeftToAReader: false,
+  });
+});
+
+test("a foot too narrow for the buttons' words folds them to their glyphs before it cuts its place", async () => {
+  assert.deepEqual(await footAt(400), {
+    place: "Chapter 1 of 3",
+    buttonsFolded: true,
+    nounLeftToAReader: false,
+  });
+});
+
+test("a foot too narrow even for its place says 1 of 3, the noun left to a reader", async () => {
+  assert.deepEqual(await footAt(200), {
+    place: "Chapter 1 of 3",
+    buttonsFolded: true,
+    nounLeftToAReader: true,
+  });
+});
+
+/** A narrow panel with the chapters read and the rail away. */
+async function narrowChapters(): Promise<HTMLElement> {
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+  document.body.style.setProperty("--luke-duration-pane", `${MOTION_DURATION_MS.PANE}ms`);
+  layContainersAt({ "side-panel": 500 });
+  const tab = await draw(
+    controlAnswering({ readChapters: () => Promise.resolve(answering(ready())) }),
+  );
+  assert.equal(floatedRail(tab), null, "the rail is away until its toggle is pressed");
+  return tab;
+}
+
+test("in a narrow panel the rail opens over the chapter, stays drawn through its exit, then is let go", async () => {
+  const tab = await narrowChapters();
+  act(() => railToggle(tab).click());
+  const opened = floatedRail(tab) ?? assert.fail("the rail opens over the chapter");
+  assert.equal(opened.getAttribute("data-state"), "open");
+  assert.equal(opened.getAttribute("data-edge"), "left");
+
+  act(() => railToggle(tab).click());
+  assert.equal(floatedRail(tab)?.getAttribute("data-state"), "leaving");
+  act(() => vi.advanceTimersByTime(MOTION_DURATION_MS.PANE - 1));
+  assert.notEqual(floatedRail(tab), null, "the exit has not finished");
+  act(() => vi.advanceTimersByTime(1));
+  assert.equal(floatedRail(tab), null, "the rail is let go once its exit has played");
+});
+
+test("Escape in the rail floated over the chapter puts it away and gives the keyboard back to its toggle", async () => {
+  const tab = await narrowChapters();
+  act(() => railToggle(tab).focus());
+  act(() => railToggle(tab).click());
+  const rail = floatedRail(tab) ?? assert.fail("the rail opens over the chapter");
+  assert.equal(document.activeElement, rail, "the rail takes the keyboard as it opens");
+
+  act(() => {
+    rail.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+  });
+  assert.equal(floatedRail(tab)?.getAttribute("data-state"), "leaving");
+  assert.equal(document.activeElement, railToggle(tab));
+});
+
+test("a chapter chosen in the rail floated over the chapter takes the rail down", async () => {
+  const tab = await narrowChapters();
+  act(() => railToggle(tab).click());
+  const sweep =
+    [...(floatedRail(tab)?.querySelectorAll<HTMLButtonElement>("button") ?? [])].find((each) =>
+      each.getAttribute("aria-label")?.startsWith("2."),
+    ) ?? assert.fail("the sweep's row stands");
+  act(() => sweep.click());
+  await settle();
+  assert.equal(heading(tab), "2. Sweep what expired");
+  assert.equal(floatedRail(tab)?.getAttribute("data-state"), "leaving");
 });

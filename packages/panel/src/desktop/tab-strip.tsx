@@ -1,6 +1,7 @@
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
   TABS_FOLD,
+  TABS_GROUND,
   Tab,
   type TabHint,
   type TabMove,
@@ -14,6 +15,7 @@ import {
 } from "@luke/ui";
 import { createContext, useContext, useRef, useState } from "react";
 import { useAppCommand } from "../app-commands.js";
+import { useCoarsePointer } from "../coarse-pointer.js";
 import { SHELL_ROOM } from "../shell-room.js";
 import { ShellRoomContext } from "../stage-room.js";
 import { ActionMenu, type MenuAction } from "./action-menu.js";
@@ -24,7 +26,9 @@ import { ROW_RUN, withRowMoves } from "./row-moves.js";
  *
  * The strip itself, its keys, its drag, its scroll, and its look, is
  * `@luke/ui`'s (`components/tabs`). What the window adds: how its tabs fold
- * in the room the stage gives (`ShellRoomContext`); the focused tab
+ * for the pointer that works them (`useCoarsePointer`), and where they
+ * stand, on the window's frame above the sheet they head wherever panes
+ * stand side by side (shell.css); the focused tab
  * stepped left or right by ⇧⌘← and ⇧⌘→, as VS Code moves an editor, while
  * one of the strip's tabs has the focus; each tab's hint, this window's
  * tooltip (`TabTooltip`); and a tab's own actions on a right-click, or from
@@ -36,8 +40,7 @@ import { ROW_RUN, withRowMoves } from "./row-moves.js";
 /**
  * Where a tab of the strip around it stands among the tabs that move, read
  * from the strip as the tab's menu opens, which moves it one place either
- * way under a finger (`row-moves.tsx`); none in a strip whose tabs stay
- * put, or for the tab anchored at its start.
+ * way (`row-moves.tsx`); none in a strip whose tabs stay put.
  */
 const TabPlaceContext = createContext<((tab: HTMLElement) => TabPlace | undefined) | undefined>(
   undefined,
@@ -53,7 +56,7 @@ const TabTooltip: TabHint = ({ label, card, children }) => (
 /**
  * The strip of tabs. `onMove`, while given, lets the tabs be moved, and
  * hears each move as the tab's place before and after it; every tab moves,
- * to any place among them all, but one anchored at the strip's start.
+ * to any place among them all.
  */
 export function TabStrip({
   label,
@@ -62,14 +65,20 @@ export function TabStrip({
   children,
 }: {
   label: string;
-  /** The ground the strip stands on: the side panel's well, or the column's own. */
+  /** The ground the strip stands on in a narrow room, full bleed: the side panel's well, or the column's own. */
   ground?: TabsGround | undefined;
   onMove?: TabMove | undefined;
   children: React.ReactNode;
 }): React.JSX.Element {
   const controls = useRef<TabsControls | null>(null);
-  // A narrow room's tabs keep their labels rather than turning to glyphs,
-  // since a phone has no hint to name a glyph and two agents' glyphs look alike.
+  // A finger's tabs keep their labels rather than turning to glyphs, since a
+  // finger has no hint to name a glyph and two agents' glyphs look alike. Note
+  // that the room says nothing here: each tab folds by its own width
+  // (`@luke/ui`'s tabs.css), so a narrow window worked by a mouse folds as a
+  // wide one does, its glyphs named under the pointer.
+  const finger = useCoarsePointer();
+  // Where panes stand side by side the strip stands on the window's frame;
+  // a narrow room's stands full bleed on the ground its caller names.
   const room = useContext(ShellRoomContext);
   // Whether one of the strip's tabs has focus, the one the move chords move.
   const [focused, setFocused] = useState(false);
@@ -81,8 +90,8 @@ export function TabStrip({
     <TabPlaceContext.Provider value={placeOf}>
       <Tabs
         label={label}
-        ground={ground}
-        fold={room === SHELL_ROOM.NARROW ? TABS_FOLD.LABEL : TABS_FOLD.GLYPH}
+        ground={room === SHELL_ROOM.NARROW ? ground : TABS_GROUND.FRAME}
+        fold={finger ? TABS_FOLD.LABEL : TABS_FOLD.GLYPH}
         onMove={onMove}
         onFocusChange={setFocused}
         controls={controls}

@@ -1,4 +1,4 @@
-import { BANNER_LOOK, BANNER_TONE, Banner, BUTTON_VARIANT, Button } from "@luke/ui";
+import { BANNER_LOOK, Banner, BUTTON_VARIANT, Button, STATUS_TONE } from "@luke/ui";
 import type { ReactNode } from "react";
 import { AttentionMark } from "../attention-mark.js";
 
@@ -39,7 +39,7 @@ export function TaskBanner({
   return (
     <Banner
       look={BANNER_LOOK.STRIP}
-      tone={BANNER_TONE.ATTENTION}
+      tone={STATUS_TONE.ATTENTION}
       glyph={<AttentionMark />}
       actions={
         <Button variant={BUTTON_VARIANT.OUTLINE} onClick={action.onPress}>

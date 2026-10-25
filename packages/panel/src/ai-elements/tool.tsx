@@ -4,17 +4,23 @@ import {
   CARD_LOOK,
   CARD_PADDING,
   Card,
+  CODE_CARD_TITLE,
+  CODE_ROW,
+  CodeCard,
+  type CodeRow,
   DISCLOSURE_BODY,
   DisclosureBody,
+  FailureNote,
   GlyphSlot,
   LineSummary,
   OneLine,
-  TextButton,
-  useDisclosureBodyDrawn,
+  Tooltip,
+  useDisclosurePreviewShown,
+  useDisclosureState,
 } from "@luke/ui";
-import { type ReactNode, useState } from "react";
+import type { ReactNode } from "react";
+import { copyThroughShell } from "../copy-feedback.js";
 import { GLYPH_STATE, StateGlyph, stateEndMark } from "../state-glyph.js";
-import { CodeBlock } from "./code-block.js";
 import { Fold, type FoldProps } from "./fold.js";
 
 /**
@@ -27,18 +33,21 @@ import { Fold, type FoldProps } from "./fold.js";
  * cut moves when the mark goes: the working mark while it runs and the
  * failed mark if it failed, each as an agent's tab draws it
  * (`state-glyph.tsx`); a call that ended well keeps no seat for one. A
- * subject the body says whole, as a command's input is the command, is
- * the closed row's preview, and the open row says its verb alone. The
+ * subject the body says whole, as a command's input is the command and a
+ * read's its path, is the closed row's preview, and the open row says its
+ * verb alone (`blockSays`), even while a find draws the body hidden. The
  * verb is in the full ink and the icon and the subject in the muted one,
  * so a reader scans what each call did and the subject reads as its
  * preview, fading where the line cuts it rather than ending on an
- * ellipsis. There is no chevron: the icon leads, and a hover fill says
- * the line opens. The body under
- * it, set in under the words, is the call's input and its answer in two
- * mono blocks of bounded height, the answer cut to its first lines with
- * the rest behind Show more. What the words say is the caller's decision
- * (`tasks/tool-call-model.ts`); how a block of each kind is drawn is
- * this file's. Its look is `.tool`'s (tasks.css).
+ * ellipsis. There is no chevron: the icon leads, a hover fill says the
+ * line opens, and its hint says what a press does, as a line that opens a
+ * tab says what it opens. The body under
+ * it, set in under the words, is the call's input and its answer, each a
+ * `CodeCard` headed "Input" and "Answer" with the window's one Copy and its
+ * one cut at 40 lines, so a long answer shows its first lines over "Show
+ * all", and Copy copies the whole of it either way. What the words say is
+ * the caller's decision (`tasks/tool-call-model.ts`); how a block of each
+ * kind is drawn is this file's. Its look is `.tool`'s (tasks.css).
  */
 
 /** The states a tool part may stand in, as the AI SDK spells them. */
@@ -66,41 +75,41 @@ export interface ToolBlock {
   readonly text: string;
 }
 
-/** The kinds of line a patch has, each drawn in its own colour. */
-const PATCH_LINE = {
-  ADDED: "added",
-  REMOVED: "removed",
-  MARK: "mark",
-  CONTEXT: "context",
-} as const;
-
-type PatchLineKind = (typeof PATCH_LINE)[keyof typeof PATCH_LINE];
-
 /** The prompt a command is drawn behind. */
 const COMMAND_PROMPT = "$ ";
 
-/** How many lines of an answer a body shows before the rest waits behind Show more. */
-const OUTPUT_PREVIEW_LINES = 40;
+/** What a block's header says it is. */
+const BLOCK_TITLE = {
+  INPUT: "Input",
+  ANSWER: "Answer",
+} as const;
 
-/** Which kind of line a patch's line is, by its first characters. */
-function patchLineKind(line: string): PatchLineKind {
-  if (line.startsWith("+")) return PATCH_LINE.ADDED;
-  if (line.startsWith("-")) return PATCH_LINE.REMOVED;
-  if (line.startsWith("@@") || line.startsWith("***")) return PATCH_LINE.MARK;
-  return PATCH_LINE.CONTEXT;
+/**
+ * Whether a block says a call's subject whole, so the row previewing it
+ * gives way while the body is drawn: a block that is the subject, as a
+ * read's input is its path, or JSON holding it as one of its values, as a
+ * search's input holds its pattern. Note that words made from the input
+ * rather than copied from it, as a page's name is made from its address,
+ * are not said by it, so they stay.
+ */
+export function blockSays(block: ToolBlock, subject: string | undefined): boolean {
+  if (subject === undefined || subject === "") return false;
+  if (block.text === subject) return true;
+  return block.kind === TOOL_BLOCK.JSON && block.text.includes(`: ${JSON.stringify(subject)}`);
 }
 
-/** A long answer cut to its first lines: what is shown, and how many lines wait behind Show more. */
-interface ClippedLines {
-  readonly shown: string;
-  readonly hiddenLines: number;
+/** What a patch's line does, by its first characters: a line added, one removed, or one that stands. */
+function patchRow(line: string): CodeRow {
+  if (line.startsWith("+")) return CODE_ROW.ADDED;
+  if (line.startsWith("-")) return CODE_ROW.REMOVED;
+  return CODE_ROW.CONTEXT;
 }
 
-function clippedLines(text: string, limit: number = OUTPUT_PREVIEW_LINES): ClippedLines {
-  const lines = text.split("\n");
-  if (lines.length <= limit) return { shown: text, hiddenLines: 0 };
-  return { shown: lines.slice(0, limit).join("\n"), hiddenLines: lines.length - limit };
-}
+/** What the hover over a call's folding line says a press does, by whether the fold stands open. */
+export const FOLD_HINT = {
+  SHOW: "Show the call",
+  HIDE: "Hide the call",
+} as const;
 
 export type ToolProps = Omit<FoldProps, "className">;
 
@@ -138,7 +147,7 @@ export interface ToolHeaderProps {
   chip?: ReactNode | undefined;
   /** Whether the subject is code (a command, a path), set in mono, rather than words. */
   subjectIsCode?: boolean;
-  /** Whether the body says the subject whole, as a command's does, so an open row drops it. */
+  /** Whether the body says the subject whole, as a command's or a read's does (`blockSays`), so an open row drops it. */
   subjectInBody?: boolean;
   /** Where the call ran, as a quiet tag at the line's end, for a call that ran somewhere other than its tab says ("On your Mac", or whose Mac by their disc and name); none for the rest. */
   place?: ReactNode | undefined;
@@ -196,6 +205,26 @@ export function ToolLine({
   );
 }
 
+/**
+ * A call's folding line, which opens and closes its fold, hanging the hint
+ * that says so, as a line that opens a tab hangs what it opens; the caller
+ * draws what stands in it, and finds it by the marks it hands.
+ */
+export function ToolSummary({
+  children,
+  ...marks
+}: {
+  children: ReactNode;
+  [mark: `data-${string}`]: string | undefined;
+}): ReactNode {
+  const { open } = useDisclosureState();
+  return (
+    <Tooltip label={open ? FOLD_HINT.HIDE : FOLD_HINT.SHOW}>
+      <LineSummary {...marks}>{children}</LineSummary>
+    </Tooltip>
+  );
+}
+
 /** The one line a call shows: what it did, and where it stands. */
 export function ToolHeader({
   state,
@@ -207,31 +236,43 @@ export function ToolHeader({
   subjectInBody = false,
   place,
 }: ToolHeaderProps): ReactNode {
-  const drawn = useDisclosureBodyDrawn();
+  const previewed = useDisclosurePreviewShown(subjectInBody);
   return (
-    <LineSummary>
+    <ToolSummary>
       <ToolLine
         state={state}
         icon={icon}
         label={label}
-        subject={subjectInBody && drawn ? undefined : subject}
+        subject={previewed ? subject : undefined}
         chip={chip}
         subjectIsCode={subjectIsCode}
         place={place}
       />
-    </LineSummary>
+    </ToolSummary>
   );
 }
 
 /** The body under an open row: a card holding the blocks, a hairline between them, clipped to its corners, so what is in it rings inside itself. */
 export function ToolContent({
   name,
+  bare = false,
   children,
 }: {
   /** The class its place names what it holds by, beside the body's own. */
   name?: string | undefined;
+  /** Whether what it holds are cards of their own (`CodeCard`), which stand one over the next with no frame around them. */
+  bare?: boolean;
   children: ReactNode;
 }): ReactNode {
+  if (bare) {
+    return (
+      <DisclosureBody inset={DISCLOSURE_BODY.NONE}>
+        <div className="tool-body" data-bare="">
+          {children}
+        </div>
+      </DisclosureBody>
+    );
+  }
   return (
     <DisclosureBody inset={DISCLOSURE_BODY.NONE}>
       <Card
@@ -246,37 +287,34 @@ export function ToolContent({
   );
 }
 
-/** A block's words drawn by its kind. */
-function BlockWords({ block }: { block: ToolBlock }): ReactNode {
-  switch (block.kind) {
-    case TOOL_BLOCK.COMMAND:
-      return (
-        <>
-          <span className="tool-prompt">{COMMAND_PROMPT}</span>
-          {block.text}
-        </>
-      );
-    case TOOL_BLOCK.PATCH:
-      return block.text.split("\n").map((line, index) => (
-        <span key={index} className="tool-patch-line" data-line={patchLineKind(line)}>
-          {line}
-        </span>
-      ));
-    case TOOL_BLOCK.TEXT:
-    case TOOL_BLOCK.JSON:
-      return block.text;
-  }
+/** A block as the card draws it: what its lines are, what Copy copies, and what each line does where it is a patch. */
+function BlockCard({
+  block,
+  title,
+  data,
+}: {
+  block: ToolBlock;
+  title: string;
+  data: `data-${string}`;
+}): ReactNode {
+  const isCommand = block.kind === TOOL_BLOCK.COMMAND;
+  return (
+    <CodeCard
+      title={title}
+      titleIs={CODE_CARD_TITLE.WORDS}
+      // Note that the prompt is drawn but never copied: Copy takes the command alone.
+      code={isCommand ? `${COMMAND_PROMPT}${block.text}` : block.text}
+      copied={block.text === "" ? undefined : block.text}
+      rows={block.kind === TOOL_BLOCK.PATCH ? block.text.split("\n").map(patchRow) : undefined}
+      data={{ [data]: "" }}
+      copy={copyThroughShell}
+    />
+  );
 }
 
 /** What the call was given. */
 export function ToolInput({ block }: { block: ToolBlock }): ReactNode {
-  return (
-    <div data-tool-input="">
-      <CodeBlock>
-        <BlockWords block={block} />
-      </CodeBlock>
-    </div>
-  );
+  return <BlockCard block={block} title={BLOCK_TITLE.INPUT} data="data-tool-input" />;
 }
 
 export interface ToolOutputProps {
@@ -285,33 +323,15 @@ export interface ToolOutputProps {
   errorText: string | undefined;
 }
 
-/** What the call answered, cut to its first lines, or the error it ended in; nothing while it has answered neither. */
+/** What the call answered, cut at 40 lines by its card, or the error it ended in; nothing while it has answered neither. */
 export function ToolOutput({ block, errorText }: ToolOutputProps): ReactNode {
-  const [whole, setWhole] = useState(false);
-  if (block === undefined && errorText === undefined) return null;
   if (errorText !== undefined) {
     return (
       <div data-tool-output="">
-        <p className="tool-error" role="alert">
-          {errorText}
-        </p>
+        <FailureNote>{errorText}</FailureNote>
       </div>
     );
   }
   if (block === undefined) return null;
-  const clipped = whole ? { shown: block.text, hiddenLines: 0 } : clippedLines(block.text);
-  return (
-    <div data-tool-output="">
-      <CodeBlock>
-        <BlockWords block={{ kind: block.kind, text: clipped.shown }} />
-      </CodeBlock>
-      {clipped.hiddenLines > 0 ? (
-        <p className="tool-more">
-          <TextButton onClick={() => setWhole(true)}>
-            Show {clipped.hiddenLines} more {clipped.hiddenLines === 1 ? "line" : "lines"}
-          </TextButton>
-        </p>
-      ) : null}
-    </div>
-  );
+  return <BlockCard block={block} title={BLOCK_TITLE.ANSWER} data="data-tool-output" />;
 }

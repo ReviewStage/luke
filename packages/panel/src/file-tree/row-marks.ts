@@ -25,6 +25,21 @@ import type { FileMark } from "./contract.js";
  * it, and the row is dimmed, as stage-cli dims a viewed file. A folder's
  * row says nothing more.
  *
+ * A name cut short fades out at its end, as a cut label does across the
+ * window (`@luke/ui`'s OneLine), rather than losing its middle to Pierre's
+ * ellipsis: Pierre cuts a name in two halves and empties the first before
+ * the second, and the sheet empties the second first, cuts it at its end
+ * rather than its start, and draws Pierre's marker, which stands only where
+ * a half is cut, as the row's ground fading in over its last letters. A
+ * folder row naming several folders (`db / schema`) gives up its last
+ * folder first, the same way.
+ *
+ * The toggle is a control a reader can find and press: Pierre draws each
+ * part as a bare span with only its colour, so the tree names every toggle
+ * after each drawing, as a checkbox named Viewed, checked once the file is
+ * viewed (`nameToggles`), and a press on it, a reader's own among them, is
+ * heard by the tree (`pressedToggle`).
+ *
  * Note that the sheet is adopted by the tree's shadow root as a
  * constructed sheet rather than handed to Pierre's `unsafeCSS`, because
  * Pierre writes that into a `<style>` element, which the panel's policy
@@ -43,6 +58,9 @@ const PART = {
   REMOVED: 3,
   VIEWED: 4,
 } as const;
+
+/** The role a Viewed toggle plays for a reader: ticked or not, as a review's checkbox. */
+const TOGGLE_ROLE = "checkbox";
 
 /** What a part says, read out in the run's hint. */
 const MARK_WORDS = {
@@ -101,13 +119,31 @@ const VIEWED_ROW = `[data-type="item"]:has(> [data-item-section="decoration"] > 
 const ROW_GROUND =
   "linear-gradient(var(--truncate-marker-background-overlay-color, transparent), var(--truncate-marker-background-overlay-color, transparent)), var(--truncate-marker-background-color, transparent)";
 
+/** A row's name, Pierre's two halves of one, a half, and Pierre's mark where a half is cut. */
+const NAME = '[data-type="item"] > [data-item-section="content"]';
+const HALVES = `${NAME} [data-truncate-group-container="middle"]`;
+const CUT = `${NAME} [data-truncate-container]`;
+const CUT_MARK = `${CUT} [data-truncate-marker]`;
+const FOLDERS = `${NAME} [data-item-flattened-subitems] > [data-item-flattened-subitem]`;
+
+/** The open file's row, the one the tree marks chosen (`folder-browser.ts`'s `markAlone`). */
+const OPEN_ROW = '[data-type="item"][data-item-selected="true"]';
+
 /**
- * The rules the tree draws by: the window's thin scrollbar, whose colour
+ * The rules the tree draws by: the open file's row lifted by a hairline and
+ * a soft shadow over the ground the host gives it, as `@luke/ui`'s ListRow
+ * draws a list's open row; a cut name's fade at its end; the window's thin scrollbar, whose colour
  * inherits into Pierre's shadow root and whose width does not, so it is set
  * here on the scroller and on the box Pierre measures that scroller's
  * gutter from; and each file's run.
  */
 const SHEET = `
+${OPEN_ROW} { box-shadow: 0 0 0 1px var(--luke-color-border), 0 1px 2px var(--luke-color-shadow-soft); }
+${HALVES} > div:first-child, ${FOLDERS} { flex: 0 1 max-content; min-width: 0; }
+${HALVES} > div:last-child, ${FOLDERS}:last-child { flex: 0 999999 max-content; min-width: 0; }
+${CUT}[data-truncate-container="fruncate"] [data-truncate-content] { direction: ltr; }
+${CUT_MARK} { right: 0; left: auto; width: var(--luke-label-fade); color: transparent; mask-image: linear-gradient(to right, transparent, #000); }
+${CUT_MARK}::before, ${CUT_MARK}::after { content: none; }
 [data-file-tree-virtualized-scroll], [data-file-tree-scrollbar-measure] { scrollbar-width: thin; }
 ${LANE}:has(> span > span) { position: relative; overflow: visible; }
 ${LANE}:has(> span > ${TICKED}) { min-width: calc(var(--luke-space-4) + var(--luke-space-12)); }
@@ -127,15 +163,50 @@ ${VIEWED_ROW}:not([data-item-selected]) { opacity: 0.6; }
 /** The sheet, made the first time a tree is dressed, where the document can make one. */
 let sheet: CSSStyleSheet | undefined;
 
+/** The shadow roots whose toggles are named each time Pierre draws in them. */
+const watched = new WeakSet<ShadowRoot>();
+
+/**
+ * Names each Viewed toggle drawn under a tree's shadow root as the control
+ * it is: a checkbox named Viewed, checked once its file is viewed, which the
+ * part says by holding the word.
+ */
+function nameToggles(root: ShadowRoot): void {
+  for (const toggle of root.querySelectorAll<HTMLElement>(part(PART.VIEWED))) {
+    toggle.setAttribute("role", TOGGLE_ROLE);
+    toggle.setAttribute("aria-label", MARK_WORDS.VIEWED);
+    toggle.setAttribute("aria-checked", String(toggle.textContent !== ""));
+  }
+}
+
+/**
+ * Names a tree's toggles now and after each time Pierre draws in its shadow
+ * root, once for each root. Note that only the parts' words and rows are
+ * watched, never attributes, so naming a toggle wakes no second naming.
+ */
+function watchToggles(root: ShadowRoot): void {
+  if (watched.has(root)) return;
+  watched.add(root);
+  new MutationObserver(() => nameToggles(root)).observe(root, {
+    childList: true,
+    characterData: true,
+    subtree: true,
+  });
+  nameToggles(root);
+}
+
 /**
  * Adopts the tree's sheet into its shadow root wherever it is not adopted
- * there, beside Pierre's own; call it each time the tree's element joins the
- * document, since Pierre then adopts its own sheet alone.
+ * there, beside Pierre's own, and names its toggles as Pierre draws them;
+ * call it each time the tree's element joins the document, since Pierre then
+ * adopts its own sheet alone.
  */
 export function dress(tree: FileTree): void {
   const root = tree.getFileTreeContainer()?.shadowRoot;
+  if (root === null || root === undefined) return;
+  watchToggles(root);
   // Note that a document that adopts no sheets, as jsdom's, draws the run unstyled.
-  if (root?.adoptedStyleSheets === undefined) return;
+  if (root.adoptedStyleSheets === undefined) return;
   if (sheet === undefined) {
     sheet = new CSSStyleSheet();
     sheet.replaceSync(SHEET);

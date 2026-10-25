@@ -6,6 +6,7 @@ import {
 } from "@luke/features/workspace-invitation-wire";
 import { act } from "react";
 import { afterEach, expect, test, vi } from "vitest";
+import { PANEL_PATH } from "../src/app/web-address";
 
 /**
  * accept-invitation.test.ts -- the invitation page says where an invitation
@@ -155,6 +156,9 @@ test("a valid invitation names its workspace and inviter and is accepted from it
   await titled(page, "You joined Atlas");
   expect(page.textContent).toContain("Return to Luke. You can close this tab.");
   expect(buttonNames(page)).toEqual([]);
+  const open = page.querySelector("a");
+  expect(open?.textContent).toBe("Open Luke on the web");
+  expect(open?.getAttribute("href")).toBe(PANEL_PATH);
 });
 
 test("a spent invitation says so and offers nothing to press", async () => {
@@ -198,7 +202,7 @@ test("a signed-out visitor is offered the providers, and a sign-in that cannot s
 
   await vi.waitFor(() =>
     expect(page.querySelector('[role="alert"]')?.textContent).toBe(
-      "Sign-in could not start. Try again.",
+      "Sign-in didn't finish. Try again.",
     ),
   );
   expect(buttonNames(page)).toEqual(["Continue with Google", "Continue with GitHub"]);

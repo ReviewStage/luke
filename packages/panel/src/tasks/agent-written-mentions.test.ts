@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { LINK_PLACE, type ReadLink } from "@luke/features/luke-link";
+import { LINK_PLACE, type ReadLink } from "@luke/features/link-grammar";
 import { pageFrameUrl } from "@luke/features/page-frame";
 import { IDLE_TASKS_VIEW } from "@luke/features/tasks-view";
 import { Effect } from "effect";
@@ -104,7 +104,10 @@ test("an agent's written mentions of a page, an agent, a section, and a file are
   act(() => page.click());
 
   assert.deepEqual(
-    chips.map((chip) => [chip.dataset.kind, chip.textContent]),
+    chips.map((chip) => [
+      chip.dataset.kind,
+      chip.querySelector(".luke-inline-ref-label")?.textContent,
+    ]),
     [
       ["page", "Invite funnel"],
       ["agent", "Wire the desktop"],

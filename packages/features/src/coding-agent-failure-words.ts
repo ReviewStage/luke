@@ -4,11 +4,15 @@ import { CODING_AGENT_FAILURE, type CodingAgentFailure } from "./coding-agent-wi
  * coding-agent-failure-words.ts -- why an agent's turn failed, in the words the window says it in: one phrase per failure word the service answers.
  *
  * A failed agent's end line says it after "Failed", and an automation's run
- * whose agent failed says it after "Its agent failed", so the two read one
- * table. A failure the window has no words for says nothing more. A
+ * whose agent failed says it after "Failed", so the two read one table. A failure the window has no words for says nothing more. A
  * failure a new agent mends says so after its words, unless Continue
  * stands beside them or one already continued it (`continuable`), when the
  * advice is redundant or stale.
+ *
+ * A failure the reader mends in Settings names no path to the page: the
+ * line's remedy opens the page itself (`failure-remedy.ts`), by the name
+ * the page has now, where a path written into the words would go stale the
+ * day the page is renamed.
  */
 
 /** Why a turn failed, by the service's one word for it; nothing for a reason with no words. */
@@ -16,16 +20,15 @@ const AGENT_FAILURE_WORDS = {
   [CODING_AGENT_FAILURE.MODEL]: "the model call failed",
   [CODING_AGENT_FAILURE.SANDBOX]: "the sandbox or checkout failed",
   [CODING_AGENT_FAILURE.GITHUB]: "GitHub refused or could not be reached",
-  [CODING_AGENT_FAILURE.ABANDONED]: "the turn ran past its bound and was ended",
-  [CODING_AGENT_FAILURE.PROVIDER_KEY]:
-    "your API key was refused or can't be read; check Settings › Agents",
+  [CODING_AGENT_FAILURE.ABANDONED]: "it ran out of time",
+  [CODING_AGENT_FAILURE.PROVIDER_KEY]: "your API key was refused or cannot be read",
   [CODING_AGENT_FAILURE.NOT_STARTED]: "the agent never started",
   [CODING_AGENT_FAILURE.FAST_ON_OWN_KEY]:
     "Fast isn't available on your own API key; choose the model with Fast off",
   [CODING_AGENT_FAILURE.FAST_NOT_ENABLED]:
     "Fast mode isn't enabled for this Anthropic organization; choose the model with Fast off",
   [CODING_AGENT_FAILURE.CONTEXT_OVERFLOW]: "the conversation was too long for the model",
-  [CODING_AGENT_FAILURE.SESSION_ENDED]: "the agent's session ended and can't be reached again",
+  [CODING_AGENT_FAILURE.SESSION_ENDED]: "the agent's session ended and cannot be reached again",
   [CODING_AGENT_FAILURE.OTHER]: undefined,
 } as const satisfies Record<CodingAgentFailure, string | undefined>;
 
@@ -49,7 +52,7 @@ export function agentFailureWords(
   continuable = false,
 ): string | undefined {
   if (holder !== undefined && failure === CODING_AGENT_FAILURE.PROVIDER_KEY) {
-    return `${holder}'s API key was refused or can't be read`;
+    return `${holder}'s API key was refused or cannot be read`;
   }
   if (holder !== undefined && failure === CODING_AGENT_FAILURE.FAST_ON_OWN_KEY) {
     return `Fast isn't available on ${holder}'s own API key; choose the model with Fast off`;

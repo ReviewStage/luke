@@ -139,12 +139,12 @@ function footOf(message: HTMLElement): readonly string[] {
 test("a finished turn's Copy and Copy link stand on its last line, to the right of how long it worked", async () => {
   const message = await drawnTurn(CODING_AGENT_STATUS.COMPLETED);
 
-  assert.deepEqual(footOf(message), ["Worked for 1m 18s", "Copy", "Copy link"]);
+  assert.deepEqual(footOf(message), ["Worked for 1m 18s", "Copy message", "Copy link"]);
 });
 
 test("a turn still running offers no Copy, its words not yet whole", async () => {
   const message = await drawnTurn(CODING_AGENT_STATUS.RUNNING);
 
   assert.ok(message.textContent?.includes(WORDS), "the turn's words so far are drawn");
-  assert.equal(message.querySelector('button[aria-label="Copy"]'), null);
+  assert.equal(message.querySelector('button[aria-label="Copy message"]'), null);
 });

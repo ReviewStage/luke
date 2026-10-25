@@ -4,9 +4,10 @@ import {
   type CodingAgentTodos,
 } from "@luke/features/coding-agent-wire";
 import type { IntegrationProvider } from "@luke/features/integration-wire";
-import { readLink } from "@luke/features/luke-link";
+import { readLink } from "@luke/features/link-grammar";
 import { mayNameMention } from "@luke/features/mention-link";
 import type { CatalogModel, ModelChoice } from "@luke/features/models-wire";
+import { formatBytes } from "@luke/features/number-format";
 import { planAttachmentOf } from "@luke/features/plan-attachment-link";
 import {
   agentCallLine,
@@ -30,6 +31,7 @@ import {
   DisclosureBody,
   DisclosureChevron,
   DisclosureSummary,
+  FailureNote,
   GAP,
   GLYPH_ARRIVAL,
   GLYPH_INK,
@@ -38,7 +40,6 @@ import {
   InlineRef,
   LAYOUT_ELEMENT,
   LineButton,
-  LineSummary,
   OneLine,
   ProviderMark,
   RollingNumber,
@@ -49,20 +50,11 @@ import {
   TEXT_VARIANT,
   Text,
   Tooltip,
+  useDisclosurePreviewShown,
   useDisclosureState,
 } from "@luke/ui";
 import { ACTOR_KIND, ACTOR_STATE, type Actor, actorName } from "@luke/ui/actor-model";
 import { githubShapes, wholeRendering } from "@luke/ui/github-html";
-import { gluedRun, LINK_GLUE } from "@luke/ui/link-glue";
-import {
-  MARKDOWN_HTML_STEP,
-  type MarkdownComponents,
-  type MarkdownNodeProps,
-  type MarkdownSteps,
-  markdownStep,
-  TRANSCRIPT_REMARK_STEPS,
-} from "@luke/ui/markdown";
-import { TAB_WORDS } from "@luke/ui/tab-strip-model";
 import {
   AppWindowIcon,
   ArchiveIcon,
@@ -75,7 +67,7 @@ import {
   CalendarPlusIcon,
   CalendarXIcon,
   CircleCheckIcon,
-  CircleDotIcon,
+  CircleDotDashedIcon,
   CircleIcon,
   CirclePlusIcon,
   CircleStopIcon,
@@ -88,6 +80,7 @@ import {
   FolderInputIcon,
   FolderMinusIcon,
   FolderPlusIcon,
+  GLYPH,
   GlobeIcon,
   HashIcon,
   HourglassIcon,
@@ -95,7 +88,6 @@ import {
   InboxIcon,
   LaptopIcon,
   LayoutListIcon,
-  ListTodoIcon,
   type LucideIcon,
   MessageCircleQuestionIcon,
   MessageCircleXIcon,
@@ -103,7 +95,6 @@ import {
   MessageSquareTextIcon,
   MessagesSquareIcon,
   PencilLineIcon,
-  PhoneOffIcon,
   PlayIcon,
   ScrollTextIcon,
   SearchIcon,
@@ -111,9 +102,20 @@ import {
   TerminalIcon,
   TimerIcon,
   WrenchIcon,
-} from "lucide-react";
+} from "@luke/ui/icons";
+import { gluedRun, LINK_GLUE } from "@luke/ui/link-glue";
+import {
+  MARKDOWN_HTML_STEP,
+  type MarkdownComponents,
+  type MarkdownNodeProps,
+  type MarkdownSteps,
+  markdownStep,
+  TRANSCRIPT_REMARK_STEPS,
+} from "@luke/ui/markdown";
+import { TAB_WORDS } from "@luke/ui/tab-strip-model";
 import {
   type ComponentProps,
+  type ComponentType,
   createContext,
   Fragment,
   type MouseEvent,
@@ -129,6 +131,7 @@ import { FoldBody } from "../ai-elements/fold.js";
 import { MessageResponse, PANEL_MARKDOWN_COMPONENTS } from "../ai-elements/message.js";
 import { Reasoning, ReasoningContent, ReasoningTrigger } from "../ai-elements/reasoning.js";
 import {
+  blockSays,
   TOOL_BLOCK,
   TOOL_STATE,
   Tool,
@@ -141,6 +144,7 @@ import {
   ToolOutput,
   type ToolState,
   ToolStateMark,
+  ToolSummary,
 } from "../ai-elements/tool.js";
 import { GLYPH_STATE, StateGlyph } from "../state-glyph.js";
 import { TextLink } from "../text-link.js";
@@ -592,7 +596,10 @@ function remarkPluginsFor(
  * task's page it is drawn on, or the window's doors off one; a link as any
  * other is where it names none.
  */
-function MentionElement({ node, children }: MarkdownNodeProps & { children?: ReactNode }): ReactNode {
+function MentionElement({
+  node,
+  children,
+}: MarkdownNodeProps & { children?: ReactNode }): ReactNode {
   const doors = useMentionDoors();
   const target = String(node?.properties[MENTION_ELEMENT.TARGET] ?? "");
   const words = node === undefined ? "" : wordsOf(node);
@@ -607,7 +614,10 @@ function MentionElement({ node, children }: MarkdownNodeProps & { children?: Rea
 }
 
 /** A link standing alone in its paragraph of a document: the card of what it names, or the paragraph as it was where it earns none (`lone-link-card.tsx`). */
-function LoneLinkElement({ node, children }: MarkdownNodeProps & { children?: ReactNode }): ReactNode {
+function LoneLinkElement({
+  node,
+  children,
+}: MarkdownNodeProps & { children?: ReactNode }): ReactNode {
   const target = String(node?.properties[LONE_LINK_ELEMENT.TARGET] ?? "");
   const words = String(node?.properties[LONE_LINK_ELEMENT.WORDS] ?? "");
   return <LoneLinkCard target={target} words={words} fallback={<p>{children}</p>} />;
@@ -883,15 +893,9 @@ const CUT_WORDS = {
   OUTPUT: "Reading the whole output…",
 } as const;
 
-/** A size in bytes as a reader says it. */
-function sizeWords(bytes: number): string {
-  const kilobytes = bytes / 1024;
-  return kilobytes < 1024 ? `${Math.round(kilobytes)} kB` : `${(kilobytes / 1024).toFixed(1)} MB`;
-}
-
 /** A cut part's two ends, the middle that could not be read said between them. */
 function cutText(cut: CutBody): string {
-  return `${cut.head}\n\n… ${sizeWords(cut.bytes)} in all; only its start and end could be read …\n\n${cut.tail}`;
+  return `${cut.head}\n\n… ${formatBytes(cut.bytes)} in all; only its start and end could be read …\n\n${cut.tail}`;
 }
 
 /**
@@ -941,7 +945,7 @@ const CALL_ICON = {
   [CALL_KIND.QUEUE_QUESTION]: MessageCircleQuestionIcon,
   [CALL_KIND.WITHDRAW_QUESTION]: MessageCircleXIcon,
   [CALL_KIND.EDIT_PLAN]: FilePenIcon,
-  [CALL_KIND.TODOS]: ListTodoIcon,
+  [CALL_KIND.TODOS]: () => <GLYPH.TODOS />,
   [CALL_KIND.INBOX_POST]: InboxIcon,
   [CALL_KIND.INBOX_CLOSE]: InboxIcon,
   [CALL_KIND.INBOX_READ]: InboxIcon,
@@ -973,18 +977,29 @@ const CALL_ICON = {
   [CALL_KIND.RUN_AUTOMATION]: CalendarCheckIcon,
   [CALL_KIND.MOVE_TASK]: FolderInputIcon,
   [CALL_KIND.UPDATE_TASK]: FilePenIcon,
-  [CALL_KIND.LIST_ISSUES]: ListTodoIcon,
-  [CALL_KIND.READ_ISSUE]: CircleDotIcon,
+  [CALL_KIND.LIST_ISSUES]: () => <GLYPH.ISSUE />,
+  [CALL_KIND.READ_ISSUE]: () => <GLYPH.ISSUE />,
   [CALL_KIND.CREATE_ISSUE]: CirclePlusIcon,
   [CALL_KIND.UPDATE_ISSUE]: FilePenIcon,
   [CALL_KIND.CREATE_TASK]: FilePlusIcon,
-  [CALL_KIND.END_CALL]: PhoneOffIcon,
+  [CALL_KIND.END_CALL]: () => <GLYPH.END_CALL />,
   [CALL_KIND.SHOW_PAGE]: AppWindowIcon,
   [CALL_KIND.READ_PAGE]: AppWindowIcon,
   [CALL_KIND.SHOW_IMAGE]: ImageIcon,
+  [CALL_KIND.OPEN_PULL_REQUEST]: () => <GLYPH.PULL_REQUEST />,
   [CALL_KIND.SLEEP]: TimerIcon,
+  [CALL_KIND.LIST_TASKS]: () => <GLYPH.TASK />,
+  [CALL_KIND.REMEMBER]: () => <GLYPH.MEMORY />,
+  [CALL_KIND.RECALL]: () => <GLYPH.MEMORY />,
+  [CALL_KIND.LIST_OPEN_ASKS]: () => <GLYPH.INBOX />,
+  [CALL_KIND.READ_COMMENTS]: () => <GLYPH.COMMENT />,
+  [CALL_KIND.REPLY_TO_COMMENT]: () => <GLYPH.COMMENT />,
+  [CALL_KIND.RESOLVE_THREAD]: () => <GLYPH.SETTLED />,
+  [CALL_KIND.REOPEN_THREAD]: () => <GLYPH.COMMENT />,
+  [CALL_KIND.SEARCH_TOOLS]: () => <GLYPH.MCP_SERVER />,
+  [CALL_KIND.MCP_TOOL]: () => <GLYPH.MCP_SERVER />,
   [CALL_KIND.OTHER]: WrenchIcon,
-} as const satisfies Record<CallKind, LucideIcon>;
+} as const satisfies Record<CallKind, ComponentType<{ "aria-hidden"?: "true" }>>;
 
 /**
  * The coding agent a call about one names, drawn on its row in the place of
@@ -1021,7 +1036,7 @@ function AgentCallChip({
       />
     );
   }
-  const press = (event: MouseEvent<HTMLButtonElement>) => {
+  const press = (event: MouseEvent<HTMLElement>) => {
     // The press is the chip's alone: the summary it stands in would fold.
     event.preventDefault();
     event.stopPropagation();
@@ -1082,6 +1097,8 @@ export type TranscriptToolProps = Omit<ComponentProps<typeof Tool>, "children"> 
     kind: CallKind;
     /** For a call of an integration's own tool, the integration, whose mark the row wears in its kind's icon's place. */
     provider?: IntegrationProvider | undefined;
+    /** For a call of an MCP server's tool, the server's name, which the row says it ran on beside its line. */
+    server?: string | undefined;
     /** For a command, the plain words the model said it is for, which the row says in its verb's place; the closed row previews the command's first line after them, and the body holds it whole. */
     description?: string | undefined;
     /** For a call about one coding agent, the agent, whose chip the row names it by in the place of "the coding agent"; none where the agent is not known. */
@@ -1100,13 +1117,15 @@ export type TranscriptToolProps = Omit<ComponentProps<typeof Tool>, "children"> 
  * One tool call: its row saying what it did, closed until clicked, and its
  * input and answer under it once opened. A command is the closed row's
  * preview, dropped once the body under it shows the command whole behind
- * its prompt, or by a find, which draws that body hidden; a description
- * stays, since the body does not say it.
+ * its prompt, or by a find, which draws that body hidden, and so is any
+ * subject the input says whole, a read's path or a search's pattern
+ * (`blockSays`); a description stays, since the body does not say it.
  */
 export function TranscriptTool({
   state,
   kind,
   provider,
+  server,
   subject,
   description,
   agent,
@@ -1136,7 +1155,7 @@ export function TranscriptTool({
         subject={line.subject}
         chip={chip}
         subjectIsCode={line.code}
-        subjectInBody={command && input.kind === TOOL_BLOCK.COMMAND}
+        subjectInBody={(command && input.kind === TOOL_BLOCK.COMMAND) || blockSays(input, subject)}
         place={
           kind === CALL_KIND.MAC_COMMAND && macOwner !== undefined ? (
             <ActorLine>
@@ -1145,11 +1164,11 @@ export function TranscriptTool({
               {" Mac"}
             </ActorLine>
           ) : (
-            callPlace(kind)
+            callPlace(kind, server)
           )
         }
       />
-      <ToolContent>
+      <ToolContent bare>
         <ToolInput block={input} />
         {cut === undefined ? (
           <ToolOutput block={output} errorText={errorText} />
@@ -1318,7 +1337,7 @@ function SentCall({
  */
 const TODO_LOOK = {
   [CODING_AGENT_TODO_STATUS.PENDING]: { Icon: CircleIcon, label: "Pending" },
-  [CODING_AGENT_TODO_STATUS.IN_PROGRESS]: { Icon: CircleDotIcon, label: "In progress" },
+  [CODING_AGENT_TODO_STATUS.IN_PROGRESS]: { Icon: CircleDotDashedIcon, label: "In progress" },
   [CODING_AGENT_TODO_STATUS.DONE]: { Icon: CircleCheckIcon, label: "Done" },
 } as const satisfies Record<CodingAgentTodoStatus, { Icon: LucideIcon; label: string }>;
 
@@ -1423,18 +1442,14 @@ export function TranscriptTodos({
     <Tool data-todos="" {...props}>
       <ToolHeader
         state={state}
-        icon={<ListTodoIcon aria-hidden="true" />}
+        icon={<GLYPH.TODOS />}
         label={words.verb}
         subject={subject}
         subjectIsCode={words.code}
       />
       <FoldBody className="todos-body">
         <TodoItems todos={todos} live={live} />
-        {errorText === undefined ? null : (
-          <p className="todos-error" role="alert">
-            {errorText}
-          </p>
-        )}
+        {errorText === undefined ? null : <FailureNote>{errorText}</FailureNote>}
       </FoldBody>
     </Tool>
   );
@@ -1444,7 +1459,8 @@ export function TranscriptTodos({
  * The list the agent is working through, docked above the composer while
  * it works, as Claude Code keeps its list over the prompt and VS Code's
  * chat over its log: one line saying how far the list has got and the
- * item it is at, which opens onto the whole list. Closed by default, as
+ * item it is at, which opens onto the whole list, led by the chevron as
+ * every fold's line is. Closed by default, as
  * VS Code's collapses to the item in progress, so it costs the log one
  * line. It is a card on the task card's look, since it stands outside the
  * log, and it is drawn by the caller only while the list is worked. It
@@ -1464,30 +1480,39 @@ export function TranscriptTodosDock({
   return (
     <Disclosure look={DISCLOSURE_LOOK.CARD} data-todos-dock="" aria-label="To-dos">
       <DisclosureSummary look={DISCLOSURE_SUMMARY.HEAD}>
+        <DisclosureChevron />
         <GlyphSlot>
-          <ListTodoIcon />
+          <GLYPH.TODOS />
         </GlyphSlot>
         <span className="todos-dock-summary">
           <RollingNumber value={done} /> of <RollingNumber value={total} /> done
         </span>
-        {focus === undefined ? null : (
-          <Text
-            as={TEXT_ELEMENT.SPAN}
-            variant={TEXT_VARIANT.INHERIT}
-            truncate
-            className="todos-dock-focus"
-          >
-            {focus}
-          </Text>
-        )}
-        <span className="todos-dock-chevron">
-          <DisclosureChevron />
-        </span>
+        <TodosDockFocus focus={focus} />
       </DisclosureSummary>
       <DisclosureBody inset={DISCLOSURE_BODY.CARD}>
         <TodoItems todos={todos} live />
       </DisclosureBody>
     </Disclosure>
+  );
+}
+
+/**
+ * The item the dock's line says the list is at, cut to the line, which
+ * gives way while the list under it is drawn, since the list says it
+ * there; the count before it stays, since the list says none.
+ */
+function TodosDockFocus({ focus }: { focus: string | undefined }): ReactNode {
+  const previewed = useDisclosurePreviewShown(focus !== undefined);
+  if (focus === undefined || !previewed) return null;
+  return (
+    <Text
+      as={TEXT_ELEMENT.SPAN}
+      variant={TEXT_VARIANT.INHERIT}
+      truncate
+      className="todos-dock-focus"
+    >
+      {focus}
+    </Text>
   );
 }
 
@@ -1573,10 +1598,10 @@ export function TranscriptSubagent({
   const row =
     onOpen === undefined && body !== undefined ? (
       <Tool>
-        <LineSummary data-subagent-row="" data-call-id={callId}>
+        <ToolSummary data-subagent-row="" data-call-id={callId}>
           {line}
-        </LineSummary>
-        <ToolContent>
+        </ToolSummary>
+        <ToolContent bare>
           <ToolInput block={body.input} />
           <ToolOutput block={body.output} errorText={undefined} />
         </ToolContent>
@@ -1595,11 +1620,7 @@ export function TranscriptSubagent({
   return (
     <div className="subagent-row">
       {row}
-      {errorText === undefined ? null : (
-        <p className="subagent-error" role="alert">
-          {errorText}
-        </p>
-      )}
+      {errorText === undefined ? null : <FailureNote>{errorText}</FailureNote>}
     </div>
   );
 }

@@ -5,23 +5,25 @@
    its hold, and one with something to press can always be dismissed to reach
    what is under it. The folded sidebar's call card holds the other corner,
    and the window is never narrow enough for the two to meet.
-   Each rises in on the spring and fades first on its way out, or flies off
-   the side it was swiped to; one whose hold runs down by itself drains a
-   bar along its foot, and a working one turns into what came of its work
-   in place, its glyphs crossfading in one cell. The stack
-   itself takes no pointer, so only a card with something to press stands in
-   the way of what is under it, and that card is always one the developer
-   can dismiss. */
+
+   The stack, the card, its glyph, words, countdown bar, and × disc are drawn
+   in Tailwind utilities over the theme (`toast.tsx`, `toast-stack.tsx`,
+   `toast-actions.tsx`). What stays here is what those cannot say: where the
+   stack stands, which reads the window's keyboard inset and its column's
+   dock, or spans the foot of a window too small for the card (the compact
+   look); the card's motion, which is keyframes and the offset its swipe
+   writes (`--luke-toast-drag`); the countdown's drain, over the hold and the
+   seconds the card writes (`--luke-toast-hold`, `--luke-toast-seconds`); and
+   what takes the pointer, which reads `:has()` and the screen's hover. */
 
 @layer components {
+  /* The stack's corner, a step in from the window's, above the on-screen
+     keyboard while it is up. It stays here because the narrow room below
+     moves it by custom properties the shell and the keyboard set. */
   .luke-toast-stack {
-    position: fixed;
-    z-index: var(--luke-z-toast);
     right: var(--luke-space-16);
-    /* Above the on-screen keyboard, while it is up. */
     bottom: calc(var(--luke-space-16) + var(--luke-keyboard-inset));
-    width: min(340px, calc(100vw - 2 * var(--luke-space-16)));
-    pointer-events: none;
+    width: min(340px, calc(var(--luke-stage-width) - 2 * var(--luke-space-16)));
   }
 
   /* On a phone the stack stands just above whatever docks at the column's
@@ -43,7 +45,7 @@
     width: min(
       340px,
       calc(
-        100vw -
+        var(--luke-stage-width) -
         2 *
         var(--luke-space-8) -
         env(safe-area-inset-left, 0px) -
@@ -52,44 +54,28 @@
     );
   }
 
-  .luke-toast-stack > ol {
-    display: flex;
-    flex-direction: column;
-    gap: var(--luke-space-8);
-    margin: 0;
-    padding: 0;
-    list-style: none;
+  /* The compact look's stack, in a window too small for the card (the
+     floating call window, whose card stands a step in from its edges):
+     across the window's foot, inside the card's own edges, over its row of
+     controls for the toast's hold, and up over its head where the words
+     take two lines. */
+  .luke-toast-stack[data-look="compact"] {
+    right: var(--luke-space-12);
+    bottom: var(--luke-space-8);
+    left: var(--luke-space-12);
+    width: auto;
   }
 
-  /* Its glyph, its words' first line, and its action share a first row as
-     tall as a control, each centred on it, so they read across on one line
-     however many follow; its words wrap at the card's own line. */
+  /* Each card rises in on the spring and fades in. Its sideways offset while
+     it is dragged or swept is one a drag writes alone and nothing
+     transitions, so the card stays under the finger; it stays here beside
+     the departures below, which carry it on from there. */
   .luke-toast {
-    --luke-toast-row: var(--luke-control-height);
-    --luke-toast-line: var(--luke-type-section-leading);
-    position: relative;
-    display: flex;
-    align-items: flex-start;
-    gap: var(--luke-icon-gap);
-    padding: var(--luke-space-8) var(--luke-space-12);
-    border: 1px solid var(--luke-color-border-strong);
-    border-radius: var(--luke-radius-14);
-    background: var(--luke-color-overlay);
-    box-shadow:
-      0 1px 2px var(--luke-color-shadow-soft),
-      0 12px 36px var(--luke-color-shadow);
     pointer-events: none;
-    /* Its sideways offset while it is dragged or swept, which a drag writes
-       alone and nothing transitions, so the card stays under the finger. */
     translate: var(--luke-toast-drag, 0px) 0;
     animation:
       luke-toast-fade var(--luke-duration-quick) var(--luke-motion-exit),
       luke-toast-rise var(--luke-duration-fast) var(--luke-spring-fast);
-  }
-
-  /* A finger's sideways drag is the toast's; its up and down stay the page's. */
-  .luke-toast[data-action="true"] {
-    touch-action: pan-y;
   }
 
   .luke-toast[data-leaving="true"] {
@@ -113,38 +99,8 @@
     translate: calc(-100% - var(--luke-space-16)) 0;
   }
 
-  /* Its glyphs share one cell, so the one it led with fades out under the
-     one it now leads with as its tone turns, the card unmoved. */
-  .luke-toast-glyph {
-    display: grid;
-    width: var(--luke-control-icon);
-    height: var(--luke-control-icon);
-    flex: none;
-    margin-top: calc((var(--luke-toast-row) - var(--luke-control-icon)) / 2);
-  }
-
-  .luke-toast-glyph > span {
-    display: flex;
-    grid-area: 1 / 1;
-    color: var(--luke-color-complete);
-  }
-
-  .luke-toast-glyph svg {
-    width: 100%;
-    height: 100%;
-  }
-
-  .luke-toast-glyph > [data-tone="failed"] {
-    color: var(--luke-color-danger-text);
-  }
-
-  /* An ask is the developer's to answer, and work under way is not done
-     yet, so neither stands in the success green: both take the muted ink. */
-  .luke-toast-glyph > [data-tone="ask"],
-  .luke-toast-glyph > [data-tone="working"] {
-    color: var(--luke-color-text-muted);
-  }
-
+  /* As its tone turns, the glyph it led with fades out under the one it now
+     leads with, which grows in on the spring, in the one cell they share. */
   .luke-toast-glyph > [data-turn="was"] {
     animation: luke-toast-glyph-out var(--luke-duration-quick) var(--luke-motion-exit) forwards;
   }
@@ -160,25 +116,14 @@
     animation: luke-toast-fade var(--luke-duration-quick) var(--luke-motion-exit);
   }
 
-  /* How much of its hold is left, as a bar along its foot that drains
-     toward its start over the hold the host hands it, a wait rather than a
-     motion, so its length is the hold's own; it stops while the card is held
-     and holds still on --luke-wait-motion on a capture run. Under reduced
-     motion it still says the time left, a notch a second rather than a
-     glide. */
+  /* How much of its hold is left: the bar drains toward its start over the
+     hold the host hands it, a wait rather than a motion, so its length is
+     the hold's own; it stops while the card is held and holds still on
+     --luke-wait-motion on a capture run. Under reduced motion it still says
+     the time left, a notch a second rather than a glide. */
   .luke-toast-countdown {
-    position: absolute;
-    right: var(--luke-space-12);
-    bottom: 0;
-    left: var(--luke-space-12);
-    height: var(--luke-space-2);
-    border-radius: var(--luke-radius-full);
-    background: var(--luke-color-text-muted);
-    opacity: 0.4;
-    transform-origin: left center;
     animation: luke-toast-drain var(--luke-toast-hold) linear forwards;
     animation-play-state: var(--luke-wait-motion);
-    pointer-events: none;
   }
 
   @media (prefers-reduced-motion: reduce) {
@@ -191,31 +136,9 @@
     animation-play-state: paused;
   }
 
-  /* Its words, and the line under them that says where or what, a title's
-     step apart as a card's title and its secondary line are, each cut to two
-     lines; the column stands as far below its last line as above its first. */
-  .luke-toast-text {
-    display: flex;
-    min-width: 0;
-    flex: 1;
-    flex-direction: column;
-    gap: var(--luke-space-2);
-    padding-block: calc((var(--luke-toast-row) - var(--luke-toast-line)) / 2);
-  }
-
-  .luke-toast-words,
-  .luke-toast-detail {
-    display: -webkit-box;
-    overflow: hidden;
-    overflow-wrap: anywhere;
-    -webkit-box-orient: vertical;
-    -webkit-line-clamp: 2;
-  }
-
   /* A toast with an action is pointed at, so it takes the pointer that one
      with none lets pass through to whatever is under it. */
   .luke-toast[data-action="true"] {
-    padding-right: var(--luke-space-8);
     pointer-events: auto;
   }
 
@@ -231,20 +154,12 @@
      no room in the row. At rest it lets the pointer through, so the part of
      it past the card's edge never stands in the way of what is under it. */
   .luke-toast-dismiss {
-    position: absolute;
-    top: calc(-1 * var(--luke-space-8));
-    left: calc(-1 * var(--luke-space-8));
-    display: flex;
-    border: 1px solid var(--luke-color-border-strong);
-    border-radius: var(--luke-radius-full);
-    background: var(--luke-color-overlay);
-    box-shadow: 0 1px 3px var(--luke-color-shadow-soft);
     opacity: 0;
     transform: scale(0.85);
     pointer-events: none;
     transition:
-      opacity var(--luke-duration-hover) ease,
-      transform var(--luke-duration-hover) ease;
+      opacity var(--luke-duration-hover) var(--luke-motion-exit),
+      transform var(--luke-duration-hover) var(--luke-motion-exit);
   }
 
   .luke-toast:focus-within .luke-toast-dismiss {
@@ -281,7 +196,8 @@
   /* A close takes a finger's press up and down alone on a coarse pointer,
      never sideways, because beside it stand the words it would close, and a
      tap meant for a toast's words that lands near its end must not close
-     it. */
+     it. This reaches into `@luke/ui`'s Button through its `luke-button`
+     class, its contract with a sheet that restyles it. */
   @media (pointer: coarse) {
     .luke-toast-dismiss .luke-button::before {
       width: 100%;

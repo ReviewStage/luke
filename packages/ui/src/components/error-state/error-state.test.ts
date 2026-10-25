@@ -11,9 +11,10 @@
 
 // @vitest-environment jsdom
 
+import { MOTION_DELAY_MS } from "@luke/brand";
 import { act, createElement, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, expect, test } from "vitest";
+import { afterEach, expect, test, vi } from "vitest";
 import { ERROR_STATE_PLACEMENT, ErrorState, RetryRowLabel } from "./error-state.js";
 
 declare global {
@@ -160,4 +161,28 @@ test("a failure on a toolbar is one alert with its sentence and presses, its who
   expect(alert.querySelector(`[title="${LINE}"]`)?.textContent).toBe(LINE);
   for (const button of alert.querySelectorAll("button")) act(() => button.click());
   expect(pressed).toEqual(["remedy", "retry"]);
+});
+
+/** The words of the hint the pointer resting on `target` raises, past the hint's wait, on a faked clock. */
+function hintOn(target: Element): string | undefined {
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+  try {
+    act(() => {
+      target.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
+    });
+    act(() => {
+      vi.advanceTimersByTime(MOTION_DELAY_MS.HINT);
+    });
+    return document.querySelector('[role="tooltip"]')?.textContent ?? undefined;
+  } finally {
+    vi.useRealTimers();
+  }
+}
+
+test("a failure's dismiss says Dismiss in a hint on hover", () => {
+  const alert = mountAlert(
+    createElement(ErrorState, { onDismiss: () => undefined, children: LINE }),
+  );
+  const dismiss = alert.querySelector("button") ?? expect.fail("no dismiss button");
+  expect(hintOn(dismiss)).toBe(dismiss.getAttribute("aria-label"));
 });

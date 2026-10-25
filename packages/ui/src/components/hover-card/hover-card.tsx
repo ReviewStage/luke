@@ -3,6 +3,7 @@ import { PRESS_PULSE, pulseOnPress } from "../../press-pulse.js";
 import { GAP, LAYOUT_ELEMENT, Stack } from "../layout/layout.js";
 import { useLinkAddress } from "../menu/link-address.js";
 import { ClippedLine, ONE_LINE_ELEMENT, ONE_LINE_END } from "../one-line/clipped-line.js";
+import { SCROLL_FADE, SCROLL_SIZE, ScrollArea } from "../scroll-area/scroll-area.js";
 
 /**
  * hover-card.tsx -- the parts every hover card is drawn from: its head, its notes, and its rule, in one type scale.
@@ -24,8 +25,10 @@ import { ClippedLine, ONE_LINE_ELEMENT, ONE_LINE_END } from "../one-line/clipped
  * the subject lives or who made it; a row of a list under a rule (`LINE`)
  * names one of the things the subject holds. Either is a button where a
  * press opens what it names and text where nothing does, in the same place
- * either way, washed under the pointer as a menu row is. A list counts what
- * it leaves out on a last line of its own.
+ * either way, washed under the pointer as a menu row is. A list names every
+ * thing it holds, never a count of the rest: past a few rows' height it
+ * scrolls within the card, fading at the edge where more stands
+ * (`HoverCardScroll`), so whatever the subject holds can be reached.
  *
  * What is drawn here is the card's words alone. The surface it stands on,
  * when it shows, how long it lingers for the pointer to cross onto it, and
@@ -55,25 +58,26 @@ const HEAD = "luke-hover-card-head flex items-baseline gap-icon-gap";
 const GLYPH =
   "luke-hover-card-glyph inline-flex h-lh w-menu-glyph flex-none items-center justify-center self-start [&>:not(.luke-avatar,:has(.luke-avatar))]:size-hover-card-glyph";
 const TITLE = "luke-hover-card-title flex min-w-0 flex-1 flex-col gap-0.5";
-const NAME = "luke-hover-card-name overflow-hidden text-hover-card-name font-medium wrap-anywhere";
+const NAME =
+  "luke-hover-card-name overflow-hidden text-label leading-[inherit] font-label wrap-anywhere";
 const SUB =
-  "luke-hover-card-sub flex min-w-0 items-center gap-1 text-hover-card-sub text-muted-foreground tabular-nums pointer-coarse:text-hover-card-coarse [&>span]:min-w-0 [&>span]:wrap-anywhere";
+  "luke-hover-card-sub flex min-w-0 items-center gap-1 text-caption leading-[inherit] text-muted-foreground tabular-nums [&>span]:min-w-0 [&>span]:wrap-anywhere";
 const CORNER =
-  "luke-hover-card-corner flex-none whitespace-nowrap text-hover-card-sub text-subtle-foreground tabular-nums pointer-coarse:text-hover-card-coarse";
+  "luke-hover-card-corner flex-none whitespace-nowrap text-caption leading-[inherit] text-muted-foreground tabular-nums";
 const NOTE =
-  "luke-hover-card-note m-0 overflow-hidden text-muted-foreground wrap-anywhere [&_code]:font-mono [&_code]:text-hover-card-code pointer-coarse:[&_code]:text-hover-card-coarse";
+  "luke-hover-card-note m-0 overflow-hidden text-muted-foreground wrap-anywhere [&_code]:font-mono [&_code]:text-hover-card-code pointer-coarse:[&_code]:text-caption";
 const RULE = "luke-hover-card-rule m-0 h-px w-full flex-none border-0 bg-border";
 const ROW =
-  "luke-hover-card-row group/row -mx-2 box-border flex h-menu-row w-[calc(100%+--spacing(4))] min-w-0 items-center gap-icon-gap rounded-menu-row border-0 bg-transparent px-2 py-0 text-left text-body leading-[inherit] text-foreground transition-colors duration-(--luke-duration-hover) ease-[ease] data-[look=detail]:text-caption data-[look=detail]:leading-[inherit] data-[look=detail]:text-muted-foreground";
+  "luke-hover-card-row group/row -mx-2 box-border flex h-menu-row w-[calc(100%+--spacing(4))] min-w-0 items-center gap-icon-gap rounded-menu-row border-0 bg-transparent px-2 py-0 text-left text-body leading-[inherit] text-foreground transition-colors duration-(--luke-duration-hover) ease-motion-exit data-[look=detail]:text-caption data-[look=detail]:leading-[inherit] data-[look=detail]:text-muted-foreground";
 const ROW_PRESS =
   "[font-family:inherit] [font-style:inherit] [font-weight:inherit] cursor-pointer hover:bg-fill-strong focus-visible:bg-fill-strong focus-visible:outline-none";
 const ROW_GLYPH =
   "luke-hover-card-row-glyph inline-flex w-menu-glyph flex-none justify-center [&>:not(.luke-avatar,:has(.luke-avatar))]:size-menu-glyph group-data-[look=detail]/row:[&>img]:size-hover-card-glyph";
 const ROW_LABEL = "luke-hover-card-row-label min-w-0 flex-1 overflow-hidden whitespace-nowrap";
 const ROW_END =
-  "luke-hover-card-row-end flex-none whitespace-nowrap text-caption leading-[inherit] text-subtle-foreground tabular-nums";
-const MORE =
-  "luke-hover-card-more flex h-hover-card-more items-center whitespace-nowrap pl-hover-card-indent text-caption leading-[inherit] text-subtle-foreground tabular-nums";
+  "luke-hover-card-row-end flex-none whitespace-nowrap text-caption leading-[inherit] text-muted-foreground tabular-nums";
+const SCROLL = "luke-hover-card-scroll -mx-2 flex max-h-hover-card-list flex-col";
+const SCROLL_BODY = "luke-hover-card-scroll-body px-2";
 
 /** The data attributes a card's root carries, which name the card for a test or a capture. */
 type HoverCardMarks = { readonly [mark: `data-${string}`]: string | undefined };
@@ -205,21 +209,34 @@ export function HoverCardRow({
   );
 }
 
-/** A list a card holds under a rule, named by `label`: its rows, each an `li` of the caller's, and a last line counting what it leaves out. */
+/**
+ * What a card holds past a few rows' height, scrolling within the card and
+ * fading at the edge where more stands, so a long list is read whole rather
+ * than cut short. Its rows keep their wash to the card's edges.
+ */
+export function HoverCardScroll({ children }: { children: ReactNode }): React.JSX.Element {
+  return (
+    <div className={SCROLL}>
+      <ScrollArea size={SCROLL_SIZE.CONTENT} fade={SCROLL_FADE.BOTH}>
+        <div className={SCROLL_BODY}>{children}</div>
+      </ScrollArea>
+    </div>
+  );
+}
+
+/** A list a card holds under a rule, named by `label`: every row it holds, each an `li` of the caller's, scrolling past a few rows' height. */
 export function HoverCardList({
   label,
-  more,
   children,
 }: {
   label: string;
-  /** How many it leaves out, in words ("2 more"); nothing where it leaves nothing out. */
-  more?: string | undefined;
   children: ReactNode;
 }): React.JSX.Element {
   return (
-    <Stack as={LAYOUT_ELEMENT.UL} gap={GAP.NONE} aria-label={label}>
-      {children}
-      {more === undefined ? null : <li className={MORE}>{more}</li>}
-    </Stack>
+    <HoverCardScroll>
+      <Stack as={LAYOUT_ELEMENT.UL} gap={GAP.NONE} aria-label={label}>
+        {children}
+      </Stack>
+    </HoverCardScroll>
   );
 }

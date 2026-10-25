@@ -5,7 +5,7 @@ import { CHECK_SUMMARY, PULL_REQUEST_STATE } from "@luke/features/coding-agent-w
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
-import { BranchChip, type PublishedDoors, PublishedRow } from "./agent-published.js";
+import { BranchChip, LinesChanged, type PublishedDoors, PublishedRow } from "./agent-published.js";
 
 /**
  * agent-published.test.ts -- the pull request's row pinned over an agent's
@@ -46,18 +46,18 @@ function doorsAsked(withPanel: boolean) {
   const asked: string[] = [];
   const doors: PublishedDoors = {
     openGitHub: (url) => asked.push(`github ${url}`),
-    copy: (words) => asked.push(`copy ${words}`),
+    copy: (words, label) => asked.push(`copy ${words} (${label})`),
     openPullRequest: withPanel ? () => asked.push("tab") : undefined,
   };
   return { doors, asked };
 }
 
 /** Draws `element` and answers the button it stands as. */
-function drawn(element: React.ReactElement): HTMLButtonElement | null {
+function drawn(element: React.ReactElement): HTMLElement | null {
   const container = document.body.appendChild(document.createElement("div"));
   root = createRoot(container);
   act(() => root?.render(element));
-  return container.querySelector<HTMLButtonElement>("button");
+  return container.querySelector<HTMLElement>("a, button");
 }
 
 /** Draws the pinned row over the doors given. */
@@ -99,7 +99,18 @@ test("the pull request's row opens its Pull request tab where a panel takes it, 
   act(() => menuItem("Open on GitHub").click());
   rightClick(row);
   act(() => menuItem("Copy branch name").click());
-  assert.deepEqual(asked, ["tab", `github ${URL}`, "copy luke/expiry-job"]);
+  assert.deepEqual(asked, ["tab", `github ${URL}`, "copy luke/expiry-job (Branch name copied)"]);
+});
+
+test("the pull request's right-click offers Copy link, copying its address where a panel takes the tab and where none does", () => {
+  for (const withPanel of [true, false]) {
+    const { row, asked } = drawRow(withPanel);
+    rightClick(row);
+    act(() => menuItem("Copy link").click());
+    assert.deepEqual(asked, [`copy ${URL} (Link copied)`]);
+    act(() => root?.unmount());
+    document.body.innerHTML = "";
+  }
 });
 
 test("where no panel takes the tab, the pull request's row opens it on GitHub", () => {
@@ -130,4 +141,16 @@ test("the box's foot wears the branch's chip, opening the branch compared on Git
 test("the pull request's row reads as every place names it, its number then its title", () => {
   const { row } = drawRow(true);
   assert.match(row.textContent ?? "", /^#42 Expire invitations/u);
+});
+
+test("the lines a change adds and removes are drawn as every count of them is, grouped and toned", () => {
+  drawn(createElement(LinesChanged, { additions: 1234, deletions: 5 }));
+  const parts = [...document.querySelectorAll(".agent-published-lines .luke-count-part")];
+  assert.deepEqual(
+    parts.map((part) => [part.textContent, part.getAttribute("data-tone")]),
+    [
+      ["+1,234", "complete"],
+      ["−5", "danger"],
+    ],
+  );
 });

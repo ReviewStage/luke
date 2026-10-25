@@ -9,12 +9,14 @@ import {
   PULL_REQUEST_STATE,
   type PullRequestState,
 } from "@luke/features/coding-agent-wire";
+import { saidWords } from "@luke/features/integration-health";
 import {
   PULL_REQUEST_ACTION,
   PULL_REQUEST_WRITE_BOUNDS,
   PULL_REQUEST_WRITE_OUTCOME,
   type PullRequestAction,
   type PullRequestActionRequest,
+  type PullRequestRefusal,
 } from "@luke/features/pull-request-write-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import {
@@ -22,31 +24,41 @@ import {
   BUTTON_SIZE,
   CHIP_LOOK,
   CHIP_SIZE,
-  CHIP_TONE,
   Chip,
   ChipName,
   COMMAND_LINK_ELEMENT,
+  CONFIRM_LOSS,
   CommandLink,
+  ConfirmDialog,
+  type DialogQuestion,
   ErrorState,
+  FailureNote,
   IconButton,
   INLINE_EDIT_LOOK,
   InlineEdit,
   type InlineEditEnd,
+  STATUS_TONE,
+  TEXT_ELEMENT,
+  TEXT_VARIANT,
+  Text,
   Tooltip,
+  useConfirmDialog,
   useMenu,
 } from "@luke/ui";
-import { useClipped } from "@luke/ui/use-clipped";
 import {
-  GitMergeIcon,
   GitPullRequestClosedIcon,
   GitPullRequestDraftIcon,
   GitPullRequestIcon,
-  PencilIcon,
-} from "lucide-react";
-import { type ReactNode, useCallback, useRef, useState } from "react";
+  GLYPH,
+} from "@luke/ui/icons";
+import { useClipped } from "@luke/ui/use-clipped";
+import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
+import { type ReactNode, useCallback, useId, useRef, useState } from "react";
 import { useAct } from "../act.js";
 import { ActionMenu, type MenuAction } from "../desktop/action-menu.js";
 import { useGitHubConnection } from "../github-connect.js";
+import { useToast, useWithdrawToast } from "../toast.js";
+import { PULL_REQUEST_STATE_LABEL, queuedLabel } from "./coding-agent-model.js";
 import { PULL_REQUEST_TONE, PullRequestMark } from "./pull-request-mark.js";
 import { pullRequestAsked, usePullRequestNumber } from "./pull-request-number.js";
 
@@ -61,16 +73,20 @@ import { pullRequestAsked, usePullRequestNumber } from "./pull-request-number.js
  * asked again (`onWritten`), so the header and the page say where the pull
  * request stands now rather than what the press assumed. A refusal stands
  * on its own line over the header until it is dismissed or the next change
- * is sent: GitHub's own words where GitHub refused the change, an offer to
- * sign in with GitHub again where it would not take the member's sign-in,
- * and Luke's own words where the change never reached GitHub.
+ * is sent: our sentence where GitHub refused the change, with GitHub's own
+ * words quoted on a line of their own under it, naming GitHub, never inside
+ * our sentence; an offer to sign in with GitHub again where it would not
+ * take the member's sign-in; and Luke's own words where the change never
+ * reached GitHub.
  *
  * The pill is `@luke/ui`'s pill chip in the tone of where the pull request
  * stands, as stage-cli's status pill is, and opens a menu offering what may
  * be done from there: Ready for review for a draft and Convert to draft for
  * one open, each with Close pull request, drawn red as every item that
  * ends what it acts on is, and
- * Reopen pull request for one closed; once merged it is a badge in that
+ * Reopen pull request for one closed. Close acts at once and a toast offers
+ * Reopen, except for one in the merge queue, where it asks first with the
+ * queue's warning, since reopening does not queue it again; once merged it is a badge in that
  * tone, with nothing left to press. The title is edited in place, as
  * stage-cli's is: its pencil opens a field over it, Enter or the check keeps
  * the words, and Escape or the cross keeps the title as it stood. The pill,
@@ -110,20 +126,15 @@ const ACTION_WORDS = {
   [PULL_REQUEST_ACTION.REMOVE_REACTION]: "Remove reaction",
 } as const satisfies Record<PullRequestAction, string>;
 
-/** The word for where the pull request stands, which the pill says. */
-const STATE_WORDS = {
-  [PULL_REQUEST_STATE.OPEN]: "Open",
-  [PULL_REQUEST_STATE.DRAFT]: "Draft",
-  [PULL_REQUEST_STATE.MERGED]: "Merged",
-  [PULL_REQUEST_STATE.CLOSED]: "Closed",
-} as const satisfies Record<PullRequestState, string>;
-
 /** The line's own words. */
 const WRITE_WORDS = {
   SIGN_IN: "Sign in with GitHub to make this change as you.",
   SIGN_IN_PRESS: "Sign in with GitHub",
-  /** GitHub's own words on a change it refused. */
-  refused: (words: string) => `GitHub said: ${words}`,
+  DISMISS: "Dismiss",
+  /** Our sentence on a change GitHub refused, which GitHub's own words follow on a line of their own. */
+  REFUSED: "GitHub refused this change.",
+  /** Who said the words quoted under a refusal. */
+  SOURCE: "GitHub",
 } as const;
 
 /** Luke's own words where a change never reached GitHub, by why. */
@@ -134,7 +145,7 @@ function failureWords(failure: CodingAgentCallFailure): string {
     case CODING_AGENT_CALL_FAILURE.REPOSITORY_NOT_REACHABLE:
       return "Luke's GitHub App no longer reaches this repository.";
     default:
-      return "Couldn't reach GitHub. Try again in a moment.";
+      return "GitHub could not be reached. Try again in a moment.";
   }
 }
 
@@ -146,21 +157,38 @@ export const WRITE_NOTE = {
 
 export type WriteNote =
   | { readonly kind: typeof WRITE_NOTE.SIGN_IN }
-  | { readonly kind: typeof WRITE_NOTE.WORDS; readonly words: string };
+  | {
+      readonly kind: typeof WRITE_NOTE.WORDS;
+      readonly words: string;
+      /** GitHub's own words on a change it refused, quoted and naming GitHub, for a line under `words`; none where it said none. */
+      readonly said?: string | undefined;
+      /** Why the service refused it, where the control that sent it does more than say its words. */
+      readonly reason?: PullRequestRefusal | undefined;
+    };
 
-/** How a change went, for a press that waits on it, such as a question's answer: made, or not, in the words the line says why. */
-type WriteOutcome = { readonly done: true } | { readonly done: false; readonly words: string };
+/** How a change went, for a press that waits on it, such as a question's answer: made, or not, in the words the line says why, and the note it left. */
+export type WriteOutcome =
+  | { readonly done: true }
+  | { readonly done: false; readonly words: string; readonly note: WriteNote };
 
 /** What a press sent while another change is out is told: it was not sent. */
-const NOT_SENT: WriteOutcome = { done: false, words: "Another change is on its way to GitHub." };
+const NOT_SENT_WORDS = "Another change is on its way to GitHub.";
+const NOT_SENT: WriteOutcome = {
+  done: false,
+  words: NOT_SENT_WORDS,
+  note: { kind: WRITE_NOTE.WORDS, words: NOT_SENT_WORDS },
+};
+
+/** What a note says, our sentence first and any words GitHub said on the line under it. */
+function noteWords(note: WriteNote): string {
+  if (note.kind === WRITE_NOTE.SIGN_IN) return WRITE_WORDS.SIGN_IN;
+  return note.said === undefined ? note.words : `${note.words}\n${note.said}`;
+}
 
 /** How an answer went, in the words its line says where GitHub did not make the change. */
 function outcomeOf(note: WriteNote | undefined): WriteOutcome {
   if (note === undefined) return { done: true };
-  return {
-    done: false,
-    words: note.kind === WRITE_NOTE.SIGN_IN ? WRITE_WORDS.SIGN_IN : note.words,
-  };
+  return { done: false, words: noteWords(note), note };
 }
 
 /** The tab's changes: the one out, if any, what the last one left to say, and the presses. */
@@ -188,7 +216,13 @@ export function noteOf(
     case PULL_REQUEST_WRITE_OUTCOME.SIGN_IN_REQUIRED:
       return { kind: WRITE_NOTE.SIGN_IN };
     case PULL_REQUEST_WRITE_OUTCOME.REFUSED:
-      return { kind: WRITE_NOTE.WORDS, words: WRITE_WORDS.refused(answer.words) };
+      return {
+        kind: WRITE_NOTE.WORDS,
+        words: WRITE_WORDS.REFUSED,
+        said: saidWords(WRITE_WORDS.SOURCE, answer.words),
+        // Note that only a change's answer names why; a viewed mark's never does.
+        reason: "reason" in answer ? answer.reason : undefined,
+      };
   }
 }
 
@@ -269,17 +303,39 @@ const ACTION_GLYPHS = {
   [PULL_REQUEST_ACTION.REOPEN]: <GitPullRequestIcon aria-hidden="true" />,
 } as const satisfies Record<StateAction, React.JSX.Element>;
 
-/** How the pill says an open pull request GitHub holds in its merge queue: its place there, where GitHub said it. */
-function queuedWords(queued: { readonly position?: number | undefined }): string {
-  return queued.position === undefined ? "Queued" : `Queued #${queued.position}`;
-}
+/** What leaving GitHub's merge queue costs the pull requests behind it, said as the merge box's Remove from queue and a queued Close each ask. */
+export const QUEUE_WARNING =
+  "Removing this pull request from the queue could impact other pull requests in the queue.";
+
+/** The question Close asks of a pull request in the merge queue, since reopening it does not queue it again. */
+const CLOSE_QUEUED_QUESTION: DialogQuestion = {
+  title: "Close this pull request?",
+  body: `Closing it takes it out of the merge queue, and reopening it does not queue it again. ${QUEUE_WARNING}`,
+  verb: ACTION_WORDS[PULL_REQUEST_ACTION.CLOSE],
+  running: "Closing",
+  loss: CONFIRM_LOSS.AFFECTS_OTHERS,
+};
+
+/** The question Close asks of an open pull request whose place in the merge queue could not be read, since it may be in it. */
+const CLOSE_UNKNOWN_QUESTION: DialogQuestion = {
+  ...CLOSE_QUEUED_QUESTION,
+  body: `Luke could not read whether this pull request is in the merge queue. If it is, closing it takes it out, and reopening it does not queue it again. ${QUEUE_WARNING}`,
+};
+
+/** What the toast says once a pull request is closed, and its one way back. */
+const CLOSED_TOAST = {
+  WORDS: "Pull request closed",
+  REOPEN: "Reopen",
+} as const;
 
 /**
  * The pill saying where the pull request stands, in its tone; a press
  * opens the changes that may be made from there, and a merged pull request,
  * which no change leaves, is a badge. An open one GitHub holds in its merge
  * queue says so in the pill, as stage-cli's does: Queued and its place, in
- * the attention tone with the merge's mark, its menu offering Close alone.
+ * the attention tone with the merge's mark, its menu offering Close alone,
+ * which asks first, since reopening does not queue it again; any other Close
+ * acts at once and a toast offers Reopen.
  * Note that the pill is a compact one, which `@luke/ui` draws in a badge's
  * box, so every state stands at the one size the app's status badges do,
  * the one with a menu adding its chevron.
@@ -287,29 +343,58 @@ function queuedWords(queued: { readonly position?: number | undefined }): string
 export function PullRequestStateMenu({
   pullRequest,
   queued,
+  shown = true,
   writes,
 }: {
   pullRequest: Pick<CodingAgentPullRequest, "number" | "state" | "checks">;
   /** Where GitHub's merge queue holds it, as the merge control read it; none where it holds it nowhere. */
   queued?: { readonly position?: number | undefined } | null | undefined;
+  /** Whether the panel the pill stands in is on screen; a question asked goes with it. */
+  shown?: boolean;
   writes: PullRequestWrites;
 }): React.JSX.Element {
   const inQueue =
     queued !== null && queued !== undefined && pullRequest.state === PULL_REQUEST_STATE.OPEN;
   const actions = actionsFrom(pullRequest.state, inQueue);
   const menu = useMenu(actions.length > 0);
-  const words = inQueue ? queuedWords(queued) : STATE_WORDS[pullRequest.state];
-  const label = `Pull request ${words}`;
-  const tone = inQueue ? CHIP_TONE.ATTENTION : PULL_REQUEST_TONE[pullRequest.state];
-  const mark = inQueue ? (
-    <GitMergeIcon aria-hidden="true" />
-  ) : (
-    // The pill says queued from the merge control's own read alone, so its mark never says it from the row's older one.
+  const toast = useToast();
+  const withdrawToast = useWithdrawToast();
+  const toastSubject = useId();
+  // Read as a press lands, so the toast's Reopen, which outlives this render, sends through the newest writes.
+  const newestWrites = useRef(writes);
+  newestWrites.current = writes;
+  // Whether Close is being asked about; the question goes once a read finds it out of the queue, so it never closes what no longer stands in it.
+  const [asked, setAsked] = useState(false);
+  // Note that a place in the queue left unread, as a failed merge read leaves it, may be one, so it is asked about as one is: only a read saying it holds it nowhere lets Close act at once.
+  const unread = queued === undefined && pullRequest.state === PULL_REQUEST_STATE.OPEN;
+  const mayBeQueued = inQueue || unread;
+  const confirm = useConfirmDialog({ subject: asked && mayBeQueued, surfaceOpen: shown }, () =>
+    writes
+      .write({ action: PULL_REQUEST_ACTION.CLOSE })
+      .then(
+        (outcome): ActionResult =>
+          outcome.done
+            ? { status: ACTION_RESULT_STATUS.ACCEPTED }
+            : { status: ACTION_RESULT_STATUS.REJECTED, reason: outcome.words },
+      ),
+  );
+  // Note that a question left behind as its panel hides is let go whole, so the panel comes back asking nothing; one already answered finishes.
+  if ((!shown || !mayBeQueued) && asked && !confirm.busy) setAsked(false);
+  const words = inQueue
+    ? queuedLabel(queued.position)
+    : PULL_REQUEST_STATE_LABEL[pullRequest.state];
+  // Note that the pill is named by the words it draws, so a change out reads "Merging…" as the screen does.
+  const shownWords = writes.pending === undefined ? words : `${ACTION_WORDS[writes.pending]}…`;
+  const label = `Pull request ${shownWords}`;
+  const tone = inQueue ? STATUS_TONE.ATTENTION : PULL_REQUEST_TONE[pullRequest.state];
+  // The pill says queued from the merge control's own read alone, so its mark never says it from the row's older one.
+  const mark = (
     <PullRequestMark
       pullRequest={{
         number: pullRequest.number,
         state: pullRequest.state,
         checks: pullRequest.checks,
+        ...(inQueue ? { queued: true } : undefined),
       }}
     />
   );
@@ -320,12 +405,37 @@ export function PullRequestStateMenu({
       </Badge>
     );
   }
+  // Note that a Close that may leave the queue asks first, and every other change acts at once, a Close offering Reopen in a toast since it can be taken back.
+  const select = (action: StateAction) => {
+    if (action === PULL_REQUEST_ACTION.REOPEN) withdrawToast(toastSubject);
+    if (action === PULL_REQUEST_ACTION.CLOSE && mayBeQueued) {
+      setAsked(true);
+      confirm.ask();
+      return;
+    }
+    void writes.write(
+      { action },
+      action === PULL_REQUEST_ACTION.CLOSE
+        ? () =>
+            toast({
+              words: CLOSED_TOAST.WORDS,
+              tone: STATUS_TONE.COMPLETE,
+              subject: toastSubject,
+              action: {
+                label: CLOSED_TOAST.REOPEN,
+                onPress: () =>
+                  void newestWrites.current.write({ action: PULL_REQUEST_ACTION.REOPEN }),
+              },
+            })
+        : undefined,
+    );
+  };
   const items: MenuAction[] = actions.map((action) => ({
     label: ACTION_WORDS[action],
     icon: ACTION_GLYPHS[action],
     danger: action === PULL_REQUEST_ACTION.CLOSE,
     disabled: writes.pending !== undefined,
-    onSelect: () => writes.write({ action }),
+    onSelect: () => select(action),
   }));
   return (
     <>
@@ -340,13 +450,16 @@ export function PullRequestStateMenu({
         {...menu.trigger()}
       >
         {mark}
-        <ChipName>
-          {writes.pending === undefined ? words : `${ACTION_WORDS[writes.pending]}…`}
-        </ChipName>
+        <ChipName>{shownWords}</ChipName>
       </Chip>
       {menu.drawn === undefined ? null : (
         <ActionMenu label={label} menu={menu.drawn} groups={[items]} onClose={menu.close} />
       )}
+      <ConfirmDialog
+        open
+        confirm={confirm}
+        question={inQueue ? CLOSE_QUEUED_QUESTION : CLOSE_UNKNOWN_QUESTION}
+      />
     </>
   );
 }
@@ -355,7 +468,10 @@ export function PullRequestStateMenu({
  * The line where GitHub did not take the last change: why, the sign-in
  * that mends it where that is why, and its dismissal. It stands over the
  * header unless the control that sent the change draws it in its own place
- * (`className`), as the review panel does.
+ * (`className`), as the review panel does. Note that a change that went
+ * wrong is a failure note, whose words keep their line breaks, so GitHub's
+ * own words stand on a line of their own under ours; only the sign-in,
+ * which needs a remedy beyond Dismiss, is an error state.
  */
 export function PullRequestWriteNote({
   writes,
@@ -370,16 +486,20 @@ export function PullRequestWriteNote({
   if (note === undefined) return null;
   return (
     <div className={className}>
-      <ErrorState
-        remedy={
-          note.kind === WRITE_NOTE.SIGN_IN
-            ? { label: WRITE_WORDS.SIGN_IN_PRESS, onClick: () => void connect() }
-            : undefined
-        }
-        onDismiss={dismiss}
-      >
-        {note.kind === WRITE_NOTE.SIGN_IN ? WRITE_WORDS.SIGN_IN : note.words}
-      </ErrorState>
+      {note.kind === WRITE_NOTE.SIGN_IN ? (
+        <ErrorState
+          remedy={{ label: WRITE_WORDS.SIGN_IN_PRESS, onClick: () => void connect() }}
+          onDismiss={dismiss}
+        >
+          {WRITE_WORDS.SIGN_IN}
+        </ErrorState>
+      ) : (
+        <FailureNote
+          also={<IconButton icon={<GLYPH.CLOSE />} label={WRITE_WORDS.DISMISS} onClick={dismiss} />}
+        >
+          {noteWords(note)}
+        </FailureNote>
+      )}
     </div>
   );
 }
@@ -400,9 +520,13 @@ export function PullRequestTitleLine({
   children: ReactNode;
 }): React.JSX.Element {
   return (
-    <h2 className={field ? "pull-request-title pull-request-title-field" : "pull-request-title"}>
+    <Text
+      as={TEXT_ELEMENT.H2}
+      variant={TEXT_VARIANT.DIALOG}
+      className={field ? "pull-request-title pull-request-title-field" : "pull-request-title"}
+    >
       {children}
-    </h2>
+    </Text>
   );
 }
 
@@ -472,7 +596,7 @@ export function PullRequestTitle({
         <span className="pull-request-title-edit">
           <Tooltip label={TITLE_WORDS.EDIT}>
             <IconButton
-              icon={<PencilIcon aria-hidden="true" />}
+              icon={<GLYPH.RENAME />}
               label={TITLE_WORDS.EDIT}
               size={BUTTON_SIZE.COMPACT}
               disabled={busy}

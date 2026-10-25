@@ -1,7 +1,6 @@
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
-import { AVATAR_SIZE, Badge, HoverCard, HoverCardHead, ProviderMark } from "@luke/ui";
+import { AVATAR_SIZE, Badge, HoverCard, HoverCardHead, type MenuRow, ProviderMark } from "@luke/ui";
 import { RepositoryPicture } from "./repository-picture.js";
-import type { MenuRow } from "./searchable-menu.js";
 
 /**
  * repository-row.tsx -- a repository as every list and menu draws it: its owner's picture, its name, its owner muted after it, found by its whole `owner/name`.

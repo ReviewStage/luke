@@ -21,6 +21,7 @@ import {
   type IntegrationStatus,
 } from "@luke/features/integration-wire";
 import { ACT_KIND } from "@luke/host/acts";
+import type { AppStateDelivery } from "@luke/host/app-state";
 import type { PortActKind, PortActPayload } from "@luke/host/contract";
 import type { SettingsLink } from "@luke/settings/settings-views";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
@@ -36,8 +37,11 @@ import { runAppCommand } from "../app-commands.js";
 import { GitHubConnectProvider } from "../github-connect.js";
 import { OpenSettingsProvider } from "../open-settings.js";
 import { rendererRuntime } from "../renderer-runtime.js";
+import { announcedPolitely, mountAnnouncer } from "../testing/announcer.js";
 import { type AnyAct, fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
+import { deliveryOf, signedInAs } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
+import { playListMotions } from "../testing/pane-motion.js";
 import { IntegrationsSection } from "./integrations-page.js";
 
 /**
@@ -68,6 +72,8 @@ let refuseRead = false;
 let githubConnected = false;
 /** Whether the account's GitHub disconnect is refused, its refusal the window's toast rather than the page's. */
 let refuseGitHubDisconnect = false;
+/** Whether a rename is refused, its refusal the row's own line. */
+let refuseRename = false;
 /** Where a provider stands where it is not disconnected, GitHub's own aside. */
 const standing = new Map<IntegrationProvider, IntegrationStatus>();
 /** What a provider's server answered when asked for its tools, over the tools it lists. */
@@ -131,6 +137,7 @@ beforeEach(() => {
   refuseRead = false;
   githubConnected = false;
   refuseGitHubDisconnect = false;
+  refuseRename = false;
   standing.clear();
   toolReads.clear();
   sent = [];
@@ -199,6 +206,7 @@ beforeEach(() => {
     // A rename names the account anew, which the next read of the integrations says.
     [ACT_KIND.INTEGRATIONS_RENAME]: (payload) => {
       sent.push({ kind: ACT_KIND.INTEGRATIONS_RENAME, payload });
+      if (refuseRename) return Promise.resolve({ failure: INTEGRATION_CALL_FAILURE.UNANSWERED });
       const { connection, label } = payload;
       accounts = accounts.map((account) =>
         account.connection === connection ? { ...account, label } : account,
@@ -226,8 +234,8 @@ async function settle(): Promise<void> {
 
 /**
  * The signed-in page once where every provider stands has been read, its
- * atoms under `registry` where one is given, as the window's root provides
- * its own, and under its title in a settings page's frame where `framed`.
+ * atoms under `registry` where one is given, else under one of its own, as
+ * the window's root provides its own, and under its title in a settings page's frame where `framed`.
  */
 async function mount(registry?: AtomRegistry.AtomRegistry, framed = false): Promise<HTMLElement> {
   const container = document.createElement("div");
@@ -261,9 +269,16 @@ async function mount(registry?: AtomRegistry.AtomRegistry, framed = false): Prom
         : createElement(IntegrationsSection, { signedIn: true }),
     ),
   );
-  act(() => root.render(registry === undefined ? page : onRegistry(registry, page)));
+  act(() => root.render(onRegistry(registry ?? ownRegistry(), page)));
   await settle();
   return container;
+}
+
+/** A registry of the page's own, as the window's root provides, so nothing one test's page shared reaches the next. */
+function ownRegistry(): AtomRegistry.AtomRegistry {
+  const registry = AtomRegistry.make();
+  registries.push(registry);
+  return registry;
 }
 
 /** A registry whose atoms wait on this clock, as the window's would on its own. */
@@ -287,17 +302,25 @@ function granolaRowOf(page: HTMLElement): Element {
   );
 }
 
-/** A row as the developer reads it: its line, and the labels of the buttons it offers. */
+/** A row as the developer reads it: its lines, one under another, and the labels of the buttons it offers. */
 interface RowRead {
   readonly line: string | undefined;
   readonly buttons: readonly string[];
 }
 
 /** Granola's row: its line, and the labels of the buttons it offers. */
+/** A row's state lines as a reader reads them, each on its own line; none where it draws none. */
+function stateLines(row: Element): string | undefined {
+  const lines = [...row.querySelectorAll(".luke-settings-row-state")].map(
+    (line) => line.textContent ?? "",
+  );
+  return lines.length === 0 ? undefined : lines.join("\n");
+}
+
 function granolaRow(page: HTMLElement): RowRead {
   const row = granolaRowOf(page);
   return {
-    line: row.querySelector(".luke-settings-row-state")?.textContent ?? undefined,
+    line: stateLines(row),
     buttons: [...row.querySelectorAll("button")].flatMap((button) =>
       button.textContent === "" ? [] : [button.textContent ?? ""],
     ),
@@ -411,7 +434,7 @@ test("an account offered no provider is told so, with no row", async () => {
   const page = await mount();
 
   assert.deepEqual(rowNames(page), []);
-  assert.match(page.textContent ?? "", /No integrations are available for this account\./u);
+  assert.match(page.textContent ?? "", /No integrations available/u);
 });
 
 test("a read that fails after one that offered nothing still says so and offers to read again", async () => {
@@ -464,6 +487,7 @@ test("GitHub connected stands quiet with the same ⋯ as every row, under a line
     (provider) => provider !== INTEGRATION_PROVIDER.GITHUB,
   );
   githubConnected = true;
+  listed.set(INTEGRATION_PROVIDER.GITHUB, [{ name: "get_me", description: "Reads the account." }]);
   const page = await mount();
   const row = rowNamed(page, "GitHub");
 
@@ -479,6 +503,7 @@ test("GitHub's Disconnect is the account's GitHub disconnect, which asks first a
     (provider) => provider !== INTEGRATION_PROVIDER.GITHUB,
   );
   githubConnected = true;
+  listed.set(INTEGRATION_PROVIDER.GITHUB, [{ name: "get_me", description: "Reads the account." }]);
   refuseGitHubDisconnect = true;
   const refusedPage = await mount();
   await choose(rowNamed(refusedPage, "GitHub"), "Disconnect");
@@ -552,11 +577,61 @@ test("a sign-in that expired, and a connection its server refused, each show Rec
   const expired = rowNamed(page, "Notion");
   const refused = rowNamed(page, "Slack");
 
-  assert.equal(expired.querySelector(".luke-settings-row-state")?.textContent, "Sign-in expired.");
+  assert.equal(expired.querySelector(".luke-settings-row-state")?.textContent, "Sign-in expired");
   assert.deepEqual(rowButtons(expired), ["Reconnect"]);
-  assert.equal(refused.querySelector(".luke-settings-row-state")?.textContent, "Slack refused the sign-in.");
+  assert.equal(
+    refused.querySelector(".luke-settings-row-state")?.textContent,
+    "Slack refused the sign-in.",
+  );
   assert.deepEqual(rowButtons(refused), ["Reconnect"]);
   assert.deepEqual(menuOf(refused), { items: ["Disconnect"], heading: undefined });
+});
+
+test("a server's own error stands quoted on a plain line under our sentence, never inside it", async () => {
+  withheld = INTEGRATION_PROVIDER_LIST.filter(
+    (provider) => provider !== INTEGRATION_PROVIDER.SLACK,
+  );
+  standing.set(INTEGRATION_PROVIDER.SLACK, INTEGRATION_STATUS.CONNECTED);
+  toolReads.set(INTEGRATION_PROVIDER.SLACK, {
+    problem: {
+      reason: INTEGRATION_TOOLS_PROBLEM.REJECTED,
+      message: "App is not enabled for Slack MCP server access",
+    },
+  });
+  const page = await mount();
+  const lines = [...rowNamed(page, "Slack").querySelectorAll(".luke-settings-row-state")].map(
+    (line) => [line.textContent, line.getAttribute("data-state")],
+  );
+
+  assert.deepEqual(lines, [
+    ["Slack could not be reached.", "attention"],
+    ["Slack said: “App is not enabled for Slack MCP server access”", "plain"],
+  ]);
+});
+
+test("a connection whose tools could not be read says so in the attention tint, never Connected, and Retry reads them again", async () => {
+  withheld = INTEGRATION_PROVIDER_LIST.filter(
+    (provider) => provider !== INTEGRATION_PROVIDER.LINEAR,
+  );
+  standing.set(INTEGRATION_PROVIDER.LINEAR, INTEGRATION_STATUS.CONNECTED);
+  toolReads.set(INTEGRATION_PROVIDER.LINEAR, { failure: INTEGRATION_CALL_FAILURE.UNANSWERED });
+  const page = await mount();
+  const row = rowNamed(page, "Linear");
+  const state = row.querySelector(".luke-settings-row-state");
+
+  assert.equal(state?.textContent, "The tools could not be read.");
+  assert.equal(state?.getAttribute("data-state"), "attention");
+  assert.deepEqual(rowButtons(row), ["Retry"]);
+
+  toolReads.delete(INTEGRATION_PROVIDER.LINEAR);
+  listed.set(INTEGRATION_PROVIDER.LINEAR, [{ name: "list_issues", description: "Lists issues." }]);
+  const retry = [...row.querySelectorAll("button")].find((each) => each.textContent === "Retry");
+  act(() => retry?.click());
+  await settle();
+
+  const mended = rowNamed(page, "Linear");
+  assert.equal(mended.querySelector(".luke-settings-row-state")?.textContent, "Connected · 1 tool");
+  assert.deepEqual(rowButtons(mended), []);
 });
 
 test("a Connect waits on the browser with Reopen and Cancel, and a Cancel ends the sign-in at the service and leaves Connect", async () => {
@@ -577,16 +652,66 @@ test("a Connect waits on the browser with Reopen and Cancel, and a Cancel ends t
   assert.deepEqual(granolaRow(page), { line: undefined, buttons: ["Connect"] });
 });
 
+test("a sign-in begun on one surface is what every other surface draws at once, and so is its Cancel, with no read between", async () => {
+  const registry = AtomRegistry.make();
+  registries.push(registry);
+  const settings = await mount(registry);
+  const other = await mount(registry);
+  holdReads = true;
+
+  await pressOnGranola(settings, "Connect");
+  assert.deepEqual(granolaRow(other), WAITING);
+  await pressOnGranola(other, "Cancel");
+  assert.deepEqual(granolaRow(settings), { line: undefined, buttons: ["Connect"] });
+});
+
+test("the window's focus still reads for the surfaces left once the first one drawn has closed", async () => {
+  const registry = AtomRegistry.make();
+  registries.push(registry);
+  await mount(registry);
+  const first = roots.at(-1) ?? assert.fail("the first surface has a root");
+  const other = await mount(registry);
+  act(() => first.unmount());
+
+  touched.set(GRANOLA, INTEGRATION_STATUS.EXPIRED);
+  await focusWindow();
+  assert.equal(granolaRow(other).line, "Sign-in expired");
+});
+
+test("a sign-out leaves nothing of one account's integrations to the next account signed in", async () => {
+  const listeners = new Set<(delivery: AppStateDelivery) => void>();
+  fakeAppBridge({
+    requestAppState: () =>
+      Promise.resolve(signedInAs({ id: "one", email: "one@example.com", name: "One" })),
+    onAppState: (listener: (delivery: AppStateDelivery) => void) => {
+      listeners.add(listener);
+      return () => listeners.delete(listener);
+    },
+  });
+  const page = await mount();
+  await pressOnGranola(page, "Connect");
+  assert.deepEqual(granolaRow(page), WAITING);
+
+  touched.clear();
+  const next = signedInAs({ id: "two", email: "two@example.com", name: "Two" });
+  act(() => {
+    for (const listener of listeners) listener({ ...deliveryOf(next), version: 2 });
+  });
+  await settle();
+  assert.deepEqual(granolaRow(page), { line: undefined, buttons: ["Connect"] });
+});
+
 test("a Cancel that lands after the sign-in finished leaves the provider connected", async () => {
+  listed.set(GRANOLA, [{ name: "list_meetings", description: "Lists meetings." }]);
   const page = await mount();
   await pressOnGranola(page, "Connect");
   touched.set(GRANOLA, INTEGRATION_STATUS.CONNECTED);
 
   await pressOnGranola(page, "Cancel");
-  assert.equal(granolaRow(page).line, "Connected");
+  assert.equal(granolaRow(page).line, "Connected · 1 tool");
 });
 
-test("a sign-in cancelled on Vercel Connect's own page says so plainly, with Try again", async () => {
+test("a sign-in cancelled on Vercel Connect's own page says so plainly, with Retry", async () => {
   const page = await mount();
   await pressOnGranola(page, "Connect");
 
@@ -595,14 +720,14 @@ test("a sign-in cancelled on Vercel Connect's own page says so plainly, with Try
   await focusWindow();
   assert.deepEqual(granolaRow(page), {
     line: "You cancelled connecting Granola.",
-    buttons: ["Try again"],
+    buttons: ["Retry"],
   });
   // The service names a failure once; the next read leaves the line as it stood.
   await focusWindow();
   assert.equal(granolaRow(page).line, "You cancelled connecting Granola.");
 });
 
-test("a sign-in Connect refused says why in Connect's own line, with Try again", async () => {
+test("a sign-in Connect refused says so, then Connect's own line quoted under it, with Retry", async () => {
   const page = await mount();
   await pressOnGranola(page, "Connect");
 
@@ -616,15 +741,15 @@ test("a sign-in Connect refused says why in Connect's own line, with Try again",
   ];
   await focusWindow();
   assert.deepEqual(granolaRow(page), {
-    line: "Couldn't connect to Granola: client_assertion aud must be the authorization server issuer.",
-    buttons: ["Try again"],
+    line: "Granola could not be connected.\nGranola's sign-in said: “client_assertion aud must be the authorization server issuer”",
+    buttons: ["Retry"],
   });
 
-  await pressOnGranola(page, "Try again");
+  await pressOnGranola(page, "Retry");
   assert.deepEqual(granolaRow(page), WAITING);
 });
 
-test("a sign-in the browser came back from without a grant says it could not connect, and why, with Try again", async () => {
+test("a sign-in the browser came back from without a grant says it could not connect, and why, with Retry", async () => {
   const page = await mount();
   await pressOnGranola(page, "Connect");
   await focusWindow();
@@ -633,18 +758,19 @@ test("a sign-in the browser came back from without a grant says it could not con
   touched.set(GRANOLA, INTEGRATION_STATUS.DISCONNECTED);
   await focusWindow();
   assert.deepEqual(granolaRow(page), {
-    line: "Couldn't connect to Granola: the sign-in came back without access.",
-    buttons: ["Try again"],
+    line: "Granola could not be connected: the sign-in came back without access.",
+    buttons: ["Retry"],
   });
 
-  await pressOnGranola(page, "Try again");
+  await pressOnGranola(page, "Retry");
   assert.deepEqual(granolaRow(page), WAITING);
 });
 
 it.effect(
-  "a sign-in still pending once its wait runs out says it did not finish, with Try again, and connects after all if the browser finishes it later",
+  "a sign-in still pending once its wait runs out says it did not finish, with Retry, and connects after all if the browser finishes it later",
   () =>
     Effect.gen(function* () {
+      listed.set(GRANOLA, [{ name: "list_meetings", description: "Lists meetings." }]);
       const registry = registryOn(yield* Clock.Clock);
       const page = yield* Effect.promise(() => mount(registry));
       yield* Effect.promise(() => pressOnGranola(page, "Connect"));
@@ -653,12 +779,12 @@ it.effect(
       yield* Effect.promise(settle);
       assert.deepEqual(granolaRow(page), {
         line: "Sign-in didn't finish.",
-        buttons: ["Try again"],
+        buttons: ["Retry"],
       });
 
       touched.set(GRANOLA, INTEGRATION_STATUS.CONNECTED);
       yield* Effect.promise(focusWindow);
-      assert.equal(granolaRow(page).line, "Connected");
+      assert.equal(granolaRow(page).line, "Connected · 1 tool");
     }),
 );
 
@@ -704,7 +830,7 @@ it.effect("a sign-in begun later does not put off the deadline of one begun befo
     yield* Effect.promise(settle);
     assert.deepEqual(granolaRow(page), {
       line: "Sign-in didn't finish.",
-      buttons: ["Try again"],
+      buttons: ["Retry"],
     });
     assert.ok(
       page.textContent?.includes("Waiting for Linear in your browser…"),
@@ -727,7 +853,7 @@ it.effect(
       yield* Effect.promise(settle);
       assert.deepEqual(granolaRow(page), {
         line: "Sign-in didn't finish.",
-        buttons: ["Try again"],
+        buttons: ["Retry"],
       });
     }),
 );
@@ -858,6 +984,12 @@ test("a query keeps only the rows it found, opening one onto the tools it found,
     "1 of 3 tools match",
   );
   assert.equal(page.querySelector(".integration-tools-panel mark")?.textContent, "deploy");
+  assert.equal(
+    rowNamed(page, "Vercel")
+      .querySelector(".luke-settings-row-state button")
+      ?.getAttribute("aria-label"),
+    "1 of 3 tools match, hide Vercel tools",
+  );
 });
 
 test("a query finds an integration by what it is for, keeping its section", async () => {
@@ -871,15 +1003,14 @@ test("a query finds an integration by what it is for, keeping its section", asyn
 
 test("a query that finds nothing says so, and clearing it brings every row back", async () => {
   connectVercelAndLinear();
+  mountAnnouncer();
   const page = await mount();
 
   await searchFor(page, "frobnicate");
 
   assert.deepEqual(sections(page), []);
-  assert.equal(
-    page.querySelector('[role="status"]')?.textContent,
-    "No integrations or tools match “frobnicate”",
-  );
+  assert.equal(page.textContent?.includes("No integrations or tools match “frobnicate”"), true);
+  assert.equal(announcedPolitely(), "No integrations or tools match “frobnicate”");
 
   const clear =
     page.querySelector<HTMLButtonElement>('button[aria-label="Clear search"]') ??
@@ -889,14 +1020,15 @@ test("a query that finds nothing says so, and clearing it brings every row back"
 
   assert.equal(rowNames(page).length, INTEGRATION_PROVIDER_LIST.length);
   assert.equal(document.activeElement, searchField(page));
+  assert.equal(announcedPolitely(), "", "the words go once the rows are back");
 });
 
 test("while where the providers stand is read, the search stands usable above placeholder sections, and the rows land in their place", async () => {
   holdReads = true;
-  const page = await mount(undefined, true);
+  const page = await mount();
 
   const status = page.querySelector('[role="status"]') ?? assert.fail("no placeholder");
-  assert.equal(status.textContent, "Loading the integrations");
+  assert.equal(status.textContent, "Reading the integrations");
   assert.equal(status.querySelectorAll(".luke-settings-section-card").length, 2);
   // Note that the field is checked as a yes or no, because a failure's diff of an element would print the whole document.
   assert.equal(searchField(page).closest('[aria-busy="true"]') === null, true);
@@ -951,8 +1083,9 @@ test("a query that finds an integration by its own name opens nothing by itself,
   assert.deepEqual(shownTools(page), []);
   act(() =>
     (
-      rowNamed(page, "Vercel").querySelector<HTMLButtonElement>(".luke-settings-row-state button") ??
-      assert.fail("Vercel's row opens onto its tools")
+      rowNamed(page, "Vercel").querySelector<HTMLButtonElement>(
+        ".luke-settings-row-state button",
+      ) ?? assert.fail("Vercel's row opens onto its tools")
     ).click(),
   );
   assert.equal(shownTools(page).length, 3);
@@ -966,8 +1099,9 @@ test("a row closed under one query opens again when that query comes back after 
 
   act(() =>
     (
-      rowNamed(page, "Vercel").querySelector<HTMLButtonElement>(".luke-settings-row-state button") ??
-      assert.fail("Vercel's row closes")
+      rowNamed(page, "Vercel").querySelector<HTMLButtonElement>(
+        ".luke-settings-row-state button",
+      ) ?? assert.fail("Vercel's row closes")
     ).click(),
   );
   assert.deepEqual(shownTools(page), []);
@@ -1020,7 +1154,7 @@ test("an opened row holds its first tool, whose page stands beside the list, and
   assert.equal(detail.querySelector(".integration-tool-parameter-name")?.textContent, "limit");
 });
 
-test("the arrows, Home, and End move the tool an opened row holds, its page following, and the list is one stop for Tab", async () => {
+test("the list is one Tab stop, and the arrows, Home, and End, wrapping, move the tool an opened row holds, its page following", async () => {
   connectVercelAndLinear();
   const page = await mount();
   openRow(page, "Vercel");
@@ -1040,7 +1174,7 @@ test("the arrows, Home, and End move the tool an opened row holds, its page foll
   assert.deepEqual(held(page), ["list_projects", "list_projects"]);
   assert.equal(toolName(document.activeElement), "list_projects");
   keyAtFocus("ArrowDown");
-  assert.deepEqual(held(page), ["list_projects", "list_projects"]);
+  assert.deepEqual(held(page), ["delete_project", "delete_project"], "↓ wraps at the end");
   keyAtFocus("Home");
   assert.deepEqual(held(page), ["delete_project", "delete_project"]);
   keyAtFocus("End");
@@ -1295,7 +1429,42 @@ test("an account renamed from its row's ⋯ is named in place: Escape keeps its 
   assert.ok(rowOf("Work"), "the row says the new name");
 });
 
-test("an added account whose first sign-in Connect refused keeps its row with the reason and Try again, which signs in a new account", async () => {
+test("a refused rename says the account could not be renamed and what to do, in the one failure sentence", async () => {
+  const notion = INTEGRATION_PROVIDER.NOTION;
+  standing.set(notion, INTEGRATION_STATUS.CONNECTED);
+  accounts = [
+    { provider: notion, connection: "notion", label: "Acme", status: INTEGRATION_STATUS.CONNECTED },
+    {
+      provider: notion,
+      connection: "notion-2",
+      label: "Personal",
+      status: INTEGRATION_STATUS.CONNECTED,
+    },
+  ];
+  refuseRename = true;
+  const page = await mount();
+  const row =
+    [...page.querySelectorAll(".luke-settings-row")].find((each) =>
+      each.querySelector('[id$="label"]')?.textContent?.startsWith("Notion · Acme"),
+    ) ?? assert.fail("Notion has a row");
+
+  await choose(row, "Rename");
+  const field =
+    page.querySelector<HTMLInputElement>('input[aria-label="Notion · Acme account name"]') ??
+    assert.fail("no name field");
+  act(() => {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(field, "Work");
+    field.dispatchEvent(new Event("input", { bubbles: true }));
+    field.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }),
+    );
+  });
+  await settle();
+
+  assert.match(page.textContent ?? "", /Notion · Acme could not be renamed\. Try again\./u);
+});
+
+test("an added account whose first sign-in Connect refused keeps its row with the reason and Retry, which signs in a new account", async () => {
   const notion = INTEGRATION_PROVIDER.NOTION;
   standing.set(notion, INTEGRATION_STATUS.CONNECTED);
   addable = [notion];
@@ -1329,13 +1498,13 @@ test("an added account whose first sign-in Connect refused keeps its row with th
     [...page.querySelectorAll(".luke-settings-row")].find(
       (row) => row.querySelector('[id$="label"]')?.textContent === "Notion · Account 3",
     ) ?? assert.fail("the refused account keeps its row");
-  assert.match(added.querySelector(".luke-settings-row-state")?.textContent ?? "", /access_denied/u);
+  assert.match(stateLines(added) ?? "", /access_denied/u);
 
   sent = [];
   act(() =>
     (
-      [...added.querySelectorAll("button")].find((button) => button.textContent === "Try again") ??
-      assert.fail("no Try again")
+      [...added.querySelectorAll("button")].find((button) => button.textContent === "Retry") ??
+      assert.fail("no Retry")
     ).click(),
   );
   await settle();
@@ -1509,8 +1678,8 @@ test("a statuses read answered after a newer one still says why the sign-in it s
   await settle();
 
   assert.deepEqual(granolaRow(page), {
-    line: "Couldn't connect to Granola: access_denied.",
-    buttons: ["Try again"],
+    line: "Granola could not be connected.\nGranola's sign-in said: “access_denied”",
+    buttons: ["Retry"],
   });
 });
 
@@ -1576,4 +1745,210 @@ test("Reopen on an added account still waiting on its first sign-in reopens that
       .map((request) => request.payload),
     [{ provider: notion, connection: "notion-3" }],
   );
+});
+
+/** How tall a row is drawn, in the layout given. */
+const ROW = 40;
+
+/** How much taller a row opened onto its tools stands, in the layout given. */
+const TOOLS = 200;
+
+/** How tall a moving row stands: a row's height, and its tools' under it where it opened onto them. */
+function heightOf(row: Element): number {
+  return row.querySelector(".integration-tools-panel") === null ? ROW : ROW + TOOLS;
+}
+
+/** Each row standing under the rows before it on the page, as a layout would; jsdom lays nothing out. */
+function layRowsInOrder(page: HTMLElement): void {
+  vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (
+    this: HTMLElement,
+  ) {
+    const rows = [...page.querySelectorAll("[data-motion-key]")];
+    const at = rows.indexOf(this);
+    const top = rows.slice(0, Math.max(at, 0)).reduce((sum, row) => sum + heightOf(row), 0);
+    return { top, bottom: top + ROW, left: 0, right: 0, width: 0, height: ROW } as DOMRect;
+  });
+}
+
+/** What a row moves as, the box its motion follows, by the row's name. */
+function movingRow(page: HTMLElement, name: string): HTMLElement {
+  return (
+    rowNamed(page, name).closest<HTMLElement>("[data-motion-key]") ??
+    assert.fail(`${name}'s row moves`)
+  );
+}
+
+/** Granola, Linear, and Mercury offered, none of them connected. */
+function offerThree(): void {
+  const offered: readonly IntegrationProvider[] = [
+    GRANOLA,
+    INTEGRATION_PROVIDER.LINEAR,
+    INTEGRATION_PROVIDER.MERCURY,
+  ];
+  withheld = INTEGRATION_PROVIDER_LIST.filter((provider) => !offered.includes(provider));
+}
+
+test("an integration that connects glides from Not connected into Connected, followed by its connection", async () => {
+  const motions = playListMotions();
+  try {
+    offerThree();
+    const page = await mount();
+    layRowsInOrder(page);
+    const before = movingRow(page, "Mercury");
+
+    touched.set(INTEGRATION_PROVIDER.MERCURY, INTEGRATION_STATUS.CONNECTED);
+    await focusWindow();
+
+    assert.deepEqual(sections(page), [
+      ["Connected", ["Mercury"]],
+      ["Not connected", ["Granola", "Linear"]],
+    ]);
+    const after = movingRow(page, "Mercury");
+    assert.equal(before.dataset.motionKey, INTEGRATION_PROVIDER.MERCURY);
+    assert.equal(after.dataset.motionKey, INTEGRATION_PROVIDER.MERCURY);
+    const glide = motions.played.find((each) => each.element === after);
+    assert.deepEqual(glide?.keyframes[0], { transform: `translate(0px, ${2 * ROW}px)` });
+  } finally {
+    motions.remove();
+  }
+});
+
+test("with motion held still, an integration that connects takes its place and nothing plays", async () => {
+  const motions = playListMotions();
+  try {
+    for (const name of ["--luke-duration-exit", "--luke-duration-shape"]) {
+      document.documentElement.style.setProperty(name, "0ms");
+    }
+    offerThree();
+    const page = await mount();
+    layRowsInOrder(page);
+
+    touched.set(INTEGRATION_PROVIDER.MERCURY, INTEGRATION_STATUS.CONNECTED);
+    await focusWindow();
+
+    assert.deepEqual(sections(page), [
+      ["Connected", ["Mercury"]],
+      ["Not connected", ["Granola", "Linear"]],
+    ]);
+    assert.deepEqual(
+      motions.played.map((each) => each.keyframes),
+      [],
+    );
+  } finally {
+    motions.remove();
+  }
+});
+
+/** Every element laid one row tall under the one before it in the document, so what a change inserts moves what follows it. */
+function layInDocumentOrder(): void {
+  vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (
+    this: HTMLElement,
+  ) {
+    const top = [...document.querySelectorAll("*")].indexOf(this) * ROW;
+    return { top, bottom: top + ROW, left: 0, right: 0, width: 0, height: ROW } as DOMRect;
+  });
+}
+
+/** The chevron on a row's tools press, and whether it stands turned. */
+function toolsChevron(page: HTMLElement, name: string): HTMLElement {
+  return (
+    rowNamed(page, name).querySelector<HTMLElement>(
+      ".luke-settings-row-state button .luke-disclosure-turn",
+    ) ?? assert.fail(`${name}'s tools press wears a turning chevron`)
+  );
+}
+
+/** The motions played on `element`, by their keyframes. */
+function motionsOn(
+  motions: ReturnType<typeof playListMotions>,
+  element: Element | null | undefined,
+): Keyframe[][] {
+  return motions.played.filter((each) => each.element === element).map((each) => each.keyframes);
+}
+
+test("a row's tools unroll under one chevron that turns, and roll up as it turns back", async () => {
+  const motions = playListMotions();
+  // Note that the arrival's fade and stagger are tokens the list motion's helper leaves unset.
+  for (const [name, value] of [
+    ["--luke-duration-quick", "140ms"],
+    ["--luke-row-stagger", "32ms"],
+  ] as const) {
+    document.documentElement.style.setProperty(name, value);
+  }
+  try {
+    connectVercelAndLinear();
+    const page = await mount();
+    layInDocumentOrder();
+    const under = movingRow(page, "Vercel");
+    assert.equal(toolsChevron(page, "Linear").dataset.open, "false");
+
+    openRow(page, "Linear");
+    await settle();
+
+    assert.equal(toolsChevron(page, "Linear").dataset.open, "true");
+    const box = rowNamed(page, "Linear")
+      .closest("[data-motion-key]")
+      ?.querySelector(".luke-reveal");
+    assert.notEqual(box?.querySelector(".integration-tools-panel"), null);
+    assert.deepEqual(motionsOn(motions, box).at(-1), [
+      { clipPath: "inset(0 0 100% 0)" },
+      { clipPath: "inset(0)" },
+    ]);
+    // Note that the row under it glides down with the clip's foot, rather than jumping under the tools.
+    assert.equal(motionsOn(motions, under).length > 0, true);
+
+    openRow(page, "Linear");
+    await settle();
+
+    assert.equal(toolsChevron(page, "Linear").dataset.open, "false");
+    assert.equal(box?.hasAttribute("inert"), true);
+    assert.deepEqual(motionsOn(motions, box).at(-1), [
+      { opacity: "1", clipPath: "inset(0)" },
+      { opacity: 0, clipPath: "inset(0 0 100% 0)" },
+    ]);
+    act(() => motions.played.findLast((each) => each.element === box)?.finish());
+    assert.equal(box?.isConnected, false);
+  } finally {
+    document.documentElement.style.removeProperty("--luke-duration-quick");
+    document.documentElement.style.removeProperty("--luke-row-stagger");
+    motions.remove();
+  }
+});
+
+test("with motion held still, a row's tools show at once and fold at once", async () => {
+  const motions = playListMotions();
+  try {
+    for (const name of ["--luke-duration-exit", "--luke-duration-shape"]) {
+      document.documentElement.style.setProperty(name, "0ms");
+    }
+    connectVercelAndLinear();
+    const page = await mount();
+    layInDocumentOrder();
+
+    openRow(page, "Linear");
+    await settle();
+
+    assert.notEqual(
+      rowNamed(page, "Linear")
+        .closest("[data-motion-key]")
+        ?.querySelector(".integration-tools-panel"),
+      null,
+    );
+    assert.deepEqual(
+      motions.played.map((each) => each.keyframes),
+      [],
+    );
+
+    openRow(page, "Linear");
+    await settle();
+
+    assert.equal(
+      rowNamed(page, "Linear")
+        .closest("[data-motion-key]")
+        ?.querySelector(".integration-tools-panel"),
+      null,
+    );
+  } finally {
+    motions.remove();
+  }
 });

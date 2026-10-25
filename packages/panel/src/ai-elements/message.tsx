@@ -1,5 +1,14 @@
 import { useAtomValue } from "@effect/atom-react";
-import { BUTTON_SIZE, cn, IconButton, MessageFrame, Tooltip } from "@luke/ui";
+import {
+  BUTTON_SIZE,
+  cn,
+  IconButton,
+  MessageFrame,
+  TEXT_ELEMENT,
+  TEXT_VARIANT,
+  Text,
+  Tooltip,
+} from "@luke/ui";
 import {
   MARKDOWN_LOOK,
   Markdown,
@@ -20,8 +29,8 @@ import { markdownHtmlParserAtom } from "../markdown-html-parser.js";
  * raised bubble, Luke's at the left in plain text across the whole column,
  * as a chat app draws them. The actions on a message are the
  * registry's, each one a quiet icon button in `@luke/ui`'s `MessageActions`,
- * which shows while the pointer or the keyboard is on the message, floated
- * to its corner rather than drawn in a row under it, with the window's own
+ * which shows while the pointer or the keyboard is on the message, in the
+ * line under it (`MessageLine`), with the window's own
  * hover hint in place of the registry's tooltip. The registry's branches, attachments, and toolbar are
  * not here, because nothing draws them yet; each arrives with the surface
  * that first does.
@@ -101,46 +110,58 @@ export function MessageAction({
   return <Tooltip label={tooltip === true ? label : tooltip}>{button}</Tooltip>;
 }
 
+/** A message's heading levels, each with the type role that sets it; h4 to h6 take the section role, never a label's, which the web draws smaller than the body. */
+const TRANSCRIPT_HEADING = {
+  1: TEXT_VARIANT.DIALOG,
+  2: TEXT_VARIANT.SECTION,
+  3: TEXT_VARIANT.SECTION,
+  4: TEXT_VARIANT.SECTION,
+  5: TEXT_VARIANT.SECTION,
+  6: TEXT_VARIANT.SECTION,
+} as const;
+
+/**
+ * A heading of a rendered message: its look from the role its level maps to,
+ * its spacing from tasks.css, and no heading element. Note that a model's `#`
+ * line is words in a conversation, not a part of the window's outline, so it
+ * is a paragraph, as a note's headings are (`@luke/ui/markdown`).
+ */
+function TranscriptHeading({
+  level,
+  children,
+}: {
+  level: keyof typeof TRANSCRIPT_HEADING;
+  children: ReactNode;
+}): React.JSX.Element {
+  return (
+    <Text
+      as={TEXT_ELEMENT.P}
+      variant={TRANSCRIPT_HEADING[level]}
+      className="transcript-heading"
+      data-level={level}
+    >
+      {children}
+    </Text>
+  );
+}
+
 /**
  * Markdown drawn at the panel's own scale (`@luke/ui/markdown`'s transcript look). Streamdown's headings and lists
  * are a page's, sized for a document a reader sits down to; a transcript's
  * are a note's, a step above the words around them and no more, a
  * list keeps to the column's own indent, and a quote is the one every
  * Markdown in the window draws (`@luke/ui/quote-face`) rather than
- * Streamdown's, which stood the browser's 40px in from the column. Each is
- * drawn by its class in tasks.css, a heading by its level.
+ * Streamdown's, which stood the browser's 40px in from the column. A list and
+ * a quote are drawn by their class in tasks.css; a heading is `Text`, its role
+ * chosen by its level and its spacing by its class.
  */
 export const PANEL_MARKDOWN_COMPONENTS: MarkdownComponents = {
-  h1: ({ children }) => (
-    <h1 className="transcript-heading" data-level={1}>
-      {children}
-    </h1>
-  ),
-  h2: ({ children }) => (
-    <h2 className="transcript-heading" data-level={2}>
-      {children}
-    </h2>
-  ),
-  h3: ({ children }) => (
-    <h3 className="transcript-heading" data-level={3}>
-      {children}
-    </h3>
-  ),
-  h4: ({ children }) => (
-    <h4 className="transcript-heading" data-level={4}>
-      {children}
-    </h4>
-  ),
-  h5: ({ children }) => (
-    <h5 className="transcript-heading" data-level={5}>
-      {children}
-    </h5>
-  ),
-  h6: ({ children }) => (
-    <h6 className="transcript-heading" data-level={6}>
-      {children}
-    </h6>
-  ),
+  h1: ({ children }) => <TranscriptHeading level={1}>{children}</TranscriptHeading>,
+  h2: ({ children }) => <TranscriptHeading level={2}>{children}</TranscriptHeading>,
+  h3: ({ children }) => <TranscriptHeading level={3}>{children}</TranscriptHeading>,
+  h4: ({ children }) => <TranscriptHeading level={4}>{children}</TranscriptHeading>,
+  h5: ({ children }) => <TranscriptHeading level={5}>{children}</TranscriptHeading>,
+  h6: ({ children }) => <TranscriptHeading level={6}>{children}</TranscriptHeading>,
   ul: ({ children }) => <ul className="transcript-list">{children}</ul>,
   ol: ({ children }) => <ol className="transcript-list">{children}</ol>,
   li: ({ children }) => <li className="transcript-list-item">{children}</li>,

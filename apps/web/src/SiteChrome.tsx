@@ -1,5 +1,5 @@
-import { FACE_ART } from "@luke/brand";
 import {
+  FaceMark,
   IconButtonLink,
   MARK_PROVIDER,
   ProviderMark,
@@ -13,9 +13,13 @@ import {
   TextLink,
   type TextLinkCurrent,
 } from "@luke/ui";
+import { PANEL_PATH } from "./app/web-address";
 
 export const REPOSITORY_URL = "https://github.com/ReviewStage/luke";
 export const DMG_URL = `${REPOSITORY_URL}/releases/latest/download/Luke.dmg`;
+
+/** Where the web app opens, the one address the site and the invitation page send a reader to. */
+export const WEB_APP_URL = PANEL_PATH;
 
 /**
  * "Luke" beside the mark, in the web profile's wordmark display style
@@ -23,38 +27,6 @@ export const DMG_URL = `${REPOSITORY_URL}/releases/latest/download/Luke.dmg`;
  */
 export const WORDMARK =
   "font-brand text-(length:--luke-display-wordmark-size) font-(--luke-display-wordmark-weight) tracking-(--luke-display-wordmark-tracking)";
-
-/** A mark's box is decided at its call site, the one place it is drawn. */
-type MarkProps = { readonly className?: string };
-
-/**
- * Luke's face, drawn from the generated `FACE_ART` constants so the web mark
- * stays tied to the product artwork. Drawing in `currentColor` keeps the page
- * free of fetched assets. Decorative: the wordmark beside it already says
- * "Luke".
- *
- * Wider than tall, so a caller sizes both axes and lets the default
- * `xMidYMid meet` letterbox the face inside that box rather than stretch it.
- */
-export function LukeMark({ className = "block h-4.5 w-5" }: MarkProps): React.JSX.Element {
-  const { MARK_VIEW_BOX, TILT, SMILE, STROKE_WIDTH, EYE_X, EYE_Y, EYE_RADIUS } = FACE_ART;
-  return (
-    <svg className={className} viewBox={MARK_VIEW_BOX} fill="none" aria-hidden="true">
-      <g transform={TILT}>
-        <path
-          d={SMILE}
-          fill="none"
-          stroke="currentColor"
-          strokeWidth={STROKE_WIDTH}
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
-        <circle cx={EYE_X.LEFT} cy={EYE_Y} r={EYE_RADIUS} fill="currentColor" />
-        <circle cx={EYE_X.RIGHT} cy={EYE_Y} r={EYE_RADIUS} fill="currentColor" />
-      </g>
-    </svg>
-  );
-}
 
 /** The pages the site's chrome links to, by the path each is served at. */
 export const SITE_PAGE = {
@@ -101,7 +73,9 @@ export function SiteNavigation({ current }: ChromeProps): React.JSX.Element {
         current={currentOf(SITE_PAGE.HOME, current)}
       >
         <span className={`inline-flex items-center gap-2 text-(--luke-color-text) ${WORDMARK}`}>
-          <LukeMark />
+          <span className="inline-flex h-4.5 w-5 shrink-0">
+            <FaceMark />
+          </span>
           Luke
         </span>
       </TextLink>

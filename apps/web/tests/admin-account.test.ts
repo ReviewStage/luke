@@ -263,7 +263,7 @@ test("a loaded account names itself, marks an admin in words, and says how it si
   expect(page.textContent).toContain("ada@example.testAdmin");
   expect(page.textContent).toContain("ada@example.test");
   expect(page.textContent).toContain(
-    "Joined Jan 5, 2026 · last seen Oct 14, 09:30 UTC · signs in with GitHub, Google",
+    "Joined Jan 5, 2026 · last seen Oct 14, 9:30 AM UTC · signs in with GitHub, Google",
   );
 });
 
@@ -308,22 +308,22 @@ test("the support sections say what the account did and what broke, by the servi
 
   const agents = rows(page, "The account's newest coding agents");
   expect(agents).toEqual([
-    "Oct 14, 08:05 UTC|acme/relay|anthropic/claude-opus-5.5 · high|completed|merged",
-    "Oct 13, 16:40 UTC|acme/web|openai/gpt-5.5 · medium · standard window|failedprovider_key|—",
+    "Oct 14, 8:05 AM UTC|acme/relay|anthropic/claude-opus-5.5 · high|Finished|Merged",
+    "Oct 13, 4:40 PM UTC|acme/web|openai/gpt-5.5 · medium · standard window|Failedprovider_key|—",
   ]);
   expect(rows(page, "The account's workspaces")).toEqual([
     "Ada's workspacePersonal|owner|1|not installed",
-    "AcmeShared workspace|member|9|active",
+    "AcmeShared workspace|member|9|Active",
   ]);
   expect(rows(page, "The account's provider keys and integration connections")).toEqual([
-    "Provider key|openai|quota_exceeded|Oct 13, 16:41 UTC",
-    "Connection|linear|connected|Sep 2, 00:00 UTC",
+    "Provider key|openai|quota_exceeded|Oct 13, 4:41 PM UTC",
+    "Connection|linear|Connected|Sep 2, 12:00 AM UTC",
   ]);
   expect(page.textContent).toContain("Coding agents start on anthropic/claude-opus-5.5 · high.");
   expect(page.textContent).toContain("Experiments:Chat");
   expect(rows(page, "The account's recent failures")).toEqual([
-    "Oct 13, 16:42 UTC|Coding agent failed|provider_key",
-    "Oct 13, 16:41 UTC|Provider key · openai|quota_exceeded",
+    "Oct 13, 4:42 PM UTC|Coding agent failed|provider_key",
+    "Oct 13, 4:41 PM UTC|Provider key · openai|quota_exceeded",
   ]);
 });
 

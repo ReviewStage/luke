@@ -235,6 +235,34 @@ test("a pinned Changes tab wears its pull request's mark and current label where
   assert.equal(unknown.querySelector("[data-pull-request-mark]"), null);
 });
 
+test("a pinned agent's tab of a task not open says its agent's name as the task's row says it now, and the label it was pinned under where the row names no such agent", () => {
+  const renamed: TaskSummary = {
+    ...TASK,
+    agents: {
+      total: 1,
+      working: 0,
+      agents: [
+        {
+          id: AGENT,
+          title: "Expire stale invitations",
+          model: "anthropic/claude-opus-5.5",
+          effort: "high",
+          status: CODING_AGENT_STATUS.COMPLETED,
+        },
+      ],
+      pullRequestTotal: 0,
+      pullRequests: [],
+    },
+  };
+  const live = drawPin(PIN, renamed);
+  assert.equal(live.textContent, "Expire stale invitations");
+
+  act(() => root?.unmount());
+  document.body.replaceChildren();
+  const unnamed = drawPin(PIN, TASK);
+  assert.equal(unnamed.textContent, "Expiry job");
+});
+
 test("a pinned Changes tab of an agent that shares its pull request with a newer one wears the open task's read of its own", () => {
   const pin: PinnedTab = { task: TASK.id, tab: { changes: AGENT }, label: "#42 Old title", at: 1 };
   const newer = "9d2b7b5f-4e3f-4e9c-9c77-7a5d8b3f4c32";
@@ -381,4 +409,28 @@ describe("a pinned Changes tab's card", () => {
     assert.match(card()?.textContent ?? "", /No longer on this task/u);
     assert.equal(document.querySelector(".luke-tooltip-card [data-tab-card]"), null);
   });
+});
+
+test("a pinned tab's ⋯ and its right-click open the same menu, the ⋯ a Tab stop after its press", () => {
+  const press = drawPin({ task: TASK.id, tab: SIDE_PANEL_TAB.PLAN, label: "Plan", at: 1 });
+  const more = document.querySelector<HTMLButtonElement>('button[aria-label="Pinned tab actions"]');
+  assert.ok(more, "the row draws a ⋯");
+  assert.equal(more.tabIndex, 0);
+  const offered = () =>
+    [...document.querySelectorAll('[role="menu"] [role="menuitem"]')].map(
+      (each) => each.textContent,
+    );
+  act(() => more.click());
+  const fromMore = offered();
+  assert.ok(fromMore.includes("Unpin"));
+  act(() => {
+    document.activeElement?.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "Escape", bubbles: true }),
+    );
+  });
+  assert.deepEqual(offered(), []);
+  act(() => {
+    press.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, clientX: 4, clientY: 4 }));
+  });
+  assert.deepEqual(offered(), fromMore);
 });

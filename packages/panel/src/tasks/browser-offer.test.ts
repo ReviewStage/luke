@@ -23,7 +23,7 @@ import { SIDE_PANEL_TAB, type SidePanelTab } from "./use-side-panel.js";
 import { NO_LOOKS } from "./use-task-looks.js";
 
 /**
- * Where a Browser tab is offered: the side panel's "+" lists New Browser tab
+ * Where a Browser tab is offered: the side panel's "+" lists New browser tab
  * under Browser while the account has the Browser tab experiment on and the
  * task has a coding agent, always in an agent's cloud browser: one agent's
  * at once, and with several, a submenu of whose, the one viewed first. A
@@ -142,9 +142,9 @@ async function browserRows(): Promise<HTMLElement[]> {
   assert.ok(add, "the panel's +");
   await act(async () => add.click());
   await settle();
-  return [...document.querySelectorAll<HTMLElement>('.tab-add-menu [role="option"]')].filter(
-    (row) => row.closest('[role="group"]')?.textContent?.startsWith("Browser") === true,
-  );
+  return [
+    ...document.querySelectorAll<HTMLElement>('.luke-searchable-menu [role="option"]'),
+  ].filter((row) => row.closest('[role="group"]')?.textContent?.startsWith("Browser") === true);
 }
 
 test("on a task with no coding agent, the panel's + offers no Browser tab, and none with the experiment off", async () => {
@@ -170,7 +170,7 @@ function landedOnDraft(chosen: readonly SidePanelTab[]): boolean {
   );
 }
 
-test("on a task with one coding agent, the panel's + New Browser tab drafts a tab in its browser at once, with no submenu, and opens nothing", async () => {
+test("on a task with one coding agent, the panel's + New browser tab drafts a tab in its browser at once, with no submenu, and opens nothing", async () => {
   handState(experimentsOn(EXPERIMENT.BROWSER));
   const asked: unknown[] = [];
   fakeActPort({
@@ -182,7 +182,7 @@ test("on a task with one coding agent, the panel's + New Browser tab drafts a ta
   const task = await mount([AGENT]);
 
   const rows = await browserRows();
-  assert.deepEqual(rowWords(rows), ["New Browser tab"]);
+  assert.deepEqual(rowWords(rows), ["New browser tab"]);
   await act(async () => rows[0]?.click());
   await settle();
 
@@ -193,10 +193,12 @@ test("on a task with one coding agent, the panel's + New Browser tab drafts a ta
 
 /** The choices of the submenu standing open beside a row of the "+". */
 function submenuChoices(): HTMLElement[] {
-  return [...document.querySelectorAll<HTMLElement>('.task-compose-submenu [role="option"]')];
+  return [
+    ...document.querySelectorAll<HTMLElement>('.luke-searchable-menu-submenu [role="option"]'),
+  ];
 }
 
-test("on a task with several coding agents, the panel's + New Browser tab opens a submenu of the agents alone, the one viewed first, and an agent drafts a tab in its browser and opens nothing", async () => {
+test("on a task with several coding agents, the panel's + New browser tab opens a submenu of the agents alone, the one viewed first, and an agent drafts a tab in its browser and opens nothing", async () => {
   handState(experimentsOn(EXPERIMENT.BROWSER));
   const asked: unknown[] = [];
   fakeActPort({
@@ -208,7 +210,7 @@ test("on a task with several coding agents, the panel's + New Browser tab opens 
   const task = await mount([AGENT, OTHER_AGENT], OTHER_AGENT.id);
 
   const rows = await browserRows();
-  assert.deepEqual(rowWords(rows), ["New Browser tab"]);
+  assert.deepEqual(rowWords(rows), ["New browser tab"]);
   const [row] = rows;
   assert.ok(row, "the one row");
   // Choosing the row opens its submenu rather than a tab.

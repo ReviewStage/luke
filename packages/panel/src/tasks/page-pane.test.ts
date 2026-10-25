@@ -11,6 +11,8 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
 import { runAppCommand } from "../app-commands.js";
 import { fakeAppPlatform } from "../testing/app-platform.js";
+import { restOn } from "../testing/hint-rest.js";
+import { onPhone } from "../testing/phone-tab.js";
 import { wholeFileDrawn, wholeFileLines, wholeFileRoot } from "../testing/whole-file.js";
 import { PagePane, type ReadPageSource } from "./page-pane.js";
 
@@ -104,6 +106,33 @@ test("a page is drawn at its newest version in a frame that runs its own scripts
   assert.match(container.textContent ?? "", /Invite funnel.*Version 3 of 3/);
 });
 
+test("a page's frame says it is read until it loads, and the wait goes when it has", () => {
+  const { container, frame } = mount(FUNNEL);
+
+  assert.equal(container.querySelector('[role="status"]')?.textContent, "Reading the page");
+  act(() => {
+    frame().dispatchEvent(new Event("load"));
+  });
+  assert.equal(container.querySelector('[role="status"]'), null);
+});
+
+test("stepping to another version says Reading again until that version's frame loads", async () => {
+  const { container, frame, press } = mount(FUNNEL);
+  act(() => {
+    frame().dispatchEvent(new Event("load"));
+  });
+  assert.equal(container.querySelector('[role="status"]'), null);
+
+  await press("Earlier version");
+
+  assert.equal(frame().getAttribute("src"), versionUrl(2));
+  assert.equal(container.querySelector('[role="status"]')?.textContent, "Reading the page");
+  act(() => {
+    frame().dispatchEvent(new Event("load"));
+  });
+  assert.equal(container.querySelector('[role="status"]'), null);
+});
+
 test("View source draws the version's HTML as a File tab's numbered, coloured lines in the frame's place, and View page draws the frame again", async () => {
   const { container, press, frame, sourceLines } = mount(FUNNEL);
 
@@ -122,12 +151,21 @@ test("View source draws the version's HTML as a File tab's numbered, coloured li
   assert.equal(frame().getAttribute("src"), versionUrl(3));
 });
 
+test("the page's Reload hangs a hint in the words it is named by", () => {
+  const { container } = mount(FUNNEL);
+  const reload = container.querySelector('button[aria-label="Reload page"]') ?? assert.fail();
+
+  restOn(reload);
+
+  assert.equal(document.querySelector('[role="tooltip"]')?.textContent, "Reload page");
+});
+
 test("over the source, View settings offers the settings its lines follow, and the ⋯ its actions alone", async () => {
   const { container, press } = mount(FUNNEL);
-  assert.equal(container.querySelector('button[aria-label="View settings"]'), null);
+  assert.equal(container.querySelector('button[aria-label="View options"]'), null);
 
   await press("View source");
-  await press("View settings");
+  await press("View options");
   const popover = document.querySelector<HTMLElement>('[role="dialog"]') ?? assert.fail();
   assert.deepEqual(
     [...popover.querySelectorAll('[role="switch"], [role="radiogroup"], [aria-haspopup]')].map(
@@ -145,7 +183,7 @@ test("over the source, View settings offers the settings its lines follow, and t
       "Ligatures",
     ],
   );
-  await press("View settings");
+  await press("View options");
 
   await press("Source actions");
   assert.deepEqual(
@@ -208,7 +246,7 @@ function typeFind(text: string): void {
 
 /** What the find bar's tally says. */
 function findTally(): string | null | undefined {
-  return document.querySelector('[role="search"][aria-label="Find"] [aria-live="polite"]')
+  return document.querySelector('[role="search"][aria-label="Find"] .luke-search-field-tally')
     ?.textContent;
 }
 
@@ -340,4 +378,46 @@ test("a source read before a Reload that answers after it does not replace the f
   await act(async () => answers[0]?.("<h1>Stale</h1>"));
 
   assert.deepEqual(await sourceLines(), ["1 <h1>Fresh</h1>"]);
+});
+
+test("on a phone the page draws no bar, and the task's header's ⋯ offers every control of it, the version said under its steps", async () => {
+  const { element, handed } = onPhone(
+    createElement(PagePane, {
+      place: { taskId: TASK },
+      page: FUNNEL,
+      readSource,
+      findActive: true,
+    }),
+  );
+  const container = document.body.appendChild(document.createElement("div"));
+  const root = createRoot(container);
+  roots.push(root);
+  act(() => root.render(element));
+
+  assert.equal(container.querySelector(".file-view-bar"), null);
+  assert.equal(container.querySelectorAll("button").length, 0, "nothing over the page presses");
+  assert.deepEqual(handed.labels(), [
+    "Earlier version",
+    "Later version",
+    "View source",
+    "Reload page",
+  ]);
+  assert.deepEqual(handed.item("Later version"), { disabled: true, detail: "Version 3 of 3" });
+
+  handed.press("Earlier version");
+  assert.equal(container.querySelector("iframe")?.getAttribute("src"), versionUrl(2));
+
+  handed.press("View source");
+  await act(async () => undefined);
+  assert.deepEqual(handed.labels(), [
+    "Earlier version",
+    "Later version",
+    "View page",
+    "Reload page",
+    "View options",
+    "Copy source",
+  ]);
+  handed.press("View options");
+  const sheet = document.querySelector<HTMLElement>('[role="dialog"]') ?? assert.fail();
+  assert.match(sheet.textContent ?? "", /View options.*Word wrap/);
 });

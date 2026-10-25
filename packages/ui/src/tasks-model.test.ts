@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
-import { TASK_BOUNDS, TASK_STATUS } from "@luke/features/task-wire";
+import { TASK_BOUNDS, TASK_PRIORITY, TASK_STATUS } from "@luke/features/task-wire";
 import { TASKS_READ, type TasksView } from "@luke/features/tasks-view";
+import { VOICE_FAILURE, VOICE_FAILURE_WORDS } from "@luke/features/words";
 import { LIVE_STATUS } from "@luke/live";
 import { MICROPHONE_STATUS } from "@luke/voice/audio";
 import { VOICE_KEYLESS_NOTE } from "@luke/voice/microphone-access";
@@ -11,26 +12,33 @@ import {
   ISSUE_MATCH_LIMIT,
   linearIssuesAskOf,
   MICROPHONE_PRESS,
+  markAsked,
   markedView,
   microphoneButton,
+  NO_PENDING_STANDINGS,
   offeredIssues,
-  pendingMark,
   positionedView,
+  renameAsked,
   SETTLED_STATUS,
   settleChanges,
+  settledMarks,
   settledNote,
+  settledRenames,
+  settledStandings,
   settleOffered,
-  statusedView,
+  standingAsked,
+  standingCallStatus,
+  standingView,
+  standingWithout,
   TASK_MARK,
   taskNameOfIssue,
   undoStillDue,
-  unsettledMarks,
   unsettledPinPositions,
-  unsettledStatuses,
+  withStanding,
 } from "./tasks-model.js";
 
 const INVITES = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
-const _BILLING = "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21";
+const BILLING = "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21";
 
 function _view(patch: Partial<TasksView>): TasksView {
   return {
@@ -76,13 +84,13 @@ test("an agent's Call button asks for the permission first, then calls the agent
   });
   assert.deepEqual(
     microphoneButton({ ...input, listening: true, call: own, voiceStatus: LIVE_STATUS.LISTENING }),
-    { press: MICROPHONE_PRESS.TALK, label: "Mute the microphone", muted: false },
+    { press: MICROPHONE_PRESS.TALK, label: "Mute microphone", muted: false },
   );
   // The agent's own call standing unheard is muted, Luke speaking over it or not.
   for (const voiceStatus of [LIVE_STATUS.MUTED, LIVE_STATUS.SPEAKING]) {
     assert.deepEqual(microphoneButton({ ...input, call: own, voiceStatus }), {
       press: MICROPHONE_PRESS.TALK,
-      label: "Unmute the microphone",
+      label: "Unmute microphone",
       muted: true,
     });
   }
@@ -100,6 +108,46 @@ test("an agent's Call button asks for the permission first, then calls the agent
   assert.equal(microphoneButton({ ...input, listening: true, call: other }).label, CALL_LABEL);
 });
 
+test("a voice window given up on for the run says so on the Call button, and how to get voice back, in place of a press", () => {
+  const input = {
+    voiceAvailable: true,
+    microphoneStatus: MICROPHONE_STATUS.GRANTED,
+    agentId: "0b5f8c1e-4d3a-4e6b-8f2c-9a1d7e3b5c40",
+    listening: false,
+    call: undefined,
+    voiceStatus: LIVE_STATUS.IDLE,
+  };
+  assert.deepEqual(microphoneButton({ ...input, voiceLost: true }), {
+    press: MICROPHONE_PRESS.NONE,
+    label: VOICE_FAILURE_WORDS[VOICE_FAILURE.VOICE_WINDOW_LOST].words,
+    muted: false,
+  });
+  // Signed out still says so first: no window would make a call run then.
+  assert.equal(
+    microphoneButton({ ...input, voiceAvailable: false, voiceLost: true }).label,
+    VOICE_KEYLESS_NOTE,
+  );
+  assert.equal(microphoneButton({ ...input, voiceLost: false }).label, CALL_LABEL);
+});
+
+test("a call that failed still has a word on its bar, where an idle voice has none", () => {
+  assert.equal(
+    standingCallStatus({ voiceStatus: LIVE_STATUS.FAILED }, undefined)?.voiceWord,
+    "Call failed",
+  );
+  assert.equal(standingCallStatus({ voiceStatus: LIVE_STATUS.IDLE }, undefined), undefined);
+});
+
+test("a call's bar says what Luke is doing without naming him, and draws no notetaker whatever an older service sent", () => {
+  const speaking = standingCallStatus({ voiceStatus: LIVE_STATUS.SPEAKING }, undefined);
+  assert.equal(speaking?.voiceWord, "Speaking");
+  const working = standingCallStatus(
+    { voiceStatus: LIVE_STATUS.LISTENING },
+    { planner: { action: "ls src" }, notes: true },
+  );
+  assert.deepEqual(working?.backend, { brain: { action: "ls src" } });
+});
+
 test("an account known to have no OpenAI API key is sent to add one before the microphone is asked for, unknown asks nothing, and its own standing call keeps its mute", () => {
   const agentId = "0b5f8c1e-4d3a-4e6b-8f2c-9a1d7e3b5c40";
   const own = { taskId: INVITES, agentId };
@@ -113,7 +161,7 @@ test("an account known to have no OpenAI API key is sent to add one before the m
   };
   const addKey = {
     press: MICROPHONE_PRESS.ADD_OPENAI_KEY,
-    label: "Add an OpenAI API key in Settings",
+    label: "Add an OpenAI key in settings",
     muted: false,
   };
   assert.deepEqual(microphoneButton({ ...input, openAiKeyMissing: true }), addKey);
@@ -144,7 +192,7 @@ test("an account known to have no OpenAI API key is sent to add one before the m
       voiceStatus: LIVE_STATUS.LISTENING,
       openAiKeyMissing: true,
     }),
-    { press: MICROPHONE_PRESS.TALK, label: "Mute the microphone", muted: false },
+    { press: MICROPHONE_PRESS.TALK, label: "Mute microphone", muted: false },
   );
 });
 
@@ -248,9 +296,10 @@ test("an unpin given here takes the pin's place with it, so a pin made again sta
     pinnedAt: 3,
     pinPosition: "a0",
   };
+  const view = _view({ tasks: [task] });
   const unpinned = markedView(
-    _view({ tasks: [task] }),
-    new Map([[INVITES, pendingMark(TASK_MARK.UNPIN, 4)]]),
+    view,
+    new Map([[INVITES, markAsked(new Map(), view, INVITES, TASK_MARK.UNPIN, 4)]]),
   ).tasks[0];
   assert.equal(unpinned?.pinnedAt, undefined);
   assert.equal(unpinned?.pinPosition, undefined);
@@ -373,17 +422,81 @@ test("a task already done is offered no Mark done, and one already canceled no C
   );
 });
 
+/** The pending standings with what `standing` asks of the task given drawn over `view`, and the ask itself. */
+function asked(view: TasksView, taskId: string, standing: Parameters<typeof standingAsked>[3]) {
+  const ask = standingAsked(NO_PENDING_STANDINGS, view, taskId, standing);
+  return { ask, standings: withStanding(NO_PENDING_STANDINGS, taskId, ask) };
+}
+
 test("a status given here is drawn on the task until the list carries it, then let go, apart from a pin given with it", () => {
   const listed = _view({ tasks: [standingTask(INVITES, TASK_STATUS.TODO)] });
-  const statuses = new Map([[INVITES, { status: TASK_STATUS.DONE }]]);
-  const pinned = new Map([[INVITES, pendingMark(TASK_MARK.PIN, 4)]]);
+  const { standings } = asked(listed, INVITES, { status: TASK_STATUS.DONE });
+  const pinned = new Map([[INVITES, markAsked(new Map(), listed, INVITES, TASK_MARK.PIN, 4)]]);
 
-  assert.equal(statusedView(listed, statuses).tasks[0]?.status, TASK_STATUS.DONE);
-  assert.equal(unsettledStatuses(statuses, listed).size, 1);
+  assert.equal(standingView(listed, standings).tasks[0]?.status, TASK_STATUS.DONE);
+  assert.equal(settledStandings(standings, listed, undefined).status.size, 1);
   const done = _view({ tasks: [standingTask(INVITES, TASK_STATUS.DONE)] });
-  assert.equal(unsettledStatuses(statuses, done).size, 0);
+  assert.equal(settledStandings(standings, done, undefined).status.size, 0);
   // Note that the status landing lets go of nothing the pin still waits on.
-  assert.equal(unsettledMarks(pinned, done).size, 1);
+  assert.equal(settledMarks(pinned, done, undefined).size, 1);
+});
+
+test("a priority or an assignee given here is drawn on the task at once, the assignee by the name the list knows them by, and a refusal puts the task back", () => {
+  const charles = { userId: "user-charles", name: "Charles Pan" };
+  const other = { ...standingTask(BILLING, TASK_STATUS.TODO), assignee: charles };
+  const listed = _view({ tasks: [standingTask(INVITES, TASK_STATUS.TODO), other] });
+  const { ask, standings } = asked(listed, INVITES, {
+    priority: TASK_PRIORITY.URGENT,
+    assigneeId: charles.userId,
+  });
+
+  const drawn = standingView(listed, standings).tasks[0];
+  assert.equal(drawn?.priority, TASK_PRIORITY.URGENT);
+  assert.deepEqual(drawn?.assignee, charles);
+  const refused = standingWithout(standings, INVITES, ask);
+  assert.deepEqual(standingView(listed, refused).tasks[0], standingTask(INVITES, TASK_STATUS.TODO));
+});
+
+test("a member the list names on no task is drawn by the name the press knows them by", () => {
+  const listed = _view({ tasks: [standingTask(INVITES, TASK_STATUS.TODO)] });
+  const ask = standingAsked(
+    NO_PENDING_STANDINGS,
+    listed,
+    INVITES,
+    { assigneeId: "user-charles" },
+    "Charles Pan",
+  );
+  const standings = withStanding(NO_PENDING_STANDINGS, INVITES, ask);
+
+  assert.deepEqual(standingView(listed, standings).tasks[0]?.assignee, {
+    userId: "user-charles",
+    name: "Charles Pan",
+  });
+});
+
+test("a task sent to no one is drawn unassigned until the list carries it", () => {
+  const assigned = {
+    ...standingTask(INVITES, TASK_STATUS.TODO),
+    assignee: { userId: "user-dean", name: "Dean Stratakos" },
+  };
+  const listed = _view({ tasks: [assigned] });
+  const { standings } = asked(listed, INVITES, { assigneeId: null });
+
+  assert.equal(standingView(listed, standings).tasks[0]?.assignee, undefined);
+  const carried = _view({ tasks: [standingTask(INVITES, TASK_STATUS.TODO)] });
+  assert.equal(settledStandings(standings, carried, undefined).assignee.size, 0);
+});
+
+test("a name the service trims, or a status a teammate set first, gives way to the list rather than standing over it", () => {
+  const listed = _view({ tasks: [standingTask(INVITES, TASK_STATUS.TODO)] });
+  const renames = new Map([[INVITES, renameAsked(new Map(), listed, INVITES, "Invites  ")]]);
+  const { standings } = asked(listed, INVITES, { status: TASK_STATUS.DONE });
+  const answered = _view({
+    tasks: [{ ...standingTask(INVITES, TASK_STATUS.IN_PROGRESS), name: "Invites" }],
+  });
+
+  assert.equal(settledRenames(renames, answered, undefined).size, 0);
+  assert.equal(settledStandings(standings, answered, undefined).status.size, 0);
 });
 
 test("Mark done's Undo puts back only the tasks still done, leaving one given another status since as it was chosen", () => {

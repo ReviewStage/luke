@@ -1,20 +1,18 @@
 import {
   AVATAR_SIZE,
   Avatar,
-  BADGE_TONE,
-  BackIcon,
   Badge,
   ChevronDownIcon,
   ComposeIcon,
   FolderIcon,
   GearIcon,
-  NAV_COUNT_SHOWN,
-  NAV_COUNT_TONE,
+  InboxIcon,
   NAV_CURRENT,
   NAV_ITEM_VARIANT,
   NavItem,
   NavItemLink,
   SearchIcon,
+  STATUS_TONE,
   useMenu,
 } from "@luke/ui";
 import { useState } from "react";
@@ -23,9 +21,8 @@ import { CatalogSection } from "../section";
 
 /**
  * nav-items.tsx -- a sidebar's places with their counts, marks, and chords,
- * the one shown, one unavailable, one unread; fold heads open and folded;
- * an account's menu trigger; links with addresses of their own; and long
- * names in a narrow column.
+ * the one shown, one unavailable, one unread; an account's menu trigger;
+ * links with addresses of their own; and long names in a narrow column.
  */
 
 /** A chord as an app draws one, hidden from a reader since the row names it. */
@@ -49,7 +46,7 @@ function Places(): React.JSX.Element {
       </NavItem>
       <NavItem
         icon={<FolderIcon />}
-        count={{ value: 3, noun: "waiting on you", tone: NAV_COUNT_TONE.ACCENT }}
+        count={{ value: 3, noun: "waiting on you", tone: STATUS_TONE.ATTENTION }}
         shortcut={<Chord keys="⇧⌘I" />}
         {...place("inbox")}
       >
@@ -61,36 +58,8 @@ function Places(): React.JSX.Element {
       <NavItem icon={<FolderIcon />} disabled>
         Automations
       </NavItem>
-      <NavItem icon={<BackIcon />} mark={<Badge tone={BADGE_TONE.ATTENTION}>Needs you</Badge>}>
-        Back
-      </NavItem>
-    </div>
-  );
-}
-
-function Folds(): React.JSX.Element {
-  const [folded, setFolded] = useState(true);
-  return (
-    <div className="catalog-narrow">
-      <NavItem
-        variant={NAV_ITEM_VARIANT.HEAD}
-        icon={<FolderIcon />}
-        expanded={!folded}
-        count={folded ? { value: 4, noun: "tasks", shown: NAV_COUNT_SHOWN.ON_HOVER } : undefined}
-        onClick={() => setFolded((was) => !was)}
-      >
-        acme/web
-      </NavItem>
-      <NavItem
-        variant={NAV_ITEM_VARIANT.HEAD}
-        icon={<FolderIcon />}
-        expanded={false}
-        count={{ value: 2, noun: "need you" }}
-      >
-        Nightly review
-      </NavItem>
-      <NavItem variant={NAV_ITEM_VARIANT.HEAD} expanded>
-        Tasks
+      <NavItem icon={<InboxIcon />} mark={<Badge tone={STATUS_TONE.ATTENTION}>Needs you</Badge>}>
+        Inbox
       </NavItem>
     </div>
   );
@@ -142,9 +111,6 @@ function NavItems(): React.JSX.Element {
     <>
       <CatalogSection id="nav-item-places" title="Places, with counts, marks, and chords">
         <Places />
-      </CatalogSection>
-      <CatalogSection id="nav-item-folds" title="Fold heads, open and folded">
-        <Folds />
       </CatalogSection>
       <CatalogSection id="nav-item-identity" title="Who: a menu's trigger">
         <Account />

@@ -1,4 +1,4 @@
-import { TEXT_ELEMENT, TEXT_VARIANT, Text } from "@luke/ui";
+import { TEXT_AREA_SUBMIT, TEXT_ELEMENT, TEXT_VARIANT, Text, type TextAreaSubmit } from "@luke/ui";
 import {
   type ReactNode,
   type Ref,
@@ -10,6 +10,7 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import { useEditedLinksHost } from "../link-menu.js";
+import { PANEL_SPAN, useKeystrokeSpans } from "../panel-spans.js";
 import type {
   ComposerChip,
   ComposerEditorHandle,
@@ -46,7 +47,9 @@ import { useSelectionToolbar } from "./selection-toolbar.js";
  * (`./selection-toolbar.tsx`), which stands aside while a list the box
  * opened stands, as its `aria-expanded` says. The field's
  * look is its own (`.agent-composer-input`, tasks.css), in the body type,
- * and unrecorded (`ph-no-capture`), the same in both boxes.
+ * and unrecorded (`ph-no-capture`), the same in both boxes. Each key pressed
+ * in it is timed to the paint after it, how long and nothing of the key
+ * (`../panel-spans.ts`), the same in every box.
  */
 
 /** The editor's class, and the inert field's before it mounts. */
@@ -77,7 +80,7 @@ export function UnloadedComposerField(): React.JSX.Element {
 }
 
 /** Whether the developer is typing somewhere the box must not take focus from: a field or an editor elsewhere. */
-function typingElsewhere(): boolean {
+export function typingElsewhere(): boolean {
   const active = document.activeElement;
   if (!(active instanceof HTMLElement) || active === document.body) return false;
   return (
@@ -122,7 +125,9 @@ export function ComposerField({
   aria,
   onKey,
   onEnter,
+  submitKey,
   onPasteFiles,
+  onPasteCut,
   onTrigger,
   chip,
   quote,
@@ -147,7 +152,11 @@ export function ComposerField({
   aria: Readonly<Record<string, string | undefined>>;
   onKey: (event: KeyboardEvent) => boolean;
   onEnter: () => void;
+  /** The key that sends: Enter, or ⌘ or Ctrl with Enter where Enter must break the line; Enter where none is given. */
+  submitKey?: TextAreaSubmit | undefined;
   onPasteFiles: (files: readonly File[]) => boolean;
+  /** Told once a paste past `maxLength` has been cut to fit; a box that gives no word of it cuts silently. */
+  onPasteCut?: (() => void) | undefined;
   onTrigger: (trigger: ComposerTrigger | undefined) => void;
   chip: (chip: ComposerChip) => ReactNode;
   /** How a quote block the editor holds is drawn; its words alone where none is given. */
@@ -164,12 +173,14 @@ export function ComposerField({
   const host = useRef<HTMLDivElement>(null);
   // A link in the draft opens, from its right-click, where the box stands.
   const editedLinks = useEditedLinksHost();
+  const keystrokes = useKeystrokeSpans(PANEL_SPAN.KEYSTROKE_COMPOSER);
   const roomHost = useCallback(
     (element: HTMLDivElement | null) => {
       room.current = element;
       editedLinks(element);
+      keystrokes(element);
     },
-    [room, editedLinks],
+    [room, editedLinks, keystrokes],
   );
   const [chips, setChips] = useState<readonly DrawnChip[]>([]);
   const toolbar = useSelectionToolbar({
@@ -187,7 +198,9 @@ export function ComposerField({
     skills,
     onKey,
     onEnter,
+    submitKey,
     onPasteFiles,
+    onPasteCut,
     onTrigger,
     mentions,
     takesFocus,
@@ -200,7 +213,9 @@ export function ComposerField({
     skills,
     onKey,
     onEnter,
+    submitKey,
     onPasteFiles,
+    onPasteCut,
     onTrigger,
     mentions,
     takesFocus,
@@ -232,7 +247,9 @@ export function ComposerField({
       },
       onKey: (event) => latest.current.onKey(event),
       onEnter: () => latest.current.onEnter(),
+      submitKey: () => latest.current.submitKey ?? TEXT_AREA_SUBMIT.ENTER,
       onPasteFiles: (files) => latest.current.onPasteFiles(files),
+      onPasteCut: () => latest.current.onPasteCut?.(),
       onTrigger: (trigger) => latest.current.onTrigger(trigger),
       drawChip: (element, drawnChip) => draw(element, drawnChip),
       drawQuote: (element, drawnQuote) => draw(element, { quote: drawnQuote }),

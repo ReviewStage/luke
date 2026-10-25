@@ -148,15 +148,16 @@ test("a row with a press opens what it names, and one without is text a reader r
   assert.equal(card.textContent, "acme/relayCreated by you");
 });
 
-test("a list is named, reads its rows and their ends, and counts what it leaves out last", () => {
+test("a list is named, reads every row and its end, and counts nothing it would leave out", () => {
   const card = drawn(
     createElement(HoverCardList, {
       label: "Pull requests",
-      more: "2 more",
-      children: createElement(
-        "li",
-        null,
-        createElement(HoverCardRow, { glyph: null, label: "#42 Invite flow", end: "+12 −3" }),
+      children: [42, 43, 44, 45, 46, 47, 48, 49, 50].map((number) =>
+        createElement(
+          "li",
+          { key: number },
+          createElement(HoverCardRow, { glyph: null, label: `#${number}`, end: "+12 −3" }),
+        ),
       ),
     }),
   );
@@ -164,8 +165,9 @@ test("a list is named, reads its rows and their ends, and counts what it leaves 
   assert.equal(list.getAttribute("aria-label"), "Pull requests");
   assert.deepEqual(
     [...list.querySelectorAll("li")].map((each) => each.textContent),
-    ["#42 Invite flow+12 −3", "2 more"],
+    [42, 43, 44, 45, 46, 47, 48, 49, 50].map((number) => `#${number}+12 −3`),
   );
+  assert.ok(list.closest(".luke-scroll-area"), "a long list scrolls within the card");
 });
 
 test("a row's words fade out at their end only while the card cuts them short", () => {

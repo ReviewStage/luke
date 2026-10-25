@@ -8,8 +8,9 @@ import type { EditorAnchor, EditorAnchors } from "./contract.js";
  *
  * The service keeps a thread's anchor as offsets into the plan's Markdown
  * (`@luke/features/plan-comment-anchor`); the editor holds its words as a
- * mark naming the thread, laid on as the editor opens and outside the
- * developer's undo, so no undo takes them off. From then on the mark is part
+ * mark naming the thread, laid on as the editor opens, or as a thread opens
+ * or closes while it stands, outside the developer's undo, so no undo takes
+ * them off. From then on the mark is part
  * of the words: typing inside them widens it, deleting them takes it, and
  * undoing the deletion brings it back with them, which no carrying-over of
  * the text alone could tell. Each draft reports where every mark stands in
@@ -80,32 +81,56 @@ function editorWords(doc: PmNode): EditorWords {
 }
 
 /**
- * The threads' marks laid on the words their anchors name in `markdown`,
- * the text the editor opened on, outside the developer's undo. Answers the
- * threads it laid a mark for, the ones the editor carries; a thread none of
- * whose words could be found is left to the service to carry.
+ * The threads' marks made to stand for the `open` threads, outside the
+ * developer's undo: a mark whose thread is not open taken off, and one laid
+ * on the words each of `anchors` names in `markdown`, the text its offsets
+ * are counted in, for a thread the editor does not carry yet. Answers the
+ * threads the editor carries afterwards; a thread none of whose words could
+ * be found is left to the service to carry. A thread it carries that is
+ * still open stays carried, its mark having followed its words since it was
+ * laid, even with no anchor of the service's: one whose words were deleted
+ * here, which undo may bring back. So is an open thread whose mark stands,
+ * which undo brought back while it was closed.
  */
 export function anchorsLaidIn(
   editor: Editor,
   markdown: string,
   anchors: readonly EditorAnchor[],
+  open: ReadonlySet<string>,
+  carried: readonly string[],
 ): readonly string[] {
   const type = editor.schema.marks[COMMENT_ANCHOR.MARK];
-  if (type === undefined || anchors.length === 0) return [];
-  const words = editorWords(editor.state.doc);
-  const toEditor = textChange(markdown, words.text);
+  if (type === undefined) return [];
+  const { doc } = editor.state;
   const tr = editor.state.tr.setMeta("addToHistory", false);
+  // Note that a mark undo brought back for a thread no longer open goes too, so no closed thread stays marked.
+  const marked = new Set<string>();
+  doc.descendants((node, pos) => {
+    if (!node.isInline) return true;
+    for (const mark of node.marks) {
+      if (mark.type !== type) continue;
+      const thread = String(mark.attrs.thread ?? "");
+      if (open.has(thread)) marked.add(thread);
+      else tr.removeMark(pos, pos + node.nodeSize, mark);
+    }
+    return false;
+  });
+  // Note that an open thread whose mark stands is carried, though the editor let it go: one closed and reopened after undo brought its deleted words back, whose anchor the service no longer holds.
+  const kept = [...new Set([...carried.filter((thread) => open.has(thread)), ...marked])];
+  const fresh = anchors.filter((anchor) => !kept.includes(anchor.thread));
+  const words = fresh.length === 0 ? undefined : editorWords(doc);
+  const toEditor = words === undefined ? undefined : textChange(markdown, words.text);
   const laid: string[] = [];
-  for (const anchor of anchors) {
-    const span = toEditor(anchor);
-    const from = span === undefined ? undefined : words.at[span.from];
-    const last = span === undefined ? undefined : words.at[span.to - 1];
+  for (const anchor of fresh) {
+    const span = toEditor?.(anchor);
+    const from = span === undefined ? undefined : words?.at[span.from];
+    const last = span === undefined ? undefined : words?.at[span.to - 1];
     if (from === undefined || last === undefined) continue;
     tr.addMark(from, last + 1, type.create({ thread: anchor.thread }));
     laid.push(anchor.thread);
   }
-  if (laid.length > 0) editor.view.dispatch(tr);
-  return laid;
+  if (tr.docChanged) editor.view.dispatch(tr);
+  return [...kept, ...laid];
 }
 
 /**

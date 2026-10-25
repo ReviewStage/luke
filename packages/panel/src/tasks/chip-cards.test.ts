@@ -63,6 +63,9 @@ import { TranscriptWords } from "./transcript-blocks.js";
 
 const AT = 1_792_000_000_000;
 
+/** What a page's card says where its page cannot be read, as the reader sees it. */
+const PAGE_UNREAD = "Luke cannot read this page.";
+
 const TASK_ID = "3f6c1b2a-8d4e-4f10-9a7b-5c2d1e0fa21b";
 
 const PAGE_ID = "26494df1-595a-4364-abf7-85781c65a9f8";
@@ -339,11 +342,15 @@ const PAGE: TaskMentionsValue = {
   },
 };
 
-/** The words drawn as a transcript draws them on the plan's page, in a window holding `STATE`. */
-async function drawn(text: string): Promise<HTMLElement> {
+/** The words drawn as a transcript draws them on a plan's page, the plan's own unless another is given, in a window holding `STATE`. */
+async function drawn(
+  text: string,
+  page: TaskMentionsValue = PAGE,
+  state: AppStateSnapshot = STATE,
+): Promise<HTMLElement> {
   fakeAppBridge({
     onAppState: () => () => undefined,
-    requestAppState: () => Promise.resolve(STATE),
+    requestAppState: () => Promise.resolve(state),
   });
   fakeActPort({
     ...inboxes.procedures,
@@ -369,7 +376,7 @@ async function drawn(text: string): Promise<HTMLElement> {
   const container = document.body.appendChild(document.createElement("div"));
   root = createRoot(container);
   const words: ReactNode = createElement(TaskMentions, {
-    value: PAGE,
+    value: page,
     children: createElement(TranscriptWords, { text }),
   });
   act(() =>
@@ -469,7 +476,33 @@ test("a plan's chip hangs the plan's card, and a section's the same card's head 
   assert.equal((await cardOf(version)).focus, "Version 4");
 });
 
-test("a page's chip hangs its title, its version and who showed it, and when it moved, a page of a plan not open read as it is first hung; one neither the window nor the read holds keeps the chip's own card", async () => {
+test("a plan's chip on another plan's page hangs the card the plan's tab hangs, and one of a plan the window lists not that tab's own name card", async () => {
+  const elsewhere: TaskMentionsValue = {
+    ...PAGE,
+    taskId: OTHER_TASK,
+    taskName: "Another plan",
+    doors: { ...PAGE.doors, taskId: OTHER_TASK, anchors: new Set() },
+  };
+  const container = await drawn(
+    [
+      mentionMarkdown({ kind: MENTION_KIND.TASK, taskId: TASK_ID }, "the plan", PLACE),
+      mentionMarkdown(
+        { kind: MENTION_KIND.TASK, taskId: "6a7b8c9d-0e1f-4a2b-8c3d-4e5f6a7b8c9d" },
+        "Someone's plan",
+        PLACE,
+      ),
+    ].join(" "),
+    elsewhere,
+  );
+  const [listed, unlisted] = chipsOf(container);
+
+  const listedCard = await cardOf(listed);
+  const unlistedCard = await cardOf(unlisted);
+  assert.deepEqual([listedCard.card, listedCard.name], ["data-task-card", TASK.name]);
+  assert.deepEqual([unlistedCard.card, unlistedCard.name], ["data-tab-card", "Someone's plan"]);
+});
+
+test("a page's chip hangs its title, its version and who showed it, and when it moved, a page of a plan not open read as it is first hung; one neither the window nor the read holds says it can't be read", async () => {
   const container = await drawn(
     [
       mentionMarkdown({ kind: MENTION_KIND.PAGE, taskId: TASK_ID, pageId: PAGE_ID }, "", PLACE),
@@ -505,18 +538,28 @@ test("a page's chip hangs its title, its version and who showed it, and when it 
   assert.equal(page.name, "Unfurl matrix");
   assert.equal(page.sub, "Version 3 · Shown by Luke");
   assert.ok(page.corner, "the corner says when the page last moved");
-  assert.equal(other.card, "data-mention-card");
-  assert.equal(other.name, "Old draft");
+  assert.deepEqual([other.name, other.notes], ["Old draft", [PAGE_UNREAD]]);
   // A page id the open plan holds, named on another plan, is not the open plan's page.
-  assert.equal(another.card, "data-mention-card");
-  assert.equal(another.name, "Another plan's page");
+  assert.deepEqual([another.name, another.notes], ["Another plan's page", [PAGE_UNREAD]]);
   // A page of a plan not open hangs its tab's card all the same, as an Inbox item's bar names it.
   assert.equal(read.card, "data-page-card");
   assert.equal(read.name, "Rollout tracker");
   assert.equal(read.sub, "Shown by Luke");
 });
 
-test("a chip of a page an agent on no task showed hangs the same card as a plan's page, read as it is first hung: its title, its version and the agent that showed it, and when it moved, over its preview; one the agent's pages hold not, or of an agent the reader cannot reach, keeps the chip's own card", async () => {
+test("a page's chip of the open plan the window holds no pages for reads the plan's pages as it is hung, and says it can't be read once they lack it", async () => {
+  const { pages: _landing, ...opening } = STATE.tasks;
+  const container = await drawn(
+    mentionMarkdown({ kind: MENTION_KIND.PAGE, taskId: TASK_ID, pageId: PAGE_ID }, "Unfurl", PLACE),
+    PAGE,
+    { ...STATE, tasks: opening },
+  );
+
+  const card = await cardOf(chipsOf(container)[0]);
+  assert.deepEqual([card.name, card.notes], ["Unfurl", [PAGE_UNREAD]]);
+});
+
+test("a chip of a page an agent on no task showed hangs the same card as a plan's page, read as it is first hung: its title, its version and the agent that showed it, and when it moved, over its preview; one the agent's pages hold not, or of an agent the reader cannot reach, says it can't be read", async () => {
   const container = await drawn(
     [
       mentionMarkdown(
@@ -551,11 +594,9 @@ test("a chip of a page an agent on no task showed hangs the same card as a plan'
   );
 
   const other = await cardOf(unheld);
-  assert.equal(other.card, "data-mention-card");
-  assert.equal(other.name, "Old ledger");
+  assert.deepEqual([other.name, other.notes], ["Old ledger", [PAGE_UNREAD]]);
   const refused = await cardOf(hidden);
-  assert.equal(refused.card, "data-mention-card");
-  assert.equal(refused.name, "Someone's ledger");
+  assert.deepEqual([refused.name, refused.notes], ["Someone's ledger", [PAGE_UNREAD]]);
 });
 
 test("a file's and a folder's chips hang their path, their repository, and where they are read", async () => {
@@ -618,6 +659,21 @@ test("an Inbox item's chip wears its agent's tile and hangs its Inbox row's own 
   assert.match(settled.sub ?? "", /^Answered/u);
   assert.equal(sweep.card, "data-inbox-row-card");
   assert.equal(sweep.name, "Quarantine the flaky test?");
+});
+
+test("an Inbox item's labelled chip is called by the item's title, whether it waits or was answered", async () => {
+  const container = await drawn(
+    [
+      `[@Inbox item](${HOME}/plan/${TASK_ID}/inbox/${ITEM_ID})`,
+      `[@Inbox item](${HOME}/plan/${TASK_ID}/inbox/${ANSWERED_ITEM})`,
+      `[@Inbox item](${HOME}/agent/${SWEEP_AGENT}/inbox/${SWEEP_ITEM})`,
+    ].join(" "),
+  );
+
+  assert.deepEqual(
+    chipsOf(container).map((chip) => chip.querySelector(".luke-inline-ref-label")?.textContent),
+    ["Keep expired links?", "Rename the invite email?", "Quarantine the flaky test?"],
+  );
 });
 
 test("an Inbox item's chip whose inbox could not be read keeps the card main's brief makes of a waiting item, and the chip's own for an item it does not hold", async () => {

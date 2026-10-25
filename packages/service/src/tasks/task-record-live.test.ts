@@ -5,7 +5,12 @@ import type { LiveStatement } from "@luke/database/core/live-statement";
 import { Database, type DatabaseServices } from "@luke/database/core/query";
 import { createCodingAgent } from "@luke/database/models/coding-agent-store";
 import { listPages, writePage } from "@luke/database/models/plan-pages";
-import { createTask } from "@luke/database/models/task-store";
+import {
+  createTask,
+  readTaskPlan,
+  savePlanText,
+  updateTask,
+} from "@luke/database/models/task-store";
 import { user } from "@luke/database/schemas/auth";
 import { messages } from "@luke/database/schemas/storage";
 import { voiceSessions, voiceTranscriptSegments } from "@luke/database/schemas/voice";
@@ -20,8 +25,9 @@ import { type TaskRecordLiveRows, taskRecordLiveRowsSchema } from "@luke/feature
 import { PAGE_SHOWER, taskPageOwner } from "@luke/features/page-wire";
 import { MESSAGE_AUTHOR, MESSAGE_ROLE } from "@luke/wire";
 import { eq } from "drizzle-orm";
-import { Effect, Option, Schema } from "effect";
+import { Duration, Effect, Option, Schema } from "effect";
 import { SqlClient } from "effect/sql";
+import { TestClock } from "effect/testing";
 import { openGithubUser } from "../testing/github-app-fake.js";
 import { SHOW_CODE_TOOL } from "./show-code.js";
 import { taskRecordLiveStatements } from "./task-record-live.js";
@@ -37,12 +43,12 @@ import { readTaskCode } from "./task-work-store.js";
  * Synthetic accounts, pages, and words throughout.
  */
 
-const PARTS = ["pages", "calls", "code"] as const;
+const PARTS = ["plan", "pages", "calls", "code"] as const;
 
 type Part = (typeof PARTS)[number];
 
 /** The parts a held read answers: every one but the calls, which no desktop reads again since every call speaks into an agent. */
-const HELD_PARTS = ["pages", "code"] as const;
+const HELD_PARTS = ["plan", "pages", "code"] as const;
 
 const CLOSED_AT = new Date(1_800_000_000_000);
 
@@ -84,6 +90,7 @@ const liveRecordOf = (reader: string, taskId: string) =>
   Effect.gen(function* () {
     const statements = Option.getOrThrow(taskRecordLiveStatements(reader, taskId));
     return yield* Schema.decodeUnknownEffect(taskRecordLiveRowsSchema)({
+      plan: yield* runLive(statements.plan),
       pages: yield* runLive(statements.pages),
       calls: yield* runLive(statements.calls),
       code: yield* runLive(statements.code),
@@ -94,6 +101,7 @@ const liveRecordOf = (reader: string, taskId: string) =>
 const heldRecordOf = (reader: string, taskId: string) =>
   Effect.gen(function* () {
     return {
+      plan: yield* readTaskPlan(reader, taskId),
       pages: yield* listPages(reader, taskPageOwner(taskId)),
       code: Option.map(yield* readTaskCode(reader, taskId), (read) => read.code),
     };
@@ -174,7 +182,12 @@ it.layer(getTestDB())("a task's record followed live", (it) => {
             held = nextHeld;
           });
 
-        assert.deepEqual(live, { pages: [], calls: [], code: [] });
+        assert.deepEqual(live, {
+          plan: [{ taskId: task.id, savedAt: Option.getOrThrow(held.plan).updatedAt }],
+          pages: [],
+          calls: [],
+          code: [],
+        });
 
         const shown = Option.getOrThrow(
           yield* writePage(
@@ -232,10 +245,47 @@ it.layer(getTestDB())("a task's record followed live", (it) => {
           ),
         );
         assert.deepEqual(yield* liveRecordOf(stranger, task.id), {
+          plan: [],
           pages: [],
           calls: [],
           code: [],
         });
+      }),
+  );
+
+  it.effect(
+    "the plan moves for a teammate as anyone saves its text, at the instant the open document reads as its last save, and not as it is renamed; a stranger reads none",
+    () =>
+      Effect.gen(function* () {
+        const owner = yield* openUser;
+        const teammate = yield* openUser;
+        const stranger = yield* openUser;
+        const task = yield* startTask(owner, { name: "Teammate invitations" });
+        yield* joinWorkspace(task.workspaceId, teammate);
+
+        let live = yield* liveRecordOf(teammate, task.id);
+        const step = (
+          expected: readonly Part[],
+          write: Effect.Effect<unknown, unknown, DatabaseServices>,
+        ) =>
+          Effect.gen(function* () {
+            yield* TestClock.adjust(Duration.seconds(1));
+            yield* Effect.orDie(write);
+            const nextLive = yield* liveRecordOf(teammate, task.id);
+            const nextHeld = yield* heldRecordOf(teammate, task.id);
+            assert.deepEqual(movedParts(live, nextLive), expected, "the live marks moved");
+            assert.deepEqual(
+              nextLive.plan.map((plan) => plan.savedAt),
+              [Option.getOrThrow(nextHeld.plan).updatedAt],
+              "the mark is the open document's last save",
+            );
+            live = nextLive;
+          });
+
+        yield* step(["plan"], savePlanText(owner, task.id, "## Invites\n\nThey expire."));
+        yield* step(["plan"], savePlanText(teammate, task.id, "## Invites\n\nA week."));
+        yield* step([], updateTask(owner, task.id, { name: "Invitations" }));
+        assert.deepEqual((yield* liveRecordOf(stranger, task.id)).plan, []);
       }),
   );
 
@@ -318,6 +368,7 @@ it.layer(getTestDB())("a task's record followed live", (it) => {
         yield* step(["code"], amended([first, said, code("call-2", "export const MAX = 5;")], 2));
 
         assert.deepEqual(yield* liveRecordOf(stranger, task.id), {
+          plan: [],
           pages: [],
           calls: [],
           code: [],

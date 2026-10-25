@@ -1,3 +1,4 @@
+import { SELECTION_WORDS } from "@luke/features/words";
 import {
   type ComponentType,
   createContext,
@@ -11,15 +12,31 @@ import {
   useCallback,
   useContext,
   useEffect,
+  useId,
+  useRef,
 } from "react";
 import { cssCustomProperties } from "../../css.js";
 import { ChevronRightIcon } from "../../face/glyphs.js";
 import { PRESS_PULSE, pulseOnPress, pulsePress } from "../../press-pulse.js";
 import { useClipped } from "../../use-clipped.js";
+import { BUTTON_SIZE } from "../button/button.js";
 import { motionKey, motionRows } from "../list-motion/list-motion.js";
 import { useLinkAddress } from "../menu/link-address.js";
-import { type ContextMenuProps, withContextMenu } from "../menu/menu.js";
+import { withContextMenu } from "../menu/menu.js";
+import { rovingItem, useRovingKeys } from "../roving-keys/roving-keys.js";
+import { type ListRowMenu, useRowMenu } from "../row-menu/row-menu.js";
+import {
+  holdRun,
+  type ListSelection,
+  ListSelectionContext,
+  selectableRow,
+  selectionRoot,
+  useListSelection,
+} from "../selection/list-selection.js";
 import { useRowSwipe } from "./use-row-swipe.js";
+
+export type { ListRowMenu } from "../row-menu/row-menu.js";
+export type { ListSelection } from "../selection/list-selection.js";
 
 /**
  * list-row.tsx -- a List of rows, each a thing a collection holds: its title, a line under it, its metadata at the end, and the acts it offers beside it.
@@ -43,9 +60,26 @@ import { useRowSwipe } from "./use-row-swipe.js";
  * one focused) reaches a row's press through `ref` and hears the keys
  * pressed on it through `onKeyDown`; a row that opens nothing takes no
  * focus, so its `ref` reaches its item, to scroll or measure, and it hears
- * no keys, which would only be its acts'. `contextMenu` (`useMenu`'s)
- * hears a right-click or a touch's long press anywhere on the row, its acts
- * included, so the app can open its own menu there.
+ * no keys, which would only be its acts'.
+ *
+ * A row whose thing has acts of its own offers them as one menu (`menu`),
+ * which every door to it opens alike: its ⋯ (`MoreButton`), the last of the
+ * row's acts, drops it from the ⋯; a right-click or a touch's long press
+ * anywhere on the row hangs it at the pointer; and the menu key or ⇧F10,
+ * pressed on the row or any of its acts, hangs it under the row from its
+ * start. The ⋯ is a Tab stop after the row's other acts, so the keyboard
+ * reaches it as it reaches them, and named for the row's thing, "Task
+ * actions", described by the row's title, so a reader hears which row's it
+ * is. It keeps its place at the row's end and shows while the pointer
+ * rests on the row, the row holds the keyboard, or its menu is open, and
+ * always on a screen with no hover, where nothing would reveal it. Its menu
+ * open rings the row; Escape hands focus back to the door it was opened
+ * from: the ⋯, what held the keyboard as the menu key was pressed, or, for
+ * a right-click, the row's press, or its ⋯ where it opens nothing. A row
+ * that offers no acts now, its groups empty, or is unavailable, draws no ⋯
+ * and opens nothing.
+ * `menu` is the one way a row wires its menu: a row never opens one by a
+ * right-click it wires itself.
  *
  * A list stands plain, its rows apart on the ground, each lit on its own;
  * or as a card (`LIST_VARIANT.CARD`), its rows edge to edge on the card's
@@ -65,9 +99,10 @@ import { useRowSwipe } from "./use-row-swipe.js";
  * the row a right-click is about, so the menu is plainly about it. A row that goes somewhere deeper wears a
  * chevron at its end (`chevron`). A row whose press must leave the focus
  * where it is, on a search field beside the list that holds the keys, keeps
- * it (`keepFocus`), as a Button does; one of a roving list, which the
- * keyboard enters at its current row and moves through by its own keys, is
- * out of the tab order and takes the focus it is handed (`tabbable`), and
+ * it (`keepFocus`), as a Button does. A `List`'s rows are one Tab stop, the
+ * arrows walking them; one whose list steers it by keys of its own says
+ * whether it is a Tab stop itself (`tabbable`), takes the focus it is
+ * handed, and is left out of the arrows' walk, and
  * one a field drives names its item by `id`, the field's active row. A row
  * unavailable (`disabled`) refuses its press and leaves the tab order, as a
  * deleting row's does. Where an app hints a row's whole title only when it
@@ -98,10 +133,11 @@ import { useRowSwipe } from "./use-row-swipe.js";
  * that offers them only to the row in hand (`LIST_ROW_ACTIONS.HOVER`), in
  * its metadata's place while the pointer rests on it or it holds the
  * keyboard, the metadata stepping aside as a sidebar row's time does for
- * Pin and Archive. The row keeps their place beside its words whether they
- * show or not, as wide as the wider of them and its metadata, so coming and
- * going they move nothing and cover nothing: the title keeps its room, and
- * the press its ring.
+ * Pin and Archive. While they stand, the row makes room for them beside its
+ * words, so they cover nothing and the press keeps its ring; at rest, where
+ * there is a hover, they take none, so the title runs to the metadata and
+ * is cut anew before them as they come, and the row's ⋯ comes with them, in
+ * the metadata's place, keeping no room of its own.
  *
  * A title cut short, there or anywhere, fades out over its last few pixels
  * instead of ending in an ellipsis, as a browser's tab does; one drawn
@@ -228,7 +264,6 @@ function preventFocusMove(event: MouseEvent<HTMLElement>): void {
 function plainWords(words: ReactNode): string | undefined {
   // A slot is handed over as a loose ReactNode, and a string is the one form
   // whose words can be compared from render to render; this check is the boundary.
-  // oxlint-disable-next-line anti-slop/no-runtime-typeof
   return typeof words === "string" ? words : undefined;
 }
 
@@ -259,15 +294,36 @@ function said(words: ReactNode): boolean {
  * One whose rows a finger opens (`fingerTall`) stands each a finger's press
  * tall on a coarse pointer, its words centred in it, as a call's line does
  * of its own; a mouse keeps the row's own height.
+ *
+ * The list is one Tab stop (`useRovingKeys`): Tab enters it at the row last
+ * focused, or its first, ↑↓ walk its rows, wrapping at the ends, Home and
+ * End go to the first and the last, and an unavailable row is passed over.
+ * A row whose list steers it from elsewhere, a field holding the keys, says
+ * whether it is a Tab stop itself (`tabbable`) and stays out of the walk.
+ * A list standing among others under group heads, a rail's, may instead
+ * join the walk of a box around them all (`joinsWalk`), so the rows of
+ * every group are one Tab stop the arrows walk from first to last.
+ *
+ * A list asked to (`selection`) chooses rows at once, as a Mac's list does
+ * (`list-selection.ts`): ⌘-click one in or out, ⇧-click a run from the
+ * last one pressed, ⇧↑↓ grow the run from the row in hand, ⌘A every row,
+ * and Esc none, while a plain press still opens its row. Each row takes
+ * part by its key (`selectKey`), and one chosen is filled and described as
+ * selected. A list not asked chooses nothing.
  */
 export function List({
+  id,
   label,
   variant = LIST_VARIANT.PLAIN,
   density = LIST_DENSITY.REGULAR,
   fingerTall = false,
   moves = false,
+  joinsWalk = false,
+  selection,
   children,
 }: {
+  /** The id of the list, which a `SelectionBar` over it names to hand it the focus back. */
+  id?: string | undefined;
   label: string;
   variant?: ListVariant;
   density?: ListDensity;
@@ -275,11 +331,23 @@ export function List({
   fingerTall?: boolean | undefined;
   /** Whether its rows move as they arrive, leave, and change places, under a `ListMotion` (`motionRows`). */
   moves?: boolean;
+  /** Whether its rows join the walk of a `useRovingKeys` box around it, with the rows of the lists beside it, rather than walk alone. */
+  joinsWalk?: boolean;
+  /** Which rows are chosen and what hears the next set, where the list chooses rows at all. */
+  selection?: ListSelection | undefined;
   children: ReactNode;
 }): React.JSX.Element {
+  const roving = useRovingKeys<HTMLUListElement>();
+  const chooser = useListSelection(selection);
   return (
     <ul
+      {...(joinsWalk ? {} : roving)}
+      onKeyDown={(event) => {
+        if (!chooser.onKeyDown(event) && !joinsWalk) roving.onKeyDown(event);
+      }}
+      id={id}
       className="luke-list"
+      {...selectionRoot()}
       data-variant={variant}
       data-density={density}
       data-finger-tall={fingerTall ? "true" : undefined}
@@ -287,7 +355,11 @@ export function List({
       {...(moves ? motionRows() : {})}
     >
       <ListVariantContext.Provider value={variant}>
-        <ListDensityContext.Provider value={density}>{children}</ListDensityContext.Provider>
+        <ListDensityContext.Provider value={density}>
+          <ListSelectionContext.Provider value={chooser.selecting}>
+            {children}
+          </ListSelectionContext.Provider>
+        </ListDensityContext.Provider>
       </ListVariantContext.Provider>
     </ul>
   );
@@ -317,13 +389,14 @@ export function ListRow({
   chevron = false,
   keepFocus = false,
   disabled = false,
-  tabbable = true,
+  tabbable,
   onTitleClipped,
   id,
+  selectKey,
   motionKey: followedBy,
   ref,
   onKeyDown,
-  contextMenu,
+  menu,
   swipe,
 }: {
   /** A mark before the title (an avatar, a status's glyph), drawn as decoration. */
@@ -369,33 +442,40 @@ export function ListRow({
   keepFocus?: boolean | undefined;
   /** Whether its press is unavailable: refused and out of the tab order. */
   disabled?: boolean | undefined;
-  /** Whether Tab stops on its press; one that is not still takes the focus a roving list hands it. */
+  /** Whether Tab stops on its press, said where something other than its `List` steers its rows, which leaves it out of the list's arrows; one that is not still takes the focus it is handed. Left out, its `List` keeps one row a Tab stop and walks the rest with the arrows. */
   tabbable?: boolean | undefined;
   /** Hears whether the title is cut short, whenever that changes, so a hint can say it whole only then. */
   onTitleClipped?: ((clipped: boolean) => void) | undefined;
   /** The id of the row's item, which a field driving the list names as its active row. */
   id?: string | undefined;
+  /** What the row is chosen by in a `List` that chooses rows (`selection`); a row with none is never chosen. */
+  selectKey?: string | undefined;
   /** The key a `ListMotion` follows the row by, out of one list and into another (`motionKey`). */
   motionKey?: string | undefined;
   /** Handed the row's press, or its item where it opens nothing. A callback, so one list keeps each row's by its own key. */
   ref?: RefCallback<HTMLElement> | undefined;
   /** A key pressed on the row's press; a row that opens nothing hears none. */
   onKeyDown?: ((event: KeyboardEvent<HTMLElement>) => void) | undefined;
-  /** The menu a right-click, the menu key, or a long press opens anywhere on the row (`useMenu`'s `contextMenu`). */
-  contextMenu?: ContextMenuProps | undefined;
+  /** The menu of the row's thing's acts, opened alike by its ⋯, a right-click, a long press, and the menu key; it takes `menuOpen`'s place. */
+  menu?: ListRowMenu | undefined;
   /** The row's one swipe right; none where it offers none. */
   swipe?: ListRowSwipe | undefined;
 }): React.JSX.Element {
   const swiped = useRowSwipe(swipe?.label, swipe?.onAct ?? NO_ACT);
   // The press hands the row's ref its element, and the link menu the address it opens.
   const linkAddress = useLinkAddress(linkHref);
+  const pressElement = useRef<HTMLButtonElement | null>(null);
   const pressRef = useCallback(
     (element: HTMLButtonElement | null) => {
+      pressElement.current = element;
       ref?.(element);
       linkAddress(element);
     },
     [ref, linkAddress],
   );
+  const titleId = useId();
+  const rowMenu = useRowMenu(menu, { disabled, opener: onPress ? pressElement : undefined });
+  const offered = rowMenu.offered;
   const [titleMeasured, titleClipped] = useClipped(plainWords(title));
   useEffect(() => {
     onTitleClipped?.(titleClipped);
@@ -409,6 +489,9 @@ export function ListRow({
   const pressPulse =
     useContext(ListVariantContext) === LIST_VARIANT.CARD ? PRESS_PULSE.FLUSH : PRESS_PULSE.QUIET;
   const describedDense = (density ?? listDensity) === LIST_DENSITY.DENSE;
+  const selecting = useContext(ListSelectionContext);
+  const choosable = selecting !== undefined && selectKey !== undefined;
+  const chosen = choosable && selecting.selected.has(selectKey);
   const described = useCallback(
     (element: HTMLElement | null) => {
       if (element === null || !describedDense) return undefined;
@@ -418,7 +501,12 @@ export function ListRow({
   );
   const [leadMeasured, leadClipped] = useClipped(lead?.label);
   const heading = (
-    <span ref={titleMeasured} className="luke-list-row-title" data-overflow={String(titleClipped)}>
+    <span
+      ref={titleMeasured}
+      id={offered ? titleId : undefined}
+      className="luke-list-row-title"
+      data-overflow={String(titleClipped)}
+    >
       {title}
     </span>
   );
@@ -492,14 +580,20 @@ export function ListRow({
       type="button"
       className="luke-list-row-main"
       aria-current={current}
+      aria-description={chosen ? SELECTION_WORDS.SELECTED : undefined}
       disabled={disabled}
-      tabIndex={tabbable ? undefined : -1}
+      tabIndex={tabbable === false ? -1 : undefined}
+      {...(tabbable === undefined ? rovingItem() : {})}
+      {...(choosable ? selectableRow(selectKey) : {})}
       // Note that the focus moves as a mousedown's default, so refusing it there is what keeps it.
-      onMouseDown={keepFocus ? preventFocusMove : undefined}
+      onMouseDown={keepFocus ? preventFocusMove : choosable ? holdRun : undefined}
       onClick={(event) => {
         // Note that the row around the press is what is pressed, its fill and its actions with it.
         const row = event.currentTarget.closest<HTMLElement>(".luke-list-row");
         pulsePress(row ?? event.currentTarget, pressPulse);
+        // Note that a right-click's menu holds the press as its opener, which its outside press leaves alone, so the press closes it.
+        if (rowMenu.open) rowMenu.close(false);
+        if (choosable && selecting.press(selectKey, event)) return;
         onPress(event);
       }}
       onKeyDown={onKeyDown}
@@ -519,6 +613,15 @@ export function ListRow({
         <hint.Hint label={hint.label}>{press}</hint.Hint>
       )}
       {said(actions) ? <div className="luke-list-row-actions">{actions}</div> : null}
+      {offered ? (
+        <div className="luke-list-row-more">
+          {rowMenu.button({
+            size:
+              (density ?? listDensity) === LIST_DENSITY.REGULAR ? undefined : BUTTON_SIZE.COMPACT,
+            describedBy: titleId,
+          })}
+        </div>
+      ) : null}
     </>
   );
   const { view, item } = swiped;
@@ -527,60 +630,68 @@ export function ListRow({
     if (!onPress) ref?.(element);
   };
   return (
-    <li
-      id={id}
-      {...(followedBy === undefined ? {} : motionKey(followedBy))}
-      ref={swipe === undefined ? (onPress ? undefined : ref) : hold}
-      className="luke-list-row"
-      data-meta={metaAt === LIST_ROW_META.TITLE ? metaAt : undefined}
-      data-actions={actionsAt === LIST_ROW_ACTIONS.HOVER ? actionsAt : undefined}
-      data-current={current === undefined ? undefined : "true"}
-      data-unread={unread === true ? "true" : undefined}
-      data-muted={muted === true ? "true" : undefined}
-      data-density={density}
-      data-ink={ink}
-      data-menu-open={menuOpen ? "true" : undefined}
-      data-swipe={swipe === undefined ? undefined : view.state}
-      data-armed={view.armed ? "true" : undefined}
-      {...withContextMenu(
-        contextMenu,
-        swipe === undefined ? {} : { onPointerDown: item.onPointerDown },
-      )}
-      {...(swipe === undefined
-        ? undefined
-        : {
-            onPointerMove: item.onPointerMove,
-            onPointerUp: item.onPointerUp,
-            onPointerCancel: item.onPointerCancel,
-            onClickCapture: item.onClickCapture,
-            style: cssCustomProperties({
-              "--luke-list-row-swipe": `${view.offset}px`,
-              "--luke-list-row-swipe-label": `${view.label.offset}px`,
-              "--luke-list-row-swipe-shown": view.label.opacity,
-            }),
-          })}
-    >
-      {swipe === undefined ? (
-        row
-      ) : (
-        <>
-          <div className="luke-list-row-swipe">
-            <button
-              type="button"
-              className="luke-list-row-swipe-act"
-              tabIndex={-1}
-              data-swipe-act=""
-              onClick={pulseOnPress(swiped.onPress)}
-            >
-              <span className="luke-list-row-swipe-label">
-                {swipe.icon}
-                <span>{swipe.label}</span>
-              </span>
-            </button>
-          </div>
-          <div className="luke-list-row-slide">{row}</div>
-        </>
-      )}
-    </li>
+    <>
+      <li
+        id={id}
+        {...(followedBy === undefined ? {} : motionKey(followedBy))}
+        ref={swipe === undefined ? (onPress ? undefined : ref) : hold}
+        className="luke-list-row"
+        data-meta={metaAt === LIST_ROW_META.TITLE ? metaAt : undefined}
+        data-actions={actionsAt === LIST_ROW_ACTIONS.HOVER ? actionsAt : undefined}
+        data-current={current === undefined ? undefined : "true"}
+        data-selected={chosen ? "true" : undefined}
+        data-unread={unread === true ? "true" : undefined}
+        data-muted={muted === true ? "true" : undefined}
+        data-density={density}
+        data-ink={ink}
+        data-menu-open={menuOpen || rowMenu.open ? "true" : undefined}
+        data-swipe={swipe === undefined ? undefined : view.state}
+        data-armed={view.armed ? "true" : undefined}
+        onKeyDown={rowMenu.onKeyDown}
+        {...withContextMenu(
+          rowMenu.doors,
+          swipe === undefined ? {} : { onPointerDown: item.onPointerDown },
+        )}
+        {...(swipe === undefined
+          ? undefined
+          : {
+              onPointerMove: item.onPointerMove,
+              onPointerUp: item.onPointerUp,
+              onPointerCancel: item.onPointerCancel,
+              onClickCapture: item.onClickCapture,
+              style: cssCustomProperties({
+                "--luke-list-row-swipe": `${view.offset}px`,
+                "--luke-list-row-swipe-label": `${view.label.offset}px`,
+                "--luke-list-row-swipe-shown": view.label.opacity,
+              }),
+            })}
+      >
+        {swipe === undefined ? (
+          row
+        ) : (
+          <>
+            <div className="luke-list-row-swipe">
+              <button
+                type="button"
+                className="luke-list-row-swipe-act"
+                tabIndex={-1}
+                data-swipe-act=""
+                onClick={pulseOnPress(swiped.onPress)}
+              >
+                <span className="luke-list-row-swipe-label">
+                  {swipe.icon}
+                  <span>{swipe.label}</span>
+                </span>
+              </button>
+            </div>
+            <div className="luke-list-row-slide">{row}</div>
+          </>
+        )}
+      </li>
+      {/* Note that the menu stands beside the row rather than in it, because a
+          press or a key in the menu's portal would otherwise reach the row's
+          own handlers, a long press on an item opening the menu again. */}
+      {rowMenu.popup}
+    </>
   );
 }

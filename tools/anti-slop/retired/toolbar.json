@@ -1,0 +1,4 @@
+{
+  "instead": "Draw the bar with Toolbar from @luke/ui, and set its room with the --luke-toolbar-* custom properties on what holds it, never with a rule on its parts.",
+  "classes": [{ "class": "desktop-toolbar*", "allow": [] }]
+}

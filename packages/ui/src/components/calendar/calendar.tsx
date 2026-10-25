@@ -19,7 +19,9 @@ import {
   CALENDAR_WEEKDAY,
   type CalendarPlace,
 } from "../../shadcn/calendar.js";
+import { ANNOUNCE, useAnnounce } from "../announcer/announcer.js";
 import { BUTTON_SIZE, IconButton } from "../button/button.js";
+import { Tooltip } from "../tooltip/hint.js";
 
 /**
  * calendar.tsx -- one month of days to pick one day or a range from, a week to a row, Sunday first.
@@ -33,7 +35,8 @@ import { BUTTON_SIZE, IconButton } from "../button/button.js";
  * catalog draw the same month whatever the day.
  *
  * Six weeks always stand, so paging months never moves what is drawn under
- * the calendar; the days of the months either side are dimmed and still
+ * the calendar, and each month paged to is said politely through the
+ * window's `Announcer`; the days of the months either side are dimmed and still
  * picked like any other. Today is marked, a single day or a range's ends
  * are filled, and the days between a range's ends are washed as one band.
  *
@@ -240,6 +243,8 @@ export function Calendar({
     moved !== undefined && monthOf(moved) === month ? moved : restingDay(month, start, today);
   const ranged = start !== undefined && end !== undefined && end !== start;
   const first = `${month}-01`;
+  const caption = spelled(first, { month: "long", year: "numeric" });
+  useAnnounce(ANNOUNCE.POLITE, caption);
 
   // Note that the keyboard is moved after the render that draws the day it
   // lands on, and waits for it, because a step into another month waits for
@@ -293,28 +298,28 @@ export function Calendar({
   return (
     <div className={cn("luke-calendar", CALENDAR)}>
       <div className={cn("luke-calendar-head", CALENDAR_CAPTION)}>
-        <span
-          className={cn("luke-calendar-title", CALENDAR_CAPTION_LABEL)}
-          id={titleId}
-          aria-live="polite"
-        >
-          {spelled(first, { month: "long", year: "numeric" })}
+        <span className={cn("luke-calendar-title", CALENDAR_CAPTION_LABEL)} id={titleId}>
+          {caption}
         </span>
         <span className={cn("luke-calendar-steps", CALENDAR_NAV)}>
-          <IconButton
-            icon={<BackIcon />}
-            label="Previous month"
-            size={BUTTON_SIZE.COMPACT}
-            disabled={month <= monthOf(FIRST_DAY)}
-            onClick={() => showMonth(-1)}
-          />
-          <IconButton
-            icon={<ForwardIcon />}
-            label="Next month"
-            size={BUTTON_SIZE.COMPACT}
-            disabled={month >= monthOf(LAST_DAY)}
-            onClick={() => showMonth(1)}
-          />
+          <Tooltip label="Previous month">
+            <IconButton
+              icon={<BackIcon />}
+              label="Previous month"
+              size={BUTTON_SIZE.COMPACT}
+              disabled={month <= monthOf(FIRST_DAY)}
+              onClick={() => showMonth(-1)}
+            />
+          </Tooltip>
+          <Tooltip label="Next month">
+            <IconButton
+              icon={<ForwardIcon />}
+              label="Next month"
+              size={BUTTON_SIZE.COMPACT}
+              disabled={month >= monthOf(LAST_DAY)}
+              onClick={() => showMonth(1)}
+            />
+          </Tooltip>
         </span>
       </div>
       <table

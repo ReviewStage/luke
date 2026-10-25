@@ -5,13 +5,14 @@ import {
   Chip,
   ChipName,
   dropBelowStart,
-  FoldingSearch,
   IconButton,
-  NAV_ITEM_VARIANT,
-  NavItem,
+  LIST_MOTION_WAY,
+  ListMotion,
+  motionRows,
   TaskStatusMark,
   TextButton,
   Tooltip,
+  useLeaving,
   useMenu,
 } from "@luke/ui";
 import { type Actor, actorName, creatorActor, memberActor } from "@luke/ui/actor-model";
@@ -32,17 +33,17 @@ import {
   SlidersHorizontalIcon,
   UserCheckIcon,
   UserIcon,
-  UsersIcon,
 } from "lucide-react";
-import type { ReactNode } from "react";
+import { type RefObject, useMemo, useRef } from "react";
 import { ACTOR_SIZE, ActorMark } from "../actor-ref.js";
 import { useAppCommand } from "../app-commands.js";
+import { commandHead, PANEL_COMMAND } from "../command-items.js";
 import { useMemberDirectory } from "../member-directory.js";
-import { PEOPLE_FILTER, peopleFilterActions } from "../member-rows.js";
+import { memberReadNotice, PEOPLE_FILTER, peopleFilterActions } from "../member-rows.js";
 import { TASK_STATUS_WORDS } from "../tasks/task-standing.js";
 import { ActionMenu, type MenuAction, type MenuEntry } from "./action-menu.js";
-import type { CountNoun } from "./sidebar-group-header.js";
 import type { TaskListViewControl } from "./task-list-view.js";
+import { FILTER } from "./tasks-page-options.js";
 
 /**
  * sidebar-task-view.tsx -- the heads of the sidebar's two sections, Pinned and Tasks, and the Tasks head's View options: how the list groups and orders its tasks.
@@ -69,68 +70,11 @@ import type { TaskListViewControl } from "./task-list-view.js";
 /** What View options is called, on its button and its menu alike. */
 const VIEW_OPTIONS = "View options";
 
-/** What the status filter is called, on its button and its menu alike. */
-const STATUS_FILTER = "Show statuses";
+/** What the status filter's menu is labelled; its button is called Filter, as the Tasks page's is. */
+const STATUS_FILTER_MENU = "Filter by status";
 
 /** The menu the status filter's button and the hidden tasks' line both open. */
 type StatusFilterMenu = ReturnType<typeof useMenu>;
-
-/**
- * A section's head: its name, which folds the section where it may be
- * folded, and what stands at its end. Where the section is searched
- * (`search`), a magnifier after the name unfolds a field over it
- * (`FoldingSearch`), the end's buttons standing still as it opens and
- * folds, so a press on one lands though the press folded the field.
- */
-export function SidebarSectionHead({
-  name,
-  search,
-  folded,
-  count,
-  noun,
-  onToggle,
-  children,
-}: {
-  name: string;
-  /** The search a magnifier after the name unfolds over it, where the section is searched. */
-  search?: { label: string; value: string; onChange: (value: string) => void } | undefined;
-  /** Whether the section is folded, where its head folds it. */
-  folded?: boolean;
-  /** How many rows a folded section holds, shown after its name while folded. */
-  count?: number;
-  /** What the count is read as, one and many. */
-  noun?: CountNoun;
-  onToggle?: () => void;
-  /** The head's buttons at its end. */
-  children?: ReactNode;
-}): React.JSX.Element {
-  const named =
-    onToggle === undefined ? (
-      <span className="sidebar-section-head-name">{name}</span>
-    ) : (
-      <NavItem
-        variant={NAV_ITEM_VARIANT.HEAD}
-        expanded={folded !== true}
-        count={
-          folded === true && count !== undefined
-            ? {
-                value: count,
-                noun: noun === undefined ? undefined : count === 1 ? noun.one : noun.many,
-              }
-            : undefined
-        }
-        onClick={onToggle}
-      >
-        {name}
-      </NavItem>
-    );
-  return (
-    <div className="sidebar-section-head">
-      {search === undefined ? named : <FoldingSearch {...search}>{named}</FoldingSearch>}
-      {children}
-    </div>
-  );
-}
 
 /** Who the list is filtered to, as the window draws them: a member as read, else as a listed task names them, else someone. */
 function filteredActor(
@@ -143,13 +87,6 @@ function filteredActor(
   const named = tasks.find((task) => task.createdBy?.userId === createdBy);
   return creatorActor(named ?? { ownerId: createdBy }, reader, undefined);
 }
-
-/** The row standing last in a people menu while the members are read, which nothing picks. */
-const READING_MEMBERS: MenuAction = {
-  label: "Reading members…",
-  disabled: true,
-  onSelect: () => undefined,
-};
 
 /** Assigned to's and Created by's choices, as every filter by person offers them: Anyone, Me, then each other member, the account id filtered to checked, and while the members are read a row saying so. */
 function memberFilter(
@@ -175,7 +112,7 @@ function memberFilter(
             : filter.userId,
       ),
   });
-  return [...people, ...(reader.membersReading ? [READING_MEMBERS] : [])];
+  return [...people, ...memberReadNotice(reader)];
 }
 
 /** The menu's choices: how the list groups, Assignee and Creator only where the workspace is shared, how it orders, and who the tasks it lists are assigned to and who created them, where shared. */
@@ -208,8 +145,7 @@ function viewEntries(
   return [
     [
       {
-        label: "Group by",
-        icon: <ListIcon />,
+        ...commandHead(PANEL_COMMAND.GROUP_BY),
         items: [
           grouping("Repository", <FolderGitIcon />, TASK_GROUPING.REPOSITORY),
           ...(shared
@@ -222,8 +158,7 @@ function viewEntries(
         ],
       },
       {
-        label: "Order by",
-        icon: <ClockIcon />,
+        ...commandHead(PANEL_COMMAND.ORDER_BY),
         items: [
           order("Last updated", <ClockIcon />, TASK_ORDER.UPDATED),
           order("Created", <CalendarPlusIcon />, TASK_ORDER.CREATED),
@@ -235,13 +170,11 @@ function viewEntries(
       ? [
           [
             {
-              label: "Assigned to",
-              icon: <UserCheckIcon />,
+              ...commandHead(PANEL_COMMAND.ASSIGNED_TO),
               items: memberFilter(view.assignedTo, control.onAssignedTo, reader),
             },
             {
-              label: "Created by",
-              icon: <UsersIcon />,
+              ...commandHead(PANEL_COMMAND.CREATED_BY),
               items: memberFilter(view.createdBy, control.onCreatedBy, reader),
             },
           ],
@@ -312,7 +245,12 @@ function StatusFilterMenuDrawn({
     onSelect: () => onStatuses(toggledStatus(statuses, status)),
   }));
   return (
-    <ActionMenu label={STATUS_FILTER} menu={menu.drawn} groups={[entries]} onClose={menu.close} />
+    <ActionMenu
+      label={STATUS_FILTER_MENU}
+      menu={menu.drawn}
+      groups={[entries]}
+      onClose={menu.close}
+    />
   );
 }
 
@@ -333,8 +271,8 @@ export function TaskStatusFilter({
   return (
     <>
       <span className="sidebar-status-filter">
-        <Tooltip label={STATUS_FILTER}>
-          <IconButton icon={<ListFilterIcon />} label={STATUS_FILTER} {...menu.trigger()} />
+        <Tooltip label={FILTER}>
+          <IconButton icon={<ListFilterIcon />} label={FILTER} {...menu.trigger()} />
         </Tooltip>
       </span>
       <StatusFilterMenuDrawn menu={menu} statuses={statuses} onStatuses={onStatuses} />
@@ -367,24 +305,106 @@ export function HiddenStatusesLine({
   );
 }
 
-/** One chip under the Tasks head: `@luke/ui`'s removable filter, what it says led by a glyph, and its × that lifts it. */
-function ViewChip({
-  glyph,
-  words,
-  lift,
-  onLift,
-}: {
-  glyph: React.JSX.Element;
-  words: string;
+/** What each chip under the Tasks head is followed by, as it arrives and leaves. */
+const VIEW_CHIP = {
+  ASSIGNED_TO: "assignedTo",
+  CREATED_BY: "createdBy",
+} as const;
+
+type ViewChipKey = (typeof VIEW_CHIP)[keyof typeof VIEW_CHIP];
+
+/** One place under the Tasks head: a filter's chip, as last drawn, so it leaves looking as it did. */
+interface ViewChipEntry {
+  readonly key: ViewChipKey;
+  readonly actor: Actor;
+  readonly words: string;
   /** What the × does, said to a screen reader. */
-  lift: string;
-  onLift: () => void;
+  readonly lift: string;
+}
+
+/** The chips the view's filters by person call for, Assigned to's first. */
+function viewChipEntries(
+  createdBy: string | undefined,
+  assignedTo: string | undefined,
+  tasks: readonly TaskSummary[],
+  reader: ReturnType<typeof useMemberDirectory>,
+): ViewChipEntry[] {
+  const entries: ViewChipEntry[] = [];
+  if (assignedTo !== undefined) {
+    const actor = filteredActor(assignedTo, reader, tasks);
+    entries.push({
+      key: VIEW_CHIP.ASSIGNED_TO,
+      actor,
+      words: assignedTo === reader.readerId ? "Assigned to me" : `Assigned to ${actorName(actor)}`,
+      lift: "Show tasks assigned to anyone",
+    });
+  }
+  if (createdBy !== undefined) {
+    const actor = filteredActor(createdBy, reader, tasks);
+    entries.push({
+      key: VIEW_CHIP.CREATED_BY,
+      actor,
+      words: createdBy === reader.readerId ? "Created by me" : `Created by ${actorName(actor)}`,
+      lift: "Show tasks created by anyone",
+    });
+  }
+  return entries;
+}
+
+/** What a press on a chip leaving does, out of reach as it is: nothing. */
+function stays(): void {}
+
+/**
+ * The chips themselves. Note that this is its own component under the
+ * line's `ListMotion`, because `useLeaving` finds the motion through the
+ * context the motion provides.
+ */
+function ViewChipLine({
+  line,
+  createdBy,
+  assignedTo,
+  tasks,
+  onClearCreatedBy,
+  onClearAssignedTo,
+}: {
+  line: RefObject<HTMLDivElement | null>;
+  createdBy: string | undefined;
+  assignedTo: string | undefined;
+  tasks: readonly TaskSummary[];
+  onClearCreatedBy: () => void;
+  onClearAssignedTo: () => void;
 }): React.JSX.Element {
+  const reader = useMemberDirectory();
+  // Note that the entries are made once for what they are made from, because `useLeaving` reads a new list as a change.
+  const listed = useMemo(
+    () => viewChipEntries(createdBy, assignedTo, tasks, reader),
+    [createdBy, assignedTo, tasks, reader],
+  );
+  const drawn = useLeaving(listed, (entry) => entry.key);
+  // Note that the box around the row stands hidden while nothing is filtered, so the row's padding takes no room, and a chip arriving arrives into a row that stands.
   return (
-    <Chip look={CHIP_LOOK.FILTER} removeLabel={lift} onRemove={onLift}>
-      {glyph}
-      <ChipName>{words}</ChipName>
-    </Chip>
+    <div ref={line} hidden={drawn.length === 0}>
+      <div className="sidebar-view-chips" {...motionRows()}>
+        {drawn.map(({ key, value, leaving }) => (
+          <Chip
+            key={key}
+            motionKey={key}
+            look={CHIP_LOOK.FILTER}
+            removeLabel={value.lift}
+            onRemove={
+              leaving
+                ? stays
+                : value.key === VIEW_CHIP.ASSIGNED_TO
+                  ? onClearAssignedTo
+                  : onClearCreatedBy
+            }
+          >
+            <ActorMark actor={value.actor} size={ACTOR_SIZE.MARK} />
+            <ChipName>{value.words}</ChipName>
+          </Chip>
+        ))}
+      </div>
+    </div>
   );
 }
 
@@ -392,7 +412,9 @@ function ViewChip({
  * The chips under the Tasks head, while the view leaves tasks out: one
  * member's face and "Assigned to me" or "Assigned to" their name, whose ×
  * lists anyone's again; then one member's face and "Created by me" or
- * "Created by" their name, whose × lists everyone's again.
+ * "Created by" their name, whose × lists everyone's again. Each scales in
+ * as it is filtered and out as it is lifted, as the Tasks page's filter
+ * chips do, under a `ListMotion` of its own.
  */
 export function ViewChips({
   createdBy,
@@ -407,32 +429,19 @@ export function ViewChips({
   tasks: readonly TaskSummary[];
   onClearCreatedBy: () => void;
   onClearAssignedTo: () => void;
-}): React.JSX.Element | null {
-  const reader = useMemberDirectory();
-  if (createdBy === undefined && assignedTo === undefined) return null;
-  const actor = createdBy === undefined ? undefined : filteredActor(createdBy, reader, tasks);
-  const assignee = assignedTo === undefined ? undefined : filteredActor(assignedTo, reader, tasks);
+}): React.JSX.Element {
+  const line = useRef<HTMLDivElement | null>(null);
   return (
-    <div className="sidebar-view-chips">
-      {assignee === undefined ? null : (
-        <ViewChip
-          glyph={<ActorMark actor={assignee} size={ACTOR_SIZE.MARK} />}
-          words={
-            assignedTo === reader.readerId ? "Assigned to me" : `Assigned to ${actorName(assignee)}`
-          }
-          lift="Show tasks assigned to anyone"
-          onLift={onClearAssignedTo}
-        />
-      )}
-      {actor === undefined ? null : (
-        <ViewChip
-          glyph={<ActorMark actor={actor} size={ACTOR_SIZE.MARK} />}
-          words={createdBy === reader.readerId ? "Created by me" : `Created by ${actorName(actor)}`}
-          lift="Show everyone's tasks"
-          onLift={onClearCreatedBy}
-        />
-      )}
-    </div>
+    <ListMotion root={line} way={LIST_MOTION_WAY.SCALE}>
+      <ViewChipLine
+        line={line}
+        createdBy={createdBy}
+        assignedTo={assignedTo}
+        tasks={tasks}
+        onClearCreatedBy={onClearCreatedBy}
+        onClearAssignedTo={onClearAssignedTo}
+      />
+    </ListMotion>
   );
 }
 
@@ -443,11 +452,11 @@ function offer(offered: boolean, changes: boolean, run: () => void): (() => void
 
 /**
  * The view's choices as ⌘K offers them, each only while it would change
- * the list: Group tasks by repository, by creator in a shared workspace, or
- * in one list; Order tasks by last updated, created, or name; Show my tasks,
- * the tasks assigned to the reader whoever created them, and Show everyone's
- * tasks, which lets go of both filters by person, in a shared workspace. They
- * act as the View options menu's choices do.
+ * the list: Group tasks by repository, by assignee or creator in a shared
+ * workspace, or in one list; Order tasks by last updated, created, or name;
+ * Show my tasks, the tasks assigned to the reader whoever created them, and
+ * Show everyone's tasks, which lets go of both filters by person, in a shared
+ * workspace. They act as the View options menu's choices do.
  */
 export function useTaskViewCommands({
   offered,
@@ -469,6 +478,7 @@ export function useTaskViewCommands({
     offer(offered && allowed, grouping !== to, () => control.onGrouping(to));
   const orderBy = (to: typeof order) => offer(offered, order !== to, () => control.onOrder(to));
   useAppCommand(APP_COMMAND.GROUP_TASKS_BY_REPOSITORY, group(TASK_GROUPING.REPOSITORY));
+  useAppCommand(APP_COMMAND.GROUP_TASKS_BY_ASSIGNEE, group(TASK_GROUPING.ASSIGNEE, shared));
   useAppCommand(APP_COMMAND.GROUP_TASKS_BY_CREATOR, group(TASK_GROUPING.CREATOR, shared));
   useAppCommand(APP_COMMAND.LIST_TASKS_UNGROUPED, group(TASK_GROUPING.NONE));
   useAppCommand(APP_COMMAND.ORDER_TASKS_BY_UPDATED, orderBy(TASK_ORDER.UPDATED));

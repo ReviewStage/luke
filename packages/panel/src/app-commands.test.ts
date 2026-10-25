@@ -47,6 +47,7 @@ function HistoryWindow({ moves, dialog }: { moves: string[]; dialog: boolean }):
     null,
     dialog
       ? createElement(Dialog, {
+          open: true,
           labelledBy: "title",
           onDismiss: () => undefined,
           children: createElement("h2", { id: "title" }, "Delete plan?"),

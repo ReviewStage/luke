@@ -22,7 +22,6 @@ import { MemberDirectory } from "../member-directory.js";
 import { lineWords } from "../testing/actor-line.js";
 import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
 import { handState, signedInAs } from "../testing/app-state.js";
-import { layContainersAt } from "../testing/container-width.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { DOCUMENT_TASK } from "../testing/document-task.js";
 import { restOn } from "../testing/hint-rest.js";
@@ -408,25 +407,30 @@ test("the sections changed since the last look are counted beside a face for eac
   assert.equal(dismissed, 1);
 });
 
-test("a title long enough to fill its line wraps short of its ⋯, as a section's heading wraps short of its own", async () => {
-  const sheets = layContainersAt({});
-  const view = await draw(
-    { ...TASK, name: "A plan whose name runs on long enough to fill the whole line it stands on" },
-    {
-      sectionLinks: {
-        workspace: "acme",
-        onOpen: () => undefined,
-        onOpenFile: () => undefined,
-        reveal: undefined,
-      },
+test("a plan read and not edited names itself by one h1, its title, with the title's ⋯ at the end of its line", async () => {
+  const view = await draw(TASK, {
+    sectionLinks: {
+      workspace: "acme",
+      onOpen: () => undefined,
+      onOpenFile: () => undefined,
+      reveal: undefined,
     },
-  );
-  const title = view.querySelector(".plan-unit-attributed .task-title > .luke-markdown-heading");
-  const titleRow = title?.closest(".plan-unit-attributed")?.querySelector(".plan-unit-more");
-  // Note that jsdom resolves no custom property, so the room reads as the length it is declared by.
-  const room = title === null || title === undefined ? "" : getComputedStyle(title).paddingRight;
-  sheets.remove();
+  });
 
-  assert.ok(titleRow, "the title carries its ⋯");
-  assert.doesNotMatch(room, /^(0(px)?)?$/u, "the title keeps room at its line's end");
+  const headings = view.querySelectorAll("h1");
+  const more = view.querySelector('[aria-label="Title actions"]');
+
+  assert.equal(headings.length, 1, "the plan page names itself once");
+  assert.equal(headings[0]?.textContent, TASK.name);
+  assert.ok(
+    more?.closest(".luke-page-header-actions"),
+    "the title carries its ⋯ in the header's acts",
+  );
+  assert.equal(more?.closest("header")?.contains(headings[0] ?? null), true);
+});
+
+test("an empty plan that cannot be edited draws no line saying to write it", async () => {
+  const view = await draw({ ...TASK, document: { body: "", assumptions: [] } });
+
+  assert.ok(!view.textContent?.includes("Write the plan"), "no line under the byline");
 });

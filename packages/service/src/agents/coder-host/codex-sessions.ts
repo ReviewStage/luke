@@ -54,9 +54,10 @@ import { PROVIDER_KEY_KIND, PROVIDER_KEY_PROVIDER } from "@luke/features/provide
 import { Duration, Effect, Option, Redacted, Result } from "effect";
 import { CHATGPT_ACCESS, refreshChatGptAccess } from "../../accounts/chatgpt-credentials.js";
 import { HostedEnvironment } from "../../environment.js";
+import { SERVER_AGENT_HARNESS } from "../../events/server-events.js";
 import { providerModelOf } from "../../providers/model-catalog.js";
 import type { BrainHostTurn } from "../brain-host/bounds.js";
-import { PLAN_REFUSAL, type PlanRefusal } from "../brain-host/eve-sessions.js";
+import { KEY_REFUSAL, PLAN_REFUSAL, type PlanRefusal } from "../brain-host/eve-sessions.js";
 import { SKILL_ROOT } from "../repository-skills.js";
 import { CODER } from "./bounds.js";
 import { NATIVE_SESSION_PREFIX } from "./native-runtime.js";
@@ -162,13 +163,20 @@ function codex(options: CodexSessionsOptions): RunnerHarness<{ readonly _tag: st
     }
     const rows = yield* listProviderKeyRows(userId, PROVIDER_KEY_KIND.API_KEY);
     const row = rows.find((each) => each.provider === PROVIDER_KEY_PROVIDER.OPENAI);
-    if (row === undefined) return yield* new LaunchRefused({ reason: "no API key" });
+    if (row === undefined) {
+      return yield* new LaunchRefused({ reason: "no API key", keyRefusal: KEY_REFUSAL.MISSING });
+    }
     const opened = openProviderKey(
       parsed.success,
       { userId, provider: PROVIDER_KEY_PROVIDER.OPENAI, kind: PROVIDER_KEY_KIND.API_KEY },
       row,
     );
-    if (Result.isFailure(opened)) return yield* new LaunchRefused({ reason: "API key unreadable" });
+    if (Result.isFailure(opened)) {
+      return yield* new LaunchRefused({
+        reason: "API key unreadable",
+        keyRefusal: KEY_REFUSAL.UNREADABLE,
+      });
+    }
     const env: Readonly<Record<string, string>> = {
       [CODEX_HOME_ENV]: CODEX_PATH.HOME,
       [RUNNER_ENV.OPENAI_API_KEY]: Redacted.value(opened.success),
@@ -208,6 +216,8 @@ function codex(options: CodexSessionsOptions): RunnerHarness<{ readonly _tag: st
         integrations: yield* options.integrations(agent),
         tokenUrl,
         installedSkills: NATIVE_SKILLS_PATH.INSTALLED,
+        // The runner stays warm past the agent's turn, for the sweep to retire (`retireWarmRunner`).
+        warm: true,
       };
       return written;
     });
@@ -230,6 +240,7 @@ function codex(options: CodexSessionsOptions): RunnerHarness<{ readonly _tag: st
 
   return {
     name: "Codex",
+    runtime: SERVER_AGENT_HARNESS.CODEX,
     sessionPrefix: NATIVE_SESSION_PREFIX[CONVERSATION_RUNTIME.CODEX],
     launch,
     config,

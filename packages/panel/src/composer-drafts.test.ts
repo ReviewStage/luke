@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import { it } from "@effect/vitest";
 import { INBOX_SCOPE_KIND } from "@luke/features/coding-agent-view";
 import { CODING_AGENT_STATUS, type CodingAgentSummary } from "@luke/features/coding-agent-wire";
 import {
@@ -14,16 +15,26 @@ import {
 import type { Task } from "@luke/features/task-wire";
 import { sameTab, TAB_WORDS } from "@luke/ui/tab-strip-model";
 import { DOCUMENT_REGION, TASKS_PAGE } from "@luke/ui/tasks-model";
-import { Effect } from "effect";
+import { Clock, Context, Effect } from "effect";
+import * as AsyncResult from "effect/reactivity/AsyncResult";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
+import { TestClock } from "effect/testing";
 import { act, createElement, Fragment } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeAll, beforeEach, test } from "vitest";
-import { useDraftsOwner } from "./composer-drafts.js";
+import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
+import {
+  DRAFT_PLACE,
+  type DraftControl,
+  type DraftWriter,
+  useDraft,
+  useDraftsOwner,
+  useDraftWriter,
+} from "./composer-drafts.js";
 import { DesktopSidebar } from "./desktop/desktop-sidebar.js";
 import { DesktopTasks } from "./desktop/desktop-tasks.js";
 import { SidebarTask } from "./desktop/task-actions.js";
 import { DRAFT_WORD } from "./draft-mark.js";
+import { rendererRuntime } from "./renderer-runtime.js";
 import {
   type AgentComposerControl,
   type MessageSender,
@@ -109,6 +120,7 @@ afterEach(() => {
   for (const root of roots.splice(0)) act(() => root.unmount());
   document.body.innerHTML = "";
   window.localStorage.clear();
+  vi.restoreAllMocks();
 });
 
 async function settle(): Promise<void> {
@@ -127,6 +139,13 @@ interface Identity {
 function SignedIn({ account }: { account: Identity | undefined }): null {
   useDraftsOwner(account);
   return null;
+}
+
+/** The developer moving to another window, which takes the focus from this one, as a window's own blur says. */
+function leaveWindow(): void {
+  act(() => {
+    window.dispatchEvent(new Event("blur"));
+  });
 }
 
 const DEAN = { id: "user-dean", email: "dean@example.com" } as const;
@@ -262,6 +281,76 @@ test("an agent's tab wears the Draft pencil while another of its task's tabs is 
   assert.equal(app.tabDrafted(INVITES.agent.title ?? ""), false);
 });
 
+/** A registry whose atoms wait on this clock, as the window's wait on its own. */
+function registryOn(clock: Clock.Clock): AtomRegistry.AtomRegistry {
+  return AtomRegistry.make({
+    initialValues: [[rendererRuntime, AsyncResult.success(Context.make(Clock.Clock, clock))]],
+  });
+}
+
+/** Longer than the typing rests before the drafts are written to storage. */
+const PAST_STORE_PAUSE = "300 millis";
+
+/** The words storage keeps, draft by draft. */
+function keptWords(): readonly string[] {
+  const kept: { text: string }[] = JSON.parse(
+    window.localStorage.getItem("luke.composerDrafts") ?? "[]",
+  );
+  return kept.map((entry) => entry.text);
+}
+
+/** Every write of the drafts to storage from here on, by the words it kept. */
+function draftWrites(): () => readonly (readonly string[])[] {
+  const writes: (readonly string[])[] = [];
+  const write = Storage.prototype.setItem;
+  vi.spyOn(Storage.prototype, "setItem").mockImplementation(function (
+    this: Storage,
+    key: string,
+    value: string,
+  ) {
+    write.call(this, key, value);
+    if (key === "luke.composerDrafts") writes.push(keptWords());
+  });
+  return () => writes;
+}
+
+it.effect(
+  "a burst of keys is held at once and written to storage once, after the typing rests",
+  () =>
+    Effect.gen(function* () {
+      const writes = draftWrites();
+      const app = windowOn(registryOn(yield* Clock.Clock));
+      yield* Effect.promise(() => app.show(INVITES, { account: DEAN }));
+
+      for (const keys of ["Expire", " invites", " after", " a week"]) {
+        typeInComposer(app.container, keys);
+        yield* Effect.promise(settle);
+        yield* TestClock.adjust("100 millis");
+      }
+      assert.equal(app.box(), "Expire invites after a week", "the box holds every key at once");
+      assert.deepEqual(writes(), [], "nothing is written while the keys come");
+
+      yield* TestClock.adjust(PAST_STORE_PAUSE);
+      yield* Effect.promise(settle);
+      assert.deepEqual(writes(), [["Expire invites after a week"]], "the burst is written once");
+    }),
+);
+
+it.effect("words not yet written reach storage at once as the window is closed", () =>
+  Effect.gen(function* () {
+    const app = windowOn(registryOn(yield* Clock.Clock));
+    yield* Effect.promise(() => app.show(INVITES, { account: DEAN }));
+    typeInComposer(app.container, "Expire invites");
+    yield* Effect.promise(settle);
+    assert.deepEqual(keptWords(), [], "the typing has not rested");
+
+    act(() => {
+      window.dispatchEvent(new Event("pagehide"));
+    });
+    assert.deepEqual(keptWords(), ["Expire invites"]);
+  }),
+);
+
 test("a draft outlasts a reload of the window, words and mark alike", async () => {
   const before = windowOn(AtomRegistry.make());
   await before.show(INVITES);
@@ -384,7 +473,9 @@ test("past the most drafts kept, the oldest written goes, whosever it is, and th
 
   typeInComposer(app.container, "Monthly, not weekly");
   await settle();
-  assert.equal(app.rowDrafted(INVITES.plan.name), false, "the oldest is let go at once");
+  leaveWindow();
+  await settle();
+  assert.equal(app.rowDrafted(INVITES.plan.name), false, "the oldest is let go as it is written");
   for (const root of roots.splice(0)) act(() => root.unmount());
 
   const sam = windowOn(AtomRegistry.make());
@@ -403,6 +494,105 @@ test("where an account kept a draft for one place under its id and a later one u
   const app = windowOn(AtomRegistry.make());
   await app.show(INVITES, { account: DEAN });
   assert.equal(app.box(), "Expire invites after a week");
+});
+
+test("the files attached to a draft while only the account's address was known stay with it once its identity learns its id", async () => {
+  const place = { kind: DRAFT_PLACE.CHAT, channelId: "channel-1" } as const;
+  const picture = { name: "login.png", mediaType: "image/png", data: "iVBORw0KGgo=" } as const;
+  let held: DraftControl | undefined;
+  function Box({ account }: { account: Identity }): null {
+    useDraftsOwner(account);
+    held = useDraft(place);
+    return null;
+  }
+  const root = createRoot(document.body.appendChild(document.createElement("div")));
+  roots.push(root);
+  const registry = AtomRegistry.make();
+  const show = (account: Identity) =>
+    act(async () => root.render(onRegistry(registry, createElement(Box, { account }))));
+  await show({ email: DEAN.email });
+  const box = () => held ?? assert.fail("the box is drawn");
+  act(() => box().update((was) => ({ ...was, text: "Like this", attachments: [picture] })));
+
+  await show(DEAN);
+  assert.equal(box().draft.text, "Like this");
+  assert.deepEqual(
+    box().draft.attachments.map((each) => each.name),
+    ["login.png"],
+    "the picture is kept in this window alone, and moves with the words",
+  );
+});
+
+test("an inbox answer's picture moves with it as the id lands before its words reach storage, its unset steps and press read as storage leaves them out", async () => {
+  const place = {
+    kind: DRAFT_PLACE.INBOX,
+    planId: INVITES.plan.id,
+    agentId: INVITES.agent.id,
+    itemId: "item-1",
+    revision: 1,
+  } as const;
+  const picture = { name: "diagram.png", mediaType: "image/png", data: "iVBORw0KGgo=" } as const;
+  let held: DraftControl | undefined;
+  function Box({ account }: { account: Identity }): null {
+    useDraftsOwner(account);
+    held = useDraft(place);
+    return null;
+  }
+  const root = createRoot(document.body.appendChild(document.createElement("div")));
+  roots.push(root);
+  const registry = AtomRegistry.make();
+  const show = (account: Identity) =>
+    act(async () => root.render(onRegistry(registry, createElement(Box, { account }))));
+  await show({ email: DEAN.email });
+  const box = () => held ?? assert.fail("the box is drawn");
+  act(() =>
+    box().update((was) => ({
+      ...was,
+      text: "Looks good",
+      attachments: [picture],
+      steps: undefined,
+      press: undefined,
+    })),
+  );
+
+  await show(DEAN);
+  assert.equal(box().draft.text, "Looks good");
+  assert.deepEqual(
+    box().draft.attachments.map((each) => each.name),
+    ["diagram.png"],
+  );
+});
+
+test("where the id's own later words win a place its address held a picture at, the picture stays with the words it was attached to rather than joining them", async () => {
+  const place = { kind: DRAFT_PLACE.CHAT, channelId: "channel-1" } as const;
+  const picture = { name: "old.png", mediaType: "image/png", data: "iVBORw0KGgo=" } as const;
+  let held: DraftControl | undefined;
+  function Box({ account }: { account: Identity }): null {
+    useDraftsOwner(account);
+    held = useDraft(place);
+    return null;
+  }
+  const root = createRoot(document.body.appendChild(document.createElement("div")));
+  roots.push(root);
+  const registry = AtomRegistry.make();
+  const show = (account: Identity) =>
+    act(async () => root.render(onRegistry(registry, createElement(Box, { account }))));
+  await show({ email: DEAN.email });
+  const box = () => held ?? assert.fail("the box is drawn");
+  act(() =>
+    box().update((was) => ({ ...was, text: "See old screenshot", attachments: [picture] })),
+  );
+  leaveWindow();
+  // Another window, already knowing the id, writes the same place later.
+  const kept = JSON.parse(window.localStorage.getItem("luke.composerDrafts") ?? "[]");
+  window.localStorage.setItem(
+    "luke.composerDrafts",
+    JSON.stringify([...kept, { accountId: DEAN.id, place, text: "Send the new contract" }]),
+  );
+
+  await show(DEAN);
+  assert.equal(box().draft.text, "Send the new contract");
+  assert.deepEqual(box().draft.attachments, []);
 });
 
 /** The window's motion as a Mac with none reduced answers it. */
@@ -789,6 +979,7 @@ async function inboxOn(item: InboxItem) {
         createElement(
           Fragment,
           null,
+          createElement(SignedIn, { account: undefined }),
           createElement(
             "ul",
             null,
@@ -852,14 +1043,18 @@ function tasklessItem(agentId: string, id: string, revision: number): InboxItem 
 
 /** An agent's own inbox with no task, followed as the Inbox page follows it, pushed as `items`. */
 async function tasklessInbox(agentId: string, items: readonly InboxItem[]) {
+  // Another window opening takes the focus from those before it.
+  leaveWindow();
   const main = followedInboxes(() => ({ items }));
   let control: TaskInboxControl | undefined;
   function Probe(): null {
+    useDraftsOwner(undefined);
     control = useTaskInbox({
       taskId: agentId,
       kind: INBOX_SCOPE_KIND.AGENT,
       shown: true,
       waiting: true,
+      readerId: undefined,
       agents: {
         heldIds: [agentId],
         inboxFollower: main.follower,
@@ -957,6 +1152,42 @@ test("an account's drafts moved from its address reach a window that read its id
   assert.equal(app.box(), "Check the export");
 });
 
+test("words another window writes for a box this window let go a moment before stand, in its box and in storage", async () => {
+  const place = {
+    kind: DRAFT_PLACE.AGENT,
+    planId: INVITES.plan.id,
+    agentId: INVITES.agent.id,
+  } as const;
+  let held: { readonly box: DraftControl; readonly writer: DraftWriter } | undefined;
+  function Box(): null {
+    useDraftsOwner(DEAN);
+    held = { box: useDraft(place), writer: useDraftWriter() };
+    return null;
+  }
+  const root = createRoot(document.body.appendChild(document.createElement("div")));
+  roots.push(root);
+  await act(async () => root.render(onRegistry(AtomRegistry.make(), createElement(Box))));
+  const box = () => held ?? assert.fail("the box is drawn");
+  act(() => box().box.update((was) => ({ ...was, text: "Fix login" })));
+  leaveWindow();
+  // The message sent lets the words go, and before the typing's pause ends the other window writes anew.
+  act(() =>
+    box().writer.drop(
+      (each) => each.kind === DRAFT_PLACE.AGENT && each.agentId === INVITES.agent.id,
+    ),
+  );
+  window.localStorage.setItem(
+    "luke.composerDrafts",
+    JSON.stringify([keptEntry(DEAN.id, INVITES.plan.id, INVITES.agent.id, "Fix logout")]),
+  );
+  act(() => {
+    window.dispatchEvent(new StorageEvent("storage", { key: "luke.composerDrafts" }));
+  });
+  await settle();
+  assert.equal(box().box.draft.text, "Fix logout");
+  assert.deepEqual(keptWords(), ["Fix logout"]);
+});
+
 test("files attached in this window stay as its draft when another window lets the words beside them go", async () => {
   const notes = { name: "notes.md", mediaType: "text/plain", data: "IyBOb3Rlcw==" } as const;
   let composer: AgentComposerControl | undefined;
@@ -978,7 +1209,8 @@ test("files attached in this window stay as its draft when another window lets t
   act(() => box().setDraft("Review this"));
   act(() => box().setAttachments((held) => [...held, notes]));
 
-  // The other window let the words go, which is all of the draft storage holds.
+  // The other window, where the developer went, let the words go, which is all of the draft storage holds.
+  leaveWindow();
   window.localStorage.setItem("luke.composerDrafts", JSON.stringify([]));
   act(() => {
     window.dispatchEvent(new StorageEvent("storage", { key: "luke.composerDrafts" }));

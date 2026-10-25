@@ -7,7 +7,7 @@ import {
   type CodingAgentMessage,
   type CodingAgentSummary,
 } from "@luke/features/coding-agent-wire";
-import { LINK_PLACE } from "@luke/features/luke-link";
+import { LINK_PLACE } from "@luke/features/link-grammar";
 import { MESSAGE_ROLE } from "@luke/wire";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
@@ -174,8 +174,8 @@ test("a link to a message brings it into view, lit once, and lets the ask go", a
     ask: 3,
   });
 
-  assert.equal(messageNamed(container, "msg-7").hasAttribute("data-message-revealed"), true);
-  assert.equal(messageNamed(container, "task-1").hasAttribute("data-message-revealed"), false);
+  assert.equal(messageNamed(container, "msg-7").hasAttribute("data-landed"), true);
+  assert.equal(messageNamed(container, "task-1").hasAttribute("data-landed"), false);
   assert.deepEqual(revealed, [3]);
 });
 
@@ -202,7 +202,7 @@ test("a link to a message on a later page of a long transcript waits for its pag
     [line("msg-7", "Use seven days.")],
   ]);
 
-  assert.equal(messageNamed(container, "msg-7").hasAttribute("data-message-revealed"), true);
+  assert.equal(messageNamed(container, "msg-7").hasAttribute("data-landed"), true);
   assert.notEqual(newestToastSays(), MESSAGE_GONE);
   assert.deepEqual(revealed, [2]);
 });
@@ -214,7 +214,7 @@ test("a link to the plan an agent was handed, its first message, brings the plan
     { ...AGENT, brief: CODING_AGENT_BRIEF.PLAN },
   );
 
-  assert.equal(messageNamed(container, "task-1").hasAttribute("data-message-revealed"), true);
+  assert.equal(messageNamed(container, "task-1").hasAttribute("data-landed"), true);
   assert.deepEqual(revealed, [1]);
 });
 
@@ -249,7 +249,7 @@ test("a link to a message a working agent wrote since its last idle page waits f
   await redraw({ agentId: AGENT.id, messageId: "msg-7", ask: 1 });
 
   assert.deepEqual(waited, { revealed: [], toast: undefined });
-  assert.equal(messageNamed(container, "msg-7").hasAttribute("data-message-revealed"), true);
+  assert.equal(messageNamed(container, "msg-7").hasAttribute("data-landed"), true);
   assert.deepEqual(revealed, [1]);
 });
 

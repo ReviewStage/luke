@@ -22,14 +22,14 @@
     font-family: var(--luke-font-sans);
     font-size: var(--luke-type-body-size);
     line-height: var(--luke-type-body-leading);
-    font-weight: var(--luke-weight-regular);
+    font-weight: var(--luke-type-body-weight);
     transition:
-      border-color var(--luke-duration-hover) ease,
-      background-color var(--luke-duration-hover) ease;
+      border-color var(--luke-duration-hover) var(--luke-motion-exit),
+      background-color var(--luke-duration-hover) var(--luke-motion-exit);
   }
 
   .luke-text-field::placeholder {
-    color: var(--luke-color-text-subtle);
+    color: var(--luke-color-text-muted);
   }
 
   .luke-text-field:focus {
@@ -61,8 +61,7 @@
   }
 
   .luke-text-field:disabled {
-    color: var(--luke-color-text-subtle);
     cursor: not-allowed;
-    opacity: 0.7;
+    opacity: var(--luke-disabled-opacity);
   }
 }

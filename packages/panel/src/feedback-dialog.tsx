@@ -8,7 +8,7 @@
  * the card.
  *
  * Each kind keeps its own draft, so a note is always sent as the kind it was
- * written as. One rule keeps it: Cancel and a delivered send discard it;
+ * written as. One rule keeps it: only a delivered send discards it; Cancel,
  * Escape and a press on the dimmed window only close the card, keeping the
  * words and screenshots for the next opening of that kind — unless there are
  * no words yet, in which case there is nothing worth keeping and they discard
@@ -35,6 +35,7 @@ import {
   type FeedbackKind,
   type FeedbackSubmission,
 } from "@luke/features/feedback";
+import { pasteCutWords } from "@luke/features/words";
 import { ACT_KIND } from "@luke/host/acts";
 import { EXPERIMENTS, type Experiment } from "@luke/settings";
 import { SHORTCUT_KEY, type ShortcutChord, shortcutAria } from "@luke/settings/shortcuts";
@@ -47,12 +48,14 @@ import {
   DIALOG_SIZE,
   Dialog,
   ErrorState,
+  FormField,
   GAP,
   IconButton,
   ImageIcon,
   Inline,
   LAYOUT_ELEMENT,
   Shortcut,
+  STATUS_TONE,
   TEXT_ELEMENT,
   TEXT_VARIANT,
   Text,
@@ -61,11 +64,11 @@ import {
   useFilePicker,
 } from "@luke/ui";
 import { useStateWithRef } from "@luke/ui/use-state-with-ref";
-import { Duration } from "effect";
 import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { useAct } from "./act.js";
+import { modEnterSends } from "./enter-sends.js";
 import { encodeImage, imageFiles } from "./feedback-images.js";
-import { TOAST_TONE, type ToastNotice, useToast } from "./toast.js";
+import { TOAST_HOLD, type ToastNotice, useToast } from "./toast.js";
 import { DROP_LEAVE, useFileDrop } from "./use-file-drop.js";
 
 /**
@@ -107,8 +110,8 @@ const SEND_CHORD: ShortcutChord = { key: SHORTCUT_KEY.ENTER };
 /** The toast a delivered note is thanked with: read on the way back from the Send button, gone before anyone wonders. */
 const SENT_NOTICE: ToastNotice = {
   words: "Sent",
-  tone: TOAST_TONE.DONE,
-  hold: Duration.seconds(3),
+  tone: STATUS_TONE.COMPLETE,
+  hold: TOAST_HOLD.DONE,
 };
 
 /** The note as it stands between openings: its words, its screenshots, and whether it is signed. */
@@ -213,7 +216,7 @@ export function FeedbackDialog({
   const [drafts, setDrafts, latestDrafts] = useStateWithRef<FeedbackDrafts>(FRESH_DRAFTS);
   /**
    * Counts each kind's discards, so a screenshot still being read when its
-   * draft was cancelled or sent lands in no draft at all.
+   * draft was discarded or sent lands in no draft at all.
    */
   const discards = useRef<Record<FeedbackKind, number>>({
     [FEEDBACK_KIND.FEEDBACK]: 0,
@@ -224,6 +227,8 @@ export function FeedbackDialog({
   shownKind.current = kind;
   const [busy, setBusy, latestBusy] = useStateWithRef(false);
   const [rejection, setRejection] = useState<string>();
+  // The words a paste past the cap left once it was cut to fit; the note stands while they do.
+  const [cutWords, setCutWords] = useState<string>();
   const fileDrop = useFileDrop((files) => void attach(imageFiles(files)), {
     leave: DROP_LEAVE.WINDOW,
   });
@@ -272,9 +277,22 @@ export function FeedbackDialog({
     setRejection(undefined);
   };
 
-  const close = (discard: boolean) => {
+  // Note that the browser cuts a paste to the room left without a word, so the words it leaves are worked out here to tell it.
+  const noteCutPaste = (box: HTMLTextAreaElement, pasted: string) => {
+    const kept = box.value.slice(0, box.selectionStart) + box.value.slice(box.selectionEnd);
+    const room = FEEDBACK_LIMITS.MESSAGE_MAX_LENGTH - kept.length;
+    const text = pasted.replaceAll("\r\n", "\n");
+    if (text.length <= room) return;
+    setCutWords(
+      box.value.slice(0, box.selectionStart) +
+        text.slice(0, room) +
+        box.value.slice(box.selectionEnd),
+    );
+  };
+
+  const close = () => {
     if (kind === undefined || latestBusy()) return;
-    if (discard || !hasWords(latestDrafts()[kind])) discardDraft(kind);
+    if (!hasWords(latestDrafts()[kind])) discardDraft(kind);
     setRejection(undefined);
     onClose();
   };
@@ -287,7 +305,7 @@ export function FeedbackDialog({
       files,
       FEEDBACK_LIMITS.MAX_IMAGES - latestDrafts()[of].images.length,
     );
-    // Note that a draft cancelled or sent while its screenshots were read
+    // Note that a draft discarded or sent while its screenshots were read
     // takes none of them, and neither does one now being sent, because
     // either would carry a picture into a note nobody attached it to.
     if (discards.current[of] !== discarded || latestBusy()) return;
@@ -328,25 +346,35 @@ export function FeedbackDialog({
     showToast(SENT_NOTICE);
   };
 
-  // Command-Return sends from anywhere in the card.
+  // Command or Ctrl with Return sends from anywhere in the card.
   const sendKey = (event: React.KeyboardEvent<HTMLDivElement>) => {
-    if (event.key !== "Enter" || !(event.metaKey || event.ctrlKey)) return;
+    if (!modEnterSends(event)) return;
     event.preventDefault();
     void send();
   };
 
+  // Note that the card is drawn as it last stood while it fades out, because
+  // what it was opened with, and the draft a send has emptied, are let go
+  // the moment it closes.
+  const standing = useRef<
+    { kind: FeedbackKind; about: Experiment | undefined; draft: FeedbackDraft } | undefined
+  >(undefined);
+  if (kind !== undefined) standing.current = { kind, about, draft };
+  const shown = standing.current;
+
   const full = draft.images.length >= FEEDBACK_LIMITS.MAX_IMAGES;
 
-  return kind === undefined ? null : (
+  return shown === undefined ? null : (
     // The whole dimmed window takes a dropped screenshot.
     <Dialog
+      open={open}
       size={DIALOG_SIZE.WIDE}
-      title={dialogTitle(kind, about)}
+      title={dialogTitle(shown.kind, shown.about)}
       busy={busy}
       refused={rejection !== undefined}
       holding={hasWords(draft)}
       initialFocus={field}
-      onDismiss={() => close(false)}
+      onDismiss={close}
       onKeyDown={sendKey}
       dropping={fileDrop.dropping}
       dropTarget={fileDrop.target}
@@ -365,7 +393,7 @@ export function FeedbackDialog({
       }
       actions={
         <>
-          <Button variant={BUTTON_VARIANT.QUIET} disabled={busy} onClick={() => close(true)}>
+          <Button variant={BUTTON_VARIANT.QUIET} disabled={busy} onClick={close}>
             Cancel
           </Button>
           <Button
@@ -383,26 +411,44 @@ export function FeedbackDialog({
       }
     >
       <div className="feedback-dialog ph-no-capture">
-        <TextArea
-          ref={field}
-          label={FEEDBACK_COPY[kind].field}
-          placeholder={FEEDBACK_COPY[kind].placeholder}
-          maxLength={FEEDBACK_LIMITS.MESSAGE_MAX_LENGTH}
-          value={draft.message}
-          disabled={busy}
-          rows={MESSAGE_ROWS}
-          grow
-          onChange={(message) => changeDraft({ message })}
-          onPaste={(event) => {
-            // A screenshot on the clipboard is an attachment, not text
-            // that failed to paste; text pastes as it always does.
-            const pasted = imageFiles(event.clipboardData.files);
-            if (pasted.length === 0) return;
-            event.preventDefault();
-            void attach(pasted);
+        <FormField
+          label={FEEDBACK_COPY[shown.kind].field}
+          description={
+            cutWords === shown.draft.message
+              ? pasteCutWords(FEEDBACK_LIMITS.MESSAGE_MAX_LENGTH)
+              : undefined
+          }
+          count={{
+            length: shown.draft.message.length,
+            limit: FEEDBACK_LIMITS.MESSAGE_MAX_LENGTH,
           }}
-        />
-        {draft.images.length > 0 ? (
+        >
+          {(control) => (
+            <TextArea
+              ref={field}
+              field={control}
+              placeholder={FEEDBACK_COPY[shown.kind].placeholder}
+              maxLength={FEEDBACK_LIMITS.MESSAGE_MAX_LENGTH}
+              value={shown.draft.message}
+              disabled={busy}
+              rows={MESSAGE_ROWS}
+              grow
+              onChange={(message) => changeDraft({ message })}
+              onPaste={(event) => {
+                // A screenshot on the clipboard is an attachment, not text
+                // that failed to paste; text pastes as it always does.
+                const pasted = imageFiles(event.clipboardData.files);
+                if (pasted.length === 0) {
+                  noteCutPaste(event.currentTarget, event.clipboardData.getData("text"));
+                  return;
+                }
+                event.preventDefault();
+                void attach(pasted);
+              }}
+            />
+          )}
+        </FormField>
+        {shown.draft.images.length > 0 ? (
           <Inline
             as={LAYOUT_ELEMENT.UL}
             gap={GAP.CONTROL}
@@ -410,7 +456,7 @@ export function FeedbackDialog({
             className="feedback-dialog-images"
             aria-label="Screenshots"
           >
-            {draft.images.map((image, index) => (
+            {shown.draft.images.map((image, index) => (
               <AttachmentChip
                 key={`${image.name}-${String(index)}`}
                 name={image.name}
@@ -418,7 +464,7 @@ export function FeedbackDialog({
                 removeDisabled={busy}
                 onRemove={() =>
                   changeDraft({
-                    images: latestDrafts()[kind].images.filter((_, held) => held !== index),
+                    images: latestDrafts()[shown.kind].images.filter((_, held) => held !== index),
                   })
                 }
               />
@@ -428,7 +474,7 @@ export function FeedbackDialog({
         {signature ? (
           <div className="feedback-dialog-signature">
             <Checkbox
-              checked={draft.signed}
+              checked={shown.draft.signed}
               disabled={busy}
               aria-describedby={signatureId}
               onChange={(signed) => changeDraft({ signed })}
@@ -442,7 +488,7 @@ export function FeedbackDialog({
               id={signatureId}
               className="feedback-dialog-identity"
             >
-              {draft.signed
+              {shown.draft.signed
                 ? `Sending as ${[signature.name, signature.email].filter(Boolean).join(" · ")}`
                 : null}
             </Text>

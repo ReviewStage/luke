@@ -27,7 +27,9 @@ import { AgentModelChip } from "./agent-model-chip.js";
  * for the same catalog (`coder-agent-tools.test.ts`), while an eve agent's
  * offers all of it. A model whose plan runs no fast mode draws no Fast.
  * A Codex agent's menu ends on the ChatGPT plan that pays and a link to
- * manage its usage; no other agent's says what pays.
+ * manage its usage; no other agent's says what pays. An automation's chip
+ * says a choice nothing of the reader's pays for cannot run; a running
+ * agent's never does.
  */
 
 const MODELS: readonly CatalogModel[] = [
@@ -97,6 +99,7 @@ function Owned(): React.JSX.Element {
   return createElement(AgentModelChip, {
     model: { choice, note: undefined, choose: setChoice },
     models: MODELS,
+    modelsFailed: false,
     readModels: () => undefined,
     usage: undefined,
   });
@@ -198,6 +201,7 @@ function openMenuOn(
           runtime,
         },
         models,
+        modelsFailed: false,
         readModels: () => undefined,
         usage,
         payer,
@@ -209,7 +213,7 @@ function openMenuOn(
   act(() => chip.click());
   const menu = view.querySelector('[role="dialog"]');
   assert.ok(menu, "the menu is open");
-  const foot = menu.querySelector(".task-compose-menu-foot")?.textContent ?? "";
+  const foot = menu.querySelector(".luke-searchable-menu-foot")?.textContent ?? "";
   const listed = [...menu.querySelectorAll('[role="listbox"] [role="option"]')].map(
     (row) => row.textContent ?? "",
   );
@@ -255,14 +259,14 @@ test("a GPT model whose ChatGPT plan pays draws no Fast row in the menu, not eve
   assert.match(opus.foot, /Fast/u);
 });
 
-test("a Codex agent's menu ends on \"Using ChatGPT plan · Manage usage\", the link opening ChatGPT's usage settings, while a Claude Code or eve agent's names no plan", () => {
+test("a Codex agent's menu ends on \"Using ChatGPT subscription · Manage usage\", the link opening ChatGPT's usage settings, while a Claude Code or eve agent's names no plan", () => {
   const opened: string[] = [];
   fakeAppPlatform({ assetBase: () => "https://luke.test/", openWeb: (href) => opened.push(href) });
   const codex = openMenuOn(CODING_AGENT_RUNTIME.CODEX, {
     model: "openai/gpt-6.1-sol",
     effort: "low",
   });
-  assert.match(codex.foot, /Using ChatGPT plan · Manage usage$/u);
+  assert.match(codex.foot, /Using ChatGPT subscription · Manage usage$/u);
   const link = [...codex.menu.querySelectorAll("a")].find((a) => a.textContent === "Manage usage");
   assert.ok(link, "Manage usage is a link");
   act(() => link.click());
@@ -291,4 +295,39 @@ test("a Codex agent its OpenAI API key pays for names no plan, before its first 
     CODING_AGENT_PAYER.API_KEY,
   );
   assert.doesNotMatch(first.foot, /plan|Manage usage/u);
+});
+
+test("an automation's chip, whose choice a new agent starts on, says a model nothing of the reader's pays for cannot run, while a running agent's chip says nothing of it", () => {
+  const unconnected = MODELS.map((model) => ({ ...model, credentialMissing: true }));
+  const footOf = (startsNew: boolean): string => {
+    const view = document.createElement("div");
+    document.body.append(view);
+    const root = createRoot(view);
+    roots.push(root);
+    act(() =>
+      root.render(
+        createElement(AgentModelChip, {
+          model: {
+            choice: { model: "anthropic/claude-opus-5.5", effort: "high" },
+            note: undefined,
+            choose: () => undefined,
+          },
+          models: unconnected,
+          modelsFailed: false,
+          readModels: () => undefined,
+          usage: undefined,
+          startsNew,
+        }),
+      ),
+    );
+    const chip = view.querySelector<HTMLButtonElement>(".agent-model-chip button");
+    assert.ok(chip);
+    act(() => chip.click());
+    const foot = view.querySelector(".luke-searchable-menu-foot")?.textContent ?? "";
+    act(() => chip.click());
+    return foot;
+  };
+
+  assert.match(footOf(true), /Connect Claude.*Opus 5\.5 cannot run until you connect Claude/u);
+  assert.doesNotMatch(footOf(false), /cannot run|Connect/u);
 });

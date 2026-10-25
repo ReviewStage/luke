@@ -14,6 +14,7 @@ import {
   NO_TASK_SECTIONS,
   placeAllWrites,
   placeWrites,
+  restoreWrites,
   sectionMoveWrites,
   sectionOrder,
   unplaceAllWrites,
@@ -277,5 +278,31 @@ describe("an agent with no task in a section", () => {
     const state = applyAll(launchWithThree(), placeWrites([], agent(shared), LATER, 0, 20), 20);
     assert.deepEqual(tasksIn(state, LATER), [shared]);
     assert.deepEqual(tasksIn(state, LAUNCH), [TASK(1), TASK(2), TASK(3)]);
+  });
+});
+
+describe("an Undo of tasks moved together", () => {
+  it("puts each back in its section under the rows it stood under, though none had a place of its own", () => {
+    const state = launchWithThree();
+    const members = [task(TASK(3)), task(TASK(1))];
+    const moved = applyAll(state, placeAllWrites(state, members, LATER, 20), 20);
+    const undone = applyAll(moved, restoreWrites(state, moved, members, LATER, 30), 30);
+    assert.deepEqual(tasksIn(undone, LAUNCH), [TASK(1), TASK(2), TASK(3)]);
+    assert.deepEqual(tasksIn(undone, LATER), []);
+  });
+
+  it("leaves a task moved again since where it was moved, and takes one from no section back out", () => {
+    const state = applyAll(launchWithThree(), [create(TASK(50), "Today")], 3);
+    const members = [task(TASK(2)), task(TASK(9))];
+    const moved = applyAll(state, placeAllWrites(state, members, LATER, 20), 20);
+    const again = applyAll(
+      moved,
+      placeWrites(sectionOrder(moved, TASK(50)), task(TASK(2)), TASK(50), 0, 21),
+      21,
+    );
+    const undone = applyAll(again, restoreWrites(state, again, members, LATER, 30), 30);
+    assert.deepEqual(tasksIn(undone, TASK(50)), [TASK(2)]);
+    assert.deepEqual(tasksIn(undone, LATER), []);
+    assert.deepEqual(tasksIn(undone, LAUNCH), [TASK(1), TASK(3)]);
   });
 });

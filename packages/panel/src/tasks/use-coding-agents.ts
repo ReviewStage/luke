@@ -22,13 +22,22 @@ import {
   hasWordsOrFiles,
 } from "@luke/features/coding-agent-wire";
 import { FAILURE_REASON, type Failure } from "@luke/features/failure-remedy";
-import type { CatalogModel, ModelChoice } from "@luke/features/models-wire";
+import type { CatalogModel, ModelChoice, ModelProvider } from "@luke/features/models-wire";
 import {
   PULL_REQUEST_CHAPTERS_CALL_FAILURE,
   type PullRequestChaptersAnswerView,
 } from "@luke/features/pull-request-chapters-view";
 import { ACT_KIND } from "@luke/host/acts";
 import type { PortActPayload } from "@luke/host/contract";
+import { STATUS_TONE } from "@luke/ui";
+import {
+  type PendingValues,
+  pendingSettled,
+  pendingShown,
+  pendingValue,
+  pendingWithout,
+  type SameValue,
+} from "@luke/ui/pending-values";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ActHandle } from "../act.js";
@@ -40,9 +49,10 @@ import {
   useDraftWriter,
   useNewAgentDraft,
 } from "../composer-drafts.js";
+import { usePendingNow } from "../pending-clock.js";
 import { rendererPause } from "../renderer-runtime.js";
 import { useSteadyDoor, useSteadyDoors } from "../steady-door.js";
-import { TOAST_HOLD, TOAST_TONE, UNDO_LABEL, useToast } from "../toast.js";
+import { TOAST_HOLD, undoToast, useToast, useWithdrawToast } from "../toast.js";
 import { useChatOn } from "./chat-gate.js";
 import {
   type AgentRun,
@@ -128,7 +138,9 @@ const NO_KEYWORDS: readonly string[] = [];
  * developer visits another plan. Its words and files are the plan's kept
  * draft (`../composer-drafts.ts`), under the draft's key, so its words
  * outlast a relaunch too, and a plan holding them opens on its draft's tab
- * again, under the same key.
+ * again, under the same key. A draft let go while it holds words or files
+ * goes at once, and a toast offers Undo, which puts it back under the same
+ * key, its chips, words, and files with it, and shows its tab again.
  *
  * New task's Agent mode starts its agent with its task, in the task's one
  * start (`use-tasks-tab.ts`): an agent that landed joins the list of the
@@ -144,8 +156,12 @@ const NO_KEYWORDS: readonly string[] = [];
  * turn it still runs is stopped. The list is read with the archived agents
  * among the rest and split here: `agents` holds those standing, which is
  * every tab, row, and menu of the task, and `archived` the rest, which the
- * summary keeps folded away with an Unarchive on each. The agent the
- * service answers moves between the two at once, and a toast offers Undo.
+ * summary keeps folded away with an Unarchive on each. A rename, an archive,
+ * and an unarchive are drawn at once, before the service answers, over
+ * every list that names the agent (`pending`, `withPendingAgents`), and put
+ * back if it refuses; each stands until a view carries it, carries a third
+ * value, no longer holds the agent, or its time runs out
+ * (`@luke/ui/pending-values`). Once an archive lands, a toast offers Undo.
  *
  * An agent may be continued in a new one, which is a Start on the task
  * `from` that agent on its whole transcript, with the developer's words, where
@@ -203,7 +219,9 @@ export interface CodingAgentsControl {
   onRetryList: () => void;
   /** The models the menu offers, as last read; nothing before the menu first asks. */
   models: readonly CatalogModel[] | undefined;
-  /** Reads the models now, for a menu opening. */
+  /** Whether the last read of the models did not land, so the menu says so with Retry rather than reading for ever. */
+  modelsFailed: boolean;
+  /** Reads the models now, for a menu opening or the menu's Retry. */
   readModels: () => void;
   /** Reads the account's default now, for a menu opening or the Settings page. */
   readDefault: () => Promise<CodingAgentDefaultAnswer>;
@@ -256,7 +274,11 @@ export interface CodingAgentsControl {
   onDraftAttachments: (
     next: (held: readonly CodingAgentAttachment[]) => readonly CodingAgentAttachment[],
   ) => void;
-  /** Lets the draft go; nothing was started, so nothing is left behind. */
+  /**
+   * Lets the draft go; nothing was started, so nothing is left behind. One
+   * that held words or files raises a toast whose Undo puts it back and
+   * shows its tab (`onDraftRestored`).
+   */
   onDiscardDraft: (draftId: string) => void;
   /**
    * Starts the draft's agent with the words as its prompt, never the task,
@@ -288,7 +310,7 @@ export interface CodingAgentsControl {
     disabledServers?: readonly string[],
   ) => Promise<Failure | undefined>;
   /** Brings back the archived agent a surface draws alone, as its own page does; none from here, where every agent is a task's. */
-  onUnarchive: (() => void) | undefined;
+  onUnarchive: (() => void | Promise<void>) | undefined;
   /** Continues one agent in a new one on its whole transcript, the developer's words and files as its note, its tab opening as a Start's does; present exactly while a Start could run. */
   continueAgent: AgentContinuer | undefined;
   start: {
@@ -327,17 +349,20 @@ export interface CodingAgentsControl {
   onSwitchServers: ServersWriter;
   /** Opens Settings on its Integrations page, where an MCP server is connected. */
   onOpenIntegrations: () => void;
-  /** Opens Settings on its Agents page, where the developer's API keys are. */
-  onOpenApiKeys: () => void;
-  /** Renames one agent, taking the agent as the service answers it; answers whether the rename took. */
+  /** Opens Settings on its Agents page at the provider's harness row, where the developer's key for it is; at the page's top where none is known. */
+  onOpenApiKeys: (provider: ModelProvider | undefined) => void;
+  /** The names and archives given here that no view carries yet, which every list naming an agent draws over its own (`withPendingAgents`). */
+  pending: PendingAgents;
+  /** Renames one agent, drawn at once and taking the agent as the service answers it; answers whether the rename took. */
   onRename: (agentId: string, title: string) => Promise<boolean>;
   /**
    * Archives one agent, a turn it still runs stopped first, or brings it
-   * back, taking the agent as the service answers it and offering Undo in a
-   * toast; a refusal is answered rather than said, for the caller to say in
-   * its dialog or a toast of its own.
+   * back, drawn at once unless `drawn` waits on the answer, taking the agent
+   * as the service answers it and offering Undo in a toast; a refusal puts
+   * it back and is answered rather than said, for the caller to say in its
+   * dialog or a toast of its own.
    */
-  onArchive: (agentId: string, archived: boolean) => Promise<ActionResult>;
+  onArchive: (agentId: string, archived: boolean, drawn?: ArchiveDrawn) => Promise<ActionResult>;
   /**
    * Deletes one agent for good, a turn it still runs stopped first, taking
    * it out of the list and saying so in a toast; a refusal is answered
@@ -480,6 +505,54 @@ function forkOf(fork: AgentFork | undefined): { readonly fork?: AgentFork } {
 /** Nothing laid in after a draft's own words as they move. */
 const NOTHING_CARRIED: Pick<Draft, "text" | "attachments"> = { text: "", attachments: [] };
 
+/** What the toast says as a draft holding words or files is let go. */
+const DRAFT_CLOSED = "Draft closed";
+
+/** A draft let go while it held words or files, kept for its Undo: the plan it stood on, its key and chips, and its words and files. */
+interface ClosedDraft {
+  readonly on: string;
+  readonly choices: DraftChoices;
+  readonly words: Pick<Draft, "text" | "attachments">;
+}
+
+/** What a draft holds beside its words and files, as the drafts hold it. */
+function choicesOf(draft: AgentDraft): DraftChoices {
+  const { id, choice, disabledServers, fork, refused } = draft;
+  return {
+    id,
+    choice,
+    disabledServers,
+    ...forkOf(fork),
+    ...(refused === undefined ? undefined : { refused }),
+  };
+}
+
+/** Whether a draft holds no words or files. */
+function holdsNoWords(draft: AgentDraft): boolean {
+  return draft.prompt === "" && draft.attachments.length === 0;
+}
+
+/** Whether a draft holds nothing at all: no words or files, no fork, and its chips as they open. */
+function holdsNothing(draft: AgentDraft): boolean {
+  return (
+    holdsNoWords(draft) &&
+    draft.fork === undefined &&
+    draft.choice === undefined &&
+    draft.disabledServers.length === 0 &&
+    draft.refused === undefined
+  );
+}
+
+/** The draft as it would be let go, kept for its Undo, or nothing where it holds no words or files. */
+function closedDraft(on: string, draft: AgentDraft): ClosedDraft | undefined {
+  if (holdsNoWords(draft)) return undefined;
+  return {
+    on,
+    choices: choicesOf(draft),
+    words: { text: draft.prompt, attachments: draft.attachments },
+  };
+}
+
 /** A Start on its way or asked again: the task, the key the press minted, and the choice it was for. */
 interface PendingStart {
   taskId: string;
@@ -601,9 +674,84 @@ function sameChoice(a: ModelChoice | undefined, b: ModelChoice | undefined): boo
   );
 }
 
+/**
+ * When an archive is drawn: at once, before the service answers, or once
+ * it has, as a dialog that asked does, since the agent leaving would take
+ * the dialog, and the refusal it would say, with it.
+ */
+export const ARCHIVE_DRAWN = {
+  AT_ONCE: "at-once",
+  ON_ANSWER: "on-answer",
+} as const;
+
+export type ArchiveDrawn = (typeof ARCHIVE_DRAWN)[keyof typeof ARCHIVE_DRAWN];
+
+/**
+ * The names and archives given here that no view carries yet, by agent id:
+ * a rename's title, and an archive's time or null for an unarchive.
+ */
+export interface PendingAgents {
+  readonly titles: PendingValues<string, string | null>;
+  readonly archives: PendingValues<string, number | null>;
+}
+
+/** What a name or archive given here is laid over and waits on: an agent as any list holds it. */
+type NamedAgent = Pick<CodingAgentSummary, "id" | "title" | "archivedAt">;
+
+/** No name given here and waiting on a view. */
+const NO_PENDING_TITLES: PendingValues<string, string | null> = new Map();
+
+/** No archive given here and waiting on a view. */
+const NO_PENDING_ARCHIVES: PendingValues<string, number | null> = new Map();
+
+/** Whether two titles are one. */
+const sameTitle: SameValue<string | null> = (a, b) => a === b;
+
+/** Whether two archive stamps say the same: archived, at whatever time, or not. */
+const sameArchive: SameValue<number | null> = (a, b) => (a === null) === (b === null);
+
+/** When an agent a view holds was archived, null while it stands; none where the view holds no such agent. */
+function archiveOf(agent: NamedAgent | undefined): number | null | undefined {
+  return agent === undefined ? undefined : (agent.archivedAt ?? null);
+}
+
+/** One agent with the name and archive given here laid over it, each where one stands. */
+function pendingAgent<A extends NamedAgent>(
+  agent: A,
+  title: string | null | undefined,
+  archive: number | null | undefined,
+): A {
+  const named = title === undefined ? agent : { ...agent, title };
+  if (archive === undefined) return named;
+  if (archive !== null) return { ...named, archivedAt: archive };
+  const { archivedAt: _archivedAt, ...standing } = named;
+  return standing as A;
+}
+
+/**
+ * The agents a list holds with every name and archive given here that the
+ * list does not yet carry laid over them, so each surface draws the press at
+ * once from its own list: the task's, an agent's page, or the sidebar's.
+ */
+export function withPendingAgents<A extends NamedAgent>(
+  list: readonly A[],
+  pending: PendingAgents,
+): readonly A[] {
+  if (pending.titles.size === 0 && pending.archives.size === 0) return list;
+  const byId = new Map(list.map((agent) => [agent.id, agent] as const));
+  const titles = pendingShown(
+    pendingSettled(pending.titles, (id) => byId.get(id)?.title, sameTitle, undefined),
+  );
+  const archives = pendingShown(
+    pendingSettled(pending.archives, (id) => archiveOf(byId.get(id)), sameArchive, undefined),
+  );
+  if (titles.size === 0 && archives.size === 0) return list;
+  return list.map((agent) => pendingAgent(agent, titles.get(agent.id), archives.get(agent.id)));
+}
+
 export function useCodingAgents(input: {
   acts: Pick<ActHandle, "act">;
-  /** The open task, or none; a fixture run's tasks have no agents. */
+  /** The open task, or none. */
   taskId: string | undefined;
   /**
    * The one agent read by its id where no task is open, as the agent page
@@ -619,14 +767,22 @@ export function useCodingAgents(input: {
    * list the open task.
    */
   listedAgents?: readonly CodingAgentSummary[] | undefined;
+  /**
+   * The agents another list draws from this control's presses, as the
+   * sidebar's agents with no task are, which a name or archive given here
+   * waits on beside the control's own; none where only its own list draws.
+   */
+  viewedAgents?: readonly NamedAgent[] | undefined;
   /** Opens Settings on its Integrations page. */
   onOpenIntegrations: () => void;
   /** Opens Settings on its Agents page. */
   /** The signed-in account's id, whose own agents carry no "Started by". */
   me?: string | undefined;
-  onOpenApiKeys: () => void;
+  onOpenApiKeys: (provider: ModelProvider | undefined) => void;
   /** Called with the agent a Start made, so its tab opens. */
   onStarted: (agentId: string) => void;
+  /** Called with the plan and key of a draft an Undo put back, so its tab opens again. */
+  onDraftRestored?: (on: string, draftId: string) => void;
   /** The words a dictation into an agent's box is likely to say; none where nothing is open. */
   keywords?: readonly string[];
   /** Mints one press's key. */
@@ -651,6 +807,7 @@ export function useCodingAgents(input: {
   const ours = (was: { taskId: string | undefined; agentId: string | undefined }) =>
     was.taskId === taskId && was.agentId === listOf;
   const [models, setModels] = useState<readonly CatalogModel[] | undefined>(undefined);
+  const [modelsFailed, setModelsFailed] = useState(false);
   const [starting, setStarting] = useState(false);
   // Where a Start from an agent and a draft stand: the open task, or the page's agent where no task
   // is open, whose Start the service puts where that agent is (its task, or its workspace).
@@ -676,7 +833,7 @@ export function useCodingAgents(input: {
   const continues = useRef(new Map<string, PendingContinue>());
   const toast = useToast();
   const failed = useCallback(
-    (words: string) => toast({ words, tone: TOAST_TONE.FAILED, hold: TOAST_HOLD.FAILED }),
+    (words: string) => toast({ words, tone: STATUS_TONE.DANGER, hold: TOAST_HOLD.FAILED }),
     [toast],
   );
   // Note that the acts and the opening are read through a ref, because the
@@ -704,10 +861,32 @@ export function useCodingAgents(input: {
     [listedAgents, taskId],
   );
   const shown = held ?? listedHere;
-  const agents = useMemo(() => shown?.filter((agent) => agent.archivedAt === undefined), [shown]);
+  // A name or archive given here stands over every list that names the agent until a view carries
+  // it, and lets go once none holds the agent, as after a sign-out. The clock is read only while
+  // one waits.
+  const [titles, setTitles] = useState(NO_PENDING_TITLES);
+  const [archives, setArchives] = useState(NO_PENDING_ARCHIVES);
+  const given = useMemo((): PendingAgents => ({ titles, archives }), [titles, archives]);
+  const pendingNow = usePendingNow(titles.size > 0 || archives.size > 0);
+  const { viewedAgents } = input;
+  useEffect(() => {
+    const viewedOf = (agentId: string) =>
+      shown?.find((agent) => agent.id === agentId) ??
+      viewedAgents?.find((agent) => agent.id === agentId);
+    setTitles((was) => pendingSettled(was, (id) => viewedOf(id)?.title, sameTitle, pendingNow));
+    setArchives((was) =>
+      pendingSettled(was, (id) => archiveOf(viewedOf(id)), sameArchive, pendingNow),
+    );
+  }, [shown, viewedAgents, pendingNow]);
+  const drawn = useMemo(
+    () => (shown === undefined ? undefined : withPendingAgents(shown, given)),
+    [shown, given],
+  );
+  const agents = useMemo(() => drawn?.filter((agent) => agent.archivedAt === undefined), [drawn]);
   const archivedAgents = useMemo(
-    () => held?.filter((agent) => agent.archivedAt !== undefined),
-    [held],
+    () =>
+      held === undefined ? undefined : drawn?.filter((agent) => agent.archivedAt !== undefined),
+    [held, drawn],
   );
   const listFailed = ours(list) && list.failed;
   const listMissing = ours(list) && list.missing === true;
@@ -781,11 +960,17 @@ export function useCodingAgents(input: {
   const readAgain = useCallback(() => setReads((count) => count + 1), []);
 
   const readModels = useCallback(() => {
+    // The menu reads again while a read is out, so a Retry shows its reading.
+    setModelsFailed(false);
     act(ACT_KIND.CODING_AGENTS_MODELS).then(
       (answer: CodingAgentModelsAnswer) => {
-        if (!("failure" in answer)) setModels(answer.models);
+        if ("failure" in answer) setModelsFailed(true);
+        else {
+          setModels(answer.models);
+          setModelsFailed(false);
+        }
       },
-      () => undefined,
+      () => setModelsFailed(true),
     );
   }, [act]);
 
@@ -1116,7 +1301,56 @@ export function useCodingAgents(input: {
     next: (held: readonly CodingAgentAttachment[]) => readonly CodingAgentAttachment[],
   ) => writeWords((was) => ({ ...was, attachments: next(was.attachments) }));
 
-  const onDiscardDraft = letGo;
+  // Note that a draft holding words or files is let go at once, as every
+  // act that can be taken back is, and its toast's Undo puts it back.
+  const onDiscardDraft = (draftId: string) => {
+    const closed =
+      startsOn === undefined || draft?.id !== draftId ? undefined : closedDraft(startsOn, draft);
+    letGo(draftId);
+    if (closed === undefined) return;
+    undoable.current = closed.choices.id;
+    toast({
+      ...undoToast(DRAFT_CLOSED, () => restoreNow.current(closed)),
+      subject: closed.choices.id,
+    });
+  };
+
+  // The closed draft whose Undo stands, withdrawn as the plan it was closed on leaves.
+  const undoable = useRef<string | undefined>(undefined);
+  const withdrawToast = useWithdrawToast();
+  useEffect(
+    () => () => {
+      if (undoable.current !== undefined) withdrawToast(undoable.current);
+      undoable.current = undefined;
+    },
+    [startsOn, withdrawToast],
+  );
+
+  // Note that Undo stands only while the plan the draft was closed on is
+  // open, so the draft standing in its place now is one this hook reads. A
+  // blank one, as a column left with no tab opens, gives way to the draft
+  // closed; one holding words, files, a fork, or chips of its own keeps them,
+  // the closed draft's words and files laid in after its own, under a key of
+  // its own, as a continue's are, since that is another request.
+  const restoreDraft = (closed: ClosedDraft) => {
+    const { on, choices, words } = closed;
+    if (on !== startsOn) return;
+    undoable.current = undefined;
+    const standing = draft?.id === choices.id ? undefined : draft;
+    const keeps = standing !== undefined && !holdsNothing(standing);
+    const id = keeps ? mintKey() : choices.id;
+    if (keeps) {
+      moveWords(on, id, standing.fork, words);
+      withDraft(on, { ...choicesOf(standing), id });
+    } else {
+      if (standing !== undefined) letGo(standing.id);
+      writer.update(wordsPlace(on, id, choices.fork), (was) => ({ ...was, ...words }));
+      withDraft(on, choices);
+    }
+    latest.current.onDraftRestored?.(on, id);
+  };
+  const restoreNow = useRef(restoreDraft);
+  restoreNow.current = restoreDraft;
 
   // Note that the draft's key is the Start's every time it is sent, because
   // nothing a refused send asked was made, and a send whose answer was lost
@@ -1285,42 +1519,61 @@ export function useCodingAgents(input: {
     [act, failed],
   );
 
-  // A rename's field closes as the edit ends, so a second rename may be out before the first
-  // answers; as with a change of model, only the newest one's answer is taken into the list,
-  // and only the newest one's refusal is said, in a toast, as the old name comes back.
+  // The agent as the views the control's presses reach carry it, before anything given here.
+  const viewedAgent = (agentId: string) =>
+    shown?.find((agent) => agent.id === agentId) ??
+    viewedAgents?.find((agent) => agent.id === agentId);
+
+  // A rename's field closes as the edit ends, and the new name is drawn at once, so a second
+  // rename may be out before the first answers; as with a change of model, only the newest one's
+  // answer is taken into the list, and only the newest one's refusal is said, in a toast, as the
+  // name it replaced comes back.
   const renames = useRef(new Map<string, number>());
-  const onRename = useCallback(
-    async (agentId: string, title: string) => {
-      const rename = (renames.current.get(agentId) ?? 0) + 1;
-      renames.current.set(agentId, rename);
-      const answer: CodingAgentAgentAnswer = await act(ACT_KIND.CODING_AGENTS_RENAME, {
-        agentId,
-        title,
-      }).catch((): CodingAgentAgentAnswer => ({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }));
-      const newest = renames.current.get(agentId) === rename;
-      if ("failure" in answer) {
-        if (newest) failed(RENAME_FAILED);
-        return false;
-      }
-      if (newest) {
-        setList((was) =>
-          was.agents === undefined ? was : { ...was, agents: withAgent(was.agents, answer.agent) },
-        );
-      }
-      return true;
-    },
-    [act, failed],
-  );
+  const onRename = async (agentId: string, title: string): Promise<boolean> => {
+    const rename = (renames.current.get(agentId) ?? 0) + 1;
+    renames.current.set(agentId, rename);
+    const asked = pendingValue(titles.get(agentId), title, viewedAgent(agentId)?.title, sameTitle);
+    setTitles((was) => new Map(was).set(agentId, asked));
+    const answer: CodingAgentAgentAnswer = await act(ACT_KIND.CODING_AGENTS_RENAME, {
+      agentId,
+      title,
+    }).catch((): CodingAgentAgentAnswer => ({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }));
+    const newest = renames.current.get(agentId) === rename;
+    if ("failure" in answer) {
+      setTitles((was) => pendingWithout(was, agentId, asked));
+      if (newest) failed(RENAME_FAILED);
+      return false;
+    }
+    if (newest) {
+      setList((was) =>
+        was.agents === undefined ? was : { ...was, agents: withAgent(was.agents, answer.agent) },
+      );
+    }
+    return true;
+  };
 
   // Note that the archive is read through a ref from its toast's Undo,
-  // because the press lands renders after the toast was raised.
-  const onArchive = async (agentId: string, archived: boolean): Promise<ActionResult> => {
+  // because the press lands renders after the toast was raised. The agent
+  // moves at once, and back where the service refuses, unless a dialog that asked waits on it.
+  const onArchive = async (
+    agentId: string,
+    archived: boolean,
+    drawn: ArchiveDrawn = ARCHIVE_DRAWN.AT_ONCE,
+  ): Promise<ActionResult> => {
+    const asked = pendingValue(
+      archives.get(agentId),
+      archived ? Date.now() : null,
+      archiveOf(viewedAgent(agentId)),
+      sameArchive,
+    );
+    if (drawn === ARCHIVE_DRAWN.AT_ONCE) setArchives((was) => new Map(was).set(agentId, asked));
     const answer: CodingAgentAgentAnswer = await act(ACT_KIND.CODING_AGENTS_ARCHIVE, {
       agentId,
       archived,
     }).catch((): CodingAgentAgentAnswer => ({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }));
     const words = archiveWords(archived);
     if ("failure" in answer) {
+      setArchives((was) => pendingWithout(was, agentId, asked));
       const notReady = answer.failure === CODING_AGENT_CALL_FAILURE.AGENT_NOT_READY;
       return {
         status: ACTION_RESULT_STATUS.REJECTED,
@@ -1330,14 +1583,7 @@ export function useCodingAgents(input: {
     setList((was) =>
       was.agents === undefined ? was : { ...was, agents: withAgent(was.agents, answer.agent) },
     );
-    toast({
-      words: words.done,
-      tone: TOAST_TONE.DONE,
-      action: {
-        label: UNDO_LABEL,
-        onPress: () => archiveNow.current(agentId, !archived).then(sayRefusal),
-      },
-    });
+    toast(undoToast(words.done, () => archiveNow.current(agentId, !archived).then(sayRefusal)));
     readAgain();
     return { status: ACTION_RESULT_STATUS.ACCEPTED };
   };
@@ -1360,7 +1606,7 @@ export function useCodingAgents(input: {
         ? was
         : { ...was, agents: was.agents.filter((agent) => agent.id !== agentId) },
     );
-    toast({ words: DELETE_WORDS.done, tone: TOAST_TONE.DONE, hold: TOAST_HOLD.DONE });
+    toast({ words: DELETE_WORDS.done, tone: STATUS_TONE.COMPLETE, hold: TOAST_HOLD.DONE });
     // Note that the list is read again, which drops a read already out that still holds the agent.
     readAgain();
     return { status: ACTION_RESULT_STATUS.ACCEPTED };
@@ -1625,6 +1871,7 @@ export function useCodingAgents(input: {
     listMissing,
     onRetryList: readAgain,
     models,
+    modelsFailed,
     readModels,
     readDefault,
     onUnarchive: undefined,
@@ -1645,7 +1892,8 @@ export function useCodingAgents(input: {
     onSwitchServers,
     onOpenIntegrations: () => latest.current.onOpenIntegrations(),
     me: input.me,
-    onOpenApiKeys: () => latest.current.onOpenApiKeys(),
+    onOpenApiKeys: (provider) => latest.current.onOpenApiKeys(provider),
+    pending: given,
     onRename,
     onArchive,
     onDelete,

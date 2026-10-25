@@ -2,14 +2,12 @@ import { PULL_REQUEST_STATE } from "./coding-agent-wire.js";
 import type { TaskAgentsSummary, TaskPullRequestLine } from "./task-wire.js";
 
 /**
- * task-agents-model.ts -- what a task's coding agents say on its sidebar row and its hover card: the row's one mark, and the card's lines.
+ * task-agents-model.ts -- what a task's coding agents say on its sidebar row: its one mark.
  *
  * A row wears at most one mark, as a devtool's sidebar does: a spinner
  * while any agent works on the task, else the pull request that matters
  * most, an open or draft one first and else a merged one, and else none.
  * A closed pull request marks nothing, since nothing is left to do with it.
- * The card names a few of the agents and pull requests the list carried and
- * counts the rest, so it is read from the list alone and never fetched.
  */
 
 /** The one mark a task's row wears at its end. */
@@ -40,10 +38,4 @@ export function taskRowMark(agents: TaskAgentsSummary | undefined): TaskRowMark 
     agents.pullRequests.find((each) => STANDING_STATES.has(each.state)) ??
     agents.pullRequests.find((each) => each.state === PULL_REQUEST_STATE.MERGED);
   return pullRequest === undefined ? NO_MARK : { kind: TASK_ROW_MARK.PULL_REQUEST, pullRequest };
-}
-
-/** What a card says after the rows it draws: how many more stand than it names, or nothing. */
-export function moreText(total: number, shown: number): string | undefined {
-  const more = total - shown;
-  return more > 0 ? `${more} more` : undefined;
 }

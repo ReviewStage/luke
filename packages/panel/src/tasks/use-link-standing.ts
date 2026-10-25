@@ -3,14 +3,9 @@ import {
   PULL_REQUEST_STATE,
   type PullRequestState,
 } from "@luke/features/coding-agent-wire";
-import {
-  type GitHubPullRequestSummary,
-  type IssueState,
-  issueAddressOf,
-  pullRequestAddressOf,
-} from "@luke/features/github-repositories-wire";
+import type { GitHubPullRequestSummary, IssueState } from "@luke/features/github-repositories-wire";
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
-import { linearIssueIdentifierOf } from "@luke/features/linear-wire";
+import { issueAddressOf, pullRequestAddressOf, readLinearIssue } from "@luke/features/link-grammar";
 import { MENTION_KIND, type Mention } from "@luke/features/mention-link";
 import type { TasksView } from "@luke/features/tasks-view";
 import type { Workspace } from "@luke/features/workspace-wire";
@@ -19,6 +14,7 @@ import * as Atom from "effect/reactivity/Atom";
 import { createContext, useContext, useEffect, useState } from "react";
 import { useAct } from "../act.js";
 import { APP_SLICE, useAppSlice } from "../use-app-state.js";
+import { PULL_REQUEST_STATE_LABEL, QUEUED_LABEL } from "./coding-agent-model.js";
 
 /**
  * use-link-standing.ts -- a Linear issue, or a GitHub pull request or issue, a link in Luke's words names, as its chip says it: its key, its title, where it stands, who it is with, and a pull request's lines added and removed, read through the workspace's own connection.
@@ -157,17 +153,6 @@ function queuedOf(pullRequest: GitHubPullRequestSummary): boolean {
   return pullRequest.queued === true && pullRequest.state === PULL_REQUEST_STATE.OPEN;
 }
 
-/** An open pull request in the merge queue in words, as its chip and its tab's pill say it. */
-const QUEUED_WORDS = "Queued";
-
-/** A pull request's state in words, as its chip says it. */
-const PULL_REQUEST_WORDS = {
-  open: "Open",
-  draft: "Draft",
-  merged: "Merged",
-  closed: "Closed",
-} as const satisfies Record<PullRequestState, string>;
-
 /** A GitHub issue's state in words, as its chip says it. */
 const ISSUE_WORDS = {
   open: "Open",
@@ -211,7 +196,7 @@ function askedOf(mention: Mention): Asked | undefined {
   // Note that a well-known site's page names no provider to ask.
   if (mention.kind !== MENTION_KIND.LINK || !("provider" in mention)) return undefined;
   if (mention.provider === INTEGRATION_PROVIDER.LINEAR) {
-    const identifier = linearIssueIdentifierOf(mention.url);
+    const identifier = readLinearIssue(mention.url);
     return identifier === undefined ? undefined : { provider: mention.provider, identifier };
   }
   if (mention.provider === INTEGRATION_PROVIDER.GITHUB) return githubAskedOf(mention.url);
@@ -291,7 +276,7 @@ function readStanding(
       : {
           key,
           title: pullRequest.title,
-          state: queuedOf(pullRequest) ? QUEUED_WORDS : PULL_REQUEST_WORDS[pullRequest.state],
+          state: queuedOf(pullRequest) ? QUEUED_LABEL : PULL_REQUEST_STATE_LABEL[pullRequest.state],
           pullRequest: standingPullRequestOf(pullRequest),
           issue: undefined,
           byline: undefined,

@@ -13,7 +13,7 @@ import {
   INBOX_WIRE_VERSION,
   type InboxItem,
 } from "@luke/features/inbox-wire";
-import type { ReadLink } from "@luke/features/luke-link";
+import type { ReadLink } from "@luke/features/link-grammar";
 import { pageFrameUrl } from "@luke/features/page-frame";
 import type { PageLine } from "@luke/features/page-wire";
 import type { TaskSummary } from "@luke/features/task-wire";

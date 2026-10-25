@@ -15,8 +15,9 @@ import { CatalogSection } from "../section";
 /**
  * inline-refs.tsx -- things named in a line of words: a link's words, a
  * byline's wash, and a mention's pill, each pressable and not; a pill
- * saying where its subject stands, one whose subject is gone, a path cut
- * at its start, and long names in a narrow column. Each hangs its card, or
+ * saying where its subject stands, one that leaves the app as a link, one
+ * whose subject is gone, a path cut at its start, and long names in a
+ * narrow column. A screen reader hears each pill's kind before its name. Each hangs its card, or
  * its name in a pill, in the window's tooltip, once the pointer rests on
  * it or the keyboard reaches it.
  */
@@ -90,20 +91,24 @@ function InlineRefs(): React.JSX.Element {
           <InlineRef
             look={INLINE_REF_LOOK.PILL}
             glyph={<DocumentIcon />}
+            kind="issue"
             label="Invitations expire too soon"
             state="In progress"
             onPress={press}
+            linkHref="https://linear.app/acme/issue/REL-42"
+            leaves
           />
           , and the section{" "}
           <InlineRef
             look={INLINE_REF_LOOK.PILL}
             glyph={<DocumentIcon />}
+            kind="section"
             label="Old rollout"
             gone
             onPress={press}
           />{" "}
           it no longer holds, or the skill{" "}
-          <InlineRef look={INLINE_REF_LOOK.PILL} label="/release" onPress={press} />.
+          <InlineRef look={INLINE_REF_LOOK.PILL} kind="skill" label="/release" onPress={press} />.
         </Text>
       </CatalogSection>
       <CatalogSection id="inline-ref-narrow" title="Long names in a narrow column">

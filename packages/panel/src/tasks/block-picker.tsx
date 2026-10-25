@@ -24,7 +24,9 @@ import {
 import { type ReactNode, type RefObject, useEffect, useId, useState } from "react";
 import {
   type ComposerTrigger,
+  type EditorAria,
   type EditorBox,
+  listAria,
   SLASH_INSERT,
   type SlashBlock,
   type SlashChoice,
@@ -219,6 +221,8 @@ interface Highlight {
 export interface BlockPicker {
   readonly menu: ReactNode;
   readonly open: boolean;
+  /** What ties the editor to the menu (`listAria`), which names it a combobox while the menu stands. */
+  readonly aria: EditorAria;
   readonly onTrigger: (trigger: ComposerTrigger | undefined) => void;
   readonly onKey: (event: KeyboardEvent) => boolean;
 }
@@ -307,24 +311,28 @@ export function useBlockPicker({
       bottom: said.trigger.rect.bottom + shift,
     };
   };
-  const menu = !open ? null : (
-    <RectFloat anchor={slash} side={POPOVER_SIDE.BELOW}>
-      <BlockMenu
-        id={listId}
-        groups={groups.map((group) => ({
-          label: group.label,
-          rows: group.entries.map((entry) => entry.row),
-        }))}
-        active={at}
-        onActiveChange={moveTo}
-        onChoose={(row) => choose(entries.findIndex((entry) => entry.row === row))}
-      />
+  // The menu fades as it closes, drawing the rows it last showed.
+  const menu = (
+    <RectFloat open={open} anchor={slash} side={POPOVER_SIDE.BELOW}>
+      {!open ? null : (
+        <BlockMenu
+          id={listId}
+          groups={groups.map((group) => ({
+            label: group.label,
+            rows: group.entries.map((entry) => entry.row),
+          }))}
+          active={at}
+          onActiveChange={moveTo}
+          onChoose={(row) => choose(entries.findIndex((entry) => entry.row === row))}
+        />
+      )}
     </RectFloat>
   );
 
   return {
     menu,
     open,
+    aria: listAria(field.field),
     // Note that the room is measured as the word is reported, a callback's moment, never in a draw.
     onTrigger: (next) =>
       setSaid(

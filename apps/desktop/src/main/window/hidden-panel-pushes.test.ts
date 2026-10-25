@@ -67,8 +67,14 @@ const GRANT: AvatarGrant = {
 
 const stops: AbortController[] = [];
 
+/** The document at `version`, whose coding agents' unseen dots move with it, so every version moves a slice. */
 function documentAt(version: number): AppStateSnapshot {
-  return { ...initialAppState(RUN, true, []), version, window: { fullScreen: false } };
+  return {
+    ...initialAppState(RUN, true, []),
+    version,
+    codingAgents: { unseen: [`agent-${version}`] },
+    window: { fullScreen: false },
+  };
 }
 
 /** The panel's one window, shown, with its page's push stream open. */
@@ -121,7 +127,7 @@ afterEach(() => {
 test("three documents pushed while the panel is hidden are one delivery, the third, as it shows", async () => {
   const { window, stream, page } = shownPanel();
   window?.emit("hide");
-  for (const version of [1, 2, 3]) windowPushes.push(page, PUSH.APP_STATE, documentAt(version));
+  for (const version of [1, 2, 3]) windowPushes.pushState(page, documentAt(version));
 
   const pending = await nextHeard(stream);
   expect(pending.heard()).toBeUndefined();
@@ -137,7 +143,7 @@ test("three documents pushed while the panel is hidden are one delivery, the thi
 test("a minimized panel is held until it is restored", async () => {
   const { window, stream, page } = shownPanel();
   window?.emit("minimize");
-  windowPushes.push(page, PUSH.APP_STATE, documentAt(1));
+  windowPushes.pushState(page, documentAt(1));
   const pending = await nextHeard(stream);
   expect(pending.heard()).toBeUndefined();
 
@@ -150,7 +156,7 @@ test("a document pushed while the panel is in view is delivered as before", asyn
   const { window, stream, page } = shownPanel();
   window?.emit("hide");
   window?.emit("show");
-  windowPushes.push(page, PUSH.APP_STATE, documentAt(1));
+  windowPushes.pushState(page, documentAt(1));
 
   expect((await nextHeard(stream)).heard()).toBe(1);
 });
@@ -158,7 +164,7 @@ test("a document pushed while the panel is in view is delivered as before", asyn
 test("an event reaches a hidden panel, behind the document held before it", async () => {
   const { window, stream, page } = shownPanel();
   window?.emit("hide");
-  windowPushes.push(page, PUSH.APP_STATE, documentAt(1));
+  windowPushes.pushState(page, documentAt(1));
   windowPushes.push(page, PUSH.SHOW_AGENT, { taskId: "task-1", agentId: "agent-1" });
 
   expect((await nextHeard(stream)).heard()).toBe(1);
@@ -169,12 +175,12 @@ test("a hidden panel running the avatar's session is told every document until t
   const { panels, window, stream, page } = shownPanel();
   panels.showAvatarSession(GRANT);
   window?.emit("hide");
-  windowPushes.push(page, PUSH.APP_STATE, documentAt(1));
+  windowPushes.pushState(page, documentAt(1));
   expect((await nextHeard(stream)).heard()).toBe(1);
-  windowPushes.push(page, PUSH.APP_STATE, documentAt(2));
+  windowPushes.pushState(page, documentAt(2));
   expect((await nextHeard(stream)).heard()).toBe(2);
 
   panels.showAvatarSession(undefined);
-  windowPushes.push(page, PUSH.APP_STATE, documentAt(3));
+  windowPushes.pushState(page, documentAt(3));
   expect((await nextHeard(stream)).heard()).toBeUndefined();
 });

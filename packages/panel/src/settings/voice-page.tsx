@@ -1,3 +1,4 @@
+import { VOICE_REMEDY, VOICE_REMEDY_LABEL } from "@luke/features/words";
 import {
   SETTINGS_PAGE as SCHEMA_SETTINGS_PAGE,
   SETTING_SECTION,
@@ -19,17 +20,29 @@ import {
 import {
   MICROPHONE_UNGRANTED_NOTE,
   microphoneAccessRow,
+  OPENAI_KEY_MISSING_NOTE,
   VOICE_KEYLESS_NOTE,
 } from "@luke/voice/microphone-access";
 import type { MicrophoneControl } from "@luke/voice/settings-controls";
+import { useOpenAiKeyMissing, useOpenApiKeys } from "../openai-key.js";
+import { useBusyPress } from "./busy-press.js";
 import { AttentionMark } from "./marks.js";
 import { SchemaSettingRows } from "./schema-rows.js";
 import type { SettingsWrites } from "./writes.js";
 
+/** The words of the OpenAI key's row, which points to where the key is kept and never shows it. */
+const OPENAI_KEY_WORDS = {
+  LABEL: "OpenAI key",
+  DETAIL: "Calls and dictation run on this key.",
+  OPEN: "Open in Agents",
+} as const;
+
 /**
- * How Luke sounds and what he says unprompted. Permission comes first, then
- * the controls that need it. Voice runs on the signed-in Luke account and on
- * nothing else, so the page offers no credential of its own.
+ * How Luke sounds and what he says unprompted. The OpenAI key a call runs on
+ * comes first, then permission, then the controls that need it. Voice needs
+ * the signed-in Luke account, and a call or a dictated clip the account's own
+ * OpenAI key, which is kept under Codex in Agents, so the page holds no key
+ * of its own and its first row points there.
  * The page reveals itself in stages rather than all at once: until voice is
  * available it says how to turn it on, and voice controls appear only once
  * the microphone is ready.
@@ -80,6 +93,7 @@ export function VoiceSection({
           </SettingsRow>
         </SettingsSection>
       )}
+      {settings.voiceAvailable ? <OpenAiKeySection /> : null}
       {/* Drawn only once there is a voice for the microphone to reach, on a
           platform whose microphone Luke asks for: until then, the permission
           guards a feature that cannot run, and the page holds the one thing
@@ -113,7 +127,7 @@ export function VoiceSection({
               {() => (
                 <>
                   {microphoneRow.offerSystemSettings ? (
-                    <Tooltip label="System Settings">
+                    <Tooltip label="Open Privacy & Security in System Settings">
                       <IconButton
                         icon={<ExternalIcon />}
                         label="Open Privacy & Security in System Settings"
@@ -121,11 +135,7 @@ export function VoiceSection({
                       />
                     </Tooltip>
                   ) : null}
-                  {microphoneRow.offerAccess ? (
-                    <Button variant={BUTTON_VARIANT.OUTLINE} onClick={microphone.onRequest}>
-                      Allow
-                    </Button>
-                  ) : null}
+                  {microphoneRow.offerAccess ? <AllowMicrophone microphone={microphone} /> : null}
                 </>
               )}
             </SettingsRow>
@@ -137,6 +147,50 @@ export function VoiceSection({
           while both halves do. */}
       {microphoneRow.ready ? <VoiceControlsSection view={view} writes={writes} /> : null}
     </>
+  );
+}
+
+/**
+ * Where the OpenAI key a call runs on is kept: Codex's row in Agents, which
+ * the press lands on. A key known to be missing wears the attention mark and
+ * the press says to add one; the key itself is never shown here.
+ */
+function OpenAiKeySection(): React.JSX.Element {
+  const missing = useOpenAiKeyMissing();
+  const openKey = useOpenApiKeys();
+  return (
+    <SettingsSection>
+      <SettingsRow
+        label={
+          <Inline gap={GAP.ICON} wrap={false}>
+            {OPENAI_KEY_WORDS.LABEL}
+            {missing ? <AttentionMark note={OPENAI_KEY_MISSING_NOTE} /> : null}
+          </Inline>
+        }
+        description={OPENAI_KEY_WORDS.DETAIL}
+      >
+        {() => (
+          <Button variant={BUTTON_VARIANT.OUTLINE} onClick={openKey}>
+            {missing ? VOICE_REMEDY_LABEL[VOICE_REMEDY.ADD_OPENAI_KEY] : OPENAI_KEY_WORDS.OPEN}
+          </Button>
+        )}
+      </SettingsRow>
+    </SettingsSection>
+  );
+}
+
+/** Allow, which waits on the host's answer to the request, that it has been handed to the voice window. */
+function AllowMicrophone({ microphone }: { microphone: MicrophoneControl }): React.JSX.Element {
+  const request = useBusyPress(microphone.onRequest);
+  return (
+    <Button
+      variant={BUTTON_VARIANT.OUTLINE}
+      busy={request.busy}
+      busyLabel="Asking for access"
+      onClick={request.onPress}
+    >
+      Allow
+    </Button>
   );
 }
 

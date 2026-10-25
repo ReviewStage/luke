@@ -2,11 +2,11 @@ import type { CodingAgentPullRequest, CodingAgentStatus } from "@luke/features/c
 import type { ModelProvider } from "@luke/features/models-wire";
 import type { TaskStatus } from "@luke/features/task-wire";
 import { AgentPlaceholderIcon, DocumentIcon, PlusIcon, TaskStatusMark } from "@luke/ui";
+import { GLYPH } from "@luke/ui/icons";
 import { pullRequestLabelOf, TAB_WORDS } from "@luke/ui/tab-strip-model";
 import { DOCUMENT_REGION } from "@luke/ui/tasks-model";
 import {
   AppWindowIcon,
-  AudioLinesIcon,
   BotIcon,
   GitPullRequestIcon,
   GlobeIcon,
@@ -87,7 +87,7 @@ export type TabSubject =
   | { readonly kind: typeof TAB_KIND.DRAFT }
   | {
       readonly kind: typeof TAB_KIND.AGENT;
-      /** Its tab's label (`agentTabLabel`), or what a pin last called it; the word for an agent where none is known. */
+      /** Its tab's label (`agentName`), or what a pin last called it; the word for an agent where none is known. */
       readonly name: string | undefined;
       readonly agent: AgentStanding | undefined;
       /** Whether a call into the agent is in progress, which its glyph wears as the live mark. */
@@ -198,7 +198,7 @@ const CALLING_WORDS = "On a call";
 function CallingGlyph(): React.JSX.Element {
   return (
     <span className="state-glyph agent-calling-glyph" role="img" aria-label={CALLING_WORDS}>
-      <AudioLinesIcon aria-hidden="true" />
+      <GLYPH.CALL />
     </span>
   );
 }

@@ -21,7 +21,9 @@ import {
 } from "./automation-wire.js";
 import { agentFailureWords } from "./coding-agent-failure-words.js";
 import { CODING_AGENT_STATUS, type CodingAgentStatus } from "./coding-agent-wire.js";
+import { clockText } from "./time-format.js";
 import { SENTRY_LEVEL, TRIGGER_CATALOG } from "./trigger-catalog.js";
+import { andList, orList } from "./words.js";
 
 /**
  * automation-list-model.ts -- the Automations list as a window draws it: grouped by who owns each, with its trigger in words, where its newest run stands, and when it runs next.
@@ -59,10 +61,10 @@ const RUN_REASON_WORDS = {
   [AUTOMATION_RUN_REASON.NO_REPOSITORY]: "It names no repository to work in.",
   [AUTOMATION_RUN_REASON.REPOSITORY_UNREACHABLE]:
     "Luke can no longer reach its repository on GitHub.",
-  [AUTOMATION_RUN_REASON.GITHUB_SIGN_IN]: "Its GitHub sign-in had lapsed.",
+  [AUTOMATION_RUN_REASON.GITHUB_SIGN_IN]: "Its GitHub sign-in expired.",
   [AUTOMATION_RUN_REASON.MODEL]: "Its model is no longer offered. Choose another.",
-  [AUTOMATION_RUN_REASON.CREDENTIAL_MISSING]: "Connect its model's provider in Settings to run it.",
-  [AUTOMATION_RUN_REASON.UNAVAILABLE]: "Coding agents couldn't be reached.",
+  [AUTOMATION_RUN_REASON.CREDENTIAL_MISSING]: "Connect its model's provider in settings to run it.",
+  [AUTOMATION_RUN_REASON.UNAVAILABLE]: "Coding agents could not be reached.",
   [AUTOMATION_RUN_REASON.REPOSITORY_CHANGED]:
     "It no longer works in the repository the event came from.",
   [AUTOMATION_RUN_REASON.PAUSED]: "It was turned off before the run could start.",
@@ -132,12 +134,12 @@ function agentLine(
     : standing;
 }
 
-/** Where a started run's agent stands, as its row's line says it. */
-const AGENT_STATUS_WORDS = {
-  [CODING_AGENT_STATUS.STARTING]: "Starting",
+/** Where a started run's agent stands, as its row's line says it; the admin pages say an agent's status in these words too. */
+export const AGENT_STATUS_WORDS = {
+  [CODING_AGENT_STATUS.STARTING]: "Starting…",
   [CODING_AGENT_STATUS.RUNNING]: "Working",
   [CODING_AGENT_STATUS.COMPLETED]: "Finished",
-  [CODING_AGENT_STATUS.FAILED]: "Its agent failed",
+  [CODING_AGENT_STATUS.FAILED]: "Failed",
   [CODING_AGENT_STATUS.CANCELLED]: "Stopped",
 } as const satisfies Record<CodingAgentStatus, string>;
 
@@ -176,11 +178,6 @@ export type AutomationNext =
 export interface AutomationGroup {
   readonly owner: AutomationScope;
   readonly automations: readonly AutomationSummary[];
-}
-
-/** A time of day as a schedule says it, the minute in two figures. */
-function clockText(hour: number, minute: number): string {
-  return `${hour}:${String(minute).padStart(2, "0")}`;
 }
 
 /** A whole number a cron field spells, or nothing for any other field. */
@@ -226,12 +223,6 @@ export function automationGroups(
   })).filter((group) => group.automations.length > 0);
 }
 
-/** Names in a run of words: "a", "a or b", "a, b, or c". */
-function eitherOf(names: readonly string[]): string {
-  if (names.length <= 2) return names.join(" or ");
-  return `${names.slice(0, -1).join(", ")}, or ${names.at(-1)}`;
-}
-
 /**
  * A trigger as one sentence, as a row and the editor say what fires it: a
  * schedule in words, a GitHub event with the repositories it is heard in and
@@ -258,22 +249,22 @@ export function automationTriggerText(
           ? ""
           : senders.length === Object.values(GITHUB_SENDER).length
             ? " by anyone"
-            : ` by ${eitherOf(senders.map((sender) => GITHUB_SENDER_WORDS[sender]))}`;
+            : ` by ${orList(senders.map((sender) => GITHUB_SENDER_WORDS[sender]))}`;
       const happens =
         trigger.event === GITHUB_TRIGGER_EVENT.PULL_REQUEST_UPDATED && moments.length > 0
-          ? `is ${eitherOf(moments.map((moment) => PULL_REQUEST_MOMENT_WORDS[moment]))}`
+          ? `is ${orList(moments.map((moment) => PULL_REQUEST_MOMENT_WORDS[moment]))}`
           : words.happens;
       const pullRequest = PULL_REQUEST_EVENTS.has(trigger.event);
       const included = [
         ...(pullRequest && trigger.drafts === true ? ["drafts"] : []),
         ...(pullRequest && trigger.forks === true ? ["forks"] : []),
       ];
-      const also = included.length === 0 ? "" : `, ${included.join(" and ")} included`;
-      const where = repositories.length === 0 ? "" : ` in ${eitherOf(repositories)}`;
+      const also = included.length === 0 ? "" : `, ${andList(included)} included`;
+      const where = repositories.length === 0 ? "" : ` in ${orList(repositories)}`;
       const labels = trigger.labels ?? [];
       const branches = trigger.branches ?? [];
-      const labelled = labels.length === 0 ? "" : ` labelled ${eitherOf(labels)}`;
-      const on = branches.length === 0 ? "" : ` on ${eitherOf(branches)}`;
+      const labelled = labels.length === 0 ? "" : ` labelled ${orList(labels)}`;
+      const on = branches.length === 0 ? "" : ` on ${orList(branches)}`;
       return `When ${words.what}${by} ${happens}${where}${labelled}${on}${also}`;
     }
     case AUTOMATION_TRIGGER.WEBHOOK:
@@ -330,8 +321,8 @@ export function automationRunTitle(run: AutomationRunSummary): string {
 /** What its owner is told of a run that failed to start: that it could not, and why, in its row's own words. */
 export function failedRunText(reason: AutomationRunReason | null): string {
   return reason === null
-    ? "A run couldn't start."
-    : `A run couldn't start. ${RUN_REASON_WORDS[reason]}`;
+    ? "A run could not start."
+    : `A run could not start. ${RUN_REASON_WORDS[reason]}`;
 }
 
 /** A run's line: why it did not start, where it did not, else where its agent stands, or that it waits to start. */
@@ -345,7 +336,7 @@ export function automationRunLine(
     case AUTOMATION_RUN_STATUS.QUEUED:
       return "Waiting to start";
     case AUTOMATION_RUN_STATUS.FAILED:
-      return "It could not start.";
+      return "Couldn't start";
     case AUTOMATION_RUN_STATUS.SKIPPED:
       return "Skipped";
     case AUTOMATION_RUN_STATUS.STARTED:

@@ -2,7 +2,7 @@
 
 import assert from "node:assert/strict";
 import { CODING_AGENT_STATUS } from "@luke/features/coding-agent-wire";
-import { LINK_PLACE, type LinkPlace, type ReadLink } from "@luke/features/luke-link";
+import { LINK_PLACE, type LinkPlace, type ReadLink } from "@luke/features/link-grammar";
 import { MODEL_PROVIDER } from "@luke/features/models-wire";
 import type { TaskSummary } from "@luke/features/task-wire";
 import { IDLE_TASKS_VIEW } from "@luke/features/tasks-view";
@@ -44,6 +44,9 @@ const UNNAMED_AGENT = "9c8b7a6f-5e4d-4c3b-8a2f-1e0d9c8b7a6f";
 const TRIAGE_AGENT = "5d4c3b2a-1f0e-4d9c-8b7a-6f5e4d3c2b1a";
 const TRIAGE = "4e3d2c1b-0a9f-4e8d-9c7b-6a5f4e3d2c1b";
 const PAGE = "26494df1-595a-4364-abf7-85781c65a9f8";
+
+/** A page of the plan the window holds no title for. */
+const UNHELD_PAGE = "5b6c7d8e-9f0a-4b1c-8d2e-3f4a5b6c7d8e";
 const ITEM = "item_4b9e";
 const SAM = "user-sam";
 const AT = 1_792_000_000_000;
@@ -114,6 +117,7 @@ const STATE: AppStateSnapshot = (() => {
           activityAt: AT,
         },
       ],
+      activeTaskId: TASK_ID,
       pages: [{ id: PAGE, title: "Unfurl matrix", version: 1, at: AT }],
     },
     inbox: {
@@ -218,12 +222,13 @@ test("a bare link to a place the window knows is called by its name, the task's 
   );
 });
 
-test("a place the window holds no name for is called by its kind, and a labelled link by its label", async () => {
+test("a place the window holds no name for is called by its kind, or by its label where it was labelled, and a labelled place it holds a name for by that name now", async () => {
   const container = await drawn(
     [
       `${HOME}/plan/${TASK_ID}/agent/${UNNAMED_AGENT}`,
       `${HOME}/automation/auto_1/run/run_1`,
       `${HOME}/inbox`,
+      `[the old matrix](${HOME}/plan/${TASK_ID}/page/${UNHELD_PAGE})`,
       `[the matrix](${HOME}/plan/${TASK_ID}/page/${PAGE})`,
     ].join(", "),
     [],
@@ -233,7 +238,8 @@ test("a place the window holds no name for is called by its kind, and a labelled
     ["agent", "Agent"],
     ["place", "Run"],
     ["place", "Inbox"],
-    ["page", "the matrix"],
+    ["page", "the old matrix"],
+    ["page", "Unfurl matrix"],
   ]);
 });
 
@@ -272,8 +278,7 @@ test("an agent's chip the window holds wears its harness's mark, on another task
   const worn = agentChips.map((chip) => {
     const onChip = chip.querySelector(".luke-inline-ref-glyph .luke-harness-mark") !== null;
     restOn(chip);
-    const onCard =
-      document.querySelector(".luke-tooltip-card [data-mention-card] .luke-harness-mark") !== null;
+    const onCard = document.querySelector(".luke-tooltip-card .luke-harness-mark") !== null;
     act(() => {
       chip.dispatchEvent(new MouseEvent("pointerout", { bubbles: true }));
     });
@@ -339,7 +344,7 @@ test("an archived agent's chip, which no list the window holds names, wears the 
   assert.deepEqual(marks, [MODEL_PROVIDER.OPENAI, MODEL_PROVIDER.ANTHROPIC]);
 });
 
-test("an automation's chip and its run's wear its clock tile, and only the Automations place keeps the lightning bolt", async () => {
+test("an automation's chip and its run's wear its Zap tile, and the Automations place wears the bare bolt", async () => {
   const container = await drawn(
     [
       `${HOME}/automation/${TRIAGE}`,
@@ -357,8 +362,8 @@ test("an automation's chip and its run's wear its clock tile, and only the Autom
     "the automation's tile",
   );
   assert.ok(run?.querySelector('.actor-mark[data-kind="automation"]'), "the run's tile");
-  assert.equal(automation?.querySelector(".lucide-zap"), null);
-  assert.equal(run?.querySelector(".lucide-zap"), null);
-  assert.ok(place?.querySelector(".lucide-zap"), "the Automations page keeps its bolt");
+  assert.ok(automation?.querySelector(".actor-mark .lucide-zap"), "the automation's tile is Zap");
+  assert.ok(run?.querySelector(".actor-mark .lucide-zap"), "the run's tile is Zap");
+  assert.ok(place?.querySelector(".lucide-zap"), "the Automations page wears its bolt");
   assert.equal(place?.querySelector(".actor-mark"), null);
 });

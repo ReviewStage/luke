@@ -13,6 +13,7 @@ import { pageFrameUrl } from "@luke/features/page-frame";
 import { IDLE_TASKS_VIEW } from "@luke/features/tasks-view";
 import type { AppStateSnapshot } from "@luke/host/app-state";
 import { ProviderMark } from "@luke/ui";
+import { ACTOR_KIND } from "@luke/ui/actor-model";
 import { CHAT_PLACE, type ChatPlace, chatNames } from "@luke/ui/chat-model";
 import { MESSAGE_ROLE, type WireRecord } from "@luke/wire";
 import { Effect } from "effect";
@@ -951,7 +952,7 @@ test("a call of an integration's tool is one row wearing the integration's mark,
   assert.equal(container.querySelector("[data-turn-fold] > summary")?.textContent, "1 tool called");
   const row = container.querySelector<HTMLElement>('[data-call-id="call-linear_remote"] summary');
   assert.ok(row, "the call's row is a fold's line");
-  assert.match(row.textContent ?? "", /^Used\s*list_issues/u);
+  assert.match(row.textContent ?? "", /^Ran\s*list_issues\s*Linear$/u);
   assert.equal(
     row.querySelector("svg")?.outerHTML,
     renderToStaticMarkup(createElement(ProviderMark, { provider: INTEGRATION_PROVIDER.LINEAR })),
@@ -968,7 +969,8 @@ test("a connection_execute with no integration's call under it keeps its own row
   assert.ok(execute);
   const { container } = drawn(assistant([execute]), true);
   const row = container.querySelector('[data-call-id="call-connection_execute"] summary');
-  assert.match(row?.textContent ?? "", /^Used\s*connection_execute/u);
+  // Note that it names the tool and the connection its own input names.
+  assert.match(row?.textContent ?? "", /^Ran\s*list_issues\s*Linear$/u);
 });
 
 test("a connection_execute that failed keeps its own row beside the call it ran, so its error is read", () => {
@@ -983,6 +985,13 @@ test("a connection_execute that failed keeps its own row beside the call it ran,
   act(() => row.click());
   const body = container.querySelector('[data-call-id="call-connection_execute"]')?.textContent;
   assert.ok(body?.includes("Linear stopped answering."), "its error is read under it");
+  assert.equal(
+    container.querySelector(
+      '[data-call-id="call-connection_execute"] [data-tool-output] [role="alert"]',
+    )?.textContent,
+    "Linear stopped answering.",
+    "and announced as an alert",
+  );
   assert.ok(
     container.querySelector('[data-call-id="call-linear_remote"]') !== null,
     "the call it ran keeps its row too",
@@ -1045,16 +1054,19 @@ function channelOf(seq: number): string | undefined {
   return chat.answer.messages.find((message) => message.seq === seq)?.channelId;
 }
 
-test("a line a chat notice wrote draws as its sender's bubble at the left, the line under it naming who and when, its words the message's own, and Open in Chat opens the channel", () => {
+test("a line a chat notice wrote draws as its sender's bubble at the left, the line under it naming who and when, its words the message's own, and Open in chat opens the channel", () => {
   const { container, opened } = noticeDrawn(true);
   const bubble = container.querySelector<HTMLElement>("[data-chat-notice]");
   assert.ok(bubble, "the notice draws as a bubble");
   assert.equal(bubble.dataset.messageId, "notice", "a link to the line finds its bubble");
   assert.ok(bubble.classList.contains("is-chat"), "it stands at the left");
   assert.equal(container.querySelector(".is-user"), null);
-  const meta = bubble.querySelector(".message-meta");
+  const meta = bubble.querySelector(".luke-message-line");
   assert.match(meta?.querySelector("[data-actor-ref]")?.textContent ?? "", /Invite emails/u);
-  assert.ok(meta?.querySelector(".message-sent-at time"), "the line says when it was posted");
+  assert.ok(
+    meta?.querySelector(".luke-message-line-time time"),
+    "the line says when it was posted",
+  );
   assert.equal(
     /teammate-invitations|m 43/u.test(meta?.textContent ?? ""),
     false,
@@ -1062,11 +1074,57 @@ test("a line a chat notice wrote draws as its sender's bubble at the left, the l
   );
   assert.match(
     bubble.querySelector(".chat-notice-words")?.textContent ?? "",
-    /^Add teammate invitations are you changing memberships columns\?/u,
+    /^agent Add teammate invitations are you changing memberships columns\?/u,
   );
-  const open = bubble.querySelector<HTMLElement>('button[aria-label="Open in Chat"]');
+  const open = bubble.querySelector<HTMLElement>('button[aria-label="Open in chat"]');
   act(() => open?.click());
   assert.deepEqual(opened, [{ kind: CHAT_PLACE.CHANNEL, channelId: channelOf(43) }]);
+});
+
+/** What a message's line under it holds, in the order it reads, by part. */
+function lineParts(line: Element | null): readonly string[] {
+  assert.ok(line, "the message has a line under it");
+  return [...line.children].map((part) => {
+    if (part.matches(".luke-message-line-sender")) return "sender";
+    if (part.matches(".luke-message-line-time")) return "time";
+    if (part.matches(".luke-message-actions")) return "actions";
+    return assert.fail(`an unplaced part: ${part.className}`);
+  });
+}
+
+test("the line under an agent's message and under a chat notice keep who sent it and when at the column's edge, the actions inside them", () => {
+  const sent: CodingAgentMessage = {
+    id: "sent",
+    role: MESSAGE_ROLE.USER,
+    parts: [{ type: "text", text: "Rerun the spec on WebKit." }],
+    sentAt: new Date(2026, 9, 14, 15, 42).getTime(),
+  };
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  roots.push(root);
+  act(() =>
+    root.render(
+      onRegistry(
+        AtomRegistry.make(),
+        createElement(AgentMessage, {
+          message: sent,
+          plan: false,
+          lead: AGENT_LEAD,
+          moving: false,
+          delegation: { models: [] },
+          sender: { kind: ACTOR_KIND.LUKE },
+        }),
+      ),
+    ),
+  );
+  const underMessage = lineParts(container.querySelector(".is-user > .luke-message-line"));
+  const notice = noticeDrawn(true).container.querySelector(
+    "[data-chat-notice] > .luke-message-line",
+  );
+
+  assert.deepEqual(underMessage, ["actions", "sender", "time"]);
+  assert.deepEqual(lineParts(notice), ["sender", "time", "actions"]);
 });
 
 test("a notice a person posted names them by their own chip, which hangs their card, as an agent's names it by its own", () => {
@@ -1077,7 +1135,9 @@ test("a notice a person posted names them by their own chip, which hangs their c
   });
   const bubble = container.querySelector<HTMLElement>("[data-chat-notice]");
   assert.ok(bubble, "the notice draws as a bubble");
-  const person = bubble.querySelector('.message-sender [data-actor-ref][data-kind="person"]');
+  const person = bubble.querySelector(
+    '.luke-message-line-sender [data-actor-ref][data-kind="person"]',
+  );
   assert.match(person?.textContent ?? "", /Maria Chen/u);
 });
 
@@ -1089,28 +1149,28 @@ test("where the window holds no chat, a notice's bubble names its sender from th
     bubble?.querySelector(".chat-notice-words")?.textContent?.trim(),
     "Are you changing memberships?",
   );
-  assert.equal(bubble?.querySelector('button[aria-label="Open in Chat"]'), null);
+  assert.equal(bubble?.querySelector('button[aria-label="Open in chat"]'), null);
 });
 
-/** The card Open in Chat hangs on a notice of message `seq`, once the pointer rests on it. */
+/** The card Open in chat hangs on a notice of message `seq`, once the pointer rests on it. */
 function placeCardOf(seq: number): string {
   const { container } = noticeDrawn(true, true, {
     ...NOTICE,
     metadata: { author: "agent", channel: "chat", chat_seq: seq, from: "Invite emails" },
   });
-  const open = container.querySelector('[data-chat-notice] button[aria-label="Open in Chat"]');
-  restOn(open ?? assert.fail("Open in Chat stands"));
+  const open = container.querySelector('[data-chat-notice] button[aria-label="Open in chat"]');
+  restOn(open ?? assert.fail("Open in chat stands"));
   return document.querySelector(".luke-tooltip-card [data-chat-notice-place]")?.textContent ?? "";
 }
 
-test("Open in Chat on a direct message hangs a card saying it is one, and who it is with", () => {
+test("Open in chat on a direct message hangs a card saying it is one, and who it is with", () => {
   const card = placeCardOf(41);
   assert.match(card, /^Direct message/u);
   assert.equal(card.includes("Reply in a thread"), false);
   assert.match(card, /19[67]\d/u, "a message of another year says its year");
 });
 
-test("Open in Chat on a thread reply hangs a card naming the channel, the thread, and its first message", () => {
+test("Open in chat on a thread reply hangs a card naming the channel, the thread, and its first message", () => {
   const card = placeCardOf(44);
   assert.match(card, /teammate-invitations/u);
   assert.match(card, /Reply in a thread/u);
@@ -1145,7 +1205,10 @@ test("a notice another coding agent posted names it by its own chip in the handl
     null,
     "no bare handle stands for the agent",
   );
-  assert.match(bubble.querySelector(".message-sender")?.textContent ?? "", /Invite expiry/u);
+  assert.match(
+    bubble.querySelector(".luke-message-line-sender")?.textContent ?? "",
+    /Invite expiry/u,
+  );
   assert.equal(
     bubble.querySelector(".chat-notice-words")?.textContent?.trim(),
     "Are you changing the memberships columns?",

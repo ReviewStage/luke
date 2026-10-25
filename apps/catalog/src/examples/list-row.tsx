@@ -1,5 +1,4 @@
 import {
-  EllipsisIcon,
   IconButton,
   LIST_DENSITY,
   LIST_ROW_ACTIONS,
@@ -9,7 +8,10 @@ import {
   LIST_ROW_META,
   LIST_VARIANT,
   List,
+  type ListDensity,
   ListRow,
+  type MenuEntry,
+  MoreButton,
   PencilIcon,
   Switch,
   TrashIcon,
@@ -24,7 +26,8 @@ import { CatalogSection } from "../section";
  * one open now, unread rows, what a row belongs to on a line of its own,
  * rows that open nothing, rows in a card,
  * a row a finger's height on a coarse pointer, compact and dense, rows whose
- * acts show on hover, rows that go deeper, and long words in a narrow column.
+ * acts show on hover, rows that go deeper, rows whose menu their ⋯, a
+ * right-click, and the menu key open, and long words in a narrow column.
  */
 
 const MEMBERS = [
@@ -46,7 +49,7 @@ function Members(): React.JSX.Element {
           meta={member.role}
           current={open === member.id ? LIST_ROW_CURRENT.ITEM : undefined}
           onPress={() => setOpen(member.id)}
-          actions={<IconButton icon={<EllipsisIcon />} label={`More for ${member.name}`} />}
+          actions={<MoreButton thing={member.name} />}
         />
       ))}
     </List>
@@ -77,6 +80,38 @@ function Automations(): React.JSX.Element {
               onChange={(checked) => setOn((all) => ({ ...all, [automation.id]: checked }))}
             />
           }
+        />
+      ))}
+    </List>
+  );
+}
+
+const ignore = (): void => undefined;
+
+/** One task's menu, which its row's ⋯, right-click, and menu key all open. */
+function taskMenu(name: string): readonly (readonly MenuEntry[])[] {
+  return [
+    [{ label: `Rename ${name}`, icon: <PencilIcon />, onSelect: ignore }],
+    [{ label: "Delete", icon: <TrashIcon />, danger: true, onSelect: ignore }],
+  ];
+}
+
+const TASKS = [
+  { id: "sign-in", name: "Fix the sign-in loop", updated: "2h" },
+  { id: "release", name: "Ship the spring release", updated: "1d" },
+] as const;
+
+/** Rows whose menu is one definition, opened by its ⋯, a right-click, or the menu key. */
+function TaskRows({ density }: { density: ListDensity }): React.JSX.Element {
+  return (
+    <List label="Tasks" density={density}>
+      {TASKS.map((task) => (
+        <ListRow
+          key={task.id}
+          title={task.name}
+          meta={task.updated}
+          onPress={ignore}
+          menu={{ thing: "Task", groups: taskMenu(task.name) }}
         />
       ))}
     </List>
@@ -118,6 +153,10 @@ function ListRows(): React.JSX.Element {
               metaAt={LIST_ROW_META.TITLE}
               unread
               onPress={() => undefined}
+              menu={{
+                thing: "Inbox item",
+                groups: [[{ label: "Mark as read", onSelect: ignore }]],
+              }}
             />
             <ListRow
               title="Board cards wrap and hover per part"
@@ -127,6 +166,10 @@ function ListRows(): React.JSX.Element {
               meta="2h"
               metaAt={LIST_ROW_META.TITLE}
               onPress={() => undefined}
+              menu={{
+                thing: "Inbox item",
+                groups: [[{ label: "Mark as unread", onSelect: ignore }]],
+              }}
             />
           </List>
         </div>
@@ -141,6 +184,14 @@ function ListRows(): React.JSX.Element {
               meta="Yesterday"
             />
           </List>
+        </div>
+      </CatalogSection>
+      <CatalogSection id="list-row-menu" title="Rows with a menu: ⋯, right-click, and the menu key">
+        <div className="catalog-column">
+          <TaskRows density={LIST_DENSITY.REGULAR} />
+        </div>
+        <div className="catalog-narrow">
+          <TaskRows density={LIST_DENSITY.DENSE} />
         </div>
       </CatalogSection>
       <CatalogSection id="list-row-card" title="Rows in a card">

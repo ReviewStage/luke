@@ -35,7 +35,7 @@ import {
   planCommentsAnswerSchema,
   planCommentThreadAnswerSchema,
 } from "./plan-comment-wire.js";
-import { PLAN_EDIT_REFUSAL, planEditRequestSchema, planEditValueSchema } from "./plan-edit.js";
+import { PLAN_EDIT_REFUSAL, planEditConflictSchema, planEditRequestSchema } from "./plan-edit.js";
 import {
   workspaceSentryAnswerSchema,
   workspaceSentryDisconnectRequestSchema,
@@ -63,6 +63,7 @@ import {
   taskFileTextSchema,
   taskFileWindowSchema,
   taskPrioritySchema,
+  taskPullRequestsSchema,
   taskRenameRequestSchema,
   taskSchema,
   taskSkillsSchema,
@@ -127,6 +128,20 @@ export const TASKS_READ = {
 const tasksReadSchema = EffectSchema.Literals(Object.values(TASKS_READ));
 
 /**
+ * Whether what the host follows live is current, as the task list's follow
+ * last found it: live while its rows arrive, catching up while a poll that
+ * failed is asked again or a follow that broke is started again, and
+ * offline while the service answers no seal at all.
+ */
+export const HOST_LIVE = {
+  LIVE: "live",
+  CATCHING_UP: "catching-up",
+  OFFLINE: "offline",
+} as const;
+
+export type HostLive = (typeof HOST_LIVE)[keyof typeof HOST_LIVE];
+
+/**
  * The active task's document as last read: the plan whole while a read has
  * landed, kept through a later read that failed, so the window never draws a
  * document it did not read and never drops one it did.
@@ -157,8 +172,7 @@ export const TASK_ACTIVITY_ACTION_MAX_CHARS = 120;
  * What each part of Luke is doing on a task call, whole, as the service's
  * `task.activity` frame says it: the voice's wait where it is in one, the
  * brain while it works on an ask with the command it is running
- * where one is pending, and whether the notetaker is writing. Nothing of the
- * ask, and no tool's output.
+ * where one is pending. Nothing of the ask, and no tool's output.
  */
 export const taskActivitySchema = EffectSchema.Struct({
   voice: EffectSchema.optionalKey(EffectSchema.Literals(Object.values(VOICE_PHASE))),
@@ -170,7 +184,8 @@ export const taskActivitySchema = EffectSchema.Struct({
       ),
     }),
   ),
-  notes: EffectSchema.Boolean,
+  // Note that no notetaker writes beside a call any more and no desktop draws one, so the key is optional here, never removed: this release parses a frame with or without it, while the service keeps sending `notes: false` for the earlier desktops that still require it.
+  notes: EffectSchema.optionalKey(EffectSchema.Boolean),
 });
 
 export type TaskActivity = typeof taskActivitySchema.Type;
@@ -254,7 +269,15 @@ export const tasksViewSchema = EffectSchema.Struct({
    * reads in place of listing each plan's agents again on a clock.
    */
   taskAgents: EffectSchema.optionalKey(EffectSchema.Array(codingAgentSummarySchema)),
+  /**
+   * Every pull request of each plan that has one, uncapped, as its row names
+   * the first few: present only while the list is followed live, when the
+   * Tasks page's cards name each one rather than a count of the rest.
+   */
+  taskPullRequests: EffectSchema.optionalKey(EffectSchema.Array(taskPullRequestsSchema)),
   listStatus: tasksReadSchema,
+  /** Whether what the host follows live is current (`HOST_LIVE`); absent before the list's follow first says, which reads as live. */
+  live: EffectSchema.optionalKey(EffectSchema.Literals(Object.values(HOST_LIVE))),
   /** The workspaces the account is a member of, its first one first, as the last list read answered; none before the first lands. */
   workspaces: EffectSchema.Array(workspaceSchema),
   /** Where the read of the workspaces stands, a failed one keeping those held; absent before the first is asked. */
@@ -502,12 +525,12 @@ export type TasksEditFailure = (typeof EDIT_FAILURES)[number];
 
 /**
  * An edit as the window hears it: saved, the task arriving on the document
- * as the service answered it; a conflict, with what the field holds now; or
- * why nothing was saved.
+ * as the service answered it; a conflict, with what the field holds now and
+ * who wrote it; or why nothing was saved.
  */
 export const tasksEditAnswerSchema = EffectSchema.Union([
   EffectSchema.Struct({ saved: EffectSchema.Literal(true) }),
-  EffectSchema.Struct({ conflict: EffectSchema.Struct({ current: planEditValueSchema }) }),
+  EffectSchema.Struct({ conflict: planEditConflictSchema }),
   EffectSchema.Struct({ failure: EffectSchema.Literals(EDIT_FAILURES) }),
 ]);
 

@@ -34,7 +34,7 @@ export const voiceRuntimeActsContract = {
     .input(exactInput(EffectSchema.Undefined))
     .output(EffectSchema.Void),
   [VOICE_RUNTIME_ACT_KIND.VOICE_CREATE_LIVE_SESSION]: actProcedure(
-    "Could not open a voice session on this system.",
+    "Could not open a call on this system.",
   )
     .input(exactInput(voiceCreateLiveSessionParamsSchema))
     .output(EffectSchema.UndefinedOr(EffectSchema.flip(voiceCreateLiveSessionResultSchema))),

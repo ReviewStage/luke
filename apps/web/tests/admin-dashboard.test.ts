@@ -204,7 +204,7 @@ test("the loading dashboard stands its sections under the same headings, saying 
   const page = render({ status: "loading" });
 
   expect(sectionHeadings(page)).toEqual(SECTIONS);
-  expect(page.querySelector('[role="status"]')?.textContent).toContain("Loading…");
+  expect(page.querySelector('[role="status"]')?.textContent).toContain("Reading this page");
 });
 
 /** Each region the page draws, by the words of the heading that names it, and the words it holds. */
@@ -388,7 +388,7 @@ test("View options offer the three time ranges, the one read checked and said af
   const heard: string[] = [];
   const page = render(ready(metrics()), heard);
 
-  expect(page.querySelector("header .desktop-toolbar-heading")?.textContent).toBe(
+  expect(page.querySelector("header .luke-toolbar-heading")?.textContent).toBe(
     "OverviewLast 7 days",
   );
   openViewOptions(page);

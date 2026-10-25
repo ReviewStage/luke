@@ -17,6 +17,7 @@ import {
   type CodingAgentSummary,
 } from "@luke/features/coding-agent-wire";
 import { FAILURE_REASON, type Failure } from "@luke/features/failure-remedy";
+import { MODEL_PROVIDER, type ModelProvider } from "@luke/features/models-wire";
 import { ACTION_RESULT_STATUS, MESSAGE_ROLE } from "@luke/wire";
 import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
@@ -161,6 +162,10 @@ async function drawnTab(input: {
   onUnarchive?: () => void;
   source?: Partial<CodingAgentSummary>;
   onArchive?: (agentId: string, archived: boolean) => void;
+  /** The signed-in reader, whose own agents archive at once; another's at rest is read again first. */
+  me?: string;
+  /** Reads the agent again before a teammate's is archived unasked. */
+  readAgent?: (agentId: string) => Promise<CodingAgentSummary | undefined>;
   onStop?: (agentId: string) => void;
   answer?: () => Promise<Failure | undefined>;
   message?: CodingAgentAgentAnswer;
@@ -174,6 +179,8 @@ async function drawnTab(input: {
   drafts?: boolean;
   /** What the first page says the agent and its newest turn cost, the latter as a service older than this window sent it. */
   usage?: Pick<CodingAgentMessagesAnswer, "usage" | "turnUsage">;
+  /** Where the end line's key press turns, by the provider it names. */
+  onOpenApiKeys?: (provider: ModelProvider | undefined) => void;
 }) {
   fakeAppBridge({});
   const source = agentOf(SOURCE, { status: input.status, ...input.source });
@@ -193,6 +200,8 @@ async function drawnTab(input: {
     archived: input.archived ?? [],
     continueAgent: input.continues === false ? undefined : continueAgent,
     onUnarchive: input.onUnarchive,
+    me: input.me,
+    ...(input.readAgent === undefined ? undefined : { readAgent: input.readAgent }),
     onArchive: (agentId, archived) => {
       input.onArchive?.(agentId, archived);
       return Promise.resolve({ status: ACTION_RESULT_STATUS.ACCEPTED });
@@ -201,6 +210,7 @@ async function drawnTab(input: {
       input.onStop?.(agentId);
       return Promise.resolve();
     },
+    onOpenApiKeys: (provider) => input.onOpenApiKeys?.(provider),
     onMessage: () =>
       Promise.resolve(input.message ?? { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }),
     transcripts: pushedTranscripts(() => [
@@ -269,7 +279,7 @@ async function drawnTab(input: {
       container.querySelector<HTMLElement>(".agent-end") ??
       container.querySelector<HTMLElement>("[data-ended]")?.parentElement ??
       null,
-    note: () => container.querySelector<HTMLElement>(".agent-composer-note"),
+    note: () => container.querySelector<HTMLElement>(".luke-composer-foot-note"),
     continuedNote: () => container.querySelector<HTMLElement>(".continued-composer"),
     continuedIn: () => [...container.querySelectorAll<HTMLElement>("[data-continued]")],
     sendButton: () => container.querySelector<HTMLButtonElement>('button[aria-label="Send"]'),
@@ -278,7 +288,9 @@ async function drawnTab(input: {
     buttons,
     /** The end line's words and the presses on their row, each by what it says. */
     endRow: () => {
-      const words = container.querySelector<HTMLElement>("[data-ended] .agent-end-words");
+      const words = container.querySelector<HTMLElement>(
+        "[data-ended] :is(.agent-end-words, .luke-failure-note-words)",
+      );
       const row = words?.closest<HTMLElement>(".agent-end-row") ?? null;
       return row === null ? null : { row, presses: buttons(row) };
     },
@@ -353,13 +365,19 @@ test("a failed turn's end line names no price, even from a service that sent the
   assert.match(line.textContent ?? "", /Failed: /);
   assert.doesNotMatch(line.textContent ?? "", /\$/);
   assert.ok(line.querySelector("[data-failed]"), "the line still tells of a failure");
+  assert.match(
+    line.querySelector('[role="alert"]')?.textContent ?? "",
+    /^Failed: /,
+    "and says it as an alert",
+  );
 
   const chip =
     tab.container.querySelector<HTMLButtonElement>(".agent-model-chip button") ??
     assert.fail("the box offers its model chip");
   act(() => chip.click());
   await settle();
-  const menu = tab.container.querySelector(".agent-model-menu") ?? assert.fail("the menu opens");
+  const menu =
+    tab.container.querySelector(".luke-searchable-menu") ?? assert.fail("the menu opens");
   assert.match(menu.textContent ?? "", /This agent: 1\.2M tokens · \$2\.41/);
   assert.doesNotMatch(menu.textContent ?? "", /\$0\.08/);
 });
@@ -434,8 +452,8 @@ test("no Continue stands on a turn failed on a refused API key, on an archived a
     status: CODING_AGENT_STATUS.FAILED,
     failure: CODING_AGENT_FAILURE.PROVIDER_KEY,
   });
-  assert.equal(key.buttons(key.container).length, 0, "Open API keys is the fix");
-  assert.match(key.endLine()?.textContent ?? "", /Open API keys/);
+  assert.equal(key.buttons(key.container).length, 0, "Connect Claude is the fix");
+  assert.match(key.endLine()?.textContent ?? "", /Connect Claude/);
 
   const archived = await drawnTab({
     status: CODING_AGENT_STATUS.FAILED,
@@ -449,6 +467,23 @@ test("no Continue stands on a turn failed on a refused API key, on an archived a
     const settled = await drawnTab({ status });
     assert.equal(settled.buttons(settled.container).length, 0, status);
   }
+});
+
+test("a turn failed on a refused key names the harness its model runs on, and its press turns to that harness's row", async () => {
+  const opened: (ModelProvider | undefined)[] = [];
+  const tab = await drawnTab({
+    status: CODING_AGENT_STATUS.FAILED,
+    failure: CODING_AGENT_FAILURE.PROVIDER_KEY,
+    source: { model: "openai/gpt-6-astra" },
+    onOpenApiKeys: (provider) => opened.push(provider),
+  });
+  const line = tab.endLine() ?? assert.fail("the turn ends on its line");
+  const press =
+    [...line.querySelectorAll("button")].find((each) => each.textContent === "Connect Codex") ??
+    assert.fail("the line offers Connect Codex");
+
+  act(() => press.click());
+  assert.deepEqual(opened, [MODEL_PROVIDER.OPENAI]);
 });
 
 test("a box closed on an ended agent offers Continue in new agent beside its note, carrying the box's words and files into the new agent and letting them go once it started", async () => {
@@ -474,9 +509,9 @@ test("a box closed on an ended agent offers Continue in new agent beside its not
   assert.equal(tab.lines("Now add the dark variant.").length, 1);
   const [line] = tab.lines("Now add the dark variant.");
   assert.match(
-    line?.querySelector("[data-undelivered]")?.textContent ?? "",
+    line?.querySelector('[role="alert"]')?.textContent ?? "",
     /^Not delivered$/,
-    "the line says it did not go",
+    "the line says it did not go, as an alert",
   );
   const [button] = tab.buttons(note);
   assert.ok(button, "the note's remedy continues the agent");
@@ -776,7 +811,7 @@ test("an agent with only forks keeps its box, since a fork is no continuation", 
   assert.ok(tab.sendButton(), "the box still takes a message");
 });
 
-test("the continued box's Archive archives a settled agent at once, asks first where it would stop a running turn, and its Stop stands only while a turn runs", async () => {
+test("the continued box's Archive archives the reader's own agent at once, settled or running, and its Stop stands only while a turn runs", async () => {
   const archived: { agentId: string; archived: boolean }[] = [];
   const settled = await drawnTab({
     status: CODING_AGENT_STATUS.COMPLETED,
@@ -802,12 +837,33 @@ test("the continued box's Archive archives a settled agent at once, asks first w
   assert.deepEqual(stopped, [SOURCE]);
 
   await act(async () => running.named(note, "Archive")?.click());
-  assert.deepEqual(archived, [], "a running turn is not stopped unasked");
-  const question =
-    document.querySelector<HTMLElement>('[role="alertdialog"]') ??
-    assert.fail("Archive asks before it stops the turn");
-  await act(async () => running.named(question, "Stop and archive")?.click());
   await settle();
+  assert.equal(document.querySelector('[role="alertdialog"]'), null, "nothing was asked");
+  assert.deepEqual(archived, [{ agentId: SOURCE, archived: true }]);
+});
+
+test("the continued box's Archive is held busy while a teammate's agent at rest is read again first, then archives it", async () => {
+  const archived: { agentId: string; archived: boolean }[] = [];
+  const read = Promise.withResolvers<CodingAgentSummary | undefined>();
+  const tab = await drawnTab({
+    status: CODING_AGENT_STATUS.COMPLETED,
+    source: { startedBy: { userId: "user-teammate", name: "Charles Pan" } },
+    me: "user-reader",
+    readAgent: () => read.promise,
+    others: [agentOf(NEXT, { from: FROM_SOURCE })],
+    onArchive: (agentId, each) => archived.push({ agentId, archived: each }),
+  });
+  const note = tab.continuedNote() ?? assert.fail("the box gives way to its note");
+  const archive = tab.named(note, "Archive") ?? assert.fail("the note offers Archive");
+  assert.equal(archive.getAttribute("aria-busy"), null);
+
+  await act(async () => archive.click());
+  assert.equal(archive.getAttribute("aria-busy"), "true");
+  assert.deepEqual(archived, [], "nothing is archived before the read answers");
+
+  read.resolve(agentOf(SOURCE, { status: CODING_AGENT_STATUS.COMPLETED }));
+  await settle();
+  assert.equal(archive.getAttribute("aria-busy"), null);
   assert.deepEqual(archived, [{ agentId: SOURCE, archived: true }]);
 });
 
@@ -922,6 +978,10 @@ test("a message refused before the transcript has read anything stands as the de
 
   const [line] = tab.lines("Continue testing.");
   assert.ok(line, "the refused line is the developer's");
-  assert.ok(line.querySelector("[data-undelivered]"), "marked as not delivered");
+  assert.equal(
+    line.querySelector('[role="alert"]')?.textContent,
+    "Not delivered",
+    "marked as not delivered",
+  );
   assert.match(line.textContent ?? "", /notes\.md/u, "with its file");
 });

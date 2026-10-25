@@ -16,10 +16,9 @@ import {
   type InboxItem,
   recommendedLabels,
 } from "@luke/features/inbox-wire";
-import { LINK_PLACE } from "@luke/features/luke-link";
+import { LINK_PLACE } from "@luke/features/link-grammar";
 import type { CatalogModel } from "@luke/features/models-wire";
 import {
-  BADGE_TONE,
   Badge,
   HOVER_CARD_ROW_LOOK,
   HoverCard,
@@ -30,20 +29,21 @@ import {
   HoverCardRule,
   INLINE_REF_LOOK,
   InlineRef,
+  STATUS_TONE,
   TaskStatusMark,
   Time,
   VisuallyHidden,
 } from "@luke/ui";
 import { ACTOR_KIND, ACTOR_STATE, type Actor, actorName, personActor } from "@luke/ui/actor-model";
-import * as Atom from "effect/reactivity/Atom";
 import {
   CheckIcon,
   CircleIcon,
-  FactoryIcon,
+  GLYPH,
   PenLineIcon,
   SquareCheckIcon,
   SquareIcon,
-} from "lucide-react";
+} from "@luke/ui/icons";
+import * as Atom from "effect/reactivity/Atom";
 import type { ReactNode } from "react";
 import { ACTOR_SIZE, ActorMark, AutomationCard, automationActor } from "../actor-ref.js";
 import { AttentionMark } from "../attention-mark.js";
@@ -54,7 +54,7 @@ import { useMemberDirectory } from "../member-directory.js";
 import { GLYPH_STATE, StateGlyph } from "../state-glyph.js";
 import { APP_SLICE, useAppSlice } from "../use-app-state.js";
 import { AgentMarkRef, type AgentSubject, lineSubject, tasklessSubject } from "./agent-ref.js";
-import { AutomationChipCard, TaskChipCard } from "./chip-cards.js";
+import { AutomationChipCard, ChipCardSkeleton, TaskChipCard } from "./chip-cards.js";
 import { agentStillWriting, providerOf } from "./coding-agent-model.js";
 import {
   holderName,
@@ -220,7 +220,11 @@ export function InboxItemCard({
       />
       {thread.ask === undefined ? (
         settled === undefined ? null : (
-          <HoverCardRow look={HOVER_CARD_ROW_LOOK.DETAIL} glyph={<CheckIcon />} label={settled} />
+          <HoverCardRow
+            look={HOVER_CARD_ROW_LOOK.DETAIL}
+            glyph={item.status === INBOX_STATUS.CLOSED ? <GLYPH.DISMISSED /> : <CheckIcon />}
+            label={settled}
+          />
         )
       ) : (
         <CardAsk ask={thread.ask} ticked={ticked} title={cardTitle(item.title)} />
@@ -320,6 +324,7 @@ function HolderRef({
               automationId={holder.automationId}
               workspace={workspaceId}
               wordsWorkspaceId={workspaceId}
+              reading={<ChipCardSkeleton glyph={glyph} name={name} />}
               fallback={fallback}
             />
           )
@@ -369,7 +374,7 @@ function CardAsk({
                 label={option.label}
                 end={
                   recommendedLabels(ask).includes(option.label) ? (
-                    <Badge tone={BADGE_TONE.ATTENTION}>{RECOMMENDED}</Badge>
+                    <Badge tone={STATUS_TONE.ATTENTION}>{RECOMMENDED}</Badge>
                   ) : undefined
                 }
               />
@@ -444,7 +449,7 @@ function TaskStatusChip({
 
 /**
  * A holder's glyph as a row's chip draws it: a task's status's mark, an
- * automation's clock tile, and the factory glyph for the agents no
+ * automation's clock tile, and the automation glyph for the agents no
  * automation names, as the holder's group header draws them.
  */
 export function HolderGlyph({ holder }: { holder: InboxHolder }): React.JSX.Element {
@@ -452,7 +457,7 @@ export function HolderGlyph({ holder }: { holder: InboxHolder }): React.JSX.Elem
     holder.kind === INBOX_HOLDER.AUTOMATION ? (holder.automationId ?? undefined) : undefined,
   );
   if (holder.kind === INBOX_HOLDER.TASK) return <PlanGlyph status={holder.task.status} />;
-  if (holder.automationId === null) return <FactoryIcon />;
+  if (holder.automationId === null) return <GLYPH.AUTOMATION />;
   return (
     <ActorMark
       actor={

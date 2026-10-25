@@ -5,6 +5,7 @@ import { decodeMention, MENTION_KIND } from "@luke/features/mention-link";
 import { IDLE_TASKS_VIEW } from "@luke/features/tasks-view";
 import { WORKSPACE_ROLE } from "@luke/features/workspace-wire";
 import { personActor } from "@luke/ui/actor-model";
+import { holdExits } from "@luke/ui/testing/held-exits";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, useRef } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -17,7 +18,7 @@ import { MENTION_MENU_SIDE, type MentionPicker, useMentionPicker } from "./menti
 import { NO_TASK } from "./task-mentions.js";
 
 /**
- * mention-picker.test.ts -- the `@` list as the editor's reports drive it: where the words are a chat message's, the members a mention tells offered in place of the workspace's, and a list closed with Escape, which a `#` written over its word opens again on the channels; and on a plan, the workspace's other tasks found by their keys.
+ * mention-picker.test.ts -- the `@` list as the editor's reports drive it: where the words are a chat message's, the members a mention tells offered in place of the workspace's, and a list closed with Escape, which fades out before it goes and which a `#` written over its word opens again on the channels; and on a plan, the workspace's other tasks found by their keys.
  */
 
 let root: Root | undefined;
@@ -26,6 +27,7 @@ afterEach(() => {
   act(() => root?.unmount());
   root = undefined;
   document.body.innerHTML = "";
+  Reflect.deleteProperty(Element.prototype, "getAnimations");
 });
 
 /** The list drawn as a chat box draws it, the latest it answered kept for the test to drive. */
@@ -100,6 +102,41 @@ test("an @ list closed with Escape stays closed in its word, and a # written ove
     picker().onChannelTrigger(word(""));
   });
   assert.deepEqual(rows(page), ["general"]);
+});
+
+test("an @ list closed with Escape stays drawn, inert, with its rows while it fades, and goes once the fade has run", () => {
+  const exits = holdExits();
+  const { picker, page } = mounted();
+  act(() => picker().onTrigger(word("mar")));
+  act(() => {
+    picker().onKey(new KeyboardEvent("keydown", { key: "Escape", cancelable: true }));
+  });
+  const fading = page.querySelector<HTMLElement>(".luke-rect-float");
+  const fadingRows = rows(page);
+  const expanded = picker().aria["aria-expanded"];
+  act(() => exits.finish());
+
+  assert.ok(fading, "the list stands while it fades");
+  assert.equal(fading.hasAttribute("inert"), true, "the fading list takes nothing");
+  assert.deepEqual(fadingRows, ["Maria Chen"], "the fading list keeps the rows it closed with");
+  assert.equal(expanded, "false", "the field reads the list closed as it starts to fade");
+  assert.equal(page.querySelector(".luke-rect-float"), null, "the list goes once it has faded");
+});
+
+test("the @ list's foot names its keys through Shortcut, ⏎ and ⇥ mention and Esc closes, and a search nothing matches says so as every menu does", () => {
+  const { picker, page } = mounted();
+  act(() => picker().onTrigger(word("mar")));
+  const foot = page.querySelector(".luke-menu-keys");
+  assert.ok(foot, "the list has a foot");
+  assert.deepEqual(
+    [...foot.children].map((item) => item.textContent),
+    ["↑↓Move", "⏎⇥Mention", "EscClose"],
+  );
+  assert.equal(foot.querySelectorAll("kbd.luke-shortcut").length, 5);
+
+  act(() => picker().onTrigger(word("zzzz")));
+  assert.deepEqual(rows(page), []);
+  assert.ok(page.textContent?.includes("No results match"));
 });
 
 /** The list drawn as a plan's editor draws it, on `plan-1` of the Stage workspace, each mention picked recorded. */
@@ -209,6 +246,19 @@ test("on a plan, a task's key typed whole leads the @ list with that task, its k
     kind: MENTION_KIND.TASK,
     taskId: "plan-421",
   });
+});
+
+test("a row in the @ list marks the word that found it, where it starts a word of its name", () => {
+  const { picker, page } = mounted();
+  act(() => picker().onTrigger(word("chen")));
+  const row = page.querySelector<HTMLElement>('[role="option"]');
+  assert.equal(row?.querySelector(".luke-combobox-option-label")?.textContent, "Maria Chen");
+  assert.deepEqual(
+    [...(row?.querySelectorAll(".luke-combobox-option-label mark") ?? [])].map(
+      (mark) => mark.textContent,
+    ),
+    ["Chen"],
+  );
 });
 
 test("a person's row in the @ list hangs their card while the pointer rests on it", () => {

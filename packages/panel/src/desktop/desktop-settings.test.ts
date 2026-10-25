@@ -13,9 +13,9 @@ import {
   WINDOW_SURFACE_ACT_KIND,
 } from "@luke/host/contract";
 import { EXPERIMENT, HOST_CAPABILITY, type HostCapability } from "@luke/settings";
-import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsView } from "@luke/settings/settings-views";
+import { SETTINGS_VIEW, type SettingsView } from "@luke/settings/settings-views";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
-import { experimentsOn, settingsView } from "@luke/settings/testing";
+import { appSettingsWire, experimentsOn, settingsView } from "@luke/settings/testing";
 import { UPDATE_STATUS } from "@luke/settings/update";
 import { MICROPHONE_STATUS } from "@luke/voice/audio";
 import { NOTIFICATIONS_GRANTOR, NOTIFICATIONS_STATUS } from "@luke/voice/settings-controls";
@@ -27,10 +27,10 @@ import { afterEach, beforeEach, test } from "vitest";
 import { useAct } from "../act.js";
 import { runAppCommand } from "../app-commands.js";
 import { CallCardContext, type CallCardInput, callControls } from "../call/call-card.js";
-import { MOUSE_BUTTON } from "../navigation-history.js";
+import { MOUSE_BUTTON, type NavigationHistory } from "../navigation-history.js";
 import type { SettingsPanelProps } from "../settings/settings-panel.js";
 import type { WorkspaceSettingsControl } from "../settings/workspace-page.js";
-import { SHELL_ROOM } from "../shell-room.js";
+import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import {
   fakeActPort,
   fakeActPortAnswering,
@@ -41,7 +41,15 @@ import {
 import { copyingInto, fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import { DESKTOP_CAPABILITIES, handState } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
-import { DesktopSettings } from "./desktop-settings.js";
+import {
+  chooseMenuItem,
+  menuItems,
+  pressInPhoneHead,
+  readPhoneHead,
+} from "../testing/phone-head.js";
+import { newestToastAction, newestToastSays } from "../testing/toast.js";
+import { ToastHost } from "../toast.js";
+import { DesktopSettings, type SettingsStep } from "./desktop-settings.js";
 import { SIDEBAR_OVERLAY } from "./sidebar-collapse.js";
 
 /** The task kinds on the act port, which the call-card test's fake refuses. */
@@ -61,12 +69,13 @@ const isAgentRead = (kind: string): boolean =>
 /**
  * Settings as the desktop draws it: the sidebar is the one list of pages,
  * grouped under the workspace the tasks' sidebar lists, Account, and This
- * Mac, opening on Profile, and every option moved by the one-home layout is
+ * Mac, opening on Account, and every option moved by the one-home layout is
  * drawn on its new page and on no other, as the search finds it there too.
  * The Workspace page is titled with the listed workspace and follows the
  * sidebar. The Integrations page's own search stands beside the sidebar's:
  * Command-F lands in the nearer one, and a sidebar result that opens an
- * integration hands its query down.
+ * integration hands its query down. The page list is one Tab stop that ↑ and ↓
+ * walk, opening nothing until a page is pressed.
  */
 
 const ignore = () => undefined;
@@ -77,7 +86,7 @@ const PAGE_GROUPS = [
   { heading: "Workspace", rows: ["Workspace"] },
   {
     heading: "Account",
-    rows: ["Profile", "Agents", "Integrations", "Skills", "Plan template", "Experimental"],
+    rows: ["Account", "Agents", "Integrations", "Skills", "Plan template", "Experimental"],
   },
   {
     heading: "This Mac",
@@ -116,11 +125,12 @@ function listing(listed: Workspace): WorkspaceSettingsControl {
 
 /** Each moved option's words, the one page that holds it, and the name the search finds its row by where that differs. */
 const HOMES = [
-  { words: "Sign out", page: "Profile" },
-  { words: "Delete account", page: "Profile" },
+  { words: "Sign out", page: "Account" },
+  { words: "Delete account", page: "Account" },
   { words: "Quiet Music and Spotify", page: "Voice" },
   { words: "Notify me when a coding agent finishes or needs me", page: "Notifications" },
   { words: "Let agents run commands on this Mac", page: "This Mac" },
+  { words: "Open Luke at login", page: "This Mac" },
   { words: "Check for updates", page: "About", found: "Updates" },
   { words: "Changelog", page: "About" },
   { words: "Minimize inline comments", page: "Appearance" },
@@ -139,6 +149,7 @@ function settingsProps(
   view: SettingsView,
   onViewChange: (view: SettingsView) => void,
   capabilities: readonly HostCapability[] = DESKTOP_CAPABILITIES,
+  settings: SettingsPanelProps["settings"] = settingsView({ voiceAvailable: true }),
 ) {
   return {
     account: ACCOUNT,
@@ -172,23 +183,47 @@ function settingsProps(
       onInstall: ignore,
       onOpenLatest: ignore,
     },
-    settings: settingsView({ voiceAvailable: true }),
+    settings,
   } satisfies SettingsPanelProps;
 }
 
-/** Settings holding its own page, as the app holds it, opened on Profile, over the workspaces the tasks' sidebar lists where it is handed them. */
+/** A history with nothing to go back or forward to. */
+const NO_HISTORY: NavigationHistory = {
+  canGoBack: false,
+  canGoForward: false,
+  onBack: ignore,
+  onForward: ignore,
+  steps: { back: [], forward: [] },
+  onGoTo: ignore,
+};
+
+/**
+ * Settings holding its own page, as the app holds it, opened on Account,
+ * over the workspaces the tasks' sidebar lists where it is handed them; in
+ * `room`, standing on its list or its page as `step` says, over `history`
+ * where it is named.
+ */
 function SettingsHarness({
   workspace,
   opensOn = SETTINGS_VIEW.ACCOUNT,
   call,
   onExit = ignore,
   capabilities,
+  stored,
+  room = SHELL_ROOM.WIDE,
+  step = { listed: true, onList: ignore },
+  history = NO_HISTORY,
 }: {
   workspace?: WorkspaceSettingsControl;
   opensOn?: SettingsView;
   call?: CallCardInput;
   onExit?: () => void;
   capabilities?: readonly HostCapability[];
+  /** The stored settings the pages read, the defaults where left out. */
+  stored?: SettingsPanelProps["settings"];
+  room?: ShellRoom;
+  step?: SettingsStep;
+  history?: NavigationHistory;
 }): React.JSX.Element {
   const [view, setView] = useState<SettingsView>(opensOn);
   // The card is handed down as the window's root hands it, past every page between.
@@ -203,18 +238,11 @@ function SettingsHarness({
       onResize: ignore,
       staged: false,
     },
-    history: {
-      canGoBack: false,
-      canGoForward: false,
-      onBack: ignore,
-      onForward: ignore,
-      steps: { back: [], forward: [] },
-      onGoTo: ignore,
-    },
-    room: SHELL_ROOM.WIDE,
-    step: { listed: true, onList: ignore },
+    history,
+    room,
+    step,
     settings: {
-      ...settingsProps(view, setView, capabilities),
+      ...settingsProps(view, setView, capabilities, stored),
       ...(workspace ? { workspace } : undefined),
     },
     onExit,
@@ -305,12 +333,67 @@ function openPage(page: HTMLElement, title: string): HTMLElement {
   return drawn;
 }
 
-test("Settings opens on Profile, and its sidebar lists every page once under Workspace, Account, and This Mac where no workspace is listed", () => {
+test("Settings opens on Account, and its sidebar lists every page once under Workspace, Account, and This Mac where no workspace is listed", () => {
   const page = mount(createElement(SettingsHarness));
   assert.deepEqual(pageGroups(page), PAGE_GROUPS);
   const current = pageButtons(page).find((each) => each.getAttribute("aria-current") === "page");
-  assert.equal(current?.textContent, "Profile");
-  assert.equal(shownTitle(page), "Profile");
+  assert.equal(current?.textContent, "Account");
+  assert.equal(shownTitle(page), "Account");
+});
+
+test("Settings names its page once, by the page's own header, which also holds the page's Reset", () => {
+  const page = mount(
+    createElement(SettingsHarness, {
+      opensOn: SETTINGS_VIEW.APPEARANCE,
+      stored: settingsView({ voiceAvailable: true, zoom: 125 }),
+    }),
+  );
+
+  const titles = [...page.querySelectorAll("h1")];
+
+  assert.deepEqual(
+    titles.map((title) => title.textContent),
+    ["Appearance"],
+  );
+  const header = titles[0]?.closest("header");
+  assert.ok(header, "the title stands in the page's header");
+  assert.deepEqual(
+    [...header.querySelectorAll("button")].map((button) => button.textContent),
+    ["Reset to defaults"],
+  );
+});
+
+test("a page group's head folds its pages, its one chevron turning with the fold, and a press brings them back", () => {
+  const page = mount(createElement(SettingsHarness));
+  const head = (name: string) =>
+    [
+      ...page.querySelectorAll<HTMLButtonElement>(
+        'nav[aria-label="Settings pages"] button[aria-expanded]',
+      ),
+    ].find((each) => each.textContent === name) ?? assert.fail(`${name} heads a group`);
+  const account = head("Account");
+  const turns = () => [...account.querySelectorAll(".luke-disclosure-turn")];
+  assert.equal(turns().length, 1, "the head draws one chevron");
+  assert.deepEqual(
+    [account.getAttribute("aria-expanded"), turns()[0]?.getAttribute("data-open")],
+    ["true", "true"],
+  );
+  assert.ok(pageButtons(page).some((each) => each.textContent === "Account"));
+
+  act(() => account.click());
+  assert.deepEqual(
+    [account.getAttribute("aria-expanded"), turns()[0]?.getAttribute("data-open")],
+    ["false", "false"],
+  );
+  assert.ok(!pageButtons(page).some((each) => each.textContent === "Account"));
+  assert.ok(
+    pageButtons(page).some((each) => each.textContent === "Workspace"),
+    "the other groups stand",
+  );
+
+  act(() => account.click());
+  assert.equal(turns()[0]?.getAttribute("data-open"), "true");
+  assert.ok(pageButtons(page).some((each) => each.textContent === "Account"));
 });
 
 test("the sidebar's first group is headed by the listed workspace's name, over its Workspace page", () => {
@@ -335,7 +418,7 @@ test("the sidebar lists Memory under Workspace and its search finds it only whil
   });
 
   assert.deepEqual(pageGroups(on)[0]?.rows, ["Workspace", "Memory"]);
-  assert.equal(shownTitle(on), "Profile");
+  assert.equal(shownTitle(on), "Account");
   openPage(on, "Memory");
   assert.equal(shownTitle(on), "Memory");
 });
@@ -383,6 +466,24 @@ test("the Settings search finds each moved option under its new page", () => {
   }
 });
 
+test("Open Luke at login stands on This Mac under Startup, drawn as the choice already stored, and Appearance holds it no more", () => {
+  const page = mount(
+    createElement(SettingsHarness, {
+      stored: settingsView({ voiceAvailable: true, openAtLogin: false }),
+    }),
+  );
+
+  const appearance = openPage(page, "Appearance").textContent ?? "";
+  const thisMac = openPage(page, "This Mac");
+  const login = thisMac.querySelector<HTMLButtonElement>('button[aria-label="Open Luke at login"]');
+  assert.ok(login, "This Mac draws the switch");
+  const group = login.closest("[aria-labelledby]");
+  const heading = group && document.getElementById(group.getAttribute("aria-labelledby") ?? "");
+  assert.equal(heading?.textContent, "Startup");
+  assert.equal(login.getAttribute("aria-checked"), "false");
+  assert.equal(appearance.includes("Open Luke at login"), false);
+});
+
 test("a platform without voice, notifications, Mac commands, or updates lists none of their pages, draws About without its Updates row, and its search finds none of them", () => {
   const missing: readonly HostCapability[] = [
     HOST_CAPABILITY.VOICE,
@@ -410,11 +511,12 @@ test("a platform without voice, notifications, Mac commands, or updates lists no
   }
 });
 
-test("a browser, which is no installed app, draws Appearance without Zoom or Open Luke at login, lists no Keyboard shortcuts page, heads its last group This device, and its search finds none of them; the desktop draws them all", () => {
+test("a browser, which is no installed app, draws Appearance without Zoom and This Mac without Startup, lists no Keyboard shortcuts page, heads its last group This device, and its search finds none of them; the desktop draws them all", () => {
   const drawnOn = (capabilities: readonly HostCapability[]) => {
     const page = mount(createElement(SettingsHarness, { capabilities }));
     const groups = pageGroups(page);
     const appearance = openPage(page, "Appearance").textContent ?? "";
+    const thisMac = openPage(page, "This Mac").textContent ?? "";
     const found = ["Zoom", "Open Luke at login", "Keyboard shortcuts"].flatMap((words) =>
       foundUnder(page, words),
     );
@@ -424,7 +526,8 @@ test("a browser, which is no installed app, draws Appearance without Zoom or Ope
     return {
       last: groups.at(-1),
       zoom: appearance.includes("Zoom"),
-      login: appearance.includes("Open Luke at login"),
+      login: thisMac.includes("Open Luke at login"),
+      startup: thisMac.includes("Startup"),
       found,
     };
   };
@@ -438,11 +541,13 @@ test("a browser, which is no installed app, draws Appearance without Zoom or Ope
   assert.ok(desktop.last?.rows.includes("Keyboard shortcuts"));
   assert.equal(desktop.zoom, true);
   assert.equal(desktop.login, true);
+  assert.equal(desktop.startup, true);
   assert.notDeepEqual(desktop.found, []);
   assert.equal(browser.last?.heading, "This device");
   assert.equal(browser.last?.rows.includes("Keyboard shortcuts"), false);
   assert.equal(browser.zoom, false);
   assert.equal(browser.login, false);
+  assert.equal(browser.startup, false);
   assert.deepEqual(browser.found, []);
 });
 
@@ -480,7 +585,7 @@ test("Keyboard shortcuts lists Show terminal and the Call group's chords only on
     document.body.innerHTML = "";
     return {
       terminal: words.includes("Show terminal"),
-      call: words.includes("Toggle microphone"),
+      call: words.includes("Mute or unmute microphone"),
       found,
     };
   };
@@ -526,36 +631,27 @@ test("Keyboard shortcuts lists Files changed's own keys under a group of their o
   assert.deepEqual(foundUnder(page, "Collapse or expand all files"), ["Keyboard shortcuts"]);
 });
 
-test("Appearance draws every diff setting in a Diffs group of its own, under the page's own rows", () => {
+test("Appearance draws every diff setting in the Diff, Lines, and Text groups, in the order the View options popover draws them", () => {
   const page = mount(createElement(SettingsHarness, { opensOn: SETTINGS_VIEW.APPEARANCE }));
-  const group =
-    [...page.querySelectorAll("section[aria-labelledby]")].find(
-      (each) =>
-        document.getElementById(each.getAttribute("aria-labelledby") ?? "")?.textContent ===
-        "Diffs",
-    ) ?? assert.fail("a Diffs group stands");
-  assert.equal(group.getAttribute("data-search-anchor"), SETTINGS_SECTION.APPEARANCE_DIFFS);
-  assert.deepEqual(
-    [...group.querySelectorAll('[role="switch"], [aria-haspopup]')].map(
-      // A pop-up's name ends with the value it names, which is not the row's.
-      (control) => control.getAttribute("aria-label")?.split(": ")[0],
-    ),
-    [
-      "Line numbers",
-      "Word wrap",
-      "Layout",
-      "Indicators",
-      "Changed words",
-      "Backgrounds",
-      "Dark theme",
-      "Light theme",
-      "Font",
-      "Font size",
-      "Line height",
-      "Ligatures",
-      "Minimize inline comments",
-    ],
-  );
+  const groups = [...page.querySelectorAll("section[aria-labelledby]")].flatMap((each) => {
+    const title = document.getElementById(each.getAttribute("aria-labelledby") ?? "")?.textContent;
+    return title === undefined || title === null
+      ? []
+      : [
+          [
+            title,
+            [...each.querySelectorAll('[role="switch"], [aria-haspopup]')].map(
+              // A pop-up's name ends with the value it names, which is not the row's.
+              (control) => control.getAttribute("aria-label")?.split(": ")[0],
+            ),
+          ],
+        ];
+  });
+  assert.deepEqual(groups, [
+    ["Diff", ["Layout", "Changed words", "Indicators", "Backgrounds"]],
+    ["Lines", ["Word wrap", "Line numbers", "Minimize inline comments"]],
+    ["Text", ["Dark theme", "Light theme", "Font", "Font size", "Line height", "Ligatures"]],
+  ]);
 });
 
 test("a page turned to opens at its top, not where the last page was scrolled", () => {
@@ -729,11 +825,11 @@ test("the plan template's version history keeps a call's card at the foot of its
   });
   // The card's presses sent as `App` sends them, over the bridge.
   function CallSettings(): React.JSX.Element {
-    const { tell } = useAct();
+    const { press } = useAct();
     const call: CallCardInput = {
       card: { taskName: "Checkout redesign", status: undefined, microphoneMuted: false },
       speakerMuted: false,
-      controls: callControls(tell, false),
+      controls: callControls(press, false),
     };
     return createElement(SettingsHarness, { opensOn: SETTINGS_VIEW.PLAN_TEMPLATE, call });
   }
@@ -815,7 +911,7 @@ test("while the plan template is read its page stands the document's own head, i
 
   assert.deepEqual(
     [reading?.startsWith("Plan template"), placeholder()],
-    [true, "Loading your plan template"],
+    [true, "Reading your plan template"],
   );
   land();
   await act(async () => {
@@ -824,6 +920,285 @@ test("while the plan template is read its page stands the document's own head, i
   assert.equal(placeholder(), undefined);
   assert.ok(page.querySelector('button[aria-label="Version history"]'), "the template is drawn");
   assert.equal(head(), reading);
+});
+
+test("the plan template names itself once, by a header holding its title and its actions, while it is read and once it lands", async () => {
+  const { promise: read, resolve: land } = Promise.withResolvers<void>();
+  fakeAppBridge({
+    ...fakeAppBridgeCalls(),
+  });
+  fakeActPort({
+    [ACT_KIND.PLAN_TEMPLATE_READ]: () =>
+      read.then(() => ({ template: "# Context\n", custom: false })),
+  });
+  const page = mount(createElement(SettingsHarness, { opensOn: SETTINGS_VIEW.PLAN_TEMPLATE }));
+  /** The page's titles, and the buttons of the header the first stands in. */
+  const named = () => {
+    const titles = [...page.querySelectorAll("h1")];
+    return {
+      titles: titles.map((title) => title.textContent),
+      acts: [...(titles[0]?.closest("header")?.querySelectorAll("button") ?? [])].map((button) =>
+        button.getAttribute("aria-label"),
+      ),
+    };
+  };
+
+  assert.deepEqual(named().titles, ["Plan template"]);
+  land();
+  await act(async () => {
+    for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
+  });
+
+  assert.deepEqual(named(), { titles: ["Plan template"], acts: ["Version history"] });
+});
+
+test("a plan template that could not be read keeps its heading, over the failure and its Retry", async () => {
+  fakeAppBridge({
+    ...fakeAppBridgeCalls(),
+  });
+  fakeActPort({
+    [ACT_KIND.PLAN_TEMPLATE_READ]: () => Promise.reject(refusedOnPort("Not here.")),
+  });
+  const page = mount(createElement(SettingsHarness, { opensOn: SETTINGS_VIEW.PLAN_TEMPLATE }));
+  await act(async () => {
+    for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
+  });
+
+  assert.deepEqual(
+    [...page.querySelectorAll("h1")].map((title) => title.textContent),
+    ["Plan template"],
+  );
+  assert.equal(page.textContent?.includes("The template could not be read."), true);
+});
+
+test("the plan template's header says, under its title, what the template is for and that it follows the account, which a search for it lands on", async () => {
+  fakeActPort({
+    [ACT_KIND.PLAN_TEMPLATE_READ]: () =>
+      Promise.resolve({ template: "# Context\n", custom: false }),
+  });
+  const page = mount(createElement(SettingsHarness, { opensOn: SETTINGS_VIEW.PLAN_TEMPLATE }));
+  await act(async () => {
+    for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
+  });
+
+  const header =
+    page.querySelector<HTMLElement>('section[aria-label="Plan template"] header') ??
+    assert.fail("the template page has a header");
+  assert.equal(
+    header.querySelector("p")?.textContent,
+    "New plans start as a copy of this template. Follows your account.",
+  );
+  assert.ok(header.querySelector('[data-search-anchor="plan-template"]'), "a search lands in it");
+});
+
+test("Reset to defaults resets the plan template at once, asking nothing, and its toast's Undo writes back the words the page held", async () => {
+  const written: (string | null)[] = [];
+  fakeActPort({
+    [ACT_KIND.PLAN_TEMPLATE_READ]: () => Promise.resolve({ template: "# Mine\n", custom: true }),
+    [ACT_KIND.PLAN_TEMPLATE_WRITE]: ({ template }) => {
+      written.push(template);
+      return Promise.resolve({ template: template ?? "# Default\n", custom: template !== null });
+    },
+  });
+  const page = mount(
+    createElement(
+      "div",
+      null,
+      createElement(SettingsHarness, { opensOn: SETTINGS_VIEW.PLAN_TEMPLATE }),
+      createElement(ToastHost),
+    ),
+  );
+  const settle = () =>
+    act(async () => {
+      for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
+    });
+  /** Which of the two templates the page's document draws. */
+  const shown = () => {
+    const words = page.querySelector(".template-document")?.textContent ?? "";
+    return ["Mine", "Default"].filter((name) => words.includes(name));
+  };
+  await settle();
+  assert.deepEqual(shown(), ["Mine"]);
+
+  const reset = [...page.querySelectorAll("button")].find(
+    (button) => button.textContent === "Reset to defaults",
+  );
+  assert.ok(reset, "a template of the account's own offers its reset");
+  act(() => reset.click());
+  await settle();
+
+  assert.equal(document.querySelector('[role="alertdialog"], [role="dialog"]'), null);
+  assert.deepEqual(
+    { written, shown: shown(), toast: newestToastSays()?.startsWith("Plan template reset") },
+    { written: [null], shown: ["Default"], toast: true },
+  );
+
+  const undo = newestToastAction();
+  assert.equal(undo?.textContent, "Undo");
+  act(() => undo?.click());
+  await settle();
+
+  assert.deepEqual({ written, shown: shown() }, { written: [null, "# Mine\n"], shown: ["Mine"] });
+});
+
+test("on a phone the page list is headed by its way out alone, named for the step Back goes to, and Settings centred, with no Back and Forward, and the way out leaves as Back did", () => {
+  let exits = 0;
+  const page = mount(
+    createElement(SettingsHarness, {
+      room: SHELL_ROOM.NARROW,
+      onExit: () => {
+        exits += 1;
+      },
+      history: {
+        ...NO_HISTORY,
+        canGoBack: true,
+        steps: {
+          back: [{ at: 0, title: { label: "Inbox" }, page: { kind: "inbox", of: undefined } }],
+          forward: [],
+        },
+      },
+    }),
+  );
+
+  assert.deepEqual(readPhoneHead(page, "settings-pages"), {
+    start: ["Back"],
+    title: "Settings",
+    end: [],
+  });
+  const names = [...page.querySelectorAll("button")].map((each) => each.getAttribute("aria-label"));
+  assert.ok(!names.includes("Back") && !names.includes("Forward"), "no Back and Forward stand");
+  assert.ok(
+    page.querySelector('nav[aria-label="Settings pages"] input'),
+    "the search stands below",
+  );
+  pressInPhoneHead(page, "settings-pages", "Back");
+  assert.equal(exits, 1);
+});
+
+test("on a phone a page is headed by the way back to the list and its reset in the ⋯, its title its own heading's, which leaves the title's line", async () => {
+  const resets: unknown[] = [];
+  fakeActPort({
+    [ACT_KIND.SETTINGS_RESET]: (payload) => {
+      resets.push(payload);
+      return Promise.resolve({
+        status: ACTION_RESULT_STATUS.ACCEPTED,
+        settings: appSettingsWire(settingsView()),
+      });
+    },
+  });
+  let listings = 0;
+  const page = mount(
+    createElement(SettingsHarness, {
+      opensOn: SETTINGS_VIEW.APPEARANCE,
+      room: SHELL_ROOM.NARROW,
+      step: {
+        listed: false,
+        onList: () => {
+          listings += 1;
+        },
+      },
+      stored: settingsView({ voiceAvailable: true, zoom: 125 }),
+    }),
+  );
+
+  assert.deepEqual(readPhoneHead(page, "settings-page"), {
+    start: ["Settings"],
+    title: undefined,
+    end: ["Appearance actions"],
+  });
+  const section = page.querySelector('section[aria-label="Appearance"]');
+  assert.deepEqual(
+    [...(section?.querySelectorAll("h1") ?? [])].map((each) => each.textContent),
+    ["Appearance"],
+    "the page names itself once",
+  );
+  assert.ok(
+    ![...(section?.querySelectorAll("button") ?? [])].some(
+      (each) => each.textContent === "Reset to defaults",
+    ),
+    "the title's line holds no reset",
+  );
+  pressInPhoneHead(page, "settings-page", "Appearance actions");
+  assert.deepEqual(menuItems(), [{ label: "Reset to defaults", disabled: false }]);
+  chooseMenuItem("Reset to defaults");
+  await act(async () => {
+    for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
+  });
+  assert.equal(resets.length, 1, "the ⋯'s reset resets the page");
+  pressInPhoneHead(page, "settings-page", "Settings");
+  assert.equal(listings, 1);
+});
+
+test("on a phone the plan template is headed by the way back and a ⋯ holding Version history and Reset to defaults, which leave its title's line", async () => {
+  fakeAppBridge({
+    ...fakeAppBridgeCalls(),
+  });
+  fakeActPort({
+    [ACT_KIND.PLAN_TEMPLATE_READ]: () => Promise.resolve({ template: "# Context\n", custom: true }),
+    [ACT_KIND.PLAN_TEMPLATE_WRITE]: () =>
+      Promise.resolve({ template: "# Default\n", custom: false }),
+  });
+  const page = mount(
+    createElement(SettingsHarness, {
+      opensOn: SETTINGS_VIEW.PLAN_TEMPLATE,
+      room: SHELL_ROOM.NARROW,
+      step: { listed: false, onList: ignore },
+    }),
+  );
+  await act(async () => {
+    for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
+  });
+
+  assert.deepEqual(readPhoneHead(page, "settings-page"), {
+    start: ["Settings"],
+    title: undefined,
+    end: ["Plan template actions"],
+  });
+  assert.equal(
+    page.querySelector('.task-title-line button[aria-label="Version history"]'),
+    null,
+    "the title's line holds no actions",
+  );
+  pressInPhoneHead(page, "settings-page", "Plan template actions");
+  assert.deepEqual(
+    menuItems().map((item) => item.label),
+    ["Version history", "Reset to defaults"],
+  );
+  chooseMenuItem("Reset to defaults");
+  assert.equal(
+    document.querySelector('[role="alertdialog"], [role="dialog"]'),
+    null,
+    "the reset asks nothing",
+  );
+  await act(async () => {
+    for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
+  });
+  pressInPhoneHead(page, "settings-page", "Plan template actions");
+  assert.deepEqual(
+    menuItems().map((item) => item.label),
+    ["Version history"],
+    "the reset left the template at its default, with nothing to reset",
+  );
+  chooseMenuItem("Version history");
+  assert.ok(page.querySelector('nav[aria-label="Versions"]'), "the template's versions stand");
+});
+
+test("a wide room keeps the page list's Back row and title and a page's own title and reset, with no phone's header", () => {
+  const page = mount(
+    createElement(SettingsHarness, {
+      opensOn: SETTINGS_VIEW.APPEARANCE,
+      stored: settingsView({ voiceAvailable: true, zoom: 125 }),
+    }),
+  );
+
+  assert.equal(page.querySelector('header[data-look="phone"]'), null);
+  assert.equal(page.querySelector(".settings-pages-title")?.textContent, "Settings");
+  assert.equal(page.querySelector(".settings-pages-title")?.getAttribute("data-variant"), "title");
+  assert.equal(shownTitle(page), "Appearance");
+  assert.ok(
+    [...page.querySelectorAll("button")].some((each) => each.textContent === "Reset to defaults"),
+    "the reset ends the page's title line",
+  );
 });
 
 test("a page's row in the sidebar offers Copy link on a right-click, copying the page's link under the listed workspace", async () => {
@@ -842,4 +1217,96 @@ test("a page's row in the sidebar offers Copy link on a right-click, copying the
   await act(async () => item.click());
 
   assert.deepEqual(copied, ["https://tryluke.dev/acme/settings/workspace"]);
+});
+
+test("the page list is one Tab stop, and ↑ and ↓ walk its pages across the groups without opening one", () => {
+  const page = mount(createElement(SettingsHarness));
+  const buttons = pageButtons(page);
+  const open = buttons.findIndex((each) => each.getAttribute("aria-current") === "page");
+  assert.notEqual(open, 0, "the open page is not the first, so Tab's landing says which it chose");
+  assert.deepEqual(
+    buttons.map((each) => each.tabIndex),
+    buttons.map((_, at) => (at === open ? 0 : -1)),
+    "Tab lands on the open page",
+  );
+  act(() => buttons[0]?.focus());
+  const press = (key: string) =>
+    act(() => {
+      document.activeElement?.dispatchEvent(
+        new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true }),
+      );
+    });
+  press("ArrowDown");
+  assert.equal(document.activeElement, buttons[1]);
+  press("ArrowUp");
+  press("ArrowUp");
+  assert.equal(document.activeElement, buttons.at(-1), "↑ wraps to the last page");
+  assert.equal(shownTitle(page), "Account", "walking the list opens no page");
+  assert.equal(buttons.filter((each) => each.tabIndex === 0).length, 1);
+});
+
+/** Every line that says where a page's settings are kept. */
+const KEEP_WORDS = [
+  "Kept on this Mac",
+  "Kept in this browser",
+  "Follows your account",
+  "Follows your workspace",
+];
+
+/** Each line saying where settings are kept that stands whole in `drawn`, the page's head's and any section's alike. */
+function keepLines(drawn: HTMLElement): string[] {
+  return [...drawn.querySelectorAll("*")]
+    .filter((each) => each.children.length === 0)
+    .map((each) => each.textContent ?? "")
+    .filter((words) => KEEP_WORDS.includes(words));
+}
+
+/** Where each page drawn through Settings' own head says its settings are kept, or nothing for one keeping nothing. */
+const PAGE_KEEPS = [
+  { title: "Account", keep: ["Follows your account"] },
+  { title: "Workspace", keep: ["Follows your workspace"] },
+  { title: "Agents", keep: ["Follows your account"] },
+  { title: "Integrations", keep: ["Follows your account"] },
+  { title: "Skills", keep: ["Follows your account"] },
+  { title: "Experimental", keep: ["Follows your account"] },
+  { title: "Voice", keep: ["Kept on this Mac"] },
+  { title: "Appearance", keep: ["Kept on this Mac"] },
+  { title: "Notifications", keep: ["Kept on this Mac"] },
+  { title: "This Mac", keep: ["Kept on this Mac"] },
+  { title: "About", keep: [] },
+  { title: "Keyboard shortcuts", keep: [] },
+];
+
+test("each Settings page says once, under its title, where its settings are kept, and a row kept elsewhere says so under its label", () => {
+  const page = mount(createElement(SettingsHarness));
+  for (const { title, keep } of PAGE_KEEPS) {
+    const drawn = openPage(page, title);
+    assert.deepEqual(keepLines(drawn), keep, title);
+    const header =
+      drawn.querySelector<HTMLElement>(".luke-page-header") ?? assert.fail(`${title} has a header`);
+    assert.deepEqual(keepLines(header), keep, `${title}'s line stands in its head`);
+  }
+
+  const account = openPage(page, "Account").textContent ?? "";
+  assert.ok(account.includes("Never what you type or say. Kept on this Mac."));
+  const voice = openPage(page, "Voice").textContent ?? "";
+  assert.ok(
+    voice.includes("Choosing one ends the conversation in progress. Follows your account."),
+  );
+});
+
+test("a browser says its own store is this browser's, never this Mac's", () => {
+  const page = mount(
+    createElement(SettingsHarness, {
+      capabilities: DESKTOP_CAPABILITIES.filter((each) => each !== HOST_CAPABILITY.DESKTOP_APP),
+    }),
+  );
+  const said = pageButtons(page).flatMap((button) => {
+    const title = button.textContent ?? "";
+    return title === "Plan template" ? [] : keepLines(openPage(page, title));
+  });
+
+  assert.ok(said.includes("Kept in this browser"));
+  assert.equal(said.includes("Kept on this Mac"), false);
+  assert.equal(document.body.textContent?.includes("Kept on this Mac"), false);
 });

@@ -1,4 +1,5 @@
 import {
+  type AnchorHTMLAttributes,
   type ButtonHTMLAttributes,
   type MouseEvent,
   type ReactNode,
@@ -8,9 +9,13 @@ import {
   useRef,
   useState,
 } from "react";
+import { cn } from "../../cn.js";
 import { CheckIcon } from "../../face/glyphs.js";
 import { PRESS_FACE, PRESS_PULSE, pulsePress } from "../../press-pulse.js";
 import { replayMotion } from "../../replay-motion.js";
+import { buttonVariants, Button as ShadcnButton } from "../../shadcn/button.js";
+import { rovingItem } from "../roving-keys/roving-keys.js";
+import { useSettled } from "../spinner/settle-wait.js";
 import { SpinnerRing } from "../spinner/spinner.js";
 
 /**
@@ -42,8 +47,9 @@ import { SpinnerRing } from "../spinner/spinner.js";
  * microphone muted is never read as one hearing you.
  *
  * A button that is not `tabbable` is out of the tab order but takes the
- * focus when it is handed it, for a roving stop: one of a group the
- * keyboard enters at one place and moves through by its own keys.
+ * focus when it is handed it. A `roving` one is an item of a roving set
+ * (`useRovingKeys`): one of a group the keyboard enters at one place and
+ * moves through by the arrows, whose box keeps its tab order.
  *
  * A button that keeps focus (`keepFocus`) leaves the focus where it is
  * when a pointer presses it, so a field beside it that holds the keys, as a
@@ -54,9 +60,12 @@ import { SpinnerRing } from "../spinner/spinner.js";
  * `focusableWhenDisabled`, where it stays in it, so a hint over it can say
  * why, and refuses its press instead, with a shake. Every press a button
  * or a link drawn as one takes is answered with a pulse of its face, and a
- * submit's arrow lifts as it sends. A busy button keeps its width, its
- * words standing hidden under a turning ring, refuses its press, and is
- * named by `busyLabel` ("Saving") for as long as the ring stands. A labelled
+ * submit's arrow lifts as it sends. A busy button refuses its press and is
+ * named by `busyLabel` ("Saving") from the press on; once its press has been
+ * out `--luke-settle-delay` (180ms) it keeps its width, its words standing
+ * hidden under the one ring every wait turns (`SpinnerRing`), so an act that
+ * lands at once never flashes one. Every kind of button, a split one's, a
+ * folding one's, a provider's, takes the same two (`BusyProps`). A labelled
  * button whose act has landed may say so, `done`: a check springs in where
  * its words stood, it refuses another press, and `onDone` hears once the
  * check has been seen, at once where no motion runs. A busy button told its
@@ -80,8 +89,11 @@ import { SpinnerRing } from "../spinner/spinner.js";
  * somewhere: a download, another site, an app's own scheme. The browser
  * follows its address, so it opens in a new tab, copies, and hands off as
  * any link does; it is never unavailable or busy, since a link that cannot
- * be followed is not drawn. An IconButtonLink is an IconButton's look on a
- * link, named by its `label`, which may open in a `newTab`.
+ * be followed is not drawn. A window that opens addresses through its own
+ * door stops the browser's follow in `onClick`, and the link is still what a
+ * right-click, a reader's link list and ⌘-click find. An IconButtonLink is an
+ * IconButton's look on a link, named by its `label`, which may open in a
+ * `newTab`.
  *
  * A labelled button is named by its words, unless it is given a `label`
  * that says more of what it does than they have room for ("Start a coding
@@ -107,6 +119,15 @@ import { SpinnerRing } from "../spinner/spinner.js";
  * An app's hint wraps a button and hands it the pointer and focus handlers
  * it shows and goes on, and the chord it names (`HintProps`), which land on
  * the button itself, so a reader is told the shortcut by the control.
+ *
+ * Each is drawn by shadcn/ui's Base UI button (`../../shadcn/button.tsx`),
+ * a native button, its box, type, and edge in Tailwind over the theme; a
+ * link drawn as one wears the same classes (`buttonVariants`). Its look,
+ * the `--luke-button-*` inks each variant and state sets, its motions, and
+ * what a container restyles it by stay in `button.css`, because a
+ * container's sheet sets those inks from the components layer, which a
+ * utility would outrank. It keeps the `luke-button` class and its `data-`
+ * attributes, which those sheets and the apps' own select it by.
  */
 
 /** What a press does, which is what a button looks like. */
@@ -162,18 +183,22 @@ export type ButtonType = (typeof BUTTON_TYPE)[keyof typeof BUTTON_TYPE];
 /**
  * A button that can be busy names what it is doing while it is, since its
  * words stand hidden under the ring and name nothing then; one that never is
- * names nothing more.
+ * names nothing more. Every kind of button takes this one shape.
  */
-type BusyProps =
-  | { busy?: false | undefined; busyLabel?: undefined; succeeded?: undefined }
+export type BusyProps =
+  | { busy?: false | undefined; busyLabel?: undefined }
   | {
-      /** Whether its press is out: it refuses another and shows a ring in place of its words. */
+      /** Whether its press is out: it refuses another and, once it has been out a moment, shows a ring in place of its words. */
       busy: boolean;
-      /** What it is named while busy, the act in progress ("Saving"). */
+      /** What it is named while busy, the act in progress ("Saving"), which a reader hears. */
       busyLabel: string;
-      /** Whether the press the ring stood for landed, read as the ring leaves: a check stands for a moment before its words come back. */
-      succeeded?: boolean | undefined;
     };
+
+/** A busy button's shape, and how its press landed. */
+type LandingProps = BusyProps & {
+  /** Whether the press the ring stood for landed, read as the ring leaves: a check stands for a moment before its words come back. */
+  succeeded?: boolean | undefined;
+};
 
 /** What an app's hint hands the button it wraps: when to show and go, and the chord it names. */
 type HintProps = Pick<
@@ -181,8 +206,21 @@ type HintProps = Pick<
   "onPointerEnter" | "onPointerLeave" | "onPointerDown" | "onFocus" | "onBlur" | "aria-keyshortcuts"
 >;
 
+/** What an app's hint hands the link it wraps: when to show and go, and the chord it names. */
+type LinkHintProps = Pick<
+  AnchorHTMLAttributes<HTMLAnchorElement>,
+  | "onPointerEnter"
+  | "onPointerLeave"
+  | "onPointerDown"
+  | "onTouchEnd"
+  | "onFocus"
+  | "onBlur"
+  | "aria-describedby"
+  | "aria-keyshortcuts"
+>;
+
 /** What every button takes, labelled or not. */
-type ButtonBase = BusyProps &
+type ButtonBase = LandingProps &
   HintProps & {
     variant?: ButtonVariant;
     shape?: ButtonShape;
@@ -195,6 +233,8 @@ type ButtonBase = BusyProps &
     focusableWhenDisabled?: boolean | undefined;
     /** Whether Tab stops on it; one that is not still takes the focus a roving group hands it. */
     tabbable?: boolean | undefined;
+    /** Whether it is an item of a `useRovingKeys` box, which keeps its tab order and walks it with the arrows. */
+    roving?: boolean | undefined;
     /** Whether a pointer's press leaves the focus where it is, as on a field beside it that holds the keys. */
     keepFocus?: boolean | undefined;
     /** Whether its glyph turns once as a press lands, as a refresh's or a retry's arrow does. */
@@ -212,6 +252,97 @@ type ButtonBase = BusyProps &
     /** Whether it goes to the page on show, which it is drawn and announced as. */
     "aria-current"?: "page" | undefined;
   };
+
+/** The box a button is drawn in: the control's, a row mark's, a glyph alone in either, or a menu's row. */
+type BoxSize = "control" | "compact" | "icon" | "icon-compact" | "row";
+
+/** The box a button of `variant` is drawn in, at `size`, with words or a glyph alone. */
+function boxSize(
+  variant: ButtonVariant | undefined,
+  size: ButtonSize | undefined,
+  iconOnly: boolean,
+): BoxSize {
+  const compact = size === BUTTON_SIZE.COMPACT;
+  if (iconOnly) return compact ? "icon-compact" : "icon";
+  if (variant === BUTTON_VARIANT.ROW) return "row";
+  return compact ? "compact" : "control";
+}
+
+/** How a button of `variant` gives under the pointer: the hand on the web, the Mac's arrow on the desktop, the arrow once it takes no press. */
+const PRESSABLE_CURSOR =
+  "cursor-pointer in-data-[luke-profile=desktop]:cursor-default disabled:cursor-default";
+
+/** What a button is drawn with: the shadcn button's box and shape, and the classes its look and state add. */
+interface ButtonLook {
+  readonly size: BoxSize;
+  readonly shape: "square" | "round";
+  readonly className: string;
+}
+
+/**
+ * What a button is drawn with: its box, and the faces its state takes.
+ * Note that the state's are decided here rather than by variants on the
+ * element, because two utilities for one property stand in an order no
+ * selector of theirs decides, as a busy button's cursor and the desktop's would.
+ */
+function buttonLook({
+  variant,
+  size,
+  shape,
+  iconOnly,
+  busy = false,
+  settled = false,
+  fades = true,
+}: {
+  variant: ButtonVariant | undefined;
+  size: ButtonSize | undefined;
+  shape: ButtonShape | undefined;
+  iconOnly: boolean;
+  /** Whether its press is out, which it says with a turning cursor. */
+  busy?: boolean;
+  /** Whether it takes no press, unavailable, busy, or done. */
+  settled?: boolean;
+  /** Whether it fades while disabled, as every button but a read-only one or a submit does. */
+  fades?: boolean;
+}): ButtonLook {
+  const box = boxSize(variant, size, iconOnly);
+  return {
+    size: box,
+    shape: shape === BUTTON_SHAPE.ROUND ? "round" : "square",
+    className: cn(
+      "luke-button",
+      busy ? "cursor-progress" : settled ? "cursor-default" : PRESSABLE_CURSOR,
+      fades && "disabled:opacity-disabled",
+    ),
+  };
+}
+
+/** The classes a link drawn as a button wears: the shadcn button's own, as shadcn dresses a link. */
+function linkClasses(look: ButtonLook): string {
+  return cn(buttonVariants(look));
+}
+
+/** The classes of a button's face, which hides under a busy ring once it shows and fades under a done check. */
+function faceClasses(size: BoxSize | undefined, ringShown: boolean, done: boolean): string {
+  return cn(
+    "luke-button-face inline-flex items-center gap-icon-gap min-w-0",
+    size === "compact" && "gap-1",
+    ringShown && "invisible",
+    done && "opacity-0",
+  );
+}
+
+/** The ring a busy button turns over its hidden face, the glyph's size, centred in its box. */
+function BusyRing(): React.JSX.Element {
+  return (
+    <span className="luke-button-ring absolute inset-0 m-auto size-control-icon" aria-hidden="true">
+      <SpinnerRing />
+    </span>
+  );
+}
+
+/** A button's words, cut with an ellipsis where its box is narrower than they are. */
+const WORDS = "luke-button-words overflow-hidden text-ellipsis";
 
 /** A pointer's press that leaves the focus where it is. */
 function preventFocusMove(event: MouseEvent<HTMLButtonElement>): void {
@@ -250,6 +381,7 @@ function stateProps(props: ButtonBase, name: string | undefined, done = false) {
     ref: props.ref,
     disabled: props.disabled === true && props.focusableWhenDisabled !== true,
     tabIndex: props.tabbable === false ? -1 : undefined,
+    ...(props.roving === true ? rovingItem() : undefined),
     "aria-disabled": refusing ? true : undefined,
     "aria-busy": props.busy === true ? true : undefined,
     "aria-label": busyName ?? name,
@@ -325,7 +457,12 @@ function DoneMark({
     };
   }, []);
   return (
-    <span ref={mark} className="luke-button-done" data-hold={hold || undefined} aria-hidden="true">
+    <span
+      ref={mark}
+      className="luke-button-done absolute inset-0 grid place-items-center"
+      data-hold={hold || undefined}
+      aria-hidden="true"
+    >
       <CheckIcon />
     </span>
   );
@@ -337,7 +474,7 @@ function DoneMark({
  * `settle` ends. Note that the ring's leaving is read as the draw sees it
  * rather than in an effect, so the check is in the first frame without it.
  */
-function useLanded(props: BusyProps): { landed: boolean; settle: () => void } {
+function useLanded(props: LandingProps): { landed: boolean; settle: () => void } {
   const busy = props.busy === true;
   const [wasBusy, setWasBusy] = useState(busy);
   const [landed, setLanded] = useState(false);
@@ -389,26 +526,46 @@ export function Button({
   children: ReactNode;
 }): React.JSX.Element {
   const { landed, settle } = useLanded(props);
+  const busy = props.busy === true;
+  const ringShown = useSettled(busy);
+  const shown = done || landed;
+  const state = stateProps(
+    readOnly ? { ...props, disabled: true } : landedProps(props, landed),
+    label,
+    shown,
+  );
   return (
-    <button
-      className="luke-button"
+    <ShadcnButton
+      {...state}
+      {...buttonLook({
+        variant: props.variant,
+        size,
+        shape: props.shape,
+        iconOnly: false,
+        busy,
+        settled: shown || state["aria-disabled"] === true,
+        fades: !readOnly,
+      })}
       data-size={size === BUTTON_SIZE.COMPACT ? BUTTON_SIZE.COMPACT : undefined}
       data-read-only={readOnly || undefined}
-      data-done={done || landed || undefined}
+      data-done={shown || undefined}
       aria-pressed={pressed}
-      {...stateProps(
-        readOnly ? { ...props, disabled: true } : landedProps(props, landed),
-        label,
-        done || landed,
-      )}
     >
-      <span className="luke-button-face" {...PRESS_FACE}>
+      <span
+        className={faceClasses(boxSize(props.variant, size, false), ringShown, shown)}
+        {...PRESS_FACE}
+      >
         {icon}
-        <span className="luke-button-words">{children}</span>
-        {trailing === undefined ? null : <span className="luke-button-trailing">{trailing}</span>}
+        <span className={WORDS}>{children}</span>
+        {trailing === undefined ? null : (
+          <span className="luke-button-trailing flex-none text-muted-foreground text-caption tabular-nums">
+            {trailing}
+          </span>
+        )}
       </span>
+      {ringShown ? <BusyRing /> : null}
       {done ? <DoneMark onShown={onDone} /> : landed ? <DoneMark hold onShown={settle} /> : null}
-    </button>
+    </ShadcnButton>
   );
 }
 
@@ -417,30 +574,41 @@ export function ButtonLink({
   href,
   variant,
   icon,
+  label,
   onClick,
   children,
-}: {
+  ...hint
+}: LinkHintProps & {
   href: string;
   variant?: ButtonVariant;
-  /** Called as the press leaves, before the browser follows the link. */
+  /** Called as the press leaves, before the browser follows the link; a press that is the window's to carry out stops the browser's with `preventDefault`. */
   onClick?: ((event: MouseEvent<HTMLAnchorElement>) => void) | undefined;
   /** The glyph before its words. */
   icon?: ReactNode;
+  /** Its accessible name, where it says more of what it does than its words have room for; it holds them. */
+  label?: string | undefined;
   children: ReactNode;
 }): React.JSX.Element {
   return (
     <a
-      className="luke-button"
+      className={linkClasses(
+        buttonLook({ variant, size: undefined, shape: undefined, iconOnly: false }),
+      )}
       data-variant={variant ?? BUTTON_VARIANT.QUIET}
+      {...hint}
       href={href}
+      aria-label={label}
       onClick={(event) => {
         pulse(event.currentTarget, variant);
         onClick?.(event);
       }}
     >
-      <span className="luke-button-face" {...PRESS_FACE}>
+      <span
+        className={faceClasses(boxSize(variant, undefined, false), false, false)}
+        {...PRESS_FACE}
+      >
         {icon}
-        <span className="luke-button-words">{children}</span>
+        <span className={WORDS}>{children}</span>
       </span>
     </a>
   );
@@ -453,7 +621,9 @@ export function IconButtonLink({
   label,
   variant,
   newTab = false,
-}: {
+  onClick,
+  ...hint
+}: LinkHintProps & {
   href: string;
   icon: ReactNode;
   /** Its accessible name, which a sighted reader has from the glyph. */
@@ -461,19 +631,27 @@ export function IconButtonLink({
   variant?: ButtonVariant;
   /** Whether it opens in a new tab, leaving the page it is on where it was. */
   newTab?: boolean;
+  /** Called as the press leaves, before the browser follows the link; a press that is the window's to carry out stops the browser's with `preventDefault`. */
+  onClick?: ((event: MouseEvent<HTMLAnchorElement>) => void) | undefined;
 }): React.JSX.Element {
   return (
     <a
-      className="luke-button"
+      className={linkClasses(
+        buttonLook({ variant, size: undefined, shape: undefined, iconOnly: true }),
+      )}
       data-icon-only="true"
       data-variant={variant ?? BUTTON_VARIANT.QUIET}
+      {...hint}
       href={href}
       aria-label={label}
-      onClick={(event) => pulse(event.currentTarget, variant)}
+      onClick={(event) => {
+        pulse(event.currentTarget, variant);
+        onClick?.(event);
+      }}
       target={newTab ? "_blank" : undefined}
       rel={newTab ? "noreferrer" : undefined}
     >
-      <span className="luke-button-face" {...PRESS_FACE}>
+      <span className={faceClasses("icon", false, false)} {...PRESS_FACE}>
         {icon}
       </span>
     </a>
@@ -523,7 +701,7 @@ function submitGlyph(state: SubmitState): React.JSX.Element {
       return <SendGlyph />;
     case SUBMIT_STATE.SUBMITTED:
       return (
-        <span className="luke-button-ring">
+        <span className="luke-button-ring block size-control-icon">
           <SpinnerRing />
         </span>
       );
@@ -565,25 +743,37 @@ export function IconButton({
     pressed?: boolean | undefined;
   }): React.JSX.Element {
   const { landed, settle } = useLanded(props);
+  const busy = props.busy === true;
+  const ringShown = useSettled(busy);
   const state = stateProps(
     submit === undefined ? landedProps(props, landed) : { ...props, shape: BUTTON_SHAPE.ROUND },
     label,
     landed,
   );
   return (
-    <button
-      className="luke-button"
+    <ShadcnButton
+      {...state}
+      {...buttonLook({
+        variant: props.variant,
+        size,
+        shape: submit === undefined ? props.shape : BUTTON_SHAPE.ROUND,
+        iconOnly: true,
+        busy,
+        settled: landed || state["aria-disabled"] === true,
+        // Note that a submit unavailable stands on the strong fill rather than fading (`button.css`).
+        fades: submit === undefined,
+      })}
       data-icon-only="true"
       data-size={size === BUTTON_SIZE.COMPACT ? BUTTON_SIZE.COMPACT : undefined}
       data-submit={submit}
       data-done={landed || undefined}
       aria-pressed={pressed}
-      {...state}
     >
-      <span className="luke-button-face" {...PRESS_FACE}>
+      <span className={faceClasses("icon", ringShown, landed)} {...PRESS_FACE}>
         {submit === undefined ? icon : submitGlyph(submit)}
       </span>
+      {ringShown ? <BusyRing /> : null}
       {landed ? <DoneMark hold onShown={settle} /> : null}
-    </button>
+    </ShadcnButton>
   );
 }

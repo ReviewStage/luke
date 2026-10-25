@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import { ISSUE_STATE } from "@luke/features/github-repositories-wire";
 import { TASK_ISSUE_PROVIDER, TASK_ISSUE_RELATION } from "@luke/features/task-issue-wire";
 import {
   TASK_PRIORITY,
@@ -10,9 +11,11 @@ import {
   type TaskStatus,
   type TaskSummary,
 } from "@luke/features/task-wire";
+import { IDLE_TASKS_VIEW } from "@luke/features/tasks-view";
 import type { Workspace, WorkspaceMember } from "@luke/features/workspace-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
+import { CARD_PRESS_SELECTOR, CHIP_LOOK } from "@luke/ui";
 import {
   COMPLETED_WINDOW,
   DEFAULT_BOARD_DISPLAY,
@@ -27,8 +30,17 @@ import { afterEach, beforeEach, test, vi } from "vitest";
 import { runAppCommand } from "../app-commands.js";
 import { MemberDirectory } from "../member-directory.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
-import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
+import {
+  type AnyAct,
+  FAKE_ANSWER,
+  type FakeActAnswer,
+  fakeActPort,
+  fakeActs,
+  fakeAppBridge,
+} from "../testing/app-bridge.js";
 import { fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
+import { handState, signedInAs } from "../testing/app-state.js";
+import { layContainersAt } from "../testing/container-width.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { restOn } from "../testing/hint-rest.js";
 import { tasksControl } from "../testing/tasks-control.js";
@@ -47,7 +59,7 @@ import { TasksBoard } from "./tasks-board.js";
  * right-click drop the task's own menu, whose Rename makes its name a
  * field, and its foot draws its agents at work and their pull requests,
  * each its mark and its number. In a narrow room, a phone's, one column stands at a time, chosen
- * by its tab, and a card's Status chip, which says its status there, moves it.
+ * by its tab, and a card's Status chip, its mark alone before its name as on a wide board, moves it.
  */
 
 const DEAN = "user-dean";
@@ -157,6 +169,7 @@ async function mountBoard(
   tasks: readonly TaskSummary[] = TASKS,
   room: ShellRoom = SHELL_ROOM.WIDE,
   display: TasksDisplay = DEFAULT_BOARD_DISPLAY,
+  overrides: NonNullable<Parameters<typeof tasksControl>[0]> = {},
 ): Promise<HTMLElement> {
   const container = document.createElement("div");
   document.body.append(container);
@@ -178,6 +191,7 @@ async function mountBoard(
       renamed.push([taskId, name]);
       return Promise.resolve(true);
     },
+    ...overrides,
   });
   const registry = AtomRegistry.make();
   const draw = (shown: TasksDisplay) =>
@@ -200,6 +214,7 @@ async function mountBoard(
                 filter: NO_TASKS_FILTER,
                 display: shown,
                 onDisplay: (next) => displayed.push(next),
+                scroll: () => undefined,
               },
             }),
           }),
@@ -224,7 +239,7 @@ function columns(board: HTMLElement): [string, string[]][] {
 /** The chip on a task's card that changes its `standing`, Priority or Status. */
 function chipOf(board: HTMLElement, taskId: string, standing: string): HTMLButtonElement {
   const chip = board.querySelector<HTMLButtonElement>(
-    `li[data-task-id="${taskId}"] .tasks-board-card-foot button[aria-label^="${standing}:"]`,
+    `li[data-task-id="${taskId}"] button[aria-label^="${standing}:"]`,
   );
   assert.ok(chip, `the card of ${taskId} wears its ${standing} chip`);
   return chip;
@@ -240,7 +255,9 @@ function pick(label: string): void {
 
 /** The card of a task, its press. */
 function cardOf(board: HTMLElement, taskId: string): HTMLButtonElement {
-  const card = board.querySelector<HTMLButtonElement>(`li[data-task-id="${taskId}"] > button`);
+  const card = board.querySelector<HTMLButtonElement>(
+    `li[data-task-id="${taskId}"] ${CARD_PRESS_SELECTOR}`,
+  );
   assert.ok(card, `the card of ${taskId} stands`);
   return card;
 }
@@ -273,6 +290,87 @@ test("each status has its column, its cards the most pressing first, each its ke
   assert.equal(card.querySelector(".actor-mark"), null, "the card wears no creator's face");
 });
 
+/** Presses `key` where the keyboard stands. */
+function pressHere(key: string): void {
+  const target = document.activeElement ?? document.body;
+  act(() => {
+    target.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true }));
+  });
+}
+
+/** The id of the task whose card holds the keyboard, if one does. */
+function focusedTask(): string | null | undefined {
+  return document.activeElement?.closest("li[data-task-id]")?.getAttribute("data-task-id");
+}
+
+test("each column's cards scroll in an area that keeps a scroll bar's room, so a bar that takes room never rewraps the cards past the column's height", async () => {
+  const board = await mountBoard(TASKS, SHELL_ROOM.WIDE, {
+    ...DEFAULT_BOARD_DISPLAY,
+    completed: COMPLETED_WINDOW.ALL,
+  });
+
+  const areas = [...board.querySelectorAll<HTMLElement>("[data-task-column]")].map((column) =>
+    column.querySelector(".luke-scroll-area")?.getAttribute("data-gutter"),
+  );
+  assert.deepEqual(areas, ["stable", "stable", "stable", "stable", "stable"]);
+});
+
+test("each column's cards are one Tab stop that ↓ and ↑ walk, and ← and → cross to the next column's stop, wrapping at the board's ends", async () => {
+  const board = await mountBoard(TASKS, SHELL_ROOM.WIDE, {
+    ...DEFAULT_BOARD_DISPLAY,
+    completed: COMPLETED_WINDOW.ALL,
+  });
+  const stops = () =>
+    [...board.querySelectorAll<HTMLElement>("[data-task-column]")].map(
+      (column) =>
+        [...column.querySelectorAll<HTMLElement>("[data-card-press]")].filter(
+          (press) => press.tabIndex === 0,
+        ).length,
+    );
+  assert.deepEqual(stops(), [1, 1, 1, 1, 1], "Tab lands once in each column");
+
+  act(() => cardOf(board, "t-38").focus());
+  pressHere("ArrowDown");
+  assert.equal(focusedTask(), "t-36");
+  pressHere("ArrowRight");
+  assert.equal(focusedTask(), "t-40", "→ lands on Todo's stop, its first card");
+  pressHere("ArrowDown");
+  assert.equal(focusedTask(), "t-39");
+  pressHere("ArrowLeft");
+  assert.equal(focusedTask(), "t-36", "← lands back on the card Backlog was left at");
+  pressHere("ArrowLeft");
+  assert.equal(focusedTask(), "t-33", "← from the first column wraps to the last");
+  pressHere("ArrowRight");
+  assert.equal(focusedTask(), "t-36");
+});
+
+test("a refresh that failed after the tasks were read keeps the columns drawn under Could not refresh and Retry, where a first read that failed draws the error alone", async () => {
+  let retried = 0;
+  const onRetryList = () => {
+    retried += 1;
+  };
+  const board = await mountBoard(TASKS, SHELL_ROOM.WIDE, DEFAULT_BOARD_DISPLAY, {
+    listFailed: true,
+    onRetryList,
+  });
+
+  assert.notEqual(columns(board).length, 0, "the columns stand");
+  const note = board.querySelector('[role="alert"]');
+  assert.match(note?.textContent ?? "", /Could not refresh/u);
+  const retry = [...(note?.querySelectorAll("button") ?? [])].find((each) =>
+    each.textContent?.includes("Retry"),
+  );
+  act(() => retry?.click());
+  assert.equal(retried, 1);
+
+  const first = await mountBoard([], SHELL_ROOM.WIDE, DEFAULT_BOARD_DISPLAY, {
+    listFailed: true,
+    listRead: false,
+  });
+  assert.equal(columns(first).length, 0);
+  assert.match(first.querySelector('[role="alert"]')?.textContent ?? "", /could not be read/u);
+});
+
 test("a task from a service before statuses stands under Todo", async () => {
   const { status: _status, ...older } = task(
     30,
@@ -298,13 +396,7 @@ test("a press on a card opens its task", async () => {
   assert.deepEqual(opened, ["t-42"]);
 });
 
-test("a card at rest hangs its task's card", async () => {
-  const board = await mountBoard();
-  restOn(cardOf(board, "t-42"));
-  assert.ok(document.querySelector(".luke-tooltip-card [data-task-card]"));
-});
-
-test("the settled finished before the past week give way to a line counting them, which shows them all; by priority the columns run from the most pressing, empty ones left out where asked", async () => {
+test("the settled finished before the past week give way to a foot counting them, which shows them all; by priority the columns run from the most pressing, empty ones left out where asked", async () => {
   const board = await mountBoard();
   const done = board.querySelector<HTMLElement>('[data-task-column="done"]');
   assert.deepEqual(columns(board).slice(-2), [
@@ -312,9 +404,9 @@ test("the settled finished before the past week give way to a line counting them
     ["Canceled", []],
   ]);
   const older = [...(done?.querySelectorAll<HTMLElement>("button") ?? [])].find(
-    (button) => button.textContent === "+ 1 older",
+    (button) => button.textContent === "Show 1 more",
   );
-  act(() => (older ?? assert.fail("no older line under Done")).click());
+  act(() => (older ?? assert.fail("no Show more line under Done")).click());
   assert.deepEqual(
     displayed.map((each) => each.completed),
     [COMPLETED_WINDOW.ALL],
@@ -531,17 +623,38 @@ test("in a narrow room showing completed adds the Canceled tab, and hiding it ag
   assert.deepEqual(columns(board), [["Todo", ["ACME-40", "ACME-39"]]]);
 });
 
-test("in a narrow room a card's Status chip says its status and sends the status picked, without a drag", async () => {
+test("in a narrow room a card's chips draw their marks alone, as the List's do, its Status before its name, and the Status sends the status picked, without a drag", async () => {
   const board = await mountBoard(TASKS, SHELL_ROOM.NARROW);
   const chip = chipOf(board, "t-39", "Status");
 
-  assert.equal(chip.querySelector(".luke-chip-name")?.textContent, "Todo");
-  assert.equal(chip.dataset.iconOnly, undefined, "the chip says its status in words");
+  for (const standing of ["Status", "Priority", "Assignee"]) {
+    const each = chipOf(board, "t-39", standing);
+    assert.equal(each.dataset.iconOnly, "true", `the ${standing} chip draws its mark alone`);
+    assert.equal(each.dataset.look, CHIP_LOOK.TOOLBAR, `the ${standing} chip wears no outline`);
+  }
+  assert.equal(
+    chip.closest(".tasks-board-card-title")?.querySelector(".tasks-board-name")?.textContent,
+    "Rate limit search",
+    "the Status chip stands before the card's name",
+  );
   act(() => chip.click());
   pick("In progress");
 
   assert.deepEqual(sent, [["t-39", { status: TASK_STATUS.IN_PROGRESS }]]);
   assert.deepEqual(opened, [], "a pick opens no task");
+});
+
+test("a card's Status mark and its Priority mark stand on one column, the one before its name over the one leading its pills", async () => {
+  const laid = layContainersAt({});
+  try {
+    const board = await mountBoard();
+    const status = getComputedStyle(chipOf(board, "t-39", "Status"));
+    const priority = getComputedStyle(chipOf(board, "t-39", "Priority"));
+    assert.notEqual(status.marginLeft, "", "the Status chip is drawn out past the card's inset");
+    assert.equal(priority.marginLeft, status.marginLeft);
+  } finally {
+    laid.remove();
+  }
 });
 
 test("in a wide room every column stands side by side, with no tabs, and a card's chips draw their marks alone", async () => {
@@ -620,6 +733,39 @@ test("a right-click on a card drops the task's own menu", async () => {
   assert.deepEqual(opened, []);
 });
 
+test("the menu key drops a card's menu from its press or any control in the card, and its ⋯ is named for the task", async () => {
+  const board = await mountBoard();
+  const key = (target: HTMLElement) =>
+    act(() => {
+      target.dispatchEvent(
+        new KeyboardEvent("keydown", { key: "ContextMenu", bubbles: true, cancelable: true }),
+      );
+    });
+  const offersRename = () =>
+    [...document.querySelectorAll('[role^="menuitem"] .luke-menu-item-label')].some(
+      (label) => label.textContent === "Rename",
+    );
+  const closeMenu = () =>
+    act(() => {
+      document.activeElement?.dispatchEvent(
+        new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }),
+      );
+    });
+
+  key(cardOf(board, "t-40"));
+  assert.ok(offersRename(), "the card's press opens its menu on the menu key");
+  closeMenu();
+  key(chipOf(board, "t-40", "Priority"));
+  assert.ok(offersRename(), "a chip in the card opens the card's menu on the menu key too");
+  assert.equal(
+    board
+      .querySelector('li[data-task-id="t-40"] .tasks-board-card-more button')
+      ?.getAttribute("aria-label"),
+    "Task actions",
+  );
+  assert.deepEqual(opened, []);
+});
+
 test("a press on a card's chip carried onto another column is that chip's, and moves no card", async () => {
   const board = await mountBoard();
   layCardsOut(board);
@@ -683,10 +829,8 @@ test("a card draws what its agents are doing and the pull requests they opened, 
     },
   };
   const board = await mountBoard([working]);
-  const foot = board.querySelector('li[data-task-id="t-42"] .tasks-board-card-foot');
-  const marks = [...(foot?.querySelectorAll("[data-pull-request-state]") ?? [])].filter((mark) =>
-    mark.matches(".task-work-pull-request"),
-  );
+  const card = board.querySelector('li[data-task-id="t-42"]');
+  const marks = [...(card?.querySelectorAll("[data-task-work='pull-request']") ?? [])];
 
   assert.deepEqual(
     marks.map((mark) => [mark.getAttribute("data-pull-request-state"), mark.textContent]),
@@ -696,12 +840,12 @@ test("a card draws what its agents are doing and the pull requests they opened, 
     ],
   );
   assert.ok(
-    foot?.querySelector(".task-work-marks [data-state='working']"),
+    card?.querySelector("[data-task-work='agents'] [data-state='working']"),
     "an agent at work is marked",
   );
 });
 
-test("a card draws a tag for each issue its task links, oldest first, a GitHub issue of its own repository by its number, and a press on a tag opens the issue", async () => {
+test("a card draws a tag for each issue its task links, oldest first, a GitHub issue of its own repository by its number and another's by its repository's name before it, and a press on a tag opens the issue", async () => {
   const linked: TaskSummary = {
     ...task(42, "Fix Safari login", TASK_STATUS.IN_PROGRESS, TASK_PRIORITY.HIGH),
     issues: [
@@ -734,9 +878,7 @@ test("a card draws a tag for each issue its task links, oldest first, a GitHub i
   ]);
 
   const tagsOf = (taskId: string) => [
-    ...board.querySelectorAll<HTMLButtonElement>(
-      `li[data-task-id="${taskId}"] .tasks-board-tags button`,
-    ),
+    ...board.querySelectorAll<HTMLAnchorElement>(`li[data-task-id="${taskId}"] a[data-task-tag]`),
   ];
   const tags = tagsOf("t-42");
   assert.deepEqual(
@@ -744,8 +886,17 @@ test("a card draws a tag for each issue its task links, oldest first, a GitHub i
     [
       [TASK_ISSUE_PROVIDER.GITHUB, "#312"],
       [TASK_ISSUE_PROVIDER.LINEAR, "ENG-455"],
-      [TASK_ISSUE_PROVIDER.GITHUB, "Acme/Auth#270"],
+      [TASK_ISSUE_PROVIDER.GITHUB, "Auth#270"],
     ],
+  );
+  assert.deepEqual(
+    tags.map((tag) => tag.getAttribute("href")),
+    [
+      "https://github.com/acme/web/issues/312",
+      "https://linear.app/acme/issue/ENG-455",
+      "https://github.com/acme/auth/issues/270",
+    ],
+    "each tag is a link to its issue",
   );
   assert.ok(
     tags.every((tag) => tag.querySelector("svg")),
@@ -756,4 +907,214 @@ test("a card draws a tag for each issue its task links, oldest first, a GitHub i
   act(() => tags[1]?.click());
   assert.deepEqual(pages, ["https://linear.app/acme/issue/ENG-455"]);
   assert.deepEqual(opened, [], "a press on a tag opens the issue, not the task");
+});
+
+/** A pull request of acme/web numbered `number`, standing in `state`. */
+function pullRequestLine(number: number, state: "open" | "merged" = "open") {
+  return {
+    number,
+    title: `Change ${number}`,
+    state,
+    checks: "failing" as const,
+    additions: 12,
+    deletions: 4,
+    url: `https://github.com/acme/web/pull/${number}`,
+  };
+}
+
+test("a card's pull request hangs that pull request's own card, its key, where it stands, its checks, and its size, and a press opens it; the task's card hangs nowhere", async () => {
+  const board = await mountBoard([
+    {
+      ...task(42, "Fix Safari login", TASK_STATUS.IN_PROGRESS, TASK_PRIORITY.HIGH),
+      agents: {
+        total: 1,
+        working: 0,
+        agents: [],
+        pullRequestTotal: 1,
+        pullRequests: [pullRequestLine(4120)],
+      },
+    },
+  ]);
+  const pill = board.querySelector<HTMLButtonElement>(
+    'li[data-task-id="t-42"] [data-task-work="pull-request"]',
+  );
+  assert.ok(pill, "the card wears its pull request");
+
+  restOn(pill);
+  const card = document.querySelector(".luke-tooltip-card [data-pull-request-card]");
+  assert.equal(card?.querySelector(".luke-hover-card-name")?.textContent, "Change 4120");
+  assert.match(card?.textContent ?? "", /acme\/web#4120 · Open/u);
+  assert.match(card?.textContent ?? "", /Checks failing · \+12 −4/u);
+
+  act(() => pill.click());
+  assert.deepEqual(pages, ["https://github.com/acme/web/pull/4120"]);
+  assert.deepEqual(opened, [], "a press on a pull request opens it, not the task");
+
+  restOn(cardOf(board, "t-42"));
+  assert.equal(document.querySelector("[data-task-card]"), null, "the card hangs no task card");
+});
+
+test("a card's pull requests past the first three are counted, and the count hangs every one of the rest the window holds, counting none", async () => {
+  const all = [4101, 4102, 4103, 4104, 4105, 4106].map((number) => pullRequestLine(number));
+  handState(
+    {},
+    {
+      tasks: {
+        ...IDLE_TASKS_VIEW,
+        taskAgents: [],
+        taskPullRequests: [{ taskId: "t-42", pullRequests: all }],
+      },
+    },
+  );
+  const board = await mountBoard([
+    {
+      ...task(42, "Fix Safari login", TASK_STATUS.IN_PROGRESS, TASK_PRIORITY.HIGH),
+      agents: {
+        total: 1,
+        working: 0,
+        agents: [],
+        pullRequestTotal: 6,
+        pullRequests: all.slice(0, 3),
+      },
+    },
+  ]);
+  const pills = [
+    ...board.querySelectorAll<HTMLButtonElement>('li[data-task-id="t-42"] [data-task-work]'),
+  ];
+  assert.deepEqual(
+    pills.map((pill) => pill.textContent),
+    ["#4101", "#4102", "#4103", "+3"],
+  );
+
+  restOn(pills[3] ?? assert.fail("the count stands"));
+  const card = document.querySelector(".luke-tooltip-card [data-more-pull-requests-card]");
+  assert.deepEqual(
+    [...(card?.querySelectorAll("[data-task-card-pull-request]") ?? [])].map(
+      (row) => row.querySelector(".task-card-number")?.textContent,
+    ),
+    ["#4104", "#4105", "#4106"],
+  );
+  assert.doesNotMatch(card?.textContent ?? "", /more/u, "it counts nothing it leaves out");
+});
+
+test("a card whose window holds every agent but not the pull requests still draws the pull requests its row names", async () => {
+  handState({}, { tasks: { ...IDLE_TASKS_VIEW, taskAgents: [] } });
+  const board = await mountBoard([
+    {
+      ...task(42, "Fix Safari login", TASK_STATUS.IN_PROGRESS, TASK_PRIORITY.HIGH),
+      agents: {
+        total: 1,
+        working: 0,
+        agents: [],
+        pullRequestTotal: 1,
+        pullRequests: [pullRequestLine(4120)],
+      },
+    },
+  ]);
+
+  assert.deepEqual(
+    [...board.querySelectorAll('li[data-task-id="t-42"] [data-task-work="pull-request"]')].map(
+      (pill) => pill.textContent,
+    ),
+    ["#4120"],
+  );
+});
+
+test("a card's assignee hangs the person's card", async () => {
+  const board = await mountBoard([
+    {
+      ...task(39, "Rate limit search", TASK_STATUS.TODO, TASK_PRIORITY.HIGH),
+      assignee: { userId: CHARLES, name: "Charles Pan" },
+    },
+  ]);
+
+  restOn(chipOf(board, "t-39", "Assignee"));
+  const card = document.querySelector(".luke-tooltip-card [data-actor-card]");
+  assert.match(card?.textContent ?? "", /Charles Pan/u);
+});
+
+test("a card's pull request from a service before it sent its page opens the task, so its pill is never a dead press", async () => {
+  const { url: _, ...unaddressed } = pullRequestLine(4120);
+  const board = await mountBoard([
+    {
+      ...task(42, "Fix Safari login", TASK_STATUS.IN_PROGRESS, TASK_PRIORITY.HIGH),
+      agents: {
+        total: 1,
+        working: 0,
+        agents: [],
+        pullRequestTotal: 1,
+        pullRequests: [unaddressed],
+      },
+    },
+  ]);
+  const pill = board.querySelector<HTMLButtonElement>(
+    'li[data-task-id="t-42"] [data-task-work="pull-request"]',
+  );
+
+  act(() => (pill ?? assert.fail("the card wears its pull request")).click());
+  assert.deepEqual(opened, ["t-42"]);
+  assert.deepEqual(pages, []);
+});
+
+test("a tag hangs its issue's card, read as the card is drawn: its title, key and state under GitHub's mark for it, where the workspace's GitHub answers", async () => {
+  const github = { ...ACME, github: { login: "acme", active: true } };
+  const linked: TaskSummary = {
+    ...task(42, "Fix Safari login", TASK_STATUS.IN_PROGRESS, TASK_PRIORITY.HIGH),
+    issues: [
+      {
+        id: "00000000-0000-4000-8000-000000000001",
+        provider: TASK_ISSUE_PROVIDER.GITHUB,
+        key: "acme/web#312",
+        url: "https://github.com/acme/web/issues/312",
+        relation: TASK_ISSUE_RELATION.CLOSES,
+      },
+    ],
+  };
+  const asked: AnyAct[] = [];
+  const state = {
+    ...signedInAs({ id: DEAN, email: "dean@acme.dev", name: "Dean Stratakos" }),
+    tasks: { ...IDLE_TASKS_VIEW, tasks: [linked], workspaces: [github] },
+  };
+  fakeActs({
+    onAppState: () => () => undefined,
+    requestAppState: () => Promise.resolve(state),
+    act: (request: AnyAct): Promise<FakeActAnswer> => {
+      asked.push(request);
+      if (request.kind === ACT_KIND.WORKSPACE_MEMBERS_READ) {
+        return Promise.resolve({ status: FAKE_ANSWER.DONE, value: MEMBERS });
+      }
+      const issue = {
+        number: 312,
+        title: "Login fails on Safari 18",
+        url: "https://github.com/acme/web/issues/312",
+        state: ISSUE_STATE.NOT_PLANNED,
+      };
+      return Promise.resolve({
+        status: FAKE_ANSWER.DONE,
+        value: request.kind === ACT_KIND.TASKS_ISSUE ? issue : undefined,
+      });
+    },
+  });
+  const board = await mountBoard([linked]);
+  const issueReads = () => asked.filter((each) => each.kind === ACT_KIND.TASKS_ISSUE);
+
+  assert.deepEqual(
+    issueReads(),
+    [],
+    "a Board of tags asks its provider for none until a card is drawn",
+  );
+  restOn(board.querySelector("a[data-task-tag]") ?? assert.fail("the tag"));
+  await act(async () => {
+    for (let tick = 0; tick < 8; tick += 1) await Promise.resolve();
+  });
+  const card = document.querySelector("[data-issue-card]");
+
+  assert.match(card?.textContent ?? "", /Login fails on Safari 18/);
+  assert.match(card?.textContent ?? "", /acme\/web#312 · Not planned/);
+  assert.match(card?.textContent ?? "", /Closes: Merging closes the issue/);
+  assert.equal(
+    card?.querySelector<SVGElement>("[data-issue-mark]")?.dataset.issueState,
+    ISSUE_STATE.NOT_PLANNED,
+  );
+  assert.equal(issueReads().length, 1);
 });

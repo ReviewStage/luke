@@ -666,6 +666,7 @@ export const MarkdownMessage = memo(function MarkdownMessage({
   found,
   diagrams,
   onTask,
+  landed,
 }: {
   words: string;
   className?: string;
@@ -683,6 +684,8 @@ export const MarkdownMessage = memo(function MarkdownMessage({
   diagrams?: boolean | undefined;
   /** Ticks or clears a task item pressed, as a plan the developer can edit does; every checkbox is read-only without it. */
   onTask?: MarkdownTaskToggler | undefined;
+  /** Whether the words were just landed on, lit once as every place landed on is. */
+  landed?: boolean | undefined;
 }): React.JSX.Element {
   const keyTargets = useTaskKeyTargets();
   const rehypePlugins = useMemo(() => {
@@ -737,6 +740,7 @@ export const MarkdownMessage = memo(function MarkdownMessage({
         components={components}
         urlTransform={link === undefined ? safeUrl : keptUrl}
         onTask={onTask}
+        landed={landed}
       />
     </FenceEdit.Provider>
   );

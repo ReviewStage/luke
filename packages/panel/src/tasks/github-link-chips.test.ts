@@ -283,7 +283,7 @@ test("a pull request's link says its number, live title, and state, wearing its 
     ["#42 Expire old invitations", "Merged", PULL_REQUEST_STATE.MERGED],
     ["#42 Expire old invitations", "Merged", PULL_REQUEST_STATE.MERGED],
     ["#5 Settle nightly", "Open", PULL_REQUEST_STATE.OPEN],
-    ["secret/pull/7", null, undefined],
+    ["secret#7", null, undefined],
   ]);
   assert.deepEqual(
     asked.filter((each) => each.kind === ACT_KIND.TASKS_PULL_REQUEST).map((each) => each.payload),
@@ -352,11 +352,49 @@ test("a pull request's link standing alone is a row named as its chip is, on a p
 test("where the workspace has no GitHub App installed, nothing is asked and the chip says what the address says", async () => {
   const { container, asked } = await drawn(`See ${MERGED}.`, ACME);
 
-  assert.deepEqual(chips(container), [["relay/pull/42", null, undefined]]);
+  assert.deepEqual(chips(container), [["#42", null, undefined]]);
   assert.deepEqual(
     asked.filter((each) => each.kind === ACT_KIND.TASKS_PULL_REQUEST),
     [],
   );
+});
+
+test("a pull request's or an issue's address no GitHub App answers for is called by its key, `#42` in the plan's repository and `ledger#5` in another, and a link with a label of its own keeps it", async () => {
+  const { container } = await drawn(
+    `${MERGED}, [the expiry change](${MERGED}), ${ELSEWHERE}, and ${OPEN_ISSUE}.`,
+    ACME,
+  );
+
+  assert.deepEqual(
+    [...container.querySelectorAll("[data-mention-ref] .luke-inline-ref-label")].map(
+      (label) => label.textContent,
+    ),
+    ["#42", "the expiry change", "ledger#5", "#7"],
+  );
+});
+
+test("on a page with no repository an address no GitHub App answers for names its repository, and one GitHub does answer still says its number and title", async () => {
+  for (const [workspace, said] of [
+    [ACME, ["relay#42", "ledger#5"]],
+    [ACME_WITH_GITHUB, ["#42 Expire old invitations", "#5 Settle nightly"]],
+  ] as const) {
+    const { container } = await drawn(
+      `${MERGED} and ${ELSEWHERE}.`,
+      workspace,
+      false,
+      NO_REPOSITORY,
+    );
+
+    assert.deepEqual(
+      [...container.querySelectorAll("[data-mention-ref] .luke-inline-ref-label")].map(
+        (label) => label.textContent,
+      ),
+      said,
+    );
+    act(() => root?.unmount());
+    root = undefined;
+    document.body.innerHTML = "";
+  }
 });
 
 test("an issue's link says its number, live title, and state, whatever its label, wearing GitHub's issue mark, as the plan's workspace's GitHub App answers them, and one it does not reach stays as its address says", async () => {
@@ -368,7 +406,7 @@ test("an issue's link says its number, live title, and state, whatever its label
   assert.deepEqual(issueChips(container), [
     ["#7 Invitations expire too soon", "Open", ISSUE_STATE.OPEN, "Issue #7, open"],
     ["#9 Invite by phone number", "Not planned", ISSUE_STATE.NOT_PLANNED, "Issue #9, not planned"],
-    ["secret/issues/3", null, undefined, undefined],
+    ["secret#3", null, undefined, undefined],
   ]);
   assert.deepEqual(
     asked.filter((each) => each.kind === ACT_KIND.TASKS_ISSUE).map((each) => each.payload),
@@ -388,7 +426,7 @@ test("an issue's link says its number, live title, and state, whatever its label
 test("where the workspace has no GitHub App installed, an issue's link asks nothing and says what the address says", async () => {
   const { container, asked } = await drawn(`See ${OPEN_ISSUE}.`, ACME);
 
-  assert.deepEqual(issueChips(container), [["relay/issues/7", null, undefined, undefined]]);
+  assert.deepEqual(issueChips(container), [["#7", null, undefined, undefined]]);
   assert.deepEqual(
     asked.filter((each) => each.kind === ACT_KIND.TASKS_ISSUE),
     [],
@@ -488,7 +526,7 @@ test("a pull request's card names its labels, and one read from an older service
   assert.deepEqual(cardLabels(older), []);
 });
 
-test("a pull request's card names its first six labels and counts the rest, so a card with many stays short", async () => {
+test("a pull request's card names every one of its labels, counting none", async () => {
   const { container } = await drawn(`See ${MANY_LABELS}.`, ACME_WITH_GITHUB);
 
   assert.deepEqual(cardLabels(container.querySelector("[data-mention-ref]") ?? undefined), [
@@ -498,7 +536,8 @@ test("a pull request's card names its first six labels and counts the rest, so a
     "d",
     "e",
     "f",
-    "+2",
+    "g",
+    "h",
   ]);
 });
 

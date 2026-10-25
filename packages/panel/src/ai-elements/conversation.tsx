@@ -6,6 +6,7 @@ import {
   ScrollArea,
   type ScrollFade,
   type ScrollFadeInset,
+  Tooltip,
 } from "@luke/ui";
 import { VIRTUAL_ROWS_ATTRIBUTE, VirtualRows, type VirtualRowsHandle } from "@luke/ui/virtual-rows";
 import { ArrowDownIcon } from "lucide-react";
@@ -271,6 +272,12 @@ export interface ConversationContentProps {
   fade?: ScrollFade | undefined;
   /** Where its start fade begins: beneath a band stuck at its top, as a call's checkpoint is. */
   fadeInset?: ScrollFadeInset | undefined;
+  /**
+   * Whether its lines are written as they stream in, as an agent's reply is,
+   * so the log is no live region: a reader would hear each chunk as it
+   * landed, and its owner says the line once it is whole instead.
+   */
+  streams?: boolean | undefined;
   children?: ReactNode;
 }
 
@@ -279,6 +286,7 @@ export function ConversationContent({
   className,
   fade = SCROLL_FADE.BOTH,
   fadeInset,
+  streams = false,
   children,
 }: ConversationContentProps): ReactNode {
   const { list, onScroll, onFold } = useConversation();
@@ -286,6 +294,7 @@ export function ConversationContent({
     <ScrollArea
       ref={list}
       role="log"
+      aria-live={streams ? "off" : undefined}
       fade={fade}
       fadeInset={fadeInset}
       onScroll={onScroll}
@@ -350,6 +359,9 @@ export function ConversationEmptyState({
   );
 }
 
+/** What the way back to the newest line is called, as its hint and its name. */
+const SCROLL_LABEL = "Scroll to the newest line";
+
 /**
  * The way back to the newest line, shown while the reader has scrolled away
  * from it: the shared icon button, floating over the lines on a ground of
@@ -360,11 +372,13 @@ export function ConversationScrollButton(): ReactNode {
   if (isAtBottom) return null;
   return (
     <div className="conversation-scroll">
-      <IconButton
-        label="Scroll to the newest line"
-        icon={<ArrowDownIcon aria-hidden="true" />}
-        onClick={scrollToBottom}
-      />
+      <Tooltip label={SCROLL_LABEL}>
+        <IconButton
+          label={SCROLL_LABEL}
+          icon={<ArrowDownIcon aria-hidden="true" />}
+          onClick={scrollToBottom}
+        />
+      </Tooltip>
     </div>
   );
 }

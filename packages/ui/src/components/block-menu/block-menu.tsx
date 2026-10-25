@@ -1,4 +1,6 @@
+import { type Noun, noMatchWords } from "@luke/features/words";
 import {
+  SHORTCUT_KEY,
   type ShortcutChord,
   WRITING_SHORTCUTS,
   type WritingAction,
@@ -7,7 +9,7 @@ import {
 import type { ReactNode, Ref } from "react";
 import { type ComboboxGroup, ComboboxList } from "../combobox/combobox.js";
 import { MENU_SURFACE_INSET, MenuSurface } from "../menu/menu-surface.js";
-import { type MenuKey, MenuKeys } from "../menu-keys/menu-keys.js";
+import { type MenuKey, MenuKeys, menuKey } from "../menu-keys/menu-keys.js";
 import { Shortcut } from "../shortcut/shortcut.js";
 import { WritingGlyph } from "../writing-glyph/writing-glyph.js";
 
@@ -30,14 +32,17 @@ import { WritingGlyph } from "../writing-glyph/writing-glyph.js";
 /** The menu's own name, which its listbox is read by. */
 const BLOCK_MENU_LABEL = "Blocks";
 
+/** What the menu lists, which its no-match line names. */
+const BLOCK: Noun = { one: "block", many: "blocks" };
+
 /** What the menu says where nothing matches. */
-const BLOCK_MENU_EMPTY = "Nothing matches";
+const BLOCK_MENU_EMPTY = noMatchWords(BLOCK);
 
 /** The keys the menu hears, said at its foot. */
 const BLOCK_MENU_KEYS: readonly MenuKey[] = [
-  { keys: "↑↓", does: "Move" },
-  { keys: "↵", does: "Insert" },
-  { keys: "esc", does: "Close" },
+  menuKey("Move", SHORTCUT_KEY.UP, SHORTCUT_KEY.DOWN),
+  menuKey("Insert", SHORTCUT_KEY.ENTER, SHORTCUT_KEY.TAB),
+  menuKey("Close", SHORTCUT_KEY.ESCAPE),
 ];
 
 /** The menu's groups, by the headings they stand under, in the order they are drawn. */

@@ -1,6 +1,6 @@
-import { useAtomValue } from "@effect/atom-react";
+import { useAtomRefresh, useAtomValue } from "@effect/atom-react";
 import { DIFF_LAYOUT } from "@luke/settings/diff-view";
-import { EmptyState } from "@luke/ui";
+import { ERROR_STATE_PLACEMENT, ErrorState } from "@luke/ui";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
@@ -118,7 +118,9 @@ export function PierreDiff({
   /** The box's classes, a card's. */
   className: string;
 }): React.JSX.Element {
-  const loaded = useAtomValue(useSideBundles().diffView);
+  const { diffView } = useSideBundles();
+  const loaded = useAtomValue(diffView);
+  const retry = useAtomRefresh(diffView);
   const module = AsyncResult.isSuccess(loaded) ? loaded.value : undefined;
   const host = useRef<HTMLDivElement>(null);
   const handle = useRef<DiffViewHandle | undefined>(undefined);
@@ -168,7 +170,11 @@ export function PierreDiff({
   });
 
   if (AsyncResult.isFailure(loaded)) {
-    return <EmptyState>{DIFF_LOAD_FAILED}</EmptyState>;
+    return (
+      <ErrorState placement={ERROR_STATE_PLACEMENT.CENTRED} onRetry={retry}>
+        {DIFF_LOAD_FAILED}
+      </ErrorState>
+    );
   }
   return (
     <div ref={host} className={className} data-diff-layout={look.layout}>

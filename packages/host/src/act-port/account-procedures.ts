@@ -1,5 +1,5 @@
 import type { AccountSnapshot } from "@luke/credentials/snapshot";
-import { Effect } from "effect";
+import { Effect, Option } from "effect";
 import { ACCOUNT_ACT_KIND } from "../contract/index.js";
 import type { HostOperator } from "../host-operator.js";
 import { actPort } from "./base.js";
@@ -16,8 +16,14 @@ import { actPort } from "./base.js";
 export interface AccountProceduresDependencies {
   host: Pick<
     HostOperator,
-    "beginSignIn" | "signInAgain" | "cancelSignIn" | "signOut" | "deleteAccount"
+    "beginSignIn" | "signInAgain" | "cancelSignIn" | "signOut" | "deleteAccount" | "accountSnapshot"
   >;
+  /**
+   * Asks before a sign-out while something would be lost, a call standing or
+   * unsaved work, answering whether to sign out. A shell that asks nothing
+   * first, a browser tab, leaves this out.
+   */
+  askBeforeSignOut?: () => Promise<boolean>;
   /**
    * Stops recording before either action runs. Neither can wait for its own
    * account transition to be relayed: a sign-out reports itself before the
@@ -36,7 +42,7 @@ export interface AccountProceduresDependencies {
 }
 
 export function accountProcedures(dependencies: AccountProceduresDependencies) {
-  const { host, haltSessionReplay, resumeSessionReplay } = dependencies;
+  const { host, haltSessionReplay, resumeSessionReplay, askBeforeSignOut } = dependencies;
   /** The halt, the host's answer, and the resume an answer that never came owes. */
   const halted = (action: Effect.Effect<AccountSnapshot>): Effect.Effect<AccountSnapshot> =>
     Effect.suspend(() => {
@@ -60,8 +66,15 @@ export function accountProcedures(dependencies: AccountProceduresDependencies) {
     ].effect(function* () {
       yield* host.cancelSignIn();
     }),
+    // A sign-out the developer cancelled answers the account as it still
+    // stands and stops nothing; where none stands, nobody is signed in and
+    // the sign-out loses nothing.
     [ACCOUNT_ACT_KIND.ACCOUNT_SIGN_OUT]: actPort[ACCOUNT_ACT_KIND.ACCOUNT_SIGN_OUT].effect(
       function* () {
+        if (askBeforeSignOut !== undefined && !(yield* Effect.promise(askBeforeSignOut))) {
+          const standing = yield* host.accountSnapshot();
+          if (Option.isSome(standing)) return standing.value;
+        }
         return yield* halted(host.signOut());
       },
     ),

@@ -29,7 +29,9 @@ import { useExperiment } from "../use-app-state.js";
  * Luke without asking again. One that failed stays failed until the reader
  * retries it, never by itself, so a service that keeps refusing draws a
  * quiet retry rather than a loop. A Reset ensures afresh with `reset`,
- * which archives the operator standing and answers the fresh one.
+ * which archives the operator standing and answers the fresh one; its Undo
+ * ensures with `restore`, which archives the fresh one and brings back the
+ * one the Reset retired.
  */
 
 /** The name the operator is drawn by, wherever it stands. */
@@ -48,7 +50,10 @@ type OperatorRead =
   | { readonly kind: typeof OPERATOR_READ.FAILED };
 
 /** What a Reset that did not land says. */
-const RESET_REFUSED = "Luke could not be started afresh. Try again in a moment.";
+const RESET_REFUSED = "Luke could not be reset. Try again in a moment.";
+
+/** What a Reset's Undo that did not land says. */
+const RESTORE_REFUSED = "Luke could not be put back. Try again in a moment.";
 
 /** Each account's ensures, by the account's id, then by each workspace's id. */
 type OperatorReads = ReadonlyMap<string | undefined, ReadonlyMap<string, OperatorRead>>;
@@ -88,17 +93,23 @@ export interface LukeOperator {
   /** Asks the ensure again after it failed; nothing while one is on its way or it stands. */
   readonly retry: () => void;
   /** Archives the operator standing and ensures a fresh one, answering its id where it landed. */
-  readonly reset: () => Promise<ActionResult & { readonly agentId?: string }>;
+  readonly reset: () => Promise<OperatorAnswer>;
+  /** Archives the operator standing and brings back the one a Reset retired, by its id, answering it where it landed. */
+  readonly restore: (agentId: string) => Promise<OperatorAnswer>;
 }
 
+/** What a Reset or its Undo came to: the operator standing after it, where it landed. */
+export type OperatorAnswer = ActionResult & { readonly agentId?: string };
+
+/** What an ensure asks beyond the workspace: nothing, a fresh operator, or the archived one named back. */
+type EnsureAsk = Record<string, never> | { readonly reset: true } | { readonly restore: string };
+
 /** The operator's id an ensure answered, or none for a failure or a refusal. */
-function ensuredId(workspaceId: string, reset: boolean): Promise<string | undefined> {
+function ensuredId(workspaceId: string, ask: EnsureAsk): Promise<string | undefined> {
   return askAct(
     ACT_KIND.CODING_AGENTS_ENSURE_OPERATOR,
     // The zone this window reads in, which the heartbeat an ensure that makes Luke aims at him is read in.
-    reset
-      ? { workspaceId, reset, timeZone: readerZone() }
-      : { workspaceId, timeZone: readerZone() },
+    { workspaceId, ...ask, timeZone: readerZone() },
   ).then(
     (answer) => ("agentId" in answer ? answer.agentId : undefined),
     () => undefined,
@@ -130,9 +141,23 @@ function claimEnsure(write: OperatorsWrite, place: OperatorPlace, again: boolean
   });
   if (!claimed) return;
   // Note that the answer lands under the account that asked, so one arriving after a sign-out is never another account's.
-  void ensuredId(place.workspaceId, false).then((agentId) =>
+  void ensuredId(place.workspaceId, {}).then((agentId) =>
     write((held) => withRead(held, place, settled(agentId))),
   );
+}
+
+/** A Reset or its Undo asked, the operator it answered kept as the one standing, or `refused` said where none landed. */
+function replaced(
+  write: OperatorsWrite,
+  place: OperatorPlace,
+  ask: EnsureAsk,
+  refused: string,
+): Promise<OperatorAnswer> {
+  return ensuredId(place.workspaceId, ask).then((agentId) => {
+    if (agentId === undefined) return { status: ACTION_RESULT_STATUS.REJECTED, reason: refused };
+    write((held) => withRead(held, place, settled(agentId)));
+    return { status: ACTION_RESULT_STATUS.ACCEPTED, agentId };
+  });
 }
 
 /**
@@ -160,14 +185,8 @@ export function useLukeOperator(asking: {
     agentId: read?.kind === OPERATOR_READ.ENSURED ? read.agentId : undefined,
     failed: read?.kind === OPERATOR_READ.FAILED,
     retry: () => claimEnsure(write, place, true),
-    reset: () =>
-      ensuredId(workspaceId, true).then((agentId) => {
-        if (agentId === undefined) {
-          return { status: ACTION_RESULT_STATUS.REJECTED, reason: RESET_REFUSED };
-        }
-        write((held) => withRead(held, place, settled(agentId)));
-        return { status: ACTION_RESULT_STATUS.ACCEPTED, agentId };
-      }),
+    reset: () => replaced(write, place, { reset: true }, RESET_REFUSED),
+    restore: (agentId) => replaced(write, place, { restore: agentId }, RESTORE_REFUSED),
   };
 }
 

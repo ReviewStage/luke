@@ -18,14 +18,10 @@
  * a stage wide enough pins it again.
  */
 
-import { Schema, SchemaTransformation } from "effect";
+import { Schema } from "effect";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { readKept, writeKept } from "../kept-storage.js";
+import { keptFlag, keptKey, useKept } from "../use-kept.js";
 import { PANE_FLOAT, type PaneFloat } from "./hover-pane.js";
-
-/** The storage keys the choices are kept under. */
-const SIDEBAR_COLLAPSED_KEY = "luke.sidebar-collapsed";
-const SIDEBAR_WIDTH_KEY = "luke.sidebar-width";
 
 /**
  * How wide the sidebar may be dragged, in CSS pixels, and where it starts:
@@ -56,21 +52,11 @@ export const SIDEBAR_OVERLAY = PANE_FLOAT;
 
 type SidebarOverlay = PaneFloat;
 
-/** The fold as kept: `true` folded, and anything else open. */
-const storedCollapsed = Schema.Literals(["true", "false"]).pipe(
-  Schema.decodeTo(
-    Schema.Boolean,
-    SchemaTransformation.transform({
-      decode: (kept) => kept === "true",
-      encode: (collapsed) => (collapsed ? "true" : "false"),
-    }),
-  ),
-);
-
-/** The kept choice, or open when there is none or storage refuses the read. */
-function readCollapsed(): boolean {
-  return readKept(SIDEBAR_COLLAPSED_KEY, storedCollapsed, false);
-}
+/** The fold and the width, kept on this Mac. */
+const KEPT = {
+  COLLAPSED: keptKey("luke.sidebar-collapsed", keptFlag),
+  WIDTH: keptKey("luke.sidebar-width", Schema.FiniteFromString),
+} as const;
 
 function clampWidth(width: number): number {
   return Math.min(SIDEBAR_WIDTH.MAX, Math.max(SIDEBAR_WIDTH.MIN, Math.round(width)));
@@ -79,11 +65,6 @@ function clampWidth(width: number): number {
 /** Whether a stage this wide is too narrow to pin the sidebar, given whether it was, so the line it crosses depends on the way it is crossed. */
 export function compactStage(width: number, was: boolean): boolean {
   return width < (was ? SIDEBAR_COMPACT.LEAVE : SIDEBAR_COMPACT.ENTER);
-}
-
-/** The kept width, or the default when there is none, it no longer reads, or storage refuses the read. */
-function readWidth(): number {
-  return clampWidth(readKept(SIDEBAR_WIDTH_KEY, Schema.FiniteFromString, SIDEBAR_WIDTH.DEFAULT));
 }
 
 export interface SidebarCollapse {
@@ -124,13 +105,13 @@ export function useSidebarCollapse(fixtureMode: boolean, compact: boolean): Side
   // Note that the fixture run's fold is a state of its own rather than the
   // kept one reset, because the run is only known once the first state
   // arrives, a render after the kept fold was read.
-  const [kept, setKept] = useState(readCollapsed);
+  const [kept, , changeKept] = useKept(KEPT.COLLAPSED, false);
   const [staged, setStaged] = useState(false);
-  const [keptWidth, setKeptWidth] = useState(readWidth);
+  const [keptWidth, keepWidth] = useKept(KEPT.WIDTH, SIDEBAR_WIDTH.DEFAULT);
   const [stagedWidth, setStagedWidth] = useState<number>(SIDEBAR_WIDTH.DEFAULT);
   const [overlay, setOverlay] = useState<SidebarOverlay>(SIDEBAR_OVERLAY.CLOSED);
   const collapsed = (fixtureMode ? staged : kept) || compact;
-  const width = fixtureMode ? stagedWidth : keptWidth;
+  const width = fixtureMode ? stagedWidth : clampWidth(keptWidth);
   const onToggle = useCallback(() => {
     if (compact) {
       setOverlay((was) =>
@@ -139,24 +120,16 @@ export function useSidebarCollapse(fixtureMode: boolean, compact: boolean): Side
       return;
     }
     setOverlay(SIDEBAR_OVERLAY.CLOSED);
-    (fixtureMode ? setStaged : setKept)((was) => !was);
-  }, [compact, fixtureMode]);
+    (fixtureMode ? setStaged : changeKept)((was) => !was);
+  }, [compact, fixtureMode, changeKept]);
   const onResize = useCallback(
-    (asked: number) => (fixtureMode ? setStagedWidth : setKeptWidth)(clampWidth(asked)),
-    [fixtureMode],
+    (asked: number) => (fixtureMode ? setStagedWidth : keepWidth)(clampWidth(asked)),
+    [fixtureMode, keepWidth],
   );
 
   useEffect(() => {
     if (!collapsed) setOverlay(SIDEBAR_OVERLAY.CLOSED);
   }, [collapsed]);
-
-  useEffect(() => {
-    writeKept(SIDEBAR_COLLAPSED_KEY, storedCollapsed, kept);
-  }, [kept]);
-
-  useEffect(() => {
-    writeKept(SIDEBAR_WIDTH_KEY, Schema.FiniteFromString, keptWidth);
-  }, [keptWidth]);
 
   // Note that the fold is handed back steady, so the columns handed it hold while it does.
   const shownOverlay = collapsed ? overlay : SIDEBAR_OVERLAY.CLOSED;

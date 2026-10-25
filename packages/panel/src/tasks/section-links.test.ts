@@ -8,7 +8,7 @@ import {
   mentionMarkdown,
 } from "@luke/features/mention-link";
 import type { Task } from "@luke/features/task-wire";
-import { act, createElement } from "react";
+import { act, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
 import { fakeAppBridge } from "../testing/app-bridge.js";
@@ -89,7 +89,7 @@ function drawn(links: Partial<SectionLinks> = {}) {
 
 function chipNamed(container: HTMLElement, name: string): HTMLButtonElement {
   const chip = [...container.querySelectorAll<HTMLButtonElement>("[data-mention-ref]")].find(
-    (each) => each.textContent === name,
+    (each) => each.querySelector(".luke-inline-ref-label")?.textContent === name,
   );
   assert.ok(chip, `a chip named ${name}`);
   return chip;
@@ -423,7 +423,7 @@ test("a folder's chip, and a file's where no file opens from here, hang their ca
   const chips = [...container.querySelectorAll<HTMLElement>("[data-mention-ref]")];
 
   assert.deepEqual(
-    chips.map((chip) => [chip.textContent, chip.tagName]),
+    chips.map((chip) => [chip.querySelector(".luke-inline-ref-label")?.textContent, chip.tagName]),
     [
       ["session-store.ts", "SPAN"],
       ["auth/", "SPAN"],
@@ -452,7 +452,7 @@ test("a click on a folder's chip in a plan that can be edited opens no editor", 
     ),
   );
   const folder = [...container.querySelectorAll<HTMLElement>("[data-mention-ref]")].find(
-    (chip) => chip.textContent === "auth/",
+    (chip) => chip.querySelector(".luke-inline-ref-label")?.textContent === "auth/",
   );
   assert.ok(folder);
 
@@ -461,7 +461,7 @@ test("a click on a folder's chip in a plan that can be edited opens no editor", 
   assert.equal(container.querySelector(".plan-document-editor"), null);
 });
 
-/** The task's page drawn as a task's own page is, its title renamed and its versions opened, each kept. */
+/** The task's page drawn as a task's own page is, its title renamed through a door each Rename asks once, and its versions opened, each kept. */
 function drawnTitled() {
   const renamed: string[] = [];
   const histories: (number | undefined)[] = [];
@@ -469,21 +469,22 @@ function drawnTitled() {
   document.body.append(container);
   const root = createRoot(container);
   roots.push(root);
-  act(() =>
-    root.render(
-      createElement(PlanBody, {
-        task: TASK,
-        live: false,
-        onEdit: () => Promise.reject(new Error("Nothing is saved in this test.")),
-        onRename: (name) => {
-          renamed.push(name);
-          return Promise.resolve(true);
-        },
-        onShowHistory: (save) => histories.push(save),
-        sectionLinks: { workspace: WORKSPACE, onOpen: () => undefined, reveal: undefined },
-      }),
-    ),
-  );
+  function TitledPlan(): React.JSX.Element {
+    const [asks, setAsks] = useState(0);
+    return createElement(PlanBody, {
+      task: TASK,
+      live: false,
+      onEdit: () => Promise.reject(new Error("Nothing is saved in this test.")),
+      onRename: (name) => {
+        renamed.push(name);
+        return Promise.resolve(true);
+      },
+      rename: { asks, asked: undefined, onBegin: () => setAsks((count) => count + 1) },
+      onShowHistory: (save) => histories.push(save),
+      sectionLinks: { workspace: WORKSPACE, onOpen: () => undefined, reveal: undefined },
+    });
+  }
+  act(() => root.render(createElement(TitledPlan)));
   const block = container.querySelector<HTMLElement>('[role="group"][aria-label="Title"]');
   const more = container.querySelector<HTMLButtonElement>('[aria-label="Title actions"]');
   assert.ok(block, "the title is a block");
@@ -506,7 +507,7 @@ function chooseItem(label: string): Promise<void> {
   return act(async () => item.click());
 }
 
-test("the title's ⋯ is a section's: in its row, shown while the keyboard is on the title, the Tab stop after it, and its menu takes focus and hands it back on Escape", () => {
+test("the title's ⋯ is a section's: at the end of the title's line, shown while the keyboard is on the title, the Tab stop after it, and its menu takes focus and hands it back on Escape", () => {
   const { block, more } = drawnTitled();
   // The unit whose hover or focus shows its ⋯, as a section's does.
   const unit = more.closest(".plan-unit-attributed");
@@ -518,7 +519,7 @@ test("the title's ⋯ is a section's: in its row, shown while the keyboard is on
 
   assert.equal(before, false);
   assert.equal(unit.matches(":focus-within"), true, "the ⋯ stands while the title is selected");
-  assert.equal(more.closest(".plan-unit-row")?.parentElement, block.parentElement);
+  assert.ok(more.closest(".luke-page-header-actions"), "the ⋯ ends the title's line");
   assert.equal(block.tabIndex, 0);
   assert.equal(more.tabIndex, 0);
   assert.ok(block.compareDocumentPosition(more) & Node.DOCUMENT_POSITION_FOLLOWING);

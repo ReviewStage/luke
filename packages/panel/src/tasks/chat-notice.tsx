@@ -6,18 +6,19 @@ import {
   chatNoticeWords,
   knownBlock,
 } from "@luke/features/chat-wire";
+import { momentText } from "@luke/features/time-format";
 import {
   HoverCard,
   HoverCardHead,
   HoverCardNote,
   HoverCardRule,
-  MESSAGE_ACTIONS_PLACEMENT,
+  MESSAGE_LINE_ALIGN,
+  MessageLine,
   TEXT_ELEMENT,
   TEXT_VARIANT,
   Text,
 } from "@luke/ui";
 import { CHAT_PLACE, type ChatNames, type ChatPlace, chatWho } from "@luke/ui/chat-model";
-import { momentText } from "@luke/ui/time-format";
 import { type ChatNoticeMetadata, MESSAGE_AUTHOR } from "@luke/wire";
 import { MessagesSquareIcon } from "lucide-react";
 import type { ReactNode } from "react";
@@ -27,7 +28,6 @@ import { previewWords } from "../desktop/chat-preview.js";
 import { useChatActor } from "./chat-actors.js";
 import { ChannelName, channelTitle } from "./chat-channel-name.js";
 import { CopyMessageAction } from "./copy-message.js";
-import { SentTime } from "./sent-time.js";
 import { SentWords } from "./skill-chip.js";
 import { TranscriptWords } from "./transcript-blocks.js";
 
@@ -39,8 +39,8 @@ import { TranscriptWords } from "./transcript-blocks.js";
  * the same bubble at the left instead, the way a chat app sets the other
  * side's words, with the line under it the mirror of a sent message's: the
  * sender's mark and name, then when it was posted, then, while the pointer
- * or the keyboard is on it, Open in Chat, Copy, and Copy link. Where it was
- * said is no part of that line: Open in Chat hangs a hover card saying it,
+ * or the keyboard is on it, Open in chat, Copy, and Copy link. Where it was
+ * said is no part of that line: Open in chat hangs a hover card saying it,
  * a direct message and its two, or the channel and, for a reply, the
  * thread's first message, and the moment in full; a press on it opens the
  * window's Chat on that channel. Its body is the message as the chat holds
@@ -59,8 +59,8 @@ const NO_NAMES: ChatNames = {
   selfName: undefined,
 };
 
-/** What Open in Chat is called. */
-const OPEN_IN_CHAT = "Open in Chat";
+/** What Open in chat is called. */
+const OPEN_IN_CHAT = "Open in chat";
 
 /** What a direct message's card is named. */
 const DIRECT_MESSAGE = "Direct message";
@@ -86,7 +86,7 @@ function heldWords(message: HeldMessage): string {
     .join("\n\n");
 }
 
-/** Where a notice's message was said, hung from its Open in Chat: a DM and its two, or the channel and the thread it replies in, its first message as plain words (`chat-preview.ts`), then the moment in full. */
+/** Where a notice's message was said, hung from its Open in chat: a DM and its two, or the channel and the thread it replies in, its first message as plain words (`chat-preview.ts`), then the moment in full. */
 function NoticePlaceCard({
   doors,
   channel,
@@ -133,7 +133,7 @@ function NoticePlaceCard({
   );
 }
 
-/** A chat notice's bubble at the column's left: the message, then its sender and when, and its actions, Open in Chat among them where the window holds the chat. */
+/** A chat notice's bubble at the column's left: the message, then its sender and when, and its actions, Open in chat among them where the window holds the chat. */
 export function ChatNoticeCard({
   messageId,
   notice,
@@ -194,32 +194,34 @@ export function ChatNoticeCard({
           )}
         </MessageContent>
       )}
-      <div className="message-meta">
-        {/* A sender the chat names is drawn by their own chip, which hangs their card, as another agent is by its own. */}
-        <span className="message-sender">
-          {from ??
-            (who?.member === undefined ? (
-              <Text
-                as={TEXT_ELEMENT.SPAN}
-                variant={TEXT_VARIANT.INHERIT}
-                truncate
-                className="message-sender-words"
-              >
-                {notice.from}
-              </Text>
-            ) : (
-              <ActorRef actor={actorOf(who.member.id)} />
-            ))}
-        </span>
-        {at === undefined ? null : <SentTime at={at} named />}
-        <CopyMessageAction
-          words={shownWords}
-          copyable={shownWords !== ""}
-          messageId={messageId}
-          placement={MESSAGE_ACTIONS_PLACEMENT.INLINE}
-          lead={open}
-        />
-      </div>
+      <MessageLine
+        align={MESSAGE_LINE_ALIGN.START}
+        // A sender the chat names is drawn by their own chip, which hangs their card, as another agent is by its own.
+        sender={
+          from ??
+          (who?.member === undefined ? (
+            <Text
+              as={TEXT_ELEMENT.SPAN}
+              variant={TEXT_VARIANT.INHERIT}
+              truncate
+              className="message-sender-words"
+            >
+              {notice.from}
+            </Text>
+          ) : (
+            <ActorRef actor={actorOf(who.member.id)} />
+          ))
+        }
+        at={at}
+        actions={
+          <CopyMessageAction
+            words={shownWords}
+            copyable={shownWords !== ""}
+            messageId={messageId}
+            lead={open}
+          />
+        }
+      />
     </Message>
   );
 }

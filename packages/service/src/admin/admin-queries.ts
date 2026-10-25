@@ -48,7 +48,7 @@ import {
   ADMIN_USERS_LIMIT,
   type AdminUserListSource,
   lastSeenInstant,
-  searchLikePattern,
+  searchLikePatterns,
 } from "./admin-users.js";
 
 export type AdminQueryFailure = QueryError | Schema.SchemaError;
@@ -400,15 +400,18 @@ const findDayTotals = SqlSchema.findOneOption({
 });
 
 /**
- * The accounts a search keeps: a case-insensitive substring of the name or
- * the email, the two fields a roster row is found by. The term travels as a
- * bound parameter — never interpolated into the SQL — with its own
- * wildcards escaped, so it can only ever name characters to find.
+ * The accounts a search keeps: every word of it a case-insensitive substring
+ * of the name or the email, the two fields a roster row is found by. The
+ * words travel as bound parameters — never interpolated into the SQL — with
+ * their own wildcards escaped, so they can only ever name characters to find.
  */
 function keptBySearch(search: string | null) {
   if (search === null) return undefined;
-  const pattern = searchLikePattern(search);
-  return or(ilike(user.name, pattern), ilike(user.email, pattern));
+  return and(
+    ...searchLikePatterns(search).map((pattern) =>
+      or(ilike(user.name, pattern), ilike(user.email, pattern)),
+    ),
+  );
 }
 
 /** The scope and the search as one condition, which is the whole roster filter. */

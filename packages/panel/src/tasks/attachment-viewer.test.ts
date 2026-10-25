@@ -11,8 +11,10 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
 import { runAppCommand } from "../app-commands.js";
 import { FindScope } from "../find-in-tab.js";
+import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
+import { ShellRoomContext } from "../stage-room.js";
 import { fakeAppBridge } from "../testing/app-bridge.js";
-import { fakeAppPlatform } from "../testing/app-platform.js";
+import { copyingInto, fakeAppPlatform } from "../testing/app-platform.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { relayout } from "../testing/resize-observer.js";
 import { wholeFileDrawn, wholeFileLines } from "../testing/whole-file.js";
@@ -74,7 +76,7 @@ interface ViewerState {
 }
 
 /** The viewer open on the two screenshots, at `at`, and the ways to reach the picture shown. */
-function opened(opening: ImageOpening = IMAGE_OPENING.FITTED) {
+function opened(opening: ImageOpening = IMAGE_OPENING.FITTED, room: ShellRoom = SHELL_ROOM.WIDE) {
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
@@ -87,18 +89,22 @@ function opened(opening: ImageOpening = IMAGE_OPENING.FITTED) {
       root.render(
         onRegistry(
           registry,
-          createElement(AttachmentViewer, {
-            files: state.files,
-            at: state.at,
-            onAt: (at: number) => {
-              state.at = at;
-              draw();
-            },
-            onClose: () => {
-              state.closed = true;
-            },
-            opening,
-          }),
+          createElement(
+            ShellRoomContext.Provider,
+            { value: room },
+            createElement(AttachmentViewer, {
+              files: state.files,
+              at: state.at,
+              onAt: (at: number) => {
+                state.at = at;
+                draw();
+              },
+              onClose: () => {
+                state.closed = true;
+              },
+              opening,
+            }),
+          ),
         ),
       ),
     );
@@ -370,6 +376,15 @@ test("the zoom buttons name the bare keys that do the same", () => {
   assert.equal(named("Zoom out"), "-");
 });
 
+test("Previous, Next and Close name the arrows and Esc that do the same", () => {
+  opened();
+  const named = (label: string) =>
+    document.querySelector(`button[aria-label="${label}"]`)?.getAttribute("aria-keyshortcuts");
+  assert.equal(named("Previous file"), "ArrowLeft");
+  assert.equal(named("Next file"), "ArrowRight");
+  assert.equal(named("Close"), "Escape");
+});
+
 test("a text file opened over the window is drawn as every code is, numbered from its first line, a Windows line break opening no line of its own", async () => {
   const notes: FileChip = {
     name: "notes.ts",
@@ -446,7 +461,8 @@ test("a text file opened over a tab leaves the tab's find its own, the file's wo
   });
 
   assert.equal(
-    document.querySelector('[role="search"][aria-label="Find"] [aria-live="polite"]')?.textContent,
+    document.querySelector('[role="search"][aria-label="Find"] .luke-search-field-tally')
+      ?.textContent,
     "1 of 1",
   );
   act(() => {
@@ -471,23 +487,73 @@ test("Copy image puts the picture shown on the clipboard as its PNG, and its che
   assert.deepEqual(copied, [PIXEL], "the PNG's own bytes, whatever the address says after them");
   const glyph = () =>
     document
-      .querySelector('button[aria-label="Copy image"] .copy-glyph')
+      .querySelector('button[aria-label="Copy image"] .luke-copy-glyph')
       ?.getAttribute("data-state");
   assert.equal(glyph(), "copied");
   viewer.key("ArrowLeft");
   assert.equal(glyph(), "idle", "the picture walked to was not the one copied");
-  viewer.key("ArrowRight");
-  assert.equal(glyph(), "copied", "back on the copied picture, the check stands again");
   const refused = Promise.withResolvers<void>();
   answer = refused.promise;
-  viewer.key("ArrowLeft");
   viewer.press("Copy image");
-  await act(async () => undefined);
-  assert.equal(
-    glyph(),
-    "idle",
-    "a copy still asked for answers nothing yet, the last one's check included",
-  );
+  viewer.key("ArrowRight");
   await act(async () => refused.reject(new Error("refused")));
-  assert.equal(glyph(), "failed", "its own answer lands beside it");
+  assert.equal(glyph(), "idle", "a copy answered after the next picture was shown lands nowhere");
+});
+
+test("Copy text puts a text file's words on the clipboard and shows the check", async () => {
+  const copied: string[] = [];
+  fakeAppPlatform(copyingInto(copied));
+  const notes: FileChip = {
+    name: "notes.ts",
+    mediaType: "text/plain",
+    url: `data:text/plain;base64,${btoa("const a = 1;\nconst b = 2;\n")}`,
+  };
+  const root = createRoot(document.body.appendChild(document.createElement("div")));
+  roots.push(root);
+  const registry = AtomRegistry.make();
+  registries.push(registry);
+  act(() =>
+    root.render(
+      onRegistry(
+        registry,
+        createElement(AttachmentViewer, {
+          files: [notes],
+          at: 0,
+          onAt: () => undefined,
+          onClose: () => undefined,
+        }),
+      ),
+    ),
+  );
+  await wholeFileDrawn(document.body);
+  const button =
+    document.querySelector<HTMLButtonElement>('button[aria-label="Copy text"]') ??
+    assert.fail("a text file offers Copy text");
+  await act(async () => button.click());
+
+  assert.deepEqual(copied, ["const a = 1;\nconst b = 2;\n"]);
+  assert.equal(button.querySelector(".luke-copy-glyph")?.getAttribute("data-state"), "copied");
+});
+
+test("on a phone the viewer's header is Close alone at its start, the file's name centred over its size, and one ⋯ at its end holding every other button; the arrow keys still walk the files", () => {
+  const viewer = opened(IMAGE_OPENING.FITTED, SHELL_ROOM.NARROW);
+  const head =
+    document.querySelector<HTMLElement>('[role="dialog"] header') ?? assert.fail("a header");
+  const named = (selector: string) =>
+    [...head.querySelectorAll(selector)].map((button) => button.getAttribute("aria-label"));
+  assert.deepEqual(named("button"), ["Close", "File actions"], "one control in each corner");
+  assert.deepEqual(named(".luke-toolbar-lead button"), ["Close"], "Close at its start");
+  assert.equal(head.querySelector("h2")?.textContent, "first.png");
+
+  viewer.press("File actions");
+  const items = () => [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')];
+  assert.deepEqual(
+    items().map((item) => item.textContent),
+    ["Previous file1 of 2", "Next file1 of 2", "Copy image", "Zoom out", "Zoom in", "Download"],
+  );
+  act(() => items()[1]?.click());
+  assert.equal(viewer.state.at, 1, "Next file shows the next");
+
+  viewer.key("ArrowLeft");
+  assert.equal(viewer.state.at, 0, "the arrows still walk the files");
 });

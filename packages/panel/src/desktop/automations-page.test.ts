@@ -36,7 +36,7 @@ import {
 } from "@luke/features/trigger-catalog";
 import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
 import { ACT_KIND } from "@luke/host/acts";
-import type { AppStateSnapshot } from "@luke/host/app-state";
+import type { AppStateDelivery, AppStateSnapshot } from "@luke/host/app-state";
 import type { PortActResult } from "@luke/host/contract";
 import { EXPERIMENT, type Experiment } from "@luke/settings";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
@@ -48,7 +48,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
 import { runAppCommand } from "../app-commands.js";
 import { OpenFeedbackProvider } from "../open-feedback.js";
-import { SHELL_ROOM } from "../shell-room.js";
+import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import {
   AUTOMATIONS_PAGE,
   type AutomationsPlace,
@@ -64,7 +64,7 @@ import {
   fakeAppBridgeCalls,
 } from "../testing/app-bridge.js";
 import { copyingInto, fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
-import { handState, stateWith } from "../testing/app-state.js";
+import { deliveryOf, handState, stateWith } from "../testing/app-state.js";
 import { layContainersAt, shown } from "../testing/container-width.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { restOn } from "../testing/hint-rest.js";
@@ -113,7 +113,11 @@ const SWEEP = automation(1, {
   name: "Nightly flaky-test sweep",
   scope: AUTOMATION_SCOPE.WORKSPACE,
 });
-const DIGEST = automation(2, { name: "Morning digest", scope: AUTOMATION_SCOPE.PERSONAL });
+const DIGEST = automation(2, {
+  name: "Morning digest",
+  scope: AUTOMATION_SCOPE.PERSONAL,
+  mine: true,
+});
 const FAILING = automation(3, {
   name: "Dependency bumps",
   scope: AUTOMATION_SCOPE.WORKSPACE,
@@ -258,6 +262,14 @@ let agentsOpened: string[] = [];
 let defaultRefused = false;
 /** How many times the model catalog was read. */
 let catalogReads = 0;
+/** Whether the model catalog answers that it could not be read. */
+let catalogRefused = false;
+/** Whether the catalog marks every model as one no credential of the reader's pays for. */
+let catalogUnconnected = false;
+/** Whether the workspace's newest agents answer that they could not be read. */
+let agentListRefused = false;
+/** Whether a search among the workspace's agents answers that it could not be made. */
+let agentSearchRefused = false;
 /** Whether the account's tasks were about no repository lately, so a new automation starts with none. */
 let noRecent = false;
 /** Whether the read of the account's integrations is held unanswered, as one still out on the wire. */
@@ -269,6 +281,8 @@ let sentryRead: WorkspaceSentry = {
   configured: true,
   installations: [{ installationId: "a1b2c3d4-0000-4000-8000-000000000001" }],
 };
+/** How many reads of the workspace's Sentry are refused before one answers. */
+let sentryRefusals = 0;
 /** Every workspace a Sentry install was asked for. */
 let sentryInstalls: string[] = [];
 /** What a change answers: the automation as changed, or why not. */
@@ -315,6 +329,10 @@ beforeEach(() => {
   boardOpens = [];
   defaultRefused = false;
   catalogReads = 0;
+  catalogRefused = false;
+  catalogUnconnected = false;
+  agentListRefused = false;
+  agentSearchRefused = false;
   changeRefusal = undefined;
   noRecent = false;
   integrationsHeld = false;
@@ -324,6 +342,7 @@ beforeEach(() => {
     installations: [{ installationId: "a1b2c3d4-0000-4000-8000-000000000001" }],
   };
   sentryInstalls = [];
+  sentryRefusals = 0;
   fakeActs({
     act: (request: AnyAct): Promise<FakeActAnswer> => {
       if (request.kind === ACT_KIND.AUTOMATIONS_FOLLOW) {
@@ -443,6 +462,10 @@ beforeEach(() => {
         return Promise.resolve({ status: FAKE_ANSWER.DONE, value });
       }
       if (request.kind === ACT_KIND.WORKSPACE_SENTRY_READ) {
+        if (sentryRefusals > 0) {
+          sentryRefusals -= 1;
+          return Promise.resolve({ status: FAKE_ANSWER.REFUSED, reason: "Unreachable." });
+        }
         return Promise.resolve({ status: FAKE_ANSWER.DONE, value: sentryRead });
       }
       if (request.kind === ACT_KIND.WORKSPACE_SENTRY_INSTALL) {
@@ -456,7 +479,14 @@ beforeEach(() => {
       }
       if (request.kind === ACT_KIND.CODING_AGENTS_MODELS) {
         catalogReads += 1;
-        return Promise.resolve({ status: FAKE_ANSWER.DONE, value: { models: CATALOG } });
+        const value = catalogRefused
+          ? { failure: AUTOMATION_CALL_FAILURE.UNANSWERED }
+          : {
+              models: CATALOG.map((model) =>
+                catalogUnconnected ? { ...model, credentialMissing: true } : model,
+              ),
+            };
+        return Promise.resolve({ status: FAKE_ANSWER.DONE, value });
       }
       if (request.kind === ACT_KIND.CODING_AGENTS_DEFAULT_READ) {
         const value = defaultRefused
@@ -467,6 +497,12 @@ beforeEach(() => {
       if (request.kind === ACT_KIND.CODING_AGENTS_WORKSPACE_LIST) {
         agentsAsked.push(request.payload);
         const { words } = request.payload;
+        if (words === undefined ? agentListRefused : agentSearchRefused) {
+          return Promise.resolve({
+            status: FAKE_ANSWER.DONE,
+            value: { failure: AUTOMATION_CALL_FAILURE.UNANSWERED },
+          });
+        }
         return Promise.resolve({
           status: FAKE_ANSWER.DONE,
           value: { agents: words === undefined ? workspaceAgents : agentsFound(words) },
@@ -564,12 +600,12 @@ test("the listed workspace's automations stand before the personal ones, under a
   assert.deepEqual(listed, [WORKSPACE.id]);
   assert.deepEqual(
     [...page.querySelectorAll(".automation-group h2")].map((heading) => heading.textContent),
-    ["Acme", "Personal"],
+    ["Acme", "Only you"],
   );
   assert.deepEqual(rows(page), [
     ["Nightly flaky-test sweep", "Acme"],
     ["Dependency bumps", "Acme"],
-    ["Morning digest", "Personal"],
+    ["Morning digest", "Only you"],
   ]);
 });
 
@@ -579,7 +615,7 @@ test("one owner's automations alone stand under no heading, still naming their o
   await settle();
 
   assert.equal(page.querySelectorAll(".automation-group h2").length, 0);
-  assert.deepEqual(rows(page), [["Morning digest", "Personal"]]);
+  assert.deepEqual(rows(page), [["Morning digest", "Only you"]]);
 });
 
 test("an automation turned off reads Off where its next run would, and a failed newest run is marked at its row's end", async () => {
@@ -623,28 +659,70 @@ test("a switch turns its automation off, and the row takes the service's answer 
   assert.equal(row.querySelector("[role=switch]")?.getAttribute("aria-checked"), "false");
 });
 
-test("an older switch's answer landing after a newer one's draws nothing over it", async () => {
+test("a switch flips at once, before the service answers, and a press made meanwhile waits its turn", async () => {
   heldChanges = [];
   const page = mount();
   await settle();
-  listHeld = true;
-  const press = () =>
-    act(() => automationRows(page)[0]?.querySelector<HTMLButtonElement>("[role=switch]")?.click());
+  const sweep = () =>
+    rowOf(page, "Nightly flaky-test sweep").querySelector<HTMLButtonElement>("[role=switch]");
+  const press = () => act(() => sweep()?.click());
 
   press();
-  press();
   await settle();
-  const [older, newer] = heldChanges;
-  newer?.();
-  await settle();
-  older?.();
-  await settle();
-
-  assert.equal(changes.length, 2);
   assert.equal(
-    page.querySelector(".automation-row-name")?.textContent,
-    "Nightly flaky-test sweep, write 2",
+    sweep()?.getAttribute("aria-checked"),
+    "false",
+    "it reads off while the write is out",
   );
+  press();
+  await settle();
+  assert.equal(changes.length, 1, "the second press sends nothing while the first is out");
+  assert.equal(sweep()?.getAttribute("aria-checked"), "true", "but the switch already shows it");
+
+  heldChanges[0]?.();
+  await settle();
+
+  assert.deepEqual(changes, [
+    { automationId: SWEEP.id, change: { enabled: false } },
+    { automationId: SWEEP.id, change: { enabled: true } },
+  ]);
+});
+
+test("presses made while a write is out send only the newest, and none that repeats what was sent", async () => {
+  heldChanges = [];
+  const page = mount();
+  await settle();
+  const press = () =>
+    act(() =>
+      rowOf(page, "Nightly flaky-test sweep")
+        .querySelector<HTMLButtonElement>("[role=switch]")
+        ?.click(),
+    );
+
+  press();
+  press();
+  press();
+  await settle();
+  heldChanges[0]?.();
+  await settle();
+
+  assert.deepEqual(changes, [{ automationId: SWEEP.id, change: { enabled: false } }]);
+});
+
+test("a switch the service refuses in the editor reads its new state at once, then goes back", async () => {
+  changeRefusal = AUTOMATION_CALL_FAILURE.NOT_PERMITTED;
+  const page = mountPages({ kind: AUTOMATIONS_PAGE.EDIT, automationId: SWEEP.id });
+  await settle();
+
+  act(() => page.querySelector<HTMLButtonElement>("[role=switch]")?.click());
+
+  assert.equal(
+    page.querySelector("[role=switch]")?.getAttribute("aria-checked"),
+    "false",
+    "it flipped before the refusal came",
+  );
+  await settle();
+  assert.equal(page.querySelector("[role=switch]")?.getAttribute("aria-checked"), "true");
 });
 
 test("a switch's answer landing after a list pushed since it was sent draws nothing over the push", async () => {
@@ -689,13 +767,13 @@ test("what changed elsewhere is drawn as the host pushes it, and a switch reads 
   assert.deepEqual(rows(page), [
     ["Nightly flaky-test sweep", "Acme"],
     ["Dependency bumps, weekly", "Acme"],
-    ["Morning digest", "Personal"],
+    ["Morning digest", "Only you"],
   ]);
 });
 
 test("a window moved to another workspace lets the list it followed go, and follows that workspace's", async () => {
   const beta: Workspace = { ...WORKSPACE, id: "workspace-beta", name: "Beta" };
-  const betaAutomation = automation(9, { name: "Beta's digest", workspaceId: beta.id });
+  const betaAutomation = automation(9, { name: "Beta's digest", workspaceId: beta.id, mine: true });
   standing = [...standing, betaAutomation];
   const page = mount();
   await settle();
@@ -703,7 +781,7 @@ test("a window moved to another workspace lets the list it followed go, and foll
   render(tasksControl({ workspace: beta }));
   await settle();
 
-  assert.deepEqual(rows(page), [["Beta's digest", "Personal"]]);
+  assert.deepEqual(rows(page), [["Beta's digest", "Only you"]]);
   assert.deepEqual(listed, [WORKSPACE.id, beta.id]);
   assert.deepEqual(
     followers.map((each) => [each.id, each.closed]),
@@ -748,7 +826,30 @@ test("a list that could not be read says so, and Retry reads it again", async ()
   await settle();
 
   assert.deepEqual(listed, [WORKSPACE.id, WORKSPACE.id]);
-  assert.deepEqual(rows(page), [["Morning digest", "Personal"]]);
+  assert.deepEqual(rows(page), [["Morning digest", "Only you"]]);
+});
+
+test("a push that fails over a list already read keeps its rows under Could not refresh and Retry, and Retry reads the list again", async () => {
+  standing = [DIGEST];
+  const page = mount();
+  await settle();
+
+  act(() => followers[0]?.push({ failure: AUTOMATION_CALL_FAILURE.UNANSWERED }));
+  await settle();
+
+  assert.deepEqual(rows(page), [["Morning digest", "Only you"]]);
+  const note = page.querySelector('[role="alert"]');
+  assert.match(note?.textContent ?? "", /Could not refresh/u);
+  assert.doesNotMatch(page.textContent ?? "", /could not be read/u);
+  const retry = [...(note?.querySelectorAll("button") ?? [])].find(
+    (button) => button.textContent === "Retry",
+  );
+  act(() => retry?.click());
+  await settle();
+
+  assert.deepEqual(listed, [WORKSPACE.id, WORKSPACE.id]);
+  assert.deepEqual(rows(page), [["Morning digest", "Only you"]]);
+  assert.equal(page.querySelector('[role="alert"]'), null, "the line goes once the list is read");
 });
 
 test("with no automations the page says what one is, and with no workspace listed it asks for none", async () => {
@@ -756,7 +857,7 @@ test("with no automations the page says what one is, and with no workspace liste
   const page = mount();
   await settle();
 
-  assert.match(page.textContent ?? "", /No automations yet/u);
+  assert.match(page.textContent ?? "", /No automations yet\./u);
   act(() => root?.unmount());
   root = undefined;
   listed = [];
@@ -764,6 +865,52 @@ test("with no automations the page says what one is, and with no workspace liste
   mount(tasksControl({ workspace: undefined }));
   await settle();
   assert.deepEqual(listed, []);
+});
+
+/** The window's bar over `page`, its parts in the order they stand, each by its text. */
+function bar(page: HTMLElement): { banner: HTMLElement; parts: Element[] } {
+  const banner = page.querySelector<HTMLElement>("header") ?? assert.fail("no bar");
+  return { banner, parts: [...banner.children] };
+}
+
+test("the list's title is its bar's heading, and Create with an agent and New automation end the bar", async () => {
+  const page = mountPages({ kind: AUTOMATIONS_PAGE.LIST });
+  await settle();
+
+  const { banner, parts } = bar(page);
+  assert.equal(banner.querySelectorAll("h1").length, 1);
+  assert.equal(parts.length, 2, "a heading and the acts, with no box of the page's own between");
+  const [heading, actions] = parts;
+  assert.equal(heading?.querySelector("h1")?.textContent, "Automations");
+  assert.deepEqual(
+    [...(actions?.querySelectorAll("button") ?? [])].map(
+      (each) => each.getAttribute("aria-label") ?? each.textContent,
+    ),
+    ["Create with an agent", "New automation"],
+  );
+});
+
+test("with no workspace chosen the bar's two acts stay reachable by keyboard, press nothing, and say why on hover", async () => {
+  const agentOpens: number[] = [];
+  mount(tasksControl({ workspace: undefined, onNewAutomationAgent: () => agentOpens.push(1) }));
+  await settle();
+
+  for (const name of ["Create with an agent", "New automation"]) {
+    const bar_ = button(name);
+    assert.equal(bar_.getAttribute("aria-disabled"), "true", name);
+    assert.equal(bar_.disabled, false, `${name} stays focusable`);
+    assert.match(pillOver(bar_) ?? "", /Choose a workspace first/u, name);
+    act(() => bar_.click());
+  }
+  assert.deepEqual(agentOpens, []);
+});
+
+test("New automation, in the bar, opens a new automation's page", async () => {
+  mountPages({ kind: AUTOMATIONS_PAGE.LIST });
+  await settle();
+
+  act(() => button("New automation").click());
+  assert.deepEqual(places.at(-1), { kind: AUTOMATIONS_PAGE.NEW });
 });
 
 test("while the list is first read it stands as quiet rows under its toolbar, said to a reader as being read", async () => {
@@ -774,10 +921,9 @@ test("while the list is first read it stands as quiet rows under its toolbar, sa
   const wait = page.querySelector("[role=status][aria-busy=true]");
   assert.equal(wait?.textContent, "Reading your automations…");
   assert.ok((wait?.querySelectorAll(".luke-skeleton").length ?? 0) > 0);
-  assert.ok(
-    page.querySelector("h1")?.textContent === "Automations",
-    "its toolbar stands over them",
-  );
+  const { parts } = bar(page);
+  assert.equal(parts[0]?.querySelector("h1")?.textContent, "Automations");
+  assert.ok(parts[1]?.querySelector("button"), "its acts stand at the bar's end");
 });
 
 test("while the list is first read its blocks stand in an owner's card of rows, each with its clock tile, its owner's and next run's columns, and its switch's place, as a row of the list does", async () => {
@@ -819,7 +965,7 @@ test("an automation's page read before the list stands the groups and rows a sch
   const page = mountPages({ kind: AUTOMATIONS_PAGE.EDIT, automationId: SWEEP.id });
   await settle();
   const reading = setupShape(page);
-  const acts = page.querySelectorAll(".desktop-toolbar-actions .luke-skeleton").length;
+  const acts = page.querySelectorAll(".luke-toolbar-actions .luke-skeleton").length;
   assert.ok(acts > 0, "its acts stand as blocks");
 
   listHeld = false;
@@ -837,7 +983,7 @@ test("with no workspace listed the list and a linked automation stand as quiet b
     page.querySelector("[role=status][aria-busy=true]")?.textContent,
     "Reading your automations…",
   );
-  assert.doesNotMatch(page.textContent ?? "", /No automations yet/u);
+  assert.doesNotMatch(page.textContent ?? "", /No automations yet\./u);
 
   act(() => root?.unmount());
   root = undefined;
@@ -968,12 +1114,42 @@ function mountPages(start: AutomationsPlace, workspace: Workspace = WORKSPACE): 
 }
 
 /** The button named, wherever it is drawn. */
+/** What a reader names `control` by: the elements its `aria-labelledby` lists, itself among them, in order. */
+function nameOf(control: HTMLElement): string {
+  const ids = (control.getAttribute("aria-labelledby") ?? "").split(" ");
+  return ids
+    .map((id) => document.getElementById(id)?.textContent ?? "")
+    .join(" ")
+    .trim();
+}
+
+/** The servers chip, found as a reader names it: by its hidden field name, then its own face. */
+function serversChip(root: ParentNode = document): HTMLButtonElement | undefined {
+  return [...root.querySelectorAll<HTMLButtonElement>("button[aria-labelledby]")].find((each) => {
+    const [fieldName] = (each.getAttribute("aria-labelledby") ?? "").split(" ");
+    return (
+      fieldName !== undefined && document.getElementById(fieldName)?.textContent === "Integrations"
+    );
+  });
+}
+
 function button(name: string): HTMLButtonElement {
   const found = [...document.querySelectorAll<HTMLButtonElement>("button")].find(
     (each) => each.textContent === name || each.getAttribute("aria-label") === name,
   );
   assert.ok(found, `no button ${name}`);
   return found;
+}
+
+/** Stands a phone's automation's runs, from its head's ⋯, where its Runs now stands. */
+function phoneRuns(): void {
+  act(() => button("Automation actions").click());
+  act(() => menuItem("Runs").click());
+}
+
+/** Whether a copy button shows its copy landed, its glyph turned to the check, once the clipboard took it. */
+function copiedShown(copyButton: HTMLButtonElement): boolean {
+  return copyButton.querySelector(".luke-copy-glyph")?.getAttribute("data-state") === "copied";
 }
 
 /** The option of the list standing open whose words are `words`. */
@@ -1041,9 +1217,9 @@ function pickerDetail(page: HTMLElement, label: string): string | undefined {
   return id === null ? undefined : (document.getElementById(id)?.textContent ?? undefined);
 }
 
-/** Whether `words` stand in a polite live region, as a row's error line says them. */
+/** Whether `words` stand in an error line, which the window's announcer says as they arrive. */
 function announced(words: string): boolean {
-  return [...document.querySelectorAll("[aria-live=polite]")].some(
+  return [...document.querySelectorAll("[data-slot=field-error]")].some(
     (region) => region.textContent === words,
   );
 }
@@ -1083,9 +1259,14 @@ function isOn(name: string): boolean {
   return switchNamed(name).getAttribute("aria-checked") === "true";
 }
 
-/** The crumbs' words, in order. */
+/** The toolbar's crumbs' words, in order. */
 function crumbs(page: HTMLElement): string {
-  return page.querySelector(".automation-crumbs")?.textContent ?? "";
+  return page.querySelector(".automation-toolbar nav")?.textContent ?? "";
+}
+
+/** The page's headings: an automation's page has one, its name. */
+function headings(page: HTMLElement): string[] {
+  return [...page.querySelectorAll("h1")].map((each) => each.textContent?.trim() ?? "");
 }
 
 test("an automation's whole row is its press: its owner and its next run open it too, and its switch only switches it", async () => {
@@ -1121,7 +1302,7 @@ test("an automation's whole row is its press: its owner and its next run open it
   assert.ok(changes.length > 0, "and switches it");
 });
 
-test("a row opens its automation's page, under crumbs naming it, with what it was saved as", async () => {
+test("a row opens its automation's page, headed by its name, with a crumb back to the list, and what it was saved as", async () => {
   const page = mountPages({ kind: AUTOMATIONS_PAGE.LIST });
   await settle();
 
@@ -1131,28 +1312,36 @@ test("a row opens its automation's page, under crumbs naming it, with what it wa
   await settle();
 
   assert.deepEqual(places.at(-1), { kind: AUTOMATIONS_PAGE.EDIT, automationId: SWEEP.id });
-  assert.equal(crumbs(page), "AutomationsNightly flaky-test sweep");
+  assert.deepEqual(headings(page), [SWEEP.name], "the page has one h1, the automation's name");
   assert.ok(
-    page.querySelector('.automation-crumbs .actor-mark[data-kind="automation"]'),
+    page.querySelector('h1 .actor-mark[data-kind="automation"]'),
     "the clock tile stands before the name",
   );
+  assert.equal(crumbs(page), "Automations", "the toolbar leads with the way back, not the name");
   assert.equal(
     page.querySelector<HTMLInputElement>("input[aria-label='Automation name']")?.value,
     SWEEP.name,
   );
   assert.equal(picked(page, "Owner"), "Acme");
   assert.equal(page.querySelector(".automation-editor-status")?.textContent, "Saved");
+  act(() => button("Automations").click());
+  assert.deepEqual(
+    places.at(-1),
+    { kind: AUTOMATIONS_PAGE.LIST },
+    "its crumb goes back to the list",
+  );
 });
 
 test("a new automation is created only once it is named and told its task, and then stands as its own page", async () => {
   const page = mountPages({ kind: AUTOMATIONS_PAGE.NEW });
   await settle();
-  assert.equal(crumbs(page), "AutomationsNew automation");
+  assert.deepEqual(headings(page), ["New automation"]);
+  assert.equal(crumbs(page), "Automations");
 
-  act(() => button("Create").click());
+  act(() => button("Create automation").click());
   await settle();
   assert.deepEqual(creates, []);
-  assert.match(page.textContent ?? "", /Name it\./u);
+  assert.match(page.textContent ?? "", /Name the automation\./u);
   assert.match(page.textContent ?? "", /Tell the agent what to do\./u);
   assert.equal(
     page.querySelector("textarea[aria-label='Prompt']")?.getAttribute("aria-invalid"),
@@ -1162,7 +1351,7 @@ test("a new automation is created only once it is named and told its task, and t
 
   type(page.querySelector("input[aria-label='Automation name']"), "Morning triage");
   type(page.querySelector("textarea[aria-label='Prompt']"), "Triage the issues opened overnight.");
-  act(() => button("Create").click());
+  act(() => button("Create automation").click());
   await settle();
 
   assert.equal(creates.length, 1);
@@ -1181,7 +1370,7 @@ test("a new automation is created only once it is named and told its task, and t
     repositories: ["acme/ledger"],
   });
   assert.equal(places.at(-1)?.kind, AUTOMATIONS_PAGE.EDIT);
-  assert.equal(crumbs(page), "AutomationsMorning triage");
+  assert.deepEqual(headings(page), ["Morning triage"]);
 });
 
 test("a new automation whose answer lands after a list pushed before it was made still stands as its own page", async () => {
@@ -1190,7 +1379,7 @@ test("a new automation whose answer lands after a list pushed before it was made
   await settle();
   type(page.querySelector("input[aria-label='Automation name']"), "Morning triage");
   type(page.querySelector("textarea[aria-label='Prompt']"), "Triage the issues opened overnight.");
-  act(() => button("Create").click());
+  act(() => button("Create automation").click());
   await settle();
 
   // Something else moves the list while the create is out, before it is made.
@@ -1200,7 +1389,7 @@ test("a new automation whose answer lands after a list pushed before it was made
   await settle();
 
   assert.equal(places.at(-1)?.kind, AUTOMATIONS_PAGE.EDIT);
-  assert.equal(crumbs(page), "AutomationsMorning triage");
+  assert.deepEqual(headings(page), ["Morning triage"]);
 });
 
 test("an edit says it is unsaved and saves only what moved", async () => {
@@ -1233,7 +1422,7 @@ test("a save the service refuses keeps the draft and says why under the name", a
   await settle();
 
   assert.equal(
-    page.querySelector(".automation-save-refusal")?.textContent,
+    page.querySelector("[role='alert']")?.textContent,
     "Only its creator, or the workspace's owners and admins, can change it.",
   );
   assert.equal(
@@ -1241,6 +1430,22 @@ test("a save the service refuses keeps the draft and says why under the name", a
     "Sweep",
   );
   assert.equal(page.querySelector(".automation-editor-status")?.textContent, "Unsaved changes");
+});
+
+test("a switch the service refuses in the editor toasts, as the list's does, and leaves the page's alert and its Save unmarked", async () => {
+  changeRefusal = AUTOMATION_CALL_FAILURE.NOT_PERMITTED;
+  const page = mountPages({ kind: AUTOMATIONS_PAGE.EDIT, automationId: SWEEP.id });
+  await settle();
+
+  act(() => page.querySelector<HTMLButtonElement>("[role=switch]")?.click());
+  await settle();
+
+  assert.equal(page.querySelector("[role='alert']"), null);
+  assert.match(
+    document.body.textContent ?? "",
+    /Only its creator, or the workspace's owners and admins, can change it\./u,
+  );
+  assert.equal(page.querySelector("[role=switch]")?.getAttribute("aria-checked"), "true");
 });
 
 test("a deletion asks first, then goes back to the list without the automation", async () => {
@@ -1259,6 +1464,47 @@ test("a deletion asks first, then goes back to the list without the automation",
   assert.ok(!rows(page).some(([name]) => name === SWEEP.name));
 });
 
+test("a row's Delete asks first, and once confirmed the row leaves the list and the history passes over its page", async () => {
+  const page = mountPages({ kind: AUTOMATIONS_PAGE.LIST });
+  await settle();
+  const row = rowOf(page, SWEEP.name);
+
+  act(() => (row.querySelector('button[aria-label="Automation actions"]') as HTMLElement).click());
+  await settle();
+  act(() => menuItem("Delete").click());
+  await settle();
+
+  assert.deepEqual(deletes, []);
+  assert.ok(rows(page).some(([name]) => name === SWEEP.name));
+  assert.match(
+    document.querySelector("[role=dialog], [role=alertdialog]")?.textContent ?? "",
+    new RegExp(`Delete ${SWEEP.name}\\?`, "u"),
+  );
+
+  act(() => dialogButton("Delete").click());
+  await settle();
+
+  assert.deepEqual(deletes, [SWEEP.id]);
+  assert.ok(!rows(page).some(([name]) => name === SWEEP.name));
+  assert.deepEqual(places.at(-1), { kind: AUTOMATIONS_PAGE.LIST, deleted: SWEEP.id });
+});
+
+test("a row's Delete withdrawn deletes nothing and leaves the row standing", async () => {
+  const page = mountPages({ kind: AUTOMATIONS_PAGE.LIST });
+  await settle();
+  const row = rowOf(page, SWEEP.name);
+
+  act(() => (row.querySelector('button[aria-label="Automation actions"]') as HTMLElement).click());
+  await settle();
+  act(() => menuItem("Delete").click());
+  await settle();
+  act(() => dialogButton("Cancel").click());
+  await settle();
+
+  assert.deepEqual(deletes, []);
+  assert.ok(rows(page).some(([name]) => name === SWEEP.name));
+});
+
 /** The leave dialog's question, while it stands. */
 function leaveAsked(): string | undefined {
   return [...document.querySelectorAll("[role=dialog], [role=alertdialog]")]
@@ -1273,7 +1519,7 @@ test("Escape leaves a page with nothing unsaved for the list, and asks first whe
   type(page.querySelector("input[aria-label='Automation name']"), "Sweep");
   act(() => runAppCommand(APP_COMMAND.EXIT_AUTOMATIONS));
   assert.equal(places.length, 1, "the unsaved draft stands");
-  assert.ok(leaveAsked(), "the leave question stands");
+  assert.match(leaveAsked() ?? "", /Your changes to this automation are lost\./u);
   act(() => button("Cancel").click());
   await settle();
   assert.equal(leaveAsked(), undefined);
@@ -1333,7 +1579,7 @@ test("a new automation with nothing written leaves at once, and one just created
   await settle();
   type(page.querySelector("input[aria-label='Automation name']"), "Morning triage");
   type(page.querySelector("textarea[aria-label='Prompt']"), "Triage the issues opened overnight.");
-  act(() => button("Create").click());
+  act(() => button("Create automation").click());
   await settle();
   assert.equal(places.at(-1)?.kind, AUTOMATIONS_PAGE.EDIT);
   assert.equal(leaveAsked(), undefined);
@@ -1342,7 +1588,7 @@ test("a new automation with nothing written leaves at once, and one just created
 test("the Owner row stands in a shared workspace, and not in the account's personal one", async () => {
   const shared = mountPages({ kind: AUTOMATIONS_PAGE.NEW });
   await settle();
-  assert.equal(picked(shared, "Owner"), "Personal");
+  assert.equal(picked(shared, "Owner"), "Only you");
   act(() => root?.unmount());
   document.body.innerHTML = "";
 
@@ -1365,10 +1611,10 @@ test("who owns an automation is the editor's first setting, and nowhere else on 
   assert.equal(formGroups(page)[0], "Sharing");
   assert.equal(picked(page, "Owner"), "Acme");
   assert.equal(page.querySelector(".automation-editor .automation-owner"), null);
-  assert.equal(page.querySelector(".automation-crumbs .automation-owner"), null);
+  assert.equal(page.querySelector("h1 .automation-owner"), null);
 });
 
-test("the Owner picker draws Personal by the account's picture and the workspace by its tile, on its chip and in its menu", async () => {
+test("the Owner picker draws Only you by the account's picture and the workspace by its tile, on its chip and in its menu", async () => {
   handState({});
   const page = mountPages({ kind: AUTOMATIONS_PAGE.NEW });
   await settle();
@@ -1376,7 +1622,7 @@ test("the Owner picker draws Personal by the account's picture and the workspace
   const chip = picker(page, "Owner");
   assert.ok(
     chip.querySelector(".actor-mark[data-kind='person']"),
-    "Personal wears the account's mark",
+    "Only you wears the account's mark",
   );
   act(() => chip.click());
   const marks = [...document.querySelectorAll("[role=option]")].map((row) => [
@@ -1388,7 +1634,7 @@ test("the Owner picker draws Personal by the account's picture and the workspace
         : "none",
   ]);
   assert.deepEqual(marks, [
-    ["Personal", "person"],
+    ["Only you", "person"],
     ["Acme", "tile"],
   ]);
 
@@ -1435,12 +1681,30 @@ test("the list's Owner column draws the workspace by its tile, the account's own
   assert.equal(markOf(FAILING.name), "someone");
 });
 
-test("a new agent's MCP servers are a field chip of the owner's connected ones until switched off, the row naming those off, and a switch saves with the task", async () => {
+test("a personal automation another member made is not called Only you, in its row, its heading, or its Owner picker", async () => {
+  const theirs = { ...DIGEST, name: "Their digest", mine: false };
+  standing = [SWEEP, theirs];
+  const page = mountPages({ kind: AUTOMATIONS_PAGE.LIST });
+  await settle();
+
+  assert.deepEqual(
+    [...page.querySelectorAll(".automation-group h2")].map((heading) => heading.textContent),
+    ["Acme", "Personal"],
+  );
+  assert.deepEqual(rows(page).at(-1), ["Their digest", "Personal"]);
+  act(() => root?.unmount());
+
+  const editor = mountPages({ kind: AUTOMATIONS_PAGE.EDIT, automationId: theirs.id });
+  await settle();
+  assert.equal(picked(editor, "Owner"), "Personal");
+});
+
+test("a new agent's Integrations are a field chip of the owner's connected ones until switched off, the row naming those off, and a switch saves with the task", async () => {
   standing = [{ ...SWEEP, mine: true }];
   const page = mountPages({ kind: AUTOMATIONS_PAGE.EDIT, automationId: SWEEP.id });
   await settle();
-  const chip = button("MCP servers");
-  assert.match(page.textContent ?? "", /Every connected server is on\./u);
+  const chip = serversChip() ?? assert.fail("the servers chip stands");
+  assert.match(page.textContent ?? "", /Every connected integration is on\./u);
   assert.equal(
     chip.querySelectorAll(".luke-provider-mark").length,
     2,
@@ -1456,6 +1720,15 @@ test("a new agent's MCP servers are a field chip of the owner's connected ones u
   act(() => sentry.click());
   assert.match(page.textContent ?? "", /Sentry off\./u);
   assert.equal(chip.querySelectorAll(".luke-provider-mark").length, 1, "Linear's mark alone");
+  assert.equal(nameOf(chip), "Integrations", "marks draw no words, so the field's name stands");
+  const linear = document.querySelector<HTMLButtonElement>(
+    "[role=switch][aria-label='Linear for this agent']",
+  );
+  assert.ok(linear, "Linear's switch stands");
+  act(() => linear.click());
+  assert.equal(nameOf(chip), "Integrations None", "the name carries the word the chip draws");
+  act(() => linear.click());
+  assert.equal(nameOf(chip), "Integrations");
   act(() => button("Save").click());
   await settle();
 
@@ -1465,38 +1738,37 @@ test("a new agent's MCP servers are a field chip of the owner's connected ones u
   });
 });
 
-test("a new agent's MCP servers row claims nothing while the owner's connections are read", async () => {
+test("a new agent's Integrations row claims nothing while the owner's connections are read", async () => {
   standing = [{ ...SWEEP, mine: true }];
   integrationsHeld = true;
   const page = mountPages({ kind: AUTOMATIONS_PAGE.EDIT, automationId: SWEEP.id });
   await settle();
 
   const reading = [...page.querySelectorAll("[role=status]")].map((each) => each.textContent);
-  assert.ok(reading.includes("Reading your connected servers…"), "the row says it is reading");
-  assert.doesNotMatch(page.textContent ?? "", /None connected yet\.|Every connected server/u);
-  assert.equal(
-    [...page.querySelectorAll("button")].find(
-      (each) => each.getAttribute("aria-label") === "MCP servers",
-    ),
-    undefined,
-    "no chip claims None while the read is out",
-  );
+  assert.ok(reading.includes("Reading your connected integrations…"), "the row says it is reading");
+  assert.doesNotMatch(page.textContent ?? "", /None connected yet\.|Every connected integration/u);
+  assert.equal(serversChip(page), undefined, "no chip claims None while the read is out");
 });
 
-test("a new agent's MCP servers row says a refused read of the owner's connections, and Retry reads them", async () => {
+test("a new agent's Integrations row says a refused read of the owner's connections, and Retry reads them", async () => {
   standing = [{ ...SWEEP, mine: true }];
   integrationsRefusals = 1;
   const page = mountPages({ kind: AUTOMATIONS_PAGE.EDIT, automationId: SWEEP.id });
   await settle();
 
   const alert = page.querySelector("[role=alert]");
-  assert.match(alert?.textContent ?? "", /Your connected servers could not be read\./u);
+  assert.match(alert?.textContent ?? "", /Your connected integrations could not be read\./u);
   assert.doesNotMatch(page.textContent ?? "", /None connected yet\./u);
 
   act(() => button("Retry").click());
   await settle();
-  assert.match(page.textContent ?? "", /Every connected server is on\./u);
-  assert.equal(button("MCP servers").querySelectorAll(".luke-provider-mark").length, 2);
+  assert.match(page.textContent ?? "", /Every connected integration is on\./u);
+  assert.equal(
+    (serversChip() ?? assert.fail("the servers chip stands")).querySelectorAll(
+      ".luke-provider-mark",
+    ).length,
+    2,
+  );
 });
 
 test("another member's automation says which servers its creator switched off, offering no switch of the reader's own", async () => {
@@ -1512,14 +1784,9 @@ test("another member's automation says which servers its creator switched off, o
 
   assert.match(
     page.textContent ?? "",
-    /Its creator's connected servers, but Sentry, Notion \(account 2\) switched off\./u,
+    /Its creator's connected integrations, but Sentry and Notion \(account 2\) switched off\./u,
   );
-  assert.equal(
-    [...page.querySelectorAll("button")].find(
-      (each) => each.getAttribute("aria-label") === "MCP servers",
-    ),
-    undefined,
-  );
+  assert.equal(serversChip(page), undefined);
 });
 
 test("the Runs panel hides and shows by its toggle and by the side panel's chord, and stays as it was left", async () => {
@@ -1684,18 +1951,6 @@ test("an automation's toolbar too narrow for its acts' words beside its name fol
   }
 });
 
-test("the crumb naming an automation, cut short by its toolbar, reads whole on the pointer, and drawn whole raises nothing", async () => {
-  const page = mountPages({ kind: AUTOMATIONS_PAGE.EDIT, automationId: SWEEP.id });
-  await settle();
-  const crumb = page.querySelector(".automation-crumb") ?? assert.fail("no crumb");
-
-  assert.equal(pillOver(crumb), undefined);
-  Object.defineProperty(crumb, "scrollWidth", { configurable: true, value: 240 });
-  Object.defineProperty(crumb, "clientWidth", { configurable: true, value: 60 });
-  act(() => relayout());
-  assert.equal(pillOver(crumb), SWEEP.name);
-});
-
 test("a Run now still out is named by what it is doing and refuses another press", async () => {
   mountPages({ kind: AUTOMATIONS_PAGE.EDIT, automationId: SWEEP.id });
   await settle();
@@ -1708,7 +1963,7 @@ test("a Run now still out is named by what it is doing and refuses another press
 
   assert.deepEqual(
     { name: run.getAttribute("aria-label"), busy: run.getAttribute("aria-busy"), runsAsked },
-    { name: "Running", busy: "true", runsAsked: [SWEEP.id] },
+    { name: "Starting", busy: "true", runsAsked: [SWEEP.id] },
   );
 });
 
@@ -1723,6 +1978,22 @@ test("a page naming an automation the list does not hold, as a link to another w
     page.textContent ?? "",
     /Not foundThis automation doesn't exist, or you don't have access to it\./u,
   );
+});
+
+test("a page naming an automation the list does not hold keeps its bar, its way back to the list standing in it", async () => {
+  const page = mountPages({
+    kind: AUTOMATIONS_PAGE.EDIT,
+    automationId: "3f0e6f5c-7d1a-4f6e-9a55-999999999999",
+  });
+  await settle();
+
+  const { banner } = bar(page);
+  assert.equal(banner.parentElement?.getAttribute("aria-label"), "Not found");
+  const back = [...banner.querySelectorAll("button")].find(
+    (each) => each.textContent === "Automations",
+  );
+  act(() => back?.click());
+  assert.deepEqual(places.at(-1), { kind: AUTOMATIONS_PAGE.LIST });
 });
 
 test("an automation's page opened before the list is read stands its toolbar's way back over its form as quiet blocks", async () => {
@@ -1828,7 +2099,7 @@ test("a new automation's page moved to another workspace starts afresh in that w
   await settle();
   type(page.querySelector("input[aria-label='Automation name']"), "Beta triage");
   type(page.querySelector("textarea[aria-label='Prompt']"), "Triage Beta's issues.");
-  act(() => button("Create").click());
+  act(() => button("Create automation").click());
   await settle();
 
   assert.equal(creates.length, 1);
@@ -1877,14 +2148,71 @@ test("Escape keeps a new page whose schedule was changed, though nothing was typ
   assert.equal(places.length, 1);
 });
 
-test("a schedule's day, time, and zone are saved as picked and typed, and a custom cron as written", async () => {
+/** A new automation's page, named and given its prompt, ready to have its schedule picked. */
+async function mountNewScheduled(): Promise<HTMLElement> {
   const page = mountPages({ kind: AUTOMATIONS_PAGE.NEW });
   await settle();
   type(page.querySelector("input[aria-label='Automation name']"), "Weekly sweep");
   type(page.querySelector("textarea[aria-label='Prompt']"), "Update the dependencies.");
+  return page;
+}
+
+test("a schedule repeated weekly is saved on Monday at nine, as its day and time are first drawn", async () => {
+  const page = await mountNewScheduled();
   pick(page, "Repeats", "Weekly");
+  act(() => button("Create automation").click());
+  await settle();
+
+  assert.deepEqual(creates.at(-1)?.trigger, {
+    kind: AUTOMATION_TRIGGER.SCHEDULE,
+    cron: "0 9 * * 1",
+    timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+  });
+});
+
+/** The Nightly sweep's page, standing on a schedule of Wednesdays at 07:30 Tokyo time. */
+async function mountWeeklySweep(): Promise<HTMLElement> {
+  standing = [
+    {
+      ...SWEEP,
+      trigger: { kind: AUTOMATION_TRIGGER.SCHEDULE, cron: "30 7 * * 3", timezone: "Asia/Tokyo" },
+    },
+  ];
+  const page = mountPages({ kind: AUTOMATIONS_PAGE.EDIT, automationId: SWEEP.id });
+  await settle();
+  return page;
+}
+
+test("a weekly schedule's day picked is saved, with its time and zone as they stood", async () => {
+  const page = await mountWeeklySweep();
   pick(page, "Day", "Monday");
-  type(page.querySelector("input[aria-label='Time']"), "07:30");
+  act(() => button("Save").click());
+  await settle();
+
+  assert.deepEqual(changes.at(-1), {
+    automationId: SWEEP.id,
+    change: {
+      trigger: { kind: AUTOMATION_TRIGGER.SCHEDULE, cron: "30 7 * * 1", timezone: "Asia/Tokyo" },
+    },
+  });
+});
+
+test("a weekly schedule's time typed is saved, with its day and zone as they stood", async () => {
+  const page = await mountWeeklySweep();
+  type(page.querySelector("input[aria-label='Time']"), "18:45");
+  act(() => button("Save").click());
+  await settle();
+
+  assert.deepEqual(changes.at(-1), {
+    automationId: SWEEP.id,
+    change: {
+      trigger: { kind: AUTOMATION_TRIGGER.SCHEDULE, cron: "45 18 * * 3", timezone: "Asia/Tokyo" },
+    },
+  });
+});
+
+test("a schedule's time zone is saved as searched for and picked", async () => {
+  const page = await mountNewScheduled();
   act(() => picker(page, "Time zone").click());
   type(document.querySelector("input[placeholder='Search time zones']"), "Tokyo");
   act(() => {
@@ -1893,24 +2221,25 @@ test("a schedule's day, time, and zone are saved as picked and typed, and a cust
       ?.click();
   });
   assert.equal(picked(page, "Time zone"), "Asia/Tokyo");
-  act(() => button("Create").click());
+  act(() => button("Create automation").click());
   await settle();
 
   assert.deepEqual(creates.at(-1)?.trigger, {
     kind: AUTOMATION_TRIGGER.SCHEDULE,
-    cron: "30 7 * * 1",
+    cron: "0 9 * * 1-5",
     timezone: "Asia/Tokyo",
   });
+});
 
+test("a custom cron is saved as written, in the zone the schedule already had", async () => {
+  const page = await mountWeeklySweep();
   pick(page, "Repeats", "Custom");
   type(page.querySelector("input[aria-label='Cron']"), "15 2 * * 1-5");
-  const created = places.at(-1);
-  assert.equal(created?.kind, AUTOMATIONS_PAGE.EDIT);
   act(() => button("Save").click());
   await settle();
 
   assert.deepEqual(changes.at(-1), {
-    automationId: "automationId" in created ? created.automationId : undefined,
+    automationId: SWEEP.id,
     change: {
       trigger: { kind: AUTOMATION_TRIGGER.SCHEDULE, cron: "15 2 * * 1-5", timezone: "Asia/Tokyo" },
     },
@@ -1969,7 +2298,7 @@ test("a new automation with no repository is not created, and the refusal descri
   await settle();
   type(page.querySelector("input[aria-label='Automation name']"), "Morning triage");
   type(page.querySelector("textarea[aria-label='Prompt']"), "Triage the issues opened overnight.");
-  act(() => button("Create").click());
+  act(() => button("Create automation").click());
   await settle();
 
   assert.deepEqual(creates, [], "nothing is created without a repository");
@@ -2011,7 +2340,7 @@ test("runs land in a new agent on the account's default until a model is chosen,
   await settle();
 
   assert.match(page.textContent ?? "", /Your default, until you choose one\./u);
-  act(() => button("Archive successful runs").click());
+  act(() => button("Archive finished runs").click());
   act(() => button("Save").click());
   await settle();
 
@@ -2248,7 +2577,7 @@ test("the agent a same-agent automation was saved with, once the list no longer 
   assert.deepEqual(names(), ["The agent it goes to now", "CI digest"]);
 });
 
-/** What each row's glyph draws, in order: GitHub's mark, or the lucide icon's name. */
+/** What each row's glyph draws, in order: Sentry's or GitHub's mark, or the lucide icon's name. */
 function glyphs(rows: readonly Element[]): string[] {
   return rows.map((row) => {
     if (row.querySelector(".integration-mark-sentry") !== null) return "sentry";
@@ -2261,7 +2590,7 @@ function glyphs(rows: readonly Element[]): string[] {
   });
 }
 
-test("each run wears what fires it: a schedule's clock, GitHub's mark, a webhook's hook, or Run now's play, while each automation's row leads with its clock tile whatever fires it", async () => {
+test("each automation's row and each run wear what fires it: a schedule's clock, GitHub's or Sentry's mark, a webhook's hook, or Run now's play", async () => {
   standing = [
     SWEEP,
     automation(7, {
@@ -2273,15 +2602,20 @@ test("each run wears what fires it: a schedule's clock, GitHub's mark, a webhook
       trigger: { kind: AUTOMATION_TRIGGER.WEBHOOK },
       webhookUrl: "https://tryluke.dev/api/automations/8/webhook",
     }),
+    SENTRY_ALERTS,
   ];
   const list = mountPages({ kind: AUTOMATIONS_PAGE.LIST });
   await settle();
-  assert.deepEqual(
-    automationRows(list).map(
-      (row) => row.querySelector('.actor-mark[data-kind="automation"]') !== null,
-    ),
-    [true, true, true],
+  const tiles = automationRows(list).map((row) =>
+    row.querySelector('.actor-mark[data-kind="automation"]'),
   );
+  assert.ok(tiles.every((tile) => tile !== null));
+  assert.deepEqual(glyphs(tiles.filter((tile) => tile !== null)), [
+    "clock",
+    "github",
+    "webhook",
+    "sentry",
+  ]);
   act(() => root?.unmount());
   document.body.innerHTML = "";
 
@@ -2364,7 +2698,7 @@ test("Run now starts a run under a key of its own, and the run stands first once
   await settle();
   assert.match(
     page.querySelector("aside[aria-label='Runs'] .luke-empty-state")?.textContent ?? "",
-    /^No runs yet$/u,
+    /^No runs yet\.$/u,
     "the panel with no run stands the empty state",
   );
 
@@ -2385,7 +2719,7 @@ test("a Run now the service refuses says why under the name, and a new automatio
   act(() => button("Run now").click());
   await settle();
   assert.equal(
-    page.querySelector(".automation-save-refusal")?.textContent,
+    page.querySelector("[role='alert']")?.textContent,
     "Only its creator, or the workspace's owners and admins, can run it.",
   );
   act(() => root?.unmount());
@@ -2394,7 +2728,7 @@ test("a Run now the service refuses says why under the name, and a new automatio
   const fresh = mountPages({ kind: AUTOMATIONS_PAGE.NEW });
   await settle();
   assert.ok(![...fresh.querySelectorAll("button")].some((each) => each.textContent === "Run now"));
-  assert.match(fresh.textContent ?? "", /No runs yet/u);
+  assert.match(fresh.textContent ?? "", /No runs yet\./u);
 });
 
 /** A run of the sweep that started the CI digest agent, which a press on its row opens. */
@@ -2442,13 +2776,33 @@ test("a default model that could not be read is said as unknown, and a model can
   act(() => button("Choose a model").click());
   await settle();
 
-  assert.ok(page.querySelector(".agent-model-menu"), "the model menu opens");
+  assert.ok(page.querySelector(".luke-searchable-menu"), "the model menu opens");
   assert.equal(catalogReads, readsBefore + 1, "opening it reads the catalog again");
   assert.equal(
     page.querySelector(".automation-editor-status")?.textContent,
     "Saved",
     "opening the menu chooses nothing",
   );
+});
+
+test("the reader's own automation says a model nothing of theirs pays for cannot run, while a teammate's, run on its maker's connections, says nothing of it", async () => {
+  catalogUnconnected = true;
+  standing = [DIGEST, SWEEP];
+  /** The pinned rows of the Model row's menu, on the automation given. */
+  const footOn = async (automationId: string): Promise<string> => {
+    const page = mountPages({ kind: AUTOMATIONS_PAGE.EDIT, automationId });
+    await settle();
+    const chip = page.querySelector<HTMLButtonElement>(".agent-model-chip button");
+    assert.ok(chip, "the Model row draws the default's chip");
+    act(() => chip.click());
+    await settle();
+    return page.querySelector(".luke-searchable-menu-foot")?.textContent ?? "";
+  };
+
+  assert.match(await footOn(DIGEST.id), /Opus 5\.5 cannot run until you connect Claude/u);
+  const teammates = await footOn(SWEEP.id);
+  assert.match(teammates, /Effort/u, "the menu is open on its pinned rows");
+  assert.doesNotMatch(teammates, /cannot run|Connect/u);
 });
 
 test("a GitHub automation's row says its trigger as one sentence, naming the repository it is heard in", async () => {
@@ -2487,7 +2841,7 @@ test("a new automation set to a GitHub event takes its settings as switches in t
   );
   type(page.querySelector("input[aria-label='Automation name']"), "Code review");
   type(page.querySelector("textarea[aria-label='Prompt']"), "Review this pull request.");
-  act(() => button("Create").click());
+  act(() => button("Create automation").click());
   await settle();
 
   assert.deepEqual(creates[0]?.trigger, {
@@ -2516,7 +2870,7 @@ test("a schedule Luke cannot read is not created, and the refusal is announced u
   type(page.querySelector("textarea[aria-label='Prompt']"), "Sweep the stale branches.");
   pick(page, "Repeats", "Custom");
   type(page.querySelector("input[aria-label='Cron']"), "every night");
-  act(() => button("Create").click());
+  act(() => button("Create automation").click());
   await settle();
 
   assert.deepEqual(creates, []);
@@ -2552,7 +2906,7 @@ test("a webhook made in the window shows its secret once, read-only with Copy, l
   pick(page, "Type", "Webhook");
   type(page.querySelector("input[aria-label='Automation name']"), "Fix Sentry alerts");
   type(page.querySelector("textarea[aria-label='Prompt']"), "Fix the error the alert names.");
-  act(() => button("Create").click());
+  act(() => button("Create automation").click());
   await settle();
 
   const field = page.querySelector<HTMLInputElement>("input[aria-label='Secret']");
@@ -2564,6 +2918,7 @@ test("a webhook made in the window shows its secret once, read-only with Copy, l
   act(() => button("Copy secret").click());
   await settle();
   assert.deepEqual(copied, [MADE_SECRET]);
+  assert.ok(copiedShown(button("Copy secret")));
 
   act(() => button("Done").click());
   assert.equal(page.querySelector("input[aria-label='Secret']"), null);
@@ -2577,18 +2932,18 @@ test("a new secret shown after one was copied says nothing was copied of it yet"
   pick(page, "Type", "Webhook");
   type(page.querySelector("input[aria-label='Automation name']"), "Fix Sentry alerts");
   type(page.querySelector("textarea[aria-label='Prompt']"), "Fix the error the alert names.");
-  act(() => button("Create").click());
+  act(() => button("Create automation").click());
   await settle();
   act(() => button("Copy secret").click());
   await settle();
-  assert.ok(button("Copied"), "the first secret's copy is said");
+  assert.ok(copiedShown(button("Copy secret")), "the first secret's copy is shown");
 
   act(() => button("Done").click());
   act(() => button("New secret").click());
   act(() => {
     const confirm = [
       ...document.querySelectorAll<HTMLButtonElement>('[role="alertdialog"] button'),
-    ].find((each) => each.textContent === "New secret");
+    ].find((each) => each.textContent === "Make secret");
     confirm?.click();
   });
   await settle();
@@ -2597,7 +2952,7 @@ test("a new secret shown after one was copied says nothing was copied of it yet"
     page.querySelector<HTMLInputElement>("input[aria-label='Secret']")?.value,
     ROTATED_SECRET,
   );
-  assert.ok(button("Copy secret"), "the new secret is not said to be copied");
+  assert.ok(!copiedShown(button("Copy secret")), "the new secret is not shown as copied");
 });
 
 test("a shown secret is let go of once the automation is saved as anything but a webhook", async () => {
@@ -2606,7 +2961,7 @@ test("a shown secret is let go of once the automation is saved as anything but a
   pick(page, "Type", "Webhook");
   type(page.querySelector("input[aria-label='Automation name']"), "Fix Sentry alerts");
   type(page.querySelector("textarea[aria-label='Prompt']"), "Fix the error the alert names.");
-  act(() => button("Create").click());
+  act(() => button("Create automation").click());
   await settle();
   assert.equal(
     page.querySelector<HTMLInputElement>("input[aria-label='Secret']")?.value,
@@ -2642,13 +2997,16 @@ test("a new secret, asked for first, is shown once on the page that asked, and i
     "no secret is shown unasked",
   );
   act(() => button("Copy address").click());
+  await settle();
+  assert.deepEqual(copied, [hooked.webhookUrl]);
+  assert.ok(copiedShown(button("Copy address")));
   act(() => button("New secret").click());
   await settle();
   assert.deepEqual(secretsAsked, [], "nothing is replaced before the developer says so");
   act(() => {
     const confirm = [
       ...document.querySelectorAll<HTMLButtonElement>('[role="alertdialog"] button'),
-    ].find((each) => each.textContent === "New secret");
+    ].find((each) => each.textContent === "Make secret");
     assert.ok(confirm, "the dialog asks first");
     confirm.click();
   });
@@ -2746,6 +3104,55 @@ test("a right-click on an automation's switch opens no menu, and Escape from its
   });
   await settle();
   assert.equal(document.activeElement, press);
+});
+
+test("an automation row's ⋯, its right-click and the menu key open the same menu, whose Copy link copies its link", async () => {
+  const page = mountPages({ kind: AUTOMATIONS_PAGE.LIST });
+  await settle();
+  const row = rowOf(page, SWEEP.name);
+  const press = row.querySelector("button") ?? assert.fail("the row is a press");
+  const openMenus = () => document.querySelectorAll('[role="menu"]:not([data-leaving])');
+  const items = () => [...(openMenus()[0]?.querySelectorAll('[role="menuitem"]') ?? [])];
+  const closeMenu = async () => {
+    act(() => {
+      document.activeElement?.dispatchEvent(
+        new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }),
+      );
+    });
+    await settle();
+  };
+  const doors = [
+    () =>
+      act(() =>
+        (row.querySelector('button[aria-label="Automation actions"]') as HTMLElement).click(),
+      ),
+    () =>
+      act(() => {
+        press.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true }));
+      }),
+    () =>
+      act(() => {
+        press.dispatchEvent(
+          new KeyboardEvent("keydown", { key: "ContextMenu", bubbles: true, cancelable: true }),
+        );
+      }),
+  ];
+
+  for (const open of doors) {
+    open();
+    await settle();
+    assert.equal(openMenus().length, 1);
+    assert.equal(openMenus()[0]?.getAttribute("aria-label"), "Automation actions");
+    assert.deepEqual(
+      items().map((item) => item.textContent),
+      ["Copy link", "Show details⌥↓", "Delete"],
+    );
+    await closeMenu();
+  }
+  doors[2]?.();
+  await settle();
+  await act(async () => menuItem("Copy link").click());
+  assert.equal(copied.at(-1), `https://tryluke.dev/${WORKSPACE.id}/automation/${SWEEP.id}`);
 });
 
 test("a link to a run shows the Runs panel a reader folded, its run marked current, a fold after it stands, and the link opened again shows it again", async () => {
@@ -2849,7 +3256,7 @@ test("Code review is suggested under an empty list as under a full one, and a bl
   standing = [];
   const empty = mount();
   await settle();
-  assert.match(empty.textContent ?? "", /No automations yet/u);
+  assert.match(empty.textContent ?? "", /No automations yet\./u);
   assert.ok(suggestion(empty, "Code review"));
   act(() => root?.unmount());
   document.body.innerHTML = "";
@@ -2876,7 +3283,7 @@ test("while Code review is off nothing is suggested, under an empty list or a fu
   standing = [];
   const empty = mount();
   await settle();
-  assert.match(empty.textContent ?? "", /No automations yet/u);
+  assert.match(empty.textContent ?? "", /No automations yet\./u);
   assert.equal(empty.querySelector("[aria-label='Suggested']"), null);
   act(() => root?.unmount());
   document.body.innerHTML = "";
@@ -2900,7 +3307,8 @@ test("a Code review draft goes back to the list once Code review turns off while
   fakeAppBridge({
     ...fakeAppBridgeCalls(),
     requestAppState: () => Promise.resolve(stateWith(experimentsOn(EXPERIMENT.CODE_REVIEW), {})),
-    onAppState: (listener: (snapshot: AppStateSnapshot) => void) => {
+    onAppState: (heard: (delivery: AppStateDelivery) => void) => {
+      const listener = (snapshot: AppStateSnapshot) => heard(deliveryOf(snapshot));
       listeners.add(listener);
       return () => listeners.delete(listener);
     },
@@ -2979,7 +3387,7 @@ test("a new automation started from the Code review suggestion is made on pull r
     "Read from the base branch, beside AGENTS.md and CLAUDE.md.",
   );
   type(rulesFile, ".cursor/BUGBOT.md");
-  act(() => button("Create").click());
+  act(() => button("Create automation").click());
   await settle();
 
   const made = creates[0];
@@ -3026,12 +3434,12 @@ test("a new automation started from the Code review suggestion is made on pull r
 });
 
 /**
- * The Automations pages on a narrow stage, a phone's, standing on `start`,
- * with the window's stylesheets laid: the page and whether its runs stand
- * alone held as the Plans tab holds them, its runs' screen shown and left
- * by their own presses.
+ * The Automations pages on a narrow stage, a phone's, or the room given,
+ * standing on `start`, with the window's stylesheets laid: the page and
+ * whether its runs stand alone held as the Plans tab holds them, its runs'
+ * screen shown and left by their own presses.
  */
-function mountNarrow(start: AutomationsPlace): HTMLElement {
+function mountNarrow(start: AutomationsPlace, room: ShellRoom = SHELL_ROOM.NARROW): HTMLElement {
   function Pages() {
     const [place, setPlace] = useState(start);
     // As the Plans tab does, a page opened on a run's link stands its runs.
@@ -3052,8 +3460,8 @@ function mountNarrow(start: AutomationsPlace): HTMLElement {
     });
     return createElement(
       "div",
-      { className: "desktop-shell", "data-room": SHELL_ROOM.NARROW },
-      createElement(AutomationsPage, { tasks, room: SHELL_ROOM.NARROW }),
+      { className: "desktop-shell", "data-room": room },
+      createElement(AutomationsPage, { tasks, room }),
     );
   }
   const container = document.createElement("div");
@@ -3085,7 +3493,7 @@ test("on a narrow stage an automation's setup stands the whole width with its ru
       "no Runs panel stands beside the setup, kept open or not",
     );
 
-    act(() => button("Runs").click());
+    phoneRuns();
     assert.deepEqual(screensShown(page), ["runs"]);
     const runsScreen = page.querySelector("section[aria-label='Runs']");
     assert.equal(runsScreen?.querySelectorAll("li").length, 1, "its runs are listed");
@@ -3097,15 +3505,49 @@ test("on a narrow stage an automation's setup stands the whole width with its ru
   }
 });
 
-test("on a narrow stage Runs takes the focus to the runs' way back, and the way back hands it to Runs", async () => {
+test("on a wide stage an automation's page under the split's line by its own width stands its setup alone, its toolbar's Runs standing the runs alone under a way back to the setup", async () => {
+  window.localStorage.clear();
+  runs = [SWEEP_RUN];
+  const sheets = layContainersAt({});
+  vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (
+    this: HTMLElement,
+  ) {
+    return DOMRect.fromRect({ width: this.classList.contains("automations-view") ? 700 : 0 });
+  });
+  try {
+    const page = mountNarrow(
+      { kind: AUTOMATIONS_PAGE.EDIT, automationId: SWEEP.id },
+      SHELL_ROOM.WIDE,
+    );
+    await settle();
+    assert.deepEqual(screensShown(page), ["setup"]);
+    assert.equal(
+      page.querySelector(".automation-runs-pane"),
+      null,
+      "no Runs panel stands beside it",
+    );
+
+    act(() => button("Runs").click());
+    assert.deepEqual(screensShown(page), ["runs"]);
+
+    act(() => button(SWEEP.name).click());
+    assert.deepEqual(screensShown(page), ["setup"]);
+  } finally {
+    sheets.remove();
+  }
+});
+
+test("on a narrow stage Runs, from the head's ⋯, takes the focus to the runs' way back, and the way back hands it to the ⋯ it was chosen from", async () => {
   window.localStorage.clear();
   mountNarrow({ kind: AUTOMATIONS_PAGE.EDIT, automationId: SWEEP.id });
   await settle();
-  const runsButton = button("Runs");
+  const more = button("Automation actions");
   act(() => {
-    runsButton.focus();
-    runsButton.click();
+    more.focus();
+    more.click();
   });
+  const runsItem = menuItem("Runs");
+  act(() => runsItem.click());
   const back = button(SWEEP.name);
   assert.ok(document.activeElement === back, "the way back to the setup");
 
@@ -3113,7 +3555,7 @@ test("on a narrow stage Runs takes the focus to the runs' way back, and the way 
     back.focus();
     back.click();
   });
-  assert.ok(document.activeElement === button("Runs"), "the setup's Runs");
+  assert.ok(document.activeElement === button("Automation actions"), "the setup's ⋯");
 });
 
 test("on a narrow stage a link to a run opens on its runs, with the run marked and the way back to the setup", async () => {
@@ -3150,11 +3592,11 @@ test("on a narrow stage each row says when it runs next before what fires it, un
   assert.equal(page.querySelector(".automation-owner"), null, "no row names its owner");
   const line = (name: string) =>
     rowOf(page, name).querySelector(".luke-list-row-description")?.textContent ?? "";
-  assert.match(line("Nightly flaky-test sweep"), /^Next .+ · Weekdays at 9:00 · UTC$/u);
-  assert.equal(line("Dependency bumps"), "Weekdays at 9:00 · UTC");
+  assert.match(line("Nightly flaky-test sweep"), /^Next .+ · Weekdays at 9:00 AM · UTC$/u);
+  assert.equal(line("Dependency bumps"), "Weekdays at 9:00 AM · UTC");
   assert.match(
     line("Yearly audit"),
-    /^Next .*2099.* · Weekdays at 9:00 · UTC$/u,
+    /^Next .*2099.* · Weekdays at 9:00 AM · UTC$/u,
     "a far run names its year",
   );
   assert.ok(rowOf(page, "Dependency bumps").querySelector(".failed-mark"));
@@ -3191,8 +3633,10 @@ test("a Sentry automation's runs wear Sentry's mark, its row says its event and 
   const list = mountPages({ kind: AUTOMATIONS_PAGE.LIST });
   await settle();
   assert.ok(
-    rowOf(list, "Fix Sentry errors").querySelector('.actor-mark[data-kind="automation"]'),
-    "the row leads with its clock tile, Sentry's mark left to its runs",
+    rowOf(list, "Fix Sentry errors").querySelector(
+      '.actor-mark[data-kind="automation"] .integration-mark-sentry',
+    ),
+    "the row's tile wears Sentry's mark",
   );
   assert.ok(
     says(rowOf(list, "Fix Sentry errors"), "When an alert fires in Sentry · web, api · error"),
@@ -3247,13 +3691,13 @@ test("a new Sentry automation is made on the event, filters, levels, and cooldow
   type(page.querySelector("input[aria-label='Hours before the same issue runs again']"), "0");
   type(page.querySelector("input[aria-label='Automation name']"), "Fix new issues");
   type(page.querySelector("textarea[aria-label='Prompt']"), "Fix the issue Sentry opened.");
-  act(() => button("Create").click());
+  act(() => button("Create automation").click());
   await settle();
   assert.equal(creates.length, 0);
   assert.match(page.textContent ?? "", /Wait a whole number of hours, from 1 to 168\./u);
 
   type(page.querySelector("input[aria-label='Hours before the same issue runs again']"), "12");
-  act(() => button("Create").click());
+  act(() => button("Create automation").click());
   await settle();
 
   assert.equal(creates.length, 1);
@@ -3268,6 +3712,33 @@ test("a new Sentry automation is made on the event, filters, levels, and cooldow
     },
   });
   assert.deepEqual(creates[0]?.guards, { ...AUTOMATION_DEFAULT_GUARDS, subjectCooldownHours: 12 });
+});
+
+test("a Sentry filter over its bounds says so under its own row, never under Type", async () => {
+  const page = mountPages({ kind: AUTOMATIONS_PAGE.NEW });
+  await settle();
+
+  pick(page, "Type", "Sentry");
+  type(
+    page.querySelector("input[aria-label='Projects']"),
+    Array.from({ length: 11 }, (_, n) => `project-${n}`).join(", "),
+  );
+  type(page.querySelector("input[aria-label='Automation name']"), "Fix new issues");
+  type(page.querySelector("textarea[aria-label='Prompt']"), "Fix the issue Sentry opened.");
+  act(() => button("Create automation").click());
+  await settle();
+
+  assert.equal(creates.length, 0);
+  assert.ok(announced("Keep each filter to 10 values of up to 100 characters."));
+  assert.equal(
+    page.querySelector("input[aria-label='Projects']")?.getAttribute("aria-invalid"),
+    "true",
+  );
+  assert.notEqual(
+    page.querySelector("input[aria-label='Environments']")?.getAttribute("aria-invalid"),
+    "true",
+  );
+  assert.equal(picker(page, "Type").getAttribute("aria-invalid"), null);
 });
 
 test("a saved Sentry automation opens on its filters and cooldown, and a cooldown changed saves over its guards alone", async () => {
@@ -3312,6 +3783,20 @@ test("where the workspace has no Sentry installed, a Sentry trigger offers Insta
   assert.deepEqual(sentryInstalls, [WORKSPACE.id]);
 });
 
+test("a Sentry read that fails says so above a saved trigger's rows, which stay editable, and Retry reads again", async () => {
+  sentryRefusals = 1;
+  standing = [SENTRY_ALERTS];
+  const page = mountPages({ kind: AUTOMATIONS_PAGE.EDIT, automationId: SENTRY_ALERTS.id });
+  await settle();
+
+  assert.match(page.textContent ?? "", /The workspace's Sentry could not be read\./u);
+  assert.ok(page.querySelector("input[aria-label='Projects']"), "the saved trigger's rows stand");
+  act(() => button("Retry").click());
+  await settle();
+  assert.doesNotMatch(page.textContent ?? "", /could not be read/u);
+  assert.ok(page.querySelector("input[aria-label='Projects']"));
+});
+
 test("Sentry stays listed but unpickable, saying why, where this deployment holds no Sentry integration, and one already fired by it keeps its rows", async () => {
   sentryRead = { configured: false, installations: [] };
   standing = [SENTRY_ALERTS];
@@ -3344,8 +3829,134 @@ test("Sentry chosen before the read says the deployment holds no Sentry integrat
   assert.match(page.textContent ?? "", /Sentry isn't available/u);
   type(page.querySelector("input[aria-label='Automation name']"), "Fix new issues");
   type(page.querySelector("textarea[aria-label='Prompt']"), "Fix the issue Sentry opened.");
-  act(() => button("Create").click());
+  act(() => button("Create automation").click());
   await settle();
   assert.equal(creates.length, 0);
-  assert.match(page.textContent ?? "", /Luke can't receive Sentry events here/u);
+  assert.match(page.textContent ?? "", /Luke cannot receive Sentry events here/u);
+});
+
+test("on a phone the list is headed by New automation and one ⋯ holding Create with an agent, its title centred between them", async () => {
+  const page = mountNarrow({ kind: AUTOMATIONS_PAGE.LIST });
+  await settle();
+  const head = page.querySelector<HTMLElement>(".automations-head");
+  assert.ok(head, "the phone's head stands");
+  assert.deepEqual(
+    [...head.querySelectorAll("button")].map(
+      (each) => each.textContent?.trim() || each.getAttribute("aria-label"),
+    ),
+    ["New automation", "Automation list actions"],
+  );
+  assert.equal(head.querySelector("h1")?.textContent, "Automations");
+  act(() => button("Automation list actions").click());
+  assert.ok(menuItem("Create with an agent"), "the ⋯ holds Create with an agent");
+});
+
+test("on a phone an automation's page is headed by the way back to the list, its name, and one ⋯ holding Save, Run now, its switch, Runs, and the automation's own actions, where the draft stands its heading", async () => {
+  const page = mountNarrow({ kind: AUTOMATIONS_PAGE.EDIT, automationId: SWEEP.id });
+  await settle();
+  const head = page.querySelector<HTMLElement>(".automation-head");
+  assert.ok(head, "the phone's head stands");
+  assert.deepEqual(
+    [...head.querySelectorAll("button")].map(
+      (each) => each.textContent?.trim() || each.getAttribute("aria-label"),
+    ),
+    ["Automations", "Automation actions"],
+  );
+  // The page's header names it, and the head picks the name up once that scrolls away, so it is the one h1.
+  assert.equal(head.querySelector("h1"), null);
+  assert.equal(page.querySelector("h1")?.textContent, SWEEP.name);
+  act(() => button("Automation actions").click());
+  const menu = document.querySelector<HTMLElement>('[role="menu"]:not([data-leaving])');
+  assert.match(menu?.textContent ?? "", /Saved/, "the draft's standing heads the menu");
+  for (const offered of ["Save", "Run now", "Runs", "Copy link", "Delete"]) {
+    assert.ok(
+      [...(menu?.querySelectorAll(".luke-menu-item-label") ?? [])].some(
+        (each) => each.textContent === offered,
+      ),
+      `the ⋯ offers ${offered}`,
+    );
+  }
+  assert.ok(menu?.querySelector('[role="menuitemcheckbox"]'), "and the automation's switch");
+});
+
+test("a model catalog that could not be read says so in the model menu, and Retry reads it again", async () => {
+  defaultRefused = true;
+  catalogRefused = true;
+  const page = mountPages({ kind: AUTOMATIONS_PAGE.EDIT, automationId: SWEEP.id });
+  await settle();
+  // Note that the menu is hung from the chip by its laid-out boxes, which jsdom draws none of.
+  vi.spyOn(Element.prototype, "getBoundingClientRect").mockImplementation(function (this: Element) {
+    if (this.classList.contains("automation-model-picker"))
+      return DOMRect.fromRect({ x: 200, y: 400, width: 120, height: 24 });
+    if (this.classList.contains("luke-anchored-popover"))
+      return DOMRect.fromRect({ x: 0, y: 0, width: 340, height: 300 });
+    return DOMRect.fromRect({ x: 0, y: 0, width: 0, height: 0 });
+  });
+  act(() => button("Choose a model").click());
+  await settle();
+
+  const menu = page.querySelector(".luke-searchable-menu") ?? assert.fail("the model menu opens");
+  assert.equal(
+    menu.querySelector("[role=alert]")?.textContent,
+    "The models could not be read.Retry",
+  );
+  assert.equal(menu.querySelector("[role=status]"), null, "it does not read for ever");
+
+  catalogRefused = false;
+  const readsBefore = catalogReads;
+  act(() =>
+    (menu.querySelector<HTMLButtonElement>("[role=alert] button") ?? assert.fail()).click(),
+  );
+  await settle();
+
+  assert.equal(catalogReads, readsBefore + 1, "Retry reads the catalog again");
+  assert.equal(menu.querySelector("[role=alert]"), null);
+  assert.ok(menu.querySelectorAll("[role=option]").length > 0, "the models are listed");
+});
+
+test("workspace agents that could not be read say so in the Agent row, and Retry reads them again", async () => {
+  agentListRefused = true;
+  const page = mountPages({ kind: AUTOMATIONS_PAGE.EDIT, automationId: SWEEP.id });
+  await settle();
+  pick(page, "Runs land in", "Same agent");
+  await settle();
+
+  assert.match(page.textContent ?? "", /The workspace's agents could not be read\./u);
+
+  agentListRefused = false;
+  act(() => button("Retry").click());
+  await settle();
+
+  assert.doesNotMatch(page.textContent ?? "", /could not be read/u);
+  assert.equal(picked(page, "Agent"), "Choose an agent");
+});
+
+test("a search of the Agent picker that failed says it failed rather than that no agent matches, and Retry searches again", async () => {
+  agentSearchRefused = true;
+  const page = mountPages({ kind: AUTOMATIONS_PAGE.EDIT, automationId: SWEEP.id });
+  await settle();
+  pick(page, "Runs land in", "Same agent");
+  await settle();
+  act(() => picker(page, "Agent").click());
+
+  type(
+    document.querySelector<HTMLInputElement>('[role="dialog"][aria-label="Agent"] input'),
+    "zzz",
+  );
+  await settle();
+  const dialog = document.querySelector('[role="dialog"][aria-label="Agent"]') ?? assert.fail();
+  assert.equal(
+    dialog.querySelector("[role=alert]")?.textContent,
+    "The search for agents could not be read.Retry",
+  );
+  assert.doesNotMatch(dialog.textContent ?? "", /No agents match/u);
+
+  agentSearchRefused = false;
+  act(() =>
+    (dialog.querySelector<HTMLButtonElement>("[role=alert] button") ?? assert.fail()).click(),
+  );
+  await settle();
+
+  assert.equal(dialog.querySelector("[role=alert]"), null);
+  assert.match(dialog.textContent ?? "", /No agents match/u);
 });

@@ -81,7 +81,7 @@
 
   /* Folded, the well is the magnifier's square at the box's end, its corner
      the control's; open, it is uncovered a little past its edge, so the
-     ring the caret brings is never clipped. */
+     ring the keyboard brings to its clear button is never clipped. */
   @keyframes luke-folding-search-unfold {
     from {
       clip-path: inset(

@@ -42,8 +42,13 @@ import {
   PULL_REQUEST_STATE,
   type PullRequestState,
 } from "@luke/features/coding-agent-wire";
-import { FAILURE_REASON, type Failure, type FailureReason } from "@luke/features/failure-remedy";
-import { agentTabLabel, CATALOG_ID_SEPARATOR, modelLabel } from "@luke/features/model-label";
+import {
+  FAILURE_REASON,
+  type Failure,
+  type FailureReason,
+  remedyLabel,
+} from "@luke/features/failure-remedy";
+import { agentName, CATALOG_ID_SEPARATOR, modelLabel } from "@luke/features/model-label";
 import {
   type CatalogModel,
   type ContextWindows,
@@ -51,11 +56,13 @@ import {
   type ModelChoice,
   type ModelProvider,
 } from "@luke/features/models-wire";
+import { formatCompact, formatUsd } from "@luke/features/number-format";
 import {
   REPOSITORY_UNREACHED,
   type RepositoryUnreached,
 } from "@luke/features/repository-reach-wire";
 import type { PlanEditor } from "@luke/features/task-wire";
+import { dayAndTimeText } from "@luke/features/time-format";
 import {
   ROW_PART,
   type RowReading,
@@ -63,6 +70,7 @@ import {
   type TurnRow,
   turnRows,
 } from "@luke/features/turn-rows";
+import { andList, readFailedWords } from "@luke/features/words";
 import type { FormerMember, WorkspaceMember } from "@luke/features/workspace-wire";
 import {
   ACTOR_KIND,
@@ -74,7 +82,6 @@ import {
   personActor,
   SOMEONE_REASON,
 } from "@luke/ui/actor-model";
-import { dayAndTimeText } from "@luke/ui/time-format";
 import { callOfLine } from "@luke/voice/transcript-model";
 import {
   ACTION_RESULT_STATUS,
@@ -95,6 +102,7 @@ import { GLYPH_STATE, type GlyphState, glyphStateWords } from "../state-glyph.js
 import { drawnCall } from "./native-tool-calls.js";
 import {
   changesSidebar,
+  plainWords,
   remoteCallOf,
   TOOL_TARGET,
   todosView,
@@ -118,29 +126,10 @@ import {
 /** The words that separate the parts of a line. */
 const LINE_SEPARATOR = " · ";
 
-/** How many tokens are a thousand and a million, as the compact count spells them. */
-const THOUSAND = 1_000;
-const MILLION = 1_000_000;
-
-/** The least dollars drawn as an amount; under it the cost reads as less than a cent. */
-const LEAST_CENTS = 0.005;
-
-/** A count of tokens compact enough for a line: 812, 12.3k, 1.2M. */
-export function compactCount(count: number): string {
-  if (count >= MILLION) return `${(count / MILLION).toFixed(1)}M`;
-  if (count >= THOUSAND) return `${(count / THOUSAND).toFixed(1)}k`;
-  return String(count);
-}
-
-/** Dollars as a line draws them: to the cent, and under a cent "<$0.01". */
-function dollars(costUsd: number): string {
-  return costUsd > 0 && costUsd < LEAST_CENTS ? "<$0.01" : `$${costUsd.toFixed(2)}`;
-}
-
 /** The plans an agent may be paid for by, each as its usage line names it; a key is billed by the token and names none. */
 const PLAN_USAGE: Partial<Record<CodingAgentPayer, string>> = {
-  [CODING_AGENT_PAYER.CLAUDE_SUBSCRIPTION]: "Claude plan",
-  [CODING_AGENT_PAYER.CHATGPT_SUBSCRIPTION]: "ChatGPT plan",
+  [CODING_AGENT_PAYER.CLAUDE_SUBSCRIPTION]: "Claude subscription",
+  [CODING_AGENT_PAYER.CHATGPT_SUBSCRIPTION]: "ChatGPT subscription",
 };
 
 /**
@@ -154,10 +143,10 @@ const PLAN_USAGE: Partial<Record<CodingAgentPayer, string>> = {
  */
 export function agentUsageLine(usage: CodingAgentUsage | undefined): string | undefined {
   if (usage === undefined) return undefined;
-  const tokens = `${compactCount(usage.inputTokens + usage.outputTokens)} tokens`;
+  const tokens = `${formatCompact(usage.inputTokens + usage.outputTokens)} tokens`;
   const paid =
     (usage.payer === undefined ? undefined : PLAN_USAGE[usage.payer]) ??
-    (usage.costUsd === undefined ? undefined : dollars(usage.costUsd));
+    (usage.costUsd === undefined ? undefined : formatUsd(usage.costUsd));
   return `This agent: ${paid === undefined ? tokens : `${tokens}${LINE_SEPARATOR}${paid}`}`;
 }
 
@@ -330,6 +319,23 @@ export function lineSender(
   }
 }
 
+/** The kinds of sender whose lines are the other side's words: Luke from a call, and GitHub. */
+const RECEIVED_SENDERS: ReadonlySet<string> = new Set([
+  CODING_AGENT_SENDER.LUKE,
+  CODING_AGENT_SENDER.GITHUB,
+]);
+
+/**
+ * Whether one of the developer's lines is the other side's words, drawn at
+ * the column's left as a chat notice is: Luke's from a call, GitHub's, and
+ * another coding agent's. A person's and an automation's, which runs on its
+ * creator's behalf, stand at the right.
+ */
+export function receivedLine(sentBy: CodingAgentSender | undefined): boolean {
+  if (sentBy === undefined) return false;
+  return sentBy.agent === true || (sentBy.kind !== undefined && RECEIVED_SENDERS.has(sentBy.kind));
+}
+
 /** The parts of the line a transcript ends on: its words, and whether it tells of a failure, which is drawn as one. */
 export interface EndLineParts {
   readonly words: string;
@@ -405,12 +411,12 @@ export function agentStateWords(status: CodingAgentStatus): string | undefined {
 }
 
 /** What the Start button says while it cannot start: the task names no repository yet. */
-export const START_NEEDS_REPOSITORY = "Choose a repository first.";
+export const START_NEEDS_REPOSITORY = "Choose a repository";
 
 /** What the refusals a Start and a message meet alike say, worded once. */
 const SHARED_FAILURE_NOTE = {
   [CODING_AGENT_CALL_FAILURE.REPOSITORY_NOT_REACHABLE]:
-    "Luke can't reach this task's repository on GitHub.",
+    "Luke cannot reach this task's repository on GitHub.",
   [CODING_AGENT_CALL_FAILURE.GITHUB_UNANSWERED]: "GitHub didn't answer. Try again.",
   [CODING_AGENT_CALL_FAILURE.MESSAGE_TOO_LONG]: "That message is too long.",
   [CODING_AGENT_CALL_FAILURE.AGENT_NOT_READY]:
@@ -419,15 +425,15 @@ const SHARED_FAILURE_NOTE = {
   // Said once the panel stopped asking again (`image-preparing.ts`).
   [CODING_AGENT_CALL_FAILURE.AGENT_IMAGE_PREPARING]:
     "The agent's image is taking too long to prepare. Try again in a few minutes.",
-  [CODING_AGENT_CALL_FAILURE.NATIVE_AGENT_NOT_HERE]: "This agent can't be reached from here yet.",
+  [CODING_AGENT_CALL_FAILURE.NATIVE_AGENT_NOT_HERE]: "This agent cannot be reached from here yet.",
   [CODING_AGENT_CALL_FAILURE.AGENT_PLAN_SIGNED_OUT]:
-    "The plan paying for this agent is signed out. Its starter signs in again in Settings.",
+    "The subscription paying for this agent is signed out. Its starter signs in again in Settings.",
   [CODING_AGENT_CALL_FAILURE.AGENT_PLAN_UNREACHABLE]:
-    "The plan's provider didn't answer. Try again in a moment.",
+    "The subscription's provider didn't answer. Try again in a moment.",
   [CODING_AGENT_CALL_FAILURE.AGENT_PLAN_LIMIT_REACHED]:
-    "The plan paying for this agent has reached its usage limit. It waits until the limit resets.",
+    "The subscription paying for this agent has reached its usage limit. It waits until the limit resets.",
   [CODING_AGENT_CALL_FAILURE.AGENT_PLAN_INELIGIBLE]:
-    "The plan paying for this agent isn't eligible to run it.",
+    "The subscription paying for this agent isn't eligible to run it.",
 } as const;
 
 /** What a Start, or a message, says while the agent's image is still being prepared and the panel asks again. */
@@ -544,6 +550,7 @@ export function chooseFailureNote(failure: CodingAgentCallFailure): string {
     case CODING_AGENT_CALL_FAILURE.AGENT_PLAN_LIMIT_REACHED:
     case CODING_AGENT_CALL_FAILURE.AGENT_PLAN_INELIGIBLE:
     case CODING_AGENT_CALL_FAILURE.AGENT_CREDENTIAL_MISSING:
+    case CODING_AGENT_CALL_FAILURE.AGENT_API_KEY_UNREADABLE:
       return MODEL_CHANGE_FAILED;
   }
 }
@@ -558,7 +565,7 @@ export const STOP_FAILED = "The agent could not be stopped. Try again.";
 export const RENAME_FAILED = "The agent could not be renamed. Try again.";
 
 /** What the toast says when the service did not switch an agent's MCP servers, whose switches fall back. */
-export const SERVERS_FAILED = "The agent's MCP servers could not be changed. Try again.";
+export const SERVERS_FAILED = "The agent's integrations could not be changed. Try again.";
 
 /** What an agent's archive says once it landed, and what it says refused. */
 const ARCHIVED_WORDS = {
@@ -600,8 +607,49 @@ export interface RefusedCall {
 /** What a missing credential keeps the developer from: starting an agent, or messaging one. */
 const ACTION = { START: "start an agent", MESSAGE: "message this agent" } as const;
 
-/** What a model menu says beside a model whose provider no subscription or API key of the account's pays for, which it draws disabled. */
-export const MODEL_NOT_CONNECTED = "Not connected";
+/** A model nothing pays for, as a failure whose press connects its provider at its harness's row. */
+export interface ConnectFailure {
+  readonly reason: typeof FAILURE_REASON.CONNECT_AGENTS;
+  readonly text: string;
+  readonly provider: ModelProvider;
+}
+
+/**
+ * The press a model menu's row holds for a model whose provider no
+ * subscription or API key of the account's pays for: "Connect Claude" at
+ * the row's end (`remedyLabel`), landing on its harness's row in Settings ›
+ * Agents (`useRepositoryRemedy`); none for a model something pays for.
+ */
+export function modelConnectFailure(model: CatalogModel): ConnectFailure | undefined {
+  if (model.credentialMissing !== true) return undefined;
+  return {
+    reason: FAILURE_REASON.CONNECT_AGENTS,
+    text: `${modelLabel(model.id, [model])} cannot run until you connect ${harnessNameOf(model.provider)} with a subscription or an API key.`,
+    provider: model.provider,
+  };
+}
+
+/** What a model's row says at its end where nothing pays for it: the press that connects its harness, which its pick is. */
+export function modelConnectWords(model: CatalogModel): string | undefined {
+  const connect = modelConnectFailure(model);
+  return connect === undefined ? undefined : remedyLabel(connect);
+}
+
+/**
+ * Why a choice cannot run, and the press that connects what would run it:
+ * the note a model menu and Settings' Default model stand under the choice
+ * where no subscription or API key of the account's pays for its model, as
+ * a new account holding only an OpenAI key finds its Claude default; none
+ * for a choice something pays for, or one the catalog no longer lists.
+ */
+export function unrunnableChoice(
+  models: readonly CatalogModel[],
+  choice: ModelChoice,
+): ConnectFailure | undefined {
+  const { base } = readModelChoice(models, choice.model);
+  const model = models.find((each) => each.id === base);
+  return model === undefined ? undefined : modelConnectFailure(model);
+}
 
 /** What an agent Luke's key paid for says to a message, since it never moves to another payer. */
 export const LUKE_PAID_REFUSAL = "Luke's key no longer runs agents. Continue in a new one.";
@@ -615,7 +663,45 @@ function credentialMissingWords(
   return `Connect ${harness} in Settings to ${action}.`;
 }
 
-/** A missing credential's note, whose press opens Settings › Agents. */
+/** What a Start refused by the plan that would pay says, to its own member, who mends it in Settings. */
+const START_PLAN_REFUSAL = {
+  [CODING_AGENT_CALL_FAILURE.AGENT_PLAN_SIGNED_OUT]:
+    "Your subscription is signed out. Sign in again in Settings to start an agent.",
+  [CODING_AGENT_CALL_FAILURE.AGENT_PLAN_INELIGIBLE]:
+    "Your subscription isn't eligible to run this agent. Choose your API key in Settings to start one.",
+} as const;
+
+/** The one sentence an unreadable API key says: what happened, and that saving it again unblocks the action. */
+function keyUnreadableWords(action: (typeof ACTION)[keyof typeof ACTION]): string {
+  return `Your saved API key can't be read. Save it again in Settings to ${action}.`;
+}
+
+/**
+ * The note of a refusal Settings › Agents mends, whose press opens it: a
+ * missing credential, an API key saved but unreadable, and, on a Start,
+ * whose caller is the plan's own member, a plan signed out or ineligible.
+ * None else; Retry alone answers every other.
+ */
+function settingsFailure(
+  refused: RefusedCall,
+  action: (typeof ACTION)[keyof typeof ACTION],
+): Failure | undefined {
+  switch (refused.failure) {
+    case CODING_AGENT_CALL_FAILURE.AGENT_CREDENTIAL_MISSING:
+      return credentialMissingFailure(refused, action);
+    case CODING_AGENT_CALL_FAILURE.AGENT_API_KEY_UNREADABLE:
+      return { reason: FAILURE_REASON.CONNECT_AGENTS, text: keyUnreadableWords(action) };
+    case CODING_AGENT_CALL_FAILURE.AGENT_PLAN_SIGNED_OUT:
+    case CODING_AGENT_CALL_FAILURE.AGENT_PLAN_INELIGIBLE:
+      return action === ACTION.START
+        ? { reason: FAILURE_REASON.CONNECT_AGENTS, text: START_PLAN_REFUSAL[refused.failure] }
+        : undefined;
+    default:
+      return undefined;
+  }
+}
+
+/** A missing credential's note, whose press opens Settings › Agents at the harness's row. */
 function credentialMissingFailure(
   refused: RefusedCall,
   action: (typeof ACTION)[keyof typeof ACTION],
@@ -623,6 +709,7 @@ function credentialMissingFailure(
   return {
     reason: FAILURE_REASON.CONNECT_AGENTS,
     text: credentialMissingWords(refused.provider, action),
+    provider: refused.provider,
   };
 }
 
@@ -639,16 +726,17 @@ export function planPayerOf(runtime: CodingAgentRuntime | undefined): CodingAgen
 
 /** What a message refused by the Claude plan that pays for its agent says. */
 const CLAUDE_PLAN_REFUSAL = {
-  SIGNED_OUT: "Your Claude plan needs reconnecting in Settings.",
-  LIMIT_REACHED: "Your Claude plan has reached its usage limit. It waits until the limit resets.",
+  SIGNED_OUT: "Your Claude subscription needs reconnecting in Settings.",
+  LIMIT_REACHED:
+    "Your Claude subscription has reached its usage limit. It waits until the limit resets.",
 } as const;
 
 /** The plan's reached limit said with when it resets, in place of waiting for a reset no one named. */
 function limitResetsWords(payer: CodingAgentPayer | undefined, resetsAt: number): string {
   const whose =
     payer === CODING_AGENT_PAYER.CLAUDE_SUBSCRIPTION
-      ? "Your Claude plan has"
-      : "The plan paying for this agent has";
+      ? "Your Claude subscription has"
+      : "The subscription paying for this agent has";
   return `${whose} reached its usage limit. It resets ${dayAndTimeText(resetsAt)}.`;
 }
 
@@ -682,10 +770,10 @@ export function startFailureNote(refused: RefusedCall, taskId: string | null): F
   if (refused.failure === CODING_AGENT_CALL_FAILURE.REPOSITORY_NOT_REACHABLE) {
     return unreachedFailure(refused.unreached, taskId);
   }
-  if (refused.failure === CODING_AGENT_CALL_FAILURE.AGENT_CREDENTIAL_MISSING) {
-    return credentialMissingFailure(refused, ACTION.START);
-  }
-  return callFailure(planRefusalWords(refused, undefined) ?? startFailureWords(refused.failure));
+  return (
+    settingsFailure(refused, ACTION.START) ??
+    callFailure(planRefusalWords(refused, undefined) ?? startFailureWords(refused.failure))
+  );
 }
 
 /** A refused call's words, which trying again mends. */
@@ -696,13 +784,13 @@ function callFailure(text: string): Failure {
 /**
  * A repository out of reach, said by why with the repository named, and
  * the press that mends it: GitHub connected, or connected again, in
- * Settings; the repository given to Luke on GitHub; another repository
+ * Settings; the repository given to Luke's GitHub App; another repository
  * chosen; the task moved to the workspace whose GitHub reaches it; or the
  * member's own token replaced in Settings › Profile, or authorized on
  * GitHub for the organization's SAML SSO. A service that said nothing more
  * says the bare sentence, which Retry answers, and so does an agent with no
  * task wherever the remedy is pressed on the task: only giving the
- * repository to Luke on GitHub, and a token's remedies, are not.
+ * repository to Luke's GitHub App, and a token's remedies, are not.
  */
 function unreachedFailure(
   unreached: RepositoryUnreached | undefined,
@@ -711,7 +799,7 @@ function unreachedFailure(
   if (unreached?.reason === REPOSITORY_UNREACHED.NOT_SELECTED) {
     return {
       reason: FAILURE_REASON.ADD_REPOSITORY,
-      text: `Luke on GitHub doesn't have access to ${unreached.repository}.`,
+      text: `Luke's GitHub App doesn't have access to ${unreached.repository}.`,
       repository: unreached.repository,
       settingsUrl: unreached.settingsUrl,
     };
@@ -729,6 +817,25 @@ function unreachedFailure(
       authorizeUrl: unreached.authorizeUrl,
     };
   }
+  // The member's token is theirs to replace in Settings, so each of its cases carries that remedy and needs no task. NO_TOKEN is a saved token the deployment cannot open; a member with none saved never reaches it.
+  if (unreached?.reason === REPOSITORY_UNREACHED.NO_TOKEN) {
+    return {
+      reason: FAILURE_REASON.GITHUB_TOKEN,
+      text: "Your saved GitHub token could not be opened.",
+    };
+  }
+  if (unreached?.reason === REPOSITORY_UNREACHED.TOKEN_NO_ACCESS) {
+    return {
+      reason: FAILURE_REASON.GITHUB_TOKEN,
+      text: `Your GitHub token cannot access ${unreached.repository}. Check the repository still exists under that name, or ask its owner to give your GitHub account access.`,
+    };
+  }
+  if (unreached?.reason === REPOSITORY_UNREACHED.TOKEN_CANNOT_PUSH) {
+    return {
+      reason: FAILURE_REASON.GITHUB_TOKEN,
+      text: `Your GitHub token cannot push to ${unreached.repository}. Ask its owner to give your GitHub account write access.`,
+    };
+  }
   if (unreached === undefined || taskId === null) {
     return callFailure(SHARED_FAILURE_NOTE[CODING_AGENT_CALL_FAILURE.REPOSITORY_NOT_REACHABLE]);
   }
@@ -737,13 +844,13 @@ function unreachedFailure(
     case REPOSITORY_UNREACHED.NOT_CONNECTED:
       return {
         reason: FAILURE_REASON.CONNECT_GITHUB,
-        text: `This workspace isn't connected to GitHub, so Luke can't reach ${repository}.`,
+        text: `This workspace isn't connected to GitHub, so Luke cannot reach ${repository}.`,
         taskId: taskId,
       };
     case REPOSITORY_UNREACHED.CONNECTION_LAPSED:
       return {
         reason: FAILURE_REASON.RECONNECT_GITHUB,
-        text: `This workspace's GitHub connection was removed or suspended, so Luke can't reach ${repository}.`,
+        text: `This workspace's GitHub connection was removed or suspended, so Luke cannot reach ${repository}.`,
         taskId: taskId,
       };
     case REPOSITORY_UNREACHED.OTHER_OWNER:
@@ -768,12 +875,6 @@ function unreachedFailure(
         taskId: taskId,
         workspace: unreached.workspace,
       };
-    case REPOSITORY_UNREACHED.NO_TOKEN:
-      return callFailure("No GitHub token saved.");
-    case REPOSITORY_UNREACHED.TOKEN_NO_ACCESS:
-      return callFailure(`Your GitHub token can't access ${repository}.`);
-    case REPOSITORY_UNREACHED.TOKEN_CANNOT_PUSH:
-      return callFailure(`Your GitHub token can't push to ${repository}.`);
   }
 }
 
@@ -806,14 +907,34 @@ function startFailureWords(failure: CodingAgentCallFailure): string {
       return SHARED_FAILURE_NOTE[failure];
     case CODING_AGENT_CALL_FAILURE.AGENT_CREDENTIAL_MISSING:
       return credentialMissingWords(undefined, ACTION.START);
+    case CODING_AGENT_CALL_FAILURE.AGENT_API_KEY_UNREADABLE:
+      return keyUnreadableWords(ACTION.START);
   }
 }
 
-/** What a message that did not reach the agent says under the composer, and what mends it, on a task or, for an agent with none, where the remedy needs no task. */
+/** What a teammate's agent says to a message its starter's own key refused: theirs to save in their Settings, which the reader's mend nothing of. */
+function starterKeyWords(failure: CodingAgentCallFailure, starter: string): string | undefined {
+  if (failure === CODING_AGENT_CALL_FAILURE.AGENT_API_KEY_UNREADABLE) {
+    return `${starter}'s saved API key can't be read. They save it again in Settings to unblock this agent.`;
+  }
+  if (failure === CODING_AGENT_CALL_FAILURE.AGENT_CREDENTIAL_MISSING) {
+    return `${starter} has no API key or subscription connected for this agent. They connect one in Settings to unblock it.`;
+  }
+  return undefined;
+}
+
+/**
+ * What a message that did not reach the agent says under the composer, and
+ * what mends it, on a task or, for an agent with none, where the remedy needs
+ * no task. A teammate's agent (`starter`, `teammateStarter`) runs on its
+ * starter's credentials, so a refusal of theirs names them and offers the
+ * reader no Settings of their own.
+ */
 export function messageFailureNote(
   refused: RefusedCall,
   taskId: string | null,
   payer?: CodingAgentPayer | undefined,
+  starter?: string | undefined,
 ): Failure {
   if (refused.failure === CODING_AGENT_CALL_FAILURE.REPOSITORY_NOT_REACHABLE) {
     return unreachedFailure(refused.unreached, taskId);
@@ -821,12 +942,18 @@ export function messageFailureNote(
   // Note that the box's note stands beside Continue in new agent, so it tells no one to continue.
   if (refused.failure === CODING_AGENT_CALL_FAILURE.AGENT_RETIRED) return callFailure(BOX_RETIRED);
   // Note that an agent Luke's key paid for is refused whatever is connected now, so Settings mends nothing.
-  if (refused.failure === CODING_AGENT_CALL_FAILURE.AGENT_CREDENTIAL_MISSING) {
-    return payer === CODING_AGENT_PAYER.LUKE
-      ? callFailure(LUKE_PAID_REFUSAL)
-      : credentialMissingFailure(refused, ACTION.MESSAGE);
+  if (
+    refused.failure === CODING_AGENT_CALL_FAILURE.AGENT_CREDENTIAL_MISSING &&
+    payer === CODING_AGENT_PAYER.LUKE
+  ) {
+    return callFailure(LUKE_PAID_REFUSAL);
   }
-  return callFailure(planRefusalWords(refused, payer) ?? messageFailureWords(refused.failure));
+  const theirs = starter === undefined ? undefined : starterKeyWords(refused.failure, starter);
+  if (theirs !== undefined) return callFailure(theirs);
+  return (
+    settingsFailure(refused, ACTION.MESSAGE) ??
+    callFailure(planRefusalWords(refused, payer) ?? messageFailureWords(refused.failure))
+  );
 }
 
 /** What a message that did not reach the agent says, by why, where only the words are drawn, as an Inbox answer's are. */
@@ -858,6 +985,8 @@ export function messageFailureWords(failure: CodingAgentCallFailure): string {
       return SHARED_FAILURE_NOTE[failure];
     case CODING_AGENT_CALL_FAILURE.AGENT_CREDENTIAL_MISSING:
       return credentialMissingWords(undefined, ACTION.MESSAGE);
+    case CODING_AGENT_CALL_FAILURE.AGENT_API_KEY_UNREADABLE:
+      return keyUnreadableWords(ACTION.MESSAGE);
   }
 }
 
@@ -871,7 +1000,7 @@ export function closesComposer(failure: CodingAgentCallFailure): boolean {
  * process's notifications so neither is ever named two ways
  * (`@luke/features/model-label`).
  */
-export { agentTabLabel, modelLabel };
+export { agentName, modelLabel };
 
 /**
  * The provider whose harness runs a model, read from its catalog id, whose
@@ -975,6 +1104,9 @@ function orderedModels(models: readonly CatalogModel[]): readonly CatalogModel[]
     )
     .map((each) => each.model);
 }
+
+/** What the model menu and Settings say where the catalog could not be read. */
+export const MODELS_READ_FAILED = readFailedWords("the models");
 
 /** The word a choice label and the Fast row say for the fast version. */
 export const FAST_WORD = "Fast";
@@ -1092,13 +1224,13 @@ function choiceDetail(effort: string, fast: boolean, standardTokens?: number): s
 /** The word the menu's pinned row and the settings row say for the context window. */
 export const CONTEXT_WORD = "Context";
 
-/** The tenth of a million a window's size in millions is cut to. */
-const TENTH_OF_A_MILLION = MILLION / 10;
+/** The steps a window's size is cut down to before it is said: a thousand below a million, a tenth of a million from it. */
+const WINDOW_CUT = { THOUSAND: 1_000, TENTH_OF_A_MILLION: 100_000, MILLION: 1_000_000 } as const;
 
-/** A window's size as a choice says it, cut to the thousand or the tenth of a million below: 272K, 1M for 1,050,000. */
+/** A window's size as a choice says it, cut to the thousand or the tenth of a million below, not rounded: 272K, 1M for 1,050,000. */
 export function windowLabel(tokens: number): string {
-  if (tokens >= MILLION) return `${Math.floor(tokens / TENTH_OF_A_MILLION) / 10}M`;
-  return `${Math.floor(tokens / THOUSAND)}K`;
+  const step = tokens >= WINDOW_CUT.MILLION ? WINDOW_CUT.TENTH_OF_A_MILLION : WINDOW_CUT.THOUSAND;
+  return formatCompact(Math.floor(tokens / step) * step);
 }
 
 /** The two windows the model offers, or nothing for a model with one, or one the catalog does not offer now. */
@@ -1162,7 +1294,7 @@ export function longWindowNote(windows: ContextWindows): string {
     parts.push(`${factorLabel(windows.longInputPriceFactor)} for input`);
   if (windows.longOutputPriceFactor !== undefined)
     parts.push(`${factorLabel(windows.longOutputPriceFactor)} for output`);
-  return parts.length === 0 ? `${past} more.` : `${past} ${parts.join(" and ")}.`;
+  return parts.length === 0 ? `${past} more.` : `${past} ${andList(parts)}.`;
 }
 
 /** A choice as the words it is drawn in: the base model's name, and the detail drawn dimmed after it. */
@@ -2097,6 +2229,41 @@ export function messageWords(message: CodingAgentMessage): string {
     .join("\n\n");
 }
 
+/** How many words a reply's lead holds at most, where its first sentence runs on. */
+const REPLY_LEAD_WORDS = 24;
+
+/** A sentence's end: its stop, then a space or the end of the words. */
+const SENTENCE_END = /[.!?](?=\s|$)/u;
+
+/**
+ * What a turn that finished replied, as a reader hears it: its newest
+ * reply's last stretch of words, after the turn's last call, cut to its
+ * first sentence, or to its first words where that runs on. Nothing where
+ * there is no reply, no words follow its last call, as a turn that ended on
+ * a call, or it is an operator's quiet reply (`quiet`), which leaves its
+ * member nothing to read.
+ */
+export function finishedReplyLead(
+  messages: readonly CodingAgentMessage[],
+  quiet: boolean,
+): { readonly messageId: string; readonly lead: string } | undefined {
+  const reply = messages.findLast((message) => message.role === MESSAGE_ROLE.ASSISTANT);
+  if (reply === undefined) return undefined;
+  if (quiet && isQuietReply(reply)) return undefined;
+  // Note that only words after the turn's last call are its reply, because words before it were the turn under way.
+  const parts = agentParts(reply);
+  const lastCall = parts.findLastIndex((part) => part.kind === AGENT_PART.TOOL);
+  const last = parts.slice(lastCall + 1).findLast((part) => part.kind === AGENT_PART.TEXT);
+  const words = last?.kind === AGENT_PART.TEXT ? plainWords(last.text) : "";
+  if (words === "") return undefined;
+  const end = SENTENCE_END.exec(words);
+  const sentence = end === null ? words : words.slice(0, end.index + 1);
+  const cut = sentence.split(/\s+/u);
+  const lead =
+    cut.length <= REPLY_LEAD_WORDS ? sentence : `${cut.slice(0, REPLY_LEAD_WORDS).join(" ")}…`;
+  return { messageId: reply.id, lead };
+}
+
 /** Where a line the developer sent stands, before the service's row for it lands. */
 export const SENT_LINE_STATE = {
   /** On its way, or taken and its row not yet read. */
@@ -2225,8 +2392,8 @@ export function agentLines(
   return [...messages, ...sent.map(sentLineMessage)];
 }
 
-/** What each pull request state is called, on the chip's label and, where it changes what the developer would do, on the row. */
-const PULL_REQUEST_STATE_LABEL = {
+/** What each pull request state is called, on the chip's label and, where it changes what the developer would do, on the row; the one map every place that says a state reads. */
+export const PULL_REQUEST_STATE_LABEL = {
   [PULL_REQUEST_STATE.OPEN]: "Open",
   [PULL_REQUEST_STATE.DRAFT]: "Draft",
   [PULL_REQUEST_STATE.MERGED]: "Merged",
@@ -2248,7 +2415,7 @@ export function checkoutCommand(branch: string): string {
 }
 
 /** A branch or a file's path as a GitHub address spells it: every character encoded but the slashes GitHub reads as the name's own. */
-export function githubPath(name: string): string {
+function githubPath(name: string): string {
   return encodeURIComponent(name).replaceAll("%2F", "/");
 }
 
@@ -2276,7 +2443,19 @@ export function pullRequestStateWord(
 }
 
 /** What the row says of an open pull request GitHub's merge queue holds, as its tab's pill says it. */
-const QUEUED_LABEL = "Queued";
+export const QUEUED_LABEL = "Queued";
+
+/** How a pull request the merge queue holds is said where its place is known: "Queued #3", else "Queued". */
+export function queuedLabel(position: number | undefined): string {
+  return position === undefined ? QUEUED_LABEL : `${QUEUED_LABEL} #${position}`;
+}
+
+/** Where a pull request stands in one word, as its card heads it: Queued for an open one the merge queue holds, else its state's label. */
+export function pullRequestStateLabel(
+  pullRequest: Pick<CodingAgentPullRequest, "state" | "queued">,
+): string {
+  return pullRequestStateWord(pullRequest) ?? PULL_REQUEST_STATE_LABEL[pullRequest.state];
+}
 
 /** The chip's own words for a reader who cannot see it: the number and where it stands. */
 export function pullRequestPillLabel(

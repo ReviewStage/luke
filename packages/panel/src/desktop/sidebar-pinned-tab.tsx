@@ -1,10 +1,10 @@
 import { useAtomRefresh, useAtomValue } from "@effect/atom-react";
 import type { CodingAgentPullRequest } from "@luke/features/coding-agent-wire";
+import type { CatalogModel } from "@luke/features/models-wire";
 import type { TaskAgentLine, TaskPullRequestLine, TaskSummary } from "@luke/features/task-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import {
   BUTTON_SIZE,
-  CopyIcon,
   HOVER_CARD_ROW_LOOK,
   HoverCard,
   HoverCardHead,
@@ -21,8 +21,6 @@ import {
   RowHint,
   RowHintOptions,
   Tooltip,
-  UnpinIcon,
-  useMenu,
   useMinute,
   VisuallyHidden,
 } from "@luke/ui";
@@ -31,19 +29,20 @@ import { shownFiles } from "@luke/voice/code-pane-model";
 import { Duration, Effect } from "effect";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import * as Atom from "effect/reactivity/Atom";
-import { ScrollTextIcon } from "lucide-react";
 import { useCallback, useEffect, useRef } from "react";
 import { askAct } from "../act.js";
+import { commandAction, commandHead, PANEL_COMMAND } from "../command-items.js";
 import { rendererRuntime } from "../renderer-runtime.js";
 import { agentSubject, NOTHING_HELD } from "../tasks/agent-ref.js";
 import { peopleOf } from "../tasks/changes-card.js";
+import { agentName } from "../tasks/coding-agent-model.js";
 import type { PullRequestMarked } from "../tasks/pull-request-mark.js";
 import { pullRequestOfTab } from "../tasks/pull-request-number.js";
 import { PlanGlyph, TAB_KIND, type TabSubject, tabLook } from "../tasks/tab-look.js";
 import { TRANSCRIPT_COPY } from "../tasks/transcript-copy.js";
 import { type PinnedTab, SIDE_PANEL_TAB } from "../tasks/use-side-panel.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
-import { ActionMenu, type MenuAction } from "./action-menu.js";
+import { type MenuAction, rowMenu } from "./action-menu.js";
 import { agentTranscriptRead } from "./agent-actions.js";
 import { useRowPlace, withRowMoves } from "./row-moves.js";
 import { type TranscriptCopier, useTranscriptCopier } from "./strip-tabs.js";
@@ -73,15 +72,20 @@ import { PullRequestLine, RepositoryDetail, taskCardOf } from "./task-card.js";
  * task's own row is pressed or another task opens. Its Unpin stands at the row's end while it is hovered or
  * reached from the keyboard, in the task rows' Pin and Archive style, and
  * part of the row to its card, as theirs are, and
- * a right-click offers Unpin, beside an agent's two copies of its
+ * a menu, opened by its ⋯, a right-click, or the menu key, offers Unpin, beside an agent's two copies of its
  * transcript while its task is open.
  *
  * A pin outlives what it opens only on the open task's word: an agent the
  * task's agents no longer hold, its Changes too, or a file no longer among those Luke showed
  * on it, leaves the row dimmed, opening nothing, with a quiet note on its
- * card, until it is unpinned. Another task's pins are drawn as they were kept, since
- * nothing of that task is read.
+ * card, until it is unpinned. Another task's pins are never gone, since
+ * nothing of that task is read but its row; a pin is named as its tab is
+ * now, from that row where it is another task's (`namedPin`), and by the
+ * label it was pinned under where nothing the window reads names it.
  */
+
+/** What a pin's Unpin button says and wears, as the pin's menu does. */
+const UNPIN = commandHead(PANEL_COMMAND.UNPIN_TAB);
 
 /** What a pin's card says once its task no longer holds what it opens. */
 const GONE_NOTE = "No longer on this task";
@@ -177,13 +181,23 @@ function pinPullRequest(
   return lines.find((line) => line.agentId === tab.changes);
 }
 
-/** A pin as the sidebar names it: by the label it was pinned under, but a Plan tab's by its task's name and a Changes tab's by its pull request's number and title as they stand now, as the tab itself is named. */
+/**
+ * A pin as the sidebar names it, as the tab itself is named now: a Plan
+ * tab's by its task's name, an agent's by the agent's name where the window
+ * reads the agent (`pinAgent`), and a Changes tab's by its pull request's
+ * number and title. Note that the label it was pinned under is what it falls
+ * back to, because another task's agents are read only as far as its row's
+ * agent lines name them.
+ */
 function namedPin(
   pin: PinnedTab,
   task: TaskSummary,
+  agent: TaskAgentLine | undefined,
   pullRequest: PinnedPullRequest | undefined,
+  models: readonly CatalogModel[] | undefined,
 ): PinnedTab {
   if (pin.tab === SIDE_PANEL_TAB.PLAN) return { ...pin, label: task.name };
+  if (agent !== undefined) return { ...pin, label: agentName(agent, models) };
   return pullRequest === undefined ? pin : { ...pin, label: pullRequestLabelOf(pullRequest) };
 }
 
@@ -206,11 +220,11 @@ function pinActionGroups(
   copied: TranscriptCopier,
 ): MenuAction[][] {
   const { tab } = pin;
-  const unpin: MenuAction = {
-    label: "Unpin",
-    icon: <UnpinIcon />,
-    onSelect: () => tasks.sidePanel.onUnpin(pin.task, tab),
-  };
+  const unpin = commandAction(
+    PANEL_COMMAND.UNPIN_TAB,
+    () => tasks.sidePanel.onUnpin(pin.task, tab),
+    false,
+  );
   const agent =
     isAgentTab(tab) && pin.task === tasks.activeTaskId
       ? tasks.agents.agents?.find((each) => each.id === tab.agent)
@@ -226,16 +240,12 @@ function pinActionGroups(
   const copy = copied(read);
   return [
     [
-      {
-        label: "Copy concise transcript",
-        icon: <CopyIcon />,
-        onSelect: () => copy(TRANSCRIPT_COPY.CONCISE),
-      },
-      {
-        label: "Copy full transcript",
-        icon: <ScrollTextIcon />,
-        onSelect: () => copy(TRANSCRIPT_COPY.FULL),
-      },
+      commandAction(
+        PANEL_COMMAND.COPY_CONCISE_TRANSCRIPT,
+        () => copy(TRANSCRIPT_COPY.CONCISE),
+        false,
+      ),
+      commandAction(PANEL_COMMAND.COPY_FULL_TRANSCRIPT, () => copy(TRANSCRIPT_COPY.FULL), false),
     ],
     [unpin],
   ];
@@ -418,26 +428,20 @@ export function SidebarPinnedTab({
   onOpenTask: () => void;
 }): React.JSX.Element {
   const livePullRequest = pinPullRequest(kept, task, tasks);
-  const pin = namedPin(kept, task, livePullRequest);
+  const agent = pinAgent(kept, task, tasks);
+  const pin = namedPin(kept, task, agent, livePullRequest, tasks.agents.models);
   const copied = useTranscriptCopier();
   const now = useMinute();
-  const menu = useMenu(tasks.shown && inSight);
   const place = useRowPlace();
-  const row = useRef<HTMLElement | null>(null);
   const item = useRef<HTMLElement | null>(null);
   // Note that the row's item is its press's parent, which its card counts as its control.
   const hold = useCallback((press: HTMLElement | null) => {
-    row.current = press;
     item.current = press?.parentElement ?? null;
   }, []);
   const gone = pinGone(pin, tasks);
-  const agent = pinAgent(pin, task, tasks);
   const changesCard = pinChangesCard(pin, tasks, gone, (agentId) =>
     tasks.onOpenPinnedTab({ ...pin, tab: { agent: agentId } }),
   );
-  // The row is what the menu rings and hands focus back to, even when the
-  // right-click lands on Unpin over its end.
-  const showMenu = menu.contextMenu(row);
   return (
     <>
       <RowHintOptions
@@ -481,19 +485,21 @@ export function SidebarPinnedTab({
             )
           }
           current={current ? LIST_ROW_CURRENT.PAGE : undefined}
-          menuOpen={menu.open !== undefined}
           hint={{ Hint: RowHint, label: pin.label }}
           onPress={() => {
-            menu.close(false);
             if (!gone) onOpen();
           }}
-          contextMenu={showMenu}
+          menu={rowMenu(
+            "Pinned tab",
+            withRowMoves(pinActionGroups(pin, tasks, copied), place),
+            tasks.shown && inSight,
+          )}
           actionsAt={LIST_ROW_ACTIONS.HOVER}
           actions={
-            <Tooltip label="Unpin">
+            <Tooltip label={UNPIN.label}>
               <IconButton
-                icon={<UnpinIcon />}
-                label={`Unpin ${pin.label}`}
+                icon={UNPIN.icon}
+                label={`${UNPIN.label} ${pin.label}`}
                 size={BUTTON_SIZE.COMPACT}
                 onClick={() => tasks.sidePanel.onUnpin(pin.task, pin.tab)}
               />
@@ -501,14 +507,6 @@ export function SidebarPinnedTab({
           }
         />
       </RowHintOptions>
-      {menu.drawn === undefined ? null : (
-        <ActionMenu
-          label={`${pin.label} actions`}
-          menu={menu.drawn}
-          groups={withRowMoves(pinActionGroups(pin, tasks, copied), place)}
-          onClose={menu.close}
-        />
-      )}
     </>
   );
 }

@@ -13,10 +13,18 @@ import { mountPlanEditor } from "./plan-editor.js";
  * nothing handed over and the text written as it was; reported where they
  * stand as words are typed before them; gone from the report, though still
  * carried, once deleted; back with their words on undo, and gone again on
- * redo. Synthetic plan.
+ * redo; and all of it counted in a text saved with Windows line endings as
+ * it was given. Threads opened and closed while the editor stands mark and
+ * unmark their words with no remount, and a thread whose words were deleted
+ * here stays carried while it is open. Synthetic plan.
  */
 
 const THREAD = "0f9b5f6e-6a8e-4c51-9a0e-2c1f2f0b7a11";
+
+const OPENED = "5c2d8e41-3b7a-4f09-8d6e-1a4b9c7f2e30";
+
+/** Words over emphasis, which a block re-printed rather than written as its source would spell otherwise. */
+const EMPHASIS = "The email follows the _mock_.";
 
 const WORDS = "Admins can withdraw an invite.";
 
@@ -31,8 +39,8 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-/** The editor mounted on the text with the thread's words anchored, and every draft and report it handed over. */
-function mounted(text = TEXT) {
+/** The editor mounted on the text, with the thread's words anchored unless it opens with none, and every draft and report it handed over. */
+function mounted(text = TEXT, marked = true) {
   const drafts: { markdown: string; anchors: EditorAnchors | undefined }[] = [];
   const host = document.createElement("div");
   document.body.append(host);
@@ -46,7 +54,7 @@ function mounted(text = TEXT) {
     onDraft: (markdown, anchors) => drafts.push({ markdown, anchors }),
     onFinish: () => undefined,
     onLeaveUp: () => undefined,
-    anchors: from < 0 ? [] : [{ thread: THREAD, from, to: from + WORDS.length }],
+    anchors: from < 0 || !marked ? [] : [{ thread: THREAD, from, to: from + WORDS.length }],
   });
   editors.push(handle);
   const element = host.querySelector<TiptapEditorHTMLElement>(".plan-document-text");
@@ -148,4 +156,74 @@ test("the editor's block button measures one bullet, a parent's own words withou
   );
   assert.equal(child?.quote, "nested two");
   assert.equal(child === undefined ? "" : child.text.slice(child.from, child.to), "nested two");
+});
+
+test("a text saved with Windows line endings marks a thread's words by offsets in it as given, and reports and measures them in the text it hands over, its line endings kept", () => {
+  const crlf = TEXT.replaceAll("\n", "\r\n");
+  const { editor, handle, host, spanOf, select, anchored, last } = mounted(crlf);
+  assert.equal(host.querySelector(`mark[data-threads~="${THREAD}"]`)?.textContent, WORDS);
+
+  editor.view.dispatch(editor.state.tr.insertText("Note: ", spanOf("Admins").from));
+  assert.equal(anchored(), WORDS);
+  assert.ok(last().markdown.includes(`\r\n\r\nNote: ${WORDS}`));
+
+  select(spanOf("withdrawn link"));
+  const span = handle.selectionSpan();
+  assert.ok(span, "the selection is measured");
+  assert.equal(span.text, handle.markdown());
+  assert.equal(span.text.slice(span.from, span.to), "withdrawn link");
+});
+
+test("a thread opened while the editor stands marks its words, unsaved words typed before them and all, and closing it takes the mark off, with no remount and the text written as it was", () => {
+  const { editor, handle, host, drafts, spanOf, last } = mounted(TEXT, false);
+  editor.view.dispatch(editor.state.tr.insertText(" and scope", spanOf("Approach").to));
+  const typed = drafts.length;
+  const from = TEXT.indexOf(EMPHASIS);
+
+  handle.replaceAnchors(TEXT, [{ thread: OPENED, from, to: from + EMPHASIS.length }], [OPENED]);
+
+  assert.equal(drafts.length, typed);
+  // Note that the mark is drawn in pieces either side of the emphasis it spans.
+  const marked = [...host.querySelectorAll(`mark[data-threads~="${OPENED}"]`)];
+  assert.equal(marked.map((mark) => mark.textContent).join(""), "The email follows the mock.");
+  assert.equal(handle.markdown(), TEXT.replace("Approach", "Approach and scope"));
+  editor.view.dispatch(editor.state.tr.insertText("!", spanOf("A withdrawn").from));
+  const report = last().anchors?.anchors.find((anchor) => anchor.thread === OPENED);
+  assert.equal(
+    report === undefined ? undefined : last().markdown.slice(report.from, report.to),
+    EMPHASIS,
+  );
+
+  handle.replaceAnchors(TEXT, undefined, []);
+
+  assert.equal(host.querySelector("mark[data-threads]"), null);
+  assert.ok(handle.markdown().includes(`\n\n${EMPHASIS}\n\n`));
+  editor.view.dispatch(editor.state.tr.insertText("?", spanOf("A withdrawn").from));
+  assert.equal(last().anchors, undefined);
+});
+
+test("a thread whose words were deleted here stays carried while it is open, though the service holds no anchor for it, so undo still brings its anchor back", () => {
+  const { editor, handle, spanOf, select, anchored, last } = mounted();
+  select(spanOf(WORDS));
+  editor.commands.deleteSelection();
+
+  handle.replaceAnchors(TEXT, [], [THREAD]);
+  editor.commands.undo();
+
+  assert.equal(anchored(), WORDS);
+  assert.deepEqual(last().anchors?.carried, [THREAD]);
+});
+
+test("a thread closed after its words were deleted, whose words undo brings back, is carried again once it reopens, so its anchor comes back with them", () => {
+  const { editor, handle, spanOf, select, anchored, last } = mounted();
+  select(spanOf(WORDS));
+  editor.commands.deleteSelection();
+  handle.replaceAnchors(TEXT, [], []);
+  editor.commands.undo();
+
+  handle.replaceAnchors(TEXT, [], [THREAD]);
+  editor.view.dispatch(editor.state.tr.insertText("Note: ", spanOf("The email").from));
+
+  assert.equal(anchored(), WORDS);
+  assert.deepEqual(last().anchors?.carried, [THREAD]);
 });

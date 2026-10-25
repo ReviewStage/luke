@@ -43,6 +43,8 @@ class StillObserver {
 // observer that never hears a change, as a page that never moves would.
 globalThis.ResizeObserver ??= StillObserver as unknown as typeof ResizeObserver;
 globalThis.IntersectionObserver ??= StillObserver as unknown as typeof IntersectionObserver;
+// Note that a list bringing its lit row into view, as a command palette does, scrolls nothing here.
+Element.prototype.scrollIntoView ??= () => undefined;
 
 /** What the platform presses, or what speaks as a control pressed. */
 const PRESSABLE = [
@@ -72,8 +74,9 @@ const PULSE = "data-pulse";
 const NO_PRESS = [
   // A dialog's backdrop, whose click asks it to close; a busy one nudges instead (`dialog.tsx`).
   "dialog.luke-dialog",
-  // A fold's action stands in its summary only to keep its own press from folding it.
-  ".luke-disclosure-action",
+  // A fold head's cells beside its summary, whose bare ground hands a press to the summary, which answers it.
+  ".luke-disclosure-lead",
+  ".luke-disclosure-actions",
   // A portal's fence only keeps what the controls it holds took from the tree around it (`portal-fence.tsx`).
   ".luke-portal-fence",
   // A document's block, whose press puts a caret in its words to edit them, as a document editor does (`editable-block.tsx`).
@@ -81,6 +84,8 @@ const NO_PRESS = [
   // Words a hint hangs from, whose tap shows the hint rather than pressing anything (`hint.tsx`).
   ".luke-one-line",
   "span.luke-inline-ref",
+  // A time, whose hint hangs from its hover and whose tap shows it (`time.tsx`).
+  "time.luke-time",
   // A file's chip, which hangs its card from the chip's hover and whose own presses are its Open and Remove buttons (`attachment-chip.tsx`).
   "li.luke-attachment-chip",
   // A turn of a conversation, whose tap on a touch screen shows its actions rather than pressing anything (`message.tsx`).

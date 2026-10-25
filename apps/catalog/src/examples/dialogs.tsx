@@ -30,19 +30,27 @@ import { CatalogSection } from "../section";
  * composer's card as New task's stands, which on a phone's screen gives its
  * words the room the desktop's margins would spend, and a picture shown edge
  * to edge under its own bar, each opened from its button and
- * put away by its answers, Escape, or a press on the dimmed window; the
+ * put away by its answers, Escape, or a press on the dimmed window, fading
+ * out as it goes; the
  * note and the composer, holding words, are nudged by the first of those
  * and put away by the next. The
  * question's words scroll inside the card in a short window, so its answers
  * stay on screen.
  */
 
+/** What each dialog here is told: whether it stands, and how it is put away. */
+interface DialogBody {
+  open: boolean;
+  onClose: () => void;
+}
+
 /** A dialog that renames a task, its field taking focus as it opens. */
-function RenameDialog({ onClose }: { onClose: () => void }): React.JSX.Element {
+function RenameDialog({ open, onClose }: DialogBody): React.JSX.Element {
   const [name, setName] = useState("Launch checklist");
   const field = useRef<HTMLInputElement | null>(null);
   return (
     <Dialog
+      open={open}
       title="Rename task"
       initialFocus={field}
       onDismiss={onClose}
@@ -67,11 +75,12 @@ function RenameDialog({ onClose }: { onClose: () => void }): React.JSX.Element {
 }
 
 /** A question that must be answered before going on, with more to say than one line holds. */
-function DeleteDialog({ onClose }: { onClose: () => void }): React.JSX.Element {
+function DeleteDialog({ open, onClose }: DialogBody): React.JSX.Element {
   const cancel = useRef<HTMLButtonElement | null>(null);
   const bodyId = useId();
   return (
     <Dialog
+      open={open}
       role={DIALOG_ROLE.ALERT_DIALOG}
       title="Delete “Quarterly planning for the platform team’s migration”?"
       describedBy={bodyId}
@@ -100,12 +109,13 @@ function DeleteDialog({ onClose }: { onClose: () => void }): React.JSX.Element {
 }
 
 /** A note being written, on the wide card, which rings while a file is dragged over the window. */
-function NoteDialog({ onClose }: { onClose: () => void }): React.JSX.Element {
+function NoteDialog({ open, onClose }: DialogBody): React.JSX.Element {
   const [note, setNote] = useState("");
   const [dropping, setDropping] = useState(false);
   const field = useRef<HTMLTextAreaElement | null>(null);
   return (
     <Dialog
+      open={open}
       size={DIALOG_SIZE.WIDE}
       title="Send feedback"
       holding={note.trim() !== ""}
@@ -151,11 +161,12 @@ function NoteDialog({ onClose }: { onClose: () => void }): React.JSX.Element {
 }
 
 /** A task's first words on the composer's card, its tool at the foot's start and its start at the end. */
-function ComposerDialog({ onClose }: { onClose: () => void }): React.JSX.Element {
+function ComposerDialog({ open, onClose }: DialogBody): React.JSX.Element {
   const [words, setWords] = useState("");
   const field = useRef<HTMLTextAreaElement | null>(null);
   return (
     <Dialog
+      open={open}
       size={DIALOG_SIZE.COMPOSER}
       title="New task"
       holding={words.trim() !== ""}
@@ -171,7 +182,7 @@ function ComposerDialog({ onClose }: { onClose: () => void }): React.JSX.Element
       <TextArea
         ref={field}
         label="Task"
-        placeholder="Describe the change for a coding agent…"
+        placeholder="Describe the task"
         value={words}
         onChange={setWords}
         rows={5}
@@ -182,10 +193,10 @@ function ComposerDialog({ onClose }: { onClose: () => void }): React.JSX.Element
 }
 
 /** A picture opened over the window, the card fitted to it under a bar naming it. */
-function PictureDialog({ onClose }: { onClose: () => void }): React.JSX.Element {
+function PictureDialog({ open, onClose }: DialogBody): React.JSX.Element {
   const titleId = useId();
   return (
-    <Dialog size={DIALOG_SIZE.MEDIA} labelledBy={titleId} onDismiss={onClose}>
+    <Dialog open={open} size={DIALOG_SIZE.MEDIA} labelledBy={titleId} onDismiss={onClose}>
       <div className="catalog-media-bar">
         <Text variant={TEXT_VARIANT.LABEL} as={TEXT_ELEMENT.H2} id={titleId}>
           luke-face.svg
@@ -199,21 +210,26 @@ function PictureDialog({ onClose }: { onClose: () => void }): React.JSX.Element 
   );
 }
 
-/** A button that opens `Body`, which closes itself. */
+/** A button that opens `Body`, which closes itself and fades out as it goes; each opening is drawn afresh. */
 function Opener({
   label,
   Body,
 }: {
   label: string;
-  Body: (props: { onClose: () => void }) => React.JSX.Element;
+  Body: (props: DialogBody) => React.JSX.Element;
 }): React.JSX.Element {
   const [open, setOpen] = useState(false);
+  const [openings, setOpenings] = useState(0);
+  const show = () => {
+    setOpen(true);
+    setOpenings((count) => count + 1);
+  };
   return (
     <>
-      <Button variant={BUTTON_VARIANT.OUTLINE} aria-haspopup="dialog" onClick={() => setOpen(true)}>
+      <Button variant={BUTTON_VARIANT.OUTLINE} aria-haspopup="dialog" onClick={show}>
         {label}
       </Button>
-      {open ? <Body onClose={() => setOpen(false)} /> : null}
+      <Body key={openings} open={open} onClose={() => setOpen(false)} />
     </>
   );
 }

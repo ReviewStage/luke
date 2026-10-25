@@ -1,8 +1,10 @@
 import { encodeMention, MENTION_KIND } from "@luke/features/mention-link";
 import type { TaskFileRequest } from "@luke/features/task-wire";
 import type { TaskCode, TasksFileAnswer } from "@luke/features/tasks-view";
+import { readingWords } from "@luke/features/words";
 import { APP_COMMAND, FILES_CHANGED_KEY, filesChangedKeyFor } from "@luke/settings/shortcuts";
 import {
+  ANNOUNCE,
   EmptyState,
   ERROR_STATE_PLACEMENT,
   ErrorState,
@@ -16,6 +18,7 @@ import {
 import { fileName } from "@luke/voice/code-pane-model";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useAppCommand } from "../app-commands.js";
+import { useAnnounceShown } from "../use-announce-shown.js";
 import { typingInto } from "./changes-list.js";
 import { CodeSnippet } from "./code-snippet.js";
 import { FileNoteAnnotation, type FileNotes, type NoteLines, noteLineOf } from "./file-note.js";
@@ -209,7 +212,14 @@ function ReadNotice({
   onRetry: () => void;
   place: ErrorStatePlacement;
 }): React.JSX.Element {
-  if (read.kind === FILE_READ.FAILED || refusalPasses(read.refusal)) {
+  const retries = read.kind === FILE_READ.FAILED || refusalPasses(read.refusal);
+  // Note that a read failure and a centred refusal are said by the components that draw them, so only this line's own words are said here.
+  const refusal =
+    retries || place === ERROR_STATE_PLACEMENT.CENTRED
+      ? ""
+      : refusalLine(read.refusal, read.branch, commit);
+  useAnnounceShown(ANNOUNCE.ALERT, refusal);
+  if (retries) {
     const line =
       read.kind === FILE_READ.FAILED
         ? "The file could not be read."
@@ -220,13 +230,10 @@ function ReadNotice({
       </ErrorState>
     );
   }
-  const refusal = refusalLine(read.refusal, read.branch, commit);
-  if (place === ERROR_STATE_PLACEMENT.CENTRED) return <EmptyState alert>{refusal}</EmptyState>;
-  return (
-    <p className="m-0" role="alert">
-      {refusal}
-    </p>
-  );
+  if (place === ERROR_STATE_PLACEMENT.CENTRED) {
+    return <EmptyState alert>{refusalLine(read.refusal, read.branch, commit)}</EmptyState>;
+  }
+  return <p className="m-0">{refusal}</p>;
 }
 
 /** A file's lines as their mention's chip names them: the file's name and the lines, `app.ts:12–20`, or the one line. */
@@ -332,7 +339,7 @@ export function FileTab({
       {read.kind === FILE_READ.READY ? (
         <FileTextView file={file} held={read} notes={notes} handleRef={handle} />
       ) : read.kind === FILE_READ.READING ? (
-        <SpinnerRegion delay label="Loading file" />
+        <SpinnerRegion delay label={readingWords("the file")} />
       ) : snippet === undefined ? (
         <ReadNotice
           read={read}

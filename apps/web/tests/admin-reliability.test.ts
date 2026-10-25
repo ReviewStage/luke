@@ -185,7 +185,7 @@ test("the loading screen stands its sections under the same headings, saying it 
   const { page } = await openReliability(undefined);
 
   expect(sectionHeadings(page)).toEqual(SECTIONS);
-  expect(page.querySelector('[role="status"]')?.textContent).toContain("Loading…");
+  expect(page.querySelector('[role="status"]')?.textContent).toContain("Reading this page");
 });
 
 test("each rate reads as a share with what it is a share of", async () => {
@@ -224,7 +224,7 @@ test("an account that needs attention reads what broke by status alone, and a pr
   );
 
   expect(row?.textContent).toContain("OpenAI key · quota exceeded");
-  expect(row?.textContent).toContain("GitHub App · suspended");
+  expect(row?.textContent).toContain("GitHub App · Suspended");
   const name = row?.querySelector<HTMLAnchorElement>("a");
   await act(async () => {
     name?.click();

@@ -1,4 +1,5 @@
 import { githubUserAvatarUrl } from "@luke/features/account-picture";
+import type { AutomationTrigger } from "@luke/features/automation-wire";
 import type { GitHubPerson } from "@luke/features/coding-agent-wire";
 import type { ModelProvider } from "@luke/features/models-wire";
 import {
@@ -8,6 +9,7 @@ import {
   type PlanSectionEdit,
   type TaskOrigin,
 } from "@luke/features/task-wire";
+import { andList } from "@luke/features/words";
 import {
   type FormerMember,
   WORKSPACE_ROLE,
@@ -91,8 +93,12 @@ export type Actor =
     }
   | {
       readonly kind: typeof ACTOR_KIND.AUTOMATION;
+      /** The automation's id, which its card is read by; absent where the place naming it knows only its name. */
+      readonly automationId?: string | undefined;
       readonly name: string;
       readonly state: ActorState;
+      /** What fires it, whose glyph its tile wears (`FiringGlyph`); the clock where the place naming it knows only its name. */
+      readonly trigger?: AutomationTrigger | undefined;
     }
   | {
       readonly kind: typeof ACTOR_KIND.SOMEONE;
@@ -115,14 +121,8 @@ export interface GitHubActor {
   readonly bot: boolean;
 }
 
-/** The most sections an activity names before it counts the rest. */
-const NAMED_SECTIONS = 3;
-
 /** What an activity calls the words a plan holds before its first heading, as the version history does. */
 const OPENING_SECTION = "Opening";
-
-/** Joins a few names as a reader says them: "Goal, Rollout, and Risks". */
-const NAMES = new Intl.ListFormat("en", { style: "long", type: "conjunction" });
 
 /** A member's role in their workspace, in the words a row and a card say it. */
 export const ROLE_WORDS = {
@@ -501,14 +501,9 @@ export function latestActivity(
   };
 }
 
-/** An activity in a line: "Edited Rollout and Risks", or "Edited Goal, Rollout, and 3 more" past a few. */
+/** An activity in a line, every section it changed named: "Edited Rollout and Risks", "Edited Goal, Rollout, Risks, and Open questions". */
 export function activityWords(activity: ActorActivity): string {
-  const { sections } = activity;
-  const named =
-    sections.length <= NAMED_SECTIONS
-      ? sections
-      : [...sections.slice(0, NAMED_SECTIONS - 1), `${sections.length - NAMED_SECTIONS + 1} more`];
-  return `Edited ${NAMES.format(named)}`;
+  return `Edited ${andList(activity.sections)}`;
 }
 
 /**

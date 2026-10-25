@@ -101,7 +101,7 @@ component, factored out of the surface where it builds the box by hand.
   `show_image`'s pictures are
   (`packages/service/src/agents/browser/browser-tool.ts`), which the stored
   conversation names by id, which that transcript shows to the members who can
-  open the task, and which is deleted with the conversation, by its purge thirty
+  open the task, and which is deleted with the conversation, by its purge seven
   days after a delete or at once with the account. None of it ever goes into a
   trace, a counted event, a fixture, or the voice window, and session replay
   masks the live view and the transcript's screenshots; the cookies a member
@@ -156,7 +156,7 @@ Vercel's cron calls `/api/maintenance/sweep` once a minute (the root `vercel.jso
 `packages/service/src/maintenance/maintenance-sweep.ts`) under the deployment's own
 `CRON_SECRET`, compared in constant time; a deployment missing that secret
 answers unavailable and sweeps nothing. Each call purges the conversations
-stamped deleted thirty days ago, settles as abandoned every turn still running
+stamped deleted seven days ago, settles as abandoned every turn still running
 past its bound (`packages/database/src/models/abandoned-turns.ts`'s
 `TURN_ABANDON`: an hour after it started, or twenty-five hours for a coding
 agent's turn, whose one turn is its whole run), and ends on its owner's own

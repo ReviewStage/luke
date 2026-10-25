@@ -6,8 +6,9 @@ import {
   taskListGraceEdge,
   taskListLiveRowsSchema,
   taskListOfLiveRows,
+  taskPullRequestsOfLiveRows,
 } from "@luke/features/task-list-live";
-import type { TaskListAnswer } from "@luke/features/task-wire";
+import type { TaskListAnswer, TaskPullRequests } from "@luke/features/task-wire";
 import { Clock, Duration, Effect, Stream } from "effect";
 import {
   decodedLiveRows,
@@ -34,7 +35,9 @@ import {
  *
  * A seal the service did not answer is asked for again, and a subscription
  * that stops for good started again, after `LIVE_RESTART`; while Realtime
- * fails it, the rows are polled inline (`live-follow.ts`). A seal refused
+ * fails it, the rows are polled inline (`live-follow.ts`). Each says so as
+ * it happens: an unanswered seal as `failed`, a broken follow or a failed
+ * poll as `behind`, until the next list is published. A seal refused
  * because the session is no longer the account the follow started for ends
  * the follow, which the next sign-in starts again.
  */
@@ -45,6 +48,7 @@ type Sealed = TaskListLiveAnswer | { readonly failure: string; readonly gone?: b
 interface LiveTaskList {
   readonly list: TaskListAnswer;
   readonly taskAgents: readonly CodingAgentSummary[];
+  readonly taskPullRequests: readonly TaskPullRequests[];
 }
 
 export interface TaskListFollowDependencies {
@@ -57,6 +61,12 @@ export interface TaskListFollowDependencies {
   readonly publish: (read: LiveTaskList) => void;
   /** That the list could not be read, each time a seal goes unanswered; the list already drawn stands. */
   readonly failed: () => void;
+  /**
+   * That the list drawn may be behind what the service holds: a poll failed
+   * and is asked again, or the follow broke and is sealed again after
+   * `LIVE_RESTART`. The next list published is caught up.
+   */
+  readonly behind: () => void;
   /** Hears the list's wait for a write's transaction once every part is live, and none once it is let go or polled. */
   readonly onTxWait?: (wait: TxWait | undefined) => void;
 }
@@ -68,6 +78,7 @@ function listsOf(rows: TaskListLiveRows): Stream.Stream<LiveTaskList> {
       const now = Stream.succeed({
         list: taskListOfLiveRows(rows, at),
         taskAgents: taskAgentsOfLiveRows(rows, at),
+        taskPullRequests: taskPullRequestsOfLiveRows(rows),
       });
       const edge = taskListGraceEdge(rows, at);
       if (edge === undefined) return now;
@@ -92,6 +103,7 @@ function liveLists(
       poll: (after) => dependencies.live(true, after),
       now: dependencies.now,
       onTxWait: dependencies.onTxWait,
+      behind: dependencies.behind,
     },
     first,
     taskListLiveRowsSchema,
@@ -115,6 +127,8 @@ export function followTaskList(dependencies: TaskListFollowDependencies): Effect
       Effect.as(false),
       Effect.catch((broken) => Effect.succeed(broken.reason === LIVE_GONE)),
     );
+    // A follow that broke draws the list it had until it is sealed again, so it says the list may be behind.
+    if (!gone) dependencies.behind();
     return !gone;
   });
   return restarting(attempt);

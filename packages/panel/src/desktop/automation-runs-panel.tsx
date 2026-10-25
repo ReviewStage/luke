@@ -5,29 +5,23 @@ import {
   automationRunStanding,
   automationRunTitle,
 } from "@luke/features/automation-list-model";
-import {
-  AUTOMATION_FIRING,
-  type AutomationFiring,
-  type AutomationRunSummary,
-  type AutomationTrigger,
-} from "@luke/features/automation-wire";
-import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
-import { LINK_PLACE } from "@luke/features/luke-link";
+import { AUTOMATION_FIRING, type AutomationRunSummary } from "@luke/features/automation-wire";
+import { LINK_PLACE } from "@luke/features/link-grammar";
+import { momentText, sinceText } from "@luke/features/time-format";
 import { TRIGGER_CATALOG } from "@luke/features/trigger-catalog";
 import {
-  BackIcon,
+  BackButton,
   EmptyState,
   ERROR_STATE_PLACEMENT,
   ErrorState,
   FILL_ELEMENT,
   Fill,
-  FoldingButton,
+  FiringGlyph,
   LIST_DENSITY,
   LIST_ROW_CURRENT,
   List,
+  ListMotion,
   ListRow,
-  PageToolbar,
-  ProviderMark,
   RESIZE_EDGE_SIDE,
   ResizeEdge,
   SCROLL_FADE,
@@ -40,22 +34,23 @@ import {
   TEXT_VARIANT,
   Text,
   Tooltip,
-  useMenu,
   useMinute,
   useResizeEdge,
 } from "@luke/ui";
-import { momentText, sinceText } from "@luke/ui/time-format";
-import { ClockIcon, ExternalLinkIcon, PlayIcon, WebhookIcon } from "lucide-react";
+import { ClockIcon, ExternalLinkIcon } from "lucide-react";
 import { useEffect, useRef } from "react";
 import { useCopyLinkItem } from "../copy-link-item.js";
 import { GLYPH_STATE, type GlyphState, StateGlyph, stateEndMark } from "../state-glyph.js";
 import { centreWithin, scrollerOf } from "../tasks/code-pane.js";
 import { useOpenLink } from "../tasks/use-open-link.js";
-import { ActionMenu, type MenuAction } from "./action-menu.js";
+import { type MenuAction, rowMenu } from "./action-menu.js";
 import { RUNS_PANEL_WIDTH, type RunsPanel } from "./folded-groups.js";
 import { usePaneSlide } from "./pane-motion.js";
+import { PhoneHead } from "./phone-head.js";
 import type { RunsRead } from "./use-automation-runs.js";
 
+/** What the runs' own screen is called on a phone. */
+const RUNS = "Runs";
 /**
  * automation-runs-panel.tsx -- the panel on an automation's page's right: its runs, newest first, each opening its agent.
  *
@@ -77,11 +72,11 @@ import type { RunsRead } from "./use-automation-runs.js";
 /** Whose key a run ran on where the automation is another's, as its line names it. */
 const CREATOR = "its creator";
 
-/** What a run's right-click menu is called. */
-const RUN_ACTIONS = "Run actions";
+/** What a run's row is, which names its ⋯ and its menu. */
+const RUN_THING = "Run";
 
 /** What the panel says while the automation has no run, over how to have one. */
-const NO_RUNS_LINE = "No runs yet";
+const NO_RUNS_LINE = "No runs yet.";
 
 /** What the placeholder rows say to a reader while the runs are first read. */
 const READING_RUNS = "Reading its runs…";
@@ -106,26 +101,6 @@ export const STANDING_GLYPH = {
   [AUTOMATION_RUN_STANDING.REST]: GLYPH_STATE.REST,
 } as const satisfies Record<AutomationRunStanding, GlyphState>;
 
-/** What fires an automation or fired a run, as its row's glyph: a schedule's clock, GitHub's or an integration's mark, a webhook's hook, or Run now's play. */
-function FiringGlyph({
-  of,
-}: {
-  of: AutomationFiring | AutomationTrigger;
-}): React.JSX.Element {
-  switch (of.kind) {
-    case AUTOMATION_FIRING.GITHUB:
-      return <ProviderMark provider={INTEGRATION_PROVIDER.GITHUB} />;
-    case AUTOMATION_FIRING.WEBHOOK:
-      return <WebhookIcon />;
-    case AUTOMATION_FIRING.MANUAL:
-      return <PlayIcon />;
-    case AUTOMATION_FIRING.SCHEDULE:
-      return <ClockIcon />;
-    case AUTOMATION_FIRING.INTEGRATION:
-      return <ProviderMark provider={of.provider} />;
-  }
-}
-
 /** The subject an integration's run is about, as its provider's page and the words that open it; none for any other run, or one whose subject has no page. */
 function subjectLink(run: AutomationRunSummary): { url: string; label: string } | undefined {
   const { firing } = run;
@@ -135,7 +110,7 @@ function subjectLink(run: AutomationRunSummary): { url: string; label: string } 
   return { url: firing.subject.url, label: `Open in ${TRIGGER_CATALOG[firing.provider].name}` };
 }
 
-/** One run's row, a press opening its agent where it started one, or else its subject where it names one, and its right-click offering its Copy link and its subject; a run with neither is words alone. */
+/** One run's row, a press opening its agent where it started one, or else its subject where it names one, and its ⋯ and right-click offering its Copy link and its subject; a run with neither is words alone. */
 function RunRow({
   run,
   keyHolder,
@@ -154,7 +129,6 @@ function RunRow({
 }): React.JSX.Element {
   const state = STANDING_GLYPH[automationRunStanding(run)];
   const line = automationRunLine(run, keyHolder);
-  const menu = useMenu(true);
   const linkItem = useCopyLinkItem();
   const openLink = useOpenLink();
   const { agent } = run;
@@ -176,40 +150,35 @@ function RunRow({
     if (linked && drawn !== null && scroller !== undefined) centreWithin(scroller, drawn);
   }, [linked]);
   return (
-    <>
-      <ListRow
-        ref={(node) => {
-          row.current = node;
-        }}
-        leading={<StateGlyph glyph={<FiringGlyph of={run.firing} />} state={state} />}
-        title={automationRunTitle(run)}
-        description={
-          <Tooltip label={line}>
-            <span>{line}</span>
+    <ListRow
+      ref={(node) => {
+        row.current = node;
+      }}
+      leading={<StateGlyph glyph={<FiringGlyph of={run.firing} />} state={state} />}
+      title={automationRunTitle(run)}
+      description={
+        <Tooltip label={line}>
+          <span>{line}</span>
+        </Tooltip>
+      }
+      meta={
+        <span className="automation-row-meta">
+          <Tooltip label={momentText(run.firedAt)}>
+            <span>{sinceText(run.firedAt, now)}</span>
           </Tooltip>
-        }
-        meta={
-          <span className="automation-row-meta">
-            <Tooltip label={momentText(run.firedAt)}>
-              <span>{sinceText(run.firedAt, now)}</span>
-            </Tooltip>
-            {stateEndMark(state, true)}
-          </span>
-        }
-        current={linked ? LIST_ROW_CURRENT.ITEM : undefined}
-        onPress={
-          agent !== null
-            ? () => onOpenAgent(agent.id)
-            : subject === undefined
-              ? undefined
-              : () => openLink(subject.url)
-        }
-        contextMenu={items.length === 0 ? undefined : menu.contextMenu(row)}
-      />
-      {menu.drawn === undefined || items.length === 0 ? null : (
-        <ActionMenu label={RUN_ACTIONS} menu={menu.drawn} groups={[items]} onClose={menu.close} />
-      )}
-    </>
+          {stateEndMark(state, true)}
+        </span>
+      }
+      current={linked ? LIST_ROW_CURRENT.ITEM : undefined}
+      onPress={
+        agent !== null
+          ? () => onOpenAgent(agent.id)
+          : subject === undefined
+            ? undefined
+            : () => openLink(subject.url)
+      }
+      menu={rowMenu(RUN_THING, [items])}
+    />
   );
 }
 
@@ -255,7 +224,8 @@ interface RunsShown {
 /**
  * The runs under their heading, scrolling by themselves: quiet blocks in
  * their place while they are first read, or that there are none yet, or
- * that they could not be read.
+ * that they could not be read. A run that starts slides in at the top, and
+ * the runs under it glide down (`ListMotion`).
  */
 function RunsBody({
   mine,
@@ -267,9 +237,10 @@ function RunsBody({
   onOpenAgent,
 }: RunsShown): React.JSX.Element {
   const now = useMinute();
+  const body = useRef<HTMLDivElement | null>(null);
   return (
     <ScrollArea fade={SCROLL_FADE.START}>
-      <div className="automation-runs-body">
+      <div ref={body} className="automation-runs-body">
         <div className="automation-runs-head">
           <Text variant={TEXT_VARIANT.SECTION} tone={TEXT_TONE.MUTED} as={TEXT_ELEMENT.H2}>
             Runs
@@ -286,19 +257,21 @@ function RunsBody({
         ) : runs.runs.length === 0 ? (
           <EmptyState icon={<ClockIcon />}>{NO_RUNS_LINE}</EmptyState>
         ) : (
-          <List label="Runs" density={LIST_DENSITY.COMPACT}>
-            {runs.runs.map((run) => (
-              <RunRow
-                key={run.id}
-                run={run}
-                keyHolder={mine ? undefined : CREATOR}
-                automationId={automationId}
-                linked={run.id === linkedRun}
-                now={now}
-                onOpenAgent={onOpenAgent}
-              />
-            ))}
-          </List>
+          <ListMotion root={body}>
+            <List label="Runs" density={LIST_DENSITY.COMPACT} moves>
+              {runs.runs.map((run) => (
+                <RunRow
+                  key={run.id}
+                  run={run}
+                  keyHolder={mine ? undefined : CREATOR}
+                  automationId={automationId}
+                  linked={run.id === linkedRun}
+                  now={now}
+                  onOpenAgent={onOpenAgent}
+                />
+              ))}
+            </List>
+          </ListMotion>
         )}
       </div>
     </ScrollArea>
@@ -381,12 +354,12 @@ export function AutomationRunsScreen({
       aria-label="Runs"
       hidden={hidden}
     >
-      <PageToolbar
-        lead={
-          <div className="automation-runs-back">
-            <FoldingButton label={name} icon={<BackIcon />} onClick={onBack} />
-          </div>
-        }
+      {/* A narrow room's screen alone, headed as a phone's page is (`phone-head.tsx`): the way back to the setup, Runs centred. */}
+      <PhoneHead
+        place="automation-runs-page"
+        start={<BackButton label={name} place={name} onBack={onBack} />}
+        title={RUNS}
+        end={null}
       />
       <RunsBody {...shown} />
     </Fill>

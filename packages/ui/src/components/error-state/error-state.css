@@ -69,6 +69,14 @@
     display: contents;
   }
 
+  /* At a list's rows' inset it takes the room its margins leave, as a note
+     line does among a sidebar's rows, and ends a little short of the row's
+     end, so Retry's glyph stands under the head's buttons'. */
+  .luke-error-state[data-placement="rows"] {
+    width: auto;
+    margin: var(--luke-space-4) var(--luke-space-4) var(--luke-space-4) var(--luke-row-inset);
+  }
+
   /* On a toolbar it is one line as wide as it says, and no container, so the
      toolbar can size it: the glyph and the presses stay whole, and the
      sentence gives way to them, cut short with an ellipsis. */
@@ -95,7 +103,7 @@
 
   /* Narrow, Retry is drawn as a glyph alone is (`IconButton`): a control's
      square in the muted ink, its words kept for a reader and drawn nowhere. */
-  @container luke-error-state (max-width: 360px) {
+  @container luke-error-state (width < 360px) {
     .luke-error-state-retry > .luke-button {
       --luke-button-ink: var(--luke-color-text-muted);
       width: var(--luke-control-height);
@@ -118,7 +126,7 @@
     align-items: baseline;
     gap: var(--luke-space-4);
     margin-left: var(--luke-space-4);
-    font-weight: 600;
+    font-weight: var(--luke-type-emphasis-weight);
   }
 
   .luke-retry-row-label svg {

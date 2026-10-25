@@ -1,3 +1,4 @@
+import { useAtomMount } from "@effect/atom-react";
 import { textChange } from "@luke/features/plan-comment-anchor";
 import {
   PLAN_COMMENT_REFUSAL,
@@ -17,15 +18,9 @@ import {
   type TasksCommentsAnswer,
   type TasksCommentsParams,
 } from "@luke/features/tasks-view";
-import {
-  createContext,
-  useCallback,
-  useContext,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import { Data, Duration, Effect, Schedule } from "effect";
+import * as Atom from "effect/reactivity/Atom";
+import { createContext, useCallback, useContext, useMemo, useRef, useState } from "react";
 
 /**
  * plan-comments.ts -- the open plan's comment threads as one control: read on the service's held long-poll while the plan is shown, and each write on its way back.
@@ -35,7 +30,8 @@ import {
  * clock of its own, as the plan's inbox is read (the desktop's `use-plan-inbox.ts`); each
  * answer is every thread of the plan, which replaces what was held, so a
  * teammate's comment or an agent's reply lands in every open window. A read
- * that did not answer ends the loop and says so, with Try again.
+ * that did not answer says so, with Try again, and the loop reads again on
+ * its own after a wait (`commentsPoll`), so one lost answer never stops it.
  *
  * A thread is started, and each comment posted, under a key the caller
  * keeps for as long as its words stand, so a write sent again after a lost
@@ -125,7 +121,80 @@ function withThread(
     : [...threads, thread];
 }
 
+/** Whether two lists hold the same threads, each at the same revision, which every change of a thread moves on. */
+function sameThreads(
+  left: readonly PlanCommentThread[],
+  right: readonly PlanCommentThread[],
+): boolean {
+  return (
+    left.length === right.length &&
+    left.every(
+      (thread, at) => thread.id === right[at]?.id && thread.revision === right[at]?.revision,
+    )
+  );
+}
+
 const UNANSWERED = { failure: PLAN_COMMENT_CALL_FAILURE.UNANSWERED } as const;
+
+/** How long the poll waits after a read that did not answer before it reads again. */
+const COMMENTS_READ_AGAIN = {
+  /** The first wait, doubling on each read that does not answer. */
+  FIRST: Duration.seconds(1),
+  /** The longest wait. */
+  LONGEST: Duration.seconds(30),
+} as const;
+
+const READ_AGAIN_BACKOFF = Schedule.exponential(COMMENTS_READ_AGAIN.FIRST).pipe(
+  Schedule.modifyDelay(({ duration }) =>
+    Effect.succeed(Duration.min(duration, COMMENTS_READ_AGAIN.LONGEST)),
+  ),
+);
+
+/** A read of the comments that did not answer. */
+class CommentsUnread extends Data.TaggedError("CommentsUnread") {}
+
+/** The poll while no plan is shown: nothing read. */
+const RESTING = Atom.make(Effect.void);
+
+/**
+ * The plan's comments read one held read after another for as long as the
+ * effect runs: each answer's threads handed to `took`, and a read that did
+ * not answer handed to `missed` and asked again after a wait that doubles
+ * from a second to thirty, started over once one answers. Note that a read
+ * after a miss asks from the start, so it answers at once rather than holding
+ * past a cursor while the plan stands still, and says the poll is back.
+ */
+export function commentsPoll(input: {
+  readonly planId: string;
+  readonly read: CommentsReader;
+  readonly took: (threads: readonly PlanCommentThread[]) => void;
+  readonly missed: () => void;
+}): Effect.Effect<void> {
+  const { planId, read, took, missed } = input;
+  return Effect.suspend(() => {
+    let after = PLAN_COMMENTS_CURSOR_START;
+    const once = Effect.tryPromise({
+      try: () => read({ planId, after }),
+      catch: () => new CommentsUnread(),
+    }).pipe(
+      Effect.flatMap((answer) => {
+        if ("failure" in answer) return Effect.fail(new CommentsUnread());
+        return Effect.sync(() => {
+          after = answer.cursor;
+          took(answer.threads);
+        });
+      }),
+      Effect.tapError(() =>
+        Effect.sync(() => {
+          after = PLAN_COMMENTS_CURSOR_START;
+          missed();
+        }),
+      ),
+      Effect.retry({ schedule: READ_AGAIN_BACKOFF }),
+    );
+    return Effect.forever(once);
+  }).pipe(Effect.ignore);
+}
 
 interface Held {
   readonly planId: string | undefined;
@@ -136,6 +205,19 @@ interface Held {
 
 function fresh(planId: string | undefined): Held {
   return { planId, threads: [], read: false, failed: false };
+}
+
+/**
+ * The comments held after a read answered with `threads`: the same held, and
+ * the same threads, where the answer brings nothing new. Note that a reader
+ * of the control draws again on a new one, and each section of an open plan
+ * marks its comments from the threads, so a read that changed nothing must
+ * hand on nothing new.
+ */
+function heldAfterRead(was: Held, threads: readonly PlanCommentThread[]): Held {
+  const same = sameThreads(was.threads, threads);
+  if (same && was.read && !was.failed) return was;
+  return { ...was, threads: same ? was.threads : threads, read: true, failed: false };
 }
 
 /**
@@ -157,35 +239,29 @@ export function usePlanComments(input: {
   const latest = useRef(input);
   latest.current = input;
 
-  const active = shown && planId !== undefined && !held.failed;
-  useEffect(() => {
-    if (!active || planId === undefined) return;
-    let live = true;
-    const loop = async () => {
-      let after = PLAN_COMMENTS_CURSOR_START;
-      while (live) {
-        const answer = await latest.current
-          .readComments({ planId, after })
-          .catch((): TasksCommentsAnswer => UNANSWERED);
-        if (!live) return;
-        if ("failure" in answer) {
-          setHeld((was) => ({ ...was, failed: true }));
-          return;
-        }
-        after = answer.cursor;
-        setHeld((was) => ({ ...was, threads: answer.threads, read: true }));
-      }
-    };
-    void loop();
-    return () => {
-      live = false;
-    };
-  }, [active, planId, attempt]);
+  // Note that the poll is read through the latest reader, so a new reader handed on a render asks nothing again.
+  const poll = useMemo(
+    () =>
+      shown && planId !== undefined
+        ? Atom.make(
+            commentsPoll({
+              planId,
+              read: (params) => latest.current.readComments(params),
+              took: (threads) =>
+                setHeld((was) => (was.planId === planId ? heldAfterRead(was, threads) : was)),
+              missed: () =>
+                setHeld((was) =>
+                  was.planId === planId && !was.failed ? { ...was, failed: true } : was,
+                ),
+            }),
+          )
+        : RESTING,
+    // Note that `attempt` is read so Retry polls again at once, past the wait standing.
+    [shown, planId, attempt],
+  );
+  useAtomMount(poll);
 
-  const onRetry = useCallback(() => {
-    setHeld((was) => ({ ...was, failed: false }));
-    setAttempt((count) => count + 1);
-  }, []);
+  const onRetry = useCallback(() => setAttempt((count) => count + 1), []);
 
   const note = useCallback((threadId: string, words: string | undefined) => {
     setNotes((was) => {

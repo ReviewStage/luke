@@ -30,11 +30,15 @@
     color: var(--luke-color-text);
     font-family: var(--luke-font-sans);
     font-size: var(--luke-type-label-size);
-    font-weight: var(--luke-weight-semibold);
-    -webkit-app-region: no-drag;
+    font-weight: var(--luke-type-label-weight);
     transition:
-      background-color var(--luke-duration-hover) ease,
-      opacity var(--luke-duration-hover) ease;
+      background-color var(--luke-duration-hover) var(--luke-motion-exit),
+      opacity var(--luke-duration-hover) var(--luke-motion-exit);
+  }
+
+  /* Only the desktop's window is dragged, so a press on its bar stays a press. */
+  [data-luke-profile="desktop"] .luke-provider-button {
+    -webkit-app-region: no-drag;
   }
 
   /* Under a finger, a finger's height at least. */
@@ -63,7 +67,7 @@
   .luke-provider-button:disabled:not([aria-busy="true"]),
   .luke-provider-button:disabled:not([aria-busy="true"]) + .luke-provider-button-last-used,
   .luke-button:disabled + .luke-provider-button-last-used {
-    opacity: 0.4;
+    opacity: var(--luke-disabled-opacity);
   }
 
   /* The ring that stands in the mark's place while its sign-in is waited on,
@@ -90,11 +94,11 @@
     border-radius: var(--luke-radius-full);
     background: color-mix(in srgb, var(--luke-color-ground) 16%, var(--luke-color-text));
     color: color-mix(in srgb, var(--luke-color-ground) 72%, transparent);
-    font-size: var(--luke-type-caption-size);
-    font-weight: var(--luke-weight-medium);
+    font-size: var(--luke-type-tag-size);
+    font-weight: var(--luke-type-tag-weight);
     line-height: var(--luke-type-caption-leading);
     white-space: nowrap;
     pointer-events: none;
-    transition: opacity var(--luke-duration-hover) ease;
+    transition: opacity var(--luke-duration-hover) var(--luke-motion-exit);
   }
 }

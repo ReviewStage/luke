@@ -5,11 +5,14 @@ import {
   type Box,
   POPOVER_ALIGN,
   POPOVER_SIDE,
+  POPOVER_WIDTH,
   type PopoverAlign,
   type PopoverPlace,
+  type PopoverWidth,
   popoverPlace,
   samePlace,
 } from "./popover-place.js";
+import { type PressAway, usePressAway } from "./press-away.js";
 
 /**
  * anchored-popover.tsx -- the layer a popover hangs from its own button in: above it, a small gap off, from one of its edges, inside the room around it.
@@ -33,14 +36,22 @@ import {
  * it was asked to line up with, so a button that grows or shrinks from its
  * other edge, as the model chip does when Fast comes on, leaves its open
  * menu where it stood rather than throwing it sideways for a frame until
- * the resize is measured.
+ * the resize is measured. A press outside the layer and its button is
+ * handed to the owner, who closes it (`press-away.ts`). A popover asks for its width in pixels or by one
+ * of the three names a menu's width is chosen from (`POPOVER_WIDTH`), whose
+ * token the layer is drawn at and measured by. An owner that closes its
+ * popover through `open` keeps the layer drawn where it last stood, so what
+ * it holds fades out in place (`PopoverPanel`'s `open`), while the layer
+ * hears no press away and measures nothing until it opens again.
  */
 
 export {
   POPOVER_ALIGN,
   POPOVER_SIDE,
+  POPOVER_WIDTH,
   type PopoverAlign,
   type PopoverSide,
+  type PopoverWidth,
 } from "./popover-place.js";
 
 /** What a popover keeps within: its marked room cut to what is seen of the window, or what is seen of the window alone. */
@@ -61,7 +72,14 @@ const LAYER =
   "luke-anchored-popover absolute z-2 data-[side=above]:bottom-[calc(100%+--spacing(1))] data-[side=below]:top-[calc(100%+--spacing(1))]";
 
 /** The width a popover asks for unless its owner asks another, the desktop's searchable menu's own, which the room may narrow. */
-const POPOVER_WIDTH = 340;
+const DEFAULT_WIDTH = 340;
+
+/** The token each named width is drawn at. */
+const WIDTH_TOKEN: Record<PopoverWidth, string> = {
+  [POPOVER_WIDTH.NARROW]: "--luke-popover-width-narrow",
+  [POPOVER_WIDTH.REGULAR]: "--luke-popover-width-regular",
+  [POPOVER_WIDTH.WIDE]: "--luke-popover-width-wide",
+};
 
 /** The box that bounds a popover beside the window's: the desktop's side panel, which marks itself so. */
 const POPOVER_ROOM = "[data-popover-room]";
@@ -74,7 +92,7 @@ const POPOVER_ROOM = "[data-popover-room]";
 function placeStyle(
   align: PopoverAlign,
   inset: number,
-  width: number,
+  width: number | string,
   room?: number,
 ): React.CSSProperties {
   const edge = align === POPOVER_ALIGN.START ? { left: inset, width } : { right: inset, width };
@@ -100,6 +118,22 @@ function roomAround(element: HTMLElement, bounds: PopoverBounds): Box {
   };
 }
 
+/** The width asked for before it is measured: its pixels, or its token's. */
+export function askedStyleWidth(width: number | PopoverWidth): number | string {
+  return typeof width === "number" ? width : `var(${WIDTH_TOKEN[width]})`;
+}
+
+/**
+ * The pixels `width` asks for: its own, or what its token holds where the
+ * layer is drawn. Note that a token no sheet sets, as under a test with no
+ * stylesheet, is read off the layer as it is laid out instead.
+ */
+function askedWidth(layer: HTMLElement, width: number | PopoverWidth): number {
+  if (typeof width === "number") return width;
+  const token = Number.parseFloat(getComputedStyle(layer).getPropertyValue(WIDTH_TOKEN[width]));
+  return Number.isFinite(token) ? token : layer.getBoundingClientRect().width;
+}
+
 /**
  * The layer itself, at the menu's width where the room allows it. Note that it is
  * placed in a layout effect and never hidden while unplaced, because the
@@ -107,22 +141,32 @@ function roomAround(element: HTMLElement, bounds: PopoverBounds): Box {
  * the focus its popover takes as it mounts.
  */
 export function AnchoredPopover({
+  open,
   align,
-  width = POPOVER_WIDTH,
+  width = DEFAULT_WIDTH,
   bounds = POPOVER_BOUNDS.ROOM,
+  onPressAway,
+  holds,
   children,
-}: {
+}: PressAway & {
+  /** Whether what it holds stands open; closed, the layer stays where it stood while that fades. */
+  open: boolean;
   align: PopoverAlign;
-  /** The width it asks for, a form's wider than a menu's. */
-  width?: number;
+  /** The width it asks for, in pixels or by name, a form's wider than a menu's. */
+  width?: number | PopoverWidth | undefined;
   /** What it keeps within: its marked room unless its owner asks for the window. */
-  bounds?: PopoverBounds;
+  bounds?: PopoverBounds | undefined;
   children: React.ReactNode;
 }): React.JSX.Element {
   const layer = useRef<HTMLDivElement>(null);
   const [place, setPlace] = useState<PopoverPlace | undefined>(undefined);
+  usePressAway(layer, () => layer.current?.parentElement, {
+    onPressAway: open ? onPressAway : undefined,
+    holds,
+  });
 
   useLayoutEffect(() => {
+    if (!open) return;
     const drawn = layer.current;
     const anchor = drawn?.parentElement;
     if (drawn === null || anchor === null || anchor === undefined) return;
@@ -130,7 +174,7 @@ export function AnchoredPopover({
       const next = popoverPlace({
         anchor: anchor.getBoundingClientRect(),
         room: roomAround(anchor, bounds),
-        width,
+        width: askedWidth(drawn, width),
         height: drawn.getBoundingClientRect().height,
         align,
       });
@@ -163,16 +207,17 @@ export function AnchoredPopover({
       viewport?.removeEventListener("scroll", measure);
       document.removeEventListener("scroll", measure, { capture: true });
     };
-  }, [align, width, bounds]);
+  }, [open, align, width, bounds]);
 
   return (
     <div
       ref={layer}
       className={LAYER}
       data-side={place?.side ?? POPOVER_SIDE.ABOVE}
+      data-width={typeof width === "number" ? undefined : width}
       style={
         place === undefined
-          ? placeStyle(align, 0, width)
+          ? placeStyle(align, 0, askedStyleWidth(width))
           : placeStyle(align, place.inset, place.width, place.room)
       }
     >

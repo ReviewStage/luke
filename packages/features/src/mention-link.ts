@@ -7,7 +7,30 @@ import {
   integrationOfHost,
   integrationProviderSchema,
 } from "./integration-wire.js";
-import { isLinkHome, LINK_ORIGIN } from "./link-home.js";
+import {
+  decodedStep,
+  encodedPath,
+  encodedStep,
+  GITHUB_DEFAULT_BRANCH,
+  GITHUB_ORIGIN,
+  GITHUB_PAGE,
+  gitHubFilePageRepositoryOf,
+  gitHubPageLink,
+  LEGACY_LINK_HOST,
+  type LegacyLink,
+  LINK_PLACE,
+  type LinkPlace,
+  legacyLinkOf,
+  linkOf,
+  linkTarget,
+  MENTION_SIGIL,
+  mentionMarkdownLink,
+  readGitHubPage,
+  readLabel,
+  readLegacyLink,
+  readLink,
+} from "./link-grammar.js";
+import { isLinkHome } from "./link-home.js";
 import { LINK_SITE_LIST, linkSiteName, linkSiteOf } from "./link-site.js";
 import { parsedUrl } from "./parsed-url.js";
 import { PLAN_SECTION_BOUNDS } from "./task-wire.js";
@@ -19,10 +42,11 @@ import { PLAN_SECTION_BOUNDS } from "./task-wire.js";
  * whose label starts with `@` (`[@Rollout](<target>)`), so the words stay
  * one string that reads as plain markdown anywhere chips are not drawn,
  * and the `@` is what marks the link as a mention rather than a link.
- * What the target looks like is decided here and nowhere else: every
- * caller holds a `Mention`, which names its subject and nothing of the
- * form, and goes through `encodeMention` and `decodeMention` to write and
- * read one.
+ * Which target a mention is written with is decided here: every caller
+ * holds a `Mention`, which names its subject and nothing of the form, and
+ * goes through `encodeMention` and `decodeMention` to write and read one.
+ * How each address is spelled, Luke's, GitHub's, and the `luke:` form, is
+ * `link-grammar.ts`'s, which this reads and writes every target through.
  *
  * Drawn, the `@` is not asked for: wherever Luke draws words a person,
  * Luke, or an agent wrote, any link whose target names a mention is drawn
@@ -46,7 +70,7 @@ import { PLAN_SECTION_BOUNDS } from "./task-wire.js";
  * - A page an agent showed on a plan is the plan's address with
  *   `/page/<pageId>` after it, and one of the plan's coding agents with
  *   `/agent/<agentId>`, the links the window already opens them by
- *   (`luke-link.ts`): ids alone, never the page's title or the agent's. A
+ *   (`link-grammar.ts`): ids alone, never the page's title or the agent's. A
  *   coding agent on no task, as an automation's run or a one-off starts
  *   one, is the workspace's address with `/agent/<agentId>` after it, its
  *   own link, so any agent of the workspace can be mentioned, and a page
@@ -54,7 +78,7 @@ import { PLAN_SECTION_BOUNDS } from "./task-wire.js";
  *   `/page/<pageId>` after it.
  * - A person is their page in the workspace, the workspace's address with
  *   `/person/<userId>` after it, the link their page is opened and copied
- *   by (`luke-link.ts`): the account's id alone, never their name or email,
+ *   by (`link-grammar.ts`): the account's id alone, never their name or email,
  *   so a mention of someone who renames themselves still names them.
  * - A section's anchor is its heading as GitHub spells a Markdown heading's
  *   (`sectionAnchors`): lower case, its punctuation dropped, a space a
@@ -136,39 +160,8 @@ const MENTION_BOUNDS = {
   MAX_MENTIONS: 20,
 } as const;
 
-/** What marks a link's label as a mention's. */
-const MENTION_SIGIL = "@";
-
-/** The settled form: a plan's address on Luke's home (`link-home.ts`), by the web's scheme or the desktop's. */
-const LINK = {
-  TASK_STEP: "plan",
-  /** The steps a task's link is read under: `plan`, which every release writes, and `task`, the next spelling. */
-  TASK_STEPS: new Set(["plan", "task"]),
-  PAGE_STEP: "page",
-  AGENT_STEP: "agent",
-  PERSON_STEP: "person",
-  LUKE_STEP: "luke",
-} as const;
-
-/** A file's or a folder's page on GitHub: the default branch for the thing itself, a commit for its lines. */
-const GITHUB = {
-  ORIGIN: "https://github.com",
-  FILE_STEP: "blob",
-  FOLDER_STEP: "tree",
-  DEFAULT_BRANCH: "HEAD",
-} as const;
-
-/** The form written before the link was settled, read forever: `luke://plan/<planId>` (`#<heading>` after it), `luke://file/<path>`, and `luke://folder/<path>/`. */
-const LEGACY = {
-  PROTOCOL: "luke:",
-  HOST: {
-    [MENTION_KIND.TASK]: "plan",
-    [MENTION_KIND.FILE]: "file",
-    [MENTION_KIND.FOLDER]: "folder",
-    [MENTION_KIND.SERVER]: "mcp",
-    [MENTION_KIND.DATE]: "date",
-  },
-} as const;
+/** The step after a task's address that names Luke on it: `/luke`, a place of no link's own. */
+const LUKE_STEP = "luke";
 
 /** A tool's name as an MCP server lists it, which is the name the agent's connection runs it by. */
 const TOOL_NAME = /^[A-Za-z0-9_.-]{1,128}$/u;
@@ -193,17 +186,6 @@ const ANCHOR_DROPPED = /[^\p{L}\p{M}\p{N}\p{Pc} -]/gu;
 
 /** A commit as a link pins one: seven to forty hexadecimal digits. */
 const COMMIT = /^[0-9a-f]{7,40}$/u;
-
-/** A GitHub page's lines: `#L3`, or `#L3-L5`. */
-const LINES_FRAGMENT = /^#L(\d{1,9})(?:-L(\d{1,9}))?$/u;
-/** The characters a markdown link's label must escape to stay one label. */
-const LABEL_SPECIAL = /[[\]\\]/gu;
-
-/** A label's escaped character, read back. */
-const LABEL_ESCAPE = /\\([[\]\\])/gu;
-
-/** The characters `encodeURIComponent` leaves that would end or break a markdown link's target. */
-const TARGET_SPECIAL = /[()!'*]/gu;
 
 /** A line that opens a fenced block: up to three spaces, then three or more backticks or tildes, and perhaps an info string. */
 const FENCE_LINE = /^ {0,3}(`{3,}|~{3,})/u;
@@ -422,37 +404,15 @@ export interface MentionInWords extends MentionLink {
 
 const readMention = EffectSchema.decodeUnknownOption(mentionSchema);
 
-/** A part of a target percent-encoded, parentheses included, so the target stays one in a markdown link. */
-function encodedPart(part: string): string {
-  return encodeURIComponent(part).replace(
-    TARGET_SPECIAL,
-    (special) => `%${special.charCodeAt(0).toString(16).toUpperCase()}`,
-  );
-}
-
-/** A path percent-encoded step by step, its slashes kept. */
-function encodedPath(path: string): string {
-  return path.split("/").map(encodedPart).join("/");
-}
-
-/** A percent-encoded part read back, or nothing where its encoding is broken. */
-function decodedPart(part: string): string | undefined {
-  try {
-    return decodeURIComponent(part);
-  } catch {
-    return undefined;
-  }
-}
-
 /** Steps of a path read back and joined, or nothing where one's encoding is broken. */
 function decodedSteps(steps: readonly string[]): string | undefined {
-  const read = steps.map(decodedPart);
+  const read = steps.map(decodedStep);
   return read.every((step) => step !== undefined) ? read.join("/") : undefined;
 }
 
-/** A target's path read back from its steps, its leading slash and, for a folder, its trailing one taken off. */
-function decodedPath(pathname: string): string | undefined {
-  return decodedSteps(pathname.replace(/^\//u, "").replace(/\/$/u, "").split("/"));
+/** A legacy target's path read back from its steps, a folder's trailing slash taken off. */
+function decodedPath(steps: readonly string[]): string | undefined {
+  return decodedSteps(steps.at(-1) === "" ? steps.slice(0, -1) : steps);
 }
 
 /** A heading's anchor before it is told apart from an earlier heading's: GitHub's spelling of it. */
@@ -475,30 +435,30 @@ function serverOfSegment(segment: string) {
 }
 
 /** The fields a legacy `luke:` target spells, for the schema to read; nothing where it is none. */
-function legacyFields(url: URL) {
-  switch (url.host) {
-    case LEGACY.HOST[MENTION_KIND.FILE]:
-      return { kind: MENTION_KIND.FILE, path: decodedPath(url.pathname) };
-    case LEGACY.HOST[MENTION_KIND.FOLDER]:
-      return { kind: MENTION_KIND.FOLDER, path: decodedPath(url.pathname) };
-    case LEGACY.HOST[MENTION_KIND.SERVER]: {
-      const [segment, tool, ...rest] = url.pathname.replace(/^\//u, "").split("/");
-      if (rest.length > 0 || url.hash !== "" || url.search !== "") return undefined;
+function legacyFields({ host, steps, hash, search }: LegacyLink) {
+  switch (host) {
+    case LEGACY_LINK_HOST.FILE:
+      return { kind: MENTION_KIND.FILE, path: decodedPath(steps) };
+    case LEGACY_LINK_HOST.FOLDER:
+      return { kind: MENTION_KIND.FOLDER, path: decodedPath(steps) };
+    case LEGACY_LINK_HOST.MCP: {
+      const [segment, tool, ...rest] = steps;
+      if (rest.length > 0 || hash !== "" || search !== "") return undefined;
       const server = serverOfSegment(segment ?? "");
       if (tool === undefined) return { kind: MENTION_KIND.SERVER, ...server };
-      return { kind: MENTION_KIND.TOOL, ...server, tool: decodedPart(tool) };
+      return { kind: MENTION_KIND.TOOL, ...server, tool: decodedStep(tool) };
     }
-    case LEGACY.HOST[MENTION_KIND.DATE]: {
-      const [start, end, ...rest] = url.pathname.replace(/^\//u, "").split("/");
-      if (rest.length > 0 || url.hash !== "" || url.search !== "") return undefined;
-      const moments = { kind: MENTION_KIND.DATE, start: decodedPart(start ?? "") };
-      return end === undefined ? moments : { ...moments, end: decodedPart(end) };
+    case LEGACY_LINK_HOST.DATE: {
+      const [start, end, ...rest] = steps;
+      if (rest.length > 0 || hash !== "" || search !== "") return undefined;
+      const moments = { kind: MENTION_KIND.DATE, start: decodedStep(start ?? "") };
+      return end === undefined ? moments : { ...moments, end: decodedStep(end) };
     }
-    case LEGACY.HOST[MENTION_KIND.TASK]: {
-      const taskId = decodedPart(url.pathname.replace(/^\//u, ""));
-      if (url.hash === "") return { kind: MENTION_KIND.TASK, taskId };
+    case LEGACY_LINK_HOST.PLAN: {
+      const taskId = decodedStep(steps.join("/"));
+      if (hash === "") return { kind: MENTION_KIND.TASK, taskId };
       // Note that a heading's words name the first section under them, as its anchor without a suffix does.
-      const heading = decodedPart(url.hash.slice(1));
+      const heading = decodedStep(hash.slice(1));
       if (heading === undefined || heading === "") return undefined;
       return { kind: MENTION_KIND.SECTION, taskId, anchor: headingAnchor(heading) };
     }
@@ -507,81 +467,71 @@ function legacyFields(url: URL) {
   }
 }
 
-/** The fields a page's or an agent's address spells after its task's id, or after the workspace for an agent on no task: `/page/<id>` or `/agent/<id>`, with no fragment. */
-function taskFields(taskId: string | undefined, rest: readonly string[], hash: string) {
-  const [step, id, ...more] = rest;
-  // Luke stands on a task with no id of his own: `/luke`.
-  if (step === LINK.LUKE_STEP && id === undefined && hash === "") {
-    return taskId === undefined ? undefined : { kind: MENTION_KIND.LUKE, taskId };
+/** The fields a place of Luke's own spells as a mention: a task, a section, a page, an agent, or a person; nothing for a place no mention names. */
+function placeFields(place: LinkPlace, hash: string) {
+  // Note that only a task's address takes a fragment, its section's anchor; a fragment past any other's names nothing.
+  if (hash !== "" && place.kind !== LINK_PLACE.TASK && place.kind !== LINK_PLACE.SECTION) {
+    return undefined;
   }
-  if (id === undefined || hash !== "") return undefined;
-  // A page always stands on a task here, so one with none reads as nothing to the schema.
-  if (step === LINK.PAGE_STEP && more.length === 0) {
-    return { kind: MENTION_KIND.PAGE, taskId, pageId: decodedPart(id) };
+  switch (place.kind) {
+    // Note that a task's link naming a comment thread names the task, as it did before threads had links.
+    case LINK_PLACE.TASK:
+    case LINK_PLACE.COMMENT:
+      return { kind: MENTION_KIND.TASK, taskId: place.planId };
+    case LINK_PLACE.SECTION:
+      return { kind: MENTION_KIND.SECTION, taskId: place.planId, anchor: place.anchor };
+    case LINK_PLACE.PAGE:
+      return "planId" in place
+        ? { kind: MENTION_KIND.PAGE, taskId: place.planId, pageId: place.pageId }
+        : { kind: MENTION_KIND.PAGE, agentId: place.agentId, pageId: place.pageId };
+    case LINK_PLACE.AGENT:
+      return place.planId === undefined
+        ? { kind: MENTION_KIND.AGENT, agentId: place.agentId }
+        : { kind: MENTION_KIND.AGENT, taskId: place.planId, agentId: place.agentId };
+    case LINK_PLACE.PERSON:
+      return { kind: MENTION_KIND.PERSON, userId: place.userId };
+    default:
+      return undefined;
   }
-  if (step !== LINK.AGENT_STEP) return undefined;
-  const agentId = decodedPart(id);
-  // An agent on no task holds its own pages: `/agent/<agentId>/page/<pageId>`.
-  if (taskId === undefined && more.length === 2 && more[0] === LINK.PAGE_STEP) {
-    return { kind: MENTION_KIND.PAGE, agentId, pageId: decodedPart(more[1] ?? "") };
+}
+
+/** The fields an address on Luke's home spells as a mention: a place of Luke's own, or Luke on a task, its address with `/luke` after it. */
+function lukeFields(url: URL) {
+  const luke = `/${LUKE_STEP}`;
+  if (url.pathname.endsWith(luke) && url.hash === "") {
+    const task = new URL(url.href);
+    task.pathname = url.pathname.slice(0, -luke.length);
+    task.search = "";
+    const place = readLink(task.href)?.place;
+    return place?.kind === LINK_PLACE.TASK
+      ? { kind: MENTION_KIND.LUKE, taskId: place.planId }
+      : undefined;
   }
-  if (more.length > 0) return undefined;
-  return taskId === undefined
-    ? { kind: MENTION_KIND.AGENT, agentId }
-    : { kind: MENTION_KIND.AGENT, taskId, agentId };
+  const place = readLink(url.href)?.place;
+  return place === undefined ? undefined : placeFields(place, url.hash);
 }
 
-/** Whether a thing's address under the workspace ends at its id, but for the trailing slash a Luke link is read with (`luke-link.ts`), and has no fragment. */
-function endsAtId(rest: readonly string[], hash: string): boolean {
-  const trailing = rest.length === 1 && rest[0] === "";
-  return (rest.length === 0 || trailing) && hash === "";
-}
-
-/** The fields a person's address spells after the workspace, `/person/<userId>`, ending at the id. */
-function personFields(id: string, rest: readonly string[], hash: string) {
-  if (!endsAtId(rest, hash)) return undefined;
-  return { kind: MENTION_KIND.PERSON, userId: decodedPart(id) };
-}
-
-/** The fields a plan's address on tryluke.dev spells, by either scheme: `/<workspace>/plan/<id>`, perhaps `#<anchor>`, or a page's or an agent's under it; or an agent's on no task, `/<workspace>/agent/<id>`; or a person's, `/<workspace>/person/<userId>`. */
-function taskAddressFields(url: URL) {
-  const [first, workspace, step, id, ...rest] = url.pathname.split("/");
-  if (first !== "" || workspace === "" || id === undefined) return undefined;
-  if (step === LINK.AGENT_STEP) return taskFields(undefined, [step, id, ...rest], url.hash);
-  if (step === LINK.PERSON_STEP) return personFields(id, rest, url.hash);
-  if (step === undefined || !LINK.TASK_STEPS.has(step)) return undefined;
-  if (rest.length > 0) return taskFields(decodedPart(id), rest, url.hash);
-  const taskId = decodedPart(id);
-  if (url.hash === "" || url.hash === "#") return { kind: MENTION_KIND.TASK, taskId };
-  const anchor = decodedPart(url.hash.slice(1))?.toLowerCase();
-  return { kind: MENTION_KIND.SECTION, taskId, anchor };
-}
-
-/** The lines a GitHub page's fragment names at a commit; nothing where it names none, or the page is a branch's. */
-function linesOf(ref: string, hash: string): MentionLines | undefined {
-  const lines = LINES_FRAGMENT.exec(hash);
-  if (lines === null || !COMMIT.test(ref)) return undefined;
-  const startLine = Number(lines[1]);
-  const endLine = lines[2] === undefined ? startLine : Number(lines[2]);
-  return { commit: ref, startLine, endLine };
-}
-
-/** The fields a page of the task's repository on GitHub spells, a file's or a folder's on `HEAD` or a commit; nothing for any other page. */
-function repositoryFields(url: URL, repository: string | null) {
-  const [first, owner, name, step, ref, ...path] = url.pathname.split("/");
-  if (first !== "" || repository === null || ref === undefined) return undefined;
-  // Note that a branch's page is no file of the task, since `feature/rollout` spells two steps and the path's first is not to be told from its last.
-  if (ref !== GITHUB.DEFAULT_BRANCH && !COMMIT.test(ref)) return undefined;
+/**
+ * The fields a page of the task's repository on GitHub spells, a file's or a
+ * folder's on `HEAD` or a commit; a broken one's for the schema to refuse,
+ * a path that climbs or lines no file has, so it names nothing rather than a
+ * page of GitHub's; nothing for any other page.
+ */
+function repositoryFields(target: string, repository: string | null) {
   // GitHub reads an owner and a name in any case, so a link spelled in another names the same repository.
-  if (`${owner}/${name}`.toLowerCase() !== repository.toLowerCase()) return undefined;
-  if (step === GITHUB.FOLDER_STEP) {
-    const folder = path.at(-1) === "" ? path.slice(0, -1) : path;
-    return { kind: MENTION_KIND.FOLDER, path: decodedSteps(folder) };
+  const own = (named: string) => named.toLowerCase() === repository?.toLowerCase();
+  const page = readGitHubPage(target);
+  if (page?.kind === GITHUB_PAGE.FOLDER && own(page.repository)) {
+    return { kind: MENTION_KIND.FOLDER, path: page.path };
   }
-  if (step !== GITHUB.FILE_STEP) return undefined;
-  const lines = linesOf(ref, url.hash);
-  const file = { kind: MENTION_KIND.FILE, path: decodedSteps(path) };
-  return lines === undefined ? file : { ...file, lines };
+  if (page?.kind === GITHUB_PAGE.FILE && own(page.repository)) {
+    const file = { kind: MENTION_KIND.FILE, path: page.path };
+    return page.lines === undefined
+      ? file
+      : { ...file, lines: { commit: page.ref, ...page.lines } };
+  }
+  const claimed = gitHubFilePageRepositoryOf(target);
+  return claimed !== undefined && own(claimed) ? { kind: MENTION_KIND.FILE } : undefined;
 }
 
 /**
@@ -600,15 +550,10 @@ function withoutCredentials(url: URL): string {
   return kept.href;
 }
 
-/** A page's address as a mention holds it: a parenthesis it keeps encoded, so it stays one markdown link's target, and reads back the same. */
-function linkAddress(href: string): string {
-  return href.replace(/[()]/gu, (special) => (special === "(" ? "%28" : "%29"));
-}
-
 /** The fields a page of an integration's or a well-known site's spells, its address kept without credentials; nothing for a page of neither. */
 function linkFields(url: URL) {
   if (!WEB_PROTOCOLS.has(url.protocol)) return undefined;
-  const address = linkAddress(withoutCredentials(url));
+  const address = linkTarget(withoutCredentials(url));
   const provider = integrationOfHost(url.hostname);
   if (provider !== undefined) return { kind: MENTION_KIND.LINK, provider, url: address };
   const site = linkSiteOf(url);
@@ -622,13 +567,13 @@ function linkFields(url: URL) {
  * else a GitHub address names.
  */
 function fieldsOf(target: string, repository: string | null) {
+  const legacy = readLegacyLink(target);
+  if (legacy !== undefined) return legacyFields(legacy);
   const url = parsedUrl(target);
   if (url === undefined) return undefined;
-  if (url.protocol === LEGACY.PROTOCOL) return legacyFields(url);
-  if (isLinkHome(url)) return taskAddressFields(url);
+  if (isLinkHome(url)) return lukeFields(url);
   // Note that a page of an integration's is read last, so a GitHub page that is a file of the task stays one.
-  const fields = url.origin === GITHUB.ORIGIN ? repositoryFields(url, repository) : undefined;
-  return fields ?? linkFields(url);
+  return repositoryFields(target, repository) ?? linkFields(url);
 }
 /** Whether the line holding the index stands inside a fenced block, its fence lines included. */
 function insideFence(text: string, at: number): boolean {
@@ -774,12 +719,6 @@ export function sectionAnchors(headings: readonly string[]): readonly string[] {
   });
 }
 
-/** A task's address, a section's with its anchor; the task's own where the anchor is empty. */
-function taskTarget(taskId: string, place: MentionPlace, anchor: string): string {
-  const task = `${LINK_ORIGIN}/${encodedPart(place.workspace)}/${LINK.TASK_STEP}/${encodedPart(taskId)}`;
-  return anchor === "" ? task : `${task}#${encodedPart(anchor)}`;
-}
-
 /** A file's or a folder's page on GitHub, or the legacy form where the task has no repository to name it under. */
 function repositoryTarget(
   kind: typeof MENTION_KIND.FILE | typeof MENTION_KIND.FOLDER,
@@ -788,62 +727,82 @@ function repositoryTarget(
   lines: MentionLines | undefined,
 ): string {
   if (place.repository === null) {
-    const folder = kind === MENTION_KIND.FOLDER ? "/" : "";
-    return `${LEGACY.PROTOCOL}//${LEGACY.HOST[kind]}/${encodedPath(path)}${folder}`;
+    const host = kind === MENTION_KIND.FOLDER ? LEGACY_LINK_HOST.FOLDER : LEGACY_LINK_HOST.FILE;
+    return legacyLinkOf(host, `${encodedPath(path)}${kind === MENTION_KIND.FOLDER ? "/" : ""}`);
   }
-  const repository = place.repository.split("/").map(encodedPart).join("/");
-  const step = kind === MENTION_KIND.FOLDER ? GITHUB.FOLDER_STEP : GITHUB.FILE_STEP;
-  const ref = lines === undefined ? GITHUB.DEFAULT_BRANCH : lines.commit;
-  const page = `${GITHUB.ORIGIN}/${repository}/${step}/${ref}/${encodedPath(path)}`;
-  if (lines === undefined) return page;
-  return lines.startLine === lines.endLine
-    ? `${page}#L${lines.startLine}`
-    : `${page}#L${lines.startLine}-L${lines.endLine}`;
+  const repository = place.repository;
+  if (kind === MENTION_KIND.FOLDER) {
+    return gitHubPageLink({
+      kind: GITHUB_PAGE.FOLDER,
+      repository,
+      ref: GITHUB_DEFAULT_BRANCH,
+      path,
+    });
+  }
+  if (lines === undefined) {
+    return gitHubPageLink({ kind: GITHUB_PAGE.FILE, repository, ref: GITHUB_DEFAULT_BRANCH, path });
+  }
+  const { commit, startLine, endLine } = lines;
+  return gitHubPageLink({
+    kind: GITHUB_PAGE.FILE,
+    repository,
+    ref: commit,
+    path,
+    lines: { startLine, endLine },
+  });
 }
 
 /** The target a mention is written with, in the task's workspace and of its repository. */
 export function encodeMention(mention: Mention, place: MentionPlace): string {
+  const workspace = place.workspace;
   switch (mention.kind) {
     case MENTION_KIND.FILE:
       return repositoryTarget(mention.kind, mention.path, place, mention.lines);
     case MENTION_KIND.FOLDER:
       return repositoryTarget(mention.kind, mention.path, place, undefined);
     case MENTION_KIND.TASK:
-      return taskTarget(mention.taskId, place, "");
+      return linkOf({ kind: LINK_PLACE.TASK, planId: mention.taskId }, workspace);
     case MENTION_KIND.SECTION:
-      return taskTarget(mention.taskId, place, mention.anchor);
+      return linkOf(
+        { kind: LINK_PLACE.SECTION, planId: mention.taskId, anchor: mention.anchor },
+        workspace,
+      );
     // An MCP server has no page of its own, so it keeps the app's own form, wherever it is written.
     case MENTION_KIND.SERVER:
-      return `${LEGACY.PROTOCOL}//${LEGACY.HOST[MENTION_KIND.SERVER]}/${mention.connection ?? mention.provider}`;
+      return legacyLinkOf(LEGACY_LINK_HOST.MCP, mention.connection ?? mention.provider);
     case MENTION_KIND.TOOL:
-      return `${LEGACY.PROTOCOL}//${LEGACY.HOST[MENTION_KIND.SERVER]}/${mention.connection ?? mention.provider}/${encodedPart(mention.tool)}`;
+      return legacyLinkOf(
+        LEGACY_LINK_HOST.MCP,
+        `${mention.connection ?? mention.provider}/${encodedStep(mention.tool)}`,
+      );
     case MENTION_KIND.LINK:
-      return linkAddress(mention.url);
-    case MENTION_KIND.PAGE: {
+      return linkTarget(mention.url);
+    case MENTION_KIND.PAGE:
       // A page of an agent on no task stands under that agent's own address.
-      const owner =
-        "agentId" in mention
-          ? `${LINK_ORIGIN}/${encodedPart(place.workspace)}/${LINK.AGENT_STEP}/${encodedPart(mention.agentId)}`
-          : taskTarget(mention.taskId, place, "");
-      return `${owner}/${LINK.PAGE_STEP}/${encodedPart(mention.pageId)}`;
-    }
+      return "agentId" in mention
+        ? linkOf(
+            { kind: LINK_PLACE.PAGE, agentId: mention.agentId, pageId: mention.pageId },
+            workspace,
+          )
+        : linkOf(
+            { kind: LINK_PLACE.PAGE, planId: mention.taskId, pageId: mention.pageId },
+            workspace,
+          );
     case MENTION_KIND.AGENT: {
       // An agent on no task stands under its workspace, as its own Luke link does.
-      const owner =
-        mention.taskId === undefined
-          ? `${LINK_ORIGIN}/${encodedPart(place.workspace)}`
-          : taskTarget(mention.taskId, place, "");
-      return `${owner}/${LINK.AGENT_STEP}/${encodedPart(mention.agentId)}`;
+      const task = mention.taskId === undefined ? {} : { planId: mention.taskId };
+      return linkOf({ kind: LINK_PLACE.AGENT, ...task, agentId: mention.agentId }, workspace);
     }
     case MENTION_KIND.PERSON:
-      return `${LINK_ORIGIN}/${encodedPart(place.workspace)}/${LINK.PERSON_STEP}/${encodedPart(mention.userId)}`;
+      return linkOf({ kind: LINK_PLACE.PERSON, userId: mention.userId }, workspace);
     case MENTION_KIND.LUKE:
-      return `${taskTarget(mention.taskId, place, "")}/${LINK.LUKE_STEP}`;
+      return `${linkOf({ kind: LINK_PLACE.TASK, planId: mention.taskId }, workspace)}/${LUKE_STEP}`;
     // A date has no page of its own, so it keeps the app's own form; its ends spell nothing a target must encode.
-    case MENTION_KIND.DATE: {
-      const date = `${LEGACY.PROTOCOL}//${LEGACY.HOST[MENTION_KIND.DATE]}/${mention.start}`;
-      return mention.end === undefined ? date : `${date}/${mention.end}`;
-    }
+    case MENTION_KIND.DATE:
+      return legacyLinkOf(
+        LEGACY_LINK_HOST.DATE,
+        mention.end === undefined ? mention.start : `${mention.start}/${mention.end}`,
+      );
   }
 }
 
@@ -864,12 +823,9 @@ export function decodeMention(target: string, repository: string | null): Mentio
  * GitHub's; nothing for any other target, a branch's page among them.
  */
 export function pageRepositoryOf(target: string): string | undefined {
-  const url = parsedUrl(target);
-  if (url?.origin !== GITHUB.ORIGIN) return undefined;
-  const [, owner, name] = url.pathname.split("/");
-  if (owner === undefined || owner === "" || name === undefined || name === "") return undefined;
-  const repository = `${owner}/${name}`;
-  return repositoryFields(url, repository) === undefined ? undefined : repository;
+  const page = readGitHubPage(target);
+  if (page?.kind !== GITHUB_PAGE.FILE && page?.kind !== GITHUB_PAGE.FOLDER) return undefined;
+  return page.repository;
 }
 
 /** Words with each control character, a line break among them, made a space, so a name stays one line of a link's label. */
@@ -895,7 +851,7 @@ function readableLink(href: string): string {
   const steps = url.pathname
     .split("/")
     .filter((step) => step !== "")
-    .map((step) => withoutControls(decodedPart(step) ?? step));
+    .map((step) => withoutControls(decodedStep(step) ?? step));
   const kind = steps.length >= 3 && KIND_STEP.test(steps.at(-2) ?? "");
   const kept = steps.slice(kind ? -3 : -2);
   const name = kept.length === 0 ? url.hostname : kept.join("/");
@@ -1014,7 +970,7 @@ export function isBareLink(label: string, target: string): boolean {
  */
 export function mayNameMention(target: string): boolean {
   if (decodeMention(target, null) !== undefined) return true;
-  return parsedUrl(target)?.origin === GITHUB.ORIGIN;
+  return parsedUrl(target)?.origin === GITHUB_ORIGIN;
 }
 
 /**
@@ -1041,8 +997,7 @@ export function linkMention(
 
 /** The mention written into markdown as a link: `[@label](target)`, its label's brackets and backslashes escaped. */
 export function mentionMarkdown(mention: Mention, name: string, place: MentionPlace): string {
-  const label = `${MENTION_SIGIL}${name}`.replace(LABEL_SPECIAL, (special) => `\\${special}`);
-  return `[${label}](${encodeMention(mention, place)})`;
+  return mentionMarkdownLink(name, encodeMention(mention, place));
 }
 
 /**
@@ -1079,9 +1034,12 @@ export function mentionLinksIn(text: string): readonly MentionLink[] {
     if (close === undefined || text[close + 1] !== "(" || insideCode(text, at)) continue;
     const targetEnd = text.indexOf(")", close + 2);
     if (targetEnd === -1) continue;
-    const target = text.slice(close + 2, targetEnd);
-    if (/\s/u.test(target)) continue;
-    const label = text.slice(at + 1, close).replace(LABEL_ESCAPE, "$1");
+    const written = text.slice(close + 2, targetEnd);
+    if (/\s/u.test(written)) continue;
+    // Note that a destination written between angle brackets is the address inside them, as markdown reads it.
+    const angled = written.length > 2 && written.startsWith("<") && written.endsWith(">");
+    const target = angled ? written.slice(1, -1) : written;
+    const label = readLabel(text.slice(at + 1, close));
     found.push({ start: at, end: targetEnd + 1, label, target });
     at = targetEnd;
   }
@@ -1253,7 +1211,7 @@ function writtenLinksIn(text: string, labelled: boolean): readonly MentionLink[]
     if (!("end" in link)) continue;
     const picture = opensPicture(text, at);
     taken.push({ start: picture ? at - 1 : at, end: link.end + 1 });
-    const label = text.slice(at + 1, close).replace(LABEL_ESCAPE, "$1");
+    const label = readLabel(text.slice(at + 1, close));
     if (picture) continue;
     if (labelled) {
       found.push({ start: at, end: link.end + 1, label, target: link.target });
@@ -1332,7 +1290,7 @@ export function linkLabels(words: string): string {
     else if (character === "]" && open !== undefined) {
       const link = words[at + 1] === "(" ? destinationEnd(words, at + 2) : undefined;
       if (link !== undefined && "end" in link) {
-        const label = words.slice(open + 1, at).replace(LABEL_ESCAPE, "$1");
+        const label = readLabel(words.slice(open + 1, at));
         said += words.slice(from, open) + (linkMention(label, link.target, null)?.name ?? label);
         from = link.end + 1;
         at = link.end;

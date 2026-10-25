@@ -1,0 +1,37 @@
+{
+  "instead": "Draw a message box's foot with ComposerFoot from @luke/ui, and take its files through useAttachedFiles; the send button and the file readers are private to them.",
+  "classes": [
+    { "class": "prompt-input-footer", "allow": ["packages/ui/src/components/composer-frame/"] },
+    { "class": "prompt-input-tools", "allow": ["packages/ui/src/components/composer-frame/"] },
+    { "class": "prompt-input-submit", "allow": ["packages/ui/src/components/composer-frame/"] },
+    { "class": "agent-composer-note", "allow": ["packages/ui/src/components/composer-frame/"] },
+    { "class": "inbox-answer-actions", "allow": ["packages/ui/src/components/composer-frame/"] }
+  ],
+  "patterns": [
+    {
+      "import": "./ai-elements/prompt-input.js",
+      "names": ["PromptInputFooter", "PromptInputTools", "PromptInputSubmit"],
+      "allow": ["packages/ui/src/components/composer-frame/"]
+    },
+    {
+      "import": "../ai-elements/prompt-input.js",
+      "names": ["PromptInputFooter", "PromptInputTools", "PromptInputSubmit"],
+      "allow": ["packages/ui/src/components/composer-frame/"]
+    },
+    {
+      "import": "./tasks/attached-files.js",
+      "names": ["readFiles", "withFiles", "filesTaken"],
+      "allow": ["packages/ui/src/components/composer-frame/"]
+    },
+    {
+      "import": "./attached-files.js",
+      "names": ["readFiles", "withFiles", "filesTaken"],
+      "allow": ["packages/ui/src/components/composer-frame/"]
+    },
+    {
+      "import": "../tasks/attached-files.js",
+      "names": ["readFiles", "withFiles", "filesTaken"],
+      "allow": ["packages/ui/src/components/composer-frame/"]
+    }
+  ]
+}

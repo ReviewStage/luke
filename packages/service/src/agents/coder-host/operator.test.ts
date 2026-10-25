@@ -9,6 +9,9 @@ import {
   listAutomations,
 } from "@luke/database/models/automation-store";
 import {
+  archiveCodingAgent,
+  type CodingAgent,
+  createCodingAgent,
   listWorkspaceCodingAgentLines,
   readCodingAgent,
 } from "@luke/database/models/coding-agent-store";
@@ -21,7 +24,7 @@ import {
   AUTOMATION_TRIGGER,
 } from "@luke/features/automation-wire";
 import { CODING_AGENT_KIND } from "@luke/features/coding-agent-wire";
-import { agentTabLabel } from "@luke/features/model-label";
+import { agentName } from "@luke/features/model-label";
 import { CODING_AGENT_DEFAULT_CHOICE, MODEL_PROVIDER } from "@luke/features/models-wire";
 import { EXPERIMENT } from "@luke/settings";
 import { eq } from "drizzle-orm";
@@ -53,7 +56,9 @@ import { codingAgentSummary } from "./status.js";
  * their own, and a member has one in each of their workspaces; a Reset
  * leaves the old one archived beside a fresh one standing, and one that
  * could not stop the old one's turn or whose fresh one the catalog would
- * refuse leaves the old one standing; an account
+ * refuse leaves the old one standing; a Restore, Reset's Undo, brings the
+ * old one back in the fresh one's place, the heartbeat with it, but never a
+ * teammate's operator, an outsider's, one standing, or a coder; an account
  * outside the workspace, or one with the experiment off, ensures none. No
  * ensure opens a session. A blank Start with no task that is no operator's
  * is still refused, as is an operator's that is not blank or names a
@@ -126,8 +131,33 @@ const ensure = (
   eve = EVE.eve,
   timeZone: string | undefined = undefined,
 ) =>
-  ensureOperator(eve, userId, workspaceId, { reset, stopStanding, timeZone }).pipe(
-    Effect.provide(services),
+  ensureOperator(eve, userId, workspaceId, {
+    reset,
+    restore: undefined,
+    stopStanding,
+    timeZone,
+  }).pipe(Effect.provide(services));
+
+/** The member's archived operator named brought back in place of the one standing, as Reset's Undo asks, its stop refused where `stop` says. */
+const restore = (
+  userId: string,
+  workspaceId: string,
+  agentId: string,
+  stopStanding: (agent: CodingAgent) => Effect.Effect<void, HostedRefusal> = nothingToStop,
+) =>
+  ensureOperator(EVE.eve, userId, workspaceId, {
+    reset: false,
+    restore: agentId,
+    stopStanding,
+    timeZone: undefined,
+  }).pipe(Effect.provide(services));
+
+/** Whether each of the member's operators in the workspace stands, by its id. */
+const standingsOf = (userId: string, workspaceId: string) =>
+  Effect.map(
+    operatorsOf(userId, workspaceId),
+    (operators) =>
+      new Map(operators.map((operator) => [operator.id, operator.archivedAt === null])),
   );
 
 /** The member's automations in the workspace. */
@@ -198,7 +228,7 @@ it.layer(getTestDB())("the member's operator", (it) => {
               0,
               new Map(),
             );
-            return agentTabLabel(summary);
+            return agentName(summary);
           });
 
         const ensured = yield* ensure(member, workspaceId);
@@ -261,6 +291,112 @@ it.layer(getTestDB())("the member's operator", (it) => {
         const archived = Option.getOrThrow(yield* readCodingAgent(member, before.agent.id));
         assert.equal(archived.conversationId, before.agent.conversationId);
       }),
+  );
+
+  it.effect(
+    "a Restore brings back the operator a Reset retired in place of the fresh one, which it archives after stopping its turn, re-aims the heartbeat, and the next ensure answers it",
+    () =>
+      Effect.gen(function* () {
+        const member = yield* openMember;
+        const workspaceId = yield* openWorkspace(member);
+        const before = yield* ensure(member, workspaceId);
+        const [heartbeat] = yield* automationsOf(member, workspaceId);
+        assert.ok(heartbeat);
+        const reset = yield* ensure(member, workspaceId, true);
+        const stopped: string[] = [];
+
+        const restored = yield* restore(member, workspaceId, before.agent.id, (agent) =>
+          Effect.sync(() => void stopped.push(agent.id)),
+        );
+        const after = yield* ensure(member, workspaceId);
+
+        assert.equal(restored.agent.id, before.agent.id);
+        assert.equal(restored.retired?.id, reset.agent.id);
+        assert.equal(restored.created, false);
+        assert.ok(restored.txid !== undefined, "the restore answers the transaction it wrote");
+        assert.deepEqual(stopped, [reset.agent.id], "the fresh one's turn is stopped first");
+        assert.equal(after.agent.id, before.agent.id);
+        assert.deepEqual(
+          yield* standingsOf(member, workspaceId),
+          new Map([
+            [reset.agent.id, false],
+            [before.agent.id, true],
+          ]),
+        );
+        assert.deepEqual(
+          (yield* automationsOf(member, workspaceId)).map((each) => [each.id, each.targetAgentId]),
+          [[heartbeat.id, before.agent.id]],
+          "the heartbeat is aimed back at him rather than made again",
+        );
+        assert.equal(
+          EVE.openedOver(before.agent.conversationId).length,
+          1,
+          "he is not opened again",
+        );
+      }),
+  );
+
+  it.effect(
+    "a Restore reaches only the member's own archived operator: a teammate's, an outsider's, a standing one, or a coder names nothing and nothing moves",
+    () =>
+      Effect.gen(function* () {
+        const member = yield* openMember;
+        const teammate = yield* openMember;
+        const outsider = yield* openMember;
+        const workspaceId = yield* openWorkspace(member);
+        yield* joinWorkspace(workspaceId, teammate);
+        yield* openWorkspace(outsider);
+        const before = yield* ensure(member, workspaceId);
+        const reset = yield* ensure(member, workspaceId, true);
+        const theirs = yield* ensure(teammate, workspaceId);
+        yield* ensure(teammate, workspaceId, true);
+        const coder = Option.getOrThrow(
+          yield* createCodingAgent(member, {
+            taskId: null,
+            organizationId: workspaceId,
+            planSnapshot: null,
+            prompt: "Sweep the copy.",
+            idempotencyKey: randomUUID(),
+            model: CODING_AGENT_DEFAULT_CHOICE.model,
+            effort: CODING_AGENT_DEFAULT_CHOICE.effort,
+            repository: "acme/relay",
+          }),
+        );
+        yield* archiveCodingAgent(member, coder.agent.id, true);
+        const ours = yield* standingsOf(member, workspaceId);
+        const teammates = yield* standingsOf(teammate, workspaceId);
+
+        const refused = yield* Effect.all([
+          Effect.result(restore(teammate, workspaceId, before.agent.id)),
+          Effect.result(restore(outsider, workspaceId, before.agent.id)),
+          Effect.result(restore(member, workspaceId, theirs.agent.id)),
+          Effect.result(restore(member, workspaceId, reset.agent.id)),
+          Effect.result(restore(member, workspaceId, coder.agent.id)),
+        ]);
+
+        for (const each of refused) assert.deepEqual(each, Result.fail(HOSTED_REFUSAL.NOT_FOUND));
+        assert.deepEqual(yield* standingsOf(member, workspaceId), ours);
+        assert.deepEqual(yield* standingsOf(teammate, workspaceId), teammates);
+      }),
+  );
+
+  it.effect("a Restore whose fresh operator's turn cannot be stopped keeps the fresh one", () =>
+    Effect.gen(function* () {
+      const member = yield* openMember;
+      const workspaceId = yield* openWorkspace(member);
+      const before = yield* ensure(member, workspaceId);
+      yield* ensure(member, workspaceId, true);
+      const standing = yield* standingsOf(member, workspaceId);
+
+      const unstoppable = yield* Effect.result(
+        restore(member, workspaceId, before.agent.id, () =>
+          Effect.fail(HOSTED_REFUSAL.AGENT_NOT_READY),
+        ),
+      );
+
+      assert.deepEqual(unstoppable, Result.fail(HOSTED_REFUSAL.AGENT_NOT_READY));
+      assert.deepEqual(yield* standingsOf(member, workspaceId), standing);
+    }),
   );
 
   it.effect(

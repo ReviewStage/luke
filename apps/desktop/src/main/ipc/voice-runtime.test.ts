@@ -283,7 +283,7 @@ it("the voice window's transcript changes are held whole in the document, and a 
   f.report(f.voiceSender, { ...view, lukeSpeaking: true });
   // Another window's report is not the voice window's to write.
   f.report(f.panelSender, view, { voiceSessionId: session, from: 0, lines: [] });
-  assert.deepEqual(f.state.snapshot().voice.callTranscript, {
+  assert.deepEqual(f.state.snapshot().callTranscript, {
     voiceSessionId: session,
     lines: [line("a", "One"), line("b", "Two")],
   });
@@ -291,5 +291,5 @@ it("the voice window's transcript changes are held whole in the document, and a 
 
   // The call gone: no lines from the first on.
   f.report(f.voiceSender, IDLE_VOICE_VIEW, { voiceSessionId: undefined, from: 0, lines: [] });
-  assert.equal(f.state.snapshot().voice.callTranscript, undefined);
+  assert.equal(f.state.snapshot().callTranscript, undefined);
 });

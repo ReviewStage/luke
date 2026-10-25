@@ -12,58 +12,75 @@ import {
   automationRunStanding,
   automationTriggerText,
 } from "@luke/features/automation-list-model";
-import { AUTOMATION_CALL_FAILURE, type AutomationView } from "@luke/features/automation-view";
+import {
+  AUTOMATION_CALL_FAILURE,
+  type AutomationCallFailure,
+  type AutomationView,
+} from "@luke/features/automation-view";
 import type { AutomationScope, AutomationSummary } from "@luke/features/automation-wire";
-import { LINK_PLACE } from "@luke/features/luke-link";
+import { LINK_PLACE } from "@luke/features/link-grammar";
+import { momentText } from "@luke/features/time-format";
+import { REFRESH_FAILED_WORDS } from "@luke/features/words";
 import type { Workspace } from "@luke/features/workspace-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import { EXPERIMENT } from "@luke/settings";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
+  BackButton,
   BUTTON_VARIANT,
   Button,
   CardPress,
   COLLECTION_STATE,
   CollectionPage,
   type CollectionState,
+  ConfirmDialog,
   DetailPage,
   EmptyState,
   ERROR_STATE_PLACEMENT,
   ErrorState,
   FoldingButton,
+  type FoldingButtonHint,
+  IconButton,
   ListRow,
-  NO_CONTEXT_MENU,
+  NOT_FOUND_THING,
+  NotFound,
   OneLine,
   PAGE_FRAME,
-  PageToolbar,
   RowHint,
   RowHintOptions,
-  Switch,
   TEXT_ELEMENT,
   TEXT_TONE,
   TEXT_VARIANT,
   Text,
+  TOOLBAR_INSET,
+  Toolbar,
+  type ToolbarProps,
   Tooltip,
-  useMenu,
+  useConfirmDialog,
+  useLeaving,
   useMinute,
   VisuallyHidden,
 } from "@luke/ui";
-import { momentText } from "@luke/ui/time-format";
+import { GLYPH } from "@luke/ui/icons";
+import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { BotIcon, GitPullRequestIcon, PlusIcon, ZapIcon } from "lucide-react";
 import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 import { useAct } from "../act.js";
 import { ACTOR_SIZE, ActorMark, AutomationCard, automationActor } from "../actor-ref.js";
 import { useAppCommand } from "../app-commands.js";
 import { LinkWorkspaceProvider, useCopyLinkItem } from "../copy-link-item.js";
-import { NOT_FOUND_THING, NotFound } from "../not-found.js";
 import { useSentryRead } from "../settings/use-sentry-read.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import { GLYPH_STATE, glyphStateWords, stateEndMark } from "../state-glyph.js";
 import { AUTOMATIONS_PAGE, type TasksControl } from "../tasks/use-tasks-tab.js";
-import { TOAST_HOLD, TOAST_TONE, useToast } from "../toast.js";
 import { useExperiment } from "../use-app-state.js";
-import { ActionMenu } from "./action-menu.js";
-import { AutomationEditor, AutomationPageSkeleton, type SentryOffer } from "./automation-editor.js";
+import { type MenuAction, rowMenu } from "./action-menu.js";
+import {
+  AutomationEditor,
+  AutomationPageSkeleton,
+  AutomationSwitch,
+  type SentryOffer,
+} from "./automation-editor.js";
 import {
   AutomationGroupCard,
   AutomationListSkeleton,
@@ -74,11 +91,13 @@ import {
 import { OWNER_MARK_SIZE, OwnerMark } from "./automation-owner.js";
 import { STANDING_GLYPH } from "./automation-runs-panel.js";
 import {
+  automationDeleteQuestion,
   automationNarrowLine,
   automationNextText,
   automationOwnerName,
   READING_AUTOMATIONS,
 } from "./automation-words.js";
+import { PhoneHead, PlaceMore, phoneBar } from "./phone-head.js";
 import { useAutomations } from "./use-automations.js";
 
 /**
@@ -89,7 +108,7 @@ import { useAutomations } from "./use-automations.js";
  * one thing the list must never leave in doubt, so the workspace's
  * automations stand first and the account's personal ones after, under a
  * heading each where both stand, and every row names its owner besides, a
- * building for the workspace and a lock for Personal. A row's glyph wears
+ * building for the workspace and a lock for Only you. A row's glyph wears
  * where its newest run stands, a failure keeps its mark at the row's end,
  * and an automation turned off reads "Off" where its next run would.
  * Under the list, or under the line saying there is none yet, stand the
@@ -104,8 +123,29 @@ import { useAutomations } from "./use-automations.js";
  * from it goes back to the list.
  */
 
-/** What an automation's row's right-click menu is called. */
-const ROW_ACTIONS = "Automation actions";
+/** What an automation's row is, which names its ⋯ and its menu. */
+const ROW_THING = "Automation";
+
+/** What the list is called, and a phone's way back from an automation's page names it. */
+const AUTOMATIONS = "Automations";
+
+/** Why a row's Delete did not land, as its question goes on saying until it is tried again or let go. */
+const DELETE_REFUSAL_WORDS = {
+  [AUTOMATION_CALL_FAILURE.UNANSWERED]: "The automation could not be deleted. Try again.",
+  [AUTOMATION_CALL_FAILURE.NOT_FOUND]: "This automation, or its workspace, is gone.",
+  [AUTOMATION_CALL_FAILURE.NO_REPOSITORY]: "The automation could not be deleted. Try again.",
+  [AUTOMATION_CALL_FAILURE.REPOSITORY_NOT_REACHABLE]:
+    "The automation could not be deleted. Try again.",
+  [AUTOMATION_CALL_FAILURE.INVALID]: "The automation could not be deleted. Try again.",
+  [AUTOMATION_CALL_FAILURE.NOT_PERMITTED]:
+    "Only its creator, or the workspace's owners and admins, can delete it.",
+} as const satisfies Record<AutomationCallFailure, string>;
+
+const ACCEPTED: ActionResult = { status: ACTION_RESULT_STATUS.ACCEPTED };
+
+/** What the list's acts are called, on their buttons and a phone's ⋯ alike. */
+const NEW_AUTOMATION = "New automation";
+const CREATE_WITH_AGENT = "Create with an agent";
 
 /** What the list says where it could not be read. */
 const UNREAD_LINE = "The automations could not be read.";
@@ -119,16 +159,17 @@ const SUGGESTIONS: readonly {
   readonly glyph: React.ReactNode;
 }[] = [{ name: AUTOMATION_PRESET.CODE_REVIEW, glyph: <GitPullRequestIcon /> }];
 
-/** Why a switch did not move, as its toast says it. */
-function toggleRefusal(answer: AutomationView, enabled: boolean): string | undefined {
-  if (!("failure" in answer)) return undefined;
-  if (answer.failure === AUTOMATION_CALL_FAILURE.NOT_PERMITTED) {
-    return "Only its creator, or the workspace's owners and admins, can change it.";
-  }
-  return enabled ? "Couldn't turn it on. Try again." : "Couldn't turn it off. Try again.";
-}
+/** Why the bar's two acts are unavailable while no workspace is chosen. */
+const NO_WORKSPACE_HINT = "Choose a workspace first";
 
-/** Who owns an automation, as its row's column says it: the workspace's photo and its name, or the maker's picture and Personal, its name whole on hover where the column cuts it short. */
+/** The hint a folding act of the bar hangs while no workspace is chosen: why it is off, after its words where they are folded. */
+const NoWorkspaceHint: FoldingButtonHint = ({ label, children }) => (
+  <Tooltip label={label === undefined ? NO_WORKSPACE_HINT : `${label}: ${NO_WORKSPACE_HINT}`}>
+    {children}
+  </Tooltip>
+);
+
+/** Who owns an automation, as its row's column says it: the workspace's photo and its name, or the maker's picture and Only you, its name whole on hover where the column cuts it short. */
 function OwnerCell({
   owner,
   mine,
@@ -138,7 +179,7 @@ function OwnerCell({
   mine: boolean;
   workspace: Workspace | undefined;
 }): React.JSX.Element {
-  const name = automationOwnerName(owner, workspace?.name);
+  const name = automationOwnerName(owner, workspace?.name, mine);
   return (
     <Tooltip label={name}>
       <AutomationOwnerFrame
@@ -162,14 +203,14 @@ function OwnerCell({
 }
 
 /**
- * One automation's row: its clock tile, wearing where its newest run
+ * One automation's row: its tile, the glyph of what fires it wearing where its newest run
  * stands, its name over what fires it, its owner, when it runs next with a
  * failure's mark before it, and its switch, hanging the automation's card. The owner and the next run each keep a column of their
  * own, so they line up down the card whatever each row says. Everything but the switch is one press
  * that opens its page, as a sidebar task's row is, so the row opens wherever
  * it is pressed and the switch beside the press only switches. Its
- * right-click offers Copy link, and hands focus back to its press as the
- * menu closes; a right-click on the switch is the switch's own and opens
+ * right-click offers Copy link, then Delete in red, which asks first, and
+ * hands focus back to its press as the menu closes; a right-click on the switch is the switch's own and opens
  * nothing. A narrow room, a phone's, has no width for the two columns beside
  * the name, so the row keeps its name whole and says when it runs next in
  * the line under it, its owner said by its card's heading instead.
@@ -181,109 +222,139 @@ function AutomationRow({
   narrow,
   onOpen,
   onToggle,
+  onDelete,
 }: {
   automation: AutomationSummary;
   workspace: Workspace | undefined;
   now: number;
   narrow: boolean;
   onOpen: () => void;
-  onToggle: (enabled: boolean) => void;
+  onToggle: (enabled: boolean) => Promise<AutomationView>;
+  /** Asks whether to delete it. */
+  onDelete: () => void;
 }): React.JSX.Element {
   const state = STANDING_GLYPH[automationRunStanding(automation.lastRun)];
   const next = automationNext(automation);
-  const menu = useMenu(true);
-  const press = useRef<HTMLElement | null>(null);
   // Note that the row's item is its press's parent, which its card counts as its control, as a sidebar task's row does.
   const item = useRef<HTMLElement | null>(null);
   const hold = useCallback((node: HTMLElement | null) => {
-    press.current = node;
     item.current = node?.parentElement ?? null;
   }, []);
   const copyLink = useCopyLinkItem()({ kind: LINK_PLACE.AUTOMATION, automationId: automation.id });
+  const remove: MenuAction = {
+    label: "Delete",
+    icon: <GLYPH.DELETE />,
+    onSelect: onDelete,
+    danger: true,
+  };
   // Note that the glyph is the row's decoration, so its working word is said in the row's words instead.
   const working = state === GLYPH_STATE.WORKING ? glyphStateWords(state, false) : undefined;
   const trigger = automationTriggerText(automation.trigger, automation.repositories ?? []);
   const hiddenWorking = working === undefined ? null : <VisuallyHidden>{working}</VisuallyHidden>;
   return (
-    <>
-      <RowHintOptions
-        card={<AutomationCard automation={automation} workspaceName={workspace?.name} />}
-        cardBeside
-        cardRegion={item}
-      >
-        <ListRow
-          ref={hold}
-          leading={<ActorMark actor={automationActor(automation)} size={ACTOR_SIZE.ROW} />}
-          title={
-            <span className="automation-row-name" data-enabled={String(automation.enabled)}>
-              {automation.name}
-            </span>
-          }
-          description={
-            narrow ? (
-              <>
-                {hiddenWorking}
-                {stateEndMark(state, true)}
-                {automationNarrowLine(automation, trigger, now)}
-              </>
-            ) : (
-              trigger
-            )
-          }
-          meta={
-            narrow ? undefined : (
-              <AutomationRowMeta
-                lead={hiddenWorking}
-                owner={
-                  <OwnerCell
-                    owner={automationOwner(automation)}
-                    mine={automation.mine === true}
-                    workspace={workspace}
-                  />
-                }
-                next={
-                  <>
-                    {stateEndMark(state, true)}
-                    <Tooltip
-                      label={next.kind === AUTOMATION_NEXT.AT ? momentText(next.at) : undefined}
-                    >
-                      <Text
-                        as={TEXT_ELEMENT.SPAN}
-                        variant={TEXT_VARIANT.INHERIT}
-                        truncate
-                        className="automation-row-when"
-                      >
-                        {automationNextText(automation, now)}
-                      </Text>
-                    </Tooltip>
-                  </>
-                }
-              />
-            )
-          }
-          actions={
-            <Switch
-              checked={automation.enabled}
-              label={
-                automation.enabled ? `Turn off ${automation.name}` : `Turn on ${automation.name}`
+    <RowHintOptions
+      card={<AutomationCard automation={automation} workspaceName={workspace?.name} />}
+      cardBeside
+      cardRegion={item}
+    >
+      <ListRow
+        ref={hold}
+        leading={<ActorMark actor={automationActor(automation)} size={ACTOR_SIZE.ROW} />}
+        title={
+          <span className="automation-row-name" data-enabled={String(automation.enabled)}>
+            {automation.name}
+          </span>
+        }
+        description={
+          narrow ? (
+            <>
+              {hiddenWorking}
+              {stateEndMark(state, true)}
+              {automationNarrowLine(automation, trigger, now)}
+            </>
+          ) : (
+            trigger
+          )
+        }
+        meta={
+          narrow ? undefined : (
+            <AutomationRowMeta
+              lead={hiddenWorking}
+              owner={
+                <OwnerCell
+                  owner={automationOwner(automation)}
+                  mine={automation.mine === true}
+                  workspace={workspace}
+                />
               }
-              onChange={(enabled) => onToggle(enabled)}
-              {...NO_CONTEXT_MENU}
+              next={
+                <>
+                  {stateEndMark(state, true)}
+                  <Tooltip
+                    label={next.kind === AUTOMATION_NEXT.AT ? momentText(next.at) : undefined}
+                  >
+                    <Text
+                      as={TEXT_ELEMENT.SPAN}
+                      variant={TEXT_VARIANT.INHERIT}
+                      truncate
+                      className="automation-row-when"
+                    >
+                      {automationNextText(automation, now)}
+                    </Text>
+                  </Tooltip>
+                </>
+              }
             />
-          }
-          hint={{ Hint: RowHint, label: automation.name }}
-          onPress={onOpen}
-          contextMenu={copyLink === undefined ? undefined : menu.contextMenu(press)}
+          )
+        }
+        actions={<AutomationSwitch automation={automation} write={onToggle} />}
+        hint={{ Hint: RowHint, label: automation.name }}
+        onPress={onOpen}
+        menu={rowMenu(ROW_THING, copyLink === undefined ? [[remove]] : [[copyLink], [remove]])}
+        motionKey={automation.id}
+      />
+    </RowHintOptions>
+  );
+}
+
+/** What every row of the list is handed: the room it stands in, and the presses on it. */
+interface AutomationRowsShown {
+  workspace: Workspace | undefined;
+  now: number;
+  narrow: boolean;
+  onOpen: (automation: AutomationSummary) => void;
+  onToggle: (automation: AutomationSummary, enabled: boolean) => Promise<AutomationView>;
+  onDelete: (automation: AutomationSummary) => void;
+}
+
+/** An automation's key, by which its row leaves the list (`ListMotion`). */
+function automationKey({ id }: AutomationSummary): string {
+  return id;
+}
+
+/** One owner's rows, a row no longer listed drawn on until its exit has played (`useLeaving`). */
+function AutomationGroupRows({
+  automations,
+  shown,
+}: {
+  automations: readonly AutomationSummary[];
+  shown: AutomationRowsShown;
+}): React.JSX.Element {
+  const drawn = useLeaving(automations, automationKey);
+  return (
+    <>
+      {drawn.map(({ key, value: automation }) => (
+        <AutomationRow
+          key={key}
+          automation={automation}
+          workspace={shown.workspace}
+          now={shown.now}
+          narrow={shown.narrow}
+          onOpen={() => shown.onOpen(automation)}
+          onToggle={(enabled) => shown.onToggle(automation, enabled)}
+          onDelete={() => shown.onDelete(automation)}
         />
-      </RowHintOptions>
-      {menu.drawn === undefined || copyLink === undefined ? null : (
-        <ActionMenu
-          label={ROW_ACTIONS}
-          menu={menu.drawn}
-          groups={[[copyLink]]}
-          onClose={menu.close}
-        />
-      )}
+      ))}
     </>
   );
 }
@@ -297,37 +368,26 @@ function AutomationRow({
  */
 function AutomationList({
   groups,
-  workspace,
-  now,
-  narrow,
-  onOpen,
-  onToggle,
-}: {
+  ...shown
+}: AutomationRowsShown & {
   groups: readonly AutomationGroup[];
-  workspace: Workspace | undefined;
-  now: number;
-  /** Whether the room is a phone's, where a lone owner's card is headed too, since its rows name no owner. */
-  narrow: boolean;
-  onOpen: (automation: AutomationSummary) => void;
-  onToggle: (automation: AutomationSummary, enabled: boolean) => void;
 }): React.JSX.Element {
   return (
     <>
       {groups.map((group) => {
-        const name = automationOwnerName(group.owner, workspace?.name);
+        const name = automationOwnerName(
+          group.owner,
+          shown.workspace?.name,
+          group.automations.every((automation) => automation.mine === true),
+        );
+        // A phone's lone owner's card is headed too, since its rows name no owner.
         return (
-          <AutomationGroupCard key={group.owner} name={name} headed={groups.length > 1 || narrow}>
-            {group.automations.map((automation) => (
-              <AutomationRow
-                key={automation.id}
-                automation={automation}
-                workspace={workspace}
-                now={now}
-                narrow={narrow}
-                onOpen={() => onOpen(automation)}
-                onToggle={(enabled) => onToggle(automation, enabled)}
-              />
-            ))}
+          <AutomationGroupCard
+            key={group.owner}
+            name={name}
+            headed={groups.length > 1 || shown.narrow}
+          >
+            <AutomationGroupRows automations={group.automations} shown={shown} />
           </AutomationGroupCard>
         );
       })}
@@ -395,6 +455,47 @@ function listState(
   return "failure" in read ? COLLECTION_STATE.ERROR : COLLECTION_STATE.READY;
 }
 
+/**
+ * The question a row's Delete asks, held for the list: which automation it
+ * asks about, standing only while that one is still listed, so one deleted
+ * elsewhere withdraws it, and the deletion itself, which the history hears
+ * of (`onDeleted`) so it passes over the automation's page from then on.
+ */
+function useRowDeletion(
+  groups: readonly AutomationGroup[],
+  remove: ReturnType<typeof useAutomations>["remove"],
+  onDeleted: (automationId: string) => void,
+) {
+  const [asking, setAsking] = useState<AutomationSummary | undefined>(undefined);
+  const asked =
+    asking !== undefined &&
+    groups.some((group) => group.automations.some((each) => each.id === asking.id))
+      ? asking
+      : undefined;
+  const confirm = useConfirmDialog({ subject: asked !== undefined, surfaceOpen: true }, () => {
+    if (asked === undefined) return Promise.resolve(ACCEPTED);
+    return remove(asked.id).then((answer): ActionResult => {
+      if ("failure" in answer) {
+        return {
+          status: ACTION_RESULT_STATUS.REJECTED,
+          reason: DELETE_REFUSAL_WORDS[answer.failure],
+        };
+      }
+      onDeleted(asked.id);
+      return ACCEPTED;
+    });
+  });
+  const { ask: askConfirm } = confirm;
+  const ask = useCallback(
+    (automation: AutomationSummary) => {
+      setAsking(automation);
+      askConfirm();
+    },
+    [askConfirm],
+  );
+  return { asked, confirm, ask };
+}
+
 /** The list's page: the listed workspace's automations, a new one a press away. */
 function ListPage({
   tasks,
@@ -407,46 +508,79 @@ function ListPage({
 }): React.JSX.Element {
   const view = tasks.automationsView;
   useAppCommand(APP_COMMAND.EXIT_AUTOMATIONS, view.onClose);
-  const toast = useToast();
   const now = useMinute();
   const workspace = tasks.workspace;
-  const { read, reload, toggle } = automations;
-  const onToggle = (automation: AutomationSummary, enabled: boolean) => {
-    toggle(automation.id, enabled).then((answer) => {
-      const refusal = toggleRefusal(answer, enabled);
-      if (refusal !== undefined) {
-        toast({ words: refusal, tone: TOAST_TONE.FAILED, hold: TOAST_HOLD.FAILED });
-      }
-    });
-  };
+  const { read, refreshFailed, reload, toggle, remove } = automations;
   const openNew = () => view.onOpen({ kind: AUTOMATIONS_PAGE.NEW });
   const openSuggested = (preset: AutomationPresetName) =>
     view.onOpen({ kind: AUTOMATIONS_PAGE.NEW, preset });
   const groups =
     read !== undefined && "automations" in read ? automationGroups(read.automations) : [];
   const workspacesUnread = workspace === undefined && tasks.workspacesFailed;
+  const deletion = useRowDeletion(groups, remove, (automationId) =>
+    view.onOpen({ kind: AUTOMATIONS_PAGE.LIST, deleted: automationId }),
+  );
   return (
     <CollectionPage
       frame={PAGE_FRAME.TOOLBAR}
       label="Automations"
       toolbar={
-        <AutomationsToolbar>
-          <FoldingButton
-            label="Create with an agent"
-            icon={<BotIcon />}
-            variant={BUTTON_VARIANT.OUTLINE}
-            disabled={workspace === undefined}
-            onClick={tasks.onNewAutomationAgent}
+        room === SHELL_ROOM.NARROW ? (
+          // A phone heads the list as it heads every place (`phone-head.tsx`): New automation, the title centred, and a ⋯.
+          <PhoneHead
+            place="automations"
+            start={
+              <Tooltip label={NEW_AUTOMATION}>
+                <IconButton
+                  icon={<PlusIcon />}
+                  label={NEW_AUTOMATION}
+                  disabled={workspace === undefined}
+                  onClick={openNew}
+                />
+              </Tooltip>
+            }
+            title={AUTOMATIONS}
+            end={
+              <PlaceMore
+                thing="Automation list"
+                shown={tasks.shown}
+                groups={() => [
+                  [
+                    {
+                      label: CREATE_WITH_AGENT,
+                      icon: <BotIcon />,
+                      disabled: workspace === undefined,
+                      onSelect: tasks.onNewAutomationAgent,
+                    },
+                  ],
+                ]}
+              />
+            }
           />
-          <Button
-            variant={BUTTON_VARIANT.OUTLINE}
-            icon={<PlusIcon />}
-            disabled={workspace === undefined}
-            onClick={openNew}
-          >
-            New automation
-          </Button>
-        </AutomationsToolbar>
+        ) : (
+          <AutomationsToolbar>
+            <FoldingButton
+              label="Create with an agent"
+              icon={<BotIcon />}
+              variant={BUTTON_VARIANT.OUTLINE}
+              disabled={workspace === undefined}
+              focusableWhenDisabled
+              hint={workspace === undefined ? NoWorkspaceHint : undefined}
+              onClick={tasks.onNewAutomationAgent}
+            />
+            <Tooltip label={workspace === undefined ? NO_WORKSPACE_HINT : undefined}>
+              <Button
+                variant={BUTTON_VARIANT.OUTLINE}
+                icon={<PlusIcon />}
+                disabled={workspace === undefined}
+                focusableWhenDisabled
+                onClick={openNew}
+              >
+                New automation
+              </Button>
+            </Tooltip>
+          </AutomationsToolbar>
+        )
       }
       state={listState(workspacesUnread, read)}
       loadingLabel={READING_AUTOMATIONS}
@@ -463,10 +597,12 @@ function ListPage({
         )
       }
     >
+      {/* A refresh that failed after the list was read leaves it drawn, with a line over it. */}
+      {refreshFailed ? <ErrorState onRetry={reload}>{REFRESH_FAILED_WORDS}</ErrorState> : null}
       {/* Note that a list with none is ready rather than empty, because the suggestions under its empty state are content. */}
       {groups.length === 0 ? (
         <div className="automations-empty">
-          <EmptyState icon={<ZapIcon />}>No automations yet</EmptyState>
+          <EmptyState icon={<ZapIcon />}>No automations yet.</EmptyState>
           <SuggestedAutomations disabled={workspace === undefined} onStart={openSuggested} />
         </div>
       ) : (
@@ -479,21 +615,48 @@ function ListPage({
             onOpen={(automation) =>
               view.onOpen({ kind: AUTOMATIONS_PAGE.EDIT, automationId: automation.id })
             }
-            onToggle={onToggle}
+            onToggle={(automation, enabled) => toggle(automation.id, enabled)}
+            onDelete={deletion.ask}
           />
           <SuggestedAutomations disabled={workspace === undefined} onStart={openSuggested} />
         </>
       )}
+      <ConfirmDialog
+        open
+        confirm={deletion.confirm}
+        question={automationDeleteQuestion(deletion.asked?.name)}
+      />
     </CollectionPage>
   );
+}
+
+/** What the way back to the list is called, and where it leads as its hint names it. */
+const AUTOMATIONS_PLACE = "Automations";
+const AUTOMATIONS_PLACE_NAME = "automations";
+
+/** The bar of an automation's page that has no automation to show: its way back to the list, at the column's edge; on a phone, the back's glyph alone in its corner (`phone-head.tsx`). */
+function backBar(onBack: () => void, phone: boolean): ToolbarProps {
+  const back = (
+    <BackButton
+      label={AUTOMATIONS_PLACE}
+      place={AUTOMATIONS_PLACE_NAME}
+      command={APP_COMMAND.EXIT_AUTOMATIONS}
+      onBack={onBack}
+    />
+  );
+  if (phone) return phoneBar({ place: "automation", start: back, end: null });
+  return { lead: back, start: TOOLBAR_INSET.COLUMN };
 }
 
 /** One automation's page that has no automation to show: its way back over `children`, which say why. */
 function AutomationAbsentPage({
   onBack,
+  phone,
   children,
 }: {
   onBack: () => void;
+  /** Whether a phone heads the page, its way back the glyph alone. */
+  phone: boolean;
   children: React.ReactNode;
 }): React.JSX.Element {
   useAppCommand(APP_COMMAND.EXIT_AUTOMATIONS, onBack);
@@ -501,15 +664,7 @@ function AutomationAbsentPage({
     <DetailPage
       frame={PAGE_FRAME.TOOLBAR}
       label="Automation"
-      toolbar={
-        <PageToolbar
-          heading={
-            <Button variant={BUTTON_VARIANT.QUIET} icon={<ZapIcon />} onClick={onBack}>
-              Automations
-            </Button>
-          }
-        />
-      }
+      toolbar={<Toolbar {...backBar(onBack, phone)} />}
     >
       {children}
     </DetailPage>
@@ -521,13 +676,16 @@ function UnreadPage({
   line,
   onBack,
   onRetry,
+  phone,
 }: {
   line: string;
   onBack: () => void;
   onRetry: () => void;
+  /** Whether a phone heads the page, its way back the glyph alone. */
+  phone: boolean;
 }): React.JSX.Element {
   return (
-    <AutomationAbsentPage onBack={onBack}>
+    <AutomationAbsentPage onBack={onBack} phone={phone}>
       <ErrorState onRetry={onRetry} placement={ERROR_STATE_PLACEMENT.CENTRED}>
         {line}
       </ErrorState>
@@ -536,12 +694,9 @@ function UnreadPage({
 }
 
 /** One automation's page that names an automation the list does not hold: it was deleted, or is of a workspace the reader is not in, as a link may name. */
-function GonePage({ onBack }: { onBack: () => void }): React.JSX.Element {
-  return (
-    <AutomationAbsentPage onBack={onBack}>
-      <NotFound thing={NOT_FOUND_THING.AUTOMATION} />
-    </AutomationAbsentPage>
-  );
+function GonePage({ onBack, phone }: { onBack: () => void; phone: boolean }): React.JSX.Element {
+  useAppCommand(APP_COMMAND.EXIT_AUTOMATIONS, onBack);
+  return <NotFound thing={NOT_FOUND_THING.AUTOMATION} bar={backBar(onBack, phone)} />;
 }
 
 /** One automation's page opened before the list is first read: the editor's own frame as quiet blocks (`AutomationPageSkeleton`), and its way back. */
@@ -583,6 +738,8 @@ export function AutomationsPage({
 /** The workspace's Sentry while no workspace is listed: unread, with nothing to install on. */
 const SENTRY_UNREAD: SentryOffer = {
   read: undefined,
+  failed: false,
+  onRetry: () => undefined,
   installing: false,
   refusal: undefined,
   onInstall: () => undefined,
@@ -596,7 +753,10 @@ const SENTRY_UNREAD: SentryOffer = {
  */
 function useWorkspaceSentry(workspaceId: string): SentryOffer {
   const { act } = useAct();
-  const { read } = useSentryRead(workspaceId);
+  const { read: answer, retry } = useSentryRead(workspaceId);
+  // Note that a read that failed offers what one still out does, so a saved Sentry trigger stays editable; the editor says the failure above its rows.
+  const read = answer !== undefined && "sentry" in answer ? answer.sentry : undefined;
+  const failed = answer !== undefined && "failed" in answer;
   const [installing, setInstalling] = useState(false);
   const [refusal, setRefusal] = useState<string | undefined>(undefined);
   const onInstall = () => {
@@ -607,7 +767,7 @@ function useWorkspaceSentry(workspaceId: string): SentryOffer {
       .catch((refused: Error) => setRefusal(refused.message))
       .finally(() => setInstalling(false));
   };
-  return { read, installing, refusal, onInstall };
+  return { read, failed, onRetry: retry, installing, refusal, onInstall };
 }
 
 /** The editor over a listed workspace, offered that workspace's Sentry. */
@@ -657,11 +817,23 @@ function AutomationsPages({
   const { read, reload } = automations;
   if (workspace === undefined && tasks.workspacesFailed) {
     return (
-      <UnreadPage line={WORKSPACES_UNREAD_LINE} onBack={back} onRetry={tasks.onRetryWorkspaces} />
+      <UnreadPage
+        line={WORKSPACES_UNREAD_LINE}
+        onBack={back}
+        onRetry={tasks.onRetryWorkspaces}
+        phone={room === SHELL_ROOM.NARROW}
+      />
     );
   }
   if (read !== undefined && "failure" in read) {
-    return <UnreadPage line={UNREAD_LINE} onBack={back} onRetry={reload} />;
+    return (
+      <UnreadPage
+        line={UNREAD_LINE}
+        onBack={back}
+        onRetry={reload}
+        phone={room === SHELL_ROOM.NARROW}
+      />
+    );
   }
   const listedAutomations = read === undefined ? [] : read.automations;
   const opened =
@@ -674,7 +846,7 @@ function AutomationsPages({
     return read === undefined ? (
       <ReadingPage onBack={back} room={room} offersOwner={offersOwner} />
     ) : (
-      <GonePage onBack={back} />
+      <GonePage onBack={back} phone={room === SHELL_ROOM.NARROW} />
     );
   }
   // Code review, the one preset, is an experiment, so no page is filled in from it while it is off.

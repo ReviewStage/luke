@@ -107,7 +107,7 @@ test("a failed run's toast is under its automation's name, and its View opens th
       automationId: SWEEP,
       runId: RUN_ID,
       workspaceId: "workspace-other",
-      words: "A run couldn't start. Luke can no longer reach its repository on GitHub.",
+      words: "A run could not start. Luke can no longer reach its repository on GitHub.",
       detail: "Flaky test sweep",
     }),
   );
@@ -115,7 +115,7 @@ test("a failed run's toast is under its automation's name, and its View opens th
   assert.ok(toast);
   assert.equal(toast.querySelector(".luke-toast-detail")?.textContent, "Flaky test sweep");
   const view = [...toast.querySelectorAll("button")].find(
-    (button) => button.textContent === "View",
+    (button) => button.textContent === "Open",
   );
   act(() => view?.click());
   assert.deepEqual(viewed, [

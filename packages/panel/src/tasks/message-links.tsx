@@ -1,4 +1,5 @@
-import { LINK_PLACE, type LinkPlace } from "@luke/features/luke-link";
+import { LINK_PLACE, type LinkPlace } from "@luke/features/link-grammar";
+import { land } from "@luke/ui/landed";
 import { createContext, useContext, useEffect, useRef } from "react";
 import { centreWithin, scrollerOf } from "./code-pane.js";
 
@@ -6,15 +7,15 @@ import { centreWithin, scrollerOf } from "./code-pane.js";
  * message-links.tsx -- a message's own link: whose transcript a message is of, so its Copy link can name it, and the ask to bring a linked message into view.
  *
  * A message is named by its agent, under its task where it has one, and its
- * own id (`@luke/features/luke-link`'s message place). The tab drawing an
+ * own id (`@luke/features/link-grammar`'s message place). The tab drawing an
  * agent's transcript hands down how its messages are named; a message
  * drawn anywhere else names nothing and offers no link.
  *
  * A link to a message opens its agent's tab and asks it to bring the
  * message into view, each ask its own, as a section's link asks the task's
  * page. The tab answers once its transcript has landed: it scrolls its own
- * scroller to the message, which wears `data-message-revealed`, lighting it
- * once, or, where the transcript holds no such message, since an
+ * scroller to the message and lands on it, lighting it once as every place
+ * landed on is (`@luke/ui/landed`), or, where the transcript holds no such message, since an
  * agent's earliest steps are left out of it, says so. Note that a message
  * is found by its id in an attribute, `data-message-id`, which carries an
  * id and none of the message's words, so the session recording reads no
@@ -133,7 +134,7 @@ export function useMessageReveal(input: {
         centreWithin(scroller, element);
         scroller.dispatchEvent(new Event("scroll"));
       }
-      element.setAttribute("data-message-revealed", "");
+      land(element);
       standing?.onRevealed(asked.ask);
     };
     const held = input.drawn(asked.messageId);

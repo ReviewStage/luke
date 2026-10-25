@@ -1,10 +1,12 @@
 import type { MemorySummary } from "@luke/features/memory-wire";
+import { dayText } from "@luke/features/time-format";
+import { readFailedWords, readingWords, SIGNED_OUT_WORDS } from "@luke/features/words";
 import type { Workspace } from "@luke/features/workspace-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import { SETTINGS_SEARCH_ROW } from "@luke/settings/settings-anchors";
 import {
-  BADGE_TONE,
   Badge,
+  CONFIRM_LOSS,
   ConfirmDialog,
   ErrorState,
   SETTINGS_SKELETON_CONTROL,
@@ -12,13 +14,13 @@ import {
   type SettingsRowSkeletonShape,
   SettingsRowsSkeleton,
   SettingsSection,
+  STATUS_TONE,
   TEXT_TONE,
   TEXT_VARIANT,
   Text,
   TrashIcon,
   useConfirmDialog,
 } from "@luke/ui";
-import { dayText } from "@luke/ui/time-format";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useAct } from "../act.js";
@@ -47,9 +49,9 @@ import { MenuRow } from "./menu-row.js";
 
 /** What the page says while it cannot read or write, and with no account. */
 const PAGE_LINE = {
-  FAILED: "Luke's memory could not be read.",
-  SIGNED_OUT: "Sign in to see what Luke remembers.",
-  NO_WORKSPACE: "Luke's memory belongs to a workspace, and none is open yet.",
+  FAILED: readFailedWords("Luke's memory"),
+  WORKSPACES_FAILED: readFailedWords("your workspaces"),
+  SIGNED_OUT: SIGNED_OUT_WORDS,
   EMPTY: "Luke hasn't remembered anything yet.",
   FORGET_FAILED: "The memory could not be forgotten. Try again.",
   PRIVATE: "Only you",
@@ -57,13 +59,7 @@ const PAGE_LINE = {
 
 /** What the page says the memories are for, and who shares them. */
 function noteFor(workspace: Workspace): string {
-  return (
-    `As they work in ${workspace.name}, Luke's coding agents keep the facts and conventions ` +
-    "you settle and recall them in the workspace's later tasks. Everyone in the workspace " +
-    "shares these memories, except those marked Only you, which only your Luke recalls. " +
-    "What you say now always wins, and an agent corrects a memory it contradicts. Forget " +
-    "anything that is wrong or no longer true."
-  );
+  return `Luke's coding agents keep what you settle in ${workspace.name} and recall it in later tasks.`;
 }
 
 /** Whose words a memory holds, as the reader is told: You for their own. */
@@ -75,6 +71,12 @@ function keeperOf(memory: MemorySummary, readerId: string | undefined): string {
 
 /** The class PostHog's recorder leaves out of a recording, element and children alike. */
 const NO_CAPTURE = "ph-no-capture";
+
+/** What the skeletons say to a reader who cannot see them. */
+const READING_LABEL = {
+  MEMORY: readingWords("Luke's memory"),
+  WORKSPACES: readingWords("your workspaces"),
+} as const;
 
 /** The rows that stand while the memories are read: each its words over who kept it and when, and its ⋯. */
 const MEMORIES_SKELETON: readonly SettingsRowSkeletonShape[] = Array.from({ length: 3 }, () => ({
@@ -114,17 +116,18 @@ function MemoryRow({
   return (
     <div className="memory-row">
       <MenuRow
-        label="Memory actions"
+        thing="Memory"
         actions={actions}
         row={{
           label: <span className="memory-text">{memory.text}</span>,
           adornment: memory.private ? (
-            <Badge tone={BADGE_TONE.NEUTRAL}>{PAGE_LINE.PRIVATE}</Badge>
+            <Badge tone={STATUS_TONE.NEUTRAL}>{PAGE_LINE.PRIVATE}</Badge>
           ) : undefined,
           description: `Kept by ${keeperOf(memory, readerId)} · ${dayText(memory.updatedAt)}`,
         }}
       />
       <ConfirmDialog
+        open
         confirm={forgetting}
         question={{
           title: "Forget this memory?",
@@ -132,7 +135,8 @@ function MemoryRow({
             ? "Your Luke will not recall it again in this workspace."
             : "No agent will recall it in any later task in this workspace, for anyone.",
           verb: "Forget",
-          running: "Forgetting…",
+          running: "Forgetting",
+          loss: CONFIRM_LOSS.IRREVERSIBLE,
         }}
       />
     </div>
@@ -143,12 +147,18 @@ export function MemorySection({
   signedIn,
   workspace,
   readerId,
+  workspacesFailed,
+  onRetryWorkspaces,
 }: {
   signedIn: boolean;
   /** The workspace Settings shows, whose memories the page reads; absent before the workspaces are read. */
   workspace: Workspace | undefined;
   /** The signed-in account, whose own memories read as You. */
   readerId: string | undefined;
+  /** Whether the read the workspaces arrive with failed, so no workspace will arrive until it is asked again. */
+  workspacesFailed: boolean;
+  /** Asks for the workspaces again. */
+  onRetryWorkspaces: (() => void) | undefined;
 }): React.JSX.Element {
   const { act } = useAct();
   const [memories, setMemories] = useState<readonly MemorySummary[] | undefined>(undefined);
@@ -243,10 +253,23 @@ export function MemorySection({
   );
 
   if (!signedIn) return <SettingsLine>{PAGE_LINE.SIGNED_OUT}</SettingsLine>;
-  if (workspace === undefined) return <SettingsLine>{PAGE_LINE.NO_WORKSPACE}</SettingsLine>;
+  // Note that no workspace is a read not answered yet or one that failed, never a workspace-less account, which holds its own.
+  if (workspace === undefined) {
+    return (
+      <SettingsSection>
+        {workspacesFailed ? (
+          <SettingsLine>
+            <ErrorState onRetry={onRetryWorkspaces}>{PAGE_LINE.WORKSPACES_FAILED}</ErrorState>
+          </SettingsLine>
+        ) : (
+          <SettingsRowsSkeleton label={READING_LABEL.WORKSPACES} rows={MEMORIES_SKELETON} />
+        )}
+      </SettingsSection>
+    );
+  }
   return (
     <>
-      <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.SUBTLE}>
+      <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
         {noteFor(workspace)}
       </Text>
       <div className={NO_CAPTURE}>
@@ -272,7 +295,7 @@ export function MemorySection({
               </ErrorState>
             </SettingsLine>
           ) : (
-            <SettingsRowsSkeleton label="Loading Luke's memory" rows={MEMORIES_SKELETON} />
+            <SettingsRowsSkeleton label={READING_LABEL.MEMORY} rows={MEMORIES_SKELETON} />
           )}
         </SettingsSection>
       </div>

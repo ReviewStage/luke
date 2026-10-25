@@ -9,11 +9,13 @@ import { ACTOR_KIND, ACTOR_STATE } from "@luke/ui/actor-model";
 import type { TiptapEditorHTMLElement } from "@tiptap/core";
 import { TextSelection } from "@tiptap/pm/state";
 import { Effect } from "effect";
+import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
 import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
 import { editorBundleLanded, installEditorLayout } from "../testing/composer.js";
+import { onRegistry } from "../testing/copy-feedback.js";
 import { DOCUMENT_TASK } from "../testing/document-task.js";
 import { PlanBody } from "./plan-body.js";
 import { TaskMentions, type TaskMentionsValue } from "./task-mentions.js";
@@ -33,6 +35,7 @@ const TASK: Task = {
 };
 
 const roots: Root[] = [];
+const registries: AtomRegistry.AtomRegistry[] = [];
 
 // Landed before any box renders, as the panel lands it after its first paint.
 beforeAll(() => Effect.runPromise(editorBundleLanded));
@@ -58,17 +61,29 @@ beforeEach(() => {
   });
 });
 
-afterEach(() => {
+afterEach(async () => {
   for (const root of roots.splice(0)) act(() => root.unmount());
+  // Note that the saves a plan left as it went answer before its atoms go.
+  for (let tick = 0; tick < 6; tick += 1) await Promise.resolve();
+  for (const registry of registries.splice(0)) registry.dispose();
   document.body.innerHTML = "";
 });
 
-/** The plan's page drawn editable with its mentions, its editor opened on Rollout, under the page's mentions where given. */
+/**
+ * The plan's page drawn editable with its mentions, its editor opened on
+ * Rollout, under the page's mentions where given. Note that it draws on a
+ * registry of its own, as the window's root provides one, because the
+ * minute a date's chip is said from is an atom: on the one registry every
+ * test shares, a test before it would have started that minute on the real
+ * clock, and a test that sets the date would read that one instead.
+ */
 async function opened(page?: TaskMentionsValue, task: Task = TASK) {
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
   roots.push(root);
+  const registry = AtomRegistry.make();
+  registries.push(registry);
   const body = createElement(PlanBody, {
     task: task,
     live: false,
@@ -82,7 +97,10 @@ async function opened(page?: TaskMentionsValue, task: Task = TASK) {
   });
   act(() =>
     root.render(
-      page === undefined ? body : createElement(TaskMentions, { value: page, children: body }),
+      onRegistry(
+        registry,
+        page === undefined ? body : createElement(TaskMentions, { value: page, children: body }),
+      ),
     ),
   );
   const rollout = container.querySelector<HTMLElement>('[role="group"][aria-label="Rollout"]');
@@ -182,7 +200,7 @@ test("Enter writes the highlighted row as its mention, drawn in the editor as it
 
   const chips = [...task.container.querySelectorAll(".plan-document-text [data-mention-ref]")];
   assert.deepEqual(
-    chips.map((chip) => chip.textContent),
+    chips.map((chip) => chip.querySelector(".luke-inline-ref-label")?.textContent),
     ["Rollout"],
   );
   assert.equal(task.container.querySelector(".mention-menu"), null);
@@ -201,7 +219,7 @@ test("words after an @ that read as a time on a day, up to six of them, offer it
     const chips = [...task.container.querySelectorAll(".plan-document-text [data-mention-ref]")];
     assert.deepEqual(offered, ["Dates", ["Oct 30 3:00 PM → 5:00 PM"]]);
     assert.deepEqual(
-      chips.map((chip) => chip.textContent),
+      chips.map((chip) => chip.querySelector(".luke-inline-ref-label")?.textContent),
       ["Oct 30 3:00 PM → 5:00 PM"],
     );
   } finally {
@@ -342,7 +360,7 @@ test("a section's address pasted whole into the plan is laid in as its chip, cal
 
   const chips = [...plan.container.querySelectorAll(".plan-document-text [data-mention-ref]")];
   assert.deepEqual(
-    chips.map((chip) => chip.textContent),
+    chips.map((chip) => chip.querySelector(".luke-inline-ref-label")?.textContent),
     ["Goal"],
   );
 });
@@ -388,7 +406,7 @@ test("a bare @ in the plan narrows by its kind's row to the repository's paths, 
   assert.deepEqual(climbed, ["apps", [["apps", ["apps/", "web/"]]]]);
   assert.deepEqual(
     [...plan.container.querySelectorAll(".plan-document-text [data-mention-ref]")].map(
-      (chip) => chip.textContent,
+      (chip) => chip.querySelector(".luke-inline-ref-label")?.textContent,
     ),
     ["web/"],
   );
@@ -441,7 +459,7 @@ test("on the plan's page an @ typed in the plan offers the pull requests its age
   assert.deepEqual(offered, [["Pull requests", ["#3059 feat(billing): bill by seat"]]]);
   assert.deepEqual(
     [...plan.container.querySelectorAll(".plan-document-text [data-mention-ref]")].map(
-      (chip) => chip.textContent,
+      (chip) => chip.querySelector(".luke-inline-ref-label")?.textContent,
     ),
     ["#3059 feat(billing): bill by seat"],
   );

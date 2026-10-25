@@ -36,7 +36,7 @@ import { Fragment } from "react";
  * narrower than its own figure.
  */
 const METRIC_CARD_GROUPED =
-  "bg-(--luke-color-surface) px-(--luke-card-inset) py-(--luke-card-inset-compact) min-[720px]:flex-1 min-[720px]:basis-36";
+  "bg-(--luke-color-surface) px-(--luke-card-inset) py-(--luke-card-inset-compact) @min-[720px]/admin-section:flex-1 @min-[720px]/admin-section:basis-36";
 
 /**
  * A figure stands on one line, never broken inside a number: a line that
@@ -221,7 +221,7 @@ const STAT_PAIR = `flex flex-1 basis-88 flex-wrap ${CARD_GAP}`;
 function StatGroup({ children }: { children: React.ReactNode }): React.JSX.Element {
   return (
     <Card padding={CARD_PADDING.FLUSH}>
-      <div className="flex flex-col gap-px bg-(--luke-color-border) min-[720px]:flex-row min-[720px]:flex-wrap">
+      <div className="flex flex-col gap-px bg-(--luke-color-border) @min-[720px]/admin-section:flex-row @min-[720px]/admin-section:flex-wrap">
         {children}
       </div>
     </Card>
@@ -322,7 +322,10 @@ export function StatCards<T>({
 /**
  * `children`, its cards and the notes under them, under `title`, a region it
  * names; or, with no title, what leads a page's first section (a page's note,
- * its headline, an account's masthead), at the same step.
+ * its headline, an account's masthead), at the same step. Note that the
+ * section is the container its cards and charts pair up by
+ * (`@min-[720px]/admin-section:`), because it is the column they stand in:
+ * the window is wider than that column by the sidebar and the page's insets.
  */
 export function AdminSection({
   title,
@@ -332,8 +335,10 @@ export function AdminSection({
   children: React.ReactNode;
 }): React.JSX.Element {
   return (
-    <SettingsSection title={title} frame={SETTINGS_SECTION_FRAME.NONE}>
-      {children}
-    </SettingsSection>
+    <div className="@container/admin-section">
+      <SettingsSection title={title} frame={SETTINGS_SECTION_FRAME.NONE}>
+        {children}
+      </SettingsSection>
+    </div>
   );
 }

@@ -193,7 +193,7 @@ function openLuke(back: ConnectReturn, platform: LinkPlatform): AuthAction | und
  * connect's landing is the app's own tab, which says nothing of closing.
  */
 export function landingDescription(words: LandingWords, back: ConnectReturn): string | undefined {
-  const closes = words.tone === LANDING_TONE.SETTLED && back.kind !== CONNECT_RETURN.ADDRESS;
+  const closes = words.tone === LANDING_TONE.COMPLETE && back.kind !== CONNECT_RETURN.ADDRESS;
   const said = [words.line, closes ? LANDING_CLOSE_TAB : undefined].filter(
     (part): part is string => part !== undefined,
   );

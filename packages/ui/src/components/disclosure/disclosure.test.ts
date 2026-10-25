@@ -7,13 +7,14 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
 import {
   DISCLOSURE_BODY,
+  DISCLOSURE_FILL,
   DISCLOSURE_LOOK,
   DISCLOSURE_SUMMARY,
   Disclosure,
-  DisclosureAction,
   DisclosureBody,
   DisclosureChevron,
   DisclosureFind,
+  DisclosureFrame,
   DisclosureSummary,
 } from "./disclosure.js";
 
@@ -21,8 +22,9 @@ import {
  * disclosure.test.ts -- a fold draws its body only once its summary is
  * pressed, says whether it is open on the summary, starts open when asked,
  * follows the element's own toggle (a find's), and draws a closed body,
- * still closed, while a find looks through it; a control in its
- * summary's action slot is pressed without folding it; a card's head
+ * still closed, while a find looks through it; a control its head holds
+ * stands beside its summary, never in it, and is pressed without folding
+ * it, while the row's bare ground beside it folds; a card's head
  * leaves its chevron where the caller puts it, at its line's end; and a
  * press gives a quiet row whole, while a card's head, whose fill meets the
  * card's edges, gives only inside its fill until what it holds settles.
@@ -131,40 +133,31 @@ test("a fold its holder keeps tells the holder of a press and stays as the holde
   assert.deepEqual(heard, [true, false]);
 });
 
-/** A fold whose summary holds a ⋯ and a box in its action slot, and a menu the ⋯ draws elsewhere. */
+/** A fold whose head holds a ⋯ and a box beside its summary, and a menu the ⋯ draws elsewhere. */
 function foldWithActions(pressed: string[], menuHost: HTMLElement): ReactElement {
   return createElement(Disclosure, {
+    actions: createElement(
+      "span",
+      { className: "ground" },
+      createElement(
+        "button",
+        { type: "button", className: "more", onClick: () => pressed.push("more") },
+        "⋯",
+      ),
+      createElement("input", { type: "checkbox", className: "box", "aria-label": "Viewed" }),
+      createPortal(
+        createElement(
+          "button",
+          { type: "button", className: "item", onClick: () => pressed.push("item") },
+          "Copy link",
+        ),
+        menuHost,
+      ),
+    ),
     children: [
       createElement(DisclosureSummary, {
         key: "summary",
-        children: [
-          createElement("span", { key: "words", className: "words" }, "Review thread"),
-          createElement(DisclosureAction, {
-            key: "action",
-            children: createElement(
-              "span",
-              { className: "ground" },
-              createElement(
-                "button",
-                { type: "button", className: "more", onClick: () => pressed.push("more") },
-                "⋯",
-              ),
-              createElement("input", {
-                type: "checkbox",
-                className: "box",
-                "aria-label": "Viewed",
-              }),
-              createPortal(
-                createElement(
-                  "button",
-                  { type: "button", className: "item", onClick: () => pressed.push("item") },
-                  "Copy link",
-                ),
-                menuHost,
-              ),
-            ),
-          }),
-        ],
+        children: createElement("span", { className: "words" }, "Review thread"),
       }),
       createElement(DisclosureBody, { key: "body", children: "The thread's comments" }),
     ],
@@ -181,7 +174,28 @@ function find<T extends HTMLElement>(selector: string): T {
   return document.querySelector<T>(selector) ?? assert.fail(selector);
 }
 
-test("a press on a control in the summary's action slot acts on the control and leaves the fold as it stood", () => {
+/** What takes a press or the focus of its own. */
+const CONTROL = "a[href], button, input, select, textarea, [role='button'], [tabindex]";
+
+test("a head's controls stand beside its summary, which its own words alone name, open or closed", () => {
+  const container = drawWithActions([]);
+  const summary = summaryOf(container);
+  assert.equal(summary.querySelector(CONTROL), null, "no control stands in the summary");
+  assert.equal(summary.textContent, "Review thread");
+  const more = find(".more");
+  assert.equal(summary.contains(more), false);
+  assert.equal(container.querySelector("details")?.contains(more), false, "nor in the fold");
+  assert.ok(more.isConnected, "drawn while the fold is closed");
+  assert.equal(
+    summary.compareDocumentPosition(more) & Node.DOCUMENT_POSITION_FOLLOWING,
+    Node.DOCUMENT_POSITION_FOLLOWING,
+    "after the summary, where the keyboard reaches it next",
+  );
+  more.focus();
+  assert.equal(document.activeElement, more, "the keyboard reaches it");
+});
+
+test("a press on a control beside the summary acts on the control and leaves the fold as it stood", () => {
   const pressed: string[] = [];
   const container = drawWithActions(pressed);
   act(() => find(".more").click());
@@ -191,9 +205,11 @@ test("a press on a control in the summary's action slot acts on the control and 
 
   act(() => find(".words").click());
   assert.equal(summaryOf(container).getAttribute("aria-expanded"), "true", "the words still fold");
+  act(() => find(".more").click());
+  assert.equal(summaryOf(container).getAttribute("aria-expanded"), "true", "and open stays open");
 });
 
-test("a press inside a menu the slot's control drew elsewhere leaves the fold as it stood", () => {
+test("a press inside a menu a control beside the summary drew elsewhere leaves the fold as it stood", () => {
   const pressed: string[] = [];
   const container = drawWithActions(pressed);
   act(() => find(".item").click());
@@ -201,15 +217,49 @@ test("a press inside a menu the slot's control drew elsewhere leaves the fold as
   assert.equal(summaryOf(container).getAttribute("aria-expanded"), "false");
 });
 
-test("a box in the slot still checks, and a press on the slot's bare ground folds nothing", () => {
+test("a box beside the summary still checks, and a press on the row's bare ground beside it folds", () => {
   const container = drawWithActions([]);
   const box = find<HTMLInputElement>(".box");
   act(() => box.click());
   assert.equal(box.checked, true);
-  const ground = new MouseEvent("click", { bubbles: true, cancelable: true });
-  act(() => find(".ground").dispatchEvent(ground));
-  assert.equal(ground.defaultPrevented, true, "the element's own toggle is stopped too");
   assert.equal(summaryOf(container).getAttribute("aria-expanded"), "false");
+  act(() => find(".ground").click());
+  assert.equal(summaryOf(container).getAttribute("aria-expanded"), "true");
+});
+
+test("a lead stands before the summary, a card's frame wears the card, and a press on the row reaches its holder", () => {
+  const stood: string[] = [];
+  const container = render(
+    createElement(Disclosure, {
+      look: DISCLOSURE_LOOK.CARD,
+      lead: createElement("button", { type: "button", className: "fold" }, "Fold"),
+      fill: DISCLOSURE_FILL.ACTIONS,
+      children: createElement(DisclosureSummary, { look: DISCLOSURE_SUMMARY.HEAD, children: "M" }),
+    }),
+  );
+  const frame = container.querySelector(".luke-disclosure-frame") ?? assert.fail("a frame");
+  assert.equal(frame.getAttribute("data-look"), DISCLOSURE_LOOK.CARD);
+  assert.equal(container.querySelector("details")?.hasAttribute("data-look"), false);
+  const lead = find(".fold");
+  assert.equal(
+    lead.compareDocumentPosition(summaryOf(container)) & Node.DOCUMENT_POSITION_FOLLOWING,
+    Node.DOCUMENT_POSITION_FOLLOWING,
+  );
+
+  const held = render(
+    createElement(DisclosureFrame, {
+      actions: createElement("button", { type: "button", className: "copy" }, "Copy path"),
+      onPointerDown: () => stood.push("row"),
+      children: createElement(Disclosure, {
+        children: createElement(DisclosureSummary, { children: "src/seats.ts" }),
+      }),
+    }),
+  );
+  const copy = held.querySelector<HTMLElement>(".copy") ?? assert.fail("a copy");
+  act(() => copy.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true })));
+  act(() => summaryOf(held).dispatchEvent(new MouseEvent("pointerdown", { bubbles: true })));
+  assert.deepEqual(stood, ["row", "row"]);
+  assert.equal(summaryOf(held).querySelector(CONTROL), null);
 });
 
 test("a row summary draws no chevron of its own, stays out of the tab order, and folds on a press", () => {

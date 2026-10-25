@@ -1,5 +1,6 @@
-import { useAtomValue } from "@effect/atom-react";
-import { EmptyState, Fill, ScrollArea, SpinnerRegion } from "@luke/ui";
+import { useAtomRefresh, useAtomValue } from "@effect/atom-react";
+import { readingWords } from "@luke/features/words";
+import { ERROR_STATE_PLACEMENT, ErrorState, Fill, ScrollArea, SpinnerRegion } from "@luke/ui";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import { type ReactNode, type RefObject, useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
@@ -24,7 +25,10 @@ import { type FileMatch, fileMatches, matchFrom } from "./file-find.js";
  * The diff bundle draws the file (`../diff-view/index.ts`'s `mountFile`),
  * loaded the first time code is shown: only the lines near the view, in a
  * shadow root of its own, coloured off the window's thread, plain until the
- * colours land. The look is the diffs' own (`file-diff.tsx`'s
+ * colours land. The wait stands until Pierre has drawn the lines, not only
+ * until the bundle lands, because the first file a window opens is drawn
+ * only once its highlighting has loaded, and the tab would stand blank
+ * between the two. The look is the diffs' own (`file-diff.tsx`'s
  * `useDiffLook`), so wrap, numbers, theme, and type are one setting for
  * every code the window draws. A note is a React tree the view draws into
  * the element the bundle keeps under its line, through a portal, as Files
@@ -289,7 +293,9 @@ export function WholeFile({
    */
   findable?: boolean | undefined;
 }): React.JSX.Element {
-  const loaded = useAtomValue(useSideBundles().diffView);
+  const { diffView } = useSideBundles();
+  const loaded = useAtomValue(diffView);
+  const retry = useAtomRefresh(diffView);
   const module = AsyncResult.isSuccess(loaded) ? loaded.value : undefined;
   const host = useRef<HTMLDivElement>(null);
   const handle = useRef<FileViewHandle | undefined>(undefined);
@@ -306,6 +312,12 @@ export function WholeFile({
   const read = useRef({ text: "", notes: [] as readonly WholeFileNote[], from: 1 });
   read.current = { text, notes, from: findFrom };
   const paint = useWholeFileFind(host, read, elementFor, handle, findable);
+  // Whether Pierre has drawn the file's lines since the bundle mounted it.
+  const [drawn, setDrawn] = useState(false);
+  const onDrawn = useCallback(() => {
+    setDrawn(true);
+    paint();
+  }, [paint]);
   const props: FileViewProps = {
     name,
     text,
@@ -314,7 +326,7 @@ export function WholeFile({
     lit,
     annotations: notes.map((note) => ({ key: note.key, line: note.line })),
     renderAnnotation: elementFor,
-    onDrawn: paint,
+    onDrawn,
   };
   const latest = useRef(props);
   latest.current = props;
@@ -327,6 +339,7 @@ export function WholeFile({
     return () => {
       handle.current = undefined;
       mounted.unmount();
+      setDrawn(false);
     };
   }, [module]);
   // Note that the bundle draws again only what changed, so it is handed every draw.
@@ -348,14 +361,18 @@ export function WholeFile({
   }
 
   if (AsyncResult.isFailure(loaded)) {
-    return <EmptyState>{FILE_LOAD_FAILED}</EmptyState>;
+    return (
+      <ErrorState placement={ERROR_STATE_PLACEMENT.CENTRED} onRetry={retry}>
+        {FILE_LOAD_FAILED}
+      </ErrorState>
+    );
   }
   return (
     <Fill className="whole-file">
       <ScrollArea ref={host}>{null}</ScrollArea>
-      {module === undefined ? (
+      {!drawn ? (
         <div className="whole-file-wait">
-          <SpinnerRegion delay label="Loading file" />
+          <SpinnerRegion delay label={readingWords("the file")} />
         </div>
       ) : null}
       {notes.map((note) => createPortal(note.content, elementFor(note.key), note.key))}

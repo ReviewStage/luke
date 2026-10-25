@@ -6,14 +6,15 @@
  * the press itself. So the shell is asked first, on the press's own stack,
  * where it asks at all (`AppPlatform.askNotificationsPermission`); the Mac
  * app, whose grant is macOS's, asks nothing here and posts the test as before.
+ * A test the host refuses says why in a toast, as every press does.
  */
 
 import { ACT_KIND } from "@luke/host/acts";
-import { tellAct } from "../act.js";
+import { pressAct } from "../act.js";
 import { appPlatform } from "../app-platform.js";
 
-/** What the Test notification button does when pressed. */
-export function testNotifications(): void {
+/** What the Test notification button does when pressed, settling once the host has answered. */
+export function testNotifications(): Promise<void> {
   appPlatform().askNotificationsPermission?.();
-  tellAct(ACT_KIND.NOTIFICATIONS_TEST);
+  return pressAct(ACT_KIND.NOTIFICATIONS_TEST);
 }

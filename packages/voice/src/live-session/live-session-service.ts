@@ -110,7 +110,7 @@ const RUN_END_NOTE = {
  * confirmed before it is told, and the stop instruction has the voice wait
  * for the developer, so this is context for its next reply and never speech.
  */
-const STOPPED_RUN_NOTE = "The developer stopped this ask, and Luke's work on it was cancelled.";
+const STOPPED_RUN_NOTE = "The developer stopped this ask, and your backend's work on it was cancelled.";
 
 /**
  * What a call back is told of Luke's words the developer did not hear because
@@ -118,8 +118,8 @@ const STOPPED_RUN_NOTE = "The developer stopped this ask, and Luke's work on it 
  * catch-up is meant short and the words may be several sentences long.
  */
 function missedWorkNote(missed: string, working: boolean): string {
-  const still = working ? " He is still working, and will say more when he has it." : "";
-  return `While the developer was away, Luke kept working. Catch them up in a sentence or two, in your own words rather than reading this out: ${missed}${still}`;
+  const still = working ? " It is still working, and will say more when it has it." : "";
+  return `While the developer was away, your backend kept working. Catch them up in a sentence or two, in your own words rather than reading this out: ${missed}${still}`;
 }
 
 /**
@@ -138,7 +138,7 @@ const UNHEARD_ASK_NOTE =
  * line reaches the voice as context and the agent as the ask.
  */
 const TYPED_LINE_NOTE =
-  "The developer typed this line into the call instead of saying it. Luke has it and will answer it, so do not answer or delegate it yourself. Their line:";
+  "The developer typed this line into the call instead of saying it. Your backend has it and will answer it, so do not answer or delegate it yourself. Their line:";
 
 /**
  * How a typed line is handed to the agent: what was said since the last ask,
@@ -151,23 +151,23 @@ const TYPED_ASK_LEAD =
 
 /** What a call back is told, silently, where work an earlier call asked for is still under way and nothing of it is news yet. */
 const STILL_WORKING_NOTE =
-  "Luke is still working on what the developer asked on an earlier call; his findings will follow when he has them.";
+  "Your backend is still working on what the developer asked on an earlier call; its findings will follow when it has them.";
 
 /** The one progress update a slow step earns, worded by the build; an unknown step gets the general line. */
 const SLOW_STEP_NOTE: ReadonlyMap<string, string> = new Map([
-  ["transcript_read", "Luke is reading a session's transcript; this takes a moment."],
-  ["provider_write", "Luke is carrying out the action; this takes a moment."],
-  ["repository_read", "Luke is reading the repository; this takes a moment."],
+  ["transcript_read", "Your backend is reading a session's transcript; this takes a moment."],
+  ["provider_write", "Your backend is carrying out the action; this takes a moment."],
+  ["repository_read", "Your backend is reading the repository; this takes a moment."],
 ]);
-const SLOW_STEP_GENERAL_NOTE = "Luke is running a longer step.";
+const SLOW_STEP_GENERAL_NOTE = "Your backend is running a longer step.";
 
 /** What a settled step is told as, worded by the build and never by the call; an unknown step gets the general line. */
 const SETTLED_STEP_NOTE: ReadonlyMap<string | undefined, string> = new Map([
-  ["transcript_read", "Luke finished reading a session's transcript"],
-  ["provider_write", "Luke finished carrying out an action"],
-  ["repository_read", "Luke finished a read of the repository"],
+  ["transcript_read", "Your backend finished reading a session's transcript"],
+  ["provider_write", "Your backend finished carrying out an action"],
+  ["repository_read", "Your backend finished a read of the repository"],
 ]);
-const SETTLED_STEP_GENERAL_NOTE = "Luke finished a step";
+const SETTLED_STEP_GENERAL_NOTE = "Your backend finished a step";
 
 /**
  * How often a running ask's settled steps reach the voice as quiet progress:

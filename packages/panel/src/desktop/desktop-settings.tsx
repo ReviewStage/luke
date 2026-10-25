@@ -1,40 +1,49 @@
 import { ACCOUNT_STATUS } from "@luke/credentials/snapshot";
 import { PRODUCT_SURFACE_EVENT } from "@luke/features/analytics";
 import { INTEGRATION_PROVIDER_LIST } from "@luke/features/integration-wire";
-import { LINK_PLACE } from "@luke/features/luke-link";
+import { LINK_PLACE } from "@luke/features/link-grammar";
 import type { Workspace } from "@luke/features/workspace-wire";
-import { type HostCapability, SETTINGS_VIEW_COUNTED_AS } from "@luke/settings";
+import {
+  type HostCapability,
+  SETTINGS_VIEW_COUNTED_AS,
+  settingKeepWords,
+  settingsPageKeep,
+} from "@luke/settings";
 import {
   SETTINGS_PAGE_GROUP,
   SETTINGS_VIEW,
   type SettingsPageGroup,
   type SettingsView,
 } from "@luke/settings/settings-views";
-import { APP_COMMAND, APP_SHORTCUTS } from "@luke/settings/shortcuts";
+import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
-  BackIcon,
-  commandKeyshortcuts,
+  BACK_BUTTON_LOOK,
+  BackButton,
   Fill,
-  FoldingButton,
   GAP,
+  GroupHeader,
   LAYOUT_ELEMENT,
   NAV_CURRENT,
   NavItem,
-  PageToolbar,
   ResizeEdge,
   SCROLL_FADE,
   ScrollArea,
   SettingsPage,
-  Shortcut,
   Stack,
+  TEXT_ELEMENT,
+  TEXT_VARIANT,
+  Text,
+  TOOLBAR_LOOK,
   useMenu,
+  useRovingKeys,
 } from "@luke/ui";
 import { accountActor } from "@luke/ui/actor-model";
 import { integrationNamed } from "@luke/ui/integration-search";
-import { useEffect, useRef, useState } from "react";
+import { type ReactNode, useEffect, useRef, useState } from "react";
 import { useAppCommand } from "../app-commands.js";
 import { appPlatform } from "../app-platform.js";
 import { ColumnFoot } from "../call/call-card.js";
+import { useListEdge, useScreenRef, useScreenSplit } from "../column-split.js";
 import { LinkWorkspaceProvider, useCopyLinkItem } from "../copy-link-item.js";
 import type { NavigationHistory } from "../navigation-history.js";
 import { AttentionMark } from "../settings/marks.js";
@@ -64,13 +73,21 @@ import {
 import { hiddenColumns, SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import { useExperimentChoices } from "../use-app-state.js";
 import { ActionMenu } from "./action-menu.js";
-import { HistoryButtons, useSidebarEdge } from "./desktop-sidebar.js";
+import { backPlaceOf } from "./back-place.js";
+import { HistoryButtons } from "./desktop-sidebar.js";
 import { useNarrowFocus } from "./narrow-focus.js";
+import { PhoneHead } from "./phone-head.js";
 import type { SidebarCollapse } from "./sidebar-collapse.js";
 import { WorkspaceTile } from "./workspace-tile.js";
 
 /** What the way back from a page to the page list says, in a narrow room. */
 const SETTINGS_LIST = "Settings";
+
+/** Where the way back from a page to the page list leads, as a hint names it. */
+const SETTINGS_PLACE = "settings";
+
+/** Where Settings' way out leads where no step stands behind it, as a hint names it. */
+const SETTINGS_EXIT_PLACE = "tasks";
 
 /** Whether Settings stands on its page list rather than on a page, which a narrow room draws one at a time. */
 export interface SettingsStep {
@@ -102,6 +119,7 @@ function SettingsPageRow({
       <NavItem
         icon={page.icon}
         current={current ? NAV_CURRENT.PAGE : undefined}
+        roving
         mark={note ? <AttentionMark note={note} /> : undefined}
         onClick={onOpen}
         contextMenu={copyLink === undefined ? undefined : menu.contextMenu()}
@@ -120,34 +138,74 @@ function SettingsPageRow({
   );
 }
 
-/** The head of a page's column: the window's drag strip, or under it in a narrow room the way back to the page list. */
-function PageBar({ onList }: { onList: (() => void) | undefined }): React.JSX.Element {
-  if (onList === undefined) return <div className="desktop-drag-strip" />;
-  return (
-    <PageToolbar
-      lead={<FoldingButton label={SETTINGS_LIST} icon={<BackIcon />} onClick={onList} />}
+/** The way back to the page list, which leads a page's bar in a narrow room. */
+function ListBack({ onList }: { onList: () => void }): React.JSX.Element {
+  return <BackButton label={SETTINGS_LIST} place={SETTINGS_PLACE} onBack={onList} />;
+}
+
+/**
+ * The head of the page list: the window's drag strip, the history's Back and
+ * Forward, the way out, and the list's label; or on a phone its header, the
+ * way out alone and Settings centred, the history's buttons left out since
+ * the way out is the one.
+ */
+function ListHead({
+  room,
+  history,
+  onExit,
+}: {
+  room: ShellRoom;
+  history: NavigationHistory;
+  onExit: () => void;
+}): React.JSX.Element {
+  const exit = (
+    <BackButton
+      look={room === SHELL_ROOM.NARROW ? BACK_BUTTON_LOOK.HEADER : BACK_BUTTON_LOOK.COLUMN}
+      label="Back"
+      place={backPlaceOf(history, SETTINGS_EXIT_PLACE)}
+      command={APP_COMMAND.EXIT_SETTINGS}
+      onBack={onExit}
     />
+  );
+  if (room === SHELL_ROOM.NARROW) {
+    return <PhoneHead place="settings-pages" start={exit} title={SETTINGS_LIST} end={null} />;
+  }
+  return (
+    <>
+      <div className="desktop-drag-strip" />
+      <HistoryButtons history={history} room={room} />
+      {exit}
+      {/* A label for the list, no heading: the page beside it is named once, by its own header's `h1`. */}
+      <Text as={TEXT_ELEMENT.DIV} variant={TEXT_VARIANT.TITLE} className="settings-pages-title">
+        {SETTINGS_LIST}
+      </Text>
+    </>
   );
 }
 
-/** A group's heading: the listed workspace's tile and name over its own group, the group's words otherwise. */
-function GroupHeading({
+/** A group of pages under its head, which folds them: the listed workspace's tile and name over its own group, the group's words otherwise. */
+function PageGroup({
   group,
   listed,
   capabilities,
+  children,
 }: {
   group: SettingsPageGroup;
   listed: Workspace | undefined;
   capabilities: readonly HostCapability[];
+  children: ReactNode;
 }): React.JSX.Element {
-  if (group !== SETTINGS_PAGE_GROUP.WORKSPACE || listed === undefined) {
-    return <h2 className="section-heading">{settingsGroupHeadingOf(group, capabilities)}</h2>;
-  }
+  const workspace = group === SETTINGS_PAGE_GROUP.WORKSPACE ? listed : undefined;
   return (
-    <h2 className="section-heading settings-nav-workspace">
-      <WorkspaceTile workspace={listed} />
-      {listed.name}
-    </h2>
+    <section className="settings-nav-group">
+      <GroupHeader
+        label={workspace?.name ?? settingsGroupHeadingOf(group, capabilities)}
+        glyph={workspace === undefined ? undefined : <WorkspaceTile workspace={workspace} />}
+        fold={{ defaultOpen: true }}
+      >
+        {children}
+      </GroupHeader>
+    </section>
   );
 }
 
@@ -161,9 +219,12 @@ function GroupHeading({
  * tasks' sidebar lists, by its tile and name, over its Members and GitHub;
  * Account, over what is the account's whichever workspace is listed; and
  * This Mac. Settings opens on Profile, Account's first page, with the caret
- * in the search. The page has
- * no top bar: its title heads its column, under the window's drag strip,
- * and a page's reset ends the title's line. The Workspace page's title is
+ * in the search. The page is a document: its title heads its column, under
+ * the page's bar (`SettingsPage`), which picks up the title once it scrolls
+ * away, and a page's reset ends the title's line. One quiet line under the
+ * title says where the page's settings are kept (`settingsPageKeep`): on this
+ * Mac, in this browser on the web, or following the account or the workspace;
+ * a row kept elsewhere says so under its own label. The Workspace page's title is
  * the listed workspace's name, since that is the workspace it shows. The
  * plan template is the one page drawn apart from the panel: it is a plan's
  * page, document and all
@@ -188,10 +249,17 @@ function GroupHeading({
  * head is the one way out a newcomer sees: it and Escape both leave as the
  * back button would.
  *
- * A narrow room shows the list or the page, one at a time, the other column
- * hidden (`hiddenColumns`): Settings opens on its list, a page chosen there,
- * by a search, or by a link stands alone the whole width, and a way back at
- * its head returns to the list. The list's edge resizes nothing then.
+ * A narrow room, or Settings narrower than the split's line by its own
+ * width (`column-split.ts`), shows the list or the page, one at a time, the
+ * other column hidden (`hiddenColumns`): Settings opens on its list, a page
+ * chosen there, by a search, or by a link stands alone the whole width, and a
+ * way back at its head returns to the list. The list's edge resizes nothing
+ * then. In a narrow room each is headed as a phone heads every page
+ * (`phone-head.tsx`): the list by its way out and Settings centred, with no
+ * Back and Forward; a page by the way back to the list, the name its bar
+ * picks up centred, and its reset in a ⋯. Wider, the list keeps the
+ * window's head, and a page standing alone the phone's, under the title
+ * bar's row.
  */
 export function DesktopSettings({
   sidebar,
@@ -214,6 +282,8 @@ export function DesktopSettings({
   const [opened, setOpened] = useState<SettingsSearchEntry>();
   const [templateHistory, setTemplateHistory] = useState(false);
   const experiments = useExperimentChoices();
+  // The pages, or the results of a search, are one Tab stop that ↑↓ walk.
+  const roving = useRovingKeys<HTMLDivElement>();
   // The template's history is the template page's, so a page turned another way, by a shortcut or a voice request, leaves it.
   if (templateHistory && settings.view !== SETTINGS_VIEW.PLAN_TEMPLATE) setTemplateHistory(false);
   // The Integrations page's search is the page's, so turning to another page leaves it.
@@ -232,7 +302,19 @@ export function DesktopSettings({
   const voiceNote = voicePageAttention(settings.microphone);
   const writes = useSettingsWrites();
   const rows = settingsRowsInput(settings);
-  const reset = pageResetControl(settings.view, settings.settings, writes, rows);
+  // A page standing alone is headed as a phone's, whose ⋯ holds its reset.
+  const split = useScreenSplit(room);
+  const reset = pageResetControl(
+    settings.view,
+    settings.settings,
+    writes,
+    rows,
+    split.single ? title : undefined,
+  );
+  // Where the page's settings are kept, one quiet line under its title; none before the settings arrive or on a page keeping nothing.
+  const pageKeep = rows ? settingsPageKeep(settings.view, rows) : undefined;
+  const keepLine =
+    pageKeep === undefined ? undefined : settingKeepWords(pageKeep, settings.capabilities);
   // Built only while a query stands: an empty field searches nothing.
   const search =
     rows && query !== "" ? searchSettings(settingsSearchEntries(rows), query) : undefined;
@@ -269,10 +351,10 @@ export function DesktopSettings({
   // The opened result stays marked only while its page is the one showing: a
   // page turned some other way, Escape or a voice request, leaves it.
   const marked = opened?.page === settings.view ? opened.id : undefined;
-  const edge = useSidebarEdge(sidebar);
-  const hidden = hiddenColumns(room, step.listed);
-  const screen = useNarrowFocus(room, step.listed);
-  const bar = <PageBar onList={room === SHELL_ROOM.NARROW ? step.onList : undefined} />;
+  const edge = useListEdge(sidebar);
+  const hidden = hiddenColumns(split.columns, step.listed);
+  const screen = useScreenRef(useNarrowFocus(split.columns, step.listed), split.ref);
+  const onList = split.single ? step.onList : undefined;
   // The page with a search of its own takes Command-F while it shows; a page hidden behind the list does not.
   const pageSearched =
     settings.view === SETTINGS_VIEW.INTEGRATIONS &&
@@ -293,19 +375,9 @@ export function DesktopSettings({
     );
   }
   return (
-    <div ref={screen} className="desktop-settings">
+    <div ref={screen} className="desktop-settings" data-single={String(split.single)}>
       <nav className="settings-pages" aria-label="Settings pages" hidden={hidden.list}>
-        <div className="desktop-drag-strip" />
-        <HistoryButtons history={history} room={room} />
-        <NavItem
-          icon={<BackIcon />}
-          aria-keyshortcuts={commandKeyshortcuts(APP_COMMAND.EXIT_SETTINGS)}
-          shortcut={<Shortcut chord={APP_SHORTCUTS[APP_COMMAND.EXIT_SETTINGS].chord} />}
-          onClick={onExit}
-        >
-          Back
-        </NavItem>
-        <h1 className="settings-pages-title">Settings</h1>
+        <ListHead room={room} history={history} onExit={onExit} />
         <SettingsSearchField
           find={!pageSearched}
           onFind={hidden.list ? step.onList : undefined}
@@ -318,18 +390,18 @@ export function DesktopSettings({
         <LinkWorkspaceProvider value={listed?.slug ?? listed?.id}>
           <Fill className="sidebar-section">
             <ScrollArea fade={SCROLL_FADE.BOTH}>
-              <div className="sidebar-section-body">
+              <div className="sidebar-section-body" {...roving}>
                 {search ? (
                   <SettingsSearchResults search={search} opened={marked} onOpen={openResult} />
                 ) : (
                   shownSettingsPageGroups(settings.capabilities, experiments).map(
                     ({ group, pages }) => (
-                      <section key={group} className="settings-nav-group">
-                        <GroupHeading
-                          group={group}
-                          listed={listed}
-                          capabilities={settings.capabilities}
-                        />
+                      <PageGroup
+                        key={group}
+                        group={group}
+                        listed={listed}
+                        capabilities={settings.capabilities}
+                      >
                         <Stack as={LAYOUT_ELEMENT.UL} gap={GAP.ROW}>
                           {pages.map((view) => (
                             <SettingsPageRow
@@ -341,7 +413,7 @@ export function DesktopSettings({
                             />
                           ))}
                         </Stack>
-                      </section>
+                      </PageGroup>
                     ),
                   )
                 )}
@@ -351,7 +423,7 @@ export function DesktopSettings({
         </LinkWorkspaceProvider>
         <ColumnFoot />
         {/* Last, so the drag strip above the way back does not take the edge's top from it. */}
-        {room === SHELL_ROOM.WIDE ? <ResizeEdge edge={edge} /> : null}
+        {split.single ? null : <ResizeEdge edge={edge} />}
       </nav>
       {settings.view === SETTINGS_VIEW.PLAN_TEMPLATE ? (
         <PlanTemplatePage
@@ -360,15 +432,22 @@ export function DesktopSettings({
               ? accountActor(settings.account)
               : undefined
           }
-          bar={bar}
+          keep={keepLine}
+          lead={onList === undefined ? undefined : <ListBack onList={onList} />}
           hidden={hidden.item}
           onShowHistory={() => setTemplateHistory(true)}
         />
       ) : (
         <section className="settings-page" aria-label={title} hidden={hidden.item}>
-          {bar}
           {/* Keyed to the page, so a page turned to opens at its top rather than where the last one was scrolled. */}
-          <SettingsPage key={settings.view} title={title} actions={reset}>
+          <SettingsPage
+            key={settings.view}
+            title={title}
+            description={keepLine}
+            actions={reset}
+            lead={onList === undefined ? undefined : <ListBack onList={onList} />}
+            look={onList === undefined ? TOOLBAR_LOOK.WINDOW : TOOLBAR_LOOK.PHONE}
+          >
             <SettingsPanel
               {...settings}
               integrationsFilter={{ query: integrationsQuery, onQueryChange: setIntegrationsQuery }}

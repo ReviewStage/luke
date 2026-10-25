@@ -128,7 +128,8 @@ function tidyAgentTitle(answer: string): Option.Option<string> {
 /**
  * A title with no model call: the first words of the first line with any
  * words on it, its Markdown marks and links' addresses left out, tidied as
- * a model's answer is; nothing where no words stand. Note that the text is
+ * a model's answer is and opening on a capital, as the model's sentence-case
+ * titles do; nothing where no words stand. Note that the text is
  * cut to the excerpt first, and that a link's label holds no bracket and its
  * address parentheses one level deep at most, because the words are the developer's and a
  * pattern that may rescan them from every bracket would be slow on long ones.
@@ -147,7 +148,11 @@ function firstWordsTitle(text: string): Option.Option<string> {
       )
       .find((each) => each.length > 0) ?? "";
   const words = line.split(/\s+/u).slice(0, AGENT_TITLE.FALLBACK_WORDS).join(" ");
-  return tidyAgentTitle(words);
+  // Note that only the first letter is raised, because the rest are the developer's own and may be a name's.
+  return Option.map(
+    tidyAgentTitle(words),
+    (title) => `${title.charAt(0).toUpperCase()}${title.slice(1)}`,
+  );
 }
 
 /** A part's words without the replay of another agent or the note's marker: the brief and the note where either stands, the part whole otherwise. */

@@ -14,26 +14,47 @@ import { RegistryContext } from "@effect/atom-react/RegistryContext";
 import { ACT_PORT, type PreloadBridge } from "@luke/host/bridge";
 import { actPort, installActPort, installAppBridge, openPushStream } from "@luke/panel/app-bridge";
 import { installAppPlatform } from "@luke/panel/app-platform";
-import { installPanelSpanRecorder } from "@luke/panel/panel-spans";
+import {
+  endWindowSpanOnFirstDraw,
+  installPanelSpanRecorder,
+  leaveWindowSpan,
+  markWindowStart,
+  PANEL_SPAN,
+} from "@luke/panel/panel-spans";
 import { rendererRegistry } from "@luke/panel/renderer-runtime";
 import { appStateFirstRead } from "@luke/panel/use-app-state";
+import { ReloadState } from "@luke/ui/error-boundary";
 import { Effect } from "effect";
 import type { ReactNode } from "react";
 import { DESKTOP_PLATFORM } from "./desktop-platform";
 import { BLANK_WINDOW, type DesktopSentryOptions, startDesktopSentry } from "./desktop-sentry";
-import { createReportingRoot } from "./desktop-sentry-root";
+import { createReportingRoot, reloadWindow, WINDOW_FAILED } from "./desktop-sentry-root";
+
+/** What a window times of its own start. */
+export interface WindowTiming {
+  /**
+   * Whether the window times its root starting to its first state drawn and
+   * to its first task list read: the panel's alone, the one window a person
+   * waits on, so the other windows' starts never mix with its.
+   */
+  readonly timesStart: boolean;
+}
 
 /**
  * Installs the window's bridge and platform, draws `surface` into its root
  * once the window's document has been read, and then starts its tracing. A
- * window whose document cannot be read mounts nothing: a fallback would
- * protect nothing. What its SDK watches beyond every window's is `sentry`'s
- * to say: the panel's entry asks for its freezes to be reported.
+ * window whose document cannot be read draws that failure with Reload in
+ * place of the surface, rather than stand blank. What its SDK watches
+ * beyond every window's is `sentry`'s to say: the panel's entry asks for
+ * its freezes to be reported, and, by `timing`, for its start to be timed.
  */
 export function mountWindow(
   surface: ReactNode,
   sentryOptions: DesktopSentryOptions = { reportsFreezes: false },
+  timing: WindowTiming = { timesStart: false },
 ): void {
+  // The window's start, which its first paint and first usable screen are timed from.
+  if (timing.timesStart) markWindowStart();
   // The desktop's bridge is the one the preload exposed as `window.luke`, and
   // this is the one place that global is read: everything else reaches main
   // through `appBridge()`, which reads what is installed here before anything
@@ -62,7 +83,19 @@ export function mountWindow(
 
   const rootElement = document.getElementById("root");
   if (!rootElement) throw new Error("Renderer root element is missing");
-  const draw = createReportingRoot(rootElement, sentry);
+  // A surface that fails to render draws its Reload instead, which is no
+  // first paint, so it is left untimed as it is reported: the root reports
+  // it as it commits, before the commit's draw is heard. Note that a nested
+  // boundary's failure is reported here too, but a page that fails once the
+  // window has drawn finds its first paint ended already, and the first
+  // usable screen is the sidebar's to end, which a failed root never draws.
+  const draw = createReportingRoot(rootElement, {
+    ...sentry,
+    reportBlankWindow: (error, why) => {
+      leaveWindowSpan(PANEL_SPAN.WINDOW_FIRST_PAINT);
+      sentry.reportBlankWindow(error, why);
+    },
+  });
 
   void (async () => {
     try {
@@ -71,10 +104,10 @@ export function mountWindow(
       await pushes.opened;
       await Effect.runPromise(appStateFirstRead);
     } catch (error) {
-      console.error("The window's state could not be read; nothing is drawn.", error);
-      // A blank window is a failure, so it is sent as an event through this
-      // window's SDK and its filters, not only kept as the console's
-      // breadcrumb, once the SDK it waits for has loaded: with nothing to
+      console.error("The window's state could not be read; its surface is not drawn.", error);
+      // A window with no state is a failure, so it is sent as an event through
+      // this window's SDK and its filters, not only kept as the console's
+      // breadcrumb, once the SDK it waits for has loaded: with no surface to
       // draw, there is no paint to wait for. Note that it is captured here
       // rather than through main's Effect reporter, because providing a
       // reporter layer on this path put 90 to 130 KB gzipped on every
@@ -84,8 +117,10 @@ export function mountWindow(
         BLANK_WINDOW.FIRST_READ,
       );
       sentry.load();
+      draw(<ReloadState failure={WINDOW_FAILED} onReload={reloadWindow} />);
       return;
     }
+    endWindowSpanOnFirstDraw(rootElement, PANEL_SPAN.WINDOW_FIRST_PAINT);
     draw(<RegistryContext.Provider value={rendererRegistry}>{surface}</RegistryContext.Provider>);
   })();
 }

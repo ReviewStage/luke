@@ -66,7 +66,7 @@ import {
   githubRepositoryFullNameSchema,
 } from "@luke/features/github-repositories-wire";
 import { MENTION_KIND } from "@luke/features/mention-link";
-import { agentGivenName, modelLabel } from "@luke/features/model-label";
+import { agentGivenName, agentName, modelLabel } from "@luke/features/model-label";
 import { type ModelChoice, modelChoiceSchema } from "@luke/features/models-wire";
 import { PAGE_OWNER, type PageOwner } from "@luke/features/page-wire";
 import { TASK_SECTION_WRITE } from "@luke/features/task-section-wire";
@@ -401,6 +401,8 @@ export const START_CODING_AGENT_REFUSAL = {
     "Not started: the plan's provider said the account is not eligible to run it; its starter chooses the API key in Settings.",
   CREDENTIAL_MISSING:
     "Not started: no subscription or API key of its starter's pays for that model, and Luke's key pays for no coding agent; its starter connects one in Settings › Agents, or start it on a model whose provider is connected.",
+  API_KEY_UNREADABLE:
+    "Not started: the API key that would pay for it is saved but cannot be read here; its starter saves it again in Settings › Agents.",
   NO_SOURCE:
     "Not started: no coding agent of your workspace has that id to start from; " +
     `${AGENT_TOOL.LIST_AGENTS} names them.`,
@@ -448,6 +450,7 @@ const START_REFUSAL_WORDS: ReadonlyMap<string, string> = new Map([
   [HOSTED_API_ERROR.AGENT_PLAN_LIMIT_REACHED, START_CODING_AGENT_REFUSAL.PLAN_LIMIT_REACHED],
   [HOSTED_API_ERROR.AGENT_PLAN_INELIGIBLE, START_CODING_AGENT_REFUSAL.PLAN_INELIGIBLE],
   [HOSTED_API_ERROR.AGENT_CREDENTIAL_MISSING, START_CODING_AGENT_REFUSAL.CREDENTIAL_MISSING],
+  [HOSTED_API_ERROR.AGENT_API_KEY_UNREADABLE, START_CODING_AGENT_REFUSAL.API_KEY_UNREADABLE],
 ]);
 
 /** Who calls an agent tool: Luke on a call, or a coding agent from its own session. */
@@ -1280,11 +1283,6 @@ export function choiceRefusal(
       : `no offered model is ${choice.model} at effort ${choice.effort}`;
   const choices = offered.map((model) => `${model.id} (${model.efforts.join(", ")})`).join("; ");
   return `${lead}: ${refused}. The choices are: ${choices}.`;
-}
-
-/** An agent by the name its tab shows: Luke for an operator, else its title, or its model's id where it has none yet. */
-function agentName(agent: CodingAgent): string {
-  return agentGivenName(agent) ?? agent.title ?? agent.model;
 }
 
 /** The name an answer names an agent by apart from its title: Luke for an operator, none for any other agent. */
@@ -2241,7 +2239,7 @@ export function runStopAgent(
       if (agent.archivedAt !== null) return agentToolRejected(STOP_AGENT_REFUSAL.ARCHIVED);
       if (!(yield* writesAsPlanPolicy(callerUserId(caller), agent))) {
         return agentToolRejected(
-          `Not stopped: ${yield* agentStarterName(agent)}'s own plan pays for that agent, so only they and their agents can stop it.`,
+          `Not stopped: ${yield* agentStarterName(agent)}'s own subscription pays for that agent, so only they and their agents can stop it.`,
         );
       }
       const stop = yield* Effect.result(stopOf(eve, call.writer, agent, call.clientKey));

@@ -1,0 +1,12 @@
+{
+  "apps/web/src/analytics.ts": "The session counted once, so a reload does not count it again: a counter's memory, no view choice.",
+  "apps/web/src/app/first-frame-hint.tsx": "Whether the last visit was signed in, so the first frame draws the right shell: a cache of the account's state.",
+  "apps/web/src/app/local-storage-file-system.ts": "The host's own files in a browser tab: data the host keeps, no view choice.",
+  "apps/web/src/connect-return.ts": "The connect flow's handoff on its return: credential handling, kept for the tab's life.",
+  "packages/panel/src/composer-drafts.ts": "The words a person had typed and not sent: a draft, never a view choice.",
+  "packages/panel/src/desktop/failed-runs.ts": "Which automation failure was last seen on this Mac: a read mark, not a view choice.",
+  "packages/panel/src/last-sign-in.ts": "The provider last signed in with, offered first at the next sign-in: credential handling.",
+  "packages/panel/src/settings/agent-auth-section.tsx": "Whether the first sign-in's notice was seen, which a refused read counts as seen: a notice's memory, no view choice.",
+  "packages/panel/src/tasks/use-task-looks.ts": "Which saves of a plan were last looked at, shared with the other windows through storage: a read mark, not a view choice.",
+  "packages/panel/src/update-toast.ts": "The version whose update the toast last announced: a notice's memory, no view choice."
+}

@@ -22,7 +22,7 @@ import { SETTINGS_VIEW } from "@luke/settings/settings-views";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import { experimentsOn } from "@luke/settings/testing";
 import { UPDATE_STATUS } from "@luke/settings/update";
-import { NAV_COUNT_TONE } from "@luke/ui";
+import { STATUS_TONE } from "@luke/ui";
 import { DOCUMENT_REGION, TASKS_PAGE } from "@luke/ui/tasks-model";
 import { MICROPHONE_STATUS } from "@luke/voice/audio";
 import { NOTIFICATIONS_GRANTOR, NOTIFICATIONS_STATUS } from "@luke/voice/settings-controls";
@@ -53,6 +53,7 @@ import {
 import { onRegistry } from "../testing/copy-feedback.js";
 import { DOCUMENT_NAME, DOCUMENT_TASK } from "../testing/document-task.js";
 import { restOn } from "../testing/hint-rest.js";
+import { pressInPhoneHead, readPhoneHead } from "../testing/phone-head.js";
 import { tasksControl } from "../testing/tasks-control.js";
 import { DesktopShell } from "./desktop-shell.js";
 import { SIDEBAR_OVERLAY, type SidebarCollapse } from "./sidebar-collapse.js";
@@ -220,18 +221,22 @@ function titleBarButtons(page: HTMLElement): string[] {
   );
 }
 
-test("while Settings is still loading its frame stands, a page of placeholder sections beside the page list's column, and Escape pressed there leaves Settings for the plans, as it does once Settings stands", () => {
+test("while Settings is still loading its frame stands, a page of placeholder sections under the one bar Settings stands under beside the page list's column, and Escape pressed there leaves Settings for the plans, as it does once Settings stands", () => {
   const tabs: PanelTab[] = [];
   const page = mount(false, false, {}, PANEL_TAB.SETTINGS, (tab) => tabs.push(tab));
   const placeholder = page.querySelector('section[aria-label="Settings"] [role="status"]');
+  const bars = page.querySelectorAll(
+    'section[aria-label="Settings"] :is(.desktop-drag-strip, .luke-toolbar)',
+  );
 
   assert.deepEqual(
     [
       page.querySelector('nav[aria-label="Settings pages"]') !== null,
       placeholder?.textContent,
       placeholder?.querySelectorAll(".luke-settings-section-card").length,
+      bars.length,
     ],
-    [true, "Loading Settings", 1],
+    [true, "Reading Settings", 1, 1],
   );
 
   act(() => {
@@ -239,6 +244,181 @@ test("while Settings is still loading its frame stands, a page of placeholder se
   });
 
   assert.deepEqual(tabs, [PANEL_TAB.TASKS]);
+});
+
+/** The shell on the tasks with its tab chosen from outside, so a test can open Settings and leave it. */
+function mountSwitching(): (tab: PanelTab) => void {
+  const container = document.createElement("div");
+  document.body.append(container);
+  root = createRoot(container);
+  const registry = AtomRegistry.make();
+  const draw = (tab: PanelTab) =>
+    act(() =>
+      root?.render(
+        onRegistry(
+          registry,
+          createElement(
+            DesktopShell,
+            shellProps(tasksControl({ page: TASKS_PAGE.HOME }), tab, ignore, {}),
+          ),
+        ),
+      ),
+    );
+  draw(PANEL_TAB.TASKS);
+  return draw;
+}
+
+test("leaving Settings gives the keyboard back to the control that held it as Settings opened", () => {
+  handState({});
+  const draw = mountSwitching();
+  const opener = document.querySelector<HTMLElement>(
+    '.title-bar-controls button[aria-label="New task"]',
+  );
+  assert.ok(opener, "the title bar's New task stands");
+  opener.focus();
+
+  draw(PANEL_TAB.SETTINGS);
+  assert.equal(
+    document.activeElement,
+    document.body,
+    "Settings draws over the window, the keyboard nowhere",
+  );
+  draw(PANEL_TAB.TASKS);
+
+  const back = document.activeElement;
+  assert.equal(back?.getAttribute("aria-label"), "New task");
+  assert.ok(back?.isConnected);
+});
+
+test("leaving Settings where the control that held the keyboard is gone leaves it with the window, and raises nothing", () => {
+  handState({});
+  const draw = mountSwitching();
+  const opener = document.createElement("button");
+  opener.setAttribute("aria-label", "Gone by then");
+  document.body.append(opener);
+  opener.focus();
+
+  draw(PANEL_TAB.SETTINGS);
+  opener.remove();
+
+  assert.doesNotThrow(() => draw(PANEL_TAB.TASKS));
+  assert.equal(document.activeElement, document.body);
+});
+
+test("leaving Settings hands the keyboard to no control of a name several share, as a row's Pin is, rather than to the wrong row's", () => {
+  handState({});
+  const draw = mountSwitching();
+  const pin = () => {
+    const button = document.createElement("button");
+    button.setAttribute("aria-label", "Pin");
+    return button;
+  };
+  const [first, second] = [pin(), pin()];
+  document.body.append(first, second);
+  second.focus();
+
+  draw(PANEL_TAB.SETTINGS);
+  first.remove();
+  second.remove();
+  document.body.append(pin(), pin());
+  draw(PANEL_TAB.TASKS);
+
+  assert.equal(document.activeElement, document.body);
+});
+
+test("leaving Settings does not hand the keyboard to the one control left of a name several shared as Settings opened", () => {
+  handState({});
+  const draw = mountSwitching();
+  const pin = () => {
+    const button = document.createElement("button");
+    button.setAttribute("aria-label", "Pin");
+    return button;
+  };
+  const [first, second] = [pin(), pin()];
+  document.body.append(first, second);
+  second.focus();
+
+  draw(PANEL_TAB.SETTINGS);
+  first.remove();
+  second.remove();
+  document.body.append(pin());
+  draw(PANEL_TAB.TASKS);
+
+  assert.equal(document.activeElement, document.body);
+});
+
+/**
+ * The shell in a narrow room on `tab` over `overrides`, Settings standing on
+ * its list or its page as `listed` says, over a history whose Back goes to
+ * the Inbox, drawn once and not waited on, so a page still loading stands
+ * its frame; every way out and back to a list written down.
+ */
+function mountLoadingNarrow(
+  tab: PanelTab,
+  overrides: Partial<TasksControl>,
+  listed: boolean,
+): { page: HTMLElement; went: string[] } {
+  const went: string[] = [];
+  const container = document.body.appendChild(document.createElement("div"));
+  root = createRoot(container);
+  const tasks = tasksControl({ page: TASKS_PAGE.HOME, ...overrides });
+  const props = shellProps(tasks, tab, ignore, {});
+  act(() =>
+    root?.render(
+      onRegistry(
+        AtomRegistry.make(),
+        createElement(DesktopShell, {
+          ...props,
+          room: SHELL_ROOM.NARROW,
+          settingsStep: { listed, onList: () => went.push("list") },
+          history: {
+            ...props.history,
+            canGoBack: true,
+            onBack: () => went.push("back"),
+            steps: {
+              back: [{ at: 0, title: { label: "Inbox" }, page: { kind: "inbox", of: undefined } }],
+              forward: [],
+            },
+          },
+        }),
+      ),
+    ),
+  );
+  return { page: container, went };
+}
+
+test("on a phone, while Settings is still loading, its list and its page stand headed as they will be: the way out or back, and the title centred", () => {
+  const list = mountLoadingNarrow(PANEL_TAB.SETTINGS, {}, true);
+  assert.deepEqual(readPhoneHead(list.page, "settings-pages"), {
+    start: ["Back"],
+    title: "Settings",
+    end: [],
+  });
+  pressInPhoneHead(list.page, "settings-pages", "Back");
+  assert.deepEqual(list.went, ["back"]);
+  act(() => root?.unmount());
+
+  const page = mountLoadingNarrow(PANEL_TAB.SETTINGS, {}, false);
+  assert.deepEqual(readPhoneHead(page.page, "settings-page").start, ["Settings"]);
+  pressInPhoneHead(page.page, "settings-page", "Settings");
+  assert.deepEqual(page.went, ["list"]);
+});
+
+test("on a phone, while the account's access is read, Admin stands headed as it will be: its list by the way out and its name, a view by the way back to the list", () => {
+  const control = tasksControl();
+  const adminView = (listed: boolean) => ({
+    adminView: { ...control.adminView, open: true, listed, onList: ignore },
+  });
+  const list = mountLoadingNarrow(PANEL_TAB.TASKS, adminView(true), true);
+  assert.deepEqual(readPhoneHead(list.page, "admin-sections"), {
+    start: ["Back"],
+    title: "Admin",
+    end: [],
+  });
+  act(() => root?.unmount());
+
+  const view = mountLoadingNarrow(PANEL_TAB.TASKS, adminView(false), true);
+  assert.deepEqual(readPhoneHead(view.page, "admin").start, ["Admin"]);
 });
 
 test("with the sidebar folded, New plan stands beside its toggle over the welcome and the Inbox alike", () => {
@@ -727,6 +907,11 @@ test("on a phone the bar's Inbox and Chat wear the counts the drawer's rows show
     "the drawer counts the same",
   );
   assert.equal(chatRow(page)?.textContent, "Chat4 need you", "the drawer counts the same");
+  // Note that the counts wear the needs-you tone the rows they count do, not a tally's ink.
+  const toneOf = (row: HTMLElement | undefined) =>
+    row?.querySelector(".luke-nav-item-count")?.getAttribute("data-tone");
+  assert.equal(toneOf(placeRow(page, "Inbox")), STATUS_TONE.ATTENTION);
+  assert.equal(toneOf(chatRow(page)), STATUS_TONE.ATTENTION);
   act(() => root?.unmount());
   document.body.innerHTML = "";
 
@@ -862,7 +1047,7 @@ test("while the Automations pages are still loading their frame stands the list 
   assert.deepEqual(closed, ["closed"]);
 });
 
-test("while a version history's chunk is still loading, its Back row and Escape leave the history, as they do once it stands", async () => {
+test("while a version history's chunk is still loading, its Back row and Escape leave the history, as they do once it stands, and on a phone its list stands headed as it will be, by the way out and its title", async () => {
   const closed: string[] = [];
   const history = { ...tasksControl().history, open: true, onClose: () => closed.push("closed") };
   handState({});
@@ -879,6 +1064,21 @@ test("while a version history's chunk is still loading, its Back row and Escape 
     assert.ok(runAppCommand(APP_COMMAND.EXIT_VERSION_HISTORY), "Escape leaves the history");
   });
   assert.deepEqual(closed, ["closed", "closed"]);
+  act(() => root?.unmount());
+
+  // Note that the chunk is still on its way, so the phone's frame is drawn in the same turn.
+  const phone = mountLoadingNarrow(
+    PANEL_TAB.TASKS,
+    { history: { ...history, listed: true } },
+    true,
+  );
+  assert.deepEqual(readPhoneHead(phone.page, "version-log"), {
+    start: ["Back"],
+    title: "Version history",
+    end: [],
+  });
+  pressInPhoneHead(phone.page, "version-log", "Back");
+  assert.deepEqual(phone.went, ["back"]);
   await settle();
 });
 
@@ -966,13 +1166,13 @@ function placed(place: Place) {
 
 /** The shell standing in a place with a call in progress about another task, its card's presses sent as `App` sends them. */
 function CallShell({ place, folded }: { place: Place; folded: boolean }): React.JSX.Element {
-  const { tell } = useAct();
+  const { press } = useAct();
   const { tab, tasks } = placed(place);
   // The card is handed down as the window's root hands it, past every page between.
   const call: CallCardInput = {
     card: { taskName: CALL_TASK_NAME, status: undefined, microphoneMuted: false },
     speakerMuted: false,
-    controls: callControls(tell, false),
+    controls: callControls(press, false),
   };
   const shell = createElement(DesktopShell, {
     gates: {
@@ -1261,7 +1461,7 @@ test("the sidebar's Chat row stands only while the account has Chat on and a cha
   );
 });
 
-test("⌘K's Chat opens Chat only while the account has it on and a chat is available, and the row counts what waits in the Inbox's accent", async () => {
+test("⌘K's Chat opens Chat only while the account has it on and a chat is available, and the row counts what waits in the needs-you tone its rows wear", async () => {
   let opened = 0;
   const chat = fixtureChat({ fixtureMode: true }, 0);
   const view = { ...tasksControl().chatView, available: true, chat, onOpen: () => (opened += 1) };
@@ -1278,7 +1478,7 @@ test("⌘K's Chat opens Chat only while the account has it on and a chat is avai
   assert.equal(runAppCommand(APP_COMMAND.CHAT), true);
   assert.equal(opened, 1);
   const count = chatRow(page)?.querySelector<HTMLElement>(".luke-nav-item-count");
-  assert.equal(count?.dataset.tone, NAV_COUNT_TONE.ACCENT);
+  assert.equal(count?.dataset.tone, STATUS_TONE.ATTENTION);
 });
 
 test("⌘K's Admin opens the Admin place for an admin alone, and is offered nothing for anyone else", async () => {
@@ -1339,7 +1539,7 @@ test("a fixture run staged on Chat offers it with no account to turn its experim
 
 /** The offline status in the title bar beside the traffic lights, if one stands. */
 function titleBarOffline(page: HTMLElement): Element | null {
-  return page.querySelector('.title-bar-controls [role="status"][aria-label="Offline"]');
+  return page.querySelector('.title-bar-controls .offline-mark[aria-label="Offline"]');
 }
 
 test("with the sidebar folded, the Mac offline says so in the title bar beside New task, and nothing does online", async () => {
@@ -1405,12 +1605,12 @@ test("on a phone an open task leads its own row with the way back the window's h
     return container;
   };
   const back = (page: HTMLElement) =>
-    page.querySelector<HTMLButtonElement>(".task-head .phone-head-start button") ??
+    page.querySelector<HTMLButtonElement>(".task-head .luke-toolbar-lead button") ??
     assert.fail("a way back");
 
   const fromInbox = render({ title: { label: "Inbox" } }, SHELL_ROOM.NARROW);
   await settle();
-  assert.equal(back(fromInbox).getAttribute("aria-label"), "Back to Inbox");
+  assert.equal(back(fromInbox).textContent, "Inbox");
   assert.equal(fromInbox.querySelector(".desktop-shell > .title-bar-controls"), null);
   act(() => back(fromInbox).click());
   assert.deepEqual(left, ["left"]);
@@ -1419,11 +1619,7 @@ test("on a phone an open task leads its own row with the way back the window's h
 
   const fromNowhere = render(undefined, SHELL_ROOM.NARROW);
   await settle();
-  assert.equal(
-    back(fromNowhere).getAttribute("aria-label"),
-    "Back to Tasks",
-    "with no page behind, the Tasks page",
-  );
+  assert.equal(back(fromNowhere).textContent, "Tasks", "with no page behind, the Tasks page");
   act(() => root?.unmount());
   document.body.innerHTML = "";
 
@@ -1519,4 +1715,38 @@ test("on a phone the drawer opened stands over a dimmed window, and beside the w
     SHELL_ROOM.WIDE,
   );
   assert.equal(wide.querySelector(".luke-drawer-scrim"), null);
+});
+
+test("on a phone no page draws the title bar's controls over its own head, an agent's page and the Automations list among them, and the panel's chord still answers where its toggle stood", async () => {
+  let toggled = 0;
+  const sidePanel = { ...tasksControl().sidePanel, onToggle: () => (toggled += 1) };
+  const agentPage = await mountNarrow({
+    page: TASKS_PAGE.DOCUMENT,
+    agentView: { ...tasksControl().agentView, agentId: "agent-1" },
+    sidePanel,
+  });
+  assert.equal(agentPage.querySelector(".desktop-shell > .title-bar-controls"), null);
+  act(() => runAppCommand(APP_COMMAND.TOGGLE_SIDE_PANEL));
+  assert.equal(toggled, 1, "the panel's chord answers on the agent's page");
+  act(() => root?.unmount());
+  document.body.innerHTML = "";
+
+  const automations = await mountNarrow({
+    automationsView: { ...tasksControl().automationsView, open: true },
+  });
+  assert.equal(
+    automations.querySelector(".desktop-shell > .title-bar-controls"),
+    null,
+    "nor over the Automations list",
+  );
+  act(() => root?.unmount());
+  document.body.innerHTML = "";
+
+  const wide = await mountNarrow(
+    { page: TASKS_PAGE.DOCUMENT, agentView: { ...tasksControl().agentView, agentId: "agent-1" } },
+    {},
+    SHELL_ROOM.WIDE,
+  );
+  assert.ok(wide.querySelector(".desktop-shell > .title-bar-controls"), "a wide window keeps them");
+  assert.ok(wide.querySelector('.title-bar-controls[data-edge="end"]'), "and the panel's toggle");
 });

@@ -1,6 +1,9 @@
 /* A heading edited where it is drawn (`editable-heading.tsx`): its caret in
-   the accent and no box. */
+   the accent and no box. It is a block in the heading it stands in, which
+   gives it the type, and wraps as the heading does. */
 .luke-editable-heading {
+  display: block;
+  overflow-wrap: break-word;
   caret-color: var(--luke-color-accent);
   outline: none; /* no ring: the caret alone, edited where it is drawn */
 }

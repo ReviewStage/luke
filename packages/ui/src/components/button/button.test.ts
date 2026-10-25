@@ -597,3 +597,35 @@ test("a button that turns turns its glyph once at each press it takes, until the
   expect(turned).toEqual(["true", "true", null, null]);
   expect(reload?.hasAttribute("data-turn")).toBe(false);
 });
+
+test("a ButtonLink given a label is named by it, and an IconButtonLink's press is heard before the link is followed", () => {
+  const presses: string[] = [];
+  const container = mount(
+    createElement(
+      "div",
+      null,
+      createElement(ButtonLink, {
+        href: "https://luke-web-git-expiry.vercel.app",
+        label: "Preview production",
+        children: "Preview",
+      }),
+      createElement(IconButtonLink, {
+        href: "https://github.com/example/luke",
+        icon: createElement("svg", { "aria-hidden": true }),
+        label: "Open on GitHub",
+        onClick: (event) => {
+          event.preventDefault();
+          presses.push("Open on GitHub");
+        },
+      }),
+    ),
+  );
+  const [preview, github] = Array.from(container.querySelectorAll("a"));
+
+  expect([preview?.getAttribute("aria-label"), preview?.textContent]).toEqual([
+    "Preview production",
+    "Preview",
+  ]);
+  act(() => github?.click());
+  expect(presses).toEqual(["Open on GitHub"]);
+});

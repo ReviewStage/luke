@@ -10,21 +10,25 @@
  * sidebar and resizes it from its own edge, but never folds, since the
  * place has no other way to its sections.
  *
- * A narrow room shows the list or the view, one at a time
- * (`hiddenColumns`): the place opens on its list, a section chosen there
- * stands alone the whole width, its toolbar led by a way back to the list.
+ * A narrow room, or the place narrower than the split's line by its own
+ * width (`column-split.ts`), shows the list or the view, one at a time
+ * (`hiddenColumns`): the place opens on its list, and a section chosen there
+ * stands alone the whole width under a way back to the list. In a narrow
+ * room each is headed as a phone heads every page (`phone-head.tsx`): the
+ * list by its way out and its name, with no Back and Forward, and a view by
+ * one way back, to the list or to the section a page stands under, its
+ * title, and its View options.
  * A view's toolbar stands in the title bar's row, as a page's does beside
  * the plans' sidebar, rather than under a drag strip of its own, and ⌘F
  * finds in the view standing (`PageFind`). The views themselves are
  * `admin/admin-place.tsx`'s.
  */
 
-import { APP_COMMAND, APP_SHORTCUTS } from "@luke/settings/shortcuts";
+import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
-  BackIcon,
-  commandKeyshortcuts,
+  BACK_BUTTON_LOOK,
+  BackButton,
   Fill,
-  FoldingButton,
   GAP,
   LAYOUT_ELEMENT,
   NAV_CURRENT,
@@ -33,8 +37,10 @@ import {
   ResizeEdge,
   SCROLL_FADE,
   ScrollArea,
-  Shortcut,
   Stack,
+  TEXT_ELEMENT,
+  TEXT_VARIANT,
+  Text,
 } from "@luke/ui";
 import { ExternalLinkIcon } from "lucide-react";
 import { AdminPlace, adminSectionOf, adminSectionView } from "../admin/admin-place.js";
@@ -44,15 +50,24 @@ import { ADMIN_PAGE, ADMIN_TAB, type AdminView } from "../admin/routing.js";
 import { useAppCommand } from "../app-commands.js";
 import { appPlatform } from "../app-platform.js";
 import { ColumnFoot } from "../call/call-card.js";
+import { useListEdge, useScreenRef, useScreenSplit } from "../column-split.js";
 import { FIND_PAGE, PageFind } from "../find-in-tab.js";
 import type { NavigationHistory } from "../navigation-history.js";
 import { hiddenColumns, SHELL_ROOM, type ShellRoom } from "../shell-room.js";
-import { HistoryButtons, useSidebarEdge } from "./desktop-sidebar.js";
+import { backPlaceOf } from "./back-place.js";
+import { HistoryButtons } from "./desktop-sidebar.js";
 import { useNarrowFocus } from "./narrow-focus.js";
+import { PhoneHead } from "./phone-head.js";
 import type { SidebarCollapse } from "./sidebar-collapse.js";
 
 /** The place's name, at the list's head and on the way back to it in a narrow room. */
 const ADMIN_TITLE = "Admin";
+
+/** Where the way back from a view to the section list leads, as a hint names it. */
+const ADMIN_PLACE_NAME = "admin";
+
+/** Where the place's way out leads where no step stands behind it, as a hint names it. */
+const ADMIN_EXIT_PLACE = "tasks";
 
 /** What the row that opens the web page says. */
 const OPEN_IN_BROWSER = "Open in browser";
@@ -86,10 +101,10 @@ export interface DesktopAdminProps {
   readonly room: ShellRoom;
   readonly history: NavigationHistory;
   readonly view: AdminView;
-  /** Whether the list stands rather than the view, which only a narrow room draws apart. */
+  /** Whether the list stands rather than the view, which only one column draws apart. */
   readonly listed: boolean;
   readonly onOpen: (view: AdminView) => void;
-  /** Stands the list, from a view standing alone in a narrow room. */
+  /** Stands the list, from a view standing alone in one column. */
   readonly onList: () => void;
   /** Leaves the place for wherever it was opened from. */
   readonly onExit: () => void;
@@ -106,24 +121,50 @@ export function DesktopAdmin({
   onExit,
 }: DesktopAdminProps): React.JSX.Element {
   useAppCommand(APP_COMMAND.EXIT_ADMIN, onExit);
-  const edge = useSidebarEdge(sidebar);
-  const hidden = hiddenColumns(room, listed);
-  const screen = useNarrowFocus(room, listed);
+  const edge = useListEdge(sidebar);
+  const split = useScreenSplit(room);
+  const hidden = hiddenColumns(split.columns, listed);
+  const screen = useScreenRef(useNarrowFocus(split.columns, listed), split.ref);
   const current = adminSectionOf(view);
   return (
-    <div ref={screen} className="desktop-admin">
+    <div ref={screen} className="desktop-admin" data-single={String(split.single)}>
       <nav className="admin-sections" aria-label="Admin sections" hidden={hidden.list}>
-        <div className="desktop-drag-strip" />
-        <HistoryButtons history={history} room={room} />
-        <NavItem
-          icon={<BackIcon />}
-          aria-keyshortcuts={commandKeyshortcuts(APP_COMMAND.EXIT_ADMIN)}
-          shortcut={<Shortcut chord={APP_SHORTCUTS[APP_COMMAND.EXIT_ADMIN].chord} />}
-          onClick={onExit}
-        >
-          Back
-        </NavItem>
-        <h1 className="admin-sections-title">{ADMIN_TITLE}</h1>
+        {room === SHELL_ROOM.NARROW ? (
+          // A phone's header: the way out alone, the history's buttons left out, and the place's name centred.
+          <PhoneHead
+            place="admin-sections"
+            start={
+              <BackButton
+                label="Back"
+                place={backPlaceOf(history, ADMIN_EXIT_PLACE)}
+                command={APP_COMMAND.EXIT_ADMIN}
+                onBack={onExit}
+              />
+            }
+            title={ADMIN_TITLE}
+            end={null}
+          />
+        ) : (
+          <>
+            <div className="desktop-drag-strip" />
+            <HistoryButtons history={history} room={room} />
+            <BackButton
+              look={BACK_BUTTON_LOOK.COLUMN}
+              label="Back"
+              place={backPlaceOf(history, ADMIN_EXIT_PLACE)}
+              command={APP_COMMAND.EXIT_ADMIN}
+              onBack={onExit}
+            />
+            {/* A label for the list, no heading: the view beside it is named once, by its own toolbar. */}
+            <Text
+              as={TEXT_ELEMENT.DIV}
+              variant={TEXT_VARIANT.LABEL}
+              className="admin-sections-title"
+            >
+              {ADMIN_TITLE}
+            </Text>
+          </>
+        )}
         <Fill className="sidebar-section">
           <ScrollArea fade={SCROLL_FADE.BOTH}>
             <div className="sidebar-section-body">
@@ -151,16 +192,16 @@ export function DesktopAdmin({
         </Fill>
         <ColumnFoot />
         {/* Last, so the drag strip above the way back does not take the edge's top from it. */}
-        {room === SHELL_ROOM.WIDE ? <ResizeEdge edge={edge} /> : null}
+        {split.single ? null : <ResizeEdge edge={edge} />}
       </nav>
       <section className="admin-page" aria-label={ADMIN_TITLE} hidden={hidden.item}>
         {/* The view's own toolbar stands in the title bar's row, as a page's
             does beside the plans' sidebar, so no drag strip stands over it;
-            a narrow room leads it with the way back to the list. */}
+            a narrow room makes it a phone's header, and one column leads it by the way back to the list. */}
         <AdminToolbarLead
           value={
-            room === SHELL_ROOM.NARROW ? (
-              <FoldingButton label={ADMIN_TITLE} icon={<BackIcon />} onClick={onList} />
+            split.single ? (
+              <BackButton label={ADMIN_TITLE} place={ADMIN_PLACE_NAME} onBack={onList} />
             ) : undefined
           }
         >

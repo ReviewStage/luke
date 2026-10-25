@@ -1,0 +1,10 @@
+{
+  "apps/catalog/src/examples/pane-pins.tsx": 1,
+  "apps/web/src/admin/chrome/sidebar.tsx": 1,
+  "packages/panel/src/desktop/hover-pane.ts": 1,
+  "packages/panel/src/desktop/tab-switcher.tsx": 1,
+  "packages/panel/src/keyboard-modality.ts": 1,
+  "packages/panel/src/navigation-history.ts": 1,
+  "packages/panel/src/tasks/plan-comments.tsx": 1,
+  "packages/panel/src/tasks/selection-toolbar.tsx": 1
+}

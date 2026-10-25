@@ -12,7 +12,7 @@ import {
 } from "@luke/features/integration-wire";
 import {
   AnchoredPopover,
-  ArrowLeftIcon,
+  BackButton,
   BUTTON_VARIANT,
   Button,
   CHIP_LOOK,
@@ -23,10 +23,13 @@ import {
   LIST_DENSITY,
   LIST_ROW_CURRENT,
   List,
+  ListMotion,
   ListRow,
   type ListRowHint,
   McpIcon,
+  NO_BACK_KEY,
   OneLine,
+  type OneLineHint,
   POPOVER_ALIGN,
   POPOVER_PANEL_LOOK,
   PopoverPanel,
@@ -45,6 +48,7 @@ import {
   TEXT_VARIANT,
   Text,
   Tooltip,
+  VisuallyHidden,
   wholeWordsHint,
 } from "@luke/ui";
 import {
@@ -99,7 +103,7 @@ import { ServerCard } from "./server-card.js";
  * to sign in there and then, as Settings does: the row waits on it with a
  * ring after its name, its line said only to a reader and in its title,
  * then Reopen and Cancel, and becomes the switch once the sign-in settles,
- * or says it failed or did not finish and offers Try again
+ * or says it failed or did not finish and offers Retry
  * (`../integration-sign-in.ts`). Pressing a connected server turns the popover into
  * its page, in place: back, its name, its switch, a filter, and its tools
  * in alphabetical order, each one line of its title, its name, the badge
@@ -125,7 +129,7 @@ import { ServerCard } from "./server-card.js";
  * server's, and otherwise closes the popover, and stops there so the panel behind stays open; a
  * second press of the button, and focus leaving it for another part of the
  * window, close it too. The button, the back, a row's switch and its
- * Connect, Reopen, Cancel, Try again or Retry are `@luke/ui`'s, each pressed
+ * Connect, Reopen, Cancel or Retry are `@luke/ui`'s, each pressed
  * without taking the focus from the field.
  */
 
@@ -146,7 +150,7 @@ const GITHUB = INTEGRATION_PROVIDER.GITHUB;
 const SERVERS_SETTINGS = "Manage in Settings";
 
 /** What the popover's list says where the deployment offers the account no server at all. */
-const SERVERS_NONE = "No servers available";
+const SERVERS_NONE = "No integrations available";
 
 /** What the home's field asks for, and says where nothing matches. */
 const SEARCH = {
@@ -155,11 +159,18 @@ const SEARCH = {
   TOOLS: "Tools",
 } as const;
 
-/** What a server's page says where its filter matches nothing, and how its back button is named. */
+/** What a server's page says where its filter matches nothing. */
 const PAGE = {
   NONE: "No tools match",
-  BACK: "Back to MCP servers",
 } as const;
+
+/** What a row's buttons can be waiting on: the browser sign-in begun, or the one under way ended. */
+const WORKING_ACT = {
+  CONNECT: "connect",
+  CANCEL: "cancel",
+} as const;
+
+type WorkingAct = (typeof WORKING_ACT)[keyof typeof WORKING_ACT];
 
 /**
  * A pointer's press that leaves the focus in the field, so the keys the
@@ -205,6 +216,17 @@ function ServerPageTitle({ name }: { name: string }): React.JSX.Element {
 }
 
 /**
+ * The hint over a row's problem: its whole words where the row cut them,
+ * and where the server or the sign-in said words of its own, those after
+ * ours, quoted and named, whether cut or not. Note that the row's one line
+ * holds our sentence alone, because their words are no sentence of Luke's.
+ */
+function problemHint(problem: string, said: string | undefined): OneLineHint {
+  if (said === undefined) return wholeWordsHint(problem);
+  return (line) => <Tooltip label={`${problem} ${said}`}>{line}</Tooltip>;
+}
+
+/**
  * What a server's row says between its mark and its end, here and on the
  * card a mention of the server hangs (`server-card.tsx`): its name, how many
  * tools it offers, and where its sign-in or its server stands.
@@ -226,7 +248,7 @@ export function ServerRowWords({ row }: { row: ServerRow }): React.JSX.Element {
         </Tooltip>
       ) : null}
       {row.problem !== undefined ? (
-        <OneLine hint={wholeWordsHint(row.problem)} className="agent-servers-problem">
+        <OneLine hint={problemHint(row.problem, row.said)} className="agent-servers-problem">
           {row.problem}
         </OneLine>
       ) : null}
@@ -313,7 +335,7 @@ function SearchRow({
 function ServersNote({ words }: { words: string }): React.JSX.Element {
   return (
     <div className="agent-servers-note">
-      <Text as={TEXT_ELEMENT.P} variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.SUBTLE}>
+      <Text as={TEXT_ELEMENT.P} variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
         {words}
       </Text>
     </div>
@@ -324,7 +346,7 @@ function ServersNote({ words }: { words: string }): React.JSX.Element {
 function ServersHeading({ words }: { words: string }): React.JSX.Element {
   return (
     <div className="agent-servers-heading" aria-hidden="true">
-      <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.SUBTLE}>
+      <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
         {words}
       </Text>
     </div>
@@ -355,12 +377,16 @@ const PointerHighlight: ListRowHint = ({ label, children }) => {
 };
 
 function ServersPopover({
+  open: standing,
   id,
   servers,
   statuses,
   onClose,
   onLeave,
+  onExited,
 }: {
+  /** Whether it stands; closed, it fades out, then tells its owner it is gone. */
+  open: boolean;
   id: string;
   servers: AgentServersControl;
   statuses: IntegrationStatuses;
@@ -368,12 +394,16 @@ function ServersPopover({
   onClose: () => void;
   /** Focus left the popover for `left`; the owner closes unless that is still its own. */
   onLeave: (left: EventTarget | null) => void;
+  onExited: () => void;
 }): React.JSX.Element {
   const field = useRef<HTMLInputElement>(null);
   const list = useRef<HTMLDivElement>(null);
+  const moving = useRef<HTMLDivElement>(null);
   const rowsId = useId();
   const rows = useServerRows(statuses, servers.disabled);
-  const [connecting, setConnecting] = useState<string | undefined>(undefined);
+  const [working, setWorking] = useState<{ server: string; act: WorkingAct } | undefined>(
+    undefined,
+  );
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState("");
   const [opened, setOpened] = useState<string | undefined>(undefined);
@@ -426,14 +456,14 @@ function ServersPopover({
 
   /** A grant begun from the row: the browser opens, and the row waits on the window's return to read it. */
   const connect = (server: string) => {
-    setConnecting(server);
-    void grant.begin(server).then(() => setConnecting(undefined));
+    setWorking({ server, act: WORKING_ACT.CONNECT });
+    void grant.begin(server).then(() => setWorking(undefined));
   };
 
   /** A sign-in waited on, ended here; a Cancel the service refused leaves it waiting, to press again. */
   const cancel = (server: string) => {
-    setConnecting(server);
-    void statuses.cancelSignIn(server).then(() => setConnecting(undefined));
+    setWorking({ server, act: WORKING_ACT.CANCEL });
+    void statuses.cancelSignIn(server).then(() => setWorking(undefined));
   };
 
   const open = (row: ServerRow, search = "") => {
@@ -473,7 +503,7 @@ function ServersPopover({
     if (opensTools(row)) {
       return open(row, found.tools.some((hit) => hit.row === row) ? query : "");
     }
-    // Note that Enter on a sign-in under way reopens it, its first press, as Try again begins it again.
+    // Note that Enter on a sign-in under way reopens it, its first press, as Retry begins it again.
     if (
       row.kind === SERVER_ROW.CONNECT ||
       row.kind === SERVER_ROW.RECONNECT ||
@@ -538,6 +568,12 @@ function ServersPopover({
     else onClose();
   };
 
+  /** A row's button while its server waits on an act: busy if it started that act, off if the other did. */
+  const workingOn = (server: string, mine: WorkingAct, busyLabel: string) => {
+    if (working?.server !== server) return {};
+    return working.act === mine ? { busy: true, busyLabel } : { disabled: true };
+  };
+
   const end = (row: ServerRow): React.JSX.Element | null => {
     switch (row.kind) {
       case SERVER_ROW.SWITCH:
@@ -548,7 +584,7 @@ function ServersPopover({
           <Button
             variant={BUTTON_VARIANT.QUIET}
             keepFocus
-            disabled={connecting === row.connection}
+            {...workingOn(row.connection, WORKING_ACT.CONNECT, "Connecting")}
             onClick={(event) => {
               event.stopPropagation();
               connect(row.connection);
@@ -563,7 +599,7 @@ function ServersPopover({
             <Button
               variant={BUTTON_VARIANT.QUIET}
               keepFocus
-              disabled={connecting === row.connection}
+              {...workingOn(row.connection, WORKING_ACT.CONNECT, "Reopening the sign-in")}
               onClick={(event) => {
                 event.stopPropagation();
                 connect(row.connection);
@@ -574,7 +610,7 @@ function ServersPopover({
             <Button
               variant={BUTTON_VARIANT.QUIET}
               keepFocus
-              disabled={connecting === row.connection}
+              {...workingOn(row.connection, WORKING_ACT.CANCEL, "Canceling the sign-in")}
               onClick={(event) => {
                 event.stopPropagation();
                 cancel(row.connection);
@@ -589,7 +625,7 @@ function ServersPopover({
           <Button
             variant={BUTTON_VARIANT.QUIET}
             keepFocus
-            disabled={connecting === row.connection}
+            {...workingOn(row.connection, WORKING_ACT.CONNECT, "Connecting")}
             onClick={(event) => {
               event.stopPropagation();
               connect(row.connection);
@@ -632,6 +668,8 @@ function ServersPopover({
     card: React.ReactNode;
     /** Whether the press opens a further page, which a chevron says. */
     opens: boolean;
+    /** The key the list's motion follows the row by, out of one section and into another. */
+    motionKey?: string;
     onPress: (() => void) | undefined;
   }) => {
     const { index } = input;
@@ -652,6 +690,7 @@ function ServersPopover({
             keepFocus
             tabbable={false}
             onPress={input.onPress}
+            motionKey={input.motionKey}
             hint={{ Hint: PointerHighlight, label: input.row.name }}
           />
         </RowHintOptions>
@@ -677,6 +716,8 @@ function ServersPopover({
       card: <ServerCard provider={row.provider} connection={row.connection} />,
       actions: end(row),
       opens: opensTools(row),
+      // Note that a server's row is followed by its connection, because a server that connects leaves Not connected for Connected and glides across rather than leaving one list and arriving in the other.
+      motionKey: row.connection,
       // Note that a row the keys can choose takes the press as Enter does, because a row hangs its card from its press and a row with none would hang nothing.
       onPress: rowPress(row),
     });
@@ -711,27 +752,29 @@ function ServersPopover({
       />
       <div className="agent-servers-scroll">
         <ScrollArea ref={list} size={SCROLL_SIZE.CONTENT}>
-          <div className="agent-servers-list">
-            {rows.length === 0 ? <ServersNote words={SERVERS_NONE} /> : null}
-            {rows.length > 0 && picks.length === 0 && groups.length === 0 ? (
-              <ServersNote words={SEARCH.NONE} />
-            ) : null}
-            {groups.map((group) => (
-              <Fragment key={group.heading ?? "unread"}>
-                {group.heading !== undefined ? <ServersHeading words={group.heading} /> : null}
-                <List label={group.heading ?? SERVERS_LABEL} density={LIST_DENSITY.COMPACT}>
-                  {group.rows.map(serverRow)}
-                </List>
-              </Fragment>
-            ))}
-            {found.tools.length > 0 ? (
-              <>
-                <ServersHeading words={SEARCH.TOOLS} />
-                <List label={SEARCH.TOOLS} density={LIST_DENSITY.COMPACT}>
-                  {found.tools.map(toolRow)}
-                </List>
-              </>
-            ) : null}
+          <div ref={moving} className="agent-servers-list">
+            <ListMotion root={moving}>
+              {rows.length === 0 ? <ServersNote words={SERVERS_NONE} /> : null}
+              {rows.length > 0 && picks.length === 0 && groups.length === 0 ? (
+                <ServersNote words={SEARCH.NONE} />
+              ) : null}
+              {groups.map((group) => (
+                <Fragment key={group.heading ?? "unread"}>
+                  {group.heading !== undefined ? <ServersHeading words={group.heading} /> : null}
+                  <List label={group.heading ?? SERVERS_LABEL} density={LIST_DENSITY.COMPACT} moves>
+                    {group.rows.map(serverRow)}
+                  </List>
+                </Fragment>
+              ))}
+              {found.tools.length > 0 ? (
+                <>
+                  <ServersHeading words={SEARCH.TOOLS} />
+                  <List label={SEARCH.TOOLS} density={LIST_DENSITY.COMPACT}>
+                    {found.tools.map(toolRow)}
+                  </List>
+                </>
+              ) : null}
+            </ListMotion>
           </div>
         </ScrollArea>
       </div>
@@ -742,9 +785,12 @@ function ServersPopover({
     return (
       <>
         <div className="agent-servers-page-head">
-          <Tooltip label={PAGE.BACK}>
-            <IconButton icon={<ArrowLeftIcon />} label={PAGE.BACK} keepFocus onClick={back} />
-          </Tooltip>
+          <BackButton
+            label={SERVERS_LABEL}
+            place={SERVERS_LABEL}
+            command={NO_BACK_KEY}
+            onBack={back}
+          />
           <ProviderMark provider={row.provider} size={PROVIDER_MARK_SIZE.ICON} />
           <ServerPageTitle name={row.name} />
           <span className="agent-servers-count">{toolsCount(row.tools?.length ?? 0)}</span>
@@ -789,7 +835,7 @@ function ServersPopover({
         server={row.name}
         tool={shown}
         tokens={pageTokens}
-        backLabel={`Back to ${row.name} tools`}
+        backPlace={`${row.name} tools`}
         onBack={closeTool}
         keepFocus
         bodyRef={toolBody}
@@ -800,6 +846,7 @@ function ServersPopover({
 
   return (
     <PopoverPanel
+      open={standing}
       id={id}
       look={POPOVER_PANEL_LOOK.MENU}
       title={
@@ -811,6 +858,7 @@ function ServersPopover({
       }
       onDismiss={dismiss}
       onLeave={onLeave}
+      onExited={onExited}
     >
       {/* Note that the searchable menu's own class rides a box drawn as its
           contents, because its rows' highlight is that menu's. */}
@@ -862,8 +910,13 @@ export function AgentServersButton({
   const open = heldOpen ?? ownOpen;
   const setOpen = onOpenChange ?? setOwnOpen;
   const popoverId = useId();
+  const labelId = useId();
+  const faceId = useId();
   const root = useRef<HTMLDivElement>(null);
   const trigger = useRef<HTMLButtonElement>(null);
+  // Note that the popover is drawn from its opening until its fade has run, and no longer, because its search, its page and its reads of every server's tools are its own and start afresh each time it opens.
+  const [drawn, setDrawn] = useState(open);
+  if (open && !drawn) setDrawn(true);
 
   // Note that we hand focus back to the button, as a menu returns it to its
   // trigger, because closing takes the focused popover away with it.
@@ -890,19 +943,25 @@ export function AgentServersButton({
         </span>
       ) : (
         // A face is a form's field, at least the column its pickers share.
-        <Chip
-          look={CHIP_LOOK.FIELD}
-          width={CHIP_WIDTH.MIN_FIELD}
-          chevron
-          aria-label={SERVERS_LABEL}
-          {...press}
-        >
-          {face}
-        </Chip>
+        <>
+          <VisuallyHidden id={labelId}>{SERVERS_LABEL}</VisuallyHidden>
+          {/* Note that the chip is named by its field's name and then the words its face draws ("None", "+2"), through its own id, because a name that left them out would not match the screen. */}
+          <Chip
+            look={CHIP_LOOK.FIELD}
+            width={CHIP_WIDTH.MIN_FIELD}
+            chevron
+            id={faceId}
+            aria-labelledby={`${labelId} ${faceId}`}
+            {...press}
+          >
+            {face}
+          </Chip>
+        </>
       )}
-      {open ? (
-        <AnchoredPopover align={POPOVER_ALIGN.END}>
+      <AnchoredPopover open={open} align={POPOVER_ALIGN.END}>
+        {drawn ? (
           <ServersPopover
+            open={open}
             id={popoverId}
             servers={servers}
             statuses={statuses}
@@ -912,9 +971,10 @@ export function AgentServersButton({
               if (!document.hasFocus()) return;
               if (!(left instanceof Node && root.current?.contains(left))) setOpen(false);
             }}
+            onExited={() => setDrawn(false)}
           />
-        </AnchoredPopover>
-      ) : null}
+        ) : null}
+      </AnchoredPopover>
     </div>
   );
 }

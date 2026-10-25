@@ -4,11 +4,15 @@ import {
   type LinearIssueSummary,
   linearIssueIdentifierIn,
 } from "@luke/features/linear-wire";
+import { mentionMarkdownLink } from "@luke/features/link-grammar";
 import {
   type RepositoryPin,
   TASK_BOUNDS,
+  TASK_PRIORITY,
   TASK_STATUS,
   type Task,
+  type TaskPriority,
+  type TaskStanding,
   type TaskStatus,
   type TaskSummary,
 } from "@luke/features/task-wire";
@@ -22,6 +26,7 @@ import {
   VOICE_PHASE,
   type VoicePhase,
 } from "@luke/features/tasks-view";
+import { VOICE_FAILURE, VOICE_FAILURE_WORDS } from "@luke/features/words";
 import type { LinearIssuesRequest, Workspace } from "@luke/features/workspace-wire";
 import { LIVE_STATUS, type LiveStatus } from "@luke/live";
 import { MICROPHONE_STATUS, type MicrophoneStatus } from "@luke/voice/audio";
@@ -31,6 +36,14 @@ import {
   VOICE_KEYLESS_NOTE,
 } from "@luke/voice/microphone-access";
 import type { VoiceCallAbout, VoiceView } from "@luke/voice/voice-view";
+import {
+  type PendingValue,
+  type PendingValues,
+  pendingSettled,
+  pendingValue,
+  pendingWithout,
+  type SameValue,
+} from "./pending-values.js";
 import { matchesTokens, searchTokens } from "./search-tokens.js";
 
 /**
@@ -143,18 +156,9 @@ export function taskNameOfIssue(issue: Pick<LinearIssueSummary, "identifier" | "
   return title === "" ? issue.identifier : title;
 }
 
-/** The characters a markdown link's label escapes to stay one label. */
-const LABEL_SPECIAL = /[[\]\\]/gu;
-
-/** The characters a markdown link's target encodes so it ends where it should. */
-const TARGET_SPECIAL = /[()]/gu;
-
 /** One issue as the app writes a link to it: its key and title over its own address. */
 function issueMention(issue: Pick<LinearIssueSummary, "identifier" | "title" | "url">): string {
-  const name = `${issue.identifier} ${issue.title.trim()}`.trim();
-  const label = `@${name}`.replace(LABEL_SPECIAL, (special) => `\\${special}`);
-  const target = issue.url.replace(TARGET_SPECIAL, (special) => (special === "(" ? "%28" : "%29"));
-  return `[${label}](${target})`;
+  return mentionMarkdownLink(`${issue.identifier} ${issue.title.trim()}`.trim(), issue.url);
 }
 
 /**
@@ -302,7 +306,7 @@ const START_FAILED_NOTE = "Luke's service did not answer. Try again.";
 const REPOSITORY_FAILURE_NOTES = {
   [TASK_CALL_FAILURE.UNANSWERED]: START_FAILED_NOTE,
   [TASK_CALL_FAILURE.REPOSITORY_NOT_REACHABLE]:
-    "Luke can't see that repository on GitHub. Choose which repositories Luke can see, then try again.",
+    "Luke cannot see that repository on GitHub. Choose which repositories Luke can see, then try again.",
 } as const satisfies Record<RepositoryCallFailure, string>;
 
 /** The sentence the page shows for a start or a repository change the service refused. */
@@ -328,18 +332,24 @@ export function startFailureNote(failure: StartCallFailure): string {
 export const RENAME_FAILED_NOTE = "The task could not be renamed. Try again.";
 
 /** The names given to tasks that main's view has yet to carry, by task id. */
-export type PendingRenames = ReadonlyMap<string, string>;
+export type PendingRenames = PendingValues<string, string>;
 
-/** The name the view gives a task: its row's in the list, else the open document's. */
-function viewedName(view: TasksView, taskId: string): string | undefined {
+/** Names drawn over the ones a view carries, by task id: the pending ones' values, or a name being typed. */
+export type TaskNames = ReadonlyMap<string, string>;
+
+/** Whether two names are one. */
+const sameName: SameValue<string> = (a, b) => a === b;
+
+/** The task the view holds: its row in the list, else the open document. */
+function viewedTask(view: TasksView, taskId: string): TaskSummary | undefined {
   const listed = view.tasks.find((task) => task.id === taskId);
-  if (listed !== undefined) return listed.name;
+  if (listed !== undefined) return listed;
   const held = view.document.task;
-  return held?.id === taskId ? held.name : undefined;
+  return held?.id === taskId ? held : undefined;
 }
 
-/** The view with each pending name drawn in place of the one it replaces, in the list and on the open document alike. */
-export function renamedView(view: TasksView, renames: PendingRenames): TasksView {
+/** The view with each name given drawn in place of the one it replaces, in the list and on the open document alike. */
+export function renamedView(view: TasksView, renames: TaskNames): TasksView {
   if (renames.size === 0) return view;
   const named = <Named extends { id: string; name: string }>(task: Named): Named => {
     const name = renames.get(task.id);
@@ -353,17 +363,23 @@ export function renamedView(view: TasksView, renames: PendingRenames): TasksView
   };
 }
 
-/**
- * The pending names the view still contradicts. One the view now carries
- * has landed, and one of a task the view no longer holds has nothing left
- * to name, so both are let go.
- */
-export function unsettledRenames(renames: PendingRenames, view: TasksView): PendingRenames {
-  const unsettled = [...renames].filter(([taskId, name]) => {
-    const viewed = viewedName(view, taskId);
-    return viewed !== undefined && viewed !== name;
-  });
-  return unsettled.length === renames.size ? renames : new Map(unsettled);
+/** The pending name a rename asks for, over the name the view gives the task and any rename of it still pending. */
+export function renameAsked(
+  renames: PendingRenames,
+  view: TasksView,
+  taskId: string,
+  name: string,
+): PendingValue<string> {
+  return pendingValue(renames.get(taskId), name, viewedTask(view, taskId)?.name, sameName);
+}
+
+/** The pending names the view still leaves standing at `now` (`pending-values.ts`). */
+export function settledRenames(
+  renames: PendingRenames,
+  view: TasksView,
+  now: number | undefined,
+): PendingRenames {
+  return pendingSettled(renames, (taskId) => viewedTask(view, taskId)?.name, sameName, now);
 }
 
 /** What a press of the task menu does to a task's place: pins it or unpins it. */
@@ -400,13 +416,13 @@ function standingStatus(task: Pick<TaskSummary, "status">): TaskStatus {
 }
 
 /**
- * What settling tasks at a status asks of each, and what its Undo asks: the
+ * What setting tasks at a status asks of each, and what its Undo asks: the
  * status each stood at before. A task already there is left out of both,
  * since the press changes nothing about it.
  */
 export function settleChanges(
   tasks: readonly Pick<TaskSummary, "id" | "status">[],
-  status: SettledStatus,
+  status: TaskStatus,
 ): { readonly asked: readonly StatusChange[]; readonly undo: readonly StatusChange[] } {
   const moved = tasks.filter((task) => standingStatus(task) !== status);
   return {
@@ -420,35 +436,53 @@ export function settleOffered(task: Pick<TaskSummary, "status">, status: Settled
   return standingStatus(task) !== status;
 }
 
-/** What the toasts say of tasks settled at each status: one, several, and the refusals. */
-const SETTLE_NOTES = {
-  [SETTLED_STATUS.DONE]: {
+/** What the toasts say of tasks set at each status: one, several, and the refusals. */
+const STATUS_NOTES = {
+  [TASK_STATUS.BACKLOG]: {
+    one: "Moved to Backlog",
+    many: "tasks moved to Backlog",
+    failedOne: "The task could not be moved to Backlog. Try again.",
+    failedMany: "The tasks could not be moved to Backlog. Try again.",
+  },
+  [TASK_STATUS.TODO]: {
+    one: "Moved to Todo",
+    many: "tasks moved to Todo",
+    failedOne: "The task could not be moved to Todo. Try again.",
+    failedMany: "The tasks could not be moved to Todo. Try again.",
+  },
+  [TASK_STATUS.IN_PROGRESS]: {
+    one: "Moved to In progress",
+    many: "tasks moved to In progress",
+    failedOne: "The task could not be moved to In progress. Try again.",
+    failedMany: "The tasks could not be moved to In progress. Try again.",
+  },
+  [TASK_STATUS.DONE]: {
     one: "Marked done",
     many: "tasks marked done",
     failedOne: "The task could not be marked done. Try again.",
     failedMany: "The tasks could not be marked done. Try again.",
   },
-  [SETTLED_STATUS.CANCELED]: {
+  [TASK_STATUS.CANCELED]: {
     one: "Task canceled",
     many: "tasks canceled",
     failedOne: "The task could not be canceled. Try again.",
     failedMany: "The tasks could not be canceled. Try again.",
   },
-} as const satisfies Record<SettledStatus, Record<string, string>>;
+} as const satisfies Record<TaskStatus, Record<string, string>>;
 
 /**
- * What the toast says once tasks were settled at a status, by how many the
- * service kept and how many it refused; one task says "Marked done".
+ * What the toast says once tasks were set at a status, by how many the
+ * service kept and how many it refused; one task done says "Marked done".
  */
-export function settledNote(status: SettledStatus, landed: number, refused: number): string {
-  const notes = SETTLE_NOTES[status];
+export function settledNote(status: TaskStatus, landed: number, refused: number): string {
+  const notes = STATUS_NOTES[status];
   const kept = landed === 1 ? notes.one : `${landed} ${notes.many}`;
   return refused === 0 ? kept : `${kept}, ${refused} could not be`;
 }
 
-/** What the toast says when the service refused every task a press settled. */
-export function settleFailedNote(status: SettledStatus, refused: number): string {
-  const notes = SETTLE_NOTES[status];
+/** What the toast says when the service refused every task a press set at a status. */
+export function settleFailedNote(status: TaskStatus, refused: number): string {
+  const notes = STATUS_NOTES[status];
   return refused === 1 ? notes.failedOne : notes.failedMany;
 }
 
@@ -458,22 +492,30 @@ export const STATUS_RESTORE_FAILED_NOTE = "The task's status could not be put ba
 /** A task's pin as the list carries it, only where it stands. */
 type MarkStamps = Pick<TaskSummary, "pinnedAt">;
 
-/** A pin given to a task that main's view has yet to carry: the instant it was asked, or null for one taken away. */
+/** A pin given to a task: the instant it was asked, or null for one taken away. */
 export interface PendingMark {
-  readonly pinnedAt?: number | null;
+  readonly pinnedAt: number | null;
 }
 
 /** The pins given to tasks that main's view has yet to carry, by task id. */
-export type PendingMarks = ReadonlyMap<string, PendingMark>;
+export type PendingMarks = PendingValues<string, PendingMark>;
 
-/** The pending stamps a press asks for, made at `at`. */
-export function pendingMark(mark: TaskMark, at: number): PendingMark {
+/** The stamp a press asks for, made at `at`. */
+function pendingMark(mark: TaskMark, at: number): PendingMark {
   switch (mark) {
     case TASK_MARK.PIN:
       return { pinnedAt: at };
     case TASK_MARK.UNPIN:
       return { pinnedAt: null };
   }
+}
+
+/** Whether two pins are one as the list draws them: pinned or not, whenever it was. */
+const sameMark: SameValue<PendingMark> = (a, b) => (a.pinnedAt === null) === (b.pinnedAt === null);
+
+/** A row's pin as a pending mark reads it. */
+function viewedMark(row: MarkStamps | undefined): PendingMark | undefined {
+  return row === undefined ? undefined : { pinnedAt: row.pinnedAt ?? null };
 }
 
 /**
@@ -507,80 +549,241 @@ export function markedView(view: TasksView, marks: PendingMarks): TasksView {
   const held = view.document.task;
   return {
     ...view,
-    tasks: view.tasks.map((task) => marked(task, marks.get(task.id))),
+    tasks: view.tasks.map((task) => marked(task, marks.get(task.id)?.value)),
     document:
       held === undefined
         ? view.document
-        : { ...view.document, task: marked(held, marks.get(held.id)) },
+        : { ...view.document, task: marked(held, marks.get(held.id)?.value) },
   };
 }
 
-/** Whether the view carries the stamp a pending mark asks for: standing where it is asked, and gone where it is taken away. */
-function markLanded(row: MarkStamps, mark: PendingMark): boolean {
-  return mark.pinnedAt === undefined || (mark.pinnedAt === null) === (row.pinnedAt === undefined);
+/** The pending pin a press asks for, over the pin the view carries and any pin of the task still pending. */
+export function markAsked(
+  marks: PendingMarks,
+  view: TasksView,
+  taskId: string,
+  mark: TaskMark,
+  at: number,
+): PendingValue<PendingMark> {
+  const viewed = viewedMark(viewedTask(view, taskId));
+  return pendingValue(marks.get(taskId), pendingMark(mark, at), viewed, sameMark);
+}
+
+/** The pending pins the view still leaves standing at `now` (`pending-values.ts`). */
+export function settledMarks(
+  marks: PendingMarks,
+  view: TasksView,
+  now: number | undefined,
+): PendingMarks {
+  return pendingSettled(marks, (taskId) => viewedMark(viewedTask(view, taskId)), sameMark, now);
 }
 
 /**
- * The pending marks the view still contradicts. One the view now carries
- * has landed, and one of a task the view no longer holds has nothing left
- * to mark, so both are let go.
+ * Where tasks were sent to stand here that main's view has yet to carry, by
+ * task id: a status, a priority, and an assignee (null for no one),
+ * each apart from the others and from the pins, so each lands or is refused
+ * on its own.
  */
-export function unsettledMarks(marks: PendingMarks, view: TasksView): PendingMarks {
-  const unsettled = [...marks].filter(([taskId, mark]) => {
-    const held = view.document.task;
-    const viewed =
-      view.tasks.find((task) => task.id === taskId) ?? (held?.id === taskId ? held : undefined);
-    return viewed !== undefined && !markLanded(viewed, mark);
-  });
-  return unsettled.length === marks.size ? marks : new Map(unsettled);
+export interface PendingStandings {
+  readonly status: PendingValues<string, TaskStatus>;
+  readonly priority: PendingValues<string, TaskPriority>;
+  readonly assignee: PendingValues<string, PendingAssignee>;
 }
 
-/**
- * A status a press gave a task that main's view has yet to carry. Each is an
- * object of its own, so whoever set it lets go of it alone, and never of a
- * later press's status for the same task.
- */
-interface PendingStatus {
-  readonly status: TaskStatus;
+/** Who a task was sent to be assigned to, by their id and the name they are drawn by; null for no one. */
+type PendingAssignee = { readonly userId: string; readonly name: string } | null;
+
+/** No task waiting on where it was sent to stand. */
+export const NO_PENDING_STANDINGS: PendingStandings = {
+  status: new Map(),
+  priority: new Map(),
+  assignee: new Map(),
+};
+
+/** What one press asked of a task's standing, each part it changes, which a refusal lets go of. */
+export interface StandingAsk {
+  readonly status?: PendingValue<TaskStatus>;
+  readonly priority?: PendingValue<TaskPriority>;
+  readonly assignee?: PendingValue<PendingAssignee>;
 }
 
-/** The statuses given to tasks that main's view has yet to carry, by task id, apart from the pins, so each lands or is refused on its own. */
-export type PendingStatuses = ReadonlyMap<string, PendingStatus>;
+/** Whether two standings are one. */
+const sameStanding: SameValue<string | null> = (a, b) => a === b;
 
-/** The view with each pending status drawn in place, in the list and on the open document alike. */
-export function statusedView(view: TasksView, statuses: PendingStatuses): TasksView {
-  if (statuses.size === 0) return view;
-  const statused = <Row extends TaskSummary>(row: Row): Row => {
-    const pending = statuses.get(row.id);
-    return pending === undefined ? row : { ...row, status: pending.status };
+/** Whether two assignees are one person, or both no one, whatever name each is drawn by. */
+const sameAssignee: SameValue<PendingAssignee> = (a, b) =>
+  sameStanding(a?.userId ?? null, b?.userId ?? null);
+
+/** A task's priority, No priority for one from a service before priorities. */
+function standingPriority(task: Pick<TaskSummary, "priority">): TaskPriority {
+  return task.priority ?? TASK_PRIORITY.NONE;
+}
+
+/** A task's assignee, null where it is assigned to no one. */
+function standingAssignee(task: Pick<TaskSummary, "assignee">): PendingAssignee {
+  return task.assignee ?? null;
+}
+
+/** The name the view knows a member by, from a task assigned to them or made by them; none where it knows none. */
+function memberName(view: TasksView, userId: string): string {
+  for (const task of view.tasks) {
+    if (task.assignee?.userId === userId) return task.assignee.name;
+    if (task.createdBy?.userId === userId) return task.createdBy.name;
+  }
+  return "";
+}
+
+/** A row assigned to the member given, or to no one. */
+function assignedTo<Row extends TaskSummary>(row: Row, assignee: PendingAssignee): Row {
+  if (assignee !== null) return { ...row, assignee };
+  const { assignee: _assignee, ...unassigned } = row;
+  return unassigned as Row;
+}
+
+/** Whether any task waits on where it was sent. */
+function anyStanding(standings: PendingStandings): boolean {
+  return standings.status.size + standings.priority.size + standings.assignee.size > 0;
+}
+
+/** The tasks waiting on where they were sent to stand. */
+export function standingTasks(standings: PendingStandings): readonly string[] {
+  return [...standings.status.keys(), ...standings.priority.keys(), ...standings.assignee.keys()];
+}
+
+/** The view with each pending standing drawn in place, in the list and on the open document alike. */
+export function standingView(view: TasksView, standings: PendingStandings): TasksView {
+  if (!anyStanding(standings)) return view;
+  const stood = <Row extends TaskSummary>(row: Row): Row => {
+    const status = standings.status.get(row.id);
+    const priority = standings.priority.get(row.id);
+    const assignee = standings.assignee.get(row.id);
+    const placed: Row = {
+      ...row,
+      ...(status === undefined ? {} : { status: status.value }),
+      ...(priority === undefined ? {} : { priority: priority.value }),
+    };
+    return assignee === undefined ? placed : assignedTo(placed, assignee.value);
   };
   const held = view.document.task;
   return {
     ...view,
-    tasks: view.tasks.map(statused),
-    document: held === undefined ? view.document : { ...view.document, task: statused(held) },
+    tasks: view.tasks.map(stood),
+    document: held === undefined ? view.document : { ...view.document, task: stood(held) },
   };
 }
 
-/** The pending statuses the view still contradicts; one it now carries, or of a task it no longer holds, is let go. */
-export function unsettledStatuses(statuses: PendingStatuses, view: TasksView): PendingStatuses {
-  const unsettled = [...statuses].filter(([taskId, pending]) => {
-    const held = view.document.task;
-    const viewed =
-      view.tasks.find((task) => task.id === taskId) ?? (held?.id === taskId ? held : undefined);
-    return viewed !== undefined && standingStatus(viewed) !== pending.status;
-  });
-  return unsettled.length === statuses.size ? statuses : new Map(unsettled);
+/**
+ * The pending standing a press asks for, over where the view stands the task
+ * and anything of it still pending. Each part is an object of its own, so
+ * whoever set it lets go of it alone, and never of a later press's for the
+ * same task. A member assigned is drawn by the name the press knows them by
+ * (`assigneeName`, the member directory's), else the one the list does.
+ */
+export function standingAsked(
+  standings: PendingStandings,
+  view: TasksView,
+  taskId: string,
+  standing: TaskStanding,
+  assigneeName?: string,
+): StandingAsk {
+  const task = viewedTask(view, taskId);
+  const { status, priority, assigneeId } = standing;
+  return {
+    ...(status === undefined
+      ? {}
+      : {
+          status: pendingValue(
+            standings.status.get(taskId),
+            status,
+            task === undefined ? undefined : standingStatus(task),
+            sameStanding,
+          ),
+        }),
+    ...(priority === undefined
+      ? {}
+      : {
+          priority: pendingValue(
+            standings.priority.get(taskId),
+            priority,
+            task === undefined ? undefined : standingPriority(task),
+            sameStanding,
+          ),
+        }),
+    ...(assigneeId === undefined
+      ? {}
+      : {
+          assignee: pendingValue(
+            standings.assignee.get(taskId),
+            assigneeId === null
+              ? null
+              : { userId: assigneeId, name: assigneeName ?? memberName(view, assigneeId) },
+            task === undefined ? undefined : standingAssignee(task),
+            sameAssignee,
+          ),
+        }),
+  };
+}
+
+/** The pending standings with what a press asked of a task drawn over the view. */
+export function withStanding(
+  standings: PendingStandings,
+  taskId: string,
+  ask: StandingAsk,
+): PendingStandings {
+  const set = <V>(held: PendingValues<string, V>, pending: PendingValue<V> | undefined) =>
+    pending === undefined ? held : new Map(held).set(taskId, pending);
+  return {
+    status: set(standings.status, ask.status),
+    priority: set(standings.priority, ask.priority),
+    assignee: set(standings.assignee, ask.assignee),
+  };
+}
+
+/** The pending standings with what a refused press asked of a task let go, each part only while it is still the one standing. */
+export function standingWithout(
+  standings: PendingStandings,
+  taskId: string,
+  ask: StandingAsk,
+): PendingStandings {
+  const drop = <V>(held: PendingValues<string, V>, pending: PendingValue<V> | undefined) =>
+    pending === undefined ? held : pendingWithout(held, taskId, pending);
+  return {
+    status: drop(standings.status, ask.status),
+    priority: drop(standings.priority, ask.priority),
+    assignee: drop(standings.assignee, ask.assignee),
+  };
+}
+
+/** The pending standings the view still leaves standing at `now` (`pending-values.ts`); the same record where nothing changed. */
+export function settledStandings(
+  standings: PendingStandings,
+  view: TasksView,
+  now: number | undefined,
+): PendingStandings {
+  const read =
+    <V>(of: (task: TaskSummary) => V) =>
+    (taskId: string) => {
+      const task = viewedTask(view, taskId);
+      return task === undefined ? undefined : of(task);
+    };
+  const status = pendingSettled(standings.status, read(standingStatus), sameStanding, now);
+  const priority = pendingSettled(standings.priority, read(standingPriority), sameStanding, now);
+  const assignee = pendingSettled(standings.assignee, read(standingAssignee), sameAssignee, now);
+  const same =
+    status === standings.status &&
+    priority === standings.priority &&
+    assignee === standings.assignee;
+  return same ? standings : { status, priority, assignee };
 }
 
 /**
- * What an Undo of settling tasks at a status still puts back: only the tasks
+ * What an Undo of setting tasks at a status still puts back: only the tasks
  * that still stand there, since one given another status since was chosen
  * anew and an Undo must not take that choice back.
  */
 export function undoStillDue(
   undo: readonly StatusChange[],
-  settled: SettledStatus,
+  settled: TaskStatus,
   tasks: readonly Pick<TaskSummary, "id" | "status">[],
 ): readonly StatusChange[] {
   return undo.filter(({ taskId }) => {
@@ -774,9 +977,9 @@ const STATUS_WORD = {
   [LIVE_STATUS.CONNECTING]: "Connecting",
   [LIVE_STATUS.MUTED]: "Muted",
   [LIVE_STATUS.LISTENING]: "Listening",
-  [LIVE_STATUS.SPEAKING]: "Luke speaking",
+  [LIVE_STATUS.SPEAKING]: "Speaking",
   [LIVE_STATUS.CLOSING]: "Closing",
-  [LIVE_STATUS.FAILED]: undefined,
+  [LIVE_STATUS.FAILED]: "Call failed",
 } as const satisfies Record<LiveStatus, string | undefined>;
 
 /** The voice's word for each of its waits the service names, in place of the call's own. */
@@ -798,7 +1001,7 @@ const VOICE_PHASE_SHOWN: ReadonlySet<LiveStatus> = new Set([
  */
 export interface CallStatus {
   voiceWord: string;
-  backend: { brain: { action: string | undefined } | undefined; notes: boolean };
+  backend: { brain: { action: string | undefined } | undefined };
 }
 
 /**
@@ -837,7 +1040,6 @@ export function standingCallStatus(
     voiceWord: phase === undefined ? word : VOICE_PHASE_WORD[phase],
     backend: {
       brain: brain === undefined ? undefined : { action: brain.action },
-      notes: activity?.notes ?? false,
     },
   };
 }
@@ -869,6 +1071,12 @@ export interface MicrophoneButton {
 /** What the Call button says on an archived agent, which no call speaks into. */
 const ARCHIVED_CALL_LABEL = "Unarchive the agent to call it";
 
+/** What the Call button says while the developer is heard on the call, and what a mute's own control says: one wording for the press wherever it stands. */
+export const MUTE_MICROPHONE_LABEL = "Mute microphone";
+
+/** What the Call button says while the developer is not heard on the call. */
+export const UNMUTE_MICROPHONE_LABEL = "Unmute microphone";
+
 /** What the Call button says where a press opens a call into its agent. */
 export const CALL_LABEL = "Call";
 
@@ -894,7 +1102,9 @@ const CALL_STANDING: ReadonlySet<LiveStatus> = new Set([
  * A call runs on the account's own OpenAI key, so an account known to have
  * none is sent to save one before anything else, even the microphone, which
  * is worth asking for only once a call can run; a call of the agent's own
- * still standing keeps its mute.
+ * still standing keeps its mute. A voice window given up on runs no call for
+ * the rest of the run, so the button says that, and how to get voice back,
+ * in place of a press that would reach nothing.
  */
 export function microphoneButton(input: {
   voiceAvailable: boolean;
@@ -909,9 +1119,15 @@ export function microphoneButton(input: {
   voiceStatus: LiveStatus;
   /** Whether the account is known to have no OpenAI API key; unknown is not missing. */
   openAiKeyMissing?: boolean;
+  /** Whether the voice window was given up on for this run, so no call can run until Luke is reopened. */
+  voiceLost?: boolean;
 }): MicrophoneButton {
   if (!input.voiceAvailable) {
     return { press: MICROPHONE_PRESS.NONE, label: VOICE_KEYLESS_NOTE, muted: false };
+  }
+  if (input.voiceLost === true) {
+    const { words } = VOICE_FAILURE_WORDS[VOICE_FAILURE.VOICE_WINDOW_LOST];
+    return { press: MICROPHONE_PRESS.NONE, label: words, muted: false };
   }
   const ownCall = input.call?.agentId === input.agentId;
   const ownCallStands = ownCall && (input.listening || CALL_STANDING.has(input.voiceStatus));
@@ -933,10 +1149,10 @@ export function microphoneButton(input: {
     return { press: MICROPHONE_PRESS.NONE, label: row.detail ?? VOICE_KEYLESS_NOTE, muted: false };
   }
   if (ownCall && input.listening) {
-    return { press: MICROPHONE_PRESS.TALK, label: "Mute the microphone", muted: false };
+    return { press: MICROPHONE_PRESS.TALK, label: MUTE_MICROPHONE_LABEL, muted: false };
   }
   if (ownCall && CALL_STANDING.has(input.voiceStatus)) {
-    return { press: MICROPHONE_PRESS.TALK, label: "Unmute the microphone", muted: true };
+    return { press: MICROPHONE_PRESS.TALK, label: UNMUTE_MICROPHONE_LABEL, muted: true };
   }
   if (input.archived === true) {
     return { press: MICROPHONE_PRESS.NONE, label: ARCHIVED_CALL_LABEL, muted: false };

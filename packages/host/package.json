@@ -13,6 +13,7 @@
     "./act-port/testing": "./src/act-port/testing.js",
     "./client": "./src/client/index.js",
     "./app-state": "./src/app-state.js",
+    "./fixture-stage": "./src/fixture-stage.js",
     "./bridge": "./src/bridge.js",
     "./contract": "./src/contract/index.js",
     "./panel-avatar": "./src/panel-avatar.js",

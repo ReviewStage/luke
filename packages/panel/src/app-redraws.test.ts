@@ -15,7 +15,8 @@ import assert from "node:assert/strict";
 import { RegistryContext } from "@effect/atom-react/RegistryContext";
 import type { TaskSummary } from "@luke/features/task-wire";
 import { IDLE_TASKS_VIEW } from "@luke/features/tasks-view";
-import { type AppStateSnapshot, RUN_PROFILE } from "@luke/host/app-state";
+import { ACT_KIND } from "@luke/host/acts";
+import { type AppStateDelivery, type AppStateSnapshot, RUN_PROFILE } from "@luke/host/app-state";
 import { type AppBridge, bridgeEntries } from "@luke/host/bridge";
 import { PUSH_METHOD } from "@luke/host/contract";
 import { LIVE_STATUS, TRANSCRIPT_SPEAKER } from "@luke/live";
@@ -33,7 +34,7 @@ import { runAppCommand } from "./app-commands.js";
 import { installWindowHistory } from "./navigation-history.js";
 import { fakeActPortAnswering, fakeAppBridge, refusedOnPort } from "./testing/app-bridge.js";
 import { fakeAppPlatform, QUIET_PANEL } from "./testing/app-platform.js";
-import { stateWith } from "./testing/app-state.js";
+import { deliveryOf, stateWith } from "./testing/app-state.js";
 
 /** How many times each recorded surface was drawn, by its name. */
 const draws = vi.hoisted(() => new Map<string, number>());
@@ -100,6 +101,17 @@ vi.mock("./desktop/desktop-welcome.js", async (importOriginal) => {
 
 const AT = 1_792_000_000_000;
 
+/**
+ * How long a wait for a surface to stand may take. Note that the window's
+ * first draw on a fixture run's open task is real work, its lazily loaded
+ * surfaces evaluated and drawn for the first time: about 0.7 s on an idle
+ * machine, and past `vi.waitFor`'s default second on a loaded CI runner.
+ */
+const STANDS_WITHIN = { timeout: 10_000 } as const;
+
+/** How long a test drawn on a fixture run may take: two waits for a surface to stand, and the settling between them. */
+const FIXTURE_TEST_WITHIN = { timeout: 30_000 } as const;
+
 const INVITES: TaskSummary = {
   id: "3f6c1b2a-8d4e-4f10-9a7b-5c2d1e0fa21b",
   workspaceId: "workspace-acme",
@@ -125,19 +137,16 @@ function onCall(version: number, lines: number, lukeSpeaking: boolean): AppState
     ...FIRST,
     version,
     run: { ...FIRST.run, fixtureMode: true, profile: RUN_PROFILE.TASKS_WORK },
-    voice: {
-      avatar: AVATAR_OFF,
-      view,
-      callTranscript: {
-        voiceSessionId: "session-on-call",
-        lines: Array.from({ length: lines }, (_, at) => ({
-          rowId: `row-${at}`,
-          speaker: TRANSCRIPT_SPEAKER.USER,
-          words: "Invite a teammate by email".slice(0, at + 1),
-          startMs: at * 100,
-          endMs: at * 100 + 100,
-        })),
-      },
+    voice: { avatar: AVATAR_OFF, view },
+    callTranscript: {
+      voiceSessionId: "session-on-call",
+      lines: Array.from({ length: lines }, (_, at) => ({
+        rowId: `row-${at}`,
+        speaker: TRANSCRIPT_SPEAKER.USER,
+        words: "Invite a teammate by email".slice(0, at + 1),
+        startMs: at * 100,
+        endMs: at * 100 + 100,
+      })),
     },
   };
 }
@@ -171,7 +180,8 @@ beforeEach(() => {
   fakeAppBridge({
     ...quiet,
     requestAppState: () => Promise.resolve(structuredClone(opening)),
-    onAppState: (listener: (snapshot: AppStateSnapshot) => void) => {
+    onAppState: (heard: (delivery: AppStateDelivery) => void) => {
+      const listener = (snapshot: AppStateSnapshot) => heard(deliveryOf(snapshot));
       listeners.add(listener);
       return () => listeners.delete(listener);
     },
@@ -206,7 +216,7 @@ async function drawWindow(first: AppStateSnapshot = FIRST): Promise<void> {
   await vi.waitFor(async () => {
     await settle();
     assert.ok((draws.get("sidebar") ?? 0) > 0, "the sidebar stands");
-  });
+  }, STANDS_WITHIN);
   if (first === FIRST) assert.ok((draws.get("home") ?? 0) > 0, "the page with no task open stands");
   draws.clear();
 }
@@ -250,66 +260,107 @@ test("a delivery that moves the tasks draws the sidebar and the page with no tas
   assert.ok((draws.get("home") ?? 0) > 0, "the page with no task open is drawn again");
 });
 
-test("a call's words growing and its turns changing hands draw neither the sidebar nor the open plan's sections", async () => {
-  await drawWindow(onCall(1, 1, false));
-  await vi.waitFor(async () => {
-    await settle();
-    assert.ok(document.querySelector(".plan-unit"), "the open plan's sections stand");
-  });
-  // The task's own reads settle a few turns after it is drawn: its tabs, and its chat's gate.
-  for (let turn = 0; turn < 10; turn += 1) {
-    await act(async () => {
-      await new Promise((settled) => setTimeout(settled, 20));
+test(
+  "a call's words growing and its turns changing hands draw neither the sidebar nor the open plan's sections",
+  FIXTURE_TEST_WITHIN,
+  async () => {
+    await drawWindow(onCall(1, 1, false));
+    await vi.waitFor(async () => {
+      await settle();
+      assert.ok(document.querySelector(".plan-unit"), "the open plan's sections stand");
+    }, STANDS_WITHIN);
+    // The task's own reads settle a few turns after it is drawn: its tabs, and its chat's gate.
+    for (let turn = 0; turn < 10; turn += 1) {
+      await act(async () => {
+        await new Promise((settled) => setTimeout(settled, 20));
+      });
+      await settle();
+    }
+    draws.clear();
+
+    // A caption tick: the transcript grows, nothing else moves.
+    await deliver(onCall(2, 2, false));
+    await deliver(onCall(3, 3, false));
+    // Luke takes the turn, and hands it back.
+    await deliver(onCall(4, 3, true));
+    await deliver(onCall(5, 4, false));
+
+    assert.equal(draws.get("sidebar") ?? 0, 0, "the sidebar is not drawn again");
+    assert.equal(draws.get("section") ?? 0, 0, "no section of the plan is drawn again");
+  },
+);
+
+test(
+  "the open plan's comments read answering, refused, draws no section of the plan again",
+  FIXTURE_TEST_WITHIN,
+  async () => {
+    // The plan's comments are read through the act port, held here until the plan stands.
+    const comments = Promise.withResolvers<never>();
+    let asked = false;
+    fakeActPortAnswering((request) => {
+      if (request.kind !== ACT_KIND.TASKS_COMMENTS)
+        return Promise.reject(refusedOnPort("Not here."));
+      asked = true;
+      return comments.promise;
     });
-    await settle();
-  }
-  draws.clear();
+    await drawWindow(onCall(1, 1, false));
+    await vi.waitFor(async () => {
+      await settle();
+      assert.ok(document.querySelector(".plan-unit"), "the open plan's sections stand");
+      assert.ok(asked, "the plan's comments are asked for");
+    }, STANDS_WITHIN);
+    draws.clear();
 
-  // A caption tick: the transcript grows, nothing else moves.
-  await deliver(onCall(2, 2, false));
-  await deliver(onCall(3, 3, false));
-  // Luke takes the turn, and hands it back.
-  await deliver(onCall(4, 3, true));
-  await deliver(onCall(5, 4, false));
+    await act(async () => comments.reject(refusedOnPort("Not here.")));
+    for (let turn = 0; turn < 10; turn += 1) {
+      await act(async () => {
+        await new Promise((settled) => setTimeout(settled, 20));
+      });
+      await settle();
+    }
 
-  assert.equal(draws.get("sidebar") ?? 0, 0, "the sidebar is not drawn again");
-  assert.equal(draws.get("section") ?? 0, 0, "no section of the plan is drawn again");
-});
+    assert.equal(draws.get("section") ?? 0, 0, "no section of the plan is drawn again");
+  },
+);
 
-test("a delivery that moves what waits in the Inbox, and nothing of the chat, draws no message of Chat again", async () => {
-  const onChat = (version: number, holding: number): AppStateSnapshot => ({
-    ...FIRST,
-    version,
-    run: { ...FIRST.run, fixtureMode: true, profile: RUN_PROFILE.CHAT },
-    inbox: {
-      ...FIRST.inbox,
-      tasks: Array.from({ length: holding }, (_, at) => ({
-        taskId: `task-${at}`,
-        items: 1,
-        updatedAt: AT,
-      })),
-    },
-  });
-  await drawWindow(onChat(1, 0));
-  // Chat opens on For you, its rows drawn once the run's synthetic chat lands.
-  await vi.waitFor(async () => {
-    act(() => {
-      runAppCommand(APP_COMMAND.CHAT);
+test(
+  "a delivery that moves what waits in the Inbox, and nothing of the chat, draws no message of Chat again",
+  FIXTURE_TEST_WITHIN,
+  async () => {
+    const onChat = (version: number, holding: number): AppStateSnapshot => ({
+      ...FIRST,
+      version,
+      run: { ...FIRST.run, fixtureMode: true, profile: RUN_PROFILE.CHAT },
+      inbox: {
+        ...FIRST.inbox,
+        tasks: Array.from({ length: holding }, (_, at) => ({
+          taskId: `task-${at}`,
+          items: 1,
+          updatedAt: AT,
+        })),
+      },
     });
-    await settle();
-    assert.ok(document.querySelector(".chat-stream .chat-message"), "Chat's messages stand");
-  });
-  for (let turn = 0; turn < 10; turn += 1) {
-    await act(async () => {
-      await new Promise((settled) => setTimeout(settled, 20));
-    });
-    await settle();
-  }
-  draws.clear();
+    await drawWindow(onChat(1, 0));
+    // Chat opens on For you, its rows drawn once the run's synthetic chat lands.
+    await vi.waitFor(async () => {
+      act(() => {
+        runAppCommand(APP_COMMAND.CHAT);
+      });
+      await settle();
+      assert.ok(document.querySelector(".chat-stream .chat-message"), "Chat's messages stand");
+    }, STANDS_WITHIN);
+    for (let turn = 0; turn < 10; turn += 1) {
+      await act(async () => {
+        await new Promise((settled) => setTimeout(settled, 20));
+      });
+      await settle();
+    }
+    draws.clear();
 
-  await deliver(onChat(2, 1));
-  await deliver(onChat(3, 2));
+    await deliver(onChat(2, 1));
+    await deliver(onChat(3, 2));
 
-  assert.ok(document.querySelector(".chat-stream"), "Chat's place still stands");
-  assert.equal(draws.get("words") ?? 0, 0, "no message of Chat is drawn again");
-});
+    assert.ok(document.querySelector(".chat-stream"), "Chat's place still stands");
+    assert.equal(draws.get("words") ?? 0, 0, "no message of Chat is drawn again");
+  },
+);

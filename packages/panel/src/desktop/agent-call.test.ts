@@ -7,23 +7,32 @@ import {
   NATIVE_CODING_AGENT_RUNTIMES,
 } from "@luke/features/coding-agent-wire";
 import { IDLE_TASKS_VIEW, type TaskActivity } from "@luke/features/tasks-view";
+import { VOICE_FAILURE, VOICE_FAILURE_WORDS } from "@luke/features/words";
+import { ACT_KIND } from "@luke/host/acts";
 import { LIVE_STATUS } from "@luke/live";
 import { EXPERIMENT } from "@luke/settings";
 import { appSettingsWire, experimentsOn, settingsView } from "@luke/settings/testing";
-import { WaveformIcon } from "@luke/ui";
+import {
+  BUTTON_VARIANT,
+  CALL_CONTROL_LABEL,
+  CALL_LIVE_WORD,
+  CALL_VIDEO_LABEL,
+  WaveformIcon,
+} from "@luke/ui";
+import { GLYPH } from "@luke/ui/icons";
 import { DOCUMENT_REGION, TASKS_PAGE } from "@luke/ui/tasks-model";
 import { AVATAR_OFF, AVATAR_STATUS, type AvatarState } from "@luke/voice/avatar";
-import { IDLE_VOICE_VIEW, type VoiceView } from "@luke/voice/voice-view";
+import { IDLE_VOICE_VIEW, VOICE_COMMAND, type VoiceView } from "@luke/voice/voice-view";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
-import { afterEach, beforeEach, test } from "vitest";
-import { CALL_VIDEO_LABEL } from "../call/call-video-tile.js";
+import { afterEach, beforeEach, onTestFinished, test } from "vitest";
 import type { AgentCallDoors } from "../tasks/agent-call.js";
 import { NO_LOOKS } from "../tasks/use-task-looks.js";
+import { fakeActPort, fakeActPortCalls } from "../testing/app-bridge.js";
 import { handState } from "../testing/app-state.js";
-import { layContainersAt } from "../testing/container-width.js";
+import { layContainersAt, shown } from "../testing/container-width.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { DOCUMENT_TASK } from "../testing/document-task.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
@@ -33,8 +42,9 @@ import { DesktopTasks } from "./desktop-tasks.js";
 /**
  * An agent's tab takes calls where the platform has a voice: a Call button,
  * a waveform, beside Dictate, which calls the agent, and while a call into
- * it stands, the call's own controls in the composer's row in the button's
- * place, with no call bar and no line saying what Luke is doing, Luke's
+ * it stands, the call's status and its own controls in the composer's row
+ * in the button's place, with no call bar and no line saying what Luke is
+ * doing, Luke's
  * video as a small tile whose size is kept, and its glyph wearing the live
  * mark. A platform with no voice hands the tab no doors, and it draws none,
  * and nor does the tab of an agent on Claude Code or Codex, since calls run
@@ -68,7 +78,11 @@ async function mountOn(
   calls: AgentCallDoors | undefined,
   voice: VoiceView = IDLE_VOICE_VIEW,
   agent: CodingAgentSummary = AGENT,
-  call: { avatar?: AvatarState; activity?: TaskActivity; notice?: React.ReactNode } = {},
+  call: {
+    avatar?: AvatarState;
+    activity?: TaskActivity;
+    unavailable?: true;
+  } = {},
 ): Promise<HTMLElement> {
   handState(
     {},
@@ -79,7 +93,11 @@ async function mountOn(
           experiments: experimentsOn(EXPERIMENT.VIDEO_CALLS),
         }),
       ),
-      voice: { view: voice, avatar: call.avatar ?? AVATAR_OFF },
+      voice: {
+        view: voice,
+        avatar: call.avatar ?? AVATAR_OFF,
+        ...(call.unavailable === undefined ? {} : { unavailable: call.unavailable }),
+      },
       tasks: {
         ...IDLE_TASKS_VIEW,
         ...(call.activity === undefined ? {} : { activity: call.activity }),
@@ -111,7 +129,6 @@ async function mountOn(
           summary: UNPINNED_SUMMARY,
           looks: NO_LOOKS,
           tasks,
-          notice: call.notice,
         }),
       ),
     ),
@@ -156,9 +173,18 @@ const ON_CALL: VoiceView = {
 
 /** The names of the buttons the agent's composer offers, in its row's order. */
 function composerButtons(page: HTMLElement): (string | null)[] {
-  return [...page.querySelectorAll(".agent-composer-actions button")].map((each) =>
+  return [...page.querySelectorAll(".agent-composer .luke-composer-foot-end button")].map((each) =>
     each.getAttribute("aria-label"),
   );
+}
+
+/** The call's group in the agent's box: its status and its controls. */
+function callGroup(page: HTMLElement): HTMLElement {
+  const group = page.querySelector<HTMLElement>(
+    '.agent-composer fieldset[aria-label="Call with Luke"]',
+  );
+  assert.ok(group, "the call stands in the agent's box");
+  return group;
 }
 
 /** The agent tab's video tile, where it stands. */
@@ -187,7 +213,7 @@ function corner(page: HTMLElement, side: "left" | "right"): HTMLElement {
 
 /** The tile inside the video's room, which it must hold. */
 function tileOf(room: HTMLElement): HTMLElement {
-  const tile = room.querySelector<HTMLElement>(".call-video-tile");
+  const tile = room.querySelector<HTMLElement>(`section[aria-label="${CALL_VIDEO_LABEL.TILE}"]`);
   assert.ok(tile);
   return tile;
 }
@@ -214,29 +240,125 @@ test("on a call into the agent, its composer holds the call's four controls in t
   assert.ok(controls, "the call's controls stand in the composer");
   assert.deepEqual(
     [...controls.querySelectorAll("button")].map((each) => each.getAttribute("aria-label")),
-    ["Mute speaker", "Mute microphone", CALL_VIDEO_LABEL.VIDEO_OFF, "End call"],
+    ["Mute speaker", "Mute microphone", CALL_CONTROL_LABEL.VIDEO_OFF, "End call"],
   );
   assert.equal(
     composerButtons(page).includes("Dictate"),
     false,
     "the call's microphone stands where Dictate would",
   );
-  assert.equal(page.querySelector(".call-bar"), null, "no call bar stands over the composer");
+  assert.equal(page.querySelector(".luke-call-bar"), null, "no call bar stands over the composer");
   assert.ok(
     page.querySelector('.main-tabs [role="tab"] .agent-calling-glyph'),
     "the agent's tab wears the live mark",
   );
 });
 
+test("on a call into the agent, its box's foot says the call is live and how long it has run, Muted while muted, and its red End call with the hang-up glyph ends the call", async () => {
+  const sent: unknown[] = [];
+  const answered = fakeActPortCalls();
+  fakeActPort({
+    ...answered,
+    [ACT_KIND.VOICE_COMMAND]: (payload) => {
+      sent.push(payload);
+      return Promise.resolve();
+    },
+  });
+  onTestFinished(() => fakeActPort(answered));
+  const page = await mountOn({ onPress: () => undefined }, ON_CALL);
+  const call = callGroup(page);
+  assert.ok(call.closest(".luke-composer-foot"), "in the box's foot");
+  assert.match(call.textContent ?? "", new RegExp(`^${CALL_LIVE_WORD.LIVE}\\d+s$`, "u"));
+  assert.match(
+    call.querySelector('time[role="timer"]')?.getAttribute("dateTime") ?? "",
+    /^PT\d+S$/u,
+    "how long the call has run, as a timer",
+  );
+
+  const end = call.querySelector<HTMLButtonElement>(
+    `button[aria-label="${CALL_CONTROL_LABEL.END_CALL}"]`,
+  );
+  assert.ok(end, "End call stands in the foot");
+  assert.equal(end.dataset.variant, BUTTON_VARIANT.DANGER);
+  assert.equal(
+    end.querySelector("svg")?.outerHTML,
+    renderToStaticMarkup(createElement(GLYPH.END_CALL)),
+  );
+  act(() => end.click());
+  await act(async () => {
+    for (let tick = 0; tick < 8; tick += 1) await Promise.resolve();
+  });
+  assert.deepEqual(sent, [{ command: VOICE_COMMAND.END_CALL }]);
+  act(() => roots.pop()?.unmount());
+
+  const muted = await mountOn({ onPress: () => undefined }, { ...ON_CALL, listening: false });
+  assert.match(
+    callGroup(muted).textContent ?? "",
+    new RegExp(`^${CALL_LIVE_WORD.MUTED}\\d+s$`, "u"),
+  );
+});
+
+test("while the call comes up or goes down, the box's foot says Connecting… or Ending…, with no count, rather than that the call is live", async () => {
+  for (const [voiceStatus, word] of [
+    [LIVE_STATUS.CONNECTING, CALL_LIVE_WORD.CONNECTING],
+    [LIVE_STATUS.CLOSING, CALL_LIVE_WORD.ENDING],
+  ] as const) {
+    const page = await mountOn(
+      { onPress: () => undefined },
+      {
+        ...ON_CALL,
+        voiceStatus,
+        listening: false,
+      },
+    );
+    const call = callGroup(page);
+    assert.match(call.textContent ?? "", new RegExp(`^${word}`, "u"));
+    assert.doesNotMatch(call.textContent ?? "", new RegExp(CALL_LIVE_WORD.LIVE, "u"));
+    assert.equal(call.querySelector('[role="timer"]'), null, "no count before or after the call");
+    const said = call.querySelector(".luke-call-live-word");
+    assert.ok(said);
+    const laid = layContainersAt({ "luke-composer-foot": 440 });
+    try {
+      assert.ok(shown(said), "the word stays where a live call's gives way, since it has no count");
+    } finally {
+      laid.remove();
+    }
+    act(() => roots.pop()?.unmount());
+  }
+});
+
+test("in a narrow box the call's status gives way, its word first and then the whole, while End call and Send stay", async () => {
+  const page = await mountOn({ onPress: () => undefined }, ON_CALL);
+  const call = callGroup(page);
+  const status = call.querySelector(".luke-call-live");
+  const word = call.querySelector(".luke-call-live-word");
+  const timer = call.querySelector('[role="timer"]');
+  const end = call.querySelector(`button[aria-label="${CALL_CONTROL_LABEL.END_CALL}"]`);
+  const send = page.querySelector('.agent-composer button[aria-label="Send"]');
+  assert.ok(status && word && timer && end && send);
+  /** What stands in the box's foot with its bar `width` wide: the word, the count, End call and Send. */
+  const standingAt = (width: number) => {
+    const laid = layContainersAt({ "luke-composer-foot": width });
+    try {
+      return [word, timer, end, send].map(shown);
+    } finally {
+      laid.remove();
+    }
+  };
+  assert.deepEqual(standingAt(600), [true, true, true, true], "a wide box says it all");
+  assert.deepEqual(standingAt(440), [false, true, true, true], "narrower, the word goes");
+  assert.deepEqual(standingAt(300), [false, false, true, true], "narrower still, the status goes");
+});
+
 test("on a call no line says what Luke is doing: no Listening, no Thinking, and no dots", async () => {
   const page = await mountOn({ onPress: () => undefined }, ON_CALL, AGENT, {
-    activity: { planner: {}, notes: true },
+    activity: { planner: {} },
   });
   const tab = page.querySelector(".agent-tab");
   assert.ok(tab);
   assert.doesNotMatch(tab.textContent ?? "", /Thinking|Listening|Writing notes/u);
   assert.equal(tab.querySelector(".luke-thinking-dots"), null);
-  assert.equal(tab.querySelector(".call-status"), null);
+  assert.equal(tab.querySelector(".luke-call-status"), null);
 });
 
 test("with video off the video's room goes and the composer's video button turns it on again; with video on it takes a room of its own between the transcript and the composer", async () => {
@@ -245,7 +367,7 @@ test("with video off the video's room goes and the composer's video button turns
   });
   assert.equal(videoTile(off), null);
   assert.equal(videoRoom(off), null, "video off takes the room away");
-  assert.ok(composerButtons(off).includes(CALL_VIDEO_LABEL.VIDEO_ON));
+  assert.ok(composerButtons(off).includes(CALL_CONTROL_LABEL.VIDEO_ON));
   act(() => roots.pop()?.unmount());
 
   const on = await mountOn({ onPress: () => undefined }, ON_CALL, AGENT, {
@@ -266,7 +388,7 @@ test("with video off the video's room goes and the composer's video button turns
   );
   assert.equal(tile.closest(".agent-composer"), null, "not in the composer");
   assert.equal(
-    tile.querySelector(`button[aria-label="${CALL_VIDEO_LABEL.VIDEO_OFF}"]`),
+    tile.querySelector(`button[aria-label="${CALL_CONTROL_LABEL.VIDEO_OFF}"]`),
     null,
     "its Video off is the composer's",
   );
@@ -393,27 +515,10 @@ test("hovering the video brings out its resize controls, each named and reached 
   );
 });
 
-test("on a call the voice's notice line floats just over the video's room, never on the video, and no captions stand anywhere in the tab", async () => {
-  const notice = createElement("div", { className: "voice-notice", "data-shown": "true" }, "Lost");
+test("on a call no captions stand anywhere in the tab", async () => {
   const page = await mountOn({ onPress: () => undefined }, ON_CALL, AGENT, {
     avatar: { status: AVATAR_STATUS.LIVE },
-    notice,
   });
-  const line = page.querySelector<HTMLElement>(".voice-notice");
-  assert.ok(line, "the notice line rides the call's tab");
-  const room = videoRoom(page);
-  assert.ok(room);
-  assert.equal(room.contains(line), false, "not inside the video's room");
-  const laid = layContainersAt({});
-  try {
-    const holder = line.closest<HTMLElement>(".agent-call-notice");
-    assert.ok(holder);
-    const drawn = getComputedStyle(holder);
-    assert.equal(drawn.position, "absolute");
-    assert.equal(drawn.bottom, "100%", "it stands above the foot's top edge, over the transcript");
-  } finally {
-    laid.remove();
-  }
   const tab = page.querySelector(".agent-tab");
   assert.ok(tab);
   assert.equal(tab.querySelector(".voice-caption, .voice-caption-speaker"), null, "no captions");
@@ -433,4 +538,27 @@ test("an agent on Claude Code or Codex offers the same Call button, which calls 
     act(() => roots.pop()?.unmount());
     document.body.innerHTML = "";
   }
+});
+
+test("an agent's tab says voice stopped working, and how to get it back, once the voice window was given up on, and a press calls nothing", async () => {
+  const pressed: string[] = [];
+  const page = await mountOn(
+    { onPress: (agentId) => pressed.push(agentId) },
+    IDLE_VOICE_VIEW,
+    AGENT,
+    { unavailable: true },
+  );
+  assert.equal(
+    callButton(page) === null,
+    true,
+    "no Call stands for a press that would reach nothing",
+  );
+  const lost = page.querySelector<HTMLButtonElement>(".agent-call-button button");
+  assert.ok(lost, "the button still stands where voice is offered");
+  assert.equal(
+    lost.getAttribute("aria-label"),
+    VOICE_FAILURE_WORDS[VOICE_FAILURE.VOICE_WINDOW_LOST].words,
+  );
+  act(() => lost.click());
+  assert.deepEqual(pressed, []);
 });

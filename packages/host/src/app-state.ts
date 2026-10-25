@@ -8,10 +8,17 @@ import type { AppSettings } from "@luke/settings/wire";
 import type { MicrophoneRoute, MicrophoneStatus, OutputAudioState } from "@luke/voice/audio";
 import type { AvatarState } from "@luke/voice/avatar";
 import type { NotificationsStatus } from "@luke/voice/settings-controls";
-import type { VoiceCallTranscript, VoiceView } from "@luke/voice/voice-view";
-import { EXCESS_KEYS, type UnparsedWireValue } from "@luke/wire";
+import {
+  callTranscriptChangeBetween,
+  isVoiceCallTranscriptChange,
+  type VoiceCallTranscript,
+  type VoiceCallTranscriptChange,
+  type VoiceView,
+  withCallTranscriptChange,
+} from "@luke/voice/voice-view";
+import { EXCESS_KEYS, isRecord, keepIdentity, type UnparsedWireValue } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
-import { Result, Schema } from "effect";
+import { Equal, Result, Schema } from "effect";
 import type { MacCommandAsk } from "./mac-command-ask.js";
 
 export type { MacCommandAsk } from "./mac-command-ask.js";
@@ -20,7 +27,10 @@ export type { MacCommandAsk } from "./mac-command-ask.js";
  * The launch profiles a window answers to. A capture run stages a
  * conversation it has no voice window for: Luke speaking, that with the
  * Mac's output off, and both speakers heard at once; or, in any fixture run,
- * the panel's Tasks tab over a synthetic task. Any other word — the default
+ * the panel's Tasks tab over a synthetic task, or over its synthetic coding
+ * agent and that agent's tabs; or a synthetic account signed in, on a page
+ * of Settings, on Admin, on Automations, or with its Inbox and its own page
+ * filled. Any other word — the default
  * included — stages nothing.
  */
 export const RUN_PROFILE = {
@@ -36,8 +46,61 @@ export const RUN_PROFILE = {
   TASKS_TRANSCRIPT: "tasks-transcript",
   /** The same task mid-call, opened at launch on the work its agent did on its calls. */
   TASKS_WORK: "tasks-work",
+  /** The same task beside its coding agent, opened at launch on its plan, whose words hold comment threads: one answered, one its agent started, one on a whole block, and one resolved. */
+  TASKS_COMMENTS: "tasks-comments",
   /** The tasks' list, opened at launch on the window's Chat over a synthetic chat. */
   CHAT: "chat",
+  /** A synthetic account signed in, its tasks holding Inbox items: an ask of each kind, a form, a notice with code, a long thread, an answered item, and a closed one. */
+  INBOX: "inbox",
+  /** The same account and items, its tasks assigned to it and its agents at work, which its own page lists. */
+  PERSON: "person",
+  /** The same task on its coding agent, its Pull request tab beside it: checks, reviews, and a merge queued. */
+  AGENT_PULL_REQUEST: "agent-pull-request",
+  /** The same agent and Pull request tab, the agent's turn long enough that its transcript scrolls. */
+  AGENT_TRANSCRIPT: "agent-transcript",
+  /** The same agent, its Pull request tab on the checks. */
+  AGENT_CHECKS: "agent-checks",
+  /** The same agent, its Pull request tab on Files changed. */
+  AGENT_FILES: "agent-files",
+  /** The same agent, its Pull request tab on Chapters. */
+  AGENT_CHAPTERS: "agent-chapters",
+  /** The same agent beside a file of its repository opened in a tab of its own. */
+  AGENT_FILE: "agent-file",
+  /** The same agent beside its Terminal, attached to a shell: one profile per state the tab draws. */
+  AGENT_TERMINAL: "agent-terminal",
+  AGENT_TERMINAL_CONNECTING: "agent-terminal-connecting",
+  AGENT_TERMINAL_RECONNECTING: "agent-terminal-reconnecting",
+  AGENT_TERMINAL_IDLE: "agent-terminal-idle",
+  AGENT_TERMINAL_EXITED: "agent-terminal-exited",
+  AGENT_TERMINAL_STOPPED: "agent-terminal-stopped",
+  AGENT_TERMINAL_STARTING: "agent-terminal-starting",
+  AGENT_TERMINAL_UNREACHABLE: "agent-terminal-unreachable",
+  /** The same agent beside a page it showed, open in a tab of its own. */
+  AGENT_PAGE: "agent-page",
+  /** The same agent mid-call, its video off, the floating call window standing over the panel. */
+  AGENT_CALL: "agent-call",
+  /** The same call with Luke's video on, its tile up in the floating call window and the agent's tab. */
+  AGENT_CALL_VIDEO: "agent-call-video",
+  /** A synthetic account signed in, Settings opened at launch on its Account page. */
+  SETTINGS_ACCOUNT: "settings-account",
+  /** The same account, Settings on its team's workspace: its members, an invitation waiting, and its Linear's sign-in expired. */
+  SETTINGS_WORKSPACE: "settings-workspace",
+  /** The same account, Settings on Agents: its Claude plan connected and its ChatGPT sign-in expired. */
+  SETTINGS_AGENTS: "settings-agents",
+  /** The same account, Settings on Integrations: some connected, some with their sign-in expired. */
+  SETTINGS_INTEGRATIONS: "settings-integrations",
+  /** The same account, Settings on Skills: its team's and its own. */
+  SETTINGS_SKILLS: "settings-skills",
+  /** The same account, Settings on its team's memory. */
+  SETTINGS_MEMORY: "settings-memory",
+  /** The same account, an admin, opened at launch on Admin's Overview. */
+  ADMIN: "admin",
+  /** The same account, opened at launch on its Automations: three, the last run of one failed. */
+  AUTOMATIONS: "automations",
+  /** The same account on one automation's editor, its runs beside it. */
+  AUTOMATIONS_EDITOR: "automations-editor",
+  /** The same account on the automation whose run failed, that run marked among its runs. */
+  AUTOMATIONS_RUNS: "automations-runs",
 } as const;
 
 export type RunProfile = (typeof RUN_PROFILE)[keyof typeof RUN_PROFILE];
@@ -73,8 +136,9 @@ interface AppVoiceSlice {
   /**
    * The live conversation as the voice window last reported it, so a panel
    * that opens mid-exchange draws the exchange rather than an idle voice.
-   * Absent until that window has reported once, and always in a fixture or
-   * capture run, which raises no voice window.
+   * Absent until that window has reported once, and in a fixture or capture
+   * run, which raises no voice window, but where a call profile stages one
+   * (`fixture-stage.ts`).
    *
    * The loudness beside it is deliberately not here. It is a reading taken
    * twenty times a second that expires in fifty milliseconds, so nothing
@@ -83,17 +147,19 @@ interface AppVoiceSlice {
    */
   view?: VoiceView;
   /**
-   * What was said on the standing call so far, held whole from the changes
-   * the voice window reports beside its view (`VoiceCallTranscript`); absent
-   * while no call stands, before its first line, and once that window is gone.
-   */
-  callTranscript?: VoiceCallTranscript | undefined;
-  /**
    * Luke's avatar on the call, as the panel reports it: what puts the video
    * tile in the tab of the agent the call is into and what the tile draws. Main's rather than
    * the voice window's, so a replaced voice window leaves it standing.
    */
   avatar: AvatarState;
+  /**
+   * Set once the voice window has been given up on for this run, after it
+   * failed to load again and again: no call can run until Luke is reopened,
+   * so where voice is offered says so rather than offering a press that
+   * reaches nothing. Main's own fact, never the window's, and absent
+   * otherwise.
+   */
+  unavailable?: true;
 }
 
 /**
@@ -258,6 +324,16 @@ export interface AppState {
   audio: AppAudioSlice;
   voice: AppVoiceSlice;
   /**
+   * What was said on the standing call so far, held whole from the changes
+   * the voice window reports beside its view (`VoiceCallTranscript`); absent
+   * while no call stands, before its first line, and once that window is gone.
+   * Not part of the voice slice, because it grows for the whole call while
+   * the view beside it is reported ten times a second: a window is handed
+   * only what moved in it (`AppStateDelivery`), and the voice and call
+   * windows, which draw none of it, are never handed it.
+   */
+  callTranscript?: VoiceCallTranscript | undefined;
+  /**
    * The Tasks tab's named tasks as the host's reads of the service
    * hold them: the list, the one active task, and its saved document. Only
    * the panel's Tasks tab draws it, and the active task is the one whose
@@ -286,9 +362,10 @@ export interface AppWindowFacts {
 
 /**
  * The document as one window is handed it: every slice, and that window's own
- * facts beside them. The first delivery is this window's bootstrap and every
- * later one carries a version at least as high, so there is no "which arrived
- * first" for a reader to answer.
+ * facts beside them. Its first read is this window's bootstrap, and every
+ * delivery after it (`AppStateDelivery`) carries what moved under a version
+ * at least as high, so there is no "which arrived first" for a reader to
+ * answer.
  */
 export type AppStateSnapshot = AppState & { window: AppWindowFacts };
 
@@ -316,6 +393,118 @@ const readAppStateSnapshot = readEither(appStateSnapshotSchema, { excess: EXCESS
 /** The boundary parse for a snapshot, as the window's bridge holds every delivery to it. */
 export function isAppStateSnapshot(value: UnparsedWireValue): boolean {
   return Result.isSuccess(readAppStateSnapshot(value));
+}
+
+/** What a delivery replaces whole: every slice and the window's facts, all but the call transcript. */
+type AppStateEntry = Exclude<keyof AppStateSnapshot, "version" | "callTranscript">;
+
+/**
+ * One push of the document to a window: what moved in it since the last that
+ * window was handed, under the version it moved to. Each entry in `entries`
+ * is replaced whole, each in `gone` is no longer held, and every entry named
+ * in neither is the one the window holds. An entry that went is named in a
+ * list of its own rather than as undefined, because the push is JSON and
+ * JSON keeps no key whose value is undefined. The call transcript is carried
+ * as the change that moved it, never whole after the first, since it grows
+ * for the whole call. A window's first delivery names every entry it draws.
+ */
+export interface AppStateDelivery {
+  readonly version: number;
+  readonly entries: { readonly [Entry in AppStateEntry]?: AppStateSnapshot[Entry] };
+  readonly gone?: readonly AppStateEntry[];
+  readonly callTranscript?: VoiceCallTranscriptChange;
+}
+
+/**
+ * The delivery that brings a window holding `sent` to `next`, or none where
+ * nothing it is handed moved. Note that the document keeps the identity of
+ * every part a patch did not move, so an untouched entry is answered at its
+ * first comparison and only an entry that moved is walked.
+ */
+export function appStateDelivery(
+  sent: AppStateSnapshot | undefined,
+  next: AppStateSnapshot,
+): AppStateDelivery | undefined {
+  // SAFETY: `Object.keys` of a snapshot names its own entries, its version, and its transcript, the last two dropped here.
+  const names = [...new Set([...Object.keys(sent ?? {}), ...Object.keys(next)])].filter(
+    (name) => name !== "version" && name !== "callTranscript",
+  ) as AppStateEntry[];
+  const moved = names.filter((name) => sent === undefined || !Equal.equals(sent[name], next[name]));
+  const gone = moved.filter((name) => next[name] === undefined);
+  const callTranscript = callTranscriptChangeBetween(sent?.callTranscript, next.callTranscript);
+  if (sent !== undefined && moved.length === 0 && callTranscript === undefined) return undefined;
+  return {
+    version: next.version,
+    entries: Object.fromEntries(
+      moved.filter((name) => next[name] !== undefined).map((name) => [name, next[name]]),
+    ),
+    ...(gone.length === 0 ? undefined : { gone }),
+    ...(callTranscript === undefined ? undefined : { callTranscript }),
+  };
+}
+
+/**
+ * The document a window holds once a delivery lands on it: each entry named
+ * replaced, keeping the identity of every part of it that did not move, so a
+ * memo keyed on a part the delivery left alone still holds; each entry gone
+ * held no more; every other entry the very object held; and the transcript
+ * with its change applied.
+ */
+export function withAppStateDelivery(
+  held: AppStateSnapshot,
+  delivery: AppStateDelivery,
+): AppStateSnapshot {
+  const entries = Object.fromEntries(
+    Object.entries(delivery.entries).map(([name, value]) => [
+      name,
+      // SAFETY: a delivery's entries are keyed by the snapshot's own entry names.
+      keepIdentity(held[name as AppStateEntry], value),
+    ]),
+  );
+  const { callTranscript: heldTranscript, ...rest } = held;
+  const callTranscript =
+    delivery.callTranscript === undefined
+      ? heldTranscript
+      : withCallTranscriptChange(heldTranscript, delivery.callTranscript);
+  const next: AppStateSnapshot = {
+    ...rest,
+    ...entries,
+    ...(callTranscript === undefined ? undefined : { callTranscript }),
+    version: delivery.version,
+  };
+  // Note that an entry gone is held as no key at all, as the document holds it.
+  for (const name of delivery.gone ?? []) Reflect.deleteProperty(next, name);
+  return next;
+}
+
+/**
+ * The boundary declaration of a delivery, held to the same terms as a
+ * snapshot's: the version, and the window facts and capabilities where it
+ * carries them, each one this build knows. The transcript's change is read
+ * by its own Schema.
+ */
+const appStateDeliverySchema = Schema.Struct({
+  version: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+  entries: Schema.Struct({
+    run: Schema.optional(
+      Schema.Struct({
+        capabilities: Schema.Array(Schema.Literals(Object.values(HOST_CAPABILITY))),
+      }),
+    ),
+    window: Schema.optional(Schema.Struct({ fullScreen: Schema.Boolean })),
+  }),
+  gone: Schema.optional(Schema.Array(Schema.String)),
+});
+
+const readAppStateDelivery = readEither(appStateDeliverySchema, { excess: EXCESS_KEYS.DROP });
+
+/** The boundary parse for a delivery, as the window's push stream holds every one to it. */
+export function isAppStateDelivery(value: UnparsedWireValue): boolean {
+  return (
+    Result.isSuccess(readAppStateDelivery(value)) &&
+    isRecord(value) &&
+    (value.callTranscript === undefined || isVoiceCallTranscriptChange(value.callTranscript))
+  );
 }
 
 /**

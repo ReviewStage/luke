@@ -1,7 +1,12 @@
 import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { Database, type DatabaseServices } from "@luke/database/core/query";
 import { createAutomation } from "@luke/database/models/automation-store";
+import { deleteTask } from "@luke/database/models/task-store";
+import { codingAgent } from "@luke/database/schemas/coding-agent";
+import { conversations } from "@luke/database/schemas/storage";
+import { CONVERSATION_KIND } from "@luke/database/storage-vocabulary";
 import { getTestDB, startTask } from "@luke/database/testing";
 import { noDatabase } from "@luke/database/testing/no-database";
 import {
@@ -11,9 +16,11 @@ import {
 } from "@luke/features/automation-wire";
 import { MODEL_PROVIDER } from "@luke/features/models-wire";
 import { noNetwork } from "@luke/wire/testing";
-import { Clock, Effect, Layer, Option, Redacted } from "effect";
+import { eq } from "drizzle-orm";
+import { Clock, Duration, Effect, Layer, Option, Redacted } from "effect";
 import { type HttpClient, HttpRouter } from "effect/http";
 import { SqlClient } from "effect/sql";
+import { TestClock } from "effect/testing";
 import { afterEach, vi } from "vitest";
 import { BRAIN_HOST_ENVIRONMENT, BRAIN_HOST_HEADER } from "../agents/brain-host/bounds.js";
 import { HostedEnvironment, type HostedEnvironmentValues } from "../environment.js";
@@ -34,11 +41,12 @@ import { MAINTENANCE_SWEEP_PATH } from "./maintenance-bounds.js";
  * The sweep's group as the cron reaches it, told to Sentry's Crons through a
  * recording transport. A sweep that runs does so over an empty migrated
  * database, so it finds nothing to do and reaches no provider; what each
- * sweep does is `maintenance-sweep.test.ts`'s. The one exception is an
- * automation the sweep starts, which reaches eve as the deployment acting
- * for its owner: under the deployment's own secret at eve's door, never the
- * cron's bearer the sweep itself was called with, over GitHub and eve as
- * one fake HTTP boundary.
+ * sweep does is `maintenance-sweep.test.ts`'s. The exceptions are a
+ * deleted task's agent, whose conversation the purge takes once its
+ * retention has passed and not before, and an automation the sweep starts,
+ * which reaches eve as the deployment acting for its owner: under the
+ * deployment's own secret at eve's door, never the cron's bearer the sweep
+ * itself was called with, over GitHub and eve as one fake HTTP boundary.
  */
 
 const CRON_SECRET = "cron-secret-1";
@@ -169,6 +177,66 @@ it.layer(getTestDB())("a sweep that runs", (it) => {
         timezone: "Etc/UTC",
       });
     }),
+  );
+});
+
+/** A task with one coding agent on it, deleted now, answering the agent's conversation. */
+const deleteTaskWithAgent = Effect.gen(function* () {
+  const owner = yield* openGithubUser();
+  const task = yield* startTask(owner, { name: "Rate limits", repository: "acme/api" });
+  const db = yield* Database;
+  const conversationId = randomUUID();
+  yield* db
+    .insert(conversations)
+    .values({ id: conversationId, userId: owner, kind: CONVERSATION_KIND.CODING_AGENT });
+  yield* db.insert(codingAgent).values({
+    id: randomUUID(),
+    organizationId: task.workspaceId,
+    userId: owner,
+    taskId: task.id,
+    conversationId,
+    model: "anthropic/claude-opus-5.5",
+    effort: "high",
+    repository: "acme/api",
+    repositories: ["acme/api"],
+    idempotencyKey: randomUUID(),
+  });
+  assert.equal(yield* deleteTask(owner, task.id), true);
+  return conversationId;
+});
+
+/** Whether the conversation's row still stands. */
+const stands = (conversationId: string) =>
+  Effect.gen(function* () {
+    const db = yield* Database;
+    const rows = yield* db
+      .select({ id: conversations.id })
+      .from(conversations)
+      .where(eq(conversations.id, conversationId));
+    return rows.length === 1;
+  });
+
+it.layer(getTestDB())("a deleted task's agent", (it) => {
+  it.effect(
+    "keeps its conversation through a sweep a minute short of seven days after the delete, and loses it to one a minute past",
+    () =>
+      Effect.gen(function* () {
+        const conversationId = yield* deleteTaskWithAgent;
+        const database = yield* testDatabase;
+        const sweepNow = sweep(CRON_SECRET, CRON_SECRET, database).pipe(
+          Effect.provide(recordingSentry().layer),
+        );
+
+        yield* TestClock.adjust(Duration.subtract(Duration.days(7), Duration.minutes(1)));
+        yield* sweepNow;
+        const kept = yield* stands(conversationId);
+
+        yield* TestClock.adjust(Duration.minutes(2));
+        yield* sweepNow;
+        const purged = !(yield* stands(conversationId));
+
+        assert.deepEqual({ kept, purged }, { kept: true, purged: true });
+      }),
   );
 });
 

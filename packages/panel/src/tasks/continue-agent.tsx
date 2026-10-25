@@ -1,13 +1,13 @@
 import type { CodingAgentAttachment, CodingAgentSummary } from "@luke/features/coding-agent-wire";
 import type { Failure } from "@luke/features/failure-remedy";
 import {
+  ANNOUNCE,
   BANNER_LOOK,
   Banner,
   BUTTON_VARIANT,
   Button,
   ComposerFrame,
   riseAboveEnd,
-  TEXT_BUTTON_TONE,
   TEXT_TONE,
   Text,
   TextButton,
@@ -20,6 +20,7 @@ import { ActorMark } from "../actor-ref.js";
 import { DRAFT_PLACE, type Draft, EMPTY_DRAFT, useDraftWriter } from "../composer-drafts.js";
 import { ActionMenu } from "../desktop/action-menu.js";
 import { useAgentArchive } from "../desktop/agent-archive.js";
+import { useAnnounceShown } from "../use-announce-shown.js";
 import { AgentActorRef, type AgentSubject, agentSubject, NOTHING_HELD } from "./agent-ref.js";
 import { CONTINUE_LABEL, CONTINUED_IN } from "./coding-agent-model.js";
 import { useContinueDoor } from "./fork-action.js";
@@ -63,6 +64,7 @@ const CONTINUED_COPY = {
   MORE: (count: number) => `+${count} more`,
   EARLIER: "Earlier continuations",
   ARCHIVE: "Archive",
+  ARCHIVING: "Archiving",
   STOP: "Stop",
   STOPPING: "Stopping",
   CONTINUING: "Continuing in new agent",
@@ -105,6 +107,7 @@ export function ContinueAgent({
   const writer = useDraftWriter();
   const { continueAgent } = control;
   const opensDraft = useContinueDoor();
+  useAnnounceShown(ANNOUNCE.ALERT, note?.text ?? "");
 
   const press = () => {
     if (continueAgent === undefined || busy) return;
@@ -147,11 +150,7 @@ export function ContinueAgent({
       >
         {label}
       </Button>
-      {note === undefined ? null : (
-        <span className="agent-continue-note" role="alert">
-          {note.text}
-        </span>
-      )}
+      {note === undefined ? null : <span className="agent-continue-note">{note.text}</span>}
     </span>
   );
 }
@@ -226,11 +225,7 @@ function ContinuedIn({
         </span>
       ))}
       {folds ? (
-        <TextButton
-          tone={TEXT_BUTTON_TONE.LINK}
-          aria-expanded={trigger["aria-expanded"]}
-          onClick={trigger.onClick}
-        >
+        <TextButton aria-expanded={trigger["aria-expanded"]} onClick={trigger.onClick}>
           {CONTINUED_COPY.MORE(earlier.length)}
         </TextButton>
       ) : null}
@@ -266,9 +261,10 @@ export function ContinuedTrail(doors: ContinuedDoors): React.JSX.Element {
 /**
  * The quiet note in a continued agent's box, framed as the box it replaces:
  * Continued in and the agents' chips, then Stop while a turn still runs,
- * and Archive, bordered as a housekeeping press is, which asks first where
- * archiving would stop a turn (`useAgentArchive`) and toasts with Undo once
- * it took. An agent already
+ * and Archive, bordered as a housekeeping press is, which asks first only
+ * where archiving would stop a teammate's turn (`useAgentArchive`), is held
+ * busy while a teammate's agent at rest is read again first, and toasts with
+ * Undo once it took. An agent already
  * archived is offered no Archive.
  */
 export function ContinuedComposerNote({
@@ -312,7 +308,12 @@ export function ContinuedComposerNote({
                     </Button>
                   )}
                   {agent.archivedAt !== undefined ? null : (
-                    <Button variant={BUTTON_VARIANT.OUTLINE} onClick={archive.action.onSelect}>
+                    <Button
+                      variant={BUTTON_VARIANT.OUTLINE}
+                      busy={archive.reading}
+                      busyLabel={CONTINUED_COPY.ARCHIVING}
+                      onClick={archive.action.onSelect}
+                    >
                       {CONTINUED_COPY.ARCHIVE}
                     </Button>
                   )}

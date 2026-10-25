@@ -5,7 +5,9 @@ import {
   firstMessageText,
   REPLAY_SENDER,
   REPLAY_STEP_KIND,
+  REPLAY_TOOL_STATE,
   type Replay,
+  toolStep,
 } from "@luke/features/agent-replay";
 import {
   CODING_AGENT_BRIEF,
@@ -13,7 +15,7 @@ import {
   type CodingAgentMessage,
   type CodingAgentSummary,
 } from "@luke/features/coding-agent-wire";
-import { LINK_PLACE, type LinkPlace, type ReadLink } from "@luke/features/luke-link";
+import { LINK_PLACE, type LinkPlace, type ReadLink } from "@luke/features/link-grammar";
 import { ACTOR_KIND, ACTOR_STATE, type Actor } from "@luke/ui/actor-model";
 import { MESSAGE_ROLE } from "@luke/wire";
 import { Effect } from "effect";
@@ -21,6 +23,7 @@ import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, test } from "vitest";
+import { copyingInto, fakeAppPlatform } from "../testing/app-platform.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { markdownHtmlParserLanded } from "../testing/markdown.js";
 import { codingAgentsControl, pushedTranscripts } from "../testing/tasks-control.js";
@@ -194,10 +197,12 @@ function headOf(container: Element): string {
 
 /** The line under the replay card as a reader reads it: whom it names, if anyone, and the moment its time stands for. */
 function cardMeta(container: Element) {
-  const meta = container.querySelector("[data-replay-card] ~ .message-meta");
+  const meta = container.querySelector(":has(> [data-replay-card]) ~ .luke-message-line");
   assert.ok(meta !== null);
   return {
-    sender: meta.querySelector(".message-sender .luke-inline-ref-label")?.textContent ?? undefined,
+    sender:
+      meta.querySelector(".luke-message-line-sender .luke-inline-ref-label")?.textContent ??
+      undefined,
     at: meta.querySelector("time")?.getAttribute("dateTime") ?? undefined,
   };
 }
@@ -247,8 +252,14 @@ test("an agent continued from another opens on the plan's card, the folded Conti
     /Invite flow/u,
   );
   assert.equal(headOf(container), "Continued from Wire the start from field · 3 steps");
-  // The reader started it, and the message's time is unknown, so the card names nobody under it.
-  assert.equal(cards[1]?.querySelector(":scope > .message-meta"), null);
+  // The reader started it, and the message's time is unknown, so the card's line names nobody and no time, and holds its Copy alone.
+  const cardLine = cards[1]?.querySelector(":scope > .luke-message-line");
+  assert.equal(cardLine?.querySelector(".luke-message-line-sender") ?? null, null);
+  assert.equal(cardLine?.querySelector("time") ?? null, null);
+  assert.equal(
+    cardLine?.querySelector('button[aria-label="Copy message"]') instanceof HTMLElement,
+    true,
+  );
   // The note is the developer's own bubble after the card.
   const bubbles = [...container.querySelectorAll(".is-user")].filter(
     (each) => !each.classList.contains("agent-origin"),
@@ -263,7 +274,7 @@ test("an agent continued from another opens on the plan's card, the folded Conti
   assert.ok(!container.textContent?.includes("Note from the developer"));
 
   // The source's chip opens its tab, and leaves the card folded.
-  press(container.querySelector("[data-replay-card] > summary [data-actor-ref]"));
+  press(container.querySelector("[data-replay-card] ~ .luke-disclosure-actions [data-actor-ref]"));
   assert.deepEqual(opened, [{ kind: TOOL_TARGET.AGENT, agent: SOURCE.id }]);
   assert.equal(container.querySelector("[data-replay-step]"), null);
 });
@@ -293,7 +304,7 @@ test("opened, the card draws each step as a transcript does, a line as a sent me
   const [line, call, said] = steps;
   assert.ok(line?.classList.contains("is-user"));
   assert.match(line?.textContent ?? "", /Use seven days\./u);
-  assert.equal(line?.querySelector(".message-sender")?.textContent, "Charles Pan");
+  assert.equal(line?.querySelector(".luke-message-line-sender")?.textContent, "Charles Pan");
   assert.match(said?.textContent ?? "", /Seven days it is\./u);
   // A call is a call's row, its verb and subject on the line, folded until opened.
   const head = call?.querySelector("summary");
@@ -353,7 +364,7 @@ test("an agent continued from an automation's run opens on the run's Prompt card
   const prompt = container.querySelector(".agent-origin [data-task-card]");
   assert.equal(prompt?.getAttribute("aria-label"), "Prompt");
   assert.match(
-    container.querySelector(".agent-origin .message-sender")?.textContent ?? "",
+    container.querySelector(".agent-origin .luke-message-line-sender")?.textContent ?? "",
     /Nightly triage/u,
   );
   assert.equal(headOf(container), "Continued from Wire the start from field · 3 steps");
@@ -388,9 +399,11 @@ test("on an agent's own page, which lists no source, the card names the source a
   );
   assert.equal(headOf(container), "Continued from Wire the start from field · 3 steps");
   // The read named the source's model, so its chip wears its harness's mark rather than the empty box of none known.
-  const mark = container.querySelector("[data-replay-card] > summary .actor-mark svg");
+  const mark = container.querySelector(
+    "[data-replay-card] ~ .luke-disclosure-actions .actor-mark svg",
+  );
   assert.ok((mark?.childElementCount ?? 0) > 0);
-  press(container.querySelector("[data-replay-card] > summary [data-actor-ref]"));
+  press(container.querySelector("[data-replay-card] ~ .luke-disclosure-actions [data-actor-ref]"));
   assert.deepEqual(opened, []);
   assert.deepEqual(places, [{ kind: LINK_PLACE.AGENT, planId: TASK_ID, agentId: SOURCE.id }]);
 });
@@ -457,7 +470,7 @@ test("a replayed line is named under its sender as a transcript names one: Luke,
   press(container.querySelector("[data-replay-card] > summary"));
   await settle();
   const senders = [...container.querySelectorAll("[data-replay-step]")].map((step) => {
-    const sender = step.querySelector(".message-sender");
+    const sender = step.querySelector(".luke-message-line-sender");
     if (sender === null) return null;
     const ref = sender.querySelector<HTMLElement>("[data-actor-ref]");
     const name = ref?.querySelector(".luke-inline-ref-label")?.textContent ?? sender.textContent;
@@ -495,7 +508,7 @@ test("the line under the card says when the reader's own agent was started, nami
     at: new Date(SENT_AT).toISOString(),
   });
   assert.doesNotMatch(
-    container.querySelector("[data-replay-card] ~ .message-meta")?.textContent ?? "",
+    container.querySelector(":has(> [data-replay-card]) ~ .luke-message-line")?.textContent ?? "",
     /You|·/u,
   );
 });
@@ -518,8 +531,9 @@ test("the line under the card names a teammate who started the agent by their fa
     at: new Date(SENT_AT).toISOString(),
   });
   assert.match(
-    container.querySelector("[data-replay-card] ~ .message-meta .message-sent-at")?.textContent ??
-      "",
+    container.querySelector(
+      ":has(> [data-replay-card]) ~ .luke-message-line .luke-message-line-time",
+    )?.textContent ?? "",
     /^·/u,
   );
 });
@@ -607,4 +621,102 @@ test("Luke's summary and the steps left out stand over the earlier-steps row, wh
     "Summary of 100 earlier steps (written by Luke)",
   );
   assert.match(body?.textContent ?? "", /10 earlier steps were left out/u);
+});
+
+test("a replayed call whose marker names its tool is drawn as the live transcript draws it: a command by its description, a patch as a patch, and an agent it is about by its tab's chip", async () => {
+  const agent = summary({
+    id: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21",
+    brief: CODING_AGENT_BRIEF.PLAN,
+  });
+  const steps: Replay["steps"] = [
+    toolStep({
+      summary: "Ran: pnpm test",
+      tool: "bash",
+      state: REPLAY_TOOL_STATE.DONE,
+      input: '{"command":"pnpm test","description":"Run the invite tests"}',
+      output: "ok",
+    }),
+    toolStep({
+      summary: "Edited: src/invite.ts",
+      tool: "apply_patch",
+      state: REPLAY_TOOL_STATE.DONE,
+      input: JSON.stringify({ patchText: "*** Update File: src/invite.ts\n-a\n+b" }),
+      output: "Done",
+    }),
+    toolStep({
+      summary: "Used: read_agent",
+      tool: "read_agent",
+      state: REPLAY_TOOL_STATE.DONE,
+      input: JSON.stringify({ agentId: SOURCE.id }),
+      output: JSON.stringify({ agent: { id: SOURCE.id, title: "Wire the start from field" } }),
+    }),
+  ];
+  const { container } = await drawn(
+    agent,
+    firstMessageText("# Invite flow", replay({ steps, totalSteps: steps.length }), undefined),
+  );
+  press(container.querySelector("[data-replay-card] > summary"));
+  await settle();
+
+  const [command, patch, read] = [...container.querySelectorAll("[data-replay-step]")];
+  // A command's line says what it is for, as the live transcript's does.
+  assert.match(command?.querySelector("summary")?.textContent ?? "", /Run the invite tests/u);
+  // A patch opens onto its body drawn as a patch, which wears its added and removed lines' colours.
+  press(patch?.querySelector("summary"));
+  assert.ok(patch?.querySelector('[data-row="added"]') instanceof HTMLElement);
+  assert.ok(patch?.querySelector('[data-row="removed"]') instanceof HTMLElement);
+  // A call about an agent names it by the chip its tab wears.
+  assert.equal(
+    read?.querySelector("[data-tool-agent-ref] .luke-inline-ref-label")?.textContent,
+    "Wire the start from field",
+  );
+});
+
+test("a replayed line stands over who sent it, when, and Copy, and the card's Copy copies the replay as it was handed", async () => {
+  const copied: string[] = [];
+  fakeAppPlatform(copyingInto(copied));
+  const agent = summary({
+    id: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21",
+    brief: CODING_AGENT_BRIEF.PLAN,
+  });
+  const steps: Replay["steps"] = [
+    {
+      kind: REPLAY_STEP_KIND.LINE,
+      summary: "Charles Pan: Use seven days.",
+      words: "Use seven days.",
+      sender: { kind: REPLAY_SENDER.MEMBER, memberId: CHARLES.userId },
+      at: SENT_AT,
+    },
+    { kind: REPLAY_STEP_KIND.SAID, summary: "Said: Seven days it is.", words: "Seven days it is." },
+  ];
+  const { container } = await drawn(
+    agent,
+    firstMessageText("# Invite flow", replay({ steps, totalSteps: steps.length }), undefined),
+  );
+  press(container.querySelector("[data-replay-card] > summary"));
+  await settle();
+
+  const line = container.querySelector("[data-replay-step='line'] > .luke-message-line");
+  assert.equal(
+    line?.querySelector(".luke-message-line-sender .luke-inline-ref-label")?.textContent,
+    "Charles Pan",
+  );
+  assert.equal(
+    line?.querySelector("time")?.getAttribute("dateTime"),
+    new Date(SENT_AT).toISOString(),
+  );
+  press(line?.querySelector('button[aria-label="Copy message"]'));
+  await settle();
+  assert.deepEqual(copied, ["Use seven days."]);
+
+  press(
+    container.querySelector(
+      ':has(> [data-replay-card]) ~ .luke-message-line button[aria-label="Copy message"]',
+    ),
+  );
+  await settle();
+  assert.deepEqual(copied, [
+    "Use seven days.",
+    "Charles Pan: Use seven days.\n\nSeven days it is.",
+  ]);
 });

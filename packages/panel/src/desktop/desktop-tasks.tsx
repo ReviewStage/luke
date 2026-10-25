@@ -1,19 +1,25 @@
 import type { CodingAgentStatus } from "@luke/features/coding-agent-wire";
+import type { InboxItem } from "@luke/features/inbox-wire";
 import { type MentionLines, sectionAnchors } from "@luke/features/mention-link";
 import { planSections } from "@luke/features/plan-document";
 import type { TaskStanding } from "@luke/features/task-wire";
+import { REFRESH_FAILED_WORDS, readingWords } from "@luke/features/words";
 import { ACT_KIND } from "@luke/host/acts";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
-  ConfirmDialog,
   EmptyState,
   ERROR_STATE_PLACEMENT,
   ErrorState,
+  FailureNote,
   FILL_ELEMENT,
   Fill,
-  PageToolbar,
+  NOT_FOUND_THING,
+  NotFound,
   SKELETON_SHAPE,
   Skeleton,
+  TOOLBAR_INSET,
+  TOOLBAR_LOOK,
+  Toolbar,
   useMinute,
 } from "@luke/ui";
 import { openThread, PlanCommentsProvider, usePlanComments } from "@luke/ui/plan-comments";
@@ -30,17 +36,15 @@ import { AutomationDirectory } from "../automation-directory.js";
 import { LinkWorkspaceProvider } from "../copy-link-item.js";
 import { FindScope } from "../find-in-tab.js";
 import { MemberDirectory } from "../member-directory.js";
-import { NOT_FOUND_THING, NotFound } from "../not-found.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import { useSteadyDoor } from "../steady-door.js";
-import { CallNotice } from "../tasks/agent-call.js";
 import { AgentCard, agentSubject } from "../tasks/agent-ref.js";
 import { StartingAgentTab } from "../tasks/agent-tab.js";
 import { AgentTabSkeleton } from "../tasks/agent-tab-skeleton.js";
 import { peopleOf } from "../tasks/changes-card.js";
 import { useChatNames } from "../tasks/chat-actors.js";
 import { useChatOn } from "../tasks/chat-gate.js";
-import { agentActor, agentTabLabel, type SentLine } from "../tasks/coding-agent-model.js";
+import { agentActor, agentName, type SentLine } from "../tasks/coding-agent-model.js";
 import { useInboxCloser } from "../tasks/inbox-close.js";
 import type { InboxCodeDoors } from "../tasks/inbox-code-card.js";
 import { INBOX_COLUMNS, useInboxColumns } from "../tasks/inbox-columns.js";
@@ -57,7 +61,7 @@ import {
 } from "../tasks/inbox-model.js";
 import { inboxNext, useInboxPager } from "../tasks/inbox-pager.js";
 import { InboxPane } from "../tasks/inbox-pane.js";
-import { PlanBody, type SectionLinks } from "../tasks/plan-body.js";
+import { PlanBody, type SectionLinks, type TitleRename } from "../tasks/plan-body.js";
 import { CommentFocusScope } from "../tasks/plan-comments.js";
 import { CHIP_PLACE, RepositoryChip } from "../tasks/repository-chip.js";
 import { SkillFiles } from "../tasks/skill-chip.js";
@@ -69,14 +73,14 @@ import {
   type TaskMentionsValue,
   useMentionAgentsReader,
 } from "../tasks/task-mentions.js";
-import { taskLinkPlace } from "../tasks/task-menu-items.js";
+import { taskLinkPlace, useOfferTaskRename } from "../tasks/task-menu-items.js";
 import { TerminalCommands } from "../tasks/terminal-commands.js";
 import { TOOL_TARGET, type ToolTarget } from "../tasks/tool-call-model.js";
 import { useHeldInboxList } from "../tasks/use-held-inbox-list.js";
 import { useInboxReadMarks, useNodOnOpen, useReadOnOpen } from "../tasks/use-inbox-read-marks.js";
 import type { MainTab } from "../tasks/use-main-tabs.js";
 import { OpenHereProvider, openPullRequestsHere } from "../tasks/use-open-link.js";
-import type { PlanEditDoor } from "../tasks/use-plan-editing.js";
+import { usePlanEditDoor } from "../tasks/use-plan-editing.js";
 import { PULL_REQUEST_VIEW, SIDE_PANEL_TAB, type SidePanelTab } from "../tasks/use-side-panel.js";
 import { type TaskInboxControl, useTaskInbox } from "../tasks/use-task-inbox.js";
 import { type TaskLooks, useReadMarks } from "../tasks/use-task-looks.js";
@@ -88,6 +92,7 @@ import { TaskChatTab } from "./desktop-chat.js";
 import { DesktopWelcome } from "./desktop-welcome.js";
 import { useTaskInboxShow } from "./folded-groups.js";
 import { AgentPane, MainTabStrip, MainTabStripSkeleton, mainTabLabel } from "./main-tabs.js";
+import { PhoneBack, PhoneHead, phoneBar } from "./phone-head.js";
 import {
   COLUMN,
   changesTabOf,
@@ -117,6 +122,7 @@ import {
   taskPaneItems,
   taskPaneOf,
 } from "./task-pane-switcher.js";
+import { useStandingDoor } from "./task-row-parts.js";
 import {
   SummaryButton,
   type SummaryLayout,
@@ -174,7 +180,7 @@ import {
  */
 
 /** What the task's page says to a reader while the task is read. */
-const TASK_LOADING_LABEL = "Loading task";
+const TASK_LOADING_LABEL = readingWords("the task");
 
 /** How wide the toolbar's worded actions stand while the task is read: a repository's chip, and Start with its model menu. */
 const ACTION_SKELETON_WIDTHS = { REPOSITORY: "112px", START: "104px" } as const;
@@ -245,6 +251,7 @@ function TaskPageSkeleton({
   summary,
   onColumn,
   starting,
+  head,
 }: {
   /** The line New task's agent start under way opens its agent on, which the column draws as the agent's tab will; none while a task is read. */
   starting?: SentLine | undefined;
@@ -254,37 +261,76 @@ function TaskPageSkeleton({
   summary: Pick<SummaryLayout, "mode" | "holds">;
   /** Hands over the column, which the summary's room is measured on, as the page's own does. */
   onColumn: (column: HTMLElement | null) => void;
+  /** A phone's head over the page, as the page will be headed once it lands (`TaskWaitHead`); none elsewhere. */
+  head?: React.ReactNode;
 }): React.JSX.Element {
   const { panel, ...frame } = drawing;
   return (
-    <TaskPage
-      columnRef={onColumn}
-      panelOpen={panel !== undefined}
-      fullScreen={panel?.fullScreen === true}
-      column={
-        <>
-          <PageToolbar
-            lead={<MainTabStripSkeleton />}
-            actions={<TaskActionsSkeleton summary={summary.holds} />}
-          />
-          <TaskBody>
-            <Fill className="desktop-task-column">
-              <AgentColumn>
-                {starting === undefined ? (
-                  <AgentTabSkeleton label={TASK_LOADING_LABEL} />
-                ) : (
-                  <StartingAgentTab line={starting} />
-                )}
-              </AgentColumn>
-            </Fill>
-            <SummarySkeleton mode={summary.mode} />
-          </TaskBody>
-        </>
-      }
-    >
-      {panel === undefined ? null : <SidePanelSkeleton drawing={frame} panel={panel} />}
-    </TaskPage>
+    <>
+      {head}
+      <TaskPage
+        columnRef={onColumn}
+        panelOpen={panel !== undefined}
+        fullScreen={panel?.fullScreen === true}
+        column={
+          <>
+            <Toolbar
+              start={TOOLBAR_INSET.COLUMN}
+              look={TOOLBAR_LOOK.TABS}
+              measure
+              title={<MainTabStripSkeleton />}
+              actions={<TaskActionsSkeleton summary={summary.holds} />}
+            />
+            <TaskBody>
+              <Fill className="desktop-task-column">
+                <AgentColumn>
+                  {starting === undefined ? (
+                    <AgentTabSkeleton label={TASK_LOADING_LABEL} />
+                  ) : (
+                    <StartingAgentTab line={starting} />
+                  )}
+                </AgentColumn>
+              </Fill>
+              <SummarySkeleton mode={summary.mode} />
+            </TaskBody>
+          </>
+        }
+      >
+        {panel === undefined ? null : <SidePanelSkeleton drawing={frame} panel={panel} />}
+      </TaskPage>
+    </>
   );
+}
+
+/**
+ * A phone's head over a task that is not drawn yet, or cannot be: its way
+ * back, as the task's own head leads (`TaskHead`), and its title a block
+ * while it is read, nothing where it cannot be; no ⋯, since a task not
+ * drawn offers no menu.
+ */
+function TaskWaitHead({
+  away,
+  reading,
+}: {
+  away: TaskHeadBack;
+  reading: boolean;
+}): React.JSX.Element {
+  return (
+    <PhoneHead
+      place="task"
+      start={<PhoneBack back={away} />}
+      title={reading ? <TaskTitleSkeleton /> : null}
+      end={null}
+    />
+  );
+}
+
+/** How wide a phone's head's title stands as a block while the task is read. */
+const TASK_TITLE_SKELETON = "50%";
+
+/** The block standing in a phone's head's title while the task is read. */
+function TaskTitleSkeleton(): React.JSX.Element {
+  return <Skeleton width={TASK_TITLE_SKELETON} />;
 }
 
 /** The column showing an agent's tab before its agent lands: the placeholder or the line it starts on. */
@@ -314,6 +360,24 @@ function NewTabChord({ onNewTab }: { onNewTab: () => void }): null {
 /** The plan's own Inbox lists one plan's items in one run, so nothing in it folds. */
 const NO_FOLDS = () => false;
 
+/** An item a call's row asked the task's Inbox to open: the thread under `key` of the agent whose row it was, any of the task's agents' where the row names none. */
+interface InboxItemAsk {
+  readonly taskId: string;
+  readonly key: string;
+  readonly agentId: string | undefined;
+}
+
+/** The item an ask names among a task's items, the latest posted where more than one agent posted under its key. */
+function askedItem(items: readonly InboxItem[], ask: InboxItemAsk): InboxItem | undefined {
+  const named = items.filter(
+    (item) => item.key === ask.key && (ask.agentId === undefined || item.agentId === ask.agentId),
+  );
+  return named.reduce<InboxItem | undefined>(
+    (latest, item) => (latest === undefined || item.postedAt > latest.postedAt ? item : latest),
+    undefined,
+  );
+}
+
 /**
  * The plan's own Inbox tab, in the side panel: its items newest first in the window's Inbox's
  * list, under the window's head, whose view's menu offers To do and All
@@ -329,12 +393,16 @@ const NO_FOLDS = () => false;
  * (`inbox-columns.ts`); holding one item, it is that item, with no list to
  * go back to. K and J, and the pager where the item stands alone, step
  * through the list (`inbox-pager.tsx`). Its head's magnifier searches the
- * list as the window's Inbox's does, the item shown keeping its place.
+ * list as the window's Inbox's does, the item shown keeping its place. A
+ * call's row that names a thread asks for its item, which the tab opens
+ * once its read holds it, or lets go once a read holds no such item.
  */
 function TaskInboxTab({
   tasks,
   task,
   inbox,
+  ask,
+  onAsked,
   onOpenTask,
   onOpenAgent,
   code,
@@ -342,6 +410,9 @@ function TaskInboxTab({
   tasks: TasksControl;
   task: TasksControl["tasks"][number];
   inbox: TaskInboxControl;
+  /** The item a call's row asked for, none where none waits to be opened. */
+  ask: InboxItemAsk | undefined;
+  onAsked: () => void;
   onOpenTask: () => void;
   onOpenAgent: (agentId: string) => void;
   code: InboxCodeDoors;
@@ -395,6 +466,17 @@ function TaskInboxTab({
     choose(listed);
     columns.onOpen(listed.item.id);
   };
+  // The item a call's row asked for is opened once the read holds it, as a row's press opens it.
+  const openColumn = columns.onOpen;
+  const asking = ask === undefined ? undefined : askedItem(items, ask);
+  const settled = ask !== undefined && (asking !== undefined || inbox.read);
+  useEffect(() => {
+    if (!settled) return;
+    onAsked();
+    if (asking === undefined) return;
+    setAsked(asking.id);
+    openColumn(asking.id);
+  }, [settled, asking, onAsked, openColumn]);
   const opened = shown && columns.shown !== INBOX_COLUMNS.LIST ? chosen : undefined;
   useReadOnOpen({
     shown: opened?.item,
@@ -404,7 +486,12 @@ function TaskInboxTab({
   });
   // A notice of the reader's own is acknowledged as it opens, as the window's Inbox acknowledges it.
   useNodOnOpen({ shown: opened, readerId: tasks.me, control: inbox });
-  const { pager, direction } = useInboxPager(steps, list, chosen?.item.id, choose, {
+  // K and J choose the item above or below, the keyboard following it to its row.
+  const step = (listed: InboxListed) => {
+    choose(listed);
+    columns.onStep();
+  };
+  const { pager, direction } = useInboxPager(steps, list, chosen?.item.id, step, {
     shown,
     folded: NO_FOLDS,
   });
@@ -434,6 +521,7 @@ function TaskInboxTab({
           show,
           view: undefined,
           search: { query, onQuery: setQuery },
+          tab: true,
         }}
         models={tasks.agents.models}
         readerId={tasks.me}
@@ -441,10 +529,11 @@ function TaskInboxTab({
         note={
           inbox.reading ? (
             <InboxListSkeleton />
-          ) : inbox.failed && listed.length === 0 ? (
-            <div className="sidebar-note">
-              <ErrorState onRetry={inbox.onRetry}>The inbox could not be read.</ErrorState>
-            </div>
+          ) : inbox.failed ? (
+            // A refresh that failed over rows already held leaves them drawn, with a line at the foot.
+            <ErrorState onRetry={inbox.onRetry} placement={ERROR_STATE_PLACEMENT.ROWS}>
+              {listed.length === 0 ? "The inbox could not be read." : REFRESH_FAILED_WORDS}
+            </ErrorState>
           ) : inbox.read && searched !== undefined && listed.length === 0 ? (
             <SearchEmpty searched={searched} />
           ) : inbox.read && filteredOut ? (
@@ -455,7 +544,7 @@ function TaskInboxTab({
           ) : null
         }
         onChoose={open}
-        onMark={(listed, unread) => marks.onMark(listed.item, unread)}
+        onMark={(listed, unread, saying) => marks.onMark(listed.item, unread, saying)}
         onClose={closeItem}
       />
       {chosen === undefined ? (
@@ -465,7 +554,7 @@ function TaskInboxTab({
           hidden={columns.shown !== INBOX_COLUMNS.BOTH}
         >
           {/* The empty pane keeps a bar the list's head's height, as the window's Inbox does. */}
-          <PageToolbar />
+          <Toolbar />
           {/* Note that the list says what its tab or its search left out, so the pane beside it stands bare. */}
           {inbox.read && listed.length === 0 && !filteredOut && searched === undefined ? (
             <EmptyState icon={<InboxIcon />}>{NEEDS_YOU.NONE}</EmptyState>
@@ -501,10 +590,10 @@ function TaskInboxTab({
  * says under it what it acts on, the tab, so the tab's Copy link is told
  * from the task's beneath it.
  */
-function shownTabGroups(shown: ShownTab | undefined): MenuAction[][] {
+function shownTabGroups(shown: ShownTab | undefined, opener: HTMLElement): MenuAction[][] {
   if (shown === undefined) return [];
   return shown
-    .groups()
+    .groups(opener)
     .map((group) => group.map((item) => ({ ...item, detail: item.detail ?? shown.label })));
 }
 
@@ -513,20 +602,17 @@ function shownTabGroups(shown: ShownTab | undefined): MenuAction[][] {
  * While the task is read, its strip holds one tab-shaped skeleton where the
  * plan's tab will stand, so the row does not move when the task is drawn,
  * and no name is guessed before the read says it; a task that could not be
- * drawn has no tab at all. The voice's notice line, handed in while the
- * task is drawn, rides the foot of the call's agent's tab.
+ * drawn has no tab at all.
  */
 function PlanDocument({
   tasks,
   looks,
-  notice,
   summary,
   room,
   away,
 }: {
   tasks: TasksControl;
   looks: TaskLooks;
-  notice: React.ReactNode;
   summary: SummaryPin;
   room: ShellRoom;
   away: TaskHeadBack;
@@ -542,6 +628,9 @@ function PlanDocument({
     tab: SidePanelTab | undefined;
     opening: boolean;
   }>();
+  // The Inbox item a call's row asked for, which the task's Inbox opens once it holds it.
+  const [inboxAsk, setInboxAsk] = useState<InboxItemAsk | undefined>(undefined);
+  const inboxAsked = useCallback(() => setInboxAsk(undefined), []);
   const { open: panelOpen, tab: panelTab } = tasks.sidePanel;
   useEffect(() => {
     if (activityAsked?.opening && panelOpen)
@@ -555,7 +644,9 @@ function PlanDocument({
   const inbox = useTaskInbox({
     taskId: inboxTaskId,
     shown: tasks.shown,
+    onScreen: inboxTaskId !== undefined && tasks.inboxShown === inboxTaskId,
     waiting: tasks.inbox.some((task) => task.taskId === inboxTaskId),
+    readerId: tasks.me,
     agents: tasks.agents,
   });
   // The task's comments are read while the task is shown, for its plan's margin, its Comments tab, and its summary.
@@ -619,10 +710,32 @@ function PlanDocument({
     if (taskId !== undefined && inbox.read) onInboxRead(taskId, waiting);
   }, [taskId, inbox.read, waiting, onInboxRead]);
   const rename = useInlineRename(taskId, tasks.onRenameTask);
+  // The open task's one rename door, which its toolbar's ⋯, its title's ⋯,
+  // and ⌘K all ask. On a phone it opens the head's field; wider, it puts the
+  // caret in the plan's own title, showing the plan first where the panel
+  // hides it. Note that the title is asked once the plan stands, because a
+  // title drawn afresh takes only the asks that come after it.
+  const [titleAsked, setTitleAsked] = useState(false);
+  const [titleAsks, setTitleAsks] = useState(0);
+  const planShown = panelOpen && panelTab === SIDE_PANEL_TAB.PLAN;
+  useEffect(() => {
+    if (!titleAsked || !planShown) return;
+    setTitleAsked(false);
+    setTitleAsks((count) => count + 1);
+  }, [titleAsked, planShown]);
+  const beginRename = useSteadyDoor(() => {
+    if (room === SHELL_ROOM.NARROW) {
+      rename.begin();
+      return;
+    }
+    if (!planShown) tasks.sidePanel.onChoose(SIDE_PANEL_TAB.PLAN);
+    setTitleAsked(true);
+  });
+  useOfferTaskRename(taskId, beginRename);
   // A terminal shown hands the keys to the side panel, where it stands; an
-  // agent's tab's Open terminal always opens that agent's own.
+  // agent's tab's Show terminal always opens that agent's own.
   const showSide = () => setFocus(COLUMN.SIDE);
-  // Open terminal opens an agent's terminal as on every surface that draws it (`agent-actions.tsx`).
+  // Show terminal opens an agent's terminal as on every surface that draws it (`agent-actions.tsx`).
   const terminalDoors = useAgentTerminalDoors(
     tasks.sidePanel,
     region.kind === DOCUMENT_REGION.READY ? region.task.repository : null,
@@ -686,15 +799,19 @@ function PlanDocument({
   };
   // A call's row in a transcript opens what the call is about where the
   // window already draws it: an agent in this column, the plan and the
-  // Inbox in the side panel, another task as the sidebar opens it, the
-  // rest in the side panel.
-  const openTarget = (target: ToolTarget) => {
+  // Inbox in the side panel, the Inbox on the item a call names, posted by
+  // the agent whose row it was (`from`), another task as the sidebar opens
+  // it, the rest in the side panel.
+  const openTarget = (target: ToolTarget, from?: string) => {
     switch (target.kind) {
       case TOOL_TARGET.AGENT:
         return openColumnTab({ agent: target.agent });
       case TOOL_TARGET.PLAN:
         return openPanelTab(SIDE_PANEL_TAB.PLAN);
       case TOOL_TARGET.INBOX:
+        if (target.key !== undefined && taskId !== undefined) {
+          setInboxAsk({ taskId, key: target.key, agentId: from });
+        }
         return openPanelTab(SIDE_PANEL_TAB.INBOX);
       case TOOL_TARGET.CHAT:
         return chatOn ? openPanelTab(SIDE_PANEL_TAB.CHAT) : undefined;
@@ -763,7 +880,8 @@ function PlanDocument({
   // panel's width, and the minute's clock move; only the cards a
   // transcript's rows hang move with the minute. Each door stands across
   // draws and calls the newest closure (`useSteadyDoor`).
-  const openTargetDoor = useSteadyDoor(openTarget);
+  // Note that the column's pane draws its tab's agent alone, so a row it opens is that agent's.
+  const openTargetDoor = useSteadyDoor((target: ToolTarget) => openTarget(target, agentOfTab(tab)));
   const openDelegationDoor = useSteadyDoor(openDelegation);
   const openPullRequestDoor = useSteadyDoor(openPullRequest);
   const openAgent = useSteadyDoor((agent: string) => openColumnTab({ agent }));
@@ -778,10 +896,12 @@ function PlanDocument({
   const showHistory = useSteadyDoor((save: number | undefined) => {
     if (opened !== undefined) tasks.history.onOpen(opened.id, save);
   });
-  const edit: PlanEditDoor | undefined =
-    opened === undefined ? undefined : (request) => tasks.edit(opened.id, request);
-  const editDoor = useSteadyDoor(edit);
+  const editDoor = usePlanEditDoor(opened?.id, tasks.edit);
   const renameDoor = useSteadyDoor((name: string) => rename.end(name));
+  const titleRename = useMemo<TitleRename>(
+    () => ({ asks: titleAsks, asked: rename.asked, onBegin: beginRename }),
+    [titleAsks, rename.asked, beginRename],
+  );
   const draftNameDoor = useSteadyDoor(
     opened === undefined
       ? undefined
@@ -790,12 +910,12 @@ function PlanDocument({
   const markRead = useSteadyDoor((unread: boolean) => {
     if (opened !== undefined) reads.mark(opened, unread);
   });
+  // The chips send a change through the door the rows use, which says so
+  // where the service did not keep it, and the chip goes on drawing the
+  // task's own value, which is the one that stands.
+  const standingDoor = useStandingDoor(tasks);
   const setStanding = useSteadyDoor(
-    opened === undefined
-      ? undefined
-      : (standing: TaskStanding) => {
-          void tasks.onSetTaskStanding(opened.id, standing);
-        },
+    opened === undefined ? undefined : (standing: TaskStanding) => standingDoor(opened, standing),
   );
   const openedId = opened?.id;
   const openedRepository = opened?.repository ?? null;
@@ -902,7 +1022,7 @@ function PlanDocument({
       text: () => opened.document.body,
       pages,
       agents: (agents.agents ?? []).map((agent) => {
-        const name = agentTabLabel(agent, agents.models);
+        const name = agentName(agent, agents.models);
         return { id: agent.id, name, actor: agentActor(agent, name), summary: agent };
       }),
       readAgents: readMentionAgents,
@@ -934,8 +1054,16 @@ function PlanDocument({
     agentLookDoor,
     pullRequestCardDoor,
   ]);
+  const phone = room === SHELL_ROOM.NARROW;
   if (region.kind === DOCUMENT_REGION.READING) {
-    return <TaskPageSkeleton drawing={drawing} summary={summaryLayout} onColumn={setColumn} />;
+    return (
+      <TaskPageSkeleton
+        drawing={drawing}
+        summary={summaryLayout}
+        onColumn={setColumn}
+        head={phone ? <TaskWaitHead away={away} reading /> : undefined}
+      />
+    );
   }
   if (
     region.kind !== DOCUMENT_REGION.READY ||
@@ -950,27 +1078,34 @@ function PlanDocument({
         : "Choose a task, or start a new one.";
     // A plan that cannot be drawn offers no menu, so its way out is said here.
     const close = { label: "Close task", onClick: tasks.onLeaveTask };
+    // A plan the service would not hand the reader is not there for them, whether it was deleted or never theirs.
+    if (region.kind === DOCUMENT_REGION.MISSING) {
+      return (
+        <NotFound
+          thing={NOT_FOUND_THING.TASK}
+          bar={
+            phone ? phoneBar({ place: "task", start: <PhoneBack back={away} />, end: null }) : {}
+          }
+          action={close}
+        />
+      );
+    }
     return (
       <>
-        <PageToolbar heading={null} />
-        {/* A plan the service would not hand the reader is not there for them, whether it was deleted or never theirs. */}
-        {region.kind === DOCUMENT_REGION.MISSING ? (
-          <NotFound thing={NOT_FOUND_THING.TASK} action={close} />
-        ) : (
-          <Fill as={FILL_ELEMENT.SECTION} className="desktop-empty-region">
-            {region.kind === DOCUMENT_REGION.FAILED ? (
-              <ErrorState
-                onRetry={tasks.onRetryDocument}
-                placement={ERROR_STATE_PLACEMENT.CENTRED}
-                exit={close}
-              >
-                {line}
-              </ErrorState>
-            ) : (
-              <EmptyState>{line}</EmptyState>
-            )}
-          </Fill>
-        )}
+        {phone ? <TaskWaitHead away={away} reading={false} /> : <Toolbar />}
+        <Fill as={FILL_ELEMENT.SECTION} className="desktop-empty-region">
+          {region.kind === DOCUMENT_REGION.FAILED ? (
+            <ErrorState
+              onRetry={tasks.onRetryDocument}
+              placement={ERROR_STATE_PLACEMENT.CENTRED}
+              exit={close}
+            >
+              {line}
+            </ErrorState>
+          ) : (
+            <EmptyState>{line}</EmptyState>
+          )}
+        </Fill>
       </>
     );
   }
@@ -1024,6 +1159,7 @@ function PlanDocument({
         // The title renames as the chip's field does, so a refusal is said beside it.
         onRename={renameDoor}
         onDraftName={draftNameDoor}
+        rename={titleRename}
         looks={looks}
         readMark={readMark}
         sectionLinks={sectionLinks}
@@ -1038,6 +1174,8 @@ function PlanDocument({
       tasks={tasks}
       task={listed}
       inbox={inbox}
+      ask={inboxAsk?.taskId === listed.id ? inboxAsk : undefined}
+      onAsked={inboxAsked}
       onOpenTask={() => openPanelTab(SIDE_PANEL_TAB.PLAN)}
       onOpenAgent={(agent) => openColumnTab({ agent })}
       code={{
@@ -1083,9 +1221,11 @@ function PlanDocument({
       tasks={tasks}
       task={task}
       button
-      onRename={rename.begin}
+      onRename={beginRename}
       lead={
-        switched ? () => [taskPaneItems(pane, choosePane), ...shownTabGroups(onTab)] : undefined
+        switched
+          ? (opener) => [taskPaneItems(pane, choosePane), ...shownTabGroups(onTab, opener)]
+          : undefined
       }
     />
   );
@@ -1093,7 +1233,9 @@ function PlanDocument({
     <TaskHead
       back={onTab === undefined ? away : { label: ACTIVITY_BACK, onPress: () => onListed(true) }}
       // Note that the task's Rename opens the task's name in the title's place on a tab too, since the tab hides the plan's own title.
-      title={onTab === undefined || rename.editing ? task.name : onTab.label}
+      title={
+        rename.editing ? (rename.asked ?? task.name) : onTab === undefined ? task.name : onTab.label
+      }
       rename={{
         editing: rename.editing,
         onEnd: (end) => {
@@ -1131,8 +1273,11 @@ function PlanDocument({
                     fullScreen={sidePanel.fullScreen}
                     column={
                       <>
-                        <PageToolbar
-                          lead={
+                        <Toolbar
+                          start={TOOLBAR_INSET.COLUMN}
+                          look={TOOLBAR_LOOK.TABS}
+                          measure
+                          title={
                             <MainTabStrip
                               task={task}
                               main={mainTabs}
@@ -1153,14 +1298,10 @@ function PlanDocument({
                           actions={
                             <>
                               {rename.refused ? (
-                                <p className="error-message" role="alert">
-                                  {RENAME_FAILED_NOTE}
-                                </p>
+                                <FailureNote>{RENAME_FAILED_NOTE}</FailureNote>
                               ) : null}
                               {repositoryNote !== undefined ? (
-                                <p className="error-message" role="alert">
-                                  {repositoryNote}
-                                </p>
+                                <FailureNote>{repositoryNote}</FailureNote>
                               ) : null}
                               <CopyChord copy={tasks.copy} />
                               {terminalDoors.terminals ? (
@@ -1215,24 +1356,22 @@ function PlanDocument({
                                 </AgentColumn>
                               ) : null
                             ) : (
-                              <CallNotice.Provider value={notice}>
-                                <AgentPane
-                                  call={calls}
-                                  label={mainTabLabel(tab, agents)}
-                                  tabbed
-                                  tab={tab}
-                                  agents={agents}
-                                  shown={tasks.shown && !sidePanel.fullScreen}
-                                  views={views}
-                                  onOpenDelegation={openDelegationDoor}
-                                  onOpenPullRequest={openPullRequestDoor}
-                                  onOpenTarget={openTargetDoor}
-                                  cards={cards}
-                                  chat={chat}
-                                  onFork={forkDoor}
-                                  onContinue={continueDoor}
-                                />
-                              </CallNotice.Provider>
+                              <AgentPane
+                                call={calls}
+                                label={mainTabLabel(tab, agents)}
+                                tabbed
+                                tab={tab}
+                                agents={agents}
+                                shown={tasks.shown && !sidePanel.fullScreen}
+                                views={views}
+                                onOpenDelegation={openDelegationDoor}
+                                onOpenPullRequest={openPullRequestDoor}
+                                onOpenTarget={openTargetDoor}
+                                cards={cards}
+                                chat={chat}
+                                onFork={forkDoor}
+                                onContinue={continueDoor}
+                              />
                             )}
                           </FindScope>
                           <TaskSummary
@@ -1319,10 +1458,13 @@ function StartingTaskPage({
   tasks,
   line,
   summary,
+  phoneAway,
 }: {
   tasks: TasksControl;
   line: SentLine;
   summary: SummaryPin;
+  /** A phone's way back, which heads the page as the task's will be (`TaskWaitHead`); none elsewhere. */
+  phoneAway: TaskHeadBack | undefined;
 }): React.JSX.Element {
   const drawing = useSidePanelDrawing(tasks.sidePanel);
   const [column, setColumn] = useState<HTMLElement | null>(null);
@@ -1334,6 +1476,7 @@ function StartingTaskPage({
       summary={summaryLayout}
       onColumn={setColumn}
       starting={line}
+      head={phoneAway === undefined ? undefined : <TaskWaitHead away={phoneAway} reading />}
     />
   );
 }
@@ -1348,7 +1491,6 @@ function StartingTaskPage({
 export const DesktopTasks = memo(function DesktopTasks({
   tasks,
   looks,
-  notice,
   summary,
   room = SHELL_ROOM.WIDE,
   away,
@@ -1356,8 +1498,6 @@ export const DesktopTasks = memo(function DesktopTasks({
   tasks: TasksControl;
   /** The open plan's sections changed since the developer last looked, held by the shell across the plan's version history. */
   looks: TaskLooks;
-  /** The voice's notice line, while it rides the foot of the open task's call. */
-  notice?: React.ReactNode;
   /** Whether the task's summary stands pinned beside its column where it fits, rather than collapsed to its rail, and whether it fits, held by the shell, whose panes glide as either turns. */
   summary: SummaryPin;
   /** The room the panel's stage gives; narrow, a task is headed by one row of its own (`task-pane-switcher.tsx`). */
@@ -1365,14 +1505,20 @@ export const DesktopTasks = memo(function DesktopTasks({
   /** A phone's way back out of the task, to the page it was opened from (`WindowHistory`'s `onLeave`); the Tasks page where none is handed. */
   away?: TaskHeadBack | undefined;
 }): React.JSX.Element {
-  // The second call's question stands over either page: a Talk press on a
-  // task's page asks it, and so does a task started from the New task dialog.
-  const secondCall = (
-    <ConfirmDialog confirm={tasks.secondCall.confirm} question={tasks.secondCall.question} />
-  );
   // A task New task is starting with its agent stands as its page until the start answers.
   if (tasks.starting !== undefined) {
-    return <StartingTaskPage tasks={tasks} line={tasks.starting} summary={summary} />;
+    return (
+      <StartingTaskPage
+        tasks={tasks}
+        line={tasks.starting}
+        summary={summary}
+        phoneAway={
+          room === SHELL_ROOM.NARROW
+            ? (away ?? { label: TASKS_BACK, onPress: tasks.boardView.onOpen })
+            : undefined
+        }
+      />
+    );
   }
   switch (tasks.page) {
     case TASKS_PAGE.DOCUMENT:
@@ -1386,12 +1532,10 @@ export const DesktopTasks = memo(function DesktopTasks({
           <PlanDocument
             tasks={tasks}
             looks={looks}
-            notice={notice}
             summary={summary}
             room={room}
             away={away ?? { label: TASKS_BACK, onPress: tasks.boardView.onOpen }}
           />
-          {secondCall}
         </SkillFiles>
       );
     // With no task open the column is a new account's welcome, and ⌘N's
@@ -1407,7 +1551,6 @@ export const DesktopTasks = memo(function DesktopTasks({
           <Fill className="home">
             <DesktopWelcome tasks={tasks} />
           </Fill>
-          {secondCall}
         </>
       );
   }

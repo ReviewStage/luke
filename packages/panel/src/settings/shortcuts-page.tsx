@@ -8,9 +8,14 @@ import {
   FILES_CHANGED_GROUP_TITLE,
   FILES_CHANGED_KEYS_LISTED,
   FILES_CHANGED_SHORTCUTS,
+  IN_CONTEXT_SHORTCUTS,
+  type InContextKey,
+  type InContextShortcut,
+  inContextShown,
   shownShortcutGroups,
   WRITING_ACTIONS_LISTED,
   WRITING_GROUP_TITLE,
+  WRITING_KEYS_IN_CONTEXT,
   WRITING_SHORTCUTS,
   type WritingAction,
   type WritingShortcut,
@@ -28,19 +33,22 @@ import {
 } from "@luke/ui";
 
 /**
- * shortcuts-page.tsx -- Settings' Keyboard shortcuts page: the window's own shortcuts, grouped as the menu bar groups them, listed to be found rather than changed.
- *
- * Luke's two system-wide keys are not here: they can be changed, so they live
- * on the Voice page beside the voice they reach (`voice-keys.tsx`).
+ * shortcuts-page.tsx -- Settings' Keyboard shortcuts page: the window's own shortcuts and the keys that answer in place, grouped by what they act on, listed to be found rather than changed.
  */
+
+/** What stands between the first and the last key of a run, 1 – 9. */
+const RUN_DASH = "–";
 
 /**
  * The window's own shortcuts rather than keys taken from the machine: each
  * answers only while Luke's window has the keyboard, so they are fixed and
- * listed here to be found, not chosen, under the groups the table keeps —
- * the menu bar's own — each row the command's name and its chord. A gated
- * feature's shortcut is listed only while the account has its experiment on,
- * and a platform feature's only where the platform offers it.
+ * listed here to be found, not chosen, under the groups the table keeps
+ * (`APP_SHORTCUT_GROUPS`), by what they act on: each row the command's name
+ * and its chord, then the group's keys that answer in place, where focus or
+ * a selection stands (`IN_CONTEXT_SHORTCUTS`). Escape is one row, under
+ * General, for every layer it steps back from. A gated feature's shortcut is
+ * listed only while the account has its experiment on, and a platform
+ * feature's only where the platform offers it.
  *
  * Each group is `@luke/ui`'s `SettingsSection` and each command its
  * `SettingsRow` at the list density, a reference's line rather than a
@@ -50,7 +58,8 @@ import {
  *
  * Writing follows them, read from the vocabulary the editors bind their
  * chords from: each mark and block with the Markdown typed in text that makes
- * it, where there is one, and its chord, where it has one. Files changed's
+ * it, where there is one, and its chord, where it has one, then a link's ⌘K
+ * over selected words and the `@` list's keys. Files changed's
  * own keys follow under a group of their own, read from the
  * table the view's handler answers to (`changes-list.tsx`), the order its
  * `?` sheet lists them in, and Chapters' after them (`agent-chapters-tab.tsx`).
@@ -73,6 +82,9 @@ export function WindowShortcutSections({
               </SettingsRow>
             </div>
           ))}
+          {group.keys.map((key) => (
+            <InContextRow key={key} inContext={key} />
+          ))}
         </SettingsSection>
       ))}
       <SettingsSection title={WRITING_GROUP_TITLE}>
@@ -85,6 +97,9 @@ export function WindowShortcutSections({
               {() => <WritingKeys action={action} />}
             </SettingsRow>
           </div>
+        ))}
+        {WRITING_KEYS_IN_CONTEXT.filter((key) => inContextShown(key, capabilities)).map((key) => (
+          <InContextRow key={key} inContext={key} />
         ))}
       </SettingsSection>
       <SettingsSection title={FILES_CHANGED_GROUP_TITLE}>
@@ -109,6 +124,30 @@ export function WindowShortcutSections({
         ))}
       </SettingsSection>
     </>
+  );
+}
+
+/** A key that answers in place: its name, then its chord, or the first and the last of a run of keys, 1 – 9. */
+function InContextRow({ inContext }: { inContext: InContextKey }): React.JSX.Element {
+  const { label, chord, through }: InContextShortcut = IN_CONTEXT_SHORTCUTS[inContext];
+  return (
+    <div {...searchAnchorProps(inContext)}>
+      <SettingsRow density={SETTINGS_ROW_DENSITY.LIST} label={label}>
+        {() => (
+          <>
+            <Shortcut value chord={chord} spoken />
+            {through === undefined ? null : (
+              <>
+                <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.LABEL} tone={TEXT_TONE.MUTED}>
+                  {RUN_DASH}
+                </Text>
+                <Shortcut value chord={through} spoken />
+              </>
+            )}
+          </>
+        )}
+      </SettingsRow>
+    </div>
   );
 }
 

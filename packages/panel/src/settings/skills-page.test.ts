@@ -12,12 +12,14 @@ import {
 import { INSTALLED_SKILL_CALL_FAILURE } from "@luke/features/installed-skill-view";
 import { INSTALLED_SKILL_SCOPE, INSTALLED_SKILL_SOURCE } from "@luke/features/installed-skill-wire";
 import { parseSkillPaste, SKILL_PASTE_KIND } from "@luke/features/skill-paste";
+import { TASK_SKILL_BOUNDS } from "@luke/features/task-wire";
 import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import type { PortActKind } from "@luke/host/contract";
 import { act, createElement, Fragment } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
+import { announcedAsAlert, mountAnnouncer } from "../testing/announcer.js";
 import { fakeActPort } from "../testing/app-bridge.js";
 import { fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import { restOn } from "../testing/hint-rest.js";
@@ -194,6 +196,8 @@ let nameTaken = false;
 let sourcePreview: InstalledSkillPreview = SOURCE;
 /** How many of the next file reads go unanswered. */
 let unansweredFiles = 0;
+/** How many of the next previews the service never answers, which the port refuses. */
+let unreachedPreviews = 0;
 
 const roots: Root[] = [];
 
@@ -206,6 +210,7 @@ beforeEach(() => {
   nameTaken = false;
   sourcePreview = SOURCE;
   unansweredFiles = 0;
+  unreachedPreviews = 0;
   fakeActPort({
     [ACT_KIND.WORKSPACE_MEMBERS_READ]: () =>
       Promise.resolve([
@@ -257,6 +262,10 @@ beforeEach(() => {
     },
     [ACT_KIND.INSTALLED_SKILLS_PREVIEW]: (payload) => {
       sent.push({ kind: ACT_KIND.INSTALLED_SKILLS_PREVIEW, payload });
+      if (unreachedPreviews > 0) {
+        unreachedPreviews -= 1;
+        return Promise.reject(new Error("offline"));
+      }
       return Promise.resolve(
         /^(?:npx|https:)/u.test(payload.text)
           ? { ...sourcePreview, missing: missingNames }
@@ -340,13 +349,16 @@ async function mountPage(shown = workspace()): Promise<void> {
   await settle();
 }
 
-async function mountDialog(shown = workspace()): Promise<InstalledSkillSummary[]> {
+async function mountDialog(
+  shown = workspace(),
+  onClose: () => void = () => undefined,
+): Promise<InstalledSkillSummary[]> {
   const installed: InstalledSkillSummary[] = [];
   mount(
     createElement(AddSkillDialog, {
       workspace: shown,
       onInstalled: (made) => installed.push(...made),
-      onClose: () => undefined,
+      onClose,
       pause: () => Promise.resolve(),
     }),
   );
@@ -442,11 +454,31 @@ test("the workspace's skills stand before the account's own, each with its sourc
   await mountPage();
 
   const headings = [...document.querySelectorAll("h2")].map((each) => each.textContent);
-  assert.deepEqual(headings, ["Stage", "Personal"]);
+  assert.deepEqual(headings, ["Stage", "Only you"]);
   const text = document.body.textContent ?? "";
-  assert.match(text, /release-notes described · acme\/agent-skills @ 3f9c2e1 · by DeanWorkspace/u);
-  assert.match(text, /pr-style described · pastedPersonal/u);
+  assert.match(
+    text,
+    /release-notes described · acme\/agent-skills @ 3f9c2e1 · by Dean\. Follows your workspace\.Workspace/u,
+  );
+  assert.match(text, /pr-style described · pastedOnly you/u);
   assert.match(text, /\.agents\/skills.*only agents started afterwards/u);
+});
+
+test("the workspace's skills each say they follow the workspace, and the account's own say nothing the page's head does not", async () => {
+  await mountPage();
+
+  assert.match(rowOf("release-notes").textContent ?? "", /Follows your workspace\./u);
+  assert.doesNotMatch(rowOf("pr-style").textContent ?? "", /Follows your/u);
+});
+
+test("an empty workspace group says it follows the workspace", async () => {
+  stored = [PR_STYLE];
+  await mountPage();
+
+  assert.match(
+    document.body.textContent ?? "",
+    /No skills installed yet\. Follows your workspace\./u,
+  );
 });
 
 test("a skill's row leads with the book in the settings mark slot, and hangs the skill's card, which says whose it is and names no file", async () => {
@@ -472,18 +504,18 @@ test("a GitHub skill whose folder moved offers Update in its ⋯, which updates 
   assert.deepEqual(sentOf(ACT_KIND.INSTALLED_SKILLS_CHECK_UPDATE), [
     { workspaceId: "workspace-stage", skillId: RELEASE_NOTES.id },
   ]);
-  assert.deepEqual(menuOf("release-notes"), ["View", "Update", "Remove"]);
+  assert.deepEqual(menuOf("release-notes"), ["Open", "Update", "Remove"]);
   await choose("release-notes", "Update");
   assert.deepEqual(sentOf(ACT_KIND.INSTALLED_SKILLS_UPDATE), [
     { workspaceId: "workspace-stage", skillId: RELEASE_NOTES.id },
   ]);
-  assert.deepEqual(menuOf("release-notes"), ["View", "Remove"]);
+  assert.deepEqual(menuOf("release-notes"), ["Open", "Remove"]);
 });
 
 test("the account's own skill offers Share with workspace, which asks in plain words and moves it there", async () => {
   await mountPage();
 
-  assert.deepEqual(menuOf("pr-style"), ["View", "Share with workspace", "Remove"]);
+  assert.deepEqual(menuOf("pr-style"), ["Open", "Share with workspace", "Remove"]);
   await choose("pr-style", "Share with workspace");
   const question = dialog("alertdialog");
   assert.match(question.textContent ?? "", /Share pr-style with Stage\?/u);
@@ -491,7 +523,7 @@ test("the account's own skill offers Share with workspace, which asks in plain w
     question.textContent ?? "",
     /Everyone in Stage will get pr-style\. It leaves your personal skills\./u,
   );
-  act(() => button("Share", question).click());
+  act(() => button("Share with workspace", question).click());
   await settle();
 
   assert.deepEqual(sentOf(ACT_KIND.INSTALLED_SKILLS_SHARE), [
@@ -499,7 +531,10 @@ test("the account's own skill offers Share with workspace, which asks in plain w
   ]);
   assert.equal(document.querySelector('[role="alertdialog"]'), null);
   const [, shared, personal] = [...document.querySelectorAll("section")];
-  assert.match(shared?.textContent ?? "", /pr-style described · pasted · by youWorkspace/u);
+  assert.match(
+    shared?.textContent ?? "",
+    /pr-style described · pasted · by you\. Follows your workspace\.Workspace/u,
+  );
   assert.match(personal?.textContent ?? "", /No skills installed yet\./u);
 });
 
@@ -508,47 +543,67 @@ test("a share the workspace already has the name for is refused in the question,
   await mountPage();
 
   await choose("pr-style", "Share with workspace");
-  act(() => button("Share", dialog("alertdialog")).click());
+  act(() => button("Share with workspace", dialog("alertdialog")).click());
   await settle();
 
   assert.match(
     dialog("alertdialog").textContent ?? "",
     /Stage already has a skill named pr-style\. Remove one of them first\./u,
   );
-  assert.match(rowOf("pr-style").textContent ?? "", /pastedPersonal/u);
+  assert.match(rowOf("pr-style").textContent ?? "", /pastedOnly you/u);
 });
 
 test("Share is never offered in a personal workspace", async () => {
   stored = [PR_STYLE];
   await mountPage(workspace({ personal: true }));
 
-  assert.deepEqual(menuOf("pr-style"), ["View", "Remove"]);
+  assert.deepEqual(menuOf("pr-style"), ["Open", "Remove"]);
 });
 
 test("View reads the skill and draws its text as written and every file with its size", async () => {
   await mountPage();
 
-  await choose("pr-style", "View");
+  await choose("pr-style", "Open");
   assert.deepEqual(sentOf(ACT_KIND.INSTALLED_SKILLS_READ), [{ skillId: PR_STYLE.id }]);
   const shown = dialog();
   assert.equal(shown.querySelector("h2")?.textContent, "pr-style");
   assert.match(shown.querySelector("pre")?.textContent ?? "", /name: pr-style[\s\S]*# PR style/u);
   assert.deepEqual(
     [...shown.querySelectorAll("dt, dd")].map((each) => each.textContent),
-    ["SKILL.md", "48 B", "examples/good.md", "2.0 KB"],
+    ["SKILL.md", "48 B", "examples/good.md", "2.0 kB"],
   );
-  act(() => button("Close", shown).click());
+  act(() => button("Done", shown).click());
   assert.equal(document.querySelector('[role="dialog"]'), null);
 });
 
-test("Remove asks first, then takes the skill off the page", async () => {
+test("Remove asks first, red for a personal skill whose files go, then takes it off the page", async () => {
   await mountPage();
 
   await choose("pr-style", "Remove");
-  act(() => button("Remove", dialog("alertdialog")).click());
+  const question = dialog("alertdialog");
+  assert.equal(button("Remove", question).dataset.variant, "danger");
+  assert.match(question.textContent ?? "", /Its files are deleted/u);
+  act(() => button("Remove", question).click());
   await settle();
   assert.deepEqual(sentOf(ACT_KIND.INSTALLED_SKILLS_REMOVE), [{ skillId: PR_STYLE.id }]);
   assert.ok(!(document.body.textContent ?? "").includes("pr-style described"));
+});
+
+test("Removing a workspace skill says everyone in the workspace loses it, in the accent", async () => {
+  await mountPage();
+
+  await choose("release-notes", "Remove");
+  const question = dialog("alertdialog");
+  assert.match(question.textContent ?? "", /Everyone in Stage loses release-notes/u);
+  assert.notEqual(button("Remove", question).dataset.variant, "danger");
+});
+
+test("Add skill opens with its box focused, not the card", async () => {
+  await mountPage();
+
+  act(() => button("Add skill").click());
+  await settle();
+  assert.ok(document.activeElement === document.querySelector("textarea"), "the box has focus");
 });
 
 test("an install lights its own rows once and says which skills and how to call one", async () => {
@@ -587,7 +642,7 @@ test("a workspace skill a member may not change draws its switch unavailable and
 
   assert.equal(switchOf("release-notes").disabled, true);
   assert.equal(switchOf("pr-style").disabled, false);
-  assert.deepEqual(menuOf("release-notes"), ["View"]);
+  assert.deepEqual(menuOf("release-notes"), ["Open"]);
   assert.deepEqual(sentOf(ACT_KIND.INSTALLED_SKILLS_CHECK_UPDATE), []);
 });
 
@@ -597,7 +652,7 @@ test("a personal workspace lists the account's own skills alone", async () => {
 
   assert.deepEqual(
     [...document.querySelectorAll("h2")].map((each) => each.textContent),
-    ["Personal"],
+    ["Only you"],
   );
 });
 
@@ -611,8 +666,8 @@ test("a command that names a skill is confirmed as its card, with no list, and I
   const text = document.body.textContent ?? "";
   assert.match(text, /Add web-design-guidelines/u);
   assert.match(text, /From vercel-labs\/agent-skills @ 3f9c2e1/u);
-  assert.match(text, /4 files · 21 KB · skills\/web/u);
-  assert.match(text, /2 other skills in this repo/u);
+  assert.match(text, /4 files · 22 kB · skills\/web/u);
+  assert.match(text, /2 other skills in this repository/u);
   assert.equal(document.querySelector("textarea"), null);
   assert.equal(document.querySelector('input[type="checkbox"]'), null);
 
@@ -727,7 +782,7 @@ test("a browsed skill's SKILL.md opens beside its box, and a read that failed is
     )[2] ?? assert.fail("no View for tdd");
   act(() => view().click());
   await settle();
-  assert.match(document.body.textContent ?? "", /Luke couldn't reach the service/u);
+  assert.match(document.body.textContent ?? "", /The service could not be reached/u);
   act(() => view().click());
   act(() => view().click());
   await settle();
@@ -801,6 +856,7 @@ test("only what a paste would install scrolls: the box's folded line, the search
 test("a refused install says which skill and why in words, keeps the dialog, and marks that skill so it no longer installs", async () => {
   refuseInstall = true;
   await mountDialog();
+  mountAnnouncer();
   await paste(COMMAND);
 
   act(() => primary().click());
@@ -809,7 +865,11 @@ test("a refused install says which skill and why in words, keeps the dialog, and
     document.body.textContent ?? "",
     /web-design-guidelines holds more than 64 files\./u,
   );
-  assert.ok(document.querySelector('[role="alert"]'));
+  assert.equal(
+    announcedAsAlert(),
+    "More than 64 files",
+    "the skill's mark is announced as an alert",
+  );
   assert.match(document.body.textContent ?? "", /More than 64 files/u);
   assert.equal(primary().textContent, "Install");
   assert.equal(primary().disabled, true);
@@ -836,6 +896,74 @@ test("pasted text folds to its size, its name suggested and editable, and asks w
       description: "How PRs read here.",
     },
   ]);
+});
+
+test("the When-to-use box stops at the description cap and counts toward it", async () => {
+  await mountDialog();
+  await paste(TEXT);
+
+  const box = fieldOf("When should agents use it?");
+  assert.equal(
+    box instanceof HTMLTextAreaElement && box.maxLength,
+    TASK_SKILL_BOUNDS.MAX_DESCRIPTION_CHARS,
+  );
+  assert.equal(document.querySelector(".luke-length-counter"), null);
+  typeInto(box, "x".repeat(Math.ceil(TASK_SKILL_BOUNDS.MAX_DESCRIPTION_CHARS * 0.9)));
+  await settle();
+  assert.match(
+    document.querySelector(".luke-length-counter")?.textContent ?? "",
+    new RegExp(`/${TASK_SKILL_BOUNDS.MAX_DESCRIPTION_CHARS}$`, "u"),
+  );
+});
+
+test("a name with a bad shape is marked invalid and says why on the Name field alone", async () => {
+  await mountDialog();
+  await paste(TEXT);
+  typeInto(fieldOf("When should agents use it?"), "How PRs read here.");
+  assert.equal(fieldOf("Name").getAttribute("aria-invalid"), null, "a good name is not marked");
+
+  typeInto(fieldOf("Name"), "PR Style");
+  await settle();
+  const name = fieldOf("Name");
+  const error = name.closest('[data-slot="field"]')?.querySelector('[data-slot="field-error"]');
+  assert.equal(name.getAttribute("aria-invalid"), "true");
+  assert.equal(error?.textContent, "Name must be lowercase words joined by hyphens");
+  assert.ok(
+    name
+      .getAttribute("aria-describedby")
+      ?.split(" ")
+      .includes(error?.id ?? "missing"),
+  );
+  assert.equal(fieldOf("When should agents use it?").getAttribute("aria-invalid"), null);
+  assert.equal(
+    document.querySelectorAll('[data-slot="field-error"]:not(:empty)').length,
+    1,
+    "the problem is said once, on its field, not again under both",
+  );
+  assert.equal(primary().disabled, true);
+});
+
+test("a When-to-use that runs past the cap is marked invalid and says so on its own field alone", async () => {
+  await mountDialog();
+  await paste(TEXT);
+
+  const box = fieldOf("When should agents use it?");
+  typeInto(box, "x".repeat(TASK_SKILL_BOUNDS.MAX_DESCRIPTION_CHARS + 1));
+  await settle();
+  const error = box.closest('[data-slot="field"]')?.querySelector('[data-slot="field-error"]');
+  assert.equal(box.getAttribute("aria-invalid"), "true");
+  assert.equal(
+    error?.textContent,
+    `Description over ${TASK_SKILL_BOUNDS.MAX_DESCRIPTION_CHARS} characters`,
+  );
+  assert.ok(
+    box
+      .getAttribute("aria-describedby")
+      ?.split(" ")
+      .includes(error?.id ?? "missing"),
+  );
+  assert.equal(fieldOf("Name").getAttribute("aria-invalid"), null);
+  assert.equal(document.querySelectorAll('[data-slot="field-error"]:not(:empty)').length, 1);
 });
 
 test("a source on another host says only GitHub for now and asks the service nothing", async () => {
@@ -872,4 +1000,49 @@ test("a description typed for one paste is never sent with the next", async () =
   assert.equal(fieldOf("When should agents use it?").value, "");
   assert.equal(fieldOf("Name").value, "review-style");
   assert.equal(primary().disabled, true);
+});
+
+/** Presses Escape in the dialog's box, as a member does with the caret in it. */
+function escapeInBox(): void {
+  act(() => {
+    (
+      document.querySelector("textarea") ??
+      document.querySelector('[role="dialog"]') ??
+      assert.fail("no box")
+    ).dispatchEvent(
+      new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }),
+    );
+  });
+}
+
+test("Escape with pasted text in the box holds the dialog open, and the next one closes it", async () => {
+  let closed = 0;
+  await mountDialog(workspace(), () => {
+    closed += 1;
+  });
+  await paste(TEXT);
+  escapeInBox();
+  assert.equal(closed, 0, "pasted text is held, not put away");
+  assert.ok(document.querySelector('[role="dialog"]'), "the dialog stands");
+
+  escapeInBox();
+  assert.equal(closed, 1, "the next Escape puts it away");
+});
+
+test("a preview the service never answers says it could not be read, and Retry asks again", async () => {
+  unreachedPreviews = 1;
+  await mountDialog();
+  await paste(COMMAND);
+
+  const text = document.body.textContent ?? "";
+  assert.match(text, /That paste could not be read\./u);
+  assert.doesNotMatch(text, /Reading/u, "a failed preview is no longer being read");
+
+  act(() => button("Retry").click());
+  await settle();
+  assert.deepEqual(sentOf(ACT_KIND.INSTALLED_SKILLS_PREVIEW), [
+    { workspaceId: "workspace-stage", text: COMMAND },
+    { workspaceId: "workspace-stage", text: COMMAND },
+  ]);
+  assert.match(document.body.textContent ?? "", /Add web-design-guidelines/u);
 });

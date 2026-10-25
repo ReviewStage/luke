@@ -4,7 +4,7 @@ import {
   type ProviderKeySummary,
 } from "@luke/features/provider-key-wire";
 import { ACT_KIND } from "@luke/host/acts";
-import { SETTINGS_VIEW } from "@luke/settings/settings-views";
+import { agentKeyLink } from "@luke/settings/settings-views";
 import {
   createContext,
   type ReactNode,
@@ -23,12 +23,12 @@ import { useOpenSettings } from "./open-settings.js";
  *
  * Calls and dictated clips run on the account's own OpenAI key and never on
  * Luke's, so with none saved the Call and Dictate buttons say where to add
- * one and open Settings › Agents rather than starting something the service
- * would refuse. The window reads the account's keys once it is signed in,
- * again whenever it is focused, which is how the developer comes back from
- * saving one elsewhere, and Settings hands over every answer its own key
- * reads and writes, so a key saved or removed there turns the buttons at
- * once.
+ * one and open Codex's row in Settings › Agents rather than starting
+ * something the service would refuse. The window reads the account's keys
+ * once it is signed in, again whenever it is focused, which is how the
+ * developer comes back from saving one elsewhere, and Settings hands over
+ * every answer its own key reads and writes, so a key saved or removed there
+ * turns the buttons at once.
  * Until a read has answered, and whenever one fails, nothing is known, and
  * nothing is turned away on a guess. Outside the window, as in a test of one
  * surface, nothing is known either.
@@ -134,8 +134,11 @@ export function useSettleOpenAiKey(): OpenAiKeyStanding["settle"] {
   return useContext(OpenAiKeyContext).settle;
 }
 
-/** Opens Settings › Agents, where the account's API keys are saved. */
+/** Opens Settings › Agents at Codex's row, where the account's OpenAI key is saved. */
 export function useOpenApiKeys(): () => void {
   const openSettings = useOpenSettings();
-  return useCallback(() => openSettings({ page: SETTINGS_VIEW.CODING_AGENTS }), [openSettings]);
+  return useCallback(
+    () => openSettings(agentKeyLink(PROVIDER_KEY_PROVIDER.OPENAI)),
+    [openSettings],
+  );
 }
