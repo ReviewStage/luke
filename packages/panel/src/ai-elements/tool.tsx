@@ -217,7 +217,7 @@ export function ToolLine({
         )}
       </span>
       {place === undefined ? null : (
-        <span className="flex flex-none">
+        <span className="tool-place flex flex-none">
           {" "}
           <Badge>{place}</Badge>
         </span>
