@@ -49,6 +49,7 @@ import {
   OVER_PANE_WIDTH,
   OverPane,
   PaneBar,
+  SCROLL_FADE,
   SCROLL_SIZE,
   ScrollArea,
   Skeleton,
@@ -886,7 +887,8 @@ function ChaptersReading({
             }}
           />
           <div className="chapter-brief">
-            <ScrollArea size={SCROLL_SIZE.CONTENT}>
+            {/* Note that a brief cut short by its share fades at the cut, never slicing a line through its letters. */}
+            <ScrollArea size={SCROLL_SIZE.CONTENT} fade={SCROLL_FADE.BOTH}>
               <div className="chapter-brief-body">
                 <div className="chapter-summary">
                   <TranscriptWords text={chapter.summary} />
