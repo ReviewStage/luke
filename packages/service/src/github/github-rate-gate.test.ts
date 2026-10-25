@@ -29,9 +29,13 @@ const INSTALLATION_BEARER = "ghs_fixture-installation-token";
 
 type Answer = () => Response | Promise<Response>;
 
-/** A GitHub whose next answers are the ones queued, and 200 once they run out. */
+/**
+ * A GitHub whose next answers are the ones queued, and 200 once they run
+ * out, behind a gate of its own: `Layer.fresh`, because a build of the gate
+ * inside another one still open would otherwise be handed that same instance.
+ */
 function scriptedGitHub(answers: Answer[]) {
-  return githubRateGate.pipe(
+  return Layer.fresh(githubRateGate).pipe(
     Layer.provide(fakeHttpClientLayer(() => (answers.shift() ?? (() => Response.json({})))())),
   );
 }
@@ -46,7 +50,7 @@ function timedGitHub(
   arrived: () => void,
   readsAnswered?: Promise<void>,
 ) {
-  return githubRateGate.pipe(
+  return Layer.fresh(githubRateGate).pipe(
     Layer.provide(
       Layer.succeed(
         HttpClient.HttpClient,
@@ -128,6 +132,20 @@ it.layer(getTestDB())("the GitHub rate gate", (it) => {
         }).pipe(Effect.provide(scriptedGitHub([secondary, secondary])), holdingNothing);
         assert.deepEqual(statuses, [403, 403, 429, 200]);
       }),
+  );
+
+  it.effect("a refusal long after the last hold lifted holds a minute again", () =>
+    Effect.gen(function* () {
+      const statuses = yield* Effect.gen(function* () {
+        const first = yield* asked;
+        yield* TestClock.adjust("17 minutes");
+        const again = yield* asked;
+        yield* TestClock.adjust("1 minute");
+        const sent = yield* asked;
+        return [first, again, sent];
+      }).pipe(Effect.provide(scriptedGitHub([secondary, secondary])), holdingNothing);
+      assert.deepEqual(statuses, [403, 403, 200]);
+    }),
   );
 
   it.effect("a hold one instance was refused into holds another instance's requests too", () =>
@@ -227,6 +245,72 @@ it.layer(getTestDB())("the GitHub rate gate", (it) => {
         [2000, 3000],
       );
     }),
+  );
+
+  it.effect("writes waiting their turn hold no place a read could be sent in", () =>
+    Effect.gen(function* () {
+      const arrivals: Array<readonly [string, number]> = [];
+      const start = yield* Clock.currentTimeMillis;
+      const firstWrite = Promise.withResolvers<void>();
+      const read = Promise.withResolvers<void>();
+      const arrived = () => {
+        const methods = arrivals.map(([method]) => method);
+        if (methods.includes("POST")) firstWrite.resolve();
+        if (methods.includes("GET")) read.resolve();
+      };
+      yield* Effect.gen(function* () {
+        const comment = sentAs(HttpClientRequest.post(COMMENTS));
+        const writes = Array.from({ length: 7 }, () => comment);
+        const all = yield* Effect.forkChild(
+          Effect.all([...writes, pullRequestAsked], { concurrency: "unbounded" }),
+        );
+        yield* Effect.promise(() => firstWrite.promise);
+        // Note that a second on, a write waiting its turn has been sent, so a read stuck behind the waiting writes is sent too.
+        yield* TestClock.adjust("1 second");
+        yield* Effect.promise(() => read.promise);
+        yield* Fiber.interrupt(all);
+      }).pipe(Effect.provide(timedGitHub(arrivals, arrived)), holdingNothing);
+      const [, readAt] = arrivals.find(([method]) => method === "GET") ?? [];
+      assert.equal(readAt === undefined ? undefined : readAt - start, 0);
+    }),
+  );
+
+  it.effect(
+    "a write that waited its turn past the shared read's trust reads the shared hold again",
+    () =>
+      Effect.gen(function* () {
+        // The statuses in the order the writes were answered, and a promise per answer, the first first.
+        const answered: number[] = [];
+        const turns = Array.from({ length: 7 }, () => Promise.withResolvers<void>());
+        yield* Effect.gen(function* () {
+          const comment = sentAs(HttpClientRequest.post(COMMENTS)).pipe(
+            Effect.tap((response) =>
+              Effect.sync(() => {
+                answered.push(response.status);
+                turns[answered.length - 1]?.resolve();
+              }),
+            ),
+          );
+          // Note that a read first leaves the instance's read of the shared hold standing, so no write waits on the database.
+          yield* asked;
+          const all = yield* Effect.forkChild(
+            Effect.all(
+              turns.map(() => comment),
+              { concurrency: "unbounded" },
+            ),
+          );
+          const [first, ...later] = turns.map((turn) => turn.promise);
+          yield* Effect.promise(() => first ?? Promise.resolve());
+          for (const [index, turn] of later.entries()) {
+            yield* TestClock.adjust("1 second");
+            yield* Effect.promise(() => turn);
+            // Another instance is refused once two writes are out and the rest are waiting, holding every instance.
+            if (index === 0) yield* Effect.provide(asked, scriptedGitHub([secondary]));
+          }
+          yield* Fiber.join(all);
+        }).pipe(Effect.provide(scriptedGitHub([])), holdingNothing);
+        assert.equal(answered.at(-1), 429);
+      }),
   );
 
   it.effect("an answer sent before the refusal and landing after it lifts no hold", () =>

@@ -12,16 +12,17 @@
  * minute has, waiting exponentially longer as the refusals repeat, because
  * an integration that keeps asking while limited may be banned.
  *
- * So the instance's `HttpClient` is wrapped: a request to the API waits for
- * one of `GATE.CONCURRENCY` places, a request that writes then waits until
- * `GATE.MUTATIVE_SPACING` after the last one under the same identity
- * started, and a refusal that names a rate limit holds every later request
- * under the same bearer's identity until GitHub said it may ask again. A request asked while held is not sent; it is answered here
- * as GitHub would answer it, a 429 with the `retry-after` left, marked
- * `GATE.HELD_MARK`, so every caller reads the refusal it already handles.
- * Any answer under 400 once the hold is over lifts the identity's backoff. A
- * 403 whose message is read here is still the caller's to read, since the
- * response keeps its body once read.
+ * So the instance's `HttpClient` is wrapped: a request that writes waits its
+ * identity's turn, one write at a time, until `GATE.MUTATIVE_SPACING` after
+ * the last one under that identity started; a request to the API then waits
+ * for one of `GATE.CONCURRENCY` places; and a refusal that names a rate
+ * limit holds every later request under the same bearer's identity until
+ * GitHub said it may ask again. A request asked while held is not sent; it
+ * is answered here as GitHub would answer it, a 429 with the `retry-after`
+ * left, marked `GATE.HELD_MARK`, so every caller reads the refusal it
+ * already handles. Any answer under 400 once the hold is over lifts the
+ * identity's backoff. A 403 whose message is read here is still the
+ * caller's to read, since the response keeps its body once read.
  *
  * Note that every installation token and the App's own JWT share one
  * identity, because an installation's tokens are minted per repository and
@@ -95,6 +96,12 @@ interface Hold {
 interface SharedRead {
   readonly readAt: number;
   readonly hold: Hold | undefined;
+}
+
+/** One identity's turn to write, and how many writes are in it or waiting on it. */
+interface Writer {
+  readonly turn: Semaphore.Semaphore;
+  readonly waiting: number;
 }
 
 /** What one refusal said of a rate limit: whether it was one, and how long GitHub asked to wait where it said. */
@@ -229,6 +236,7 @@ export const githubRateGate: Layer.Layer<
     const holds = new Map<string, Hold>();
     const shared = new Map<string, SharedRead>();
     const nextWrite = new Map<string, number>();
+    const writers = new Map<string, Writer>();
 
     const remembered = (identity: string, now: number, hold: Hold | undefined) =>
       Effect.sync(() => {
@@ -271,23 +279,43 @@ export const githubRateGate: Layer.Layer<
       return hold;
     });
 
-    /** The hold standing on the identity at `now`, the instance's own or the shared one as last read, without reading again. */
-    const standingHold = (identity: string, now: number): Hold | undefined =>
-      [holds.get(identity), shared.get(identity)?.hold].find(
-        (hold) => hold !== undefined && now < hold.until,
-      );
-
-    /** Waits until a request that writes may start under the identity, its start booked before it waits. */
-    const spaced = (identity: string) =>
-      Effect.flatMap(Clock.currentTimeMillis, (now) => {
-        const start = Math.max(now, nextWrite.get(identity) ?? now);
-        // Note that a booking already past is let go, so a member token that wrote once is not kept.
-        for (const [kept, next] of nextWrite) {
-          if (next <= now) nextWrite.delete(kept);
-        }
-        nextWrite.set(identity, start + Duration.toMillis(GATE.MUTATIVE_SPACING));
-        return start > now ? Effect.sleep(Duration.millis(start - now)) : Effect.void;
+    /**
+     * The write runs in the identity's turn: one write under an identity at
+     * a time, each waiting first until `GATE.MUTATIVE_SPACING` after the
+     * last one started, so the wait holds no place a read could be sent in.
+     * A turn no write waits on is let go, so a member token that wrote once
+     * keeps none.
+     */
+    const inTurn = <A, E, R>(identity: string, write: Effect.Effect<A, E, R>) =>
+      Effect.suspend(() => {
+        const writer = writers.get(identity) ?? { turn: Semaphore.makeUnsafe(1), waiting: 0 };
+        writers.set(identity, { ...writer, waiting: writer.waiting + 1 });
+        const waited = Effect.flatMap(Clock.currentTimeMillis, (now) => {
+          const next = nextWrite.get(identity) ?? now;
+          return next > now ? Effect.sleep(Duration.millis(next - now)) : Effect.void;
+        });
+        return writer.turn
+          .withPermits(1)(Effect.andThen(waited, write))
+          .pipe(
+            Effect.ensuring(
+              Effect.sync(() => {
+                const standing = writers.get(identity);
+                if (standing === undefined) return;
+                if (standing.waiting <= 1) writers.delete(identity);
+                else writers.set(identity, { ...standing, waiting: standing.waiting - 1 });
+              }),
+            ),
+          );
       });
+
+    /** Books the start of a write under the identity at `now`, which the next write waits a second past. */
+    const started = (identity: string, now: number) => {
+      // Note that a booking already past is let go, so a member token that wrote once is not kept.
+      for (const [kept, next] of nextWrite) {
+        if (next <= now) nextWrite.delete(kept);
+      }
+      nextWrite.set(identity, now + Duration.toMillis(GATE.MUTATIVE_SPACING));
+    };
 
     /** Lets go of the shared hold an answer came after, where the instance last read one now over. */
     const lifted = Effect.fnUntraced(function* (identity: string, now: number) {
@@ -339,18 +367,20 @@ export const githubRateGate: Layer.Layer<
       const refusal = yield* refusalOf(response, yield* Clock.currentTimeMillis);
       if (!refusal.limited) return;
       const now = yield* Clock.currentTimeMillis;
+      // Note that a hold long lifted is let go before this refusal is
+      // counted, so it counts no strike, as the shared hold's statement
+      // reads it, and a member token refused once and never again is not kept.
+      for (const [kept, standing] of holds) {
+        if (standing.until + Duration.toMillis(GATE.MAXIMUM_HOLD) < now) holds.delete(kept);
+      }
       const standing = holds.get(identity);
       const holding = standing !== undefined && now < standing.until;
       // Note that refusals of requests already out as the hold began are
       // one strike, not one each, so a burst does not jump the backoff.
       const strikes = (standing?.strikes ?? 0) + (holding ? 0 : 1);
-      const hold = holdFor(refusal, Math.max(1, strikes));
+      const hold = holdFor(refusal, strikes);
       const until = Math.max(standing?.until ?? 0, now + Duration.toMillis(hold));
-      // Note that a hold long lifted is let go here, so a member token refused once and never again is not kept.
-      for (const [kept, standing] of holds) {
-        if (standing.until + Duration.toMillis(GATE.MAXIMUM_HOLD) < now) holds.delete(kept);
-      }
-      holds.set(identity, { until, strikes: Math.max(1, strikes) });
+      holds.set(identity, { until, strikes });
       const everywhere = yield* heldEverywhere(identity, refusal, now);
       // The identity's kind and GitHub's own counters alone: nothing of the bearer or the request.
       yield* Effect.logWarning("github: rate limited; holding requests", {
@@ -372,28 +402,25 @@ export const githubRateGate: Layer.Layer<
       // that queued behind the refusal must not be sent after it; this
       // instance's own hold is read first, and the shared one only where
       // that holds nothing.
-      return places.withPermits(1)(
+      const writes = MUTATIVE_METHODS.has(request.method);
+      const gated = places.withPermits(1)(
         Effect.gen(function* () {
           const now = yield* Clock.currentTimeMillis;
           const local = holds.get(identity);
           const held =
             local !== undefined && now < local.until ? local : yield* sharedHold(identity, now);
           if (held !== undefined && now < held.until) return heldAnswer(request, held.until - now);
-          // Note that a write books its start only here, with its place had
-          // and the hold read, so two writes that queued together still
-          // start a second apart; a hold set while it waited is read again
-          // from what the instance knows, with nothing awaited before the send.
-          if (MUTATIVE_METHODS.has(request.method)) {
-            yield* spaced(identity);
-            const started = yield* Clock.currentTimeMillis;
-            const since = standingHold(identity, started);
-            if (since !== undefined) return heldAnswer(request, since.until - started);
-          }
+          // Note that a write books its start only now, as it is sent, so a
+          // write that waited for its place still starts a second after the
+          // last; one held, or given up on before this, books nothing.
+          if (writes) started(identity, yield* Clock.currentTimeMillis);
           const response = yield* sent;
           yield* noted(identity, response);
           return response;
         }),
       );
+      // Note that a write waits its turn before it takes a place, and reads the hold after, so the wait holds no place and misses no hold set meanwhile.
+      return writes ? inTurn(identity, gated) : gated;
     });
   }),
 );
