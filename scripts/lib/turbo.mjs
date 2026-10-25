@@ -31,7 +31,9 @@ export const TEST_TASK = "test:vitest";
  * `TURBO_TOKEN` through to every task, and a task's output is a cache
  * artifact: a task that printed its environment would store the token in a
  * log replayed to every machine that hits the hash. With `--token` no task
- * ever sees it. Without a token turbo uses the local cache alone.
+ * ever sees it. Without a token turbo uses the local cache alone. The flag
+ * goes before any `--`, past which turbo hands every word to the task, so a
+ * sharded run's `-- --shard=<i>/<n>` never carries the token to vitest.
  *
  * Note also that we name the platform in `LUKE_TURBO_PLATFORM`, which
  * `turbo.json` hashes through `globalEnv`, because turbo's own hash covers no
@@ -42,9 +44,16 @@ export const TEST_TASK = "test:vitest";
 export function turboInvocation(args, env = process.env) {
   const { TURBO_TOKEN: token, ...rest } = env;
   const tokenArguments = token ? [`--token=${token}`] : [];
+  const passThrough = args.includes("--") ? args.indexOf("--") : args.length;
   return {
     command: "pnpm",
-    args: ["exec", "turbo", ...args, ...tokenArguments],
+    args: [
+      "exec",
+      "turbo",
+      ...args.slice(0, passThrough),
+      ...tokenArguments,
+      ...args.slice(passThrough),
+    ],
     env: { ...rest, LUKE_TURBO_PLATFORM: PLATFORM, TURBO_TELEMETRY_DISABLED: "1" },
   };
 }
