@@ -106,7 +106,7 @@ for (const { name, dark, surface } of SURFACES) {
     test(`on ${name} the ${owner} dot is drawn in the accent's hue and holds a mark's 3:1`, () => {
       layUnder(surface);
       document.body.innerHTML = renderToStaticMarkup(
-        createElement(CornerDot, { shown: true }, "Filter"),
+        createElement(CornerDot, { shown: true, children: "Filter" }),
       );
       const mark = document.querySelector(".luke-corner-dot-mark");
       assert.ok(mark, "the dot is drawn");
