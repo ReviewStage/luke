@@ -117,22 +117,23 @@ function existing(root: string, output: string): string[] {
   return BUILT_FILES.filter((file) => existsSync(join(root, output, file)));
 }
 
-test("a build without SENTRY_AUTH_TOKEN uploads nothing and leaves the output as eve wrote it", async (t) => {
+test.for([
+  {
+    build: "build without SENTRY_AUTH_TOKEN",
+    environment: { VERCEL: "1", VERCEL_GIT_COMMIT_SHA: COMMIT },
+  },
+  {
+    build: "Preview build with the token",
+    environment: {
+      VERCEL: "1",
+      VERCEL_GIT_COMMIT_SHA: COMMIT,
+      SENTRY_AUTH_TOKEN: "test-token",
+      VERCEL_ENV: "preview",
+    },
+  },
+])("a $build uploads nothing and leaves the output as eve wrote it", async ({ environment }, t) => {
   const root = await builtService(t, ".vercel/output");
-  const run = await upload(t, root, { VERCEL: "1", VERCEL_GIT_COMMIT_SHA: COMMIT });
-  assert.equal(run.status, 0, run.output);
-  assert.equal(run.uploadArguments, undefined);
-  assert.deepEqual(existing(root, ".vercel/output"), BUILT_FILES);
-});
-
-test("a Preview build with the token uploads nothing and leaves the output as eve wrote it", async (t) => {
-  const root = await builtService(t, ".vercel/output");
-  const run = await upload(t, root, {
-    VERCEL: "1",
-    VERCEL_GIT_COMMIT_SHA: COMMIT,
-    SENTRY_AUTH_TOKEN: "test-token",
-    VERCEL_ENV: "preview",
-  });
+  const run = await upload(t, root, environment);
   assert.equal(run.status, 0, run.output);
   assert.equal(run.uploadArguments, undefined);
   assert.deepEqual(existing(root, ".vercel/output"), BUILT_FILES);

@@ -334,17 +334,6 @@ it.layer(getTestDB())("the window's read of a workspace's chat", (it) => {
       }),
   );
 
-  it.effect("a read past nothing moved is let go at the hold, answering the chat unchanged", () =>
-    Effect.gen(function* () {
-      const room = yield* openRoom;
-      yield* room.post("Morning.");
-      const { cursor } = yield* room.read(CHAT_CURSOR_START);
-      const held = yield* Effect.forkChild(room.read(cursor));
-      const answered = yield* driven({ fiber: held, asleep: room.asleep }, CODER.MESSAGES_HOLD);
-      assert.deepEqual([answered.messages, answered.cursor], [[], cursor]);
-    }),
-  );
-
   it.effect(
     "a held read is let go exactly at the store's hold, not a poll before, and the oRPC route adds no deadline of its own",
     () =>

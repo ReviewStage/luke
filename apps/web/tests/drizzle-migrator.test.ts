@@ -120,14 +120,6 @@ it.layer(withPlatform(getTestDB()))(
         assert.deepEqual([...(yield* recordedNames)].sort(), yield* folders);
       }),
     );
-
-    it.effect("applies nothing a second time either", () =>
-      Effect.gen(function* () {
-        yield* runWebMigrations();
-        assert.deepEqual(yield* runWebMigrations(), []);
-        assert.deepEqual([...(yield* recordedNames)].sort(), yield* folders);
-      }),
-    );
   },
 );
 

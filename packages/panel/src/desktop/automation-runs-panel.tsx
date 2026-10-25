@@ -19,6 +19,8 @@ import {
   FiringGlyph,
   LIST_DENSITY,
   LIST_ROW_CURRENT,
+  LIST_ROW_LEAD,
+  LIST_VARIANT,
   List,
   ListMotion,
   ListRow,
@@ -37,6 +39,7 @@ import {
   useMinute,
   useResizeEdge,
 } from "@luke/ui";
+import { GLYPH } from "@luke/ui/icons";
 import { ClockIcon, ExternalLinkIcon } from "lucide-react";
 import { useEffect, useRef } from "react";
 import { useCopyLinkItem } from "../copy-link-item.js";
@@ -70,7 +73,7 @@ const RUNS = "Runs";
  */
 
 /** Whose key a run ran on where the automation is another's, as its line names it. */
-const CREATOR = "its creator";
+export const CREATOR = "its creator";
 
 /** What a run's row is, which names its ⋯ and its menu. */
 const RUN_THING = "Run";
@@ -110,11 +113,12 @@ function subjectLink(run: AutomationRunSummary): { url: string; label: string } 
   return { url: firing.subject.url, label: `Open in ${TRIGGER_CATALOG[firing.provider].name}` };
 }
 
-/** One run's row, a press opening its agent where it started one, or else its subject where it names one, and its ⋯ and right-click offering its Copy link and its subject; a run that opens nothing is no press. */
-function RunRow({
+/** One run's row, a press opening its agent where it started one, or else its subject where it names one, and its ⋯ and right-click offering its Copy link and its subject; a run that opens nothing is no press. A row among many automations' runs names its automation on a line of its own. */
+export function RunRow({
   run,
   keyHolder,
   automationId,
+  automationName,
   linked,
   now,
   onOpenAgent,
@@ -122,6 +126,8 @@ function RunRow({
   run: AutomationRunSummary;
   keyHolder: string | undefined;
   automationId: string | undefined;
+  /** The automation it is a run of, said over its line where the list holds more than one automation's runs; none on that automation's own page. */
+  automationName?: string | undefined;
   /** Whether a link named this run, which marks it and brings it into view. */
   linked: boolean;
   now: number;
@@ -157,6 +163,12 @@ function RunRow({
       }}
       leading={<StateGlyph glyph={<FiringGlyph of={run.firing} />} state={state} />}
       title={automationRunTitle(run)}
+      lead={
+        automationName === undefined
+          ? undefined
+          : { icon: <GLYPH.AUTOMATION />, label: automationName }
+      }
+      leadAt={LIST_ROW_LEAD.LINE}
       description={
         <Tooltip label={line}>
           <span>{line}</span>
@@ -186,13 +198,18 @@ function RunRow({
 /**
  * The runs while they are first read: rows in a run's own row, a block where
  * its glyph, its title, its line, and when it fired will stand, so the runs
- * land where the blocks stood. The rows open nothing, and the region says
- * what is being read.
+ * land where the blocks stood, in a card where they will stand in one, as
+ * the Runs tab draws them. The rows open nothing, and the region says what
+ * is being read.
  */
-function RunsSkeleton(): React.JSX.Element {
+export function RunsSkeleton({ card = false }: { card?: boolean }): React.JSX.Element {
   return (
     <SkeletonRegion label={READING_RUNS}>
-      <List label="Runs" density={LIST_DENSITY.COMPACT}>
+      <List
+        label="Runs"
+        density={LIST_DENSITY.COMPACT}
+        variant={card ? LIST_VARIANT.CARD : LIST_VARIANT.PLAIN}
+      >
         {SKELETON_RUNS.map(({ title, line }) => (
           <ListRow
             key={title}

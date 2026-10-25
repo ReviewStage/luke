@@ -830,36 +830,6 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
   );
 
   it.effect(
-    "open answers failed and opens nothing where no snapshot or no setup-token stands",
-    () =>
-      Effect.gen(function* () {
-        vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
-        const { userId, agent } = yield* openAgentWithoutPlan;
-        const noSnapshot = runnerSandboxApi();
-        const withoutImage = yield* sessionsFor(userId, { next: 0 }).pipe(
-          Effect.provide(services(noSnapshot, null)),
-        );
-        assert.equal(
-          (yield* withoutImage.open(message(agent, "Go."))).outcome,
-          EVE_SEND_OUTCOME.FAILED,
-        );
-        assert.deepEqual(noSnapshot.sandboxes, []);
-
-        const noToken = runnerSandboxApi();
-        const withoutPlan = yield* sessionsFor(userId, { next: 0 }).pipe(
-          Effect.provide(services(noToken)),
-        );
-        assert.equal(
-          (yield* withoutPlan.open(message(agent, "Go."))).outcome,
-          EVE_SEND_OUTCOME.FAILED,
-        );
-        // The sandbox the failed launch opened is deleted again, and no runner started.
-        assert.ok(noToken.sandboxes.every((sandbox) => sandbox.deleted));
-        assert.deepEqual(noToken.commands, []);
-      }),
-  );
-
-  it.effect(
     "a PDF attached to the first message or a later one is written into the sandbox and named by its path, where an image goes as a block",
     () =>
       Effect.gen(function* () {

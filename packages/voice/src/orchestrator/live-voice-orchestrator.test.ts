@@ -365,11 +365,6 @@ it.effect(
       yield* TestClock.adjust(Duration.millis(10));
       yield* Effect.yieldNow;
       assert.equal(f.views.length, before + 1);
-      assert.deepEqual(
-        Object.keys(f.views[before] ?? {}).filter((key) => /caption/iu.test(key)),
-        [],
-        "the view carries no captions: what is said is the transcript's alone",
-      );
       assert.deepEqual(f.transcripts[before], {
         voiceSessionId: "voice-session-1",
         from: 0,

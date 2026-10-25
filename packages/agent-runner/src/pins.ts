@@ -6,8 +6,7 @@
  * `codex-sessions.ts`) point the runner at the paths, the runner bundles
  * the same Agent SDK (this package's `package.json`), and Codex's
  * app-server protocol types are generated from the same Codex
- * (`scripts/generate-codex-protocol.mjs`). A bump moves them together, and
- * `pins.test.ts` refuses a runner or a protocol left behind. Erasable syntax
+ * (`scripts/generate-codex-protocol.mjs`). A bump moves them together. Erasable syntax
  * alone, so Node runs the generator over it as it stands.
  */
 
