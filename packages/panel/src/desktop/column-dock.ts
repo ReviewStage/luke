@@ -38,6 +38,9 @@ const CARD_TILE = ".luke-call-video-tile";
 /** The tile's still, where it draws Luke's face and its words in the video's place (`@luke/ui`'s `AvatarStill`). */
 const TILE_STILL = ".luke-call-video-still";
 
+/** The tile's wait once the video's first frame is drawn (`@luke/ui`'s `AvatarWaiting`), which fades out but stays laid out. */
+const TILE_GONE = '.luke-call-video-waiting[data-gone="true"]';
+
 /** The length the card hands its tile's height in (`@luke/ui`'s placement hook). */
 const CARD_TILE_HEIGHT = "--luke-call-video-height";
 
@@ -148,11 +151,15 @@ function barFeet(column: Element, rest: number): number[] {
  * (Video ended, why, and Restart video; or the wait while it connects):
  * from its first line shown to its last, its padding, and the tile's border;
  * or nothing over a picture. Note that the lines are read where they lay
- * out, so a tile already shortened still answers what they need whole.
+ * out, so a tile already shortened still answers what they need whole; and
+ * that a wait gone from over the video's first frame (`TILE_GONE`) needs
+ * nothing, since it stays laid out while it fades and then stands unseen.
  */
 function stillNeeds(tile: HTMLElement): number {
-  const still = tile.querySelector<HTMLElement>(TILE_STILL);
-  if (still === null) return 0;
+  const still = [...tile.querySelectorAll<HTMLElement>(TILE_STILL)].find(
+    (each) => each.closest(TILE_GONE) === null,
+  );
+  if (still === undefined) return 0;
   const lines = [...still.children].filter(
     (line): line is HTMLElement => line instanceof HTMLElement && line.offsetHeight > 0,
   );
@@ -376,7 +383,13 @@ export function useColumnDock(
       });
     }
     const arrived = new MutationObserver(measure);
-    arrived.observe(host, { childList: true, subtree: true });
+    // Note that the card's wait goes from over the video's first frame by an attribute alone, which frees the room it held (`stillNeeds`).
+    arrived.observe(host, {
+      childList: true,
+      subtree: true,
+      attributes: true,
+      attributeFilter: ["data-gone"],
+    });
     // Note that a scroll moves a part that flows with what it scrolls, an Inbox reply box, under the toasts, and neither observer sees it.
     host.addEventListener("scroll", measure, { capture: true, passive: true });
     follow();
