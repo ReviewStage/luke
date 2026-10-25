@@ -310,7 +310,7 @@ export const COMPOSER_DOCK_CLASS = "px-luke-16 pt-0 pb-row-inset";
  * the card: its foot pads past the fade, so the newest line stands whole
  * above it.
  */
-export const LOG_OVER_COMPOSER_CLASS = "agent-log-over-composer pb-log-over-composer";
+export const LOG_OVER_COMPOSER_CLASS = "agent-log-over-composer";
 
 export function ComposerCard({
   children,

@@ -223,7 +223,7 @@
 
 /* A plan's task item the developer can tick from the drawn plan says so. */
 .plan-unit li.task-list-item input[type="checkbox"]:enabled {
-  cursor: pointer;
+  cursor: var(--luke-cursor-press);
 }
 
 /* A section's heading wraps short of the row at its end, so the byline and
@@ -2026,10 +2026,33 @@
    leaves a strip of one mark a chapter while hidden. */
 .chapters-view {
   --chapter-rail-width: calc(var(--luke-space-64) * 4);
+  /* The least the chapter reads at: its bar, three lines of its brief, the
+     least of its files (below), and its foot. Its strip is as wide as keeps
+     each mark clear of the edge it stands at, a window's or the panel's. */
+  --chapter-brief-least: calc(3 * var(--luke-type-body-leading) + var(--luke-list-inset));
+  --chapter-reading-least: calc(
+    4 *
+    var(--luke-pane-bar-height) +
+    var(--luke-row-inset) +
+    var(--chapter-brief-least)
+  );
+  --chapter-strip-width: var(--luke-space-20);
 }
 
+/* Note that the body never stands shorter than the chapter's least, so a
+   window too short for it lets the Pull request tab scroll (below) rather
+   than slicing the brief or pushing the foot out past the body's clip. */
 .chapters-body {
   position: relative;
+  min-height: var(--chapter-reading-least);
+}
+
+/* A window too short for the header, the tabs and the chapter's least
+   scrolls the Pull request tab as one while Chapters is shown, the header
+   leaving the top, so every part of the chapter reads whole. Any view
+   with no least of its own fills the room as before and never scrolls it. */
+.pull-request-tab:has(> .pull-request-view:not([hidden]) > .chapters-view) {
+  overflow-y: auto;
 }
 
 .chapter-rail {
@@ -2093,7 +2116,7 @@
 
 .chapters-view[data-rail-beside="false"] .chapter-strip {
   display: flex;
-  width: var(--luke-space-12);
+  width: var(--chapter-strip-width);
   flex: none;
   border-right: 1px solid var(--luke-color-border);
 }
@@ -2107,8 +2130,8 @@
 }
 
 /* The chapter: its bar, its brief, which scrolls on its own once it is taller than
-   its share, so the diff under it keeps at least half the view; the list;
-   and its foot bar. */
+   its share, so the diff under it keeps at least half the view, and fades
+   where it is cut; the list; and its foot bar. */
 .chapter-brief {
   display: flex;
   min-height: 0;
@@ -2258,7 +2281,7 @@
 @container side-panel (width < 640px) {
   .chapters-view .chapter-strip {
     display: flex;
-    width: var(--luke-space-12);
+    width: var(--chapter-strip-width);
     flex: none;
     border-right: 1px solid var(--luke-color-border);
   }
@@ -4002,6 +4025,22 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
   }
 }
 
+/* An agent's log runs right up to the card's top edge and its words
+   dissolve over `--luke-scroll-fade` just above it (its `ScrollArea`'s end
+   fade), rather than being sliced short of the card. Its foot pads past the
+   fade, so the newest line, scrolled to or followed, stands whole above it;
+   the area's own scroll padding brings a control focused from below in
+   past the fade as well. While toasts stand, it pads past what they take
+   of the window's foot over the dock (`--luke-toast-room`, which the shell
+   measures) instead where that is more, so the newest line, and an Inbox
+   thread's draft reply flowing under it, stand a step clear of them. */
+.agent-log-over-composer {
+  padding-bottom: max(
+    calc(var(--luke-scroll-fade) + var(--luke-space-4)),
+    calc(var(--luke-toast-room, 0px) + var(--luke-space-8))
+  );
+}
+
 /* A to-do list's glyphs (transcript-blocks.tsx's `TodoItems`) stand at 14px
    in their 16px seat, as a call's line's do. */
 .todo-items {
@@ -5495,7 +5534,7 @@ svg.lucide {
   border-radius: 2px;
   background: var(--comment-mark);
   color: inherit;
-  cursor: pointer;
+  cursor: var(--luke-cursor-press);
   transition: background var(--luke-duration-hover) var(--luke-motion-exit);
 }
 
@@ -5672,7 +5711,7 @@ svg.lucide {
 /* A thread at rest is one press (`CardPress`) over its words and replies,
    which reaches its whole card and rings it from the keyboard. */
 .comment-card[data-open="false"] {
-  cursor: pointer;
+  cursor: var(--luke-cursor-press);
 }
 
 .comment-card[data-open="true"] {

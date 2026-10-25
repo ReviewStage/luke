@@ -16,14 +16,14 @@
   }
 
   /* A window's days (`daily-bars.tsx`): as wide as its frame and as tall as
-     its caller says, and pointing where a day's column opens a page. */
+     its caller says, and pressable where a day's column opens a page. */
   .luke-chart.luke-daily-bars {
     aspect-ratio: auto;
     width: 100%;
   }
 
   .luke-chart.luke-daily-bars[data-opens] {
-    cursor: pointer;
+    cursor: var(--luke-cursor-press);
   }
 
   .luke-chart .recharts-cartesian-axis-tick text {
