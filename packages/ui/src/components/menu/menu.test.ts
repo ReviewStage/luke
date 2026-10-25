@@ -8,6 +8,7 @@ import { Tooltip } from "../tooltip/hint.js";
 import {
   MENU_DETAIL,
   MENU_ITEM_MARK,
+  MENU_KEEPS_CLEAR,
   Menu,
   type MenuEntry,
   MenuItem,
@@ -858,13 +859,18 @@ function menuBox(element: HTMLElement): boolean {
   );
 }
 
-/** A menu drawn `width` by `height`, as a browser lays it out, though jsdom lays out nothing. */
-function menusMeasure(width: number, height: number): void {
+/** A menu drawn `width` by `height`, and whatever `laid` lays out, as a browser lays it out, though jsdom lays out nothing. */
+function menusMeasure(
+  width: number,
+  height: number,
+  laid: (element: HTMLElement) => DOMRect | undefined = () => undefined,
+): void {
   const measured = HTMLElement.prototype.getBoundingClientRect;
   vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (
     this: HTMLElement,
   ) {
-    return menuBox(this) ? new DOMRect(0, 0, width, height) : measured.call(this);
+    if (menuBox(this)) return new DOMRect(0, 0, width, height);
+    return laid(this) ?? measured.call(this);
   });
   vi.spyOn(HTMLElement.prototype, "offsetWidth", "get").mockImplementation(function (
     this: HTMLElement,
@@ -916,13 +922,45 @@ test("with no visual viewport, a menu opened near the window's foot stands where
   expect((await hungAt())?.[1]).toBe("380px");
 });
 
-test("a menu with no room below where it opened, a sliver from the window's margin, stands against the margin as it covers what opened it", async () => {
+/** An 800px window with no visual viewport, as the desktop's is. */
+function desktopWindow(): void {
   vi.stubGlobal("innerHeight", 800);
   vi.stubGlobal("visualViewport", undefined);
   vi.spyOn(document.documentElement, "clientHeight", "get").mockReturnValue(800);
   vi.spyOn(document.documentElement, "clientWidth", "get").mockReturnValue(window.innerWidth);
-  menusMeasure(160, 400);
-  // Opened 40px in, 32px short of the 8px margin, and 400px tall where 92px stand below it.
-  rightClickAt(700);
-  expect((await hungAt())?.[0]).toBe("8px");
+}
+
+test("a menu with no room above or below the ⋯ it dropped from stands beside the ⋯, clear of it", async () => {
+  desktopWindow();
+  // The ⋯ at a row's right end halfway down, under a menu 600px tall that fits neither under nor over it.
+  const more = new DOMRect(900, 380, 24, 24);
+  menusMeasure(160, 600, (element) => (element.textContent === "More" ? more : undefined));
+  mount(createElement(Harness, { groups: taskGroups([]) }));
+  act(() => button("More").click());
+  const left = Number.parseFloat((await hungAt())?.[0] ?? "");
+  expect(left + 160).toBeLessThanOrEqual(more.left);
+});
+
+test("a menu too tall for the room over a bar it keeps clear of stands above the bar", async () => {
+  desktopWindow();
+  // A phone's places bar across the window's foot, its top 60px up.
+  menusMeasure(160, 300, (element) =>
+    element.hasAttribute("data-menu-keeps-clear") ? new DOMRect(0, 740, 1024, 60) : undefined,
+  );
+  mount(
+    createElement(
+      Fragment,
+      null,
+      createElement(Harness, { groups: taskGroups([]) }),
+      createElement("nav", MENU_KEEPS_CLEAR, "Places"),
+    ),
+  );
+  const row = document.querySelector("p") ?? expect.fail("the row is drawn");
+  act(() => {
+    row.dispatchEvent(
+      new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: 40, clientY: 700 }),
+    );
+  });
+  const top = Number.parseFloat((await hungAt())?.[1] ?? "");
+  expect(top + 300).toBeLessThanOrEqual(740);
 });

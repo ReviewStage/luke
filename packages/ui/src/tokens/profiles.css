@@ -183,9 +183,11 @@
      and its top yields to make room. Where the window cannot hold all of
      it, the card takes the window and the list scrolls. In a short window,
      where that share is less than a card's full height
-     (`--luke-command-full`), the card goes on down to the window's foot
-     less the margin before its list is cut, rather than leaving the room
-     under it empty. */
+     (`--luke-command-full`), the card goes on down as far as a tall
+     window's top would leave it (less the margin) before its list is cut,
+     rather than leaving the room under it empty. The card stands in the
+     middle of the window, as much room over it as under it, which a tall
+     window's share and top already give. */
   --luke-command-chrome: calc(
     var(--luke-touch-target) +
     var(--luke-control-height) +
@@ -202,23 +204,13 @@
     calc(var(--luke-stage-height) - 2 * var(--luke-space-8)),
     max(calc(var(--luke-stage-height) * 0.64), var(--luke-command-least))
   );
-  --luke-command-top: max(
-    var(--luke-space-8),
-    min(
-      calc(var(--luke-stage-height) * 0.18),
-      var(--luke-stage-height) -
-      var(--luke-command-share) -
-      var(--luke-space-8)
-    )
-  );
   --luke-command-room: max(
     var(--luke-command-share),
-    min(
-      var(--luke-stage-height) -
-      var(--luke-command-top) -
-      var(--luke-space-8),
-      var(--luke-command-full)
-    )
+    min(var(--luke-stage-height) * 0.82 - var(--luke-space-8), var(--luke-command-full))
+  );
+  --luke-command-top: max(
+    var(--luke-space-8),
+    calc((var(--luke-stage-height) - var(--luke-command-room)) / 2)
   );
   --luke-command-sheet: max(
     min(
@@ -450,9 +442,11 @@
      and its top yields to make room. Where the window cannot hold all of
      it, the card takes the window and the list scrolls. In a short window,
      where that share is less than a card's full height
-     (`--luke-command-full`), the card goes on down to the window's foot
-     less the margin before its list is cut, rather than leaving the room
-     under it empty. */
+     (`--luke-command-full`), the card goes on down as far as a tall
+     window's top would leave it (less the margin) before its list is cut,
+     rather than leaving the room under it empty. The card stands in the
+     middle of the window, as much room over it as under it, which a tall
+     window's share and top already give. */
   --luke-command-chrome: calc(
     var(--luke-touch-target) +
     var(--luke-control-height) +
@@ -469,23 +463,13 @@
     calc(var(--luke-stage-height) - 2 * var(--luke-space-8)),
     max(calc(var(--luke-stage-height) * 0.64), var(--luke-command-least))
   );
-  --luke-command-top: max(
-    var(--luke-space-8),
-    min(
-      calc(var(--luke-stage-height) * 0.18),
-      var(--luke-stage-height) -
-      var(--luke-command-share) -
-      var(--luke-space-8)
-    )
-  );
   --luke-command-room: max(
     var(--luke-command-share),
-    min(
-      var(--luke-stage-height) -
-      var(--luke-command-top) -
-      var(--luke-space-8),
-      var(--luke-command-full)
-    )
+    min(var(--luke-stage-height) * 0.82 - var(--luke-space-8), var(--luke-command-full))
+  );
+  --luke-command-top: max(
+    var(--luke-space-8),
+    calc((var(--luke-stage-height) - var(--luke-command-room)) / 2)
   );
   --luke-command-sheet: max(
     min(

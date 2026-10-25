@@ -1,21 +1,22 @@
 import { expect, test } from "vitest";
-import { type MenuLine, menuCut } from "./menu-cut.js";
+import { MENU_LINE, type MenuLine, menuCut } from "./menu-cut.js";
 
 /**
  * menu-cut.test.ts -- a menu too tall for its room is cut through a line of
- * words, so its fade lies over words that go on below. The lines are a task
- * row's menu as a 760×520 window lays it out: rows 32px tall, rules between
- * groups, and a footer of two caption lines under the last rule.
+ * words where items go on past it, so its fade lies over words that go on
+ * below, and keeps its whole room where every item fits. The lines are a
+ * task row's menu as a 760×520 window lays it out: rows 32px tall, rules
+ * between groups, and a footer of two caption lines under the last rule.
  */
 
-/** A row of words from `top`, 32px tall. */
+/** An item from `top`, 32px tall. */
 function row(top: number): MenuLine {
-  return { top, bottom: top + 32, words: true };
+  return { top, bottom: top + 32, kind: MENU_LINE.ITEM };
 }
 
 /** A rule between groups at `top`. */
 function rule(top: number): MenuLine {
-  return { top, bottom: top + 1, words: false };
+  return { top, bottom: top + 1, kind: MENU_LINE.RULE };
 }
 
 // Copy plan … Permanently delete, then the "Created by / Last edited" footer.
@@ -39,13 +40,18 @@ const TASK_MENU: readonly MenuLine[] = [
   rule(447),
   row(452),
   rule(488),
-  { top: 493, bottom: 535, words: true },
+  { top: 493, bottom: 535, kind: MENU_LINE.NOTE },
 ];
 const FADE = 24;
 
-test("a room that ends over the gap above a footer cuts through the middle of the last row whose middle it reaches", () => {
-  // The room ends 1px into the footer, so the fade would lie over the rule and gap above it.
-  expect(menuCut(TASK_MENU, 535, 494, FADE)).toBe(468);
+test("a room that ends over a rule with items past it cuts through the middle of the last row whose middle it reaches", () => {
+  // The room ends between the rule over Permanently delete and its row, so the fade would lie over the gap.
+  expect(menuCut(TASK_MENU, 535, 450, FADE)).toBe(427);
+});
+
+test("a room that holds every item whole, only the footer past it, leaves the rows as tall as the room", () => {
+  // The 760×520 window's room ends 1px into the footer, under Permanently delete and its rule.
+  expect(menuCut(TASK_MENU, 535, 494, FADE)).toBeUndefined();
 });
 
 test("a room that already ends half a fade into a row's words leaves the rows as tall as the room", () => {

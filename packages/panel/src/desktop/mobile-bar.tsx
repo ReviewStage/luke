@@ -1,4 +1,4 @@
-import { BarItem, EllipsisIcon } from "@luke/ui";
+import { BarItem, EllipsisIcon, MENU_KEEPS_CLEAR } from "@luke/ui";
 import { TASKS_PAGE } from "@luke/ui/tasks-model";
 import { InboxIcon, ListTodoIcon, MessagesSquareIcon } from "lucide-react";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
@@ -62,6 +62,7 @@ export function MobileBar({
     <nav
       className="mobile-bar flex border-t border-border bg-ground px-luke-4 py-luke-2"
       aria-label="Places"
+      {...MENU_KEEPS_CLEAR}
     >
       <BarItem
         icon={<InboxIcon />}
