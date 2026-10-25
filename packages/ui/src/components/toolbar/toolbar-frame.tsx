@@ -7,7 +7,7 @@
  * frame it fills by hand.
  */
 
-import type { ReactNode } from "react";
+import type { ReactNode, Ref } from "react";
 
 /** How far in from a bar's edge its first or last thing stands. */
 export const TOOLBAR_INSET = {
@@ -40,6 +40,8 @@ export function ToolbarFrame({
   measure = false,
   folded = false,
   wrapHeading = false,
+  wrapped = false,
+  frameRef,
   children,
 }: {
   start?: ToolbarInset | undefined;
@@ -49,10 +51,13 @@ export function ToolbarFrame({
   measure?: boolean | undefined;
   folded?: boolean | undefined;
   wrapHeading?: boolean | undefined;
+  wrapped?: boolean | undefined;
+  frameRef?: Ref<HTMLElement> | undefined;
   children?: ReactNode;
 }): React.JSX.Element {
   return (
     <header
+      ref={frameRef}
       className={place === undefined ? "luke-toolbar" : `luke-toolbar ${place}-head`}
       data-start={start}
       data-end={end}
@@ -60,6 +65,7 @@ export function ToolbarFrame({
       data-measure={measure ? "true" : undefined}
       data-folded={folded ? "true" : undefined}
       data-wrap-heading={wrapHeading ? "true" : undefined}
+      data-wrapped={wrapped ? "true" : undefined}
     >
       {children}
     </header>

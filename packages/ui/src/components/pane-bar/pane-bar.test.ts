@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import { act, createElement, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
+import { layTitle } from "../../testing/laid-title.js";
 import type { MenuEntry } from "../menu/menu.js";
 import { PaneBar } from "./pane-bar.js";
 
@@ -11,7 +12,8 @@ import { PaneBar } from "./pane-bar.js";
  * pane-bar.test.ts -- a tab's bar draws its lead, its middle, and its
  * actions in that order with the ⋯ last, and leaves out a slot that says
  * nothing; the ⋯ drops the menu it was handed, named as the ⋯ is, and a
- * choice in it acts and closes it.
+ * choice in it acts and closes it; a title the bar would cut under the
+ * readable floor stands on a row of its own, still read whole.
  */
 
 declare global {
@@ -108,4 +110,25 @@ test("the ⋯ drops the menu it was handed, and a choice in it acts and closes i
   act(() => items[0]?.click());
   assert.deepEqual(chosen, ["Copy path"]);
   assert.equal(more.getAttribute("aria-expanded"), "false");
+});
+
+test("a title the bar would cut under the readable floor stands on a row of its own", () => {
+  const laid = layTitle({
+    room: ".luke-pane-bar-lead",
+    words: ".luke-pane-bar-title",
+    roomWidth: 64,
+    whole: 203,
+    floor: 120,
+  });
+  try {
+    const bar = barOf(
+      render(
+        createElement(PaneBar, { title: TITLE, actions: createElement("span", null, "Viewed") }),
+      ),
+    );
+    assert.equal(bar.dataset.wrapped, "true");
+    assert.match(bar.textContent ?? "", new RegExp(TITLE));
+  } finally {
+    laid.restore();
+  }
 });

@@ -3875,3 +3875,9 @@ ul.actor-stack {
   align-items: center;
   justify-content: center;
 }
+
+/* New thread's bar, should it stand its title on a row of its own, stands
+   it where the form's labels start, rather than where a crumb's words do. */
+.inbox-view-items:has(> .inbox-compose) {
+  --luke-toolbar-wrap-heading-at: var(--content-inset);
+}

@@ -31,7 +31,6 @@ import {
   LAYOUT_ELEMENT,
   MoreButton,
   moreLabel,
-  ONE_LINE_END,
   SidePanelIcon,
   STATUS_TONE,
   Stack,
@@ -1202,7 +1201,8 @@ function useAutomationCrumb(
  * path as its last words, in the text's own ink, so the bar still says what
  * is read; it fades in as it comes and out as the heading comes back, so the
  * title never stands twice. A narrow bar cuts the task's crumb short first,
- * then the title, which ends in an ellipsis, and the agent's keeps its size.
+ * then the title, which fades out where it is cut as every title does, and
+ * the agent's keeps its size.
  */
 function Crumbs({
   holder,
@@ -1247,7 +1247,7 @@ function Crumbs({
       // Note that once the title joins the path the agent's crumb keeps its size, so a narrow bar cuts the task's crumb short first and then the title.
       fixed: titleShown,
     },
-    { label: title, current: true, shown: titleShown, end: ONE_LINE_END.ELLIPSIS },
+    { label: title, current: true, shown: titleShown },
   ].filter((crumb) => crumb !== undefined);
   return (
     <div className="inbox-crumbs flex min-w-0 flex-initial">
