@@ -9,7 +9,8 @@
  * would go past the smallest or largest size is not offered, so the key falls
  * through to nothing and the command palette leaves it out. Only the desktop
  * zooms, so nothing is offered on the web, where the browser's own zoom keeps
- * the chords.
+ * the chords. A size the settings refuse is said in a toast, since the press
+ * that asked has no control left to show it on.
  */
 
 import {
@@ -21,13 +22,18 @@ import {
   zoomStepped,
 } from "@luke/settings";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
+import { STATUS_TONE } from "@luke/ui";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { useLayoutEffect, useRef } from "react";
 import { useAppCommand } from "./app-commands.js";
+import { showToast, TOAST_HOLD } from "./toast.js";
 import { useCapability } from "./use-app-state.js";
 
 /** The custom property desktop.css divides the traffic lights' width by, since the page zoom does not scale them. */
 const ZOOM_PROPERTY = "--zoom";
+
+/** What the toast says where a size was refused, so the window stays as it was. */
+const ZOOM_REFUSED = "The window could not be zoomed. Try again.";
 
 /**
  * Offers the zoom commands over the stored size, `undefined` until the
@@ -49,11 +55,11 @@ export function useWindowZoom(
       if (target === (asked.current ?? zoom)) return;
       asked.current = target;
       void write(target).then((result) => {
+        if (result.status === ACTION_RESULT_STATUS.ACCEPTED) return;
+        showToast({ words: ZOOM_REFUSED, tone: STATUS_TONE.DANGER, hold: TOAST_HOLD.FAILED });
         // Note that a refused size is forgotten, because no snapshot will
         // ever arrive saying it.
-        if (result.status !== ACTION_RESULT_STATUS.ACCEPTED && asked.current === target) {
-          asked.current = undefined;
-        }
+        if (asked.current === target) asked.current = undefined;
       });
     };
   };
