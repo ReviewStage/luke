@@ -178,6 +178,21 @@ test("a Mermaid fence on a plan's page draws as the picture the diagram bundle a
   assert.ok(page.querySelector(".plan-diagram")?.classList.contains("ph-no-capture"));
 });
 
+test("a diagram's picture is named for its title, or its first line where it has none", async () => {
+  const titled = "---\ntitle: Invite flow\n---\nflowchart LR\n  Invite --> Join";
+  const plain = "%% a note\n\nsequenceDiagram\n  Admin->>Service: Invite";
+  const page = await drawn(
+    createElement(PlanBody, {
+      task: taskWith(`${mermaidFence(titled)}\n\n${mermaidFence(plain)}`),
+      live: false,
+    }),
+  );
+
+  const alts = [...page.querySelectorAll(".plan-diagram img")].map((img) => img.getAttribute("alt"));
+
+  assert.deepEqual(alts, ["Diagram: Invite flow", "Diagram: sequenceDiagram"]);
+});
+
 test("Show code puts the fence's code in the picture's place, and Show diagram brings the picture back", async () => {
   const code = "flowchart LR\n  Invite --> Join";
   const page = await drawn(
@@ -392,7 +407,7 @@ test("in a wide room the keyboard's press on a diagram, named for what it does, 
     createElement(PlanBody, { task: taskWith(mermaidFence(code)), live: false }),
   );
   const enlarge = press(page);
-  assert.equal(enlarge.getAttribute("aria-label"), "Enlarge Diagram");
+  assert.equal(enlarge.getAttribute("aria-label"), "Enlarge Diagram: flowchart LR");
 
   act(() => enlarge.click());
 

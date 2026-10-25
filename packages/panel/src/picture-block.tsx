@@ -17,7 +17,9 @@ import { PICTURE_STATE, type PictureState } from "@luke/ui/picture-cache";
  * window's spinner; a picture this reader cannot reach, or whose bytes are
  * gone, is its alt text and says it is not available, as a tile of a set
  * says it (`@luke/ui`'s `PictureStandIn`); one whose read did not land this
- * time says it could not be read, with Retry, in the same box. The block is left out
+ * time says it could not be read, with Retry, in the same box. A gone picture
+ * is plain words, never a `role="img"` named by its alt, which would hide the
+ * "not available" beside it and leave an empty alt with no name at all. The block is left out
  * of the screen recording (`ph-no-capture`), because a picture can hold
  * words and the recording carries none (`session-replay.ts`), and because a
  * `data:` address is megabytes of attribute a recording has no use for even
@@ -149,8 +151,6 @@ export function PictureBlock({
         corner={CARD_CORNER.CONTROL}
         padding={CARD_PADDING.NONE}
         dashed
-        role="img"
-        aria-label={alt}
         className="picture-frame picture-missing"
       >
         <PictureStandIn state={PICTURE_STATE.MISSING} words={alt} />
