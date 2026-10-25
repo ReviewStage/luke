@@ -1,0 +1,27 @@
+/* composer-body.css -- the files' row over a message box's words, inset as
+   the foot under them stands in its frame. */
+
+@layer components {
+  /* A card's row stands at the card's inset, as its foot does. */
+  .luke-composer-files {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--luke-tight-gap);
+    padding: var(--luke-space-12) var(--luke-space-12) 0;
+  }
+
+  /* A field's or an input's row stands a step tighter in its well. */
+  .luke-composer-frame:is([data-look="field"], [data-look="input"]) .luke-composer-files {
+    padding: var(--luke-space-6) var(--luke-space-6) 0;
+  }
+
+  /* A bare frame's row is flush with the words under it, since the card around it insets both. */
+  .luke-composer-frame[data-look="bare"] .luke-composer-files {
+    padding: 0;
+  }
+
+  /* A row that holds nothing drawn takes no room, as a box's chips row is hidden while it holds no file. */
+  .luke-composer-files:not(:has(> :not([hidden]))) {
+    display: none;
+  }
+}

@@ -107,7 +107,7 @@ function patchRow(line: string): CodeRow {
 }
 
 /** What the hover over a call's folding line says a press does, by whether the fold stands open. */
-export const FOLD_HINT = {
+const FOLD_HINT = {
   SHOW: "Show the call",
   HIDE: "Hide the call",
 } as const;
@@ -202,7 +202,7 @@ export function ToolLine({
           </OneLine>
         )}
         {chip === undefined ? null : (
-          <span className="tool-chip flex min-w-0 max-w-inline-ref-pill flex-initial whitespace-nowrap">
+          <span className="tool-chip flex min-w-0 max-w-tool-chip flex-initial whitespace-nowrap">
             {chip}
             {subject === undefined ? null : " "}
           </span>

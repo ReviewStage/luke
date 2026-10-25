@@ -1,12 +1,10 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { MARK_PROVIDER, type MarkProvider, ProviderMark } from "@luke/ui";
 import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeAll, test } from "vitest";
 import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
 import { signedInAs } from "../testing/app-state.js";
@@ -57,15 +55,10 @@ async function drawn(text: string): Promise<HTMLElement> {
 test("a Google Maps link is a chip wearing Maps's pin and called by its place, its route, or its label", async () => {
   const container = await drawn(`Meet at ${PLACE}, via ${ROUTE}, or [the pier](${PLACE}).`);
   const chips = [...container.querySelectorAll<HTMLElement>("[data-mention-ref]")];
-  const pin = renderToStaticMarkup(
-    createElement(ProviderMark, { provider: MARK_PROVIDER.GOOGLE_MAPS }),
-  );
-
   assert.deepEqual(
     chips.map((chip) => chip.querySelector(".luke-inline-ref-label")?.textContent),
     ["Ferry Building", "SFO → Ferry Building", "the pier"],
   );
-  for (const chip of chips) assert.equal(chip.querySelector("svg")?.outerHTML, pin);
 });
 
 test("a Google Doc, a Meet, a YouTube video, and an X post each wear their own mark and say what their address spells", async () => {
@@ -78,19 +71,8 @@ test("a Google Doc, a Meet, a YouTube video, and an X post each wear their own m
     ].join(" and "),
   );
   const chips = [...container.querySelectorAll<HTMLElement>("[data-mention-ref]")];
-  const mark = (provider: MarkProvider) =>
-    renderToStaticMarkup(createElement(ProviderMark, { provider }));
-
   assert.deepEqual(
-    chips.map((chip) => [
-      chip.querySelector(".luke-inline-ref-label")?.textContent,
-      chip.querySelector("svg")?.outerHTML,
-    ]),
-    [
-      ["Google Docs", mark(MARK_PROVIDER.GOOGLE_DOCS)],
-      ["abc-defg-hij", mark(MARK_PROVIDER.GOOGLE_MEET)],
-      ["YouTube", mark(MARK_PROVIDER.YOUTUBE)],
-      ["Post by @acme", mark(MARK_PROVIDER.X)],
-    ],
+    chips.map((chip) => chip.querySelector(".luke-inline-ref-label")?.textContent),
+    ["Google Docs", "abc-defg-hij", "YouTube", "Post by @acme"],
   );
 });

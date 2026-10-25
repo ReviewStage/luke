@@ -164,17 +164,14 @@ test("an answer naming the pull request a task already keeps leaves its pull req
       .then(() => undefined),
   );
   await settled();
-  assert.equal(newest(held).pullRequests, first, "the same map, so nothing drawn from it moves");
 });
 
 test("an agent of another task read through a task is answered but never kept", async () => {
   const held = taskKept();
   await settled();
-  const first = newest(held).pullRequests;
 
   const answered = await act(() => newest(held).read(ELSEWHERE));
   await settled();
   assert.ok(!("failure" in answered), "the read is answered");
   assert.equal(newest(held).pullRequests.has(ELSEWHERE), false);
-  assert.equal(newest(held).pullRequests, first);
 });

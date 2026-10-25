@@ -42,3 +42,13 @@ test("a task surface's weight and leading stand beside a font and a size, and it
   );
   assert.equal(cn("pt-section-gap", "pt-0"), "pt-0");
 });
+
+test("a later row or navigation length replaces an earlier, and a size-only type stands beside a colour", () => {
+  assert.equal(
+    cn("min-h-control ps-luke-4", "min-h-disclosure-row ps-0"),
+    "min-h-disclosure-row ps-0",
+  );
+  assert.equal(cn("h-control", "h-luke-32"), "h-luke-32");
+  assert.equal(cn("text-dialog-size text-foreground"), "text-dialog-size text-foreground");
+  assert.equal(cn("text-tag-size text-on-accent"), "text-tag-size text-on-accent");
+});

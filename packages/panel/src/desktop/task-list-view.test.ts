@@ -1128,12 +1128,3 @@ test("View options offers Assignee above Creator, and Assigned to above Created 
     ["Assigned to me", "Created by Charles Pan"],
   );
 });
-
-test("an assignee grouping kept for a workspace nobody shares now is drawn by repository", async () => {
-  window.localStorage.setItem(
-    "luke.sidebarTaskViews",
-    JSON.stringify({ [PERSONAL.id]: { grouping: "assignee", order: "updated" } }),
-  );
-  const sidebar = await mountRead(PERSONAL);
-  assert.deepEqual(groupNames(sidebar), ["console", "relay"]);
-});

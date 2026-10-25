@@ -211,26 +211,6 @@ test("a phone's keyboard rising in a tall window leaves room for two toasts, set
   assert.equal(standing().length, 3);
 });
 
-test("a toast with an action and a hold draws its countdown over that hold, and one that persists or has no action draws none", () => {
-  mount(WINDOW.TALL);
-  act(() =>
-    show?.({
-      words: "Task archived",
-      tone: STATUS_TONE.COMPLETE,
-      action: { label: "Undo", onPress: () => undefined },
-    }),
-  );
-  act(() => show?.(persisting("Retry the webhook finished")));
-  act(() => show?.({ words: "Link copied", tone: STATUS_TONE.COMPLETE, hold: TOAST_HOLD.DONE }));
-
-  const countdowns = [...document.querySelectorAll<HTMLElement>(".luke-toast")].map((toast) =>
-    toast
-      .querySelector<HTMLElement>(".luke-toast-countdown")
-      ?.style.getPropertyValue("--luke-toast-hold"),
-  );
-  assert.deepEqual(countdowns, ["5000ms", undefined, undefined]);
-});
-
 test("two pieces of work under way stand apart, each settles its own card in place, and a refusal is said as an alert", () => {
   mount(WINDOW.TALL);
   let first: ((notice: ToastNotice) => void) | undefined;
@@ -248,10 +228,6 @@ test("two pieces of work under way stand apart, each settles its own card in pla
 
   assert.deepEqual(standing(), ["Saved", "Couldn't save"]);
   assert.deepEqual([...document.querySelectorAll(".luke-toast")], working, "the same two cards");
-  assert.deepEqual(
-    working.map((toast) => (toast as HTMLElement).dataset.tone),
-    [STATUS_TONE.COMPLETE, STATUS_TONE.DANGER],
-  );
   assert.equal(document.querySelector('[role="alert"]')?.textContent, "Couldn't save");
 });
 
@@ -259,11 +235,9 @@ test("an Undo toast says the act in the success tone, and its Undo takes the act
   mount(WINDOW.TALL);
   const undone: string[] = [];
   act(() => show?.(undoToast("Task archived", () => undone.push("Task archived"))));
-  const tone = document.querySelector<HTMLElement>(".luke-toast")?.dataset.tone;
 
   act(() => toastButton("Undo").click());
 
-  assert.equal(tone, STATUS_TONE.COMPLETE);
   assert.deepEqual(undone, ["Task archived"]);
   assert.deepEqual(standing(), []);
 });

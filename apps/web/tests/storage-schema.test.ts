@@ -61,6 +61,7 @@ const DECLARED_TABLES = [
   "coding_agent_runner_lease",
   "coding_agent_wakeup",
   "conversations",
+  "dispatch_waiters",
   "github_connect_intent",
   "github_install_intent",
   "github_installation",

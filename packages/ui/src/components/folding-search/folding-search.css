@@ -3,54 +3,14 @@
    its glyph riding the leading edge on the same beat, and folds back into it.
    Only clip-path, transform, and opacity move, so nothing beside the box is
    displaced and no text changes size mid-motion. Reduced motion and a capture
-   run zero the durations (`motion.css`), so the field then simply stands. */
+   run zero the durations (`motion.css`), so the field then simply stands.
+   The boxes and the fade under the field are utilities (`folding-search.tsx`);
+   what stays here is the motion keyframes play. */
 
 @layer components {
-  .luke-folding-search {
-    position: relative;
-    display: flex;
-    min-width: 0;
-    flex: 1;
-    align-items: center;
-    gap: var(--luke-control-gap);
-  }
-
-  .luke-folding-search-name {
-    display: flex;
-    min-width: 0;
-    flex: 1;
-    align-items: center;
-  }
-
-  .luke-folding-search-name > * {
-    min-width: 0;
-    flex: 1;
-  }
-
-  /* What the field covers fades back once the field has left. */
-  .luke-folding-search-name,
-  .luke-folding-search-magnifier {
-    display: flex;
-    transition: opacity var(--luke-duration-quick) var(--luke-motion-pane) var(--luke-duration-exit);
-  }
-
-  .luke-folding-search[data-open="true"]
-    :is(.luke-folding-search-name, .luke-folding-search-magnifier) {
-    opacity: 0;
-    transition: opacity var(--luke-duration-exit) var(--luke-motion-exit);
-  }
-
   .luke-folding-search-field {
-    position: absolute;
-    inset: 0;
-    display: flex;
-    align-items: center;
     animation: luke-folding-search-unfold var(--luke-duration-pane) var(--luke-motion-pane)
       backwards;
-  }
-
-  .luke-folding-search-field > .luke-search-field {
-    width: 100%;
   }
 
   .luke-folding-search-field .luke-search-field > svg {

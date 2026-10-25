@@ -160,7 +160,7 @@ import {
   type VercelSandboxApi,
   vercelSandboxApi,
 } from "../vercel-sandbox-api.js";
-import { CODER } from "./bounds.js";
+import { CODER, sandboxVcpus } from "./bounds.js";
 import {
   type AgentRepositoryRead,
   agentDeepenPlan,
@@ -364,7 +364,9 @@ const FAILED_STATUS = { UNAVAILABLE: 503, REFUSED: 422 } as const;
  * again at once, and given up where the image is still being prepared after
  * the template's own wait. An open answers preparing before any sandbox
  * stands, so making it again leaves nothing behind. `times` only bounds a
- * template that answers ready yet keeps losing its snapshot.
+ * template that answers ready yet keeps losing its snapshot. A message's
+ * relaunch past its answer retries on it too, its lease let go for each
+ * wait (`send`).
  */
 const IMAGE_READY = {
   times: 3,
@@ -952,14 +954,14 @@ export const runnerSessions = <
         },
       );
 
-    /** A new sandbox of the agent's, under the session given, opened from the snapshot named. */
+    /** A new sandbox of the agent's, under the session given, opened from the snapshot named at the size its repository asks for. */
     const createdFrom = (agent: CodingAgent, sessionId: string, snapshotId: string) =>
       api.create({
         name: `${SANDBOX_NAME}${randomUUID()}`,
         snapshotId,
         tags: { [SESSION_TAG]: sessionId, [RUNNER_TAG.AGENT]: agent.id },
         timeoutMs: CODER.SANDBOX_TIMEOUT_MS,
-        vcpus: CODER.SANDBOX_VCPUS,
+        vcpus: sandboxVcpus(agent.repository),
         keepLastSnapshots: {
           count: CODER.SANDBOX_SNAPSHOTS.count,
           expiration: Duration.toMillis(CODER.SANDBOX_SNAPSHOTS.expiration),
@@ -1248,7 +1250,7 @@ export const runnerSessions = <
         return now !== runner.fingerprint;
       });
 
-    const sendHolding = (sessionId: string, message: EveMessage<Turn>) =>
+    const sendHolding = (sessionId: string, message: EveMessage<Turn>, sent: RunnerMessage) =>
       Effect.gen(function* () {
         // The agent is read beside the sandbox, and its read answers only for a sandbox found.
         const [found, agentRead] = yield* Effect.all(
@@ -1262,7 +1264,6 @@ export const runnerSessions = <
           return { outcome: EVE_SEND_OUTCOME.RETIRED } as const;
         }
         const target = { userId, conversationId: agent.conversationId };
-        const sent = messageLine(message);
         const accepted = {
           outcome: EVE_SEND_OUTCOME.ACCEPTED,
           sessionId,
@@ -1527,11 +1528,53 @@ export const runnerSessions = <
           );
         }),
 
+      // A relaunch on a fresh sandbox that finds the image still being prepared takes the message
+      // all the same, and waits on the image's build once the answer has left. Note that the wait
+      // holds no runner lease, because a message sent meanwhile waits on the lease no longer than
+      // its own deadline; the lease is taken once the build ended and the message sent afresh, so
+      // a sandbox a message sent meanwhile relaunched is written to rather than opened twice, and
+      // let go again for another wait where the relaunch finds the image's snapshot gone. A
+      // caller with no after-response door is answered that the image is being prepared, as before.
       send: (sessionId, message) =>
         Effect.gen(function* () {
-          const { id } = yield* agentOf(message.conversationId);
-          return yield* holdingRunner(id, sendHolding(sessionId, message));
-        }).pipe(Effect.catch(failed("send")), Effect.provideContext(context)),
+          const after = yield* Effect.serviceOption(AfterResponse);
+          return yield* Effect.gen(function* () {
+            const agent = yield* agentOf(message.conversationId);
+            const sent = messageLine(message);
+            return yield* holdingRunner(agent.id, sendHolding(sessionId, message, sent)).pipe(
+              Effect.catchIf(
+                (failure) => failure instanceof ImagePreparing && Option.isSome(after),
+                () =>
+                  Effect.as(
+                    afterResponse(
+                      `A ${harness.name} relaunch`,
+                      Effect.flatMap(AgentSandboxImage, (image) =>
+                        Effect.ignore(image.prepared),
+                      ).pipe(
+                        Effect.andThen(
+                          Effect.retry(
+                            holdingRunner(agent.id, sendHolding(sessionId, message, sent)),
+                            IMAGE_READY,
+                          ),
+                        ),
+                        Effect.catch(launchFailed(agent)),
+                      ),
+                    ),
+                    {
+                      outcome: EVE_SEND_OUTCOME.ACCEPTED,
+                      sessionId,
+                      deliveryId: sent.line.uuid,
+                    } as const,
+                  ),
+              ),
+            );
+          }).pipe(
+            Effect.catch(failed("send")),
+            Effect.provideContext(
+              Option.isSome(after) ? Context.add(context, AfterResponse, after.value) : context,
+            ),
+          );
+        }),
 
       // The Stop is scoped to the turn it names: written only while that turn is the
       // conversation's turn under way, to the command of the launch running it, and naming that

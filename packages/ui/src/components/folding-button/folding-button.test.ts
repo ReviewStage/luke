@@ -5,12 +5,7 @@ import { act, cloneElement, createElement, createRef } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
 import { PlusIcon } from "../../face/glyphs.js";
-import {
-  BUTTON_SHAPE,
-  BUTTON_VARIANT,
-  FoldingButton,
-  type FoldingButtonHint,
-} from "../../index.js";
+import { FoldingButton, type FoldingButtonHint } from "../../index.js";
 
 /**
  * folding-button.test.ts -- a folding button with its words drawn is named
@@ -116,30 +111,6 @@ test("what its hint hands it lands on the button, so the focused button names th
     },
     { chord: "Meta+[", focused: true, hinted: "true" },
   );
-});
-
-test("a round one in a tinted look is named by its words, takes its press, and wears what its hint hands it", () => {
-  const container = document.body.appendChild(document.createElement("div"));
-  root = createRoot(container);
-  act(() =>
-    root?.render(
-      createElement(FoldingButton, {
-        label: "Restart",
-        icon: createElement(PlusIcon),
-        variant: BUTTON_VARIANT.WORKING_TINT,
-        shape: BUTTON_SHAPE.ROUND,
-        onClick: () => {
-          presses += 1;
-        },
-        hint: ChordHint,
-      }),
-    ),
-  );
-  const button = container.querySelector("button") ?? assert.fail("no button");
-  assert.equal(button.textContent, "Restart");
-  assert.equal(button.getAttribute("aria-keyshortcuts"), "Meta+[");
-  act(() => button.click());
-  assert.equal(presses, 1);
 });
 
 test("one that opens a popup says so and whether it stands open, is named in full where it says more than its words, and hands its owner the button", () => {

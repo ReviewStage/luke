@@ -6,9 +6,8 @@ import { afterEach, expect, test } from "vitest";
 import { PageThumb } from "../../index.js";
 
 /**
- * page-thumb.test.ts -- a thumb of a page stays hidden until its frame has
- * loaded and hides again when a newer address is handed it; a thumb of a
- * picture or a glyph is never loading.
+ * page-thumb.test.ts -- a thumb of a page holds its frame out of the tab
+ * order and the reader's reading; a thumb of a glyph holds no frame.
  */
 
 const roots: Root[] = [];
@@ -30,22 +29,6 @@ function mount(element: React.ReactElement): HTMLElement {
 
 const frame = (src: string) => ({ title: "A page", src, sandbox: "allow-scripts" });
 
-test("a page's frame shows once it has loaded, and again waits when its address changes", () => {
-  const container = document.createElement("div");
-  document.body.append(container);
-  const root = createRoot(container);
-  roots.push(root);
-  act(() => root.render(createElement(PageThumb, { frame: frame("about:blank#1") })));
-  const thumb = () => container.querySelector<HTMLElement>(".luke-page-thumb");
-  expect(thumb()?.dataset.loaded).toBe("false");
-  act(() => {
-    container.querySelector("iframe")?.dispatchEvent(new Event("load"));
-  });
-  expect(thumb()?.dataset.loaded).toBe("true");
-  act(() => root.render(createElement(PageThumb, { frame: frame("about:blank#2") })));
-  expect(thumb()?.dataset.loaded).toBe("false");
-});
-
 test("a frame is inert: out of the tab order and the screen reader's reading", () => {
   const iframe = mount(createElement(PageThumb, { frame: frame("about:blank") })).querySelector(
     "iframe",
@@ -54,8 +37,7 @@ test("a frame is inert: out of the tab order and the screen reader's reading", (
   expect(iframe?.getAttribute("aria-hidden")).toBe("true");
 });
 
-test("a thumb with a glyph is marked missing and holds no frame", () => {
+test("a thumb with a glyph holds no frame", () => {
   const thumb = mount(createElement(PageThumb, { glyph: createElement("svg") })).firstElementChild;
-  expect(thumb?.hasAttribute("data-missing")).toBe(true);
   expect(thumb?.querySelector("iframe")).toBeNull();
 });

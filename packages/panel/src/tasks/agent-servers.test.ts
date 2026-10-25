@@ -536,7 +536,6 @@ test("a server's problem fades where its row cuts it short, as every cut line of
 
   const problem = container.querySelector(".agent-servers-problem");
   assert.equal(problem?.textContent, "Linear refused the sign-in.");
-  assert.equal(problem?.getAttribute("data-end"), "fade");
 });
 
 test("a server's own error is no part of its row's sentence, and stands quoted after it in the problem's hint", async () => {

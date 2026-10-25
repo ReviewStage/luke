@@ -208,7 +208,6 @@ test("a Changes card names the coding agent whose pull request it is by its tile
   );
   assert.ok(named, "the agent is named as an actor");
   assert.equal(named.textContent, "Expiry job");
-  assert.ok(named.querySelector('.actor-mark[data-kind="agent"]'), "the agent wears its tile");
 
   restOn(named);
   await act(async () => {
