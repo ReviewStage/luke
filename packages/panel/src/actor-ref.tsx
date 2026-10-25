@@ -7,7 +7,7 @@ import {
   automationRunStanding,
   automationTriggerText,
 } from "@luke/features/automation-list-model";
-import type { AutomationSummary } from "@luke/features/automation-wire";
+import type { AutomationRunSummary, AutomationSummary } from "@luke/features/automation-wire";
 import {
   AVATAR_SHAPE,
   AVATAR_SIZE,
@@ -668,6 +668,16 @@ export function automationActor(automation: AutomationSummary): Actor {
     name: automation.name,
     state: ACTOR_STATE_OF_RUN[automationRunStanding(automation.lastRun)],
     trigger: automation.trigger,
+  };
+}
+
+/** One run of an automation, as its row in a list of every automation's runs wears it: the glyph of what fired it, wearing where it stands, under its automation's name. */
+export function automationRunActor(run: AutomationRunSummary, name: string): Actor {
+  return {
+    kind: ACTOR_KIND.AUTOMATION,
+    name,
+    state: ACTOR_STATE_OF_RUN[automationRunStanding(run)],
+    trigger: run.firing,
   };
 }
 

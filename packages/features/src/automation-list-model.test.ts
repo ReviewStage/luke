@@ -237,6 +237,7 @@ test("a run is titled by its agent where the agent has a title, else by what fir
 
   assert.equal(automationRunTitle(run({ agent })), "Fix the flaky test");
   assert.equal(automationRunTitle(run({ agent: { ...agent, title: null } })), "Run now");
+  assert.equal(automationRunTitle(run({ agent: { ...agent, title: "<untitled>" } })), "Run now");
   assert.equal(
     automationRunTitle(run({ firing: { kind: "schedule", dueAt: 1 } })),
     "Scheduled run",
