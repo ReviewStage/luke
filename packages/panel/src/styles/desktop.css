@@ -3465,6 +3465,21 @@ ul.actor-stack {
   transition: visibility 0s linear var(--luke-duration-pane);
 }
 
+/* The line under an automation's agent's bar (`automation-agent-run.tsx`):
+   what fired its run, when, and where it stands, its words where the bar's
+   title starts, over a hairline. */
+.automation-agent-run {
+  flex: none;
+  padding: 0 calc(var(--column-inset) + var(--luke-row-inset)) var(--luke-item-gap);
+  border-bottom: 1px solid var(--luke-color-border);
+}
+
+/* Where the run stands among the arrows, in figures that hold their width as they step. */
+.automation-agent-run-count {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
 /* The plan's summary (`task-summary.tsx`) ----------------------------------- */
 
 /* The toolbar's toggle stands in the toolbar's row as its button alone; its
