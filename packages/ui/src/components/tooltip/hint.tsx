@@ -201,6 +201,8 @@ interface Standing {
   readonly hide: () => void;
   /** The row the card was hung from, whose other controls raise nothing of their own while it stands. */
   readonly region: HTMLElement | undefined;
+  /** Whether it is a card, which a plain pill over words inside its control leaves standing. */
+  readonly carded: boolean;
   readonly holds: (node: Node) => boolean;
 }
 
@@ -628,6 +630,7 @@ export function Tooltip({
       anchor,
       hide,
       region: row,
+      carded,
       holds: (node) => pillElement.current?.contains(node) === true,
     });
   };
@@ -641,6 +644,8 @@ export function Tooltip({
     // A control in the standing card's row is part of that row, and leaves the card standing.
     const top = standing.at(-1);
     if (top !== undefined && top.id !== id && top.region?.contains(anchor) === true) return;
+    // Words cut short inside a control hanging a card, as a menu item's label is, never replace that card with a pill.
+    if (!carded && top?.carded === true && top.anchor.contains(anchor)) return;
     // Note that the warm spell is read before anything is taken down, so a
     // hint this one takes down never warms the window for it.
     if (touched || performance.now() < warmUntil) {
