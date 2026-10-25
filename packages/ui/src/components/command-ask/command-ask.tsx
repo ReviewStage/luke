@@ -3,16 +3,16 @@ import { BUTTON_VARIANT, Button } from "../button/button.js";
 import { DIALOG_ROLE, Dialog } from "../dialog/dialog.js";
 import { FILE_TEXT_EXTENT, FileText } from "../file-text/file-text.js";
 import { Stack } from "../layout/layout.js";
-import { TEXT_TONE, TEXT_VARIANT, Text } from "../text/text.js";
-import { TextButton } from "../text-button/text-button.js";
+import { TEXT_TONE, Text } from "../text/text.js";
+import { TEXT_BUTTON_TONE, TextButton } from "../text-button/text-button.js";
 
 /**
  * command-ask.tsx -- a command an agent asks to run on this Mac, put to the developer as a modal over the window: the command as written, then Deny, Always allow, and Allow once.
  *
- * The window asks the way a permission prompt does: it dims, and a card
- * holds the question, the exact command, mono and scrolling past a reading
- * height, one muted line on what running it means, and the three answers
- * at its foot, the safe one first. A long unbroken run in the command, the
+ * The window asks the way a permission prompt does, and as a confirm does:
+ * it dims, and a card holds the question, one muted line under it on what
+ * running it means, the exact command, mono and scrolling past a reading
+ * height, and the three answers at its foot, the safe one first. A long unbroken run in the command, the
  * base64 of a payload, is shown by its head and how much of it there is,
  * since no one reads it there and it would bury the rest of the command;
  * Show all, at the foot's start, brings it back whole. Focus lands on Deny, so a key already pressed runs nothing;
@@ -93,6 +93,7 @@ export function CommandAsk({
       actionsStart={
         shortened ? (
           <TextButton
+            tone={TEXT_BUTTON_TONE.ACCENT}
             aria-expanded={whole}
             aria-controls={commandId}
             onClick={() => setWhole(!whole)}
@@ -116,6 +117,10 @@ export function CommandAsk({
       }
     >
       <Stack>
+        <Text tone={TEXT_TONE.MUTED} id={bodyId}>
+          Runs from your home folder, and the agent sees what it prints. Always allow lasts until
+          you change it in {settingsPage === undefined ? null : <>{settingsPage} </>}settings.
+        </Text>
         <div id={commandId}>
           <FileText
             text={whole ? command : folded}
@@ -123,10 +128,6 @@ export function CommandAsk({
             extent={FILE_TEXT_EXTENT.WHOLE}
           />
         </div>
-        <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED} id={bodyId}>
-          Runs from your home folder, and the agent sees what it prints. Always allow lasts until
-          you change it in {settingsPage === undefined ? null : <>{settingsPage} </>}settings.
-        </Text>
       </Stack>
     </Dialog>
   );
