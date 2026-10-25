@@ -103,13 +103,11 @@ const TURN_MESSAGE_LEAD = {
 /**
  * What a session has handed its agent in its turns' messages, as content
  * addresses kept in eve's durable session state: the task, by the parts
- * of it no save of the plan changes (`taskKey`), the chat digest, an
- * operator's desk, and whether the call's words stand. Nothing yet for a session whose turns
+ * of it no save of the plan changes (`taskKey`), an operator's desk, and whether the call's words stand. Nothing yet for a session whose turns
  * handed none, or whose history eve compacted since.
  */
 export interface TurnHanded {
   readonly task?: string;
-  readonly chat?: string;
   /** The operator's desk as last handed (`../operator-desk.ts`), so one unchanged is not handed again. */
   readonly desk?: string;
   /** Whether the session's last turn was spoken, which a compaction leaves standing, so a typed turn after it says the call's words no longer hold. */

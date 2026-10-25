@@ -244,7 +244,7 @@ const AUTHOR_OF_KIND = {
 } as const;
 
 /** One block as a notice's line reads it, and a read of the chat: words as written, every mention link in them whole, a picture by its alt and its attachment id, which an agent names it by, anything else named by what it is. */
-export function blockWords(block: ChatReadBlock): string {
+function blockWords(block: ChatReadBlock): string {
   switch (block.type) {
     case CHAT_BLOCK.MARKDOWN:
       return "text" in block ? block.text : "";

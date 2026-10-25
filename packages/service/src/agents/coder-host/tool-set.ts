@@ -1,6 +1,5 @@
 import type { CodingAgent } from "@luke/database/models/coding-agent-store";
 import { CLAUDE_CODE_TOOL, CODEX_TOOL, RETIRED_TOOL } from "@luke/features/agent-tools";
-import { CHAT_BLOCK } from "@luke/features/chat-wire";
 import { CODING_AGENT_KIND } from "@luke/features/coding-agent-wire";
 import { inboxSandboxPicturePaths } from "@luke/features/inbox-attachment-link";
 import { ACTION_RESULT_STATUS, type WireRecord, WireValueSchema } from "@luke/wire";
@@ -24,10 +23,10 @@ import { BRAIN_HOST_TURN, type BrainHostTurn } from "../brain-host/bounds.js";
  * key, the hosted page read (`../public-research.ts`), the delegation of a slice of its
  * work to a worker (`apps/dev/tools/delegate.ts`), the notes it takes on
  * its plan (`plan-edit.ts`), its to-do list (`todos.ts`), and the
- * developer's inbox it posts to (`inbox.ts`), the pull request the service
- * opens for it (`pull-request.ts`), the workspace's chat it posts in and
- * reads (`chat.ts`), its reach to the other coding agents of
- * its workspace (`../coding-agent-tools.ts`), the load of one of its
+ * threads it posts to its workspace's channels (`inbox.ts`), the pull
+ * request the service opens for it (`pull-request.ts`), its reach to the
+ * other coding agents of its workspace, a message to one among it
+ * (`../coding-agent-tools.ts`, `agent-message.ts`), the load of one of its
  * repository's skills (`skills.ts`), and the pages it shows the developer
  * (`../page-tool.ts`), eve's own durable `sleep`, which it waits on its
  * checks or a deploy with, and the call's own question queue and hang-up,
@@ -58,13 +57,14 @@ export const CODER_TOOL = {
   EDIT_PLAN: AGENT_TOOL.EDIT_PLAN,
   LOOK_AT_PICTURE: AGENT_TOOL.LOOK_AT_PICTURE,
   WRITE_TODOS: AGENT_TOOL.WRITE_TODOS,
-  POST_TO_INBOX: AGENT_TOOL.POST_TO_INBOX,
+  POST_THREAD: AGENT_TOOL.POST_THREAD,
   WITHDRAW_ASK: AGENT_TOOL.WITHDRAW_ASK,
-  READ_INBOX: AGENT_TOOL.READ_INBOX,
+  READ_THREADS: AGENT_TOOL.READ_THREADS,
   LIST_OPEN_ASKS: AGENT_TOOL.LIST_OPEN_ASKS,
   OPEN_PULL_REQUEST: AGENT_TOOL.OPEN_PULL_REQUEST,
   LIST_AGENTS: AGENT_TOOL.LIST_AGENTS,
   READ_AGENT: AGENT_TOOL.READ_AGENT,
+  MESSAGE_AGENT: AGENT_TOOL.MESSAGE_AGENT,
   START_AGENT: AGENT_TOOL.START_AGENT,
   STOP_AGENT: AGENT_TOOL.STOP_AGENT,
   UPDATE_AGENT: AGENT_TOOL.UPDATE_AGENT,
@@ -79,10 +79,6 @@ export const CODER_TOOL = {
   UPDATE_AUTOMATION: AGENT_TOOL.UPDATE_AUTOMATION,
   DELETE_AUTOMATION: AGENT_TOOL.DELETE_AUTOMATION,
   RUN_AUTOMATION: AGENT_TOOL.RUN_AUTOMATION,
-  POST_CHAT: AGENT_TOOL.POST_CHAT,
-  READ_CHAT: AGENT_TOOL.READ_CHAT,
-  RESOLVE_ASK: AGENT_TOOL.RESOLVE_ASK,
-  EDIT_CHANNEL: AGENT_TOOL.EDIT_CHANNEL,
   LIST_MODELS: AGENT_TOOL.LIST_MODELS,
   REMEMBER: AGENT_TOOL.REMEMBER,
   RECALL: AGENT_TOOL.RECALL,
@@ -235,9 +231,10 @@ export function kindToolsOf(agent: Pick<CodingAgent, "kind">): ReadonlySet<KindT
  * replaced by eve's provider-run `web_search` on the agent's own key, the archive, unarchive, and move of a task into a
  * section since folded into `update_agent` and `update_task`, and the close
  * of and reply on an inbox item since folded into `withdraw_ask` and
- * `post_to_inbox`, and `message_agent`, since folded into `post_chat`'s
- * direct message. A transcript written then names them, and reads back
- * under the same set.
+ * `post_to_inbox`, that post and its read, since named `post_thread` and
+ * `read_threads`, and the workspace's chat, retired for channels' threads
+ * and `message_agent`. A transcript written then names them, and reads
+ * back under the same set.
  */
 export const RETIRED_CODER_TOOL = {
   WEB_FETCH: "web_fetch",
@@ -247,7 +244,12 @@ export const RETIRED_CODER_TOOL = {
   MOVE_TASK: RETIRED_TOOL.MOVE_TASK,
   CLOSE_INBOX_ITEM: RETIRED_TOOL.CLOSE_INBOX_ITEM,
   REPLY_INBOX: RETIRED_TOOL.REPLY_INBOX,
-  MESSAGE_AGENT: RETIRED_TOOL.MESSAGE_AGENT,
+  POST_TO_INBOX: RETIRED_TOOL.POST_TO_INBOX,
+  READ_INBOX: RETIRED_TOOL.READ_INBOX,
+  POST_CHAT: RETIRED_TOOL.POST_CHAT,
+  READ_CHAT: RETIRED_TOOL.READ_CHAT,
+  RESOLVE_ASK: RETIRED_TOOL.RESOLVE_ASK,
+  EDIT_CHANNEL: RETIRED_TOOL.EDIT_CHANNEL,
 } as const;
 
 /**
@@ -272,23 +274,14 @@ const SANDBOX_TOOLS: ReadonlySet<string> = new Set([
   CODER_TOOL.BROWSER,
 ]);
 
-/** What a chat post's input is read for here: the types of its blocks, and an image's path, which names a file in the sandbox where an attachment's id names none. */
-const readPostedBlocks = Schema.decodeUnknownOption(
-  Schema.Struct({
-    blocks: Schema.Array(
-      Schema.Struct({ type: Schema.String, path: Schema.optionalKey(Schema.Unknown) }),
-    ),
-  }),
-);
-
-/** What an inbox post's input is read for here: its body, whose pictures name files in the sandbox. */
+/** What a thread post's input is read for here: its body, whose pictures name files in the sandbox. */
 const readPostedBody = Schema.decodeUnknownOption(Schema.Struct({ body: Schema.String }));
 
 /**
  * Whether an event of the agent's session opened its sandbox: a request for
  * a sandbox tool, for a page read from a file in the sandbox, for an
- * edit of the plan adding a picture read from one, for a chat post with a
- * picture by its path, or for an inbox post whose body draws one by a path naming no
+ * edit of the plan adding a picture read from one, or for a thread post
+ * whose body draws one by a path naming no
  * scheme, each read from a file in the sandbox, or a message
  * received with files, which eve stages in the sandbox before the
  * turn opens, opening it to do so.
@@ -304,11 +297,7 @@ export function opensSandbox(event: MessageStreamEvent): boolean {
             (action.toolName === CODER_TOOL.EDIT_PLAN &&
               Array.isArray(action.input.pictures) &&
               action.input.pictures.length > 0) ||
-            (action.toolName === CODER_TOOL.POST_CHAT &&
-              Option.exists(readPostedBlocks(action.input), ({ blocks }) =>
-                blocks.some((block) => block.type === CHAT_BLOCK.IMAGE && block.path !== undefined),
-              )) ||
-            (action.toolName === CODER_TOOL.POST_TO_INBOX &&
+            (action.toolName === CODER_TOOL.POST_THREAD &&
               Option.exists(
                 readPostedBody(action.input),
                 ({ body }) => inboxSandboxPicturePaths(body).length > 0,

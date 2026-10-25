@@ -490,7 +490,7 @@ function inboxToolView(
   output: WireValue | undefined,
 ): ToolCallView {
   const refused = inboxRefusal(output);
-  if (tool === AGENT_TOOL.POST_TO_INBOX) {
+  if (tool === AGENT_TOOL.POST_THREAD || tool === RETIRED_TOOL.POST_TO_INBOX) {
     const message = threadPostView(input);
     if (message !== undefined) {
       return {
@@ -743,7 +743,7 @@ export interface SentWords {
 }
 
 /**
- * What a `start_agent` or a retired `message_agent` call sent, whole, which its row's
+ * What a `start_agent` or a `message_agent` call sent, whole, which its row's
  * line cuts to its first line: a message's words, or a start's prompt (named
  * `task` by a start journaled before the prompt had its name) and its note;
  * nothing for any other call, or for a start on the plan with no note, which
@@ -751,7 +751,7 @@ export interface SentWords {
  */
 export function sentWords(tool: string, input: WireValue | undefined): SentWords | undefined {
   const words =
-    tool === RETIRED_TOOL.MESSAGE_AGENT || tool === RETIRED_TOOL.MESSAGE_CODING_AGENT
+    tool === AGENT_TOOL.MESSAGE_AGENT || tool === RETIRED_TOOL.MESSAGE_CODING_AGENT
       ? stringAt(input, "text")
       : tool === AGENT_TOOL.START_AGENT || tool === RETIRED_TOOL.START_CODING_AGENT
         ? (stringAt(input, "prompt") ?? stringAt(input, "task"))
@@ -937,6 +937,8 @@ const AGENT_TOOL_VIEWS = {
     namedCall(CALL_KIND.LIST_AGENTS, input, output, undefined),
   [AGENT_TOOL.READ_AGENT]: ({ input, output }) =>
     namedCall(CALL_KIND.READ_AGENT, input, output, "agentId"),
+  [AGENT_TOOL.MESSAGE_AGENT]: ({ input, output }) =>
+    namedCall(CALL_KIND.MESSAGE_AGENT, input, output, "text"),
   [AGENT_TOOL.START_AGENT]: ({ input, output }) =>
     // Note that a start journaled before the prompt had its name carries it as `task`.
     namedCall(
@@ -1049,20 +1051,12 @@ const AGENT_TOOL_VIEWS = {
     output: output === undefined ? undefined : jsonBlock(output),
   }),
   [AGENT_TOOL.WRITE_TODOS]: ({ input }) => todosToolView(input),
-  [AGENT_TOOL.POST_TO_INBOX]: READ_INBOX_CALL,
+  [AGENT_TOOL.POST_THREAD]: READ_INBOX_CALL,
   [AGENT_TOOL.WITHDRAW_ASK]: READ_INBOX_CALL,
-  [AGENT_TOOL.READ_INBOX]: READ_INBOX_CALL,
+  [AGENT_TOOL.READ_THREADS]: READ_INBOX_CALL,
   [AGENT_TOOL.LIST_OPEN_ASKS]: ({ input, output }) =>
     namedCall(CALL_KIND.LIST_OPEN_ASKS, input, output, undefined),
   [AGENT_TOOL.OPEN_PULL_REQUEST]: ({ input, output }) => openedPullRequestView(input, output),
-  [AGENT_TOOL.POST_CHAT]: ({ input, output }) =>
-    chatCall(CALL_KIND.CHAT_POST, input, output, "text"),
-  [AGENT_TOOL.READ_CHAT]: ({ input, output }) =>
-    chatCall(CALL_KIND.CHAT_READ, input, output, "channel"),
-  [AGENT_TOOL.RESOLVE_ASK]: ({ input, output }) =>
-    namedCall(CALL_KIND.CHAT_RESOLVE, input, output, "key"),
-  [AGENT_TOOL.EDIT_CHANNEL]: ({ input, output }) =>
-    namedCall(CALL_KIND.CHAT_EDIT_CHANNEL, input, output, "channel"),
   [AGENT_TOOL.LOAD_SKILL]: ({ input, output }) => {
     const skillName = loadedSkill(input);
     return {
@@ -1130,8 +1124,6 @@ const RETIRED_TOOL_VIEWS = {
     namedCall(CALL_KIND.READ_AGENT, input, output, "agentId"),
   [RETIRED_TOOL.MESSAGE_CODING_AGENT]: ({ input, output }) =>
     namedCall(CALL_KIND.MESSAGE_AGENT, input, output, "text"),
-  [RETIRED_TOOL.MESSAGE_AGENT]: ({ input, output }) =>
-    namedCall(CALL_KIND.MESSAGE_AGENT, input, output, "text"),
   [RETIRED_TOOL.START_CODING_AGENT]: ({ input, output }) =>
     namedCall(
       CALL_KIND.START_AGENT,
@@ -1147,6 +1139,16 @@ const RETIRED_TOOL_VIEWS = {
     answeredCall(CALL_KIND.MOVE_TASK, input, output, "task", "name"),
   [RETIRED_TOOL.CLOSE_INBOX_ITEM]: READ_INBOX_CALL,
   [RETIRED_TOOL.REPLY_INBOX]: READ_INBOX_CALL,
+  [RETIRED_TOOL.POST_TO_INBOX]: READ_INBOX_CALL,
+  [RETIRED_TOOL.READ_INBOX]: READ_INBOX_CALL,
+  [RETIRED_TOOL.POST_CHAT]: ({ input, output }) =>
+    chatCall(CALL_KIND.CHAT_POST, input, output, "text"),
+  [RETIRED_TOOL.READ_CHAT]: ({ input, output }) =>
+    chatCall(CALL_KIND.CHAT_READ, input, output, "channel"),
+  [RETIRED_TOOL.RESOLVE_ASK]: ({ input, output }) =>
+    namedCall(CALL_KIND.CHAT_RESOLVE, input, output, "key"),
+  [RETIRED_TOOL.EDIT_CHANNEL]: ({ input, output }) =>
+    namedCall(CALL_KIND.CHAT_EDIT_CHANNEL, input, output, "channel"),
   [RETIRED_TOOL.LIST_ISSUES]: ({ input, output }) =>
     namedCall(CALL_KIND.LIST_ISSUES, input, output, undefined),
   [RETIRED_TOOL.READ_ISSUE]: ({ input, output }) => issueCall(CALL_KIND.READ_ISSUE, input, output),
@@ -1373,7 +1375,7 @@ const TOOL_TARGETS: ReadonlyMap<string, (call: TargetedCall) => ToolTarget | und
   [AGENT_TOOL.DRAW_ON_BOARD, () => BOARD_TARGET],
   [AGENT_TOOL.LOOK_AT_BOARD, () => BOARD_TARGET],
   [AGENT_TOOL.READ_AGENT, namedAgent],
-  [RETIRED_TOOL.MESSAGE_AGENT, namedAgent],
+  [AGENT_TOOL.MESSAGE_AGENT, namedAgent],
   [AGENT_TOOL.START_AGENT, startedAgent],
   [RETIRED_TOOL.UNARCHIVE_AGENT, namedAgent],
   [AGENT_TOOL.STOP_AGENT, namedAgent],
@@ -1388,10 +1390,12 @@ const TOOL_TARGETS: ReadonlyMap<string, (call: TargetedCall) => ToolTarget | und
   [AGENT_TOOL.LOOK_AT_PICTURE, () => TASK_TARGET],
   [AGENT_TOOL.SHOW_CODE, shownCode],
   [AGENT_TOOL.OPEN_PULL_REQUEST, openedPullRequest],
-  [AGENT_TOOL.POST_TO_INBOX, namedThread],
+  [AGENT_TOOL.POST_THREAD, namedThread],
+  [RETIRED_TOOL.POST_TO_INBOX, namedThread],
   [AGENT_TOOL.WITHDRAW_ASK, namedThread],
   [RETIRED_TOOL.CLOSE_INBOX_ITEM, () => INBOX_TARGET],
-  [AGENT_TOOL.READ_INBOX, () => INBOX_TARGET],
+  [AGENT_TOOL.READ_THREADS, () => INBOX_TARGET],
+  [RETIRED_TOOL.READ_INBOX, () => INBOX_TARGET],
   [RETIRED_TOOL.REPLY_INBOX, () => INBOX_TARGET],
   [CHAT_TOOL.POST, tasksOwnPost],
 ]);
@@ -1421,7 +1425,7 @@ export function toolTarget(call: TargetedCall): ToolTarget | undefined {
 /** The tools whose call is about one coding agent, under every name one was made under, which a row names by the agent's chip. */
 const AGENT_CALL_TOOLS: ReadonlySet<string> = new Set([
   AGENT_TOOL.READ_AGENT,
-  RETIRED_TOOL.MESSAGE_AGENT,
+  AGENT_TOOL.MESSAGE_AGENT,
   AGENT_TOOL.START_AGENT,
   RETIRED_TOOL.ARCHIVE_AGENT,
   RETIRED_TOOL.UNARCHIVE_AGENT,

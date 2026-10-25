@@ -16,7 +16,6 @@ import { CONVERSATION_RUNTIME } from "@luke/database/storage-vocabulary";
 import { getTestDB, openWorkspace, startTask } from "@luke/database/testing";
 import { BOARD_ELEMENT_TYPE } from "@luke/features/board-vocabulary";
 import { BROWSER_AGENT_ACTION } from "@luke/features/browser-agent-actions";
-import { CHAT_TOOL } from "@luke/features/chat-wire";
 import { CODING_AGENT_PAYER } from "@luke/features/coding-agent-wire";
 import { INBOX_TOOL } from "@luke/features/inbox-wire";
 import { PICTURE_MEDIA_TYPE, PICTURE_TYPE, type Picture } from "@luke/features/picture-wire";
@@ -69,7 +68,6 @@ import {
   type AgentDoorSeams,
   type AgentToolCall,
   runAgentBoard,
-  runAgentChat,
   runAgentComment,
   runAgentEditPlan,
   runAgentLookAtPicture,
@@ -98,7 +96,7 @@ import { LUKE_MCP_TOOLS, type LukeMcpServices, refusedByDoor } from "./tools.js"
  * Luke's MCP server, answered by its group the way a function answers it,
  * over a real dialect, and driven by the MCP SDK's own client, the one a
  * harness speaks: a runner's bearer admits its agent's conversation, the
- * server lists `read_inbox` and runs it through the coder host's inbox door
+ * server lists `read_threads` and runs it through the coder host's inbox door
  * as the agent's starter, the door eve's tool reaches through the coder host, and a wrong bearer, a missing one, and a retired
  * one are each refused before anything is read. Synthetic accounts and
  * words throughout.
@@ -220,7 +218,13 @@ const agentWithBearer = Effect.gen(function* () {
   const agent = Option.getOrThrow(started).agent;
   const bearer = randomBytes(32).toString("base64url");
   yield* recordCodingAgentRunnerToken(userId, agent.id, runnerTokenDigest(bearer));
-  return { userId, taskId: task.id, agentId: agent.id, bearer };
+  return {
+    userId,
+    taskId: task.id,
+    agentId: agent.id,
+    organizationId: agent.organizationId,
+    bearer,
+  };
 });
 
 /** A Codex agent on no task and in no repository, as an automation's run starts one, with a runner's bearer recorded for its conversation. */
@@ -317,8 +321,8 @@ function post(
 
 /** The tools a native agent is served: every Luke tool of the eve agent's that its harness has no equal of. */
 const SERVED_TOOLS = [
-  "post_to_inbox",
-  "read_inbox",
+  "post_thread",
+  "read_threads",
   "withdraw_ask",
   "open_pull_request",
   "edit_plan",
@@ -333,6 +337,7 @@ const SERVED_TOOLS = [
   "stop_agent",
   "list_agents",
   "read_agent",
+  "message_agent",
   "update_agent",
   "list_models",
   "list_open_asks",
@@ -349,10 +354,6 @@ const SERVED_TOOLS = [
   "run_automation",
   "remember",
   "recall",
-  "post_chat",
-  "read_chat",
-  "resolve_ask",
-  "edit_channel",
   "read_comments",
   "reply_to_comment",
   "resolve_thread",
@@ -386,9 +387,9 @@ const commentTool =
  * none, answers otherwise.
  */
 const DOOR_OF: Readonly<Record<Exclude<ServedTool, "run_on_mac" | "browser">, DirectCall>> = {
-  post_to_inbox: (admitted, input) =>
+  post_thread: (admitted, input) =>
     runAgentInbox(admitted, { tool: INBOX_TOOL.POST, input, sandbox: NO_SANDBOX }),
-  read_inbox: (admitted, input) => runAgentInbox(admitted, { tool: INBOX_TOOL.READ, input }),
+  read_threads: (admitted, input) => runAgentInbox(admitted, { tool: INBOX_TOOL.READ, input }),
   withdraw_ask: (admitted, input) => runAgentInbox(admitted, { tool: INBOX_TOOL.WITHDRAW, input }),
   open_pull_request: (admitted, input) => runAgentOpenPullRequest(admitted, input),
   edit_plan: (admitted, input) => runAgentEditPlan(admitted, input, 0, NO_SANDBOX),
@@ -403,6 +404,7 @@ const DOOR_OF: Readonly<Record<Exclude<ServedTool, "run_on_mac" | "browser">, Di
   stop_agent: agentTool("stop_agent"),
   list_agents: agentTool("list_agents"),
   read_agent: agentTool("read_agent"),
+  message_agent: agentTool("message_agent"),
   update_agent: agentTool("update_agent"),
   list_models: agentTool("list_models"),
   list_open_asks: agentTool("list_open_asks"),
@@ -419,20 +421,6 @@ const DOOR_OF: Readonly<Record<Exclude<ServedTool, "run_on_mac" | "browser">, Di
   run_automation: agentTool("run_automation"),
   remember: agentTool("remember"),
   recall: agentTool("recall"),
-  post_chat: (admitted, input, seams) =>
-    runAgentChat(seams, admitted, {
-      tool: CHAT_TOOL.POST,
-      input,
-      clientKey: randomUUID(),
-      postsInTurn: 0,
-      sandbox: NO_SANDBOX,
-    }),
-  read_chat: (admitted, input, seams) =>
-    runAgentChat(seams, admitted, { tool: CHAT_TOOL.READ, input }),
-  resolve_ask: (admitted, input, seams) =>
-    runAgentChat(seams, admitted, { tool: CHAT_TOOL.RESOLVE, input }),
-  edit_channel: (admitted, input, seams) =>
-    runAgentChat(seams, admitted, { tool: CHAT_TOOL.EDIT_CHANNEL, input }),
   read_comments: commentTool("read_comments"),
   reply_to_comment: commentTool("reply_to_comment"),
   resolve_thread: commentTool("resolve_thread"),
@@ -473,7 +461,7 @@ const initialize = (protocolVersion: string) => ({
 
 it.layer(getTestDB())("Luke's MCP server", (it) => {
   it.effect(
-    "an SDK client under the runner's bearer lists read_inbox and reads its agent's inbox through the inbox door",
+    "an SDK client under the runner's bearer lists read_threads and reads its agent's threads through the inbox door, and is shown post_thread naming its workspace's channels",
     () =>
       Effect.gen(function* () {
         const fetch = yield* standing;
@@ -496,6 +484,9 @@ it.layer(getTestDB())("Luke's MCP server", (it) => {
         yield* Effect.promise(() => client.close());
 
         assert.ok(listed.tools.some((tool) => tool.name === INBOX_TOOL.READ));
+        const posting = listed.tools.find((tool) => tool.name === INBOX_TOOL.POST);
+        const words = posting?.description ?? "";
+        assert.ok(words.includes("\n#general: "), words);
         assert.equal(called.isError, false);
         // SAFETY: the server answers every tool call with text blocks alone (`app.ts`'s `toolResult`).
         const [content] = called.content as readonly { type: string; text: string }[];
@@ -627,7 +618,9 @@ it.layer(getTestDB())("Luke's MCP server", (it) => {
         for (const tool of listed.tools) {
           const served = LUKE_MCP_TOOLS.get(tool.name);
           assert.ok(served !== undefined);
-          assert.equal(tool.description, served.description);
+          // A tool whose words differ by workspace opens on its words for every agent, its workspace's after them.
+          if (served.describe === undefined) assert.equal(tool.description, served.description);
+          else assert.ok(tool.description?.startsWith(served.description), tool.name);
           assert.deepEqual(tool.inputSchema, served.inputSchema);
         }
       }),

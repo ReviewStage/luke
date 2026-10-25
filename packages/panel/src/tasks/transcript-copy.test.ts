@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { firstMessageText, REPLAY_STEP_KIND } from "@luke/features/agent-replay";
 import { chatNoticeReplyLine } from "@luke/features/chat-wire";
 import {
+  agentMessageReplyLine,
   CODING_AGENT_BRIEF,
   CODING_AGENT_SENDER,
   type CodingAgentMessage,
@@ -129,6 +130,37 @@ test("a chat notice is copied under the member it tells of a message from, never
     kind: LATEST_ACTIVITY.WORDS,
     text: "Yes, base on my migration.",
   });
+});
+
+test("another agent's message is copied, with Chat off, as its words alone under the agent that sent it, never as chat", () => {
+  const message: CodingAgentMessage = {
+    ...said(
+      "message",
+      MESSAGE_ROLE.USER,
+      [
+        "Message · [@Invite emails](https://tryluke.dev/acme/agent/a1) to you:",
+        "Rebase before you push.",
+        agentMessageReplyLine("5f3c2a1e-9b8d-4c7a-8e6f-1a2b3c4d5e6f"),
+      ].join("\n\n"),
+    ),
+    metadata: { author: "agent", channel: "chat", from: "Invite emails" },
+  };
+  const transcript = agentTranscript({
+    title: "Add teammate invitations",
+    brief: undefined,
+    chatOn: false,
+    messages: [said("plan", MESSAGE_ROLE.USER, "Build invitations."), message],
+  });
+  assert.equal(
+    transcriptMarkdown(transcript, TRANSCRIPT_COPY.CONCISE),
+    [
+      "# Add teammate invitations",
+      "## Plan",
+      "Build invitations.",
+      "## Message from Invite emails",
+      "Rebase before you push.",
+    ].join("\n\n") + "\n",
+  );
 });
 
 test("a notice in its whole shape is copied as the message alone under who said it, and an inbox answer without its item's key, as the tab draws both", () => {

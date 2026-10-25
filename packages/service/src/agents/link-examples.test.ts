@@ -82,24 +82,7 @@ test("a coding agent is shown to name each kind as a mention Luke draws as its c
   }
 });
 
-test("a coding agent with Chat on is shown no link of a task's Luke, on a task or on none", () => {
-  const chatOf = (taskLink: string | null) => {
-    const words = coderInstructions(
-      REPOSITORY,
-      CODING_AGENT_BRIEF.PLAN,
-      true,
-      taskLink,
-      undefined,
-      true,
-    );
-    const from = words.indexOf("## Your team's chat");
-    return words.slice(from, words.indexOf("\n## ", from + 1));
-  };
-  assert.deepEqual(drawnAs(chatOf(TASK_ADDRESS)), []);
-  assert.deepEqual(drawnAs(chatOf(null)), []);
-});
-
-test("the inbox's post tool and the plan's edit tool show a file's link Luke draws as its chip, written as a mention", () => {
+test("the thread post tool and the plan's edit tool show a file's link Luke draws as its chip, written as a mention", () => {
   for (const description of [INBOX_TOOLS.POST.description, EDIT_PLAN_TOOL.description]) {
     assert.deepEqual(drawnAs(description), [MENTION_KIND.FILE]);
     assert.ok(

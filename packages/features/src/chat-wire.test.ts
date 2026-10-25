@@ -19,6 +19,7 @@ import {
   postChatAskInputSchema,
   postChatInputSchema,
 } from "./chat-wire.js";
+import { AGENT_MESSAGE_LEAD, agentMessageReplyLine } from "./coding-agent-wire.js";
 
 /** An agent's mention link's address, as a `to` names its DM. */
 const AGENT_LINK =
@@ -206,6 +207,17 @@ test("a notice's words as a person reads them keep the message alone, without th
     "Check this.\n\nIt asks you nothing, really.",
   );
   assert.equal(chatNoticeWords("Reply with care."), "Reply with care.");
+  // A message another agent sent reads as its words alone, without who sent it or how to answer.
+  assert.equal(
+    chatNoticeWords(
+      [
+        `${AGENT_MESSAGE_LEAD} · [@Invite emails](https://tryluke.dev/acme/agent/a1) to you:`,
+        "Rebase before you push.",
+        agentMessageReplyLine("5f3c2a1e-9b8d-4c7a-8e6f-1a2b3c4d5e6f"),
+      ].join("\n\n"),
+    ),
+    "Rebase before you push.",
+  );
   // A sender no link names is named plainly, and a DM's thread is said to the reader.
   assert.equal(
     chatNoticeWords(

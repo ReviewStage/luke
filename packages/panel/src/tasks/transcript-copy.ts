@@ -27,6 +27,7 @@ import {
   type AgentPart,
   agentRows,
   chatNoticeOf,
+  drawnNoticeOf,
   isDelegation,
   messageWords,
   placedMessages,
@@ -91,12 +92,13 @@ export type LatestActivity =
       readonly code: boolean;
     };
 
-/** Who a turn of the copy is, as its heading names them; a chat notice's heading names its sender after the word. */
+/** Who a turn of the copy is, as its heading names them; a chat notice's and another agent's message's heading names its sender after the words. */
 const SPEAKER = {
   DEVELOPER: "Developer",
   AGENT: "Agent",
   SUBAGENT: "Subagent",
   CHAT: "Chat from",
+  MESSAGE: "Message from",
 } as const;
 
 type Speaker = (typeof SPEAKER)[keyof typeof SPEAKER];
@@ -162,9 +164,13 @@ interface CopiedTurn {
   readonly blocks: readonly CopiedBlock[];
 }
 
-/** Whether a turn is words someone else handed the agent, the developer or a chat notice, rather than the agent's own. */
+/** Whether a turn is words someone else handed the agent, the developer, a chat notice, or another agent's message, rather than the agent's own. */
 function handedIn(turn: CopiedTurn): boolean {
-  return turn.speaker === SPEAKER.DEVELOPER || turn.speaker === SPEAKER.CHAT;
+  return (
+    turn.speaker === SPEAKER.DEVELOPER ||
+    turn.speaker === SPEAKER.CHAT ||
+    turn.speaker === SPEAKER.MESSAGE
+  );
 }
 
 /** A turn's heading: who said it, a chat notice's under its sender. */
@@ -267,16 +273,18 @@ export function drawnMessageWords(message: CodingAgentMessage): string {
 
 /**
  * One of the developer's messages as a copy reads it: their words, as the
- * tab draws them, an inbox line without its item's key; and a chat notice,
- * while the window offers Chat, as the message it tells of under who said
- * it, without the lines that are the agent's alone.
+ * tab draws them, an inbox line without its item's key; and a notice the
+ * tab draws as its sender's (`drawnNoticeOf`), as the message it tells of
+ * under who said it, without the lines that are the agent's alone.
  */
 function developerTurn(message: CodingAgentMessage, chatOn: boolean): CopiedTurn {
   const words = messageWords(message);
-  const notice = chatOn ? chatNoticeOf(message) : undefined;
+  const notice = drawnNoticeOf(message, chatOn);
   if (notice !== undefined) {
     const blocks = [{ kind: COPIED_BLOCK.WORDS, text: chatNoticeWords(words) }] as const;
-    return { speaker: SPEAKER.CHAT, from: notice.from, blocks };
+    // A message another agent sent holds no place in any chat, so it is copied as a message rather than as chat.
+    const speaker = notice.chat_seq === undefined ? SPEAKER.MESSAGE : SPEAKER.CHAT;
+    return { speaker, from: notice.from, blocks };
   }
   const blocks = [{ kind: COPIED_BLOCK.WORDS, text: inboxLineWords(words) }] as const;
   return { speaker: SPEAKER.DEVELOPER, blocks };

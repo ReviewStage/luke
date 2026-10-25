@@ -15,7 +15,6 @@
  * Code's appended to its prompt, Codex's as its `developer_instructions`.
  */
 
-import { chatEnabledFor } from "@luke/database/models/account-store";
 import { type CodingAgent, hasRepository } from "@luke/database/models/coding-agent-store";
 import { readNativeSequence } from "@luke/database/models/native-projection-store";
 import { CONVERSATION_RUNTIME } from "@luke/database/storage-vocabulary";
@@ -64,16 +63,11 @@ const nativeCoderInstructions = (userId: string, agent: CodingAgent, harness: Co
       Effect.tapError(logStoreFailure),
       Effect.orElseSucceed(() => agent.organizationId),
     );
-    const chatOn = yield* chatEnabledFor(userId).pipe(
-      Effect.tapError(logStoreFailure),
-      Effect.orElseSucceed(() => false),
-    );
     const memoryOn = yield* memoryOnFor(userId);
     return agentCoderInstructions(agent, {
       ciReadable,
       coAuthor,
       workspace,
-      chatOn,
       memoryOn,
       harness,
     });

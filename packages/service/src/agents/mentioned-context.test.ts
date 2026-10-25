@@ -443,10 +443,7 @@ test("another agent of the plan the words mention is handed by its id, where its
     /another coding agent of your workspace on this task, "Store the invitations" \(id `9e8d7c6b-5a4f-4e3d-8c2b-1a0f9e8d7c6b`\) working in `acme\/relay` on the branch `luke\/store-invitations`, whose pull request is #42 \(https:\/\/github\.com\/acme\/relay\/pull\/42\)\./u,
   );
   assert.match(part, /`gh pr diff 42`/u);
-  assert.match(
-    part,
-    /To message it, send it a direct message: `post_chat` with `to` set to the link the developer pointed you at\./u,
-  );
+  assert.match(part, /To message it, call `message_agent` with its id\./u);
   assert.match(part, /Its conversation is not yours to read\./u);
 });
 
@@ -478,7 +475,7 @@ test("an agent of the workspace on another task or on none is handed with its ta
     another ?? "",
     /another coding agent of your workspace on the task "Billing", "Store the invitations"/u,
   );
-  assert.match(another ?? "", /To message it, send it a direct message/u);
+  assert.match(another ?? "", /To message it, call `message_agent`/u);
   assert.match(
     none,
     /another coding agent of your workspace on no task, "Store the invitations" \(id `9e8d7c6b-5a4f-4e3d-8c2b-1a0f9e8d7c6b`\), archived, working in `acme\/relay`/u,

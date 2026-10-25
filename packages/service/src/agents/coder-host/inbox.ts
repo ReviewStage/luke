@@ -1,5 +1,11 @@
 import { posix } from "node:path";
 import type { DatabaseServices } from "@luke/database/core/query";
+import {
+  CHANNEL_NAME_REFUSAL,
+  type ChannelRow,
+  openChannels,
+  resolveChannel,
+} from "@luke/database/models/channel-store";
 import { OPERATOR_NOTICE_KIND } from "@luke/database/storage-vocabulary";
 import { inboxSandboxPicturePaths } from "@luke/features/inbox-attachment-link";
 import {
@@ -26,11 +32,12 @@ import {
   recommendedLabels,
 } from "@luke/features/inbox-wire";
 import { LINK_PLACE, linkOf, mentionMarkdownLink } from "@luke/features/link-grammar";
+import { decodeMention, MENTION_KIND, mentionLinksIn } from "@luke/features/mention-link";
 import { PAGE_OWNER, type PageOwner } from "@luke/features/page-wire";
 import { readEither } from "@luke/wire/effect";
-import { Effect, Option, Result } from "effect";
+import { DateTime, Effect, Option, Result } from "effect";
 import { ACTION_RESULT_STATUS, EXCESS_KEYS, type UnparsedWireValue } from "../../core.js";
-import { logStoreFailure } from "../../http/store-failure.js";
+import { logStoreFailure, type StoreFailure } from "../../http/store-failure.js";
 import {
   agentInboxItems,
   closeInboxItem,
@@ -50,15 +57,21 @@ import {
 } from "./inbox-image.js";
 
 /**
- * inbox.ts -- the coding agent's three inbox tools: post a message on a thread of the developer's inbox, withdraw a thread's open ask, and read every thread back.
+ * inbox.ts -- the coding agent's three thread tools: post a message on a thread in one of its workspace's channels, withdraw a thread's open ask, and read every thread back.
  *
  * What an agent cannot do or decide alone, a product choice, an approval
  * of a risky step, a question, or something only the developer can do by
  * hand such as a setting on GitHub, and whatever is ready for the developer
- * to look at, review, or test by hand, such as a pull request, goes in the
- * inbox rather than in a message, where it is lost in the transcript: a
- * thread of its own on the service (`inbox-store.ts`), drawn on the task's
- * Inbox tab. The agent names each thread by a key of its own. A post is one
+ * to look at, review, or test by hand, such as a pull request, goes in a
+ * thread rather than in a message, where it is lost in the transcript: a
+ * thread of its own on the service (`inbox-store.ts`), posted to one of its
+ * workspace's open channels, which every member reads, and drawn in the
+ * developer's Inbox as well. The agent chooses the channel per thread by
+ * the purposes its tool's words list (`postThreadDescription`), names it
+ * by name, `#` or not, and may address the thread's ask to a member by
+ * their mention link; a name no open channel goes by and a link naming no
+ * member are refused before the store is asked, and a thread naming none
+ * goes to #general. The agent names each thread by a key of its own. A post is one
  * message on it, one Markdown body with its chips, its cards, and its
  * pictures where they belong, which may end with an ask, `decide`, `do`, or
  * `answer` (`@luke/features/inbox-wire`); the first post under a key opens
@@ -86,40 +99,75 @@ const MAX_PICTURE_MB = (INBOX_BOUNDS.MAX_IMAGE_BYTES / 1_000_000).toFixed(1);
 /** The inbox's video bound in megabytes, as the words the model reads say it. */
 const MAX_VIDEO_MB = (INBOX_BOUNDS.MAX_VIDEO_BYTES / 1_000_000).toFixed(1);
 
-/** The tools as the model is shown them (`apps/dev/tools/`): each one's name, words, and input. */
+/** What `post_thread`'s words say before the workspace's channels. */
+const POST_THREAD_WORDS =
+  "Post a thread to one of your workspace's channels, apart from your transcript: something you need from a member, or something ready for them to look at or review, " +
+  "such as a pull request you opened or a page you showed. Every member of the workspace reads every channel, and the developer sees your threads in their Inbox too. " +
+  "Post only what a person would act on or be glad to know; an update on something you posted goes into its thread, never a thread of its own. " +
+  "Each post is one message on a thread under key, your own short lowercase slug such as branch-protection. " +
+  "The first post under a key opens its thread and must name its title; a later post under the same key adds a message to that thread, never a second one, " +
+  "and a title it names renames the thread only where the post asks. " +
+  "channel is the open channel the thread goes to, by its name, such as general: choose one for each thread by what belongs in it. " +
+  "A thread that names none goes to #general, and a later post under its key that names none leaves it where it stands; " +
+  "a name no open channel of your workspace goes by, or an archived channel's, is refused. " +
+  "to is the member the thread's ask is addressed to, by their mention link, the [@Name](link) you name a member by, and the ask waits on them; " +
+  "without it, it waits on the task's assignee, or on the developer who started you. " +
+  `body is the message, one Markdown body of at most ${INBOX_BOUNDS.MAX_MESSAGE_CHARS} characters. ` +
+  "Write a file, a pull request, or an issue in it as a mention, such as [@store.ts](https://github.com/<owner>/<name>/blob/HEAD/<path>), so Luke draws it as a chip. " +
+  "Put a link alone on its own line to show it as a card: a pull request, an issue, a page such as the GitHub settings page a to-do is done on, " +
+  "or the exact lines a decision is about, as a blob link into your repository at the full 40-character commit you read them at, one already on GitHub, " +
+  `ending #L<start>-L<end>, at most ${INBOX_BOUNDS.MAX_CODE_LINES} lines, which they see as GitHub holds them at that commit. ` +
+  `Draw a picture where it belongs, such as a screenshot of a UI you rendered, as ![alt](<path> "caption"): path is the file's path in your sandbox, ` +
+  `relative to the checkout or absolute, a PNG, JPEG, or WebP of at most ${MAX_PICTURE_MB} MB, or a WebM video of at most ${MAX_VIDEO_MB} MB, such as a recording of a flow, which plays there, ` +
+  `at most ${INBOX_BOUNDS.MAX_MESSAGE_PICTURES} a message; ` +
+  "alt says in a sentence what it shows, and pictures written next to each other stand side by side. " +
+  "ask is what the message asks of them, which ends it: " +
+  `decide (two to ${INBOX_BOUNDS.MAX_OPTIONS} options, each a short label and an optional detail; name the label you recommend; multiple lets them pick several, and recommended then takes a list of the labels you recommend; ` +
+  "for a go-ahead on one step you propose, two short options such as Approve and Request changes), " +
+  "do (a to-do: something only they can do by hand, such as changing a GitHub setting, adding a secret, or testing by hand what you could not test yourself; " +
+  `its steps, at most ${INBOX_BOUNDS.MAX_STEPS}, say exactly what to do, and they tick each before they mark it done, or say they couldn't), ` +
+  `or answer (one to ${INBOX_BOUNDS.MAX_FIELDS} typed fields, text, number, select with its options and the one you recommend, or boolean, each named by its label and required where it must be filled; ` +
+  "or no fields for an answer in their own words); never end an answer with an optional free-text field, because the reply box under every ask already takes a note; " +
+  "never ask for a credential or a secret in a form, since the answer reaches your transcript: " +
+  "that is a do the developer does by hand. A post without ask asks nothing: something they should only know, or your reply on the thread; never how the work is going, such as that you started or that a pull request is almost merged. " +
+  "It waits until they acknowledge it, which never reaches you unless they write something; " +
+  `you may have at most ${INBOX_BOUNDS.MAX_OPEN_PER_AGENT} such posts waiting to be acknowledged, apart from your open asks. ` +
+  "A thread holds one open ask, and a newer ask replaces it. " +
+  "An answer to decide or answer always reaches you as a message. " +
+  "waits is for a do alone: whether you need to hear it is done as a message, only where you set it true; " +
+  "a do you do not wait on is kept for you to read, though an answer carrying their words or a file still reaches you as a message. " +
+  `An answer reaches you as a developer's message whose first line starts "${INBOX_ANSWER_LEAD}" and names the key. ` +
+  `You may hold at most ${INBOX_BOUNDS.MAX_OPEN_PER_AGENT} open asks. The call answers with your threads as they stand, each with the mention you name it by.`;
+
+/** One open channel as the tool's words list it: its name and what belongs in it. */
+type ListedChannel = Pick<ChannelRow, "name" | "purpose">;
+
+/**
+ * The words `post_thread` is shown with: how to post, then the workspace's
+ * open channels with their purposes, for the agent to choose one by, where
+ * any are listed. Note that the list is the one part that differs between
+ * workspaces, and it closes the words, so what comes before it stays one
+ * text for every agent.
+ */
+function postThreadDescription(channels: readonly ListedChannel[]): string {
+  const listed =
+    channels.length === 0
+      ? ""
+      : ` Your workspace's open channels, each with what belongs in it:\n${channels
+          .map((channel) => `#${channel.name}: ${channel.purpose}`)
+          .join("\n")}`;
+  return `${POST_THREAD_WORDS}${listed}`;
+}
+
+/**
+ * The tools as the model is shown them (`apps/dev/tools/`): each one's name,
+ * words, and input. `post_thread`'s words here list no channel; an agent is
+ * shown them with its workspace's (`postThreadDescription`).
+ */
 export const INBOX_TOOLS = {
   POST: {
     name: INBOX_TOOL.POST,
-    description:
-      "Put something in the developer's inbox, apart from your transcript: something you need from them, or something ready for them to look at or review, " +
-      "such as a pull request you opened or a page you showed. Each post is one message on a thread under key, your own short lowercase slug such as branch-protection. " +
-      "The first post under a key opens its thread and must name its title; a later post under the same key adds a message to that thread, never a second one, " +
-      "and a title it names renames the thread only where the post asks. " +
-      `body is the message, one Markdown body of at most ${INBOX_BOUNDS.MAX_MESSAGE_CHARS} characters. ` +
-      "Write a file, a pull request, or an issue in it as a mention, such as [@store.ts](https://github.com/<owner>/<name>/blob/HEAD/<path>), so Luke draws it as a chip. " +
-      "Put a link alone on its own line to show it as a card: a pull request, an issue, a page such as the GitHub settings page a to-do is done on, " +
-      "or the exact lines a decision is about, as a blob link into your repository at the full 40-character commit you read them at, one already on GitHub, " +
-      `ending #L<start>-L<end>, at most ${INBOX_BOUNDS.MAX_CODE_LINES} lines, which they see as GitHub holds them at that commit. ` +
-      `Draw a picture where it belongs, such as a screenshot of a UI you rendered, as ![alt](<path> "caption"): path is the file's path in your sandbox, ` +
-      `relative to the checkout or absolute, a PNG, JPEG, or WebP of at most ${MAX_PICTURE_MB} MB, or a WebM video of at most ${MAX_VIDEO_MB} MB, such as a recording of a flow, which plays there, ` +
-      `at most ${INBOX_BOUNDS.MAX_MESSAGE_PICTURES} a message; ` +
-      "alt says in a sentence what it shows, and pictures written next to each other stand side by side. " +
-      "ask is what the message asks of them, which ends it: " +
-      `decide (two to ${INBOX_BOUNDS.MAX_OPTIONS} options, each a short label and an optional detail; name the label you recommend; multiple lets them pick several, and recommended then takes a list of the labels you recommend; ` +
-      "for a go-ahead on one step you propose, two short options such as Approve and Request changes), " +
-      "do (a to-do: something only they can do by hand, such as changing a GitHub setting, adding a secret, or testing by hand what you could not test yourself; " +
-      `its steps, at most ${INBOX_BOUNDS.MAX_STEPS}, say exactly what to do, and they tick each before they mark it done, or say they couldn't), ` +
-      `or answer (one to ${INBOX_BOUNDS.MAX_FIELDS} typed fields, text, number, select with its options and the one you recommend, or boolean, each named by its label and required where it must be filled; ` +
-      "or no fields for an answer in their own words); never ask for a credential or a secret in a form, since the answer reaches your transcript: " +
-      "that is a do the developer does by hand. A post without ask asks nothing: something they should only know, or your reply on the thread; never how the work is going, such as that you started or that a pull request is almost merged. " +
-      "It waits in their inbox until they acknowledge it, which never reaches you unless they write something; " +
-      `you may have at most ${INBOX_BOUNDS.MAX_OPEN_PER_AGENT} such posts waiting to be acknowledged, apart from your open asks. ` +
-      "A thread holds one open ask, and a newer ask replaces it. " +
-      "An answer to decide or answer always reaches you as a message. " +
-      "waits is for a do alone: whether you need to hear it is done as a message, only where you set it true; " +
-      "a do you do not wait on is kept for you to read, though an answer carrying their words or a file still reaches you as a message. " +
-      `An answer reaches you as a developer's message whose first line starts "${INBOX_ANSWER_LEAD}" and names the key. ` +
-      `You may hold at most ${INBOX_BOUNDS.MAX_OPEN_PER_AGENT} open asks. The call answers with your whole inbox as it stands, each thread with the mention you name it by.`,
+    description: postThreadDescription([]),
     inputSchema: inboxThreadPostInputSchema,
   },
   WITHDRAW: {
@@ -127,13 +175,13 @@ export const INBOX_TOOLS = {
     description:
       "Withdraw the open ask of one of your threads, by its key, with why: you no longer need it, you found the answer yourself, " +
       "or you checked that the to-do is done. The thread and its messages stay; refused where it holds no open ask, such as one already answered. " +
-      "The call answers with your whole inbox as it stands.",
+      "The call answers with your threads as they stand.",
     inputSchema: inboxWithdrawInputSchema,
   },
   READ: {
     name: INBOX_TOOL.READ,
     description:
-      "Read your threads in the developer's inbox as they stand now, each with the mention you name it by: every one still asking, whole, and the latest settled ones by their last messages and their latest ask and answer; " +
+      "Read your threads, in whichever channel each was posted to, as they stand now, each with the mention you name it by: every one still asking, whole, and the latest settled ones by their last messages and their latest ask and answer; " +
       `a thread longer than ${INBOX_BOUNDS.MAX_MESSAGES_READ} messages reads its first, its open ask, and its latest ${INBOX_BOUNDS.MAX_MESSAGES_READ}. ` +
       "Each message reads in order with who wrote it, you or a member by name, the ask it ends with and where that stands " +
       "(open, answered, replaced by a newer ask, or withdrawn, with your reason), and the answer a member's message carries. " +
@@ -182,6 +230,11 @@ interface AgentInboxLine {
   readonly closedReason?: string;
 }
 
+/** The agent a post is made as: its account, task, and id, and the workspace whose channels and members the post names. */
+export interface ThreadPoster extends InboxAgent {
+  readonly organizationId: string;
+}
+
 /** What a call answers, as the model reads it: the agent's inbox as it stands, or why the call did nothing beside it. */
 export type InboxToolResult =
   | {
@@ -218,6 +271,10 @@ export const INBOX_REFUSAL = {
   UNREADABLE_WITHDRAW: "Not withdrawn: name the thread's key and why you withdraw its ask.",
   NO_OPEN_ASK: "Not withdrawn: you have no thread under that key with an open ask.",
   NO_CHANNEL: "Not posted: that channel is archived, or not one of your workspace's.",
+  UNKNOWN_CHANNEL: `Not posted: no open channel of your workspace goes by that name; name one ${INBOX_TOOL.POST}'s words list, or none for #general.`,
+  ARCHIVED_CHANNEL: `Not posted: that channel is archived; name an open one ${INBOX_TOOL.POST}'s words list, or none for #general.`,
+  NO_MEMBER:
+    "Not posted: to names no member; write a member of your workspace by their mention link, [@Name](link), as a person's chip is written.",
   NO_ADDRESSEE: "Not posted: the member you addressed is not in your workspace.",
   NO_AGENT: "Not done: this conversation is no coding agent's.",
   UNAVAILABLE: "Not done: the service could not reach its store.",
@@ -507,16 +564,62 @@ function bodyPictures(
   });
 }
 
-/** The post as the store writes it: its key, title, words, and ask as a message keeps it, and whether the agent hears the answer (`heardAnswer`). */
-function threadPost(post: InboxThreadPostInput) {
-  const { waits, ask, ...written } = post;
-  if (ask === undefined) return written;
-  return { ...written, ask: keptInboxAsk(ask), needsReply: heardAnswer(ask, waits) };
+/** Where a post goes and whom it waits on, as the store takes them: the channel's id and the member's account, each absent where the post names none. */
+interface ThreadPlace {
+  readonly channelId?: string;
+  readonly addresseeId?: string;
 }
 
-/** Runs one post: its pictures read from the sandbox, the message written on the thread under its key, and the agent's inbox answered, or why not. */
+/** The post as the store writes it: its key, title, words, and ask as a message keeps it, whether the agent hears the answer (`heardAnswer`), and where it goes. */
+function threadPost(post: InboxThreadPostInput, place: ThreadPlace) {
+  const { waits, ask, channel: _channel, to: _to, ...written } = post;
+  if (ask === undefined) return { ...written, ...place };
+  return { ...written, ...place, ask: keptInboxAsk(ask), needsReply: heardAnswer(ask, waits) };
+}
+
+/** The member a post's `to` names by their mention link written whole, or its address alone, by account; nothing where it names no person, such as an agent or a task. */
+function addresseeOf(to: string): string | undefined {
+  const [link] = mentionLinksIn(to);
+  const whole = link !== undefined && link.start === 0 && link.end === to.length;
+  const mention = decodeMention(whole ? link.target : to, null);
+  return mention?.kind === MENTION_KIND.PERSON ? mention.userId : undefined;
+}
+
+/**
+ * Where a post goes and whom it waits on, or why it goes nowhere: the open
+ * channel of the agent's workspace its name names, a leading `#` dropped,
+ * refused where only an archived one goes by it or none does; and the
+ * member its mention link names, refused where it names no person. Note
+ * that whether that person is of the workspace is the store's to say, under
+ * the lock it writes the post under (`postInboxThread`).
+ */
+function placeOf(
+  agent: ThreadPoster,
+  post: InboxThreadPostInput,
+): Effect.Effect<Result.Result<ThreadPlace, string>, StoreFailure, DatabaseServices> {
+  return Effect.gen(function* () {
+    const addresseeId = post.to === undefined ? undefined : addresseeOf(post.to.trim());
+    if (post.to !== undefined && addresseeId === undefined) {
+      return Result.fail(INBOX_REFUSAL.NO_MEMBER);
+    }
+    const addressed = addresseeId === undefined ? {} : { addresseeId };
+    if (post.channel === undefined) return Result.succeed(addressed);
+    const name = post.channel.trim().replace(/^#/u, "");
+    const found = yield* resolveChannel(agent.userId, agent.organizationId, name);
+    if (Result.isFailure(found)) {
+      return Result.fail(
+        found.failure === CHANNEL_NAME_REFUSAL.ARCHIVED
+          ? INBOX_REFUSAL.ARCHIVED_CHANNEL
+          : INBOX_REFUSAL.UNKNOWN_CHANNEL,
+      );
+    }
+    return Result.succeed({ ...addressed, channelId: found.success.id });
+  });
+}
+
+/** Runs one post: where it goes, its pictures read from the sandbox, the message written on the thread under its key, and the agent's threads answered, or why not. */
 export function postToInbox(
-  agent: InboxAgent,
+  agent: ThreadPoster,
   input: UnparsedWireValue,
   sandbox: InboxSandboxDoor,
 ): Effect.Effect<InboxToolResult, never, DatabaseServices> {
@@ -526,9 +629,14 @@ export function postToInbox(
   if (post.body.trim() === "") return Effect.succeed(inboxRejected(INBOX_REFUSAL.UNREADABLE_POST));
   const refused = askRefusal(post.ask);
   if (refused !== undefined) return Effect.succeed(inboxRejected(refused));
-  return Effect.flatMap(bodyPictures(post.body, sandbox), (pictures) => {
-    if (Result.isFailure(pictures)) return Effect.succeed(inboxRejected(pictures.failure));
-    return Effect.flatMap(postInboxThread(agent, threadPost(post), pictures.success), (posted) => {
+  return Effect.gen(function* () {
+    // A place refused is said before any picture is read, since mending it reads them again.
+    const place = yield* placeOf(agent, post);
+    if (Result.isFailure(place)) return inboxRejected(place.failure);
+    const pictures = yield* bodyPictures(post.body, sandbox);
+    if (Result.isFailure(pictures)) return inboxRejected(pictures.failure);
+    const thread = threadPost(post, place.success);
+    return yield* Effect.flatMap(postInboxThread(agent, thread, pictures.success), (posted) => {
       if (Result.isFailure(posted)) {
         return Effect.succeed(inboxRejected(storeRefusal(posted.failure)));
       }
@@ -562,6 +670,25 @@ export function withdrawAsk(
   ).pipe(
     Effect.tapError(logStoreFailure),
     Effect.catch(() => Effect.succeed(inboxRejected(INBOX_REFUSAL.UNAVAILABLE))),
+  );
+}
+
+/**
+ * `post_thread`'s words as the agent is shown them: with its workspace's
+ * open channels and their purposes, #general minted first where it has none
+ * yet; without them where they cannot be read, which is logged, so the
+ * agent is still offered the tool.
+ */
+export function postThreadWordsFor(
+  agent: Pick<ThreadPoster, "userId" | "organizationId">,
+): Effect.Effect<string, never, DatabaseServices> {
+  return Effect.gen(function* () {
+    const now = yield* DateTime.nowAsDate;
+    const channels = yield* openChannels(agent.userId, agent.organizationId, now);
+    return postThreadDescription(channels);
+  }).pipe(
+    Effect.tapError(logStoreFailure),
+    Effect.catch(() => Effect.succeed(INBOX_TOOLS.POST.description)),
   );
 }
 
