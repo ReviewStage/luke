@@ -137,7 +137,9 @@ export type { ListSelection } from "../selection/list-selection.js";
  * words, so they cover nothing and the press keeps its ring; at rest, where
  * there is a hover, they take none, so the title runs to the metadata and
  * is cut anew before them as they come, and the row's ⋯ comes with them, in
- * the metadata's place, keeping no room of its own.
+ * the metadata's place, keeping no room of its own. A row with a ⋯ and no
+ * acts offers its ⋯ the same way, so its metadata ends where its
+ * neighbours' does.
  *
  * A title cut short, there or anywhere, fades out over its last few pixels
  * instead of ending in an ellipsis, as a browser's tab does; one drawn
@@ -273,7 +275,7 @@ const MAIN_CLASS =
   "luke-list-row-main col-[leading-start/end-end] row-1 m-0 grid min-w-0 grid-cols-subgrid items-center rounded-inherit border-0 bg-transparent text-start text-inherit [font:inherit]";
 
 /** A press that is a button, pressed as a Mac's list is on the desktop, without the web's pointing hand. */
-const MAIN_BUTTON_CLASS = `${MAIN_CLASS} cursor-pointer in-data-[luke-profile=desktop]:cursor-default disabled:cursor-default`;
+const MAIN_BUTTON_CLASS = `${MAIN_CLASS} cursor-press disabled:cursor-default`;
 
 /**
  * The leading mark, muted, a glyph at a control's glyph size and an avatar
@@ -695,6 +697,8 @@ export function ListRow({
     </>
   );
   const { view, item } = swiped;
+  // Note that a row whose only act is its ⋯ offers it as a hover row offers its acts, so no row keeps an empty ⋯ track at rest.
+  const actsOnHover = actionsAt === LIST_ROW_ACTIONS.HOVER || (offered && !said(actions));
   const hold = (element: HTMLLIElement | null) => {
     item.ref.current = element;
     if (!onPress) ref?.(element);
@@ -707,7 +711,7 @@ export function ListRow({
         ref={swipe === undefined ? (onPress ? undefined : ref) : hold}
         className={ROW_CLASS}
         data-meta={metaAt === LIST_ROW_META.TITLE ? metaAt : undefined}
-        data-actions={actionsAt === LIST_ROW_ACTIONS.HOVER ? actionsAt : undefined}
+        data-actions={actsOnHover ? LIST_ROW_ACTIONS.HOVER : undefined}
         data-current={current === undefined ? undefined : "true"}
         data-selected={chosen ? "true" : undefined}
         data-unread={unread === true ? "true" : undefined}

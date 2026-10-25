@@ -1,38 +1,14 @@
-/* auth-page.css -- one card centred in the window: the OAuth pages' raised
-   surface, its words centred over a body whose controls stretch to the
-   card's inner width. The page queries its own width rather than the
-   viewport's, so a card drawn in a narrow frame narrows its inset as it
-   would on a phone; a container query cannot read a custom property, so the
-   width it narrows under is a literal here. */
+/* auth-page.css -- what an auth page's utilities (`auth-page.tsx`,
+   `auth-mark.tsx`) cannot say: the card's inset, which a narrow page's
+   container query narrows; the sizes it sets on the glyphs other components
+   draw inside it; and the desktop window's drag. The page queries its own
+   width rather than the viewport's, so a card drawn in a narrow frame
+   narrows its inset as it would on a phone; a container query cannot read
+   a custom property, so the width it narrows under is a literal here. */
 
 @layer components {
-  .luke-auth-page {
-    container-type: inline-size;
-    display: grid;
-    place-items: center;
-    min-height: 100dvh;
-    padding: var(--luke-page-inset);
-    box-sizing: border-box;
-  }
-
   .luke-auth-card {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    width: 100%;
-    max-width: 430px;
-    box-sizing: border-box;
     padding: var(--luke-space-40) var(--luke-space-32);
-    border: 1px solid var(--luke-color-border);
-    border-radius: var(--luke-dialog-radius);
-    background: var(--luke-color-surface);
-    box-shadow: 0 24px 80px var(--luke-color-shadow-soft);
-    color: var(--luke-color-text);
-    font-family: var(--luke-font-sans);
-    font-size: var(--luke-type-body-size);
-    line-height: var(--luke-type-body-leading);
-    text-align: center;
-    overflow-wrap: anywhere;
   }
 
   /* Under a phone's width the card gives its inset back to what it holds. */
@@ -43,53 +19,13 @@
     }
   }
 
-  .luke-auth-mark {
-    display: inline-flex;
-    max-width: 100%;
-  }
-
-  /* The ring an AuthMark draws: the mark at about two thirds of it, on the
-     card's surface inside a hairline edge. */
-  .luke-auth-ring {
-    position: relative;
-    display: inline-grid;
-    place-items: center;
-    width: 56px;
-    height: 56px;
-    box-sizing: border-box;
-    border: 1px solid var(--luke-color-border);
-    border-radius: var(--luke-radius-full);
-    background: var(--luke-color-surface);
-    color: var(--luke-color-text);
-  }
-
+  /* The ring's mark, a provider's or Luke's, at about two thirds of it. */
   .luke-auth-ring > svg {
     width: 36px;
     height: 36px;
   }
 
-  /* The badge sits on the ring's lower right, where its edge crosses the
-     diagonal, cut out of the card by a ring of the card's own colour. A
-     failure is the danger red every failure is drawn in. */
-  .luke-auth-badge {
-    position: absolute;
-    right: calc(var(--luke-space-2) * -1);
-    bottom: calc(var(--luke-space-2) * -1);
-    display: grid;
-    place-items: center;
-    width: 20px;
-    height: 20px;
-    border-radius: var(--luke-radius-full);
-    background: var(--luke-color-complete);
-    box-shadow: 0 0 0 3px var(--luke-color-surface);
-    color: var(--luke-color-surface);
-  }
-
-  .luke-auth-badge[data-tone="danger"] {
-    background: var(--luke-color-danger-fill);
-    color: var(--luke-color-on-danger);
-  }
-
+  /* The badge's glyph, in the badge's own ink at full strength. */
   .luke-auth-badge > svg {
     width: 12px;
     height: 12px;
@@ -98,75 +34,14 @@
     stroke-width: 3;
   }
 
-  .luke-auth-title {
-    margin: var(--luke-space-16) 0 0;
-    font-size: var(--luke-type-title-size);
-    line-height: var(--luke-type-title-leading);
-    font-weight: var(--luke-type-title-weight);
-    letter-spacing: var(--luke-type-title-tracking);
-    /* A title that wraps splits its words evenly rather than leaving one alone. */
-    text-wrap: balance;
-  }
-
-  /* The card's first child opens it flush, whichever part that is. */
-  .luke-auth-card > :first-child {
-    margin-top: 0;
-  }
-
-  :is(.luke-auth-description, .luke-auth-footnote) {
-    margin: var(--luke-space-8) 0 0;
-    color: var(--luke-color-text-muted);
-  }
-
-  .luke-auth-description {
-    font-size: var(--luke-type-label-size);
-    line-height: var(--luke-type-label-leading);
-  }
-
   /* A footnote of several notes stands them one under another. */
   .luke-auth-footnote > * {
     display: block;
-  }
-
-  .luke-auth-footnote {
-    margin-top: var(--luke-space-16);
-    font-size: var(--luke-type-caption-size);
-    line-height: var(--luke-type-caption-leading);
-  }
-
-  /* The body is as wide as the card's inside, and so is each thing in it,
-     so a provider's button fills its line and a form's fields stand on the
-     start edge as they do anywhere else. */
-  .luke-auth-body {
-    display: flex;
-    flex-direction: column;
-    align-self: stretch;
-    gap: var(--luke-space-12);
-    margin-top: var(--luke-space-32);
-    text-align: start;
-  }
-
-  /* The way on stands centred under the words, as wide as its own. */
-  .luke-auth-action {
-    display: flex;
-    justify-content: center;
-    margin-top: var(--luke-space-24);
   }
 
   /* The footnote can hold a press (a wait's Cancel), and the way on is one,
      which is no part of a window drag. */
   [data-luke-profile="desktop"] :is(.luke-auth-footnote, .luke-auth-action) {
     -webkit-app-region: no-drag;
-  }
-
-  .luke-auth-error {
-    margin: var(--luke-space-16) 0 0;
-    color: var(--luke-color-danger-text);
-  }
-
-  /* Empty, it keeps its place in the tree, so its alert region is standing
-     when an error arrives, and gives back the room before it. */
-  .luke-auth-error:empty {
-    margin: 0;
   }
 }

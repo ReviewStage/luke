@@ -148,7 +148,9 @@ export function Conversation({
   // line at its bottom, and puts one back there once nothing is left below
   // to scroll to. Note that it watches no line of its own, because the block
   // is as tall as its lines, so any line resizing resizes it, and a line
-  // replaced or removed is then never held by the observer.
+  // replaced or removed is then never held by the observer; and that it
+  // watches the block's border box, so its end growing to leave the toasts'
+  // room (`--luke-toast-room`) keeps a following log at its newest line too.
   const [resized] = useState(
     () =>
       new ResizeObserver(() => {
@@ -217,7 +219,7 @@ export function Conversation({
     }
     if (first !== null) firstFromTop.current = first.offsetTop - element.scrollTop;
     resized.observe(element);
-    if (lines !== null) resized.observe(lines);
+    if (lines !== null) resized.observe(lines, { box: "border-box" });
     askOlder(element);
   });
   const scrollToBottom = useCallback(() => {
@@ -300,12 +302,7 @@ export function ConversationContent({
       onScroll={onScroll}
       onClickCapture={onFold}
     >
-      <div
-        className={cn(
-          "conversation-log px-content-inset pt-section-gap pb-luke-20",
-          className,
-        )}
-      >
+      <div className={cn("conversation-log px-content-inset pt-section-gap pb-luke-20", className)}>
         {children}
       </div>
     </ScrollArea>
