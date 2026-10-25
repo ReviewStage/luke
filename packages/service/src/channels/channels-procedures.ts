@@ -14,6 +14,7 @@ import {
   archiveChannel,
   CHANNEL_WRITE_REFUSAL,
   type ChannelWriteRefusal,
+  channelWorkspaceOf,
   createChannel,
   listChannelLooks,
   openChannels,
@@ -21,7 +22,7 @@ import {
   stampChannelLook,
 } from "@luke/database/models/channel-store";
 import type { Channel, ChannelsAnswer } from "@luke/features/channel-wire";
-import { DateTime, Effect, Result } from "effect";
+import { DateTime, Effect, Option, Result } from "effect";
 import {
   HOSTED_REFUSAL,
   type HostedRefusal,
@@ -52,6 +53,16 @@ const written = <A>(outcome: Result.Result<A, ChannelWriteRefusal>) =>
   Result.isFailure(outcome)
     ? Effect.fail(writeRefusal(outcome.failure))
     : Effect.succeed(outcome.success);
+
+/** The channel's workspace, open or archived, as the reader reaches it; not found where it is none of theirs. */
+const workspaceOfChannel = /* @__PURE__ */ Effect.fnUntraced(function* (
+  userId: string,
+  channelId: string,
+) {
+  const workspace = yield* hostedStoreOrUnavailable(channelWorkspaceOf(userId, channelId));
+  if (Option.isNone(workspace)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+  return workspace.value;
+});
 
 /**
  * The workspace's open channels as the reader reads them, its #general
@@ -124,12 +135,16 @@ export function channelsProcedures(seams: ChannelsProcedureSeams) {
     }),
     look: signedIn.look.effect(function* ({ input, context }) {
       const { workspaceId, channelId } = input;
+      // A channel of another workspace than the one named is not found, so a look never lands where the answer does not.
+      const workspace = yield* workspaceOfChannel(context.userId, channelId);
+      if (workspace !== workspaceId) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
       const now = yield* DateTime.nowAsDate;
-      // Note that a look at a channel of another workspace stamps nothing, and the list then answers for the one named.
       yield* hostedStoreOrUnavailable(stampChannelLook(context.userId, channelId, now));
       return yield* channelsOf(context.userId, workspaceId);
     }),
     threads: signedIn.threads.effect(function* ({ input, context }) {
+      // Note that the channel is reached first, so one of a workspace the reader is not in is not found rather than empty.
+      yield* workspaceOfChannel(context.userId, input.channelId);
       const threads = yield* hostedStoreOrUnavailable(
         channelThreads(context.userId, input.channelId),
       );

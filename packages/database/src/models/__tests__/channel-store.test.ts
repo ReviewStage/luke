@@ -9,6 +9,7 @@ import {
   archiveChannel,
   CHANNEL_NAME_REFUSAL,
   CHANNEL_WRITE_REFUSAL,
+  type ChannelWriteRefusal,
   createChannel,
   ensureGeneralChannel,
   listChannelLooks,
@@ -116,7 +117,7 @@ it.layer(getTestDB())("a workspace's channels", (it) => {
           yield* createChannel(charles, workspace, draft("app"), new Date(5)),
         );
         const general = yield* ensureGeneralChannel(workspace, new Date(6));
-        const refused = [
+        const outcomes: readonly Result.Result<unknown, ChannelWriteRefusal>[] = [
           yield* createChannel(dean, workspace, draft("app"), new Date(7)),
           yield* createChannel(dean, workspace, draft("general"), new Date(7)),
           yield* createChannel(outsider, workspace, draft("infra"), new Date(7)),
@@ -124,7 +125,10 @@ it.layer(getTestDB())("a workspace's channels", (it) => {
           yield* archiveChannel(dean, workspace, general, new Date(7)),
           yield* renameChannel(outsider, workspace, app.id, "web"),
           yield* archiveChannel(outsider, workspace, app.id, new Date(7)),
-        ].map((outcome) => (Result.isFailure(outcome) ? outcome.failure : "written"));
+        ];
+        const refused = outcomes.map((outcome) =>
+          Result.isFailure(outcome) ? outcome.failure : "written",
+        );
         const renamed = yield* renameChannel(dean, workspace, app.id, "web");
         const archived = yield* archiveChannel(dean, workspace, app.id, new Date(8));
         const remade = yield* createChannel(dean, workspace, draft("web"), new Date(9));

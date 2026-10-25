@@ -2203,6 +2203,29 @@ function placeOf(
 }
 
 /**
+ * The thread a follow-up names a place for moved to the channel it names,
+ * and its open ask addressed to the member it names; what it names nothing
+ * for left where it stands, since a follow-up replaces no ask.
+ */
+const replaceItem = SqlSchema.void({
+  Request: Schema.Struct({
+    itemId: Schema.String,
+    channelId: Schema.NullOr(Schema.String),
+    addresseeId: Schema.NullOr(Schema.String),
+  }),
+  execute: ({ itemId, channelId, addresseeId }) =>
+    Database.use((db) =>
+      db
+        .update(inboxItem)
+        .set({
+          ...(channelId === null ? undefined : { channelId }),
+          ...(addresseeId === null ? undefined : { addresseeId }),
+        })
+        .where(eq(inboxItem.id, itemId)),
+    ),
+});
+
+/**
  * The agent's words that ask nothing written as its message on the thread
  * of its item standing under the key, as its reply is, with the pictures
  * they name kept as the message's files and written by their addresses;
@@ -2238,7 +2261,8 @@ function followUp(
  * asks than the bound, and a notice where it would hold more open notices
  * than the same bound. A post that asks nothing on a thread whose ask
  * still stands open is a message on it, as the agent's reply is, which
- * moves nothing of the item but its last change; on any other thread, or
+ * moves nothing of the item but its last change, and the channel and the
+ * addressee it names, if any; on any other thread, or
  * under a key with no item, it is written as `keepPost` writes one, the
  * item a notice waiting on the developer's nod again. A post naming no title
  * keeps the standing item's, read under the same lock; refused where no
@@ -2261,17 +2285,21 @@ export function postInboxThread(
         const locked = yield* lockAgent(agent);
         if (Option.isNone(locked)) return Result.fail(INBOX_POST_REFUSAL.NO_AGENT);
         const standing = yield* findAgentItem({ ...agent, key: post.key });
+        const placed = yield* placeOf(locked.value, post);
+        if (Result.isFailure(placed)) return Result.fail(placed.failure);
         if (post.ask === undefined && Option.isSome(standing) && standing.value.asking) {
-          return Result.succeed(
-            yield* followUp(agent, locked.value, standing.value.id, post, pictures),
-          );
+          const itemId = standing.value.id;
+          const { channelId, addresseeId } = placed.success;
+          // Note that a follow-up naming no place writes nothing here, because an update with nothing to set is no statement.
+          if (channelId !== null || addresseeId !== null) {
+            yield* replaceItem({ itemId, channelId, addresseeId });
+          }
+          return Result.succeed(yield* followUp(agent, locked.value, itemId, post, pictures));
         }
         const title = post.title ?? Option.getOrUndefined(standing)?.title;
         if (title === undefined) return Result.fail(INBOX_POST_REFUSAL.NO_TITLE);
         const room = yield* roomToPost(agent, post.key, post.ask);
         if (Result.isFailure(room)) return Result.fail(room.failure);
-        const placed = yield* placeOf(locked.value, post);
-        if (Result.isFailure(placed)) return Result.fail(placed.failure);
         const now = yield* DateTime.nowAsDate;
         const { kept, idOf } = yield* Effect.sync(() => picturesByPath(pictures));
         const view = { title, needsReply: post.needsReply ?? true };

@@ -307,6 +307,21 @@ const updateArchived = SqlSchema.findOneOption({
     ),
 });
 
+/** The workspace of the channel, open or archived, where the account is a member of it. */
+const findChannelWorkspace = SqlSchema.findOneOption({
+  Request: Schema.Struct({ userId: Schema.String, channelId: Schema.String }),
+  Result: Schema.Struct({ organizationId: Schema.String }),
+  execute: ({ userId, channelId }) =>
+    Database.use((db) =>
+      db
+        .select({ organizationId: channel.organizationId })
+        .from(channel)
+        .where(
+          and(eq(channel.id, channelId), workspaceReachableBy(userId, channel.organizationId)),
+        ),
+    ),
+});
+
 /** Whether an archived channel of the workspace goes by the name, where the account is a member of it. */
 const findArchivedNamed = SqlSchema.findOneOption({
   Request: Schema.Struct({ ...PlaceSchema.fields, name: Schema.String }),
@@ -371,6 +386,17 @@ export function listChannels(
   organizationId: string,
 ): TaskStoreEffect<readonly ChannelRow[]> {
   return Effect.map(findChannels({ userId, organizationId }), (rows) => rows.map(channelRow));
+}
+
+/** The workspace a channel, open or archived, belongs to; nothing where the account is not a member of it, or no channel goes by the id. */
+export function channelWorkspaceOf(
+  userId: string,
+  channelId: string,
+): TaskStoreEffect<Option.Option<string>> {
+  return Effect.map(
+    findChannelWorkspace({ userId, channelId }),
+    Option.map((row) => row.organizationId),
+  );
 }
 
 /**

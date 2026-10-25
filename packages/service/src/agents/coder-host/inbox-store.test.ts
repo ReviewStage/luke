@@ -2035,6 +2035,32 @@ it.layer(getTestDB())("a thread's channel", (it) => {
       }),
   );
 
+  it.effect(
+    "a follow-up on an open ask moves its thread and readdresses the ask where it names them, and is refused a channel archived",
+    () =>
+      Effect.gen(function* () {
+        const { agent, workspaceId } = yield* openAgentIn;
+        const teammate = yield* openUser;
+        yield* joinWorkspace(workspaceId, teammate);
+        const app = yield* channelIn(agent.userId, workspaceId, "app");
+        const retired = yield* channelIn(agent.userId, workspaceId, "retired");
+        yield* archiveChannel(agent.userId, workspaceId, retired, new Date(2));
+        const asked = yield* post(agent, SETTINGS);
+        const followUp = { key: SETTINGS.key, body: "The setting is under Branches." };
+
+        const moved = yield* post(agent, { ...followUp, channelId: app, addresseeId: teammate });
+        const refused = yield* postInboxThread(agent, { ...followUp, channelId: retired });
+
+        assert.equal(moved.id, asked.id);
+        assert.equal(moved.waitsOn?.userId, teammate);
+        assert.deepEqual(
+          (yield* channelThreads(agent.userId, app)).map((thread) => thread.id),
+          [asked.id],
+        );
+        assert.deepEqual(refused, Result.fail(INBOX_POST_REFUSAL.NO_CHANNEL));
+      }),
+  );
+
   it.effect("an account outside the workspace reads none of a channel's threads or counts", () =>
     Effect.gen(function* () {
       const { agent, workspaceId } = yield* openAgentIn;
