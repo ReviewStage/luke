@@ -2154,6 +2154,7 @@ it.layer(getTestDB())("the coding-agent store's agent of a conversation", (it) =
         const header = {
           id: agent.id,
           userId: starter,
+          organizationId: workspace,
           taskId: null,
           repository: "acme/api",
           title: "Flaky tests",
