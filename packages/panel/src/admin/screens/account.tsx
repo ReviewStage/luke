@@ -2,6 +2,7 @@ import type { AdminUserDetail } from "@luke/features/admin-answer-wire";
 import { ADMIN_READ, type AdminMetricsWindow } from "@luke/features/admin-wire";
 import { formatCount } from "@luke/features/number-format";
 import { formatDate, formatDayTick, formatInstant } from "@luke/features/time-format";
+import { readFailedWords } from "@luke/features/words";
 import {
   AVATAR_SIZE,
   Badge,
@@ -37,7 +38,7 @@ import { ADMIN_TAB, accountReadQuery } from "../routing.js";
 import { useAdminRead } from "../use-admin-read.js";
 import { AccountSupportSections } from "./account-support.js";
 
-const ACCOUNT_ERROR = "The account endpoint did not answer.";
+const ACCOUNT_ERROR = readFailedWords("this account");
 
 /** What the page is called until its account is read, or where it cannot be. */
 const ACCOUNT_TITLE = "Account";

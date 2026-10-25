@@ -6,7 +6,13 @@ import {
 } from "@luke/features/admin-wire";
 import { formatCount } from "@luke/features/number-format";
 import { formatDate } from "@luke/features/time-format";
-import { type Noun, noMatchWords, noneYetWords, readingWords } from "@luke/features/words";
+import {
+  type Noun,
+  noMatchWords,
+  noneYetWords,
+  readFailedWords,
+  readingWords,
+} from "@luke/features/words";
 import {
   COLLECTION_STATE,
   SearchField,
@@ -37,7 +43,7 @@ import {
 import { SEARCH_DEBOUNCE_MS, searchTerm, usersReadQuery } from "../routing.js";
 import { useAdminRead, useAdminWrite } from "../use-admin-read.js";
 
-const USERS_ERROR = "The users endpoint did not answer.";
+const USERS_ERROR = readFailedWords("users");
 
 /** What a toast says when the star's write did not land. */
 const FAVORITE_FAILED = "The favorite could not be saved. Try again.";

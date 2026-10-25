@@ -9,7 +9,13 @@ import { INTEGRATION_ROW_STATUS } from "@luke/features/integration-row-wire";
 import { INTEGRATION_NAME } from "@luke/features/integration-wire";
 import { formatCount, formatPercent } from "@luke/features/number-format";
 import { formatDate } from "@luke/features/time-format";
-import { type Noun, noMatchWords, noneYetWords, readingWords } from "@luke/features/words";
+import {
+  type Noun,
+  noMatchWords,
+  noneYetWords,
+  readFailedWords,
+  readingWords,
+} from "@luke/features/words";
 import {
   Badge,
   COLLECTION_STATE,
@@ -60,7 +66,7 @@ import { useAdminRead } from "../use-admin-read.js";
  * since a workspace has no page of its own.
  */
 
-const WORKSPACES_ERROR = "The workspaces endpoint did not answer.";
+const WORKSPACES_ERROR = readFailedWords("workspaces");
 
 const WORKSPACE: Noun = { one: "workspace", many: "workspaces" };
 
