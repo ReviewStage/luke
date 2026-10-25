@@ -1069,16 +1069,18 @@ function ThreadWhere({
           <Text
             as={TEXT_ELEMENT.SPAN}
             variant={TEXT_VARIANT.INHERIT}
+            font={TEXT_FONT.MONO}
             truncate
-            className="shrink-[1000] grow-0 basis-auto font-mono"
+            className="shrink-[1000] grow-0 basis-auto"
           >
             <bdi>{path.slice(0, cut + 1)}</bdi>
           </Text>
           <Text
             as={TEXT_ELEMENT.SPAN}
             variant={TEXT_VARIANT.INHERIT}
+            font={TEXT_FONT.MONO}
             truncate
-            className="flex-initial font-mono text-foreground"
+            className="flex-initial text-foreground"
           >
             <bdi>{path.slice(cut + 1)}</bdi>
           </Text>
