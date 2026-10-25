@@ -429,13 +429,10 @@ interface UnstoredPlace {
   readonly was: KeptDraft | undefined;
 }
 
-/** What a window changed in an account's drafts and has not written to storage: the places it set, the latest set last, and what it let go. */
-interface Unstored {
-  readonly places: readonly UnstoredPlace[];
-  readonly drops: readonly ((place: DraftPlace) => boolean)[];
-}
+/** What a window changed in an account's drafts and has not written to storage: the places it set or let go, the latest changed last. */
+type Unstored = readonly UnstoredPlace[];
 
-const NOTHING_UNSTORED: Unstored = { places: [], drops: [] };
+const NOTHING_UNSTORED: Unstored = [];
 
 /** What the window changed in one account's drafts and has not written to storage yet. */
 const unstoredOf = Atom.family((_owner: Owner) =>
@@ -487,9 +484,9 @@ function readBeside(owner: Owner, held: readonly KeptDraft[]): readonly KeptDraf
 }
 
 /**
- * What storage holds with the window's unwritten changes laid over it: what
- * they let go let go, and each place they set as the window holds it, moved
- * last. Note that a place the window did not change stands as storage holds
+ * What storage holds with the window's unwritten changes laid over it: each
+ * place they changed as the window holds it, moved last, or let go where it
+ * holds none. Note that a place the window did not change stands as storage holds
  * it, because another window may have written it since.
  */
 function withUnstored(
@@ -497,10 +494,10 @@ function withUnstored(
   held: readonly KeptDraft[],
   unstored: Unstored,
 ): readonly KeptDraft[] {
-  return unstored.places.reduce<readonly KeptDraft[]>(
+  return unstored.reduce<readonly KeptDraft[]>(
     (drafts, { place }) =>
       withDraft(drafts, place, held.find((kept) => Equal.equals(kept.place, place)) ?? EMPTY_DRAFT),
-    standing.filter((kept) => !unstored.drops.some((drop) => drop(kept.place))),
+    standing,
   );
 }
 
@@ -514,18 +511,24 @@ function edited(held: readonly KeptDraft[], edit: DraftEdit): readonly KeptDraft
   return withDraft(held, edit.place, edit.next(was));
 }
 
-/** What the window holds unwritten once `edit` lands: a place set moves last and keeps what storage held before its first change. */
-function unstoredAfter(unstored: Unstored, held: readonly KeptDraft[], edit: DraftEdit): Unstored {
-  if ("drop" in edit) return { ...unstored, drops: [...unstored.drops, edit.drop] };
-  const standing = unstored.places.find(({ place }) => Equal.equals(place, edit.place));
+/** What the window holds unwritten once `place` is changed: it moves last and keeps what storage held before its first change. */
+function unstoredWith(unstored: Unstored, held: readonly KeptDraft[], place: DraftPlace): Unstored {
+  const standing = unstored.find((each) => Equal.equals(each.place, place));
   const was =
-    standing === undefined
-      ? held.find((kept) => Equal.equals(kept.place, edit.place))
-      : standing.was;
-  return {
-    ...unstored,
-    places: [...unstored.places.filter((each) => each !== standing), { place: edit.place, was }],
-  };
+    standing === undefined ? held.find((kept) => Equal.equals(kept.place, place)) : standing.was;
+  return [...unstored.filter((each) => each !== standing), { place, was }];
+}
+
+/**
+ * What the window holds unwritten once `edit` lands. Note that a drop is
+ * kept as each place it lets go, with what storage held there, so a read
+ * again keeps words another window wrote at one of them since.
+ */
+function unstoredAfter(unstored: Unstored, held: readonly KeptDraft[], edit: DraftEdit): Unstored {
+  if (!("drop" in edit)) return unstoredWith(unstored, held, edit.place);
+  return held
+    .filter((kept) => edit.drop(kept.place))
+    .reduce((after, kept) => unstoredWith(after, held, kept.place), unstored);
 }
 
 /**
@@ -539,21 +542,18 @@ function unstoredBeside(
   unstored: Unstored,
   standing: readonly KeptDraft[],
 ): Unstored {
-  return {
-    ...unstored,
-    places: unstored.places.filter(({ place, was }) =>
-      sameStored(
-        owner,
-        was,
-        standing.find((kept) => Equal.equals(kept.place, place)),
-      ),
+  return unstored.filter(({ place, was }) =>
+    sameStored(
+      owner,
+      was,
+      standing.find((kept) => Equal.equals(kept.place, place)),
     ),
-  };
+  );
 }
 
 /** Whether the window holds nothing unwritten. */
 function nothingUnstored(unstored: Unstored): boolean {
-  return unstored.places.length === 0 && unstored.drops.length === 0;
+  return unstored.length === 0;
 }
 
 /**

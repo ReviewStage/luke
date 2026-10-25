@@ -22,7 +22,14 @@ import { TestClock } from "effect/testing";
 import { act, createElement, Fragment } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
-import { useDraftsOwner } from "./composer-drafts.js";
+import {
+  DRAFT_PLACE,
+  type DraftControl,
+  type DraftWriter,
+  useDraft,
+  useDraftsOwner,
+  useDraftWriter,
+} from "./composer-drafts.js";
 import { DesktopSidebar } from "./desktop/desktop-sidebar.js";
 import { DesktopTasks } from "./desktop/desktop-tasks.js";
 import { SidebarTask } from "./desktop/task-actions.js";
@@ -1044,6 +1051,42 @@ test("an account's drafts moved from its address reach a window that read its id
 
   await app.show(INVITES, { account: DEAN });
   assert.equal(app.box(), "Check the export");
+});
+
+test("words another window writes for a box this window let go a moment before stand, in its box and in storage", async () => {
+  const place = {
+    kind: DRAFT_PLACE.AGENT,
+    planId: INVITES.plan.id,
+    agentId: INVITES.agent.id,
+  } as const;
+  let held: { readonly box: DraftControl; readonly writer: DraftWriter } | undefined;
+  function Box(): null {
+    useDraftsOwner(DEAN);
+    held = { box: useDraft(place), writer: useDraftWriter() };
+    return null;
+  }
+  const root = createRoot(document.body.appendChild(document.createElement("div")));
+  roots.push(root);
+  await act(async () => root.render(onRegistry(AtomRegistry.make(), createElement(Box))));
+  const box = () => held ?? assert.fail("the box is drawn");
+  act(() => box().box.update((was) => ({ ...was, text: "Fix login" })));
+  leaveWindow();
+  // The message sent lets the words go, and before the typing's pause ends the other window writes anew.
+  act(() =>
+    box().writer.drop(
+      (each) => each.kind === DRAFT_PLACE.AGENT && each.agentId === INVITES.agent.id,
+    ),
+  );
+  window.localStorage.setItem(
+    "luke.composerDrafts",
+    JSON.stringify([keptEntry(DEAN.id, INVITES.plan.id, INVITES.agent.id, "Fix logout")]),
+  );
+  act(() => {
+    window.dispatchEvent(new StorageEvent("storage", { key: "luke.composerDrafts" }));
+  });
+  await settle();
+  assert.equal(box().box.draft.text, "Fix logout");
+  assert.deepEqual(keptWords(), ["Fix logout"]);
 });
 
 test("files attached in this window stay as its draft when another window lets the words beside them go", async () => {
