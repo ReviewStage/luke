@@ -84,7 +84,7 @@ export function MarkStrip({
 }): React.JSX.Element {
   return (
     <div
-      className={onPress === undefined ? STRIP_CLASS[look] : `${STRIP_CLASS[look]} cursor-pointer`}
+      className={onPress === undefined ? STRIP_CLASS[look] : `${STRIP_CLASS[look]} cursor-press`}
       data-look={look}
       data-pressable={onPress === undefined ? undefined : "true"}
       aria-hidden="true"

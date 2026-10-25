@@ -1522,7 +1522,7 @@ test("a removal the account's role does not allow says so in the dialog that ask
   );
 });
 
-test("a member leaves after confirming, which names what stays and what stops, says so in a toast, and lands the window; an owner is offered no Leave", async () => {
+test("a member leaves after confirming, which names what stays and what stops, and lands the window; an owner is offered no Leave", async () => {
   const member = await mount(ACME);
   const leaveRow = leaveGroup(member.page) ?? assert.fail("no leave");
   const line = leaveLine(leaveRow);
@@ -1539,14 +1539,6 @@ test("a member leaves after confirming, which names what stays and what stops, s
     "Automations you created stop running.",
     "Your own workspace, Dana, isn't affected.",
   ]);
-  assert.equal(
-    document.querySelector(".luke-toast-stack")?.textContent?.includes("You left acme."),
-    false,
-  );
-  assert.equal(
-    document.querySelector(".luke-toast-stack")?.textContent?.includes("You left acme"),
-    true,
-  );
 
   assert.deepEqual(
     sent

@@ -119,6 +119,7 @@ import { SPINNERS_EXAMPLE } from "./examples/spinners";
 import { SPLIT_BUTTONS_EXAMPLE } from "./examples/split-buttons";
 import { SWATCHES_EXAMPLE } from "./examples/swatches";
 import { SWITCHES_EXAMPLE } from "./examples/switches";
+import { TAB_NOTICES_EXAMPLE } from "./examples/tab-notices";
 import { TABS_EXAMPLE } from "./examples/tabs";
 import { TASK_MARKS_EXAMPLE } from "./examples/task-marks";
 import { TEXT_BUTTONS_EXAMPLE } from "./examples/text-buttons";
@@ -222,6 +223,7 @@ export const EXAMPLES: readonly Example[] = [
   CHECKBOXES_EXAMPLE,
   SWITCHES_EXAMPLE,
   TABS_EXAMPLE,
+  TAB_NOTICES_EXAMPLE,
   LIST_ROW_EXAMPLE,
   SHOW_MORE_ROWS_EXAMPLE,
   SIDEBAR_PARTS_EXAMPLE,

@@ -8,6 +8,7 @@ import {
   MENU_SURFACE_FLOW,
   MenuSurface,
   ScrollArea,
+  type ScrollOverscroll,
   SpinnerRegion,
   TooltipPill,
   useHintRest,
@@ -258,6 +259,7 @@ export function PierreDiffList({
   reveal,
   onDrawn,
   flash,
+  overscroll,
 }: {
   entries: readonly DiffListEntry[];
   look: DiffLook;
@@ -281,6 +283,8 @@ export function PierreDiffList({
   onDrawn?: ((path: string, lines: readonly number[]) => void) | undefined;
   /** The lines to scroll to and light a moment once the list draws their file open; each ask once. */
   flash?: DiffListFlash | undefined;
+  /** Whether a swipe past the list's end stops there or is handed on to the box it stands in; it stops where none is named. */
+  overscroll?: ScrollOverscroll | undefined;
 }): React.JSX.Element {
   const { diffView } = useSideBundles();
   const loaded = useAtomValue(diffView);
@@ -483,7 +487,7 @@ export function PierreDiffList({
   return (
     <Fill
       ref={holdBox}
-      className="diff-view diff-list"
+      className="diff-view diff-list relative bg-ground select-text"
       data-diff-layout={look.layout}
       aria-busy={filesDrawn ? undefined : true}
       onPointerOver={(event) => hang(event.nativeEvent)}
@@ -494,7 +498,7 @@ export function PierreDiffList({
       {module === undefined ? (
         <SpinnerRegion delay label={CHANGES_WORDS.READING} />
       ) : (
-        <ScrollArea ref={host} data-diff-list-scroller="">
+        <ScrollArea ref={host} overscroll={overscroll} data-diff-list-scroller="">
           {null}
         </ScrollArea>
       )}

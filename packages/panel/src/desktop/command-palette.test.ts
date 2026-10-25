@@ -308,7 +308,6 @@ const SETTINGS_PAGES = [
   "Plan template",
   "Voice",
   "Appearance",
-  "Notifications",
   "This Mac",
   "Experimental",
   "About",

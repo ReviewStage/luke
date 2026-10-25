@@ -240,7 +240,11 @@ function GitHubPicture({
     return <PictureBlock state={state} alt={alt} caption={undefined} onOpen={open} />;
   }
   return state.kind === PICTURE_STATE.READY ? (
-    <img className="pull-request-picture" src={state.url} alt={alt} />
+    <img
+      className="inline-block h-auto max-w-full rounded-luke-6 align-middle"
+      src={state.url}
+      alt={alt}
+    />
   ) : (
     <PictureSkeleton alt={alt} />
   );

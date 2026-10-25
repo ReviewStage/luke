@@ -1638,7 +1638,6 @@ export function useCodingAgents(input: {
         ? was
         : { ...was, agents: was.agents.filter((agent) => agent.id !== agentId) },
     );
-    toast({ words: DELETE_WORDS.done, tone: STATUS_TONE.COMPLETE, hold: TOAST_HOLD.DONE });
     // Note that the list is read again, which drops a read already out that still holds the agent.
     readAgain();
     return { status: ACTION_RESULT_STATUS.ACCEPTED };

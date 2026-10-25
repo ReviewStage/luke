@@ -105,7 +105,7 @@ function LinkMark({
   if (provider === TASK_ISSUE_PROVIDER.GITHUB) {
     // Note that a registry glyph takes no props, so the unread mark stands in a box that sizes and tints it.
     return (
-      <span className="task-issue-link-unread">
+      <span className="task-issue-link-unread size-icon-12 flex-none text-muted-foreground">
         <GLYPH.ISSUE_UNREAD />
       </span>
     );
@@ -170,7 +170,11 @@ function LinkChip({
     danger: true,
   };
   return (
-    <li className="task-issue-link" data-provider={link.provider} data-relation={link.relation}>
+    <li
+      className="task-issue-link flex min-w-0 max-w-issue-chip"
+      data-provider={link.provider}
+      data-relation={link.relation}
+    >
       <Tooltip
         label={`${link.key} ${link.title} · ${summary}`}
         card={
@@ -190,7 +194,9 @@ function LinkChip({
           {...trigger(dropBelowStart)}
         >
           {linkMarkOf(link)}
-          <span className="task-issue-link-key">{issueKeyWords(link, repository)}</span>
+          <span className="task-issue-link-key flex-none font-mono text-caption-inline font-luke-regular text-muted-foreground">
+            {issueKeyWords(link, repository)}
+          </span>
           <ChipName>{link.title}</ChipName>
         </Chip>
       </Tooltip>
@@ -199,9 +205,9 @@ function LinkChip({
           label={`${link.key} ${link.title}`}
           menu={drawn}
           heading={
-            <span className="task-issue-link-heading">
-              <span className="task-issue-link-heading-title">{link.title}</span>
-              <span className="task-issue-link-heading-state">
+            <span className="flex max-w-menu-most flex-col gap-list-gap">
+              <span className="font-luke-medium text-foreground wrap-anywhere">{link.title}</span>
+              <span className="text-caption text-muted-foreground">
                 {standingWords(link.standing) ?? link.key}
               </span>
             </span>
@@ -378,7 +384,7 @@ export function TaskIssueLinks({
           />
         ))}
         {offered ? (
-          <li className="task-issue-links-add">
+          <li className="task-issue-links-add flex min-w-0 max-w-full">
             {/* Note that the chip may stand anywhere along a row that wraps, so its menu hangs from whichever edge leaves it room. */}
             <IssuePickerChip
               trigger={LINKS_WORDS.LINK}

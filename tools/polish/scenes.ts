@@ -138,6 +138,14 @@ const LONG_THREAD: Step = {
 };
 const FORM_ITEM: Step = { kind: STEP.CLICK, role: "button", name: "Invite limits" };
 const NEW_THREAD: Step = { kind: STEP.CLICK, role: "button", name: "New thread" };
+// A phone's Inbox head has no compose button: New thread is the first row of its ⋯ menu.
+const PHONE_NEW_THREAD: readonly Step[] = [
+  { kind: STEP.CLICK, role: "button", name: "Inbox actions", within: MAIN },
+  { kind: STEP.CLICK, role: "menuitem", name: "New thread" },
+];
+
+// The workspace switcher at the sidebar's head, named "Workspace: {name}" among more words.
+const WORKSPACE_MENU: Step = { kind: STEP.CLICK, role: "button", name: "Workspace:" };
 
 // The account's menu at the sidebar's foot, named as the workspace's switcher is named within more words.
 const ACCOUNT_MENU: Step = { kind: STEP.CLICK, role: "button", name: "Ada Lovelace", exact: true };
@@ -242,10 +250,12 @@ export const SCENES: readonly Scene[] = [
     title: "The workspace menu",
     profile: "tasks",
     sidebar: true,
-    steps: [{ kind: STEP.CLICK, role: "button", name: "Workspace:" }],
+    steps: [WORKSPACE_MENU],
+    // Note that "More" only opens the drawer the switcher stands in, so the scene opens its menu too.
     phoneSteps: [
       ...PHONE_TO_LIST,
       { kind: STEP.CLICK, role: "button", name: "More", within: PHONE_PLACES },
+      WORKSPACE_MENU,
     ],
   },
   // The plan's other faces.
@@ -256,7 +266,6 @@ export const SCENES: readonly Scene[] = [
     title: "A call's transcript",
     profile: "tasks-transcript",
   },
-  { id: "plan-work", place: PLACE.PLAN, title: "A call's work", profile: "tasks-work" },
   // The plan's comment threads: their marks in the words, one opened from its line's count, and the resolved one in the Comments tab.
   {
     id: "plan-comments",
@@ -327,7 +336,7 @@ export const SCENES: readonly Scene[] = [
     profile: "inbox",
     sidebar: true,
     steps: [OPEN_INBOX, TO_INBOX_LIST, NEW_THREAD],
-    phoneSteps: [...PHONE_TO_INBOX, NEW_THREAD],
+    phoneSteps: [...PHONE_TO_INBOX, ...PHONE_NEW_THREAD],
   },
   // A person's page: the account's own, from its menu at the sidebar's foot.
   {
@@ -484,6 +493,13 @@ export const SCENES: readonly Scene[] = [
     place: PLACE.AUTOMATIONS,
     title: "A failed run",
     profile: "automations-runs",
+  },
+  {
+    id: "automations-runs-tab",
+    place: PLACE.AUTOMATIONS,
+    title: "Every automation's runs",
+    profile: "automations",
+    steps: [{ kind: STEP.CLICK, role: "radio", name: "Runs" }],
   },
   // ⌘K over a task.
   {

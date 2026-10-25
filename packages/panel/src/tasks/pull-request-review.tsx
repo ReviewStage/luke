@@ -26,6 +26,7 @@ import { type ReactNode, useId, useRef, useState } from "react";
 import { modEnterSends } from "../enter-sends.js";
 import { CommentEditor, overCommentBound } from "./comment-editor.js";
 import type { PendingReview } from "./line-comment.js";
+import { ACTS_AT_END_CLASS } from "./pull-request-look.js";
 import { PullRequestWriteNote, type PullRequestWrites } from "./pull-request-writes.js";
 
 /**
@@ -169,7 +170,7 @@ function ReviewPanel({
       onLeave={onLeave}
       onKeyDown={onKey}
     >
-      <p className="pull-request-review-lead">
+      <p className="m-0 -mt-luke-8 text-muted-foreground">
         {REVIEW_WORDS.LEAD}
         {pending == null || pending.comments === 0
           ? null
@@ -198,7 +199,7 @@ function ReviewPanel({
         }}
       />
       <PullRequestWriteNote writes={writes} className="pull-request-review-note" />
-      <div className="pull-request-review-foot">
+      <div className={ACTS_AT_END_CLASS}>
         {pending == null ? null : (
           <Button
             variant={BUTTON_VARIANT.DANGER_OUTLINE}
@@ -276,7 +277,7 @@ export function PullRequestReview({
   };
 
   return (
-    <div className="pull-request-review" ref={root}>
+    <div className="pull-request-review relative flex" ref={root}>
       {/* Note that a narrow row folds the press to a square around its glyph, which wears the count at its corner, so the word stands in the hint and the name. */}
       <FoldingButton
         ref={trigger}

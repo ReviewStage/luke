@@ -185,7 +185,7 @@ function CrumbTree({
     >
       <MenuSurface
         ref={box}
-        className="file-crumb-tree ph-no-capture"
+        className="file-crumb-tree ph-no-capture max-h-crumb-tree w-popover-narrow"
         role="dialog"
         aria-label={label}
         tabIndex={-1}

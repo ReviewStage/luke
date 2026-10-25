@@ -82,7 +82,7 @@ export function pictureNode(pictures: PlanEditorPictures | undefined) {
     addNodeView() {
       return ({ node: held, getPos, editor }) => {
         const dom = document.createElement("span");
-        dom.className = "editor-picture";
+        dom.className = "editor-picture block";
         dom.contentEditable = "false";
         let current = held;
         let selected = false;

@@ -257,6 +257,20 @@ body,
   left: auto;
 }
 
+/* An automation's mark at a page's head draws its glyph's ink across the
+   whole share, as GitHub's and Sentry's marks, which fill their drawing,
+   already do. Note that Lucide's glyphs ink 22 of their 24 units and the
+   working mark's grid 13 of its 16 pixels, so at a page's 48px each would
+   otherwise stand a few pixels short inside its box; a row's small mark
+   keeps them as drawn, level with the Lucide glyphs of the rows around it. */
+.actor-mark[data-kind="automation"][data-size="page"] .state-glyph > svg.lucide {
+  scale: calc(24 / 22);
+}
+
+.actor-mark[data-kind="automation"][data-size="page"] .state-glyph > .luke-working-mark {
+  scale: calc(16 / 13);
+}
+
 /* A line that names an actor: its words and the actor in one row centred on
    the disc, so the disc never rides above the words' baseline. Note that
    its spaces stand inside its words, because a row drops a run that is
@@ -645,11 +659,6 @@ body,
   padding-inline: max(var(--content-inset), var(--reading-room));
 }
 
-/* To and Subject stand at the box's own width, inside its inset. */
-.inbox-compose-head {
-  padding-inline: var(--luke-space-16);
-}
-
 .inbox-compose-row {
   display: grid;
   min-height: var(--luke-space-48);
@@ -659,20 +668,17 @@ body,
   grid-template-columns: var(--luke-space-48) minmax(0, 1fr);
 }
 
-/* A row that is a FormField stands its label over its control rather than before it. */
-.inbox-compose-row[data-field] {
-  display: block;
-  padding-block: var(--luke-row-inset);
-}
-
 .inbox-compose-label {
   color: var(--luke-color-text-muted);
   font-size: var(--luke-type-caption-size);
   line-height: var(--luke-type-caption-leading);
 }
 
-.inbox-compose-box {
+/* The box stands at the rows' own width, its edges on their hairlines: the
+   form's inset is already the room's, so the box takes none of its own. */
+.inbox-compose > .inbox-compose-box {
   margin-top: var(--luke-section-gap);
+  padding-inline: 0;
 }
 
 /* A line written again where it stands (`edit-composer.tsx`) is already in the
@@ -756,6 +762,10 @@ body,
    hair either side of it short of the column, whether or not a thread stands
    yet, as the desktop's inset does, so the words never move when the first
    comment lands, and a plan and its versions keep one width. */
+.desktop-document {
+  --comment-gutter: var(--luke-page-inset);
+}
+
 [data-luke-profile="web"] .desktop-document {
   --comment-gutter: calc(var(--luke-touch-target) + 2 * var(--luke-space-2));
 }
@@ -2676,6 +2686,22 @@ body,
 .desktop-task > .page-find[hidden] {
   visibility: hidden;
   transition: visibility 0s linear var(--luke-duration-pane);
+}
+
+/* The line under an automation's agent's bar (`automation-agent-run.tsx`):
+   what fired its run, when, and where it stands, its words where the bar's
+   title starts, over a hairline. */
+.automation-agent-run {
+  flex: none;
+  padding: 0 calc(var(--column-inset) + var(--luke-row-inset) + var(--luke-list-inset))
+    var(--luke-item-gap);
+  border-bottom: 1px solid var(--luke-color-border);
+}
+
+/* Where the run stands among the arrows, in figures that hold their width as they step. */
+.automation-agent-run-count {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 
 /* The plan's summary (`task-summary.tsx`) ----------------------------------- */

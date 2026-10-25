@@ -514,6 +514,15 @@ test("where the read answers nothing, the chip's own card says where the agent w
   assert.match(card.words ?? "", /A coding agent on another task/u);
 });
 
+test("a chip of an agent whose read answers nothing draws no mark, leaving its name alone", async () => {
+  answering = false;
+  const container = await drawn(`Ask ${mentionOf(PRORATE, "Prorate")}.`);
+
+  const glyph = container.querySelector("[data-mention-ref] .luke-inline-ref-glyph");
+
+  assert.equal(glyph?.childElementCount, 0);
+});
+
 test("two chips of one task's agents hung one after the other share the task's read", async () => {
   const container = await drawn(
     `${mentionOf(PRORATE, "Prorate")} then ${mentionOf(PRORATE, "the prorater")}.`,

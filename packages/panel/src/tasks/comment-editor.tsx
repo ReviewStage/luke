@@ -173,10 +173,10 @@ export function CommentEditor({
   };
 
   return (
-    <div className="comment-editor">
+    <div className="flex min-w-0 flex-col gap-item-gap">
       <ComposerFrame
         look={COMPOSER_LOOK.INPUT}
-        className="comment-editor-frame"
+        className="comment-editor-frame relative box-border min-h-comment-editor px-control-inset py-item-gap"
         aria-busy={busy}
         onKeyDown={(event) => {
           const finishing = event.key === "Escape" || modEnterSends(event);
@@ -190,7 +190,7 @@ export function CommentEditor({
         }}
       >
         {block === undefined ? null : (
-          <div className="comment-editor-head">
+          <div className="comment-editor-head absolute top-luke-2 right-luke-2">
             <Tooltip label={COMMENT_EDITOR_WORDS.ADD_SUGGESTION}>
               <IconButton
                 icon={block.row.icon}
@@ -208,7 +208,9 @@ export function CommentEditor({
           label={label}
           roomLabel={COMMENT_EDITOR_WORDS.room(label)}
           placeholder={placeholder}
-          className={markdownClass("comment-editor-text")}
+          className={markdownClass(
+            "comment-editor-text text-body-size leading-reading text-foreground",
+          )}
           focus={focus}
           placement={focus ? PLACEMENT_END : undefined}
           handle={handle}
@@ -222,7 +224,11 @@ export function CommentEditor({
         />
         {foot}
       </ComposerFrame>
-      {over > 0 ? <p className="comment-editor-note">{COMMENT_EDITOR_WORDS.over(over)}</p> : null}
+      {over > 0 ? (
+        <p className="comment-editor-note m-0 text-caption-inline text-destructive">
+          {COMMENT_EDITOR_WORDS.over(over)}
+        </p>
+      ) : null}
     </div>
   );
 }

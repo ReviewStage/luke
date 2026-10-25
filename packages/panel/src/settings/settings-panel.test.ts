@@ -3,9 +3,10 @@
 import assert from "node:assert/strict";
 import { ACCOUNT_STATUS } from "@luke/credentials/snapshot";
 import { SETTINGS_PAGE_LIST, SETTINGS_VIEW } from "@luke/settings/settings-views";
+import { settingsView } from "@luke/settings/testing";
 import { UPDATE_STATUS } from "@luke/settings/update";
 import { MICROPHONE_STATUS } from "@luke/voice/audio";
-import { NOTIFICATIONS_GRANTOR, NOTIFICATIONS_STATUS } from "@luke/voice/settings-controls";
+import { NOTIFICATIONS_STATUS } from "@luke/voice/settings-controls";
 import { ACTION_RESULT_STATUS } from "@luke/wire";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
@@ -20,8 +21,9 @@ import { SettingsPanel, type SettingsPanelProps } from "./settings-panel.js";
 
 /**
  * Settings' Account page as the panel draws it: its own groups and no list of
- * the other pages, which the Settings sidebar alone lists; and no page's
- * buttons end their words with an ellipsis.
+ * the other pages, which the Settings sidebar alone lists; This Mac saying
+ * where macOS has Luke's notifications off; and no page's buttons end their
+ * words with an ellipsis.
  */
 
 const ignore = () => undefined;
@@ -47,10 +49,8 @@ const SETTINGS: SettingsPanelProps = {
   },
   notifications: {
     status: NOTIFICATIONS_STATUS.UNKNOWN,
-    grantor: NOTIFICATIONS_GRANTOR.MACOS,
     packaged: true,
     onOpenSettings: ignore,
-    onTest: ignore,
   },
   capabilities: DESKTOP_CAPABILITIES,
   updates: {
@@ -116,6 +116,39 @@ test("a signed-out Workspace page says to sign in rather than drawing nothing", 
   );
 
   assert.equal(container.textContent, "Sign in to use this page.");
+});
+
+test("This Mac says under Ask every time where macOS refused Luke's last notification, and opens System Settings", () => {
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  roots.push(root);
+  let opened = 0;
+  const drawn = (status: (typeof NOTIFICATIONS_STATUS)[keyof typeof NOTIFICATIONS_STATUS]) => {
+    act(() =>
+      root.render(
+        onRegistry(
+          AtomRegistry.make(),
+          createElement(SettingsPanel, {
+            ...SETTINGS,
+            view: SETTINGS_VIEW.THIS_MAC,
+            settings: settingsView({}),
+            notifications: { status, packaged: true, onOpenSettings: () => (opened += 1) },
+          }),
+        ),
+      ),
+    );
+    return container.textContent ?? "";
+  };
+  const offLine = "macOS has notifications off for Luke";
+
+  assert.equal(drawn(NOTIFICATIONS_STATUS.ON).includes(offLine), false);
+  assert.equal(drawn(NOTIFICATIONS_STATUS.OFF).includes(offLine), true);
+  const open = [...container.querySelectorAll("button")].find(
+    (button) => button.textContent === "Open System Settings",
+  );
+  act(() => open?.click());
+  assert.equal(opened, 1);
 });
 
 test("no Settings page draws a button whose words end with an ellipsis", () => {

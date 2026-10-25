@@ -391,7 +391,7 @@ function ShownStills({
     return <ShownOne door={door} shown={{ ...only, picture }} onOpen={() => openAt(picture.id)} />;
   }
   return (
-    <div className="transcript-picture-set">
+    <div className="my-block-gap">
       <PictureSet label={SHOWN_LABEL} count={shown.length}>
         {shown.slice(0, PICTURE_SET_SHOWN).map((each, index) => (
           // Note that a picture's place in its set is its identity: a set never reorders.
@@ -442,7 +442,7 @@ export function CallPictures({
   // Note that a call's set draws every picture it answered, never six and a count, because one not kept says why only on its own tile and the viewer walks none of those.
   return (
     <>
-      <div className="call-pictures">
+      <div className="mt-list-gap mr-0 mb-item-gap ml-transcript-gutter">
         <PictureSet label={CALLED_LABEL} count={called.length} thumbnails>
           {called.map((each, index) =>
             each.kept ? (

@@ -143,9 +143,11 @@ function PlaceToggle({
 }): React.JSX.Element {
   const label = open && !peeked ? words.open : words.closed;
   // Note that the place is the box around the button, because the stylesheet
-  // shows one place by the panel's width and a barrel button wears no mark.
+  // shows one place by the panel's width and a barrel button wears no mark:
+  // the place beside the tab stands, and the one over it waits for a narrow
+  // panel (tasks.css).
   return (
-    <span ref={box} className="file-tree-toggle" data-place={place}>
+    <span ref={box} className="file-tree-toggle flex data-[place=over]:hidden" data-place={place}>
       <Tooltip label={label}>
         <IconButton
           icon={<SidePanelIcon />}
@@ -456,9 +458,12 @@ export interface FileHistory {
  * pair is drawn: a way with nothing along it is dimmed rather than gone, so
  * neither button moves.
  */
+/** A view's Back and Forward, a list's gap apart, beside its path in the bar, a File tab's and a Browser tab's alike. */
+export const FILE_VIEW_HISTORY_CLASS = "flex flex-none items-center gap-list-gap";
+
 function HistoryButtons({ history }: { history: FileHistory }): React.JSX.Element {
   return (
-    <div className="file-view-history">
+    <div className={FILE_VIEW_HISTORY_CLASS}>
       <Tooltip label="Back">
         <IconButton
           icon={<ArrowLeftIcon />}
@@ -816,7 +821,9 @@ export function FileView({
               />
               {commit === undefined ? null : (
                 <Tooltip label={`Read at commit ${commit}`}>
-                  <span className="file-view-commit">{shortCommit(commit)}</span>
+                  <span className="flex-none whitespace-nowrap font-mono text-muted-foreground">
+                    {shortCommit(commit)}
+                  </span>
                 </Tooltip>
               )}
             </>
@@ -830,7 +837,7 @@ export function FileView({
           tree={browsing ? tree.toggles : undefined}
         />
       )}
-      <Fill flow={FILL_FLOW.ROW} clip className="file-view-body" {...tree.body}>
+      <Fill flow={FILL_FLOW.ROW} clip className="file-view-body relative" {...tree.body}>
         {/* Keyed by the file, then by the commit it is read at, so lines read
             at one commit are never laid beside another's. */}
         <Fragment key={file.path}>

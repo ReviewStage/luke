@@ -17,12 +17,12 @@ export const ROOT_TASKS = ["lint", "discarded-effect"];
 export const WORKSPACE_TASKS = ["typecheck"];
 
 /**
- * The tests, one task per workspace holding a `vitest.config.ts`, except that
- * @luke/service's and @luke/panel's suites, the largest, are cut into three shards so CI can run
- * them on three runners. `scripts/repository-checks.sh` refuses a
- * workspace whose tests are under none of these names.
+ * The tests, one task per workspace holding a `vitest.config.ts`. CI cuts the
+ * largest suites into vitest shards on runners of their own
+ * (`.github/workflows/ci.yml`), and `scripts/repository-checks.sh` refuses a
+ * workspace whose tests are under no task of this name.
  */
-export const TEST_TASKS = ["test:vitest", "test:vitest:1", "test:vitest:2", "test:vitest:3"];
+export const TEST_TASK = "test:vitest";
 
 /**
  * The command line and environment that start turbo with `args`. Note that
@@ -31,7 +31,9 @@ export const TEST_TASKS = ["test:vitest", "test:vitest:1", "test:vitest:2", "tes
  * `TURBO_TOKEN` through to every task, and a task's output is a cache
  * artifact: a task that printed its environment would store the token in a
  * log replayed to every machine that hits the hash. With `--token` no task
- * ever sees it. Without a token turbo uses the local cache alone.
+ * ever sees it. Without a token turbo uses the local cache alone. The flag
+ * goes before any `--`, past which turbo hands every word to the task, so a
+ * sharded run's `-- --shard=<i>/<n>` never carries the token to vitest.
  *
  * Note also that we name the platform in `LUKE_TURBO_PLATFORM`, which
  * `turbo.json` hashes through `globalEnv`, because turbo's own hash covers no
@@ -42,9 +44,16 @@ export const TEST_TASKS = ["test:vitest", "test:vitest:1", "test:vitest:2", "tes
 export function turboInvocation(args, env = process.env) {
   const { TURBO_TOKEN: token, ...rest } = env;
   const tokenArguments = token ? [`--token=${token}`] : [];
+  const passThrough = args.includes("--") ? args.indexOf("--") : args.length;
   return {
     command: "pnpm",
-    args: ["exec", "turbo", ...args, ...tokenArguments],
+    args: [
+      "exec",
+      "turbo",
+      ...args.slice(0, passThrough),
+      ...tokenArguments,
+      ...args.slice(passThrough),
+    ],
     env: { ...rest, LUKE_TURBO_PLATFORM: PLATFORM, TURBO_TELEMETRY_DISABLED: "1" },
   };
 }
