@@ -29,6 +29,7 @@ import {
   INSET,
   LAYOUT_ELEMENT,
   type PaneBarMenu,
+  type ScrollOverscroll,
   SpinnerRegion,
   Stack,
   TEXT_ELEMENT,
@@ -1598,6 +1599,7 @@ function FilesList({
   boxRef,
   reveal,
   flash,
+  overscroll,
 }: {
   list: ChangesList;
   threads: ChangesThreads | undefined;
@@ -1615,6 +1617,8 @@ function FilesList({
   reveal: ListReveal | undefined;
   /** The lines to bring into view and light a moment, once; none lights none. */
   flash: DiffListFlash | undefined;
+  /** Whether a swipe past the list's end is handed on to the box the tab stands in. */
+  overscroll: ScrollOverscroll | undefined;
 }): React.JSX.Element {
   const look = useDiffLook(roomy);
   const box = useRef<HTMLDivElement | null>(null);
@@ -1670,6 +1674,7 @@ function FilesList({
             reveal={landing.reveal}
             onDrawn={opened.onDrawn}
             flash={flash}
+            overscroll={overscroll}
           />
         </ThreadLandingProvider>
       )}
@@ -1777,6 +1782,7 @@ export function AgentChangesTab({
   reads,
   files,
   fileReveal,
+  overscroll,
 }: {
   agentId: string;
   control: CodingAgentsControl;
@@ -1798,6 +1804,8 @@ export function AgentChangesTab({
   files?: readonly CodingAgentChangedFile[] | undefined;
   /** A file to bring into view, once, among those drawn. */
   fileReveal?: FileReveal | undefined;
+  /** Whether a swipe past the list's end is handed on to the box the tab stands in, as a chapter's is to the Pull request tab; it stops at the end where none is named. */
+  overscroll?: ScrollOverscroll | undefined;
 }): React.JSX.Element {
   const { answer, refreshFailed, out, ask, pullRequest, viewedFiles } = reads;
   const room = usePaneRoom(tree);
@@ -1990,6 +1998,7 @@ export function AgentChangesTab({
               : { ...reveal, file: revealFile }
           }
           flash={flash}
+          overscroll={overscroll}
         />
         <FileTreePane
           file={shownFile.path}

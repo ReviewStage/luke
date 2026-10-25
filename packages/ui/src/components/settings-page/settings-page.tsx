@@ -50,6 +50,11 @@ import { TOOLBAR_INSET, TOOLBAR_LOOK, Toolbar, type ToolbarLook } from "../toolb
  * in one corner, what acts on the whole page in the other (a ⋯ the caller
  * hands as `actions`), and the name it picks up centred between them; the
  * header in the page keeps the title alone.
+ *
+ * It is drawn in Tailwind utilities over the theme with no shadcn/ui base,
+ * since a page's frame, scroller, and column are a layout shadcn has no
+ * component for. The top's fade on its scroll timeline, an empty state's
+ * room, and the column's narrow inset stay in `settings-page.css`.
  */
 
 /**
@@ -87,7 +92,7 @@ export function SettingsPage({
   const named = useHeadingAway(page, head);
   const phone = look === TOOLBAR_LOOK.PHONE;
   return (
-    <div className="luke-settings-page-frame">
+    <div className="luke-settings-page-frame flex h-full min-h-0 min-w-0 grow basis-0 flex-col">
       <Toolbar
         lead={lead}
         pickUp={{ name: named.name, shown: named.away }}
@@ -101,9 +106,12 @@ export function SettingsPage({
             }
           : {})}
       />
-      <div ref={page} className="luke-settings-page">
-        <div className="luke-settings-page-column">
-          <div ref={head} className="luke-settings-page-head">
+      <div
+        ref={page}
+        className="luke-settings-page @container/luke-settings-page box-border min-h-0 min-w-0 grow basis-0 overflow-x-clip overflow-y-auto overscroll-contain scroll-py-page-inset [scrollbar-gutter:stable]"
+      >
+        <div className="luke-settings-page-column mx-auto">
+          <div ref={head} className="luke-settings-page-head mb-luke-24">
             <PageHeader
               title={title}
               description={description}
@@ -112,7 +120,11 @@ export function SettingsPage({
             />
           </div>
           <RevealArea root={sections}>
-            <div ref={sections} className="luke-settings-page-sections" {...revealArea()}>
+            <div
+              ref={sections}
+              className="luke-settings-page-sections flex min-w-0 flex-col gap-page-section-gap"
+              {...revealArea()}
+            >
               {children}
             </div>
           </RevealArea>
