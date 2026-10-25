@@ -99,7 +99,7 @@ export function SidebarInbox({
           compose.onEnd();
           onOpen(choiceOf(listed));
         }}
-        onMark={(listed, unread) => marks.onMark(listed.item, unread)}
+        onMark={(listed, unread, saying) => marks.onMark(listed.item, unread, saying)}
         onClose={closeItem}
       />
     </AutomationDirectory>

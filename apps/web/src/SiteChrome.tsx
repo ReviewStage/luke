@@ -13,9 +13,13 @@ import {
   TextLink,
   type TextLinkCurrent,
 } from "@luke/ui";
+import { PANEL_PATH } from "./app/web-address";
 
 export const REPOSITORY_URL = "https://github.com/ReviewStage/luke";
 export const DMG_URL = `${REPOSITORY_URL}/releases/latest/download/Luke.dmg`;
+
+/** Where the web app opens, the one address the site and the invitation page send a reader to. */
+export const WEB_APP_URL = PANEL_PATH;
 
 /**
  * "Luke" beside the mark, in the web profile's wordmark display style

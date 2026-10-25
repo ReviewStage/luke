@@ -186,9 +186,20 @@ function control(dialog: HTMLElement, selector: string): HTMLElement {
   return found;
 }
 
-/** A field of the picker, by its name. */
+/** The words shown over a field of the picker, by what they say; nothing where none stand. */
+function labelOf(dialog: HTMLElement, name: string): HTMLLabelElement | undefined {
+  return [...dialog.querySelectorAll<HTMLLabelElement>("label")].find(
+    (label) => label.textContent === name,
+  );
+}
+
+/** A field of the picker, by its name: the words shown over it, or a name of its own where none are. */
 function fieldOf(dialog: HTMLElement, name: string): HTMLInputElement {
-  const found = dialog.querySelector<HTMLInputElement>(`input[aria-label="${name}"]`);
+  const label = labelOf(dialog, name);
+  const found =
+    label === undefined
+      ? dialog.querySelector<HTMLInputElement>(`input[aria-label="${name}"]`)
+      : dialog.querySelector<HTMLInputElement>(`input[id="${label.htmlFor}"]`);
   assert.ok(found, `the picker holds the ${name} field`);
   return found;
 }
@@ -254,7 +265,7 @@ test("a date chip pressed in the plan's editor opens its picker on the date, its
   const dialog = await pressChip(container);
 
   assert.equal(fieldOf(dialog, "Start").value, "Oct 23, 2026");
-  assert.equal(dialog.querySelector('input[aria-label="End"]'), null);
+  assert.equal(labelOf(dialog, "End"), undefined);
   assert.match(dialog.textContent ?? "", /October 2026/u);
   assert.equal(
     control(dialog, '[aria-selected="true"] button').getAttribute("aria-label"),
@@ -303,7 +314,8 @@ test("End date switched on and closed at once writes the range it shows, to the 
   const start = fieldOf(dialog, "Start");
   const end = fieldOf(dialog, "End");
   const shown = [start.value, end.value];
-  const oneRow = start.parentElement === end.parentElement;
+  // Note that each date stands in its field, under its name, so the row is the line the two fields share.
+  const oneRow = start.closest(".luke-inline") === end.closest(".luke-inline");
   await pressKey(dialog, "Escape");
 
   assert.deepEqual(shown, ["Oct 23, 2026", "Oct 24, 2026"]);
@@ -369,9 +381,15 @@ test("the picker stays hung from its chip as the words under it scroll", async (
   const chip = chipIn(container);
   let top = 120;
   vi.spyOn(chip, "getBoundingClientRect").mockImplementation(() => new DOMRect(40, top, 60, 20));
+  // Note that jsdom lays nothing out, so the box the picker is laid in is named for it.
+  vi.spyOn(HTMLElement.prototype, "offsetParent", "get").mockReturnValue(document.body);
 
-  const dialog = await pressChip(container);
-  const hung = dialog.closest<HTMLElement>(".date-picker-anchor");
+  await pressChip(container);
+  const dialog = [...container.querySelectorAll<HTMLElement>('[role="dialog"]')].find(
+    (each) =>
+      document.getElementById(each.getAttribute("aria-labelledby") ?? "")?.textContent === "Date",
+  );
+  const hung = dialog?.parentElement;
   const before = hung?.style.top;
   top = 60;
   act(() => {
@@ -570,6 +588,39 @@ test("words typed in the picker that name no date are marked and change nothing"
   assert.deepEqual(mentionsIn(editor), [
     { name: "Oct 23, 2026", target: "luke://date/2026-10-23" },
   ]);
+});
+
+test("each end's date field is named by the words shown over it", async () => {
+  const { container } = await opened();
+
+  const dialog = await pressChip(container);
+  act(() => control(dialog, 'button[role="switch"][aria-label="End date"]').click());
+
+  for (const name of ["Start", "End"]) {
+    const label = labelOf(dialog, name);
+    assert.ok(label, `the ${name} field has its name shown over it`);
+    assert.equal(fieldOf(dialog, name).id, label.htmlFor);
+  }
+});
+
+test("words that name no date say what to write under the field, in words, until they are typed again", async () => {
+  const { container } = await opened();
+
+  const dialog = await pressChip(container);
+  typeWords(dialog, "Start", "someday");
+  await pressKey(dialog, "Enter");
+  const field = fieldOf(dialog, "Start");
+  const said = () =>
+    (field.getAttribute("aria-describedby") ?? "")
+      .split(" ")
+      .map((id) => (id === "" ? "" : (document.getElementById(id)?.textContent ?? "")))
+      .join("");
+
+  assert.equal(said(), "Write a date, such as Oct 24.");
+  assert.match(dialog.textContent ?? "", /Write a date, such as Oct 24\./u);
+  typeWords(dialog, "Start", "oct 28");
+  assert.equal(said(), "");
+  assert.doesNotMatch(dialog.textContent ?? "", /Write a date/u);
 });
 
 test("Clear takes the chip out of the words", async () => {

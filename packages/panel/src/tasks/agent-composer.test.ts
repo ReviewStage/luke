@@ -719,6 +719,19 @@ test("a call that begins mid-dictation ends it, keeping the words said, and the 
   assert.equal(composerEditor(box.container).textContent, "the invite page");
 });
 
+test('a clip sent for reading draws its ring and its "Transcribing" together, the word with no dots, before the settle delay has passed', async () => {
+  const box = await mountedForCall(() => new Promise(ignore));
+  box.press("Dictate");
+  await settle();
+  box.press("Done");
+  await settle();
+
+  const reading = box.container.querySelector(".dictation-transcribing");
+  assert.ok(reading, "the strip says it is transcribing");
+  assert.ok(reading.querySelector('[data-slot="spinner"]'), "the ring stands with the word");
+  assert.equal(reading.querySelector(":scope > [aria-hidden]")?.textContent, "Transcribing");
+});
+
 test("a clip still being read as a call begins keeps its strip and its Cancel beside the call's controls until its words land, then the row holds the call", async () => {
   let land: (answer: { text: string }) => void = ignore;
   const box = await mountedForCall(

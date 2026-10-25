@@ -1,5 +1,9 @@
-import { useAtomValue } from "@effect/atom-react";
-import type { CodingAgentAttachment } from "@luke/features/coding-agent-wire";
+import { useAtomSet, useAtomValue } from "@effect/atom-react";
+import {
+  base64Bytes,
+  CODING_AGENT_BOUNDS,
+  type CodingAgentAttachment,
+} from "@luke/features/coding-agent-wire";
 import { LINK_PLACE } from "@luke/features/link-grammar";
 import { textChange } from "@luke/features/plan-comment-anchor";
 import {
@@ -60,11 +64,13 @@ import {
   SkeletonRegion,
   TEXT_AREA_GROW_LIMIT,
   TEXT_AREA_LOOK,
+  TEXT_BUTTON_TONE,
   TEXT_ELEMENT,
   TEXT_TONE,
   TEXT_VARIANT,
   Text,
   TextArea,
+  TextButton,
   Time,
   Tooltip,
   TrashIcon,
@@ -93,8 +99,9 @@ import {
 } from "@luke/ui/plan-comments";
 import { visibleViewport } from "@luke/ui/visible-viewport";
 import { ACTION_RESULT_STATUS } from "@luke/wire";
-import { Schema } from "effect";
+import { Equal, Schema } from "effect";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
+import * as Atom from "effect/reactivity/Atom";
 import {
   createContext,
   type ReactNode,
@@ -240,6 +247,8 @@ const COMMENT_WORDS = {
   OPEN_THREAD: "Open thread",
   SHOW_WORDS: "Show in the plan",
   SENDING: "Sending",
+  DISCARD: "Discard",
+  NOT_SENT: "This comment could not be sent.",
 } as const;
 
 /** Which thread is open, and the one being started, shared by the marks that open them and the margin that draws them. */
@@ -417,6 +426,15 @@ const DELETE_THREAD_QUESTION: DialogQuestion = {
   body: `Every comment in it is deleted with it. ${IRREVERSIBLE_WORDS}`,
   verb: "Delete thread",
   running: "Deleting",
+  loss: CONFIRM_LOSS.IRREVERSIBLE,
+};
+
+/** What discarding a send not sent asks first, since its words and files are kept nowhere else. */
+const DISCARD_QUESTION: DialogQuestion = {
+  title: "Discard this comment?",
+  body: `Its words and files are kept nowhere else. ${IRREVERSIBLE_WORDS}`,
+  verb: "Discard",
+  running: "Discarding",
   loss: CONFIRM_LOSS.IRREVERSIBLE,
 };
 
@@ -818,6 +836,7 @@ function PlainCommentText({
 function ReplyField({
   label,
   place,
+  writer,
   sending,
   onSend,
   onCancel,
@@ -828,6 +847,8 @@ function ReplyField({
   label: string;
   /** Where the words are kept unsent, so Esc, a press away, or the thread closing finds them as the field opens again. */
   place: PlanCommentPlace;
+  /** Who writes them, the reader, whose sends marked as not sent are theirs alone. */
+  writer: string | undefined;
   sending: boolean;
   /** Sends the words and the files under a key that stays the same while they do, so a send tried again after a lost answer is taken once. */
   onSend: (
@@ -861,35 +882,73 @@ function ReplyField({
   const files = useAttachedFiles({ onRefusal: setRefusal });
   // The words sent and not yet answered, which the field holds as a draft while it stands empty, so a send that fails finds them.
   const [inFlight, setInFlight] = useState("");
-  const attempt = useRef<
-    { words: string; attachments: readonly CodingAgentAttachment[]; key: string } | undefined
-  >(undefined);
+  const attempt = useRef<CommentSend | undefined>(undefined);
+  // A refused send the field could not take back beside what was typed or added since, kept apart, marked as not sent, with Retry under its key.
+  const unsent = useAtomValue(
+    unsentAtom,
+    (all) => all.find((each) => each.writer === writer && Equal.equals(each.place, place))?.send,
+  );
+  const keepUnsent = useAtomSet(unsentAtom);
+  const setUnsent = (send: CommentSend | undefined) =>
+    keepUnsent((all) => [
+      ...all.filter((each) => each.writer !== writer || !Equal.equals(each.place, place)),
+      ...(send === undefined ? [] : [{ writer, place, send }]),
+    ]);
+  // The words the field holds this moment, for a send's answer that lands after the render it was made in.
+  const wordsNow = useRef(words);
+  wordsNow.current = words;
   // Note that a dictation's note is said before the cut paste's, and only the agent box's editor cuts a paste.
   const said = heard ?? (cut ? pasteCutWords(PLAN_COMMENT_BOUNDS.MAX_WORDS_CHARS) : undefined);
-  // Note that a failed send is said over a refused file, which is said over a dictation's note or a cut paste.
-  const note = failure ?? refusal ?? said;
-  const send = () => {
-    const trimmed = words.trim();
-    if (trimmed === "" || sending || files.reading) return;
-    const { attachments } = files;
-    const was = attempt.current;
-    const same = was?.words === trimmed && sameFiles(was.attachments, attachments);
-    const key = same && was !== undefined ? was.key : crypto.randomUUID();
-    attempt.current = { words: trimmed, attachments, key };
-    // Note that the field empties as the words are sent, since a send may wait on the ones its mentions hand the thread to, and takes them back where the send fails and nothing was typed since.
-    setWords("");
-    files.set([]);
-    setInFlight(trimmed);
-    void onSend(trimmed, key, attachments).then((sent) => {
+  // Note that a failed send is said over a refused file, which is said over a dictation's note or a cut paste, and stands on the not-sent line where there is one.
+  const note = (unsent === undefined ? failure : undefined) ?? refusal ?? said;
+  const go = (out: CommentSend) => {
+    setInFlight(out.words);
+    void onSend(out.words, out.key, out.attachments).then((sent) => {
       setInFlight("");
       if (sent) {
         attempt.current = undefined;
         return;
       }
-      update((now) => (now.text === "" ? { ...now, text: trimmed } : now));
-      if (files.now().length === 0) files.set(attachments);
+      // Note that a refused send goes back above whatever was typed or added since, so neither is dropped, unless the two together are more than one comment carries.
+      const held = wordsNow.current;
+      const back = {
+        words: held.trim() === "" ? out.words : `${out.words}\n\n${held}`,
+        attachments: [...out.attachments, ...files.now()],
+      };
+      if (!carried(back)) {
+        setUnsent(out);
+        return;
+      }
+      update((now) => ({ ...now, text: back.words }));
+      files.set(back.attachments);
     });
   };
+  const send = () => {
+    const trimmed = words.trim();
+    // Note that a send not sent goes first, so comments land in the order they were written.
+    if (trimmed === "" || sending || files.reading || unsent !== undefined) return;
+    const { attachments } = files;
+    const was = attempt.current;
+    const same = was?.words === trimmed && sameFiles(was.attachments, attachments);
+    const key = same && was !== undefined ? was.key : crypto.randomUUID();
+    attempt.current = { words: trimmed, attachments, key };
+    // Note that the field empties as the words are sent, since a send may wait on the ones its mentions hand the thread to.
+    setWords("");
+    files.set([]);
+    go(attempt.current);
+  };
+  const retry = () => {
+    if (unsent === undefined || sending) return;
+    setUnsent(undefined);
+    go(unsent);
+  };
+  // Note that Discard asks first, since a send not sent is kept nowhere else.
+  const discard = useConfirmDialog({ subject: unsent !== undefined, surfaceOpen: true }, () => {
+    setUnsent(undefined);
+    // Note that words written again after a discard are a new comment, so they go under a new key.
+    attempt.current = undefined;
+    return Promise.resolve({ status: ACTION_RESULT_STATUS.ACCEPTED });
+  });
   return (
     <ComposerFrame
       look={variant === REPLY_VARIANT.FIRST ? COMPOSER_LOOK.BARE : COMPOSER_LOOK.CARD}
@@ -902,6 +961,23 @@ function ReplyField({
       }
       {...files.drop.target}
     >
+      {unsent === undefined ? null : (
+        <div className="comment-unsent" data-unsent="">
+          <AttachedFileChips files={attachmentChips(unsent.attachments)} />
+          <CommentWords words={unsent.words} />
+          <FailureNote
+            onRetry={retry}
+            also={
+              <TextButton tone={TEXT_BUTTON_TONE.QUIET} onClick={discard.ask}>
+                {COMMENT_WORDS.DISCARD}
+              </TextButton>
+            }
+          >
+            {failure ?? COMMENT_WORDS.NOT_SENT}
+          </FailureNote>
+          <ConfirmDialog open confirm={discard} question={DISCARD_QUESTION} />
+        </div>
+      )}
       <CommentText
         value={words}
         label={label}
@@ -936,7 +1012,7 @@ function ReplyField({
         send={{
           label: label === COMMENT_WORDS.ADD ? COMMENT_WORDS.COMMENT : COMMENT_WORDS.REPLY,
           empty: words.trim() === "",
-          held: files.reading,
+          held: files.reading || unsent !== undefined,
           onSend: send,
           busy: sending,
           busyLabel: COMMENT_WORDS.SENDING,
@@ -953,6 +1029,38 @@ function writtenOn(place: DraftPlace, threadId: string, entryId: string | undefi
   if (place.kind !== DRAFT_PLACE.PLAN_COMMENT || !("threadId" in place.on)) return false;
   if (place.on.threadId !== threadId) return false;
   return entryId === undefined || ("entryId" in place.on && place.on.entryId === entryId);
+}
+
+/** One comment's words and files as they are sent, under the key a send tried again goes under. */
+interface CommentSend {
+  readonly words: string;
+  readonly attachments: readonly CodingAgentAttachment[];
+  readonly key: string;
+}
+
+/**
+ * Each window's sends marked as not sent, by who wrote them and the place
+ * they were written in, kept past their field, so a thread closed and
+ * opened again finds its line where it was left, and another account
+ * signed in to the window reads none. Note that each window's registry
+ * holds its own.
+ */
+const unsentAtom = Atom.keepAlive(
+  Atom.make<
+    readonly {
+      readonly writer: string | undefined;
+      readonly place: PlanCommentPlace;
+      readonly send: CommentSend;
+    }[]
+  >([]),
+);
+
+/** Whether one comment carries these words and files: its words' bound, and a message's count of files and their bytes together. */
+function carried(send: Pick<CommentSend, "words" | "attachments">): boolean {
+  if (send.words.length > PLAN_COMMENT_BOUNDS.MAX_WORDS_CHARS) return false;
+  if (send.attachments.length > CODING_AGENT_BOUNDS.MAX_ATTACHMENTS) return false;
+  const bytes = send.attachments.reduce((sum, each) => sum + base64Bytes(each.data), 0);
+  return bytes <= CODING_AGENT_BOUNDS.MAX_ATTACHMENTS_BYTES;
 }
 
 /** Whether two sends carry the same files, each the very one read, in the same order. */
@@ -1204,6 +1312,7 @@ function ThreadCard({
             planId: doors.control.planId,
             on: { threadId: thread.id },
           }}
+          writer={doors.me}
           sending={sending}
           autoFocus={pressed}
           failure={note}
@@ -1255,6 +1364,7 @@ function PendingCard({
           planId: doors.control.planId,
           on: { quote: pending.quote, scope: pending.scope },
         }}
+        writer={doors.me}
         sending={sending}
         autoFocus
         failure={note}

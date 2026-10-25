@@ -7283,7 +7283,14 @@ test("a reply leaves its box the moment it is sent, the box and the ask standing
   await settle();
 
   assert.equal(composerEditor(pane).textContent, "", "the box lets its words go at once");
-  assert.deepEqual(attachedNames(pane), [], "and its files");
+  assert.deepEqual(attachedNames(draftReplyIn(pane)), [], "and its files");
+  assert.deepEqual(
+    [...pane.querySelectorAll('.inbox-thread > li:not([data-inbox-comment="draft"])')].flatMap(
+      attachedNames,
+    ),
+    ["notes.md"],
+    "which go up with the reply on the thread",
+  );
   assert.equal(composerEditor(pane).getAttribute("aria-disabled"), null, "and stands open");
   assert.ok(
     openOptions(pane).every((option) => !option.disabled),
@@ -7302,6 +7309,91 @@ test("a reply leaves its box the moment it is sent, the box and the ask standing
 
   assert.equal(composerEditor(pane).textContent, "Does it matter for SSO teams?");
   assert.deepEqual(attachedNames(pane), ["notes.md"]);
+  assert.equal(
+    pane.querySelector('.agent-composer [role="alert"]')?.textContent,
+    "Only the member who started this agent can do this.",
+  );
+});
+
+/** The reader's draft reply at the thread's end, which holds the box. */
+function draftReplyIn(pane: HTMLElement): Element {
+  return pane.querySelector('[data-inbox-comment="draft"]') ?? assert.fail("the draft reply");
+}
+
+/** The words at the head's end of each comment of the thread that says its reply is on its way. */
+function sendingMarks(page: HTMLElement): (string | undefined)[] {
+  return [...itemPane(page).querySelectorAll(".inbox-thread .luke-comment-trailing")]
+    .map((trailing) => wordsOf(trailing))
+    .filter((words) => words === "Sending");
+}
+
+test("a plain reply stands at the thread's end marked Sending the moment it is sent, and once a read or its answer holds it, the message stands in its place once; refused, it leaves the thread as its words go back into the box, which says why", async () => {
+  const shown = threadItem([askingMessage(EXPIRY_ASK)]);
+  const pane = await mountThread(shown);
+  const page = pane.ownerDocument.body;
+  // Each send waits on the test's word: the reply landing on the thread, or refused.
+  const lands: ((refused: boolean) => void)[] = [];
+  const landed: InboxItem[] = [];
+  const bridge = appBridge();
+  const previous = fakeActsAnswer();
+  fakeActs({
+    ...bridge,
+    act: (request: AnyAct): Promise<FakeActAnswer> => {
+      if (request.kind !== ACT_KIND.CODING_AGENTS_INBOX_MESSAGE) return previous(request);
+      const answer = repliedOn(shown, "e1b2c3d4-0000-4000-8000-000000000021")(request.payload);
+      if (!("failure" in answer)) landed.push(answer.item);
+      return new Promise((resolve) =>
+        lands.push((refused) =>
+          resolve({
+            status: FAKE_ANSWER.DONE,
+            value: refused ? { failure: CODING_AGENT_CALL_FAILURE.NOT_PERMITTED } : answer,
+          }),
+        ),
+      );
+    },
+  });
+
+  typeInComposer(pane, "Does it matter for SSO teams?");
+  composerEditor(pane).focus();
+  pressInComposer(pane, "Enter");
+  await settle();
+  assert.deepEqual(threadOf(page).at(-1), [
+    "message",
+    "person",
+    "You",
+    "Does it matter for SSO teams?",
+  ]);
+  assert.deepEqual(sendingMarks(page), ["Sending"], "the reply says it is on its way");
+
+  // The push holding the reply lands before the reply's own answer does.
+  const held = landed[0] ?? assert.fail("the reply is answered");
+  await act(async () =>
+    main.push({ kind: INBOX_SCOPE_KIND.PLAN, id: BILLING.id }, { items: [held, RETRY] }),
+  );
+  await settle();
+  await act(async () => lands[0]?.(false));
+  await settle();
+  assert.deepEqual(
+    threadOf(page).filter(([, , , words]) => words === "Does it matter for SSO teams?"),
+    [["message", "person", "You", "Does it matter for SSO teams?"]],
+    "the message stands once, in the reply's place",
+  );
+  assert.deepEqual(sendingMarks(page), [], "and says nothing of sending");
+
+  typeInComposer(pane, "Never mind.");
+  pressInComposer(pane, "Enter");
+  await settle();
+  assert.deepEqual(threadOf(page).at(-1), ["message", "person", "You", "Never mind."]);
+  assert.deepEqual(sendingMarks(page), ["Sending"]);
+  await act(async () => lands[1]?.(true));
+  await settle();
+  assert.equal(
+    threadOf(page).some(([, , , words]) => words === "Never mind."),
+    false,
+    "a refused reply leaves the thread",
+  );
+  assert.deepEqual(sendingMarks(page), []);
+  assert.equal(composerEditor(pane).textContent, "Never mind.", "its words are back in the box");
   assert.equal(
     pane.querySelector('.agent-composer [role="alert"]')?.textContent,
     "Only the member who started this agent can do this.",

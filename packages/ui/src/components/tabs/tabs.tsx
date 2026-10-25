@@ -141,6 +141,8 @@ export const TABS_GROUND = {
   WELL: "well",
   /** A column's own ground. */
   GROUND: "ground",
+  /** The window's frame, above the sheet it heads: the chosen tab is lifted in the sheet's ground, as a browser's is. */
+  FRAME: "frame",
 } as const;
 
 export type TabsGround = (typeof TABS_GROUND)[keyof typeof TABS_GROUND];

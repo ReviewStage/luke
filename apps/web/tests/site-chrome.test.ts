@@ -6,6 +6,7 @@ import { renderToStaticMarkup, renderToString } from "react-dom/server";
 import { test } from "vitest";
 import { AboutPage } from "../src/AboutPage";
 import { App } from "../src/App";
+import { PANEL_PATH } from "../src/app/web-address";
 import { ChangelogPage, RELEASES } from "../src/ChangelogPage";
 import { changelogRoutes } from "../src/changelog-releases";
 import { PrivacyPage } from "../src/PrivacyPage";
@@ -84,6 +85,15 @@ for (const { path, page, marked } of PAGES) {
     for (const link of current) assert.equal(link.getAttribute("href"), path);
   });
 }
+
+test("the landing offers the web app beside the download", () => {
+  const body = drawn(App).querySelector("main");
+  assert.deepEqual(links(body), [
+    "Download for macOS -> https://github.com/ReviewStage/luke/releases/latest/download/Luke.dmg",
+    `Open Luke on the web -> ${PANEL_PATH}`,
+    "View on GitHub -> https://github.com/ReviewStage/luke",
+  ]);
+});
 
 for (const path of ["/changelog/page/2", `/changelog/${RELEASES[0]?.version}`]) {
   test(`${path} marks the changelog as where the reader is, not as the page they are on`, () => {

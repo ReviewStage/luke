@@ -178,7 +178,7 @@ import {
   useRowMediaAsks,
   useRowMediaReads,
 } from "./inbox-row-media.js";
-import { InboxSelectionBar } from "./inbox-selection.js";
+import { type InboxListMark, InboxSelectionBar } from "./inbox-selection.js";
 import { PlanGlyph } from "./tab-look.js";
 import { markReadItem } from "./task-menu-items.js";
 import { cardTitle } from "./tool-call-model.js";
@@ -1555,7 +1555,7 @@ export function InboxList({
   placement?: InboxListPlacement;
   onChoose: (listed: InboxListed) => void;
   /** Marks an item read or unread from its row or the selection's bar, answering whether the service took it; none where the rows offer no mark. */
-  onMark?: ((listed: InboxListed, unread: boolean) => Promise<boolean>) | undefined;
+  onMark?: InboxListMark | undefined;
   /** Closes an open item without an answer from its row or the selection's bar; none where the rows offer no close. */
   onClose?: InboxCloser | undefined;
 }): React.JSX.Element {

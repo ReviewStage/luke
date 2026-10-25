@@ -35,6 +35,7 @@ import {
   type FeedbackKind,
   type FeedbackSubmission,
 } from "@luke/features/feedback";
+import { pasteCutWords } from "@luke/features/words";
 import { ACT_KIND } from "@luke/host/acts";
 import { EXPERIMENTS, type Experiment } from "@luke/settings";
 import { SHORTCUT_KEY, type ShortcutChord, shortcutAria } from "@luke/settings/shortcuts";
@@ -47,6 +48,7 @@ import {
   DIALOG_SIZE,
   Dialog,
   ErrorState,
+  FormField,
   GAP,
   IconButton,
   ImageIcon,
@@ -225,6 +227,8 @@ export function FeedbackDialog({
   shownKind.current = kind;
   const [busy, setBusy, latestBusy] = useStateWithRef(false);
   const [rejection, setRejection] = useState<string>();
+  // The words a paste past the cap left once it was cut to fit; the note stands while they do.
+  const [cutWords, setCutWords] = useState<string>();
   const fileDrop = useFileDrop((files) => void attach(imageFiles(files)), {
     leave: DROP_LEAVE.WINDOW,
   });
@@ -271,6 +275,19 @@ export function FeedbackDialog({
     if (kind === undefined) return;
     writeDraft(kind, { ...latestDrafts()[kind], ...next });
     setRejection(undefined);
+  };
+
+  // Note that the browser cuts a paste to the room left without a word, so the words it leaves are worked out here to tell it.
+  const noteCutPaste = (box: HTMLTextAreaElement, pasted: string) => {
+    const kept = box.value.slice(0, box.selectionStart) + box.value.slice(box.selectionEnd);
+    const room = FEEDBACK_LIMITS.MESSAGE_MAX_LENGTH - kept.length;
+    const text = pasted.replaceAll("\r\n", "\n");
+    if (text.length <= room) return;
+    setCutWords(
+      box.value.slice(0, box.selectionStart) +
+        text.slice(0, room) +
+        box.value.slice(box.selectionEnd),
+    );
   };
 
   const close = () => {
@@ -394,25 +411,43 @@ export function FeedbackDialog({
       }
     >
       <div className="feedback-dialog ph-no-capture">
-        <TextArea
-          ref={field}
+        <FormField
           label={FEEDBACK_COPY[shown.kind].field}
-          placeholder={FEEDBACK_COPY[shown.kind].placeholder}
-          maxLength={FEEDBACK_LIMITS.MESSAGE_MAX_LENGTH}
-          value={shown.draft.message}
-          disabled={busy}
-          rows={MESSAGE_ROWS}
-          grow
-          onChange={(message) => changeDraft({ message })}
-          onPaste={(event) => {
-            // A screenshot on the clipboard is an attachment, not text
-            // that failed to paste; text pastes as it always does.
-            const pasted = imageFiles(event.clipboardData.files);
-            if (pasted.length === 0) return;
-            event.preventDefault();
-            void attach(pasted);
+          description={
+            cutWords === shown.draft.message
+              ? pasteCutWords(FEEDBACK_LIMITS.MESSAGE_MAX_LENGTH)
+              : undefined
+          }
+          count={{
+            length: shown.draft.message.length,
+            limit: FEEDBACK_LIMITS.MESSAGE_MAX_LENGTH,
           }}
-        />
+        >
+          {(control) => (
+            <TextArea
+              ref={field}
+              field={control}
+              placeholder={FEEDBACK_COPY[shown.kind].placeholder}
+              maxLength={FEEDBACK_LIMITS.MESSAGE_MAX_LENGTH}
+              value={shown.draft.message}
+              disabled={busy}
+              rows={MESSAGE_ROWS}
+              grow
+              onChange={(message) => changeDraft({ message })}
+              onPaste={(event) => {
+                // A screenshot on the clipboard is an attachment, not text
+                // that failed to paste; text pastes as it always does.
+                const pasted = imageFiles(event.clipboardData.files);
+                if (pasted.length === 0) {
+                  noteCutPaste(event.currentTarget, event.clipboardData.getData("text"));
+                  return;
+                }
+                event.preventDefault();
+                void attach(pasted);
+              }}
+            />
+          )}
+        </FormField>
         {shown.draft.images.length > 0 ? (
           <Inline
             as={LAYOUT_ELEMENT.UL}

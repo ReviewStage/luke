@@ -140,18 +140,51 @@
   background: var(--luke-color-sidebar);
 }
 
-:where(:root):not([data-luke-room="narrow"]) .desktop-shell > .desktop-main,
+/* A page is the sheet, but a page whose top row holds tabs: a task, an
+   agent's page, and the Inbox, each with the side panel beside it. */
+:where(:root):not([data-luke-room="narrow"])
+  .desktop-shell
+  > .desktop-main:not(:has(.desktop-task)),
 :where(:root):not([data-luke-room="narrow"])
   .desktop-shell
   > :is(.desktop-settings, .desktop-version-history, .desktop-admin)
-  > :is(.settings-page, .version-page, .admin-page) {
-  margin: var(--sheet-gap) var(--sheet-gap) var(--sheet-gap) 0;
+  > :is(.settings-page, .version-page, .admin-page),
+:where(:root):not([data-luke-room="narrow"])
+  .desktop-shell
+  > .desktop-main
+  .desktop-task
+  > .desktop-task-main::before,
+:where(:root):not([data-luke-room="narrow"])
+  .desktop-shell
+  > .desktop-main
+  .desktop-task
+  > .agent-page::before,
+:where(:root):not([data-luke-room="narrow"])
+  .desktop-shell
+  > .desktop-main
+  .desktop-task
+  > .page-find::before,
+:where(:root):not([data-luke-room="narrow"])
+  .desktop-shell
+  > .desktop-main
+  .desktop-task
+  > .side-panel::before {
   border-radius: var(--sheet-radius);
   background: var(--luke-color-ground);
   box-shadow:
     0 0 0 1px var(--luke-color-border),
     0 1px 2px var(--luke-color-shadow-soft),
     0 16px 40px -20px var(--luke-color-shadow);
+}
+
+:where(:root):not([data-luke-room="narrow"])
+  .desktop-shell
+  > .desktop-main:not(:has(.desktop-task)),
+:where(:root):not([data-luke-room="narrow"])
+  .desktop-shell
+  > :is(.desktop-settings, .desktop-version-history, .desktop-admin)
+  > :is(.settings-page, .version-page, .admin-page) {
+  margin: var(--sheet-gap) var(--sheet-gap) var(--sheet-gap) 0;
 }
 
 /* A narrow room's column is full bleed but is still the work, so it stands
@@ -168,14 +201,12 @@
    the title bar's buttons, which stand on the window rather than the sheet,
    instead of a gap below them. Its controls are centred in it rather than
    padded, so the shorter row still holds them. */
-:where(:root):not([data-luke-room="narrow"]) .desktop-shell > .desktop-main {
+:where(:root):not([data-luke-room="narrow"])
+  .desktop-shell
+  > .desktop-main:not(:has(.desktop-task)) {
   --desktop-bar-height: calc(2 * (var(--title-bar-middle) - var(--sheet-gap)) + 1px);
   --luke-toolbar-height: var(--desktop-bar-height);
   --luke-toolbar-block-inset: 0px;
-}
-
-:where(:root):not([data-luke-room="narrow"]) .desktop-shell > .desktop-main .side-panel-bar {
-  padding-block: 0;
 }
 
 /* With the sidebar folded there is no frame beside the sheet to set it off,
@@ -183,25 +214,166 @@
    standing a gap in from them as a second, nested window would. */
 :where(:root):not([data-luke-room="narrow"])
   .desktop-shell[data-sidebar-collapsed="true"]
-  > .desktop-main {
+  > .desktop-main:not(:has(.desktop-task)) {
   --sheet-gap: 0px;
   --sheet-radius: 0px;
 
   box-shadow: none;
 }
 
-/* The side panel's well reaches the sheet's right edge, and its top and
-   bottom, so it rounds the sheet's corners it stands in; full screen it
-   covers the whole sheet and rounds all four. */
-:where(:root):not([data-luke-room="narrow"]) .desktop-shell > .desktop-main .side-panel {
-  border-radius: 0 var(--sheet-radius) var(--sheet-radius) 0;
+/* A page with tabs stands its top row on the frame, level with the traffic
+   lights, as a browser's tab strip does, and its sheet starts under the
+   row, holding the page alone. The side panel is a sheet of its own a gap
+   beside it, on the panel's well, under its own row of tabs. The frame
+   stays a gap round both, the sidebar folded or not, since the row above
+   them is the frame already. Note that each sheet is drawn beneath its
+   column rather than as its ground, because the row above it is the same
+   column's. */
+:where(:root):not([data-luke-room="narrow"]) .desktop-shell > .desktop-main:has(.desktop-task) {
+  /* The row draws no hairline on the frame, so its middle is the traffic
+     lights' own. */
+  --desktop-bar-height: calc(2 * var(--title-bar-middle));
+  --luke-toolbar-height: var(--desktop-bar-height);
+
+  margin: 0 var(--sheet-gap) var(--sheet-gap) 0;
+}
+
+:where(:root):not([data-luke-room="narrow"])
+  .desktop-shell[data-sidebar-collapsed="true"]
+  > .desktop-main:has(.desktop-task) {
+  --luke-toolbar-start-at: calc(var(--sidebar-toggle-clearance) - var(--sheet-gap));
+
+  margin-left: var(--sheet-gap);
 }
 
 :where(:root):not([data-luke-room="narrow"])
   .desktop-shell
   > .desktop-main
-  .side-panel[data-full-screen="true"] {
-  border-radius: var(--sheet-radius);
+  .desktop-task
+  > :is(.desktop-task-main, .agent-page, .page-find) {
+  position: relative;
+  isolation: isolate;
+}
+
+/* The panel is placed already, full screen and leaving alike (desktop.css). */
+:where(:root):not([data-luke-room="narrow"])
+  .desktop-shell
+  > .desktop-main
+  .desktop-task
+  > .side-panel {
+  isolation: isolate;
+}
+
+:where(:root):not([data-luke-room="narrow"])
+  .desktop-shell
+  > .desktop-main
+  .desktop-task
+  > .desktop-task-main::before,
+:where(:root):not([data-luke-room="narrow"])
+  .desktop-shell
+  > .desktop-main
+  .desktop-task
+  > .agent-page::before,
+:where(:root):not([data-luke-room="narrow"])
+  .desktop-shell
+  > .desktop-main
+  .desktop-task
+  > .page-find::before,
+:where(:root):not([data-luke-room="narrow"])
+  .desktop-shell
+  > .desktop-main
+  .desktop-task
+  > .side-panel::before {
+  position: absolute;
+  z-index: -1;
+  inset: var(--desktop-bar-height) 0 0;
+  content: "";
+  pointer-events: none;
+}
+
+:where(:root):not([data-luke-room="narrow"])
+  .desktop-shell
+  > .desktop-main
+  .desktop-task
+  > .side-panel {
+  margin-left: var(--sheet-gap);
+  border-left: 0;
+  background: transparent;
+}
+
+:where(:root):not([data-luke-room="narrow"])
+  .desktop-shell
+  > .desktop-main
+  .desktop-task
+  > .side-panel::before {
+  background: var(--luke-color-well);
+}
+
+:where(:root):not([data-luke-room="narrow"])
+  .desktop-shell
+  > .desktop-main
+  .desktop-task
+  > .side-panel[data-full-screen="true"] {
+  margin-left: 0;
+}
+
+/* The panel's edge is dragged in the gap between the two sheets, beside
+   them rather than over the row above. */
+:where(:root):not([data-luke-room="narrow"])
+  .desktop-shell
+  > .desktop-main
+  .desktop-task
+  > .side-panel
+  > .luke-resize-edge {
+  top: var(--desktop-bar-height);
+  left: calc(-1 * var(--sheet-gap) / 2);
+  transform: translateX(-50%);
+}
+
+/* The Inbox's list is parted from its item inside the sheet, under the row,
+   rather than by an edge running up through the row on the frame. */
+:where(:root):not([data-luke-room="narrow"])
+  .desktop-shell
+  > .desktop-main
+  .desktop-task
+  .inbox-tasks {
+  border-right: 0;
+}
+
+:where(:root):not([data-luke-room="narrow"])
+  .desktop-shell
+  > .desktop-main
+  .desktop-task
+  .inbox-view[data-columns="both"]
+  .inbox-tasks::after {
+  position: absolute;
+  top: var(--desktop-bar-height);
+  right: 0;
+  bottom: 0;
+  width: 1px;
+  background: var(--luke-color-border);
+  content: "";
+  pointer-events: none;
+}
+
+/* The list's search, the first thing in the sheet under its head on the
+   frame, stands a row's inset in from the sheet's top as from its rows. */
+:where(:root):not([data-luke-room="narrow"])
+  .desktop-shell
+  > .desktop-main
+  .desktop-task
+  .inbox-search {
+  padding-top: var(--luke-row-inset);
+}
+
+/* What paints the page's ground at its sheet's edge, the plan's summary,
+   rounds the sheet's corners it stands in. */
+:where(:root):not([data-luke-room="narrow"])
+  .desktop-shell
+  > .desktop-main
+  .desktop-task-main
+  .task-summary {
+  border-radius: 0 var(--sheet-radius) var(--sheet-radius) 0;
 }
 
 .desktop-shell[data-sidebar-collapsed="true"] {

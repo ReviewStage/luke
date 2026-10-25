@@ -1,6 +1,9 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import { RegistryContext } from "@effect/atom-react/RegistryContext";
+import { MOTION_DELAY_MS } from "@luke/brand";
+import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test, vi } from "vitest";
@@ -8,8 +11,9 @@ import { ONE_LINE_ELEMENT, ONE_LINE_END, OneLine } from "./one-line.js";
 
 /**
  * one-line.test.ts -- a line reads its words whole to a reader, and its
- * hint says them whole only while its box cuts them short; it fades out at
- * its end unless its caller asks for an ellipsis. jsdom lays
+ * hint says them whole only while its box cuts them short, the window's
+ * tooltip where its caller gives none; it fades out at its end unless its
+ * caller asks for an ellipsis. jsdom lays
  * nothing out, so the box's widths are stood in for, and the observer that
  * measures it is fired by hand.
  */
@@ -95,4 +99,67 @@ test("a line fades out at its end unless its caller asks for an ellipsis", () =>
     line.getAttribute("data-end"),
   );
   assert.deepEqual(ends, ["fade", "ellipsis"]);
+});
+
+/** The pointer arriving on `target` and resting there past the hint's wait, on a faked clock. */
+function restOn(target: Element): void {
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+  try {
+    act(() => {
+      target.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
+    });
+    act(() => {
+      vi.advanceTimersByTime(MOTION_DELAY_MS.HINT);
+    });
+  } finally {
+    vi.useRealTimers();
+  }
+}
+
+/** A line as the window draws it, its box `width` wide against words 120 wide, with no hint of its caller's. */
+function renderUnhinted(width: number): { view: HTMLElement; line: Element } {
+  vi.stubGlobal("ResizeObserver", StandInObserver);
+  const view = render(
+    createElement(
+      RegistryContext.Provider,
+      { value: AtomRegistry.make() },
+      createElement(OneLine, { children: "A very long task name" }),
+    ),
+  );
+  const line = view.querySelector(".luke-one-line") ?? assert.fail("the line");
+  vi.spyOn(line, "scrollWidth", "get").mockReturnValue(120);
+  vi.spyOn(line, "clientWidth", "get").mockReturnValue(width);
+  resize();
+  return { view, line };
+}
+
+test("a line cut short reads its words whole in the window's tooltip, though its caller gave no hint", () => {
+  const { line } = renderUnhinted(80);
+  restOn(line);
+  const said = document.querySelector('[role="tooltip"]') ?? assert.fail("the tooltip");
+  assert.equal(said.textContent, "A very long task name");
+});
+
+test("a line drawn whole raises no tooltip of its own", () => {
+  const { line } = renderUnhinted(120);
+  restOn(line);
+  assert.equal(document.querySelector('[role="tooltip"]'), null);
+});
+
+test("a caller's own hint stands in the tooltip's place", () => {
+  vi.stubGlobal("ResizeObserver", StandInObserver);
+  const view = render(
+    createElement(
+      RegistryContext.Provider,
+      { value: AtomRegistry.make() },
+      createElement(OneLine, { hint, children: "sam@example.com" }),
+    ),
+  );
+  const line = view.querySelector(".luke-one-line") ?? assert.fail("the line");
+  vi.spyOn(line, "scrollWidth", "get").mockReturnValue(120);
+  vi.spyOn(line, "clientWidth", "get").mockReturnValue(80);
+  resize();
+  restOn(line);
+  assert.equal(document.querySelector('[role="tooltip"]'), null);
+  assert.equal(view.querySelector("[data-hint]")?.getAttribute("data-hint"), "sam@example.com");
 });

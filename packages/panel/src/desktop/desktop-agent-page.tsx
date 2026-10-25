@@ -576,19 +576,22 @@ export function DesktopAgentPage({
         />
       );
     }
+    // In the page's own frame, so its row and sheet stand where the read page's will.
     return (
-      <Fill as={FILL_ELEMENT.SECTION} className="agent-page" aria-label="Agent">
-        {toolbar}
-        {agents.listFailed ? (
-          <ErrorState onRetry={agents.onRetryList} placement={ERROR_STATE_PLACEMENT.CENTRED}>
-            {NOT_READ}
-          </ErrorState>
-        ) : (
-          <Fill className="desktop-task-column">
-            <AgentTabSkeleton label={readingWords("the agent")} />
-          </Fill>
-        )}
-      </Fill>
+      <div className="desktop-task" data-panel-open="false">
+        <Fill as={FILL_ELEMENT.SECTION} className="agent-page" aria-label="Agent">
+          {toolbar}
+          {agents.listFailed ? (
+            <ErrorState onRetry={agents.onRetryList} placement={ERROR_STATE_PLACEMENT.CENTRED}>
+              {NOT_READ}
+            </ErrorState>
+          ) : (
+            <Fill className="desktop-task-column">
+              <AgentTabSkeleton label={readingWords("the agent")} />
+            </Fill>
+          )}
+        </Fill>
+      </div>
     );
   }
   return (

@@ -12,8 +12,10 @@ import { layContainersAt } from "../testing/container-width.js";
  * window at its top right rather than in a row, stands one gap after the
  * last control of the top row beneath it, the gap that row keeps between its
  * own controls: the plan's, an agent's, or the Inbox's toolbar, and the open
- * panel's bar, with the sidebar open, where the work is a sheet a gap in
- * from the window's edge, or folded, where it is not, and in a narrow room.
+ * panel's bar, with the sidebar open or folded, the rows standing on the
+ * window's frame over sheets a gap in from its edges, and in a narrow room;
+ * and on the frame each row's first tab, and the toggle, stand on one line
+ * with the edges of the sheets below them.
  * jsdom lays nothing out, so each length is read as the sheets declare it
  * (`testing/container-width.ts`) and measured from the window's right edge.
  * jsdom keeps a shorthand that names a custom property only as its rule's
@@ -166,38 +168,31 @@ test("the side panel's toggle stands one gap after the last control of the row b
   }
 });
 
-test("on the Mac, over the open sidebar's sheet, the plan's tab and the toggle stand as far in from the sheet's sides as under its top, and the web keeps a row's inset", () => {
+test("on the frame the plan's tab and the panel's start on their sheets' edges, and the toggle ends on the panel's, or the page's while it is shut", () => {
   for (const profile of [PROFILE.DESKTOP, PROFILE.WEB]) {
-    for (const fullScreen of [false, true]) {
-      const shell = {
-        profile,
-        room: "wide" as const,
-        sidebarCollapsed: false,
-        panelOpen: fullScreen,
-      };
+    for (const panelOpen of [false, true]) {
+      const shell = { profile, room: "wide" as const, sidebarCollapsed: false, panelOpen };
       const { main, row, controls } = drawn(shell);
-      if (fullScreen) row.parentElement?.setAttribute("data-full-screen", "true");
-      const control = pixels(resolved(row, "var(--luke-control-height)"));
-      const rowInset = pixels(resolved(row, "var(--column-inset)"));
-      const tab = {
-        top: (declared(row, "min-height") - control) / 2,
-        side: boxSide(row, "padding", "left"),
-      };
-      const toggle = {
-        top: declared(controls, "top") - boxSide(main, "margin", "top"),
-        side: declared(controls, "right") - boxSide(main, "margin", "right"),
-      };
-      const where = JSON.stringify({ ...shell, fullScreen });
-
-      if (profile === PROFILE.DESKTOP) {
-        assert.ok(tab.top < rowInset, where);
-        assert.equal(tab.side, tab.top, where);
-        assert.equal(toggle.side, toggle.top, where);
-      } else {
-        assert.equal(tab.side, rowInset, where);
-        assert.equal(declared(controls, "right"), rowInset, where);
-      }
+      const where = JSON.stringify(shell);
+      assert.equal(boxSide(row, "padding", "left"), 0, where);
+      assert.equal(declared(controls, "right"), boxSide(main, "margin", "right"), where);
       document.body.replaceChildren();
     }
+  }
+});
+
+test("on the frame with the sidebar folded, the plan's tab starts past the title bar's buttons, measured from the window's edge rather than its sheet's", () => {
+  for (const profile of [PROFILE.DESKTOP, PROFILE.WEB]) {
+    const shell = { profile, room: "wide" as const, sidebarCollapsed: true, panelOpen: false };
+    const { main, row } = drawn(shell);
+    const where = JSON.stringify(shell);
+    const sheetGap = boxSide(main, "margin", "left");
+    assert.ok(sheetGap > 0, where);
+    assert.equal(
+      sheetGap + boxSide(row, "padding", "left"),
+      pixels(resolved(row, "var(--sidebar-toggle-clearance)")),
+      where,
+    );
+    document.body.replaceChildren();
   }
 });

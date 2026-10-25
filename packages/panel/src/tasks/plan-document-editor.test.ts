@@ -3,11 +3,19 @@
 import assert from "node:assert/strict";
 import { CONVERSATION_MEDIA_TYPE } from "@luke/features/conversation-picture-wire";
 import { planAttachmentAddress } from "@luke/features/plan-attachment-link";
+import {
+  PLAN_COMMENT_ACTOR,
+  PLAN_COMMENT_ENTRY,
+  PLAN_COMMENT_SCOPE,
+  PLAN_COMMENT_STATUS,
+  type PlanCommentThread,
+} from "@luke/features/plan-comment-wire";
 import type { PlanEditRequest } from "@luke/features/plan-edit";
 import { PLAN_ACTOR, type Task } from "@luke/features/task-wire";
 import { TASK_CALL_FAILURE, type TasksEditAnswer } from "@luke/features/tasks-view";
 import { ACT_KIND } from "@luke/host/acts";
 import { DIAGRAM_DRAWING, type DiagramModule } from "@luke/ui/diagram-contract";
+import { type PlanCommentsControl, PlanCommentsProvider } from "@luke/ui/plan-comments";
 import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment, type ReactElement } from "react";
@@ -157,6 +165,43 @@ async function settle(): Promise<void> {
  * atoms of its own, as the window holds them; `render` draws another plan,
  * through its own door where given.
  */
+/** A plan comment thread on the plan's first words, open or not. */
+function threadOn(id: string, status: PlanCommentThread["status"]): PlanCommentThread {
+  return {
+    id,
+    scope: PLAN_COMMENT_SCOPE.WORDS,
+    quote: "Let people join",
+    anchor: { from: 3, to: 18 },
+    section: "Goal",
+    status,
+    entries: [
+      {
+        id: `${id}-entry`,
+        kind: PLAN_COMMENT_ENTRY.COMMENT,
+        writer: { actor: PLAN_COMMENT_ACTOR.MEMBER, by: CHARLES },
+        words: "Should this be a setting?",
+        at: 1,
+      },
+    ],
+    createdAt: 1,
+    updatedAt: 1,
+    revision: 1,
+  };
+}
+
+function commentsOver(threads: readonly PlanCommentThread[]): PlanCommentsControl {
+  return {
+    planId: "plan-1",
+    threads,
+    read: true,
+    failed: false,
+    onRetry: () => undefined,
+    notes: new Map(),
+    start: async () => ({ note: "not in this test" }),
+    act: async () => true,
+  };
+}
+
 /** What the window tells its shell of the plans' words, drawn beside the plan as a shell would read it. */
 function UnsavedWords(): ReactElement {
   return createElement("output", { "data-unsaved-words": String(usePlanWordsUnsaved()) });
@@ -169,7 +214,11 @@ function unsavedWords(container: HTMLElement): boolean {
   );
 }
 
-function mount(answers: readonly TasksEditAnswer[] = [], first: Task = DOCUMENT_TASK) {
+function mount(
+  answers: readonly TasksEditAnswer[] = [],
+  first: Task = DOCUMENT_TASK,
+  threads?: readonly PlanCommentThread[],
+) {
   const sent: PlanEditRequest[] = [];
   const renamed: string[] = [];
   const container = document.createElement("div");
@@ -187,6 +236,11 @@ function mount(answers: readonly TasksEditAnswer[] = [], first: Task = DOCUMENT_
     renamed.push(name);
     return Promise.resolve(true);
   };
+  // Note that a plan with no comments control draws none, as a template does.
+  const commented = (page: ReactElement) =>
+    threads === undefined
+      ? page
+      : createElement(PlanCommentsProvider, { value: commentsOver(threads) }, page);
   const draw = (page: ReactElement) =>
     act(() =>
       root.render(
@@ -197,7 +251,7 @@ function mount(answers: readonly TasksEditAnswer[] = [], first: Task = DOCUMENT_
             createElement(
               Fragment,
               null,
-              page,
+              commented(page),
               createElement(ToastHost),
               createElement(UnsavedWords),
             ),
@@ -725,6 +779,28 @@ test("a press anywhere on an empty plan's room opens its text with the caret in 
   assert.deepEqual(open().placement, PLACEMENT_END);
   assert.equal(title(container).textContent, DOCUMENT_NAME, "the title stays over the text");
   assert.ok(body.contains(container.querySelector(".plan-document-editor")));
+});
+
+test("an empty plan at rest says to write it, a button whose press opens its text with the caret in it", () => {
+  const { container, render } = mount();
+  render({ ...DOCUMENT_TASK, document: { body: "", assumptions: [] } });
+  const line = [...container.querySelectorAll("button")].find(
+    (each) => each.textContent === "Write the plan",
+  );
+  assert.ok(line, "the empty plan's line");
+
+  act(() => line.focus());
+  assert.equal(document.activeElement, line, "the keyboard reaches it");
+  act(() => line.click());
+
+  assert.equal(open().markdown, "");
+  assert.deepEqual(open().placement, PLACEMENT_END);
+  assert.ok(
+    ![...container.querySelectorAll("button")].some(
+      (each) => each.textContent === "Write the plan",
+    ),
+    "the line goes once the editor stands in its place",
+  );
 });
 
 test("a press on a plan's room under its text opens it at the end, beside it on the nearest line, and above it nowhere", () => {
@@ -1320,4 +1396,23 @@ test("an open editor holding unsaved words keeps them as a teammate saves, saves
   } finally {
     vi.useRealTimers();
   }
+});
+
+test("the editor is handed the open threads' words, and none while no open thread stands on any, so its drafts map no anchors for nothing", () => {
+  const open1 = threadOn("0f9b5f6e-6a8e-4c51-9a0e-2c1f2f0b7a11", PLAN_COMMENT_STATUS.OPEN);
+  const resolved = threadOn("0f9b5f6e-6a8e-4c51-9a0e-2c1f2f0b7a22", PLAN_COMMENT_STATUS.RESOLVED);
+
+  const withOpen = mount([], DOCUMENT_TASK, [resolved, open1]);
+  act(() => block(withOpen.container, "Goal").click());
+  assert.deepEqual(open().anchors, [{ thread: open1.id, from: 3, to: 18 }]);
+  withOpen.unmount();
+
+  const withResolved = mount([], DOCUMENT_TASK, [resolved]);
+  act(() => block(withResolved.container, "Goal").click());
+  assert.equal(open().anchors, undefined);
+  withResolved.unmount();
+
+  const withNone = mount([], DOCUMENT_TASK, []);
+  act(() => block(withNone.container, "Goal").click());
+  assert.equal(open().anchors, undefined);
 });

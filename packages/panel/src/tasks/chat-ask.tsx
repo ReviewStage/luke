@@ -26,6 +26,7 @@ import { type Actor, actorName } from "@luke/ui/actor-model";
 import type { ChatAskAnswer } from "@luke/ui/chat-model";
 import { CheckIcon } from "lucide-react";
 import { type RefObject, useRef, useState } from "react";
+import { actFailureWords } from "../act.js";
 import { ActorLine, ActorRef, commentAuthor } from "../actor-ref.js";
 import { DRAFT_PLACE, type Draft, EMPTY_DRAFT, useDraft } from "../composer-drafts.js";
 import { useIntegrationStatuses } from "../integration-statuses.js";
@@ -272,9 +273,9 @@ function Answer({
         // Note that an answer taken lets the draft go, and one refused keeps it to send again.
         if (refused === undefined) kept.update(() => EMPTY_DRAFT);
       },
-      (failed: Error) => {
+      (failed: unknown) => {
         setSending(false);
-        setRefusal(failed.message);
+        setRefusal(actFailureWords(failed));
       },
     );
   };

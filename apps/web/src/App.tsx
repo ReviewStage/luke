@@ -13,7 +13,14 @@ import {
 } from "@luke/ui";
 import { captureSiteEvent, SITE_EVENT } from "./analytics";
 import { DemoVideo } from "./DemoVideo";
-import { DMG_URL, REPOSITORY_URL, SITE_PAGE, SiteFooterLinks, SiteNavigation } from "./SiteChrome";
+import {
+  DMG_URL,
+  REPOSITORY_URL,
+  SITE_PAGE,
+  SiteFooterLinks,
+  SiteNavigation,
+  WEB_APP_URL,
+} from "./SiteChrome";
 
 /**
  * The landing: the copy runs left, the way a page of prose does. The demo is
@@ -36,6 +43,9 @@ export function App(): React.JSX.Element {
             onClick={() => captureSiteEvent(SITE_EVENT.DOWNLOAD_PRESS)}
           >
             Download for macOS
+          </ButtonLink>
+          <ButtonLink variant={BUTTON_VARIANT.OUTLINE} href={WEB_APP_URL}>
+            Open Luke on the web
           </ButtonLink>
           <ButtonLink
             variant={BUTTON_VARIANT.OUTLINE}

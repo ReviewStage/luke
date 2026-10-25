@@ -8,10 +8,13 @@ import {
   MARK_PROVIDER,
   type MenuRow,
   POPOVER_ALIGN,
+  POPOVER_SIDE,
   POPOVER_WIDTH,
   type PopoverAlign,
   type PopoverWidth,
   ProviderMark,
+  RectFloat,
+  SEARCHABLE_MENU_LAYER,
   SearchableMenu,
   Spinner,
 } from "@luke/ui";
@@ -28,6 +31,8 @@ import { CatalogSection } from "../section";
  * notes said in the list's place while the rows are read and once a read
  * failed, with Retry. Each closes on Escape, a pick, a second press of its
  * button, and focus leaving it, and hands the focus back to its button.
+ * Last, a menu embedded in a layer floated under words (`RectFloat`), as
+ * the date picker's time zones are, which places it and sets its width.
  */
 
 /** Synthetic repositories, under the owners a GitHub account would list. */
@@ -175,6 +180,40 @@ function Failed(): React.JSX.Element {
   );
 }
 
+/** A menu standing in a layer floated under marked words, with no layer of its own. */
+function Embedded(): React.JSX.Element {
+  const words = useRef<HTMLElement>(null);
+  const [chosen, setChosen] = useState<string | undefined>("acme/app");
+  const menuId = useId();
+  const ignore = () => undefined;
+  return (
+    <div className="catalog-anchor">
+      <p>
+        The agent works in <mark ref={words}>a repository</mark> picked from the list under it.
+      </p>
+      <RectFloat
+        open
+        anchor={() => words.current?.getBoundingClientRect()}
+        side={POPOVER_SIDE.BELOW}
+        width={POPOVER_WIDTH.NARROW}
+      >
+        <SearchableMenu
+          layer={SEARCHABLE_MENU_LAYER.EMBEDDED}
+          id={menuId}
+          label="Repository"
+          placeholder="Search repositories"
+          rows={REPOSITORIES}
+          value={chosen}
+          noMatch="No repositories match"
+          onPick={setChosen}
+          onClose={ignore}
+          onLeave={ignore}
+        />
+      </RectFloat>
+    </div>
+  );
+}
+
 function SearchableMenuExample(): React.JSX.Element {
   return (
     <>
@@ -220,6 +259,9 @@ function SearchableMenuExample(): React.JSX.Element {
             <Failed />
           </Inline>
         </div>
+      </CatalogSection>
+      <CatalogSection id="searchable-menu-embedded" title="Embedded in a floated layer">
+        <Embedded />
       </CatalogSection>
     </>
   );

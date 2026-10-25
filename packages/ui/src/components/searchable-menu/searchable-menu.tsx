@@ -76,10 +76,35 @@ import { RowHint, RowHintOptions, Tooltip } from "../tooltip/hint.js";
  * holding the button and the menu, from the edge its owner names, at one of
  * three widths (`POPOVER_WIDTH`): narrow for a Settings picker, regular for
  * the composer's, and wide for one that lists an issue's title with its key
- * and state. Its owner holds it drawn through its exit (`useDisclosure`),
- * handing it `leaving`, which leaves it inert and fading, focus already
- * handed back.
+ * and state. An owner that already hangs a layer of its own, a picker
+ * floated by a box in the words (`RectFloat`) say, asks for it embedded
+ * (`SEARCHABLE_MENU_LAYER.EMBEDDED`) instead: drawn with no layer, inside
+ * the owner's, which says where it stands and how wide. Its owner holds it
+ * drawn through its exit (`useDisclosure`), handing it `leaving`, which
+ * leaves it inert and fading, focus already handed back.
  */
+
+/** Whether the menu hangs from its button in a layer of its own, or stands in a layer its owner hangs. */
+export const SEARCHABLE_MENU_LAYER = {
+  ANCHORED: "anchored",
+  EMBEDDED: "embedded",
+} as const;
+
+export type SearchableMenuLayer =
+  (typeof SEARCHABLE_MENU_LAYER)[keyof typeof SEARCHABLE_MENU_LAYER];
+
+/** Where the menu stands: hung from its button's edge at a width, or in its owner's layer, which places it. */
+type SearchableMenuPlace =
+  | {
+      layer?: typeof SEARCHABLE_MENU_LAYER.ANCHORED | undefined;
+      /** The button's edge the menu hangs from. */
+      align: PopoverAlign;
+      /** What it keeps within: its marked room unless its owner asks for the window. */
+      bounds?: PopoverBounds | undefined;
+      /** How wide it stands, the room allowing: regular where none is named. */
+      width?: PopoverWidth | undefined;
+    }
+  | { layer: typeof SEARCHABLE_MENU_LAYER.EMBEDDED };
 
 /** One row the menu lists. */
 export interface MenuRow {
@@ -440,44 +465,40 @@ export function MenuRowList({
   );
 }
 
-export function SearchableMenu(props: {
-  /** The menu's id, which its trigger's `aria-controls` names. */
-  id: string;
-  /** What the list is, for assistive technology: "Repository", "Model". */
-  label: string;
-  /** The search field's placeholder; none draws the menu without a field, for a list too short to search. */
-  placeholder?: string | undefined;
-  rows: readonly MenuRow[];
-  /** The id of the row chosen now, drawn checked; none while nothing is. */
-  value: string | undefined;
-  /** Said in the list's place while there is nothing to list: reading, a failure, an empty catalog. */
-  note?: React.ReactNode;
-  /** Said when a query matches nothing. */
-  noMatch: string;
-  /** Present, the owner answers the search: it hears each query as typed, and the rows it hands are listed as they are, unfiltered. */
-  onSearch?: ((query: string) => void) | undefined;
-  onPick: (id: string) => void;
-  /** Escape was pressed: the owner closes the menu and hands focus back to its trigger. */
-  onClose: () => void;
-  /** Focus left the menu for `left`; the owner closes unless that is still its own. */
-  onLeave: (left: EventTarget | null) => void;
-  /** Pinned under the list, always on screen, reached by the arrows past the last match. */
-  foot?: readonly FootRow[] | undefined;
-  /** One muted line under the pinned rows, pressed by nothing: what the agent has cost. */
-  footNote?: string | undefined;
-  /** One muted line under that, which may hold a link: the plan that pays, as its provider asks. */
-  planNote?: React.ReactNode;
-  /** The button's edge the menu hangs from. */
-  align: PopoverAlign;
-  /** What it keeps within: its marked room unless its owner asks for the window. */
-  bounds?: PopoverBounds | undefined;
-  /** How wide it stands, the room allowing: regular where none is named. */
-  width?: PopoverWidth | undefined;
-  /** The menu is on its way out: drawn fading, and taking nothing. */
-  leaving?: boolean | undefined;
-  /** Hands the menu's element to the hold its owner draws it through its exit with. */
-  ref?: ((element: HTMLElement | null) => void) | undefined;
-}): React.JSX.Element {
+export function SearchableMenu(
+  props: {
+    /** The menu's id, which its trigger's `aria-controls` names. */
+    id: string;
+    /** What the list is, for assistive technology: "Repository", "Model". */
+    label: string;
+    /** The search field's placeholder; none draws the menu without a field, for a list too short to search. */
+    placeholder?: string | undefined;
+    rows: readonly MenuRow[];
+    /** The id of the row chosen now, drawn checked; none while nothing is. */
+    value: string | undefined;
+    /** Said in the list's place while there is nothing to list: reading, a failure, an empty catalog. */
+    note?: React.ReactNode;
+    /** Said when a query matches nothing. */
+    noMatch: string;
+    /** Present, the owner answers the search: it hears each query as typed, and the rows it hands are listed as they are, unfiltered. */
+    onSearch?: ((query: string) => void) | undefined;
+    onPick: (id: string) => void;
+    /** Escape was pressed: the owner closes the menu and hands focus back to its trigger. */
+    onClose: () => void;
+    /** Focus left the menu for `left`; the owner closes unless that is still its own. */
+    onLeave: (left: EventTarget | null) => void;
+    /** Pinned under the list, always on screen, reached by the arrows past the last match. */
+    foot?: readonly FootRow[] | undefined;
+    /** One muted line under the pinned rows, pressed by nothing: what the agent has cost. */
+    footNote?: string | undefined;
+    /** One muted line under that, which may hold a link: the plan that pays, as its provider asks. */
+    planNote?: React.ReactNode;
+    /** The menu is on its way out: drawn fading, and taking nothing. */
+    leaving?: boolean | undefined;
+    /** Hands the menu's element to the hold its owner draws it through its exit with. */
+    ref?: ((element: HTMLElement | null) => void) | undefined;
+  } & SearchableMenuPlace,
+): React.JSX.Element {
   const { rows, value, onPick } = props;
   const leaving = props.leaving === true;
   const [query, setQuery] = useState("");
@@ -576,7 +597,8 @@ export function SearchableMenu(props: {
     if (row === undefined || menu === undefined) return setRowBox(undefined);
     setRowBox({ top: row.top - menu.top, height: row.height });
   }, [listedAt, listId]);
-  const keepsToWindow = props.bounds === POPOVER_BOUNDS.WINDOW;
+  const keepsToWindow =
+    props.layer !== SEARCHABLE_MENU_LAYER.EMBEDDED && props.bounds === POPOVER_BOUNDS.WINDOW;
   useLayoutEffect(() => {
     const branch = panel.current?.parentElement;
     if (openAt === undefined || panel.current === null || branch == null) return;
@@ -742,6 +764,107 @@ export function SearchableMenu(props: {
     </MenuSurface>
   );
 
+  const menu = (
+    <MenuSurface
+      ref={holdSurface}
+      id={props.id}
+      className="luke-searchable-menu relative"
+      inset={MENU_SURFACE_INSET.NONE}
+      role="dialog"
+      aria-label={props.label}
+      leaving={leaving}
+      onKeyDown={onKey}
+      onBlur={(event) => props.onLeave(event.relatedTarget)}
+    >
+      {searching ? (
+        <SearchField
+          ref={field}
+          look={SEARCH_FIELD_LOOK.MENU}
+          label={props.placeholder ?? props.label}
+          placeholder={props.placeholder}
+          value={query}
+          combobox={keys}
+          onChange={(typed) => {
+            setQuery(typed);
+            props.onSearch?.(typed);
+            // The first match that may be picked takes the highlight; with
+            // none, nothing does, so Enter picks nothing. The owner's own
+            // answer is not in yet, so its first row takes it as it comes.
+            const first = answered ? NOWHERE : firstOpen(matchingRows(rows, typed));
+            moveTo(first === NOWHERE ? undefined : first);
+          }}
+        />
+      ) : null}
+      <ComboboxList
+        ref={list}
+        id={listId}
+        label={props.label}
+        groups={optionGroups(matches, value, answered ? "" : query)}
+        active={at}
+        onActiveChange={hoverRow}
+        onChoose={(index) => {
+          const row = matches[index];
+          if (row !== undefined) chooseRow(row, index);
+        }}
+        steer={searching ? undefined : keys}
+        note={props.note}
+        empty={props.note === undefined ? props.noMatch : undefined}
+      />
+      {open === undefined || footAt >= 0 || rowBox === undefined ? null : (
+        <div
+          className="luke-searchable-menu-branch luke-searchable-menu-row-branch"
+          style={{ top: rowBox.top, height: rowBox.height }}
+        >
+          {submenuSurface(open)}
+        </div>
+      )}
+      {footed ? (
+        <div id={footId} className="luke-searchable-menu-foot">
+          {foot.map((row, index) => {
+            const item = (
+              <MenuItem
+                action={{
+                  label: row.label,
+                  ...(row.icon === undefined ? undefined : { icon: row.icon }),
+                  hint: row.detail,
+                  onSelect: () => pressFoot(row),
+                  disabled: row.disabled !== undefined,
+                  checked: row.toggle?.on,
+                  mark: row.toggle === undefined ? undefined : MENU_ITEM_MARK.SWITCH,
+                  opens: row.submenu !== undefined,
+                }}
+                steered={{
+                  id: footRowId(index),
+                  highlighted: index === footAt,
+                  expanded: index === footAt && open !== undefined,
+                  onHover: () => hoverFoot(row, index),
+                }}
+                onChoose={() => pressFoot(row)}
+              />
+            );
+            const branch = (
+              <div className="luke-searchable-menu-branch">
+                {item}
+                {index === footAt && open !== undefined ? submenuSurface(open) : null}
+              </div>
+            );
+            // A row that cannot be pressed says why on hover, from around it,
+            // since the item takes no handlers but its own.
+            return row.disabled === undefined ? (
+              <Fragment key={row.id}>{branch}</Fragment>
+            ) : (
+              <Tooltip key={row.id} label={row.disabled}>
+                {branch}
+              </Tooltip>
+            );
+          })}
+          {props.footNote === undefined ? null : <FootNote words={props.footNote} />}
+          {props.planNote === undefined ? null : <FootNote words={props.planNote} aligned />}
+        </div>
+      ) : null}
+    </MenuSurface>
+  );
+  if (props.layer === SEARCHABLE_MENU_LAYER.EMBEDDED) return menu;
   return (
     <AnchoredPopover
       open={!leaving}
@@ -749,104 +872,7 @@ export function SearchableMenu(props: {
       bounds={props.bounds}
       width={props.width ?? POPOVER_WIDTH.REGULAR}
     >
-      <MenuSurface
-        ref={holdSurface}
-        id={props.id}
-        className="luke-searchable-menu relative"
-        inset={MENU_SURFACE_INSET.NONE}
-        role="dialog"
-        aria-label={props.label}
-        leaving={leaving}
-        onKeyDown={onKey}
-        onBlur={(event) => props.onLeave(event.relatedTarget)}
-      >
-        {searching ? (
-          <SearchField
-            ref={field}
-            look={SEARCH_FIELD_LOOK.MENU}
-            label={props.placeholder ?? props.label}
-            placeholder={props.placeholder}
-            value={query}
-            combobox={keys}
-            onChange={(typed) => {
-              setQuery(typed);
-              props.onSearch?.(typed);
-              // The first match that may be picked takes the highlight; with
-              // none, nothing does, so Enter picks nothing. The owner's own
-              // answer is not in yet, so its first row takes it as it comes.
-              const first = answered ? NOWHERE : firstOpen(matchingRows(rows, typed));
-              moveTo(first === NOWHERE ? undefined : first);
-            }}
-          />
-        ) : null}
-        <ComboboxList
-          ref={list}
-          id={listId}
-          label={props.label}
-          groups={optionGroups(matches, value, answered ? "" : query)}
-          active={at}
-          onActiveChange={hoverRow}
-          onChoose={(index) => {
-            const row = matches[index];
-            if (row !== undefined) chooseRow(row, index);
-          }}
-          steer={searching ? undefined : keys}
-          note={props.note}
-          empty={props.note === undefined ? props.noMatch : undefined}
-        />
-        {open === undefined || footAt >= 0 || rowBox === undefined ? null : (
-          <div
-            className="luke-searchable-menu-branch luke-searchable-menu-row-branch"
-            style={{ top: rowBox.top, height: rowBox.height }}
-          >
-            {submenuSurface(open)}
-          </div>
-        )}
-        {footed ? (
-          <div id={footId} className="luke-searchable-menu-foot">
-            {foot.map((row, index) => {
-              const item = (
-                <MenuItem
-                  action={{
-                    label: row.label,
-                    ...(row.icon === undefined ? undefined : { icon: row.icon }),
-                    hint: row.detail,
-                    onSelect: () => pressFoot(row),
-                    disabled: row.disabled !== undefined,
-                    checked: row.toggle?.on,
-                    mark: row.toggle === undefined ? undefined : MENU_ITEM_MARK.SWITCH,
-                    opens: row.submenu !== undefined,
-                  }}
-                  steered={{
-                    id: footRowId(index),
-                    highlighted: index === footAt,
-                    expanded: index === footAt && open !== undefined,
-                    onHover: () => hoverFoot(row, index),
-                  }}
-                  onChoose={() => pressFoot(row)}
-                />
-              );
-              const branch = (
-                <div className="luke-searchable-menu-branch">
-                  {item}
-                  {index === footAt && open !== undefined ? submenuSurface(open) : null}
-                </div>
-              );
-              // A row that cannot be pressed says why on hover, from around it,
-              // since the item takes no handlers but its own.
-              return row.disabled === undefined ? (
-                <Fragment key={row.id}>{branch}</Fragment>
-              ) : (
-                <Tooltip key={row.id} label={row.disabled}>
-                  {branch}
-                </Tooltip>
-              );
-            })}
-            {props.footNote === undefined ? null : <FootNote words={props.footNote} />}
-            {props.planNote === undefined ? null : <FootNote words={props.planNote} aligned />}
-          </div>
-        ) : null}
-      </MenuSurface>
+      {menu}
     </AnchoredPopover>
   );
 }

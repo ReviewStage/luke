@@ -9,6 +9,7 @@ import {
   useId,
   useRef,
 } from "react";
+import { isComposingKey } from "../../composing-key.js";
 import { CloseIcon } from "../../face/glyphs.js";
 import { motionHeld } from "../../motion-timing.js";
 import { useDisclosure } from "../../use-disclosure.js";
@@ -178,7 +179,7 @@ export function PopoverPanel({
   if (!mounted || (leaving && motionHeld())) return null;
 
   const onKey = (event: React.KeyboardEvent<HTMLDivElement>) => {
-    if (event.key === "Escape" && !event.nativeEvent.isComposing) {
+    if (event.key === "Escape" && !isComposingKey(event)) {
       event.stopPropagation();
       onDismiss();
       return;

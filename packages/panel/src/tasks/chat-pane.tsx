@@ -72,6 +72,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { actFailureWords } from "../act.js";
 import { ActorRef, ActorStack, commentAuthor } from "../actor-ref.js";
 import {
   Conversation,
@@ -391,8 +392,6 @@ interface PendingPost extends PendingPlace {
   readonly refused?: string;
 }
 
-/** What a post refused says where nothing said why. */
-const UNSENT = "Not sent";
 const DISCARD_POST = "Discard";
 
 /** What Discard asks before a refused post is let go. */
@@ -458,9 +457,7 @@ function usePendingPosts(
   const go = (entry: PendingPost, takeBack: (refused: string) => boolean) => {
     outbox.queue = outbox.queue.then(async () => {
       const sender = outbox.senders.get(entry.id) ?? onPost;
-      const refused = await sender(entry.post, entry.id).catch((failed: unknown) =>
-        failed instanceof Error ? failed.message : UNSENT,
-      );
+      const refused = await sender(entry.post, entry.id).catch(actFailureWords);
       const back = refused !== undefined && takeBack(refused);
       if (back) outbox.refusedKeys.set(postWords(entry), entry.id);
       if (refused === undefined || back) outbox.senders.delete(entry.id);

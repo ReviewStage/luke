@@ -652,6 +652,24 @@ test("the tree stands as wide as the panel keeps it, and its edge asks for anoth
   assert.deepEqual(held.widths, [264], "Enter puts back the tree's own width");
 });
 
+test("the tree's edge moves the tree from the width it is drawn at, where the box leaves the diff its least", async () => {
+  files = [changed("a.ts")];
+  vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (
+    this: HTMLElement,
+  ) {
+    const width = this.classList.contains("file-view-body") ? 500 : 0;
+    return new DOMRect(0, 0, width, 0);
+  });
+  const { tree, held } = heldTree(true, 264);
+  await drawTab({ tree });
+
+  const edge =
+    document.querySelector<HTMLElement>('.file-tree-pane [role="separator"]') ??
+    assert.fail("an edge");
+  press(edge, { key: "ArrowRight" });
+  assert.deepEqual(held.widths, [248], "a step narrower than the 264px the tree is drawn at");
+});
+
 test("while the tree is hidden a strip stands in its place, a mark for each file, and resting on it peeks the tree", async () => {
   viewedAnswer = MARKED;
   files = [
@@ -777,9 +795,7 @@ test("the pointer's first arrival on a header's letter hangs its hint, though th
     header("a.ts").querySelector(".file-view-status") ?? assert.fail("the letter stands");
   restOn(letter());
   await flush();
-  const hint = letter().getAttribute("aria-describedby");
-  assert.ok(hint !== null, "the letter is described by its hint");
-  assert.equal(document.getElementById(hint)?.textContent, "Modified");
+  assert.equal(document.querySelector('[role="tooltip"]')?.textContent, "Modified");
 });
 
 test("a file's header leads with its type's icon after its status letter, and its folder and name fade out where the row cuts them rather than ending in an ellipsis", async () => {

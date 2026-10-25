@@ -1818,7 +1818,11 @@ test("a date chip in the chat box opens its picker, and a day picked there names
     await act(async () => undefined);
     const dialog = box.querySelector<HTMLElement>('[role="dialog"]');
     assert.ok(dialog, "the picker is open");
-    const start = dialog.querySelector<HTMLInputElement>('input[aria-label="Start"]')?.value;
+    // Note that the date field is named by the words shown over it, its label.
+    const startFor = [...dialog.querySelectorAll("label")].find(
+      (label) => label.textContent === "Start",
+    )?.htmlFor;
+    const start = dialog.querySelector<HTMLInputElement>(`input[id="${startFor}"]`)?.value;
     act(() =>
       dialog.querySelector<HTMLElement>('button[aria-label="Friday, October 23, 2026"]')?.click(),
     );

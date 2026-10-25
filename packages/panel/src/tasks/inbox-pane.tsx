@@ -76,7 +76,7 @@ import {
   agentSubject,
   NOTHING_HELD,
 } from "./agent-ref.js";
-import { AttachedFileChips } from "./attached-file-chips.js";
+import { AttachedFileChips, attachmentChips } from "./attached-file-chips.js";
 import { InboxAnswerBox } from "./inbox-answer-box.js";
 import {
   ANSWERED,
@@ -132,7 +132,7 @@ import { TranscriptWords } from "./transcript-blocks.js";
 import type { CodingAgentsControl } from "./use-coding-agents.js";
 import { WordsWorkspace } from "./use-link-standing.js";
 import { opensAsLink } from "./use-open-link.js";
-import type { TaskInboxControl } from "./use-task-inbox.js";
+import { type PendingInboxReply, pendingReplyOn, type TaskInboxControl } from "./use-task-inbox.js";
 
 /**
  * inbox-pane.tsx -- one inbox item at reading size: a comment thread under the item's title, the agent's messages and what they ask, and the answers given in place or as they were given.
@@ -345,6 +345,50 @@ function DraftReply({
       nameRef={<ActorRef actor={reader} nameOnly />}
     >
       {children}
+    </InboxComment>
+  );
+}
+
+/** What a reply on its way says at its head's end. */
+const SENDING = "Sending";
+
+/**
+ * The reader's plain reply on its way, as the thread's last message before
+ * the draft reply: drawn as the reader's own message is, its files going
+ * up, and "Sending" at its head's end, until the item holds it, when the
+ * message it became stands in its place.
+ */
+function PendingReply({
+  readerId,
+  reply,
+  now,
+}: {
+  readerId: string | undefined;
+  reply: PendingInboxReply;
+  now: number;
+}): React.JSX.Element {
+  const reader = useReader(readerId);
+  return (
+    <InboxComment
+      kind={COMMENT.MESSAGE}
+      author={commentAuthor(reader)}
+      nameRef={<ActorRef actor={reader} nameOnly />}
+      at={reply.at}
+      now={now}
+      trailing={
+        <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
+          {SENDING}
+        </Text>
+      }
+    >
+      {reply.attachments.length === 0 ? null : (
+        <AttachedFileChips files={attachmentChips(reply.attachments)} uploading />
+      )}
+      {reply.text === "" ? null : (
+        <div className="inbox-words inbox-message-words" data-inbox-message-text="">
+          <SentWords text={reply.text} asDocument />
+        </div>
+      )}
     </InboxComment>
   );
 }
@@ -1187,7 +1231,8 @@ function Crumbs({
 /**
  * One item at reading size, as a comment thread: under the pane's crumbs,
  * the item's title alone as the thread's subject, then every message of
- * its thread, oldest first, and the reader's draft reply at its end, the
+ * its thread, oldest first, a plain reply of the reader's on its way after
+ * them (`PendingReply`), and the reader's draft reply at its end, the
  * open ask's controls standing in it. Once the item is settled, the next
  * item that needs the developer is offered under the board
  * (`inbox-pager.tsx`).
@@ -1252,6 +1297,7 @@ export function InboxPane({
   const open = item.status === INBOX_STATUS.OPEN;
   const draft = control.draftOf(item);
   const thread = item.thread ?? NO_MESSAGES;
+  const pending = pendingReplyOn(control.pendingReplies, item);
   useOptionNumbers(pane, item, draft, control, open ? numberedPickOf(thread) : undefined);
   const formText: FormTextDoors = {
     self: item.agentId,
@@ -1391,6 +1437,9 @@ export function InboxPane({
                         ) : null}
                       </Fragment>
                     ))}
+                    {pending === undefined ? null : (
+                      <PendingReply readerId={readerId} reply={pending} now={now} />
+                    )}
                     {draftReply}
                   </Stack>
                 </LoneLinkCards>

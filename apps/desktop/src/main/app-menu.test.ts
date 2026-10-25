@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { ellipsized } from "@luke/panel/testing/action-label";
 import { DESKTOP_CAPABILITIES } from "@luke/panel/testing/app-state";
 import { EXPERIMENT } from "@luke/settings";
 import {
@@ -24,9 +23,9 @@ import {
  * The menu bar as a gated feature's experiment decides it: an item whose
  * command does not stand is not in its menu, and leaves no separator
  * stranded where it stood; and the one drawer redraws when the update item
- * or the account's experiments move, and only then; and no item a reader
- * can choose ends its name with an ellipsis; and only a development build
- * offers the developer tools.
+ * or the account's experiments move, and only then; and an item ends its name
+ * with an ellipsis only where it opens a window or asks; and only a
+ * development build offers the developer tools.
  */
 
 /** The labels of one top-level menu's items, a separator as a dash. */
@@ -41,6 +40,8 @@ function labelsOf(template: MenuItemConstructorOptions[], menu: string): readonl
 describe("the menu bar's gate", () => {
   test("every item stands while every command does", () => {
     assert.deepEqual(labelsOf(appMenuTemplate("Luke"), "Go"), [
+      "Command Palette",
+      "-",
       "Ask Luke",
       "Inbox",
       "Tasks",
@@ -51,6 +52,9 @@ describe("the menu bar's gate", () => {
       "-",
       "Next Recent Tab",
       "Previous Recent Tab",
+      "-",
+      "Move Tab Left",
+      "Move Tab Right",
     ]);
   });
 
@@ -61,6 +65,8 @@ describe("the menu bar's gate", () => {
       (command) => command !== APP_COMMAND.INBOX && command !== APP_COMMAND.ASK_LUKE,
     );
     assert.deepEqual(labelsOf(withoutInbox, "Go"), [
+      "Command Palette",
+      "-",
       "Tasks",
       "Automations",
       "-",
@@ -69,6 +75,9 @@ describe("the menu bar's gate", () => {
       "-",
       "Next Recent Tab",
       "Previous Recent Tab",
+      "-",
+      "Move Tab Left",
+      "Move Tab Right",
     ]);
 
     const withoutPlaces = appMenuTemplate(
@@ -81,11 +90,16 @@ describe("the menu bar's gate", () => {
         command !== APP_COMMAND.AUTOMATIONS,
     );
     assert.deepEqual(labelsOf(withoutPlaces, "Go"), [
+      "Command Palette",
+      "-",
       "Back",
       "Forward",
       "-",
       "Next Recent Tab",
       "Previous Recent Tab",
+      "-",
+      "Move Tab Left",
+      "Move Tab Right",
     ]);
   });
 });
@@ -97,7 +111,7 @@ describe("the Ask Luke item", () => {
         shortcutShown(command, experiments, DESKTOP_CAPABILITIES),
       );
     assert.ok(!labelsOf(shownWith({}), "Go").includes("Ask Luke"));
-    assert.equal(labelsOf(shownWith(experimentsOn(EXPERIMENT.OPERATOR)), "Go")[0], "Ask Luke");
+    assert.ok(labelsOf(shownWith(experimentsOn(EXPERIMENT.OPERATOR)), "Go").includes("Ask Luke"));
   });
 });
 
@@ -152,8 +166,24 @@ function choosableLabels(items: readonly MenuItemConstructorOptions[]): string[]
   ]);
 }
 
+/** The labels of every item a reader can choose that end with an ellipsis, in any state of the update item. */
+function ellipsizedLabels(update?: Parameters<typeof appMenuTemplate>[1]): string[] {
+  return choosableLabels(appMenuTemplate("Luke", update)).filter((label) => label.endsWith("…"));
+}
+
+const ASKING_ITEMS = [
+  "Permanently Delete Task…",
+  "Send Feedback…",
+  "Settings…",
+  "Suggest a Feature…",
+];
+
 describe("the menu bar's names", () => {
-  test("no item a reader can choose ends with an ellipsis, in any state of the update item", () => {
+  test("an item ends with an ellipsis where it opens a window or asks, and nowhere else", () => {
+    assert.deepEqual(ellipsizedLabels().sort(), ASKING_ITEMS);
+  });
+
+  test("the update item, which opens nothing, adds none in any state", () => {
     for (const act of Object.values(UPDATE_MENU_ACT)) {
       const update = {
         act,
@@ -161,8 +191,26 @@ describe("the menu bar's names", () => {
         onInstall: () => undefined,
         onOpenLatest: () => undefined,
       };
-      assert.deepEqual(ellipsized(choosableLabels(appMenuTemplate("Luke", update))), [], act);
+      assert.deepEqual(ellipsizedLabels(update).sort(), ASKING_ITEMS, act);
     }
+  });
+});
+
+describe("the command palette and tab moves", () => {
+  test("stand under Go with their chords, as items of their own commands", () => {
+    const items = everyItem(appMenuTemplate("Luke")).filter((item) =>
+      [APP_COMMAND.COMMAND_PALETTE, APP_COMMAND.MOVE_TAB_LEFT, APP_COMMAND.MOVE_TAB_RIGHT].some(
+        (command) => command === item.id,
+      ),
+    );
+    assert.deepEqual(
+      items.map((item) => [item.id, item.label, item.accelerator]),
+      [
+        [APP_COMMAND.COMMAND_PALETTE, "Command Palette", "Command+K"],
+        [APP_COMMAND.MOVE_TAB_LEFT, "Move Tab Left", "Shift+Command+Left"],
+        [APP_COMMAND.MOVE_TAB_RIGHT, "Move Tab Right", "Shift+Command+Right"],
+      ],
+    );
   });
 });
 

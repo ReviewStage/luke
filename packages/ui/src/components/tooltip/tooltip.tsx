@@ -81,7 +81,7 @@ export const TOOLTIP_CHORD =
 
 /** What every hint is handed: the control it stands for, and how it shows and goes. */
 interface TooltipBase {
-  /** The hint's id, which the control's `aria-describedby` names while it describes it. */
+  /** The hint's own id, apart from its words' (`hint.tsx`'s `HintWords`), which describe its control. */
   id: string;
   /** The control it hangs from. */
   anchor: HTMLElement;

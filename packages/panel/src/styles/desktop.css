@@ -234,20 +234,24 @@ body,
   --title-bar-ground: var(--luke-color-well);
 }
 
-/* Where the side panel's toggle stands in from the window's right edge: a
-   row's inset, or, over the open sidebar's inset sheet on the Mac, as far
-   in from the sheet's right edge as it stands under the sheet's top, so it
-   nests in the sheet's corner on one gap rather than a hair under its top
-   and further from its side, as the plan's tab does at the other corner.
-   The web keeps a row's inset: its taller controls leave no room over them
-   to match (`--title-bar-middle`). */
-.desktop-shell {
-  --panel-toggle-right: var(--column-inset);
+/* A page with tabs stands its rows on the frame (shell.css), so the toggle
+   at the right and, while the sidebar is folded, the buttons at the left
+   rest on the frame as those rows do, with no ground of their own. */
+:where(:root):not([data-luke-room="narrow"])
+  .desktop-shell:has(.desktop-task)
+  .title-bar-controls[data-edge="end"],
+:where(:root):not([data-luke-room="narrow"])
+  .desktop-shell[data-sidebar-collapsed="true"][data-sidebar-overlay="closed"]:has(.desktop-task)
+  .title-bar-controls:not([data-edge]) {
+  --title-bar-ground: transparent;
 }
 
-[data-luke-profile="desktop"]
-  .desktop-shell[data-sidebar-collapsed="false"]:not([data-room="narrow"]) {
-  --panel-toggle-right: calc(var(--title-bar-middle) - var(--luke-control-height) / 2);
+/* Where the side panel's toggle stands in from the window's right edge: at
+   the sheets' own edge, so it ends on one line with the panel's sheet below
+   it, or the page's while the panel is shut. Only a page with tabs draws
+   the toggle. */
+.desktop-shell {
+  --panel-toggle-right: var(--sheet-gap);
 }
 
 .title-bar-controls[data-edge="end"] {
@@ -1290,25 +1294,30 @@ ul.actor-stack {
 }
 
 /* With the panel beside it, the toolbar ends at the panel's edge rather than
-   the window's, and the panel's own row leaves the toggle its room. */
+   the window's, and the panel's own row leaves the toggle its room. On the
+   frame its last control ends on one line with its sheet's edge below. */
 .desktop-shell .desktop-task[data-panel-open="true"] {
   --luke-toolbar-end-at: var(--column-inset);
 }
 
-/* Over the open sidebar's inset sheet on the Mac, the row is kept level with
-   the traffic lights, which leaves only a hair over its controls (shell.css).
-   The plan's toolbar, whose tab stands in the sheet's top left corner,
-   starts that same hair in from the sheet's side, so the tab nests in the
-   corner on one gap rather than a hair under the top and a row's inset from
-   the side. The toggle at the other corner does the same
-   (`--panel-toggle-right`), and so does the side panel's first tab while
-   the panel fills the sheet. A bar further in the column, a task's Inbox
-   tab's, sets its own start. */
-[data-luke-profile="desktop"]
-  .desktop-shell[data-sidebar-collapsed="false"]:not([data-room="narrow"])
+:where(:root):not([data-luke-room="narrow"]) .desktop-shell .desktop-task[data-panel-open="true"] {
+  --luke-toolbar-end-at: 0px;
+}
+
+/* On the frame the plan's first tab starts on one line with its sheet's
+   edge below it, as the side panel's does (`.side-panel-bar`); with the
+   sidebar folded it starts past the title bar's buttons, measured from the
+   sheet's edge, a gap in from the window's. A bar further in the column, a
+   task's Inbox tab's, sets its own start. */
+:where(:root):not([data-luke-room="narrow"]) .desktop-shell > .desktop-main .desktop-task-main {
+  --luke-toolbar-start-at: 0px;
+}
+
+:where(:root):not([data-luke-room="narrow"])
+  .desktop-shell[data-sidebar-collapsed="true"]
   > .desktop-main
   .desktop-task-main {
-  --luke-toolbar-start-at: calc((var(--desktop-bar-height) - var(--luke-control-height)) / 2);
+  --luke-toolbar-start-at: calc(var(--sidebar-toggle-clearance) - var(--sheet-gap));
 }
 
 /* The plan's toolbar answers its own width (`Toolbar`'s `measure`), so its
@@ -2167,20 +2176,18 @@ ul.actor-stack {
   --luke-toolbar-centre: off;
 }
 
-/* A task's own Inbox stands under its column's tab strip, clear of the title
-   bar's buttons at either end, so its item's bar keeps the column's own inset
-   whether the sidebar is folded or the panel's toggle is drawn. Under the
-   strip, the item's bar is the tab's own bar, as tall as every other tab's
-   (`PaneBar`) and on its ground, rather than a top row. */
-.desktop-task-main .inbox-view {
+/* A task's own Inbox draws in the side panel (`inboxBody` reaches `SidePanel`
+   alone), under its tab strip and clear of the title bar's buttons at either
+   end, so its item's bar keeps the column's own inset whether the sidebar is
+   folded or the panel's toggle is drawn. Under the strip, the item's bar is
+   the tab's own bar, as tall as every other tab's (`PaneBar`) and on its
+   ground, rather than a top row. */
+.side-panel-content .inbox-view {
   --luke-toolbar-start-at: var(--column-inset);
   --luke-toolbar-end-at: var(--column-inset);
   --luke-toolbar-height: var(--secondary-bar-height);
+  --luke-toolbar-block-inset: var(--luke-tight-gap);
   --luke-toolbar-ground: var(--luke-color-fill-hover);
-}
-
-:where(:root)[data-luke-room="narrow"] .desktop-shell .desktop-task-main .inbox-view {
-  --luke-toolbar-block-inset: var(--luke-space-4);
 }
 
 /* The list's body, inside the `ScrollArea` tab panel that scrolls it. */
@@ -2770,7 +2777,7 @@ ul.actor-stack {
   > .page-find
   > .inbox-view[data-columns="item"]
   .inbox-view-items {
-  --luke-toolbar-start-at: var(--sidebar-toggle-clearance);
+  --luke-toolbar-start-at: calc(var(--sidebar-toggle-clearance) - var(--sheet-gap));
 }
 
 /* Experiments ---------------------------------------------------------------- */
@@ -3059,11 +3066,11 @@ ul.actor-stack {
 }
 
 /* The form, drawn as a Settings page: each group's name over a card of
-   Settings rows, the groups a section apart. */
+   Settings rows, the groups a page section apart. */
 .automation-form {
   display: flex;
   flex-direction: column;
-  gap: var(--luke-section-gap);
+  gap: var(--luke-page-section-gap);
 }
 
 /* The prompt's placeholder, the height of its field at the rows it stands
@@ -4361,6 +4368,12 @@ ul.actor-stack {
     var(--column-inset);
 }
 
+/* On the frame its first tab starts on one line with its sheet's edge
+   below, as the plan's does. */
+:where(:root):not([data-luke-room="narrow"]) .desktop-shell .side-panel-bar {
+  padding-left: 0;
+}
+
 [data-luke-profile="desktop"] .side-panel-bar {
   -webkit-app-region: drag;
 }
@@ -4368,17 +4381,7 @@ ul.actor-stack {
 /* Full screen with the sidebar folded, the row starts where the plan's
    toolbar would: clear of the traffic lights and the sidebar toggle. */
 .desktop-shell[data-sidebar-collapsed="true"] .side-panel[data-full-screen="true"] .side-panel-bar {
-  padding-left: var(--sidebar-toggle-clearance);
-}
-
-/* Full screen beside the open sidebar on the Mac, its first tab nests in the
-   sheet's top left corner as the plan's tab does there. */
-[data-luke-profile="desktop"]
-  .desktop-shell[data-sidebar-collapsed="false"]:not([data-room="narrow"])
-  > .desktop-main
-  .side-panel[data-full-screen="true"]
-  > .side-panel-bar {
-  padding-left: calc((var(--desktop-bar-height) - var(--luke-control-height)) / 2);
+  padding-left: calc(var(--sidebar-toggle-clearance) - var(--sheet-gap));
 }
 
 /* The tabs and their "+" take what the row leaves beside the full-screen

@@ -60,8 +60,9 @@ export type UpdateMenuAct = (typeof UPDATE_MENU_ACT)[keyof typeof UPDATE_MENU_AC
 
 /**
  * The item's name for each act, in the title case a Mac menu writes. Note
- * that an act to choose carries no ellipsis, as no item in the bar does,
- * while the two that stand disabled say the work under way as a status does.
+ * that an act to choose carries no ellipsis, since it opens nothing and asks
+ * nothing, while the two that stand disabled say the work under way as a
+ * status does.
  */
 const UPDATE_MENU_LABELS = {
   [UPDATE_MENU_ACT.CHECK]: "Check for Updates",
@@ -227,6 +228,16 @@ function roleItem(
   return { role, accelerator: shortcutAccelerator(APP_SHORTCUTS[command].chord) };
 }
 
+/**
+ * An item that opens a window or asks before it acts, named with the "…" a
+ * Mac menu gives such an item. Note that the ellipsis belongs to the menu
+ * bar alone: ⌘K and the shortcuts page name the same commands bare, so it is
+ * added here and not to their shared labels.
+ */
+function opening(item: MenuItemConstructorOptions): MenuItemConstructorOptions {
+  return { ...item, label: `${item.label}…` };
+}
+
 /** A command with no key, named as the window names it. */
 function menuItem(command: MenuCommand): MenuItemConstructorOptions {
   return { label: menuTitle(MENU_COMMAND_LABELS[command]), click: sendCommand(command) };
@@ -306,7 +317,8 @@ function developerItem(tools: DeveloperToolsMenu): MenuItemConstructorOptions {
  * columns, the system's full screen, and its zoom are View's, reload first
  * as Safari's View keeps it, the zoom in
  * the order Chrome's View keeps it, the call's microphone and speaker are
- * Call's, back and forward are Go's as Finder and Safari keep them, the
+ * Call's, the command palette, the places, back and forward (as Finder and
+ * Safari keep them) and the tab moves are Go's, the
  * window's own are macOS's Window menu, and the shortcuts and the notes to
  * the people who make Luke are Help's. A gated feature's item stands only
  * while `shown` says its command does (`shortcutShown`), and View's
@@ -445,7 +457,7 @@ function fullMenuTemplate(
         { role: "about" },
         ...(update ? [updateItem(update)] : []),
         SEPARATOR,
-        commandItem(APP_COMMAND.SETTINGS),
+        opening(commandItem(APP_COMMAND.SETTINGS)),
         SEPARATOR,
         { role: "services" },
         SEPARATOR,
@@ -471,7 +483,7 @@ function fullMenuTemplate(
         commandItem(APP_COMMAND.COPY_LINK),
         SEPARATOR,
         commandItem(APP_COMMAND.MARK_TASK_DONE),
-        commandItem(APP_COMMAND.DELETE_TASK),
+        opening(commandItem(APP_COMMAND.DELETE_TASK)),
       ],
     },
     {
@@ -543,6 +555,8 @@ function fullMenuTemplate(
     {
       label: "Go",
       submenu: [
+        commandItem(APP_COMMAND.COMMAND_PALETTE),
+        SEPARATOR,
         commandItem(APP_COMMAND.ASK_LUKE),
         commandItem(APP_COMMAND.INBOX),
         commandItem(APP_COMMAND.TASKS),
@@ -553,6 +567,9 @@ function fullMenuTemplate(
         SEPARATOR,
         commandItem(APP_COMMAND.NEXT_RECENT_TAB),
         commandItem(APP_COMMAND.PREVIOUS_RECENT_TAB),
+        SEPARATOR,
+        commandItem(APP_COMMAND.MOVE_TAB_LEFT),
+        commandItem(APP_COMMAND.MOVE_TAB_RIGHT),
       ],
     },
     {
@@ -571,8 +588,8 @@ function fullMenuTemplate(
       submenu: [
         commandItem(APP_COMMAND.KEYBOARD_SHORTCUTS),
         SEPARATOR,
-        menuItem(APP_COMMAND.SEND_FEEDBACK),
-        menuItem(APP_COMMAND.SUGGEST_FEATURE),
+        opening(menuItem(APP_COMMAND.SEND_FEEDBACK)),
+        opening(menuItem(APP_COMMAND.SUGGEST_FEATURE)),
       ],
     },
   ];
