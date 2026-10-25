@@ -9,6 +9,7 @@ import { Effect } from "effect";
 import type { HttpClient } from "effect/http";
 import { sandboxListRefusal } from "../../testing/vercel-sandbox-fake.js";
 import type { AdmittedConversation } from "../brain-host/conversation.js";
+import { vercelMachineLayer } from "../machine/vercel-machine.js";
 import { agentSandboxDoors, SANDBOX_DOOR_MAX_BYTES } from "./sandbox-door.js";
 
 /**
@@ -115,9 +116,11 @@ const ADMITTED: AdmittedConversation = {
 
 /** The doors over the layer given, their effects run on this test's own context. */
 const doorsOver = (admitted: AdmittedConversation) =>
-  Effect.map(Effect.context<HttpClient.HttpClient>(), (context) =>
-    agentSandboxDoors((effect) => Effect.runPromiseWith(context)(effect), fixtureToken)(admitted),
-  );
+  Effect.map(Effect.context<HttpClient.HttpClient>(), (context) => {
+    const run = <A, E>(effect: Effect.Effect<A, E, HttpClient.HttpClient>) =>
+      Effect.runPromiseWith(context)(effect);
+    return agentSandboxDoors(run, vercelMachineLayer({ readToken: fixtureToken, run }))(admitted);
+  });
 
 /** The file door over the layer given. */
 const doorOver = (admitted: AdmittedConversation) =>

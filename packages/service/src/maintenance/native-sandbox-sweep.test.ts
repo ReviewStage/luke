@@ -15,7 +15,7 @@ import { eq } from "drizzle-orm";
 import { Duration, Effect, Option } from "effect";
 import { afterEach, vi } from "vitest";
 import { CODER } from "../agents/coder-host/bounds.js";
-import { RUNNER_TAG } from "../agents/coder-host/runner-sessions.js";
+import { RUNNER_TAG } from "../agents/machine/vercel-machine.js";
 import { commandRead, type ReadCommand } from "../testing/runner-sandbox-fake.js";
 import { sandboxListRefusal, sandboxStopRefusal } from "../testing/vercel-sandbox-fake.js";
 import { NATIVE_SANDBOX_SWEEP, sweepNativeSandboxes } from "./native-sandbox-sweep.js";

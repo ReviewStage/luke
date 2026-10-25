@@ -45,12 +45,12 @@ import { SERVER_AGENT_HARNESS } from "../../events/server-events.js";
 import { providerModelOf } from "../../providers/model-catalog.js";
 import type { BrainHostTurn } from "../brain-host/bounds.js";
 import { KEY_REFUSAL, PLAN_REFUSAL } from "../brain-host/eve-sessions.js";
+import { LaunchRefused } from "../machine/agent-machine.js";
 import { SKILL_ROOT } from "../repository-skills.js";
 import { CODER } from "./bounds.js";
 import { NATIVE_SESSION_PREFIX } from "./native-runtime.js";
 import { NATIVE_SKILLS_PATH } from "./native-skills.js";
 import {
-  LaunchRefused,
   type RunnerHarness,
   type RunnerServices,
   type RunnerSessionsOptions,

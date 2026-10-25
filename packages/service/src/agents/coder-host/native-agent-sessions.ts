@@ -27,19 +27,22 @@ import {
 } from "../../integrations/connection-door.js";
 import { deploymentEveOrigin } from "../brain-host/eve-origin.js";
 import { LUKE_MCP_PATH, lukeIntegrationMcpUrl } from "../luke-mcp/app.js";
+import type { AgentMachine } from "../machine/agent-machine.js";
+import { type SandboxRunner, vercelMachineLayer } from "../machine/vercel-machine.js";
 import { memoryOnFor } from "../memory-tools.js";
 import { RUNNER_EVENTS_PATH } from "../native-events/runner-events-app.js";
 import { RUNNER_TOKEN_PATH } from "../native-events/runner-token-app.js";
+import { deploymentOidcToken } from "../vercel-sandbox-api.js";
 import { workspaceStepOf } from "../written-mentions.js";
 import { agentCiReadable, agentCoAuthor } from "./checkout.js";
 import { claudeCodeSessions } from "./claude-code-sessions.js";
 import { codexSessions } from "./codex-sessions.js";
 import { agentCoderInstructions, CODER_HARNESS, type CoderHarness } from "./instructions.js";
-import type { RunnerServices, RunnerSessionsOptions, SandboxRunner } from "./runner-sessions.js";
+import type { RunnerServices, RunnerSessionsOptions } from "./runner-sessions.js";
 import { NativeAgentSessions } from "./runtime-sessions.js";
 
 export interface NativeAgentSessionsOptions {
-  /** Runs one effect on the function's runtime, which the checkout reaches the sandbox through. */
+  /** Runs one effect on the function's runtime, which the checkout reaches the agent's machine through. */
   readonly run: SandboxRunner;
   /** The deployment's own origin, which the runner reaches Luke at; none opens no harness. */
   readonly origin?: () => string | undefined;
@@ -88,10 +91,14 @@ const nativeIntegrations = (userId: string, agent: CodingAgent, origin: string) 
     (names) => names.map((name) => ({ name, url: lukeIntegrationMcpUrl(origin, name) })),
   );
 
-/** The native harnesses over the function's services, as above. */
+/** The native harnesses over the function's services, as above, each agent's runner on Vercel Sandbox (`vercel-machine.ts`). */
 export function nativeAgentSessionsLayer(
   options: NativeAgentSessionsOptions,
-): Layer.Layer<NativeAgentSessions, never, RunnerServices | ConnectionDoorServices> {
+): Layer.Layer<
+  NativeAgentSessions,
+  never,
+  Exclude<RunnerServices, AgentMachine> | ConnectionDoorServices
+> {
   return Layer.effect(
     NativeAgentSessions,
     Effect.gen(function* () {
@@ -116,7 +123,6 @@ export function nativeAgentSessionsLayer(
             Effect.map(Option.match({ onNone: () => 0, onSome: (last) => last + 1 })),
             Effect.provideContext(context),
           ),
-        run: options.run,
       });
       return {
         sessions: (runtime, account) => {
@@ -138,5 +144,5 @@ export function nativeAgentSessionsLayer(
         },
       };
     }),
-  );
+  ).pipe(Layer.provide(vercelMachineLayer({ readToken: deploymentOidcToken, run: options.run })));
 }
