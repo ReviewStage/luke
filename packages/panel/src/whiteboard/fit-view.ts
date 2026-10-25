@@ -14,6 +14,12 @@
  * down to a tenth, which at a phone's zoom of a third gives up a quarter of the
  * room. And that this module holds no Excalidraw value and reads no DOM, so
  * the panel's tests read it without the canvas Excalidraw needs to load.
+ *
+ * A fitted view follows its canvas: while no one has moved it, a canvas that
+ * changes size is fitted again (`followFit`). A window opened large and then
+ * made small, or a pane that takes its width only after the board loaded,
+ * would otherwise keep the first size's view, too large and off the canvas's
+ * edges. Once the developer scrolls or zooms, the view is theirs and stays.
  */
 
 /** A box in the canvas's own pixels. */
@@ -111,4 +117,26 @@ export function fitView(
     fit = placeIn(canvas, inset, bounds);
   }
   return fit.view;
+}
+
+/** A view the board fitted, and the canvas size it was fitted at. */
+export interface Fitted {
+  readonly view: View;
+  readonly width: number;
+  readonly height: number;
+}
+
+/** What a fitted view does on a change to the canvas: stays, is fitted again, or is the developer's from now on. */
+export const FOLLOW = { HOLD: "hold", REFIT: "refit", RELEASE: "release" } as const;
+export type Follow = (typeof FOLLOW)[keyof typeof FOLLOW];
+
+/** What `fitted` does now that the canvas stands at `now`: fitted again where only its size changed, released where its view moved. */
+export function followFit(fitted: Fitted, now: Fitted): Follow {
+  const { view } = fitted;
+  const moved =
+    now.view.zoom !== view.zoom ||
+    now.view.scrollX !== view.scrollX ||
+    now.view.scrollY !== view.scrollY;
+  if (moved) return FOLLOW.RELEASE;
+  return now.width === fitted.width && now.height === fitted.height ? FOLLOW.HOLD : FOLLOW.REFIT;
 }
