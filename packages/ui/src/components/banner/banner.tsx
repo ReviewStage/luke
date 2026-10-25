@@ -4,7 +4,8 @@ import { STATUS_TONE, type StatusTone } from "../../status-tone.js";
  * banner.tsx -- the one strip a notice about a place is drawn as: a glyph, its words, and the presses that answer it, which drop beneath the words where the strip is narrow.
  *
  * A notice comes in three looks: a slim strip across a column, its words held
- * to one line (a stranded repository's); a card over a document, its glyph
+ * to one line and fading out at its end where it cuts them short (a stranded
+ * repository's); a card over a document, its glyph
  * in a disc (an archived plan's, the plan template's); and a quiet row in the
  * frame its place draws around it (an archived agent's, in its composer's
  * place). Each is in one of a few tones, which tint the strip and the card.
@@ -25,6 +26,7 @@ import { STATUS_TONE, type StatusTone } from "../../status-tone.js";
 
 import { type ReactNode, useId } from "react";
 import { Alert, AlertAction, AlertDescription, AlertGlyph, AlertRow } from "../../shadcn/alert.js";
+import { useClipped } from "../../use-clipped.js";
 
 /** How a banner looks; its layout is the same for all three. */
 export const BANNER_LOOK = {
@@ -54,13 +56,20 @@ export function Banner({
   children: ReactNode;
 }): React.JSX.Element {
   const wordsId = useId();
+  const [measured, clipped] = useClipped();
+  const strip = look === BANNER_LOOK.STRIP;
   return (
     <Alert look={look} tone={tone} aria-labelledby={wordsId}>
       <AlertRow look={look}>
         <AlertGlyph look={look} tone={tone}>
           {glyph}
         </AlertGlyph>
-        <AlertDescription look={look} id={wordsId}>
+        <AlertDescription
+          look={look}
+          id={wordsId}
+          ref={strip ? measured : undefined}
+          data-overflow={strip ? String(clipped) : undefined}
+        >
           {children}
         </AlertDescription>
         {actions === undefined ? null : <AlertAction>{actions}</AlertAction>}

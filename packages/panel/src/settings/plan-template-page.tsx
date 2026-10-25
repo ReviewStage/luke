@@ -394,7 +394,11 @@ function TemplateNote({ keep }: { keep: string | undefined }): React.JSX.Element
 
 /** The template's document as the page draws it, in a plan's type and kept out of a recording. */
 function TemplateFrame({ children }: { children: React.ReactNode }): React.JSX.Element {
-  return <Fill className="desktop-document template-document ph-no-capture">{children}</Fill>;
+  return (
+    <Fill className="desktop-document template-document ph-no-capture @container/plan-document">
+      {children}
+    </Fill>
+  );
 }
 
 /**

@@ -161,17 +161,88 @@ export type CallLiveProps =
       now?: number | undefined;
     };
 
+/**
+ * A call's status in a message box's foot, on one line in the caption's
+ * type. In a narrow box's foot it gives way before the call's controls or
+ * the send do: first a live call's word (`liveWordClass`), the mark and the
+ * count saying the call is up, while "Connecting…" and "Ending…", which
+ * have no count to say it and are narrower for it, keep theirs; and then the
+ * whole, where the box folds its own presses into its ⋯ (a card under
+ * 400px), the mutes' struck glyphs and End call still saying a call stands
+ * (`composer-foot.css`'s container). Note that each width is off-scale:
+ * 496px, where the foot's live word stops fitting, and 376px, where its
+ * live mark does.
+ */
+const LIVE =
+  "luke-call-live flex flex-none items-center gap-luke-6 text-caption whitespace-nowrap text-muted-foreground @max-[376px]/luke-composer-foot:hidden";
+
+/** The word, in the text's ink while live, and quiet while muted, never red, or while the call comes up or goes down. */
+function liveWordClass(props: CallLiveProps): string {
+  if (props.stage !== CALL_STAGE.LIVE) return "luke-call-live-word text-muted-foreground";
+  const ink = props.muted ? "text-muted-foreground" : "text-foreground";
+  return `luke-call-live-word ${ink} @max-[496px]/luke-composer-foot:hidden`;
+}
+
+/**
+ * The call bar's own row, laid out as a voice composer's controls are: the
+ * call's two lines at its left and its controls at its right. Its least
+ * height holds both lines, so it never moves as the backend's line comes
+ * and goes, but where it is too narrow for the call on one row. It answers
+ * its own width, as the sidebar's card, the floating card, and the floating
+ * window draw it, each at a width of its own.
+ */
+const BAR =
+  "luke-call-bar @container/luke-call-bar mx-auto my-0 flex min-h-call-row max-w-call-row-max flex-wrap items-center gap-x-block-gap gap-y-control-gap";
+
+/**
+ * The call's two lines, each cut short on one line, so a long command never
+ * wraps the row or pushes the controls, and the dots are never cut. Too
+ * narrow for the status beside the controls (the sidebar's card at its
+ * narrowest, an off-scale 210px), the status takes a row of its own, the
+ * voice's word whole, and the controls stand under it at the right. The
+ * floating window's bar is wider than this and must stay so, since its
+ * window's height is fixed.
+ */
+const STATUS =
+  "luke-call-status flex min-w-0 flex-1 flex-col gap-luke-2 whitespace-nowrap @max-[210px]/luke-call-bar:basis-full";
+
+/**
+ * The backend's line, in the caption's muted voice. Narrower than an
+ * off-scale 280px, a call card's controls at its head's step, the working
+ * dots go, the line's own words saying Luke works, so Luke's command keeps
+ * their room.
+ */
+const BACKEND =
+  "luke-call-backend flex min-w-0 items-center gap-control-gap text-caption text-muted-foreground";
+const BACKEND_DOTS = "luke-call-backend-dots flex @max-[280px]/luke-call-bar:hidden";
+const BACKEND_ACTION = "luke-call-backend-action font-mono";
+
+/**
+ * End call stands apart from the two mutes, so muting never hangs up; at a
+ * call card's narrowest the controls close up to a card head's own step, so
+ * its mutes and End call stand under its Video on and its way back.
+ */
+const CONTROLS =
+  "luke-call-controls ml-auto flex flex-none items-center gap-control-gap @max-[280px]/luke-call-bar:gap-tight-gap";
+const MUTES = "luke-call-mutes flex flex-none items-center gap-tight-gap";
+
 /** The mark a call's status leads with: the live tone while up, the struck microphone while muted, and the quiet tone either side of it. */
 function CallLiveMark({ props }: { props: CallLiveProps }): React.JSX.Element {
   if (props.stage === CALL_STAGE.LIVE && props.muted) {
     return (
-      <span className="luke-call-live-muted" aria-hidden="true">
+      <span className="luke-call-live-muted flex flex-none [&>svg]:size-icon-12" aria-hidden="true">
         <MicrophoneOffIcon />
       </span>
     );
   }
   const tone = props.stage === CALL_STAGE.LIVE ? STATUS_TONE.WORKING : STATUS_TONE.NEUTRAL;
-  return <span className="luke-call-live-mark" data-tone={tone} aria-hidden="true" />;
+  return (
+    <span
+      className="luke-call-live-mark size-luke-6 flex-none rounded-luke-full bg-tone-ink"
+      data-tone={tone}
+      aria-hidden="true"
+    />
+  );
 }
 
 /** The word a call's status says, by its stage and, while it is up, whether it is muted. */
@@ -199,12 +270,12 @@ export function CallLive(props: CallLiveProps): React.JSX.Element {
   const live = props.stage === CALL_STAGE.LIVE;
   return (
     <span
-      className="luke-call-live"
+      className={LIVE}
       data-stage={props.stage}
       data-muted={String(props.stage === CALL_STAGE.LIVE && props.muted)}
     >
       <CallLiveMark props={props} />
-      <span className="luke-call-live-word">{callLiveWord(props)}</span>
+      <span className={liveWordClass(props)}>{callLiveWord(props)}</span>
       {live ? (
         <Time
           at={props.startedAt}
@@ -278,7 +349,7 @@ export function VideoToggle({
   return hint === VIDEO_TOGGLE_HINT.TOOLTIP ? (
     <Tooltip label={label}>{toggle}</Tooltip>
   ) : (
-    <span className="luke-call-video-toggle" title={label}>
+    <span className="luke-call-video-toggle flex" title={label}>
       {toggle}
     </span>
   );
@@ -301,19 +372,19 @@ function CallStatusLines({
 }): React.JSX.Element {
   const brain = status?.backend.brain;
   return (
-    <span className="luke-call-status">
+    <span className={STATUS}>
       <Text
         as={TEXT_ELEMENT.SPAN}
         variant={TEXT_VARIANT.INHERIT}
         truncate
-        className="luke-call-status-word"
+        className="luke-call-status-word data-[muted=true]:text-muted-foreground"
         data-muted={String(muted)}
       >
         {status?.voiceWord}
       </Text>
       {brain !== undefined ? (
-        <span className="luke-call-backend">
-          <span className="luke-call-backend-dots">
+        <span className={BACKEND}>
+          <span className={BACKEND_DOTS}>
             <ThinkingDots />
           </span>
           {/* Note that this keeps the system's title, because the floating call window is too short for a pill. */}
@@ -327,7 +398,7 @@ function CallStatusLines({
               BRAIN_THINKING
             ) : (
               <>
-                {BRAIN_WORKING} · <span className="luke-call-backend-action">{brain.action}</span>
+                {BRAIN_WORKING} · <span className={BACKEND_ACTION}>{brain.action}</span>
               </>
             )}
           </Text>
@@ -345,7 +416,7 @@ function CallStatusLines({
  * beside them, apart from both so muting never hangs up. The two mutes'
  * chords are not the bar's to offer: they answer while any call is in
  * progress, wherever the owner stands. A narrow bar stacks its status over
- * its controls rather than cutting the voice's word (call.css).
+ * its controls rather than cutting the voice's word (`STATUS`).
  */
 export function CallBar({
   status,
@@ -368,10 +439,10 @@ export function CallBar({
   titled?: boolean;
 }): React.JSX.Element {
   return (
-    <footer className="luke-call-bar">
+    <footer className={BAR}>
       <CallStatusLines status={status} muted={microphone.muted} titled={titled} />
-      <div className="luke-call-controls">
-        <div className="luke-call-mutes">
+      <div className={CONTROLS}>
+        <div className={MUTES}>
           <CallMute device={CALL_DEVICE.SPEAKER} muted={speaker.muted} onPress={speaker.onPress} />
           <CallMute
             device={CALL_DEVICE.MICROPHONE}

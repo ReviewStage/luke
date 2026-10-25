@@ -68,6 +68,14 @@ import { Highlighted } from "./search-field.js";
  * scroll it. Where either is drawn, and what the keys do, is the owner's.
  */
 
+/** A value a parameter takes, as a chip in the code face, its default outlined. */
+const PARAMETER_VALUE =
+  "rounded-luke-6 bg-fill-strong px-tight-gap font-mono text-caption text-muted-foreground data-[default=true]:text-foreground data-[default=true]:shadow-tool-default";
+
+/** A tool's page's title, in the head's weight, given way before the name after it. */
+const DETAIL_TITLE =
+  "integration-tool-detail-title m-0 flex-initial text-section font-luke-semibold text-foreground";
+
 /** Keeps a row inside its scroller's view, scrolling only the scroller (the renderer's rule against `scrollIntoView`). */
 export function keepInView(list: HTMLElement | null, row: Element | null): void {
   if (list === null || !(row instanceof HTMLElement)) return;
@@ -162,19 +170,22 @@ export function IntegrationToolList({
               id={idOf?.(tool)}
               ref={rowRef === undefined ? undefined : (press) => rowRef(tool, press)}
               title={
-                <span className="integration-tool-name">
+                <span className="integration-tool-name flex min-w-0 items-baseline gap-item-gap [&>.luke-badge]:flex-none [&>.luke-badge]:self-center">
                   <OneLine
                     className={
                       namedApart(tool)
-                        ? "integration-tool-title"
-                        : "integration-tool-title integration-tool-code"
+                        ? "integration-tool-title flex-initial"
+                        : "integration-tool-title integration-tool-code flex-initial font-mono text-caption-inline"
                     }
                     words={toolTitle(tool)}
                   >
                     <Highlighted text={toolTitle(tool)} tokens={tokens} />
                   </OneLine>
                   {namedApart(tool) ? (
-                    <OneLine className="integration-tool-id" words={tool.name}>
+                    <OneLine
+                      className="integration-tool-id min-w-0 flex-[0_100_auto] font-mono text-caption-inline font-luke-regular text-muted-foreground"
+                      words={tool.name}
+                    >
                       <Highlighted text={tool.name} tokens={tokens} />
                     </OneLine>
                   ) : null}
@@ -210,32 +221,45 @@ function Parameters({ tool }: { tool: IntegrationTool }): React.JSX.Element | nu
   // A tool whose input schema its server's answer could not say is drawn with no parameters at all, rather than as taking none.
   if (tool.parameters === undefined) return null;
   return (
-    <section className="integration-tool-parameters" aria-label="Parameters">
-      <Text as={TEXT_ELEMENT.H3} variant={TEXT_VARIANT.GROUP} className="integration-tool-section">
+    <section className="integration-tool-parameters @container" aria-label="Parameters">
+      <Text
+        as={TEXT_ELEMENT.H3}
+        variant={TEXT_VARIANT.GROUP}
+        className="integration-tool-section m-0 mb-tight-gap flex items-baseline gap-item-gap"
+      >
         {"Parameters"}
-        <span className="integration-tool-section-count">
+        <span className="integration-tool-section-count tabular-nums">
           {tool.parameters.length === 0 ? "none" : tool.parameters.length}
         </span>
       </Text>
       {tool.parameters.length === 0 ? null : (
-        <dl className="integration-tool-parameter-list">
+        <dl className="integration-tool-parameter-list m-0 flex flex-col">
           {requiredFirst(tool.parameters).map((parameter) => (
-            <div key={parameter.name} className="integration-tool-parameter">
-              <dt className="integration-tool-parameter-head">
-                <span className="integration-tool-parameter-name">{parameter.name}</span>
-                <span className="integration-tool-parameter-type">{parameter.type}</span>
+            <div
+              key={parameter.name}
+              className="integration-tool-parameter flex flex-col gap-list-gap border-t border-border py-item-gap"
+            >
+              <dt className="integration-tool-parameter-head flex min-w-0 flex-wrap items-baseline gap-x-item-gap">
+                <span className="integration-tool-parameter-name select-text font-mono text-caption-inline text-foreground wrap-anywhere">
+                  {parameter.name}
+                </span>
+                <span className="integration-tool-parameter-type font-mono text-caption-inline text-muted-foreground">
+                  {parameter.type}
+                </span>
                 {parameter.required ? (
-                  <span className="integration-tool-parameter-required">required</span>
+                  <span className="integration-tool-parameter-required ml-auto text-caption-inline font-luke-semibold text-attention">
+                    required
+                  </span>
                 ) : null}
               </dt>
               {parameter.description === undefined &&
               parameter.values === undefined &&
               parameter.default === undefined ? null : (
-                <dd className="integration-tool-parameter-body">
+                <dd className="integration-tool-parameter-body m-0 flex select-text flex-col gap-tight-gap text-caption text-muted-foreground">
                   {parameter.description !== undefined ? (
                     <MarkdownMessage
                       words={parameter.description}
-                      className="integration-tool-parameter-description"
+                      className="integration-tool-parameter-description [&_code]:text-foreground"
                     />
                   ) : null}
                   <ParameterValues values={parameter.values} fallback={parameter.default} />
@@ -259,16 +283,22 @@ function ParameterValues({
 }): React.JSX.Element | null {
   if (values.length === 0 && fallback === undefined) return null;
   return (
-    <span className="integration-tool-parameter-values">
+    <span className="integration-tool-parameter-values flex flex-wrap items-baseline gap-tight-gap text-muted-foreground">
       {values.map((value) => (
-        <code key={value} data-default={value === fallback ? "true" : undefined}>
+        <code
+          key={value}
+          className={PARAMETER_VALUE}
+          data-default={value === fallback ? "true" : undefined}
+        >
           {value}
         </code>
       ))}
       {fallback !== undefined && !values.includes(fallback) ? (
         <span>
           {"default "}
-          <code data-default="true">{fallback}</code>
+          <code className={PARAMETER_VALUE} data-default="true">
+            {fallback}
+          </code>
         </span>
       ) : null}
     </span>
@@ -304,7 +334,7 @@ export function IntegrationToolDetail({
   const title = toolTitle(tool);
   return (
     <Fill as={FILL_ELEMENT.ARTICLE} className="integration-tool-detail" aria-label={title}>
-      <header className="integration-tool-detail-head">
+      <header className="integration-tool-detail-head flex h-pane-bar min-w-0 flex-none items-center gap-icon-gap border-b border-border px-list-inset">
         {onBack !== undefined && backPlace !== undefined ? (
           <BackButton
             label={backPlace}
@@ -318,8 +348,8 @@ export function IntegrationToolDetail({
           as={ONE_LINE_ELEMENT.H2}
           className={
             namedApart(tool)
-              ? "integration-tool-detail-title"
-              : "integration-tool-detail-title integration-tool-code"
+              ? DETAIL_TITLE
+              : `${DETAIL_TITLE} integration-tool-code font-mono text-caption-inline`
           }
           words={title}
         >
@@ -328,7 +358,7 @@ export function IntegrationToolDetail({
         {namedApart(tool) ? (
           <OneLine
             as={ONE_LINE_ELEMENT.CODE}
-            className="integration-tool-detail-name"
+            className="integration-tool-detail-name min-w-0 flex-[0_100_auto] select-text font-mono text-caption-inline text-muted-foreground"
             words={tool.name}
           >
             {tool.name}
@@ -337,7 +367,7 @@ export function IntegrationToolDetail({
       </header>
       {/* The page's one scroller, focused by script so its keys scroll it as any focused scroller's do. */}
       <ScrollArea ref={bodyRef} tabIndex={-1} onKeyDown={onBodyKeyDown}>
-        <div className="integration-tool-detail-body">
+        <div className="integration-tool-detail-body flex flex-col gap-block-gap px-list-inset pt-row-inset pb-list-inset">
           {hints.length > 0 ? (
             <Inline
               as={LAYOUT_ELEMENT.UL}
@@ -360,7 +390,7 @@ export function IntegrationToolDetail({
           ) : (
             <MarkdownMessage
               words={tool.description}
-              className="integration-tool-description-whole"
+              className="integration-tool-description-whole cursor-text select-text text-caption-inline leading-tool-description text-muted-foreground"
               found={tokens}
             />
           )}
