@@ -847,8 +847,10 @@
     var(--luke-collection-page-inset)
   );
   --spacing-detail-page-inset: var(--luke-detail-page-inset);
-  /* A detail column's end: its inset alone, since a toast is an overlay and moves nothing. */
-  --spacing-detail-page-end: var(--luke-detail-page-inset);
+  /* A detail column's end, clear of what a phone's call card takes of the
+     window's foot (`--luke-card-room`, which the shell says). A toast is an
+     overlay and takes nothing. */
+  --spacing-detail-page-end: max(var(--luke-detail-page-inset), var(--luke-card-room, 0px));
   --spacing-public-page-start: var(--luke-public-page-start);
   --spacing-public-page-end: var(--luke-public-page-end);
   --container-public-page: 700px; /* off-scale: the site's reading column */

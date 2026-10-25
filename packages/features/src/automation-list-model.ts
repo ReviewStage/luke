@@ -21,6 +21,7 @@ import {
 } from "./automation-wire.js";
 import { agentFailureWords } from "./coding-agent-failure-words.js";
 import { CODING_AGENT_STATUS, type CodingAgentStatus } from "./coding-agent-wire.js";
+import { titlesNothing } from "./task-wire.js";
 import { clockText } from "./time-format.js";
 import { SENTRY_LEVEL, TRIGGER_CATALOG } from "./trigger-catalog.js";
 import { andList, orList } from "./words.js";
@@ -347,7 +348,9 @@ export function automationFiringTitle(firing: AutomationRunSummary["firing"]): s
 
 /** A run's title: its agent's own, where it has one, else what fired it. */
 export function automationRunTitle(run: AutomationRunSummary): string {
-  if (run.agent !== null && run.agent.title !== null) return run.agent.title;
+  // Note that a placeholder title ("<untitled>") names nothing, so the run is titled as one whose agent has no title.
+  const title = run.agent?.title ?? null;
+  if (title !== null && !titlesNothing(title)) return title;
   return automationFiringTitle(run.firing);
 }
 

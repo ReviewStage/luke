@@ -17,7 +17,9 @@ import { runAgent } from "./runtime.js";
  * open claims the conversation's record itself rather than finding it
  * claimed (`CoderHost.admitSandbox`). It stands for the session, across
  * turns and deploys; a sandbox Vercel stopped resumes from its snapshot with
- * the checkout and the agent's changes intact. The image, its timeout and
+ * the checkout and the agent's changes intact, and one whose sandbox or
+ * snapshot is gone opens anew through this selector, its uncommitted work
+ * lost (`coder-host/bounds.ts`'s `SANDBOX_SNAPSHOTS`). The image, its timeout and
  * size, and the store hook's stop at each turn's end are the coding agent's
  * policy over the one environment both roots share, its size the one its
  * repository asks for (`coder-host/bounds.ts`'s `sandboxVcpus`), which is

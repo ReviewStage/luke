@@ -66,7 +66,7 @@ export type DetailPageInset = (typeof DETAIL_PAGE_INSET)[keyof typeof DETAIL_PAG
 const COLUMN_CLASS =
   "box-border min-w-0 min-h-0 overscroll-contain scrollbar-gutter-stable outline-offset-[var(--luke-focus-ring-inset)]";
 
-/** A column's content, ending on the page's inset, a long word broken rather than run past the column. */
+/** A column's content, ending on the page's inset or clear of a phone's call card, whichever is more, a long word broken rather than run past the column. */
 const CONTENT_CLASS = "pb-detail-page-end wrap-anywhere";
 
 /** What stands beside the main content: facts about the thing, its people, its history. */

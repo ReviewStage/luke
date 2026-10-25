@@ -13,7 +13,7 @@ import type { StoredAutomationOrigin } from "@luke/database/schemas/coding-agent
 import { firstMessageParts } from "@luke/features/agent-replay";
 import { AUTOMATION_FIRING } from "@luke/features/automation-wire";
 import { CODING_AGENT_BOUNDS } from "@luke/features/coding-agent-wire";
-import { UNTITLED_TASK_NAME } from "@luke/features/task-wire";
+import { titlesNothing } from "@luke/features/task-wire";
 import { failureKind } from "@luke/runtime/effect";
 import { generateText, isTextUIPart, type LanguageModel, type ToolSet } from "ai";
 import { Effect, Option, type Schema } from "effect";
@@ -119,7 +119,7 @@ function tidyAgentTitle(answer: string): Option.Option<string> {
     .slice(0, CODING_AGENT_BOUNDS.MAX_TITLE_CHARS)
     .trim();
   // A task's own sentinel names nothing, so a task it would name stays open to the next title.
-  if (title.length === 0 || title.toLowerCase() === UNTITLED_TASK_NAME.toLowerCase()) {
+  if (title.length === 0 || titlesNothing(title)) {
     return Option.none();
   }
   return Option.some(title);

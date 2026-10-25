@@ -156,7 +156,11 @@ export type { ListSelection } from "../selection/list-selection.js";
  * instead (`LIST_ROW_LEAD.LINE`), between its title and its description,
  * its glyph and its whole name in the description's quieter ink, as a
  * mail app names a thread's sender over its preview, so neither the name
- * nor the preview is cut short to make room for the other.
+ * nor the preview is cut short to make room for the other. A fuller row
+ * that keeps to two lines may lead its description with the plain words
+ * instead (`LIST_ROW_LEAD.INLINE`), its glyph and its whole name in the
+ * description's ink, a middle dot, then the description, as a two-line
+ * row of its own kind reads its one quiet line.
  *
  * A row may be swiped right to one act (`swipe`), as a mail app's thread
  * is swiped to mark it read: a short swipe leaves it open on the act's
@@ -190,9 +194,10 @@ export const LIST_ROW_ACTIONS = {
 
 export type ListRowActions = (typeof LIST_ROW_ACTIONS)[keyof typeof LIST_ROW_ACTIONS];
 
-/** Where what a row belongs to stands: a chip leading its description's line, or a line of its own over the description. */
+/** Where what a row belongs to stands: a chip leading its description's line, its plain words leading that line, or a line of its own over the description. */
 export const LIST_ROW_LEAD = {
   DESCRIPTION: "description",
+  INLINE: "inline",
   LINE: "line",
 } as const;
 
@@ -295,16 +300,22 @@ const CHEVRON_CLASS =
 
 /**
  * What a row belongs to: a small chip of a glyph and a name cut short at a
- * short name's width leading its description, or a line of its own between
+ * short name's width leading its description, the glyph and the name bare
+ * leading it, or a line of its own between
  * its title and its description, its glyph and its whole name in the
  * description's quieter ink, with no chip round it.
  */
 const LEAD_CLASS = {
   [LIST_ROW_LEAD.DESCRIPTION]:
     "luke-list-row-lead me-luke-4 inline-flex max-w-list-row-lead items-center gap-luke-2 rounded-luke-6 bg-fill-strong px-luke-4 py-0 align-bottom text-muted-foreground",
+  [LIST_ROW_LEAD.INLINE]:
+    "luke-list-row-lead inline-flex max-w-full items-center gap-luke-4 align-bottom text-muted-foreground",
   [LIST_ROW_LEAD.LINE]:
     "luke-list-row-lead flex items-center gap-luke-4 text-caption text-muted-foreground",
 } as const satisfies Record<ListRowLeadAt, string>;
+
+/** What stands between a lead's plain words and the description they lead. */
+const LEAD_SEPARATOR = " · ";
 
 /** The parts of a row swiped to its one act: the act's button under the face, its press, and the label riding the face's edge. */
 const SWIPE_CLASS = "luke-list-row-swipe absolute inset-0 rounded-inherit";
@@ -622,13 +633,16 @@ export function ListRow({
           heading
         )}
         {leadAt === LIST_ROW_LEAD.LINE ? leadMark : null}
-        {said(description) || (leadAt === LIST_ROW_LEAD.DESCRIPTION && lead !== undefined) ? (
+        {said(description) || (leadAt !== LIST_ROW_LEAD.LINE && lead !== undefined) ? (
           <span
             ref={described}
             className="luke-list-row-description"
             data-overflow={describedDense ? String(descriptionClipped) : undefined}
           >
-            {leadAt === LIST_ROW_LEAD.DESCRIPTION ? leadMark : null}
+            {leadAt === LIST_ROW_LEAD.LINE ? null : leadMark}
+            {leadAt === LIST_ROW_LEAD.INLINE && lead !== undefined && said(description)
+              ? LEAD_SEPARATOR
+              : null}
             {description}
           </span>
         ) : null}

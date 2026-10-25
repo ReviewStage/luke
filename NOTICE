@@ -35,10 +35,11 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
-shadcn/ui chart (packages/ui/src/chart/chart.tsx)
--------------------------------------------------
-Vendored from https://ui.shadcn.com (registry new-york-v4/ui/chart) and
-modified. MIT License.
+shadcn/ui (packages/ui/src/chart/chart.tsx, packages/ui/src/shadcn/)
+---------------------------------------------------------------------
+Vendored from https://ui.shadcn.com (the chart from registry
+new-york-v4/ui/chart, the components in packages/ui/src/shadcn/ from style
+base-nova) and modified. MIT License.
 
 Copyright (c) 2023 shadcn
 

@@ -258,7 +258,7 @@ export function Conversation({
   );
   return (
     <ConversationContext.Provider value={scroll}>
-      <Fill className={cn("conversation", className)} {...props}>
+      <Fill className={cn("conversation relative", className)} {...props}>
         {children}
       </Fill>
     </ConversationContext.Provider>
@@ -300,7 +300,9 @@ export function ConversationContent({
       onScroll={onScroll}
       onClickCapture={onFold}
     >
-      <div className={cn("conversation-log", className)}>{children}</div>
+      <div className={cn("conversation-log px-content-inset pt-section-gap pb-luke-20", className)}>
+        {children}
+      </div>
     </ScrollArea>
   );
 }
@@ -355,9 +357,25 @@ export function ConversationEmptyState({
   children: ReactNode;
 }): ReactNode {
   return (
-    <div className={cn("conversation-empty", wide && "conversation-empty-wide")}>{children}</div>
+    <div
+      className={cn(
+        "conversation-empty m-auto flex max-w-conversation-empty flex-col items-center justify-center gap-block-gap p-card text-center text-body text-muted-foreground",
+        wide && "max-w-conversation-empty-wide",
+      )}
+    >
+      {children}
+    </div>
   );
 }
+
+/**
+ * What floats over a log in a slot of its own, centred across it, on a
+ * ground of its own ringed and lifted off the lines: the way back to the
+ * newest line over its foot, and the line saying earlier lines could not be
+ * read over its top, so neither moves a row of the log as it comes and goes.
+ */
+export const FLOATING_OVER_LOG_CLASS =
+  "absolute left-1/2 -translate-x-1/2 rounded-control shadow-floating-edge";
 
 /** What the way back to the newest line is called, as its hint and its name. */
 const SCROLL_LABEL = "Scroll to the newest line";
@@ -371,7 +389,10 @@ export function ConversationScrollButton(): ReactNode {
   const { isAtBottom, scrollToBottom } = useConversation();
   if (isAtBottom) return null;
   return (
-    <div className="conversation-scroll">
+    // Its ground is the button's own (`--luke-button-ground`), which the button's lit fill is laid over as a title bar's is.
+    <div
+      className={`conversation-scroll ${FLOATING_OVER_LOG_CLASS} bottom-luke-16 flex bg-button-ground [--luke-button-ground:var(--luke-color-well)]`}
+    >
       <Tooltip label={SCROLL_LABEL}>
         <IconButton
           label={SCROLL_LABEL}
