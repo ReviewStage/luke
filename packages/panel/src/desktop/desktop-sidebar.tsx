@@ -166,12 +166,7 @@ import { needsYouNoun, usePlacesWaiting } from "./places-waiting.js";
 import { RowPlaced, useRowMoveKeys } from "./row-moves.js";
 import { SidebarAgent } from "./sidebar-agent.js";
 import { SIDEBAR_WIDTH, type SidebarCollapse, sidebarInSight } from "./sidebar-collapse.js";
-import {
-  type CountNoun,
-  foldedCount,
-  sidebarFold,
-  TASK_NOUN,
-} from "./sidebar-fold.js";
+import { type CountNoun, foldedCount, sidebarFold, TASK_NOUN } from "./sidebar-fold.js";
 import { SidebarFoot } from "./sidebar-foot.js";
 import { SidebarInbox } from "./sidebar-inbox.js";
 import { SidebarLuke } from "./sidebar-luke.js";

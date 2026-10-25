@@ -88,7 +88,7 @@ export function functionAliasPath(path: string): string {
   return path.slice(0, path.length - posix.extname(path).length);
 }
 
-export function functionConfigPath(outputDirectory: string, path: string): string {
+function functionConfigPath(outputDirectory: string, path: string): string {
   return join(functionDirectory(outputDirectory, path), FUNCTION_CONFIG_FILE);
 }
 
@@ -97,7 +97,7 @@ export function functionEntryPath(outputDirectory: string, path: string): string
 }
 
 /** The configuration a function is deployed with; a duration is written only where the plan gave one. */
-export function functionConfig(maxDuration: number | undefined): FunctionConfig {
+function functionConfig(maxDuration: number | undefined): FunctionConfig {
   const config: FunctionConfig = {
     runtime: FUNCTION_RUNTIME,
     handler: FUNCTION_ENTRY,

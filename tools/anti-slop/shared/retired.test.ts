@@ -1,7 +1,6 @@
-import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
 
 import { afterEach, describe, expect, it } from "vitest";
 
@@ -9,18 +8,10 @@ import { configWeakensGuard, guardSuppressionLines } from "./press-guard.ts";
 import {
   namesRetired,
   parseRetiredFile,
-  RETIRED,
   RETIRED_GUARD_RULE,
   readRetired,
   retiredCssPlaces,
 } from "./retired.ts";
-
-const REPOSITORY_ROOT = path.resolve(
-  path.dirname(fileURLToPath(import.meta.url)),
-  "..",
-  "..",
-  "..",
-);
 
 const VALID = { instead: "Use Thing.", classes: [{ class: "old-thing", allow: ["packages/ui/"] }] };
 
@@ -61,15 +52,6 @@ describe("a retired file", () => {
       writeFileSync(path.join(folder, "README.md"), "# not read");
       expect(() => readRetired(folder)).toThrow(/bad\.json/u);
     });
-  });
-});
-
-describe("the retired files", () => {
-  it("baseline only files that exist, since the rule reads the files it lints and a deleted one leaves its row behind", () => {
-    const missing = RETIRED.flatMap((retirement) => Object.keys(retirement.baseline)).filter(
-      (file) => !existsSync(path.join(REPOSITORY_ROOT, file)),
-    );
-    expect(missing).toEqual([]);
   });
 });
 

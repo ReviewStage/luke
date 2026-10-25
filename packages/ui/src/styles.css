@@ -17,10 +17,6 @@
 @import "./components/reveal/reveal.css";
 @import "./components/menu/menu.css";
 @import "./components/nav-item/nav-item.css";
-@import "./components/page-thumb/page-thumb.css";
-@import "./components/picture-tile/picture-tile.css";
-@import "./components/picture-set/picture-set.css";
-@import "./components/video-player/video-player.css";
 @import "./components/attachment-chip/attachment-chip.css";
 @import "./components/badge/badge.css";
 @import "./components/banner/banner.css";
@@ -29,13 +25,9 @@
 @import "./components/copy-button/copy-button.css";
 @import "./components/swatch/swatch.css";
 @import "./components/calendar/calendar.css";
-@import "./components/call/call.css";
 @import "./components/block-list/block-list.css";
 @import "./components/card/card.css";
-@import "./components/card-press/card-press.css";
-@import "./components/composer-frame/composer-frame.css";
 @import "./components/composer-frame/composer-foot.css";
-@import "./components/composer-frame/composer-body.css";
 @import "./components/facts/facts.css";
 @import "./components/file-text/file-text.css";
 @import "./chart/chart.css";
@@ -65,7 +57,6 @@
 @import "./marks/harness-mark.css";
 @import "./marks/provider-mark.css";
 @import "./marks/task-marks.css";
-@import "./components/provider-button/provider-button.css";
 @import "./components/public-page/public-page.css";
 @import "./components/saved-tick/saved-tick.css";
 @import "./components/folding-search/folding-search.css";
