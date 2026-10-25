@@ -170,7 +170,6 @@ function mount(
           onClose: () => undefined,
           onChoose: setPlace,
           onShow: setPlace,
-          onShowMessage: () => undefined,
           listed: false,
           onList: () => undefined,
           onPost: (post, clientKey) =>

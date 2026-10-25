@@ -325,7 +325,7 @@ test("a draft asks nothing of the service, one per plan, until its first message
   await act(async () => {
     failed = await tab.control().startPrompt(draft, prompt, choice, []);
   });
-  assert.equal(failed?.text, "The agent could not be started. Try again.");
+  assert.equal(failed?.text, "The agent could not be started.");
   assert.equal(tab.control().draft?.id, draft, "a send that did not start keeps the draft");
   assert.deepEqual(tab.started, []);
 
@@ -892,7 +892,7 @@ test("a fork joins the task's draft under a key of its own, its words kept and i
   await act(async () => {
     failed = await tab.control().startFork(joined, fork, ` ${words} `, undefined, [notes], []);
   });
-  assert.equal(failed?.text, "The agent could not be started. Try again.");
+  assert.equal(failed?.text, "The agent could not be started.");
   // Note that the fork kept is the same fork, though the tab hands back the one it already held where its fields are the same (`useSteadyDoors`).
   assert.deepEqual(tab.control().draft?.fork, fork, "a send that did not start keeps the fork");
   await act(async () => {
@@ -1045,7 +1045,7 @@ test("a continue opens the task's draft with the closed box's words and files af
   await act(async () => {
     failed = await after.control().startFork(draft, fork, "", undefined, [], []);
   });
-  assert.equal(failed?.text, "The agent could not be started. Try again.");
+  assert.equal(failed?.text, "The agent could not be started.");
   await act(async () => {
     failed = await after.control().startFork(draft, fork, "", undefined, [], []);
   });
@@ -1106,7 +1106,7 @@ test("continuing an agent starts on the task from its whole transcript under the
   await act(async () => {
     failed = await continueAgent(SOURCE);
   });
-  assert.equal(failed?.text, "The agent could not be started. Try again.");
+  assert.equal(failed?.text, "The agent could not be started.");
   assert.deepEqual(tab.started, []);
   await act(async () => {
     failed = await continueAgent(SOURCE);

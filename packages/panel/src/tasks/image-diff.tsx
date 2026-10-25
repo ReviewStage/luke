@@ -136,8 +136,8 @@ function OneSide({
 }): React.JSX.Element {
   const state = usePicture(agentId, address, useImageRead());
   return (
-    <div className="image-diff-sides">
-      <figure className="image-diff-side">
+    <div className="flex w-full flex-wrap justify-center gap-block-gap">
+      <figure className="m-0 flex min-w-0 shrink grow basis-image-diff-side flex-col items-center gap-item-gap [&>figcaption]:text-caption-inline [&>figcaption]:text-muted-foreground">
         <figcaption>{label}</figcaption>
         <SidePicture state={state} label={label} />
         {note === undefined ? null : <NoteLine look={NOTE_LINE_LOOK.INSET}>{note}</NoteLine>}
@@ -172,7 +172,7 @@ function Stacked({
   // Note that the after is cut or faded through the CSSOM (`style`), which the panel's policy admits where it refuses a style written as markup.
   const style = swipe ? { clipPath: `inset(0 0 0 ${amount}%)` } : { opacity: amount / 100 };
   return (
-    <div className="image-diff-stacked">
+    <div className="flex max-w-full flex-col items-center gap-control-gap">
       <div className="image-diff-stack">
         <img className="image-diff-picture" src={before} alt={IMAGE_WORDS.BEFORE} />
         <img className="image-diff-picture" src={after} alt={IMAGE_WORDS.AFTER} style={style} />
@@ -216,7 +216,7 @@ function BothSides({
   } satisfies Record<ImageCompare, string>;
   return (
     <>
-      <div className="image-diff-modes">
+      <div className="flex justify-center">
         <ChoiceBar<ImageCompare>
           label={IMAGE_WORDS.COMPARE}
           items={COMPARE_OPTIONS}
@@ -228,18 +228,18 @@ function BothSides({
         />
       </div>
       <div
-        className="image-diff-panel"
+        className="flex w-full min-w-0 flex-col items-center"
         role="tabpanel"
         id={panelId}
         aria-labelledby={tabIds[compare]}
       >
         {ready === undefined || compare === IMAGE_COMPARE.SIDE_BY_SIDE ? (
-          <div className="image-diff-sides">
-            <figure className="image-diff-side">
+          <div className="flex w-full flex-wrap justify-center gap-block-gap">
+            <figure className="m-0 flex min-w-0 shrink grow basis-image-diff-side flex-col items-center gap-item-gap [&>figcaption]:text-caption-inline [&>figcaption]:text-muted-foreground">
               <figcaption>{IMAGE_WORDS.BEFORE}</figcaption>
               <SidePicture state={beforeState} label={IMAGE_WORDS.BEFORE} />
             </figure>
-            <figure className="image-diff-side">
+            <figure className="m-0 flex min-w-0 shrink grow basis-image-diff-side flex-col items-center gap-item-gap [&>figcaption]:text-caption-inline [&>figcaption]:text-muted-foreground">
               <figcaption>{IMAGE_WORDS.AFTER}</figcaption>
               <SidePicture state={afterState} label={IMAGE_WORDS.AFTER} />
             </figure>
@@ -326,7 +326,10 @@ function ImageSidesNear({
     );
   })();
   return (
-    <div ref={setBox} className="image-diff">
+    <div
+      ref={setBox}
+      className="image-diff flex flex-col items-center gap-control-gap p-card-snug font-sans"
+    >
       {near ? drawn : <PictureStandIn state={PICTURE_STATE.READING} words="" />}
     </div>
   );

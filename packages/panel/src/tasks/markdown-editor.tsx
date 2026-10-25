@@ -69,10 +69,19 @@ import { useKnownNames } from "./use-known-names.js";
  */
 
 /** What every editor's room wears: the box the toolbar and the menus over its words are placed in. */
-const ROOM_CLASS = "markdown-editor";
+const ROOM_CLASS = "markdown-editor relative";
 
 /** What the room says while the editor's bundle could not be loaded. */
 const EDITOR_LOAD_FAILED = "The editor could not be loaded.";
+
+/**
+ * What stands under an editor, a failed load or save, or a change made
+ * elsewhere and the choice it asks: one wrapping line in the caption role,
+ * its presses a control's gap apart. Its margin is its sheet's (tasks.css),
+ * because it has to outrank the editor's own gap between its children.
+ */
+export const EDITOR_NOTE_CLASS =
+  "plan-editor-note flex flex-wrap items-center gap-control-gap text-caption text-muted-foreground";
 
 /** A document's mentions in its editor: what they open and where they are written, what the `@` list offers, and how an edit of the document's headings names them anew. */
 interface MarkdownEditorMentions {
@@ -103,8 +112,10 @@ export interface MarkdownEditorProps {
   readonly focus?: boolean | undefined;
   /** The text as it would be saved now, after each change, and where the comment threads' words stand in it, where the document carries any. */
   readonly onDraft: (markdown: string, anchors?: EditorAnchors) => void;
-  /** Esc or ⌘↩, with the section the caret stood in, which a document with no sections need not read, and which of the two it was. */
+  /** Esc or the send, with the section the caret stood in, which a document with no sections need not read, and which of the two it was. */
   readonly onFinish: (section: number, how: Finish) => void;
+  /** Whether the text is a message box's, whose send is Enter and whose Shift+Enter writes; a document's, where none is given, sends on ⌘↩. */
+  readonly sendsOnEnter?: boolean | undefined;
   /** Focus leaving the room for anywhere but its own toolbar and menus; none where the document stays open. */
   readonly onLeave?: (() => void) | undefined;
   /** Where the mounted editor's handle is kept, for a document that asks it more than its drafts. */
@@ -210,6 +221,7 @@ export function MarkdownEditor({
   focus = true,
   onDraft,
   onFinish,
+  sendsOnEnter,
   onLeave,
   handle: givenHandle,
   room: givenRoom,
@@ -289,7 +301,7 @@ export function MarkdownEditor({
       <section ref={room} className={roomClass} aria-busy="true">
         {loading}
         {AsyncResult.isFailure(module) ? (
-          <p className="plan-editor-note">{EDITOR_LOAD_FAILED}</p>
+          <p className={EDITOR_NOTE_CLASS}>{EDITOR_LOAD_FAILED}</p>
         ) : null}
       </section>
     );
@@ -304,6 +316,7 @@ export function MarkdownEditor({
     className,
     onDraft,
     onFinish: (section, how) => once(() => onFinish(section, how)),
+    sendsOnEnter,
     onLeaveUp,
     mentions:
       mentions === undefined

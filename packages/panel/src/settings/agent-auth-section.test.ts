@@ -303,11 +303,6 @@ test("each harness's row says how it is connected beside an act: nothing and Con
   assert.match(described("Claude"), /Connected with a subscription/u);
   assert.deepEqual(rowState(connected, "Claude"), connectedWith("Connected with a subscription"));
   assert.deepEqual(rowState(connected, "Codex"), connectedWith("Connected with an API key"));
-  assert.match(
-    rowButton(connected, "Codex").closest(".luke-settings-row")?.textContent ?? "",
-    /calls and dictation\.Connected with an API key/u,
-    "Codex's line under its name keeps saying it holds the call's key",
-  );
   for (const root of roots.splice(0)) act(() => root.unmount());
 
   // The plan's default off with a key saved is the key, whatever the plan's state.
@@ -331,14 +326,13 @@ test("each harness's row says how it is connected beside an act: nothing and Con
   assert.deepEqual(rowState(await mount(), "Claude"), needsHand("Usage limit reached"));
 });
 
-test("each harness's row stands where a link to its section lands, and Codex's says it holds the key calls run on", async () => {
+test("each harness's row stands where a link to its section lands", async () => {
   const page = await mount();
   const landed = (section: string) =>
     page.querySelector(`[${SETTINGS_SEARCH_ANCHOR_ATTRIBUTE}="${section}"]`) ??
     assert.fail(`nothing stands at ${section}`);
   assert.ok(landed(SETTINGS_SECTION.CLAUDE).contains(rowButton(page, "Claude")));
   assert.ok(landed(SETTINGS_SECTION.CODEX).contains(rowButton(page, "Codex")));
-  assert.match(landed(SETTINGS_SECTION.CODEX).textContent ?? "", /OpenAI key/u);
 });
 
 test("the dialog's radios pick the plan or the key as the default, sent as the plan's forAgents, and only a saved credential's radio is pressable", async () => {
@@ -559,7 +553,7 @@ test("a ChatGPT sign-in OpenAI no longer honors says its sign-in expired, and ho
   const dialog = await open(page, "Codex");
   assert.match(
     card(dialog, "Subscription").textContent ?? "",
-    /Sign-in expired\. Sign in with ChatGPT to reconnect\./u,
+    /Sign-in expired\.(?! Sign in)/u,
   );
 });
 

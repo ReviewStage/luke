@@ -47,7 +47,6 @@ import {
   type AppInboxTasklessItem,
   RUN_PROFILE,
 } from "@luke/host/app-state";
-import type { ChatShown } from "@luke/host/contract";
 import { EXPERIMENT, HOST_CAPABILITY } from "@luke/settings";
 import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsLink } from "@luke/settings/settings-views";
 import { STATUS_TONE } from "@luke/ui";
@@ -111,7 +110,7 @@ import {
   recentRepositories,
   renameAsked,
   renamedView,
-  repositoryFailureNote,
+  repositoryChangeFailureNote,
   repositoryPageUrl,
   STATUS_RESTORE_FAILED_NOTE,
   type StatusChange,
@@ -257,10 +256,9 @@ interface PendingSectionWrite {
  * their workers' in the side panel; New task's Agent mode starts the task
  * and its agent in the one start, and the task opens on that agent's tab,
  * or on a draft holding the words with why where the agent was refused.
- * Main is told which agent's tab is shown, so the notification it
- * posts when an agent ends is held back while the developer is looking at
- * that agent, and the agents main says ended unseen read in semibold until their
- * tab is shown (`@luke/host/agent-notices`). The open plan's history is the
+ * Main is told which agent's tab is shown, so an agent that ends while the
+ * developer is looking at it is not marked unseen, and the agents main says
+ * ended unseen read in semibold until their tab is shown (`@luke/host/agent-notices`). The open plan's history is the
  * tab's as well (`use-plan-history.ts`): its version history, opened from
  * the task's menu or its "Edited by" line, or from a section's on the
  * revision that last changed the section, takes the whole window in the
@@ -286,15 +284,17 @@ export type InboxChoice = (
  * it leaves the task the host has open, and the call bound to it, as they
  * stand; opening any task, or a new one, leaves it. The item chosen is kept
  * while it stands, so the item answered stays in sight, and after it is
- * left, so opening it again in the same workspace stands on the item last read.
+ * left, so opening it again in the same workspace stands on the item last read
+ * beside the list. A narrow room, a phone's, keeps the choice too but opens
+ * on the list, since there the list is the place: an item stands alone only
+ * once a row is pressed or a link asks for it (`onOpenItem`).
  */
 interface InboxViewControl {
   readonly open: boolean;
   /** The item chosen in it, none until one is, where the list's first stands in. */
   readonly chosen: InboxChoice | undefined;
+  /** Opens the Inbox, as the places bar, the sidebar, and its chord do: on its list in a narrow room, whatever stood there, and as it was left in a wide one; asked first where leaving would lose unsaved work. */
   readonly onOpen: () => void;
-  /** Opens the Inbox on its list rather than the item last read, as a phone's places bar does; asked first where leaving would lose unsaved work. */
-  readonly onOpenList: () => void;
   readonly onClose: () => void;
   readonly onChoose: (chosen: InboxChoice) => void;
   /**
@@ -401,8 +401,6 @@ type StandIn =
       readonly place: ChatPlace;
       /** Whether the rail stands rather than the place, which only a narrow room draws apart. */
       readonly listed: boolean;
-      /** The message a toast's View asked for, whose channel is shown once the read holds it. */
-      readonly seek?: string | undefined;
     }
   | { readonly kind: typeof STAND_IN.BOARD }
   | {
@@ -436,6 +434,8 @@ interface BoardViewControl {
 /** Which Automations page stands: the list, a new automation's editor, or one automation's. */
 export const AUTOMATIONS_PAGE = {
   LIST: "list",
+  /** Every run of the listed workspace's automations, beside the list as its other tab. */
+  RUNS: "runs",
   NEW: "new",
   EDIT: "edit",
 } as const;
@@ -446,6 +446,7 @@ export type AutomationsPlace =
       /** The automation whose page was left for the list by deleting it, which the window's history passes over from then on. */
       readonly deleted?: string;
     }
+  | { readonly kind: typeof AUTOMATIONS_PAGE.RUNS }
   | {
       readonly kind: typeof AUTOMATIONS_PAGE.NEW;
       /** The suggestion on the list it was opened from, whose preset fills its draft in; none for a blank one. */
@@ -460,6 +461,11 @@ export type AutomationsPlace =
       readonly created?: true;
     };
 
+/** Whether a place is one of the Automations page's two tabs, the list or the runs, rather than one automation's page. */
+export function automationsTab(place: AutomationsPlace): boolean {
+  return place.kind === AUTOMATIONS_PAGE.LIST || place.kind === AUTOMATIONS_PAGE.RUNS;
+}
+
 /** The list, where the Automations pages open with none asked for. */
 const AUTOMATIONS_LIST: AutomationsPlace = { kind: AUTOMATIONS_PAGE.LIST };
 
@@ -473,7 +479,7 @@ function launchedStandIn(place: FixturePlace | undefined): StandIn | undefined {
 
 /** Whether an Automations page stands its runs alone in a narrow room: as it was last told, else where it was opened on a run's link, which names a run its runs list. */
 function runsStanding(place: AutomationsPlace, runs: boolean | undefined): boolean {
-  if (place.kind === AUTOMATIONS_PAGE.LIST) return false;
+  if (automationsTab(place)) return false;
   return runs ?? (place.kind === AUTOMATIONS_PAGE.EDIT && place.runId !== undefined);
 }
 
@@ -516,8 +522,8 @@ interface ChatViewControl {
   readonly place: ChatPlace;
   /**
    * Whether Chat stands on its rail rather than on the place shown, which
-   * only a narrow room draws apart: Chat opened does, and a place chosen or
-   * shown does not.
+   * only a narrow room draws apart: Chat opened does, in a narrow room even
+   * while a place stood, and a place chosen or shown does not.
    */
   readonly listed: boolean;
   /** Goes back from the place shown to the rail. */
@@ -526,8 +532,6 @@ interface ChatViewControl {
   readonly single?: boolean;
   /** Says whether Chat shows one column. */
   readonly onSingle?: (single: boolean) => void;
-  /** Opens it from wherever the window stands, on the channel a message stands in once the read holds it: what a chat toast's View asks. */
-  readonly onShowMessage: (messageId: string) => void;
   readonly onOpen: () => void;
   readonly onClose: () => void;
   readonly onChoose: (place: ChatPlace) => void;
@@ -576,6 +580,19 @@ function agentRequest(handed: NewTaskAgent) {
     ...(handed.attachments.length === 0 ? undefined : { attachments: handed.attachments }),
     ...(handed.choice === undefined ? undefined : choiceRequest(handed.choice)),
   };
+}
+
+/** Where a group's quick add puts the task it adds: the group's status, priority, or assignee, or its repository. */
+export interface QuickAddInto {
+  readonly standing?: TaskStanding;
+  readonly repository?: string;
+}
+
+/** What a quick add asks of where its task stands: a status, a priority, or an assignee, as given; no one assigned is where a task starts, so it is asked nothing. */
+function startingStanding(standing: TaskStanding | undefined) {
+  if (standing === undefined) return undefined;
+  const { assigneeId, ...rest } = standing;
+  return assigneeId === undefined || assigneeId === null ? rest : { ...rest, assigneeId };
 }
 
 /** What the press that opened New task chose: a repository (a repository group's +), the card's purpose (the Automations page's Create with an agent), or the card a start refused after it closed opens again on. */
@@ -720,7 +737,7 @@ export interface TasksControl {
   onSelect: (taskId: string) => void;
   /** Opens a task as the window's history goes back or forward to it, as it stood, since the history stands its panel itself. */
   onRestoreTask: (taskId: string) => void;
-  /** Opens a task on one agent's tab: what a notification's click asks. */
+  /** Opens a task on one agent's tab: what a row's press or the call card's way back asks. */
   onShowAgent: (taskId: string, agentId: string) => void;
   /** Opens a task on a tab of its column, as it last stood: what ⌃Tab's card asks (`tab-switcher.tsx`). */
   onShowColumnTab: (taskId: string, tab: MainTab) => void;
@@ -763,10 +780,8 @@ export interface TasksControl {
   onShowChat: (taskId: string) => void;
   /** What waits on the developer across the account's tasks, as main's read last answered: each task with an open inbox item, and its items. */
   inbox: readonly AppInboxTask[];
-  /** The task whose Inbox is on screen, or none: what main is told, so an item it shows is not announced. */
+  /** The task whose Inbox is on screen, or none. */
   inboxShown: string | null;
-  /** The Chat on screen, the window's or a task's Chat tab, or none: what main is told, so a message it shows is not announced. */
-  chatShown: ChatShown | null;
   /** Every task holding an inbox item, waiting or settled, the task whose item changed latest first: what the window's Inbox lists. */
   inboxTasks: readonly AppInboxTaskHolding[];
   /** What waits on the developer from agents with no task, as main's read last answered: what the window's Inbox lists beside the tasks' and counts with them. */
@@ -830,6 +845,12 @@ export interface TasksControl {
   onNewTask: () => void;
   /** New task with a repository already chosen in the dialog: what a repository group's + asks. */
   onNewTaskIn: (repository: string) => void;
+  /**
+   * Adds a task named `name` to a Tasks page group with no agent, in the
+   * listed workspace, and opens nothing: what a group's quick add asks.
+   * Answers why it was not added, or nothing once the list carries it.
+   */
+  onQuickAdd: (name: string, into: QuickAddInto) => Promise<Failure | undefined>;
   /** New task's card for the agent that makes an automation: what the Automations page's Create with an agent asks. */
   onNewAutomationAgent: () => void;
   /** The New task dialog: whether it stands, what its press chose, and the two presses it makes. */
@@ -1108,7 +1129,6 @@ const NO_TASKLESS_AGENTS: readonly TasklessAgent[] = [];
 const TASK_COPIED_NOTE = "Plan copied";
 
 /** What the toast says once a task is deleted. */
-const TASK_DELETED_NOTE = "Task deleted";
 
 /** What the toast says when the service did not move a task, which stays where it was. */
 const MOVE_REFUSED_NOTE = "The task could not be moved. Try again.";
@@ -1567,22 +1587,6 @@ export function useTasksTab(input: {
         : held,
     );
   }, [shownChannel, heldAnswer, liveRun]);
-  // A message a toast's View asked for opens its channel once a read holds it; till then Chat stands on For you, which lists it.
-  const chatSeek = standIn?.kind === STAND_IN.CHAT ? standIn.seek : undefined;
-  useEffect(() => {
-    if (chatSeek === undefined) return;
-    const message = heldAnswer?.messages.find((each) => each.id === chatSeek);
-    if (message === undefined) return;
-    setStandIn((held) =>
-      held?.kind === STAND_IN.CHAT && held.seek === chatSeek
-        ? {
-            kind: STAND_IN.CHAT,
-            place: { kind: CHAT_PLACE.CHANNEL, channelId: message.channelId },
-            listed: false,
-          }
-        : held,
-    );
-  }, [chatSeek, heldAnswer]);
   const page = tasksPage(tasks);
   const region = documentRegion(tasks);
   // A started agent's tab opens selected; the column's tabs are built after
@@ -1888,52 +1892,13 @@ export function useTasksTab(input: {
       : panelShown && sidePanel.tab === SIDE_PANEL_TAB.INBOX
         ? (viewed.activeTaskId ?? null)
         : null;
-  // Chat on screen is where what waits in it is read, so main announces none of that then: the
-  // window's Chat reads the listed workspace's every channel, and a task's Chat tab only its plan's.
-  const chatShown: ChatShown | null =
-    !shown || listedWorkspace === undefined
-      ? null
-      : standIn?.kind === STAND_IN.CHAT
-        ? { workspaceId: listedWorkspace.id, taskId: null }
-        : taskChatShown && viewed.activeTaskId !== undefined
-          ? { workspaceId: listedWorkspace.id, taskId: viewed.activeTaskId }
-          : null;
-  const chatShownWorkspace = chatShown?.workspaceId ?? null;
-  const chatShownTask = chatShown?.taskId ?? null;
-  const reportedTab = useRef<
-    | {
-        agentId: string | null;
-        inboxTaskId: string | null;
-        chatShownWorkspace: string | null;
-        chatShownTask: string | null;
-      }
-    | undefined
-  >(undefined);
+  // Main is told which agent's tab is on screen, whose end it marks unseen nowhere then.
+  const reportedAgent = useRef<string | null | undefined>(undefined);
   useEffect(() => {
-    const was = reportedTab.current;
-    if (
-      was?.agentId === shownAgent &&
-      was.inboxTaskId === shownInbox &&
-      was.chatShownWorkspace === chatShownWorkspace &&
-      was.chatShownTask === chatShownTask
-    ) {
-      return;
-    }
-    reportedTab.current = {
-      agentId: shownAgent,
-      inboxTaskId: shownInbox,
-      chatShownWorkspace,
-      chatShownTask,
-    };
-    tell(ACT_KIND.CODING_AGENTS_SHOWN, {
-      agentId: shownAgent,
-      inboxTaskId: shownInbox,
-      chatShown:
-        chatShownWorkspace === null
-          ? null
-          : { workspaceId: chatShownWorkspace, taskId: chatShownTask },
-    });
-  }, [shownAgent, shownInbox, chatShownWorkspace, chatShownTask, tell]);
+    if (reportedAgent.current === shownAgent) return;
+    reportedAgent.current = shownAgent;
+    tell(ACT_KIND.CODING_AGENTS_SHOWN, { agentId: shownAgent });
+  }, [shownAgent, tell]);
   // Note that the Inbox's choice is remembered as it is made, so leaving the Inbox and coming back stands on it.
   useEffect(() => {
     if (inboxChosen !== undefined) {
@@ -2123,18 +2088,15 @@ export function useTasksTab(input: {
   );
 
   // A fixture's tasks are deleted nowhere, as they are read from nowhere. A
-  // delete that landed says so in a toast, since its dialog has closed; a
-  // refusal is said in the dialog that asked, unless the tab went away while
+  // delete that landed says nothing, since the task leaving the list says it;
+  // a refusal is said in the dialog that asked, unless the tab went away while
   // the delete was out and took the dialog with it.
   const shownNow = useRef(shown);
   shownNow.current = shown;
   const deleteTask = async (taskId: string): Promise<ActionResult> => {
     if (fixture !== undefined) return DELETE_REFUSED;
     const deleted = await act(ACT_KIND.TASKS_DELETE, { taskId }).catch(() => false);
-    if (deleted) {
-      toast({ words: TASK_DELETED_NOTE, tone: STATUS_TONE.COMPLETE, hold: TOAST_HOLD.DONE });
-      return { status: ACTION_RESULT_STATUS.ACCEPTED };
-    }
+    if (deleted) return { status: ACTION_RESULT_STATUS.ACCEPTED };
     if (!shownNow.current) {
       toast({ words: DELETE_REFUSED_NOTE, tone: STATUS_TONE.DANGER, hold: TOAST_HOLD.FAILED });
     }
@@ -2506,7 +2468,7 @@ export function useTasksTab(input: {
     });
     const on: StandIn | undefined =
       rest.kind === RESTING_PAGE.INBOX
-        ? { kind: STAND_IN.INBOX, chosen: rest.chosen, listed: false }
+        ? { kind: STAND_IN.INBOX, chosen: rest.chosen, listed: input.room === SHELL_ROOM.NARROW }
         : rest.kind === RESTING_PAGE.TASKS
           ? { kind: STAND_IN.BOARD }
           : undefined;
@@ -2721,7 +2683,7 @@ export function useTasksTab(input: {
   ): Promise<string | undefined> => {
     if (fixture !== undefined) return Promise.resolve(undefined);
     return act(ACT_KIND.TASKS_SET_REPOSITORY, { taskId, repository }).then(
-      (answer) => ("failure" in answer ? repositoryFailureNote(answer.failure) : undefined),
+      (answer) => ("failure" in answer ? repositoryChangeFailureNote(answer.failure) : undefined),
       (refused: Error) => refused.message,
     );
   };
@@ -2932,6 +2894,24 @@ export function useTasksTab(input: {
   // Note that New task's start is a steady door, so the dialog handed it holds while nothing it draws moves.
   const steadyStartTask = useSteadyDoor(startTask);
 
+  // A group's quick add starts a task with no agent and no call, quietly, so
+  // the window stays on the Tasks page and the task lands in its group.
+  const quickAdd: TasksControl["onQuickAdd"] = (name, into) =>
+    act(ACT_KIND.TASKS_START, {
+      name,
+      ...(into.repository === undefined ? undefined : { repository: into.repository }),
+      ...(listedWorkspace === undefined ? undefined : { workspaceId: listedWorkspace.id }),
+      ...startingStanding(into.standing),
+      planning: false,
+      quiet: true,
+    }).then(
+      (answer): Failure | undefined =>
+        "failure" in answer
+          ? { reason: FAILURE_REASON.OTHER, text: startFailureNote(answer.failure) }
+          : undefined,
+      (refused: Error): Failure => ({ reason: FAILURE_REASON.OTHER, text: refused.message }),
+    );
+
   // The dialog matches its name against the Linear issues of the workspace
   // it starts in, and searches them, where that workspace has Linear connected.
   const linearIssuesIn = useCallback<TasksControl["newTask"]["linearIssuesIn"]>(
@@ -3016,7 +2996,7 @@ export function useTasksTab(input: {
     return home?.id ?? listedWorkspace?.id;
   };
 
-  // A version's Open lands where its writer wrote it: an agent's tab, as a notification opens it.
+  // A version's Open lands where its writer wrote it: an agent's tab.
   const showSource = (taskId: string, source: RevisionSource) => {
     showColumnTab(taskId, { agent: source.agentId });
   };
@@ -3143,7 +3123,7 @@ export function useTasksTab(input: {
         return;
       }
       case LINK_PLACE.INBOX: {
-        // Note that a link to the Inbox opens it as its sidebar row does, on the item last chosen in the workspace it lists.
+        // Note that a link to the Inbox opens it as its sidebar row does, on the item last chosen in the workspace it lists, and in a narrow room on its list.
         const workspaceId = listLinked(workspace);
         standInFor({
           kind: STAND_IN.INBOX,
@@ -3151,7 +3131,7 @@ export function useTasksTab(input: {
             account: input.account,
             workspaceId,
           }),
-          listed: false,
+          listed: input.room === SHELL_ROOM.NARROW,
         });
         return;
       }
@@ -3573,7 +3553,6 @@ export function useTasksTab(input: {
     onShowPanelTab: guard(showPanelTab),
     inbox: input.inboxWaiting,
     inboxShown: shownInbox,
-    chatShown,
     inboxTasks: input.inboxTasks,
     inboxTaskless: input.inboxTaskless,
     failedRuns: input.failedRuns,
@@ -3581,35 +3560,23 @@ export function useTasksTab(input: {
     inboxView: {
       open: inboxView !== undefined,
       chosen: inboxChosen,
+      // Note that a narrow room opens on the list though it keeps the item last chosen, so a wide room it turns into again stands that item beside the list.
       onOpen: guard(() => {
         setHistoryFor(undefined);
+        const listed = input.room === SHELL_ROOM.NARROW;
         const remembered = lastInboxChoice.current;
         setStandIn((held) =>
           held?.kind === STAND_IN.INBOX
-            ? held
+            ? listed
+              ? { ...held, listed }
+              : held
             : {
                 kind: STAND_IN.INBOX,
                 chosen: rememberedChoice(remembered, {
                   account: input.account,
                   workspaceId: listedWorkspaceId,
                 }),
-                listed: false,
-              },
-        );
-      }),
-      onOpenList: guard(() => {
-        setHistoryFor(undefined);
-        const remembered = lastInboxChoice.current;
-        setStandIn((held) =>
-          held?.kind === STAND_IN.INBOX
-            ? { ...held, listed: true }
-            : {
-                kind: STAND_IN.INBOX,
-                chosen: rememberedChoice(remembered, {
-                  account: input.account,
-                  workspaceId: listedWorkspaceId,
-                }),
-                listed: true,
+                listed,
               },
         );
       }),
@@ -3645,11 +3612,15 @@ export function useTasksTab(input: {
       listed: standIn?.kind === STAND_IN.CHAT ? standIn.listed : true,
       onList: () =>
         setStandIn((held) => (held?.kind === STAND_IN.CHAT ? { ...held, listed: true } : held)),
+      // A narrow room opens on the rail even from a channel it stands on, keeping the channel for a wide room to show beside it.
       onOpen: guard(() => {
         setHistoryFor(undefined);
+        const listed = input.room === SHELL_ROOM.NARROW;
         setStandIn((held) =>
           held?.kind === STAND_IN.CHAT
-            ? held
+            ? listed
+              ? { ...held, listed }
+              : held
             : { kind: STAND_IN.CHAT, place: FOR_YOU, listed: true },
         );
       }),
@@ -3663,11 +3634,6 @@ export function useTasksTab(input: {
       onShow: guard((place: ChatPlace) => {
         setHistoryFor(undefined);
         setStandIn({ kind: STAND_IN.CHAT, place, listed: false });
-      }),
-      onShowMessage: guard((messageId: string) => {
-        setHistoryFor(undefined);
-        // Note that For you stands while the read is sought, since it lists the message, where the channel shown before need not.
-        setStandIn({ kind: STAND_IN.CHAT, place: FOR_YOU, listed: false, seek: messageId });
       }),
       onPost: (post, clientKey) =>
         liveRun
@@ -3750,7 +3716,7 @@ export function useTasksTab(input: {
       }),
       onRuns: (shown) =>
         setStandIn((held) =>
-          held?.kind === STAND_IN.AUTOMATIONS && held.place.kind !== AUTOMATIONS_PAGE.LIST
+          held?.kind === STAND_IN.AUTOMATIONS && !automationsTab(held.place)
             ? { ...held, runs: shown }
             : held,
         ),
@@ -3766,8 +3732,7 @@ export function useTasksTab(input: {
       onClose: guard(() => setStandIn(undefined)),
     },
     onShowFile: showFile,
-    // A version's Open lands where its writer wrote it: an agent's tab, as a
-    // notification opens it.
+    // A version's Open lands where its writer wrote it: an agent's tab.
     onShowSource: guard(showSource),
     // The call card's way back lands where the task's call bar is in sight.
     onShowTask: guard((taskId: string) => showPanelTab(taskId, SIDE_PANEL_TAB.PLAN)),
@@ -3832,6 +3797,7 @@ export function useTasksTab(input: {
     },
     onNewTask: () => newTaskWith(undefined),
     onNewTaskIn: (repository) => newTaskWith({ repository }),
+    onQuickAdd: quickAdd,
     onNewAutomationAgent: () => newTaskWith({ purpose: NEW_TASK_PURPOSE.AUTOMATION }),
     newTask: {
       open: newTaskAsk !== undefined,

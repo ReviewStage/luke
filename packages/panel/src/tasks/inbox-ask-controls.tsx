@@ -11,7 +11,6 @@ import {
   recommendedLabels,
 } from "@luke/features/inbox-wire";
 import { FIELD_WORDS } from "@luke/features/words";
-import { SHORTCUT_KEY, type ShortcutChord } from "@luke/settings/shortcuts";
 import {
   Badge,
   BUTTON_SIZE,
@@ -30,7 +29,6 @@ import {
   LAYOUT_ELEMENT,
   ReadableControls,
   Stack,
-  TEXT_AREA_SUBMIT,
   TEXT_ELEMENT,
   TEXT_FIELD_TYPE,
   TEXT_TONE,
@@ -39,9 +37,9 @@ import {
   TextField,
 } from "@luke/ui";
 import type { Actor } from "@luke/ui/actor-model";
+import { isComposingKey } from "@luke/ui/composing-key";
 import { CheckIcon, GLYPH, Undo2Icon } from "@luke/ui/icons";
 import { ActorLine, ActorRef } from "../actor-ref.js";
-import { modEnterSends } from "../enter-sends.js";
 import { type FormTextDoors, type FormTextProps, InboxFormText } from "./inbox-form-text.js";
 import {
   ANSWER_TONE,
@@ -54,7 +52,6 @@ import {
   INBOX_MISSING,
   type InboxDraft,
   type InboxMissing,
-  severalFields,
   shownTicks,
   withDoPress,
   withStep,
@@ -73,15 +70,28 @@ import { SentWords } from "./skill-chip.js";
  * are pressed, picked, ticked, or filled, the box's Send sending it; an
  * answered ask's stand as the answer left them, read-only and at full
  * strength. Enter on an option or in a field sends the box the controls
- * stand in (`DraftQuestion`), save in a form of several fields, where Enter
- * only picks and ⌘ or Ctrl with Enter sends, and a send lacking something
- * takes the keyboard to it (`focusMissing`). An ask's words, its options and its
+ * stand in (`DraftQuestion`), a form of several fields too, where Space or
+ * a press picks an option, and a send lacking something takes the keyboard
+ * to it (`focusMissing`). An ask's words, its options and its
  * steps, select and copy whether it is open or not (`ReadableControls`), a
  * drag over them picking and ticking nothing, and stand Reply over them as
  * the words around them do (`reply-to-selection.tsx`), a field's own
  * typing aside. Nothing here knows where the ask came from: an Inbox
  * item's thread or a chat message.
  */
+
+/** An ask's box, in an Inbox thread or Chat's message, which gives way to its column. */
+export const INBOX_ASK_BOX = "inbox-ask min-w-0";
+
+/** An ask's kind at its head, in the label's weight. */
+export const INBOX_ASK_KIND = "inbox-ask-kind font-luke-medium text-foreground";
+
+/** Where an ask stands at its head, its glyph at the caption's glyph size before its words. */
+export const INBOX_ASK_STANDING =
+  "inbox-ask-standing inline-flex min-w-0 items-center gap-tight-gap [&>svg]:size-luke-12 [&>svg]:flex-none";
+
+/** An ask's presses on one line, wrapping where the column is narrow. */
+const INBOX_ASK_PRESSES = "inbox-ask-presses flex flex-wrap gap-control-gap";
 
 /** The words a choice's open options are named by, for a reader that does not see the question over them. */
 const CHOICE_LEGEND = "Options";
@@ -192,9 +202,12 @@ type FormText = (props: FormTextProps) => React.ReactNode;
  */
 function fieldFrame(field: InboxField, readOnly: boolean) {
   return readOnly
-    ? ({ className: "inbox-field", "data-inbox-answered-field": field.type } as const)
+    ? ({
+        className: "inbox-field flex min-w-0 flex-col gap-item-gap",
+        "data-inbox-answered-field": field.type,
+      } as const)
     : ({
-        className: "inbox-field",
+        className: "inbox-field flex min-w-0 flex-col gap-item-gap",
         "data-inbox-field": field.type,
         "data-inbox-field-label": field.label,
       } as const);
@@ -217,7 +230,7 @@ function AnsweredText({
     <ComposerFrame look={COMPOSER_LOOK.INPUT} className="inbox-field-composer" data-read-only="">
       {/* biome-ignore lint/a11y/useSemanticElements: the words hold mention chips, which no native field can, and speak as the read-only field they stand for. */}
       <div
-        className="inbox-words inbox-field-words"
+        className="inbox-field-words m-0 box-border min-h-inbox-field-words px-control-inset py-item-gap wrap-anywhere select-text"
         role="textbox"
         aria-readonly="true"
         aria-multiline="true"
@@ -300,7 +313,7 @@ function InboxFormField({
         <div {...fieldFrame(field, readOnly)}>
           <FormField label={field.label} optional={optionalField(field)}>
             {(control) => (
-              <div className="inbox-field-short">
+              <div className="inbox-field-short max-w-inbox-field-short">
                 <TextField
                   field={control}
                   type={TEXT_FIELD_TYPE.NUMBER}
@@ -406,14 +419,6 @@ export function bareKey(event: { metaKey: boolean; ctrlKey: boolean; altKey: boo
   return !event.metaKey && !event.ctrlKey && !event.altKey;
 }
 
-/** ⌘ or Ctrl with Enter, which sends a form of several fields. */
-const MOD_ENTER_CHORD: ShortcutChord = { key: SHORTCUT_KEY.ENTER };
-
-/** The key Send's hint names for an ask: ⌘↩ where Enter only picks, nothing where Enter sends. */
-export function askSendChord(ask: InboxAsk | undefined): ShortcutChord | undefined {
-  return ask !== undefined && severalFields(ask) ? MOD_ENTER_CHORD : undefined;
-}
-
 /**
  * Sends the open item's answer from wherever in its pane the developer
  * pressed Enter, through its box's own send, so the box's checks stand: an
@@ -426,27 +431,16 @@ export function sendFromPane(pane: HTMLElement | null): void {
 
 /**
  * Enter in an open item's question, on an option or in a form's field,
- * sends the answer, and never presses the option it stands on; ⌘ or Ctrl
- * with Enter sends from anywhere in it. Where the question is a form of
- * several fields (`several`), a bare Enter sends nothing: it presses the
- * option it stands on, and goes no further than a field, which would
- * otherwise submit the box. Shift+Enter is no send, and an editor's Enter is
- * the editor's own to hand on.
+ * sends the answer, and never presses the option it stands on, which Space
+ * or a press picks. Shift+Enter is no send, and an editor's Enter is the
+ * editor's own to hand on.
  */
 function onResponseKey(
   pane: React.RefObject<HTMLElement | null>,
-  several: boolean,
   event: React.KeyboardEvent,
 ): void {
-  if (event.key !== "Enter" || event.shiftKey || event.altKey || event.nativeEvent.isComposing) {
-    return;
-  }
+  if (event.key !== "Enter" || event.shiftKey || event.altKey || isComposingKey(event)) return;
   if (writesLines(event.target)) return;
-  if (several && !modEnterSends(event)) {
-    // Note that an input's Enter would submit the box, which is the send this holds back; an option's is left to press it.
-    if (event.target instanceof HTMLInputElement) event.preventDefault();
-    return;
-  }
   // Note that the key is held back here, as it bubbles, which keeps a focused option's button from pressing it.
   event.preventDefault();
   sendFromPane(pane.current);
@@ -527,7 +521,7 @@ function AskPress({
 /** An ask's controls, whose words select and copy, and a Reply quotes as the words around them. */
 function AskWords({ children }: { children: React.ReactNode }): React.JSX.Element {
   return (
-    <div className="inbox-ask-words" {...{ [REPLY_SCOPE]: "" }}>
+    <div className="inbox-ask-words contents" {...{ [REPLY_SCOPE]: "" }}>
       <ReadableControls>{children}</ReadableControls>
     </div>
   );
@@ -570,7 +564,7 @@ function OpenControls({
   switch (ask.type) {
     case INBOX_ASK.DECIDE:
       return decideButtons(ask) ? (
-        <div className="inbox-ask-presses" data-inbox-options="">
+        <div className={INBOX_ASK_PRESSES} data-inbox-options="">
           {ask.options.map((option) => {
             const picked = draft.choices.includes(option.label);
             return (
@@ -617,7 +611,7 @@ function OpenControls({
               ))}
             </Stack>
           )}
-          <div className="inbox-ask-presses">
+          <div className={INBOX_ASK_PRESSES}>
             <AskPress
               label={ASK_PRESS.DONE}
               pressed={decision === INBOX_REPLY.DONE}
@@ -643,13 +637,7 @@ function OpenControls({
             form={{ fields: ask.fields }}
             draft={draft}
             disabled={disabled}
-            text={(props) => (
-              <InboxFormText
-                {...props}
-                doors={doors.text}
-                submitKey={severalFields(ask) ? TEXT_AREA_SUBMIT.MOD_ENTER : TEXT_AREA_SUBMIT.ENTER}
-              />
-            )}
+            text={(props) => <InboxFormText {...props} doors={doors.text} />}
             onDraft={onDraft}
           />
         </div>
@@ -660,7 +648,10 @@ function OpenControls({
 /** The glyph a press given wears in its answer's tone (`ANSWER_STATUS_TONE`): a check in green going ahead, a turn back in grey holding back. */
 function ToneGlyph({ tone }: { tone: AnswerTone }): React.JSX.Element {
   return (
-    <span className="inbox-ask-pressed" data-tone={ANSWER_STATUS_TONE[tone]}>
+    <span
+      className="inbox-ask-pressed inline-flex text-tone-ink"
+      data-tone={ANSWER_STATUS_TONE[tone]}
+    >
       {tone === ANSWER_TONE.AHEAD ? (
         <CheckIcon aria-hidden="true" />
       ) : (
@@ -733,7 +724,7 @@ function LeftControls({
   switch (ask.type) {
     case INBOX_ASK.DECIDE:
       return decideButtons(ask) ? (
-        <div className="inbox-ask-presses">
+        <div className={INBOX_ASK_PRESSES}>
           {ask.options.map((option, at) => (
             <AnsweredPress
               key={option.label}
@@ -763,7 +754,7 @@ function LeftControls({
               ))}
             </Stack>
           )}
-          <div className="inbox-ask-presses">
+          <div className={INBOX_ASK_PRESSES}>
             <AnsweredPress
               label={ASK_PRESS.DONE}
               tone={ANSWER_TONE.AHEAD}
@@ -801,24 +792,21 @@ export function hasControls(ask: InboxAsk): boolean {
  * The open question's controls as the draft reply's card's body, over its
  * foot, with no card, border, or head of their own, since the agent's
  * message says what it asks: an Enter on an option or in a field sends the
- * card, and ⌘ or Ctrl with Enter sends it from anywhere in it, the only
- * send of a form of several fields.
+ * card, a form of several fields too.
  */
 export function DraftQuestion({
   pane,
-  ask,
   children,
 }: {
   pane: React.RefObject<HTMLElement | null>;
-  ask: InboxAsk;
   children: React.ReactNode;
 }): React.JSX.Element {
   return (
     // biome-ignore lint/a11y/noStaticElementInteractions: the keys it hears come from the options and fields inside it, whose Enter sends the card.
     <div
-      className="inbox-draft-ask"
+      className="inbox-draft-ask flex min-w-0 flex-col gap-block-gap px-list-inset pt-list-inset pb-tight-gap"
       data-inbox-draft-ask=""
-      onKeyDown={(event) => onResponseKey(pane, severalFields(ask), event)}
+      onKeyDown={(event) => onResponseKey(pane, event)}
     >
       {children}
     </div>
@@ -852,7 +840,10 @@ export function AnsweredCard({
   if (!hasControls(ask)) return null;
   return (
     // Note that it is no `inbox-ask` card: the controls stand in the reply itself, at its words' left edge.
-    <div className="inbox-ask-answered" data-inbox-answered="">
+    <div
+      className="inbox-ask-answered mb-tight-gap flex min-w-0 flex-col gap-block-gap"
+      data-inbox-answered=""
+    >
       <HeldControls ask={ask} title={title} draft={answeredDraft(ask, answers)} />
     </div>
   );
@@ -880,14 +871,14 @@ export function WithdrawnWords({
 }): React.JSX.Element {
   if (reason !== undefined) {
     return (
-      <span className="inbox-ask-standing">
+      <span className={INBOX_ASK_STANDING}>
         <GLYPH.DISMISSED />
         {WITHDRAWN}
       </span>
     );
   }
   return (
-    <span className="inbox-ask-standing">
+    <span className={INBOX_ASK_STANDING}>
       <GLYPH.DISMISSED />
       {closer === undefined ? (
         CLOSED_WORDS
@@ -906,7 +897,11 @@ export function WithdrawnWhy({ reason }: { reason: string | undefined }): React.
   if (reason === undefined) return null;
   return (
     // Note that its words may be quoted into a reply, as the agent's own words may.
-    <p className="inbox-ask-why" data-inbox-withdrawn-why="" {...{ [REPLY_SCOPE]: "" }}>
+    <p
+      className="inbox-ask-why m-0 text-muted-foreground wrap-anywhere"
+      data-inbox-withdrawn-why=""
+      {...{ [REPLY_SCOPE]: "" }}
+    >
       {reason}
     </p>
   );

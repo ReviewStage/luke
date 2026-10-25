@@ -211,12 +211,15 @@ export function ForkedToLine({ messageId }: { messageId: string }): ReactNode {
   const chips = useContext(ForkContext)?.forkedTo(messageId) ?? [];
   if (chips.length === 0) return null;
   return (
-    <p className="agent-forked-to" data-forked-to="">
-      <SplitIcon aria-hidden="true" />
+    <p
+      className="mx-0 mt-list-gap mb-0 flex flex-wrap items-center gap-tight-gap text-caption-inline text-muted-foreground"
+      data-forked-to=""
+    >
+      <SplitIcon className="size-control-icon flex-none" aria-hidden="true" />
       <span>{FORK_WORDS.TO}</span>
       {chips.map((chip, index) => (
         // Note that each chip holds the comma after it, so no gap opens before the comma.
-        <span key={index} className="agent-forked-to-item">
+        <span key={index} className="inline-flex items-center">
           {chip}
           {index === chips.length - 1 ? null : <span aria-hidden="true">,</span>}
         </span>

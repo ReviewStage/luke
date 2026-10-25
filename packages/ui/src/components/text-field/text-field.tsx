@@ -25,14 +25,15 @@ import type { FieldControl } from "../form-field/form-field.js";
  * Escape taken, but answers only one pressed while nothing is being
  * composed: the Escape that cancels a composition is the input method's,
  * and must not close the page the field stands on either. A TextArea's
- * `onSubmit` answers ⌘Return (Ctrl+Enter off the Mac) on the same terms,
- * leaving a plain Return to start a new line; or, for a note sent as a
- * chat message is, a plain Return, leaving Shift-Return the new line.
+ * `onSubmit` answers a plain Return on the same terms, as every box that
+ * sends does, leaving Shift-Return the new line; or, where Return must
+ * start a line itself, as on a phone's keyboard, ⌘Return (Ctrl+Enter off
+ * the Mac).
  *
  * A number field holds a number, or nothing while it is empty or holds what
  * is not yet one (a lone minus sign), as the browser reads it; a busy text
  * area, its words on their way somewhere, takes no typing and answers
- * neither Escape nor ⌘Return until it is not.
+ * neither Escape nor its submit key until it is not.
  *
  * A TextField is drawn by shadcn/ui's input (`../../shadcn/input.tsx`, on
  * Base UI) and a TextArea by its textarea (`../../shadcn/textarea.tsx`); a
@@ -80,7 +81,7 @@ export const TEXT_FIELD_AUTO_COMPLETE = {
 export type TextFieldAutoComplete =
   (typeof TEXT_FIELD_AUTO_COMPLETE)[keyof typeof TEXT_FIELD_AUTO_COMPLETE];
 
-/** The key that submits a text area: ⌘Return (Ctrl+Enter), or a plain Return, as a chat's note sends. */
+/** The key that submits a text area: a plain Return, as every box sends, or ⌘Return (Ctrl+Enter) where Return must start a line, as on a phone's keyboard. */
 export const TEXT_AREA_SUBMIT = {
   MOD_ENTER: "mod-enter",
   ENTER: "enter",
@@ -329,7 +330,7 @@ export function TextArea({
   enterKeyHint,
   busy = false,
   onSubmit,
-  submitKey = TEXT_AREA_SUBMIT.MOD_ENTER,
+  submitKey = TEXT_AREA_SUBMIT.ENTER,
   onPaste,
   ref,
   ...props
@@ -349,7 +350,7 @@ export function TextArea({
   busy?: boolean | undefined;
   /** What the submit key does, pressed while no input method is composing. */
   onSubmit?: (() => void) | undefined;
-  /** The key `onSubmit` answers; ⌘Return (Ctrl+Enter) where none is named. */
+  /** The key `onSubmit` answers; a plain Return where none is named. */
   submitKey?: TextAreaSubmit | undefined;
   /** What a paste does before the text arrives, for a caller that takes pasted files itself. */
   onPaste?: ((event: ClipboardEvent<HTMLTextAreaElement>) => void) | undefined;

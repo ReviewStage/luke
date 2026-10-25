@@ -197,7 +197,7 @@ const ACTS: readonly {
   },
   {
     kind: AGENT_ACT_KIND.CODING_AGENTS_SHOWN,
-    payload: { agentId: AGENT_ID, inboxTaskId: null },
+    payload: { agentId: AGENT_ID },
   },
   {
     kind: AGENT_ACT_KIND.CODING_AGENTS_SEEN,
@@ -297,14 +297,8 @@ function windowPort(
     observeStatus: (agentId, status) => {
       noted.push(`status:${agentId}=${status}`);
     },
-    observeTitle: (agentId, title) => {
-      noted.push(`title:${agentId}=${title}`);
-    },
     observeMessaged: (agent) => {
       noted.push(`messaged:${agent.id}=${agent.status}`);
-    },
-    observeModels: (models) => {
-      noted.push(`models:${models.length}`);
     },
     observeTaskGone: (taskId) => {
       noted.push(`gone:${taskId}`);
@@ -314,12 +308,6 @@ function windowPort(
     },
     seen: (agentId) => {
       noted.push(`seen:${agentId}`);
-    },
-    shownInbox: (taskId) => {
-      noted.push(`inbox:${taskId}`);
-    },
-    shownChat: (shown) => {
-      noted.push(`chat:${JSON.stringify(shown)}`);
     },
   };
   const port = testActPort(agentProcedures({ host, notices }));
@@ -480,10 +468,9 @@ it("an ensure of the operator that made one reads the plan list again, so its si
   assert.deepEqual(standing.asked, [["codingAgentEnsureOperator", { workspaceId: WORKSPACE_ID }]]);
 });
 
-it("a panel's reads are noted on their way: the models, a task's agents or the task gone, and an agent's title before its status, but a worker's page is no word on the agent", async () => {
+it("a panel's reads are noted on their way: a task's agents or the task gone, and an agent's status, but a worker's page is no word on the agent", async () => {
   const { call, noted } = windowPort(PANEL, {
     answers: {
-      codingAgentModels: () => Effect.succeed({ models: [] }),
       codingAgentList: () => Effect.succeed({ failure: CODING_AGENT_CALL_FAILURE.NOT_FOUND }),
       codingAgentMessages: () =>
         Effect.succeed({
@@ -496,7 +483,6 @@ it("a panel's reads are noted on their way: the models, a task's agents or the t
     },
   });
 
-  await call(AGENT_ACT_KIND.CODING_AGENTS_MODELS, undefined);
   await call(AGENT_ACT_KIND.CODING_AGENTS_LIST, { taskId: TASK_ID });
   await call(AGENT_ACT_KIND.CODING_AGENTS_MESSAGES, { agentId: AGENT_ID, after: "0" });
   await call(AGENT_ACT_KIND.CODING_AGENTS_MESSAGES, {
@@ -511,38 +497,21 @@ it("a panel's reads are noted on their way: the models, a task's agents or the t
   });
 
   assert.deepEqual(noted, [
-    "models:0",
     `gone:${TASK_ID}`,
-    `title:${AGENT_ID}=Triage`,
     `status:${AGENT_ID}=${CODING_AGENT_STATUS.RUNNING}`,
     `messaged:${AGENT_ID}=${CODING_AGENT_STATUS.STARTING}`,
   ]);
 });
 
-it("a panel's word on what it shows is noted whole, the Chat as none where it names none, and answers nothing", async () => {
+it("a panel's word on which agent it shows is noted, none as none, and answers nothing", async () => {
   const { call, asked, noted } = windowPort(PANEL);
-  const chat = { workspaceId: WORKSPACE_ID, taskId: TASK_ID };
 
-  const named = await call(AGENT_ACT_KIND.CODING_AGENTS_SHOWN, {
-    agentId: AGENT_ID,
-    inboxTaskId: TASK_ID,
-    chatShown: chat,
-  });
-  const none = await call(AGENT_ACT_KIND.CODING_AGENTS_SHOWN, {
-    agentId: null,
-    inboxTaskId: null,
-  });
+  const named = await call(AGENT_ACT_KIND.CODING_AGENTS_SHOWN, { agentId: AGENT_ID });
+  const none = await call(AGENT_ACT_KIND.CODING_AGENTS_SHOWN, { agentId: null });
 
   assert.deepEqual(named, { answer: undefined });
   assert.deepEqual(none, { answer: undefined });
-  assert.deepEqual(noted, [
-    `shown:${AGENT_ID}`,
-    `inbox:${TASK_ID}`,
-    `chat:${JSON.stringify(chat)}`,
-    "shown:null",
-    "inbox:null",
-    "chat:null",
-  ]);
+  assert.deepEqual(noted, [`shown:${AGENT_ID}`, "shown:null"]);
   assert.deepEqual(asked, []);
 });
 
@@ -610,7 +579,6 @@ it("a payload carrying a key its kind's schema does not name is refused in the k
   assert.deepEqual(
     await call(AGENT_ACT_KIND.CODING_AGENTS_SHOWN, {
       agentId: AGENT_ID,
-      inboxTaskId: null,
       stray: true,
     }),
     { refused: REFUSAL[AGENT_ACT_KIND.CODING_AGENTS_SHOWN] },
@@ -632,10 +600,9 @@ it("a payload carrying a key its kind's schema does not name is refused in the k
 
 it("a payload its kind's schema refuses, or one sent to a kind that carries none, is refused in the kind's own words, and the host is not asked nor anything noted", async () => {
   const { call, asked, noted } = windowPort(PANEL);
-  assert.deepEqual(
-    await call(AGENT_ACT_KIND.CODING_AGENTS_SHOWN, { agentId: " ", inboxTaskId: null }),
-    { refused: REFUSAL[AGENT_ACT_KIND.CODING_AGENTS_SHOWN] },
-  );
+  assert.deepEqual(await call(AGENT_ACT_KIND.CODING_AGENTS_SHOWN, { agentId: " " }), {
+    refused: REFUSAL[AGENT_ACT_KIND.CODING_AGENTS_SHOWN],
+  });
   assert.deepEqual(await call(AGENT_ACT_KIND.CODING_AGENTS_LIST, { taskId: "" }), {
     refused: REFUSAL[AGENT_ACT_KIND.CODING_AGENTS_LIST],
   });
@@ -681,9 +648,8 @@ it("a panel's transcript stream follows the transcript at the host, hears each p
   // SAFETY: the stream reaches the transcript asks alone.
   const host = transcripts as HostAsk;
   const noted: string[] = [];
-  // SAFETY: the stream notes an agent's title and status alone.
+  // SAFETY: the stream notes an agent's status alone.
   const notices = {
-    observeTitle: (_agentId: string, title: string | null) => noted.push(`title:${title}`),
     observeStatus: (_agentId: string, status: string) => noted.push(`status:${status}`),
   } as unknown as AgentProceduresDependencies["notices"];
   const port = testActPort(agentProcedures({ host, notices }));
@@ -709,7 +675,7 @@ it("a panel's transcript stream follows the transcript at the host, hears each p
   }
   assert.deepEqual((await first).value, page);
   assert.deepEqual((await second).value, page);
-  assert.deepEqual(noted, ["title:Invites", "status:running", "title:Invites", "status:running"]);
+  assert.deepEqual(noted, ["status:running", "status:running"]);
 
   await one.return(undefined);
   await until(() => listeners.size === 1);

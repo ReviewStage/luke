@@ -75,7 +75,7 @@ import { ActionMenu, type MenuAction, type MenuEntry, rowMenu } from "./action-m
 import { strandedHome, useMoveTaskDialog } from "./move-task-dialog.js";
 import { useRowPlace, withRowMoves } from "./row-moves.js";
 import { moveToSectionEntry, useSectionDialogs } from "./sidebar-sections.js";
-import { TaskRowMark, taskCardOf } from "./task-card.js";
+import { SIDEBAR_ROW_REPOSITORY, SIDEBAR_ROW_TIME, TaskRowMark, taskCardOf } from "./task-card.js";
 
 /**
  * task-actions.tsx -- one task's actions, offered alike from the toolbar's ⋯ button and from a right-click on the task in the sidebar.
@@ -362,7 +362,7 @@ function TaskMenuFooter({
   const named = edit !== undefined && edit.actor !== PLAN_ACTOR.EARLIER;
   return (
     <>
-      <p className="task-menu-note actor-line">
+      <p className="task-menu-note actor-line m-0 flex-wrap overflow-clip [overflow-clip-margin:var(--luke-focus-ring-room)]">
         {"Created by "}
         {origin === undefined ? null : (
           <>
@@ -375,7 +375,7 @@ function TaskMenuFooter({
         <Time at={task.createdAt} now={now} look={TIME_LOOK.AGO} />
       </p>
       {edit === undefined && task.updatedAt <= task.createdAt ? null : (
-        <p className="task-menu-note actor-line">
+        <p className="task-menu-note actor-line m-0 flex-wrap overflow-clip [overflow-clip-margin:var(--luke-focus-ring-room)]">
           {named ? "Last edited by " : "Last edited"}
           {edit === undefined ? null : <EditedBy edit={edit} place={place} sentence />}
           {" · "}
@@ -722,9 +722,9 @@ export function SidebarTask({
           description={rename.refused ? <span>{RENAME_FAILED_NOTE}</span> : undefined}
           meta={
             rename.editing ? null : (
-              <span className="sidebar-task-time">
+              <span className={SIDEBAR_ROW_TIME}>
                 {repository === undefined ? null : (
-                  <OneLine className="sidebar-task-repository" words={repository}>
+                  <OneLine className={SIDEBAR_ROW_REPOSITORY} words={repository}>
                     {repository}
                   </OneLine>
                 )}

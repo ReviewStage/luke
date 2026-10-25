@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { CODING_AGENT_BRIEF } from "@luke/features/coding-agent-wire";
+import { LINK_PLACE, readLink } from "@luke/features/link-grammar";
 import { decodeMention, isMentionLabel, MENTION_KIND } from "@luke/features/mention-link";
 import { test } from "vitest";
 import { INBOX_TOOLS } from "./coder-host/inbox.js";
@@ -26,6 +27,7 @@ const FILLED: ReadonlyMap<string, string> = new Map([
   ["<task-id>", "pl_2"],
   ["<agent-id>", "7c1d2e3f-4a5b-4c6d-8e9f-0a1b2c3d4e5f"],
   ["<issue-id>", "3f0e6f5c-7d1a-4f6e-9a55-000000000042"],
+  ["<item-id>", "9b2e4c6a-1d3f-4e5a-8b7c-0d1e2f3a4b5c"],
 ]);
 
 /** The task the coding agent works on, whose link its instructions are handed. */
@@ -47,9 +49,11 @@ function examplesIn(words: string): string[] {
   return linksIn(words).map(({ target }) => target);
 }
 
-/** What each example link is drawn as: the kind of mention its chip names, or nothing where it stays a link. */
+/** What each example link is drawn as: the kind of mention its chip names, else the kind of place in Luke it names, or nothing where it stays a link. */
 function drawnAs(words: string): (string | undefined)[] {
-  return examplesIn(words).map((target) => decodeMention(target, REPOSITORY)?.kind);
+  return examplesIn(words).map(
+    (target) => decodeMention(target, REPOSITORY)?.kind ?? readLink(target)?.place.kind,
+  );
 }
 
 test("a coding agent is shown to name each kind as a mention Luke draws as its chip, its task's own under its task's link and only where it has a task, and one on no task its own pages under its own link", () => {
@@ -61,7 +65,12 @@ test("a coding agent is shown to name each kind as a mention Luke draws as its c
       const told = words.slice(words.indexOf("## What your messages are"));
       assert.deepEqual(
         drawnAs(told),
-        [...shared, ...(onTask ? own : [MENTION_KIND.PAGE]), MENTION_KIND.AGENT],
+        [
+          ...shared,
+          ...(onTask ? own : [MENTION_KIND.PAGE]),
+          MENTION_KIND.AGENT,
+          LINK_PLACE.INBOX_ITEM,
+        ],
         `${brief} ${onTask}`,
       );
       assert.deepEqual(

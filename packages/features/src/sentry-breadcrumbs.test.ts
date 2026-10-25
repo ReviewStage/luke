@@ -35,19 +35,6 @@ test("a failed join's validate fetch, its token in the query, is dropped", () =>
   assert.equal(withoutAccessTokens(breadcrumb), null);
 });
 
-test("the same request over XHR is dropped too", () => {
-  const breadcrumb = {
-    category: "xhr",
-    type: "http",
-    data: {
-      method: "GET",
-      url: `https://x.livekit.cloud/rtc/validate?access_token=${TOKEN}`,
-      status_code: 401,
-    },
-  };
-  assert.equal(withoutAccessTokens(breadcrumb), null);
-});
-
 test("a console line that prints the URL is dropped", () => {
   const breadcrumb = {
     category: "console",

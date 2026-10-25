@@ -87,6 +87,7 @@ import { backPlaceOf } from "./back-place.js";
 import { HistoryButtons } from "./desktop-sidebar.js";
 import { useNarrowFocus } from "./narrow-focus.js";
 import { PhoneHead } from "./phone-head.js";
+import { PLACE_LIST, PLACE_LIST_TITLE, PLACE_PAGE, PLACE_SPLIT } from "./place-columns.js";
 import type { SidebarCollapse } from "./sidebar-collapse.js";
 
 /**
@@ -131,6 +132,17 @@ import type { SidebarCollapse } from "./sidebar-collapse.js";
  * (`taskVersionSubject`), or the account's plan template's, whose versions
  * are the developer's alone (`../settings/plan-template-history.tsx`).
  */
+
+/** Who wrote a version, in the label's type, on its row and over its sections alike. */
+const VERSION_AUTHOR =
+  "version-row-author min-w-0 overflow-hidden whitespace-nowrap text-label font-luke-medium text-foreground";
+
+/**
+ * A pane of the track the versions and the sections of the one opened stand
+ * in, each giving back the track's reach past the column as padding; its
+ * slide is the window's pane motion (`desktop.css`).
+ */
+const VERSION_PANE = "version-log-pane flex min-h-0 min-w-0 flex-col px-ring-reach";
 
 /**
  * What a version history is of, as the view draws it: the history as read
@@ -270,12 +282,14 @@ function RevisionRow({
         ref={rowRef}
         leading={<ActorMark actor={author} size={ACTOR_SIZE.ROW} />}
         title={
-          <span className="version-row-author" data-author={author.kind}>
+          <span className={VERSION_AUTHOR} data-author={author.kind}>
             {actorName(author)}
             <LeftWords actor={author} />
           </span>
         }
-        description={<span className="version-row-summary">{summary}</span>}
+        description={
+          <span className="version-row-summary line-clamp-2 whitespace-normal">{summary}</span>
+        }
         meta={<Time at={lastEdit.at} now={now} />}
         current={selected ? LIST_ROW_CURRENT.ITEM : undefined}
         onPress={onSelect}
@@ -310,7 +324,7 @@ function SectionsHead({
   onBack: (() => void) | undefined;
 }): React.JSX.Element {
   const name = (
-    <OneLine className="version-row-author">
+    <OneLine className={VERSION_AUTHOR}>
       {actorName(author)}
       <LeftWords actor={author} />
     </OneLine>
@@ -326,7 +340,7 @@ function SectionsHead({
           onBack={onBack}
         />
       )}
-      <p className="version-sections-head">
+      <p className="version-sections-head mx-0 my-control-gap flex min-w-0 flex-none items-center gap-control-gap whitespace-nowrap px-row-inset py-item-gap">
         <ActorMark actor={author} size={ACTOR_SIZE.ROW} />
         {source === undefined ? (
           name
@@ -450,7 +464,7 @@ function EarlierRow({
     );
   };
   return (
-    <div className="version-earlier">
+    <div className="version-earlier mx-0 mt-control-gap mb-0 px-row-inset py-row-inset text-caption text-muted-foreground">
       {failed ? (
         <FailureNote onRetry={read}>Could not read older versions.</FailureNote>
       ) : (
@@ -775,8 +789,16 @@ export function DesktopVersionHistory({
   const exitPlaceName = exitPlace ?? backPlaceOf(history, subject.title ?? subject.noun);
 
   return (
-    <div ref={screen} className="desktop-version-history" data-single={String(split.single)}>
-      <nav className="version-log ph-no-capture" aria-label="Versions" hidden={hidden.list}>
+    <div
+      ref={screen}
+      className={`desktop-version-history ${PLACE_SPLIT}`}
+      data-single={String(split.single)}
+    >
+      <nav
+        className={`version-log ph-no-capture ${PLACE_LIST}`}
+        aria-label="Versions"
+        hidden={hidden.list}
+      >
         {narrow ? (
           // A phone's header: the way out, or from a revision's sections back to every version, and the title.
           <PhoneHead
@@ -815,18 +837,25 @@ export function DesktopVersionHistory({
             />
           </>
         )}
-        <div className="version-log-track" data-opened={String(opened !== undefined)}>
-          <div className="version-log-pane" inert={opened !== undefined}>
+        <div
+          className="version-log-track -mx-ring-reach grid min-h-0 flex-1 grid-cols-version-track grid-rows-version-track overflow-x-clip"
+          data-opened={String(opened !== undefined)}
+        >
+          <div className={VERSION_PANE} inert={opened !== undefined}>
             {narrow ? null : (
-              <Text as={TEXT_ELEMENT.H1} variant={TEXT_VARIANT.TITLE} className="version-log-title">
+              <Text
+                as={TEXT_ELEMENT.H1}
+                variant={TEXT_VARIANT.TITLE}
+                className={`version-log-title ${PLACE_LIST_TITLE}`}
+              >
                 {VERSION_HISTORY}
               </Text>
             )}
-            <Fill className="sidebar-section">
+            <Fill className="sidebar-section -m-ring-reach">
               <ScrollArea ref={log} fade={SCROLL_FADE.BOTH}>
                 {/* biome-ignore lint/a11y/noStaticElementInteractions: the keys and the focus are the rows' own, which the box only hears bubble. */}
                 <div
-                  className="sidebar-section-body"
+                  className="sidebar-section-body flex min-h-list-held flex-col p-ring-reach"
                   onFocus={chooseSteppedRow(rows, versions.onSelect)}
                   onKeyDown={versionKeys}
                 >
@@ -881,14 +910,14 @@ export function DesktopVersionHistory({
           </div>
           <Fill
             as={FILL_ELEMENT.SECTION}
-            className="sidebar-section version-log-pane"
+            className={`sidebar-section -m-ring-reach ${VERSION_PANE}`}
             aria-label={LIST_LABEL.SECTIONS}
             inert={opened === undefined}
           >
             <ScrollArea fade={SCROLL_FADE.BOTH}>
               {/* biome-ignore lint/a11y/noStaticElementInteractions: the keys and the focus are the rows' own, which the box only hears bubble. */}
               <div
-                className="sidebar-section-body"
+                className="sidebar-section-body flex min-h-list-held flex-col p-ring-reach"
                 onFocus={chooseSteppedRow(sectionRows, chooseUnit)}
                 onKeyDown={sectionKeys}
               >
@@ -936,7 +965,11 @@ export function DesktopVersionHistory({
         {/* Last, so the drag strip above the way back does not take the edge's top from it. */}
         {split.single ? null : <ResizeEdge edge={edge} />}
       </nav>
-      <section className="version-page ph-no-capture" aria-label="Version" hidden={hidden.item}>
+      <section
+        className={`version-page ph-no-capture ${PLACE_PAGE}`}
+        aria-label="Version"
+        hidden={hidden.item}
+      >
         <PageFind page={FIND_PAGE.VERSION_HISTORY} at={String(versions.selected)} active>
           <VersionPage
             subject={subject}

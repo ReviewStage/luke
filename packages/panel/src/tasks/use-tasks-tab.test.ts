@@ -140,12 +140,6 @@ const OPEN: TasksView = {
 const readShown = Schema.decodeUnknownOption(
   Schema.Struct({
     agentId: Schema.NullOr(Schema.String),
-    inboxTaskId: Schema.NullOr(Schema.String),
-    chatShown: Schema.optionalKey(
-      Schema.NullOr(
-        Schema.Struct({ workspaceId: Schema.String, taskId: Schema.NullOr(Schema.String) }),
-      ),
-    ),
   }),
 );
 
@@ -190,10 +184,6 @@ function mount(
   const agentActs: PortActKind[] = [];
   /** Which agent's tab main was told is shown, each time it was told. */
   const shownAgents: (string | null)[] = [];
-  /** Which task's Inbox main was told is shown, each time it was told. */
-  const shownInboxes: (string | null)[] = [];
-  /** Which Chat main was told is on screen, each time it was told. */
-  const shownChats: ({ workspaceId: string; taskId: string | null } | null)[] = [];
   /** What the voice window was told to do, each time it was told. */
   const voiceCommands: VoiceCommand[] = [];
   /** Each asked act's payload, unread until a test reads it as the act's schema would. */
@@ -273,8 +263,6 @@ function mount(
           const shown = Option.getOrUndefined(readShown(args[0]));
           if (kind === ACT_KIND.CODING_AGENTS_SHOWN && shown !== undefined) {
             shownAgents.push(shown.agentId);
-            shownInboxes.push(shown.inboxTaskId);
-            shownChats.push(shown.chatShown ?? null);
           }
           const voiceCommand = Option.getOrUndefined(readVoiceCommand(args[0]));
           if (kind === ACT_KIND.VOICE_COMMAND && voiceCommand !== undefined) {
@@ -317,8 +305,6 @@ function mount(
     told,
     agentActs,
     shownAgents,
-    shownInboxes,
-    shownChats,
     voiceCommands,
     payloads,
     /** Every Settings link the tab followed, in order. */
@@ -1701,7 +1687,7 @@ test("the Inbox lists the chosen workspace's share of what waits, and a plan the
   assert.deepEqual(share(), { inbox: ["alerts"], inboxTasks: ["alerts"] });
 });
 
-test("an Inbox item chosen in one workspace gives way as another is listed, so main is not told its plan's Inbox still shows", () => {
+test("an Inbox item chosen in one workspace gives way as another is listed, so its plan's Inbox no longer stands on screen", () => {
   const tab = mount({ shown: true, tasks: TWO_WORKSPACES });
 
   act(() => tab.control().inboxView.onOpen());
@@ -1711,23 +1697,30 @@ test("an Inbox item chosen in one workspace gives way as another is listed, so m
 
   assert.deepEqual(chosen, { taskId: "notes", itemId: "notes-item-0" });
   assert.equal(tab.control().inboxView.chosen, undefined);
-  assert.equal(tab.shownInboxes.at(-1), null);
+  assert.equal(tab.control().inboxShown, null);
 });
 
-test("the Inbox opened on its list, as a phone's places bar opens it, stands its list over the item last chosen, from elsewhere and from the item alike", () => {
-  const tab = mount({ shown: true, tasks: TWO_WORKSPACES });
+test("in a narrow room the Inbox and Chat opened stand their lists over the item or channel last chosen, from elsewhere and from the item alike, where a wide room stands the item", () => {
+  for (const room of [SHELL_ROOM.NARROW, SHELL_ROOM.WIDE]) {
+    const tab = mount({ shown: true, tasks: TWO_WORKSPACES, room });
+    const narrow = room === SHELL_ROOM.NARROW;
+    act(() => tab.control().inboxView.onOpenItem({ taskId: "notes", itemId: "notes-item-0" }));
+    act(() => tab.control().boardView.onOpen());
 
-  act(() => tab.control().inboxView.onOpen());
-  act(() => tab.control().inboxView.onChoose({ taskId: "notes", itemId: "notes-item-0" }));
-  act(() => tab.control().boardView.onOpen());
-  act(() => tab.control().inboxView.onOpenList());
-  assert.equal(tab.control().inboxView.open, true);
-  assert.equal(tab.control().inboxView.listed, true);
-  assert.deepEqual(tab.control().inboxView.chosen, { taskId: "notes", itemId: "notes-item-0" });
+    act(() => tab.control().inboxView.onOpen());
+    assert.equal(tab.control().inboxView.listed, narrow, room);
+    assert.deepEqual(tab.control().inboxView.chosen, { taskId: "notes", itemId: "notes-item-0" });
 
-  act(() => tab.control().inboxView.onListed(false));
-  act(() => tab.control().inboxView.onOpenList());
-  assert.equal(tab.control().inboxView.listed, true, "from the item it goes back to the list");
+    act(() => tab.control().inboxView.onListed(false));
+    act(() => tab.control().inboxView.onOpen());
+    assert.equal(tab.control().inboxView.listed, narrow, `${room}, from the item`);
+
+    const channel = { kind: CHAT_PLACE.CHANNEL, channelId: "c0ffee00-0000-4000-8000-000000000001" };
+    act(() => tab.control().chatView.onShow(channel));
+    act(() => tab.control().chatView.onOpen());
+    assert.equal(tab.control().chatView.listed, narrow, `${room}, Chat from its channel`);
+    assert.deepEqual(tab.control().chatView.place, channel);
+  }
 });
 
 test("the Inbox opened again stands on the item last chosen in it, as a row's choice, and on none once another workspace is listed", () => {
@@ -3036,56 +3029,6 @@ test("a chat notification's click, listing the workspace its message waits in an
   });
   assert.equal(tab.control().workspace?.id, ACME.id);
   assert.equal(tab.control().chatView.open, true);
-  assert.deepEqual(tab.control().chatShown, { workspaceId: ACME.id, taskId: null });
-});
-
-test("a chat toast's View opens Chat, and the channel its message stands in once a read holds it", async () => {
-  handState(experimentsOn(EXPERIMENT.CHAT));
-  const me = "b1c2d3e4-0000-4000-8000-000000000001";
-  const channelId = "c0ffee00-0000-4000-8000-000000000002";
-  const messageId = "d0d0d0d0-0000-4000-8000-000000000003";
-  const stream = chatStream();
-  const tab = mount(
-    { shown: true, tasks: { ...OPEN, workspaces: [PERSONAL] } },
-    {
-      [ACT_KIND.CODING_AGENTS_CHAT_FOLLOW]: stream.open,
-      [ACT_KIND.CODING_AGENTS_CHAT_POST]: () => Promise.resolve({ readSeq: 0 }),
-    },
-    AtomRegistryModule.make(),
-  );
-  await settle();
-  act(() => tab.control().chatView.onShow({ kind: CHAT_PLACE.CHANNEL, channelId: "other" }));
-  act(() => tab.control().chatView.onShowMessage(messageId));
-  assert.equal(tab.control().chatView.open, true);
-  assert.deepEqual(
-    tab.control().chatView.place,
-    FOR_YOU,
-    "For you, which lists the message, stands until the read lands, rather than the channel shown before",
-  );
-  stream.push({
-    self: me,
-    readSeq: 0,
-    members: [{ id: me, kind: MEMBER_KIND.HUMAN, name: "Dean", left: false }],
-    channels: [{ id: channelId, kind: CHANNEL_KIND.TOPIC, name: "infra", archived: false }],
-    messages: [
-      {
-        id: messageId,
-        seq: 4,
-        touchedSeq: 4,
-        channelId,
-        authorId: "a0a0a0a0-0000-4000-8000-000000000004",
-        blocks: [],
-        mentions: [me],
-        postedAt: 1,
-      },
-    ],
-    cursor: "",
-  });
-  await vi.waitFor(async () => {
-    await settle();
-    assert.deepEqual(tab.control().chatView.place, { kind: CHAT_PLACE.CHANNEL, channelId });
-  });
-  assert.equal(tab.control().chatView.listed, false);
 });
 
 test("the task's Chat, opened from ⌘K's Chat row, stands in the side panel and never in the column", async () => {
@@ -3096,23 +3039,6 @@ test("the task's Chat, opened from ⌘K's Chat row, stands in the side panel and
   assert.equal(on.control().sidePanel.tab, SIDE_PANEL_TAB.CHAT);
   assert.equal(on.control().sidePanel.open, true);
   assert.deepEqual(on.control().mainTabs.tabs, []);
-});
-
-test("main is told a task's Chat tab on screen shows only its plan's channel, where the window's Chat shows the whole workspace's", async () => {
-  handState(experimentsOn(EXPERIMENT.CHAT));
-  const tab = mount(
-    { shown: true, tasks: { ...OPEN, workspaces: [PERSONAL] } },
-    {},
-    AtomRegistryModule.make(),
-  );
-  await settle();
-  act(() => tab.control().onShowChat(TASK.id));
-  const onTab = tab.shownChats.at(-1);
-  act(() => tab.control().chatView.onOpen());
-
-  assert.deepEqual(onTab, { workspaceId: PERSONAL.id, taskId: TASK.id });
-  assert.deepEqual(tab.shownChats.at(-1), { workspaceId: PERSONAL.id, taskId: null });
-  assert.deepEqual(tab.control().chatShown, tab.shownChats.at(-1));
 });
 
 test("the task's Chat tab on screen marks the task's plan channel read, as the window's Chat on that channel does", async () => {
@@ -3323,6 +3249,33 @@ async function startAgentTask(tab: ReturnType<typeof mount>) {
     .map(({ payload }) => Option.getOrUndefined(readAgentNamed(payload)));
   return { choice, prompt, note, starts };
 }
+
+test("a group's quick add sends one quiet start with the group's standing and no agent, asking no one assigned as nothing", async () => {
+  const tab = mount(
+    { shown: true, tasks: OPEN },
+    { [ACT_KIND.TASKS_START]: () => Promise.resolve({ planId: OTHER_TASK_ID }) },
+  );
+  let refused: Failure | undefined = { reason: FAILURE_REASON.OTHER, text: "unanswered" };
+  await act(async () => {
+    refused = await tab.control().onQuickAdd("Export invoices as CSV", {
+      standing: { status: TASK_STATUS.BACKLOG, priority: TASK_PRIORITY.HIGH, assigneeId: null },
+    });
+  });
+
+  assert.equal(refused, undefined);
+  assert.deepEqual(
+    tab.payloads.filter(({ kind }) => kind === ACT_KIND.TASKS_START).map(({ payload }) => payload),
+    [
+      {
+        name: "Export invoices as CSV",
+        status: TASK_STATUS.BACKLOG,
+        priority: TASK_PRIORITY.HIGH,
+        planning: false,
+        quiet: true,
+      },
+    ],
+  );
+});
 
 test("New task's Agent mode sends one start carrying the agent, its words and model, and opens the task on the agent it started", async () => {
   const started = { ...RUNNING_AGENT, planId: OTHER_TASK_ID };

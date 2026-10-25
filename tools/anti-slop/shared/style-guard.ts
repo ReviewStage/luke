@@ -20,6 +20,8 @@ export const STYLE_RULE = {
   EASING: "literal-easing",
   PICKER_WIDTH: "literal-picker-width",
   SPACING: "literal-spacing",
+  CURSOR: "pointer-cursor",
+  CRUMB_WIDTH: "crumb-width",
 } as const;
 export type StyleRule = (typeof STYLE_RULE)[keyof typeof STYLE_RULE];
 
@@ -61,6 +63,16 @@ export const STYLE_RULES: Readonly<
     refuses:
       "a pixel or rem literal on `padding`, `margin`, `gap`, `row-gap` or `column-gap` in the panel's stylesheets: the spacing role or scale step is read (0, `1px` and `auto` pass)",
     backlog: true,
+  },
+  [STYLE_RULE.CURSOR]: {
+    refuses:
+      "the pointing hand spelled out (`cursor: pointer`, `cursor-pointer`) or a cursor chosen per profile: a control reads `cursor-press` (`--luke-cursor-press`), a real link `cursor-link` (`--luke-cursor-link`)",
+    backlog: false,
+  },
+  [STYLE_RULE.CRUMB_WIDTH]: {
+    refuses:
+      "a path's crumb drawn wider than its words: a `min-width` above zero, or a share of the room with no `max-width: max-content` on the sheet's crumbs, stands a gap before the next chevron",
+    backlog: false,
   },
 };
 
@@ -445,10 +457,84 @@ function holdsForeignInk(block: CssBlock, property: string): boolean {
   return FOREIGN_INK_PREFIXES.some((prefix) => property.startsWith(prefix));
 }
 
+/** The pointing hand as a cursor's own value, not a word inside a custom property's name. */
+const POINTER_CURSOR = /(?<![\w-])pointer(?![\w-])/u;
+
+/** A selector or a Tailwind variant that picks a profile, as a cursor of its own per app would. */
+const PROFILE_PICK = /luke-profile/u;
+
+/**
+ * Whether a declaration chooses its own cursor where the one rule goes: the
+ * hand spelled out, or any cursor set under a profile's selector, which is
+ * the rule copied rather than read (profiles.css's `--luke-cursor-press`).
+ */
+function ownCursor(declaration: CssDeclaration, block: CssBlock): boolean {
+  if (declaration.property !== "cursor") return false;
+  if (POINTER_CURSOR.test(bareValue(declaration.value))) return true;
+  return block.preludes.some((prelude) => PROFILE_PICK.test(prelude));
+}
+
+/** A path's landmark, whose list items are its crumbs (`@luke/ui`'s `Breadcrumbs`). */
+const PATH_CLASS = /\.luke-breadcrumbs\b/u;
+
+/** A selector with what its brackets and parentheses hold taken out, so `:has(> .x)` splits as one compound. */
+function withoutArguments(selector: string): string {
+  let out = selector.replace(/\[[^\]]*\]/gu, "[]");
+  while (/\([^()]*\)/u.test(out)) out = out.replace(/\([^()]*\)/gu, "");
+  return out;
+}
+
+/** Whether a block's selector draws a path's crumb: a list item, in its last compound, of a path. */
+function isCrumbBox(block: CssBlock): boolean {
+  return withoutArguments(selectorOf(block))
+    .split(",")
+    .some((part) => {
+      const last =
+        part
+          .trim()
+          .split(/[\s>+~]+/u)
+          .at(-1) ?? "";
+      return PATH_CLASS.test(part) && /^li(?![\w-])/u.test(last);
+    });
+}
+
+/** Whether a sheet caps its crumbs at their own width, so a share of the room never stretches one. */
+function capsCrumbs(blocks: readonly CssBlock[]): boolean {
+  return blocks.some(
+    (block) =>
+      isCrumbBox(block) &&
+      block.declarations.some(
+        (declaration) =>
+          declaration.property === "max-width" && declaration.value.trim() === "max-content",
+      ),
+  );
+}
+
+/**
+ * Whether a declaration draws a crumb wider than its words. Note that a
+ * floor is a crumb's flex basis, never its `min-width`, because a
+ * `min-width` above a short crumb's words stretches its item and stands a
+ * gap before the next chevron; and a crumb that takes a share of the room
+ * grows only where the sheet caps crumbs at their own width.
+ */
+function widensCrumb(declaration: CssDeclaration, block: CssBlock, capped: boolean): boolean {
+  if (!isCrumbBox(block)) return false;
+  const { property, value } = declaration;
+  if (property === "min-width") return !/^0(?:[a-z]+)?$/u.test(value.trim());
+  const grow =
+    property === "flex-grow"
+      ? value.trim()
+      : property === "flex"
+        ? value.trim().split(/\s+/u)[0]
+        : "";
+  return !capped && grow !== undefined && /^\d*\.?\d+$/u.test(grow) && Number(grow) > 0;
+}
+
 function cssRuleOf(declaration: CssDeclaration, block: CssBlock): StyleRule | undefined {
   const { property, value } = declaration;
   const bare = bareValue(value);
   if (isTokenBlock(block)) return undefined;
+  if (ownCursor(declaration, block)) return STYLE_RULE.CURSOR;
   if (property === "text-overflow" && /\bellipsis\b/u.test(bare)) return STYLE_RULE.ELLIPSIS;
   if (RADIUS_PROPERTY.test(property) && holdsLiteralNumber(value)) return STYLE_RULE.RADIUS;
   if (literalType(property, value)) return STYLE_RULE.TYPE;
@@ -525,6 +611,8 @@ function themeHas(names: ThemeNames, namespace: string, name: string): boolean {
 function classRuleOf(token: string, names: ThemeNames): StyleRule | undefined {
   const utility = utilityOf(token);
   if (utility === "truncate" || utility === "text-ellipsis") return STYLE_RULE.ELLIPSIS;
+  if (/^cursor-(?:pointer|\[pointer\])$/u.test(utility)) return STYLE_RULE.CURSOR;
+  if (utility.startsWith("cursor-") && PROFILE_PICK.test(token)) return STYLE_RULE.CURSOR;
   const text = /^text-(.+)$/u.exec(utility)?.[1];
   if (text !== undefined && !themeHas(names, "text", text)) {
     if (TYPE_SCALE.test(text) || LENGTH_ARBITRARY.test(text)) return STYLE_RULE.TYPE;
@@ -664,9 +752,13 @@ export function styleViolations(
   if (!isWatched(file)) return [];
   const violations: StyleViolation[] = [];
   if (CSS_SOURCE.test(file)) {
-    for (const block of scanCss(text).blocks) {
+    const { blocks } = scanCss(text);
+    const capped = capsCrumbs(blocks);
+    for (const block of blocks) {
       for (const declaration of block.declarations) {
-        const rule = cssRuleOf(declaration, block);
+        const rule =
+          cssRuleOf(declaration, block) ??
+          (widensCrumb(declaration, block, capped) ? STYLE_RULE.CRUMB_WIDTH : undefined);
         if (rule === undefined) continue;
         violations.push({
           rule,

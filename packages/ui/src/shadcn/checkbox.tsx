@@ -13,11 +13,11 @@ import { CheckIcon } from "../face/glyphs.js";
  * a mixed box (`indeterminate`), which shadcn draws as a check; the tick
  * springing in from a little smaller as it lands, and the box giving under
  * a press held on an enabled one, on the spring small elements ride; the
- * desktop's arrow cursor; none of shadcn's field-group, invalid, or dark
+ * one press cursor (`cursor-press`); none of shadcn's field-group, invalid, or dark
  * utilities, which no Luke surface sets; and none of its outline or ring
  * utilities, because the window's own focus ring (`@luke/panel`'s base.css)
  * draws the keyboard's ring and a utility would outrank it
- * (`shadcn-focus.test.ts`). `@luke/ui`'s `Checkbox`
+ * (`anti-slop/no-shadcn-focus-ring`). `@luke/ui`'s `Checkbox`
  * (`components/checkbox/checkbox.tsx`) is what an app draws; this is its inside.
  */
 
@@ -27,7 +27,7 @@ function Checkbox({ className, indeterminate, ...props }: CheckboxPrimitive.Root
       data-slot="checkbox"
       indeterminate={indeterminate}
       className={cn(
-        "peer relative flex size-[14px] shrink-0 items-center justify-center rounded-[4px] border border-control-edge bg-field text-on-accent transition-transform duration-(--luke-duration-fast) ease-spring-fast data-checked:border-accent-fill data-checked:bg-accent-fill data-indeterminate:border-accent-fill data-indeterminate:bg-accent-fill data-disabled:opacity-disabled active:not-data-disabled:not-data-readonly:scale-85 cursor-pointer in-data-[luke-profile=desktop]:cursor-default data-disabled:cursor-default data-readonly:cursor-default",
+        "peer relative flex size-[14px] shrink-0 items-center justify-center rounded-[4px] border border-control-edge bg-field text-on-accent transition-transform duration-(--luke-duration-fast) ease-spring-fast data-checked:border-accent-fill data-checked:bg-accent-fill data-indeterminate:border-accent-fill data-indeterminate:bg-accent-fill data-disabled:opacity-disabled active:not-data-disabled:not-data-readonly:scale-85 cursor-press data-disabled:cursor-default data-readonly:cursor-default",
         className,
       )}
       {...props}

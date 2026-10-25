@@ -14,8 +14,53 @@ import { extendTailwindMerge } from "tailwind-merge";
  * know as a colour: `text-body` beside `text-foreground` would be dropped as
  * a second text colour, and `px-control-inset` would outlive a later `p-0`.
  * The disabled fade (`opacity-disabled`) is told as an opacity, which it
- * would otherwise not read as one, so a later fade would not replace it.
+ * would otherwise not read as one, so a later fade would not replace it,
+ * and the two press cursors (`cursor-press`, `cursor-link`) as cursors, so a
+ * later `cursor-default` on a control that takes no press replaces them.
  */
+
+/**
+ * The names the panel places' block of the theme adds (Automations, Chat,
+ * Settings, a version history, Admin, the sign-in), by the group
+ * tailwind-merge reads each in.
+ */
+const PANEL_PLACES = {
+  tracking: ["experiment-tag"],
+  spacing: [
+    "automation-field",
+    "automation-next",
+    "automation-owner",
+    "automation-runs",
+    "automation-time",
+    "automation-webhook",
+    "chat-measure",
+    "chat-reading",
+    "em",
+    "onboarding-foot",
+  ],
+} as const;
+
+/**
+ * The names the panel work column's block of the theme adds (its layout's
+ * spacing roles, a transcript's opening line, the call's video room, a
+ * tool's page, the find bar, the version history), by the group
+ * tailwind-merge reads each in.
+ */
+const PANEL_WORK_COLUMN = {
+  "font-weight": ["luke-medium", "luke-regular", "luke-semibold"],
+  leading: ["tool-description"],
+  spacing: [
+    "attention-mark",
+    "agent-video-frame",
+    "column-inset",
+    "find-field",
+    "origin-glyph",
+    "ring-reach",
+  ],
+  radius: ["disc"],
+  shadow: ["tool-default"],
+  animate: ["edit-composer-in", "edit-composer-out"],
+} as const;
 
 /**
  * The names the feedback and display components' block of the theme adds
@@ -127,6 +172,37 @@ const CONTENT_TEXT = {
 } as const;
 
 /**
+ * The names the panel window's block of the theme adds (its layout's
+ * spacing roles, the sidebar's parts, an actor's mark, a press's corner
+ * dot), by the group tailwind-merge reads each in.
+ */
+const PANEL_WINDOW = {
+  text: ["section-size"],
+  tracking: ["workspace-head"],
+  spacing: [
+    "actor-badge",
+    "actor-badge-glyph",
+    "actor-face-share",
+    "actor-for-near",
+    "actor-for-x",
+    "actor-for-y",
+    "actor-overlap",
+    "corner-dot",
+    "list-held",
+    "offline-glyph",
+    "offline-mark",
+    "section-icon-scroll",
+    "sidebar-row-repository",
+    "sidebar-row-time",
+    "sidebar-slot-start",
+    "workspace-ref-lift",
+    "workspace-shared-glyph",
+  ],
+  shadow: ["actor-for-ring", "actor-outline", "actor-outline-ring", "actor-ring"],
+  animate: ["offline-arrive"],
+} as const;
+
+/**
  * The names the rows and navigation block of the theme adds (list row, nav
  * item, disclosure, bar item, pane bar, toolbar, over pane, folding search,
  * searchable menu), by the group tailwind-merge reads each in.
@@ -156,6 +232,25 @@ const ROWS_NAVIGATION = {
 } as const;
 
 /**
+ * The names the panel Home and tasks block of the theme adds (the welcome, a row's context, New task's title, a
+ * card's line, the Board's column, the List's row and maker), by the group
+ * tailwind-merge reads each in.
+ */
+const PANEL_HOME_TASKS = {
+  spacing: [
+    "card-line",
+    "new-task-title",
+    "row-context",
+    "tasks-board-column",
+    "tasks-list-maker",
+    "tasks-list-row",
+    "welcome-composer",
+    "welcome-face",
+    "welcome-tile",
+  ],
+} as const;
+
+/**
  * The names the panel shell's block of the theme adds (the sidebar, a row's
  * end mark, a search's match, the call card, the settings rows), by the
  * group tailwind-merge reads each in.
@@ -173,6 +268,167 @@ const PANEL_SHELL = {
     "settings-search-clearance",
   ],
   radius: ["luke-14"],
+} as const;
+
+/**
+ * The names the panel Inbox's block of the theme adds (its columns, its
+ * list's held height, its thread's gutter, a pick, its fields), by the
+ * group tailwind-merge reads each in.
+ */
+const PANEL_INBOX = {
+  spacing: [
+    "attention-glyph-small",
+    "inbox-earlier",
+    "inbox-face-half",
+    "inbox-field-short",
+    "inbox-field-words",
+    "inbox-line",
+    "list-held-least",
+    "pick-glyph-lift",
+  ],
+} as const;
+
+/**
+ * The names the chips, media, and call block of the theme adds (attachment
+ * chip, picture set and tile, page thumb, video player, provider button,
+ * composer frame, call bar and video tile), by the group tailwind-merge reads
+ * each in.
+ */
+const CHIPS_MEDIA_CALL = {
+  text: ["label-inline"],
+  spacing: [
+    "attachment-chip",
+    "attachment-chip-check",
+    "attachment-chip-lead",
+    "attachment-chip-max",
+    "attachment-chip-meter",
+    "attachment-chip-remove",
+    "attachment-chip-remove-out",
+    "attachment-chip-thumb",
+    "call-row",
+    "call-row-max",
+    "call-tile",
+    "call-tile-face-max",
+    "call-tile-face-share",
+    "icon-12",
+    "icon-16",
+    "page-thumb-row",
+    "picture-row",
+    "picture-thumb",
+    "provider-gate",
+    "provider-gate-touch",
+    "stage",
+    "video-player",
+  ],
+  radius: ["attachment-chip-face", "call-tile"],
+  shadow: ["attachment-chip-disc", "composer", "provider-gate"],
+  aspect: ["picture"],
+} as const;
+
+/**
+ * The names the panel's task surfaces' block of the theme adds (tasks.css,
+ * moving onto utilities), by the group tailwind-merge reads each in.
+ */
+const TASK_SURFACES = {
+  text: ["section-inline", "picture-caption"],
+  tracking: ["busy"],
+  spacing: [
+    "plan-byline-room",
+    "plan-unit-row",
+    "plan-changed-note",
+    "content-inset",
+    "bubble",
+    "transcript-gutter",
+    "tool-chip",
+    "conversation-empty",
+    "conversation-empty-wide",
+    "conversation-older",
+    "file-tree",
+    "crumb-tree",
+    "popover-narrow",
+    "page-versions-end",
+    "image-diff-side",
+    "snippet-pending",
+    "pull-request-page",
+    "chapter-rail",
+    "review-badge",
+    "comment-editor",
+    "branch-chip",
+    "label-dot",
+    "line-comment",
+    "boxed-inset",
+    "check-glyph",
+    "deployment-open",
+    "annotation",
+    "annotation-turn",
+    "annotation-face",
+    "annotation-face-x",
+    "annotation-gap",
+    "annotation-more",
+    "log-over-composer",
+    "todos-dock",
+    "dictation-clock",
+    "viewer-text",
+    "shells-pane",
+    "servers-list",
+    "issue-chip",
+    "picture-most",
+    "picture-stand-in",
+    "picture-describe",
+    "picture-glyph",
+    "comment-margin",
+    "comment-card",
+    "comment-indent",
+  ],
+  shadow: ["floating-edge"],
+} as const;
+
+/**
+ * The names the page patterns' block of the theme adds (layout, settings,
+ * the collection, detail, public, and auth pages, the empty and error
+ * states, the failure note, and the group header), by the group
+ * tailwind-merge reads each in.
+ */
+const PAGE_PATTERNS = {
+  text: ["public-page-lead"],
+  "font-weight": ["public-page-hero"],
+  leading: ["public-page-hero"],
+  spacing: [
+    "failure-note-row",
+    "field-least",
+    "group-header-mark",
+    "luke-64",
+    "luke-96",
+    "page-inset",
+    "page-section-gap",
+    "auth-ring",
+    "collection-page-inset",
+    "detail-page-end",
+    "detail-page-inset",
+    "public-media-reach",
+    "public-page-end",
+    "public-page-start",
+    "settings-row-compact",
+    "settings-row-compact-block",
+    "settings-row-compact-inline",
+    "settings-row-indent",
+    "settings-row-list",
+    "settings-row-list-block",
+    "settings-row-mark",
+    "settings-row-state-dot",
+    "settings-row-words-inset",
+    "state-row-inset",
+  ],
+  radius: ["public-media"],
+  shadow: ["auth-badge", "auth-card", "public-media"],
+  container: [
+    "auth-card",
+    "collection-page",
+    "empty-state",
+    "public-page",
+    "public-page-lead",
+    "public-page-wide",
+  ],
 } as const;
 
 const merge = extendTailwindMerge({
@@ -193,7 +449,11 @@ const merge = extendTailwindMerge({
         "tag",
         ...FEEDBACK_DISPLAY.text,
         ...CONTENT_TEXT.text,
+        ...PANEL_WINDOW.text,
         ...ROWS_NAVIGATION.text,
+        ...CHIPS_MEDIA_CALL.text,
+        ...PAGE_PATTERNS.text,
+        ...TASK_SURFACES.text,
       ],
       "font-weight": [
         "text",
@@ -204,17 +464,28 @@ const merge = extendTailwindMerge({
         "section",
         "emphasis",
         "title",
+        ...PANEL_WORK_COLUMN["font-weight"],
         ...FEEDBACK_DISPLAY["font-weight"],
         ...CONTENT_TEXT["font-weight"],
+        ...PAGE_PATTERNS["font-weight"],
       ],
-      tracking: ["title", ...PANEL_SHELL.tracking],
+      tracking: [
+        "title",
+        ...PANEL_SHELL.tracking,
+        ...PANEL_WINDOW.tracking,
+        ...PANEL_PLACES.tracking,
+        ...TASK_SURFACES.tracking,
+      ],
       leading: [
         "body",
         ...FEEDBACK_DISPLAY.leading,
         ...CONTENT_TEXT.leading,
         ...ROWS_NAVIGATION.leading,
+        ...PANEL_WORK_COLUMN.leading,
+        ...PAGE_PATTERNS.leading,
       ],
       spacing: [
+        ...PANEL_PLACES.spacing,
         "luke-2",
         "luke-4",
         "luke-6",
@@ -254,6 +525,7 @@ const merge = extendTailwindMerge({
         "dialog-action-gap",
         "dialog-action",
         "dialog-room",
+        "dialog-window-top",
         "dialog-command-top",
         "dialog-command-room",
         "dialog-command-sheet",
@@ -277,10 +549,17 @@ const merge = extendTailwindMerge({
         "choice-segment",
         "choice-segment-compact",
         "caption-glyph",
+        ...PANEL_WORK_COLUMN.spacing,
         ...FEEDBACK_DISPLAY.spacing,
         ...CONTENT_TEXT.spacing,
+        ...PANEL_WINDOW.spacing,
         ...ROWS_NAVIGATION.spacing,
         ...PANEL_SHELL.spacing,
+        ...PANEL_INBOX.spacing,
+        ...CHIPS_MEDIA_CALL.spacing,
+        ...PANEL_HOME_TASKS.spacing,
+        ...PAGE_PATTERNS.spacing,
+        ...TASK_SURFACES.spacing,
       ],
       radius: [
         "control",
@@ -297,10 +576,13 @@ const merge = extendTailwindMerge({
         "luke-full",
         "choice-segment",
         "choice-box",
+        ...PANEL_WORK_COLUMN.radius,
         ...FEEDBACK_DISPLAY.radius,
         ...CONTENT_TEXT.radius,
         ...ROWS_NAVIGATION.radius,
         ...PANEL_SHELL.radius,
+        ...CHIPS_MEDIA_CALL.radius,
+        ...PAGE_PATTERNS.radius,
       ],
       shadow: [
         "dialog",
@@ -308,11 +590,17 @@ const merge = extendTailwindMerge({
         "menu",
         "tooltip",
         "switch-thumb",
+        ...PANEL_WORK_COLUMN.shadow,
         ...FEEDBACK_DISPLAY.shadow,
         ...CONTENT_TEXT.shadow,
+        ...PANEL_WINDOW.shadow,
         ...ROWS_NAVIGATION.shadow,
+        ...CHIPS_MEDIA_CALL.shadow,
+        ...PAGE_PATTERNS.shadow,
+        ...TASK_SURFACES.shadow,
       ],
       font: ["ui"],
+      aspect: [...CHIPS_MEDIA_CALL.aspect],
       container: [
         "dialog-confirm",
         "dialog-wide",
@@ -325,6 +613,7 @@ const merge = extendTailwindMerge({
         "tooltip-card",
         ...FEEDBACK_DISPLAY.container,
         ...CONTENT_TEXT.container,
+        ...PAGE_PATTERNS.container,
       ],
       animate: [
         "dialog-scrim",
@@ -334,10 +623,13 @@ const merge = extendTailwindMerge({
         "menu-in",
         "tooltip-in",
         "tooltip-leave",
+        ...PANEL_WINDOW.animate,
+        ...PANEL_WORK_COLUMN.animate,
       ],
     },
     classGroups: {
       opacity: [{ opacity: ["disabled"] }],
+      cursor: [{ cursor: ["press", "link"] }],
     },
   },
 });

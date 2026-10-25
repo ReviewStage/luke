@@ -146,6 +146,29 @@ export interface AgentServersControl {
 /** The provider a server name that parses as none would be drawn as; never reached, since every row's name is minted from a provider. */
 const GITHUB = INTEGRATION_PROVIDER.GITHUB;
 
+/**
+ * The servers' list, taller than the searchable menu's, as tall as a
+ * server's page, so going in and back keeps the popover's size, and never
+ * taller than the window leaves above the composer once the field and the
+ * foot are drawn, so the field stays on screen in the shortest window.
+ */
+const SERVERS_SCROLL_CLASS = "flex max-h-servers-list flex-col";
+
+/** How many tools a server offers, in the muted detail type. */
+const SERVER_COUNT_CLASS =
+  "agent-servers-count flex-none whitespace-nowrap text-caption-inline text-muted-foreground tabular-nums";
+
+/** What stands at a server's row's end: its switch, or Connect, as Settings › Integrations draws them. */
+export const SERVER_END_CLASS = "ml-auto flex flex-none items-center gap-tight-gap";
+
+/**
+ * A page's head in the popover's place: back, folded to its glyph, its mark
+ * and name, its count, and its switch at the end, over a hairline, at the
+ * search field's height; a narrowed mention list's crumb stands as one.
+ */
+export const SERVER_PAGE_HEAD_CLASS =
+  "agent-servers-page-head flex h-pane-bar flex-none items-center gap-icon-gap border-b border-border pr-list-inset pl-item-gap [--luke-fold:folded]";
+
 /** What the pinned row at the popover's foot is named, which opens Settings › Integrations. */
 const SERVERS_SETTINGS = "Manage in Settings";
 
@@ -207,12 +230,16 @@ function ServerSwitch({
 
 /** A server's name in its row, faded where the row cuts it short. */
 function ServerName({ name }: { name: string }): React.JSX.Element {
-  return <OneLine className="agent-servers-name">{name}</OneLine>;
+  return <OneLine className="agent-servers-name flex-initial">{name}</OneLine>;
 }
 
 /** A server's name heading its own page, faded where the head cuts it short. */
 function ServerPageTitle({ name }: { name: string }): React.JSX.Element {
-  return <OneLine className="agent-servers-page-title">{name}</OneLine>;
+  return (
+    <OneLine className="agent-servers-page-title text-section-inline font-luke-semibold text-foreground">
+      {name}
+    </OneLine>
+  );
 }
 
 /**
@@ -235,27 +262,30 @@ export function ServerRowWords({ row }: { row: ServerRow }): React.JSX.Element {
   return (
     // Note that the words stand in a line of their own, because a list row's
     // title would otherwise clip the reason behind a long name.
-    <span className="agent-servers-words">
+    <span className="flex min-w-0 flex-auto items-center gap-icon-gap">
       <ServerName name={row.name} />
       {row.tools !== undefined ? (
-        <span className="agent-servers-count">{toolsCount(row.tools.length)}</span>
+        <span className={SERVER_COUNT_CLASS}>{toolsCount(row.tools.length)}</span>
       ) : null}
       {row.kind === SERVER_ROW.SIGNING_IN ? (
         <Tooltip label={row.note}>
-          <span className="agent-servers-waiting">
+          <span className="agent-servers-waiting flex">
             <Spinner label={row.note ?? ""} />
           </span>
         </Tooltip>
       ) : null}
       {row.problem !== undefined ? (
-        <OneLine hint={problemHint(row.problem, row.said)} className="agent-servers-problem">
+        <OneLine
+          hint={problemHint(row.problem, row.said)}
+          className="agent-servers-problem flex-auto text-caption-inline text-attention"
+        >
           {row.problem}
         </OneLine>
       ) : null}
       {row.note !== undefined && row.kind !== SERVER_ROW.SIGNING_IN ? (
         <OneLine
           hint={wholeWordsHint(row.note)}
-          className="agent-servers-problem agent-servers-problem-quiet"
+          className="agent-servers-problem flex-auto text-caption-inline text-muted-foreground"
         >
           {row.note}
         </OneLine>
@@ -334,7 +364,7 @@ function SearchRow({
 /** What the popover's list says in its rows' place. */
 function ServersNote({ words }: { words: string }): React.JSX.Element {
   return (
-    <div className="agent-servers-note">
+    <div className="flex min-h-10 items-center justify-center px-list-inset py-tight-gap text-center">
       <Text as={TEXT_ELEMENT.P} variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
         {words}
       </Text>
@@ -345,7 +375,7 @@ function ServersNote({ words }: { words: string }): React.JSX.Element {
 /** The heading over a run of the home's rows. */
 function ServersHeading({ words }: { words: string }): React.JSX.Element {
   return (
-    <div className="agent-servers-heading" aria-hidden="true">
+    <div className="px-row-inset pt-row-inset pb-tight-gap first:pt-luke-2" aria-hidden="true">
       <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
         {words}
       </Text>
@@ -750,9 +780,9 @@ function ServersPopover({
         }}
         onKeyDown={onHomeKey}
       />
-      <div className="agent-servers-scroll">
+      <div className={SERVERS_SCROLL_CLASS}>
         <ScrollArea ref={list} size={SCROLL_SIZE.CONTENT}>
-          <div ref={moving} className="agent-servers-list">
+          <div ref={moving} className="agent-servers-list p-menu-inset">
             <ListMotion root={moving}>
               {rows.length === 0 ? <ServersNote words={SERVERS_NONE} /> : null}
               {rows.length > 0 && picks.length === 0 && groups.length === 0 ? (
@@ -784,7 +814,7 @@ function ServersPopover({
   const serverPage = (row: ServerRow) => {
     return (
       <>
-        <div className="agent-servers-page-head">
+        <div className={SERVER_PAGE_HEAD_CLASS}>
           <BackButton
             label={SERVERS_LABEL}
             place={SERVERS_LABEL}
@@ -793,8 +823,8 @@ function ServersPopover({
           />
           <ProviderMark provider={row.provider} size={PROVIDER_MARK_SIZE.ICON} />
           <ServerPageTitle name={row.name} />
-          <span className="agent-servers-count">{toolsCount(row.tools?.length ?? 0)}</span>
-          <span className="agent-servers-end">
+          <span className={SERVER_COUNT_CLASS}>{toolsCount(row.tools?.length ?? 0)}</span>
+          <span className={SERVER_END_CLASS}>
             <ServerSwitch row={row} servers={servers} />
           </span>
         </div>
@@ -808,9 +838,9 @@ function ServersPopover({
           }}
           onKeyDown={onPageKey}
         />
-        <div className="agent-servers-scroll">
+        <div className={SERVERS_SCROLL_CLASS}>
           <ScrollArea ref={list} size={SCROLL_SIZE.CONTENT}>
-            <div className="agent-servers-list">
+            <div className="agent-servers-list p-menu-inset">
               {pageTools.length === 0 ? <ServersNote words={PAGE.NONE} /> : null}
               <IntegrationToolList
                 server={row.name}
@@ -862,13 +892,13 @@ function ServersPopover({
     >
       {/* Note that the searchable menu's own class rides a box drawn as its
           contents, because its rows' highlight is that menu's. */}
-      <div className="searchable-menu agent-servers-menu">
+      <div className="agent-servers-menu contents">
         {page !== undefined && tool !== undefined
           ? toolPage(page, tool)
           : page !== undefined
             ? serverPage(page)
             : home}
-        <div className="task-compose-menu-foot">
+        <div className="task-compose-menu-foot block flex-none border-t border-border p-menu-inset">
           <Button
             variant={BUTTON_VARIANT.QUIET}
             icon={<GearIcon />}
@@ -933,10 +963,10 @@ export function AgentServersButton({
   } as const;
 
   return (
-    <div className="agent-servers" ref={root}>
+    <div className="agent-servers relative flex min-w-0" ref={root}>
       {face === undefined ? (
         // Note that the box, not the button, wears the class the composer's ⋯ finds the press by (`agent-composer.tsx`).
-        <span className="agent-servers-button">
+        <span className="agent-servers-button flex">
           <Tooltip label={SERVERS_LABEL}>
             <IconButton icon={<McpIcon />} label={SERVERS_LABEL} {...press} />
           </Tooltip>

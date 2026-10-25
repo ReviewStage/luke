@@ -371,10 +371,16 @@ export interface VercelSandboxApi {
   ) => Effect.Effect<ListedSandbox, SandboxUnavailable>;
   /**
    * Snapshots the running session, which stops it, answering the snapshot's
-   * id. The snapshot never expires. A session that is no longer running is
-   * refused, so of two snapshots asked at once only the first is taken.
+   * id. The snapshot expires `expiresAfter` its last use, or never where that
+   * is infinite. Note that an expiration asked here wins over the sandbox's
+   * own `keepLastSnapshots`, so a snapshot that must lapse on its own says
+   * when. A session that is no longer running is refused, so of two
+   * snapshots asked at once only the first is taken.
    */
-  readonly snapshot: (sandboxSessionId: string) => Effect.Effect<string, SandboxUnavailable>;
+  readonly snapshot: (
+    sandboxSessionId: string,
+    expiresAfter: Duration.Duration,
+  ) => Effect.Effect<string, SandboxUnavailable>;
   /**
    * Whether the snapshot named still stands: false where Vercel answers it
    * not found (404) or gone (410), or names it deleted or failed.
@@ -1199,7 +1205,7 @@ export function vercelSandboxApi(
             status: session.status ?? sandbox.status,
           };
         }),
-      snapshot: (sandboxSessionId) =>
+      snapshot: (sandboxSessionId, expiresAfter) =>
         Effect.gen(function* () {
           const asked = yield* credentials(SANDBOX_CALL.SNAPSHOT);
           const url = apiUrl(
@@ -1207,7 +1213,10 @@ export function vercelSandboxApi(
             asked.teamId,
           );
           const request = HttpClientRequest.post(url, { headers: asked.headers }).pipe(
-            HttpClientRequest.bodyJsonUnsafe({ expiration: 0 }),
+            // Vercel's create-a-snapshot takes 0 for a snapshot that never expires.
+            HttpClientRequest.bodyJsonUnsafe({
+              expiration: Duration.isFinite(expiresAfter) ? Duration.toMillis(expiresAfter) : 0,
+            }),
           );
           const taken = yield* callApi(client, SANDBOX_CALL.SNAPSHOT, request);
           const read = readSnapshot(jsonOf(taken.text));

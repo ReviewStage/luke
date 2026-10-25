@@ -254,7 +254,10 @@ export function AgentCallControls({
   // The speaker and the end are the voice window's to carry out: it plays Luke and holds the call.
   const command = (sent: VoiceCommand) => press(ACT_KIND.VOICE_COMMAND, { command: sent });
   return (
-    <fieldset className="agent-call-controls" aria-label={CALL_CONTROLS_LABEL}>
+    <fieldset
+      className="agent-call-controls m-0 flex min-w-0 flex-none items-center gap-tight-gap border-0 p-0"
+      aria-label={CALL_CONTROLS_LABEL}
+    >
       <AgentCallStatus status={view.voiceStatus} startedAt={startedAt} muted={button.muted} />
       <CallMute
         device={CALL_DEVICE.SPEAKER}
@@ -288,7 +291,7 @@ export function AgentCallFoot({ agentId }: { agentId: string }): React.JSX.Eleme
   const onCall = useAgentOnCall(agentId);
   if (!onCall) return null;
   return (
-    <div className="agent-call-foot">
+    <div className="agent-call-foot relative">
       <AgentCallVideo agentId={agentId} />
     </div>
   );

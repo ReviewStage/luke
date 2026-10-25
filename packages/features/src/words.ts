@@ -243,11 +243,10 @@ export const VOICE_FAILURE_WORDS = {
     words: "Luke could not start the call. Try again in a moment.",
   },
   [VOICE_FAILURE.CALL_DROPPED]: {
-    words: "The call dropped: the connection was lost. Call again to carry on.",
+    words: "The call dropped. Call again to carry on.",
   },
   [VOICE_FAILURE.MICROPHONE_REFUSED]: {
-    words:
-      "A call needs the microphone. Allow it in System Settings › Privacy & Security › Microphone.",
+    words: "A call needs the microphone. Allow it in System Settings.",
     remedy: VOICE_REMEDY.ALLOW_MICROPHONE,
   },
   [VOICE_FAILURE.MICROPHONE_UNAVAILABLE]: {
@@ -255,11 +254,11 @@ export const VOICE_FAILURE_WORDS = {
       "Luke can't hear you: the microphone could not be opened. Check that one is connected, then unmute.",
   },
   [VOICE_FAILURE.OPENAI_KEY_MISSING]: {
-    words: "Luke could not start the call. A call runs on your OpenAI key, and none is saved.",
+    words: "Luke could not start the call: no OpenAI key is saved.",
     remedy: VOICE_REMEDY.ADD_OPENAI_KEY,
   },
   [VOICE_FAILURE.OPENAI_KEY_REFUSED]: {
-    words: "Luke could not start the call. OpenAI refused your key, which may have been revoked.",
+    words: "Luke could not start the call. OpenAI refused your key.",
     remedy: VOICE_REMEDY.ADD_OPENAI_KEY,
   },
   [VOICE_FAILURE.OPENAI_KEY_UNFUNDED]: {
@@ -273,7 +272,7 @@ export const VOICE_FAILURE_WORDS = {
     words: "This agent runs on Claude or Codex and can't take calls yet.",
   },
   [VOICE_FAILURE.VOICE_UNAVAILABLE]: {
-    words: "Voice is temporarily unavailable. Try again later.",
+    words: "Voice is temporarily unavailable.",
   },
   [VOICE_FAILURE.VOICE_WINDOW_LOST]: {
     words: "Voice stopped working and could not restart. Quit and reopen Luke to call again.",

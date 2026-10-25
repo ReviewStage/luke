@@ -103,7 +103,7 @@ function UpdatePill({
     [hint],
   );
   return (
-    <span className="sidebar-update">
+    <span className="sidebar-update flex flex-none">
       <FoldingButton
         label={word}
         icon={icon}
@@ -168,7 +168,7 @@ function AccountHeading({
           as={TEXT_ELEMENT.SPAN}
           variant={TEXT_VARIANT.INHERIT}
           truncate
-          className="account-menu-name"
+          className="account-menu-name font-luke-semibold text-foreground"
         >
           {account.name}
         </Text>
@@ -177,7 +177,7 @@ function AccountHeading({
         as={TEXT_ELEMENT.SPAN}
         variant={TEXT_VARIANT.INHERIT}
         truncate
-        className="account-menu-email"
+        className="account-menu-email text-muted-foreground"
       >
         {account.email}
       </Text>

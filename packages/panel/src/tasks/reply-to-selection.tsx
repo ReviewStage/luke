@@ -211,7 +211,7 @@ export function ReplyToSelection({
   return createPortal(
     <MenuSurface
       flow={MENU_SURFACE_FLOW.TOOLBAR}
-      className="reply-to-selection"
+      className="reply-to-selection fixed z-menu -translate-x-1/2 -translate-y-full data-below:translate-y-0"
       data-below={picked.below ? "" : undefined}
       style={{ left: picked.left, top: picked.top }}
     >
@@ -240,8 +240,10 @@ export function ComposerQuoteView({
   held: boolean;
 }): React.JSX.Element {
   return (
-    <div className="composer-quote">
-      <span className="composer-quote-words">{quote.words}</span>
+    <div className="composer-quote my-tight-gap mx-0 flex select-none items-start gap-control-gap border-l-3 border-border-strong pl-[0.8em] text-caption leading-body text-muted-foreground">
+      <span className="composer-quote-words m-0 min-w-0 flex-auto whitespace-pre-line wrap-anywhere line-clamp-3">
+        {quote.words}
+      </span>
       <Tooltip label={REPLY_WORDS.REMOVE}>
         {/* Note that the press keeps the caret where it stands, so the words around the quote stay where they were. */}
         <IconButton

@@ -55,6 +55,8 @@ import { SCROLL_FADE, SCROLL_SIZE, ScrollArea } from "../scroll-area/scroll-area
  */
 const CARD = "luke-hover-card flex flex-col gap-1";
 const HEAD = "luke-hover-card-head flex items-baseline gap-icon-gap";
+const LEAD = "luke-hover-card-lead flex items-center gap-control-gap";
+const LED_HEAD = "min-w-0 flex-1";
 const GLYPH =
   "luke-hover-card-glyph inline-flex h-lh w-menu-glyph flex-none items-center justify-center self-start [&>:not(.luke-avatar,:has(.luke-avatar))]:size-hover-card-glyph";
 const TITLE = "luke-hover-card-title flex min-w-0 flex-1 flex-col gap-0.5";
@@ -70,7 +72,7 @@ const RULE = "luke-hover-card-rule m-0 h-px w-full flex-none border-0 bg-border"
 const ROW =
   "luke-hover-card-row group/row -mx-2 box-border flex h-menu-row w-[calc(100%+--spacing(4))] min-w-0 items-center gap-icon-gap rounded-menu-row border-0 bg-transparent px-2 py-0 text-left text-body leading-[inherit] text-foreground transition-colors duration-(--luke-duration-hover) ease-motion-exit data-[look=detail]:text-caption data-[look=detail]:leading-[inherit] data-[look=detail]:text-muted-foreground";
 const ROW_PRESS =
-  "[font-family:inherit] [font-style:inherit] [font-weight:inherit] cursor-pointer hover:bg-fill-strong focus-visible:bg-fill-strong focus-visible:outline-none";
+  "[font-family:inherit] [font-style:inherit] [font-weight:inherit] cursor-press hover:bg-fill-strong focus-visible:bg-fill-strong focus-visible:outline-none";
 const ROW_GLYPH =
   "luke-hover-card-row-glyph inline-flex w-menu-glyph flex-none justify-center [&>:not(.luke-avatar,:has(.luke-avatar))]:size-menu-glyph group-data-[look=detail]/row:[&>img]:size-hover-card-glyph";
 const ROW_LABEL = "luke-hover-card-row-label min-w-0 flex-1 overflow-hidden whitespace-nowrap";
@@ -102,14 +104,22 @@ export function HoverCard({
   );
 }
 
-/** A card's head: its glyph where it wears one, its name and the line under it, and its corner. */
+/**
+ * A card's head: its glyph where it wears one, its name and the line under
+ * it, and its corner. A card about someone or somewhere leads instead with
+ * their `mark` at a card's size, a face or a workspace's tile, the head
+ * beside it and centred on it, as a profile card leads with its picture.
+ */
 export function HoverCardHead({
+  mark,
   glyph,
   name,
   oneLine = false,
   sub,
   corner,
 }: {
+  /** What leads the head at a card's size, a face or a tile, beside the rest rather than on the name's first line. */
+  mark?: ReactNode;
   glyph?: ReactNode;
   name: ReactNode;
   /** Whether the name stands on one line, faded where it is cut short, rather than wrapping to two: a task standing in for a title. */
@@ -119,8 +129,8 @@ export function HoverCardHead({
   /** What stands muted at the head's right. */
   corner?: ReactNode;
 }): React.JSX.Element {
-  return (
-    <div className={HEAD}>
+  const head = (
+    <div className={mark === undefined ? HEAD : `${HEAD} ${LED_HEAD}`}>
       {glyph === undefined ? null : <span className={GLYPH}>{glyph}</span>}
       <div className={TITLE}>
         {oneLine ? (
@@ -137,6 +147,13 @@ export function HoverCardHead({
         {sub === undefined ? null : <span className={SUB}>{sub}</span>}
       </div>
       {corner === undefined ? null : <span className={CORNER}>{corner}</span>}
+    </div>
+  );
+  if (mark === undefined) return head;
+  return (
+    <div className={LEAD}>
+      {mark}
+      {head}
     </div>
   );
 }

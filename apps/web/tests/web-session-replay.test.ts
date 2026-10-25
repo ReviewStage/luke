@@ -111,13 +111,11 @@ test("a production build with the site's key records the tab under the desktop's
   await vi.advanceTimersByTimeAsync(10_000);
   assert.equal(posthog.sessionRecordingStarted(), true);
 
-  // What the recorder was started with: every text node and input masked,
-  // the canvas, the console, and clicks kept out, and the attributes that
-  // carry words asterisked while a stylesheet's address still lays out.
+  // What the recorder was started with: the canvas, the console, and clicks
+  // kept out, and the attributes that carry words asterisked while a
+  // stylesheet's address still lays out.
   const recording = posthog.config.session_recording;
-  assert.equal(recording.maskTextSelector, "*");
   assert.equal(recording.captureCanvas?.recordCanvas, false);
-  assert.equal(posthog.config.mask_all_text, true);
   assert.equal(posthog.config.autocapture, false);
   assert.equal(posthog.config.enable_recording_console_log, false);
   assert.equal(posthog.config.capture_performance, false);

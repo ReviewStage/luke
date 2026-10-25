@@ -11,7 +11,6 @@ import { AUTOMATION_RUN_REASON } from "@luke/features/automation-wire";
 import {
   CODING_AGENT_CALL_FAILURE,
   type CodingAgentAccountInboxAnswerView,
-  type CodingAgentPullRequestAnswerView,
 } from "@luke/features/coding-agent-view";
 import {
   CODING_AGENT_KIND,
@@ -21,21 +20,11 @@ import {
   type TasklessAgent,
 } from "@luke/features/coding-agent-wire";
 import { Effect, Layer, Queue, Stream } from "effect";
-import {
-  type AgentEndToast,
-  type AgentNotice,
-  AgentNoticeDoors,
-  type AgentPlace,
-  type ChatMessageToast,
-  createAgentNotices,
-  type FailedRunToast,
-  type InboxItemsToast,
-} from "./agent-notices.js";
+import { type AgentNotice, AgentNoticeDoors, createAgentNotices } from "./agent-notices.js";
 import type { AppInboxSlice, AppInboxTask, AppInboxTaskHolding } from "./app-state.js";
 
 const TASK_ID = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
 const AGENT_ID = "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21";
-const TASK_NAME = "Teammate invitations";
 const MODEL = "anthropic/claude-opus-5.5";
 const TURN_ID = "3f1c2b7a-9d4e-4a6b-8c1d-2e5f6a7b8c9d";
 const ACCOUNT = "dean@example.com";
@@ -69,35 +58,25 @@ type InboxAnswerGiven =
     });
 
 /**
- * The notices over a scripted host: each task's list answers from its own
- * queue, the last answer standing, the account's inbox read holds until the
- * test answers it, and everything posted, toasted, opened, badged, and
- * written is kept for the test to read. Electron's doors are a Layer of the
- * test's own that records what leaves through each.
+ * The notices over a scripted host: the account's inbox read holds until the
+ * test answers it, and everything posted, badged, and written is kept for
+ * the test to read. Electron's doors are a Layer of the test's own that
+ * records what leaves through each.
  */
 function fixture() {
-  const readPullRequests: string[] = [];
-  const published = new Map<string, CodingAgentPullRequestAnswerView>();
   const posted: AgentNotice[] = [];
-  const toasted: AgentEndToast[] = [];
-  const inboxToasted: InboxItemsToast[] = [];
-  const runsToasted: FailedRunToast[] = [];
-  const chatToasted: ChatMessageToast[] = [];
-  const chatOpened: string[] = [];
   let chatOn = true;
   const badges: number[] = [];
-  /** Whether the notification door throws, as a browser that refuses to build one does. */
-  let refusingPosts = false;
+  /** Whether the badge door throws, as a platform that refuses one may. */
+  let refusingBadges = false;
   const doors = Layer.succeed(AgentNoticeDoors, {
     post: (notice) => {
-      if (refusingPosts) throw new TypeError("Illegal constructor");
       posted.push(notice);
     },
-    toast: (end) => toasted.push(end),
-    toastInbox: (opened) => inboxToasted.push(opened),
-    toastFailedRun: (run) => runsToasted.push(run),
-    toastChat: (message) => chatToasted.push(message),
-    badge: (count) => badges.push(count),
+    badge: (count) => {
+      if (refusingBadges) throw new TypeError("Illegal invocation");
+      badges.push(count);
+    },
   });
   /** How many times the account's inbox was followed. */
   let inboxFollows = 0;
@@ -105,35 +84,18 @@ function fixture() {
   const holding: (readonly AppInboxTaskHolding[])[] = [];
   const taskless: AppInboxSlice["taskless"][] = [];
   const failedRuns: AppInboxSlice["failedRuns"][] = [];
-  const chatWaiting: AppInboxSlice["chat"][] = [];
-  const openedAutomations: string[] = [];
-  const openedInboxes: string[] = [];
   let inboxAnswers: Queue.Queue<CodingAgentAccountInboxAnswerView> | undefined;
   let accounts: Queue.Queue<string | undefined> | undefined;
-  const opened: AgentPlace[] = [];
-  const openedTaskless: {
-    readonly agentId: string;
-    readonly itemId: string;
-    readonly workspaceId?: string;
-  }[] = [];
   const unseen: (readonly string[])[] = [];
   let focus: ((focused: boolean) => void) | undefined;
   let accountChanged: ((signedInAs: string | undefined) => void) | undefined;
   let signedInAs: string | undefined = ACCOUNT;
   let accountId: string | undefined = ACCOUNT_ID;
-  let notifying = true;
   const notices = Effect.gen(function* () {
     inboxAnswers = yield* Queue.unbounded<CodingAgentAccountInboxAnswerView>();
     accounts = yield* Queue.unbounded<string | undefined>();
     Queue.offerUnsafe(accounts, signedInAs);
     return yield* createAgentNotices({
-      readPullRequest: (agentId) =>
-        Effect.sync(() => {
-          readPullRequests.push(agentId);
-          return published.get(agentId) ?? { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED };
-        }),
-      taskName: (taskId) => (taskId === TASK_ID ? TASK_NAME : undefined),
-      open: (place) => opened.push(place),
       onUnseenChanged: (next) => unseen.push(next),
       onPanelFocusChanged: (listener) => {
         focus = listener;
@@ -141,7 +103,6 @@ function fixture() {
           focus = undefined;
         };
       },
-      notifying: () => notifying,
       signedInAs: () => signedInAs,
       accountId: () => accountId,
       onAccountChanged: (listener) => {
@@ -162,26 +123,14 @@ function fixture() {
         holding.push(next.tasks);
         taskless.push(next.taskless);
         failedRuns.push(next.failedRuns);
-        chatWaiting.push(next.chat);
       },
-      openFailedRun: (place) => openedAutomations.push(place.automationId),
-      openChat: (workspaceId) => chatOpened.push(workspaceId),
       chatOn: () => chatOn,
-      openInbox: (taskId) => openedInboxes.push(taskId),
-      openTasklessItem: (item) => openedTaskless.push(item),
       report: () => undefined,
     });
   }).pipe(Effect.provide(doors));
   return {
     notices,
-    readPullRequests,
     posted,
-    toasted,
-    /** What the agent's pull-request read answers, for the notice of its end. */
-    publish: (agentId: string, answer: CodingAgentPullRequestAnswerView) =>
-      published.set(agentId, answer),
-    opened,
-    openedTaskless,
     unseen,
     focus: (focused: boolean) => {
       assert.ok(focus, "the notices subscribe to the window's focus");
@@ -205,15 +154,7 @@ function fixture() {
     holding,
     taskless,
     badges,
-    inboxToasted,
-    openedInboxes,
-    runsToasted,
     failedRuns,
-    chatWaiting,
-    openedAutomations,
-    chatToasted,
-    /** The workspace each chat notification's click opened Chat on. */
-    chatOpened,
     /** The account's Chat experiment. */
     turnChat: (on: boolean) => {
       chatOn = on;
@@ -222,21 +163,14 @@ function fixture() {
     knowAccountId: (next: string | undefined) => {
       accountId = next;
     },
-    /** The developer's setting for notifications. */
-    notify: (on: boolean) => {
-      notifying = on;
+    /** Whether the badge door throws on each count. */
+    refuseBadges: (on: boolean) => {
+      refusingBadges = on;
     },
-    /** Whether the notification door throws on each post. */
-    refusePosts: (on: boolean) => {
-      refusingPosts = on;
-    },
-    /** What was said, without the clicks. */
-    said: () => posted.map(({ title, body }) => ({ title, body })),
-    /** How many times the task list was asked for again. */
   };
 }
 it.effect(
-  "the account leaving takes its agents with it, so nothing of theirs is announced to the next",
+  "the account leaving takes its agents with it, so nothing of theirs is dotted for the next",
   () =>
     Effect.gen(function* () {
       const f = fixture();
@@ -254,11 +188,11 @@ it.effect(
       // The answer that was on its way lands as a first sighting.
       notices.observeAgents([{ ...other, status: CODING_AGENT_STATUS.COMPLETED }]);
       yield* settled;
-      assert.equal(f.posted.length, 1);
+      assert.deepEqual(f.unseen.at(-1), []);
     }),
 );
 it.effect(
-  "the plan list followed live feeds the ledger: an end it carries is announced, and a plan it drops takes its agents' dots with it",
+  "the plan list followed live feeds the ledger: an end it carries is dotted, and a plan it drops takes its agents' dots with it",
   () =>
     Effect.gen(function* () {
       const f = fixture();
@@ -270,7 +204,6 @@ it.effect(
       notices.observeFollowed([agent(CODING_AGENT_STATUS.COMPLETED)], [TASK_ID]);
       yield* settled;
 
-      assert.deepEqual(f.said(), [{ title: TASK_NAME, body: "Opus 5.5 finished" }]);
       assert.deepEqual(f.unseen.at(-1), [AGENT_ID]);
 
       notices.observeFollowed([], []);
@@ -319,7 +252,7 @@ it.effect(
 );
 
 it.effect(
-  "an agent a Start answered is kept through a push that does not name it yet, so its quick end is still announced",
+  "an agent a Start answered is kept through a push that does not name it yet, so its quick end is still dotted",
   () =>
     Effect.gen(function* () {
       const f = fixture();
@@ -331,7 +264,6 @@ it.effect(
       notices.observeFollowed([agent(CODING_AGENT_STATUS.COMPLETED)], [TASK_ID]);
       yield* settled;
 
-      assert.deepEqual(f.said(), [{ title: TASK_NAME, body: "Opus 5.5 finished" }]);
       assert.deepEqual(f.unseen.at(-1), [AGENT_ID]);
     }),
 );
@@ -423,60 +355,6 @@ it.effect(
       assert.deepEqual(f.waiting.at(-1), []);
       assert.equal(f.badges.at(-1), 0);
       assert.equal(f.inboxFollows(), 2);
-    }),
-);
-it.effect(
-  "items one read finds opened while the window is focused are handed over in one toast, and those on the Inbox on screen are left out of it",
-  () =>
-    Effect.gen(function* () {
-      const f = fixture();
-      const notices = yield* f.notices;
-      f.focus(true);
-      f.answerInbox({ items: [], cursor: "1", readAt: READ_AT });
-      yield* settled;
-
-      f.answerInbox({
-        items: [
-          waitingItem(ITEM_A, { updatedAt: READ_AT + 1 }),
-          waitingItem(ITEM_B, { title: "Rotate the staging key?", updatedAt: READ_AT + 1 }),
-        ],
-        cursor: "2",
-        readAt: READ_AT + 2,
-      });
-      yield* settled;
-      assert.deepEqual(f.inboxToasted, [
-        {
-          items: [
-            {
-              taskId: TASK_ID,
-              itemId: ITEM_A,
-              words: "Fix invitations: Push to the release branch?",
-              detail: TASK_NAME,
-            },
-            {
-              taskId: TASK_ID,
-              itemId: ITEM_B,
-              words: "Fix invitations: Rotate the staging key?",
-              detail: TASK_NAME,
-            },
-          ],
-        },
-      ]);
-
-      // The task's Inbox on screen says what lands in it itself, so main hands the window nothing.
-      notices.shownInbox(TASK_ID);
-      f.answerInbox({
-        items: [
-          waitingItem(ITEM_A, { updatedAt: READ_AT + 1 }),
-          waitingItem(ITEM_B, { updatedAt: READ_AT + 1 }),
-          waitingItem(ITEM_C, { updatedAt: READ_AT + 3 }),
-        ],
-        cursor: "3",
-        readAt: READ_AT + 4,
-      });
-      yield* settled;
-      assert.equal(f.inboxToasted.length, 1);
-      assert.deepEqual(f.posted, []);
     }),
 );
 it.effect(
@@ -584,7 +462,7 @@ function tasklessAgent(
 }
 
 it.effect(
-  "an automation's agent with no plan, held from the plan list, announces its end under the automation's name, its click opening its own page",
+  "an automation's agent with no plan, held from the plan list, is dotted as its turn ends",
   () =>
     Effect.gen(function* () {
       const f = fixture();
@@ -595,16 +473,11 @@ it.effect(
       notices.observeTaskless([tasklessAgent(CODING_AGENT_STATUS.COMPLETED)]);
       yield* settled;
 
-      assert.deepEqual(f.said(), [
-        { title: AUTOMATION_NAME, body: "Triage overnight issues finished" },
-      ]);
       assert.deepEqual(f.unseen.at(-1), [AGENT_ID]);
-      f.posted[0]?.onClick();
-      assert.deepEqual(f.opened, [{ taskId: null, agentId: AGENT_ID }]);
     }),
 );
 it.effect(
-  "an operator's heartbeat that ended quiet leaves no dot and no notice, and one that said something leaves both",
+  "an operator's heartbeat that ended quiet leaves no dot, and one that said something leaves one",
   () =>
     Effect.gen(function* () {
       const f = fixture();
@@ -624,18 +497,16 @@ it.effect(
       notices.observeTaskless([luke(CODING_AGENT_STATUS.RUNNING, { quietTurn: true })]);
       notices.observeTaskless([luke(CODING_AGENT_STATUS.COMPLETED, { quietTurn: true })]);
       yield* settled;
-      assert.deepEqual(f.posted, []);
       assert.deepEqual(f.unseen, [], "a quiet end dots nothing");
 
       notices.observeTaskless([luke(CODING_AGENT_STATUS.RUNNING, { turnId: said })]);
       notices.observeTaskless([luke(CODING_AGENT_STATUS.COMPLETED, { turnId: said })]);
       yield* settled;
-      assert.deepEqual(f.said(), [{ title: AUTOMATION_NAME, body: "Luke finished" }]);
       assert.deepEqual(f.unseen.at(-1), [AGENT_ID]);
     }),
 );
 it.effect(
-  "a heartbeat whose end the agent's page saw first has its dot taken back, and its notice let go, once the list says it was quiet",
+  "a heartbeat whose end the agent's page saw first has its dot taken back once the list says it was quiet",
   () =>
     Effect.gen(function* () {
       const f = fixture();
@@ -652,72 +523,10 @@ it.effect(
       yield* settled;
 
       assert.deepEqual(f.unseen.at(-1), []);
-      assert.deepEqual(f.posted, []);
     }),
 );
 it.effect(
-  "an automation's agent with no plan that fails while the window is focused elsewhere is toasted in the failed tone under the automation's name, its View going to its own page",
-  () =>
-    Effect.gen(function* () {
-      const f = fixture();
-      const notices = yield* f.notices;
-      f.focus(true);
-
-      notices.observeTaskless([tasklessAgent(CODING_AGENT_STATUS.RUNNING)]);
-      notices.observeTaskless([tasklessAgent(CODING_AGENT_STATUS.FAILED)]);
-      yield* Effect.yieldNow;
-
-      assert.deepEqual(f.toasted, [
-        {
-          place: { taskId: null, agentId: AGENT_ID },
-          words: "Triage overnight issues failed",
-          detail: AUTOMATION_NAME,
-          failed: true,
-        },
-      ]);
-      assert.deepEqual(f.posted, []);
-    }),
-);
-it.effect(
-  "an agent with no plan named only by an act's answer is announced under the automation that answer names",
-  () =>
-    Effect.gen(function* () {
-      const f = fixture();
-      const notices = yield* f.notices;
-      f.focus(false);
-      const mine = {
-        ...agent(CODING_AGENT_STATUS.RUNNING, { title: "Triage overnight issues" }),
-        planId: null,
-        startedBy: { userId: ACCOUNT_ID, name: "Dana" },
-        automationName: AUTOMATION_NAME,
-      };
-
-      notices.observeAgents([mine]);
-      notices.observeAgents([{ ...mine, status: CODING_AGENT_STATUS.COMPLETED }]);
-      yield* Effect.yieldNow;
-
-      assert.deepEqual(f.said(), [
-        { title: AUTOMATION_NAME, body: "Triage overnight issues finished" },
-      ]);
-    }),
-);
-it.effect(
-  "an untitled automation's agent is named by its automation, as its tab names it, not by its model",
-  () =>
-    Effect.gen(function* () {
-      const f = fixture();
-      const notices = yield* f.notices;
-      f.focus(false);
-
-      notices.observeTaskless([tasklessAgent(CODING_AGENT_STATUS.RUNNING, { title: null })]);
-      notices.observeTaskless([tasklessAgent(CODING_AGENT_STATUS.FAILED, { title: null })]);
-      yield* Effect.yieldNow;
-
-      assert.deepEqual(f.said(), [{ title: AUTOMATION_NAME, body: `${AUTOMATION_NAME} failed` }]);
-    }),
-);
-it.effect(
-  "a teammate's agent with no plan on the plan list is not held, so its end is announced to its starter alone",
+  "a teammate's agent with no plan on the plan list is not held, so its end is dotted for its starter alone",
   () =>
     Effect.gen(function* () {
       const f = fixture();
@@ -729,7 +538,6 @@ it.effect(
       notices.observeTaskless([tasklessAgent(CODING_AGENT_STATUS.COMPLETED, theirs)]);
       yield* Effect.yieldNow;
 
-      assert.deepEqual(f.posted, []);
       assert.deepEqual(f.unseen, []);
     }),
 );
@@ -751,7 +559,6 @@ it.effect(
       notices.observeAgents([{ ...theirs, status: CODING_AGENT_STATUS.COMPLETED }]);
       yield* settled;
 
-      assert.deepEqual(f.posted, []);
       assert.deepEqual(f.unseen, []);
     }),
 );
@@ -773,7 +580,7 @@ function tasklessItem(id: string, patch: Partial<AccountTasklessEntry> = {}): Ac
   };
 }
 it.effect(
-  "an item of an agent with no plan waits beside the plans' with its workspace and counts on the badge, and one opened since is announced by its automation, its click opening the item in the window's Inbox",
+  "an item of an agent with no plan waits beside the plans' with its workspace and counts on the badge",
   () =>
     Effect.gen(function* () {
       const f = fixture();
@@ -802,18 +609,6 @@ it.effect(
         2,
         "the badge counts a plan's item and an agent's with no plan alike",
       );
-      assert.deepEqual(f.said(), [
-        { title: "Nightly flake sweep", body: "Sweep the flaky tests: Quarantine the flaky test?" },
-      ]);
-      f.posted.at(-1)?.onClick();
-      assert.deepEqual(f.openedTaskless, [
-        { agentId: AGENT_ID, itemId: ITEM_B, workspaceId: "workspace-acme" },
-      ]);
-      assert.deepEqual(
-        f.opened,
-        [],
-        "it opens the item in the window's Inbox, not the agent's page",
-      );
       assert.deepEqual(
         f.taskless.at(-1)?.map((item) => item.workspaceId),
         ["workspace-acme"],
@@ -822,36 +617,6 @@ it.effect(
     }),
 );
 
-it.effect("an item's title says a link by its name, never its address, in the notification", () =>
-  Effect.gen(function* () {
-    const f = fixture();
-    yield* f.notices;
-    f.focus(false);
-    f.answerInbox({ items: [], cursor: "1", readAt: READ_AT });
-    yield* settled;
-
-    f.answerInbox({
-      items: [],
-      planless: [
-        tasklessItem(ITEM_B, {
-          title:
-            "Quarantine [@flaky.test.ts](https://github.com/acme/relay/blob/HEAD/flaky.test.ts) per [LUKE-9](https://linear.app/acme/issue/LUKE-9)?",
-          updatedAt: READ_AT + 1,
-        }),
-      ],
-      cursor: "2",
-      readAt: READ_AT + 2,
-    });
-    yield* settled;
-
-    assert.deepEqual(f.said(), [
-      {
-        title: "Nightly flake sweep",
-        body: "Sweep the flaky tests: Quarantine flaky.test.ts per LUKE-9?",
-      },
-    ]);
-  }),
-);
 it.effect(
   "an automation renamed with nothing waiting moving is written as the item's new name, its cursor the same",
   () =>
@@ -907,7 +672,7 @@ it.effect(
 );
 
 it.effect(
-  "only the items of agents the account started wait on it: a teammate's agent's questions are neither counted, badged, nor announced, while its plan is still listed",
+  "only the items of agents the account started wait on it: a teammate's agent's questions are neither counted nor badged, while its plan is still listed",
   () =>
     Effect.gen(function* () {
       const f = fixture();
@@ -948,7 +713,6 @@ it.effect(
         [TASK_ID],
       );
       assert.equal(f.badges.at(-1), 1);
-      assert.deepEqual(f.said(), []);
       assert.deepEqual(
         f.holding.at(-1)?.map((holding) => holding.taskId),
         [TASK_ID, teamTask],
@@ -1020,19 +784,6 @@ it.effect(
 );
 
 it.effect(
-  "an item whose starter the service does not say waits on the account, as every item did before",
-  () =>
-    Effect.gen(function* () {
-      const f = fixture();
-      yield* f.notices;
-      f.answerInbox({ items: [waitingItem(ITEM_A)], cursor: "1", readAt: READ_AT });
-      yield* settled;
-
-      assert.equal(f.badges.at(-1), 1);
-    }),
-);
-
-it.effect(
   "an account whose id arrives after its first read stops counting a teammate's agent's questions at the next answer, though nothing past the cursor changed",
   () =>
     Effect.gen(function* () {
@@ -1061,7 +812,7 @@ it.effect(
 );
 
 it.effect(
-  "a question from a teammate's agent with no plan is neither counted, badged, nor announced to the account, while its own is",
+  "a question from a teammate's agent with no plan is neither counted nor badged for the account, while its own is",
   () =>
     Effect.gen(function* () {
       const f = fixture();
@@ -1081,12 +832,11 @@ it.effect(
       yield* settled;
 
       assert.equal(f.badges.at(-1), 1);
-      assert.equal(f.said().length, 1);
     }),
 );
 
 it.effect(
-  "a question from a teammate's agent with no plan is written for the window's Inbox with who started it, as every member's Inbox lists it, though it is neither badged nor announced",
+  "a question from a teammate's agent with no plan is written for the window's Inbox with who started it, as every member's Inbox lists it, though it is not badged",
   () =>
     Effect.gen(function* () {
       const f = fixture();
@@ -1107,7 +857,6 @@ it.effect(
         [[ITEM_B, "user-charles"]],
       );
       assert.equal(f.badges.at(-1), 0);
-      assert.deepEqual(f.said(), []);
     }),
 );
 
@@ -1128,74 +877,31 @@ function failedRun(patch: Partial<AccountFailedRun> = {}): AccountFailedRun {
 }
 
 it.effect(
-  "a run of the account's own automation that failed to start since the last answer is announced under the automation's name, its click opening the automation, and is written for the window without counting on the badge",
+  "a run of the account's own automation that failed to start since the last answer is written for the window without counting on the badge",
   () =>
     Effect.gen(function* () {
       const f = fixture();
       yield* f.notices;
-      f.focus(false);
       f.answerInbox({ items: [], cursor: "1", readAt: READ_AT });
       yield* settled;
 
       f.answerInbox({ items: [], failedRuns: [failedRun()], cursor: "2", readAt: READ_AT + 2 });
       yield* settled;
 
-      assert.deepEqual(f.said(), [
-        {
-          title: "Flaky test sweep",
-          body: "A run could not start. Luke can no longer reach its repository on GitHub.",
-        },
-      ]);
-      f.posted[0]?.onClick();
-      assert.deepEqual(f.openedAutomations, [AUTOMATION_ID]);
       assert.deepEqual(f.failedRuns.at(-1), [failedRun()]);
       assert.equal(f.badges.at(-1), 0);
     }),
 );
-it.effect(
-  "a run that failed to start while the window is focused is toasted under the automation's name, and is announced once however often it is carried",
-  () =>
-    Effect.gen(function* () {
-      const f = fixture();
-      yield* f.notices;
-      f.focus(true);
-      f.answerInbox({ items: [], cursor: "1", readAt: READ_AT });
-      yield* settled;
+it.effect("a failed run the first answer carries is written for the window", () =>
+  Effect.gen(function* () {
+    const f = fixture();
+    yield* f.notices;
+    const first = failedRun();
+    f.answerInbox({ items: [], failedRuns: [first], cursor: "1", readAt: READ_AT + 2 });
+    yield* settled;
 
-      f.answerInbox({ items: [], failedRuns: [failedRun()], cursor: "2", readAt: READ_AT + 2 });
-      yield* settled;
-      f.answerInbox({
-        items: [waitingItem(ITEM_A, { updatedAt: READ_AT })],
-        failedRuns: [failedRun()],
-        cursor: "3",
-        readAt: READ_AT + 3,
-      });
-      yield* settled;
-
-      assert.deepEqual(f.runsToasted, [
-        {
-          place: { automationId: AUTOMATION_ID, runId: RUN_ID, workspaceId: "workspace-acme" },
-          words: "A run could not start. Luke can no longer reach its repository on GitHub.",
-          detail: "Flaky test sweep",
-        },
-      ]);
-      assert.deepEqual(f.posted, []);
-    }),
-);
-it.effect(
-  "a failed run the first answer carries is where the account stands and is announced nowhere, though it is written for the window",
-  () =>
-    Effect.gen(function* () {
-      const f = fixture();
-      yield* f.notices;
-      f.focus(false);
-      const first = failedRun();
-      f.answerInbox({ items: [], failedRuns: [first], cursor: "1", readAt: READ_AT + 2 });
-      yield* settled;
-
-      assert.deepEqual(f.posted, []);
-      assert.deepEqual(f.failedRuns.at(-1), [first]);
-    }),
+    assert.deepEqual(f.failedRuns.at(-1), [first]);
+  }),
 );
 
 /** A chat message waiting on the developer, as the account's read carries it. */
@@ -1214,218 +920,78 @@ function chatEntry(seq: number, patch: Partial<AccountChatEntry> = {}): AccountC
 }
 
 it.effect(
-  "a chat message that comes to wait is announced once by who and why under its task, never what was said: as a notification behind, in the toast in front, and nowhere while Chat is on screen; the badge counts it beside the items",
+  "an agent's end, an Inbox item, a chat message and a failed run, focused or behind, post no notification, while the dot, the counts, the badge and the Automations mark still move",
   () =>
     Effect.gen(function* () {
       const f = fixture();
       const notices = yield* f.notices;
-      f.focus(false);
-      // The first answer is where the account stands, and announces nothing it holds.
-      f.answerInbox({ items: [], chat: [chatEntry(40)], cursor: "1", readAt: READ_AT });
-      yield* settled;
-      assert.equal(f.posted.length, 0);
-      assert.equal(f.badges.at(-1), 1);
-
-      f.answerInbox({
-        items: [waitingItem(ITEM_A)],
-        chat: [
-          chatEntry(40),
-          chatEntry(47, {
-            reason: ACCOUNT_CHAT_REASON.MENTION,
-            from: "Luke",
-            workspaceId: "workspace-beta",
-          }),
-        ],
-        cursor: "2",
-        readAt: READ_AT,
-      });
-      yield* settled;
-      // The mention that came to wait is announced; the message already waiting is not.
-      assert.ok(
-        f.said().some((said) => said.title === TASK_NAME && said.body === "Luke mentioned you"),
-      );
-      assert.equal(f.badges.at(-1), 3);
-      f.posted.find((notice) => notice.body === "Luke mentioned you")?.onClick();
-      // Its click opens the Chat of the workspace it waits in, whichever the window lists.
-      assert.deepEqual(f.chatOpened, ["workspace-beta"]);
-
-      f.focus(true);
-      f.answerInbox({
-        items: [waitingItem(ITEM_A)],
-        chat: [
-          chatEntry(40),
-          chatEntry(47),
-          chatEntry(51, { reason: ACCOUNT_CHAT_REASON.ASK, planId: null }),
-        ],
-        cursor: "3",
-        readAt: READ_AT,
-      });
-      yield* settled;
-      assert.deepEqual(f.chatToasted, [
-        {
-          messageId: chatEntry(51).messageId,
-          workspaceId: "workspace-acme",
-          taskId: null,
-          words: "Invite emails asked you",
-          detail: "Chat",
-        },
-      ]);
-
-      notices.shownChat({ workspaceId: "workspace-acme", taskId: null });
-      const before = f.posted.length;
-      f.answerInbox({
-        items: [waitingItem(ITEM_A)],
-        chat: [
-          chatEntry(40),
-          chatEntry(47),
-          chatEntry(51),
-          chatEntry(52),
-          chatEntry(53, { workspaceId: "workspace-beta", planId: null }),
-        ],
-        cursor: "4",
-        readAt: READ_AT,
-      });
-      yield* settled;
-      // Chat on screen is Acme's, so Acme's message is read there and Beta's is still told.
-      assert.deepEqual(
-        f.chatToasted.map((toast) => toast.messageId),
-        [chatEntry(51).messageId, chatEntry(53).messageId],
-      );
-      assert.equal(f.posted.length, before);
-    }),
-);
-
-it.effect(
-  "a task's Chat tab on screen quiets only what waits in its plan's channel: a direct message and another plan's message in the same workspace are still told",
-  () =>
-    Effect.gen(function* () {
-      const f = fixture();
-      const notices = yield* f.notices;
-      f.focus(true);
       f.answerInbox({ items: [], chat: [], cursor: "1", readAt: READ_AT });
       yield* settled;
-      notices.shownChat({ workspaceId: "workspace-acme", taskId: TASK_ID });
-      const otherTask = "3c9e1a2b-4d5f-4a6b-8c7d-9e0f1a2b3c4d";
+
+      for (const focused of [false, true]) {
+        f.focus(focused);
+        const agentId = focused ? AGENT_ID : "a1b2c3d4-0000-4000-8000-000000000004";
+        notices.observeAgents([agent(CODING_AGENT_STATUS.RUNNING, { id: agentId })]);
+        notices.observeAgents([agent(CODING_AGENT_STATUS.COMPLETED, { id: agentId })]);
+      }
+      f.focus(false);
       f.answerInbox({
-        items: [],
-        chat: [
-          chatEntry(60),
-          chatEntry(61, { planId: null }),
-          chatEntry(62, { planId: otherTask }),
-        ],
+        items: [waitingItem(ITEM_A, { updatedAt: READ_AT + 1 })],
+        chat: [chatEntry(40, { updatedAt: READ_AT + 1 })],
+        failedRuns: [failedRun()],
         cursor: "2",
-        readAt: READ_AT,
+        readAt: READ_AT + 2,
       });
       yield* settled;
+
+      assert.deepEqual(f.posted, []);
       assert.deepEqual(
-        f.chatToasted.map((toast) => toast.messageId),
-        [chatEntry(61).messageId, chatEntry(62).messageId],
+        [...(f.unseen.at(-1) ?? [])].sort(),
+        [AGENT_ID, "a1b2c3d4-0000-4000-8000-000000000004"].sort(),
       );
+      assert.deepEqual(
+        f.waiting.at(-1)?.flatMap((task) => task.items.map((item) => item.id)),
+        [ITEM_A],
+      );
+      assert.equal(f.badges.at(-1), 2, "the badge counts the item and the chat message");
+      assert.deepEqual(f.failedRuns.at(-1), [failedRun()]);
     }),
 );
 
-it.effect(
-  "with Chat off for the account, nothing waiting in chat is announced or counted on the badge",
-  () =>
-    Effect.gen(function* () {
-      const f = fixture();
-      yield* f.notices;
-      f.turnChat(false);
-      f.focus(false);
-      f.answerInbox({ items: [], chat: [chatEntry(40)], cursor: "1", readAt: READ_AT });
-      yield* settled;
-      f.answerInbox({
-        items: [],
-        chat: [chatEntry(40), chatEntry(41)],
-        cursor: "2",
-        readAt: READ_AT,
-      });
-      yield* settled;
-      assert.equal(f.posted.length, 0);
-      assert.equal(f.badges.at(-1), 0);
-    }),
+it.effect("with Chat off for the account, nothing waiting in chat is counted on the badge", () =>
+  Effect.gen(function* () {
+    const f = fixture();
+    yield* f.notices;
+    f.turnChat(false);
+    f.focus(false);
+    f.answerInbox({ items: [], chat: [chatEntry(40)], cursor: "1", readAt: READ_AT });
+    yield* settled;
+    f.answerInbox({
+      items: [],
+      chat: [chatEntry(40), chatEntry(41)],
+      cursor: "2",
+      readAt: READ_AT,
+    });
+    yield* settled;
+    assert.equal(f.badges.at(-1), 0);
+  }),
 );
 
-it.effect(
-  "what waits in chat reaches the window by message, so a toast goes once its message no longer waits, and nothing does while Chat is off",
-  () =>
-    Effect.gen(function* () {
-      const f = fixture();
-      yield* f.notices;
-      f.answerInbox({
-        items: [],
-        chat: [chatEntry(40), chatEntry(41)],
-        cursor: "1",
-        readAt: READ_AT,
-      });
-      yield* settled;
-      f.answerInbox({ items: [], chat: [chatEntry(41)], cursor: "2", readAt: READ_AT });
-      yield* settled;
-      assert.deepEqual(f.chatWaiting.slice(-2), [
-        [chatEntry(40).messageId, chatEntry(41).messageId],
-        [chatEntry(41).messageId],
-      ]);
-      f.turnChat(false);
-      f.answerInbox({ items: [], chat: [chatEntry(41)], cursor: "3", readAt: READ_AT });
-      yield* settled;
-      assert.deepEqual(f.chatWaiting.at(-1), []);
-    }),
-);
+it.effect("a badge door that throws loses that count alone: the next answer still badges", () =>
+  Effect.gen(function* () {
+    const f = fixture();
+    yield* f.notices;
+    f.refuseBadges(true);
+    f.answerInbox({ items: [waitingItem(ITEM_A)], cursor: "1", readAt: READ_AT });
+    yield* settled;
+    f.refuseBadges(false);
+    f.answerInbox({
+      items: [waitingItem(ITEM_A), waitingItem(ITEM_B)],
+      cursor: "2",
+      readAt: READ_AT,
+    });
+    yield* settled;
 
-it.effect(
-  "an open ask that comes to the read changed before the last answer was read, as one of a workspace just joined, is no news, where a mention stamped late still is",
-  () =>
-    Effect.gen(function* () {
-      const f = fixture();
-      yield* f.notices;
-      f.focus(false);
-      f.answerInbox({ items: [], chat: [], cursor: "1", readAt: READ_AT });
-      yield* settled;
-      f.answerInbox({
-        items: [],
-        chat: [
-          chatEntry(30, { reason: ACCOUNT_CHAT_REASON.ASK, updatedAt: READ_AT - 4 * 86_400_000 }),
-          chatEntry(31, { updatedAt: READ_AT + 60_000 }),
-          // A mention its person was stamped for only now, after a retried post, is news however old.
-          chatEntry(32, { reason: ACCOUNT_CHAT_REASON.MENTION, updatedAt: READ_AT - 86_400_000 }),
-        ],
-        cursor: "2",
-        readAt: READ_AT + 120_000,
-      });
-      yield* settled;
-      assert.deepEqual(f.said(), [
-        { title: TASK_NAME, body: "Invite emails messaged you" },
-        { title: TASK_NAME, body: "Invite emails mentioned you" },
-      ]);
-    }),
-);
-it.effect(
-  "a notification door that throws loses that notice alone: the next end is still announced",
-  () =>
-    Effect.gen(function* () {
-      const f = fixture();
-      const notices = yield* f.notices;
-      f.focus(false);
-      const other = "a1b2c3d4-0000-4000-8000-000000000003";
-      notices.observeAgents([
-        agent(CODING_AGENT_STATUS.RUNNING),
-        agent(CODING_AGENT_STATUS.RUNNING, { id: other, title: "Second" }),
-      ]);
-
-      f.refusePosts(true);
-      notices.observeAgents([
-        agent(CODING_AGENT_STATUS.COMPLETED),
-        agent(CODING_AGENT_STATUS.RUNNING, { id: other, title: "Second" }),
-      ]);
-      yield* Effect.yieldNow;
-      f.refusePosts(false);
-      notices.observeAgents([
-        agent(CODING_AGENT_STATUS.COMPLETED),
-        agent(CODING_AGENT_STATUS.COMPLETED, { id: other, title: "Second" }),
-      ]);
-      yield* Effect.yieldNow;
-
-      assert.equal(f.posted.length, 1);
-      assert.match(f.posted[0]?.body ?? "", /Second/u);
-    }),
+    assert.equal(f.badges.at(-1), 2);
+  }),
 );

@@ -110,7 +110,7 @@ function Toasts(): React.JSX.Element {
 const SAYING = {
   [STATUS_TONE.WORKING]: "Adding to the plan…",
   [STATUS_TONE.COMPLETE]: "Added to the plan",
-  [STATUS_TONE.DANGER]: "The plan could not be saved just now.",
+  [STATUS_TONE.DANGER]: "The plan could not be saved.",
 } as const;
 
 type Outcome = keyof typeof SAYING;

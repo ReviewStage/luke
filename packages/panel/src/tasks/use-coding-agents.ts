@@ -58,6 +58,7 @@ import {
   ARCHIVE_NOT_READY,
   archiveWords,
   choiceRequest,
+  continueFailureNote,
   DELETE_WORDS,
   openingLineOf,
   RENAME_FAILED,
@@ -1156,7 +1157,7 @@ export function useCodingAgents(input: {
         continues.current.delete(sourceId);
       }
       if ((latest.current.taskId ?? latest.current.agentId) !== startsOn) failed(START_FAILED_AWAY);
-      return startFailureNote(answer, taskId ?? null);
+      return continueFailureNote(answer, taskId ?? null);
     }
     continues.current.delete(sourceId);
     landed(startsOn, answer.agent);
@@ -1638,7 +1639,6 @@ export function useCodingAgents(input: {
         ? was
         : { ...was, agents: was.agents.filter((agent) => agent.id !== agentId) },
     );
-    toast({ words: DELETE_WORDS.done, tone: STATUS_TONE.COMPLETE, hold: TOAST_HOLD.DONE });
     // Note that the list is read again, which drops a read already out that still holds the agent.
     readAgain();
     return { status: ACTION_RESULT_STATUS.ACCEPTED };
@@ -1712,7 +1712,8 @@ export function useCodingAgents(input: {
     (agentId) => act(ACT_KIND.CODING_AGENTS_PULL_REQUEST, { agentId }),
     [act],
   );
-  // Note that an archived agent's pull request is read too, since the summary offers it as any other.
+  // Note that an archived agent's pull request is read too, after every other agent's, since the
+  // summary offers it as any other and the task list pushes none of an archived agent's.
   const published = useTaskPullRequests(taskId, held, readPullRequestOnce, held);
 
   // A pull request a tab names by its number is kept by agent and number,

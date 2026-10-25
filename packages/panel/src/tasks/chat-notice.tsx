@@ -23,7 +23,12 @@ import { type ChatNoticeMetadata, MESSAGE_AUTHOR } from "@luke/wire";
 import { MessagesSquareIcon } from "lucide-react";
 import type { ReactNode } from "react";
 import { ActorRef } from "../actor-ref.js";
-import { Message, MessageAction, MessageContent } from "../ai-elements/message.js";
+import {
+  CHAT_MESSAGE_CLASS,
+  Message,
+  MessageAction,
+  MessageContent,
+} from "../ai-elements/message.js";
 import { previewWords } from "../desktop/chat-preview.js";
 import { useChatActor } from "./chat-actors.js";
 import { ChannelName, channelTitle } from "./chat-channel-name.js";
@@ -180,7 +185,7 @@ export function ChatNoticeCard({
   return (
     <Message
       from="assistant"
-      className="is-chat"
+      className={CHAT_MESSAGE_CLASS}
       data-chat-notice=""
       data-author={notice.author}
       data-message-id={messageId}

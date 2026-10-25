@@ -46,7 +46,7 @@ export function usePullRequestComment(agentId: string, onWritten: () => void): P
   return { writes, body, setBody };
 }
 
-/** The box: its heading, the words written as they are drawn, GitHub's answer where it did not take the last one, and Comment, which ⌘↩ presses too. */
+/** The box: its heading, the words written as they are drawn, GitHub's answer where it did not take the last one, and Comment, which Enter in the words presses too. */
 export function PullRequestCommentBox({
   comment,
 }: {
@@ -62,14 +62,14 @@ export function PullRequestCommentBox({
   };
   return (
     <section
-      className="pull-request-section pull-request-comment-box"
+      className="pull-request-section pull-request-comment-box flex flex-col gap-control-gap"
       aria-label={COMMENT_WORDS.TITLE}
     >
       <Text
         as={TEXT_ELEMENT.H3}
         variant={TEXT_VARIANT.GROUP}
         truncate
-        className="pull-request-heading"
+        className="pull-request-heading mx-0 mt-0 mb-item-gap flex items-baseline gap-item-gap px-row-inset"
       >
         {COMMENT_WORDS.TITLE}
       </Text>
@@ -85,7 +85,7 @@ export function PullRequestCommentBox({
         fieldRef={field}
       />
       <PullRequestWriteNote writes={writes} className="pull-request-comment-note" />
-      <div className="pull-request-comment-foot">
+      <div className="pull-request-comment-foot flex justify-end">
         <Button
           variant={BUTTON_VARIANT.PRIMARY}
           disabled={blank}

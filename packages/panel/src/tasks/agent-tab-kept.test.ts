@@ -164,7 +164,7 @@ function cardOn(row: HTMLElement | null): readonly (string | boolean | null | un
   return [
     card.querySelector(".luke-hover-card-name")?.textContent,
     card.querySelector(".luke-hover-card-corner")?.textContent,
-    card.querySelector('.actor-card-head .state-glyph[data-state="working"]') !== null,
+    card.querySelector('.luke-hover-card-lead .state-glyph[data-state="working"]') !== null,
   ];
 }
 

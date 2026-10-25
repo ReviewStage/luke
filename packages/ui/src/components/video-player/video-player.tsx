@@ -1,6 +1,7 @@
 import { CONVERSATION_MEDIA_TYPE } from "@luke/features/conversation-picture-wire";
 import { playheadText } from "@luke/features/time-format";
 import { type RefObject, useEffect, useRef, useState } from "react";
+import { cssCustomProperties } from "../../css.js";
 import {
   ExitFullScreenIcon,
   ExpandIcon,
@@ -36,9 +37,11 @@ import { Tooltip } from "../tooltip/hint.js";
  * frame that hugs it at its own shape up to its column's width. A place that
  * has a viewer to open hands `onExpand`: Expand pauses the video here and
  * opens the viewer, which grows from the frame as it grows from a picture's
- * tile. In the viewer (`VIEWER`) the video plays at once, as large as the
- * card lets it, unless motion is held still (`motionHeld`: reduced motion or
- * a capture run), where it waits on its first frame for Play.
+ * tile. In the viewer (`VIEWER`) the video plays at once, as wide as the
+ * place makes the player, unless motion is held still (`motionHeld`: reduced
+ * motion or a capture run), where it waits on its first frame for Play; once
+ * its size is read it says it as `--luke-video-natural-width` and
+ * `--luke-video-natural-height`, plain numbers the place may fit it by.
  *
  * The bytes arrive as a picture's do, as a `data:` URL the window's picture
  * reads hold (`picture-cache.ts`, the inbox's and the chat's own), and play
@@ -46,6 +49,10 @@ import { Tooltip } from "../tooltip/hint.js";
  * because neither window's content policy lets media load from a `data:`
  * address, where both allow `blob:`. What holds the player keeps it out of
  * the screen recording, as it keeps a picture (`ph-no-capture`).
+ *
+ * It is drawn in Tailwind utilities over the theme, its inline frame a
+ * `Card` (shadcn/ui's) and its controls `@luke/ui`'s own; shadcn/ui has no
+ * player.
  */
 
 /** What the player and its controls are named for a reader. */
@@ -204,6 +211,34 @@ function BarButton({
   );
 }
 
+/**
+ * The bar along the video's foot, over a veil that keeps its words legible
+ * on any frame, its scrubber a thin track in the bar's ink. With a pointer
+ * it fades while the video plays and comes back while the pointer or the
+ * keyboard is in the frame; on a touch screen it always stands, so a first
+ * tap presses rather than being spent as a hover.
+ */
+const BAR =
+  "luke-video-player-bar absolute right-0 bottom-0 left-0 flex items-center gap-luke-4 bg-[linear-gradient(transparent,var(--color-veil))] px-luke-6 pt-luke-24 pb-luke-4 text-on-veil transition-opacity duration-(--luke-duration-fast) ease-motion-exit " +
+  "group-data-[playing=true]/video-frame:[@media(hover:hover)]:opacity-0 group-data-[playing=true]/video-frame:group-hover/video-frame:opacity-100 group-data-[playing=true]/video-frame:[@media(hover:hover)]:group-focus-within/video-frame:opacity-100 " +
+  "[&_.luke-slider]:mx-luke-4 [&_.luke-slider]:h-luke-16 [&_.luke-slider]:accent-on-veil";
+
+/**
+ * The frame the video and its bar stand in, on the veil while its first
+ * frame loads. It takes focus only from a press, to hold the player's keys,
+ * so it draws no ring of its own; its buttons draw theirs. Full screen, it
+ * fills the screen and the video stands in it at its own shape.
+ */
+const FRAME =
+  "luke-video-player-frame group/video-frame relative block max-h-[inherit] bg-veil focus:outline-none [&:fullscreen]:grid [&:fullscreen]:h-screen [&:fullscreen]:w-stage [&:fullscreen]:place-items-center";
+
+/** The video at its own shape, as wide as its column and no taller than a picture, or the viewer's; filling the screen full screen. */
+const VIDEO =
+  "luke-video-player-video block h-auto w-auto max-w-full cursor-press group-[:fullscreen]/video-frame:size-full group-[:fullscreen]/video-frame:max-h-none group-[:fullscreen]/video-frame:max-w-none group-[:fullscreen]/video-frame:object-contain";
+
+/** The player as its place holds it: hugging the video at most its column's width, and in the viewer no taller than the card. */
+const PLAYER = "luke-video-player relative block w-fit max-w-full";
+
 /** The bar along a video's foot: play or pause, how far of how long, the scrubber, Expand, and Full screen. */
 function VideoBar({
   playback,
@@ -222,13 +257,13 @@ function VideoBar({
 }): React.JSX.Element {
   const time = `${playheadText(playback.at * MS_PER_SECOND)} / ${playheadText(playback.duration * MS_PER_SECOND)}`;
   return (
-    <span className="luke-video-player-bar">
+    <span className={BAR}>
       <BarButton
         label={playback.playing ? VIDEO_LABEL.PAUSE : VIDEO_LABEL.PLAY}
         icon={playback.playing ? <PauseIcon /> : <PlayIcon />}
         onPress={onToggle}
       />
-      <span className="luke-video-player-time">{time}</span>
+      <span className="luke-video-player-time flex-none text-caption tabular-nums">{time}</span>
       <Slider
         label={VIDEO_LABEL.SEEK}
         value={playback.at}
@@ -273,6 +308,8 @@ export function VideoPlayer({
   const frame = useRef<HTMLSpanElement>(null);
   const [full, toggleFullScreen] = useFullScreen(frame);
   const [playback, setPlayback] = useState<Playback>({ playing: false, at: 0, duration: 0 });
+  // The video's own pixels once its size is read, which the viewer fits it by.
+  const [natural, setNatural] = useState<VideoSize>();
   const viewer = place === VIDEO_PLAYER_PLACE.VIEWER;
   // Note that whether it starts is read once, as it mounts, because a video hears autoplay only then.
   const [starts] = useState(() => viewer && !motionHeld());
@@ -299,7 +336,7 @@ export function VideoPlayer({
     // biome-ignore lint/a11y/useSemanticElements: a player holds a video and its bar, not a form's controls, so it is no `<fieldset>`.
     <span
       ref={frame}
-      className="luke-video-player-frame"
+      className={FRAME}
       data-playing={playback.playing}
       data-full={full}
       // Note that the frame takes focus, so a press on the video leaves the keys with the player.
@@ -314,7 +351,7 @@ export function VideoPlayer({
         // Note that the player carries no captions track, because an agent's recording of its screen has no sound.
         <video
           ref={video}
-          className="luke-video-player-video"
+          className={`${VIDEO} ${viewer ? "w-full" : "max-h-video-player"}`}
           src={url}
           width={size?.width}
           height={size?.height}
@@ -328,6 +365,8 @@ export function VideoPlayer({
             toggleOf(video.current);
           }}
           onLoadedMetadata={(event) => {
+            const shown = event.currentTarget;
+            if (viewer) setNatural({ width: shown.videoWidth, height: shown.videoHeight });
             probeLength(event.currentTarget);
             read(event.currentTarget);
           }}
@@ -358,7 +397,18 @@ export function VideoPlayer({
   // In the viewer the card around it is the viewer's own.
   if (viewer) {
     return (
-      <span className="luke-video-player" data-place={place}>
+      <span
+        className={`${PLAYER} max-h-full`}
+        data-place={place}
+        style={
+          natural === undefined
+            ? undefined
+            : cssCustomProperties({
+                "--luke-video-natural-width": natural.width,
+                "--luke-video-natural-height": natural.height,
+              })
+        }
+      >
         {player}
       </span>
     );
@@ -368,7 +418,7 @@ export function VideoPlayer({
       as={CARD_ELEMENT.SPAN}
       corner={CARD_CORNER.CONTROL}
       padding={CARD_PADDING.FLUSH}
-      className="luke-video-player"
+      className={PLAYER}
       data-place={place}
     >
       {player}

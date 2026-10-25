@@ -51,11 +51,13 @@ import {
   ANSWERED,
   AnsweredCard,
   AskControls,
-  askSendChord,
   bareKey,
   DraftQuestion,
   focusMissing,
   hasControls,
+  INBOX_ASK_BOX,
+  INBOX_ASK_KIND,
+  INBOX_ASK_STANDING,
   OPTION_NUMBER,
   optionRows,
   sendFromPane,
@@ -65,7 +67,7 @@ import {
   WithdrawnWords,
 } from "./inbox-ask-controls.js";
 import { askHeadWords } from "./inbox-ask-words.js";
-import { COMMENT, InboxComment } from "./inbox-comment.js";
+import { COMMENT, INBOX_THREAD, InboxComment } from "./inbox-comment.js";
 import type { FormTextDoors } from "./inbox-form-text.js";
 import {
   answerDid,
@@ -292,7 +294,7 @@ function Answer({
   };
   const controls =
     asked === undefined || !asks ? undefined : (
-      <DraftQuestion pane={box} ask={asked}>
+      <DraftQuestion pane={box}>
         <AskControls
           ask={asked}
           title={undefined}
@@ -342,7 +344,6 @@ function Answer({
         quote={(quote) => <ComposerQuoteView quote={quote} held={sending} />}
         says={note === undefined ? undefined : { words: note }}
         nod={nod}
-        sendChord={asks ? askSendChord(asked) : undefined}
         sending={sending}
         held={sending}
         // Note that a form of fields none of which must be filled is answered empty, so it holds an answer before anything is in it.
@@ -392,7 +393,7 @@ function AnsweredComment({
   const at = chatAnsweredAt(chat, message);
   const answerer = actorOf(answeredBy ?? "");
   return (
-    <Stack as={LAYOUT_ELEMENT.OL} gap={GAP.NONE} className="inbox-thread" aria-label="Answer">
+    <Stack as={LAYOUT_ELEMENT.OL} gap={GAP.NONE} className={INBOX_THREAD} aria-label="Answer">
       <InboxComment
         kind={COMMENT.ANSWERED}
         author={commentAuthor(answerer)}
@@ -408,13 +409,16 @@ function AnsweredComment({
         {drawn ? <AnsweredCard ask={asked} title={undefined} answers={answers} /> : null}
         {/* Where no control says what was done and nothing was written, a chip says it, as the Inbox's answer does. */}
         {drawn || answer.note !== undefined ? null : (
-          <span className="inbox-pick" data-inbox-pick="">
+          <span
+            className="inbox-pick inline-flex max-w-full items-start gap-tight-gap self-start rounded-luke-6 bg-fill-strong px-item-gap py-px text-caption-inline font-luke-medium text-foreground [&>span]:min-w-0 [&>span]:wrap-anywhere [&_svg]:mt-pick-glyph-lift [&_svg]:size-luke-12 [&_svg]:flex-none"
+            data-inbox-pick=""
+          >
             <CheckIcon aria-hidden="true" />
             <span>{sentenceCased(answerDid(answer))}</span>
           </span>
         )}
         {answer.note === undefined ? null : (
-          <div className="inbox-words" data-inbox-note="">
+          <div className="m-0 select-text" data-inbox-note="">
             <SentWords text={answer.note} asDocument />
           </div>
         )}
@@ -460,7 +464,7 @@ export function AskCard({
   if (!knownResponse(response)) {
     return (
       <div className="chat-ask" data-status={ask.status}>
-        <div className="inbox-ask">
+        <div className={INBOX_ASK_BOX}>
           <Card look={CARD_LOOK.RAISED} padding={CARD_PADDING.FLUSH}>
             <CardHead>
               <Text tone={TEXT_TONE.MUTED}>{NEWER_LUKE}</Text>
@@ -486,7 +490,7 @@ export function AskCard({
   const standing = (() => {
     switch (ask.status) {
       case ASK_STATUS.ANSWERED:
-        return <span className="inbox-ask-standing">{ANSWERED}</span>;
+        return <span className={INBOX_ASK_STANDING}>{ANSWERED}</span>;
       case ASK_STATUS.CLOSED:
         // Note that only its poster resolves an ask, so a close that says no reason was theirs.
         return (
@@ -501,11 +505,11 @@ export function AskCard({
   })();
   return (
     <div ref={card} className="chat-ask" data-status={ask.status}>
-      <div className="inbox-ask">
+      <div className={INBOX_ASK_BOX}>
         <Card look={CARD_LOOK.RAISED} padding={CARD_PADDING.FLUSH}>
           {asked === undefined ? null : (
             <CardHead>
-              <span className="inbox-ask-kind">{askHeadWords(asked, undefined)}</span>
+              <span className={INBOX_ASK_KIND}>{askHeadWords(asked, undefined)}</span>
               {standing}
             </CardHead>
           )}

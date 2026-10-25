@@ -63,7 +63,11 @@ export function OfflineMark(): React.JSX.Element | null {
   const { word, hint, Icon } = LIVE_MARK_LOOK[mark];
   return (
     <Tooltip label={hint}>
-      <span className="offline-mark" role="img" aria-label={word}>
+      <span
+        className="offline-mark inline-flex h-offline-mark flex-none animate-offline-arrive items-center gap-tight-gap self-center whitespace-nowrap rounded-luke-full bg-attention-tint px-row-inset text-caption-inline font-luke-semibold text-attention [&_svg]:size-offline-glyph"
+        role="img"
+        aria-label={word}
+      >
         <Icon aria-hidden="true" />
         <span className="offline-mark-word">{word}</span>
       </span>

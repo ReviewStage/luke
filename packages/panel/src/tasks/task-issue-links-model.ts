@@ -48,6 +48,14 @@ const FAILURE_WORDS = {
   [TASK_CALL_FAILURE.LINEAR_UNAVAILABLE]: "The workspace's Linear could not read that issue.",
 } as const satisfies Record<TaskIssueCallFailure, string>;
 
+/** What a read of the links that found no answer says in the row's place, beside its Retry. */
+const READ_UNANSWERED = "Luke did not answer.";
+
+/** What the row's place says of a read of the links that did not land, beside its Retry. */
+export function readNoteOf(failure: TaskIssueCallFailure): string {
+  return failure === TASK_CALL_FAILURE.UNANSWERED ? READ_UNANSWERED : FAILURE_WORDS[failure];
+}
+
 /** What the box says of a change that did not land: a link refused, or a call that found no answer. */
 export function linkNoteOf(
   why: { readonly refused: TaskIssueLinkRefusal } | { readonly failure: TaskIssueCallFailure },

@@ -31,7 +31,7 @@ import type { FormEventHandler, HTMLAttributes, ReactNode } from "react";
  */
 
 /** The card's own class, which `.prompt-input*` (tasks.css) lays out from. */
-const PROMPT_INPUT_CLASS = "prompt-input";
+const PROMPT_INPUT_CLASS = "prompt-input flex w-full flex-col";
 
 export type PromptInputProps = Omit<
   HTMLAttributes<HTMLFormElement>,

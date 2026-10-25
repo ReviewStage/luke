@@ -105,7 +105,6 @@ export function registerDesktopIpc(services: DesktopServices): void {
     operator,
     windows,
     notices,
-    testNotification,
     avatar,
     colourCode,
     run,
@@ -179,7 +178,6 @@ export function registerDesktopIpc(services: DesktopServices): void {
       microphoneRouteWatcher: () => native.microphoneRouteWatcher(),
       recordProductEvent,
       openExternal: config.openExternal,
-      testNotification,
       copyText: (words) => clipboard.writeText(words),
       copyImage: (png) => {
         const image = nativeImage.createFromBuffer(Buffer.from(png, "base64"));

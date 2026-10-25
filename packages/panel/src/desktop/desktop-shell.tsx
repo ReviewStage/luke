@@ -79,6 +79,7 @@ import { ADMIN_PLACE, PERSON_PAGE, VERSION_HISTORY } from "./pages-on-demand.js"
 import { PaneGlide } from "./pane-motion.js";
 import { PersonPageSkeleton } from "./person-frame.js";
 import { PhoneHead } from "./phone-head.js";
+import { PLACE_LIST, PLACE_PAGE, PLACE_SPLIT } from "./place-columns.js";
 import { SidePanelChord, SidePanelToggle } from "./side-panel.js";
 import { SIDEBAR_OVERLAY, type SidebarCollapse, sidebarInSight } from "./sidebar-collapse.js";
 import { homeTaskCardOf } from "./task-card.js";
@@ -145,8 +146,12 @@ function AdminLoading({
   useAppCommand(APP_COMMAND.EXIT_ADMIN, onExit);
   const narrow = hidden.list || hidden.item;
   return (
-    <div className="desktop-admin">
-      <nav className="admin-sections" aria-label="Admin sections" hidden={hidden.list}>
+    <div className={`desktop-admin ${PLACE_SPLIT}`}>
+      <nav
+        className={`admin-sections ${PLACE_LIST}`}
+        aria-label="Admin sections"
+        hidden={hidden.list}
+      >
         {narrow ? (
           <PhoneHead
             place="admin-sections"
@@ -165,7 +170,7 @@ function AdminLoading({
           <div className="desktop-drag-strip" />
         )}
       </nav>
-      <section className="admin-page" aria-label="Admin" hidden={hidden.item}>
+      <section className={`admin-page ${PLACE_PAGE}`} aria-label="Admin" hidden={hidden.item}>
         {narrow ? null : <div className="desktop-drag-strip" />}
         <CollectionPage
           frame={PAGE_FRAME.TOOLBAR}
@@ -239,8 +244,8 @@ function VersionHistoryLoading({
     />
   );
   return (
-    <div className="desktop-version-history">
-      <nav className="version-log" aria-label="Versions" hidden={hidden.list}>
+    <div className={`desktop-version-history ${PLACE_SPLIT}`}>
+      <nav className={`version-log ${PLACE_LIST}`} aria-label="Versions" hidden={hidden.list}>
         {narrow ? (
           <PhoneHead place="version-log" start={exit} title="Version history" end={null} />
         ) : (
@@ -250,7 +255,7 @@ function VersionHistoryLoading({
           </>
         )}
       </nav>
-      <section className="version-page" aria-label="Version" hidden={hidden.item}>
+      <section className={`version-page ${PLACE_PAGE}`} aria-label="Version" hidden={hidden.item}>
         {narrow ? (
           <PhoneHead
             place="version"
@@ -347,8 +352,12 @@ function SettingsLoading({
   useAppCommand(APP_COMMAND.EXIT_SETTINGS, onExit);
   const narrow = hidden.list || hidden.item;
   return (
-    <div className="desktop-settings">
-      <nav className="settings-pages" aria-label="Settings pages" hidden={hidden.list}>
+    <div className={`desktop-settings ${PLACE_SPLIT}`}>
+      <nav
+        className={`settings-pages ${PLACE_LIST}`}
+        aria-label="Settings pages"
+        hidden={hidden.list}
+      >
         {narrow ? (
           <PhoneHead
             place="settings-pages"
@@ -367,7 +376,7 @@ function SettingsLoading({
           <div className="desktop-drag-strip" />
         )}
       </nav>
-      <section className="settings-page" aria-label="Settings" hidden={hidden.item}>
+      <section className={`settings-page ${PLACE_PAGE}`} aria-label="Settings" hidden={hidden.item}>
         {/* Note that the page draws its own bar, the window's drag handle, as Settings' page does once drawn. */}
         <SettingsPageSkeleton
           label={readingWords("Settings")}
@@ -820,7 +829,7 @@ export function DesktopShell({
     const macAppLink = appPlatform().macAppLink?.();
     return (
       <ScrollArea>
-        <div className="desktop-onboarding">
+        <div className="desktop-onboarding flex min-h-full flex-col pb-onboarding-foot">
           <div className="desktop-drag-strip" />
           <SignInGate
             account={account}

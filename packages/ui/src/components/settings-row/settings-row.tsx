@@ -1,6 +1,15 @@
 import { type ReactNode, useId } from "react";
+import { cn } from "../../cn.js";
 import { CheckIcon } from "../../face/glyphs.js";
 import { AlertIcon } from "../../icons/lucide-glyphs.js";
+import {
+  Item,
+  ItemActions,
+  ItemContent,
+  ItemDescription,
+  ItemMedia,
+  ItemTitle,
+} from "../../shadcn/item.js";
 import { ANNOUNCE } from "../announcer/announcer.js";
 import { ErrorLine } from "../error-line/error-line.js";
 import { LANDED, landedMark } from "../landed/landed.js";
@@ -69,6 +78,13 @@ import { VisuallyHidden } from "../visually-hidden/visually-hidden.js";
  * is lit as every place landed on is (`../landed/landed.ts`), its wash a
  * step inside the card it stands flush in, so the eye finds it among the
  * rest; reduced motion keeps the wash, still, for as long.
+ *
+ * It is drawn by shadcn/ui's item (`../../shadcn/item.tsx`) in Tailwind
+ * utilities over the theme, the row's density picking the item's padding and
+ * least height. What a utility cannot say stays in `settings-row.css`: the
+ * narrow container's rules and the properties they undo, a finger's
+ * whole-row press, and the size of a glyph another component draws in a
+ * mark.
  */
 
 /** How a row stands: padded in a section's card, a reference list's line in one, or bare inside a surface that insets it. */
@@ -88,6 +104,17 @@ export const SETTINGS_ROW_INDENT = {
 
 export type SettingsRowIndent = (typeof SETTINGS_ROW_INDENT)[keyof typeof SETTINGS_ROW_INDENT];
 
+/** How wide the row's lead stands: a provider's mark at its own width, or a face's, in which a mark standing in a card beside a face's row is centred so both rows' words start together. */
+export const SETTINGS_ROW_LEAD = {
+  MARK: "mark",
+  FACE: "face",
+} as const;
+
+export type SettingsRowLead = (typeof SETTINGS_ROW_LEAD)[keyof typeof SETTINGS_ROW_LEAD];
+
+/** A face's width, in which a mark in the card beside it stands centred. */
+const FACE_LEAD = "w-avatar-card justify-center";
+
 /** What a row hands the controls it holds. */
 export interface SettingsRowControl {
   /** The label's id, for a control named by `aria-labelledby`. */
@@ -103,25 +130,40 @@ function said(words: ReactNode): boolean {
   return words !== undefined && words !== null && words !== false && words !== "";
 }
 
+/**
+ * The label's type at each density: a setting's name at a label's weight, a
+ * reference list's line at the body's, since it is read rather than set.
+ */
+const LABEL_CLASS = {
+  [SETTINGS_ROW_DENSITY.CARD]:
+    "luke-settings-row-label font-sans text-label font-label text-foreground",
+  [SETTINGS_ROW_DENSITY.COMPACT]:
+    "luke-settings-row-label font-sans text-label font-label text-foreground",
+  [SETTINGS_ROW_DENSITY.LIST]:
+    "luke-settings-row-label font-sans text-label font-text text-foreground",
+} as const satisfies Record<SettingsRowDensity, string>;
+
 /** The row's name: the `<label>` of the control it sets where it labels one, words beside its controls otherwise. */
 function RowLabel({
   id,
   control,
+  density,
   children,
 }: {
   id: string;
   control: string | undefined;
+  density: SettingsRowDensity;
   children: ReactNode;
 }): React.JSX.Element {
   if (control === undefined) {
     return (
-      <span className="luke-settings-row-label" id={id}>
+      <span className={LABEL_CLASS[density]} id={id}>
         {children}
       </span>
     );
   }
   return (
-    <label className="luke-settings-row-label" id={id} htmlFor={control}>
+    <label className={LABEL_CLASS[density]} id={id} htmlFor={control}>
       {children}
     </label>
   );
@@ -136,6 +178,7 @@ export function SettingsRow({
   adornment,
   density = SETTINGS_ROW_DENSITY.CARD,
   indent = SETTINGS_ROW_INDENT.NONE,
+  lead = SETTINGS_ROW_LEAD.MARK,
   labelsControl = false,
   landed = false,
   children,
@@ -153,6 +196,8 @@ export function SettingsRow({
   density?: SettingsRowDensity | undefined;
   /** Where the row's edge stands; at the card's where none is named. */
   indent?: SettingsRowIndent | undefined;
+  /** How wide the lead stands; a mark's where none is named, a face's for a row that stands beside rows led by faces. */
+  lead?: SettingsRowLead | undefined;
   /** Whether the row's words label its one control, a switch, wearing `controlId`: a press on them sets it, and it stays beside them. */
   labelsControl?: boolean | undefined;
   /** Whether the row just arrived, which lights it once. */
@@ -179,57 +224,77 @@ export function SettingsRow({
     "aria-describedby": describedBy === "" ? undefined : describedBy,
     "aria-invalid": failed ? true : undefined,
   };
+  const name = (
+    <RowLabel id={labelId} control={labelsControl ? controlId : undefined} density={density}>
+      {label}
+    </RowLabel>
+  );
   return (
     <div
-      className="luke-settings-row"
+      className="luke-settings-row @container/luke-settings-row min-w-0 data-[indent=mark]:ms-settings-row-indent"
       data-invalid={failed}
       data-density={density}
       data-indent={indent}
       data-labels-control={labelsControl}
       {...landedMark(landed, LANDED.WITHIN)}
     >
-      <div className="luke-settings-row-body">
-        <div className="luke-settings-row-line">
-          <div className="luke-settings-row-subject">
-            {led ? <div className="luke-settings-row-leading">{leading}</div> : null}
-            <div className="luke-settings-row-copy">
+      <Item size={density} className={indent === SETTINGS_ROW_INDENT.MARK ? "ps-0" : undefined}>
+        <div
+          className={
+            density === SETTINGS_ROW_DENSITY.COMPACT
+              ? "luke-settings-row-line flex flex-wrap items-center"
+              : "luke-settings-row-line flex items-center"
+          }
+        >
+          <div className="luke-settings-row-subject flex min-w-0 items-center gap-luke-12">
+            {led ? (
+              <ItemMedia className={lead === SETTINGS_ROW_LEAD.FACE ? FACE_LEAD : undefined}>
+                {leading}
+              </ItemMedia>
+            ) : null}
+            <ItemContent>
               {said(adornment) ? (
-                <div className="luke-settings-row-title">
-                  <RowLabel id={labelId} control={labelsControl ? controlId : undefined}>
-                    {label}
-                  </RowLabel>
+                <ItemTitle>
+                  {name}
                   {adornment}
-                </div>
+                </ItemTitle>
               ) : (
-                <RowLabel id={labelId} control={labelsControl ? controlId : undefined}>
-                  {label}
-                </RowLabel>
+                name
               )}
               {described ? (
-                <p className="luke-settings-row-description" id={descriptionId}>
-                  {description}
-                </p>
+                <ItemDescription id={descriptionId}>{description}</ItemDescription>
               ) : null}
-            </div>
+            </ItemContent>
           </div>
-          <div className="luke-settings-row-controls">{children?.(control)}</div>
+          <ItemActions>{children?.(control)}</ItemActions>
         </div>
         {below === undefined ? null : (
-          <div className="luke-settings-row-below" data-led={led}>
+          <div
+            className={
+              led
+                ? "luke-settings-row-below mt-luke-8 min-w-0 ps-settings-row-words-inset"
+                : "luke-settings-row-below mt-luke-8 min-w-0"
+            }
+            data-led={led}
+          >
             {below(control)}
           </div>
         )}
         <ErrorLine id={errorId} level={ANNOUNCE.ALERT}>
           {failed ? error : null}
         </ErrorLine>
-      </div>
+      </Item>
     </div>
   );
 }
 
 /** The box a provider's or a service's mark leads its row in, one size whatever the artwork's proportions. */
 export function SettingsRowMark({ children }: { children: ReactNode }): React.JSX.Element {
-  return <span className="luke-settings-row-mark">{children}</span>;
+  return (
+    <span className="luke-settings-row-mark grid size-settings-row-mark flex-none place-items-center">
+      {children}
+    </span>
+  );
 }
 
 /** Where a row's subject stands, as its line under the name says it. */
@@ -240,6 +305,14 @@ export const SETTINGS_ROW_STATE = {
 } as const;
 
 export type SettingsRowState = (typeof SETTINGS_ROW_STATE)[keyof typeof SETTINGS_ROW_STATE];
+
+/** What each state draws: the finished session's dot before the words, the attention tint, or nothing. */
+const STATE_CLASS = {
+  [SETTINGS_ROW_STATE.CONNECTED]:
+    "before:size-settings-row-state-dot before:flex-none before:rounded-luke-full before:bg-complete",
+  [SETTINGS_ROW_STATE.ATTENTION]: "text-attention",
+  [SETTINGS_ROW_STATE.PLAIN]: "",
+} as const satisfies Record<SettingsRowState, string>;
 
 /**
  * Where a row's subject stands, under its name: connected with the dot a
@@ -262,7 +335,13 @@ export function SettingsRowStateLine({
 }): React.JSX.Element {
   return (
     <span
-      className="luke-settings-row-state"
+      className={cn(
+        "luke-settings-row-state items-center gap-luke-6",
+        block ? "flex w-fit" : "inline-flex",
+        // Note that the parts of a wrapping line are spaced by the spaces written between them, kept by `pre`: a flex gap beside the space a part ends in, trimmed at its end, would leave a wider gap after a separator than before it. The state's dot keeps its own.
+        wrap && "flex-wrap gap-x-0 whitespace-pre before:me-luke-6",
+        STATE_CLASS[state],
+      )}
       data-state={state}
       data-block={block ? "" : undefined}
       data-wrap={wrap ? "" : undefined}
@@ -275,12 +354,16 @@ export function SettingsRowStateLine({
 
 /** A value a row ends in, in a column of its own: a member's role, as the shortcuts page sets a chord. */
 export function SettingsRowValue({ children }: { children: ReactNode }): React.JSX.Element {
-  return <span className="luke-settings-row-value">{children}</span>;
+  return (
+    <span className="luke-settings-row-value min-w-luke-64 flex-none text-right text-body text-muted-foreground">
+      {children}
+    </span>
+  );
 }
 
 /** The room of a row's ⋯ on a row with none, so every row's value ends in one column. */
 export function SettingsRowActSlot(): React.JSX.Element {
-  return <span className="luke-settings-row-act-slot" aria-hidden="true" />;
+  return <span className="luke-settings-row-act-slot w-control flex-none" aria-hidden="true" />;
 }
 
 /** What is true of a saved credential, on one muted line beside its presses: its hint, its login, its status, wrapping between facts, never inside one. */
@@ -301,7 +384,7 @@ export function SettingsFacts({
 /** The complete green's check a saved credential or a connected row ends in. */
 export function SettingsSavedMark(): React.JSX.Element {
   return (
-    <span className="luke-settings-saved-mark">
+    <span className="luke-settings-saved-mark inline-flex text-complete in-[.luke-button]:ml-luke-4">
       <CheckIcon />
     </span>
   );
@@ -309,13 +392,20 @@ export function SettingsSavedMark(): React.JSX.Element {
 
 /** The word beside a row's name while its value differs from the default: a fact about a preference, never an urgency. */
 export function SettingsChangedMark(): React.JSX.Element {
-  return <span className="luke-settings-changed-mark">Modified</span>;
+  return (
+    <span className="luke-settings-changed-mark text-caption leading-tag font-tag text-muted-foreground">
+      Modified
+    </span>
+  );
 }
 
 /** The small mark beside a name while the feature it belongs to still needs a hand, its `note` the hover's and the screen reader's words. */
 export function SettingsAttentionMark({ note }: { note: string }): React.JSX.Element {
   return (
-    <span className="luke-settings-attention-mark" title={note}>
+    <span
+      className="luke-settings-attention-mark inline-flex flex-none text-attention"
+      title={note}
+    >
       <AlertIcon />
       <VisuallyHidden>({note})</VisuallyHidden>
     </span>

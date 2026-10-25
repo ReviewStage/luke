@@ -1,0 +1,1 @@
+ALTER TABLE "coding_agent" ADD COLUMN "published_read" jsonb;

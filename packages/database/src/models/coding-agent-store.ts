@@ -53,6 +53,7 @@ import {
   type StoredAgentStep,
   type StoredArchive,
   type StoredAutomationOrigin,
+  type StoredPublishedRead,
   type StoredPullRequest,
   type StoredStartedFrom,
 } from "../schemas/coding-agent.js";
@@ -1473,25 +1474,47 @@ const PublishedColumnSchema = Schema.Struct({
   mergedAt: Schema.optionalKey(Schema.Number),
 });
 
+/** The `published_read` column (`StoredPublishedRead`). */
+const PublishedReadColumnSchema = Schema.Struct({
+  at: Schema.Number,
+  branch: Schema.NullOr(Schema.String),
+  pushed: Schema.Boolean,
+});
+
 const updateAgentPublished = SqlSchema.void({
   Request: Schema.Struct({
     userId: Schema.String,
     agentId: Schema.String,
     published: Schema.NullOr(PublishedColumnSchema),
+    publishedRead: Schema.NullOr(PublishedReadColumnSchema),
   }),
-  execute: ({ userId, agentId, published }) =>
+  execute: ({ userId, agentId, published, publishedRead }) =>
     Database.use((db) =>
-      db.update(codingAgent).set({ published }).where(reachableAgent(userId, agentId)),
+      db
+        .update(codingAgent)
+        .set({ published, publishedRead })
+        .where(reachableAgent(userId, agentId)),
+    ),
+});
+
+const updateAgentPublishedReadForgotten = SqlSchema.void({
+  Request: Schema.Struct({ userId: Schema.String, agentId: Schema.String }),
+  execute: ({ userId, agentId }) =>
+    Database.use((db) =>
+      db.update(codingAgent).set({ publishedRead: null }).where(reachableAgent(userId, agentId)),
     ),
 });
 
 const findAgentPublished = SqlSchema.findOneOption({
   Request: Schema.Struct({ userId: Schema.String, agentId: Schema.String }),
-  Result: Schema.Struct({ published: Schema.NullOr(PublishedColumnSchema) }),
+  Result: Schema.Struct({
+    published: Schema.NullOr(PublishedColumnSchema),
+    publishedRead: Schema.NullOr(PublishedReadColumnSchema),
+  }),
   execute: ({ userId, agentId }) =>
     Database.use((db) =>
       db
-        .select({ published: codingAgent.published })
+        .select({ published: codingAgent.published, publishedRead: codingAgent.publishedRead })
         .from(codingAgent)
         .where(reachableAgent(userId, agentId))
         .limit(1),
@@ -2176,13 +2199,22 @@ export function continuationsOf(
   });
 }
 
-/** The pull request from the agent's branch as GitHub just answered, or null where it answered none; nothing written for an agent of a workspace the account is not in. */
+/** The pull request from the agent's branch as GitHub just answered, or null where it answered none, with the read that found it where one is named; nothing written for an agent of a workspace the account is not in. */
 export function recordCodingAgentPublished(
   userId: string,
   agentId: string,
   published: StoredPullRequest | null,
+  read?: StoredPublishedRead,
 ): CodingAgentStoreEffect<void> {
-  return updateAgentPublished({ userId, agentId, published });
+  return updateAgentPublished({ userId, agentId, published, publishedRead: read ?? null });
+}
+
+/** The row's read of GitHub let go, so its pull request is no longer answered in GitHub's place; nothing written for an agent of a workspace the account is not in. */
+export function forgetCodingAgentPublishedRead(
+  userId: string,
+  agentId: string,
+): CodingAgentStoreEffect<void> {
+  return updateAgentPublishedReadForgotten({ userId, agentId });
 }
 
 /** Whether any coding agent on the task, archived ones and a teammate's on their own token among them, has a pull request GitHub reported merged; false for a task the account does not reach. */
@@ -2200,6 +2232,24 @@ export function readCodingAgentPublished(
 ): CodingAgentStoreEffect<StoredPullRequest | null> {
   return Effect.map(findAgentPublished({ userId, agentId }), (row) =>
     Option.isSome(row) ? row.value.published : null,
+  );
+}
+
+/** What the agent's row keeps of GitHub's last answer: the pull request, null where it found none, and the read that found it. */
+export interface KeptPublished {
+  readonly published: StoredPullRequest | null;
+  readonly read: StoredPublishedRead;
+}
+
+/** The row's pull request with the read that wrote it; null where no read is kept, and for an agent the account does not reach. */
+export function readCodingAgentKeptPublished(
+  userId: string,
+  agentId: string,
+): CodingAgentStoreEffect<KeptPublished | null> {
+  return Effect.map(findAgentPublished({ userId, agentId }), (row) =>
+    Option.isSome(row) && row.value.publishedRead !== null
+      ? { published: row.value.published, read: row.value.publishedRead }
+      : null,
   );
 }
 

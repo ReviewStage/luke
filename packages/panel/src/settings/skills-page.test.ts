@@ -460,7 +460,7 @@ test("the workspace's skills stand before the account's own, each with its sourc
     text,
     /release-notes describedacme\/agent-skills @ 3f9c2e1 · by Dean\. Follows your workspace\.Workspace/u,
   );
-  assert.match(text, /pr-style describedpastedOnly you/u);
+  assert.match(text, /pr-style describedPastedOnly you/u);
   assert.match(text, /\.agents\/skills.*only agents started afterwards/u);
 });
 
@@ -546,7 +546,7 @@ test("the account's own skill offers Share with workspace, which asks in plain w
   const [, shared, personal] = [...document.querySelectorAll("section")];
   assert.match(
     shared?.textContent ?? "",
-    /pr-style describedpasted · by you\. Follows your workspace\.Workspace/u,
+    /pr-style describedPasted · by you\. Follows your workspace\.Workspace/u,
   );
   assert.match(personal?.textContent ?? "", /No skills installed yet\./u);
 });
@@ -563,7 +563,7 @@ test("a share the workspace already has the name for is refused in the question,
     dialog("alertdialog").textContent ?? "",
     /Stage already has a skill named pr-style\. Remove one of them first\./u,
   );
-  assert.match(rowOf("pr-style").textContent ?? "", /pastedOnly you/u);
+  assert.match(rowOf("pr-style").textContent ?? "", /PastedOnly you/u);
 });
 
 test("Share is never offered in a personal workspace", async () => {
@@ -617,7 +617,7 @@ test("Add skill opens with its box focused, not the card", async () => {
   assert.ok(document.activeElement === document.querySelector("textarea"), "the box has focus");
 });
 
-test("an install lights its own rows once and says which skills and how to call one", async () => {
+test("an install lights its own rows once", async () => {
   await mountPage();
 
   act(() => button("Add skill").click());
@@ -631,9 +631,6 @@ test("an install lights its own rows once and says which skills and how to call 
     (each) => each.querySelector(".luke-settings-row-label")?.textContent,
   );
   assert.deepEqual(lit, ["react-best-practices", "web-design-guidelines"]);
-  const toast = document.querySelector('[aria-label="Notifications"]')?.textContent ?? "";
-  assert.match(toast, /Installed web-design-guidelines and react-best-practices/u);
-  assert.match(toast, /Type \/web-design-guidelines in any new agent/u);
 });
 
 test("a switch turns its skill off and draws the service's answer", async () => {
@@ -960,7 +957,7 @@ test("a source on another host says only GitHub for now and asks the service not
   await mountDialog();
   await paste("npx skills add https://gitlab.com/acme/skills");
 
-  assert.match(document.body.textContent ?? "", /Only GitHub sources for now\./u);
+  assert.match(document.body.textContent ?? "", /Only GitHub sources\./u);
   assert.deepEqual(sentOf(ACT_KIND.INSTALLED_SKILLS_PREVIEW), []);
 });
 

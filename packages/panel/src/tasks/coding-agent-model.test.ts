@@ -33,6 +33,7 @@ import {
   choiceLabel,
   choiceModelId,
   choiceOn,
+  continueFailureNote,
   delegates,
   effortFor,
   messageFailureNote,
@@ -770,21 +771,34 @@ test("a Start or a message refused for an API key saved but unreadable says so a
     [
       {
         reason: FAILURE_REASON.CONNECT_AGENTS,
-        text: "Your saved API key can't be read. Save it again in Settings to start an agent.",
+        text: "Your saved API key can't be read. Save it again.",
       },
       {
         reason: FAILURE_REASON.CONNECT_AGENTS,
-        text: "Your saved API key can't be read. Save it again in Settings to message this agent.",
+        text: "Your saved API key can't be read. Save it again.",
       },
       {
         reason: FAILURE_REASON.CONNECT_AGENTS,
-        text: "Your subscription is signed out. Sign in again in Settings to start an agent.",
+        text: "Your subscription is signed out. Sign in again.",
       },
       {
         reason: FAILURE_REASON.CONNECT_AGENTS,
-        text: "Your subscription isn't eligible to run this agent. Choose your API key in Settings to start one.",
+        text: "Your subscription isn't eligible to run this agent. Choose your API key.",
       },
       FAILURE_REASON.OTHER,
+    ],
+  );
+});
+
+test("a Continue refused for what Settings mends names Settings, since no press beside it opens Settings", () => {
+  assert.deepEqual(
+    [
+      CODING_AGENT_CALL_FAILURE.AGENT_API_KEY_UNREADABLE,
+      CODING_AGENT_CALL_FAILURE.AGENT_PLAN_SIGNED_OUT,
+    ].map((failure) => continueFailureNote({ failure }, null).text),
+    [
+      "Your saved API key can't be read. Save it again in Settings to start an agent.",
+      "Your subscription is signed out. Sign in again in Settings to start an agent.",
     ],
   );
 });

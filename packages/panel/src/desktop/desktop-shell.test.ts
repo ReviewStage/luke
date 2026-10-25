@@ -25,7 +25,7 @@ import { UPDATE_STATUS } from "@luke/settings/update";
 import { STATUS_TONE } from "@luke/ui";
 import { DOCUMENT_REGION, TASKS_PAGE } from "@luke/ui/tasks-model";
 import { MICROPHONE_STATUS } from "@luke/voice/audio";
-import { NOTIFICATIONS_GRANTOR, NOTIFICATIONS_STATUS } from "@luke/voice/settings-controls";
+import { NOTIFICATIONS_STATUS } from "@luke/voice/settings-controls";
 import { ACTION_RESULT_STATUS } from "@luke/wire";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, useState } from "react";
@@ -39,6 +39,7 @@ import { PANEL_TAB, type PanelTab } from "../panel-tabs.js";
 import type { SettingsPanelProps } from "../settings/settings-panel.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import { fixtureChat } from "../tasks/chat-fixture.js";
+import { loadTasksFixture } from "../tasks/tasks-fixture-loader.js";
 import { HISTORY_READ } from "../tasks/use-plan-history.js";
 import { SIDE_PANEL_TAB } from "../tasks/use-side-panel.js";
 import { AUTOMATIONS_PAGE, type TasksControl } from "../tasks/use-tasks-tab.js";
@@ -80,10 +81,8 @@ const SETTINGS: SettingsPanelProps = {
   },
   notifications: {
     status: NOTIFICATIONS_STATUS.UNKNOWN,
-    grantor: NOTIFICATIONS_GRANTOR.MACOS,
     packaged: true,
     onOpenSettings: ignore,
-    onTest: ignore,
   },
   capabilities: DESKTOP_CAPABILITIES,
   updates: {
@@ -193,7 +192,6 @@ function mount(
         open: inboxOpen,
         chosen: undefined,
         onOpen: ignore,
-        onOpenList: () => undefined,
         onClose: ignore,
         onChoose: ignore,
         onOpenItem: () => undefined,
@@ -820,14 +818,13 @@ function barItem(page: HTMLElement, name: string): HTMLButtonElement {
   return item;
 }
 
-test("on a phone the Tasks page stands over a bar of the window's places, its own marked, and the bar's Inbox opens the Inbox on its list", async () => {
+test("on a phone the Tasks page stands over a bar of the window's places, its own marked, and the bar's Inbox opens the Inbox", async () => {
   const asked: string[] = [];
   const page = await mountNarrow({
     boardView: { ...tasksControl().boardView, open: true },
     inboxView: {
       ...tasksControl().inboxView,
       onOpen: () => asked.push("open"),
-      onOpenList: () => asked.push("open on its list"),
     },
   });
   assert.deepEqual(
@@ -837,7 +834,7 @@ test("on a phone the Tasks page stands over a bar of the window's places, its ow
   assert.equal(barItem(page, "Tasks").getAttribute("aria-current"), "page");
   assert.equal(barItem(page, "Inbox").getAttribute("aria-current"), null);
   act(() => barItem(page, "Inbox").click());
-  assert.deepEqual(asked, ["open on its list"]);
+  assert.deepEqual(asked, ["open"]);
 });
 
 test("on a phone the bar's More opens the sidebar's drawer, which holds every other place", async () => {
@@ -1525,6 +1522,8 @@ test("a fixture run staged on Chat offers it with no account to turn its experim
   const view = { ...tasksControl().chatView, available: true, chat };
   const run = { ...stateWith({}, {}).run, fixtureMode: true };
   handState({}, { run: { ...run, profile: RUN_PROFILE.CHAT } });
+  // The window is drawn once the synthetic tasks have landed (`App`).
+  await loadTasksFixture();
   const staged = mount(false, false, { chatView: view });
   await settle();
   assert.ok(chatRow(staged), "the chat profile's run offers Chat");

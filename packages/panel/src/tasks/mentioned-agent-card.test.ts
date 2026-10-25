@@ -327,7 +327,8 @@ async function cardOf(chip: Element | undefined) {
     name: card.querySelector(".luke-hover-card-name")?.textContent,
     model: card.querySelector("[data-model-label]")?.textContent,
     corner: card.querySelector(".luke-hover-card-corner")?.textContent,
-    working: card.querySelector('.actor-card-head .state-glyph[data-state="working"]') !== null,
+    working:
+      card.querySelector('.luke-hover-card-lead .state-glyph[data-state="working"]') !== null,
     foot: card.querySelector(".luke-hover-card-rule + .luke-hover-card-note")?.textContent,
     words: card.textContent,
   };
@@ -511,6 +512,15 @@ test("where the read answers nothing, the chip's own card says where the agent w
 
   assert.equal(card.tab, false);
   assert.match(card.words ?? "", /A coding agent on another task/u);
+});
+
+test("a chip of an agent whose read answers nothing draws no mark, leaving its name alone", async () => {
+  answering = false;
+  const container = await drawn(`Ask ${mentionOf(PRORATE, "Prorate")}.`);
+
+  const glyph = container.querySelector("[data-mention-ref] .luke-inline-ref-glyph");
+
+  assert.equal(glyph?.childElementCount, 0);
 });
 
 test("two chips of one task's agents hung one after the other share the task's read", async () => {

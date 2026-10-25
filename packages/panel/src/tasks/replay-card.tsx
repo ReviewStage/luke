@@ -27,7 +27,7 @@ import { MESSAGE_ROLE } from "@luke/wire";
 import { ChevronsUpIcon, SplitIcon, TextQuoteIcon } from "lucide-react";
 import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { ActorRef } from "../actor-ref.js";
-import { Message, MessageContent } from "../ai-elements/message.js";
+import { CHAT_MESSAGE_CLASS, Message, MessageContent } from "../ai-elements/message.js";
 import { PLAN_BODY_LAYOUT, Plan, PlanContent, PlanHeader, PlanIcon } from "../ai-elements/plan.js";
 import { useFindOpen } from "../find-in-tab.js";
 import { useMemberDirectory } from "../member-directory.js";
@@ -74,6 +74,13 @@ import { useOpenPlace } from "./use-open-link.js";
  * where known. The source's whole transcript is a press of its chip away.
  * The model is `replay-card-model.ts`.
  */
+
+/**
+ * A chip naming what a transcript's opening came from, as the transcript
+ * draws one, which cuts its own name to the line: held to the line's width
+ * so a narrow line cuts the title, never the state after it.
+ */
+export const ORIGIN_CHIP = "agent-origin-chip inline-flex min-w-0 max-w-full";
 
 /**
  * Where an agent's replay card stands: the agents of its task, archived ones
@@ -250,7 +257,7 @@ function LineStep({
   return (
     <Message
       from={received ? MESSAGE_ROLE.ASSISTANT : MESSAGE_ROLE.USER}
-      className={received ? "is-chat" : undefined}
+      className={received ? CHAT_MESSAGE_CLASS : undefined}
       data-replay-step={REPLAY_STEP_KIND.LINE}
     >
       <MessageContent>
@@ -382,7 +389,13 @@ function ReplaySteps({
     setShown(steps.length - page.from + page.next);
   };
   return (
-    <div ref={list} tabIndex={-1} className="replay-steps" data-replay-steps="">
+    // No ring: it is focused only by script, to keep the place when Show more is spent.
+    <div
+      ref={list}
+      tabIndex={-1}
+      className="replay-steps flex flex-col gap-block-gap outline-none"
+      data-replay-steps=""
+    >
       {page.from === 0 ? null : (
         <Inline>
           <Button
@@ -420,14 +433,15 @@ function ReplayFoot({
     pullRequest === undefined || pullRequest === null ? undefined : pullRequestLabelOf(pullRequest);
   if (branch === undefined && words === undefined) return null;
   return (
-    <div className="replay-foot">
+    // The branch and the pull request, over a dashed rule.
+    <div className="flex flex-wrap items-center gap-x-block-gap gap-y-tight-gap border-t border-dashed border-border pt-row-inset text-caption text-muted-foreground *:min-w-0">
       {branch === undefined ? null : (
         <span>
           Builds on <code>{branch}</code>
         </span>
       )}
       {pullRequest === undefined || pullRequest === null || words === undefined ? null : (
-        <span className="agent-origin-chip">
+        <span className={ORIGIN_CHIP}>
           {linkChip(pullRequest.url, words, doors) ?? (
             <TextLink
               href={pullRequest.url}
@@ -502,7 +516,7 @@ export function ReplayCard({
         data-replay-card=""
         aria-label={replayVerb(replay)}
         actions={
-          <span className="agent-origin-chip">
+          <span className={ORIGIN_CHIP}>
             <ActorRef actor={tile} card={place.card(agentId)} onOpen={openSource} faceOnly />
           </span>
         }
@@ -513,7 +527,7 @@ export function ReplayCard({
           </PlanIcon>
           {/* Note that the head names the source in words, its chip standing beside the head, because the head is the card's summary, which holds no control. */}
           <OneLine
-            className="replay-card-title"
+            className="flex min-w-0 flex-1 items-center gap-tight-gap overflow-hidden whitespace-nowrap"
             words={`${replayVerb(replay)} ${name} · ${replayCount(replay)}`}
           >
             <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>

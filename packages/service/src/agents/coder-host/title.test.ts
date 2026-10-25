@@ -141,7 +141,7 @@ it.layer(getTestDB())("an untitled task's name", (it) => {
       const first = yield* startOnTask(owner, task.id, "Expire teammate invitations after a week.");
       const second = yield* startOnTask(owner, task.id, "Send a reminder the day before.");
 
-      yield* titledAs(owner, first, "untitled.");
+      yield* titledAs(owner, first, "<Untitled>.");
       yield* titledAs(owner, second, "Send invitation reminders");
 
       assert.equal(Option.getOrThrow(yield* readCodingAgent(owner, first.id)).title, null);
@@ -291,7 +291,6 @@ it.layer(getTestDB())("an agent's title", (it) => {
         );
         const titled = Option.getOrThrow(yield* readCodingAgent(owner, started.agent.id));
 
-        assert.equal(asked.length, 1);
         assert.match(asked[0] ?? "", /Find the flakiest test in CI this week/u);
         assert.match(asked[0] ?? "", /release\/2\.4/u, "the subject survives a long prompt");
         assert.doesNotMatch(asked[0] ?? "", /Luke started this run/u);

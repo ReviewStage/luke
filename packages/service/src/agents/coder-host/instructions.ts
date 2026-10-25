@@ -408,6 +408,10 @@ ${read}${EDIT_PLAN_WORDS}`,
 function namingWords(repository: string, taskLink: string | null): string {
   const file = `https://github.com/${repository}/blob/HEAD/apps/web/session-store.ts`;
   const lines = `https://github.com/${repository}/blob/<commit>/apps/web/session-store.ts#L3-L5`;
+  const inboxItem =
+    taskLink === null
+      ? "https://tryluke.dev/acme/agent/<agent-id>/inbox/<item-id>"
+      : `${taskLink}/inbox/<item-id>`;
   const ownTask =
     taskLink === null
       ? `
@@ -419,6 +423,7 @@ function namingWords(repository: string, taskLink: string | null): string {
 - A file of your repository: \`[@session-store.ts](${file})\`; a folder the same way with \`tree\` for \`blob\`; lines at a commit already on GitHub: \`[@session-store.ts:3–5](${lines})\`.
 - A pull request or an issue on GitHub, or a Linear issue, by its own address: \`[@#42 Fix the refresh](https://github.com/${repository}/pull/42)\`, \`[@LUKE-142 Token refresh fails](https://linear.app/acme/issue/LUKE-142)\`.${ownTask}
 - Another coding agent, or another task, by the \`mention\` \`${CODER_TOOL.LIST_AGENTS}\`, \`${CODER_TOOL.START_AGENT}\`, or \`${CODER_TOOL.LIST_TASKS}\` answered: \`[@Wire the desktop](https://tryluke.dev/acme/plan/<task-id>/agent/<agent-id>)\`.
+- One of your Inbox items, by the \`mention\` each of your inbox tools answered for its thread: \`[@Review the invite flow](${inboxItem})\`.
 - A date, which opens nothing, by its day, or its time with the offset it is at, and a range by both ends joined by a slash, its words the date in full: \`[@Oct 20, 2026](luke://date/2026-10-20)\`, \`[@Oct 20, 2026, 3:00 PM PDT](luke://date/2026-10-20T15:00-07:00)\`, \`[@Oct 20, 2026 → Oct 24, 2026](luke://date/2026-10-20/2026-10-24)\`.
 - An MCP server, by its connection's name as your tools list it: \`[@Linear](luke://mcp/linear)\`, or \`[@Notion](luke://mcp/notion-2)\` for a second Notion account.
 

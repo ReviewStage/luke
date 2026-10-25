@@ -301,6 +301,12 @@ body {
   border-radius: var(--luke-radius-8);
 }
 
+/* A column wider than a strip's narrow break and short of its whole sentence, so its words are cut short. */
+.catalog-strip-room {
+  width: 520px;
+  max-width: 100%;
+}
+
 /* A sample block standing for an item an arrangement holds; a long one
    gives way rather than overflowing, as a real label does. */
 .catalog-swatch {
@@ -449,10 +455,27 @@ body {
   background: var(--luke-color-surface);
 }
 
+/* A picture in a card as large as the window allows: its bar along the
+   top, the picture centred on its own ground under it. */
+.catalog-window {
+  display: flex;
+  height: 100%;
+  flex-direction: column;
+}
+
+.catalog-window-picture {
+  display: grid;
+  min-height: 0;
+  flex: 1 1 auto;
+  place-items: center;
+  background: var(--luke-color-surface);
+}
+
 /* The face gives way to a narrow or short window, so the card that fits it
    never has to clip it: the window less the dimmed margin, the picture's
    inset, the card's edge, and, for its height, the bar above it. */
-.catalog-media-picture > .luke-face {
+.catalog-media-picture > .luke-face,
+.catalog-window-picture > .luke-face {
   width: min(
     480px,
     100vw -

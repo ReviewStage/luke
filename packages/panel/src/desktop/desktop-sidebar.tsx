@@ -44,7 +44,6 @@ import {
   opensMenu,
   PanePin,
   PinIcon,
-  PlusIcon,
   ProviderMark,
   RESIZE_EDGE_SIDE,
   ResizeEdge,
@@ -155,12 +154,14 @@ import { useUnreadTasks } from "../tasks/use-task-looks.js";
 import { AUTOMATIONS_PAGE, type InboxChoice, type TasksControl } from "../tasks/use-tasks-tab.js";
 import { useAdminAccess, useExperiment } from "../use-app-state.js";
 import { ActionMenu, type MenuAction, type MenuEntry } from "./action-menu.js";
+import { runningRuns } from "./automation-runs-tab.js";
 import { welcomed } from "./desktop-welcome.js";
 import { useFailedRunsMark } from "./failed-runs.js";
 import { type FoldedGroups, useFoldedGroups } from "./folded-groups.js";
 import { type HoverPane, useHoverPane } from "./hover-pane.js";
 import { LukeIdentity } from "./luke-identity.js";
 import { isLuke, useLukeOperator, withoutLuke } from "./luke-operator.js";
+import { NewTaskInButton } from "./new-task-button.js";
 import { ADMIN_PLACE } from "./pages-on-demand.js";
 import { needsYouNoun, usePlacesWaiting } from "./places-waiting.js";
 import { RowPlaced, useRowMoveKeys } from "./row-moves.js";
@@ -189,6 +190,7 @@ import {
 } from "./sidebar-task-view.js";
 import { type RowFaces, SidebarTask } from "./task-actions.js";
 import { useTaskListView } from "./task-list-view.js";
+import { useWorkspaceRuns } from "./use-automation-runs.js";
 import { useRowDrag } from "./use-row-drag.js";
 import { WorkspaceSwitcher } from "./workspace-switcher.js";
 
@@ -200,6 +202,9 @@ const WORK_RESERVE = 360;
 
 /** What the header over the tasks with no repository says. */
 const NO_REPOSITORY = "No repository";
+
+/** What the Automations row's count counts, as a reader hears it after the figure. */
+const RUNNING_NOUN = "running";
 
 /** The widths of the tasks' names while the list is first read, uneven as names are. */
 const LIST_SKELETON = ["72%", "54%", "64%", "46%"] as const;
@@ -942,7 +947,7 @@ function RepositorySection({
         count={foldedCount(folded, group.rows.length, TASK_NOUN)}
         mark={
           repository !== null && context.tasks.pinnedRepositories.includes(repository) ? (
-            <span className="sidebar-repository-pinned">
+            <span className="sidebar-repository-pinned inline-flex flex-none text-muted-foreground [&_svg]:size-luke-12">
               <PinIcon />
               <VisuallyHidden>(pinned)</VisuallyHidden>
             </span>
@@ -965,14 +970,10 @@ function RepositorySection({
               />
             )}
             {repository === null ? null : (
-              <Tooltip label={`New task in ${label}`}>
-                <IconButton
-                  icon={<PlusIcon />}
-                  label={`New task in ${label}`}
-                  size={BUTTON_SIZE.COMPACT}
-                  onClick={() => onNewTaskIn(repository)}
-                />
-              </Tooltip>
+              <NewTaskInButton
+                label={`New task in ${label}`}
+                onPress={() => onNewTaskIn(repository)}
+              />
             )}
           </>
         }
@@ -1497,15 +1498,20 @@ function SidebarTasksRow({
  * While a run of the account's own automation failed to start since that
  * automation was opened, the row wears the failed mark at its end, where the
  * Inbox's count stands on its row, giving way to the chord as that does.
+ * While agents its workspace's automations started still work, it counts
+ * them in the working tone beside that mark, as the Runs tab does.
  */
 function SidebarAutomationsRow({
   current,
   failed,
+  running,
   disabled,
   onOpen,
 }: {
   current: boolean;
   failed: boolean;
+  /** How many runs of the listed workspace's automations still have an agent at work. */
+  running: number;
   disabled: boolean;
   onOpen: () => void;
 }): React.JSX.Element {
@@ -1513,6 +1519,7 @@ function SidebarAutomationsRow({
     <NavItem
       icon={<ZapIcon />}
       current={current ? NAV_CURRENT.PAGE : undefined}
+      count={{ value: running, noun: RUNNING_NOUN, tone: STATUS_TONE.WORKING }}
       mark={failed ? stateEndMark(GLYPH_STATE.FAILED, false) : undefined}
       aria-keyshortcuts={commandKeyshortcuts(APP_COMMAND.AUTOMATIONS)}
       shortcut={<Shortcut chord={APP_SHORTCUTS[APP_COMMAND.AUTOMATIONS].chord} />}
@@ -1768,6 +1775,11 @@ function SidebarColumn({
   const inBoard = onTasks && tasks.boardView.open;
   // Opening an automation sees its failed run, which the Automations row is marked for until then.
   const { place: automationsPlace } = tasks.automationsView;
+  // The workspace's runs, followed while the sidebar stands, as the Runs tab follows them, for the row to count the ones still at work.
+  const { read: workspaceRuns } = useWorkspaceRuns(
+    tasks.signedIn ? tasks.workspace?.id : undefined,
+  );
+  const automationsRunning = runningRuns(workspaceRuns);
   const automationFailed = useFailedRunsMark(
     tasks.failedRuns,
     tasks.workspace?.id,
@@ -2118,6 +2130,7 @@ function SidebarColumn({
         <SidebarAutomationsRow
           current={inAutomations}
           failed={automationFailed}
+          running={automationsRunning}
           disabled={!tasks.signedIn}
           onOpen={chosen(openAutomations)}
         />
@@ -2149,10 +2162,15 @@ function SidebarColumn({
       {/* One scroller for the pages' rows and both sections, so neither the
           rows nor the pinned tasks hold the column above the rest: on an
           iPad's or a short window's column they left the tasks a strip. */}
-      <Fill className="sidebar-section">
+      <Fill className="sidebar-section -m-ring-reach">
         <ScrollArea fade={SCROLL_FADE.BOTH}>
           <ListMotion root={body}>
-            <div {...roving} ref={bodyRef} className="sidebar-section-body" {...motionRows()}>
+            <div
+              {...roving}
+              ref={bodyRef}
+              className="sidebar-section-body flex min-h-list-held flex-col p-ring-reach [&_.sidebar-group+.sidebar-group]:mt-section-gap"
+              {...motionRows()}
+            >
               {places}
               {operator === undefined ? null : (
                 <nav className="sidebar-group" aria-label="Luke">

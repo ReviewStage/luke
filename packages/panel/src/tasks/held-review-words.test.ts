@@ -214,7 +214,7 @@ function actionsSent(): string[] {
   return changes.map((change) => change.action);
 }
 
-test("Ctrl+Enter sends a reply and saves an edit, and a bare Enter sends neither", async () => {
+test("Enter sends a reply and saves an edit, and Shift+Enter sends neither", async () => {
   const container = draw();
   const press = (element: HTMLElement, init: KeyboardEventInit) =>
     act(() => {
@@ -225,16 +225,16 @@ test("Ctrl+Enter sends a reply and saves an edit, and a bare Enter sends neither
 
   act(() => button(container, "Reply…").click());
   typeAtEnd(box(container, "Reply"), "Thanks");
-  press(box(container, "Reply"), { key: "Enter" });
+  press(box(container, "Reply"), { key: "Enter", shiftKey: true });
   await settle();
-  assert.deepEqual(actionsSent(), [], "a bare Enter sends nothing");
-  press(box(container, "Reply"), { key: "Enter", ctrlKey: true });
+  assert.deepEqual(actionsSent(), [], "Shift+Enter sends nothing");
+  press(box(container, "Reply"), { key: "Enter" });
   await settle();
   assert.deepEqual(actionsSent(), [PULL_REQUEST_ACTION.REPLY_TO_THREAD]);
 
   act(() => button(container, "Edit").click());
   typeAtEnd(box(container, "Pending comment"), "!");
-  press(box(container, "Pending comment"), { key: "Enter", ctrlKey: true });
+  press(box(container, "Pending comment"), { key: "Enter" });
   await settle();
   assert.deepEqual(actionsSent(), [
     PULL_REQUEST_ACTION.REPLY_TO_THREAD,

@@ -23,7 +23,6 @@ import {
   type CommandKey,
   installCommandKey,
 } from "@luke/settings/shortcuts";
-import type { NotificationsGrantor } from "@luke/voice/settings-controls";
 import type { OpenBrowserLive } from "./tasks/cloud-browser-live.js";
 
 export type { OpenBrowserLive } from "./tasks/cloud-browser-live.js";
@@ -97,20 +96,6 @@ export interface AppPlatform {
    * answers one, and the Mac app, which needs none, leaves this out.
    */
   macAppLink?(): string;
-  /**
-   * Who grants this window notifications where it is not macOS, such as a
-   * browser's permission for the site: a shell whose grant is macOS's, the
-   * Mac app, leaves this out.
-   */
-  notificationsGrantor?(): NotificationsGrantor;
-  /**
-   * Asks the shell's grantor for permission where it was never answered,
-   * called in the press's own handler before Settings' test leaves for the
-   * host, because a browser such as Safari prompts only for an ask made
-   * inside the press. A shell whose grant is macOS's, the Mac app, leaves
-   * this out.
-   */
-  askNotificationsPermission?(): void;
   /**
    * Hears the ask standing each time a page comes to hold unsaved work, and
    * nothing once none does, so a shell that can leave the page by ways of its

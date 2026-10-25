@@ -2,7 +2,7 @@ import { BarItem, EllipsisIcon } from "@luke/ui";
 import { TASKS_PAGE } from "@luke/ui/tasks-model";
 import { InboxIcon, ListTodoIcon, MessagesSquareIcon } from "lucide-react";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
-import { AUTOMATIONS_PAGE, type TasksControl } from "../tasks/use-tasks-tab.js";
+import { automationsTab, type TasksControl } from "../tasks/use-tasks-tab.js";
 import { needsYouNoun, usePlacesWaiting } from "./places-waiting.js";
 import { SIDEBAR_OVERLAY, type SidebarCollapse } from "./sidebar-collapse.js";
 
@@ -14,8 +14,9 @@ import { SIDEBAR_OVERLAY, type SidebarCollapse } from "./sidebar-collapse.js";
  * It stands only in a narrow room and only on a place's list, the Inbox's,
  * the Tasks page, Chat's rail, Automations, or the window resting with no
  * task open, so a task, an agent's page, an item, or a channel being read
- * keeps the whole screen and is left by Back. The Inbox's press lands on its
- * list, not on the item last read, since on a phone the list is the place.
+ * keeps the whole screen and is left by Back. Each press lands on its
+ * place's list, not on the item or channel last read, since on a phone the
+ * list is the place (`use-tasks-tab.ts`'s `onOpen`).
  *
  * The Inbox and Chat each count what waits on the developer there, the
  * count the drawer's rows show, read from the one reading they draw from
@@ -32,8 +33,8 @@ export function mobileBarShown(room: ShellRoom, tasks: TasksControl, chatOn: boo
   if (inboxView.open) return inboxView.listed || inboxView.chosen === undefined;
   if (agentView.agentId !== undefined || personView.userId !== undefined) return false;
   if (boardView.open) return true;
-  // Note that an automation's editor and its runs keep the whole screen, as an item does; only the list stands over the bar.
-  if (automationsView.open) return automationsView.place.kind === AUTOMATIONS_PAGE.LIST;
+  // Note that an automation's editor and its runs keep the whole screen, as an item does; only the list and the Runs tab stand over the bar.
+  if (automationsView.open) return automationsTab(automationsView.place);
   return tasks.page === TASKS_PAGE.HOME;
 }
 
@@ -67,7 +68,7 @@ export function MobileBar({
         current={inInbox}
         count={{ value: waiting.inbox, noun: needsYouNoun(waiting.inbox) }}
         inert={drawerOpen}
-        onPress={inboxView.onOpenList}
+        onPress={inboxView.onOpen}
       >
         Inbox
       </BarItem>

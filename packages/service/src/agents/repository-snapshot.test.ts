@@ -99,6 +99,9 @@ it.effect(
         state: REPOSITORY_SNAPSHOT_STATE.READY,
         snapshotId: fake.snapshots[0],
       });
+      // It lapses on its own three days and fifteen minutes after its last use, rather than never,
+      // so one the sweep's delete keeps for a sandbox still on it does not stand for good.
+      assert.equal(fake.snapshotExpirations.get(fake.snapshots[0] ?? ""), 260_100_000);
     }),
 );
 

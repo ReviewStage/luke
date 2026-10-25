@@ -13,6 +13,7 @@ import {
   CloseIcon,
   CopyButton,
   DIALOG_SIZE,
+  DIALOG_VEIL,
   Dialog,
   IconButton,
   IMAGE_OPENING,
@@ -69,8 +70,10 @@ import { WholeFile, type WholeFileNote } from "./whole-file.js";
  * the file shown (who last edited it, for a plan's picture), beside Copy for a text file or a picture,
  * whatever the place opening it offers for a picture (Add to plan, in an
  * agent's transcript), Download, and the way out. It opens in the window's one modal frame,
- * `@luke/ui`'s dialog fitted to the file shown: the window dims, Tab stays inside the card, and
- * Escape, a press on the dimmed window, and the way out all close it and
+ * `@luke/ui`'s dialog as large as the window allows, its top clear of the
+ * traffic lights, the file fitted inside it edge to edge: a picture or a
+ * video up to twice its own pixels, a text file at its reading width. The window dims, Tab stays inside the card, and
+ * Escape, a press on the dimmed window or the room around the file, and the way out all close it and
  * hand focus back to the chip that opened it. A picture opened from its
  * tile grows out of the tile and, closed on that picture, shrinks back into it. The
  * file's bytes are the chip's own, so a file in the message box and one
@@ -86,6 +89,16 @@ import { WholeFile, type WholeFileNote } from "./whole-file.js";
  * Note that a PDF is shown by its icon rather than drawn, because the
  * window's policy refuses the frames and objects Chromium draws one in.
  */
+
+/** The file's name in the viewer's head, cut to its line. */
+const TITLE_CLASS = "attachment-viewer-title m-0 overflow-hidden whitespace-nowrap";
+
+/** How large the file is, quiet, in the caption role. */
+const SIZE_CLASS = "attachment-viewer-size flex-none text-caption text-muted-foreground";
+
+/** What the place opening the viewer says of the file, a plan's picture saying who last edited it, in the size's quiet ink, cut past the ring a press in it draws. */
+const NOTE_CLASS =
+  "attachment-viewer-note flex min-w-0 overflow-clip [overflow-clip-margin:var(--luke-focus-ring-room)] text-caption text-muted-foreground";
 
 /** What the header's buttons are named. */
 const VIEWER_LABEL = {
@@ -308,21 +321,30 @@ function AttachmentBody({
 }): React.JSX.Element {
   if (attachmentView(file) === ATTACHMENT_VIEW.IMAGE) {
     return (
-      <div ref={zoom.frameRef} className="attachment-viewer-body">
+      // Two fingers anywhere on the frame pinch the picture (`@luke/ui`'s ZoomImage), never the page.
+      <div
+        ref={zoom.frameRef}
+        className="attachment-viewer-body min-h-0 flex-auto grid touch-none place-items-center overflow-hidden bg-surface"
+        {...DIALOG_VEIL}
+      >
         <ZoomImage zoom={zoom} src={file.url} alt={file.name} />
       </div>
     );
   }
   if (attachmentView(file) === ATTACHMENT_VIEW.VIDEO) {
     return (
-      <div className="attachment-viewer-body">
+      // A video plays on the veil, centred, as large as the card leaves it under its header at its own shape.
+      <div
+        className="attachment-viewer-body min-h-0 flex-auto grid place-items-center overflow-hidden bg-veil"
+        {...DIALOG_VEIL}
+      >
         <VideoPlayer dataUrl={file.url} label={file.name} place={VIDEO_PLAYER_PLACE.VIEWER} />
       </div>
     );
   }
   if (text !== undefined) {
     return (
-      <div className="attachment-viewer-body attachment-viewer-lines">
+      <div className="attachment-viewer-body min-h-0 flex-auto attachment-viewer-lines mx-auto flex w-viewer-text flex-col bg-card-code">
         <WholeFile
           name={file.name}
           text={text.replace(/\r\n/gu, "\n")}
@@ -336,10 +358,17 @@ function AttachmentBody({
     );
   }
   return (
-    <div className="attachment-viewer-body attachment-viewer-other">
-      <FileTypeIcon name={file.name} />
-      <p className="attachment-viewer-other-name">{file.name}</p>
-      <p className="attachment-viewer-other-size">{sizeLabel(base64)}</p>
+    <div
+      className="attachment-viewer-body min-h-0 flex-auto flex flex-col items-center justify-center gap-item-gap p-card text-center"
+      {...DIALOG_VEIL}
+    >
+      <FileTypeIcon name={file.name} className="size-12" />
+      <p className="mx-0 mt-item-gap mb-0 max-w-full text-section font-luke-semibold wrap-anywhere">
+        {file.name}
+      </p>
+      <p className="mx-0 mt-0 mb-block-gap text-caption text-muted-foreground">
+        {sizeLabel(base64)}
+      </p>
       <Button icon={<DownloadIcon aria-hidden="true" />} onClick={() => download(file)}>
         {VIEWER_LABEL.DOWNLOAD}
       </Button>
@@ -419,16 +448,17 @@ export function AttachmentViewer({
   return (
     <Dialog
       open
-      size={DIALOG_SIZE.MEDIA}
+      size={DIALOG_SIZE.WINDOW}
       labelledBy={titleId}
       onDismiss={close}
       onKeyDown={walkKey}
       expand={expand}
     >
       <div
-        className="attachment-viewer ph-no-capture"
+        className="attachment-viewer ph-no-capture flex size-full min-h-0 flex-col"
         data-view={attachmentView(file)}
         data-opening={opening}
+        {...DIALOG_VEIL}
       >
         {phone ? (
           <PhoneHead
@@ -442,19 +472,19 @@ export function AttachmentViewer({
               />
             }
             title={
-              <span className="attachment-viewer-heading">
+              <span className="flex min-w-0 flex-col items-center">
                 <Text
                   as={TEXT_ELEMENT.H2}
                   variant={TEXT_VARIANT.TOOLBAR_TITLE}
                   id={titleId}
-                  className="luke-toolbar-title attachment-viewer-title"
+                  className={`luke-toolbar-title max-w-full ${TITLE_CLASS}`}
                 >
                   <OneLine>{file.name}</OneLine>
                 </Text>
-                <span className="attachment-viewer-about">
-                  <span className="attachment-viewer-size">{sizeLabel(base64)}</span>
+                <span className="flex min-w-0 max-w-full">
+                  <span className={`m-0 ${SIZE_CLASS}`}>{sizeLabel(base64)}</span>
                   {note === undefined || note === null ? null : (
-                    <span className="attachment-viewer-note">{note}</span>
+                    <span className={`my-0 mr-0 ml-luke-8 ${NOTE_CLASS}`}>{note}</span>
                   )}
                 </span>
               </span>
@@ -482,29 +512,30 @@ export function AttachmentViewer({
             }
           />
         ) : (
-          <header className="attachment-viewer-header">
-            <FileTypeIcon name={file.name} />
+          <header className="flex flex-none items-center gap-tight-gap border-b border-border py-luke-4 pr-item-gap pl-list-inset">
+            <FileTypeIcon name={file.name} className="mr-tight-gap size-control-icon flex-none" />
             <Text
               as={TEXT_ELEMENT.H2}
               variant={TEXT_VARIANT.SECTION}
               id={titleId}
-              className="attachment-viewer-title"
+              className={TITLE_CLASS}
             >
               <OneLine>{file.name}</OneLine>
             </Text>
-            <span className="attachment-viewer-size">{sizeLabel(base64)}</span>
+            {/* What the place opening the viewer says of the file shown stands after its size in the same quiet ink, the size giving it the room the size kept before the header's buttons (tasks.css), and it is cut before it reaches them. */}
+            <span className={`my-0 mr-auto ml-tight-gap ${SIZE_CLASS}`}>{sizeLabel(base64)}</span>
             {note === undefined || note === null ? null : (
-              <span className="attachment-viewer-note">{note}</span>
+              <span className={`my-0 mr-auto ml-block-gap ${NOTE_CLASS}`}>{note}</span>
             )}
             {files.length > 1 ? (
-              <div className="attachment-viewer-walk">
+              <div className="flex items-center">
                 <HeaderButton
                   label={VIEWER_LABEL.PREVIOUS}
                   chord={VIEWER_CHORD.PREVIOUS}
                   onClick={() => walk(-1)}
                   icon={<ChevronLeftIcon aria-hidden="true" />}
                 />
-                <span className="attachment-viewer-place">
+                <span className="attachment-viewer-place min-w-12 text-center text-caption text-muted-foreground tabular-nums">
                   {`${String(at + 1)} of ${String(files.length)}`}
                 </span>
                 <HeaderButton

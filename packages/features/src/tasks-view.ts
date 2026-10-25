@@ -344,8 +344,17 @@ export const IDLE_TASKS_VIEW: TasksView = {
   document: { status: TASKS_READ.IDLE },
 };
 
-/** Starting a task, as the window asks it: the name, and the repository it is about where one is chosen; the service keeps both. */
-export const tasksStartRequestSchema = taskCreateRequestSchema;
+/**
+ * Starting a task, as the window asks it: the service's own start, and
+ * whether it opens the task. A quiet start, a Tasks page group's quick add,
+ * opens nothing and answers once the task list carries the task, so it
+ * lands in its group under the reader's eye. Note that the service's own
+ * schema still reads the start the host hands on (`TaskClient.create`).
+ */
+export const tasksStartRequestSchema = EffectSchema.Struct({
+  ...taskCreateRequestSchema.fields,
+  quiet: EffectSchema.optionalKey(EffectSchema.Boolean),
+});
 
 export type TasksStartRequest = typeof tasksStartRequestSchema.Type;
 

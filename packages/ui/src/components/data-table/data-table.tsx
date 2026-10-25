@@ -85,12 +85,11 @@ const TABLE_MIN_WIDTH =
 const ROW = "transition-[background-color] duration-(--luke-duration-hover) ease-plain";
 
 /** A row that opens something: lit under the pointer, and pressed with the web's pointing hand but a Mac list's arrow on the desktop. */
-const PRESSABLE_ROW =
-  "cursor-pointer [&:hover]:bg-muted in-data-[luke-profile=desktop]:cursor-default";
+const PRESSABLE_ROW = "cursor-press [&:hover]:bg-muted";
 
 /** A sortable heading's press: its words alone, in the heading's own type and ink, its ring a little off them. */
 const SORT_BUTTON =
-  "m-0 inline-flex items-baseline border-0 bg-transparent p-0 text-inherit [font:inherit] cursor-pointer outline-offset-2 in-data-[luke-profile=desktop]:cursor-default";
+  "m-0 inline-flex items-baseline border-0 bg-transparent p-0 text-inherit [font:inherit] cursor-press outline-offset-2";
 
 /** The elements a press inside a row answers for itself. */
 const OWN_CONTROL = "a, button, input, select, textarea, label, [role='button']";

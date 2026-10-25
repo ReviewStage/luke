@@ -60,6 +60,7 @@ import {
 } from "@luke/ui";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useAct } from "../act.js";
+import { enterKeyHint, enterSubmitKey } from "../enter-sends.js";
 import { rendererPause } from "../renderer-runtime.js";
 import { SkillMark } from "../tasks/skill-ref.js";
 import { useAnnounceShown } from "../use-announce-shown.js";
@@ -911,6 +912,8 @@ export function AddSkillDialog({
                 autoFocus
                 busy={installing}
                 placeholder="npx skills add mattpocock/skills --skill grill-me"
+                enterKeyHint={enterKeyHint()}
+                submitKey={enterSubmitKey()}
                 onSubmit={install}
                 onChange={(next) => {
                   pasted.current = pastedAtOnce(text, next);

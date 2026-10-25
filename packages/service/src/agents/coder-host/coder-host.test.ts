@@ -1328,49 +1328,33 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork, modelCatalogOf(CATALOG)))(
 
           const titled = Option.getOrThrow(yield* readCodingAgent(userId, agent.id));
           assert.equal(titled.title, "Teammate invitations by email");
-          assert.equal(asked.length, 1);
           assert.match(asked[0] ?? "", /Invite a teammate by email/u);
         }),
     );
 
-    it.effect(
-      "an opening the title model names nothing from is asked again as the turn ends, with the answer beside it",
-      () =>
+    it.effect.each([
+      { end: "turn.completed", case: "the turn ends" },
+      {
+        end: "turn.failed",
+        case: "a failed turn ends, so an agent whose first turn fails is still named",
+      },
+    ] as const)(
+      "an opening the title model names nothing from is asked again with the answer beside it as $case",
+      ({ end }) =>
         Effect.gen(function* () {
           const { model, asked } = scriptedTitleModel(["", "Read the agent guide"]);
           const host = yield* hostOverStore(model);
           const { agent, userId, sessionId, auth, admitted } = yield* openAgent(host);
           const state = memoryRelayState();
           const session = { id: sessionId, auth, turn: { id: "turn_0" } };
-          for (const event of codingTurn("turn_0", "turn.completed")) {
+          for (const event of codingTurn("turn_0", end)) {
             // SAFETY: the relay reads the session's id and auth; eve's turn metadata is not read here.
             yield* host.relay(event, admitted, session as never, state, {});
           }
 
           const titled = Option.getOrThrow(yield* readCodingAgent(userId, agent.id));
           assert.equal(titled.title, "Read the agent guide");
-          assert.equal(asked.length, 2);
           assert.match(asked[1] ?? "", /The guide is read; the plan fits the code\./u);
-        }),
-    );
-
-    it.effect(
-      "an opening the title model names nothing from is asked again as a failed turn ends, so an agent whose first turn fails is still named",
-      () =>
-        Effect.gen(function* () {
-          const { model, asked } = scriptedTitleModel(["", "Read the agent guide"]);
-          const host = yield* hostOverStore(model);
-          const { agent, userId, sessionId, auth, admitted } = yield* openAgent(host);
-          const state = memoryRelayState();
-          const session = { id: sessionId, auth, turn: { id: "turn_0" } };
-          for (const event of codingTurn("turn_0", "turn.failed")) {
-            // SAFETY: the relay reads the session's id and auth; eve's turn metadata is not read here.
-            yield* host.relay(event, admitted, session as never, state, {});
-          }
-
-          const titled = Option.getOrThrow(yield* readCodingAgent(userId, agent.id));
-          assert.equal(titled.title, "Read the agent guide");
-          assert.equal(asked.length, 2);
         }),
     );
 
@@ -1692,27 +1676,34 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork, modelCatalogOf(CATALOG)))(
             input: unparsedWire({}),
           });
 
-          assert.deepEqual(read, {
-            status: ACTION_RESULT_STATUS.ACCEPTED,
-            inbox: [
-              {
-                key: "region",
-                title: "Which region?",
-                status: INBOX_STATUS.CLOSED,
-                thread: [
-                  {
-                    from: "you",
-                    text: "Both cost the same.",
-                    ask: {
-                      type: INBOX_ASK.DECIDE,
-                      status: INBOX_ASK_STATUS.WITHDRAWN,
-                      withdrawnReason: "Picked iad1.",
+          assert.equal(read.status, ACTION_RESULT_STATUS.ACCEPTED);
+          // The thread's mention is spelled out in `coder-inbox.test.ts`; here it is only carried.
+          const [{ mention, ...line } = { mention: undefined }] = read.inbox ?? [];
+          assert.match(mention ?? "", /^\[@Which region\?\]\(https:\/\/tryluke\.dev\//u);
+          assert.deepEqual(
+            { ...read, inbox: [line] },
+            {
+              status: ACTION_RESULT_STATUS.ACCEPTED,
+              inbox: [
+                {
+                  key: "region",
+                  title: "Which region?",
+                  status: INBOX_STATUS.CLOSED,
+                  thread: [
+                    {
+                      from: "you",
+                      text: "Both cost the same.",
+                      ask: {
+                        type: INBOX_ASK.DECIDE,
+                        status: INBOX_ASK_STATUS.WITHDRAWN,
+                        withdrawnReason: "Picked iad1.",
+                      },
                     },
-                  },
-                ],
-              },
-            ],
-          });
+                  ],
+                },
+              ],
+            },
+          );
         }),
     );
 

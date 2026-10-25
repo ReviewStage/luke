@@ -5,7 +5,7 @@ import { LinesChanged } from "../tasks/agent-published.js";
 import { pullRequestNumberLabel, pullRequestStateLabel } from "../tasks/coding-agent-model.js";
 import { PullRequestMark } from "../tasks/pull-request-mark.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
-import { AgentLine, PullRequestLine } from "./task-card.js";
+import { AgentLine, PullRequestLine, TASK_MARK_GLYPH } from "./task-card.js";
 
 /**
  * task-part-cards.tsx -- the cards a task's List row and Board card hang on their parts, rather than one card for the whole task: a pull request's, the pull requests its marks leave out, and its agents at work.
@@ -48,7 +48,7 @@ export function PullRequestCard({
   return (
     <HoverCard data-pull-request-card="">
       <HoverCardHead
-        glyph={<PullRequestMark pullRequest={pullRequest} className="task-mark-glyph" />}
+        glyph={<PullRequestMark pullRequest={pullRequest} className={TASK_MARK_GLYPH} />}
         name={pullRequest.title}
         sub={`${pullRequestKey(pullRequest)} · ${pullRequestStateLabel(pullRequest)}`}
       />

@@ -1,20 +1,20 @@
-import { type ReactNode, useId, useRef } from "react";
+import { useRef } from "react";
 import { BUTTON_VARIANT, Button } from "../button/button.js";
 import { DIALOG_ROLE, Dialog } from "../dialog/dialog.js";
 import { FILE_TEXT_EXTENT, FileText } from "../file-text/file-text.js";
-import { Stack } from "../layout/layout.js";
-import { TEXT_TONE, Text } from "../text/text.js";
 
 /**
  * command-ask.tsx -- a command an agent asks to run on this Mac, put to the developer as a modal over the window: the command as written, then Deny, Always allow, and Allow once.
  *
- * The window asks the way a permission prompt does: it dims, a card says
- * what is asked and shows the exact command, mono and whole, scrolling
- * past a reading height, and the three answers sit at its foot, the safe
- * one first. Focus lands on Deny, so a key already pressed runs nothing;
- * Escape and a press on the dimmed window deny too, since a prompt waved
- * away must not run the command. Always allow says beside it that it stops
- * the asking for every later command, which is the setting it writes.
+ * The window asks the way a permission prompt does: it dims, a card asks
+ * its question over the exact command, mono and whole, scrolling past a
+ * few lines so a long one never fills the card, and the three answers sit
+ * at its foot, the safe one first. The command is not the card's
+ * description, since a payload of thousands of characters would be read
+ * out before the answers; it stands as its own named region instead.
+ * Focus lands on Deny, so a key already pressed runs nothing; Escape and a
+ * press on the dimmed window deny too, since a prompt waved away must not
+ * run the command.
  * Whoever owns the card holds it mounted while the ask stands and passes
  * `open` as the ask goes, answered or timed out, so the card fades out
  * (`Dialog`'s `open`), taking it down once it says it is gone.
@@ -33,7 +33,6 @@ export function CommandAsk({
   onAllowAlways,
   onDeny,
   onExited,
-  settingsPage,
 }: {
   /** Whether the ask stands; falling, the card fades out before it goes. */
   open: boolean;
@@ -47,17 +46,13 @@ export function CommandAsk({
   onDeny: () => void;
   /** Its fade has run and the card is gone, which its owner takes the ask down on. */
   onExited?: (() => void) | undefined;
-  /** The page of Settings the asking is changed in, as the window links it by name; settings at large where none. */
-  settingsPage?: ReactNode;
 }): React.JSX.Element {
   const deny = useRef<HTMLButtonElement | null>(null);
-  const bodyId = useId();
   return (
     <Dialog
       open={open}
       role={DIALOG_ROLE.ALERT_DIALOG}
       title={TITLE}
-      describedBy={bodyId}
       initialFocus={deny}
       onDismiss={onDeny}
       onExited={onExited}
@@ -75,15 +70,7 @@ export function CommandAsk({
         </>
       }
     >
-      <Stack>
-        <Text tone={TEXT_TONE.MUTED} id={bodyId}>
-          An agent wants to run this in your login shell, from your home folder. What it prints goes
-          to the model and is kept with the conversation. Always allow stops the asking for every
-          later command, until you change it in{" "}
-          {settingsPage === undefined ? null : <>{settingsPage} </>}settings.
-        </Text>
-        <FileText text={command} label={COMMAND_LABEL} extent={FILE_TEXT_EXTENT.WHOLE} />
-      </Stack>
+      <FileText text={command} label={COMMAND_LABEL} extent={FILE_TEXT_EXTENT.BRIEF} />
     </Dialog>
   );
 }

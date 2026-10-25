@@ -114,14 +114,6 @@ test("every kind of ask a post may carry is taken under its key, a task's among 
       type,
     );
   }
-  assert.equal(
-    takes(postChatAskInputSchema, {
-      text: "Rotate the key.",
-      key: "rotate",
-      ask: { response: { type: CHAT_ASK.TASK } },
-    }),
-    true,
-  );
 });
 
 test("a window's write is a post with its words one way and one place, an answer, a resolve, or a read, and refuses anything between", () => {

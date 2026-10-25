@@ -75,6 +75,7 @@ import {
   useWordsKeptOnClose,
 } from "./plan-document-editor.js";
 import { PlanPictures, usePlanPictureDrawer } from "./plan-pictures.js";
+import { UNIT_ATTRIBUTED_CLASS, UNIT_BYLINE_CLASS, UNIT_MORE_CLASS } from "./plan-unit-look.js";
 import {
   copyTaskLinkItem,
   markReadItem,
@@ -345,7 +346,7 @@ function EditedLine({
   onShowHistory: ShowHistory | undefined;
 }): React.JSX.Element {
   return (
-    <p className="plan-edit-note actor-line">
+    <p className="plan-edit-note actor-line mx-0 mt-0 mb-block-gap text-caption text-muted-foreground">
       {edit.actor === PLAN_ACTOR.EARLIER ? "Edited" : "Edited by "}
       <EditedBy edit={edit} place={place} sentence />
       {" · "}
@@ -433,8 +434,9 @@ function ChangedLine({
   if (looks.changed.size === 0) return null;
   const edits = [...looks.changed].flatMap((heading) => marks.edits.get(heading) ?? []);
   const editors = editorsOf(edits, marks.place);
+  // Note that the line keeps the room it always had under "Edited by" and Dismiss overhangs it, so the button does not push the document down.
   return (
-    <p className="plan-changed-note">
+    <p className="plan-changed-note -mt-luke-6 mb-luke-12 mx-0 flex h-plan-changed-note items-center gap-item-gap text-caption text-muted-foreground">
       <span className="actor-line">
         {changedLine(looks.changed.size, editors.length > 0)}
         {editors.length === 0 ? null : (
@@ -479,7 +481,7 @@ function bylineOf(marks: SectionMarks, heading: string): React.JSX.Element | nul
   if (edit === undefined) return null;
   const { onShowHistory, place } = marks;
   return (
-    <span className="plan-unit-byline actor-line">
+    <span className={UNIT_BYLINE_CLASS}>
       {edit.actor === PLAN_ACTOR.EARLIER ? (
         "Edited"
       ) : (
@@ -525,7 +527,8 @@ const WRITING_CLASS = "plan-writing";
 const RESTING_CLASS = "plan-caret-resting";
 
 /** The class of a section changed since the developer last looked, tinted until they dismiss it. */
-const CHANGED_CLASS = "plan-changed";
+const CHANGED_CLASS =
+  "plan-changed relative isolate after:pointer-events-none after:absolute after:-inset-x-luke-6 after:-inset-y-luke-2 after:-z-1 after:rounded-luke-6 after:bg-plan-changed";
 
 /** The presses that say the developer is reading somewhere of their own, which the caret stops following. */
 const SCROLL_INTENT_EVENTS = ["wheel", "pointerdown", "keydown"] as const;
@@ -754,10 +757,12 @@ function attributed(
   if (byline === null && menu === null) return drawn;
   // Note that the byline and the ⋯ share one row, because a row centres the
   // line on the button's box where two separately placed boxes never quite do.
+  // The row hangs past the column's edge by `--luke-space-6`, as the ⋯ always
+  // has, and takes no pointer itself, only its byline and its ⋯ do.
   return (
-    <div className="plan-unit-attributed">
+    <div className={UNIT_ATTRIBUTED_CLASS}>
       {drawn}
-      <div className="plan-unit-row">
+      <div className="plan-unit-row pointer-events-none absolute top-0 -right-luke-6 flex h-control w-plan-unit-row items-center justify-end gap-tight-gap">
         {byline}
         {menu}
       </div>
@@ -785,7 +790,7 @@ function UnitMenu({
   return (
     <>
       {/* The box shows the ⋯ while the pointer or the keyboard is on its unit. */}
-      <span className="plan-unit-more">
+      <span className={UNIT_MORE_CLASS}>
         <MoreButton
           thing={thing}
           tabbable={tabbable}
@@ -1095,7 +1100,7 @@ export function PlanPageHead({
   edited?: React.ReactNode;
 }): React.JSX.Element {
   return (
-    <div className="task-page-head">
+    <div className="task-page-head pt-luke-32">
       <PageHeader title={name} description={description} actions={actions} />
       {edited}
     </div>

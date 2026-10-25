@@ -34,6 +34,7 @@ import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { type ActHandle, useAct } from "../act.js";
 import { PhoneHead, PlaceMore } from "../desktop/phone-head.js";
+import { PLACE_PAGE } from "../desktop/place-columns.js";
 import { DocumentScroll } from "../tasks/document-frame.js";
 import type { TaskReader } from "../tasks/edit-ref.js";
 import { PlanBody, PlanBodyColumn, PlanPageHead } from "../tasks/plan-body.js";
@@ -394,7 +395,11 @@ function TemplateNote({ keep }: { keep: string | undefined }): React.JSX.Element
 
 /** The template's document as the page draws it, in a plan's type and kept out of a recording. */
 function TemplateFrame({ children }: { children: React.ReactNode }): React.JSX.Element {
-  return <Fill className="desktop-document template-document ph-no-capture">{children}</Fill>;
+  return (
+    <Fill className="desktop-document template-document ph-no-capture @container/plan-document">
+      {children}
+    </Fill>
+  );
 }
 
 /**
@@ -655,7 +660,7 @@ export function PlanTemplatePage({
   const note = <TemplateNote keep={keep} />;
   return (
     <section
-      className="settings-page"
+      className={`settings-page ${PLACE_PAGE}`}
       aria-label={TEMPLATE_TITLE}
       aria-busy={signedIn && template.read === TEMPLATE_READ.READING ? true : undefined}
       hidden={hidden}

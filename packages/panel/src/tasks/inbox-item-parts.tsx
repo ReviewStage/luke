@@ -20,6 +20,7 @@ import { LINK_PLACE } from "@luke/features/link-grammar";
 import type { CatalogModel } from "@luke/features/models-wire";
 import {
   Badge,
+  cn,
   HOVER_CARD_ROW_LOOK,
   HoverCard,
   HoverCardHead,
@@ -74,9 +75,20 @@ import {
 } from "./inbox-model.js";
 import { ReadAgentModel } from "./mentioned-agent-card.js";
 import { PlanGlyph } from "./tab-look.js";
-import { TASK_STATUS_WORDS, TaskKey } from "./task-standing.js";
+import { TASK_CARD_STANDING, TASK_STATUS_WORDS, TaskKey } from "./task-standing.js";
 import { cardTitle, plainWords } from "./tool-call-model.js";
 import { useOpenPlace } from "./use-open-link.js";
+
+/** A row's mark before its words, a Chat place's or the next item's, which keeps its own size. */
+export const INBOX_ROW_MARK = "inbox-row-mark flex flex-none";
+
+/**
+ * An item that needs the developer wears the attention mark before its time,
+ * a size under a row glyph's, as a sidebar plan wears it, so the disc's edge
+ * reads at the time's height.
+ */
+export const INBOX_ROW_ATTENTION =
+  "inbox-row-attention inline-flex [&_.attention-mark]:size-luke-12 [&_.attention-mark_svg]:size-attention-glyph-small";
 
 /** What a teammate's open item says to a reader beside their face, which is drawn for the eye alone: it waits on them, not the reader. */
 function waitingOn(starter: Actor): string {
@@ -272,7 +284,7 @@ function HolderLine({
       ? workspaces?.find((each) => each.id === holder.task.workspaceId)?.name
       : undefined;
   return (
-    <div className="task-card-standing" data-line="one">
+    <div className={cn(TASK_CARD_STANDING, "flex-nowrap text-caption-inline")} data-line="one">
       {holder.kind === INBOX_HOLDER.TASK ? (
         <TaskKey workspaceName={workspaceName} number={holder.task.number} />
       ) : null}
@@ -440,7 +452,7 @@ function TaskStatusChip({
   if (holder.kind !== INBOX_HOLDER.TASK || holder.task.status === undefined) return null;
   const { status } = holder.task;
   return (
-    <span className="inbox-row-task-status" data-task-status={status}>
+    <span className="inbox-row-task-status inline-flex" data-task-status={status}>
       {drawn ? <TaskStatusMark status={status} /> : null}
       <VisuallyHidden>{TASK_STATUS_WORDS[status]}</VisuallyHidden>
     </span>
@@ -544,7 +556,7 @@ export function InboxItemEnd({
       )}
       {drafted ? <DraftMark /> : null}
       {needsYou && standing ? (
-        <span className="inbox-row-attention">
+        <span className={INBOX_ROW_ATTENTION}>
           <AttentionMark />
           <VisuallyHidden>{NEEDS_YOU.LABEL}</VisuallyHidden>
         </span>

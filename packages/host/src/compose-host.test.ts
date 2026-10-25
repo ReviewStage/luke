@@ -82,7 +82,7 @@ const desktopAccountSource = Layer.provide(
 );
 
 /** A client offering one capability of its own, as a browser might. */
-const CLIENT: readonly ClientCapability[] = [HOST_CAPABILITY.NOTIFICATIONS];
+const CLIENT: readonly ClientCapability[] = [HOST_CAPABILITY.MICROPHONE];
 
 /** What a standing host answers for a Mac's repositories and an agent's terminals, and which concerns it says it runs. */
 const askedOfStandingHost = Effect.gen(function* () {
@@ -123,7 +123,7 @@ describe("the host's platform concerns", () => {
         assert.equal(asked.concerns.has(HOST_CONCERN.MAC_TERMINAL), false);
         assert.equal(asked.concerns.has(HOST_CONCERN.TERMINALS), false);
         assert.equal(asked.concerns.has(HOST_CONCERN.TASKS), true);
-        assert.deepEqual(hostCapabilities(asked.concerns, CLIENT), [HOST_CAPABILITY.NOTIFICATIONS]);
+        assert.deepEqual(hostCapabilities(asked.concerns, CLIENT), [HOST_CAPABILITY.MICROPHONE]);
       }).pipe(Effect.provide(NodeFileSystem.layer)),
   );
 
@@ -156,7 +156,7 @@ describe("the host's platform concerns", () => {
       for (const concern of ALL_HOST_PLATFORM_CONCERNS)
         assert.equal(asked.concerns.has(concern), true);
       assert.deepEqual(hostCapabilities(asked.concerns, CLIENT), [
-        HOST_CAPABILITY.NOTIFICATIONS,
+        HOST_CAPABILITY.MICROPHONE,
         HOST_CAPABILITY.MAC_COMMANDS,
         HOST_CAPABILITY.MAC_TERMINAL,
         HOST_CAPABILITY.TERMINALS,
@@ -167,7 +167,6 @@ describe("the host's platform concerns", () => {
         HOST_CAPABILITY.VOICE,
         HOST_CAPABILITY.UPDATES,
         HOST_CAPABILITY.MICROPHONE,
-        HOST_CAPABILITY.NOTIFICATIONS,
         HOST_CAPABILITY.MAC_COMMANDS,
         HOST_CAPABILITY.MAC_TERMINAL,
         HOST_CAPABILITY.TERMINALS,
