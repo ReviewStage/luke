@@ -2,6 +2,7 @@ import {
   channelInfo,
   channelItem,
   chooseChannel,
+  closeThread,
   kindTone,
   THREAD_KIND_WORDS,
   useChannelsMock,
@@ -36,6 +37,7 @@ import {
   ErrorState,
   Fill,
   GAP,
+  IconButton,
   LAYOUT_ELEMENT,
   MoreButton,
   moreLabel,
@@ -63,7 +65,7 @@ import {
   SOMEONE_REASON,
 } from "@luke/ui/actor-model";
 import { isWireString } from "@luke/wire";
-import { BotIcon, CheckIcon, ChevronDownIcon, ChevronUpIcon, ZapIcon } from "lucide-react";
+import { BotIcon, CheckIcon, ChevronDownIcon, ChevronUpIcon, XIcon, ZapIcon } from "lucide-react";
 import { GLYPH } from "@luke/ui/icons";
 import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { ActorLine, ActorRef, AutomationCard, commentAuthor } from "../actor-ref.js";
@@ -1005,6 +1007,17 @@ function InboxItemMenu({
  * The thread's subject, as a plan or a pull request leads with one: the
  * item's title alone, the thread under it.
  */
+/** PROTOTYPE ONLY (STAG-547): the way to close a thread open beside a channel's stream, as Slack's thread pane offers. */
+function ChannelsCloseThread(): React.JSX.Element | null {
+  const mock = useChannelsMock();
+  if (!mock.on || channelInfo(mock.channel) === undefined) return null;
+  return (
+    <Tooltip label="Close thread">
+      <IconButton icon={<XIcon />} label="Close thread" onClick={closeThread} />
+    </Tooltip>
+  );
+}
+
 /**
  * PROTOTYPE ONLY (STAG-547): over a thread's title in the Channels mockup,
  * its kind, its channel, and whom it waits on where that is someone else.
@@ -1411,6 +1424,7 @@ export function InboxPane({
                   onMark={doors.onMark}
                   onClose={doors.onClose}
                 />
+                <ChannelsCloseThread />
               </div>
             </div>
           }

@@ -140,9 +140,20 @@ export function badgedKind(kind: ThreadKind): boolean {
 interface ChannelsMockState {
   readonly on: boolean;
   readonly channel: MockChannel;
+  /** Whether a channel's thread stands open beside its stream, as Slack's thread pane does. */
+  readonly threadOpen: boolean;
 }
 
-let state: ChannelsMockState = { on: false, channel: MOCK_CHANNEL.FOR_YOU };
+/** A post the reader made in a channel's box, which the mockup keeps in the window alone. */
+export interface ChannelPost {
+  readonly id: string;
+  readonly channel: MockChannel;
+  readonly text: string;
+  readonly at: number;
+}
+
+let state: ChannelsMockState = { on: false, channel: MOCK_CHANNEL.FOR_YOU, threadOpen: false };
+let posts: readonly ChannelPost[] = [];
 /** What a channel's sidebar row says: how many of its threads need the reader, and whether any is unread. */
 export interface ChannelCount {
   readonly needsYou: number;
@@ -154,7 +165,12 @@ let counts: ReadonlyMap<MockChannel, ChannelCount> = new Map();
 const listeners = new Set<() => void>();
 
 function publish(next: ChannelsMockState): void {
-  if (next.on === state.on && next.channel === state.channel) return;
+  if (
+    next.on === state.on &&
+    next.channel === state.channel &&
+    next.threadOpen === state.threadOpen
+  )
+    return;
   state = next;
   for (const listener of listeners) listener();
 }
@@ -176,7 +192,31 @@ export function startChannelsMock(
 
 /** Shows a channel, or For you. */
 export function chooseChannel(channel: MockChannel): void {
-  publish({ ...state, channel });
+  publish({ ...state, channel, threadOpen: channel === state.channel ? state.threadOpen : false });
+}
+
+/** Opens the chosen thread beside the channel's stream. */
+export function openThread(): void {
+  publish({ ...state, threadOpen: true });
+}
+
+/** Closes the thread beside the channel's stream. */
+export function closeThread(): void {
+  publish({ ...state, threadOpen: false });
+}
+
+/** Posts the reader's words in a channel, kept in the window alone. */
+export function addChannelPost(channel: MockChannel, text: string): void {
+  if (text.trim() === "") return;
+  const at = Date.now();
+  posts = [...posts, { id: `post-${posts.length}-${at}`, channel, text, at }];
+  for (const listener of listeners) listener();
+}
+
+/** The reader's posts in a channel. */
+export function useChannelPosts(channel: MockChannel): readonly ChannelPost[] {
+  const all = useSyncExternalStore(subscribe, () => posts);
+  return all.filter((post) => post.channel === channel);
 }
 
 /** Whether the mockup is on, and the channel shown. */

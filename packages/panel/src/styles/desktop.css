@@ -5685,3 +5685,77 @@ ul.actor-stack {
   gap: var(--luke-tight-gap);
   margin-block-end: var(--luke-tight-gap);
 }
+
+/* PROTOTYPE ONLY (STAG-547): a channel drawn as a stream (`channel-stream.tsx`),
+   the whole place wide until a thread opens beside it, as Slack's does. */
+.inbox-view[data-channels-stream],
+.inbox-view[data-channels-stream]:is([data-columns="list"], [data-columns="item"]) {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.inbox-view[data-channels-stream]:has(> .inbox-view-items) {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 44%);
+}
+
+.inbox-view[data-channels-stream] > .inbox-view-items {
+  display: flex;
+  border-left: 1px solid var(--luke-color-border);
+}
+
+.channels-stream {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  flex-direction: column;
+}
+
+.channels-stream-log {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+}
+
+.channels-stream-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--luke-space-4);
+  padding: var(--luke-space-8) var(--column-inset) var(--luke-space-16);
+}
+
+.channels-day {
+  display: flex;
+  justify-content: center;
+  padding: var(--luke-space-8) 0 var(--luke-space-4);
+}
+
+.channels-post {
+  padding: var(--luke-space-8) var(--luke-space-12);
+  border-radius: var(--luke-radius-10);
+}
+
+.channels-post:hover {
+  background: var(--luke-color-fill-hover);
+}
+
+.channels-post[data-chosen="true"] {
+  background: var(--luke-color-fill-selected);
+}
+
+.channels-post-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--luke-space-6);
+}
+
+.channels-post-asks,
+.channels-post-replies {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--luke-space-6);
+}
+
+.channels-composer {
+  padding: 0 var(--column-inset) var(--column-inset);
+}

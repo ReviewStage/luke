@@ -21,7 +21,13 @@ import { agentName } from "../tasks/coding-agent-model.js";
 import { INBOX_COLUMNS, useInboxColumns } from "../tasks/inbox-columns.js";
 import { InboxCompose } from "../tasks/inbox-compose.js";
 import { INBOX_NOT_READ, InboxList, InboxListNote, newTaskAction } from "../tasks/inbox-list.js";
-import { channelItemIds, MOCK_CHANNEL, useChannelsMock } from "../tasks/channels-mock.js";
+import { ChannelStream } from "../tasks/channel-stream.js";
+import {
+  channelInfo,
+  channelItemIds,
+  MOCK_CHANNEL,
+  useChannelsMock,
+} from "../tasks/channels-mock.js";
 import {
   anyUnread,
   INBOX_GROUPING,
@@ -239,6 +245,9 @@ function InboxShown({
     onRetry,
     compose,
   } = listing;
+  // PROTOTYPE ONLY (STAG-547): a channel of the Channels mockup is drawn as a stream, its thread beside it once opened.
+  const mock = useChannelsMock();
+  const streamChannel = mock.on ? channelInfo(mock.channel) : undefined;
   // New task is the way on from an Inbox with nothing in it, wherever an account can start one.
   const newTask = tasks.signedIn ? tasks.onNewTask : undefined;
   const now = useMinute();
@@ -438,8 +447,23 @@ function InboxShown({
               active={tasks.shown && !sideFocused}
               hidden={sidePanel.fullScreen}
             >
-              <div className="inbox-view" ref={columns.ref} data-columns={columns.shown}>
-                {paneOnly ? null : (
+              <div
+                className="inbox-view"
+                ref={columns.ref}
+                data-columns={columns.shown}
+                data-channels-stream={streamChannel === undefined ? undefined : ""}
+              >
+                {paneOnly ? null : streamChannel !== undefined ? (
+                  <ChannelStream
+                    channel={streamChannel}
+                    items={listedItems(list)}
+                    chosen={chosen?.item.id}
+                    threadOpen={mock.threadOpen}
+                    readerId={tasks.me}
+                    now={now}
+                    onOpen={open}
+                  />
+                ) : (
                   <InboxList
                     view={list}
                     chosen={chosen?.item.id}
@@ -482,7 +506,7 @@ function InboxShown({
                     onClose={closeItem}
                   />
                 )}
-                {compose.on ? (
+                {streamChannel !== undefined && !mock.threadOpen ? null : compose.on ? (
                   <InboxCompose
                     // Note that the pane is the listed workspace's, so another listed starts it afresh, its To and its agents read there.
                     key={listedWorkspace?.id}
