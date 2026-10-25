@@ -48,6 +48,13 @@ import { Picker } from "../settings/picker-row.js";
  * A task from a service before statuses has no key and no chips.
  */
 
+/**
+ * A task's card's lead, where it stands: its key, its status, its priority,
+ * and who is on it, each a Badge of its mark and its words, wrapping where
+ * the card is narrow. An Inbox row's card holds it on one line instead.
+ */
+export const TASK_CARD_STANDING = "task-card-standing flex flex-wrap items-center gap-tight-gap";
+
 /** Each status as its chip, its menu's row, the Board's column, and the sidebar's filter say it. */
 export const TASK_STATUS_WORDS = {
   [TASK_STATUS.BACKLOG]: "Backlog",
@@ -199,7 +206,11 @@ export function TaskKey({
 }): React.JSX.Element | null {
   if (workspaceName === undefined || number === undefined) return null;
   return (
-    <span className="task-key" data-task-key="" aria-hidden={decorative ? true : undefined}>
+    <span
+      className="task-key inline-flex shrink-0 items-center whitespace-nowrap tabular-nums"
+      data-task-key=""
+      aria-hidden={decorative ? true : undefined}
+    >
       <Text
         variant={TEXT_VARIANT.CAPTION}
         tone={TEXT_TONE.MUTED}

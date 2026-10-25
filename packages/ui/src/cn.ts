@@ -219,6 +219,24 @@ const PANEL_SHELL = {
 } as const;
 
 /**
+ * The names the panel Inbox's block of the theme adds (its columns, its
+ * list's held height, its thread's gutter, a pick, its fields), by the
+ * group tailwind-merge reads each in.
+ */
+const PANEL_INBOX = {
+  spacing: [
+    "attention-glyph-small",
+    "inbox-earlier",
+    "inbox-face-half",
+    "inbox-field-short",
+    "inbox-field-words",
+    "inbox-line",
+    "list-held-least",
+    "pick-glyph-lift",
+  ],
+} as const;
+
+/**
  * The names the chips, media, and call block of the theme adds (attachment
  * chip, picture set and tile, page thumb, video player, provider button,
  * composer frame, call bar and video tile), by the group tailwind-merge reads
@@ -478,6 +496,7 @@ const merge = extendTailwindMerge({
         ...CONTENT_TEXT.spacing,
         ...ROWS_NAVIGATION.spacing,
         ...PANEL_SHELL.spacing,
+        ...PANEL_INBOX.spacing,
         ...CHIPS_MEDIA_CALL.spacing,
         ...PANEL_HOME_TASKS.spacing,
         ...PAGE_PATTERNS.spacing,

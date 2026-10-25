@@ -29,6 +29,20 @@ import { useCallback, useLayoutEffect, useRef, useState } from "react";
 import { useAppCommand } from "../app-commands.js";
 import { useColumnSplit } from "../column-split.js";
 
+/**
+ * The Inbox's two columns, the list as wide as it was last dragged and the
+ * item beside it, held to what the Inbox's own width leaves the pane, which
+ * is why the Inbox is the container it measures; too narrow for both, the
+ * list or the item stands alone the whole Inbox wide, and the list needs no
+ * edge to part it from the item.
+ */
+export const INBOX_VIEW =
+  "inbox-view @container grid min-h-0 flex-1 grid-cols-inbox data-[columns=item]:grid-cols-single data-[columns=list]:grid-cols-single [&>[hidden]]:hidden [&[data-columns=list]_.inbox-tasks]:border-r-0";
+
+/** The chosen item's column, a container its bar answers (`inbox-item`). */
+export const INBOX_VIEW_ITEMS =
+  "inbox-view-items @container/inbox-item flex min-h-0 min-w-0 flex-col";
+
 /** Which of the Inbox's columns stand. */
 export const INBOX_COLUMNS = {
   /** The list and the item beside it. */

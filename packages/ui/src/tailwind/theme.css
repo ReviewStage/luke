@@ -94,6 +94,24 @@
   --color-border-selected: var(--luke-color-border-selected);
   --color-accent-ink: var(--luke-color-accent-text);
   --spacing-touch: var(--luke-touch-target);
+
+  /* The panel's Inbox (`@luke/panel`'s `tasks/inbox-*.tsx`): its two columns
+     and the one standing alone; the list's held height while a row leaves;
+     the thread's gutter, a list row's 20px, the line through its faces, and
+     the earlier messages' line inset past it; a pick's check centred on its
+     first line; a short field's measure and an answered field's least
+     height; and the column's inset
+     and the attention mark's glyph a size under a row's. */
+  --grid-template-columns-inbox: auto minmax(0, 1fr);
+  --grid-template-columns-single: minmax(0, 1fr);
+  --spacing-list-held-least: var(--luke-list-held-height, 0);
+  --spacing-inbox-face-half: calc(var(--luke-space-20) / 2);
+  --spacing-inbox-line: calc(var(--luke-space-20) / 2 - 1px);
+  --spacing-inbox-earlier: calc(var(--luke-space-20) + var(--luke-list-inset));
+  --spacing-pick-glyph-lift: calc((1lh - var(--luke-icon-12)) / 2);
+  --spacing-inbox-field-short: calc(10 * var(--luke-space-16));
+  --spacing-inbox-field-words: calc(var(--luke-type-body-leading) + 2 * var(--luke-item-gap));
+  --spacing-attention-glyph-small: 10px; /* off-scale: the attention mark's glyph at a row's time */
   /* A box or a range a choice is drawn in: a field's ground inside a
      chosen row's edge, filled in the accent where it is on. */
   --color-field: var(--luke-color-input);
