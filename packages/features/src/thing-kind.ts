@@ -3,6 +3,7 @@ import {
   LINK_PLACE,
   type LinkPlace,
   type LinkPlaceKind,
+  type NumberedAddress,
   pullRequestAddressOf,
 } from "./link-grammar.js";
 import { MENTION_KIND, type Mention } from "./mention-link.js";
@@ -119,10 +120,11 @@ export type ThingOf<K extends ThingKind> = Extract<Thing, { readonly kind: K }>;
 /** A place of the kind given. */
 type PlaceOf<K extends LinkPlaceKind> = Extract<LinkPlace, { readonly kind: K }>;
 
-/** What names a thing beyond the names the window holds: the heading its anchor names in the plan open, and the key and title its provider answered for its page. */
+/** What names a thing beyond the names the window holds: the heading its anchor names in the plan open, the key and title its provider answered for its page, and the repository, `owner/name`, of the place the thing is named in, which a pull request's or an issue's key leaves out where it is the same. */
 export interface ThingSaid {
   readonly heading: string | undefined;
   readonly answered: { readonly key: string; readonly title: string } | undefined;
+  readonly repository: string | null;
 }
 
 /** What a thing is called now, where the window holds it, and whether that wins over the words it was written with. */
@@ -146,7 +148,11 @@ export interface ThingNameHeld {
 }
 
 /** Nothing said of a thing beyond the names the window holds. */
-export const NOTHING_SAID: ThingSaid = { heading: undefined, answered: undefined };
+export const NOTHING_SAID: ThingSaid = {
+  heading: undefined,
+  answered: undefined,
+  repository: null,
+};
 
 /** A kind the window holds no name of, which is called by the words it was written with. */
 export const NO_LIVE_NAME: ThingName<Thing> = { live: false, held: () => undefined };
@@ -157,6 +163,37 @@ const ANSWERED_NAME: ThingName<Thing> = {
   held: (_thing, _known, { answered }) =>
     answered === undefined ? undefined : `${answered.key} ${answered.title}`,
 };
+
+/**
+ * What a pull request or an issue is called by its number: `#42` in the
+ * repository the place stands on, compared whatever its case as GitHub reads
+ * it, and `relay#42` in another.
+ */
+function numberedKey(address: NumberedAddress, repository: string | null): string {
+  if (repository !== null && address.repository.toLowerCase() === repository.toLowerCase()) {
+    return `#${address.number}`;
+  }
+  return `${address.repository.split("/")[1] ?? address.repository}#${address.number}`;
+}
+
+/**
+ * A pull request's or an issue's page, called by the key and title its
+ * provider answered where it was written bare, and by its key alone, as the
+ * address says it, until then or where it never does: a refusal, no GitHub
+ * App on the repository, a workspace without GitHub.
+ */
+function numberedName(
+  addressOf: (url: string) => NumberedAddress | undefined,
+): ThingName<{ readonly url: string }> {
+  return {
+    live: false,
+    held: ({ url }, _known, { answered, repository }) => {
+      if (answered !== undefined) return `${answered.key} ${answered.title}`;
+      const address = addressOf(url);
+      return address === undefined ? undefined : numberedKey(address, repository);
+    },
+  };
+}
 
 /** An agent's name held, said with the words given before it: "Changes by Ada". */
 function byAgent(words: string, agentId: string, known: KnownNames): string | undefined {
@@ -192,9 +229,9 @@ export const THING_NAME: ThingNames = {
     live: false,
     held: (changes, known) => byAgent("Changes by", changes.agentId, known),
   },
-  [THING_KIND.PULL_REQUEST]: ANSWERED_NAME,
+  [THING_KIND.PULL_REQUEST]: numberedName(pullRequestAddressOf),
   [THING_KIND.PULL_REQUEST_THREAD]: NO_LIVE_NAME,
-  [THING_KIND.ISSUE]: ANSWERED_NAME,
+  [THING_KIND.ISSUE]: numberedName(issueAddressOf),
   [THING_KIND.LINK]: ANSWERED_NAME,
   [THING_KIND.MESSAGE]: {
     live: false,

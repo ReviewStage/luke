@@ -493,7 +493,8 @@ export function MentionChipCard({
  * page's, the agent's as its tab names it, the person's, Luke, whatever
  * words it was written with; else the name it was written with; and a
  * provider's page written as its bare address, by the key and title its
- * provider answered for it.
+ * provider answered for it, and a pull request or an issue by its key alone,
+ * `#42` or `relay#42` off `repository`, until it does.
  */
 function chipName(
   mention: Mention,
@@ -502,9 +503,10 @@ function chipName(
   known: KnownNames,
   standing: LinkStanding | undefined,
   heading: string | undefined,
+  repository: string | null,
 ): string {
   const thing = thingOfMention(mention);
-  const { live, held } = thingName(thing, known, { heading, answered: standing });
+  const { live, held } = thingName(thing, known, { heading, answered: standing, repository });
   // Note that a plan the window still lists Untitled keeps the name it was written with, which says more.
   if (thing.kind === THING_KIND.PLAN && held === UNTITLED_TASK_NAME) return written;
   return (live || bare ? held : undefined) ?? written;
@@ -566,7 +568,9 @@ function MentionChip({
     keyNames.taskId === mention.taskId;
   const name =
     githubName(mention, standing) ??
-    (keyed ? written : chipName(mention, written, bare, known, standing, heading));
+    (keyed
+      ? written
+      : chipName(mention, written, bare, known, standing, heading, doors.place.repository));
   const state = mentionState(mention, doors);
   const press = pressOf(mention, target, state, doors, openLink);
   const card = (
@@ -929,9 +933,14 @@ export interface PastedNames {
 }
 
 /** What a pasted address's chip is called: a section of the plan pasted on by its heading, a plan, a page, or an agent by the name the window holds, else what its address says. */
-function pastedName(mention: Mention, said: string, names: PastedNames): string {
+function pastedName(
+  mention: Mention,
+  said: string,
+  names: PastedNames,
+  repository: string | null,
+): string {
   if (mention.kind !== MENTION_KIND.SECTION)
-    return chipName(mention, said, true, names.known, undefined, undefined);
+    return chipName(mention, said, true, names.known, undefined, undefined, repository);
   if (mention.taskId !== names.taskId) return said;
   const headings = planSections(names.text()).map((section) => section.heading);
   return headings[sectionAnchors(headings).indexOf(mention.anchor)] ?? said;
@@ -958,7 +967,7 @@ export function pastedMentionNode(
   return link === undefined || elsewhere
     ? undefined
     : {
-        name: pastedName(link.mention, link.name, names),
+        name: pastedName(link.mention, link.name, names, place.repository),
         target: encodeMention(link.mention, place),
       };
 }
