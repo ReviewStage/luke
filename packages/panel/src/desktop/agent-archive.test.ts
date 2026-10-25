@@ -12,10 +12,10 @@ import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test, vi } from "vitest";
-import { ARCHIVE_DRAWN } from "../tasks/use-coding-agents.js";
 import { layContainersAt } from "../testing/container-width.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { restOn } from "../testing/hint-rest.js";
+import { ARCHIVE_DRAWN } from "../tasks/use-coding-agents.js";
 import { codingAgentsControl } from "../testing/tasks-control.js";
 import { ArchivedAgents } from "./agent-archive.js";
 
