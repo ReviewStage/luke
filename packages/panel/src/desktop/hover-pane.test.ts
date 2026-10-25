@@ -13,8 +13,8 @@ import { PANE_FLOAT, type PaneFloat, useFloatDismiss, useHoverPane } from "./hov
  * a choice. A menu it raised stands outside it, through a portal, and the
  * work beside it holds a button of its own.
  */
-function Floating(): React.JSX.Element {
-  const [state, onState] = useState<PaneFloat>(PANE_FLOAT.CLOSED);
+function Floating({ opensOn }: { opensOn: PaneFloat }): React.JSX.Element {
+  const [state, onState] = useState<PaneFloat>(opensOn);
   const float = { state, onState };
   const keep = useFloatDismiss(float);
   const pane = useHoverPane(float, {
@@ -64,10 +64,10 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-function mount(): HTMLElement {
+function mount(opensOn: PaneFloat = PANE_FLOAT.CLOSED): HTMLElement {
   const host = document.body.appendChild(document.createElement("div"));
   root = createRoot(host);
-  act(() => root?.render(createElement(Floating)));
+  act(() => root?.render(createElement(Floating, { opensOn })));
   return host;
 }
 
@@ -114,6 +114,11 @@ test("a pane opened from away takes the keyboard where it says, and Escape in it
   const press = pressEscape(part(page, ".row"));
   assert.deepEqual([standing(page), press.defaultPrevented], [PANE_FLOAT.CLOSED, true]);
   assert.ok(document.activeElement === toggle, "the keyboard is back on the toggle");
+});
+
+test("a pane drawn already open, as the drawer Settings' More opens is, takes the keyboard where it says", () => {
+  const page = mount(PANE_FLOAT.OPEN);
+  assert.ok(document.activeElement === part(page, ".row"), "the keyboard lands in the pane");
 });
 
 test("an open pane stays for a press in it or on its toggle's press, and goes at a press outside it or once a choice in it is made", () => {
