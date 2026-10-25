@@ -178,8 +178,7 @@ const ROWS_NAVIGATION = {
 } as const;
 
 /**
- * The names the panel Home and tasks block of the theme adds (the page's
- * inset and section gap, the welcome, a row's context, New task's title, a
+ * The names the panel Home and tasks block of the theme adds (the welcome, a row's context, New task's title, a
  * card's line, the Board's column, the List's row and maker), by the group
  * tailwind-merge reads each in.
  */
@@ -187,8 +186,6 @@ const PANEL_HOME_TASKS = {
   spacing: [
     "card-line",
     "new-task-title",
-    "page-inset",
-    "page-section-gap",
     "row-context",
     "tasks-board-column",
     "tasks-list-maker",
@@ -256,6 +253,54 @@ const CHIPS_MEDIA_CALL = {
   aspect: ["picture"],
 } as const;
 
+/**
+ * The names the page patterns' block of the theme adds (layout, settings,
+ * the collection, detail, public, and auth pages, the empty and error
+ * states, the failure note, and the group header), by the group
+ * tailwind-merge reads each in.
+ */
+const PAGE_PATTERNS = {
+  text: ["public-page-lead"],
+  "font-weight": ["public-page-hero"],
+  leading: ["public-page-hero"],
+  spacing: [
+    "failure-note-row",
+    "field-least",
+    "group-header-mark",
+    "luke-64",
+    "luke-96",
+    "page-inset",
+    "page-section-gap",
+    "auth-ring",
+    "collection-page-inset",
+    "detail-page-end",
+    "detail-page-inset",
+    "public-media-reach",
+    "public-page-end",
+    "public-page-start",
+    "settings-row-compact",
+    "settings-row-compact-block",
+    "settings-row-compact-inline",
+    "settings-row-indent",
+    "settings-row-list",
+    "settings-row-list-block",
+    "settings-row-mark",
+    "settings-row-state-dot",
+    "settings-row-words-inset",
+    "state-row-inset",
+  ],
+  radius: ["public-media"],
+  shadow: ["auth-badge", "auth-card", "public-media"],
+  container: [
+    "auth-card",
+    "collection-page",
+    "empty-state",
+    "public-page",
+    "public-page-lead",
+    "public-page-wide",
+  ],
+} as const;
+
 const merge = extendTailwindMerge({
   extend: {
     theme: {
@@ -276,6 +321,7 @@ const merge = extendTailwindMerge({
         ...CONTENT_TEXT.text,
         ...ROWS_NAVIGATION.text,
         ...CHIPS_MEDIA_CALL.text,
+        ...PAGE_PATTERNS.text,
       ],
       "font-weight": [
         "text",
@@ -289,6 +335,7 @@ const merge = extendTailwindMerge({
         ...PANEL_WORK_COLUMN["font-weight"],
         ...FEEDBACK_DISPLAY["font-weight"],
         ...CONTENT_TEXT["font-weight"],
+        ...PAGE_PATTERNS["font-weight"],
       ],
       tracking: ["title", ...PANEL_SHELL.tracking],
       leading: [
@@ -297,6 +344,7 @@ const merge = extendTailwindMerge({
         ...CONTENT_TEXT.leading,
         ...ROWS_NAVIGATION.leading,
         ...PANEL_WORK_COLUMN.leading,
+        ...PAGE_PATTERNS.leading,
       ],
       spacing: [
         "luke-2",
@@ -368,6 +416,7 @@ const merge = extendTailwindMerge({
         ...PANEL_SHELL.spacing,
         ...CHIPS_MEDIA_CALL.spacing,
         ...PANEL_HOME_TASKS.spacing,
+        ...PAGE_PATTERNS.spacing,
       ],
       radius: [
         "control",
@@ -390,6 +439,7 @@ const merge = extendTailwindMerge({
         ...ROWS_NAVIGATION.radius,
         ...PANEL_SHELL.radius,
         ...CHIPS_MEDIA_CALL.radius,
+        ...PAGE_PATTERNS.radius,
       ],
       shadow: [
         "dialog",
@@ -402,6 +452,7 @@ const merge = extendTailwindMerge({
         ...CONTENT_TEXT.shadow,
         ...ROWS_NAVIGATION.shadow,
         ...CHIPS_MEDIA_CALL.shadow,
+        ...PAGE_PATTERNS.shadow,
       ],
       font: ["ui"],
       aspect: [...CHIPS_MEDIA_CALL.aspect],
@@ -417,6 +468,7 @@ const merge = extendTailwindMerge({
         "tooltip-card",
         ...FEEDBACK_DISPLAY.container,
         ...CONTENT_TEXT.container,
+        ...PAGE_PATTERNS.container,
       ],
       animate: [
         "dialog-scrim",
