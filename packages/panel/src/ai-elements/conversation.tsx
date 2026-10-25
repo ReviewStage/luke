@@ -2,12 +2,14 @@ import {
   cn,
   Fill,
   IconButton,
+  SCROLL_END_INSET,
   SCROLL_FADE,
   ScrollArea,
   type ScrollFade,
   type ScrollFadeInset,
   Tooltip,
 } from "@luke/ui";
+import { scrollAsked } from "@luke/ui/scroll-asked";
 import { VIRTUAL_ROWS_ATTRIBUTE, VirtualRows, type VirtualRowsHandle } from "@luke/ui/virtual-rows";
 import { ArrowDownIcon } from "lucide-react";
 import {
@@ -122,21 +124,12 @@ export function Conversation({
   const opened = useRef(subject);
   // Where the log last stood, its own writes among it, so a scroll is read as the reader's up or down from there.
   const lastTop = useRef(0);
-  // How tall the log's lines and its box stood as last seen, so a scroll is known to have come with a change of either.
-  const seen = useRef({ height: 0, room: 0 });
   // When the reader last scrolled or asked for a scroll, as an event's time.
   const readerAt = useRef(Number.NEGATIVE_INFINITY);
-  const see = useCallback((element: HTMLDivElement) => {
-    seen.current = { height: element.scrollHeight, room: element.clientHeight };
+  const toEnd = useCallback((element: HTMLDivElement) => {
+    element.scrollTop = element.scrollHeight;
+    lastTop.current = element.scrollTop;
   }, []);
-  const toEnd = useCallback(
-    (element: HTMLDivElement) => {
-      element.scrollTop = element.scrollHeight;
-      lastTop.current = element.scrollTop;
-      see(element);
-    },
-    [see],
-  );
   useEffect(() => {
     const heard = (event: Event) => {
       readerAt.current = event.timeStamp;
@@ -188,7 +181,6 @@ export function Conversation({
           toEnd(element);
           return;
         }
-        see(element);
         if (!followsNewest(element)) {
           setAtBottom(false);
           return;
@@ -262,27 +254,25 @@ export function Conversation({
   // takes it off its newest line: the browser shifts a log down of its own accord to hold its place
   // as lines above grow (scroll anchoring), a message's words drawn late
   // among them, and the observer then takes it the rest of the way down.
-  // Note too that a scroll up the layout made is not the reader's: a box
-  // that grows pulls its scroll back to its new end, and lines landing in
-  // the same frame leave it short of the end it then has, as a window
-  // sized after its log first drew does. A scroll up that came with a
-  // change of the log's height or room, and with no wheel, touch, press,
-  // or key of the reader's just before it, leaves the log following, taken
-  // back to its end; a script's scroll up, which changes neither, as find's
-  // or an unread line's, still takes it off its newest line.
+  // Note too that a scroll up is the reader's only where their wheel,
+  // touch, press, or key came just before it, or a script said it was about
+  // to scroll the log for them (`askScroll`), as find, a reveal, or an
+  // unread line does. Any other is the layout's, and leaves the log
+  // following, taken back to its end: a box that grows pulls its scroll back
+  // to its new end with lines landing in the same frame, and rows hidden and
+  // shown again within a frame leave the scroll where the hidden rows
+  // clamped it, at the log's first line, with the log's height and room as
+  // they were.
   const onScroll = useCallback(
     (event: UIEvent<HTMLDivElement>) => {
       const element = event.currentTarget;
       const down = element.scrollTop >= lastTop.current;
-      const resized =
-        element.scrollHeight !== seen.current.height || element.clientHeight !== seen.current.room;
-      const reader = event.timeStamp - readerAt.current < READER_SCROLL_MS;
-      if (following.current && !down && resized && !reader && !followsNewest(element)) {
+      const asked = event.timeStamp - readerAt.current < READER_SCROLL_MS || scrollAsked(element);
+      if (following.current && !down && !asked && !followsNewest(element)) {
         toEnd(element);
         return;
       }
       lastTop.current = element.scrollTop;
-      see(element);
       following.current = followsNewest(element) || (following.current && down);
       setAtBottom(following.current);
       const first = observed.current?.first;
@@ -291,7 +281,7 @@ export function Conversation({
       }
       if (!down) askOlder(element);
     },
-    [askOlder, see, toEnd],
+    [askOlder, toEnd],
   );
   // Note that a fold the reader opens or closes takes the log off its newest line, because what they opened grows under them, and following would scroll it, and every line above it, out from under the press.
   const onFold = useCallback((event: MouseEvent<HTMLDivElement>) => {
@@ -328,7 +318,12 @@ export interface ConversationContentProps {
   children?: ReactNode;
 }
 
-/** The scroll box, a log of what follows, its lines in one block inside it. */
+/**
+ * The scroll box, a log of what follows, its lines in one block inside it.
+ * While the way back to the newest line shows, the log's end fade ends
+ * above the foot it stands in (`SCROLL_END_INSET.CONTROL`), so the lines
+ * are gone before they reach it and it never sits on a line's edge.
+ */
 export function ConversationContent({
   className,
   fade = SCROLL_FADE.BOTH,
@@ -336,7 +331,7 @@ export function ConversationContent({
   streams = false,
   children,
 }: ConversationContentProps): ReactNode {
-  const { list, onScroll, onFold } = useConversation();
+  const { list, isAtBottom, onScroll, onFold } = useConversation();
   return (
     <ScrollArea
       ref={list}
@@ -344,6 +339,7 @@ export function ConversationContent({
       aria-live={streams ? "off" : undefined}
       fade={fade}
       fadeInset={fadeInset}
+      endInset={isAtBottom ? SCROLL_END_INSET.NONE : SCROLL_END_INSET.CONTROL}
       onScroll={onScroll}
       onClickCapture={onFold}
     >
@@ -429,8 +425,8 @@ const SCROLL_LABEL = "Scroll to the newest line";
 
 /**
  * The way back to the newest line, shown while the reader has scrolled away
- * from it: the shared icon button, floating over the lines on a ground of
- * its own (`.conversation-scroll` in tasks.css).
+ * from it: the shared icon button, floating on a ground of its own in the
+ * middle of the foot the log's lines end above (`--luke-scroll-foot`).
  */
 export function ConversationScrollButton(): ReactNode {
   const { isAtBottom, scrollToBottom } = useConversation();
@@ -438,7 +434,7 @@ export function ConversationScrollButton(): ReactNode {
   return (
     // Its ground is the button's own (`--luke-button-ground`), which the button's lit fill is laid over as a title bar's is.
     <div
-      className={`conversation-scroll ${FLOATING_OVER_LOG_CLASS} bottom-luke-16 flex bg-button-ground [--luke-button-ground:var(--luke-color-well)]`}
+      className={`conversation-scroll ${FLOATING_OVER_LOG_CLASS} bottom-luke-8 flex bg-button-ground [--luke-button-ground:var(--luke-color-well)]`}
     >
       <Tooltip label={SCROLL_LABEL}>
         <IconButton

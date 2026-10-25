@@ -59,6 +59,7 @@ import {
   postsIn,
 } from "@luke/ui/chat-model";
 import { PICTURE_STATE, type PictureAnswer, usePicture } from "@luke/ui/picture-cache";
+import { askScroll } from "@luke/ui/scroll-asked";
 import { ACTION_RESULT_STATUS } from "@luke/wire";
 import * as Atom from "effect/reactivity/Atom";
 import type * as AtomRegistry from "effect/reactivity/AtomRegistry";
@@ -1065,6 +1066,7 @@ function ChannelStream({
     const room = Number.parseFloat(window.getComputedStyle(at).scrollMarginTop) || 0;
     const above = at.getBoundingClientRect().top - box.getBoundingClientRect().top - room;
     if (above >= 0) return;
+    askScroll(box);
     box.scrollTop += above;
     box.dispatchEvent(new Event("scroll"));
   }, [opened]);

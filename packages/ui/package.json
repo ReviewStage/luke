@@ -24,6 +24,7 @@
     "./markdown-class": "./src/markdown/markdown-class.js",
     "./markdown-words": "./src/markdown/markdown-words.js",
     "./virtual-rows": "./src/components/virtual-rows/virtual-rows.js",
+    "./scroll-asked": "./src/scroll-asked.js",
     "./tokens.css": "./src/tokens/tokens.css",
     "./styles.css": "./src/styles.css",
     "./search-tokens": "./src/search-tokens.js",

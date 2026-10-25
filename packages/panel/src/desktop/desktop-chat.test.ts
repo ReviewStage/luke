@@ -407,6 +407,9 @@ test("a channel opens as a log at its newest message, a New line before the firs
     "false",
   );
   assert.equal(toNewest(page), null);
+  act(() => {
+    log.dispatchEvent(new WheelEvent("wheel", { bubbles: true, deltaY: -600 }));
+  });
   log.scrollTop = 400;
   act(() => {
     log.dispatchEvent(new Event("scroll"));

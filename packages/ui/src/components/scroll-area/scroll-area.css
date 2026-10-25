@@ -35,6 +35,14 @@
   initial-value: 0px;
 }
 
+/* How far above the area's end edge its end fade ends: none, or the foot a
+   control floating over the end stands in. It does not inherit either. */
+@property --luke-scroll-area-end-inset {
+  syntax: "<length>";
+  inherits: false;
+  initial-value: 0px;
+}
+
 @keyframes luke-scroll-area-fade-start {
   from {
     --luke-scroll-area-fade-start: 0px;
@@ -92,15 +100,17 @@
      something to scroll, and is not motion, so reduced motion leaves it
      be. The scroll padding brings what the keys move to clear of a faded
      edge. Above its inset the mask is whole, so a band stuck there stands
-     whole, and the fade begins beneath it; the scroll padding clears both. */
+     whole, and the fade begins beneath it; below its end inset nothing
+     shows, so a control floating there stands clear of what scrolls; the
+     scroll padding clears both. */
   .luke-scroll-area:not([data-fade="none"]) {
     mask-image: linear-gradient(
       to bottom,
       #000 var(--luke-scroll-area-fade-inset),
       transparent var(--luke-scroll-area-fade-inset),
       #000 calc(var(--luke-scroll-area-fade-inset) + var(--luke-scroll-area-fade-start)),
-      #000 calc(100% - var(--luke-scroll-area-fade-end)),
-      transparent
+      #000 calc(100% - var(--luke-scroll-area-end-inset) - var(--luke-scroll-area-fade-end)),
+      transparent calc(100% - var(--luke-scroll-area-end-inset))
     );
     scroll-padding-block-start: calc(var(--luke-scroll-area-fade-inset) + var(--luke-scroll-fade));
     animation-name: luke-scroll-area-fade-start, luke-scroll-area-fade-end;
@@ -116,13 +126,17 @@
     --luke-scroll-area-fade-inset: var(--luke-scroll-band);
   }
 
+  .luke-scroll-area[data-end-inset="control"] {
+    --luke-scroll-area-end-inset: var(--luke-scroll-foot);
+  }
+
   /* The end's depth stays at none where the start alone fades. */
   .luke-scroll-area[data-fade="start"] {
     animation-name: luke-scroll-area-fade-start, none;
   }
 
   .luke-scroll-area[data-fade="both"] {
-    scroll-padding-block-end: var(--luke-scroll-fade);
+    scroll-padding-block-end: calc(var(--luke-scroll-area-end-inset) + var(--luke-scroll-fade));
   }
 
   /* A sideways area fades along its inline axis, on its inline timeline. */
