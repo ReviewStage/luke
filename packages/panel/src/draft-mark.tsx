@@ -13,6 +13,7 @@
  * of the words waiting rides it.
  */
 
+import { ROW_MARK, RowMark } from "@luke/ui";
 import { PencilLineIcon } from "lucide-react";
 
 /** What the mark is called. */
@@ -20,8 +21,10 @@ export const DRAFT_WORD = "Draft";
 
 export function DraftMark(): React.JSX.Element {
   return (
-    <span className="draft-mark" role="img" aria-label={DRAFT_WORD}>
-      <PencilLineIcon aria-hidden="true" />
-    </span>
+    <RowMark
+      kind={ROW_MARK.DRAFT}
+      label={DRAFT_WORD}
+      glyph={<PencilLineIcon aria-hidden="true" />}
+    />
   );
 }

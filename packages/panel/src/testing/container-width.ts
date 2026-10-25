@@ -2,10 +2,8 @@ import base from "@luke/panel/styles/base.css?raw";
 import call from "@luke/panel/styles/call.css?raw";
 import desktop from "@luke/panel/styles/desktop.css?raw";
 import entry from "@luke/panel/styles/index.css?raw";
-import search from "@luke/panel/styles/search.css?raw";
 import settings from "@luke/panel/styles/settings.css?raw";
 import shell from "@luke/panel/styles/shell.css?raw";
-import shortcut from "@luke/panel/styles/shortcut.css?raw";
 import tasks from "@luke/panel/styles/tasks.css?raw";
 import utilities from "@luke/panel/testing/tailwind.css?inline";
 import ui from "@luke/ui/styles.css?inline";
@@ -52,11 +50,9 @@ const UTILITIES = "tailwind.css";
 /** Each stylesheet the panel's `index.css` imports, by the specifier it imports it by. */
 const SHEET_BY_IMPORT = {
   "@luke/ui/tokens.css": tokens,
-  "./search.css": search,
   "./settings.css": settings,
   "./base.css": base,
   "@luke/ui/styles.css": ui,
-  "./shortcut.css": shortcut,
   "./tasks.css": tasks,
   "./shell.css": shell,
   "./desktop.css": desktop,

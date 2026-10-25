@@ -28,18 +28,25 @@ export function automationDeleteQuestion(name: string | undefined): DialogQuesti
 /** How near a next run is still named by its weekday alone: under a week, so no weekday stands for two days. */
 const WEEKDAY_REACH_MS = 6 * 24 * 60 * 60 * 1000;
 
-/** When an automation runs next, in a few words: within the week by its weekday, further off by its date. */
-export function automationNextText(automation: AutomationSummary, now: number): string {
+/** A run due at `at`, in a few words: within the week by its weekday, further off by its date. */
+function dueText(at: number, now: number): string {
+  return at - now < WEEKDAY_REACH_MS
+    ? `Next ${weekdayAndTimeText(at)}`
+    : `Next ${dayAndTimeText(at)}`;
+}
+
+/** When an automation runs next, in a few words; none for one an event fires, whose trigger already says when. */
+export function automationNextText(automation: AutomationSummary, now: number): string | undefined {
   const next = automationNext(automation);
   switch (next.kind) {
     case AUTOMATION_NEXT.OFF:
       return "Off";
+    case AUTOMATION_NEXT.EVENT:
+      return undefined;
     case AUTOMATION_NEXT.UNSCHEDULED:
       return "Not scheduled";
     case AUTOMATION_NEXT.AT:
-      return next.at - now < WEEKDAY_REACH_MS
-        ? `Next ${weekdayAndTimeText(next.at)}`
-        : `Next ${dayAndTimeText(next.at)}`;
+      return dueText(next.at, now);
   }
 }
 
@@ -69,6 +76,6 @@ export function automationNarrowLine(
   const next = automationNext(automation);
   if (next.kind !== AUTOMATION_NEXT.AT) return trigger;
   const sameYear = new Date(next.at).getFullYear() === new Date(now).getFullYear();
-  const when = sameYear ? automationNextText(automation, now) : `Next ${momentText(next.at)}`;
+  const when = sameYear ? dueText(next.at, now) : `Next ${momentText(next.at)}`;
   return `${when} · ${trigger}`;
 }

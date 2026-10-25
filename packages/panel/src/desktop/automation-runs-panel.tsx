@@ -110,7 +110,7 @@ function subjectLink(run: AutomationRunSummary): { url: string; label: string } 
   return { url: firing.subject.url, label: `Open in ${TRIGGER_CATALOG[firing.provider].name}` };
 }
 
-/** One run's row, a press opening its agent where it started one, or else its subject where it names one, and its ⋯ and right-click offering its Copy link and its subject; a run with neither is words alone. */
+/** One run's row, a press opening its agent where it started one, or else its subject where it names one, and its ⋯ and right-click offering its Copy link and its subject; a run that opens nothing is no press. */
 function RunRow({
   run,
   keyHolder,
@@ -132,8 +132,9 @@ function RunRow({
   const linkItem = useCopyLinkItem();
   const openLink = useOpenLink();
   const { agent } = run;
+  // Note that every run offers its link, one that started no agent too, because a failed run's notification links to it, and a run with no menu has no ⋯ track, so its time would stand out of line with the others'.
   const copyLink =
-    automationId === undefined || agent === null
+    automationId === undefined
       ? undefined
       : linkItem({ kind: LINK_PLACE.AUTOMATION_RUN, automationId, runId: run.id });
   const subject = subjectLink(run);
@@ -163,10 +164,10 @@ function RunRow({
       }
       meta={
         <span className="automation-row-meta">
+          {stateEndMark(state, true)}
           <Tooltip label={momentText(run.firedAt)}>
             <span>{sinceText(run.firedAt, now)}</span>
           </Tooltip>
-          {stateEndMark(state, true)}
         </span>
       }
       current={linked ? LIST_ROW_CURRENT.ITEM : undefined}
@@ -222,12 +223,14 @@ interface RunsShown {
 }
 
 /**
- * The runs under their heading, scrolling by themselves: quiet blocks in
+ * The runs under their heading, or none where the screen is headed Runs
+ * already, scrolling by themselves: quiet blocks in
  * their place while they are first read, or that there are none yet, or
  * that they could not be read. A run that starts slides in at the top, and
  * the runs under it glide down (`ListMotion`).
  */
 function RunsBody({
+  headed,
   mine,
   created,
   automationId,
@@ -235,17 +238,19 @@ function RunsBody({
   runs,
   onRetry,
   onOpenAgent,
-}: RunsShown): React.JSX.Element {
+}: RunsShown & { headed: boolean }): React.JSX.Element {
   const now = useMinute();
   const body = useRef<HTMLDivElement | null>(null);
   return (
     <ScrollArea fade={SCROLL_FADE.START}>
       <div ref={body} className="automation-runs-body">
-        <div className="automation-runs-head">
-          <Text variant={TEXT_VARIANT.SECTION} tone={TEXT_TONE.MUTED} as={TEXT_ELEMENT.H2}>
-            Runs
-          </Text>
-        </div>
+        {headed ? (
+          <div className="automation-runs-head">
+            <Text variant={TEXT_VARIANT.SECTION} tone={TEXT_TONE.MUTED} as={TEXT_ELEMENT.H2}>
+              Runs
+            </Text>
+          </div>
+        ) : null}
         {!created ? (
           <EmptyState icon={<ClockIcon />}>{NO_RUNS_LINE}</EmptyState>
         ) : runs === undefined ? (
@@ -319,7 +324,7 @@ export function AutomationRunsPanel({
     >
       <ResizeEdge edge={edge} />
       <aside className="automation-runs" aria-label="Runs">
-        <RunsBody {...shown} />
+        <RunsBody headed {...shown} />
       </aside>
     </div>
   );
@@ -361,7 +366,7 @@ export function AutomationRunsScreen({
         title={RUNS}
         end={null}
       />
-      <RunsBody {...shown} />
+      <RunsBody headed={false} {...shown} />
     </Fill>
   );
 }

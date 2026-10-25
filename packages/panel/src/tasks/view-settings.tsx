@@ -235,7 +235,7 @@ function LinesRows({ notes }: { notes: boolean }): React.JSX.Element {
           label="Minimize inline comments"
           detail={
             <>
-              <span className="shortcut-hint">
+              <span className="finger:hidden">
                 Or press <Shortcut chord={MINIMIZE_CHORD} spoken /> over the code
               </span>
             </>

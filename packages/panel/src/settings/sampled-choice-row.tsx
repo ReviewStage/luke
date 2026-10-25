@@ -206,11 +206,11 @@ function SampledChoiceDialog({
       }
     >
       <ScrollArea size={SCROLL_SIZE.CONTENT} fade={SCROLL_FADE.BOTH}>
-        <div className="sampled-choice" onKeyDownCapture={onKeyDownCapture}>
+        <div className="grid gap-luke-16" onKeyDownCapture={onKeyDownCapture}>
           {groups.map((group) => {
             const holdsPick = group.options.some((option) => option.value === picked);
             return (
-              <section key={group.heading ?? ""} className="sampled-choice-group">
+              <section key={group.heading ?? ""} className="grid gap-luke-6">
                 {group.heading === undefined ? null : (
                   <Text as={TEXT_ELEMENT.H3} variant={TEXT_VARIANT.LABEL} tone={TEXT_TONE.MUTED}>
                     {group.heading}
