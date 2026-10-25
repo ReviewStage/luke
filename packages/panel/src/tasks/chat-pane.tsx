@@ -911,7 +911,7 @@ const ThreadRow = memo(function ThreadRow({
   );
   const thread = quiet ? null : (
     <div className="chat-thread mt-tight-gap" data-open={String(open)}>
-      <div className="chat-thread-toggle m-0 text-label [&_.actor-stack]:me-item-gap [&_.actor-stack]:align-middle">
+      <div className="chat-thread-toggle m-0 text-label [&_.actor-stack]:me-item-gap! [&_.actor-stack]:align-middle">
         {/* Note that the faces stand beside the press rather than in it, since each hangs its replier's card. */}
         {replies.length > 0 && !open ? (
           <ActorStack
