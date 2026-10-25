@@ -259,23 +259,23 @@ fi
 
 # The root `vitest.config.ts` names every workspace with tests, which is what
 # `pnpm exec vitest run <path>` from the root reads, and each of those
-# workspaces runs its tests through turbo under a name in `lib/turbo.mjs`'s
-# TEST_TASKS, which is what the checks and CI ask turbo for. A workspace that
-# gains a `vitest.config.ts` and is left off the list, or whose tests are under
-# no such name, has tests nothing runs, and CI stays green over them; one that
+# workspaces runs its tests through turbo under `lib/turbo.mjs`'s TEST_TASK,
+# which is what the checks and CI ask turbo for. A workspace that gains a
+# `vitest.config.ts` and is left off the list, or whose tests are under no
+# such name, has tests nothing runs, and CI stays green over them; one that
 # loses its config and stays on the list fails the run outright. All three are
-# the same drift. A suite cut into shards must declare every shard, or the
-# files hashed to the missing one never run. CI's job for the whole task may
-# leave a workspace out with `--filter=!<name>` only where another job in
-# `ci.yml` runs that task for it alone with `--filter=<name>`, and no job may
-# run one the whole task's job still runs, so each workspace's tests run in
-# exactly one job.
+# the same drift. CI's job for the whole task may leave a workspace out with
+# `--filter=!<name>` only where another job in `ci.yml` runs that task for it
+# alone with `--filter=<name>`, and no job may run one the whole task's job
+# still runs, so each workspace's tests run in exactly one job. A workspace
+# cut into vitest shards (`-- --shard=<i>/<n>`) runs in one job per shard,
+# and must run in every shard of one set, or the files hashed to the missing
+# one never run.
 node --input-type=module -e '
   import { glob, readFile } from "node:fs/promises";
   import path from "node:path";
   const root = process.argv[1];
-  const { TEST_TASKS } = await import(path.join(root, "scripts/lib/turbo.mjs"));
-  const [WHOLE, ...SHARDS] = TEST_TASKS;
+  const { TEST_TASK: WHOLE } = await import(path.join(root, "scripts/lib/turbo.mjs"));
   const configured = [];
   for await (const found of glob(["apps/*/vitest.config.ts", "packages/*/vitest.config.ts", "tools/*/vitest.config.ts"], { cwd: root })) {
     configured.push(path.dirname(found).split(path.sep).join("/"));
@@ -291,28 +291,43 @@ node --input-type=module -e '
     const scripts = JSON.parse(await readFile(path.join(root, one, "package.json"), "utf8")).scripts ?? {};
     const named = Object.keys(scripts).filter((script) => script.startsWith(WHOLE));
     const whole = named.length === 1 && named[0] === WHOLE;
-    const sharded = named.length === SHARDS.length && SHARDS.every((shard) => named.includes(shard));
-    if (!whole && !sharded) untasked.push(one);
+    if (!whole) untasked.push(one);
     if (whole) wholeNames.push(JSON.parse(await readFile(path.join(root, one, "package.json"), "utf8")).name);
   }
   const workflow = await readFile(path.join(root, ".github/workflows/ci.yml"), "utf8");
   const excluded = [];
-  const alone = [];
-  for (const [, filters] of workflow.matchAll(new RegExp(WHOLE + "((?:[ \\t]+--filter=\\S+)+)", "gu"))) {
-    for (const [, negated, name] of filters.matchAll(/--filter=(!?)(\S+)/gu)) (negated ? excluded : alone).push(name);
+  const alone = new Map();
+  let shardedWhole = false;
+  for (const [, filters, index, count] of workflow.matchAll(new RegExp(WHOLE + "((?:[ \\t]+--filter=\\S+)+)(?:[ \\t]+--[ \\t]+--shard=(\\d+)/(\\d+))?", "gu"))) {
+    for (const [, negated, name] of filters.matchAll(/--filter=(!?)(\S+)/gu)) {
+      if (negated) {
+        excluded.push(name);
+        if (index) shardedWhole = true;
+      } else {
+        alone.set(name, [...(alone.get(name) ?? []), index ? `${index}/${count}` : "whole"]);
+      }
+    }
   }
-  const unrun = excluded.filter((name) => !alone.includes(name));
-  const doubled = alone.filter((name) => !excluded.includes(name));
-  const unknown = [...new Set([...excluded, ...alone])].filter((name) => !wholeNames.includes(name));
-  if (missing.length > 0 || stale.length > 0 || untasked.length > 0 || unrun.length > 0 || doubled.length > 0 || unknown.length > 0) {
+  const unrun = excluded.filter((name) => !alone.has(name));
+  const doubled = [...alone.keys()].filter((name) => !excluded.includes(name));
+  const unknown = [...new Set([...excluded, ...alone.keys()])].filter((name) => !wholeNames.includes(name));
+  const unsharded = [];
+  for (const [name, runs] of alone) {
+    const count = Number(runs[0].split("/")[1]) || 1;
+    const expected = count === 1 ? ["whole"] : Array.from({ length: count }, (_, at) => `${at + 1}/${count}`);
+    if (runs.length !== expected.length || !expected.every((run) => runs.includes(run))) unsharded.push([name, runs]);
+  }
+  if (missing.length > 0 || stale.length > 0 || untasked.length > 0 || unrun.length > 0 || doubled.length > 0 || unknown.length > 0 || unsharded.length > 0 || shardedWhole) {
     process.stderr.write(
       `error: the root vitest.config.ts projects list, the workspaces holding a vitest.config.ts, and their turbo test tasks have drifted apart:\n${[
         ...missing.map((one) => `  ${one} has a vitest.config.ts and the list never names it, so nothing runs its tests`),
         ...stale.map((one) => `  ${one} is on the list and holds no vitest.config.ts`),
-        ...untasked.map((one) => `  ${one} runs its tests under neither "${WHOLE}" alone nor all of ${SHARDS.map((shard) => `"${shard}"`).join(", ")}, so the checks and CI never run them`),
+        ...untasked.map((one) => `  ${one} declares no "${WHOLE}" script, or another "${WHOLE}…" one beside it, so the checks and CI never run some of its tests`),
         ...unrun.map((name) => `  .github/workflows/ci.yml leaves ${name} out of the "${WHOLE}" job and no job runs "${WHOLE} --filter=${name}", so CI never runs its tests`),
         ...doubled.map((name) => `  .github/workflows/ci.yml runs "${WHOLE} --filter=${name}" in a job of its own and never leaves ${name} out of the "${WHOLE}" job, so CI runs its tests twice`),
         ...unknown.map((name) => `  .github/workflows/ci.yml filters "${WHOLE}" by ${name}, which names no workspace running its tests under "${WHOLE}" alone`),
+        ...unsharded.map(([name, runs]) => `  .github/workflows/ci.yml runs "${WHOLE} --filter=${name}" as ${runs.join(", ")}, which is neither one whole job nor every shard of one set once, so CI runs some of its tests twice or never`),
+        ...(shardedWhole ? [`  .github/workflows/ci.yml shards the job that leaves workspaces out with "--filter=!", which only a job for one workspace may do`] : []),
       ].join("\n")}\n`,
     );
     process.exit(1);

@@ -254,7 +254,7 @@ const LOOK_CSS = `
     background-color: var(--luke-color-fill-pressed);
   }
   [data-separator="line-info-basic"] [${GAP_CONTROL_ATTRIBUTE}="${GAP_CONTROL.ALL}"] {
-    cursor: pointer;
+    cursor: var(--luke-cursor-press);
   }
   [data-separator="line-info-basic"] [${GAP_CONTROL_ATTRIBUTE}="${GAP_CONTROL.ALL}"]:hover {
     /* The code's own ink, as an arrow's lifts under the pointer. */
