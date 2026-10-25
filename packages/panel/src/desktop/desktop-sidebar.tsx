@@ -53,6 +53,8 @@ import {
   ScrollArea,
   SearchIcon,
   Shortcut,
+  SidebarPlaces,
+  SidebarRule,
   Skeleton,
   SkeletonRegion,
   STATUS_TONE,
@@ -2091,7 +2093,7 @@ function SidebarColumn({
   // (`shell-room.ts`). They hold nothing that a fresh draw loses.
   const places = (
     <>
-      <div className="sidebar-places">
+      <SidebarPlaces>
         <NewTaskButton
           tasks={tasks}
           // A person's page stands in the welcome's place without leaving its page, and draws no composer.
@@ -2128,8 +2130,8 @@ function SidebarColumn({
           onOpen={chosen(openAutomations)}
         />
         <SidebarAdminRow onOpen={chosen(openAdmin)} />
-      </div>
-      <hr className="sidebar-rule" />
+      </SidebarPlaces>
+      <SidebarRule />
     </>
   );
   return (
