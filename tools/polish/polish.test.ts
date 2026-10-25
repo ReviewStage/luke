@@ -2,6 +2,7 @@ import { JSDOM } from "jsdom";
 import { describe, expect, it } from "vitest";
 import { READY_SCRIPT } from "./ready.ts";
 import { CLIENT, type Client, drawsOn, pressedOn, SCENES, STEP } from "./scenes.ts";
+import { scrollScript } from "./scroll.ts";
 
 // jsdom lays nothing out, so a box is given the rectangle it would stand in.
 const ON_SCREEN = { width: 20, height: 20, top: 10, left: 10, bottom: 30, right: 30 };
@@ -31,6 +32,29 @@ describe("the readiness script", () => {
 
   it("does not wait on a spinner scrolled out of view", () => {
     expect(readyWith('<span data-box class="luke-spinner"></span>', OFF_SCREEN)).toBe(true);
+  });
+});
+
+describe("the scroll script", () => {
+  /** A page whose body holds `html`, its boxes scrolled to `top`, and what a scroll of `role` by `by` answered there. */
+  function scrolledWith(html: string, top: number, role: string, by: number) {
+    const dom = new JSDOM(`<body>${html}</body>`, { runScripts: "outside-only" });
+    const boxes = [...dom.window.document.querySelectorAll<HTMLElement>("[data-box]")];
+    for (const box of boxes) box.scrollTop = top;
+    const found = dom.window.eval(scrollScript(role, by)) as boolean;
+    return { found, tops: boxes.map((box) => box.scrollTop) };
+  }
+
+  it("scrolls the first box of the role back up by the step's pixels, and no other", () => {
+    const html = '<div data-box role="log"></div><div data-box role="log"></div>';
+
+    expect(scrolledWith(html, 900, "log", -600)).toEqual({ found: true, tops: [300, 900] });
+  });
+
+  it("answers that it found nothing where no box holds the role", () => {
+    const html = '<div data-box role="region"></div>';
+
+    expect(scrolledWith(html, 900, "log", -600)).toEqual({ found: false, tops: [900] });
   });
 });
 

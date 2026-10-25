@@ -73,6 +73,7 @@ import { AsyncIteratorClass } from "@orpc/client";
 import {
   PULL_REQUEST_VIEW,
   type PullRequestView,
+  SIDE_PANEL_TAB,
   type SidePanelState,
   type StagedSidePanel,
 } from "./use-side-panel.js";
@@ -275,65 +276,191 @@ function toolPart(tool: string, callId: string, input: WireRecord, output: WireR
   return { type: `tool-${tool}`, toolCallId: callId, state: "output-available", input, output };
 }
 
-/** The agent's one turn: the developer's ask, then its reads, its edit, its tests, and the pull request it opened. */
-const MESSAGES: readonly CodingAgentMessage[] = [
-  {
-    id: "fixture-agent-ask",
-    turnId: TURN_ID,
-    role: MESSAGE_ROLE.USER,
-    parts: [
+/** The developer's ask that began the agent's one turn. */
+const ASK: CodingAgentMessage = {
+  id: "fixture-agent-ask",
+  turnId: TURN_ID,
+  role: MESSAGE_ROLE.USER,
+  parts: [
+    {
+      type: "text",
+      text: "Build teammate invitations from the plan: a member invites by email, and the link joins the workspace.",
+    },
+  ],
+  sentAt: STARTED_AT,
+};
+
+/** The agent's reads, its edit, its tests, and the pull request it opened, answering the ask. */
+const WORK: CodingAgentMessage = {
+  id: "fixture-agent-work",
+  turnId: TURN_ID,
+  role: MESSAGE_ROLE.ASSISTANT,
+  parts: [
+    {
+      type: "text",
+      text: "I'll model an invite as a pending membership, as the plan settled, so removal covers both.",
+    },
+    toolPart(
+      "read_file",
+      "fixture-read",
+      { filePath: "src/db/schema/memberships.ts" },
+      { content: "export const memberships = pgTable(…)" },
+    ),
+    toolPart(
+      "apply_patch",
+      "fixture-patch",
+      { patchText: "*** Begin Patch\n*** Add File: src/members/invite.ts\n*** End Patch" },
+      { output: "Done." },
+    ),
+    toolPart(
+      "bash",
+      "fixture-test",
+      { command: "pnpm test src/members", description: "Run the members tests" },
       {
-        type: "text",
-        text: "Build teammate invitations from the plan: a member invites by email, and the link joins the workspace.",
+        stdout: " ✓ src/members/invite.test.ts (1 test)\n\n Tests  1 passed",
+        stderr: "",
+        exitCode: 0,
       },
-    ],
-    sentAt: STARTED_AT,
-  },
-  {
-    id: "fixture-agent-work",
-    turnId: TURN_ID,
-    role: MESSAGE_ROLE.ASSISTANT,
+    ),
+    toolPart(
+      "open_pull_request",
+      "fixture-open",
+      { title: PULL_REQUEST.title, head: PULL_REQUEST.head },
+      { number: PULL_REQUEST.number, url: PULL_REQUEST.url },
+    ),
+    {
+      type: "text",
+      text: `Opened #${PULL_REQUEST.number}. An invite expires after seven days, and a used or withdrawn link reads "This invite is no longer valid".`,
+    },
+  ],
+  startedAt: STARTED_AT,
+  finishedAt: STARTED_AT + 6 * MINUTE,
+};
+
+/** The agent's one turn: the developer's ask, then its work. */
+const MESSAGES: readonly CodingAgentMessage[] = [ASK, WORK];
+
+/** The first turn's id where later turns followed it, the newest of which is `TURN_ID`. */
+const FIRST_TURN_ID = "3b7d1f5a-0c2e-4d4f-8a6b-1c3e5f7a9b0d";
+
+/** One follow-up turn: the developer's ask at `at`, then the agent's work on it, `parts`, done two minutes later. */
+function followUp(input: {
+  readonly id: string;
+  readonly turnId: string;
+  readonly at: number;
+  readonly ask: string;
+  readonly parts: CodingAgentMessage["parts"];
+}): readonly CodingAgentMessage[] {
+  return [
+    {
+      id: `${input.id}-ask`,
+      turnId: input.turnId,
+      role: MESSAGE_ROLE.USER,
+      parts: [{ type: "text", text: input.ask }],
+      sentAt: input.at,
+    },
+    {
+      id: `${input.id}-work`,
+      turnId: input.turnId,
+      role: MESSAGE_ROLE.ASSISTANT,
+      parts: input.parts,
+      startedAt: input.at,
+      finishedAt: input.at + 2 * MINUTE,
+    },
+  ];
+}
+
+/**
+ * The agent's turn and the three the developer asked after it, as an agent
+ * kept at a pull request reads: more than the window holds, so its
+ * transcript scrolls. The newest is the summary's turn.
+ */
+const LONG_MESSAGES: readonly CodingAgentMessage[] = [
+  { ...ASK, turnId: FIRST_TURN_ID },
+  { ...WORK, turnId: FIRST_TURN_ID },
+  ...followUp({
+    id: "fixture-agent-pending",
+    turnId: "4c8e2a6b-1d3f-4e5a-9b7c-2d4e6f8a0b2e",
+    at: STARTED_AT + 10 * MINUTE,
+    ask: "The members list shows invited addresses as members. Skip a pending membership there and in the access check.",
     parts: [
-      {
-        type: "text",
-        text: "I'll model an invite as a pending membership, as the plan settled, so removal covers both.",
-      },
       toolPart(
         "read_file",
-        "fixture-read",
-        { filePath: "src/db/schema/memberships.ts" },
-        { content: "export const memberships = pgTable(…)" },
+        "fixture-pending-read",
+        { filePath: "src/members/list.ts" },
+        { content: "export async function listMembers(…)" },
       ),
       toolPart(
         "apply_patch",
-        "fixture-patch",
-        { patchText: "*** Begin Patch\n*** Add File: src/members/invite.ts\n*** End Patch" },
+        "fixture-pending-patch",
+        {
+          patchText:
+            "*** Begin Patch\n*** Update File: src/members/list.ts\n*** Update File: src/workspaces/access.ts\n*** End Patch",
+        },
+        { output: "Done." },
+      ),
+      {
+        type: "text",
+        text: "Listing members and checking access both skip a pending membership now, so an invited address reads as a member only once it joins.",
+      },
+    ],
+  }),
+  ...followUp({
+    id: "fixture-agent-race",
+    turnId: "5d9f3b7c-2e4a-4f6b-8c8d-3e5f7a9b1c3f",
+    at: STARTED_AT + 20 * MINUTE,
+    ask: "What happens if two people open the same link at once?",
+    parts: [
+      {
+        type: "text",
+        text: "Both would read the invite before either marked it accepted, so both would join. I'll mark it accepted in the same update that checks `acceptedAt`, so only one of them wins.",
+      },
+      toolPart(
+        "apply_patch",
+        "fixture-race-patch",
+        { patchText: "*** Begin Patch\n*** Update File: src/members/invite.ts\n*** End Patch" },
         { output: "Done." },
       ),
       toolPart(
         "bash",
-        "fixture-test",
+        "fixture-race-test",
         { command: "pnpm test src/members", description: "Run the members tests" },
         {
-          stdout: " ✓ src/members/invite.test.ts (1 test)\n\n Tests  1 passed",
+          stdout: " ✓ src/members/invite.test.ts (2 tests)\n\n Tests  2 passed",
           stderr: "",
           exitCode: 0,
         },
       ),
+      {
+        type: "text",
+        text: "A second accept of the same link now reads as no longer valid, and a test opens one link twice at once.",
+      },
+    ],
+  }),
+  ...followUp({
+    id: "fixture-agent-label",
+    turnId: TURN_ID,
+    at: STARTED_AT + 30 * MINUTE,
+    ask: "Rename the expired page's button to Ask for a new invite, then push.",
+    parts: [
       toolPart(
-        "open_pull_request",
-        "fixture-open",
-        { title: PULL_REQUEST.title, head: PULL_REQUEST.head },
-        { number: PULL_REQUEST.number, url: PULL_REQUEST.url },
+        "apply_patch",
+        "fixture-label-patch",
+        { patchText: "*** Begin Patch\n*** Update File: src/pages/invite.tsx\n*** End Patch" },
+        { output: "Done." },
+      ),
+      toolPart(
+        "bash",
+        "fixture-label-push",
+        { command: "git push", description: "Push the branch" },
+        { stdout: "", stderr: "To github.com:ada/relay.git", exitCode: 0 },
       ),
       {
         type: "text",
-        text: `Opened #${PULL_REQUEST.number}. An invite expires after seven days, and a used or withdrawn link reads "This invite is no longer valid".`,
+        text: `Pushed to #${PULL_REQUEST.number}. The expired page's button reads "Ask for a new invite".`,
       },
     ],
-    startedAt: STARTED_AT,
-    finishedAt: STARTED_AT + 6 * MINUTE,
-  },
+  }),
 ];
 
 /** The agent's transcript, as its stream opens on it: the whole turn, caught up. */
@@ -606,15 +733,28 @@ type TerminalStage =
       readonly code?: number;
     };
 
-/** What one agent profile opens beside the agent: its Pull request tab on a view, a file's tab, the page it showed, or its Terminal staged one way. */
+/** How long the agent's transcript runs: its one turn as it ran, or that turn with every step it took, which runs past the window's height. */
+const TRANSCRIPT_LENGTH = {
+  SHORT: "short",
+  LONG: "long",
+} as const;
+
+type TranscriptLength = (typeof TRANSCRIPT_LENGTH)[keyof typeof TRANSCRIPT_LENGTH];
+
+/** What one agent profile opens beside the agent: its Pull request tab on a view, with the transcript as long as it says, a file's tab, the page it showed, its Terminal staged one way, or the task's plan, whose comments the tasks fixture answers. */
 type AgentStage =
-  | { readonly view: PullRequestView }
+  | { readonly view: PullRequestView; readonly transcript?: TranscriptLength }
   | { readonly file: string }
   | { readonly page: string }
-  | { readonly terminal: TerminalStage };
+  | { readonly terminal: TerminalStage }
+  | { readonly plan: true };
 
 const AGENT_STAGES: ReadonlyMap<string, AgentStage> = new Map<string, AgentStage>([
   [RUN_PROFILE.AGENT_PULL_REQUEST, { view: PULL_REQUEST_VIEW.CONVERSATION }],
+  [
+    RUN_PROFILE.AGENT_TRANSCRIPT,
+    { view: PULL_REQUEST_VIEW.CONVERSATION, transcript: TRANSCRIPT_LENGTH.LONG },
+  ],
   [RUN_PROFILE.AGENT_CHECKS, { view: PULL_REQUEST_VIEW.CHECKS }],
   [RUN_PROFILE.AGENT_FILES, { view: PULL_REQUEST_VIEW.FILES }],
   [RUN_PROFILE.AGENT_CHAPTERS, { view: PULL_REQUEST_VIEW.CHAPTERS }],
@@ -643,6 +783,8 @@ const AGENT_STAGES: ReadonlyMap<string, AgentStage> = new Map<string, AgentStage
   ],
   [RUN_PROFILE.AGENT_TERMINAL_UNREACHABLE, { terminal: { kind: TERMINAL_STAGE.REFUSED } }],
   [RUN_PROFILE.AGENT_PAGE, { page: FIXTURE_PAGE.id }],
+  // The plan's threads are the tasks fixture's to answer (`tasks-fixture.ts`); one of them is this agent's.
+  [RUN_PROFILE.TASKS_COMMENTS, { plan: true }],
   // The call itself is the host's to stage (`fixture-stage.ts`); beside it the agent's pull request stands.
   [RUN_PROFILE.AGENT_CALL, { view: PULL_REQUEST_VIEW.CONVERSATION }],
   [RUN_PROFILE.AGENT_CALL_VIDEO, { view: PULL_REQUEST_VIEW.CONVERSATION }],
@@ -701,14 +843,18 @@ function postShellPort(stage: Extract<TerminalStage, { kind: typeof TERMINAL_STA
   );
 }
 
-/** The transcript's stream, as main opens one: its one page, then its end, as a finished agent's stands. */
-function transcriptStream(): AsyncIteratorClass<CodingAgentTranscriptPage, void> {
+/** The transcript's stream, as main opens one: its one page, as long as the stage says, then its end, as a finished agent's stands. */
+function transcriptStream(stage: AgentStage): AsyncIteratorClass<CodingAgentTranscriptPage, void> {
+  const page =
+    "view" in stage && stage.transcript === TRANSCRIPT_LENGTH.LONG
+      ? { ...TRANSCRIPT_PAGE, messages: LONG_MESSAGES }
+      : TRANSCRIPT_PAGE;
   let told = false;
   return new AsyncIteratorClass<CodingAgentTranscriptPage, void>(
     async () => {
       if (told) return { done: true, value: undefined };
       told = true;
-      return { done: false, value: TRANSCRIPT_PAGE };
+      return { done: false, value: page };
     },
     async () => undefined,
   );
@@ -728,7 +874,7 @@ type StagedAnswer<Kind extends PortActKind> = (
 /** Every read the agent's tabs ask, answered as the service would answer it for this agent. */
 const ANSWERS: { readonly [Kind in PortActKind]?: StagedAnswer<Kind> } = {
   [ACT_KIND.CODING_AGENTS_LIST]: ({ taskId }) => ({ agents: [agentSummary(taskId)] }),
-  [ACT_KIND.CODING_AGENTS_TRANSCRIPT]: () => transcriptStream(),
+  [ACT_KIND.CODING_AGENTS_TRANSCRIPT]: (_payload, stage) => transcriptStream(stage),
   [ACT_KIND.CODING_AGENTS_TRANSCRIPT_OLDER]: () => ({
     failure: CODING_AGENT_CALL_FAILURE.NOT_FOUND,
   }),
@@ -885,6 +1031,7 @@ export function agentSidePanel(
     const page = { page: stage.page };
     return { ...panel, tab: page, pages: [page] };
   }
+  if ("plan" in stage) return { ...panel, tab: SIDE_PANEL_TAB.PLAN };
   const terminal = { terminal: FIXTURE_AGENT_ID };
   return { ...panel, tab: terminal, terminals: [terminal] };
 }

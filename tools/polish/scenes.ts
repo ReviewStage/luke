@@ -48,6 +48,8 @@ export const STEP = {
   TYPE: "type",
   /** Waits until some element shows these words. */
   WAIT_FOR_TEXT: "wait-for-text",
+  /** Scrolls the first element of an ARIA role by some pixels, up where negative, as a transcript read back up is. */
+  SCROLL: "scroll",
 } as const;
 
 /** An element by its ARIA role and accessible name, which it holds among other words unless `exact`, looked for within a landmark where one is named. */
@@ -65,7 +67,8 @@ export type Step =
   | ({ readonly kind: typeof STEP.RIGHT_CLICK } & Target)
   | ({ readonly kind: typeof STEP.HOVER } & Target)
   | { readonly kind: typeof STEP.TYPE; readonly text: string }
-  | { readonly kind: typeof STEP.WAIT_FOR_TEXT; readonly text: string };
+  | { readonly kind: typeof STEP.WAIT_FOR_TEXT; readonly text: string }
+  | { readonly kind: typeof STEP.SCROLL; readonly role: string; readonly by: number };
 
 export interface Scene {
   /** Unique, and the folder its pictures are written to. */
@@ -140,7 +143,35 @@ const NEW_THREAD: Step = { kind: STEP.CLICK, role: "button", name: "New thread" 
 const ACCOUNT_MENU: Step = { kind: STEP.CLICK, role: "button", name: "Ada Lovelace", exact: true };
 const YOUR_PROFILE: Step = { kind: STEP.CLICK, role: "menuitem", name: "Your profile" };
 
+// The plan's side panel widened over the task, and the count at the end of the line whose thread holds three comments, which opens it.
+const EXPAND_PANEL: Step = { kind: STEP.CLICK, role: "button", name: "Expand panel" };
+const ANSWERED_THREAD: Step = { kind: STEP.CLICK, role: "button", name: "3 comments" };
+
+// The task's Comments tab, from the side panel's own "Open a tab" (a phone's Activity), on its resolved threads.
+const SIDE_PANEL = { role: "complementary", name: "Panel" } as const;
+const RESOLVED: Step = { kind: STEP.CLICK, role: "button", name: "Resolved", exact: true };
+const TO_RESOLVED: readonly Step[] = [
+  { kind: STEP.CLICK, role: "option", name: "Comments" },
+  RESOLVED,
+];
+
+// A phone shows one of the open task's faces at a time, which its head's menu chooses.
+const PHONE_TASK_ACTIONS: Step = {
+  kind: STEP.CLICK,
+  role: "button",
+  name: "Task actions",
+  within: MAIN,
+};
+
+// The agent's transcript read back up from its newest line.
+const READ_BACK_UP: Step = { kind: STEP.SCROLL, role: "log", by: -600 };
+
 const DESKTOP_ONLY: readonly Client[] = [CLIENT.DESKTOP];
+
+/** The press on a phone's task head menu's face named `name`, which the task then shows. */
+function phoneFace(name: string): Step {
+  return { kind: STEP.CLICK, role: "menuitemcheckbox", name };
+}
 
 /**
  * The keys a press step presses on `client`. The web client presses Command
@@ -226,6 +257,39 @@ export const SCENES: readonly Scene[] = [
     profile: "tasks-transcript",
   },
   { id: "plan-work", place: PLACE.PLAN, title: "A call's work", profile: "tasks-work" },
+  // The plan's comment threads: their marks in the words, one opened from its line's count, and the resolved one in the Comments tab.
+  {
+    id: "plan-comments",
+    place: PLACE.PLAN,
+    title: "Comment marks",
+    profile: "tasks-comments",
+    steps: [EXPAND_PANEL],
+    phoneSteps: [],
+  },
+  {
+    id: "plan-comment-thread",
+    place: PLACE.PLAN,
+    title: "An open thread",
+    profile: "tasks-comments",
+    steps: [EXPAND_PANEL, ANSWERED_THREAD],
+    phoneSteps: [ANSWERED_THREAD],
+  },
+  {
+    id: "plan-comments-resolved",
+    place: PLACE.PLAN,
+    title: "A resolved thread",
+    profile: "tasks-comments",
+    steps: [
+      { kind: STEP.CLICK, role: "button", name: "Open a tab", within: SIDE_PANEL },
+      ...TO_RESOLVED,
+    ],
+    phoneSteps: [
+      PHONE_TASK_ACTIONS,
+      phoneFace("Activity"),
+      { kind: STEP.CLICK, role: "button", name: "Comments", within: MAIN },
+      RESOLVED,
+    ],
+  },
   // Chat.
   { id: "chat", place: PLACE.CHAT, title: "For you", profile: "chat" },
   // The Inbox.
@@ -288,6 +352,15 @@ export const SCENES: readonly Scene[] = [
     place: PLACE.AGENT,
     title: "Pull request",
     profile: "agent-pull-request",
+  },
+  {
+    id: "agent-transcript-scrolled",
+    place: PLACE.AGENT,
+    title: "A long transcript, scrolled up",
+    profile: "agent-transcript",
+    // Note that the agent's transcript is the window's first log, and read back up it floats the way back to its newest line.
+    steps: [READ_BACK_UP],
+    phoneSteps: [PHONE_TASK_ACTIONS, phoneFace("Agents"), READ_BACK_UP],
   },
   { id: "agent-checks", place: PLACE.AGENT, title: "Checks", profile: "agent-checks" },
   { id: "agent-files", place: PLACE.AGENT, title: "Files changed", profile: "agent-files" },
