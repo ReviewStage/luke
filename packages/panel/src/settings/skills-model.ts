@@ -72,7 +72,7 @@ export const SKILLS_LINE = {
   ABOUT:
     "Repository skills come from each repository's .agents/skills folder. Changes here reach only agents started afterwards.",
   PERSONAL: "Only you",
-  PASTED: "pasted",
+  PASTED: "Pasted",
   NONE: "No skills installed yet.",
   READ_FAILED: "Your skills could not be read.",
   ADD_SKILL: "Add skill",
