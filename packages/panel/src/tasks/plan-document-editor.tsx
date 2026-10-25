@@ -837,15 +837,17 @@ export function PlanDocumentEditor({
     [],
   );
   // The open threads' words, carried by the editor from the text it opens on, which is the plan's as saved.
+  // Note that none is handed over while no open thread has words, since an empty list would still map every marked word on each keystroke for nothing.
   const comments = usePlanCommentsControl();
-  const commentAnchors =
+  const openAnchors =
     comments === undefined || editor.draft !== task.document.body
-      ? undefined
+      ? []
       : comments.threads.flatMap((thread) =>
           thread.anchor === undefined || !openThread(thread)
             ? []
             : [{ thread: thread.id, ...thread.anchor }],
         );
+  const commentAnchors = openAnchors.length === 0 ? undefined : openAnchors;
   useTakenText(editor, editing, task, handle, handed);
   // Whether the editor's bundle has landed, which mounts the editor in the room.
   const ready = AsyncResult.isSuccess(useAtomValue(useSideBundles().planEditor));
