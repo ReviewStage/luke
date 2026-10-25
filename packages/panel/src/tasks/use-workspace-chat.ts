@@ -137,8 +137,7 @@ export interface WorkspaceChatControl {
 }
 
 /** What a card says when its answer was not taken. */
-export const CHAT_NOT_TAKEN =
-  "The ask changed before your answer landed. Answer it as it stands now.";
+const CHAT_NOT_TAKEN = "The ask changed before your answer landed. Answer it as it stands now.";
 
 interface Held {
   /** The account the chat was read for, so another account signing in starts from nothing of it. */

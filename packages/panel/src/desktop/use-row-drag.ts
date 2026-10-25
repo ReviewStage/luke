@@ -44,6 +44,13 @@
  * the handle a press must land on, so a press on a row inside a group
  * starts that row's own drag and not the group's.
  *
+ * A zone may stand only while a row is carried, as the sidebar's Pinned
+ * does while nothing is pinned: the list's owner hears the press become a
+ * drag and the drag end (`onCarried`), the first drawn before the drag
+ * looks for a zone, so the zone it draws is one the pointer can reach at
+ * once; a drop is heard in the same draw as the drag's end, so a zone the
+ * drop filled stands on rather than leaving for a frame.
+ *
  * A drop scope (an element wearing `data-row-drop-scope`: the sidebar, the
  * Board) keeps its zones to its own lists' rows, and its classes are
  * worn, boxless, around the copy, so its stylesheet's rules for a row still
@@ -148,6 +155,8 @@ export interface RowDragOptions {
   onDropOut?: ((from: number, zone: string, at: number) => void) | undefined;
   /** What a press must land in to start a drag, where a row is a group with rows of its own inside. */
   handle?: string;
+  /** Hears a press become a drag (`true`) and that drag end, dropped or put back (`false`). */
+  onCarried?: ((carried: boolean) => void) | undefined;
 }
 
 /** What the list's owner hears from a drop: the row at `from` now stands at `to`, which differs from it. */
@@ -421,11 +430,13 @@ export function useRowDrag(
 ): React.PointerEventHandler<HTMLElement> | undefined {
   const latest = useRef(onMove);
   const latestOut = useRef(options.onDropOut);
+  const latestCarried = useRef(options.onCarried);
   const release = useRef<(() => void) | undefined>(undefined);
   const abandon = useRef<(() => void) | undefined>(undefined);
   useLayoutEffect(() => {
     latest.current = onMove;
     latestOut.current = options.onDropOut;
+    latestCarried.current = options.onCarried;
   });
   // A list taken away under a drag takes its copy down with it.
   useEffect(() => () => abandon.current?.(), []);
@@ -435,6 +446,7 @@ export function useRowDrag(
 
   const begin = (list: HTMLElement, press: RowPress) => {
     const pressed = () => press.rows[press.at];
+    const carried = (now: boolean) => latestCarried.current?.(now);
     const { scroller } = press;
     // Note that the column is run along at once rather than gliding, because
     // a glide would be restarted, and cut short, by every frame.
@@ -465,6 +477,8 @@ export function useRowDrag(
         // Copied before it is marked, so the copy is lifted rather than faded.
         if (row !== undefined) press.carried = liftCopy(row, list, press.scope);
         row?.setAttribute(DRAGGING_ATTRIBUTE, "true");
+        // Drawn now, so a zone that stands only while a row is carried is there to be found.
+        flushSync(() => carried(true));
       }
       press.pointer = event.clientY;
       press.pointerX = event.clientX;
@@ -475,7 +489,9 @@ export function useRowDrag(
     };
     const putBack = () => {
       release.current?.();
-      if (press.dragging) lower(press, list, true);
+      if (!press.dragging) return;
+      lower(press, list, true);
+      carried(false);
     };
     const drop = (event: PointerEvent) => {
       if (event.pointerId !== press.pointerId) return;
@@ -487,6 +503,7 @@ export function useRowDrag(
       const now = [...list.querySelectorAll<HTMLElement>(ROW)];
       if (now.length !== press.rows.length || now.some((each, at) => each !== press.rows[at])) {
         lower(press, list, true);
+        carried(false);
         return;
       }
       // The drag is drawn where the pointer was let go, which a move may not have reported.
@@ -496,7 +513,10 @@ export function useRowDrag(
       const zone = press.zone;
       if (zone !== undefined) {
         // The row now stands in the zone's list, so it comes down there rather than settling here.
-        flushSync(() => latestOut.current?.(press.at, zone.id, zone.at));
+        flushSync(() => {
+          latestOut.current?.(press.at, zone.id, zone.at);
+          carried(false);
+        });
         lower(press, list, false);
         return;
       }
@@ -504,6 +524,7 @@ export function useRowDrag(
       // come down where that drew them, and the copy lands on the row there.
       flushSync(() => {
         if (press.to !== press.at) latest.current?.(press.at, press.to);
+        carried(false);
       });
       const copy = press.carried;
       press.carried = undefined;

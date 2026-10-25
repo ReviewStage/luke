@@ -40,6 +40,7 @@ import { DIALOG_ACTIONS_EXAMPLE } from "./examples/dialog-actions";
 import { DIALOGS_EXAMPLE } from "./examples/dialogs";
 import { DISCLOSURES_EXAMPLE } from "./examples/disclosures";
 import { DRAWER_SWIPES_EXAMPLE } from "./examples/drawer-swipes";
+import { DROP_SLOTS_EXAMPLE } from "./examples/drop-slots";
 import { EDITABLE_DOCUMENT_EXAMPLE } from "./examples/editable-document";
 import { EMPTY_STATES_EXAMPLE } from "./examples/empty-states";
 import { ERROR_LINES_EXAMPLE } from "./examples/error-lines";
@@ -194,6 +195,7 @@ export const EXAMPLES: readonly Example[] = [
   DIALOG_ACTIONS_EXAMPLE,
   DISCLOSURES_EXAMPLE,
   DRAWER_SWIPES_EXAMPLE,
+  DROP_SLOTS_EXAMPLE,
   EMPTY_STATES_EXAMPLE,
   ERROR_LINES_EXAMPLE,
   ERROR_STATES_EXAMPLE,

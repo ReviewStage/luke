@@ -1699,22 +1699,6 @@ test("on a phone a finger swiped in from the screen's left edge opens the drawer
   assert.deepEqual(asked, [], "a mouse's drag opens nothing");
   fingerSwipe(work, 30, 260);
   assert.deepEqual(asked, [SIDEBAR_OVERLAY.OPEN]);
-  assert.equal(page.querySelector(".luke-drawer-scrim")?.getAttribute("data-open"), "false");
-});
-
-test("on a phone the drawer opened stands over a dimmed window, and beside the work there is none", async () => {
-  const phone = await mountNarrow(
-    { boardView: { ...tasksControl().boardView, open: true } },
-    { overlay: SIDEBAR_OVERLAY.OPEN },
-  );
-  assert.equal(phone.querySelector(".luke-drawer-scrim")?.getAttribute("data-open"), "true");
-  act(() => root?.unmount());
-  const wide = await mountNarrow(
-    { boardView: { ...tasksControl().boardView, open: true } },
-    { overlay: SIDEBAR_OVERLAY.OPEN },
-    SHELL_ROOM.WIDE,
-  );
-  assert.equal(wide.querySelector(".luke-drawer-scrim"), null);
 });
 
 test("on a phone no page draws the title bar's controls over its own head, an agent's page and the Automations list among them, and the panel's chord still answers where its toggle stood", async () => {

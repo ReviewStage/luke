@@ -6,7 +6,7 @@ import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
-import { FOLD_HINT, TOOL_BLOCK, TOOL_STATE } from "../ai-elements/tool.js";
+import { TOOL_BLOCK, TOOL_STATE } from "../ai-elements/tool.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { restOn } from "../testing/hint-rest.js";
 import { TARGET_HINT, TOOL_TARGET } from "./tool-call-model.js";
@@ -91,8 +91,8 @@ test("a row that opens a tab and a row that folds each say on hover what a press
   const opens = hintOver(rowOf(drawn(OPENING_CALL)));
   const folds = hintOver(rowOf(drawn(FOLDING_CALL)));
 
-  assert.equal(opens, TARGET_HINT[TOOL_TARGET.PAGE]);
-  assert.equal(folds, FOLD_HINT.SHOW);
+  assert.equal(opens, "Open the page");
+  assert.equal(folds, "Show the call");
 });
 
 test("a folding row says it hides the call once it stands open", () => {
@@ -100,9 +100,9 @@ test("a folding row says it hides the call once it stands open", () => {
   act(() => row.click());
 
   assert.equal(row.getAttribute("aria-expanded"), "true");
-  assert.equal(hintOver(row), FOLD_HINT.HIDE);
+  assert.equal(hintOver(row), "Hide the call");
 });
 
 test("a worker's row that folds rather than opening its tab says it shows the call", () => {
-  assert.equal(hintOver(rowOf(drawn(FOLDING_SUBAGENT))), FOLD_HINT.SHOW);
+  assert.equal(hintOver(rowOf(drawn(FOLDING_SUBAGENT))), "Show the call");
 });

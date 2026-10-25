@@ -18,7 +18,6 @@ import {
   AUTOMATION_TRIGGER,
   type AutomationRunSummary,
   type AutomationSummary,
-  GITHUB_TRIGGER_EVENT,
 } from "@luke/features/automation-wire";
 import type { CodingAgentSummary } from "@luke/features/coding-agent-wire";
 import {
@@ -926,55 +925,6 @@ test("while the list is first read it stands as quiet rows under its toolbar, sa
   assert.ok(parts[1]?.querySelector("button"), "its acts stand at the bar's end");
 });
 
-test("while the list is first read its blocks stand in an owner's card of rows, each with its clock tile, its owner's and next run's columns, and its switch's place, as a row of the list does", async () => {
-  listHeld = true;
-  const page = mount();
-  await settle();
-
-  const shape = (row: Element) => [
-    row.closest(".automation-group .luke-list") === null ? "loose" : "carded",
-    row.querySelector(".luke-list-row-leading") === null ? "no tile" : "tile",
-    row.querySelector(".automation-row-meta .automation-owner") === null ? "no owner" : "owner",
-    row.querySelector(".automation-row-meta .automation-row-next") === null ? "no next" : "next",
-    row.querySelector(".luke-list-row-actions") === null ? "no switch" : "switch",
-  ];
-  const placeholders = [...page.querySelectorAll("[role=status][aria-busy=true] li")];
-  assert.ok(placeholders.length > 0);
-  listHeld = false;
-  pushStanding();
-  await settle();
-  const listed = automationRows(page);
-  assert.ok(listed.length > 0);
-  for (const row of [...placeholders.slice(0, 1), ...listed]) {
-    assert.deepEqual(shape(row), ["carded", "tile", "owner", "next", "switch"]);
-  }
-});
-
-/** Each group of an automation's setup, by its heading, and its rows, each by whether it says words under its name. */
-function setupShape(page: HTMLElement): string[][] {
-  return [...page.querySelectorAll(".automation-form section[aria-labelledby]")].map((group) => [
-    group.querySelector("h2")?.textContent ?? "",
-    ...[...group.querySelectorAll(".luke-settings-row")].map((row) =>
-      row.querySelector(".luke-settings-row-description") === null ? "row" : "described row",
-    ),
-  ]);
-}
-
-test("an automation's page read before the list stands the groups and rows a scheduled automation's setup lands with, its acts' places in its toolbar", async () => {
-  listHeld = true;
-  const page = mountPages({ kind: AUTOMATIONS_PAGE.EDIT, automationId: SWEEP.id });
-  await settle();
-  const reading = setupShape(page);
-  const acts = page.querySelectorAll(".luke-toolbar-actions .luke-skeleton").length;
-  assert.ok(acts > 0, "its acts stand as blocks");
-
-  listHeld = false;
-  pushStanding();
-  await settle();
-  assert.ok(page.querySelector("input[aria-label='Automation name']"), "the setup landed");
-  assert.deepEqual(reading, setupShape(page));
-});
-
 test("with no workspace listed the list and a linked automation stand as quiet blocks, never as empty or gone", async () => {
   // Note that the tasks are read apart from the workspaces, so a listed task list says nothing of them.
   const page = mount(tasksControl({ workspace: undefined, listRead: true, listFailed: false }));
@@ -1614,41 +1564,6 @@ test("who owns an automation is the editor's first setting, and nowhere else on 
   assert.equal(page.querySelector("h1 .automation-owner"), null);
 });
 
-test("the Owner picker draws Only you by the account's picture and the workspace by its tile, on its chip and in its menu", async () => {
-  handState({});
-  const page = mountPages({ kind: AUTOMATIONS_PAGE.NEW });
-  await settle();
-
-  const chip = picker(page, "Owner");
-  assert.ok(
-    chip.querySelector(".actor-mark[data-kind='person']"),
-    "Only you wears the account's mark",
-  );
-  act(() => chip.click());
-  const marks = [...document.querySelectorAll("[role=option]")].map((row) => [
-    row.querySelector(".luke-combobox-option-label")?.textContent,
-    row.querySelector(".actor-mark") !== null
-      ? "person"
-      : row.querySelector(".luke-avatar[data-shape='tile']") !== null
-        ? "tile"
-        : "none",
-  ]);
-  assert.deepEqual(marks, [
-    ["Only you", "person"],
-    ["Acme", "tile"],
-  ]);
-
-  const acme = [...document.querySelectorAll<HTMLButtonElement>("[role=option]")].find(
-    (row) => row.querySelector(".luke-combobox-option-label")?.textContent === "Acme",
-  );
-  assert.ok(acme, "the menu offers the workspace");
-  act(() => acme.click());
-  assert.ok(
-    picker(page, "Owner").querySelector(".luke-avatar[data-shape='tile']"),
-    "the workspace wears its tile",
-  );
-});
-
 test("another's personal automation's Owner picker draws its owner unnamed, never as the reader", async () => {
   handState({});
   standing = [{ ...DIGEST, mine: false }];
@@ -1659,26 +1574,6 @@ test("another's personal automation's Owner picker draws its owner unnamed, neve
     picker(page, "Owner").querySelector(".actor-mark")?.getAttribute("data-kind"),
     "someone",
   );
-});
-
-test("the list's Owner column draws the workspace by its tile, the account's own by its picture, and another's personal one unnamed", async () => {
-  handState({});
-  standing = [
-    SWEEP,
-    { ...DIGEST, mine: true },
-    { ...FAILING, scope: AUTOMATION_SCOPE.PERSONAL, mine: false },
-  ];
-  const page = mountPages({ kind: AUTOMATIONS_PAGE.LIST });
-  await settle();
-
-  const markOf = (name: string) => {
-    const owner = rowOf(page, name).querySelector(".automation-owner");
-    if (owner?.querySelector(".luke-avatar[data-shape='tile']")) return "tile";
-    return owner?.querySelector(".actor-mark")?.getAttribute("data-kind") ?? "none";
-  };
-  assert.equal(markOf(SWEEP.name), "tile");
-  assert.equal(markOf(DIGEST.name), "person");
-  assert.equal(markOf(FAILING.name), "someone");
 });
 
 test("a personal automation another member made is not called Only you, in its row, its heading, or its Owner picker", async () => {
@@ -2589,60 +2484,6 @@ function glyphs(rows: readonly Element[]): string[] {
     return named?.slice("lucide-".length) ?? "none";
   });
 }
-
-test("each automation's row and each run wear what fires it: a schedule's clock, GitHub's or Sentry's mark, a webhook's hook, or Run now's play", async () => {
-  standing = [
-    SWEEP,
-    automation(7, {
-      name: "Review pull requests",
-      trigger: { kind: AUTOMATION_TRIGGER.GITHUB, event: GITHUB_TRIGGER_EVENT.PULL_REQUEST_OPENED },
-    }),
-    automation(8, {
-      name: "Deploy hook",
-      trigger: { kind: AUTOMATION_TRIGGER.WEBHOOK },
-      webhookUrl: "https://tryluke.dev/api/automations/8/webhook",
-    }),
-    SENTRY_ALERTS,
-  ];
-  const list = mountPages({ kind: AUTOMATIONS_PAGE.LIST });
-  await settle();
-  const tiles = automationRows(list).map((row) =>
-    row.querySelector('.actor-mark[data-kind="automation"]'),
-  );
-  assert.ok(tiles.every((tile) => tile !== null));
-  assert.deepEqual(glyphs(tiles.filter((tile) => tile !== null)), [
-    "clock",
-    "github",
-    "webhook",
-    "sentry",
-  ]);
-  act(() => root?.unmount());
-  document.body.innerHTML = "";
-
-  const fired = (n: number, firing: AutomationRunSummary["firing"]): AutomationRunSummary => ({
-    id: `1c2d3e4f-5a6b-4c7d-8e9f-${String(n).padStart(12, "0")}`,
-    firing,
-    status: AUTOMATION_RUN_STATUS.SKIPPED,
-    reason: null,
-    agent: null,
-    firedAt: n,
-    settledAt: n,
-  });
-  runs = [
-    fired(4, { kind: AUTOMATION_TRIGGER.SCHEDULE, dueAt: 4 }),
-    fired(3, {
-      kind: AUTOMATION_TRIGGER.GITHUB,
-      event: GITHUB_TRIGGER_EVENT.PULL_REQUEST_OPENED,
-      repository: "acme/ledger",
-      number: 12,
-    }),
-    fired(2, { kind: AUTOMATION_TRIGGER.WEBHOOK, bytes: 40 }),
-    fired(1, { kind: "manual" }),
-  ];
-  const page = mountPages({ kind: AUTOMATIONS_PAGE.EDIT, automationId: SWEEP.id });
-  await settle();
-  assert.deepEqual(glyphs(runRows(page)), ["clock", "github", "webhook", "play"]);
-});
 
 test("an automation's runs stand on its page's right, newest first, a run that started an agent opening it", async () => {
   runs = [

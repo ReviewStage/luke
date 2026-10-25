@@ -45,6 +45,7 @@ export * from "./components/dialog/dialog-actions.js";
 export * from "./components/disclosure/disclosure.js";
 export * from "./components/drawer-swipe/drawer-scrim.js";
 export * from "./components/drawer-swipe/use-drawer-swipe.js";
+export * from "./components/drop-slot/drop-slot.js";
 export * from "./components/editable-block/editable-block.js";
 export * from "./components/editable-heading/editable-heading.js";
 export * from "./components/empty-state/empty-state.js";
