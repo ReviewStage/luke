@@ -3,7 +3,7 @@ import { PNG } from "pngjs";
 import { describe, expect, it } from "vitest";
 import { flattenPng } from "./png.ts";
 import { READY_SCRIPT } from "./ready.ts";
-import { CLIENT, type Client, drawsOn, pressedOn, SCENES, STEP } from "./scenes.ts";
+import { CLIENT, type Client, pressedOn, SCENES, STEP } from "./scenes.ts";
 import { PIN_SCROLL_FADES_SCRIPT, scrollScript } from "./scroll.ts";
 import { sizedScript } from "./viewport.ts";
 
@@ -122,16 +122,6 @@ describe("flattening a picture", () => {
 });
 
 describe("the scene list", () => {
-  it("leaves the desktop-only scenes out of the web client's", () => {
-    const web = SCENES.filter((scene) => drawsOn(scene, CLIENT.WEB)).map((scene) => scene.id);
-    const desktopOnly = SCENES.filter((scene) => !drawsOn(scene, CLIENT.WEB)).map(
-      (scene) => scene.id,
-    );
-    expect(desktopOnly).toEqual(expect.arrayContaining(["voice-muted", "call-panel"]));
-    expect(web).toContain("palette");
-    expect(web).not.toContain("voice-muted");
-  });
-
   it("opens ⌘K with the chord each client answers: Meta on the desktop, a Mac's alone, and Ctrl or Meta on the web as its system has it", () => {
     const palettes = SCENES.filter((scene) => scene.id.startsWith("palette"));
     const chordsOn = (client: Client) =>

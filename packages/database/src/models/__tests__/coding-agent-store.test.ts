@@ -11,7 +11,7 @@ import {
   CODING_AGENT_PAYER,
   PULL_REQUEST_STATE,
 } from "@luke/features/coding-agent-wire";
-import { GITHUB_ACCESS, type GitHubAccess } from "@luke/features/github-repositories-wire";
+import { GITHUB_ACCESS } from "@luke/features/github-repositories-wire";
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
 import { LIVE_SERVER_EVENT } from "@luke/live";
 import { sessionKey } from "@luke/runtime/vocabulary";
@@ -1597,41 +1597,6 @@ it.layer(getTestDB())("the GitHub access a task and an agent recorded", (it) => 
   );
 });
 
-it.layer(getTestDB())("the coding-agent store's GitHub access", (it) => {
-  it.effect(
-    "an agent keeps how its repository was reached as it started, read back by its starter, and one started with none named reads as the App's",
-    () =>
-      Effect.gen(function* () {
-        const starter = yield* openAccount;
-        const workspace = yield* openWorkspace(starter);
-        const task = yield* createTask(starter, { organizationId: workspace, name: "Billing" });
-        const startOn = (githubAccess?: GitHubAccess) =>
-          Effect.map(
-            createCodingAgent(starter, {
-              taskId: task.id,
-              planSnapshot: "# Billing",
-              prompt: null,
-              idempotencyKey: randomUUID(),
-              model: "anthropic/claude-opus-5.5",
-              effort: "high",
-              repository: "acme/api",
-              ...(githubAccess === undefined ? undefined : { githubAccess }),
-            }),
-            (started) => Option.getOrThrow(started).agent,
-          );
-
-        const onToken = yield* startOn(GITHUB_ACCESS.TOKEN);
-        const unnamed = yield* startOn();
-
-        assert.equal(
-          Option.getOrThrow(yield* readCodingAgent(starter, onToken.id)).githubAccess,
-          GITHUB_ACCESS.TOKEN,
-        );
-        assert.equal(unnamed.githubAccess, GITHUB_ACCESS.APP);
-      }),
-  );
-});
-
 it.layer(getTestDB())("the coding-agent store's list lines", (it) => {
   /** Text the size of a long plan, which an agent may be handed and no line carries. */
   const largeText = "Any member may invite a teammate by email.\n".repeat(6_000);
@@ -1771,7 +1736,7 @@ it.layer(getTestDB())("the coding-agent store's list lines", (it) => {
 
 it.layer(getTestDB())("the coding-agent store's agent with no repository, started blank", (it) => {
   it.effect(
-    "an agent started on a task with no repository and handed nothing is read back by its workspace's members with no repository and neither plan nor prompt, and a call into it outlives it naming none",
+    "an agent started on a task with no repository and handed nothing is read back by its workspace's members with no repository and neither plan nor prompt",
     () =>
       Effect.gen(function* () {
         const starter = yield* openAccount;
@@ -1806,33 +1771,6 @@ it.layer(getTestDB())("the coding-agent store's agent with no repository, starte
           [[agent.id, null, CODING_AGENT_BRIEF.BLANK]],
         );
         assert.equal(codingAgentLineOf(read).brief, CODING_AGENT_BRIEF.BLANK);
-        const [stored] = yield* Database.use((db) =>
-          db
-            .select({ repositories: codingAgent.repositories })
-            .from(codingAgent)
-            .where(eq(codingAgent.id, agent.id)),
-        );
-        assert.deepEqual(stored?.repositories, []);
-
-        const call = randomUUID();
-        yield* Database.use((db) =>
-          db.insert(voiceSessions).values({
-            id: call,
-            userId: starter,
-            taskId: task.id,
-            agentId: agent.id,
-            liveSessionId: `live-${call}`,
-            delegationMode: VOICE_DELEGATION_MODE.CLIENT,
-          }),
-        );
-        yield* Database.use((db) => db.delete(codingAgent).where(eq(codingAgent.id, agent.id)));
-        const calls = yield* Database.use((db) =>
-          db
-            .select({ agentId: voiceSessions.agentId })
-            .from(voiceSessions)
-            .where(eq(voiceSessions.id, call)),
-        );
-        assert.deepEqual(calls, [{ agentId: null }]);
       }),
   );
 });

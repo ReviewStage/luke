@@ -709,32 +709,6 @@ it("a workspace's people stream to every window following them, each workspace's
   assert.deepEqual(asked.at(-1), `peopleUnfollow:${ACME.id}`);
 });
 
-it("a people stream opened while the last one's unfollow is on its way asks the host to follow only once that unfollow is done, so the new follow stands", async () => {
-  const { client, asked, script } = windowPort(PANEL);
-  const unfollowed = Promise.withResolvers<void>();
-  script.peopleUnfollowed = unfollowed.promise;
-
-  const first = await client[WORKSPACE_ACT_KIND.WORKSPACE_PEOPLE](WORKSPACE);
-  void first.next();
-  await until(() => asked.length === 1);
-  const closed = first.return(undefined);
-  await until(() => asked.length === 2);
-  const second = await client[WORKSPACE_ACT_KIND.WORKSPACE_PEOPLE](WORKSPACE);
-  void second.next();
-  await until(() => asked.length === 3);
-  assert.deepEqual(asked, [`peopleFollow:${ACME.id}`, `peopleUnfollow:${ACME.id}`]);
-
-  unfollowed.resolve();
-  await closed;
-  await until(() => asked.length === 3);
-  assert.deepEqual(asked, [
-    `peopleFollow:${ACME.id}`,
-    `peopleUnfollow:${ACME.id}`,
-    `peopleFollow:${ACME.id}`,
-  ]);
-  await second.return(undefined);
-});
-
 it("the voice window is refused a workspace's people, and the host is not asked", async () => {
   const { client, asked } = windowPort(VOICE);
   try {

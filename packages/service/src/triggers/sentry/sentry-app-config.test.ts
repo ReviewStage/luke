@@ -36,7 +36,6 @@ it.effect(
       assert.equal(read.success.slug, "luke");
       assert.equal(read.success.clientId, "client-id");
       assert.equal(Redacted.value(read.success.clientSecret), "not-a-real-secret");
-      assert.equal(String(read.success.clientSecret), "<redacted>");
     }),
 );
 

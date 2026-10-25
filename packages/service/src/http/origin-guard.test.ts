@@ -85,7 +85,7 @@ test("a cookie POST that names no origin is refused with the hosted vocabulary's
   );
 });
 
-test("a cookie POST from a foreign origin is refused, whatever else it says", async () => {
+test("a cookie POST from a foreign origin, or one spelled other than a browser spells the deployment's own, is refused, whatever else it says", async () => {
   const guard = cookieOriginGuard(PRODUCTION);
 
   for (const origin of [
@@ -93,6 +93,9 @@ test("a cookie POST from a foreign origin is refused, whatever else it says", as
     "null",
     "http://tryluke.dev",
     "https://tryluke.dev.evil.example",
+    "https://TRYLUKE.dev",
+    "https://tryluke.dev:443",
+    "https://tryluke.dev/",
   ]) {
     assert.deepEqual(await verdict(guard, cookiePost(COOKIE_ROUTE, { origin })), REFUSED, origin);
   }
@@ -103,14 +106,6 @@ test("a cookie POST from a foreign origin is refused, whatever else it says", as
     ),
     REFUSED,
   );
-});
-
-test("an origin spelled other than a browser spells the deployment's own is refused", async () => {
-  const guard = cookieOriginGuard(PRODUCTION);
-
-  for (const origin of ["https://TRYLUKE.dev", "https://tryluke.dev:443", "https://tryluke.dev/"]) {
-    assert.deepEqual(await verdict(guard, cookiePost(COOKIE_ROUTE, { origin })), REFUSED, origin);
-  }
 });
 
 test("a cookie POST, PUT, DELETE, or PATCH from the deployment's own origin goes on to its route", async () => {
