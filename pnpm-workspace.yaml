@@ -103,6 +103,19 @@ patchedDependencies:
 # untouched. `packages/service/src/agents/agent-runtime/build.test.ts` holds
 # it. Move the patch with every `eve` bump, and delete it if eve stops writing
 # the map.
+#
+# The same patch makes a session whose Vercel sandbox is gone, or whose
+# sandbox's snapshot expired, open a fresh sandbox. eve 0.74.0 runs a
+# session's `defineSandbox` selector once, at its first open, and only resumes
+# the sandbox its state names from then on: a resume that found the sandbox
+# deleted, or whose first command Vercel refused with 410 for the lost
+# snapshot, failed every later sandbox call of the session for good. The patch
+# answers both as `SandboxSessionGoneError`, deleting what is left of the
+# sandbox, and the owning session's open then drops its state and starts
+# through the selector again, which checks the repository out anew. eve 0.83.0
+# does the same for a deleted sandbox and not for a lost snapshot; until a bump
+# carries both, `packages/service/src/agents/agent-runtime/sandbox-resume.test.ts`
+# holds it.
   eve@0.74.0: patches/eve@0.74.0.patch
 
 # `@neon/realtime-drizzle` 0.1.0 declares `drizzle-orm` `>=0.45.2 <0.46.0` as
