@@ -129,8 +129,8 @@ export interface MenuPlacement {
   y: number;
   align: MenuAlign;
   grow?: MenuGrow;
-  /** The span across of the button it drops from, where one did: a menu with no room above or below the button stands beside it rather than over it. */
-  button?: { left: number; right: number };
+  /** The box of the button it drops from, where one did: a menu with no room on its side of the button grows from the button's other side, or stands beside it, rather than over it. */
+  button?: ButtonBox;
 }
 
 /**
@@ -224,9 +224,17 @@ function layerOf(opener: HTMLElement): MenuLayer {
   return opener.closest('[aria-modal="true"]') === null ? MENU_LAYER.WINDOW : MENU_LAYER.DIALOG;
 }
 
-/** The span across of a button's box. */
-function spanOf(bounds: DOMRect): { left: number; right: number } {
-  return { left: bounds.left, right: bounds.right };
+/** The edges of the button a menu drops from. */
+interface ButtonBox {
+  left: number;
+  right: number;
+  top: number;
+  bottom: number;
+}
+
+/** A button's box as a placement keeps it. */
+function spanOf(bounds: DOMRect): ButtonBox {
+  return { left: bounds.left, right: bounds.right, top: bounds.top, bottom: bounds.bottom };
 }
 
 /** Where a menu dropped from a button hangs: under it, its right edge on the button's. */
@@ -450,32 +458,42 @@ function pointAt(x: number, y: number): { getBoundingClientRect: () => DOMRect }
   return { getBoundingClientRect: () => ({ ...box, toJSON: () => box }) };
 }
 
+/** The room a menu has from `y` to the edge of `seen` it grows toward, less the margin. */
+function roomOf(y: number, grow: MenuGrow | undefined, seen: SeenRect): number {
+  return grow === MENU_GROW.UP ? y - seen.y - MENU_MARGIN : seen.y + seen.height - MENU_MARGIN - y;
+}
+
 /**
- * How far across a menu `width` by `height` hangs from `placement` in
- * `seen`. A menu with no room for it on its side of its opener is moved
- * along until it fits (`HELD_INSIDE`), over its opener; dropped from a
- * button, it stands beside the button instead, its end the drop's gap short
- * of the button's near edge, so the button that opened it stays in sight
- * and to hand, as a system menu's does. Where there is no room beside it
- * either, or no button, it hangs where it was placed.
+ * Where a menu `width` by `height` hangs from `placement` in `seen`. A menu
+ * with no room for it on its side of its opener is moved along until it
+ * fits (`HELD_INSIDE`), over its opener. Dropped from a button, it keeps
+ * clear of the button instead, as a system menu does: it grows from the
+ * button's other side where that has the room, or else stands beside the
+ * button, its end the drop's gap short of the button's near edge. Where
+ * neither has room, or there is no button, it hangs where it was placed.
  */
-function acrossOf(
+function settledOf(
   placement: MenuPlacement,
   size: { width: number; height: number },
   seen: SeenRect,
-): number {
-  const room =
-    placement.grow === MENU_GROW.UP
-      ? placement.y - seen.y - MENU_MARGIN
-      : seen.y + seen.height - MENU_MARGIN - placement.y;
+): MenuPlacement {
   const { button } = placement;
-  if (size.height <= room || button === undefined) return placement.x;
+  if (size.height <= roomOf(placement.y, placement.grow, seen) || button === undefined) {
+    return placement;
+  }
+  const flipped =
+    placement.grow === MENU_GROW.UP
+      ? { y: button.bottom + MENU_DROP, grow: MENU_GROW.DOWN }
+      : { y: button.top - MENU_DROP, grow: MENU_GROW.UP };
+  if (size.height <= roomOf(flipped.y, flipped.grow, seen)) return { ...placement, ...flipped };
   if (placement.align === MENU_ALIGN.END) {
     const end = button.left - MENU_DROP;
-    return end - size.width >= seen.x + MENU_MARGIN ? end : placement.x;
+    return end - size.width >= seen.x + MENU_MARGIN ? { ...placement, x: end } : placement;
   }
   const start = button.right + MENU_DROP;
-  return start + size.width <= seen.x + seen.width - MENU_MARGIN ? start : placement.x;
+  return start + size.width <= seen.x + seen.width - MENU_MARGIN
+    ? { ...placement, x: start }
+    : placement;
 }
 
 /** What can be seen of the window, as the rectangle a menu is held inside. */
@@ -1063,15 +1081,17 @@ export function Menu({
   // rectangle new on every render would have Base UI place the menu again
   // on every render, and every placing renders it again.
   const seen = useMemo(() => seenRect(), [placement]);
-  // Where the menu hangs across, once it is drawn and measured: beside the button it dropped from where it must otherwise stand over it (`acrossOf`).
-  const [across, setAcross] = useState<{ placement: MenuPlacement; x: number } | undefined>();
-  const x = across?.placement === placement ? across.x : placement.x;
-  const anchor = useMemo(() => pointAt(x, placement.y), [x, placement]);
+  // Where the menu hangs, once it is drawn and measured: clear of the button it dropped from where it must otherwise stand over it (`settledOf`).
+  const [settled, setSettled] = useState<
+    { placement: MenuPlacement; hung: MenuPlacement } | undefined
+  >();
+  const hung = settled?.placement === placement ? settled.hung : placement;
+  const anchor = useMemo(() => pointAt(hung.x, hung.y), [hung]);
   useLayoutEffect(() => {
-    if (popup === null || across?.placement === placement) return;
+    if (popup === null || settled?.placement === placement) return;
     const { width, height } = popup.getBoundingClientRect();
-    setAcross({ placement, x: acrossOf(placement, { width, height }, seen) });
-  }, [popup, placement, across, seen]);
+    setSettled({ placement, hung: settledOf(placement, { width, height }, seen) });
+  }, [popup, placement, settled, seen]);
   const layer = layerOf(opener);
 
   // Focus lands on the first item, or the checked one where it opens on
@@ -1155,7 +1175,7 @@ export function Menu({
         aria-label={label}
         layer={layer}
         anchor={anchor}
-        side={placement.grow === MENU_GROW.UP ? "top" : "bottom"}
+        side={hung.grow === MENU_GROW.UP ? "top" : "bottom"}
         align={placement.align === MENU_ALIGN.END ? "end" : "start"}
         sideOffset={0}
         collisionBoundary={seen}

@@ -941,6 +941,18 @@ test("a menu with no room above or below the ⋯ it dropped from stands beside t
   expect(left + 160).toBeLessThanOrEqual(more.left);
 });
 
+test("a menu with no room below the ⋯ it dropped from, and room above, stands wholly above the ⋯", async () => {
+  desktopWindow();
+  // The ⋯ at a row's right end near the window's foot, under a menu 300px tall.
+  const more = new DOMRect(900, 690, 24, 24);
+  menusMeasure(160, 300, (element) => (element.textContent === "More" ? more : undefined));
+  mount(createElement(Harness, { groups: taskGroups([]) }));
+  act(() => button("More").click());
+  const [left = "", top = ""] = (await hungAt()) ?? [];
+  expect(Number.parseFloat(top) + 300).toBeLessThanOrEqual(more.top);
+  expect(Number.parseFloat(left) + 160).toBe(more.right);
+});
+
 test("a menu too tall for the room over a bar it keeps clear of stands above the bar", async () => {
   desktopWindow();
   // A phone's places bar across the window's foot, its top 60px up.
