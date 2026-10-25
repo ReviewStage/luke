@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import { it } from "@effect/vitest";
 import { INBOX_SCOPE_KIND } from "@luke/features/coding-agent-view";
 import { CODING_AGENT_STATUS, type CodingAgentSummary } from "@luke/features/coding-agent-wire";
 import {
@@ -14,16 +15,19 @@ import {
 import type { Task } from "@luke/features/task-wire";
 import { sameTab, TAB_WORDS } from "@luke/ui/tab-strip-model";
 import { DOCUMENT_REGION, TASKS_PAGE } from "@luke/ui/tasks-model";
-import { Effect } from "effect";
+import { Clock, Context, Effect } from "effect";
+import * as AsyncResult from "effect/reactivity/AsyncResult";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
+import { TestClock } from "effect/testing";
 import { act, createElement, Fragment } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeAll, beforeEach, test } from "vitest";
+import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
 import { useDraftsOwner } from "./composer-drafts.js";
 import { DesktopSidebar } from "./desktop/desktop-sidebar.js";
 import { DesktopTasks } from "./desktop/desktop-tasks.js";
 import { SidebarTask } from "./desktop/task-actions.js";
 import { DRAFT_WORD } from "./draft-mark.js";
+import { rendererRuntime } from "./renderer-runtime.js";
 import {
   type AgentComposerControl,
   type MessageSender,
@@ -109,6 +113,7 @@ afterEach(() => {
   for (const root of roots.splice(0)) act(() => root.unmount());
   document.body.innerHTML = "";
   window.localStorage.clear();
+  vi.restoreAllMocks();
 });
 
 async function settle(): Promise<void> {
@@ -127,6 +132,13 @@ interface Identity {
 function SignedIn({ account }: { account: Identity | undefined }): null {
   useDraftsOwner(account);
   return null;
+}
+
+/** The developer moving to another window, which takes the focus from this one, as a window's own blur says. */
+function leaveWindow(): void {
+  act(() => {
+    window.dispatchEvent(new Event("blur"));
+  });
 }
 
 const DEAN = { id: "user-dean", email: "dean@example.com" } as const;
@@ -262,6 +274,76 @@ test("an agent's tab wears the Draft pencil while another of its task's tabs is 
   assert.equal(app.tabDrafted(INVITES.agent.title ?? ""), false);
 });
 
+/** A registry whose atoms wait on this clock, as the window's wait on its own. */
+function registryOn(clock: Clock.Clock): AtomRegistry.AtomRegistry {
+  return AtomRegistry.make({
+    initialValues: [[rendererRuntime, AsyncResult.success(Context.make(Clock.Clock, clock))]],
+  });
+}
+
+/** Longer than the typing rests before the drafts are written to storage. */
+const PAST_STORE_PAUSE = "300 millis";
+
+/** The words storage keeps, draft by draft. */
+function keptWords(): readonly string[] {
+  const kept: { text: string }[] = JSON.parse(
+    window.localStorage.getItem("luke.composerDrafts") ?? "[]",
+  );
+  return kept.map((entry) => entry.text);
+}
+
+/** Every write of the drafts to storage from here on, by the words it kept. */
+function draftWrites(): () => readonly (readonly string[])[] {
+  const writes: (readonly string[])[] = [];
+  const write = Storage.prototype.setItem;
+  vi.spyOn(Storage.prototype, "setItem").mockImplementation(function (
+    this: Storage,
+    key: string,
+    value: string,
+  ) {
+    write.call(this, key, value);
+    if (key === "luke.composerDrafts") writes.push(keptWords());
+  });
+  return () => writes;
+}
+
+it.effect(
+  "a burst of keys is held at once and written to storage once, after the typing rests",
+  () =>
+    Effect.gen(function* () {
+      const writes = draftWrites();
+      const app = windowOn(registryOn(yield* Clock.Clock));
+      yield* Effect.promise(() => app.show(INVITES, { account: DEAN }));
+
+      for (const keys of ["Expire", " invites", " after", " a week"]) {
+        typeInComposer(app.container, keys);
+        yield* Effect.promise(settle);
+        yield* TestClock.adjust("100 millis");
+      }
+      assert.equal(app.box(), "Expire invites after a week", "the box holds every key at once");
+      assert.deepEqual(writes(), [], "nothing is written while the keys come");
+
+      yield* TestClock.adjust(PAST_STORE_PAUSE);
+      yield* Effect.promise(settle);
+      assert.deepEqual(writes(), [["Expire invites after a week"]], "the burst is written once");
+    }),
+);
+
+it.effect("words not yet written reach storage at once as the window is closed", () =>
+  Effect.gen(function* () {
+    const app = windowOn(registryOn(yield* Clock.Clock));
+    yield* Effect.promise(() => app.show(INVITES, { account: DEAN }));
+    typeInComposer(app.container, "Expire invites");
+    yield* Effect.promise(settle);
+    assert.deepEqual(keptWords(), [], "the typing has not rested");
+
+    act(() => {
+      window.dispatchEvent(new Event("pagehide"));
+    });
+    assert.deepEqual(keptWords(), ["Expire invites"]);
+  }),
+);
+
 test("a draft outlasts a reload of the window, words and mark alike", async () => {
   const before = windowOn(AtomRegistry.make());
   await before.show(INVITES);
@@ -384,7 +466,9 @@ test("past the most drafts kept, the oldest written goes, whosever it is, and th
 
   typeInComposer(app.container, "Monthly, not weekly");
   await settle();
-  assert.equal(app.rowDrafted(INVITES.plan.name), false, "the oldest is let go at once");
+  leaveWindow();
+  await settle();
+  assert.equal(app.rowDrafted(INVITES.plan.name), false, "the oldest is let go as it is written");
   for (const root of roots.splice(0)) act(() => root.unmount());
 
   const sam = windowOn(AtomRegistry.make());
@@ -789,6 +873,7 @@ async function inboxOn(item: InboxItem) {
         createElement(
           Fragment,
           null,
+          createElement(SignedIn, { account: undefined }),
           createElement(
             "ul",
             null,
@@ -852,9 +937,12 @@ function tasklessItem(agentId: string, id: string, revision: number): InboxItem 
 
 /** An agent's own inbox with no task, followed as the Inbox page follows it, pushed as `items`. */
 async function tasklessInbox(agentId: string, items: readonly InboxItem[]) {
+  // Another window opening takes the focus from those before it.
+  leaveWindow();
   const main = followedInboxes(() => ({ items }));
   let control: TaskInboxControl | undefined;
   function Probe(): null {
+    useDraftsOwner(undefined);
     control = useTaskInbox({
       taskId: agentId,
       kind: INBOX_SCOPE_KIND.AGENT,
@@ -979,7 +1067,8 @@ test("files attached in this window stay as its draft when another window lets t
   act(() => box().setDraft("Review this"));
   act(() => box().setAttachments((held) => [...held, notes]));
 
-  // The other window let the words go, which is all of the draft storage holds.
+  // The other window, where the developer went, let the words go, which is all of the draft storage holds.
+  leaveWindow();
   window.localStorage.setItem("luke.composerDrafts", JSON.stringify([]));
   act(() => {
     window.dispatchEvent(new StorageEvent("storage", { key: "luke.composerDrafts" }));

@@ -9,10 +9,11 @@ import {
   inboxFormValueSchema,
 } from "@luke/features/inbox-wire";
 import { PLAN_COMMENT_SCOPE } from "@luke/features/plan-comment-wire";
-import { Equal, Schema } from "effect";
+import { Duration, Effect, Equal, Schema } from "effect";
 import { Atom } from "effect/reactivity";
 import { useEffect, useLayoutEffect, useMemo, useRef } from "react";
 import { readKept, writeKept } from "./kept-storage.js";
+import { rendererRuntime } from "./renderer-runtime.js";
 
 /**
  * composer-drafts.ts -- what the developer typed in a box and has not sent, kept per destination on this Mac, so switching away and back finds it where it was left.
@@ -53,7 +54,11 @@ import { readKept, writeKept } from "./kept-storage.js";
  * brings the words back without them. The store keeps the latest
  * `MAX_KEPT` drafts, so one left on an agent long gone is let go in time.
  * Note that a write starts from what storage holds, as the looks' does,
- * because another panel's window keeps its drafts there too.
+ * because another panel's window keeps its drafts there too. A change is the
+ * window's at once and reaches storage once the typing rests
+ * (`STORE_PAUSE`), or sooner where the box loses focus, the window is hidden
+ * or closed, or another account signs in to it, so a burst of keys reads and
+ * writes the whole store once rather than on every key.
  */
 
 /** Where the drafts are kept in the renderer's storage. */
@@ -61,6 +66,9 @@ const STORAGE_KEY = "luke.composerDrafts";
 
 /** How many drafts are kept at most, the oldest written let go first. */
 const MAX_KEPT = 200;
+
+/** How long the typing rests before what the window changed is written to storage. */
+const STORE_PAUSE = Duration.millis(300);
 
 /** What a draft is written to: a started agent, a plan's agent not yet started, an inbox item, a task not yet started, an automation's helper not yet started, a chat's channel or thread, an Inbox thread not yet started, a plan's comment, a line comment on an agent's changed file, an agent's line written again, or a chat message's ask. */
 export const DRAFT_PLACE = {
@@ -340,6 +348,35 @@ function storedAs(owner: Owner, kept: KeptDraft, entry: StoredDraft): boolean {
   );
 }
 
+/** A draft as storage keeps it, a card's picks only where it holds some. */
+function entryOf(
+  owner: Owner,
+  { place, text, choices, values, steps = [], press, title = "", to, dropped = [] }: KeptDraft,
+): StoredDraft {
+  return {
+    accountId: owner,
+    place,
+    text,
+    ...(choices.length === 0 ? undefined : { choices }),
+    ...(values.length === 0 ? undefined : { values }),
+    ...(steps.length === 0 ? undefined : { steps }),
+    ...(press === undefined ? undefined : { press }),
+    ...(title === "" ? undefined : { title }),
+    ...(to === undefined ? undefined : { to }),
+    ...(dropped.length === 0 ? undefined : { dropped }),
+  };
+}
+
+/** Whether two of the owner's drafts for one place hold the same that storage keeps, none and one of files alone alike. */
+function sameStored(
+  owner: Owner,
+  one: KeptDraft | undefined,
+  other: KeptDraft | undefined,
+): boolean {
+  if (one === undefined || !stored(one)) return other === undefined || !stored(other);
+  return other !== undefined && storedAs(owner, one, entryOf(owner, other));
+}
+
 /**
  * Keeps the owner's drafts beside every other account's, in the order they
  * were written: an entry unchanged stands where it stood and one written
@@ -355,18 +392,7 @@ function writeDrafts(owner: Owner, drafts: readonly KeptDraft[]): readonly KeptD
   );
   const written = kept
     .filter((draft) => !standing.some((entry) => storedAs(owner, draft, entry)))
-    .map(({ place, text, choices, values, steps = [], press, title = "", to, dropped = [] }) => ({
-      accountId: owner,
-      place,
-      text,
-      ...(choices.length === 0 ? undefined : { choices }),
-      ...(values.length === 0 ? undefined : { values }),
-      ...(steps.length === 0 ? undefined : { steps }),
-      ...(press === undefined ? undefined : { press }),
-      ...(title === "" ? undefined : { title }),
-      ...(to === undefined ? undefined : { to }),
-      ...(dropped.length === 0 ? undefined : { dropped }),
-    }));
+    .map((draft) => entryOf(owner, draft));
   const entries = [...standing, ...written].slice(-MAX_KEPT);
   writeKept(STORAGE_KEY, storedDrafts, entries);
   return drafts.filter(
@@ -384,20 +410,160 @@ function withDraft(
   return holds(draft) ? [...others, { ...draft, place }] : others;
 }
 
-/** A change to the drafts: one place's draft moved on from what it holds, or the drafts a predicate names let go. */
+/** A change to the drafts: one place's draft moved on from what it holds, the drafts a predicate names let go, what the window changed written to storage, or storage read again. */
 type DraftChange =
   | { readonly place: DraftPlace; readonly next: (was: Draft) => Draft }
   | { readonly drop: (place: DraftPlace) => boolean }
+  | { readonly store: true }
   | { readonly reread: true };
 
+/** Writes to storage what the window changed and has not written yet. */
+const STORE: DraftChange = { store: true };
+
+/** Reads storage again, and writes beside it what the window changed and has not written yet where no other window wrote over it since. */
+const REREAD: DraftChange = { reread: true };
+
+/** A place the window set and has not written, and its draft as storage held it before, none where it held none. */
+interface UnstoredPlace {
+  readonly place: DraftPlace;
+  readonly was: KeptDraft | undefined;
+}
+
+/** What a window changed in an account's drafts and has not written to storage: the places it set, the latest set last, and what it let go. */
+interface Unstored {
+  readonly places: readonly UnstoredPlace[];
+  readonly drops: readonly ((place: DraftPlace) => boolean)[];
+}
+
+const NOTHING_UNSTORED: Unstored = { places: [], drops: [] };
+
+/** What the window changed in one account's drafts and has not written to storage yet. */
+const unstoredOf = Atom.family((_owner: Owner) =>
+  Atom.keepAlive(Atom.make<Unstored>(NOTHING_UNSTORED)),
+);
+
 /**
- * Every draft one account holds, in an atom of its own. Note that a write
- * keeps the words of every other place as storage holds them, and the files
- * as this window does, since storage holds none, with a draft of files alone
- * this window's own; each draft unchanged is the very one it was, so a box
- * reading another place's draft does not draw again. Each account's atom is
- * kept alive, because the files live nowhere else while no box is open, and
- * is its own, so nothing one account attached reaches another's box.
+ * The wait before one account's drafts are written to storage, as an atom
+ * whose work is the pause and then the write: setting it again starts the
+ * pause over and lets go of the one standing, so a burst of keys writes once,
+ * after the last. Note that it is not lazy, because nothing reads it: the
+ * wait runs as soon as it is set.
+ */
+const storeLaterOf = Atom.family((owner: Owner) =>
+  Atom.keepAlive(
+    Atom.setLazy(
+      rendererRuntime.fn((_: undefined, get) =>
+        Effect.sleep(STORE_PAUSE).pipe(
+          Effect.andThen(Effect.sync(() => get.set(draftsOf(owner), STORE))),
+        ),
+      ),
+      false,
+    ),
+  ),
+);
+
+/**
+ * The owner's drafts as storage holds them, the files beside them as this
+ * window holds them, since storage holds none, with a draft of files alone
+ * this window's own; each draft unchanged is the very one `held` holds.
+ */
+function readBeside(owner: Owner, held: readonly KeptDraft[]): readonly KeptDraft[] {
+  const read = readDrafts(owner).map((kept) => {
+    const was = held.find((each) => Equal.equals(each.place, kept.place));
+    if (was === undefined) return kept;
+    return Equal.equals({ ...was, attachments: [] }, kept)
+      ? was
+      : { ...kept, attachments: was.attachments };
+  });
+  // Note that files storage has no word of stay as a draft of files alone, even where another
+  // window let the words beside them go, because they live in this window and nowhere else.
+  const filesAlone = held
+    .filter(
+      (kept) =>
+        kept.attachments.length > 0 && !read.some((each) => Equal.equals(each.place, kept.place)),
+    )
+    .map((kept) => ({ ...EMPTY_DRAFT, place: kept.place, attachments: kept.attachments }));
+  return [...filesAlone, ...read];
+}
+
+/**
+ * What storage holds with the window's unwritten changes laid over it: what
+ * they let go let go, and each place they set as the window holds it, moved
+ * last. Note that a place the window did not change stands as storage holds
+ * it, because another window may have written it since.
+ */
+function withUnstored(
+  standing: readonly KeptDraft[],
+  held: readonly KeptDraft[],
+  unstored: Unstored,
+): readonly KeptDraft[] {
+  return unstored.places.reduce<readonly KeptDraft[]>(
+    (drafts, { place }) =>
+      withDraft(drafts, place, held.find((kept) => Equal.equals(kept.place, place)) ?? EMPTY_DRAFT),
+    standing.filter((kept) => !unstored.drops.some((drop) => drop(kept.place))),
+  );
+}
+
+/** A change to one place, or a drop, as `DraftChange` names them. */
+type DraftEdit = Exclude<DraftChange, { readonly store: true } | { readonly reread: true }>;
+
+/** The drafts the window holds once `edit` lands on them. */
+function edited(held: readonly KeptDraft[], edit: DraftEdit): readonly KeptDraft[] {
+  if ("drop" in edit) return held.filter((kept) => !edit.drop(kept.place));
+  const was = held.find((kept) => Equal.equals(kept.place, edit.place)) ?? EMPTY_DRAFT;
+  return withDraft(held, edit.place, edit.next(was));
+}
+
+/** What the window holds unwritten once `edit` lands: a place set moves last and keeps what storage held before its first change. */
+function unstoredAfter(unstored: Unstored, held: readonly KeptDraft[], edit: DraftEdit): Unstored {
+  if ("drop" in edit) return { ...unstored, drops: [...unstored.drops, edit.drop] };
+  const standing = unstored.places.find(({ place }) => Equal.equals(place, edit.place));
+  const was =
+    standing === undefined
+      ? held.find((kept) => Equal.equals(kept.place, edit.place))
+      : standing.was;
+  return {
+    ...unstored,
+    places: [...unstored.places.filter((each) => each !== standing), { place: edit.place, was }],
+  };
+}
+
+/**
+ * What the window holds unwritten that still stands once storage is read
+ * again: each place set where storage holds what it held before the window
+ * changed it. Note that a place another window wrote since is taken as that
+ * window wrote it, because its words are the later.
+ */
+function unstoredBeside(
+  owner: Owner,
+  unstored: Unstored,
+  standing: readonly KeptDraft[],
+): Unstored {
+  return {
+    ...unstored,
+    places: unstored.places.filter(({ place, was }) =>
+      sameStored(
+        owner,
+        was,
+        standing.find((kept) => Equal.equals(kept.place, place)),
+      ),
+    ),
+  };
+}
+
+/** Whether the window holds nothing unwritten. */
+function nothingUnstored(unstored: Unstored): boolean {
+  return unstored.places.length === 0 && unstored.drops.length === 0;
+}
+
+/**
+ * Every draft one account holds, in an atom of its own. A change is held at
+ * once and written to storage once the typing rests (`storeLaterOf`), or
+ * sooner where a store is asked for; the write starts from what storage
+ * holds, so another window's words at a place this one did not change stand.
+ * Each account's atom is kept alive, because the files live nowhere else
+ * while no box is open, and is its own, so nothing one account attached
+ * reaches another's box.
  */
 const draftsOf = Atom.family((owner: Owner) => {
   const self: Atom.Writable<readonly KeptDraft[], DraftChange> = Atom.keepAlive(
@@ -405,39 +571,23 @@ const draftsOf = Atom.family((owner: Owner) => {
       () => readDrafts(owner),
       (ctx, change: DraftChange) => {
         const held = ctx.get(self);
-        const read = readDrafts(owner).map((kept) => {
-          const was = held.find((each) => Equal.equals(each.place, kept.place));
-          if (was === undefined) return kept;
-          return Equal.equals({ ...was, attachments: [] }, kept)
-            ? was
-            : { ...kept, attachments: was.attachments };
-        });
-        // Note that files storage has no word of stay as a draft of files alone, even where another
-        // window let the words beside them go, because they live in this window and nowhere else.
-        const filesAlone = held
-          .filter(
-            (kept) =>
-              kept.attachments.length > 0 &&
-              !read.some((each) => Equal.equals(each.place, kept.place)),
-          )
-          .map((kept) => ({ ...EMPTY_DRAFT, place: kept.place, attachments: kept.attachments }));
-        const standing = [...filesAlone, ...read];
-        // A read again takes what another window or a move wrote, and writes nothing of its own.
-        if ("reread" in change) {
-          ctx.setSelf(standing);
+        const unstored = ctx.get(unstoredOf(owner));
+        if ("drop" in change || "place" in change) {
+          ctx.setSelf(edited(held, change));
+          ctx.set(unstoredOf(owner), unstoredAfter(unstored, held, change));
+          ctx.set(storeLaterOf(owner), undefined);
           return;
         }
-        const next =
-          "drop" in change
-            ? standing.filter((kept) => !change.drop(kept.place))
-            : withDraft(
-                standing,
-                change.place,
-                change.next(
-                  standing.find((kept) => Equal.equals(kept.place, change.place)) ?? EMPTY_DRAFT,
-                ),
-              );
-        ctx.setSelf(writeDrafts(owner, next));
+        // A store with nothing unwritten reads nothing, so a pause ending after a flush costs nothing.
+        if ("store" in change && nothingUnstored(unstored)) return;
+        const standing = readBeside(owner, held);
+        const writing = "reread" in change ? unstoredBeside(owner, unstored, standing) : unstored;
+        ctx.set(unstoredOf(owner), NOTHING_UNSTORED);
+        ctx.setSelf(
+          nothingUnstored(writing)
+            ? standing
+            : writeDrafts(owner, withUnstored(standing, held, writing)),
+        );
       },
     ),
   );
@@ -491,19 +641,41 @@ export function useDraftsOwner(
   const id = account?.id;
   const email = account?.email;
   useLayoutEffect(() => {
+    // What the account signed in until now typed is written as its own before another's are read.
+    change(STORE);
     if (id !== undefined && email !== undefined) adoptDrafts(email, id);
     own(id ?? email ?? null);
     // Note that the account's drafts are read again, because a window that held them before may
     // hold them as they stood then, before a move from its address added to them.
-    change({ reread: true });
+    change(REREAD);
   }, [own, change, id, email]);
   // Another panel's window writing the drafts is read at once, so a box never types over its words.
   useEffect(() => {
     const heard = (event: StorageEvent) => {
-      if (event.key === STORAGE_KEY) change({ reread: true });
+      if (event.key === STORAGE_KEY) change(REREAD);
     };
     window.addEventListener("storage", heard);
     return () => window.removeEventListener("storage", heard);
+  }, [change]);
+  // Note that what the window holds unwritten is written at once wherever the words could be lost
+  // or read elsewhere before the typing rests: the box losing focus, the window losing it, hidden,
+  // or closed, a quit's included, and the window's root going.
+  useEffect(() => {
+    const store = () => change(STORE);
+    const hidden = () => {
+      if (document.visibilityState === "hidden") store();
+    };
+    window.addEventListener("focusout", store);
+    window.addEventListener("blur", store);
+    window.addEventListener("pagehide", store);
+    document.addEventListener("visibilitychange", hidden);
+    return () => {
+      window.removeEventListener("focusout", store);
+      window.removeEventListener("blur", store);
+      window.removeEventListener("pagehide", store);
+      document.removeEventListener("visibilitychange", hidden);
+      store();
+    };
   }, [change]);
 }
 
@@ -541,6 +713,14 @@ export interface DraftControl {
   readonly update: (next: (was: Draft) => Draft) => void;
 }
 
+/**
+ * Writes what the window holds unwritten as a box that writes drafts goes,
+ * so whatever reads them next, here or after a relaunch, finds its words.
+ */
+function useStoreOnLeave(change: (change: DraftChange) => void): void {
+  useEffect(() => () => change(STORE), [change]);
+}
+
 /** The draft kept for `place`, empty where none is. */
 export function useDraft(place: DraftPlace): DraftControl {
   const draft = useAtomValue(
@@ -548,6 +728,7 @@ export function useDraft(place: DraftPlace): DraftControl {
     (drafts) => drafts.find((kept) => Equal.equals(kept.place, place)) ?? EMPTY_DRAFT,
   );
   const change = useAtomSet(draftsAtom);
+  useStoreOnLeave(change);
   return { draft, update: (next) => change({ place, next }) };
 }
 
@@ -644,6 +825,7 @@ export interface DraftWriter {
 /** The draft writer, for an owner that reads its drafts on its own, the same one for as long as the window's registry stands. */
 export function useDraftWriter(): DraftWriter {
   const change = useAtomSet(draftsAtom);
+  useStoreOnLeave(change);
   return useMemo(
     () => ({ update: (place, next) => change({ place, next }), drop: (drop) => change({ drop }) }),
     [change],
