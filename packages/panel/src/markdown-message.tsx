@@ -1,4 +1,5 @@
 import { keySpansIn } from "@luke/features/workspace-key";
+import { SEARCH_MATCH_CLASS } from "@luke/ui";
 import { gluedRun, LINK_GLUE } from "@luke/ui/link-glue";
 import {
   MARKDOWN_LOOK,
@@ -300,9 +301,6 @@ const drawEdit =
 type HastElement = Element;
 type HastElementChild = ElementContent;
 
-/** The class a search's words are marked with, as `search-field.tsx`'s `Highlighted` marks them. */
-const SEARCH_MATCH_CLASS = "search-match";
-
 /** One run of text with the words a search asks for marked where they landed. */
 function foundIn(text: HastText, tokens: readonly string[]): readonly HastElementChild[] {
   const ranges = matchRanges(text.value, tokens);
@@ -315,7 +313,7 @@ function foundIn(text: HastText, tokens: readonly string[]): readonly HastElemen
     parts.push({
       type: "element",
       tagName: "mark",
-      properties: { className: [SEARCH_MATCH_CLASS] },
+      properties: { className: SEARCH_MATCH_CLASS.split(" ") },
       children: [{ type: "text", value: text.value.slice(range.start, range.end) }],
     });
     from = range.end;

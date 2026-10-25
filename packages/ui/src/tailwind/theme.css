@@ -208,6 +208,23 @@
     }
   }
 
+  /* The panel's shell (`../components/sidebar/`, `row-mark/`, `search-match/`,
+     and the panel's own call card, settings rows, and mobile bar): a row's
+     end mark, the sidebar's head and its corner, a settings row's inset and
+     least heights, the handover's field chip, and the room a settings search
+     lands a line below. A search's wash and a name at a dialog's size are the
+     rows' block's (`match`, `dialog-size`). */
+  --spacing-row-mark: 14px; /* off-scale: a mark a size under the glyph it follows */
+  --spacing-section-gap: var(--luke-section-gap);
+  --tracking-identity: -0.01em; /* off-scale: a name set at a dialog's size, drawn in */
+  --radius-luke-14: var(--luke-radius-14);
+  --spacing-settings-row-block: var(--luke-settings-row-block);
+  --spacing-settings-row-inline: var(--luke-settings-row-inline);
+  --spacing-settings-row: var(--luke-settings-row-min-height);
+  --spacing-settings-row-pair: var(--luke-space-32);
+  --spacing-heir-least: 220px; /* off-scale: a field chip wide enough for a name */
+  --spacing-settings-search-clearance: calc(var(--luke-space-32) + 3 * var(--luke-control-height));
+
   /* The overlays' roles (`../shadcn/dialog.tsx`, `popover.tsx`, `tooltip.tsx`,
      `hover-card.tsx`): the dimmed window, the surface a card or a menu
      stands on and its hairline, the dark pill, their corners, lifts, and
@@ -596,7 +613,7 @@
   --spacing-glyph: var(--luke-glyph-size, var(--luke-space-16));
   --color-shortcut-ink: var(--luke-shortcut-ink, var(--luke-color-text-muted));
   --text-shortcut: var(--luke-shortcut-text, var(--luke-type-caption-size));
-  --spacing-working-mark: var(--luke-working-mark-size, var(--luke-space-12));
+  --spacing-working-mark: var(--luke-working-mark-size, var(--luke-space-16));
   --color-mark-strip-ink: var(--luke-mark-strip-ink);
   --spacing-thinking-dot: 5px; /* off-scale: a wait's dot */
   --color-code: var(--luke-color-code-text);
@@ -662,7 +679,6 @@
   /* The panel's task surfaces (`@luke/panel`'s tasks.css, moving onto
      utilities): the gaps a line's parts and a pane's groups stand apart by,
      and the weights words are set in where no type role names them. */
-  --spacing-section-gap: var(--luke-section-gap);
   --font-weight-luke-regular: var(--luke-weight-regular);
   --font-weight-luke-medium: var(--luke-weight-medium);
   --font-weight-luke-semibold: var(--luke-weight-semibold);
@@ -676,7 +692,6 @@
      button floats on there; and the line of an address that opens nothing. */
   --spacing-content-inset: var(--content-inset);
   --spacing-bubble: 95%; /* off-scale: a share of the column */
-  --radius-luke-14: var(--luke-radius-14);
   --spacing-transcript-gutter: var(--transcript-gutter);
   --spacing-tool-chip: var(--luke-inline-ref-pill-width);
   --spacing-conversation-empty: 280px; /* off-scale: a short line's measure */

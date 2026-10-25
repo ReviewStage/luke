@@ -226,7 +226,7 @@ export function CallStartMarker({
               </span>
             </Text>
             {live ? (
-              <span className="inline-flex items-center gap-tight-gap font-luke-semibold text-complete before:size-luke-6 before:rounded-luke-full before:bg-current">
+              <span className="inline-flex items-center gap-tight-gap font-luke-semibold text-working before:size-luke-6 before:rounded-luke-full before:bg-current">
                 {CALL_MARKER_WORDS.LIVE}
               </span>
             ) : null}

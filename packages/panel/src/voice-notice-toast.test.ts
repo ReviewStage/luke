@@ -7,11 +7,13 @@ import {
   type VoiceFailure,
   type VoiceRemedy,
 } from "@luke/features/words";
+import { SpeakerIcon } from "@luke/ui";
 import type { VoiceSpeakers } from "@luke/voice/voice-view";
 import { Duration } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment } from "react";
 import { createRoot, type Root } from "react-dom/client";
+import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, test, vi } from "vitest";
 import { onRegistry } from "./testing/copy-feedback.js";
 import { TOAST_HOLD, ToastHost } from "./toast.js";
@@ -210,7 +212,7 @@ test("a temporary unavailability stands as a notice, said politely rather than a
   assert.equal(said("alert"), "");
 });
 
-test("while Luke speaks into a Mac whose output is off, a toast says so, politely, with a Hide that quiets it", () => {
+test("while Luke speaks into a Mac whose output is off, a toast says so, politely, led by the speaker, with a Hide that quiets it", () => {
   const dismissed: string[] = [];
   drawn({
     speakers: LUKE_SPEAKING,
@@ -219,6 +221,8 @@ test("while Luke speaks into a Mac whose output is off, a toast says so, politel
   });
   assert.deepEqual(standing(), [HINT]);
   assert.equal(said("status"), HINT);
+  const glyph = document.querySelector(".luke-toast:not([data-leaving]) .luke-toast-glyph");
+  assert.equal(glyph?.innerHTML.includes(renderToStaticMarkup(createElement(SpeakerIcon))), true);
   act(() => toastControl("Hide").click());
   assert.deepEqual(dismissed, ["got it"]);
 });
