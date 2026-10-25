@@ -117,6 +117,7 @@ import { SLIDER_EXAMPLE } from "./examples/slider";
 import { SOCIAL_SIGN_IN_EXAMPLE } from "./examples/social-sign-in";
 import { SPINNERS_EXAMPLE } from "./examples/spinners";
 import { SPLIT_BUTTONS_EXAMPLE } from "./examples/split-buttons";
+import { STREAM_DIVIDERS_EXAMPLE } from "./examples/stream-dividers";
 import { SWATCHES_EXAMPLE } from "./examples/swatches";
 import { SWITCHES_EXAMPLE } from "./examples/switches";
 import { TAB_NOTICES_EXAMPLE } from "./examples/tab-notices";
@@ -239,6 +240,7 @@ export const EXAMPLES: readonly Example[] = [
   RECT_FLOAT_EXAMPLE,
   NAV_ITEMS_EXAMPLE,
   NOTE_LINES_EXAMPLE,
+  STREAM_DIVIDERS_EXAMPLE,
   ONE_LINE_EXAMPLE,
   OVER_PANES_EXAMPLE,
   PAGINATION_EXAMPLE,
