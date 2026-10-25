@@ -57,7 +57,13 @@ function shellIn(room: "wide" | "narrow") {
 
 test("a narrow room's full-bleed work column stands on the sheet's ground, as a wide room's sheet does, not on the frame", () => {
   const wide = shellIn("wide");
-  const sheet = declared(wide.main, "background");
+  // A wide room's work column draws its sheet beneath it, under its row on the frame; Settings' page is the sheet itself.
+  wide.main.remove();
+  const settings = wide.shell.appendChild(document.createElement("div"));
+  settings.className = "desktop-settings";
+  const page = settings.appendChild(document.createElement("section"));
+  page.className = "settings-page";
+  const sheet = declared(page, "background");
   const frame = declared(wide.shell, "background");
   document.body.replaceChildren();
   const narrow = shellIn("narrow");
@@ -65,4 +71,24 @@ test("a narrow room's full-bleed work column stands on the sheet's ground, as a 
   assert.notEqual(sheet, "");
   assert.notEqual(sheet, frame);
   assert.equal(declared(narrow.main, "background"), sheet);
+});
+
+test("a wide room's page without tabs stands its top row on the frame as a page with tabs does, one row high with no gap over it, its sheet beneath the row rather than its ground", () => {
+  for (const collapsed of [false, true]) {
+    const geometry = (tabbed: boolean) => {
+      const { shell, main } = shellIn("wide");
+      document.documentElement.setAttribute("data-luke-profile", PROFILE.DESKTOP);
+      shell.dataset.sidebarCollapsed = String(collapsed);
+      if (tabbed) main.appendChild(document.createElement("div")).className = "desktop-task";
+      const drawn = ["--desktop-bar-height", "margin", "margin-left", "background"].map(
+        (property) => declared(main, property),
+      );
+      document.body.replaceChildren();
+      return drawn;
+    };
+    const tabless = geometry(false);
+
+    assert.deepEqual(tabless, geometry(true), `sidebar collapsed: ${collapsed}`);
+    assert.equal(tabless[3], "", "the page stands on the frame, its sheet drawn beneath it");
+  }
 });
