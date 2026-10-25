@@ -509,7 +509,6 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
           integrations: [LINEAR_SERVER],
           allowedDomains: config.allowedDomains,
           installedSkills: "/opt/luke/installed-skills",
-          warm: true,
         });
         assert.deepEqual(first, {
           type: INPUT_LINE.MESSAGE,

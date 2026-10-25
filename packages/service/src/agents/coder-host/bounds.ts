@@ -185,11 +185,15 @@ export const CODER = {
    * How long a native agent's runner stays warm once its turn is over, for
    * the next message to reach it as a line on its stdin rather than through
    * a resumed sandbox and a relaunched CLI; past it, the sweep retires the
-   * runner (`retireWarmRunner`) and its END stops the sandbox. An idle
-   * sandbox bills its memory alone, 4 GB at Vercel's rate, so ten warm
-   * minutes cost about a cent and a half a turn.
+   * runner (`retireWarmRunner`) and its END stops the sandbox. Zero, so a
+   * runner is launched cold (`runnerStaysWarm`) and ends at its turn's end,
+   * and its END stops the sandbox at once: ten warm minutes kept a 4 vCPU,
+   * 8 GB sandbox up for up to 62 sandbox-hours a day over Oct 23–24, about
+   * $5–10 a day, for the 636 of 1,536 finished turns a follow-up reached
+   * within three minutes. Those now resume from the stop's snapshot. A
+   * window is one line here: raise it, and launches ask to stay warm again.
    */
-  RUNNER_WARM: Duration.minutes(10),
+  RUNNER_WARM: Duration.zero,
   /**
    * How long renewing a running runner's credential may take once its
    * message is written. The send answers only after it, inside the store's
@@ -254,4 +258,9 @@ export type CoderRefusal = (typeof CODER_REFUSAL)[keyof typeof CODER_REFUSAL];
 export function sandboxVcpus(repository: string | null): number {
   if (repository === null) return CODER.SANDBOX_VCPUS;
   return CODER.SANDBOX_VCPUS_BY_REPOSITORY.get(repository.toLowerCase()) ?? CODER.SANDBOX_VCPUS;
+}
+
+/** Whether a native agent's runner is launched to stay warm past its turn: only while `CODER.RUNNER_WARM` leaves it a window. */
+export function runnerStaysWarm(): boolean {
+  return Duration.isGreaterThan(CODER.RUNNER_WARM, Duration.zero);
 }
