@@ -255,3 +255,8 @@ export function channelSlug(typed: string): string {
     .replace(/[^a-z0-9]+/gu, "-")
     .replace(/^-+|-+$/gu, "");
 }
+
+/** How many open asks wait on the reader across every channel, as a phone's bar counts them. */
+export function channelsWaiting(channels: readonly Channel[]): number {
+  return channels.reduce((total, channel) => total + channel.waiting, 0);
+}

@@ -45,6 +45,7 @@ import { useChatOn } from "../tasks/chat-gate.js";
 import { ChipCards, type TaskFocus } from "../tasks/chip-cards.js";
 import { MentionedAgents } from "../tasks/mentioned-agent-card.js";
 import { NewTaskDialog } from "../tasks/new-task-dialog.js";
+import { useChannelPlace } from "../tasks/use-channels.js";
 import { useInboxListing } from "../tasks/use-inbox-listing.js";
 import { useAgentLook, useTaskLooks } from "../tasks/use-task-looks.js";
 import {
@@ -737,6 +738,7 @@ export function DesktopShell({
       : undefined;
   // Note that Channels stands in the inbox-first sidebar's place, its sidebar listing channels and its page a channel's stream.
   const channelsOn = useExperiment(EXPERIMENT.CHANNELS);
+  const channelPlace = useChannelPlace();
   const inboxFirst = useExperiment(EXPERIMENT.INBOX_FIRST) && !channelsOn;
   // With the inbox-first sidebar on, the Inbox is read once here, the sidebar listing it and the Inbox's page showing its chosen item; off, it reads nothing.
   // Note that a narrow room's drawer is too skinny for the list, so there the Inbox's page lists its items itself, the list and then the item each across the screen.
@@ -844,6 +846,7 @@ export function DesktopShell({
           <MobileBar
             tasks={tasks}
             chatOn={chatOn}
+            channelsOn={channelsOn}
             sidebar={sidebar}
             onPressMore={keepOverlay}
             leave={() => onTabChange(PANEL_TAB.TASKS)}
@@ -914,7 +917,12 @@ export function DesktopShell({
     />
   );
   // A phone goes between its places by a bar at the screen's foot, standing on their lists alone (`mobile-bar.tsx`).
-  const barShown = mobileBarShown(room, tasks, chatOn);
+  const barShown = mobileBarShown(
+    room,
+    tasks,
+    chatOn,
+    channelsOn ? { threadOpen: channelPlace.threadOpen } : undefined,
+  );
   return (
     <div
       ref={shell}
@@ -1026,7 +1034,13 @@ export function DesktopShell({
         </MentionedAgents>
       </main>
       {barShown ? (
-        <MobileBar tasks={tasks} chatOn={chatOn} sidebar={sidebar} onPressMore={keepOverlay} />
+        <MobileBar
+          tasks={tasks}
+          chatOn={chatOn}
+          channelsOn={channelsOn}
+          sidebar={sidebar}
+          onPressMore={keepOverlay}
+        />
       ) : null}
       {/* Folded, the sidebar's card floats in the corner it would have stood over. */}
       <StandingCallCardDock docked={sidebar.collapsed} surface={CALL_CARD_SURFACE.FLOATING} />
