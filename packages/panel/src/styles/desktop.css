@@ -186,14 +186,6 @@ body,
   display: none;
 }
 
-/* A place standing alone, Chat one column by its own width or in a narrow
-   room (`desktop-chat.tsx`'s `single`), leads its head with the way back, so
-   its name keeps the room left and what is said beside it gives way; its
-   menu stays at the head's end, the only way to edit or archive a topic. */
-.chat-view[data-single="true"] .chat-stream > .luke-pane-bar .luke-pane-bar-detail {
-  display: none;
-}
-
 /* A narrow room is a phone's, whose keyboard takes half the screen: a box's
    field stops growing at a smaller share of what is seen
    (`--luke-stage-height`) than the two fifths every room keeps (tasks.css),
@@ -415,18 +407,16 @@ body,
   display: inline-flex;
 }
 
-/* The sidebar's View options and the Tasks page's Filter wear a dot while
-   the view leaves tasks out, so a filtered list never passes for the whole
-   of it: drawn by the box around the button, over its corner, in the
-   accent's ink, since the web's accent fill is too light to hold 3:1 as a
-   mark on its light page and its ring is near-black there. */
-.sidebar-view-options,
+/* The Tasks page's Filter wears a dot while the view leaves tasks out, so a
+   filtered list never passes for the whole of it, as the sidebar's head's
+   do (`@luke/ui`'s `GroupAction`): drawn by the box around the button, over
+   its corner, in the accent's ink, since the web's accent fill is too light
+   to hold 3:1 as a mark on its light page and its ring is near-black there. */
 .tasks-page-option {
   position: relative;
   display: inline-flex;
 }
 
-.sidebar-view-options[data-filtered="true"]::after,
 .tasks-page-option[data-filtered="true"]::after {
   position: absolute;
   top: var(--luke-space-4);
@@ -437,12 +427,6 @@ body,
   background: var(--luke-color-accent-text);
   content: "";
   pointer-events: none;
-}
-
-/* The Tasks head's status filter always stands, whether or not the sidebar
-   is hovered or holds focus (`sidebar-task-view.tsx`). */
-.sidebar-status-filter {
-  display: inline-flex;
 }
 
 /* The quiet line under the list saying what the status filter leaves out,
@@ -2695,17 +2679,11 @@ ul.actor-stack {
   font-weight: var(--luke-weight-regular);
 }
 
-/* An item's bar ends in its actions, as far in from the Inbox's edge as its
-   crumbs start: the pager where the item stands alone, and its ⋯ menu. */
-.inbox-item-actions {
-  margin-left: auto;
-  padding-right: var(--column-inset);
-}
-
 /* The pager (`inbox-pager.tsx`): where the item stands in the list, in the
    meta voice's figures, and the arrows up and down it. An arrow with
    nowhere to go steps back. */
 .inbox-pager {
+  display: flex;
   align-items: center;
 }
 
@@ -2723,44 +2701,6 @@ ul.actor-stack {
   min-height: 0;
   flex-direction: column;
   container: inbox-item / inline-size;
-}
-
-/* An item's bar holds its way back, its crumbs and its actions in a box of
-   its own, as the automation editor's bar does, so what it does as its
-   column narrows is the box's own. An item standing alone narrower than its
-   bar's crumbs, the way back, the pager, and the ⋯ menu draws its way back's
-   glyph alone, named still, beside the pager and the menu, and the crumbs
-   take a line of their own under them. A bar narrower than a crumb, the way
-   back, the pager, and the menu need beside one another, a phone's in any
-   room or a side panel's on the desktop, has no room for its crumbs beside
-   the way back and the Resolve, which squeezed them to a glyph and a letter,
-   so they take a line of their own, the whole bar wide, each cut short by
-   its share as anywhere; the item's own width says so, never the room. */
-.inbox-item-bar {
-  display: flex;
-  min-width: 0;
-  flex: 1;
-  align-items: center;
-  gap: var(--luke-control-gap);
-}
-
-@container inbox-item (width < 480px) {
-  .inbox-item-bar {
-    flex-wrap: wrap;
-    row-gap: var(--luke-tight-gap);
-  }
-
-  .inbox-item-bar > .inbox-crumbs {
-    order: 1;
-    flex-basis: 100%;
-  }
-}
-
-/* The way back folds to its glyph (`FoldingButton`). */
-@container inbox-item (width < 360px) {
-  .inbox-item-bar {
-    --luke-fold: folded;
-  }
 }
 
 /* Only the column's bar meets the folded sidebar's toggle, so the items' bar
@@ -2846,15 +2786,20 @@ ul.actor-stack {
 
 /* Chat ----------------------------------------------------------------------- */
 
-/* A place standing alone under a folded sidebar's title-bar buttons starts
-   past them, where its way back stands, as a toolbar does (shell.css). */
+/* Only the rail's bar meets the folded sidebar's toggle, so the place's bar
+   (`chat-pane.tsx`'s `PlaceHead`) keeps its own inset beside it. A place
+   standing alone is the first column, so its bar, led by the way back,
+   leaves the title bar's buttons their room, as the Inbox item's does. */
+.chat-stream {
+  --luke-toolbar-start-at: initial;
+}
+
 .desktop-shell[data-sidebar-collapsed="true"]
   .desktop-main
   > .page-find
   > .chat-view[data-single="true"]
-  .chat-stream
-  > .luke-pane-bar {
-  padding-left: var(--sidebar-toggle-clearance);
+  .chat-stream {
+  --luke-toolbar-start-at: calc(var(--sidebar-toggle-clearance) - var(--sheet-gap));
 }
 
 /* An ask draws as the Inbox's ask in its row (`chat-ask.tsx`), a step
@@ -2882,6 +2827,22 @@ ul.actor-stack {
   min-width: 0;
   flex-direction: column;
   gap: var(--luke-control-gap);
+}
+
+/* A root's thread stands in a slot of its own after the message, so its open
+   box outlives the message turning from continued to named (`ThreadRow`): it
+   lines up under the words, in the words' column of a continued message, and
+   under a named one's comment past its face, as it stood inside them. */
+.chat-message > .chat-thread {
+  grid-column: 2;
+  margin-top: calc(var(--luke-tight-gap) + var(--luke-list-gap));
+}
+
+/* Note that a named message's words stand past its comment's face, a list
+   row's disc (`AVATAR_SIZE.ROW`, `--luke-space-20`), and the gap after it. */
+.chat-message > .luke-comment ~ .chat-thread {
+  grid-column: 1 / -1;
+  padding-inline-start: calc(var(--luke-space-20) + var(--luke-icon-gap));
 }
 
 /* Under a finger a thread's press, Reply or how many replied, takes a press

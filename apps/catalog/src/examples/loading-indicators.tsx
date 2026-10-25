@@ -7,6 +7,8 @@ import {
   Inline,
   Shimmer,
   Stack,
+  TEXT_TONE,
+  Text,
   ThinkingDots,
   WorkingMark,
 } from "@luke/ui";
@@ -23,9 +25,15 @@ function LoadingIndicators(): React.JSX.Element {
   return (
     <>
       <CatalogSection id="working-mark" title="Working mark">
-        <Inline gap={GAP.FIELD}>
-          <WorkingMark />
-        </Inline>
+        <Stack gap={GAP.CONTROL} align={ALIGN.START}>
+          <Inline gap={GAP.FIELD}>
+            <WorkingMark />
+          </Inline>
+          <Inline gap={GAP.FIELD}>
+            <WorkingMark />
+            <Text tone={TEXT_TONE.MUTED}>Sweeping flaky tests</Text>
+          </Inline>
+        </Stack>
       </CatalogSection>
       <CatalogSection id="thinking-dots" title="Thinking dots">
         <Inline gap={GAP.FIELD}>

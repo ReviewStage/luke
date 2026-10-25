@@ -183,3 +183,113 @@ test("a to-do list landing over an agent's composer raises the dock at the frame
 
   assert.equal(dock(), "200px", "the to-do list over it docks with it");
 });
+
+/** A task beside its side panel, the panel's agent composer at its foot under the toasts' corner, and the window's toasts, portalled out of the shell. */
+function PanelShell(): React.JSX.Element {
+  const shell = useRef<HTMLDivElement>(null);
+  useColumnDock(shell, false, false, "task");
+  return createElement(
+    "div",
+    { ref: shell, className: "desktop-shell", "data-staged": "window" },
+    createElement("div", { className: "desktop-task-main", "data-staged": "main" }),
+    createElement(
+      "aside",
+      { className: "side-panel", "data-staged": "panel" },
+      createElement("div", { className: "agent-composer", "data-staged": "composer" }),
+    ),
+  );
+}
+
+test("beside the work, the toasts stand above an agent's composer under their corner, in the side panel rather than the column", () => {
+  stage(
+    new Map([
+      ["window", { left: 0, right: 1200, top: 0, bottom: 800 }],
+      ["main", { left: 0, right: 700, top: 0, bottom: 800 }],
+      ["panel", { left: 700, right: 1200, top: 0, bottom: 800 }],
+      ["composer", { left: 700, right: 1200, top: 680, bottom: 784 }],
+      ["toasts", { left: 844, right: 1184, top: 734, bottom: 784 }],
+    ]),
+  );
+  const toasts = document.body.appendChild(document.createElement("section"));
+  toasts.className = "luke-toast-stack";
+  toasts.dataset.staged = "toasts";
+  const container = document.body.appendChild(document.createElement("div"));
+  root = createRoot(container);
+  act(() => root?.render(createElement(PanelShell)));
+  assert.equal(document.documentElement.style.getPropertyValue("--luke-toast-dock"), "120px");
+});
+
+/** A phone's side panel filling the window, a panel on its way out still standing before it, inert, its agent's video and composer at its foot. */
+function LeavingPanelShell(): React.JSX.Element {
+  const shell = useRef<HTMLDivElement>(null);
+  useColumnDock(shell, true, true, "panel");
+  return createElement(
+    "div",
+    { ref: shell, className: "desktop-shell" },
+    createElement(
+      "aside",
+      { className: "side-panel", inert: true, "data-staged": "leaving" },
+      createElement("div", { className: "agent-call-foot", "data-staged": "video" }),
+      createElement("div", { className: "agent-composer", "data-staged": "composer" }),
+    ),
+    createElement("aside", { className: "side-panel", "data-staged": "shown" }),
+  );
+}
+
+test("a side panel on its way out lifts nothing over the panel shown, whatever docks at its foot", () => {
+  stage(
+    new Map([
+      ["leaving", { left: 0, right: 400, top: 0, bottom: 800 }],
+      ["video", { left: 0, right: 400, top: 300, bottom: 680 }],
+      ["composer", { left: 0, right: 400, top: 680, bottom: 800 }],
+      ["shown", { left: 0, right: 400, top: 0, bottom: 800 }],
+    ]),
+  );
+  const container = document.body.appendChild(document.createElement("div"));
+  root = createRoot(container);
+  act(() => root?.render(createElement(LeavingPanelShell)));
+  assert.equal(document.documentElement.style.getPropertyValue("--luke-column-dock"), "0px");
+});
+
+/** An Inbox thread beside the work, its draft reply flowing at the end of its scrolled board, and the window's toasts. */
+function InboxShell(): React.JSX.Element {
+  const shell = useRef<HTMLDivElement>(null);
+  useColumnDock(shell, false, false, "inbox");
+  return createElement(
+    "div",
+    { ref: shell, className: "desktop-shell", "data-staged": "window" },
+    createElement(
+      "section",
+      { className: "inbox-view-items", "data-staged": "board" },
+      createElement("div", { className: "agent-composer", "data-staged": "reply" }),
+    ),
+  );
+}
+
+test("a draft reply scrolled up under the toasts raises them at the frame after the scroll", () => {
+  const frames: FrameRequestCallback[] = [];
+  vi.spyOn(window, "requestAnimationFrame").mockImplementation((heard) => frames.push(heard));
+  const boxes = new Map([
+    ["window", { left: 0, right: 1200, top: 0, bottom: 800 }],
+    ["board", { left: 600, right: 1200, top: 0, bottom: 800 }],
+    ["reply", { left: 600, right: 1200, top: 900, bottom: 1000 }],
+    ["toasts", { left: 844, right: 1184, top: 734, bottom: 784 }],
+  ]);
+  stage(boxes);
+  const toasts = document.body.appendChild(document.createElement("section"));
+  toasts.className = "luke-toast-stack";
+  toasts.dataset.staged = "toasts";
+  const container = document.body.appendChild(document.createElement("div"));
+  root = createRoot(container);
+  act(() => root?.render(createElement(InboxShell)));
+  const dock = () => document.documentElement.style.getPropertyValue("--luke-toast-dock");
+  assert.equal(dock(), "0px", "the reply below the window docks nothing");
+
+  boxes.set("reply", { left: 600, right: 1200, top: 680, bottom: 780 });
+  act(() => {
+    document.querySelector(".inbox-view-items")?.dispatchEvent(new Event("scroll"));
+    for (const heard of frames.splice(0)) heard(0);
+  });
+
+  assert.equal(dock(), "120px", "the reply scrolled up under the corner docks");
+});

@@ -1184,7 +1184,8 @@ function ChatView({
                   at={undefined}
                   unread={false}
                   needsYou={rail.forYou > 0}
-                  current={view.place.kind === CHAT_PLACE.FOR_YOU}
+                  // Note that For you is where Chat opens, so it is ringed only while its pane is drawn: a rail standing alone has chosen nothing yet.
+                  current={view.place.kind === CHAT_PLACE.FOR_YOU && !hidden.item}
                   card={undefined}
                   end={undefined}
                   groups={forYouGroups}

@@ -384,7 +384,10 @@ function useTemplateReset(
  */
 function TemplateNote({ keep }: { keep: string | undefined }): React.JSX.Element {
   return (
-    <span className="template-note" {...searchAnchorProps(SETTINGS_SEARCH_ROW.PLAN_TEMPLATE)}>
+    <span
+      className="scroll-mt-settings-search-clearance"
+      {...searchAnchorProps(SETTINGS_SEARCH_ROW.PLAN_TEMPLATE)}
+    >
       {keep === undefined ? PAGE_LINE.NOTE : `${PAGE_LINE.NOTE} ${keep}.`}
     </span>
   );

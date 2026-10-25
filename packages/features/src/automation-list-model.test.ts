@@ -9,6 +9,7 @@ import {
   automationRunStanding,
   automationRunTitle,
   automationTriggerText,
+  parseAutomationClock,
 } from "./automation-list-model.js";
 import {
   AUTOMATION_ACTION,
@@ -213,6 +214,29 @@ test("an automation turned off says so before any instant, and one with no insta
   assert.deepEqual(automationNext(automation("a", { nextRunAt: null })), {
     kind: AUTOMATION_NEXT.UNSCHEDULED,
   });
+});
+
+test("an automation fired by an event has no next run to name, a schedule with none is unscheduled", () => {
+  const webhook = automation("a", {
+    trigger: { kind: AUTOMATION_TRIGGER.WEBHOOK },
+    nextRunAt: null,
+  });
+  assert.deepEqual(automationNext(webhook), { kind: AUTOMATION_NEXT.EVENT });
+  assert.deepEqual(automationNext({ ...webhook, enabled: false }), { kind: AUTOMATION_NEXT.OFF });
+});
+
+test("a time of day typed is read as the summary says it and as a 24-hour clock does", () => {
+  const read = (text: string) => parseAutomationClock(text);
+  assert.deepEqual(read("2:00 AM"), { hour: 2, minute: 0 });
+  assert.deepEqual(read("12:30 pm"), { hour: 12, minute: 30 });
+  assert.deepEqual(read("12 AM"), { hour: 0, minute: 0 });
+  assert.deepEqual(read("9pm"), { hour: 21, minute: 0 });
+  assert.deepEqual(read("14:05"), { hour: 14, minute: 5 });
+  assert.equal(read("13:00 PM"), undefined);
+  assert.equal(read("24:00"), undefined);
+  assert.equal(read("2:75"), undefined);
+  assert.equal(read("2:"), undefined);
+  assert.equal(read("soon"), undefined);
 });
 
 test("a run is titled by its agent where the agent has a title, else by what fired it", () => {

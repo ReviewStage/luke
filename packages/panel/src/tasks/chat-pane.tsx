@@ -32,6 +32,8 @@ import {
   Text,
   TextButton,
   Time,
+  TOOLBAR_INSET,
+  Toolbar,
   useConfirmDialog,
   useMinute,
   VisuallyHidden,
@@ -907,58 +909,53 @@ const ThreadRow = memo(function ThreadRow({
       quoting === undefined ? undefined : { words: quoting, onQuoted: () => setQuoting(undefined) },
     [quoting],
   );
-  const words = (
-    <>
-      <Body message={message} context={context} />
-      {quiet ? null : (
-        <div className="chat-thread mt-tight-gap" data-open={String(open)}>
-          <div className="chat-thread-toggle m-0 text-label [&_.actor-stack]:me-item-gap [&_.actor-stack]:align-middle">
-            {/* Note that the faces stand beside the press rather than in it, since each hangs its replier's card. */}
-            {replies.length > 0 && !open ? (
-              <ActorStack
-                actors={repliers}
-                drawn={REPLIERS_DRAWN}
-                faces={repliers.map(() => ({}))}
-                label={REPLIERS_LABEL}
-              />
-            ) : null}
-            {toggle}
-          </div>
-          {open && replies.length + pendingReplies.length > 0 ? (
-            <ul className="chat-replies m-0 list-none p-0">
-              {replies.map((reply) => (
-                <Reply key={reply.id} message={reply} context={context} />
-              ))}
-              {pendingReplies.map((entry) => (
-                <PendingRow key={entry.id} entry={entry} context={context} reply />
-              ))}
-            </ul>
-          ) : null}
-          {open && canReply ? (
-            <ChatComposer
-              channelId={message.channelId}
-              replyTo={message.seq}
-              label="Reply in thread"
-              mentions={context.mentionsIn(message.channelId, [
-                message.authorId,
-                ...replies.map((reply) => reply.authorId),
-              ])}
-              keywords={context.keywords}
-              compact
-              replyDoor={threadDoor}
-              pendingQuote={pendingQuote}
-              onSend={(text, attachments, takeBack) =>
-                context.send(
-                  { channelId: message.channelId, replyTo: message.seq },
-                  { ...postOf(text, attachments), replyTo: message.seq },
-                  takeBack,
-                )
-              }
-            />
-          ) : null}
-        </div>
-      )}
-    </>
+  const thread = quiet ? null : (
+    <div className="chat-thread mt-tight-gap" data-open={String(open)}>
+      <div className="chat-thread-toggle m-0 text-label [&_.actor-stack]:me-item-gap [&_.actor-stack]:align-middle">
+        {/* Note that the faces stand beside the press rather than in it, since each hangs its replier's card. */}
+        {replies.length > 0 && !open ? (
+          <ActorStack
+            actors={repliers}
+            drawn={REPLIERS_DRAWN}
+            faces={repliers.map(() => ({}))}
+            label={REPLIERS_LABEL}
+          />
+        ) : null}
+        {toggle}
+      </div>
+      {open && replies.length + pendingReplies.length > 0 ? (
+        <ul className="chat-replies m-0 list-none p-0">
+          {replies.map((reply) => (
+            <Reply key={reply.id} message={reply} context={context} />
+          ))}
+          {pendingReplies.map((entry) => (
+            <PendingRow key={entry.id} entry={entry} context={context} reply />
+          ))}
+        </ul>
+      ) : null}
+      {open && canReply ? (
+        <ChatComposer
+          channelId={message.channelId}
+          replyTo={message.seq}
+          label="Reply in thread"
+          mentions={context.mentionsIn(message.channelId, [
+            message.authorId,
+            ...replies.map((reply) => reply.authorId),
+          ])}
+          keywords={context.keywords}
+          compact
+          replyDoor={threadDoor}
+          pendingQuote={pendingQuote}
+          onSend={(text, attachments, takeBack) =>
+            context.send(
+              { channelId: message.channelId, replyTo: message.seq },
+              { ...postOf(text, attachments), replyTo: message.seq },
+              takeBack,
+            )
+          }
+        />
+      ) : null}
+    </div>
   );
   const action = <RowActions message={message} extra={quiet && canReply ? toggle : undefined} />;
   return (
@@ -973,14 +970,20 @@ const ThreadRow = memo(function ThreadRow({
           <ContinuedTime at={message.postedAt} />
           <div className={CHAT_MESSAGE_BODY}>
             <ContinuedByline actor={actor} action={action} />
-            {words}
+            <Body message={message} context={context} />
           </div>
         </>
       ) : (
         <MessageComment actor={actor} at={message.postedAt} where={where} action={action}>
-          <div className={CHAT_MESSAGE_BODY}>{words}</div>
+          <div className={CHAT_MESSAGE_BODY}>
+            <Body message={message} context={context} />
+          </div>
         </MessageComment>
       )}
+      {/* Note that the thread stands in a slot of its own after the message, because a reply landing in the thread above
+          turns a continued message into a named one, and an open box drawn inside either shape would be drawn anew,
+          losing its caret and a dictation under way. */}
+      {thread}
     </li>
   );
 });
@@ -1139,7 +1142,15 @@ function ForYouWhere({
   );
 }
 
-/** The head over a place, a `PaneBar`: the way back where it stands alone and a task's glyph as its mark, its name as the title, what it says beside that, and its menu. */
+/**
+ * The head over a place: the way back where it stands alone and a task's
+ * glyph as its mark, its name as the title, what it says beside that, and
+ * its menu. In the window's Chat it is the window's bar (`Toolbar`), as the
+ * Inbox item's beside its list is, level with the rail's and on the card's
+ * edges; in a task's tab it is the tab's own bar (`PaneBar`). Standing alone
+ * behind its way back, its name keeps the room and what is said beside it
+ * is left out.
+ */
 function PlaceHead({
   title,
   channel,
@@ -1159,8 +1170,31 @@ function PlaceHead({
   /** Whether a phone heads the place (`phone-head.tsx`): the way back alone at its start, the name centred, its menu at its end, and what is said beside the name left to the place's own view. */
   phone?: boolean;
 }): React.JSX.Element {
+  const inTab = useContext(HandTabActionsContext) !== undefined;
   if (phone) {
     return <PhoneHead place="chat-place" start={lead} title={title} end={actions} />;
+  }
+  if (!inTab) {
+    const glyph = channel === undefined ? undefined : <ChannelGlyph channel={channel} />;
+    return (
+      <Toolbar
+        place="chat-place"
+        start={lead === undefined ? undefined : TOOLBAR_INSET.COLUMN}
+        lead={
+          lead === undefined ? (
+            glyph
+          ) : (
+            <>
+              {lead}
+              {glyph}
+            </>
+          )
+        }
+        title={title}
+        detail={lead === undefined ? meta : undefined}
+        actions={actions}
+      />
+    );
   }
   return (
     <PaneBar

@@ -173,7 +173,7 @@ export function AccountSection({
           leading={<ActorMark actor={accountActor(account)} size={ACTOR_SIZE.CARD} />}
           label={<OneLine hint={wholeWordsHint(account.email)}>{account.email}</OneLine>}
           description={
-            <span className="account-provider">
+            <span className="inline-flex flex-wrap items-center gap-luke-4 whitespace-nowrap">
               Signed in with
               <ProviderMark provider={account.provider} size={PROVIDER_MARK_SIZE.CAPTION} />
               {account.provider === ACCOUNT_PROVIDER.GITHUB ? "GitHub" : "Google"}

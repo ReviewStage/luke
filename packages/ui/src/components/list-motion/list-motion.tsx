@@ -166,9 +166,14 @@ interface Point {
   readonly y: number;
 }
 
+/** Where the layout stands a mover, and whether the reader could see it there: drawn at least in part inside what the scroller around the root shows. */
+interface Place extends Point {
+  readonly seen: boolean;
+}
+
 /** Where every mover under the root stood before a change, each keyed one by its key, and which lists stood. */
 interface Snapshot {
-  readonly places: Map<Element, Point>;
+  readonly places: Map<Element, Place>;
   readonly keyed: Map<string, Element>;
   readonly lists: Set<Element>;
 }
@@ -315,16 +320,38 @@ function shiftOf(element: Element): Point {
   };
 }
 
+/** The nearest element above `element` that scrolls it, if one does. */
+function scrollerOf(element: HTMLElement): HTMLElement | undefined {
+  for (let at = element.parentElement; at !== null; at = at.parentElement) {
+    const { overflowY } = getComputedStyle(at);
+    if (overflowY === "auto" || overflowY === "scroll") return at;
+  }
+  return undefined;
+}
+
+/** The band of the window, top to bottom, that shows what `root` draws: the scroller's box around it, cut to the window. */
+function viewOf(root: HTMLElement): { readonly top: number; readonly bottom: number } {
+  const scroller = scrollerOf(root)?.getBoundingClientRect();
+  const height = root.ownerDocument.defaultView?.innerHeight ?? Number.POSITIVE_INFINITY;
+  return {
+    top: Math.max(scroller?.top ?? 0, 0),
+    bottom: Math.min(scroller?.bottom ?? height, height),
+  };
+}
+
 /**
  * Where the layout stands each element, from the root's top left corner:
  * where it is drawn, less what its own transform and every one around it
- * under the root draw it by, so a motion under way moves no place.
+ * under the root draw it by, so a motion under way moves no place; and
+ * whether it is drawn where the reader can see it.
  */
-function placesOf(root: HTMLElement, elements: readonly Element[]): Map<Element, Point> {
+function placesOf(root: HTMLElement, elements: readonly Element[]): Map<Element, Place> {
   const origin = root.getBoundingClientRect();
-  const places = new Map<Element, Point>();
+  const view = viewOf(root);
+  const places = new Map<Element, Place>();
   for (const element of elements) {
     const box = element.getBoundingClientRect();
+    const seen = box.bottom >= view.top && box.top <= view.bottom;
     let x = box.left - origin.left;
     let y = box.top - origin.top;
     for (let at: Element | null = element; at !== null && at !== root; at = at.parentElement) {
@@ -332,7 +359,7 @@ function placesOf(root: HTMLElement, elements: readonly Element[]): Map<Element,
       x -= shift.x;
       y -= shift.y;
     }
-    places.set(element, { x, y });
+    places.set(element, { x, y, seen });
   }
   return places;
 }
@@ -402,11 +429,11 @@ function homeOf(way: ListMotionWay): Keyframe {
 /**
  * Takes each leaving element out of the layout, laid over the place it is
  * drawn at, and slides it out, letting its entry go once that has played;
- * at once where there is to be no motion. Note that every place is read
- * before any element leaves, since each that leaves moves the rest, and
- * that the exit takes over from whatever motion of its own was under way,
- * so it is laid where that motion drew it rather than where the layout
- * stood it.
+ * at once where there is to be no motion, or where the reader could not
+ * see it. Note that every place is read before any element leaves, since
+ * each that leaves moves the rest, and that the exit takes over from
+ * whatever motion of its own was under way, so it is laid where that motion
+ * drew it rather than where the layout stood it.
  */
 function playExits(
   root: HTMLElement,
@@ -420,7 +447,14 @@ function playExits(
     return;
   }
   const away = awayOf(root, way);
-  const placed = leaving.map((each) => {
+  // Note that a row out of sight plays nothing, so a list that loses thousands at once, the Inbox's All to its To do, animates no more than a screenful.
+  const seen = leaving.filter(({ element }) => before.places.get(element)?.seen === true);
+  for (const { element, onLeft } of leaving) {
+    if (before.places.get(element)?.seen === true) continue;
+    element.style.display = "none";
+    onLeft();
+  }
+  const placed = seen.map((each) => {
     const { element } = each;
     const shift = shiftOf(element);
     return {
@@ -464,14 +498,14 @@ interface MoveTiming {
 }
 
 /** Plays a row's arrival, the way it would leave played back on the spring, added onto any motion of its own, as it fades in, `step` staggers after the first; only the fade where it does not travel. */
-function arrive(root: HTMLElement, mover: Element, step: number, timing: MoveTiming): void {
+function arrive(mover: Element, step: number, away: Keyframe, timing: MoveTiming): void {
   if (timing.arrive === undefined) return;
   const delay = timing.wait + Math.min(step, STAGGER_STEPS) * timing.stagger;
   mover.animate([{ opacity: 0 }, { opacity: 1 }], { ...timing.arrive, delay, fill: "backwards" });
   if (!timing.travels) return;
   // Note that a clip is no offset to add onto one under way, so an unroll replaces any clip of its own.
   const unrolls = timing.way === LIST_MOTION_WAY.UNROLL;
-  mover.animate([awayOf(root, timing.way), homeOf(timing.way)], {
+  mover.animate([away, homeOf(timing.way)], {
     ...timing.travel,
     delay,
     fill: "backwards",
@@ -485,12 +519,17 @@ function arrive(root: HTMLElement, mover: Element, step: number, timing: MoveTim
  * list, less what the group around it moved, which carries it, added onto
  * any glide of its own still under way; a mover new to a list that stood
  * fades in. Both wait out the exit when something left, as what leaves goes
- * first.
+ * first. Only a mover the reader could see, before the change or after it,
+ * plays: one out of sight just stands where the change put it, so a change
+ * of thousands of rows plays a screenful of them.
  */
 function playMoves(root: HTMLElement, before: Snapshot, timing: MoveTiming): void {
-  const movers = moversOf(root).filter((mover) => !exits.has(mover));
+  // Note that a row leaving with no exit to play, out of sight or moved to another list, is hidden until its entry goes, and glides nowhere.
+  const movers = moversOf(root).filter(
+    (mover) => !exits.has(mover) && !mover.hasAttribute("data-leaving"),
+  );
   const now = placesOf(root, movers);
-  const wasOf = (mover: Element): Point | undefined => {
+  const wasOf = (mover: Element): Place | undefined => {
     const own = before.places.get(mover);
     if (own !== undefined) return own;
     const key = mover.getAttribute(KEY_ATTRIBUTE);
@@ -508,11 +547,14 @@ function playMoves(root: HTMLElement, before: Snapshot, timing: MoveTiming): voi
     const list = mover.parentElement;
     return wasOf(mover) === undefined && list !== null && before.lists.has(list);
   });
-  for (const [step, mover] of arriving.entries()) arrive(root, mover, step, timing);
+  const away = awayOf(root, timing.way);
+  const seenArriving = arriving.filter((mover) => now.get(mover)?.seen === true);
+  for (const [step, mover] of seenArriving.entries()) arrive(mover, step, away, timing);
   // Note that rows arriving in a leaving row's place, a choice's next rows, set the beat what they move glides on.
   const glide = arriving.length === 0 ? (timing.close ?? timing.travel) : timing.travel;
   for (const mover of movers) {
-    if (wasOf(mover) === undefined) continue;
+    const was = wasOf(mover);
+    if (was === undefined || !(was.seen || now.get(mover)?.seen === true)) continue;
     const carrier = carrierOf(root, mover);
     const own = movedBy(mover);
     const carried = carrier === root ? { x: 0, y: 0 } : movedBy(carrier);
@@ -526,15 +568,6 @@ function playMoves(root: HTMLElement, before: Snapshot, timing: MoveTiming): voi
       composite: "add",
     });
   }
-}
-
-/** The nearest element above `element` that scrolls it, if one does. */
-function scrollerOf(element: HTMLElement): HTMLElement | undefined {
-  for (let at = element.parentElement; at !== null; at = at.parentElement) {
-    const { overflowY } = getComputedStyle(at);
-    if (overflowY === "auto" || overflowY === "scroll") return at;
-  }
-  return undefined;
 }
 
 /** How tall what `root` lays out stands, from its top to under its last element in the layout. */

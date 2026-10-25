@@ -21,7 +21,7 @@
  * `glyphStateWords` gives.
  */
 
-import { Tooltip, WorkingMark } from "@luke/ui";
+import { ROW_MARK, RowMark, Tooltip, WorkingMark } from "@luke/ui";
 import { CircleAlertIcon } from "lucide-react";
 import type { ReactNode } from "react";
 
@@ -88,9 +88,7 @@ export function StateGlyph({
 function FailedMark({ hinted }: { hinted: boolean }): React.JSX.Element {
   const words = GLYPH_STATE_WORDS[GLYPH_STATE.FAILED];
   const mark = (
-    <span className="failed-mark" role="img" aria-label={words}>
-      <CircleAlertIcon aria-hidden="true" />
-    </span>
+    <RowMark kind={ROW_MARK.FAILED} label={words} glyph={<CircleAlertIcon aria-hidden="true" />} />
   );
   return hinted ? <Tooltip label={words}>{mark}</Tooltip> : mark;
 }
