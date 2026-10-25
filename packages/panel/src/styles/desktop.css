@@ -2945,6 +2945,7 @@ ul.actor-stack {
   border: 1px solid var(--luke-color-border);
   border-radius: var(--luke-control-radius);
   background: var(--luke-color-surface);
+  transition: background-color var(--luke-duration-hover) var(--luke-motion-exit);
 }
 
 .automation-suggestion:hover:not([data-disabled="true"]) {
@@ -2989,6 +2990,7 @@ ul.actor-stack {
 .automation-suggestion-add {
   flex: none;
   color: var(--luke-color-text-muted);
+  transition: color var(--luke-duration-hover) var(--luke-motion-exit);
 }
 
 .automation-suggestion:hover:not([data-disabled="true"]) .automation-suggestion-add {

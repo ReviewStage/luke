@@ -94,6 +94,10 @@
   .luke-inline-ref[data-look="wash"] {
     gap: var(--luke-space-4);
     border-radius: var(--luke-radius-6);
+    transition:
+      background-color var(--luke-duration-hover) var(--luke-motion-exit),
+      box-shadow var(--luke-duration-hover) var(--luke-motion-exit),
+      color var(--luke-duration-hover) var(--luke-motion-exit);
   }
 
   .luke-inline-ref[data-look="wash"] .luke-inline-ref-label {
@@ -122,6 +126,7 @@
     color: var(--luke-color-text);
     font-weight: var(--luke-type-tag-weight);
     line-height: 1.2;
+    transition: background-color var(--luke-duration-hover) var(--luke-motion-exit);
   }
 
   .luke-inline-ref[data-look="pill"]:has(.luke-inline-ref-state) {
