@@ -7,6 +7,12 @@
      nearly as heavy as a semibold. */
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  /* Note that a phone's browser draws every size as the tokens say, because
+     iOS Safari otherwise inflates the text of a block whose lines run past
+     the screen, a code block's above all, until its code reads larger than
+     the body. Tailwind's preflight would set this, but the panel takes none. */
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
   background: transparent;
   /* The palette every shared component draws in, the inks, grounds, fills,
      edges, accent, states, and shadows, is `@luke/ui`'s desktop palette
