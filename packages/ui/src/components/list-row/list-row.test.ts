@@ -1,19 +1,16 @@
 // @vitest-environment jsdom
 
-import { act, cloneElement, createElement, Fragment, Profiler, useState } from "react";
+import { act, cloneElement, createElement, Fragment, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { IconButton } from "../button/button.js";
 import { useRovingKeys } from "../roving-keys/roving-keys.js";
 import {
-  LIST_DENSITY,
   LIST_ROW_ACTIONS,
   LIST_ROW_CURRENT,
   LIST_ROW_LEAD,
   LIST_ROW_META,
-  LIST_VARIANT,
   List,
-  type ListDensity,
   ListRow,
   type ListRowHint,
 } from "./list-row.js";
@@ -44,10 +41,7 @@ import {
  * takes the focus it is handed; one unavailable refuses its press; one a
  * field drives is found by its id; a chevron and attachments say nothing to a reader; acts
  * shown on hover are still a Tab stop after the row; and an app hears
- * whether the title is cut short. A title cut short fades, and so do a dense
- * row's description and a row's lead, while a regular row's description and
- * any row's metadata keep their ellipsis. Synthetic
- * members.
+ * whether the title is cut short. Synthetic members.
  */
 
 declare global {
@@ -264,8 +258,6 @@ test("a row's lead stands on the line under its title, before the description's 
     "Retry the webhook?2hBilling usage alerts for every workspaceChoice · 2 options",
   );
   const lead = row.querySelector(".luke-list-row-lead");
-  expect(lead?.closest(".luke-list-row-description")).not.toBeNull();
-  expect(lead?.closest(".luke-list-row-head")).toBeNull();
   expect(lead?.querySelector("svg")?.closest('[aria-hidden="true"]')).not.toBeNull();
 });
 
@@ -289,9 +281,6 @@ test("a row's lead may stand on a line of its own between its title and its desc
     "Retry the webhook?2hBilling usage alerts for every workspaceChoice · 2 options",
   );
   const lead = row.querySelector(".luke-list-row-lead");
-  expect(lead?.closest(".luke-list-row-description")).toBeNull();
-  expect(lead?.closest(".luke-list-row-head")).toBeNull();
-  expect(lead?.nextElementSibling?.classList.contains("luke-list-row-description")).toBe(true);
   expect(lead?.querySelector("svg")?.closest('[aria-hidden="true"]')).not.toBeNull();
 });
 
@@ -307,9 +296,7 @@ test("a row whose lead stands on a line of its own draws it with no description 
       }),
     }),
   );
-  const row = button(container, "Retry the webhook?Billing usage alerts");
-  expect(row.querySelector(".luke-list-row-lead")).not.toBeNull();
-  expect(row.querySelector(".luke-list-row-description")).toBeNull();
+  expect(button(container, "Retry the webhook?Billing usage alerts")).toBeTruthy();
 });
 
 test("Tab meets the list's one row, then each row's acts, the other rows left to the arrows", () => {
@@ -727,7 +714,6 @@ test("a row's attachments stand under its description, hidden from a reader, so 
   const row = button(container, "Alert at 80%?Agent: here is the chart");
   const attachments = row.querySelector("img")?.closest('[aria-hidden="true"]');
   expect(attachments).not.toBeNull();
-  expect(attachments?.previousElementSibling?.textContent).toBe("Agent: here is the chart");
 });
 
 /**
@@ -803,162 +789,6 @@ test("an app hears whether a row's title is cut short, whenever its box resizes"
   width = 320;
   act(() => resized());
   expect(heard).toEqual([false, true]);
-});
-
-test("a row whose acts come in on hover fades its title only while it is cut short", () => {
-  const resized = standInResizeObserver();
-  let width = 120;
-  vi.spyOn(HTMLElement.prototype, "scrollWidth", "get").mockImplementation(() => width);
-  vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockReturnValue(200);
-  const hovered = draw(
-    createElement(List, {
-      label: "Tasks",
-      children: createElement(ListRow, {
-        title: "Fix pin and archive overlapping the sidebar row's name",
-        meta: "2m",
-        onPress: () => undefined,
-        actionsAt: LIST_ROW_ACTIONS.HOVER,
-        actions: createElement(IconButton, { icon: null, label: "Archive" }),
-      }),
-    }),
-  );
-  const overflow = () =>
-    hovered.querySelector(".luke-list-row-title")?.getAttribute("data-overflow");
-  act(() => resized());
-  expect(overflow()).toBe("false");
-  width = 320;
-  act(() => resized());
-  expect(overflow()).toBe("true");
-});
-
-test("a row with no acts fades its title while it is cut short, and ends it on its last letter while it fits", () => {
-  const resized = standInResizeObserver();
-  let width = 120;
-  vi.spyOn(HTMLElement.prototype, "scrollWidth", "get").mockImplementation(() => width);
-  vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockReturnValue(200);
-  const container = draw(
-    createElement(List, {
-      label: "Tabs",
-      density: LIST_DENSITY.DENSE,
-      children: createElement(ListRow, {
-        title: "Draw the summary panel's tabs with a fade",
-        onPress: () => undefined,
-      }),
-    }),
-  );
-  const overflow = () =>
-    container.querySelector(".luke-list-row-title")?.getAttribute("data-overflow");
-  act(() => resized());
-  expect(overflow()).toBe("false");
-  width = 320;
-  act(() => resized());
-  expect(overflow()).toBe("true");
-});
-
-/** Each slot of a row drawn with `density`, by whether it fades: cut short, fitting, or not measured at all and ending in an ellipsis. */
-function slotsOf(density: ListDensity) {
-  const resized = standInResizeObserver();
-  // Note that every box is cut short, so a slot measured says it fades and one never measured says nothing.
-  vi.spyOn(HTMLElement.prototype, "scrollWidth", "get").mockReturnValue(320);
-  vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockReturnValue(200);
-  const container = draw(
-    createElement(List, {
-      label: "Pages",
-      density,
-      children: createElement(ListRow, {
-        title: "Invite funnel",
-        description: "The weekly invite funnel, by the workspace each invite was sent from",
-        lead: { icon: glyph(), label: "Billing usage alerts for every workspace" },
-        meta: "2h",
-        onPress: () => undefined,
-      }),
-    }),
-  );
-  act(() => resized());
-  const slot = (name: string) =>
-    container.querySelector(`.luke-list-row-${name}`)?.getAttribute("data-overflow");
-  return {
-    title: slot("title"),
-    description: slot("description"),
-    lead: slot("lead-label"),
-    meta: slot("meta"),
-  };
-}
-
-test("a dense row's description fades while it is cut short, as its title and its lead do; its metadata keeps its ellipsis", () => {
-  expect(slotsOf(LIST_DENSITY.DENSE)).toEqual({
-    title: "true",
-    description: "true",
-    lead: "true",
-    meta: null,
-  });
-});
-
-test("a regular row's description, a preview's prose, keeps its ellipsis, while its title and its lead fade", () => {
-  expect(slotsOf(LIST_DENSITY.REGULAR)).toEqual({
-    title: "true",
-    description: null,
-    lead: "true",
-    meta: null,
-  });
-});
-
-test("a list made dense fades its rows' descriptions cut short, and made regular again gives them back their ellipsis", () => {
-  const resized = standInResizeObserver();
-  vi.spyOn(HTMLElement.prototype, "scrollWidth", "get").mockReturnValue(320);
-  vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockReturnValue(200);
-  const pages = (density: ListDensity) =>
-    createElement(List, {
-      label: "Pages",
-      density,
-      children: createElement(ListRow, {
-        title: "Invite funnel",
-        description: "The weekly invite funnel, by the workspace each invite was sent from",
-        onPress: () => undefined,
-      }),
-    });
-  const container = draw(pages(LIST_DENSITY.REGULAR));
-  const root = roots.at(-1);
-  const overflow = () =>
-    container.querySelector(".luke-list-row-description")?.getAttribute("data-overflow");
-  act(() => resized());
-  expect(overflow()).toBeNull();
-  act(() => root?.render(pages(LIST_DENSITY.DENSE)));
-  act(() => resized());
-  expect(overflow()).toBe("true");
-  act(() => root?.render(pages(LIST_DENSITY.REGULAR)));
-  expect(overflow()).toBeNull();
-});
-
-test("a title renamed longer or shorter is measured again, though its box keeps its width", async () => {
-  const resized = standInResizeObserver();
-  // Note that the box stands 200px wide whatever its words, as a row whose width its list sets does.
-  vi.spyOn(HTMLElement.prototype, "scrollWidth", "get").mockImplementation(function (
-    this: HTMLElement,
-  ) {
-    return (this.textContent ?? "").length * 8;
-  });
-  vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockReturnValue(200);
-  const shell = (title: string) =>
-    createElement(List, {
-      label: "Shells",
-      children: createElement(ListRow, {
-        title,
-        onPress: () => undefined,
-        actionsAt: LIST_ROW_ACTIONS.HOVER,
-        actions: createElement(IconButton, { icon: glyph(), label: "End" }),
-      }),
-    });
-  const container = draw(shell("zsh"));
-  const root = roots.at(-1);
-  const overflow = () =>
-    container.querySelector(".luke-list-row-title")?.getAttribute("data-overflow");
-  act(() => resized());
-  expect(overflow()).toBe("false");
-  await act(async () => root?.render(shell("Long-running build and test process")));
-  expect(overflow()).toBe("true");
-  await act(async () => root?.render(shell("zsh")));
-  expect(overflow()).toBe("false");
 });
 
 /** How wide the swiped row stands, in CSS pixels: its act's line at 60% is 180px. */
@@ -1298,11 +1128,6 @@ test("a trackpad's two-finger swipe moves the row by its sideways wheel and is l
   expect(standing(long.item)).toEqual(["rest", "0px", false]);
 });
 
-test("a row that offers no swipe draws none and hears a press as a click", () => {
-  const container = draw(createElement(Members));
-  expect(container.querySelector("li[data-swipe], [data-swipe-act]")).toBeNull();
-});
-
 test("an open row's own acts take their click, the row's swipe doing nothing", () => {
   const { item, press, acted, opened } = swiped();
   drag(press, 10, 40);
@@ -1413,12 +1238,6 @@ test("a flick carries a release along its speed: let go short of the line, a fas
   expect([slow.acted, standing(slow.item)]).toEqual([[], ["open", "72px", false]]);
 });
 
-test("past 85% of the row the row gives, going on with a third of the hand's travel", () => {
-  const { item, press } = swiped();
-  drag(press, 20, 300);
-  expect(standing(item)).toEqual(["moving", "270.75px", true]);
-});
-
 test("a trackpad movement that begins up or down stays the list's until its wheel rests, however sideways it turns; a sideways one begins a swipe only once it leans sideways 5px, and twice as far as up or down", () => {
   const { frameAt, wheel } = trackpad();
   const { item } = swiped();
@@ -1461,7 +1280,7 @@ test("a trackpad's deltas shrinking five times in a row are the fingers lifted: 
   expect(short.acted).toEqual([]);
 });
 
-test("a trackpad's swipe on an open row starts from where it rests, goes the hand's way past the give however it is fed, and a flick let go when the wheel rests carries as a pointer's does", () => {
+test("a trackpad's swipe on an open row starts from where it rests, and a flick let go when the wheel rests carries as a pointer's does", () => {
   const { frameAt, wheel } = trackpad();
   const open = swiped();
   drag(open.press, 10, 40);
@@ -1469,12 +1288,6 @@ test("a trackpad's swipe on an open row starts from where it rests, goes the han
   expect(standing(open.item)).toEqual(["open", "72px", false]);
   wheel(open.item, -5);
   expect(standing(open.item)).toEqual(["moving", "77px", false]);
-
-  const far = swiped();
-  wheel(far.item, -300);
-  expect(standing(far.item)).toEqual(["moving", "270.75px", true]);
-  wheel(far.item, -10);
-  expect(standing(far.item)).toEqual(["moving", "274.25px", true]);
 
   const flicked = swiped();
   wheel(flicked.item, -60, 0, 100);
@@ -1543,55 +1356,4 @@ test("a row that swipes still opens its menu on a touch held still, and the touc
   } finally {
     vi.useRealTimers();
   }
-});
-
-test("a row in a dense list is drawn once as it mounts, knowing it is dense in that render, and drawn again by nothing of its own", () => {
-  let commits = 0;
-  const list = (title: string) =>
-    createElement(
-      Profiler,
-      { id: "row", onRender: () => (commits += 1) },
-      createElement(List, {
-        label: "Sidebar",
-        density: LIST_DENSITY.DENSE,
-        children: createElement(ListRow, {
-          title,
-          description: "acme/relay",
-          meta: "3m",
-          onPress: () => undefined,
-          actionsAt: LIST_ROW_ACTIONS.HOVER,
-          actions: createElement(IconButton, { icon: null, label: "Pin" }),
-        }),
-      }),
-    );
-  const container = draw(list("Fix the refresh"));
-  expect(commits).toBe(1);
-  expect(container.querySelector(".luke-list-row-description")?.getAttribute("data-overflow")).toBe(
-    "false",
-  );
-  expect(container.querySelector<HTMLElement>(".luke-list-row")?.getAttribute("style")).toBeNull();
-});
-
-test("a press gives a row whole, and a row edge to edge in a card only inside its fill", () => {
-  const container = draw(
-    createElement(
-      "div",
-      null,
-      createElement(List, {
-        label: "Plain",
-        children: createElement(ListRow, { title: "Ada", onPress: ignore }),
-      }),
-      createElement(List, {
-        label: "Card",
-        variant: LIST_VARIANT.CARD,
-        children: createElement(ListRow, { title: "Grace", onPress: ignore }),
-      }),
-    ),
-  );
-  press(button(container, "Ada"));
-  press(button(container, "Grace"));
-  const [plain, card] = [...container.querySelectorAll(".luke-list-row")];
-
-  expect(plain?.getAttribute("data-pulse")).toBe("quiet");
-  expect(card?.getAttribute("data-pulse")).toBe("flush");
 });

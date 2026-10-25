@@ -4,7 +4,7 @@
   "ignoreBinaries": ["afconvert", "iconutil", "ditto", "shasum", "tiffutil"],
   "workspaces": {
     ".": {
-      "entry": ["scripts/fixtures/discarded-effect/*.ts"],
+      "entry": ["scripts/fixtures/discarded-effect/*.ts", "scripts/vercel-deployed-paths.mjs"],
       "project": ["scripts/**"]
     },
     "apps/desktop": {

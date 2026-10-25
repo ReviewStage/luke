@@ -264,20 +264,20 @@ export const acceptAsk = /* @__PURE__ */ Effect.fn("web/acceptAsk")(function* <
     ...(input.timeZone === undefined ? undefined : { timeZone: input.timeZone }),
   };
 
-  // The dispatch runs under the conversation's dispatch lock, so one dispatch at a time runs in a
+  // The dispatch runs under the conversation's dispatch claim, so one dispatch at a time runs in a
   // conversation: of two retries for one client id the second finds the session written and
   // hands eve nothing, and of two first asks the second reads the session the first opened and
   // sends into it rather than opening a second the forward-only claim would lose. A Clear that
-  // lands between the admission above and this lock finds no conversation to dispatch in, and the
+  // lands between the admission above and the claim finds no conversation to dispatch in, and the
   // ask is refused as not found rather than dispatched into a conversation the account has cleared.
   // An eve that could not be reached is the same refusal as one that answered outside its shape,
-  // with the gateway's own status for the operator: the row is left standing for a retry, and the
-  // transaction the dispatch runs in commits nothing for it, as it commits nothing for a refusal.
-  // Note that the dispatch cannot be interrupted, because eve takes the message before the row
-  // records what eve answered: a caller that went in between (a voice socket detaching) would roll
-  // the record back with eve's turn already running, and no turn would ever be bound to the ask.
-  // A dispatch past its deadline is refused as an eve that could not be reached is, the row left
-  // standing for a retry.
+  // with the gateway's own status for the operator: the row is left standing for a retry, its claim
+  // cleared as it is for a refusal; and so is an ask another hand-over's claim kept waiting past the
+  // wait for it, eve told nothing. Note that the dispatch cannot be interrupted, because eve takes the
+  // message before the row records what eve answered: a caller that went in between (a voice socket
+  // detaching) would leave the record unwritten with eve's turn already running, and no turn would
+  // ever be bound to the ask. A dispatch past its deadline is refused as an eve that could not be
+  // reached is, the row left standing for a retry.
   let failed: AskOutcome | undefined;
   const dispatch = seams.asks.dispatchOnce(
     { userId, conversationId },
@@ -316,6 +316,12 @@ export const acceptAsk = /* @__PURE__ */ Effect.fn("web/acceptAsk")(function* <
   const dispatched = within.value;
   if (dispatched === ASK_DISPATCH_REFUSAL.NO_CONVERSATION) {
     return Result.fail({ refusal: ASK_REFUSAL.NOT_FOUND });
+  }
+  if (dispatched === ASK_DISPATCH_REFUSAL.BUSY) {
+    return Result.fail({
+      refusal: ASK_REFUSAL.UPSTREAM,
+      status: HOSTED_HTTP_STATUS.SERVICE_UNAVAILABLE,
+    });
   }
   return failed ?? accepted;
 });

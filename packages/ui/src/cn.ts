@@ -130,7 +130,6 @@ const PANEL_WINDOW = {
     "actor-overlap",
     "attention-glyph-small",
     "corner-dot",
-    "item-gap",
     "list-held",
     "offline-glyph",
     "offline-mark",
@@ -146,6 +145,35 @@ const PANEL_WINDOW = {
   radius: ["disc"],
   shadow: ["actor-for-ring", "actor-outline", "actor-outline-ring", "actor-ring"],
   animate: ["offline-arrive"],
+} as const;
+
+/**
+ * The names the rows and navigation block of the theme adds (list row, nav
+ * item, disclosure, bar item, pane bar, toolbar, over pane, folding search,
+ * searchable menu), by the group tailwind-merge reads each in.
+ */
+const ROWS_NAVIGATION = {
+  text: ["dialog-size", "tag-size"],
+  leading: ["label"],
+  spacing: [
+    "bar-count-reach",
+    "caption-leading",
+    "disclosure-row",
+    "item-gap",
+    "list-row-lead",
+    "luke-32",
+    "luke-48",
+    "menu-label",
+    "nav-identity",
+    "over-pane",
+    "over-pane-column",
+    "pane-bar",
+    "submenu",
+    "submenu-reach",
+    "swipe-label",
+  ],
+  shadow: ["bar-count-ring"],
+  radius: ["inherit"],
 } as const;
 
 const merge = extendTailwindMerge({
@@ -166,6 +194,7 @@ const merge = extendTailwindMerge({
         "tag",
         ...FEEDBACK_DISPLAY.text,
         ...PANEL_WINDOW.text,
+        ...ROWS_NAVIGATION.text,
       ],
       "font-weight": [
         "text",
@@ -180,7 +209,7 @@ const merge = extendTailwindMerge({
         ...PANEL_WINDOW["font-weight"],
       ],
       tracking: ["title", ...PANEL_WINDOW.tracking],
-      leading: ["body", ...FEEDBACK_DISPLAY.leading],
+      leading: ["body", ...FEEDBACK_DISPLAY.leading, ...ROWS_NAVIGATION.leading],
       spacing: [
         "luke-2",
         "luke-4",
@@ -246,6 +275,7 @@ const merge = extendTailwindMerge({
         "caption-glyph",
         ...FEEDBACK_DISPLAY.spacing,
         ...PANEL_WINDOW.spacing,
+        ...ROWS_NAVIGATION.spacing,
       ],
       radius: [
         "control",
@@ -264,6 +294,7 @@ const merge = extendTailwindMerge({
         "choice-box",
         ...FEEDBACK_DISPLAY.radius,
         ...PANEL_WINDOW.radius,
+        ...ROWS_NAVIGATION.radius,
       ],
       shadow: [
         "dialog",
@@ -273,6 +304,7 @@ const merge = extendTailwindMerge({
         "switch-thumb",
         ...FEEDBACK_DISPLAY.shadow,
         ...PANEL_WINDOW.shadow,
+        ...ROWS_NAVIGATION.shadow,
       ],
       font: ["ui"],
       container: [

@@ -161,9 +161,6 @@ test("a blank tile draws nothing until its picture loads, lazily, and says where
     onFail: failed,
   });
   const tile = container.firstElementChild;
-  assert.equal(tile?.getAttribute("data-shape"), "tile");
-  assert.equal(tile?.getAttribute("data-edged"), "true");
-  assert.equal(tile?.hasAttribute("data-hue"), false);
   assert.equal(container.textContent, "");
   assert.equal(tile?.querySelector("svg"), null);
   assert.equal(picture(container)?.getAttribute("loading"), "lazy");

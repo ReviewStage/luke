@@ -999,6 +999,8 @@ export class StreamRelay {
     const asks = this.#seams.asks;
     if (asks === undefined) return Effect.succeed([]);
     return Effect.gen(function* () {
+      // A delivery eve names is written onto its ask only once eve's answer is, so a hand-over still under way is waited out.
+      yield* asks.binding.handOversSettled(standing.target);
       const bound = yield* asks.binding.bindDeliveries(
         standing.target,
         deliveryIds,
@@ -1073,11 +1075,11 @@ export class StreamRelay {
    * eve coalesced with it, which is taken as its awaiting row, and every
    * other line, a typed ask's among them, is written here as the turn's user
    * row. Note
-   * the order: the awaiting row is taken once the conversation's dispatch
-   * lock is free, which waits out an ask's dispatch still writing its
-   * delivery under that lock (`asks.ts`'s `dispatchOnce`), so the binding that follows reads a
-   * delivery eve steered in before its dispatch committed; bound first, such
-   * an ask would be missed and its line written twice.
+   * that the binding (`#bound`) first waits out an ask's dispatch still
+   * writing its delivery under the conversation's dispatch claim (`asks.ts`'s
+   * `handOversSettled`), so it reads a delivery eve steered in before its
+   * dispatch recorded it; bound before, such an ask would be missed and its
+   * line written twice.
    */
   #received(
     eveTurnId: string,
