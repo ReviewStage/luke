@@ -129,8 +129,9 @@ export const CONNECTION_TOOL = {
  * names: eve's provider-run web reads, which coding agents ran before they
  * had the public reads, the planning model's four tools about the
  * task's coding agents, since named as `AGENT_TOOL`'s agent tools, the
- * four about the workspace's own issues, gone with them, and the inbox's
- * post and read, since named for the channels a thread is posted to.
+ * four about the workspace's own issues, gone with them, the inbox's
+ * post and read, since named for the channels a thread is posted to, and
+ * the four of the workspace's Chat, removed with it.
  */
 export const RETIRED_TOOL = {
   WEB_FETCH: "web_fetch",
@@ -155,6 +156,11 @@ export const RETIRED_TOOL = {
   // Renamed `post_thread` and `read_threads`, since a thread is posted to a channel.
   POST_TO_INBOX: "post_to_inbox",
   READ_INBOX: "read_inbox",
+  // The workspace's Chat, removed with it.
+  POST_CHAT: "post_chat",
+  READ_CHAT: "read_chat",
+  RESOLVE_ASK: "resolve_ask",
+  EDIT_CHANNEL: "edit_channel",
 } as const;
 
 /**
