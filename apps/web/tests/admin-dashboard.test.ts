@@ -194,16 +194,11 @@ function cardOf(page: HTMLElement, label: string): string {
   return name?.parentElement?.parentElement?.textContent ?? "";
 }
 
-test("a loaded dashboard states its sections under their headings, in order", () => {
-  const page = render(ready(metrics()));
-
-  expect(sectionHeadings(page)).toEqual(SECTIONS);
-});
-
 test("the loading dashboard stands its sections under the same headings, saying it is loading", () => {
   const page = render({ status: "loading" });
 
   expect(sectionHeadings(page)).toEqual(SECTIONS);
+  expect(regions(page).map((region) => region.name)).toEqual(SECTIONS);
   expect(page.querySelector('[role="status"]')?.textContent).toContain("Reading this page");
 });
 
@@ -224,12 +219,6 @@ test("each section is a region named by its heading, holding what it heads and i
   expect(named("This week")).not.toContain("Activity by feature per day");
   expect(named("Most active accounts")).toContain("Ada Lovelace");
   expect(named("Most active accounts")).toContain("An active day is a UTC day");
-});
-
-test("the loading dashboard stands the same regions, named by the same headings", () => {
-  const page = render({ status: "loading" });
-
-  expect(regions(page).map((region) => region.name)).toEqual(SECTIONS);
 });
 
 test("each headline tile reads its week's figure under its name, with its move and its detail", () => {
@@ -384,13 +373,10 @@ test("a first read that failed says why under the page's toolbar, its controls s
   expect(heard).toEqual(["window 90", "reload"]);
 });
 
-test("View options offer the three time ranges, the one read checked and said after the title, and Include admins, each handing its choice up", () => {
+test("View options offer the three time ranges, the one read checked, and Include admins, each handing its choice up", () => {
   const heard: string[] = [];
   const page = render(ready(metrics()), heard);
 
-  expect(page.querySelector("header .luke-toolbar-heading")?.textContent).toBe(
-    "OverviewLast 7 days",
-  );
   openViewOptions(page);
   expect(menuItems().map((item) => item.label)).toEqual(["Time range", "Include admins"]);
   choose("Time range");

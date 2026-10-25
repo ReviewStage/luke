@@ -868,7 +868,7 @@ function ServersPopover({
           : page !== undefined
             ? serverPage(page)
             : home}
-        <div className="task-compose-menu-foot">
+        <div className="task-compose-menu-foot block flex-none border-t border-border p-menu-inset">
           <Button
             variant={BUTTON_VARIANT.QUIET}
             icon={<GearIcon />}

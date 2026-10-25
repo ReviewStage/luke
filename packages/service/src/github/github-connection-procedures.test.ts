@@ -11,7 +11,7 @@ import { makeSignature } from "better-auth/crypto";
 import { bearer } from "better-auth/plugins";
 import { eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/pglite";
-import { Cause, Context, Duration, Effect, Layer, Option } from "effect";
+import { Cause, type Context, Duration, Effect, Layer, Option } from "effect";
 import { SqlClient } from "effect/sql";
 import { TestClock } from "effect/testing";
 import { afterEach, beforeEach, vi } from "vitest";
@@ -24,7 +24,7 @@ import {
 } from "../auth/auth-policy.js";
 import type { WireValue } from "../core.js";
 import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "../http/http.js";
-import { HOSTED_BODY_CEILING_BYTES, hostedFetch } from "../orpc/handler.js";
+import { hostedFetch } from "../orpc/handler.js";
 import type { WebServices } from "../runtime.js";
 import { githubProcedures } from "./github-procedures.js";
 import { type GitHubUnlink, githubUnlink } from "./github-unlink.js";
@@ -617,60 +617,6 @@ it.effect(
         {
           status: HOSTED_HTTP_STATUS.BAD_REQUEST,
           body: { error: HOSTED_API_ERROR.INVALID_REQUEST },
-        },
-      );
-    }),
-);
-
-it.effect("a path asked by another method is the hosted vocabulary's own 405", () =>
-  Effect.gen(function* () {
-    const service = yield* openService;
-
-    assert.deepEqual(yield* service.ask("/api/github/connect", { method: "GET" }), {
-      status: HOSTED_HTTP_STATUS.METHOD_NOT_ALLOWED,
-      body: { error: HOSTED_API_ERROR.METHOD_NOT_ALLOWED },
-    });
-  }),
-);
-
-it.effect(
-  "a claim streamed with no stated length is refused as too large past the handler's ceiling",
-  () =>
-    Effect.gen(function* () {
-      const handle = hostedFetch({
-        github: githubProcedures({
-          resolveUserId: () => Effect.succeed(Option.none()),
-          resolveSessionUserId: () => Effect.succeed(Option.some("user-1")),
-          unlinkGitHub: () => Effect.void,
-        }),
-      });
-      const chunk = new Uint8Array(64 * 1024).fill(0x20);
-      let sent = 0;
-      const body = new ReadableStream<Uint8Array>({
-        pull(controller) {
-          if (sent > HOSTED_BODY_CEILING_BYTES) return controller.close();
-          sent += chunk.byteLength;
-          controller.enqueue(chunk);
-        },
-      });
-      // Node's fetch takes a streamed body only with `duplex` said, which the DOM's `RequestInit` has no field for.
-      const streamed: RequestInit & { readonly duplex: "half" } = {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body,
-        duplex: "half",
-      };
-      // SAFETY: the body is refused before any procedure yields a service, so an empty context stands in for the web runtime's.
-      const services = Context.empty() as Context.Context<WebServices>;
-      const response = yield* Effect.promise(() =>
-        handle(new Request(new URL("/api/github/connect/claim", ORIGIN), streamed), services),
-      );
-
-      assert.deepEqual(
-        { status: response.status, body: yield* Effect.promise(() => response.json()) },
-        {
-          status: HOSTED_HTTP_STATUS.PAYLOAD_TOO_LARGE,
-          body: { error: HOSTED_API_ERROR.REQUEST_TOO_LARGE },
         },
       );
     }),

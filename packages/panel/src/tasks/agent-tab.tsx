@@ -181,7 +181,7 @@ import {
   useMessageReveal,
 } from "./message-links.js";
 import { PlanPictures } from "./plan-pictures.js";
-import { ReplayCard, type ReplayPlace, replayPlace } from "./replay-card.js";
+import { ORIGIN_CHIP, ReplayCard, type ReplayPlace, replayPlace } from "./replay-card.js";
 import { briefAgent, replayOpening } from "./replay-card-model.js";
 import { REPLY_SCOPE, ReplyToSelection } from "./reply-to-selection.js";
 import { REWIND_ACTION, RewindProvider, rewindPoints, useMessageEdit } from "./rewind-action.js";
@@ -926,10 +926,10 @@ function AgentPartView({
 /** A webhook call's body inside the card of the prompt it rode in with, folded again under its own line, as the caller sent it. */
 function OriginBody({ body }: { body: string }): React.JSX.Element {
   return (
-    <Fold className="agent-origin-body">
+    <Fold className="agent-origin-body text-caption-inline">
       <LineSummary brightens>
         <DisclosureChevron />
-        <WebhookIcon className="agent-origin-body-icon" aria-hidden="true" />
+        <WebhookIcon className="agent-origin-body-icon size-luke-16 shrink-0" aria-hidden="true" />
         {WEBHOOK_BODY_LABEL}
       </LineSummary>
       <FoldBody>
@@ -1019,7 +1019,7 @@ function TaskRef({ task, onOpen }: { task: BriefTask; onOpen?: (() => void) | un
     <InlineRef
       look={INLINE_REF_LOOK.WASH}
       glyph={
-        <span className="agent-origin-glyph">
+        <span className="agent-origin-glyph inline-grid size-luke-16 flex-none place-items-center text-muted-foreground [&>svg]:size-origin-glyph">
           <PlanGlyph status={task.status} />
         </span>
       }
@@ -1085,7 +1085,7 @@ function OriginSubject({
       </OneLine>
     );
   const chip = linkChip(url, words, doors);
-  if (chip !== undefined) return <span className="agent-origin-chip">{chip}</span>;
+  if (chip !== undefined) return <span className={ORIGIN_CHIP}>{chip}</span>;
   return (
     <OneLine className="agent-origin-subject" words={words}>
       <TextLink
@@ -1363,7 +1363,7 @@ export function AgentMessage({
         <Message from={message.role} data-message-id={message.id} data-editing="">
           <div
             ref={editing.ref}
-            className="edit-composer"
+            className="edit-composer origin-top-right animate-edit-composer-in data-leaving:animate-edit-composer-out"
             data-leaving={editing.leaving ? "" : undefined}
             inert={editing.leaving}
           >

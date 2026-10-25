@@ -68,6 +68,9 @@ import {
  * a file draws every window of its lines.
  */
 
+/** A tab a find searches, which holds its bar at its top right and answers its own width (`find-scope`'s container queries). */
+const FIND_SCOPE = "find-scope relative @container/find-scope";
+
 /** How far a step moves through the matches. */
 export const FIND_STEP = {
   PREVIOUS: -1,
@@ -280,14 +283,14 @@ function FindBar({
   return (
     <MenuSurface
       ref={surface}
-      className="find-bar"
+      className="find-bar absolute top-luke-8 right-column-inset z-3"
       flow={MENU_SURFACE_FLOW.ROW}
       leaving={leaving}
       role="search"
       aria-label="Find"
       {...{ [FIND_SKIP_ATTRIBUTE]: "" }}
     >
-      <div className="find-bar-field">
+      <div className="find-bar-field mr-list-gap w-find-field">
         <SearchField
           ref={field}
           label="Find"
@@ -434,7 +437,7 @@ export function FindScope({
   return (
     <Fill
       ref={setRoot}
-      className={className === undefined ? "find-scope" : `${className} find-scope`}
+      className={className === undefined ? FIND_SCOPE : `${className} ${FIND_SCOPE}`}
       {...props}
     >
       {!drawn.mounted || (drawn.leaving && motionHeld()) ? null : (

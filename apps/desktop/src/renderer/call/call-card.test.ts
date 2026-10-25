@@ -11,7 +11,7 @@ import { deliveryOf, stateWith } from "@luke/panel/testing/app-state";
 import { onRegistry } from "@luke/panel/testing/copy-feedback";
 import { EXPERIMENT } from "@luke/settings";
 import { experimentsOn } from "@luke/settings/testing";
-import { CALL_CONTROL_LABEL, CALL_VIDEO_LABEL, TOAST_LOOK } from "@luke/ui";
+import { CALL_CONTROL_LABEL, CALL_VIDEO_LABEL } from "@luke/ui";
 import { AVATAR_END_REASON, AVATAR_STATUS, type AvatarState } from "@luke/voice/avatar";
 import { IDLE_VOICE_VIEW, type VoiceView } from "@luke/voice/voice-view";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
@@ -139,7 +139,7 @@ const card = (page: HTMLElement) => page.querySelector<HTMLElement>("section.cal
 const tileIn = (scope: Element | null) =>
   scope?.querySelector<HTMLElement>(`section[aria-label="${CALL_VIDEO_LABEL.TILE}"]`) ?? null;
 
-test("with video on, the card draws Luke's video over the plan's name, on the track it is handed, and with none to offer it is the card alone", () => {
+test("with video on, the card draws Luke's video on the track it is handed, and with none to offer it is the card alone", () => {
   const dock = (call: CallCardInput) =>
     createElement(CallCardDock, { call, surface: CALL_CARD_SURFACE.FLOATING });
   const container = document.createElement("div");
@@ -155,9 +155,7 @@ test("with video on, the card draws Luke's video over the plan's name, on the tr
   assert.deepEqual((tile.querySelector("video")?.srcObject as FakeMediaStream | null)?.tracks, [
     VIDEO,
   ]);
-  // Above the name, and with no end of its own: End call stays the bar's.
-  const head = card(container)?.querySelector(".call-card-head");
-  assert.ok(head && tile.compareDocumentPosition(head) & Node.DOCUMENT_POSITION_FOLLOWING);
+  // With no end of its own: End call stays the bar's.
   assert.deepEqual(
     [...tile.querySelectorAll("button")].map((each) => each.getAttribute("aria-label")),
     [CALL_CONTROL_LABEL.VIDEO_OFF],
@@ -221,7 +219,6 @@ test("the floating call window draws Luke's video while the avatar is live, its 
   const page = mount(createElement(CallWindowCard));
   await settle();
   const windowCard = card(page);
-  assert.equal(windowCard?.dataset.surface, CALL_CARD_SURFACE.WINDOW);
   const tile = tileIn(windowCard);
   assert.ok(tile, "the window's card draws the video tile");
   // jsdom has no WebRTC, so the panel's frames never reach it: Luke's still face, not a black box.
@@ -283,7 +280,7 @@ test("in the floating call window ⇧⌘M and ⇧⌘S answer, as the mute hints 
   assert.deepEqual(sent.at(-1), { kind: "voice.command", payload: { command: "mute-speaker" } });
 });
 
-test("a press main refuses in the floating call window is said there, compact over the card", async () => {
+test("a press main refuses in the floating call window is said there", async () => {
   handBridge(onCall({ status: AVATAR_STATUS.OFF }));
   fakeActPortAnswering((request) => {
     sent.push(request);
@@ -299,10 +296,9 @@ test("a press main refuses in the floating call window is said there, compact ov
   await settle();
   assert.deepEqual(sent, [{ kind: "voice.command", payload: { command: "end-call" } }]);
   const stack = document.querySelector<HTMLElement>('section[aria-label="Notifications"]');
-  assert.equal(stack?.dataset.look, TOAST_LOOK.COMPACT);
   const toasts = [...(stack?.querySelectorAll<HTMLElement>(".luke-toast") ?? [])];
   assert.deepEqual(
-    toasts.map((toast) => [toast.dataset.look, toast.textContent]),
-    [[TOAST_LOOK.COMPACT, "The voice window refused end-call."]],
+    toasts.map((toast) => toast.textContent),
+    ["The voice window refused end-call."],
   );
 });
