@@ -33,10 +33,6 @@ const SILENT_DOORS = Layer.succeed(AgentNoticeDoors, {
   post: (notice) => {
     posted.push(notice);
   },
-  toast: () => undefined,
-  toastInbox: () => undefined,
-  toastFailedRun: () => undefined,
-  toastChat: () => undefined,
   badge: () => undefined,
 });
 
@@ -61,7 +57,6 @@ function linked(
       host: {
         codingAgentList: () => UNANSWERED,
         codingAgentPage: () => UNANSWERED,
-        codingAgentPullRequest: () => UNANSWERED,
         codingAgentAccountInboxFollow: () => Effect.void,
         codingAgentAccountInboxUnfollow: () => Effect.void,
         onAccountInboxChanged: () => () => undefined,
@@ -70,11 +65,6 @@ function linked(
         workspacesRefresh,
       },
       presenter: {
-        open: () => undefined,
-        openInbox: () => undefined,
-        openTasklessItem: () => undefined,
-        openFailedRun: () => undefined,
-        openChat: () => undefined,
         openMacCommandAsk: () => {
           forward += 1;
         },

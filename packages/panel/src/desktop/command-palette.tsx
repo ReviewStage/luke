@@ -40,7 +40,7 @@
  * them, followed the first time the Inbox is searched (`use-inbox-search.ts`):
  * each found by its title and its task's or automation's name, and else by
  * anything its thread says, the words that found it then said beside its
- * task's name. One chosen opens in the Inbox, as a notification's would.
+ * task's name. One chosen opens in the Inbox, as its row there would.
  *
  * It is the nearest layer while it stands: no key pressed in it goes on to
  * the window, so Escape closes the palette and nothing else, a call's reply
@@ -844,8 +844,8 @@ function paletteEntries(entry: AddEntry): readonly AddEntry[] {
  * agent's browser; then its archived agents (`archivedAgentRows`), each in
  * its row's look and words, found by its row's words, and beside the task's
  * name; none while no task is open. The "+"'s kinds stand under Commands as
- * Show board and the rest (`panelTabRows`). An agent opens as its
- * notification's click opens it, the Inbox the same way, and the panel's
+ * Show board and the rest (`panelTabRows`). An agent opens on its task's
+ * tab, or its own page where it has no task, the Inbox the same way, and the panel's
  * places as the "+" opens them, the version history giving way to each, so
  * none opens behind what covers it.
  */

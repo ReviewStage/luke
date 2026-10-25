@@ -42,7 +42,7 @@ import {
   TASK_SKILL_SOURCE,
   type TaskSkillSource,
 } from "@luke/features/task-wire";
-import { andList, countWords, readFailedWords, TERM } from "@luke/features/words";
+import { countWords, readFailedWords, TERM } from "@luke/features/words";
 import type { Workspace, WorkspaceMember } from "@luke/features/workspace-wire";
 import { CONFIRM_LOSS, type ConfirmLoss, STATUS_TONE, type StatusTone } from "@luke/ui";
 import { matchesTokens, searchTokens } from "@luke/ui/search-tokens";
@@ -304,37 +304,6 @@ export function fencedSkillFile(text: string): string {
   const longest = Math.max(0, ...[...text.matchAll(/`+/gu)].map((run) => run[0].length));
   const fence = "`".repeat(Math.max(3, longest + 1));
   return `${fence}markdown\n${text.replace(/\n+$/u, "")}\n${fence}`;
-}
-
-/* ----- After an install ----- */
-
-/** How many installed skills the notice names before it counts the rest. */
-const NAMED_INSTALLS = 2;
-
-/** "grill-me", "grill-me and grilling", "grill-me, grilling, and 3 more". */
-function namesText(names: readonly string[]): string {
-  const more = names.length - NAMED_INSTALLS;
-  return andList(more <= 0 ? names : [...names.slice(0, NAMED_INSTALLS), `${more} more`]);
-}
-
-/**
- * What the page says once an install lands: which skills, one or two by
- * name and the rest counted, and, under it, how to call the first one a
- * member can call, since that is what they will want to do next. Nothing
- * where nothing was installed. Note that a workspace's skill is offered
- * only to agents in that workspace, while a personal one follows its owner
- * into every workspace, so the hint names the workspace for the first.
- */
-export function installedNotice(
-  made: readonly Pick<InstalledSkillSummary, "name" | "userInvocable" | "scope">[],
-  workspace: Pick<Workspace, "name">,
-): { readonly words: string; readonly detail?: string } | undefined {
-  if (made.length === 0) return undefined;
-  const words = `Installed ${namesText(made.map((each) => each.name))}`;
-  const callable = made.find((each) => each.userInvocable);
-  if (callable === undefined) return { words };
-  const where = callable.scope === INSTALLED_SKILL_SCOPE.WORKSPACE ? ` in ${workspace.name}` : "";
-  return { words, detail: `Type /${callable.name} in any new agent${where}` };
 }
 
 /* ----- Words for what went wrong ----- */
