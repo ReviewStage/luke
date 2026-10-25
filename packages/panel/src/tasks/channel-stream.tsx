@@ -21,7 +21,6 @@ import { ACT_KIND } from "@luke/host/acts";
 import {
   AVATAR_SIZE,
   Avatar,
-  Badge,
   BUTTON_SIZE,
   BUTTON_VARIANT,
   Button,
@@ -29,7 +28,6 @@ import {
   CHOICE_BAR_SIZE,
   ChoiceBar,
   Comment,
-  STATUS_TONE,
   TEXT_BUTTON_TONE,
   TEXT_TONE,
   TEXT_VARIANT,
@@ -98,17 +96,27 @@ function isMine(listed: InboxListed, readerId: string | undefined): boolean {
   return (item.thread ?? []).some((message) => message.member?.userId === readerId);
 }
 
-/** The ways the mockup can mark what needs the reader, compared by `?needs=` in a development tab: a badge on the post, a ground under it, and a strip under the channel's head. */
-const NEEDS_LOOK = { BADGE: "badge", FILL: "fill", STRIP: "strip" } as const;
+/**
+ * The grounds the mockup can draw under a post that needs the reader,
+ * compared by `?ground=` in a development tab: a neutral fill, the attention
+ * tint, a lifted card, an outlined card, and the others dimmed instead.
+ */
+const GROUND = {
+  NEUTRAL: "neutral",
+  TINT: "tint",
+  LIFT: "lift",
+  OUTLINE: "outline",
+  DIM: "dim",
+} as const;
 
-type NeedsLook = (typeof NEEDS_LOOK)[keyof typeof NEEDS_LOOK];
+type Ground = (typeof GROUND)[keyof typeof GROUND];
 
-/** The looks shown: those the address names, else the badge and the strip. */
-const NEEDS_LOOKS: ReadonlySet<NeedsLook> = (() => {
-  const named = new URLSearchParams(globalThis.location?.search ?? "").get("needs");
-  const all = Object.values(NEEDS_LOOK) as readonly string[];
-  const picked = (named ?? "").split(",").filter((look) => all.includes(look)) as NeedsLook[];
-  return new Set<NeedsLook>(picked.length > 0 ? picked : [NEEDS_LOOK.BADGE, NEEDS_LOOK.STRIP]);
+/** The ground shown: the one the address names, else the neutral fill. */
+const STREAM_GROUND: Ground = (() => {
+  const named = new URLSearchParams(globalThis.location?.search ?? "").get("ground");
+  return (Object.values(GROUND) as readonly string[]).includes(named ?? "")
+    ? (named as Ground)
+    : GROUND.NEUTRAL;
 })();
 
 /** Whether a thread asks the reader something still open. */
@@ -215,13 +223,7 @@ function RepliesLine({
   const { item } = listed;
   const waiting = asksSomeone(listed) ? item.waitsOn : undefined;
   const waitingOn =
-    waiting === undefined
-      ? undefined
-      : waiting.userId !== readerId
-        ? waiting.name
-        : NEEDS_LOOKS.has(NEEDS_LOOK.BADGE)
-          ? undefined
-          : "you";
+    waiting === undefined ? undefined : waiting.userId === readerId ? "you" : waiting.name;
   return (
     <div className="channels-post-replies">
       {repliers.map((reply) => (
@@ -286,18 +288,13 @@ function ThreadPost({
       className="channels-post"
       data-chosen={String(chosen)}
       data-settled={String(item.status !== INBOX_STATUS.OPEN)}
-      data-needs-fill={String(NEEDS_LOOKS.has(NEEDS_LOOK.FILL) && needsReader(listed, readerId))}
+      data-needs={String(needsReader(listed, readerId))}
     >
       <Comment
         author={commentAuthor(actor)}
         nameRef={<ActorRef actor={actor} nameOnly />}
         at={item.postedAt}
         now={now}
-        trailing={
-          NEEDS_LOOKS.has(NEEDS_LOOK.BADGE) && needsReader(listed, readerId) ? (
-            <Badge tone={STATUS_TONE.ATTENTION}>Needs you</Badge>
-          ) : undefined
-        }
       >
         <div className="channels-post-body">
           <Text variant={TEXT_VARIANT.LABEL}>{item.title}</Text>
@@ -345,7 +342,7 @@ function LocalPost({
   );
 }
 
-/** The channel as a stream: its head, what needs the reader, and its posts by day. */
+/** The channel as a stream: its head and its posts by day, what needs the reader on a ground of its own. */
 export function ChannelStream({
   channel,
   items,
@@ -373,7 +370,6 @@ export function ChannelStream({
     (listed) => scope === STREAM_SCOPE.EVERYONE || isMine(listed, readerId),
   );
   const shown = scoped;
-  const needing = items.filter((listed) => needsReader(listed, readerId));
   const mineCount = items.filter(
     (listed) => isMine(listed, readerId) && asksSomeone(listed),
   ).length;
@@ -398,7 +394,11 @@ export function ChannelStream({
   };
   let lastDay = "";
   return (
-    <section className="channels-stream" aria-label={`#${channel.name}`}>
+    <section
+      className="channels-stream"
+      aria-label={`#${channel.name}`}
+      data-ground={STREAM_GROUND}
+    >
       <Toolbar
         title={`#${channel.name}`}
         end={TOOLBAR_INSET.COLUMN}
@@ -429,22 +429,6 @@ export function ChannelStream({
             : `${channel.purpose} · In flight: ${channel.inFlight}`}
         </Text>
       </div>
-      {!NEEDS_LOOKS.has(NEEDS_LOOK.STRIP) || needing.length === 0 ? null : (
-        <div className="channels-needs">
-          <Badge tone={STATUS_TONE.ATTENTION}>
-            {needing.length === 1 ? "1 needs you" : `${needing.length} need you`}
-          </Badge>
-          {needing.map((listed) => (
-            <TextButton
-              key={listed.item.id}
-              tone={TEXT_BUTTON_TONE.ACCENT}
-              onClick={() => open(listed)}
-            >
-              {listed.item.title}
-            </TextButton>
-          ))}
-        </div>
-      )}
       <Conversation subject={channel.id} list={log} className="channels-stream-log">
         <ConversationContent>
           <div className="channels-stream-body">

@@ -5767,15 +5767,28 @@ ul.actor-stack {
 }
 
 
-/* What needs the reader, compared in the mockup: a ground under the post, and a strip under the channel's head naming each. */
-.channels-post[data-needs-fill="true"] {
+
+/* What needs the reader stands on a ground of its own (`channel-stream.tsx`'s
+   `GROUND`), compared in the mockup: a neutral fill, the attention tint, a
+   card lifted off the stream, an outlined card, or the rest dimmed instead. */
+.channels-stream[data-ground="neutral"] .channels-post[data-needs="true"] {
   background: var(--luke-color-fill-hover);
 }
 
-.channels-needs {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--luke-space-4) var(--luke-space-12);
-  padding: 0 var(--column-inset) var(--luke-row-inset);
+.channels-stream[data-ground="tint"] .channels-post[data-needs="true"] {
+  background: var(--luke-color-attention-tint);
+}
+
+.channels-stream[data-ground="lift"] .channels-post[data-needs="true"] {
+  background: var(--luke-color-surface);
+  box-shadow: var(--shadow-card-soft);
+}
+
+.channels-stream[data-ground="outline"] .channels-post[data-needs="true"] {
+  background: var(--luke-color-fill-hover);
+  box-shadow: inset 0 0 0 1px var(--luke-color-border-strong);
+}
+
+.channels-stream[data-ground="dim"] .channels-post[data-needs="false"] {
+  opacity: 0.55;
 }
