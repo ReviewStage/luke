@@ -122,8 +122,8 @@ const readOutbound = Schema.decodeUnknownOption(terminalPortOutboundSchema);
 /** Return, as the screen reads it, which runs the bar's action. */
 const RETURN = "\r";
 
-/** The grey a terminal prints its own notes in: the palette's bright black. */
-const NOTE_INK = "\x1b[90m";
+/** The ink a terminal prints its own notes in: palette slot 16, which `terminal-theme.ts` gives the note colour and a dimmed screen leaves undimmed. */
+const NOTE_INK = "\x1b[38;5;16m";
 const RESET = "\x1b[0m";
 
 /** What hides the cursor, as a terminal reads it (DECTCEM). */

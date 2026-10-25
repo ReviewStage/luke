@@ -567,6 +567,7 @@ test("a shell that ended takes any key for a new one", async () => {
   const tab = await mount();
   const port = main.post(OLDEST);
   port.say({ type: "state", state: "exited", code: 0 });
+  assert.equal(tab.standing(), "· sandbox · exited");
   assert.equal(tab.bar(), undefined);
   assert.equal(tab.dimmed(), false);
   main.listed = { sandbox: SANDBOX_STATE.RUNNING, terminals: [] };
