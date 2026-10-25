@@ -27,6 +27,7 @@ import {
   type AgentPart,
   agentRows,
   chatNoticeOf,
+  drawnNoticeOf,
   isDelegation,
   messageWords,
   placedMessages,
@@ -267,13 +268,13 @@ export function drawnMessageWords(message: CodingAgentMessage): string {
 
 /**
  * One of the developer's messages as a copy reads it: their words, as the
- * tab draws them, an inbox line without its item's key; and a chat notice,
- * while the window offers Chat, as the message it tells of under who said
- * it, without the lines that are the agent's alone.
+ * tab draws them, an inbox line without its item's key; and a notice the
+ * tab draws as its sender's (`drawnNoticeOf`), as the message it tells of
+ * under who said it, without the lines that are the agent's alone.
  */
 function developerTurn(message: CodingAgentMessage, chatOn: boolean): CopiedTurn {
   const words = messageWords(message);
-  const notice = chatOn ? chatNoticeOf(message) : undefined;
+  const notice = drawnNoticeOf(message, chatOn);
   if (notice !== undefined) {
     const blocks = [{ kind: COPIED_BLOCK.WORDS, text: chatNoticeWords(words) }] as const;
     return { speaker: SPEAKER.CHAT, from: notice.from, blocks };
