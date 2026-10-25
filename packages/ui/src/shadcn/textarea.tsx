@@ -11,7 +11,7 @@ import { cn } from "../cn.js";
  * flex, and sized by its rows rather than `field-sizing-content`, which a
  * growing note asks for itself (`components/text-field`). None of shadcn's
  * outline or ring utilities, for the window's own ring
- * (`shadcn-focus.test.ts`), and no `dark:` grounds. `TEXTAREA_WELL` is the
+ * (`anti-slop/no-shadcn-focus-ring`), and no `dark:` grounds. `TEXTAREA_WELL` is the
  * field's well, exported so a text area bare in a card that is its well
  * replaces it whole.
  */

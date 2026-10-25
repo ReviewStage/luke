@@ -14,7 +14,7 @@ import { cn } from "../cn.js";
  * the desktop's arrow cursor; and none of shadcn's outline or ring
  * utilities, because the window's own focus ring (`@luke/panel`'s
  * base.css) draws the keyboard's ring and a utility would outrank it
- * (`shadcn-focus.test.ts`). `@luke/ui`'s `Slider`
+ * (`anti-slop/no-shadcn-focus-ring`). `@luke/ui`'s `Slider`
  * (`components/slider/slider.tsx`) is what an app draws; this is its inside.
  */
 

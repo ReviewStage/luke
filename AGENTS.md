@@ -207,7 +207,7 @@ pnpm --filter @luke/web test:agent       # offline brain eval, by hand
   flags, variants, sizes, themes) are one case, not a matrix.
 - `[review]` A test you wrote to explore the code while working is deleted
   before the push unless it passes this section.
-- `[review]` Reach for the cheapest guard that holds: a type, then a lint rule
+- `[check: anti-slop/no-source-read-in-test]` `[review]` Reach for the cheapest guard that holds: a type, then a lint rule
   in `tools/anti-slop/`, then a test. A rule about source text, such as a
   banned class or import, is a lint rule, never a test that reads source
   files.
@@ -238,7 +238,7 @@ pnpm --filter @luke/web test:agent       # offline brain eval, by hand
   and passes alone or in any order.
 - `[review]` A test finishes in about a second, and a file in about ten, on
   CI. One that cannot says why in a comment.
-- `[review]` Use real code first, then a fake, then a stub, and replace only
+- `[check: anti-slop/no-internal-vi-mock]` `[review]` Use real code first, then a fake, then a stub, and replace only
   what crosses a process boundary: provider HTTP, Apple, the model, the OS,
   the clock. An Effect service is replaced by a test `Layer` on its tag;
   anything else by `vi.spyOn`, restored with `vi.restoreAllMocks()`. Never
@@ -257,7 +257,7 @@ pnpm --filter @luke/web test:agent       # offline brain eval, by hand
 
 ### Changing and removing tests
 
-- `[review]` Never make a test pass by weakening it: no `.only`, `.skip`,
+- `[check: anti-slop/no-focused-or-skipped-test]` `[review]` Never make a test pass by weakening it: no `.only`, `.skip`,
   `.todo`, or `it.flakyTest`, no looser assertion, and no longer timeout or
   extra retry without evidence of what was slow. A flaky test is fixed or
   deleted.

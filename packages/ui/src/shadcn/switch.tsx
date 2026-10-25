@@ -11,7 +11,7 @@ import { cn } from "../cn.js";
  * elements ride, the desktop's arrow cursor, and none of shadcn's outline
  * or ring utilities, because the window's own focus ring (`@luke/panel`'s
  * base.css) draws the keyboard's ring, and a utility would outrank it
- * (`shadcn-focus.test.ts`). `@luke/ui`'s `Switch`
+ * (`anti-slop/no-shadcn-focus-ring`). `@luke/ui`'s `Switch`
  * (`components/switch/switch.tsx`) is what an app draws; this is its inside.
  * `SWITCH_TRACK` and `SWITCH_THUMB` are exported so the switch's drawing
  * alone, inside a row that is itself the switch, wears the same classes.
