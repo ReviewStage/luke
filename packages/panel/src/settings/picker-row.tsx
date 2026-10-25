@@ -108,7 +108,7 @@ export function Picker({
   };
 
   return (
-    <span className="settings-picker" ref={row}>
+    <span className="settings-picker relative inline-flex flex-none items-center" ref={row}>
       <Chip
         ref={chip}
         look={CHIP_LOOK.FIELD}

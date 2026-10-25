@@ -208,6 +208,24 @@
     }
   }
 
+  /* The panel's shell (`../components/sidebar/`, `row-mark/`, `search-match/`,
+     and the panel's own call card, settings rows, and mobile bar): a search's
+     wash, the veil over a photo's foot, a row's end mark, the sidebar's head
+     and its corner, a settings row's inset and least heights, the handover's
+     field chip, and the room a settings search lands a line below. */
+  --color-match: var(--luke-color-match);
+  --spacing-row-mark: 14px; /* off-scale: a mark a size under the glyph it follows */
+  --spacing-section-gap: var(--luke-section-gap);
+  --text-dialog-size: var(--luke-type-dialog-size);
+  --tracking-identity: -0.01em; /* off-scale: a name set at a dialog's size, drawn in */
+  --radius-luke-14: var(--luke-radius-14);
+  --spacing-settings-row-block: var(--luke-settings-row-block);
+  --spacing-settings-row-inline: var(--luke-settings-row-inline);
+  --spacing-settings-row: var(--luke-settings-row-min-height);
+  --spacing-settings-row-pair: var(--luke-space-32);
+  --spacing-heir-least: 220px; /* off-scale: a field chip wide enough for a name */
+  --spacing-settings-search-clearance: calc(var(--luke-space-32) + 3 * var(--luke-control-height));
+
   /* The overlays' roles (`../shadcn/dialog.tsx`, `popover.tsx`, `tooltip.tsx`,
      `hover-card.tsx`): the dimmed window, the surface a card or a menu
      stands on and its hairline, the dark pill, their corners, lifts, and
@@ -585,6 +603,10 @@
    `--luke-fold` (`fold-folded:`, `fold-bare:`; README's "Folding in a
    narrow container"). */
 @custom-variant pointer-coarse (@media (pointer: coarse));
+/* A device worked by a finger alone, which neither hovers nor points finely,
+   where words that only point at a chord are not drawn (`finger:hidden`);
+   both are asked, so a tablet worked with a trackpad keeps them. */
+@custom-variant finger (@media (hover: none) and (pointer: coarse));
 @custom-variant fold-folded (@container style(--luke-fold: folded));
 @custom-variant fold-bare (@container style(--luke-fold: bare));
 

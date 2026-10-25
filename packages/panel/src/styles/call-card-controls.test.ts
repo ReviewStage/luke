@@ -40,7 +40,7 @@ function windowCard() {
   card.className = "call-card";
   card.dataset.surface = "window";
   const head = card.appendChild(document.createElement("div"));
-  head.className = "call-card-head";
+  head.className = "call-card-head flex min-w-0 items-center gap-tight-gap";
   const bar = card
     .appendChild(document.createElement("div"))
     .appendChild(document.createElement("footer"));

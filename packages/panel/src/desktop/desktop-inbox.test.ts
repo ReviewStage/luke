@@ -9361,11 +9361,13 @@ test("a To row ends in its starter's face where a teammate started the agent and
     return [
       option.querySelector(".luke-combobox-option-label")?.textContent,
       ...[...(end?.children ?? [])].map((mark) =>
-        mark.matches(".actor-mark") ? `face ${mark.getAttribute("data-kind")}` : mark.className,
+        mark.matches(".actor-mark")
+          ? `face ${mark.getAttribute("data-kind")}`
+          : mark.getAttribute("aria-label"),
       ),
     ];
   });
-  assert.deepEqual(ends, [["Seat limits", "face person", "failed-mark"], ["Alerts"]]);
+  assert.deepEqual(ends, [["Seat limits", "face person", "Failed"], ["Alerts"]]);
 });
 
 test("a word typed in To asks the service for the agents it names, so one past the workspace's newest is found, picked, and sent to", async () => {

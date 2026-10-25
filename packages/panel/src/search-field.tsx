@@ -1,3 +1,4 @@
+import { SearchMatch } from "@luke/ui";
 import { type MatchRange, matchRanges } from "@luke/ui/search-tokens";
 import { focusSeek } from "./focus-seek.js";
 
@@ -49,11 +50,7 @@ export function Highlighted({
   let from = 0;
   for (const range of ranges) {
     if (range.start > from) parts.push(text.slice(from, range.start));
-    parts.push(
-      <mark className="search-match" key={range.start}>
-        {text.slice(range.start, range.end)}
-      </mark>,
-    );
+    parts.push(<SearchMatch key={range.start}>{text.slice(range.start, range.end)}</SearchMatch>);
     from = range.end;
   }
   if (from < text.length) parts.push(text.slice(from));

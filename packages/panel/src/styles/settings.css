@@ -1,75 +1,7 @@
-/* The settings tab's own layout: what no shared component draws. */
-
-/* Every row stands at the height a label-and-subtext pair needs, whether or
-   not it carries the subtext: a list where the short rows sit shorter reads as
-   cramped rather than as calm. */
-.settings-row {
-  display: flex;
-  min-height: 32px;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--luke-space-12);
-}
-
-/* A row's picker: the chip naming the value, and the app's own menu hung
-   from it (`@luke/ui`'s `SearchableMenu`), drawn the way the composer's
-   chips and menus are so Settings reads as the rest of the app. Every chip
-   shares one width, like a column of macOS pop-up buttons: the control
-   sizes the face, not whichever value happens to be chosen, so the rows
-   read as one aligned column and a change of value cannot re-shape its row.
-   The width fits the longest faces a build ships, and a longer model name
-   ellipsizes rather than growing. */
-.settings-picker {
-  position: relative;
-  display: inline-flex;
-  flex: 0 0 auto;
-  align-items: center;
-}
-
-/* The provider the account signed in with, its mark beside its name as the
-   sign-in button drew them, at the size of the line's own words, each part
-   kept whole, so a narrow row wraps the line between them, never inside. */
-.account-provider {
-  display: inline-flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--luke-space-4);
-  white-space: nowrap;
-}
-
-/* Settings › Workspace › Invitations (`.workspace-invite-row`, a refusal
-   standing under the form in a line of its own): the invite form at a row's
-   height and inset. */
-.workspace-invite {
-  display: flex;
-  min-height: var(--luke-settings-row-min-height);
-  align-items: center;
-  padding: var(--luke-settings-row-block) var(--luke-settings-row-inline);
-}
-
-/* The handover dialog's admin to make the owner: the field chip leading
-   with their face stands in this container, which holds it wide enough for
-   a name and lets it grow with a longer one. */
-.workspace-heir {
-  display: grid;
-  align-self: flex-start;
-  min-width: 220px;
-  max-width: 100%;
-}
-
-/* What a leave keeps and stops, under the leave dialog's body, in its
-   muted words. */
-.leave-consequences {
-  margin: 0;
-  padding-left: var(--luke-space-16);
-  color: var(--luke-color-text-muted);
-  font-size: var(--luke-type-body-size);
-  line-height: var(--luke-type-body-leading);
-}
-
-.leave-consequences li + li {
-  margin-top: var(--luke-space-4);
-}
+/* The settings tab's own layout that utilities say badly: the integration
+   tools' split and the picture choice, each laid out by its container's
+   width, and the rows of another component the split restages. The rest is
+   drawn in utilities where each is written. */
 
 /* Settings › Integrations: a connected row's tools opened in place under
    it, over a hairline. The chevron that opens a row, after its count, turns
@@ -88,12 +20,6 @@
      overran a short window and left a tall one a thin strip. */
   height: calc(var(--luke-stage-height) * 0.6);
   grid-template-columns: minmax(200px, 42%) minmax(0, 1fr);
-}
-
-/* The tools' rows, inside the `ScrollArea` that scrolls them; the page
-   beside them draws the rule between the two. */
-.integration-tools-list {
-  padding: var(--luke-space-4);
 }
 
 .integration-tools-split > .integration-tool-detail {
@@ -145,19 +71,6 @@
   .integration-tools-panel .integration-tool-detail-name {
     flex: 1 1 100%;
   }
-}
-
-/* A choice whose every value is heard (`sampled-choice-row.tsx`), in its
-   dialog: each heading over its run of values, the runs a step apart, so a
-   language reads as one family before its names do. */
-.sampled-choice {
-  display: grid;
-  gap: var(--luke-space-16);
-}
-
-.sampled-choice-group {
-  display: grid;
-  gap: var(--luke-space-6);
 }
 
 /* A choice whose every value has a face (`picture-choice-row.tsx`), under
@@ -214,9 +127,4 @@
     width: min(100%, 200px);
     justify-self: center;
   }
-}
-
-/* A search landing on the plan template's line keeps the title over it in view. */
-.template-note {
-  scroll-margin-top: calc(var(--luke-space-32) + 3 * var(--luke-control-height));
 }

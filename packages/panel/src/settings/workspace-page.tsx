@@ -696,7 +696,7 @@ function MemberLeave({
           loss: CONFIRM_LOSS.IRREVERSIBLE,
         }}
       >
-        <ul className="leave-consequences">
+        <ul className="leave-consequences m-0 pl-luke-16 text-body text-muted-foreground [&>li+li]:mt-luke-4">
           <li>{LEAVE_WORDS.TASKS(workspace.name)}</li>
           <li>{LEAVE_WORDS.AGENTS}</li>
           {automationsLine === undefined ? null : <li>{automationsLine}</li>}
@@ -731,7 +731,7 @@ function HeirChip({
   // Note that a container holds the chip wide enough for a name, because width is its place's.
   return (
     <>
-      <div className="workspace-heir">
+      <div className="grid min-w-heir-least max-w-full self-start">
         <Chip
           look={CHIP_LOOK.FIELD}
           chevron
@@ -1144,7 +1144,7 @@ function Invitations({
   return (
     <>
       <Stack gap={GAP.NONE}>
-        <div className="workspace-invite">
+        <div className="workspace-invite flex min-h-settings-row items-center px-settings-row-inline py-settings-row-block">
           <Inline
             as={LAYOUT_ELEMENT.FORM}
             align={ALIGN.END}
