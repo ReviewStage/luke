@@ -8,8 +8,6 @@
  * how far below the way back the page's first line stands.
  */
 
-import assert from "node:assert/strict";
-
 /** A custom property a length names. */
 const NAMED = /var\((--[\w-]+)\)/u;
 
@@ -53,9 +51,8 @@ export function pixelsOf(element: Element, length: string): number {
     spelled = spelled.replace(whole, `(${style.getPropertyValue(property).trim()})`);
   }
   const sum = spelled.replace(/calc/gu, "").replace(/px/gu, "");
-  assert.match(sum, /^[\d\s.+\-*/()]+$/u, `${length} works out to a length`);
-  const pixels = arithmetic(sum);
-  assert.ok(Number.isFinite(pixels), `${length} works out to a length`);
+  const pixels = /^[\d\s.+\-*/()]+$/u.test(sum) ? arithmetic(sum) : Number.NaN;
+  if (!Number.isFinite(pixels)) throw new Error(`${length} works out to no length: ${sum}`);
   return pixels;
 }
 
@@ -66,7 +63,8 @@ export function pixelsOf(element: Element, length: string): number {
  * own top padding.
  */
 export function wayBackGap(bar: HTMLElement, opening: HTMLElement): number {
-  const back = bar.querySelector("button") ?? assert.fail("the bar leads with a way back");
+  const back = bar.querySelector("button");
+  if (back === null) throw new Error("the bar leads with no way back");
   const row = pixelsOf(bar, getComputedStyle(bar).minHeight);
   const control = pixelsOf(back, "var(--luke-control-height)");
   return (row - control) / 2 + pixelsOf(opening, getComputedStyle(opening).paddingTop);
