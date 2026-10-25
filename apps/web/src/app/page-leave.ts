@@ -36,6 +36,8 @@ export interface PageLeave {
   readonly unsavedPlanWords: (unsaved: boolean) => void;
   /** Takes `go`, a way out of this tab, once the standing ask says to, or at once where none stands. */
   readonly leave: (go: () => void) => void;
+  /** Whether a page or a plan holds work a reload would lose, so a way out asks before it goes. */
+  readonly holdsWork: () => boolean;
 }
 
 export function pageLeave(page: LeavingPage): PageLeave {
@@ -96,7 +98,7 @@ export function pageLeave(page: LeavingPage): PageLeave {
     ask(() => take(go));
   };
 
-  return { unsavedWork, unsavedPlanWords, leave };
+  return { unsavedWork, unsavedPlanWords, leave, holdsWork: () => listening };
 }
 
 /** This tab's ways out, over its own window. */
