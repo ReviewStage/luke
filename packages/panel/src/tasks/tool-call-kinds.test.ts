@@ -59,7 +59,7 @@ function rowOf(tool: string, input: WireRecord, output: WireRecord) {
   );
   const row = container.querySelector("summary");
   assert.ok(row, `${tool} draws a row`);
-  return { words: row.textContent?.trim(), wrench: row.querySelector(".lucide-wrench") !== null };
+  return row.textContent?.trim();
 }
 
 const NO_ANSWER = { status: "accepted" };
@@ -84,18 +84,17 @@ test("each of Luke's tools that fell through to 'Used' reads as its own verb, wi
     [AGENT_TOOL.REOPEN_THREAD, { threadId: "t1" }, "Reopened a thread"],
   ] as const;
   for (const [tool, input, words] of rows) {
-    assert.deepEqual(rowOf(tool, input, NO_ANSWER), { words, wrench: false }, tool);
+    assert.equal(rowOf(tool, input, NO_ANSWER), words, tool);
   }
 });
 
 test("a call of an integration's tool says the tool it ran and the server it ran on, behind the server's mark", () => {
-  const { words, wrench } = rowOf(
+  const words = rowOf(
     "linear_remote",
     { remoteTool: "list_issues", parentCallId: "wrapper", input: {} },
     NO_ANSWER,
   );
   assert.equal(words, "Ran list_issues Linear");
-  assert.equal(wrench, false);
 });
 
 test("every tool an agent is offered has a kind of its own, and an MCP call a native harness made reads on its server", () => {

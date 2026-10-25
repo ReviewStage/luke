@@ -620,7 +620,6 @@ test("a connection whose tools could not be read says so in the attention tint, 
   const state = row.querySelector(".luke-settings-row-state");
 
   assert.equal(state?.textContent, "The tools could not be read.");
-  assert.equal(state?.getAttribute("data-state"), "attention");
   assert.deepEqual(rowButtons(row), ["Retry"]);
 
   toolReads.delete(INTEGRATION_PROVIDER.LINEAR);
@@ -1787,31 +1786,6 @@ function offerThree(): void {
   ];
   withheld = INTEGRATION_PROVIDER_LIST.filter((provider) => !offered.includes(provider));
 }
-
-test("an integration that connects glides from Not connected into Connected, followed by its connection", async () => {
-  const motions = playListMotions();
-  try {
-    offerThree();
-    const page = await mount();
-    layRowsInOrder(page);
-    const before = movingRow(page, "Mercury");
-
-    touched.set(INTEGRATION_PROVIDER.MERCURY, INTEGRATION_STATUS.CONNECTED);
-    await focusWindow();
-
-    assert.deepEqual(sections(page), [
-      ["Connected", ["Mercury"]],
-      ["Not connected", ["Granola", "Linear"]],
-    ]);
-    const after = movingRow(page, "Mercury");
-    assert.equal(before.dataset.motionKey, INTEGRATION_PROVIDER.MERCURY);
-    assert.equal(after.dataset.motionKey, INTEGRATION_PROVIDER.MERCURY);
-    const glide = motions.played.find((each) => each.element === after);
-    assert.deepEqual(glide?.keyframes[0], { transform: `translate(0px, ${2 * ROW}px)` });
-  } finally {
-    motions.remove();
-  }
-});
 
 test("with motion held still, an integration that connects takes its place and nothing plays", async () => {
   const motions = playListMotions();

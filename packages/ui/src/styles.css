@@ -49,6 +49,7 @@
 @import "./components/combobox/combobox.css";
 @import "./components/detail-page/detail-page.css";
 @import "./components/disclosure/disclosure.css";
+@import "./components/drop-slot/drop-slot.css";
 @import "./components/error-state/error-state.css";
 @import "./components/note-line/note-line.css";
 /* The wiring first, then the generated motions that assume it. */

@@ -1170,8 +1170,8 @@ ul.actor-stack {
 /* A sidebar too narrow for the pill's word beside a name that reads folds
    the pill to its glyph alone in a round, so the name keeps the room. The
    button's name and its hint still say what it does. */
-/* off-scale: 220px, where the update pill's word stops fitting beside a name */
-@container sidebar-foot (width < 220px) {
+/* off-scale: 280px, where the update pill's word stops fitting beside a name as long as "Ada Lovelace", which would otherwise end faded short at the default sidebar's 264px; the offline pill folds at the same width */
+@container sidebar-foot (width < 280px) {
   .sidebar-update {
     --luke-fold: folded;
   }

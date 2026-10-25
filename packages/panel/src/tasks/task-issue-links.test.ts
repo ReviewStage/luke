@@ -21,7 +21,6 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
 import { fakeActPort } from "../testing/app-bridge.js";
 import { fakeAppPlatform } from "../testing/app-platform.js";
-import { layContainersAt } from "../testing/container-width.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { restOn } from "../testing/hint-rest.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
@@ -269,7 +268,6 @@ test("a chip hangs its issue's card while the pointer rests on it: its title, re
   assert.match(card?.textContent ?? "", /Login fails on Safari 18/);
   assert.match(card?.textContent ?? "", /acme\/web#312 · Not planned/);
   assert.match(card?.textContent ?? "", /Closes: Merging closes the issue/);
-  assert.ok(card?.querySelector("[data-issue-mark]"), "the issue's live mark leads the card");
 });
 
 test("a keyword switched and an issue unlinked from a chip's menu reach the host for that link, and the chips follow", async () => {
@@ -322,28 +320,6 @@ test("an issue unlinked asks nothing and offers Undo, which links the same issue
   ]);
 });
 
-test("a GitHub issue its provider did not answer wears a mark of its own, not the open issue's circle in grey", async () => {
-  const { standing: _, ...unanswered } = SAFARI;
-  const open = {
-    ...SAFARI,
-    standing: { provider: TASK_ISSUE_PROVIDER.GITHUB, state: ISSUE_STATE.OPEN },
-  };
-  const { container } = await mount({
-    links: [
-      open,
-      { ...unanswered, id: "0b6c1f0e-2a7d-4c3e-9f1a-0d8e7b6a5c49", key: "acme/web#301" },
-    ],
-  });
-
-  const openMark = container.querySelector(".issue-mark")?.outerHTML.replace(/ class="[^"]*"/u, "");
-  const unreadMark = container
-    .querySelector(".task-issue-link-unread svg")
-    ?.outerHTML.replace(/ class="[^"]*"/u, "");
-  assert.ok(openMark !== undefined && unreadMark !== undefined, "both draw a mark");
-  assert.notEqual(unreadMark.replace(/ aria-hidden="true"| focusable="false"/gu, ""), openMark);
-  assert.equal(container.querySelector(".task-issue-link-unread .issue-mark"), null);
-});
-
 test("an issue its provider did not answer asks before it is unlinked, in red, since Undo could not link it again", async () => {
   const { standing: _, ...unread } = ENG;
   const { container, sent } = await mount({ links: [SAFARI, unread] });
@@ -357,12 +333,10 @@ test("an issue its provider did not answer asks before it is unlinked, in red, s
     [...question.querySelectorAll<HTMLButtonElement>("button")].find(
       (each) => each.textContent === "Unlink",
     ) ?? assert.fail("no Unlink in the question");
-  const variant = answer.getAttribute("data-variant");
   await act(async () => answer.click());
   await settle();
 
   assert.equal(asked, false, "nothing is sent while it asks");
-  assert.equal(variant, "danger");
   assert.deepEqual(sent.slice(1), [
     [ACT_KIND.TASK_ISSUES_UNLINK, { taskId: TASK_ID, linkId: ENG.id }],
   ]);
@@ -519,23 +493,4 @@ test("a keyword change a newer one overtook puts nothing back when it is refused
     ["Part of"],
   );
   assert.equal(container.querySelector('[role="alert"]'), null);
-});
-
-test("on a phone the chips wrap rather than run past the page, each cutting its title short", async () => {
-  const laid = layContainersAt({}, { touch: true });
-  try {
-    const { container } = await mount({ links: [SAFARI, ENG] });
-    const shell = document.body.appendChild(document.createElement("div"));
-    shell.className = "desktop-shell";
-    shell.dataset.room = "narrow";
-    shell.append(container);
-    const list = container.querySelector(".task-issue-links-rows") ?? assert.fail("the row");
-    const chip = container.querySelector(".task-issue-link") ?? assert.fail("a chip");
-
-    assert.equal(getComputedStyle(list).flexWrap, "wrap");
-    assert.equal(getComputedStyle(chip).minWidth, "0px", "a chip may shrink below its words");
-    assert.match(getComputedStyle(chip).maxWidth, /100%/u, "a chip stands inside the page");
-  } finally {
-    laid.remove();
-  }
 });

@@ -16,7 +16,7 @@ import { tasksControl } from "../testing/tasks-control.js";
 import { DesktopSidebar } from "./desktop-sidebar.js";
 
 /**
- * sidebar-drawer-narrow.test.ts -- a phone's drawer gives its tasks the column: the pages' rows scroll away with them, and an empty Pinned, a place to drag a first pin that a finger cannot drag to, stands nowhere under a finger; beside the work the rows stand put over the tasks, and under a mouse the empty Pinned stays whatever the room.
+ * sidebar-drawer-narrow.test.ts -- a phone's drawer gives its tasks the column: the pages' rows scroll away with them; beside the work the rows stand put over the tasks; and an empty Pinned stands nowhere, under a finger or a mouse, whatever the room.
  */
 
 const WORKSPACE: Workspace = {
@@ -114,16 +114,16 @@ test("in a phone's drawer under a finger the pages' rows scroll with the tasks, 
   assert.equal(pinnedStands(sidebar), false);
 });
 
-test("a narrow window worked by a mouse, which can drag a first pin, keeps the empty Pinned", async () => {
+test("a narrow window worked by a mouse draws no empty Pinned either", async () => {
   const sidebar = await mountIn(SHELL_ROOM.NARROW);
 
-  assert.equal(pinnedStands(sidebar), true);
+  assert.equal(pinnedStands(sidebar), false);
 });
 
-test("beside the work the pages' rows stand put over the tasks' scroller, and an empty Pinned waits for a first pin", async () => {
+test("beside the work the pages' rows stand put over the tasks' scroller, and an empty Pinned stands nowhere", async () => {
   const sidebar = await mountIn(SHELL_ROOM.WIDE);
 
   assert.deepEqual(scrolled(sidebar), { home: false, tasks: true });
-  assert.equal(pinnedStands(sidebar), true, "Pinned stands");
-  assert.match(sidebar.textContent ?? "", /Drag tasks here to pin them/u);
+  assert.equal(pinnedStands(sidebar), false, "no Pinned");
+  assert.doesNotMatch(sidebar.textContent ?? "", /Pinned/u);
 });

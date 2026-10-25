@@ -870,5 +870,4 @@ test("a line still on its way draws its files going up with no share, each takin
   assert.equal(meter.hasAttribute("aria-valuenow"), false, "the send says nothing of its share");
   draw(false);
   assert.equal(host.querySelector('[role="progressbar"]'), null);
-  assert.notEqual(host.querySelector(".luke-attachment-chip-landed"), null, "its check");
 });

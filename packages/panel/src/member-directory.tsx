@@ -29,6 +29,8 @@ export interface Directory {
   readonly former: readonly FormerMember[] | undefined;
   /** The workspace whose members these are, which a person named here is opened in. */
   readonly workspaceId?: string | undefined;
+  /** How many members that workspace has, as its listing counts them, before the members are read. */
+  readonly memberCount?: number | undefined;
   /** Whether the members or who left are still being read, neither read refused. */
   readonly reading: boolean;
   /** Whether the members alone are still being read and not refused, which a menu of them says whatever became of the read of who left. */
@@ -80,12 +82,14 @@ export function MemberDirectory({
   // Note that the directory is the same across draws while none of it moves, because every
   // face and name inside it is drawn again for a new one.
   const workspaceId = workspace?.id;
+  const memberCount = workspace?.memberCount;
   const directory = useMemo(
     () => ({
       members,
       readerId,
       former,
       workspaceId,
+      memberCount,
       reading,
       membersReading,
       membersRefused,
@@ -97,6 +101,7 @@ export function MemberDirectory({
       readerId,
       former,
       workspaceId,
+      memberCount,
       reading,
       membersReading,
       membersRefused,
