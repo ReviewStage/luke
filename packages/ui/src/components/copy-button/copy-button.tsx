@@ -42,6 +42,11 @@ import { Tooltip } from "../tooltip/hint.js";
  * is an atom's work on the registry the app's root provides, as a hint's
  * rest is (`../tooltip/hint.tsx`), so nothing here arms a timer of its own
  * and a test moves it on a faked clock.
+ *
+ * The glyph is drawn in the Tailwind theme's utilities, in the complete ink
+ * once a copy lands and the danger ink once one is refused, and a chip's
+ * lead stacks its own glyph and the copy's in one square. What answers the
+ * chip's pointer and keyboard, and the glyph's turn, are `copy-button.css`'s.
  */
 
 /** The looks a copy button comes in: a glyph alone, or a chip that names what it copies. */
@@ -98,6 +103,13 @@ function copyLabel(what: string): string {
   return `Copy ${what}`;
 }
 
+/** The glyph's ink in each state: the button's at rest, the complete ink once a copy lands, the danger ink once one is refused. */
+const GLYPH_INK = {
+  [COPY_STATE.IDLE]: "",
+  [COPY_STATE.COPIED]: " text-complete",
+  [COPY_STATE.FAILED]: " text-danger",
+} as const satisfies Record<CopyState, string>;
+
 /**
  * The glyph for `state`, keyed by how many times it has turned, so each
  * turn springs the new glyph in and the first draw stands still.
@@ -107,7 +119,7 @@ function CopyGlyph({ state, turns }: { state: CopyState; turns: number }): React
   return (
     <span
       key={turns}
-      className="luke-copy-glyph"
+      className={`luke-copy-glyph inline-grid flex-none place-items-center${GLYPH_INK[state]}`}
       data-state={state}
       data-turned={turns > 0 || undefined}
       aria-hidden="true"
@@ -155,7 +167,7 @@ function ChipLead({
 }): React.JSX.Element {
   return (
     <span
-      className="luke-copy-lead inline-grid size-chip-chevron flex-none text-muted-foreground [&_svg]:size-chip-chevron"
+      className="luke-copy-lead inline-grid size-chip-chevron flex-none text-muted-foreground *:[grid-area:1/1] *:place-self-center *:transition-opacity *:duration-(--luke-duration-quick) *:ease-motion-exit [&_svg]:size-chip-chevron"
       data-state={state}
     >
       <span className="luke-copy-lead-mark" aria-hidden="true">

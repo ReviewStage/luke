@@ -40,7 +40,7 @@ const GITHUB_ORIGIN = "https://github.com";
 const BOT_SUFFIX = "[bot]";
 
 /** A GitHub account's own page: a person's profile, or the App's page for an App's bot. */
-export function githubPageOf(login: string, bot: boolean): string {
+function githubPageOf(login: string, bot: boolean): string {
   const app = bot && login.endsWith(BOT_SUFFIX);
   const path = app ? `apps/${login.slice(0, -BOT_SUFFIX.length)}` : login;
   return new URL(path, `${GITHUB_ORIGIN}/`).href;

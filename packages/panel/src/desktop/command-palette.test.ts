@@ -276,13 +276,13 @@ function heard(node: Node): string {
   return [...node.childNodes].map(heard).join("");
 }
 
-/** Each row the palette lists, as what leads it, its name, and the muted words after it. */
+/** Each row the palette lists, as its name, the muted words after it, and a task's key at its end. */
 function rows(): string[] {
   return [...document.querySelectorAll('[role="option"]')].map((row) =>
     [
-      row.querySelector(".luke-combobox-option-lead"),
       row.querySelector(".luke-combobox-option-label"),
       row.querySelector(".luke-combobox-option-detail"),
+      row.querySelector("[data-task-key]"),
     ]
       .filter((part) => part !== null)
       .map(heard)
@@ -593,12 +593,12 @@ test("in a row too narrow for every filter, the filter a key chooses is scrolled
   assert.equal(document.activeElement, field(), "the caret stays in the field");
 });
 
-test("the footer names the keys that step the filters now: ← → while the field is empty, ⌘[ ⌘] once typed", () => {
+test("the footer names the keys that step the filters now: ← → while the field is empty, ⌘[ / ⌘] once typed", () => {
   openPalette();
   assert.deepEqual(footer(), ["↑↓ Select", "⏎ Open", "←→ Filter"]);
 
   type("invite");
-  assert.deepEqual(footer(), ["↑↓ Select", "⏎ Open", "⌘[⌘] Filter"]);
+  assert.deepEqual(footer(), ["↑↓ Select", "⏎ Open", "⌘[ / ⌘] Filter"]);
 
   type("");
   assert.deepEqual(footer(), ["↑↓ Select", "⏎ Open", "←→ Filter"]);
@@ -625,11 +625,11 @@ test("the footer says Return runs a command chosen and opens anything else", () 
 
   type("go to inbox");
   assert.equal(rows()[0], "Go to inbox");
-  assert.deepEqual(footer(), ["↑↓ Select", "⏎ Run", "⌘[⌘] Filter"]);
+  assert.deepEqual(footer(), ["↑↓ Select", "⏎ Run", "⌘[ / ⌘] Filter"]);
 
   type("theme");
   assert.equal(rows()[0], "Theme · Appearance");
-  assert.deepEqual(footer(), ["↑↓ Select", "⏎ Open", "⌘[⌘] Filter"]);
+  assert.deepEqual(footer(), ["↑↓ Select", "⏎ Open", "⌘[ / ⌘] Filter"]);
 });
 
 test("⌘K says a place it opens as Go to the place, and the menus' own words stand for the rest", () => {
@@ -640,20 +640,6 @@ test("⌘K says a place it opens as Go to the place, and the menus' own words st
   assert.ok(rows().includes("Go to tasks"));
   assert.ok(rows().includes("Show my tasks"));
   assert.ok(!rows().includes("Inbox"), "the place is never said bare, as a verb would be");
-});
-
-test("every row in Commands keeps a glyph's room, so a command no menu marks names itself at the edge the others do", () => {
-  openPaletteOverPlaces();
-  chooseFilter("Commands");
-
-  const options = [...document.querySelectorAll('[role="group"] [role="option"]')];
-  assert.ok(options.length > 0, "commands are listed");
-  for (const option of options) {
-    assert.ok(
-      option.querySelector(".luke-combobox-option-glyph"),
-      `${option.textContent} keeps the glyph's room`,
-    );
-  }
 });
 
 test("the field asks to search Luke under All, and the kind under its filter", () => {
@@ -1316,7 +1302,7 @@ test("a task's row ends as its sidebar row does, who is on it then an agent at w
 
   assert.deepEqual(ends(), [["unassigned", "working"], ["unassigned"]]);
   type("ACME-12");
-  assert.deepEqual(rows(), ["ACME-12 · Billing usage alerts · billing"]);
+  assert.deepEqual(rows(), ["Billing usage alerts · billing · ACME-12"]);
 });
 
 test("an agent pressed on a task's card in ⌘K over Settings leaves the palette for the tasks and opens the agent's tab, as a row does", () => {
@@ -1440,13 +1426,13 @@ test("a task's row says its repository by its name, as the Tasks list's row does
   chooseFilter("Tasks");
 
   assert.deepEqual(rows(), [
-    "ACME-1 · Invoice export · billing",
-    "ACME-2 · Login page · acme/web",
-    "ACME-3 · Docs site · oss/web",
+    "Invoice export · billing · ACME-1",
+    "Login page · acme/web · ACME-2",
+    "Docs site · oss/web · ACME-3",
   ]);
 });
 
-test("a task's row leads with its key, which marks what the query typed, a key typed whole in any case lists its task first, ahead of a longer key it begins, and choosing it opens the task", () => {
+test("a task's row ends with its key, which marks what the query typed, a key typed whole in any case lists its task first, ahead of a longer key it begins, and choosing it opens the task", () => {
   const stage = { id: "workspace-stage", name: "Stage", role: WORKSPACE_ROLE.OWNER, github: null };
   const task = (number: number, name: string) => ({
     id: `task-${number}`,
@@ -1472,18 +1458,45 @@ test("a task's row leads with its key, which marks what the query typed, a key t
   type("stag-42");
 
   assert.deepEqual(rows(), [
-    "STAG-42 · Billing usage alerts from the meter · luke",
-    "STAG-421 · Cut the release · luke",
+    "Billing usage alerts from the meter · luke · STAG-42",
+    "Cut the release · luke · STAG-421",
   ]);
   type("STAG-421");
-  assert.deepEqual(rows()[0], "STAG-421 · Cut the release · luke");
+  assert.deepEqual(rows()[0], "Cut the release · luke · STAG-421");
   assert.equal(
     document.querySelector('[role="option"] [data-task-key] .search-match')?.textContent,
     "STAG-421",
     "the key the query typed is marked in the row, so it says why the task was found",
   );
-  press("STAG-421 · Cut the release · luke");
+  press("Cut the release · luke · STAG-421");
   assert.deepEqual(sent, ["task-421"]);
+});
+
+test("a task's row with a key starts as one without does, its glyph then its name, so the list's names line up", () => {
+  const stage = { id: "workspace-stage", name: "Stage", role: WORKSPACE_ROLE.OWNER, github: null };
+  const task = (id: string, name: string, number?: number) => ({
+    id,
+    workspaceId: stage.id,
+    ...(number === undefined ? {} : { number }),
+    name,
+    createdAt: 1,
+    updatedAt: 1,
+    repository: "stage/luke",
+  });
+  openPalette(
+    tasksControl({
+      workspaces: [stage],
+      workspace: stage,
+      tasks: [task("keyed", "Billing export", 42), task("plain", "Usage alerts")],
+    }),
+  );
+  chooseFilter("Tasks");
+
+  const starts = [...document.querySelectorAll('[role="option"]')].map((row) =>
+    row.firstElementChild?.classList.contains("luke-combobox-option-glyph"),
+  );
+  assert.deepEqual(starts, [true, true], "no row is pushed right by a key that leads it");
+  assert.equal(document.querySelectorAll("[data-task-key]").length, 1);
 });
 
 test("a task wears who is on it at its row's end, a teammate by face, no one on the dashed mark, the reader nothing, and is found by its assignee's name or its creator's, which the row then says", () => {

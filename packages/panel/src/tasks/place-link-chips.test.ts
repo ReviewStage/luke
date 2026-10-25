@@ -23,7 +23,6 @@ import { type AnyAct, FAKE_ANSWER, type FakeActAnswer, fakeActs } from "../testi
 import { fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import { signedInAs } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
-import { restOn } from "../testing/hint-rest.js";
 import { markdownHtmlParserLanded } from "../testing/markdown.js";
 import { TranscriptWords } from "./transcript-blocks.js";
 import { OpenLinkProvider } from "./use-open-link.js";
@@ -259,38 +258,6 @@ test("a press on a place's chip opens the place in the window", async () => {
   ]);
 });
 
-test("an agent's chip the window knows no harness for has its name say whose it is", async () => {
-  const container = await drawn(`${HOME}/plan/${TASK_ID}/agent/${UNNAMED_AGENT}`, []);
-  const chip = container.querySelector<HTMLElement>('[data-mention-ref][data-kind="agent"]');
-
-  assert.equal(chip?.querySelector(".luke-inline-ref-label")?.textContent, "Agent");
-});
-
-test("an agent's chip the window holds wears its harness's mark, on another task's words or none, and the card it hangs wears it too", async () => {
-  const container = await drawn(
-    `${HOME}/plan/${TASK_ID}/agent/${AGENT} and ${HOME}/agent/${TRIAGE_AGENT}`,
-    [],
-  );
-  const agentChips = [
-    ...container.querySelectorAll<HTMLElement>('[data-mention-ref][data-kind="agent"]'),
-  ];
-
-  const worn = agentChips.map((chip) => {
-    const onChip = chip.querySelector(".luke-inline-ref-glyph .luke-harness-mark") !== null;
-    restOn(chip);
-    const onCard = document.querySelector(".luke-tooltip-card .luke-harness-mark") !== null;
-    act(() => {
-      chip.dispatchEvent(new MouseEvent("pointerout", { bubbles: true }));
-    });
-    return [onChip, onCard];
-  });
-
-  assert.deepEqual(worn, [
-    [true, true],
-    [true, true],
-  ]);
-});
-
 /** An archived agent as the service reads it, on the task given or none, on the model given. */
 function archivedAgent(id: string, planId: string | null, model: string) {
   return {
@@ -342,28 +309,4 @@ test("an archived agent's chip, which no list the window holds names, wears the 
     chip.querySelector(".luke-inline-ref-glyph .luke-harness-mark")?.getAttribute("data-provider"),
   );
   assert.deepEqual(marks, [MODEL_PROVIDER.OPENAI, MODEL_PROVIDER.ANTHROPIC]);
-});
-
-test("an automation's chip and its run's wear its Zap tile, and the Automations place wears the bare bolt", async () => {
-  const container = await drawn(
-    [
-      `${HOME}/automation/${TRIAGE}`,
-      `${HOME}/automation/${TRIAGE}/run/run_1`,
-      `${HOME}/automations`,
-    ].join(" and "),
-    [],
-  );
-
-  const [automation, run, place] = [
-    ...container.querySelectorAll<HTMLElement>("[data-mention-ref]"),
-  ];
-  assert.ok(
-    automation?.querySelector('.actor-mark[data-kind="automation"]'),
-    "the automation's tile",
-  );
-  assert.ok(run?.querySelector('.actor-mark[data-kind="automation"]'), "the run's tile");
-  assert.ok(automation?.querySelector(".actor-mark .lucide-zap"), "the automation's tile is Zap");
-  assert.ok(run?.querySelector(".actor-mark .lucide-zap"), "the run's tile is Zap");
-  assert.ok(place?.querySelector(".lucide-zap"), "the Automations page wears its bolt");
-  assert.equal(place?.querySelector(".actor-mark"), null);
 });

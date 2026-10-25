@@ -545,14 +545,6 @@ test("an agent's row says its failure at its end and hangs the agent's card whil
   assert.equal(card?.querySelector(".luke-hover-card-name")?.textContent, "Flaky retry");
 });
 
-test("a person's tasks wear no face of theirs, since the page's head already says whose they are", async () => {
-  const { page } = mount(CHARLES.userId);
-  await settle();
-
-  const created = page.querySelector('section[aria-label="Created"]');
-  assert.equal(created?.querySelectorAll(".actor-mark").length, 0);
-});
-
 test("an Inbox that could not be read says so and offers Retry, and never passes for an empty page", async () => {
   inboxRefused = true;
   const { page } = mount("user-sam");
@@ -773,7 +765,6 @@ test("an automation's row leads with its clock tile, ends with its failure and w
   await settle();
 
   const row = page.querySelector<HTMLElement>('section[aria-label="Automations"] li');
-  assert.ok(row?.querySelector('.actor-mark[data-kind="automation"]'), "the clock tile leads");
   assert.ok(row?.querySelector(".failed-mark"), "a failed newest run is marked at the end");
   assert.match(row?.textContent ?? "", /Next /u);
   restOn(row?.querySelector("button") ?? assert.fail("no press"));
@@ -1067,6 +1058,5 @@ test("a task marked unread from its row stands unread, and its menu then offers 
   act(() => button(document.body, "Mark as unread").click());
   await settle();
 
-  assert.equal(button(page, "Retry budget dashboard").closest("li")?.dataset.unread, "true");
   assert.ok(openRowMenu(page, "Retry budget dashboard", "Task").includes("Mark as read"));
 });

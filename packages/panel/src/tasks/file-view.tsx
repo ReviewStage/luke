@@ -405,11 +405,16 @@ export function usePaneRoom(shown: {
 }
 
 /**
- * How much of the box the tree stands in a drag leaves the tab beside it, in
- * CSS pixels: the least a diff reads at, which the stylesheet holds the tree
- * to as well (`.file-tree-pane`), so a drag starts from the width drawn.
+ * The most of the box it stands in the tree takes, which the stylesheet
+ * holds it to as well (`.file-tree-pane`'s 40%), so a drag starts from the
+ * width drawn and the code or diff beside it keeps the larger column.
  */
-const TAB_RESERVE = 200;
+const TREE_SHARE = 0.4;
+
+/** What a drag of the tree leaves the tab beside it in their box, in CSS pixels: the rest of the box past the tree's share. */
+function tabReserve(box: HTMLElement): number {
+  return box.getBoundingClientRect().width * (1 - TREE_SHARE);
+}
 
 /** The tree as the panel holds it for every File and Changes tab: open or not, and how wide. */
 export interface TreeShown {
@@ -431,7 +436,7 @@ export function useTreeEdge(tree: TreeShown): ResizeEdgeHandle | undefined {
     side: RESIZE_EDGE_SIDE.LEFT,
     width: width?.width ?? FILE_TREE_WIDTH.DEFAULT,
     bounds: FILE_TREE_WIDTH,
-    reserve: () => TAB_RESERVE,
+    reserve: tabReserve,
     label: "Resize files",
     onResize: (asked) => width?.onResize(asked),
     onToggleCollapsed: tree.onToggle,

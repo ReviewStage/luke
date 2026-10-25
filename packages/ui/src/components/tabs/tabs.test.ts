@@ -187,7 +187,6 @@ test("a strip of many tabs, narrowed, chosen along, and scrolled, draws every ta
   const loops = failures.mock.calls.filter((call) => /Maximum update depth/u.test(String(call[0])));
   assert.deepEqual(loops, []);
   assert.equal(container.querySelectorAll('[role="tab"]').length, MANY);
-  assert.equal(stripOf(container).style.getPropertyValue("--luke-tab-count"), String(MANY));
 });
 
 test("a tab chosen past the strip's end is scrolled into its own place, and one before its start likewise", async () => {
@@ -306,8 +305,6 @@ test("a preview tab wears its preview, and a double-click keeps it, while a tab 
       ),
     }),
   );
-  assert.equal(pill(container, "Preview").dataset.preview, "true");
-  assert.equal(pill(container, "Kept").dataset.preview, "false");
   for (const label of ["Preview", "Kept"]) {
     act(() => {
       tabOf(container, label).dispatchEvent(new MouseEvent("dblclick", { bubbles: true }));

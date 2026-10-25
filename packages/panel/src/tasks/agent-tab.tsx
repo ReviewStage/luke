@@ -2359,7 +2359,10 @@ function AgentTabView({
     [composer.editing, onEdit, onCancelEdit, onSendEdit, onRevert, points, editor],
   );
   const chatOn = useChatOn();
-  const working = agentStillWriting(agent.status);
+  // Note that a line on its way counts as work from the press, because the agent's status turns
+  // running only once the service takes the line, which may take seconds.
+  const lineGoing = composer.sent.some((line) => line.state === SENT_LINE_STATE.PENDING);
+  const working = agentStillWriting(agent.status) || lineGoing;
   const name = agentName(agent, models);
   const keyProvider = providerOf(agent.model);
   const tab = useRef<HTMLElement>(null);
@@ -2477,8 +2480,8 @@ function AgentTabView({
                       composer.rewinding && startedAt !== undefined ? composer.rewoundAt : startedAt
                     }
                     ended={
-                      // Note that the end line waits for a page, so a stopped agent's tab never draws it over nothing.
-                      transcript.pages === 0
+                      // Note that the end line waits for a page, so a stopped agent's tab never draws it over nothing, and gives way to a line on its way, which the working line stands for.
+                      transcript.pages === 0 || lineGoing
                         ? undefined
                         : endLineParts(agent.status, transcript.failure, starter, continuable)
                     }
@@ -2602,19 +2605,20 @@ type AgentTabProps = AgentTabDoors &
 const NO_RETRY = () => undefined;
 
 /**
- * The tab of an agent New task is still starting, before the service has
- * made it: the developer's words as its first line, as the agent's own
- * transcript will draw them, and its working line saying it is starting,
- * over the composer's card, which the agent's own tab takes the place of
- * once the start answers, its first line drawn in the same place.
+ * The tab of an agent New task or a Start is still starting, before the
+ * service has made it: the developer's words as its first line, where it was
+ * started on some, as the agent's own transcript will draw them, and its
+ * working line saying it is starting, over the composer's card, which the
+ * agent's own tab takes the place of once the start answers, its first line
+ * drawn in the same place. One started on no words is briefed on the plan.
  */
-export function StartingAgentTab({ line }: { line: SentLine }): React.JSX.Element {
-  const messages = useMemo(() => agentLines([], [line]), [line]);
+export function StartingAgentTab({ line }: { line?: SentLine | undefined }): React.JSX.Element {
+  const messages = useMemo(() => (line === undefined ? [] : agentLines([], [line])), [line]);
   return (
     <AgentTabFrame>
       <AgentTranscriptView
         messages={messages}
-        brief={CODING_AGENT_BRIEF.PROMPT}
+        brief={line === undefined ? CODING_AGENT_BRIEF.PLAN : CODING_AGENT_BRIEF.PROMPT}
         reading={false}
         failed={false}
         working

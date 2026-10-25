@@ -251,6 +251,68 @@ export const LIST_ROW_INK = {
 
 export type ListRowInk = (typeof LIST_ROW_INK)[keyof typeof LIST_ROW_INK];
 
+/**
+ * A list's and a row's own boxes, in utilities over the theme. What its
+ * state restyles stays in `list-row.css`: the row's fill and ring, the
+ * press's insets and height, which a variant, a density, or the acts beside
+ * it set, the words' type and ink, the hover acts' crossfade and the room
+ * they take, the swipe's slide, and every reveal the pointer, the keyboard,
+ * or a menu makes, through `:has()` and the pointer's media. Each part keeps
+ * its `luke-list-row-*` class, which that sheet, the panel's, and the tests
+ * find it by.
+ */
+const LIST_CLASS =
+  "luke-list flex list-none flex-col gap-list-gap p-0 data-[variant=card]:gap-0 data-[variant=card]:overflow-hidden data-[variant=card]:rounded-control data-[variant=card]:border data-[variant=card]:border-border data-[variant=card]:bg-surface";
+
+/** The row: a grid of five tracks, its parts centred on its middle, in the text's ink. */
+const ROW_CLASS =
+  "luke-list-row grid min-w-0 grid-cols-list-row items-center font-sans text-foreground transition-[background-color] duration-(--luke-duration-hover) ease-plain";
+
+/** The press spans the mark, the words, and the end, its parts standing in the row's own tracks. */
+const MAIN_CLASS =
+  "luke-list-row-main col-[leading-start/end-end] row-1 m-0 grid min-w-0 grid-cols-subgrid items-center rounded-inherit border-0 bg-transparent text-start text-inherit [font:inherit]";
+
+/** A press that is a button, pressed as a Mac's list is on the desktop, without the web's pointing hand. */
+const MAIN_BUTTON_CLASS = `${MAIN_CLASS} cursor-pointer in-data-[luke-profile=desktop]:cursor-default disabled:cursor-default`;
+
+/**
+ * The leading mark, muted, a glyph at a control's glyph size and an avatar
+ * at its own; a provider's mark keeps the text's colour, a brand mark being
+ * the provider's identity, not a muted glyph.
+ */
+const LEADING_CLASS =
+  "luke-list-row-leading col-[leading] me-icon-gap inline-flex text-muted-foreground [&>.luke-provider-mark]:text-foreground [&>svg]:size-control-icon";
+
+/** The row's end, its metadata and its chevron, at the end of its track, so it lines up with the acts that share it. */
+const END_CLASS =
+  "luke-list-row-end col-[end] ms-icon-gap flex min-w-0 items-center justify-self-end gap-icon-gap";
+
+/** A chevron at the end of a row that goes deeper, its room kept so nothing moves as it shows. */
+const CHEVRON_CLASS =
+  "luke-list-row-chevron inline-flex flex-none text-muted-foreground transition-opacity duration-(--luke-duration-hover) ease-plain [&>svg]:size-luke-12";
+
+/**
+ * What a row belongs to: a small chip of a glyph and a name cut short at a
+ * short name's width leading its description, or a line of its own between
+ * its title and its description, its glyph and its whole name in the
+ * description's quieter ink, with no chip round it.
+ */
+const LEAD_CLASS = {
+  [LIST_ROW_LEAD.DESCRIPTION]:
+    "luke-list-row-lead me-luke-4 inline-flex max-w-list-row-lead items-center gap-luke-2 rounded-luke-6 bg-fill-strong px-luke-4 py-0 align-bottom text-muted-foreground",
+  [LIST_ROW_LEAD.LINE]:
+    "luke-list-row-lead flex items-center gap-luke-4 text-caption text-muted-foreground",
+} as const satisfies Record<ListRowLeadAt, string>;
+
+/** The parts of a row swiped to its one act: the act's button under the face, its press, and the label riding the face's edge. */
+const SWIPE_CLASS = "luke-list-row-swipe absolute inset-0 rounded-inherit";
+const SWIPE_ACT_CLASS =
+  "luke-list-row-swipe-act absolute inset-0 m-0 border-0 bg-transparent p-0 text-on-accent [font:inherit]";
+const SWIPE_LABEL_CLASS =
+  "luke-list-row-swipe-label absolute inset-y-0 start-0 flex w-swipe-label flex-col items-center justify-center gap-luke-2 text-tag-size font-tag [&>svg]:size-control-icon";
+const SLIDE_CLASS =
+  "luke-list-row-slide relative col-span-full row-1 grid min-w-0 grid-cols-subgrid items-center rounded-inherit";
+
 /** A pointer's press that leaves the focus where it is. */
 function preventFocusMove(event: MouseEvent<HTMLElement>): void {
   event.preventDefault();
@@ -346,7 +408,7 @@ export function List({
         if (!chooser.onKeyDown(event) && !joinsWalk) roving.onKeyDown(event);
       }}
       id={id}
-      className="luke-list"
+      className={LIST_CLASS}
       {...selectionRoot()}
       data-variant={variant}
       data-density={density}
@@ -514,10 +576,10 @@ export function ListRow({
   // the place a hover row's acts step into.
   const end =
     said(meta) || chevron ? (
-      <span className="luke-list-row-end">
+      <span className={END_CLASS}>
         {said(meta) ? <span className="luke-list-row-meta">{meta}</span> : null}
         {chevron ? (
-          <span className="luke-list-row-chevron" aria-hidden="true">
+          <span className={CHEVRON_CLASS} aria-hidden="true">
             <ChevronRightIcon />
           </span>
         ) : null}
@@ -525,13 +587,16 @@ export function ListRow({
     ) : null;
   const leadMark =
     lead === undefined ? null : (
-      <span className="luke-list-row-lead" data-at={leadAt}>
-        <span className="luke-list-row-lead-icon" aria-hidden="true">
+      <span className={LEAD_CLASS[leadAt]} data-at={leadAt}>
+        <span
+          className="luke-list-row-lead-icon inline-flex flex-none [&>svg]:size-caption-glyph"
+          aria-hidden="true"
+        >
           {lead.icon}
         </span>
         <span
           ref={leadMeasured}
-          className="luke-list-row-lead-label"
+          className="luke-list-row-lead-label min-w-0 overflow-hidden whitespace-nowrap"
           data-overflow={String(leadClipped)}
         >
           {lead.label}
@@ -541,11 +606,11 @@ export function ListRow({
   const face = (
     <>
       {said(leading) ? (
-        <span className="luke-list-row-leading" aria-hidden="true">
+        <span className={LEADING_CLASS} aria-hidden="true">
           {leading}
         </span>
       ) : null}
-      <span className="luke-list-row-text">
+      <span className="luke-list-row-text col-[text] min-w-0">
         {metaAt === LIST_ROW_META.TITLE ? (
           <span className="luke-list-row-head">
             {heading}
@@ -566,7 +631,10 @@ export function ListRow({
           </span>
         ) : null}
         {said(attachments) ? (
-          <span className="luke-list-row-attachments" aria-hidden="true">
+          <span
+            className="luke-list-row-attachments flex gap-luke-6 overflow-hidden"
+            aria-hidden="true"
+          >
             {attachments}
           </span>
         ) : null}
@@ -578,7 +646,7 @@ export function ListRow({
     <button
       ref={pressRef}
       type="button"
-      className="luke-list-row-main"
+      className={MAIN_BUTTON_CLASS}
       aria-current={current}
       aria-description={chosen ? SELECTION_WORDS.SELECTED : undefined}
       disabled={disabled}
@@ -604,7 +672,7 @@ export function ListRow({
   const row = (
     <>
       {press === undefined ? (
-        <div className="luke-list-row-main" aria-current={current}>
+        <div className={MAIN_CLASS} aria-current={current}>
           {face}
         </div>
       ) : hint === undefined ? (
@@ -612,9 +680,11 @@ export function ListRow({
       ) : (
         <hint.Hint label={hint.label}>{press}</hint.Hint>
       )}
-      {said(actions) ? <div className="luke-list-row-actions">{actions}</div> : null}
+      {said(actions) ? (
+        <div className="luke-list-row-actions row-1 flex items-center gap-luke-4">{actions}</div>
+      ) : null}
       {offered ? (
-        <div className="luke-list-row-more">
+        <div className="luke-list-row-more row-1 flex items-center">
           {rowMenu.button({
             size:
               (density ?? listDensity) === LIST_DENSITY.REGULAR ? undefined : BUTTON_SIZE.COMPACT,
@@ -635,7 +705,7 @@ export function ListRow({
         id={id}
         {...(followedBy === undefined ? {} : motionKey(followedBy))}
         ref={swipe === undefined ? (onPress ? undefined : ref) : hold}
-        className="luke-list-row"
+        className={ROW_CLASS}
         data-meta={metaAt === LIST_ROW_META.TITLE ? metaAt : undefined}
         data-actions={actionsAt === LIST_ROW_ACTIONS.HOVER ? actionsAt : undefined}
         data-current={current === undefined ? undefined : "true"}
@@ -670,21 +740,21 @@ export function ListRow({
           row
         ) : (
           <>
-            <div className="luke-list-row-swipe">
+            <div className={SWIPE_CLASS}>
               <button
                 type="button"
-                className="luke-list-row-swipe-act"
+                className={SWIPE_ACT_CLASS}
                 tabIndex={-1}
                 data-swipe-act=""
                 onClick={pulseOnPress(swiped.onPress)}
               >
-                <span className="luke-list-row-swipe-label">
+                <span className={SWIPE_LABEL_CLASS}>
                   {swipe.icon}
                   <span>{swipe.label}</span>
                 </span>
               </button>
             </div>
-            <div className="luke-list-row-slide">{row}</div>
+            <div className={SLIDE_CLASS}>{row}</div>
           </>
         )}
       </li>
