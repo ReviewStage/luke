@@ -2596,28 +2596,6 @@
   color: var(--luke-color-text-muted);
 }
 
-/* Words sent to GitHub as Markdown (`comment-editor.tsx`): the plan's
-   editor in a text field's frame, a suggestion's press over it where the
-   comment offers one, and a note under it where the words run past
-   GitHub's bound. */
-.comment-editor {
-  display: flex;
-  min-width: 0;
-  flex-direction: column;
-  gap: var(--luke-item-gap);
-}
-
-/* The words grow with what is written from a few lines' height, as a text
-   area that grows does; the frame clips nothing, since the `/` menu and the
-   format toolbar open past its edge. A suggestion's press stands in its
-   corner, the words kept clear of it. */
-.comment-editor-frame {
-  position: relative;
-  box-sizing: border-box;
-  min-height: calc(3lh + 2 * var(--luke-space-6));
-  padding: var(--luke-item-gap) var(--luke-control-inset);
-}
-
 /* A foot inside the frame (`reply-form.tsx`) reaches the frame's own edge
    rather than the words' inset, as it does in every other frame. */
 .comment-editor-frame > .luke-composer-foot {
@@ -2626,18 +2604,6 @@
 
 .comment-editor-frame:has(> .comment-editor-head) {
   padding-inline-end: calc(var(--luke-control-height) + var(--luke-space-4));
-}
-
-.comment-editor-head {
-  position: absolute;
-  top: var(--luke-space-2);
-  right: var(--luke-space-2);
-}
-
-.comment-editor-text {
-  color: var(--luke-color-text);
-  font-size: var(--luke-type-body-size);
-  line-height: var(--luke-type-reading-leading);
 }
 
 /* A suggested change is GitHub's ```suggestion block, drawn under its name
@@ -2652,82 +2618,9 @@
   font-weight: var(--luke-weight-medium);
 }
 
-.comment-editor-note {
-  margin: 0;
-  color: var(--luke-color-danger);
-  font-size: var(--luke-type-caption-size);
-}
-
-.pull-request-review-foot {
-  display: flex;
-  justify-content: flex-end;
-  gap: var(--luke-control-gap);
-}
-
-/* The branches it merges, each a compact pill in the code face that
-   copies its name (`pull-request-branches.tsx`), the arrow quiet between
-   them. A long name gives way, cut in its middle, before the row wraps
-   the arrow away from it; the branch it merges from gives way first. */
-.pull-request-branches {
-  display: inline-flex;
-  min-width: 0;
-  max-width: 100%;
-  align-items: center;
-  gap: var(--luke-tight-gap);
-  white-space: nowrap;
-}
-
-.pull-request-branch {
-  display: inline-flex;
-  min-width: 0;
-  max-width: 22rem;
-  flex: 0 4 auto;
-}
-
-.pull-request-branch:first-child {
-  flex-shrink: 1;
-}
-
-.pull-request-branches-arrow {
-  flex: none;
-  color: var(--luke-color-text-muted);
-}
-
-/* The branches and, beside them, the stack it stands in
-   (`pull-request-stack.tsx`): the branches give way first. */
-.pull-request-branch-row {
-  display: flex;
-  min-width: 0;
-  max-width: 100%;
-  align-items: center;
-  gap: var(--luke-control-gap);
-}
-
 /* Who opened it and when, one phrase after their face. */
-.pull-request-opened {
-  display: inline-flex;
-  min-width: 0;
-  align-items: center;
-  gap: var(--luke-tight-gap);
-  white-space: nowrap;
-}
-
 .pull-request-branch-row > .pull-request-branches {
   flex: 0 1 auto;
-}
-
-/* "Stack 2/4", an outlined button whose menu lists the stack: its count quieter. */
-.pull-request-stack-count {
-  color: var(--luke-color-text-muted);
-  font-variant-numeric: tabular-nums;
-}
-
-/* Its labels, each `@luke/ui`'s Badge filled with its GitHub colour
-   (`pull-request-labels.tsx`), never wider than the row. */
-.pull-request-label {
-  display: flex;
-  min-width: 0;
-  max-width: 100%;
 }
 
 /* The labels at the end of the header's line of people, after the
@@ -2737,31 +2630,10 @@
   min-width: 0;
 }
 
-/* The reviewers' faces and, beside them, the two pickers, whose own side
-   room spaces them. */
-.pull-request-reviewers {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--luke-list-gap);
-}
-
-/* A label's colour, leading its item in the label picker. */
-.pull-request-label-dot {
-  display: inline-block;
-  width: 10px;
-  height: 10px;
-  border: 1px solid var(--luke-color-border);
-  border-radius: var(--luke-radius-full);
-  background: var(--label-dot, transparent);
-}
-
 /* The words that stand on the page rather than in a box, at the content
    inset. */
 .pull-request-title,
-.changes-people.pull-request-people,
-.pull-request-heading,
-.pull-request-none,
-.pull-request-section > .pull-request-words {
+.changes-people.pull-request-people {
   padding-inline: var(--row-inset);
 }
 
@@ -2868,49 +2740,14 @@
   content: "";
 }
 
-.pull-request-quiet {
-  color: var(--luke-color-text-muted);
-}
-
 /* The merge control at the title row's end (`merge-box.tsx`), as
    stage-cli's merge status stands: a status chip at the pill's size saying
    what holds the merge up, then the one press. A narrow header draws the
    chip's glyph alone, its word still read, so the press keeps its words and
    nothing runs past the row. It stands a control's height with or without
    a press, so a chip alone is level with the title's first line too. */
-.merge-control {
-  display: flex;
-  min-width: 0;
-  min-height: var(--luke-control-height);
-  align-items: center;
-  gap: var(--luke-control-gap);
-}
-
-.merge-chip {
-  display: inline-flex;
-  min-width: 0;
-}
-
 .pull-request-section {
   margin-top: var(--luke-space-20);
-}
-
-.pull-request-heading {
-  display: flex;
-  align-items: baseline;
-  gap: var(--luke-item-gap);
-  margin: 0 0 var(--luke-item-gap);
-}
-
-.pull-request-count {
-  color: var(--luke-color-text-muted);
-  font-variant-numeric: tabular-nums;
-  font-weight: var(--luke-weight-regular);
-}
-
-.pull-request-none {
-  margin: 0;
-  font-size: var(--luke-type-caption-size);
 }
 
 /* A part of the overview still being read: its blocks in the type its
@@ -2918,8 +2755,7 @@
    the checks, and the conversation stand theirs in their own boxes
    (`agent-pull-request-tab.tsx`). A part whose read failed says so in the
    same place, with its Retry. */
-.pull-request-skeleton,
-.pull-request-failure {
+.pull-request-skeleton {
   padding-inline: var(--row-inset);
 }
 
@@ -2931,73 +2767,8 @@
   margin-top: var(--luke-item-gap);
 }
 
-/* A deployment's door to the address it serves, quiet at its row's end. */
-.pull-request-deployment-open > svg {
-  display: block;
-  width: 13px;
-  height: 13px;
-}
-
-/* A check's lead: its standing's glyph, then its App's avatar. */
-.pull-request-check-lead {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--luke-control-gap);
-}
-
-.pull-request-check-glyph {
-  display: inline-grid;
-  flex: 0 0 auto;
-  place-items: center;
-  color: var(--check-tone);
-}
-
-.pull-request-check-glyph > svg {
-  width: 14px;
-  height: 14px;
-}
-
-[data-check-state="passed"] {
-  --check-tone: var(--luke-color-complete);
-}
-
-[data-check-state="failed"] {
-  --check-tone: var(--luke-color-danger);
-}
-
-/* A check still running is work under way, not something that needs you. */
-[data-check-state="pending"] {
-  --check-tone: var(--luke-color-working);
-}
-
-[data-check-state="skipped"] {
-  --check-tone: var(--luke-color-text-muted);
-}
-
-/* Words written on GitHub, drawn at the transcript's own size, a step over
-   the page's quiet lines, its headings no more than a step above that
-   (`PANEL_MARKDOWN_COMPONENTS`). */
-.pull-request-words {
-  min-width: 0;
-  color: var(--luke-color-text);
-  font-size: var(--luke-type-body-size);
-  line-height: var(--luke-type-reading-leading);
-  user-select: text;
-}
-
-/* A description open in its editor (`pull-request-description.tsx`) in the
-   drawn description's own type and rhythm, so nothing moves as it opens or
-   closes: its blocks a step apart as the transcript's are, a heading opening
-   the text standing where the drawn one does, its lists in the transcript's
-   indent, and a task's box standing before its words, as GitHub draws it,
-   rather than in the plan's gutter. */
 /* A description with no words, where the member may write them, says so
    where the editor's placeholder will, in its type. */
-.pull-request-description-empty {
-  margin: 0;
-  color: var(--luke-color-text-muted);
-}
-
 .pull-request-description-text.plan-document-text > * {
   margin-block: 0;
 }
@@ -3036,18 +2807,6 @@
   position: static;
 }
 
-/* The comments and reviews, oldest first, each boxed under its head. */
-.pull-request-entry {
-  display: flex;
-  min-width: 0;
-  flex-direction: column;
-  gap: var(--luke-item-gap);
-  padding: var(--luke-row-inset) var(--boxed-inset);
-  border: 1px solid var(--luke-color-border);
-  border-radius: var(--luke-control-radius);
-  font-size: var(--luke-type-caption-size);
-}
-
 /* A task list stands as GitHub draws one: its boxes in the bullets' place. */
 .pull-request-words ul:has(> li > input[type="checkbox"]) {
   padding-left: 0;
@@ -3062,14 +2821,6 @@
 /* A picture GitHub's rendering names, read through the service: as wide as
    the words around it at most, at its own shape, and a quiet box of a
    screenshot's shape while it is read. */
-.pull-request-picture {
-  display: inline-block;
-  max-width: 100%;
-  height: auto;
-  border-radius: var(--luke-radius-6);
-  vertical-align: middle;
-}
-
 .pull-request-picture-skeleton {
   display: inline-block;
   width: min(100%, 240px);
@@ -3122,12 +2873,6 @@
 /* The fold lays its chip, `@luke/ui`'s chip summary, at the end of its
    row: closed, in a row of no height, its foot just over the line's own;
    open, over the threads it shows. */
-.diff-thread-chip-row {
-  display: flex;
-  flex-direction: column;
-  gap: var(--luke-tight-gap);
-}
-
 .diff-thread-chip-row:not([open], [data-above]) {
   height: 0;
   flex-direction: row;
@@ -3135,59 +2880,8 @@
   translate: 0 calc(-1 * var(--luke-space-2));
 }
 
-.diff-thread-chip-faces {
-  display: inline-flex;
-}
-
 .diff-thread-chip-faces > .actor-mark + .actor-mark {
   margin-inline-start: calc(-1 * var(--luke-space-4));
-}
-
-.diff-thread-chip-resolved {
-  color: var(--luke-color-complete);
-}
-
-.diff-thread-chip-threads {
-  display: flex;
-  flex-direction: column;
-  gap: var(--luke-item-gap);
-}
-
-/* A comment being written on lines of a file (`line-comment.tsx`), under
-   the last of them as a review thread stands: a card of the thread's own
-   face, its head naming the lines, the words as they are drawn, GitHub's
-   refusal, and what GitHub's own line comment offers at its foot. Its frame
-   is `@luke/ui`'s Card, which leaves its room to it. */
-.line-comment {
-  display: flex;
-  flex-direction: column;
-  gap: var(--luke-control-gap);
-  max-width: 720px;
-  padding: var(--luke-row-inset) var(--luke-list-inset) var(--luke-list-inset);
-}
-
-.line-comment-head {
-  margin: 0;
-  color: var(--luke-color-text-muted);
-  font-size: var(--luke-type-caption-size);
-  font-weight: var(--luke-weight-semibold);
-}
-
-.line-comment-note {
-  margin: 0;
-  color: var(--luke-color-text-muted);
-  font-size: var(--luke-type-caption-size);
-}
-
-.line-comment-foot {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-  gap: var(--luke-control-gap);
-}
-
-.diff-outdated-threads {
-  flex: none;
 }
 
 /* One card for what is written on lines of code (`annotation-card.tsx`): a
@@ -3207,49 +2901,6 @@
     var(--annotation-turn) +
     var(--annotation-gap)
   );
-  min-width: 0;
-  max-width: min(48rem, 100%);
-  color: var(--luke-color-text);
-  font-family: var(--luke-font-sans);
-  font-size: var(--luke-type-body-size);
-  line-height: var(--luke-type-body-leading);
-}
-
-/* Where a card's place does not say which lines it is on: its file's path,
-   cut in the middle so the file's name stands, and its lines, the strip's
-   whole width pressing to them in Files changed. */
-.annotation-card-where {
-  display: flex;
-  min-width: 0;
-  border-bottom: 1px solid var(--luke-color-border);
-  color: var(--luke-color-text-muted);
-  font-size: var(--luke-type-caption-size);
-  line-height: var(--luke-type-caption-leading);
-}
-
-.annotation-where {
-  display: flex;
-  min-width: 0;
-  padding: var(--luke-tight-gap) var(--luke-list-inset);
-  white-space: nowrap;
-}
-
-/* The folder gives way long before the file's name does. */
-.annotation-where-folder {
-  flex: 0 1000 auto;
-  font-family: var(--luke-font-mono);
-}
-
-.annotation-where-file {
-  flex: 0 1 auto;
-  font-family: var(--luke-font-mono);
-  color: var(--luke-color-text);
-}
-
-.annotation-where-lines {
-  flex: none;
-  margin-inline-start: var(--luke-control-gap);
-  color: var(--luke-color-text-muted);
 }
 
 /* The head: one line that never wraps, the name giving way first, its whole
@@ -3286,121 +2937,6 @@
   padding-inline-end: var(--luke-row-inset);
 }
 
-.annotation-card-turn {
-  display: flex;
-  width: var(--annotation-turn);
-  height: var(--annotation-turn);
-  flex: none;
-  align-items: center;
-  justify-content: center;
-}
-
-.annotation-card-face {
-  display: flex;
-  width: var(--annotation-face);
-  height: var(--annotation-face);
-  flex: none;
-  align-items: center;
-  justify-content: center;
-}
-
-.annotation-card-name {
-  display: flex;
-  min-width: 0;
-  flex: 0 1 auto;
-  overflow: hidden;
-  font-weight: var(--luke-weight-semibold);
-}
-
-.annotation-card-time {
-  flex: none;
-  color: var(--luke-color-text-muted);
-}
-
-/* A state the card is in, `@luke/ui`'s Badge, never giving way. */
-.annotation-card-state {
-  display: flex;
-  flex: none;
-}
-
-.annotation-card-count {
-  display: inline-flex;
-  flex: none;
-  align-items: center;
-  gap: var(--luke-tight-gap);
-  color: var(--luke-color-text-muted);
-}
-
-.annotation-card-count > svg {
-  width: var(--luke-space-12);
-  height: var(--luke-space-12);
-}
-
-/* The ⋯ stands at the head's end, beside it. */
-.annotation-card-end {
-  display: flex;
-  flex: none;
-  margin-inline-start: auto;
-}
-
-/* Open, the comments stand in the faces' and the words' columns, under the
-   head's face and name. */
-.annotation-card-content {
-  padding-top: var(--luke-space-2);
-  padding-right: var(--luke-list-inset);
-  padding-bottom: var(--luke-list-inset);
-  padding-left: var(--annotation-face-x);
-}
-
-.annotation-comment {
-  display: grid;
-  min-width: 0;
-  column-gap: var(--annotation-gap);
-  grid-template-columns: var(--annotation-face) minmax(0, 1fr);
-  row-gap: var(--luke-tight-gap);
-}
-
-.annotation-comment-words {
-  display: flex;
-  min-width: 0;
-  flex-direction: column;
-  gap: var(--luke-item-gap);
-  grid-column: 2;
-  overflow-wrap: anywhere;
-}
-
-/* The replies a read left on GitHub, in the words' column. */
-.annotation-card-more {
-  margin: var(--luke-space-8) 0 0 calc(var(--annotation-face) + var(--annotation-gap));
-}
-
-/* A thread's ⋯ stands at the end of its head. */
-.pull-request-thread-menu {
-  display: flex;
-  margin-left: auto;
-}
-
-/* The preview (file-diff.tsx) stands in the box rather than filling a tab. */
-.pull-request-thread-lines {
-  flex: none;
-  overflow-y: visible;
-  margin-bottom: var(--luke-control-gap);
-  border-block: 1px solid var(--luke-color-border);
-  background: var(--luke-color-code-ground);
-}
-
-/* Under a thread's comments, what a member does on it
-   (`pull-request-thread-actions.tsx`): a quiet field-shaped Reply… that
-   opens the reply's own field, and Resolve or Unresolve at the row's end;
-   GitHub's refusal of the last one under them. */
-.pull-request-thread-actions {
-  display: flex;
-  flex-direction: column;
-  gap: var(--luke-control-gap);
-  padding: var(--luke-row-inset) var(--luke-list-inset);
-  border-top: 1px solid var(--luke-color-border);
-}
-
 /* A narrow card's presses draw closer, at the pane's inset. */
 /* off-scale: 440px, where a card's age is drawn closer (annotation-card.tsx) */
 @container annotation (width < 440px) {
@@ -3413,88 +2949,7 @@
   }
 }
 
-/* The member's own pending comment (`pending-comments.tsx`): laid out as
-   any comment of a thread, its Edit and Delete under its words. */
-.pull-request-pending-comment {
-  display: flex;
-  min-width: 0;
-  flex-direction: column;
-  gap: var(--luke-item-gap);
-}
-
-.pull-request-thread-actions-row {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: var(--luke-control-gap);
-}
-
-/* The reactions under a description or a comment, as GitHub draws them:
-   a row of pills, each its emoji and how many gave it, the reader's own lit.
-   A pill the reader may press is `@luke/ui`'s compact filter Chip; one they
-   may not is a Badge, lit in the ink as a pressed one is. */
-.pull-request-section > .pull-request-reactions {
-  margin-top: var(--luke-control-gap);
-  padding-inline: var(--row-inset);
-}
-
-.pull-request-reaction {
-  display: flex;
-}
-
-.pull-request-reaction-count {
-  font-variant-numeric: tabular-nums;
-}
-
-/* Add reaction's row of GitHub's eight, hung from its button: one compact
-   line of the app's icon buttons, each wearing its emoji at the dialog's
-   type size, wrapping where a narrow panel leaves less room than eight. */
-.pull-request-reaction-picker {
-  position: relative;
-}
-
-.pull-request-reaction-choices {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--luke-list-gap);
-  padding: var(--luke-tight-gap);
-}
-
-.pull-request-reaction-emoji {
-  font-size: var(--luke-type-dialog-size);
-  line-height: 1;
-}
-
-/* The comment box at the foot of the Conversation
-   (`pull-request-comment-box.tsx`): the words with their preview, GitHub's
-   refusal under them, drawn as every refusal is (`ErrorState`), and
-   Comment at the row's end. */
-.pull-request-comment-box {
-  display: flex;
-  flex-direction: column;
-  gap: var(--luke-control-gap);
-}
-
-.pull-request-comment-foot {
-  display: flex;
-  justify-content: flex-end;
-}
-
-/* The earlier entries a read left on GitHub, counted where they would stand. */
-.pull-request-earlier {
-  margin: 0 0 var(--luke-control-gap);
-  padding-inline: var(--row-inset);
-}
-
 /* What a read left on GitHub, counted as a press in the caption's type. */
-.pull-request-more {
-  align-self: flex-start;
-  max-width: 100%;
-  color: var(--luke-color-text-muted);
-  font-size: var(--luke-type-caption-size);
-  line-height: var(--luke-type-caption-leading);
-}
-
 .file-tab-snippet-label {
   margin: 0;
   padding: var(--luke-row-inset) var(--luke-list-inset) var(--luke-tight-gap);

@@ -111,6 +111,31 @@ const FEEDBACK_DISPLAY = {
   container: ["progress"],
 } as const;
 
+/**
+ * The names the panel's task surfaces' block of the theme adds (tasks.css,
+ * moving onto utilities), by the group tailwind-merge reads each in.
+ */
+const TASK_SURFACES = {
+  "font-weight": ["luke-regular", "luke-semibold"],
+  leading: ["reading"],
+  spacing: [
+    "item-gap",
+    "comment-editor",
+    "branch-chip",
+    "label-dot",
+    "line-comment",
+    "boxed-inset",
+    "check-glyph",
+    "deployment-open",
+    "annotation",
+    "annotation-turn",
+    "annotation-face",
+    "annotation-face-x",
+    "annotation-gap",
+    "annotation-more",
+  ],
+} as const;
+
 const merge = extendTailwindMerge({
   extend: {
     theme: {
@@ -139,9 +164,10 @@ const merge = extendTailwindMerge({
         "emphasis",
         "title",
         ...FEEDBACK_DISPLAY["font-weight"],
+        ...TASK_SURFACES["font-weight"],
       ],
       tracking: ["title"],
-      leading: ["body", ...FEEDBACK_DISPLAY.leading],
+      leading: ["body", ...FEEDBACK_DISPLAY.leading, ...TASK_SURFACES.leading],
       spacing: [
         "luke-2",
         "luke-4",
@@ -206,6 +232,7 @@ const merge = extendTailwindMerge({
         "choice-segment-compact",
         "caption-glyph",
         ...FEEDBACK_DISPLAY.spacing,
+        ...TASK_SURFACES.spacing,
       ],
       radius: [
         "control",

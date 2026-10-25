@@ -330,7 +330,7 @@ export function PullRequestDescription({
     },
   );
   const read = drawn ?? (
-    <p className="pull-request-words pull-request-description-empty">
+    <p className="pull-request-words m-0 min-w-0 select-text text-body-size leading-reading text-muted-foreground">
       {DESCRIPTION_WORDS.PLACEHOLDER}
     </p>
   );
@@ -366,7 +366,7 @@ export function PullRequestDescription({
         placeholder={DESCRIPTION_WORDS.PLACEHOLDER}
         // Note that the words wear the drawn description's own classes, so nothing moves as it opens or closes.
         className="transcript-markdown pull-request-description-text"
-        roomClassName="pull-request-words pull-request-description"
+        roomClassName="pull-request-words pull-request-description min-w-0 select-text text-body-size leading-reading text-foreground"
         onDraft={(markdown) => {
           draft.current = markdown;
         }}

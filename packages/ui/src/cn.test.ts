@@ -31,3 +31,12 @@ test("a later disabled fade replaces an earlier one, the theme's own included", 
   assert.equal(cn("disabled:opacity-50", "disabled:opacity-disabled"), "disabled:opacity-disabled");
   assert.equal(cn("disabled:opacity-disabled", "disabled:opacity-100"), "disabled:opacity-100");
 });
+
+test("a task surface's weight and leading stand beside a font and a size, and its later length replaces an earlier", () => {
+  assert.equal(cn("font-ui font-luke-semibold"), "font-ui font-luke-semibold");
+  assert.equal(cn("text-body-size leading-reading"), "text-body-size leading-reading");
+  assert.equal(
+    cn("max-w-annotation text-foreground", "max-w-line-comment"),
+    "text-foreground max-w-line-comment",
+  );
+});

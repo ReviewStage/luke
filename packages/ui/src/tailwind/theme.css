@@ -577,6 +577,37 @@
      line of what holds it, as a card's aside does. */
   --radius-choice-box: var(--luke-space-4);
   --text-caption-inline: var(--luke-type-caption-size);
+
+  /* The panel's task surfaces (`@luke/panel`'s tasks.css, moving onto
+     utilities): the gap a line's parts stand apart by, a reply's reading
+     leading, and the weights words are set in where no type role names
+     them. */
+  --spacing-item-gap: var(--luke-item-gap);
+  --leading-reading: var(--luke-type-reading-leading);
+  --font-weight-luke-regular: var(--luke-weight-regular);
+  --font-weight-luke-semibold: var(--luke-weight-semibold);
+  /* A pull request's conversation (`agent-pull-request-tab.tsx`): the
+     words' field growing from a few lines' height; a branch's chip at its
+     widest; a label's dot in its GitHub colour (`--label-dot`); a line
+     comment's measure; a boxed entry's inset, its hairline counted
+     (`--boxed-inset`); a check's glyph and a deployment's door; and the
+     annotation card's measure and columns, which its sheet sets
+     (`.annotation-card`). */
+  --spacing-comment-editor: calc(3lh + 2 * var(--luke-space-6));
+  --spacing-branch-chip: 22rem; /* off-scale: a branch's name before it is cut */
+  --spacing-label-dot: 10px; /* off-scale: a label's swatch */
+  --color-label-dot: var(--label-dot, transparent);
+  --spacing-line-comment: 720px; /* off-scale: a line comment's reading measure */
+  --spacing-boxed-inset: var(--boxed-inset);
+  --spacing-check-glyph: 14px; /* off-scale: a check's glyph */
+  --spacing-deployment-open: 13px; /* off-scale: a deployment's door */
+  --spacing-annotation: min(48rem, 100%);
+  --spacing-annotation-turn: var(--annotation-turn);
+  --spacing-annotation-face: var(--annotation-face);
+  --spacing-annotation-face-x: var(--annotation-face-x);
+  --spacing-annotation-gap: var(--annotation-gap);
+  --spacing-annotation-more: calc(var(--annotation-face) + var(--annotation-gap));
+  --grid-template-columns-annotation-comment: var(--annotation-face) minmax(0, 1fr);
 }
 
 /* The conditions a control answers beside its states: a finger's pointer,

@@ -25,7 +25,7 @@ export function PullRequestLabels({
       aria-label="Labels"
     >
       {labels.map((label) => (
-        <li key={label.name} className="pull-request-label">
+        <li key={label.name} className="pull-request-label flex min-w-0 max-w-full">
           <Badge fill={label.color}>{label.name}</Badge>
         </li>
       ))}
