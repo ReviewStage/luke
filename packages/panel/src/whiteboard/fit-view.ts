@@ -7,7 +7,7 @@
  * last shape. Here a bar wider than it is tall is read as the top's or the
  * bottom's, whichever is nearer, so the drawing stands between them, a gap
  * clear of each. A tall bar, the side tools, holds its side clear only if the
- * drawing so placed would reach it, so a board whose side tools stand above
+ * drawing so placed would come within the gap of it, so a board whose side tools stand above
  * the drawing keeps the room beside them.
  *
  * Note that the zoom is the exact one that fits, where Excalidraw's own rounds
@@ -44,8 +44,14 @@ interface Insets {
   left: number;
 }
 
-function intersects(a: Rect, b: Rect): boolean {
-  return a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom;
+/** Whether `a` stands within `gap` of `b`, or over it. */
+function reaches(a: Rect, b: Rect, gap: number): boolean {
+  return (
+    a.left < b.right + gap &&
+    b.left - gap < a.right &&
+    a.top < b.bottom + gap &&
+    b.top - gap < a.bottom
+  );
 }
 
 interface Canvas {
@@ -95,9 +101,9 @@ export function fitView(
     else inset.bottom = Math.max(inset.bottom, canvas.height - bar.top + gap);
   }
   let fit = placeIn(canvas, inset, bounds);
-  // A side bar moves its side in only when the drawing, so placed, would reach it: at most one move a bar.
+  // A side bar moves its side in only when the drawing, so placed, would come within the gap of it: at most one move a bar.
   for (const _ of sides) {
-    const hit = sides.find((bar) => intersects(fit.placed, bar));
+    const hit = sides.find((bar) => reaches(fit.placed, bar, gap));
     if (hit === undefined) break;
     if ((hit.left + hit.right) / 2 < canvas.width / 2)
       inset.left = Math.max(inset.left, hit.right + gap);

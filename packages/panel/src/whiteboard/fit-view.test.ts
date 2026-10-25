@@ -44,9 +44,17 @@ test("a side tool the drawing would reach holds the drawing back from it", () =>
   assertBox(onScreen(view, bounds), { left: 16, top: 50.625, right: 334, bottom: 249.375 });
 });
 
+test("a side tool the drawing would stand too near holds it a gap clear, though they do not touch", () => {
+  const bounds: SceneBounds = [0, 0, 320, 200];
+  const sideTools = { left: 370, top: 100, right: 400, bottom: 200 };
+  const view = fitView(CANVAS, [sideTools], bounds, GAP);
+  // Alone the drawing would end at 360, 10px short of the tools. The room left of a gap short of them is 338 wide, centred from 16, so it ends at 345.
+  assertBox(onScreen(view, bounds), { left: 25, top: 50, right: 345, bottom: 250 });
+});
+
 test("a side tool above the drawing takes no room from it", () => {
   const bounds: SceneBounds = [0, 0, 320, 200];
-  const sideTools = { left: 370, top: 0, right: 400, bottom: 45 };
+  const sideTools = { left: 370, top: 0, right: 400, bottom: 30 };
   const view = fitView(CANVAS, [sideTools], bounds, GAP);
   assert.equal(view.zoom, 1);
   assertBox(onScreen(view, bounds), { left: 40, top: 50, right: 360, bottom: 250 });
