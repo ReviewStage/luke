@@ -33,7 +33,7 @@ import type { SettingsWrites } from "./writes.js";
 /** The words of the OpenAI key's row, which points to where the key is kept and never shows it. */
 const OPENAI_KEY_WORDS = {
   LABEL: "OpenAI key",
-  DETAIL: "Calls and dictation run on your OpenAI key, kept under Codex in Agents.",
+  DETAIL: "Calls and dictation run on this key.",
   OPEN: "Open in Agents",
 } as const;
 
