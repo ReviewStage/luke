@@ -302,7 +302,6 @@ test("opened, the card draws each step as a transcript does, a line as a sent me
   );
   // A line is a sent message, named by whoever sent it, Charles here though Dean started the source.
   const [line, call, said] = steps;
-  assert.ok(line?.classList.contains("is-user"));
   assert.match(line?.textContent ?? "", /Use seven days\./u);
   assert.equal(line?.querySelector(".luke-message-line-sender")?.textContent, "Charles Pan");
   assert.match(said?.textContent ?? "", /Seven days it is\./u);

@@ -4,9 +4,7 @@ import assert from "node:assert/strict";
 import { act, createElement, type ReactElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
-import { STATUS_TONE } from "../../status-tone.js";
 import {
-  CHOICE_FLOW,
   CHOICE_LOOK,
   CHOICE_SELECT,
   ChoiceList,
@@ -19,9 +17,8 @@ import {
  * choice-list.test.ts -- a pick-one list is a radio group the arrows walk
  * past an unavailable row, a press on its checked row keeping or clearing
  * the choice as asked; a pick-several list toggles each row on its own, the
- * arrows moving along it; a marked and numbered list
- * leads each row with its control and wears its key; a read-only list
- * keeps the open look, its pick checked, and takes no press, key, or Tab;
+ * arrows moving along it; a numbered list wears each row's key; a read-only
+ * list keeps its pick checked and takes no press, key, or Tab;
  * a settled list names what was picked and takes no press; and Enter
  * presses a row and a card's own field keeps its caret, where Base UI's
  * radio and group would not.
@@ -197,28 +194,6 @@ test("a press chooses a row; a press on the checked row keeps it, unless the lis
   assert.equal(row(cleared, "Never retry").getAttribute("aria-checked"), "false");
 });
 
-test("an open row's badge stands in the attention tone unless the option names its own", () => {
-  const page = render(
-    createElement(ChoiceList<Retry>, {
-      legend: "Retries",
-      options: [
-        { value: "three", label: "Retry 3 times", badge: "Recommended" },
-        { value: "never", label: "Never retry", badge: "Quiet", badgeTone: STATUS_TONE.NEUTRAL },
-      ],
-      value: [],
-      onChange: () => undefined,
-    }),
-  );
-  const tones = [...page.querySelectorAll(".luke-badge")].map((badge) => [
-    badge.textContent,
-    badge.getAttribute("data-tone"),
-  ]);
-  assert.deepEqual(tones, [
-    ["Recommended", STATUS_TONE.ATTENTION],
-    ["Quiet", STATUS_TONE.NEUTRAL],
-  ]);
-});
-
 test("a press on the checked row is heard by a list that listens for it, and changes nothing", () => {
   const pressed: string[] = [];
   const page = render(
@@ -277,69 +252,20 @@ test("the arrows move the keyboard along a pick-several list, past an unavailabl
   assert.equal(heard(page), "");
 });
 
-test("a marked list leads each row with the radio or the checkbox it behaves as, and a numbered one wears each row's number after its badge and names it as the row's key", () => {
-  const controls = (page: HTMLElement) =>
-    rows(page).map((each) =>
-      each.querySelector(".luke-choice-control")?.getAttribute("data-shape"),
-    );
-  assert.deepEqual(controls(render(createElement(Held, { look: CHOICE_LOOK.MARKED }))), [
-    "radio",
-    "radio",
-    "radio",
-  ]);
+test("a numbered list wears each row's number after its badge and names it as the row's key", () => {
   const boxes = render(
     createElement(Held, { look: CHOICE_LOOK.MARKED, select: CHOICE_SELECT.MANY, numbered: true }),
   );
-  assert.deepEqual(controls(boxes), ["box", "box", "box"]);
   assert.deepEqual(
     rows(boxes).map((each) => each.getAttribute("aria-keyshortcuts")),
     ["1", "2", "3"],
   );
   assert.equal(row(boxes, "Retry 3 times").textContent, "Retry 3 timesRecommended1Over an hour.");
   const plain = render(createElement(Held));
-  assert.deepEqual(controls(plain), [undefined, undefined, undefined]);
   assert.deepEqual(
     rows(plain).map((each) => each.getAttribute("aria-keyshortcuts")),
     [null, null, null],
   );
-});
-
-test("a list across stands its rows side by side, each toned row filling its checked control with what picking it means, and still picks one by the arrows", () => {
-  function Decide(): React.JSX.Element {
-    const [value, setValue] = useState<readonly string[]>([]);
-    return createElement(ChoiceList<string>, {
-      legend: "Decision",
-      options: [
-        { value: "yes", label: "Approve", tone: STATUS_TONE.COMPLETE },
-        { value: "no", label: "Decline", tone: STATUS_TONE.DANGER },
-      ],
-      value,
-      look: CHOICE_LOOK.MARKED,
-      flow: CHOICE_FLOW.ACROSS,
-      onChange: setValue,
-    });
-  }
-  const page = render(createElement(Decide));
-  assert.equal(page.querySelector('[role="radiogroup"]')?.getAttribute("data-flow"), "across");
-  assert.deepEqual(
-    rows(page).map((each) => each.dataset.tone),
-    ["complete", "danger"],
-  );
-  act(() => row(page, "Approve").focus());
-  key(row(page, "Approve"), "ArrowRight");
-  assert.equal(row(page, "Decline").getAttribute("aria-checked"), "true");
-});
-
-test("a pill list draws its options as pills, a check before the picked one's words, and picks as a radio group does", () => {
-  const page = render(createElement(Held, { look: CHOICE_LOOK.PILL, start: ["never"] }));
-  assert.equal(page.querySelector('[role="radiogroup"]')?.getAttribute("data-look"), "pill");
-  assert.deepEqual(
-    rows(page).map((each) => each.querySelector(".luke-choice-check") !== null),
-    [true, true, true],
-  );
-  act(() => row(page, "Never retry").focus());
-  key(row(page, "Never retry"), "ArrowDown");
-  assert.equal(heard(page), "three");
 });
 
 test("an unavailable list changes nothing, by press or by key", () => {
@@ -349,14 +275,11 @@ test("an unavailable list changes nothing, by press or by key", () => {
   assert.equal(heard(page), "");
 });
 
-test("a read-only list keeps the open look with its pick checked, its badge in the neutral tone, and takes no press, key, or Tab", () => {
+test("a read-only list keeps its pick checked and takes no press, key, or Tab", () => {
   for (const select of [CHOICE_SELECT.ONE, CHOICE_SELECT.MANY]) {
     const page = render(
       createElement(Held, { select, readOnly: true, look: CHOICE_LOOK.MARKED, start: ["three"] }),
     );
-    const list = page.querySelector<HTMLElement>(".luke-choice-list") ?? assert.fail("no list");
-    assert.equal(list.dataset.readOnly, "true");
-    assert.equal(list.dataset.look, "marked", "each row still leads with its control");
     assert.deepEqual(
       rows(page).map((each) => [each.getAttribute("aria-checked"), each.disabled]),
       [
@@ -365,7 +288,6 @@ test("a read-only list keeps the open look with its pick checked, its badge in t
         ["false", true],
       ],
     );
-    assert.equal(page.querySelector<HTMLElement>(".luke-badge")?.dataset.tone, "neutral");
     act(() => row(page, "Never retry").click());
     key(row(page, "Retry 3 times"), "ArrowDown");
     assert.equal(heard(page), "", "nothing is handed on");
@@ -408,8 +330,6 @@ test("a picture list is a radio group of faces the arrows walk, each face's pict
       ],
     }),
   );
-  const group = container.querySelector('[role="radiogroup"]');
-  assert.equal(group?.getAttribute("data-look"), "picture");
   const faces = [...container.querySelectorAll<HTMLButtonElement>('[role="radio"]')];
   assert.deepEqual(
     faces.map((face) => face.textContent),

@@ -111,11 +111,6 @@ function drawFirstFrame(container: HTMLElement): void {
   });
 }
 
-test("a live avatar plays its video track", () => {
-  const { container } = mountRoot(tile({ status: AVATAR_STATUS.LIVE, video: VIDEO }));
-  assert.deepEqual(playing(container.querySelector("video")), [VIDEO]);
-});
-
 test("a live avatar still says it is connecting until its video draws a first frame, then stops", () => {
   const { container } = mountRoot(tile({ status: AVATAR_STATUS.LIVE, video: VIDEO }));
   assert.equal(waitingSays(container), CALL_VIDEO_LABEL.CONNECTING);

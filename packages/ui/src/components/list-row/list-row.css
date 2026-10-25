@@ -10,16 +10,20 @@
    rather than inside it, a button holding no button: that track widens to
    the acts while they stand, so the words never run under them, and where
    there is a hover it is the end's alone at rest, so the words run to the
-   metadata (below). */
+   metadata (below).
+
+   Each part's own box is drawn in utilities (`list-row.tsx`); what stays
+   here is what a row's state restyles: its fill and ring, the press's
+   insets and height, the words' type and ink, the hover acts and the room
+   they take, the swipe's slide, and every reveal, through `:has()`, the
+   pointer's media, and custom properties set on the row. */
 
 @layer components {
+  /* A list's own box is drawn in utilities (`list-row.tsx`) but for its
+     margin, which a page pulls out past its column by from this layer
+     (`collection-page.css`, `detail-page.css`), and a utility would outrank. */
   .luke-list {
-    display: flex;
-    flex-direction: column;
-    gap: var(--luke-list-gap);
     margin: 0;
-    padding: 0;
-    list-style: none;
   }
 
   /* Note that the end's track gives way to nothing but the words: it takes
@@ -30,20 +34,7 @@
     --luke-list-row-inset-block: var(--luke-row-inset);
     --luke-list-row-inset-inline: var(--luke-list-inset);
 
-    display: grid;
-    grid-template-columns:
-      [leading-start] auto
-      [leading-end text-start] minmax(0, 1fr)
-      [text-end end-start] minmax(0, auto)
-      [end-end acts-start] auto
-      [acts-end more-start] auto
-      [more-end];
-    align-items: center;
-    min-width: 0;
     border-radius: var(--luke-control-radius);
-    color: var(--luke-color-text);
-    font-family: var(--luke-font-sans);
-    transition: background-color var(--luke-duration-hover) var(--luke-motion-exit);
   }
 
   /* The pointer lights a row that opens something, never past the open
@@ -76,50 +67,15 @@
     background: var(--luke-color-fill-selected);
   }
 
-  /* The press spans the mark, the words, and the end, its parts standing
-     in the row's own tracks. */
+  /* The press stands its words at the row's insets, which a variant, a
+     density, and the acts beside it set. */
   .luke-list-row-main {
-    display: grid;
-    grid-column: leading-start / end-end;
-    grid-row: 1;
-    grid-template-columns: subgrid;
-    align-items: center;
-    min-width: 0;
-    margin: 0;
     padding: var(--luke-list-row-inset-block) var(--luke-list-row-inset-inline);
-    border: 0;
-    border-radius: inherit;
-    background: none;
-    color: inherit;
-    font: inherit;
-    text-align: start;
   }
 
-  button.luke-list-row-main {
-    cursor: pointer;
-  }
-
-  button.luke-list-row-main:disabled {
-    cursor: default;
-  }
-
-  /* A desktop row answers a press the way a Mac's list does, without the
-     web's pointing hand. */
-  [data-luke-profile="desktop"] button.luke-list-row-main {
-    cursor: default;
-  }
-
-  /* A card holds its rows edge to edge on its ground, a hairline between
-     each and the next, as a settings section's card does; its corner clips
-     the fill of its first and last rows. */
-  .luke-list[data-variant="card"] {
-    gap: 0;
-    overflow: hidden;
-    border: 1px solid var(--luke-color-border);
-    border-radius: var(--luke-control-radius);
-    background: var(--luke-color-surface);
-  }
-
+  /* A card holds its rows edge to edge on its ground (`list-row.tsx`), a
+     hairline between each and the next, as a settings section's card does;
+     its corner clips the fill of its first and last rows. */
   .luke-list[data-variant="card"] > .luke-list-row {
     border-radius: 0;
   }
@@ -165,7 +121,11 @@
     contain: layout style;
   }
 
+  /* Note that a swipe row's press stands in its slide, so it is reached through it, or that row stands shorter than the rows around it. */
   :is(.luke-list[data-density="dense"] > .luke-list-row, .luke-list-row[data-density="dense"])
+  > .luke-list-row-main,
+  :is(.luke-list[data-density="dense"] > .luke-list-row, .luke-list-row[data-density="dense"])
+    > .luke-list-row-slide
     > .luke-list-row-main {
     min-height: var(--luke-control-height);
   }
@@ -259,40 +219,17 @@
     padding-inline-end: 0;
   }
 
-  .luke-list-row-leading {
-    display: inline-flex;
-    grid-column: leading;
-    margin-inline-end: var(--luke-icon-gap);
-    color: var(--luke-color-text-muted);
-  }
-
-  /* A provider's mark keeps the text's colour: a brand mark is the
-     provider's identity, not a muted glyph, so one drawn in currentColor
-     reads as it does everywhere else. */
-  .luke-list-row-leading > .luke-provider-mark {
-    color: var(--luke-color-text);
-  }
-
-  /* A glyph stands at a control's glyph size; an avatar brings its own. */
-  .luke-list-row-leading > svg {
-    width: var(--luke-control-icon);
-    height: var(--luke-control-icon);
-  }
-
+  /* A row's words stand in a column, which a dense row lays in a line and
+     a mail-style row hands to the press's tracks. */
   .luke-list-row-text {
     display: flex;
-    grid-column: text;
     flex-direction: column;
     gap: var(--luke-space-2);
-    min-width: 0;
   }
 
   /* A row's attachments stand on a line of their own under its words, in a
      run that is cut at the row's end rather than wrapping. */
   .luke-list-row-attachments {
-    display: flex;
-    gap: var(--luke-space-6);
-    overflow: hidden;
     margin-block-start: var(--luke-space-4);
   }
 
@@ -355,77 +292,9 @@
     line-height: var(--luke-type-caption-leading);
   }
 
-  /* What a row belongs to leads its description, a small chip of a glyph
-     and a name cut short at a short name's width, the description's words
-     following it on the line. */
-  .luke-list-row-lead {
-    /* Note that the name is cut short at a short name's measure, its glyph
-       and the gap after it beside that. */
-    --luke-list-row-lead-measure: 18ch;
-    display: inline-flex;
-    max-width: calc(
-      var(--luke-list-row-lead-measure) +
-      var(--luke-type-caption-size) +
-      var(--luke-space-2)
-    );
-    align-items: center;
-    gap: var(--luke-space-2);
-    margin-inline-end: var(--luke-space-4);
-    padding: 0 var(--luke-space-4);
-    border-radius: var(--luke-radius-6);
-    background: var(--luke-color-fill-strong);
-    color: var(--luke-color-text-muted);
-    vertical-align: bottom;
-  }
-
-  .luke-list-row-lead-icon {
-    display: inline-flex;
-    flex: none;
-  }
-
-  .luke-list-row-lead-icon > svg {
-    width: var(--luke-type-caption-size);
-    height: var(--luke-type-caption-size);
-  }
-
-  .luke-list-row-lead-label {
-    min-width: 0;
-    overflow: hidden;
-    white-space: nowrap;
-  }
-
-  /* What a row belongs to may stand on a line of its own instead, between
-     its title and its description: its glyph and its whole name in the
-     description's quieter ink, cut only at the row's end, with no chip
-     round it, since a line of its own needs no box to stand apart. */
-  .luke-list-row-lead[data-at="line"] {
-    display: flex;
-    max-width: none;
-    gap: var(--luke-space-4);
-    margin: 0;
-    padding: 0;
-    border-radius: 0;
-    background: none;
-    color: var(--luke-color-text-muted);
-    font-size: var(--luke-type-caption-size);
-    line-height: var(--luke-type-caption-leading);
-  }
-
   /* The name of what a row belongs to fades where its chip cuts it short. */
   .luke-list-row-lead-label[data-overflow="true"] {
     mask-image: linear-gradient(to left, transparent, #000 var(--luke-label-fade));
-  }
-
-  /* The row's end, its metadata and its chevron, stands in the end's track
-     at the track's end, so it lines up with the acts that share the track. */
-  .luke-list-row-end {
-    display: flex;
-    grid-column: end;
-    justify-self: end;
-    align-items: center;
-    gap: var(--luke-icon-gap);
-    min-width: 0;
-    margin-inline-start: var(--luke-icon-gap);
   }
 
   /* The title gives way first; past it, the metadata is cut short. */
@@ -484,11 +353,7 @@
   /* Acts that always stand do so in their own track beside the press, as
      far in from the row's end as the press's words are. */
   .luke-list-row-actions {
-    display: flex;
     grid-column: acts;
-    grid-row: 1;
-    align-items: center;
-    gap: var(--luke-space-4);
     margin-inline-start: var(--luke-control-gap);
     padding-inline-end: var(--luke-list-row-inset-inline);
   }
@@ -500,10 +365,7 @@
      hover it comes in with them, in its end's place, where there is a
      hover (below). */
   .luke-list-row-more {
-    display: flex;
     grid-column: more;
-    grid-row: 1;
-    align-items: center;
     margin-inline-start: var(--luke-control-gap);
     padding-inline-end: var(--luke-list-row-inset-inline);
     opacity: 0;
@@ -518,7 +380,7 @@
     margin-block-start: var(--luke-list-row-inset-block);
   }
 
-  .luke-list-row:not([data-actions="hover"]) .luke-list-row-actions:has(+ .luke-list-row-more) {
+  .luke-list-row .luke-list-row-actions:has(+ .luke-list-row-more) {
     padding-inline-end: 0;
   }
 
@@ -548,16 +410,7 @@
   /* A row that goes deeper wears its chevron at its end, shown while the
      row is reached for or open, its room kept so nothing moves as it shows. */
   .luke-list-row-chevron {
-    display: inline-flex;
-    flex: none;
-    color: var(--luke-color-text-muted);
     opacity: 0;
-    transition: opacity var(--luke-duration-hover) var(--luke-motion-exit);
-  }
-
-  .luke-list-row-chevron > svg {
-    width: var(--luke-space-12);
-    height: var(--luke-space-12);
   }
 
   .luke-list-row:is(:has(:focus-visible), [data-current="true"]) .luke-list-row-chevron {
@@ -680,64 +533,23 @@
   }
 
   /* Where there is a hover, a row whose acts come in on hover keeps no
-     room for them at rest: its words run to its metadata, and its metadata
-     ends the row at its end inset. The acts take their room only while they
-     stand, the row in hand, holding the keyboard, or its menu open, the end
-     stepping aside for them (above) and the title cut anew before them, as
-     a title is cut wherever its row narrows. At rest each keeps its place
-     but takes no room, standing out of the row's flow in its end's place
-     (`position: absolute`, its grid area its containing block), so its
-     buttons stand where they will show. Its ⋯, beside acts, comes in with
-     them, last, in its end's place, and keeps no track of its own. Note that
-     the acts stand clear of the ⋯ by its width (`--luke-list-row-more-size`,
-     its button's), because they are two boxes in one track. A row that
-     offers a menu and no acts keeps its ⋯ in its own track beside its end,
-     which nothing steps in for, and so does every row on a screen with no
-     hover, where the ⋯ is always shown and the acts keep their room (above). */
+     room for them at rest: its words run to its metadata. The acts take
+     their room only while they stand, the row in hand, holding the keyboard,
+     or its menu open, the end stepping aside for them (above) and the title
+     cut anew before them, as a title is cut wherever its row narrows. At
+     rest they keep their place but take no room, standing out of the row's
+     flow in their end's place (`position: absolute`, its grid area its
+     containing block), so their buttons stand where they will show. The ⋯ is
+     not one of them: it keeps its own track last, shown or not, whatever the
+     row's acts are, so every row's metadata ends the same distance from the
+     row's end, and the times of a list stand in one column. */
   @media (hover: hover) {
     .luke-list-row[data-actions="hover"] {
-      --luke-list-row-more-size: var(--luke-control-height);
-      --luke-list-row-acts-clear: 0px;
-
       position: relative;
     }
 
-    :is(
-        .luke-list:is([data-density="compact"], [data-density="dense"]) > .luke-list-row,
-        .luke-list-row:is([data-density="compact"], [data-density="dense"])
-      )[data-actions="hover"] {
-      --luke-list-row-more-size: var(--luke-space-24);
-    }
-
-    .luke-list-row[data-actions="hover"]:has(.luke-list-row-actions + .luke-list-row-more) {
-      --luke-list-row-acts-clear: calc(
-        var(--luke-list-row-inset-inline) +
-        var(--luke-list-row-more-size) +
-        var(--luke-space-4)
-      );
-    }
-
-    .luke-list-row[data-actions="hover"]:has(> .luke-list-row-actions + .luke-list-row-more)
-      > .luke-list-row-main,
-    .luke-list-row[data-actions="hover"]
-      > .luke-list-row-slide:has(> .luke-list-row-actions + .luke-list-row-more)
-      > .luke-list-row-main {
-      padding-inline-end: var(--luke-list-row-inset-inline);
-    }
-
-    .luke-list-row[data-actions="hover"] .luke-list-row-actions + .luke-list-row-more {
-      grid-column: end;
-      justify-self: end;
-      margin-inline: 0 var(--luke-list-row-inset-inline);
-      padding-inline-end: 0;
-    }
-
-    .luke-list-row[data-actions="hover"] .luke-list-row-actions {
-      margin-inline-end: var(--luke-list-row-acts-clear);
-    }
-
     .luke-list-row[data-actions="hover"]:not(:hover, :has(:focus-visible), [data-menu-open="true"])
-      :is(.luke-list-row-actions, .luke-list-row-actions + .luke-list-row-more) {
+      .luke-list-row-actions {
       position: absolute;
     }
   }
@@ -813,14 +625,6 @@
   }
 
   .luke-list-row-slide {
-    position: relative;
-    display: grid;
-    grid-column: 1 / -1;
-    grid-row: 1;
-    grid-template-columns: subgrid;
-    align-items: center;
-    min-width: 0;
-    border-radius: inherit;
     background-color: var(--luke-list-row-ground, var(--luke-color-ground));
     background-image: linear-gradient(var(--luke-list-row-fill), var(--luke-list-row-fill));
     transform: translateX(var(--luke-list-row-swipe, 0px));
@@ -845,9 +649,6 @@
      face's corners; it comes in at once as a swipe begins, and goes only
      once the face has slid home over it. */
   .luke-list-row-swipe {
-    position: absolute;
-    inset: 0;
-    border-radius: inherit;
     background: var(--luke-color-accent);
     opacity: 1;
   }
@@ -865,29 +666,7 @@
     background: color-mix(in srgb, var(--luke-color-accent) 82%, var(--luke-color-on-accent));
   }
 
-  .luke-list-row-swipe-act {
-    position: absolute;
-    inset: 0;
-    margin: 0;
-    padding: 0;
-    border: 0;
-    background: none;
-    color: var(--luke-color-on-accent);
-    font: inherit;
-  }
-
   .luke-list-row-swipe-label {
-    position: absolute;
-    inset-block: 0;
-    inset-inline-start: 0;
-    display: flex;
-    width: 56px;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: var(--luke-space-2);
-    font-size: var(--luke-type-tag-size);
-    font-weight: var(--luke-type-tag-weight);
     opacity: var(--luke-list-row-swipe-shown, 0);
     transform: translateX(var(--luke-list-row-swipe-label, 0px));
     transition: transform var(--luke-duration-fast) var(--luke-spring-fast);
@@ -898,10 +677,5 @@
      glides rather than snaps. */
   .luke-list-row[data-swipe="moving"] .luke-list-row-swipe-label {
     transition: transform var(--luke-duration-hover) var(--luke-motion-exit);
-  }
-
-  .luke-list-row-swipe-label > svg {
-    width: var(--luke-control-icon);
-    height: var(--luke-control-icon);
   }
 }

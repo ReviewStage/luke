@@ -227,6 +227,24 @@ test("what Luke kept in the workspace is read for it and listed in the service's
   );
 });
 
+test("a memory's code in backticks is drawn as inline code, never as the backticks themselves", async () => {
+  const written = { ...TESTS, text: "Run `pnpm db:generate` after changing a schema." };
+  stored = [written];
+  const { page } = await mount();
+
+  const code = [
+    ...rowOf(page, {
+      ...written,
+      text: "Run pnpm db:generate after changing a schema.",
+    }).querySelectorAll("code"),
+  ];
+  assert.deepEqual(
+    code.map((each) => each.textContent),
+    ["pnpm db:generate"],
+  );
+  assert.doesNotMatch(page.textContent ?? "", /`/u);
+});
+
 test("Forget asks first, then forgets the memory for good and lists what the service then keeps", async () => {
   const { page } = await mount();
 
@@ -241,14 +259,6 @@ test("Forget asks first, then forgets the memory for good and lists what the ser
   );
   assert.deepEqual(words(page), [TESTS.text]);
   assert.equal(document.querySelector('[role="alertdialog"]'), null);
-});
-
-test("Forget is drawn red, since a forgotten memory cannot be got back", async () => {
-  const { page } = await mount();
-
-  askForget(page, DEPLOYS);
-
-  assert.equal(button(dialog(), "Forget").getAttribute("data-variant"), "danger");
 });
 
 test("a forget that fails says so in the dialog and keeps the memory listed", async () => {

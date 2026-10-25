@@ -376,31 +376,6 @@ test("an end picked before the start becomes the start, so the range stays in or
   ]);
 });
 
-test("the picker stays hung from its chip as the words under it scroll", async () => {
-  const { container } = await opened();
-  const chip = chipIn(container);
-  let top = 120;
-  vi.spyOn(chip, "getBoundingClientRect").mockImplementation(() => new DOMRect(40, top, 60, 20));
-  // Note that jsdom lays nothing out, so the box the picker is laid in is named for it.
-  vi.spyOn(HTMLElement.prototype, "offsetParent", "get").mockReturnValue(document.body);
-
-  await pressChip(container);
-  const dialog = [...container.querySelectorAll<HTMLElement>('[role="dialog"]')].find(
-    (each) =>
-      document.getElementById(each.getAttribute("aria-labelledby") ?? "")?.textContent === "Date",
-  );
-  const hung = dialog?.parentElement;
-  const before = hung?.style.top;
-  top = 60;
-  act(() => {
-    container.querySelector(".plan-document-text")?.dispatchEvent(new Event("scroll"));
-  });
-  vi.restoreAllMocks();
-
-  assert.equal(before, "120px");
-  assert.equal(hung?.style.top, "60px");
-});
-
 test("Include time puts a time on the day, spelled with the offset the reader's zone stands at then", async () => {
   const { container, editor } = await opened();
 

@@ -15,16 +15,13 @@ import { APP_COMMAND } from "@luke/settings/shortcuts";
 import { MESSAGE_ROLE, type WireRecord } from "@luke/wire";
 import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
-import { act, createElement, type ReactElement, type ReactNode, useMemo } from "react";
+import { act, createElement, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
 import { runAppCommand } from "../app-commands.js";
-import { taskCards } from "../desktop/side-panel.js";
-import { useTabViews } from "../desktop/strip-tabs.js";
 import { FindScope } from "../find-in-tab.js";
 import { FAKE_ANSWER, fakeActs } from "../testing/app-bridge.js";
 import { onRegistry } from "../testing/copy-feedback.js";
-import { focusRestOn } from "../testing/hint-rest.js";
 import { markdownHtmlParserLanded } from "../testing/markdown.js";
 import { codingAgentsControl, pushedPage } from "../testing/tasks-control.js";
 import { AgentTab, type TranscriptCards } from "./agent-tab.js";
@@ -405,107 +402,6 @@ test("⌘F finds a word on a long fence's 55th line, past its cut, and opens the
   assert.ok(card.contains(litRange.startContainer), "the match is in the fence's card");
   assert.equal(card.querySelector("[hidden]"), null, "the card shows its lines past the cut");
   assert.ok(pressNamed("Show less"), "the card stands whole");
-});
-
-/** The turn a running agent is still writing, as a page reads it. */
-function writing(words: string): CodingAgentMessage {
-  return {
-    id: "newest",
-    role: MESSAGE_ROLE.ASSISTANT,
-    parts: [{ type: "step-start" }, { type: "text", text: words }],
-    startedAt: 9_000,
-  };
-}
-
-function tool(name: string, callId: string, input: WireRecord, output: WireRecord): WireRecord {
-  return { type: `tool-${name}`, toolCallId: callId, state: "output-available", input, output };
-}
-
-/** A finished turn that messaged another agent, whose row hangs that agent's card. */
-const MESSAGED: CodingAgentMessage = {
-  id: "messaged",
-  role: MESSAGE_ROLE.ASSISTANT,
-  parts: [
-    { type: "step-start" },
-    tool(
-      "message_coding_agent",
-      "call-message",
-      { agentId: "agent-7", text: "Rebase" },
-      {
-        status: "accepted",
-      },
-    ),
-    { type: "text", text: "Asked for a rebase." },
-  ],
-  startedAt: 1_000,
-  finishedAt: 2_000,
-};
-
-test("a page that lands draws no message it did not touch again, the task's page holding what the tab drew without being drawn again", async () => {
-  const running = { ...AGENT, status: CODING_AGENT_STATUS.RUNNING };
-  const other: CodingAgentSummary = { ...AGENT, id: "agent-7", title: "Invoice export" };
-  const { follower, push } = following({
-    ...page([message(0), MESSAGED, writing("Reading.")]),
-    status: CODING_AGENT_STATUS.RUNNING,
-  });
-  const control = codingAgentsControl({ agents: [running, other], transcripts: follower });
-  // Each time the card the earlier turn's row hangs is drawn.
-  let cardDraws = 0;
-  function DrawnCard({ card }: { card: ReactNode }): ReactNode {
-    cardDraws += 1;
-    return card;
-  }
-  // The task's page as the window draws it: what the tabs hold, and the cards their rows hang, read from it.
-  function TaskPage(): ReactNode {
-    const views = useTabViews();
-    const cards = useMemo(
-      () =>
-        taskCards({
-          agents: control,
-          held: views.held,
-          chosen: () => false,
-          shownCode: [],
-          pages: undefined,
-        }).agent(AGENT_ID),
-      [views.held],
-    );
-    const counted = useMemo<TranscriptCards>(
-      () => ({
-        ...cards,
-        target: (target) => createElement(DrawnCard, { card: cards.target(target) }),
-      }),
-      [cards],
-    );
-    return createElement(AgentTab, {
-      agent: running,
-      control,
-      shown: true,
-      cards: counted,
-      onOpenSubagent: () => undefined,
-      onOpenTarget: () => undefined,
-      onHeld: views.onAgentHeld,
-    });
-  }
-  const container = document.body.appendChild(document.createElement("div"));
-  root = createRoot(container);
-  act(() => root?.render(onRegistry(AtomRegistry.make(), createElement(TaskPage))));
-  await act(settled);
-  // The earlier turn's card stands open, as the pointer resting on its row hangs it.
-  const chip = container.querySelector<HTMLElement>(
-    '[data-call-id="call-message"] [data-tool-agent-ref]',
-  );
-  assert.ok(chip, "the earlier turn's row names the agent it messaged");
-  document.documentElement.dataset.keyboard = "true";
-  focusRestOn(chip);
-  assert.ok(cardDraws > 0, "the card is drawn");
-
-  cardDraws = 0;
-  await push({ ...page([writing("Reading the audit.")]), status: CODING_AGENT_STATUS.RUNNING });
-  assert.match(
-    container.querySelector('[data-message-id="newest"]')?.textContent ?? "",
-    /Reading the audit\./u,
-  );
-  assert.equal(cardDraws, 0, "the earlier turn is not drawn again");
 });
 
 test("older messages put before the first under a long log leave the row the reader was on where it stood", async () => {

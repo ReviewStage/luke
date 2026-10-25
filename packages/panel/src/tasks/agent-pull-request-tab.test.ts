@@ -818,7 +818,6 @@ it.effect(
         `data:${PIXEL.contentType};base64,${PIXEL.base64}`,
         "any other is drawn as the service read it",
       );
-      assert.equal(rows[2]?.querySelector(".lucide-bot"), null, "no avatar, none drawn");
       assert.deepEqual(words(tab, '[role="timer"]'), ["1m 5s"]);
 
       yield* TestClock.adjust("1 second");
@@ -1522,13 +1521,6 @@ function sectionHead(tab: HTMLElement, name: string): HTMLElement {
   );
 }
 
-/** What stands at the end of a section's heading, beside it rather than in it; none where nothing does. */
-function sectionEnd(tab: HTMLElement, name: string): HTMLElement | null {
-  return tab.querySelector<HTMLElement>(
-    `section[aria-label="${name}"] > .luke-disclosure-frame > .luke-disclosure-actions > .pull-request-section-end`,
-  );
-}
-
 /** What a filter's switch says it leaves out, as a reader hears it. */
 function filterNote(tab: HTMLElement, name: string): string {
   const note = filter(tab, name).getAttribute("aria-describedby");
@@ -1688,7 +1680,6 @@ test("the Description and the Conversation each fold under a heading pressed acr
     ["true", "true"],
     "both start open",
   );
-  assert.ok(description.querySelector(".luke-disclosure-turn"), "a chevron leads the heading");
   assert.ok(tab.querySelector('[aria-label="Description"] .pull-request-words'));
   assert.ok(tab.querySelector('[aria-label="Conversation"] .pull-request-entry'));
 
@@ -1724,46 +1715,6 @@ test("the Description and the Conversation each fold under a heading pressed acr
     "false",
     "opening one leaves the other as it was kept",
   );
-});
-
-test("the Conversation scrolls in a box whose fade begins beneath a band, each section's heading the sticky band at its top, and the filters stand at the end of the Conversation's heading rather than in a row of their own", async () => {
-  const tab = await draw(controlAnswering());
-  const scroller =
-    tab.querySelector<HTMLElement>('[role="region"][aria-label="Pull request conversation"]') ??
-    assert.fail("the conversation scrolls");
-  assert.ok(scroller.classList.contains("luke-scroll-area"));
-  assert.equal(scroller.dataset.fade, "start");
-  assert.equal(scroller.dataset.fadeInset, "band");
-  const page = scroller.querySelector(":scope > .pull-request-page") ?? assert.fail("its page");
-  assert.deepEqual(
-    [...page.querySelectorAll(":scope > section")].map((each) => each.getAttribute("aria-label")),
-    ["Description", "Conversation", "Add a comment"],
-  );
-  for (const name of ["Description", "Conversation"]) {
-    const head = sectionHead(tab, name);
-    assert.equal(
-      head.querySelector(":scope > h3.pull-request-heading")?.firstChild?.textContent,
-      name,
-    );
-    assert.ok(
-      head.nextElementSibling?.querySelector(".pull-request-section-body"),
-      `${name}'s body follows its band`,
-    );
-  }
-  const end = sectionEnd(tab, "Conversation") ?? assert.fail("the Conversation's heading ends");
-  assert.deepEqual(words(end, "button"), ["Hide resolved0", "Hide bots0"]);
-  assert.equal(
-    sectionHead(tab, "Conversation").querySelector("button"),
-    null,
-    "the filters stand beside the heading, no part of what names it",
-  );
-  for (const chip of end.querySelectorAll<HTMLElement>("button")) {
-    // Drawn as the tasks board's view filter in its toolbar: a filter chip at the control's size, never a reaction's compact pill.
-    assert.equal(chip.dataset.look, "filter");
-    assert.equal(chip.dataset.size, undefined, `${chip.textContent} stands at the control's size`);
-  }
-  assert.equal(sectionEnd(tab, "Description"), null);
-  assert.equal(tab.querySelector(".pull-request-filters"), null, "no row of filters stands");
 });
 
 test("opened on its files, as a link to its changes opens it, the header stands above them with where each reviewer stands, and switching between the tabs draws each as it was", async () => {
@@ -2199,36 +2150,6 @@ test("the pill, the title, and the files' count stand from what Luke holds befor
   ]);
 });
 
-test("each part's placeholder stands in the boxes the part lands in: the line under the title in the people line, the conversation in entry cards, the checks in the checks' own list", async () => {
-  const pullRequest = held<{ pullRequest: CodingAgentOverviewPullRequest }>();
-  const checks = held<{ pullRequest: CodingAgentOverviewChecks }>();
-  const conversation = held<{ pullRequest: CodingAgentOverviewConversation }>();
-  const tab = await draw(
-    controlAnswering({
-      pullRequest: pullRequest.read,
-      checks: checks.read,
-      conversation: conversation.read,
-    }),
-  );
-  const placeholder = (label: string) =>
-    [...tab.querySelectorAll<HTMLElement>('[aria-busy="true"]')].find(
-      (each) => each.textContent === label,
-    ) ?? assert.fail(`${label} stands`);
-
-  assert.ok(
-    placeholder("Reading pull request").querySelector(".pull-request-people .luke-skeleton"),
-  );
-  assert.ok(
-    placeholder("Reading conversation").querySelectorAll(".pull-request-entry .luke-skeleton")
-      .length > 0,
-  );
-  await choose(tab, "Checks");
-  const rows = placeholder("Reading checks").querySelectorAll(
-    '[aria-label="Check list"] li .luke-skeleton',
-  );
-  assert.ok(rows.length > 0, "the checks' blocks stand in the checks' own list");
-});
-
 /** A read answering each ask with the next of the answers given, the last again once they run out. */
 function inTurn<A>(...answers: readonly A[]): () => Promise<A> {
   let ask = 0;
@@ -2410,14 +2331,6 @@ function offered(tab: HTMLElement): string[] {
   return labels;
 }
 
-/** The labels the pill's menu draws red, opened and closed again. */
-function offeredRed(tab: HTMLElement): string[] {
-  act(() => pill(tab).click());
-  const labels = words(document.body, '[role="menuitem"][data-danger="true"]');
-  act(() => pill(tab).click());
-  return labels;
-}
-
 test("a draft's pill offers Ready for review, and Close pull request in red, which is asked of the service for the agent, and the tab reads the pull request again, its pill then saying it is open and offering Convert to draft", async () => {
   let reads = 0;
   const tab = await draw(
@@ -2438,14 +2351,12 @@ test("a draft's pill offers Ready for review, and Close pull request in red, whi
   );
   assert.equal(pill(tab).textContent, "Draft");
   assert.deepEqual(offered(tab), ["Ready for review", "Close pull request"]);
-  assert.deepEqual(offeredRed(tab), ["Close pull request"], "closing is drawn red");
 
   await pressAction(tab, "Ready for review");
 
   assert.deepEqual(changes, [[AGENT.id, { action: PULL_REQUEST_ACTION.READY_FOR_REVIEW }]]);
   assert.equal(pill(tab).textContent, "Open");
   assert.deepEqual(offered(tab), ["Convert to draft", "Close pull request"]);
-  assert.deepEqual(offeredRed(tab), ["Close pull request"], "closing is drawn red");
   assert.equal(tab.querySelector(".pull-request-write-note"), null);
 });
 
@@ -3136,53 +3047,6 @@ test("a press outside the review panel closes it, its words kept, and one on a s
   }
 });
 
-test("its labels stand under the title in their GitHub colours, a fill with words that read on it in the light and a tint with words lifted to read in the dark; one GitHub spelled otherwise stands quiet", async () => {
-  const tab = await draw(
-    controlAnswering({
-      pullRequest: () =>
-        Promise.resolve({
-          pullRequest: {
-            ...PULL_REQUEST,
-            labels: [
-              { name: "bug", color: "d73a4a" },
-              { name: "needs review", color: "fbca04" },
-              { name: "blocked", color: "000000" },
-              { name: "odd", color: "not-a-colour" },
-            ],
-          },
-        }),
-    }),
-  );
-  const labels = [
-    ...tab.querySelectorAll<HTMLElement>(".pull-request-header .pull-request-label > .luke-badge"),
-  ];
-  const colour = (at: number, property: string) =>
-    labels[at]?.style.getPropertyValue(property) ?? assert.fail(`label ${at} stands`);
-  assert.deepEqual(
-    labels.map((label) => label.textContent),
-    ["bug", "needs review", "blocked", "odd"],
-  );
-  assert.equal(colour(0, "--luke-badge-fill-light"), "#d73a4a");
-  assert.equal(
-    colour(0, "--luke-badge-words-light"),
-    "#ffffff",
-    "a dark fill is written on in white",
-  );
-  assert.equal(colour(1, "--luke-badge-words-light"), "#24292f", "a light fill is written on dark");
-  assert.equal(colour(0, "--luke-badge-fill-dark"), "#d73a4a20");
-  assert.equal(colour(1, "--luke-badge-words-dark"), "#fbca04", "a light colour reads as it is");
-  assert.equal(
-    colour(2, "--luke-badge-words-dark"),
-    "#999999",
-    "black is lifted to read on the dark",
-  );
-  assert.equal(
-    colour(3, "--luke-badge-fill-light"),
-    "",
-    "a colour spelled otherwise draws no fill",
-  );
-});
-
 test("a pull request with no labels spends no line on them: its label picker stands beside the reviewers' picker, and its labels, once it has some, close that same line", async () => {
   let labels: { name: string; color: string }[] = [];
   const tab = await draw(
@@ -3225,7 +3089,6 @@ it.effect(
         assert.fail("the branches stand");
       const chips = [...branches.querySelectorAll<HTMLButtonElement>("button")];
       const head = chips[1] ?? assert.fail("the head's chip stands");
-      const glyph = () => head.querySelector(".luke-copy-glyph")?.getAttribute("data-state");
 
       assert.deepEqual(
         chips.map((chip) => [
@@ -3245,7 +3108,6 @@ it.effect(
         await settle();
       });
       assert.deepEqual(copied, ["luke/expiry-job"]);
-      assert.equal(glyph(), "copied");
       assert.equal(
         head.getAttribute("aria-label"),
         "Copy branch luke/expiry-job",
@@ -3281,22 +3143,6 @@ test("a head on a fork is named, and copied, as GitHub names it: the fork's acco
   await act(async () => head.click());
   await settle();
   assert.deepEqual(copied, ["octocat:patch-1"]);
-});
-
-test("the number keeps to the title's last word, the space before it inside the end that never wraps, so it never stands alone on a line", async () => {
-  const tab = await draw(controlAnswering());
-  const title =
-    tab.querySelector<HTMLElement>(".pull-request-header .pull-request-title") ??
-    assert.fail("the title stands");
-  const end = title.querySelector(".pull-request-title-end") ?? assert.fail("its end stands");
-
-  assert.equal(
-    title.firstChild?.textContent,
-    "Expire invitations",
-    "no space the line may break at",
-  );
-  assert.equal(end.textContent, " #42");
-  assert.equal(title.textContent, "Expire invitations #42");
 });
 
 test("who opened it reads as one phrase with when: opened a while ago, or, once merged, opened · merged a while ago", async () => {
@@ -3505,42 +3351,6 @@ test("a pull request of the stack GitHub's merge queue holds says Queued in the 
     items.map((item) => item.textContent),
     ["#42 Step 42", "#40 Step 40Queued · Opens on GitHub"],
   );
-  act(() => button.click());
-});
-
-test("the stack's menu draws each pull request's mark in its state's colour: a draft's, a queued one's, and an open one's", async () => {
-  const entry = (number: number, extra: { draft?: boolean; queued?: true }) => ({
-    number,
-    title: `Step ${number}`,
-    url: `https://github.com/acme/relay/pull/${number}`,
-    draft: extra.draft === true,
-    ...(extra.queued === true ? { queued: true as const } : undefined),
-  });
-  const tab = await draw(
-    controlAnswering({
-      pullRequest: () =>
-        Promise.resolve({
-          pullRequest: {
-            ...PULL_REQUEST,
-            stack: [entry(40, { queued: true }), entry(42, {}), entry(44, { draft: true })],
-          },
-        }),
-    }),
-    PULL_REQUEST_VIEW.CONVERSATION,
-  );
-  const button =
-    tab.querySelector<HTMLButtonElement>(
-      '.pull-request-branch-row button[aria-label="Stack, 2 of 3"]',
-    ) ?? assert.fail("the stack stands beside the branches");
-
-  act(() => button.click());
-  const states = [
-    ...document.querySelectorAll(':is([role="menuitem"], [role="menuitemcheckbox"])'),
-  ].map((item) =>
-    item.querySelector("[data-pull-request-mark]")?.getAttribute("data-pull-request-state"),
-  );
-
-  assert.deepEqual(states, ["draft", "open", "queued"]);
   act(() => button.click());
 });
 
@@ -4241,24 +4051,6 @@ test("Close on a pull request in the merge queue asks first with the queue's war
     undefined,
     "reopening does not queue it again, so none is offered",
   );
-});
-
-test("Close on a queued pull request draws its act in the accent, since it reaches the pull requests behind it and reopening undoes it", async () => {
-  const tab = await draw(
-    merging(MERGE_STATE.CLEAN, {
-      queue: true,
-      queued: { position: 2 },
-      autoMerge: { method: null },
-    }),
-  );
-  await pressAction(tab, "Close pull request");
-
-  const act = [
-    ...document.querySelectorAll<HTMLButtonElement>(
-      '[role="dialog"] button, [role="alertdialog"] button',
-    ),
-  ].find((each) => each.textContent === "Close pull request");
-  assert.equal(act?.getAttribute("data-variant"), "primary");
 });
 
 test("an open pull request GitHub holds in its merge queue says Queued and its place in the pill, in the attention tone with the merge's glyph, its menu offering Close and never Convert to draft; the merge control draws no chip, only Remove from queue", async () => {

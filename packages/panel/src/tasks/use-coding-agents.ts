@@ -50,7 +50,6 @@ import {
   useNewAgentDraft,
 } from "../composer-drafts.js";
 import { usePendingNow } from "../pending-clock.js";
-import { rendererPause } from "../renderer-runtime.js";
 import { useSteadyDoor, useSteadyDoors } from "../steady-door.js";
 import { TOAST_HOLD, undoToast, useToast, useWithdrawToast } from "../toast.js";
 import { useChatOn } from "./chat-gate.js";
@@ -61,7 +60,6 @@ import {
   choiceRequest,
   DELETE_WORDS,
   openingLineOf,
-  PREPARING_IMAGE,
   RENAME_FAILED,
   SERVERS_FAILED,
   type SentLine,
@@ -73,7 +71,6 @@ import {
   withAgentRun,
 } from "./coding-agent-model.js";
 import { type AgentFork, continueFork, forkStart } from "./fork-model.js";
-import { untilImagePrepared } from "./image-preparing.js";
 import {
   type ByPullRequestTab,
   pullRequestAsked,
@@ -326,6 +323,8 @@ export interface CodingAgentsControl {
     succeeded: boolean;
     /** Starts an agent on the choice given, or on the account's default with none. */
     onPress: (choice?: ModelChoice) => void;
+    /** The agent a Start on the open task is still making, its tab standing under the press's key until the service answers; none while none is out. */
+    pending?: StartingAgent | undefined;
   };
   /**
    * A draft's Call: starts the draft's agent for a call to open into, on
@@ -504,6 +503,12 @@ function forkOf(fork: AgentFork | undefined): { readonly fork?: AgentFork } {
 
 /** Nothing laid in after a draft's own words as they move. */
 const NOTHING_CARRIED: Pick<Draft, "text" | "attachments"> = { text: "", attachments: [] };
+
+/** The agent a Start is still making: the key its press minted, which its tab stands under until the service answers, and the model it was chosen on, none for the account's default. */
+export interface StartingAgent {
+  readonly key: string;
+  readonly model: string | undefined;
+}
 
 /** What the toast says as a draft holding words or files is let go. */
 const DRAFT_CLOSED = "Draft closed";
@@ -829,6 +834,14 @@ export function useCodingAgents(input: {
     { taskId: string; agent: CodingAgentSummary; line: SentLine } | undefined
   >(undefined);
   const pending = useRef<PendingStart | undefined>(undefined);
+  // The Start out now on a task, whose tab stands under its key until it answers.
+  const [pressed, setPressed] = useState<{ taskId: string; starting: StartingAgent } | undefined>(
+    undefined,
+  );
+  // The agents Starts made on a task whose list was not read as they landed, which stand among its agents until the list is.
+  const [unlisted, setUnlisted] = useState<
+    { taskId: string; agents: readonly CodingAgentSummary[] } | undefined
+  >(undefined);
   // Each agent continued's press, by the agent's id, held until its Start lands.
   const continues = useRef(new Map<string, PendingContinue>());
   const toast = useToast();
@@ -861,6 +874,16 @@ export function useCodingAgents(input: {
     [listedAgents, taskId],
   );
   const shown = held ?? listedHere;
+  // Note that the agents Starts made before the list was read stand beside what is shown, whatever
+  // the followed task list carries yet, so their tabs never leave between the answer and the list.
+  const landedHere =
+    read === undefined && unlisted?.taskId === taskId ? unlisted?.agents : undefined;
+  const standing = useMemo(() => {
+    const missing = landedHere?.filter(
+      (landed) => shown?.some((agent) => agent.id === landed.id) !== true,
+    );
+    return missing === undefined || missing.length === 0 ? shown : [...(shown ?? []), ...missing];
+  }, [shown, landedHere]);
   // A name or archive given here stands over every list that names the agent until a view carries
   // it, and lets go once none holds the agent, as after a sign-out. The clock is read only while
   // one waits.
@@ -871,18 +894,25 @@ export function useCodingAgents(input: {
   const { viewedAgents } = input;
   useEffect(() => {
     const viewedOf = (agentId: string) =>
-      shown?.find((agent) => agent.id === agentId) ??
+      standing?.find((agent) => agent.id === agentId) ??
       viewedAgents?.find((agent) => agent.id === agentId);
     setTitles((was) => pendingSettled(was, (id) => viewedOf(id)?.title, sameTitle, pendingNow));
     setArchives((was) =>
       pendingSettled(was, (id) => archiveOf(viewedOf(id)), sameArchive, pendingNow),
     );
-  }, [shown, viewedAgents, pendingNow]);
+  }, [standing, viewedAgents, pendingNow]);
   const drawn = useMemo(
-    () => (shown === undefined ? undefined : withPendingAgents(shown, given)),
-    [shown, given],
+    () => (standing === undefined ? undefined : withPendingAgents(standing, given)),
+    [standing, given],
   );
   const agents = useMemo(() => drawn?.filter((agent) => agent.archivedAt === undefined), [drawn]);
+  // Note that a Start out on the task stands among its tabs under the press's key, the task's
+  // agents known or not, since it is the tab the press opens.
+  const pressedHere = pressed?.taskId === taskId ? pressed?.starting : undefined;
+  const agentIds = useMemo(() => {
+    const ids = agents?.map((agent) => agent.id);
+    return pressedHere === undefined ? ids : [...(ids ?? []), pressedHere.key];
+  }, [agents, pressedHere]);
   const archivedAgents = useMemo(
     () =>
       held === undefined ? undefined : drawn?.filter((agent) => agent.archivedAt !== undefined),
@@ -1005,27 +1035,31 @@ export function useCodingAgents(input: {
     setStartLanded(false);
     // Note that a Start from the page's agent names no task, so the service puts it where that agent is.
     const where = on === taskId ? { taskId: on } : undefined;
-    // An image still being prepared is said beside Start, and the same Start asked again under its key.
-    return untilImagePrepared(
-      () =>
-        act(ACT_KIND.CODING_AGENTS_START, { ...where, ...asked }).catch(
-          (): CodingAgentAgentAnswer => ({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }),
-        ),
-      () => setNote({ taskId: on, note: { reason: FAILURE_REASON.OTHER, text: PREPARING_IMAGE } }),
-      rendererPause,
-    ).then((answer) => {
-      setStarting(false);
-      // The word that the image was being prepared goes once the Start is answered; a refusal says its own.
-      setNote((was) => (was?.taskId === on && was.note.text === PREPARING_IMAGE ? undefined : was));
-      return answer;
-    });
+    return act(ACT_KIND.CODING_AGENTS_START, { ...where, ...asked })
+      .catch((): CodingAgentAgentAnswer => ({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }))
+      .then((answer) => {
+        setStarting(false);
+        return answer;
+      });
   };
 
-  /** A Start that landed: the agent joins the list and its tab opens. Note that one landing after the developer left the task opens no tab on the task now open. */
+  /**
+   * A Start that landed: the agent joins the list and its tab opens. Note
+   * that one landing after the developer left the task opens no tab on the
+   * task now open, and that the list is read again only where it was not
+   * read yet, the agent standing among the task's agents until it is, since
+   * a read already standing is joined the agent at once and one still out
+   * may answer from before the Start.
+   */
   const landed = (on: string, agent: CodingAgentSummary) => {
     if ((latest.current.taskId ?? latest.current.agentId) !== on) return;
     joined(on, agent);
     latest.current.onStarted(agent.id);
+    if (listedNow.current) return;
+    setUnlisted((was) => ({
+      taskId: on,
+      agents: [...(was?.taskId === on ? was.agents : []), agent],
+    }));
     readAgain();
   };
 
@@ -1041,10 +1075,14 @@ export function useCodingAgents(input: {
         : mintKey();
     pending.current = { taskId, key, choice };
     setNote(undefined);
+    // The agent's tab opens on the press, under its key, and gives way to the agent once it is made.
+    setPressed({ taskId, starting: { key, model: choice?.model } });
+    latest.current.onStarted(key);
     askStart(taskId, {
       idempotencyKey: key,
       ...(choice === undefined ? undefined : choiceRequest(choice)),
     }).then((answer) => {
+      setPressed((was) => (was?.starting.key === key ? undefined : was));
       if ("failure" in answer) {
         // Only a service that never answered is asked again under the same key.
         if (answer.failure !== CODING_AGENT_CALL_FAILURE.UNANSWERED) pending.current = undefined;
@@ -1440,20 +1478,14 @@ export function useCodingAgents(input: {
 
   const onMessage = useCallback<MessageSender>(
     async (agentId, text, clientKey, attachments) => {
-      // A message that opens the agent's sandbox anew may wait on its image, and is asked again under its key.
-      const answer: CodingAgentAgentAnswer = await untilImagePrepared(
-        () =>
-          act(ACT_KIND.CODING_AGENTS_MESSAGE, {
-            agentId,
-            text,
-            clientKey,
-            ...(attachments.length === 0 ? undefined : { attachments }),
-          }).catch(
-            (): CodingAgentAgentAnswer => ({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }),
-          ),
-        () => undefined,
-        rendererPause,
-      );
+      // Note that a message that opens the agent's sandbox anew while its image is prepared is
+      // taken at once, its relaunch waiting on the image in the service, so it is asked once.
+      const answer: CodingAgentAgentAnswer = await act(ACT_KIND.CODING_AGENTS_MESSAGE, {
+        agentId,
+        text,
+        clientKey,
+        ...(attachments.length === 0 ? undefined : { attachments }),
+      }).catch((): CodingAgentAgentAnswer => ({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }));
       if (!("failure" in answer)) {
         setList((was) =>
           was.agents === undefined
@@ -1852,7 +1884,7 @@ export function useCodingAgents(input: {
     workspaceId,
     agentRepository,
     origin: ours(list) ? list.origin : undefined,
-    agentIds: agents?.map((agent) => agent.id),
+    agentIds,
     heldIds: held?.map((agent) => agent.id),
     draft,
     onNewDraft,
@@ -1883,6 +1915,7 @@ export function useCodingAgents(input: {
       note: note !== undefined && note.taskId === taskId ? note.note : undefined,
       succeeded: startLanded,
       onPress: pressStart,
+      pending: pressedHere,
     },
     startCall: taskId !== undefined ? startCall : undefined,
     onStop,

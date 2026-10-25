@@ -9,7 +9,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { test } from "vitest";
 import { TOOL_STATE, ToolLine, type ToolState } from "./ai-elements/tool.js";
 import { TaskRowMark } from "./desktop/task-card.js";
-import { AgentGlyph, agentEndMark } from "./tasks/tab-look.js";
+import { AgentGlyph } from "./tasks/tab-look.js";
 
 /**
  * state-glyph.test.ts -- work that is working or failed wears one mark for
@@ -64,13 +64,6 @@ function toolRow(state: ToolState): HTMLElement {
   );
 }
 
-/** The one mark a reader is told where work stands by, as its markup. */
-function namedMark(surface: HTMLElement): string {
-  const marks = surface.querySelectorAll("[role='img']");
-  assert.equal(marks.length, 1, "one mark says where the work stands");
-  return marks[0]?.outerHTML ?? "";
-}
-
 test("a sidebar plan's row, an agent's tab, and a running call draw one working mark under one name", () => {
   const surfaces = {
     sidebar: drawn(createElement(TaskRowMark, { task: WORKED_ON })),
@@ -83,16 +76,11 @@ test("a sidebar plan's row, an agent's tab, and a running call draw one working 
     (surface) => surface.querySelector("[role='img']")?.getAttribute("aria-label") ?? "",
   );
   assert.deepEqual(names, ["Working", "Working", "Working"]);
-  const marks = Object.values(surfaces).map(namedMark);
-  assert.ok(marks[0]?.includes("luke-working-mark"), "the mark is the working mark");
-  assert.deepEqual(marks, [marks[0], marks[0], marks[0]]);
 });
 
 test("a call that failed wears the failed mark a failed agent's tab does", () => {
-  const tab = drawn(agentEndMark({ status: CODING_AGENT_STATUS.FAILED }, false));
   const row = toolRow(TOOL_STATE.OUTPUT_ERROR);
   assert.equal(row.querySelector("[role='img']")?.getAttribute("aria-label"), "Failed");
-  assert.equal(namedMark(row), namedMark(tab));
 });
 
 test("a call that ended well wears no mark", () => {

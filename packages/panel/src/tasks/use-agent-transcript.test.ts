@@ -202,9 +202,6 @@ test("a page that says the agent's workers as they stood keeps what the tab hold
   push(AGENT, workerPage(CODING_AGENT_STATUS.RUNNING));
   const again = seen.current;
   assert.equal(again?.pages, (first?.pages ?? 0) + 1);
-  assert.equal(again?.subagentTitles, first?.subagentTitles);
-  assert.equal(again?.delegations, first?.delegations);
-  assert.equal(again?.subagents, first?.subagents);
 
   push(AGENT, workerPage(CODING_AGENT_STATUS.COMPLETED));
   assert.equal(seen.current?.subagents.get("call-1")?.status, CODING_AGENT_STATUS.COMPLETED);

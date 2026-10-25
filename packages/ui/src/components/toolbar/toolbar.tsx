@@ -94,6 +94,22 @@ const NOT_FOUND_TITLE = "Not found";
 /** The name of a trail's landmark. */
 const TRAIL_LABEL = "Path";
 
+/**
+ * The bar's parts. Its own row stays in `toolbar.css`, which the window's
+ * custom properties, its style query, and a narrow room's wrap restyle, and
+ * which the tests read for its insets and its drag region; so does the
+ * heading, which a narrow room's wrap sizes, and the picked-up name, whose
+ * three properties leave on three timings. What leads gives way before the
+ * actions do, its controls shrinking to their own floors rather than
+ * pushing the actions off the bar.
+ */
+const LEAD = "luke-toolbar-lead flex min-w-0 flex-initial items-center gap-control-gap";
+const ACTIONS = "luke-toolbar-actions relative flex flex-none items-center gap-control-gap";
+const TAG = "luke-toolbar-tag flex-none";
+/** The title, in the dialog's type with a title's tracking; its room reaches 6px left of the words, so its own hover fill and field ring, which start there, are not clipped. */
+const TITLE =
+  "luke-toolbar-title m-0 -ml-luke-6 pl-luke-6 text-dialog-size font-dialog tracking-title";
+
 /** A place above the page in its trail: its name, the glyph it wears where it wears one, and the press back to it. */
 export interface ToolbarPlace {
   readonly label: string;
@@ -147,7 +163,7 @@ function said(node: ReactNode): boolean {
 function ToolbarTitle({ title }: { title: ReactNode }): React.JSX.Element {
   if (typeof title !== "string") return <>{title}</>;
   return (
-    <OneLine as={ONE_LINE_ELEMENT.H1} hint={wholeWordsHint(title)} className="luke-toolbar-title">
+    <OneLine as={ONE_LINE_ELEMENT.H1} hint={wholeWordsHint(title)} className={TITLE}>
       {title}
     </OneLine>
   );
@@ -195,10 +211,7 @@ function ToolbarPickedUp({ pickUp }: { pickUp: ToolbarPickUp }): React.JSX.Eleme
       data-shown={pickUp.shown ? "true" : "false"}
       aria-hidden={pickUp.shown ? undefined : "true"}
     >
-      <OneLine
-        hint={pickUp.shown ? wholeWordsHint(pickUp.name) : undefined}
-        className="luke-toolbar-title"
-      >
+      <OneLine hint={pickUp.shown ? wholeWordsHint(pickUp.name) : undefined} className={TITLE}>
         {pickUp.name}
       </OneLine>
     </span>
@@ -229,7 +242,7 @@ export function Toolbar({
       measure={measure}
       folded={folded}
     >
-      {said(lead) ? <div className="luke-toolbar-lead">{lead}</div> : null}
+      {said(lead) ? <div className={LEAD}>{lead}</div> : null}
       <div className="luke-toolbar-heading">
         {trail !== undefined && trail.length > 0 && typeof title === "string" && title !== "" ? (
           <ToolbarTrail trail={trail} title={title} />
@@ -240,9 +253,9 @@ export function Toolbar({
         ) : pickUp !== undefined && pickUp.name !== "" ? (
           <ToolbarPickedUp pickUp={pickUp} />
         ) : null}
-        {said(tag) ? <span className="luke-toolbar-tag">{tag}</span> : null}
+        {said(tag) ? <span className={TAG}>{tag}</span> : null}
       </div>
-      {said(actions) ? <div className="luke-toolbar-actions">{actions}</div> : null}
+      {said(actions) ? <div className={ACTIONS}>{actions}</div> : null}
     </ToolbarFrame>
   );
 }

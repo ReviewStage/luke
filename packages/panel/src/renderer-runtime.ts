@@ -48,7 +48,7 @@ export const rendererServicesNow = (): Context.Context<never> =>
 /**
  * A pause of the milliseconds handed, as a fiber of its own on the
  * renderer's services, for a promise-shaped caller that waits between tries
- * (`tasks/image-preparing.ts`): each pause stands alone, so one never cuts
+ * (`settings/add-skill-dialog.tsx`): each pause stands alone, so one never cuts
  * another short.
  */
 export const rendererPause = (ms: number): Promise<void> =>

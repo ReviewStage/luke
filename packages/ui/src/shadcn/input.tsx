@@ -18,7 +18,9 @@ import { cn } from "../cn.js";
  * here takes a file; and no `dark:` grounds, as the palette's roles carry
  * both themes. `INPUT_CONTROL` is the control's own size and ground,
  * exported so a field drawn at another size (`components/text-field`)
- * replaces it whole. `@luke/ui`'s `TextField`, `SearchField`, and
+ * replaces it whole, and `INPUT_FIELD` what every field shares, exported
+ * with it so a field that is its own `<input>` (the combobox's, whose keys
+ * and value its engine holds) wears the same classes. `@luke/ui`'s `TextField`, `SearchField`, and
  * `InlineEdit` are what an app draws; this is their inside.
  */
 
@@ -27,7 +29,7 @@ export const INPUT_CONTROL =
   "h-control rounded-control border border-border-strong bg-field px-control-inset focus:bg-field-focus";
 
 /** What every field shares: its box, its type, its placeholder, and its invalid and disabled states. */
-const INPUT_FIELD =
+export const INPUT_FIELD =
   "m-0 box-border block w-full min-w-0 font-body text-body font-text text-foreground transition-[border-color,background-color] duration-(--luke-duration-hover) ease-plain placeholder:text-muted-foreground aria-invalid:animate-field-shake aria-invalid:border-destructive disabled:cursor-not-allowed disabled:opacity-disabled";
 
 export function ShadcnInput({ className, type, ...props }: React.ComponentProps<"input">) {
