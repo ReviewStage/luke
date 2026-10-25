@@ -165,6 +165,20 @@ describe("a stylesheet", () => {
     ]);
   });
 
+  it("refuses a :has() over a subject that is any element, and passes one over a named subject or as the subject", () => {
+    expect(
+      sheetRules(`.a:has(> .b) > * { color: inherit; }
+        .a .b:has([aria-expanded="true"]) > * { opacity: 1; }
+        .c:has(> .d) > :not(.d, .e) { opacity: 0.6; }`),
+    ).toEqual([STYLE_RULE.HAS_OVER_ANY, STYLE_RULE.HAS_OVER_ANY, STYLE_RULE.HAS_OVER_ANY]);
+    expect(
+      sheetRules(`.a:has(> .b) { --x: 1; }
+        .a:has(> .b) > .c { color: inherit; }
+        :root[data-p="d"]:has(.e) :is(body, #root) { height: 100%; }
+        .f .g:not(:has(> svg))::before { content: ""; }`),
+    ).toEqual([]);
+  });
+
   it("refuses a crumb drawn wider than its words, and passes a floor that is its basis under a cap", () => {
     const floored = `.luke-breadcrumbs[data-variant="caption"] li { min-width: 11em; flex: 0 9 auto; }
       .luke-breadcrumbs li:has(> .luke-breadcrumb-separator) { min-width: calc(var(--floor) + 12px); }

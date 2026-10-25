@@ -12,8 +12,8 @@ import { createContext, type ReactNode, useContext } from "react";
  * refused for now while the developer had already written on in the box
  * keeps its words on its line the same way, and its mark offers Retry,
  * which sends it again where it stands. The note stands directly under the
- * bubble, which is what fades the bubble and its files (`tasks.css`'s
- * `.is-user:has(> .luke-failure-note)`). The tab hands its transcript the
+ * bubble, and the line marked so fades its bubble and its files
+ * (`useLineMarked`, `tasks.css`'s `.is-user[data-undelivered]`). The tab hands its transcript the
  * lines so marked (`SentLineMarks`), by the id each was drawn under, and
  * the lines still on their way, whose files are drawn going up.
  */
@@ -53,6 +53,12 @@ export function useUndeliveredLines(): ReadonlySet<string> {
 /** Whether the line drawn under `messageId` is still on its way. */
 export function useLineSending(messageId: string): boolean {
   return useContext(MarksContext).sending.has(messageId);
+}
+
+/** Whether the line drawn under `messageId` did not go, which its mark says under it and its bubble wears faded. */
+export function useLineMarked(messageId: string): boolean {
+  const marks = useContext(MarksContext);
+  return marks.undelivered.has(messageId) || marks.unsent.has(messageId);
 }
 
 /** The mark under a line that did not go; nothing under any other. */

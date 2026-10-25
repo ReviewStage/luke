@@ -53,8 +53,12 @@
      where its title's words start and its actions end (`toolbar.css`'s page
      inset, a column's inset and a row's), in any room, so the bar lines up
      with what it heads rather than with a measure centred under it. A page
-     framed by a bar outside it, a tab's, keeps its measure. */
-  .luke-detail-page[data-frame="toolbar"]:has(> .luke-toolbar) > * {
+     framed by a bar outside it, a tab's, keeps its measure. Note that the
+     columns are named after the toolbar rather than as any child of a page
+     that `:has()` one, because a `:has()` over a page whose subject is any
+     child makes the browser restyle the whole window for every element
+     added under it. */
+  .luke-detail-page[data-frame="toolbar"] > .luke-toolbar ~ .luke-detail-page-body {
     --luke-detail-page-side: calc(var(--luke-space-12) + var(--luke-row-inset));
   }
 

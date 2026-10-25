@@ -1874,8 +1874,11 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
 
 /* A line the agent refused for good or for now (`undelivered-mark.tsx`): its
    bubble and files faded, as words that did not go, under the failure note
-   that says so. */
-.is-user:has(> .luke-failure-note) > :not(.luke-failure-note, .luke-message-line) {
+   that says so. Note that the line says so itself (`data-undelivered`)
+   rather than being found by a `:has()` of its note, because a `:has()`
+   whose subject is any child makes the browser restyle the whole window for
+   every element added under it. */
+.is-user[data-undelivered] > :not(.luke-failure-note, .luke-message-line) {
   opacity: 0.6;
 }
 

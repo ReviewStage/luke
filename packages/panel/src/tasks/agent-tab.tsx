@@ -229,6 +229,7 @@ import { keptPieces, PIECE_ROWS, pieceKey, type TurnPiece, turnPieces } from "./
 import {
   UndeliveredLines,
   UndeliveredMark,
+  useLineMarked,
   useLineSending,
   useUndeliveredLines,
 } from "./undelivered-mark.js";
@@ -1366,6 +1367,7 @@ export function AgentMessage({
   const words = messageWords(message);
   const forkOffered = useForkOffered();
   const sending = useLineSending(message.id);
+  const marked = useLineMarked(message.id);
   const editor = useMessageEdit(message.id);
   // Note that a box let go stays drawn, on the doors it was last handed, until its exit has played.
   const editing = useDisclosure(editor !== undefined);
@@ -1426,6 +1428,7 @@ export function AgentMessage({
         from={received ? MESSAGE_ROLE.ASSISTANT : message.role}
         className={received ? CHAT_MESSAGE_CLASS : undefined}
         data-message-id={message.id}
+        data-undelivered={marked ? "" : undefined}
       >
         <MessageFileChips message={message} sending={sending} />
         {words === "" ? null : (
