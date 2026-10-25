@@ -115,6 +115,7 @@ test("each experiment is a switch, on as the account chose, that writes the choi
   assert.ok(browser, "the Browser tab has a switch");
   assert.equal(browser.getAttribute("aria-checked"), "true");
   // The row's one line says what turning it on brings; the page says nothing above the rows, the newest experiment's first.
+  assert.ok(page.textContent?.startsWith("Local agents"));
   assert.ok(page.textContent?.startsWith("Channels"));
 
   await act(async () => browser.click());
@@ -131,6 +132,7 @@ test("an experiment's Send feedback opens the dialog about that experiment", () 
     for (const button of feedback) button.click();
   });
   assert.deepEqual(feedbackAbout, [
+    EXPERIMENT.LOCAL_AGENTS,
     EXPERIMENT.CHANNELS,
     EXPERIMENT.MEMORY,
     EXPERIMENT.OPERATOR,
@@ -181,6 +183,7 @@ test("with Video calls on, its avatar is chosen from every face at once in its c
     ),
   );
   assert.deepEqual(cards, [
+    ["Local agents"],
     ["Channels"],
     ["Memory"],
     ["Luke, your operator"],

@@ -7,7 +7,7 @@
  * desktop cannot take over a Mac by naming its id (`../schemas/mac-device.ts`).
  */
 
-import { and, desc, eq, gte } from "drizzle-orm";
+import { and, desc, eq, gte, inArray } from "drizzle-orm";
 import { DateTime, Effect, type Option, Schema } from "effect";
 import { SqlSchema } from "effect/sql";
 import { Database, type DatabaseServices, type StoreFailure } from "../core/query.js";
@@ -80,6 +80,18 @@ const findSeen = SqlSchema.findAll({
     ),
 });
 
+const findNamed = SqlSchema.findAll({
+  Request: Schema.Struct({ ids: Schema.Array(Schema.String) }),
+  Result: MacDeviceSchema,
+  execute: ({ ids }) =>
+    Database.use((db) =>
+      db
+        .select({ id: macDevice.id, name: macDevice.name, lastSeenAt: macDevice.lastSeenAt })
+        .from(macDevice)
+        .where(inArray(macDevice.id, [...ids])),
+    ),
+});
+
 const findLayout = SqlSchema.findOneOption({
   Request: DeviceKeySchema,
   Result: DeviceLayoutSchema,
@@ -127,4 +139,22 @@ export function macDevicesSeenSince(
   since: Date,
 ): MacDeviceEffect<readonly MacDevice[]> {
   return findSeen({ userId, since });
+}
+
+/**
+ * The Macs the local agents a reader was shown are pinned to, by id: each
+ * one's name and when it last beat, for the agent's label and its offline
+ * state. Note that this read is keyed by the devices alone, not an account,
+ * because a local agent's teammates see which Mac it runs on as they see who
+ * started it; its caller hands it only the device ids of agents it already
+ * read through their workspaces' gate.
+ */
+export function macDevicesNamed(
+  ids: readonly string[],
+): MacDeviceEffect<ReadonlyMap<string, MacDevice>> {
+  if (ids.length === 0) return Effect.succeed(new Map());
+  return Effect.map(
+    findNamed({ ids: [...new Set(ids)] }),
+    (devices) => new Map(devices.map((device) => [device.id, device])),
+  );
 }

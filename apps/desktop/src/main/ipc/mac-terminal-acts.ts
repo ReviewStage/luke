@@ -7,7 +7,8 @@
  * into Luke's own folder the first time, brings the branch into a worktree
  * of that clone, and runs the command there (`openOnMacScript`, beside it).
  * Stop ends the run and keeps its port, so the tab hears it end; Open in
- * Terminal opens the Mac's own Terminal in the branch's worktree. A run's
+ * Terminal opens the Mac's own Terminal in the branch's worktree, and a
+ * local agent's Terminal opens it in the worktree that agent runs in. A run's
  * output goes out on a port posted to the asking panel alone, and the
  * panel's size comes back on it. The terminal keeps running while its tab is out of sight: a tab drawn
  * again opens afresh, gets a new port, and is shown the terminal's latest
@@ -19,6 +20,7 @@
  */
 
 import path from "node:path";
+import { macAgentLayout } from "@luke/features/mac-agent-wire";
 import {
   MAC_TERMINAL_PORT_MESSAGE,
   type MacTerminalOpenParams,
@@ -55,6 +57,8 @@ export interface MacTerminalActsDependencies {
   host: Pick<HostOperator, "macRepositories" | "setMacRepository">;
   /** Where every Luke install keeps its clones and worktrees (`worktreesRoot`). */
   worktreesRoot: string;
+  /** This Mac's home folder, under which a local agent's worktree stands (`macAgentLayout`). */
+  home: string;
   /** Where Luke keeps its application data, which an earlier Luke kept its clones and worktrees under. */
   stateRoot: string;
   ports: {
@@ -108,7 +112,7 @@ function refuseUnlessPanel<E>(actor: ActSender, refused: () => E): Effect.Effect
 export function macTerminalProcedures(
   dependencies: MacTerminalActsDependencies,
 ): Pick<PlatformActProcedures<WebContents>, MacTerminalActKind> {
-  const { host, worktreesRoot, stateRoot, ports, start, openInTerminal, exists, fork } =
+  const { host, worktreesRoot, home, stateRoot, ports, start, openInTerminal, exists, fork } =
     dependencies;
   /**
    * Each panel's terminals, by the agent whose branch each opened, and the
@@ -282,6 +286,15 @@ export function macTerminalProcedures(
         cloneFolder(worktreesRoot, drawn.repository),
       ].find(exists);
       if (folder === undefined) return yield* Effect.fail(errors.REFUSED());
+      openInTerminal(folder);
+    }),
+    [MAC_TERMINAL_ACT_KIND.MAC_TERMINAL_LOCAL_AGENT]: macTerminalPort[
+      MAC_TERMINAL_ACT_KIND.MAC_TERMINAL_LOCAL_AGENT
+    ].effect(function* ({ input, context, errors }) {
+      yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
+      // Note that the worktree is the host's to make, as it takes the agent's launch, so one not made yet is refused rather than made here.
+      const folder = macAgentLayout(home, input.agentId).checkoutPath;
+      if (!exists(folder)) return yield* Effect.fail(errors.REFUSED());
       openInTerminal(folder);
     }),
     [MAC_TERMINAL_ACT_KIND.MAC_TERMINAL_CLOSE]: macTerminalPort[

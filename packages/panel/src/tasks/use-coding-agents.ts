@@ -13,13 +13,16 @@ import {
   type CodingAgentReviewOptionsAnswerView,
 } from "@luke/features/coding-agent-view";
 import {
+  CODING_AGENT_MACHINE,
   CONTEXT_WINDOW,
   type CodingAgentAttachment,
   type CodingAgentChangesPeople,
+  type CodingAgentMachine,
   type CodingAgentOrigin,
   type CodingAgentPullRequest,
   type CodingAgentSummary,
   hasWordsOrFiles,
+  type ThisMacOffer,
 } from "@luke/features/coding-agent-wire";
 import { FAILURE_REASON, type Failure } from "@luke/features/failure-remedy";
 import type { CatalogModel, ModelChoice, ModelProvider } from "@luke/features/models-wire";
@@ -216,6 +219,8 @@ export interface CodingAgentsControl {
   models: readonly CatalogModel[] | undefined;
   /** Whether the last read of the models did not land, so the menu says so with Retry rather than reading for ever. */
   modelsFailed: boolean;
+  /** The Mac a Start may run its agent on, as the last read of the models offered it; nothing where it offered none, or before the first read. */
+  thisMac: ThisMacOffer | undefined;
   /** Reads the models now, for a menu opening or the menu's Retry. */
   readModels: () => void;
   /** Reads the account's default now, for a menu opening or the Settings page. */
@@ -319,8 +324,8 @@ export interface CodingAgentsControl {
     note: Failure | undefined;
     /** Whether this button's own last Start started its agent, so a draft's or a call's start, which hold it busy too, never reads as its own. */
     succeeded: boolean;
-    /** Starts an agent on the choice given, or on the account's default with none. */
-    onPress: (choice?: ModelChoice) => void;
+    /** Starts an agent on the choice given, or on the account's default with none, on the starter's Mac where `machine` names it, else in the cloud. */
+    onPress: (choice?: ModelChoice, machine?: CodingAgentMachine) => void;
     /** The agent a Start on the open task is still making, its tab standing under the press's key until the service answers; none while none is out. */
     pending?: StartingAgent | undefined;
   };
@@ -561,6 +566,7 @@ interface PendingStart {
   taskId: string;
   key: string;
   choice: ModelChoice | undefined;
+  machine: CodingAgentMachine | undefined;
 }
 
 /** Starts a new agent on the open task from one of its agents' whole transcript, with the developer's words and the files attached to them as its note where given; answers why it did not start, or nothing once it did. */
@@ -810,6 +816,7 @@ export function useCodingAgents(input: {
     was.taskId === taskId && was.agentId === listOf;
   const [models, setModels] = useState<readonly CatalogModel[] | undefined>(undefined);
   const [modelsFailed, setModelsFailed] = useState(false);
+  const [thisMac, setThisMac] = useState<ThisMacOffer | undefined>(undefined);
   const [starting, setStarting] = useState(false);
   // Where a Start from an agent and a draft stand: the open task, or the page's agent where no task
   // is open, whose Start the service puts where that agent is (its task, or its workspace).
@@ -994,6 +1001,7 @@ export function useCodingAgents(input: {
         if ("failure" in answer) setModelsFailed(true);
         else {
           setModels(answer.models);
+          setThisMac(answer.thisMac);
           setModelsFailed(false);
         }
       },
@@ -1060,17 +1068,20 @@ export function useCodingAgents(input: {
     readAgain();
   };
 
-  const pressStart = (choice?: ModelChoice) => {
+  const pressStart = (choice?: ModelChoice, machine?: CodingAgentMachine) => {
     if (taskId === undefined || repository === null || starting) return;
     // The key is the press's own, and a press asked again after the service
     // did not answer carries the one it minted, so the service answers the
     // agent it may already have started rather than a second one.
     const held = pending.current;
     const key =
-      held !== undefined && held.taskId === taskId && sameChoice(held.choice, choice)
+      held !== undefined &&
+      held.taskId === taskId &&
+      sameChoice(held.choice, choice) &&
+      held.machine === machine
         ? held.key
         : mintKey();
-    pending.current = { taskId, key, choice };
+    pending.current = { taskId, key, choice, machine };
     setNote(undefined);
     // The agent's tab opens on the press, under its key, and gives way to the agent once it is made.
     setPressed({ taskId, starting: { key, model: choice?.model } });
@@ -1078,6 +1089,8 @@ export function useCodingAgents(input: {
     askStart(taskId, {
       idempotencyKey: key,
       ...(choice === undefined ? undefined : choiceRequest(choice)),
+      // Note that the cloud is what a Start with no machine runs in, so only the Mac is named.
+      ...(machine === CODING_AGENT_MACHINE.MAC ? { machine } : undefined),
     }).then((answer) => {
       setPressed((was) => (was?.starting.key === key ? undefined : was));
       if ("failure" in answer) {
@@ -1900,6 +1913,7 @@ export function useCodingAgents(input: {
     onRetryList: readAgain,
     models,
     modelsFailed,
+    thisMac,
     readModels,
     readDefault,
     onUnarchive: undefined,

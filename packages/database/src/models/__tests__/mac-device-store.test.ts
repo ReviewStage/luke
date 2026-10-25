@@ -6,12 +6,18 @@ import { TestClock } from "effect/testing";
 import { Database } from "../../core/query.js";
 import { user } from "../../schemas/auth.js";
 import { getTestDB, MAC_DEVICE_LAYOUT } from "../../testing/index.js";
-import { beatMacDevice, macDevicesSeenSince, registerMacDevice } from "../mac-device-store.js";
+import {
+  beatMacDevice,
+  macDevicesNamed,
+  macDevicesSeenSince,
+  registerMacDevice,
+} from "../mac-device-store.js";
 
 /**
  * An account's Macs, over a real dialect: a Mac is registered, beaten, and
  * read by its own account alone, an id another account holds is never taken
- * over, and a Mac that stopped beating is no longer read as there.
+ * over, a Mac that stopped beating is no longer read as there, and the
+ * Macs a read's local agents name are read by their ids alone.
  * Synthetic accounts and Macs throughout.
  */
 
@@ -75,5 +81,24 @@ it.layer(getTestDB())("the Mac device store", (it) => {
         [id],
       );
     }),
+  );
+
+  it.effect(
+    "the Macs agents are pinned to are read by id, whichever account holds each, and only those",
+    () =>
+      Effect.gen(function* () {
+        const { owner, other } = yield* openAccounts;
+        const [studio, laptop, unnamed] = [randomUUID(), randomUUID(), randomUUID()];
+        yield* registerMacDevice(owner, { id: studio, name: "Studio", ...MAC_DEVICE_LAYOUT });
+        yield* registerMacDevice(other, { id: laptop, name: "Laptop", ...MAC_DEVICE_LAYOUT });
+        yield* registerMacDevice(owner, { id: unnamed, name: "Spare", ...MAC_DEVICE_LAYOUT });
+
+        const named = yield* macDevicesNamed([studio, laptop, studio, randomUUID()]);
+
+        assert.deepEqual([...named.values()].map((device) => device.name).sort(), [
+          "Laptop",
+          "Studio",
+        ]);
+      }),
   );
 });

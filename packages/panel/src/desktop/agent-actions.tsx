@@ -1,13 +1,16 @@
 import {
   CODING_AGENT_KIND,
+  CODING_AGENT_MACHINE,
   type CodingAgentAttachment,
   type CodingAgentBrief,
   type CodingAgentSummary,
 } from "@luke/features/coding-agent-wire";
 import { TERMINAL_ASK } from "@luke/features/terminal-entry";
+import { ACT_KIND } from "@luke/host/acts";
 import { HOST_CAPABILITY } from "@luke/settings";
 import { type InlineRename, useInlineRename } from "@luke/ui/use-inline-rename";
 import { useMemo } from "react";
+import { pressAct } from "../act.js";
 import { agentPlace, useCopyLinkItem } from "../copy-link-item.js";
 import { useSteadyDoor } from "../steady-door.js";
 import type { AgentCallDoors, AgentCallPlace, AgentCallPress } from "../tasks/agent-call.js";
@@ -30,7 +33,8 @@ import { type TabDoors, type TranscriptRead, useTranscriptCopier } from "./strip
  * and its sidebar row, which leaves out only what `NOT_ON_A_ROW` names.
  * Rename, which opens its name's field where the surface draws its name,
  * while neither it nor what it stands under is archived; Show terminal, where the platform runs one,
- * and none for an archived agent, whose sandbox takes no shell; Copy link; its transcript's
+ * and none for an archived agent, whose sandbox takes no shell, which for a local agent opens the
+ * Mac's own Terminal in its worktree instead of the relayed tab; Copy link; its transcript's
  * two copies, read whole from the service; Archive, asked first
  * while a teammate's agent works (`agent-archive.tsx`), or Unarchive once it is archived;
  * and last and alone, Permanently delete, always asked first
@@ -200,6 +204,7 @@ export function useAgentActions(
     | "archivedAt"
     | "brief"
     | "kind"
+    | "machine"
     | "startedBy"
   >,
   agents: CodingAgentsControl,
@@ -224,6 +229,17 @@ export function useAgentActions(
   // an archived agent is renamed then.
   const renamable = agents.onUnarchive === undefined && agent.archivedAt === undefined;
   const { onOpenTerminal } = terminals;
+  const macTerminal = useCapability(HOST_CAPABILITY.MAC_TERMINAL);
+  const local = agent.machine === CODING_AGENT_MACHINE.MAC;
+  // Note that a local agent runs in a worktree on its starter's Mac, which no relayed tab reaches, so
+  // its Terminal opens the Mac's own Terminal there, where the platform has one.
+  const terminal = local
+    ? macTerminal
+      ? () => void pressAct(ACT_KIND.MAC_TERMINAL_LOCAL_AGENT, { agentId: agent.id })
+      : undefined
+    : onOpenTerminal === undefined
+      ? undefined
+      : () => onOpenTerminal(agent.id);
   const read = agentTranscriptRead(
     agents.readTranscript,
     agent.id,
@@ -236,10 +252,7 @@ export function useAgentActions(
       onCopy: copied(read),
       onRename: renamable ? rename.begin : undefined,
       // Note that an archived agent's sandbox takes no shell, so it offers no terminal.
-      onOpenTerminal:
-        onOpenTerminal === undefined || agent.archivedAt !== undefined
-          ? undefined
-          : () => onOpenTerminal(agent.id),
+      onOpenTerminal: agent.archivedAt !== undefined ? undefined : terminal,
       archive: agent.archivedAt === undefined ? archive.action : unarchive,
       deletion: deletion.action,
       copyLink,

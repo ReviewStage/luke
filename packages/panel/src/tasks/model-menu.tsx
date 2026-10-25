@@ -1,4 +1,8 @@
-import { CONTEXT_WINDOW } from "@luke/features/coding-agent-wire";
+import {
+  CODING_AGENT_MACHINE,
+  CONTEXT_WINDOW,
+  type ThisMacOffer,
+} from "@luke/features/coding-agent-wire";
 import { remedyLabel } from "@luke/features/failure-remedy";
 import type { CatalogModel, ModelChoice } from "@luke/features/models-wire";
 import { readingWords } from "@luke/features/words";
@@ -12,6 +16,7 @@ import {
   SearchableMenu,
   Spinner,
 } from "@luke/ui";
+import { ExperimentTag } from "../experiment-marks.js";
 import { HarnessMark } from "../harness-marks.js";
 import { OPEN_SETTINGS_LABEL } from "../open-settings.js";
 import {
@@ -72,7 +77,9 @@ import { useRepositoryRemedy } from "./repository-remedy.js";
  * checks it as it checks any. What the owner does with a choice is its
  * own: the Start button starts on it, the chip
  * changes its agent, and under the pinned rows says what the agent has
- * cost.
+ * cost. The Start button's alone heads its pinned rows with Run on, Cloud
+ * or This Mac, the Experimental tag beside it, while local agents are on and
+ * the service offers the reader's Mac.
  */
 
 /** What the menu says in the list's place. */
@@ -83,11 +90,35 @@ const MENU_NOTE = {
 
 /** The rows pinned under the list. */
 const FOOT_ROW = {
+  RUN_ON: "run-on",
   EFFORT: "effort",
   CONTEXT: "context",
   FAST: "fast",
   CONNECT: "connect",
 } as const;
+
+/** Where a new agent runs, as the Run on row offers it: a cloud sandbox, or the reader's own Mac. */
+export const RUN_ON = {
+  CLOUD: CODING_AGENT_MACHINE.VERCEL,
+  THIS_MAC: CODING_AGENT_MACHINE.MAC,
+} as const;
+
+export type RunOn = (typeof RUN_ON)[keyof typeof RUN_ON];
+
+/** What the Run on row and its two choices are called. */
+const RUN_ON_WORDS = {
+  ROW: "Run on",
+  [RUN_ON.CLOUD]: "Cloud",
+  [RUN_ON.THIS_MAC]: "This Mac",
+} as const;
+
+/** The Run on row's choice, where the menu offers one: the Mac a Start may run on, and the choice standing now. */
+export interface RunOnChoice {
+  /** The Mac offered (`thisMacOfferSchema`), whose name the This Mac choice says under it. */
+  readonly mac: ThisMacOffer;
+  readonly value: RunOn;
+  readonly onChoose: (next: RunOn) => void;
+}
 
 /**
  * The menu's rows: each base model under the mark of the harness that runs
@@ -164,6 +195,8 @@ export function ModelMenu(props: {
   planNote?: React.ReactNode;
   /** Whether the choice is what a new agent would start on, on the reader's own credentials, so one nothing of theirs pays for says it cannot run: the Start button's and an automation's. */
   startsNew?: boolean | undefined;
+  /** The Run on row heading the pinned rows, its Experimental tag beside it: only the Start button's, while local agents are on and the service offers this Mac. */
+  runOn?: RunOnChoice | undefined;
   /** The menu is on its way out (`SearchableMenu`'s). */
   leaving?: boolean | undefined;
   /** Hands the menu's element to the hold its owner draws it through its exit with. */
@@ -266,11 +299,42 @@ export function ModelMenu(props: {
     ];
   };
 
+  /** The Run on row, where the menu offers one: Cloud or This Mac, the Mac's own name under it, closing the menu on a pick. */
+  const runOnRow = (): FootRow[] => {
+    const runOn = props.runOn;
+    if (runOn === undefined) return [];
+    return [
+      {
+        id: FOOT_ROW.RUN_ON,
+        label: RUN_ON_WORDS.ROW,
+        tag: <ExperimentTag />,
+        detail: RUN_ON_WORDS[runOn.value],
+        submenu: {
+          label: RUN_ON_WORDS.ROW,
+          rows: [
+            { id: RUN_ON.CLOUD, label: RUN_ON_WORDS[RUN_ON.CLOUD] },
+            {
+              id: RUN_ON.THIS_MAC,
+              label: RUN_ON_WORDS[RUN_ON.THIS_MAC],
+              detail: runOn.mac.name,
+            },
+          ],
+          value: runOn.value,
+          onPick: (picked) => {
+            onClose();
+            runOn.onChoose(picked === RUN_ON.THIS_MAC ? RUN_ON.THIS_MAC : RUN_ON.CLOUD);
+          },
+        },
+      },
+    ];
+  };
+
   const foot: FootRow[] | undefined =
     chosen === undefined || read === undefined || models === undefined
       ? undefined
       : [
           ...connectRow(),
+          ...runOnRow(),
           {
             id: FOOT_ROW.EFFORT,
             label: "Effort",

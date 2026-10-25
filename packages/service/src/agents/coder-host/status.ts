@@ -6,6 +6,7 @@ import {
   codingAgentBriefOf,
   codingAgentLineOf,
 } from "@luke/database/models/coding-agent-store";
+import type { MacDevice } from "@luke/database/models/mac-device-store";
 import type { StoredArchive, StoredAutomationOrigin } from "@luke/database/schemas/coding-agent";
 import { AUTOMATION_FIRING } from "@luke/features/automation-wire";
 import {
@@ -28,8 +29,10 @@ import {
   type CodingAgentSummary,
   type NativeCodingAgentRuntime,
 } from "@luke/features/coding-agent-wire";
+import { Duration } from "effect";
 import { BRAIN_REQUEST_FAILURE, TURN_STATUS } from "../../core.js";
 import { REPOSITORY_REFUSAL } from "../repository-shell.js";
+import { THIS_MAC } from "./agent-runtime-choice.js";
 import { CODER_REFUSAL } from "./bounds.js";
 
 /**
@@ -259,15 +262,42 @@ function archivedByOf(
   };
 }
 
-/** What every read of one agent says of it but its task, its status read at `now`, and the agents started from it where any was. */
+/** No Mac read: a summary built from it names no Mac. */
+const NO_MACS: ReadonlyMap<string, MacDevice> = new Map();
+
+/** The Mac a local agent runs on as its summary names it, online where it beat within `THIS_MAC.FRESH` of `now`; none for an agent in a sandbox or whose Mac was not read. */
+function macOf(
+  agent: Pick<CodingAgentLine, "machine" | "deviceId">,
+  macs: ReadonlyMap<string, MacDevice>,
+  now: number,
+): CodingAgentSummary["mac"] {
+  if (agent.machine !== CODING_AGENT_MACHINE.MAC || agent.deviceId == null) return undefined;
+  const device = macs.get(agent.deviceId);
+  if (device === undefined) return undefined;
+  const online = device.lastSeenAt.getTime() >= now - Duration.toMillis(THIS_MAC.FRESH);
+  return { name: device.name, online };
+}
+
+/** The Macs a read's local agents are pinned to, by id, which `macDevicesNamed` reads. */
+export function summaryDevices(
+  agents: readonly Pick<CodingAgentLine, "machine" | "deviceId">[],
+): readonly string[] {
+  return agents.flatMap((agent) =>
+    agent.machine === CODING_AGENT_MACHINE.MAC && agent.deviceId != null ? [agent.deviceId] : [],
+  );
+}
+
+/** What every read of one agent says of it but its task, its status read at `now`, the agents started from it where any was, and the Mac it runs on where `macs` holds it. */
 function summaryFields(
   agent: CodingAgentLine,
   standing: AgentTurnStanding,
   now: number,
   names: ReadonlyMap<string, string>,
   continuedBy: readonly CodingAgentStartedFromIt[],
+  macs: ReadonlyMap<string, MacDevice>,
 ): Omit<CodingAgentSummary, "id" | "planId"> {
   const starter = names.get(agent.userId);
+  const mac = macOf(agent, macs, now);
   const summary: Omit<CodingAgentSummary, "id" | "planId"> = {
     model: agent.model,
     effort: agent.effort,
@@ -280,6 +310,7 @@ function summaryFields(
     ...(agent.kind === CODING_AGENT_KIND.OPERATOR ? { kind: agent.kind } : undefined),
     // Likewise only a local agent says where it runs, so a sandboxed agent's summary is as it was.
     ...(agent.machine === CODING_AGENT_MACHINE.MAC ? { machine: agent.machine } : undefined),
+    ...(mac === undefined ? undefined : { mac }),
     createdAt: agent.createdAt.getTime(),
     status: codingAgentStatusOf(standing.turn, {
       createdAt: agent.createdAt,
@@ -322,8 +353,9 @@ function summaryFields(
 /**
  * One agent as the tabs draw it, on a task or with none, read whole or as a
  * list's line, its status read at `now`, the member who started it named by
- * `names`, the accounts' names by id, where theirs stands, and the agents
- * started from it, none where the read names none.
+ * `names`, the accounts' names by id, where theirs stands, the agents
+ * started from it, none where the read names none, and the Mac a local
+ * agent runs on, where `macs` holds it.
  */
 export function codingAgentSummary(
   agent: CodingAgent | CodingAgentLine,
@@ -331,12 +363,13 @@ export function codingAgentSummary(
   now: number,
   names: ReadonlyMap<string, string>,
   continuedBy: readonly CodingAgentStartedFromIt[] = [],
+  macs: ReadonlyMap<string, MacDevice> = NO_MACS,
 ): CodingAgentSummary {
   const line = "brief" in agent ? agent : codingAgentLineOf(agent);
   return {
     id: line.id,
     planId: line.taskId,
-    ...summaryFields(line, standing, now, names, continuedBy),
+    ...summaryFields(line, standing, now, names, continuedBy, macs),
   };
 }
 
@@ -389,18 +422,19 @@ export function pageAccounts(agent: CodingAgent): readonly string[] {
     : summaryAccounts(agent);
 }
 
-/** One agent as its own page reads it, on a task or with none, its status read at `now`, with the agents started from it. */
+/** One agent as its own page reads it, on a task or with none, its status read at `now`, with the agents started from it and the Mac it runs on. */
 export function codingAgentPage(
   agent: CodingAgent,
   standing: AgentTurnStanding,
   now: number,
   names: ReadonlyMap<string, string>,
   continuedBy: readonly CodingAgentStartedFromIt[] = [],
+  macs: ReadonlyMap<string, MacDevice> = NO_MACS,
 ): CodingAgentPage {
   return {
     id: agent.id,
     planId: agent.taskId,
-    ...summaryFields(codingAgentLineOf(agent), standing, now, names, continuedBy),
+    ...summaryFields(codingAgentLineOf(agent), standing, now, names, continuedBy, macs),
     automationId: agent.automationId,
     ...(agent.automationOrigin === null
       ? undefined

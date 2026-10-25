@@ -139,6 +139,7 @@ export function codingAgentsControl(
     onRetryList: ignore,
     models: undefined,
     modelsFailed: false,
+    thisMac: undefined,
     readModels: ignore,
     readDefault: () => Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }),
     onUnarchive: undefined,

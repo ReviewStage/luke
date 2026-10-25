@@ -149,6 +149,7 @@ export function registerDesktopIpc(services: DesktopServices): void {
     ...macTerminalProcedures({
       host: operator.host,
       worktreesRoot: worktreesRoot(os.homedir()),
+      home: os.homedir(),
       openInTerminal: (folder) =>
         execFile("/usr/bin/open", ["-a", "Terminal", folder], () => undefined),
       exists: (folder) => fs.existsSync(folder),

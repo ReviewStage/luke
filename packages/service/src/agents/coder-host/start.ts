@@ -11,6 +11,7 @@ import {
   readCodingAgentByKey,
   readCodingAgentContext,
 } from "@luke/database/models/coding-agent-store";
+import { macDevicesNamed } from "@luke/database/models/mac-device-store";
 import { listAccountProviderKeyRows } from "@luke/database/models/provider-key-store";
 import type { TaskIssueLink } from "@luke/database/models/task-issue-store";
 import {
@@ -132,7 +133,7 @@ import {
   withinWindow,
 } from "./replay-summary.js";
 import { failedCallRefusal } from "./runtime-sessions.js";
-import { codingAgentSummary, summaryAccounts } from "./status.js";
+import { codingAgentSummary, summaryAccounts, summaryDevices } from "./status.js";
 import { cancelledTurn, summaryOf } from "./stop.js";
 import { CODER_TOOL_SET } from "./tool-set.js";
 
@@ -1319,10 +1320,14 @@ export const startRequestedAgent = /* @__PURE__ */ Effect.fnUntraced(function* (
     landed,
   }).pipe(Effect.catchTag("ModelChoiceRefused", () => Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST)));
   if (!created) return { agent: yield* summaryOf(userId, agent), created };
-  const [names, runtimes] = yield* hostedStoreOrUnavailable(
+  const [names, runtimes, macs] = yield* hostedStoreOrUnavailable(
     Effect.all(
-      [readAccountNames(summaryAccounts(agent)), nativeRuntimesOfReached([agent.conversationId])],
-      { concurrency: 2 },
+      [
+        readAccountNames(summaryAccounts(agent)),
+        nativeRuntimesOfReached([agent.conversationId]),
+        macDevicesNamed(summaryDevices([agent])),
+      ],
+      { concurrency: 3 },
     ),
   );
   return {
@@ -1335,6 +1340,8 @@ export const startRequestedAgent = /* @__PURE__ */ Effect.fnUntraced(function* (
       },
       yield* Clock.currentTimeMillis,
       names,
+      [],
+      macs,
     ),
     created,
     ...(txid === undefined ? undefined : { txid }),

@@ -159,6 +159,8 @@ export interface FootRow {
   icon?: React.JSX.Element;
   /** Muted words at the row's end, before a submenu's chevron: the effort chosen now. */
   detail?: string | undefined;
+  /** A quiet mark right after the label, such as an experiment's Experimental tag. */
+  tag?: React.ReactNode;
   onPress?: () => void;
   submenu?: Submenu;
   /** A switch at the row's end, which a press turns; the menu stays open. */
@@ -869,6 +871,7 @@ export function SearchableMenu(
                 action={{
                   label: row.label,
                   ...(row.icon === undefined ? undefined : { icon: row.icon }),
+                  tag: row.tag,
                   hint: row.detail,
                   onSelect: () => pressFoot(row),
                   disabled: row.disabled !== undefined,

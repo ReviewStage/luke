@@ -41,4 +41,9 @@ export const macTerminalActsContract = {
   )
     .input(exactInput(macTerminalKeySchema))
     .output(EffectSchema.Void),
+  [MAC_TERMINAL_ACT_KIND.MAC_TERMINAL_LOCAL_AGENT]: actProcedure(
+    "Could not open Terminal in this agent's worktree. It is made when the agent first runs on this Mac.",
+  )
+    .input(exactInput(macTerminalKeySchema))
+    .output(EffectSchema.Void),
 };

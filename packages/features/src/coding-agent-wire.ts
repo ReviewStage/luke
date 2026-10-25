@@ -732,6 +732,15 @@ export const codingAgentSummarySchema = EffectSchema.Struct({
   kind: EffectSchema.optionalKey(EffectSchema.Literals(Object.values(CODING_AGENT_KIND))),
   /** Where its runner runs, said only of a local agent on its starter's Mac; absent for one in a sandbox, and from a service older than it. */
   machine: EffectSchema.optionalKey(EffectSchema.Literal(CODING_AGENT_MACHINE.MAC)),
+  /**
+   * The Mac a local agent runs on, by its own name, and whether it beat
+   * lately enough to take the agent's work now; absent for an agent in a
+   * sandbox, for one whose Mac is gone, from a read that does not name it,
+   * and from a service older than it.
+   */
+  mac: EffectSchema.optionalKey(
+    EffectSchema.Struct({ name: EffectSchema.String, online: EffectSchema.Boolean }),
+  ),
   /** Epoch milliseconds the agent was started. */
   createdAt: countedNumber,
   status: EffectSchema.Literals(Object.values(CODING_AGENT_STATUS)),

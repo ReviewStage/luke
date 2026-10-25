@@ -147,6 +147,8 @@ export interface MenuAction {
   icon?: React.JSX.Element;
   /** A muted second line under the label, such as who shares a workspace, which a reader hears after it. */
   detail?: string | undefined;
+  /** A quiet mark right after the label, such as an experiment's Experimental tag; it names itself to a reader. */
+  tag?: React.ReactNode;
   /** Where the detail stands: under the label where none is said, or beside it. */
   detailPlace?: MenuDetailPlace | undefined;
   onSelect: () => void;
@@ -607,7 +609,14 @@ function ItemBody({ action }: { action: MenuAction }): React.JSX.Element {
     return (
       <>
         <MenuGlyph>{action.icon}</MenuGlyph>
-        <OneLine className="luke-menu-item-label min-w-0 flex-1">{action.label}</OneLine>
+        {action.tag === undefined ? (
+          <OneLine className="luke-menu-item-label min-w-0 flex-1">{action.label}</OneLine>
+        ) : (
+          <span className="luke-menu-item-tagged flex min-w-0 flex-1 items-center gap-luke-8">
+            <OneLine className="luke-menu-item-label min-w-0">{action.label}</OneLine>
+            {action.tag}
+          </span>
+        )}
         <ItemEnd action={action} />
       </>
     );

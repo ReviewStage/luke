@@ -1,5 +1,6 @@
 import { readFailedWords, readingWords } from "@luke/features/words";
 import {
+  Badge,
   BUTTON_VARIANT,
   Button,
   ErrorState,
@@ -138,6 +139,8 @@ function Hung({
                       onPick: setEffort,
                     },
                   },
+                  // A row with a quiet mark after its label, as Start's Run on wears its Experimental tag.
+                  { id: "run-on", label: "Run on", tag: <Badge>Beta</Badge>, onPress: close },
                   { id: "github", label: "Open on GitHub", onPress: close },
                 ]
               : undefined
