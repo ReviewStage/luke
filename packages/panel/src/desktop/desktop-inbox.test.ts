@@ -3998,7 +3998,7 @@ test("files whose reads land together both stand in the box", async () => {
   assert.deepEqual(attachedNames(itemPane(page)), ["a.txt", "b.txt"]);
 });
 
-test("files read for an item its agent changed meanwhile land nowhere, and the box says to attach them again", async () => {
+test("files still being read as the agent posts on the item again land in its box", async () => {
   // Main pushes the chosen task's inbox again as the test says it changed.
   const deliver = (outcome: ReadOutcome) =>
     main.push({ kind: INBOX_SCOPE_KIND.PLAN, id: BILLING.id }, pushedOf(outcome.value));
@@ -4020,11 +4020,8 @@ test("files read for an item its agent changed meanwhile land nowhere, and the b
     for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
   });
   await settle();
-  const pane = itemPane(page);
-  assert.deepEqual(attachedNames(pane), [], "the file lands on no revision");
-  assert.match(pane.querySelector('[role="alert"]')?.textContent ?? "", /Attach them again/u);
+  assert.deepEqual(attachedNames(itemPane(page)), ["trace.txt"]);
 });
-
 test("a message's file whose read failed says so under the files, and Retry reads it again", async () => {
   const written = threadItem([
     askingMessage(EXPIRY_ASK),
@@ -5545,35 +5542,35 @@ test("a thread read cut to its latest messages says the earlier ones are in the 
   assert.deepEqual(asked.shownAgents, []);
 });
 
-test("an answer left unsent on an item a teammate answers meanwhile is let go rather than becoming a message, and a message being written on a settled item outlasts the reads after it", async () => {
-  // Main pushes the chosen task's inbox again as the test says it changed.
-  const deliver = (outcome: ReadOutcome) =>
-    main.push({ kind: INBOX_SCOPE_KIND.PLAN, id: BILLING.id }, pushedOf(outcome.value));
+test("what an item's box holds unsent, its words and its files, outlasts every message landing on the item: a teammate's answer settling it, then the agent asking on it again", async () => {
+  const deliver = (items: readonly InboxItem[], cursor: string) =>
+    main.push({ kind: INBOX_SCOPE_KIND.PLAN, id: BILLING.id }, pushedOf({ items, cursor }));
   const { page } = mount();
   await settle();
-  const pane = itemPane(page);
   assert.equal(readTitle(page), "Alert at 80%?");
-  typeInComposer(pane, "Use 90%");
-  await settle();
+  typeInComposer(itemPane(page), "Use 90%");
+  await handFiles(page, [new File(["threshold: 0.9\n"], "alerts.yml", { type: "" })], "pick");
+  const box = () => [composerEditor(itemPane(page)).textContent, attachedNames(itemPane(page))];
 
   const answered: InboxItem = {
     ...answeredBy(THRESHOLD, TEAMMATE, "Retry once", "", 3_500),
     updatedAt: 3_500,
   };
-  act(() =>
-    deliver({ status: FAKE_ANSWER.DONE, value: { items: [answered, RETRY], cursor: "2" } }),
-  );
+  act(() => deliver([answered, RETRY], "2"));
   await settle();
-  assert.equal(composerEditor(pane).getAttribute("aria-label"), "Reply");
-  assert.equal(composerEditor(pane).textContent, "", "the unsent answer is not a message");
+  assert.equal(composerEditor(itemPane(page)).getAttribute("aria-label"), "Reply");
+  assert.deepEqual(box(), ["Use 90%", ["alerts.yml"]], "a teammate's answer takes nothing");
 
-  typeInComposer(pane, "Thanks, Charles.");
+  const asked: InboxItem = {
+    ...answered,
+    revision: 2,
+    status: INBOX_STATUS.OPEN,
+    thread: [...(answered.thread ?? []), askingMessage(EXPIRY_ASK, { createdAt: 4_000 })],
+    updatedAt: 4_000,
+  };
+  act(() => deliver([asked, RETRY], "3"));
   await settle();
-  act(() =>
-    deliver({ status: FAKE_ANSWER.DONE, value: { items: [answered, RETRY], cursor: "3" } }),
-  );
-  await settle();
-  assert.equal(composerEditor(pane).textContent, "Thanks, Charles.");
+  assert.deepEqual(box(), ["Use 90%", ["alerts.yml"]], "nor does the agent asking again");
 });
 
 /** A row's two lines as a reader meets them: whether its first holds its title and its time, and the muted words of its second. */
@@ -7489,59 +7486,6 @@ test("words written on a reply's settled box while the reply carrying the ask's 
   assert.equal(composerEditor(pane).textContent, "One more detail");
   assert.deepEqual(checkedOptions(pane), ["7 days"]);
   assert.equal(footWords(pane), "", "the box says nothing of what is sent");
-});
-
-test("words another window writes in the open ask's box while this window's reply carrying the answer is out are kept beside this window's own once the reply is refused", async () => {
-  const shown = threadItem([askingMessage(EXPIRY_ASK)]);
-  const pane = await mountThread(shown);
-  const refuse: (() => void)[] = [];
-  const bridge = appBridge();
-  const previous = fakeActsAnswer();
-  fakeActs({
-    ...bridge,
-    act: (request: AnyAct): Promise<FakeActAnswer> => {
-      if (request.kind !== ACT_KIND.CODING_AGENTS_INBOX_MESSAGE) return previous(request);
-      return new Promise((resolve) =>
-        refuse.push(() =>
-          resolve({
-            status: FAKE_ANSWER.DONE,
-            value: { failure: CODING_AGENT_CALL_FAILURE.NOT_PERMITTED },
-          }),
-        ),
-      );
-    },
-  });
-
-  act(() => openOptions(pane)[1]?.click());
-  act(() =>
-    pane.querySelector<HTMLButtonElement>('form.inbox-answer button[type="submit"]')?.click(),
-  );
-  await settle();
-  typeInComposer(pane, "One more detail");
-  await settle();
-  // The other window, where the item still waits, writes in its open box, as storage hands it on.
-  const open = {
-    kind: "inbox",
-    planId: TASK_ID,
-    agentId: shown.agentId,
-    itemId: shown.id,
-    revision: shown.revision,
-  };
-  window.localStorage.setItem(
-    "luke.composerDrafts",
-    JSON.stringify([{ accountId: null, place: open, text: "Please wait" }]),
-  );
-  act(() => {
-    window.dispatchEvent(new StorageEvent("storage", { key: "luke.composerDrafts" }));
-  });
-  await settle();
-  await act(async () => refuse[0]?.());
-  await settle();
-
-  assert.deepEqual(
-    [...composerEditor(pane).querySelectorAll("p")].map((line) => line.textContent),
-    ["Please wait", "One more detail"],
-  );
 });
 
 test("picking an option in the draft reply stands it picked and lights Send, the box saying nothing, and pressing it again takes it off; sent, the reply drops into the thread as the reader's comment leading with the answered card, and the draft stands plain at the end again", async () => {

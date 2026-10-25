@@ -140,6 +140,7 @@ function mount(
     // Note that a write is staged on the chat as it stands when it lands, as the window's own chat takes it, not as it stood when the post was sent.
     const now = useRef(chat);
     now.current = chat;
+    restage = (next) => setChat((held) => (held === undefined ? held : next(held)));
     const stage = (staged: (held: FixtureChat) => Staged) => {
       const held = now.current;
       const landed = held === undefined ? { refused: "No chat." } : staged(held);
@@ -210,6 +211,9 @@ function mount(
 
 /** Closes the mounted Chat and opens it again in the same window. */
 let reopen: () => void = () => undefined;
+
+/** Changes the mounted Chat's chat as a push from the service would. */
+let restage: (next: (chat: FixtureChat) => FixtureChat) => void = () => undefined;
 
 /** The member the next draw of Chat reads as, where another reader stands in the window; the fixture's own where none. */
 let readingAs: string | undefined;
@@ -912,6 +916,30 @@ test("an ask's note and decision are there again when Chat closes and opens agai
     settledAsk(page, 51).querySelector("[data-inbox-note]")?.textContent?.trim(),
     "go ahead",
   );
+});
+
+test("an ask's note outlasts its poster changing the ask, whose decision made before goes", () => {
+  const page = mount();
+  const card = openAsk(page, UNIQUE_INDEX);
+  typeInComposer(card, "go ahead");
+  act(() => pressNamed(card, "Approve").click());
+
+  act(() =>
+    restage((chat) => ({
+      ...chat,
+      answer: {
+        ...chat.answer,
+        messages: chat.answer.messages.map((message) =>
+          message.seq === 51 && message.ask !== undefined
+            ? { ...message, ask: { ...message.ask, revision: message.ask.revision + 1 } }
+            : message,
+        ),
+      },
+    })),
+  );
+  const changed = openAsk(page, UNIQUE_INDEX);
+  assert.equal(boxWords(changed), "go ahead");
+  assert.equal(pressNamed(changed, "Approve").getAttribute("aria-pressed"), "false");
 });
 
 test("a paste past an ask note's cap is cut to the room left and the card's note line says so, until the words change", () => {

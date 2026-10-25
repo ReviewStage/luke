@@ -1,4 +1,5 @@
 import { useAtomSet, useAtomValue } from "@effect/atom-react";
+import { RegistryContext } from "@effect/atom-react/RegistryContext";
 import { type CodingAgentAttachment, DIFF_SIDE } from "@luke/features/coding-agent-wire";
 import {
   INBOX_REPLY,
@@ -11,7 +12,7 @@ import {
 import { PLAN_COMMENT_SCOPE } from "@luke/features/plan-comment-wire";
 import { Duration, Effect, Equal, Schema } from "effect";
 import { Atom } from "effect/reactivity";
-import { useEffect, useLayoutEffect, useMemo, useRef } from "react";
+import { useContext, useEffect, useLayoutEffect, useMemo, useRef } from "react";
 import { readKept, writeKept } from "./kept-storage.js";
 import { rendererRuntime } from "./renderer-runtime.js";
 
@@ -30,13 +31,16 @@ import { rendererRuntime } from "./renderer-runtime.js";
  * agent, pull request, file, side, and last line (`comment-drafts.ts`), an agent's line
  * written again its words and files per agent and line
  * (`edit-composer.tsx`), a chat ask's answer its
- * picks and note per message, at the revision it was written against
- * (`chat-ask.tsx`), and an inbox
- * card its answer per item, at the revision it was written against, the
- * options picked, the fields filled, and, on a thread, the steps ticked and
- * the answer pressed beside its note. A draft is known by where
- * it goes, a place named by the ids of what it goes to, never one key built
- * of them. Sending a draft lets it go, and so does emptying its box, so a
+ * picks and note per message (`chat-ask.tsx`), and an inbox card its answer
+ * per item, the options picked, the fields filled, and, on a thread, the
+ * steps ticked and the answer pressed beside its note. A draft is known by
+ * where it goes, a place named by the ids of what it goes to, never one key
+ * built of them, and never by anything a message landing there moves, a
+ * revision, a status, or a time, so what is being written outlasts every
+ * message that arrives meanwhile. A card's picks are the one part made on
+ * the ask as it stood, so they are kept with the revision they were made
+ * on and read as none once the ask changed (`draftAt`), its words and files
+ * standing whatever the revision. Sending a draft lets it go, and so does emptying its box, so a
  * place holds a draft only while its box holds something.
  *
  * The words are kept in the renderer's own storage, as the sidebar's folds
@@ -115,10 +119,6 @@ const draftPlaceSchema = Schema.Union([
     /** The agent that posted the item, whose own inbox, where it has no plan, is all that reads it. */
     agentId: Schema.String,
     itemId: Schema.String,
-    /** The item's revision the answer was written against; the agent changing the item starts its picks afresh, its words and files carried to the new revision (`use-task-inbox.ts`). */
-    revision: Schema.Number,
-    /** Set where the draft is a message on a settled item's thread rather than the answer to an open one, so neither is ever taken for the other. */
-    thread: Schema.optionalKey(Schema.Literal(true)),
   }),
   Schema.Struct({
     kind: Schema.Literal(DRAFT_PLACE.NEW_TASK),
@@ -184,8 +184,6 @@ const draftPlaceSchema = Schema.Union([
     kind: Schema.Literal(DRAFT_PLACE.CHAT_ASK),
     /** The chat message that carries the ask. */
     messageId: Schema.String,
-    /** The ask's revision the answer was written against, so picks never land on options its poster changed since. */
-    revision: Schema.Number,
   }),
 ]);
 
@@ -228,6 +226,7 @@ const storedDrafts = Schema.fromJsonString(
       title: Schema.optionalKey(Schema.String),
       to: Schema.optionalKey(Schema.String),
       dropped: Schema.optionalKey(Schema.Array(Schema.String)),
+      revision: Schema.optionalKey(Schema.Number),
     }),
   ),
 );
@@ -250,6 +249,8 @@ export interface Draft {
   readonly to?: string | undefined;
   /** The files of a line written again that its box took off, by their key in the line, so they stay off where the line's files are offered again (`edit-composer.tsx`). */
   readonly dropped?: readonly string[] | undefined;
+  /** The revision of the inbox item or chat ask its picks were made on, so they never land on an ask changed since (`draftAt`). */
+  readonly revision?: number | undefined;
 }
 
 /** One place's draft. */
@@ -311,23 +312,25 @@ function readStored(): readonly StoredDraft[] {
 function readDrafts(owner: Owner): readonly KeptDraft[] {
   return readStored()
     .filter((kept) => kept.accountId === owner)
-    .flatMap(({ place, text, choices = [], values = [], steps, press, title, to, dropped }) =>
-      isDraftPlace(place)
-        ? [
-            {
-              place,
-              text,
-              attachments: [],
-              choices,
-              values,
-              ...(steps === undefined ? undefined : { steps }),
-              ...(press === undefined ? undefined : { press }),
-              ...(title === undefined ? undefined : { title }),
-              ...(to === undefined ? undefined : { to }),
-              ...(dropped === undefined ? undefined : { dropped }),
-            },
-          ]
-        : [],
+    .flatMap(
+      ({ place, text, choices = [], values = [], steps, press, title, to, dropped, revision }) =>
+        isDraftPlace(place)
+          ? [
+              {
+                place,
+                text,
+                attachments: [],
+                choices,
+                values,
+                ...(steps === undefined ? undefined : { steps }),
+                ...(press === undefined ? undefined : { press }),
+                ...(title === undefined ? undefined : { title }),
+                ...(to === undefined ? undefined : { to }),
+                ...(dropped === undefined ? undefined : { dropped }),
+                ...(revision === undefined ? undefined : { revision }),
+              },
+            ]
+          : [],
     )
     .filter(stored);
 }
@@ -344,14 +347,26 @@ function storedAs(owner: Owner, kept: KeptDraft, entry: StoredDraft): boolean {
     entry.press === kept.press &&
     (entry.title ?? "") === (kept.title ?? "") &&
     entry.to === kept.to &&
-    Equal.equals(entry.dropped ?? [], kept.dropped ?? [])
+    Equal.equals(entry.dropped ?? [], kept.dropped ?? []) &&
+    entry.revision === kept.revision
   );
 }
 
 /** A draft as storage keeps it, a card's picks only where it holds some. */
 function entryOf(
   owner: Owner,
-  { place, text, choices, values, steps = [], press, title = "", to, dropped = [] }: KeptDraft,
+  {
+    place,
+    text,
+    choices,
+    values,
+    steps = [],
+    press,
+    title = "",
+    to,
+    dropped = [],
+    revision,
+  }: KeptDraft,
 ): StoredDraft {
   return {
     accountId: owner,
@@ -364,6 +379,7 @@ function entryOf(
     ...(title === "" ? undefined : { title }),
     ...(to === undefined ? undefined : { to }),
     ...(dropped.length === 0 ? undefined : { dropped }),
+    ...(revision === undefined ? undefined : { revision }),
   };
 }
 
@@ -865,16 +881,45 @@ function isInbox(kept: KeptDraft): kept is KeptDraft<InboxPlace> {
   return kept.place.kind === DRAFT_PLACE.INBOX;
 }
 
-/** Whether a kept draft is the one the item's card reads as it now stands: at its revision, an answer while it is open and a thread's message once it settled. */
-export function draftOfItem(
-  place: InboxPlace,
-  item: Pick<InboxItem, "id" | "revision" | "status">,
-): boolean {
+/** Whether a draft holds a pick: an option, a field, a step, or a press. */
+export function holdsPicks(draft: Draft): boolean {
   return (
-    place.itemId === item.id &&
-    place.revision === item.revision &&
-    (place.thread === true) === (item.status !== INBOX_STATUS.OPEN)
+    draft.choices.length > 0 ||
+    draft.values.length > 0 ||
+    (draft.steps ?? []).length > 0 ||
+    draft.press !== undefined
   );
+}
+
+/** A draft with its picks let go, its words and files as they were. */
+export function withoutPicks<D extends Draft>(draft: D): D {
+  return {
+    ...draft,
+    choices: [],
+    values: [],
+    steps: undefined,
+    press: undefined,
+    revision: undefined,
+  };
+}
+
+/**
+ * A draft as a box answering an ask at `revision` reads it, none where no
+ * ask stands to be picked on: its picks only where they were made on that
+ * revision, and its words and files whatever the revision. Note that it is
+ * the draft itself wherever nothing is let go, so a reader comparing drafts
+ * by identity draws again only as one changes.
+ */
+export function draftAt<D extends Draft>(draft: D, revision: number | null): D {
+  return draft.revision === revision || !holdsPicks(draft) ? draft : withoutPicks(draft);
+}
+
+/** An inbox item's draft as its card reads it as the item now stands: its picks only at the item's revision while it is open. */
+export function draftOfItem<D extends Draft>(
+  draft: D,
+  item: Pick<InboxItem, "revision" | "status">,
+): D {
+  return draftAt(draft, item.status === INBOX_STATUS.OPEN ? item.revision : null);
 }
 
 /**
@@ -885,22 +930,26 @@ export function draftOfItem(
  */
 export function useInboxItemDrafted(item: Pick<InboxItem, "id" | "revision" | "status">): boolean {
   return useAtomValue(draftsAtom, (drafts) =>
-    drafts.some((kept) => isInbox(kept) && draftOfItem(kept.place, item)),
+    drafts.some(
+      (kept) => isInbox(kept) && kept.place.itemId === item.id && holds(draftOfItem(kept, item)),
+    ),
   );
 }
 
 /**
- * The draft an inbox item's box holds as it now stands (`draftOfItem`), its
- * steps ticked and the answer pressed, which its row and its card read to
- * show the steps as the box does; none where no draft stands. Note that it
- * answers the kept draft itself, the same until it changes.
+ * The draft an inbox item's box holds, its steps ticked and the answer
+ * pressed, which its row and its card read to show the steps as the box
+ * does; none where no draft stands, or where its picks were made on the item
+ * before it changed, since none of them stands then. Note that it answers
+ * the kept draft itself, the same until it changes.
  */
 export function useInboxItemDraft(
   item: Pick<InboxItem, "id" | "revision" | "status">,
 ): KeptDraft | undefined {
-  return useAtomValue(draftsAtom, (drafts) =>
-    drafts.find((kept) => isInbox(kept) && draftOfItem(kept.place, item)),
-  );
+  return useAtomValue(draftsAtom, (drafts) => {
+    const kept = drafts.find((each) => isInbox(each) && each.place.itemId === item.id);
+    return kept === undefined || draftOfItem(kept, item) !== kept ? undefined : kept;
+  });
 }
 
 /**
@@ -920,19 +969,25 @@ export function useInboxDrafts(taskId: string | null): readonly KeptDraft<InboxP
   });
 }
 
-/** The presses that write any place's draft, or let go of those a predicate names. */
+/** The presses that write any place's draft, or let go of those a predicate names, and a read of the draft the window holds now at the first place one names, for a press that must know what its box held as it was pressed. */
 export interface DraftWriter {
   readonly update: (place: DraftPlace, next: (was: Draft) => Draft) => void;
   readonly drop: (drop: (place: DraftPlace) => boolean) => void;
+  readonly heldAt: (find: (place: DraftPlace) => boolean) => KeptDraft | undefined;
 }
 
 /** The draft writer, for an owner that reads its drafts on its own, the same one for as long as the window's registry stands. */
 export function useDraftWriter(): DraftWriter {
+  const registry = useContext(RegistryContext);
   const change = useAtomSet(draftsAtom);
   useStoreOnLeave(change);
   return useMemo(
-    () => ({ update: (place, next) => change({ place, next }), drop: (drop) => change({ drop }) }),
-    [change],
+    () => ({
+      update: (place, next) => change({ place, next }),
+      drop: (drop) => change({ drop }),
+      heldAt: (find) => registry.get(draftsAtom).find((kept) => find(kept.place)),
+    }),
+    [change, registry],
   );
 }
 

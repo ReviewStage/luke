@@ -529,7 +529,6 @@ test("an inbox answer's picture moves with it as the id lands before its words r
     planId: INVITES.plan.id,
     agentId: INVITES.agent.id,
     itemId: "item-1",
-    revision: 1,
   } as const;
   const picture = { name: "diagram.png", mediaType: "image/png", data: "iVBORw0KGgo=" } as const;
   let held: DraftControl | undefined;
@@ -1092,7 +1091,6 @@ test("an agent with no plan carries its own outdated answers' words to the item 
   const reread = await tasklessInbox(INVITES.agent.id, [reposted]);
   assert.equal(reread.draftOf(reposted).note, "Only teammates", "the words outlast the post");
   assert.deepEqual(reread.draftOf(reposted).choices, [], "the outdated ask's pick is let go");
-  assert.equal(reread.draftOf(mine).note, "", "and nothing stands at the outdated revision");
   const kept = await tasklessInbox(BILLING.agent.id, [theirs]);
   assert.equal(kept.draftOf(theirs).note, "Weekly");
 });

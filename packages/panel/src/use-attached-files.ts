@@ -175,8 +175,6 @@ export interface AttachedFilesOptions {
   readonly most?: number | undefined;
   /** Whether the box takes no files now, as the agent box while a send holds it. */
   readonly held?: boolean | undefined;
-  /** What the files land on, and what is said where a read lands once the box writes elsewhere, as an Inbox item its agent revised. */
-  readonly place?: { readonly key: unknown; readonly moved: string } | undefined;
 }
 
 /** The files a box holds and the ways it takes more and lets them go. */
@@ -229,15 +227,9 @@ export function useAttachedFiles(options: AttachedFilesOptions): AttachedFiles {
       latest.current.onRefusal(handed.refusal);
       return;
     }
-    const at = latest.current.place?.key;
     setReading((count) => count + 1);
     void readFiles(handed.files)
-      .then((read) => {
-        const { place, onRefusal } = latest.current;
-        // Files read for a place the box no longer writes to land nowhere, as its words were let go.
-        if (place !== undefined && !Object.is(place.key, at)) onRefusal(place.moved);
-        else take(handed.refusal, read);
-      })
+      .then((read) => take(handed.refusal, read))
       .finally(() => setReading((count) => count - 1));
   };
   const drop = useFileDrop((files) => attach(Array.from(files)), { over: options.held !== true });
