@@ -63,6 +63,7 @@ export const HOSTED_REFUSAL_STATUS = {
   [HOSTED_API_ERROR.LINEAR_UNAVAILABLE]: HOSTED_HTTP_STATUS.CONFLICT,
   [HOSTED_API_ERROR.SKILL_NAME_TAKEN]: HOSTED_HTTP_STATUS.CONFLICT,
   [HOSTED_API_ERROR.SKILL_FILES_REFUSED]: HOSTED_HTTP_STATUS.CONFLICT,
+  [HOSTED_API_ERROR.CHANNEL_NAME_TAKEN]: HOSTED_HTTP_STATUS.CONFLICT,
 } as const;
 
 type HostedRefusalSlug = keyof typeof HOSTED_REFUSAL_STATUS;
@@ -156,6 +157,8 @@ export const HOSTED_REFUSAL = {
   SKILL_NAME_TAKEN: { error: HOSTED_API_ERROR.SKILL_NAME_TAKEN },
   /** A skill's files were refused; nothing was installed. */
   SKILL_FILES_REFUSED: { error: HOSTED_API_ERROR.SKILL_FILES_REFUSED },
+  /** Another open channel of the workspace goes by that name; nothing was written. */
+  CHANNEL_NAME_TAKEN: { error: HOSTED_API_ERROR.CHANNEL_NAME_TAKEN },
 } as const satisfies Record<string, HostedRefusal>;
 
 /** A plan's usage limit reached, with when it resets in epoch milliseconds where the provider said, so the words can name it. */

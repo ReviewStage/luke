@@ -83,12 +83,15 @@ type WorkLook = (typeof WORK_LOOK)[keyof typeof WORK_LOOK];
 const STANDING_PULL_REQUESTS = new Set<string>([PULL_REQUEST_STATE.OPEN, PULL_REQUEST_STATE.DRAFT]);
 
 /** A task's status, Todo for one from a service before statuses. */
-export function statusOf(task: TaskSummary): TaskStatus {
+export function statusOf(task: Pick<TaskSummary, "status">): TaskStatus {
   return task.status ?? TASK_STATUS.TODO;
 }
 
+/** What a standing chip reads of a task: its status, priority, and assignee. */
+type ChipTask = Pick<TaskSummary, "status" | "priority" | "assignee">;
+
 /** A task's priority, No priority for one from a service before priorities. */
-function priorityOf(task: TaskSummary): TaskPriority {
+function priorityOf(task: ChipTask): TaskPriority {
   return task.priority ?? TASK_PRIORITY.NONE;
 }
 
@@ -189,7 +192,8 @@ export function PriorityChip({
   look,
   onStanding,
 }: {
-  task: TaskSummary;
+  /** What it says of the task: where it stands, as a card or a row holds it, or as a quick add's draft does before it is a task. */
+  task: ChipTask;
   look: ChipLook;
   onStanding: (standing: TaskStanding) => void;
 }): React.JSX.Element {
@@ -217,7 +221,8 @@ export function AssigneeChip({
   look,
   onStanding,
 }: {
-  task: TaskSummary;
+  /** What it says of the task: where it stands, as a card or a row holds it, or as a quick add's draft does before it is a task. */
+  task: ChipTask;
   look: ChipLook;
   onStanding: (standing: TaskStanding) => void;
 }): React.JSX.Element {
@@ -257,7 +262,8 @@ export function StatusChip({
   look,
   onStanding,
 }: {
-  task: TaskSummary;
+  /** What it says of the task: where it stands, as a card or a row holds it, or as a quick add's draft does before it is a task. */
+  task: ChipTask;
   look: ChipLook;
   onStanding: (standing: TaskStanding) => void;
 }): React.JSX.Element {

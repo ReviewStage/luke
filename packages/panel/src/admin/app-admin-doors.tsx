@@ -17,16 +17,15 @@
 import type { AdminReadParams, AdminRefused } from "@luke/features/admin-wire";
 import { ADMIN_UNANSWERED } from "@luke/features/admin-wire";
 import { ACT_KIND } from "@luke/host/acts";
-import { ERROR_STATE_PLACEMENT, ErrorState } from "@luke/ui";
+import { COLLECTION_STATE, ERROR_STATE_PLACEMENT, ErrorState } from "@luke/ui";
 import { askAct } from "../act.js";
-import { PhoneHead } from "../desktop/phone-head.js";
 import {
   type AdminDoors,
   AdminDoorsProvider,
   AdminReadRefused,
   type AdminReads,
 } from "./admin-doors.js";
-import { useAdminToolbarLead } from "./chrome/page-header.js";
+import { AdminCollectionPage } from "./chrome/page-header.js";
 
 /** What the page says where the gate refused the read, in place of the view. */
 const GATE_WORDS = {
@@ -65,14 +64,17 @@ const APP_ADMIN_READS: AdminReads = {
   favorite: (id, favorite) => askAct(ACT_KIND.ADMIN_FAVORITE, { id, favorite }).catch(() => false),
 };
 
-/** A refusal standing in the view's place, as the app's centred failure, under a phone's header led by the way back to the list where one stands. */
+/** A refusal standing in the view's place, as the app's centred failure, under the place's own toolbar and sections. */
 function GateRefusal({ words }: { words: string }): React.JSX.Element {
-  const lead = useAdminToolbarLead();
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
-      {lead === undefined ? null : <PhoneHead place="admin" start={lead} title={null} end={null} />}
-      <ErrorState placement={ERROR_STATE_PLACEMENT.CENTRED}>{words}</ErrorState>
-    </div>
+    <AdminCollectionPage
+      title="Admin"
+      controls={null}
+      filters={undefined}
+      state={COLLECTION_STATE.ERROR}
+      loadingLabel="Admin"
+      error={<ErrorState placement={ERROR_STATE_PLACEMENT.CENTRED}>{words}</ErrorState>}
+    />
   );
 }
 

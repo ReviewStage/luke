@@ -15,11 +15,13 @@
  * choice back.
  *
  * Each option is its glyph, its name, and a count. The name is always
- * given: a fill bar narrower than its options need scrolls sideways and
- * shows an option other than the chosen one by its glyph alone, its name
- * left to a reader who cannot see it; one standing in a toolbar beside other
- * controls folds every option at once instead, once their names no longer
- * fit (`fold`).
+ * given. A bar narrower than its options need keeps them on one row and
+ * scrolls sideways, its cut edges fading as a scroll area's do
+ * (`scrollFadeMarks`), the chosen option brought into view as it is chosen;
+ * a fill bar shows an option other than the chosen one by its glyph alone
+ * too, its name left to a reader who cannot see it, and one standing in a
+ * toolbar beside other controls folds every option at once instead, once
+ * their names no longer fit (`fold`).
  * A count is words, or parts each in
  * its own tone (`CountPart`), which holds chosen or not; a diff's lines are
  * `linesCount`'s, always green and red. An option may say more in the
@@ -30,9 +32,8 @@
  * control's height, a fill under the one chosen. It draws no underline: a
  * bar heading a page or a column stands in its header's band, whose
  * hairline is the header's. `segmented` is a trough, the chosen option on a
- * thumb raised in it, its options wrapping inside it when too wide, or,
- * stretched (`stretch`), filling its row on one line, its options sharing
- * it alike, as a pane switcher's. In either the fill or the thumb slides
+ * thumb raised in it, hugging its options or, stretched (`stretch`),
+ * filling its row, its options sharing it alike, as a pane switcher's. In either the fill or the thumb slides
  * from option to option. `size`
  * compact is a step smaller, in the caption's type. What finds the bar for an app (the
  * desktop's settings search) is the app's: it hands the bar the `data-`
@@ -88,6 +89,7 @@ import {
   rovingItem,
   useRovingKeys,
 } from "../roving-keys/roving-keys.js";
+import { SCROLL_AXIS, SCROLL_FADE, scrollFadeMarks } from "../scroll-area/scroll-area.js";
 import { Tooltip } from "../tooltip/hint.js";
 
 /** The role a bar's options carry, which decides the keys it steps by: a tab's, or a radio's. */
@@ -163,19 +165,23 @@ const THUMB_ELEMENT = ":scope > .luke-choice-bar-thumb";
 const CHOSEN = ':scope > [aria-selected="true"], :scope > [aria-checked="true"]';
 
 /**
- * The bar's box: a row of its options, never wider than its container. A
- * fill bar takes its container's width, scrolling sideways with no bar
- * drawn, and is the container its narrow fold measures (`choice-bar.css`);
- * a segmented one hugs its options in a trough, wrapping them inside it, or,
- * stretched, fills its row on one line. Note that a fill bar in a
- * PaneBar's middle grows to the middle's room, because the container it is
+ * The bar's box: one row of its options, never wider than its container,
+ * scrolling sideways past it with no bar drawn, its cut edges fading
+ * (`BAR_FADE`). A fill bar takes its container's width, and is the container
+ * its narrow fold measures (`choice-bar.css`); a segmented one hugs its
+ * options in a trough, or, stretched, fills its row. Note that a fill bar in
+ * a PaneBar's middle grows to the middle's room, because the container it is
  * sizes itself as if it held nothing, so as a flex item that only hugs its
  * options it would stand 0px wide.
  */
-const BAR = "luke-choice-bar relative items-center min-w-0 max-w-full";
+const BAR =
+  "luke-choice-bar relative items-center flex-nowrap min-w-0 max-w-full [scrollbar-width:none]";
+
+/** The scroll area's sideways fade, which eases in only while the row has options past an edge. */
+const BAR_FADE = scrollFadeMarks(SCROLL_FADE.BOTH, SCROLL_AXIS.HORIZONTAL);
 
 const BAR_LOOK = {
-  fill: "flex flex-none [.luke-pane-bar-middle>&]:flex-1 self-stretch overflow-x-auto [scrollbar-width:none] @container/luke-choice-bar",
+  fill: "flex flex-none [.luke-pane-bar-middle>&]:flex-1 self-stretch @container/luke-choice-bar",
   segmented: "inline-flex gap-0.5 p-0.5 rounded-control bg-muted",
 } as const satisfies Record<ChoiceBarLook, string>;
 
@@ -185,10 +191,10 @@ const FILL_GAP = {
   compact: "gap-0",
 } as const satisfies Record<ChoiceBarSize, string>;
 
-/** A segmented bar's width: hugging its options and wrapping them, or filling its row on one line. */
+/** A segmented bar's width: hugging its options, or filling its row. */
 const SEGMENTED_WIDTH = {
-  hug: "flex-initial flex-wrap w-fit",
-  stretch: "flex-auto flex-nowrap w-auto",
+  hug: "flex-initial w-fit",
+  stretch: "flex-auto w-auto",
 } as const;
 
 /**
@@ -354,8 +360,29 @@ function placeThumb(bar: HTMLElement, slide: boolean): void {
 }
 
 /**
+ * Scrolls `bar` the least that brings its chosen option clear of the faded
+ * edges, where the row is cut past it. Note that it moves the bar's own
+ * scroll rather than calling `scrollIntoView`, which would scroll every box
+ * around the bar too.
+ */
+function revealChosen(bar: HTMLElement): void {
+  const chosen = bar.querySelector<HTMLElement>(CHOSEN);
+  if (chosen === null || bar.scrollWidth <= bar.clientWidth) return;
+  const style = getComputedStyle(bar);
+  const start = chosen.offsetLeft - (Number.parseFloat(style.scrollPaddingInlineStart) || 0);
+  const end =
+    chosen.offsetLeft +
+    chosen.offsetWidth +
+    (Number.parseFloat(style.scrollPaddingInlineEnd) || 0) -
+    bar.clientWidth;
+  if (start < bar.scrollLeft) bar.scrollLeft = start;
+  else if (end > bar.scrollLeft) bar.scrollLeft = end;
+}
+
+/**
  * The ref the bar's own element takes and the one each option takes, which
- * keep its thumb under the chosen option: sliding to it after a render that
+ * keep its thumb under the chosen option, which a cut row brings into view
+ * (`revealChosen`): sliding to it after a render that
  * chose another, or that changed which options stand (`placed`), and placed
  * at once when the bar or an option resizes (a narrow bar dropping its
  * names, a count growing, a hidden panel shown). Note that each element is
@@ -368,7 +395,9 @@ function useThumb(chosen: string | undefined, placed: OptionsPlaced) {
   const bar = useRef<HTMLDivElement | null>(null);
   // Note that the thumb is placed again only when the choice or the options standing change; a resize is the observers'.
   useLayoutEffect(() => {
-    if (bar.current !== null) placeThumb(bar.current, true);
+    if (bar.current === null) return;
+    placeThumb(bar.current, true);
+    revealChosen(bar.current);
   }, [chosen, placed]);
   const optionRef = useCallback((element: HTMLElement | null) => {
     if (element === null || !("ResizeObserver" in globalThis)) return undefined;
@@ -698,8 +727,11 @@ export function ChoiceBar<Value extends string>(props: ChoiceBarProps<Value>): R
       onFocus={keys.onFocus}
       {...groupAttributes(role, label, disabled || !roving ? undefined : keys.onKeyDown)}
       {...appAttributes}
+      data-axis={BAR_FADE["data-axis"]}
+      data-fade={BAR_FADE["data-fade"]}
       className={cn(
         BAR,
+        BAR_FADE.className,
         BAR_LOOK[look],
         segmented
           ? SEGMENTED_WIDTH[stretch ? "stretch" : "hug"]

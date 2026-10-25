@@ -94,11 +94,11 @@ export function StartAgentButton({ control }: { control: CodingAgentsControl }):
   const remedyWords = note === undefined ? undefined : remedyLabel(note);
   const remedy = note === undefined ? undefined : repositoryRemedy(note, () => press());
   return (
-    <div className="start-agent">
+    <div className="start-agent relative flex items-center gap-control-gap">
       {note !== undefined ? (
         // Start itself is the retry of a plain refusal; a repository's remedy keeps Retry
         // beside it where it is finished elsewhere, and a move presses Start again by itself.
-        <div className="start-agent-note">
+        <div className="start-agent-note flex min-w-0 max-w-half-container">
           <ErrorState
             placement={ERROR_STATE_PLACEMENT.TOOLBAR}
             remedy={
@@ -117,7 +117,7 @@ export function StartAgentButton({ control }: { control: CodingAgentsControl }):
           </ErrorState>
         </div>
       ) : null}
-      <span className="start-agent-split">
+      <span className="start-agent-split flex">
         {/* A press of the main part closes the menu whether or not it starts anything: a refused
             press, busy or unavailable, never reaches `press`, so the split button hears every
             press but the chevron's, which toggles the menu itself (`onMainPress`). */}

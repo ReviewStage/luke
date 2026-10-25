@@ -1,5 +1,5 @@
 import type { Workspace } from "@luke/features/workspace-wire";
-import { HoverCard, HoverCardHead, OneLine, Tooltip } from "@luke/ui";
+import { cn, HoverCard, HoverCardHead, OneLine, Tooltip } from "@luke/ui";
 import type { ReactNode } from "react";
 import { TILE_SIZE, WorkspaceTile } from "./workspace-tile.js";
 
@@ -27,6 +27,29 @@ export const WORKSPACE_REF_SIZE = {
 } as const;
 
 type WorkspaceRefSize = (typeof WORKSPACE_REF_SIZE)[keyof typeof WORKSPACE_REF_SIZE];
+
+/**
+ * How far apart each size stands its tile and its name: a line's and the
+ * head's at their own gaps, a row's a step wider than a line's; a name with
+ * a line under it stands as far from its tile as the head's does.
+ */
+const GAP_OF_SIZE = {
+  [WORKSPACE_REF_SIZE.INLINE]: "gap-tight-gap",
+  [WORKSPACE_REF_SIZE.ROW]: "gap-item-gap",
+  [WORKSPACE_REF_SIZE.HEAD]: "gap-block-gap",
+} as const;
+
+/**
+ * The name at each size: in a line of words it sits on the line's baseline,
+ * as an actor's does, standing at least the tile's height so the tile stays
+ * centred on it; at the sidebar's head it takes the head's weight.
+ */
+const NAME_OF_SIZE = {
+  [WORKSPACE_REF_SIZE.INLINE]: "self-baseline py-workspace-ref-lift",
+  [WORKSPACE_REF_SIZE.ROW]: undefined,
+  [WORKSPACE_REF_SIZE.HEAD]:
+    "text-foreground text-section-size font-luke-semibold tracking-workspace-head",
+} as const;
 
 /** The tile each size of ref draws. */
 const TILE_OF_SIZE = {
@@ -60,10 +83,11 @@ export function WorkspaceCard({
 }): React.JSX.Element {
   return (
     <HoverCard data-workspace-card="">
-      <div className="workspace-card-head">
-        <WorkspaceTile workspace={workspace} size={TILE_SIZE.HEAD} />
-        <HoverCardHead name={workspace.name} sub={sharedWords(workspace.memberCount, personal)} />
-      </div>
+      <HoverCardHead
+        mark={<WorkspaceTile workspace={workspace} size={TILE_SIZE.HEAD} />}
+        name={workspace.name}
+        sub={sharedWords(workspace.memberCount, personal)}
+      />
     </HoverCard>
   );
 }
@@ -87,23 +111,35 @@ export function WorkspaceRef({
   line?: ReactNode;
   card?: ReactNode;
 }): React.JSX.Element {
+  const nameClass = cn("workspace-ref-name", NAME_OF_SIZE[size]);
   const named =
     name === undefined ? (
-      <OneLine className="workspace-ref-name" words={workspace.name}>
+      <OneLine className={nameClass} words={workspace.name}>
         {workspace.name}
       </OneLine>
     ) : (
-      <OneLine className="workspace-ref-name">{name}</OneLine>
+      <OneLine className={nameClass}>{name}</OneLine>
     );
+  // Note that the head fills its row, so its chevron stands at the row's end.
   const ref = (
-    <span className="workspace-ref" data-size={size}>
+    <span
+      className={cn(
+        "workspace-ref inline-flex min-w-0 max-w-full items-center",
+        size === WORKSPACE_REF_SIZE.INLINE ? "align-baseline" : "align-middle",
+        line === undefined ? GAP_OF_SIZE[size] : "gap-block-gap",
+        size === WORKSPACE_REF_SIZE.HEAD && "flex-1",
+      )}
+      data-size={size}
+    >
       <WorkspaceTile workspace={workspace} size={TILE_OF_SIZE[size]} />
       {line === undefined ? (
         named
       ) : (
-        <span className="workspace-ref-copy">
+        <span className="workspace-ref-copy flex min-w-0 flex-col gap-list-gap">
           {named}
-          <span className="workspace-ref-line">{line}</span>
+          <span className="workspace-ref-line text-muted-foreground text-caption-inline">
+            {line}
+          </span>
         </span>
       )}
     </span>

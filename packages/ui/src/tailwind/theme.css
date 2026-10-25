@@ -48,6 +48,29 @@
   --text-caption--line-height: var(--luke-type-caption-leading);
   --spacing-control: var(--luke-control-height);
   --spacing-control-inset: var(--luke-control-inset);
+
+  /* The panel's side panel and the plan's summary beside the document
+     (`@luke/panel`): the summary's width and its rail's, both said once on
+     the task's column (`desktop.css`'s `.desktop-task-main`); the card's
+     inset, the rail's less its 1px border; the panel's widest, which leaves
+     the document its reserve; the empty panel's column, 300px at most; a
+     note's share of the toolbar; and the card's arrival and leaving. */
+  --spacing-summary: var(--summary-width);
+  --spacing-summary-rail: var(--summary-rail-width);
+  --spacing-summary-card-inset: calc(var(--luke-space-12) - 1px);
+  --spacing-side-panel: max(
+    280px,
+    calc(100% - var(--document-reserve))
+  ); /* off-scale: the panel's least width */
+  --spacing-side-panel-no-tabs: max(
+    var(--luke-space-16),
+    calc((100% - 300px) / 2 + var(--luke-space-16))
+  ); /* off-scale: the empty panel's 300px column */
+  --spacing-half-container: 50cqi;
+  --animate-card-grow-in:
+    luke-menu-arrive var(--luke-duration-quick) var(--luke-motion-exit) both,
+    luke-card-grow var(--luke-duration-fast) var(--luke-spring-fast) both;
+  --animate-card-leave: luke-menu-leave var(--luke-duration-exit) var(--luke-motion-exit) forwards;
   --spacing-control-icon: var(--luke-control-icon);
   --spacing-icon-gap: var(--luke-icon-gap);
   --spacing-menu-row: var(--luke-menu-row-height);
@@ -321,6 +344,9 @@
   --spacing-dialog-action-gap: var(--luke-dialog-action-gap);
   --spacing-dialog-action: var(--luke-dialog-action-width);
   --spacing-dialog-room: var(--luke-dialog-room);
+  /* Where a card the window's size starts: clear of what the window draws
+     over its top (the traffic lights), as the window says, else a margin. */
+  --spacing-dialog-window-top: var(--luke-dialog-window-top, var(--luke-space-12));
   --spacing-card-inset-snug: var(--luke-card-inset-snug);
   --spacing-dialog-reach: var(--luke-space-12);
   --spacing-menu-inset: var(--luke-menu-inset);
@@ -678,6 +704,64 @@
   --shadow-card-soft: 0 1px 2px var(--luke-color-shadow-soft);
   --shadow-card-lift: 0 2px 6px var(--luke-color-shadow-soft);
 
+  /* The panel window's own (`@luke/panel`'s desktop surfaces, which every
+     client mounts): the profile's spacing roles its layout reads beside the
+     ones above; the keyboard ring's reach a scroller stands past its column
+     by; the least height a column's list keeps while a row leaves near its
+     end (`ListMotion`); the sizes and inks of the sidebar's own parts, its
+     workspace head, its section icons drawn from the file tree's palette
+     (the panel's `base.css`), and the picker that chooses one. */
+  --spacing-list-held: max(100%, var(--luke-list-held-height, 0px));
+  /* off-scale: centres a line of words on the inline tile's 14px */
+  --spacing-workspace-ref-lift: max(0px, calc((14px - 1lh) / 2));
+  --spacing-workspace-shared-glyph: 11px; /* off-scale: a people glyph at a caption's x-height */
+  --spacing-corner-dot: 5px; /* off-scale: the dot a press wears at its corner (`CornerDot`) */
+  --spacing-section-icon-scroll: 220px; /* off-scale: the icon grid's room, about seven rows */
+  --grid-template-columns-section-icons: repeat(
+    10,
+    28px
+  ); /* off-scale: ten icon buttons, edge to edge */
+  --text-section-size: var(--luke-type-section-size);
+  --tracking-workspace-head: -0.005em; /* off-scale: the sidebar head's name, a hair tighter */
+  /* An actor's mark (`@luke/panel`'s `actor-ref.tsx`): the opaque tile a
+     member who left, and a pile's count, stand on, a step of ink over the
+     ground, so the face a square overlaps never shows through it; the ground
+     a pile's ring cuts each face from; someone unnamed's outline; Luke's
+     face's share of his square; the member an agent acted for, at the
+     corner; a pile's badge; and how far each face overlaps the one before. */
+  --color-actor-tile: color-mix(in srgb, var(--luke-color-ink) 10%, var(--luke-color-ground));
+  --color-actor-stack-ground: var(--actor-stack-ground, var(--luke-color-ground));
+  --shadow-actor-outline: inset 0 0 0 1px var(--luke-color-border-strong);
+  --shadow-actor-ring: 0 0 0 2px var(--actor-stack-ground, var(--luke-color-ground));
+  --shadow-actor-outline-ring:
+    inset 0 0 0 1px var(--luke-color-border-strong),
+    0 0 0 2px var(--actor-stack-ground, var(--luke-color-ground));
+  --shadow-actor-for-ring: 0 0 0 1.5px var(--actor-stack-ground, var(--luke-color-ground));
+  --spacing-actor-face-share: 80%; /* off-scale: Luke's face, a share of his square */
+  --spacing-actor-for-x: 22%; /* off-scale: how far the face acted for stands past the mark's end */
+  --spacing-actor-for-y: 18%; /* off-scale: and past its foot */
+  --spacing-actor-for-near: 8%; /* off-scale: both, at a card's and a page's size */
+  --spacing-actor-badge: 13px; /* off-scale: a pile face's badge */
+  --spacing-actor-badge-glyph: 8px; /* off-scale: the badge's glyph */
+  --spacing-actor-overlap: 5px; /* off-scale: how far each face overlaps the one before */
+  /* A sidebar row's end (`task-card.tsx`'s `SIDEBAR_ROW_TIME`): room for
+     two of a row's small acts and a hair, so times line up; the repository
+     it names before its marks, cut short past a few words; the attention
+     mark's glyph a size under the row's; the empty group's slot past its header's glyph; and the
+     offline pill, its height, glyph, tint, and arrival. */
+  --spacing-sidebar-row-time: calc(2 * var(--luke-space-24) + var(--luke-space-2));
+  --spacing-sidebar-row-repository: 7em; /* off-scale: a few words of a repository's name */
+  --spacing-sidebar-slot-start: calc(
+    var(--luke-row-inset) +
+    var(--luke-control-icon) +
+    var(--luke-icon-gap)
+  );
+  --spacing-offline-mark: 24px; /* off-scale: the offline pill, a compact button's height */
+  --spacing-offline-glyph: 13px; /* off-scale: the offline pill's glyph */
+  --color-attention-tint: var(--luke-color-attention-tint);
+  --animate-offline-arrive: luke-menu-arrive var(--luke-duration-quick) var(--luke-motion-exit)
+    backwards;
+
   /* Motion comes from the motion tokens alone (docs/DESIGN.md): a `transition`
      utility runs on the quick duration and the spring, never on Tailwind's
      own literal. */
@@ -1029,6 +1113,7 @@
      (`.annotation-card`). */
   --spacing-comment-editor: calc(3lh + 2 * var(--luke-space-6));
   --spacing-branch-chip: 22rem; /* off-scale: a branch's name before it is cut */
+  --spacing-branch-base: min(22rem, 50%); /* off-scale: the base's, at most half its row */
   --spacing-label-dot: 10px; /* off-scale: a label's swatch */
   --color-label-dot: var(--label-dot, transparent);
   --spacing-line-comment: 720px; /* off-scale: a line comment's reading measure */
@@ -1058,22 +1143,13 @@
   --color-file-icon-pink: var(--file-icon-pink);
   --color-file-icon-mauve: var(--file-icon-mauve);
   /* A file opened over the window (`attachment-viewer.tsx`): a text file's
-     width, any other file's, and the whole of the dimmed window a picture
-     at its own pixels takes, on the veil a video plays on. */
+     reading width, centred in the window. */
   --spacing-viewer-text: min(
     880px,
     var(--luke-stage-width) -
     2 *
     var(--luke-space-24)
   ); /* off-scale: a text file's reading width */
-  --spacing-viewer-other: min(
-    400px,
-    var(--luke-stage-width) -
-    2 *
-    var(--luke-space-24)
-  ); /* off-scale: a file shown by its icon */
-  --spacing-viewer-stage: calc(var(--luke-stage-width) - 2 * var(--luke-space-24));
-  --spacing-viewer-stage-height: calc(var(--luke-stage-height) - 2 * var(--luke-space-24));
   /* A Terminal tab (`terminal-tab.tsx`): its ground, a busy bar's dots spaced apart, and the shells'
      list beside it. */
   --color-terminal-ground: var(--terminal-ground);

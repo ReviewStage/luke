@@ -76,6 +76,7 @@ import {
   readBody,
   send,
 } from "./github-app.js";
+import { rateLimited } from "./github-rate-gate.js";
 import { type StackCandidate, type StackEntry, stackOf } from "./pull-request-stack.js";
 
 /** A pull request as much as the agent's pill and its summary row draw: where it stands, its head, and its size. */
@@ -460,6 +461,19 @@ function summaryOf(checks: HeadChecks): CheckSummary {
   return checks.any ? CHECK_SUMMARY.PASSING : CHECK_SUMMARY.NONE;
 }
 
+/**
+ * Whether a 403 is the App not being given what the read needs, rather than
+ * GitHub's rate limit, which answers 403 too: a limit is a read GitHub did
+ * not answer, never a head with no checks.
+ */
+function forbiddenNotLimited(
+  response: HttpClientResponse.HttpClientResponse,
+): Effect.Effect<boolean> {
+  return response.status === GITHUB_HTTP_STATUS.FORBIDDEN
+    ? Effect.map(rateLimited(response), (limited) => !limited)
+    : Effect.succeed(false);
+}
+
 /** A head's checks read as one answer, or as none where the App may not read them, said once in the log. */
 function readChecks<A>(
   what: string,
@@ -471,15 +485,16 @@ function readChecks<A>(
   return Effect.scoped(
     Effect.flatMap(send(request), (response: HttpClientResponse.HttpClientResponse) => {
       if (response.status === GITHUB_HTTP_STATUS.NOT_FOUND) return Effect.succeed(none);
-      if (response.status === GITHUB_HTTP_STATUS.FORBIDDEN) {
-        return Effect.as(
-          Effect.logWarning(
-            `the GitHub App may not read a head's ${what}; the checks read as none`,
-          ),
-          none,
-        );
-      }
-      return Effect.map(readBody(response, schema), tally);
+      return Effect.flatMap(forbiddenNotLimited(response), (forbidden) =>
+        forbidden
+          ? Effect.as(
+              Effect.logWarning(
+                `the GitHub App may not read a head's ${what}; the checks read as none`,
+              ),
+              none,
+            )
+          : Effect.map(readBody(response, schema), tally),
+      );
     }),
   );
 }
@@ -1274,13 +1289,14 @@ function readListed<A>(
   return Effect.scoped(
     Effect.flatMap(send(request), (response: HttpClientResponse.HttpClientResponse) => {
       if (response.status === GITHUB_HTTP_STATUS.NOT_FOUND) return Effect.succeed([]);
-      if (response.status === GITHUB_HTTP_STATUS.FORBIDDEN) {
-        return Effect.as(
-          Effect.logWarning(`the GitHub App may not read a head's ${what}; none are listed`),
-          [],
-        );
-      }
-      return Effect.map(readBody(response, schema), listed);
+      return Effect.flatMap(forbiddenNotLimited(response), (forbidden) =>
+        forbidden
+          ? Effect.as(
+              Effect.logWarning(`the GitHub App may not read a head's ${what}; none are listed`),
+              [],
+            )
+          : Effect.map(readBody(response, schema), listed),
+      );
     }),
   );
 }

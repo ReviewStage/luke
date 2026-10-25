@@ -254,6 +254,7 @@ export const PRODUCT_EXPERIMENT = {
   GITHUB_TOKEN: "github-token",
   INBOX_FIRST: "inbox-first",
   OPERATOR: "operator",
+  LOCAL_AGENTS: "local-agents",
 } as const;
 
 export type ProductExperiment = (typeof PRODUCT_EXPERIMENT)[keyof typeof PRODUCT_EXPERIMENT];

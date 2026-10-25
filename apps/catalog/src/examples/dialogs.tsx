@@ -210,6 +210,26 @@ function PictureDialog({ open, onClose }: DialogBody): React.JSX.Element {
   );
 }
 
+/** A picture opened in a card as large as the window allows, below its top bar, under a bar naming it. */
+function WindowPictureDialog({ open, onClose }: DialogBody): React.JSX.Element {
+  const titleId = useId();
+  return (
+    <Dialog open={open} size={DIALOG_SIZE.WINDOW} labelledBy={titleId} onDismiss={onClose}>
+      <div className="catalog-window">
+        <div className="catalog-media-bar">
+          <Text variant={TEXT_VARIANT.LABEL} as={TEXT_ELEMENT.H2} id={titleId}>
+            luke-face.svg
+          </Text>
+          <IconButton icon={<CloseIcon />} label="Close" onClick={onClose} />
+        </div>
+        <div className="catalog-window-picture">
+          <WingFace />
+        </div>
+      </div>
+    </Dialog>
+  );
+}
+
 /** A button that opens `Body`, which closes itself and fades out as it goes; each opening is drawn afresh. */
 function Opener({
   label,
@@ -243,6 +263,7 @@ function Dialogs(): React.JSX.Element {
         <Opener label="Send feedback…" Body={NoteDialog} />
         <Opener label="New task…" Body={ComposerDialog} />
         <Opener label="Open picture…" Body={PictureDialog} />
+        <Opener label="Open picture large…" Body={WindowPictureDialog} />
       </Inline>
     </CatalogSection>
   );

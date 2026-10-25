@@ -115,6 +115,7 @@
     "./agents/coding-agents-app": "./src/agents/coding-agents-app.js",
     "./agents/command-description": "./src/agents/command-description.js",
     "./agents/mac-command": "./src/agents/mac-command.js",
+    "./agents/machine/vercel-machine": "./src/agents/machine/vercel-machine.js",
     "./agents/mentioned-context": "./src/agents/mentioned-context.js",
     "./agents/messages-procedures": "./src/agents/messages-procedures.js",
     "./agents/operator-desk": "./src/agents/operator-desk.js",

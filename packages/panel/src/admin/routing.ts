@@ -72,6 +72,24 @@ export type AdminView =
   | { kind: typeof ADMIN_PAGE.ACCOUNT; id: string }
   | { kind: typeof ADMIN_PAGE.DAY; day: string };
 
+/** Whether a view is one of the place's sections, rather than an account's or a day's page under one. */
+export function adminSection(view: AdminView): boolean {
+  return view.kind !== ADMIN_PAGE.ACCOUNT && view.kind !== ADMIN_PAGE.DAY;
+}
+
+/** The view a section opens on; Animations is the web page's alone, so the app opens the Overview for it. */
+export function adminSectionView(tab: AdminTab): AdminView {
+  return { kind: tab === ADMIN_TAB.ANIMATIONS ? ADMIN_TAB.DASHBOARD : tab };
+}
+
+/** The section a view stands under: an account's page under Users, a day's under the Overview. */
+export function adminSectionOf(view: AdminView): AdminTab {
+  if (view.kind === ADMIN_PAGE.ACCOUNT) return ADMIN_TAB.USERS;
+  if (view.kind === ADMIN_PAGE.DAY) return ADMIN_TAB.DASHBOARD;
+  if (view.kind === ADMIN_TAB.ANIMATIONS) return ADMIN_TAB.DASHBOARD;
+  return view.kind;
+}
+
 export function viewFromLocation(): AdminView {
   const params = new URLSearchParams(window.location.search);
   const id = params.get(ACCOUNT_VIEW_PARAM);

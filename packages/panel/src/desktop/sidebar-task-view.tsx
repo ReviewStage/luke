@@ -305,7 +305,7 @@ export function HiddenStatusesLine({
   if (hidden.length === 0) return null;
   const opener = menu.trigger(dropBelowStart);
   return (
-    <p className="sidebar-hidden-statuses">
+    <p className="sidebar-hidden-statuses mx-row-inset my-tight-gap text-caption text-muted-foreground">
       <TextButton aria-expanded={opener["aria-expanded"]} onClick={opener.onClick}>
         {hiddenStatusesLine(hidden)}
       </TextButton>
@@ -392,7 +392,10 @@ function ViewChipLine({
   // Note that the box around the row stands hidden while nothing is filtered, so the row's padding takes no room, and a chip arriving arrives into a row that stands.
   return (
     <div ref={line} hidden={drawn.length === 0}>
-      <div className="sidebar-view-chips" {...motionRows()}>
+      <div
+        className="sidebar-view-chips flex flex-wrap gap-tight-gap px-item-gap pb-item-gap"
+        {...motionRows()}
+      >
         {drawn.map(({ key, value, leaving }) => (
           <Chip
             key={key}

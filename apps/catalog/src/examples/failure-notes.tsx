@@ -1,10 +1,11 @@
 /**
  * failure-notes.tsx -- a failure's line with Retry after its words, one with
- * no Retry, a tool's error of several lines, and long words in a column
- * narrower than the line.
+ * no Retry, a tool's error of several lines, long words in a column
+ * narrower than the line, and one standing in a list's place beside a note
+ * line, at the rows' inset.
  */
 
-import { FailureNote } from "@luke/ui";
+import { FAILURE_NOTE_LOOK, FailureNote, NOTE_LINE_LOOK, NoteLine } from "@luke/ui";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
 
@@ -38,6 +39,14 @@ function FailureNotes(): React.JSX.Element {
           <FailureNote onRetry={stay}>
             The list of the workspace’s automations could not be read from the service.
           </FailureNote>
+        </div>
+      </CatalogSection>
+      <CatalogSection id="failure-note-list" title="In a list's place">
+        <div className="catalog-frame">
+          <FailureNote look={FAILURE_NOTE_LOOK.LIST} onRetry={stay}>
+            The files could not be shown.
+          </FailureNote>
+          <NoteLine look={NOTE_LINE_LOOK.LIST}>No files match.</NoteLine>
         </div>
       </CatalogSection>
     </>

@@ -418,8 +418,8 @@ function submitsOf(submitKey: TextAreaSubmit | undefined, presses: KeyboardEvent
   return submits;
 }
 
-test("a text area submits on ⌘Return or Ctrl+Enter, never a plain Return or an input method's Return", () => {
-  const submits = submitsOf(undefined, [
+test("a text area asked to submits on ⌘Return or Ctrl+Enter, never a plain Return or an input method's Return", () => {
+  const submits = submitsOf(TEXT_AREA_SUBMIT.MOD_ENTER, [
     { metaKey: true },
     { ctrlKey: true },
     {},
@@ -430,8 +430,8 @@ test("a text area submits on ⌘Return or Ctrl+Enter, never a plain Return or an
   assert.equal(submits, 2);
 });
 
-test("a text area asked to submits on a plain Return, leaving Shift-Return and an input method's Return be", () => {
-  const submits = submitsOf(TEXT_AREA_SUBMIT.ENTER, [
+test("a text area submits on a plain Return, leaving Shift-Return and an input method's Return be", () => {
+  const submits = submitsOf(undefined, [
     {},
     { shiftKey: true },
     { isComposing: true },

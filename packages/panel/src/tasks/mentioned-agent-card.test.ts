@@ -327,7 +327,8 @@ async function cardOf(chip: Element | undefined) {
     name: card.querySelector(".luke-hover-card-name")?.textContent,
     model: card.querySelector("[data-model-label]")?.textContent,
     corner: card.querySelector(".luke-hover-card-corner")?.textContent,
-    working: card.querySelector('.actor-card-head .state-glyph[data-state="working"]') !== null,
+    working:
+      card.querySelector('.luke-hover-card-lead .state-glyph[data-state="working"]') !== null,
     foot: card.querySelector(".luke-hover-card-rule + .luke-hover-card-note")?.textContent,
     words: card.textContent,
   };

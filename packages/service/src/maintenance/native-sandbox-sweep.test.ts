@@ -15,7 +15,7 @@ import { eq } from "drizzle-orm";
 import { Duration, Effect, Option } from "effect";
 import { afterEach, vi } from "vitest";
 import { CODER } from "../agents/coder-host/bounds.js";
-import { RUNNER_TAG } from "../agents/coder-host/runner-sessions.js";
+import { RUNNER_TAG } from "../agents/machine/vercel-machine.js";
 import { commandRead, type ReadCommand } from "../testing/runner-sandbox-fake.js";
 import { sandboxListRefusal, sandboxStopRefusal } from "../testing/vercel-sandbox-fake.js";
 import { NATIVE_SANDBOX_SWEEP, sweepNativeSandboxes } from "./native-sandbox-sweep.js";
@@ -522,61 +522,55 @@ it.layer(getTestDB())("the native sandbox sweep", (it) => {
       assert.deepEqual(api.stopped, []);
     }),
   );
-  it.effect(
-    "a sandbox whose runner still runs within the warm window keeps running, and one whose old runner exited or is gone is stopped",
-    () =>
-      Effect.gen(function* () {
-        vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
-        const api = vercel();
-        const relaunched = yield* openAgent(CONVERSATION_RUNTIME.CLAUDE_CODE, {
-          status: TURN_STATUS.SETTLED,
-          at: minutesBefore(5),
-        });
-        const exited = yield* openAgent(CONVERSATION_RUNTIME.CLAUDE_CODE, {
-          status: TURN_STATUS.SETTLED,
-          at: minutesBefore(10),
-        });
-        const vanished = yield* openAgent(CONVERSATION_RUNTIME.CLAUDE_CODE, {
-          status: TURN_STATUS.SETTLED,
-          at: minutesBefore(10),
-        });
-        api.commands.set("cmd_live", { id: "cmd_live", exitCode: null });
-        // Vercel has not recorded this exit yet, as no read waited for it: a plain read names none.
-        api.commands.set("cmd_exited", { id: "cmd_exited", exitCode: 0 });
-        const live = nativeSandbox(relaunched.id, "cmd_live");
-        const done = nativeSandbox(exited.id, "cmd_exited");
-        const gone = nativeSandbox(vanished.id, "cmd_unknown");
-        api.sandboxes.push(live, done, gone);
+  it.effect("a sandbox whose old runner exited or is gone is stopped", () =>
+    Effect.gen(function* () {
+      vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
+      const api = vercel();
+      const exited = yield* openAgent(CONVERSATION_RUNTIME.CLAUDE_CODE, {
+        status: TURN_STATUS.SETTLED,
+        at: minutesBefore(10),
+      });
+      const vanished = yield* openAgent(CONVERSATION_RUNTIME.CLAUDE_CODE, {
+        status: TURN_STATUS.SETTLED,
+        at: minutesBefore(10),
+      });
+      // Vercel has not recorded this exit yet, as no read waited for it: a plain read names none.
+      api.commands.set("cmd_exited", { id: "cmd_exited", exitCode: 0 });
+      const done = nativeSandbox(exited.id, "cmd_exited");
+      const gone = nativeSandbox(vanished.id, "cmd_unknown");
+      api.sandboxes.push(done, gone);
 
-        const outcome = yield* sweepNativeSandboxes(NOW).pipe(Effect.provide(api.layer));
+      const outcome = yield* sweepNativeSandboxes(NOW).pipe(Effect.provide(api.layer));
 
-        assert.deepEqual(outcome, {
-          stopped: 2,
-          retired: 0,
-          held: 0,
-          failed: 0,
-          deferred: 0,
-          lost: 0,
-        });
-        assert.equal(live.status, "running");
-        assert.equal(done.status, "stopped");
-        assert.equal(gone.status, "stopped");
-      }),
+      assert.deepEqual(outcome, {
+        stopped: 2,
+        retired: 0,
+        held: 0,
+        failed: 0,
+        deferred: 0,
+        lost: 0,
+      });
+      assert.equal(done.status, "stopped");
+      assert.equal(gone.status, "stopped");
+    }),
   );
 
   it.effect(
-    "a runner warm past its window is asked to retire, its sandbox left for its END to stop, and one within the window stays warm",
+    "a runner still up past its warm window and the grace is asked to retire, its sandbox left for its END to stop, and one whose run ended within them stays up",
     () =>
       Effect.gen(function* () {
         vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
         const api = vercel();
+        // Note that the window may be zero, so a runner launched warm before it was lowered goes once the grace does.
         const idle = yield* openAgent(CONVERSATION_RUNTIME.CLAUDE_CODE, {
           status: TURN_STATUS.SETTLED,
-          at: minutesBefore(Duration.toMinutes(CODER.RUNNER_WARM) + 1),
+          at: minutesBefore(
+            Duration.toMinutes(Duration.max(CODER.RUNNER_WARM, NATIVE_SANDBOX_SWEEP.GRACE)) + 1,
+          ),
         });
         const recent = yield* openAgent(CONVERSATION_RUNTIME.CLAUDE_CODE, {
           status: TURN_STATUS.SETTLED,
-          at: minutesBefore(Duration.toMinutes(CODER.RUNNER_WARM) - 1),
+          at: new Date(NOW.getTime() - GRACE_MS + 1),
         });
         api.commands.set("cmd_idle", { id: "cmd_idle", exitCode: null });
         api.commands.set("cmd_recent", { id: "cmd_recent", exitCode: null });

@@ -78,6 +78,15 @@ const SNAPSHOT_TAG = {
 /** Vercel's refusal of a name already taken: another launch's build. */
 const CONFLICT_STATUS = 409;
 
+/**
+ * How long after its last use Vercel keeps a repository snapshot: as long as
+ * it is opened from, and its build's grace. Note that the sweep's delete
+ * keeps a snapshot another sandbox still resumes from, so a snapshot that
+ * never expired would outlive its sandbox for good; and that every sandbox
+ * opened from it resets the clock, so one in use does not lapse.
+ */
+const SNAPSHOT_LAPSE = Duration.sum(REPOSITORY_SNAPSHOT.MAX_AGE, REPOSITORY_SNAPSHOT.BUILD_GRACE);
+
 export const REPOSITORY_SNAPSHOT_STATE = {
   /** Built, stopped on its snapshot, and young enough to open from. */
   READY: "ready",
@@ -229,9 +238,7 @@ export const buildRepositorySnapshot = Effect.fn("web/buildRepositorySnapshot")(
       vcpus: CODER.SANDBOX_VCPUS,
       keepLastSnapshots: {
         count: 1,
-        expiration: Duration.toMillis(
-          Duration.sum(REPOSITORY_SNAPSHOT.MAX_AGE, REPOSITORY_SNAPSHOT.BUILD_GRACE),
-        ),
+        expiration: Duration.toMillis(SNAPSHOT_LAPSE),
         deleteEvicted: true,
       },
       env: {},
@@ -260,7 +267,7 @@ export const buildRepositorySnapshot = Effect.fn("web/buildRepositorySnapshot")(
     // The mark goes up before the snapshot, so the snapshot it leaves is known for a whole checkout.
     const now = yield* Clock.currentTimeMillis;
     yield* api.updateTags(name, { [SNAPSHOT_TAG.KEY]: key, [SNAPSHOT_TAG.BUILT]: String(now) });
-    yield* api.snapshot(running);
+    yield* api.snapshot(running, SNAPSHOT_LAPSE);
     yield* Effect.logInfo(`the repository snapshot ${name} is ready`);
   }).pipe(
     Effect.timeoutOrElse({

@@ -84,8 +84,10 @@ import { codingAgentStatusOf } from "./status.js";
  * still writes the line when the turn receives it. The turn's checkout and
  * its credential renewals run on the developer's standing with GitHub, so
  * a sign-in that lapsed is refused here rather than failing the turn's
- * first step. The caller is any member of the agent's workspace, whose task
- * read gates the send, or for an agent with no task whose membership of its
+ * first step; a GitHub that could not be asked refuses nothing, since an
+ * outage or a rate limit says nothing of that standing. The caller is any
+ * member of the agent's workspace, whose task read gates the send, or for
+ * an agent with no task whose membership of its
  * workspace does, and whose standing with GitHub is asked (the starter
  * alone, for an agent on its starter's own GitHub token), while the line
  * lands in the agent's conversation under the member who started it,
@@ -361,7 +363,13 @@ export const steerCodingAgentWritten = /* @__PURE__ */ Effect.fn("web/steerCodin
     },
     { concurrency: "unbounded" },
   );
-  yield* Effect.fromResult(reached.repository);
+  // Note that a GitHub that did not answer, or that holds Luke's calls for its rate limit, lets the words through,
+  // because the agent's checkout already stands and only GitHub's definite no is a reason to keep them from it.
+  yield* Effect.fromResult(reached.repository).pipe(
+    Effect.catch((refusal) =>
+      refusal.error === HOSTED_REFUSAL.GITHUB_UNANSWERED.error ? Effect.void : Effect.fail(refusal),
+    ),
+  );
   // Note that a session found unclaimed is read again now that GitHub has answered, because a Start's session
   // may have claimed its record meanwhile, and the stale read would refuse a send it now takes.
   const sessionId =

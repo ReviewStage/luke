@@ -1,0 +1,103 @@
+/**
+ * mac-device-store.ts -- an account's Macs that can run its local agents: registered, beaten, and read for the ones there now.
+ *
+ * Every function is an effect over the ambient `SqlClient`, keyed by the
+ * account, so no account moves, beats, or reads another's Mac. A register
+ * under an id another account holds writes nothing and answers false, so a
+ * desktop cannot take over a Mac by naming its id (`../schemas/mac-device.ts`).
+ */
+
+import { and, desc, eq, gte } from "drizzle-orm";
+import { DateTime, Effect, Schema } from "effect";
+import { SqlSchema } from "effect/sql";
+import { Database, type DatabaseServices, type StoreFailure } from "../core/query.js";
+import { macDevice } from "../schemas/mac-device.js";
+
+type MacDeviceEffect<A> = Effect.Effect<A, StoreFailure, DatabaseServices>;
+
+const DeviceKeySchema = Schema.Struct({ userId: Schema.String, id: Schema.String });
+
+/** One Mac as Start reads it: its id, its name, and when it last beat. */
+const MacDeviceSchema = Schema.Struct({
+  id: Schema.String,
+  name: Schema.String,
+  lastSeenAt: Schema.Date,
+});
+
+export type MacDevice = typeof MacDeviceSchema.Type;
+
+const upsertDevice = SqlSchema.findAll({
+  Request: Schema.Struct({ ...DeviceKeySchema.fields, name: Schema.String, now: Schema.Date }),
+  Result: Schema.Struct({ id: Schema.String }),
+  execute: ({ userId, id, name, now }) =>
+    Database.use((db) =>
+      db
+        .insert(macDevice)
+        .values({ id, userId, name, lastSeenAt: now })
+        .onConflictDoUpdate({
+          target: macDevice.id,
+          set: { name, lastSeenAt: now },
+          // Moved only where the account registering it is the one holding it.
+          setWhere: eq(macDevice.userId, userId),
+        })
+        .returning({ id: macDevice.id }),
+    ),
+});
+
+const touchDevice = SqlSchema.findAll({
+  Request: Schema.Struct({ ...DeviceKeySchema.fields, now: Schema.Date }),
+  Result: Schema.Struct({ id: Schema.String }),
+  execute: ({ userId, id, now }) =>
+    Database.use((db) =>
+      db
+        .update(macDevice)
+        .set({ lastSeenAt: now })
+        .where(and(eq(macDevice.id, id), eq(macDevice.userId, userId)))
+        .returning({ id: macDevice.id }),
+    ),
+});
+
+const findSeen = SqlSchema.findAll({
+  Request: Schema.Struct({ userId: Schema.String, since: Schema.Date }),
+  Result: MacDeviceSchema,
+  execute: ({ userId, since }) =>
+    Database.use((db) =>
+      db
+        .select({ id: macDevice.id, name: macDevice.name, lastSeenAt: macDevice.lastSeenAt })
+        .from(macDevice)
+        .where(and(eq(macDevice.userId, userId), gte(macDevice.lastSeenAt, since)))
+        .orderBy(desc(macDevice.lastSeenAt)),
+    ),
+});
+
+/**
+ * Registers the Mac under the account, or renames and beats it where the
+ * account holds it already; false where another account holds the id, and
+ * nothing was written.
+ */
+export function registerMacDevice(
+  userId: string,
+  device: { readonly id: string; readonly name: string },
+): MacDeviceEffect<boolean> {
+  return Effect.flatMap(DateTime.nowAsDate, (now) =>
+    Effect.map(
+      upsertDevice({ userId, id: device.id, name: device.name, now }),
+      (rows) => rows.length > 0,
+    ),
+  );
+}
+
+/** Records that the account's Mac is there now; false where the account holds no such Mac. */
+export function beatMacDevice(userId: string, id: string): MacDeviceEffect<boolean> {
+  return Effect.flatMap(DateTime.nowAsDate, (now) =>
+    Effect.map(touchDevice({ userId, id, now }), (rows) => rows.length > 0),
+  );
+}
+
+/** The account's Macs that beat at or after the instant given, the latest first. */
+export function macDevicesSeenSince(
+  userId: string,
+  since: Date,
+): MacDeviceEffect<readonly MacDevice[]> {
+  return findSeen({ userId, since });
+}

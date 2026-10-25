@@ -403,7 +403,11 @@ function InboxShown({
     <LinkWorkspaceProvider value={listedWorkspace?.slug ?? listedWorkspace?.id}>
       <MemberDirectory workspace={tasks.workspace} readerId={tasks.me}>
         <AutomationDirectory workspace={tasks.workspace} wanted onOpen={openAutomation}>
-          <div ref={onArea} className="desktop-task" data-panel-open={String(sidePanel.open)}>
+          <div
+            ref={onArea}
+            className="desktop-task relative flex min-h-0 flex-1"
+            data-panel-open={String(sidePanel.open)}
+          >
             {/* Hidden rather than left out while the panel fills the window, as a plan's column is. */}
             <PageFind
               page={FIND_PAGE.INBOX}

@@ -1,5 +1,5 @@
 /**
- * place-columns.ts -- the columns Settings, a version history, and the Admin place lay their list and the item chosen in it in, as class names every screen of theirs draws with.
+ * place-columns.ts -- the columns Settings and a version history lay their list and the item chosen in it in, as class names every screen of theirs draws with.
  *
  * Each takes the whole shell: the list where the plans' sidebar stands, as
  * wide as the sidebar but never wider than the share of the stage the

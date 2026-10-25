@@ -1,6 +1,7 @@
-import { BarItem, EllipsisIcon } from "@luke/ui";
+import { BarItem, EllipsisIcon, MENU_KEEPS_CLEAR } from "@luke/ui";
 import { TASKS_PAGE } from "@luke/ui/tasks-model";
 import { InboxIcon, ListTodoIcon, MessagesSquareIcon } from "lucide-react";
+import { adminSection } from "../admin/routing.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import { automationsTab, type TasksControl } from "../tasks/use-tasks-tab.js";
 import { needsYouNoun, usePlacesWaiting } from "./places-waiting.js";
@@ -28,13 +29,16 @@ import { SIDEBAR_OVERLAY, type SidebarCollapse } from "./sidebar-collapse.js";
 export function mobileBarShown(room: ShellRoom, tasks: TasksControl, chatOn: boolean): boolean {
   // Note that the open task's side panel is not asked: it is held behind every place, so it says nothing of the one on screen.
   if (room !== SHELL_ROOM.NARROW || !tasks.signedIn) return false;
-  const { inboxView, chatView, boardView, automationsView, agentView, personView } = tasks;
+  const { inboxView, chatView, boardView, automationsView, adminView, agentView, personView } =
+    tasks;
   if (chatView.open && chatOn) return chatView.listed;
   if (inboxView.open) return inboxView.listed || inboxView.chosen === undefined;
   if (agentView.agentId !== undefined || personView.userId !== undefined) return false;
   if (boardView.open) return true;
   // Note that an automation's editor and its runs keep the whole screen, as an item does; only the list and the Runs tab stand over the bar.
   if (automationsView.open) return automationsTab(automationsView.place);
+  // So does Admin: a section stands over the bar, an account's or a day's page under one keeps the whole screen.
+  if (adminView.open) return adminSection(adminView.view);
   return tasks.page === TASKS_PAGE.HOME;
 }
 
@@ -62,6 +66,7 @@ export function MobileBar({
     <nav
       className="mobile-bar flex border-t border-border bg-ground px-luke-4 py-luke-2"
       aria-label="Places"
+      {...MENU_KEEPS_CLEAR}
     >
       <BarItem
         icon={<InboxIcon />}

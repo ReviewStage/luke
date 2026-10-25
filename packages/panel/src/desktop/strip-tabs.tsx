@@ -530,7 +530,7 @@ export function AddTabButton({
   };
 
   return (
-    <div ref={root} className="tab-add-anchor">
+    <div ref={root} className="tab-add-anchor relative flex flex-none">
       <Tooltip label={label} command={APP_COMMAND.NEW_TAB}>
         <IconButton
           ref={opener}

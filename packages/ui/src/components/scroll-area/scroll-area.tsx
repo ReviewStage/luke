@@ -157,17 +157,21 @@ const GUTTER_CLASS = {
 } as const satisfies Record<ScrollGutter, string>;
 
 /**
- * The area's own class and marks for a list that is its own scroller, whose
- * element a list engine owns (`ComboboxList`, cmdk's list), so it fades its
- * cut edges as `fade` says, as an area does, scrolling up and down alone.
- * Its size, overscroll, and padding stay the list's.
+ * The area's own class and marks for a box that is its own scroller, whose
+ * element another owns (`ComboboxList`, cmdk's list, a `ChoiceBar`'s row),
+ * so it fades its cut edges as `fade` says, as an area does, scrolling along
+ * `axis` alone, up and down where none is named. Its size, overscroll, and
+ * padding stay its own.
  */
-export function scrollFadeMarks(fade: ScrollFade): {
+export function scrollFadeMarks(
+  fade: ScrollFade,
+  axis: ScrollAxis = SCROLL_AXIS.VERTICAL,
+): {
   className: string;
   "data-axis": ScrollAxis;
   "data-fade": ScrollFade;
 } {
-  return { className: "luke-scroll-area", "data-axis": SCROLL_AXIS.VERTICAL, "data-fade": fade };
+  return { className: "luke-scroll-area", "data-axis": axis, "data-fade": fade };
 }
 
 /** A box scrolling `axis`, filling its parent's room as `size` says, its edges fading as `fade` and `fadeInset` say, a swipe past its end stopping or handed on as `overscroll` says. */

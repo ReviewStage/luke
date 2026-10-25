@@ -613,7 +613,7 @@ export function DesktopAgentPage({
     }
     // In the page's own frame, so its row and sheet stand where the read page's will.
     return (
-      <div className="desktop-task" data-panel-open="false">
+      <div className="desktop-task relative flex min-h-0 flex-1" data-panel-open="false">
         <Fill as={FILL_ELEMENT.SECTION} className="agent-page" aria-label="Agent">
           {toolbar}
           {agents.listFailed ? (
@@ -654,7 +654,7 @@ export function DesktopAgentPage({
                     ) : null}
                     <div
                       ref={onArea}
-                      className="desktop-task"
+                      className="desktop-task relative flex min-h-0 flex-1"
                       data-panel-open={String(sidePanel.open)}
                     >
                       {/* Hidden rather than left out while the panel fills the window, as a plan's column is. */}

@@ -28,6 +28,8 @@ import {
 import { DOCUMENT_REGION, TASKS_PAGE } from "@luke/ui/tasks-model";
 import { Suspense, useEffect, useLayoutEffect, useMemo, useRef } from "react";
 import { ACTOR_SIZE, actorMarkWidth } from "../actor-ref.js";
+import { AdminCollectionPage, AdminPlaceFrameProvider } from "../admin/chrome/page-header.js";
+import type { AdminView } from "../admin/routing.js";
 import { useAppCommand } from "../app-commands.js";
 import { appPlatform } from "../app-platform.js";
 import { CALL_CARD_SURFACE, StandingCallCardDock } from "../call/call-card.js";
@@ -56,6 +58,7 @@ import {
   useCapability,
   useExperiment,
 } from "../use-app-state.js";
+import { ADMIN_TITLE, adminFrame } from "./admin-frame.js";
 import {
   AutomationListSkeleton,
   AutomationsActsSkeleton,
@@ -126,72 +129,33 @@ function TasksLoading({ onExit }: { onExit: () => void }): React.JSX.Element {
 }
 
 /**
- * What stands while the Admin place's chunk loads (`pages-on-demand.ts`): its
- * list's column and the view's frame over quiet blocks, and its own way out.
- * A narrow room heads the column it shows as the place will, a phone's
- * header (`phone-head.tsx`) led by the way out of the list or back to it.
+ * What stands while the Admin place's chunk loads, or while the account's
+ * access is read: the place's toolbar and its bar of sections, as it will
+ * stand, over rows of blocks, and its own way out, so Escape pressed in that
+ * frame closes Admin as the place would.
  */
 function AdminLoading({
+  room,
+  view,
+  onOpen,
   onExit,
-  place,
-  onList,
-  hidden,
 }: {
+  room: ShellRoom;
+  view: AdminView;
+  onOpen: (view: AdminView) => void;
   onExit: () => void;
-  /** Where the way out leads, as its hint names it. */
-  place: string;
-  onList: () => void;
-  hidden: HiddenColumns;
 }): React.JSX.Element {
   useAppCommand(APP_COMMAND.EXIT_ADMIN, onExit);
-  const narrow = hidden.list || hidden.item;
   return (
-    <div className={`desktop-admin ${PLACE_SPLIT}`}>
-      <nav
-        className={`admin-sections ${PLACE_LIST}`}
-        aria-label="Admin sections"
-        hidden={hidden.list}
-      >
-        {narrow ? (
-          <PhoneHead
-            place="admin-sections"
-            start={
-              <BackButton
-                label="Back"
-                place={place}
-                command={APP_COMMAND.EXIT_ADMIN}
-                onBack={onExit}
-              />
-            }
-            title="Admin"
-            end={null}
-          />
-        ) : (
-          <div className="desktop-drag-strip" />
-        )}
-      </nav>
-      <section className={`admin-page ${PLACE_PAGE}`} aria-label="Admin" hidden={hidden.item}>
-        {narrow ? null : <div className="desktop-drag-strip" />}
-        <CollectionPage
-          frame={PAGE_FRAME.TOOLBAR}
-          label="Admin"
-          toolbar={
-            narrow ? (
-              <PhoneHead
-                place="admin"
-                start={<BackButton label="Admin" place="admin" onBack={onList} />}
-                title="Overview"
-                end={null}
-              />
-            ) : (
-              <Toolbar title="Overview" />
-            )
-          }
-          state={COLLECTION_STATE.LOADING}
-          loadingLabel="Reading the dashboard…"
-        />
-      </section>
-    </div>
+    <AdminPlaceFrameProvider value={adminFrame(room, view, onOpen)}>
+      <AdminCollectionPage
+        title={ADMIN_TITLE}
+        controls={null}
+        filters={undefined}
+        state={COLLECTION_STATE.LOADING}
+        loadingLabel={readingWords("the dashboard")}
+      />
+    </AdminPlaceFrameProvider>
   );
 }
 
@@ -207,7 +171,7 @@ function PersonLoading({
   return <PersonPageSkeleton name={name} />;
 }
 
-/** Where Settings' and Admin's ways out lead where no step stands behind them, as a hint names it. */
+/** Where Settings' way out leads where no step stands behind it, as a hint names it. */
 const TASKS_EXIT_PLACE = "tasks";
 
 /** Where a version history's way out leads where no step stands behind it, as a hint names it. */
@@ -910,48 +874,14 @@ export function DesktopShell({
       </div>
     );
   }
-  // The Admin place takes the whole window as Settings does, its sections listed where the tasks were.
-  if (tasks.adminView.open && (adminAccess || adminPending)) {
-    const exitAdmin = history.canGoBack ? history.onBack : tasks.adminView.onClose;
-    const loading = (
-      <AdminLoading
-        onExit={exitAdmin}
-        place={backPlaceOf(history, TASKS_EXIT_PLACE)}
-        onList={tasks.adminView.onList}
-        hidden={hiddenColumns(room, tasks.adminView.listed)}
-      />
-    );
-    // While the account's access is read, the place stands as it does while its chunk loads.
-    if (!adminAccess) {
-      return (
-        <div className="desktop-shell" data-room={room}>
-          {loading}
-        </div>
-      );
-    }
-    return (
-      <div className="desktop-shell" data-room={room}>
-        <Suspense fallback={loading}>
-          <ADMIN_PLACE.Route
-            sidebar={sidebar}
-            room={room}
-            history={history}
-            view={tasks.adminView.view}
-            listed={tasks.adminView.listed}
-            onOpen={tasks.adminView.onOpen}
-            onList={tasks.adminView.onList}
-            onExit={exitAdmin}
-          />
-        </Suspense>
-      </div>
-    );
-  }
   const inboxOpen = tasks.inboxView.open;
   const pageAgent = tasks.agentView.agentId;
   const pagePerson = tasks.personView.userId;
   const automationsOpen = tasks.automationsView.open;
   const chatOpen = tasks.chatView.open && chatOn;
   const boardOpen = tasks.boardView.open;
+  // The Admin place is an admin's alone; while the account's access is still read it stands as it does while its chunk loads.
+  const adminOpen = tasks.adminView.open && (adminAccess || adminPending);
   // A phone's task is headed by a row of its own, whose ⋯ stands for the panel's toggle (`task-pane-switcher.tsx`).
   const panelToggle =
     (planToggle && room !== SHELL_ROOM.NARROW) ||
@@ -962,6 +892,14 @@ export function DesktopShell({
   // keyboard reaches what the drawer covers, and a press there only puts it
   // away. Its toggle stays, the way to close it.
   const drawerOver = room === SHELL_ROOM.NARROW && sidebar.overlay !== SIDEBAR_OVERLAY.CLOSED;
+  const adminLoading = (
+    <AdminLoading
+      room={room}
+      view={tasks.adminView.view}
+      onOpen={tasks.adminView.onOpen}
+      onExit={tasks.adminView.onClose}
+    />
+  );
   // A phone goes between its places by a bar at the screen's foot, standing on their lists alone (`mobile-bar.tsx`).
   const barShown = mobileBarShown(room, tasks, chatOn);
   return (
@@ -1039,6 +977,20 @@ export function DesktopShell({
               // The Tasks page holds its own find, its subject the view it shows, so a search in the List does not follow into the Board.
               <Suspense fallback={<TasksLoading onExit={tasks.boardView.onClose} />}>
                 <TASKS_ROUTE.Route tasks={tasks} room={room} />
+              </Suspense>
+            ) : adminOpen ? (
+              <Suspense fallback={adminLoading}>
+                {adminAccess ? (
+                  <ADMIN_PLACE.Route
+                    room={room}
+                    view={tasks.adminView.view}
+                    shown={tasks.shown}
+                    onOpen={tasks.adminView.onOpen}
+                    onExit={tasks.adminView.onClose}
+                  />
+                ) : (
+                  adminLoading
+                )}
               </Suspense>
             ) : automationsOpen ? (
               <PageFind

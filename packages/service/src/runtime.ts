@@ -78,8 +78,11 @@ const webLogger = Logger.layer([Logger.consoleJson, Logger.tracerLogger, sentryL
  *
  * The client every route and agent reaches GitHub through is wrapped in
  * `githubRateGate` (`github/github-rate-gate.ts`), so one instance sends
- * GitHub's API a few requests at a time and none while GitHub says it is
- * rate limited.
+ * GitHub's API a few requests at a time, a second apart where they write,
+ * and none while GitHub says it is rate limited to any instance. The gate
+ * keeps its holds in the database over `webSqlClient`, the very layer below,
+ * which a build of this layer builds once however many name it, so the gate
+ * holds no pool of its own.
  *
  * `BearerCallers` keeps the caller each bearer resolved to for a minute
  * (`auth/bearer-callers.ts`), so a held read and the polls inside it ask the
@@ -93,7 +96,7 @@ const webLogger = Logger.layer([Logger.consoleJson, Logger.tracerLogger, sentryL
  * that re-export a bundle stand, rather than out of the bundle itself.
  */
 export const webServices = Layer.mergeAll(
-  githubRateGate.pipe(Layer.provide(FetchHttpClient.layer)),
+  githubRateGate.pipe(Layer.provide(Layer.merge(FetchHttpClient.layer, webSqlClient))),
   webSqlClient,
   hostedEnvironment,
   githubAppFromEnvironment.pipe(Layer.provide(hostedEnvironment)),

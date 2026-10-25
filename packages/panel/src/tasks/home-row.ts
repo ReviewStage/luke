@@ -16,6 +16,6 @@ export const HOME_ROW_META =
 export const HOME_ROW_CONTEXT =
   "home-row-context min-w-0 max-w-row-context flex-initial overflow-hidden text-muted-foreground text-caption-inline whitespace-nowrap";
 
-/** The row's picture, a tile or a glyph at a row glyph's size. */
+/** The row's picture, a tile or a glyph at a row glyph's size; a state glyph's own drawing is left to its mark, which fills the share of the face the glyph is given (`actor-ref.tsx`). */
 export const HOME_ROW_PICTURE =
-  "home-row-picture inline-flex size-luke-16 flex-none items-center justify-center text-muted-foreground [&_svg]:size-control-icon";
+  "home-row-picture inline-flex size-luke-16 flex-none items-center justify-center text-muted-foreground [&_:not(.state-glyph)>svg]:size-control-icon";

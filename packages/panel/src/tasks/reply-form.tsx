@@ -7,8 +7,8 @@ import { CommentEditor, overCommentBound } from "./comment-editor.js";
  *
  * One form for every small box of words sent to GitHub: the Markdown field
  * (`CommentEditor`) and, under its words inside its frame, the shared foot
- * (`ComposerFoot`) holding Cancel and the send, which reads in words. ⌘↩ or
- * Ctrl+↩ sends, a bare Enter adds a line, Esc lets the form go keeping its
+ * (`ComposerFoot`) holding Cancel and the send, which reads in words. Enter
+ * sends, Shift+Enter adds a line, Esc lets the form go keeping its
  * words, and Cancel lets them go too. The owner holds the words, through
  * `onWrite`, so what Esc closed is there when the form opens again; it
  * closes the form once GitHub took them.

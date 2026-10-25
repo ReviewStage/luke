@@ -162,7 +162,10 @@ function headCorner(
   if (pullRequest === undefined) return standing;
   return (
     <>
-      <PullRequestMark pullRequest={pullRequest} className="card-corner-mark" />
+      <PullRequestMark
+        pullRequest={pullRequest}
+        className="card-corner-mark mr-tight-gap size-luke-12 align-[-2px]"
+      />
       {pullRequestNumberLabel(pullRequest)}
       {standing === undefined ? null : ENDED_SEPARATOR}
       {standing}
@@ -323,6 +326,7 @@ export function AgentTabCard({
     read();
   const head = (
     <HoverCardHead
+      mark={tile === undefined ? undefined : <ActorMark actor={tile} size={ACTOR_SIZE.CARD} />}
       name={name}
       oneLine={untitled}
       sub={choice === undefined ? undefined : <ModelLabel choice={choice} models={models} />}
@@ -331,14 +335,7 @@ export function AgentTabCard({
   );
   return (
     <HoverCard data-tab-card="">
-      {tile === undefined ? (
-        head
-      ) : (
-        <div className="actor-card-head">
-          <ActorMark actor={tile} size={ACTOR_SIZE.CARD} />
-          {head}
-        </div>
-      )}
+      {head}
       {corner.kind === CARD_CORNER.WORKING ? (
         // Note that the word is a reader's alone, because the tile that shows the work hides its mark from a reader and nothing drawn says it.
         <VisuallyHidden>{glyphStateWords(GLYPH_STATE.WORKING, false)}</VisuallyHidden>

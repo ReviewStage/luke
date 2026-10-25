@@ -402,21 +402,12 @@ test("on a phone, while Settings is still loading, its list and its page stand h
   assert.deepEqual(page.went, ["list"]);
 });
 
-test("on a phone, while the account's access is read, Admin stands headed as it will be: its list by the way out and its name, a view by the way back to the list", () => {
-  const control = tasksControl();
-  const adminView = (listed: boolean) => ({
-    adminView: { ...control.adminView, open: true, listed, onList: ignore },
-  });
-  const list = mountLoadingNarrow(PANEL_TAB.TASKS, adminView(true), true);
-  assert.deepEqual(readPhoneHead(list.page, "admin-sections"), {
-    start: ["Back"],
-    title: "Admin",
-    end: [],
-  });
-  act(() => root?.unmount());
-
-  const view = mountLoadingNarrow(PANEL_TAB.TASKS, adminView(false), true);
-  assert.deepEqual(readPhoneHead(view.page, "admin").start, ["Admin"]);
+test("on a phone, while the account's access is read, Admin stands headed as it will be, its name centred over the bar of its sections", () => {
+  handState({}, { access: { admin: false, pending: true } });
+  const adminView = { ...tasksControl().adminView, open: true };
+  const { page } = mountLoadingNarrow(PANEL_TAB.TASKS, { adminView }, true);
+  assert.equal(readPhoneHead(page, "admin").title, "Admin");
+  assert.ok(page.querySelector('[role="radiogroup"][aria-label="Admin sections"]'));
 });
 
 test("with the sidebar folded, New plan stands beside its toggle over the welcome and the Inbox alike", () => {
@@ -1493,6 +1484,22 @@ test("⌘K's Admin opens the Admin place for an admin alone, and is offered noth
   await settle();
   assert.equal(runAppCommand(APP_COMMAND.ADMIN), true);
   assert.equal(opened, 1);
+});
+
+test("Admin stands in the plan's place beside the sidebar, its row marked, with no way back of its own", async () => {
+  handState({}, { access: { admin: true } });
+  const page = mount(false, false, { adminView: { ...tasksControl().adminView, open: true } });
+  await settle();
+  assert.ok(page.querySelector("aside.desktop-sidebar"), "the sidebar stays");
+  assert.equal(placeRow(page, "Admin")?.getAttribute("aria-current"), "page");
+  const main = page.querySelector(".desktop-main") ?? assert.fail("the work column");
+  assert.ok(main.querySelector("section[aria-label=Admin]"), "Admin stands in the plan's place");
+  assert.deepEqual(
+    [...main.querySelectorAll("button")].filter((button) =>
+      /^Back\b/u.test(button.getAttribute("aria-label") ?? button.textContent ?? ""),
+    ),
+    [],
+  );
 });
 
 test("with Chat off for the account, its row stands nowhere, and Chat standing in the plan's place gives it back", async () => {
