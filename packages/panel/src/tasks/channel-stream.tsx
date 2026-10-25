@@ -21,6 +21,7 @@ import { ACT_KIND } from "@luke/host/acts";
 import {
   AVATAR_SIZE,
   Avatar,
+  Badge,
   BUTTON_SIZE,
   BUTTON_VARIANT,
   Button,
@@ -28,7 +29,7 @@ import {
   CHOICE_BAR_SIZE,
   ChoiceBar,
   Comment,
-  ComposeIcon,
+  STATUS_TONE,
   TEXT_BUTTON_TONE,
   TEXT_TONE,
   TEXT_VARIANT,
@@ -86,7 +87,7 @@ const STREAM_SCOPE = { EVERYONE: "everyone", MINE: "mine" } as const;
 type StreamScope = (typeof STREAM_SCOPE)[keyof typeof STREAM_SCOPE];
 
 /** The scope the reader last chose, kept across channels as Slack keeps a filter. */
-let lastScope: StreamScope = STREAM_SCOPE.EVERYONE;
+let lastScope: StreamScope = STREAM_SCOPE.MINE;
 
 /** Whether a thread is the reader's: of a task they own, asking them, or one they wrote on. */
 function isMine(listed: InboxListed, readerId: string | undefined): boolean {
@@ -97,10 +98,22 @@ function isMine(listed: InboxListed, readerId: string | undefined): boolean {
   return (item.thread ?? []).some((message) => message.member?.userId === readerId);
 }
 
-/** Whether a thread is finished with and from before today, which the stream folds away. */
-function finishedEarlier(listed: InboxListed, now: number): boolean {
-  const today = new Date(now).setHours(0, 0, 0, 0);
-  return listed.item.status !== INBOX_STATUS.OPEN && listed.item.postedAt < today;
+/** The ways the mockup can mark what needs the reader, compared by `?needs=` in a development tab: a badge on the post, a ground under it, and a strip under the channel's head. */
+const NEEDS_LOOK = { BADGE: "badge", FILL: "fill", STRIP: "strip" } as const;
+
+type NeedsLook = (typeof NEEDS_LOOK)[keyof typeof NEEDS_LOOK];
+
+/** The looks shown: those the address names, else the badge and the strip. */
+const NEEDS_LOOKS: ReadonlySet<NeedsLook> = (() => {
+  const named = new URLSearchParams(globalThis.location?.search ?? "").get("needs");
+  const all = Object.values(NEEDS_LOOK) as readonly string[];
+  const picked = (named ?? "").split(",").filter((look) => all.includes(look)) as NeedsLook[];
+  return new Set<NeedsLook>(picked.length > 0 ? picked : [NEEDS_LOOK.BADGE, NEEDS_LOOK.STRIP]);
+})();
+
+/** Whether a thread asks the reader something still open. */
+function needsReader(listed: InboxListed, readerId: string | undefined): boolean {
+  return asksSomeone(listed) && listed.item.waitsOn?.userId === readerId;
 }
 
 /** One entry of the stream: a thread, or a post made in the window. */
@@ -202,7 +215,13 @@ function RepliesLine({
   const { item } = listed;
   const waiting = asksSomeone(listed) ? item.waitsOn : undefined;
   const waitingOn =
-    waiting === undefined ? undefined : waiting.userId === readerId ? "you" : waiting.name;
+    waiting === undefined
+      ? undefined
+      : waiting.userId !== readerId
+        ? waiting.name
+        : NEEDS_LOOKS.has(NEEDS_LOOK.BADGE)
+          ? undefined
+          : "you";
   return (
     <div className="channels-post-replies">
       {repliers.map((reply) => (
@@ -267,13 +286,18 @@ function ThreadPost({
       className="channels-post"
       data-chosen={String(chosen)}
       data-settled={String(item.status !== INBOX_STATUS.OPEN)}
-      data-yours={String(asksSomeone(listed) && item.waitsOn?.userId === readerId)}
+      data-needs-fill={String(NEEDS_LOOKS.has(NEEDS_LOOK.FILL) && needsReader(listed, readerId))}
     >
       <Comment
         author={commentAuthor(actor)}
         nameRef={<ActorRef actor={actor} nameOnly />}
         at={item.postedAt}
         now={now}
+        trailing={
+          NEEDS_LOOKS.has(NEEDS_LOOK.BADGE) && needsReader(listed, readerId) ? (
+            <Badge tone={STATUS_TONE.ATTENTION}>Needs you</Badge>
+          ) : undefined
+        }
       >
         <div className="channels-post-body">
           <Text variant={TEXT_VARIANT.LABEL}>{item.title}</Text>
@@ -321,7 +345,7 @@ function LocalPost({
   );
 }
 
-/** The channel as a stream: its head, with New task, and its posts by day. */
+/** The channel as a stream: its head, what needs the reader, and its posts by day. */
 export function ChannelStream({
   channel,
   items,
@@ -330,7 +354,6 @@ export function ChannelStream({
   readerId,
   now,
   onOpen,
-  onNewTask,
 }: {
   channel: ChannelInfo;
   items: readonly InboxListed[];
@@ -340,20 +363,17 @@ export function ChannelStream({
   readerId: string | undefined;
   now: number;
   onOpen: (listed: InboxListed) => void;
-  /** Starts a task in the channel's area; none where the reader cannot start one. */
-  onNewTask: (() => void) | undefined;
 }): React.JSX.Element {
   const log = useRef<HTMLDivElement>(null);
   const posts = useChannelPosts(channel.id);
   const [scope, setScope] = useState<StreamScope>(lastScope);
-  const [showFinished, setShowFinished] = useState(false);
   // Note that the New line stands where the reader left off as the channel opened, and stays while they read it.
   const looked = useMemo(() => channelLastLooked(channel.id), [channel.id]);
   const scoped = items.filter(
     (listed) => scope === STREAM_SCOPE.EVERYONE || isMine(listed, readerId),
   );
-  const folded = scoped.filter((listed) => finishedEarlier(listed, now));
-  const shown = showFinished ? scoped : scoped.filter((listed) => !finishedEarlier(listed, now));
+  const shown = scoped;
+  const needing = items.filter((listed) => needsReader(listed, readerId));
   const mineCount = items.filter(
     (listed) => isMine(listed, readerId) && asksSomeone(listed),
   ).length;
@@ -399,16 +419,6 @@ export function ChannelStream({
               value={scope}
               onChange={choose}
             />
-            {onNewTask === undefined ? null : (
-              <Button
-                size={BUTTON_SIZE.COMPACT}
-                variant={BUTTON_VARIANT.OUTLINE}
-                icon={<ComposeIcon />}
-                onClick={onNewTask}
-              >
-                New task
-              </Button>
-            )}
           </div>
         }
       />
@@ -419,18 +429,25 @@ export function ChannelStream({
             : `${channel.purpose} · In flight: ${channel.inFlight}`}
         </Text>
       </div>
+      {!NEEDS_LOOKS.has(NEEDS_LOOK.STRIP) || needing.length === 0 ? null : (
+        <div className="channels-needs">
+          <Badge tone={STATUS_TONE.ATTENTION}>
+            {needing.length === 1 ? "1 needs you" : `${needing.length} need you`}
+          </Badge>
+          {needing.map((listed) => (
+            <TextButton
+              key={listed.item.id}
+              tone={TEXT_BUTTON_TONE.ACCENT}
+              onClick={() => open(listed)}
+            >
+              {listed.item.title}
+            </TextButton>
+          ))}
+        </div>
+      )}
       <Conversation subject={channel.id} list={log} className="channels-stream-log">
         <ConversationContent>
           <div className="channels-stream-body">
-            {folded.length === 0 ? null : (
-              <div className="channels-finished">
-                <TextButton onClick={() => setShowFinished(!showFinished)}>
-                  {showFinished
-                    ? "Hide finished work"
-                    : `${folded.length} finished earlier this week`}
-                </TextButton>
-              </div>
-            )}
             {entries.length === 0 ? (
               <div className="channels-day">
                 <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>

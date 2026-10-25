@@ -5766,8 +5766,16 @@ ul.actor-stack {
   gap: var(--luke-space-8);
 }
 
-.channels-finished {
+
+/* What needs the reader, compared in the mockup: a ground under the post, and a strip under the channel's head naming each. */
+.channels-post[data-needs-fill="true"] {
+  background: var(--luke-color-fill-hover);
+}
+
+.channels-needs {
   display: flex;
-  justify-content: center;
-  padding-block: var(--luke-space-4);
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--luke-space-4) var(--luke-space-12);
+  padding: 0 var(--column-inset) var(--luke-row-inset);
 }

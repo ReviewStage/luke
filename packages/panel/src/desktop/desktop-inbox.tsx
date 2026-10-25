@@ -463,7 +463,6 @@ function InboxShown({
                     readerId={tasks.me}
                     now={now}
                     onOpen={open}
-                    onNewTask={newTask}
                   />
                 ) : (
                   <InboxList
@@ -500,7 +499,6 @@ function InboxShown({
                         onList={columns.onList}
                         onRetry={onRetry}
                         searched={searched}
-                        onNewTask={newTask}
                       />
                     }
                     onChoose={open}
