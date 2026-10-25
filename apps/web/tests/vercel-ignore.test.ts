@@ -279,6 +279,19 @@ test("a last deployment that cannot be fetched is compared with the merge-base w
   assert.equal(decide(builtRoot, UNKNOWN_COMMIT, process.env.PATH, PREVIEW), VERDICT.BUILD);
 });
 
+test("a branch whose last deployment cannot be fetched is built where a commit since the merge-base changed the deployed tree, even one later reverted", async (t) => {
+  const origin = await repository(t);
+  commit(origin, "apps/web/src/main.tsx", "web v0\n");
+  git(origin, "checkout", "-q", "-b", PREVIEW.VERCEL_GIT_COMMIT_REF);
+  commit(origin, "apps/web/src/main.tsx", "web v1\n");
+  commit(origin, "apps/web/src/main.tsx", "web v0\n");
+  git(origin, "checkout", "-q", "main");
+  const root = await cloneOf(t, origin, PREVIEW.VERCEL_GIT_COMMIT_REF);
+  assert.equal(decide(root, UNKNOWN_COMMIT, process.env.PATH, PREVIEW), VERDICT.BUILD);
+  // Note that with no deployment to have served v1, the branch is main's tree and is skipped.
+  assert.equal(decide(root, undefined, process.env.PATH, PREVIEW), VERDICT.SKIP);
+});
+
 test("a branch that shares no history with main is built", async (t) => {
   const origin = await repository(t);
   git(origin, "checkout", "-q", "--orphan", PREVIEW.VERCEL_GIT_COMMIT_REF);

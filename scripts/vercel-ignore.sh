@@ -40,7 +40,9 @@
 # the commit cannot be fetched, is compared with its merge-base with `main`
 # instead, deepening the shallow clone until the two histories meet: a branch
 # that changes nothing deployed against `main` serves what production does
-# and has nothing to preview. Production, the build of `main` itself, never
+# and has nothing to preview; one whose last deployment cannot be fetched
+# must, besides, have no commit since the merge-base that touched it.
+# Production, the build of `main` itself, never
 # falls back so: with no last deployment to compare with, it builds.
 # Every fetch goes to the repository Vercel names in its system environment
 # variables (`VERCEL_GIT_PROVIDER`, `VERCEL_GIT_REPO_OWNER`,
@@ -168,6 +170,7 @@ if [[ ${VERCEL_ENV:-} == production || ${VERCEL_GIT_COMMIT_REF:-} == "$DEFAULT_B
 fi
 
 base=
+unfetched=false
 if [[ -n $previous ]]; then
     if have_commit "$previous" "$fetch_from"; then
         base=$previous
@@ -176,6 +179,7 @@ if [[ -n $previous ]]; then
         exit 1
     else
         printf 'vercel-ignore: the last deployment, %s, could not be fetched from %s; comparing with %s\n' "$previous" "$fetch_from" "$DEFAULT_BRANCH"
+        unfetched=true
     fi
 elif [[ $production == true ]]; then
     printf 'vercel-ignore: building (no deployment of this branch has succeeded yet)\n'
@@ -187,6 +191,21 @@ if [[ -z $base ]]; then
         exit 1
     fi
     printf 'vercel-ignore: comparing with %s, the merge-base with %s\n' "$base" "$DEFAULT_BRANCH"
+fi
+# Note that a branch whose last deployment could not be fetched is skipped
+# only where no commit since the merge-base touched the deployed tree, not
+# merely where the head's tree matches the merge-base's, because that
+# deployment may have shipped a change a later commit reverted: the preview
+# would go on serving it.
+if [[ $unfetched == true ]]; then
+    if ! touched=$(git log --format=%H -1 "$base..HEAD" -- "${DEPLOYED_PATHS[@]}"); then
+        printf 'vercel-ignore: building (the commits since %s could not be read)\n' "$base"
+        exit 1
+    fi
+    if [[ -n $touched ]]; then
+        printf 'vercel-ignore: building (%s, since the merge-base, changed what is deployed)\n' "$touched"
+        exit 1
+    fi
 fi
 
 git diff --quiet "$base" HEAD -- "${DEPLOYED_PATHS[@]}"
