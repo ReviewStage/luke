@@ -41,10 +41,7 @@ const TAILWIND_UTILITIES = /@import\s+"tailwindcss(?:\/utilities\.css)?"/u;
 const UI_THEME_IMPORTS = ['"@luke/ui/tailwind/sources.css"', '"@luke/ui/tailwind/theme.css"'];
 
 /** What the panel's root declares so a phone draws its sizes as the tokens say: WebKit's spelling and the standard one. */
-const TEXT_SIZE_ADJUST = [
-  /-webkit-text-size-adjust:\s*100%/u,
-  /(?<![\w-])text-size-adjust:\s*100%/u,
-];
+const TEXT_SIZE_ADJUST = ["-webkit-text-size-adjust", "text-size-adjust"] as const;
 
 /** Each `<link>` in a page's head, as its `rel` and `href`. */
 function linksOf(html: string): readonly { rel: string; href: string }[] {
@@ -198,7 +195,14 @@ export function themeImportProblems(file: string, sheet: string): readonly strin
 export function textSizeProblems(file: string, sheet: string): readonly string[] {
   const css = sheet.replace(/\/\*[\s\S]*?\*\//gu, "");
   const root = /(?:^|\})\s*:root\s*\{([^}]*)\}/u.exec(css)?.[1] ?? "";
-  if (TEXT_SIZE_ADJUST.every((declaration) => declaration.test(root))) return [];
+  // Note that the last declaration of a property is the one that stands, as the cascade reads it.
+  const declared = new Map(
+    root.split(";").map((declaration) => {
+      const [property = "", ...value] = declaration.split(":");
+      return [property.trim(), value.join(":").trim()];
+    }),
+  );
+  if (TEXT_SIZE_ADJUST.every((property) => declared.get(property) === "100%")) return [];
   return [`${file}: its :root does not set -webkit-text-size-adjust and text-size-adjust to 100%`];
 }
 

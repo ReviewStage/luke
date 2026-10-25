@@ -71,5 +71,8 @@ describe("the site's pages", () => {
     ]);
     expect(textSizeProblems("base.css", `:root { color: red; } .card { ${both} }`)).toHaveLength(1);
     expect(textSizeProblems("base.css", `:root { /* ${both} */ }`)).toHaveLength(1);
+    expect(
+      textSizeProblems("base.css", `:root { ${both} -webkit-text-size-adjust: auto; }`),
+    ).toHaveLength(1);
   });
 });
