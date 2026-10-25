@@ -211,6 +211,11 @@ function pushable(
   return stream;
 }
 
+/** The follows of a workspace's list alone, in order, apart from its runs' the tabs hold. */
+function listFollowers(): Follower[] {
+  return followers.filter((each) => each.kind === AUTOMATION_FOLLOW.WORKSPACE);
+}
+
 /** A workspace's list as the host pushes it: the next scripted answer, or what stands in it. */
 function listOf(workspaceId: string): unknown {
   return (
@@ -806,7 +811,7 @@ test("a window moved to another workspace lets the list it followed go, and foll
   assert.deepEqual(rows(page), [["Beta's digest", "Only you"]]);
   assert.deepEqual(listed, [WORKSPACE.id, beta.id]);
   assert.deepEqual(
-    followers.map((each) => [each.id, each.closed]),
+    listFollowers().map((each) => [each.id, each.closed]),
     [
       [WORKSPACE.id, true],
       [beta.id, false],
@@ -856,7 +861,7 @@ test("a push that fails over a list already read keeps its rows under Could not 
   const page = mount();
   await settle();
 
-  act(() => followers[0]?.push({ failure: AUTOMATION_CALL_FAILURE.UNANSWERED }));
+  act(() => listFollowers()[0]?.push({ failure: AUTOMATION_CALL_FAILURE.UNANSWERED }));
   await settle();
 
   assert.deepEqual(rows(page), [["Morning digest", "Only you"]]);
@@ -2620,10 +2625,12 @@ test("the Runs tab lists every automation's runs, each naming its automation, na
   ];
   const page = mountPages({ kind: AUTOMATIONS_PAGE.LIST });
   await settle();
-  const choose = (words: string) => {
-    const found = [...page.querySelectorAll<HTMLElement>("[role=radio]")].find(
-      (each) => each.textContent === words,
+  const choiceOf = (words: string) =>
+    [...page.querySelectorAll<HTMLElement>("[role=radio]")].find(
+      (each) => each.querySelector(".luke-choice-bar-label")?.textContent === words,
     );
+  const choose = (words: string) => {
+    const found = choiceOf(words);
     assert.ok(found, `no choice ${words}`);
     act(() => found.click());
   };
@@ -2634,6 +2641,11 @@ test("the Runs tab lists every automation's runs, each naming its automation, na
 
   assert.deepEqual(places.at(-1), { kind: AUTOMATIONS_PAGE.RUNS });
   assert.equal(listedRuns().length, 2);
+  assert.deepEqual(
+    ["Runs", "All", "Running", "Failed"].map((words) => choiceOf(words)?.textContent),
+    ["Runs1", "All", "Running1", "Failed1"],
+    "the Runs tab counts what runs, and Running and Failed what each keeps",
+  );
   assert.match(listedRuns()[0] ?? "", /^Fix the flaky testNightly flaky-test sweep · Working/u);
   assert.match(listedRuns()[1] ?? "", /^Scheduled runMorning digest · /u);
   choose("Failed");
