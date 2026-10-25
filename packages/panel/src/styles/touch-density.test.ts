@@ -5,7 +5,10 @@ import {
   AddressField,
   BUTTON_SIZE,
   Checkbox,
+  DISCLOSURE_LOOK,
+  DISCLOSURE_SUMMARY,
   Disclosure,
+  DisclosureSummary,
   IconButton,
   INLINE_EDIT_LOOK,
   InlineEdit,
@@ -483,12 +486,24 @@ function transcriptRows(): [string, HTMLElement][] {
     }),
     "tool",
   );
+  // Note that a `data-` attribute passes as the summary's own, which its props' type does not spell.
+  const headProps = {
+    look: DISCLOSURE_SUMMARY.HEAD,
+    "data-row": "the to-do list's head",
+    children: "",
+  };
+  const head = drawn(
+    createElement(Disclosure, {
+      look: DISCLOSURE_LOOK.CARD,
+      children: createElement(DisclosureSummary, headProps),
+    }),
+  );
   const host = document.body.appendChild(document.createElement("div"));
   host.innerHTML = `
-    <details class="luke-disclosure" data-look="card"><summary class="luke-disclosure-summary" data-look="head" data-row="the to-do list's head"></summary></details>
     <div class="agent-published-dock"><ul class="luke-list" data-finger-tall="true"><li class="luke-list-row"><button class="luke-list-row-main" data-row="the pull request's row"></button></li></ul></div>`;
   return [
     ...call.querySelectorAll<HTMLElement>("[data-row]"),
+    ...head.querySelectorAll<HTMLElement>("[data-row]"),
     ...host.querySelectorAll<HTMLElement>("[data-row]"),
   ].map((row) => [row.dataset.row ?? "", row]);
 }

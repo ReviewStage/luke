@@ -1,7 +1,10 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { afterEach, test } from "vitest";
+import { DISCLOSURE_LOOK, DISCLOSURE_SUMMARY, Disclosure, DisclosureSummary } from "@luke/ui";
+import { act, createElement } from "react";
+import { createRoot, type Root } from "react-dom/client";
+import { afterEach, beforeAll, test } from "vitest";
 import { layContainersAt } from "../testing/container-width.js";
 
 /**
@@ -12,17 +15,36 @@ import { layContainersAt } from "../testing/container-width.js";
  * the profile's × does; and a narrow dock, a side panel at its narrowest,
  * says Fork of by its glyph alone, so the source's name keeps that room.
  * jsdom lays nothing out, so the sheets are laid
- * (`testing/container-width.ts`) and the chip is built in the markup
- * `fork-action.tsx` draws.
+ * (`testing/container-width.ts`), the chip is built in the markup
+ * `fork-action.tsx` draws, and the card is the `Disclosure` the dock draws.
  */
 
+declare global {
+  var IS_REACT_ACT_ENVIRONMENT: boolean | undefined;
+}
+
 let laid: HTMLStyleElement | undefined;
+const roots: Root[] = [];
+
+beforeAll(() => {
+  globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+});
 
 afterEach(() => {
+  for (const root of roots.splice(0)) act(() => root.unmount());
   laid?.remove();
   laid = undefined;
   document.body.replaceChildren();
 });
+
+/** A length with every `var()` in it read off the root, which jsdom leaves unresolved. */
+function resolved(length: string): string {
+  const root = getComputedStyle(document.documentElement);
+  const once = length.replace(/var\((--[\w-]+)\)/g, (_, name: string) =>
+    root.getPropertyValue(name).trim(),
+  );
+  return once === length ? once : resolved(once);
+}
 
 /** A forked draft's chip in a dock of the width given, answering its parts. */
 function forkChip(width = 528) {
@@ -62,14 +84,24 @@ test("a forked draft's chip stands on one line, its source and its quote cut sho
 
 test("a forked draft's chip is drawn on the docked to-do list's card", () => {
   const { chip } = forkChip();
-  const todos = document.body.appendChild(document.createElement("details"));
-  todos.className = "luke-disclosure";
-  todos.dataset.look = "card";
-  const head = todos.appendChild(document.createElement("summary"));
-  head.className = "luke-disclosure-summary";
-  head.dataset.look = "head";
+  const host = document.body.appendChild(document.createElement("div"));
+  const root = createRoot(host);
+  roots.push(root);
+  act(() =>
+    root.render(
+      createElement(Disclosure, {
+        look: DISCLOSURE_LOOK.CARD,
+        children: createElement(DisclosureSummary, {
+          look: DISCLOSURE_SUMMARY.HEAD,
+          children: "To-dos",
+        }),
+      }),
+    ),
+  );
+  const todos = host.querySelector("details") ?? assert.fail("the to-do list's card is drawn");
+  const head = host.querySelector("summary") ?? assert.fail("its head is drawn");
   assert.equal(getComputedStyle(chip).backgroundColor, getComputedStyle(todos).backgroundColor);
-  assert.equal(getComputedStyle(chip).minHeight, getComputedStyle(head).height);
+  assert.equal(resolved(getComputedStyle(chip).minHeight), resolved(getComputedStyle(head).height));
 });
 
 test("a forked draft's chip is not held to a height, so a profile's taller × stands inside it", () => {

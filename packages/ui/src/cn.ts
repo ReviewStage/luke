@@ -111,6 +111,35 @@ const FEEDBACK_DISPLAY = {
   container: ["progress"],
 } as const;
 
+/**
+ * The names the rows and navigation block of the theme adds (list row, nav
+ * item, disclosure, bar item, pane bar, toolbar, over pane, folding search,
+ * searchable menu), by the group tailwind-merge reads each in.
+ */
+const ROWS_NAVIGATION = {
+  text: ["dialog-size", "tag-size"],
+  leading: ["label"],
+  spacing: [
+    "bar-count-reach",
+    "caption-leading",
+    "disclosure-row",
+    "item-gap",
+    "list-row-lead",
+    "luke-32",
+    "luke-48",
+    "menu-label",
+    "nav-identity",
+    "over-pane",
+    "over-pane-column",
+    "pane-bar",
+    "submenu",
+    "submenu-reach",
+    "swipe-label",
+  ],
+  shadow: ["bar-count-ring"],
+  radius: ["inherit"],
+} as const;
+
 const merge = extendTailwindMerge({
   extend: {
     theme: {
@@ -128,6 +157,7 @@ const merge = extendTailwindMerge({
         "group",
         "tag",
         ...FEEDBACK_DISPLAY.text,
+        ...ROWS_NAVIGATION.text,
       ],
       "font-weight": [
         "text",
@@ -141,7 +171,7 @@ const merge = extendTailwindMerge({
         ...FEEDBACK_DISPLAY["font-weight"],
       ],
       tracking: ["title"],
-      leading: ["body", ...FEEDBACK_DISPLAY.leading],
+      leading: ["body", ...FEEDBACK_DISPLAY.leading, ...ROWS_NAVIGATION.leading],
       spacing: [
         "luke-2",
         "luke-4",
@@ -206,6 +236,7 @@ const merge = extendTailwindMerge({
         "choice-segment-compact",
         "caption-glyph",
         ...FEEDBACK_DISPLAY.spacing,
+        ...ROWS_NAVIGATION.spacing,
       ],
       radius: [
         "control",
@@ -223,6 +254,7 @@ const merge = extendTailwindMerge({
         "choice-segment",
         "choice-box",
         ...FEEDBACK_DISPLAY.radius,
+        ...ROWS_NAVIGATION.radius,
       ],
       shadow: [
         "dialog",
@@ -231,6 +263,7 @@ const merge = extendTailwindMerge({
         "tooltip",
         "switch-thumb",
         ...FEEDBACK_DISPLAY.shadow,
+        ...ROWS_NAVIGATION.shadow,
       ],
       font: ["ui"],
       container: [
