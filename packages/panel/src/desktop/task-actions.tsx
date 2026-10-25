@@ -361,7 +361,7 @@ function TaskMenuFooter({
   const named = edit !== undefined && edit.actor !== PLAN_ACTOR.EARLIER;
   return (
     <>
-      <p className="task-menu-note actor-line">
+      <p className="task-menu-note actor-line m-0 flex-wrap overflow-clip [overflow-clip-margin:var(--luke-focus-ring-room)]">
         {"Created by "}
         {origin === undefined ? null : (
           <>
@@ -374,7 +374,7 @@ function TaskMenuFooter({
         <Time at={task.createdAt} now={now} look={TIME_LOOK.AGO} />
       </p>
       {edit === undefined && task.updatedAt <= task.createdAt ? null : (
-        <p className="task-menu-note actor-line">
+        <p className="task-menu-note actor-line m-0 flex-wrap overflow-clip [overflow-clip-margin:var(--luke-focus-ring-room)]">
           {named ? "Last edited by " : "Last edited"}
           {edit === undefined ? null : <EditedBy edit={edit} place={place} sentence />}
           {" · "}

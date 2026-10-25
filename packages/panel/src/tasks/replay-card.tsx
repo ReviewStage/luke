@@ -76,6 +76,13 @@ import { useOpenPlace } from "./use-open-link.js";
  */
 
 /**
+ * A chip naming what a transcript's opening came from, as the transcript
+ * draws one, which cuts its own name to the line: held to the line's width
+ * so a narrow line cuts the title, never the state after it.
+ */
+export const ORIGIN_CHIP = "agent-origin-chip inline-flex min-w-0 max-w-full";
+
+/**
  * Where an agent's replay card stands: the agents of its task, archived ones
  * among them, which its source is found among, and the doors to that source:
  * its chip's tile and card, its tab, a message of it, and what it published.
@@ -427,7 +434,7 @@ function ReplayFoot({
         </span>
       )}
       {pullRequest === undefined || pullRequest === null || words === undefined ? null : (
-        <span className="agent-origin-chip">
+        <span className={ORIGIN_CHIP}>
           {linkChip(pullRequest.url, words, doors) ?? (
             <TextLink
               href={pullRequest.url}
@@ -502,7 +509,7 @@ export function ReplayCard({
         data-replay-card=""
         aria-label={replayVerb(replay)}
         actions={
-          <span className="agent-origin-chip">
+          <span className={ORIGIN_CHIP}>
             <ActorRef actor={tile} card={place.card(agentId)} onOpen={openSource} faceOnly />
           </span>
         }

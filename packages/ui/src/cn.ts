@@ -18,6 +18,29 @@ import { extendTailwindMerge } from "tailwind-merge";
  */
 
 /**
+ * The names the panel work column's block of the theme adds (its layout's
+ * spacing roles, a transcript's opening line, the call's video room, a
+ * tool's page, the find bar, the version history), by the group
+ * tailwind-merge reads each in.
+ */
+const PANEL_WORK_COLUMN = {
+  "font-weight": ["luke-medium", "luke-regular", "luke-semibold"],
+  leading: ["tool-description"],
+  spacing: [
+    "attention-mark",
+    "agent-video-frame",
+    "column-inset",
+    "find-field",
+    "origin-glyph",
+    "ring-reach",
+    "section-gap",
+  ],
+  radius: ["disc"],
+  shadow: ["tool-default"],
+  animate: ["edit-composer-in", "edit-composer-out"],
+} as const;
+
+/**
  * The names the feedback and display components' block of the theme adds
  * (badge, chip, avatar, toast, spinner, progress, skeleton, banner, card,
  * pagination, breadcrumbs, data table), by the group tailwind-merge reads
@@ -168,10 +191,16 @@ const merge = extendTailwindMerge({
         "section",
         "emphasis",
         "title",
+        ...PANEL_WORK_COLUMN["font-weight"],
         ...FEEDBACK_DISPLAY["font-weight"],
       ],
       tracking: ["title"],
-      leading: ["body", ...FEEDBACK_DISPLAY.leading, ...ROWS_NAVIGATION.leading],
+      leading: [
+        "body",
+        ...PANEL_WORK_COLUMN.leading,
+        ...FEEDBACK_DISPLAY.leading,
+        ...ROWS_NAVIGATION.leading,
+      ],
       spacing: [
         "luke-2",
         "luke-4",
@@ -235,6 +264,7 @@ const merge = extendTailwindMerge({
         "choice-segment",
         "choice-segment-compact",
         "caption-glyph",
+        ...PANEL_WORK_COLUMN.spacing,
         ...FEEDBACK_DISPLAY.spacing,
         ...ROWS_NAVIGATION.spacing,
       ],
@@ -253,6 +283,7 @@ const merge = extendTailwindMerge({
         "luke-full",
         "choice-segment",
         "choice-box",
+        ...PANEL_WORK_COLUMN.radius,
         ...FEEDBACK_DISPLAY.radius,
         ...ROWS_NAVIGATION.radius,
       ],
@@ -262,6 +293,7 @@ const merge = extendTailwindMerge({
         "menu",
         "tooltip",
         "switch-thumb",
+        ...PANEL_WORK_COLUMN.shadow,
         ...FEEDBACK_DISPLAY.shadow,
         ...ROWS_NAVIGATION.shadow,
       ],
@@ -286,6 +318,7 @@ const merge = extendTailwindMerge({
         "menu-in",
         "tooltip-in",
         "tooltip-leave",
+        ...PANEL_WORK_COLUMN.animate,
       ],
     },
     classGroups: {

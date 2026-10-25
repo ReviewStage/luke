@@ -167,7 +167,7 @@ function AccountHeading({
           as={TEXT_ELEMENT.SPAN}
           variant={TEXT_VARIANT.INHERIT}
           truncate
-          className="account-menu-name"
+          className="account-menu-name font-luke-semibold text-foreground"
         >
           {account.name}
         </Text>
@@ -176,7 +176,7 @@ function AccountHeading({
         as={TEXT_ELEMENT.SPAN}
         variant={TEXT_VARIANT.INHERIT}
         truncate
-        className="account-menu-email"
+        className="account-menu-email text-muted-foreground"
       >
         {account.email}
       </Text>
