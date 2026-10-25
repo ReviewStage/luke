@@ -1818,7 +1818,7 @@ test("Enter anywhere in a form of several fields, in its number field or its tex
   );
 });
 
-test("in a form of three fields Enter on a focused option sends the form and picks nothing, and Send names no chord", async () => {
+test("in a form of three fields Enter on a focused option sends the form and picks nothing, an input method's Enter sends nothing, and Send names no chord", async () => {
   const form = asking(EXPIRY, {
     type: INBOX_ASK.ANSWER,
     fields: [
@@ -1841,6 +1841,14 @@ test("in a form of three fields Enter on a focused option sends the form and pic
   assert.equal(answerSend(pane).hasAttribute("aria-keyshortcuts"), false);
 
   act(() => option("High").click());
+  const retries =
+    pane.querySelector<HTMLInputElement>('[data-inbox-field-label="Retries"] input') ??
+    assert.fail("no Retries input");
+  act(() => retries.focus());
+  // Note that Safari's last composing key comes as code 229 with isComposing already false.
+  keyOn(retries, "Enter", { keyCode: 229 });
+  await settle();
+  assert.deepEqual(sent, [], "an input method's Enter sends nothing");
   const low = option("Low");
   act(() => low.focus());
   keyOn(low, "Enter");

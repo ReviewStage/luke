@@ -37,6 +37,7 @@ import {
   TextField,
 } from "@luke/ui";
 import type { Actor } from "@luke/ui/actor-model";
+import { isComposingKey } from "@luke/ui/composing-key";
 import { CheckIcon, GLYPH, Undo2Icon } from "@luke/ui/icons";
 import { ActorLine, ActorRef } from "../actor-ref.js";
 import { type FormTextDoors, type FormTextProps, InboxFormText } from "./inbox-form-text.js";
@@ -422,9 +423,7 @@ function onResponseKey(
   pane: React.RefObject<HTMLElement | null>,
   event: React.KeyboardEvent,
 ): void {
-  if (event.key !== "Enter" || event.shiftKey || event.altKey || event.nativeEvent.isComposing) {
-    return;
-  }
+  if (event.key !== "Enter" || event.shiftKey || event.altKey || isComposingKey(event)) return;
   if (writesLines(event.target)) return;
   // Note that the key is held back here, as it bubbles, which keeps a focused option's button from pressing it.
   event.preventDefault();
