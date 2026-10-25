@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { Empty, EmptyHeader, EmptyMedia } from "../../shadcn/empty.js";
 import { BUTTON_VARIANT, Button, type ButtonVariant } from "../button/button.js";
 import { TEXT_ELEMENT, TEXT_TONE, TEXT_VARIANT, Text } from "../text/text.js";
 
@@ -21,7 +22,24 @@ import { TEXT_ELEMENT, TEXT_TONE, TEXT_VARIANT, Text } from "../text/text.js";
  * its container leaves it and stands a little above that room's middle,
  * where the eye takes the middle to be, scrolling rather than overflowing
  * where the room is shorter than it.
+ *
+ * It is drawn by shadcn/ui's empty (`../../shadcn/empty.tsx`) in Tailwind
+ * utilities over the theme: the block, its glyph, and its words are the
+ * vendored parts, and the room around the block is this component's own,
+ * its space above and below shared two to three by the room's `::before`
+ * and `::after`.
  */
+
+/**
+ * The room an empty place fills. Note that the room above the state and the
+ * room below it are shared two to three, so it stands where the eye takes
+ * the middle to be, and that where the room is shorter than the state both
+ * shares are nothing and the state scrolls rather than run under what
+ * stands above it. Each share's basis is nothing rather than a percentage,
+ * which a room of no set height would read as the content's.
+ */
+const ROOM =
+  "luke-empty-state flex min-h-0 flex-[1_1_0] flex-col items-center overflow-x-hidden overflow-y-auto before:flex-[2_1_0] after:flex-[3_1_0]";
 
 /** How the way on from an empty place is drawn: quiet, or primary where the press is what the place is for. */
 export const EMPTY_STATE_ACTION_LOOK = {
@@ -75,21 +93,17 @@ export function EmptyState({
   children: ReactNode;
 }): React.JSX.Element {
   return (
-    <div className="luke-empty-state">
-      <div className="luke-empty-state-body" role={alert ? "alert" : undefined}>
-        {icon === undefined ? null : (
-          <span className="luke-empty-state-icon" aria-hidden="true">
-            {icon}
-          </span>
-        )}
-        <div className="luke-empty-state-words">
+    <div className={ROOM}>
+      <Empty role={alert ? "alert" : undefined}>
+        {icon === undefined ? null : <EmptyMedia aria-hidden="true">{icon}</EmptyMedia>}
+        <EmptyHeader>
           {title === undefined ? null : (
             <Text as={TEXT_ELEMENT.H3} variant={TEXT_VARIANT.LABEL}>
               {title}
             </Text>
           )}
           <Text tone={TEXT_TONE.MUTED}>{children}</Text>
-        </div>
+        </EmptyHeader>
         {[action, secondary].map((way) =>
           way === undefined ? null : (
             <Button
@@ -104,7 +118,7 @@ export function EmptyState({
             </Button>
           ),
         )}
-      </div>
+      </Empty>
     </div>
   );
 }

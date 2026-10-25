@@ -775,13 +775,101 @@
   --spacing-call-tile-face-share: 40%; /* off-scale: a share of a frame's width */
   --spacing-call-tile-face-max: 56px; /* off-scale: a masthead's disc */
 
+  /* The page patterns (`components/layout/`, `settings-*`,
+     `collection-page`, `detail-page`, `public-page`, `auth-page`,
+     `empty-state`, `error-state`, `failure-note`, `group-header`): the
+     roles a Stack's and an Inline's gaps and insets read, and each
+     pattern's own lengths, which name the scale's steps, as above. */
+  --spacing-field-gap: var(--luke-field-gap);
+  --spacing-page-section-gap: var(--luke-page-section-gap);
+  /* The least width a field gives way to before its line wraps. */
+  --spacing-field-least: var(--luke-select-field-width);
+  --spacing-page-inset: var(--luke-page-inset);
+  --spacing-luke-64: var(--luke-space-64);
+  --spacing-luke-96: var(--luke-space-96);
+
+  /* Settings (`settings-row`, `settings-section`, `settings-page`). */
+  /* A row's least height and padding at a bare compact row's density and a
+     reference list's, a card's standing with the panel shell's above
+     (`--luke-settings-row-*` in `profiles.css`); an indented row's step in to its parent's words and
+     what a row grows below its line, past the mark the row's sheet sizes
+     (`settings-row.css`); the mark's box, which a mark outside a row draws
+     at 20px; and a connected row's dot. */
+  --spacing-settings-row-compact: var(--luke-settings-row-compact-min-height);
+  --spacing-settings-row-compact-block: var(--luke-settings-row-compact-block);
+  --spacing-settings-row-compact-inline: var(--luke-settings-row-compact-inline);
+  --spacing-settings-row-list: var(--luke-settings-row-list-min-height);
+  --spacing-settings-row-list-block: var(--luke-settings-row-list-block);
+  --spacing-settings-row-indent: calc(
+    var(--luke-settings-row-inline) +
+    var(--luke-settings-row-words-inset)
+  );
+  --spacing-settings-row-words-inset: var(--luke-settings-row-words-inset);
+  --spacing-settings-row-mark: var(--luke-settings-row-mark-size, 20px); /* off-scale: a mark */
+  --spacing-settings-row-state-dot: 6px; /* off-scale: a connected row's dot */
+
+  /* Pages (`collection-page`, `detail-page`, `public-page`, `auth-page`).
+     A page's measure and inset are its own sheet's custom properties, which
+     its profile and its own width (a container query) set, so the roles
+     here read them where the element stands. */
+  --spacing-collection-page-inset: var(--luke-collection-page-inset);
+  --container-collection-page: calc(
+    var(--luke-collection-page-width) +
+    2 *
+    var(--luke-collection-page-inset)
+  );
+  --spacing-detail-page-inset: var(--luke-detail-page-inset);
+  /* A detail column's end, clear of what the standing toasts take of the
+     window's foot (`--luke-toast-room`, which the shell measures). */
+  --spacing-detail-page-end: max(var(--luke-detail-page-inset), var(--luke-toast-room, 0px));
+  --spacing-public-page-start: var(--luke-public-page-start);
+  --spacing-public-page-end: var(--luke-public-page-end);
+  --container-public-page: 700px; /* off-scale: the site's reading column */
+  --container-public-page-wide: 860px; /* off-scale: the column with a rail beside it */
+  --container-public-page-lead: 34rem; /* off-scale: the landing's lead */
+  --text-public-page-lead: 1.125rem; /* off-scale: the landing's lead */
+  --text-public-page-lead--line-height: 1.75rem;
+  /* The hero's display style, the page title's where the profile has none. */
+  --leading-public-page-hero: var(--luke-display-hero-leading, var(--luke-type-title-leading));
+  --font-weight-public-page-hero: var(--luke-display-hero-weight, var(--luke-type-title-weight));
+  --tracking-public-page-hero: var(--luke-display-hero-tracking, normal);
+  --z-index-public-page-banner: 40; /* off-scale: the banner over the document's scroll */
+  --color-public-page-banner: color-mix(in srgb, var(--luke-color-ground) 85%, transparent);
+  --blur-public-page-banner: 12px; /* off-scale: the banner's blur */
+  /* A picture bleeding past the column, up to 960px and never nearer an edge than the page's inset. */
+  --spacing-public-media-reach: calc(
+    50% -
+    min(960px / 2, 50cqw - var(--luke-page-inset))
+  ); /* off-scale: 960px, the bleed */
+  --radius-public-media: var(--luke-radius-14);
+  --shadow-public-media:
+    0 20px 25px -5px var(--luke-color-shadow-soft), 0 8px 10px -6px var(--luke-color-shadow-soft);
+  --container-auth-card: 430px; /* off-scale: the OAuth pages' card */
+  --shadow-auth-card: 0 24px 80px var(--luke-color-shadow-soft);
+  --spacing-auth-ring: 56px; /* off-scale: the artwork's ring */
+  --shadow-auth-badge: 0 0 0 3px var(--luke-color-surface);
+  --color-auth-badge-danger: var(--luke-color-danger-fill);
+  --color-auth-badge-on-danger: var(--luke-color-on-danger);
+
+  /* States (`group-header`, `empty-state`, `error-state`, `failure-note`). */
+  /* off-scale: the measure an empty place's glyph, words, and way on wrap
+     at, never wider than the room. */
+  --container-empty-state: min(280px, 100%);
+  /* A caption's line centred in a control-tall row, as the glyph and Retry
+     beside it are: an error state's words, a failure note's beside Retry. */
+  --spacing-state-row-inset: calc(
+    (var(--luke-control-height) - var(--luke-type-caption-leading)) /
+    2
+  );
+  /* A failure note's first row with no press in it: one caption's line. */
+  --spacing-failure-note-row: var(--luke-type-caption-leading);
+  /* A group head's mark, a small note a step under its glyph. */
+  --spacing-group-header-mark: var(--luke-icon-12);
+
   /* The panel's task surfaces (`@luke/panel`'s tasks.css, moving onto
      utilities): the gaps a byline's phrases, a line's parts, a pane's groups,
      and a page's sections stand apart by, and the weights words are set in
      where no type role names them; then each surface's own. */
-  --spacing-field-gap: var(--luke-field-gap);
-  --spacing-page-section-gap: var(--luke-page-section-gap);
-  --spacing-page-inset: var(--luke-page-inset);
   --spacing-log-over-composer: calc(var(--luke-scroll-fade) + var(--luke-space-4));
   --spacing-todos-dock: calc(var(--luke-stage-height) * 0.3);
   --spacing-dictation-clock: 34px; /* off-scale: a clock's widest reading */

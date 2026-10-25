@@ -21,12 +21,45 @@
  * A failure may carry one act beside Retry, `also`, such as Discard on a post
  * that did not go; it stands after Retry in the same row, and holds the
  * line's control-tall first row on its own where there is no Retry.
+ *
+ * It is drawn in Tailwind utilities over the theme with no shadcn base:
+ * shadcn's alert is a block of its own, a titled card or strip (Luke's
+ * `Banner`), where a failure note is one line among the words of what it
+ * failed in. The line's first row is a caption's leading tall, or a
+ * control's where a press stands in it, and the mark and the words' first
+ * line are centred in that row, so a failure of several lines keeps its
+ * mark by its first.
  */
 
 import type { ReactNode } from "react";
 import { GLYPH } from "../../icons/glyph-registry.js";
 import { STATUS_TONE } from "../../status-tone.js";
 import { RetryButton } from "../retry-button/retry-button.js";
+
+/** The line: the mark, the words, and the presses on one row, in the danger tone's ink at a caption's size. */
+const LINE =
+  "luke-failure-note m-0 flex min-w-0 items-start gap-icon-gap font-ui text-caption text-tone-ink";
+
+/**
+ * Each part, by whether a press stands in the first row, which is then a
+ * control tall. Note that a tool's error keeps its own line breaks, wraps
+ * where it must, and can be selected to copy.
+ */
+const PART = {
+  ROW: {
+    mark: "luke-failure-note-mark flex h-control flex-none items-center [&_svg]:size-control-icon",
+    words:
+      "luke-failure-note-words min-w-0 flex-[1_1_0] py-state-row-inset wrap-anywhere whitespace-pre-wrap select-text",
+  },
+  LINE: {
+    mark: "luke-failure-note-mark flex h-failure-note-row flex-none items-center [&_svg]:size-control-icon",
+    words:
+      "luke-failure-note-words min-w-0 flex-[1_1_0] py-0 wrap-anywhere whitespace-pre-wrap select-text",
+  },
+} as const;
+
+/** The presses after the words, Retry then `also`. */
+const ACTS = "luke-failure-note-retry flex flex-none items-center gap-icon-gap";
 
 /** A failure's words, `children`, behind the failed mark in the danger tone, and Retry after them where `onRetry` is given, then `also`. */
 export function FailureNote({
@@ -43,19 +76,20 @@ export function FailureNote({
 }): React.JSX.Element {
   const Mark = GLYPH.FAILED;
   const acts = onRetry !== undefined || also !== undefined;
+  const part = acts ? PART.ROW : PART.LINE;
   return (
     <p
-      className="luke-failure-note"
+      className={LINE}
       data-tone={STATUS_TONE.DANGER}
       data-retry={acts ? "" : undefined}
       role="alert"
     >
-      <span className="luke-failure-note-mark" aria-hidden="true">
+      <span className={part.mark} aria-hidden="true">
         <Mark />
       </span>
-      <span className="luke-failure-note-words">{children}</span>
+      <span className={part.words}>{children}</span>
       {acts ? (
-        <span className="luke-failure-note-retry">
+        <span className={ACTS}>
           {onRetry === undefined ? null : <RetryButton onRetry={onRetry} />}
           {also}
         </span>
