@@ -22,7 +22,10 @@ const tester = new RuleTester();
 tester.run("no-source-read-in-test", noSourceReadInTestRule, {
   valid: [
     // A fixture or a recording is data, not source.
-    { code: 'readFileSync(new URL("./fixtures/stream.jsonl", import.meta.url), "utf8");', filename: TEST_FILE },
+    {
+      code: 'readFileSync(new URL("./fixtures/stream.jsonl", import.meta.url), "utf8");',
+      filename: TEST_FILE,
+    },
     { code: 'await readFile(path.join(directory, "settings.json"), "utf8");', filename: TEST_FILE },
     { code: 'readdirSync(path.join(temporary, "out"));', filename: TEST_FILE },
     // A module in a checkout the test made is the test's own data.
@@ -49,7 +52,7 @@ tester.run("no-source-read-in-test", noSourceReadInTestRule, {
       errors: [{ messageId: "sourceRead" }],
     },
     {
-      code: "await readFile(`${root}/packages/panel/src/app.tsx`, \"utf8\");",
+      code: 'await readFile(`${root}/packages/panel/src/app.tsx`, "utf8");',
       filename: TEST_FILE,
       errors: [{ messageId: "sourceRead" }],
     },
@@ -58,6 +61,10 @@ tester.run("no-source-read-in-test", noSourceReadInTestRule, {
       filename: TEST_FILE,
       errors: [{ messageId: "sourceRead" }],
     },
-    { code: 'globSync("packages/ui/src/**/*.tsx");', filename: TEST_FILE, errors: [{ messageId: "sourceRead" }] },
+    {
+      code: 'globSync("packages/ui/src/**/*.tsx");',
+      filename: TEST_FILE,
+      errors: [{ messageId: "sourceRead" }],
+    },
   ],
 });

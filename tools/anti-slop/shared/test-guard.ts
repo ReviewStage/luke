@@ -34,7 +34,11 @@ export function literalText(node: ESTree.Node | null | undefined): string | unde
 /** The name a call is made through: `name(…)`, or `object.name(…)` however deep. */
 export function calleeName(callee: ESTree.Node): string | undefined {
   if (callee.type === "Identifier") return callee.name;
-  if (callee.type === "MemberExpression" && !callee.computed && callee.property.type === "Identifier")
+  if (
+    callee.type === "MemberExpression" &&
+    !callee.computed &&
+    callee.property.type === "Identifier"
+  )
     return callee.property.name;
   return undefined;
 }

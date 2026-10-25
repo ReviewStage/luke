@@ -20,8 +20,8 @@ import {
 } from "./shared/press-guard.ts";
 import { PRESS_LISTENER_GUARD_RULE } from "./shared/press-listener-guard.ts";
 import { namesRetired, RETIRED_GUARD_RULE } from "./shared/retired.ts";
-import { SKELETON_GUARD_RULE } from "./shared/skeleton-guard.ts";
 import { SHADCN_FOCUS_GUARD_RULE, SHADCN_SOURCE } from "./shared/shadcn-focus-guard.ts";
+import { SKELETON_GUARD_RULE } from "./shared/skeleton-guard.ts";
 import {
   INTERNAL_MOCK_GUARD_RULE,
   isWatchedTest,

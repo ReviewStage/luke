@@ -40,7 +40,7 @@ export const noFocusedOrSkippedTestRule = defineRule({
     },
     messages: {
       weakened:
-        "`.{{member}}` runs less than this file declares. Fix the test or delete it; never weaken one to pass (root AGENTS.md's \"Testing\").",
+        '`.{{member}}` runs less than this file declares. Fix the test or delete it; never weaken one to pass (root AGENTS.md\'s "Testing").',
     },
   },
   createOnce(context) {

@@ -51,7 +51,7 @@ export const noSourceReadInTestRule = defineRule({
     },
     messages: {
       sourceRead:
-        "This test reads source text ({{what}}). Hold a rule about source text in a lint rule under tools/anti-slop/, and assert behavior through the public export (root AGENTS.md's \"Testing\").",
+        'This test reads source text ({{what}}). Hold a rule about source text in a lint rule under tools/anti-slop/, and assert behavior through the public export (root AGENTS.md\'s "Testing").',
     },
   },
   createOnce(context) {

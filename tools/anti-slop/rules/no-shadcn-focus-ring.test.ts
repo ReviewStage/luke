@@ -21,9 +21,15 @@ const tester = new RuleTester();
 
 tester.run("no-shadcn-focus-ring", noShadcnFocusRingRule, {
   valid: [
-    { code: 'const box = "h-control rounded-control border-input bg-transparent";', filename: SHADCN_FILE },
+    {
+      code: 'const box = "h-control rounded-control border-input bg-transparent";',
+      filename: SHADCN_FILE,
+    },
     // A ring's colour or offset alone draws no ring, and a name merely holding the words is no utility.
-    { code: 'const box = "ring-offset-background focus-visible:ring-offset-2 my-ring-1x";', filename: SHADCN_FILE },
+    {
+      code: 'const box = "ring-offset-background focus-visible:ring-offset-2 my-ring-1x";',
+      filename: SHADCN_FILE,
+    },
     // Outside the vendored folder, the rule has nothing to say.
     {
       code: 'const box = "outline-none";',
@@ -31,12 +37,20 @@ tester.run("no-shadcn-focus-ring", noShadcnFocusRingRule, {
     },
   ],
   invalid: [
-    { code: 'const box = "border outline-none";', filename: SHADCN_FILE, errors: [{ messageId: "ring" }] },
+    {
+      code: 'const box = "border outline-none";',
+      filename: SHADCN_FILE,
+      errors: [{ messageId: "ring" }],
+    },
     {
       code: "const box = `${base} focus-visible:ring-3 focus-visible:ring-ring/50`;",
       filename: SHADCN_FILE,
       errors: [{ messageId: "ring" }],
     },
-    { code: 'cn("data-[open]:outline-hidden", size);', filename: SHADCN_FILE, errors: [{ messageId: "ring" }] },
+    {
+      code: 'cn("data-[open]:outline-hidden", size);',
+      filename: SHADCN_FILE,
+      errors: [{ messageId: "ring" }],
+    },
   ],
 });

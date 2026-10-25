@@ -37,8 +37,16 @@ tester.run("no-internal-vi-mock", noInternalViMockRule, {
       filename: TEST_FILE,
       errors: [{ messageId: "internalMock" }],
     },
-    { code: 'vi.doMock("@luke/wire");', filename: TEST_FILE, errors: [{ messageId: "internalMock" }] },
-    { code: 'vi.mock("#main/app.js");', filename: TEST_FILE, errors: [{ messageId: "internalMock" }] },
+    {
+      code: 'vi.doMock("@luke/wire");',
+      filename: TEST_FILE,
+      errors: [{ messageId: "internalMock" }],
+    },
+    {
+      code: 'vi.mock("#main/app.js");',
+      filename: TEST_FILE,
+      errors: [{ messageId: "internalMock" }],
+    },
     {
       code: 'vi.mock(import("../app-bridge.js"));',
       filename: TEST_FILE,

@@ -35,7 +35,7 @@ export const noInternalViMockRule = defineRule({
     },
     messages: {
       internalMock:
-        "`vi.{{member}}(\"{{module}}\")` swaps a module of this repository for a copy. Use the real module, a test `Layer` on its service's tag, or `vi.spyOn` at the process boundary it crosses (root AGENTS.md's \"Testing\").",
+        '`vi.{{member}}("{{module}}")` swaps a module of this repository for a copy. Use the real module, a test `Layer` on its service\'s tag, or `vi.spyOn` at the process boundary it crosses (root AGENTS.md\'s "Testing").',
     },
   },
   createOnce(context) {
