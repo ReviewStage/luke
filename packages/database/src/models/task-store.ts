@@ -1272,14 +1272,19 @@ const leaveSections = SqlSchema.void({
 const followingAgentsAndInbox = Effect.fnUntraced(function* (
   taskId: string,
   organizationId: string,
+  moved: boolean,
   now: Date,
 ) {
   yield* Database.use((db) =>
     db.update(codingAgent).set({ organizationId }).where(eq(codingAgent.taskId, taskId)),
   );
-  const channelId = yield* ensureGeneralChannel(organizationId, now);
+  // A change naming the workspace the task stands in leaves its threads in their channels.
+  const channel = moved ? { channelId: yield* ensureGeneralChannel(organizationId, now) } : {};
   yield* Database.use((db) =>
-    db.update(inboxItem).set({ organizationId, channelId }).where(eq(inboxItem.taskId, taskId)),
+    db
+      .update(inboxItem)
+      .set({ organizationId, ...channel })
+      .where(eq(inboxItem.taskId, taskId)),
   );
   yield* Database.use((db) =>
     db.update(attachment).set({ organizationId }).where(eq(attachment.taskId, taskId)),
@@ -1424,7 +1429,7 @@ export function updateTaskCommitted<E = never, R = never>(
           });
         }
         if (changes.organizationId !== undefined) {
-          yield* followingAgentsAndInbox(taskId, row.organizationId, now);
+          yield* followingAgentsAndInbox(taskId, row.organizationId, moved, now);
           yield* moveTaskChat(taskId, row.organizationId);
           if (row.organizationId !== locked.value.organizationId) yield* leaveSections(taskId);
         }
