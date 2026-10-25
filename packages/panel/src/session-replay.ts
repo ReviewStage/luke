@@ -81,6 +81,8 @@ const WORDS = new Set([
   "title",
   "aria-label",
   "aria-description",
+  "aria-roledescription",
+  "aria-valuetext",
   "aria-placeholder",
   "alt",
   "placeholder",
