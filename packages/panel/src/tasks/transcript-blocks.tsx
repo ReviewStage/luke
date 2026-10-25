@@ -195,7 +195,7 @@ import { WorkingTime } from "./working-time.js";
  * dotted, with the address as its hint.
  */
 export const INERT_LINK_CLASS =
-  "underline decoration-dotted decoration-inert-link decoration-1 underline-offset-[0.24em]";
+  "text-link-inert underline decoration-dotted decoration-inert-link decoration-1 underline-offset-[0.24em]";
 
 /**
  * A link in a transcript's words. A web page, such as the pull request an

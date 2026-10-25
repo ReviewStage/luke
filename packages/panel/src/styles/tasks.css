@@ -3260,20 +3260,6 @@
   margin-top: var(--luke-block-gap);
 }
 
-.transcript-list {
-  margin-block: var(--luke-tight-gap);
-  padding-left: var(--luke-space-20);
-  list-style-type: disc;
-}
-
-ol.transcript-list {
-  list-style-type: decimal;
-}
-
-.transcript-list-item {
-  margin-block: var(--luke-list-gap);
-}
-
 .transcript-markdown > :first-child {
   margin-top: 0;
 }

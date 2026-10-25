@@ -361,7 +361,7 @@ export function ConversationEmptyState({
   return (
     <div
       className={cn(
-        "m-auto flex max-w-conversation-empty flex-col items-center justify-center gap-block-gap p-card text-center text-body text-muted-foreground",
+        "conversation-empty m-auto flex max-w-conversation-empty flex-col items-center justify-center gap-block-gap p-card text-center text-body text-muted-foreground",
         wide && "max-w-conversation-empty-wide",
       )}
     >
