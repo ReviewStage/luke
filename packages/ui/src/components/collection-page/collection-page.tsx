@@ -1,5 +1,10 @@
 import { type ReactNode, type Ref, useId } from "react";
-import { PAGE_FRAME, PAGE_WIDTH, type PageHeading } from "../page-frame/page-frame.js";
+import {
+  PAGE_FRAME,
+  PAGE_WIDTH,
+  type PageHeading,
+  type PageWidth,
+} from "../page-frame/page-frame.js";
 import { PageHeader } from "../page-header/page-header.js";
 import { SKELETON_SHAPE, Skeleton, SkeletonRegion } from "../skeleton/skeleton.js";
 
@@ -20,13 +25,23 @@ import { SKELETON_SHAPE, Skeleton, SkeletonRegion } from "../skeleton/skeleton.j
  *
  * Under the window's toolbar (`PAGE_FRAME.TOOLBAR`) the page draws no
  * header: the toolbar stands still above the filters, and the page is named
- * by the toolbar's title. A board that scrolls sideways stands its content
+ * by the toolbar's title. Its filters and content then stand across the
+ * room on the toolbar's own edges rather than at the measure, so the bar's
+ * title and actions line up with what it heads. A board that scrolls sideways stands its content
  * across the whole room (`PAGE_WIDTH.FULL`) rather than at the measure.
  *
  * The page heads itself with a document's header (`PageHeader`), its title
  * the page's one `h1`. The empty and failed states are the caller's, handed in whole, since an
  * empty collection says what to do about it and a failed one how to retry.
  * The page names itself by its title and takes no class or style.
+ *
+ * It is drawn in Tailwind utilities over the theme, with no shadcn/ui base,
+ * since shadcn has no page frame; what the frame and the width ask of each
+ * part is picked here. Its sheet (`collection-page.css`) keeps the page's
+ * measure and inset, which its profile and its own width set, the filter
+ * line's `:has()`, the notice's room, the rows of blocks a read stands (a
+ * skeleton's classes name only themselves), and the reach of what the caller
+ * lays in.
  */
 
 /** What the content shows: rows being read, none at all, a failure, or the rows. */
@@ -41,6 +56,46 @@ export type CollectionState = (typeof COLLECTION_STATE)[keyof typeof COLLECTION_
 
 /** How many rows a read in progress stands, enough to fill the top of a window. */
 const LOADING_ROWS = 4;
+
+/** What the header, the filters, and the content share: the page's inset, and its measure centred in what is left. */
+const COLUMN_CLASS = "box-border w-full mx-auto px-collection-page-inset";
+
+/**
+ * Each width's measure and content. At the measure the content holds what
+ * it holds and ends on the page's inset. Across the room, a board's content
+ * holds to the page's height rather than its cards', so a board whose
+ * columns scroll their own cards fills the page and never scrolls it down;
+ * content taller than that runs past it, and the page scrolls down as it
+ * would. Its end inset is a last item rather than padding, so it still
+ * follows what runs past.
+ */
+const WIDTH_CLASS = {
+  [PAGE_WIDTH.MEASURE]: {
+    measure: "max-w-collection-page",
+    content: "flex-[1_0_auto] pb-collection-page-inset",
+    scroll: "overflow-x-hidden",
+  },
+  [PAGE_WIDTH.FULL]: {
+    measure: "max-w-none",
+    content:
+      "flex-[1_1_0] min-h-0 after:flex-none after:h-collection-page-inset after:content-['']",
+    scroll: "overflow-x-auto",
+  },
+} as const satisfies Record<PageWidth, { measure: string; content: string; scroll: string }>;
+
+/**
+ * The header and filters stand still above the scroll, and reserve a
+ * scrollbar's gutter as the scroll does, so a scrollbar that takes room
+ * narrows the column under them no more than them. Their end gap is the
+ * content's room under the filters, which keeps a focus ring on a filter
+ * inside what they clip. In a pane too short for them they take half its
+ * height at most and scroll themselves, so the content keeps the rest.
+ */
+const TOP_CLASS =
+  "flex-none box-border max-h-1/2 overflow-x-hidden overflow-y-auto scrollbar-gutter-stable pb-section-gap";
+
+/** An empty or failed collection's notice, centred in the room under the filters (its room above and below is the sheet's). */
+const NOTICE_CLASS = "flex flex-1 flex-col items-center text-center";
 
 /** Whether a slot says anything: nothing, `null`, `false`, and an empty string say nothing. */
 function said(words: ReactNode): boolean {
@@ -115,14 +170,22 @@ export function CollectionPage({
 }): React.JSX.Element {
   const titleId = `${useId()}title`;
   const underToolbar = heading.frame === PAGE_FRAME.TOOLBAR;
+  const width = heading.width ?? PAGE_WIDTH.MEASURE;
+  const sized = WIDTH_CLASS[width];
   const filterLine = said(filters) ? (
-    <div className="luke-collection-page-filters">{filters}</div>
+    <div
+      className={`luke-collection-page-filters ${COLUMN_CLASS} ${sized.measure} flex-wrap items-center gap-control-gap pt-section-gap`}
+    >
+      {filters}
+    </div>
   ) : null;
+  // Note that under a toolbar with no filters the content opens the filters' gap below the toolbar's hairline, as its padding rather than the scroll's, because a sticky head sticks inside its scroller's padding and would leave what scrolls under it showing above it.
+  const toolbarGap = underToolbar && filterLine === null ? "pt-section-gap" : "";
   return (
     <section
-      className="luke-collection-page"
+      className="luke-collection-page @container flex flex-1 flex-col min-w-0 h-full min-h-0 text-foreground font-ui text-body"
       data-frame={heading.frame}
-      data-width={heading.width ?? PAGE_WIDTH.MEASURE}
+      data-width={width}
       aria-labelledby={underToolbar ? undefined : titleId}
       aria-label={underToolbar ? heading.label : undefined}
     >
@@ -130,12 +193,14 @@ export function CollectionPage({
         <>
           {heading.toolbar}
           {filterLine === null ? null : (
-            <div className="luke-collection-page-top">{filterLine}</div>
+            <div className={`luke-collection-page-top ${TOP_CLASS}`}>{filterLine}</div>
           )}
         </>
       ) : (
-        <div className="luke-collection-page-top">
-          <div className="luke-collection-page-header">
+        <div className={`luke-collection-page-top ${TOP_CLASS}`}>
+          <div
+            className={`luke-collection-page-header ${COLUMN_CLASS} ${sized.measure} pt-collection-page-inset`}
+          >
             <PageHeader
               title={heading.title}
               titleId={titleId}
@@ -146,16 +211,21 @@ export function CollectionPage({
           {filterLine}
         </div>
       )}
-      <div className="luke-collection-page-scroll" ref={scrollRef}>
-        <div className="luke-collection-page-content">
+      <div
+        className={`luke-collection-page-scroll flex flex-1 flex-col min-h-0 ${sized.scroll} overflow-y-auto overscroll-contain scrollbar-gutter-stable`}
+        ref={scrollRef}
+      >
+        <div
+          className={`luke-collection-page-content ${COLUMN_CLASS} ${sized.measure} flex flex-col ${sized.content} ${toolbarGap}`}
+        >
           {state === COLLECTION_STATE.LOADING ? (
             <CollectionPageSkeleton label={loadingLabel} skeleton={skeleton} />
           ) : null}
           {state === COLLECTION_STATE.EMPTY ? (
-            <div className="luke-collection-page-notice">{empty}</div>
+            <div className={`luke-collection-page-notice ${NOTICE_CLASS}`}>{empty}</div>
           ) : null}
           {state === COLLECTION_STATE.ERROR ? (
-            <div className="luke-collection-page-notice">{error}</div>
+            <div className={`luke-collection-page-notice ${NOTICE_CLASS}`}>{error}</div>
           ) : null}
           {state === COLLECTION_STATE.READY ? children : null}
         </div>

@@ -38,22 +38,10 @@
     },
     // One workspace's tests. The check that walks every /api/ client in the
     // repository runs in scripts/repository-checks.sh, outside the cache, so
-    // no workspace's tests read beyond their own graph.
+    // no workspace's tests read beyond their own graph. CI cuts the largest
+    // suites into vitest shards by handing `-- --shard=<i>/<n>` through,
+    // which turbo hashes with the task, so each shard caches on its own.
     "test:vitest": {
-      "dependsOn": ["^transit"],
-      "outputs": []
-    },
-    // @luke/service's and @luke/panel's suites in three vitest shards, one per
-    // CI runner.
-    "test:vitest:1": {
-      "dependsOn": ["^transit"],
-      "outputs": []
-    },
-    "test:vitest:2": {
-      "dependsOn": ["^transit"],
-      "outputs": []
-    },
-    "test:vitest:3": {
       "dependsOn": ["^transit"],
       "outputs": []
     },

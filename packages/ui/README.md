@@ -235,6 +235,34 @@ sheet, because they style generated HTML element by element, and so does
 `landed.css`, whose wash is played on whatever element a view brings the eye
 to, by its `data-landed` attribute alone.
 
+The chips, media, and call components are drawn the same way: `PageThumb`
+stands on shadcn's aspect ratio, and `PictureSet`'s tiles and
+`VideoPlayer`'s inline frame on its card (`Card`), while `AttachmentChip`,
+`PictureTile`, `ProviderButton`'s gate, `CardPress`, `ComposerFrame` and its
+foot, and the call's `CallBar`, `CallLive`, and `CallVideoTile` are drawn in
+the theme's utilities with no shadcn base, since shadcn/ui has no player,
+composer, or call, and its badge and button are a control's box where these
+are frames holding presses of their own. What answers a container's width,
+the call bar's, the tile's, a message box's foot's, is a container query
+variant (`@max-[280px]/luke-call-bar:`) beside the rule it changes. Their
+sheets keep only keyframes and the rules that play them, and the foot's one
+`:has()` container.
+
+The page patterns follow: `SettingsRow` stands on shadcn's item and
+`EmptyState` on its empty, and `Stack`, `Inline`, `Fill`,
+`SettingsSection`, `SettingsPage`, `CollectionPage`, `DetailPage`,
+`PublicPage`, and `AuthPage` are drawn in the theme's utilities with no
+shadcn base, since shadcn has no arrangement or page frame of its own, as
+are `ErrorState`, `FailureNote`, and `GroupHeader`: a failure's line is no
+banner, so shadcn's alert, which `Banner` stands on, is not its base, and a
+group's fold is `Disclosure`'s. Each keeps its `luke-*` hooks, which the panel's
+sheets and tests read. What stays in their sheets is what a utility would
+get wrong: what a `Stack` asks of the items it holds, which the held
+component's own sheet must still outrank; the narrow-room container
+queries, and the properties those queries undo, since a sheet's rule cannot
+undo a utility; the `:has()` rules; the settings page's scroll fade; and a
+skeleton's boxes, whose classes name themselves a skeleton's.
+
 ## Icons
 
 Every icon is imported through one door, `@luke/ui/icons`, built on Lucide
@@ -385,6 +413,7 @@ is refused where it reaches Tailwind's own scale (`text-sm`, `font-medium`,
 | `literal-easing` | `ease`, `linear`, `cubic-bezier()`, `steps()` in a transition or animation, or `ease-in-out` | Read `--luke-spring`, `--luke-spring-fast`, `--luke-motion-exit`, or `--luke-motion-pane`; a hover's `ease` is the default, so drop it |
 | `literal-picker-width` | A literal `width`, `min-width` or `max-width` on a picker's, popover's or menu's class, outside `@luke/ui` | Hang the layer at one of `POPOVER_WIDTH`'s three widths (`AnchoredPopover`'s or `RectFloat`'s `width`), and let what it holds fill it |
 | `literal-spacing` | A `px` or `rem` literal on `padding`, `margin`, `gap`, `row-gap` or `column-gap` in `packages/panel/src/styles/*.css`; `0`, `auto` and `1px` pass | Read the spacing role (`--luke-list-gap`, `--luke-tight-gap`, `--luke-control-gap`, `--luke-row-inset`, `--luke-section-gap`, `--luke-page-section-gap`) or, where no role fits, a `--luke-space-*` step |
+| `crumb-width` | A `min-width` above zero on a path's crumb (`.luke-breadcrumbs … li`), or a crumb that takes a share of the room in a sheet that never caps its crumbs at `max-width: max-content` | Give a crumb its floor as its flex basis, `flex: 1 0 <floor>`, capped at `max-width: max-content`, so a short crumb stands as wide as its words and the next chevron follows it |
 
 No comment silences it, and it refuses one that asks to
 (`style-guard-disable`); the face's generated `face/face-motion.css` is the one
@@ -394,7 +423,7 @@ counts each file's places, and the guard fails on a file holding more than its
 count and on a count above what the file still holds. So the change that fixes a
 place lowers its count; `node tools/anti-slop/style-guard.ts --shrink` lowers
 every count to what the files hold and never raises one. A rule that started
-clean (`literal-duration`, `literal-picker-width`) takes no baseline at all, and a baseline is deleted
+clean (`literal-duration`, `literal-picker-width`, `crumb-width`) takes no baseline at all, and a baseline is deleted
 from nothing: once every count is gone, its file is `{}`.
 
 ### Folding in a narrow container

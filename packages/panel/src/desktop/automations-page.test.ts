@@ -18,6 +18,7 @@ import {
   AUTOMATION_TRIGGER,
   type AutomationRunSummary,
   type AutomationSummary,
+  type AutomationWorkspaceRun,
 } from "@luke/features/automation-wire";
 import type { CodingAgentSummary } from "@luke/features/coding-agent-wire";
 import {
@@ -247,6 +248,8 @@ let workspaceAgents: readonly CodingAgentSummary[] = [];
 let agentsFound: (words: string) => readonly CodingAgentSummary[] = () => [];
 /** The service's runs of every automation, newest first, as a read of one's runs answers them. */
 let runs: AutomationRunSummary[] = [];
+/** Every run of the workspace's automations, as its Runs tab's follow pushes them. */
+let workspaceRuns: AutomationWorkspaceRun[] = [];
 /** Every Run now asked, by the automation it runs. */
 let runsAsked: string[] = [];
 /** Whether a read of an automation's runs is held unanswered, as one still out on the wire. */
@@ -320,6 +323,7 @@ beforeEach(() => {
   workspaceAgents = [CI_DIGEST];
   agentsFound = () => [];
   runs = [];
+  workspaceRuns = [];
   runsAsked = [];
   runsHeld = false;
   runHeld = false;
@@ -350,6 +354,8 @@ beforeEach(() => {
         if (kind === AUTOMATION_FOLLOW.WORKSPACE) {
           listed.push(id);
           if (!listHeld) first = [listOf(id)];
+        } else if (kind === AUTOMATION_FOLLOW.WORKSPACE_RUNS) {
+          first = [{ runs: workspaceRuns }];
         } else if (!runsHeld) {
           first = [{ runs }];
         }
@@ -2586,6 +2592,62 @@ test("an automation's runs stand on its page's right, newest first, a run that s
     1,
     "a run that started no agent is no press",
   );
+});
+
+test("the Runs tab lists every automation's runs, each naming its automation, narrowed to the running or the failed", async () => {
+  standing = [SWEEP, DIGEST];
+  workspaceRuns = [
+    {
+      id: "3e4f5a6b-7c8d-4e9f-8a0b-1c2d3e4f5a6b",
+      firing: { kind: AUTOMATION_TRIGGER.SCHEDULE, dueAt: 3 },
+      status: AUTOMATION_RUN_STATUS.STARTED,
+      reason: null,
+      agent: { id: CI_DIGEST.id, title: "Fix the flaky test", status: "running" },
+      firedAt: 3,
+      settledAt: 3,
+      automation: { id: SWEEP.id, name: SWEEP.name },
+    },
+    {
+      id: "4f5a6b7c-8d9e-4f0a-9b1c-2d3e4f5a6b7c",
+      firing: { kind: AUTOMATION_TRIGGER.SCHEDULE, dueAt: 2 },
+      status: AUTOMATION_RUN_STATUS.FAILED,
+      reason: "creator-left",
+      agent: null,
+      firedAt: 2,
+      settledAt: 2,
+      automation: { id: DIGEST.id, name: DIGEST.name },
+    },
+  ];
+  const page = mountPages({ kind: AUTOMATIONS_PAGE.LIST });
+  await settle();
+  const choose = (words: string) => {
+    const found = [...page.querySelectorAll<HTMLElement>("[role=radio]")].find(
+      (each) => each.textContent === words,
+    );
+    assert.ok(found, `no choice ${words}`);
+    act(() => found.click());
+  };
+  choose("Runs");
+  await settle();
+  const listedRuns = () =>
+    [...page.querySelectorAll("ul[aria-label='Runs'] li")].map((row) => row.textContent ?? "");
+
+  assert.deepEqual(places.at(-1), { kind: AUTOMATIONS_PAGE.RUNS });
+  assert.equal(listedRuns().length, 2);
+  assert.match(listedRuns()[0] ?? "", /^Fix the flaky testNightly flaky-test sweepWorking/u);
+  assert.match(listedRuns()[1] ?? "", /^Scheduled runMorning digest/u);
+  choose("Failed");
+  assert.deepEqual(
+    listedRuns().map((row) => row.startsWith("Scheduled run")),
+    [true],
+  );
+  choose("Running");
+  assert.deepEqual(
+    listedRuns().map((row) => row.startsWith("Fix the flaky test")),
+    [true],
+  );
+  act(() => page.querySelector<HTMLButtonElement>("ul[aria-label='Runs'] li button")?.click());
+  assert.deepEqual(agentsOpened, [CI_DIGEST.id]);
 });
 
 test("an automation's runs stand as quiet rows under the panel's heading while they are first read", async () => {

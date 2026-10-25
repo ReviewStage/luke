@@ -1,10 +1,13 @@
 /* toast.css -- the window's passing notices: up to three cards stacked in its
-   bottom-right corner, newest at the bottom, always the window's step in
-   from its corner whatever docks at its foot (a plan's call bar, an agent's
-   composer or its to-do list). A card over one of them stands there only for
-   its hold, and one with something to press can always be dismissed to reach
-   what is under it. The folded sidebar's call card holds the other corner,
-   and the window is never narrow enough for the two to meet.
+   bottom-right corner, newest at the bottom, the window's step in from its
+   corner, and just above whatever docks at its foot under that corner (an
+   agent's composer or its to-do list, a phone's places bar), so a toast
+   never stands over the box being typed in. A reply box flowing at a
+   thread's end is no dock: the thread's log leaves the toasts' room at its
+   end instead, so it and the newest message above it scroll clear of them,
+   and the toasts never climb over the thread. The folded sidebar's call
+   card holds the other corner, and the window is never narrow enough for
+   the two to meet.
 
    The stack, the card, its glyph, words, countdown bar, and × disc are drawn
    in Tailwind utilities over the theme (`toast.tsx`, `toast-stack.tsx`,
@@ -18,16 +21,32 @@
 
 @layer components {
   /* The stack's corner, a step in from the window's, above the on-screen
-     keyboard while it is up. It stays here because the narrow room below
-     moves it by custom properties the shell and the keyboard set. */
+     keyboard while it is up, and just above the dock under the corner
+     (`--luke-toast-dock`, which the shell measures), leaving itself at least
+     three controls' height of what is seen above, as on a phone. It stays
+     here because it moves by custom properties the shell and the keyboard
+     set. */
   .luke-toast-stack {
     right: var(--luke-space-16);
-    bottom: calc(var(--luke-space-16) + var(--luke-keyboard-inset));
+    bottom: calc(
+      max(
+        var(--luke-space-16),
+        min(
+          var(--luke-toast-dock, 0px),
+          var(--luke-stage-height) -
+          3 *
+          var(--luke-control-height)
+        ) +
+        var(--luke-space-8)
+      ) +
+      var(--luke-keyboard-inset)
+    );
     width: min(340px, calc(var(--luke-stage-width) - 2 * var(--luke-space-16)));
   }
 
   /* On a phone the stack stands just above whatever docks at the column's
-     foot, a composer first of all, rather than over it, leaving itself at
+     foot or under the stack (`--luke-toast-dock`), a composer first of all,
+     rather than over it, leaving itself at
      least three controls' height of what is seen above, and keeps off the
      notch and the home indicator, since it is fixed to the page rather than
      the stage. The room is the document root's, because the stack is
@@ -38,7 +57,12 @@
       max(var(--luke-keyboard-inset), env(safe-area-inset-bottom, 0px)) +
       max(
         0px,
-        min(var(--luke-column-dock, 0px), var(--luke-stage-height) - 3 * var(--luke-control-height))
+        min(
+          max(var(--luke-column-dock, 0px), var(--luke-toast-dock, 0px)),
+          var(--luke-stage-height) -
+          3 *
+          var(--luke-control-height)
+        )
       ) +
       var(--luke-space-8)
     );

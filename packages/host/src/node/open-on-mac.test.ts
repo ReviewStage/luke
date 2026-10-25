@@ -12,7 +12,7 @@ import {
 import path from "node:path";
 import { temporaryDirectory } from "@luke/runtime/testing";
 import { test } from "vitest";
-import { cloneFolder, openOnMacScript, worktreeFolder, worktreesRoot } from "./open-on-mac.js";
+import { cloneFolder, openOnMacScript, worktreeFolder } from "./open-on-mac.js";
 
 /**
  * Open on this Mac's script over real Git and bash, an origin on disk
@@ -546,10 +546,6 @@ test(
   },
   GIT_DEADLINE,
 );
-
-test("the shared root sits in the home folder, its path holding no space", () => {
-  assert.equal(worktreesRoot("/Users/someone"), "/Users/someone/.luke");
-});
 
 test(
   "an open waits on a clone another holds while it lives, and takes the lock over once it is gone",

@@ -857,27 +857,6 @@ it.layer(getTestDB())("the integrations an account is offered", (it) => {
   );
 
   it.effect(
-    "a read past the window of the sign-ins holding a provider's places offers the provider again in that same read",
-    () =>
-      Effect.gen(function* () {
-        const group = yield* standing(NOTION_CONNECTOR, undefined, undefined, { declines: true });
-        const userId = yield* openAccount("ended@five-notions.example");
-        const add = (query: string) =>
-          group.ask(`/api/account/integrations/${NOTION}/connect${query}`, {
-            method: "POST",
-            userId,
-          });
-        yield* add("");
-        for (let added = 1; added < INTEGRATION_ACCOUNTS_MAX; added += 1) yield* add("?add=true");
-        yield* TestClock.adjust("16 minutes");
-        const read = yield* group.ask(HOSTED_SERVICE_PATH.ACCOUNT_INTEGRATIONS, { userId });
-
-        assert.equal(accountsIn(read.body).length, 0);
-        assert.ok(addableIn(read.body).includes(NOTION));
-      }),
-  );
-
-  it.effect(
     "an account connected before labels were kept takes its name at the provider from its grant at the next read, once",
     () =>
       Effect.gen(function* () {

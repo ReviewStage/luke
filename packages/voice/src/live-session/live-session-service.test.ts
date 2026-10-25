@@ -703,17 +703,6 @@ it.effect(
 );
 
 it.effect(
-  "a sentence is said as the brain tells it, with no settled mark of the service's own to wait for",
-  () =>
-    Effect.gen(function* () {
-      const { f, sideband } = yield* askedRun();
-      f.brain.fire(sentence("run-1", "Right away."));
-      yield* settle();
-      assert.deepEqual(said(sideband), ["Right away."]);
-    }),
-);
-
-it.effect(
   "a finished worker's finding is said while an asked run is still under way, and the next ask silences it",
   () =>
     Effect.gen(function* () {

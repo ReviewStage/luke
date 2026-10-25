@@ -24,7 +24,9 @@ import { Toolbar, type ToolbarPickUp } from "../toolbar/toolbar.js";
  *
  * Under the window's toolbar (`PAGE_FRAME.TOOLBAR`) the page draws no
  * header nor bar of its own: the caller's toolbar stands still above the
- * columns, and the page is named by the toolbar's title. Content that scrolls sideways stands across the
+ * columns, and the page is named by the toolbar's title. Under a toolbar it
+ * draws itself, its columns stand across the room on the toolbar's own
+ * edges, so the bar's title and actions line up with what it heads. Content that scrolls sideways stands across the
  * whole room (`PAGE_WIDTH.FULL`) rather than at the measure. A page in a
  * narrow column under rows that stand at a column's inset stands its words
  * with theirs (`DETAIL_PAGE_INSET.READING`) rather than a page's inset in from them. A
@@ -39,6 +41,13 @@ import { Toolbar, type ToolbarPickUp } from "../toolbar/toolbar.js";
  * its header reads (`onPickUp`), for the caller's bar to pick up. The
  * secondary column is a complementary landmark named by its `label`. The
  * page names itself by its title and takes no class or style.
+ *
+ * It is drawn in Tailwind utilities over the theme, with no shadcn/ui base,
+ * since shadcn has no page frame. Its sheet (`detail-page.css`) keeps the
+ * page's measure, inset, and the room either side of it, which its profile
+ * and its own width set; the columns' grid, scrolls, and insets, which the
+ * narrow pane's container query and the secondary column's `:has()` undo;
+ * and the reach of what the caller lays in.
  */
 
 /** How far in from its sides the page stands its words: a page's inset, or a column's, as tabs read at the measure stand theirs. */
@@ -48,6 +57,17 @@ export const DETAIL_PAGE_INSET = {
 } as const;
 
 export type DetailPageInset = (typeof DETAIL_PAGE_INSET)[keyof typeof DETAIL_PAGE_INSET];
+
+/**
+ * What either column is: its own scroll, a swipe past its end held there,
+ * its gutter kept so a scrollbar moves nothing, and the keyboard's ring drawn
+ * inside it, because the page clips anything drawn past its edge.
+ */
+const COLUMN_CLASS =
+  "box-border min-w-0 min-h-0 overscroll-contain scrollbar-gutter-stable outline-offset-[var(--luke-focus-ring-inset)]";
+
+/** A column's content, ending on the page's inset or clear of the standing toasts, whichever is more, a long word broken rather than run past the column. */
+const CONTENT_CLASS = "pb-detail-page-end wrap-anywhere";
 
 /** What stands beside the main content: facts about the thing, its people, its history. */
 export type DetailSecondary = {
@@ -90,7 +110,7 @@ export function DetailPage({
   }, [onPickUp, named.name, named.away]);
   return (
     <section
-      className="luke-detail-page"
+      className="luke-detail-page @container flex flex-1 flex-col min-w-0 h-full min-h-0 text-foreground font-ui text-body"
       data-frame={heading.frame}
       data-width={heading.width ?? PAGE_WIDTH.MEASURE}
       data-inset={inset}
@@ -102,11 +122,14 @@ export function DetailPage({
       ) : barOutside ? null : (
         <Toolbar pickUp={{ name: named.name, shown: named.away }} />
       )}
-      <div ref={body} className="luke-detail-page-body">
+      <div ref={body} className="luke-detail-page-body flex-1 min-h-0">
         {/* biome-ignore lint/a11y/noNoninteractiveTabindex: a column scrolls on its own, and a column of words holds nothing else a keyboard could reach to scroll it by. */}
-        <div className="luke-detail-page-main" tabIndex={0}>
+        <div className={`luke-detail-page-main ${COLUMN_CLASS}`} tabIndex={0}>
           {underToolbar ? null : (
-            <div ref={header} className="luke-detail-page-header">
+            <div
+              ref={header}
+              className="luke-detail-page-header pt-detail-page-inset pb-section-gap"
+            >
               <PageHeader
                 title={heading.title}
                 titleId={titleId}
@@ -115,12 +138,16 @@ export function DetailPage({
               />
             </div>
           )}
-          <div className="luke-detail-page-content">{children}</div>
+          <div className={`luke-detail-page-content ${CONTENT_CLASS}`}>{children}</div>
         </div>
         {secondary === undefined ? null : (
-          // biome-ignore lint/a11y/noNoninteractiveTabindex: it scrolls on its own, as the main column does.
-          <aside className="luke-detail-page-secondary" aria-label={secondary.label} tabIndex={0}>
-            <div className="luke-detail-page-content">{secondary.content}</div>
+          <aside
+            className={`luke-detail-page-secondary ${COLUMN_CLASS}`}
+            aria-label={secondary.label}
+            // biome-ignore lint/a11y/noNoninteractiveTabindex: it scrolls on its own, as the main column does.
+            tabIndex={0}
+          >
+            <div className={`luke-detail-page-content ${CONTENT_CLASS}`}>{secondary.content}</div>
           </aside>
         )}
       </div>

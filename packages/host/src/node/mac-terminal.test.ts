@@ -70,12 +70,12 @@ test("the script runs on a real terminal, takes what is typed, follows a resize,
     [
       `tty > ${ttyFile}`,
       "test -t 0 && echo on-a-terminal",
+      // Note that the resize's SIGWINCH is the event the size is read on; `wait`, unlike `read`, gives way to the trap at once.
+      `trap 'echo "size:$(stty size)"; exit 5' WINCH`,
       "echo ready",
       "read -r line",
       'echo "typed:$line"',
-      "read -r _",
-      'echo "size:$(stty size)"',
-      "exit 5",
+      "sleep 60 & wait $!",
       "",
     ].join("\n"),
   );
@@ -84,9 +84,6 @@ test("the script runs on a real terminal, takes what is typed, follows a resize,
   terminal.write("hello\r");
   await until("typed:hello");
   terminal.resize(100, 40);
-  // Note that the size is read after the resize has had its own command's time, by typing once more.
-  execFileSync("sleep", ["0.2"]);
-  terminal.write("\r");
   const code = await ended;
 
   assert.match(printed(), /on-a-terminal/u);

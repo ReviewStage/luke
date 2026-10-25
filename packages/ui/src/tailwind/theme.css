@@ -48,6 +48,36 @@
   --spacing-menu-row: var(--luke-menu-row-height);
   --spacing-menu-glyph: var(--luke-menu-glyph);
   --spacing-list-gap: var(--luke-list-gap);
+
+  /* The panel's work column (`@luke/panel`: a transcript's opening line, the
+     call's video room, a tool's page, the find bar, the version history):
+     the profile's spacing roles it reads beside the ones above, and its own
+     glyphs, measures, and motions. */
+  --spacing-ring-reach: var(--luke-focus-ring-reach);
+  --spacing-column-inset: var(--luke-space-12);
+  --spacing-origin-glyph: 14px; /* off-scale: a document glyph in a 16px mark's place */
+  --spacing-attention-mark: 14px; /* off-scale: the attention disc, a row glyph's size */
+  --spacing-find-field: 240px; /* off-scale: the find bar's field, one width whatever is typed */
+  --spacing-agent-video-frame: min(
+    100%,
+    calc(var(--call-video-height) * var(--call-video-aspect)),
+    calc(var(--luke-stage-height) * 0.4 * var(--call-video-aspect))
+  );
+  --aspect-agent-video: var(--call-video-aspect);
+  --radius-disc: 50%; /* off-scale: a circle, whose corner what it holds inherits */
+  --font-weight-luke-regular: var(--luke-weight-regular);
+  --font-weight-luke-medium: var(--luke-weight-medium);
+  --font-weight-luke-semibold: var(--luke-weight-semibold);
+  --leading-tool-description: 1.5; /* off-scale: a tool's description, a step looser than a caption */
+  --shadow-tool-default: inset 0 0 0 1px var(--luke-color-border-strong);
+  --grid-template-columns-version-track: 100% 100%;
+  --grid-template-rows-version-track: minmax(0, 1fr);
+  --animate-edit-composer-in:
+    luke-menu-arrive var(--luke-duration-quick) var(--luke-motion-exit) both,
+    luke-card-grow var(--luke-duration-fast) var(--luke-spring-fast) both;
+  --animate-edit-composer-out:
+    luke-menu-leave var(--luke-duration-exit) var(--luke-motion-exit) both,
+    luke-card-shrink var(--luke-duration-exit) var(--luke-motion-exit) both;
   --radius-luke-6: var(--luke-radius-6);
   --radius-luke-8: var(--luke-radius-8);
   --radius-luke-10: var(--luke-radius-10);
@@ -675,6 +705,166 @@
     calc(var(--luke-space-64) * 4),
     calc(100% - var(--luke-space-48))
   );
+
+  /* Chips, media, and call (`components/attachment-chip/`, `picture-set/`,
+     `picture-tile/`, `page-thumb/`, `video-player/`, `provider-button/`,
+     `card-press/`, `composer-frame/`, `call/`). Their lengths name the
+     scale's steps where one fits, and say so where none does. */
+  --spacing-page-thumb-row: 48px; /* off-scale: a row's media line */
+  --spacing-icon-16: var(--luke-icon-16);
+  --color-veil: var(--luke-color-veil);
+  --color-on-veil: var(--luke-color-on-veil);
+  /* A picture's own shape, which its tile sets where it is drawn
+     (`--luke-picture-ratio`); the room a few grow from in a row, and the
+     width one of many stands at, each at that shape. */
+  --aspect-picture: var(--luke-picture-ratio);
+  --spacing-picture-row: calc(var(--luke-picture-ratio) * var(--luke-picture-row));
+  --spacing-picture-thumb: calc(var(--luke-picture-ratio) * var(--luke-picture-thumb));
+  /* An attachment chip (`components/attachment-chip/`): as tall as a
+     thumbnail, a thumbnail's width where it holds one, and at most this
+     wide; its face a hair inside its edge, led a hair under a row's inset;
+     the way off a disc over its corner, whose 24px target overhangs it; a
+     landed file's check; and the upload's hairline meter. */
+  --spacing-attachment-chip: 48px; /* off-scale: a thumbnail's height */
+  --spacing-attachment-chip-thumb: 64px; /* off-scale: a thumbnail's width */
+  --spacing-attachment-chip-max: min(220px, 100%); /* off-scale: a chip's longest */
+  --spacing-attachment-chip-lead: 10px; /* off-scale: the glyph's inset */
+  --spacing-attachment-chip-remove: 24px; /* off-scale: the way off's target */
+  --spacing-attachment-chip-remove-out: 9px; /* off-scale: half the disc past the corner */
+  --spacing-attachment-chip-check: 10px; /* off-scale: the landed check's glyph */
+  --spacing-attachment-chip-meter: 2px; /* off-scale: a hairline bar */
+  --radius-attachment-chip-face: calc(var(--luke-radius-8) - 1px);
+  --shadow-attachment-chip-disc: inset 0 0 0 1px var(--luke-color-border-strong);
+  /* A video played in place (`components/video-player/`): no taller than a
+     picture is drawn, and full screen as wide as the stage. */
+  --spacing-video-player: 520px; /* off-scale: a picture's drawn height */
+  --spacing-stage: var(--luke-stage-width);
+  /* A sign-in gate's provider button (`components/provider-button/`): the
+     height a devtool's sign-in button stands at, a finger's at least under
+     one, in a hairline drawn inside it; and the last-used pill, in the
+     button's own ink at a tint laid over the ground. */
+  --spacing-provider-gate: 40px; /* off-scale: a devtool's sign-in height */
+  --spacing-provider-gate-touch: max(40px, var(--luke-touch-target)); /* off-scale: as above */
+  --shadow-provider-gate: inset 0 0 0 1px var(--luke-color-border);
+  --text-label-inline: var(--luke-type-label-size);
+  --color-provider-last-used: color-mix(
+    in srgb,
+    var(--luke-color-ground) 16%,
+    var(--luke-color-text)
+  );
+  --color-provider-last-used-ink: color-mix(in srgb, var(--luke-color-ground) 72%, transparent);
+  /* A composer's card (`components/composer-frame/`), lifted by a soft
+     shadow rather than ringed by a dark edge. */
+  --shadow-composer:
+    0 1px 2px var(--luke-color-shadow-soft), 0 12px 32px -16px var(--luke-color-shadow);
+  /* A call's bar and Luke's video tile (`components/call/`): the bar no
+     wider than a page's measure and as tall as its two lines; a caption's
+     small glyph; the tile's corner, a smaller one on a card, and its height
+     there, which an owner may set (`--luke-call-video-height`, README's
+     "Placement hooks"); and the face, at a share of a frame's width, never
+     past a card's own. */
+  --spacing-call-row-max: var(--luke-page-measure);
+  --spacing-call-row: calc(
+    var(--luke-type-section-leading) +
+    var(--luke-space-2) +
+    var(--luke-type-caption-leading)
+  );
+  --spacing-icon-12: var(--luke-icon-12);
+  --radius-call-tile: var(--luke-radius-14);
+  --spacing-call-tile: var(--luke-call-video-height, auto);
+  --spacing-call-tile-face-share: 40%; /* off-scale: a share of a frame's width */
+  --spacing-call-tile-face-max: 56px; /* off-scale: a masthead's disc */
+
+  /* The page patterns (`components/layout/`, `settings-*`,
+     `collection-page`, `detail-page`, `public-page`, `auth-page`,
+     `empty-state`, `error-state`, `failure-note`, `group-header`): the
+     roles a Stack's and an Inline's gaps and insets read, and each
+     pattern's own lengths, which name the scale's steps, as above. */
+  --spacing-field-gap: var(--luke-field-gap);
+  --spacing-page-section-gap: var(--luke-page-section-gap);
+  /* The least width a field gives way to before its line wraps. */
+  --spacing-field-least: var(--luke-select-field-width);
+  --spacing-page-inset: var(--luke-page-inset);
+  --spacing-luke-64: var(--luke-space-64);
+  --spacing-luke-96: var(--luke-space-96);
+
+  /* Settings (`settings-row`, `settings-section`, `settings-page`). */
+  /* A row's least height and padding at a bare compact row's density and a
+     reference list's, a card's standing with the panel shell's above
+     (`--luke-settings-row-*` in `profiles.css`); an indented row's step in to its parent's words and
+     what a row grows below its line, past the mark the row's sheet sizes
+     (`settings-row.css`); the mark's box, which a mark outside a row draws
+     at 20px; and a connected row's dot. */
+  --spacing-settings-row-compact: var(--luke-settings-row-compact-min-height);
+  --spacing-settings-row-compact-block: var(--luke-settings-row-compact-block);
+  --spacing-settings-row-compact-inline: var(--luke-settings-row-compact-inline);
+  --spacing-settings-row-list: var(--luke-settings-row-list-min-height);
+  --spacing-settings-row-list-block: var(--luke-settings-row-list-block);
+  --spacing-settings-row-indent: calc(
+    var(--luke-settings-row-inline) +
+    var(--luke-settings-row-words-inset)
+  );
+  --spacing-settings-row-words-inset: var(--luke-settings-row-words-inset);
+  --spacing-settings-row-mark: var(--luke-settings-row-mark-size, 20px); /* off-scale: a mark */
+  --spacing-settings-row-state-dot: 6px; /* off-scale: a connected row's dot */
+
+  /* Pages (`collection-page`, `detail-page`, `public-page`, `auth-page`).
+     A page's measure and inset are its own sheet's custom properties, which
+     its profile and its own width (a container query) set, so the roles
+     here read them where the element stands. */
+  --spacing-collection-page-inset: var(--luke-collection-page-inset);
+  --container-collection-page: calc(
+    var(--luke-collection-page-width) +
+    2 *
+    var(--luke-collection-page-inset)
+  );
+  --spacing-detail-page-inset: var(--luke-detail-page-inset);
+  /* A detail column's end, clear of what the standing toasts take of the
+     window's foot (`--luke-toast-room`, which the shell measures). */
+  --spacing-detail-page-end: max(var(--luke-detail-page-inset), var(--luke-toast-room, 0px));
+  --spacing-public-page-start: var(--luke-public-page-start);
+  --spacing-public-page-end: var(--luke-public-page-end);
+  --container-public-page: 700px; /* off-scale: the site's reading column */
+  --container-public-page-wide: 860px; /* off-scale: the column with a rail beside it */
+  --container-public-page-lead: 34rem; /* off-scale: the landing's lead */
+  --text-public-page-lead: 1.125rem; /* off-scale: the landing's lead */
+  --text-public-page-lead--line-height: 1.75rem;
+  /* The hero's display style, the page title's where the profile has none. */
+  --leading-public-page-hero: var(--luke-display-hero-leading, var(--luke-type-title-leading));
+  --font-weight-public-page-hero: var(--luke-display-hero-weight, var(--luke-type-title-weight));
+  --tracking-public-page-hero: var(--luke-display-hero-tracking, normal);
+  --z-index-public-page-banner: 40; /* off-scale: the banner over the document's scroll */
+  --color-public-page-banner: color-mix(in srgb, var(--luke-color-ground) 85%, transparent);
+  --blur-public-page-banner: 12px; /* off-scale: the banner's blur */
+  /* A picture bleeding past the column, up to 960px and never nearer an edge than the page's inset. */
+  --spacing-public-media-reach: calc(
+    50% -
+    min(960px / 2, 50cqw - var(--luke-page-inset))
+  ); /* off-scale: 960px, the bleed */
+  --radius-public-media: var(--luke-radius-14);
+  --shadow-public-media:
+    0 20px 25px -5px var(--luke-color-shadow-soft), 0 8px 10px -6px var(--luke-color-shadow-soft);
+  --container-auth-card: 430px; /* off-scale: the OAuth pages' card */
+  --shadow-auth-card: 0 24px 80px var(--luke-color-shadow-soft);
+  --spacing-auth-ring: 56px; /* off-scale: the artwork's ring */
+  --shadow-auth-badge: 0 0 0 3px var(--luke-color-surface);
+  --color-auth-badge-danger: var(--luke-color-danger-fill);
+  --color-auth-badge-on-danger: var(--luke-color-on-danger);
+
+  /* States (`group-header`, `empty-state`, `error-state`, `failure-note`). */
+  /* off-scale: the measure an empty place's glyph, words, and way on wrap
+     at, never wider than the room. */
+  --container-empty-state: min(280px, 100%);
+  /* A caption's line centred in a control-tall row, as the glyph and Retry
+     beside it are: an error state's words, a failure note's beside Retry. */
+  --spacing-state-row-inset: calc(
+    (var(--luke-control-height) - var(--luke-type-caption-leading)) /
+    2
+  );
+  /* A failure note's first row with no press in it: one caption's line. */
+  --spacing-failure-note-row: var(--luke-type-caption-leading);
+  /* A group head's mark, a small note a step under its glyph. */
+  --spacing-group-header-mark: var(--luke-icon-12);
 }
 
 /* The conditions a control answers beside its states: a finger's pointer,

@@ -144,7 +144,7 @@ export function AgentCallVideo({ agentId }: { agentId: string }): React.JSX.Elem
   if (status === undefined || status === AVATAR_STATUS.OFF) return null;
   return (
     <div
-      className="agent-call-video"
+      className="agent-call-video flex justify-center px-luke-16 py-row-inset"
       data-reveal={String(hovered || dragging)}
       onPointerEnter={() => setHovered(true)}
       onPointerLeave={() => setHovered(false)}
@@ -153,7 +153,7 @@ export function AgentCallVideo({ agentId }: { agentId: string }): React.JSX.Elem
         "--call-video-aspect": String(aspect),
       })}
     >
-      <div className="agent-call-video-frame">
+      <div className="agent-call-video-frame aspect-agent-video w-agent-video-frame">
         <ResizeFrame reveal={hovered || dragging}>
           <CallVideoTile
             video={video}

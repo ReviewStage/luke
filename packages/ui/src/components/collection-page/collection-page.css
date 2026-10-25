@@ -1,29 +1,21 @@
-/* collection-page.css -- a collection's page: a still header and filters
-   over one scrolling content column, all three at one measure centred in
-   the room. The measure is the page's, a plan's reading width in the window
-   and the admin's wider column on the web. The page queries its own width
-   rather than the viewport's, so a page in a narrow pane narrows its inset
-   as it would in a narrow window; a container query cannot read a custom
-   property, so the width it narrows under is a literal here. Under the
-   window's toolbar the page draws no header, and a board's content stands
-   across the room, scrolling sideways past it, and holds to the page's
-   height. */
+/* collection-page.css -- what a collection page's utilities
+   (`collection-page.tsx`) cannot say: the page's measure and inset, which
+   its profile and its own width set, or under the window's toolbar the
+   room's whole width at the toolbar's edges; the filter line's `:has()`; the
+   notice's room; the rows of blocks a read stands, whose classes name only
+   themselves; and the reach of what the caller lays in. The page queries
+   its own width rather than the viewport's, so a page in a narrow pane
+   narrows its inset as it would in a narrow window; a container query
+   cannot read a custom property, so the width it narrows under is a
+   literal here. */
 
 @layer components {
+  /* The measure is the page's, a plan's reading width in the window and the
+     admin's wider column on the web; the theme's `max-w-collection-page`
+     and `px-collection-page-inset` read them. */
   .luke-collection-page {
     --luke-collection-page-width: var(--luke-page-measure);
     --luke-collection-page-inset: var(--luke-page-inset);
-    container-type: inline-size;
-    display: flex;
-    flex: 1;
-    flex-direction: column;
-    min-width: 0;
-    height: 100%;
-    min-height: 0;
-    color: var(--luke-color-text);
-    font-family: var(--luke-font-sans);
-    font-size: var(--luke-type-body-size);
-    line-height: var(--luke-type-body-leading);
   }
 
   [data-luke-profile="web"] .luke-collection-page {
@@ -37,116 +29,30 @@
     }
   }
 
-  /* The header, the filters, and the content each take the page's inset
-     and stand their measure in the middle of what is left, so all three
-     open on one edge. */
-  .luke-collection-page-header,
-  .luke-collection-page-filters,
-  .luke-collection-page-content {
-    box-sizing: border-box;
-    width: 100%;
-    max-width: calc(var(--luke-collection-page-width) + 2 * var(--luke-collection-page-inset));
-    margin-inline: auto;
-    padding-inline: var(--luke-collection-page-inset);
+  /* Under the window's toolbar the page is a workspace's rather than a
+     document's: its filters and its content stand across the room on the
+     toolbar's own edges, where its title's words start and its actions end
+     (`toolbar.css`'s page inset, a column's inset and a row's), in any
+     room, so the bar lines up with what it heads rather than with a
+     measure centred under it. Note that it says so in the page's own
+     properties, the measure as wide as the room, so whatever reads them
+     answers it. */
+  .luke-collection-page[data-frame="toolbar"] > * {
+    --luke-collection-page-width: 100%;
+    --luke-collection-page-inset: calc(var(--luke-space-12) + var(--luke-row-inset));
   }
 
-  /* The header (`PageHeader`) opens at the page's inset. */
-  .luke-collection-page-header {
-    padding-top: var(--luke-collection-page-inset);
-  }
-
+  /* Note that the filter line's display stays here rather than in a
+     utility, because a filter line whose filters all stand hidden, a line
+     of chips waiting for its first, takes no room, so the line can stand
+     ready for a chip to arrive into without a gap where none is, and a rule
+     in this layer cannot undo a utility. */
   .luke-collection-page-filters {
     display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: var(--luke-control-gap);
-    padding-top: var(--luke-section-gap);
   }
 
-  /* A filter line whose filters all stand hidden, a line of chips waiting
-     for its first, takes no room, so the line can stand ready for a chip
-     to arrive into without a gap where none is. */
   .luke-collection-page-filters:not(:has(> :not([hidden]))) {
     display: none;
-  }
-
-  /* The header and filters stand still above the scroll, and reserve a
-     scrollbar's gutter as the scroll does, so a scrollbar that takes room
-     narrows the column under them no more than them. Their end gap is the
-     content's room under the filters, which keeps a focus ring on a filter
-     inside what they clip. In a pane too short for them they take half its
-     height at most and scroll themselves, so the content keeps the rest. */
-  .luke-collection-page-top {
-    flex: none;
-    box-sizing: border-box;
-    max-height: 50%;
-    overflow-x: hidden;
-    overflow-y: auto;
-    scrollbar-gutter: stable;
-    padding-bottom: var(--luke-section-gap);
-  }
-
-  /* The one scroll, the width of the page so the wheel works anywhere on
-     it. */
-  .luke-collection-page-scroll {
-    display: flex;
-    flex: 1;
-    flex-direction: column;
-    min-height: 0;
-    overflow-x: hidden;
-    overflow-y: auto;
-    overscroll-behavior: contain;
-    scrollbar-gutter: stable;
-  }
-
-  .luke-collection-page-content {
-    display: flex;
-    flex: 1 0 auto;
-    flex-direction: column;
-    padding-bottom: var(--luke-collection-page-inset);
-  }
-
-  /* Under a toolbar with no filters, the content opens the filters' gap
-     below the toolbar's hairline, inside the scroll so the wheel works
-     right up to it. Note that the gap is the content's padding rather than
-     the scroll's, because a sticky head sticks inside its scroller's
-     padding, and would leave what scrolls under it showing above it. */
-  .luke-collection-page[data-frame="toolbar"]
-    > .luke-collection-page-scroll:first-child
-    > .luke-collection-page-content,
-  .luke-collection-page[data-frame="toolbar"]
-    > :not(.luke-collection-page-top)
-    + .luke-collection-page-scroll
-    > .luke-collection-page-content {
-    padding-top: var(--luke-section-gap);
-  }
-
-  /* A board's content stands across the room at the page's inset and
-     scrolls sideways past it. */
-  .luke-collection-page[data-width="full"]
-  :is(.luke-collection-page-header, .luke-collection-page-filters, .luke-collection-page-content) {
-    max-width: none;
-  }
-
-  .luke-collection-page[data-width="full"] > .luke-collection-page-scroll {
-    overflow-x: auto;
-  }
-
-  /* A board's content holds to the page's height rather than its cards',
-     so a board whose columns scroll their own cards fills the page and
-     never scrolls it down; content taller than that runs past it, and the
-     page scrolls down as it would. Its end inset is a last item rather than
-     padding, so it still follows what runs past. */
-  .luke-collection-page[data-width="full"] .luke-collection-page-content {
-    flex: 1 1 0;
-    min-height: 0;
-    padding-bottom: 0;
-  }
-
-  .luke-collection-page[data-width="full"] .luke-collection-page-content::after {
-    flex: none;
-    height: var(--luke-collection-page-inset);
-    content: "";
   }
 
   /* A filter's search field stands at a search's width, not the line's. */
@@ -163,6 +69,10 @@
     margin-inline: calc(-1 * var(--luke-space-12));
   }
 
+  /* The rows of blocks a read in progress stands, where the caller hands no
+     skeleton: a skeleton's elements wear only classes naming themselves a
+     skeleton's (`anti-slop/skeleton-through-components`), so they are laid
+     out here. */
   .luke-collection-page-skeleton {
     display: flex;
     flex-direction: column;
@@ -189,14 +99,6 @@
 
   /* An empty or failed collection stands its notice a little above the
      room's middle, shared two to three as an empty state stands alone. */
-  .luke-collection-page-notice {
-    display: flex;
-    flex: 1;
-    flex-direction: column;
-    align-items: center;
-    text-align: center;
-  }
-
   .luke-collection-page-notice::before,
   .luke-collection-page-notice::after {
     content: "";
