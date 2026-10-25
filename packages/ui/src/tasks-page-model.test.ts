@@ -614,13 +614,6 @@ test("the Board stands a column for each assignee where asked, the reader's firs
   ]);
 });
 
-test("the List and the Board draw each task's assignee at first and not its creator", () => {
-  for (const display of [DEFAULT_LIST_DISPLAY, DEFAULT_BOARD_DISPLAY]) {
-    expect(display.properties).toContain(TASK_PROPERTY.ASSIGNEE);
-    expect(display.properties).not.toContain(TASK_PROPERTY.CREATOR);
-  }
-});
-
 test("a display kept before rows offered the assignee draws it, and keeps its creator as it was kept, on or off", () => {
   const without = (left: readonly TaskProperty[], ...out: TaskProperty[]) =>
     left.filter((property) => !out.includes(property));

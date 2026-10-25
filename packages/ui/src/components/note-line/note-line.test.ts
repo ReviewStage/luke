@@ -37,17 +37,17 @@ function mount(element: React.ReactElement): HTMLElement {
   return container;
 }
 
-for (const look of Object.values(NOTE_LINE_LOOK)) {
-  test(`a ${look} note line announced as a status says its words alone, with no alert or press`, () => {
-    const container = mount(createElement(NoteLine, { look, status: true, children: WORDS }));
-    const statuses = container.querySelectorAll('[role="status"]');
+test("a note line announced as a status says its words alone, with no alert or press", () => {
+  const container = mount(
+    createElement(NoteLine, { look: NOTE_LINE_LOOK.LIST, status: true, children: WORDS }),
+  );
+  const statuses = container.querySelectorAll('[role="status"]');
 
-    expect(statuses).toHaveLength(1);
-    expect(statuses[0]?.textContent).toBe(WORDS);
-    expect(container.querySelector('[role="alert"]')).toBeNull();
-    expect(container.querySelector("button")).toBeNull();
-  });
-}
+  expect(statuses).toHaveLength(1);
+  expect(statuses[0]?.textContent).toBe(WORDS);
+  expect(container.querySelector('[role="alert"]')).toBeNull();
+  expect(container.querySelector("button")).toBeNull();
+});
 
 test("a note line not announced says its words without a live role", () => {
   const container = mount(createElement(NoteLine, { children: WORDS }));

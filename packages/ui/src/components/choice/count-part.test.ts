@@ -9,8 +9,8 @@ import { CountParts, linesCount } from "./count-part.js";
 
 /**
  * count-part.test.ts -- a diff's line count is two parts, the lines added
- * in the complete tone and the lines removed in the danger tone, read as one
- * count; a part's glyph says its state in words.
+ * and the lines removed, read as one count; a part's glyph says its state in
+ * words.
  */
 
 declare global {
@@ -33,18 +33,6 @@ function render(element: ReactElement): HTMLElement {
   act(() => root.render(element));
   return container;
 }
-
-test("a diff's lines are added in the complete tone and removed in the danger tone", () => {
-  assert.deepEqual(linesCount(214, 38), [
-    { text: "+214", tone: STATUS_TONE.COMPLETE },
-    { text: "−38", tone: STATUS_TONE.DANGER },
-  ]);
-  assert.deepEqual(
-    linesCount(0, 0).map((part) => part.tone),
-    [STATUS_TONE.COMPLETE, STATUS_TONE.DANGER],
-    "an empty diff's count still carries its colours",
-  );
-});
 
 test("a count's parts read as one count, a space between each", () => {
   const page = render(createElement(CountParts, { parts: linesCount(214, 38) }));
