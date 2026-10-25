@@ -23,6 +23,7 @@ import { test } from "vitest";
 import {
   ANSWER_TONE,
   acknowledgedOnOpen,
+  asksNod,
   awaitsNod,
   CODE_READ,
   codeNotice,
@@ -71,6 +72,7 @@ import {
   shownTicks,
   taskHolder,
   tasklessGroups,
+  waitsOnReader,
   withChoice,
   withDoPress,
   withStep,
@@ -1438,13 +1440,17 @@ test("a notice, open with no ask open on its thread, waits on the reader's nod, 
   });
 
   assert.equal(awaitsNod(notice), true);
-  assert.equal(acknowledgedOnOpen(notice, READER), true);
+  assert.equal(acknowledgedOnOpen(notice, READER, false), true);
   assert.equal(
-    acknowledgedOnOpen({ ...notice, needsReply: true }, READER),
+    acknowledgedOnOpen({ ...notice, needsReply: true }, READER, false),
     false,
     "a notice whose agent waits to hear back is not nodded to by a mere open",
   );
-  assert.equal(acknowledgedOnOpen(notice, undefined), false, "nor before the reader is known");
+  assert.equal(
+    acknowledgedOnOpen(notice, undefined, false),
+    false,
+    "nor before the reader is known",
+  );
   const asked = asking({ type: INBOX_ASK.ANSWER });
   assert.equal(awaitsNod({ ...notice, thread: [asked] }), false);
   assert.equal(
@@ -1453,6 +1459,51 @@ test("a notice, open with no ask open on its thread, waits on the reader's nod, 
     "an ask open on the thread is answered, not nodded to",
   );
   assert.equal(awaitsNod({ ...notice, status: INBOX_STATUS.ANSWERED }), false);
+});
+
+test("an item of an agent with no task waits on the member it is addressed to, else on its starter", () => {
+  const teammate = CHARLES.userId;
+
+  assert.deepEqual(
+    [
+      waitsOnReader({ startedBy: teammate, waitsOn: READER }, READER),
+      waitsOnReader({ startedBy: READER, waitsOn: teammate }, READER),
+      waitsOnReader({ startedBy: READER }, READER),
+    ],
+    [true, false, true],
+  );
+});
+
+test("under Channels a notice offers Got it, and is nodded to on open, only where its agent addressed it to the reader; one addressed to nobody is only read", () => {
+  const notice = item({
+    id: "a1b2c3d4-0000-4000-8000-000000000011",
+    needsReply: false,
+    waitsOn: YOU,
+    thread: [
+      {
+        ...message({ text: "The preview is up.", createdAt: 1_000 }),
+        author: INBOX_MESSAGE_AUTHOR.AGENT,
+      },
+    ],
+  });
+  const addressed = { ...notice, addressed: true };
+
+  assert.deepEqual(
+    [asksNod(notice, READER, true), acknowledgedOnOpen(notice, READER, true)],
+    [false, false],
+  );
+  assert.deepEqual(
+    [asksNod(addressed, READER, true), acknowledgedOnOpen(addressed, READER, true)],
+    [true, true],
+  );
+  assert.deepEqual(
+    [
+      asksNod({ ...addressed, waitsOn: CHARLES }, READER, true),
+      acknowledgedOnOpen({ ...addressed, waitsOn: CHARLES }, READER, true),
+    ],
+    [false, false],
+    "a notice addressed to a teammate is theirs to nod to",
+  );
 });
 
 test("an answer's stamp names a pair of buttons' pick in the past where it can and which way it goes, any other pick by its options, and a to-do by the steps it ticked", () => {

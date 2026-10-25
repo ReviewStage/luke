@@ -227,6 +227,8 @@ export interface AppInboxTasklessItem extends AppInboxWaitingItem {
   workspaceId?: string;
   /** The account that started the agent, whom the item waits on; absent where the service does not say, when it is the reader's own. */
   startedBy?: string;
+  /** The account the item waits on: the member its agent addressed it to, else its starter; absent from a service before it, which reads as waiting on `startedBy`. */
+  waitsOn?: string;
 }
 
 /** One automation holding items of its runs' agents with no task, waiting or settled, as a task holding items is listed: how many, and when the latest changed; null for the agents no automation the reader may read names. */

@@ -66,6 +66,7 @@ type InboxAnswerGiven =
 function fixture() {
   const posted: AgentNotice[] = [];
   let chatOn = true;
+  let channelsOn = false;
   const badges: number[] = [];
   /** Whether the badge door throws, as a platform that refuses one may. */
   let refusingBadges = false;
@@ -125,6 +126,7 @@ function fixture() {
         failedRuns.push(next.failedRuns);
       },
       chatOn: () => chatOn,
+      channelsOn: () => channelsOn,
       report: () => undefined,
     });
   }).pipe(Effect.provide(doors));
@@ -158,6 +160,10 @@ function fixture() {
     /** The account's Chat experiment. */
     turnChat: (on: boolean) => {
       chatOn = on;
+    },
+    /** The account's Channels experiment. */
+    turnChannels: (on: boolean) => {
+      channelsOn = on;
     },
     /** The signed-in account's id as its identity now holds it: none for one stored without it. */
     knowAccountId: (next: string | undefined) => {
@@ -975,6 +981,57 @@ it.effect("with Chat off for the account, nothing waiting in chat is counted on 
     yield* settled;
     assert.equal(f.badges.at(-1), 0);
   }),
+);
+
+it.effect(
+  "with Channels on, the badge counts the open asks that wait on the account, an ask with no task addressed to it among them, and no notice or teammate's ask, beside chat",
+  () =>
+    Effect.gen(function* () {
+      const f = fixture();
+      yield* f.notices;
+      f.turnChannels(true);
+      const teammate = "user-charles";
+      f.answerInbox({
+        items: [
+          waitingItem(ITEM_A, { waitsOn: ACCOUNT_ID, asking: true }),
+          waitingItem(ITEM_B, { waitsOn: ACCOUNT_ID, asking: false }),
+          waitingItem(ITEM_C, { waitsOn: teammate, asking: true }),
+        ],
+        planless: [
+          tasklessItem(ITEM_B, { startedBy: teammate, waitsOn: ACCOUNT_ID, asking: true }),
+          tasklessItem(ITEM_C, { startedBy: ACCOUNT_ID, waitsOn: teammate, asking: true }),
+        ],
+        chat: [chatEntry(40)],
+        cursor: "1",
+        readAt: READ_AT,
+      });
+      yield* settled;
+
+      assert.equal(f.badges.at(-1), 3);
+    }),
+);
+
+it.effect(
+  "Channels turning on counts the badge again from what last waited, with no answer moving",
+  () =>
+    Effect.gen(function* () {
+      const f = fixture();
+      const notices = yield* f.notices;
+      f.answerInbox({
+        items: [
+          waitingItem(ITEM_A, { waitsOn: ACCOUNT_ID, asking: true }),
+          waitingItem(ITEM_B, { waitsOn: ACCOUNT_ID, asking: false }),
+        ],
+        cursor: "1",
+        readAt: READ_AT,
+      });
+      yield* settled;
+      const before = f.badges.at(-1);
+      f.turnChannels(true);
+      notices.recount();
+
+      assert.deepEqual([before, f.badges.at(-1)], [2, 1]);
+    }),
 );
 
 it.effect("a badge door that throws loses that count alone: the next answer still badges", () =>
