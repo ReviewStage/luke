@@ -302,7 +302,7 @@ export function ConversationContent({
     >
       <div
         className={cn(
-          "conversation-log px-content-inset pt-section-gap pb-luke-20 [&>:not(:last-child)]:mb-block-gap",
+          "conversation-log px-content-inset pt-section-gap pb-luke-20",
           className,
         )}
       >
