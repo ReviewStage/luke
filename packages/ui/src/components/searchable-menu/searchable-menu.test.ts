@@ -16,7 +16,13 @@ import {
   type PopoverWidth,
 } from "../../index.js";
 import { ErrorState } from "../error-state/error-state.js";
-import { type FootRow, type MenuRow, MenuRowList, SearchableMenu } from "./searchable-menu.js";
+import {
+  type FootRow,
+  type MenuRow,
+  MenuRowList,
+  SEARCHABLE_MENU_LAYER,
+  SearchableMenu,
+} from "./searchable-menu.js";
 
 /**
  * searchable-menu.test.ts -- what typing in a picker's field does and the
@@ -106,6 +112,7 @@ function mount(
     note?: React.ReactNode;
     width?: PopoverWidth | undefined;
     bounds?: PopoverBounds | undefined;
+    embedded?: boolean;
   } = {},
 ) {
   const asked: Asked = { said: [], escapedPast: [] };
@@ -133,9 +140,9 @@ function mount(
         onClose: () => asked.said.push("close"),
         onLeave: () => undefined,
         foot: options.foot === true ? footOf(asked.said) : undefined,
-        align: POPOVER_ALIGN.START,
-        width: options.width,
-        bounds: options.bounds,
+        ...(options.embedded === true
+          ? { layer: SEARCHABLE_MENU_LAYER.EMBEDDED }
+          : { align: POPOVER_ALIGN.START, width: options.width, bounds: options.bounds }),
       }),
     ),
   );
@@ -338,6 +345,17 @@ test("the width chosen sets the popover's width to its token, and none chosen is
   assert.equal(wide.placed, wide.token);
   assert.equal(unnamed.placed, unnamed.token);
   assert.notEqual(narrow.placed, wide.placed);
+});
+
+test("an embedded menu stands in its owner's layer with none of its own, and reads the same keys", () => {
+  const asked = mount({ placeholder: "Search models", embedded: true });
+  const menu = document.querySelector<HTMLElement>('[role="dialog"][aria-label="Model"]');
+  press({ key: "ArrowDown" });
+  press({ key: "Enter" });
+
+  assert.equal(document.querySelector(".luke-anchored-popover"), null);
+  assert.equal(menu?.parentElement, document.body.firstElementChild?.firstElementChild);
+  assert.deepEqual(asked.said, ["pick haiku"]);
 });
 
 test("the arrows go on into the pinned rows, whose submenu Right opens, Left closes, and Enter picks in", () => {

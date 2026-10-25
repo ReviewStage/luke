@@ -8,8 +8,10 @@
      button leaves (`--luke-popover-room`, measured against what is seen of
      the window), so a phone's keyboard or a short window never hides its
      last rows: its list gives way and scrolls, under the search row that
-     stays. */
-  .luke-anchored-popover > .luke-searchable-menu {
+     stays. Embedded in a layer floated by a box in the words, it keeps to
+     the room that layer's side leaves it the same way. */
+  .luke-anchored-popover > .luke-searchable-menu,
+  .luke-rect-float > .luke-searchable-menu {
     max-height: var(--luke-popover-room, none);
   }
 
