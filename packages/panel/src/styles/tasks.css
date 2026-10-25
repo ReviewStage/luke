@@ -2198,35 +2198,40 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
 }
 
 /* What the place opening the viewer says of the file shown, after its size
-   in the same quiet ink, a plan's picture saying who last edited it: on a
-   phone's header the size gives it the room the size kept before the
-   buttons, and it is cut before it reaches them. */
+   in the same quiet ink, a plan's picture saying who last edited it: the
+   size gives it the room the size kept before the header's buttons, and it
+   is cut before it reaches them. */
 .attachment-viewer-size:has(+ .attachment-viewer-note) {
   margin-right: 0;
 }
 
-/* A file opened over the window (`attachment-viewer.tsx`) stands under a bar
-   where the window's top bar stands, clear of the traffic lights, on the
-   window's ground (`@luke/ui`'s Toolbar). */
-.attachment-viewer {
-  --luke-toolbar-start-at: var(--title-bar-left);
-  --luke-toolbar-ground: var(--luke-color-ground);
-}
-
-/* A picture or a video fits the room under the bar at its own shape, the
-   room one track its own size so the file's 100% is the room's; a picture
-   at its own pixels keeps the whole room. */
+/* A picture or a video fits the room under the viewer's header at its own
+   shape, the room one track its own size so the file's 100% is the room's.
+   A picture grows past its own pixels to fill the room, at most twice over
+   (`@luke/ui`'s ZoomImage says them once it has loaded); a video plays no
+   larger than its own (`@luke/ui`'s VideoPlayer). */
 .attachment-viewer-body:has(> :is(.luke-zoom-image, .luke-video-player)) {
   grid-template: minmax(0, 1fr) / minmax(0, 1fr);
 }
 
-.attachment-viewer-body > :is(.luke-zoom-image, .luke-video-player) {
-  max-width: 100%;
+.attachment-viewer-body:has(> .luke-zoom-image) {
+  container-type: size;
+}
+
+.attachment-viewer-body > .luke-video-player {
   max-height: 100%;
 }
 
-.attachment-viewer[data-opening="own-pixels"] .attachment-viewer-body {
-  padding: 0;
+.attachment-viewer-body > .luke-zoom-image {
+  width: min(
+    100cqw,
+    100cqh *
+    var(--luke-zoom-natural-width) /
+    var(--luke-zoom-natural-height),
+    var(--luke-zoom-natural-width) *
+    2px
+  );
+  max-height: 100%;
 }
 
 /* An agent's Terminal tab (`terminal-tab.tsx`): the File tab's frame, its

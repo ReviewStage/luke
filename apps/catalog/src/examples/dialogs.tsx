@@ -4,7 +4,6 @@ import {
   CloseIcon,
   DIALOG_ROLE,
   DIALOG_SIZE,
-  DIALOG_VEIL,
   Dialog,
   FormField,
   IconButton,
@@ -18,7 +17,6 @@ import {
   Text,
   TextArea,
   TextField,
-  Toolbar,
   WingFace,
 } from "@luke/ui";
 import { useId, useRef, useState } from "react";
@@ -212,21 +210,19 @@ function PictureDialog({ open, onClose }: DialogBody): React.JSX.Element {
   );
 }
 
-/** A picture opened over the whole window, on the dark veil under the window's own bar, put away by a press on the veil. */
+/** A picture opened in a card as large as the window allows, below its top bar, under a bar naming it. */
 function WindowPictureDialog({ open, onClose }: DialogBody): React.JSX.Element {
   const titleId = useId();
   return (
     <Dialog open={open} size={DIALOG_SIZE.WINDOW} labelledBy={titleId} onDismiss={onClose}>
       <div className="catalog-window">
-        <Toolbar
-          title={
-            <Text variant={TEXT_VARIANT.TOOLBAR_TITLE} as={TEXT_ELEMENT.H2} id={titleId}>
-              luke-face.svg
-            </Text>
-          }
-          actions={<IconButton icon={<CloseIcon />} label="Close" onClick={onClose} />}
-        />
-        <div className="catalog-window-picture" {...DIALOG_VEIL}>
+        <div className="catalog-media-bar">
+          <Text variant={TEXT_VARIANT.LABEL} as={TEXT_ELEMENT.H2} id={titleId}>
+            luke-face.svg
+          </Text>
+          <IconButton icon={<CloseIcon />} label="Close" onClick={onClose} />
+        </div>
+        <div className="catalog-window-picture">
           <WingFace />
         </div>
       </div>
@@ -267,7 +263,7 @@ function Dialogs(): React.JSX.Element {
         <Opener label="Send feedback…" Body={NoteDialog} />
         <Opener label="New task…" Body={ComposerDialog} />
         <Opener label="Open picture…" Body={PictureDialog} />
-        <Opener label="Open picture full window…" Body={WindowPictureDialog} />
+        <Opener label="Open picture large…" Body={WindowPictureDialog} />
       </Inline>
     </CatalogSection>
   );

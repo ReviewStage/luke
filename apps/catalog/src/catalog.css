@@ -455,11 +455,9 @@ body {
   background: var(--luke-color-surface);
 }
 
-/* A picture over the whole window: the bar on the window's ground, the
-   picture centred on the veil under it. */
+/* A picture in a card as large as the window allows: its bar along the
+   top, the picture centred on its own ground under it. */
 .catalog-window {
-  --luke-toolbar-ground: var(--luke-color-ground);
-
   display: flex;
   height: 100%;
   flex-direction: column;
@@ -470,6 +468,7 @@ body {
   min-height: 0;
   flex: 1 1 auto;
   place-items: center;
+  background: var(--luke-color-surface);
 }
 
 /* The face gives way to a narrow or short window, so the card that fits it

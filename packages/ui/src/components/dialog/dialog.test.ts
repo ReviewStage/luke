@@ -6,14 +6,7 @@ import { afterEach, beforeAll, expect, test, vi } from "vitest";
 import { MOTION_TOKEN } from "../../motion-timing.js";
 import { holdExits } from "../../testing/held-exits.js";
 import { Announcer } from "../announcer/announcer.js";
-import {
-  DIALOG_ROLE,
-  DIALOG_SIZE,
-  DIALOG_VEIL,
-  Dialog,
-  type DialogHandle,
-  nextRowOrHead,
-} from "./dialog.js";
+import { DIALOG_ROLE, Dialog, type DialogHandle, nextRowOrHead } from "./dialog.js";
 
 /**
  * dialog.test.ts -- a dialog opened from a button takes the keyboard and
@@ -237,32 +230,6 @@ test("a press dragged out of the card leaves it open, and one on the dimmed wind
   press(backdrop, backdrop);
   expect(card()).toBeNull();
   expect(holds(opener)).toBe(true);
-});
-
-test("a card that fills the window is put away by a press on its veil, and not by one on what the veil holds", () => {
-  let dismissed = 0;
-  draw(
-    createElement(Dialog, {
-      open: true,
-      size: DIALOG_SIZE.WINDOW,
-      title: "shot.png",
-      onDismiss: () => {
-        dismissed += 1;
-      },
-      children: createElement(
-        "div",
-        { ...DIALOG_VEIL, "data-testid": "veil" },
-        createElement("img", { alt: "shot.png" }),
-      ),
-    }),
-  );
-  const veil = document.querySelector("[data-testid=veil]") ?? expect.fail("the veil stands");
-  const picture = veil.querySelector("img") ?? expect.fail("the picture stands");
-  press(picture, picture);
-  press(picture, veil);
-  expect(dismissed).toBe(0);
-  press(veil, veil);
-  expect(dismissed).toBe(1);
 });
 
 test("taken away unanswered, as a surface closing behind it does, it still hands focus back", () => {
