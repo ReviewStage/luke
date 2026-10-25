@@ -9,13 +9,14 @@
  * how long it stands, not a toast's hold. A failure is the danger tone,
  * which the stack says as an alert; a notice and the volume hint ask the
  * developer's attention, said politely. A failure with a remedy offers it as
- * the toast's action, and the volume hint offers "Hide". Words that change
+ * the toast's action, and the volume hint offers "Hide" and leads with the
+ * speaker, since it is about the Mac's sound and asks nothing of the Inbox. Words that change
  * are a new toast in the old one's place; words the developer dismissed stay
  * dismissed until the voice says something else.
  */
 
 import { VOICE_REMEDY, VOICE_REMEDY_LABEL, type VoiceRemedy } from "@luke/features/words";
-import { STATUS_TONE, type ToastTone } from "@luke/ui";
+import { SpeakerIcon, STATUS_TONE, type ToastTone } from "@luke/ui";
 import { type RefObject, useEffect, useRef } from "react";
 import { type ToastNotice, useToast, useWithdrawToast } from "./toast.js";
 import {
@@ -59,7 +60,7 @@ export interface VoiceNoticeToastOptions extends VoiceNoticePresses {
   notice: VoiceNoticePresentation;
 }
 
-/** The toast a notice stands as: its words in its tone, with the hint's "Hide" or a failure's remedy as its action. */
+/** The toast a notice stands as: its words in its tone, with the hint's speaker and "Hide" or a failure's remedy as its action. */
 function noticeToast(
   content: VoiceNoticeContent,
   presses: RefObject<VoiceNoticePresses>,
@@ -73,7 +74,7 @@ function noticeToast(
   } as const;
   if (tone === VOICE_NOTICE_TONE.VOLUME) {
     const onPress = () => presses.current.onDismissHint();
-    return { ...toast, action: { label: DISMISS_HINT_LABEL, onPress } };
+    return { ...toast, glyph: SpeakerIcon, action: { label: DISMISS_HINT_LABEL, onPress } };
   }
   if (remedy === undefined) return toast;
   const onPress = () => presses.current.onRemedy(remedy);
