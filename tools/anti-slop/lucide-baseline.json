@@ -36,7 +36,6 @@
   "packages/panel/src/settings/workspace-token-repositories.tsx": 1,
   "packages/panel/src/state-glyph.test.ts": 1,
   "packages/panel/src/state-glyph.tsx": 1,
-  "packages/panel/src/styles/task-view-label-fade.test.ts": 1,
   "packages/panel/src/tasks/add-to-plan.tsx": 1,
   "packages/panel/src/tasks/agent-tab.tsx": 1,
   "packages/panel/src/tasks/annotation-card.tsx": 1,
