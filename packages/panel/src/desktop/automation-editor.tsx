@@ -32,7 +32,7 @@ import {
   withIntegrationFilters,
   withRepository,
 } from "@luke/features/automation-draft-model";
-import { automationTriggerText } from "@luke/features/automation-list-model";
+import { automationTriggerText, parseAutomationClock } from "@luke/features/automation-list-model";
 import { readSchedule, SCHEDULE_REFUSAL } from "@luke/features/automation-schedule";
 import {
   AUTOMATION_CALL_FAILURE,
@@ -70,7 +70,7 @@ import {
 import { LINK_PLACE } from "@luke/features/link-grammar";
 import type { ModelChoice } from "@luke/features/models-wire";
 import type { WorkspaceSentry } from "@luke/features/sentry-install-wire";
-import { dayAndTimeText, timeZoneNames } from "@luke/features/time-format";
+import { clockText, dayAndTimeText, timeZoneNames } from "@luke/features/time-format";
 import {
   SENTRY_LEVEL,
   SENTRY_TRIGGER_EVENT,
@@ -142,6 +142,7 @@ import {
   Switch,
   TEXT_ELEMENT,
   TEXT_FIELD_FONT,
+  TEXT_FIELD_SIZE,
   TEXT_FIELD_TYPE,
   TEXT_TONE,
   TEXT_VARIANT,
@@ -454,18 +455,46 @@ export function AutomationSwitch({
   );
 }
 
-/** A time of day as the time field holds it, the hour and minute in two figures each. */
-function clockValue(hour: number, minute: number): string {
-  return `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
-}
-
-/** The hour and minute a time field holds, or nothing while it holds none. */
-function clockOf(value: string): { hour: number; minute: number } | undefined {
-  const [hour, minute] = value.split(":").map(Number);
-  if (hour === undefined || minute === undefined || Number.isNaN(hour) || Number.isNaN(minute)) {
-    return undefined;
-  }
-  return { hour, minute };
+/**
+ * The schedule's time of day, written as the summary says it ("2:00 AM")
+ * rather than in the engine's own time input, which pads it ("02:00 AM").
+ * What is typed stands as typed while the caret is in the field, a time it
+ * cannot read marking the field invalid and changing nothing, and the
+ * schedule's own words come back once it is left.
+ */
+function ClockField({
+  hour,
+  minute,
+  inputRef,
+  describedBy,
+  invalid,
+  onClock,
+}: {
+  hour: number;
+  minute: number;
+  inputRef: RefObject<HTMLInputElement | null>;
+  describedBy: string | undefined;
+  invalid: boolean | undefined;
+  onClock: (clock: { readonly hour: number; readonly minute: number }) => void;
+}): React.JSX.Element {
+  const [typed, setTyped] = useState<string | undefined>(undefined);
+  const unreadable = typed !== undefined && parseAutomationClock(typed) === undefined;
+  return (
+    <TextField
+      ref={inputRef}
+      label="Time"
+      describedBy={describedBy}
+      invalid={invalid === true || unreadable}
+      value={typed ?? clockText(hour, minute)}
+      onEscape={() => inputRef.current?.blur()}
+      onChange={(text) => {
+        setTyped(text);
+        const clock = parseAutomationClock(text);
+        if (clock !== undefined) onClock(clock);
+      }}
+      onBlur={() => setTyped(undefined)}
+    />
+  );
 }
 
 /** A minute past the hour as the hourly picker names it: "At :15". */
@@ -809,18 +838,13 @@ function ScheduleRows({
                     />
                   ) : (
                     <span className="automation-field automation-time-field">
-                      <TextField
-                        ref={time}
-                        type={TEXT_FIELD_TYPE.TIME}
-                        label="Time"
+                      <ClockField
+                        inputRef={time}
+                        hour={schedule.hour}
+                        minute={schedule.minute}
                         describedBy={control["aria-describedby"]}
                         invalid={control["aria-invalid"]}
-                        value={clockValue(schedule.hour, schedule.minute)}
-                        onEscape={() => time.current?.blur()}
-                        onChange={(text) => {
-                          const clock = clockOf(text);
-                          if (clock !== undefined) onSchedule({ ...schedule, ...clock });
-                        }}
+                        onClock={(clock) => onSchedule({ ...schedule, ...clock })}
                       />
                     </span>
                   )}
@@ -902,14 +926,32 @@ const NEW_AUTOMATION = "New automation";
 /** The place above the editor, which its toolbar's first crumb names and goes back to. */
 const AUTOMATIONS_PLACE = "Automations";
 
-/** The page's title: the automation's tile beside its name, the page's one `h1`. */
+/** What the title's field says while it holds no name. */
+const UNTITLED_AUTOMATION = "Untitled automation";
+
+/**
+ * The page's title: the automation's tile beside its name, the page's one
+ * `h1`, the name written where it is drawn (the title-sized field), so the
+ * page names the automation once and the name is edited there. An
+ * automation not yet made stands as New automation until it is named.
+ */
 function EditorTitle({
   automation,
+  name,
+  nameField,
+  invalid,
+  onName,
 }: {
   automation: AutomationSummary | undefined;
+  /** The name as it is written now, saved or not. */
+  name: string;
+  /** The field's input, which its Escape lets go of the caret from. */
+  nameField: RefObject<HTMLInputElement | null>;
+  invalid: boolean;
+  onName: (name: string) => void;
 }): React.JSX.Element {
   return (
-    <Inline gap={GAP.CONTROL}>
+    <Inline gap={GAP.CONTROL} wrap={false}>
       <ActorMark
         actor={
           automation === undefined
@@ -917,7 +959,16 @@ function EditorTitle({
             : automationActor(automation)
         }
       />
-      {automation === undefined ? NEW_AUTOMATION : automation.name}
+      <TextField
+        ref={nameField}
+        size={TEXT_FIELD_SIZE.TITLE}
+        label="Automation name"
+        placeholder={automation === undefined ? NEW_AUTOMATION : UNTITLED_AUTOMATION}
+        invalid={invalid}
+        value={name}
+        onEscape={() => nameField.current?.blur()}
+        onChange={onName}
+      />
     </Inline>
   );
 }
@@ -2638,11 +2689,25 @@ export function AutomationEditor({
       screenRef={screen}
       layoutRef={editorLayout}
       hidden={hidden.list}
-      title={<EditorTitle automation={automation} />}
+      title={
+        <EditorTitle
+          automation={automation}
+          name={draft.name}
+          nameField={nameField}
+          invalid={shownProblems && problems[DRAFT_FIELD.NAME] !== undefined}
+          onName={(name) => editDraft({ name })}
+        />
+      }
       toolbar={(pickUp) => (
         <EditorToolbar
           automation={automation}
-          pickUp={pickUp}
+          // Note that the bar is handed the written name, because the title is a field and a field's value is no words the page can read off its heading.
+          pickUp={{
+            ...pickUp,
+            name:
+              draft.name.trim() ||
+              (automation === undefined ? NEW_AUTOMATION : UNTITLED_AUTOMATION),
+          }}
           codeReview={codeReviewOn && readCodeReviewSettings(draft.prompt) !== undefined}
           dirty={dirty}
           saving={saving}
@@ -2663,14 +2728,6 @@ export function AutomationEditor({
       )}
       setup={
         <AutomationSetup>
-          <TextField
-            ref={nameField}
-            label="Automation name"
-            placeholder="Untitled automation"
-            value={draft.name}
-            onEscape={() => nameField.current?.blur()}
-            onChange={(name) => editDraft({ name })}
-          />
           {shownProblems && problems[DRAFT_FIELD.NAME] !== undefined ? (
             <FailureNote>{problems[DRAFT_FIELD.NAME]}</FailureNote>
           ) : null}
