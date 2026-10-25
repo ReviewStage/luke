@@ -5824,6 +5824,37 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
   );
 
   it.effect(
+    "a message while GitHub does not answer still reaches the agent, since only GitHub's definite no keeps the words from it",
+    () =>
+      Effect.gen(function* () {
+        const eve = fakeEve();
+        let githubDown = false;
+        const { owner, ask, agent } = yield* agentStartedOn(
+          yield* openTask({
+            eve,
+            github: (sent) =>
+              githubDown && new URL(sent.url).pathname.startsWith("/app/installations/")
+                ? Response.json({ message: "Service Unavailable" }, { status: 503 })
+                : undefined,
+          }),
+          eve,
+          { running: true },
+        );
+        githubDown = true;
+
+        readAnswer(
+          codingAgentMessageAnswerSchema,
+          HOSTED_HTTP_STATUS.ACCEPTED,
+          yield* ask(
+            messageAs(owner, agent.id, { text: "Rebase on main.", clientKey: randomUUID() }),
+          ),
+        );
+
+        assert.equal(eve.sent.length, 1);
+      }),
+  );
+
+  it.effect(
     "a member steers the running turn of an agent a teammate started: the words reach the starter's session and stand under the starter, so a repeat under the key sends nothing",
     () =>
       Effect.gen(function* () {
