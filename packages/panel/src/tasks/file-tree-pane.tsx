@@ -3,6 +3,7 @@ import type { TasksTreeAnswer } from "@luke/features/tasks-view";
 import { noMatchWords, readingWords, TERM } from "@luke/features/words";
 import {
   cssCustomProperties,
+  FAILURE_NOTE_LOOK,
   FailureNote,
   Fill,
   IconButton,
@@ -30,6 +31,7 @@ import {
   TREE_STANDING,
   type TreeStanding,
 } from "../file-tree/contract.js";
+import { usePhoneRoom } from "../stage-room.js";
 import type { PaneOver } from "./file-view.js";
 import { entriesOf } from "./folder-listings.js";
 
@@ -56,7 +58,8 @@ import { entriesOf } from "./folder-listings.js";
  * opens and closes it; where its tab has no room for it beside, it is an
  * `OverPane` (`over`), floated over the tab's right edge as a sheet, or a
  * column where it is only peeked out of its strip, and slid out again as it
- * is put away.
+ * is put away. On a phone it fills the tab, as every place there fills the
+ * screen, put away by a file chosen in it or its toggle in the header's ⋯.
  *
  * An agent's Changes tab stands the same pane beside its diff
  * (`agent-changes-tab.tsx`), over its pull request's files alone: the tree
@@ -94,8 +97,8 @@ export const TREE_READING: TreeStanding = { kind: TREE_STANDING.READING };
  * The host a tree is mounted in, with where it stands said around it: its
  * bundle or its root being read, why either could not be, with Retry where
  * listing again may help, or that a search matches nothing, each in the
- * tree's place; and once a folder was listed short of whole, that line under
- * its rows. Note that the host stays mounted, hidden while the words stand
+ * tree's place, at the rows' inset as a list's notes stand; and once a
+ * folder was listed short of whole, that line under its rows. Note that the host stays mounted, hidden while the words stand
  * in its place, because the tree drawn in it outlives every standing.
  */
 export function FileTreeStage({
@@ -119,7 +122,9 @@ export function FileTreeStage({
 }): React.JSX.Element {
   if (module === undefined) {
     return missed ? (
-      <FailureNote onRetry={onRetryBundle}>{TREE_LOAD_FAILED}</FailureNote>
+      <FailureNote look={FAILURE_NOTE_LOOK.LIST} onRetry={onRetryBundle}>
+        {TREE_LOAD_FAILED}
+      </FailureNote>
     ) : (
       <SpinnerRegion delay label={TREE_WORDS.READING} />
     );
@@ -131,7 +136,9 @@ export function FileTreeStage({
         <SpinnerRegion delay label={TREE_WORDS.READING} />
       ) : null}
       {standing.kind === TREE_STANDING.FAILED ? (
-        <FailureNote onRetry={standing.retry ? onRetry : undefined}>{standing.notice}</FailureNote>
+        <FailureNote look={FAILURE_NOTE_LOOK.LIST} onRetry={standing.retry ? onRetry : undefined}>
+          {standing.notice}
+        </FailureNote>
       ) : null}
       {standing.kind === TREE_STANDING.NO_MATCH ? (
         <NoteLine look={NOTE_LINE_LOOK.LIST}>{TREE_WORDS.NO_MATCH}</NoteLine>
@@ -376,6 +383,7 @@ export function FileTreePane({
   edge?: ResizeEdgeHandle | undefined;
 }): React.JSX.Element {
   const field = useRef<HTMLInputElement>(null);
+  const phone = usePhoneRoom();
   if (over !== undefined) {
     return (
       <OverPane
@@ -386,7 +394,9 @@ export function FileTreePane({
         toggle={over.toggle}
         initialFocus={field}
         label={label}
-        width={narrow ? OVER_PANE_WIDTH.SHEET : OVER_PANE_WIDTH.COLUMN}
+        width={
+          phone ? OVER_PANE_WIDTH.FULL : narrow ? OVER_PANE_WIDTH.SHEET : OVER_PANE_WIDTH.COLUMN
+        }
       >
         <FileTreeBody {...tree} field={field} floating />
       </OverPane>
