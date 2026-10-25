@@ -86,16 +86,13 @@ test("each answer is heard as its own, and Escape denies", () => {
   assert.deepEqual(heard, { once: 1, always: 1, deny: 2 });
 });
 
-test("a long encoded payload is shortened until Show full command brings it back", () => {
+test("a long encoded payload is shortened until Show all brings it back", () => {
   const payload = "H4sIA".padEnd(2000, "QUJD");
   const command = `echo '${payload}' | base64 -d | tar xz`;
   asked(command);
   const words = () => document.querySelector(".luke-file-text-words")?.textContent ?? "";
-  assert.equal(
-    words(),
-    "echo 'H4sIAQUJDQUJDQUJDQUJDQUJ… [1,976 more characters]' | base64 -d | tar xz",
-  );
-  act(() => button("Show full command").click());
+  assert.equal(words(), "echo 'H4sIAQUJDQUJDQUJDQUJDQUJ… (1,976 more)' | base64 -d | tar xz");
+  act(() => button("Show all").click());
   assert.equal(words(), command);
 });
 

@@ -9,16 +9,16 @@ import { TextButton } from "../text-button/text-button.js";
 /**
  * command-ask.tsx -- a command an agent asks to run on this Mac, put to the developer as a modal over the window: the command as written, then Deny, Always allow, and Allow once.
  *
- * The window asks the way a permission prompt does: it dims, a card says
- * what is asked and shows the exact command, mono and whole, scrolling
- * past a reading height, and the three answers sit at its foot, the safe
- * one first. A long unbroken run in the command, the base64 of a payload,
- * is shown by its head and how much of it there is, since no one reads it
- * there and it would bury the rest of the command; Show full command
- * brings it back whole. Focus lands on Deny, so a key already pressed runs nothing;
+ * The window asks the way a permission prompt does: it dims, and a card
+ * holds the question, the exact command, mono and scrolling past a reading
+ * height, one muted line on what running it means, and the three answers
+ * at its foot, the safe one first. A long unbroken run in the command, the
+ * base64 of a payload, is shown by its head and how much of it there is,
+ * since no one reads it there and it would bury the rest of the command;
+ * Show all, at the foot's start, brings it back whole. Focus lands on Deny, so a key already pressed runs nothing;
  * Escape and a press on the dimmed window deny too, since a prompt waved
- * away must not run the command. Always allow says beside it that it stops
- * the asking for every later command, which is the setting it writes.
+ * away must not run the command. The muted line says Always allow lasts
+ * until This Mac's setting changes, which is the setting it writes.
  * Whoever owns the card holds it mounted while the ask stands and passes
  * `open` as the ask goes, answered or timed out, so the card fades out
  * (`Dialog`'s `open`), taking it down once it says it is gone.
@@ -47,7 +47,7 @@ const ENCODED_RUN = new RegExp(`[A-Za-z0-9+/=]{${FOLDED_RUN_MIN},}`, "g");
 function foldEncodedRuns(command: string): string {
   return command.replace(ENCODED_RUN, (run) => {
     const hidden = run.length - FOLDED_RUN_HEAD;
-    return `${run.slice(0, FOLDED_RUN_HEAD)}… [${hidden.toLocaleString("en-US")} more characters]`;
+    return `${run.slice(0, FOLDED_RUN_HEAD)}… (${hidden.toLocaleString("en-US")} more)`;
   });
 }
 
@@ -90,6 +90,17 @@ export function CommandAsk({
       initialFocus={deny}
       onDismiss={onDeny}
       onExited={onExited}
+      actionsStart={
+        shortened ? (
+          <TextButton
+            aria-expanded={whole}
+            aria-controls={commandId}
+            onClick={() => setWhole(!whole)}
+          >
+            {whole ? "Shorten" : "Show all"}
+          </TextButton>
+        ) : null
+      }
       actions={
         <>
           <Button ref={deny} variant={BUTTON_VARIANT.QUIET} onClick={onDeny}>
@@ -105,12 +116,6 @@ export function CommandAsk({
       }
     >
       <Stack>
-        <Text tone={TEXT_TONE.MUTED} id={bodyId}>
-          An agent wants to run this in your login shell, from your home folder. What it prints goes
-          to the model and stays in the conversation. Always allow skips this for every later
-          command, until you change it in {settingsPage === undefined ? null : <>{settingsPage} </>}
-          settings.
-        </Text>
         <div id={commandId}>
           <FileText
             text={whole ? command : folded}
@@ -118,18 +123,10 @@ export function CommandAsk({
             extent={FILE_TEXT_EXTENT.WHOLE}
           />
         </div>
-        {shortened ? (
-          <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
-            {whole ? "Showing the encoded data in full. " : "Long encoded data is shortened. "}
-            <TextButton
-              aria-expanded={whole}
-              aria-controls={commandId}
-              onClick={() => setWhole(!whole)}
-            >
-              {whole ? "Shorten it" : "Show full command"}
-            </TextButton>
-          </Text>
-        ) : null}
+        <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED} id={bodyId}>
+          Runs from your home folder, and the agent sees what it prints. Always allow lasts until
+          you change it in {settingsPage === undefined ? null : <>{settingsPage} </>}settings.
+        </Text>
       </Stack>
     </Dialog>
   );
