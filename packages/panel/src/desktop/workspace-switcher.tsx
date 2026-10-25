@@ -67,7 +67,7 @@ function sharedLine(count: number | undefined, personal: boolean): React.JSX.Ele
   const words = sharedWords(count, personal);
   if (count === undefined || words === undefined) return undefined;
   return (
-    <span className="sidebar-workspace-shared">
+    <span className="sidebar-workspace-shared inline-flex items-center gap-tight-gap text-muted-foreground text-caption-inline [&>svg]:size-workspace-shared-glyph">
       {personal && count <= 1 ? null : <UsersIcon aria-hidden="true" />}
       {words}
     </span>
@@ -92,7 +92,7 @@ export function WorkspaceSwitcher({
   if (listed === undefined) return null;
   const personal = tasks.workspaces[0]?.id === listed.id;
   return (
-    <div className="sidebar-workspace">
+    <div className="sidebar-workspace flex-none pb-block-gap">
       <NavItem
         variant={NAV_ITEM_VARIANT.IDENTITY}
         // The name a reader hears says who shares it too, since the label stands for the button's text.

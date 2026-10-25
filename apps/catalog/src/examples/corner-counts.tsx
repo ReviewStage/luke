@@ -1,11 +1,21 @@
-import { CommentsIcon, CornerCount, FoldingButton, GAP, Inline } from "@luke/ui";
+import {
+  CommentsIcon,
+  CornerCount,
+  CornerDot,
+  FoldingButton,
+  GAP,
+  GearIcon,
+  IconButton,
+  Inline,
+} from "@luke/ui";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
 
 /**
  * corner-counts.tsx -- a press's glyph wearing a count at its corner, a
  * review's pending comments, beside one with nothing waiting, and a count of
- * two figures.
+ * two figures; and a press wearing a dot at its corner, a view filtered,
+ * beside one that is not.
  */
 
 function CornerCounts(): React.JSX.Element {
@@ -38,6 +48,14 @@ function CornerCounts(): React.JSX.Element {
             </CornerCount>
           }
         />
+      </Inline>
+      <Inline gap={GAP.CONTROL}>
+        <CornerDot shown>
+          <IconButton icon={<GearIcon />} label="View options" aria-description="Filtered" />
+        </CornerDot>
+        <CornerDot shown={false}>
+          <IconButton icon={<GearIcon />} label="View options" />
+        </CornerDot>
       </Inline>
     </CatalogSection>
   );

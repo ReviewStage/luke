@@ -288,7 +288,7 @@ test("the pointer going from a starter's card back onto the agent's own name kee
 
 test("an agent's card wears its tile beside its name and its pull request at the corner where the plan holds one, and offers no Open agent, since the name it hangs from opens the tab", async () => {
   const { card, opened } = await agentNamed(DEAN.userId, new Map([[AGENT.id, PULL_REQUEST]]));
-  const tile = card.querySelector<HTMLElement>(".actor-card-head > .actor-mark");
+  const tile = card.querySelector<HTMLElement>(".luke-hover-card-lead > .actor-mark");
   assert.equal(tile?.dataset.kind, "agent");
   assert.equal(tile?.dataset.size, "card");
   const corner =

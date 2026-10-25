@@ -947,7 +947,7 @@ function RepositorySection({
         count={foldedCount(folded, group.rows.length, TASK_NOUN)}
         mark={
           repository !== null && context.tasks.pinnedRepositories.includes(repository) ? (
-            <span className="sidebar-repository-pinned">
+            <span className="sidebar-repository-pinned inline-flex flex-none text-muted-foreground [&_svg]:size-luke-12">
               <PinIcon />
               <VisuallyHidden>(pinned)</VisuallyHidden>
             </span>
@@ -2172,10 +2172,15 @@ function SidebarColumn({
       {/* One scroller for both sections, so the pinned tasks scroll away
           with the rest rather than holding half the column; in a phone's
           drawer the pages' rows ride it too. */}
-      <Fill className="sidebar-section">
+      <Fill className="sidebar-section -m-ring-reach">
         <ScrollArea fade={SCROLL_FADE.BOTH}>
           <ListMotion root={body}>
-            <div {...roving} ref={bodyRef} className="sidebar-section-body" {...motionRows()}>
+            <div
+              {...roving}
+              ref={bodyRef}
+              className="sidebar-section-body flex min-h-list-held flex-col p-ring-reach [&_.sidebar-group+.sidebar-group]:mt-section-gap"
+              {...motionRows()}
+            >
               {narrow ? places : null}
               {operator === undefined ? null : (
                 <nav className="sidebar-group" aria-label="Luke">

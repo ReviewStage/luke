@@ -103,7 +103,7 @@ function UpdatePill({
     [hint],
   );
   return (
-    <span className="sidebar-update">
+    <span className="sidebar-update flex flex-none">
       <FoldingButton
         label={word}
         icon={icon}

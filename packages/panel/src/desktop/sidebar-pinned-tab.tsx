@@ -470,13 +470,13 @@ export function SidebarPinnedTab({
           density={LIST_DENSITY.DENSE}
           ink={LIST_ROW_INK.SIDEBAR}
           leading={
-            <span className="sidebar-pinned-tab-glyph">
+            <span className="sidebar-pinned-tab-glyph flex [&_.state-glyph]:[--state-glyph-size:var(--spacing-luke-16)] [&_svg]:size-luke-16">
               {tabLook(pinSubject(pin, task, agent, livePullRequest)).icon}
             </span>
           }
           title={
             gone ? (
-              <span className="sidebar-pinned-tab-gone">
+              <span className="sidebar-pinned-tab-gone opacity-55">
                 {pin.label}
                 <VisuallyHidden>(unavailable)</VisuallyHidden>
               </span>
