@@ -1,6 +1,5 @@
-import { CODING_AGENT_MACHINE } from "@luke/features/coding-agent-wire";
 import { FAILURE_REASON, remedyLabel, retriesBesideRemedy } from "@luke/features/failure-remedy";
-import type { ModelChoice } from "@luke/features/models-wire";
+import { MODEL_PROVIDER, type ModelChoice } from "@luke/features/models-wire";
 import { EXPERIMENT } from "@luke/settings";
 import {
   ERROR_STATE_PLACEMENT,
@@ -13,7 +12,7 @@ import {
 import { useDisclosure } from "@luke/ui/use-disclosure";
 import { useEffect, useId, useRef, useState } from "react";
 import { choiceLabel } from "../tasks/coding-agent-model.js";
-import { ModelMenu, RUN_ON, type RunOn, settledChoice } from "../tasks/model-menu.js";
+import { ModelMenu, settledChoice } from "../tasks/model-menu.js";
 import { useRepositoryRemedy } from "../tasks/repository-remedy.js";
 import type { CodingAgentsControl } from "../tasks/use-coding-agents.js";
 import { useExperiment } from "../use-app-state.js";
@@ -28,10 +27,12 @@ import { useExperiment } from "../use-app-state.js";
  * the plan's tab stays open (the button is drawn afresh for each task and
  * each return to its plan, so a pick never outlives the Start it was made
  * for by much), and is never kept as the account's default, which only
- * Settings changes. While local agents are on and the service offers this
- * Mac, the menu's Run on picks Cloud or This Mac, the cloud by default, and
- * a Start on This Mac says the Mac's name on hover after the model and asks
- * the service to run the agent there. The models and the default are read as the
+ * Settings changes. While local agents are on and the service offers any
+ * of the account's Macs, the menu's Run on picks Cloud or one of them by
+ * its name, the cloud by default, and a Start on a Mac says its name on
+ * hover after the model and asks the service to run the agent there, by
+ * the Mac's id; a model of another provider than Anthropic's stands at
+ * Cloud, since a Mac runs Claude Code alone. The models and the default are read as the
  * button mounts and again as the menu opens, so the menu shows the catalog
  * as it stands and the default as Settings last wrote it. A
  * task with no repository has nothing for an agent to check out, so Start
@@ -44,6 +45,9 @@ import { useExperiment } from "../use-app-state.js";
  * `SplitButton`.
  */
 
+/** Why Run on stands at Cloud for a model a Mac cannot run. */
+const MAC_RUNS_CLAUDE = "Agents on a Mac run Claude models only.";
+
 export function StartAgentButton({ control }: { control: CodingAgentsControl }): React.JSX.Element {
   const { start } = control;
   const repositoryRemedy = useRepositoryRemedy();
@@ -52,8 +56,8 @@ export function StartAgentButton({ control }: { control: CodingAgentsControl }):
   const [choice, setChoice] = useState<ModelChoice | undefined>(undefined);
   /** What the menu picked, which Start runs on in place of the default; nothing until a pick. */
   const [picked, setPicked] = useState<ModelChoice | undefined>(undefined);
-  /** Where the menu's Run on said to start, the cloud until This Mac is picked. */
-  const [runOn, setRunOn] = useState<RunOn>(RUN_ON.CLOUD);
+  /** The Mac the menu's Run on said to start on, by its device id; none for the cloud, until a Mac is picked. */
+  const [runOn, setRunOn] = useState<string | undefined>(undefined);
   const localAgents = useExperiment(EXPERIMENT.LOCAL_AGENTS);
   const menuId = useId();
   const chevron = useRef<HTMLButtonElement>(null);
@@ -82,12 +86,19 @@ export function StartAgentButton({ control }: { control: CodingAgentsControl }):
   };
 
   const models = control.models;
-  // Note that Run on is offered only while local agents are on and the service offers this Mac, so
-  // a Mac that went away, or the experiment turned off, starts in the cloud whatever was picked.
-  const mac = localAgents ? control.thisMac : undefined;
-  const onMac = mac !== undefined && runOn === RUN_ON.THIS_MAC;
+  // Note that Run on is offered only while local agents are on and the service offers a Mac of
+  // theirs, so a Mac that went away, or the experiment turned off, starts in the cloud whatever
+  // was picked.
+  const macs =
+    localAgents && control.macs !== undefined && control.macs.length > 0 ? control.macs : undefined;
   // A default effort the model no longer lists falls to the model's first.
   const chosen = settledChoice(models, picked ?? choice);
+  // A Mac runs Claude Code alone, so a model of another provider's stands at Cloud.
+  const provider = models?.find((each) => each.id === chosen?.model)?.provider;
+  const macUnavailable =
+    provider === undefined || provider === MODEL_PROVIDER.ANTHROPIC ? undefined : MAC_RUNS_CLAUDE;
+  const mac =
+    macUnavailable === undefined ? macs?.find((each) => each.deviceId === runOn) : undefined;
   const unavailable = !start.available;
 
   const press = () => {
@@ -96,19 +107,14 @@ export function StartAgentButton({ control }: { control: CodingAgentsControl }):
     // Note that only a pick names its choice; with none the service runs the default as it holds it.
     // A pick the catalog no longer settles is sent as picked, so the service refuses it rather than
     // the agent quietly running on the default.
-    start.onPress(
-      picked === undefined ? undefined : (chosen ?? picked),
-      onMac ? CODING_AGENT_MACHINE.MAC : undefined,
-    );
+    start.onPress(picked === undefined ? undefined : (chosen ?? picked), mac?.deviceId);
   };
 
   const modelHint =
     models !== undefined && chosen !== undefined ? choiceLabel(chosen, models) : undefined;
   const hint =
     start.reason ??
-    (modelHint !== undefined && mac !== undefined && onMac
-      ? `${modelHint} on ${mac.name}`
-      : modelHint);
+    (modelHint !== undefined && mac !== undefined ? `${modelHint} on ${mac.name}` : modelHint);
 
   const note = start.note;
   const remedyWords = note === undefined ? undefined : remedyLabel(note);
@@ -175,7 +181,16 @@ export function StartAgentButton({ control }: { control: CodingAgentsControl }):
           onRetry={control.readModels}
           chosen={chosen}
           startsNew
-          runOn={mac === undefined ? undefined : { mac, value: runOn, onChoose: setRunOn }}
+          runOn={
+            macs === undefined
+              ? undefined
+              : {
+                  macs,
+                  deviceId: mac?.deviceId,
+                  onChoose: setRunOn,
+                  unavailable: macUnavailable,
+                }
+          }
           onChoose={setPicked}
           onClose={close}
           onLeave={(left) => {

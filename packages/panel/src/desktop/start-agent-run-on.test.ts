@@ -1,7 +1,6 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { CODING_AGENT_MACHINE, type CodingAgentMachine } from "@luke/features/coding-agent-wire";
 import { type CatalogModel, MODEL_PROVIDER } from "@luke/features/models-wire";
 import { EXPERIMENT } from "@luke/settings";
 import { experimentsOn } from "@luke/settings/testing";
@@ -15,8 +14,8 @@ import { StartAgentButton } from "./start-agent-button.js";
 
 /**
  * start-agent-run-on.test.ts -- Start's Run on, with local agents on and the
- * service offering this Mac: a press starts in the cloud until This Mac is
- * picked, and on the Mac after. Note that it stands in a file of its own,
+ * service offering two of the account's Macs: a press starts in the cloud
+ * until a Mac is picked, and on the one picked after, never another. Note that it stands in a file of its own,
  * because a window reads its document once, and the gate reads the
  * experiment off that document.
  */
@@ -38,6 +37,9 @@ const MODELS: readonly CatalogModel[] = [
     efforts: ["high"],
   },
 ];
+
+const STUDIO = "6f0c1d0e-6b1a-4d43-9a49-2b7b6f1f0a11";
+const LAPTOP = "0b8e4c1a-2f6d-4f53-8a2e-9d1c7e5b3a40";
 
 /** The button named `name`. */
 function button(name: string): HTMLButtonElement {
@@ -61,12 +63,15 @@ async function settle(): Promise<void> {
   });
 }
 
-test("a press starts in the cloud until Run on picks This Mac, and on the Mac after", async () => {
+test("a press starts in the cloud until Run on picks a Mac, and on the Mac picked after, by its id", async () => {
   handState(experimentsOn(EXPERIMENT.LOCAL_AGENTS));
-  const started: (CodingAgentMachine | undefined)[] = [];
+  const started: (string | undefined)[] = [];
   const control = codingAgentsControl({
     models: MODELS,
-    thisMac: { deviceId: "6f0c1d0e-6b1a-4d43-9a49-2b7b6f1f0a11", name: "Studio" },
+    macs: [
+      { deviceId: STUDIO, name: "Studio" },
+      { deviceId: LAPTOP, name: "Laptop" },
+    ],
     readDefault: () => Promise.resolve({ choice: { model: MODELS[0]?.id ?? "", effort: "high" } }),
     start: {
       available: true,
@@ -74,7 +79,7 @@ test("a press starts in the cloud until Run on picks This Mac, and on the Mac af
       busy: false,
       note: undefined,
       succeeded: false,
-      onPress: (_choice, machine) => started.push(machine),
+      onPress: (_choice, deviceId) => started.push(deviceId),
     },
   });
   const container = document.createElement("div");
@@ -85,9 +90,11 @@ test("a press starts in the cloud until Run on picks This Mac, and on the Mac af
   act(() => button("Start a coding agent").click());
   act(() => button("Choose a model to start with").click());
   await settle();
-  // Note that the menu's keys stay in its field: up past Effort to Run on, right into its choices, down to This Mac.
-  for (const key of ["ArrowUp", "ArrowUp", "ArrowRight", "ArrowDown", "Enter"]) press(key);
+  // Note that the menu's keys stay in its field: up past Effort to Run on, right into its choices, down past Studio to Laptop.
+  for (const key of ["ArrowUp", "ArrowUp", "ArrowRight", "ArrowDown", "ArrowDown", "Enter"]) {
+    press(key);
+  }
   await act(async () => button("Start a coding agent").click());
 
-  expect(started).toEqual([undefined, CODING_AGENT_MACHINE.MAC]);
+  expect(started).toEqual([undefined, LAPTOP]);
 });

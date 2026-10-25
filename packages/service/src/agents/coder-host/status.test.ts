@@ -27,7 +27,7 @@ import {
  * handed a message, or its turn ended, and never a moment a turn streams;
  * how long a line of the developer's awaiting its turn reads it running; and
  * why a failed turn failed, a prompt past the model's window told apart;
- * and the Mac a local agent's summary names, online or away.
+ * and the Mac a local agent's summary names, and when it last beat.
  */
 
 const LINE_GRACE_MS = Duration.toMillis(CODER.LINE_GRACE);
@@ -145,7 +145,7 @@ test("a prompt the provider refused as longer than the window reads as a context
   expect(codingAgentFailureOf(overloaded)).toBe(CODING_AGENT_FAILURE.MODEL);
 });
 
-test("a local agent's summary names its Mac, online while it beat within 45 seconds and offline past that", () => {
+test("a local agent's summary names its Mac and when it last beat; an agent in a sandbox names none", () => {
   const DEVICE = "device-1";
   const line: CodingAgentLine = {
     id: "agent-1",
@@ -187,6 +187,5 @@ test("a local agent's summary names its Mac, online while it beat within 45 seco
       ]),
     ).mac;
 
-  expect(seen(now - 44_000)).toEqual({ name: "Charles's MacBook Pro", online: true });
-  expect(seen(now - 46_000)).toEqual({ name: "Charles's MacBook Pro", online: false });
+  expect(seen(now - 44_000)).toEqual({ name: "Charles's MacBook Pro", seenAt: now - 44_000 });
 });

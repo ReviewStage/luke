@@ -31,11 +31,11 @@
  * moves it to another payer.
  *
  * Where the agent runs is chosen beside it (`agentMachineChoice`): a Vercel
- * Sandbox, or, where the Start asks for This Mac, the starter's Mac, on the
- * same runtime and payer a cloud agent would run on. This Mac is offered
- * (`thisMacOffer`) only to an account with the `local-agents` experiment on
- * and a Mac of its that beat within `THIS_MAC.FRESH`, and the agent is pinned
- * to the Mac that beat last. A local agent runs Claude Code alone, so one on
+ * Sandbox, or, where the Start names one of the starter's Macs, that Mac, on
+ * the same runtime and payer a cloud agent would run on. Its Macs are offered
+ * (`macOffers`) only to an account with the `local-agents` experiment on,
+ * each that beat within `THIS_MAC.FRESH`, and the agent is pinned to the one
+ * the Start named, once it is checked to be among them. A local agent runs Claude Code alone, so one on
  * Codex, or on no harness at all, is refused by name.
  */
 
@@ -55,7 +55,8 @@ import {
   type CodingAgentPayer,
   LOCAL_AGENT_REFUSAL,
   type LocalAgentRefusal,
-  type ThisMacOffer,
+  MAC_PRESENCE,
+  type MacOffer,
 } from "@luke/features/coding-agent-wire";
 import { MODEL_PROVIDER, type ModelProvider } from "@luke/features/models-wire";
 import {
@@ -82,7 +83,7 @@ export class LocalAgentRefused extends Data.TaggedError("LocalAgentRefused")<{
 
 export const THIS_MAC = {
   /** How lately a Mac must have beaten for Start to offer it: one beat, and room for the next to arrive. */
-  FRESH: Duration.seconds(45),
+  FRESH: Duration.millis(MAC_PRESENCE.FRESH_MS),
 } as const;
 
 /** Where a new agent runs: its machine, and the Mac a local agent is pinned to. */
@@ -238,37 +239,41 @@ export const agentRuntimeChoice = /* @__PURE__ */ Effect.fnUntraced(function* (
 });
 
 /**
- * The Mac the account may start a local agent on, as Start offers it: the
- * one of its Macs that beat last, where it beat within `THIS_MAC.FRESH` and
- * the account has the `local-agents` experiment on; none otherwise.
+ * The Macs the account may start a local agent on, as Start offers them:
+ * each of its Macs that beat within `THIS_MAC.FRESH`, the latest first,
+ * where the account has the `local-agents` experiment on; none otherwise.
+ * Note that Start offers every one by name rather than one as This Mac,
+ * because the service cannot tell which Mac the asking window runs on, and
+ * a web tab runs on none.
  */
-export const thisMacOffer = /* @__PURE__ */ Effect.fnUntraced(function* (
+export const macOffers = /* @__PURE__ */ Effect.fnUntraced(function* (
   userId: string,
-): Effect.fn.Return<Option.Option<ThisMacOffer>, StoreFailure, DatabaseServices> {
-  if (!(yield* accountExperimentOn(userId, EXPERIMENT.LOCAL_AGENTS))) return Option.none();
+): Effect.fn.Return<readonly MacOffer[], StoreFailure, DatabaseServices> {
+  if (!(yield* accountExperimentOn(userId, EXPERIMENT.LOCAL_AGENTS))) return [];
   const now = yield* Clock.currentTimeMillis;
   const seen = yield* macDevicesSeenSince(
     userId,
     new Date(now - Duration.toMillis(THIS_MAC.FRESH)),
   );
-  return Option.map(Option.fromNullishOr(seen[0]), (device) => ({
-    deviceId: device.id,
-    name: device.name,
-  }));
+  return seen.map((device) => ({ deviceId: device.id, name: device.name }));
 });
 
 /**
  * Where a new agent of the account's runs on the runtime given, as its
- * Start asks: a sandbox where it asks for none, or its starter's Mac that
- * beat last, where This Mac is offered to it and the runtime is Claude
- * Code's; refused by name otherwise, Codex among it.
+ * Start asks: a sandbox where it asks for none, or the Mac it names, where
+ * that Mac is one Start offers the account (`macOffers`) and the runtime is
+ * Claude Code's; refused by name otherwise, Codex among it, and a Mac that
+ * is another account's or is not there is refused as away.
  */
 export const agentMachineChoice = /* @__PURE__ */ Effect.fnUntraced(function* (
   userId: string,
-  asked: CodingAgentMachine | undefined,
+  asked: {
+    readonly machine?: CodingAgentMachine | undefined;
+    readonly deviceId?: string | undefined;
+  },
   runtime: ConversationRuntime,
 ): Effect.fn.Return<AgentMachineChoice, StoreFailure | LocalAgentRefused, DatabaseServices> {
-  if (asked !== CODING_AGENT_MACHINE.MAC) return IN_A_SANDBOX;
+  if (asked.machine !== CODING_AGENT_MACHINE.MAC) return IN_A_SANDBOX;
   if (!(yield* accountExperimentOn(userId, EXPERIMENT.LOCAL_AGENTS))) {
     return yield* new LocalAgentRefused({ reason: LOCAL_AGENT_REFUSAL.OFF });
   }
@@ -278,11 +283,11 @@ export const agentMachineChoice = /* @__PURE__ */ Effect.fnUntraced(function* (
   if (runtime !== CONVERSATION_RUNTIME.CLAUDE_CODE) {
     return yield* new LocalAgentRefused({ reason: LOCAL_AGENT_REFUSAL.NO_HARNESS });
   }
-  const offer = yield* thisMacOffer(userId);
-  if (Option.isNone(offer)) {
+  const offer = (yield* macOffers(userId)).find((each) => each.deviceId === asked.deviceId);
+  if (offer === undefined) {
     return yield* new LocalAgentRefused({ reason: LOCAL_AGENT_REFUSAL.MAC_AWAY });
   }
-  return { machine: CODING_AGENT_MACHINE.MAC, deviceId: offer.value.deviceId };
+  return { machine: CODING_AGENT_MACHINE.MAC, deviceId: offer.deviceId };
 });
 
 /**

@@ -29,10 +29,8 @@ import {
   type CodingAgentSummary,
   type NativeCodingAgentRuntime,
 } from "@luke/features/coding-agent-wire";
-import { Duration } from "effect";
 import { BRAIN_REQUEST_FAILURE, TURN_STATUS } from "../../core.js";
 import { REPOSITORY_REFUSAL } from "../repository-shell.js";
-import { THIS_MAC } from "./agent-runtime-choice.js";
 import { CODER_REFUSAL } from "./bounds.js";
 
 /**
@@ -265,17 +263,16 @@ function archivedByOf(
 /** No Mac read: a summary built from it names no Mac. */
 const NO_MACS: ReadonlyMap<string, MacDevice> = new Map();
 
-/** The Mac a local agent runs on as its summary names it, online where it beat within `THIS_MAC.FRESH` of `now`; none for an agent in a sandbox or whose Mac was not read. */
+/** The Mac a local agent runs on as its summary names it, by its name and when it last beat; none for an agent in a sandbox or whose Mac was not read. */
 function macOf(
   agent: Pick<CodingAgentLine, "machine" | "deviceId">,
   macs: ReadonlyMap<string, MacDevice>,
-  now: number,
 ): CodingAgentSummary["mac"] {
   if (agent.machine !== CODING_AGENT_MACHINE.MAC || agent.deviceId == null) return undefined;
   const device = macs.get(agent.deviceId);
-  if (device === undefined) return undefined;
-  const online = device.lastSeenAt.getTime() >= now - Duration.toMillis(THIS_MAC.FRESH);
-  return { name: device.name, online };
+  return device === undefined
+    ? undefined
+    : { name: device.name, seenAt: device.lastSeenAt.getTime() };
 }
 
 /** The Macs a read's local agents are pinned to, by id, which `macDevicesNamed` reads. */
@@ -297,7 +294,7 @@ function summaryFields(
   macs: ReadonlyMap<string, MacDevice>,
 ): Omit<CodingAgentSummary, "id" | "planId"> {
   const starter = names.get(agent.userId);
-  const mac = macOf(agent, macs, now);
+  const mac = macOf(agent, macs);
   const summary: Omit<CodingAgentSummary, "id" | "planId"> = {
     model: agent.model,
     effort: agent.effort,

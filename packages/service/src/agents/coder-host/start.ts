@@ -413,8 +413,10 @@ export type StartAsk = StartPlace & {
   readonly branch?: string | undefined;
   /** Whether a call is opened into the agent as it lands; it runs where any Start would (`startRuntimeOf`). */
   readonly call?: boolean | undefined;
-  /** Where the agent runs: its starter's Mac where This Mac is asked for (`agentMachineChoice`); a sandbox where none is named. */
+  /** Where the agent runs: the starter's Mac `deviceId` names, where a Mac is asked for (`agentMachineChoice`); a sandbox where none is named. */
   readonly machine?: CodingAgentMachine | undefined;
+  /** The Mac a Start on a Mac names, one of those Start offered the starter. */
+  readonly deviceId?: string | undefined;
   /** The repository the task's own start reached in the same request, which the agent's Start takes rather than asking GitHub again; none for every other Start. */
   readonly reached?: StartReach | undefined;
   /** The task the task's own start made in the same request, as it was made, which the agent's Start lands on rather than reading it again; none for every other Start. */
@@ -969,13 +971,16 @@ function startRuntimeOf(userId: string, model: string, keys: AccountKeyRows) {
 }
 
 /**
- * Where a new agent runs (`agentMachineChoice`): a sandbox, or its starter's
- * Mac where This Mac is asked for and offered; refused by name where it is
- * not, and nothing is written.
+ * Where a new agent runs (`agentMachineChoice`): a sandbox, or the starter's
+ * Mac the Start names where it is one Start offers them; refused by name
+ * where it is not, and nothing is written.
  */
 function startMachineOf(
   userId: string,
-  asked: CodingAgentMachine | undefined,
+  asked: {
+    readonly machine?: CodingAgentMachine | undefined;
+    readonly deviceId?: string | undefined;
+  },
   runtime: ConversationRuntime,
 ) {
   return Effect.catch(agentMachineChoice(userId, asked, runtime), (failure) =>
@@ -1129,7 +1134,11 @@ export const startCodingAgent = /* @__PURE__ */ Effect.fn("web/startCodingAgent"
   const title = ask.title ?? (continued ? continuedTitle(from.source.title) : undefined);
   // The runtime and the payer are decided as the agent is made, by the starter's account and model, and never change.
   const runtime = yield* startRuntimeOf(userId, choice.model, keys);
-  const placed = yield* startMachineOf(userId, ask.machine, runtime.runtime);
+  const placed = yield* startMachineOf(
+    userId,
+    { machine: ask.machine, deviceId: ask.deviceId },
+    runtime.runtime,
+  );
   const started = yield* hostedStoreOrUnavailable(
     createCodingAgent(userId, {
       ...brief,
@@ -1315,6 +1324,7 @@ export const startRequestedAgent = /* @__PURE__ */ Effect.fnUntraced(function* (
     blank: request.blank,
     call: request.call,
     machine: request.machine,
+    deviceId: request.deviceId,
     summaryModel,
     reached,
     landed,

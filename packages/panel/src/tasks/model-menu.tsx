@@ -1,8 +1,4 @@
-import {
-  CODING_AGENT_MACHINE,
-  CONTEXT_WINDOW,
-  type ThisMacOffer,
-} from "@luke/features/coding-agent-wire";
+import { CONTEXT_WINDOW, type MacOffer } from "@luke/features/coding-agent-wire";
 import { remedyLabel } from "@luke/features/failure-remedy";
 import type { CatalogModel, ModelChoice } from "@luke/features/models-wire";
 import { readingWords } from "@luke/features/words";
@@ -78,8 +74,8 @@ import { useRepositoryRemedy } from "./repository-remedy.js";
  * own: the Start button starts on it, the chip
  * changes its agent, and under the pinned rows says what the agent has
  * cost. The Start button's alone heads its pinned rows with Run on, Cloud
- * or This Mac, the Experimental tag beside it, while local agents are on and
- * the service offers the reader's Mac.
+ * or one of the reader's Macs by its name, the Experimental tag beside it,
+ * while local agents are on and the service offers any Mac of theirs.
  */
 
 /** What the menu says in the list's place. */
@@ -97,28 +93,25 @@ const FOOT_ROW = {
   CONNECT: "connect",
 } as const;
 
-/** Where a new agent runs, as the Run on row offers it: a cloud sandbox, or the reader's own Mac. */
-export const RUN_ON = {
-  CLOUD: CODING_AGENT_MACHINE.VERCEL,
-  THIS_MAC: CODING_AGENT_MACHINE.MAC,
-} as const;
-
-export type RunOn = (typeof RUN_ON)[keyof typeof RUN_ON];
-
-/** What the Run on row and its two choices are called. */
+/** What the Run on row and its cloud choice are called; each Mac is called by its own name. */
 const RUN_ON_WORDS = {
   ROW: "Run on",
-  [RUN_ON.CLOUD]: "Cloud",
-  [RUN_ON.THIS_MAC]: "This Mac",
+  CLOUD: "Cloud",
 } as const;
 
-/** The Run on row's choice, where the menu offers one: the Mac a Start may run on, and the choice standing now. */
+/** The Run on row's choice, where the menu offers one: the account's Macs a Start may run on, and the one chosen now, none for the cloud. */
 export interface RunOnChoice {
-  /** The Mac offered (`thisMacOfferSchema`), whose name the This Mac choice says under it. */
-  readonly mac: ThisMacOffer;
-  readonly value: RunOn;
-  readonly onChoose: (next: RunOn) => void;
+  /** The Macs offered (`macOfferSchema`), each a choice by its name. */
+  readonly macs: readonly MacOffer[];
+  /** The Mac chosen, by its device id; none for the cloud. */
+  readonly deviceId: string | undefined;
+  readonly onChoose: (deviceId: string | undefined) => void;
+  /** Why no Mac can be chosen for the model standing now, which the row says on hover, standing at Cloud; none where one can. */
+  readonly unavailable?: string | undefined;
 }
+
+/** The id the Run on row's cloud choice is picked by, which no device id is. */
+const CLOUD_ROW = "cloud";
 
 /**
  * The menu's rows: each base model under the mark of the harness that runs
@@ -299,30 +292,30 @@ export function ModelMenu(props: {
     ];
   };
 
-  /** The Run on row, where the menu offers one: Cloud or This Mac, the Mac's own name under it, closing the menu on a pick. */
+  /** The Run on row, where the menu offers one: Cloud, or one of the account's Macs by its name, closing the menu on a pick; muted at Cloud where the model standing runs on no Mac. */
   const runOnRow = (): FootRow[] => {
     const runOn = props.runOn;
     if (runOn === undefined) return [];
+    const mac = runOn.macs.find((each) => each.deviceId === runOn.deviceId);
     return [
       {
         id: FOOT_ROW.RUN_ON,
         label: RUN_ON_WORDS.ROW,
         tag: <ExperimentTag />,
-        detail: RUN_ON_WORDS[runOn.value],
+        detail: mac?.name ?? RUN_ON_WORDS.CLOUD,
+        disabled: runOn.unavailable,
         submenu: {
           label: RUN_ON_WORDS.ROW,
           rows: [
-            { id: RUN_ON.CLOUD, label: RUN_ON_WORDS[RUN_ON.CLOUD] },
-            {
-              id: RUN_ON.THIS_MAC,
-              label: RUN_ON_WORDS[RUN_ON.THIS_MAC],
-              detail: runOn.mac.name,
-            },
+            { id: CLOUD_ROW, label: RUN_ON_WORDS.CLOUD },
+            ...runOn.macs.map((each) => ({ id: each.deviceId, label: each.name })),
           ],
-          value: runOn.value,
+          value: mac?.deviceId ?? CLOUD_ROW,
           onPick: (picked) => {
             onClose();
-            runOn.onChoose(picked === RUN_ON.THIS_MAC ? RUN_ON.THIS_MAC : RUN_ON.CLOUD);
+            runOn.onChoose(
+              runOn.macs.some((each) => each.deviceId === picked) ? picked : undefined,
+            );
           },
         },
       },
