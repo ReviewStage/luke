@@ -1660,11 +1660,14 @@ export interface RunnerEnding {
 
 /**
  * Whether the agent's runner may have taken a message since its turn ended:
- * a turn of its run queued or running, or a line of the developer's written
- * since that turn ended that no turn has taken yet, and not so long ago
- * that it reads as unanswered (`CODER.LINE_GRACE`). A send writes its line's
- * row before it takes the runner lease, so read under the lease this sees
- * every message a send wrote to the runner ahead of it.
+ * a turn of its run queued or running, or a line of the developer's no turn
+ * has taken yet, written not so long ago that it reads as unanswered
+ * (`CODER.LINE_GRACE`). A send writes its line's row before it takes the
+ * runner lease, and the runner names the line taken only in an event posted
+ * after its IDLE, so read under the lease this sees every message a send
+ * wrote to the runner ahead of it. Note that a line is not weighed against
+ * when the turn ended, because that is when the IDLE's batch landed, which
+ * may come after the next line was written.
  */
 const runnerMayBeAtWork = (agentId: string, now: Date) =>
   Effect.gen(function* () {
@@ -1675,7 +1678,6 @@ const runnerMayBeAtWork = (agentId: string, now: Date) =>
     const awaiting = (yield* awaitingLinesOfReached([conversationId])).get(conversationId);
     return (
       awaiting !== undefined &&
-      awaiting.getTime() > endedAt.getTime() &&
       now.getTime() - awaiting.getTime() <= Duration.toMillis(CODER.LINE_GRACE)
     );
   });

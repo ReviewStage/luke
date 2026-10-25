@@ -1996,14 +1996,14 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         const target = { userId, conversationId: agent.conversationId };
         const startedAt = yield* Clock.currentTimeMillis;
         const at = (millis: number) => new Date(startedAt + millis);
-        // The first turn ended at its IDLE, as the developer's next line was written, which the store
-        // writes before it hands the line to the runner.
+        // The developer's next line was written, as the store writes it before it hands the line to
+        // the runner, a moment before the batch holding the first turn's IDLE landed and settled it.
         yield* db.insert(turns).values({
           ...target,
           origin: TURN_ORIGIN.TYPED,
           status: TURN_STATUS.SETTLED,
           queuedAt: at(0),
-          settledAt: at(0),
+          settledAt: at(2_000),
         });
         const lineId = randomUUID();
         yield* db.insert(messages).values({
@@ -2041,8 +2041,8 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
             ...target,
             origin: TURN_ORIGIN.TYPED,
             status: TURN_STATUS.SETTLED,
-            queuedAt: at(1_500),
-            settledAt: at(2_000),
+            queuedAt: at(2_500),
+            settledAt: at(3_000),
           })
           .returning({ id: turns.id });
         yield* db.update(messages).set({ turnId: second?.id }).where(eq(messages.id, lineId));
