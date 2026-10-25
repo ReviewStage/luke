@@ -11,8 +11,10 @@ import {
  * roving-keys.ts -- one Tab stop for a set of items, the arrows walking between them, as a Mac's list or a toolbar's buttons are walked.
  *
  * A box (`useRovingKeys`) holds its items, each marked by `rovingItem()`.
- * Exactly one of them is a Tab stop: the one last focused, or the first
- * while none has been, and every other is out of the tab order, so Tab
+ * Exactly one of them is a Tab stop: the one last focused, or while none
+ * has been, the chosen one (`aria-selected`, `aria-checked`), then the
+ * current one (`aria-current` of `page`, `step`, or `true`), then the first,
+ * and every other is out of the tab order, so Tab
  * enters the set once and leaves it at the next. The arrows along the
  * set's orientation (↑↓, or ←→ for a row of items) step the focus to the
  * next or previous item, wrapping at either end, and Home and End go to the
@@ -91,12 +93,21 @@ const STEP_KEYS = {
 /** The attributes that say an item is the chosen one: a tab's, or a radio's. */
 const CHOSEN_ATTRIBUTES = ["aria-selected", "aria-checked"] as const;
 
-/** What a change under the box settles the tab order on: an item coming, going, turning unavailable, or chosen. */
+/** The `aria-current` values that say an item is where the person stands: a page, a step, or the thing itself. */
+const CURRENT_VALUES = ["page", "step", "true"] as const;
+
+/** What a change under the box settles the tab order on: an item coming, going, turning unavailable, chosen, or current. */
 const WATCHED = {
   childList: true,
   subtree: true,
   attributes: true,
-  attributeFilter: ["disabled", "aria-disabled", ITEM_ATTRIBUTE, ...CHOSEN_ATTRIBUTES],
+  attributeFilter: [
+    "disabled",
+    "aria-disabled",
+    ITEM_ATTRIBUTE,
+    ...CHOSEN_ATTRIBUTES,
+    "aria-current",
+  ],
 } as const satisfies MutationObserverInit;
 
 const NONE_SKIPPED = () => false;
@@ -123,6 +134,11 @@ function available(item: HTMLElement): boolean {
 /** Whether an item is the chosen one of its set. */
 function chosen(item: HTMLElement): boolean {
   return CHOSEN_ATTRIBUTES.some((name) => item.getAttribute(name) === "true");
+}
+
+/** Whether an item is the current one of its set, as the open page of a list of pages is. */
+function current(item: HTMLElement): boolean {
+  return CURRENT_VALUES.some((value) => item.getAttribute("aria-current") === value);
 }
 
 /** The item of the box an event landed on, where it landed on one. */
@@ -227,8 +243,14 @@ export function useRovingKeys<T extends HTMLElement>({
       if (stop === ROVING_STOP.NONE) return;
       const items = itemsOf(box);
       const open = items.filter(available);
-      const kept = stop === ROVING_STOP.CHOSEN ? open.find(chosen) : held.current;
-      const tabStop = kept !== null && kept !== undefined && open.includes(kept) ? kept : open[0];
+      // Note that Tab enters on the row the person last moved to, else the
+      // chosen row, else the current one, else the first, so a list opens
+      // where its owner already stands.
+      const remembered = stop === ROVING_STOP.HELD ? held.current : null;
+      const tabStop =
+        remembered !== null && open.includes(remembered)
+          ? remembered
+          : (open.find(chosen) ?? open.find(current) ?? open[0]);
       for (const item of items) {
         const order = item === tabStop ? 0 : -1;
         // Note that a disabled control is out of the order already: one
