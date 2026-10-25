@@ -36,11 +36,22 @@ import { TEXT_ELEMENT, TEXT_TONE, TEXT_VARIANT, Text } from "../text/text.js";
  * card of them, where the page has not yet read what its sections are
  * (`SettingsSectionsSkeleton`). The rest of the page stands meanwhile, and
  * the region around the blocks says what is being read.
+ *
+ * It is drawn in Tailwind utilities over the theme with no shadcn/ui base:
+ * shadcn's card is a frame for whatever a caller lays in it, and a section's
+ * card is a column of rows it rules one from the next, a reveal area whose
+ * rows unroll in it. The rules between rows stay in `settings-section.css`,
+ * since they fall on other components' boxes, as do the placeholders' own
+ * boxes, which a skeleton's lint rule holds to a skeleton's class alone.
  */
 
 /** A card's line where its rows would stand: a note's words, in a description's muted words, or a failure (`ErrorState`). */
 export function SettingsLine({ children }: { children: ReactNode }): React.JSX.Element {
-  return <div className="luke-settings-line">{children}</div>;
+  return (
+    <div className="luke-settings-line m-0 box-border flex min-h-settings-row min-w-0 items-center gap-control-gap px-settings-row-inline py-settings-row-block font-sans text-caption font-caption text-muted-foreground wrap-anywhere">
+      {children}
+    </div>
+  );
 }
 
 /* ----- Skeletons ----- */
@@ -261,14 +272,20 @@ function SectionFrame({
   const card = useRef<HTMLDivElement>(null);
   return (
     <section
-      className="luke-settings-section"
+      className="luke-settings-section flex min-w-0 flex-col gap-luke-8"
       aria-labelledby={labelledBy}
       {...(anchor === undefined ? undefined : searchAnchorProps(anchor))}
     >
-      {head === undefined ? null : <div className="luke-settings-section-head">{head}</div>}
+      {head === undefined ? null : (
+        <div className="luke-settings-section-head px-luke-2">{head}</div>
+      )}
       {frame === SETTINGS_SECTION_FRAME.CARD ? (
         <RevealArea root={card}>
-          <div ref={card} className="luke-settings-section-card" {...revealArea()}>
+          <div
+            ref={card}
+            className="luke-settings-section-card flex min-w-0 flex-col rounded-control border border-border bg-surface"
+            {...revealArea()}
+          >
             {children}
           </div>
         </RevealArea>

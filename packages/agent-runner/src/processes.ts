@@ -9,14 +9,30 @@
  * so the runner, the CLI it spawns, and everything the CLI's commands
  * started carry an empty one, a server that detached from its shell
  * included, while the sandbox's own processes keep theirs. A process with an
- * empty set that is neither the runner nor one it spawned itself, the
- * harness, is the agent's.
+ * empty set that is neither the runner, nor one it spawned itself, the
+ * harness, nor the harness's command-sandbox bridge, is the agent's.
+ *
+ * The bridge is the `socat` Claude Code starts beside itself when its command
+ * sandbox is on, as the runner always asks (`runner.ts`): it listens on a
+ * socket under `/tmp` named `claude-http-<id>.sock` and forwards to the
+ * CLI's own proxy for as long as the CLI runs. It is told apart narrowly, as
+ * a child of the harness running `socat` on exactly that socket, so a
+ * `socat` or a server of the agent's own still reads as the agent's. Counted
+ * as the agent's, it held every wait the whole launch, and the sandbox under
+ * it, until the wakeup came. This is the one bridge the pinned SDK
+ * (`@anthropic-ai/claude-agent-sdk` 0.3.304) starts; its sandbox runtime can
+ * also start a SOCKS bridge on `claude-socks-<id>.sock`, which this pin does
+ * not, so a bump that does would hold every wait again, never cut work off,
+ * until it is matched here too. The relays each sandboxed command starts end
+ * with that command, so none stands while the agent waits.
  *
  * Where `/proc` cannot be read, the answer is that one runs, so a wait is
- * never released on a guess.
+ * never released on a guess; so is a process whose command line cannot be
+ * read, which is never taken for the bridge.
  */
 
 import { readdirSync, readFileSync } from "node:fs";
+import { basename } from "node:path";
 import { Context, Effect, Layer } from "effect";
 
 export interface ProcessTableShape {
@@ -27,6 +43,12 @@ export interface ProcessTableShape {
 export class ProcessTable extends Context.Service<ProcessTable, ProcessTableShape>()(
   "@luke/agent-runner/ProcessTable",
 ) {}
+
+/** The program and the listening address of Claude Code's command-sandbox bridge, as its command line spells them. */
+const HARNESS_BRIDGE = {
+  PROGRAM: "socat",
+  LISTEN: /^UNIX-LISTEN:\/tmp\/claude-http-[0-9a-f]+\.sock(,|$)/,
+} as const;
 
 /** One process as its `status` names it: its parent, and whether its bounding set is empty. */
 interface Status {
@@ -48,10 +70,27 @@ function statusOf(root: string, pid: string): Status | undefined {
   return { parent: Number(parent), emptied: /^0+$/.test(bounding) };
 }
 
+/** Whether a process's command line, read from its `cmdline`, is the bridge's; no where it cannot be read. */
+function runsBridge(root: string, pid: number): boolean {
+  let argv: string[];
+  try {
+    argv = readFileSync(`${root}/${pid}/cmdline`, "utf8").split("\0");
+  } catch {
+    return false;
+  }
+  const [program, listen] = argv;
+  return (
+    program !== undefined &&
+    basename(program) === HARNESS_BRIDGE.PROGRAM &&
+    listen !== undefined &&
+    HARNESS_BRIDGE.LISTEN.test(listen)
+  );
+}
+
 /**
  * Whether a process with an emptied bounding set runs under `root`, a
- * `/proc`, beside the runner (`self`) and the processes it spawned; yes
- * where no process at all could be read.
+ * `/proc`, beside the runner (`self`), the processes it spawned, and the
+ * harness's bridge; yes where no process at all could be read.
  */
 function agentProcessRunsUnder(root: string, self: number): boolean {
   let pids: string[];
@@ -60,15 +99,19 @@ function agentProcessRunsUnder(root: string, self: number): boolean {
   } catch {
     return true;
   }
-  let read = 0;
+  const statuses = new Map<number, Status>();
   for (const pid of pids) {
     const status = statusOf(root, pid);
-    if (status === undefined) continue;
-    read += 1;
-    if (!status.emptied || Number(pid) === self || status.parent === self) continue;
+    if (status !== undefined) statuses.set(Number(pid), status);
+  }
+  if (statuses.size === 0) return true;
+  for (const [pid, status] of statuses) {
+    if (!status.emptied || pid === self || status.parent === self) continue;
+    // Note that the bridge is the harness's only where the harness, a child of the runner, spawned it.
+    if (statuses.get(status.parent)?.parent === self && runsBridge(root, pid)) continue;
     return true;
   }
-  return read === 0;
+  return false;
 }
 
 /** The processes under `root`, a `/proc`, as the runner `self` reads them: the sandbox's own `/proc` and the runner's pid in production. */

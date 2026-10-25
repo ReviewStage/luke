@@ -1199,7 +1199,7 @@ function CommentCard({
       padding={CARD_PADDING.NONE}
       hover={hover}
       lit={lit}
-      className="comment-card px-list-inset pt-tight-gap pb-row-inset text-body text-foreground data-[open=false]:cursor-pointer data-[open=true]:pt-row-inset"
+      className="comment-card px-list-inset pt-tight-gap pb-row-inset text-body text-foreground data-[open=false]:cursor-press data-[open=true]:pt-row-inset"
       data-open={String(open)}
       {...data}
     >

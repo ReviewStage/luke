@@ -10,7 +10,7 @@
     border: 1px solid var(--luke-color-border);
     border-radius: 50%;
     background: var(--luke-swatch);
-    cursor: pointer;
+    cursor: var(--luke-cursor-press);
   }
 
   .luke-swatch[data-none] {
