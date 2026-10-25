@@ -1902,87 +1902,13 @@
   margin: 0;
 }
 
-/* Who a pull request names, in a notice's voice: who opened it and its
-   reviewers, each a line of words around its faces
-   (`pull-request-people.tsx`). */
-.changes-people {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--luke-tight-gap) var(--luke-field-gap);
-  padding: var(--luke-row-inset) var(--luke-list-inset);
-  border-bottom: 1px solid var(--luke-color-border);
-  color: var(--luke-color-text-muted);
-  font-size: var(--luke-type-caption-size);
-  line-height: var(--luke-type-caption-leading);
-}
-
-/* A reviewer's standing, in GitHub's colours: approved green, changes asked
-   for red, a review asked for amber, a comment or a dismissal quiet. */
-[data-review-state="approved"] {
-  --review-tone: var(--luke-color-complete);
-}
-
-[data-review-state="changes-requested"] {
-  --review-tone: var(--luke-color-danger);
-}
-
-[data-review-state="requested"] {
-  --review-tone: var(--luke-color-attention);
-}
-
-[data-review-state="commented"],
-[data-review-state="dismissed"] {
-  --review-tone: var(--luke-color-text-muted);
-}
-
-.review-state {
-  display: inline-grid;
-  place-items: center;
-  color: var(--review-tone);
-}
-
-/* At a face's corner the standing is a disc of its tone, its glyph cut from
-   it in the ground's colour, so a check reads apart from a cross at a
-   face's size; a review asked for is the disc alone, smaller, as GitHub's
-   waiting dot. The badge's own ground rings it off the face. */
-.review-face-badge {
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  background: var(--review-tone);
-  color: var(--luke-color-ground);
-}
-
-.review-face-badge[data-review-state="requested"] {
-  width: 7px;
-  height: 7px;
-}
-
+/* A reviewer's standing at a face's corner in a facepile
+   (`pull-request-people.tsx`'s `FaceBadge`): its glyph cut from the disc at
+   the badge's size. */
 .actor-stack-badge > .review-face-badge > svg {
   width: 7px;
   height: 7px;
   stroke-width: 4;
-}
-
-.changes-comment-head {
-  display: flex;
-  min-width: 0;
-  align-items: center;
-  gap: var(--luke-control-gap);
-  color: var(--luke-color-text);
-}
-
-.changes-comment-state {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--luke-tight-gap);
-  color: var(--luke-color-text-muted);
-}
-
-.changes-comment-state .review-state > svg {
-  width: 12px;
-  height: 12px;
 }
 
 /* An agent's Pull request tab (`agent-pull-request-tab.tsx`): a header of
@@ -2012,52 +1938,10 @@
   container: pull-request-tab / inline-size;
 }
 
-/* The tab shown fills the room under the header and the tabs, the others
-   kept drawn but hidden, so switching back draws what each last read. */
-.pull-request-view {
-  /* Note that the view hands the tab's band down as the scroller's own, so
-     the fade begins beneath the heading at whatever height it stands
-     (`SCROLL_FADE_INSET.BAND`). */
-  --luke-scroll-band: var(--pull-request-band);
-}
-
-.pull-request-view[hidden] {
-  display: none;
-}
-
 /* The Chapters view (agent-chapters-tab.tsx): the chapters' rail docked at
-   its left, as Files changed's tree docks at its right, and the chapter
-   chosen beside it, its head over its own Files changed list and its foot
-   under it. The rail is as wide as the tree stands by default, slides in
-   past the view's left edge and out over the chapter (`usePaneSlide`), so
-   the body clips what stands past it, with `clip` rather than `hidden`, and
-   leaves a strip of one mark a chapter while hidden. */
-.chapters-view {
-  --chapter-rail-width: calc(var(--luke-space-64) * 4);
-}
-
-.chapters-body {
-  position: relative;
-}
-
-.chapter-rail {
-  display: flex;
-  width: min(var(--chapter-rail-width), 40%);
-  min-width: 0;
-  flex: 0 0 auto;
-  flex-direction: column;
-  border-right: 1px solid var(--luke-color-border);
-}
-
-.chapter-rail[data-leaving] {
-  position: absolute;
-  z-index: 1;
-  inset-block: 0;
-  left: 0;
-  background: var(--luke-color-well);
-}
-
-/* Note that the rail hidden beside the chapter is hidden only where it can
+   its left, as Files changed's tree docks at its right, slides in past the
+   view's left edge and out over the chapter (`usePaneSlide`), and leaves a
+   strip of one mark a chapter while hidden. Note that the rail hidden beside the chapter is hidden only where it can
    stand beside it, so a panel narrowed since still floats it when asked. */
 @container side-panel (width >= 640px) {
   .chapters-view[data-rail-beside="false"] .chapter-rail:not([data-leaving]) {
@@ -2065,47 +1949,8 @@
   }
 }
 
-/* A row's number, quiet before its title, and its risk as a dot in the
-   risk's colour in the glyph's place; "Other changes" draws none. */
-.chapter-row-number {
-  margin-right: var(--luke-icon-gap);
-  color: var(--luke-color-text-muted);
-  font-variant-numeric: tabular-nums;
-}
-
-.chapter-risk-mark {
-  display: block;
-  width: var(--luke-space-8);
-  height: var(--luke-space-8);
-  border-radius: var(--luke-radius-full);
-}
-
-.chapter-risk-mark[data-risk="high"] {
-  background: var(--luke-color-danger-text);
-}
-
-.chapter-risk-mark[data-risk="medium"] {
-  background: var(--luke-color-attention);
-}
-
-.chapter-risk-mark[data-risk="low"] {
-  background: var(--luke-color-complete);
-}
-
-/* While the rail is hidden, a strip stands in its place (`MarkStrip`), one
-   mark for each chapter in its risk's colour, as Files changed's strip
-   stands for its tree; this box says when it is drawn and its edge. */
-.chapter-strip {
-  display: none;
-}
-
-.chapters-view[data-rail-beside="false"] .chapter-strip {
-  display: flex;
-  width: var(--luke-space-12);
-  flex: none;
-  border-right: 1px solid var(--luke-color-border);
-}
-
+/* The rail's toggle, beside the chapter or over it, one shown at a time by
+   the panel's width (below), which the view reads to know where it opens. */
 .chapter-rail-toggle {
   display: flex;
 }
@@ -2114,45 +1959,12 @@
   display: none;
 }
 
-/* The chapter: its bar, its brief, which scrolls on its own once it is taller than
-   its share, so the diff under it keeps at least half the view; the list;
-   and its foot bar. */
-.chapter-brief {
-  display: flex;
-  min-height: 0;
-  max-height: 50%;
-  flex: 0 1 auto;
-  flex-direction: column;
-  border-bottom: 1px solid var(--luke-color-border);
-}
-
-.chapter-brief-body {
-  display: flex;
-  flex-direction: column;
-  gap: var(--luke-control-gap);
-  padding: var(--luke-row-inset) var(--column-inset) var(--luke-list-inset);
-}
-
-/* Which model told the chapters, a quiet line over them. */
-.chapters-made-by {
-  margin: 0;
-  padding: var(--luke-tight-gap) var(--luke-list-inset);
-  border-bottom: 1px solid var(--luke-color-border);
-}
-
 /* The chapter's foot says its place whole, "Chapter 1 of 2", before its
    buttons take room: the place never shrinks, so the buttons give way
    first, folding to their glyphs (`FoldingButton`), and only where even the
    place will not fit does it drop its noun for a reader and say "1 of 2". */
 .chapter-reading {
   container: chapter-reading / inline-size;
-}
-
-.chapter-place {
-  flex: none;
-  padding-left: var(--luke-row-inset);
-  color: var(--luke-color-text);
-  white-space: nowrap;
 }
 
 /* off-scale: 480px, where Previous chapter and Next chapter no longer fit beside the place */
@@ -2176,22 +1988,6 @@
   }
 }
 
-.chapter-viewed {
-  display: flex;
-  align-items: center;
-  color: var(--luke-color-text-muted);
-  font-size: var(--luke-type-caption-size);
-}
-
-.chapter-summary,
-.chapter-key-changes {
-  padding-inline: var(--row-inset);
-}
-
-.chapter-key-changes > ul {
-  margin-top: var(--luke-tight-gap);
-}
-
 /* A key change's card, `@luke/ui`'s outlined Card: the words take its
    width; the press to its lines hugs its own. */
 .chapter-key-change {
@@ -2202,31 +1998,7 @@
   padding: var(--luke-item-gap) var(--luke-row-inset);
 }
 
-.chapter-key-change-words {
-  align-self: stretch;
-}
-
-/* A key change's lines named alone, while stale chapters draw no diff to bring them into. */
-.chapter-key-change-ref {
-  color: var(--luke-color-text-muted);
-}
-
-/* Chapters being made: how long it has been, then blocks where the rail
-   and the chapter will stand. */
-.chapters-generating-line {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--luke-control-gap);
-  margin: 0;
-  padding: var(--luke-row-inset) var(--column-inset);
-  border-bottom: 1px solid var(--luke-color-border);
-  color: var(--luke-color-text-muted);
-  font-size: var(--luke-type-caption-size);
-  line-height: var(--luke-type-caption-leading);
-}
-
-/* The placeholder's region takes the room under the line, as the
+/* While chapters are being made, the placeholder's region takes the room under the line, as the
    chapters' body does under theirs, so the rail runs the full height. */
 .chapters-generating > .luke-skeleton-region {
   display: flex;
@@ -2271,23 +2043,8 @@
   }
 }
 
-/* The band the views' tabs stand in under the header, whose hairline is the
-   band's rather than the tabs', with Review at its end while the pull
-   request is open: the tabs give way first, folding to their glyphs. */
-.pull-request-tabs {
-  display: flex;
-  flex: none;
-  align-items: center;
-  gap: var(--luke-control-gap);
-  padding: var(--luke-item-gap) var(--column-inset);
-  border-bottom: 1px solid var(--luke-color-border);
-}
-
-.pull-request-tabs > .pull-request-review {
-  flex: none;
-}
-
-/* The row gives way in steps as the tab narrows, so every tab keeps its
+/* The tabs' row under the header, Review at its end while the pull request
+   is open, gives way in steps as the tab narrows, so every tab keeps its
    name for as long as it can and none is named while the others are not:
    first Review folds to a square around its glyph, which wears its count,
    its word left to its hint; then the tabs take in their room; and only once their names no
@@ -2316,14 +2073,7 @@
    wide, so the merge control and Review stand at the panel's edge; only the
    views under them keep to the reading measure. */
 .pull-request-header {
-  /* Note that the container makes the header a stacking context of its
-     own, so it stands over the rows after it, or the merge control's panel
-     hung from it would pass under the tabs. */
-  position: relative;
-  z-index: 1;
-  flex: none;
   container: pull-request-header luke-room / inline-size;
-  padding: var(--luke-row-inset) var(--column-inset);
 }
 
 /* The title's row: the pill at the row's inset, the title taking the room
@@ -2366,11 +2116,6 @@
   align-items: center;
   gap: var(--luke-control-gap);
   margin-inline-start: auto;
-}
-
-/* The header's Preview where several deployments serve, holding the menu it drops. */
-.pull-request-preview {
-  display: flex;
 }
 
 /* A narrow header, a phone's or the side panel's at its least, gives the
@@ -2448,24 +2193,9 @@
   mask-repeat: no-repeat;
 }
 
-/* The Conversation's scroller (agent-pull-request-tab.tsx's
-   `ConversationView`): its words at the measure, as far in from the sides
-   as a `DetailPage` at a column's inset stands them, so the Conversation
-   and the Checks read alike, opening a section's gap under the tabs and
-   ending a page's inset short of the foot. */
-.pull-request-page {
-  --pull-request-page-measure: var(--luke-page-measure);
-  padding: var(--luke-section-gap)
-    max(var(--luke-space-12), (100cqi - var(--pull-request-page-measure)) / 2)
-    var(--luke-page-inset);
-  color: var(--luke-color-text);
-  font-size: var(--luke-type-body-size);
-  line-height: var(--luke-type-body-leading);
-  overflow-wrap: anywhere;
-}
-
-/* On the web, the wider column a web `DetailPage` stands at, so the
-   Conversation and the Checks wrap alike there too. */
+/* On the web, the Conversation's scroller (`.pull-request-page`) stands at
+   the wider column a web `DetailPage` does, so the Conversation and the
+   Checks wrap alike there too. */
 [data-luke-profile="web"] .pull-request-page {
   --pull-request-page-measure: 1040px; /* off-scale: detail-page.css's web measure */
 }
@@ -2548,52 +2278,10 @@
   background: var(--luke-color-well);
 }
 
-/* What the heading holds at its end, Hide resolved and Hide bots on the
-   Conversation's: filter chips as the tasks board's toolbar draws its view
-   filter, each its word and the quiet count of what it leaves out, pressed
-   while on. */
-.pull-request-section-end {
-  display: flex;
-  flex: none;
-  align-items: center;
-  gap: var(--luke-control-gap);
-}
-
-.pull-request-filter {
-  display: inline-flex;
-}
-
-/* What a section holds opens a step under its band. */
-.pull-request-section-body {
-  padding-top: var(--luke-tight-gap);
-}
-
 /* A tab's page (a `DetailPage` at the tabs' inset) opens its own gap under
    the row, so its first section adds none. */
 .pull-request-section:first-child {
   margin-top: 0;
-}
-
-/* Where GitHub did not take the last change: a line over the header, at the
-   content inset, its dismissal at the row's end. */
-.pull-request-write-note {
-  flex: 0 0 auto;
-  padding: var(--luke-tight-gap) var(--column-inset) var(--luke-tight-gap) var(--content-inset);
-  border-bottom: 1px solid var(--luke-color-border);
-}
-
-/* The bar's Review press and the panel it opens (`pull-request-review.tsx`):
-   the press holds the panel's anchor, and the panel is a popover card as
-   the context ring's is, its words' field over what the review says, each
-   choice a row with its meaning under its name, as stage-cli draws them. */
-.pull-request-review {
-  position: relative;
-  display: flex;
-}
-
-.pull-request-review-lead {
-  margin: calc(-1 * var(--luke-space-8)) 0 0;
-  color: var(--luke-color-text-muted);
 }
 
 /* Words sent to GitHub as Markdown (`comment-editor.tsx`): the plan's

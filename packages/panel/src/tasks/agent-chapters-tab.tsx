@@ -255,7 +255,7 @@ const SKELETON_LINES = ["40%", "92%", "86%", "60%"] as const;
 /** The chapters' body: the rail, its strip, and the chapter being read, side by side, clipped at its edges as the rail slides. */
 function ChaptersBody({ children }: { children: ReactNode }): React.JSX.Element {
   return (
-    <Fill flow={FILL_FLOW.ROW} clip className="chapters-body">
+    <Fill flow={FILL_FLOW.ROW} clip className="chapters-body relative">
       {children}
     </Fill>
   );
@@ -290,7 +290,7 @@ function ChapterRailFrame({
   return (
     <nav
       ref={pane}
-      className="chapter-rail"
+      className="chapter-rail flex w-chapter-rail min-w-0 flex-none flex-col border-r border-border data-leaving:absolute data-leaving:inset-y-0 data-leaving:left-0 data-leaving:z-1 data-leaving:bg-well"
       aria-label={CHAPTERS_WORDS.RAIL}
       data-leaving={leaving ? "" : undefined}
       inert={leaving}
@@ -372,7 +372,7 @@ function Generating({
   const words = ours ? CHAPTERS_WORDS.GENERATING : CHAPTERS_WORDS.ELSEWHERE;
   return (
     <Fill className="chapters-generating">
-      <p className="chapters-generating-line">
+      <p className="chapters-generating-line m-0 flex items-center justify-between gap-control-gap border-b border-border px-column-inset py-row-inset text-caption text-muted-foreground">
         <span>
           {words}
           {live ? (
@@ -400,7 +400,12 @@ function Generating({
 
 /** A chapter's risk as its row's mark, in the risk's colour; none for "Other changes". Decoration: the row's name says it. */
 function RiskMark({ risk }: { risk: Chapter["risk"] }): React.JSX.Element {
-  return <span className="chapter-risk-mark" data-risk={risk ?? undefined} />;
+  return (
+    <span
+      className="block size-luke-8 rounded-luke-full data-[risk=high]:bg-danger data-[risk=low]:bg-complete data-[risk=medium]:bg-attention"
+      data-risk={risk ?? undefined}
+    />
+  );
 }
 
 /** A chapter's risk as a chip in its tone, whose card says why. */
@@ -523,7 +528,7 @@ function ChapterRail({
                 aria-label={CHAPTERS_WORDS.row(index + 1, row.chapter.title, risk, done)}
                 onClick={() => onChoose(index)}
               >
-                <span className="chapter-row-number">{index + 1}</span>
+                <span className="mr-icon-gap text-muted-foreground tabular-nums">{index + 1}</span>
                 {row.chapter.title}
               </NavItem>
             </Tooltip>
@@ -569,7 +574,10 @@ function ChapterStrip({
   onOpen: () => void;
 }): React.JSX.Element {
   return (
-    <div ref={box} className="chapter-strip">
+    <div
+      ref={box}
+      className="chapter-strip hidden w-luke-12 flex-none border-r border-border group-data-[rail-beside=false]/chapters:flex"
+    >
       <MarkStrip
         marks={rows.map((row, index) => ({
           tone: row.chapter.risk ? RISK_TONES[row.chapter.risk] : undefined,
@@ -602,11 +610,11 @@ function KeyChangeItem({
       padding={CARD_PADDING.NONE}
       className="chapter-key-change"
     >
-      <div className="chapter-key-change-words">
+      <div className="self-stretch">
         <TranscriptWords text={change.content} />
       </div>
       {first === undefined ? null : onReveal === undefined ? (
-        <span className="chapter-key-change-ref">{lineRefLabel(first)}</span>
+        <span className="text-muted-foreground">{lineRefLabel(first)}</span>
       ) : (
         <TextButton onClick={() => onReveal(first)}>{lineRefLabel(first)}</TextButton>
       )}
@@ -795,7 +803,7 @@ function ChaptersReading({
     // The view hears its chapter keys from whatever in it has the focus, past the list's own.
     <Fill
       ref={setRoot}
-      className="chapters-view"
+      className="chapters-view group/chapters"
       data-rail-beside={String(slide.drawn)}
       data-rail-over={over ? "open" : "closed"}
       onKeyDown={onKeyDown}
@@ -810,7 +818,7 @@ function ChaptersReading({
           ) : null}
         </div>
       ) : null}
-      <p className="chapters-made-by">
+      <p className="chapters-made-by m-0 border-b border-border px-list-inset py-tight-gap">
         <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
           {CHAPTERS_WORDS.madeBy(chaptersModelLabel(model))}
         </Text>
@@ -854,7 +862,7 @@ function ChaptersReading({
                   label={done ? CHAPTERS_WORDS.UNMARK_VIEWED : CHAPTERS_WORDS.MARK_VIEWED}
                   chord={CHAPTERS_SHORTCUTS[CHAPTERS_KEY.MARK_CHAPTER_VIEWED].chord}
                 >
-                  <span className="chapter-viewed">
+                  <span className="chapter-viewed flex items-center text-caption-inline text-muted-foreground">
                     <Checkbox checked={done} onChange={markChapter}>
                       {CHAPTERS_WORDS.VIEWED}
                     </Checkbox>
@@ -885,15 +893,15 @@ function ChaptersReading({
               ],
             }}
           />
-          <div className="chapter-brief">
+          <div className="flex max-h-1/2 min-h-0 flex-initial flex-col border-b border-border">
             <ScrollArea size={SCROLL_SIZE.CONTENT}>
-              <div className="chapter-brief-body">
-                <div className="chapter-summary">
+              <div className="flex flex-col gap-control-gap px-column-inset pt-row-inset pb-list-inset">
+                <div className="px-row-inset">
                   <TranscriptWords text={chapter.summary} />
                 </div>
                 {chapter.keyChanges.length === 0 ? null : (
                   <section
-                    className="chapter-key-changes"
+                    className="px-row-inset [&>ul]:mt-tight-gap"
                     aria-label={CHAPTERS_WORDS.WHAT_TO_REVIEW}
                   >
                     <Text as={TEXT_ELEMENT.H4} variant={TEXT_VARIANT.CAPTION}>
@@ -952,7 +960,7 @@ function ChaptersReading({
           )}
           <PaneBar
             middle={
-              <span className="chapter-place">
+              <span className="chapter-place flex-none whitespace-nowrap pl-row-inset text-foreground">
                 <span className="chapter-place-noun">{CHAPTERS_WORDS.PLACE_NOUN} </span>
                 {CHAPTERS_WORDS.of(at + 1, chapters.length)}
               </span>

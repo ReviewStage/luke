@@ -331,6 +331,16 @@ const CHAPTERS_TAB = lazyRoute(() =>
 );
 
 /** The tab's own words. */
+/**
+ * A view of the tab, filling the room under the header and the tabs, the
+ * others kept drawn but hidden, so switching back draws what each last read.
+ * Note that it hands the tab's band down as its scroller's own, so the fade
+ * begins beneath a section's heading at whatever height it stands
+ * (`SCROLL_FADE_INSET.BAND`).
+ */
+const VIEW_CLASS =
+  "pull-request-view [--luke-scroll-band:var(--pull-request-band)] [&[hidden]]:hidden";
+
 const PULL_REQUEST_WORDS = {
   READING: "Reading pull request",
   READING_CHECKS: "Reading checks",
@@ -611,7 +621,11 @@ function Section({
     <section className="pull-request-section" aria-label={title}>
       <DisclosureFrame
         actions={
-          end === undefined ? undefined : <span className="pull-request-section-end">{end}</span>
+          end === undefined ? undefined : (
+            <span className="pull-request-section-end flex flex-none items-center gap-control-gap">
+              {end}
+            </span>
+          )
         }
       >
         <Fold
@@ -623,7 +637,7 @@ function Section({
             <DisclosureChevron />
             {heading}
           </DisclosureSummary>
-          <FoldBody className="pull-request-section-body">{children}</FoldBody>
+          <FoldBody className="pull-request-section-body pt-tight-gap">{children}</FoldBody>
         </Fold>
       </DisclosureFrame>
     </section>
@@ -1380,7 +1394,9 @@ function EntryFrame({
 
 /** A skeleton entry's head, where who stands before the words are read. */
 function EntryHead({ children }: { children: ReactNode }): React.JSX.Element {
-  return <span className="changes-comment-head">{children}</span>;
+  return (
+    <span className="flex min-w-0 items-center gap-control-gap text-foreground">{children}</span>
+  );
 }
 
 /** One comment or review: who, where a review left them, and when; then their words, and the review threads a review started. */
@@ -1445,7 +1461,11 @@ interface OverviewParts {
 
 /** The line under the title, in the people line's caption type: the branches, who opened it, its reviewers and labels. */
 function PeopleLine({ children }: { children: ReactNode }): React.JSX.Element {
-  return <div className="changes-people pull-request-people">{children}</div>;
+  return (
+    <div className="changes-people pull-request-people flex flex-wrap items-center gap-x-field-gap gap-y-tight-gap border-b border-border px-list-inset py-row-inset text-caption text-muted-foreground">
+      {children}
+    </div>
+  );
 }
 
 /** Under the title, one line wrapping where it must: the branches and the stack it stands in, who opened it and when, its reviewers, the pickers and its labels; a skeleton while its read is out, and its failure with Retry. */
@@ -1658,7 +1678,7 @@ function PreviewControl({
     onSelect: () => openLink(deployment.url),
   }));
   return (
-    <span className="pull-request-preview">
+    <span className="flex">
       <Button
         variant={BUTTON_VARIANT.OUTLINE}
         icon={<ScanSearchIcon />}
@@ -2046,7 +2066,7 @@ function ConversationFilter({
   const noteId = useId();
   const note = count === undefined ? undefined : describe(count);
   const filter = (
-    <span className="pull-request-filter">
+    <span className="pull-request-filter inline-flex">
       <Chip
         look={CHIP_LOOK.FILTER}
         aria-label={label}
@@ -2145,7 +2165,9 @@ function ConversationView({
       fadeInset={SCROLL_FADE_INSET.BAND}
       gutter={SCROLL_GUTTER.STABLE}
     >
-      <div className="pull-request-page">
+      // Its words at the measure, as far in from the sides as a `DetailPage` at a column's inset
+      stands them, so the Conversation and the Checks read alike.
+      <div className="pull-request-page px-pull-request-page pt-section-gap pb-page-inset text-body text-foreground wrap-anywhere [--pull-request-page-measure:var(--luke-page-measure)]">
         <DescriptionPart
           agentId={agentId}
           part={parts.pullRequest}
@@ -2717,9 +2739,10 @@ function PullRequestTabBody({
               </EmptyState>
             ) : (
               <>
+                {/* The header is a stacking context of its own, raised over the rows after it, or the merge control's panel hung from it would pass under the tabs. */}
                 <header
                   ref={fold.header}
-                  className="pull-request-header"
+                  className="pull-request-header relative z-1 flex-none px-column-inset py-row-inset"
                   data-folded={fold.folded ? "" : undefined}
                 >
                   <div className="pull-request-title-row">
@@ -2797,7 +2820,7 @@ function PullRequestTabBody({
                   }
                 />
                 <Fill
-                  className="pull-request-view"
+                  className={VIEW_CLASS}
                   role="tabpanel"
                   id={ids(PULL_REQUEST_VIEW.CONVERSATION).panel}
                   aria-labelledby={ids(PULL_REQUEST_VIEW.CONVERSATION).tab}
@@ -2813,7 +2836,7 @@ function PullRequestTabBody({
                   />
                 </Fill>
                 <Fill
-                  className="pull-request-view"
+                  className={VIEW_CLASS}
                   role="tabpanel"
                   id={ids(PULL_REQUEST_VIEW.CHECKS).panel}
                   aria-labelledby={ids(PULL_REQUEST_VIEW.CHECKS).tab}
@@ -2832,7 +2855,7 @@ function PullRequestTabBody({
                   </DetailPage>
                 </Fill>
                 <Fill
-                  className="pull-request-view"
+                  className={VIEW_CLASS}
                   role="tabpanel"
                   id={ids(PULL_REQUEST_VIEW.CHAPTERS).panel}
                   aria-labelledby={ids(PULL_REQUEST_VIEW.CHAPTERS).tab}
@@ -2863,7 +2886,7 @@ function PullRequestTabBody({
               </>
             )}
             <Fill
-              className="pull-request-view"
+              className={VIEW_CLASS}
               role="tabpanel"
               id={ids(PULL_REQUEST_VIEW.FILES).panel}
               aria-labelledby={ids(PULL_REQUEST_VIEW.FILES).tab}

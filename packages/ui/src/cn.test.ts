@@ -31,3 +31,11 @@ test("a later disabled fade replaces an earlier one, the theme's own included", 
   assert.equal(cn("disabled:opacity-50", "disabled:opacity-disabled"), "disabled:opacity-disabled");
   assert.equal(cn("disabled:opacity-disabled", "disabled:opacity-100"), "disabled:opacity-100");
 });
+
+test("a task surface's later inset replaces an earlier one", () => {
+  assert.equal(
+    cn("px-column-inset text-muted-foreground", "px-content-inset"),
+    "text-muted-foreground px-content-inset",
+  );
+  assert.equal(cn("pt-section-gap", "pt-0"), "pt-0");
+});
