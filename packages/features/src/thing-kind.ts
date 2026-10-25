@@ -277,7 +277,8 @@ export function thingWordHeard(kind: ThingKind, name: string): string | undefine
   const word = THING_WORD[kind];
   const lead = name.slice(0, word.length);
   const said = lead.localeCompare(word, undefined, { sensitivity: "base" }) === 0;
-  const whole = name.length === word.length || /^[\s,:]/u.test(name.slice(word.length));
+  // Note that the word must end where a word does, so "Taskbar" still says it is a task.
+  const whole = !/^[\p{L}\p{N}]/u.test(name.slice(word.length));
   return said && whole ? undefined : word;
 }
 

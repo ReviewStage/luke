@@ -19,6 +19,8 @@ test("a name that already starts with its kind says it once", () => {
   assert.equal(thingWordHeard(THING_KIND.LUKE, "Luke"), undefined);
   assert.equal(thingWordHeard(THING_KIND.CHANGES, "Changes by Ada"), undefined);
   assert.equal(thingWordHeard(THING_KIND.MESSAGE, "Message from Ada"), undefined);
+  assert.equal(thingWordHeard(THING_KIND.INBOX, "Inbox (team)"), undefined);
+  assert.equal(thingWordHeard(THING_KIND.AUTOMATIONS, "Automations."), undefined);
 });
 
 test("a name that only begins with the kind's letters still says its kind", () => {
