@@ -458,10 +458,24 @@ test("the workspace's skills stand before the account's own, each with its sourc
   const text = document.body.textContent ?? "";
   assert.match(
     text,
-    /release-notes described · acme\/agent-skills @ 3f9c2e1 · by Dean\. Follows your workspace\.Workspace/u,
+    /release-notes describedacme\/agent-skills @ 3f9c2e1 · by Dean\. Follows your workspace\.Workspace/u,
   );
-  assert.match(text, /pr-style described · pastedOnly you/u);
+  assert.match(text, /pr-style describedpastedOnly you/u);
   assert.match(text, /\.agents\/skills.*only agents started afterwards/u);
+});
+
+test("a skill's description stands alone, its source and keep line under it as the row's detail", async () => {
+  await mountPage();
+
+  const row = rowOf("release-notes");
+  assert.equal(
+    row.querySelector(".luke-settings-row-state")?.textContent,
+    "acme/agent-skills @ 3f9c2e1 · by Dean. Follows your workspace.",
+  );
+  assert.equal(
+    row.querySelector(".luke-settings-row-description")?.firstChild?.textContent,
+    "release-notes described",
+  );
 });
 
 test("the workspace's skills each say they follow the workspace, and the account's own say nothing the page's head does not", async () => {
@@ -533,7 +547,7 @@ test("the account's own skill offers Share with workspace, which asks in plain w
   const [, shared, personal] = [...document.querySelectorAll("section")];
   assert.match(
     shared?.textContent ?? "",
-    /pr-style described · pasted · by you\. Follows your workspace\.Workspace/u,
+    /pr-style describedpasted · by you\. Follows your workspace\.Workspace/u,
   );
   assert.match(personal?.textContent ?? "", /No skills installed yet\./u);
 });

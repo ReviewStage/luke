@@ -33,10 +33,13 @@ import { Fragment } from "react";
 /**
  * A card inside a StatGroup leaves its edge to the group's, and once the
  * group sets its cards side by side, shares the row with them, never
- * narrower than its own figure.
+ * narrower than its own figure. Note that it has no ground of its own, because
+ * the surface is translucent in the dark, and a cell laying it over the
+ * group's own would read lighter than every other card; its right and bottom
+ * hairlines fall in the one-pixel gap, or past the group's clipped edge.
  */
 const METRIC_CARD_GROUPED =
-  "bg-(--luke-color-surface) px-(--luke-card-inset) py-(--luke-card-inset-compact) @min-[720px]/admin-section:flex-1 @min-[720px]/admin-section:basis-36";
+  "shadow-[1px_0_0_var(--luke-color-border),0_1px_0_var(--luke-color-border)] px-(--luke-card-inset) py-(--luke-card-inset-compact) @min-[720px]/admin-section:flex-1 @min-[720px]/admin-section:basis-36";
 
 /**
  * A figure stands on one line, never broken inside a number: a line that
@@ -214,14 +217,14 @@ const STAT_PAIR = `flex flex-1 basis-88 flex-wrap ${CARD_GAP}`;
 /**
  * Related headline metrics share one surface, leaving charts as the dominant
  * objects: stacked on a narrow page, side by side on a wide one. Note that
- * the rules between the cards are the group's own border ink showing
- * through a one-pixel gap, because a row that wraps when a figure needs the
+ * the rules between the cards are each card's own right and bottom hairline
+ * in a one-pixel gap, because a row that wraps when a figure needs the
  * room would leave a fixed divider on the wrong side of a card.
  */
 function StatGroup({ children }: { children: React.ReactNode }): React.JSX.Element {
   return (
     <Card padding={CARD_PADDING.FLUSH}>
-      <div className="flex flex-col gap-px bg-(--luke-color-border) @min-[720px]/admin-section:flex-row @min-[720px]/admin-section:flex-wrap">
+      <div className="flex flex-col gap-px @min-[720px]/admin-section:flex-row @min-[720px]/admin-section:flex-wrap">
         {children}
       </div>
     </Card>

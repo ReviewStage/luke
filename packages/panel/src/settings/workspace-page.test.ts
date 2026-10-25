@@ -2489,7 +2489,7 @@ test("a workspace's Linear whose sign-in expired says so, offering an admin Reco
     "Linear",
   );
 
-  assert.deepEqual(rowWords(admin), ["Linear", "Sign-in expired."]);
+  assert.deepEqual(rowWords(admin), ["Linear", "Sign-in expired"]);
   assert.ok(button(admin, "Reconnect"));
   assert.deepEqual(rowWords(member), ["Linear", "Sign-in expired. Ask an owner or admin."]);
   assert.deepEqual(rowButtons(member), []);
