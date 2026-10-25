@@ -2165,8 +2165,8 @@ function ConversationView({
       fadeInset={SCROLL_FADE_INSET.BAND}
       gutter={SCROLL_GUTTER.STABLE}
     >
-      // Its words at the measure, as far in from the sides as a `DetailPage` at a column's inset
-      stands them, so the Conversation and the Checks read alike.
+      {/* Its words at the measure, as far in from the sides as a `DetailPage` at a column's inset
+      stands them, so the Conversation and the Checks read alike. */}
       <div className="pull-request-page px-pull-request-page pt-section-gap pb-page-inset text-body text-foreground wrap-anywhere [--pull-request-page-measure:var(--luke-page-measure)]">
         <DescriptionPart
           agentId={agentId}
