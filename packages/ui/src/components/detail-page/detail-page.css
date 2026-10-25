@@ -8,7 +8,7 @@
    cannot read a custom property, so the widths it narrows under are
    literals here. The header opens the main column's scroll under the
    page's bar. Under the window's toolbar the page draws neither, and
-   content that scrolls sideways stands across the room. */
+   stands across the room on the toolbar's edges. */
 
 @layer components {
   .luke-detail-page {
@@ -55,6 +55,16 @@
   /* Across the whole room, the inset alone stands either side. */
   .luke-detail-page[data-width="full"] > * {
     --luke-detail-page-side: var(--luke-detail-page-edge, var(--luke-detail-page-inset));
+  }
+
+  /* Under the window's own toolbar the page is a workspace's rather than a
+     document's: its columns stand across the room on the toolbar's edges,
+     where its title's words start and its actions end (`toolbar.css`'s page
+     inset, a column's inset and a row's), in any room, so the bar lines up
+     with what it heads rather than with a measure centred under it. A page
+     framed by a bar outside it, a tab's, keeps its measure. */
+  .luke-detail-page[data-frame="toolbar"]:has(> .luke-toolbar) > * {
+    --luke-detail-page-side: calc(var(--luke-space-12) + var(--luke-row-inset));
   }
 
   /* Under 480px of room a desktop page gives back half its inset. */
