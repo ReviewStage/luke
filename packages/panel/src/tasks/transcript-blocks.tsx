@@ -146,6 +146,7 @@ import {
   ToolStateMark,
   ToolSummary,
 } from "../ai-elements/tool.js";
+import { OUTSIDE_GLYPH_CLASS } from "../picture-block.js";
 import { GLYPH_STATE, StateGlyph } from "../state-glyph.js";
 import { TextLink } from "../text-link.js";
 import { useInboxPictureDrawer } from "./inbox-pictures.js";
@@ -545,7 +546,7 @@ function PictureElement({ node }: MarkdownNodeProps): ReactNode {
   const words = said === "" ? UNNAMED_PICTURE : said;
   return (
     <TranscriptLink href={address === "" ? undefined : address} words={words}>
-      <ImageIcon className="picture-outside-glyph" aria-hidden="true" />
+      <ImageIcon className={OUTSIDE_GLYPH_CLASS} aria-hidden="true" />
       {words}
     </TranscriptLink>
   );
@@ -625,7 +626,12 @@ function LoneLinkElement({
 
 /** A document's paragraph of pictures alone: the pictures side by side, sharing its width. */
 function PictureRowElement({ children }: MarkdownNodeProps & { children?: ReactNode }): ReactNode {
-  return <div className={PICTURE_ROW_ELEMENT.CLASS}>{children}</div>;
+  // Side by side, sharing the column's width, so a before and an after read as a pair; each still hugs its own picture, and none grows past its own size (tasks.css).
+  return (
+    <div className={`${PICTURE_ROW_ELEMENT.CLASS} my-block-gap flex items-start gap-block-gap`}>
+      {children}
+    </div>
+  );
 }
 
 /** A mention held with the punctuation written against it, in the box no line breaks inside (`link-glue.ts`). */
@@ -692,7 +698,7 @@ export function GitHubPictureLink({ src, alt }: { src: string; alt: string }): R
   const words = alt === "" ? UNNAMED_PICTURE : alt;
   return (
     <TranscriptLink href={src === "" ? undefined : src} words={words}>
-      <ImageIcon className="picture-outside-glyph" aria-hidden="true" />
+      <ImageIcon className={OUTSIDE_GLYPH_CLASS} aria-hidden="true" />
       {words}
     </TranscriptLink>
   );

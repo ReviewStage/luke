@@ -441,7 +441,10 @@ function CommentFiles({
   return (
     <>
       {pictures.length === 0 ? null : (
-        <div className="transcript-pictures" data-inbox-file-pictures="">
+        <div
+          className="transcript-pictures flex items-start gap-block-gap"
+          data-inbox-file-pictures=""
+        >
           {pictures.map((file) => (
             <InboxPicture
               key={file.attachmentId}
