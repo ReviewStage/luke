@@ -1341,6 +1341,13 @@
   padding-inline: var(--luke-list-inset);
 }
 
+/* A file's letter in its header stands at least a step wide. Note that this
+   stays a rule, because the summary it stands in gives each of its children
+   `min-w-0` through a child selector, which outranks a utility here. */
+.diff-list-head .file-view-status {
+  min-width: var(--luke-space-16);
+}
+
 /* The file stage-cli's keys stand on is marked as a selected card is: the
    card's own edge, Pierre's file element the header stands in, drawn in the
    selected edge's ink, around the folded header or the whole open file. It

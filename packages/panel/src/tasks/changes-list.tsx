@@ -532,7 +532,7 @@ export function FileHead({
   const letter = (
     <span
       ref={partAt(1)}
-      className="file-view-status inline-flex h-luke-16 min-w-luke-16 flex-none items-center justify-center rounded-luke-6 bg-status-letter font-mono text-caption-inline font-luke-semibold text-attention data-[status=added]:text-complete data-[status=deleted]:text-danger data-[status=renamed]:text-working"
+      className="file-view-status inline-flex h-luke-16 flex-none items-center justify-center rounded-luke-6 bg-status-letter font-mono text-caption-inline font-luke-semibold text-attention data-[status=added]:text-complete data-[status=deleted]:text-danger data-[status=renamed]:text-working"
       data-status={file.status}
     >
       {STATUS_LETTER[file.status]}
