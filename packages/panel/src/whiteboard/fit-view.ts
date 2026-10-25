@@ -1,0 +1,108 @@
+/**
+ * fit-view.ts -- the view a board opens on: the whole drawing, as large as the room the toolbars leave will hold it.
+ *
+ * Excalidraw's own fit runs the drawing edge to edge of the canvas, while its
+ * toolbars float over that canvas. In a room as narrow as a phone's, the top
+ * toolbar then hides the diagram's first labels and the side tools cover its
+ * last shape. Here a bar wider than it is tall is read as the top's or the
+ * bottom's, whichever is nearer, so the drawing stands between them, a gap
+ * clear of each. A tall bar, the side tools, holds its side clear only if the
+ * drawing so placed would reach it, so a board whose side tools stand above
+ * the drawing keeps the room beside them.
+ *
+ * Note that the zoom is the exact one that fits, where Excalidraw's own rounds
+ * down to a tenth, which at a phone's zoom of a third gives up a quarter of the
+ * room. And that this module holds no Excalidraw value and reads no DOM, so
+ * the panel's tests read it without the canvas Excalidraw needs to load.
+ */
+
+/** A box in the canvas's own pixels. */
+export interface Rect {
+  readonly left: number;
+  readonly top: number;
+  readonly right: number;
+  readonly bottom: number;
+}
+
+/** A view as Excalidraw's app state holds one: the scene point at the canvas's corner, and the scale. */
+export interface View {
+  readonly zoom: number;
+  readonly scrollX: number;
+  readonly scrollY: number;
+}
+
+/** The drawing's bounds in the scene, as Excalidraw's `getCommonBounds` answers them. */
+export type SceneBounds = readonly [left: number, top: number, right: number, bottom: number];
+
+/** Excalidraw's own limits on a zoom: no larger than the drawing's own size, and no smaller than a tenth of it. */
+const ZOOM = { MIN: 0.1, MAX: 1 } as const;
+
+interface Insets {
+  top: number;
+  right: number;
+  bottom: number;
+  left: number;
+}
+
+function intersects(a: Rect, b: Rect): boolean {
+  return a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom;
+}
+
+interface Canvas {
+  readonly width: number;
+  readonly height: number;
+}
+
+/** The drawing fitted into what `inset` leaves of `canvas`, and the box it then stands in. */
+function placeIn(canvas: Canvas, inset: Insets, bounds: SceneBounds) {
+  const [left, top, right, bottom] = bounds;
+  const size = { width: Math.max(right - left, 1), height: Math.max(bottom - top, 1) };
+  const room = {
+    width: canvas.width - inset.left - inset.right,
+    height: canvas.height - inset.top - inset.bottom,
+  };
+  const fit = Math.min(room.width / size.width, room.height / size.height, ZOOM.MAX);
+  const zoom = Math.max(fit, ZOOM.MIN);
+  const centre = { x: inset.left + room.width / 2, y: inset.top + room.height / 2 };
+  const view: View = {
+    zoom,
+    scrollX: centre.x / zoom - (left + right) / 2,
+    scrollY: centre.y / zoom - (top + bottom) / 2,
+  };
+  const half = { x: (size.width * zoom) / 2, y: (size.height * zoom) / 2 };
+  const placed: Rect = {
+    left: centre.x - half.x,
+    top: centre.y - half.y,
+    right: centre.x + half.x,
+    bottom: centre.y + half.y,
+  };
+  return { view, placed };
+}
+
+/** The view that fits `bounds` into `canvas`, a `gap` clear of the bars that float over it. */
+export function fitView(
+  canvas: Canvas,
+  bars: readonly Rect[],
+  bounds: SceneBounds,
+  gap: number,
+): View {
+  const inset: Insets = { top: gap, right: gap, bottom: gap, left: gap };
+  const sides = bars.filter((bar) => bar.right - bar.left <= bar.bottom - bar.top);
+  for (const bar of bars) {
+    if (sides.includes(bar)) continue;
+    if ((bar.top + bar.bottom) / 2 < canvas.height / 2)
+      inset.top = Math.max(inset.top, bar.bottom + gap);
+    else inset.bottom = Math.max(inset.bottom, canvas.height - bar.top + gap);
+  }
+  let fit = placeIn(canvas, inset, bounds);
+  // A side bar moves its side in only when the drawing, so placed, would reach it: at most one move a bar.
+  for (const _ of sides) {
+    const hit = sides.find((bar) => intersects(fit.placed, bar));
+    if (hit === undefined) break;
+    if ((hit.left + hit.right) / 2 < canvas.width / 2)
+      inset.left = Math.max(inset.left, hit.right + gap);
+    else inset.right = Math.max(inset.right, canvas.width - hit.left + gap);
+    fit = placeIn(canvas, inset, bounds);
+  }
+  return fit.view;
+}

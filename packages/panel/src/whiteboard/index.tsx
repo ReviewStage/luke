@@ -4,6 +4,7 @@ import {
   convertToExcalidrawElements,
   Excalidraw,
   exportToBlob,
+  getCommonBounds,
   ROUNDNESS,
   restoreElements,
   THEME,
@@ -18,6 +19,7 @@ import type {
   AppState,
   ExcalidrawImperativeAPI,
   ExcalidrawInitialDataState,
+  NormalizedZoomValue,
 } from "@excalidraw/excalidraw/types";
 import {
   BOARD_ELEMENT_TYPE,
@@ -35,6 +37,7 @@ import {
   type WhiteboardModule,
   type WhiteboardProps,
 } from "./contract.js";
+import { fitView, type Rect } from "./fit-view.js";
 import { openingView } from "./opening-view.js";
 
 /**
@@ -69,7 +72,8 @@ import { openingView } from "./opening-view.js";
  * theme is a filter over the scene, so a drawing saved under either is the
  * same drawing.
  *
- * Worked by a finger, it opens in the hand (`opening-view.ts`).
+ * Worked by a finger, it opens in the hand (`opening-view.ts`). Its view
+ * fits the drawing to the room the toolbars leave (`fit-view.ts`).
  */
 
 /** Excalidraw's theme for the window's appearance as it stands, the one its stylesheet is drawn in. */
@@ -296,6 +300,41 @@ function newerDrawing(board: Board, applied: number) {
   return board.drawing !== undefined && board.drawing.number > applied ? board.drawing : undefined;
 }
 
+/** The toolbars Excalidraw floats over the canvas: its tool islands, top and bottom, and the side tools. */
+const TOOLBARS = ".App-top-bar .Island, .App-bottom-bar .Island, .mobile-misc-tools-container";
+
+/** How far the first view keeps the drawing from a toolbar and from the canvas's edge, as far as Excalidraw's own toolbars stand from it. */
+const FIT_GAP = 16;
+
+/** An element's box in the canvas's own pixels, `canvas` being the canvas's. */
+function rectWithin(element: Element, canvas: DOMRect): Rect {
+  const { left, top, right, bottom } = element.getBoundingClientRect();
+  return {
+    left: left - canvas.left,
+    top: top - canvas.top,
+    right: right - canvas.left,
+    bottom: bottom - canvas.top,
+  };
+}
+
+/** Puts the whole drawing in view, as large as the room the toolbars leave will hold it (`fit-view.ts`). */
+function fitToDrawing(api: ExcalidrawImperativeAPI, host: HTMLElement): void {
+  const elements = api.getSceneElements();
+  if (elements.length === 0) return;
+  const canvas = host.getBoundingClientRect();
+  const bars = [...host.querySelectorAll(TOOLBARS)].map((bar) => rectWithin(bar, canvas));
+  const view = fitView(canvas, bars, getCommonBounds(elements), FIT_GAP);
+  api.updateScene({
+    // SAFETY: the zoom is a number Excalidraw's own limits already bound (`fit-view.ts`), which its brand only records.
+    appState: {
+      scrollX: view.scrollX,
+      scrollY: view.scrollY,
+      zoom: { value: view.zoom as NormalizedZoomValue },
+    },
+    captureUpdate: CaptureUpdateAction.NEVER,
+  });
+}
+
 /** The hand-drawn font Excalidraw measures and draws text in, as the document loads it. */
 const DRAWING_FONT = `${DRAWING_DEFAULT.FONT_SIZE}px Excalifont`;
 
@@ -350,7 +389,7 @@ function mountBoard(host: HTMLElement, props: WhiteboardProps): WhiteboardHandle
     applied = drawing.number;
     const elements = withDrawing(api.getSceneElementsIncludingDeleted(), drawing.elements);
     api.updateScene({ elements, captureUpdate: CaptureUpdateAction.NEVER });
-    api.scrollToContent(undefined, { fitToContent: true, animate: false });
+    fitToDrawing(api, host);
   }
 
   function changed(elements: readonly OrderedExcalidrawElement[], appState: AppState): void {
@@ -359,7 +398,7 @@ function mountBoard(host: HTMLElement, props: WhiteboardProps): WhiteboardHandle
     if (!loaded) {
       loaded = true;
       held = signature;
-      api?.scrollToContent(undefined, { fitToContent: true, animate: false });
+      if (api !== undefined) fitToDrawing(api, host);
       document.fonts.load(DRAWING_FONT).then(
         () => show(latest),
         () => show(latest),
