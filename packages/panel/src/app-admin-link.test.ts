@@ -128,14 +128,19 @@ async function deliver(snapshot: AppStateSnapshot): Promise<void> {
   await settle();
 }
 
-/** Whether the Admin place stands drawn, its sections listed, rather than its loading frame. */
+/** Whether the Admin place stands, drawn or its loading frame, by the bar of its sections. */
+function adminOpen(): boolean {
+  return document.querySelector('[role="radiogroup"][aria-label="Admin sections"]') !== null;
+}
+
+/** Whether the Admin place stands drawn, its views under the recording's block, rather than its loading frame. */
 function adminStands(): boolean {
-  return document.querySelector('nav[aria-label="Admin sections"] .luke-nav-item') !== null;
+  return document.querySelector(".desktop-main .ph-no-capture") !== null;
 }
 
 /** Whether the Admin place stands waiting on the account's access, its loading frame up. */
 function adminWaits(): boolean {
-  return document.querySelector(".desktop-admin") !== null && !adminStands();
+  return adminOpen() && !adminStands();
 }
 
 test("an Admin link handed while the account's access is read opens the place waiting on it, which stands once the account is an admin", async () => {
@@ -155,7 +160,7 @@ test("the place waiting on the read gives the window back once it says the accou
   assert.equal(adminWaits(), true);
 
   await deliver({ ...FIRST, version: 2, access: { admin: false } });
-  assert.equal(document.querySelector(".desktop-admin"), null);
+  assert.equal(adminOpen(), false);
 });
 
 test("an Admin link handed to an account known to be no admin opens nothing", async () => {
@@ -164,5 +169,5 @@ test("an Admin link handed to an account known to be no admin opens nothing", as
   act(() => showLink?.(ADMIN_LINK));
   await settle();
 
-  assert.equal(document.querySelector(".desktop-admin"), null);
+  assert.equal(adminOpen(), false);
 });

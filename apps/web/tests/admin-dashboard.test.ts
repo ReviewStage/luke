@@ -347,10 +347,10 @@ function button(page: HTMLElement, words: string): HTMLButtonElement {
 
 test("a refresh that failed says so over the answer still shown, and Retry reads again", () => {
   const heard: string[] = [];
-  const page = render(ready(metrics(), "The metrics endpoint did not answer."), heard);
+  const page = render(ready(metrics(), "The overview could not be read."), heard);
 
   expect(page.querySelector('[role="alert"]')?.textContent).toContain(
-    "Refresh failed. Still showing the earlier answer. The metrics endpoint did not answer.",
+    "Refresh failed. Still showing the earlier answer. The overview could not be read.",
   );
   expect(cardOf(page, "Weekly active developers")).toBe(
     "Weekly active developers12+20% vs the 7 days before",
@@ -361,11 +361,11 @@ test("a refresh that failed says so over the answer still shown, and Retry reads
 
 test("a first read that failed says why under the page's toolbar, its controls still at hand, and Retry reads again", () => {
   const heard: string[] = [];
-  const page = render({ status: "error", detail: "The metrics endpoint did not answer." }, heard);
+  const page = render({ status: "error", detail: "The overview could not be read." }, heard);
 
   expect(page.querySelector("header h1")?.textContent).toBe("Overview");
   expect(page.querySelector('[role="alert"]')?.textContent).toContain(
-    "The metrics endpoint did not answer.",
+    "The overview could not be read.",
   );
   openViewOptions(page);
   choose("Time range", "Last 90 days");
@@ -394,14 +394,14 @@ test("View options offer the three time ranges, the one read checked, and Includ
 test("Retry refuses a press while a read is out, rather than abort it and start over", () => {
   const heard: string[] = [];
   const failed = render(
-    { status: "error", detail: "The metrics endpoint did not answer." },
+    { status: "error", detail: "The overview could not be read." },
     heard,
     true,
   );
   act(() => button(failed, "Retry").click());
   act(() => root?.unmount());
 
-  const stale = render(ready(metrics(), "The metrics endpoint did not answer."), heard, true);
+  const stale = render(ready(metrics(), "The overview could not be read."), heard, true);
   act(() => button(stale, "Retry").click());
 
   expect(heard).toEqual([]);

@@ -2,6 +2,7 @@ import type { AdminDayAccount, AdminDayDetail } from "@luke/features/admin-answe
 import { ADMIN_READ } from "@luke/features/admin-wire";
 import { formatCount } from "@luke/features/number-format";
 import { formatDayHeading } from "@luke/features/time-format";
+import { readFailedWords } from "@luke/features/words";
 import {
   DATA_TABLE_COLUMN_KIND,
   DATA_TABLE_MIN_WIDTH,
@@ -21,7 +22,7 @@ import { DataTableSkeleton } from "../chrome/table-skeleton.js";
 import { ADMIN_TAB, dayReadQuery } from "../routing.js";
 import { useAdminRead } from "../use-admin-read.js";
 
-const DAY_ERROR = "The day endpoint did not answer.";
+const DAY_ERROR = readFailedWords("this day");
 
 /** How many accounts the table's skeleton stands a row for, about a quiet day's. */
 const ACCOUNT_SKELETON_ROWS = 5;
