@@ -149,21 +149,21 @@ function LinkChip({
         look={CARD_LOOK.OUTLINE}
         corner={CARD_CORNER.CONTROL}
         padding={CARD_PADDING.NONE}
-        className="new-task-issue"
+        className="new-task-issue flex min-w-0 max-w-full items-center gap-item-gap pl-row-inset text-muted-foreground text-caption-inline [&>svg]:size-luke-12 [&>svg]:flex-none"
         data-issue-chip=""
         data-provider={link.provider}
       >
         <LinkMark link={link} />
         {/* Note that the repository is in the card, because the chip reads `#N title` as every chip of an issue does. */}
-        <span className="new-task-issue-name">
-          <span className="new-task-issue-key">
+        <span className="new-task-issue-name flex min-w-0 items-center gap-item-gap">
+          <span className="new-task-issue-key flex-none font-mono">
             {github ? `#${link.issue.number}` : link.issue.identifier}
           </span>
-          <OneLine className="new-task-issue-title" words={link.issue.title}>
+          <OneLine className="new-task-issue-title text-foreground" words={link.issue.title}>
             {link.issue.title}
           </OneLine>
         </span>
-        <span className="new-task-issue-relation">
+        <span className="new-task-issue-relation flex flex-none">
           <Tooltip label={RELATION_DETAIL[link.relation]}>
             <Chip
               look={CHIP_LOOK.FILTER}
@@ -176,7 +176,7 @@ function LinkChip({
             </Chip>
           </Tooltip>
         </span>
-        <span className="new-task-issue-drop">
+        <span className="new-task-issue-drop ml-auto flex">
           <Tooltip label={LINK_WORDS.DROP}>
             <IconButton
               icon={<CloseIcon />}
@@ -203,7 +203,7 @@ export function NewTaskLinks({
 }): React.JSX.Element | null {
   if (links.length === 0) return null;
   return (
-    <div className="new-task-links">
+    <div className="new-task-links mx-control-gap mt-control-gap flex min-w-0 flex-wrap gap-item-gap">
       {links.map((link, index) => (
         <LinkChip
           key={linkIdOf(link)}

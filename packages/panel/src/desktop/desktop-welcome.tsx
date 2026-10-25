@@ -52,14 +52,21 @@ export function welcomed(tasks: TasksControl): boolean {
 export function DesktopWelcome({ tasks }: { tasks: TasksControl }): React.JSX.Element | null {
   if (!welcomed(tasks)) return null;
   return (
-    <Fill as={FILL_ELEMENT.SECTION} className="home-welcome" aria-label="Welcome">
-      <span className="home-welcome-face" aria-hidden="true">
+    <Fill
+      as={FILL_ELEMENT.SECTION}
+      className="home-welcome items-center justify-center-safe gap-block-gap overflow-y-auto p-page-inset text-center"
+      aria-label="Welcome"
+    >
+      <span
+        className="home-welcome-face mb-tight-gap flex size-welcome-tile items-center justify-center rounded-luke-14 bg-muted text-foreground [&_.luke-face]:size-welcome-face!"
+        aria-hidden="true"
+      >
         <WingFace />
       </span>
       <Text as={TEXT_ELEMENT.H1} variant={TEXT_VARIANT.TITLE}>
         Start your first task
       </Text>
-      <div className="home-composer ph-no-capture">
+      <div className="home-composer ph-no-capture mt-control-gap w-welcome-composer text-start">
         <NewTaskComposer
           newTask={{ ...tasks.newTask, preset: undefined }}
           workspaceId={tasks.newTask.workspaceId}

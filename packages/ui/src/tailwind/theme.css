@@ -360,13 +360,12 @@
 
   /* The panel's places beside the sidebar (`@luke/panel`: Automations,
      Chat, Settings, a version history, the Admin place, the sign-in): the
-     profile's spacing roles they read; the Inbox's two columns, which Chat
-     shares, and the list-and-item split Settings, a history, and Admin
-     stand in; an automation row's columns and fields; a message's face
-     column and Chat's reading inset and measure; a glyph at its words'
-     size; the sign-in's foot; the experiment tag's tracking; and the spring
-     a byline's presses fade on. */
-  --grid-template-columns-inbox: auto minmax(0, 1fr);
+     profile's spacing roles they read; the list-and-item split Settings, a
+     history, and Admin stand in; an automation row's columns and fields; a
+     message's face column and Chat's reading inset and measure; a glyph at
+     its words' size; the sign-in's foot; the experiment tag's tracking; and
+     the spring a byline's presses fade on. Chat shares the Inbox's two
+     columns, above. */
   --grid-template-columns-place-split: min(var(--sidebar-width), 35%) minmax(0, 1fr);
   --grid-template-rows-single: minmax(0, 1fr);
   --grid-template-columns-chat-message: var(--luke-space-32) minmax(0, 1fr);
@@ -763,7 +762,6 @@
   );
   --spacing-offline-mark: 24px; /* off-scale: the offline pill, a compact button's height */
   --spacing-offline-glyph: 13px; /* off-scale: the offline pill's glyph */
-  --color-attention-tint: var(--luke-color-attention-tint);
   --animate-offline-arrive: luke-menu-arrive var(--luke-duration-quick) var(--luke-motion-exit)
     backwards;
 

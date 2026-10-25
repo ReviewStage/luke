@@ -132,7 +132,10 @@ export function PersonSectionFrame({
   children: ReactNode;
 }): React.JSX.Element {
   return (
-    <section className="home-section" aria-label={label}>
+    <section
+      className="home-section flex flex-col gap-tight-gap [.home-section+&]:mt-page-section-gap pointer-coarse:[&_.luke-list-row-main]:min-h-touch"
+      aria-label={label}
+    >
       <GroupHeader
         heading={label === undefined ? GROUP_HEADING.NONE : GROUP_HEADING.H2}
         label={title}

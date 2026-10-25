@@ -128,6 +128,14 @@ const GITHUB_ROW = {
   NONE: "github-none",
 } as const;
 
+/**
+ * A GitHub row's detail: the outside badge where its author is outside the
+ * repository, then its number, author, and age, or the grant row's words and
+ * the mark that says they leave for GitHub, all but the words held whole.
+ */
+const GITHUB_DETAIL =
+  "issue-picker-github-detail inline-flex min-w-0 max-w-full items-center gap-item-gap [&>:not(.issue-picker-github-said)]:flex-none [&>svg]:size-luke-12";
+
 /** How long the typing rests before Linear is searched for the words as typed. */
 const SEARCH_PAUSE = Duration.millis(250);
 
@@ -309,9 +317,9 @@ function githubRow(
   return {
     id: issue.nodeId,
     label: issue.title,
-    icon: <CircleDotIcon className="issue-picker-github-open" />,
+    icon: <CircleDotIcon className="issue-picker-github-open text-complete" />,
     detail: isOutsideAuthor(issue.authorAssociation) ? (
-      <span className="issue-picker-github-detail">
+      <span className={GITHUB_DETAIL}>
         <Tooltip label={ISSUE_WORDS.OUTSIDE_HINT}>
           <span>
             <Badge tone={STATUS_TONE.ATTENTION}>{ISSUE_WORDS.OUTSIDE}</Badge>
@@ -355,7 +363,7 @@ function githubRows(
         label: grantLabel(standing.repository),
         icon: <ProviderMark provider={INTEGRATION_PROVIDER.GITHUB} />,
         detail: (
-          <span className="issue-picker-github-detail">
+          <span className={GITHUB_DETAIL}>
             {ISSUE_WORDS.GRANT_DETAIL}
             <ExternalLinkIcon />
           </span>

@@ -57,6 +57,7 @@ import { APP_SLICE, useAppSlice } from "../use-app-state.js";
 import { AgentMarkRef, type AgentSubject, lineSubject, tasklessSubject } from "./agent-ref.js";
 import { AutomationChipCard, ChipCardSkeleton, TaskChipCard } from "./chip-cards.js";
 import { agentStillWriting, providerOf } from "./coding-agent-model.js";
+import { HOME_ROW_META } from "./home-row.js";
 import {
   holderName,
   INBOX_HOLDER,
@@ -508,7 +509,7 @@ export function useInboxStanding(listed: InboxListed, readerId: string | undefin
 
 /** An item row's meta, its context, marks, and time in one line at the title's right. */
 function InboxRowMeta({ children }: { children: ReactNode }): React.JSX.Element {
-  return <span className="home-row-meta">{children}</span>;
+  return <span className={HOME_ROW_META}>{children}</span>;
 }
 
 /**
