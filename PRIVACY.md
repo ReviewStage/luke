@@ -355,7 +355,7 @@ the item is deleted with its task. While you are signed in, Luke
 on your Mac keeps a read open to our service for every item waiting in your
 workspaces, each in brief (its task, agent, title, and the account that started
 the agent), and for every task holding an item; it counts in its sidebar and on
-its Dock icon, and tells you of, only the items of agents you started. Opening the Inbox reads
+its Dock icon only the items of agents you started. Opening the Inbox reads
 each of those tasks' items whole, the ones you settled included, with what
 each offered and the answer you picked; Luke holds them in memory only, never
 on disk. Deleting the task, or your account, deletes
