@@ -179,15 +179,52 @@
      controls draw their glyphs alone, named still. Note that it wraps only
      by that rule, because the heading's basis is nothing until then. */
   .luke-toolbar[data-wrap-heading="true"] {
+    /* Where the heading's row stands its words: the column's words inset
+       at both edges, less a crumb's pill pad at the start
+       (`breadcrumb-pill-inline`), so the crumbs' words, not their pills,
+       start where the column's words do. */
+    --luke-toolbar-wrap-heading-start: calc(var(--luke-toolbar-page-inset) - var(--luke-space-4));
+    --luke-toolbar-wrap-heading-end: var(--luke-toolbar-page-inset);
+
     container: luke-toolbar / inline-size;
     flex-wrap: wrap;
-    row-gap: var(--luke-tight-gap);
+    row-gap: 0;
   }
 
+  /* The top row keeps the bar's own height, its lead and actions centred in
+     it as in a bar of one row, so it stands level with every other bar and
+     the card under it starts where it always does. The heading's row stands
+     under it as a pane's bar does (`PaneBar`), one pane bar high with its
+     crumbs centred, at the top of what the bar heads rather than across its
+     edge, and reaches past any room the top row keeps for the window's
+     buttons to the column's words inset; it is what the bar heads, so the
+     window is not dragged by it. */
   @container luke-toolbar (width < 480px) {
+    .luke-toolbar[data-wrap-heading="true"] > :is(.luke-toolbar-lead, .luke-toolbar-actions) {
+      min-height: calc(var(--luke-toolbar-height) - 2 * var(--luke-toolbar-edge-block));
+      margin-bottom: var(--luke-toolbar-edge-block);
+    }
+
     .luke-toolbar[data-wrap-heading="true"] > .luke-toolbar-heading {
+      display: flex;
       order: 1;
-      flex-basis: 100%;
+      flex: 0 0
+        calc(
+          100% +
+          var(--luke-toolbar-edge-start) +
+          var(--luke-toolbar-edge-end) -
+          var(--luke-toolbar-wrap-heading-start) -
+          var(--luke-toolbar-wrap-heading-end)
+        );
+      align-items: center;
+      min-height: var(--luke-pane-bar-height);
+      margin: 0 calc(var(--luke-toolbar-wrap-heading-end) - var(--luke-toolbar-edge-end))
+        calc(-1 * var(--luke-toolbar-edge-block))
+        calc(var(--luke-toolbar-wrap-heading-start) - var(--luke-toolbar-edge-start));
+    }
+
+    [data-luke-profile="desktop"] .luke-toolbar[data-wrap-heading="true"] > .luke-toolbar-heading {
+      -webkit-app-region: no-drag;
     }
 
     .luke-toolbar[data-wrap-heading="true"] > .luke-toolbar-actions {
