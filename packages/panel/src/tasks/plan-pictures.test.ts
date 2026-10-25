@@ -115,6 +115,23 @@ test("a plan's picture is drawn from its bytes under its caption, and one this r
   assert.equal(blocks[1]?.textContent, "Members page · not available");
 });
 
+test("a picture that is not available is read as words, with or without alt text, never hidden behind an image role", async () => {
+  const taskId = "4d5e6f7a-8b9c-4d0e-a1f2-3b4c5d6e7f80";
+  standHost(new Set(), []);
+  const body = [`![Members page](${picture(taskId, GONE)})`, `![](${picture(taskId, GONE)})`].join(
+    "\n\n",
+  );
+
+  const view = await drawn(createElement(PlanBody, { task: taskOf(taskId, body), live: false }));
+
+  const blocks = [...view.querySelectorAll<HTMLElement>(".picture-block")];
+  assert.deepEqual(
+    blocks.map((block) => block.textContent),
+    ["Members page · not available", "This picture is not available"],
+  );
+  assert.ok(blocks.every((block) => block.querySelector('[role="img"]') === null));
+});
+
 test("a press on a picture opens the plan's pictures over the window, named by their alt text", async () => {
   const taskId = "9e2f5c11-6d4a-4c8b-b1e3-2a3b4c5d6e04";
   standHost(new Set([MOCK, SECOND]), []);

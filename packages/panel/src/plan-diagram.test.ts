@@ -16,6 +16,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test } from "vitest";
 import { type SideBundles, sideBundles } from "./bundle-loader.js";
 import { MarkdownMessage } from "./markdown-message.js";
+import { DiagramPreview } from "./plan-diagram.js";
 import { SHELL_ROOM } from "./shell-room.js";
 import { ShellRoomContext } from "./stage-room.js";
 import { PlanBody } from "./tasks/plan-body.js";
@@ -176,6 +177,58 @@ test("a Mermaid fence on a plan's page draws as the picture the diagram bundle a
   assert.deepEqual(pictures(page), [pictureOf(code, DIAGRAM_APPEARANCE.LIGHT)]);
   assert.equal(page.querySelector(".plan-diagram pre"), null);
   assert.ok(page.querySelector(".plan-diagram")?.classList.contains("ph-no-capture"));
+});
+
+test("a diagram's picture is named for its title, or its first line where it has none", async () => {
+  const titled = "---\ntitle: Invite flow\n---\nflowchart LR\n  Invite --> Join";
+  const plain = "%% a note\n\nsequenceDiagram\n  Admin->>Service: Invite";
+  const configured = "---\nconfig:\n  layout: elk\n---\nflowchart LR\n  A --> B";
+  const pie = 'pie title "Votes so far"\n  "Yes" : 3';
+  const page = await drawn(
+    createElement(PlanBody, {
+      task: taskWith(
+        [titled, plain, configured, pie].map((code) => mermaidFence(code)).join("\n\n"),
+      ),
+      live: false,
+    }),
+  );
+
+  const alts = [...page.querySelectorAll(".plan-diagram img")].map((img) =>
+    img.getAttribute("alt"),
+  );
+
+  assert.deepEqual(alts, [
+    "Diagram: Invite flow",
+    "Diagram: sequenceDiagram",
+    "Diagram: flowchart LR",
+    "Diagram: Votes so far",
+  ]);
+});
+
+test("while an edited diagram is drawn again, the picture kept is still named for the code it shows", async () => {
+  const before = "---\ntitle: Before\n---\nflowchart LR\n  A --> B";
+  const after = "---\ntitle: After\n---\nflowchart LR\n  A --> B";
+  const container = document.body.appendChild(document.createElement("div"));
+  const root = createRoot(container);
+  roots.push(root);
+  const show = (code: string, previous: string | undefined) =>
+    act(() =>
+      root.render(
+        onRegistry(
+          AtomRegistry.make(),
+          onSideBundles(bundles, createElement(DiagramPreview, { code, previous })),
+        ),
+      ),
+    );
+  const alt = () => container.querySelector("img")?.getAttribute("alt");
+  show(before, undefined);
+  await settle();
+
+  show(after, before);
+
+  assert.equal(alt(), "Diagram: Before");
+  await settle();
+  assert.equal(alt(), "Diagram: After");
 });
 
 test("Show code puts the fence's code in the picture's place, and Show diagram brings the picture back", async () => {
@@ -392,7 +445,7 @@ test("in a wide room the keyboard's press on a diagram, named for what it does, 
     createElement(PlanBody, { task: taskWith(mermaidFence(code)), live: false }),
   );
   const enlarge = press(page);
-  assert.equal(enlarge.getAttribute("aria-label"), "Enlarge Diagram");
+  assert.equal(enlarge.getAttribute("aria-label"), "Enlarge Diagram: flowchart LR");
 
   act(() => enlarge.click());
 

@@ -5709,6 +5709,7 @@ svg.lucide {
 /* A picture this reader cannot reach, or whose bytes are gone: its words. */
 .picture-missing {
   width: 480px;
+  max-width: 100%;
   padding: var(--luke-card-inset-snug);
   cursor: default;
 }
