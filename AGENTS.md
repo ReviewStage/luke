@@ -176,56 +176,100 @@ pnpm --filter @luke/web test:agent       # offline brain eval, scripted model, b
 
 Push and let CI, which runs every check, gate the PR. Running the tests you
 touched (`pnpm exec vitest run <path>`) or `pnpm check:affected` before a push
-is optional. `check.sh` is the full local run, for a release, a broad
-refactor, or on request, and must exit 0 when it is run.
-
-The rules below are the testing guide; every test runs on vitest, through
+is optional; never run a whole workspace's suite to check one change.
+`check.sh` is the full local run, for a release, a broad refactor, or on
+request, and must exit 0 when it is run. Every test runs on vitest, through
 `pnpm exec vitest`.
 
-- Every behavior change ships with a test that fails without it, same PR.
-- Use the smallest layer that catches the bug: a type or lint rule, then a
-  test through the module's public export, then a real Postgres or child
-  process.
-- Tests are hermetic: one process, `TestClock`, a temp dir they made, PGlite.
-  No network, personal data, live provider, or real clock. They pass alone
+Each rule below names what holds it. `[check: …]` is a lint rule or script
+that fails the build, so CI is the check and the words are only the reason;
+`[review]` is held by nothing but the reader, so it is the rule an agent is
+most likely to break. A rule that can move from `[review]` to a check should.
+
+### When to add a test
+
+A test costs CI time on every push for as long as it exists, so the bar is
+that it pays for itself, not that the diff has one.
+
+- `[review]` A new test must catch a regression you can name that no existing
+  test catches. Look for the test that already covers the behavior first: if
+  there is one, extend it or add a row to its `it.each` table. If you cannot
+  name the regression, do not add the test.
+- `[review]` A bug fix ships with one test that fails without the fix: run it
+  red before the fix, green after. A behavior change ships with tests for what
+  the diff changes and nothing more: no tests for code the PR leaves alone,
+  for a dependency, or for the platform.
+- `[review]` One case per behavior, never one per input: no matrix over
+  spellings, flags, variants, sizes, or themes that take the same path. A
+  regression is generalized into one meaningful test, and stops there.
+- `[review]` A test written to explore an implementation is deleted before the
+  push unless it meets the bar above.
+- `[review]` Use the smallest layer that catches the bug: a type, then a lint
+  rule, then a test through the module's public export, then a real Postgres
+  or child process. A rule about source text (a banned class, import, or
+  pattern) is a rule in `tools/anti-slop/`, never a test that reads source
+  files.
+
+### What a test asserts
+
+- `[review]` What a caller observes through the public export: a returned
+  value, a rendered word or accessible role, a stored row, an emitted event,
+  an error. Never private state, call or render counts, or that a fake was
+  called; never a private function exported for a test.
+- `[review]` No change detectors: an expected value computed by the code under
+  test or pasted from its output; a test of a getter, constant, token table,
+  type, re-export, or Schema round-trip on a valid value; a class name,
+  stylesheet declaration, `var(--luke-*)` value, computed style, or markup
+  shape no user perceives. How a surface looks is held by `@luke/ui`, its
+  lint rules, and looking at it in the catalog, not by tests.
+- `[review]` A removed feature takes its tests with it; never add a test that
+  asserts the removed thing is gone.
+
+### How a test is built
+
+- `[review]` Hermetic: one process, `TestClock`, a temp dir it made, PGlite.
+  No network, personal data, live provider, or real clock. It passes alone
   and in any order.
-- Prefer the real implementation, then a fake, then a stub. Mock at a
+- `[review]` Fast: roughly 1s a test and 10s a file in CI. A file over budget
+  is cut or split; a test that needs real time or a child process says why.
+- `[review]` The real implementation, then a fake, then a stub. Mock at a
   process boundary (provider HTTP, Apple, the model, the OS, the clock), never
   between internal modules. For an Effect service the double is a test
   `Layer` on its `Context.Tag`; elsewhere `vi.spyOn` over `vi.mock`, restored
   with `vi.restoreAllMocks()`.
-- Assert what a caller observes, never private state or call counts.
-- Use the shared builders before inline setup:
-  `apps/web/tests/support/`, `packages/wire/src/testing/`, and
-  `temporaryDirectory` from `@luke/runtime/testing`.
-- A test that needs a database provides `getTestDB()`
+- `[review]` Effect tests use `it.effect` and `TestClock.adjust`, rather than
+  running an effect themselves (`Effect.run*`, `Runtime.run*`,
+  `ManagedRuntime.make`) or waiting on real time (`setTimeout`, `setInterval`,
+  `Effect.sleep`, `it.live`). The Effect edge rules exempt a test file by
+  extension, because a test body is its own edge
+  (`tools/anti-slop/shared/effect-edges.ts`).
+- `[review]` A test that needs a database provides `getTestDB()`
   (`@luke/database/testing`), a migrated database of its own, and a query
   over account rows tests that one user cannot read another's. A model or
   repository under `packages/database/src/` ships with a sibling
   `__tests__/<name>.test.ts` in the same PR.
-- Effect tests use `it.effect` and `TestClock.adjust`, rather than running
-  an effect themselves (`Effect.run*`, `Runtime.run*`, `ManagedRuntime.make`)
-  or waiting on real time (`setTimeout`, `setInterval`, `Effect.sleep`,
-  `it.live`). No lint rule holds a test file to this: the Effect edge rules
-  exempt one by extension, because a test body is its own edge
-  (`tools/anti-slop/shared/effect-edges.ts`), so review is the check.
-- Goldens change only under `LUKE_UPDATE_FIXTURES=1` through the shared
-  helpers, with the diff explained in the PR. A JSON Schema golden is kept
-  only for a schema a model is shown as a tool's input.
-- Never loosen or skip a test to go green: no `.only`, `.skip`, `.todo`, or
-  `it.flakyTest`, which no lint rule refuses either. Fix or delete a flaky
-  test. A test that breaks on a refactor because it checks internal
-  wiring a behavior test already covers is deleted, not fixed, and the PR
-  says which behavior test covers it.
-- Do not write change-detector tests: an expected value computed by the code
-  under test or pasted from its output; a test of a getter, constant, type,
-  re-export, or Schema round-trip on a valid value; a test that only asserts
-  a fake was called; a private function exported for a test.
+- `[review]` Shared builders before inline setup: `apps/web/tests/support/`,
+  `packages/wire/src/testing/`, and `temporaryDirectory` from
+  `@luke/runtime/testing`. A shared fixture earns its place by having more
+  than one caller.
 
-What the checks hold a test to is narrower than the rules above:
-`anti-slop/no-node-test` refuses `node:test` in TypeScript, so every test runs
-on vitest, and `scripts/repository-checks.sh` refuses a workspace whose
-`vitest.config.ts` the root `vitest.config.ts` projects list does not name.
+### Keeping the suite honest
+
+- `[review]` Never loosen or skip a test to go green: no `.only`, `.skip`,
+  `.todo`, or `it.flakyTest`, and no longer timeout or retry without evidence
+  of what was slow. Fix or delete a flaky test.
+- `[review]` A test that breaks on a refactor because it checks wiring a
+  behavior test already covers is deleted, not fixed. A PR that deletes a test
+  says which behavior test covers it.
+- `[review]` Goldens change only under `LUKE_UPDATE_FIXTURES=1` through the
+  shared helpers, with the diff explained in the PR; never edit one by hand.
+  A JSON Schema golden is kept only for a schema a model is shown as a tool's
+  input.
+- `[check: anti-slop/no-node-test]` Every test runs on vitest; `node:test` is
+  refused in TypeScript.
+- `[check: scripts/repository-checks.sh]` Every workspace with a
+  `vitest.config.ts` is named in the root `vitest.config.ts` projects list and
+  runs under exactly one CI test job.
 
 ## Effect idioms
 
