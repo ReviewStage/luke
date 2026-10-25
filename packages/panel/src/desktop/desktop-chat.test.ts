@@ -361,7 +361,7 @@ function layOutLogs(lineTop = 0): void {
     tops.set(this, top);
   });
   vi.spyOn(Element.prototype, "getBoundingClientRect").mockImplementation(function (this: Element) {
-    const top = this.classList.contains("chat-unread-line") ? lineTop : 0;
+    const top = this.classList.contains("luke-stream-divider") ? lineTop : 0;
     return DOMRect.fromRect({ x: 0, y: top, width: 0, height: 0 });
   });
 }
@@ -381,7 +381,7 @@ function toNewest(page: HTMLElement): HTMLButtonElement | null {
 /** The shown channel's roots in order, by seq, and its "New" line where it stands. */
 function roots(page: HTMLElement): string[] {
   return [...page.querySelectorAll(".chat-messages > li")].map((node) =>
-    node.classList.contains("chat-unread-line")
+    node.classList.contains("luke-stream-divider")
       ? (node.textContent ?? "")
       : (node.getAttribute("data-seq") ?? ""),
   );
@@ -419,7 +419,7 @@ test("a channel opens as a log at its newest message, a New line before the firs
   assert.equal(log.scrollTop, 1000);
   assert.equal(toNewest(page), null);
   act(() => railRow(page, "general").click());
-  assert.equal(page.querySelector(".chat-unread-line"), null);
+  assert.equal(page.querySelector(".luke-stream-divider"), null);
 });
 
 test("a channel whose unread run is taller than the box opens with its New line at the top, let go of the newest message", () => {

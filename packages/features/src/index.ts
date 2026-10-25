@@ -22,6 +22,7 @@ export {
   HostedAutomationClient,
   type HostedAutomationClientOptions,
 } from "./automation-client.js";
+export { HostedChannelClient, type HostedChannelClientOptions } from "./channel-client.js";
 export {
   HostedCodingAgentClient,
   type HostedCodingAgentClientOptions,

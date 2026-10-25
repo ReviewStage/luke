@@ -113,7 +113,7 @@ test("each experiment is a switch, on as the account chose, that writes the choi
   assert.ok(chat, "Chat has a switch");
   assert.equal(chat.getAttribute("aria-checked"), "true");
   // The row's one line says what turning it on brings; the page says nothing above the rows, the newest experiment's first.
-  assert.ok(page.textContent?.startsWith("Memory"));
+  assert.ok(page.textContent?.startsWith("Channels"));
 
   await act(async () => chat.click());
   assert.deepEqual(sent, [{ experiment: EXPERIMENT.CHAT, on: false }]);
@@ -129,6 +129,7 @@ test("an experiment's Send feedback opens the dialog about that experiment", () 
     for (const button of feedback) button.click();
   });
   assert.deepEqual(feedbackAbout, [
+    EXPERIMENT.CHANNELS,
     EXPERIMENT.MEMORY,
     EXPERIMENT.OPERATOR,
     EXPERIMENT.INBOX_FIRST,
@@ -180,6 +181,7 @@ test("with Video calls on, its avatar is chosen from every face at once in its c
     ),
   );
   assert.deepEqual(cards, [
+    ["Channels"],
     ["Memory"],
     ["Luke, your operator"],
     ["Inbox-first sidebar"],

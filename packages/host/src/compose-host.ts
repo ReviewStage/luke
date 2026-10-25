@@ -2,6 +2,7 @@ import { ACCOUNT_STATUS } from "@luke/credentials/snapshot";
 import {
   HostedAdminClient,
   HostedAutomationClient,
+  HostedChannelClient,
   HostedCodingAgentClient,
   HostedGitHubConnectionClient,
   HostedIntegrationsClient,
@@ -33,6 +34,7 @@ import { composeAutomations } from "./compose-automations.js";
 import { composeChatGptSignIn } from "./compose-chatgpt-sign-in.js";
 import { composeCodingAgents } from "./compose-coding-agents.js";
 import { composeInstalledSkills } from "./compose-installed-skills.js";
+import { composeChannels } from "./compose-channels.js";
 import { composeIntegrations } from "./compose-integrations.js";
 import { composeLive } from "./compose-live.js";
 import { composeMacCommands } from "./compose-mac-commands.js";
@@ -77,6 +79,7 @@ const HOST_START_ORDER: readonly HostConcern[] = [
   HOST_CONCERN.TASKS,
   HOST_CONCERN.CODING_AGENTS,
   HOST_CONCERN.AUTOMATIONS,
+  HOST_CONCERN.CHANNELS,
   HOST_CONCERN.INTEGRATIONS,
   HOST_CONCERN.INSTALLED_SKILLS,
   HOST_CONCERN.MAC_COMMANDS,
@@ -200,6 +203,14 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
       account,
       accountId,
       client: new HostedAutomationClient({
+        serviceBaseUrl: kernel.hostedServiceBaseUrl,
+        credential: account.credential,
+      }),
+    });
+    const channels = yield* composeChannels({
+      kernel,
+      account,
+      client: new HostedChannelClient({
         serviceBaseUrl: kernel.hostedServiceBaseUrl,
         credential: account.credential,
       }),
@@ -333,6 +344,7 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
       [HOST_CONCERN.TASKS]: tasks,
       [HOST_CONCERN.CODING_AGENTS]: codingAgents,
       [HOST_CONCERN.AUTOMATIONS]: automations,
+      [HOST_CONCERN.CHANNELS]: channels,
       [HOST_CONCERN.INTEGRATIONS]: integrations,
       [HOST_CONCERN.INSTALLED_SKILLS]: installedSkills,
       [HOST_CONCERN.MAC_COMMANDS]: macCommands,

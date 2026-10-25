@@ -28,6 +28,7 @@ export const HOST_CONCERN = {
   TASKS: "tasks",
   CODING_AGENTS: "codingAgents",
   AUTOMATIONS: "automations",
+  CHANNELS: "channels",
   INTEGRATIONS: "integrations",
   INSTALLED_SKILLS: "installedSkills",
   MAC_COMMANDS: "macCommands",

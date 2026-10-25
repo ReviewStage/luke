@@ -255,6 +255,7 @@ export const PRODUCT_EXPERIMENT = {
   INBOX_FIRST: "inbox-first",
   OPERATOR: "operator",
   LOCAL_AGENTS: "local-agents",
+  CHANNELS: "channels",
 } as const;
 
 export type ProductExperiment = (typeof PRODUCT_EXPERIMENT)[keyof typeof PRODUCT_EXPERIMENT];
