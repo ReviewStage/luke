@@ -250,3 +250,46 @@ test("a side panel on its way out lifts nothing over the panel shown, whatever d
   act(() => root?.render(createElement(LeavingPanelShell)));
   assert.equal(document.documentElement.style.getPropertyValue("--luke-column-dock"), "0px");
 });
+
+/** An Inbox thread beside the work, its draft reply flowing at the end of its scrolled board, and the window's toasts. */
+function InboxShell(): React.JSX.Element {
+  const shell = useRef<HTMLDivElement>(null);
+  useColumnDock(shell, false, false, "inbox");
+  return createElement(
+    "div",
+    { ref: shell, className: "desktop-shell", "data-staged": "window" },
+    createElement(
+      "section",
+      { className: "inbox-view-items", "data-staged": "board" },
+      createElement("div", { className: "agent-composer", "data-staged": "reply" }),
+    ),
+  );
+}
+
+test("a draft reply scrolled up under the toasts raises them at the frame after the scroll", () => {
+  const frames: FrameRequestCallback[] = [];
+  vi.spyOn(window, "requestAnimationFrame").mockImplementation((heard) => frames.push(heard));
+  const boxes = new Map([
+    ["window", { left: 0, right: 1200, top: 0, bottom: 800 }],
+    ["board", { left: 600, right: 1200, top: 0, bottom: 800 }],
+    ["reply", { left: 600, right: 1200, top: 900, bottom: 1000 }],
+    ["toasts", { left: 844, right: 1184, top: 734, bottom: 784 }],
+  ]);
+  stage(boxes);
+  const toasts = document.body.appendChild(document.createElement("section"));
+  toasts.className = "luke-toast-stack";
+  toasts.dataset.staged = "toasts";
+  const container = document.body.appendChild(document.createElement("div"));
+  root = createRoot(container);
+  act(() => root?.render(createElement(InboxShell)));
+  const dock = () => document.documentElement.style.getPropertyValue("--luke-toast-dock");
+  assert.equal(dock(), "0px", "the reply below the window docks nothing");
+
+  boxes.set("reply", { left: 600, right: 1200, top: 680, bottom: 780 });
+  act(() => {
+    document.querySelector(".inbox-view-items")?.dispatchEvent(new Event("scroll"));
+    for (const heard of frames.splice(0)) heard(0);
+  });
+
+  assert.equal(dock(), "120px", "the reply scrolled up under the corner docks");
+});

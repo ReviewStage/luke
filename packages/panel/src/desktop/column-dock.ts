@@ -145,7 +145,8 @@ function toastDockHeight(shell: Element, docked: string, stack: DOMRect, step: n
  * clear of them.
  *
  * One ResizeObserver follows the column, the docked parts, the card, and
- * the toasts; a MutationObserver re-reads when the column or a part arrives
+ * the toasts; a scroll anywhere under the shell re-reads, since it moves a
+ * part that flows with what it scrolls; a MutationObserver re-reads when the column or a part arrives
  * or goes, a task's column once it has loaded, a to-do list appearing over
  * the composer. `key` names what the shell is drawing,
  * so a page or a panel coming and going finds its column afresh. A shell
@@ -232,7 +233,7 @@ export function useColumnDock(
       for (const element of standing) sized.observe(element);
     }
     let frame: number | undefined;
-    const arrived = new MutationObserver(() => {
+    function measure(): void {
       if (frame !== undefined) return;
       frame = requestAnimationFrame(() => {
         frame = undefined;
@@ -240,14 +241,18 @@ export function useColumnDock(
         follow();
         write();
       });
-    });
+    }
+    const arrived = new MutationObserver(measure);
     arrived.observe(host, { childList: true, subtree: true });
+    // Note that a scroll moves a part that flows with what it scrolls, an Inbox reply box, under the toasts, and neither observer sees it.
+    host.addEventListener("scroll", measure, { capture: true, passive: true });
     follow();
     write();
     return () => {
       if (frame !== undefined) cancelAnimationFrame(frame);
       sized.disconnect();
       arrived.disconnect();
+      host.removeEventListener("scroll", measure, { capture: true });
       root.style.removeProperty(COLUMN_DOCK);
       root.style.removeProperty(TOAST_DOCK);
       root.style.removeProperty(TOAST_ROOM);
